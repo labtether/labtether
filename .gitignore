@@ -3,7 +3,8 @@
 
 # Go
 bin/
-build/
+build/*
+!build/*.Dockerfile
 /labtether
 /labtether-agent
 /node-agent
