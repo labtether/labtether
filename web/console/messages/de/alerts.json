@@ -1,0 +1,13 @@
+{
+  "title": "Alarme",
+  "subtitle": {
+    "label": "Ihr Alarm-Posteingang{activeInfo}, Regeln und Stummschaltung",
+    "active": " · {count} aktiv"
+  },
+  "tabs": {
+    "inbox": "Posteingang",
+    "rules": "Regeln",
+    "silences": "Stummgeschaltet",
+    "delivery": "Zustellprotokoll"
+  }
+}

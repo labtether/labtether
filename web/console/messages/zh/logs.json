@@ -1,0 +1,23 @@
+{
+  "title": "日志",
+  "subtitle": "搜索和过滤设备的日志输出",
+  "filters": {
+    "source": "来源",
+    "level": "级别",
+    "events": "事件",
+    "range": "范围",
+    "search": "搜索",
+    "allSources": "所有来源",
+    "operational": "运维",
+    "all": "全部"
+  },
+  "search": {
+    "placeholder": "搜索消息文本 (error, timeout, zfs...)"
+  },
+  "empty": {
+    "title": "还没有日志事件",
+    "description": "设备开始上报后，事件将显示在此处。请确保至少有一个设备已连接。",
+    "viewDevices": "查看设备"
+  },
+  "noMatch": "没有日志事件与当前筛选条件匹配。"
+}

@@ -1,0 +1,13 @@
+{
+  "title": "Alertes",
+  "subtitle": {
+    "label": "Votre boîte de réception d'alertes{activeInfo}, règles et mises en sourdine",
+    "active": " · {count} active(s)"
+  },
+  "tabs": {
+    "inbox": "Boîte de réception",
+    "rules": "Règles",
+    "silences": "En sourdine",
+    "delivery": "Journal de livraison"
+  }
+}

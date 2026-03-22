@@ -1,0 +1,57 @@
+{
+  "title": "Salud",
+  "subtitle": "Puntajes de disponibilidad, trabajos fallidos, historial de eventos y ventanas de mantenimiento",
+  "tabs": {
+    "scores": "Puntajes",
+    "timeline": "Eventos",
+    "maintenance": "Mantenimiento",
+    "map": "Mapa"
+  },
+  "scores": {
+    "locationHealth": "// Salud por ubicación",
+    "failedJobs": "// Trabajos fallidos",
+    "commonErrors": "// Errores comunes",
+    "failedJobsTrend": "// Tendencia de trabajos fallidos",
+    "dataCleanup": "// Limpieza de datos",
+    "healthEmpty": {
+      "title": "Aún no hay datos de salud",
+      "description": "Los puntajes de salud aparecerán cuando los grupos tengan dispositivos conectados."
+    },
+    "noFailedJobs": "Sin trabajos fallidos.",
+    "noRecurringErrors": "Sin errores recurrentes.",
+    "noTrendData": "Sin datos de tendencia.",
+    "retentionHealthy": "Ciclo de retención saludable."
+  },
+  "timeline": {
+    "heading": "// Historial de eventos",
+    "group": "Grupo",
+    "range": "Rango",
+    "errors": "Errores",
+    "warnings": "Advertencias",
+    "failedActions": "Acciones fallidas",
+    "failedUpdates": "Actualizaciones fallidas",
+    "unresponsive": "Sin respuesta",
+    "offline": "Sin conexión",
+    "noEvents": "Sin eventos en el rango de tiempo.",
+    "showMore": "Ver más",
+    "showLess": "Ver menos"
+  },
+  "maintenance": {
+    "heading": "// Ventanas de mantenimiento",
+    "group": "Grupo",
+    "name": "Nombre",
+    "start": "Inicio",
+    "end": "Fin",
+    "muteAlerts": "Silenciar alertas",
+    "pauseActions": "Pausar acciones",
+    "pauseUpdates": "Pausar actualizaciones",
+    "submit": "Programar mantenimiento",
+    "saving": "Guardando...",
+    "empty": "No hay ventanas de mantenimiento programadas."
+  },
+  "map": {
+    "heading": "// Mapa de ubicaciones",
+    "noCoordinates": "sin coordenadas",
+    "noLocationData": "Sin datos de ubicación para el mapa."
+  }
+}

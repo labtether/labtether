@@ -1,0 +1,57 @@
+{
+  "title": "Health",
+  "subtitle": "Uptime scores, failed jobs, event history, and downtime windows",
+  "tabs": {
+    "scores": "Scores",
+    "timeline": "Events",
+    "maintenance": "Downtime",
+    "map": "Map"
+  },
+  "scores": {
+    "locationHealth": "// Location Health",
+    "failedJobs": "// Failed Jobs",
+    "commonErrors": "// Common Errors",
+    "failedJobsTrend": "// Failed Jobs Trend",
+    "dataCleanup": "// Data Cleanup",
+    "healthEmpty": {
+      "title": "No health data yet",
+      "description": "Health scores will appear once groups have connected devices."
+    },
+    "noFailedJobs": "No failed jobs.",
+    "noRecurringErrors": "No recurring errors.",
+    "noTrendData": "No trend data.",
+    "retentionHealthy": "Retention loop healthy."
+  },
+  "timeline": {
+    "heading": "// Event History",
+    "group": "Group",
+    "range": "Range",
+    "errors": "Errors",
+    "warnings": "Warnings",
+    "failedActions": "Failed Actions",
+    "failedUpdates": "Failed Updates",
+    "unresponsive": "Unresponsive",
+    "offline": "Offline",
+    "noEvents": "No timeline events in range.",
+    "showMore": "Show more",
+    "showLess": "Show less"
+  },
+  "maintenance": {
+    "heading": "// Downtime Windows",
+    "group": "Group",
+    "name": "Name",
+    "start": "Start",
+    "end": "End",
+    "muteAlerts": "Mute Alerts",
+    "pauseActions": "Pause Actions",
+    "pauseUpdates": "Pause Updates",
+    "submit": "Schedule Downtime",
+    "saving": "Saving...",
+    "empty": "No downtime windows scheduled."
+  },
+  "map": {
+    "heading": "// Location Map",
+    "noCoordinates": "no coordinates",
+    "noLocationData": "No location data for map."
+  }
+}

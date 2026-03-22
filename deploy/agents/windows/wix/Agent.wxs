@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Agent.wxs — Component definitions for LabTether Agent MSI.
+
+  Components defined here:
+    BinaryComponent     — installs labtether-agent.exe to INSTALLDIR
+    ConfigDirComponent  — creates CONFIGDIR with restricted ACLs
+    ServiceComponent    — registers and controls the LabTetherAgent service
+    RegistryComponent   — writes HUB_URL / ENROLLMENT_TOKEN to the service
+                          Environment registry key (only when provided)
+
+  Service recovery (restart x3, 60 s delay, 24 h reset) cannot be set
+  through WiX v5 ServiceInstall natively. It is applied via a deferred
+  CustomAction that runs sc.exe failure after the service is installed.
+  The CustomAction runs with elevated privileges (Impersonate="no") and
+  is conditioned so it only executes during install/upgrade, not repair.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+
+  <Fragment>
+
+    <!-- ==============================================================
+         Directory stubs referenced by components below.
+         The actual directory entries live in Product.wxs; we reference
+         them here by Id only.
+    ============================================================== -->
+
+    <ComponentGroup Id="AgentComponents" Directory="INSTALLDIR">
+
+      <!-- ============================================================
+           Binary component: labtether-agent.exe
+           Placed in INSTALLDIR (C:\Program Files\LabTether\).
+           The File/@Source path is resolved at build time by the build
+           script, which stages the binary as:
+             wix/staging/labtether-agent.exe
+      ============================================================ -->
+      <Component Id="BinaryComponent" Guid="A1B2C3D4-E5F6-7890-ABCD-EF1234567890">
+        <File
+            Id="labtether_agent_exe"
+            Source="staging\labtether-agent.exe"
+            KeyPath="yes"
+            Vital="yes" />
+      </Component>
+
+      <!-- ============================================================
+           Config directory component: C:\ProgramData\LabTether\
+           Creates the directory with restricted permissions:
+             SYSTEM        — FullControl
+             Administrators — FullControl
+           Standard users are denied access so that the config and token
+           files cannot be read by unprivileged accounts.
+
+           The util:PermissionEx extension sets explicit ACLs and removes
+           inherited permissions (ReplaceInheritedPermissions="yes").
+      ============================================================ -->
+      <Component Id="ConfigDirComponent"
+                 Guid="B2C3D4E5-F6A7-8901-BCDE-F12345678901"
+                 Directory="CONFIGDIR">
+        <CreateFolder Directory="CONFIGDIR">
+          <util:PermissionEx
+              User="SYSTEM"
+              GenericAll="yes"
+              ReplaceInheritedPermissions="yes" />
+          <util:PermissionEx
+              User="Administrators"
+              GenericAll="yes" />
+        </CreateFolder>
+      </Component>
+
+      <!-- ============================================================
+           Service component: LabTetherAgent Windows service.
+
+           ServiceInstall registers the service.
+           ServiceControl starts it after install and stops it before
+           uninstall (also stops on upgrade via MajorUpgrade sequencing).
+
+           Account="LocalSystem" matches the existing PowerShell install
+           behavior. For a least-privilege posture, replace with a
+           dedicated gMSA or virtual service account in a future task.
+
+           ErrorControl="normal" — service start failures are logged but
+           do not roll back the install (avoids a bad catch-22 on first
+           boot before networking is up).
+      ============================================================ -->
+      <Component Id="ServiceComponent" Guid="C3D4E5F6-A7B8-9012-CDEF-123456789012">
+        <File
+            Id="labtether_agent_exe_svc"
+            Source="staging\labtether-agent.exe"
+            KeyPath="yes"
+            Vital="yes" />
+
+        <ServiceInstall
+            Id="LabTetherAgentInstall"
+            Name="LabTetherAgent"
+            DisplayName="LabTether Agent"
+            Description="LabTether Agent: endpoint monitoring, operations, and remote access."
+            Type="ownProcess"
+            Start="auto"
+            Account="LocalSystem"
+            ErrorControl="normal"
+            Interactive="no"
+            Vital="yes" />
+
+        <ServiceControl
+            Id="LabTetherAgentStart"
+            Name="LabTetherAgent"
+            Start="install"
+            Stop="both"
+            Remove="uninstall"
+            Wait="yes" />
+      </Component>
+
+      <!-- ============================================================
+           Registry component: service Environment multi-string value.
+
+           Writes HUB_URL and ENROLLMENT_TOKEN to:
+             HKLM\SYSTEM\CurrentControlSet\Services\LabTetherAgent\Environment
+
+           Each RegistryValue element is conditioned on the corresponding
+           public property being non-empty, matching the behavior of the
+           existing install-agent.ps1 script.
+
+           The KeyPath on the first value means the entire component
+           (and its registry entries) is tracked for repair/uninstall.
+      ============================================================ -->
+      <Component Id="RegistryComponent"
+                 Guid="D4E5F6A7-B8C9-0123-DEF0-234567890123">
+        <Condition>HUB_URL &lt;&gt; "" OR ENROLLMENT_TOKEN &lt;&gt; ""</Condition>
+
+        <RegistryKey
+            Root="HKLM"
+            Key="SYSTEM\CurrentControlSet\Services\LabTetherAgent\Environment"
+            ForceCreateOnInstall="yes">
+
+          <RegistryValue
+              Type="multiString"
+              Name="HUB_URL_ENV"
+              Value="LABTETHER_WS_URL=[HUB_URL]"
+              KeyPath="yes"
+              Action="write">
+            <Condition>HUB_URL &lt;&gt; ""</Condition>
+          </RegistryValue>
+
+          <RegistryValue
+              Type="multiString"
+              Name="ENROLLMENT_TOKEN_ENV"
+              Value="LABTETHER_ENROLLMENT_TOKEN=[ENROLLMENT_TOKEN]"
+              Action="write">
+            <Condition>ENROLLMENT_TOKEN &lt;&gt; ""</Condition>
+          </RegistryValue>
+
+        </RegistryKey>
+      </Component>
+
+    </ComponentGroup>
+
+  </Fragment>
+
+  <!-- ================================================================
+       CustomAction: configure service failure/recovery policy.
+
+       WiX v5 ServiceInstall has no native element for recovery actions.
+       We invoke sc.exe failure as a deferred CustomAction with elevated
+       privileges after the service is installed.
+
+       sc.exe failure LabTetherAgent \
+           reset=86400 \
+           actions=restart/60000/restart/60000/restart/60000
+
+         reset=86400   — reset failure count after 24 hours of uptime
+         restart/60000 — restart service after 60 s on each of 3 failures
+
+       ExeCommand uses the full sc.exe path for reliability in all
+       Windows environments regardless of PATH ordering.
+
+       Sequence placement: after InstallServices (which registers the
+       service), before StartServices (which starts it). This ensures
+       the recovery policy is in place before the first start.
+  ================================================================ -->
+  <Fragment>
+
+    <CustomAction
+        Id="SetServiceRecovery"
+        Directory="INSTALLDIR"
+        ExeCommand='[SystemFolder]sc.exe failure LabTetherAgent reset= 86400 actions= restart/60000/restart/60000/restart/60000'
+        Execute="deferred"
+        Impersonate="no"
+        Return="ignore" />
+
+    <InstallExecuteSequence>
+      <Custom Action="SetServiceRecovery" After="InstallServices">
+        NOT Installed OR REINSTALL
+      </Custom>
+    </InstallExecuteSequence>
+
+  </Fragment>
+
+</Wix>

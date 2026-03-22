@@ -1,0 +1,64 @@
+{
+  "title": "Aktionen",
+  "subtitle": "Aufgaben auf Ihren Geräten ausführen und Ergebnisse überprüfen",
+  "runAction": {
+    "heading": "// Aktion ausführen",
+    "integration": {
+      "label": "Integration",
+      "tooltip": "Integrationsmodul, das diese Aktion bereitstellt"
+    },
+    "action": "Aktion",
+    "device": {
+      "label": "Gerät",
+      "tooltip": "Die Ressourcenkennung, auf die eingewirkt wird (Container-ID, VM-Name usw.)",
+      "placeholder": "Container-ID / VM-ID / Entity-ID"
+    },
+    "options": {
+      "label": "Optionen",
+      "placeholder": "key=value,key2=value2"
+    },
+    "previewOnly": {
+      "label": "Nur Vorschau",
+      "tooltip": "Aktion simulieren, ohne Änderungen vorzunehmen"
+    },
+    "submit": "Ausführen",
+    "submitting": "Wird eingereiht..."
+  },
+  "history": {
+    "heading": "// Ausführungsverlauf",
+    "viewLogs": "Protokolle anzeigen",
+    "empty": {
+      "title": "Noch keine Ausführungen",
+      "description": "Wählen Sie oben eine Integration und Aktion aus und klicken Sie auf Ausführen."
+    }
+  },
+  "updates": {
+    "title": "Aktualisierungen",
+    "subtitle": "Aktualisierungen planen und im gesamten Lab ausführen",
+    "planName": "Planname",
+    "devices": {
+      "label": "Geräte",
+      "tooltip": "Kommagetrennte Liste der zu aktualisierenden Geräte-Hostnamen",
+      "placeholder": "lab-host-01, docker-host-01"
+    },
+    "scopes": {
+      "label": "Bereiche",
+      "tooltip": "Update-Kategorien: os_packages, docker_images usw.",
+      "placeholder": "os_packages,docker_images"
+    },
+    "previewOnly": "Nur Vorschau",
+    "createPlan": "Plan erstellen",
+    "saving": "Wird gespeichert...",
+    "plans": "Pläne",
+    "recentRuns": "Letzte Ausführungen",
+    "run": "Ausführen",
+    "plansEmpty": {
+      "title": "Noch keine Update-Pläne",
+      "description": "Erstellen Sie oben einen Plan, um festzulegen, welche Geräte und Bereiche aktualisiert werden sollen."
+    },
+    "runsEmpty": {
+      "title": "Noch keine Update-Ausführungen",
+      "description": "Führen Sie einen Plan aus, um eine Ausführung zu starten."
+    }
+  }
+}

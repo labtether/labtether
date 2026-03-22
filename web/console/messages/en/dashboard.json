@@ -1,0 +1,35 @@
+{
+  "title": "Dashboard",
+  "subtitle": "Your homelab at a glance",
+  "export": "Export",
+  "addDevice": "+ Add Device",
+  "errorHint": "Check that the backend is running and accessible.",
+  "loadingTopology": "Loading topology overview...",
+  "kpi": {
+    "online": "online",
+    "cpu": "cpu",
+    "memory": "memory",
+    "failures": "failures"
+  },
+  "fleetFocus": {
+    "label": "Fleet Focus",
+    "devicesLink": "Devices",
+    "loading": "Loading fleet data...",
+    "empty": "No devices found. Add your first device to get started.",
+    "showIssues": "Show only issues",
+    "showAll": "Show all fleet"
+  },
+  "activity": {
+    "label": "Activity",
+    "empty": "No recent activity. Commands and events will appear here.",
+    "command": "act",
+    "event": "evt",
+    "heartbeat": "hb"
+  },
+  "hotspots": {
+    "label": "Resource Hotspots",
+    "cpu": "Top CPU",
+    "memory": "Top Memory",
+    "disk": "Top Disk"
+  }
+}

@@ -1,0 +1,210 @@
+{
+  "provider_instance": {
+    "id": "prov-connector-pbs-collector-1",
+    "kind": "connector",
+    "provider": "pbs",
+    "display_name": "connector-pbs",
+    "status": "healthy",
+    "scope": "global",
+    "config_ref": "collector-1",
+    "metadata": {
+      "instance_key": "collector-1"
+    }
+  },
+  "assets": [
+    {
+      "id": "pbs-datastore-main",
+      "type": "storage-pool",
+      "name": "main",
+      "source": "pbs",
+      "resource_class": "storage",
+      "resource_kind": "datastore",
+      "metadata": {
+        "resource_class": "storage",
+        "resource_kind": "datastore",
+        "store": "main"
+      },
+      "attributes": {
+        "source": "pbs",
+        "store": "main"
+      }
+    },
+    {
+      "id": "pbs-root-1",
+      "type": "storage-controller",
+      "name": "pbs-root",
+      "source": "pbs",
+      "resource_class": "storage",
+      "resource_kind": "storage-controller",
+      "metadata": {
+        "hostname": "pbs-root",
+        "resource_class": "storage",
+        "resource_kind": "storage-controller"
+      },
+      "attributes": {
+        "hostname": "pbs-root",
+        "source": "pbs"
+      }
+    }
+  ],
+  "external_refs": [
+    {
+      "resource_id": "pbs-datastore-main",
+      "provider_instance_id": "prov-connector-pbs-collector-1",
+      "external_id": "main",
+      "external_type": "datastore"
+    },
+    {
+      "resource_id": "pbs-root-1",
+      "provider_instance_id": "prov-connector-pbs-collector-1",
+      "external_id": "pbs-root-1",
+      "external_type": "storage-controller"
+    }
+  ],
+  "relationships": [
+    {
+      "source_resource_id": "pbs-root-1",
+      "target_resource_id": "pbs-datastore-main",
+      "type": "contains",
+      "direction": "downstream",
+      "criticality": "medium",
+      "inferred": true,
+      "confidence": 90,
+      "evidence": {
+        "source": "pbs.discovery"
+      }
+    }
+  ],
+  "capability_sets": [
+    {
+      "subject_type": "provider",
+      "subject_id": "prov-connector-pbs-collector-1",
+      "capabilities": [
+        {
+          "id": "events.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "health.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "inventory.discover",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "system.action",
+          "scope": "action",
+          "stability": "ga",
+          "supports_dry_run": true,
+          "requires_target": true
+        },
+        {
+          "id": "telemetry.read",
+          "scope": "read",
+          "stability": "ga"
+        }
+      ]
+    },
+    {
+      "subject_type": "resource",
+      "subject_id": "pbs-datastore-main",
+      "capabilities": [
+        {
+          "id": "events.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "health.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "telemetry.read",
+          "scope": "read",
+          "stability": "ga"
+        }
+      ]
+    },
+    {
+      "subject_type": "resource",
+      "subject_id": "pbs-root-1",
+      "capabilities": [
+        {
+          "id": "events.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "health.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "system.action",
+          "scope": "action",
+          "stability": "ga",
+          "supports_dry_run": true,
+          "requires_target": true
+        },
+        {
+          "id": "telemetry.read",
+          "scope": "read",
+          "stability": "ga"
+        }
+      ]
+    }
+  ],
+  "template_bindings": [
+    {
+      "resource_id": "pbs-datastore-main",
+      "template_id": "template.pbs.datastore",
+      "tabs": [
+        "actions",
+        "logs",
+        "overview",
+        "pbs",
+        "telemetry"
+      ]
+    },
+    {
+      "resource_id": "pbs-root-1",
+      "template_id": "template.pbs.controller",
+      "tabs": [
+        "actions",
+        "logs",
+        "overview",
+        "pbs",
+        "telemetry",
+        "terminal"
+      ],
+      "operations": [
+        "automation.entity.toggle",
+        "automation.service.call",
+        "container.kill",
+        "container.pause",
+        "container.remove",
+        "container.restart",
+        "container.unpause",
+        "disk.smart_test",
+        "storage.pool.scrub",
+        "system.reboot"
+      ]
+    }
+  ],
+  "checkpoint": {
+    "provider_instance_id": "prov-connector-pbs-collector-1",
+    "stream": "discover",
+    "cursor": "count=2;ts=*"
+  },
+  "reconciliation": {
+    "created_count": 2,
+    "updated_count": 4,
+    "stale_count": 0,
+    "error_count": 0
+  }
+}

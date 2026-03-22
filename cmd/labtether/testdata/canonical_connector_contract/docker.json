@@ -1,0 +1,197 @@
+{
+  "provider_instance": {
+    "id": "prov-connector-docker-collector-1",
+    "kind": "connector",
+    "provider": "docker",
+    "display_name": "connector-docker",
+    "status": "healthy",
+    "scope": "global",
+    "config_ref": "collector-1",
+    "metadata": {
+      "instance_key": "collector-1"
+    }
+  },
+  "assets": [
+    {
+      "id": "docker-ct-nginx",
+      "type": "docker-container",
+      "name": "nginx",
+      "source": "docker",
+      "resource_class": "compute",
+      "resource_kind": "docker-container",
+      "metadata": {
+        "container_id": "abc123",
+        "resource_class": "compute",
+        "resource_kind": "docker-container"
+      },
+      "attributes": {
+        "container_id": "abc123",
+        "source": "docker"
+      }
+    },
+    {
+      "id": "docker-host-lab",
+      "type": "container-host",
+      "name": "docker-host-lab",
+      "source": "docker",
+      "resource_class": "compute",
+      "resource_kind": "container-host",
+      "metadata": {
+        "hostname": "docker-host-lab",
+        "resource_class": "compute",
+        "resource_kind": "container-host"
+      },
+      "attributes": {
+        "hostname": "docker-host-lab",
+        "source": "docker"
+      }
+    }
+  ],
+  "external_refs": [
+    {
+      "resource_id": "docker-ct-nginx",
+      "provider_instance_id": "prov-connector-docker-collector-1",
+      "external_id": "abc123",
+      "external_type": "docker-container"
+    },
+    {
+      "resource_id": "docker-host-lab",
+      "provider_instance_id": "prov-connector-docker-collector-1",
+      "external_id": "docker-host-lab",
+      "external_type": "container-host"
+    }
+  ],
+  "capability_sets": [
+    {
+      "subject_type": "provider",
+      "subject_id": "prov-connector-docker-collector-1",
+      "capabilities": [
+        {
+          "id": "events.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "health.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "inventory.discover",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "system.action",
+          "scope": "action",
+          "stability": "ga",
+          "supports_dry_run": true,
+          "requires_target": true
+        },
+        {
+          "id": "telemetry.read",
+          "scope": "read",
+          "stability": "ga"
+        }
+      ]
+    },
+    {
+      "subject_type": "resource",
+      "subject_id": "docker-ct-nginx",
+      "capabilities": [
+        {
+          "id": "events.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "health.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "telemetry.read",
+          "scope": "read",
+          "stability": "ga"
+        }
+      ]
+    },
+    {
+      "subject_type": "resource",
+      "subject_id": "docker-host-lab",
+      "capabilities": [
+        {
+          "id": "events.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "health.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "system.action",
+          "scope": "action",
+          "stability": "ga",
+          "supports_dry_run": true,
+          "requires_target": true
+        },
+        {
+          "id": "telemetry.read",
+          "scope": "read",
+          "stability": "ga"
+        }
+      ]
+    }
+  ],
+  "template_bindings": [
+    {
+      "resource_id": "docker-ct-nginx",
+      "template_id": "template.docker.container",
+      "tabs": [
+        "inspect",
+        "logs",
+        "overview",
+        "stats",
+        "telemetry"
+      ]
+    },
+    {
+      "resource_id": "docker-host-lab",
+      "template_id": "template.docker.host",
+      "tabs": [
+        "containers",
+        "images",
+        "logs",
+        "overview",
+        "stacks",
+        "telemetry",
+        "terminal"
+      ],
+      "operations": [
+        "automation.entity.toggle",
+        "automation.service.call",
+        "container.kill",
+        "container.pause",
+        "container.remove",
+        "container.restart",
+        "container.unpause",
+        "disk.smart_test",
+        "storage.pool.scrub",
+        "system.reboot"
+      ]
+    }
+  ],
+  "checkpoint": {
+    "provider_instance_id": "prov-connector-docker-collector-1",
+    "stream": "discover",
+    "cursor": "count=2;ts=*"
+  },
+  "reconciliation": {
+    "created_count": 2,
+    "updated_count": 3,
+    "stale_count": 0,
+    "error_count": 0
+  }
+}

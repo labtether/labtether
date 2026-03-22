@@ -1,0 +1,57 @@
+{
+  "title": "健康",
+  "subtitle": "可用性评分、失败任务、事件历史和维护窗口",
+  "tabs": {
+    "scores": "评分",
+    "timeline": "事件",
+    "maintenance": "停机维护",
+    "map": "地图"
+  },
+  "scores": {
+    "locationHealth": "// 位置健康状况",
+    "failedJobs": "// 失败任务",
+    "commonErrors": "// 常见错误",
+    "failedJobsTrend": "// 失败任务趋势",
+    "dataCleanup": "// 数据清理",
+    "healthEmpty": {
+      "title": "还没有健康数据",
+      "description": "当分组有已连接的设备后，健康评分将会显示。"
+    },
+    "noFailedJobs": "没有失败的任务。",
+    "noRecurringErrors": "没有重复出现的错误。",
+    "noTrendData": "没有趋势数据。",
+    "retentionHealthy": "数据保留循环健康。"
+  },
+  "timeline": {
+    "heading": "// 事件历史",
+    "group": "分组",
+    "range": "范围",
+    "errors": "错误",
+    "warnings": "警告",
+    "failedActions": "失败操作",
+    "failedUpdates": "失败更新",
+    "unresponsive": "无响应",
+    "offline": "离线",
+    "noEvents": "该时间范围内没有事件。",
+    "showMore": "显示更多",
+    "showLess": "收起"
+  },
+  "maintenance": {
+    "heading": "// 维护窗口",
+    "group": "分组",
+    "name": "名称",
+    "start": "开始",
+    "end": "结束",
+    "muteAlerts": "静音告警",
+    "pauseActions": "暂停操作",
+    "pauseUpdates": "暂停更新",
+    "submit": "安排维护窗口",
+    "saving": "正在保存...",
+    "empty": "没有已安排的维护窗口。"
+  },
+  "map": {
+    "heading": "// 位置地图",
+    "noCoordinates": "无坐标",
+    "noLocationData": "地图没有位置数据。"
+  }
+}

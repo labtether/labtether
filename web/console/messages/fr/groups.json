@@ -1,0 +1,31 @@
+{
+  "title": "Groupes",
+  "subtitle": "Gérer les groupes utilisés pour les appareils, la topologie, les alertes et la fiabilité",
+  "manage": "Gérer",
+  "done": "Terminé",
+  "newGroup": "Nouveau groupe",
+  "expandAll": "Tout développer",
+  "collapseAll": "Tout réduire",
+  "empty": {
+    "title": "Aucun groupe pour le moment",
+    "description": "Créez votre premier groupe pour organiser les appareils.",
+    "action": "Créer un groupe"
+  },
+  "dropToRoot": "Déposer ici pour déplacer au niveau supérieur",
+  "editModal": {
+    "title": "Modifier le groupe",
+    "name": "Nom",
+    "parentGroup": "Groupe parent",
+    "jumpChain": "Accès réseau — Chaîne de rebond",
+    "saving": "Enregistrement..."
+  },
+  "create": {
+    "nameSlugRequired": "Le nom et le slug sont requis."
+  },
+  "edit": {
+    "nameRequired": "Le nom est requis."
+  },
+  "delete": {
+    "confirmHint": "Saisissez le nom exact du groupe pour confirmer."
+  }
+}

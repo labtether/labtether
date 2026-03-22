@@ -1,0 +1,13 @@
+{
+  "title": "告警",
+  "subtitle": {
+    "label": "您的告警收件箱{activeInfo}、规则和静音控制",
+    "active": " · {count} 个活跃"
+  },
+  "tabs": {
+    "inbox": "收件箱",
+    "rules": "规则",
+    "silences": "已静音",
+    "delivery": "投递日志"
+  }
+}

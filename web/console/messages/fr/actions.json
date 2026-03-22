@@ -1,0 +1,64 @@
+{
+  "title": "Actions",
+  "subtitle": "Exécuter des tâches sur vos appareils et consulter les résultats",
+  "runAction": {
+    "heading": "// Exécuter une action",
+    "integration": {
+      "label": "Intégration",
+      "tooltip": "Module d'intégration qui fournit cette action"
+    },
+    "action": "Action",
+    "device": {
+      "label": "Appareil",
+      "tooltip": "L'identifiant de la ressource cible (ID de conteneur, nom de VM, etc.)",
+      "placeholder": "container-id / vm-id / entity-id"
+    },
+    "options": {
+      "label": "Options",
+      "placeholder": "key=value,key2=value2"
+    },
+    "previewOnly": {
+      "label": "Aperçu uniquement",
+      "tooltip": "Simuler l'action sans effectuer de modifications"
+    },
+    "submit": "Exécuter",
+    "submitting": "Mise en file d'attente..."
+  },
+  "history": {
+    "heading": "// Historique d'exécution",
+    "viewLogs": "Voir les journaux",
+    "empty": {
+      "title": "Aucune exécution pour le moment",
+      "description": "Sélectionnez une intégration et une action ci-dessus, puis cliquez sur Exécuter."
+    }
+  },
+  "updates": {
+    "title": "Mises à jour",
+    "subtitle": "Planifier et exécuter des mises à jour dans votre lab",
+    "planName": "Nom du plan",
+    "devices": {
+      "label": "Appareils",
+      "tooltip": "Liste de noms d'hôtes séparés par des virgules à mettre à jour",
+      "placeholder": "lab-host-01, docker-host-01"
+    },
+    "scopes": {
+      "label": "Portées",
+      "tooltip": "Catégories de mise à jour : os_packages, docker_images, etc.",
+      "placeholder": "os_packages,docker_images"
+    },
+    "previewOnly": "Aperçu uniquement",
+    "createPlan": "Créer un plan",
+    "saving": "Enregistrement...",
+    "plans": "Plans",
+    "recentRuns": "Exécutions récentes",
+    "run": "Exécuter",
+    "plansEmpty": {
+      "title": "Aucun plan de mise à jour",
+      "description": "Créez un plan ci-dessus pour définir quels appareils et portées mettre à jour."
+    },
+    "runsEmpty": {
+      "title": "Aucune exécution de mise à jour",
+      "description": "Exécutez un plan pour démarrer une exécution."
+    }
+  }
+}

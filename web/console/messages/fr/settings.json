@@ -1,0 +1,19 @@
+{
+  "title": "Paramètres",
+  "subtitle": "Ajuster l'apparence et le fonctionnement de LabTether",
+  "appearance": {
+    "heading": "// Apparence",
+    "theme": "Thème",
+    "layout": "Disposition",
+    "accent": "Accent",
+    "autoRefreshLabel": "Actualisation auto",
+    "autoRefreshOff": "Off"
+  },
+  "copiedToClipboard": "Copié dans le presse-papiers",
+  "about": {
+    "heading": "// À propos",
+    "version": "Version\u00a0: {version}",
+    "uptime": "Disponibilité\u00a0: {uptime}",
+    "sessionLifetime": "Session\u00a0: {duration}"
+  }
+}

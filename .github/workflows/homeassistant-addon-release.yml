@@ -1,0 +1,151 @@
+name: Home Assistant Add-on Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Add-on version override (defaults to tag name without leading v)"
+        required: false
+        type: string
+      publish_repo_branch:
+        description: "Publish hosted addon repository branch"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      owner_lc: ${{ steps.meta.outputs.owner_lc }}
+      publish_repo_branch: ${{ steps.meta.outputs.publish_repo_branch }}
+    steps:
+      - name: Resolve release metadata
+        id: meta
+        run: |
+          set -euo pipefail
+
+          version=""
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            version="${{ github.event.inputs.version }}"
+          fi
+
+          if [[ -z "${version}" ]]; then
+            if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+              version="${GITHUB_REF_NAME#v}"
+            else
+              version="${GITHUB_SHA::12}"
+            fi
+          fi
+
+          owner_lc="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+
+          publish_repo_branch="true"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            input_value="${{ github.event.inputs.publish_repo_branch }}"
+            if [[ "${input_value}" == "false" ]]; then
+              publish_repo_branch="false"
+            fi
+          fi
+
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "owner_lc=${owner_lc}" >> "$GITHUB_OUTPUT"
+          echo "publish_repo_branch=${publish_repo_branch}" >> "$GITHUB_OUTPUT"
+
+  build-addon-images:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            go_arch: amd64
+            base_image: ghcr.io/home-assistant/amd64-base:3.19
+          - arch: aarch64
+            platform: linux/arm64
+            go_arch: arm64
+            base_image: ghcr.io/home-assistant/aarch64-base:3.19
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push addon image (${{ matrix.arch }})
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: integrations/homeassistant/addon/labtether/Dockerfile
+          push: true
+          platforms: ${{ matrix.platform }}
+          build-args: |
+            BUILD_FROM=${{ matrix.base_image }}
+            TARGETARCH=${{ matrix.go_arch }}
+          tags: |
+            ghcr.io/${{ needs.prepare.outputs.owner_lc }}/labtether-homeassistant-addon-${{ matrix.arch }}:${{ needs.prepare.outputs.version }}
+            ghcr.io/${{ needs.prepare.outputs.owner_lc }}/labtether-homeassistant-addon-${{ matrix.arch }}:latest
+          labels: |
+            org.opencontainers.image.title=LabTether Home Assistant Add-on
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+  package-addon-repository:
+    needs: [prepare, build-addon-images]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Package Home Assistant repository layout
+        run: |
+          ./scripts/release/package-ha-addon-repo.sh \
+            --version "${{ needs.prepare.outputs.version }}" \
+            --image-prefix "ghcr.io/${{ needs.prepare.outputs.owner_lc }}/labtether-homeassistant-addon" \
+            --output-dir "./dist/ha-addon-repository"
+
+      - name: Upload add-on repository artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: homeassistant-addon-repository-${{ needs.prepare.outputs.version }}
+          path: |
+            dist/ha-addon-repository
+            dist/labtether-ha-addon-repository-${{ needs.prepare.outputs.version }}.tar.gz
+          if-no-files-found: error
+
+      - name: Attach add-on repository tarball to GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/labtether-ha-addon-repository-${{ needs.prepare.outputs.version }}.tar.gz
+
+      - name: Publish hosted add-on repository branch
+        if: needs.prepare.outputs.publish_repo_branch == 'true'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: homeassistant-addon-repo
+          publish_dir: ./dist/ha-addon-repository
+          force_orphan: true
+          enable_jekyll: false
+          commit_message: "release: Home Assistant add-on repo ${{ needs.prepare.outputs.version }}"

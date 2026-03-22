@@ -1,0 +1,19 @@
+{
+  "title": "Einstellungen",
+  "subtitle": "Anpassen, wie LabTether aussieht und funktioniert",
+  "appearance": {
+    "heading": "// Darstellung",
+    "theme": "Design",
+    "layout": "Layout",
+    "accent": "Akzentfarbe",
+    "autoRefreshLabel": "Auto-Aktualisierung",
+    "autoRefreshOff": "Aus"
+  },
+  "copiedToClipboard": "In die Zwischenablage kopiert",
+  "about": {
+    "heading": "// Über",
+    "version": "Version: {version}",
+    "uptime": "Laufzeit: {uptime}",
+    "sessionLifetime": "Sitzung: {duration}"
+  }
+}

@@ -1,0 +1,21 @@
+[Unit]
+Description=LabTether Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+EnvironmentFile=-/etc/labtether/agent.env
+ExecStart=/usr/local/bin/labtether-agent
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+# Package actions, OS updates, and agent self-update need to write system paths.
+ProtectSystem=off
+ProtectHome=read-only
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

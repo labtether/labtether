@@ -1,0 +1,18 @@
+{
+  "title": "Audit Log",
+  "subtitle": "System activity and event history",
+  "exportCSV": "Export CSV",
+  "timestamp": "Time",
+  "type": "Event Type",
+  "actor": "Actor",
+  "target": "Target",
+  "decision": "Decision",
+  "details": "Details",
+  "noEvents": "No audit events",
+  "noEventsDesc": "System activity will appear here as actions are performed.",
+  "allow": "Allow",
+  "deny": "Deny",
+  "filterByType": "Filter by type",
+  "allTypes": "All Types",
+  "search": "Search events..."
+}

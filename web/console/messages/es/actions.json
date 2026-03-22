@@ -1,0 +1,64 @@
+{
+  "title": "Acciones",
+  "subtitle": "Ejecutar tareas en sus dispositivos y revisar resultados",
+  "runAction": {
+    "heading": "// Ejecutar acción",
+    "integration": {
+      "label": "Integración",
+      "tooltip": "Módulo de integración que proporciona esta acción"
+    },
+    "action": "Acción",
+    "device": {
+      "label": "Dispositivo",
+      "tooltip": "El identificador del recurso a actuar (ID de contenedor, nombre de VM, etc.)",
+      "placeholder": "container-id / vm-id / entity-id"
+    },
+    "options": {
+      "label": "Opciones",
+      "placeholder": "key=value,key2=value2"
+    },
+    "previewOnly": {
+      "label": "Solo vista previa",
+      "tooltip": "Simular la acción sin realizar cambios"
+    },
+    "submit": "Ejecutar",
+    "submitting": "Encolando..."
+  },
+  "history": {
+    "heading": "// Historial de ejecución",
+    "viewLogs": "Ver registros",
+    "empty": {
+      "title": "Aún no hay ejecuciones",
+      "description": "Seleccione una integración y acción arriba, luego presione Ejecutar."
+    }
+  },
+  "updates": {
+    "title": "Actualizaciones",
+    "subtitle": "Programar y ejecutar actualizaciones en su laboratorio",
+    "planName": "Nombre del plan",
+    "devices": {
+      "label": "Dispositivos",
+      "tooltip": "Lista separada por comas de nombres de host de dispositivos a actualizar",
+      "placeholder": "lab-host-01, docker-host-01"
+    },
+    "scopes": {
+      "label": "Alcances",
+      "tooltip": "Categorías de actualización: os_packages, docker_images, etc.",
+      "placeholder": "os_packages,docker_images"
+    },
+    "previewOnly": "Solo vista previa",
+    "createPlan": "Crear plan",
+    "saving": "Guardando...",
+    "plans": "Planes",
+    "recentRuns": "Ejecuciones recientes",
+    "run": "Ejecutar",
+    "plansEmpty": {
+      "title": "Aún no hay planes de actualización",
+      "description": "Cree un plan arriba para definir qué dispositivos y alcances actualizar."
+    },
+    "runsEmpty": {
+      "title": "Aún no hay ejecuciones de actualización",
+      "description": "Ejecute un plan para iniciar una ejecución."
+    }
+  }
+}

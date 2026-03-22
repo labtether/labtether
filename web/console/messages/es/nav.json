@@ -1,0 +1,27 @@
+{
+  "brand": "LabTether",
+  "brandSub": "plano de control",
+  "categories": {
+    "overview": "resumen",
+    "operations": "operaciones",
+    "system": "sistema"
+  },
+  "dashboard": "Panel",
+  "devices": "Dispositivos",
+  "topology": "Topología",
+  "services": "Servicios",
+  "containers": "Contenedores",
+  "terminal": "Terminal",
+  "files": "Archivos",
+  "logs": "Registros",
+  "alerts": "Alertas",
+  "actions": "Acciones",
+  "groups": "Grupos",
+  "health": "Salud",
+  "users": "Usuarios",
+  "security": "Seguridad",
+  "settings": "Configuración",
+  "commandPalette": {
+    "placeholder": "Buscar comandos..."
+  }
+}

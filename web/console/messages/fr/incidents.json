@@ -1,0 +1,16 @@
+{
+  "title": "Incidents",
+  "subtitle": "Suivre les problèmes et comprendre ce qui s'est passé",
+  "back": "Retour",
+  "actions": {
+    "startInvestigating": "Commencer l'investigation",
+    "markMitigated": "Marquer comme atténué",
+    "markResolved": "Marquer comme résolu"
+  },
+  "notes": {
+    "title": "Notes",
+    "placeholder": "Saisir une note...",
+    "emptyHint": "Ajoutez des notes d'investigation, l'analyse des causes et les mesures de mitigation.",
+    "add": "Ajouter une note"
+  }
+}

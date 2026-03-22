@@ -1,0 +1,12 @@
+{
+  "title": "终端",
+  "loading": "正在加载工作区...",
+  "palette": {
+    "group": "终端",
+    "newTab": "新建标签页",
+    "enableBroadcast": "启用广播",
+    "disableBroadcast": "禁用广播",
+    "enterFullscreen": "进入全屏",
+    "exitFullscreen": "退出全屏"
+  }
+}

@@ -1,0 +1,3 @@
+# gosec allowlist
+# format: rule_id<TAB>path<TAB>line<TAB>justification
+# policy: entries must be explicitly reviewed; new findings fail CI until added with rationale.

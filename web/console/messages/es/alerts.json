@@ -1,0 +1,13 @@
+{
+  "title": "Alertas",
+  "subtitle": {
+    "label": "Su bandeja de alertas{activeInfo}, reglas y controles de silencio",
+    "active": " · {count} activa(s)"
+  },
+  "tabs": {
+    "inbox": "Bandeja de entrada",
+    "rules": "Reglas",
+    "silences": "Silenciadas",
+    "delivery": "Registro de envíos"
+  }
+}

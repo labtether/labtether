@@ -1,0 +1,16 @@
+{
+  "title": "Incidentes",
+  "subtitle": "Rastrear problemas y ver qué sucedió",
+  "back": "Volver",
+  "actions": {
+    "startInvestigating": "Iniciar investigación",
+    "markMitigated": "Marcar como mitigado",
+    "markResolved": "Marcar como resuelto"
+  },
+  "notes": {
+    "title": "Notas",
+    "placeholder": "Escribir una nota...",
+    "emptyHint": "Agregue notas de investigación, análisis de causa raíz y pasos de mitigación.",
+    "add": "Agregar nota"
+  }
+}

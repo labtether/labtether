@@ -1,0 +1,23 @@
+{
+  "title": "Registros",
+  "subtitle": "Buscar y filtrar la salida de registros de sus dispositivos",
+  "filters": {
+    "source": "Fuente",
+    "level": "Nivel",
+    "events": "Eventos",
+    "range": "Rango",
+    "search": "Buscar",
+    "allSources": "Todas las fuentes",
+    "operational": "Operacional",
+    "all": "Todos"
+  },
+  "search": {
+    "placeholder": "Buscar en texto de mensaje (error, timeout, zfs...)"
+  },
+  "empty": {
+    "title": "Aún no hay eventos de registro",
+    "description": "Los eventos aparecerán aquí cuando los dispositivos comiencen a reportar. Verifique que al menos un dispositivo esté conectado.",
+    "viewDevices": "Ver dispositivos"
+  },
+  "noMatch": "Ningún evento de registro coincide con sus filtros actuales."
+}

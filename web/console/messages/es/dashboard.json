@@ -1,0 +1,35 @@
+{
+  "title": "Panel",
+  "subtitle": "Su homelab de un vistazo",
+  "export": "Exportar",
+  "addDevice": "+ Agregar dispositivo",
+  "errorHint": "Verifique que el backend esté funcionando y sea accesible.",
+  "loadingTopology": "Cargando vista de topología...",
+  "kpi": {
+    "online": "en línea",
+    "cpu": "CPU",
+    "memory": "memoria",
+    "failures": "fallos"
+  },
+  "fleetFocus": {
+    "label": "Vista de flota",
+    "devicesLink": "Dispositivos",
+    "loading": "Cargando datos de la flota...",
+    "empty": "No se encontraron dispositivos. Agregue su primer dispositivo para comenzar.",
+    "showIssues": "Mostrar solo problemas",
+    "showAll": "Mostrar toda la flota"
+  },
+  "activity": {
+    "label": "Actividad",
+    "empty": "Sin actividad reciente. Los comandos y eventos aparecerán aquí.",
+    "command": "acc",
+    "event": "evt",
+    "heartbeat": "hb"
+  },
+  "hotspots": {
+    "label": "Puntos calientes de recursos",
+    "cpu": "Top CPU",
+    "memory": "Top Memoria",
+    "disk": "Top Disco"
+  }
+}

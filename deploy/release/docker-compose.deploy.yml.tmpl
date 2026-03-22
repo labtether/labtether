@@ -1,0 +1,109 @@
+services:
+  labtether-bootstrap:
+    image: __POSTGRES_IMAGE__
+    restart: "no"
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        umask 022
+        mkdir -p /bootstrap/postgres
+        if [ ! -s /bootstrap/postgres/password ]; then
+          dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '\n' | tr '+/' '-_' > /bootstrap/postgres/password
+          printf '\n' >> /bootstrap/postgres/password
+          chmod 0444 /bootstrap/postgres/password
+        fi
+    volumes:
+      - labtether-bootstrap:/bootstrap
+
+  postgres:
+    image: __POSTGRES_IMAGE__
+    restart: unless-stopped
+    depends_on:
+      labtether-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-labtether}
+      POSTGRES_USER: ${POSTGRES_USER:-labtether}
+      POSTGRES_PASSWORD_FILE: /bootstrap/postgres/password
+    volumes:
+      - labtether-bootstrap:/bootstrap:ro
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-labtether} -d ${POSTGRES_DB:-labtether}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  labtether:
+    image: __LABTETHER_HUB_IMAGE__
+    restart: unless-stopped
+    depends_on:
+      labtether-bootstrap:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    environment:
+      API_PORT: 8080
+      POSTGRES_DB: ${POSTGRES_DB:-labtether}
+      POSTGRES_USER: ${POSTGRES_USER:-labtether}
+      LABTETHER_ENV: production
+      LABTETHER_ADMIN_USERNAME: ${LABTETHER_ADMIN_USERNAME:-admin}
+      LABTETHER_ADMIN_PASSWORD: ${LABTETHER_ADMIN_PASSWORD:-}
+      LABTETHER_MANAGED_POSTGRES: "true"
+      LABTETHER_TLS_MODE: ${LABTETHER_TLS_MODE:-auto}
+      LABTETHER_DATA_DIR: /data
+      LABTETHER_API_TOKEN_FILE: /run/labtether/api-token
+      GUACD_HOST: ${GUACD_HOST:-guacd}
+      GUACD_PORT: ${GUACD_PORT:-4822}
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        export POSTGRES_PASSWORD="$$(cat /bootstrap/postgres/password)"
+        export DATABASE_URL="postgres://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@postgres:5432/$${POSTGRES_DB}?sslmode=disable"
+        exec /service
+    ports:
+      - "${LABTETHER_HTTP_BIND:-127.0.0.1}:8080:8080"
+      - "${LABTETHER_HTTPS_BIND:-127.0.0.1}:8443:8443"
+    volumes:
+      - labtether-bootstrap:/bootstrap:ro
+      - labtether-data:/data
+      - labtether-ca:/ca
+      - labtether-service-auth:/run/labtether
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  web-console:
+    image: __LABTETHER_WEB_IMAGE__
+    restart: unless-stopped
+    depends_on:
+      labtether:
+        condition: service_healthy
+    environment:
+      PORT: 3000
+      LABTETHER_API_BASE_URL: http://labtether:8080
+      NEXT_PUBLIC_HUB_API_PORT: "8080"
+      LABTETHER_API_TOKEN_FILE: /run/labtether/api-token
+    ports:
+      - "${LABTETHER_CONSOLE_BIND:-127.0.0.1}:3000:3000"
+    volumes:
+      - labtether-ca:/ca:ro
+      - labtether-service-auth:/run/labtether:ro
+
+  guacd:
+    profiles: ["remote-desktop"]
+    image: __GUACD_IMAGE__
+    restart: unless-stopped
+
+volumes:
+  labtether-bootstrap:
+  postgres-data:
+  labtether-data:
+  labtether-ca:
+  labtether-service-auth:

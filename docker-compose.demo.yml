@@ -1,0 +1,42 @@
+## Demo deployment for App Store review.
+## Extends docker-compose.deploy.yml with a seed job and relaxed bind addresses.
+##
+## Usage:
+##   cp .env.demo .env.deploy
+##   docker compose -f docker-compose.deploy.yml -f docker-compose.demo.yml up -d
+##
+## The demo-seed service runs once after the hub is healthy, inserting sample
+## assets, alerts, incidents, logs, and the apple-review viewer account.
+
+services:
+  labtether:
+    environment:
+      LABTETHER_TLS_MODE: "off"
+    ports:
+      - "0.0.0.0:8080:8080"
+
+  web-console:
+    ports:
+      - "0.0.0.0:3000:3000"
+
+  demo-seed:
+    image: ${POSTGRES_IMAGE:?set POSTGRES_IMAGE in .env.deploy}
+    restart: "no"
+    depends_on:
+      labtether:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        export PGPASSWORD="$$(cat /bootstrap/postgres/password)"
+        echo "Waiting 5s for migrations to complete..."
+        sleep 5
+        psql -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -f /seed/demo-seed.sql
+        echo "Demo seed complete."
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-labtether}
+      POSTGRES_USER: ${POSTGRES_USER:-labtether}
+    volumes:
+      - labtether-bootstrap:/bootstrap:ro
+      - ./scripts/demo-seed.sql:/seed/demo-seed.sql:ro

@@ -1,0 +1,23 @@
+{
+  "title": "Logs",
+  "subtitle": "Search and filter log output from your devices",
+  "filters": {
+    "source": "Source",
+    "level": "Level",
+    "events": "Events",
+    "range": "Range",
+    "search": "Search",
+    "allSources": "All Sources",
+    "operational": "Operational",
+    "all": "All"
+  },
+  "search": {
+    "placeholder": "Search message text (error, timeout, zfs...)"
+  },
+  "empty": {
+    "title": "No log events yet",
+    "description": "Events will appear here once devices start reporting. Check that at least one device is connected.",
+    "viewDevices": "View Devices"
+  },
+  "noMatch": "No log events match your current filters."
+}

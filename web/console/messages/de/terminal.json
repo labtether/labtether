@@ -1,0 +1,12 @@
+{
+  "title": "Terminal",
+  "loading": "Arbeitsbereich wird geladen...",
+  "palette": {
+    "group": "Terminal",
+    "newTab": "Neuer Tab",
+    "enableBroadcast": "Broadcast aktivieren",
+    "disableBroadcast": "Broadcast deaktivieren",
+    "enterFullscreen": "Vollbild aktivieren",
+    "exitFullscreen": "Vollbild beenden"
+  }
+}

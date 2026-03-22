@@ -1,0 +1,8 @@
+{
+  "title": "Archivos",
+  "subtitle": "Explorar y transferir archivos en sus dispositivos",
+  "empty": {
+    "title": "Explorador de archivos",
+    "description": "Seleccione un dispositivo con un agente conectado para explorar y transferir archivos."
+  }
+}

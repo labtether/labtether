@@ -1,0 +1,16 @@
+{
+  "title": "事件",
+  "subtitle": "跟踪问题并查看发生了什么",
+  "back": "返回",
+  "actions": {
+    "startInvestigating": "开始调查",
+    "markMitigated": "标记为已缓解",
+    "markResolved": "标记为已解决"
+  },
+  "notes": {
+    "title": "备注",
+    "placeholder": "输入备注...",
+    "emptyHint": "添加调查备注、根因分析和缓解步骤。",
+    "add": "添加备注"
+  }
+}

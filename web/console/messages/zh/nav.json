@@ -1,0 +1,27 @@
+{
+  "brand": "LabTether",
+  "brandSub": "控制平面",
+  "categories": {
+    "overview": "概览",
+    "operations": "运维",
+    "system": "系统"
+  },
+  "dashboard": "仪表盘",
+  "devices": "设备",
+  "topology": "拓扑",
+  "services": "服务",
+  "containers": "容器",
+  "terminal": "终端",
+  "files": "文件",
+  "logs": "日志",
+  "alerts": "告警",
+  "actions": "操作",
+  "groups": "分组",
+  "health": "健康",
+  "users": "用户",
+  "security": "安全",
+  "settings": "设置",
+  "commandPalette": {
+    "placeholder": "搜索命令..."
+  }
+}

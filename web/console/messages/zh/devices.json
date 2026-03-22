@@ -1,0 +1,37 @@
+{
+  "title": "设备",
+  "subtitle": "基础设施主机、连接器中心和虚拟机",
+  "addDevice": "添加设备",
+  "search": {
+    "placeholder": "搜索设备...",
+    "label": "搜索设备"
+  },
+  "empty": {
+    "title": "还没有设备",
+    "description": "点击添加设备来安装代理、连接 Proxmox 集群或关联其他基础设施。",
+    "action": "添加您的第一个设备"
+  },
+  "hierarchy": {
+    "nestAsChild": "Nest as child",
+    "mergeAsDevice": "Merge as same device",
+    "viewInTopology": "View full tree in Topology",
+    "setParent": "Set parent...",
+    "addChild": "Add child",
+    "detachFromParent": "Detach from parent",
+    "addFacet": "Add facet (merge asset)"
+  },
+  "composites": {
+    "primary": "Primary",
+    "facet": "Facet",
+    "sourceView": "Source: {source}"
+  },
+  "proposals": {
+    "title": "Suggested Relationships",
+    "mergeComposite": "Merge",
+    "linkParentChild": "Link",
+    "dismiss": "Dismiss",
+    "matchSignals": "Match signals",
+    "confidence": "Confidence: {value}%",
+    "newSuggestions": "{count} suggested relationships"
+  }
+}

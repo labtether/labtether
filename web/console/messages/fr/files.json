@@ -1,0 +1,8 @@
+{
+  "title": "Fichiers",
+  "subtitle": "Parcourir et transférer des fichiers sur vos appareils",
+  "empty": {
+    "title": "Explorateur de fichiers",
+    "description": "Sélectionnez un appareil avec un agent connecté pour parcourir et transférer des fichiers."
+  }
+}

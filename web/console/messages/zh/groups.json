@@ -1,0 +1,31 @@
+{
+  "title": "分组",
+  "subtitle": "管理用于设备、拓扑、告警和可靠性的分组",
+  "manage": "管理",
+  "done": "完成",
+  "newGroup": "新建分组",
+  "expandAll": "全部展开",
+  "collapseAll": "全部折叠",
+  "empty": {
+    "title": "还没有分组",
+    "description": "创建您的第一个分组来组织设备。",
+    "action": "创建分组"
+  },
+  "dropToRoot": "拖放到此处以移动到顶层",
+  "editModal": {
+    "title": "编辑分组",
+    "name": "名称",
+    "parentGroup": "父分组",
+    "jumpChain": "网络访问 — 跳转链",
+    "saving": "正在保存..."
+  },
+  "create": {
+    "nameSlugRequired": "名称和标识符为必填项。"
+  },
+  "edit": {
+    "nameRequired": "名称为必填项。"
+  },
+  "delete": {
+    "confirmHint": "请输入完全匹配的分组名称以确认。"
+  }
+}

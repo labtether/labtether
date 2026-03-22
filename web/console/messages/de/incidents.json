@@ -1,0 +1,16 @@
+{
+  "title": "Vorfälle",
+  "subtitle": "Probleme verfolgen und Geschehenes nachvollziehen",
+  "back": "Zurück",
+  "actions": {
+    "startInvestigating": "Untersuchung starten",
+    "markMitigated": "Als eingedämmt markieren",
+    "markResolved": "Als gelöst markieren"
+  },
+  "notes": {
+    "title": "Notizen",
+    "placeholder": "Notiz eingeben...",
+    "emptyHint": "Fügen Sie Untersuchungsnotizen, Ursachenanalysen und Gegenmaßnahmen hinzu.",
+    "add": "Notiz hinzufügen"
+  }
+}

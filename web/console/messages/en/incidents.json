@@ -1,0 +1,16 @@
+{
+  "title": "Issues",
+  "subtitle": "Track problems and see what happened",
+  "back": "Back",
+  "actions": {
+    "startInvestigating": "Start Investigating",
+    "markMitigated": "Mark Mitigated",
+    "markResolved": "Mark Resolved"
+  },
+  "notes": {
+    "title": "Notes",
+    "placeholder": "Type a note...",
+    "emptyHint": "Add investigation notes, root cause analysis, and mitigation steps.",
+    "add": "Add Note"
+  }
+}

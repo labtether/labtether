@@ -1,0 +1,12 @@
+{
+  "title": "Session Recordings",
+  "empty": "No recordings yet.",
+  "columns": {
+    "asset": "Asset",
+    "protocol": "Protocol",
+    "duration": "Duration",
+    "size": "Size",
+    "status": "Status",
+    "date": "Date"
+  }
+}

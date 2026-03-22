@@ -1,0 +1,12 @@
+{
+  "title": "Sitzungsaufzeichnungen",
+  "empty": "Noch keine Aufzeichnungen.",
+  "columns": {
+    "asset": "Asset",
+    "protocol": "Protokoll",
+    "duration": "Dauer",
+    "size": "Größe",
+    "status": "Status",
+    "date": "Datum"
+  }
+}

@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push hub image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: build/go-service.Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/labtether:${{ github.ref_name }}
+            ghcr.io/${{ github.repository }}/labtether:latest
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            APP_VERSION=${{ github.ref_name }}
+            SERVICE_DIR=cmd/labtether
+
+      - name: Build and push web console image
+        uses: docker/build-push-action@v6
+        with:
+          context: web/console
+          file: web/console/Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            LABTETHER_API_BASE_URL=http://labtether:8080
+          tags: |
+            ghcr.io/${{ github.repository }}/web-console:${{ github.ref_name }}
+            ghcr.io/${{ github.repository }}/web-console:latest
+
+      - name: Render deploy release artifacts
+        run: |
+          ./scripts/release/render-deploy-artifacts.sh \
+            --version "${GITHUB_REF_NAME}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --output-dir "${RUNNER_TEMP}/release-artifacts"
+
+      - name: Upload release artifacts to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ runner.temp }}/release-artifacts/docker-compose.deploy.yml
+            ${{ runner.temp }}/release-artifacts/.env.deploy.example
+            ${{ runner.temp }}/release-artifacts/deploy-manifest.json

@@ -1,0 +1,35 @@
+{
+  "loading": "Chargement...",
+  "error": "Une erreur est survenue",
+  "retry": "Réessayer",
+  "save": "Enregistrer",
+  "cancel": "Annuler",
+  "delete": "Supprimer",
+  "confirm": "Confirmer",
+  "close": "Fermer",
+  "search": {
+    "label": "Recherche",
+    "placeholder": "Rechercher..."
+  },
+  "noResults": "Aucun résultat trouvé",
+  "empty": "Rien ici pour le moment",
+  "actions": {
+    "export": "Exporter",
+    "refresh": "Actualiser",
+    "add": "Ajouter",
+    "edit": "Modifier",
+    "remove": "Supprimer"
+  },
+  "status": {
+    "online": "En ligne",
+    "offline": "Hors ligne",
+    "unknown": "Inconnu",
+    "enabled": "Activé",
+    "disabled": "Désactivé"
+  },
+  "time": {
+    "ago": "il y a {time}"
+  },
+  "copied": "Copié",
+  "copy": "Copier"
+}

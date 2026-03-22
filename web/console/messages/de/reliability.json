@@ -1,0 +1,57 @@
+{
+  "title": "Zustand",
+  "subtitle": "Verfügbarkeitswerte, fehlgeschlagene Jobs, Ereignisverlauf und Wartungsfenster",
+  "tabs": {
+    "scores": "Werte",
+    "timeline": "Ereignisse",
+    "maintenance": "Ausfallzeiten",
+    "map": "Karte"
+  },
+  "scores": {
+    "locationHealth": "// Standort-Zustand",
+    "failedJobs": "// Fehlgeschlagene Jobs",
+    "commonErrors": "// Häufige Fehler",
+    "failedJobsTrend": "// Fehlgeschlagene Jobs Trend",
+    "dataCleanup": "// Datenbereinigung",
+    "healthEmpty": {
+      "title": "Noch keine Zustandsdaten",
+      "description": "Zustandswerte werden angezeigt, sobald Gruppen verbundene Geräte haben."
+    },
+    "noFailedJobs": "Keine fehlgeschlagenen Jobs.",
+    "noRecurringErrors": "Keine wiederkehrenden Fehler.",
+    "noTrendData": "Keine Trenddaten.",
+    "retentionHealthy": "Aufbewahrungsschleife gesund."
+  },
+  "timeline": {
+    "heading": "// Ereignisverlauf",
+    "group": "Gruppe",
+    "range": "Zeitraum",
+    "errors": "Fehler",
+    "warnings": "Warnungen",
+    "failedActions": "Fehlgeschlagene Aktionen",
+    "failedUpdates": "Fehlgeschlagene Aktualisierungen",
+    "unresponsive": "Nicht reagierend",
+    "offline": "Offline",
+    "noEvents": "Keine Zeitleistenereignisse im Zeitraum.",
+    "showMore": "Mehr anzeigen",
+    "showLess": "Weniger anzeigen"
+  },
+  "maintenance": {
+    "heading": "// Wartungsfenster",
+    "group": "Gruppe",
+    "name": "Name",
+    "start": "Start",
+    "end": "Ende",
+    "muteAlerts": "Alarme stummschalten",
+    "pauseActions": "Aktionen pausieren",
+    "pauseUpdates": "Aktualisierungen pausieren",
+    "submit": "Wartungsfenster planen",
+    "saving": "Wird gespeichert...",
+    "empty": "Keine Wartungsfenster geplant."
+  },
+  "map": {
+    "heading": "// Standortkarte",
+    "noCoordinates": "keine Koordinaten",
+    "noLocationData": "Keine Standortdaten für die Karte."
+  }
+}

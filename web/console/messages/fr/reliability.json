@@ -1,0 +1,57 @@
+{
+  "title": "Santé",
+  "subtitle": "Scores de disponibilité, jobs échoués, historique des événements et fenêtres de maintenance",
+  "tabs": {
+    "scores": "Scores",
+    "timeline": "Événements",
+    "maintenance": "Maintenance",
+    "map": "Carte"
+  },
+  "scores": {
+    "locationHealth": "// Santé par emplacement",
+    "failedJobs": "// Jobs échoués",
+    "commonErrors": "// Erreurs fréquentes",
+    "failedJobsTrend": "// Tendance des jobs échoués",
+    "dataCleanup": "// Nettoyage des données",
+    "healthEmpty": {
+      "title": "Aucune donnée de santé pour le moment",
+      "description": "Les scores de santé apparaîtront lorsque les groupes auront des appareils connectés."
+    },
+    "noFailedJobs": "Aucun job échoué.",
+    "noRecurringErrors": "Aucune erreur récurrente.",
+    "noTrendData": "Aucune donnée de tendance.",
+    "retentionHealthy": "Boucle de rétention saine."
+  },
+  "timeline": {
+    "heading": "// Historique des événements",
+    "group": "Groupe",
+    "range": "Période",
+    "errors": "Erreurs",
+    "warnings": "Avertissements",
+    "failedActions": "Actions échouées",
+    "failedUpdates": "Mises à jour échouées",
+    "unresponsive": "Non réactif",
+    "offline": "Hors ligne",
+    "noEvents": "Aucun événement dans la période.",
+    "showMore": "Voir plus",
+    "showLess": "Voir moins"
+  },
+  "maintenance": {
+    "heading": "// Fenêtres de maintenance",
+    "group": "Groupe",
+    "name": "Nom",
+    "start": "Début",
+    "end": "Fin",
+    "muteAlerts": "Mettre les alertes en sourdine",
+    "pauseActions": "Suspendre les actions",
+    "pauseUpdates": "Suspendre les mises à jour",
+    "submit": "Planifier la maintenance",
+    "saving": "Enregistrement...",
+    "empty": "Aucune fenêtre de maintenance planifiée."
+  },
+  "map": {
+    "heading": "// Carte des emplacements",
+    "noCoordinates": "pas de coordonnées",
+    "noLocationData": "Aucune donnée de localisation pour la carte."
+  }
+}

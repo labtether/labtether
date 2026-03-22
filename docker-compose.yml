@@ -1,0 +1,191 @@
+services:
+  labtether:
+    build:
+      context: .
+      dockerfile: build/go-service.Dockerfile
+      args:
+        SERVICE_DIR: cmd/labtether
+    environment:
+      API_PORT: 8080
+      LABTETHER_AGENT_BASE_URL: http://labtether-agent:8090
+      LABTETHER_POLL_INTERVAL_SECONDS: ${LABTETHER_POLL_INTERVAL_SECONDS:-5}
+      LABTETHER_DEFAULT_TELEMETRY_WINDOW: ${LABTETHER_DEFAULT_TELEMETRY_WINDOW:-1h}
+      LABTETHER_DEFAULT_LOG_WINDOW: ${LABTETHER_DEFAULT_LOG_WINDOW:-1h}
+      LABTETHER_LOG_QUERY_LIMIT: ${LABTETHER_LOG_QUERY_LIMIT:-120}
+      LABTETHER_DEFAULT_ACTOR_ID: ${LABTETHER_DEFAULT_ACTOR_ID:-owner}
+      LABTETHER_DEFAULT_ACTION_DRY_RUN: ${LABTETHER_DEFAULT_ACTION_DRY_RUN:-true}
+      LABTETHER_DEFAULT_UPDATE_DRY_RUN: ${LABTETHER_DEFAULT_UPDATE_DRY_RUN:-true}
+      # sslmode=disable is acceptable for local Docker network communication (postgres is not exposed externally).
+      # For production deployments outside Docker, use sslmode=require or sslmode=verify-ca.
+      DATABASE_URL: postgres://${POSTGRES_USER:-labtether}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/${POSTGRES_DB:-labtether}?sslmode=disable
+      LABTETHER_DB_STATEMENT_TIMEOUT: ${LABTETHER_DB_STATEMENT_TIMEOUT:-30s}
+      JOB_POLL_INTERVAL: ${JOB_POLL_INTERVAL:-500ms}
+      STRUCTURED_ENABLED: ${STRUCTURED_ENABLED:-true}
+      INTERACTIVE_ENABLED: ${INTERACTIVE_ENABLED:-true}
+      CONNECTOR_ENABLED: ${CONNECTOR_ENABLED:-true}
+      QUEUE_MAX_DELIVERIES: ${QUEUE_MAX_DELIVERIES:-5}
+      RETENTION_APPLY_INTERVAL: ${RETENTION_APPLY_INTERVAL:-5m}
+      LABTETHER_EXEC_ALLOWLIST_MODE: ${LABTETHER_EXEC_ALLOWLIST_MODE:-true}
+      LABTETHER_EXEC_ALLOWED_BINARIES: ${LABTETHER_EXEC_ALLOWED_BINARIES:-}
+      LABTETHER_EXEC_BLOCKED_BINARIES: ${LABTETHER_EXEC_BLOCKED_BINARIES:-}
+      LABTETHER_SHELL_COMMAND_ALLOWLIST_MODE: ${LABTETHER_SHELL_COMMAND_ALLOWLIST_MODE:-false}
+      LABTETHER_SHELL_COMMAND_ALLOWLIST_PREFIXES: ${LABTETHER_SHELL_COMMAND_ALLOWLIST_PREFIXES:-}
+      LABTETHER_SHELL_COMMAND_BLOCKED_SUBSTRINGS: ${LABTETHER_SHELL_COMMAND_BLOCKED_SUBSTRINGS:-}
+      LABTETHER_OUTBOUND_ALLOWLIST_MODE: ${LABTETHER_OUTBOUND_ALLOWLIST_MODE:-true}
+      LABTETHER_OUTBOUND_ALLOW_PRIVATE: ${LABTETHER_OUTBOUND_ALLOW_PRIVATE:-true}
+      LABTETHER_OUTBOUND_ALLOW_LOOPBACK: ${LABTETHER_OUTBOUND_ALLOW_LOOPBACK:-true}
+      LABTETHER_OUTBOUND_ALLOWED_HOSTS: ${LABTETHER_OUTBOUND_ALLOWED_HOSTS:-}
+      LABTETHER_OUTBOUND_ALLOWED_SCHEMES: ${LABTETHER_OUTBOUND_ALLOWED_SCHEMES:-http,https,ws,wss}
+      LABTETHER_LOG_SANITIZE_MAX_LEN: ${LABTETHER_LOG_SANITIZE_MAX_LEN:-512}
+      LABTETHER_ENV: ${LABTETHER_ENV:-production}
+      LABTETHER_ADMIN_PASSWORD: ${LABTETHER_ADMIN_PASSWORD:?LABTETHER_ADMIN_PASSWORD must be set}
+      LABTETHER_OWNER_TOKEN: ${LABTETHER_OWNER_TOKEN:?LABTETHER_OWNER_TOKEN must be set}
+      LABTETHER_ENCRYPTION_KEY: ${LABTETHER_ENCRYPTION_KEY:?LABTETHER_ENCRYPTION_KEY must be set}
+      LABTETHER_AGENT_TOKEN_TTL_HOURS: ${LABTETHER_AGENT_TOKEN_TTL_HOURS:-720}
+      GUACD_HOST: ${GUACD_HOST:-guacd}
+      GUACD_PORT: ${GUACD_PORT:-4822}
+      # SSH terminal credentials (fallback when no per-asset config exists)
+      SSH_USERNAME: ${SSH_USERNAME:-}
+      SSH_PASSWORD: ${SSH_PASSWORD:-}
+      SSH_PRIVATE_KEY: ${SSH_PRIVATE_KEY:-}
+      SSH_PRIVATE_KEY_PATH: ${SSH_PRIVATE_KEY_PATH:-}
+      SSH_PORT: ${SSH_PORT:-22}
+      # TLS: auto mode uses self-signed certs; uncomment the lines below to override with external certs
+      LABTETHER_TLS_MODE: auto
+      LABTETHER_DATA_DIR: /data
+      # LABTETHER_TLS_CERT: /certs/hub.crt
+      # LABTETHER_TLS_KEY: /certs/hub.key
+    ports:
+      # Keep the HTTP redirect/health port local-only by default.
+      - "${LABTETHER_HUB_HTTP_PUBLISH_IP:-127.0.0.1}:8080:8080"
+      # Publish HTTPS on the LAN so native/mobile clients can reach the hub.
+      - "${LABTETHER_HUB_HTTPS_PUBLISH_IP:-0.0.0.0}:8443:8443"
+    volumes:
+      - labtether-data:/data
+      - labtether-ca:/ca
+    # volumes:
+    #   - ./certs:/certs:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      guacd:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+
+  labtether-agent:
+    build:
+      context: .
+      dockerfile: build/agent.Dockerfile
+      args:
+        SERVICE_DIR: agents/labtether-agent
+    environment:
+      AGENT_PORT: 8090
+      LABTETHER_API_BASE_URL: https://labtether:8443
+      LABTETHER_API_TOKEN: ${LABTETHER_API_TOKEN:?LABTETHER_API_TOKEN must be set}
+      LABTETHER_WS_URL: wss://labtether:8443/ws/agent
+      LABTETHER_TLS_CA_FILE: /ca/ca.crt
+      AGENT_ASSET_ID: lab-host-01
+      AGENT_SOURCE: labtether-agent
+      LABTETHER_EXEC_ALLOWLIST_MODE: ${LABTETHER_EXEC_ALLOWLIST_MODE:-true}
+      LABTETHER_EXEC_ALLOWED_BINARIES: ${LABTETHER_EXEC_ALLOWED_BINARIES:-}
+      LABTETHER_EXEC_BLOCKED_BINARIES: ${LABTETHER_EXEC_BLOCKED_BINARIES:-}
+      LABTETHER_SHELL_COMMAND_ALLOWLIST_MODE: ${LABTETHER_SHELL_COMMAND_ALLOWLIST_MODE:-false}
+      LABTETHER_SHELL_COMMAND_ALLOWLIST_PREFIXES: ${LABTETHER_SHELL_COMMAND_ALLOWLIST_PREFIXES:-}
+      LABTETHER_SHELL_COMMAND_BLOCKED_SUBSTRINGS: ${LABTETHER_SHELL_COMMAND_BLOCKED_SUBSTRINGS:-}
+      LABTETHER_OUTBOUND_ALLOWLIST_MODE: ${LABTETHER_OUTBOUND_ALLOWLIST_MODE:-true}
+      LABTETHER_OUTBOUND_ALLOW_PRIVATE: ${LABTETHER_OUTBOUND_ALLOW_PRIVATE:-true}
+      LABTETHER_OUTBOUND_ALLOW_LOOPBACK: ${LABTETHER_OUTBOUND_ALLOW_LOOPBACK:-true}
+      LABTETHER_OUTBOUND_ALLOWED_HOSTS: ${LABTETHER_OUTBOUND_ALLOWED_HOSTS:-}
+      LABTETHER_OUTBOUND_ALLOWED_SCHEMES: ${LABTETHER_OUTBOUND_ALLOWED_SCHEMES:-http,https,ws,wss}
+      LABTETHER_LOG_SANITIZE_MAX_LEN: ${LABTETHER_LOG_SANITIZE_MAX_LEN:-512}
+      # Auto-enrollment: set LABTETHER_ENROLLMENT_TOKEN instead of API_TOKEN for zero-config setup
+      # LABTETHER_ENROLLMENT_TOKEN: ${LABTETHER_ENROLLMENT_TOKEN:-}
+      # LABTETHER_TOKEN_FILE: /data/agent-token
+      # TLS: agent trusts hub's auto-generated CA via dedicated CA volume (no access to private keys)
+      # To skip verification (not recommended): LABTETHER_TLS_SKIP_VERIFY: "true"
+    volumes:
+      - labtether-ca:/ca:ro
+    ports:
+      - "127.0.0.1:8090:8090"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+
+  postgres:
+    image: postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-labtether}
+      POSTGRES_USER: ${POSTGRES_USER:-labtether}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-labtether} -d ${POSTGRES_DB:-labtether}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+
+  web-console:
+    build:
+      context: ./web/console
+      args:
+        LABTETHER_API_BASE_URL: http://labtether:8080
+    environment:
+      PORT: 3000
+      LABTETHER_API_BASE_URL: http://labtether:8080
+      LABTETHER_AGENT_BASE_URL: http://labtether-agent:8090
+      NEXT_PUBLIC_HUB_API_PORT: "8080"
+      LABTETHER_POLL_INTERVAL_SECONDS: ${LABTETHER_POLL_INTERVAL_SECONDS:-5}
+      LABTETHER_DEFAULT_TELEMETRY_WINDOW: ${LABTETHER_DEFAULT_TELEMETRY_WINDOW:-1h}
+      LABTETHER_DEFAULT_LOG_WINDOW: ${LABTETHER_DEFAULT_LOG_WINDOW:-1h}
+      LABTETHER_LOG_QUERY_LIMIT: ${LABTETHER_LOG_QUERY_LIMIT:-120}
+      LABTETHER_DEFAULT_ACTOR_ID: ${LABTETHER_DEFAULT_ACTOR_ID:-owner}
+      LABTETHER_DEFAULT_ACTION_DRY_RUN: ${LABTETHER_DEFAULT_ACTION_DRY_RUN:-true}
+      LABTETHER_DEFAULT_UPDATE_DRY_RUN: ${LABTETHER_DEFAULT_UPDATE_DRY_RUN:-true}
+      LABTETHER_API_TOKEN: ${LABTETHER_API_TOKEN:?LABTETHER_API_TOKEN must be set}
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      labtether:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+
+  guacd:
+    # Pin to the 1.6.0 multi-arch index digest so both amd64/arm64 pull a
+    # deterministic image while still selecting a native architecture variant.
+    image: ${GUACD_IMAGE:-guacamole/guacd:1.6.0@sha256:8974eaa9ba32f713daf311e7cc8cd7e4cdfba1edea39eed75524e78ef4b08f4f}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+
+volumes:
+  postgres-data:
+  labtether-data:
+  labtether-ca:

@@ -1,0 +1,35 @@
+{
+  "title": "Tableau de bord",
+  "subtitle": "Votre homelab en un coup d'œil",
+  "export": "Exporter",
+  "addDevice": "+ Ajouter un appareil",
+  "errorHint": "Vérifiez que le backend est en cours d'exécution et accessible.",
+  "loadingTopology": "Chargement de la vue topologique...",
+  "kpi": {
+    "online": "en ligne",
+    "cpu": "CPU",
+    "memory": "mémoire",
+    "failures": "échecs"
+  },
+  "fleetFocus": {
+    "label": "Vue de la flotte",
+    "devicesLink": "Appareils",
+    "loading": "Chargement des données de la flotte...",
+    "empty": "Aucun appareil trouvé. Ajoutez votre premier appareil pour commencer.",
+    "showIssues": "Afficher uniquement les problèmes",
+    "showAll": "Afficher toute la flotte"
+  },
+  "activity": {
+    "label": "Activité",
+    "empty": "Aucune activité récente. Les commandes et événements apparaîtront ici.",
+    "command": "act",
+    "event": "évé",
+    "heartbeat": "hb"
+  },
+  "hotspots": {
+    "label": "Points chauds des ressources",
+    "cpu": "Top CPU",
+    "memory": "Top Mémoire",
+    "disk": "Top Disque"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "title": "会话录制",
+  "empty": "还没有录制记录。",
+  "columns": {
+    "asset": "资产",
+    "protocol": "协议",
+    "duration": "时长",
+    "size": "大小",
+    "status": "状态",
+    "date": "日期"
+  }
+}

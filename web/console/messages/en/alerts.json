@@ -1,0 +1,13 @@
+{
+  "title": "Alerts",
+  "subtitle": {
+    "label": "Your alert inbox{activeInfo}, rules, mutes, and delivery history",
+    "active": " · {count} active"
+  },
+  "tabs": {
+    "inbox": "Inbox",
+    "rules": "Rules",
+    "silences": "Muted",
+    "delivery": "Delivery Log"
+  }
+}

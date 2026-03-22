@@ -1,0 +1,12 @@
+{
+  "title": "Enregistrements de sessions",
+  "empty": "Aucun enregistrement pour le moment.",
+  "columns": {
+    "asset": "Ressource",
+    "protocol": "Protocole",
+    "duration": "Durée",
+    "size": "Taille",
+    "status": "Statut",
+    "date": "Date"
+  }
+}

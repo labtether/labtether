@@ -1,0 +1,8 @@
+{
+  "title": "Dateien",
+  "subtitle": "Dateien auf Ihren Geräten durchsuchen und übertragen",
+  "empty": {
+    "title": "Datei-Browser",
+    "description": "Wählen Sie ein Gerät mit verbundenem Agenten aus, um Dateien zu durchsuchen und zu übertragen."
+  }
+}

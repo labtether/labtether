@@ -1,0 +1,163 @@
+{
+  "title": "Services",
+  "subtitle": {
+    "default": "Discovered web services across your homelab",
+    "count": "{upCount}/{totalCount} services online"
+  },
+  "suggestions": {
+    "accept": "Accept",
+    "deny": "Deny"
+  },
+  "config": {
+    "title": "Service Configuration",
+    "backToServices": "Back to Services",
+    "tabs": {
+      "manual": "Manual Services",
+      "overrides": "Overrides",
+      "grouping": "Grouping & Merge",
+      "icons": "Icons"
+    },
+    "header": {
+      "edit": "Edit",
+      "addManualService": "Add Manual Service",
+      "doneSelect": "Done Select",
+      "selectServices": "Select Services",
+      "bulkEdit": "Bulk Edit ({count})",
+      "doneArranging": "Done Arranging",
+      "arrangeServices": "Arrange Services",
+      "syncing": "Syncing...",
+      "refresh": "Refresh",
+      "pulling": "Pulling...",
+      "pullImages": "Pull Images ({count})",
+      "pullImagesTitle": "Pull {count} unique image(s)",
+      "noImagesAvailable": "No docker service images available to pull"
+    },
+    "overrides": {
+      "serviceName": "Service Name",
+      "host": "Host",
+      "overriddenFields": "Overridden Fields",
+      "lastUpdated": "Last Updated",
+      "actions": "Actions",
+      "loading": "Loading...",
+      "resetToAuto": "Reset to Auto",
+      "resetSelected": "Reset Selected",
+      "resetConfirm": "Reset this override? The service will revert to its auto-detected values.",
+      "bulkResetConfirm": "Reset {count} overrides? These services will revert to auto-detected values.",
+      "emptyState": "No overrides. Services are showing their auto-detected values.",
+      "fields": {
+        "name": "Name",
+        "url": "URL",
+        "category": "Category",
+        "icon": "Icon",
+        "tags": "Tags",
+        "hidden": "Hidden"
+      }
+    },
+    "grouping": {
+      "urlGroupingTitle": "URL Grouping",
+      "serviceMergingTitle": "Service Merging",
+      "mode": "Mode",
+      "modes": {
+        "off": "Off",
+        "conservative": "Conservative",
+        "balanced": "Balanced",
+        "aggressive": "Aggressive"
+      },
+      "groupingModeDesc": {
+        "off": "No automatic URL grouping",
+        "conservative": "Only group very high-confidence matches (95%+)",
+        "balanced": "Group high and medium-confidence matches (90%+)",
+        "aggressive": "Group broader candidates (85%+)"
+      },
+      "mergeModeDesc": {
+        "off": "Do not auto-merge duplicate candidates.",
+        "conservative": "Merge only high-confidence duplicates.",
+        "balanced": "Merge high-confidence and selected medium-confidence matches.",
+        "aggressive": "Merge broader candidates and rely more on manual exclusions."
+      },
+      "confidenceThreshold": "Confidence Threshold",
+      "aliasRules": "Alias Rules",
+      "aliasRulesDesc": "One rule per line. Format: source_pattern => canonical_pattern.",
+      "aliasRulesPlaceholder": "*.*.simbaslabs.com => *.simbaslabs.com",
+      "neverGroupRules": "Never-Group Rules",
+      "neverGroupDesc": "URL pair per line. Use this to prevent grouping or remove an alternative URL from Service Edit.",
+      "dryRun": "Dry Run",
+      "dryRunLabel": "Evaluate merge candidates without auto-applying.",
+      "forceMergeRules": "Force-Merge Rules",
+      "forceMergeDesc": "URL pair per line. Supported separators: =>, <=>, or comma.",
+      "neverMergeRules": "Never-Merge Rules",
+      "neverMergeDesc": "URL pair per line. Use this to block merges or undo a merge from Service Edit.",
+      "urlPairPlaceholder": "https://example.tail.domain => https://example.domain",
+      "quickPresets": "Quick presets",
+      "domainPlaceholder": "simbaslabs.com",
+      "presetDescription": "Adds rule {ruleFrom} => {ruleTo} to map xyz.anything.domain to xyz.domain.",
+      "enterDomainFirst": "Enter a base domain first (for example simbaslabs.com).",
+      "addedAliasPreset": "Added alias preset: {rule}",
+      "appliedBalancedGrouping": "Applied preset: Balanced grouping.",
+      "appliedSafeDryRun": "Applied preset: Safe dry run.",
+      "appliedBalancedLiveMerge": "Applied preset: Balanced live merge.",
+      "loadingGrouping": "Loading URL grouping settings...",
+      "loadingMerge": "Loading service merge settings...",
+      "saving": "Saving...",
+      "presets": {
+        "ignoreMiddleLabel": "Ignore Middle Label",
+        "balanced": "Balanced Preset",
+        "safe": "Safe Preset",
+        "live": "Live Preset"
+      },
+      "save": "Save",
+      "saved": "Settings saved",
+      "summary": "{mode} mode, threshold {threshold}%"
+    },
+    "manual": {
+      "addService": "Add Service",
+      "editService": "Edit Service",
+      "loading": "Loading...",
+      "deleteConfirm": "Are you sure you want to delete this service?",
+      "standalone": "Standalone",
+      "notMonitored": "Not monitored",
+      "nameRequired": "Name is required",
+      "urlRequired": "URL is required",
+      "urlInvalid": "URL must start with http:// or https://",
+      "categoryRequired": "Category is required",
+      "hostPlaceholder": "Select an asset (optional)",
+      "emptyState": "No manual services. Click \"Add Service\" to create one.",
+      "form": {
+        "name": "Name *",
+        "namePlaceholder": "My Service",
+        "url": "URL *",
+        "urlPlaceholder": "https://example.local:8080",
+        "category": "Category *",
+        "selectPlaceholder": "--",
+        "hostAsset": "Host Asset",
+        "icon": "Icon",
+        "iconPlaceholder": "icon-key (optional)",
+        "tags": "Tags",
+        "tagsPlaceholder": "tag1, tag2, tag3 (optional)",
+        "cancel": "Cancel"
+      },
+      "table": {
+        "name": "Name",
+        "url": "URL",
+        "category": "Category",
+        "host": "Host",
+        "status": "Status",
+        "actions": "Actions",
+        "delete": "Delete"
+      }
+    },
+    "icons": {
+      "upload": "Upload Icon",
+      "rename": "Rename",
+      "delete": "Delete",
+      "deleteConfirm": "Delete this icon?",
+      "deleteInUse": "This icon is used by {count} services. Delete anyway?",
+      "usedBy": "Used by {count} services",
+      "notUsed": "Not in use",
+      "maxSize": "Max 512KB",
+      "fileTooLarge": "File exceeds 512KB limit",
+      "uploadFailed": "Upload failed",
+      "emptyState": "No custom icons. Upload icons to use them across your services."
+    }
+  }
+}

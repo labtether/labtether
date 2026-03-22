@@ -1,0 +1,12 @@
+{
+  "title": "Terminal",
+  "loading": "Cargando espacio de trabajo...",
+  "palette": {
+    "group": "Terminal",
+    "newTab": "Nueva pestaña",
+    "enableBroadcast": "Activar transmisión",
+    "disableBroadcast": "Desactivar transmisión",
+    "enterFullscreen": "Entrar en pantalla completa",
+    "exitFullscreen": "Salir de pantalla completa"
+  }
+}

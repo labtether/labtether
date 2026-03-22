@@ -1,0 +1,122 @@
+{
+  "provider_instance": {
+    "id": "prov-connector-home-assistant-collector-1",
+    "kind": "connector",
+    "provider": "home-assistant",
+    "display_name": "connector-home-assistant",
+    "status": "healthy",
+    "scope": "global",
+    "config_ref": "collector-1",
+    "metadata": {
+      "instance_key": "collector-1"
+    }
+  },
+  "assets": [
+    {
+      "id": "ha-entity-light-kitchen",
+      "type": "entity",
+      "name": "Kitchen Light",
+      "source": "home-assistant",
+      "resource_class": "service",
+      "resource_kind": "ha-entity",
+      "metadata": {
+        "domain": "light",
+        "entity_id": "light.kitchen",
+        "resource_class": "service",
+        "resource_kind": "ha-entity"
+      },
+      "attributes": {
+        "domain": "light",
+        "entity_id": "light.kitchen",
+        "source": "home-assistant"
+      }
+    }
+  ],
+  "external_refs": [
+    {
+      "resource_id": "ha-entity-light-kitchen",
+      "provider_instance_id": "prov-connector-home-assistant-collector-1",
+      "external_id": "light.kitchen",
+      "external_type": "ha-entity"
+    }
+  ],
+  "capability_sets": [
+    {
+      "subject_type": "provider",
+      "subject_id": "prov-connector-home-assistant-collector-1",
+      "capabilities": [
+        {
+          "id": "events.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "health.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "inventory.discover",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "system.action",
+          "scope": "action",
+          "stability": "ga",
+          "supports_dry_run": true,
+          "requires_target": true
+        },
+        {
+          "id": "telemetry.read",
+          "scope": "read",
+          "stability": "ga"
+        }
+      ]
+    },
+    {
+      "subject_type": "resource",
+      "subject_id": "ha-entity-light-kitchen",
+      "capabilities": [
+        {
+          "id": "events.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "health.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "telemetry.read",
+          "scope": "read",
+          "stability": "ga"
+        }
+      ]
+    }
+  ],
+  "template_bindings": [
+    {
+      "resource_id": "ha-entity-light-kitchen",
+      "template_id": "template.homeassistant.entity",
+      "tabs": [
+        "actions",
+        "logs",
+        "overview",
+        "telemetry"
+      ]
+    }
+  ],
+  "checkpoint": {
+    "provider_instance_id": "prov-connector-home-assistant-collector-1",
+    "stream": "discover",
+    "cursor": "count=1;ts=*"
+  },
+  "reconciliation": {
+    "created_count": 1,
+    "updated_count": 2,
+    "stale_count": 0,
+    "error_count": 0
+  }
+}

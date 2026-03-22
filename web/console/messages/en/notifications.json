@@ -1,0 +1,73 @@
+{
+  "heading": "// Notifications",
+  "addChannel": "+ Add Channel",
+  "empty": "No notification channels configured. Add one to receive alerts.",
+  "enabled": "Enabled",
+  "disabled": "Disabled",
+  "edit": "Edit",
+  "test": "Send Test",
+  "testSent": "Test sent",
+  "testFailed": "Test failed",
+  "delete": "Delete",
+  "typeSelect": {
+    "heading": "Select a channel type",
+    "slack": {
+      "name": "Slack",
+      "description": "Send alerts to a Slack channel via incoming webhook"
+    },
+    "email": {
+      "name": "Email",
+      "description": "Send alerts via SMTP to one or more recipients"
+    },
+    "webhook": {
+      "name": "Webhook",
+      "description": "POST alert payloads to any HTTP endpoint"
+    },
+    "ntfy": {
+      "name": "ntfy",
+      "description": "Push notifications via ntfy.sh or a self-hosted ntfy server"
+    },
+    "gotify": {
+      "name": "Gotify",
+      "description": "Push notifications via a self-hosted Gotify server"
+    }
+  },
+  "form": {
+    "name": "Channel Name",
+    "webhookUrl": "Webhook URL",
+    "smtpHost": "SMTP Host",
+    "smtpPort": "SMTP Port",
+    "smtpUser": "SMTP User",
+    "smtpPass": "SMTP Password",
+    "from": "From Address",
+    "url": "URL",
+    "serverUrl": "Server URL",
+    "topic": "Topic",
+    "username": "Username (optional)",
+    "password": "Password (optional)",
+    "token": "Token (optional)",
+    "priority": "Priority (optional)",
+    "appToken": "App Token",
+    "keepSecret": "Leave blank to keep current"
+  },
+  "save": "Save",
+  "cancel": "Cancel",
+  "back": "Back",
+  "deleteDialog": {
+    "title": "Delete Channel",
+    "body": "This will permanently remove the channel {name}. This action cannot be undone.",
+    "confirm": "Delete Channel"
+  },
+  "errors": {
+    "nameRequired": "Channel name is required.",
+    "webhookUrlRequired": "Webhook URL is required.",
+    "smtpHostRequired": "SMTP host is required.",
+    "smtpPortRequired": "SMTP port is required.",
+    "smtpUserRequired": "SMTP user is required.",
+    "fromRequired": "From address is required.",
+    "urlRequired": "URL is required.",
+    "serverUrlRequired": "Server URL is required.",
+    "topicRequired": "Topic is required.",
+    "appTokenRequired": "App token is required."
+  }
+}

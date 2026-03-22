@@ -1,0 +1,19 @@
+{
+  "title": "设置",
+  "subtitle": "调整 LabTether 的外观和行为",
+  "appearance": {
+    "heading": "// 外观",
+    "theme": "主题",
+    "layout": "布局",
+    "accent": "强调色",
+    "autoRefreshLabel": "自动刷新",
+    "autoRefreshOff": "关闭"
+  },
+  "copiedToClipboard": "已复制到剪贴板",
+  "about": {
+    "heading": "// 关于",
+    "version": "版本：{version}",
+    "uptime": "运行时间：{uptime}",
+    "sessionLifetime": "会话：{duration}"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "title": "Grabaciones de sesión",
+  "empty": "Aún no hay grabaciones.",
+  "columns": {
+    "asset": "Recurso",
+    "protocol": "Protocolo",
+    "duration": "Duración",
+    "size": "Tamaño",
+    "status": "Estado",
+    "date": "Fecha"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "title": "Journaux",
+  "subtitle": "Rechercher et filtrer les sorties de journal de vos appareils",
+  "filters": {
+    "source": "Source",
+    "level": "Niveau",
+    "events": "Événements",
+    "range": "Période",
+    "search": "Recherche",
+    "allSources": "Toutes les sources",
+    "operational": "Opérationnel",
+    "all": "Tous"
+  },
+  "search": {
+    "placeholder": "Rechercher dans le texte (error, timeout, zfs...)"
+  },
+  "empty": {
+    "title": "Aucun événement de journal pour le moment",
+    "description": "Les événements apparaîtront ici une fois que les appareils commenceront à rapporter. Vérifiez qu'au moins un appareil est connecté.",
+    "viewDevices": "Voir les appareils"
+  },
+  "noMatch": "Aucun événement de journal ne correspond à vos filtres actuels."
+}

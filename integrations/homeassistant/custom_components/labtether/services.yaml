@@ -1,0 +1,28 @@
+run_action:
+  name: Run Action
+  description: Run an action on a LabTether-managed asset.
+  fields:
+    asset_id:
+      name: Asset ID
+      description: The LabTether asset ID to run the action on.
+      required: true
+      selector:
+        text:
+    action:
+      name: Action
+      description: "The action to run (e.g. vm.start, vm.stop, snapshot.create)."
+      required: true
+      selector:
+        text:
+    connector_id:
+      name: Connector ID
+      description: "The connector that owns the action (e.g. proxmox, truenas)."
+      required: false
+      selector:
+        text:
+    params:
+      name: Parameters
+      description: Optional parameters for the action.
+      required: false
+      selector:
+        object:

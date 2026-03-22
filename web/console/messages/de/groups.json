@@ -1,0 +1,31 @@
+{
+  "title": "Gruppen",
+  "subtitle": "Gruppen verwalten, die für Geräte, Topologie, Alarme und Zuverlässigkeit verwendet werden",
+  "manage": "Verwalten",
+  "done": "Fertig",
+  "newGroup": "Neue Gruppe",
+  "expandAll": "Alle aufklappen",
+  "collapseAll": "Alle zuklappen",
+  "empty": {
+    "title": "Noch keine Gruppen",
+    "description": "Erstellen Sie Ihre erste Gruppe, um Geräte zu organisieren.",
+    "action": "Gruppe erstellen"
+  },
+  "dropToRoot": "Hier ablegen, um auf die oberste Ebene zu verschieben",
+  "editModal": {
+    "title": "Gruppe bearbeiten",
+    "name": "Name",
+    "parentGroup": "Übergeordnete Gruppe",
+    "jumpChain": "Netzwerkzugang — Jump-Kette",
+    "saving": "Wird gespeichert..."
+  },
+  "create": {
+    "nameSlugRequired": "Name und Slug sind erforderlich."
+  },
+  "edit": {
+    "nameRequired": "Name ist erforderlich."
+  },
+  "delete": {
+    "confirmHint": "Geben Sie den Gruppennamen genau ein, um zu bestätigen."
+  }
+}

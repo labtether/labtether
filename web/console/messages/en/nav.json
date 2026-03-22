@@ -1,0 +1,32 @@
+{
+  "brand": "LabTether",
+  "brandSub": "control plane",
+  "categories": {
+    "overview": "overview",
+    "operations": "operations",
+    "system": "system"
+  },
+  "dashboard": "Dashboard",
+  "devices": "Devices",
+  "topology": "Topology",
+  "services": "Services",
+  "containers": "Containers",
+  "terminal": "Terminal",
+  "files": "Files",
+  "remoteView": "Remote View",
+  "logs": "Logs",
+  "alerts": "Alerts",
+  "actions": "Actions",
+  "webhooks": "Webhooks",
+  "schedules": "Schedules",
+  "groups": "Groups",
+  "health": "Health",
+  "users": "Users",
+  "security": "Security",
+  "auditLog": "Audit Log",
+  "apiDocs": "API Docs",
+  "settings": "Settings",
+  "commandPalette": {
+    "placeholder": "Search commands..."
+  }
+}

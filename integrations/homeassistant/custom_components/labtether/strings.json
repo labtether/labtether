@@ -1,0 +1,78 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to LabTether Hub",
+        "description": "Connect Home Assistant to an existing LabTether hub. Use the hub URL and an API key with access to assets, metrics, alerts, and actions. Enable the TLS toggle only when you intentionally trust a self-signed hub certificate.",
+        "data": {
+          "host": "Hub URL",
+          "api_key": "API Key",
+          "name": "Display Name",
+          "ignore_cert_errors": "Ignore TLS certificate errors"
+        }
+      },
+      "import_options": {
+        "title": "Choose What To Import",
+        "description": "Preview for {host_label}: {asset_count} assets, {telemetry_asset_count} telemetry-capable assets, {switchable_asset_count} controllable assets, {alerts_count} active alerts. Visible sources: {sources_label}. Choose which entities and services Home Assistant should create.",
+        "data": {
+          "import_status_entities": "Import status entities",
+          "import_telemetry_sensors": "Import telemetry sensors",
+          "import_power_switches": "Import power switches",
+          "enable_run_action_service": "Enable run_action service",
+          "scan_interval_seconds": "Polling interval (seconds)"
+        }
+      },
+      "review": {
+        "title": "Review Setup",
+        "description": "Title: {title}\nHub: {host}\nIgnore TLS certificate errors: {ignore_cert_errors}\nImport status entities: {import_status_entities}\nImport telemetry sensors: {import_telemetry_sensors}\nImport power switches: {import_power_switches}\nEnable run_action service: {enable_run_action_service}\nPolling interval: {scan_interval}s\nPreview: {asset_count} assets, {alerts_count} active alerts.",
+        "data": {}
+      },
+      "reconfigure": {
+        "title": "Update LabTether Connection",
+        "description": "Update the Home Assistant connection details for this LabTether hub.",
+        "data": {
+          "host": "Hub URL",
+          "api_key": "API Key",
+          "name": "Display Name",
+          "ignore_cert_errors": "Ignore TLS certificate errors"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reconnect to LabTether",
+        "description": "Authentication to {host} failed. Enter a fresh API key to restore the LabTether integration.",
+        "data": {
+          "api_key": "API Key",
+          "ignore_cert_errors": "Ignore TLS certificate errors"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to the LabTether hub. Check the URL, API key, and network path.",
+      "invalid_auth": "The LabTether API key was rejected.",
+      "invalid_url": "Enter a full hub URL starting with http:// or https://.",
+      "tls_error": "TLS validation failed. If you intentionally use a self-signed hub certificate, enable the ignore-certificate toggle and try again.",
+      "unknown": "An unexpected error occurred."
+    },
+    "abort": {
+      "already_configured": "This LabTether hub is already configured.",
+      "reauth_successful": "The LabTether connection was reauthenticated successfully.",
+      "reconfigure_successful": "The LabTether connection was updated successfully."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "LabTether Options",
+        "description": "Adjust polling, imported entity types, the action service, and TLS behavior for this LabTether connection.",
+        "data": {
+          "ignore_cert_errors": "Ignore TLS certificate errors",
+          "import_status_entities": "Import status entities",
+          "import_telemetry_sensors": "Import telemetry sensors",
+          "import_power_switches": "Import power switches",
+          "enable_run_action_service": "Enable run_action service",
+          "scan_interval_seconds": "Polling interval (seconds)"
+        }
+      }
+    }
+  }
+}

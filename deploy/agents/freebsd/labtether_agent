@@ -1,0 +1,21 @@
+#!/bin/sh
+# PROVIDE: labtether_agent
+# REQUIRE: NETWORKING
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+
+name="labtether_agent"
+rcvar="${name}_enable"
+
+: ${labtether_agent_enable:="NO"}
+: ${labtether_agent_user:="root"}
+: ${labtether_agent_command:="/usr/local/bin/labtether-agent"}
+: ${labtether_agent_env:="/usr/local/etc/labtether/agent.env"}
+
+pidfile="/var/run/${name}.pid"
+command="/usr/sbin/daemon"
+command_args="-f -p ${pidfile} /usr/bin/env $(cat ${labtether_agent_env} 2>/dev/null | xargs) ${labtether_agent_command}"
+
+load_rc_config "$name"
+run_rc_command "$1"

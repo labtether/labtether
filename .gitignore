@@ -1,0 +1,69 @@
+# macOS
+.DS_Store
+
+# Go
+bin/
+build/
+/labtether
+/labtether-agent
+/node-agent
+/linux-agent
+*.test
+coverage.out
+
+# Swift
+.build/
+
+# Node
+node_modules/
+web/console/.next/
+web/console/out/
+web/console/test-results/
+web/console/playwright-report/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Env
+.env
+.env.deploy
+.env*.local
+web/console/e2e/certs/*.pem
+
+# Temp
+tmp/
+
+# Local runtime data (secrets, TLS material)
+data/certs/
+data/install/
+
+# Backups
+backups/
+
+# Claude / AI tooling
+CLAUDE.md
+AGENTS.md
+.claude/
+.mcp.json
+
+# IDE
+.vscode/
+.idea/
+.worktrees/
+
+# Playwright MCP logs
+.playwright-mcp/
+
+# Superpowers brainstorm cache
+.superpowers/
+
+# Loose screenshots (dev artifacts)
+/*.png
+/notes/*.png
+/screenshots/
+.gstack/
+
+# Local build artifacts
+.bin/

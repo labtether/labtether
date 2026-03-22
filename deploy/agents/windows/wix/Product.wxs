@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Product.wxs — WiX v5 main manifest for LabTether Agent MSI.
+
+  UpgradeCode: 7F3A2E1D-9C4B-4F8A-B6D5-0E2C8A3F7B9E
+    This GUID is permanent and must never change across versions.
+    Changing it would break in-place upgrades and MSI chain detection.
+
+  ProductCode: "*" — a new GUID is generated automatically per build.
+    This is required for MajorUpgrade (each build is a distinct product
+    that replaces prior versions, tracked by UpgradeCode).
+
+  Public properties (configurable via msiexec /i ... PROPERTY=value):
+    HUB_URL           — WebSocket URL of the LabTether hub
+                        e.g. HUB_URL=wss://hub.example.com
+    ENROLLMENT_TOKEN  — One-time enrollment token for agent registration
+
+  ServiceInstall recovery actions (restart x3, 60 s delay, 24 h reset)
+  are configured post-install by a CustomAction that calls sc.exe failure,
+  because WiX v5 ServiceInstall does not expose a native recovery element.
+  See Agent.wxs CustomAction definition for the exact sc.exe invocation.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+  <Package
+      Name="LabTether Agent"
+      Manufacturer="LabTether"
+      Version="!(bind.FileVersion.labtether_agent_exe)"
+      UpgradeCode="7F3A2E1D-9C4B-4F8A-B6D5-0E2C8A3F7B9E"
+      Language="1033"
+      Codepage="1252"
+      Scope="perMachine">
+
+    <!-- ================================================================
+         Upgrade policy: remove any prior version before installing.
+         Schedule="afterInstallInitialize" keeps the old version alive
+         until the new binary is in place, enabling a clean swap.
+    ================================================================ -->
+    <MajorUpgrade
+        Schedule="afterInstallInitialize"
+        DowngradeErrorMessage="A newer version of LabTether Agent is already installed." />
+
+    <!-- ================================================================
+         Media / cabinet: embed everything in the MSI for single-file
+         distribution (no separate .cab needed for deployment via GPO /
+         SCCM / Intune).
+    ================================================================ -->
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- ================================================================
+         Public properties — settable via msiexec command line.
+         Declared here so Windows Installer trusts them as public (upper-
+         case) and propagates them through the install session.
+    ================================================================ -->
+    <Property Id="HUB_URL" Secure="yes" />
+    <Property Id="ENROLLMENT_TOKEN" Secure="yes" />
+
+    <!-- Hide the ENROLLMENT_TOKEN from log files. -->
+    <Property Id="MsiHiddenProperties" Value="ENROLLMENT_TOKEN" />
+
+    <!-- ================================================================
+         Directory layout.
+         INSTALLDIR   → C:\Program Files\LabTether\
+         CONFIGDIR    → C:\ProgramData\LabTether\
+         Both are set to well-known Windows standard locations and are
+         not user-overridable via the UI (no UI included in this MSI;
+         it is designed for silent enterprise deployment).
+    ================================================================ -->
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLDIR" Name="LabTether" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="CONFIGDIR" Name="LabTether" />
+    </StandardDirectory>
+
+    <!-- ================================================================
+         Feature: single top-level feature containing all components.
+         Enterprise silent installs reference this feature by Id.
+    ================================================================ -->
+    <Feature Id="ProductFeature" Title="LabTether Agent" Level="1">
+      <ComponentGroupRef Id="AgentComponents" />
+    </Feature>
+
+    <!-- ================================================================
+         UI: intentionally none — silent deployment only.
+         Add <UIRef Id="WixUI_Minimal" /> here if a basic GUI is later
+         required for interactive installs.
+    ================================================================ -->
+
+  </Package>
+</Wix>

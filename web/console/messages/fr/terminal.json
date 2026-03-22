@@ -1,0 +1,12 @@
+{
+  "title": "Terminal",
+  "loading": "Chargement de l'espace de travail...",
+  "palette": {
+    "group": "Terminal",
+    "newTab": "Nouvel onglet",
+    "enableBroadcast": "Activer la diffusion",
+    "disableBroadcast": "Désactiver la diffusion",
+    "enterFullscreen": "Passer en plein écran",
+    "exitFullscreen": "Quitter le plein écran"
+  }
+}

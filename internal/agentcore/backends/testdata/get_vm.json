@@ -1,0 +1,74 @@
+[
+  {
+    "Name": "dc01",
+    "State": 2,
+    "CPUUsage": 12,
+    "MemoryAssigned": 4294967296,
+    "MemoryStartup": 2147483648,
+    "Generation": 2,
+    "Uptime": {
+      "Days": 3,
+      "Hours": 14,
+      "Minutes": 22,
+      "Seconds": 7,
+      "TotalSeconds": 310927.0
+    },
+    "Status": "Operating normally",
+    "Path": "C:\\ProgramData\\Microsoft\\Windows\\Hyper-V",
+    "VMId": "a1b2c3d4-0001-0001-0001-000000000001"
+  },
+  {
+    "Name": "web-server",
+    "State": 2,
+    "CPUUsage": 4,
+    "MemoryAssigned": 2147483648,
+    "MemoryStartup": 1073741824,
+    "Generation": 2,
+    "Uptime": {
+      "Days": 0,
+      "Hours": 5,
+      "Minutes": 41,
+      "Seconds": 33,
+      "TotalSeconds": 20493.0
+    },
+    "Status": "Operating normally",
+    "Path": "C:\\ProgramData\\Microsoft\\Windows\\Hyper-V",
+    "VMId": "a1b2c3d4-0002-0002-0002-000000000002"
+  },
+  {
+    "Name": "test-lab",
+    "State": 3,
+    "CPUUsage": 0,
+    "MemoryAssigned": 0,
+    "MemoryStartup": 2147483648,
+    "Generation": 1,
+    "Uptime": {
+      "Days": 0,
+      "Hours": 0,
+      "Minutes": 0,
+      "Seconds": 0,
+      "TotalSeconds": 0.0
+    },
+    "Status": "Operating normally",
+    "Path": "C:\\ProgramData\\Microsoft\\Windows\\Hyper-V",
+    "VMId": "a1b2c3d4-0003-0003-0003-000000000003"
+  },
+  {
+    "Name": "backup-vm",
+    "State": 6,
+    "CPUUsage": 0,
+    "MemoryAssigned": 1073741824,
+    "MemoryStartup": 1073741824,
+    "Generation": 2,
+    "Uptime": {
+      "Days": 1,
+      "Hours": 2,
+      "Minutes": 15,
+      "Seconds": 0,
+      "TotalSeconds": 94500.0
+    },
+    "Status": "Operating normally",
+    "Path": "D:\\VMs",
+    "VMId": "a1b2c3d4-0004-0004-0004-000000000004"
+  }
+]

@@ -1,0 +1,163 @@
+{
+  "title": "Services",
+  "subtitle": {
+    "default": "Services web découverts dans votre homelab",
+    "count": "{upCount}/{totalCount} services en ligne"
+  },
+  "suggestions": {
+    "accept": "Accepter",
+    "deny": "Refuser"
+  },
+  "config": {
+    "title": "Configuration des services",
+    "backToServices": "Retour aux services",
+    "tabs": {
+      "manual": "Services manuels",
+      "overrides": "Remplacements",
+      "grouping": "Groupement et fusion",
+      "icons": "Icônes"
+    },
+    "header": {
+      "edit": "Modifier",
+      "addManualService": "Ajouter un service manuel",
+      "doneSelect": "Terminer la sélection",
+      "selectServices": "Sélectionner des services",
+      "bulkEdit": "Modification en masse ({count})",
+      "doneArranging": "Terminer l'arrangement",
+      "arrangeServices": "Organiser les services",
+      "syncing": "Synchronisation...",
+      "refresh": "Actualiser",
+      "pulling": "Téléchargement...",
+      "pullImages": "Télécharger les images ({count})",
+      "pullImagesTitle": "Télécharger {count} image(s) unique(s)",
+      "noImagesAvailable": "Aucune image de service Docker disponible à télécharger"
+    },
+    "overrides": {
+      "serviceName": "Nom du service",
+      "host": "Hôte",
+      "overriddenFields": "Champs remplacés",
+      "lastUpdated": "Dernière mise à jour",
+      "actions": "Actions",
+      "loading": "Chargement...",
+      "resetToAuto": "Rétablir auto",
+      "resetSelected": "Rétablir la sélection",
+      "resetConfirm": "Rétablir ce remplacement ? Le service reviendra à ses valeurs détectées automatiquement.",
+      "bulkResetConfirm": "Rétablir {count} remplacements ? Ces services reviendront aux valeurs détectées automatiquement.",
+      "emptyState": "Aucun remplacement. Les services affichent leurs valeurs détectées automatiquement.",
+      "fields": {
+        "name": "Nom",
+        "url": "URL",
+        "category": "Catégorie",
+        "icon": "Icône",
+        "tags": "Tags",
+        "hidden": "Masqué"
+      }
+    },
+    "grouping": {
+      "urlGroupingTitle": "Groupement d'URL",
+      "serviceMergingTitle": "Fusion de services",
+      "mode": "Mode",
+      "modes": {
+        "off": "Désactivé",
+        "conservative": "Conservateur",
+        "balanced": "Équilibré",
+        "aggressive": "Agressif"
+      },
+      "groupingModeDesc": {
+        "off": "Pas de groupement automatique d'URL",
+        "conservative": "Grouper uniquement les correspondances de très haute confiance (95%+)",
+        "balanced": "Grouper les correspondances de haute et moyenne confiance (90%+)",
+        "aggressive": "Grouper des candidats plus larges (85%+)"
+      },
+      "mergeModeDesc": {
+        "off": "Ne pas fusionner automatiquement les candidats en double.",
+        "conservative": "Fusionner uniquement les doublons de haute confiance.",
+        "balanced": "Fusionner les correspondances de haute et moyenne confiance sélectionnées.",
+        "aggressive": "Fusionner des candidats plus larges et s'appuyer davantage sur les exclusions manuelles."
+      },
+      "confidenceThreshold": "Seuil de confiance",
+      "aliasRules": "Règles d'alias",
+      "aliasRulesDesc": "Une règle par ligne. Format : motif_source => motif_canonique.",
+      "aliasRulesPlaceholder": "*.*.simbaslabs.com => *.simbaslabs.com",
+      "neverGroupRules": "Règles de non-groupement",
+      "neverGroupDesc": "Paire d'URL par ligne. Utilisez ceci pour empêcher le groupement ou supprimer une URL alternative depuis la modification du service.",
+      "dryRun": "Simulation",
+      "dryRunLabel": "Évaluer les candidats à la fusion sans appliquer automatiquement.",
+      "forceMergeRules": "Règles de fusion forcée",
+      "forceMergeDesc": "Paire d'URL par ligne. Séparateurs pris en charge : =>, <=> ou virgule.",
+      "neverMergeRules": "Règles de non-fusion",
+      "neverMergeDesc": "Paire d'URL par ligne. Utilisez ceci pour bloquer les fusions ou annuler une fusion depuis la modification du service.",
+      "urlPairPlaceholder": "https://example.tail.domain => https://example.domain",
+      "quickPresets": "Préréglages rapides",
+      "domainPlaceholder": "simbaslabs.com",
+      "presetDescription": "Ajoute la règle {ruleFrom} => {ruleTo} pour mapper xyz.anything.domain vers xyz.domain.",
+      "enterDomainFirst": "Entrez d'abord un domaine de base (par exemple simbaslabs.com).",
+      "addedAliasPreset": "Préréglage d'alias ajouté : {rule}",
+      "appliedBalancedGrouping": "Préréglage appliqué : Groupement équilibré.",
+      "appliedSafeDryRun": "Préréglage appliqué : Simulation sécurisée.",
+      "appliedBalancedLiveMerge": "Préréglage appliqué : Fusion en direct équilibrée.",
+      "loadingGrouping": "Chargement des paramètres de groupement d'URL...",
+      "loadingMerge": "Chargement des paramètres de fusion de services...",
+      "saving": "Enregistrement...",
+      "presets": {
+        "ignoreMiddleLabel": "Ignorer le label intermédiaire",
+        "balanced": "Préréglage équilibré",
+        "safe": "Préréglage sécurisé",
+        "live": "Préréglage en direct"
+      },
+      "save": "Enregistrer",
+      "saved": "Paramètres enregistrés",
+      "summary": "Mode {mode}, seuil {threshold}%"
+    },
+    "manual": {
+      "addService": "Ajouter un service",
+      "editService": "Modifier le service",
+      "loading": "Chargement...",
+      "deleteConfirm": "Êtes-vous sûr de vouloir supprimer ce service ?",
+      "standalone": "Autonome",
+      "notMonitored": "Non surveillé",
+      "nameRequired": "Le nom est requis",
+      "urlRequired": "L'URL est requise",
+      "urlInvalid": "L'URL doit commencer par http:// ou https://",
+      "categoryRequired": "La catégorie est requise",
+      "hostPlaceholder": "Sélectionner un actif (facultatif)",
+      "emptyState": "Aucun service manuel. Cliquez sur \"Ajouter un service\" pour en créer un.",
+      "form": {
+        "name": "Nom *",
+        "namePlaceholder": "Mon service",
+        "url": "URL *",
+        "urlPlaceholder": "https://example.local:8080",
+        "category": "Catégorie *",
+        "selectPlaceholder": "--",
+        "hostAsset": "Actif hôte",
+        "icon": "Icône",
+        "iconPlaceholder": "clé-icône (facultatif)",
+        "tags": "Tags",
+        "tagsPlaceholder": "tag1, tag2, tag3 (facultatif)",
+        "cancel": "Annuler"
+      },
+      "table": {
+        "name": "Nom",
+        "url": "URL",
+        "category": "Catégorie",
+        "host": "Hôte",
+        "status": "Statut",
+        "actions": "Actions",
+        "delete": "Supprimer"
+      }
+    },
+    "icons": {
+      "upload": "Télécharger une icône",
+      "rename": "Renommer",
+      "delete": "Supprimer",
+      "deleteConfirm": "Supprimer cette icône ?",
+      "deleteInUse": "Cette icône est utilisée par {count} services. Supprimer quand même ?",
+      "usedBy": "Utilisé par {count} services",
+      "notUsed": "Non utilisé",
+      "maxSize": "Max. 512 Ko",
+      "fileTooLarge": "Le fichier dépasse la limite de 512 Ko",
+      "uploadFailed": "Échec du téléchargement",
+      "emptyState": "Aucune icône personnalisée. Téléchargez des icônes pour les utiliser dans vos services."
+    }
+  }
+}

@@ -1,0 +1,157 @@
+{
+  "provider_instance": {
+    "id": "prov-agent-agent-node-contract-linux",
+    "kind": "agent",
+    "provider": "agent",
+    "display_name": "agent-node-contract-linux",
+    "status": "healthy",
+    "scope": "global",
+    "config_ref": "agent-node-contract-linux",
+    "metadata": {
+      "instance_key": "agent-node-contract-linux"
+    }
+  },
+  "asset": {
+    "id": "agent-node-contract-linux",
+    "type": "host",
+    "name": "agent-node-contract-linux",
+    "source": "agent",
+    "resource_class": "compute",
+    "resource_kind": "host",
+    "metadata": {
+      "cap_logs": "stored,query,stream",
+      "cap_network": "list,action",
+      "cap_packages": "list,action",
+      "cap_schedules": "list",
+      "cap_services": "list,action",
+      "cpu_used_percent": "17.5",
+      "platform": "linux"
+    },
+    "attributes": {
+      "cpu_used_percent": 17.5,
+      "source": "agent"
+    }
+  },
+  "external_refs": [
+    {
+      "resource_id": "agent-node-contract-linux",
+      "provider_instance_id": "prov-agent-agent-node-contract-linux",
+      "external_id": "agent-node-contract-linux",
+      "external_type": "host"
+    }
+  ],
+  "capability_set": {
+    "subject_type": "resource",
+    "subject_id": "agent-node-contract-linux",
+    "capabilities": [
+      {
+        "id": "cron.list",
+        "scope": "read",
+        "stability": "ga"
+      },
+      {
+        "id": "files.list",
+        "scope": "read",
+        "stability": "ga"
+      },
+      {
+        "id": "health.read",
+        "scope": "read",
+        "stability": "ga"
+      },
+      {
+        "id": "logs.query",
+        "scope": "read",
+        "stability": "ga"
+      },
+      {
+        "id": "logs.read",
+        "scope": "read",
+        "stability": "ga"
+      },
+      {
+        "id": "logs.stream",
+        "scope": "stream",
+        "stability": "ga"
+      },
+      {
+        "id": "network.action",
+        "scope": "action",
+        "stability": "ga"
+      },
+      {
+        "id": "network.list",
+        "scope": "read",
+        "stability": "ga"
+      },
+      {
+        "id": "package.action",
+        "scope": "action",
+        "stability": "ga"
+      },
+      {
+        "id": "package.list",
+        "scope": "read",
+        "stability": "ga"
+      },
+      {
+        "id": "process.list",
+        "scope": "read",
+        "stability": "ga"
+      },
+      {
+        "id": "service.action",
+        "scope": "action",
+        "stability": "ga"
+      },
+      {
+        "id": "service.list",
+        "scope": "read",
+        "stability": "ga"
+      },
+      {
+        "id": "telemetry.read",
+        "scope": "read",
+        "stability": "ga"
+      },
+      {
+        "id": "terminal.open",
+        "scope": "action",
+        "stability": "ga"
+      },
+      {
+        "id": "users.list",
+        "scope": "read",
+        "stability": "ga"
+      }
+    ]
+  },
+  "template_binding": {
+    "resource_id": "agent-node-contract-linux",
+    "template_id": "template.compute.default",
+    "tabs": [
+      "actions",
+      "cron",
+      "files",
+      "interfaces",
+      "logs",
+      "overview",
+      "packages",
+      "processes",
+      "services",
+      "telemetry",
+      "terminal",
+      "users"
+    ],
+    "operations": [
+      "service.restart",
+      "service.start",
+      "service.stop"
+    ]
+  },
+  "checkpoint": {
+    "provider_instance_id": "prov-agent-agent-node-contract-linux",
+    "stream": "discover",
+    "cursor": "agent-node-contract-linux@*"
+  }
+}

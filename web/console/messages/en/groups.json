@@ -1,0 +1,31 @@
+{
+  "title": "Groups",
+  "subtitle": "Manage groups used across devices, topology, alerts, and reliability",
+  "manage": "Manage",
+  "done": "Done",
+  "newGroup": "New Group",
+  "expandAll": "Expand all",
+  "collapseAll": "Collapse all",
+  "empty": {
+    "title": "No groups yet",
+    "description": "Create your first group to organize devices.",
+    "action": "Create Group"
+  },
+  "dropToRoot": "Drop here to move to top level",
+  "editModal": {
+    "title": "Edit Group",
+    "name": "Name",
+    "parentGroup": "Parent Group",
+    "jumpChain": "Network Access — Jump Chain",
+    "saving": "Saving..."
+  },
+  "create": {
+    "nameSlugRequired": "Name and slug are required."
+  },
+  "edit": {
+    "nameRequired": "Name is required."
+  },
+  "delete": {
+    "confirmHint": "Type the group name exactly to confirm."
+  }
+}

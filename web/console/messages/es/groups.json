@@ -1,0 +1,31 @@
+{
+  "title": "Grupos",
+  "subtitle": "Administrar grupos usados en dispositivos, topología, alertas y confiabilidad",
+  "manage": "Administrar",
+  "done": "Listo",
+  "newGroup": "Nuevo grupo",
+  "expandAll": "Expandir todo",
+  "collapseAll": "Contraer todo",
+  "empty": {
+    "title": "Aún no hay grupos",
+    "description": "Cree su primer grupo para organizar dispositivos.",
+    "action": "Crear grupo"
+  },
+  "dropToRoot": "Soltar aquí para mover al nivel superior",
+  "editModal": {
+    "title": "Editar grupo",
+    "name": "Nombre",
+    "parentGroup": "Grupo padre",
+    "jumpChain": "Acceso de red — Cadena de salto",
+    "saving": "Guardando..."
+  },
+  "create": {
+    "nameSlugRequired": "El nombre y el slug son obligatorios."
+  },
+  "edit": {
+    "nameRequired": "El nombre es obligatorio."
+  },
+  "delete": {
+    "confirmHint": "Escriba el nombre del grupo exactamente para confirmar."
+  }
+}

@@ -1,0 +1,25 @@
+issuer: http://localhost:5556/dex
+
+storage:
+  type: memory
+
+web:
+  http: 0.0.0.0:5556
+
+oauth2:
+  skipApprovalScreen: true
+
+staticClients:
+  - id: labtether
+    secret: labtether-test-secret
+    name: LabTether
+    redirectURIs:
+      - http://localhost:3000/api/auth/oidc/callback
+
+enablePasswordDB: true
+
+staticPasswords:
+  - email: testuser@localhost
+    hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W"
+    username: testuser
+    userID: "1234567890"

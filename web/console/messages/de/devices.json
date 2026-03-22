@@ -1,0 +1,37 @@
+{
+  "title": "Geräte",
+  "subtitle": "Infrastruktur-Hosts, Connector-Hubs und virtuelle Maschinen",
+  "addDevice": "Gerät hinzufügen",
+  "search": {
+    "placeholder": "Geräte suchen...",
+    "label": "Geräte suchen"
+  },
+  "empty": {
+    "title": "Noch keine Geräte",
+    "description": "Klicken Sie auf Gerät hinzufügen, um einen Agenten zu installieren, ein Proxmox-Cluster zu verbinden oder andere Infrastruktur einzubinden.",
+    "action": "Erstes Gerät hinzufügen"
+  },
+  "hierarchy": {
+    "nestAsChild": "Nest as child",
+    "mergeAsDevice": "Merge as same device",
+    "viewInTopology": "View full tree in Topology",
+    "setParent": "Set parent...",
+    "addChild": "Add child",
+    "detachFromParent": "Detach from parent",
+    "addFacet": "Add facet (merge asset)"
+  },
+  "composites": {
+    "primary": "Primary",
+    "facet": "Facet",
+    "sourceView": "Source: {source}"
+  },
+  "proposals": {
+    "title": "Suggested Relationships",
+    "mergeComposite": "Merge",
+    "linkParentChild": "Link",
+    "dismiss": "Dismiss",
+    "matchSignals": "Match signals",
+    "confidence": "Confidence: {value}%",
+    "newSuggestions": "{count} suggested relationships"
+  }
+}

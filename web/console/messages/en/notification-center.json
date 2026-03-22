@@ -1,0 +1,18 @@
+{
+  "title": "Notification Center",
+  "subtitle": "Delivery history for alert notifications",
+  "status": "Status",
+  "channel": "Channel",
+  "alert": "Alert",
+  "sentAt": "Sent At",
+  "error": "Error",
+  "retries": "Retries",
+  "noNotifications": "No notifications yet",
+  "noNotificationsDesc": "Notification deliveries will appear here when alerts fire.",
+  "all": "All",
+  "sent": "Sent",
+  "failed": "Failed",
+  "pending": "Pending",
+  "filterByStatus": "Filter by status",
+  "refresh": "Refresh"
+}

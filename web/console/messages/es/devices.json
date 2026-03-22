@@ -1,0 +1,37 @@
+{
+  "title": "Dispositivos",
+  "subtitle": "Hosts de infraestructura, hubs de conectores y máquinas virtuales",
+  "addDevice": "Agregar dispositivo",
+  "search": {
+    "placeholder": "Buscar dispositivos...",
+    "label": "Buscar dispositivos"
+  },
+  "empty": {
+    "title": "Aún no hay dispositivos",
+    "description": "Haga clic en Agregar dispositivo para instalar un agente, conectar un clúster Proxmox o vincular otra infraestructura.",
+    "action": "Agregar su primer dispositivo"
+  },
+  "hierarchy": {
+    "nestAsChild": "Nest as child",
+    "mergeAsDevice": "Merge as same device",
+    "viewInTopology": "View full tree in Topology",
+    "setParent": "Set parent...",
+    "addChild": "Add child",
+    "detachFromParent": "Detach from parent",
+    "addFacet": "Add facet (merge asset)"
+  },
+  "composites": {
+    "primary": "Primary",
+    "facet": "Facet",
+    "sourceView": "Source: {source}"
+  },
+  "proposals": {
+    "title": "Suggested Relationships",
+    "mergeComposite": "Merge",
+    "linkParentChild": "Link",
+    "dismiss": "Dismiss",
+    "matchSignals": "Match signals",
+    "confidence": "Confidence: {value}%",
+    "newSuggestions": "{count} suggested relationships"
+  }
+}

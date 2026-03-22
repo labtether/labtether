@@ -1,0 +1,8 @@
+{
+  "title": "Files",
+  "subtitle": "Browse and transfer files on your devices",
+  "empty": {
+    "title": "File Browser",
+    "description": "Select a device with a connected agent to browse and transfer files."
+  }
+}

@@ -1,0 +1,215 @@
+{
+  "provider_instance": {
+    "id": "prov-connector-portainer-collector-1",
+    "kind": "connector",
+    "provider": "portainer",
+    "display_name": "connector-portainer",
+    "status": "healthy",
+    "scope": "global",
+    "config_ref": "collector-1",
+    "metadata": {
+      "instance_key": "collector-1"
+    }
+  },
+  "assets": [
+    {
+      "id": "portainer-ct-1",
+      "type": "container",
+      "name": "api",
+      "source": "portainer",
+      "resource_class": "compute",
+      "resource_kind": "container",
+      "metadata": {
+        "container_id": "portainer-ct-1",
+        "endpoint_id": "1",
+        "resource_class": "compute",
+        "resource_kind": "container"
+      },
+      "attributes": {
+        "container_id": "portainer-ct-1",
+        "endpoint_id": "1",
+        "source": "portainer"
+      }
+    },
+    {
+      "id": "portainer-endpoint-1",
+      "type": "container-host",
+      "name": "endpoint-1",
+      "source": "portainer",
+      "resource_class": "compute",
+      "resource_kind": "container-host",
+      "metadata": {
+        "endpoint_id": "1",
+        "resource_class": "compute",
+        "resource_kind": "container-host"
+      },
+      "attributes": {
+        "endpoint_id": "1",
+        "source": "portainer"
+      }
+    }
+  ],
+  "external_refs": [
+    {
+      "resource_id": "portainer-ct-1",
+      "provider_instance_id": "prov-connector-portainer-collector-1",
+      "external_id": "portainer-ct-1",
+      "external_type": "container",
+      "external_parent_id": "1"
+    },
+    {
+      "resource_id": "portainer-endpoint-1",
+      "provider_instance_id": "prov-connector-portainer-collector-1",
+      "external_id": "1",
+      "external_type": "container-host",
+      "external_parent_id": "1"
+    }
+  ],
+  "relationships": [
+    {
+      "source_resource_id": "portainer-ct-1",
+      "target_resource_id": "portainer-endpoint-1",
+      "type": "runs_on",
+      "direction": "downstream",
+      "criticality": "high",
+      "inferred": true,
+      "confidence": 92,
+      "evidence": {
+        "source": "metadata.endpoint_id"
+      }
+    }
+  ],
+  "capability_sets": [
+    {
+      "subject_type": "provider",
+      "subject_id": "prov-connector-portainer-collector-1",
+      "capabilities": [
+        {
+          "id": "events.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "health.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "inventory.discover",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "system.action",
+          "scope": "action",
+          "stability": "ga",
+          "supports_dry_run": true,
+          "requires_target": true
+        },
+        {
+          "id": "telemetry.read",
+          "scope": "read",
+          "stability": "ga"
+        }
+      ]
+    },
+    {
+      "subject_type": "resource",
+      "subject_id": "portainer-ct-1",
+      "capabilities": [
+        {
+          "id": "events.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "health.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "telemetry.read",
+          "scope": "read",
+          "stability": "ga"
+        }
+      ]
+    },
+    {
+      "subject_type": "resource",
+      "subject_id": "portainer-endpoint-1",
+      "capabilities": [
+        {
+          "id": "events.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "health.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "system.action",
+          "scope": "action",
+          "stability": "ga",
+          "supports_dry_run": true,
+          "requires_target": true
+        },
+        {
+          "id": "telemetry.read",
+          "scope": "read",
+          "stability": "ga"
+        }
+      ]
+    }
+  ],
+  "template_bindings": [
+    {
+      "resource_id": "portainer-ct-1",
+      "template_id": "template.compute.default",
+      "tabs": [
+        "actions",
+        "logs",
+        "overview",
+        "telemetry",
+        "terminal"
+      ]
+    },
+    {
+      "resource_id": "portainer-endpoint-1",
+      "template_id": "template.docker.host",
+      "tabs": [
+        "containers",
+        "images",
+        "logs",
+        "overview",
+        "stacks",
+        "telemetry",
+        "terminal"
+      ],
+      "operations": [
+        "automation.entity.toggle",
+        "automation.service.call",
+        "container.kill",
+        "container.pause",
+        "container.remove",
+        "container.restart",
+        "container.unpause",
+        "disk.smart_test",
+        "storage.pool.scrub",
+        "system.reboot"
+      ]
+    }
+  ],
+  "checkpoint": {
+    "provider_instance_id": "prov-connector-portainer-collector-1",
+    "stream": "discover",
+    "cursor": "count=2;ts=*"
+  },
+  "reconciliation": {
+    "created_count": 2,
+    "updated_count": 4,
+    "stale_count": 0,
+    "error_count": 0
+  }
+}

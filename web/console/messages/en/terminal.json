@@ -1,0 +1,12 @@
+{
+  "title": "Terminal",
+  "loading": "Loading workspace...",
+  "palette": {
+    "group": "Terminal",
+    "newTab": "New Tab",
+    "enableBroadcast": "Enable Broadcast",
+    "disableBroadcast": "Disable Broadcast",
+    "enterFullscreen": "Enter Fullscreen",
+    "exitFullscreen": "Exit Fullscreen"
+  }
+}

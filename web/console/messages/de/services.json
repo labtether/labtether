@@ -1,0 +1,163 @@
+{
+  "title": "Dienste",
+  "subtitle": {
+    "default": "Erkannte Webdienste in Ihrem Homelab",
+    "count": "{upCount}/{totalCount} Dienste online"
+  },
+  "suggestions": {
+    "accept": "Akzeptieren",
+    "deny": "Ablehnen"
+  },
+  "config": {
+    "title": "Dienstkonfiguration",
+    "backToServices": "Zurück zu Diensten",
+    "tabs": {
+      "manual": "Manuelle Dienste",
+      "overrides": "Überschreibungen",
+      "grouping": "Gruppierung & Zusammenführung",
+      "icons": "Symbole"
+    },
+    "header": {
+      "edit": "Bearbeiten",
+      "addManualService": "Manuellen Dienst hinzufügen",
+      "doneSelect": "Auswahl beenden",
+      "selectServices": "Dienste auswählen",
+      "bulkEdit": "Massenbearbeitung ({count})",
+      "doneArranging": "Anordnung beenden",
+      "arrangeServices": "Dienste anordnen",
+      "syncing": "Synchronisiere...",
+      "refresh": "Aktualisieren",
+      "pulling": "Wird geladen...",
+      "pullImages": "Images laden ({count})",
+      "pullImagesTitle": "{count} eindeutige(s) Image(s) laden",
+      "noImagesAvailable": "Keine Docker-Service-Images zum Laden verfügbar"
+    },
+    "overrides": {
+      "serviceName": "Dienstname",
+      "host": "Host",
+      "overriddenFields": "Geänderte Felder",
+      "lastUpdated": "Zuletzt aktualisiert",
+      "actions": "Aktionen",
+      "loading": "Laden...",
+      "resetToAuto": "Auf Auto zurücksetzen",
+      "resetSelected": "Auswahl zurücksetzen",
+      "resetConfirm": "Diese Überschreibung zurücksetzen? Der Dienst wird auf seine automatisch erkannten Werte zurückgesetzt.",
+      "bulkResetConfirm": "{count} Überschreibungen zurücksetzen? Diese Dienste werden auf automatisch erkannte Werte zurückgesetzt.",
+      "emptyState": "Keine Überschreibungen. Dienste zeigen ihre automatisch erkannten Werte.",
+      "fields": {
+        "name": "Name",
+        "url": "URL",
+        "category": "Kategorie",
+        "icon": "Symbol",
+        "tags": "Tags",
+        "hidden": "Versteckt"
+      }
+    },
+    "grouping": {
+      "urlGroupingTitle": "URL-Gruppierung",
+      "serviceMergingTitle": "Dienst-Zusammenführung",
+      "mode": "Modus",
+      "modes": {
+        "off": "Aus",
+        "conservative": "Konservativ",
+        "balanced": "Ausgewogen",
+        "aggressive": "Aggressiv"
+      },
+      "groupingModeDesc": {
+        "off": "Keine automatische URL-Gruppierung",
+        "conservative": "Nur sehr hohe Übereinstimmungen gruppieren (95%+)",
+        "balanced": "Hohe und mittlere Übereinstimmungen gruppieren (90%+)",
+        "aggressive": "Breitere Kandidaten gruppieren (85%+)"
+      },
+      "mergeModeDesc": {
+        "off": "Duplikat-Kandidaten nicht automatisch zusammenführen.",
+        "conservative": "Nur Duplikate mit hoher Konfidenz zusammenführen.",
+        "balanced": "Hohe und ausgewählte mittlere Übereinstimmungen zusammenführen.",
+        "aggressive": "Breitere Kandidaten zusammenführen und mehr auf manuelle Ausschlüsse setzen."
+      },
+      "confidenceThreshold": "Konfidenzschwelle",
+      "aliasRules": "Alias-Regeln",
+      "aliasRulesDesc": "Eine Regel pro Zeile. Format: Quellmuster => Kanonisches Muster.",
+      "aliasRulesPlaceholder": "*.*.simbaslabs.com => *.simbaslabs.com",
+      "neverGroupRules": "Nie-gruppieren-Regeln",
+      "neverGroupDesc": "URL-Paar pro Zeile. Verhindert Gruppierung oder entfernt eine alternative URL aus der Dienstbearbeitung.",
+      "dryRun": "Testlauf",
+      "dryRunLabel": "Zusammenführungs-Kandidaten auswerten, ohne automatisch anzuwenden.",
+      "forceMergeRules": "Erzwungene Zusammenführungsregeln",
+      "forceMergeDesc": "URL-Paar pro Zeile. Unterstützte Trennzeichen: =>, <=> oder Komma.",
+      "neverMergeRules": "Nie-zusammenführen-Regeln",
+      "neverMergeDesc": "URL-Paar pro Zeile. Blockiert Zusammenführungen oder macht eine Zusammenführung aus der Dienstbearbeitung rückgängig.",
+      "urlPairPlaceholder": "https://example.tail.domain => https://example.domain",
+      "quickPresets": "Schnellvoreinstellungen",
+      "domainPlaceholder": "simbaslabs.com",
+      "presetDescription": "Fügt Regel {ruleFrom} => {ruleTo} hinzu, um xyz.anything.domain auf xyz.domain abzubilden.",
+      "enterDomainFirst": "Geben Sie zuerst eine Basisdomain ein (z.B. simbaslabs.com).",
+      "addedAliasPreset": "Alias-Voreinstellung hinzugefügt: {rule}",
+      "appliedBalancedGrouping": "Voreinstellung angewendet: Ausgewogene Gruppierung.",
+      "appliedSafeDryRun": "Voreinstellung angewendet: Sicherer Testlauf.",
+      "appliedBalancedLiveMerge": "Voreinstellung angewendet: Ausgewogene Live-Zusammenführung.",
+      "loadingGrouping": "URL-Gruppierungseinstellungen werden geladen...",
+      "loadingMerge": "Dienst-Zusammenführungseinstellungen werden geladen...",
+      "saving": "Speichern...",
+      "presets": {
+        "ignoreMiddleLabel": "Mittleres Label ignorieren",
+        "balanced": "Ausgewogene Voreinstellung",
+        "safe": "Sichere Voreinstellung",
+        "live": "Live-Voreinstellung"
+      },
+      "save": "Speichern",
+      "saved": "Einstellungen gespeichert",
+      "summary": "{mode}-Modus, Schwelle {threshold}%"
+    },
+    "manual": {
+      "addService": "Dienst hinzufügen",
+      "editService": "Dienst bearbeiten",
+      "loading": "Laden...",
+      "deleteConfirm": "Möchten Sie diesen Dienst wirklich löschen?",
+      "standalone": "Eigenständig",
+      "notMonitored": "Nicht überwacht",
+      "nameRequired": "Name ist erforderlich",
+      "urlRequired": "URL ist erforderlich",
+      "urlInvalid": "URL muss mit http:// oder https:// beginnen",
+      "categoryRequired": "Kategorie ist erforderlich",
+      "hostPlaceholder": "Asset auswählen (optional)",
+      "emptyState": "Keine manuellen Dienste. Klicken Sie auf \"Dienst hinzufügen\", um einen zu erstellen.",
+      "form": {
+        "name": "Name *",
+        "namePlaceholder": "Mein Dienst",
+        "url": "URL *",
+        "urlPlaceholder": "https://example.local:8080",
+        "category": "Kategorie *",
+        "selectPlaceholder": "--",
+        "hostAsset": "Host-Asset",
+        "icon": "Symbol",
+        "iconPlaceholder": "Symbol-Schlüssel (optional)",
+        "tags": "Tags",
+        "tagsPlaceholder": "tag1, tag2, tag3 (optional)",
+        "cancel": "Abbrechen"
+      },
+      "table": {
+        "name": "Name",
+        "url": "URL",
+        "category": "Kategorie",
+        "host": "Host",
+        "status": "Status",
+        "actions": "Aktionen",
+        "delete": "Löschen"
+      }
+    },
+    "icons": {
+      "upload": "Symbol hochladen",
+      "rename": "Umbenennen",
+      "delete": "Löschen",
+      "deleteConfirm": "Dieses Symbol löschen?",
+      "deleteInUse": "Dieses Symbol wird von {count} Diensten verwendet. Trotzdem löschen?",
+      "usedBy": "Verwendet von {count} Diensten",
+      "notUsed": "Nicht in Verwendung",
+      "maxSize": "Max. 512KB",
+      "fileTooLarge": "Datei überschreitet 512KB-Limit",
+      "uploadFailed": "Hochladen fehlgeschlagen",
+      "emptyState": "Keine benutzerdefinierten Symbole. Laden Sie Symbole hoch, um sie für Ihre Dienste zu verwenden."
+    }
+  }
+}

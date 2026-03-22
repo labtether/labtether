@@ -1,0 +1,35 @@
+{
+  "loading": "加载中...",
+  "error": "出了点问题",
+  "retry": "重试",
+  "save": "保存",
+  "cancel": "取消",
+  "delete": "删除",
+  "confirm": "确认",
+  "close": "关闭",
+  "search": {
+    "label": "搜索",
+    "placeholder": "搜索..."
+  },
+  "noResults": "未找到结果",
+  "empty": "这里还没有内容",
+  "actions": {
+    "export": "导出",
+    "refresh": "刷新",
+    "add": "添加",
+    "edit": "编辑",
+    "remove": "移除"
+  },
+  "status": {
+    "online": "在线",
+    "offline": "离线",
+    "unknown": "未知",
+    "enabled": "已启用",
+    "disabled": "已禁用"
+  },
+  "time": {
+    "ago": "{time}前"
+  },
+  "copied": "已复制",
+  "copy": "复制"
+}

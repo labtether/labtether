@@ -1,0 +1,211 @@
+{
+  "provider_instance": {
+    "id": "prov-connector-truenas-collector-1",
+    "kind": "connector",
+    "provider": "truenas",
+    "display_name": "connector-truenas",
+    "status": "healthy",
+    "scope": "global",
+    "config_ref": "collector-1",
+    "metadata": {
+      "instance_key": "collector-1"
+    }
+  },
+  "assets": [
+    {
+      "id": "truenas-host-nas01",
+      "type": "nas",
+      "name": "nas01",
+      "source": "truenas",
+      "resource_class": "storage",
+      "resource_kind": "storage-controller",
+      "metadata": {
+        "hostname": "nas01",
+        "resource_class": "storage",
+        "resource_kind": "storage-controller"
+      },
+      "attributes": {
+        "hostname": "nas01",
+        "source": "truenas"
+      }
+    },
+    {
+      "id": "truenas-pool-main",
+      "type": "storage-pool",
+      "name": "main",
+      "source": "truenas",
+      "resource_class": "storage",
+      "resource_kind": "storage-pool",
+      "metadata": {
+        "pool_id": "main",
+        "resource_class": "storage",
+        "resource_kind": "storage-pool"
+      },
+      "attributes": {
+        "pool_id": "main",
+        "source": "truenas"
+      }
+    }
+  ],
+  "external_refs": [
+    {
+      "resource_id": "truenas-host-nas01",
+      "provider_instance_id": "prov-connector-truenas-collector-1",
+      "external_id": "truenas-host-nas01",
+      "external_type": "storage-controller"
+    },
+    {
+      "resource_id": "truenas-pool-main",
+      "provider_instance_id": "prov-connector-truenas-collector-1",
+      "external_id": "main",
+      "external_type": "storage-pool",
+      "external_parent_id": "main"
+    }
+  ],
+  "relationships": [
+    {
+      "source_resource_id": "truenas-host-nas01",
+      "target_resource_id": "truenas-pool-main",
+      "type": "contains",
+      "direction": "downstream",
+      "criticality": "medium",
+      "inferred": true,
+      "confidence": 70,
+      "evidence": {
+        "source": "truenas.discovery"
+      }
+    }
+  ],
+  "capability_sets": [
+    {
+      "subject_type": "provider",
+      "subject_id": "prov-connector-truenas-collector-1",
+      "capabilities": [
+        {
+          "id": "events.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "health.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "inventory.discover",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "system.action",
+          "scope": "action",
+          "stability": "ga",
+          "supports_dry_run": true,
+          "requires_target": true
+        },
+        {
+          "id": "telemetry.read",
+          "scope": "read",
+          "stability": "ga"
+        }
+      ]
+    },
+    {
+      "subject_type": "resource",
+      "subject_id": "truenas-host-nas01",
+      "capabilities": [
+        {
+          "id": "events.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "health.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "system.action",
+          "scope": "action",
+          "stability": "ga",
+          "supports_dry_run": true,
+          "requires_target": true
+        },
+        {
+          "id": "telemetry.read",
+          "scope": "read",
+          "stability": "ga"
+        }
+      ]
+    },
+    {
+      "subject_type": "resource",
+      "subject_id": "truenas-pool-main",
+      "capabilities": [
+        {
+          "id": "events.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "health.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "telemetry.read",
+          "scope": "read",
+          "stability": "ga"
+        }
+      ]
+    }
+  ],
+  "template_bindings": [
+    {
+      "resource_id": "truenas-host-nas01",
+      "template_id": "template.truenas.controller",
+      "tabs": [
+        "actions",
+        "logs",
+        "overview",
+        "telemetry",
+        "terminal",
+        "truenas"
+      ],
+      "operations": [
+        "automation.entity.toggle",
+        "automation.service.call",
+        "container.kill",
+        "container.pause",
+        "container.remove",
+        "container.restart",
+        "container.unpause",
+        "disk.smart_test",
+        "storage.pool.scrub",
+        "system.reboot"
+      ]
+    },
+    {
+      "resource_id": "truenas-pool-main",
+      "template_id": "template.storage.default",
+      "tabs": [
+        "actions",
+        "logs",
+        "overview",
+        "telemetry",
+        "truenas"
+      ]
+    }
+  ],
+  "checkpoint": {
+    "provider_instance_id": "prov-connector-truenas-collector-1",
+    "stream": "discover",
+    "cursor": "count=2;ts=*"
+  },
+  "reconciliation": {
+    "created_count": 2,
+    "updated_count": 4,
+    "stale_count": 0,
+    "error_count": 0
+  }
+}

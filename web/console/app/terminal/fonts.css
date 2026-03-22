@@ -1,0 +1,18 @@
+/* Terminal fonts — loaded on-demand when the terminal module is used.
+   Imported in the terminal module layout, NOT in the global app layout. */
+
+/* JetBrains Mono — weights 400, 700 */
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap");
+
+/* Fira Code — weights 400, 700 */
+@import url("https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;700&display=swap");
+
+/* Source Code Pro — weights 400, 700 */
+@import url("https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;700&display=swap");
+
+/* IBM Plex Mono — weights 400, 700 */
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&display=swap");
+
+/* Cascadia Code — not on Google Fonts; relies on system availability.
+   Users on Windows 10+ or with the font installed will get it automatically.
+   The terminal falls back to the generic monospace stack if unavailable. */

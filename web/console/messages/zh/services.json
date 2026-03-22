@@ -1,0 +1,163 @@
+{
+  "title": "服务",
+  "subtitle": {
+    "default": "在您的家庭实验室中发现的 Web 服务",
+    "count": "{upCount}/{totalCount} 个服务在线"
+  },
+  "suggestions": {
+    "accept": "接受",
+    "deny": "拒绝"
+  },
+  "config": {
+    "title": "服务配置",
+    "backToServices": "返回服务",
+    "tabs": {
+      "manual": "手动服务",
+      "overrides": "覆盖设置",
+      "grouping": "分组与合并",
+      "icons": "图标"
+    },
+    "header": {
+      "edit": "编辑",
+      "addManualService": "添加手动服务",
+      "doneSelect": "完成选择",
+      "selectServices": "选择服务",
+      "bulkEdit": "批量编辑 ({count})",
+      "doneArranging": "完成排列",
+      "arrangeServices": "排列服务",
+      "syncing": "同步中...",
+      "refresh": "刷新",
+      "pulling": "拉取中...",
+      "pullImages": "拉取镜像 ({count})",
+      "pullImagesTitle": "拉取 {count} 个唯一镜像",
+      "noImagesAvailable": "没有可拉取的 Docker 服务镜像"
+    },
+    "overrides": {
+      "serviceName": "服务名称",
+      "host": "主机",
+      "overriddenFields": "已覆盖字段",
+      "lastUpdated": "最后更新",
+      "actions": "操作",
+      "loading": "加载中...",
+      "resetToAuto": "恢复自动",
+      "resetSelected": "重置所选",
+      "resetConfirm": "重置此覆盖？服务将恢复为自动检测的值。",
+      "bulkResetConfirm": "重置 {count} 个覆盖？这些服务将恢复为自动检测的值。",
+      "emptyState": "没有覆盖设置。服务正在显示其自动检测的值。",
+      "fields": {
+        "name": "名称",
+        "url": "URL",
+        "category": "类别",
+        "icon": "图标",
+        "tags": "标签",
+        "hidden": "隐藏"
+      }
+    },
+    "grouping": {
+      "urlGroupingTitle": "URL 分组",
+      "serviceMergingTitle": "服务合并",
+      "mode": "模式",
+      "modes": {
+        "off": "关闭",
+        "conservative": "保守",
+        "balanced": "均衡",
+        "aggressive": "激进"
+      },
+      "groupingModeDesc": {
+        "off": "不进行自动 URL 分组",
+        "conservative": "仅分组非常高置信度的匹配 (95%+)",
+        "balanced": "分组高和中置信度的匹配 (90%+)",
+        "aggressive": "分组更广泛的候选项 (85%+)"
+      },
+      "mergeModeDesc": {
+        "off": "不自动合并重复候选项。",
+        "conservative": "仅合并高置信度的重复项。",
+        "balanced": "合并高置信度和选定的中等置信度匹配。",
+        "aggressive": "合并更广泛的候选项，更多依赖手动排除。"
+      },
+      "confidenceThreshold": "置信度阈值",
+      "aliasRules": "别名规则",
+      "aliasRulesDesc": "每行一条规则。格式：源模式 => 规范模式。",
+      "aliasRulesPlaceholder": "*.*.simbaslabs.com => *.simbaslabs.com",
+      "neverGroupRules": "禁止分组规则",
+      "neverGroupDesc": "每行一个 URL 对。用于防止分组或从服务编辑中移除替代 URL。",
+      "dryRun": "模拟运行",
+      "dryRunLabel": "评估合并候选项而不自动应用。",
+      "forceMergeRules": "强制合并规则",
+      "forceMergeDesc": "每行一个 URL 对。支持的分隔符：=>、<=> 或逗号。",
+      "neverMergeRules": "禁止合并规则",
+      "neverMergeDesc": "每行一个 URL 对。用于阻止合并或从服务编辑中撤销合并。",
+      "urlPairPlaceholder": "https://example.tail.domain => https://example.domain",
+      "quickPresets": "快速预设",
+      "domainPlaceholder": "simbaslabs.com",
+      "presetDescription": "添加规则 {ruleFrom} => {ruleTo}，将 xyz.anything.domain 映射到 xyz.domain。",
+      "enterDomainFirst": "请先输入基础域名（例如 simbaslabs.com）。",
+      "addedAliasPreset": "已添加别名预设：{rule}",
+      "appliedBalancedGrouping": "已应用预设：均衡分组。",
+      "appliedSafeDryRun": "已应用预设：安全模拟运行。",
+      "appliedBalancedLiveMerge": "已应用预设：均衡实时合并。",
+      "loadingGrouping": "正在加载 URL 分组设置...",
+      "loadingMerge": "正在加载服务合并设置...",
+      "saving": "保存中...",
+      "presets": {
+        "ignoreMiddleLabel": "忽略中间标签",
+        "balanced": "均衡预设",
+        "safe": "安全预设",
+        "live": "实时预设"
+      },
+      "save": "保存",
+      "saved": "设置已保存",
+      "summary": "{mode}模式，阈值 {threshold}%"
+    },
+    "manual": {
+      "addService": "添加服务",
+      "editService": "编辑服务",
+      "loading": "加载中...",
+      "deleteConfirm": "您确定要删除此服务吗？",
+      "standalone": "独立",
+      "notMonitored": "未监控",
+      "nameRequired": "名称为必填项",
+      "urlRequired": "URL 为必填项",
+      "urlInvalid": "URL 必须以 http:// 或 https:// 开头",
+      "categoryRequired": "类别为必填项",
+      "hostPlaceholder": "选择资产（可选）",
+      "emptyState": "没有手动服务。点击\"添加服务\"创建一个。",
+      "form": {
+        "name": "名称 *",
+        "namePlaceholder": "我的服务",
+        "url": "URL *",
+        "urlPlaceholder": "https://example.local:8080",
+        "category": "类别 *",
+        "selectPlaceholder": "--",
+        "hostAsset": "主机资产",
+        "icon": "图标",
+        "iconPlaceholder": "图标键（可选）",
+        "tags": "标签",
+        "tagsPlaceholder": "标签1, 标签2, 标签3（可选）",
+        "cancel": "取消"
+      },
+      "table": {
+        "name": "名称",
+        "url": "URL",
+        "category": "类别",
+        "host": "主机",
+        "status": "状态",
+        "actions": "操作",
+        "delete": "删除"
+      }
+    },
+    "icons": {
+      "upload": "上传图标",
+      "rename": "重命名",
+      "delete": "删除",
+      "deleteConfirm": "删除此图标？",
+      "deleteInUse": "此图标被 {count} 个服务使用。仍然删除？",
+      "usedBy": "被 {count} 个服务使用",
+      "notUsed": "未使用",
+      "maxSize": "最大 512KB",
+      "fileTooLarge": "文件超过 512KB 限制",
+      "uploadFailed": "上传失败",
+      "emptyState": "没有自定义图标。上传图标以在您的服务中使用。"
+    }
+  }
+}

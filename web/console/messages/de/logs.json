@@ -1,0 +1,23 @@
+{
+  "title": "Protokolle",
+  "subtitle": "Protokollausgaben Ihrer Geräte suchen und filtern",
+  "filters": {
+    "source": "Quelle",
+    "level": "Stufe",
+    "events": "Ereignisse",
+    "range": "Zeitraum",
+    "search": "Suche",
+    "allSources": "Alle Quellen",
+    "operational": "Betrieblich",
+    "all": "Alle"
+  },
+  "search": {
+    "placeholder": "Nachrichtentext suchen (error, timeout, zfs...)"
+  },
+  "empty": {
+    "title": "Noch keine Protokollereignisse",
+    "description": "Ereignisse werden hier angezeigt, sobald Geräte Daten melden. Stellen Sie sicher, dass mindestens ein Gerät verbunden ist.",
+    "viewDevices": "Geräte anzeigen"
+  },
+  "noMatch": "Keine Protokollereignisse entsprechen Ihren aktuellen Filtern."
+}

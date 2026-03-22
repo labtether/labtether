@@ -1,0 +1,39 @@
+{
+  "loading": "Loading...",
+  "error": "Something went wrong",
+  "retry": "Try again",
+  "save": "Save",
+  "cancel": "Cancel",
+  "delete": "Delete",
+  "confirm": "Confirm",
+  "close": "Close",
+  "search": {
+    "label": "Search",
+    "placeholder": "Search..."
+  },
+  "noResults": "No results found",
+  "empty": "Nothing here yet",
+  "actions": {
+    "export": "Export",
+    "refresh": "Refresh",
+    "add": "Add",
+    "edit": "Edit",
+    "remove": "Remove"
+  },
+  "status": {
+    "online": "Online",
+    "offline": "Offline",
+    "unknown": "Unknown",
+    "enabled": "Enabled",
+    "disabled": "Disabled"
+  },
+  "time": {
+    "ago": "{time} ago"
+  },
+  "copied": "Copied",
+  "copy": "Copy",
+  "errorBoundary": {
+    "title": "Something went wrong",
+    "tryAgain": "Try again"
+  }
+}

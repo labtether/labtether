@@ -1,0 +1,15 @@
+# Lightweight Dex OIDC provider for testing.
+# Usage: docker compose -f deploy/testing/docker-compose.dex.yml up -d
+# Teardown: docker compose -f deploy/testing/docker-compose.dex.yml down
+#
+# OIDC Issuer: http://localhost:5556/dex
+# Test user: testuser@localhost / password
+
+services:
+  dex:
+    image: ghcr.io/dexidp/dex:v2.41.1
+    command: ["dex", "serve", "/etc/dex/config.yaml"]
+    ports:
+      - "127.0.0.1:5556:5556"
+    volumes:
+      - ./dex-config.yaml:/etc/dex/config.yaml:ro

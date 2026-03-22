@@ -1,0 +1,223 @@
+{
+  "provider_instance": {
+    "id": "prov-connector-proxmox",
+    "kind": "connector",
+    "provider": "proxmox",
+    "display_name": "Proxmox",
+    "status": "healthy",
+    "scope": "global",
+    "metadata": {
+      "instance_key": ""
+    }
+  },
+  "assets": [
+    {
+      "id": "proxmox-node-pve99",
+      "type": "hypervisor-node",
+      "name": "pve99",
+      "source": "proxmox",
+      "resource_class": "compute",
+      "resource_kind": "hypervisor-node",
+      "metadata": {
+        "node": "pve99",
+        "resource_class": "compute",
+        "resource_kind": "hypervisor-node"
+      },
+      "attributes": {
+        "node": "pve99",
+        "source": "proxmox"
+      }
+    },
+    {
+      "id": "proxmox-vm-999",
+      "type": "vm",
+      "name": "vm-999",
+      "source": "proxmox",
+      "resource_class": "compute",
+      "resource_kind": "vm",
+      "metadata": {
+        "node": "pve99",
+        "resource_class": "compute",
+        "resource_kind": "vm",
+        "vmid": "999"
+      },
+      "attributes": {
+        "node": "pve99",
+        "source": "proxmox",
+        "vmid": "999"
+      }
+    }
+  ],
+  "external_refs": [
+    {
+      "resource_id": "proxmox-node-pve99",
+      "provider_instance_id": "prov-connector-proxmox",
+      "external_id": "proxmox-node-pve99",
+      "external_type": "hypervisor-node",
+      "external_parent_id": "pve99"
+    },
+    {
+      "resource_id": "proxmox-vm-999",
+      "provider_instance_id": "prov-connector-proxmox",
+      "external_id": "999",
+      "external_type": "vm",
+      "external_parent_id": "pve99"
+    }
+  ],
+  "relationships": [
+    {
+      "source_resource_id": "proxmox-vm-999",
+      "target_resource_id": "proxmox-node-pve99",
+      "type": "runs_on",
+      "direction": "downstream",
+      "criticality": "high",
+      "inferred": true,
+      "confidence": 95,
+      "evidence": {
+        "source": "metadata.node"
+      }
+    }
+  ],
+  "capability_sets": [
+    {
+      "subject_type": "provider",
+      "subject_id": "prov-connector-proxmox",
+      "capabilities": [
+        {
+          "id": "events.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "health.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "inventory.discover",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "system.action",
+          "scope": "action",
+          "stability": "ga"
+        },
+        {
+          "id": "telemetry.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "workload.action",
+          "scope": "action",
+          "stability": "ga",
+          "supports_dry_run": true,
+          "requires_target": true
+        }
+      ]
+    },
+    {
+      "subject_type": "resource",
+      "subject_id": "proxmox-node-pve99",
+      "capabilities": [
+        {
+          "id": "events.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "health.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "telemetry.read",
+          "scope": "read",
+          "stability": "ga"
+        }
+      ]
+    },
+    {
+      "subject_type": "resource",
+      "subject_id": "proxmox-vm-999",
+      "capabilities": [
+        {
+          "id": "events.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "health.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "telemetry.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "workload.action",
+          "scope": "action",
+          "stability": "ga",
+          "supports_dry_run": true,
+          "requires_target": true
+        }
+      ]
+    }
+  ],
+  "template_bindings": [
+    {
+      "resource_id": "proxmox-node-pve99",
+      "template_id": "template.proxmox.node",
+      "tabs": [
+        "actions",
+        "desktop",
+        "logs",
+        "overview",
+        "proxmox",
+        "settings",
+        "telemetry",
+        "terminal"
+      ]
+    },
+    {
+      "resource_id": "proxmox-vm-999",
+      "template_id": "template.proxmox.workload",
+      "tabs": [
+        "actions",
+        "desktop",
+        "logs",
+        "overview",
+        "proxmox",
+        "telemetry",
+        "terminal"
+      ],
+      "operations": [
+        "workload.clone",
+        "workload.clone_from_template",
+        "workload.disk_resize",
+        "workload.force_stop",
+        "workload.migrate",
+        "workload.reboot",
+        "workload.resume",
+        "workload.shutdown",
+        "workload.start",
+        "workload.stop",
+        "workload.suspend"
+      ]
+    }
+  ],
+  "checkpoint": {
+    "provider_instance_id": "prov-connector-proxmox",
+    "stream": "discover",
+    "cursor": "count=2;ts=*"
+  },
+  "reconciliation": {
+    "created_count": 2,
+    "updated_count": 4,
+    "stale_count": 0,
+    "error_count": 0
+  }
+}

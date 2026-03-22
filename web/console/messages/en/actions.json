@@ -1,0 +1,64 @@
+{
+  "title": "Actions",
+  "subtitle": "Run tasks on your devices and review results",
+  "runAction": {
+    "heading": "// Run Action",
+    "integration": {
+      "label": "Integration",
+      "tooltip": "Integration module that provides this action"
+    },
+    "action": "Action",
+    "device": {
+      "label": "Device",
+      "tooltip": "The resource identifier to act on (container ID, VM name, etc.)",
+      "placeholder": "container-id / vm-id / entity-id"
+    },
+    "options": {
+      "label": "Options",
+      "placeholder": "key=value,key2=value2"
+    },
+    "previewOnly": {
+      "label": "Preview Only",
+      "tooltip": "Simulate the action without making changes"
+    },
+    "submit": "Run",
+    "submitting": "Queueing..."
+  },
+  "history": {
+    "heading": "// Run History",
+    "viewLogs": "View logs",
+    "empty": {
+      "title": "No runs yet",
+      "description": "Pick an integration and action above, then hit Run."
+    }
+  },
+  "updates": {
+    "title": "Updates",
+    "subtitle": "Schedule and run updates across your lab",
+    "planName": "Plan Name",
+    "devices": {
+      "label": "Devices",
+      "tooltip": "Comma-separated list of device hostnames to update",
+      "placeholder": "lab-host-01, docker-host-01"
+    },
+    "scopes": {
+      "label": "Scopes",
+      "tooltip": "Update categories: os_packages, docker_images, etc.",
+      "placeholder": "os_packages,docker_images"
+    },
+    "previewOnly": "Preview Only",
+    "createPlan": "Create Plan",
+    "saving": "Saving...",
+    "plans": "Plans",
+    "recentRuns": "Recent Runs",
+    "run": "Run",
+    "plansEmpty": {
+      "title": "No update plans yet",
+      "description": "Create a plan above to define which devices and scopes to update."
+    },
+    "runsEmpty": {
+      "title": "No update runs yet",
+      "description": "Execute a plan to start a run."
+    }
+  }
+}

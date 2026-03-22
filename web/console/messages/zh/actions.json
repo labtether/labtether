@@ -1,0 +1,64 @@
+{
+  "title": "操作",
+  "subtitle": "在设备上运行任务并查看结果",
+  "runAction": {
+    "heading": "// 运行操作",
+    "integration": {
+      "label": "集成",
+      "tooltip": "提供此操作的集成模块"
+    },
+    "action": "操作",
+    "device": {
+      "label": "设备",
+      "tooltip": "要操作的资源标识符（容器 ID、虚拟机名称等）",
+      "placeholder": "容器 ID / 虚拟机 ID / 实体 ID"
+    },
+    "options": {
+      "label": "选项",
+      "placeholder": "key=value,key2=value2"
+    },
+    "previewOnly": {
+      "label": "仅预览",
+      "tooltip": "模拟操作而不进行实际更改"
+    },
+    "submit": "运行",
+    "submitting": "正在排队..."
+  },
+  "history": {
+    "heading": "// 执行历史",
+    "viewLogs": "查看日志",
+    "empty": {
+      "title": "还没有执行记录",
+      "description": "选择上方的集成和操作，然后点击运行。"
+    }
+  },
+  "updates": {
+    "title": "更新",
+    "subtitle": "在您的实验室中计划和运行更新",
+    "planName": "计划名称",
+    "devices": {
+      "label": "设备",
+      "tooltip": "要更新的设备主机名，以逗号分隔",
+      "placeholder": "lab-host-01, docker-host-01"
+    },
+    "scopes": {
+      "label": "范围",
+      "tooltip": "更新类别：os_packages、docker_images 等",
+      "placeholder": "os_packages,docker_images"
+    },
+    "previewOnly": "仅预览",
+    "createPlan": "创建计划",
+    "saving": "正在保存...",
+    "plans": "计划",
+    "recentRuns": "最近执行",
+    "run": "运行",
+    "plansEmpty": {
+      "title": "还没有更新计划",
+      "description": "在上方创建计划以定义要更新的设备和范围。"
+    },
+    "runsEmpty": {
+      "title": "还没有更新执行记录",
+      "description": "执行一个计划以开始运行。"
+    }
+  }
+}

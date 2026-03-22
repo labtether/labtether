@@ -1,0 +1,368 @@
+{
+  "registry": {
+    "capability_ids": [
+      "backup.action",
+      "cron.list",
+      "events.read",
+      "events.stream",
+      "files.list",
+      "files.read",
+      "files.write",
+      "health.read",
+      "image.action",
+      "inventory.discover",
+      "logs.query",
+      "logs.read",
+      "logs.stream",
+      "network.action",
+      "network.list",
+      "package.action",
+      "package.list",
+      "process.list",
+      "service.action",
+      "service.list",
+      "snapshot.action",
+      "stack.action",
+      "system.action",
+      "telemetry.read",
+      "terminal.open",
+      "users.list",
+      "workload.action"
+    ],
+    "operation_ids": [
+      "app.restart",
+      "app.start",
+      "app.stop",
+      "automation.entity.toggle",
+      "automation.service.call",
+      "backup.start",
+      "container.kill",
+      "container.pause",
+      "container.remove",
+      "container.restart",
+      "container.unpause",
+      "disk.smart_test",
+      "image.pull",
+      "image.remove",
+      "service.restart",
+      "service.start",
+      "service.stop",
+      "snapshot.create",
+      "snapshot.delete",
+      "snapshot.rollback",
+      "stack.down",
+      "stack.pull",
+      "stack.redeploy",
+      "stack.remove",
+      "stack.restart",
+      "stack.start",
+      "stack.stop",
+      "stack.up",
+      "storage.datastore.gc",
+      "storage.datastore.prune",
+      "storage.datastore.verify",
+      "storage.pool.scrub",
+      "system.reboot",
+      "workload.clone",
+      "workload.clone_from_template",
+      "workload.disk_resize",
+      "workload.force_stop",
+      "workload.migrate",
+      "workload.reboot",
+      "workload.resume",
+      "workload.shutdown",
+      "workload.start",
+      "workload.stop",
+      "workload.suspend"
+    ],
+    "metric_ids": [
+      "availability_state",
+      "backup_age_seconds",
+      "cpu_used_percent",
+      "disk_used_percent",
+      "iops_read",
+      "iops_write",
+      "latency_ms",
+      "memory_used_percent",
+      "network_rx_bytes_per_sec",
+      "network_tx_bytes_per_sec",
+      "temperature_celsius",
+      "uptime_seconds"
+    ],
+    "event_ids": [
+      "event.alert",
+      "event.connector",
+      "event.incident",
+      "event.log",
+      "event.operation",
+      "event.state_change",
+      "event.topology"
+    ],
+    "template_ids": [
+      "template.compute.default",
+      "template.docker.container",
+      "template.docker.host",
+      "template.homeassistant.entity",
+      "template.other.default",
+      "template.pbs.controller",
+      "template.pbs.datastore",
+      "template.proxmox.node",
+      "template.proxmox.workload",
+      "template.storage.default",
+      "template.truenas.controller"
+    ]
+  },
+  "providers": [
+    {
+      "id": "prov-agent-linux-node-status-contract",
+      "kind": "agent",
+      "provider": "agent",
+      "display_name": "linux-node-status-contract",
+      "status": "healthy",
+      "scope": "global",
+      "config_ref": "linux-node-status-contract",
+      "metadata": {
+        "instance_key": "linux-node-status-contract"
+      }
+    },
+    {
+      "id": "prov-connector-proxmox-collector-status",
+      "kind": "connector",
+      "provider": "proxmox",
+      "display_name": "Proxmox",
+      "status": "healthy",
+      "scope": "global",
+      "config_ref": "collector-status",
+      "metadata": {
+        "instance_key": "collector-status"
+      }
+    }
+  ],
+  "capability_sets": [
+    {
+      "subject_type": "provider",
+      "subject_id": "prov-connector-proxmox-collector-status",
+      "capabilities": [
+        {
+          "id": "events.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "health.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "inventory.discover",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "system.action",
+          "scope": "action",
+          "stability": "ga"
+        },
+        {
+          "id": "telemetry.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "workload.action",
+          "scope": "action",
+          "stability": "ga",
+          "supports_dry_run": true,
+          "requires_target": true
+        }
+      ]
+    },
+    {
+      "subject_type": "resource",
+      "subject_id": "linux-node-status-contract",
+      "capabilities": [
+        {
+          "id": "files.list",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "health.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "logs.query",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "logs.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "network.action",
+          "scope": "action",
+          "stability": "ga"
+        },
+        {
+          "id": "network.list",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "process.list",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "service.action",
+          "scope": "action",
+          "stability": "ga"
+        },
+        {
+          "id": "service.list",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "telemetry.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "terminal.open",
+          "scope": "action",
+          "stability": "ga"
+        },
+        {
+          "id": "users.list",
+          "scope": "read",
+          "stability": "ga"
+        }
+      ]
+    },
+    {
+      "subject_type": "resource",
+      "subject_id": "proxmox-node-status-1",
+      "capabilities": [
+        {
+          "id": "events.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "health.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "telemetry.read",
+          "scope": "read",
+          "stability": "ga"
+        }
+      ]
+    },
+    {
+      "subject_type": "resource",
+      "subject_id": "proxmox-vm-status-101",
+      "capabilities": [
+        {
+          "id": "events.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "health.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "telemetry.read",
+          "scope": "read",
+          "stability": "ga"
+        },
+        {
+          "id": "workload.action",
+          "scope": "action",
+          "stability": "ga",
+          "supports_dry_run": true,
+          "requires_target": true
+        }
+      ]
+    }
+  ],
+  "template_bindings": [
+    {
+      "resource_id": "linux-node-status-contract",
+      "template_id": "template.compute.default",
+      "tabs": [
+        "actions",
+        "files",
+        "interfaces",
+        "logs",
+        "overview",
+        "processes",
+        "services",
+        "telemetry",
+        "terminal",
+        "users"
+      ],
+      "operations": [
+        "service.restart",
+        "service.start",
+        "service.stop"
+      ]
+    },
+    {
+      "resource_id": "proxmox-node-status-1",
+      "template_id": "template.proxmox.node",
+      "tabs": [
+        "actions",
+        "desktop",
+        "logs",
+        "overview",
+        "proxmox",
+        "settings",
+        "telemetry",
+        "terminal"
+      ]
+    },
+    {
+      "resource_id": "proxmox-vm-status-101",
+      "template_id": "template.proxmox.workload",
+      "tabs": [
+        "actions",
+        "desktop",
+        "logs",
+        "overview",
+        "proxmox",
+        "telemetry",
+        "terminal"
+      ],
+      "operations": [
+        "workload.clone",
+        "workload.clone_from_template",
+        "workload.disk_resize",
+        "workload.force_stop",
+        "workload.migrate",
+        "workload.reboot",
+        "workload.resume",
+        "workload.shutdown",
+        "workload.start",
+        "workload.stop",
+        "workload.suspend"
+      ]
+    }
+  ],
+  "reconciliation": [
+    {
+      "provider_instance_id": "prov-connector-proxmox-collector-status",
+      "created_count": 2,
+      "updated_count": 4,
+      "stale_count": 0,
+      "error_count": 0
+    }
+  ]
+}
