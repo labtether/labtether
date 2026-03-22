@@ -8,7 +8,7 @@ require (
 	github.com/golang/snappy v1.0.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/hirochachacha/go-smb2 v1.1.0
-	github.com/jackc/pgx/v5 v5.8.0
+	github.com/jackc/pgx/v5 v5.9.0
 	github.com/jlaffaye/ftp v0.2.0
 	github.com/mark3labs/mcp-go v0.45.0
 	github.com/pion/interceptor v0.1.44
@@ -18,13 +18,13 @@ require (
 	github.com/pquerna/otp v1.5.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
-	github.com/shirou/gopsutil/v4 v4.26.1
+	github.com/shirou/gopsutil/v4 v4.26.2
 	github.com/studio-b12/gowebdav v0.12.0
 	golang.org/x/crypto v0.49.0
-	golang.org/x/oauth2 v0.35.0
+	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.20.0
 	golang.org/x/sys v0.42.0
-	google.golang.org/protobuf v1.36.8
+	google.golang.org/protobuf v1.36.11
 )
 
 require (
