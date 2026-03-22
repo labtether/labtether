@@ -258,15 +258,15 @@ func newTestAuthDeps(t *testing.T) (*Deps, *memAuthStore) {
 	return &Deps{
 		AuthStore:                 store,
 		OIDCRef:                   &OIDCProviderRef{},
-		TLSEnabled:               false,
-		ChallengeStore:           auth.NewChallengeStore(),
-		TOTPEncryptionKey:        make([]byte, 32),
-		OIDCStates:               make(map[string]OIDCAuthState),
-		EnforceRateLimit:         testutil.NoopRateLimit,
+		TLSEnabled:                false,
+		ChallengeStore:            auth.NewChallengeStore(),
+		TOTPEncryptionKey:         make([]byte, 32),
+		OIDCStates:                make(map[string]OIDCAuthState),
+		EnforceRateLimit:          testutil.NoopRateLimit,
 		ValidateOwnerTokenRequest: func(_ *http.Request) bool { return true },
 		UserIDFromContext:         testutil.TestUserID,
-		WrapAuth:                 testutil.NoopAuth,
-		WrapAdmin:                testutil.NoopAuth,
+		WrapAuth:                  testutil.NoopAuth,
+		WrapAdmin:                 testutil.NoopAuth,
 	}, store
 }
 

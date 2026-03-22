@@ -44,12 +44,12 @@ func TestOIDCAssignableRole(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"owner", "admin"},   // owner downgrades to admin
-		{"Owner", "admin"},   // case insensitive
-		{"admin", "admin"},   // stays admin
+		{"owner", "admin"}, // owner downgrades to admin
+		{"Owner", "admin"}, // case insensitive
+		{"admin", "admin"}, // stays admin
 		{"operator", "operator"},
 		{"viewer", "viewer"},
-		{"", "viewer"},       // empty normalizes to viewer
+		{"", "viewer"},        // empty normalizes to viewer
 		{"unknown", "viewer"}, // unknown normalizes to viewer
 	}
 	for _, tt := range tests {

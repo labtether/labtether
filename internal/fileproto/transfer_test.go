@@ -25,11 +25,11 @@ func (m *transferMockFS) Connect(_ context.Context, _ ConnectionConfig) error { 
 func (m *transferMockFS) List(_ context.Context, _ string, _ bool) ([]FileEntry, error) {
 	return nil, nil
 }
-func (m *transferMockFS) Mkdir(_ context.Context, _ string) error        { return nil }
-func (m *transferMockFS) Delete(_ context.Context, _ string) error       { return nil }
-func (m *transferMockFS) Rename(_ context.Context, _, _ string) error    { return nil }
-func (m *transferMockFS) Copy(_ context.Context, _, _ string) error      { return nil }
-func (m *transferMockFS) Close() error                                   { return nil }
+func (m *transferMockFS) Mkdir(_ context.Context, _ string) error     { return nil }
+func (m *transferMockFS) Delete(_ context.Context, _ string) error    { return nil }
+func (m *transferMockFS) Rename(_ context.Context, _, _ string) error { return nil }
+func (m *transferMockFS) Copy(_ context.Context, _, _ string) error   { return nil }
+func (m *transferMockFS) Close() error                                { return nil }
 
 func (m *transferMockFS) Read(_ context.Context, path string) (io.ReadCloser, int64, error) {
 	m.mu.Lock()

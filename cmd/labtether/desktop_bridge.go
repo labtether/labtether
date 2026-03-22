@@ -357,7 +357,7 @@ type displayBridge = desktoppkg.DisplayBridge
 type recordingMetadata = desktoppkg.RecordingMetadata
 
 // Function aliases for exported desktop package functions.
-func normalizeDesktopProtocol(raw string) string   { return desktoppkg.NormalizeDesktopProtocol(raw) }
+func normalizeDesktopProtocol(raw string) string { return desktoppkg.NormalizeDesktopProtocol(raw) }
 func sendDesktopClose(agentConn *agentmgr.AgentConn, sessionID string) {
 	desktoppkg.SendDesktopClose(agentConn, sessionID)
 }

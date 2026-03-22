@@ -1,9 +1,9 @@
 package proxmox
 
 import (
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"crypto/tls"
 	"fmt"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"log"
 	"net"
 	"net/http"

@@ -59,7 +59,9 @@ var (
 )
 
 // Package-level function aliases for tests.
-func writeTrueNASResolveError(w http.ResponseWriter, err error) { truenaspkg.WriteTrueNASResolveError(w, err) }
+func writeTrueNASResolveError(w http.ResponseWriter, err error) {
+	truenaspkg.WriteTrueNASResolveError(w, err)
+}
 
 func latestSmartResultsByDisk(results []map[string]any) map[string]map[string]any {
 	return truenaspkg.LatestSmartResultsByDisk(results)
@@ -92,8 +94,6 @@ func staleTrueNASReadWarning(message, fetchedAt string) string {
 func appendTrueNASWarning(existing []string, warning string) []string {
 	return truenaspkg.AppendTrueNASWarning(existing, warning)
 }
-
-
 
 // ensureTruenasDeps returns truenasDeps. When pre-initialized (production),
 // returns the cached instance. Otherwise, rebuilds on every call so that test
@@ -271,4 +271,4 @@ func trueNASFilesystemCacheKey(scope, id, requestPath string) string {
 // already declared in proxmox_bridge.go; only declare the new ones here.
 func anyToFloat64(value any) float64                { return shared.AnyToFloat64(value) }
 func parseAnyBoolLoose(value any) (bool, bool)      { return shared.ParseAnyBoolLoose(value) }
-func parseAnyTimestamp(value any) (time.Time, bool)  { return shared.ParseAnyTimestamp(value) }
+func parseAnyTimestamp(value any) (time.Time, bool) { return shared.ParseAnyTimestamp(value) }

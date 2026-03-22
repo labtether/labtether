@@ -13,7 +13,7 @@ import (
 )
 
 type CollectorLifecycle struct {
-	deps    *Deps
+	deps      *Deps
 	collector hubcollector.Collector
 	source    string
 	logFields map[string]string
@@ -21,7 +21,7 @@ type CollectorLifecycle struct {
 
 func NewCollectorLifecycle(d *Deps, collector hubcollector.Collector, source, collectorType string) CollectorLifecycle {
 	return CollectorLifecycle{
-		deps:    d,
+		deps:      d,
 		collector: collector,
 		source:    strings.TrimSpace(source),
 		logFields: map[string]string{

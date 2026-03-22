@@ -86,4 +86,3 @@ func (d *Deps) HandleTrueNASPools(ctx context.Context, w http.ResponseWriter, r 
 		servicehttp.WriteError(w, http.StatusNotFound, "unknown pool action: "+poolAction)
 	}
 }
-

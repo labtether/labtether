@@ -24,12 +24,12 @@ import (
 	"github.com/labtether/labtether/internal/logs"
 	"github.com/labtether/labtether/internal/notifications"
 	"github.com/labtether/labtether/internal/retention"
+	"github.com/labtether/labtether/internal/savedactions"
+	"github.com/labtether/labtether/internal/schedules"
 	"github.com/labtether/labtether/internal/synthetic"
 	"github.com/labtether/labtether/internal/telemetry"
 	"github.com/labtether/labtether/internal/terminal"
 	"github.com/labtether/labtether/internal/updates"
-	"github.com/labtether/labtether/internal/savedactions"
-	"github.com/labtether/labtether/internal/schedules"
 	"github.com/labtether/labtether/internal/webhooks"
 )
 

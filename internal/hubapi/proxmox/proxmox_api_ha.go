@@ -1,9 +1,9 @@
 package proxmox
 
 import (
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"context"
 	"encoding/json"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strings"
 	"time"
@@ -13,8 +13,8 @@ import (
 
 // handleProxmoxAssetHA handles HA operations for a Proxmox asset.
 //
-//   POST /proxmox/assets/{id}/ha/migrate — migrate VM/CT to target node via HA
-//   PUT  /proxmox/assets/{id}/ha        — update HA resource config
+//	POST /proxmox/assets/{id}/ha/migrate — migrate VM/CT to target node via HA
+//	PUT  /proxmox/assets/{id}/ha        — update HA resource config
 func (d *Deps) handleProxmoxAssetHA(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/proxmox/assets/")
 	// parts[0]=id, parts[1]="ha", parts[2]=sub-action (optional)

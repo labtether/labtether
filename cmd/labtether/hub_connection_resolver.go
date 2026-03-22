@@ -49,10 +49,10 @@ func (s *apiServer) resolveHubConnectionSelection(r *http.Request) hubConnection
 // listHubInterfaces and listHubInterfaceAddrs are always honoured.
 func (s *apiServer) buildHubConnectionResolverDeps() *shared.HubConnectionResolverDeps {
 	return &shared.HubConnectionResolverDeps{
-		ExternalURL:  s.externalURL,
-		TLSEnabled:   s.tlsState.Enabled,
-		CACertPEM:    s.tlsState.CACertPEM,
-		DefaultPort:  "",
+		ExternalURL:        s.externalURL,
+		TLSEnabled:         s.tlsState.Enabled,
+		CACertPEM:          s.tlsState.CACertPEM,
+		DefaultPort:        "",
 		ListInterfaces:     listHubInterfaces,
 		ListInterfaceAddrs: listHubInterfaceAddrs,
 

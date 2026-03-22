@@ -6,8 +6,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/labtether/labtether/internal/logs"
 	statusaggpkg "github.com/labtether/labtether/internal/hubapi/statusagg"
+	"github.com/labtether/labtether/internal/logs"
 )
 
 // --- Type aliases for test compatibility ---

@@ -11,7 +11,7 @@ import (
 // pbsCapabilities describes the tabs and features available for a PBS asset.
 type PBSCapabilities struct {
 	Tabs      []string `json:"tabs"`
-	Kind      string   `json:"kind"`       // "server" or "datastore"
+	Kind      string   `json:"kind"` // "server" or "datastore"
 	FetchedAt string   `json:"fetched_at"`
 }
 

@@ -1,10 +1,10 @@
 package main
 
 import (
-	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
 	"context"
 	"errors"
 	"fmt"
+	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
 	"math"
 	"net/http"
 	"net/http/httptest"

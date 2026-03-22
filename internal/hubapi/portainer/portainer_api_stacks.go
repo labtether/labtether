@@ -1,9 +1,9 @@
 package portainer
 
 import (
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"context"
 	"encoding/json"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"io"
 	"net/http"
 	"strconv"

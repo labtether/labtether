@@ -15,10 +15,10 @@ type DiskMountsSource interface {
 // DiskMountEntry holds per-mount metric values and identifying labels.
 type DiskMountEntry struct {
 	AssetID   string
-	Total     float64 // bytes
-	Used      float64 // bytes
-	Available float64 // bytes
-	UsePct    float64 // percent
+	Total     float64           // bytes
+	Used      float64           // bytes
+	Available float64           // bytes
+	UsePct    float64           // percent
 	Labels    map[string]string // mount_point
 }
 

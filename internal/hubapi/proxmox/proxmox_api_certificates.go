@@ -1,8 +1,8 @@
 package proxmox
 
 import (
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"context"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strings"
 	"time"
@@ -12,8 +12,8 @@ import (
 
 // handleProxmoxNodeCertificates handles certificate operations for a node.
 //
-//   GET  /proxmox/nodes/{node}/certificates         — list certificates
-//   POST /proxmox/nodes/{node}/certificates/renew   — renew ACME certificate
+//	GET  /proxmox/nodes/{node}/certificates         — list certificates
+//	POST /proxmox/nodes/{node}/certificates/renew   — renew ACME certificate
 func (d *Deps) handleProxmoxNodeCertificates(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/proxmox/nodes/")
 	// parts[0]=node, parts[1]="certificates", parts[2]=sub-action (optional)

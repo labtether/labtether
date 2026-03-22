@@ -1,11 +1,11 @@
 package agents
 
 import (
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"crypto/sha256"
 	"debug/buildinfo"
 	"encoding/hex"
 	"fmt"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"io"
 	"net/url"
 	"os"

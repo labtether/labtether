@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/connectorsdk"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/modelmap"
 	"github.com/labtether/labtether/internal/servicehttp"
-	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
 func (d *Deps) HandleListConnectors(w http.ResponseWriter, r *http.Request) {

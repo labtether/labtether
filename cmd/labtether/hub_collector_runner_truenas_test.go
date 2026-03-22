@@ -302,10 +302,10 @@ func TestCollectorEndpointIdentity(t *testing.T) {
 
 func TestBestRunsOnIdentityTargetPrefersIP(t *testing.T) {
 	source := assets.Asset{
-		ID:     "portainer-endpoint-1",
-		Type:   "container-host",
-		Name:   "portainer-omeganas",
-		Source: "portainer",
+		ID:      "portainer-endpoint-1",
+		Type:    "container-host",
+		Name:    "portainer-omeganas",
+		Source:  "portainer",
 		GroupID: "home",
 		Metadata: map[string]string{
 			"endpoint_host": "omeganas.local",
@@ -313,20 +313,20 @@ func TestBestRunsOnIdentityTargetPrefersIP(t *testing.T) {
 		},
 	}
 	targetA := assets.Asset{
-		ID:     "truenas-host-omeganas",
-		Type:   "nas",
-		Name:   "OmegaNAS",
-		Source: "truenas",
+		ID:      "truenas-host-omeganas",
+		Type:    "nas",
+		Name:    "OmegaNAS",
+		Source:  "truenas",
 		GroupID: "home",
 		Metadata: map[string]string{
 			"collector_endpoint_ip": "10.0.0.25",
 		},
 	}
 	targetB := assets.Asset{
-		ID:     "truenas-host-backup",
-		Type:   "nas",
-		Name:   "BackupNAS",
-		Source: "truenas",
+		ID:      "truenas-host-backup",
+		Type:    "nas",
+		Name:    "BackupNAS",
+		Source:  "truenas",
 		GroupID: "home",
 		Metadata: map[string]string{
 			"collector_endpoint_ip": "10.0.0.44",
@@ -353,24 +353,24 @@ func TestBestRunsOnIdentityTargetPrefersIP(t *testing.T) {
 
 func TestBestRunsOnIdentityTargetAmbiguousHostname(t *testing.T) {
 	source := assets.Asset{
-		ID:     "truenas-host-omeganas",
-		Type:   "nas",
-		Name:   "OmegaNAS",
-		Source: "truenas",
+		ID:      "truenas-host-omeganas",
+		Type:    "nas",
+		Name:    "OmegaNAS",
+		Source:  "truenas",
 		GroupID: "home",
 	}
 	targetA := assets.Asset{
-		ID:     "proxmox-vm-100",
-		Type:   "vm",
-		Name:   "OmegaNAS",
-		Source: "proxmox",
+		ID:      "proxmox-vm-100",
+		Type:    "vm",
+		Name:    "OmegaNAS",
+		Source:  "proxmox",
 		GroupID: "home",
 	}
 	targetB := assets.Asset{
-		ID:     "proxmox-vm-101",
-		Type:   "vm",
-		Name:   "omeganas",
-		Source: "proxmox",
+		ID:      "proxmox-vm-101",
+		Type:    "vm",
+		Name:    "omeganas",
+		Source:  "proxmox",
 		GroupID: "home",
 	}
 

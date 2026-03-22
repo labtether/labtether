@@ -221,7 +221,7 @@ func TestParseRebootRequiredOutputFalse(t *testing.T) {
 		[]byte("False\r\n"),
 		[]byte("  False  \n"),
 		[]byte(""),
-		[]byte("true"),  // PowerShell always capitalises; lower-case must not match
+		[]byte("true"), // PowerShell always capitalises; lower-case must not match
 		[]byte("false"),
 	}
 	for _, c := range cases {

@@ -1,8 +1,8 @@
 package pbs
 
 import (
-	"strings"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/labtether/labtether/internal/persistence"

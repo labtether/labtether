@@ -1,9 +1,9 @@
 package pbs
 
 import (
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"errors"
 	"fmt"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strings"
 

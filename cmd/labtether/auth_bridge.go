@@ -30,7 +30,7 @@ func (s *apiServer) buildAuthDeps() *authpkg.Deps {
 		AppendAuditEventBestEffort: s.appendAuditEventBestEffort,
 		EnforceRateLimit:           s.enforceRateLimit,
 		ValidateOwnerTokenRequest:  s.validateOwnerTokenRequest,
-		UserIDFromContext:           principalActorID,
+		UserIDFromContext:          principalActorID,
 
 		WrapAuth:  s.withAuth,
 		WrapAdmin: s.withAdminAuth,
@@ -164,8 +164,8 @@ type adminBootstrapStore = authpkg.AdminBootstrapStore
 // Constants delegated to the auth package.
 var (
 	defaultBootstrapAdminUsername = authpkg.DefaultBootstrapAdminUsername
-	weakPasswords                = authpkg.WeakPasswords
-	errOIDCSetupRequired         = authpkg.ErrOIDCSetupRequired
+	weakPasswords                 = authpkg.WeakPasswords
+	errOIDCSetupRequired          = authpkg.ErrOIDCSetupRequired
 )
 
 // oidcAssignableRole delegates to the auth package.

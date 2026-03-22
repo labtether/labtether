@@ -32,26 +32,26 @@ type Deps struct {
 	AgentMgr *agentmgr.AgentManager
 
 	// Core stores.
-	AssetStore            persistence.AssetStore
-	GroupStore            persistence.GroupStore
-	GroupProfileStore     persistence.GroupProfileStore
-	FailoverStore         persistence.FailoverStore
-	TelemetryStore        persistence.TelemetryStore
-	LogStore              persistence.LogStore
-	DependencyStore       persistence.DependencyStore
-	EdgeStore             edges.Store
-	SyntheticStore        persistence.SyntheticStore
-	LinkSuggestionStore   persistence.LinkSuggestionStore
-	CredentialStore       persistence.CredentialStore
-	AuditStore            persistence.AuditStore
-	RetentionStore        persistence.RetentionStore
-	DB                    PushDeviceStore
+	AssetStore          persistence.AssetStore
+	GroupStore          persistence.GroupStore
+	GroupProfileStore   persistence.GroupProfileStore
+	FailoverStore       persistence.FailoverStore
+	TelemetryStore      persistence.TelemetryStore
+	LogStore            persistence.LogStore
+	DependencyStore     persistence.DependencyStore
+	EdgeStore           edges.Store
+	SyntheticStore      persistence.SyntheticStore
+	LinkSuggestionStore persistence.LinkSuggestionStore
+	CredentialStore     persistence.CredentialStore
+	AuditStore          persistence.AuditStore
+	RetentionStore      persistence.RetentionStore
+	DB                  PushDeviceStore
 
 	// File protocol connection pool and stores.
-	FileProtoPool        *fileproto.Pool
-	FileConnectionStore  persistence.FileConnectionStore
-	FileTransferStore    persistence.FileTransferStore
-	ActiveTransfers      *sync.Map // transfer ID → context.CancelFunc
+	FileProtoPool       *fileproto.Pool
+	FileConnectionStore persistence.FileConnectionStore
+	FileTransferStore   persistence.FileTransferStore
+	ActiveTransfers     *sync.Map // transfer ID → context.CancelFunc
 
 	// Remote desktop bookmark store.
 	RemoteBookmarkStore RemoteBookmarkStoreInterface
@@ -80,8 +80,8 @@ type Deps struct {
 	HubCollectorStore persistence.HubCollectorStore
 
 	// Coordinator removal callbacks (nil-safe in handlers).
-	RemoveDockerHost      func(assetID string)
-	RemoveWebServiceHost  func(assetID string)
+	RemoveDockerHost     func(assetID string)
+	RemoveWebServiceHost func(assetID string)
 
 	// SendSSHKeyRemoveToAsset sends the ssh_key_remove message to the agent
 	// currently connected for the given asset. It is a no-op when the asset
@@ -109,15 +109,15 @@ type Deps struct {
 	// Asset sub-handler callbacks injected from cmd/labtether for dispatch
 	// targets that have not yet been extracted into this package.
 	// All fields are optional (nil-safe guards in HandleAssetActions).
-	HandleDesktopCredentials          http.HandlerFunc
-	HandleRetrieveDesktopCredentials  http.HandlerFunc
-	HandleDisplayList                 func(w http.ResponseWriter, r *http.Request, assetID string)
-	HandlePushHubKey                  func(w http.ResponseWriter, r *http.Request, assetID string)
-	HandleTestProtocolConnection      func(w http.ResponseWriter, r *http.Request, assetID, protocol string)
-	HandleListProtocolConfigs         func(w http.ResponseWriter, r *http.Request, assetID string)
-	HandleCreateProtocolConfig        func(w http.ResponseWriter, r *http.Request, assetID string)
-	HandleUpdateProtocolConfig        func(w http.ResponseWriter, r *http.Request, assetID, protocol string)
-	HandleDeleteProtocolConfig        func(w http.ResponseWriter, r *http.Request, assetID, protocol string)
+	HandleDesktopCredentials         http.HandlerFunc
+	HandleRetrieveDesktopCredentials http.HandlerFunc
+	HandleDisplayList                func(w http.ResponseWriter, r *http.Request, assetID string)
+	HandlePushHubKey                 func(w http.ResponseWriter, r *http.Request, assetID string)
+	HandleTestProtocolConnection     func(w http.ResponseWriter, r *http.Request, assetID, protocol string)
+	HandleListProtocolConfigs        func(w http.ResponseWriter, r *http.Request, assetID string)
+	HandleCreateProtocolConfig       func(w http.ResponseWriter, r *http.Request, assetID string)
+	HandleUpdateProtocolConfig       func(w http.ResponseWriter, r *http.Request, assetID, protocol string)
+	HandleDeleteProtocolConfig       func(w http.ResponseWriter, r *http.Request, assetID, protocol string)
 
 	// Cross-cutting helpers injected from cmd/labtether.
 	DecodeJSONBody  func(w http.ResponseWriter, r *http.Request, dst any) error

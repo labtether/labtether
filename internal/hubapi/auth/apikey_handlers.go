@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/apikeys"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/audit"
 	internalauth "github.com/labtether/labtether/internal/auth"
 	"github.com/labtether/labtether/internal/hubapi/shared"

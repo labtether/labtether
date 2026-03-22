@@ -97,9 +97,9 @@ func (d *Deps) HandleV2BulkServiceAction(w http.ResponseWriter, r *http.Request)
 	wg.Wait()
 
 	shared.AppendAuditEventBestEffort(d.AuditStore, audit.Event{
-		Type:    "api.bulk.service_action",
-		ActorID: apiv2.PrincipalActorID(r.Context()),
-		Details: map[string]any{"action": req.Action, "service": req.Service, "targets": filteredTargets},
+		Type:      "api.bulk.service_action",
+		ActorID:   apiv2.PrincipalActorID(r.Context()),
+		Details:   map[string]any{"action": req.Action, "service": req.Service, "targets": filteredTargets},
 		Timestamp: time.Now().UTC(),
 	}, "v2 bulk service action")
 

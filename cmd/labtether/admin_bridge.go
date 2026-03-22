@@ -38,9 +38,9 @@ func (s *apiServer) buildAdminDeps() *adminpkg.Deps {
 		AppendAuditEventBestEffort: func(event adminpkg.AuditEventAlias, logMessage string) {
 			s.appendAuditEventBestEffort(event, logMessage)
 		},
-		ApplySecurityRuntimeOverrides:             applySecurityRuntimeOverrides,
+		ApplySecurityRuntimeOverrides:              applySecurityRuntimeOverrides,
 		InvalidateWebServiceURLGroupingConfigCache: s.invalidateWebServiceURLGroupingConfigCache,
-		InvalidateStatusCaches:                    s.invalidateStatusCaches,
+		InvalidateStatusCaches:                     s.invalidateStatusCaches,
 		PrincipalActorID: func(ctx context.Context) string {
 			return principalActorID(ctx)
 		},

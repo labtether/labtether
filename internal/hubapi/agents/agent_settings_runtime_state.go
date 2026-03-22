@@ -1,8 +1,8 @@
 package agents
 
 import (
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"encoding/json"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"strings"
 	"time"
 

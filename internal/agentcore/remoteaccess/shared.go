@@ -7,9 +7,9 @@ import (
 )
 
 const (
-	DefaultCommandTimeout  = 30 * time.Second
+	DefaultCommandTimeout   = 30 * time.Second
 	MaxRemoteCommandTimeout = 5 * time.Minute
-	MaxCommandOutputBytes  = sysconfig.MaxCommandOutputBytes
+	MaxCommandOutputBytes   = sysconfig.MaxCommandOutputBytes
 )
 
 // TruncateCommandOutput delegates to sysconfig.TruncateCommandOutput.

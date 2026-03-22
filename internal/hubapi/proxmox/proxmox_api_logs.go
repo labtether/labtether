@@ -1,8 +1,8 @@
 package proxmox
 
 import (
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"context"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strconv"
 	"strings"

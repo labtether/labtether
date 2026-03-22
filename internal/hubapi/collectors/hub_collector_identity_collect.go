@@ -12,7 +12,7 @@ var identityIPv4Pattern = regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}\b`)
 
 func CollectCollectorIdentity(asset assets.Asset) CollectorIdentity {
 	identity := CollectorIdentity{
-		IPs: make(map[string]struct{}, 4),
+		IPs:       make(map[string]struct{}, 4),
 		Hostnames: make(map[string]struct{}, 4),
 	}
 

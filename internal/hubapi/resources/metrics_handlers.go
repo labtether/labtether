@@ -79,8 +79,8 @@ func (d *Deps) HandleMetricsOverview(w http.ResponseWriter, r *http.Request) {
 
 		for _, assetEntry := range assetList {
 			// Zero-value DynamicSnapshot (nil Metrics map) is safe here — map reads
-		// on nil maps return zero values, and ToLegacySnapshot handles it correctly.
-		dyn := dynSnapshots[assetEntry.ID]
+			// on nil maps return zero values, and ToLegacySnapshot handles it correctly.
+			dyn := dynSnapshots[assetEntry.ID]
 			entry := shared.AssetTelemetryOverview{
 				AssetID:    assetEntry.ID,
 				Name:       assetEntry.Name,

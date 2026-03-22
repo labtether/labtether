@@ -114,7 +114,7 @@ func TestReplayBufferedTelemetrySendsSamplesInOrder(t *testing.T) {
 func TestWSHeartbeatPublisherFallsBackToHTTPWhenDisconnected(t *testing.T) {
 	fallback := &recordingHeartbeatPublisher{}
 	publisher := newWSHeartbeatPublisher(&wsTransport{}, fallback, RuntimeConfig{
-		Source: "agent",
+		Source:  "agent",
 		GroupID: "group-1",
 	}, map[string]string{
 		"platform": "linux",
@@ -141,7 +141,7 @@ func TestWSHeartbeatPublisherSendsHeartbeatWhenConnected(t *testing.T) {
 
 	fallback := &recordingHeartbeatPublisher{}
 	publisher := newWSHeartbeatPublisher(transport, fallback, RuntimeConfig{
-		Source: "agent",
+		Source:  "agent",
 		GroupID: "group-1",
 	}, map[string]string{
 		"os_name": "Ubuntu 24.04 LTS",

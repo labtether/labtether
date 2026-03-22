@@ -23,8 +23,8 @@ func (s *apiServer) buildProxmoxDeps() *proxmoxpkg.Deps {
 		TelemetryStore:    s.telemetryStore,
 		ConnectorRegistry: s.connectorRegistry,
 
-		RequireAdminAuth: s.requireAdminAuth,
-		EnforceRateLimit: s.enforceRateLimit,
+		RequireAdminAuth:  s.requireAdminAuth,
+		EnforceRateLimit:  s.enforceRateLimit,
 		IssueStreamTicket: s.issueStreamTicket,
 
 		SetDesktopSPICEProxyTarget: func(sessionID string, target proxmoxpkg.DesktopSPICEProxyTarget) {
@@ -157,8 +157,10 @@ func (s *apiServer) resolveProxmoxActionTarget(actionID, target string) (string,
 	return s.ensureProxmoxDeps().ResolveProxmoxActionTarget(actionID, target)
 }
 
-func proxmoxActionErrorMessage(err error) string       { return proxmoxpkg.ProxmoxActionErrorMessage(err) }
-func proxmoxActionOutput(result proxmoxActionExecution) string { return proxmoxpkg.ProxmoxActionOutput(result) }
+func proxmoxActionErrorMessage(err error) string { return proxmoxpkg.ProxmoxActionErrorMessage(err) }
+func proxmoxActionOutput(result proxmoxActionExecution) string {
+	return proxmoxpkg.ProxmoxActionOutput(result)
+}
 func validateResolvedProxmoxActionTarget(resolved proxmoxSessionTarget, expectedKind, actionID string) error {
 	return proxmoxpkg.ValidateResolvedProxmoxActionTarget(resolved, expectedKind, actionID)
 }
@@ -187,8 +189,10 @@ func newProxmoxTLSConfig(skipVerify bool, caPEM string) (*tls.Config, error) {
 
 type proxmoxStoragePoolState = proxmoxpkg.ProxmoxStoragePoolState
 
-func parseStorageInsightsWindow(raw string) time.Duration { return proxmoxpkg.ParseStorageInsightsWindow(raw) }
-func clampPercent(value float64) float64                  { return proxmoxpkg.ClampPercent(value) }
+func parseStorageInsightsWindow(raw string) time.Duration {
+	return proxmoxpkg.ParseStorageInsightsWindow(raw)
+}
+func clampPercent(value float64) float64 { return proxmoxpkg.ClampPercent(value) }
 func buildProxmoxStorageInsightEvents(tasks []proxmoxconnector.Task, poolStates []proxmoxStoragePoolState, now time.Time, window time.Duration) []proxmoxpkg.ProxmoxStorageInsightEvent {
 	return proxmoxpkg.BuildProxmoxStorageInsightEvents(tasks, poolStates, now, window)
 }
@@ -200,8 +204,14 @@ func (s *apiServer) loadProxmoxAssetDetails(ctx context.Context, assetID string,
 func (s *apiServer) loadProxmoxStorageInsights(ctx context.Context, assetID string, target proxmoxSessionTarget, runtime *proxmoxRuntime, window time.Duration) (proxmoxpkg.ProxmoxStorageInsightsResponse, error) {
 	return s.ensureProxmoxDeps().LoadProxmoxStorageInsights(ctx, assetID, target, runtime, window)
 }
-func parsePositiveInt(raw string) (int, bool)                   { return proxmoxpkg.ParsePositiveInt(raw) }
-func parseAnyInt64(value any) (int64, bool)                     { return proxmoxpkg.ParseAnyInt64(value) }
-func formatStorageInsightsWindow(window time.Duration) string   { return proxmoxpkg.FormatStorageInsightsWindow(window) }
-func (s *apiServer) handleProxmoxNodeNetwork(w http.ResponseWriter, r *http.Request) { s.ensureProxmoxDeps().HandleProxmoxNodeNetwork(w, r) }
-func (s *apiServer) openProxmoxTerminalTicket(ctx context.Context, runtime *proxmoxRuntime, target proxmoxSessionTarget) (proxmoxconnector.ProxyTicket, error) { return s.ensureProxmoxDeps().OpenProxmoxTerminalTicket(ctx, runtime, target) }
+func parsePositiveInt(raw string) (int, bool) { return proxmoxpkg.ParsePositiveInt(raw) }
+func parseAnyInt64(value any) (int64, bool)   { return proxmoxpkg.ParseAnyInt64(value) }
+func formatStorageInsightsWindow(window time.Duration) string {
+	return proxmoxpkg.FormatStorageInsightsWindow(window)
+}
+func (s *apiServer) handleProxmoxNodeNetwork(w http.ResponseWriter, r *http.Request) {
+	s.ensureProxmoxDeps().HandleProxmoxNodeNetwork(w, r)
+}
+func (s *apiServer) openProxmoxTerminalTicket(ctx context.Context, runtime *proxmoxRuntime, target proxmoxSessionTarget) (proxmoxconnector.ProxyTicket, error) {
+	return s.ensureProxmoxDeps().OpenProxmoxTerminalTicket(ctx, runtime, target)
+}

@@ -80,12 +80,12 @@ func NewTestPolicyState() *TestPolicyState {
 
 // --- Store constructors (re-exported for convenience) ---
 
-func NewAssetStore() persistence.AssetStore       { return persistence.NewMemoryAssetStore() }
-func NewGroupStore() persistence.GroupStore        { return persistence.NewMemoryGroupStore() }
+func NewAssetStore() persistence.AssetStore         { return persistence.NewMemoryAssetStore() }
+func NewGroupStore() persistence.GroupStore         { return persistence.NewMemoryGroupStore() }
 func NewTelemetryStore() persistence.TelemetryStore { return persistence.NewMemoryTelemetryStore() }
-func NewLogStore() persistence.LogStore            { return persistence.NewMemoryLogStore() }
-func NewAuditStore() persistence.AuditStore        { return persistence.NewMemoryAuditStore() }
-func NewTerminalStore() persistence.TerminalStore  { return persistence.NewMemoryTerminalStore() }
+func NewLogStore() persistence.LogStore             { return persistence.NewMemoryLogStore() }
+func NewAuditStore() persistence.AuditStore         { return persistence.NewMemoryAuditStore() }
+func NewTerminalStore() persistence.TerminalStore   { return persistence.NewMemoryTerminalStore() }
 func NewCredentialStore() persistence.CredentialStore {
 	return persistence.NewMemoryCredentialStore()
 }

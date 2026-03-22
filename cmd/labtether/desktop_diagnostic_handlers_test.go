@@ -83,11 +83,11 @@ func TestHandleDesktopDiagnoseRequestBridgesAgentSuccess(t *testing.T) {
 		}
 
 		raw, _ := json.Marshal(agentmgr.DesktopDiagnosticData{
-			RequestID:   req.RequestID,
-			XvfbRunning: true,
-			XvfbDisplays: []string{":99"},
+			RequestID:       req.RequestID,
+			XvfbRunning:     true,
+			XvfbDisplays:    []string{":99"},
 			WebRTCAvailable: true,
-			WebRTCReason: "all good",
+			WebRTCReason:    "all good",
 		})
 		sut.processAgentDesktopDiagnosed(&agentmgr.AgentConn{AssetID: "diag-node-1"}, agentmgr.Message{
 			Type: agentmgr.MsgDesktopDiagnosed,

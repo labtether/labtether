@@ -116,7 +116,6 @@ func loadPBSDatastoreSummary(ctx context.Context, client *pbs.Client, store stri
 	return pbspkg.LoadPBSDatastoreSummary(ctx, client, store, usage)
 }
 
-
 // Additional type aliases for test-referenced types.
 type pbsSnapshotsResponse = pbspkg.PBSSnapshotsResponse
 type pbsBackupGroupEntry = pbspkg.PBSBackupGroupEntry
@@ -125,4 +124,5 @@ type pbsVerificationResponse = pbspkg.PBSVerificationResponse
 type pbsCapabilities = pbspkg.PBSCapabilities
 type pbsDatastoreSummary = pbspkg.PBSDatastoreSummary
 type pbsGroupsResponse = pbspkg.PBSGroupsResponse
+
 func pbsNodeFromAsset(asset assets.Asset) string { return pbspkg.PBSNodeFromAsset(asset) }

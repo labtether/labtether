@@ -11,11 +11,12 @@ import (
 
 // handlePBSVerifyJobs dispatches verify-job CRUD and run actions.
 // Routes (relative to /pbs/assets/{assetID}/):
-//   GET    verify-jobs           -> list
-//   POST   verify-jobs           -> create
-//   PUT    verify-jobs/{id}      -> update
-//   DELETE verify-jobs/{id}      -> delete
-//   POST   verify-jobs/{id}/run  -> run
+//
+//	GET    verify-jobs           -> list
+//	POST   verify-jobs           -> create
+//	PUT    verify-jobs/{id}      -> update
+//	DELETE verify-jobs/{id}      -> delete
+//	POST   verify-jobs/{id}/run  -> run
 func (d *Deps) HandlePBSVerifyJobs(ctx context.Context, w http.ResponseWriter, r *http.Request, collectorID string, subParts []string) {
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
@@ -111,12 +112,13 @@ func (d *Deps) HandlePBSVerifyJobs(ctx context.Context, w http.ResponseWriter, r
 
 // handlePBSPruneJobs dispatches prune-job CRUD and run actions.
 // Routes (relative to /pbs/assets/{assetID}/):
-//   GET    prune-jobs              -> list
-//   POST   prune-jobs              -> create
-//   PUT    prune-jobs/{id}         -> update
-//   DELETE prune-jobs/{id}         -> delete
-//   POST   prune-jobs/{id}/run     -> run
-//   POST   prune-jobs/{id}/simulate -> simulate (dry-run)
+//
+//	GET    prune-jobs              -> list
+//	POST   prune-jobs              -> create
+//	PUT    prune-jobs/{id}         -> update
+//	DELETE prune-jobs/{id}         -> delete
+//	POST   prune-jobs/{id}/run     -> run
+//	POST   prune-jobs/{id}/simulate -> simulate (dry-run)
 func (d *Deps) HandlePBSPruneJobs(ctx context.Context, w http.ResponseWriter, r *http.Request, collectorID string, subParts []string) {
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
@@ -214,11 +216,12 @@ func (d *Deps) HandlePBSPruneJobs(ctx context.Context, w http.ResponseWriter, r 
 
 // handlePBSSyncJobs dispatches sync-job CRUD and run actions.
 // Routes (relative to /pbs/assets/{assetID}/):
-//   GET    sync-jobs           -> list
-//   POST   sync-jobs           -> create
-//   PUT    sync-jobs/{id}      -> update
-//   DELETE sync-jobs/{id}      -> delete
-//   POST   sync-jobs/{id}/run  -> run
+//
+//	GET    sync-jobs           -> list
+//	POST   sync-jobs           -> create
+//	PUT    sync-jobs/{id}      -> update
+//	DELETE sync-jobs/{id}      -> delete
+//	POST   sync-jobs/{id}/run  -> run
 func (d *Deps) HandlePBSSyncJobs(ctx context.Context, w http.ResponseWriter, r *http.Request, collectorID string, subParts []string) {
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {

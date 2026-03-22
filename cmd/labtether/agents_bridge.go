@@ -32,8 +32,8 @@ func (s *apiServer) buildAgentsDeps() *agentspkg.Deps {
 			}
 		},
 
-		PendingAgents:      s.pendingAgents,
-		PendingAgentCmds:   &s.pendingAgentCmds,
+		PendingAgents:    s.pendingAgents,
+		PendingAgentCmds: &s.pendingAgentCmds,
 
 		HubIdentity:    s.hubIdentity,
 		CACertPEM:      s.tlsState.CACertPEM,
@@ -308,41 +308,79 @@ type agentSettingsPayload = agentspkg.AgentSettingsPayload
 type agentSettingsViewState = agentspkg.AgentSettingsViewState
 
 func resolveAgentBinaryDir() string { return agentspkg.ResolveAgentBinaryDir() }
-func resolveAgentBinaryPath(binaryDir, agentOS, arch string) (string, string, error) { return agentspkg.ResolveAgentBinaryPath(binaryDir, agentOS, arch) }
+func resolveAgentBinaryPath(binaryDir, agentOS, arch string) (string, string, error) {
+	return agentspkg.ResolveAgentBinaryPath(binaryDir, agentOS, arch)
+}
 
 type pendingAgentCommand = shared.PendingAgentCommand
 
-func configuredAgentTokenTTLHours() int { return agentspkg.ConfiguredAgentTokenTTLHours() }
+func configuredAgentTokenTTLHours() int           { return agentspkg.ConfiguredAgentTokenTTLHours() }
 func newAgentTokenExpiry(now time.Time) time.Time { return agentspkg.NewAgentTokenExpiry(now) }
-func normalizeHostnameForAssetID(hostname string) string { return agentspkg.NormalizeHostnameForAssetID(hostname) }
-func buildPendingEnrollmentAssetID(hostname string) string { return agentspkg.BuildPendingEnrollmentAssetID(hostname) }
-func sanitizePendingIdentityHeader(raw string, maxLen int) string { return agentspkg.SanitizePendingIdentityHeader(raw, maxLen) }
-func decodePendingEnrollmentAssetID(w http.ResponseWriter, r *http.Request) (string, bool) { return agentspkg.DecodePendingEnrollmentAssetID(w, r) }
-func resolveApprovedAssetID(agent *pendingAgent, pendingAssetID string) string { return agentspkg.ResolveApprovedAssetID(agent, pendingAssetID) }
-func sendPendingEnrollmentDecision(agent *pendingAgent, msgType string, data any, closeReason string) error { return agentspkg.SendPendingEnrollmentDecision(agent, msgType, data, closeReason) }
-func normalizeAgentSettingValues(values map[string]string, forHubApply bool) (map[string]string, error) { return agentspkg.NormalizeAgentSettingValues(values, forHubApply) }
+func normalizeHostnameForAssetID(hostname string) string {
+	return agentspkg.NormalizeHostnameForAssetID(hostname)
+}
+func buildPendingEnrollmentAssetID(hostname string) string {
+	return agentspkg.BuildPendingEnrollmentAssetID(hostname)
+}
+func sanitizePendingIdentityHeader(raw string, maxLen int) string {
+	return agentspkg.SanitizePendingIdentityHeader(raw, maxLen)
+}
+func decodePendingEnrollmentAssetID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	return agentspkg.DecodePendingEnrollmentAssetID(w, r)
+}
+func resolveApprovedAssetID(agent *pendingAgent, pendingAssetID string) string {
+	return agentspkg.ResolveApprovedAssetID(agent, pendingAssetID)
+}
+func sendPendingEnrollmentDecision(agent *pendingAgent, msgType string, data any, closeReason string) error {
+	return agentspkg.SendPendingEnrollmentDecision(agent, msgType, data, closeReason)
+}
+func normalizeAgentSettingValues(values map[string]string, forHubApply bool) (map[string]string, error) {
+	return agentspkg.NormalizeAgentSettingValues(values, forHubApply)
+}
 func parseIntSafe(s string) int { return agentspkg.ParseIntSafe(s) }
-func mergeAgentSettingsReportState(previous, reported agentSettingsRuntimeState) agentSettingsRuntimeState { return agentspkg.MergeAgentSettingsReportState(previous, reported) }
-func sameAgentSettingsRevision(left, right string) bool { return agentspkg.SameAgentSettingsRevision(left, right) }
-func preservesAgentSettingsApplyStatus(status string) bool { return agentspkg.PreservesAgentSettingsApplyStatus(status) }
-func dockerConnectivityTestCommand(endpoint string) string { return agentspkg.DockerConnectivityTestCommand(endpoint) }
-func trimUnixEndpointScheme(endpoint string) (string, bool) { return agentspkg.TrimUnixEndpointScheme(endpoint) }
+func mergeAgentSettingsReportState(previous, reported agentSettingsRuntimeState) agentSettingsRuntimeState {
+	return agentspkg.MergeAgentSettingsReportState(previous, reported)
+}
+func sameAgentSettingsRevision(left, right string) bool {
+	return agentspkg.SameAgentSettingsRevision(left, right)
+}
+func preservesAgentSettingsApplyStatus(status string) bool {
+	return agentspkg.PreservesAgentSettingsApplyStatus(status)
+}
+func dockerConnectivityTestCommand(endpoint string) string {
+	return agentspkg.DockerConnectivityTestCommand(endpoint)
+}
+func trimUnixEndpointScheme(endpoint string) (string, bool) {
+	return agentspkg.TrimUnixEndpointScheme(endpoint)
+}
 func sanitizeSHA256Hex(raw string) (string, bool) { return agentspkg.SanitizeSHA256Hex(raw) }
-func generateInstallScript(hubURL, wsURL string) string { return agentspkg.GenerateInstallScript(hubURL, wsURL) }
-func determineAgentVersionStatus(currentVersion, latestVersion string) string { return agentspkg.DetermineAgentVersionStatus(currentVersion, latestVersion) }
-func normalizeAgentReleaseOS(raw string) string { return agentspkg.NormalizeAgentReleaseOS(raw) }
+func generateInstallScript(hubURL, wsURL string) string {
+	return agentspkg.GenerateInstallScript(hubURL, wsURL)
+}
+func determineAgentVersionStatus(currentVersion, latestVersion string) string {
+	return agentspkg.DetermineAgentVersionStatus(currentVersion, latestVersion)
+}
+func normalizeAgentReleaseOS(raw string) string   { return agentspkg.NormalizeAgentReleaseOS(raw) }
 func normalizeAgentReleaseArch(raw string) string { return agentspkg.NormalizeAgentReleaseArch(raw) }
-func agentVersionFromBuildInfo(mainVersion string, settings []debug.BuildSetting) string { return agentspkg.AgentVersionFromBuildInfo(mainVersion, settings) }
-func agentSettingGlobalDefaultKey(key string) (string, bool) { return agentspkg.AgentSettingGlobalDefaultKey(key) }
-func cloneAgentSettingValues(values map[string]string) map[string]string { return agentspkg.CloneAgentSettingValues(values) }
+func agentVersionFromBuildInfo(mainVersion string, settings []debug.BuildSetting) string {
+	return agentspkg.AgentVersionFromBuildInfo(mainVersion, settings)
+}
+func agentSettingGlobalDefaultKey(key string) (string, bool) {
+	return agentspkg.AgentSettingGlobalDefaultKey(key)
+}
+func cloneAgentSettingValues(values map[string]string) map[string]string {
+	return agentspkg.CloneAgentSettingValues(values)
+}
 func zeroTimeToRFC3339(t time.Time) string { return agentspkg.ZeroTimeToRFC3339(t) }
-func agentSettingStoreKey(assetID, key string) string { return agentspkg.AgentSettingStoreKey(assetID, key) }
+func agentSettingStoreKey(assetID, key string) string {
+	return agentspkg.AgentSettingStoreKey(assetID, key)
+}
 
 // Test-seam: cmd/labtether tests write to agentspkg.PendingEnrollmentAfterFunc directly.
 
 const (
-	maxPendingHostnameIDLen        = 64  // mirrors agents.maxPendingHostnameIDLen
-	maxPendingEnrollmentAgents     = 200                // mirrors agents.maxPendingEnrollmentAgents
-	maxPendingEnrollmentPerIP      = 5                  // mirrors agents.maxPendingEnrollmentPerIP
-	maxPendingEnrollmentTimeout    = 10 * time.Minute   // mirrors agents.maxPendingEnrollmentTimeout
+	maxPendingHostnameIDLen     = 64               // mirrors agents.maxPendingHostnameIDLen
+	maxPendingEnrollmentAgents  = 200              // mirrors agents.maxPendingEnrollmentAgents
+	maxPendingEnrollmentPerIP   = 5                // mirrors agents.maxPendingEnrollmentPerIP
+	maxPendingEnrollmentTimeout = 10 * time.Minute // mirrors agents.maxPendingEnrollmentTimeout
 )

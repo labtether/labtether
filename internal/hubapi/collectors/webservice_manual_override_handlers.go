@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/labtether/labtether/internal/connectors/webservice"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/servicehttp"
-	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
 type webServiceManualRequest struct {

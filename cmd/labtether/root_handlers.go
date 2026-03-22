@@ -69,4 +69,3 @@ func hostWithoutPort(r *http.Request) string {
 	}
 	return host
 }
-

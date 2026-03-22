@@ -224,9 +224,9 @@ func (d *Deps) connectBookmark(w http.ResponseWriter, r *http.Request, bookmark 
 	}
 
 	servicehttp.WriteJSON(w, http.StatusCreated, map[string]any{
-		"session_id":              session.ID,
-		"persistent_session_id":   attached.ID,
-		"stream_ticket":           ticket,
+		"session_id":               session.ID,
+		"persistent_session_id":    attached.ID,
+		"stream_ticket":            ticket,
 		"stream_ticket_expires_at": ticketExpiresAt,
 	})
 }

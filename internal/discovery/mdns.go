@@ -287,8 +287,8 @@ func (a *MDNSAdvertiser) buildResponsePacket(queryID uint16) []byte {
 		return b
 	}
 	b = appendUint16(b, uint16(rdataLen))
-	b = appendUint16(b, 0)               // priority
-	b = appendUint16(b, 0)               // weight
+	b = appendUint16(b, 0) // priority
+	b = appendUint16(b, 0) // weight
 	if a.port <= 0 || a.port > math.MaxUint16 {
 		return b
 	}

@@ -1,9 +1,9 @@
 package proxmox
 
 import (
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"crypto/sha256"
 	"fmt"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"strings"
 	"time"
 

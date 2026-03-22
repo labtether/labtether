@@ -3,9 +3,9 @@ package main
 import (
 	"time"
 
-	"github.com/labtether/labtether/internal/logs"
 	logspkg "github.com/labtether/labtether/internal/hubapi/logspkg"
 	statusaggpkg "github.com/labtether/labtether/internal/hubapi/statusagg"
+	"github.com/labtether/labtether/internal/logs"
 )
 
 // buildLogsDeps constructs the logspkg.Deps from the apiServer's fields.

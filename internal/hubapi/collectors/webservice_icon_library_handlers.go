@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labtether/labtether/internal/servicehttp"
 	"github.com/labtether/labtether/internal/hubapi/shared"
+	"github.com/labtether/labtether/internal/servicehttp"
 )
 
 type WebServiceIconLibraryEntry struct {

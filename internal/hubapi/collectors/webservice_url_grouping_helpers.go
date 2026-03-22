@@ -15,7 +15,7 @@ const (
 	WebServiceURLGroupingModeConservative WebServiceURLGroupingMode = "conservative"
 	WebServiceURLGroupingModeBalanced     WebServiceURLGroupingMode = "balanced"
 	WebServiceURLGroupingModeAggressive   WebServiceURLGroupingMode = "aggressive"
-	defaultWebServiceURLGroupingCacheTTL                      = 5 * time.Second
+	defaultWebServiceURLGroupingCacheTTL                            = 5 * time.Second
 )
 
 type WebServiceURLGroupingConfig struct {

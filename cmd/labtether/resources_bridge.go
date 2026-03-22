@@ -35,11 +35,11 @@ func (s *apiServer) buildResourcesDeps() *respkg.Deps {
 		AuditStore:          s.auditStore,
 		RetentionStore:      s.retentionStore,
 		DB:                  s.db,
-		FileProtoPool:        s.fileProtoPool,
-		FileConnectionStore:  s.db,
-		FileTransferStore:    s.db,
-		ActiveTransfers:      &s.activeTransfers,
-		RemoteBookmarkStore:  s.db,
+		FileProtoPool:       s.fileProtoPool,
+		FileConnectionStore: s.db,
+		FileTransferStore:   s.db,
+		ActiveTransfers:     &s.activeTransfers,
+		RemoteBookmarkStore: s.db,
 
 		FileBridges:    &s.fileBridges,
 		ProcessBridges: &s.processBridges,
@@ -60,10 +60,10 @@ func (s *apiServer) buildResourcesDeps() *respkg.Deps {
 			return s.executeViaAgent(job)
 		},
 
-		EnforceRateLimit: s.enforceRateLimit,
-		PrincipalActorID: func(ctx context.Context) string { return principalActorID(ctx) },
+		EnforceRateLimit:  s.enforceRateLimit,
+		PrincipalActorID:  func(ctx context.Context) string { return principalActorID(ctx) },
 		UserIDFromContext: func(ctx context.Context) string { return userIDFromContext(ctx) },
-		SecretsManager:   s.secretsManager,
+		SecretsManager:    s.secretsManager,
 		AppendAuditEventBestEffort: func(event audit.Event, logMessage string) {
 			s.appendAuditEventBestEffort(event, logMessage)
 		},
@@ -76,7 +76,7 @@ func (s *apiServer) buildResourcesDeps() *respkg.Deps {
 		}(),
 
 		// Heartbeat and delete cascade dependencies.
-		EnrollmentStore:  s.enrollmentStore,
+		EnrollmentStore:   s.enrollmentStore,
 		HubCollectorStore: s.hubCollectorStore,
 		RemoveDockerHost: func(assetID string) {
 			if s.dockerCoordinator != nil {
@@ -263,11 +263,15 @@ func newFileBridge(buffer int, expectedAssetID string) *fileBridge {
 func generateRequestID() string { return respkg.GenerateRequestID() }
 
 // Function aliases for test accessibility.
-func parseProcessListLimit(raw string) int         { return respkg.ParseProcessListLimit(raw) }
-func normalizeProcessSortBy(raw string) string     { return respkg.NormalizeProcessSortBy(raw) }
+func parseProcessListLimit(raw string) int             { return respkg.ParseProcessListLimit(raw) }
+func normalizeProcessSortBy(raw string) string         { return respkg.NormalizeProcessSortBy(raw) }
 func normalizeProcessSignal(raw string) (string, bool) { return respkg.NormalizeProcessSignal(raw) }
-func parseProcessCommandOutput(output string) []agentmgr.ProcessInfo { return respkg.ParseProcessCommandOutput(output) }
-func normalizeFrontendPerfMetadata(input map[string]any) map[string]string { return respkg.NormalizeFrontendPerfMetadata(input) }
+func parseProcessCommandOutput(output string) []agentmgr.ProcessInfo {
+	return respkg.ParseProcessCommandOutput(output)
+}
+func normalizeFrontendPerfMetadata(input map[string]any) map[string]string {
+	return respkg.NormalizeFrontendPerfMetadata(input)
+}
 func sanitizeMobileTelemetryKey(value string) string { return respkg.SanitizeMobileTelemetryKey(value) }
 
 // Constant aliases.
@@ -433,6 +437,7 @@ func (s *apiServer) handleLinkSuggestionActions(w http.ResponseWriter, r *http.R
 func (s *apiServer) handleManualLink(w http.ResponseWriter, r *http.Request) {
 	s.ensureResourcesDeps().HandleManualLink(w, r)
 }
+
 // Edge handlers (graph model)
 func (s *apiServer) handleEdges(w http.ResponseWriter, r *http.Request) {
 	s.ensureResourcesDeps().HandleEdges(w, r)
@@ -511,7 +516,9 @@ func (s *apiServer) eligibleWoLRelays(targetAssetID string, target assets.Asset)
 	return s.ensureResourcesDeps().EligibleWoLRelays(targetAssetID, target)
 }
 
-func (s *apiServer) findAssetMAC(metadata map[string]string) string { return respkg.FindAssetMAC(metadata) }
+func (s *apiServer) findAssetMAC(metadata map[string]string) string {
+	return respkg.FindAssetMAC(metadata)
+}
 
 type dependencyBatchLister = respkg.DependencyBatchLister
 type dependencySingleLister = respkg.DependencySingleLister
@@ -540,4 +547,3 @@ func (s *apiServer) handleFileTransfers(w http.ResponseWriter, r *http.Request) 
 func (s *apiServer) handleManualDeviceRoutes(w http.ResponseWriter, r *http.Request) {
 	s.ensureResourcesDeps().HandleManualDeviceRoutes(w, r)
 }
-

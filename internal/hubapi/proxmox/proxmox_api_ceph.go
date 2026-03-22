@@ -1,8 +1,8 @@
 package proxmox
 
 import (
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"context"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strconv"
 	"strings"
@@ -13,9 +13,9 @@ import (
 
 // handleProxmoxCeph handles Ceph management endpoints.
 //
-//   GET  /proxmox/ceph/pools               — list Ceph pools
-//   POST /proxmox/ceph/osd/{node}/{id}/in  — mark OSD in
-//   POST /proxmox/ceph/osd/{node}/{id}/out — mark OSD out
+//	GET  /proxmox/ceph/pools               — list Ceph pools
+//	POST /proxmox/ceph/osd/{node}/{id}/in  — mark OSD in
+//	POST /proxmox/ceph/osd/{node}/{id}/out — mark OSD out
 func (d *Deps) HandleProxmoxCeph(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/proxmox/ceph/")
 	parts := strings.SplitN(path, "/", 5)
@@ -129,4 +129,3 @@ func (d *Deps) HandleProxmoxCephStatus(w http.ResponseWriter, r *http.Request) {
 		"osds":   osds,
 	})
 }
-

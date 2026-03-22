@@ -1,9 +1,9 @@
 package proxmox
 
 import (
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"context"
 	"encoding/json"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strings"
 	"time"
@@ -14,9 +14,9 @@ import (
 
 // handleProxmoxStorageContent handles storage content operations.
 //
-//   GET    /proxmox/nodes/{node}/storage/{storage}/content         — list content
-//   POST   /proxmox/nodes/{node}/storage/{storage}/content         — download URL into storage
-//   DELETE /proxmox/nodes/{node}/storage/{storage}/content/{volid} — delete content item
+//	GET    /proxmox/nodes/{node}/storage/{storage}/content         — list content
+//	POST   /proxmox/nodes/{node}/storage/{storage}/content         — download URL into storage
+//	DELETE /proxmox/nodes/{node}/storage/{storage}/content/{volid} — delete content item
 func (d *Deps) handleProxmoxStorageContent(w http.ResponseWriter, r *http.Request) {
 	// path after "/proxmox/nodes/" is: {node}/storage/{storage}/content[/{volid}]
 	path := strings.TrimPrefix(r.URL.Path, "/proxmox/nodes/")

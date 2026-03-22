@@ -17,9 +17,9 @@ import (
 // still in root during incremental extraction). The parent agentcore package
 // wires these at init time.
 var (
-	DetectDesktopSessionTypeFn func() string                     // returns session type string
-	PreferredX11DisplayFn      func() string                     // returns preferred X11 DISPLAY value
-	WakeX11DisplayFn           func(display, xauthPath string)   // wakes the display
+	DetectDesktopSessionTypeFn func() string                   // returns session type string
+	PreferredX11DisplayFn      func() string                   // returns preferred X11 DISPLAY value
+	WakeX11DisplayFn           func(display, xauthPath string) // wakes the display
 	BuildX11ClientEnvFn        func(display, xauthPath string) []string
 	NewDisplayListCommand      = securityruntime.NewCommandContext
 )

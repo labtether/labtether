@@ -4,10 +4,10 @@ import (
 	"context"
 	"sync/atomic"
 
-	"github.com/labtether/labtether/internal/jobqueue"
-	workerpkg "github.com/labtether/labtether/internal/hubapi/worker"
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/actions"
+	"github.com/labtether/labtether/internal/hubapi/shared"
+	workerpkg "github.com/labtether/labtether/internal/hubapi/worker"
+	"github.com/labtether/labtether/internal/jobqueue"
 	"github.com/labtether/labtether/internal/terminal"
 	"github.com/labtether/labtether/internal/updates"
 )

@@ -7,7 +7,7 @@ import (
 )
 
 func TestMergeConnections_EmptyInputs(t *testing.T) {
-	result := MergeConnections("test-topology",nil, nil)
+	result := MergeConnections("test-topology", nil, nil)
 	if len(result) != 0 {
 		t.Errorf("expected empty result, got %d items", len(result))
 	}
@@ -24,7 +24,7 @@ func TestMergeConnections_UserConnection(t *testing.T) {
 			Deleted:       false,
 		},
 	}
-	result := MergeConnections("test-topology",topoConns, nil)
+	result := MergeConnections("test-topology", topoConns, nil)
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
@@ -47,7 +47,7 @@ func TestMergeConnections_AcceptedConnection(t *testing.T) {
 			Deleted:       false,
 		},
 	}
-	result := MergeConnections("test-topology",topoConns, nil)
+	result := MergeConnections("test-topology", topoConns, nil)
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
@@ -67,7 +67,7 @@ func TestMergeConnections_SoftDeletedExcluded(t *testing.T) {
 			Deleted:       true, // soft-deleted
 		},
 	}
-	result := MergeConnections("test-topology",topoConns, nil)
+	result := MergeConnections("test-topology", topoConns, nil)
 	if len(result) != 0 {
 		t.Errorf("expected empty result for soft-deleted connection, got %d items", len(result))
 	}
@@ -92,7 +92,7 @@ func TestMergeConnections_SoftDeletedSuppressesDiscovered(t *testing.T) {
 			RelationshipType: "depends_on",
 		},
 	}
-	result := MergeConnections("test-topology",topoConns, assetEdges)
+	result := MergeConnections("test-topology", topoConns, assetEdges)
 	if len(result) != 0 {
 		t.Errorf("expected soft-deleted topology connection to suppress discovered edge, got %d items", len(result))
 	}
@@ -107,7 +107,7 @@ func TestMergeConnections_DiscoveredEdgeIncluded(t *testing.T) {
 			RelationshipType: "connected_to",
 		},
 	}
-	result := MergeConnections("test-topology",nil, assetEdges)
+	result := MergeConnections("test-topology", nil, assetEdges)
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
@@ -128,7 +128,7 @@ func TestMergeConnections_ContainsEdgeExcluded(t *testing.T) {
 			RelationshipType: "contains",
 		},
 	}
-	result := MergeConnections("test-topology",nil, assetEdges)
+	result := MergeConnections("test-topology", nil, assetEdges)
 	if len(result) != 0 {
 		t.Errorf("expected 'contains' edge to be excluded, got %d items", len(result))
 	}
@@ -143,7 +143,7 @@ func TestMergeConnections_UnknownRelationshipExcluded(t *testing.T) {
 			RelationshipType: "unknown_rel",
 		},
 	}
-	result := MergeConnections("test-topology",nil, assetEdges)
+	result := MergeConnections("test-topology", nil, assetEdges)
 	if len(result) != 0 {
 		t.Errorf("expected unknown relationship type to be excluded, got %d items", len(result))
 	}
@@ -168,7 +168,7 @@ func TestMergeConnections_BothSourcesContributeUnique(t *testing.T) {
 			RelationshipType: "peer_of",
 		},
 	}
-	result := MergeConnections("test-topology",topoConns, assetEdges)
+	result := MergeConnections("test-topology", topoConns, assetEdges)
 	if len(result) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(result))
 	}
@@ -204,7 +204,7 @@ func TestMergeConnections_TopologyConnectionTakesPrecedenceOverDiscovered(t *tes
 			RelationshipType: "runs_on", // same tuple as topology connection
 		},
 	}
-	result := MergeConnections("test-topology",topoConns, assetEdges)
+	result := MergeConnections("test-topology", topoConns, assetEdges)
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result (topology wins), got %d", len(result))
 	}

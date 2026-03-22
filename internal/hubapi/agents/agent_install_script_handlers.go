@@ -1,8 +1,8 @@
 package agents
 
 import (
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"fmt"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"io"
 	"net/http"
 	"strings"

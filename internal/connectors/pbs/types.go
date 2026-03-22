@@ -209,13 +209,13 @@ type PruneOptions struct {
 
 // VerifyJob represents a PBS scheduled verify job config entry.
 type VerifyJob struct {
-	ID          string `json:"id"`
-	Store       string `json:"store"`
-	Schedule    string `json:"schedule,omitempty"`
-	Comment     string `json:"comment,omitempty"`
-	Disabled    bool   `json:"disable,omitempty"`
-	IgnoreVerified bool `json:"ignore-verified,omitempty"`
-	MaxDepth    *int   `json:"max-depth,omitempty"`
+	ID             string `json:"id"`
+	Store          string `json:"store"`
+	Schedule       string `json:"schedule,omitempty"`
+	Comment        string `json:"comment,omitempty"`
+	Disabled       bool   `json:"disable,omitempty"`
+	IgnoreVerified bool   `json:"ignore-verified,omitempty"`
+	MaxDepth       *int   `json:"max-depth,omitempty"`
 }
 
 // PruneJob represents a PBS scheduled prune job config entry.
@@ -236,24 +236,24 @@ type PruneJob struct {
 
 // SyncJob represents a PBS scheduled sync job config entry.
 type SyncJob struct {
-	ID          string `json:"id"`
-	Store       string `json:"store"`
-	Remote      string `json:"remote,omitempty"`
-	RemoteStore string `json:"remote-store,omitempty"`
-	Schedule    string `json:"schedule,omitempty"`
-	Comment     string `json:"comment,omitempty"`
-	Disabled    bool   `json:"disable,omitempty"`
-	RemoveVanished bool `json:"remove-vanished,omitempty"`
+	ID             string `json:"id"`
+	Store          string `json:"store"`
+	Remote         string `json:"remote,omitempty"`
+	RemoteStore    string `json:"remote-store,omitempty"`
+	Schedule       string `json:"schedule,omitempty"`
+	Comment        string `json:"comment,omitempty"`
+	Disabled       bool   `json:"disable,omitempty"`
+	RemoveVanished bool   `json:"remove-vanished,omitempty"`
 }
 
 // Remote represents a PBS remote (pull source) configuration entry.
 type Remote struct {
-	Name     string `json:"name"`
-	Host     string `json:"host,omitempty"`
-	Port     *int   `json:"port,omitempty"`
-	AuthID   string `json:"authid,omitempty"`
+	Name        string `json:"name"`
+	Host        string `json:"host,omitempty"`
+	Port        *int   `json:"port,omitempty"`
+	AuthID      string `json:"authid,omitempty"`
 	Fingerprint string `json:"fingerprint,omitempty"`
-	Comment  string `json:"comment,omitempty"`
+	Comment     string `json:"comment,omitempty"`
 }
 
 // TrafficRule represents a PBS traffic control rule.

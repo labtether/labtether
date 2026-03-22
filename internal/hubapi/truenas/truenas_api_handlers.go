@@ -1,9 +1,9 @@
 package truenas
 
 import (
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"context"
 	"errors"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"sort"
 	"strings"

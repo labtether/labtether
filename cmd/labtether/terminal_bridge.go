@@ -295,8 +295,10 @@ func isOwnerActor(actorID string) bool {
 }
 
 // Function aliases for exported terminal package functions.
-func isHubLocalTerminalTarget(target string) bool { return terminalpkg.IsHubLocalTerminalTarget(target) }
-func hubLocalTerminalEnabled() bool               { return terminalpkg.HubLocalTerminalEnabled() }
+func isHubLocalTerminalTarget(target string) bool {
+	return terminalpkg.IsHubLocalTerminalTarget(target)
+}
+func hubLocalTerminalEnabled() bool { return terminalpkg.HubLocalTerminalEnabled() }
 
 func writeTerminalStatus(wsConn *websocket.Conn, stage, message string, attempt, attempts int, elapsedMs int64) error {
 	return terminalpkg.WriteTerminalStatus(wsConn, stage, message, attempt, attempts, elapsedMs)
@@ -350,12 +352,12 @@ func persistentTmuxCleanupCommand(tmuxSessionName string) string {
 
 // Constants aliases.
 const (
-	hubLocalTerminalTarget    = terminalpkg.HubLocalTerminalTarget
-	envEnableHubLocalTerminal = terminalpkg.EnvEnableHubLocalTerminal
-	sshDialAttemptTimeout     = terminalpkg.SSHDialAttemptTimeout
-	sshDialMaxAttempts        = terminalpkg.SSHDialMaxAttempts
-	sshDialRetryDelay         = terminalpkg.SSHDialRetryDelay
-	sshShellStartupTimeout    = terminalpkg.SSHShellStartupTimeout
+	hubLocalTerminalTarget      = terminalpkg.HubLocalTerminalTarget
+	envEnableHubLocalTerminal   = terminalpkg.EnvEnableHubLocalTerminal
+	sshDialAttemptTimeout       = terminalpkg.SSHDialAttemptTimeout
+	sshDialMaxAttempts          = terminalpkg.SSHDialMaxAttempts
+	sshDialRetryDelay           = terminalpkg.SSHDialRetryDelay
+	sshShellStartupTimeout      = terminalpkg.SSHShellStartupTimeout
 	terminalStreamWriteDeadline = terminalpkg.TerminalStreamWriteDeadline
 )
 

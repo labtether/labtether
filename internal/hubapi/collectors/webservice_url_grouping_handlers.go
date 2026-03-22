@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/servicehttp"
-	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
 // --- request types ---

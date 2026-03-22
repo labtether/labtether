@@ -13,8 +13,8 @@ var infraHostTypes = map[string]bool{
 	"server":             true,
 	"hypervisor":         true,
 	"hypervisor-node":    true,
-	"nas":               true,
-	"container-host":    true,
+	"nas":                true,
+	"container-host":     true,
 	"storage-controller": true,
 	// NOTE: connector-cluster is intentionally excluded — it's an internal
 	// connector asset, not a user-facing infrastructure host. The frontend
@@ -91,8 +91,8 @@ type SeedResult struct {
 // arranged in a grid with at most 3 zones per row.
 func zoneGridPosition(index int) Position {
 	const (
-		colSpacing = 680.0 // wider than max zone width (600px + 80px gap)
-		rowSpacing = 350.0
+		colSpacing  = 680.0 // wider than max zone width (600px + 80px gap)
+		rowSpacing  = 350.0
 		zonesPerRow = 3
 	)
 	col := index % zonesPerRow

@@ -524,19 +524,19 @@ func TestAutoLinkDockerContainersSkipsDuplicates(t *testing.T) {
 	sut.dependencyStore = deps
 
 	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
-		AssetID: "docker-host-srv",
-		Type:    "container-host",
-		Name:    "docker-srv",
-		Source:  "docker",
+		AssetID:  "docker-host-srv",
+		Type:     "container-host",
+		Name:     "docker-srv",
+		Source:   "docker",
 		Metadata: map[string]string{"agent_id": "srv"},
 	}); err != nil {
 		t.Fatalf("failed to upsert docker host: %v", err)
 	}
 	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
-		AssetID: "docker-ct-srv-aaa",
-		Type:    "docker-container",
-		Name:    "app",
-		Source:  "docker",
+		AssetID:  "docker-ct-srv-aaa",
+		Type:     "docker-container",
+		Name:     "app",
+		Source:   "docker",
 		Metadata: map[string]string{"agent_id": "srv"},
 	}); err != nil {
 		t.Fatalf("failed to upsert container: %v", err)

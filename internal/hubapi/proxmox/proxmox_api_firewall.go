@@ -1,8 +1,8 @@
 package proxmox
 
 import (
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"context"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strconv"
 	"strings"
@@ -14,10 +14,10 @@ import (
 
 // handleProxmoxAssetFirewall handles firewall CRUD for /proxmox/assets/{id}/firewall.
 //
-//   GET    /proxmox/assets/{id}/firewall       — list rules (redirects to details data)
-//   POST   /proxmox/assets/{id}/firewall       — create rule
-//   PUT    /proxmox/assets/{id}/firewall/{pos} — update rule at position
-//   DELETE /proxmox/assets/{id}/firewall/{pos} — delete rule at position
+//	GET    /proxmox/assets/{id}/firewall       — list rules (redirects to details data)
+//	POST   /proxmox/assets/{id}/firewall       — create rule
+//	PUT    /proxmox/assets/{id}/firewall/{pos} — update rule at position
+//	DELETE /proxmox/assets/{id}/firewall/{pos} — delete rule at position
 func (d *Deps) handleProxmoxAssetFirewall(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/proxmox/assets/")
 	// path is now: {id}/firewall or {id}/firewall/{pos}

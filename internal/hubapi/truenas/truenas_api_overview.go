@@ -1,8 +1,8 @@
 package truenas
 
 import (
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"context"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strings"
 	"time"
@@ -12,14 +12,14 @@ import (
 )
 
 type TrueNASOverviewResponse struct {
-	AssetID   string                  `json:"asset_id"`
-	Hostname  string                  `json:"hostname,omitempty"`
-	SystemInfo map[string]any         `json:"system_info,omitempty"`
-	Pools     []map[string]any        `json:"pools,omitempty"`
-	Services  []TrueNASServiceEntry   `json:"services,omitempty"`
-	Alerts    []map[string]any        `json:"alerts,omitempty"`
-	Warnings  []string                `json:"warnings,omitempty"`
-	FetchedAt string                  `json:"fetched_at"`
+	AssetID    string                `json:"asset_id"`
+	Hostname   string                `json:"hostname,omitempty"`
+	SystemInfo map[string]any        `json:"system_info,omitempty"`
+	Pools      []map[string]any      `json:"pools,omitempty"`
+	Services   []TrueNASServiceEntry `json:"services,omitempty"`
+	Alerts     []map[string]any      `json:"alerts,omitempty"`
+	Warnings   []string              `json:"warnings,omitempty"`
+	FetchedAt  string                `json:"fetched_at"`
 }
 
 func (d *Deps) HandleTrueNASOverview(ctx context.Context, w http.ResponseWriter, r *http.Request, asset assets.Asset, runtime *TruenasRuntime) {

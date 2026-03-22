@@ -135,7 +135,7 @@ func (s *apiServer) handleV2HubStatus(w http.ResponseWriter, r *http.Request) {
 		agentCount = s.agentMgr.Count()
 	}
 	apiv2.WriteJSON(w, http.StatusOK, map[string]any{
-		"status":          "running",
+		"status":           "running",
 		"agents_connected": agentCount,
 	})
 }

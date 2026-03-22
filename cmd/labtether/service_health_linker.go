@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	serviceHealthLinkerInterval     = 5 * time.Minute
-	serviceHealthLinkerStartupDelay = 90 * time.Second
+	serviceHealthLinkerInterval      = 5 * time.Minute
+	serviceHealthLinkerStartupDelay  = 90 * time.Second
 	serviceHealthLinkerCheckInterval = 60
 )
 

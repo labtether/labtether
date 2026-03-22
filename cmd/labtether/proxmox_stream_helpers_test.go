@@ -1,7 +1,6 @@
 package main
 
 import (
-	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
 	"context"
 	"crypto/cipher"
 	"crypto/rand"
@@ -10,6 +9,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
+	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
 	"io"
 	"math/big"
 	"net/http"

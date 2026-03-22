@@ -1,9 +1,9 @@
 package pbs
 
 import (
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"context"
 	"fmt"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"sort"
 	"strings"
@@ -24,25 +24,25 @@ type PBSAssetDetailsResponse struct {
 	Store       string                `json:"store,omitempty"`
 	Datastore   *PBSDatastoreSummary  `json:"datastore,omitempty"`
 	Datastores  []PBSDatastoreSummary `json:"datastores,omitempty"`
-	Tasks       []pbsconnector.Task            `json:"tasks,omitempty"`
+	Tasks       []pbsconnector.Task   `json:"tasks,omitempty"`
 	Warnings    []string              `json:"warnings,omitempty"`
 	FetchedAt   string                `json:"fetched_at"`
 }
 
 type PBSDatastoreSummary struct {
-	Store           string                 `json:"store"`
-	Status          string                 `json:"status"`
-	MountStatus     string                 `json:"mount_status,omitempty"`
-	Maintenance     string                 `json:"maintenance_mode,omitempty"`
-	Comment         string                 `json:"comment,omitempty"`
-	TotalBytes      int64                  `json:"total_bytes,omitempty"`
-	UsedBytes       int64                  `json:"used_bytes,omitempty"`
-	AvailBytes      int64                  `json:"avail_bytes,omitempty"`
-	UsagePercent    float64                `json:"usage_percent,omitempty"`
-	GroupCount      int                    `json:"group_count"`
-	SnapshotCount   int                    `json:"snapshot_count"`
-	LastBackupAt    string                 `json:"last_backup_at,omitempty"`
-	DaysSinceBackup float64                `json:"days_since_backup,omitempty"`
+	Store           string                          `json:"store"`
+	Status          string                          `json:"status"`
+	MountStatus     string                          `json:"mount_status,omitempty"`
+	Maintenance     string                          `json:"maintenance_mode,omitempty"`
+	Comment         string                          `json:"comment,omitempty"`
+	TotalBytes      int64                           `json:"total_bytes,omitempty"`
+	UsedBytes       int64                           `json:"used_bytes,omitempty"`
+	AvailBytes      int64                           `json:"avail_bytes,omitempty"`
+	UsagePercent    float64                         `json:"usage_percent,omitempty"`
+	GroupCount      int                             `json:"group_count"`
+	SnapshotCount   int                             `json:"snapshot_count"`
+	LastBackupAt    string                          `json:"last_backup_at,omitempty"`
+	DaysSinceBackup float64                         `json:"days_since_backup,omitempty"`
 	GCStatus        *pbsconnector.DatastoreGCStatus `json:"gc_status,omitempty"`
 }
 
@@ -67,15 +67,15 @@ type PBSGroupsResponse struct {
 }
 
 type PBSSnapshotEntry struct {
-	BackupType   string                    `json:"backup_type"`
-	BackupID     string                    `json:"backup_id"`
-	BackupTime   int64                     `json:"backup_time"`
-	Size         int64                     `json:"size,omitempty"`
-	Protected    bool                      `json:"protected,omitempty"`
-	Owner        string                    `json:"owner,omitempty"`
-	Comment      string                    `json:"comment,omitempty"`
+	BackupType   string                             `json:"backup_type"`
+	BackupID     string                             `json:"backup_id"`
+	BackupTime   int64                              `json:"backup_time"`
+	Size         int64                              `json:"size,omitempty"`
+	Protected    bool                               `json:"protected,omitempty"`
+	Owner        string                             `json:"owner,omitempty"`
+	Comment      string                             `json:"comment,omitempty"`
 	Verification *pbsconnector.SnapshotVerification `json:"verification,omitempty"`
-	Files        []string                  `json:"files,omitempty"`
+	Files        []string                           `json:"files,omitempty"`
 }
 
 type PBSSnapshotsResponse struct {

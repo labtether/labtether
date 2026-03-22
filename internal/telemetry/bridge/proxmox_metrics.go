@@ -14,15 +14,15 @@ type ProxmoxMetricsSource interface {
 
 // ProxmoxMetricEntry holds per-node/VM metric values and identifying labels.
 type ProxmoxMetricEntry struct {
-	AssetID    string
-	CPU        float64 // 0–1 ratio; multiply by 100 for percent
-	MemUsed    float64 // bytes
-	MemTotal   float64 // bytes
-	NetIn      float64 // bytes/sec
-	NetOut     float64 // bytes/sec
-	DiskRead   float64 // bytes/sec
-	DiskWrite  float64 // bytes/sec
-	Labels     map[string]string // proxmox_node
+	AssetID   string
+	CPU       float64           // 0–1 ratio; multiply by 100 for percent
+	MemUsed   float64           // bytes
+	MemTotal  float64           // bytes
+	NetIn     float64           // bytes/sec
+	NetOut    float64           // bytes/sec
+	DiskRead  float64           // bytes/sec
+	DiskWrite float64           // bytes/sec
+	Labels    map[string]string // proxmox_node
 }
 
 // ProxmoxMetricsBridge is a MetricsBridge that reads Proxmox resource metrics

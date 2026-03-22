@@ -82,9 +82,9 @@ func TestResolveRuntimeInstallSecretsMigratesLegacyEnvSecrets(t *testing.T) {
 func TestResolveRuntimeInstallSecretsAllowsEnvOverridesAndPersistsThem(t *testing.T) {
 	store := installstate.New(filepath.Join(t.TempDir(), "install"))
 	if err := store.Save(installstate.Metadata{}, installstate.Secrets{
-		OwnerToken:    "persisted-owner-token",
-		APIToken:      "persisted-api-token",
-		EncryptionKey: "MDEyMzQ1Njc4OUFCQ0RFRjAxMjM0NTY3ODlBQkNERUY=",
+		OwnerToken:       "persisted-owner-token",
+		APIToken:         "persisted-api-token",
+		EncryptionKey:    "MDEyMzQ1Njc4OUFCQ0RFRjAxMjM0NTY3ODlBQkNERUY=",
 		PostgresPassword: "persisted-postgres-password",
 	}); err != nil {
 		t.Fatalf("Save() error = %v", err)

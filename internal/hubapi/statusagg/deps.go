@@ -19,16 +19,16 @@ import (
 // the only mutations are cache updates on the embedded Cache field.
 type Deps struct {
 	// Store interfaces (read-only usage).
-	AssetStore        persistence.AssetStore
-	GroupStore        persistence.GroupStore
-	TelemetryStore    persistence.TelemetryStore
-	LogStore          persistence.LogStore
-	ActionStore       persistence.ActionStore
-	UpdateStore       persistence.UpdateStore
-	CanonicalStore    persistence.CanonicalModelStore
-	RuntimeStore      persistence.RuntimeSettingsStore
-	AuditStore        persistence.AuditStore
-	TerminalStore     persistence.TerminalStore
+	AssetStore     persistence.AssetStore
+	GroupStore     persistence.GroupStore
+	TelemetryStore persistence.TelemetryStore
+	LogStore       persistence.LogStore
+	ActionStore    persistence.ActionStore
+	UpdateStore    persistence.UpdateStore
+	CanonicalStore persistence.CanonicalModelStore
+	RuntimeStore   persistence.RuntimeSettingsStore
+	AuditStore     persistence.AuditStore
+	TerminalStore  persistence.TerminalStore
 
 	// Connector registry for listing active connectors.
 	ConnectorRegistry *connectorsdk.Registry

@@ -8,7 +8,6 @@ import (
 
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/auth"
-	authpkg "github.com/labtether/labtether/internal/hubapi/auth"
 	"github.com/labtether/labtether/internal/connectors/docker"
 	"github.com/labtether/labtether/internal/connectors/homeassistant"
 	"github.com/labtether/labtether/internal/connectors/pbs"
@@ -19,6 +18,7 @@ import (
 	"github.com/labtether/labtether/internal/connectorsdk"
 	"github.com/labtether/labtether/internal/discovery"
 	"github.com/labtether/labtether/internal/fileproto"
+	authpkg "github.com/labtether/labtether/internal/hubapi/auth"
 	"github.com/labtether/labtether/internal/installstate"
 	"github.com/labtether/labtether/internal/modelmap"
 	"github.com/labtether/labtether/internal/notifications"
@@ -121,17 +121,17 @@ func newAPIServer(
 			Adapters:    defaultNotificationAdapters(),
 			DispatchSem: make(chan struct{}, 32),
 		},
-		collectorDispatchSem:    make(chan struct{}, 8),
-		rateLimiter:             RateLimiter{Windows: make(map[string]rateCounter, 64)},
-		streamTicketStore:       StreamTicketStore{Tickets: make(map[string]streamTicket, 128)},
-		desktopSessionOpts:      make(map[string]desktopSessionOptions, 128),
-		desktopSPICE:            make(map[string]desktopSPICEProxyTarget, 128),
-		agentBinaryDir:          resolveAgentBinaryDir(),
-		externalURL:             strings.TrimRight(strings.TrimSpace(envOrDefault("LABTETHER_EXTERNAL_URL", "")), "/"),
-		pendingAgents:           newPendingAgents(),
-		challengeStore:          auth.NewChallengeStore(),
-		installStateStore:       installStateStore,
-		fileProtoPool:           fileproto.NewPool(),
+		collectorDispatchSem: make(chan struct{}, 8),
+		rateLimiter:          RateLimiter{Windows: make(map[string]rateCounter, 64)},
+		streamTicketStore:    StreamTicketStore{Tickets: make(map[string]streamTicket, 128)},
+		desktopSessionOpts:   make(map[string]desktopSessionOptions, 128),
+		desktopSPICE:         make(map[string]desktopSPICEProxyTarget, 128),
+		agentBinaryDir:       resolveAgentBinaryDir(),
+		externalURL:          strings.TrimRight(strings.TrimSpace(envOrDefault("LABTETHER_EXTERNAL_URL", "")), "/"),
+		pendingAgents:        newPendingAgents(),
+		challengeStore:       auth.NewChallengeStore(),
+		installStateStore:    installStateStore,
+		fileProtoPool:        fileproto.NewPool(),
 	}
 	// Wire broadcaster to bump status aggregate generation on every mutation event.
 	srv.broadcaster.SetOnBroadcast(func() { srv.statusCache.Generation.Add(1) })

@@ -83,7 +83,7 @@ func TestParseWevtutilOutputLevelMapping(t *testing.T) {
 	// entry[3]: Level 2 -> error  (WindowsUpdateClient)
 	// entry[4]: Level 3 -> warning (Dhcp-Client)
 	expected := []struct {
-		levelNum int
+		levelNum  int
 		wantLevel string
 	}{
 		{4, "info"},

@@ -245,7 +245,7 @@ func TestHandleQueryIgnoresResponses(t *testing.T) {
 	// Build a packet with QR=1 (response) — should be silently ignored.
 	pkt := make([]byte, 12)
 	binary.BigEndian.PutUint16(pkt[2:4], 0x8000) // QR bit set
-	binary.BigEndian.PutUint16(pkt[4:6], 1)       // QDCOUNT=1
+	binary.BigEndian.PutUint16(pkt[4:6], 1)      // QDCOUNT=1
 
 	// The method should return without sending anything — no panic.
 	a.handleQuery(pkt, nil)

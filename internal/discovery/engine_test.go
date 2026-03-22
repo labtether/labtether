@@ -14,9 +14,9 @@ import (
 // ---------------------------------------------------------------------------
 
 type mockEdgeStore struct {
-	mu      sync.Mutex
-	edges   []edges.Edge
-	nextID  int
+	mu     sync.Mutex
+	edges  []edges.Edge
+	nextID int
 }
 
 func newMockEdgeStore() *mockEdgeStore {

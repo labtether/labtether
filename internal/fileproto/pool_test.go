@@ -11,11 +11,11 @@ import (
 
 // mockRemoteFS implements RemoteFS for pool tests.
 type mockRemoteFS struct {
-	mu          sync.Mutex
-	connected   bool
-	closed      bool
-	listErr     error // when non-nil, List returns this error (simulates dead connection)
-	connectErr  error // when non-nil, Connect returns this error
+	mu           sync.Mutex
+	connected    bool
+	closed       bool
+	listErr      error // when non-nil, List returns this error (simulates dead connection)
+	connectErr   error // when non-nil, Connect returns this error
 	connectCalls int
 	closeCalls   int
 }

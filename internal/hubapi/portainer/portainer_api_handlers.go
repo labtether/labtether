@@ -129,4 +129,3 @@ func portainerEndpointID(asset assets.Asset) (int, error) {
 	}
 	return id, nil
 }
-

@@ -219,9 +219,9 @@ func (d *Deps) attachPersistentSession(w http.ResponseWriter, r *http.Request, p
 	}
 
 	servicehttp.WriteJSON(w, http.StatusCreated, map[string]any{
-		"persistent_session":      attached,
-		"session":                 session,
-		"stream_ticket":           ticket,
+		"persistent_session":       attached,
+		"session":                  session,
+		"stream_ticket":            ticket,
 		"stream_ticket_expires_at": ticketExpiresAt,
 	})
 }

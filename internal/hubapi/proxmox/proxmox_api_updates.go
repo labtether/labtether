@@ -1,8 +1,8 @@
 package proxmox
 
 import (
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"context"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strings"
 	"time"
@@ -12,8 +12,8 @@ import (
 
 // handleProxmoxNodeUpdates handles package update operations for a node.
 //
-//   GET  /proxmox/nodes/{node}/updates         — list available updates
-//   POST /proxmox/nodes/{node}/updates/refresh — refresh apt package cache
+//	GET  /proxmox/nodes/{node}/updates         — list available updates
+//	POST /proxmox/nodes/{node}/updates/refresh — refresh apt package cache
 func (d *Deps) handleProxmoxNodeUpdates(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/proxmox/nodes/")
 	// parts[0]=node, parts[1]="updates", parts[2]=sub-action (optional)

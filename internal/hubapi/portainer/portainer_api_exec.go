@@ -1,10 +1,10 @@
 package portainer
 
 import (
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strings"
 	"sync"

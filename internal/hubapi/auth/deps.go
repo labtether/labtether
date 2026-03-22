@@ -62,7 +62,7 @@ type Deps struct {
 	OIDCStates  map[string]OIDCAuthState
 
 	// Auth middleware injected from cmd/labtether.
-	EnforceRateLimit         func(w http.ResponseWriter, r *http.Request, bucket string, limit int, window time.Duration) bool
+	EnforceRateLimit          func(w http.ResponseWriter, r *http.Request, bucket string, limit int, window time.Duration) bool
 	ValidateOwnerTokenRequest func(r *http.Request) bool
 
 	// Context extractors injected from cmd/labtether.

@@ -13,8 +13,8 @@ import (
 	"github.com/labtether/labtether/internal/telemetry/bridge"
 	"github.com/labtether/labtether/internal/telemetry/promexport"
 
-	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 )
 
 // ----------------------------------------------------------------------------
@@ -142,7 +142,8 @@ func hasLabel(pb *dto.Metric, name string) bool {
 // ----------------------------------------------------------------------------
 
 // TestBridgeToPrometheusEndToEnd verifies the full pipeline:
-//   bridge.Registry → MemoryTelemetryStore → promexport.Collector → HTTP handler
+//
+//	bridge.Registry → MemoryTelemetryStore → promexport.Collector → HTTP handler
 func TestBridgeToPrometheusEndToEnd(t *testing.T) {
 	now := time.Now().UTC()
 

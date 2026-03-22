@@ -24,7 +24,7 @@ type TLSState struct {
 	DefaultKeyFile        string
 	DefaultCAPEM          []byte
 	DefaultGetCertificate func(*tls.ClientHelloInfo) (*tls.Certificate, error)
-	CACertPEM             []byte // PEM-encoded CA certificate (for enrollment distribution)
+	CACertPEM             []byte                // PEM-encoded CA certificate (for enrollment distribution)
 	CertReloader          *certmgr.CertReloader // non-nil when TLS mode is "auto" with built-in certs
 	// TailscaleCertReloader holds the Tailscale cert reloader when TLS mode is
 	// "auto" with Tailscale certs. The concrete type lives in cmd/labtether and

@@ -1,9 +1,9 @@
 package agents
 
 import (
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"errors"
 	"fmt"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"io"
 	"net/http"
 	"net/url"

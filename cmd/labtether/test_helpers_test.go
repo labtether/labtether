@@ -104,9 +104,9 @@ func newTestAPIServer(t *testing.T) *apiServer {
 			Adapters:    defaultNotificationAdapters(),
 			DispatchSem: make(chan struct{}, 32),
 		},
-		collectorDispatchSem:    make(chan struct{}, 4),
-		pendingAgents:           newPendingAgents(),
-		installStateStore:       installstate.New(filepath.Join(t.TempDir(), "install")),
+		collectorDispatchSem: make(chan struct{}, 4),
+		pendingAgents:        newPendingAgents(),
+		installStateStore:    installstate.New(filepath.Join(t.TempDir(), "install")),
 	}
 	sut.webServiceCoordinator = webservice.NewCoordinator(persistence.NewMemoryWebServiceStore())
 	// proxmoxDeps is lazy-initialized by ensureProxmoxDeps() on first use,

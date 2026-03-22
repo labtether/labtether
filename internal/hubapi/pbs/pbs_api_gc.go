@@ -11,8 +11,9 @@ import (
 
 // handlePBSGC handles GC status (GET) and GC trigger (POST) for a datastore.
 // Routes:
-//   GET  /pbs/assets/{assetID}/datastores/{ds}/gc  -> GC status from datastore status
-//   POST /pbs/assets/{assetID}/datastores/{ds}/gc  -> trigger GC, returns UPID
+//
+//	GET  /pbs/assets/{assetID}/datastores/{ds}/gc  -> GC status from datastore status
+//	POST /pbs/assets/{assetID}/datastores/{ds}/gc  -> trigger GC, returns UPID
 func (d *Deps) HandlePBSDatastoreGC(ctx context.Context, w http.ResponseWriter, r *http.Request, collectorID, store string) {
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
@@ -34,8 +35,8 @@ func (d *Deps) HandlePBSDatastoreGC(ctx context.Context, w http.ResponseWriter, 
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
-			"store":     store,
-			"gc_status": status.GCStatus,
+			"store":      store,
+			"gc_status":  status.GCStatus,
 			"fetched_at": time.Now().UTC().Format(time.RFC3339),
 		})
 

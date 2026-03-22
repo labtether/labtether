@@ -9,8 +9,8 @@ import (
 type MatchCandidate struct {
 	SourceAssetID string
 	TargetAssetID string
-	Type          string  // "edge" or "composite"
-	EdgeType      string  // relationship_type for edges (e.g., "contains")
+	Type          string // "edge" or "composite"
+	EdgeType      string // relationship_type for edges (e.g., "contains")
 	Confidence    float64
 	Signal        string // description of what matched
 }
@@ -269,15 +269,15 @@ type StructuralMatcher struct{}
 // serviceTypes is the set of asset types treated as "hosted services" that
 // imply a parent host.
 var serviceTypes = map[string]bool{
-	"truenas":           true,
-	"proxmox_backup":    true,
-	"pbs":               true,
-	"homeassistant":     true,
-	"home_assistant":    true,
-	"ha":                true,
-	"portainer":         true,
-	"grafana":           true,
-	"nextcloud":         true,
+	"truenas":        true,
+	"proxmox_backup": true,
+	"pbs":            true,
+	"homeassistant":  true,
+	"home_assistant": true,
+	"ha":             true,
+	"portainer":      true,
+	"grafana":        true,
+	"nextcloud":      true,
 }
 
 // hostTypes is the set of asset types treated as potential parent hosts.

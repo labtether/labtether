@@ -21,10 +21,10 @@ func TestPBSMetricsBridgeCollect(t *testing.T) {
 			{
 				AssetID:     "pbs-asset-backup01",
 				Total:       2 * 1024 * 1024 * 1024 * 1024, // 2 TiB
-				Used:        500 * 1024 * 1024 * 1024,       // 500 GiB
-				Available:   1524 * 1024 * 1024 * 1024,      // remainder
+				Used:        500 * 1024 * 1024 * 1024,      // 500 GiB
+				Available:   1524 * 1024 * 1024 * 1024,     // remainder
 				BackupCount: 42,
-				BackupAge:   3600,  // 1 hour
+				BackupAge:   3600, // 1 hour
 				GCPending:   8192,
 				Labels: map[string]string{
 					"datastore": "backup-store",

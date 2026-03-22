@@ -4,11 +4,11 @@ import "github.com/labtether/labtether/internal/edges"
 
 // MergeConnections combines topology_connections with asset_edges into a unified list.
 // Rules:
-// - topology_connections with deleted=false are included (origin "user" or "accepted")
-// - asset_edges are included only if no matching topology_connection exists for the same
-//   (source, target, relationship) tuple — including soft-deleted ones (which suppress discovered edges)
-// - "contains" edges are excluded (containment is shown via expandable cards, not connection lines)
-// - Edge relationship types not in ValidRelationships are excluded
+//   - topology_connections with deleted=false are included (origin "user" or "accepted")
+//   - asset_edges are included only if no matching topology_connection exists for the same
+//     (source, target, relationship) tuple — including soft-deleted ones (which suppress discovered edges)
+//   - "contains" edges are excluded (containment is shown via expandable cards, not connection lines)
+//   - Edge relationship types not in ValidRelationships are excluded
 func MergeConnections(topologyID string, topoConns []Connection, assetEdges []edges.Edge) []MergedConnection {
 	type key struct{ src, tgt, rel string }
 	topoByKey := make(map[key]Connection, len(topoConns))

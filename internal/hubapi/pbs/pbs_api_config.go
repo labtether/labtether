@@ -11,8 +11,9 @@ import (
 
 // handlePBSRemotes dispatches remote CRUD actions.
 // Routes (relative to /pbs/assets/{assetID}/):
-//   GET  remotes  -> list
-//   POST remotes  -> create
+//
+//	GET  remotes  -> list
+//	POST remotes  -> create
 func (d *Deps) HandlePBSRemotes(ctx context.Context, w http.ResponseWriter, r *http.Request, collectorID string) {
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
@@ -51,10 +52,11 @@ func (d *Deps) HandlePBSRemotes(ctx context.Context, w http.ResponseWriter, r *h
 
 // handlePBSTrafficControl dispatches traffic-control CRUD actions.
 // Routes (relative to /pbs/assets/{assetID}/):
-//   GET    traffic-control         -> list
-//   POST   traffic-control         -> create
-//   PUT    traffic-control/{name}  -> update
-//   DELETE traffic-control/{name}  -> delete
+//
+//	GET    traffic-control         -> list
+//	POST   traffic-control         -> create
+//	PUT    traffic-control/{name}  -> update
+//	DELETE traffic-control/{name}  -> delete
 func (d *Deps) HandlePBSTrafficControl(ctx context.Context, w http.ResponseWriter, r *http.Request, collectorID string, subParts []string) {
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {

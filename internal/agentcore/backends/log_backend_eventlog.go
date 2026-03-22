@@ -15,9 +15,9 @@ import (
 )
 
 const (
-	wevtutilQueryCommandTimeout  = 20 * time.Second
-	wevtutilStreamPollInterval   = 5 * time.Second
-	wevtutilDefaultChannels      = "System,Application"
+	wevtutilQueryCommandTimeout = 20 * time.Second
+	wevtutilStreamPollInterval  = 5 * time.Second
+	wevtutilDefaultChannels     = "System,Application"
 )
 
 // WindowsLogBackend implements LogBackend using wevtutil on Windows.

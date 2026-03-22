@@ -23,17 +23,17 @@ type portainerResourceCount struct {
 
 // portainerOverviewResponse is the payload for the /portainer/assets/{id}/overview endpoint.
 type portainerOverviewResponse struct {
-	Containers     portainerResourceSummary `json:"containers"`
-	Stacks         portainerResourceSummary `json:"stacks"`
-	Images         portainerResourceCount   `json:"images"`
-	Volumes        portainerResourceCount   `json:"volumes"`
-	Networks       portainerResourceCount   `json:"networks"`
-	ServerVersion  string                   `json:"server_version,omitempty"`
-	DatabaseVersion string                  `json:"database_version,omitempty"`
-	BuildNumber    string                   `json:"build_number,omitempty"`
-	EndpointName   string                   `json:"endpoint_name,omitempty"`
-	EndpointURL    string                   `json:"endpoint_url,omitempty"`
-	Warnings       []string                 `json:"warnings,omitempty"`
+	Containers      portainerResourceSummary `json:"containers"`
+	Stacks          portainerResourceSummary `json:"stacks"`
+	Images          portainerResourceCount   `json:"images"`
+	Volumes         portainerResourceCount   `json:"volumes"`
+	Networks        portainerResourceCount   `json:"networks"`
+	ServerVersion   string                   `json:"server_version,omitempty"`
+	DatabaseVersion string                   `json:"database_version,omitempty"`
+	BuildNumber     string                   `json:"build_number,omitempty"`
+	EndpointName    string                   `json:"endpoint_name,omitempty"`
+	EndpointURL     string                   `json:"endpoint_url,omitempty"`
+	Warnings        []string                 `json:"warnings,omitempty"`
 }
 
 // handlePortainerOverview returns a summary overview for a Portainer asset.

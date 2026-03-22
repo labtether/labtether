@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/connectors/pbs"
-	"github.com/labtether/labtether/internal/servicehttp"
 	"github.com/labtether/labtether/internal/hubapi/shared"
+	"github.com/labtether/labtether/internal/servicehttp"
 )
 
 func (d *Deps) HandlePBSConnectorTest(w http.ResponseWriter, r *http.Request) {

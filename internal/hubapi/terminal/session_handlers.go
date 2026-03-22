@@ -407,4 +407,3 @@ func (d *Deps) canAccessOwnedSession(r *http.Request, sessionActorID string) boo
 	}
 	return strings.TrimSpace(sessionActorID) == actorID
 }
-

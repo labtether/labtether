@@ -19,8 +19,8 @@ type PBSMetricEntry struct {
 	Used        float64 // bytes
 	Available   float64 // bytes
 	BackupCount float64
-	BackupAge   float64 // seconds since last backup
-	GCPending   float64 // bytes
+	BackupAge   float64           // seconds since last backup
+	GCPending   float64           // bytes
 	Labels      map[string]string // datastore
 }
 

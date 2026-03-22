@@ -157,5 +157,9 @@ func (s *apiServer) closeDockerExecBridgesForAsset(assetID string) {
 type dockerExecBridge = dockerpkg.DockerExecBridge
 
 // Function aliases for exported dockerpkg functions.
-func normalizeDockerHostLookupID(value string) string { return dockerpkg.NormalizeDockerHostLookupID(value) }
-func dockerExecCommandFromQuery(raw string) []string  { return dockerpkg.DockerExecCommandFromQuery(raw) }
+func normalizeDockerHostLookupID(value string) string {
+	return dockerpkg.NormalizeDockerHostLookupID(value)
+}
+func dockerExecCommandFromQuery(raw string) []string {
+	return dockerpkg.DockerExecCommandFromQuery(raw)
+}

@@ -108,8 +108,8 @@ func PersistCanonicalConnectorSnapshot(
 	startedAt := time.Now().UTC()
 
 	providerInstance := model.ProviderInstance{
-		ID:   CanonicalProviderInstanceID(model.ProviderKindConnector, providerID, instanceKey),
-		Kind: model.ProviderKindConnector,
+		ID:       CanonicalProviderInstanceID(model.ProviderKindConnector, providerID, instanceKey),
+		Kind:     model.ProviderKindConnector,
 		Provider: providerID,
 		DisplayName: canonicalFirstNonEmpty(
 			strings.TrimSpace(displayName),

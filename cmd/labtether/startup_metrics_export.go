@@ -330,8 +330,8 @@ func (a *agentPresenceAdapter) AllAgentPresenceMetrics() []bridge.AgentPresenceE
 // ---- siteReliabilityAdapter implements bridge.SiteReliabilitySource ----
 
 type siteReliabilityAdapter struct {
-	groupStore         persistence.GroupStore
-	reliabilityStore   persistence.ReliabilityHistoryStore
+	groupStore       persistence.GroupStore
+	reliabilityStore persistence.ReliabilityHistoryStore
 }
 
 func (a *siteReliabilityAdapter) AllSiteReliabilityMetrics() []bridge.SiteReliabilityEntry {

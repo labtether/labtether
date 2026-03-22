@@ -23,7 +23,7 @@ type LinuxDesktopSessionInfo struct {
 // Injectable function variables for desktop session detection.
 // The parent agentcore package wires these at init time.
 var (
-	DetectLinuxDesktopSessionFn   func() LinuxDesktopSessionInfo
+	DetectLinuxDesktopSessionFn    func() LinuxDesktopSessionInfo
 	AppendDetectedActiveDisplaysFn func(dst []string) []string
 )
 

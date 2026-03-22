@@ -36,11 +36,11 @@ type ProtocolConfigDB interface {
 // through the function fields and pointer fields below.
 type Deps struct {
 	// Store interfaces.
-	RuntimeStore      persistence.RuntimeSettingsStore
-	AuditStore        persistence.AuditStore
-	AdminResetStore   persistence.AdminResetStore
-	CredentialStore   persistence.CredentialStore
-	AssetStore        persistence.AssetStore
+	RuntimeStore    persistence.RuntimeSettingsStore
+	AuditStore      persistence.AuditStore
+	AdminResetStore persistence.AdminResetStore
+	CredentialStore persistence.CredentialStore
+	AssetStore      persistence.AssetStore
 
 	// DB is a direct reference to the PostgresStore for protocol config
 	// operations that bypass the store interface layer.

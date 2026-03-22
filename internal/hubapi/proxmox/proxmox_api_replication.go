@@ -1,8 +1,8 @@
 package proxmox
 
 import (
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"context"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strings"
 	"time"
@@ -12,8 +12,8 @@ import (
 
 // handleProxmoxNodeReplication handles replication operations for a node.
 //
-//   GET  /proxmox/nodes/{node}/replication         — list replication jobs
-//   POST /proxmox/nodes/{node}/replication/{id}/run — trigger replication job now
+//	GET  /proxmox/nodes/{node}/replication         — list replication jobs
+//	POST /proxmox/nodes/{node}/replication/{id}/run — trigger replication job now
 func (d *Deps) handleProxmoxNodeReplication(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/proxmox/nodes/")
 	// parts[0]=node, parts[1]="replication", parts[2]=id (optional), parts[3]="run" (optional)

@@ -15,8 +15,8 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/labtether/labtether/internal/connectors/truenas"
-	truenaspkg "github.com/labtether/labtether/internal/hubapi/truenas"
 	"github.com/labtether/labtether/internal/credentials"
+	truenaspkg "github.com/labtether/labtether/internal/hubapi/truenas"
 	"github.com/labtether/labtether/internal/hubcollector"
 	"github.com/labtether/labtether/internal/logs"
 )

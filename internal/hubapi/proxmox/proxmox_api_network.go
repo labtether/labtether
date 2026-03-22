@@ -1,9 +1,9 @@
 package proxmox
 
 import (
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"context"
 	"encoding/json"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strings"
 	"time"
@@ -13,10 +13,10 @@ import (
 
 // handleProxmoxNodeNetworkCRUD handles network interface management.
 //
-//   GET  /proxmox/nodes/{node}/network         — list interfaces (existing handler)
-//   POST /proxmox/nodes/{node}/network         — create interface
-//   PUT  /proxmox/nodes/{node}/network         — apply pending changes
-//   PUT  /proxmox/nodes/{node}/network/{iface} — update interface
+//	GET  /proxmox/nodes/{node}/network         — list interfaces (existing handler)
+//	POST /proxmox/nodes/{node}/network         — create interface
+//	PUT  /proxmox/nodes/{node}/network         — apply pending changes
+//	PUT  /proxmox/nodes/{node}/network/{iface} — update interface
 func (d *Deps) handleProxmoxNodeNetworkCRUD(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/proxmox/nodes/")
 	// parts[0]=node, parts[1]="network", parts[2]=iface (optional)

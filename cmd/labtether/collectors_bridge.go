@@ -320,7 +320,9 @@ func newCollectorLifecycle(s *apiServer, collector hubcollector.Collector, sourc
 func (s *apiServer) executePortainerCollector(ctx context.Context, collector hubcollector.Collector) {
 	s.ensureCollectorsDeps().ExecutePortainerCollector(ctx, collector)
 }
-func firstNonEmptyString(values ...string) string { return collectorspkg.FirstNonEmptyString(values...) }
+func firstNonEmptyString(values ...string) string {
+	return collectorspkg.FirstNonEmptyString(values...)
+}
 
 // Constant aliases.
 const (
@@ -336,33 +338,58 @@ func (s *apiServer) autoLinkPortainerHostsToTrueNASHosts() error {
 func (s *apiServer) autoLinkTrueNASHostsToProxmoxGuests() error {
 	return s.ensureCollectorsDeps().AutoLinkTrueNASHostsToProxmoxGuests()
 }
-func normalizeTrueNASStatus(metadata map[string]string) string { return collectorspkg.NormalizeTrueNASStatus(metadata) }
-func normalizePortainerStatus(metadata map[string]string) string { return collectorspkg.NormalizePortainerStatus(metadata) }
-func normalizeDockerStatus(metadata map[string]string) string { return collectorspkg.NormalizeDockerStatus(metadata) }
-func stableConnectorLogID(prefix, key string) string { return collectorspkg.StableConnectorLogID(prefix, key) }
-func proxmoxTaskAssetID(task proxmoxconnector.Task, fallback string) string { return collectorspkg.ProxmoxTaskAssetID(task, fallback) }
+func normalizeTrueNASStatus(metadata map[string]string) string {
+	return collectorspkg.NormalizeTrueNASStatus(metadata)
+}
+func normalizePortainerStatus(metadata map[string]string) string {
+	return collectorspkg.NormalizePortainerStatus(metadata)
+}
+func normalizeDockerStatus(metadata map[string]string) string {
+	return collectorspkg.NormalizeDockerStatus(metadata)
+}
+func stableConnectorLogID(prefix, key string) string {
+	return collectorspkg.StableConnectorLogID(prefix, key)
+}
+func proxmoxTaskAssetID(task proxmoxconnector.Task, fallback string) string {
+	return collectorspkg.ProxmoxTaskAssetID(task, fallback)
+}
 func proxmoxTaskLevel(task proxmoxconnector.Task) string { return collectorspkg.ProxmoxTaskLevel(task) }
-func trueNASAlertMessage(alert map[string]any) string { return collectorspkg.TrueNASAlertMessage(alert) }
+func trueNASAlertMessage(alert map[string]any) string {
+	return collectorspkg.TrueNASAlertMessage(alert)
+}
 func collectorAnyTime(value any) time.Time { return collectorspkg.CollectorAnyTime(value) }
-func collectorEndpointIdentity(rawBaseURL string) (string, string) { return collectorspkg.CollectorEndpointIdentity(rawBaseURL) }
+func collectorEndpointIdentity(rawBaseURL string) (string, string) {
+	return collectorspkg.CollectorEndpointIdentity(rawBaseURL)
+}
 func executeWinRMCommand(ctx context.Context, endpoint, user, password, command string, useHTTPS, skipVerify bool, caPEM string) (string, error) {
 	return collectorspkg.ExecuteWinRMCommand(ctx, endpoint, user, password, command, useHTTPS, skipVerify, caPEM)
 }
+
 const maxWinRMSOAPResponseBytes = collectorspkg.MaxWinRMSOAPResponseBytes
+
 func winrmSOAPRequest(ctx context.Context, client *http.Client, endpoint, user, password, body string) (string, error) {
 	return collectorspkg.WinRMSOAPRequest(ctx, client, endpoint, user, password, body)
 }
 func collectorAnyString(value any) string { return collectorspkg.CollectorAnyString(value) }
+
 type webServiceIconLibraryEntry = collectorspkg.WebServiceIconLibraryEntry
+
 const webServiceURLGroupingModeBalanced = collectorspkg.WebServiceURLGroupingModeBalanced
-func parseWebServiceAliasRules(raw string) []collectorspkg.WebServiceAliasRule { return collectorspkg.ParseWebServiceAliasRules(raw) }
-func parseWebServicePairRules(raw string) map[string]struct{} { return collectorspkg.ParseWebServicePairRules(raw) }
+
+func parseWebServiceAliasRules(raw string) []collectorspkg.WebServiceAliasRule {
+	return collectorspkg.ParseWebServiceAliasRules(raw)
+}
+func parseWebServicePairRules(raw string) map[string]struct{} {
+	return collectorspkg.ParseWebServicePairRules(raw)
+}
+
 const webServiceURLGroupingModeConservative = collectorspkg.WebServiceURLGroupingModeConservative
+
 // Getter/setter helpers for webServiceCleanup test vars (direct references to package vars).
-func getWebServiceCleanupInterval() time.Duration                              { return collectorspkg.WebServiceCleanupInterval }
-func setWebServiceCleanupInterval(d time.Duration)                             { collectorspkg.WebServiceCleanupInterval = d }
-func getWebServiceCleanupStep() func(*collectorspkg.Deps)                      { return collectorspkg.WebServiceCleanupStep }
-func setWebServiceCleanupStep(fn func(*collectorspkg.Deps))                    { collectorspkg.WebServiceCleanupStep = fn }
+func getWebServiceCleanupInterval() time.Duration           { return collectorspkg.WebServiceCleanupInterval }
+func setWebServiceCleanupInterval(d time.Duration)          { collectorspkg.WebServiceCleanupInterval = d }
+func getWebServiceCleanupStep() func(*collectorspkg.Deps)   { return collectorspkg.WebServiceCleanupStep }
+func setWebServiceCleanupStep(fn func(*collectorspkg.Deps)) { collectorspkg.WebServiceCleanupStep = fn }
 func (s *apiServer) resolveWebServiceURLGroupingConfig() collectorspkg.WebServiceURLGroupingConfig {
 	return s.ensureCollectorsDeps().ResolveWebServiceURLGroupingConfig()
 }

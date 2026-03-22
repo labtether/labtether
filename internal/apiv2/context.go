@@ -10,11 +10,11 @@ import (
 type contextKey string
 
 const (
-	userIDContextKey       contextKey = "user_id"
-	userRoleContextKey     contextKey = "user_role"
-	scopesContextKey       contextKey = "api_scopes"
+	userIDContextKey        contextKey = "user_id"
+	userRoleContextKey      contextKey = "user_role"
+	scopesContextKey        contextKey = "api_scopes"
 	allowedAssetsContextKey contextKey = "api_allowed_assets"
-	apiKeyIDContextKey     contextKey = "api_key_id"
+	apiKeyIDContextKey      contextKey = "api_key_id"
 )
 
 // ContextWithUserID returns a new context carrying the authenticated user ID.

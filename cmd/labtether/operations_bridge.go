@@ -290,4 +290,3 @@ const (
 	tlsUploadedCertRelativePath = opspkg.TLSUploadedCertRelativePath
 	tlsUploadedKeyRelativePath  = opspkg.TLSUploadedKeyRelativePath
 )
-

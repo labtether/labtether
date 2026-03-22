@@ -1,12 +1,12 @@
 package main
 
 import (
-	agentspkg "github.com/labtether/labtether/internal/hubapi/agents"
 	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	agentspkg "github.com/labtether/labtether/internal/hubapi/agents"
 	"net/http"
 	"net/http/httptest"
 	"strings"

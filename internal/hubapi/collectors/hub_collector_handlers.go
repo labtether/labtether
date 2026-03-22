@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/hubcollector"
 	"github.com/labtether/labtether/internal/servicehttp"
-	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
 func (d *Deps) HandleHubCollectors(w http.ResponseWriter, r *http.Request) {

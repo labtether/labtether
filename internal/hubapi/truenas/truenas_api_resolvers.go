@@ -254,4 +254,3 @@ func TrueNASDiskHealthSeverity(status string) int {
 		return 0
 	}
 }
-

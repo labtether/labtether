@@ -17,7 +17,7 @@ type ServiceHealthEntry struct {
 	AssetID       string
 	ResponseMs    float64
 	UptimePercent float64
-	Status        float64 // 0=down, 1=up
+	Status        float64           // 0=down, 1=up
 	Labels        map[string]string // service_name, service_url
 }
 

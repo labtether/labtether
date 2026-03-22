@@ -73,14 +73,14 @@ const (
 	KeyServicesDiscoveryDefaultLANScanPorts             = "services.discovery_default_lan_scan_ports"
 	KeyServicesDiscoveryDefaultLANScanMaxHosts          = "services.discovery_default_lan_scan_max_hosts"
 
-	KeyPrometheusScrapeEnabled          = "prometheus.scrape_enabled"
-	KeyPrometheusRemoteWriteEnabled     = "prometheus.remote_write_enabled"
-	KeyPrometheusRemoteWriteURL         = "prometheus.remote_write_url"
-	KeyPrometheusRemoteWriteUsername    = "prometheus.remote_write_username"
-	KeyPrometheusRemoteWritePassword    = "prometheus.remote_write_password"
-	KeyPrometheusRemoteWriteInterval    = "prometheus.remote_write_interval"
-	KeyProcessMetricsEnabled            = "prometheus.process_metrics_enabled"
-	KeyProcessMetricsTopN               = "prometheus.process_metrics_top_n"
+	KeyPrometheusScrapeEnabled       = "prometheus.scrape_enabled"
+	KeyPrometheusRemoteWriteEnabled  = "prometheus.remote_write_enabled"
+	KeyPrometheusRemoteWriteURL      = "prometheus.remote_write_url"
+	KeyPrometheusRemoteWriteUsername = "prometheus.remote_write_username"
+	KeyPrometheusRemoteWritePassword = "prometheus.remote_write_password"
+	KeyPrometheusRemoteWriteInterval = "prometheus.remote_write_interval"
+	KeyProcessMetricsEnabled         = "prometheus.process_metrics_enabled"
+	KeyProcessMetricsTopN            = "prometheus.process_metrics_top_n"
 )
 
 var definitions = []Definition{
