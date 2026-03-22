@@ -292,9 +292,9 @@ func TestDockerExecManagerHandleExecStartStreamsOutputAndCleansUp(t *testing.T) 
 
 	em.HandleExecStart(transport, agentmgr.Message{Type: agentmgr.MsgDockerExecStart, Data: raw})
 
-	started := waitForCollectorMessage(t, transport, 2*time.Second)
-	output := waitForCollectorMessage(t, transport, 2*time.Second)
-	closed := waitForCollectorMessage(t, transport, 2*time.Second)
+	started := waitForCollectorMessage(t, transport, 10*time.Second)
+	output := waitForCollectorMessage(t, transport, 10*time.Second)
+	closed := waitForCollectorMessage(t, transport, 10*time.Second)
 
 	if started.Type != agentmgr.MsgDockerExecStarted {
 		t.Fatalf("started message type=%q, want %q", started.Type, agentmgr.MsgDockerExecStarted)

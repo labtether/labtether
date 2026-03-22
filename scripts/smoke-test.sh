@@ -74,21 +74,7 @@ if [[ -z "$AUTH_TOKEN" ]]; then
   exit 1
 fi
 
-# dev-backend defaults to TLS auto mode and returns a redirect hint on HTTP /healthz.
-if [[ "${API_BASE}" == http://* ]]; then
-  health_probe="$(curl -sS --max-time 5 "${API_BASE}/healthz" 2>/dev/null || true)"
-  if [[ "${health_probe}" == *'"status":"redirect_active"'* ]]; then
-    base_no_scheme="${API_BASE#http://}"
-    host_port="${base_no_scheme%%/*}"
-    host="${host_port%%:*}"
-    redirect_port="$(printf '%s' "${health_probe}" | sed -n 's/.*https on port \([0-9][0-9]*\).*/\1/p')"
-    if [[ -z "${redirect_port}" ]]; then
-      redirect_port=8443
-    fi
-    API_BASE="https://${host}:${redirect_port}"
-    log "Detected API HTTP redirect mode; switching smoke API base to ${API_BASE}"
-  fi
-fi
+# TLS redirect detection is now handled after compose starts (see below).
 
 smoke_init_cleanup
 
@@ -163,6 +149,28 @@ if [[ "$SKIP_COMPOSE" == "0" ]]; then
     "${compose_cmd[@]}" up -d --build
   fi
   STARTED_COMPOSE=1
+
+  # Hub in TLS auto mode returns a redirect hint on HTTP /healthz.
+  # Detect this and switch to HTTPS before waiting for health.
+  if [[ "${API_BASE}" == http://* ]]; then
+    log "Probing for TLS redirect on ${API_BASE}/healthz"
+    for _probe_i in $(seq 1 30); do
+      health_probe="$(curl -sS --max-time 2 "${API_BASE}/healthz" 2>/dev/null || true)"
+      if [[ "${health_probe}" == *'"status":"redirect_active"'* ]]; then
+        base_no_scheme="${API_BASE#http://}"
+        host_port="${base_no_scheme%%/*}"
+        host="${host_port%%:*}"
+        redirect_port="$(printf '%s' "${health_probe}" | sed -n 's/.*https on port \([0-9][0-9]*\).*/\1/p')"
+        if [[ -z "${redirect_port}" ]]; then
+          redirect_port=8443
+        fi
+        API_BASE="https://${host}:${redirect_port}"
+        log "  Detected TLS redirect; switching API base to ${API_BASE}"
+        break
+      fi
+      sleep 2
+    done
+  fi
 
   wait_for_http "LabTether health" "$API_BASE/healthz" || exit 1
   wait_for_http "Agent health" "$AGENT_BASE/healthz" || exit 1
