@@ -218,7 +218,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run E2E
-        run: npx playwright test --ignore-pattern='**/visual-regression*'
+        run: npm run test:e2e -- --ignore-snapshots
 
       - name: Upload Playwright artifacts
         if: always()
@@ -254,7 +254,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run E2E over self-signed HTTPS
-        run: PLAYWRIGHT_SELF_SIGNED_HTTPS=1 npx playwright test --ignore-pattern='**/visual-regression*'
+        run: npm run test:e2e:https -- --ignore-snapshots
 
       - name: Upload HTTPS E2E Playwright artifacts
         if: always()
