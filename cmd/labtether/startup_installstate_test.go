@@ -36,7 +36,7 @@ func TestResolveRuntimeInstallSecretsGeneratesAndPersistsMissingValues(t *testin
 func TestResolveRuntimeInstallSecretsMigratesLegacyEnvSecrets(t *testing.T) {
 	t.Setenv("LABTETHER_OWNER_TOKEN", "legacy-owner-token")
 	t.Setenv("LABTETHER_API_TOKEN", "legacy-api-token")
-	t.Setenv("LABTETHER_ENCRYPTION_KEY", "MDEyMzQ1Njc4OUFCQ0RFRjAxMjM0NTY3ODlBQkNERUY=")
+	t.Setenv("LABTETHER_ENCRYPTION_KEY", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 	t.Setenv("POSTGRES_PASSWORD", "generated-postgres-password")
 
 	store := installstate.New(filepath.Join(t.TempDir(), "install"))
@@ -51,7 +51,7 @@ func TestResolveRuntimeInstallSecretsMigratesLegacyEnvSecrets(t *testing.T) {
 	if got.APIToken != "legacy-api-token" {
 		t.Fatalf("APIToken = %q, want legacy-api-token", got.APIToken)
 	}
-	if got.EncryptionKey != "MDEyMzQ1Njc4OUFCQ0RFRjAxMjM0NTY3ODlBQkNERUY=" {
+	if got.EncryptionKey != "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=" {
 		t.Fatalf("EncryptionKey = %q, want migrated env value", got.EncryptionKey)
 	}
 

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/labtether/labtether/internal/agentcore/system"
 	"github.com/labtether/labtether/internal/agentmgr"
 )
 
@@ -367,11 +368,22 @@ func TestDetectWebRTCCapabilitiesCollectsEncodersAudioAndDisplays(t *testing.T) 
 	originalGOOS := WebRTCRuntimeGOOS
 	originalLookPath := WebRTCLookPath
 	originalNewCommand := NewWebRTCSecurityCommand
+	originalDetectSession := DetectDesktopSessionFn
+	originalCollectUserSessions := system.CollectUserSessionsFn
 	t.Cleanup(func() {
 		WebRTCRuntimeGOOS = originalGOOS
 		WebRTCLookPath = originalLookPath
 		NewWebRTCSecurityCommand = originalNewCommand
+		DetectDesktopSessionFn = originalDetectSession
+		system.CollectUserSessionsFn = originalCollectUserSessions
 	})
+
+	// Mock session detection so CI environments (which may have loginctl
+	// sessions or /proc-based display hints) don't inject extra displays.
+	DetectDesktopSessionFn = func() DesktopSessionInfo {
+		return DesktopSessionInfo{Type: DesktopSessionTypeHeadless, Backend: DesktopBackendHeadless}
+	}
+	system.CollectUserSessionsFn = func() ([]agentmgr.UserSession, error) { return nil, nil }
 
 	t.Setenv("LABTETHER_WEBRTC_X11_DISPLAY", " :7 ")
 	t.Setenv("DISPLAY", ":1")

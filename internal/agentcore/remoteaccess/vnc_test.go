@@ -415,14 +415,19 @@ func TestStartLinuxVNCServerSkipsToXvfbOnHeadless(t *testing.T) {
 	originalFind := FindDesktopFreeDisplay
 	originalBootstrap := StartDesktopBootstrap
 	originalCollectUserSessions := system.CollectUserSessionsFn
+	originalDetectSession := DetectDesktopSessionFn
 	t.Cleanup(func() {
 		LaunchDesktopVNCReady = originalLaunch
 		StartDesktopXvfb = originalStartXvfb
 		FindDesktopFreeDisplay = originalFind
 		StartDesktopBootstrap = originalBootstrap
 		system.CollectUserSessionsFn = originalCollectUserSessions
+		DetectDesktopSessionFn = originalDetectSession
 	})
 	system.CollectUserSessionsFn = func() ([]agentmgr.UserSession, error) { return nil, nil }
+	DetectDesktopSessionFn = func() DesktopSessionInfo {
+		return DesktopSessionInfo{Type: DesktopSessionTypeHeadless, Backend: DesktopBackendHeadless}
+	}
 
 	// No lock file for :0 → headless, should skip first attempt entirely.
 	os.Remove("/tmp/.X0-lock")

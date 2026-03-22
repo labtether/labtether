@@ -1,6 +1,8 @@
 package remoteaccess
 
 import (
+	"fmt"
+	"os/exec"
 	"sync"
 	"testing"
 
@@ -89,6 +91,17 @@ func TestDisplayManagerActiveDisplays(t *testing.T) {
 // does not attempt to reuse a placeholder entry (xvfbCmd == nil) that is still
 // being started by another goroutine.
 func TestDisplayManagerAcquireSkipsPlaceholder(t *testing.T) {
+	originalFind := FindDesktopFreeDisplay
+	originalStartXvfb := StartDesktopXvfb
+	t.Cleanup(func() {
+		FindDesktopFreeDisplay = originalFind
+		StartDesktopXvfb = originalStartXvfb
+	})
+	FindDesktopFreeDisplay = func() int { return 98 }
+	StartDesktopXvfb = func(int, int, int) (*exec.Cmd, string, error) {
+		return nil, "", fmt.Errorf("xvfb not available in test")
+	}
+
 	dm := NewDisplayManager()
 
 	// Insert a placeholder that mimics an in-flight acquire (refCount=1, xvfbCmd=nil).
@@ -101,7 +114,7 @@ func TestDisplayManagerAcquireSkipsPlaceholder(t *testing.T) {
 	dm.Mu.Unlock()
 
 	// A second goroutine calling acquire should NOT reuse the placeholder.
-	// Because StartDesktopXvfb is unavailable in unit tests, the acquire will
+	// Because StartDesktopXvfb is stubbed to fail in this test, the acquire will
 	// fail — but what matters is that it did not return the placeholder's empty
 	// xauthPath as a valid result.
 	// We verify via the map: acquire must either insert a new key or remove the
@@ -118,7 +131,7 @@ func TestDisplayManagerAcquireSkipsPlaceholder(t *testing.T) {
 
 	refBefore := before()
 
-	// acquire will fail (no Xvfb binary) — that is expected in this test.
+	// acquire will fail (mocked Xvfb) — that is expected in this test.
 	// We only care that the placeholder was not touched.
 	_, _, _ = dm.acquire()
 
@@ -134,6 +147,25 @@ func TestDisplayManagerAcquireSkipsPlaceholder(t *testing.T) {
 // The test injects a fake FindDesktopFreeDisplay that always returns the same
 // number, forcing the race condition to manifest if the placeholder is absent.
 func TestDisplayManagerAcquireNoConcurrentDuplicate(t *testing.T) {
+	originalFind := FindDesktopFreeDisplay
+	originalStartXvfb := StartDesktopXvfb
+	t.Cleanup(func() {
+		FindDesktopFreeDisplay = originalFind
+		StartDesktopXvfb = originalStartXvfb
+	})
+
+	callCount := 0
+	var findMu sync.Mutex
+	FindDesktopFreeDisplay = func() int {
+		findMu.Lock()
+		defer findMu.Unlock()
+		callCount++
+		return 90 + callCount
+	}
+	StartDesktopXvfb = func(int, int, int) (*exec.Cmd, string, error) {
+		return nil, "", fmt.Errorf("xvfb not available in test")
+	}
+
 	dm := NewDisplayManager()
 
 	// Run two goroutines that both attempt acquire at the same time.

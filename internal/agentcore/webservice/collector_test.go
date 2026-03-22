@@ -338,6 +338,9 @@ func TestDiscoverPortScannedServices(t *testing.T) {
 
 	t.Setenv("LABTETHER_WEBSVC_PORTSCAN_DISABLED", "false")
 	t.Setenv("LABTETHER_WEBSVC_PORTSCAN_PORTS", strconv.Itoa(port))
+	// Disable listening-port discovery so /proc/net/tcp on Linux CI does not
+	// inject extra candidate ports that may be reachable and break the count.
+	t.Setenv("LABTETHER_WEBSVC_PORTSCAN_INCLUDE_LISTENING", "false")
 
 	wsc := &WebServiceCollector{
 		assetID: "asset-1",
