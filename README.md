@@ -10,7 +10,7 @@ Metrics. Logs. Alerts. Remote access. Actions. One URL.
 <br/>
 
 [![CI](https://img.shields.io/github/actions/workflow/status/labtether/labtether/ci.yml?style=flat-square&label=CI)](https://github.com/labtether/labtether/actions/workflows/ci.yml)
-[![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
+[![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square)](LICENSE)
 
@@ -113,14 +113,16 @@ Agents are optional — connectors like Proxmox and TrueNAS work without them. B
 <summary>🐧 <strong>Linux</strong></summary>
 <br/>
 
+Download the agent binary from [labtether-linux/releases](https://github.com/labtether/labtether-linux/releases) (amd64 or arm64), then enroll:
+
 ```bash
-curl -fsSL https://github.com/labtether/labtether-linux/releases/latest/download/labtether-agent-linux-amd64 \
-  -o /usr/local/bin/labtether-agent && chmod +x /usr/local/bin/labtether-agent
+chmod +x labtether-agent-linux-amd64
+sudo ./labtether-agent-linux-amd64 --hub wss://your-hub:8443/ws/agent --enrollment-token YOUR_TOKEN
 ```
 
-Enroll: `labtether-agent --hub wss://your-hub:8443/ws/agent --enrollment-token YOUR_TOKEN`
+Or use the hub's generated install command — it handles the download automatically.
 
-📖 [Full Linux setup guide →](https://labtether.com/docs/wiki/agents/linux)
+📖 [Full setup guide →](https://labtether.com/docs/install-upgrade/agent-install-commands-by-os)
 
 </details>
 
@@ -128,9 +130,9 @@ Enroll: `labtether-agent --hub wss://your-hub:8443/ws/agent --enrollment-token Y
 <summary>🍎 <strong>macOS</strong></summary>
 <br/>
 
-Download **LabTether Agent.app** from [Releases](https://github.com/labtether/labtether-mac/releases/latest). Drag to Applications and launch — the menu bar icon handles enrollment.
+Download **LabTether Agent.app** from [labtether-mac/releases](https://github.com/labtether/labtether-mac/releases). Drag to Applications and launch — the menu bar icon handles enrollment.
 
-📖 [Full macOS setup guide →](https://labtether.com/docs/wiki/agents/macos)
+📖 [Full setup guide →](https://labtether.com/docs/install-upgrade/agent-install-commands-by-os)
 
 </details>
 
@@ -138,9 +140,9 @@ Download **LabTether Agent.app** from [Releases](https://github.com/labtether/la
 <summary>🪟 <strong>Windows</strong></summary>
 <br/>
 
-Download **LabTether Agent** from [Releases](https://github.com/labtether/labtether-win/releases/latest) and run the installer. The system tray icon handles enrollment.
+Download **LabTether Agent** from [labtether-win/releases](https://github.com/labtether/labtether-win/releases) and run the installer. The system tray icon handles enrollment.
 
-📖 [Full Windows setup guide →](https://labtether.com/docs/wiki/agents/windows)
+📖 [Full setup guide →](https://labtether.com/docs/install-upgrade/agent-install-commands-by-os)
 
 </details>
 
@@ -176,9 +178,9 @@ LabTether pulls inventory, health, and telemetry from your infrastructure — no
 | 🖥️ **[Hub](https://github.com/labtether/labtether)** | Docker | The control plane. You're looking at it. |
 | 🐧 **[Linux Agent](https://github.com/labtether/labtether-linux)** | Linux | Telemetry, remote access, and actions. |
 | 🍎 **[macOS Agent](https://github.com/labtether/labtether-mac)** | macOS 13+ | Menu bar app with status and notifications. |
-| 🪟 **[Windows Agent](https://github.com/labtether/labtether-win)** | Windows 10+ | System tray app with Hyper-V and Windows Update. |
+| 🪟 **[Windows Agent](https://github.com/labtether/labtether-win)** | Windows 10+ | System tray app with enrollment and credential management. |
 | ⌨️ **[CLI](https://github.com/labtether/labtether-cli)** | Cross-platform | Manage your hub from the terminal. |
-| 📱 **iOS Companion** | iPhone / iPad | Coming soon — [labtether.com](https://labtether.com) |
+| 📱 **iOS Companion** | iPhone / iPad | Mobile fleet monitoring, push notifications, Live Activities. |
 
 ---
 
