@@ -315,6 +315,7 @@ jobs:
           sed -i 's/REPLACE_WITH_LONG_RANDOM_API_TOKEN/ci-api-token/g' .env
           sed -i 's|REPLACE_WITH_BASE64_32_BYTE_KEY|MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=|g' .env
           sed -i 's/REPLACE_WITH_STRONG_ADMIN_PASSWORD/ci-admin-pw/g' .env
+          echo 'LABTETHER_TLS_MODE=disabled' >> .env
 
       - name: Smoke test
         run: make smoke-test
