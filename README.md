@@ -1,55 +1,79 @@
-<p align="center">
-  <h1 align="center">LabTether</h1>
-  <p align="center">
-    <strong>Stop tab-hopping. Start operating.</strong>
-    <br />
-    The self-hosted control plane for homelabs that deserve better than a pile of browser tabs.
-  </p>
-</p>
+<div align="center">
 
-<p align="center">
-  <a href="https://github.com/labtether/labtether/actions/workflows/ci.yml"><img src="https://github.com/labtether/labtether/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <img src="https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go&logoColor=white" alt="Go" />
-  <img src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white" alt="Docker" />
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License" /></a>
-</p>
+# LabTether
 
-<p align="center">
-  <a href="https://labtether.com">Website</a> &bull;
-  <a href="https://labtether.com/docs">Documentation</a> &bull;
-  <a href="https://labtether.com/docs/wiki">Wiki</a> &bull;
-  <a href="CHANGELOG.md">Changelog</a>
-</p>
+### Stop tab-hopping. Start operating.
 
-<!-- TODO: Hero screenshot — dashboard-dark.png -->
+One control plane for your entire homelab.<br/>
+Metrics. Logs. Alerts. Remote access. Actions. One URL.
 
----
+<br/>
 
-## The Problem
+[![CI](https://img.shields.io/github/actions/workflow/status/labtether/labtether/ci.yml?style=flat-square&label=CI)](https://github.com/labtether/labtether/actions/workflows/ci.yml)
+[![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docs.docker.com/compose/)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square)](LICENSE)
 
-You run Proxmox, TrueNAS, Docker, maybe Home Assistant. Each has its own dashboard, its own alerts, its own way of telling you something is wrong. When a drive starts failing at 2am, you're opening five tabs trying to correlate what happened, when, and why.
+[Website](https://labtether.com) · [Docs](https://labtether.com/docs) · [Wiki](https://labtether.com/docs/wiki) · [Changelog](CHANGELOG.md)
 
-You've tried Grafana + Prometheus + Loki. It works — if you enjoy writing PromQL and maintaining yet another stack. For most homelab operators, that's trading one problem for another.
+</div>
 
-## The Fix
+<br/>
 
-LabTether puts everything in one place. Metrics, logs, alerts, incidents, remote access, and actions — one dashboard, one timeline, one URL.
-
-- **See everything** — Fleet health, telemetry, and logs from every node. No PromQL required.
-- **Fix things fast** — Remote terminal and desktop sessions directly from the browser. No SSH keys to manage.
-- **Know what changed** — Every action is logged. Every alert is correlated with metrics. Triage incidents from a single timeline.
-- **Manage it all** — Linux, Windows, macOS, FreeBSD. Proxmox, TrueNAS, Docker, Portainer, Home Assistant. One control plane.
-- **Own your data** — Self-hosted with Docker Compose + Postgres. Nothing phones home. Nothing leaves your network.
-
-<!-- TODO: Feature screenshots grid — dashboard, remote access, alerts, topology -->
+<!-- TODO: Replace with hero screenshot once demo is ready -->
+<!-- <p align="center"><img src="docs/images/dashboard-dark.png" width="900" /></p> -->
 
 ---
 
-## Quick Start
+## 🧩 The Problem
 
-Get LabTether running in under 5 minutes. You need Docker and Docker Compose.
+You run Proxmox, TrueNAS, Docker, maybe Home Assistant. Each has its own dashboard, its own alerts, its own way of telling you something is wrong.
 
-**1. Download the Compose file**
+When a drive starts failing at 2am, you're opening **five tabs** trying to piece together what happened.
+
+You've tried the Grafana + Prometheus + Loki stack. It works — if you enjoy writing PromQL queries and maintaining **yet another set of infrastructure** just to monitor your infrastructure.
+
+## 🔧 The Fix
+
+LabTether replaces the tab sprawl with **one dashboard, one timeline, one URL.**
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### 📊 See Everything
+Fleet health, telemetry, and logs from every node. CPU, memory, disk, network, temperature — no PromQL required.
+
+### 🖥️ Fix Things Fast
+Remote terminal and desktop sessions directly in the browser. No SSH keys, no VNC clients, no port forwarding.
+
+### 🔔 Know What Changed
+Every action is audit-logged. Every alert is correlated with metrics and logs. Triage from a single incident timeline.
+
+</td>
+<td width="50%" valign="top">
+
+### 🏗️ Manage It All
+Linux, Windows, macOS, FreeBSD. Proxmox, TrueNAS, Docker, Portainer, Home Assistant. One place.
+
+### 🔒 Own Your Data
+Self-hosted with Docker Compose + Postgres. Nothing phones home. Nothing leaves your network. Ever.
+
+### 🔄 Ship Updates Safely
+Plan maintenance with dry-run support, rollback awareness, and full audit trails across your fleet.
+
+</td>
+</tr>
+</table>
+
+---
+
+## 🚀 Quick Start
+
+> [!TIP]
+> You need **Docker** and **Docker Compose**. That's it.
+
+**1. Grab the Compose file**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/labtether/labtether/main/docker-compose.deploy.yml \
@@ -74,50 +98,55 @@ EOF
 docker compose up -d
 ```
 
-Open **https://localhost:8443** — the hub generates TLS certificates on first boot and walks you through setup.
+Open **https://localhost:8443** — TLS certificates are generated on first boot. The setup wizard walks you through the rest.
 
-> Full guide with Tailscale remote access, custom TLS, and multi-user setup at **[labtether.com/docs](https://labtether.com/docs)**
+> [!NOTE]
+> Full guide with **Tailscale remote access**, custom TLS, OIDC SSO, and multi-user setup at [labtether.com/docs](https://labtether.com/docs)
 
 ---
 
-## Add Your Nodes
+## 📡 Add Your Nodes
 
-Agents run on your machines and report back to the hub. They're optional — connectors like Proxmox and TrueNAS work without agents — but agents unlock remote access, deeper telemetry, and action execution.
+Agents are optional — connectors like Proxmox and TrueNAS work without them. But agents unlock **remote access**, deeper telemetry, and action execution.
 
 <details>
-<summary><strong>Linux</strong></summary>
+<summary>🐧 <strong>Linux</strong></summary>
+<br/>
 
 ```bash
 curl -fsSL https://github.com/labtether/labtether-linux/releases/latest/download/labtether-agent-linux-amd64 \
   -o /usr/local/bin/labtether-agent && chmod +x /usr/local/bin/labtether-agent
 ```
 
-Then enroll: `labtether-agent --hub wss://your-hub:8443/ws/agent --enrollment-token YOUR_TOKEN`
+Enroll: `labtether-agent --hub wss://your-hub:8443/ws/agent --enrollment-token YOUR_TOKEN`
 
-Full setup with systemd: [labtether.com/docs/wiki/agents/linux](https://labtether.com/docs/wiki/agents/linux)
-
-</details>
-
-<details>
-<summary><strong>macOS</strong></summary>
-
-Download **LabTether Agent.app** from [Releases](https://github.com/labtether/labtether-mac/releases/latest) — a menu bar app that handles enrollment, status, and notifications.
-
-Guide: [labtether.com/docs/wiki/agents/macos](https://labtether.com/docs/wiki/agents/macos)
+📖 [Full Linux setup guide →](https://labtether.com/docs/wiki/agents/linux)
 
 </details>
 
 <details>
-<summary><strong>Windows</strong></summary>
+<summary>🍎 <strong>macOS</strong></summary>
+<br/>
 
-Download **LabTether Agent** from [Releases](https://github.com/labtether/labtether-win/releases/latest) — a system tray app with auto-updates and service management.
+Download **LabTether Agent.app** from [Releases](https://github.com/labtether/labtether-mac/releases/latest). Drag to Applications and launch — the menu bar icon handles enrollment.
 
-Guide: [labtether.com/docs/wiki/agents/windows](https://labtether.com/docs/wiki/agents/windows)
+📖 [Full macOS setup guide →](https://labtether.com/docs/wiki/agents/macos)
 
 </details>
 
 <details>
-<summary><strong>FreeBSD</strong></summary>
+<summary>🪟 <strong>Windows</strong></summary>
+<br/>
+
+Download **LabTether Agent** from [Releases](https://github.com/labtether/labtether-win/releases/latest) and run the installer. The system tray icon handles enrollment.
+
+📖 [Full Windows setup guide →](https://labtether.com/docs/wiki/agents/windows)
+
+</details>
+
+<details>
+<summary>😈 <strong>FreeBSD</strong></summary>
+<br/>
 
 FreeBSD nodes are managed agentlessly via connectors. No agent install required.
 
@@ -125,28 +154,9 @@ FreeBSD nodes are managed agentlessly via connectors. No agent install required.
 
 ---
 
-## What You Get
+## 🔌 Integrations
 
-### Fleet Dashboard
-CPU, memory, disk, network, and temperature across every node — at a glance. Drill into any machine for full telemetry history.
-
-### Remote Access
-Open a terminal or desktop session to any agent-connected machine directly from the browser. WebRTC-powered, no port forwarding or VPN required (works great with Tailscale).
-
-### Alerts & Incidents
-Define alert rules from templates or custom conditions. When things break, triage from a single timeline that correlates metrics, logs, and changes.
-
-### Integrations
-Connect what you already run. LabTether pulls inventory, health, and telemetry from your infrastructure — not the other way around.
-
-### Update Runs
-Plan and execute maintenance across your fleet. Dry-run support, rollback awareness, and full audit trails.
-
----
-
-## Integrations
-
-<p>
+<p align="center">
   <img src="https://img.shields.io/badge/Proxmox%20VE-E57000?style=for-the-badge&logo=proxmox&logoColor=white" alt="Proxmox VE" />
   <img src="https://img.shields.io/badge/Proxmox%20Backup-E57000?style=for-the-badge&logo=proxmox&logoColor=white" alt="PBS" />
   <img src="https://img.shields.io/badge/TrueNAS-0095D5?style=for-the-badge&logo=truenas&logoColor=white" alt="TrueNAS" />
@@ -155,27 +165,27 @@ Plan and execute maintenance across your fleet. Dry-run support, rollback awaren
   <img src="https://img.shields.io/badge/Home%20Assistant-41BDF5?style=for-the-badge&logo=homeassistant&logoColor=white" alt="Home Assistant" />
 </p>
 
----
-
-## Ecosystem
-
-| | Platform | Description |
-|---|----------|-------------|
-| **[Hub](https://github.com/labtether/labtether)** | Docker | The control plane. You're looking at it. |
-| **[Linux Agent](https://github.com/labtether/labtether-linux)** | Linux | Telemetry, remote access, and actions for Linux machines. |
-| **[macOS Agent](https://github.com/labtether/labtether-mac)** | macOS 13+ | Menu bar app with status, settings, and notifications. |
-| **[Windows Agent](https://github.com/labtether/labtether-win)** | Windows 10+ | System tray app with Hyper-V and Windows Update support. |
-| **[CLI](https://github.com/labtether/labtether-cli)** | Cross-platform | Manage your hub from the command line. |
-| **iOS Companion** | iPhone / iPad | Coming to [labtether.com](https://labtether.com). |
+LabTether pulls inventory, health, and telemetry from your infrastructure — not the other way around. Connect what you already run.
 
 ---
 
-## Links
+## 🧰 Ecosystem
 
-| | |
-|---|---|
-| **Documentation** | [labtether.com/docs](https://labtether.com/docs) |
-| **Contributing** | [CONTRIBUTING.md](CONTRIBUTING.md) |
-| **Security** | [SECURITY.md](SECURITY.md) |
-| **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
-| **License** | [Apache 2.0](LICENSE) |
+| | Platform | What it does |
+|:---|:---------|:-------------|
+| 🖥️ **[Hub](https://github.com/labtether/labtether)** | Docker | The control plane. You're looking at it. |
+| 🐧 **[Linux Agent](https://github.com/labtether/labtether-linux)** | Linux | Telemetry, remote access, and actions. |
+| 🍎 **[macOS Agent](https://github.com/labtether/labtether-mac)** | macOS 13+ | Menu bar app with status and notifications. |
+| 🪟 **[Windows Agent](https://github.com/labtether/labtether-win)** | Windows 10+ | System tray app with Hyper-V and Windows Update. |
+| ⌨️ **[CLI](https://github.com/labtether/labtether-cli)** | Cross-platform | Manage your hub from the terminal. |
+| 📱 **iOS Companion** | iPhone / iPad | Coming soon — [labtether.com](https://labtether.com) |
+
+---
+
+<div align="center">
+
+**[Documentation](https://labtether.com/docs)** · **[Contributing](CONTRIBUTING.md)** · **[Security](SECURITY.md)** · **[Changelog](CHANGELOG.md)** · **[License](LICENSE)**
+
+Copyright 2026 LabTether · [Apache 2.0](LICENSE)
+
+</div>
