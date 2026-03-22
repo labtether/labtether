@@ -307,6 +307,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Prepare environment
+        run: cp .env.example .env
+
       - name: Smoke test
         run: make smoke-test
 
