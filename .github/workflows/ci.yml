@@ -318,11 +318,15 @@ jobs:
           sed -i 's/REPLACE_WITH_STRONG_ADMIN_PASSWORD/ci-admin-pw/g' .env
 
       - name: Smoke test
-        run: make smoke-test
+        run: ./scripts/smoke-test.sh --keep
 
       - name: Dump container logs on failure
         if: failure()
         run: docker compose logs --no-color 2>&1 | tail -100 || true
 
-      - name: Queue integration test
+      - name: Integration test
         run: make integration-test
+
+      - name: Tear down
+        if: always()
+        run: docker compose down || true
