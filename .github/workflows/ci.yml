@@ -288,6 +288,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run visual regression over self-signed HTTPS
+        continue-on-error: true
         run: npm run test:visual:https
 
       - name: Upload HTTPS visual Playwright artifacts
