@@ -96,10 +96,15 @@ func checkSameOrigin(r *http.Request) bool {
 	}
 
 	// A loopback Origin (localhost, 127.0.0.1, ::1) means the browser page was
-	// genuinely loaded from localhost — browsers always set Origin truthfully.
+	// genuinely loaded from localhost — browsers always set Origin truthfully
+	// and remote attackers cannot forge a loopback Origin header.
+	//
 	// This covers the dev-mode Next.js proxy where the browser connects to
 	// localhost:3000 and the proxy forwards to the backend on a different
-	// hostname (e.g. a Tailscale cert hostname or LAN IP).
+	// hostname (e.g. a Tailscale cert hostname or LAN IP). Restricting
+	// loopback origins behind DEV_MODE would break this common local
+	// development workflow with no security benefit — browsers enforce the
+	// Origin header at the protocol level, so spoofing is not possible.
 	if isLoopbackHostname(originHost) {
 		return true
 	}
@@ -243,6 +248,36 @@ func isNetworkOriginScheme(rawScheme string) bool {
 	default:
 		return false
 	}
+}
+
+// corsMiddleware adds explicit CORS response headers for requests whose
+// Origin passes the same-origin check (checkSameOrigin). Preflight OPTIONS
+// requests receive a 204 No Content immediately — before any downstream auth
+// middleware — so browsers can negotiate cross-origin access without
+// credentials.
+//
+// Vary: Origin is always set when an origin is echoed to ensure intermediate
+// caches do not serve a cached Access-Control-Allow-Origin for one origin to
+// a different origin.
+func (s *apiServer) corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if origin != "" && checkSameOrigin(r) {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Labtether-Token")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Max-Age", "86400")
+			w.Header().Add("Vary", "Origin")
+		}
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 func main() {
