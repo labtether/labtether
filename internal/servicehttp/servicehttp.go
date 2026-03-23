@@ -27,11 +27,11 @@ type Config struct {
 	BindAddress      string // optional: listener bind address (default 0.0.0.0)
 	AuthToken        string // #nosec G117 -- Runtime auth token config, not a hardcoded secret.
 	ExtraHandlers    map[string]http.HandlerFunc
-	TLSCertFile      string   // optional: path to TLS certificate file
-	TLSKeyFile       string   // optional: path to TLS private key file
-	DBPool           DBPinger // optional: if set, /healthz pings the DB
-	RedirectHTTPPort string   // if set, start an HTTP redirect listener on this port
-	HTTPSPort        int      // the HTTPS port to redirect to
+	TLSCertFile      string       // optional: path to TLS certificate file
+	TLSKeyFile       string       // optional: path to TLS private key file
+	DBPool           DBPinger     // optional: if set, /healthz pings the DB
+	RedirectHTTPPort string       // if set, start an HTTP redirect listener on this port
+	HTTPSPort        int          // the HTTPS port to redirect to
 	ReadinessCheck   func() error // optional: returns nil if ready, error if not
 	// GetCertificate is an optional TLS callback for dynamic certificate serving.
 	// When set alongside TLSCertFile/TLSKeyFile, it is assigned to

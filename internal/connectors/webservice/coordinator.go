@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
-	"github.com/labtether/labtether/internal/serviceregistry"
 	"github.com/labtether/labtether/internal/persistence"
+	"github.com/labtether/labtether/internal/serviceregistry"
 	"golang.org/x/sync/singleflight"
 )
 
