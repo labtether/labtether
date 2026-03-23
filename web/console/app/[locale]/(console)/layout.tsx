@@ -17,6 +17,7 @@ import { createSettingsProvider } from "../../components/palette/providers/setti
 import { createQuickConnectProvider } from "../../components/palette/providers/quick-connect";
 import { createRecentProvider } from "../../components/palette/providers/recent";
 import { createSnippetsProvider } from "../../components/palette/providers/snippets";
+import { DemoBanner } from "../../components/DemoBanner";
 import { Sidebar } from "../../components/Sidebar";
 import { CommandPalette } from "../../components/CommandPalette";
 import { MobileNavToggle, MobileNavOverlay, useMobileNav } from "../../components/MobileNav";
@@ -179,22 +180,25 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
 
 export default function ConsoleLayout({ children }: { children: React.ReactNode }) {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <StatusProvider>
-          <PaletteContextProvider>
-            <ConnectedAgentsProvider>
-              <DesktopSessionProvider>
-                <ToastProvider>
-                  <TipProvider>
-                    <ConsoleShell>{children}</ConsoleShell>
-                  </TipProvider>
-                </ToastProvider>
-              </DesktopSessionProvider>
-            </ConnectedAgentsProvider>
-          </PaletteContextProvider>
-        </StatusProvider>
-      </AuthProvider>
-    </ThemeProvider>
+    <>
+      <DemoBanner />
+      <ThemeProvider>
+        <AuthProvider>
+          <StatusProvider>
+            <PaletteContextProvider>
+              <ConnectedAgentsProvider>
+                <DesktopSessionProvider>
+                  <ToastProvider>
+                    <TipProvider>
+                      <ConsoleShell>{children}</ConsoleShell>
+                    </TipProvider>
+                  </ToastProvider>
+                </DesktopSessionProvider>
+              </ConnectedAgentsProvider>
+            </PaletteContextProvider>
+          </StatusProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </>
   );
 }

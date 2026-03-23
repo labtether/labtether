@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import createMiddleware from "next-intl/middleware";
-import { isMutationRequestOriginAllowed, isMutatingMethod, isProxyRequestAuthorized } from "./lib/proxyAuth";
+import { hasLabtetherSessionCookie, isMutationRequestOriginAllowed, isMutatingMethod, isProxyRequestAuthorized } from "./lib/proxyAuth";
 
 const locales = ["en", "de", "fr", "es", "zh"] as const;
 
@@ -13,6 +13,7 @@ const publicAPIPaths = new Set<string>([
   "/api/auth/providers",
   "/api/auth/oidc/start",
   "/api/auth/oidc/callback",
+  "/api/demo/session",
 ]);
 
 const handleI18nRouting = createMiddleware({
@@ -23,6 +24,15 @@ const handleI18nRouting = createMiddleware({
 
 export function proxy(request: NextRequest) {
   const { pathname } = new URL(request.url);
+
+  // Demo mode: auto-provision a session for unauthenticated page visits.
+  if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
+    const cookies = request.headers.get("cookie") ?? "";
+    if (!hasLabtetherSessionCookie(cookies) && !pathname.startsWith("/api/")) {
+      const redirect = encodeURIComponent(pathname);
+      return Response.redirect(new URL(`/api/demo/session?redirect=${redirect}`, request.url), 307);
+    }
+  }
 
   if (pathname.startsWith("/api/") || pathname.startsWith("/api")) {
     if (request.method === "OPTIONS") {
