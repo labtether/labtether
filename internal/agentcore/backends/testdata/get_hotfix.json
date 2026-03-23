@@ -1,8 +1,0 @@
-[
-  {"Source": "WIN-SERVER01", "Description": "Update", "HotFixID": "KB5034441", "InstalledBy": "NT AUTHORITY\\SYSTEM", "InstalledOn": "1/15/2024 12:00:00 AM"},
-  {"Source": "WIN-SERVER01", "Description": "Security Update", "HotFixID": "KB5033372", "InstalledBy": "NT AUTHORITY\\SYSTEM", "InstalledOn": "12/12/2023 12:00:00 AM"},
-  {"Source": "WIN-SERVER01", "Description": "Security Update", "HotFixID": "KB5031539", "InstalledBy": "NT AUTHORITY\\SYSTEM", "InstalledOn": "11/14/2023 12:00:00 AM"},
-  {"Source": "WIN-SERVER01", "Description": "Update", "HotFixID": "KB5028997", "InstalledBy": "NT AUTHORITY\\SYSTEM", "InstalledOn": "9/12/2023 12:00:00 AM"},
-  {"Source": "WIN-SERVER01", "Description": "Security Update", "HotFixID": "KB5025885", "InstalledBy": "NT AUTHORITY\\SYSTEM", "InstalledOn": "5/9/2023 12:00:00 AM"},
-  {"Source": "WIN-SERVER01", "Description": "Update", "HotFixID": "KB5012170", "InstalledBy": "", "InstalledOn": "8/9/2022 12:00:00 AM"}
-]
