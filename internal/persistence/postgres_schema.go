@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"sort"
 	"strconv"
@@ -33,10 +34,18 @@ func NewPostgresStore(ctx context.Context, databaseURL string) (*PostgresStore, 
 	if err != nil {
 		return nil, err
 	}
-	config.MaxConns = 10
-	config.MinConns = 2
-	config.MaxConnLifetime = 5 * time.Minute
-	config.MaxConnIdleTime = 1 * time.Minute
+	maxConns := envIntOrDefault("LABTETHER_DB_MAX_CONNS", 10)
+	minConns := envIntOrDefault("LABTETHER_DB_MIN_CONNS", 2)
+	lifetimeMin := envIntOrDefault("LABTETHER_DB_MAX_CONN_LIFETIME_MIN", 5)
+	idleMin := envIntOrDefault("LABTETHER_DB_MAX_CONN_IDLE_TIME_MIN", 1)
+
+	config.MaxConns = int32(maxConns)
+	config.MinConns = int32(minConns)
+	config.MaxConnLifetime = time.Duration(lifetimeMin) * time.Minute
+	config.MaxConnIdleTime = time.Duration(idleMin) * time.Minute
+
+	log.Printf("labtether db: pool max=%d min=%d lifetime=%dm idle=%dm",
+		maxConns, minConns, lifetimeMin, idleMin)
 	if config.ConnConfig.RuntimeParams == nil {
 		config.ConnConfig.RuntimeParams = make(map[string]string, 2)
 	}
@@ -74,6 +83,18 @@ func dbStatementTimeout() time.Duration {
 	parsed, err := time.ParseDuration(raw)
 	if err != nil || parsed <= 0 {
 		return defaultDBStatementTimeout
+	}
+	return parsed
+}
+
+func envIntOrDefault(key string, fallback int) int {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(raw)
+	if err != nil || parsed <= 0 {
+		return fallback
 	}
 	return parsed
 }

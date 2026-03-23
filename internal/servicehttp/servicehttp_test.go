@@ -1,10 +1,15 @@
 package servicehttp
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestSecurityHeadersMiddleware(t *testing.T) {
@@ -206,5 +211,120 @@ func TestBearerAuthMiddleware(t *testing.T) {
 	protected.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("healthz bypass status = %d, want %d", rec.Code, http.StatusNoContent)
+	}
+}
+
+// helper: start a servicehttp server on an ephemeral port and return its base URL.
+func startTestServer(t *testing.T, cfg Config) (baseURL string, cancel context.CancelFunc) {
+	t.Helper()
+
+	// Find a free port.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	ln.Close()
+
+	cfg.BindAddress = "127.0.0.1"
+	cfg.Port = fmt.Sprintf("%d", port)
+	if cfg.Name == "" {
+		cfg.Name = "test"
+	}
+
+	ctx, cancelFn := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() { errCh <- Run(ctx, cfg) }()
+
+	// Wait for the server to accept connections.
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		conn, dialErr := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 50*time.Millisecond)
+		if dialErr == nil {
+			conn.Close()
+			return fmt.Sprintf("http://127.0.0.1:%d", port), cancelFn
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancelFn()
+	t.Fatalf("server did not start within deadline")
+	return "", nil
+}
+
+func TestReadyz_NoCheckReturnsReady(t *testing.T) {
+	base, cancel := startTestServer(t, Config{})
+	defer cancel()
+
+	resp, err := http.Get(base + "/readyz")
+	if err != nil {
+		t.Fatalf("GET /readyz: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["ready"] != true {
+		t.Fatalf("ready = %v, want true", body["ready"])
+	}
+}
+
+func TestReadyz_CheckPassesReturnsReady(t *testing.T) {
+	base, cancel := startTestServer(t, Config{
+		ReadinessCheck: func() error { return nil },
+	})
+	defer cancel()
+
+	resp, err := http.Get(base + "/readyz")
+	if err != nil {
+		t.Fatalf("GET /readyz: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["ready"] != true {
+		t.Fatalf("ready = %v, want true", body["ready"])
+	}
+}
+
+func TestReadyz_CheckFailsReturns503(t *testing.T) {
+	base, cancel := startTestServer(t, Config{
+		ReadinessCheck: func() error {
+			return errors.New("database: connection refused")
+		},
+	})
+	defer cancel()
+
+	resp, err := http.Get(base + "/readyz")
+	if err != nil {
+		t.Fatalf("GET /readyz: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusServiceUnavailable)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["ready"] != false {
+		t.Fatalf("ready = %v, want false", body["ready"])
+	}
+	if body["error"] != "database: connection refused" {
+		t.Fatalf("error = %v, want %q", body["error"], "database: connection refused")
 	}
 }

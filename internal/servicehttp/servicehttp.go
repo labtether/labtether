@@ -32,6 +32,7 @@ type Config struct {
 	DBPool           DBPinger // optional: if set, /healthz pings the DB
 	RedirectHTTPPort string   // if set, start an HTTP redirect listener on this port
 	HTTPSPort        int      // the HTTPS port to redirect to
+	ReadinessCheck   func() error // optional: returns nil if ready, error if not
 	// GetCertificate is an optional TLS callback for dynamic certificate serving.
 	// When set alongside TLSCertFile/TLSKeyFile, it is assigned to
 	// tls.Config.GetCertificate so the server can hot-swap certs without restart.
@@ -71,6 +72,16 @@ func Run(ctx context.Context, cfg Config) error {
 	})
 
 	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		if cfg.ReadinessCheck != nil {
+			if err := cfg.ReadinessCheck(); err != nil {
+				WriteJSON(w, http.StatusServiceUnavailable, map[string]any{
+					"service": cfg.Name,
+					"ready":   false,
+					"error":   err.Error(),
+				})
+				return
+			}
+		}
 		WriteJSON(w, http.StatusOK, map[string]any{
 			"service": cfg.Name,
 			"ready":   true,
@@ -158,11 +169,14 @@ func Run(ctx context.Context, cfg Config) error {
 
 	go func() {
 		<-ctx.Done()
-		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		timeoutSec := envIntOrDefault("LABTETHER_SHUTDOWN_TIMEOUT_SECONDS", 15)
+		log.Printf("labtether: shutdown initiated, draining connections (timeout %ds)...", timeoutSec)
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Duration(timeoutSec)*time.Second)
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
 			log.Printf("%s graceful shutdown error: %v", cfg.Name, err)
 		}
+		log.Printf("labtether: shutdown complete")
 	}()
 
 	var listenErr error
@@ -333,4 +347,19 @@ func WriteError(w http.ResponseWriter, status int, message string) {
 		message = "An internal error occurred."
 	}
 	WriteJSON(w, status, map[string]any{"error": message})
+}
+
+// envIntOrDefault reads an environment variable as an integer, returning the
+// default value if the variable is unset or cannot be parsed.
+func envIntOrDefault(key string, defaultVal int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return defaultVal
+	}
+	var n int
+	if _, err := fmt.Sscanf(v, "%d", &n); err != nil {
+		log.Printf("labtether: invalid value for %s=%q, using default %d", key, v, defaultVal)
+		return defaultVal
+	}
+	return n
 }

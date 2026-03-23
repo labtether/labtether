@@ -300,6 +300,12 @@ func runHub(ctx context.Context) error {
 		HTTPSPort:        httpsPortInt,
 		ExtraHandlers:    handlers,
 		DBPool:           pgStore.Pool(),
+		ReadinessCheck: func() error {
+			if err := pgStore.Pool().Ping(ctx); err != nil {
+				return fmt.Errorf("database: %w", err)
+			}
+			return nil
+		},
 	}
 	if srv.tlsState.CertSwitcher != nil {
 		httpCfg.GetCertificate = srv.tlsState.CertSwitcher.GetCertificate

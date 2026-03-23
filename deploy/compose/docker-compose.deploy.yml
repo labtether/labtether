@@ -29,6 +29,11 @@ services:
     volumes:
       - labtether-bootstrap:/bootstrap:ro
       - postgres-data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-labtether} -d ${POSTGRES_DB:-labtether}"]
       interval: 5s
@@ -36,6 +41,9 @@ services:
       retries: 5
       start_period: 10s
 
+  # TLS: Built-in auto-provisioned certs renew automatically.
+  # For external certs, monitor expiration and renew before expiry.
+  # Check cert status: curl -k https://localhost:8443/api/v2/tls/info
   labtether:
     image: ${LABTETHER_HUB_IMAGE:?set LABTETHER_HUB_IMAGE in .env.deploy}
     restart: unless-stopped
@@ -72,6 +80,11 @@ services:
       - labtether-data:/data
       - labtether-ca:/ca
       - labtether-service-auth:/run/labtether
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/healthz"]
       interval: 10s
@@ -95,11 +108,21 @@ services:
     volumes:
       - labtether-ca:/ca:ro
       - labtether-service-auth:/run/labtether:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
 
   guacd:
     profiles: ["remote-desktop"]
     image: ${GUACD_IMAGE:?set GUACD_IMAGE in .env.deploy}
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
 
 volumes:
   labtether-bootstrap:
