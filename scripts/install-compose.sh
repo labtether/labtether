@@ -8,6 +8,7 @@ ENV_TEMPLATE="${ENV_TEMPLATE:-${PROJECT_ROOT}/.env.deploy.example}"
 
 VERSION="${LABTETHER_VERSION:-}"
 ENABLE_REMOTE_DESKTOP=0
+BUILD_LOCAL=0
 
 # shellcheck source=/dev/null
 source "${PROJECT_ROOT}/scripts/lib/script-common.sh"
@@ -24,6 +25,7 @@ Prepare a simple end-user Docker Compose deployment:
 
 Options:
   --version <tag>          Required LabTether release tag (example: v1.2.3)
+  --build                  Build images locally instead of pulling from registry
   --with-remote-desktop    Enable the optional guacd profile during install
   -h, --help               Show this help
 
@@ -39,6 +41,10 @@ while [[ $# -gt 0 ]]; do
     --version)
       VERSION="$2"
       shift 2
+      ;;
+    --build)
+      BUILD_LOCAL=1
+      shift
       ;;
     --with-remote-desktop)
       ENABLE_REMOTE_DESKTOP=1
@@ -132,8 +138,31 @@ fi
 
 cd "${PROJECT_ROOT}"
 
-log_info "Pulling release images..."
-docker compose "${compose_args[@]}" pull
+if [[ "${BUILD_LOCAL}" -eq 1 ]]; then
+  # When --build is used, override the image references to use local builds.
+  # The deploy compose expects pre-built images via env vars; we point them at
+  # locally-built tags and add the build compose overlay.
+  local_hub_image="labtether/hub:${VERSION}"
+  local_web_image="labtether/web-console:${VERSION}"
+  upsert_env_value "LABTETHER_HUB_IMAGE" "${local_hub_image}"
+  upsert_env_value "LABTETHER_WEB_IMAGE" "${local_web_image}"
+
+  log_info "Building hub image (${local_hub_image})..."
+  docker build -t "${local_hub_image}" \
+    --build-arg SERVICE_DIR=cmd/labtether \
+    --build-arg APP_VERSION="${VERSION}" \
+    -f build/go-service.Dockerfile .
+
+  log_info "Building web console image (${local_web_image})..."
+  docker build -t "${local_web_image}" \
+    -f web/console/Dockerfile web/console/
+
+  log_info "Pulling third-party images..."
+  docker compose "${compose_args[@]}" pull postgres
+else
+  log_info "Pulling release images..."
+  docker compose "${compose_args[@]}" pull
+fi
 
 log_info "Starting deploy stack..."
 docker compose "${compose_args[@]}" up -d
