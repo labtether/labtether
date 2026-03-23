@@ -156,8 +156,8 @@ func TestHandleDesktopStreamRejectsWaylandVNCFallbackWhenWebRTCUnavailable(t *te
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 for unsupported Wayland VNC fallback, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "wayland_pipewire_node_missing") {
-		t.Fatalf("expected upstream reason in response, got %s", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "An internal error occurred.") {
+		t.Fatalf("expected sanitized error message in response, got %s", rec.Body.String())
 	}
 }
 

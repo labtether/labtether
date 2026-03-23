@@ -657,8 +657,8 @@ func TestHandleProxmoxAssetsAdditionalErrorBranches(t *testing.T) {
 		req = httptest.NewRequest(http.MethodGet, "/proxmox/assets/proxmox-node-pve01/details", nil)
 		rec = httptest.NewRecorder()
 		sut.handleProxmoxAssets(rec, req)
-		if rec.Code != http.StatusBadGateway || !strings.Contains(rec.Body.String(), "failed to resolve proxmox asset") {
-			t.Fatalf("expected resolve error 502, got %d body=%s", rec.Code, strings.TrimSpace(rec.Body.String()))
+		if rec.Code != http.StatusBadGateway || !strings.Contains(rec.Body.String(), "An internal error occurred.") {
+			t.Fatalf("expected sanitized error 502, got %d body=%s", rec.Code, strings.TrimSpace(rec.Body.String()))
 		}
 	})
 
@@ -705,8 +705,8 @@ func TestHandleProxmoxAssetsAdditionalErrorBranches(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/proxmox/assets/proxmox-node-pve01/details", nil)
 		rec := httptest.NewRecorder()
 		sut.handleProxmoxAssets(rec, req)
-		if rec.Code != http.StatusBadGateway || !strings.Contains(rec.Body.String(), "failed to load proxmox details") {
-			t.Fatalf("expected details load error 502, got %d body=%s", rec.Code, strings.TrimSpace(rec.Body.String()))
+		if rec.Code != http.StatusBadGateway || !strings.Contains(rec.Body.String(), "An internal error occurred.") {
+			t.Fatalf("expected sanitized error 502, got %d body=%s", rec.Code, strings.TrimSpace(rec.Body.String()))
 		}
 
 		sut.assetStore = &proxmoxAssetStoreWithErrors{
@@ -716,8 +716,8 @@ func TestHandleProxmoxAssetsAdditionalErrorBranches(t *testing.T) {
 		req = httptest.NewRequest(http.MethodGet, "/proxmox/assets/proxmox-node-pve01/storage/insights", nil)
 		rec = httptest.NewRecorder()
 		sut.handleProxmoxAssets(rec, req)
-		if rec.Code != http.StatusBadGateway || !strings.Contains(rec.Body.String(), "failed to load proxmox storage insights") {
-			t.Fatalf("expected storage insights load error 502, got %d body=%s", rec.Code, strings.TrimSpace(rec.Body.String()))
+		if rec.Code != http.StatusBadGateway || !strings.Contains(rec.Body.String(), "An internal error occurred.") {
+			t.Fatalf("expected sanitized error 502, got %d body=%s", rec.Code, strings.TrimSpace(rec.Body.String()))
 		}
 		// Restore the underlying store so global cleanup hooks keep working.
 		sut.assetStore = sut.assetStore.(*proxmoxAssetStoreWithErrors).inner

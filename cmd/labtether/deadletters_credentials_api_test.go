@@ -193,8 +193,8 @@ func TestHandleAuditEventsReturnsServiceUnavailableWithoutAuditStore(t *testing.
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503, got %d", rec.Code)
 	}
-	if !strings.Contains(strings.ToLower(rec.Body.String()), "audit store unavailable") {
-		t.Fatalf("expected audit store unavailable message, got %s", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "An internal error occurred.") {
+		t.Fatalf("expected sanitized error message, got %s", rec.Body.String())
 	}
 }
 

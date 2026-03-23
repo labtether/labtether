@@ -119,7 +119,7 @@ func TestHandleHomeAssistantConnectorTestCredentialResolutionErrors(t *testing.T
 		if rec.Code != http.StatusServiceUnavailable {
 			t.Fatalf("expected 503, got %d", rec.Code)
 		}
-		assertErrorBodyContains(t, rec.Body.Bytes(), "credential store unavailable")
+		assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 	})
 
 	t.Run("credential not found", func(t *testing.T) {
@@ -211,7 +211,7 @@ func TestHandleHomeAssistantConnectorTestSuccessAndFailure(t *testing.T) {
 		if rec.Code != http.StatusBadGateway {
 			t.Fatalf("expected 502, got %d body=%s", rec.Code, rec.Body.String())
 		}
-		assertErrorBodyContains(t, rec.Body.Bytes(), "home assistant api returned 502")
+		assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 		if strings.Contains(rec.Body.String(), leakedSecret) {
 			t.Fatalf("expected response to redact leaked token, got %s", rec.Body.String())
 		}

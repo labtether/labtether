@@ -94,7 +94,7 @@ func TestHandleTrueNASAssetsAdditionalErrors(t *testing.T) {
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 when log store unavailable, got %d", rec.Code)
 	}
-	assertErrorBodyContains(t, rec.Body.Bytes(), "log store unavailable")
+	assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 }
 
 func TestWriteTrueNASResolveErrorDefaultBranch(t *testing.T) {
@@ -103,7 +103,7 @@ func TestWriteTrueNASResolveErrorDefaultBranch(t *testing.T) {
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 for generic resolve error, got %d", rec.Code)
 	}
-	assertErrorBodyContains(t, rec.Body.Bytes(), "upstream failed")
+	assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 }
 
 func TestResolveTrueNASAssetRuntimeFallbackAndError(t *testing.T) {
@@ -649,7 +649,7 @@ func TestTrueNASAPIHandlersAdditionalBranchCoverage(t *testing.T) {
 		if rec.Code != http.StatusBadGateway {
 			t.Fatalf("expected 502 for log query failure, got %d", rec.Code)
 		}
-		assertErrorBodyContains(t, rec.Body.Bytes(), "failed to load truenas events")
+		assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 	})
 
 	t.Run("smart handler error and warning paths", func(t *testing.T) {

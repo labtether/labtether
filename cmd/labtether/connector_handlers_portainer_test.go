@@ -97,7 +97,7 @@ func TestHandlePortainerConnectorTestCredentialResolutionErrors(t *testing.T) {
 		if rec.Code != http.StatusServiceUnavailable {
 			t.Fatalf("expected 503, got %d", rec.Code)
 		}
-		assertErrorBodyContains(t, rec.Body.Bytes(), "credential store unavailable")
+		assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 	})
 
 	t.Run("credential not found", func(t *testing.T) {
@@ -255,7 +255,7 @@ func TestHandlePortainerConnectorTestFailsWhenNoEndpointsVisible(t *testing.T) {
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 when no endpoints are visible, got %d body=%s", rec.Code, rec.Body.String())
 	}
-	assertErrorBodyContains(t, rec.Body.Bytes(), "no endpoints are visible")
+	assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 }
 
 func TestHandlePortainerConnectorTestDecryptFailure(t *testing.T) {
@@ -358,7 +358,7 @@ func TestHandlePortainerConnectorTestUpstreamFailure(t *testing.T) {
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502, got %d", rec.Code)
 	}
-	assertErrorBodyContains(t, rec.Body.Bytes(), "portainer api returned 502")
+	assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 }
 
 func TestHandlePortainerConnectorTestUpstreamFailureRedactsSecret(t *testing.T) {
@@ -384,7 +384,7 @@ func TestHandlePortainerConnectorTestUpstreamFailureRedactsSecret(t *testing.T) 
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502, got %d body=%s", rec.Code, rec.Body.String())
 	}
-	assertErrorBodyContains(t, rec.Body.Bytes(), "portainer api returned 502")
+	assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 	if strings.Contains(rec.Body.String(), leakedSecret) {
 		t.Fatalf("expected response to redact leaked secret, got %s", rec.Body.String())
 	}
@@ -488,7 +488,7 @@ func TestHandleConnectorActionsPortainerDiscover(t *testing.T) {
 		if rec.Code != http.StatusBadGateway {
 			t.Fatalf("expected 502, got %d", rec.Code)
 		}
-		assertErrorBodyContains(t, rec.Body.Bytes(), "discover failed")
+		assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 	})
 
 	t.Run("discover success", func(t *testing.T) {
@@ -560,7 +560,7 @@ func TestHandleConnectorActionsPortainerHealth(t *testing.T) {
 		if rec.Code != http.StatusBadGateway {
 			t.Fatalf("expected 502, got %d", rec.Code)
 		}
-		assertErrorBodyContains(t, rec.Body.Bytes(), "health check failed")
+		assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 	})
 
 	t.Run("health success", func(t *testing.T) {
@@ -675,7 +675,7 @@ func TestHandleConnectorActionsPortainerActionsAndExecute(t *testing.T) {
 		if rec.Code != http.StatusBadGateway {
 			t.Fatalf("expected 502, got %d", rec.Code)
 		}
-		assertErrorBodyContains(t, rec.Body.Bytes(), "action execution failed")
+		assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 	})
 
 	t.Run("execute success and eof decode path", func(t *testing.T) {

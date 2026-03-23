@@ -184,8 +184,8 @@ func TestMetricsOverviewGroupFilterReturnsServiceUnavailableWithoutGroupStore(t 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 when group store is unavailable, got %d", rec.Code)
 	}
-	if !strings.Contains(strings.ToLower(rec.Body.String()), "group store unavailable") {
-		t.Fatalf("expected group store unavailable error, got %s", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "An internal error occurred.") {
+		t.Fatalf("expected sanitized error message, got %s", rec.Body.String())
 	}
 }
 
@@ -200,8 +200,8 @@ func TestLogsQueryGroupFilterReturnsServiceUnavailableWithoutGroupStore(t *testi
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 when group store is unavailable, got %d", rec.Code)
 	}
-	if !strings.Contains(strings.ToLower(rec.Body.String()), "group store unavailable") {
-		t.Fatalf("expected group store unavailable error, got %s", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "An internal error occurred.") {
+		t.Fatalf("expected sanitized error message, got %s", rec.Body.String())
 	}
 }
 
@@ -216,8 +216,8 @@ func TestLogSourcesGroupFilterReturnsServiceUnavailableWithoutGroupStore(t *test
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 when group store is unavailable, got %d", rec.Code)
 	}
-	if !strings.Contains(strings.ToLower(rec.Body.String()), "group store unavailable") {
-		t.Fatalf("expected group store unavailable error, got %s", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "An internal error occurred.") {
+		t.Fatalf("expected sanitized error message, got %s", rec.Body.String())
 	}
 }
 
@@ -231,8 +231,8 @@ func TestMetricsHandlersReturnServiceUnavailableWithoutStores(t *testing.T) {
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 when asset store is unavailable, got %d", rec.Code)
 	}
-	if !strings.Contains(strings.ToLower(rec.Body.String()), "asset store unavailable") {
-		t.Fatalf("expected asset store unavailable error, got %s", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "An internal error occurred.") {
+		t.Fatalf("expected sanitized error message, got %s", rec.Body.String())
 	}
 
 	sut = newTestAPIServer(t)
@@ -243,8 +243,8 @@ func TestMetricsHandlersReturnServiceUnavailableWithoutStores(t *testing.T) {
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 when telemetry store is unavailable, got %d", rec.Code)
 	}
-	if !strings.Contains(strings.ToLower(rec.Body.String()), "telemetry store unavailable") {
-		t.Fatalf("expected telemetry store unavailable error, got %s", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "An internal error occurred.") {
+		t.Fatalf("expected sanitized error message, got %s", rec.Body.String())
 	}
 
 	sut = newTestAPIServer(t)
@@ -255,8 +255,8 @@ func TestMetricsHandlersReturnServiceUnavailableWithoutStores(t *testing.T) {
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 when asset store is unavailable, got %d", rec.Code)
 	}
-	if !strings.Contains(strings.ToLower(rec.Body.String()), "asset store unavailable") {
-		t.Fatalf("expected asset store unavailable error, got %s", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "An internal error occurred.") {
+		t.Fatalf("expected sanitized error message, got %s", rec.Body.String())
 	}
 
 	sut = newTestAPIServer(t)
@@ -267,7 +267,7 @@ func TestMetricsHandlersReturnServiceUnavailableWithoutStores(t *testing.T) {
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 when telemetry store is unavailable, got %d", rec.Code)
 	}
-	if !strings.Contains(strings.ToLower(rec.Body.String()), "telemetry store unavailable") {
-		t.Fatalf("expected telemetry store unavailable error, got %s", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "An internal error occurred.") {
+		t.Fatalf("expected sanitized error message, got %s", rec.Body.String())
 	}
 }

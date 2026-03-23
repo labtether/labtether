@@ -68,7 +68,7 @@ func TestHandlePBSTaskRoutesAndHandlerGuards(t *testing.T) {
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 for status runtime unavailable, got %d", rec.Code)
 	}
-	assertErrorBodyContains(t, rec.Body.Bytes(), "pbs runtime unavailable")
+	assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 
 	req = httptest.NewRequest(http.MethodPost, "/pbs/tasks/node/upid/log", nil)
 	rec = httptest.NewRecorder()
@@ -97,7 +97,7 @@ func TestHandlePBSTaskRoutesAndHandlerGuards(t *testing.T) {
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 for log runtime unavailable, got %d", rec.Code)
 	}
-	assertErrorBodyContains(t, rec.Body.Bytes(), "pbs runtime unavailable")
+	assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 
 	req = httptest.NewRequest(http.MethodGet, "/pbs/tasks/node/upid/stop", nil)
 	rec = httptest.NewRecorder()
@@ -129,7 +129,7 @@ func TestHandlePBSTaskRoutesAndHandlerGuards(t *testing.T) {
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 for stop runtime unavailable, got %d", rec.Code)
 	}
-	assertErrorBodyContains(t, rec.Body.Bytes(), "pbs runtime unavailable")
+	assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 }
 
 func TestHandlePBSTaskHandlersUpstreamErrorsAndLogLimits(t *testing.T) {
@@ -157,7 +157,7 @@ func TestHandlePBSTaskHandlersUpstreamErrorsAndLogLimits(t *testing.T) {
 		if rec.Code != http.StatusBadGateway {
 			t.Fatalf("expected 502 for upstream status error, got %d", rec.Code)
 		}
-		assertErrorBodyContains(t, rec.Body.Bytes(), "failed to fetch pbs task status")
+		assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 	})
 
 	t.Run("log upstream failure", func(t *testing.T) {
@@ -179,7 +179,7 @@ func TestHandlePBSTaskHandlersUpstreamErrorsAndLogLimits(t *testing.T) {
 		if rec.Code != http.StatusBadGateway {
 			t.Fatalf("expected 502 for upstream log error, got %d", rec.Code)
 		}
-		assertErrorBodyContains(t, rec.Body.Bytes(), "failed to fetch pbs task log")
+		assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 	})
 
 	t.Run("stop upstream failure", func(t *testing.T) {
@@ -202,7 +202,7 @@ func TestHandlePBSTaskHandlersUpstreamErrorsAndLogLimits(t *testing.T) {
 		if rec.Code != http.StatusBadGateway {
 			t.Fatalf("expected 502 for upstream stop error, got %d", rec.Code)
 		}
-		assertErrorBodyContains(t, rec.Body.Bytes(), "failed to stop pbs task")
+		assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 	})
 
 	t.Run("log limit clamp to 2000", func(t *testing.T) {
@@ -344,7 +344,7 @@ func TestHandlePBSTaskHandlersRequireCollectorWhenMultipleCollectors(t *testing.
 			if rec.Code != http.StatusBadGateway {
 				t.Fatalf("expected 502 when collector_id missing under multi-collector setup, got %d body=%s", rec.Code, rec.Body.String())
 			}
-			assertErrorBodyContains(t, rec.Body.Bytes(), "collector_id is required when multiple active pbs collectors are configured")
+			assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 		})
 	}
 
@@ -391,7 +391,7 @@ func TestHandlePBSAssetsGuardAndErrorBranches(t *testing.T) {
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 when runtime missing, got %d", rec.Code)
 	}
-	assertErrorBodyContains(t, rec.Body.Bytes(), "failed to load pbs runtime")
+	assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -443,7 +443,7 @@ func TestHandlePBSAssetsGuardAndErrorBranches(t *testing.T) {
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 when detail load fails, got %d", rec.Code)
 	}
-	assertErrorBodyContains(t, rec.Body.Bytes(), "failed to load pbs details")
+	assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 }
 
 func TestLoadPBSAssetDetailsDatastoreAndServerBranches(t *testing.T) {
