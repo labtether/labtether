@@ -24,7 +24,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push hub image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: build/go-service.Dockerfile
@@ -38,7 +38,7 @@ jobs:
             SERVICE_DIR=cmd/labtether
 
       - name: Build and push web console image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: web/console
           file: web/console/Dockerfile
