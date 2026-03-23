@@ -113,8 +113,8 @@ func TestHandleFileDownloadFirstPayloadTimeoutReturnsGatewayTimeout(t *testing.T
 	if rec.Code != http.StatusGatewayTimeout {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "agent did not respond in time") {
-		t.Fatalf("expected timeout error, got %s", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "An internal error occurred.") {
+		t.Fatalf("expected sanitized error message, got %s", rec.Body.String())
 	}
 	if got := rec.Header().Get("Content-Disposition"); got != "" {
 		t.Fatalf("unexpected content disposition on timeout: %q", got)

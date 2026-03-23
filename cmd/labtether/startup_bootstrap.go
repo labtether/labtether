@@ -11,6 +11,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -280,6 +281,14 @@ func runHub(ctx context.Context) error {
 	// so that compression is only applied to regular JSON API responses.
 	for path, h := range handlers {
 		handlers[path] = gzipMiddleware(h).ServeHTTP
+	}
+
+	// Wrap every handler with CORS middleware. This runs as the outermost
+	// layer so that OPTIONS preflight requests receive proper CORS headers
+	// and a 204 response without passing through auth middleware.
+	for path, h := range handlers {
+		wrapped := srv.corsMiddleware(http.HandlerFunc(h))
+		handlers[path] = wrapped.ServeHTTP
 	}
 
 	httpCfg := servicehttp.Config{

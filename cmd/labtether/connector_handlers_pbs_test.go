@@ -70,7 +70,7 @@ func TestHandlePBSConnectorTestCredentialResolutionErrors(t *testing.T) {
 		if rec.Code != http.StatusServiceUnavailable {
 			t.Fatalf("expected 503, got %d", rec.Code)
 		}
-		assertErrorBodyContains(t, rec.Body.Bytes(), "credential store unavailable")
+		assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 	})
 
 	t.Run("credential not found", func(t *testing.T) {
@@ -163,7 +163,7 @@ func TestHandlePBSConnectorTestSuccessAndFailure(t *testing.T) {
 		if rec.Code != http.StatusBadGateway {
 			t.Fatalf("expected 502, got %d body=%s", rec.Code, rec.Body.String())
 		}
-		assertErrorBodyContains(t, rec.Body.Bytes(), "pbs api returned 502")
+		assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 	})
 
 	t.Run("upstream health failure redacts token secret", func(t *testing.T) {
@@ -185,7 +185,7 @@ func TestHandlePBSConnectorTestSuccessAndFailure(t *testing.T) {
 		if rec.Code != http.StatusBadGateway {
 			t.Fatalf("expected 502, got %d body=%s", rec.Code, rec.Body.String())
 		}
-		assertErrorBodyContains(t, rec.Body.Bytes(), "pbs api returned 502")
+		assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 		if strings.Contains(rec.Body.String(), leakedSecret) {
 			t.Fatalf("expected response to redact leaked token secret, got %s", rec.Body.String())
 		}
@@ -234,7 +234,7 @@ func TestHandlePBSConnectorTestAdditionalBranches(t *testing.T) {
 		if rec.Code != http.StatusBadGateway {
 			t.Fatalf("expected 502, got %d body=%s", rec.Code, rec.Body.String())
 		}
-		assertErrorBodyContains(t, rec.Body.Bytes(), "pbs ping did not return pong=true")
+		assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 	})
 
 	t.Run("version request failure", func(t *testing.T) {
@@ -262,7 +262,7 @@ func TestHandlePBSConnectorTestAdditionalBranches(t *testing.T) {
 		if rec.Code != http.StatusBadGateway {
 			t.Fatalf("expected 502, got %d body=%s", rec.Code, rec.Body.String())
 		}
-		assertErrorBodyContains(t, rec.Body.Bytes(), "pbs api returned 502")
+		assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 	})
 
 	t.Run("release falls back to version field", func(t *testing.T) {

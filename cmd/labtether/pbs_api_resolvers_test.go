@@ -44,7 +44,7 @@ func TestWritePBSResolveErrorBranches(t *testing.T) {
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 for generic resolve error, got %d", rec.Code)
 	}
-	assertErrorBodyContains(t, rec.Body.Bytes(), "upstream failure")
+	assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 }
 
 func TestResolvePBSAssetBranches(t *testing.T) {

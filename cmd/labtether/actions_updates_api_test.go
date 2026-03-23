@@ -447,8 +447,8 @@ func TestActionAndUpdateGroupFiltersReturnServiceUnavailableWithoutGroupStore(t 
 	if actionRec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected action runs group filter to return 503 without group store, got %d", actionRec.Code)
 	}
-	if !strings.Contains(strings.ToLower(actionRec.Body.String()), "group store unavailable") {
-		t.Fatalf("expected group store unavailable message, got %s", actionRec.Body.String())
+	if !strings.Contains(actionRec.Body.String(), "An internal error occurred.") {
+		t.Fatalf("expected sanitized error message, got %s", actionRec.Body.String())
 	}
 
 	updateReq := httptest.NewRequest(http.MethodGet, "/updates/runs?group_id=group-1", nil)
@@ -457,7 +457,7 @@ func TestActionAndUpdateGroupFiltersReturnServiceUnavailableWithoutGroupStore(t 
 	if updateRec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected update runs group filter to return 503 without group store, got %d", updateRec.Code)
 	}
-	if !strings.Contains(strings.ToLower(updateRec.Body.String()), "group store unavailable") {
-		t.Fatalf("expected group store unavailable message, got %s", updateRec.Body.String())
+	if !strings.Contains(updateRec.Body.String(), "An internal error occurred.") {
+		t.Fatalf("expected sanitized error message, got %s", updateRec.Body.String())
 	}
 }

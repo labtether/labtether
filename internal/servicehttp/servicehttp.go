@@ -325,6 +325,12 @@ func WriteJSON(w http.ResponseWriter, status int, payload any) {
 }
 
 // WriteError writes a standard JSON error response.
+// For 5xx responses, the original message is logged server-side and a generic
+// message is returned to the client to avoid leaking internal details.
 func WriteError(w http.ResponseWriter, status int, message string) {
+	if status >= 500 {
+		log.Printf("[error-sanitized] %d %s", status, message)
+		message = "An internal error occurred."
+	}
 	WriteJSON(w, status, map[string]any{"error": message})
 }

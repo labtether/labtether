@@ -387,8 +387,8 @@ func TestRetentionSettingsReturnServiceUnavailableWithoutRetentionStore(t *testi
 	if getRec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503, got %d", getRec.Code)
 	}
-	if !strings.Contains(strings.ToLower(getRec.Body.String()), "retention settings unavailable") {
-		t.Fatalf("expected retention settings unavailable message, got %s", getRec.Body.String())
+	if !strings.Contains(getRec.Body.String(), "An internal error occurred.") {
+		t.Fatalf("expected sanitized error message, got %s", getRec.Body.String())
 	}
 
 	updateReq := httptest.NewRequest(http.MethodPost, "/settings/retention", bytes.NewReader([]byte(`{"preset":"compact"}`)))

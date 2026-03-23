@@ -22,8 +22,8 @@ func TestHandleAuthLoginReturnsServiceUnavailableWithoutAuthStore(t *testing.T) 
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected status 503, got %d", rr.Code)
 	}
-	if !strings.Contains(rr.Body.String(), "authentication unavailable") {
-		t.Fatalf("expected authentication unavailable error, got %q", rr.Body.String())
+	if !strings.Contains(rr.Body.String(), "An internal error occurred.") {
+		t.Fatalf("expected sanitized error message, got %q", rr.Body.String())
 	}
 }
 
@@ -88,7 +88,7 @@ func TestHandleAuthUsersReturnsServiceUnavailableWithoutAuthStore(t *testing.T) 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503, got %d", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "authentication unavailable") {
-		t.Fatalf("expected authentication unavailable error, got %q", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "An internal error occurred.") {
+		t.Fatalf("expected sanitized error message, got %q", rec.Body.String())
 	}
 }

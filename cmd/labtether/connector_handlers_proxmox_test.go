@@ -31,7 +31,7 @@ func TestHandleProxmoxConnectorTestRedactsTokenSecret(t *testing.T) {
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502, got %d body=%s", rec.Code, rec.Body.String())
 	}
-	assertErrorBodyContains(t, rec.Body.Bytes(), "proxmox api returned 502")
+	assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 	if strings.Contains(rec.Body.String(), leakedSecret) {
 		t.Fatalf("expected response to redact leaked token secret, got %s", rec.Body.String())
 	}
@@ -59,7 +59,7 @@ func TestHandleProxmoxConnectorTestRedactsPassword(t *testing.T) {
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502, got %d body=%s", rec.Code, rec.Body.String())
 	}
-	assertErrorBodyContains(t, rec.Body.Bytes(), "ticket auth failed")
+	assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 	if strings.Contains(rec.Body.String(), leakedPassword) {
 		t.Fatalf("expected response to redact leaked password, got %s", rec.Body.String())
 	}
