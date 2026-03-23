@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { TerminalSquare, Radio, Maximize } from "lucide-react";
 import { usePaletteRegister, type PaletteProvider } from "../../../contexts/PaletteContext";
@@ -10,7 +11,6 @@ import { useTerminalSnippets } from "../../../hooks/useTerminalSnippets";
 import { useTerminalWorkspaceTabUI } from "../../../hooks/useTerminalWorkspaceTabUI";
 import SnippetPicker from "../../../components/terminal/SnippetPicker";
 import SessionsPanel from "../../../components/terminal/SessionsPanel";
-import ScrollbackViewer from "../../../components/terminal/ScrollbackViewer";
 import { getThemeById } from "../../../terminal/themes";
 import { getFontById } from "../../../terminal/fonts";
 import WorkspaceGrid from "../../../components/terminal/WorkspaceGrid";
@@ -20,6 +20,18 @@ import SettingsPanel from "../../../components/terminal/SettingsPanel";
 import TerminalWorkspaceHeader from "../../../components/terminal/TerminalWorkspaceHeader";
 import type { XTerminalHandle } from "../../../components/XTerminal";
 import type { WorkspacePane, PanelSizes } from "../../../hooks/useWorkspaceTabs";
+
+const ScrollbackViewer = dynamic(
+  () => import("../../../components/terminal/ScrollbackViewer"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-full">
+        <span className="text-muted-foreground">Loading scrollback viewer...</span>
+      </div>
+    ),
+  },
+);
 
 const EMPTY_PANES: WorkspacePane[] = [];
 
