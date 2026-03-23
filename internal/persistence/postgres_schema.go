@@ -2,6 +2,8 @@ package persistence
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -128,13 +130,20 @@ func (s *PostgresStore) ensureSchema(ctx context.Context) error {
 		return err
 	}
 
+	// Add checksum column to existing deployments that pre-date this column.
+	// NULL checksum means the migration was applied before checksum tracking was
+	// introduced; those rows are skipped during verification (no false positives).
+	if _, err := conn.Exec(ctx, `ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS checksum TEXT`); err != nil {
+		return err
+	}
+
 	migrations, err := normalizedSchemaMigrations(postgresSchemaMigrations())
 	if err != nil {
 		return err
 	}
 
 	for _, migration := range migrations {
-		if err := applySchemaMigration(ctx, conn, migration); err != nil {
+		if err := applyOrVerifySchemaMigration(ctx, conn, migration); err != nil {
 			return err
 		}
 	}
@@ -165,12 +174,58 @@ func normalizedSchemaMigrations(migrations []schemaMigration) ([]schemaMigration
 	return sorted, nil
 }
 
-func applySchemaMigration(ctx context.Context, conn *pgxpool.Conn, migration schemaMigration) error {
-	var alreadyApplied bool
-	if err := conn.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE version = $1)`, migration.Version).Scan(&alreadyApplied); err != nil {
-		return err
+// schemaMigrationChecksum computes a stable SHA-256 hex digest over all SQL
+// statements in a migration.  The digest is stored when a migration is first
+// applied and re-verified on every subsequent startup.  A mismatch indicates
+// that the migration source code was modified after being applied, which is a
+// configuration error — migrations must be append-only.
+func schemaMigrationChecksum(migration schemaMigration) string {
+	h := sha256.New()
+	for _, stmt := range migration.Statements {
+		h.Write([]byte(stmt))
+		h.Write([]byte{0}) // null-byte separator so adjacent statements don't merge
 	}
-	if alreadyApplied {
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func applyOrVerifySchemaMigration(ctx context.Context, conn *pgxpool.Conn, migration schemaMigration) error {
+	// Query both existence and stored checksum in one round-trip.
+	var (
+		exists           bool
+		storedChecksum   *string // NULL when row pre-dates checksum column
+	)
+	if err := conn.QueryRow(ctx,
+		`SELECT TRUE, checksum FROM schema_migrations WHERE version = $1`,
+		migration.Version,
+	).Scan(&exists, &storedChecksum); err != nil {
+		// pgx returns an error on no rows; treat that as not-yet-applied.
+		exists = false
+	}
+
+	if exists {
+		// Verify checksum for already-applied migrations that have one recorded.
+		// Rows with a NULL checksum were applied before checksum tracking existed;
+		// backfill the checksum now so future startups can verify them.
+		want := schemaMigrationChecksum(migration)
+		if storedChecksum == nil {
+			if _, err := conn.Exec(ctx,
+				`UPDATE schema_migrations SET checksum = $1 WHERE version = $2`,
+				want, migration.Version,
+			); err != nil {
+				return fmt.Errorf("schema migration v%d (%s): backfill checksum: %w",
+					migration.Version, migration.Name, err)
+			}
+			log.Printf("labtether: schema migration v%d (%s): checksum backfilled",
+				migration.Version, migration.Name)
+		} else if *storedChecksum != want {
+			return fmt.Errorf(
+				"schema migration v%d (%s) has been modified after being applied "+
+					"(stored checksum %s, computed %s) — "+
+					"migrations are append-only; restore the original SQL statements "+
+					"or consult docs/internal/UPGRADING.md for rollback instructions",
+				migration.Version, migration.Name, *storedChecksum, want,
+			)
+		}
 		return nil
 	}
 
@@ -189,10 +244,11 @@ func applySchemaMigration(ctx context.Context, conn *pgxpool.Conn, migration sch
 	}
 
 	if _, err := tx.Exec(ctx,
-		`INSERT INTO schema_migrations (version, name, applied_at) VALUES ($1, $2, $3)`,
+		`INSERT INTO schema_migrations (version, name, applied_at, checksum) VALUES ($1, $2, $3, $4)`,
 		migration.Version,
 		migration.Name,
 		time.Now().UTC(),
+		schemaMigrationChecksum(migration),
 	); err != nil {
 		return err
 	}
