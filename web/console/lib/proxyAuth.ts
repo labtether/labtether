@@ -15,7 +15,9 @@ export function hasLabtetherSessionCookie(cookieHeader: string | null): boolean 
   if (!cookieHeader) {
     return false;
   }
-  return /(?:^|;\s*)labtether_session=/.test(cookieHeader);
+  return cookieHeader.split(";").some(
+    (c) => c.trim().startsWith("labtether_session=")
+  );
 }
 
 export function isTrustedServiceProxyPath(pathname: string): boolean {
@@ -90,7 +92,11 @@ export function isMutationRequestOriginAllowed(request: RequestLike): boolean {
 
   const hasSession = hasLabtetherSessionCookie(request.headers.get("cookie"));
   if (!hasSession && hasServiceModeAuthHeader(request.headers)) {
-    return true;
+    const origin = request.headers.get("origin");
+    if (!origin) {
+      return true; // Non-browser client (CLI, agent) — no Origin header
+    }
+    // Browser with service token — fall through to origin validation below
   }
 
   const originHeader = request.headers.get("origin")?.trim() ?? "";
