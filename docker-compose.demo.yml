@@ -1,13 +1,23 @@
 # docker-compose.demo.yml — demo mode overlay
-# Usage: docker compose -f docker-compose.deploy.yml -f docker-compose.demo.yml up -d
+# Usage: docker compose --env-file .env.deploy -f deploy/compose/docker-compose.deploy.yml -f docker-compose.demo.yml up -d
+#
+# Designed for deployment behind Cloudflare proxy:
+# - Console exposed on port 80 (Cloudflare terminates TLS)
+# - Hub TLS disabled (internal only, not exposed)
+# - Hub HTTP bound to localhost only (console proxies API calls)
 services:
   labtether:
     environment:
       - LABTETHER_DEMO_MODE=true
       - LABTETHER_DEMO_CONFIRM=yes-this-is-a-demo-instance
+      - LABTETHER_TLS_MODE=disabled
+    ports:
+      - "127.0.0.1:8080:8080"
     volumes:
       - ./scripts/demo-seed.sql:/scripts/demo-seed.sql:ro
 
   web-console:
     environment:
       - NEXT_PUBLIC_DEMO_MODE=true
+    ports:
+      - "0.0.0.0:80:3000"
