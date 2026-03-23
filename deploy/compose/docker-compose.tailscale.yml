@@ -1,5 +1,5 @@
 # Tailscale-only overlay: removes public port bindings.
-# Usage: docker compose -f docker-compose.yml -f docker-compose.tailscale.yml up -d
+# Usage: docker compose -f docker-compose.yml -f deploy/compose/docker-compose.tailscale.yml up -d
 services:
   labtether:
     ports: !reset []

@@ -76,7 +76,7 @@ Plan maintenance with dry-run support, rollback awareness, and full audit trails
 **1. Grab the Compose file**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/labtether/labtether/main/docker-compose.deploy.yml \
+curl -fsSL https://raw.githubusercontent.com/labtether/labtether/main/deploy/compose/docker-compose.deploy.yml \
   -o docker-compose.yml
 ```
 

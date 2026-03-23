@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-COMPOSE_FILE="${COMPOSE_FILE:-${PROJECT_ROOT}/docker-compose.deploy.yml}"
+COMPOSE_FILE="${COMPOSE_FILE:-${PROJECT_ROOT}/deploy/compose/docker-compose.deploy.yml}"
 ENV_FILE="${ENV_FILE:-${PROJECT_ROOT}/.env.deploy}"
 
 VERSION="${LABTETHER_VERSION:-}"
@@ -24,7 +24,7 @@ Options:
   -h, --help               Show this help
 
 Environment:
-  COMPOSE_FILE             Compose file path (default: ./docker-compose.deploy.yml)
+  COMPOSE_FILE             Compose file path (default: ./deploy/compose/docker-compose.deploy.yml)
   ENV_FILE                 Deploy env file path (default: ./.env.deploy)
 USAGE
 }

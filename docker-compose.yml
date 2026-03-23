@@ -83,11 +83,11 @@ services:
           cpus: '1.0'
 
   labtether-agent:
-    build:
-      context: .
-      dockerfile: build/agent.Dockerfile
-      args:
-        SERVICE_DIR: agents/labtether-agent
+    image: ghcr.io/labtether/labtether-agent:dev
+    # For local agent development with sibling checkout:
+    # build:
+    #   context: ../labtether-agent
+    #   dockerfile: Dockerfile
     environment:
       AGENT_PORT: 8090
       LABTETHER_API_BASE_URL: https://labtether:8443

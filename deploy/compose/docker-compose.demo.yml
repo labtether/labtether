@@ -3,7 +3,7 @@
 ##
 ## Usage:
 ##   cp .env.demo .env.deploy
-##   docker compose -f docker-compose.deploy.yml -f docker-compose.demo.yml up -d
+##   docker compose -f deploy/compose/docker-compose.deploy.yml -f deploy/compose/docker-compose.demo.yml up -d
 ##
 ## The demo-seed service runs once after the hub is healthy, inserting sample
 ## assets, alerts, incidents, logs, and the apple-review viewer account.
