@@ -1,0 +1,132 @@
+# Upgrading LabTether Hub
+
+This guide covers the upgrade procedure for LabTether hub deployments, including database migration safety and rollback procedures.
+
+## Before Upgrading
+
+1. **Back up the database:**
+
+   ```bash
+   make db-backup
+   # or
+   ./scripts/db-backup.sh
+   ```
+
+   Backups are stored in `backups/` with 7-day retention by default.
+
+2. **Note the current version:**
+
+   Check the `schema_migrations` table for the latest applied migration:
+
+   ```sql
+   SELECT version, name, applied_at FROM schema_migrations ORDER BY version DESC LIMIT 5;
+   ```
+
+   Or check the container image tag:
+
+   ```bash
+   docker compose -f deploy/compose/docker-compose.deploy.yml ps
+   ```
+
+3. **Read the CHANGELOG** for breaking changes between your current version and the target version.
+
+## Upgrade Procedure (Docker Compose)
+
+```bash
+# 1. Backup
+make db-backup
+
+# 2. Pull new images
+./scripts/upgrade-compose.sh v2026.X
+# or manually:
+docker compose -f deploy/compose/docker-compose.deploy.yml pull
+
+# 3. Restart (migrations run automatically on hub startup)
+docker compose -f deploy/compose/docker-compose.deploy.yml up -d
+
+# 4. Verify
+curl -s http://localhost:8080/healthz
+curl -s http://localhost:8080/readyz
+docker compose logs labtether | grep "migration"
+```
+
+## Rollback Procedure
+
+LabTether uses forward-only migrations. There are no Down() rollbacks. Rollback is performed by restoring from a database backup.
+
+1. **Stop the hub:**
+
+   ```bash
+   docker compose -f deploy/compose/docker-compose.deploy.yml down
+   ```
+
+2. **Restore the database:**
+
+   ```bash
+   ./scripts/db-restore.sh backups/latest.sql.gz
+   ```
+
+3. **Deploy the previous version:**
+
+   Update the image tag in `.env.deploy` to the previous version, then restart:
+
+   ```bash
+   docker compose -f deploy/compose/docker-compose.deploy.yml up -d
+   ```
+
+> **Note:** Rollback is restore-from-backup only. Forward-only migrations mean you cannot undo individual migrations. Always ensure you have a recent backup before upgrading.
+
+## When Upgrades Require Downtime
+
+- Major version upgrades (e.g., v2026.1 to v2026.2) may include breaking migrations that alter table structures or rename columns.
+- Always read the CHANGELOG before upgrading.
+- Plan for 1-5 minutes of downtime during migration, depending on database size.
+- For zero-downtime requirements, test the upgrade on a staging environment first.
+
+## Troubleshooting
+
+### Migration stuck
+
+A stuck migration is usually caused by a held advisory lock. Check for it:
+
+```sql
+SELECT * FROM pg_locks WHERE locktype = 'advisory';
+```
+
+If a lock is held by a dead session, terminate it:
+
+```sql
+SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+WHERE pid IN (SELECT pid FROM pg_locks WHERE locktype = 'advisory');
+```
+
+### Migration failed
+
+1. Check the hub logs for the specific error:
+
+   ```bash
+   docker compose logs labtether | grep -i "migration\|error"
+   ```
+
+2. Restore from backup:
+
+   ```bash
+   ./scripts/db-restore.sh backups/latest.sql.gz
+   ```
+
+3. Report the issue with the error message and migration version number.
+
+### Hub won't start after upgrade
+
+1. Check container logs:
+
+   ```bash
+   docker compose -f deploy/compose/docker-compose.deploy.yml logs labtether
+   ```
+
+2. Common causes:
+   - Database connection failure: verify `DATABASE_URL` in `.env.deploy`
+   - Migration error: check logs for the failing migration version, restore backup, report issue
+   - Port conflict: ensure port 8080 is available
+
+3. If the issue is migration-related, roll back using the procedure above.

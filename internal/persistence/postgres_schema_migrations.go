@@ -1,5 +1,14 @@
 package persistence
 
+// Migration guidelines:
+//
+// 1. Always add migrations at the END of the slice — never modify existing ones.
+// 2. Use IF NOT EXISTS / IF EXISTS for idempotency.
+// 3. Each migration runs in a single transaction — all statements succeed or all fail.
+// 4. Test migrations on a copy of production data before deploying.
+// 5. Rollback is via database restore — see docs/internal/UPGRADING.md.
+// 6. Advisory locks prevent concurrent migration races.
+
 func postgresSchemaMigrations() []schemaMigration {
 	migrations := []schemaMigration{
 		{
