@@ -1,0 +1,13 @@
+# docker-compose.demo.yml — demo mode overlay
+# Usage: docker compose -f docker-compose.deploy.yml -f docker-compose.demo.yml up -d
+services:
+  hub:
+    environment:
+      - LABTETHER_DEMO_MODE=true
+      - LABTETHER_DEMO_CONFIRM=yes-this-is-a-demo-instance
+    volumes:
+      - ./scripts/demo-seed.sql:/scripts/demo-seed.sql:ro
+
+  web:
+    environment:
+      - NEXT_PUBLIC_DEMO_MODE=true

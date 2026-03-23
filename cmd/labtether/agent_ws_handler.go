@@ -217,6 +217,11 @@ func (s *apiServer) buildWSRouter() shared.WSRouter {
 // handleAgentWebSocket upgrades an agent HTTP connection to WebSocket,
 // registers it with the AgentManager, and processes messages in a read loop.
 func (s *apiServer) handleAgentWebSocket(w http.ResponseWriter, r *http.Request) {
+	if s.demoMode {
+		http.Error(w, `{"error":"Agent connections are disabled in demo mode.","demo":true}`, http.StatusForbidden)
+		return
+	}
+
 	assetID := strings.TrimSpace(r.Header.Get("X-Asset-ID"))
 	platform := strings.TrimSpace(r.Header.Get("X-Platform"))
 	agentVersion := strings.TrimSpace(r.Header.Get("X-Agent-Version"))

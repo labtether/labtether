@@ -86,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (response.ok) {
           const data = await response.json();
           setBootstrapError(null);
+          setBootstrapAttempt(0);
           setUser(data.user ?? null);
           return;
         }

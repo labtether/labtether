@@ -37,6 +37,7 @@ type LiveSummary struct {
 // LiveResponse is the lightweight status response used by /status/aggregate/live.
 type LiveResponse struct {
 	Timestamp         time.Time                       `json:"timestamp"`
+	Demo              bool                            `json:"demo"`
 	Summary           LiveSummary                     `json:"summary"`
 	Endpoints         []EndpointResult                `json:"endpoints"`
 	Assets            []assets.Asset                  `json:"assets"`
@@ -63,6 +64,7 @@ type Summary struct {
 // Response is the full status aggregate response.
 type Response struct {
 	Timestamp           time.Time                          `json:"timestamp"`
+	Demo                bool                               `json:"demo"`
 	Summary             Summary                            `json:"summary"`
 	Endpoints           []EndpointResult                   `json:"endpoints"`
 	Connectors          []connectorsdk.Descriptor          `json:"connectors"`

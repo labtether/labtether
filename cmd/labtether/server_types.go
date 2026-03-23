@@ -172,6 +172,8 @@ type apiServer struct {
 	agentBinaryDir                string
 	externalURL                   string
 	dataDir                       string
+	demoMode                      bool
+	demoRateLimiter               *demoSessionRateLimiter
 	pendingAgents                 *pendingAgents
 	challengeStore                *auth.ChallengeStore
 	totpEncryptionKey             []byte

@@ -229,6 +229,7 @@ func (d *Deps) buildLiveResponseWithAssets(
 
 	return LiveResponse{
 		Timestamp: now,
+		Demo:      d.DemoMode,
 		Summary: LiveSummary{
 			ServicesUp:      servicesUp,
 			ServicesTotal:   servicesTotal,
@@ -301,6 +302,7 @@ func (d *Deps) buildResponseWithAssets(
 
 	return Response{
 		Timestamp: live.Timestamp,
+		Demo:      d.DemoMode,
 		Summary: Summary{
 			ServicesUp:      live.Summary.ServicesUp,
 			ServicesTotal:   live.Summary.ServicesTotal,
