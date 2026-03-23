@@ -174,6 +174,8 @@ func applySchemaMigration(ctx context.Context, conn *pgxpool.Conn, migration sch
 		return nil
 	}
 
+	log.Printf("labtether: applying schema migration v%d: %s", migration.Version, migration.Name)
+
 	tx, err := conn.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return err

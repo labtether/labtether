@@ -13,6 +13,10 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	log.Println("labtether migrator: applying pending schema migrations")
+	log.Println("labtether migrator: IMPORTANT — ensure you have a recent database backup before upgrading")
+	log.Println("labtether migrator: run 'make db-backup' or 'scripts/db-backup.sh' to create one")
+
 	databaseURL := envOrDefault("DATABASE_URL", persistence.DefaultDatabaseURL("localhost"))
 	store, err := persistence.NewPostgresStore(ctx, databaseURL)
 	if err != nil {
