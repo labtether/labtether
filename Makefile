@@ -1,4 +1,4 @@
-.PHONY: help fmt lint test check check-docs build bootstrap install-compose upgrade-compose setup-doctor db-backup db-restore package-ha-addon-repo security-gosec coverage-portainer perf-gate dev-up dev-up-restart dev-backend dev-backend-bg dev-backend-bg-restart dev-backend-stop dev-frontend dev-frontend-bg dev-frontend-bg-restart dev-frontend-stop dev-stop-all db-migrate compose-up compose-up-fast compose-down compose-logs smoke-test desktop-smoke-test integration-test check-port build-agent-linux check-go check-docker check-docker-compose check-node check-npm check-ps check-find
+.PHONY: help fmt lint test check check-docs build bootstrap install-compose upgrade-compose setup-doctor db-backup db-restore package-ha-addon-repo security-gosec coverage-portainer perf-gate dev-up dev-up-restart dev-backend dev-backend-bg dev-backend-bg-restart dev-backend-stop dev-frontend dev-frontend-bg dev-frontend-bg-restart dev-frontend-stop dev-stop-all db-migrate db-migrate-status compose-up compose-up-fast compose-down compose-logs smoke-test desktop-smoke-test integration-test check-port build-agent-linux check-go check-docker check-docker-compose check-node check-npm check-ps check-find
 
 help:
 	@echo "Targets:"
@@ -30,6 +30,7 @@ help:
 	@echo "  dev-backend    - Build and run Go backend locally (foreground, interactive debugging)"
 	@echo "  dev-frontend   - Run Next.js dev server (foreground, interactive debugging)"
 	@echo "  db-migrate     - Apply DB migrations"
+	@echo "  db-migrate-status - Show applied migrations and checksum status (requires psql)"
 	@echo "  compose-up     - Start full stack via Docker (rebuild images)"
 	@echo "  compose-up-fast - Start full stack via Docker using existing images"
 	@echo "  compose-down   - Stop Docker stack"
@@ -177,6 +178,9 @@ dev-stop-all: check-node check-npm
 
 db-migrate: check-go
 	@./scripts/db-migrate.sh
+
+db-migrate-status:
+	@./scripts/db-migrate-status.sh
 
 check-port: check-ps
 	@if nc -z localhost 3000 2>/dev/null; then \
