@@ -324,7 +324,7 @@ func TestReadyz_CheckFailsReturns503(t *testing.T) {
 	if body["ready"] != false {
 		t.Fatalf("ready = %v, want false", body["ready"])
 	}
-	if body["error"] != "database: connection refused" {
-		t.Fatalf("error = %v, want %q", body["error"], "database: connection refused")
+	if body["error"] != "readiness check failed" {
+		t.Fatalf("error = %v, want %q", body["error"], "readiness check failed")
 	}
 }

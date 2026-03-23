@@ -98,18 +98,20 @@ func (s *apiServer) auditMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(sw, r)
 
 		duration := time.Since(start)
-		actor := principalActorID(r.Context())
+		// Note: actor ID is not available at middleware level because auth middleware
+		// creates a new request context. Per-handler audit events (appendAuditEventBestEffort)
+		// capture the authenticated actor. This middleware log uses client IP for correlation.
 		clientIP := requestClientKey(r)
 
-		log.Printf("audit: %s %s %d %dms actor=%s ip=%s",
-			r.Method, path, sw.statusCode, duration.Milliseconds(), actor, clientIP)
+		log.Printf("audit: %s %s %d %dms ip=%s",
+			r.Method, path, sw.statusCode, duration.Milliseconds(), clientIP)
 
 		// Best-effort append to the audit store -- never fail the request.
 		if s.auditStore != nil {
 			event := audit.Event{
 				ID:        idgen.New("audit"),
 				Type:      "api.request",
-				ActorID:   actor,
+				ActorID:   clientIP,
 				Target:    r.Method + " " + path,
 				Timestamp: start.UTC(),
 				Details: map[string]any{
@@ -120,9 +122,11 @@ func (s *apiServer) auditMiddleware(next http.Handler) http.Handler {
 					"client_ip":   clientIP,
 				},
 			}
-			if err := s.auditStore.Append(event); err != nil {
-				log.Printf("audit: failed to persist api.request event: %v", err)
-			}
+			go func() {
+				if err := s.auditStore.Append(event); err != nil {
+					log.Printf("audit: failed to append event: %v", err)
+				}
+			}()
 		}
 	})
 }

@@ -74,10 +74,11 @@ func Run(ctx context.Context, cfg Config) error {
 	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
 		if cfg.ReadinessCheck != nil {
 			if err := cfg.ReadinessCheck(); err != nil {
+				log.Printf("readyz: check failed: %v", err)
 				WriteJSON(w, http.StatusServiceUnavailable, map[string]any{
 					"service": cfg.Name,
 					"ready":   false,
-					"error":   err.Error(),
+					"error":   "readiness check failed",
 				})
 				return
 			}

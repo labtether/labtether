@@ -37,3 +37,8 @@ export function pruneExpired(): void {
     if (now > entry.resetAt) store.delete(key);
   }
 }
+
+// Prune expired entries every 60 seconds to prevent memory growth
+if (typeof setInterval !== "undefined") {
+  setInterval(pruneExpired, 60_000);
+}
