@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     || request.headers.get("x-real-ip")
     || "unknown";
 
-  const { success, remaining, resetAt } = checkRateLimit(`login:${ip}`);
+  const { success, resetAt } = checkRateLimit(`login:${ip}`);
   if (!success) {
     return Response.json(
       { error: "Too many login attempts. Try again later." },
