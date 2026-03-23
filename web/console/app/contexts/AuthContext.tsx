@@ -66,13 +66,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     async function checkAuth() {
       const markTransientUnavailable = () => {
-        setBootstrapError("LabTether can't reach the backend right now. It may still be starting or restarting. We’ll keep retrying automatically.");
+        setBootstrapError("LabTether can’t reach the backend right now. It may still be starting or restarting. We’ll keep retrying automatically.");
         if (!cancelled) {
+          const backoffMs = Math.min(3000 * Math.pow(2, bootstrapAttempt), 60000);
           retryTimer = window.setTimeout(() => {
             if (!cancelled) {
               setBootstrapAttempt((attempt) => attempt + 1);
             }
-          }, 3000);
+          }, backoffMs);
         }
       };
 
