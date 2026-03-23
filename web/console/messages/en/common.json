@@ -34,6 +34,8 @@
   "copy": "Copy",
   "errorBoundary": {
     "title": "Something went wrong",
+    "sectionTitle": "Something went wrong in {section}",
+    "sectionDescription": "This section encountered an error. Other sections are unaffected.",
     "tryAgain": "Try again"
   }
 }

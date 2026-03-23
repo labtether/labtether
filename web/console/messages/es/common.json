@@ -31,5 +31,11 @@
     "ago": "hace {time}"
   },
   "copied": "Copiado",
-  "copy": "Copiar"
+  "copy": "Copiar",
+  "errorBoundary": {
+    "title": "Algo salió mal",
+    "sectionTitle": "Algo salió mal en {section}",
+    "sectionDescription": "Esta sección encontró un error. Las demás secciones no se ven afectadas.",
+    "tryAgain": "Reintentar"
+  }
 }

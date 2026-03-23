@@ -31,5 +31,11 @@
     "ago": "vor {time}"
   },
   "copied": "Kopiert",
-  "copy": "Kopieren"
+  "copy": "Kopieren",
+  "errorBoundary": {
+    "title": "Etwas ist schiefgelaufen",
+    "sectionTitle": "Etwas ist in {section} schiefgelaufen",
+    "sectionDescription": "In diesem Bereich ist ein Fehler aufgetreten. Andere Bereiche sind nicht betroffen.",
+    "tryAgain": "Erneut versuchen"
+  }
 }

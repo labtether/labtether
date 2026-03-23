@@ -31,5 +31,11 @@
     "ago": "{time}前"
   },
   "copied": "已复制",
-  "copy": "复制"
+  "copy": "复制",
+  "errorBoundary": {
+    "title": "出了点问题",
+    "sectionTitle": "{section}出了点问题",
+    "sectionDescription": "此部分遇到错误，其他部分不受影响。",
+    "tryAgain": "重试"
+  }
 }
