@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { Card } from "../../../../components/ui/Card";
 import { buildClusterFlowModel } from "./clusterTopologyFlowModel";
 import { ClusterTopologyHeader } from "./ClusterTopologyHeader";
-import { ClusterTopologyGraphView } from "./ClusterTopologyGraphView";
 import { ClusterTopologyListView } from "./ClusterTopologyListView";
 import { useClusterTopologyDerivedData } from "./useClusterTopologyDerivedData";
 import { useClusterTopologyGraphController } from "./useClusterTopologyGraphController";
@@ -13,6 +13,18 @@ import type {
   ClusterTopologySectionProps,
   TopologyView,
 } from "./clusterTopologyTypes";
+
+const ClusterTopologyGraphView = dynamic(
+  () => import("./ClusterTopologyGraphView").then((mod) => ({ default: mod.ClusterTopologyGraphView })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-full">
+        <span className="text-muted-foreground">Loading topology graph...</span>
+      </div>
+    ),
+  },
+);
 
 export function ClusterTopologySection({ clusterStatus, haResources, assets = [] }: ClusterTopologySectionProps) {
   const [topologyView, setTopologyView] = useState<TopologyView>("graph");

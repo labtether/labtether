@@ -31,5 +31,11 @@
     "ago": "il y a {time}"
   },
   "copied": "Copié",
-  "copy": "Copier"
+  "copy": "Copier",
+  "errorBoundary": {
+    "title": "Une erreur est survenue",
+    "sectionTitle": "Une erreur est survenue dans {section}",
+    "sectionDescription": "Cette section a rencontré une erreur. Les autres sections ne sont pas affectées.",
+    "tryAgain": "Réessayer"
+  }
 }
