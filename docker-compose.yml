@@ -117,6 +117,9 @@ services:
       - labtether-ca:/ca:ro
     ports:
       - "127.0.0.1:8090:8090"
+    depends_on:
+      labtether:
+        condition: service_healthy
     deploy:
       resources:
         limits:

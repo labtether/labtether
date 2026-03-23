@@ -55,6 +55,15 @@ func runHub(ctx context.Context) error {
 		log.Printf("labtether warning: runtime encryption key not set; credential encryption endpoints are disabled")
 	}
 
+	demoMode := envOrDefaultBool("LABTETHER_DEMO_MODE", false)
+	if demoMode {
+		demoConfirm := envOrDefault("LABTETHER_DEMO_CONFIRM", "")
+		if demoConfirm != "yes-this-is-a-demo-instance" {
+			return fmt.Errorf("LABTETHER_DEMO_MODE=true requires LABTETHER_DEMO_CONFIRM=yes-this-is-a-demo-instance")
+		}
+		log.Println("WARNING: DEMO MODE ENABLED — this instance is public, read-only, and unauthenticated. Do not use for production.")
+	}
+
 	registry := buildConnectorRegistry()
 
 	// Policy state (inline from policy service).
@@ -64,8 +73,10 @@ func runHub(ctx context.Context) error {
 	go refreshSecurityRuntimeSettingsDirect(ctx, pgStore)
 
 	// Bootstrap admin user for MVP single-user auth.
-	if err := bootstrapAdminUser(pgStore); err != nil {
-		return fmt.Errorf("labtether startup failed: admin bootstrap failed: %w", err)
+	if !demoMode {
+		if err := bootstrapAdminUser(pgStore); err != nil {
+			return fmt.Errorf("labtether startup failed: admin bootstrap failed: %w", err)
+		}
 	}
 
 	oidcProvider, oidcAutoProvision, err := loadOIDCProviderFromEnv(ctx)
@@ -76,6 +87,14 @@ func runHub(ctx context.Context) error {
 
 	srv := newAPIServer(pgStore, secretsManager, policyState, registry, authValidator, oidcRef, newInstallStateStore(dataDir))
 	srv.dataDir = dataDir
+	srv.demoMode = demoMode
+
+	if demoMode {
+		srv.demoRateLimiter = newDemoSessionRateLimiter(10, time.Minute)
+		if err := srv.bootstrapDemoUser(); err != nil {
+			return fmt.Errorf("labtether startup failed: %w", err)
+		}
+	}
 
 	// Derive TOTP encryption key for 2FA secret storage.
 	totpKey, err := deriveTOTPKey(runtimeSecrets.EncryptionKey)
@@ -298,6 +317,16 @@ func runHub(ctx context.Context) error {
 	for path, h := range handlers {
 		wrapped := srv.corsMiddleware(http.HandlerFunc(h))
 		handlers[path] = wrapped.ServeHTTP
+	}
+
+	// In demo mode, wrap every handler with read-only middleware as the
+	// outermost layer. This blocks all mutating requests (POST/PUT/DELETE/PATCH)
+	// except for explicitly allowlisted paths like /api/demo/session.
+	if srv.demoMode {
+		for path, h := range handlers {
+			finalHandler := demoReadOnlyMiddleware(http.HandlerFunc(h))
+			handlers[path] = finalHandler.ServeHTTP
+		}
 	}
 
 	httpCfg := servicehttp.Config{

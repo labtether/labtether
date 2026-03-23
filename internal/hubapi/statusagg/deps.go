@@ -43,6 +43,9 @@ type Deps struct {
 	// ProcessedJobs is the atomic counter of processed worker jobs. Nil is safe.
 	ProcessedJobs *atomic.Uint64
 
+	// DemoMode indicates whether the hub is running in demo mode.
+	DemoMode bool
+
 	// Cache holds all in-memory caching state for the status aggregate.
 	// It is embedded by pointer so that cmd/labtether/server_types.go can
 	// continue to embed StatusCache as a field and pass &s.statusCache here.

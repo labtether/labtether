@@ -31,6 +31,7 @@ func (s *apiServer) buildStatusAggDeps() *statusaggpkg.Deps {
 		TerminalStore:         s.terminalStore,
 		ConnectorRegistry:     s.connectorRegistry,
 		WebServiceCoordinator: s.webServiceCoordinator,
+		DemoMode:              s.demoMode,
 		Cache:                 &s.statusCache,
 	}
 }

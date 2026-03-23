@@ -56,10 +56,10 @@ export async function POST(request: Request) {
       { status: response.status },
     );
 
-    // Forward set-cookie headers from backend
-    const setCookie = response.headers.get("set-cookie");
-    if (setCookie) {
-      res.headers.set("set-cookie", setCookie);
+    // Forward set-cookie headers from backend (use getSetCookie to avoid
+    // comma-joining that corrupts Expires dates in multi-cookie responses).
+    for (const cookie of response.headers.getSetCookie()) {
+      res.headers.append("set-cookie", cookie);
     }
 
     return res;

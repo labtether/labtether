@@ -107,16 +107,13 @@ func Run(ctx context.Context, cfg Config) error {
 
 	useTLS := cfg.TLSCertFile != "" && cfg.TLSKeyFile != ""
 
-	// When TLS is active, wrap the main handler with security headers.
+	// Build the middleware chain: mux → SecurityHeaders (if TLS) → BearerAuth (if token).
 	var handler http.Handler = mux
+	if useTLS {
+		handler = SecurityHeaders(handler)
+	}
 	if strings.TrimSpace(cfg.AuthToken) != "" {
 		handler = BearerAuth(handler, cfg.AuthToken)
-	}
-	if useTLS {
-		handler = SecurityHeaders(mux)
-		if strings.TrimSpace(cfg.AuthToken) != "" {
-			handler = BearerAuth(handler, cfg.AuthToken)
-		}
 	}
 
 	addr := net.JoinHostPort(cfg.BindAddress, cfg.Port)

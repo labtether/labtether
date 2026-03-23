@@ -218,6 +218,7 @@ func (s *apiServer) buildHTTPHandlers(
 		"/updates/plans/":                      s.withAuth(s.handleUpdatePlanActions),
 		"/updates/runs":                        s.withAuth(s.handleUpdateRuns),
 		"/updates/runs/":                       s.withAuth(s.handleUpdateRunActions),
+		"/api/demo/session":                    s.handleDemoSession,
 		"/auth/login":                          s.handleAuthLogin,
 		"/auth/login/2fa":                      s.handleLogin2FA,
 		"/auth/bootstrap/status":               s.handleAuthBootstrapStatus,
