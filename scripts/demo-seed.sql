@@ -52,19 +52,19 @@ ON CONFLICT (id) DO NOTHING;
 -- ============================================================
 -- 4. ASSET DEPENDENCIES (topology via asset_edges / asset_dependencies view)
 -- ============================================================
-INSERT INTO asset_edges (id, source_asset_id, target_asset_id, relationship_type, direction, label, metadata, created_at, updated_at) VALUES
+INSERT INTO asset_edges (id, source_asset_id, target_asset_id, relationship_type, direction, criticality, origin, confidence, match_signals, metadata, created_at, updated_at) VALUES
     -- proxmox-1 runs dev-vm
-    (gen_random_uuid()::text, 'asset-proxmox-1',     'asset-dev-vm',         'runs_on',      'downstream', 'VM hosted on Proxmox',           '{}'::jsonb, NOW() - INTERVAL '30 days', NOW()),
-    -- docker-host-1 runs containers (pihole, home-assistant, media-server)
-    (gen_random_uuid()::text, 'asset-docker-host-1', 'asset-pihole',         'runs_on',      'downstream', 'Pi-hole container',              '{}'::jsonb, NOW() - INTERVAL '120 days', NOW()),
-    (gen_random_uuid()::text, 'asset-docker-host-1', 'asset-home-assistant', 'runs_on',      'downstream', 'Home Assistant container',        '{}'::jsonb, NOW() - INTERVAL '120 days', NOW()),
-    (gen_random_uuid()::text, 'asset-docker-host-1', 'asset-media-server',   'runs_on',      'downstream', 'Media server container',          '{}'::jsonb, NOW() - INTERVAL '60 days',  NOW()),
-    -- truenas provides storage to proxmox, docker-host, and backup-server
-    (gen_random_uuid()::text, 'asset-truenas-main',  'asset-proxmox-1',      'provides_to',  'downstream', 'NFS datastore',                   '{}'::jsonb, NOW() - INTERVAL '180 days', NOW()),
-    (gen_random_uuid()::text, 'asset-truenas-main',  'asset-docker-host-1',  'provides_to',  'downstream', 'iSCSI volumes',                   '{}'::jsonb, NOW() - INTERVAL '120 days', NOW()),
-    (gen_random_uuid()::text, 'asset-truenas-main',  'asset-backup-server',  'provides_to',  'downstream', 'Backup target share',             '{}'::jsonb, NOW() - INTERVAL '90 days',  NOW()),
-    -- monitoring depends on k3s-node-1
-    (gen_random_uuid()::text, 'asset-monitoring',    'asset-k3s-node-1',     'depends_on',   'upstream',   'Grafana + Prometheus on k3s',     '{}'::jsonb, NOW() - INTERVAL '45 days',  NOW())
+    (gen_random_uuid()::text, 'asset-proxmox-1',     'asset-dev-vm',         'runs_on',      'downstream', 'high',   'manual', 1.0, NULL, '{"note":"VM hosted on Proxmox"}'::jsonb,      NOW() - INTERVAL '30 days',  NOW()),
+    -- docker-host-1 runs containers
+    (gen_random_uuid()::text, 'asset-docker-host-1', 'asset-pihole',         'runs_on',      'downstream', 'medium', 'manual', 1.0, NULL, '{"note":"Pi-hole container"}'::jsonb,          NOW() - INTERVAL '120 days', NOW()),
+    (gen_random_uuid()::text, 'asset-docker-host-1', 'asset-home-assistant', 'runs_on',      'downstream', 'medium', 'manual', 1.0, NULL, '{"note":"Home Assistant container"}'::jsonb,   NOW() - INTERVAL '120 days', NOW()),
+    (gen_random_uuid()::text, 'asset-docker-host-1', 'asset-media-server',   'runs_on',      'downstream', 'low',    'manual', 1.0, NULL, '{"note":"Media server container"}'::jsonb,     NOW() - INTERVAL '60 days',  NOW()),
+    -- truenas provides storage
+    (gen_random_uuid()::text, 'asset-truenas-main',  'asset-proxmox-1',      'provides_to',  'downstream', 'critical','manual', 1.0, NULL, '{"note":"NFS datastore"}'::jsonb,             NOW() - INTERVAL '180 days', NOW()),
+    (gen_random_uuid()::text, 'asset-truenas-main',  'asset-docker-host-1',  'provides_to',  'downstream', 'high',   'manual', 1.0, NULL, '{"note":"iSCSI volumes"}'::jsonb,              NOW() - INTERVAL '120 days', NOW()),
+    (gen_random_uuid()::text, 'asset-truenas-main',  'asset-backup-server',  'provides_to',  'downstream', 'high',   'manual', 1.0, NULL, '{"note":"Backup target share"}'::jsonb,        NOW() - INTERVAL '90 days',  NOW()),
+    -- monitoring depends on k3s
+    (gen_random_uuid()::text, 'asset-monitoring',    'asset-k3s-node-1',     'depends_on',   'upstream',   'high',   'manual', 1.0, NULL, '{"note":"Grafana + Prometheus on k3s"}'::jsonb, NOW() - INTERVAL '45 days',  NOW())
 ON CONFLICT DO NOTHING;
 
 -- ============================================================
