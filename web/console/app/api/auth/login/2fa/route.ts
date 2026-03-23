@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { resolvedBackendBaseURLs, upstreamErrorPayload } from "../../../../../lib/backend";
 import { isMutationRequestOriginAllowed } from "../../../../../lib/proxyAuth";
+import { checkRateLimit } from "../../../../../lib/rateLimit";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,24 @@ function parse2FARequest(raw: unknown): { challenge_token: string; code: string 
 export async function POST(request: Request) {
   if (!isMutationRequestOriginAllowed(request)) {
     return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
+  }
+
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+    || request.headers.get("x-real-ip")
+    || "unknown";
+
+  const { success, remaining, resetAt } = checkRateLimit(`login-2fa:${ip}`);
+  if (!success) {
+    return Response.json(
+      { error: "Too many login attempts. Try again later." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.ceil((resetAt - Date.now()) / 1000)),
+          "X-RateLimit-Remaining": "0",
+        },
+      }
+    );
   }
 
   const base = await resolvedBackendBaseURLs();
