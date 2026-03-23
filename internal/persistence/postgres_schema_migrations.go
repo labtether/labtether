@@ -2487,5 +2487,14 @@ func postgresSchemaMigrations() []schemaMigration {
 		},
 	})
 
+	migrations = append(migrations, schemaMigration{
+		Version: 73,
+		Name:    "audit_events_indexes",
+		Statements: []string{
+			`CREATE INDEX IF NOT EXISTS idx_audit_events_actor_id ON audit_events (actor_id)`,
+			`CREATE INDEX IF NOT EXISTS idx_audit_events_type ON audit_events (type)`,
+		},
+	})
+
 	return migrations
 }
