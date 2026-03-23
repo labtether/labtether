@@ -283,6 +283,15 @@ func runHub(ctx context.Context) error {
 		handlers[path] = gzipMiddleware(h).ServeHTTP
 	}
 
+	// Wrap every handler with audit logging middleware. This runs after CORS
+	// (applied next) but before gzip so it captures the real response status
+	// code. It logs method, path, status, duration, and authenticated actor
+	// for every API request and appends best-effort audit events to the store.
+	for path, h := range handlers {
+		wrapped := srv.auditMiddleware(http.HandlerFunc(h))
+		handlers[path] = wrapped.ServeHTTP
+	}
+
 	// Wrap every handler with CORS middleware. This runs as the outermost
 	// layer so that OPTIONS preflight requests receive proper CORS headers
 	// and a 204 response without passing through auth middleware.
