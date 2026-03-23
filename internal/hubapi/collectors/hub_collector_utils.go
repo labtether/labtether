@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labtether/labtether/internal/agentcore"
 	"github.com/labtether/labtether/internal/connectors/proxmox"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/hubcollector"
@@ -126,7 +125,7 @@ func (d *Deps) ingestCollectorTelemetry(collector hubcollector.Collector, output
 		return
 	}
 	responseFormat, _ := collector.Config["response_format"].(string)
-	samples, _ := agentcore.ParseCollectorOutput(output, responseFormat, collector.AssetID)
+	samples, _ := ParseCollectorOutput(output, responseFormat, collector.AssetID)
 	if len(samples) == 0 {
 		return
 	}

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labtether/labtether/internal/agentcore"
+	"github.com/labtether/labtether/internal/agentsettings"
 	"github.com/labtether/labtether/internal/logs"
 	"github.com/labtether/labtether/internal/servicehttp"
 	"github.com/labtether/labtether/internal/terminal"
@@ -172,7 +172,7 @@ func (d *Deps) HandleAgentSettingsReset(w http.ResponseWriter, r *http.Request, 
 
 	var keys []string
 	if len(req.Keys) == 0 {
-		definitions := agentcore.AgentSettingDefinitions()
+		definitions := agentsettings.AgentSettingDefinitions()
 		keys = make([]string, 0, len(definitions))
 		for _, definition := range definitions {
 			keys = append(keys, AgentSettingStoreKey(assetID, definition.Key))
@@ -180,7 +180,7 @@ func (d *Deps) HandleAgentSettingsReset(w http.ResponseWriter, r *http.Request, 
 	} else {
 		for _, raw := range req.Keys {
 			key := strings.TrimSpace(raw)
-			if _, ok := agentcore.AgentSettingDefinitionByKey(key); !ok {
+			if _, ok := agentsettings.AgentSettingDefinitionByKey(key); !ok {
 				servicehttp.WriteError(w, http.StatusBadRequest, fmt.Sprintf("unknown setting key: %s", key))
 				return
 			}
@@ -222,23 +222,23 @@ func (d *Deps) HandleAgentSettingsDockerTest(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if raw := strings.TrimSpace(req.Enabled); raw != "" {
-		normalized, err := agentcore.NormalizeAgentSettingValue(agentcore.SettingKeyDockerEnabled, raw)
+		normalized, err := agentsettings.NormalizeAgentSettingValue(agentsettings.SettingKeyDockerEnabled, raw)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		effective[agentcore.SettingKeyDockerEnabled] = normalized
+		effective[agentsettings.SettingKeyDockerEnabled] = normalized
 	}
 	if raw := strings.TrimSpace(req.Endpoint); raw != "" {
-		normalized, err := agentcore.NormalizeAgentSettingValue(agentcore.SettingKeyDockerEndpoint, raw)
+		normalized, err := agentsettings.NormalizeAgentSettingValue(agentsettings.SettingKeyDockerEndpoint, raw)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		effective[agentcore.SettingKeyDockerEndpoint] = normalized
+		effective[agentsettings.SettingKeyDockerEndpoint] = normalized
 	}
 
-	mode := strings.TrimSpace(strings.ToLower(effective[agentcore.SettingKeyDockerEnabled]))
+	mode := strings.TrimSpace(strings.ToLower(effective[agentsettings.SettingKeyDockerEnabled]))
 	if mode == "false" {
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 			"ok":      true,
@@ -247,7 +247,7 @@ func (d *Deps) HandleAgentSettingsDockerTest(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	endpoint := strings.TrimSpace(effective[agentcore.SettingKeyDockerEndpoint])
+	endpoint := strings.TrimSpace(effective[agentsettings.SettingKeyDockerEndpoint])
 	if endpoint == "" {
 		endpoint = "/var/run/docker.sock"
 	}

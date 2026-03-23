@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labtether/labtether/internal/agentcore"
+	"github.com/labtether/labtether/internal/agentsettings"
 	"github.com/labtether/labtether/internal/runtimesettings"
 )
 
@@ -79,14 +79,14 @@ func NormalizeAgentSettingValues(values map[string]string, forHubApply bool) (ma
 	out := make(map[string]string, len(values))
 	for rawKey, rawValue := range values {
 		key := strings.TrimSpace(rawKey)
-		definition, ok := agentcore.AgentSettingDefinitionByKey(key)
+		definition, ok := agentsettings.AgentSettingDefinitionByKey(key)
 		if !ok {
 			return nil, fmt.Errorf("unknown setting key: %s", key)
 		}
 		if forHubApply && definition.LocalOnly {
 			return nil, fmt.Errorf("setting %s is local-only", key)
 		}
-		normalized, err := agentcore.NormalizeAgentSettingValue(key, rawValue)
+		normalized, err := agentsettings.NormalizeAgentSettingValue(key, rawValue)
 		if err != nil {
 			return nil, err
 		}
@@ -96,8 +96,8 @@ func NormalizeAgentSettingValues(values map[string]string, forHubApply bool) (ma
 }
 
 func (d *Deps) CollectEffectiveAgentSettingValues(assetID string) (map[string]string, error) {
-	definitions := agentcore.AgentSettingDefinitions()
-	effective := agentcore.DefaultAgentSettingValues()
+	definitions := agentsettings.AgentSettingDefinitions()
+	effective := agentsettings.DefaultAgentSettingValues()
 	if d.RuntimeStore == nil {
 		return effective, nil
 	}
@@ -109,14 +109,14 @@ func (d *Deps) CollectEffectiveAgentSettingValues(assetID string) (map[string]st
 	for _, definition := range definitions {
 		if globalKey, ok := AgentSettingGlobalDefaultKey(definition.Key); ok {
 			if raw, ok := overrides[globalKey]; ok {
-				if normalized, err := agentcore.NormalizeAgentSettingValue(definition.Key, raw); err == nil {
+				if normalized, err := agentsettings.NormalizeAgentSettingValue(definition.Key, raw); err == nil {
 					effective[definition.Key] = normalized
 				}
 			}
 		}
 		assetKey := AgentSettingStoreKey(assetID, definition.Key)
 		if raw, ok := overrides[assetKey]; ok {
-			if normalized, err := agentcore.NormalizeAgentSettingValue(definition.Key, raw); err == nil {
+			if normalized, err := agentsettings.NormalizeAgentSettingValue(definition.Key, raw); err == nil {
 				effective[definition.Key] = normalized
 			}
 		}
@@ -186,7 +186,7 @@ func (d *Deps) BuildAgentSettingsPayload(assetID string) (AgentSettingsPayload, 
 	}
 	payload.AgentVersionStatus = DetermineAgentVersionStatus(payload.AgentVersion, payload.LatestAgentVersion)
 
-	definitions := agentcore.AgentSettingDefinitions()
+	definitions := agentsettings.AgentSettingDefinitions()
 	sort.Slice(definitions, func(i, j int) bool {
 		return definitions[i].Key < definitions[j].Key
 	})
@@ -230,13 +230,13 @@ func (d *Deps) BuildAgentSettingsPayload(assetID string) (AgentSettingsPayload, 
 		overrideValue := ""
 		globalValue := ""
 		if raw, ok := global[definition.Key]; ok {
-			if normalized, err := agentcore.NormalizeAgentSettingValue(definition.Key, raw); err == nil {
+			if normalized, err := agentsettings.NormalizeAgentSettingValue(definition.Key, raw); err == nil {
 				globalValue = normalized
 				source = "hub-default"
 			}
 		}
 		if raw, ok := overrides[definition.Key]; ok {
-			if normalized, err := agentcore.NormalizeAgentSettingValue(definition.Key, raw); err == nil {
+			if normalized, err := agentsettings.NormalizeAgentSettingValue(definition.Key, raw); err == nil {
 				overrideValue = normalized
 				source = "hub-override"
 			}
@@ -400,33 +400,33 @@ func AgentVersionFromBuildInfo(mainVersion string, settings []debug.BuildSetting
 
 func AgentSettingGlobalDefaultKey(key string) (string, bool) {
 	switch key {
-	case agentcore.SettingKeyCollectIntervalSec:
+	case agentsettings.SettingKeyCollectIntervalSec:
 		return "agent_collect_interval_sec", true
-	case agentcore.SettingKeyHeartbeatIntervalSec:
+	case agentsettings.SettingKeyHeartbeatIntervalSec:
 		return "agent_heartbeat_interval_sec", true
-	case agentcore.SettingKeyServicesDiscoveryDockerEnabled:
+	case agentsettings.SettingKeyServicesDiscoveryDockerEnabled:
 		return runtimesettings.KeyServicesDiscoveryDefaultDockerEnabled, true
-	case agentcore.SettingKeyServicesDiscoveryProxyEnabled:
+	case agentsettings.SettingKeyServicesDiscoveryProxyEnabled:
 		return runtimesettings.KeyServicesDiscoveryDefaultProxyEnabled, true
-	case agentcore.SettingKeyServicesDiscoveryProxyTraefikEnabled:
+	case agentsettings.SettingKeyServicesDiscoveryProxyTraefikEnabled:
 		return runtimesettings.KeyServicesDiscoveryDefaultProxyTraefikEnabled, true
-	case agentcore.SettingKeyServicesDiscoveryProxyCaddyEnabled:
+	case agentsettings.SettingKeyServicesDiscoveryProxyCaddyEnabled:
 		return runtimesettings.KeyServicesDiscoveryDefaultProxyCaddyEnabled, true
-	case agentcore.SettingKeyServicesDiscoveryProxyNPMEnabled:
+	case agentsettings.SettingKeyServicesDiscoveryProxyNPMEnabled:
 		return runtimesettings.KeyServicesDiscoveryDefaultProxyNPMEnabled, true
-	case agentcore.SettingKeyServicesDiscoveryPortScanEnabled:
+	case agentsettings.SettingKeyServicesDiscoveryPortScanEnabled:
 		return runtimesettings.KeyServicesDiscoveryDefaultPortScanEnabled, true
-	case agentcore.SettingKeyServicesDiscoveryPortScanIncludeListening:
+	case agentsettings.SettingKeyServicesDiscoveryPortScanIncludeListening:
 		return runtimesettings.KeyServicesDiscoveryDefaultPortScanIncludeListening, true
-	case agentcore.SettingKeyServicesDiscoveryPortScanPorts:
+	case agentsettings.SettingKeyServicesDiscoveryPortScanPorts:
 		return runtimesettings.KeyServicesDiscoveryDefaultPortScanPorts, true
-	case agentcore.SettingKeyServicesDiscoveryLANScanEnabled:
+	case agentsettings.SettingKeyServicesDiscoveryLANScanEnabled:
 		return runtimesettings.KeyServicesDiscoveryDefaultLANScanEnabled, true
-	case agentcore.SettingKeyServicesDiscoveryLANScanCIDRs:
+	case agentsettings.SettingKeyServicesDiscoveryLANScanCIDRs:
 		return runtimesettings.KeyServicesDiscoveryDefaultLANScanCIDRs, true
-	case agentcore.SettingKeyServicesDiscoveryLANScanPorts:
+	case agentsettings.SettingKeyServicesDiscoveryLANScanPorts:
 		return runtimesettings.KeyServicesDiscoveryDefaultLANScanPorts, true
-	case agentcore.SettingKeyServicesDiscoveryLANScanMaxHosts:
+	case agentsettings.SettingKeyServicesDiscoveryLANScanMaxHosts:
 		return runtimesettings.KeyServicesDiscoveryDefaultLANScanMaxHosts, true
 	default:
 		return "", false

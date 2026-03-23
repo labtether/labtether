@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labtether/labtether/internal/agentcore"
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/agentsettings"
 	"github.com/labtether/labtether/internal/runtimesettings"
 )
 
@@ -18,18 +18,18 @@ func TestAgentSettingGlobalDefaultKeyServiceDiscoveryMappings(t *testing.T) {
 		key  string
 		want string
 	}{
-		{agentcore.SettingKeyServicesDiscoveryDockerEnabled, runtimesettings.KeyServicesDiscoveryDefaultDockerEnabled},
-		{agentcore.SettingKeyServicesDiscoveryProxyEnabled, runtimesettings.KeyServicesDiscoveryDefaultProxyEnabled},
-		{agentcore.SettingKeyServicesDiscoveryProxyTraefikEnabled, runtimesettings.KeyServicesDiscoveryDefaultProxyTraefikEnabled},
-		{agentcore.SettingKeyServicesDiscoveryProxyCaddyEnabled, runtimesettings.KeyServicesDiscoveryDefaultProxyCaddyEnabled},
-		{agentcore.SettingKeyServicesDiscoveryProxyNPMEnabled, runtimesettings.KeyServicesDiscoveryDefaultProxyNPMEnabled},
-		{agentcore.SettingKeyServicesDiscoveryPortScanEnabled, runtimesettings.KeyServicesDiscoveryDefaultPortScanEnabled},
-		{agentcore.SettingKeyServicesDiscoveryPortScanIncludeListening, runtimesettings.KeyServicesDiscoveryDefaultPortScanIncludeListening},
-		{agentcore.SettingKeyServicesDiscoveryPortScanPorts, runtimesettings.KeyServicesDiscoveryDefaultPortScanPorts},
-		{agentcore.SettingKeyServicesDiscoveryLANScanEnabled, runtimesettings.KeyServicesDiscoveryDefaultLANScanEnabled},
-		{agentcore.SettingKeyServicesDiscoveryLANScanCIDRs, runtimesettings.KeyServicesDiscoveryDefaultLANScanCIDRs},
-		{agentcore.SettingKeyServicesDiscoveryLANScanPorts, runtimesettings.KeyServicesDiscoveryDefaultLANScanPorts},
-		{agentcore.SettingKeyServicesDiscoveryLANScanMaxHosts, runtimesettings.KeyServicesDiscoveryDefaultLANScanMaxHosts},
+		{agentsettings.SettingKeyServicesDiscoveryDockerEnabled, runtimesettings.KeyServicesDiscoveryDefaultDockerEnabled},
+		{agentsettings.SettingKeyServicesDiscoveryProxyEnabled, runtimesettings.KeyServicesDiscoveryDefaultProxyEnabled},
+		{agentsettings.SettingKeyServicesDiscoveryProxyTraefikEnabled, runtimesettings.KeyServicesDiscoveryDefaultProxyTraefikEnabled},
+		{agentsettings.SettingKeyServicesDiscoveryProxyCaddyEnabled, runtimesettings.KeyServicesDiscoveryDefaultProxyCaddyEnabled},
+		{agentsettings.SettingKeyServicesDiscoveryProxyNPMEnabled, runtimesettings.KeyServicesDiscoveryDefaultProxyNPMEnabled},
+		{agentsettings.SettingKeyServicesDiscoveryPortScanEnabled, runtimesettings.KeyServicesDiscoveryDefaultPortScanEnabled},
+		{agentsettings.SettingKeyServicesDiscoveryPortScanIncludeListening, runtimesettings.KeyServicesDiscoveryDefaultPortScanIncludeListening},
+		{agentsettings.SettingKeyServicesDiscoveryPortScanPorts, runtimesettings.KeyServicesDiscoveryDefaultPortScanPorts},
+		{agentsettings.SettingKeyServicesDiscoveryLANScanEnabled, runtimesettings.KeyServicesDiscoveryDefaultLANScanEnabled},
+		{agentsettings.SettingKeyServicesDiscoveryLANScanCIDRs, runtimesettings.KeyServicesDiscoveryDefaultLANScanCIDRs},
+		{agentsettings.SettingKeyServicesDiscoveryLANScanPorts, runtimesettings.KeyServicesDiscoveryDefaultLANScanPorts},
+		{agentsettings.SettingKeyServicesDiscoveryLANScanMaxHosts, runtimesettings.KeyServicesDiscoveryDefaultLANScanMaxHosts},
 	}
 
 	for _, tt := range tests {

@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/labtether/labtether/internal/agentcore"
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/serviceregistry"
 	"github.com/labtether/labtether/internal/persistence"
 	"golang.org/x/sync/singleflight"
 )
@@ -1096,7 +1096,7 @@ func enrichServicesFromRegistry(services []agentmgr.DiscoveredWebService) {
 		}
 		// Try matching by Docker image first.
 		if image := svc.Metadata["image"]; image != "" {
-			if known, ok := agentcore.LookupByDockerImage(image); ok {
+			if known, ok := serviceregistry.LookupByDockerImage(image); ok {
 				applyRegistryMatch(svc, known)
 				continue
 			}
@@ -1112,7 +1112,7 @@ func enrichServicesFromRegistry(services []agentmgr.DiscoveredWebService) {
 			hints = append(hints, svc.URL)
 		}
 		for _, hint := range hints {
-			if known, ok := agentcore.LookupByHint(hint); ok {
+			if known, ok := serviceregistry.LookupByHint(hint); ok {
 				applyRegistryMatch(svc, known)
 				break
 			}
@@ -1122,14 +1122,14 @@ func enrichServicesFromRegistry(services []agentmgr.DiscoveredWebService) {
 
 // applyRegistryMatch fills in missing fields from a registry match without
 // overwriting values the agent already set.
-func applyRegistryMatch(svc *agentmgr.DiscoveredWebService, known agentcore.KnownService) {
+func applyRegistryMatch(svc *agentmgr.DiscoveredWebService, known serviceregistry.KnownService) {
 	if svc.ServiceKey == "" {
 		svc.ServiceKey = known.Key
 	}
 	if svc.IconKey == "" {
 		svc.IconKey = known.IconKey
 	}
-	if svc.Category == "" || svc.Category == agentcore.CatOther {
+	if svc.Category == "" || svc.Category == serviceregistry.CatOther {
 		svc.Category = known.Category
 	}
 	// Only update name if it looks auto-generated (e.g. "Port 8080" or container name).

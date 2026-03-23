@@ -8,26 +8,26 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labtether/labtether/internal/agentcore"
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/agentsettings"
 	"github.com/labtether/labtether/internal/assets"
 )
 
 func TestNormalizeAgentSettingValuesRejectsLocalOnlyForHubApply(t *testing.T) {
 	if _, err := normalizeAgentSettingValues(map[string]string{
-		agentcore.SettingKeyTLSSkipVerify: "true",
+		agentsettings.SettingKeyTLSSkipVerify: "true",
 	}, true); err == nil {
 		t.Fatalf("expected local-only setting to be rejected for hub apply")
 	}
 
 	values, err := normalizeAgentSettingValues(map[string]string{
-		agentcore.SettingKeyTLSSkipVerify: "true",
+		agentsettings.SettingKeyTLSSkipVerify: "true",
 	}, false)
 	if err != nil {
 		t.Fatalf("expected local-only setting to normalize for local apply, got %v", err)
 	}
-	if values[agentcore.SettingKeyTLSSkipVerify] != "true" {
-		t.Fatalf("normalized value=%q, want true", values[agentcore.SettingKeyTLSSkipVerify])
+	if values[agentsettings.SettingKeyTLSSkipVerify] != "true" {
+		t.Fatalf("normalized value=%q, want true", values[agentsettings.SettingKeyTLSSkipVerify])
 	}
 }
 
@@ -64,7 +64,7 @@ func TestPushAgentSettingsApplyIncludesStoredFingerprint(t *testing.T) {
 	}()
 
 	sut.pushAgentSettingsApply("node-apply", map[string]string{
-		agentcore.SettingKeyLogLevel: "debug",
+		agentsettings.SettingKeyLogLevel: "debug",
 	})
 
 	select {
@@ -83,8 +83,8 @@ func TestPushAgentSettingsApplyIncludesStoredFingerprint(t *testing.T) {
 		if payload.RequestID == "" || payload.Revision == "" {
 			t.Fatalf("expected request and revision IDs, got %+v", payload)
 		}
-		if payload.Values[agentcore.SettingKeyLogLevel] != "debug" {
-			t.Fatalf("log level=%q, want debug", payload.Values[agentcore.SettingKeyLogLevel])
+		if payload.Values[agentsettings.SettingKeyLogLevel] != "debug" {
+			t.Fatalf("log level=%q, want debug", payload.Values[agentsettings.SettingKeyLogLevel])
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for outbound settings apply")
@@ -100,8 +100,8 @@ func TestPushAgentSettingsApplyIncludesStoredFingerprint(t *testing.T) {
 	if state.Fingerprint != "fp-expected" {
 		t.Fatalf("fingerprint=%q, want fp-expected", state.Fingerprint)
 	}
-	if state.Values[agentcore.SettingKeyLogLevel] != "debug" {
-		t.Fatalf("state log level=%q, want debug", state.Values[agentcore.SettingKeyLogLevel])
+	if state.Values[agentsettings.SettingKeyLogLevel] != "debug" {
+		t.Fatalf("state log level=%q, want debug", state.Values[agentsettings.SettingKeyLogLevel])
 	}
 }
 
@@ -151,7 +151,7 @@ func TestProcessAgentSettingsStatePreservesApplyLifecycleForMatchingRevision(t *
 
 			payload, err := json.Marshal(agentmgr.AgentSettingsStateData{
 				Revision:             "rev-1",
-				Values:               map[string]string{agentcore.SettingKeyDockerEnabled: "true"},
+				Values:               map[string]string{agentsettings.SettingKeyDockerEnabled: "true"},
 				Fingerprint:          "fp-after",
 				AllowRemoteOverrides: true,
 				ReportedAt:           reportedAt.Format(time.RFC3339),
@@ -187,8 +187,8 @@ func TestProcessAgentSettingsStatePreservesApplyLifecycleForMatchingRevision(t *
 			if !state.AllowRemoteOverrides {
 				t.Fatalf("expected allow_remote_overrides=true")
 			}
-			if state.Values[agentcore.SettingKeyDockerEnabled] != "true" {
-				t.Fatalf("docker_enabled=%q, want true", state.Values[agentcore.SettingKeyDockerEnabled])
+			if state.Values[agentsettings.SettingKeyDockerEnabled] != "true" {
+				t.Fatalf("docker_enabled=%q, want true", state.Values[agentsettings.SettingKeyDockerEnabled])
 			}
 		})
 	}
@@ -200,7 +200,7 @@ func TestBuildAgentSettingsPayloadMarksDriftWhenAgentReportsEmptyValue(t *testin
 	wantTURNURL := "turn:turn.example.com:3478"
 
 	if _, err := sut.runtimeStore.SaveRuntimeSettingOverrides(map[string]string{
-		agentSettingStoreKey(assetID, agentcore.SettingKeyWebRTCTURNURL): wantTURNURL,
+		agentSettingStoreKey(assetID, agentsettings.SettingKeyWebRTCTURNURL): wantTURNURL,
 	}); err != nil {
 		t.Fatalf("save runtime override: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestBuildAgentSettingsPayloadMarksDriftWhenAgentReportsEmptyValue(t *testin
 	sut.setAgentSettingsRuntimeState(assetID, agentSettingsRuntimeState{
 		Status: "reported",
 		Values: map[string]string{
-			agentcore.SettingKeyWebRTCTURNURL: "",
+			agentsettings.SettingKeyWebRTCTURNURL: "",
 		},
 	})
 
@@ -219,13 +219,13 @@ func TestBuildAgentSettingsPayloadMarksDriftWhenAgentReportsEmptyValue(t *testin
 
 	var found agentSettingEntry
 	for _, setting := range payload.Settings {
-		if setting.Key == agentcore.SettingKeyWebRTCTURNURL {
+		if setting.Key == agentsettings.SettingKeyWebRTCTURNURL {
 			found = setting
 			break
 		}
 	}
 	if found.Key == "" {
-		t.Fatalf("expected %s setting in payload", agentcore.SettingKeyWebRTCTURNURL)
+		t.Fatalf("expected %s setting in payload", agentsettings.SettingKeyWebRTCTURNURL)
 	}
 	if found.EffectiveValue != wantTURNURL {
 		t.Fatalf("effective_value=%q, want %q", found.EffectiveValue, wantTURNURL)
@@ -252,7 +252,7 @@ func TestHandleAgentSettingsHistoryPreservesApplyFailureAfterStateReport(t *test
 
 	payload, err := json.Marshal(agentmgr.AgentSettingsStateData{
 		Revision:   "rev-2",
-		Values:     map[string]string{agentcore.SettingKeyLogLevel: "info"},
+		Values:     map[string]string{agentsettings.SettingKeyLogLevel: "info"},
 		ReportedAt: reportedAt.Format(time.RFC3339),
 	})
 	if err != nil {

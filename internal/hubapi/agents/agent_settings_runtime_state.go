@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labtether/labtether/internal/agentcore"
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/agentsettings"
 )
 
 type AgentSettingsRuntimeState struct {
@@ -83,7 +83,7 @@ func (d *Deps) SendAgentSettingsApply(conn *agentmgr.AgentConn) {
 		return
 	}
 	for key := range effective {
-		if def, ok := agentcore.AgentSettingDefinitionByKey(key); ok && def.LocalOnly {
+		if def, ok := agentsettings.AgentSettingDefinitionByKey(key); ok && def.LocalOnly {
 			delete(effective, key)
 		}
 	}
