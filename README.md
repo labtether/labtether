@@ -87,7 +87,7 @@ cat > .env.deploy << 'EOF'
 LABTETHER_VERSION=latest
 LABTETHER_HUB_IMAGE=ghcr.io/labtether/labtether/labtether:${LABTETHER_VERSION}
 LABTETHER_WEB_IMAGE=ghcr.io/labtether/labtether/web-console:${LABTETHER_VERSION}
-POSTGRES_IMAGE=postgres:16-alpine
+POSTGRES_IMAGE=postgres:18-alpine
 GUACD_IMAGE=guacamole/guacd:1.6.0
 EOF
 ```

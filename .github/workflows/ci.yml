@@ -83,7 +83,7 @@ jobs:
             -e POSTGRES_PASSWORD=labtether \
             -e POSTGRES_DB=labtether \
             -p 5432:5432 \
-            postgres:16 \
+            postgres:18 \
             -c shared_preload_libraries=pg_stat_statements \
             -c pg_stat_statements.track=all >/dev/null
 
