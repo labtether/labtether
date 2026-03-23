@@ -147,7 +147,7 @@ jobs:
 
       - name: Upload backend perf artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-hotspot-perf-artifacts
           path: /tmp/labtether-perf-artifacts
@@ -223,7 +223,7 @@ jobs:
 
       - name: Upload Playwright artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: web-e2e-playwright
           path: |
@@ -260,7 +260,7 @@ jobs:
 
       - name: Upload HTTPS E2E Playwright artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: web-e2e-https-playwright
           path: |
@@ -297,7 +297,7 @@ jobs:
 
       - name: Upload HTTPS visual Playwright artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: web-visual-https-playwright
           path: |
