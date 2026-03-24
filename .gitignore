@@ -3,10 +3,11 @@
 
 # Go
 bin/
+# Agent binaries are downloaded from GitHub Releases at build time.
+# They must not be committed to this repo.
 build/*
 !build/*.Dockerfile
 /labtether
-/labtether-agent
 /node-agent
 /linux-agent
 *.test
