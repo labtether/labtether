@@ -92,12 +92,17 @@ func (d *Deps) ProcessAgentHeartbeat(conn *agentmgr.AgentConn, msg agentmgr.Mess
 	// If the agent reported its version and we know the latest version, push an
 	// update request when the agent is outdated. The push is fire-and-forget —
 	// the agent decides locally whether auto-update is enabled.
+	// Debounce: only push once per connection per latest version to avoid flooding.
 	if agentVersion := strings.TrimSpace(conn.Meta("agent_version")); agentVersion != "" {
 		if d.AgentCache != nil {
 			if manifest := d.AgentCache.Manifest(); manifest != nil {
 				latestVersion := manifest.GoAgentVersion()
 				if DetermineAgentVersionStatus(agentVersion, latestVersion) == "update_available" {
-					d.SendUpdateRequest(conn)
+					pushedKey := "update_pushed_for:" + latestVersion
+					if conn.Meta(pushedKey) == "" {
+						conn.SetMeta(pushedKey, "true")
+						d.SendUpdateRequest(conn)
+					}
 				}
 			}
 		}
