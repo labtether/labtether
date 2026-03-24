@@ -37,7 +37,7 @@ func (s *apiServer) buildAgentsDeps() *agentspkg.Deps {
 
 		HubIdentity:    s.hubIdentity,
 		CACertPEM:      s.tlsState.CACertPEM,
-		AgentBinaryDir: s.agentBinaryDir,
+		AgentCache: s.agentCache,
 		TLSEnabled:     s.tlsState.Enabled,
 
 		AgentWebSocketUpgrader: agentWebSocketUpgrader,
@@ -306,11 +306,6 @@ type agentsDeps = agentspkg.Deps
 type agentSettingEntry = agentspkg.AgentSettingEntry
 type agentSettingsPayload = agentspkg.AgentSettingsPayload
 type agentSettingsViewState = agentspkg.AgentSettingsViewState
-
-func resolveAgentBinaryDir() string { return agentspkg.ResolveAgentBinaryDir() }
-func resolveAgentBinaryPath(binaryDir, agentOS, arch string) (string, string, error) {
-	return agentspkg.ResolveAgentBinaryPath(binaryDir, agentOS, arch)
-}
 
 type pendingAgentCommand = shared.PendingAgentCommand
 

@@ -18,6 +18,7 @@ import (
 	"github.com/labtether/labtether/internal/connectorsdk"
 	"github.com/labtether/labtether/internal/discovery"
 	"github.com/labtether/labtether/internal/fileproto"
+	agentspkg "github.com/labtether/labtether/internal/hubapi/agents"
 	authpkg "github.com/labtether/labtether/internal/hubapi/auth"
 	"github.com/labtether/labtether/internal/installstate"
 	"github.com/labtether/labtether/internal/modelmap"
@@ -126,7 +127,16 @@ func newAPIServer(
 		streamTicketStore:    StreamTicketStore{Tickets: make(map[string]streamTicket, 128)},
 		desktopSessionOpts:   make(map[string]desktopSessionOptions, 128),
 		desktopSPICE:         make(map[string]desktopSPICEProxyTarget, 128),
-		agentBinaryDir:       resolveAgentBinaryDir(),
+		agentCache: func() *agentspkg.AgentCache {
+			cache := &agentspkg.AgentCache{
+				RuntimeDir: envOrDefault("LABTETHER_AGENT_CACHE_DIR", "/data/agents"),
+				BakedInDir: envOrDefault("LABTETHER_AGENT_DIR", "/opt/labtether/agents"),
+			}
+			if err := cache.LoadManifest(); err != nil {
+				log.Printf("WARN: agent manifest not found: %v (agent binary endpoints will return 503 until manifest is available)", err)
+			}
+			return cache
+		}(),
 		externalURL:          strings.TrimRight(strings.TrimSpace(envOrDefault("LABTETHER_EXTERNAL_URL", "")), "/"),
 		pendingAgents:        newPendingAgents(),
 		challengeStore:       auth.NewChallengeStore(),

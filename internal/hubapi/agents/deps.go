@@ -48,8 +48,8 @@ type Deps struct {
 	// CA certificate PEM for enrollment.
 	CACertPEM []byte
 
-	// Agent binary directory.
-	AgentBinaryDir string
+	// Agent cache for manifest-driven binary distribution.
+	AgentCache *AgentCache
 
 	// TLS state.
 	TLSEnabled bool
@@ -102,6 +102,8 @@ func RegisterRoutes(handlers map[string]http.HandlerFunc, d *Deps) {
 	handlers["/api/v1/agents/pending"] = d.WrapAuth(d.HandleListPendingAgents)
 	handlers["/api/v1/agents/approve"] = d.WrapAuth(d.HandleApproveAgent)
 	handlers["/api/v1/agents/reject"] = d.WrapAuth(d.HandleRejectAgent)
+	handlers["/api/v1/agent/manifest"] = d.WrapAuth(d.HandleAgentManifest)
+	handlers["/api/v1/agent/cache/refresh"] = d.WrapAdmin(d.HandleAgentCacheRefresh)
 }
 
 // RegisterWSHandlers registers WebSocket message handlers for agent-related

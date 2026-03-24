@@ -1,4 +1,4 @@
-.PHONY: help fmt lint test check check-docs build bootstrap install-compose upgrade-compose setup-doctor db-backup db-restore package-ha-addon-repo security-gosec coverage-portainer perf-gate dev-up dev-up-restart dev-backend dev-backend-bg dev-backend-bg-restart dev-backend-stop dev-frontend dev-frontend-bg dev-frontend-bg-restart dev-frontend-stop dev-stop-all db-migrate db-migrate-status compose-up compose-up-fast compose-down compose-logs smoke-test desktop-smoke-test integration-test check-port build-agent-linux check-go check-docker check-docker-compose check-node check-npm check-ps check-find
+.PHONY: help fmt lint test check check-docs build bootstrap install-compose upgrade-compose setup-doctor db-backup db-restore package-ha-addon-repo security-gosec coverage-portainer perf-gate dev-up dev-up-restart dev-backend dev-backend-bg dev-backend-bg-restart dev-backend-stop dev-frontend dev-frontend-bg dev-frontend-bg-restart dev-frontend-stop dev-stop-all db-migrate db-migrate-status compose-up compose-up-fast compose-down compose-logs smoke-test desktop-smoke-test integration-test check-port check-go check-docker check-docker-compose check-node check-npm check-ps check-find
 
 help:
 	@echo "Targets:"
@@ -235,25 +235,4 @@ desktop-smoke-test:
 integration-test:
 	@./scripts/integration-queue-flow.sh
 
-# --- Linux Agent ---
-
-build-agent-linux: check-go
-	@echo "Building LabTether agent for Linux..."
-	@mkdir -p build
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o build/labtether-agent-linux-amd64 ./agents/labtether-agent
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o build/labtether-agent-linux-arm64 ./agents/labtether-agent
-	@echo "Linux agent binaries: build/labtether-agent-linux-amd64, build/labtether-agent-linux-arm64"
-
-# --- Windows Agent ---
-
-build-agent-windows: check-go
-	@echo "Building LabTether agent for Windows..."
-	@mkdir -p build
-	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o build/labtether-agent-windows-amd64.exe ./agents/labtether-agent
-	CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -o build/labtether-agent-windows-arm64.exe ./agents/labtether-agent
-	@echo "Windows agent binaries: build/labtether-agent-windows-amd64.exe, build/labtether-agent-windows-arm64.exe"
-
-# --- All Agents ---
-
-build-agent-all: build-agent-linux build-agent-windows
 

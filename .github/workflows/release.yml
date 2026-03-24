@@ -23,6 +23,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Generate agent manifest and download binaries
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./scripts/release/generate-agent-manifest.sh "${{ github.ref_name }}" ./agent-dist
+
       - name: Build and push hub image
         uses: docker/build-push-action@v7
         with:

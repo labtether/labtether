@@ -169,7 +169,7 @@ type apiServer struct {
 	browserEventsDeps             *sharedpkg.BrowserEventsDeps
 	fileProtoPool                 *fileproto.Pool
 	activeTransfers               sync.Map
-	agentBinaryDir                string
+	agentCache                    *agentspkg.AgentCache
 	externalURL                   string
 	dataDir                       string
 	demoMode                      bool
