@@ -48,8 +48,8 @@ type Deps struct {
 	// CA certificate PEM for enrollment.
 	CACertPEM []byte
 
-	// Agent binary directory.
-	AgentBinaryDir string
+	// Agent cache for manifest-driven binary distribution.
+	AgentCache *AgentCache
 
 	// TLS state.
 	TLSEnabled bool

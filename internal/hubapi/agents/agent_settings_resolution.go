@@ -1,14 +1,8 @@
 package agents
 
 import (
-	"crypto/sha256"
-	"debug/buildinfo"
-	"encoding/hex"
 	"fmt"
-	"github.com/labtether/labtether/internal/hubapi/shared"
-	"io"
 	"net/url"
-	"os"
 	"runtime/debug"
 	"sort"
 	"strings"
@@ -288,40 +282,15 @@ func (d *Deps) BuildAgentSettingsPayload(assetID string) (AgentSettingsPayload, 
 }
 
 func (d *Deps) LatestAgentVersionForPlatform(agentOS, arch string) (string, string, error) {
-	_, binaryPath, err := ResolveAgentBinaryPath(d.AgentBinaryDir, agentOS, arch)
-	if err != nil {
-		return "", "", err
+	m := d.AgentCache.Manifest()
+	if m == nil {
+		return "", "", fmt.Errorf("agent manifest not loaded")
 	}
-
-	// #nosec G304 -- constrained by ResolveAgentBinaryPath allowlist.
-	f, err := os.Open(binaryPath)
-	if err != nil {
-		return "", "", err
+	agent, ok := m.Agents["labtether-agent"]
+	if !ok {
+		return "", "", fmt.Errorf("no labtether-agent in manifest")
 	}
-	defer f.Close()
-
-	info, err := f.Stat()
-	if err != nil {
-		return "", "", err
-	}
-
-	version := strings.TrimSpace(shared.EnvOrDefault("LABTETHER_AGENT_RELEASE_VERSION", ""))
-	if version == "" {
-		version = DetectAgentBinaryVersion(binaryPath)
-	}
-	if version == "" {
-		sum := sha256.New()
-		if _, err := io.Copy(sum, f); err != nil {
-			return "", "", err
-		}
-		sha := hex.EncodeToString(sum.Sum(nil))
-		if len(sha) < 12 {
-			return "", "", fmt.Errorf("invalid release hash")
-		}
-		version = "sha256:" + sha[:12]
-	}
-
-	return version, info.ModTime().UTC().Format(time.RFC3339), nil
+	return agent.Version, m.GeneratedAt, nil
 }
 
 func DetermineAgentVersionStatus(currentVersion, latestVersion string) string {
@@ -358,15 +327,6 @@ func NormalizeAgentReleaseArch(raw string) string {
 	default:
 		return ""
 	}
-}
-
-func DetectAgentBinaryVersion(binaryPath string) string {
-	info, err := buildinfo.ReadFile(binaryPath)
-	if err != nil || info == nil {
-		return ""
-	}
-
-	return AgentVersionFromBuildInfo(info.Main.Version, info.Settings)
 }
 
 func AgentVersionFromBuildInfo(mainVersion string, settings []debug.BuildSetting) string {
