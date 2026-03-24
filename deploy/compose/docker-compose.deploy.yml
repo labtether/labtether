@@ -61,6 +61,7 @@ services:
       LABTETHER_ADMIN_PASSWORD: ${LABTETHER_ADMIN_PASSWORD:-}
       LABTETHER_MANAGED_POSTGRES: "true"
       LABTETHER_TLS_MODE: ${LABTETHER_TLS_MODE:-auto}
+      LABTETHER_AGENT_MANIFEST_REFRESH: ${LABTETHER_AGENT_MANIFEST_REFRESH:-false}
       LABTETHER_DATA_DIR: /data
       LABTETHER_API_TOKEN_FILE: /run/labtether/api-token
       GUACD_HOST: ${GUACD_HOST:-guacd}
@@ -80,6 +81,7 @@ services:
       - labtether-data:/data
       - labtether-ca:/ca
       - labtether-service-auth:/run/labtether
+      - labtether-agent-cache:/data/agents
     deploy:
       resources:
         limits:
@@ -130,3 +132,4 @@ volumes:
   labtether-data:
   labtether-ca:
   labtether-service-auth:
+  labtether-agent-cache:
