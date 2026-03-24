@@ -112,6 +112,44 @@ if ! wait $! 2>/dev/null; then
   exit 1
 fi
 
+# ── Verify checksum ───────────────────────────────────────────────────────
+info "Verifying binary integrity"
+
+RELEASE_URL="${HUB_URL}/api/v1/agent/releases/latest?arch=${ARCH}"
+if [[ "${DOWNLOADER}" == "curl" ]]; then
+  if [[ "${#CURL_TLS_ARGS[@]}" -gt 0 ]]; then
+    RELEASE_JSON=$(curl "${CURL_TLS_ARGS[@]}" -fsSL "${RELEASE_URL}" 2>/dev/null || true)
+  else
+    RELEASE_JSON=$(curl -fsSL "${RELEASE_URL}" 2>/dev/null || true)
+  fi
+else
+  if [[ "${#WGET_TLS_ARGS[@]}" -gt 0 ]]; then
+    RELEASE_JSON=$(wget "${WGET_TLS_ARGS[@]}" -q -O - "${RELEASE_URL}" 2>/dev/null || true)
+  else
+    RELEASE_JSON=$(wget -q -O - "${RELEASE_URL}" 2>/dev/null || true)
+  fi
+fi
+
+if [[ -n "${RELEASE_JSON}" ]]; then
+  EXPECTED_SHA256=$(echo "${RELEASE_JSON}" | grep -o '"sha256":"[^"]*"' | head -1 | cut -d'"' -f4)
+  if [[ -n "${EXPECTED_SHA256}" ]]; then
+    ACTUAL_SHA256=$(sha256sum "${TMP_BINARY}" 2>/dev/null | awk '{print $1}')
+    if [[ -z "${ACTUAL_SHA256}" ]]; then
+      ACTUAL_SHA256=$(shasum -a 256 "${TMP_BINARY}" 2>/dev/null | awk '{print $1}')
+    fi
+    if [[ "${ACTUAL_SHA256}" != "${EXPECTED_SHA256}" ]]; then
+      error "SHA256 mismatch! Expected: ${EXPECTED_SHA256}, Got: ${ACTUAL_SHA256}"
+      rm -f "${TMP_BINARY}"
+      exit 1
+    fi
+    success "SHA256 verified"
+  else
+    warn "Could not extract checksum from release metadata, skipping verification"
+  fi
+else
+  warn "Could not fetch release metadata, skipping verification"
+fi
+
 chmod 755 "${TMP_BINARY}"
 mv "${TMP_BINARY}" "${BINARY_DEST}"
 trap - EXIT
