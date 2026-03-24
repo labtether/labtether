@@ -1,15 +1,25 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import dynamic from "next/dynamic";
 import { useTopologyData } from "./useTopologyData";
 import { useTopologyUndo } from "./useTopologyUndo";
-import TopologyCanvas from "./TopologyCanvas";
 import TopologyInbox from "./TopologyInbox";
+
+const TopologyCanvas = dynamic(() => import("./TopologyCanvas"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-full w-full items-center justify-center">
+      <span className="text-sm text-[var(--muted)]">Loading topology canvas...</span>
+    </div>
+  ),
+});
 import { TopologyInspector } from "./TopologyInspector";
 import TopologyTreeView from "./TopologyTreeView";
 import { ConnectToDialog } from "./ConnectToDialog";
 import { useFastStatus } from "../../../contexts/StatusContext";
 import { TopologySearch } from "./TopologySearch";
+import { ErrorBoundary } from "../../../components/ErrorBoundary";
 
 type ViewMode = "canvas" | "tree";
 type PanelMode = "inbox" | "inspector" | null;
@@ -203,6 +213,18 @@ export default function TopologyCanvasPage() {
       <div className="h-full w-full pt-14">
         {viewMode === "canvas" ? (
           topology ? (
+            <ErrorBoundary
+              fallback={
+                <div className="flex h-full w-full items-center justify-center text-sm text-[var(--muted)]">
+                  <div className="flex flex-col items-center gap-2">
+                    <p>Topology canvas failed to render.</p>
+                    <button onClick={() => window.location.reload()} className="text-sm underline hover:no-underline">
+                      Reload page
+                    </button>
+                  </div>
+                </div>
+              }
+            >
             <TopologyCanvas
               topology={topology}
               onViewportChange={saveViewport}
@@ -236,6 +258,7 @@ export default function TopologyCanvasPage() {
               onDeleteConnection={deleteConnection}
               onResetLayout={resetTopology}
             />
+            </ErrorBoundary>
           ) : (
             <div className="flex h-full w-full items-center justify-center text-sm text-[var(--muted)]">
               No topology data

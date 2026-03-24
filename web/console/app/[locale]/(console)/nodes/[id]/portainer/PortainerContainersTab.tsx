@@ -8,7 +8,14 @@ import { Card } from "../../../../../components/ui/Card";
 import { portainerAction, portainerFetch } from "./usePortainerData";
 import { buildBrowserWsUrl } from "../../../../../lib/ws";
 
-const XTerminal = dynamic(() => import("../../../../../components/XTerminal"), { ssr: false });
+const XTerminal = dynamic(() => import("../../../../../components/XTerminal"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center h-full min-h-[200px]">
+      <span className="text-sm text-[var(--muted)]">Loading terminal...</span>
+    </div>
+  ),
+});
 
 type DockerContainer = {
   Id: string;

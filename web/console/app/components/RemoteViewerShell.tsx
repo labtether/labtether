@@ -8,6 +8,7 @@ import ReconnectOverlay from "./ReconnectOverlay";
 import { RemoteViewFileDrawer } from "./RemoteViewFileDrawer";
 import { RemoteViewToolbar } from "./RemoteViewToolbar";
 import type { ScalingMode } from "./RemoteViewToolbar";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { SessionPanel } from "./SessionPanel";
 import type { DesktopProtocol, SpiceTicket } from "./SessionPanel";
 import type { GuacamoleViewerHandle } from "./GuacamoleViewer";
@@ -313,34 +314,36 @@ export function RemoteViewerShell({
           targetDir={uploadTargetDir}
           uploadFile={protocol === "webrtc" ? onFileDropUpload : undefined}
         >
-          <SessionPanel
-            type="desktop"
-            protocol={protocol}
-            spiceTicket={spiceTicket}
-            connectionState={connectionState}
-            wsUrl={wsUrl}
-            error={error}
-            target={target}
-            connectedAgentIds={connectedAgentIds}
-            onRetry={onRetry}
-            vncRef={vncRef}
-            guacRef={guacRef}
-            spiceRef={spiceRef}
-            webrtcRef={webrtcRef}
-            quality={quality}
-            scalingMode={scalingMode}
-            viewOnly={viewOnly}
-            audioEnabled={!audioMuted}
-            volume={volume}
-            onWebRTCStats={onWebRTCStats}
-            onDesktopConnect={onDesktopConnect}
-            onDesktopDisconnect={onDesktopDisconnect}
-            onDesktopError={onDesktopError}
-            onCredentialsRequired={onCredentialsRequired}
-            webrtcDisplayLayout={webrtcDisplayLayout}
-            onWebRTCStream={onWebRTCStream}
-            credentialOverlay={credentialOverlay}
-          />
+          <ErrorBoundary>
+            <SessionPanel
+              type="desktop"
+              protocol={protocol}
+              spiceTicket={spiceTicket}
+              connectionState={connectionState}
+              wsUrl={wsUrl}
+              error={error}
+              target={target}
+              connectedAgentIds={connectedAgentIds}
+              onRetry={onRetry}
+              vncRef={vncRef}
+              guacRef={guacRef}
+              spiceRef={spiceRef}
+              webrtcRef={webrtcRef}
+              quality={quality}
+              scalingMode={scalingMode}
+              viewOnly={viewOnly}
+              audioEnabled={!audioMuted}
+              volume={volume}
+              onWebRTCStats={onWebRTCStats}
+              onDesktopConnect={onDesktopConnect}
+              onDesktopDisconnect={onDesktopDisconnect}
+              onDesktopError={onDesktopError}
+              onCredentialsRequired={onCredentialsRequired}
+              webrtcDisplayLayout={webrtcDisplayLayout}
+              onWebRTCStream={onWebRTCStream}
+              credentialOverlay={credentialOverlay}
+            />
+          </ErrorBoundary>
         </FileDropOverlay>
 
         {targetHasAgent && (
