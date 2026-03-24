@@ -153,3 +153,72 @@ This means the SQL statements for an already-applied migration were edited in so
    - Port conflict: ensure port 8080 is available
 
 3. If the issue is migration-related, roll back using the procedure above.
+
+---
+
+### Pre-Upgrade Checklist
+
+1. **Back up the database** before every upgrade:
+   ```bash
+   make db-backup
+   ```
+   Backups are stored in `backups/` with timestamps. Auto-pruned after 7 days.
+
+2. **Check current schema version:**
+   ```bash
+   make db-migrate-status
+   ```
+
+3. **Review release notes** for the target version — check for:
+   - Breaking migration changes
+   - Required configuration changes
+   - Expected downtime
+
+4. **Plan for downtime:** Most migrations complete in under 30 seconds. Large data migrations (rare) may take 1-5 minutes. The hub is unavailable during migration.
+
+---
+
+### Rollback Procedure
+
+Migrations are forward-only by design. To rollback:
+
+1. **Stop the hub:**
+   ```bash
+   docker compose down
+   ```
+
+2. **Restore the database from backup:**
+   ```bash
+   make db-restore BACKUP_FILE=backups/labtether_YYYYMMDD_HHMMSS.sql.gz
+   ```
+
+3. **Pin the previous version** in `.env.deploy`:
+   ```bash
+   LABTETHER_VERSION=v2026.1  # Previous working version
+   ```
+
+4. **Restart:**
+   ```bash
+   docker compose up -d
+   ```
+
+**Important:** The hub will refuse to start if the database schema is newer than what it expects. Always restore the backup that matches the hub version you're rolling back to.
+
+---
+
+### Troubleshooting
+
+**Migration stuck / advisory lock held:**
+If the hub fails to start with "could not acquire advisory lock", another migration is in progress or a previous run crashed:
+```bash
+# Check for held locks
+docker compose exec postgres psql -U labtether -d labtether -c \
+  "SELECT * FROM pg_locks WHERE locktype = 'advisory';"
+
+# Force release (only if no migration is actually running)
+docker compose exec postgres psql -U labtether -d labtether -c \
+  "SELECT pg_advisory_unlock(0x4c545348454d41);"
+```
+
+**Checksum mismatch:**
+If the hub reports "migration checksum mismatch", a previously applied migration's source code was modified. This is never expected in normal operation. Do NOT modify applied migrations — create a new migration instead.
