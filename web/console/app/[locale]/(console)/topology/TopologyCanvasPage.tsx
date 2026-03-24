@@ -1,10 +1,19 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import dynamic from "next/dynamic";
 import { useTopologyData } from "./useTopologyData";
 import { useTopologyUndo } from "./useTopologyUndo";
-import TopologyCanvas from "./TopologyCanvas";
 import TopologyInbox from "./TopologyInbox";
+
+const TopologyCanvas = dynamic(() => import("./TopologyCanvas"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-full w-full items-center justify-center">
+      <span className="text-sm text-[var(--muted)]">Loading topology canvas...</span>
+    </div>
+  ),
+});
 import { TopologyInspector } from "./TopologyInspector";
 import TopologyTreeView from "./TopologyTreeView";
 import { ConnectToDialog } from "./ConnectToDialog";

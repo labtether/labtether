@@ -21,13 +21,34 @@ import type {
 import type { ScalingMode } from "./RemoteViewToolbar";
 import type { ITheme } from "@xterm/xterm";
 
-const XTerminal = dynamic(() => import("./XTerminal"), { ssr: false });
-const VNCViewer = dynamic(() => import("./VNCViewer"), { ssr: false });
+function ViewerLoadingFallback({ label }: { label: string }) {
+  return (
+    <div className="flex items-center justify-center h-full min-h-[200px]">
+      <span className="text-sm text-[var(--muted)]">Loading {label}...</span>
+    </div>
+  );
+}
+
+const XTerminal = dynamic(() => import("./XTerminal"), {
+  ssr: false,
+  loading: () => <ViewerLoadingFallback label="terminal" />,
+});
+const VNCViewer = dynamic(() => import("./VNCViewer"), {
+  ssr: false,
+  loading: () => <ViewerLoadingFallback label="VNC viewer" />,
+});
 const GuacamoleViewer = dynamic(() => import("./GuacamoleViewer"), {
   ssr: false,
+  loading: () => <ViewerLoadingFallback label="remote desktop" />,
 });
-const SPICEViewer = dynamic(() => import("./SPICEViewer"), { ssr: false });
-const WebRTCViewer = dynamic(() => import("./WebRTCViewer"), { ssr: false });
+const SPICEViewer = dynamic(() => import("./SPICEViewer"), {
+  ssr: false,
+  loading: () => <ViewerLoadingFallback label="SPICE viewer" />,
+});
+const WebRTCViewer = dynamic(() => import("./WebRTCViewer"), {
+  ssr: false,
+  loading: () => <ViewerLoadingFallback label="WebRTC viewer" />,
+});
 
 export type DesktopProtocol = "vnc" | "rdp" | "spice" | "webrtc";
 
