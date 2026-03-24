@@ -5,63 +5,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/labtether/labtether/internal/servicehttp"
 )
-
-// ResolveAgentBinaryDir returns the directory that contains pre-built agent
-// binaries. It checks, in order:
-//  1. LABTETHER_AGENT_DIR environment variable
-//  2. ./build/   (development — binaries built locally)
-//  3. /opt/labtether/agents/  (production Docker image)
-//
-// Deprecated: Use AgentCache for manifest-driven binary resolution.
-// Kept for backward compatibility with cmd/labtether bridge until Task 3b.
-func ResolveAgentBinaryDir() string {
-	if dir := strings.TrimSpace(os.Getenv("LABTETHER_AGENT_DIR")); dir != "" {
-		return dir
-	}
-
-	if info, err := os.Stat("./build"); err == nil && info.IsDir() {
-		return "./build"
-	}
-
-	return "/opt/labtether/agents"
-}
-
-// ResolveAgentBinaryPath resolves the binary name and file path for the given
-// OS and architecture within the specified directory.
-//
-// Deprecated: Use AgentCache + AgentManifest.LookupBinary for manifest-driven
-// binary resolution. Kept for backward compatibility with cmd/labtether bridge
-// until Task 3b.
-func ResolveAgentBinaryPath(binaryDir, agentOS, arch string) (string, string, error) {
-	agentOS = strings.ToLower(strings.TrimSpace(agentOS))
-	arch = strings.ToLower(strings.TrimSpace(arch))
-
-	switch agentOS {
-	case "linux":
-		if arch != "amd64" && arch != "arm64" {
-			return "", "", fmt.Errorf("arch must be amd64 or arm64")
-		}
-		name := fmt.Sprintf("labtether-agent-linux-%s", arch)
-		return name, filepath.Join(binaryDir, name), nil
-	case "darwin":
-		// Current macOS packaging publishes a universal binary.
-		name := "labtether-agent-darwin"
-		return name, filepath.Join(binaryDir, name), nil
-	case "windows":
-		if arch != "amd64" && arch != "arm64" {
-			return "", "", fmt.Errorf("arch must be amd64 or arm64")
-		}
-		name := fmt.Sprintf("labtether-agent-windows-%s.exe", arch)
-		return name, filepath.Join(binaryDir, name), nil
-	default:
-		return "", "", fmt.Errorf("os must be linux, darwin, or windows")
-	}
-}
 
 // HandleAgentBinary serves the pre-built labtether-agent binary for the
 // requested architecture. The endpoint is intentionally public (no auth)

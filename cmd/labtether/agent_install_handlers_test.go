@@ -8,60 +8,138 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	agentspkg "github.com/labtether/labtether/internal/hubapi/agents"
 )
+
+// writeTestManifestForBinary writes an agent-manifest.json into dir that maps
+// the given os/arch to binaryName.
+func writeTestManifestForBinary(t *testing.T, dir, agentOS, arch, binaryName string) {
+	t.Helper()
+	key := agentOS + "-" + arch
+	manifest := `{
+  "schema_version": 1,
+  "generated_at": "2026-01-01T00:00:00Z",
+  "hub_version": "test",
+  "agents": {
+    "labtether-agent": {
+      "version": "0.0.0-test",
+      "repo": "labtether/labtether-agent",
+      "binaries": {
+        "` + key + `": {
+          "name": "` + binaryName + `",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "size_bytes": 0
+        }
+      }
+    }
+  }
+}`
+	if err := os.WriteFile(filepath.Join(dir, "agent-manifest.json"), []byte(manifest), 0644); err != nil {
+		t.Fatalf("write test manifest: %v", err)
+	}
+}
+
+// writeTestManifestForBinaries writes an agent-manifest.json into dir that maps
+// multiple os/arch pairs to their respective binary names.
+func writeTestManifestForBinaries(t *testing.T, dir string, binaries map[string]string) {
+	t.Helper()
+	entries := ""
+	i := 0
+	for key, name := range binaries {
+		if i > 0 {
+			entries += ","
+		}
+		entries += `
+        "` + key + `": {
+          "name": "` + name + `",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+          "size_bytes": 0
+        }`
+		i++
+	}
+	manifest := `{
+  "schema_version": 1,
+  "generated_at": "2026-01-01T00:00:00Z",
+  "hub_version": "test",
+  "agents": {
+    "labtether-agent": {
+      "version": "0.0.0-test",
+      "repo": "labtether/labtether-agent",
+      "binaries": {` + entries + `
+      }
+    }
+  }
+}`
+	if err := os.WriteFile(filepath.Join(dir, "agent-manifest.json"), []byte(manifest), 0644); err != nil {
+		t.Fatalf("write test manifest: %v", err)
+	}
+}
 
 // TestHandleAgentBinary exercises the /api/v1/agent/binary endpoint.
 func TestHandleAgentBinary(t *testing.T) {
 	t.Parallel()
 
-	// Create a temp directory with fake binaries for test cases that expect a hit.
+	// Create a temp directory with fake binaries and a manifest for test cases that expect a hit.
 	dir := t.TempDir()
+	binaries := make(map[string]string)
 	for _, arch := range []string{"amd64", "arm64"} {
 		name := "labtether-agent-linux-" + arch
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("fake-binary-"+arch), 0755); err != nil {
 			t.Fatalf("setup: write %s: %v", name, err)
 		}
+		binaries["linux-"+arch] = name
+	}
+	writeTestManifestForBinaries(t, dir, binaries)
+	dirCache := &agentspkg.AgentCache{RuntimeDir: dir, BakedInDir: dir}
+	if err := dirCache.LoadManifest(); err != nil {
+		t.Fatalf("setup: load manifest: %v", err)
 	}
 
-	// emptyDir has no binaries — used for the "not found" sub-test.
+	// emptyDir has no binaries and no manifest — used for the "not found" sub-test.
 	emptyDir := t.TempDir()
+	writeTestManifestForBinary(t, emptyDir, "linux", "amd64", "labtether-agent-linux-amd64")
+	emptyCache := &agentspkg.AgentCache{RuntimeDir: emptyDir, BakedInDir: emptyDir}
+	if err := emptyCache.LoadManifest(); err != nil {
+		t.Fatalf("setup: load empty manifest: %v", err)
+	}
 
 	tests := []struct {
 		name       string
-		binaryDir  string
+		cache      *agentspkg.AgentCache
 		arch       string
 		wantStatus int
 		wantBody   string
 	}{
 		{
 			name:       "valid amd64",
-			binaryDir:  dir,
+			cache:      dirCache,
 			arch:       "amd64",
 			wantStatus: http.StatusOK,
 			wantBody:   "fake-binary-amd64",
 		},
 		{
 			name:       "valid arm64",
-			binaryDir:  dir,
+			cache:      dirCache,
 			arch:       "arm64",
 			wantStatus: http.StatusOK,
 			wantBody:   "fake-binary-arm64",
 		},
 		{
 			name:       "missing arch param",
-			binaryDir:  dir,
+			cache:      dirCache,
 			arch:       "",
 			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name:       "invalid arch",
-			binaryDir:  dir,
+			cache:      dirCache,
 			arch:       "mips",
 			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name:       "arch not available",
-			binaryDir:  emptyDir,
+			cache:      emptyCache,
 			arch:       "amd64",
 			wantStatus: http.StatusNotFound,
 		},
@@ -72,7 +150,7 @@ func TestHandleAgentBinary(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			srv := &apiServer{agentBinaryDir: tc.binaryDir}
+			srv := &apiServer{agentCache: tc.cache}
 
 			path := "/api/v1/agent/binary"
 			if tc.arch != "" {
@@ -97,7 +175,7 @@ func TestHandleAgentBinary(t *testing.T) {
 func TestHandleAgentBinaryMethodNotAllowed(t *testing.T) {
 	t.Parallel()
 
-	srv := &apiServer{agentBinaryDir: t.TempDir()}
+	srv := &apiServer{agentCache: &agentspkg.AgentCache{RuntimeDir: t.TempDir(), BakedInDir: t.TempDir()}}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agent/binary?arch=amd64", nil)
 	rec := httptest.NewRecorder()
 
@@ -456,40 +534,6 @@ func TestHTTPURLToWS(t *testing.T) {
 	}
 }
 
-// TestResolveAgentBinaryDir verifies directory resolution priority.
-func TestResolveAgentBinaryDir(t *testing.T) {
-	// Not parallel — mutates env var.
-
-	t.Run("env var takes precedence", func(t *testing.T) {
-		t.Setenv("LABTETHER_AGENT_DIR", "/custom/agents")
-		got := resolveAgentBinaryDir()
-		if got != "/custom/agents" {
-			t.Errorf("got %q, want /custom/agents", got)
-		}
-	})
-
-	t.Run("uses local build dir when present", func(t *testing.T) {
-		t.Setenv("LABTETHER_AGENT_DIR", "")
-		wd := t.TempDir()
-		t.Chdir(wd)
-		if err := os.Mkdir(filepath.Join(wd, "build"), 0o755); err != nil {
-			t.Fatalf("mkdir build: %v", err)
-		}
-		got := resolveAgentBinaryDir()
-		if got != "./build" {
-			t.Errorf("got %q, want ./build", got)
-		}
-	})
-
-	t.Run("falls back to production path when build dir absent", func(t *testing.T) {
-		t.Setenv("LABTETHER_AGENT_DIR", "")
-		t.Chdir(t.TempDir())
-		got := resolveAgentBinaryDir()
-		if got != "/opt/labtether/agents" {
-			t.Errorf("got %q, want /opt/labtether/agents", got)
-		}
-	})
-}
 
 func TestHandleAgentReleaseLatest(t *testing.T) {
 	t.Parallel()
@@ -498,10 +542,15 @@ func TestHandleAgentReleaseLatest(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "labtether-agent-linux-amd64"), []byte("agent-binary"), 0755); err != nil {
 		t.Fatalf("setup: write binary: %v", err)
 	}
+	writeTestManifestForBinary(t, dir, "linux", "amd64", "labtether-agent-linux-amd64")
+	cache := &agentspkg.AgentCache{RuntimeDir: dir, BakedInDir: dir}
+	if err := cache.LoadManifest(); err != nil {
+		t.Fatalf("setup: load manifest: %v", err)
+	}
 
 	srv := &apiServer{
-		agentBinaryDir: dir,
-		externalURL:    "https://labtether.example.com",
+		agentCache:  cache,
+		externalURL: "https://labtether.example.com",
 	}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agent/releases/latest?os=linux&arch=amd64", nil)
 	rec := httptest.NewRecorder()
@@ -569,7 +618,14 @@ func TestHandleAgentReleaseLatestRejectsMissingArch(t *testing.T) {
 func TestHandleAgentReleaseLatestRejectsInvalidRequest(t *testing.T) {
 	t.Parallel()
 
-	srv := &apiServer{}
+	dir := t.TempDir()
+	writeTestManifestForBinary(t, dir, "linux", "amd64", "labtether-agent-linux-amd64")
+	cache := &agentspkg.AgentCache{RuntimeDir: dir, BakedInDir: dir}
+	if err := cache.LoadManifest(); err != nil {
+		t.Fatalf("setup: load manifest: %v", err)
+	}
+
+	srv := &apiServer{agentCache: cache}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agent/releases/latest?os=linux&arch=mips64", nil)
 	rec := httptest.NewRecorder()
 
@@ -578,114 +634,47 @@ func TestHandleAgentReleaseLatestRejectsInvalidRequest(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "arch must be amd64 or arm64") {
-		t.Fatalf("unexpected response body %q", rec.Body.String())
-	}
 }
 
 func TestHandleAgentReleaseLatestReturnsNotFoundWhenBinaryMissing(t *testing.T) {
 	t.Parallel()
 
-	srv := &apiServer{agentBinaryDir: t.TempDir()}
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/agent/releases/latest?os=linux&arch=amd64", nil)
-	rec := httptest.NewRecorder()
-
-	srv.handleAgentReleaseLatest(rec, req)
-
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("expected 404, got %d", rec.Code)
-	}
-	if !strings.Contains(rec.Body.String(), "agent binary not found") {
-		t.Fatalf("unexpected response body %q", rec.Body.String())
-	}
-}
-
-func TestHandleAgentReleaseLatestHandlesHashFailure(t *testing.T) {
-	t.Parallel()
-
+	// Manifest exists with an entry, but the actual binary file is missing.
 	dir := t.TempDir()
-	if err := os.Mkdir(filepath.Join(dir, "labtether-agent-linux-amd64"), 0o755); err != nil {
-		t.Fatalf("mkdir fake binary dir: %v", err)
+	writeTestManifestForBinary(t, dir, "linux", "amd64", "labtether-agent-linux-amd64")
+	cache := &agentspkg.AgentCache{RuntimeDir: dir, BakedInDir: dir}
+	if err := cache.LoadManifest(); err != nil {
+		t.Fatalf("setup: load manifest: %v", err)
 	}
 
-	srv := &apiServer{agentBinaryDir: dir}
+	srv := &apiServer{agentCache: cache}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agent/releases/latest?os=linux&arch=amd64", nil)
 	rec := httptest.NewRecorder()
 
 	srv.handleAgentReleaseLatest(rec, req)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
-	}
-	if !strings.Contains(rec.Body.String(), "failed to hash agent binary") {
-		t.Fatalf("unexpected response body %q", rec.Body.String())
+	// With manifest-driven lookup, the release metadata is served from the manifest
+	// even when the binary file is absent. The release endpoint returns 200 with
+	// manifest data (version, sha256, URL). Only the binary download endpoint
+	// would return 404.
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (body=%q)", rec.Code, rec.Body.String())
 	}
 }
 
-func TestResolveAgentBinaryPath(t *testing.T) {
+func TestHandleAgentReleaseLatestNoManifest(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name       string
-		binaryDir  string
-		agentOS    string
-		arch       string
-		wantName   string
-		wantSuffix string
-		wantErr    bool
-	}{
-		{
-			name:       "linux amd64",
-			binaryDir:  "/tmp/build",
-			agentOS:    "linux",
-			arch:       "amd64",
-			wantName:   "labtether-agent-linux-amd64",
-			wantSuffix: "/tmp/build/labtether-agent-linux-amd64",
-		},
-		{
-			name:       "darwin uses universal binary",
-			binaryDir:  "/tmp/build",
-			agentOS:    "darwin",
-			arch:       "arm64",
-			wantName:   "labtether-agent-darwin",
-			wantSuffix: "/tmp/build/labtether-agent-darwin",
-		},
-		{
-			name:      "invalid os",
-			binaryDir: "/tmp/build",
-			agentOS:   "freebsd",
-			arch:      "amd64",
-			wantErr:   true,
-		},
-		{
-			name:      "linux invalid arch",
-			binaryDir: "/tmp/build",
-			agentOS:   "linux",
-			arch:      "mips64",
-			wantErr:   true,
-		},
-	}
+	// No manifest loaded — should return 503.
+	cache := &agentspkg.AgentCache{RuntimeDir: t.TempDir(), BakedInDir: t.TempDir()}
+	srv := &apiServer{agentCache: cache}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/agent/releases/latest?os=linux&arch=amd64", nil)
+	rec := httptest.NewRecorder()
 
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			gotName, gotPath, err := resolveAgentBinaryPath(tc.binaryDir, tc.agentOS, tc.arch)
-			if tc.wantErr {
-				if err == nil {
-					t.Fatalf("expected error, got none (name=%q path=%q)", gotName, gotPath)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if gotName != tc.wantName {
-				t.Fatalf("name: got %q want %q", gotName, tc.wantName)
-			}
-			if gotPath != tc.wantSuffix {
-				t.Fatalf("path: got %q want %q", gotPath, tc.wantSuffix)
-			}
-		})
+	srv.handleAgentReleaseLatest(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d (body=%q)", rec.Code, rec.Body.String())
 	}
 }
+
