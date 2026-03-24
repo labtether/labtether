@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { SessionToolbar } from "../../../../components/SessionToolbar";
+import { ErrorBoundary } from "../../../../components/ErrorBoundary";
 import { SessionPanel } from "../../../../components/SessionPanel";
 import { Card } from "../../../../components/ui/Card";
 import { Input, Select } from "../../../../components/ui/Input";
@@ -320,27 +321,29 @@ export function TerminalTab({ nodeId }: { nodeId: string }) {
           open={searchOpen}
           onClose={() => setSearchOpen(false)}
         />
-        <SessionPanel
-          type="terminal"
-          connectionState={session.connectionState}
-          wsUrl={session.wsUrl}
-          error={session.error}
-          target={session.target}
-          connectedAgentIds={session.connectedAgentIds}
-          onRetry={connectWithShell}
-          termRef={termRef}
-          onTerminalConnected={session.handleConnected}
-          onTerminalDisconnected={session.handleDisconnected}
-          onTerminalError={session.handleError}
-          onTerminalStreamReady={session.handleStreamReady}
-          onTerminalStreamStatus={session.handleStreamStatus}
-          terminalTheme={themeDef.theme}
-          terminalFontFamily={fontDef.family}
-          terminalFontSize={prefs.font_size}
-          terminalCursorStyle={prefs.cursor_style}
-          terminalCursorBlink={prefs.cursor_blink}
-          terminalScrollback={prefs.scrollback}
-        />
+        <ErrorBoundary>
+          <SessionPanel
+            type="terminal"
+            connectionState={session.connectionState}
+            wsUrl={session.wsUrl}
+            error={session.error}
+            target={session.target}
+            connectedAgentIds={session.connectedAgentIds}
+            onRetry={connectWithShell}
+            termRef={termRef}
+            onTerminalConnected={session.handleConnected}
+            onTerminalDisconnected={session.handleDisconnected}
+            onTerminalError={session.handleError}
+            onTerminalStreamReady={session.handleStreamReady}
+            onTerminalStreamStatus={session.handleStreamStatus}
+            terminalTheme={themeDef.theme}
+            terminalFontFamily={fontDef.family}
+            terminalFontSize={prefs.font_size}
+            terminalCursorStyle={prefs.cursor_style}
+            terminalCursorBlink={prefs.cursor_blink}
+            terminalScrollback={prefs.scrollback}
+          />
+        </ErrorBoundary>
       </div>
 
       {/* Keyboard toolbar */}

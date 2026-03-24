@@ -10,6 +10,7 @@ import TopologyTreeView from "./TopologyTreeView";
 import { ConnectToDialog } from "./ConnectToDialog";
 import { useFastStatus } from "../../../contexts/StatusContext";
 import { TopologySearch } from "./TopologySearch";
+import { ErrorBoundary } from "../../../components/ErrorBoundary";
 
 type ViewMode = "canvas" | "tree";
 type PanelMode = "inbox" | "inspector" | null;
@@ -203,6 +204,18 @@ export default function TopologyCanvasPage() {
       <div className="h-full w-full pt-14">
         {viewMode === "canvas" ? (
           topology ? (
+            <ErrorBoundary
+              fallback={
+                <div className="flex h-full w-full items-center justify-center text-sm text-[var(--muted)]">
+                  <div className="flex flex-col items-center gap-2">
+                    <p>Topology canvas failed to render.</p>
+                    <button onClick={() => window.location.reload()} className="text-sm underline hover:no-underline">
+                      Reload page
+                    </button>
+                  </div>
+                </div>
+              }
+            >
             <TopologyCanvas
               topology={topology}
               onViewportChange={saveViewport}
@@ -236,6 +249,7 @@ export default function TopologyCanvasPage() {
               onDeleteConnection={deleteConnection}
               onResetLayout={resetTopology}
             />
+            </ErrorBoundary>
           ) : (
             <div className="flex h-full w-full items-center justify-center text-sm text-[var(--muted)]">
               No topology data
