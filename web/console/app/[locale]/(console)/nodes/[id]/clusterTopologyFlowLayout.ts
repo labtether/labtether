@@ -3,7 +3,8 @@ import type { Asset } from "../../../../console/models";
 import type { ClusterPlacement, GuestPlacement } from "./clusterTopologyFlowPlacements";
 
 function nodeYTop(
-  graph: dagre.graphlib.Graph,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  graph: InstanceType<typeof dagre.graphlib.Graph>,
   nodeID: string,
   nodeHeight: number,
   fallbackTop: number,
