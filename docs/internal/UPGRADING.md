@@ -18,8 +18,15 @@ This guide covers the upgrade procedure for LabTether hub deployments, including
 
    Check the `schema_migrations` table for the latest applied migration:
 
+   ```bash
+   make db-migrate-status
+   ```
+
+   Or query directly:
+
    ```sql
-   SELECT version, name, applied_at FROM schema_migrations ORDER BY version DESC LIMIT 5;
+   SELECT version, name, applied_at, checksum IS NOT NULL AS checksum_verified
+   FROM schema_migrations ORDER BY version DESC LIMIT 5;
    ```
 
    Or check the container image tag:
@@ -53,6 +60,8 @@ docker compose logs labtether | grep "migration"
 ## Rollback Procedure
 
 LabTether uses forward-only migrations. There are no Down() rollbacks. Rollback is performed by restoring from a database backup.
+
+> **Important:** Each migration's SQL statements are checksummed (SHA-256) when first applied and re-verified on every subsequent startup. If a migration is modified after being applied the hub will refuse to start with a clear error message. This is intentional — migrations are append-only. If you see a checksum error after a failed partial upgrade, restore from backup.
 
 1. **Stop the hub:**
 
@@ -115,6 +124,20 @@ WHERE pid IN (SELECT pid FROM pg_locks WHERE locktype = 'advisory');
    ```
 
 3. Report the issue with the error message and migration version number.
+
+### Migration checksum mismatch
+
+If the hub logs an error like:
+
+```
+schema migration vN (name) has been modified after being applied (stored checksum ..., computed ...)
+```
+
+This means the SQL statements for an already-applied migration were edited in source code. Migrations are append-only — do **not** edit an existing migration. The correct resolution is:
+
+1. Revert the source code change for that migration.
+2. If the change was intentional and the environment is non-production, drop and recreate the database, then re-run `make db-migrate`.
+3. For production environments, restore from a backup taken before the change was made.
 
 ### Hub won't start after upgrade
 
