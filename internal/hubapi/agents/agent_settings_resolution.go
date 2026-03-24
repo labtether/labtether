@@ -1,13 +1,18 @@
 package agents
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"log"
 	"net/url"
 	"runtime/debug"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/agentsettings"
 	"github.com/labtether/labtether/internal/runtimesettings"
 )
@@ -303,6 +308,54 @@ func DetermineAgentVersionStatus(currentVersion, latestVersion string) string {
 		return "up_to_date"
 	}
 	return "update_available"
+}
+
+// SendUpdateRequest sends an update.request message to a connected agent to
+// trigger a self-update. This is a fire-and-forget push — the agent will
+// report progress and results via update.progress / update.result messages.
+func (d *Deps) SendUpdateRequest(conn *agentmgr.AgentConn) {
+	if conn == nil || d.AgentCache == nil {
+		return
+	}
+	manifest := d.AgentCache.Manifest()
+	if manifest == nil {
+		return
+	}
+
+	agentOS := NormalizeAgentReleaseOS(conn.Platform)
+	agentArch := NormalizeAgentReleaseArch(conn.Meta("cpu_architecture"))
+	if agentOS == "" || agentArch == "" {
+		return
+	}
+
+	// Verify the binary exists in the manifest for this platform before pushing.
+	if _, err := manifest.LookupBinary(agentOS, agentArch); err != nil {
+		return
+	}
+
+	// Generate a unique job ID for this push.
+	var idBytes [8]byte
+	if _, err := rand.Read(idBytes[:]); err != nil {
+		return
+	}
+	jobID := "auto-update-" + hex.EncodeToString(idBytes[:])
+
+	data, err := json.Marshal(agentmgr.UpdateRequestData{
+		JobID: jobID,
+		Mode:  "self",
+	})
+	if err != nil {
+		return
+	}
+	if err := conn.Send(agentmgr.Message{
+		Type: agentmgr.MsgUpdateRequest,
+		ID:   jobID,
+		Data: data,
+	}); err != nil {
+		log.Printf("agentws: failed to push update request to %s: %v", conn.AssetID, err)
+	} else {
+		log.Printf("agentws: pushed self-update request %s to %s", jobID, conn.AssetID)
+	}
 }
 
 func NormalizeAgentReleaseOS(raw string) string {

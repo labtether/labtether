@@ -89,6 +89,20 @@ func (d *Deps) ProcessAgentHeartbeat(conn *agentmgr.AgentConn, msg agentmgr.Mess
 
 	d.broadcastEvent("heartbeat.update", map[string]any{"asset_id": conn.AssetID})
 
+	// If the agent reported its version and we know the latest version, push an
+	// update request when the agent is outdated. The push is fire-and-forget —
+	// the agent decides locally whether auto-update is enabled.
+	if agentVersion := strings.TrimSpace(conn.Meta("agent_version")); agentVersion != "" {
+		if d.AgentCache != nil {
+			if manifest := d.AgentCache.Manifest(); manifest != nil {
+				latestVersion := manifest.GoAgentVersion()
+				if DetermineAgentVersionStatus(agentVersion, latestVersion) == "update_available" {
+					d.SendUpdateRequest(conn)
+				}
+			}
+		}
+	}
+
 	// Store connector discovery info in presence metadata (without overwriting connected_at/session_id).
 	if len(data.Connectors) > 0 && d.PresenceStore != nil {
 		meta := map[string]any{"connectors": data.Connectors}
