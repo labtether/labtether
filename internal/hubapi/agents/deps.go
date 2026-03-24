@@ -102,6 +102,8 @@ func RegisterRoutes(handlers map[string]http.HandlerFunc, d *Deps) {
 	handlers["/api/v1/agents/pending"] = d.WrapAuth(d.HandleListPendingAgents)
 	handlers["/api/v1/agents/approve"] = d.WrapAuth(d.HandleApproveAgent)
 	handlers["/api/v1/agents/reject"] = d.WrapAuth(d.HandleRejectAgent)
+	handlers["/api/v1/agent/manifest"] = d.WrapAuth(d.HandleAgentManifest)
+	handlers["/api/v1/agent/cache/refresh"] = d.WrapAdmin(d.HandleAgentCacheRefresh)
 }
 
 // RegisterWSHandlers registers WebSocket message handlers for agent-related
