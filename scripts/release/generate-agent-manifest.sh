@@ -85,10 +85,10 @@ MAC_RELEASE=$(gh_api "${GITHUB_API}/repos/${MAC_REPO}/releases/tags/${HUB_VERSIO
               gh_api "${GITHUB_API}/repos/${MAC_REPO}/releases/latest" 2>/dev/null || echo '{}')
 MAC_VERSION=$(echo "${MAC_RELEASE}" | jq -r '.tag_name // "unknown"')
 MAC_BINARY="labtether-agent-macos-universal.tar.gz"
-MAC_URL=$(echo "${MAC_RELEASE}" | jq -r --arg name "${MAC_BINARY}" '.assets[] | select(.name == $name) | .browser_download_url // ""')
+MAC_URL=$(echo "${MAC_RELEASE}" | jq -r --arg name "${MAC_BINARY}" '(.assets // [])[] | select(.name == $name) | .browser_download_url // ""' 2>/dev/null || echo "")
 
 MAC_SHA256_VAL=""
-CHECKSUMS_URL=$(echo "${MAC_RELEASE}" | jq -r '.assets[] | select(.name | endswith("checksums.txt")) | .browser_download_url // ""' 2>/dev/null || echo "")
+CHECKSUMS_URL=$(echo "${MAC_RELEASE}" | jq -r '(.assets // [])[] | select(.name | endswith("checksums.txt")) | .browser_download_url // ""' 2>/dev/null || echo "")
 if [[ -n "${CHECKSUMS_URL}" && "${CHECKSUMS_URL}" != "null" && "${CHECKSUMS_URL}" != "" ]]; then
   MAC_SHA256_VAL=$(curl -fsSL "${CHECKSUMS_URL}" 2>/dev/null | grep "${MAC_BINARY}" | awk '{print $1}' || echo "")
 fi
@@ -101,10 +101,10 @@ WIN_RELEASE=$(gh_api "${GITHUB_API}/repos/${WIN_REPO}/releases/tags/${HUB_VERSIO
               gh_api "${GITHUB_API}/repos/${WIN_REPO}/releases/latest" 2>/dev/null || echo '{}')
 WIN_VERSION=$(echo "${WIN_RELEASE}" | jq -r '.tag_name // "unknown"')
 WIN_BINARY="labtether-agent-win-x64.zip"
-WIN_URL=$(echo "${WIN_RELEASE}" | jq -r --arg name "${WIN_BINARY}" '.assets[] | select(.name == $name) | .browser_download_url // ""')
+WIN_URL=$(echo "${WIN_RELEASE}" | jq -r --arg name "${WIN_BINARY}" '(.assets // [])[] | select(.name == $name) | .browser_download_url // ""' 2>/dev/null || echo "")
 
 WIN_SHA256_VAL=""
-WIN_CHECKSUMS_URL=$(echo "${WIN_RELEASE}" | jq -r '.assets[] | select(.name | endswith("checksums.txt")) | .browser_download_url // ""' 2>/dev/null || echo "")
+WIN_CHECKSUMS_URL=$(echo "${WIN_RELEASE}" | jq -r '(.assets // [])[] | select(.name | endswith("checksums.txt")) | .browser_download_url // ""' 2>/dev/null || echo "")
 if [[ -n "${WIN_CHECKSUMS_URL}" && "${WIN_CHECKSUMS_URL}" != "null" && "${WIN_CHECKSUMS_URL}" != "" ]]; then
   WIN_SHA256_VAL=$(curl -fsSL "${WIN_CHECKSUMS_URL}" 2>/dev/null | grep "${WIN_BINARY}" | awk '{print $1}' || echo "")
 fi
