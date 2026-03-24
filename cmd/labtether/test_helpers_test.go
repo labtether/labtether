@@ -71,6 +71,7 @@ func newTestAPIServer(t *testing.T) *apiServer {
 	enrollmentStore := persistence.NewMemoryEnrollmentStore()
 	adminResetStore := persistence.NewMemoryAdminResetStore()
 	linkSuggestionStore := persistence.NewMemoryLinkSuggestionStore()
+	authStore := persistence.NewMemoryAuthStore()
 
 	sut := &apiServer{
 		terminalStore:           terminalStore,
@@ -97,6 +98,7 @@ func newTestAPIServer(t *testing.T) *apiServer {
 		webhookStore:            persistence.NewMemoryWebhookStore(),
 		savedActionStore:        persistence.NewMemorySavedActionStore(),
 		linkSuggestionStore:     linkSuggestionStore,
+		authStore:               authStore,
 		secretsManager:          secretsManager,
 		policyState:             newPolicyRuntimeState(policy.DefaultEvaluatorConfig()),
 		connectorRegistry:       connectorsdk.NewRegistry(),
