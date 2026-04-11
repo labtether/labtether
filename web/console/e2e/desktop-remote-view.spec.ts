@@ -345,7 +345,10 @@ async function installDesktopBrowserMocks(
 
       send(data: unknown) {
         if (this.delegate) {
-          this.delegate.send(data as string | ArrayBufferLike | Blob | ArrayBufferView);
+          // TS 6's lib.dom typings tightened WebSocket.send to require
+          // BufferSource, which excludes SharedArrayBuffer. Cast to the
+          // narrower set of types the mock is known to pass through.
+          this.delegate.send(data as string | ArrayBuffer | Blob | ArrayBufferView<ArrayBuffer>);
           return;
         }
         const payload = typeof data === "string" ? data : String(data);
