@@ -191,8 +191,8 @@ func schemaMigrationChecksum(migration schemaMigration) string {
 func applyOrVerifySchemaMigration(ctx context.Context, conn *pgxpool.Conn, migration schemaMigration) error {
 	// Query both existence and stored checksum in one round-trip.
 	var (
-		exists           bool
-		storedChecksum   *string // NULL when row pre-dates checksum column
+		exists         bool
+		storedChecksum *string // NULL when row pre-dates checksum column
 	)
 	if err := conn.QueryRow(ctx,
 		`SELECT TRUE, checksum FROM schema_migrations WHERE version = $1`,

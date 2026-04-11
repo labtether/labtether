@@ -35,10 +35,10 @@ func (s *apiServer) buildAgentsDeps() *agentspkg.Deps {
 		PendingAgents:    s.pendingAgents,
 		PendingAgentCmds: &s.pendingAgentCmds,
 
-		HubIdentity:    s.hubIdentity,
-		CACertPEM:      s.tlsState.CACertPEM,
-		AgentCache: s.agentCache,
-		TLSEnabled:     s.tlsState.Enabled,
+		HubIdentity: s.hubIdentity,
+		CACertPEM:   s.tlsState.CACertPEM,
+		AgentCache:  s.agentCache,
+		TLSEnabled:  s.tlsState.Enabled,
 
 		AgentWebSocketUpgrader: agentWebSocketUpgrader,
 

@@ -83,7 +83,7 @@ services:
           cpus: '1.0'
 
   labtether-agent:
-    image: ghcr.io/labtether/labtether-agent:dev
+    image: ghcr.io/labtether/labtether-agent:latest
     # For local agent development with sibling checkout:
     # build:
     #   context: ../labtether-agent
