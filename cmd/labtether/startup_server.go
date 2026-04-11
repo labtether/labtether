@@ -137,11 +137,11 @@ func newAPIServer(
 			}
 			return cache
 		}(),
-		externalURL:          strings.TrimRight(strings.TrimSpace(envOrDefault("LABTETHER_EXTERNAL_URL", "")), "/"),
-		pendingAgents:        newPendingAgents(),
-		challengeStore:       auth.NewChallengeStore(),
-		installStateStore:    installStateStore,
-		fileProtoPool:        fileproto.NewPool(),
+		externalURL:       strings.TrimRight(strings.TrimSpace(envOrDefault("LABTETHER_EXTERNAL_URL", "")), "/"),
+		pendingAgents:     newPendingAgents(),
+		challengeStore:    auth.NewChallengeStore(),
+		installStateStore: installStateStore,
+		fileProtoPool:     fileproto.NewPool(),
 	}
 	// Wire broadcaster to bump status aggregate generation on every mutation event.
 	srv.broadcaster.SetOnBroadcast(func() { srv.statusCache.Generation.Add(1) })

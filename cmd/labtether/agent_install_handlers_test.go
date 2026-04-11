@@ -534,7 +534,6 @@ func TestHTTPURLToWS(t *testing.T) {
 	}
 }
 
-
 func TestHandleAgentReleaseLatest(t *testing.T) {
 	t.Parallel()
 
@@ -677,4 +676,3 @@ func TestHandleAgentReleaseLatestNoManifest(t *testing.T) {
 		t.Fatalf("expected 503, got %d (body=%q)", rec.Code, rec.Body.String())
 	}
 }
-

@@ -1,6 +1,9 @@
 # macOS
 .DS_Store
 
+# Windows
+Thumbs.db
+
 # Go
 bin/
 # Agent binaries are downloaded from GitHub Releases at build time.
@@ -13,6 +16,12 @@ agent-dist/
 /linux-agent
 *.test
 coverage.out
+*.prof
+*.pprof
+__debug_bin*
+vendor/
+go.work
+go.work.sum
 
 # Swift
 .build/
@@ -24,10 +33,22 @@ web/console/out/
 web/console/test-results/
 web/console/playwright-report/
 *.tsbuildinfo
+.eslintcache
+.stylelintcache
+.vitest-cache/
+vitest.config.ts.timestamp-*
+.turbo/
+.swc/
+.vercel/
+.cache/
 
 # Python
 __pycache__/
 *.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.python-version
 
 # Env
 .env
@@ -50,11 +71,18 @@ CLAUDE.md
 AGENTS.md
 .claude/
 .mcp.json
+.context/
 
-# IDE
+# IDE / editors
 .vscode/
 .idea/
 .worktrees/
+.history/
+.vs/
+*.code-workspace
+*.swp
+*.swo
+*~
 
 # Playwright MCP logs
 .playwright-mcp/
@@ -70,3 +98,10 @@ AGENTS.md
 
 # Local build artifacts
 .bin/
+
+# Runtime dumps / core files
+dump.rdb
+*.dump
+*.dmp
+core
+core.*
