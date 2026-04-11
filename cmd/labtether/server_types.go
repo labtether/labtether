@@ -142,6 +142,7 @@ type apiServer struct {
 	linkSuggestionScanMu          sync.Mutex
 	linkSuggestionScanLastStarted time.Time
 	linkSuggestionScanRunning     atomic.Bool
+	collectorsDepsOnce            sync.Once
 	collectorsDeps                *collectorspkg.Deps
 	agentsDeps                    *agentspkg.Deps
 	terminalDeps                  *terminalpkg.Deps
