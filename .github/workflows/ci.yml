@@ -308,19 +308,22 @@ jobs:
   stack-checks:
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    permissions:
-      contents: read
-      packages: read
     steps:
-      - name: Checkout
+      - name: Checkout hub
         uses: actions/checkout@v6
 
-      - name: Log in to GHCR
-        uses: docker/login-action@v4
+      - name: Checkout labtether-agent
+        uses: actions/checkout@v6
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          repository: labtether/labtether-agent
+          path: labtether-agent
+
+      - name: Build agent image locally
+        run: |
+          docker build \
+            --tag ghcr.io/labtether/labtether-agent:latest \
+            --build-arg APP_VERSION=ci \
+            labtether-agent
 
       - name: Prepare environment
         run: |
