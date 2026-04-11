@@ -33,19 +33,22 @@ type portainerRuntime = portainerpkg.PortainerRuntime
 type cachedPortainerRuntime = portainerpkg.CachedPortainerRuntime
 type portainerCapabilities = portainerpkg.PortainerCapabilities
 
-// ensurePortainerDeps returns portainerDeps, creating and caching on first call.
+// ensurePortainerDeps returns portainerDeps, initializing once with sync.Once
+// so concurrent callers can't race on the lazy-init. Store pointers are
+// refreshed from apiServer on every call so tests that swap stores mid-run
+// stay visible while reusing the cached Deps for state continuity.
 func (s *apiServer) ensurePortainerDeps() *portainerpkg.Deps {
-	if s.portainerDeps != nil {
-		d := s.portainerDeps
-		d.AssetStore = s.assetStore
-		d.HubCollectorStore = s.hubCollectorStore
-		d.CredentialStore = s.credentialStore
-		d.SecretsManager = s.secretsManager
-		d.RequireAdminAuth = s.requireAdminAuth
-		return d
-	}
-	d := s.buildPortainerDeps()
-	s.portainerDeps = d
+	s.portainerDepsOnce.Do(func() {
+		if s.portainerDeps == nil {
+			s.portainerDeps = s.buildPortainerDeps()
+		}
+	})
+	d := s.portainerDeps
+	d.AssetStore = s.assetStore
+	d.HubCollectorStore = s.hubCollectorStore
+	d.CredentialStore = s.credentialStore
+	d.SecretsManager = s.secretsManager
+	d.RequireAdminAuth = s.requireAdminAuth
 	return d
 }
 

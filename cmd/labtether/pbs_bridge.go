@@ -29,19 +29,22 @@ func (s *apiServer) buildPBSDeps() *pbspkg.Deps {
 type pbsRuntime = pbspkg.PBSRuntime
 type cachedPBSRuntime = pbspkg.CachedPBSRuntime
 
-// ensurePBSDeps returns pbsDeps, creating and caching on first call.
+// ensurePBSDeps returns pbsDeps, initializing once with sync.Once so concurrent
+// callers can't race on the lazy-init. Store pointers are refreshed from
+// apiServer on every call so tests that swap stores mid-run stay visible while
+// reusing the cached Deps for state continuity.
 func (s *apiServer) ensurePBSDeps() *pbspkg.Deps {
-	if s.pbsDeps != nil {
-		d := s.pbsDeps
-		d.AssetStore = s.assetStore
-		d.HubCollectorStore = s.hubCollectorStore
-		d.CredentialStore = s.credentialStore
-		d.SecretsManager = s.secretsManager
-		d.RequireAdminAuth = s.requireAdminAuth
-		return d
-	}
-	d := s.buildPBSDeps()
-	s.pbsDeps = d
+	s.pbsDepsOnce.Do(func() {
+		if s.pbsDeps == nil {
+			s.pbsDeps = s.buildPBSDeps()
+		}
+	})
+	d := s.pbsDeps
+	d.AssetStore = s.assetStore
+	d.HubCollectorStore = s.hubCollectorStore
+	d.CredentialStore = s.credentialStore
+	d.SecretsManager = s.secretsManager
+	d.RequireAdminAuth = s.requireAdminAuth
 	return d
 }
 

@@ -19,10 +19,8 @@ func (s *apiServer) buildGroupFeaturesDeps() *groupfeaturespkg.Deps {
 
 // ensureGroupFeaturesDeps returns the cached group features deps, creating on first call.
 func (s *apiServer) ensureGroupFeaturesDeps() *groupfeaturespkg.Deps {
-	if s.groupFeaturesDeps != nil {
-		return s.groupFeaturesDeps
-	}
-	d := s.buildGroupFeaturesDeps()
-	s.groupFeaturesDeps = d
-	return d
+	s.groupFeaturesDepsOnce.Do(func() {
+		s.groupFeaturesDeps = s.buildGroupFeaturesDeps()
+	})
+	return s.groupFeaturesDeps
 }

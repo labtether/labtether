@@ -26,12 +26,10 @@ func (s *apiServer) buildLogsDeps() *logspkg.Deps {
 
 // ensureLogsDeps returns the logs deps, creating and caching on first call.
 func (s *apiServer) ensureLogsDeps() *logspkg.Deps {
-	if s.logsDeps != nil {
-		return s.logsDeps
-	}
-	d := s.buildLogsDeps()
-	s.logsDeps = d
-	return d
+	s.logsDepsOnce.Do(func() {
+		s.logsDeps = s.buildLogsDeps()
+	})
+	return s.logsDeps
 }
 
 // Compile-time check: logspkg.RecentSourceLister must be satisfied by

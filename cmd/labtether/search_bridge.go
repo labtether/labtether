@@ -12,10 +12,8 @@ func (s *apiServer) buildSearchDeps() *shared.SearchDeps {
 
 // ensureSearchDeps returns the search deps, creating and caching on first call.
 func (s *apiServer) ensureSearchDeps() *shared.SearchDeps {
-	if s.searchDeps != nil {
-		return s.searchDeps
-	}
-	d := s.buildSearchDeps()
-	s.searchDeps = d
-	return d
+	s.searchDepsOnce.Do(func() {
+		s.searchDeps = s.buildSearchDeps()
+	})
+	return s.searchDeps
 }

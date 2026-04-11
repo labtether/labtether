@@ -81,7 +81,7 @@ func TestHandleDesktopStreamTicketIssuesAgentVNCPasswordWithoutQueryLeak(t *test
 	sut := newTestAPIServer(t)
 	sut.agentMgr = agentmgr.NewManager()
 	sut.agentMgr.Register(&agentmgr.AgentConn{AssetID: "desktop-node-01"})
-	sut.desktopDeps = nil // reset cached deps to pick up new agentMgr
+	sut.resetDesktopDepsForTest() // reset cached deps to pick up new agentMgr
 	sut.setDesktopSessionOptions("sess-vnc-auth", desktopSessionOptions{
 		Protocol: "vnc",
 		Quality:  "medium",

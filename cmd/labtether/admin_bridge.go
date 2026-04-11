@@ -76,10 +76,11 @@ func (s *apiServer) buildAdminDeps() *adminpkg.Deps {
 
 // ensureAdminDeps returns adminDeps, lazily building and caching on first call.
 func (s *apiServer) ensureAdminDeps() *adminpkg.Deps {
-	if s.adminDeps != nil {
-		return s.adminDeps
-	}
-	s.adminDeps = s.buildAdminDeps()
+	s.adminDepsOnce.Do(func() {
+		if s.adminDeps == nil {
+			s.adminDeps = s.buildAdminDeps()
+		}
+	})
 	return s.adminDeps
 }
 

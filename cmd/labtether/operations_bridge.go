@@ -236,12 +236,10 @@ func (s *apiServer) buildOperationsDeps() *opspkg.ExecDeps {
 
 // ensureOperationsDeps returns the operations deps, creating and caching on first call.
 func (s *apiServer) ensureOperationsDeps() *opspkg.ExecDeps {
-	if s.operationsDeps != nil {
-		return s.operationsDeps
-	}
-	d := s.buildOperationsDeps()
-	s.operationsDeps = d
-	return d
+	s.operationsDepsOnce.Do(func() {
+		s.operationsDeps = s.buildOperationsDeps()
+	})
+	return s.operationsDeps
 }
 
 // buildUpdateExecutorDeps constructs the UpdateExecutorDeps from apiServer fields.

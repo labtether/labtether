@@ -16,12 +16,10 @@ func (s *apiServer) buildBulkDeps() *bulkpkg.Deps {
 
 // ensureBulkDeps returns the bulk deps, creating and caching on first call.
 func (s *apiServer) ensureBulkDeps() *bulkpkg.Deps {
-	if s.bulkDeps != nil {
-		return s.bulkDeps
-	}
-	d := s.buildBulkDeps()
-	s.bulkDeps = d
-	return d
+	s.bulkDepsOnce.Do(func() {
+		s.bulkDeps = s.buildBulkDeps()
+	})
+	return s.bulkDeps
 }
 
 // execOnAssetForBulk adapts v2ExecOnAsset to the bulkpkg.ExecResult type.
