@@ -325,6 +325,11 @@ jobs:
             --build-arg APP_VERSION=ci \
             labtether-agent
 
+      - name: Generate agent manifest and binaries
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/release/generate-agent-manifest.sh ci ./agent-dist
+
       - name: Prepare environment
         run: |
           cp .env.example .env
