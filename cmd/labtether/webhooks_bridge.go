@@ -12,10 +12,8 @@ func (s *apiServer) buildWebhooksDeps() *webhookspkg.Deps {
 
 // ensureWebhooksDeps returns the webhooks deps, creating and caching on first call.
 func (s *apiServer) ensureWebhooksDeps() *webhookspkg.Deps {
-	if s.webhooksDeps != nil {
-		return s.webhooksDeps
-	}
-	d := s.buildWebhooksDeps()
-	s.webhooksDeps = d
-	return d
+	s.webhooksDepsOnce.Do(func() {
+		s.webhooksDeps = s.buildWebhooksDeps()
+	})
+	return s.webhooksDeps
 }

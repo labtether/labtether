@@ -144,29 +144,51 @@ type apiServer struct {
 	linkSuggestionScanRunning     atomic.Bool
 	collectorsDepsOnce            sync.Once
 	collectorsDeps                *collectorspkg.Deps
+	agentsDepsOnce                sync.Once
 	agentsDeps                    *agentspkg.Deps
+	terminalDepsOnce              sync.Once
 	terminalDeps                  *terminalpkg.Deps
+	desktopDepsOnce               sync.Once
 	desktopDeps                   *desktoppkg.Deps
 	proxmoxDeps                   *proxmoxpkg.Deps
+	pbsDepsOnce                   sync.Once
 	pbsDeps                       *pbspkg.Deps
+	portainerDepsOnce             sync.Once
 	portainerDeps                 *portainerpkg.Deps
+	truenasDepsOnce               sync.Once
 	truenasDeps                   *truenaspkg.Deps
+	authDepsOnce                  sync.Once
 	authDeps                      *authpkg.Deps
 	alertingDeps                  *alertingpkg.Deps
+	dockerDepsOnce                sync.Once
 	dockerDeps                    *dockerpkg.Deps
+	operationsDepsOnce            sync.Once
 	operationsDeps                *opspkg.ExecDeps
+	actionsDepsOnce               sync.Once
 	actionsDeps                   *actionspkg.Deps
+	updatesDepsOnce               sync.Once
 	updatesDeps                   *updatespkg.Deps
+	bulkDepsOnce                  sync.Once
 	bulkDeps                      *bulkpkg.Deps
+	whoamiDepsOnce                sync.Once
 	whoamiDeps                    *whoamipkg.Deps
+	groupFeaturesDepsOnce         sync.Once
 	groupFeaturesDeps             *groupfeaturespkg.Deps
+	schedulesDepsOnce             sync.Once
 	schedulesDeps                 *schedulespkg.Deps
+	webhooksDepsOnce              sync.Once
 	webhooksDeps                  *webhookspkg.Deps
+	logsDepsOnce                  sync.Once
 	logsDeps                      *logspkg.Deps
+	homeassistantDepsOnce         sync.Once
 	homeassistantDeps             *homeassistantpkg.Deps
+	adminDepsOnce                 sync.Once
 	adminDeps                     *adminpkg.Deps
+	workerDepsOnce                sync.Once
 	workerDeps                    *workerpkg.Deps
+	searchDepsOnce                sync.Once
 	searchDeps                    *sharedpkg.SearchDeps
+	browserEventsDepsOnce         sync.Once
 	browserEventsDeps             *sharedpkg.BrowserEventsDeps
 	fileProtoPool                 *fileproto.Pool
 	activeTransfers               sync.Map

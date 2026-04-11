@@ -13,12 +13,10 @@ func (s *apiServer) buildHomeAssistantDeps() *homeassistantpkg.Deps {
 
 // ensureHomeAssistantDeps returns homeassistantDeps, creating and caching on first call.
 func (s *apiServer) ensureHomeAssistantDeps() *homeassistantpkg.Deps {
-	if s.homeassistantDeps != nil {
-		return s.homeassistantDeps
-	}
-	d := s.buildHomeAssistantDeps()
-	s.homeassistantDeps = d
-	return d
+	s.homeassistantDepsOnce.Do(func() {
+		s.homeassistantDeps = s.buildHomeAssistantDeps()
+	})
+	return s.homeassistantDeps
 }
 
 // Forwarding methods.

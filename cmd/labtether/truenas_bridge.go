@@ -95,25 +95,23 @@ func appendTrueNASWarning(existing []string, warning string) []string {
 	return truenaspkg.AppendTrueNASWarning(existing, warning)
 }
 
-// ensureTruenasDeps returns truenasDeps. When pre-initialized (production),
-// returns the cached instance. Otherwise, rebuilds on every call so that test
-// mutations to apiServer store fields are visible, while reusing the cached
-// Deps's mutable state (caches, subscription handles) for state continuity.
+// ensureTruenasDeps returns truenasDeps, initializing once with sync.Once so
+// concurrent callers can't race on the lazy-init. Store pointers are refreshed
+// from apiServer on every call so tests that swap stores mid-run stay visible
+// while reusing the cached Deps's mutable state for continuity.
 func (s *apiServer) ensureTruenasDeps() *truenaspkg.Deps {
-	if s.truenasDeps != nil {
-		// Production path: update store pointers from apiServer so test
-		// mutations are reflected without losing cached state.
-		d := s.truenasDeps
-		d.AssetStore = s.assetStore
-		d.HubCollectorStore = s.hubCollectorStore
-		d.CredentialStore = s.credentialStore
-		d.SecretsManager = s.secretsManager
-		d.LogStore = s.logStore
-		d.RequireAdminAuth = s.requireAdminAuth
-		return d
-	}
-	d := s.buildTruenasDeps()
-	s.truenasDeps = d
+	s.truenasDepsOnce.Do(func() {
+		if s.truenasDeps == nil {
+			s.truenasDeps = s.buildTruenasDeps()
+		}
+	})
+	d := s.truenasDeps
+	d.AssetStore = s.assetStore
+	d.HubCollectorStore = s.hubCollectorStore
+	d.CredentialStore = s.credentialStore
+	d.SecretsManager = s.secretsManager
+	d.LogStore = s.logStore
+	d.RequireAdminAuth = s.requireAdminAuth
 	return d
 }
 

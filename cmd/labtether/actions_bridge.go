@@ -45,12 +45,10 @@ func (s *apiServer) buildActionsDeps() *actionspkg.Deps {
 
 // ensureActionsDeps returns the actions deps, creating and caching on first call.
 func (s *apiServer) ensureActionsDeps() *actionspkg.Deps {
-	if s.actionsDeps != nil {
-		return s.actionsDeps
-	}
-	d := s.buildActionsDeps()
-	s.actionsDeps = d
-	return d
+	s.actionsDepsOnce.Do(func() {
+		s.actionsDeps = s.buildActionsDeps()
+	})
+	return s.actionsDeps
 }
 
 // ensureActionRunDeps is an alias for ensureActionsDeps; it exists so that

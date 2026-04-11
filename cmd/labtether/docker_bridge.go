@@ -62,12 +62,10 @@ func (s *apiServer) buildDockerDeps() *dockerpkg.Deps {
 
 // ensureDockerDeps returns the docker deps, creating and caching on first call.
 func (s *apiServer) ensureDockerDeps() *dockerpkg.Deps {
-	if s.dockerDeps != nil {
-		return s.dockerDeps
-	}
-	d := s.buildDockerDeps()
-	s.dockerDeps = d
-	return d
+	s.dockerDepsOnce.Do(func() {
+		s.dockerDeps = s.buildDockerDeps()
+	})
+	return s.dockerDeps
 }
 
 // Forwarding methods from apiServer to dockerpkg.Deps so that existing

@@ -31,10 +31,8 @@ func (s *apiServer) buildUpdatesDeps() *updatespkg.Deps {
 
 // ensureUpdatesDeps returns the updates deps, creating and caching on first call.
 func (s *apiServer) ensureUpdatesDeps() *updatespkg.Deps {
-	if s.updatesDeps != nil {
-		return s.updatesDeps
-	}
-	d := s.buildUpdatesDeps()
-	s.updatesDeps = d
-	return d
+	s.updatesDepsOnce.Do(func() {
+		s.updatesDeps = s.buildUpdatesDeps()
+	})
+	return s.updatesDeps
 }

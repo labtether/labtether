@@ -73,6 +73,11 @@ type proxmoxActionExecution = proxmoxpkg.ProxmoxActionExecution
 // ensureProxmoxDeps returns proxmoxDeps. When pre-initialized (production),
 // returns the cached instance for shared client caching. Otherwise, rebuilds
 // on every call so that test mutations to apiServer fields are visible.
+//
+// This function does NOT have the race-on-lazy-init pattern that
+// ensureCollectorsDeps had, because neither branch mutates shared state: the
+// cached branch is a pure read, and the rebuild branch returns a local value
+// without assigning it to s.proxmoxDeps. Concurrent callers are safe.
 func (s *apiServer) ensureProxmoxDeps() *proxmoxpkg.Deps {
 	if s.proxmoxDeps != nil {
 		return s.proxmoxDeps

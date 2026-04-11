@@ -14,10 +14,8 @@ func (s *apiServer) buildWhoamiDeps() *whoamipkg.Deps {
 
 // ensureWhoamiDeps returns the whoami deps, creating and caching on first call.
 func (s *apiServer) ensureWhoamiDeps() *whoamipkg.Deps {
-	if s.whoamiDeps != nil {
-		return s.whoamiDeps
-	}
-	d := s.buildWhoamiDeps()
-	s.whoamiDeps = d
-	return d
+	s.whoamiDepsOnce.Do(func() {
+		s.whoamiDeps = s.buildWhoamiDeps()
+	})
+	return s.whoamiDeps
 }

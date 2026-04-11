@@ -47,12 +47,10 @@ func (s *apiServer) buildWorkerDeps() *workerpkg.Deps {
 
 // ensureWorkerDeps returns the worker deps, creating and caching on first call.
 func (s *apiServer) ensureWorkerDeps() *workerpkg.Deps {
-	if s.workerDeps != nil {
-		return s.workerDeps
-	}
-	d := s.buildWorkerDeps()
-	s.workerDeps = d
-	return d
+	s.workerDepsOnce.Do(func() {
+		s.workerDeps = s.buildWorkerDeps()
+	})
+	return s.workerDeps
 }
 
 // Forwarding methods from apiServer to worker.Deps so that existing

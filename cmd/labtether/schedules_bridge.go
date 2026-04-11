@@ -12,10 +12,8 @@ func (s *apiServer) buildSchedulesDeps() *schedulespkg.Deps {
 
 // ensureSchedulesDeps returns the schedules deps, creating and caching on first call.
 func (s *apiServer) ensureSchedulesDeps() *schedulespkg.Deps {
-	if s.schedulesDeps != nil {
-		return s.schedulesDeps
-	}
-	d := s.buildSchedulesDeps()
-	s.schedulesDeps = d
-	return d
+	s.schedulesDepsOnce.Do(func() {
+		s.schedulesDeps = s.buildSchedulesDeps()
+	})
+	return s.schedulesDeps
 }

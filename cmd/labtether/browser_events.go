@@ -73,10 +73,8 @@ func (s *apiServer) buildBrowserEventsDeps() *shared.BrowserEventsDeps {
 // ensureBrowserEventsDeps returns the browser events deps, creating and
 // caching on first call.
 func (s *apiServer) ensureBrowserEventsDeps() *shared.BrowserEventsDeps {
-	if s.browserEventsDeps != nil {
-		return s.browserEventsDeps
-	}
-	d := s.buildBrowserEventsDeps()
-	s.browserEventsDeps = d
-	return d
+	s.browserEventsDepsOnce.Do(func() {
+		s.browserEventsDeps = s.buildBrowserEventsDeps()
+	})
+	return s.browserEventsDeps
 }

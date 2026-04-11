@@ -152,12 +152,10 @@ func (s *apiServer) buildTerminalDeps() *terminalpkg.Deps {
 
 // ensureTerminalDeps returns the terminal deps, creating and caching on first call.
 func (s *apiServer) ensureTerminalDeps() *terminalpkg.Deps {
-	if s.terminalDeps != nil {
-		return s.terminalDeps
-	}
-	d := s.buildTerminalDeps()
-	s.terminalDeps = d
-	return d
+	s.terminalDepsOnce.Do(func() {
+		s.terminalDeps = s.buildTerminalDeps()
+	})
+	return s.terminalDeps
 }
 
 // Forwarding methods from apiServer to terminal.Deps so that existing

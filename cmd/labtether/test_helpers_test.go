@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/labtether/labtether/internal/connectors/webservice"
@@ -17,6 +18,21 @@ import (
 	"github.com/labtether/labtether/internal/secrets"
 	"github.com/labtether/labtether/internal/terminal"
 )
+
+// resetTerminalDepsForTest clears the cached terminal deps and resets the
+// sync.Once guard so the next ensureTerminalDeps call rebuilds from the
+// current apiServer fields. Tests use this when they swap stores or policy
+// mid-run and need the change reflected.
+func (s *apiServer) resetTerminalDepsForTest() {
+	s.terminalDeps = nil
+	s.terminalDepsOnce = sync.Once{}
+}
+
+// resetDesktopDepsForTest mirrors resetTerminalDepsForTest for desktopDeps.
+func (s *apiServer) resetDesktopDepsForTest() {
+	s.desktopDeps = nil
+	s.desktopDepsOnce = sync.Once{}
+}
 
 func mustCreateSession(t *testing.T, sut *apiServer) string {
 	t.Helper()

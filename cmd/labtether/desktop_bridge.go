@@ -128,12 +128,10 @@ func (s *apiServer) buildDesktopDeps() *desktoppkg.Deps {
 
 // ensureDesktopDeps returns the desktop deps, creating and caching on first call.
 func (s *apiServer) ensureDesktopDeps() *desktoppkg.Deps {
-	if s.desktopDeps != nil {
-		return s.desktopDeps
-	}
-	d := s.buildDesktopDeps()
-	s.desktopDeps = d
-	return d
+	s.desktopDepsOnce.Do(func() {
+		s.desktopDeps = s.buildDesktopDeps()
+	})
+	return s.desktopDeps
 }
 
 // Forwarding methods from apiServer to desktop.Deps so that existing

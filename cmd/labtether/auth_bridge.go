@@ -40,10 +40,11 @@ func (s *apiServer) buildAuthDeps() *authpkg.Deps {
 // ensureAuthDeps returns authDeps, lazily building and caching on first call.
 // The auth package owns OIDC state, so a stable instance is required.
 func (s *apiServer) ensureAuthDeps() *authpkg.Deps {
-	if s.authDeps != nil {
-		return s.authDeps
-	}
-	s.authDeps = s.buildAuthDeps()
+	s.authDepsOnce.Do(func() {
+		if s.authDeps == nil {
+			s.authDeps = s.buildAuthDeps()
+		}
+	})
 	return s.authDeps
 }
 

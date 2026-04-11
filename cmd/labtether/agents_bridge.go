@@ -74,12 +74,10 @@ func (s *apiServer) buildAgentsDeps() *agentspkg.Deps {
 
 // ensureAgentsDeps returns the agents deps, creating and caching on first call.
 func (s *apiServer) ensureAgentsDeps() *agentspkg.Deps {
-	if s.agentsDeps != nil {
-		return s.agentsDeps
-	}
-	d := s.buildAgentsDeps()
-	s.agentsDeps = d
-	return d
+	s.agentsDepsOnce.Do(func() {
+		s.agentsDeps = s.buildAgentsDeps()
+	})
+	return s.agentsDeps
 }
 
 // Forwarding methods from apiServer to agents.Deps so that existing

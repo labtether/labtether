@@ -67,6 +67,9 @@ func (s *apiServer) buildAlertingDeps() *alertingpkg.Deps {
 // ensureAlertingDeps returns the alerting deps. When pre-initialized (production),
 // returns the cached instance. Otherwise, rebuilds on every call so that test
 // mutations to apiServer fields are visible.
+//
+// Like ensureProxmoxDeps, this pattern does NOT have the race-on-lazy-init
+// fixed in ensureCollectorsDeps, because neither branch mutates shared state.
 func (s *apiServer) ensureAlertingDeps() *alertingpkg.Deps {
 	if s.alertingDeps != nil {
 		return s.alertingDeps

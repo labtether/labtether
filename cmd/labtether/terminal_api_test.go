@@ -428,7 +428,7 @@ func TestAttachPersistentSessionAppliesInteractivePolicy(t *testing.T) {
 	cfg := policy.DefaultEvaluatorConfig()
 	cfg.InteractiveEnabled = false
 	sut.policyState = newPolicyRuntimeState(cfg)
-	sut.terminalDeps = nil // reset cached deps to pick up new policyState
+	sut.resetTerminalDepsForTest() // reset cached deps to pick up new policyState
 
 	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.PersistentSession.ID+"/attach", nil)
 	attachReq = attachReq.WithContext(contextWithUserID(attachReq.Context(), "actor-a"))
@@ -508,7 +508,7 @@ func TestAttachPersistentSessionDoesNotMarkAttachedWhenSessionCreateFails(t *tes
 		TerminalStore: sut.terminalStore,
 		createErr:     errors.New("synthetic create failure"),
 	}
-	sut.terminalDeps = nil // reset cached deps to pick up new terminalStore
+	sut.resetTerminalDepsForTest() // reset cached deps to pick up new terminalStore
 
 	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.PersistentSession.ID+"/attach", nil)
 	attachReq = attachReq.WithContext(contextWithUserID(attachReq.Context(), "actor-a"))
@@ -735,10 +735,10 @@ func TestDeletePersistentSessionFailsClosedWhenAttachedSessionCleanupFails(t *te
 		TerminalStore: originalStore,
 		deleteErr:     errors.New("synthetic delete failure"),
 	}
-	sut.terminalDeps = nil // reset cached deps to pick up new terminalStore
+	sut.resetTerminalDepsForTest() // reset cached deps to pick up new terminalStore
 	defer func() {
 		sut.terminalStore = originalStore
-		sut.terminalDeps = nil
+		sut.resetTerminalDepsForTest()
 	}()
 
 	deleteReq := httptest.NewRequest(http.MethodDelete, "/terminal/persistent-sessions/"+created.PersistentSession.ID, nil)
