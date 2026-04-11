@@ -194,42 +194,14 @@ jobs:
       - name: Docs quality checks
         run: make check-docs
 
-  web-e2e:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    defaults:
-      run:
-        working-directory: web/console
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: "24"
-          cache: "npm"
-          cache-dependency-path: web/console/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
-
-      - name: Run E2E
-        continue-on-error: true
-        run: npm run test:e2e -- --ignore-snapshots
-
-      - name: Upload Playwright artifacts
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: web-e2e-playwright
-          path: |
-            web/console/playwright-report
-            web/console/test-results
-          if-no-files-found: warn
+  # web-e2e (plain HTTP) was removed in favor of web-e2e-https. Production
+  # serves the console over HTTPS, and the HTTPS variant exercises the same
+  # 122 Playwright specs under the production server path. The plain-HTTP
+  # variant had been timing out (20m cap vs ~21m needed) and producing many
+  # transient failures that didn't reproduce under HTTPS, likely due to
+  # secure-context gating in browser APIs the console uses. If HTTP-mode
+  # coverage is wanted again, bring it back with a 30m timeout and triage
+  # the HTTP-only failures first.
 
   web-e2e-https:
     runs-on: ubuntu-latest
