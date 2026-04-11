@@ -85,12 +85,14 @@ func (s *apiServer) buildCollectorsDeps() *collectorspkg.Deps {
 
 // ensureCollectorsDeps returns the collectors deps, creating and caching on first call.
 func (s *apiServer) ensureCollectorsDeps() *collectorspkg.Deps {
-	if s.collectorsDeps != nil {
-		return s.collectorsDeps
-	}
-	d := s.buildCollectorsDeps()
-	s.collectorsDeps = d
-	return d
+	// Use sync.Once so concurrent callers don't each build their own
+	// *Deps with independent CollectorRunState trackers. Before this,
+	// concurrent executeCollector calls could each see collectorsDeps==nil,
+	// build separate Deps, and bypass singleflight dedup.
+	s.collectorsDepsOnce.Do(func() {
+		s.collectorsDeps = s.buildCollectorsDeps()
+	})
+	return s.collectorsDeps
 }
 
 // Forwarding methods from apiServer to collectors.Deps so that existing
