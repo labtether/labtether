@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -57,17 +58,23 @@ func Run(ctx context.Context, cfg Config) error {
 
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		status := "ok"
+		pgStatus := "ok"
 		httpStatus := http.StatusOK
 		if cfg.DBPool != nil {
 			if err := cfg.DBPool.Ping(r.Context()); err != nil {
 				status = "degraded"
+				pgStatus = "unreachable"
 				httpStatus = http.StatusServiceUnavailable
 			}
+		} else {
+			pgStatus = "not_configured"
 		}
 		WriteJSON(w, httpStatus, map[string]any{
-			"service":   cfg.Name,
-			"status":    status,
-			"timestamp": time.Now().UTC().Format(time.RFC3339),
+			"service":    cfg.Name,
+			"status":     status,
+			"postgres":   pgStatus,
+			"goroutines": runtime.NumGoroutine(),
+			"timestamp":  time.Now().UTC().Format(time.RFC3339),
 		})
 	})
 
