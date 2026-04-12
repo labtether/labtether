@@ -45,6 +45,7 @@ func NewPostgresStore(ctx context.Context, databaseURL string) (*PostgresStore, 
 	config.MinConns = int32(minConns)
 	config.MaxConnLifetime = time.Duration(lifetimeMin) * time.Minute
 	config.MaxConnIdleTime = time.Duration(idleMin) * time.Minute
+	config.HealthCheckPeriod = 30 * time.Second
 
 	log.Printf("labtether db: pool max=%d min=%d lifetime=%dm idle=%dm",
 		maxConns, minConns, lifetimeMin, idleMin)
