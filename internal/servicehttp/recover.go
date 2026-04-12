@@ -16,7 +16,10 @@ func RecoverMiddleware(next http.Handler) http.Handler {
 		defer func() {
 			if err := recover(); err != nil {
 				log.Printf("http: panic recovered on %s %s: %v\n%s", r.Method, r.URL.Path, err, debug.Stack())
-				http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				_, _ = w.Write([]byte(`{"error":"internal server error"}`))
+
 			}
 		}()
 		next.ServeHTTP(w, r)
