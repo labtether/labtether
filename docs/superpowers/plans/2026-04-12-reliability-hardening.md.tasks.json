@@ -1,0 +1,52 @@
+{
+  "planPath": "docs/superpowers/plans/2026-04-12-reliability-hardening.md",
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Task 1: Hub Panic Recovery Middleware and safeGo Helper",
+      "status": "pending",
+      "description": "Create RecoverMiddleware and SafeGo in internal/servicehttp/. Tests verify panic recovery and restart behavior.\n\n```json:metadata\n{\"files\": [\"internal/servicehttp/recover.go\", \"internal/servicehttp/recover_test.go\"], \"verifyCommand\": \"go test ./internal/servicehttp/ -run TestRecover|TestSafeGo -v\", \"acceptanceCriteria\": [\"RecoverMiddleware catches panics and returns 500\", \"SafeGo recovers and restarts goroutines\", \"WaitGroup tracking works\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: Wire Hub Panic Recovery Into Critical Paths",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "Apply RecoverMiddleware to HTTP handlers, recover in WS dispatcher, SafeGo for background loops, bound API key touch.\n\n```json:metadata\n{\"files\": [\"cmd/labtether/startup_bootstrap.go\", \"cmd/labtether/agent_ws_handler.go\", \"cmd/labtether/startup_background.go\", \"cmd/labtether/main.go\"], \"verifyCommand\": \"go build ./cmd/labtether/\", \"acceptanceCriteria\": [\"RecoverMiddleware on all handlers\", \"WS dispatcher has panic recovery\", \"Background loops use SafeGo\", \"API key touch bounded\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: Hub Database Resilience",
+      "status": "pending",
+      "description": "Enable pgx HealthCheckPeriod and add retryDB helper.\n\n```json:metadata\n{\"files\": [\"internal/persistence/postgres_schema.go\", \"internal/persistence/retry.go\", \"internal/persistence/retry_test.go\"], \"verifyCommand\": \"go test ./internal/persistence/ -run TestRetryDB -v\", \"acceptanceCriteria\": [\"HealthCheckPeriod enabled\", \"retryDB works with backoff\", \"Context cancellation respected\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: Hub Deeper Health Check",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "Expand /healthz to return postgres status and goroutine count.\n\n```json:metadata\n{\"files\": [\"internal/servicehttp/servicehttp.go\"], \"verifyCommand\": \"go build ./cmd/labtether/\", \"acceptanceCriteria\": [\"/healthz returns postgres and goroutine info\", \"503 on DB failure\"]}\n```"
+    },
+    {
+      "id": 5,
+      "subject": "Task 5: Agent Panic Recovery",
+      "status": "pending",
+      "description": "Add panic recovery to all agent goroutine entry points with WaitGroup tracking.\n\n```json:metadata\n{\"files\": [\"internal/agentcore/safego.go\", \"internal/agentcore/safego_test.go\", \"internal/agentcore/command_handler.go\", \"internal/agentcore/ws_transport.go\", \"internal/agentcore/runtime.go\"], \"verifyCommand\": \"go build ./...\", \"acceptanceCriteria\": [\"All goroutine entry points have panic recovery\", \"WaitGroup handler tracking\", \"Semaphore on all handlers\"]}\n```"
+    },
+    {
+      "id": 6,
+      "subject": "Task 6: Agent Command Kill-on-Timeout",
+      "status": "pending",
+      "blockedBy": [5],
+      "description": "Force-kill processes after timeout, add Docker exec 5-minute timeout.\n\n```json:metadata\n{\"files\": [\"internal/agentcore/remoteaccess/exec_ws.go\", \"internal/agentcore/docker/exec.go\"], \"verifyCommand\": \"go build ./...\", \"acceptanceCriteria\": [\"Force-kill on timeout\", \"Docker exec has 5min timeout\"]}\n```"
+    },
+    {
+      "id": 7,
+      "subject": "Task 7: Agent Watchdog",
+      "status": "pending",
+      "blockedBy": [5],
+      "description": "Watchdog detects stuck heartbeat and goroutine leaks.\n\n```json:metadata\n{\"files\": [\"internal/agentcore/watchdog.go\", \"internal/agentcore/watchdog_test.go\", \"internal/agentcore/runtime.go\", \"internal/agentcore/run.go\"], \"verifyCommand\": \"go test ./internal/agentcore/ -run TestWatchdog -v\", \"acceptanceCriteria\": [\"Stuck detection works\", \"Goroutine leak warning works\", \"Exit code 11 on stuck\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-04-12T00:00:00Z"
+}
