@@ -1,7 +1,9 @@
 package main
 
 import (
+	"log"
 	"net/http"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -405,6 +407,11 @@ func (s *apiServer) handleAgentWebSocket(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *apiServer) dispatchAgentWebSocketMessage(router shared.WSRouter, assetID string, conn *agentmgr.AgentConn, msg agentmgr.Message) {
+	defer func() {
+		if err := recover(); err != nil {
+			log.Printf("agentws: panic in handler for message type %q from %s: %v\n%s", msg.Type, assetID, err, debug.Stack())
+		}
+	}()
 	handler, ok := router[msg.Type]
 	if !ok {
 		securityruntime.Logf("agentws: unknown message type %q from %s", msg.Type, assetID)

@@ -383,14 +383,11 @@ func (s *apiServer) withAuth(next http.HandlerFunc) http.HandlerFunc {
 			}
 			// Debounce last_used_at updates — only touch if >1 minute since last use.
 			if key.LastUsedAt == nil || time.Since(*key.LastUsedAt) > time.Minute {
-				touchCtx := context.WithoutCancel(r.Context())
-				go func() {
-					updateCtx, cancel := context.WithTimeout(touchCtx, 5*time.Second)
-					defer cancel()
-					if err := s.apiKeyStore.TouchAPIKeyLastUsed(updateCtx, key.ID); err != nil {
-						log.Printf("apikey: touch last-used for %s: %v", key.ID, err) // #nosec G706 -- API key IDs are store-generated identifiers and the error is local runtime state.
-					}
-				}()
+				select {
+				case s.apiKeyTouchCh <- key.ID:
+				default:
+					// Channel full — skip this touch.
+				}
 			}
 
 			ctx := contextWithPrincipal(r.Context(), "apikey:"+key.ID, role)

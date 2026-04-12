@@ -201,6 +201,8 @@ type apiServer struct {
 	challengeStore                *auth.ChallengeStore
 	totpEncryptionKey             []byte
 	installStateStore             *installstate.Store
+	backgroundWG                  sync.WaitGroup
+	apiKeyTouchCh                 chan string
 }
 
 // StatusCache is now defined in internal/hubapi/statusagg. The type alias

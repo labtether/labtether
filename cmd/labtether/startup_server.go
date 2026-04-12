@@ -142,6 +142,7 @@ func newAPIServer(
 		challengeStore:    auth.NewChallengeStore(),
 		installStateStore: installStateStore,
 		fileProtoPool:     fileproto.NewPool(),
+		apiKeyTouchCh:     make(chan string, 100),
 	}
 	// Wire broadcaster to bump status aggregate generation on every mutation event.
 	srv.broadcaster.SetOnBroadcast(func() { srv.statusCache.Generation.Add(1) })

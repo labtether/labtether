@@ -329,6 +329,12 @@ func runHub(ctx context.Context) error {
 		}
 	}
 
+	// Wrap every handler with panic recovery as the absolute outermost layer.
+	for path, h := range handlers {
+		wrapped := servicehttp.RecoverMiddleware(http.HandlerFunc(h))
+		handlers[path] = wrapped.ServeHTTP
+	}
+
 	httpCfg := servicehttp.Config{
 		Name:             "labtether",
 		Port:             port,
