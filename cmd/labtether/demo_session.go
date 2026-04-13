@@ -36,6 +36,31 @@ func newDemoSessionRateLimiter(limit int, window time.Duration) *demoSessionRate
 	}
 }
 
+func safeLocalDemoRedirectTarget(raw string) string {
+	normalized := strings.ReplaceAll(strings.TrimSpace(raw), "\\", "/")
+	if normalized == "" {
+		return "/"
+	}
+	parsed, err := url.ParseRequestURI(normalized)
+	if err != nil || parsed == nil {
+		return "/"
+	}
+	if parsed.IsAbs() || parsed.Host != "" || parsed.Hostname() != "" {
+		return "/"
+	}
+	if !strings.HasPrefix(parsed.Path, "/") || strings.HasPrefix(parsed.Path, "//") {
+		return "/"
+	}
+	redirectTarget := parsed.Path
+	if redirectTarget == "" {
+		redirectTarget = "/"
+	}
+	if parsed.RawQuery != "" {
+		redirectTarget += "?" + parsed.RawQuery
+	}
+	return redirectTarget
+}
+
 // allow returns true if the request from the given IP is within the rate limit.
 func (rl *demoSessionRateLimiter) allow(ip string) bool {
 	now := time.Now().UTC()
@@ -124,15 +149,6 @@ func (s *apiServer) handleDemoSession(w http.ResponseWriter, r *http.Request) {
 
 	// Redirect to the requested path, defaulting to "/".
 	next := sanitizeNextPath(r.URL.Query().Get("redirect"))
-	redirectTarget := "/"
-	if parsed, err := url.ParseRequestURI(next); err == nil && parsed != nil && strings.HasPrefix(parsed.Path, "/") && !strings.HasPrefix(parsed.Path, "//") {
-		redirectTarget = parsed.Path
-		if redirectTarget == "" {
-			redirectTarget = "/"
-		}
-		if parsed.RawQuery != "" {
-			redirectTarget += "?" + parsed.RawQuery
-		}
-	}
+	redirectTarget := safeLocalDemoRedirectTarget(next)
 	http.Redirect(w, r, redirectTarget, http.StatusSeeOther)
 }

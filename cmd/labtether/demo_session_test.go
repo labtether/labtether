@@ -107,6 +107,25 @@ func TestHandleDemoSession_RedirectsToRequestedPath(t *testing.T) {
 	}
 }
 
+func TestSafeLocalDemoRedirectTargetRejectsAbsoluteAndBackslashVariants(t *testing.T) {
+	tests := []struct {
+		raw  string
+		want string
+	}{
+		{"", "/"},
+		{"/en/dashboard?tab=demo", "/en/dashboard?tab=demo"},
+		{"https://evil.example", "/"},
+		{"//evil.example", "/"},
+		{"\\\\evil.example\\share", "/"},
+		{"\\en\\dashboard", "/en/dashboard"},
+	}
+	for _, tt := range tests {
+		if got := safeLocalDemoRedirectTarget(tt.raw); got != tt.want {
+			t.Fatalf("safeLocalDemoRedirectTarget(%q) = %q, want %q", tt.raw, got, tt.want)
+		}
+	}
+}
+
 func TestDemoSessionRateLimiter(t *testing.T) {
 	rl := newDemoSessionRateLimiter(3, time.Minute)
 

@@ -80,7 +80,7 @@ func (d *Deps) executeHomeAssistantCollector(ctx context.Context, collector hubc
 			continue
 		}
 		eligibleAssets++
-		metadata := make(map[string]string, len(discoveredAsset.Metadata)+3)
+		metadata := make(map[string]string)
 		for key, value := range discoveredAsset.Metadata {
 			metadata[key] = value
 		}
