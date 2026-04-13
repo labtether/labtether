@@ -305,11 +305,13 @@ jobs:
       - name: Prepare environment
         run: |
           cp .env.example .env
-          sed -i 's/REPLACE_WITH_STRONG_POSTGRES_PASSWORD/ci-smoke-pw/g' .env
-          sed -i 's/REPLACE_WITH_LONG_RANDOM_OWNER_TOKEN/ci-owner-token/g' .env
-          sed -i 's/REPLACE_WITH_LONG_RANDOM_API_TOKEN/ci-owner-token/g' .env
-          sed -i 's|REPLACE_WITH_BASE64_32_BYTE_KEY|MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=|g' .env
-          sed -i 's/REPLACE_WITH_STRONG_ADMIN_PASSWORD/ci-admin-pw/g' .env
+          cat >> .env <<'EOF'
+          POSTGRES_PASSWORD=ci-smoke-pw
+          LABTETHER_OWNER_TOKEN=ci-owner-token
+          LABTETHER_API_TOKEN=ci-owner-token
+          LABTETHER_ENCRYPTION_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+          LABTETHER_ADMIN_PASSWORD=ci-admin-pw
+          EOF
 
       - name: Smoke test
         run: ./scripts/smoke-test.sh --keep
