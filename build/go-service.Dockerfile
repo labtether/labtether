@@ -24,6 +24,7 @@ RUN adduser -D -u 65532 labtether
 COPY --from=builder /out/service /service
 COPY --from=builder --chown=65532:65532 /out/data /data
 COPY --from=builder --chown=65532:65532 /out/ca /ca
+RUN mkdir -p /run/labtether && chown -R 65532:65532 /run/labtether
 # Agent binaries and manifest (populated by CI before docker build)
 COPY --chown=65532:65532 agent-dist/ /opt/labtether/agents/
 USER 65532
