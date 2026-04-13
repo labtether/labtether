@@ -16,6 +16,7 @@ import (
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/connectorsdk"
 	"github.com/labtether/labtether/internal/groups"
+	groupfeatures "github.com/labtether/labtether/internal/hubapi/groupfeatures"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/logs"
 	"github.com/labtether/labtether/internal/model"
@@ -63,25 +64,26 @@ type Summary struct {
 
 // Response is the full status aggregate response.
 type Response struct {
-	Timestamp           time.Time                          `json:"timestamp"`
-	Demo                bool                               `json:"demo"`
-	Summary             Summary                            `json:"summary"`
-	Endpoints           []EndpointResult                   `json:"endpoints"`
-	Connectors          []connectorsdk.Descriptor          `json:"connectors"`
-	Groups              []groups.Group                     `json:"groups"`
-	Assets              []assets.Asset                     `json:"assets"`
-	TelemetryOverview   []shared.AssetTelemetryOverview    `json:"telemetryOverview"`
-	RecentLogs          []logs.Event                       `json:"recentLogs"`
-	LogSources          []logs.SourceSummary               `json:"logSources"`
-	ActionRuns          []actions.Run                      `json:"actionRuns"`
-	UpdatePlans         []updates.Plan                     `json:"updatePlans"`
-	UpdateRuns          []updates.Run                      `json:"updateRuns"`
-	DeadLetters         []shared.DeadLetterEventResponse   `json:"deadLetters"`
-	DeadLetterAnalytics shared.DeadLetterAnalyticsResponse `json:"deadLetterAnalytics"`
-	Sessions            []terminal.Session                 `json:"sessions"`
-	RecentCommands      []terminal.Command                 `json:"recentCommands"`
-	RecentAudit         []audit.Event                      `json:"recentAudit"`
-	Canonical           CanonicalPayload                   `json:"canonical"`
+	Timestamp           time.Time                              `json:"timestamp"`
+	Demo                bool                                   `json:"demo"`
+	Summary             Summary                                `json:"summary"`
+	Endpoints           []EndpointResult                       `json:"endpoints"`
+	Connectors          []connectorsdk.Descriptor              `json:"connectors"`
+	Groups              []groups.Group                         `json:"groups"`
+	Assets              []assets.Asset                         `json:"assets"`
+	TelemetryOverview   []shared.AssetTelemetryOverview        `json:"telemetryOverview"`
+	RecentLogs          []logs.Event                           `json:"recentLogs"`
+	LogSources          []logs.SourceSummary                   `json:"logSources"`
+	GroupReliability    []groupfeatures.GroupReliabilityRecord `json:"groupReliability"`
+	ActionRuns          []actions.Run                          `json:"actionRuns"`
+	UpdatePlans         []updates.Plan                         `json:"updatePlans"`
+	UpdateRuns          []updates.Run                          `json:"updateRuns"`
+	DeadLetters         []shared.DeadLetterEventResponse       `json:"deadLetters"`
+	DeadLetterAnalytics shared.DeadLetterAnalyticsResponse     `json:"deadLetterAnalytics"`
+	Sessions            []terminal.Session                     `json:"sessions"`
+	RecentCommands      []terminal.Command                     `json:"recentCommands"`
+	RecentAudit         []audit.Event                          `json:"recentAudit"`
+	Canonical           CanonicalPayload                       `json:"canonical"`
 }
 
 // CanonicalPayload is the canonical model snapshot included in the full status

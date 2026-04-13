@@ -3,7 +3,9 @@ package persistence
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
+	"time"
 
 	"github.com/labtether/labtether/internal/webhooks"
 )
@@ -42,28 +44,31 @@ func (m *memoryWebhookStore) ListWebhooks(_ context.Context) ([]webhooks.Webhook
 	for _, wh := range m.data {
 		result = append(result, wh)
 	}
+	slices.SortFunc(result, func(a, b webhooks.Webhook) int {
+		return b.CreatedAt.Compare(a.CreatedAt)
+	})
 	return result, nil
 }
 
-func (m *memoryWebhookStore) UpdateWebhook(_ context.Context, id string, name *string, url *string, events *[]string, enabled *bool) error {
+func (m *memoryWebhookStore) UpdateWebhook(_ context.Context, wh webhooks.Webhook) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.data[wh.ID]; !ok {
+		return fmt.Errorf("webhook not found: %s", wh.ID)
+	}
+	m.data[wh.ID] = wh
+	return nil
+}
+
+func (m *memoryWebhookStore) MarkWebhookTriggered(_ context.Context, id string, at time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	wh, ok := m.data[id]
 	if !ok {
 		return fmt.Errorf("webhook not found: %s", id)
 	}
-	if name != nil {
-		wh.Name = *name
-	}
-	if url != nil {
-		wh.URL = *url
-	}
-	if events != nil {
-		wh.Events = *events
-	}
-	if enabled != nil {
-		wh.Enabled = *enabled
-	}
+	at = at.UTC()
+	wh.LastTriggeredAt = &at
 	m.data[id] = wh
 	return nil
 }

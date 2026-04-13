@@ -23,6 +23,16 @@ const progressThrottleInterval = 500 * time.Millisecond
 // progressThrottleBytes is the minimum bytes between DB progress updates.
 const progressThrottleBytes int64 = 1 << 20 // 1 MB
 
+func (d *Deps) fileTransferActorID(ctx context.Context) string {
+	if d.PrincipalActorID != nil {
+		actorID := strings.TrimSpace(d.PrincipalActorID(ctx))
+		if actorID != "" {
+			return actorID
+		}
+	}
+	return "system"
+}
+
 // HandleFileTransfers dispatches /api/v1/file-transfers requests.
 func (d *Deps) HandleFileTransfers(w http.ResponseWriter, r *http.Request) {
 	trimmed := strings.TrimPrefix(r.URL.Path, fileTransferAPIPrefix)
@@ -111,6 +121,7 @@ func (d *Deps) handleStartFileTransfer(w http.ResponseWriter, r *http.Request) {
 
 	// Create the pending transfer record.
 	ft := &persistence.FileTransfer{
+		ActorID:    d.fileTransferActorID(r.Context()),
 		SourceType: req.SourceType,
 		SourceID:   req.SourceID,
 		SourcePath: req.SourcePath,
@@ -147,6 +158,10 @@ func (d *Deps) handleGetFileTransfer(w http.ResponseWriter, r *http.Request, tra
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load file transfer")
 		return
 	}
+	if strings.TrimSpace(ft.ActorID) != d.fileTransferActorID(r.Context()) {
+		servicehttp.WriteError(w, http.StatusNotFound, "file transfer not found")
+		return
+	}
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"transfer": ft})
 }
 
@@ -160,6 +175,10 @@ func (d *Deps) handleCancelFileTransfer(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load file transfer")
+		return
+	}
+	if strings.TrimSpace(ft.ActorID) != d.fileTransferActorID(r.Context()) {
+		servicehttp.WriteError(w, http.StatusNotFound, "file transfer not found")
 		return
 	}
 

@@ -41,7 +41,7 @@ export default function IncidentsPage() {
     handleLessonsLearnedChange,
   } = useIncidentPostmortemEditor({ updateIncident });
 
-  const { incident: selectedIncident, events, loading: detailLoading } = useIncidentDetail(
+  const { incident: selectedIncident, events, loading: detailLoading, replaceIncident } = useIncidentDetail(
     view === "detail" ? selectedId : null
   );
 
@@ -64,7 +64,8 @@ export default function IncidentsPage() {
   };
 
   const handleStatusChange = async (id: string, newStatus: string) => {
-    await updateIncident(id, { status: newStatus });
+    const updatedIncident = await updateIncident(id, { status: newStatus });
+    replaceIncident(updatedIncident);
   };
 
   return (
@@ -141,10 +142,13 @@ export default function IncidentsPage() {
                   <Button
                     disabled={!noteText.trim()}
                     onClick={() => {
-                      void updateIncident(selectedIncident.id, {
-                        summary: (selectedIncident.summary ? selectedIncident.summary + "\n" : "") + noteText.trim()
-                      });
-                      setNoteText("");
+                      void (async () => {
+                        const updatedIncident = await updateIncident(selectedIncident.id, {
+                          summary: (selectedIncident.summary ? selectedIncident.summary + "\n" : "") + noteText.trim()
+                        });
+                        replaceIncident(updatedIncident);
+                        setNoteText("");
+                      })();
                     }}
                   >
                     {t('notes.add')}
@@ -165,7 +169,10 @@ export default function IncidentsPage() {
                   onRemoveActionItem={handleRemoveActionItem}
                   onUpdateActionItem={handleUpdateActionItem}
                   onLessonsLearnedChange={handleLessonsLearnedChange}
-                  onSave={() => handleSavePostmortem(selectedIncident.id)}
+                  onSave={async () => {
+                    const updatedIncident = await handleSavePostmortem(selectedIncident.id);
+                    replaceIncident(updatedIncident);
+                  }}
                 />
               ) : null}
             </>

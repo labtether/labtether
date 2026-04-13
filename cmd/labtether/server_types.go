@@ -45,6 +45,7 @@ import (
 	"github.com/labtether/labtether/internal/telemetry/bridge"
 	"github.com/labtether/labtether/internal/terminal"
 	"github.com/labtether/labtether/internal/topology"
+	"github.com/labtether/labtether/internal/webhooks"
 )
 
 // TLSState is a type alias for opspkg.TLSState. It is defined there so that
@@ -109,6 +110,7 @@ type apiServer struct {
 	tlsState                      TLSState
 	pendingAgentCmds              sync.Map // map[jobID]pendingAgentCommand
 	collectorRunState             sync.Map // map[collectorID]*atomic.Bool
+	syntheticCheckRunState        sync.Map // map[checkID]struct{}
 	terminalBridges               sync.Map // map[sessionID]*terminalBridge
 	dockerExecBridges             sync.Map // map[sessionID]*dockerExecBridge
 	desktopBridges                sync.Map // map[sessionID]*desktopBridge
@@ -178,6 +180,11 @@ type apiServer struct {
 	schedulesDeps                 *schedulespkg.Deps
 	webhooksDepsOnce              sync.Once
 	webhooksDeps                  *webhookspkg.Deps
+	webhookEventCh                chan webhookDispatchEvent
+	webhookCacheMu                sync.RWMutex
+	webhookCache                  []webhooks.Webhook
+	webhookCacheLoaded            bool
+	webhookCacheDirty             bool
 	logsDepsOnce                  sync.Once
 	logsDeps                      *logspkg.Deps
 	homeassistantDepsOnce         sync.Once

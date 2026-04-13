@@ -2,11 +2,16 @@ package resources
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
+	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/hubapi/shared"
+	"github.com/labtether/labtether/internal/securityruntime"
 )
+
+var errFileResponseBackpressured = errors.New("file response bridge backpressure exceeded")
 
 func (d *Deps) ProcessAgentFileListed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 	var data agentmgr.FileListedData
@@ -66,9 +71,14 @@ func (d *Deps) DeliverFileResponse(requestID string, msg agentmgr.Message) {
 		if !ok || bridge == nil {
 			return
 		}
+		timer := time.NewTimer(fileResponseBackpressureLimit)
+		defer timer.Stop()
 		select {
 		case bridge.Ch <- msg:
 		case <-bridge.Done:
+		case <-timer.C:
+			securityruntime.Logf("file: dropping stalled response stream for request %s after %s of backpressure", requestID, fileResponseBackpressureLimit)
+			bridge.Fail(errFileResponseBackpressured)
 		}
 	}
 }

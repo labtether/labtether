@@ -38,12 +38,6 @@ func (d *Deps) HandleAssets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	assetList, err := d.AssetStore.ListAssets()
-	if err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list assets")
-		return
-	}
-
 	groupID := strings.TrimSpace(r.URL.Query().Get("group_id"))
 	if groupID != "" {
 		if d.GroupStore == nil {
@@ -59,15 +53,35 @@ func (d *Deps) HandleAssets(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusNotFound, "group not found")
 			return
 		}
+	}
 
-		filtered := make([]assets.Asset, 0, len(assetList))
-		for _, assetEntry := range assetList {
-			if strings.TrimSpace(assetEntry.GroupID) == groupID {
-				filtered = append(filtered, assetEntry)
+	var (
+		assetList []assets.Asset
+		err       error
+	)
+	if groupID != "" {
+		if groupAssetStore, ok := d.AssetStore.(persistence.GroupAssetStore); ok {
+			assetList, err = groupAssetStore.ListAssetsByGroup(groupID)
+		} else {
+			assetList, err = d.AssetStore.ListAssets()
+			if err == nil {
+				filtered := make([]assets.Asset, 0, len(assetList))
+				for _, assetEntry := range assetList {
+					if strings.TrimSpace(assetEntry.GroupID) == groupID {
+						filtered = append(filtered, assetEntry)
+					}
+				}
+				assetList = filtered
 			}
 		}
-		assetList = filtered
+	} else {
+		assetList, err = d.AssetStore.ListAssets()
 	}
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list assets")
+		return
+	}
+
 	if tag := strings.TrimSpace(r.URL.Query().Get("tag")); tag != "" {
 		normalized := assets.NormalizeTags([]string{tag})
 		if len(normalized) == 0 {

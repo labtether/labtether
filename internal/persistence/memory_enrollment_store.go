@@ -114,7 +114,7 @@ func (m *MemoryEnrollmentStore) RevokeEnrollmentToken(id string) error {
 
 	tok, ok := m.enrollmentTokens[id]
 	if !ok {
-		return fmt.Errorf("enrollment token %s not found", id)
+		return ErrNotFound
 	}
 	if tok.RevokedAt != nil {
 		return nil
@@ -199,7 +199,7 @@ func (m *MemoryEnrollmentStore) RevokeAgentToken(id string) error {
 
 	tok, ok := m.agentTokens[id]
 	if !ok {
-		return fmt.Errorf("agent token %s not found", id)
+		return ErrNotFound
 	}
 	if tok.Status != "active" {
 		return nil

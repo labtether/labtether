@@ -2,6 +2,7 @@ package bulkpkg
 
 import (
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -66,11 +67,29 @@ func (d *Deps) HandleV2BulkServiceAction(w http.ResponseWriter, r *http.Request)
 	allowed := apiv2.AllowedAssetsFromContext(r.Context())
 	command := "systemctl " + req.Action + " " + req.Service
 
-	var filteredTargets []string
+	seenTargets := make(map[string]struct{}, len(req.Targets))
+	filteredTargets := make([]string, 0, len(req.Targets))
+	deniedTargets := make([]string, 0)
 	for _, target := range req.Targets {
-		if apiv2.AssetCheck(allowed, target) {
-			filteredTargets = append(filteredTargets, target)
+		normalizedTarget := strings.TrimSpace(target)
+		if normalizedTarget == "" {
+			apiv2.WriteError(w, http.StatusBadRequest, "validation", "targets must not contain empty asset ids")
+			return
 		}
+		if _, exists := seenTargets[normalizedTarget]; exists {
+			apiv2.WriteError(w, http.StatusBadRequest, "validation", "duplicate target: "+normalizedTarget)
+			return
+		}
+		seenTargets[normalizedTarget] = struct{}{}
+		if !apiv2.AssetCheck(allowed, normalizedTarget) {
+			deniedTargets = append(deniedTargets, normalizedTarget)
+			continue
+		}
+		filteredTargets = append(filteredTargets, normalizedTarget)
+	}
+	if len(deniedTargets) > 0 {
+		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "api key does not have access to targets: "+strings.Join(deniedTargets, ", "))
+		return
 	}
 	if len(filteredTargets) == 0 {
 		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "none of the requested targets are accessible with this API key")

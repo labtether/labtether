@@ -88,6 +88,15 @@ func (d *Deps) HandleSyntheticCheckActions(w http.ResponseWriter, r *http.Reques
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
+		_, ok, err := d.SyntheticStore.GetSyntheticCheck(checkID)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load synthetic check")
+			return
+		}
+		if !ok {
+			servicehttp.WriteError(w, http.StatusNotFound, "synthetic check not found")
+			return
+		}
 		results, err := d.SyntheticStore.ListSyntheticResults(checkID, parseLimit(r, 50))
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list synthetic results")
@@ -139,6 +148,10 @@ func (d *Deps) HandleSyntheticCheckActions(w http.ResponseWriter, r *http.Reques
 				return
 			}
 			req.Target = &trimmed
+		}
+		if req.IntervalSeconds != nil && *req.IntervalSeconds <= 0 {
+			servicehttp.WriteError(w, http.StatusBadRequest, "interval_seconds must be greater than zero")
+			return
 		}
 		updated, err := d.SyntheticStore.UpdateSyntheticCheck(checkID, req)
 		if err != nil {

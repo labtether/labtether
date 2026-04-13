@@ -91,7 +91,7 @@ func (d *Deps) HandleManualDeviceRoutes(w http.ResponseWriter, r *http.Request) 
 		Platform: req.Platform,
 	}
 
-	_, err := d.AssetStore.UpsertAssetHeartbeat(heartbeatReq)
+	assetEntry, err := d.AssetStore.UpsertAssetHeartbeat(heartbeatReq)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create asset")
 		return
@@ -104,19 +104,27 @@ func (d *Deps) HandleManualDeviceRoutes(w http.ResponseWriter, r *http.Request) 
 			req.Host,
 			assetID,
 		); execErr != nil {
+			_ = d.AssetStore.DeleteAsset(assetID)
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to set host on asset")
 			return
 		}
 	}
+	assetEntry.Host = req.Host
+	assetEntry.TransportType = "manual"
 
 	// Apply tags via UpdateAsset if provided.
 	if len(req.Tags) > 0 {
 		normalized := assets.NormalizeTags(req.Tags)
 		updateReq := assets.UpdateRequest{Tags: &normalized}
-		if _, updateErr := d.AssetStore.UpdateAsset(assetID, updateReq); updateErr != nil {
+		updatedAsset, updateErr := d.AssetStore.UpdateAsset(assetID, updateReq)
+		if updateErr != nil {
+			_ = d.AssetStore.DeleteAsset(assetID)
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to set tags on asset")
 			return
 		}
+		assetEntry = updatedAsset
+		assetEntry.Host = req.Host
+		assetEntry.TransportType = "manual"
 	}
 
 	actorID := ""
@@ -132,16 +140,6 @@ func (d *Deps) HandleManualDeviceRoutes(w http.ResponseWriter, r *http.Request) 
 	}
 	if d.AppendAuditEventBestEffort != nil {
 		d.AppendAuditEventBestEffort(ev, "api warning: failed to append manual device create audit event")
-	}
-
-	assetEntry, ok, err := d.AssetStore.GetAsset(assetID)
-	if err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to retrieve created asset")
-		return
-	}
-	if !ok {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "created asset not found")
-		return
 	}
 
 	servicehttp.WriteJSON(w, http.StatusCreated, map[string]any{"asset": assetEntry})

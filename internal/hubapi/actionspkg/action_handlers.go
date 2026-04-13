@@ -94,26 +94,38 @@ func (d *Deps) HandleActionExecute(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if len(req.Params) > maxActionParamCount {
-		servicehttp.WriteError(w, http.StatusBadRequest, "too many action params")
-		return
-	}
-	for key, value := range req.Params {
-		key = strings.TrimSpace(key)
-		value = strings.TrimSpace(value)
-		if key == "" {
-			servicehttp.WriteError(w, http.StatusBadRequest, "action param key cannot be blank")
+	if req.Params != nil {
+		normalizedParams := make(map[string]string, len(req.Params))
+		for key, value := range req.Params {
+			key = strings.TrimSpace(key)
+			value = strings.TrimSpace(value)
+			if key == "" {
+				servicehttp.WriteError(w, http.StatusBadRequest, "action param key cannot be blank")
+				return
+			}
+			if err := shared.ValidateMaxLen("action param key", key, maxActionParamKeyLength); err != nil {
+				servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			if err := shared.ValidateMaxLen("action param value", value, maxActionParamValLength); err != nil {
+				servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			if _, exists := normalizedParams[key]; exists {
+				servicehttp.WriteError(w, http.StatusBadRequest, "duplicate action param key")
+				return
+			}
+			normalizedParams[key] = value
+		}
+		if len(normalizedParams) > maxActionParamCount {
+			servicehttp.WriteError(w, http.StatusBadRequest, "too many action params")
 			return
 		}
-		if err := shared.ValidateMaxLen("action param key", key, maxActionParamKeyLength); err != nil {
-			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
-			return
+		if len(normalizedParams) == 0 {
+			req.Params = nil
+		} else {
+			req.Params = normalizedParams
 		}
-		if err := shared.ValidateMaxLen("action param value", value, maxActionParamValLength); err != nil {
-			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		req.Params[key] = value
 	}
 
 	checkCommand := req.Command
@@ -331,6 +343,9 @@ func (d *Deps) HandleActionExecute(w http.ResponseWriter, r *http.Request) {
 		"type":         run.Type,
 		"connector_id": run.ConnectorID,
 		"action_id":    run.ActionID,
+	}
+	if requestedActorID != "" && requestedActorID != req.ActorID {
+		logFields["requested_actor_label"] = requestedActorID
 	}
 	if d.LogStore != nil {
 		if err := d.LogStore.AppendEvent(logs.Event{

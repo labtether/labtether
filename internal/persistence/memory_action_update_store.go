@@ -290,6 +290,10 @@ func (m *MemoryUpdateStore) GetUpdateRun(id string) (updates.Run, bool, error) {
 }
 
 func (m *MemoryUpdateStore) ListUpdateRuns(limit int, status string) ([]updates.Run, error) {
+	return m.ListUpdateRunsPage(limit, 0, status)
+}
+
+func (m *MemoryUpdateStore) ListUpdateRunsPage(limit, offset int, status string) ([]updates.Run, error) {
 	if limit <= 0 {
 		limit = 50
 	}
@@ -309,6 +313,10 @@ func (m *MemoryUpdateStore) ListUpdateRuns(limit int, status string) ([]updates.
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].UpdatedAt.After(out[j].UpdatedAt)
 	})
+	if offset >= len(out) {
+		return []updates.Run{}, nil
+	}
+	out = out[offset:]
 	if len(out) > limit {
 		out = out[:limit]
 	}

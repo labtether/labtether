@@ -39,6 +39,13 @@ func startRuntimeLoops(
 	servicehttp.SafeGo(ctx, wg, "notification-retry", func(ctx context.Context) { srv.runNotificationRetryLoop(ctx) })
 	servicehttp.SafeGo(ctx, wg, "protocol-health", func(ctx context.Context) { srv.runProtocolHealthChecker(ctx) })
 	servicehttp.SafeGo(ctx, wg, "service-health-linker", func(ctx context.Context) { srv.runServiceHealthLinker(ctx) })
+	servicehttp.SafeGo(ctx, wg, "webhook-relay", func(ctx context.Context) { srv.runWebhookRelay(ctx) })
+	if pgStore != nil && srv.groupStore != nil && srv.assetStore != nil {
+		groupFeaturesDeps := srv.ensureGroupFeaturesDeps()
+		servicehttp.SafeGo(ctx, wg, "reliability-materializer", func(ctx context.Context) {
+			groupFeaturesDeps.RunReliabilityMaterializer(ctx, pgStore)
+		})
+	}
 
 	// Archive worker: periodically archives stale detached persistent sessions.
 	terminalDeps := srv.ensureTerminalDeps()

@@ -434,6 +434,10 @@ func (s *PostgresStore) GetUpdateRun(id string) (updates.Run, bool, error) {
 }
 
 func (s *PostgresStore) ListUpdateRuns(limit int, status string) ([]updates.Run, error) {
+	return s.ListUpdateRunsPage(limit, 0, status)
+}
+
+func (s *PostgresStore) ListUpdateRunsPage(limit, offset int, status string) ([]updates.Run, error) {
 	if limit <= 0 {
 		limit = 50
 	}
@@ -450,9 +454,17 @@ func (s *PostgresStore) ListUpdateRuns(limit int, status string) ([]updates.Run,
 		args = append(args, status)
 		sql += " ORDER BY updated_at DESC LIMIT $2"
 		args = append(args, limit)
+		if offset > 0 {
+			sql += " OFFSET $3"
+			args = append(args, offset)
+		}
 	} else {
 		sql += " ORDER BY updated_at DESC LIMIT $1"
 		args = append(args, limit)
+		if offset > 0 {
+			sql += " OFFSET $2"
+			args = append(args, offset)
+		}
 	}
 
 	rows, err := s.pool.Query(context.Background(), sql, args...)

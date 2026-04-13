@@ -74,6 +74,14 @@ func (c *countingUpdateStore) ListUpdateRuns(limit int, status string) ([]update
 	return c.UpdateStore.ListUpdateRuns(limit, status)
 }
 
+func (c *countingUpdateStore) ListUpdateRunsPage(limit, offset int, status string) ([]updates.Run, error) {
+	c.listUpdateRunsCalls++
+	if store, ok := c.UpdateStore.(persistence.UpdateRunPageStore); ok {
+		return store.ListUpdateRunsPage(limit, offset, status)
+	}
+	return c.UpdateStore.ListUpdateRuns(limit, status)
+}
+
 type countingIncidentStore struct {
 	persistence.IncidentStore
 	listIncidentAlertLinksCalls int
@@ -99,6 +107,9 @@ type countingLogStore struct {
 	persistence.LogStore
 	queryEventsCalls     int
 	lastQueryEventsReq   logs.QueryRequest
+	querySourcesCalls    int
+	lastSourceSummaryReq logs.SourceSummaryRequest
+	groupSeverityCalls   int
 	queryDeadLetterCalls int
 	countDeadLetterCalls int
 	listSourcesSinceCall int
@@ -180,6 +191,53 @@ func (c *countingLogStore) ListSourcesSince(limit int, from time.Time) ([]logs.S
 func (c *countingLogStore) ListSources(limit int) ([]logs.SourceSummary, error) {
 	c.listSourcesCalls++
 	return c.LogStore.ListSources(limit)
+}
+
+func (c *countingLogStore) QuerySourceSummaries(req logs.SourceSummaryRequest) ([]logs.SourceSummary, error) {
+	c.querySourcesCalls++
+	captured := req
+	captured.GroupAssetIDs = append([]string(nil), req.GroupAssetIDs...)
+	c.lastSourceSummaryReq = captured
+	if store, ok := c.LogStore.(persistence.LogSourceSummaryStore); ok {
+		return store.QuerySourceSummaries(req)
+	}
+
+	events, err := c.LogStore.QueryEvents(logs.QueryRequest{
+		From:          req.From,
+		To:            req.To,
+		Limit:         1000,
+		GroupID:       req.GroupID,
+		GroupAssetIDs: req.GroupAssetIDs,
+		FieldKeys:     []string{"group_id"},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	counts := make(map[string]logs.SourceSummary, len(events))
+	for _, event := range events {
+		entry := counts[event.Source]
+		entry.Source = event.Source
+		entry.Count++
+		if event.Timestamp.After(entry.LastSeenAt) {
+			entry.LastSeenAt = event.Timestamp
+		}
+		counts[event.Source] = entry
+	}
+
+	out := make([]logs.SourceSummary, 0, len(counts))
+	for _, entry := range counts {
+		out = append(out, entry)
+	}
+	return out, nil
+}
+
+func (c *countingLogStore) QueryGroupSeverityCounts(req logs.GroupSeverityCountRequest) ([]logs.GroupSeverityCount, error) {
+	c.groupSeverityCalls++
+	if store, ok := c.LogStore.(persistence.LogGroupSeverityCountStore); ok {
+		return store.QueryGroupSeverityCounts(req)
+	}
+	return nil, nil
 }
 
 func (c *countingLogStore) LogEventsWatermark() (time.Time, error) {
@@ -658,7 +716,7 @@ func TestStatusLogSourcesSiteFilterUsesProjectedSiteField(t *testing.T) {
 	}
 }
 
-func TestHandleLogSourcesSiteFilterUsesProjectedSiteField(t *testing.T) {
+func TestHandleLogSourcesGroupFilterUsesExactSourceAggregation(t *testing.T) {
 	sut := newTestAPIServer(t)
 
 	logCounter := &countingLogStore{LogStore: sut.logStore}
@@ -691,17 +749,17 @@ func TestHandleLogSourcesSiteFilterUsesProjectedSiteField(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
-	if logCounter.queryEventsCalls != 1 {
-		t.Fatalf("expected one QueryEvents call, got %d", logCounter.queryEventsCalls)
+	if logCounter.querySourcesCalls != 1 {
+		t.Fatalf("expected one QuerySourceSummaries call, got %d", logCounter.querySourcesCalls)
 	}
-	if len(logCounter.lastQueryEventsReq.FieldKeys) != 1 || logCounter.lastQueryEventsReq.FieldKeys[0] != "group_id" {
-		t.Fatalf("expected group-filter log-sources query to project only group_id, got %#v", logCounter.lastQueryEventsReq.FieldKeys)
+	if logCounter.queryEventsCalls != 0 {
+		t.Fatalf("expected group-filter log-sources path to skip raw QueryEvents fallback, got %d calls", logCounter.queryEventsCalls)
 	}
-	if logCounter.lastQueryEventsReq.GroupID != groupEntry.ID {
-		t.Fatalf("expected group-filter log-sources query to include group id, got %q", logCounter.lastQueryEventsReq.GroupID)
+	if logCounter.lastSourceSummaryReq.GroupID != groupEntry.ID {
+		t.Fatalf("expected grouped source aggregation to include group id, got %q", logCounter.lastSourceSummaryReq.GroupID)
 	}
-	if len(logCounter.lastQueryEventsReq.GroupAssetIDs) != 1 || logCounter.lastQueryEventsReq.GroupAssetIDs[0] != assetID {
-		t.Fatalf("expected group-filter log-sources query to include fallback asset IDs, got %#v", logCounter.lastQueryEventsReq.GroupAssetIDs)
+	if len(logCounter.lastSourceSummaryReq.GroupAssetIDs) != 1 || logCounter.lastSourceSummaryReq.GroupAssetIDs[0] != assetID {
+		t.Fatalf("expected grouped source aggregation to include group asset IDs, got %#v", logCounter.lastSourceSummaryReq.GroupAssetIDs)
 	}
 }
 

@@ -155,3 +155,34 @@ func TestHandleV2Assets_Delete(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestHandleV2Assets_UpdateMissingAssetReturnsNotFound(t *testing.T) {
+	s := newTestAPIServer(t)
+
+	req := httptest.NewRequest("PATCH", "/api/v2/assets/missing", strings.NewReader(`{"name":"Renamed"}`))
+	req.Header.Set("Content-Type", "application/json")
+	ctx := contextWithPrincipal(req.Context(), "admin", "admin")
+	req = req.WithContext(ctx)
+
+	rec := httptest.NewRecorder()
+	s.handleV2AssetActions(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleV2Assets_DeleteMissingAssetReturnsNotFound(t *testing.T) {
+	s := newTestAPIServer(t)
+
+	req := httptest.NewRequest("DELETE", "/api/v2/assets/missing", nil)
+	ctx := contextWithPrincipal(req.Context(), "admin", "admin")
+	req = req.WithContext(ctx)
+
+	rec := httptest.NewRecorder()
+	s.handleV2AssetActions(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
+	}
+}

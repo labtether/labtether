@@ -158,11 +158,11 @@ export function useNodeProxmoxData({
   useEffect(() => {
     if (activeTab !== "settings" || !nodeId || !isProxmoxAsset) return;
     if (!isDocumentVisible) return;
-    if (proxmoxDetails?.collector_id) return;
+    if (proxmoxCollectorID) return;
     const controller = new AbortController();
     void fetchProxmoxDetails(controller.signal);
     return () => { controller.abort(); };
-  }, [activeTab, fetchProxmoxDetails, isDocumentVisible, isProxmoxAsset, nodeId, proxmoxDetails?.collector_id]);
+  }, [activeTab, fetchProxmoxDetails, isDocumentVisible, isProxmoxAsset, nodeId, proxmoxCollectorID]);
 
   const runProxmoxQuickAction = useCallback(async (
     actionID: string,

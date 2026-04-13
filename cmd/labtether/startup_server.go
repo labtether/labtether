@@ -143,9 +143,11 @@ func newAPIServer(
 		installStateStore: installStateStore,
 		fileProtoPool:     fileproto.NewPool(),
 		apiKeyTouchCh:     make(chan string, 100),
+		webhookEventCh:    make(chan webhookDispatchEvent, 256),
 	}
 	// Wire broadcaster to bump status aggregate generation on every mutation event.
 	srv.broadcaster.SetOnBroadcast(func() { srv.statusCache.Generation.Add(1) })
+	srv.broadcaster.SetOnEvent(srv.enqueueWebhookEvent)
 	srv.proxmoxDeps = srv.buildProxmoxDeps()
 	return srv
 }
@@ -173,7 +175,7 @@ func startMDNSAdvertiser(ctx context.Context, port int) {
 	}()
 }
 
-func configureServerRuntime(srv *apiServer, registry *connectorsdk.Registry, secretsManager *secrets.Manager, pgStore *persistence.PostgresStore) {
+func configureServerRuntime(ctx context.Context, srv *apiServer, registry *connectorsdk.Registry, secretsManager *secrets.Manager, pgStore *persistence.PostgresStore) {
 	// Docker coordinator — must be created after srv so agentMgr is available.
 	srv.dockerCoordinator = docker.NewCoordinator(srv.agentMgr)
 	registry.Register(modelmap.WrapConnector(srv.dockerCoordinator))
@@ -183,6 +185,9 @@ func configureServerRuntime(srv *apiServer, registry *connectorsdk.Registry, sec
 
 	// Hub SSH identity for agent key auto-provisioning.
 	if secretsManager != nil {
+		if err := pgStore.MigrateLegacyWebhookSecrets(ctx, secretsManager); err != nil {
+			log.Printf("labtether warning: webhook secret migration skipped: %v", err)
+		}
 		identity, identityErr := ensureHubSSHIdentity(srv)
 		if identityErr != nil {
 			log.Printf("labtether warning: hub SSH identity not available: %v", identityErr)

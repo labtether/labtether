@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { backendAuthHeadersWithCookie, resolvedBackendBaseURLs } from "../../../../lib/backend";
+import { isMutationRequestOriginAllowed } from "../../../../lib/proxyAuth";
 
 type QuickSessionRequest = {
   host: string;
@@ -42,6 +43,10 @@ function parseQuickSessionRequest(raw: unknown): QuickSessionRequest | null {
 }
 
 export async function POST(request: Request) {
+  if (!isMutationRequestOriginAllowed(request)) {
+    return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
+  }
+
   let raw: unknown;
   try {
     raw = await request.json();

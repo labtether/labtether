@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
 
 import { backendAuthHeadersWithCookie, resolvedBackendBaseURLs } from "../../../../../../lib/backend";
+import { isMutationRequestOriginAllowed } from "../../../../../../lib/proxyAuth";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
 export async function POST(request: Request, props: RouteParams) {
+  if (!isMutationRequestOriginAllowed(request)) {
+    return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
+  }
+
   const { id } = await props.params;
   if (!id) {
     return NextResponse.json({ error: "persistent session id is required" }, { status: 400 });

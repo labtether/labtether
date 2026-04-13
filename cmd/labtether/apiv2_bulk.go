@@ -13,6 +13,11 @@ import (
 	"github.com/labtether/labtether/internal/audit"
 )
 
+const (
+	maxBulkFilePushTargets       = 64
+	bulkFilePushStartConcurrency = 8
+)
+
 // handleV2BulkServiceAction handles POST /api/v2/bulk/service-action.
 func (s *apiServer) handleV2BulkServiceAction(w http.ResponseWriter, r *http.Request) {
 	s.ensureBulkDeps().HandleV2BulkServiceAction(w, r)
@@ -66,6 +71,10 @@ func (s *apiServer) handleV2BulkFilePush(w http.ResponseWriter, r *http.Request)
 		apiv2.WriteError(w, http.StatusBadRequest, "validation", "targets must not be empty")
 		return
 	}
+	if len(req.Targets) > maxBulkFilePushTargets {
+		apiv2.WriteError(w, http.StatusBadRequest, "validation", "targets exceeds maximum of 64")
+		return
+	}
 
 	type targetResult struct {
 		DestConnectionID string `json:"dest_connection_id"`
@@ -77,12 +86,15 @@ func (s *apiServer) handleV2BulkFilePush(w http.ResponseWriter, r *http.Request)
 	results := make([]targetResult, len(req.Targets))
 	var mu sync.Mutex
 	var wg sync.WaitGroup
+	sem := make(chan struct{}, bulkFilePushStartConcurrency)
 	requestCtx := context.WithoutCancel(r.Context())
 
 	for i, t := range req.Targets {
+		sem <- struct{}{}
 		wg.Add(1)
 		go func(idx int, destConnID, destPath string) {
 			defer wg.Done()
+			defer func() { <-sem }()
 
 			res := targetResult{
 				DestConnectionID: strings.TrimSpace(destConnID),

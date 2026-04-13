@@ -47,6 +47,32 @@ type SourceSummary struct {
 	LastSeenAt time.Time `json:"last_seen_at"`
 }
 
+// SourceSummaryRequest defines filters for source aggregation queries.
+type SourceSummaryRequest struct {
+	GroupID       string
+	GroupAssetIDs []string
+	From          time.Time
+	To            time.Time
+	Limit         int
+}
+
+// GroupSeverityCountRequest defines filters for exact per-group severity
+// aggregations without materializing raw log events.
+type GroupSeverityCountRequest struct {
+	From        time.Time
+	To          time.Time
+	AssetGroups map[string]string
+	GroupIDs    []string
+}
+
+// GroupSeverityCount is an aggregate row for per-group severity counts.
+type GroupSeverityCount struct {
+	GroupID         string `json:"group_id"`
+	ErrorCount      int    `json:"error_count"`
+	WarnCount       int    `json:"warn_count"`
+	DeadLetterCount int    `json:"dead_letter_count"`
+}
+
 // SavedViewRequest captures persisted log filter preferences.
 type SavedViewRequest struct {
 	ID      string `json:"id,omitempty"`

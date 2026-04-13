@@ -104,6 +104,34 @@ func (m *MemoryCredentialStore) CreateCredentialProfile(profile credentials.Prof
 	return cloneCredentialProfile(profile), nil
 }
 
+func (m *MemoryCredentialStore) UpdateCredentialProfile(profile credentials.Profile) (credentials.Profile, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	existing, ok := m.profiles[strings.TrimSpace(profile.ID)]
+	if !ok {
+		return credentials.Profile{}, errors.New("credential profile not found")
+	}
+
+	existing.Name = strings.TrimSpace(profile.Name)
+	existing.Kind = strings.TrimSpace(profile.Kind)
+	existing.Username = strings.TrimSpace(profile.Username)
+	existing.Description = strings.TrimSpace(profile.Description)
+	existing.Status = strings.TrimSpace(profile.Status)
+	if existing.Status == "" {
+		existing.Status = "active"
+	}
+	existing.Metadata = cloneMetadata(profile.Metadata)
+	existing.SecretCiphertext = strings.TrimSpace(profile.SecretCiphertext)
+	existing.PassphraseCiphertext = strings.TrimSpace(profile.PassphraseCiphertext)
+	existing.UpdatedAt = time.Now().UTC()
+	existing.RotatedAt = cloneTimePtr(profile.RotatedAt)
+	existing.ExpiresAt = cloneTimePtr(profile.ExpiresAt)
+
+	m.profiles[existing.ID] = cloneCredentialProfile(existing)
+	return cloneCredentialProfile(existing), nil
+}
+
 func (m *MemoryCredentialStore) UpdateCredentialProfileSecret(id, secretCiphertext, passphraseCiphertext string, expiresAt *time.Time) (credentials.Profile, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

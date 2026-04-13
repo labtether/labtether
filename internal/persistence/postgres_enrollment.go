@@ -93,10 +93,21 @@ func (s *PostgresStore) IncrementEnrollmentTokenUse(id string) error {
 
 func (s *PostgresStore) RevokeEnrollmentToken(id string) error {
 	now := time.Now().UTC()
-	_, err := s.pool.Exec(context.Background(),
-		`UPDATE enrollment_tokens SET revoked_at = $1 WHERE id = $2 AND revoked_at IS NULL`, now, id,
-	)
-	return err
+	var foundID string
+	err := s.pool.QueryRow(context.Background(),
+		`UPDATE enrollment_tokens
+		 SET revoked_at = COALESCE(revoked_at, $1)
+		 WHERE id = $2
+		 RETURNING id`,
+		now, id,
+	).Scan(&foundID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *PostgresStore) ListEnrollmentTokens(limit int) ([]enrollment.EnrollmentToken, error) {
@@ -172,10 +183,22 @@ func (s *PostgresStore) TouchAgentTokenLastUsed(id string) error {
 
 func (s *PostgresStore) RevokeAgentToken(id string) error {
 	now := time.Now().UTC()
-	_, err := s.pool.Exec(context.Background(),
-		`UPDATE agent_tokens SET status = 'revoked', revoked_at = $1 WHERE id = $2 AND status = 'active'`, now, id,
-	)
-	return err
+	var foundID string
+	err := s.pool.QueryRow(context.Background(),
+		`UPDATE agent_tokens
+		 SET status = 'revoked',
+		     revoked_at = COALESCE(revoked_at, $1)
+		 WHERE id = $2
+		 RETURNING id`,
+		now, id,
+	).Scan(&foundID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *PostgresStore) RevokeAgentTokensByAsset(assetID string) error {

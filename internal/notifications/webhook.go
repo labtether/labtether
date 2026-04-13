@@ -3,6 +3,9 @@ package notifications
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -37,6 +40,16 @@ func (w *WebhookAdapter) Send(ctx context.Context, config map[string]any, payloa
 	}
 	req.Header.Set("Content-Type", "application/json")
 
+	if eventType, ok := config["event_type"].(string); ok && strings.TrimSpace(eventType) != "" {
+		req.Header.Set("X-Labtether-Event", strings.TrimSpace(eventType))
+	}
+	if timestamp, ok := config["timestamp"].(string); ok && strings.TrimSpace(timestamp) != "" {
+		req.Header.Set("X-Labtether-Timestamp", strings.TrimSpace(timestamp))
+		if secret, ok := config["secret"].(string); ok && strings.TrimSpace(secret) != "" {
+			req.Header.Set("X-Labtether-Signature-256", webhookSignature(secret, strings.TrimSpace(timestamp), body))
+		}
+	}
+
 	if headers, ok := config["headers"].(map[string]any); ok {
 		for k, v := range headers {
 			if s, ok := v.(string); ok {
@@ -56,4 +69,12 @@ func (w *WebhookAdapter) Send(ctx context.Context, config map[string]any, payloa
 		return fmt.Errorf("webhook returned status %d", resp.StatusCode)
 	}
 	return nil
+}
+
+func webhookSignature(secret, timestamp string, body []byte) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(timestamp))
+	mac.Write([]byte("."))
+	mac.Write(body)
+	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { backendAuthHeadersWithCookie, resolvedBackendBaseURLs } from "../../../../../../lib/backend";
+import { isMutationRequestOriginAllowed } from "../../../../../../lib/proxyAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -9,14 +10,26 @@ type RouteParams = {
 };
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  if (!isMutationRequestOriginAllowed(request)) {
+    return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
+  }
+
   return updateManualService(request, params);
 }
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {
+  if (!isMutationRequestOriginAllowed(request)) {
+    return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
+  }
+
   return updateManualService(request, params);
 }
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  if (!isMutationRequestOriginAllowed(request)) {
+    return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
+  }
+
   const { id } = await params;
   const base = await resolvedBackendBaseURLs();
   const authHeaders = backendAuthHeadersWithCookie(request);

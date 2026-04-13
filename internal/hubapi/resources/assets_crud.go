@@ -1,12 +1,14 @@
 package resources
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/idgen"
+	"github.com/labtether/labtether/internal/persistence"
 )
 
 // V2ListAssets handles GET /api/v2/assets.
@@ -130,6 +132,10 @@ func (d *Deps) V2UpdateAsset(w http.ResponseWriter, r *http.Request, assetID str
 
 	updated, err := d.AssetStore.UpdateAsset(assetID, req)
 	if err != nil {
+		if errors.Is(err, persistence.ErrNotFound) {
+			apiv2.WriteError(w, http.StatusNotFound, "asset_not_found", "no asset with id: "+assetID)
+			return
+		}
 		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to update asset")
 		return
 	}
@@ -139,6 +145,10 @@ func (d *Deps) V2UpdateAsset(w http.ResponseWriter, r *http.Request, assetID str
 // V2DeleteAsset handles DELETE /api/v2/assets/{id}.
 func (d *Deps) V2DeleteAsset(w http.ResponseWriter, _ *http.Request, assetID string) {
 	if err := d.AssetStore.DeleteAsset(assetID); err != nil {
+		if errors.Is(err, persistence.ErrNotFound) {
+			apiv2.WriteError(w, http.StatusNotFound, "asset_not_found", "no asset with id: "+assetID)
+			return
+		}
 		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to delete asset")
 		return
 	}

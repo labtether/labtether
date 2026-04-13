@@ -120,7 +120,7 @@ func (d *Deps) dispatchAlertNotificationsSync(rule alerts.Rule, instanceID, stat
 				channel = loadedChannel
 			}
 			if !channel.Enabled {
-				d.recordNotificationHistory(channelID, instanceID, routeID, notifications.RecordStatusFailed, "channel disabled")
+				d.recordNotificationHistory(channelID, instanceID, routeID, notifications.RecordStatusFailed, "channel disabled", payload)
 				continue
 			}
 
@@ -128,11 +128,11 @@ func (d *Deps) dispatchAlertNotificationsSync(rule alerts.Rule, instanceID, stat
 			sendErr := d.sendNotification(sendCtx, channel, payload)
 			cancel()
 			if sendErr != nil {
-				rec := d.recordNotificationHistoryWithRetry(channel.ID, instanceID, routeID, notifications.RecordStatusFailed, sendErr.Error())
+				rec := d.recordNotificationHistoryWithRetry(channel.ID, instanceID, routeID, notifications.RecordStatusFailed, sendErr.Error(), payload)
 				log.Printf("notifications: channel %s send failed (retry %d/%d): %v", channel.ID, rec.RetryCount, rec.MaxRetries, sendErr)
 				continue
 			}
-			d.recordNotificationHistory(channel.ID, instanceID, routeID, notifications.RecordStatusSent, "")
+			d.recordNotificationHistory(channel.ID, instanceID, routeID, notifications.RecordStatusSent, "", payload)
 		}
 	}
 }
@@ -268,7 +268,7 @@ func (d *Deps) sendNotification(ctx context.Context, channel notifications.Chann
 	}
 }
 
-func (d *Deps) recordNotificationHistory(channelID, instanceID, routeID, status, errorMessage string) {
+func (d *Deps) recordNotificationHistory(channelID, instanceID, routeID, status, errorMessage string, payload map[string]any) {
 	if d.NotificationStore == nil {
 		return
 	}
@@ -276,6 +276,7 @@ func (d *Deps) recordNotificationHistory(channelID, instanceID, routeID, status,
 		ChannelID:       strings.TrimSpace(channelID),
 		AlertInstanceID: strings.TrimSpace(instanceID),
 		RouteID:         strings.TrimSpace(routeID),
+		Payload:         cloneAnyMap(payload),
 		Status:          strings.TrimSpace(status),
 		Error:           strings.TrimSpace(errorMessage),
 	})
@@ -287,7 +288,7 @@ func (d *Deps) recordNotificationHistory(channelID, instanceID, routeID, status,
 // recordNotificationHistoryWithRetry creates a failed notification record and
 // schedules it for retry by setting next_retry_at via RetryBackoff(0).
 // It returns the created record so the caller can log retry metadata.
-func (d *Deps) recordNotificationHistoryWithRetry(channelID, instanceID, routeID, status, errorMessage string) notifications.Record {
+func (d *Deps) recordNotificationHistoryWithRetry(channelID, instanceID, routeID, status, errorMessage string, payload map[string]any) notifications.Record {
 	if d.NotificationStore == nil {
 		return notifications.Record{}
 	}
@@ -295,6 +296,7 @@ func (d *Deps) recordNotificationHistoryWithRetry(channelID, instanceID, routeID
 		ChannelID:       strings.TrimSpace(channelID),
 		AlertInstanceID: strings.TrimSpace(instanceID),
 		RouteID:         strings.TrimSpace(routeID),
+		Payload:         cloneAnyMap(payload),
 		Status:          strings.TrimSpace(status),
 		Error:           strings.TrimSpace(errorMessage),
 	})
@@ -304,7 +306,7 @@ func (d *Deps) recordNotificationHistoryWithRetry(channelID, instanceID, routeID
 	}
 	// Schedule first retry.
 	nextRetry := time.Now().UTC().Add(notifications.RetryBackoff(0))
-	updateErr := d.NotificationStore.UpdateRetryState(context.Background(), rec.ID, 0, &nextRetry, notifications.RecordStatusFailed)
+	updateErr := d.NotificationStore.UpdateRetryState(context.Background(), rec.ID, 0, &nextRetry, notifications.RecordStatusFailed, strings.TrimSpace(errorMessage))
 	if updateErr != nil {
 		log.Printf("notifications: failed to schedule retry for record %s: %v", rec.ID, updateErr)
 	}
@@ -337,10 +339,7 @@ func (d *Deps) RetryPendingNotifications(ctx context.Context) {
 			continue
 		}
 
-		payload := map[string]any{
-			"alert_instance_id": rec.AlertInstanceID,
-			"retry":             true,
-		}
+		payload := d.payloadForRetry(rec)
 		sendCtx, cancel := context.WithTimeout(ctx, notificationDispatchTimeout)
 		sendErr := d.sendNotification(sendCtx, channel, payload)
 		cancel()
@@ -348,7 +347,7 @@ func (d *Deps) RetryPendingNotifications(ctx context.Context) {
 		newRetryCount := rec.RetryCount + 1
 		if sendErr == nil {
 			// Success — clear retry state and mark sent.
-			clearUpdateErr := d.NotificationStore.UpdateRetryState(ctx, rec.ID, newRetryCount, nil, notifications.RecordStatusSent)
+			clearUpdateErr := d.NotificationStore.UpdateRetryState(ctx, rec.ID, newRetryCount, nil, notifications.RecordStatusSent, "")
 			if clearUpdateErr != nil {
 				log.Printf("notifications: failed to mark retry success for record %s: %v", rec.ID, clearUpdateErr)
 			}
@@ -365,7 +364,7 @@ func (d *Deps) RetryPendingNotifications(ctx context.Context) {
 
 		// Schedule next retry.
 		nextRetry := now.Add(notifications.RetryBackoff(newRetryCount))
-		updateErr := d.NotificationStore.UpdateRetryState(ctx, rec.ID, newRetryCount, &nextRetry, notifications.RecordStatusFailed)
+		updateErr := d.NotificationStore.UpdateRetryState(ctx, rec.ID, newRetryCount, &nextRetry, notifications.RecordStatusFailed, sendErr.Error())
 		if updateErr != nil {
 			log.Printf("notifications: failed to update retry state for record %s: %v", rec.ID, updateErr)
 		}
@@ -375,11 +374,53 @@ func (d *Deps) RetryPendingNotifications(ctx context.Context) {
 // exhaustNotificationRetry marks a record as permanently failed by setting
 // retry_count = max_retries and clearing next_retry_at.
 func (d *Deps) exhaustNotificationRetry(ctx context.Context, rec notifications.Record, reason string) {
-	updateErr := d.NotificationStore.UpdateRetryState(ctx, rec.ID, rec.MaxRetries, nil, notifications.RecordStatusFailed)
+	updateErr := d.NotificationStore.UpdateRetryState(ctx, rec.ID, rec.MaxRetries, nil, notifications.RecordStatusFailed, strings.TrimSpace(reason))
 	if updateErr != nil {
 		log.Printf("notifications: failed to exhaust retry for record %s: %v", rec.ID, updateErr)
 	}
 	log.Printf("notifications: record %s permanently failed after %d retries: %s", rec.ID, rec.MaxRetries, reason)
+}
+
+func (d *Deps) payloadForRetry(rec notifications.Record) map[string]any {
+	if len(rec.Payload) > 0 {
+		payload := cloneAnyMap(rec.Payload)
+		payload["retry"] = true
+		if payloadString(payload, "alert_instance_id") == "" && strings.TrimSpace(rec.AlertInstanceID) != "" {
+			payload["alert_instance_id"] = strings.TrimSpace(rec.AlertInstanceID)
+		}
+		return payload
+	}
+
+	if d.AlertInstanceStore != nil && strings.TrimSpace(rec.AlertInstanceID) != "" {
+		inst, ok, err := d.AlertInstanceStore.GetAlertInstance(strings.TrimSpace(rec.AlertInstanceID))
+		if err == nil && ok && d.AlertStore != nil {
+			rule, rok, ruleErr := d.AlertStore.GetAlertRule(strings.TrimSpace(inst.RuleID))
+			if ruleErr == nil && rok {
+				payload := buildAlertNotificationPayload(rule, inst.ID, retryStateForInstance(inst.Status), d.collectRuleGroupIDs(rule))
+				payload["retry"] = true
+				return payload
+			}
+		}
+	}
+
+	payload := map[string]any{
+		"event":             "notification.retry",
+		"alert_instance_id": strings.TrimSpace(rec.AlertInstanceID),
+		"alert_id":          strings.TrimSpace(rec.AlertInstanceID),
+		"title":             "LabTether notification retry",
+		"text":              fmt.Sprintf("Retrying notification delivery for alert instance %s", strings.TrimSpace(rec.AlertInstanceID)),
+		"retry":             true,
+	}
+	return payload
+}
+
+func retryStateForInstance(status string) string {
+	switch strings.TrimSpace(status) {
+	case alerts.InstanceStatusResolved:
+		return "resolved"
+	default:
+		return "firing"
+	}
 }
 
 // runNotificationRetryLoop periodically checks for pending retries and

@@ -135,7 +135,12 @@ func scanAlertRoute(row alertRouteScanner) (notifications.Route, error) {
 	if groupFilter != nil {
 		route.GroupFilter = *groupFilter
 	}
-	route.GroupBy = unmarshalStringSlice(groupBy)
+	// Grouping/repeat semantics are not implemented by the dispatcher yet, so
+	// keep the API surface honest by normalizing any legacy stored values away.
+	route.GroupBy = nil
+	route.GroupWaitSeconds = 0
+	route.GroupIntervalSeconds = 0
+	route.RepeatIntervalSeconds = 0
 	route.CreatedAt = route.CreatedAt.UTC()
 	route.UpdatedAt = route.UpdatedAt.UTC()
 	return route, nil
@@ -149,6 +154,7 @@ func scanNotificationRecord(row notificationRecordScanner) (notifications.Record
 	rec := notifications.Record{}
 	var alertInstanceID *string
 	var routeID *string
+	var payload []byte
 	var sentAt *time.Time
 	var nextRetryAt *time.Time
 	if err := row.Scan(
@@ -156,6 +162,7 @@ func scanNotificationRecord(row notificationRecordScanner) (notifications.Record
 		&rec.ChannelID,
 		&alertInstanceID,
 		&routeID,
+		&payload,
 		&rec.Status,
 		&sentAt,
 		&rec.Error,
@@ -172,6 +179,7 @@ func scanNotificationRecord(row notificationRecordScanner) (notifications.Record
 	if routeID != nil {
 		rec.RouteID = *routeID
 	}
+	rec.Payload = unmarshalAnyMap(payload)
 	if sentAt != nil {
 		v := sentAt.UTC()
 		rec.SentAt = &v

@@ -36,6 +36,10 @@ import (
 // ErrNotFound is returned when a requested resource does not exist.
 var ErrNotFound = errors.New("not found")
 
+// ErrAlreadyExists is returned when a requested create operation conflicts with
+// an existing record.
+var ErrAlreadyExists = errors.New("already exists")
+
 // ReliabilityRecord stores a historical group reliability score snapshot.
 type ReliabilityRecord struct {
 	ID          string         `json:"id"`
@@ -74,6 +78,13 @@ type TerminalPersistentSessionStore interface {
 	ListDetachedOlderThan(threshold time.Time) ([]terminal.PersistentSession, error)
 	ListAttachedSessions() ([]terminal.PersistentSession, error)
 	MarkAllAttachedAsDetached() error
+}
+
+// TerminalPersistentSessionActorStore is an optional optimization interface
+// for loading persistent terminal sessions for a single actor without scanning
+// the full session inventory first.
+type TerminalPersistentSessionActorStore interface {
+	ListPersistentSessionsByActor(actorID string) ([]terminal.PersistentSession, error)
 }
 
 // TerminalBookmarkStore provides persistence for saved terminal connection bookmarks.
@@ -158,17 +169,30 @@ type LogStore interface {
 	AppendEvent(event logs.Event) error
 	QueryEvents(req logs.QueryRequest) ([]logs.Event, error)
 	ListSources(limit int) ([]logs.SourceSummary, error)
-	SaveView(req logs.SavedViewRequest) (logs.SavedView, error)
-	ListViews(limit int) ([]logs.SavedView, error)
-	GetView(id string) (logs.SavedView, bool, error)
-	UpdateView(id string, req logs.SavedViewRequest) (logs.SavedView, error)
-	DeleteView(id string) error
+	SaveView(actorID string, req logs.SavedViewRequest) (logs.SavedView, error)
+	ListViews(actorID string, limit int) ([]logs.SavedView, error)
+	GetView(actorID, id string) (logs.SavedView, bool, error)
+	UpdateView(actorID, id string, req logs.SavedViewRequest) (logs.SavedView, error)
+	DeleteView(actorID, id string) error
 }
 
 // LogBatchAppendStore is an optional optimization interface for appending
 // many log events in one store call.
 type LogBatchAppendStore interface {
 	AppendEvents(events []logs.Event) error
+}
+
+// LogSourceSummaryStore is an optional optimization interface for exact source
+// aggregations over a filtered log window without materializing raw events.
+type LogSourceSummaryStore interface {
+	QuerySourceSummaries(req logs.SourceSummaryRequest) ([]logs.SourceSummary, error)
+}
+
+// LogGroupSeverityCountStore is an optional optimization interface for exact
+// per-group severity aggregations over a filtered log window without
+// materializing raw log events.
+type LogGroupSeverityCountStore interface {
+	QueryGroupSeverityCounts(req logs.GroupSeverityCountRequest) ([]logs.GroupSeverityCount, error)
 }
 
 // DeadLetterLogStore is an optional optimization interface for dead-letter
@@ -203,6 +227,12 @@ type UpdateStore interface {
 	ListUpdateRuns(limit int, status string) ([]updates.Run, error)
 	DeleteUpdateRun(id string) error
 	ApplyUpdateResult(result updates.Result) error
+}
+
+// UpdateRunPageStore is an optional optimization interface for paginating
+// update runs without being constrained by the primary ListUpdateRuns limit.
+type UpdateRunPageStore interface {
+	ListUpdateRunsPage(limit, offset int, status string) ([]updates.Run, error)
 }
 
 // AlertRuleFilter defines query options for listing alert rules.
@@ -265,6 +295,7 @@ type RuntimeSettingsStore interface {
 // CredentialStore provides encrypted profile inventory and per-asset terminal SSH mapping.
 type CredentialStore interface {
 	CreateCredentialProfile(profile credentials.Profile) (credentials.Profile, error)
+	UpdateCredentialProfile(profile credentials.Profile) (credentials.Profile, error)
 	UpdateCredentialProfileSecret(id, secretCiphertext, passphraseCiphertext string, expiresAt *time.Time) (credentials.Profile, error)
 	GetCredentialProfile(id string) (credentials.Profile, bool, error)
 	ListCredentialProfiles(limit int) ([]credentials.Profile, error)
@@ -353,7 +384,7 @@ type NotificationStore interface {
 	CreateNotificationRecord(req notifications.CreateRecordRequest) (notifications.Record, error)
 	ListNotificationHistory(limit int, channelID string) ([]notifications.Record, error)
 	ListPendingRetries(ctx context.Context, now time.Time, limit int) ([]notifications.Record, error)
-	UpdateRetryState(ctx context.Context, id string, retryCount int, nextRetryAt *time.Time, status string) error
+	UpdateRetryState(ctx context.Context, id string, retryCount int, nextRetryAt *time.Time, status, errorMessage string) error
 }
 
 // DependencyStore provides persistence for asset dependencies and blast-radius queries.
@@ -380,6 +411,13 @@ type SyntheticStore interface {
 	RecordSyntheticResult(checkID string, result synthetic.Result) (synthetic.Result, error)
 	ListSyntheticResults(checkID string, limit int) ([]synthetic.Result, error)
 	UpdateSyntheticCheckStatus(id string, status string, runAt time.Time) error
+}
+
+// DueSyntheticCheckStore is an optional optimization interface for loading
+// enabled synthetic checks that are currently due to run, ordered by oldest
+// last-run first so older checks do not starve behind frequently updated rows.
+type DueSyntheticCheckStore interface {
+	ListDueSyntheticChecks(ctx context.Context, now time.Time, limit int) ([]synthetic.Check, error)
 }
 
 // HubCollectorStore provides persistence for hub-initiated collectors.
@@ -523,6 +561,7 @@ type RemoteBookmark struct {
 // FileTransfer represents a file transfer job between two endpoints.
 type FileTransfer struct {
 	ID               string     `json:"id"`
+	ActorID          string     `json:"-"`
 	SourceType       string     `json:"source_type"`
 	SourceID         string     `json:"source_id"`
 	SourcePath       string     `json:"source_path"`
@@ -569,7 +608,7 @@ type ScheduleStore interface {
 	CreateScheduledTask(ctx context.Context, task schedules.ScheduledTask) error
 	GetScheduledTask(ctx context.Context, id string) (schedules.ScheduledTask, bool, error)
 	ListScheduledTasks(ctx context.Context) ([]schedules.ScheduledTask, error)
-	UpdateScheduledTask(ctx context.Context, id string, name *string, cronExpr *string, command *string, targets *[]string, enabled *bool) error
+	UpdateScheduledTask(ctx context.Context, id string, name *string, cronExpr *string, command *string, targets *[]string, groupID *string, enabled *bool) error
 	DeleteScheduledTask(ctx context.Context, id string) error
 }
 
@@ -578,14 +617,15 @@ type WebhookStore interface {
 	CreateWebhook(ctx context.Context, wh webhooks.Webhook) error
 	GetWebhook(ctx context.Context, id string) (webhooks.Webhook, bool, error)
 	ListWebhooks(ctx context.Context) ([]webhooks.Webhook, error)
-	UpdateWebhook(ctx context.Context, id string, name *string, url *string, events *[]string, enabled *bool) error
+	UpdateWebhook(ctx context.Context, wh webhooks.Webhook) error
 	DeleteWebhook(ctx context.Context, id string) error
+	MarkWebhookTriggered(ctx context.Context, id string, at time.Time) error
 }
 
 // SavedActionStore provides persistence for reusable saved action sequences.
 type SavedActionStore interface {
 	CreateSavedAction(ctx context.Context, action savedactions.SavedAction) error
-	GetSavedAction(ctx context.Context, id string) (savedactions.SavedAction, bool, error)
-	ListSavedActions(ctx context.Context) ([]savedactions.SavedAction, error)
-	DeleteSavedAction(ctx context.Context, id string) error
+	GetSavedAction(ctx context.Context, actorID, id string) (savedactions.SavedAction, bool, error)
+	ListSavedActions(ctx context.Context, actorID string, limit, offset int) ([]savedactions.SavedAction, int, error)
+	DeleteSavedAction(ctx context.Context, actorID, id string) error
 }

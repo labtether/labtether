@@ -11,15 +11,17 @@
     "device": {
       "label": "Gerät",
       "tooltip": "Die Ressourcenkennung, auf die eingewirkt wird (Container-ID, VM-Name usw.)",
-      "placeholder": "Container-ID / VM-ID / Entity-ID"
+      "placeholder": "Container-ID / VM-ID / Entity-ID",
+      "notRequired": "Diese Aktion benötigt kein Zielgerät."
     },
-    "options": {
-      "label": "Optionen",
-      "placeholder": "key=value,key2=value2"
+    "parameters": {
+      "none": "Diese Aktion benötigt keine zusätzlichen Parameter.",
+      "required": "(erforderlich)"
     },
     "previewOnly": {
       "label": "Nur Vorschau",
-      "tooltip": "Aktion simulieren, ohne Änderungen vorzunehmen"
+      "tooltip": "Aktion simulieren, ohne Änderungen vorzunehmen",
+      "unsupportedTooltip": "Diese Aktion läuft direkt und unterstützt keinen Vorschaumodus"
     },
     "submit": "Ausführen",
     "submitting": "Wird eingereiht..."

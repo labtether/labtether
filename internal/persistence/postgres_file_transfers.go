@@ -21,6 +21,7 @@ func scanFileTransfer(row fileTransferScanner) (FileTransfer, error) {
 	ft := FileTransfer{}
 	if err := row.Scan(
 		&ft.ID,
+		&ft.ActorID,
 		&ft.SourceType,
 		&ft.SourceID,
 		&ft.SourcePath,
@@ -50,7 +51,7 @@ func scanFileTransfer(row fileTransferScanner) (FileTransfer, error) {
 
 // --- columns ---
 
-const fileTransferColumns = `id, source_type, source_id, source_path, dest_type, dest_id, dest_path, file_name, file_size, bytes_transferred, status, error, started_at, completed_at`
+const fileTransferColumns = `id, actor_id, source_type, source_id, source_path, dest_type, dest_id, dest_path, file_name, file_size, bytes_transferred, status, error, started_at, completed_at`
 
 // --- store methods ---
 
@@ -75,9 +76,10 @@ func (s *PostgresStore) CreateFileTransfer(ctx context.Context, ft *FileTransfer
 	}
 
 	_, err := s.pool.Exec(ctx,
-		`INSERT INTO file_transfers (id, source_type, source_id, source_path, dest_type, dest_id, dest_path, file_name, file_size, bytes_transferred, status, error, started_at, completed_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+		`INSERT INTO file_transfers (id, actor_id, source_type, source_id, source_path, dest_type, dest_id, dest_path, file_name, file_size, bytes_transferred, status, error, started_at, completed_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
 		ft.ID,
+		strings.TrimSpace(ft.ActorID),
 		strings.TrimSpace(ft.SourceType),
 		strings.TrimSpace(ft.SourceID),
 		ft.SourcePath,

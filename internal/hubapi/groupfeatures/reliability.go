@@ -63,23 +63,11 @@ func (d *Deps) HandleGroupReliabilityCollection(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	computation, err := d.buildGroupReliabilityComputation(from, to, groupIDSetFromGroups(groupList))
+	records, err := d.BuildGroupReliabilityRecords(groupList, from, to)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to compute group reliability")
 		return
 	}
-
-	records := make([]GroupReliabilityRecord, 0, len(groupList))
-	for _, groupEntry := range groupList {
-		record, err := d.buildGroupReliabilityRecordFromComputation(groupEntry, computation)
-		if err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to compute group reliability")
-			return
-		}
-		records = append(records, record)
-	}
-
-	SortGroupReliabilityRecords(records)
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"generated_at": time.Now().UTC(),
@@ -144,17 +132,76 @@ func SortGroupReliabilityRecords(records []GroupReliabilityRecord) {
 // BuildGroupReliabilityRecord computes the reliability record for a single group
 // over the given time window. It is exported so the materializer can call it.
 func (d *Deps) BuildGroupReliabilityRecord(groupEntry groups.Group, from, to time.Time) (GroupReliabilityRecord, error) {
-	knownGroupIDs := map[string]struct{}{}
-	if groupID := strings.TrimSpace(groupEntry.ID); groupID != "" {
-		knownGroupIDs[groupID] = struct{}{}
-	}
-
-	computation, err := d.buildGroupReliabilityComputation(from, to, knownGroupIDs)
+	records, err := d.BuildGroupReliabilityRecords([]groups.Group{groupEntry}, from, to)
 	if err != nil {
 		return GroupReliabilityRecord{}, err
 	}
+	if len(records) == 0 {
+		return GroupReliabilityRecord{}, nil
+	}
+	return records[0], nil
+}
 
-	return d.buildGroupReliabilityRecordFromComputation(groupEntry, computation)
+// BuildGroupReliabilityRecords computes reliability records for a group slice
+// over the given time window.
+func (d *Deps) BuildGroupReliabilityRecords(groupList []groups.Group, from, to time.Time) ([]GroupReliabilityRecord, error) {
+	if len(groupList) == 0 {
+		return []GroupReliabilityRecord{}, nil
+	}
+
+	if len(groupList) == 1 {
+		groupID := strings.TrimSpace(groupList[0].ID)
+		if groupID != "" {
+			if groupAssetStore, ok := d.AssetStore.(persistence.GroupAssetStore); ok {
+				assetList, err := groupAssetStore.ListAssetsByGroup(groupID)
+				if err != nil {
+					return nil, err
+				}
+				return d.BuildGroupReliabilityRecordsWithAssets(groupList, assetList, from, to)
+			}
+		}
+	}
+
+	assetList, err := d.AssetStore.ListAssets()
+	if err != nil {
+		return nil, err
+	}
+	return d.BuildGroupReliabilityRecordsWithAssets(groupList, assetList, from, to)
+}
+
+// BuildGroupReliabilityRecordsWithAssets computes reliability records from a
+// caller-supplied asset list so hot paths can avoid a second asset scan.
+func (d *Deps) BuildGroupReliabilityRecordsWithAssets(
+	groupList []groups.Group,
+	assetList []assets.Asset,
+	from, to time.Time,
+) ([]GroupReliabilityRecord, error) {
+	if len(groupList) == 0 {
+		return []GroupReliabilityRecord{}, nil
+	}
+
+	knownGroupIDs := map[string]struct{}{}
+	for _, groupEntry := range groupList {
+		if groupID := strings.TrimSpace(groupEntry.ID); groupID != "" {
+			knownGroupIDs[groupID] = struct{}{}
+		}
+	}
+
+	computation, err := d.buildGroupReliabilityComputationWithAssets(from, to, assetList, knownGroupIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	records := make([]GroupReliabilityRecord, 0, len(groupList))
+	for _, groupEntry := range groupList {
+		record, err := d.buildGroupReliabilityRecordFromComputation(groupEntry, computation)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, record)
+	}
+	SortGroupReliabilityRecords(records)
+	return records, nil
 }
 
 // groupIDSetFromGroups builds a set of non-empty group IDs.
@@ -205,46 +252,25 @@ func (d *Deps) buildGroupReliabilityComputationWithAssets(
 	assetList []assets.Asset,
 	knownGroupIDs map[string]struct{},
 ) (groupReliabilityComputation, error) {
-	logQuery := logs.QueryRequest{
-		From:      from,
-		To:        to,
-		Limit:     1000,
-		FieldKeys: []string{"group_id"},
-	}
-	if len(knownGroupIDs) == 1 {
-		for groupID := range knownGroupIDs {
-			logQuery.GroupID = strings.TrimSpace(groupID)
-		}
-		if logQuery.GroupID != "" {
-			logQuery.GroupAssetIDs = shared.GroupAssetIDsForGroup(logQuery.GroupID, assetGroupLookup(assetList))
-		}
-	}
+	computation := d.newGroupReliabilityComputation(from, to, time.Now().UTC(), assetList, knownGroupIDs)
 
-	logEvents, err := d.LogStore.QueryEvents(logQuery)
+	logCounts, err := d.loadGroupReliabilityLogCounts(from, to, computation.assetGroup, knownGroupIDs)
+	if err != nil {
+		return groupReliabilityComputation{}, err
+	}
+	failedActions, err := d.loadGroupReliabilityFailedActions(from, to, computation.assetGroup, knownGroupIDs)
+	if err != nil {
+		return groupReliabilityComputation{}, err
+	}
+	failedUpdates, err := d.loadGroupReliabilityFailedUpdates(from, to, computation.assetGroup, knownGroupIDs)
 	if err != nil {
 		return groupReliabilityComputation{}, err
 	}
 
-	actionRuns, err := d.ActionStore.ListActionRuns(500, 0, "", actions.StatusFailed)
-	if err != nil {
-		return groupReliabilityComputation{}, err
-	}
-
-	updateRuns, err := d.UpdateStore.ListUpdateRuns(500, updates.StatusFailed)
-	if err != nil {
-		return groupReliabilityComputation{}, err
-	}
-
-	return d.BuildGroupReliabilityComputationFromInputs(
-		from,
-		to,
-		time.Now().UTC(),
-		assetList,
-		logEvents,
-		actionRuns,
-		updateRuns,
-		knownGroupIDs,
-	)
+	computation.logCounts = logCounts
+	computation.failedActions = failedActions
+	computation.failedUpdates = failedUpdates
+	return computation, nil
 }
 
 // BuildGroupReliabilityComputationFromInputs assembles a reliability computation
@@ -259,37 +285,7 @@ func (d *Deps) BuildGroupReliabilityComputationFromInputs(
 	failedUpdateRuns []updates.Run,
 	knownGroupIDs map[string]struct{},
 ) (groupReliabilityComputation, error) {
-	computation := groupReliabilityComputation{
-		now:             now.UTC(),
-		assetGroup:      make(map[string]string, len(assetList)),
-		assetCounts:     make(map[string]groupReliabilityAssetCounts, len(assetList)),
-		logCounts:       make(map[string]groupReliabilityLogCounts, 16),
-		failedActions:   make(map[string]int, 16),
-		failedUpdates:   make(map[string]int, 16),
-		knownGroupIDs:   knownGroupIDs,
-		computationFrom: from,
-		computationTo:   to,
-	}
-
-	for _, assetEntry := range assetList {
-		groupID := strings.TrimSpace(assetEntry.GroupID)
-		if groupID == "" {
-			continue
-		}
-		computation.assetGroup[assetEntry.ID] = groupID
-
-		counts := computation.assetCounts[groupID]
-		counts.Total++
-		switch GroupAssetFreshness(assetEntry.LastSeenAt, computation.now) {
-		case "online":
-			counts.Online++
-		case "stale":
-			counts.Stale++
-		default:
-			counts.Offline++
-		}
-		computation.assetCounts[groupID] = counts
-	}
+	computation := d.newGroupReliabilityComputation(from, to, now, assetList, knownGroupIDs)
 
 	for _, event := range logEvents {
 		groupID := ""
@@ -371,6 +367,257 @@ func (d *Deps) BuildGroupReliabilityComputationFromInputs(
 	return computation, nil
 }
 
+func (d *Deps) newGroupReliabilityComputation(
+	from time.Time,
+	to time.Time,
+	now time.Time,
+	assetList []assets.Asset,
+	knownGroupIDs map[string]struct{},
+) groupReliabilityComputation {
+	computation := groupReliabilityComputation{
+		now:             now.UTC(),
+		assetGroup:      make(map[string]string, len(assetList)),
+		assetCounts:     make(map[string]groupReliabilityAssetCounts, len(assetList)),
+		logCounts:       make(map[string]groupReliabilityLogCounts, 16),
+		failedActions:   make(map[string]int, 16),
+		failedUpdates:   make(map[string]int, 16),
+		knownGroupIDs:   knownGroupIDs,
+		computationFrom: from,
+		computationTo:   to,
+	}
+
+	for _, assetEntry := range assetList {
+		groupID := strings.TrimSpace(assetEntry.GroupID)
+		if groupID == "" {
+			continue
+		}
+		computation.assetGroup[assetEntry.ID] = groupID
+
+		counts := computation.assetCounts[groupID]
+		counts.Total++
+		switch GroupAssetFreshness(assetEntry.LastSeenAt, computation.now) {
+		case "online":
+			counts.Online++
+		case "stale":
+			counts.Stale++
+		default:
+			counts.Offline++
+		}
+		computation.assetCounts[groupID] = counts
+	}
+
+	return computation
+}
+
+func (d *Deps) loadGroupReliabilityLogCounts(
+	from time.Time,
+	to time.Time,
+	assetGroup map[string]string,
+	knownGroupIDs map[string]struct{},
+) (map[string]groupReliabilityLogCounts, error) {
+	counts := make(map[string]groupReliabilityLogCounts, maxInt(len(knownGroupIDs), 16))
+	if d.LogStore == nil {
+		return counts, nil
+	}
+
+	groupIDs := make([]string, 0, len(knownGroupIDs))
+	for groupID := range knownGroupIDs {
+		groupID = strings.TrimSpace(groupID)
+		if groupID == "" {
+			continue
+		}
+		groupIDs = append(groupIDs, groupID)
+	}
+
+	if severityStore, ok := d.LogStore.(persistence.LogGroupSeverityCountStore); ok {
+		rows, err := severityStore.QueryGroupSeverityCounts(logs.GroupSeverityCountRequest{
+			From:        from,
+			To:          to,
+			AssetGroups: assetGroup,
+			GroupIDs:    groupIDs,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			groupID := strings.TrimSpace(row.GroupID)
+			if groupID == "" {
+				continue
+			}
+			if len(knownGroupIDs) > 0 {
+				if _, ok := knownGroupIDs[groupID]; !ok {
+					continue
+				}
+			}
+			counts[groupID] = groupReliabilityLogCounts{
+				Error:      row.ErrorCount,
+				Warn:       row.WarnCount,
+				DeadLetter: row.DeadLetterCount,
+			}
+		}
+		return counts, nil
+	}
+
+	logEvents, err := d.LogStore.QueryEvents(logs.QueryRequest{
+		From:      from,
+		To:        to,
+		Limit:     1000,
+		FieldKeys: []string{"group_id"},
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, event := range logEvents {
+		groupID := strings.TrimSpace(assetGroup[strings.TrimSpace(event.AssetID)])
+		if groupID == "" {
+			groupID = strings.TrimSpace(event.Fields["group_id"])
+		}
+		if groupID == "" {
+			continue
+		}
+		if len(knownGroupIDs) > 0 {
+			if _, ok := knownGroupIDs[groupID]; !ok {
+				continue
+			}
+		}
+		entry := counts[groupID]
+		switch NormalizeLogSeverity(event.Level) {
+		case "error":
+			entry.Error++
+			if strings.EqualFold(strings.TrimSpace(event.Source), "dead_letter") {
+				entry.DeadLetter++
+			}
+		case "warn":
+			entry.Warn++
+		}
+		counts[groupID] = entry
+	}
+	return counts, nil
+}
+
+func (d *Deps) loadGroupReliabilityFailedActions(
+	from time.Time,
+	to time.Time,
+	assetGroup map[string]string,
+	knownGroupIDs map[string]struct{},
+) (map[string]int, error) {
+	counts := make(map[string]int, maxInt(len(knownGroupIDs), 16))
+	if d.ActionStore == nil {
+		return counts, nil
+	}
+
+	const pageSize = 500
+	offset := 0
+	for {
+		runs, err := d.ActionStore.ListActionRuns(pageSize, offset, "", actions.StatusFailed)
+		if err != nil {
+			return nil, err
+		}
+		if len(runs) == 0 {
+			return counts, nil
+		}
+
+		for _, run := range runs {
+			if run.UpdatedAt.After(to) {
+				continue
+			}
+			if run.UpdatedAt.Before(from) {
+				continue
+			}
+			for _, groupID := range actionRunMatchedGroups(run, assetGroup, knownGroupIDs) {
+				counts[groupID]++
+			}
+		}
+
+		if len(runs) < pageSize || runs[len(runs)-1].UpdatedAt.Before(from) {
+			return counts, nil
+		}
+		offset += len(runs)
+	}
+}
+
+func (d *Deps) loadGroupReliabilityFailedUpdates(
+	from time.Time,
+	to time.Time,
+	assetGroup map[string]string,
+	knownGroupIDs map[string]struct{},
+) (map[string]int, error) {
+	counts := make(map[string]int, maxInt(len(knownGroupIDs), 16))
+	if d.UpdateStore == nil {
+		return counts, nil
+	}
+
+	const pageSize = 500
+	offset := 0
+	planTouchedGroups := make(map[string][]string)
+	var pageStore persistence.UpdateRunPageStore
+	if store, ok := d.UpdateStore.(persistence.UpdateRunPageStore); ok {
+		pageStore = store
+	}
+
+	for {
+		var (
+			runs []updates.Run
+			err  error
+		)
+		if pageStore != nil {
+			runs, err = pageStore.ListUpdateRunsPage(pageSize, offset, updates.StatusFailed)
+		} else {
+			if offset > 0 {
+				return counts, nil
+			}
+			runs, err = d.UpdateStore.ListUpdateRuns(pageSize, updates.StatusFailed)
+		}
+		if err != nil {
+			return nil, err
+		}
+		if len(runs) == 0 {
+			return counts, nil
+		}
+
+		missingPlanIDs := make([]string, 0, len(runs))
+		for _, run := range runs {
+			planID := strings.TrimSpace(run.PlanID)
+			if planID == "" {
+				continue
+			}
+			if _, ok := planTouchedGroups[planID]; ok {
+				continue
+			}
+			missingPlanIDs = append(missingPlanIDs, planID)
+		}
+		plansByID, err := d.loadUpdatePlansByID(missingPlanIDs)
+		if err != nil {
+			return nil, err
+		}
+		for _, planID := range missingPlanIDs {
+			plan, ok := plansByID[planID]
+			if !ok {
+				planTouchedGroups[planID] = nil
+				continue
+			}
+			planTouchedGroups[planID] = updatePlanTouchedGroups(plan, assetGroup, knownGroupIDs)
+		}
+
+		for _, run := range runs {
+			if run.UpdatedAt.After(to) {
+				continue
+			}
+			if run.UpdatedAt.Before(from) {
+				continue
+			}
+			for _, groupID := range planTouchedGroups[strings.TrimSpace(run.PlanID)] {
+				counts[groupID]++
+			}
+		}
+
+		if len(runs) < pageSize || runs[len(runs)-1].UpdatedAt.Before(from) {
+			return counts, nil
+		}
+		offset += len(runs)
+	}
+}
+
 func actionRunMatchedGroups(
 	run actions.Run,
 	assetGroup map[string]string,
@@ -444,7 +691,7 @@ func (d *Deps) buildGroupReliabilityRecordFromComputation(
 	record.FailedActions = computation.failedActions[groupID]
 	record.FailedUpdates = computation.failedUpdates[groupID]
 
-	guardrails, err := d.GroupGuardrails(groupEntry.ID, time.Now().UTC())
+	guardrails, err := d.GroupGuardrails(groupEntry.ID, computation.computationTo)
 	if err != nil {
 		return GroupReliabilityRecord{}, err
 	}
@@ -528,6 +775,13 @@ func (d *Deps) loadUpdatePlansByID(planIDs []string) (map[string]updates.Plan, e
 
 func minInt(left, right int) int {
 	if left < right {
+		return left
+	}
+	return right
+}
+
+func maxInt(left, right int) int {
+	if left > right {
 		return left
 	}
 	return right

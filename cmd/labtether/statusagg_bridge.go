@@ -21,6 +21,7 @@ func (s *apiServer) buildStatusAggDeps() *statusaggpkg.Deps {
 	return &statusaggpkg.Deps{
 		AssetStore:            s.assetStore,
 		GroupStore:            s.groupStore,
+		GroupMaintenanceStore: s.groupMaintenanceStore,
 		TelemetryStore:        s.telemetryStore,
 		LogStore:              s.logStore,
 		ActionStore:           s.actionStore,

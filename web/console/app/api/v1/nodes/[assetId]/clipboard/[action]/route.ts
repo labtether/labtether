@@ -5,6 +5,7 @@ import {
   resolvedBackendBaseURLs,
   upstreamErrorPayload,
 } from "../../../../../../../lib/backend";
+import { isMutationRequestOriginAllowed } from "../../../../../../../lib/proxyAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,10 @@ type RouteContext = {
 const allowedActions = new Set(["get", "set"]);
 
 export async function POST(request: NextRequest, context: RouteContext) {
+  if (!isMutationRequestOriginAllowed(request)) {
+    return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
+  }
+
   const { assetId, action } = await context.params;
   const normalizedAction = action.trim().toLowerCase();
 

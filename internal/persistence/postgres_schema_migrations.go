@@ -395,10 +395,13 @@ func postgresSchemaMigrations() []schemaMigration {
 					error TEXT NOT NULL DEFAULT '',
 					created_at TIMESTAMPTZ NOT NULL,
 					updated_at TIMESTAMPTZ NOT NULL,
+					available_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 					locked_at TIMESTAMPTZ,
-					completed_at TIMESTAMPTZ
+					completed_at TIMESTAMPTZ,
+					lock_token TEXT
 				)`,
 				`CREATE INDEX IF NOT EXISTS idx_job_queue_status_created ON job_queue(status, created_at ASC)`,
+				`CREATE INDEX IF NOT EXISTS idx_job_queue_status_available_created ON job_queue(status, available_at ASC, created_at ASC)`,
 				`CREATE INDEX IF NOT EXISTS idx_job_queue_kind_status ON job_queue(kind, status)`,
 				`CREATE INDEX IF NOT EXISTS idx_job_queue_dead_lettered ON job_queue(created_at DESC) WHERE status = 'dead_lettered'`,
 			},
@@ -2257,6 +2260,7 @@ func postgresSchemaMigrations() []schemaMigration {
 			)`,
 			`CREATE TABLE IF NOT EXISTS file_transfers (
 				id                TEXT PRIMARY KEY,
+				actor_id          TEXT NOT NULL DEFAULT '',
 				source_type       TEXT NOT NULL,
 				source_id         TEXT NOT NULL,
 				source_path       TEXT NOT NULL,
@@ -2502,6 +2506,63 @@ func postgresSchemaMigrations() []schemaMigration {
 		Statements: []string{
 			`CREATE INDEX IF NOT EXISTS idx_audit_events_actor_id ON audit_events (actor_id)`,
 			`CREATE INDEX IF NOT EXISTS idx_audit_events_type ON audit_events (type)`,
+		},
+	})
+
+	migrations = append(migrations, schemaMigration{
+		Version: 74,
+		Name:    "notification_history_payload",
+		Statements: []string{
+			`ALTER TABLE notification_history ADD COLUMN IF NOT EXISTS payload JSONB NOT NULL DEFAULT '{}'::jsonb`,
+			`UPDATE notification_history SET payload = '{}'::jsonb WHERE payload IS NULL`,
+		},
+	})
+
+	migrations = append(migrations, schemaMigration{
+		Version: 75,
+		Name:    "webhook_secret_ciphertext",
+		Statements: []string{
+			`ALTER TABLE webhooks ADD COLUMN IF NOT EXISTS secret_ciphertext TEXT NOT NULL DEFAULT ''`,
+			`UPDATE webhooks SET secret_ciphertext = '' WHERE secret_ciphertext IS NULL`,
+		},
+	})
+
+	migrations = append(migrations, schemaMigration{
+		Version: 76,
+		Name:    "saved_log_views_owner_scope",
+		Statements: []string{
+			`ALTER TABLE saved_log_views ADD COLUMN IF NOT EXISTS owner_id TEXT NOT NULL DEFAULT ''`,
+			`UPDATE saved_log_views SET owner_id = '' WHERE owner_id IS NULL`,
+			`CREATE INDEX IF NOT EXISTS idx_saved_log_views_owner_updated ON saved_log_views(owner_id, updated_at DESC)`,
+		},
+	})
+
+	migrations = append(migrations, schemaMigration{
+		Version: 77,
+		Name:    "file_transfers_actor_scope",
+		Statements: []string{
+			`ALTER TABLE file_transfers ADD COLUMN IF NOT EXISTS actor_id TEXT NOT NULL DEFAULT ''`,
+			`UPDATE file_transfers SET actor_id = '' WHERE actor_id IS NULL`,
+			`CREATE INDEX IF NOT EXISTS idx_file_transfers_actor_id ON file_transfers(actor_id)`,
+		},
+	})
+
+	migrations = append(migrations, schemaMigration{
+		Version: 78,
+		Name:    "job_queue_leases_and_backoff",
+		Statements: []string{
+			`ALTER TABLE job_queue ADD COLUMN IF NOT EXISTS available_at TIMESTAMPTZ NOT NULL DEFAULT now()`,
+			`UPDATE job_queue SET available_at = created_at WHERE available_at IS NULL`,
+			`ALTER TABLE job_queue ADD COLUMN IF NOT EXISTS lock_token TEXT`,
+			`CREATE INDEX IF NOT EXISTS idx_job_queue_status_available_created ON job_queue(status, available_at ASC, created_at ASC)`,
+		},
+	})
+
+	migrations = append(migrations, schemaMigration{
+		Version: 79,
+		Name:    "saved_actions_owner_index",
+		Statements: []string{
+			`CREATE INDEX IF NOT EXISTS idx_saved_actions_created_by_created_at ON saved_actions(created_by, created_at DESC)`,
 		},
 	})
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 
@@ -27,19 +28,49 @@ func (s *PostgresStore) CreateSavedAction(ctx context.Context, action savedactio
 	return err
 }
 
-func (s *PostgresStore) GetSavedAction(ctx context.Context, id string) (savedactions.SavedAction, bool, error) {
+func (s *PostgresStore) GetSavedAction(ctx context.Context, actorID, id string) (savedactions.SavedAction, bool, error) {
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		actorID = "system"
+	}
 	row := s.pool.QueryRow(ctx,
 		`SELECT id, name, description, steps, created_by, created_at
-		 FROM saved_actions WHERE id = $1`, id)
+		 FROM saved_actions WHERE created_by = $1 AND id = $2`,
+		actorID,
+		strings.TrimSpace(id),
+	)
 	return scanSavedActionRow(row)
 }
 
-func (s *PostgresStore) ListSavedActions(ctx context.Context) ([]savedactions.SavedAction, error) {
+func (s *PostgresStore) ListSavedActions(ctx context.Context, actorID string, limit, offset int) ([]savedactions.SavedAction, int, error) {
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		actorID = "system"
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	var total int
+	if err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM saved_actions WHERE created_by = $1`, actorID).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
 	rows, err := s.pool.Query(ctx,
 		`SELECT id, name, description, steps, created_by, created_at
-		 FROM saved_actions ORDER BY created_at DESC`)
+		 FROM saved_actions
+		 WHERE created_by = $1
+		 ORDER BY created_at DESC
+		 LIMIT $2 OFFSET $3`,
+		actorID,
+		limit,
+		offset,
+	)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
@@ -48,23 +79,38 @@ func (s *PostgresStore) ListSavedActions(ctx context.Context) ([]savedactions.Sa
 		var a savedactions.SavedAction
 		var stepsJSON []byte
 		if err := rows.Scan(&a.ID, &a.Name, &a.Description, &stepsJSON, &a.CreatedBy, &a.CreatedAt); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		if stepsJSON != nil {
 			if err := json.Unmarshal(stepsJSON, &a.Steps); err != nil {
-				return nil, fmt.Errorf("corrupt steps JSON for saved action %s: %w", a.ID, err)
+				return nil, 0, fmt.Errorf("corrupt steps JSON for saved action %s: %w", a.ID, err)
 			}
 		}
 		result = append(result, a)
 	}
-	return result, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	return result, total, nil
 }
 
-// DeleteSavedAction removes a saved action by ID. Returns nil even if the
-// action does not exist (idempotent delete).
-func (s *PostgresStore) DeleteSavedAction(ctx context.Context, id string) error {
-	_, err := s.pool.Exec(ctx, `DELETE FROM saved_actions WHERE id = $1`, id)
-	return err
+func (s *PostgresStore) DeleteSavedAction(ctx context.Context, actorID, id string) error {
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		actorID = "system"
+	}
+	tag, err := s.pool.Exec(ctx,
+		`DELETE FROM saved_actions WHERE created_by = $1 AND id = $2`,
+		actorID,
+		strings.TrimSpace(id),
+	)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func scanSavedActionRow(row pgx.Row) (savedactions.SavedAction, bool, error) {

@@ -325,6 +325,7 @@ func (d *Deps) buildResponseWithAssets(
 		TelemetryOverview:   live.TelemetryOverview,
 		RecentLogs:          collections.recentLogs,
 		LogSources:          collections.logSources,
+		GroupReliability:    collections.groupReliability,
 		ActionRuns:          collections.actionRuns,
 		UpdatePlans:         collections.updatePlans,
 		UpdateRuns:          collections.updateRuns,

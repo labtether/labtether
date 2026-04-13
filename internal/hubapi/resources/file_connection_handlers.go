@@ -137,6 +137,7 @@ func (d *Deps) handleCreateFileConnection(w http.ResponseWriter, r *http.Request
 	req.Host = strings.TrimSpace(req.Host)
 	req.InitialPath = strings.TrimSpace(req.InitialPath)
 	req.Username = strings.TrimSpace(req.Username)
+	req.Passphrase = strings.TrimSpace(req.Passphrase)
 	req.AuthMethod = strings.TrimSpace(req.AuthMethod)
 
 	if err := validateFileConnectionRequest(req); err != nil {
@@ -151,34 +152,7 @@ func (d *Deps) handleCreateFileConnection(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Create credential profile.
-	profileID := idgen.New("cred")
-	secretCiphertext, err := d.SecretsManager.EncryptString(strings.TrimSpace(req.Secret), profileID)
-	if err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to encrypt credential secret")
-		return
-	}
-
-	var passphraseCiphertext string
-	if pp := strings.TrimSpace(req.Passphrase); pp != "" {
-		passphraseCiphertext, err = d.SecretsManager.EncryptString(pp, profileID)
-		if err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to encrypt passphrase")
-			return
-		}
-	}
-
-	profile := credentials.Profile{
-		ID:                   profileID,
-		Name:                 fmt.Sprintf("File Connection — %s", req.Name),
-		Kind:                 kind,
-		Username:             req.Username,
-		Description:          fmt.Sprintf("Auto-created for file connection (%s)", req.Protocol),
-		Status:               "active",
-		SecretCiphertext:     secretCiphertext,
-		PassphraseCiphertext: passphraseCiphertext,
-	}
-	created, err := d.CredentialStore.CreateCredentialProfile(profile)
+	created, err := d.createFileConnectionCredentialProfile(req.Name, req.Protocol, req.Username, kind, req.Secret, req.Passphrase)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create credential profile")
 		return
@@ -214,6 +188,7 @@ type fileConnectionUpdateRequest struct {
 	InitialPath string         `json:"initial_path"`
 	Username    string         `json:"username"`
 	Secret      string         `json:"secret"` // #nosec G117 -- Request payload intentionally carries runtime credential material.
+	Passphrase  string         `json:"passphrase,omitempty"`
 	AuthMethod  string         `json:"auth_method"`
 	ExtraConfig map[string]any `json:"extra_config,omitempty"`
 }
@@ -247,6 +222,7 @@ func (d *Deps) handleUpdateFileConnection(w http.ResponseWriter, r *http.Request
 	req.Host = strings.TrimSpace(req.Host)
 	req.InitialPath = strings.TrimSpace(req.InitialPath)
 	req.Username = strings.TrimSpace(req.Username)
+	req.Passphrase = strings.TrimSpace(req.Passphrase)
 	req.AuthMethod = strings.TrimSpace(req.AuthMethod)
 
 	if req.Name != "" {
@@ -268,29 +244,98 @@ func (d *Deps) handleUpdateFileConnection(w http.ResponseWriter, r *http.Request
 		existing.ExtraConfig = req.ExtraConfig
 	}
 
-	// Update credentials if secret provided.
 	secret := strings.TrimSpace(req.Secret)
-	if secret != "" && existing.CredentialID != nil {
-		kind := credentialKindForFileProtocol(existing.Protocol, req.AuthMethod)
-		if kind == "" {
-			kind = credentialKindForFileProtocol(existing.Protocol, "password")
-		}
+	passphrase := strings.TrimSpace(req.Passphrase)
 
-		ciphertext, err := d.SecretsManager.EncryptString(secret, *existing.CredentialID)
+	var profile credentials.Profile
+	hasProfile := false
+	if existing.CredentialID != nil && strings.TrimSpace(*existing.CredentialID) != "" {
+		loaded, ok, err := d.CredentialStore.GetCredentialProfile(*existing.CredentialID)
 		if err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to encrypt credential secret")
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load credential profile")
 			return
 		}
-		_, err = d.CredentialStore.UpdateCredentialProfileSecret(*existing.CredentialID, ciphertext, "", nil)
-		if err != nil {
+		if !ok {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "linked credential profile not found")
+			return
+		}
+		profile = loaded
+		hasProfile = true
+	}
+
+	effectiveUsername := req.Username
+	if effectiveUsername == "" && hasProfile {
+		effectiveUsername = strings.TrimSpace(profile.Username)
+	}
+	effectiveAuthMethod := req.AuthMethod
+	if effectiveAuthMethod == "" && hasProfile {
+		effectiveAuthMethod = authMethodForCredentialKind(profile.Kind)
+	}
+	desiredKind := credentialKindForFileProtocol(existing.Protocol, effectiveAuthMethod)
+	if desiredKind == "" {
+		servicehttp.WriteError(w, http.StatusBadRequest, "unsupported protocol/auth_method combination")
+		return
+	}
+	if err := validateFileConnectionFields(existing.Name, existing.Protocol, existing.Host, effectiveUsername, secret, passphrase, effectiveAuthMethod, true, false); err != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if hasProfile && credentialKindUsesPrivateKey(profile.Kind) != credentialKindUsesPrivateKey(desiredKind) && secret == "" {
+		servicehttp.WriteError(w, http.StatusBadRequest, "secret is required when changing between password and private_key authentication")
+		return
+	}
+
+	if hasProfile {
+		profile.Name = fileConnectionCredentialProfileName(existing.Name)
+		profile.Kind = desiredKind
+		profile.Username = effectiveUsername
+		profile.Description = fileConnectionCredentialProfileDescription(existing.Protocol)
+		if secret != "" {
+			profile.SecretCiphertext, err = d.SecretsManager.EncryptString(secret, profile.ID)
+			if err != nil {
+				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to encrypt credential secret")
+				return
+			}
+		}
+		switch {
+		case desiredKind != credentials.KindSSHPrivateKey:
+			profile.PassphraseCiphertext = ""
+		case req.Passphrase != "":
+			profile.PassphraseCiphertext, err = d.SecretsManager.EncryptString(passphrase, profile.ID)
+			if err != nil {
+				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to encrypt passphrase")
+				return
+			}
+		}
+		if secret != "" || req.Passphrase != "" {
+			now := time.Now().UTC()
+			profile.RotatedAt = &now
+		}
+		if _, err := d.CredentialStore.UpdateCredentialProfile(profile); err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update credential profile")
 			return
 		}
-		// Update username on the profile if changed.
-		_ = kind // kind is used for the initial creation; rotate keeps the existing kind
+	}
+
+	if !hasProfile {
+		if err := validateFileConnectionFields(existing.Name, existing.Protocol, existing.Host, effectiveUsername, secret, passphrase, effectiveAuthMethod, true, true); err != nil {
+			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		created, err := d.createFileConnectionCredentialProfile(existing.Name, existing.Protocol, effectiveUsername, desiredKind, secret, passphrase)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create credential profile")
+			return
+		}
+		existing.CredentialID = &created.ID
 	}
 
 	if err := d.FileConnectionStore.UpdateFileConnection(r.Context(), existing); err != nil {
+		if errors.Is(err, persistence.ErrNotFound) {
+			servicehttp.WriteError(w, http.StatusNotFound, "file connection not found")
+			return
+		}
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update file connection")
 		return
 	}
@@ -537,23 +582,7 @@ func (d *Deps) testFileConnection(ctx context.Context, config fileproto.Connecti
 }
 
 func validateFileConnectionRequest(req fileConnectionCreateRequest) error {
-	if req.Name == "" {
-		return errors.New("name is required")
-	}
-	if req.Protocol == "" {
-		return errors.New("protocol is required")
-	}
-	if req.Host == "" {
-		return errors.New("host is required")
-	}
-	validProtocols := map[string]bool{"sftp": true, "ftp": true, "smb": true, "webdav": true}
-	if !validProtocols[req.Protocol] {
-		return fmt.Errorf("protocol must be one of: sftp, ftp, smb, webdav")
-	}
-	if req.Secret == "" {
-		return errors.New("secret is required")
-	}
-	return nil
+	return validateFileConnectionFields(req.Name, req.Protocol, req.Host, req.Username, req.Secret, strings.TrimSpace(req.Passphrase), req.AuthMethod, true, true)
 }
 
 func credentialKindForFileProtocol(protocol, authMethod string) string {
@@ -572,4 +601,96 @@ func credentialKindForFileProtocol(protocol, authMethod string) string {
 	default:
 		return ""
 	}
+}
+
+func authMethodForCredentialKind(kind string) string {
+	if kind == credentials.KindSSHPrivateKey {
+		return "private_key"
+	}
+	return "password"
+}
+
+func credentialKindUsesPrivateKey(kind string) bool {
+	return kind == credentials.KindSSHPrivateKey
+}
+
+func validateFileConnectionFields(name, protocol, host, username, secret, passphrase, authMethod string, requireName, requireSecret bool) error {
+	if requireName && strings.TrimSpace(name) == "" {
+		return errors.New("name is required")
+	}
+	protocol = strings.TrimSpace(protocol)
+	if protocol == "" {
+		return errors.New("protocol is required")
+	}
+	if strings.TrimSpace(host) == "" {
+		return errors.New("host is required")
+	}
+	if strings.TrimSpace(username) == "" {
+		return errors.New("username is required")
+	}
+	if requireSecret && strings.TrimSpace(secret) == "" {
+		return errors.New("secret is required")
+	}
+
+	switch protocol {
+	case "sftp":
+		if authMethod == "" {
+			authMethod = "password"
+		}
+		if authMethod != "password" && authMethod != "private_key" {
+			return errors.New("auth_method must be password or private_key for sftp")
+		}
+		if authMethod != "private_key" && strings.TrimSpace(passphrase) != "" {
+			return errors.New("passphrase is only supported for private_key authentication")
+		}
+	case "ftp", "smb", "webdav":
+		if authMethod == "" {
+			authMethod = "password"
+		}
+		if authMethod != "password" {
+			return fmt.Errorf("auth_method must be password for %s", protocol)
+		}
+		if strings.TrimSpace(passphrase) != "" {
+			return errors.New("passphrase is only supported for private_key authentication")
+		}
+	default:
+		return fmt.Errorf("protocol must be one of: sftp, ftp, smb, webdav")
+	}
+
+	return nil
+}
+
+func fileConnectionCredentialProfileName(connectionName string) string {
+	return fmt.Sprintf("File Connection — %s", strings.TrimSpace(connectionName))
+}
+
+func fileConnectionCredentialProfileDescription(protocol string) string {
+	return fmt.Sprintf("Auto-created for file connection (%s)", strings.TrimSpace(protocol))
+}
+
+func (d *Deps) createFileConnectionCredentialProfile(connectionName, protocol, username, kind, secret, passphrase string) (credentials.Profile, error) {
+	profileID := idgen.New("cred")
+	secretCiphertext, err := d.SecretsManager.EncryptString(strings.TrimSpace(secret), profileID)
+	if err != nil {
+		return credentials.Profile{}, err
+	}
+
+	passphraseCiphertext := ""
+	if strings.TrimSpace(passphrase) != "" {
+		passphraseCiphertext, err = d.SecretsManager.EncryptString(strings.TrimSpace(passphrase), profileID)
+		if err != nil {
+			return credentials.Profile{}, err
+		}
+	}
+
+	return d.CredentialStore.CreateCredentialProfile(credentials.Profile{
+		ID:                   profileID,
+		Name:                 fileConnectionCredentialProfileName(connectionName),
+		Kind:                 strings.TrimSpace(kind),
+		Username:             strings.TrimSpace(username),
+		Description:          fileConnectionCredentialProfileDescription(protocol),
+		Status:               "active",
+		SecretCiphertext:     secretCiphertext,
+		PassphraseCiphertext: passphraseCiphertext,
+	})
 }

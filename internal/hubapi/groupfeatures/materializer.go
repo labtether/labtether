@@ -41,7 +41,7 @@ func (d *Deps) RunReliabilityMaterializer(ctx context.Context, store persistence
 // the results to the ReliabilityHistoryStore. It is exported so callers can
 // trigger a materialisation on demand.
 func (d *Deps) MaterializeReliability(store persistence.ReliabilityHistoryStore) {
-	if d.GroupStore == nil || store == nil {
+	if d.GroupStore == nil || d.AssetStore == nil || store == nil {
 		return
 	}
 
@@ -51,13 +51,23 @@ func (d *Deps) MaterializeReliability(store persistence.ReliabilityHistoryStore)
 		return
 	}
 
+	assetList, err := d.AssetStore.ListAssets()
+	if err != nil {
+		log.Printf("reliability materializer: failed to list assets: %v", err)
+		return
+	}
+
 	now := time.Now().UTC()
 	from := now.Add(-24 * time.Hour)
+	records, err := d.BuildGroupReliabilityRecordsWithAssets(groupList, assetList, from, now)
+	if err != nil {
+		log.Printf("reliability materializer: failed to compute reliability: %v", err)
+		return
+	}
 
-	for _, group := range groupList {
-		record, err := d.BuildGroupReliabilityRecord(group, from, now)
-		if err != nil {
-			log.Printf("reliability materializer: failed to compute for group %s: %v", group.ID, err)
+	for _, record := range records {
+		groupID := record.Group.ID
+		if groupID == "" {
 			continue
 		}
 
@@ -72,8 +82,8 @@ func (d *Deps) MaterializeReliability(store persistence.ReliabilityHistoryStore)
 			"dead_letters":   record.DeadLetters,
 		}
 
-		if err := store.InsertReliabilityRecord(group.ID, record.Score, record.Grade, factors, 24); err != nil {
-			log.Printf("reliability materializer: failed to insert record for group %s: %v", group.ID, err)
+		if err := store.InsertReliabilityRecord(groupID, record.Score, record.Grade, factors, 24); err != nil {
+			log.Printf("reliability materializer: failed to insert record for group %s: %v", groupID, err)
 		}
 	}
 

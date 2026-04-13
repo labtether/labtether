@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"errors"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"log"
 	"net"
@@ -12,6 +13,7 @@ import (
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/auth"
 	"github.com/labtether/labtether/internal/enrollment"
+	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/platforms"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
@@ -261,6 +263,10 @@ func (d *Deps) HandleEnrollmentTokenActions(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := d.EnrollmentStore.RevokeEnrollmentToken(id); err != nil {
+		if errors.Is(err, persistence.ErrNotFound) {
+			servicehttp.WriteError(w, http.StatusNotFound, "enrollment token not found")
+			return
+		}
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to revoke enrollment token")
 		return
 	}
@@ -300,6 +306,21 @@ func (d *Deps) HandleAgentTokens(w http.ResponseWriter, r *http.Request) {
 		DeviceFingerprint string     `json:"device_fingerprint,omitempty"`
 	}
 
+	deviceFingerprints := map[string]string{}
+	if d.AssetStore != nil && len(tokens) > 0 {
+		assetList, err := d.AssetStore.ListAssets()
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list agent tokens")
+			return
+		}
+		deviceFingerprints = make(map[string]string, len(assetList))
+		for _, asset := range assetList {
+			if fingerprint := strings.TrimSpace(asset.Metadata["agent_device_fingerprint"]); fingerprint != "" {
+				deviceFingerprints[asset.ID] = fingerprint
+			}
+		}
+	}
+
 	summaries := make([]agentTokenSummary, 0, len(tokens))
 	for _, token := range tokens {
 		summary := agentTokenSummary{
@@ -312,11 +333,7 @@ func (d *Deps) HandleAgentTokens(w http.ResponseWriter, r *http.Request) {
 			CreatedAt:   token.CreatedAt,
 			RevokedAt:   token.RevokedAt,
 		}
-		if d.AssetStore != nil {
-			if asset, ok, err := d.AssetStore.GetAsset(token.AssetID); err == nil && ok {
-				summary.DeviceFingerprint = strings.TrimSpace(asset.Metadata["agent_device_fingerprint"])
-			}
-		}
+		summary.DeviceFingerprint = deviceFingerprints[token.AssetID]
 		summaries = append(summaries, summary)
 	}
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"tokens": summaries})
@@ -368,6 +385,10 @@ func (d *Deps) HandleAgentTokenActions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := d.EnrollmentStore.RevokeAgentToken(id); err != nil {
+		if errors.Is(err, persistence.ErrNotFound) {
+			servicehttp.WriteError(w, http.StatusNotFound, "agent token not found")
+			return
+		}
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to revoke agent token")
 		return
 	}

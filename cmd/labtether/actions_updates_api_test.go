@@ -303,6 +303,49 @@ func TestActionExecuteUsesAuthenticatedActor(t *testing.T) {
 	}
 }
 
+func TestActionExecuteRejectsDuplicateNormalizedParamKeys(t *testing.T) {
+	sut := newTestAPIServer(t)
+
+	payload := []byte(`{"type":"command","target":"lab-host-01","command":"uptime","params":{"group_id":"one"," group_id ":"two"}}`)
+	req := httptest.NewRequest(http.MethodPost, "/actions/execute", bytes.NewReader(payload))
+	rec := httptest.NewRecorder()
+	sut.handleActionExecute(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+	if !strings.Contains(strings.ToLower(rec.Body.String()), "duplicate action param key") {
+		t.Fatalf("expected duplicate key error, got %s", rec.Body.String())
+	}
+}
+
+func TestActionExecuteNormalizesActionParamKeysBeforeQueueing(t *testing.T) {
+	sut := newTestAPIServer(t)
+
+	payload := []byte(`{"type":"command","target":"lab-host-01","command":"uptime","params":{" timeout ":" 15 "}}`)
+	req := httptest.NewRequest(http.MethodPost, "/actions/execute", bytes.NewReader(payload))
+	rec := httptest.NewRecorder()
+	sut.handleActionExecute(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 when queue is unavailable, got %d", rec.Code)
+	}
+
+	runs, err := sut.actionStore.ListActionRuns(10, 0, "", "")
+	if err != nil {
+		t.Fatalf("failed to list action runs: %v", err)
+	}
+	if len(runs) == 0 {
+		t.Fatal("expected at least one action run")
+	}
+	if got := runs[0].Params["timeout"]; got != "15" {
+		t.Fatalf("expected trimmed timeout param, got %q", got)
+	}
+	if _, exists := runs[0].Params[" timeout "]; exists {
+		t.Fatalf("expected raw param key to be removed, got %#v", runs[0].Params)
+	}
+}
+
 func TestUpdateExecuteUsesAuthenticatedActor(t *testing.T) {
 	sut := newTestAPIServer(t)
 

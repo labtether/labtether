@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Incident, IncidentEvent } from "../console/models";
+import { extractIncident, upsertIncident } from "../lib/incidents";
 import { ensureArray, ensureRecord } from "../lib/responseGuards";
 
 export function useIncidents() {
@@ -41,7 +42,13 @@ export function useIncidents() {
       body: JSON.stringify(req),
     });
     if (!res.ok) throw new Error(`Failed to create incident: ${res.status}`);
-    await fetchIncidents();
+    const created = extractIncident(await res.json().catch(() => null));
+    if (!created) {
+      await fetchIncidents();
+      return null;
+    }
+    setIncidents((current) => upsertIncident(current, created));
+    return created;
   }, [fetchIncidents]);
 
   const updateIncident = useCallback(async (id: string, req: Record<string, unknown>) => {
@@ -51,7 +58,13 @@ export function useIncidents() {
       body: JSON.stringify(req),
     });
     if (!res.ok) throw new Error(`Failed to update incident: ${res.status}`);
-    await fetchIncidents();
+    const updated = extractIncident(await res.json().catch(() => null));
+    if (!updated) {
+      await fetchIncidents();
+      throw new Error("Failed to parse updated incident");
+    }
+    setIncidents((current) => upsertIncident(current, updated));
+    return updated;
   }, [fetchIncidents]);
 
   return {
@@ -86,13 +99,17 @@ export function useIncidentDetail(id: string | null) {
         ]);
 
         if (incRes.ok) {
-          const payload = (await incRes.json().catch(() => null)) as Incident | null;
-          setIncident(payload);
+          const nextIncident = extractIncident(await incRes.json().catch(() => null));
+          setIncident(nextIncident);
+        } else {
+          setIncident(null);
         }
         if (eventsRes.ok) {
           const data = (await eventsRes.json().catch(() => null)) as unknown;
           const payload = ensureRecord(data);
           setEvents(Array.isArray(data) ? data as IncidentEvent[] : ensureArray<IncidentEvent>(payload?.events));
+        } else {
+          setEvents([]);
         }
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -106,5 +123,9 @@ export function useIncidentDetail(id: string | null) {
     return () => { controller.abort(); };
   }, [id]);
 
-  return { incident, events, loading };
+  const replaceIncident = useCallback((nextIncident: Incident) => {
+    setIncident(nextIncident);
+  }, []);
+
+  return { incident, events, loading, replaceIncident };
 }

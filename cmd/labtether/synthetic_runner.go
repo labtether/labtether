@@ -7,8 +7,11 @@ import (
 	"time"
 
 	alertingpkg "github.com/labtether/labtether/internal/hubapi/alerting"
+	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/synthetic"
 )
+
+const syntheticRunnerBatchLimit = 500
 
 func (s *apiServer) runSyntheticRunner(ctx context.Context) {
 	ticker := time.NewTicker(15 * time.Second)
@@ -31,13 +34,12 @@ func (s *apiServer) runPendingSyntheticChecks(ctx context.Context) {
 		return
 	}
 
-	checks, err := s.syntheticStore.ListSyntheticChecks(500, true)
+	now := time.Now().UTC()
+	checks, err := s.dueSyntheticChecks(ctx, now, syntheticRunnerBatchLimit)
 	if err != nil {
 		log.Printf("synthetic runner: failed to list checks: %v", err)
 		return
 	}
-
-	now := time.Now().UTC()
 
 	// Run checks concurrently with a bounded semaphore so that up to 500 checks
 	// don't all execute serially. pgxpool handles concurrent DB calls safely.
@@ -53,12 +55,11 @@ checkLoop:
 		default:
 		}
 
-		// Check if enough time has elapsed since last run.
-		if check.LastRunAt != nil {
-			interval := time.Duration(check.IntervalSeconds) * time.Second
-			if now.Sub(*check.LastRunAt) < interval {
-				continue
-			}
+		if check.IntervalSeconds <= 0 {
+			continue
+		}
+		if _, running := s.syntheticCheckRunState.LoadOrStore(check.ID, struct{}{}); running {
+			continue
 		}
 
 		wg.Add(1)
@@ -66,6 +67,7 @@ checkLoop:
 		go func(check synthetic.Check) {
 			defer wg.Done()
 			defer func() { <-sem }()
+			defer s.syntheticCheckRunState.Delete(check.ID)
 
 			result := alertingpkg.ExecuteSyntheticCheck(check)
 			recorded, err := s.syntheticStore.RecordSyntheticResult(check.ID, result)
@@ -80,4 +82,27 @@ checkLoop:
 	}
 
 	wg.Wait()
+}
+
+func (s *apiServer) dueSyntheticChecks(ctx context.Context, now time.Time, limit int) ([]synthetic.Check, error) {
+	if dueStore, ok := s.syntheticStore.(persistence.DueSyntheticCheckStore); ok {
+		return dueStore.ListDueSyntheticChecks(ctx, now, limit)
+	}
+
+	checks, err := s.syntheticStore.ListSyntheticChecks(limit, true)
+	if err != nil {
+		return nil, err
+	}
+
+	due := make([]synthetic.Check, 0, len(checks))
+	for _, check := range checks {
+		if check.IntervalSeconds <= 0 {
+			continue
+		}
+		if check.LastRunAt != nil && now.Sub(*check.LastRunAt) < time.Duration(check.IntervalSeconds)*time.Second {
+			continue
+		}
+		due = append(due, check)
+	}
+	return due, nil
 }

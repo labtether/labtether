@@ -241,10 +241,77 @@ func TestHandleV2ScheduleActions_Patch(t *testing.T) {
 	}
 }
 
+func TestHandleV2ScheduleActions_PutSupportsGroupUpdate(t *testing.T) {
+	s := newTestAPIServer(t)
+
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v2/schedules", strings.NewReader(`{"name":"grouped","cron_expr":"@hourly","command":"echo hi","targets":[" srv1 ","srv1","srv2"]}`))
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq = createReq.WithContext(contextWithPrincipal(createReq.Context(), "admin", "admin"))
+
+	createRec := httptest.NewRecorder()
+	s.handleV2Schedules(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("failed to create task: %d %s", createRec.Code, createRec.Body.String())
+	}
+
+	var created scheduleCreateResponse
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("failed to decode create response: %v", err)
+	}
+
+	putReq := httptest.NewRequest(http.MethodPut, "/api/v2/schedules/"+created.Data.ID, strings.NewReader(`{"group_id":" group-1 "}`))
+	putReq.Header.Set("Content-Type", "application/json")
+	putReq = putReq.WithContext(contextWithPrincipal(putReq.Context(), "admin", "admin"))
+
+	putRec := httptest.NewRecorder()
+	s.handleV2ScheduleActions(putRec, putReq)
+	if putRec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", putRec.Code, putRec.Body.String())
+	}
+
+	var updatedResp scheduleCreateResponse
+	if err := json.Unmarshal(putRec.Body.Bytes(), &updatedResp); err != nil {
+		t.Fatalf("failed to decode put response: %v", err)
+	}
+	if updatedResp.Data.GroupID != "group-1" {
+		t.Fatalf("expected group_id to be updated, got %q", updatedResp.Data.GroupID)
+	}
+	if len(updatedResp.Data.Targets) != 2 {
+		t.Fatalf("expected normalized targets to contain 2 entries, got %d", len(updatedResp.Data.Targets))
+	}
+}
+
+func TestHandleV2ScheduleActions_MissingScheduleReturnsNotFound(t *testing.T) {
+	s := newTestAPIServer(t)
+
+	for _, tc := range []struct {
+		name   string
+		method string
+		body   string
+	}{
+		{name: "patch", method: http.MethodPatch, body: `{"command":"echo after"}`},
+		{name: "delete", method: http.MethodDelete},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, "/api/v2/schedules/sched-missing", strings.NewReader(tc.body))
+			if tc.body != "" {
+				req.Header.Set("Content-Type", "application/json")
+			}
+			req = req.WithContext(contextWithPrincipal(req.Context(), "admin", "admin"))
+
+			rec := httptest.NewRecorder()
+			s.handleV2ScheduleActions(rec, req)
+			if rec.Code != http.StatusNotFound {
+				t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
 func TestHandleV2ScheduleActions_MethodNotAllowed(t *testing.T) {
 	s := newTestAPIServer(t)
 
-	req := httptest.NewRequest(http.MethodPut, "/api/v2/schedules/some-id", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/schedules/some-id", nil)
 	ctx := contextWithPrincipal(req.Context(), "admin", "admin")
 	req = req.WithContext(ctx)
 

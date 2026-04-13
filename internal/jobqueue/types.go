@@ -1,6 +1,7 @@
 package jobqueue
 
 import (
+	"errors"
 	"fmt"
 	"time"
 )
@@ -36,9 +37,13 @@ type Job struct {
 	Error       string     `json:"error"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
+	AvailableAt time.Time  `json:"available_at"`
 	LockedAt    *time.Time `json:"locked_at,omitempty"`
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
+	LockToken   string     `json:"-"`
 }
+
+var ErrClaimLost = errors.New("job claim lost")
 
 // ValidKinds is the set of valid job kinds.
 var ValidKinds = map[JobKind]bool{

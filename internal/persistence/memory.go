@@ -90,6 +90,17 @@ func (m *MemoryTerminalStore) ListPersistentSessions() ([]terminal.PersistentSes
 	return m.store.ListPersistentSessions(), nil
 }
 
+func (m *MemoryTerminalStore) ListPersistentSessionsByActor(actorID string) ([]terminal.PersistentSession, error) {
+	all := m.store.ListPersistentSessions()
+	out := make([]terminal.PersistentSession, 0, len(all))
+	for _, persistent := range all {
+		if strings.TrimSpace(persistent.ActorID) == strings.TrimSpace(actorID) {
+			out = append(out, persistent)
+		}
+	}
+	return out, nil
+}
+
 func (m *MemoryTerminalStore) UpdatePersistentSession(id string, req terminal.UpdatePersistentSessionRequest) (terminal.PersistentSession, error) {
 	return m.store.UpdatePersistentSession(id, req)
 }

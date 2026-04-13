@@ -79,7 +79,7 @@ func TestBroadcasterDropsBackpressuredClientWithoutBlocking(t *testing.T) {
 	}
 }
 
-func TestDeliverFileResponseWaitsForBridgeCapacity(t *testing.T) {
+func TestDeliverFileResponseFailsStalledBridgeCapacity(t *testing.T) {
 	sut := newTestAPIServer(t)
 	bridge := newFileBridge(1, "node-audit")
 	defer bridge.Close()
@@ -98,24 +98,17 @@ func TestDeliverFileResponseWaitsForBridgeCapacity(t *testing.T) {
 
 	select {
 	case <-delivered:
-		t.Fatal("expected second delivery to block while the bridge buffer is full")
-	case <-time.After(50 * time.Millisecond):
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for second delivery to fail fast")
+	}
+
+	if err := bridge.Err(); err == nil {
+		t.Fatal("expected stalled file bridge to record a backpressure error")
 	}
 
 	gotFirst := <-bridge.Ch
 	if gotFirst.ID != first.ID {
-		t.Fatalf("expected first message to drain first, got %+v", gotFirst)
-	}
-
-	select {
-	case <-delivered:
-	case <-time.After(time.Second):
-		t.Fatal("expected second delivery to complete once capacity is available")
-	}
-
-	gotSecond := <-bridge.Ch
-	if gotSecond.ID != second.ID {
-		t.Fatalf("expected second message after capacity returned, got %+v", gotSecond)
+		t.Fatalf("expected first message to remain buffered, got %+v", gotFirst)
 	}
 }
 

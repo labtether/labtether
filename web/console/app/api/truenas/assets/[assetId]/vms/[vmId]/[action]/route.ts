@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { backendAuthHeadersWithCookie, resolvedBackendBaseURLs } from "../../../../../../../../lib/backend";
+import { isMutationRequestOriginAllowed } from "../../../../../../../../lib/proxyAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,10 @@ async function safeJSON(response: Response): Promise<unknown | null> {
 const ALLOWED_ACTIONS = new Set(["start", "stop", "restart"]);
 
 export async function POST(request: Request, { params }: Params) {
+  if (!isMutationRequestOriginAllowed(request)) {
+    return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
+  }
+
   const base = await resolvedBackendBaseURLs();
   const authHeaders = backendAuthHeadersWithCookie(request);
   const { assetId, vmId, action } = await params;

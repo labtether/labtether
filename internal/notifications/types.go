@@ -92,17 +92,18 @@ type UpdateRouteRequest struct {
 }
 
 type Record struct {
-	ID              string     `json:"id"`
-	ChannelID       string     `json:"channel_id"`
-	AlertInstanceID string     `json:"alert_instance_id,omitempty"`
-	RouteID         string     `json:"route_id,omitempty"`
-	Status          string     `json:"status"`
-	SentAt          *time.Time `json:"sent_at,omitempty"`
-	Error           string     `json:"error,omitempty"`
-	RetryCount      int        `json:"retry_count"`
-	MaxRetries      int        `json:"max_retries"`
-	NextRetryAt     *time.Time `json:"next_retry_at,omitempty"`
-	CreatedAt       time.Time  `json:"created_at"`
+	ID              string         `json:"id"`
+	ChannelID       string         `json:"channel_id"`
+	AlertInstanceID string         `json:"alert_instance_id,omitempty"`
+	RouteID         string         `json:"route_id,omitempty"`
+	Payload         map[string]any `json:"-"`
+	Status          string         `json:"status"`
+	SentAt          *time.Time     `json:"sent_at,omitempty"`
+	Error           string         `json:"error,omitempty"`
+	RetryCount      int            `json:"retry_count"`
+	MaxRetries      int            `json:"max_retries"`
+	NextRetryAt     *time.Time     `json:"next_retry_at,omitempty"`
+	CreatedAt       time.Time      `json:"created_at"`
 }
 
 // RetryBackoff returns the exponential backoff duration for the given retry attempt.
@@ -123,11 +124,12 @@ func RetryBackoff(attempt int) time.Duration {
 }
 
 type CreateRecordRequest struct {
-	ChannelID       string `json:"channel_id"`
-	AlertInstanceID string `json:"alert_instance_id,omitempty"`
-	RouteID         string `json:"route_id,omitempty"`
-	Status          string `json:"status"`
-	Error           string `json:"error,omitempty"`
+	ChannelID       string         `json:"channel_id"`
+	AlertInstanceID string         `json:"alert_instance_id,omitempty"`
+	RouteID         string         `json:"route_id,omitempty"`
+	Payload         map[string]any `json:"-"`
+	Status          string         `json:"status"`
+	Error           string         `json:"error,omitempty"`
 }
 
 func NormalizeChannelType(value string) string {

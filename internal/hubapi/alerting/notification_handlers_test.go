@@ -44,3 +44,17 @@ func TestHandleNotificationChannelActionsRejectsExtraPathSegments(t *testing.T) 
 		t.Fatalf("expected 404 for channel action path with extra segments, got %d", rec.Code)
 	}
 }
+
+func TestValidateCreateRouteRequestRejectsUnsupportedGroupingAndRepeatSettings(t *testing.T) {
+	err := ValidateCreateRouteRequest(notifications.CreateRouteRequest{
+		Name:                  "Critical route",
+		ChannelIDs:            []string{"chan-1"},
+		GroupBy:               []string{"severity"},
+		GroupWaitSeconds:      30,
+		GroupIntervalSeconds:  300,
+		RepeatIntervalSeconds: 3600,
+	})
+	if err == nil {
+		t.Fatal("expected unsupported grouping settings to be rejected")
+	}
+}

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/labtether/labtether/internal/idgen"
 	"github.com/labtether/labtether/internal/logs"
@@ -904,6 +905,161 @@ func (s *PostgresStore) ListSources(limit int) ([]logs.SourceSummary, error) {
 	return out, nil
 }
 
+func (s *PostgresStore) QuerySourceSummaries(req logs.SourceSummaryRequest) ([]logs.SourceSummary, error) {
+	limit := req.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+
+	from := req.From.UTC()
+	to := req.To.UTC()
+	if to.IsZero() {
+		to = time.Now().UTC()
+	}
+	if from.IsZero() {
+		from = to.Add(-24 * time.Hour)
+	}
+
+	groupID := strings.TrimSpace(req.GroupID)
+	groupAssetIDs := normalizeLogAssetIDs(req.GroupAssetIDs)
+
+	args := make([]any, 0, 6)
+	where := make([]string, 0, 4)
+	next := 1
+
+	where = append(where, fmt.Sprintf("timestamp >= $%d", next))
+	args = append(args, from)
+	next++
+	where = append(where, fmt.Sprintf("timestamp <= $%d", next))
+	args = append(args, to)
+	next++
+
+	if groupID != "" {
+		if len(groupAssetIDs) > 0 {
+			where = append(where, fmt.Sprintf("(asset_id = ANY($%d::text[]) OR NULLIF(BTRIM(fields->>'group_id'), '') = $%d)", next, next+1))
+			args = append(args, groupAssetIDs, groupID)
+			next += 2
+		} else {
+			where = append(where, fmt.Sprintf("NULLIF(BTRIM(fields->>'group_id'), '') = $%d", next))
+			args = append(args, groupID)
+			next++
+		}
+	} else if len(groupAssetIDs) > 0 {
+		where = append(where, fmt.Sprintf("asset_id = ANY($%d::text[])", next))
+		args = append(args, groupAssetIDs)
+		next++
+	}
+
+	sql := `SELECT source, COUNT(*) AS event_count, MAX(timestamp) AS last_seen
+		FROM log_events`
+	if len(where) > 0 {
+		sql += " WHERE " + strings.Join(where, " AND ")
+	}
+	sql += fmt.Sprintf(" GROUP BY source ORDER BY last_seen DESC LIMIT $%d", next)
+	args = append(args, limit)
+
+	rows, err := s.pool.Query(context.Background(), sql, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]logs.SourceSummary, 0, limit)
+	for rows.Next() {
+		row := logs.SourceSummary{}
+		if err := rows.Scan(&row.Source, &row.Count, &row.LastSeenAt); err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+	return out, nil
+}
+
+func (s *PostgresStore) QueryGroupSeverityCounts(req logs.GroupSeverityCountRequest) ([]logs.GroupSeverityCount, error) {
+	from := req.From.UTC()
+	to := req.To.UTC()
+	if to.IsZero() {
+		to = time.Now().UTC()
+	}
+	if from.IsZero() {
+		from = to.Add(-time.Hour)
+	}
+
+	assetIDs := make([]string, 0, len(req.AssetGroups))
+	groupIDsByAsset := make([]string, 0, len(req.AssetGroups))
+	for assetID, groupID := range req.AssetGroups {
+		assetID = strings.TrimSpace(assetID)
+		groupID = strings.TrimSpace(groupID)
+		if assetID == "" || groupID == "" {
+			continue
+		}
+		assetIDs = append(assetIDs, assetID)
+		groupIDsByAsset = append(groupIDsByAsset, groupID)
+	}
+	filterGroupIDs := make([]string, 0, len(req.GroupIDs))
+	for _, groupID := range req.GroupIDs {
+		groupID = strings.TrimSpace(groupID)
+		if groupID == "" {
+			continue
+		}
+		filterGroupIDs = append(filterGroupIDs, groupID)
+	}
+
+	rows, err := s.pool.Query(context.Background(),
+		`WITH asset_groups AS (
+			SELECT *
+			FROM unnest($3::text[], $4::text[]) AS ag(asset_id, group_id)
+		)
+		SELECT
+			resolved.group_id,
+			COALESCE(SUM(CASE WHEN resolved.level = 'error' THEN 1 ELSE 0 END), 0) AS error_count,
+			COALESCE(SUM(CASE WHEN resolved.level IN ('warn', 'warning') THEN 1 ELSE 0 END), 0) AS warn_count,
+			COALESCE(SUM(CASE WHEN resolved.level = 'error' AND resolved.source = 'dead_letter' THEN 1 ELSE 0 END), 0) AS dead_letter_count
+		FROM (
+			SELECT
+				COALESCE(NULLIF(BTRIM(le.fields->>'group_id'), ''), ag.group_id) AS group_id,
+				LOWER(BTRIM(le.level)) AS level,
+				BTRIM(le.source) AS source
+			FROM log_events le
+			LEFT JOIN asset_groups ag ON ag.asset_id = le.asset_id
+			WHERE le.timestamp >= $1
+			  AND le.timestamp <= $2
+			  AND COALESCE(NULLIF(BTRIM(le.fields->>'group_id'), ''), ag.group_id) <> ''
+			  AND (cardinality($5::text[]) = 0 OR COALESCE(NULLIF(BTRIM(le.fields->>'group_id'), ''), ag.group_id) = ANY($5::text[]))
+		) AS resolved
+		GROUP BY resolved.group_id
+		ORDER BY resolved.group_id ASC`,
+		from,
+		to,
+		assetIDs,
+		groupIDsByAsset,
+		filterGroupIDs,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]logs.GroupSeverityCount, 0, 16)
+	for rows.Next() {
+		entry := logs.GroupSeverityCount{}
+		if err := rows.Scan(&entry.GroupID, &entry.ErrorCount, &entry.WarnCount, &entry.DeadLetterCount); err != nil {
+			return nil, err
+		}
+		out = append(out, entry)
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+	return out, nil
+}
+
 func (s *PostgresStore) LogEventsWatermark() (time.Time, error) {
 	now := time.Now().UTC()
 	if watermark, ok := s.cachedLogEventsWatermark(now); ok {
@@ -979,26 +1135,23 @@ func (s *PostgresStore) TelemetryWatermark() (time.Time, error) {
 	return watermark.UTC(), nil
 }
 
-func (s *PostgresStore) SaveView(req logs.SavedViewRequest) (logs.SavedView, error) {
+func (s *PostgresStore) SaveView(actorID string, req logs.SavedViewRequest) (logs.SavedView, error) {
 	now := time.Now().UTC()
 	id := strings.TrimSpace(req.ID)
 	if id == "" {
 		id = idgen.New("view")
 	}
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		actorID = "system"
+	}
 
 	row := s.pool.QueryRow(context.Background(),
-		`INSERT INTO saved_log_views (id, name, asset_id, source, level, search, window_value, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
-		 ON CONFLICT (id) DO UPDATE
-		 SET name = EXCLUDED.name,
-		     asset_id = EXCLUDED.asset_id,
-		     source = EXCLUDED.source,
-		     level = EXCLUDED.level,
-		     search = EXCLUDED.search,
-		     window_value = EXCLUDED.window_value,
-		     updated_at = EXCLUDED.updated_at
+		`INSERT INTO saved_log_views (id, owner_id, name, asset_id, source, level, search, window_value, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
 		 RETURNING id, name, asset_id, source, level, search, window_value, created_at, updated_at`,
 		id,
+		actorID,
 		strings.TrimSpace(req.Name),
 		nullIfBlank(req.AssetID),
 		nullIfBlank(req.Source),
@@ -1025,6 +1178,10 @@ func (s *PostgresStore) SaveView(req logs.SavedViewRequest) (logs.SavedView, err
 		&view.CreatedAt,
 		&view.UpdatedAt,
 	); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return logs.SavedView{}, ErrAlreadyExists
+		}
 		return logs.SavedView{}, err
 	}
 	if assetID != nil {
@@ -1046,16 +1203,22 @@ func (s *PostgresStore) SaveView(req logs.SavedViewRequest) (logs.SavedView, err
 	return view, nil
 }
 
-func (s *PostgresStore) ListViews(limit int) ([]logs.SavedView, error) {
+func (s *PostgresStore) ListViews(actorID string, limit int) ([]logs.SavedView, error) {
 	if limit <= 0 {
 		limit = 50
+	}
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		actorID = "system"
 	}
 
 	rows, err := s.pool.Query(context.Background(),
 		`SELECT id, name, asset_id, source, level, search, window_value, created_at, updated_at
 		 FROM saved_log_views
+		 WHERE owner_id = $1
 		 ORDER BY updated_at DESC
-		 LIMIT $1`,
+		 LIMIT $2`,
+		actorID,
 		limit,
 	)
 	if err != nil {
@@ -1107,11 +1270,16 @@ func (s *PostgresStore) ListViews(limit int) ([]logs.SavedView, error) {
 	return out, nil
 }
 
-func (s *PostgresStore) GetView(id string) (logs.SavedView, bool, error) {
+func (s *PostgresStore) GetView(actorID, id string) (logs.SavedView, bool, error) {
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		actorID = "system"
+	}
 	row := s.pool.QueryRow(context.Background(),
 		`SELECT id, name, asset_id, source, level, search, window_value, created_at, updated_at
 		 FROM saved_log_views
-		 WHERE id = $1`,
+		 WHERE owner_id = $1 AND id = $2`,
+		actorID,
 		strings.TrimSpace(id),
 	)
 
@@ -1155,15 +1323,20 @@ func (s *PostgresStore) GetView(id string) (logs.SavedView, bool, error) {
 	return view, true, nil
 }
 
-func (s *PostgresStore) UpdateView(id string, req logs.SavedViewRequest) (logs.SavedView, error) {
+func (s *PostgresStore) UpdateView(actorID, id string, req logs.SavedViewRequest) (logs.SavedView, error) {
 	now := time.Now().UTC()
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		actorID = "system"
+	}
 	id = strings.TrimSpace(id)
 
 	row := s.pool.QueryRow(context.Background(),
 		`UPDATE saved_log_views
-		 SET name = $2, asset_id = $3, source = $4, level = $5, search = $6, window_value = $7, updated_at = $8
-		 WHERE id = $1
+		 SET name = $3, asset_id = $4, source = $5, level = $6, search = $7, window_value = $8, updated_at = $9
+		 WHERE owner_id = $1 AND id = $2
 		 RETURNING id, name, asset_id, source, level, search, window_value, created_at, updated_at`,
+		actorID,
 		id,
 		strings.TrimSpace(req.Name),
 		nullIfBlank(req.AssetID),
@@ -1214,9 +1387,14 @@ func (s *PostgresStore) UpdateView(id string, req logs.SavedViewRequest) (logs.S
 	return view, nil
 }
 
-func (s *PostgresStore) DeleteView(id string) error {
+func (s *PostgresStore) DeleteView(actorID, id string) error {
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		actorID = "system"
+	}
 	tag, err := s.pool.Exec(context.Background(),
-		`DELETE FROM saved_log_views WHERE id = $1`,
+		`DELETE FROM saved_log_views WHERE owner_id = $1 AND id = $2`,
+		actorID,
 		strings.TrimSpace(id),
 	)
 	if err != nil {

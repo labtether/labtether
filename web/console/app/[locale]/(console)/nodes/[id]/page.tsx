@@ -254,7 +254,7 @@ export default function NodeDetailPage() {
     proxmoxCollectorID,
     fetchProxmoxDetails,
     runProxmoxQuickAction,
-    proxmoxCollectorId: proxmoxDetails?.collector_id ?? null,
+    proxmoxCollectorId: proxmoxCollectorID || null,
     proxmoxActionMessage,
     proxmoxActionError,
   });

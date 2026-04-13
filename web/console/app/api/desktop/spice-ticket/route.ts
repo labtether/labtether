@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { backendAuthHeadersWithCookie, resolvedBackendBaseURLs, shouldUseSecureWebSocket } from "../../../../lib/backend";
+import { isMutationRequestOriginAllowed } from "../../../../lib/proxyAuth";
 
 type SpiceTicketRequest = {
   sessionId: string;
@@ -19,6 +20,10 @@ type SpiceTicketPayload = {
 };
 
 export async function POST(request: Request) {
+  if (!isMutationRequestOriginAllowed(request)) {
+    return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
+  }
+
   let body: SpiceTicketRequest;
   try {
     body = (await request.json()) as SpiceTicketRequest;

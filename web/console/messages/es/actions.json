@@ -11,15 +11,17 @@
     "device": {
       "label": "Dispositivo",
       "tooltip": "El identificador del recurso a actuar (ID de contenedor, nombre de VM, etc.)",
-      "placeholder": "container-id / vm-id / entity-id"
+      "placeholder": "container-id / vm-id / entity-id",
+      "notRequired": "Esta acción no requiere un dispositivo objetivo."
     },
-    "options": {
-      "label": "Opciones",
-      "placeholder": "key=value,key2=value2"
+    "parameters": {
+      "none": "Esta acción no requiere parámetros adicionales.",
+      "required": "(obligatorio)"
     },
     "previewOnly": {
       "label": "Solo vista previa",
-      "tooltip": "Simular la acción sin realizar cambios"
+      "tooltip": "Simular la acción sin realizar cambios",
+      "unsupportedTooltip": "Esta acción se ejecuta en vivo y no admite modo de vista previa"
     },
     "submit": "Ejecutar",
     "submitting": "Encolando..."

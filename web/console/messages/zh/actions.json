@@ -11,15 +11,17 @@
     "device": {
       "label": "设备",
       "tooltip": "要操作的资源标识符（容器 ID、虚拟机名称等）",
-      "placeholder": "容器 ID / 虚拟机 ID / 实体 ID"
+      "placeholder": "容器 ID / 虚拟机 ID / 实体 ID",
+      "notRequired": "此操作不需要目标设备。"
     },
-    "options": {
-      "label": "选项",
-      "placeholder": "key=value,key2=value2"
+    "parameters": {
+      "none": "此操作不需要额外参数。",
+      "required": "（必填）"
     },
     "previewOnly": {
       "label": "仅预览",
-      "tooltip": "模拟操作而不进行实际更改"
+      "tooltip": "模拟操作而不进行实际更改",
+      "unsupportedTooltip": "此操作会直接执行，不支持预览模式"
     },
     "submit": "运行",
     "submitting": "正在排队..."

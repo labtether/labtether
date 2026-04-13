@@ -2,9 +2,9 @@ package schedules
 
 import "time"
 
-// ScheduledTask represents a recurring command schedule stored in the hub.
-// The cron expression is persisted but not yet evaluated — execution is a
-// separate feature planned for a later workstream.
+// ScheduledTask represents a saved recurring-command definition stored in the hub.
+// The cron expression is persisted for API/export workflows, but the hub does not
+// automatically evaluate or execute scheduled tasks yet.
 type ScheduledTask struct {
 	ID        string     `json:"id"`
 	Name      string     `json:"name"`

@@ -29,6 +29,7 @@ type EventBroadcaster struct {
 	mu          sync.RWMutex
 	clients     map[*BrowserClient]bool
 	onBroadcast func() // optional callback invoked on each broadcast (e.g. to bump cache generation)
+	onEvent     func(eventType string, data any, at time.Time)
 }
 
 // NewEventBroadcaster creates an EventBroadcaster ready for use.
@@ -60,6 +61,12 @@ func (eb *EventBroadcaster) SetOnBroadcast(fn func()) {
 	eb.onBroadcast = fn
 }
 
+// SetOnEvent registers an optional callback invoked with the event envelope
+// details for each broadcast. Callers must keep handlers non-blocking.
+func (eb *EventBroadcaster) SetOnEvent(fn func(eventType string, data any, at time.Time)) {
+	eb.onEvent = fn
+}
+
 // Register adds a WebSocket connection to the broadcast list.
 func (eb *EventBroadcaster) Register(conn *websocket.Conn) *BrowserClient {
 	client := &BrowserClient{
@@ -86,13 +93,17 @@ func (eb *EventBroadcaster) Unregister(client *BrowserClient) {
 // Broadcast sends an event to all connected browser clients.
 // Each write is serialized per-connection to prevent concurrent write panics.
 func (eb *EventBroadcaster) Broadcast(eventType string, data any) {
+	now := time.Now().UTC()
 	if eb.onBroadcast != nil {
 		eb.onBroadcast()
+	}
+	if eb.onEvent != nil {
+		eb.onEvent(eventType, data, now)
 	}
 	msg, err := json.Marshal(map[string]any{
 		"type": eventType,
 		"data": data,
-		"ts":   time.Now().UTC().Format(time.RFC3339),
+		"ts":   now.Format(time.RFC3339),
 	})
 	if err != nil {
 		log.Printf("browser events: marshal error: %v", err)

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/policy"
 	"github.com/labtether/labtether/internal/servicehttp"
 	"github.com/labtether/labtether/internal/terminal"
@@ -99,20 +100,32 @@ func (d *Deps) HandlePersistentSessionActions(w http.ResponseWriter, r *http.Req
 }
 
 func (d *Deps) listPersistentSessions(w http.ResponseWriter, r *http.Request) {
-	sessions, err := d.TerminalPersistentStore.ListPersistentSessions()
+	actorID := d.PrincipalActorID(r.Context())
+	var (
+		sessions []terminal.PersistentSession
+		err      error
+	)
+	if !d.IsOwnerActor(actorID) {
+		if scopedStore, ok := d.TerminalPersistentStore.(persistence.TerminalPersistentSessionActorStore); ok {
+			sessions, err = scopedStore.ListPersistentSessionsByActor(actorID)
+		} else {
+			sessions, err = d.TerminalPersistentStore.ListPersistentSessions()
+			if err == nil {
+				filtered := make([]terminal.PersistentSession, 0, len(sessions))
+				for _, session := range sessions {
+					if strings.TrimSpace(session.ActorID) == actorID {
+						filtered = append(filtered, session)
+					}
+				}
+				sessions = filtered
+			}
+		}
+	} else {
+		sessions, err = d.TerminalPersistentStore.ListPersistentSessions()
+	}
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list persistent sessions")
 		return
-	}
-	actorID := d.PrincipalActorID(r.Context())
-	if !d.IsOwnerActor(actorID) {
-		filtered := make([]terminal.PersistentSession, 0, len(sessions))
-		for _, session := range sessions {
-			if strings.TrimSpace(session.ActorID) == actorID {
-				filtered = append(filtered, session)
-			}
-		}
-		sessions = filtered
 	}
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"persistent_sessions": sessions})
 }
@@ -204,17 +217,17 @@ func (d *Deps) attachPersistentSession(w http.ResponseWriter, r *http.Request, p
 		return
 	}
 
-	attached, err := d.TerminalPersistentStore.MarkPersistentSessionAttached(persistent.ID, attachedAt)
-	if err != nil {
-		_ = d.TerminalStore.DeleteTerminalSession(session.ID)
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to mark persistent session attached")
-		return
-	}
-
 	ticket, ticketExpiresAt, err := d.IssueStreamTicket(r.Context(), session.ID)
 	if err != nil {
 		_ = d.TerminalStore.DeleteTerminalSession(session.ID)
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to issue stream ticket")
+		return
+	}
+
+	attached, err := d.TerminalPersistentStore.MarkPersistentSessionAttached(persistent.ID, attachedAt)
+	if err != nil {
+		_ = d.TerminalStore.DeleteTerminalSession(session.ID)
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to mark persistent session attached")
 		return
 	}
 

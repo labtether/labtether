@@ -42,7 +42,7 @@ const v2OpenAPISpec = `{
     { "name": "metrics",        "description": "Telemetry and metric time-series" },
     { "name": "exec",           "description": "Remote command execution" },
     { "name": "actions",        "description": "Saved actions (reusable command templates)" },
-    { "name": "schedules",      "description": "Scheduled task execution" },
+    { "name": "schedules",      "description": "Saved schedule definitions (stored configuration only; no automatic execution)" },
     { "name": "groups",         "description": "Asset grouping" },
     { "name": "docker",         "description": "Docker host, container, and stack management" },
     { "name": "files",          "description": "File transfers between assets" },
@@ -225,12 +225,16 @@ const v2OpenAPISpec = `{
     },
 
     "/api/v2/actions": {
-      "get":  { "summary": "List saved actions",  "description": "Scope: actions:read.",  "operationId": "listSavedActions",  "tags": ["actions"], "responses": { "200": { "description": "Action list" } } },
+      "get":  { "summary": "List saved actions",  "description": "Scope: actions:read.",  "operationId": "listSavedActions",  "tags": ["actions"], "parameters": [{ "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 1000 } }, { "name": "offset", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 0 } }], "responses": { "200": { "description": "Action list" } } },
       "post": { "summary": "Create saved action", "description": "Scope: actions:write.", "operationId": "createSavedAction", "tags": ["actions"], "responses": { "201": { "description": "Created" } } }
     },
     "/api/v2/actions/{id}": {
       "get":    { "summary": "Get saved action",     "description": "Scope: actions:read.",  "operationId": "getSavedAction",    "tags": ["actions"], "responses": { "200": { "description": "Action" } } },
       "delete": { "summary": "Delete saved action",  "description": "Scope: actions:write.", "operationId": "deleteSavedAction", "tags": ["actions"], "responses": { "200": { "description": "Deleted" } } },
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
+    },
+    "/api/v2/actions/{id}/run": {
+      "post": { "summary": "Run saved action", "description": "Scopes: actions:exec and assets:exec.", "operationId": "runSavedAction", "tags": ["actions"], "responses": { "200": { "description": "Per-step execution results" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
 
@@ -240,7 +244,7 @@ const v2OpenAPISpec = `{
     },
     "/api/v2/schedules/{id}": {
       "get":    { "summary": "Get schedule",    "description": "Scope: schedules:read.",  "operationId": "getSchedule",    "tags": ["schedules"], "responses": { "200": { "description": "Schedule" } } },
-      "put":    { "summary": "Update schedule", "description": "Scope: schedules:write.", "operationId": "updateSchedule", "tags": ["schedules"], "responses": { "200": { "description": "Updated" } } },
+      "patch":  { "summary": "Update schedule", "description": "Scope: schedules:write.", "operationId": "updateSchedule", "tags": ["schedules"], "responses": { "200": { "description": "Updated" } } },
       "delete": { "summary": "Delete schedule", "description": "Scope: schedules:write.", "operationId": "deleteSchedule", "tags": ["schedules"], "responses": { "200": { "description": "Deleted" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
@@ -677,6 +681,7 @@ const v2OpenAPISpec = `{
     "/api/v2/webhooks/{id}": {
       "get":    { "summary": "Get webhook",    "description": "Scope: webhooks:read.",  "operationId": "getWebhook",    "tags": ["webhooks"], "responses": { "200": { "description": "Webhook" } } },
       "put":    { "summary": "Update webhook", "description": "Scope: webhooks:write.", "operationId": "updateWebhook", "tags": ["webhooks"], "responses": { "200": { "description": "Updated" } } },
+      "patch":  { "summary": "Patch webhook",  "description": "Scope: webhooks:write.", "operationId": "patchWebhook",  "tags": ["webhooks"], "responses": { "200": { "description": "Updated" } } },
       "delete": { "summary": "Delete webhook", "description": "Scope: webhooks:write.", "operationId": "deleteWebhook", "tags": ["webhooks"], "responses": { "200": { "description": "Deleted" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },

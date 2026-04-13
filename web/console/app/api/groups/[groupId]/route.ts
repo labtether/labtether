@@ -5,6 +5,7 @@ import {
   backendBaseURLs,
   resolvedBackendBaseURLs,
 } from "../../../../lib/backend";
+import { isMutationRequestOriginAllowed } from "../../../../lib/proxyAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -33,14 +34,26 @@ export async function GET(request: Request, context: RouteContext) {
 }
 
 export async function PUT(request: Request, context: RouteContext) {
+  if (!isMutationRequestOriginAllowed(request)) {
+    return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
+  }
+
   return proxyMutation(request, context, "PUT");
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
+  if (!isMutationRequestOriginAllowed(request)) {
+    return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
+  }
+
   return proxyMutation(request, context, "PATCH");
 }
 
 export async function DELETE(request: Request, context: RouteContext) {
+  if (!isMutationRequestOriginAllowed(request)) {
+    return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
+  }
+
   try {
     const { groupId } = await context.params;
     const response = await fetchGroupBackend(

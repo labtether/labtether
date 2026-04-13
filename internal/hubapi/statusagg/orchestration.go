@@ -10,6 +10,7 @@ import (
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/connectorsdk"
 	"github.com/labtether/labtether/internal/groups"
+	groupfeatures "github.com/labtether/labtether/internal/hubapi/groupfeatures"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/logs"
 	"github.com/labtether/labtether/internal/terminal"
@@ -27,6 +28,7 @@ type aggregateCollections struct {
 	recentAudit      []audit.Event
 	recentLogs       []logs.Event
 	logSources       []logs.SourceSummary
+	groupReliability []groupfeatures.GroupReliabilityRecord
 	actionRuns       []actions.Run
 	updatePlans      []updates.Plan
 	updateRuns       []updates.Run
@@ -114,6 +116,7 @@ func (d *Deps) collectAggregateCollections(
 	}()
 
 	wg.Wait()
+	c.groupReliability = d.listGroupReliability(c.groups, allAssets)
 	return c
 }
 

@@ -39,6 +39,9 @@ func ValidateCreateRouteRequest(req notifications.CreateRouteRequest) error {
 	if err := ValidateNoDeprecatedCanonicalPredicateKeys(req.Matchers, "matchers"); err != nil {
 		return err
 	}
+	if err := validateUnsupportedRouteDispatchSettings(req.GroupBy, req.GroupWaitSeconds, req.GroupIntervalSeconds, req.RepeatIntervalSeconds); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -59,6 +62,32 @@ func ValidateUpdateRouteRequest(req notifications.UpdateRouteRequest) error {
 		if err := ValidateNoDeprecatedCanonicalPredicateKeys(*req.Matchers, "matchers"); err != nil {
 			return err
 		}
+	}
+	groupBy := []string(nil)
+	if req.GroupBy != nil {
+		groupBy = *req.GroupBy
+	}
+	groupWait := 0
+	if req.GroupWaitSeconds != nil {
+		groupWait = *req.GroupWaitSeconds
+	}
+	groupInterval := 0
+	if req.GroupIntervalSeconds != nil {
+		groupInterval = *req.GroupIntervalSeconds
+	}
+	repeatInterval := 0
+	if req.RepeatIntervalSeconds != nil {
+		repeatInterval = *req.RepeatIntervalSeconds
+	}
+	if err := validateUnsupportedRouteDispatchSettings(groupBy, groupWait, groupInterval, repeatInterval); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateUnsupportedRouteDispatchSettings(groupBy []string, groupWaitSeconds, groupIntervalSeconds, repeatIntervalSeconds int) error {
+	if len(groupBy) > 0 || groupWaitSeconds > 0 || groupIntervalSeconds > 0 || repeatIntervalSeconds > 0 {
+		return errors.New("grouping and repeat interval settings are not supported yet")
 	}
 	return nil
 }

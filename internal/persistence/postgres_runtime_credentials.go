@@ -447,6 +447,68 @@ func (s *PostgresStore) CreateCredentialProfile(profile credentials.Profile) (cr
 	return created, nil
 }
 
+func (s *PostgresStore) UpdateCredentialProfile(profile credentials.Profile) (credentials.Profile, error) {
+	now := time.Now().UTC()
+	status := strings.TrimSpace(profile.Status)
+	if status == "" {
+		status = "active"
+	}
+	metadataPayload, err := marshalStringMap(profile.Metadata)
+	if err != nil {
+		return credentials.Profile{}, err
+	}
+
+	updated, err := scanCredentialProfile(s.pool.QueryRow(context.Background(),
+		`UPDATE credential_profiles
+		 SET name = $2,
+		     kind = $3,
+		     username = $4,
+		     description = $5,
+		     status = $6,
+		     metadata = $7::jsonb,
+		     secret_ciphertext = $8,
+		     passphrase_ciphertext = $9,
+		     updated_at = $10,
+		     rotated_at = $11,
+		     expires_at = $12
+		 WHERE id = $1
+		 RETURNING
+			id,
+			name,
+			kind,
+			username,
+			description,
+			status,
+			metadata,
+			secret_ciphertext,
+			passphrase_ciphertext,
+			created_at,
+			updated_at,
+			rotated_at,
+			last_used_at,
+			expires_at`,
+		strings.TrimSpace(profile.ID),
+		strings.TrimSpace(profile.Name),
+		strings.TrimSpace(profile.Kind),
+		nullIfBlank(profile.Username),
+		nullIfBlank(profile.Description),
+		status,
+		metadataPayload,
+		strings.TrimSpace(profile.SecretCiphertext),
+		nullIfBlank(profile.PassphraseCiphertext),
+		now,
+		nullTime(profile.RotatedAt),
+		nullTime(profile.ExpiresAt),
+	))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return credentials.Profile{}, errors.New("credential profile not found")
+		}
+		return credentials.Profile{}, err
+	}
+	return updated, nil
+}
+
 func (s *PostgresStore) UpdateCredentialProfileSecret(id, secretCiphertext, passphraseCiphertext string, expiresAt *time.Time) (credentials.Profile, error) {
 	now := time.Now().UTC()
 	updated, err := scanCredentialProfile(s.pool.QueryRow(context.Background(),

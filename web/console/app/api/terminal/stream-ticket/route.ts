@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { backendAuthHeadersWithCookie, resolvedBackendBaseURLs, shouldUseSecureWebSocket } from "../../../../lib/backend";
+import { isMutationRequestOriginAllowed } from "../../../../lib/proxyAuth";
 
 type StreamTicketRequest = {
   sessionId: string;
@@ -16,6 +17,10 @@ type StreamTicketPayload = {
 };
 
 export async function POST(request: Request) {
+  if (!isMutationRequestOriginAllowed(request)) {
+    return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
+  }
+
   let body: StreamTicketRequest;
   try {
     body = (await request.json()) as StreamTicketRequest;

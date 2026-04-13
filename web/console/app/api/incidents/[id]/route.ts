@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { backendAuthHeadersWithCookie, resolvedBackendBaseURLs } from "../../../../lib/backend";
+import {
+  backendAuthHeadersWithCookie,
+  resolvedBackendBaseURLs,
+  upstreamErrorPayload,
+} from "../../../../lib/backend";
+import { isMutationRequestOriginAllowed } from "../../../../lib/proxyAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +23,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!isMutationRequestOriginAllowed(request)) {
+    return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
+  }
+
   const { id } = await params;
   const base = await resolvedBackendBaseURLs();
   const authHeaders = backendAuthHeadersWithCookie(request);
@@ -30,7 +39,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       cache: "no-store",
     });
     const payload = await safeJSON(response);
-    if (!response.ok) return NextResponse.json(payload ?? { error: "failed to update incident" }, { status: response.status });
+    if (!response.ok) {
+      return NextResponse.json(
+        upstreamErrorPayload(response.status, payload, "failed to update incident"),
+        { status: response.status }
+      );
+    }
     return NextResponse.json(payload ?? {});
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "backend error" }, { status: 502 });

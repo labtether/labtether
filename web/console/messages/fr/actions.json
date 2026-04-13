@@ -11,15 +11,17 @@
     "device": {
       "label": "Appareil",
       "tooltip": "L'identifiant de la ressource cible (ID de conteneur, nom de VM, etc.)",
-      "placeholder": "container-id / vm-id / entity-id"
+      "placeholder": "container-id / vm-id / entity-id",
+      "notRequired": "Cette action ne nécessite pas de cible."
     },
-    "options": {
-      "label": "Options",
-      "placeholder": "key=value,key2=value2"
+    "parameters": {
+      "none": "Cette action ne nécessite aucun paramètre supplémentaire.",
+      "required": "(obligatoire)"
     },
     "previewOnly": {
       "label": "Aperçu uniquement",
-      "tooltip": "Simuler l'action sans effectuer de modifications"
+      "tooltip": "Simuler l'action sans effectuer de modifications",
+      "unsupportedTooltip": "Cette action s'exécute réellement et ne prend pas en charge le mode aperçu"
     },
     "submit": "Exécuter",
     "submitting": "Mise en file d'attente..."

@@ -143,6 +143,35 @@ func (d *Deps) updateBookmark(w http.ResponseWriter, r *http.Request, bookmark t
 		servicehttp.WriteError(w, http.StatusBadRequest, "invalid bookmark payload")
 		return
 	}
+	if req.Title != nil {
+		title := strings.TrimSpace(*req.Title)
+		if title == "" {
+			servicehttp.WriteError(w, http.StatusBadRequest, "title is required")
+			return
+		}
+		req.Title = &title
+	}
+	if req.AssetID != nil {
+		assetID := strings.TrimSpace(*req.AssetID)
+		req.AssetID = &assetID
+	}
+	if req.Host != nil {
+		host := strings.TrimSpace(*req.Host)
+		req.Host = &host
+	}
+
+	nextAssetID := bookmark.AssetID
+	if req.AssetID != nil {
+		nextAssetID = *req.AssetID
+	}
+	nextHost := bookmark.Host
+	if req.Host != nil {
+		nextHost = *req.Host
+	}
+	if nextAssetID == "" && nextHost == "" {
+		servicehttp.WriteError(w, http.StatusBadRequest, "asset_id or host is required")
+		return
+	}
 
 	updated, err := d.TerminalBookmarkStore.UpdateBookmark(bookmark.ID, req)
 	if err != nil {
@@ -207,19 +236,18 @@ func (d *Deps) connectBookmark(w http.ResponseWriter, r *http.Request, bookmark 
 		return
 	}
 
-	// Mark persistent session as attached.
-	attached, err := d.TerminalPersistentStore.MarkPersistentSessionAttached(persistent.ID, attachedAt)
-	if err != nil {
-		_ = d.TerminalStore.DeleteTerminalSession(session.ID)
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to mark persistent session attached")
-		return
-	}
-
 	// Issue stream ticket.
 	ticket, ticketExpiresAt, err := d.IssueStreamTicket(r.Context(), session.ID)
 	if err != nil {
 		_ = d.TerminalStore.DeleteTerminalSession(session.ID)
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to issue stream ticket")
+		return
+	}
+
+	attached, err := d.TerminalPersistentStore.MarkPersistentSessionAttached(persistent.ID, attachedAt)
+	if err != nil {
+		_ = d.TerminalStore.DeleteTerminalSession(session.ID)
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to mark persistent session attached")
 		return
 	}
 

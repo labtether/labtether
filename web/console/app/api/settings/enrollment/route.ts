@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { backendBaseURLs, backendAuthHeadersWithCookie } from "../../../../lib/backend";
+import { isMutationRequestOriginAllowed } from "../../../../lib/proxyAuth";
 
 export async function GET(request: Request) {
   try {
@@ -23,6 +24,10 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (!isMutationRequestOriginAllowed(request)) {
+    return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
+  }
+
   try {
     const base = backendBaseURLs();
     const body = await request.json();

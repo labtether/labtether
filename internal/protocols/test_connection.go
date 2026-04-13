@@ -223,19 +223,34 @@ func TestRDP(ctx context.Context, host string, port int, guacdAddr string) *Test
 		}
 	}
 
-	latency := time.Since(start).Milliseconds()
-
 	if guacdAddr != "" {
+		guacdDialCtx, guacdCancel := context.WithTimeout(ctx, dialTimeout)
+		defer guacdCancel()
+		guacdConn, guacdErr := (&net.Dialer{}).DialContext(guacdDialCtx, "tcp", strings.TrimSpace(guacdAddr))
+		if guacdErr != nil {
+			return &TestResult{
+				Success:   false,
+				LatencyMs: time.Since(start).Milliseconds(),
+				Error:     "guacd unavailable: " + guacdErr.Error(),
+			}
+		}
+		if closeErr := guacdConn.Close(); closeErr != nil {
+			return &TestResult{
+				Success:   false,
+				LatencyMs: time.Since(start).Milliseconds(),
+				Error:     fmt.Sprintf("close guacd test connection: %v", closeErr),
+			}
+		}
 		return &TestResult{
 			Success:   true,
-			LatencyMs: latency,
-			Message:   "reachable (guacd available)",
+			LatencyMs: time.Since(start).Milliseconds(),
+			Message:   "reachable (guacd reachable)",
 		}
 	}
 
 	return &TestResult{
 		Success:   true,
-		LatencyMs: latency,
+		LatencyMs: time.Since(start).Milliseconds(),
 		Message:   "reachable (credentials not verified — guacd not available)",
 	}
 }

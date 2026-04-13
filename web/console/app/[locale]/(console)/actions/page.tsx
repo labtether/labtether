@@ -15,6 +15,8 @@ import { useActions } from "../../../hooks/useActions";
 export default function ActionsPage() {
   const t = useTranslations('actions');
   const {
+    actionParameters,
+    actionParamValues,
     connectors,
     selectedConnector,
     setSelectedConnector,
@@ -22,10 +24,11 @@ export default function ActionsPage() {
     selectedConnectorAction,
     setSelectedConnectorAction,
     selectedActionDescriptor,
+    actionRequiresTarget,
+    actionSupportsDryRun,
     actionTarget,
     setActionTarget,
-    actionParams,
-    setActionParams,
+    setActionParamValue,
     actionDryRun,
     setActionDryRun,
     actionSubmitting,
@@ -69,36 +72,64 @@ export default function ActionsPage() {
               </Select>
             </label>
           </div>
-          <label className="flex flex-col gap-1 text-xs font-mono uppercase tracking-wider text-[var(--muted)]">
-            <span data-tooltip={t('runAction.device.tooltip')}>{t('runAction.device.label')}</span>
-            <Input
-              value={actionTarget}
-              onChange={(event) => setActionTarget(event.target.value)}
-              placeholder={t('runAction.device.placeholder')}
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-mono uppercase tracking-wider text-[var(--muted)]">
-            {t('runAction.options.label')}
-            <Input
-              value={actionParams}
-              onChange={(event) => setActionParams(event.target.value)}
-              placeholder={t('runAction.options.placeholder')}
-            />
-          </label>
-          <label className="flex items-center gap-2 text-sm text-[var(--text)] cursor-pointer select-none">
+          {actionRequiresTarget ? (
+            <label className="flex flex-col gap-1 text-xs font-mono uppercase tracking-wider text-[var(--muted)]">
+              <span data-tooltip={t('runAction.device.tooltip')}>{t('runAction.device.label')}</span>
+              <Input
+                value={actionTarget}
+                onChange={(event) => setActionTarget(event.target.value)}
+                placeholder={t('runAction.device.placeholder')}
+              />
+            </label>
+          ) : (
+            <p className="text-xs text-[var(--muted)]">{t('runAction.device.notRequired')}</p>
+          )}
+          {actionParameters.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {actionParameters.map((parameter) => (
+                <label key={parameter.key} className="flex flex-col gap-1 text-xs font-mono uppercase tracking-wider text-[var(--muted)]">
+                  <span title={parameter.description}>
+                    {parameter.label}
+                    {parameter.required ? ` ${t('runAction.parameters.required')}` : ""}
+                  </span>
+                  <Input
+                    value={actionParamValues[parameter.key] ?? ""}
+                    onChange={(event) => setActionParamValue(parameter.key, event.target.value)}
+                    placeholder={parameter.description || parameter.key}
+                  />
+                </label>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-[var(--muted)]">{t('runAction.parameters.none')}</p>
+          )}
+          <label className={`flex items-center gap-2 text-sm text-[var(--text)] select-none ${actionSupportsDryRun ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}>
             <span
               role="checkbox"
-              aria-checked={actionDryRun}
-              tabIndex={0}
-              onClick={() => setActionDryRun(!actionDryRun)}
-              onKeyDown={(event) => { if (event.key === " " || event.key === "Enter") { event.preventDefault(); setActionDryRun(!actionDryRun); } }}
-              className={`inline-flex items-center justify-center w-4 h-4 rounded border transition-colors ${actionDryRun ? "border-[var(--accent)] bg-[var(--accent)] text-white" : "border-[var(--line)] bg-transparent"}`}
+              aria-checked={actionSupportsDryRun && actionDryRun}
+              aria-disabled={!actionSupportsDryRun}
+              tabIndex={actionSupportsDryRun ? 0 : -1}
+              onClick={() => {
+                if (actionSupportsDryRun) {
+                  setActionDryRun(!actionDryRun);
+                }
+              }}
+              onKeyDown={(event) => {
+                if (!actionSupportsDryRun) return;
+                if (event.key === " " || event.key === "Enter") {
+                  event.preventDefault();
+                  setActionDryRun(!actionDryRun);
+                }
+              }}
+              className={`inline-flex items-center justify-center w-4 h-4 rounded border transition-colors ${(actionSupportsDryRun && actionDryRun) ? "border-[var(--accent)] bg-[var(--accent)] text-white" : "border-[var(--line)] bg-transparent"}`}
             >
-              {actionDryRun ? <span className="text-[10px] leading-none">&#10003;</span> : null}
+              {actionSupportsDryRun && actionDryRun ? <span className="text-[10px] leading-none">&#10003;</span> : null}
             </span>
-            <span data-tooltip={t('runAction.previewOnly.tooltip')}>{t('runAction.previewOnly.label')}</span>
+            <span data-tooltip={actionSupportsDryRun ? t('runAction.previewOnly.tooltip') : t('runAction.previewOnly.unsupportedTooltip')}>
+              {t('runAction.previewOnly.label')}
+            </span>
           </label>
-          <Button type="submit" variant="primary" disabled={actionSubmitting}>
+          <Button type="submit" variant="primary" disabled={actionSubmitting || !selectedActionDescriptor}>
             {actionSubmitting ? t('runAction.submitting') : t('runAction.submit')}
           </Button>
         </form>

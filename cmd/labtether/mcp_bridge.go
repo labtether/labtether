@@ -8,6 +8,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/connectorsdk"
 	"github.com/labtether/labtether/internal/mcpserver"
 	"github.com/labtether/labtether/internal/persistence"
@@ -259,23 +260,28 @@ func (s *apiServer) mcpListSavedActions() func(ctx context.Context) ([]map[strin
 		return nil
 	}
 	return func(ctx context.Context) ([]map[string]any, error) {
-		actions, err := s.savedActionStore.ListSavedActions(ctx)
+		actions, _, err := s.savedActionStore.ListSavedActions(ctx, apiv2.PrincipalActorID(ctx), 200, 0)
 		if err != nil {
 			return nil, err
 		}
 		out := make([]map[string]any, 0, len(actions))
 		for _, a := range actions {
-			b, err := json.Marshal(a)
-			if err != nil {
-				log.Printf("mcp: mcpListSavedActions: marshal skip: %v", err)
-				continue
+			steps := make([]map[string]any, 0, len(a.Steps))
+			for _, step := range a.Steps {
+				steps = append(steps, map[string]any{
+					"name":    step.Name,
+					"command": step.Command,
+					"target":  step.Target,
+				})
 			}
-			var m map[string]any
-			if err := json.Unmarshal(b, &m); err != nil {
-				log.Printf("mcp: mcpListSavedActions: unmarshal skip: %v", err)
-				continue
-			}
-			out = append(out, m)
+			out = append(out, map[string]any{
+				"id":          a.ID,
+				"name":        a.Name,
+				"description": a.Description,
+				"steps":       steps,
+				"created_by":  a.CreatedBy,
+				"created_at":  a.CreatedAt,
+			})
 		}
 		return out, nil
 	}

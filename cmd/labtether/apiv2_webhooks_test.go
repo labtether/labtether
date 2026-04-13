@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -12,7 +13,7 @@ func TestHandleV2Webhooks_Create(t *testing.T) {
 	s := newTestAPIServer(t)
 	handler := s.handleV2Webhooks
 
-	body := `{"name":"my-webhook","url":"https://example.com/hook","events":["asset.online","asset.offline"]}`
+	body := `{"name":"my-webhook","url":"https://example.com/hook","secret":"super-secret","events":["asset.online","asset.offline"]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/webhooks", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	ctx := contextWithPrincipal(req.Context(), "admin", "admin")
@@ -40,6 +41,28 @@ func TestHandleV2Webhooks_Create(t *testing.T) {
 	}
 	if data["url"] != "https://example.com/hook" {
 		t.Errorf("expected url 'https://example.com/hook', got %v", data["url"])
+	}
+
+	id, _ := data["id"].(string)
+	stored, ok, err := s.webhookStore.GetWebhook(req.Context(), id)
+	if err != nil {
+		t.Fatalf("get stored webhook: %v", err)
+	}
+	if !ok {
+		t.Fatalf("expected stored webhook %s", id)
+	}
+	if stored.Secret != "" {
+		t.Fatalf("expected plaintext secret to be empty, got %q", stored.Secret)
+	}
+	if stored.SecretCiphertext == "" {
+		t.Fatal("expected encrypted webhook secret to be persisted")
+	}
+	decrypted, err := s.secretsManager.DecryptString(stored.SecretCiphertext, stored.ID)
+	if err != nil {
+		t.Fatalf("decrypt secret: %v", err)
+	}
+	if decrypted != "super-secret" {
+		t.Fatalf("expected decrypted secret %q, got %q", "super-secret", decrypted)
 	}
 }
 
@@ -171,4 +194,118 @@ func TestHandleV2WebhookActions_Delete(t *testing.T) {
 	if delData["status"] != "deleted" {
 		t.Errorf("expected status 'deleted', got %v", delData["status"])
 	}
+}
+
+func TestHandleV2WebhookActions_UpdateMissingReturnsNotFound(t *testing.T) {
+	s := newTestAPIServer(t)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v2/webhooks/wh_missing", strings.NewReader(`{"name":"new-name"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(contextWithPrincipal(req.Context(), "admin", "admin"))
+	rec := httptest.NewRecorder()
+	s.handleV2WebhookActions(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleV2WebhookActions_DeleteMissingReturnsNotFound(t *testing.T) {
+	s := newTestAPIServer(t)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v2/webhooks/wh_missing", nil)
+	req = req.WithContext(contextWithPrincipal(req.Context(), "admin", "admin"))
+	rec := httptest.NewRecorder()
+	s.handleV2WebhookActions(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleV2WebhookActions_PatchRejectsTooManyEvents(t *testing.T) {
+	s := newTestAPIServer(t)
+	webhookID := createWebhookForTest(t, s, `{"name":"limit-test","url":"https://example.com/hook","events":[]}`)
+
+	events := make([]string, 0, 65)
+	for i := 0; i < 65; i++ {
+		events = append(events, "event."+strconv.Itoa(i))
+	}
+	payload, err := json.Marshal(map[string]any{"events": events})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v2/webhooks/"+webhookID, strings.NewReader(string(payload)))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(contextWithPrincipal(req.Context(), "admin", "admin"))
+	rec := httptest.NewRecorder()
+	s.handleV2WebhookActions(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleV2WebhookActions_PutUpdatesSecretAndReturnsWebhook(t *testing.T) {
+	s := newTestAPIServer(t)
+	webhookID := createWebhookForTest(t, s, `{"name":"rotate","url":"https://example.com/hook","events":["asset.online"]}`)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v2/webhooks/"+webhookID, strings.NewReader(`{"name":"rotate-2","secret":"next-secret","events":["asset.offline","asset.offline"],"enabled":false}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(contextWithPrincipal(req.Context(), "admin", "admin"))
+	rec := httptest.NewRecorder()
+	s.handleV2WebhookActions(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal update response: %v", err)
+	}
+	data := resp["data"].(map[string]any)
+	if data["name"] != "rotate-2" {
+		t.Fatalf("expected updated name, got %v", data["name"])
+	}
+	if data["enabled"] != false {
+		t.Fatalf("expected enabled=false, got %v", data["enabled"])
+	}
+
+	stored, ok, err := s.webhookStore.GetWebhook(req.Context(), webhookID)
+	if err != nil {
+		t.Fatalf("get stored webhook: %v", err)
+	}
+	if !ok {
+		t.Fatalf("expected stored webhook %s", webhookID)
+	}
+	if len(stored.Events) != 1 || stored.Events[0] != "asset.offline" {
+		t.Fatalf("expected deduped events, got %#v", stored.Events)
+	}
+	decrypted, err := s.secretsManager.DecryptString(stored.SecretCiphertext, stored.ID)
+	if err != nil {
+		t.Fatalf("decrypt updated secret: %v", err)
+	}
+	if decrypted != "next-secret" {
+		t.Fatalf("expected rotated secret, got %q", decrypted)
+	}
+}
+
+func createWebhookForTest(t *testing.T, s *apiServer, body string) string {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/webhooks", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(contextWithPrincipal(req.Context(), "admin", "admin"))
+	rec := httptest.NewRecorder()
+	s.handleV2Webhooks(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected webhook create to succeed, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal create response: %v", err)
+	}
+	return resp["data"].(map[string]any)["id"].(string)
 }

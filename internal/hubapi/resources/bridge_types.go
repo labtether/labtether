@@ -2,6 +2,7 @@ package resources
 
 import (
 	"strings"
+	"sync"
 
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/hubapi/shared"
@@ -14,6 +15,9 @@ type FileBridge struct {
 	Ch              chan agentmgr.Message
 	Done            chan struct{}
 	ExpectedAssetID string
+
+	mu  sync.Mutex
+	err error
 }
 
 // NewFileBridge creates a new file bridge with the given buffer size.
@@ -33,11 +37,38 @@ func (b *FileBridge) Close() {
 	if b == nil || b.Done == nil {
 		return
 	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	select {
 	case <-b.Done:
 	default:
 		close(b.Done)
 	}
+}
+
+func (b *FileBridge) Fail(err error) {
+	if b == nil || err == nil {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.err == nil {
+		b.err = err
+	}
+	select {
+	case <-b.Done:
+	default:
+		close(b.Done)
+	}
+}
+
+func (b *FileBridge) Err() error {
+	if b == nil {
+		return nil
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.err
 }
 
 // ProcessBridge holds the channel for a pending process list request.

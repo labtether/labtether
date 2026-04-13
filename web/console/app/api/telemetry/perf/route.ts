@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
 
 import { backendAuthHeadersWithCookie, resolvedBackendBaseURLs } from "../../../../lib/backend";
+import { isMutationRequestOriginAllowed } from "../../../../lib/proxyAuth";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  if (!isMutationRequestOriginAllowed(request)) {
+    return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
+  }
+
   const payload = await safeJSON(request);
   if (!payload || typeof payload !== "object") {
     return NextResponse.json({ error: "invalid telemetry payload" }, { status: 400 });

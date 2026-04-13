@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import type { Incident } from "../../../console/models";
 
 type UseIncidentPostmortemEditorOptions = {
-  updateIncident: (id: string, req: Record<string, unknown>) => Promise<void>;
+  updateIncident: (id: string, req: Record<string, unknown>) => Promise<Incident>;
 };
 
 export function useIncidentPostmortemEditor({ updateIncident }: UseIncidentPostmortemEditorOptions) {
@@ -21,14 +21,20 @@ export function useIncidentPostmortemEditor({ updateIncident }: UseIncidentPostm
 
   const handleSavePostmortem = useCallback(async (id: string) => {
     setPmSaving(true);
-    const items = pmActionItems.filter((item) => item.trim() !== "");
-    await updateIncident(id, {
-      root_cause: pmRootCause || undefined,
-      action_items: items.length > 0 ? items : undefined,
-      lessons_learned: pmLessonsLearned || undefined,
-    });
-    setPmDirty(false);
-    setPmSaving(false);
+    try {
+      const items = pmActionItems
+        .map((item) => item.trim())
+        .filter((item) => item !== "");
+      const updatedIncident = await updateIncident(id, {
+        root_cause: pmRootCause.trim() || undefined,
+        action_items: items.length > 0 ? items : undefined,
+        lessons_learned: pmLessonsLearned.trim() || undefined,
+      });
+      setPmDirty(false);
+      return updatedIncident;
+    } finally {
+      setPmSaving(false);
+    }
   }, [pmActionItems, pmLessonsLearned, pmRootCause, updateIncident]);
 
   const handleAddActionItem = useCallback(() => {

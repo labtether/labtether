@@ -214,14 +214,14 @@ func (d *Deps) handleDirectVNCProxy(w http.ResponseWriter, r *http.Request, sess
 // and the manual device protocol config path (where the env gate is bypassed).
 //
 // skipOutboundValidation must be true only for manual device paths where the
-// host was already validated at creation time by protocols.ValidateManualDeviceHost,
-// which allows RFC-1918 private addresses needed for homelab LAN targets. The
-// generic agentless fallback path (skipOutboundValidation=false) enforces the
-// full securityruntime outbound policy.
+// host follows the manual-device policy, including DNS results resolved at
+// connect time. The generic agentless fallback path
+// (skipOutboundValidation=false) enforces the full securityruntime outbound
+// policy.
 func (d *Deps) handleDirectVNCProxyWithConfig(w http.ResponseWriter, r *http.Request, session terminal.Session, host string, port int, skipOutboundValidation bool) {
 	var addr string
 	if skipOutboundValidation {
-		// Host was validated at manual device creation time; allow LAN/private IPs.
+		host = strings.TrimSpace(host)
 		if err := protocols.ValidateManualDeviceHost(host); err != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, "invalid desktop target: "+d.SanitizeUpstreamError(err.Error()))
 			return
@@ -245,8 +245,8 @@ func (d *Deps) handleDirectVNCProxyWithConfig(w http.ResponseWriter, r *http.Req
 	var vncConn net.Conn
 	var dialErr error
 	if skipOutboundValidation {
-		// #nosec G102,G704 -- Host validated by ValidateManualDeviceHost; this branch is an explicit manual-device skip-outbound policy.
-		vncConn, dialErr = net.DialTimeout("tcp", addr, 10*time.Second)
+		// #nosec G102,G704 -- Host and resolved IPs are validated by DialManualDeviceTCPTimeout; this branch is an explicit manual-device policy.
+		vncConn, dialErr = protocols.DialManualDeviceTCPTimeout(r.Context(), host, port, 10*time.Second)
 	} else {
 		vncConn, dialErr = securityruntime.DialOutboundTCPTimeout(host, port, 10*time.Second)
 	}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/labtether/labtether/internal/actions"
 	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/groups"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/logs"
 	"github.com/labtether/labtether/internal/persistence"
@@ -68,13 +69,12 @@ func (d *Deps) HandleGroupTimeline(w http.ResponseWriter, r *http.Request, group
 	}
 
 	var (
-		logEvents            []logs.Event
-		reliabilityLogEvents []logs.Event
-		actionRuns           []actions.Run
-		updateRuns           []updates.Run
-		queryErr             error
-		queryErrMu           sync.Mutex
-		queryWG              sync.WaitGroup
+		logEvents  []logs.Event
+		actionRuns []actions.Run
+		updateRuns []updates.Run
+		queryErr   error
+		queryErrMu sync.Mutex
+		queryWG    sync.WaitGroup
 	)
 
 	runQuery := func(fn func() error) {
@@ -102,21 +102,6 @@ func (d *Deps) HandleGroupTimeline(w http.ResponseWriter, r *http.Request, group
 		})
 		if err != nil {
 			return fmt.Errorf("failed to query logs: %w", err)
-		}
-		return nil
-	})
-	runQuery(func() error {
-		var err error
-		reliabilityLogEvents, err = d.LogStore.QueryEvents(logs.QueryRequest{
-			From:          from,
-			To:            to,
-			Limit:         1000,
-			GroupID:       groupID,
-			GroupAssetIDs: groupAssetIDs,
-			FieldKeys:     []string{"group_id"},
-		})
-		if err != nil {
-			return fmt.Errorf("failed to query logs for reliability: %w", err)
 		}
 		return nil
 	})
@@ -291,38 +276,14 @@ func (d *Deps) HandleGroupTimeline(w http.ResponseWriter, r *http.Request, group
 	}
 	impact.TotalEvents = len(timeline)
 
-	failedActionRuns := make([]actions.Run, 0, len(actionRuns))
-	for _, run := range actionRuns {
-		if strings.EqualFold(strings.TrimSpace(run.Status), actions.StatusFailed) {
-			failedActionRuns = append(failedActionRuns, run)
-		}
-	}
-	failedUpdateRuns := make([]updates.Run, 0, len(updateRuns))
-	for _, run := range updateRuns {
-		if strings.EqualFold(strings.TrimSpace(run.Status), updates.StatusFailed) {
-			failedUpdateRuns = append(failedUpdateRuns, run)
-		}
-	}
-
-	reliabilityComputation, err := d.BuildGroupReliabilityComputationFromInputs(
-		from,
-		to,
-		now,
-		groupAssets,
-		reliabilityLogEvents,
-		failedActionRuns,
-		failedUpdateRuns,
-		map[string]struct{}{groupID: {}},
-	)
+	reliabilityRecords, err := d.BuildGroupReliabilityRecordsWithAssets([]groups.Group{groupEntry}, groupAssets, from, to)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to compute group reliability")
 		return
 	}
-
-	reliability, err := d.buildGroupReliabilityRecordFromComputation(groupEntry, reliabilityComputation)
-	if err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to compute group reliability")
-		return
+	reliability := GroupReliabilityRecord{Group: groupEntry}
+	if len(reliabilityRecords) > 0 {
+		reliability = reliabilityRecords[0]
 	}
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{

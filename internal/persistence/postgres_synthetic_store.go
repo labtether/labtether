@@ -196,6 +196,40 @@ func (s *PostgresStore) ListSyntheticChecks(limit int, enabledOnly bool) ([]synt
 	return out, rows.Err()
 }
 
+func (s *PostgresStore) ListDueSyntheticChecks(ctx context.Context, now time.Time, limit int) ([]synthetic.Check, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 500 {
+		limit = 500
+	}
+
+	rows, err := s.pool.Query(ctx,
+		fmt.Sprintf(`SELECT %s FROM synthetic_checks
+		 WHERE enabled = true
+		   AND interval_seconds > 0
+		   AND (last_run_at IS NULL OR last_run_at + make_interval(secs => interval_seconds) <= $1)
+		 ORDER BY COALESCE(last_run_at, to_timestamp(0)) ASC, created_at ASC
+		 LIMIT $2`, syntheticCheckColumns),
+		now.UTC(),
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]synthetic.Check, 0, limit)
+	for rows.Next() {
+		check, scanErr := scanSyntheticCheck(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		out = append(out, check)
+	}
+	return out, rows.Err()
+}
+
 func (s *PostgresStore) UpdateSyntheticCheck(id string, req synthetic.UpdateCheckRequest) (synthetic.Check, error) {
 	existing, ok, err := s.GetSyntheticCheck(id)
 	if err != nil {

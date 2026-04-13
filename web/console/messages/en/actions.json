@@ -11,15 +11,17 @@
     "device": {
       "label": "Device",
       "tooltip": "The resource identifier to act on (container ID, VM name, etc.)",
-      "placeholder": "container-id / vm-id / entity-id"
+      "placeholder": "container-id / vm-id / entity-id",
+      "notRequired": "This action does not require a target device."
     },
-    "options": {
-      "label": "Options",
-      "placeholder": "key=value,key2=value2"
+    "parameters": {
+      "none": "This action does not require any additional parameters.",
+      "required": "(required)"
     },
     "previewOnly": {
       "label": "Preview Only",
-      "tooltip": "Simulate the action without making changes"
+      "tooltip": "Simulate the action without making changes",
+      "unsupportedTooltip": "This action runs live and does not support dry-run mode"
     },
     "submit": "Run",
     "submitting": "Queueing..."

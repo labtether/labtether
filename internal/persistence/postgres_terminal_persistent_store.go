@@ -202,6 +202,34 @@ func (s *PostgresStore) ListPersistentSessions() ([]terminal.PersistentSession, 
 	return out, nil
 }
 
+func (s *PostgresStore) ListPersistentSessionsByActor(actorID string) ([]terminal.PersistentSession, error) {
+	rows, err := s.pool.Query(context.Background(),
+		`SELECT id, actor_id, target, title, status, tmux_session_name, created_at, updated_at,
+		        last_attached_at, last_detached_at, bookmark_id, archived_at, archive_after_days, pinned
+		 FROM terminal_persistent_sessions
+		 WHERE actor_id = $1
+		 ORDER BY updated_at DESC, created_at DESC`,
+		strings.TrimSpace(actorID),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]terminal.PersistentSession, 0, 16)
+	for rows.Next() {
+		persistent, scanErr := scanPersistentSession(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		out = append(out, persistent)
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+	return out, nil
+}
+
 func (s *PostgresStore) UpdatePersistentSession(id string, req terminal.UpdatePersistentSessionRequest) (terminal.PersistentSession, error) {
 	persistent, ok, err := s.GetPersistentSession(id)
 	if err != nil {

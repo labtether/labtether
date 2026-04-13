@@ -7,11 +7,46 @@ import { Button } from "../../../../components/ui/Button";
 import { apiFetch } from "../../../../lib/api";
 import { downloadJSON } from "../../../../lib/export";
 
+type SavedActionListResponse = {
+  data?: unknown[];
+  meta?: {
+    total?: number;
+    per_page?: number;
+  };
+};
+
 export function BackupExportCard() {
   const t = useTranslations("settings");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  async function fetchAllSavedActions() {
+    const pageSize = 100;
+    let offset = 0;
+    const items: unknown[] = [];
+
+    while (true) {
+      const result = await apiFetch<SavedActionListResponse>(`/api/v2/actions?limit=${pageSize}&offset=${offset}`);
+      if (!result.response.ok) {
+        return result;
+      }
+
+      const pageItems = Array.isArray(result.data?.data) ? result.data.data : [];
+      items.push(...pageItems);
+
+      const total = typeof result.data?.meta?.total === "number" ? result.data.meta.total : items.length;
+      const perPage = typeof result.data?.meta?.per_page === "number" ? result.data.meta.per_page : pageSize;
+      if (pageItems.length === 0 || items.length >= total || pageItems.length < perPage) {
+        return {
+          response: result.response,
+          data: items,
+        };
+      }
+
+      offset += perPage;
+    }
+  }
 
   async function handleExport() {
     setLoading(true);
@@ -24,7 +59,7 @@ export function BackupExportCard() {
         groupsResult,
         webhooksResult,
         schedulesResult,
-        actionsResult,
+        savedActionsResult,
         alertRulesResult,
         notifChannelsResult,
       ] = await Promise.all([
@@ -32,7 +67,7 @@ export function BackupExportCard() {
         apiFetch("/api/groups"),
         apiFetch("/api/v2/webhooks"),
         apiFetch("/api/v2/schedules"),
-        apiFetch("/api/v2/actions"),
+        fetchAllSavedActions(),
         apiFetch("/alerts/rules"),
         apiFetch("/notifications/channels"),
       ]);
@@ -42,7 +77,7 @@ export function BackupExportCard() {
       if (!groupsResult.response.ok) failedEndpoints.push("/api/groups");
       if (!webhooksResult.response.ok) failedEndpoints.push("/api/v2/webhooks");
       if (!schedulesResult.response.ok) failedEndpoints.push("/api/v2/schedules");
-      if (!actionsResult.response.ok) failedEndpoints.push("/api/v2/actions");
+      if (!savedActionsResult.response.ok) failedEndpoints.push("/api/v2/actions");
       if (!alertRulesResult.response.ok) failedEndpoints.push("/alerts/rules");
       if (!notifChannelsResult.response.ok) failedEndpoints.push("/notifications/channels");
 
@@ -56,7 +91,7 @@ export function BackupExportCard() {
         groups: groupsResult.data,
         webhooks: webhooksResult.data,
         schedules: schedulesResult.data,
-        actions: actionsResult.data,
+        actions: savedActionsResult.data,
         alert_rules: alertRulesResult.data,
         notification_channels: notifChannelsResult.data,
       };

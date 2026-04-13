@@ -9,8 +9,9 @@ import (
 )
 
 const (
-	fileRequestTimeout = 30 * time.Second
-	fileChunkSizeHub   = 64 * 1024
+	fileRequestTimeout            = 30 * time.Second
+	fileResponseBackpressureLimit = 250 * time.Millisecond
+	fileChunkSizeHub              = 64 * 1024
 )
 
 // newFileBridge is a convenience alias for NewFileBridge.

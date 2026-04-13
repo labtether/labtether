@@ -30,14 +30,14 @@ func (s *stubProcessQueue) Claim(context.Context) (*Job, error) {
 	return job, nil
 }
 
-func (s *stubProcessQueue) Fail(_ context.Context, jobID string, errMsg string) error {
+func (s *stubProcessQueue) Fail(_ context.Context, jobID, _ string, errMsg string) error {
 	s.failCalls++
 	s.failJobID = jobID
 	s.failErrMsg = errMsg
 	return s.failErr
 }
 
-func (s *stubProcessQueue) Complete(_ context.Context, jobID string) error {
+func (s *stubProcessQueue) Complete(_ context.Context, jobID, _ string) error {
 	s.completeCalls++
 	s.completeJobID = jobID
 	return s.completeErr
@@ -233,5 +233,45 @@ func TestProcessOneWithQueueDeadLetterCallbackPanicIsRecovered(t *testing.T) {
 	}
 	if q.failCalls != 1 {
 		t.Fatalf("expected fail to be called once, got %d", q.failCalls)
+	}
+}
+
+func TestHandleRecoveredDeadJobsInvokesCallbackForRecoveredTimeouts(t *testing.T) {
+	w := NewWorker(nil)
+	cbCalls := 0
+	var gotErr error
+	w.OnDeadLetter(func(_ context.Context, job *Job, jobErr error) {
+		cbCalls++
+		if job.ID != "job-recovered-dead" {
+			t.Fatalf("unexpected job id %s", job.ID)
+		}
+		gotErr = jobErr
+	})
+
+	w.handleRecoveredDeadJobs(context.Background(), []*Job{{
+		ID:    "job-recovered-dead",
+		Kind:  KindActionRun,
+		Error: "job claim timed out after max attempts",
+	}})
+
+	if cbCalls != 1 {
+		t.Fatalf("expected callback once, got %d", cbCalls)
+	}
+	if gotErr == nil || !strings.Contains(gotErr.Error(), "timed out") {
+		t.Fatalf("expected timeout error, got %v", gotErr)
+	}
+}
+
+func TestHandleRecoveredDeadJobsUsesDefaultMessageWhenErrorBlank(t *testing.T) {
+	w := NewWorker(nil)
+	var gotErr error
+	w.OnDeadLetter(func(_ context.Context, _ *Job, jobErr error) {
+		gotErr = jobErr
+	})
+
+	w.handleRecoveredDeadJobs(context.Background(), []*Job{{ID: "job-blank-error", Kind: KindUpdateRun}})
+
+	if gotErr == nil || !strings.Contains(gotErr.Error(), "timed out") {
+		t.Fatalf("expected default timeout error, got %v", gotErr)
 	}
 }

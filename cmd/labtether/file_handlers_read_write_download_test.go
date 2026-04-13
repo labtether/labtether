@@ -264,7 +264,7 @@ func TestHandleFileDownloadReturnsExplicitFailureOnMidStreamAgentError(t *testin
 	}
 }
 
-func TestDeliverFileResponseWaitsForBackpressuredConsumer(t *testing.T) {
+func TestDeliverFileResponseFailsBackpressuredConsumer(t *testing.T) {
 	sut := newTestAPIServer(t)
 
 	const requestID = "req-backpressure"
@@ -296,20 +296,12 @@ func TestDeliverFileResponseWaitsForBackpressuredConsumer(t *testing.T) {
 
 	select {
 	case <-delivered:
-		t.Fatal("expected deliverFileResponse to wait for channel capacity instead of dropping the chunk")
-	case <-time.After(50 * time.Millisecond):
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for backpressured delivery to fail")
 	}
 
-	select {
-	case <-bridge.Ch:
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out draining first buffered chunk")
-	}
-
-	select {
-	case <-delivered:
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for second chunk delivery")
+	if err := bridge.Err(); err == nil {
+		t.Fatal("expected backpressured bridge to record an error")
 	}
 
 	select {
@@ -322,10 +314,10 @@ func TestDeliverFileResponseWaitsForBackpressuredConsumer(t *testing.T) {
 		if err != nil {
 			t.Fatalf("decode chunk contents: %v", err)
 		}
-		if string(decoded) != "two" {
-			t.Fatalf("expected second chunk payload to be preserved, got %q", string(decoded))
+		if string(decoded) != "one" {
+			t.Fatalf("expected first chunk payload to remain buffered, got %q", string(decoded))
 		}
 	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for preserved backpressured chunk")
+		t.Fatal("timed out waiting for preserved buffered chunk")
 	}
 }

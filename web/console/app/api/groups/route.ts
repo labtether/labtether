@@ -5,6 +5,7 @@ import {
   backendBaseURLs,
   resolvedBackendBaseURLs,
 } from "../../../lib/backend";
+import { isMutationRequestOriginAllowed } from "../../../lib/proxyAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,10 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (!isMutationRequestOriginAllowed(request)) {
+    return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
+  }
+
   try {
     const payload = await request.json();
 

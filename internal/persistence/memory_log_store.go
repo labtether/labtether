@@ -337,7 +337,166 @@ func (m *MemoryLogStore) ListSources(limit int) ([]logs.SourceSummary, error) {
 	return out, nil
 }
 
-func (m *MemoryLogStore) SaveView(req logs.SavedViewRequest) (logs.SavedView, error) {
+func (m *MemoryLogStore) QuerySourceSummaries(req logs.SourceSummaryRequest) ([]logs.SourceSummary, error) {
+	if req.Limit <= 0 {
+		req.Limit = 50
+	}
+	if req.To.IsZero() {
+		req.To = time.Now().UTC()
+	}
+	if req.From.IsZero() {
+		req.From = req.To.Add(-24 * time.Hour)
+	}
+
+	groupID := strings.TrimSpace(req.GroupID)
+	groupAssetIDs := normalizeLogAssetIDs(req.GroupAssetIDs)
+	groupAssetSet := map[string]struct{}{}
+	if len(groupAssetIDs) > 0 {
+		groupAssetSet = make(map[string]struct{}, len(groupAssetIDs))
+		for _, candidate := range groupAssetIDs {
+			groupAssetSet[candidate] = struct{}{}
+		}
+	}
+
+	type aggregate struct {
+		count    int
+		lastSeen time.Time
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	stats := make(map[string]aggregate, 24)
+	for i := len(m.events) - 1; i >= 0; i-- {
+		event := m.events[i]
+		if event.Timestamp.Before(req.From) || event.Timestamp.After(req.To) {
+			continue
+		}
+		if groupID != "" {
+			matchesGroup := false
+			if eventAssetID := strings.TrimSpace(event.AssetID); eventAssetID != "" {
+				if _, ok := groupAssetSet[eventAssetID]; ok {
+					matchesGroup = true
+				}
+			}
+			if !matchesGroup && strings.TrimSpace(event.Fields["group_id"]) == groupID {
+				matchesGroup = true
+			}
+			if !matchesGroup {
+				continue
+			}
+		} else if len(groupAssetSet) > 0 {
+			if _, ok := groupAssetSet[strings.TrimSpace(event.AssetID)]; !ok {
+				continue
+			}
+		}
+
+		current := stats[event.Source]
+		current.count++
+		if event.Timestamp.After(current.lastSeen) {
+			current.lastSeen = event.Timestamp
+		}
+		stats[event.Source] = current
+	}
+
+	out := make([]logs.SourceSummary, 0, len(stats))
+	for source, stat := range stats {
+		out = append(out, logs.SourceSummary{
+			Source:     source,
+			Count:      stat.count,
+			LastSeenAt: stat.lastSeen.UTC(),
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].LastSeenAt.After(out[j].LastSeenAt)
+	})
+	if len(out) > req.Limit {
+		out = out[:req.Limit]
+	}
+	return out, nil
+}
+
+func (m *MemoryLogStore) QueryGroupSeverityCounts(req logs.GroupSeverityCountRequest) ([]logs.GroupSeverityCount, error) {
+	from := req.From.UTC()
+	to := req.To.UTC()
+	if to.IsZero() {
+		to = time.Now().UTC()
+	}
+	if from.IsZero() {
+		from = to.Add(-time.Hour)
+	}
+
+	groupSet := make(map[string]struct{}, len(req.GroupIDs))
+	for _, groupID := range req.GroupIDs {
+		groupID = strings.TrimSpace(groupID)
+		if groupID == "" {
+			continue
+		}
+		groupSet[groupID] = struct{}{}
+	}
+
+	assetGroups := make(map[string]string, len(req.AssetGroups))
+	for assetID, groupID := range req.AssetGroups {
+		assetID = strings.TrimSpace(assetID)
+		groupID = strings.TrimSpace(groupID)
+		if assetID == "" || groupID == "" {
+			continue
+		}
+		assetGroups[assetID] = groupID
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	countCapacity := len(groupSet)
+	if countCapacity < 8 {
+		countCapacity = 8
+	}
+	counts := make(map[string]logs.GroupSeverityCount, countCapacity)
+	for i := len(m.events) - 1; i >= 0; i-- {
+		event := m.events[i]
+		if event.Timestamp.Before(from) || event.Timestamp.After(to) {
+			continue
+		}
+
+		groupID := strings.TrimSpace(assetGroups[strings.TrimSpace(event.AssetID)])
+		if groupID == "" {
+			groupID = strings.TrimSpace(event.Fields["group_id"])
+		}
+		if groupID == "" {
+			continue
+		}
+		if len(groupSet) > 0 {
+			if _, ok := groupSet[groupID]; !ok {
+				continue
+			}
+		}
+
+		entry := counts[groupID]
+		entry.GroupID = groupID
+		switch strings.ToLower(strings.TrimSpace(event.Level)) {
+		case "error":
+			entry.ErrorCount++
+			if strings.EqualFold(strings.TrimSpace(event.Source), "dead_letter") {
+				entry.DeadLetterCount++
+			}
+		case "warn", "warning":
+			entry.WarnCount++
+		}
+		counts[groupID] = entry
+	}
+
+	out := make([]logs.GroupSeverityCount, 0, len(counts))
+	for _, entry := range counts {
+		out = append(out, entry)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].GroupID < out[j].GroupID
+	})
+	return out, nil
+}
+
+func (m *MemoryLogStore) SaveView(actorID string, req logs.SavedViewRequest) (logs.SavedView, error) {
 	now := time.Now().UTC()
 
 	m.mu.Lock()
@@ -346,6 +505,14 @@ func (m *MemoryLogStore) SaveView(req logs.SavedViewRequest) (logs.SavedView, er
 	id := strings.TrimSpace(req.ID)
 	if id == "" {
 		id = idgen.New("view")
+	}
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		actorID = "system"
+	}
+	viewKey := ownedLogViewKey(actorID, id)
+	if _, ok := m.views[viewKey]; ok {
+		return logs.SavedView{}, ErrAlreadyExists
 	}
 
 	view := logs.SavedView{
@@ -358,27 +525,31 @@ func (m *MemoryLogStore) SaveView(req logs.SavedViewRequest) (logs.SavedView, er
 		Window:  strings.TrimSpace(req.Window),
 	}
 
-	if existing, ok := m.views[id]; ok {
-		view.CreatedAt = existing.CreatedAt
-	} else {
-		view.CreatedAt = now
-	}
+	view.CreatedAt = now
 	view.UpdatedAt = now
 
-	m.views[id] = view
+	m.views[viewKey] = view
 	return view, nil
 }
 
-func (m *MemoryLogStore) ListViews(limit int) ([]logs.SavedView, error) {
+func (m *MemoryLogStore) ListViews(actorID string, limit int) ([]logs.SavedView, error) {
 	if limit <= 0 {
 		limit = 50
+	}
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		actorID = "system"
 	}
 
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	out := make([]logs.SavedView, 0, len(m.views))
-	for _, view := range m.views {
+	prefix := actorID + "::"
+	for key, view := range m.views {
+		if !strings.HasPrefix(key, prefix) {
+			continue
+		}
 		out = append(out, view)
 	}
 
@@ -392,21 +563,21 @@ func (m *MemoryLogStore) ListViews(limit int) ([]logs.SavedView, error) {
 	return out, nil
 }
 
-func (m *MemoryLogStore) GetView(id string) (logs.SavedView, bool, error) {
+func (m *MemoryLogStore) GetView(actorID, id string) (logs.SavedView, bool, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	view, ok := m.views[strings.TrimSpace(id)]
+	view, ok := m.views[ownedLogViewKey(actorID, id)]
 	if !ok {
 		return logs.SavedView{}, false, nil
 	}
 	return view, true, nil
 }
 
-func (m *MemoryLogStore) UpdateView(id string, req logs.SavedViewRequest) (logs.SavedView, error) {
+func (m *MemoryLogStore) UpdateView(actorID, id string, req logs.SavedViewRequest) (logs.SavedView, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	id = strings.TrimSpace(id)
-	view, ok := m.views[id]
+	viewKey := ownedLogViewKey(actorID, id)
+	view, ok := m.views[viewKey]
 	if !ok {
 		return logs.SavedView{}, ErrNotFound
 	}
@@ -417,17 +588,25 @@ func (m *MemoryLogStore) UpdateView(id string, req logs.SavedViewRequest) (logs.
 	view.Search = strings.TrimSpace(req.Search)
 	view.Window = strings.TrimSpace(req.Window)
 	view.UpdatedAt = time.Now().UTC()
-	m.views[id] = view
+	m.views[viewKey] = view
 	return view, nil
 }
 
-func (m *MemoryLogStore) DeleteView(id string) error {
+func (m *MemoryLogStore) DeleteView(actorID, id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	id = strings.TrimSpace(id)
-	if _, ok := m.views[id]; !ok {
+	viewKey := ownedLogViewKey(actorID, id)
+	if _, ok := m.views[viewKey]; !ok {
 		return ErrNotFound
 	}
-	delete(m.views, id)
+	delete(m.views, viewKey)
 	return nil
+}
+
+func ownedLogViewKey(actorID, viewID string) string {
+	actorID = strings.TrimSpace(actorID)
+	if actorID == "" {
+		actorID = "system"
+	}
+	return actorID + "::" + strings.TrimSpace(viewID)
 }

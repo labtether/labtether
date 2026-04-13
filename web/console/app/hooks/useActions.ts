@@ -3,6 +3,7 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { useSlowStatus, useStatusControls, useStatusSettings } from "../contexts/StatusContext";
 import type { ConnectorActionDescriptor } from "../console/models";
+import { buildConnectorActionRequest, syncActionParamValues, type ActionParamValues } from "../lib/actionForm";
 import { ensureArray, ensureRecord, ensureString } from "../lib/responseGuards";
 
 export function useActions() {
@@ -17,21 +18,24 @@ export function useActions() {
   const [connectorActions, setConnectorActions] = useState<ConnectorActionDescriptor[]>([]);
   const [selectedConnectorAction, setSelectedConnectorAction] = useState<string>("");
   const [actionTarget, setActionTarget] = useState<string>("");
-  const [actionParams, setActionParams] = useState<string>("");
+  const [actionParamValues, setActionParamValues] = useState<ActionParamValues>({});
   const [actionDryRun, setActionDryRun] = useState<boolean>(defaultActionDryRun);
   const [actionSubmitting, setActionSubmitting] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [connectorActionsError, setConnectorActionsError] = useState<string | null>(null);
 
-  // Auto-select first connector
   useEffect(() => {
     const connectorList = status?.connectors ?? [];
-    if (selectedConnector) return;
-    if (connectorList.length === 0) return;
+    if (connectorList.length === 0) {
+      if (selectedConnector) {
+        setSelectedConnector("");
+      }
+      return;
+    }
+    if (selectedConnector && connectorList.some((connector) => connector.id === selectedConnector)) return;
     setSelectedConnector(connectorList[0].id);
   }, [status?.connectors, selectedConnector]);
 
-  // Load actions for selected connector
   useEffect(() => {
     if (!selectedConnector) {
       setConnectorActions([]);
@@ -42,6 +46,8 @@ export function useActions() {
     const controller = new AbortController();
     const load = async () => {
       setConnectorActionsError(null);
+      setConnectorActions([]);
+      setSelectedConnectorAction("");
       try {
         const response = await fetch(`/api/connectors/${encodeURIComponent(selectedConnector)}/actions`, {
           cache: "no-store",
@@ -79,69 +85,80 @@ export function useActions() {
 
   const selectedActionDescriptor =
     connectorActions.find((action) => action.id === selectedConnectorAction) ?? null;
+  const actionParameters = selectedActionDescriptor?.parameters ?? [];
+  const actionRequiresTarget = selectedActionDescriptor?.requires_target ?? false;
+  const actionSupportsDryRun = selectedActionDescriptor?.supports_dry_run ?? false;
+
+  useEffect(() => {
+    setActionParamValues((current) => syncActionParamValues(current, selectedActionDescriptor));
+    setActionMessage(null);
+  }, [selectedActionDescriptor]);
+
+  useEffect(() => {
+    if (!actionSupportsDryRun && actionDryRun) {
+      setActionDryRun(false);
+    }
+  }, [actionSupportsDryRun, actionDryRun]);
+
+  const setActionParamValue = useCallback((key: string, value: string) => {
+    setActionParamValues((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }, []);
 
   const submitConnectorAction = useCallback(async (event: FormEvent) => {
     event.preventDefault();
-    if (!selectedConnector || !selectedConnectorAction) {
-      setActionMessage("Choose a connector action first.");
+    const request = buildConnectorActionRequest({
+      actionDryRun,
+      actionId: selectedConnectorAction,
+      actorId: defaultActorID,
+      connectorId: selectedConnector,
+      descriptor: selectedActionDescriptor,
+      paramValues: actionParamValues,
+      selectedGroupFilter,
+      target: actionTarget,
+    });
+    if (!request.ok) {
+      setActionMessage(request.error);
       return;
-    }
-
-    const parsedParams: Record<string, string> = {};
-    const chunks = actionParams
-      .split(",")
-      .map((chunk) => chunk.trim())
-      .filter((chunk) => chunk.length > 0);
-    for (const chunk of chunks) {
-      const separator = chunk.indexOf("=");
-      if (separator <= 0) continue;
-      const key = chunk.slice(0, separator).trim();
-      const value = chunk.slice(separator + 1).trim();
-      if (key !== "") {
-        parsedParams[key] = value;
-      }
-    }
-    if (selectedGroupFilter !== "all" && !parsedParams.group_id) {
-      parsedParams.group_id = selectedGroupFilter;
     }
 
     setActionSubmitting(true);
     setActionMessage(null);
     try {
-      const payload: Record<string, unknown> = {
-        actor_id: defaultActorID,
-        type: "connector_action",
-        connector_id: selectedConnector,
-        action_id: selectedConnectorAction,
-        dry_run: actionDryRun
-      };
-      if (actionTarget.trim() !== "") {
-        payload.target = actionTarget.trim();
-      }
-      if (Object.keys(parsedParams).length > 0) {
-        payload.params = parsedParams;
-      }
-
       const response = await fetch("/api/actions/execute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(request.payload)
       });
       const result = ensureRecord(await response.json().catch(() => null));
       if (!response.ok) {
         throw new Error(ensureString(result?.error) || `action queue failed: ${response.status}`);
       }
       setActionMessage(`Action queued as ${ensureString(result?.job_id) || "job"}`);
-      setActionParams("");
+      setActionParamValues((current) => syncActionParamValues(current, selectedActionDescriptor));
       await fetchStatus();
     } catch (err) {
       setActionMessage(err instanceof Error ? err.message : "failed to queue action");
     } finally {
       setActionSubmitting(false);
     }
-  }, [selectedConnector, selectedConnectorAction, actionParams, selectedGroupFilter, defaultActorID, actionDryRun, actionTarget, fetchStatus]);
+  }, [
+    actionDryRun,
+    actionParamValues,
+    actionTarget,
+    defaultActorID,
+    fetchStatus,
+    selectedActionDescriptor,
+    selectedConnector,
+    selectedConnectorAction,
+    selectedGroupFilter,
+  ]);
 
   return {
+    actionParameters,
+    actionParamValues,
     connectors,
     selectedConnector,
     setSelectedConnector,
@@ -149,10 +166,11 @@ export function useActions() {
     selectedConnectorAction,
     setSelectedConnectorAction,
     selectedActionDescriptor,
+    actionRequiresTarget,
+    actionSupportsDryRun,
     actionTarget,
     setActionTarget,
-    actionParams,
-    setActionParams,
+    setActionParamValue,
     actionDryRun,
     setActionDryRun,
     actionSubmitting,

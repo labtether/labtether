@@ -97,6 +97,47 @@ func TestWebhookAdapter_Send_ForwardsCustomHeaders(t *testing.T) {
 	}
 }
 
+func TestWebhookAdapter_Send_SetsSignatureHeadersWhenConfigured(t *testing.T) {
+	allowLoopbackHTTP(t)
+
+	var eventHeader string
+	var timestampHeader string
+	var signatureHeader string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		eventHeader = r.Header.Get("X-Labtether-Event")
+		timestampHeader = r.Header.Get("X-Labtether-Timestamp")
+		signatureHeader = r.Header.Get("X-Labtether-Signature-256")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	a := &WebhookAdapter{}
+	cfg := map[string]any{
+		"url":        srv.URL,
+		"secret":     "test-secret",
+		"event_type": "asset.online",
+		"timestamp":  "2026-04-12T01:02:03Z",
+	}
+	payload := map[string]any{"type": "asset.online", "data": map[string]any{"asset_id": "asset-1"}}
+	if err := a.Send(context.Background(), cfg, payload); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if eventHeader != "asset.online" {
+		t.Fatalf("expected event header, got %q", eventHeader)
+	}
+	if timestampHeader != "2026-04-12T01:02:03Z" {
+		t.Fatalf("expected timestamp header, got %q", timestampHeader)
+	}
+	expectedSignatureBody, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	expectedSignature := webhookSignature("test-secret", "2026-04-12T01:02:03Z", expectedSignatureBody)
+	if signatureHeader != expectedSignature {
+		t.Fatalf("expected signature %q, got %q", expectedSignature, signatureHeader)
+	}
+}
+
 func TestWebhookAdapter_Send_UsesPostMethod(t *testing.T) {
 	allowLoopbackHTTP(t)
 

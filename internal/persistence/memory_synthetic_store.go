@@ -95,6 +95,45 @@ func (m *MemorySyntheticStore) ListSyntheticChecks(limit int, enabledOnly bool) 
 	return out, nil
 }
 
+func (m *MemorySyntheticStore) ListDueSyntheticChecks(_ context.Context, now time.Time, limit int) ([]synthetic.Check, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	out := make([]synthetic.Check, 0, len(m.checks))
+	for _, check := range m.checks {
+		if !check.Enabled {
+			continue
+		}
+		if check.IntervalSeconds <= 0 {
+			continue
+		}
+		if check.LastRunAt != nil && now.Sub(*check.LastRunAt) < time.Duration(check.IntervalSeconds)*time.Second {
+			continue
+		}
+		out = append(out, check)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		left := out[i]
+		right := out[j]
+		switch {
+		case left.LastRunAt == nil && right.LastRunAt == nil:
+			return left.CreatedAt.Before(right.CreatedAt)
+		case left.LastRunAt == nil:
+			return true
+		case right.LastRunAt == nil:
+			return false
+		case !left.LastRunAt.Equal(*right.LastRunAt):
+			return left.LastRunAt.Before(*right.LastRunAt)
+		default:
+			return left.CreatedAt.Before(right.CreatedAt)
+		}
+	})
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
 func (m *MemorySyntheticStore) UpdateSyntheticCheck(id string, req synthetic.UpdateCheckRequest) (synthetic.Check, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

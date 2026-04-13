@@ -103,7 +103,7 @@ func runHub(ctx context.Context) error {
 	}
 	srv.totpEncryptionKey = totpKey
 
-	configureServerRuntime(srv, registry, secretsManager, pgStore)
+	configureServerRuntime(ctx, srv, registry, secretsManager, pgStore)
 	initMetricsExport(srv, pgStore)
 
 	// Start periodic challenge token cleanup to prevent unbounded memory growth.

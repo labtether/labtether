@@ -18,18 +18,6 @@ func (s *PostgresStore) CreateAlertRoute(req notifications.CreateRouteRequest) (
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
-	groupWait := req.GroupWaitSeconds
-	if groupWait <= 0 {
-		groupWait = 30
-	}
-	groupInterval := req.GroupIntervalSeconds
-	if groupInterval <= 0 {
-		groupInterval = 300
-	}
-	repeatInterval := req.RepeatIntervalSeconds
-	if repeatInterval <= 0 {
-		repeatInterval = 3600
-	}
 
 	matchersPayload, err := marshalAnyMap(req.Matchers)
 	if err != nil {
@@ -61,9 +49,9 @@ func (s *PostgresStore) CreateAlertRoute(req notifications.CreateRouteRequest) (
 		nullIfBlank(req.SeverityFilter),
 		nullIfBlank(req.GroupFilter),
 		groupByPayload,
-		groupWait,
-		groupInterval,
-		repeatInterval,
+		req.GroupWaitSeconds,
+		req.GroupIntervalSeconds,
+		req.RepeatIntervalSeconds,
 		enabled,
 		now,
 	))

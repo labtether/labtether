@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/logs"
 	"github.com/labtether/labtether/internal/persistence"
@@ -69,18 +70,11 @@ func (d *Deps) HandleLogsQuery(w http.ResponseWriter, r *http.Request) {
 			queryLimit = groupQueryLimit
 		}
 
-		assetList, err := d.AssetStore.ListAssets()
+		assetGroup, groupAssetIDs, err = d.groupAssets(groupID)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list assets")
 			return
 		}
-		assetGroup = make(map[string]string, len(assetList))
-		for _, assetEntry := range assetList {
-			if strings.TrimSpace(assetEntry.GroupID) != "" {
-				assetGroup[assetEntry.ID] = strings.TrimSpace(assetEntry.GroupID)
-			}
-		}
-		groupAssetIDs = shared.GroupAssetIDsForGroup(groupID, assetGroup)
 	}
 
 	query := logs.QueryRequest{
@@ -288,62 +282,72 @@ func (d *Deps) HandleLogSources(w http.ResponseWriter, r *http.Request) {
 		traceWindowStart = from
 		traceWindowEnd = to
 
-		assetList, err := d.AssetStore.ListAssets()
+		_, groupAssetIDs, err := d.groupAssets(groupID)
 		if err != nil {
 			traceErr = err
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list assets")
 			return
 		}
-		assetGroup := make(map[string]string, len(assetList))
-		for _, assetEntry := range assetList {
-			if strings.TrimSpace(assetEntry.GroupID) != "" {
-				assetGroup[assetEntry.ID] = strings.TrimSpace(assetEntry.GroupID)
-			}
-		}
-		groupAssetIDs := shared.GroupAssetIDsForGroup(groupID, assetGroup)
 
-		events, err := d.LogStore.QueryEvents(logs.QueryRequest{
-			From:          from,
-			To:            to,
-			Limit:         1000,
-			GroupID:       groupID,
-			GroupAssetIDs: groupAssetIDs,
-			FieldKeys:     []string{"group_id"},
-		})
-		if err != nil {
-			traceErr = err
-			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to query logs for source aggregation")
-			return
-		}
-		events = shared.FilterLogEventsByGroup(events, groupID, assetGroup)
-
-		type aggregate struct {
-			count    int
-			lastSeen time.Time
-		}
-		stats := make(map[string]aggregate, 24)
-		for _, event := range events {
-			current := stats[event.Source]
-			current.count++
-			if event.Timestamp.After(current.lastSeen) {
-				current.lastSeen = event.Timestamp
-			}
-			stats[event.Source] = current
-		}
-
-		sources = make([]logs.SourceSummary, 0, len(stats))
-		for source, stat := range stats {
-			sources = append(sources, logs.SourceSummary{
-				Source:     source,
-				Count:      stat.count,
-				LastSeenAt: stat.lastSeen.UTC(),
+		if sourceStore, ok := d.LogStore.(persistence.LogSourceSummaryStore); ok {
+			mode = "group_filtered_window_aggregated"
+			listed, err := sourceStore.QuerySourceSummaries(logs.SourceSummaryRequest{
+				GroupID:       groupID,
+				GroupAssetIDs: groupAssetIDs,
+				From:          from,
+				To:            to,
+				Limit:         limit,
 			})
-		}
-		sort.Slice(sources, func(i, j int) bool {
-			return sources[i].LastSeenAt.After(sources[j].LastSeenAt)
-		})
-		if len(sources) > limit {
-			sources = sources[:limit]
+			if err != nil {
+				traceErr = err
+				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to query logs for source aggregation")
+				return
+			}
+			sources = listed
+		} else {
+			mode = "group_filtered_window_fallback"
+			events, err := d.LogStore.QueryEvents(logs.QueryRequest{
+				From:          from,
+				To:            to,
+				Limit:         1000,
+				GroupID:       groupID,
+				GroupAssetIDs: groupAssetIDs,
+				FieldKeys:     []string{"group_id"},
+			})
+			if err != nil {
+				traceErr = err
+				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to query logs for source aggregation")
+				return
+			}
+
+			type aggregate struct {
+				count    int
+				lastSeen time.Time
+			}
+			stats := make(map[string]aggregate, 24)
+			for _, event := range events {
+				current := stats[event.Source]
+				current.count++
+				if event.Timestamp.After(current.lastSeen) {
+					current.lastSeen = event.Timestamp
+				}
+				stats[event.Source] = current
+			}
+
+			sources = make([]logs.SourceSummary, 0, len(stats))
+			for source, stat := range stats {
+				sources = append(sources, logs.SourceSummary{
+					Source:     source,
+					Count:      stat.count,
+					LastSeenAt: stat.lastSeen.UTC(),
+				})
+			}
+			sort.Slice(sources, func(i, j int) bool {
+				return sources[i].LastSeenAt.After(sources[j].LastSeenAt)
+			})
+			if len(sources) > limit {
+				sources = sources[:limit]
+			}
 		}
 	}
 
@@ -372,7 +376,7 @@ func (d *Deps) HandleLogViews(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		views, err := d.LogStore.ListViews(shared.ParseLimit(r, 50))
+		views, err := d.LogStore.ListViews(apiv2.PrincipalActorID(r.Context()), shared.ParseLimit(r, 50))
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list log views")
 			return
@@ -384,14 +388,22 @@ func (d *Deps) HandleLogViews(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusBadRequest, "invalid log view payload")
 			return
 		}
+		if strings.TrimSpace(req.ID) != "" {
+			servicehttp.WriteError(w, http.StatusBadRequest, "id must not be provided when creating a log view")
+			return
+		}
 		req.Name = strings.TrimSpace(req.Name)
 		if req.Name == "" {
 			servicehttp.WriteError(w, http.StatusBadRequest, "name is required")
 			return
 		}
 
-		view, err := d.LogStore.SaveView(req)
+		view, err := d.LogStore.SaveView(apiv2.PrincipalActorID(r.Context()), req)
 		if err != nil {
+			if errors.Is(err, persistence.ErrAlreadyExists) {
+				servicehttp.WriteError(w, http.StatusConflict, "log view already exists")
+				return
+			}
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to save log view")
 			return
 		}
@@ -417,7 +429,7 @@ func (d *Deps) HandleLogViewActions(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		view, ok, err := d.LogStore.GetView(viewID)
+		view, ok, err := d.LogStore.GetView(apiv2.PrincipalActorID(r.Context()), viewID)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load log view")
 			return
@@ -433,12 +445,16 @@ func (d *Deps) HandleLogViewActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusBadRequest, "invalid log view payload")
 			return
 		}
+		if bodyID := strings.TrimSpace(req.ID); bodyID != "" && bodyID != viewID {
+			servicehttp.WriteError(w, http.StatusBadRequest, "body id must match the requested log view")
+			return
+		}
 		req.Name = strings.TrimSpace(req.Name)
 		if req.Name == "" {
 			servicehttp.WriteError(w, http.StatusBadRequest, "name is required")
 			return
 		}
-		view, err := d.LogStore.UpdateView(viewID, req)
+		view, err := d.LogStore.UpdateView(apiv2.PrincipalActorID(r.Context()), viewID, req)
 		if err != nil {
 			if errors.Is(err, persistence.ErrNotFound) {
 				servicehttp.WriteError(w, http.StatusNotFound, "log view not found")
@@ -449,7 +465,7 @@ func (d *Deps) HandleLogViewActions(w http.ResponseWriter, r *http.Request) {
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"view": view})
 	case http.MethodDelete:
-		if err := d.LogStore.DeleteView(viewID); err != nil {
+		if err := d.LogStore.DeleteView(apiv2.PrincipalActorID(r.Context()), viewID); err != nil {
 			if errors.Is(err, persistence.ErrNotFound) {
 				servicehttp.WriteError(w, http.StatusNotFound, "log view not found")
 				return
@@ -461,4 +477,36 @@ func (d *Deps) HandleLogViewActions(w http.ResponseWriter, r *http.Request) {
 	default:
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+func (d *Deps) groupAssets(groupID string) (map[string]string, []string, error) {
+	if groupAssetStore, ok := d.AssetStore.(persistence.GroupAssetStore); ok {
+		assetList, err := groupAssetStore.ListAssetsByGroup(groupID)
+		if err != nil {
+			return nil, nil, err
+		}
+		assetGroup := make(map[string]string, len(assetList))
+		groupAssetIDs := make([]string, 0, len(assetList))
+		for _, assetEntry := range assetList {
+			assetID := strings.TrimSpace(assetEntry.ID)
+			if assetID == "" {
+				continue
+			}
+			assetGroup[assetID] = groupID
+			groupAssetIDs = append(groupAssetIDs, assetID)
+		}
+		return assetGroup, groupAssetIDs, nil
+	}
+
+	assetList, err := d.AssetStore.ListAssets()
+	if err != nil {
+		return nil, nil, err
+	}
+	assetGroup := make(map[string]string, len(assetList))
+	for _, assetEntry := range assetList {
+		if strings.TrimSpace(assetEntry.GroupID) != "" {
+			assetGroup[assetEntry.ID] = strings.TrimSpace(assetEntry.GroupID)
+		}
+	}
+	return assetGroup, shared.GroupAssetIDsForGroup(groupID, assetGroup), nil
 }

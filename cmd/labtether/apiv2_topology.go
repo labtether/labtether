@@ -4,9 +4,11 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/labtether/labtether/internal/apiv2"
+	"github.com/labtether/labtether/internal/edges"
 	"github.com/labtether/labtether/internal/topology"
 )
 
@@ -73,7 +75,7 @@ func (s *apiServer) handleV2Topology(w http.ResponseWriter, r *http.Request) {
 	// Fetch discovered edges for connection merge.
 	var merged []topology.MergedConnection
 	if len(assetIDs) > 0 {
-		discoveredEdges, edgeErr := s.edgeStore.ListEdgesBatch(assetIDs, 10000)
+		discoveredEdges, edgeErr := s.listTopologyEdges(assetIDs)
 		if edgeErr != nil {
 			log.Printf("topology: failed to list edges for merge: %v", edgeErr)
 		}
@@ -157,7 +159,7 @@ func (s *apiServer) topologyAutoSeed(topologyID string) ([]topology.Zone, error)
 	// Fetch edges for seed connections.
 	var seedEdges []topology.EdgeInfo
 	if len(assetIDs) > 0 {
-		discoveredEdges, edgeErr := s.edgeStore.ListEdgesBatch(assetIDs, 10000)
+		discoveredEdges, edgeErr := s.listTopologyEdges(assetIDs)
 		if edgeErr == nil {
 			for _, e := range discoveredEdges {
 				seedEdges = append(seedEdges, topology.EdgeInfo{
@@ -182,20 +184,28 @@ func (s *apiServer) topologyAutoSeed(topologyID string) ([]topology.Zone, error)
 	// Build a mapping from seed-generated IDs to DB-generated IDs so member
 	// ZoneIDs can be rewritten before calling SetMembers.
 	seedToDBZoneID := make(map[string]string, len(result.Zones))
+	var persistErr error
 	for _, z := range result.Zones {
 		created, createErr := s.topologyStore.CreateZone(z)
 		if createErr != nil {
-			log.Printf("topology: auto-seed create zone %q failed: %v", z.Label, createErr)
-			continue
+			persistErr = createErr
+			break
 		}
 		seedToDBZoneID[z.ID] = created.ID
+	}
+	if persistErr != nil {
+		_ = s.topologyStore.ClearTopology(topologyID)
+		return nil, persistErr
 	}
 
 	// Rewrite member ZoneIDs from seed IDs to DB IDs.
 	for i := range result.Members {
-		if dbID, ok := seedToDBZoneID[result.Members[i].ZoneID]; ok {
-			result.Members[i].ZoneID = dbID
+		dbID, ok := seedToDBZoneID[result.Members[i].ZoneID]
+		if !ok {
+			_ = s.topologyStore.ClearTopology(topologyID)
+			return nil, errors.New("topology auto-seed produced members for an unknown zone")
 		}
+		result.Members[i].ZoneID = dbID
 	}
 
 	// Group members by zone for SetMembers calls.
@@ -205,13 +215,15 @@ func (s *apiServer) topologyAutoSeed(topologyID string) ([]topology.Zone, error)
 	}
 	for zoneID, ms := range membersByZone {
 		if err := s.topologyStore.SetMembers(zoneID, ms); err != nil {
-			log.Printf("topology: auto-seed set members for zone %s failed: %v", zoneID, err)
+			_ = s.topologyStore.ClearTopology(topologyID)
+			return nil, err
 		}
 	}
 
 	for _, c := range result.Connections {
 		if _, err := s.topologyStore.CreateConnection(c); err != nil {
-			log.Printf("topology: auto-seed create connection failed: %v", err)
+			_ = s.topologyStore.ClearTopology(topologyID)
+			return nil, err
 		}
 	}
 
@@ -391,6 +403,10 @@ func (s *apiServer) handleV2TopologyZoneReorder(w http.ResponseWriter, r *http.R
 	}
 
 	if err := s.topologyStore.ReorderZones(req.Updates); err != nil {
+		if errors.Is(err, topology.ErrNotFound) {
+			apiv2.WriteError(w, http.StatusNotFound, "not_found", "zone not found")
+			return
+		}
 		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to reorder zones: "+err.Error())
 		return
 	}
@@ -681,7 +697,7 @@ func (s *apiServer) handleV2TopologyUnsorted(w http.ResponseWriter, r *http.Requ
 	}
 	parentMap := make(map[string]string)
 	if len(assetIDs) > 0 {
-		allEdges, edgeErr := s.edgeStore.ListEdgesBatch(assetIDs, 10000)
+		allEdges, edgeErr := s.listTopologyEdges(assetIDs)
 		if edgeErr == nil {
 			for _, e := range allEdges {
 				if e.RelationshipType == "contains" {
@@ -730,17 +746,34 @@ func (s *apiServer) handleV2TopologyAutoPlace(w http.ResponseWriter, r *http.Req
 
 	// Group placements by zone.
 	byZone := make(map[string][]topology.ZoneMember)
+	zoneOrder := make([]string, 0, len(req.Placements))
+	seenAssets := make(map[string]struct{}, len(req.Placements))
 	sortIdx := 0
 	for _, p := range req.Placements {
-		if p.AssetID == "" || p.ZoneID == "" {
-			continue
+		if strings.TrimSpace(p.AssetID) == "" || strings.TrimSpace(p.ZoneID) == "" {
+			apiv2.WriteError(w, http.StatusBadRequest, "validation", "each placement requires asset_id and zone_id")
+			return
 		}
-		byZone[p.ZoneID] = append(byZone[p.ZoneID], topology.ZoneMember{
-			ZoneID:    p.ZoneID,
-			AssetID:   p.AssetID,
+		assetID := strings.TrimSpace(p.AssetID)
+		zoneID := strings.TrimSpace(p.ZoneID)
+		if _, exists := seenAssets[assetID]; exists {
+			apiv2.WriteError(w, http.StatusBadRequest, "validation", "each asset may only be placed once per request")
+			return
+		}
+		seenAssets[assetID] = struct{}{}
+		if _, ok := byZone[zoneID]; !ok {
+			zoneOrder = append(zoneOrder, zoneID)
+		}
+		byZone[zoneID] = append(byZone[zoneID], topology.ZoneMember{
+			ZoneID:    zoneID,
+			AssetID:   assetID,
 			SortOrder: sortIdx,
 		})
 		sortIdx++
+	}
+	if len(zoneOrder) == 0 {
+		apiv2.WriteError(w, http.StatusBadRequest, "validation", "placements array is required")
+		return
 	}
 
 	// Fetch layout and all existing members once, outside the loop.
@@ -763,7 +796,8 @@ func (s *apiServer) handleV2TopologyAutoPlace(w http.ResponseWriter, r *http.Req
 
 	// For each zone, merge existing members with new placements.
 	placed := 0
-	for zoneID, newMembers := range byZone {
+	for _, zoneID := range zoneOrder {
+		newMembers := byZone[zoneID]
 		merged := append([]topology.ZoneMember{}, existingByZone[zoneID]...)
 
 		// Append new members with positions offset from existing count.
@@ -783,6 +817,91 @@ func (s *apiServer) handleV2TopologyAutoPlace(w http.ResponseWriter, r *http.Req
 		"status": "placed",
 		"count":  placed,
 	})
+}
+
+const topologyEdgeChunkSize = 200
+
+func (s *apiServer) listTopologyEdges(assetIDs []string) ([]edges.Edge, error) {
+	if s == nil || s.edgeStore == nil {
+		return nil, nil
+	}
+	trimmedIDs := make([]string, 0, len(assetIDs))
+	seenIDs := make(map[string]struct{}, len(assetIDs))
+	for _, assetID := range assetIDs {
+		assetID = strings.TrimSpace(assetID)
+		if assetID == "" {
+			continue
+		}
+		if _, exists := seenIDs[assetID]; exists {
+			continue
+		}
+		seenIDs[assetID] = struct{}{}
+		trimmedIDs = append(trimmedIDs, assetID)
+	}
+	if len(trimmedIDs) == 0 {
+		return []edges.Edge{}, nil
+	}
+
+	allEdges := make([]edges.Edge, 0)
+	seenEdges := make(map[string]struct{})
+	for start := 0; start < len(trimmedIDs); start += topologyEdgeChunkSize {
+		end := min(start+topologyEdgeChunkSize, len(trimmedIDs))
+		chunkEdges, err := s.listTopologyEdgesChunk(trimmedIDs[start:end])
+		if err != nil {
+			return nil, err
+		}
+		for _, edge := range chunkEdges {
+			if _, exists := seenEdges[edge.ID]; exists {
+				continue
+			}
+			seenEdges[edge.ID] = struct{}{}
+			allEdges = append(allEdges, edge)
+		}
+	}
+	slices.SortFunc(allEdges, func(a, b edges.Edge) int {
+		return b.CreatedAt.Compare(a.CreatedAt)
+	})
+	return allEdges, nil
+}
+
+func (s *apiServer) listTopologyEdgesChunk(assetIDs []string) ([]edges.Edge, error) {
+	const topologyEdgeBatchLimit = 50000
+
+	edgesBatch, err := s.edgeStore.ListEdgesBatch(assetIDs, topologyEdgeBatchLimit)
+	if err != nil {
+		return nil, err
+	}
+	if len(edgesBatch) < topologyEdgeBatchLimit || len(assetIDs) <= 1 {
+		return edgesBatch, nil
+	}
+
+	mid := len(assetIDs) / 2
+	left, err := s.listTopologyEdgesChunk(assetIDs[:mid])
+	if err != nil {
+		return nil, err
+	}
+	right, err := s.listTopologyEdgesChunk(assetIDs[mid:])
+	if err != nil {
+		return nil, err
+	}
+
+	merged := make([]edges.Edge, 0, len(left)+len(right))
+	seenEdges := make(map[string]struct{}, len(left)+len(right))
+	for _, edge := range left {
+		if _, exists := seenEdges[edge.ID]; exists {
+			continue
+		}
+		seenEdges[edge.ID] = struct{}{}
+		merged = append(merged, edge)
+	}
+	for _, edge := range right {
+		if _, exists := seenEdges[edge.ID]; exists {
+			continue
+		}
+		seenEdges[edge.ID] = struct{}{}
+		merged = append(merged, edge)
+	}
+	return merged, nil
 }
 
 // ---------------------------------------------------------------------------

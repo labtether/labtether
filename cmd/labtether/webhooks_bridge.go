@@ -5,8 +5,10 @@ import webhookspkg "github.com/labtether/labtether/internal/hubapi/webhookspkg"
 // buildWebhooksDeps constructs the webhookspkg.Deps from the apiServer's fields.
 func (s *apiServer) buildWebhooksDeps() *webhookspkg.Deps {
 	return &webhookspkg.Deps{
-		WebhookStore: s.webhookStore,
-		AuditStore:   s.auditStore,
+		WebhookStore:           s.webhookStore,
+		AuditStore:             s.auditStore,
+		SecretsManager:         s.secretsManager,
+		InvalidateWebhookCache: s.invalidateWebhookCache,
 	}
 }
 

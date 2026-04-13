@@ -1,8 +1,17 @@
 import { NextResponse } from "next/server";
 
-import { backendAuthHeadersWithCookie, resolvedBackendBaseURLs } from "../../../../lib/backend";
+import {
+  backendAuthHeadersWithCookie,
+  resolvedBackendBaseURLs,
+  upstreamErrorPayload,
+} from "../../../../lib/backend";
+import { isMutationRequestOriginAllowed } from "../../../../lib/proxyAuth";
 
 export async function POST(request: Request) {
+  if (!isMutationRequestOriginAllowed(request)) {
+    return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
+  }
+
   let payload: unknown;
   try {
     payload = await request.json();
@@ -25,7 +34,10 @@ export async function POST(request: Request) {
 
     const responsePayload = await safeJSON(response);
     if (!response.ok) {
-      return NextResponse.json(responsePayload ?? { error: "failed to queue action" }, { status: response.status });
+      return NextResponse.json(
+        upstreamErrorPayload(response.status, responsePayload, "failed to queue action"),
+        { status: response.status }
+      );
     }
 
     return NextResponse.json(responsePayload ?? {});

@@ -29,14 +29,16 @@ func setupTestQueue(t *testing.T) (*Queue, func()) {
 		id TEXT PRIMARY KEY,
 		kind TEXT NOT NULL,
 		status TEXT NOT NULL DEFAULT 'queued',
-		payload BYTEA,
+		payload JSONB NOT NULL,
 		attempts INT NOT NULL DEFAULT 0,
 		max_attempts INT NOT NULL DEFAULT 5,
 		error TEXT DEFAULT '',
 		created_at TIMESTAMPTZ DEFAULT now(),
 		updated_at TIMESTAMPTZ DEFAULT now(),
+		available_at TIMESTAMPTZ DEFAULT now(),
 		locked_at TIMESTAMPTZ,
-		completed_at TIMESTAMPTZ
+		completed_at TIMESTAMPTZ,
+		lock_token TEXT
 	)`)
 	if err != nil {
 		pool.Close()
@@ -46,7 +48,7 @@ func setupTestQueue(t *testing.T) (*Queue, func()) {
 	q := New(pool, 100*time.Millisecond, 2) // maxAttempts=2 for testing
 	return q, func() {
 		// Clean up test data
-		_, _ = pool.Exec(ctx, `DELETE FROM job_queue WHERE kind LIKE 'test_%'`)
+		_, _ = pool.Exec(ctx, `DELETE FROM job_queue WHERE kind IN ($1, $2)`, string(KindActionRun), string(KindUpdateRun))
 		pool.Close()
 	}
 }
@@ -58,7 +60,7 @@ func TestFailAndRetry(t *testing.T) {
 	ctx := context.Background()
 
 	// Enqueue a test job
-	jobID, err := q.Enqueue(ctx, JobKind("test_dlq_retry"), []byte(`{"test": true}`))
+	jobID, err := q.Enqueue(ctx, KindActionRun, []byte(`{"test": true}`))
 	if err != nil {
 		t.Fatalf("Enqueue failed: %v", err)
 	}
@@ -76,7 +78,7 @@ func TestFailAndRetry(t *testing.T) {
 	}
 
 	// Fail the job (should retry since attempts < maxAttempts)
-	err = q.Fail(ctx, jobID, "transient error")
+	err = q.Fail(ctx, jobID, job.LockToken, "transient error")
 	if err != nil {
 		t.Fatalf("Fail failed: %v", err)
 	}
@@ -94,7 +96,7 @@ func TestFailAndRetry(t *testing.T) {
 	}
 
 	// Fail again (should dead-letter since attempts >= maxAttempts)
-	err = q.Fail(ctx, jobID, "permanent error")
+	err = q.Fail(ctx, jobID, job.LockToken, "permanent error")
 	if err != nil {
 		t.Fatalf("Fail (attempt 2) failed: %v", err)
 	}
@@ -142,7 +144,7 @@ func TestCompleteSuccess(t *testing.T) {
 
 	ctx := context.Background()
 
-	jobID, err := q.Enqueue(ctx, JobKind("test_dlq_success"), []byte(`{"test": true}`))
+	jobID, err := q.Enqueue(ctx, KindUpdateRun, []byte(`{"test": true}`))
 	if err != nil {
 		t.Fatalf("Enqueue failed: %v", err)
 	}
@@ -156,7 +158,7 @@ func TestCompleteSuccess(t *testing.T) {
 	}
 
 	// Complete successfully
-	err = q.Complete(ctx, jobID)
+	err = q.Complete(ctx, jobID, job.LockToken)
 	if err != nil {
 		t.Fatalf("Complete failed: %v", err)
 	}

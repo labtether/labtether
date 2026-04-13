@@ -6,7 +6,7 @@ import { Calendar, Pencil, Plus, Trash2 } from "lucide-react";
 import { PageHeader } from "../../../components/PageHeader";
 import { Card } from "../../../components/ui/Card";
 import { Button } from "../../../components/ui/Button";
-import { Input, Select } from "../../../components/ui/Input";
+import { Input } from "../../../components/ui/Input";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { apiFetch, apiMutate } from "../../../lib/api";
 
@@ -20,27 +20,17 @@ interface Schedule {
   targets: string[];
   group_id?: string;
   enabled: boolean;
-  last_run?: string;
-  next_run?: string;
+  last_run_at?: string;
+  next_run_at?: string;
 }
 
 interface SchedulesResponse {
-  schedules: Schedule[];
-}
-
-// ── Helpers ──
-
-function relativeTime(iso: string | undefined): string {
-  if (!iso) return "";
-  const delta = Date.now() - new Date(iso).getTime();
-  const abs = Math.abs(delta);
-  const future = delta < 0;
-  const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
-
-  if (abs < 60_000) return rtf.format(future ? Math.ceil(delta / 1000) : Math.floor(-delta / 1000), "second");
-  if (abs < 3_600_000) return rtf.format(future ? Math.ceil(delta / 60_000) : Math.floor(-delta / 60_000), "minute");
-  if (abs < 86_400_000) return rtf.format(future ? Math.ceil(delta / 3_600_000) : Math.floor(-delta / 3_600_000), "hour");
-  return rtf.format(future ? Math.ceil(delta / 86_400_000) : Math.floor(-delta / 86_400_000), "day");
+  data: Schedule[];
+  meta?: {
+    total?: number;
+    page?: number;
+    per_page?: number;
+  };
 }
 
 // ── Modal ──
@@ -160,14 +150,12 @@ function ScheduleModal({ mode, initial, saving, error, onClose, onSubmit }: Sche
           {/* Group */}
           <label className="block space-y-1">
             <span className="text-[10px] text-[var(--muted)]">{t("group")}</span>
-            <Select
+            <Input
               value={groupId}
               onChange={(e) => setGroupId(e.target.value)}
+              placeholder={t("groupPlaceholder")}
               disabled={saving}
-              className="w-full"
-            >
-              <option value="">— none —</option>
-            </Select>
+            />
           </label>
 
           {error ? <p className="text-xs text-[var(--bad)]">{error}</p> : null}
@@ -268,7 +256,7 @@ export default function SchedulesPage() {
         setFetchError("Failed to load schedules.");
         return;
       }
-      setSchedules(data?.schedules ?? []);
+      setSchedules(data?.data ?? []);
     } catch {
       setFetchError("Failed to load schedules.");
     } finally {
@@ -329,22 +317,6 @@ export default function SchedulesPage() {
         setModalError(err instanceof Error ? err.message : "Failed to update schedule.");
       } finally {
         setSaving(false);
-      }
-    },
-    [fetchSchedules],
-  );
-
-  // ── Toggle enabled ──
-
-  const handleToggleEnabled = useCallback(
-    async (schedule: Schedule) => {
-      try {
-        await apiMutate(`/api/v2/schedules/${schedule.id}`, "PATCH", {
-          enabled: !schedule.enabled,
-        });
-        await fetchSchedules();
-      } catch {
-        /* toggle failures are transient; page will reflect server state on next fetch */
       }
     },
     [fetchSchedules],
@@ -412,6 +384,9 @@ export default function SchedulesPage() {
       />
 
       <Card variant="flush">
+        <div className="border-b border-[var(--line)] px-4 py-3 text-xs text-[var(--muted)]">
+          {t("configOnlyNotice")}
+        </div>
         {loading ? (
           <div className="p-4">
             <EmptyState
@@ -455,15 +430,6 @@ export default function SchedulesPage() {
                   <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] hidden lg:table-cell">
                     {t("targets")}
                   </th>
-                  <th className="px-4 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">
-                    {t("enabled")}
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] hidden lg:table-cell">
-                    {t("lastRun")}
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] hidden lg:table-cell">
-                    {t("nextRun")}
-                  </th>
                   <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">
                     {/* actions */}
                   </th>
@@ -500,35 +466,6 @@ export default function SchedulesPage() {
                           {t("targetsCount", { count: s.targets.length })}
                         </span>
                       )}
-                    </td>
-
-                    {/* Enabled toggle */}
-                    <td className="px-4 py-3 text-center">
-                      <button
-                        type="button"
-                        aria-label={s.enabled ? "Disable schedule" : "Enable schedule"}
-                        onClick={() => { void handleToggleEnabled(s); }}
-                        className="inline-flex items-center justify-center w-8 h-5 rounded-full transition-colors cursor-pointer"
-                        style={{ transitionDuration: "var(--dur-fast)" }}
-                      >
-                        <span
-                          className={`block w-2 h-2 rounded-full ${
-                            s.enabled
-                              ? "bg-[var(--good)] shadow-[0_0_6px_var(--good)]"
-                              : "bg-[var(--muted)]"
-                          }`}
-                        />
-                      </button>
-                    </td>
-
-                    {/* Last run */}
-                    <td className="px-4 py-3 text-xs text-[var(--muted)] hidden lg:table-cell">
-                      {s.last_run ? relativeTime(s.last_run) : t("never")}
-                    </td>
-
-                    {/* Next run */}
-                    <td className="px-4 py-3 text-xs text-[var(--muted)] hidden lg:table-cell">
-                      {s.next_run ? relativeTime(s.next_run) : t("never")}
                     </td>
 
                     {/* Actions */}

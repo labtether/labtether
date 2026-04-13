@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { backendAuthHeadersWithCookie, resolvedBackendBaseURLs } from "../../../../../lib/backend";
+import { isMutationRequestOriginAllowed } from "../../../../../lib/proxyAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,10 @@ type RouteContext = {
 };
 
 export async function PUT(request: Request, context: RouteContext) {
+  if (!isMutationRequestOriginAllowed(request)) {
+    return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
+  }
+
   try {
     const { id } = await context.params;
     const body = await request.text();

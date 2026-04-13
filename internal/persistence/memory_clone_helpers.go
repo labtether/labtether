@@ -1,5 +1,7 @@
 package persistence
 
+import "time"
+
 func cloneMetadata(input map[string]string) map[string]string {
 	if len(input) == 0 {
 		return nil
@@ -57,5 +59,13 @@ func cloneFloatPtr(input *float64) *float64 {
 		return nil
 	}
 	value := *input
+	return &value
+}
+
+func cloneTimePtr(input *time.Time) *time.Time {
+	if input == nil {
+		return nil
+	}
+	value := input.UTC()
 	return &value
 }

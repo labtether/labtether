@@ -8,7 +8,24 @@ import (
 	"testing"
 
 	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/persistence"
 )
+
+type trackingGroupAssetStore struct {
+	*persistence.MemoryAssetStore
+	listAssetsCalls        int
+	listAssetsByGroupCalls int
+}
+
+func (s *trackingGroupAssetStore) ListAssets() ([]assets.Asset, error) {
+	s.listAssetsCalls++
+	return s.MemoryAssetStore.ListAssets()
+}
+
+func (s *trackingGroupAssetStore) ListAssetsByGroup(groupID string) ([]assets.Asset, error) {
+	s.listAssetsByGroupCalls++
+	return s.MemoryAssetStore.ListAssetsByGroup(groupID)
+}
 
 func TestAssetHeartbeatCreatesAsset(t *testing.T) {
 	sut := newTestAPIServer(t)
@@ -189,6 +206,62 @@ func TestGroupsCreateListAndAssignAsset(t *testing.T) {
 	}
 	if getResp.Asset.GroupID != groupID {
 		t.Fatalf("expected group_id %s, got %s", groupID, getResp.Asset.GroupID)
+	}
+}
+
+func TestHandleAssetsUsesGroupedStorePathWhenFilteringByGroup(t *testing.T) {
+	sut := newTestAPIServer(t)
+	trackingStore := &trackingGroupAssetStore{MemoryAssetStore: persistence.NewMemoryAssetStore()}
+	sut.assetStore = trackingStore
+
+	groupOneID := mustCreateGroup(t, sut, "Garage Lab", "garage-fast-path")
+	groupTwoID := mustCreateGroup(t, sut, "Office Lab", "office-fast-path")
+
+	if _, err := trackingStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: "asset-g1",
+		Name:    "Group One",
+		Type:    "host",
+		Source:  "agent",
+		GroupID: groupOneID,
+		Status:  "online",
+	}); err != nil {
+		t.Fatalf("failed to seed group-one asset: %v", err)
+	}
+	if _, err := trackingStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: "asset-g2",
+		Name:    "Group Two",
+		Type:    "host",
+		Source:  "agent",
+		GroupID: groupTwoID,
+		Status:  "online",
+	}); err != nil {
+		t.Fatalf("failed to seed group-two asset: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/assets?group_id="+groupOneID, nil)
+	rec := httptest.NewRecorder()
+	sut.handleAssets(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if trackingStore.listAssetsCalls != 0 {
+		t.Fatalf("expected grouped request to avoid ListAssets, got %d calls", trackingStore.listAssetsCalls)
+	}
+	if trackingStore.listAssetsByGroupCalls != 1 {
+		t.Fatalf("expected one ListAssetsByGroup call, got %d", trackingStore.listAssetsByGroupCalls)
+	}
+
+	var resp struct {
+		Assets []struct {
+			ID string `json:"id"`
+		} `json:"assets"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode assets response: %v", err)
+	}
+	if len(resp.Assets) != 1 || resp.Assets[0].ID != "asset-g1" {
+		t.Fatalf("expected only group-one asset, got %#v", resp.Assets)
 	}
 }
 

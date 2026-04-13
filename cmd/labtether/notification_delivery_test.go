@@ -53,16 +53,28 @@ func (a *blockingNotificationAdapter) Send(_ context.Context, _ map[string]any, 
 }
 
 type notificationStoreStub struct {
-	channels map[string]notifications.Channel
-	routes   map[string]notifications.Route
-	records  []notifications.CreateRecordRequest
+	channels      map[string]notifications.Channel
+	routes        map[string]notifications.Route
+	records       []notifications.Record
+	retryUpdates  []notificationRetryUpdate
+	nextRecordNum int
+}
+
+type notificationRetryUpdate struct {
+	ID          string
+	RetryCount  int
+	NextRetryAt *time.Time
+	Status      string
+	Error       string
 }
 
 func newNotificationStoreStub() *notificationStoreStub {
 	return &notificationStoreStub{
-		channels: make(map[string]notifications.Channel),
-		routes:   make(map[string]notifications.Route),
-		records:  make([]notifications.CreateRecordRequest, 0, 8),
+		channels:      make(map[string]notifications.Channel),
+		routes:        make(map[string]notifications.Route),
+		records:       make([]notifications.Record, 0, 8),
+		retryUpdates:  make([]notificationRetryUpdate, 0, 8),
+		nextRecordNum: 1,
 	}
 }
 
@@ -212,17 +224,24 @@ func (s *notificationStoreStub) DeleteAlertRoute(id string) error {
 }
 
 func (s *notificationStoreStub) CreateNotificationRecord(req notifications.CreateRecordRequest) (notifications.Record, error) {
-	s.records = append(s.records, req)
 	now := time.Now().UTC()
-	return notifications.Record{
-		ID:              "notif-record",
+	rec := notifications.Record{
+		ID:              "notif-record-" + time.Now().UTC().Format("150405.000000000"),
 		ChannelID:       req.ChannelID,
 		AlertInstanceID: req.AlertInstanceID,
 		RouteID:         req.RouteID,
+		Payload:         cloneAnyMap(req.Payload),
 		Status:          req.Status,
 		Error:           req.Error,
+		MaxRetries:      notifications.DefaultMaxRetries,
 		CreatedAt:       now,
-	}, nil
+	}
+	if rec.Status == notifications.RecordStatusSent {
+		rec.SentAt = &now
+	}
+	s.nextRecordNum++
+	s.records = append(s.records, rec)
+	return rec, nil
 }
 
 func (s *notificationStoreStub) ListNotificationHistory(_ int, channelID string) ([]notifications.Record, error) {
@@ -232,23 +251,84 @@ func (s *notificationStoreStub) ListNotificationHistory(_ int, channelID string)
 			continue
 		}
 		out = append(out, notifications.Record{
-			ID:              "notif-record",
+			ID:              rec.ID,
 			ChannelID:       rec.ChannelID,
 			AlertInstanceID: rec.AlertInstanceID,
 			RouteID:         rec.RouteID,
+			Payload:         cloneAnyMap(rec.Payload),
 			Status:          rec.Status,
+			SentAt:          rec.SentAt,
 			Error:           rec.Error,
-			CreatedAt:       time.Now().UTC(),
+			RetryCount:      rec.RetryCount,
+			MaxRetries:      rec.MaxRetries,
+			NextRetryAt:     rec.NextRetryAt,
+			CreatedAt:       rec.CreatedAt,
 		})
 	}
 	return out, nil
 }
 
-func (s *notificationStoreStub) ListPendingRetries(_ context.Context, _ time.Time, _ int) ([]notifications.Record, error) {
-	return nil, nil
+func (s *notificationStoreStub) ListPendingRetries(_ context.Context, now time.Time, limit int) ([]notifications.Record, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	out := make([]notifications.Record, 0, limit)
+	for _, rec := range s.records {
+		if rec.Status != notifications.RecordStatusFailed || rec.NextRetryAt == nil {
+			continue
+		}
+		if rec.RetryCount >= rec.MaxRetries {
+			continue
+		}
+		if rec.NextRetryAt.After(now) {
+			continue
+		}
+		out = append(out, notifications.Record{
+			ID:              rec.ID,
+			ChannelID:       rec.ChannelID,
+			AlertInstanceID: rec.AlertInstanceID,
+			RouteID:         rec.RouteID,
+			Payload:         cloneAnyMap(rec.Payload),
+			Status:          rec.Status,
+			SentAt:          rec.SentAt,
+			Error:           rec.Error,
+			RetryCount:      rec.RetryCount,
+			MaxRetries:      rec.MaxRetries,
+			NextRetryAt:     rec.NextRetryAt,
+			CreatedAt:       rec.CreatedAt,
+		})
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
 }
 
-func (s *notificationStoreStub) UpdateRetryState(_ context.Context, _ string, _ int, _ *time.Time, _ string) error {
+func (s *notificationStoreStub) UpdateRetryState(_ context.Context, id string, retryCount int, nextRetryAt *time.Time, status, errorMessage string) error {
+	s.retryUpdates = append(s.retryUpdates, notificationRetryUpdate{
+		ID:          id,
+		RetryCount:  retryCount,
+		NextRetryAt: nextRetryAt,
+		Status:      status,
+		Error:       errorMessage,
+	})
+	for idx := range s.records {
+		if s.records[idx].ID != id {
+			continue
+		}
+		s.records[idx].RetryCount = retryCount
+		s.records[idx].NextRetryAt = nextRetryAt
+		s.records[idx].Status = status
+		s.records[idx].Error = errorMessage
+		if status == notifications.RecordStatusSent {
+			sentAt := time.Now().UTC()
+			s.records[idx].SentAt = &sentAt
+			s.records[idx].Error = ""
+		} else {
+			s.records[idx].SentAt = nil
+		}
+		break
+	}
 	return nil
 }
 
@@ -364,6 +444,15 @@ func TestDispatchAlertNotifications_RecordsFailureWhenAdapterSendFails(t *testin
 	if store.records[0].Error == "" {
 		t.Fatalf("expected failure reason to be recorded")
 	}
+	if store.records[0].NextRetryAt == nil {
+		t.Fatalf("expected failed record to schedule a retry")
+	}
+	if got := store.records[0].Payload["rule_id"]; got != "rule-1" {
+		t.Fatalf("expected payload snapshot to retain rule_id, got %v", got)
+	}
+	if got := store.records[0].Payload["title"]; got == "" {
+		t.Fatalf("expected payload snapshot to retain title, got %v", got)
+	}
 }
 
 func TestDispatchAlertNotificationsDoesNotBlockCallerOnSlowChannel(t *testing.T) {
@@ -417,6 +506,79 @@ func TestDispatchAlertNotificationsDoesNotBlockCallerOnSlowChannel(t *testing.T)
 
 	if len(store.records) != 1 {
 		t.Fatalf("expected one notification history record after slow send, got %d", len(store.records))
+	}
+}
+
+func TestRetryPendingNotifications_UsesStoredPayloadAndClearsFailureMetadataOnSuccess(t *testing.T) {
+	sut := newTestAPIServer(t)
+
+	store := newNotificationStoreStub()
+	store.channels["chan-webhook"] = notifications.Channel{
+		ID:      "chan-webhook",
+		Name:    "Webhook",
+		Type:    notifications.ChannelTypeWebhook,
+		Config:  map[string]any{"url": "https://example.invalid/hook"},
+		Enabled: true,
+	}
+	store.routes["route-critical"] = notifications.Route{
+		ID:             "route-critical",
+		Name:           "Critical Route",
+		ChannelIDs:     []string{"chan-webhook"},
+		SeverityFilter: "critical",
+		Enabled:        true,
+	}
+
+	adapter := &fakeNotificationAdapter{
+		typ:     notifications.ChannelTypeWebhook,
+		sendErr: context.DeadlineExceeded,
+	}
+	sut.notificationStore = store
+	sut.notificationDispatcher.Adapters = map[string]notifications.Adapter{
+		notifications.ChannelTypeWebhook: adapter,
+	}
+
+	rule := alerts.Rule{
+		ID:       "rule-1",
+		Name:     "CPU Saturation",
+		Severity: alerts.SeverityCritical,
+	}
+	sut.dispatchAlertNotifications(rule, "inst-1", "firing")
+	sut.waitForNotificationDispatches()
+
+	if len(store.records) != 1 {
+		t.Fatalf("expected one failed notification record, got %d", len(store.records))
+	}
+	dueNow := time.Now().UTC().Add(-time.Second)
+	store.records[0].NextRetryAt = &dueNow
+
+	adapter.sendErr = nil
+	sut.ensureAlertingDeps().RetryPendingNotifications(context.Background())
+
+	if len(adapter.calls) != 2 {
+		t.Fatalf("expected initial send plus retry, got %d calls", len(adapter.calls))
+	}
+	retryPayload := adapter.calls[1].Payload
+	if got := retryPayload["rule_id"]; got != "rule-1" {
+		t.Fatalf("expected retry to reuse original payload snapshot, got rule_id=%v", got)
+	}
+	if got := retryPayload["retry"]; got != true {
+		t.Fatalf("expected retry marker on retry payload, got %v", got)
+	}
+	if got := retryPayload["title"]; got == "" {
+		t.Fatalf("expected retry payload to retain title, got %v", got)
+	}
+
+	if store.records[0].Status != notifications.RecordStatusSent {
+		t.Fatalf("expected retry success to mark record sent, got %s", store.records[0].Status)
+	}
+	if store.records[0].Error != "" {
+		t.Fatalf("expected retry success to clear stale error, got %q", store.records[0].Error)
+	}
+	if store.records[0].SentAt == nil {
+		t.Fatalf("expected retry success to set sent_at")
+	}
+	if store.records[0].NextRetryAt != nil {
+		t.Fatalf("expected retry success to clear next_retry_at")
 	}
 }
 

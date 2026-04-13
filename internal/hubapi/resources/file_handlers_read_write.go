@@ -17,6 +17,7 @@ import (
 )
 
 var errFileDownloadTimedOut = errors.New("file download timed out")
+var errFileDownloadBackpressured = errors.New("file download could not keep up with the agent stream")
 
 func (d *Deps) HandleFileList(w http.ResponseWriter, r *http.Request, assetID string) {
 	if r.Method != http.MethodGet {
@@ -126,10 +127,14 @@ func (d *Deps) HandleFileDownloadWithTimeout(w http.ResponseWriter, r *http.Requ
 		_ = os.Remove(tempPath)
 	}()
 
-	firstChunk, err := receiveFileDownloadChunk(bridge.Ch, timeout)
+	firstChunk, err := receiveFileDownloadChunk(bridge, timeout)
 	if err != nil {
 		if errors.Is(err, errFileDownloadTimedOut) {
 			servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
+			return
+		}
+		if errors.Is(err, errFileDownloadBackpressured) {
+			servicehttp.WriteError(w, http.StatusBadGateway, err.Error())
 			return
 		}
 		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
@@ -152,10 +157,12 @@ func (d *Deps) HandleFileDownloadWithTimeout(w http.ResponseWriter, r *http.Requ
 			return
 		}
 	}
-	if err := bufferRemainingDownloadChunks(tempFile, bridge.Ch, filePath, timeout, firstChunk.Done); err != nil {
+	if err := bufferRemainingDownloadChunks(tempFile, bridge, filePath, timeout, firstChunk.Done); err != nil {
 		switch {
 		case errors.Is(err, errFileDownloadTimedOut):
 			servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
+		case errors.Is(err, errFileDownloadBackpressured):
+			servicehttp.WriteError(w, http.StatusBadGateway, err.Error())
 		case errors.Is(err, errFileDownloadAgentFailed):
 			servicehttp.WriteError(w, http.StatusBadGateway, err.Error())
 		default:
@@ -182,17 +189,25 @@ func (d *Deps) HandleFileDownloadWithTimeout(w http.ResponseWriter, r *http.Requ
 	}
 }
 
-func receiveFileDownloadChunk(ch <-chan agentmgr.Message, timeout time.Duration) (agentmgr.FileDataPayload, error) {
+func receiveFileDownloadChunk(bridge *FileBridge, timeout time.Duration) (agentmgr.FileDataPayload, error) {
 	if timeout <= 0 {
 		timeout = fileRequestTimeout
 	}
 	select {
-	case msg := <-ch:
+	case msg := <-bridge.Ch:
 		var chunk agentmgr.FileDataPayload
 		if err := json.Unmarshal(msg.Data, &chunk); err != nil {
 			return agentmgr.FileDataPayload{}, err
 		}
 		return chunk, nil
+	case <-bridge.Done:
+		if err := bridge.Err(); err != nil {
+			if errors.Is(err, errFileResponseBackpressured) {
+				return agentmgr.FileDataPayload{}, errFileDownloadBackpressured
+			}
+			return agentmgr.FileDataPayload{}, err
+		}
+		return agentmgr.FileDataPayload{}, errFileDownloadTimedOut
 	case <-time.After(timeout):
 		return agentmgr.FileDataPayload{}, errFileDownloadTimedOut
 	}
@@ -207,15 +222,18 @@ func DecodeFileDownloadChunk(chunk agentmgr.FileDataPayload) ([]byte, error) {
 
 var errFileDownloadAgentFailed = errors.New("agent reported a file download failure")
 
-func bufferRemainingDownloadChunks(dst *os.File, ch <-chan agentmgr.Message, filePath string, timeout time.Duration, firstChunkDone bool) error {
+func bufferRemainingDownloadChunks(dst *os.File, bridge *FileBridge, filePath string, timeout time.Duration, firstChunkDone bool) error {
 	if firstChunkDone {
 		return nil
 	}
 	for {
-		chunk, err := receiveFileDownloadChunk(ch, timeout)
+		chunk, err := receiveFileDownloadChunk(bridge, timeout)
 		if err != nil {
 			if errors.Is(err, errFileDownloadTimedOut) {
 				securityruntime.Logf("file: download timed out for %s", filePath)
+			}
+			if errors.Is(err, errFileDownloadBackpressured) {
+				securityruntime.Logf("file: download backpressure exceeded for %s", filePath)
 			}
 			return err
 		}

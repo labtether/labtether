@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 )
@@ -23,8 +24,8 @@ type Worker struct {
 
 type processQueue interface {
 	Claim(ctx context.Context) (*Job, error)
-	Fail(ctx context.Context, jobID string, errMsg string) error
-	Complete(ctx context.Context, jobID string) error
+	Fail(ctx context.Context, jobID, lockToken, errMsg string) error
+	Complete(ctx context.Context, jobID, lockToken string) error
 }
 
 // NewWorker creates a Worker for the given Queue.
@@ -73,17 +74,7 @@ func (w *Worker) Run(ctx context.Context) {
 
 	// Periodic stale-claim recovery (moved from per-Claim to reduce DB load).
 	staleRecovery := time.NewTicker(30 * time.Second)
-	go func() {
-		defer staleRecovery.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-staleRecovery.C:
-				_ = w.queue.RecoverStaleClaims(ctx, time.Now().UTC())
-			}
-		}
-	}()
+	go w.runStaleRecoveryLoop(ctx, staleRecovery)
 
 	for {
 		// Process all available jobs before waiting.
@@ -116,17 +107,7 @@ func (w *Worker) runPollOnly(ctx context.Context) {
 
 	// Periodic stale-claim recovery (moved from per-Claim to reduce DB load).
 	staleRecovery := time.NewTicker(30 * time.Second)
-	go func() {
-		defer staleRecovery.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-staleRecovery.C:
-				_ = w.queue.RecoverStaleClaims(ctx, time.Now().UTC())
-			}
-		}
-	}()
+	go w.runStaleRecoveryLoop(ctx, staleRecovery)
 
 	for {
 		select {
@@ -170,7 +151,7 @@ func (w *Worker) processOneWithQueue(ctx context.Context, q processQueue) bool {
 	if !ok {
 		log.Printf("jobqueue worker: no handler for kind %q, dead-lettering job %s", job.Kind, job.ID)
 		jobErr := errors.New("no handler registered for job kind")
-		failErr := q.Fail(ctx, job.ID, jobErr.Error())
+		failErr := q.Fail(ctx, job.ID, job.LockToken, jobErr.Error())
 		if failErr != nil {
 			log.Printf("jobqueue worker: failed to mark job %s as failed: %v", job.ID, failErr)
 			return true
@@ -181,9 +162,16 @@ func (w *Worker) processOneWithQueue(ctx context.Context, q processQueue) bool {
 		return true
 	}
 
-	if err := w.invokeHandler(handler, ctx, job); err != nil {
+	handlerCtx, cancel := context.WithCancel(ctx)
+	stopHeartbeat := w.startClaimHeartbeat(handlerCtx, q, job)
+	err = w.invokeHandler(handler, handlerCtx, job)
+	cancel()
+	if stopHeartbeat != nil {
+		stopHeartbeat()
+	}
+	if err != nil {
 		log.Printf("jobqueue worker: job %s (%s) failed: %v", job.ID, job.Kind, err)
-		failErr := q.Fail(ctx, job.ID, err.Error())
+		failErr := q.Fail(ctx, job.ID, job.LockToken, err.Error())
 		if failErr != nil {
 			log.Printf("jobqueue worker: failed to mark job %s as failed: %v", job.ID, failErr)
 		}
@@ -195,7 +183,7 @@ func (w *Worker) processOneWithQueue(ctx context.Context, q processQueue) bool {
 		return true
 	}
 
-	if err := q.Complete(ctx, job.ID); err != nil {
+	if err := q.Complete(ctx, job.ID, job.LockToken); err != nil {
 		log.Printf("jobqueue worker: failed to complete job %s: %v", job.ID, err)
 	}
 	return true
@@ -223,4 +211,73 @@ func (w *Worker) invokeDeadLetterCB(cb DeadLetterCallback, ctx context.Context, 
 		}
 	}()
 	cb(ctx, job, jobErr)
+}
+
+func (w *Worker) startClaimHeartbeat(ctx context.Context, q processQueue, job *Job) func() {
+	if job == nil || job.ID == "" || job.LockToken == "" {
+		return nil
+	}
+	renewable, ok := q.(interface {
+		RenewClaim(ctx context.Context, jobID, lockToken string) error
+		leaseHeartbeatInterval() time.Duration
+	})
+	if !ok {
+		return nil
+	}
+
+	ticker := time.NewTicker(renewable.leaseHeartbeatInterval())
+	done := make(chan struct{})
+	go func() {
+		defer ticker.Stop()
+		defer close(done)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := renewable.RenewClaim(ctx, job.ID, job.LockToken); err != nil {
+					if !errors.Is(err, ErrClaimLost) && ctx.Err() == nil {
+						log.Printf("jobqueue worker: failed to renew claim for job %s: %v", job.ID, err)
+					}
+					return
+				}
+			}
+		}
+	}()
+	return func() {
+		<-done
+	}
+}
+
+func (w *Worker) runStaleRecoveryLoop(ctx context.Context, ticker *time.Ticker) {
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			deadJobs, err := w.queue.RecoverStaleClaims(ctx, time.Now().UTC())
+			if err != nil {
+				log.Printf("jobqueue worker: failed to recover stale claims: %v", err)
+				continue
+			}
+			w.handleRecoveredDeadJobs(ctx, deadJobs)
+		}
+	}
+}
+
+func (w *Worker) handleRecoveredDeadJobs(ctx context.Context, jobs []*Job) {
+	w.mu.RLock()
+	deadLetterCB := w.deadLetterCB
+	w.mu.RUnlock()
+	for _, job := range jobs {
+		if deadLetterCB == nil || job == nil {
+			continue
+		}
+		jobErr := errors.New(strings.TrimSpace(job.Error))
+		if strings.TrimSpace(jobErr.Error()) == "" {
+			jobErr = errors.New("job claim timed out after max attempts")
+		}
+		w.invokeDeadLetterCB(deadLetterCB, ctx, job, jobErr)
+	}
 }

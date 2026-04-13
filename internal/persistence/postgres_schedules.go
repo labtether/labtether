@@ -65,7 +65,7 @@ func (s *PostgresStore) ListScheduledTasks(ctx context.Context) ([]schedules.Sch
 	return result, rows.Err()
 }
 
-func (s *PostgresStore) UpdateScheduledTask(ctx context.Context, id string, name *string, cronExpr *string, command *string, targets *[]string, enabled *bool) error {
+func (s *PostgresStore) UpdateScheduledTask(ctx context.Context, id string, name *string, cronExpr *string, command *string, targets *[]string, groupID *string, enabled *bool) error {
 	var setClauses []string
 	var args []any
 	argIdx := 1
@@ -94,6 +94,11 @@ func (s *PostgresStore) UpdateScheduledTask(ctx context.Context, id string, name
 		args = append(args, targetsJSON)
 		argIdx++
 	}
+	if groupID != nil {
+		setClauses = append(setClauses, fmt.Sprintf("group_id = $%d", argIdx))
+		args = append(args, nilIfEmpty(*groupID))
+		argIdx++
+	}
 	if enabled != nil {
 		setClauses = append(setClauses, fmt.Sprintf("enabled = $%d", argIdx))
 		args = append(args, *enabled)
@@ -107,15 +112,25 @@ func (s *PostgresStore) UpdateScheduledTask(ctx context.Context, id string, name
 	query := fmt.Sprintf("UPDATE scheduled_tasks SET %s WHERE id = $%d",
 		strings.Join(setClauses, ", "), argIdx)
 	args = append(args, id)
-	_, err := s.pool.Exec(ctx, query, args...)
-	return err
+	tag, err := s.pool.Exec(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
-// DeleteScheduledTask removes a scheduled task by ID. Returns nil even if the
-// task does not exist (idempotent delete).
 func (s *PostgresStore) DeleteScheduledTask(ctx context.Context, id string) error {
-	_, err := s.pool.Exec(ctx, `DELETE FROM scheduled_tasks WHERE id = $1`, id)
-	return err
+	tag, err := s.pool.Exec(ctx, `DELETE FROM scheduled_tasks WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // nilIfEmpty returns nil if s is the empty string, otherwise returns &s.

@@ -21,19 +21,24 @@ func (s *PostgresStore) CreateNotificationRecord(req notifications.CreateRecordR
 	if status == notifications.RecordStatusSent {
 		sentAt = now
 	}
+	payloadValue, err := marshalAnyMap(req.Payload)
+	if err != nil {
+		return notifications.Record{}, err
+	}
 
 	return scanNotificationRecord(s.pool.QueryRow(context.Background(),
 		`INSERT INTO notification_history (
-			id, channel_id, alert_instance_id, route_id, status, sent_at, error,
+			id, channel_id, alert_instance_id, route_id, payload, status, sent_at, error,
 			retry_count, max_retries, next_retry_at, created_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-		RETURNING id, channel_id, alert_instance_id, route_id, status, sent_at, error,
+		VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12)
+		RETURNING id, channel_id, alert_instance_id, route_id, payload, status, sent_at, error,
 			retry_count, max_retries, next_retry_at, created_at`,
 		idgen.New("notif"),
 		strings.TrimSpace(req.ChannelID),
 		nullIfBlank(req.AlertInstanceID),
 		nullIfBlank(req.RouteID),
+		payloadValue,
 		status,
 		sentAt,
 		strings.TrimSpace(req.Error),
@@ -62,9 +67,9 @@ func (s *PostgresStore) ListNotificationHistory(limit int, channelID string) ([]
 		next++
 	}
 
-	sql := `SELECT id, channel_id, alert_instance_id, route_id, status, sent_at, error,
-		retry_count, max_retries, next_retry_at, created_at
-		FROM notification_history`
+	sql := `SELECT id, channel_id, alert_instance_id, route_id, payload, status, sent_at, error,
+			retry_count, max_retries, next_retry_at, created_at
+			FROM notification_history`
 	if len(where) > 0 {
 		sql += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -99,7 +104,7 @@ func (s *PostgresStore) ListPendingRetries(ctx context.Context, now time.Time, l
 	}
 
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, channel_id, alert_instance_id, route_id, status, sent_at, error,
+		`SELECT id, channel_id, alert_instance_id, route_id, payload, status, sent_at, error,
 			retry_count, max_retries, next_retry_at, created_at
 		FROM notification_history
 		WHERE status = 'failed' AND retry_count < max_retries AND next_retry_at <= $1
@@ -124,12 +129,23 @@ func (s *PostgresStore) ListPendingRetries(ctx context.Context, now time.Time, l
 
 // UpdateRetryState updates the retry_count, next_retry_at, and status columns
 // for the notification record with the given id.
-func (s *PostgresStore) UpdateRetryState(ctx context.Context, id string, retryCount int, nextRetryAt *time.Time, status string) error {
+func (s *PostgresStore) UpdateRetryState(ctx context.Context, id string, retryCount int, nextRetryAt *time.Time, status, errorMessage string) error {
+	status = notifications.NormalizeRecordStatus(status)
+	if status == "" {
+		status = notifications.RecordStatusFailed
+	}
+	var sentAt any
+	var errorValue any
+	if status == notifications.RecordStatusSent {
+		sentAt = time.Now().UTC()
+	} else {
+		errorValue = nullIfBlank(strings.TrimSpace(errorMessage))
+	}
 	_, err := s.pool.Exec(ctx,
 		`UPDATE notification_history
-		SET retry_count = $1, next_retry_at = $2, status = $3
-		WHERE id = $4`,
-		retryCount, nextRetryAt, strings.TrimSpace(status), strings.TrimSpace(id),
+		SET retry_count = $1, next_retry_at = $2, status = $3, error = $4, sent_at = $5
+		WHERE id = $6`,
+		retryCount, nextRetryAt, status, errorValue, sentAt, strings.TrimSpace(id),
 	)
 	return err
 }

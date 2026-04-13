@@ -265,12 +265,15 @@ func (s *PostgresStore) ReorderZones(updates []ZoneReorder) error {
 		if u.ParentZoneID != "" {
 			parentZoneID = &u.ParentZoneID
 		}
-		_, err := tx.Exec(ctx,
+		tag, err := tx.Exec(ctx,
 			`UPDATE topology_zones SET parent_zone_id = $2, sort_order = $3, updated_at = $4 WHERE id = $1`,
 			u.ZoneID, parentZoneID, u.SortOrder, now,
 		)
 		if err != nil {
 			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return ErrNotFound
 		}
 	}
 
