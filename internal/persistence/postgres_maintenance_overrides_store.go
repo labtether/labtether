@@ -88,7 +88,7 @@ func (s *PostgresStore) ListMaintenanceOverrides(windowID string, limit int) ([]
 	}
 	defer rows.Close()
 
-	out := make([]groupmaintenance.MaintenanceOverride, 0, limit)
+	out := make([]groupmaintenance.MaintenanceOverride, 0)
 	for rows.Next() {
 		o, scanErr := scanMaintenanceOverride(rows)
 		if scanErr != nil {

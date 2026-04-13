@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -21,6 +20,7 @@ import (
 	"github.com/labtether/labtether/internal/apikeys"
 	"github.com/labtether/labtether/internal/auth"
 	"github.com/labtether/labtether/internal/policy"
+	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
@@ -286,7 +286,8 @@ func main() {
 	defer stop()
 
 	if err := runHub(ctx); err != nil {
-		log.Fatalf("labtether exited with error: %v", err)
+		securityruntime.Logf("labtether exited with fatal error: %T", err)
+		os.Exit(1)
 	}
 }
 

@@ -595,17 +595,31 @@ func (d *Deps) handleUserSessions(w http.ResponseWriter, r *http.Request, userID
 // SanitizeNextPath sanitizes a redirect-next path.
 func SanitizeNextPath(next string) string {
 	next = strings.TrimSpace(next)
-	if next == "" || !strings.HasPrefix(next, "/") {
+	if next == "" {
 		return "/"
 	}
-	if strings.HasPrefix(next, "//") {
+	parsed, err := url.ParseRequestURI(next)
+	if err != nil {
 		return "/"
 	}
-	lower := strings.ToLower(next)
+	if parsed.IsAbs() || parsed.Host != "" {
+		return "/"
+	}
+	if !strings.HasPrefix(parsed.Path, "/") || strings.HasPrefix(parsed.Path, "//") {
+		return "/"
+	}
+	lower := strings.ToLower(parsed.Path)
 	if strings.Contains(lower, "javascript:") || strings.Contains(lower, "data:") {
 		return "/"
 	}
-	return next
+	normalized := parsed.Path
+	if normalized == "" {
+		normalized = "/"
+	}
+	if parsed.RawQuery != "" {
+		normalized += "?" + parsed.RawQuery
+	}
+	return normalized
 }
 
 // ValidateAuthRedirectURI validates an OAuth2 redirect URI.
@@ -624,8 +638,18 @@ func ValidateAuthRedirectURI(raw string) (string, error) {
 	if parsed.Host == "" {
 		return "", fmt.Errorf("redirect_uri host is required")
 	}
+	if parsed.User != nil {
+		return "", fmt.Errorf("redirect_uri userinfo is not allowed")
+	}
+	if parsed.RawQuery != "" {
+		return "", fmt.Errorf("redirect_uri query is not allowed")
+	}
 	if parsed.Fragment != "" {
 		return "", fmt.Errorf("redirect_uri fragment is not allowed")
+	}
+	path := strings.TrimSpace(parsed.EscapedPath())
+	if path != "/api/auth/oidc/callback" && path != "/auth/oidc/callback" {
+		return "", fmt.Errorf("redirect_uri must target the oidc callback endpoint")
 	}
 	return parsed.String(), nil
 }

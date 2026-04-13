@@ -82,7 +82,7 @@ func (s *PostgresStore) ListNotificationHistory(limit int, channelID string) ([]
 	}
 	defer rows.Close()
 
-	out := make([]notifications.Record, 0, limit)
+	out := make([]notifications.Record, 0)
 	for rows.Next() {
 		rec, scanErr := scanNotificationRecord(rows)
 		if scanErr != nil {
@@ -116,7 +116,7 @@ func (s *PostgresStore) ListPendingRetries(ctx context.Context, now time.Time, l
 	}
 	defer rows.Close()
 
-	out := make([]notifications.Record, 0, limit)
+	out := make([]notifications.Record, 0)
 	for rows.Next() {
 		rec, scanErr := scanNotificationRecord(rows)
 		if scanErr != nil {

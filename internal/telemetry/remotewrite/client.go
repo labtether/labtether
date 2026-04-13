@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/golang/snappy"
+	"github.com/labtether/labtether/internal/securityruntime"
 	"google.golang.org/protobuf/encoding/protowire"
 )
 
@@ -102,7 +103,7 @@ var remoteWriteClient = &http.Client{
 // It sets the required Content-Type, Content-Encoding, and version headers.
 // HTTP 2xx responses are treated as success; any other status is an error.
 func Push(ctx context.Context, url string, body []byte, username, password string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	req, err := securityruntime.NewOutboundRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("remotewrite: build request: %w", err)
 	}
@@ -114,7 +115,7 @@ func Push(ctx context.Context, url string, body []byte, username, password strin
 		req.SetBasicAuth(username, password)
 	}
 
-	resp, err := remoteWriteClient.Do(req) // #nosec G704 -- Remote-write URL is operator-configured telemetry egress, not browser-controlled input.
+	resp, err := securityruntime.DoOutboundRequest(remoteWriteClient, req)
 	if err != nil {
 		return fmt.Errorf("remotewrite: http post: %w", err)
 	}

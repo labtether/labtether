@@ -222,6 +222,10 @@ func SendBrowserVNCNoAuth(conn *websocket.Conn, rfbVersion string) error {
 
 // VNCEncryptChallenge DES-encrypts a 16-byte VNC challenge using the password.
 func VNCEncryptChallenge(challenge []byte, password string) []byte {
+	// RFB/VNC password authentication mandates DES over the server challenge.
+	// Proxmox exposes only this legacy handshake for ticket-based VNC auth, so
+	// we keep the algorithm confined to this protocol adapter instead of trying
+	// to repurpose it elsewhere.
 	key := VNCDESKey(password)
 	block, err := proxmoxCallDESNewCipher(key[:])
 	if err != nil {

@@ -122,7 +122,7 @@ func (s *PostgresStore) ListFailoverPairs(limit int) ([]groupfailover.FailoverPa
 	}
 	defer rows.Close()
 
-	out := make([]groupfailover.FailoverPair, 0, limit)
+	out := make([]groupfailover.FailoverPair, 0)
 	for rows.Next() {
 		fp, scanErr := scanFailoverPair(rows)
 		if scanErr != nil {

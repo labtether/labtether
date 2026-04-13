@@ -134,7 +134,7 @@ func (s *PostgresStore) ListGroupMaintenanceWindows(groupID string, activeAt *ti
 	}
 	defer rows.Close()
 
-	out := make([]groupmaintenance.MaintenanceWindow, 0, limit)
+	out := make([]groupmaintenance.MaintenanceWindow, 0)
 	for rows.Next() {
 		window, scanErr := scanGroupMaintenanceWindow(rows)
 		if scanErr != nil {

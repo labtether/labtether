@@ -613,7 +613,7 @@ func (s *PostgresStore) ListCredentialProfiles(limit int) ([]credentials.Profile
 	}
 	defer rows.Close()
 
-	out := make([]credentials.Profile, 0, limit)
+	out := make([]credentials.Profile, 0)
 	for rows.Next() {
 		profile, scanErr := scanCredentialProfile(rows)
 		if scanErr != nil {

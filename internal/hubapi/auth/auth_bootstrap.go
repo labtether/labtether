@@ -5,11 +5,11 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/labtether/labtether/internal/auth"
 	"github.com/labtether/labtether/internal/hubapi/shared"
+	"github.com/labtether/labtether/internal/securityruntime"
 )
 
 // WeakPasswords that must never be used in production.
@@ -59,7 +59,7 @@ func BootstrapAdminUser(store AdminBootstrapStore) error {
 
 	if password == "" {
 		if isProd {
-			log.Printf("labtether auth: no bootstrap admin password configured in production; waiting for post-install setup flow")
+			securityruntime.Logf("labtether auth: no bootstrap admin password configured in production; waiting for post-install setup flow")
 			return nil
 		}
 		// Generate a strong random password when none is configured.
@@ -73,7 +73,7 @@ func BootstrapAdminUser(store AdminBootstrapStore) error {
 
 	// Block weak passwords in production.
 	if isProd && WeakPasswords[password] {
-		return fmt.Errorf("refusing weak admin password %q in production", password)
+		return fmt.Errorf("refusing weak admin password in production")
 	}
 
 	hash, err := auth.HashPassword(password)
@@ -90,13 +90,11 @@ func BootstrapAdminUser(store AdminBootstrapStore) error {
 	}
 
 	if generated {
-		// Log only a masked hint — never expose the full password in logs.
-		hint := password[:4] + "..." + password[len(password)-4:]
-		log.Printf("labtether auth: created bootstrap admin user %q (id=%s) with generated password hint: %s (set LABTETHER_ADMIN_USERNAME/LABTETHER_ADMIN_PASSWORD to control this)", user.Username, user.ID, hint)
+		securityruntime.Logf("labtether auth: created bootstrap admin user %q (id=%s) with a generated password that was intentionally not logged; set LABTETHER_ADMIN_USERNAME/LABTETHER_ADMIN_PASSWORD to control this", user.Username, user.ID)
 	} else if isProd {
-		log.Printf("labtether auth: created bootstrap admin user %q (id=%s) from LABTETHER_ADMIN_USERNAME/LABTETHER_ADMIN_PASSWORD", user.Username, user.ID)
+		securityruntime.Logf("labtether auth: created bootstrap admin user %q (id=%s) from LABTETHER_ADMIN_USERNAME/LABTETHER_ADMIN_PASSWORD", user.Username, user.ID)
 	} else {
-		log.Printf("labtether auth: created bootstrap admin user %q (id=%s) with dev password", user.Username, user.ID)
+		securityruntime.Logf("labtether auth: created bootstrap admin user %q (id=%s) with an explicitly configured dev password", user.Username, user.ID)
 	}
 	return nil
 }

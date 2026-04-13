@@ -1,7 +1,6 @@
 package shared
 
 import (
-	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -42,11 +41,11 @@ func EnvOrDefaultUint64(key string, fallback uint64) uint64 {
 }
 
 func Uint64ToIntClamp(value uint64) int {
-	maxInt := uint64(math.MaxInt)
-	if value > maxInt {
-		return math.MaxInt
+	parsed, err := strconv.ParseInt(strconv.FormatUint(value, 10), 10, 0)
+	if err != nil {
+		return int(^uint(0) >> 1)
 	}
-	return int(value)
+	return int(parsed)
 }
 
 func IntToUint64NonNegative(value int) uint64 {

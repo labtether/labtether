@@ -15,6 +15,7 @@ import (
 
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/credentials"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/idgen"
 	"github.com/labtether/labtether/internal/protocols"
 	"github.com/labtether/labtether/internal/servicehttp"
@@ -488,12 +489,16 @@ func (d *Deps) HandlePushHubKey(w http.ResponseWriter, r *http.Request, assetID 
 	}
 
 	addr := fmt.Sprintf("%s:%d", host, pc.Port)
+	hostKeyCallback, hostKeyErr := buildHubKeyPushHostKeyCallback(pc.Config)
+	if hostKeyErr != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, hostKeyErr.Error())
+		return
+	}
 
-	// #nosec G106 -- key installation flow; host key trust established by operator intent.
 	sshCfg := &ssh.ClientConfig{
 		User:            username,
 		Auth:            []ssh.AuthMethod{ssh.Password(password)},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: hostKeyCallback,
 		Timeout:         10 * time.Second,
 	}
 
@@ -567,11 +572,10 @@ if ($existing -notcontains $key) { Add-Content -Path $authKeys -Value $key }
 		return
 	}
 
-	// #nosec G106 -- verification reconnect for key installation; host key trust same as above.
 	verifyCfg := &ssh.ClientConfig{
 		User:            username,
 		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signer)},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: hostKeyCallback,
 		Timeout:         10 * time.Second,
 	}
 
@@ -629,4 +633,23 @@ func runSSHCommand(client *ssh.Client, cmd string) (string, error) {
 
 	out, err := sess.CombinedOutput(cmd)
 	return string(out), err
+}
+
+func buildHubKeyPushHostKeyCallback(rawConfig []byte) (ssh.HostKeyCallback, error) {
+	var sshCfg protocols.SSHConfig
+	if len(rawConfig) > 0 {
+		_ = json.Unmarshal(rawConfig, &sshCfg)
+	}
+	if hostKey := strings.TrimSpace(sshCfg.HostKey); hostKey != "" {
+		hostPub, _, _, _, parseErr := ssh.ParseAuthorizedKey([]byte(hostKey))
+		if parseErr != nil {
+			return nil, fmt.Errorf("configured SSH host key is invalid")
+		}
+		return ssh.FixedHostKey(hostPub), nil
+	}
+	knownHostsCallback, err := shared.BuildKnownHostsHostKeyCallback()
+	if err != nil {
+		return nil, fmt.Errorf("SSH host key verification is required for hub key push; configure the asset host key or install a known_hosts entry")
+	}
+	return knownHostsCallback, nil
 }

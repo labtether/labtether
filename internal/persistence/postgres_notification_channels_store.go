@@ -70,7 +70,7 @@ func (s *PostgresStore) ListNotificationChannels(limit int) ([]notifications.Cha
 	}
 	defer rows.Close()
 
-	out := make([]notifications.Channel, 0, limit)
+	out := make([]notifications.Channel, 0)
 	for rows.Next() {
 		ch, scanErr := scanNotificationChannel(rows)
 		if scanErr != nil {

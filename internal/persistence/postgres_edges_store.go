@@ -169,7 +169,7 @@ func (s *PostgresStore) ListEdgesByAsset(assetID string, limit int) ([]edges.Edg
 	}
 	defer rows.Close()
 
-	out := make([]edges.Edge, 0, limit)
+	out := make([]edges.Edge, 0)
 	for rows.Next() {
 		e, scanErr := scanEdge(rows)
 		if scanErr != nil {
@@ -208,7 +208,7 @@ func (s *PostgresStore) ListEdgesBatch(assetIDs []string, limit int) ([]edges.Ed
 	}
 	defer rows.Close()
 
-	out := make([]edges.Edge, 0, limit)
+	out := make([]edges.Edge, 0)
 	for rows.Next() {
 		e, scanErr := scanEdge(rows)
 		if scanErr != nil {

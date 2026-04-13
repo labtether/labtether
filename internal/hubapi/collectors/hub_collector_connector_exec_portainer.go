@@ -106,7 +106,7 @@ func (d *Deps) ExecutePortainerCollector(ctx context.Context, collector hubcolle
 	ingested := 0
 	eligibleAssets := 0
 	upsertFailures := 0
-	snapshotAssets := make([]connectorsdk.Asset, 0, len(discovered)+1)
+	snapshotAssets := make([]connectorsdk.Asset, 0)
 	endpointHost, endpointIP := CollectorEndpointIdentity(baseURL)
 	endpointAssetCount := 0
 	type endpointInventory struct {
@@ -148,7 +148,7 @@ func (d *Deps) ExecutePortainerCollector(ctx context.Context, collector hubcolle
 		}
 		eligibleAssets++
 
-		metadata := make(map[string]string, len(asset.Metadata)+6)
+		metadata := make(map[string]string)
 		for key, value := range asset.Metadata {
 			metadata[key] = value
 		}

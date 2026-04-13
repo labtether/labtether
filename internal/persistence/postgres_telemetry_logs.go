@@ -686,7 +686,7 @@ func (s *PostgresStore) QueryEvents(req logs.QueryRequest) ([]logs.Event, error)
 	}
 	defer rows.Close()
 
-	out := make([]logs.Event, 0, limit)
+	out := make([]logs.Event, 0)
 	for rows.Next() {
 		event := logs.Event{}
 		var assetID *string
@@ -781,7 +781,7 @@ func (s *PostgresStore) QueryDeadLetterEvents(from, to time.Time, limit int) ([]
 	}
 	defer rows.Close()
 
-	out := make([]logs.DeadLetterEvent, 0, limit)
+	out := make([]logs.DeadLetterEvent, 0)
 	for rows.Next() {
 		var entry logs.DeadLetterEvent
 		var deliveriesRaw string
@@ -858,7 +858,7 @@ func (s *PostgresStore) ListSourcesSince(limit int, from time.Time) ([]logs.Sour
 	}
 	defer rows.Close()
 
-	out := make([]logs.SourceSummary, 0, limit)
+	out := make([]logs.SourceSummary, 0)
 	for rows.Next() {
 		row := logs.SourceSummary{}
 		if err := rows.Scan(&row.Source, &row.Count, &row.LastSeenAt); err != nil {
@@ -891,7 +891,7 @@ func (s *PostgresStore) ListSources(limit int) ([]logs.SourceSummary, error) {
 	}
 	defer rows.Close()
 
-	out := make([]logs.SourceSummary, 0, limit)
+	out := make([]logs.SourceSummary, 0)
 	for rows.Next() {
 		row := logs.SourceSummary{}
 		if err := rows.Scan(&row.Source, &row.Count, &row.LastSeenAt); err != nil {
@@ -967,7 +967,7 @@ func (s *PostgresStore) QuerySourceSummaries(req logs.SourceSummaryRequest) ([]l
 	}
 	defer rows.Close()
 
-	out := make([]logs.SourceSummary, 0, limit)
+	out := make([]logs.SourceSummary, 0)
 	for rows.Next() {
 		row := logs.SourceSummary{}
 		if err := rows.Scan(&row.Source, &row.Count, &row.LastSeenAt); err != nil {
@@ -1226,7 +1226,7 @@ func (s *PostgresStore) ListViews(actorID string, limit int) ([]logs.SavedView, 
 	}
 	defer rows.Close()
 
-	out := make([]logs.SavedView, 0, limit)
+	out := make([]logs.SavedView, 0)
 	for rows.Next() {
 		view := logs.SavedView{}
 		var assetID *string

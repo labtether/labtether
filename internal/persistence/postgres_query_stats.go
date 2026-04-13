@@ -67,7 +67,7 @@ func (s *PostgresStore) TopQueryStats(limit int) ([]QueryStat, error) {
 	}
 	defer rows.Close()
 
-	out := make([]QueryStat, 0, limit)
+	out := make([]QueryStat, 0)
 	for rows.Next() {
 		entry := QueryStat{}
 		if err := rows.Scan(

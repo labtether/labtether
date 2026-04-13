@@ -94,7 +94,7 @@ func (s *PostgresStore) ListAlertRoutes(limit int) ([]notifications.Route, error
 	}
 	defer rows.Close()
 
-	out := make([]notifications.Route, 0, limit)
+	out := make([]notifications.Route, 0)
 	for rows.Next() {
 		route, scanErr := scanAlertRoute(rows)
 		if scanErr != nil {

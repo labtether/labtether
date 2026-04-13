@@ -292,7 +292,7 @@ func (s *PostgresStore) ListRecentCommands(limit int) ([]terminal.Command, error
 	}
 	defer rows.Close()
 
-	commands := make([]terminal.Command, 0, limit)
+	commands := make([]terminal.Command, 0)
 	for rows.Next() {
 		cmd := terminal.Command{}
 		if err := rows.Scan(
@@ -378,7 +378,7 @@ func (s *PostgresStore) List(limit, offset int) ([]audit.Event, error) {
 	}
 	defer rows.Close()
 
-	out := make([]audit.Event, 0, limit)
+	out := make([]audit.Event, 0)
 	for rows.Next() {
 		event := audit.Event{}
 		var details []byte

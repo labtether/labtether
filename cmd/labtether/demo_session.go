@@ -3,6 +3,8 @@ package main
 import (
 	"log"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -122,8 +124,15 @@ func (s *apiServer) handleDemoSession(w http.ResponseWriter, r *http.Request) {
 
 	// Redirect to the requested path, defaulting to "/".
 	next := sanitizeNextPath(r.URL.Query().Get("redirect"))
-	if next == "" {
-		next = "/"
+	redirectTarget := "/"
+	if parsed, err := url.ParseRequestURI(next); err == nil && parsed != nil && strings.HasPrefix(parsed.Path, "/") && !strings.HasPrefix(parsed.Path, "//") {
+		redirectTarget = parsed.Path
+		if redirectTarget == "" {
+			redirectTarget = "/"
+		}
+		if parsed.RawQuery != "" {
+			redirectTarget += "?" + parsed.RawQuery
+		}
 	}
-	http.Redirect(w, r, next, http.StatusSeeOther)
+	http.Redirect(w, r, redirectTarget, http.StatusSeeOther)
 }

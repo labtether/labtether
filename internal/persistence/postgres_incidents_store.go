@@ -203,7 +203,7 @@ func (s *PostgresStore) ListIncidents(filter IncidentFilter) ([]incidents.Incide
 	}
 	defer rows.Close()
 
-	out := make([]incidents.Incident, 0, limit)
+	out := make([]incidents.Incident, 0)
 	for rows.Next() {
 		incident, scanErr := scanIncident(rows)
 		if scanErr != nil {
@@ -519,7 +519,7 @@ func (s *PostgresStore) ListIncidentAlertLinks(incidentID string, limit int) ([]
 	}
 	defer rows.Close()
 
-	out := make([]incidents.AlertLink, 0, limit)
+	out := make([]incidents.AlertLink, 0)
 	for rows.Next() {
 		link, scanErr := scanIncidentAlertLink(rows)
 		if scanErr != nil {

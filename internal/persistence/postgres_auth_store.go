@@ -96,7 +96,7 @@ func (s *PostgresStore) ListUsers(limit int) ([]auth.User, error) {
 	}
 	defer rows.Close()
 
-	users := make([]auth.User, 0, limit)
+	users := make([]auth.User, 0)
 	for rows.Next() {
 		user, scanErr := scanUser(rows)
 		if scanErr != nil {

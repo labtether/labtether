@@ -438,8 +438,8 @@ func ListAssetDependenciesBatch(store DependencySingleLister, assetIDs []string,
 		perAssetLimit = 1000
 	}
 
-	merged := make([]dependencies.Dependency, 0, limit)
-	seen := make(map[string]struct{}, limit)
+	merged := make([]dependencies.Dependency, 0)
+	seen := make(map[string]struct{})
 	for _, assetID := range assetIDs {
 		deps, err := store.ListAssetDependencies(assetID, perAssetLimit)
 		if err != nil {

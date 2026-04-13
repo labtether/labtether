@@ -106,7 +106,7 @@ func (s *PostgresStore) ListIncidentEvents(incidentID string, limit int) ([]inci
 	}
 	defer rows.Close()
 
-	out := make([]incidents.IncidentEvent, 0, limit)
+	out := make([]incidents.IncidentEvent, 0)
 	for rows.Next() {
 		e, scanErr := scanIncidentEvent(rows)
 		if scanErr != nil {

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"sort"
 	"strconv"
@@ -41,8 +42,8 @@ func NewPostgresStore(ctx context.Context, databaseURL string) (*PostgresStore, 
 	lifetimeMin := envIntOrDefault("LABTETHER_DB_MAX_CONN_LIFETIME_MIN", 5)
 	idleMin := envIntOrDefault("LABTETHER_DB_MAX_CONN_IDLE_TIME_MIN", 1)
 
-	config.MaxConns = int32(maxConns)
-	config.MinConns = int32(minConns)
+	config.MaxConns = clampPositiveInt32(maxConns)
+	config.MinConns = clampPositiveInt32(minConns)
 	config.MaxConnLifetime = time.Duration(lifetimeMin) * time.Minute
 	config.MaxConnIdleTime = time.Duration(idleMin) * time.Minute
 	config.HealthCheckPeriod = 30 * time.Second
@@ -100,6 +101,16 @@ func envIntOrDefault(key string, fallback int) int {
 		return fallback
 	}
 	return parsed
+}
+
+func clampPositiveInt32(value int) int32 {
+	if value <= 0 {
+		return 1
+	}
+	if value > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	return int32(value)
 }
 
 func (s *PostgresStore) Close() {

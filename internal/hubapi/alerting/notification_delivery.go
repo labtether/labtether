@@ -10,6 +10,7 @@ import (
 
 	"github.com/labtether/labtether/internal/alerts"
 	"github.com/labtether/labtether/internal/notifications"
+	"github.com/labtether/labtether/internal/securityruntime"
 )
 
 const (
@@ -129,7 +130,7 @@ func (d *Deps) dispatchAlertNotificationsSync(rule alerts.Rule, instanceID, stat
 			cancel()
 			if sendErr != nil {
 				rec := d.recordNotificationHistoryWithRetry(channel.ID, instanceID, routeID, notifications.RecordStatusFailed, sendErr.Error(), payload)
-				log.Printf("notifications: channel %s send failed (retry %d/%d): %v", channel.ID, rec.RetryCount, rec.MaxRetries, sendErr)
+				securityruntime.Logf("notifications: channel %s send failed (retry %d/%d)", channel.ID, rec.RetryCount, rec.MaxRetries)
 				continue
 			}
 			d.recordNotificationHistory(channel.ID, instanceID, routeID, notifications.RecordStatusSent, "", payload)
@@ -355,7 +356,7 @@ func (d *Deps) RetryPendingNotifications(ctx context.Context) {
 			continue
 		}
 
-		log.Printf("notifications: retry %d/%d failed for record %s: %v", newRetryCount, rec.MaxRetries, rec.ID, sendErr)
+		securityruntime.Logf("notifications: retry %d/%d failed for record %s", newRetryCount, rec.MaxRetries, rec.ID)
 
 		if newRetryCount >= rec.MaxRetries {
 			d.exhaustNotificationRetry(ctx, rec, sendErr.Error())

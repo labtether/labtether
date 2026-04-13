@@ -88,7 +88,7 @@ func (s *PostgresStore) ListAssetDependencies(assetID string, limit int) ([]depe
 	}
 	defer rows.Close()
 
-	out := make([]dependencies.Dependency, 0, limit)
+	out := make([]dependencies.Dependency, 0)
 	for rows.Next() {
 		dep, scanErr := scanDependency(rows)
 		if scanErr != nil {
@@ -138,7 +138,7 @@ func (s *PostgresStore) ListAssetDependenciesBatch(assetIDs []string, limit int)
 	}
 	defer rows.Close()
 
-	out := make([]dependencies.Dependency, 0, limit)
+	out := make([]dependencies.Dependency, 0)
 	for rows.Next() {
 		dep, scanErr := scanDependency(rows)
 		if scanErr != nil {
@@ -363,7 +363,7 @@ func (s *PostgresStore) ListIncidentAssets(incidentID string, limit int) ([]inci
 	}
 	defer rows.Close()
 
-	out := make([]incidents.IncidentAsset, 0, limit)
+	out := make([]incidents.IncidentAsset, 0)
 	for rows.Next() {
 		ia, scanErr := scanIncidentAsset(rows)
 		if scanErr != nil {

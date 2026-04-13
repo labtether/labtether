@@ -146,7 +146,7 @@ func (s *PostgresStore) ListHubCollectors(limit int, enabledOnly bool) ([]hubcol
 	}
 	defer rows.Close()
 
-	out := make([]hubcollector.Collector, 0, limit)
+	out := make([]hubcollector.Collector, 0)
 	for rows.Next() {
 		c, scanErr := scanHubCollector(rows)
 		if scanErr != nil {

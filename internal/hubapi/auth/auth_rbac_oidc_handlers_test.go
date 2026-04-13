@@ -130,11 +130,14 @@ func TestValidateAuthRedirectURI(t *testing.T) {
 		input   string
 		wantErr bool
 	}{
-		{"https://example.com/callback", false},
-		{"http://localhost:3000/callback", false},
+		{"https://example.com/api/auth/oidc/callback", false},
+		{"http://localhost:3000/auth/oidc/callback", false},
 		{"", true},
 		{"ftp://example.com", true},
 		{"not-a-url", true},
+		{"https://example.com/callback", true},
+		{"https://user@example.com/api/auth/oidc/callback", true},
+		{"https://example.com/api/auth/oidc/callback?code=x", true},
 		{"https://example.com/cb#frag", true},
 	}
 	for _, tt := range tests {

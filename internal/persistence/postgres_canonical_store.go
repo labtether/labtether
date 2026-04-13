@@ -106,7 +106,7 @@ func (s *PostgresStore) ListProviderInstances(limit int) ([]model.ProviderInstan
 	}
 	defer rows.Close()
 
-	out := make([]model.ProviderInstance, 0, limit)
+	out := make([]model.ProviderInstance, 0)
 	for rows.Next() {
 		provider, scanErr := scanProviderInstance(rows)
 		if scanErr != nil {
@@ -324,7 +324,7 @@ func (s *PostgresStore) ListResourceRelationships(resourceID string, limit int) 
 	}
 	defer rows.Close()
 
-	out := make([]model.ResourceRelationship, 0, limit)
+	out := make([]model.ResourceRelationship, 0)
 	for rows.Next() {
 		relationship, _, scanErr := scanCanonicalRelationship(rows)
 		if scanErr != nil {
@@ -486,7 +486,7 @@ func (s *PostgresStore) ListCapabilitySets(limit int) ([]model.CapabilitySet, er
 	}
 	defer rows.Close()
 
-	out := make([]model.CapabilitySet, 0, limit)
+	out := make([]model.CapabilitySet, 0)
 	for rows.Next() {
 		set, _, scanErr := scanCapabilitySet(rows)
 		if scanErr != nil {
@@ -741,7 +741,7 @@ func (s *PostgresStore) ListReconciliationResults(providerInstanceID string, lim
 	}
 	defer rows.Close()
 
-	out := make([]model.ReconciliationResult, 0, limit)
+	out := make([]model.ReconciliationResult, 0)
 	for rows.Next() {
 		result, _, scanErr := scanReconciliationResult(rows)
 		if scanErr != nil {

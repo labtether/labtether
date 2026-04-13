@@ -29,6 +29,10 @@ type wsConn interface {
 }
 
 var dialWS = func(ctx context.Context, endpoint string, skipVerify bool) (wsConn, error) {
+	validatedEndpoint, err := securityruntime.ValidateOutboundURL(endpoint)
+	if err != nil {
+		return nil, err
+	}
 	dialer := websocket.Dialer{
 		TLSClientConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12,
@@ -37,7 +41,7 @@ var dialWS = func(ctx context.Context, endpoint string, skipVerify bool) (wsConn
 		},
 	}
 
-	conn, _, err := dialer.DialContext(ctx, endpoint, nil)
+	conn, _, err := dialer.DialContext(ctx, validatedEndpoint.String(), nil)
 	if err != nil {
 		return nil, err
 	}

@@ -79,6 +79,9 @@ func (m *MemoryLogStore) QueryEvents(req logs.QueryRequest) ([]logs.Event, error
 	if req.Limit <= 0 {
 		req.Limit = 200
 	}
+	if req.Limit > 1000 {
+		req.Limit = 1000
+	}
 	if req.To.IsZero() {
 		req.To = time.Now().UTC()
 	}
@@ -104,7 +107,7 @@ func (m *MemoryLogStore) QueryEvents(req logs.QueryRequest) ([]logs.Event, error
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	out := make([]logs.Event, 0, req.Limit)
+	out := make([]logs.Event, 0)
 	for i := len(m.events) - 1; i >= 0; i-- {
 		event := m.events[i]
 		if event.Timestamp.Before(req.From) || event.Timestamp.After(req.To) {
@@ -174,7 +177,7 @@ func (m *MemoryLogStore) QueryDeadLetterEvents(from, to time.Time, limit int) ([
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	out := make([]logs.DeadLetterEvent, 0, limit)
+	out := make([]logs.DeadLetterEvent, 0)
 	for i := len(m.events) - 1; i >= 0; i-- {
 		event := m.events[i]
 		if event.Timestamp.Before(from) || event.Timestamp.After(to) {
@@ -340,6 +343,9 @@ func (m *MemoryLogStore) ListSources(limit int) ([]logs.SourceSummary, error) {
 func (m *MemoryLogStore) QuerySourceSummaries(req logs.SourceSummaryRequest) ([]logs.SourceSummary, error) {
 	if req.Limit <= 0 {
 		req.Limit = 50
+	}
+	if req.Limit > 1000 {
+		req.Limit = 1000
 	}
 	if req.To.IsZero() {
 		req.To = time.Now().UTC()

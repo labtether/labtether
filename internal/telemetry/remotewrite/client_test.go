@@ -111,6 +111,9 @@ func TestSerializeWriteRequestLabelOrder(t *testing.T) {
 // ---- Push HTTP tests ----
 
 func TestPushSuccess(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
+	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
+
 	var received []byte
 	var gotContentType, gotContentEncoding, gotVersion, gotUserAgent string
 
@@ -147,6 +150,9 @@ func TestPushSuccess(t *testing.T) {
 }
 
 func TestPushBasicAuth(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
+	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
+
 	var gotUser, gotPass string
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -164,6 +170,9 @@ func TestPushBasicAuth(t *testing.T) {
 }
 
 func TestPushNoAuth(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
+	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
+
 	var gotAuthHeader string
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -181,6 +190,9 @@ func TestPushNoAuth(t *testing.T) {
 }
 
 func TestPushHTTPError(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
+	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -193,6 +205,9 @@ func TestPushHTTPError(t *testing.T) {
 }
 
 func TestPushBadURL(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
+	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
+
 	err := Push(context.Background(), "http://127.0.0.1:0/unreachable", []byte("x"), "", "")
 	if err == nil {
 		t.Fatal("expected error for unreachable URL")
@@ -228,6 +243,9 @@ func (m *mockHWM) Get(_ context.Context) (time.Time, error) { return m.t, nil }
 func (m *mockHWM) Set(_ context.Context, t time.Time) error { m.t = t; return nil }
 
 func TestWorkerPushesBatch(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
+	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
+
 	var pushCount atomic.Int32
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -268,6 +286,9 @@ func TestWorkerPushesBatch(t *testing.T) {
 }
 
 func TestWorkerDisabledDoesNotPush(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
+	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
+
 	var pushCount atomic.Int32
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -294,6 +315,9 @@ func TestWorkerDisabledDoesNotPush(t *testing.T) {
 }
 
 func TestWorkerBacksOffOnError(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
+	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
+
 	// Server always returns 500 to trigger backoff.
 	var callCount atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -329,6 +353,9 @@ func TestWorkerBacksOffOnError(t *testing.T) {
 }
 
 func TestWorkerEmptySourceNoRequest(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
+	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
+
 	var callCount atomic.Int32
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

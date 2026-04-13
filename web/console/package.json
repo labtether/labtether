@@ -17,6 +17,12 @@
     "test:visual:https": "env -u NO_COLOR PLAYWRIGHT_SELF_SIGNED_HTTPS=1 playwright test e2e/visual-regression.spec.ts",
     "postinstall": "sh scripts/patch-novnc.sh"
   },
+  "overrides": {
+    "brace-expansion": "^1.1.13",
+    "flatted": "^3.4.2",
+    "picomatch": "^4.0.4",
+    "vite": "^8.0.5"
+  },
   "dependencies": {
     "@dagrejs/dagre": "^3.0.0",
     "@novnc/novnc": "^1.5.0",

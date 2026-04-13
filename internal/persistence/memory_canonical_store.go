@@ -511,7 +511,7 @@ func (m *MemoryCanonicalModelStore) ListReconciliationResults(providerInstanceID
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	out := make([]model.ReconciliationResult, 0, limit)
+	out := make([]model.ReconciliationResult, 0)
 	if providerInstanceID != "" {
 		out = append(out, m.reconciliationResultsByProvider[providerInstanceID]...)
 	} else {

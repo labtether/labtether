@@ -142,7 +142,7 @@ func (s *PostgresStore) ListGroupProfiles(limit int) ([]groupprofiles.Profile, e
 	}
 	defer rows.Close()
 
-	out := make([]groupprofiles.Profile, 0, limit)
+	out := make([]groupprofiles.Profile, 0)
 	for rows.Next() {
 		p, scanErr := scanGroupProfile(rows)
 		if scanErr != nil {
@@ -305,7 +305,7 @@ func (s *PostgresStore) ListDriftChecks(groupID string, limit int) ([]groupprofi
 	}
 	defer rows.Close()
 
-	out := make([]groupprofiles.DriftCheck, 0, limit)
+	out := make([]groupprofiles.DriftCheck, 0)
 	for rows.Next() {
 		d, scanErr := scanDriftCheck(rows)
 		if scanErr != nil {

@@ -185,7 +185,7 @@ func (s *PostgresStore) ListSyntheticChecks(limit int, enabledOnly bool) ([]synt
 	}
 	defer rows.Close()
 
-	out := make([]synthetic.Check, 0, limit)
+	out := make([]synthetic.Check, 0)
 	for rows.Next() {
 		check, scanErr := scanSyntheticCheck(rows)
 		if scanErr != nil {
@@ -219,7 +219,7 @@ func (s *PostgresStore) ListDueSyntheticChecks(ctx context.Context, now time.Tim
 	}
 	defer rows.Close()
 
-	out := make([]synthetic.Check, 0, limit)
+	out := make([]synthetic.Check, 0)
 	for rows.Next() {
 		check, scanErr := scanSyntheticCheck(rows)
 		if scanErr != nil {
@@ -351,7 +351,7 @@ func (s *PostgresStore) ListSyntheticResults(checkID string, limit int) ([]synth
 	}
 	defer rows.Close()
 
-	out := make([]synthetic.Result, 0, limit)
+	out := make([]synthetic.Result, 0)
 	for rows.Next() {
 		r, scanErr := scanSyntheticResult(rows)
 		if scanErr != nil {

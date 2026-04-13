@@ -141,7 +141,7 @@ func (s *PostgresStore) ListActionRuns(limit, offset int, runType, status string
 	}
 	defer rows.Close()
 
-	out := make([]actions.Run, 0, limit)
+	out := make([]actions.Run, 0)
 	for rows.Next() {
 		run, err := scanActionRun(rows)
 		if err != nil {
@@ -322,7 +322,7 @@ func (s *PostgresStore) ListUpdatePlans(limit int) ([]updates.Plan, error) {
 	}
 	defer rows.Close()
 
-	out := make([]updates.Plan, 0, limit)
+	out := make([]updates.Plan, 0)
 	for rows.Next() {
 		plan, err := scanUpdatePlan(rows)
 		if err != nil {
@@ -473,7 +473,7 @@ func (s *PostgresStore) ListUpdateRunsPage(limit, offset int, status string) ([]
 	}
 	defer rows.Close()
 
-	out := make([]updates.Run, 0, limit)
+	out := make([]updates.Run, 0)
 	for rows.Next() {
 		run, err := scanUpdateRun(rows)
 		if err != nil {

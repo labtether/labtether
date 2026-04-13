@@ -141,7 +141,7 @@ func (s *PostgresStore) ListAlertInstances(filter AlertInstanceFilter) ([]alerts
 	}
 	defer rows.Close()
 
-	out := make([]alerts.AlertInstance, 0, limit)
+	out := make([]alerts.AlertInstance, 0)
 	for rows.Next() {
 		inst, scanErr := scanAlertInstance(rows)
 		if scanErr != nil {
@@ -263,7 +263,7 @@ func (s *PostgresStore) ListAlertSilences(limit int, activeOnly bool) ([]alerts.
 	}
 	defer rows.Close()
 
-	out := make([]alerts.AlertSilence, 0, limit)
+	out := make([]alerts.AlertSilence, 0)
 	for rows.Next() {
 		silence, scanErr := scanAlertSilence(rows)
 		if scanErr != nil {

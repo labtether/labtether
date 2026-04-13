@@ -271,8 +271,8 @@ func (s *PostgresStore) ListAlertRules(filter AlertRuleFilter) ([]alerts.Rule, e
 	}
 	defer rows.Close()
 
-	out := make([]alerts.Rule, 0, limit)
-	ruleIDs := make([]string, 0, limit)
+	out := make([]alerts.Rule, 0)
+	ruleIDs := make([]string, 0)
 	for rows.Next() {
 		rule, scanErr := scanAlertRule(rows)
 		if scanErr != nil {
