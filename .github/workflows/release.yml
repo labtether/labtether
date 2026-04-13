@@ -64,7 +64,7 @@ jobs:
             --output-dir "${RUNNER_TEMP}/release-artifacts"
 
       - name: Upload release artifacts to GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             ${{ runner.temp }}/release-artifacts/docker-compose.deploy.yml
