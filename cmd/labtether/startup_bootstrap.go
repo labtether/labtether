@@ -22,6 +22,7 @@ import (
 
 	"github.com/labtether/labtether/internal/auth"
 	"github.com/labtether/labtether/internal/certmgr"
+	"github.com/labtether/labtether/internal/demo"
 	authpkg "github.com/labtether/labtether/internal/hubapi/auth"
 	"github.com/labtether/labtether/internal/installstate"
 	"github.com/labtether/labtether/internal/persistence"
@@ -94,6 +95,7 @@ func runHub(ctx context.Context) error {
 		if err := srv.bootstrapDemoUser(); err != nil {
 			return fmt.Errorf("labtether startup failed: %w", err)
 		}
+		go demo.RunKeepalive(ctx, pgStore.Pool())
 	}
 
 	// Derive TOTP encryption key for 2FA secret storage.
