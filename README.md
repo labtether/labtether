@@ -182,10 +182,16 @@ FreeBSD nodes are managed agentlessly via connectors. No agent install required.
 | | Platform | Description |
 |:---|:---------|:------------|
 | **[Linux Agent](https://github.com/labtether/labtether-agent)** | Linux | Telemetry, remote access, and actions for Linux machines. |
-| **[macOS Agent](https://github.com/labtether/labtether-mac)** | macOS 13+ | Menu bar app with status, enrollment, and notifications. |
-| **[Windows Agent](https://github.com/labtether/labtether-win)** | Windows 10+ | System tray app with service management and auto-updates. |
 | **[CLI](https://github.com/labtether/labtether-cli)** | Cross-platform | Manage your hub from the terminal. |
-| **iOS Companion** | iPhone / iPad | Mobile fleet monitoring and push notifications. |
+
+### Coming soon
+
+| | Platform | Description |
+|:---|:---------|:------------|
+| **[Windows Agent](https://github.com/labtether/labtether-win)** | Windows 10+ | Native system tray app with service management and auto-updates. |
+| **[macOS Agent](https://github.com/labtether/labtether-mac)** | macOS 13+ | Menu bar app with status, enrollment, and notifications. |
+| **FreeBSD Agent** | FreeBSD 13+ | Endpoint agent for BSD-based systems. |
+| **iOS & iPad Companion** | iPhone / iPad | Mobile fleet monitoring, push notifications, and live activities. One-time purchase, no subscriptions. |
 
 ---
 
