@@ -1,6 +1,32 @@
 # TODO
 
 ## Now
+- [ ] **Launch prep — remaining manual steps (2026-04-15)**
+  - [ ] Redeploy demo instance with new image (has keepalive goroutine for live metrics)
+    - SSH to demo host
+    - `docker compose -f docker-compose.deploy.yml -f docker-compose.demo.yml pull`
+    - `docker compose -f docker-compose.deploy.yml -f docker-compose.demo.yml up -d`
+    - Verify dashboard shows green devices, sparklines, and activity at demo.labtether.com
+  - [ ] Enable GitHub Discussions on labtether/labtether
+    - Settings > Features > Discussions
+    - Create categories: Show & Tell, Q&A (answers enabled), Feature Requests, General
+    - Pin "Welcome! Show us your homelab" thread in Show & Tell
+    - Pin "Getting Started — FAQ" thread in Q&A (install command + demo link)
+    - See `docs/marketing/community-setup-guide.md` for full content
+  - [ ] Configure Discord welcome message
+    - Auto-DM or welcome channel message with: docker run command, demo link, docs link, #introductions prompt
+    - See `docs/marketing/community-setup-guide.md` for full content
+  - [ ] Capture fresh screenshots after demo is live with keepalive
+    - Dashboard with green devices and sparklines
+    - Devices page with online nodes
+    - Topology view
+    - Alerts page with active/resolved alerts
+    - Terminal session
+    - Store in `website/public/docs/screenshots/` and update quickstart doc
+  - [x] Push hub changes to GitHub (12 commits: all-in-one Dockerfile, deploy templates, README, demo keepalive, What's Next card)
+  - [x] Push and deploy website to Cloudflare (quickstart, connector guides, install flow, env vars)
+  - [x] Push Home Assistant Dockerfile fix
+  - [x] Add GitHub topics (selfhosted, homelab, monitoring, docker, proxmox, truenas, infrastructure, devops, mcp, ai-agent, observability, remote-access)
 - [ ] Audit follow-up (2026-03-22): finish the post-locale-loop console cleanup.
   - [x] Break the `/foo` <-> `/en/foo` redirect loop in standalone/proxied console runs.
   - [x] Restore green route-integrity coverage with shared API mocks for always-on console background fetches.
