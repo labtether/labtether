@@ -67,7 +67,7 @@ fi
 
 mkdir -p "${OUTPUT_DIR}"
 
-labtether_image="ghcr.io/${REPOSITORY}/labtether:${VERSION}"
+labtether_image="ghcr.io/labtether/labtether:${VERSION}"
 
 template_path="${PROJECT_ROOT}/deploy/release/docker-compose.deploy.yml.tmpl"
 if [[ ! -f "${template_path}" ]]; then
