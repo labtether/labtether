@@ -6,4 +6,7 @@ export LABTETHER_MANAGED_POSTGRES=true
 export LABTETHER_DATA_DIR=/data
 export LABTETHER_AGENT_DIR=/opt/labtether/agents
 export LABTETHER_AGENT_CACHE_DIR=/data/agents
-exec s6-setuidgid labtether /usr/local/bin/labtether
+export LABTETHER_API_TOKEN_FILE=/run/labtether/api-token
+export GUACD_HOST=${GUACD_HOST:-127.0.0.1}
+export GUACD_PORT=${GUACD_PORT:-4822}
+exec /command/s6-setuidgid labtether /usr/local/bin/labtether

@@ -70,9 +70,8 @@ RUN apk add --no-cache \
     postgresql18 \
     postgresql18-contrib
 
-# Create users
-RUN adduser -D -u 65532 labtether && \
-    adduser -D -s /bin/sh postgres
+# Create users (postgres user already exists from postgresql18 package)
+RUN adduser -D -u 65532 labtether
 
 # ── Copy artefacts from build stages ─────────────────────────
 
@@ -88,16 +87,19 @@ COPY --from=node-builder /app/public            /app/console/public
 COPY agent-dist/ /opt/labtether/agents/
 
 # ── Data directories ─────────────────────────────────────────
-RUN mkdir -p /data/postgres /data/certs /data/agents /data/config \
-             /run/postgresql /run/labtether && \
+RUN mkdir -p /data/postgres /data/certs /data/agents /data/config /data/install \
+             /run/postgresql /run/labtether /ca && \
     chown -R postgres:postgres /data/postgres /run/postgresql && \
-    chown -R labtether:labtether /data/certs /data/agents /data/config /run/labtether
+    chown -R labtether:labtether /data /run/labtether /ca && \
+    chown -R postgres:postgres /data/postgres
 
 # ── s6 service definitions ───────────────────────────────────
 COPY build/s6/s6-rc.d /etc/s6-overlay/s6-rc.d
 COPY build/s6/user     /etc/s6-overlay/s6-rc.d/user
+COPY build/s6/scripts  /etc/s6-overlay/scripts
 RUN find /etc/s6-overlay/s6-rc.d -name 'run' -exec chmod 755 {} + && \
-    find /etc/s6-overlay/s6-rc.d -name 'up'  -exec chmod 755 {} +
+    find /etc/s6-overlay/s6-rc.d -name 'up'  -exec chmod 755 {} + && \
+    find /etc/s6-overlay/scripts -type f -exec chmod 755 {} +
 
 # ── Environment ──────────────────────────────────────────────
 ENV S6_KEEP_ENV=1 \

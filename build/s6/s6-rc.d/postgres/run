@@ -2,6 +2,6 @@
 mkdir -p /data/postgres /run/postgresql
 chown -R postgres:postgres /data/postgres /run/postgresql
 if [ ! -f /data/postgres/PG_VERSION ]; then
-  su - postgres -s /bin/sh -c "initdb -D /data/postgres --auth-local=trust --auth-host=scram-sha-256"
+  /command/s6-setuidgid postgres initdb -D /data/postgres --auth-local=trust --auth-host=scram-sha-256
 fi
-exec su - postgres -s /bin/sh -c "postgres -D /data/postgres -k /run/postgresql -c listen_addresses=127.0.0.1 -c port=5432"
+exec /command/s6-setuidgid postgres postgres -D /data/postgres -k /run/postgresql -c listen_addresses=127.0.0.1 -c port=5432 -c unix_socket_directories=/run/postgresql
