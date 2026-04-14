@@ -1,0 +1,16 @@
+#!/bin/sh
+for i in $(seq 1 30); do
+  if pg_isready -h 127.0.0.1 -p 5432 -U "${POSTGRES_USER}" -q 2>/dev/null; then
+    su - postgres -s /bin/sh -c "psql -h 127.0.0.1 -p 5432 -tc \"SELECT 1 FROM pg_database WHERE datname='${POSTGRES_DB}'\" | grep -q 1 || createdb -h 127.0.0.1 -p 5432 '${POSTGRES_DB}'"
+    if [ ! -f /data/config/postgres-password ]; then
+      PG_PASS=$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '\n' | tr '+/' '-_')
+      printf '%s' "${PG_PASS}" > /data/config/postgres-password
+      chmod 0400 /data/config/postgres-password
+      su - postgres -s /bin/sh -c "psql -h 127.0.0.1 -p 5432 -c \"ALTER USER ${POSTGRES_USER} PASSWORD '${PG_PASS}';\""
+    fi
+    exit 0
+  fi
+  sleep 1
+done
+echo "PostgreSQL did not become ready in 30 seconds"
+exit 1

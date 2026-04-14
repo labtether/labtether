@@ -10,7 +10,10 @@ bin/
 # They must not be committed to this repo.
 build/*
 !build/*.Dockerfile
-agent-dist/
+!build/Dockerfile
+!build/s6/
+agent-dist/*
+!agent-dist/.keep
 /labtether
 /node-agent
 /linux-agent
@@ -93,7 +96,10 @@ AGENTS.md
 # Loose screenshots (dev artifacts)
 /*.png
 /notes/*.png
-/screenshots/
+# README screenshots are committed — only ignore non-image files in screenshots/
+/screenshots/*
+!/screenshots/*.png
+!/screenshots/*.gif
 .gstack/
 
 # Local build artifacts
