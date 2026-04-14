@@ -169,7 +169,43 @@ export function DashboardFirstRunChecklistCard({
               </Link>
             </div>
           ) : (
-            <div className="mt-3 text-xs text-[var(--ok)]">Checklist complete. You can dismiss this card at any time.</div>
+            <div className="mt-4">
+              <p className="text-xs font-medium text-[var(--text)]">
+                Core workflows validated. Here&apos;s what to explore next:
+              </p>
+              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <Link
+                  href="/settings"
+                  className="block rounded-lg px-3 py-2 bg-[var(--panel-glass)] border border-[var(--panel-border)] text-xs text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors"
+                >
+                  Set up alert notifications
+                </Link>
+                <a
+                  href="https://labtether.com/docs/guides/mcp-gateway"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block rounded-lg px-3 py-2 bg-[var(--panel-glass)] border border-[var(--panel-border)] text-xs text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors"
+                >
+                  Connect the MCP gateway
+                </a>
+                <a
+                  href="https://discord.gg/labtether"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block rounded-lg px-3 py-2 bg-[var(--panel-glass)] border border-[var(--panel-border)] text-xs text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors"
+                >
+                  Join the community
+                </a>
+                <a
+                  href="https://github.com/labtether/labtether"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block rounded-lg px-3 py-2 bg-[var(--panel-glass)] border border-[var(--panel-border)] text-xs text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors"
+                >
+                  Star us on GitHub
+                </a>
+              </div>
+            </div>
           )}
         </>
       )}
