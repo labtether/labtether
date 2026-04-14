@@ -101,7 +101,7 @@ services:
   guacd:
     profiles: ["remote-desktop"]
     image: __LABTETHER_IMAGE__
-    command: ["/usr/local/sbin/guacd", "-f", "-b", "0.0.0.0", "-l", "4822"]
+    command: ["/opt/guacamole/sbin/guacd", "-f", "-b", "0.0.0.0", "-l", "4822"]
     restart: unless-stopped
 
 volumes:

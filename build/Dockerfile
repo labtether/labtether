@@ -97,10 +97,10 @@ COPY --from=node-builder /app/.next/standalone /app/console/
 COPY --from=node-builder /app/.next/static     /app/console/.next/static
 COPY --from=node-builder /app/public            /app/console/public
 
-# guacd binary + libraries
-COPY --from=guacd-source /usr/local/sbin/guacd       /usr/local/sbin/guacd
-COPY --from=guacd-source /usr/local/lib/libguac*      /usr/local/lib/
-COPY --from=guacd-source /usr/local/lib/freerdp3/     /usr/local/lib/freerdp3/
+# guacd binary + libraries (guacamole installs to /opt/guacamole/)
+COPY --from=guacd-source /opt/guacamole/sbin/guacd       /opt/guacamole/sbin/guacd
+COPY --from=guacd-source /opt/guacamole/lib/             /opt/guacamole/lib/
+COPY --from=guacd-source /opt/guacamole/bin/             /opt/guacamole/bin/
 
 # Agent distribution (populated by CI; .keep ensures layer exists)
 COPY agent-dist/ /opt/labtether/agents/
@@ -128,7 +128,7 @@ ENV S6_KEEP_ENV=1 \
     LABTETHER_HTTPS_PORT=8443 \
     PORT=3000 \
     LABTETHER_API_BASE_URL=http://localhost:8080 \
-    LD_LIBRARY_PATH=/usr/local/lib
+    LD_LIBRARY_PATH=/opt/guacamole/lib
 
 EXPOSE 3000 8080 8443
 VOLUME /data
