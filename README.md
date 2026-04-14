@@ -2,18 +2,45 @@
 
 # LabTether
 
-**Run your homelab like a real operations platform.**
+**Cross-platform homelab control plane with AI-powered operations.**
 
 [![CI](https://github.com/labtether/labtether/actions/workflows/ci.yml/badge.svg)](https://github.com/labtether/labtether/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square)](LICENSE)
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white)](DISCORD_INVITE_URL)
+[![Demo](https://img.shields.io/badge/Demo-Try%20It-FF0080?style=flat-square)](https://demo.labtether.com)
 
-[Website](https://labtether.com) &middot; [Docs](https://labtether.com/docs) &middot; [Wiki](https://labtether.com/docs/wiki) &middot; [Changelog](CHANGELOG.md)
+[Website](https://labtether.com) &middot; [Docs](https://labtether.com/docs) &middot; [Wiki](https://labtether.com/docs/wiki) &middot; [Discord](DISCORD_INVITE_URL) &middot; [Demo](https://demo.labtether.com) &middot; [Changelog](CHANGELOG.md)
 
 </div>
 
-<!-- TODO: Add hero screenshot of dashboard (dashboard-dark.png) -->
+<p align="center">
+  <img src="screenshots/01-dashboard.png" alt="LabTether Dashboard" width="900" />
+</p>
+
+<p align="center">
+  <img src="screenshots/walkthrough.gif" alt="LabTether Walkthrough" width="900" />
+  <br/>
+  <em>Dashboard &rarr; Devices &rarr; Topology &rarr; Terminal &rarr; Alerts &rarr; Files</em>
+</p>
+
+<table>
+<tr>
+<td align="center" width="33%">
+<strong>Cross-Platform</strong><br/>
+Linux, Windows, macOS, FreeBSD — all first-class citizens, managed from one hub.
+</td>
+<td align="center" width="33%">
+<strong>AI Agent Gateway</strong><br/>
+Operate your infrastructure through Claude, Cursor, or any MCP client.
+</td>
+<td align="center" width="33%">
+<strong>Unified Operations</strong><br/>
+Dashboard, remote access, alerts, updates — one URL instead of six tabs.
+</td>
+</tr>
+</table>
 
 ---
 
@@ -32,36 +59,30 @@ LabTether replaces the tab sprawl with one dashboard, one timeline, one URL.
 
 ## Quick Start
 
-Get a full LabTether hub running in under 5 minutes. You need Docker and Docker Compose.
+Get a full LabTether hub running in under 5 minutes. You need Docker.
 
-**1. Download the Compose file**
+**One command:**
+
+```bash
+docker run -d --name labtether \
+  -p 3000:3000 -p 8443:8443 \
+  -v labtether-data:/data \
+  ghcr.io/labtether/labtether:latest
+```
+
+Open **http://localhost:3000** — the setup wizard walks you through the rest. TLS certificates are generated automatically.
+
+> Full guide with Tailscale remote access, custom TLS, OIDC SSO, and multi-user setup at [labtether.com/docs](https://labtether.com/docs).
+
+### Advanced: Docker Compose
+
+For split services, external Postgres, or resource limits:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/labtether/labtether/main/deploy/compose/docker-compose.deploy.yml \
   -o docker-compose.yml
-```
-
-**2. Configure**
-
-```bash
-cat > .env.deploy << 'EOF'
-LABTETHER_VERSION=latest
-LABTETHER_HUB_IMAGE=ghcr.io/labtether/labtether/labtether:${LABTETHER_VERSION}
-LABTETHER_WEB_IMAGE=ghcr.io/labtether/labtether/web-console:${LABTETHER_VERSION}
-POSTGRES_IMAGE=postgres:18-alpine
-GUACD_IMAGE=guacamole/guacd:1.6.0
-EOF
-```
-
-**3. Launch**
-
-```bash
 docker compose up -d
 ```
-
-Open **https://localhost:8443** -- TLS certificates are generated on first boot. The setup wizard walks you through the rest.
-
-> Full guide with Tailscale remote access, custom TLS, OIDC SSO, and multi-user setup at [labtether.com/docs](https://labtether.com/docs).
 
 ---
 
@@ -102,8 +123,6 @@ FreeBSD nodes are managed agentlessly via connectors. No agent install required.
 
 ## What You Get
 
-<!-- TODO: Add feature screenshots when demo environment is ready -->
-
 **Fleet Dashboard** -- Health at a glance. CPU, memory, disk, network, and temperature across every node.
 
 **Remote Access** -- Terminal and desktop sessions directly from the browser. No SSH keys or VNC clients needed.
@@ -113,6 +132,35 @@ FreeBSD nodes are managed agentlessly via connectors. No agent install required.
 **Integrations** -- Connect what you already run: Proxmox VE, TrueNAS, Docker, Portainer, Home Assistant, and Proxmox Backup Server.
 
 **Update Runs** -- Plan and execute maintenance across your fleet with dry-run support and audit trails.
+
+<details>
+<summary><strong>Screenshots</strong></summary>
+<br/>
+<p align="center">
+  <img src="screenshots/01-dashboard.png" alt="Fleet Dashboard" width="800" /><br/>
+  <em>Fleet Dashboard — all nodes at a glance</em>
+</p>
+<p align="center">
+  <img src="screenshots/02-devices.png" alt="Device Detail" width="800" /><br/>
+  <em>Device Detail — deep telemetry per host</em>
+</p>
+<p align="center">
+  <img src="screenshots/05-terminal.png" alt="Remote Terminal" width="800" /><br/>
+  <em>Remote Terminal — browser-based SSH, no keys needed</em>
+</p>
+<p align="center">
+  <img src="screenshots/03-topology.png" alt="Topology Map" width="800" /><br/>
+  <em>Topology Map — visualize your infrastructure</em>
+</p>
+<p align="center">
+  <img src="screenshots/08-alerts.png" alt="Alerts and Incidents" width="800" /><br/>
+  <em>Alerts — correlated timeline with telemetry</em>
+</p>
+<p align="center">
+  <img src="screenshots/06-files.png" alt="File Manager" width="800" /><br/>
+  <em>File Manager — browse and transfer files remotely</em>
+</p>
+</details>
 
 ---
 
@@ -138,6 +186,15 @@ FreeBSD nodes are managed agentlessly via connectors. No agent install required.
 | **[Windows Agent](https://github.com/labtether/labtether-win)** | Windows 10+ | System tray app with service management and auto-updates. |
 | **[CLI](https://github.com/labtether/labtether-cli)** | Cross-platform | Manage your hub from the terminal. |
 | **iOS Companion** | iPhone / iPad | Mobile fleet monitoring and push notifications. |
+
+---
+
+## Community
+
+- **Discord** -- [Join the server](DISCORD_INVITE_URL)
+- **Twitter/X** -- [@labtether](https://x.com/labtether)
+- **Blog** -- [labtether.com/blog](https://labtether.com/blog)
+- **Live Demo** -- [demo.labtether.com](https://demo.labtether.com) (no signup required)
 
 ---
 
