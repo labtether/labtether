@@ -1,7 +1,8 @@
 # ──────────────────────────────────────────────────────────────
 # LabTether All-in-One Image
-# Bundles: Hub API (Go) · Next.js Console · PostgreSQL 18 · guacd
+# Bundles: Hub API (Go) · Next.js Console · PostgreSQL 18
 # Process supervisor: s6-overlay v3
+# Remote desktop (guacd) runs as a separate container via compose.
 # ──────────────────────────────────────────────────────────────
 
 # ── Stage 1: Go builder ──────────────────────────────────────
@@ -41,11 +42,8 @@ COPY web/console/ .
 ENV LABTETHER_API_BASE_URL=http://localhost:8080
 RUN npm run build
 
-# ── Stage 4: guacd source (binary + libs) ────────────────────
-FROM guacamole/guacd:1.6.0 AS guacd-source
-
-# ── Stage 5: Runtime ─────────────────────────────────────────
-FROM alpine:3.21
+# ── Stage 4: Runtime ─────────────────────────────────────────
+FROM alpine:edge
 
 ARG S6_OVERLAY_VERSION=3.2.0.2
 ARG TARGETARCH
@@ -70,22 +68,11 @@ RUN apk add --no-cache \
     ca-certificates \
     nodejs \
     postgresql18 \
-    postgresql18-contrib \
-    cairo \
-    libjpeg-turbo \
-    libpng \
-    libwebp \
-    pango \
-    libssh2 \
-    libvncserver \
-    ossp-uuid \
-    freerdp-libs \
-    libtelnet
+    postgresql18-contrib
 
 # Create users
 RUN adduser -D -u 65532 labtether && \
-    adduser -D -s /bin/sh postgres && \
-    adduser -D -s /bin/sh guacd
+    adduser -D -s /bin/sh postgres
 
 # ── Copy artefacts from build stages ─────────────────────────
 
@@ -96,11 +83,6 @@ COPY --from=go-builder /out/labtether /usr/local/bin/labtether
 COPY --from=node-builder /app/.next/standalone /app/console/
 COPY --from=node-builder /app/.next/static     /app/console/.next/static
 COPY --from=node-builder /app/public            /app/console/public
-
-# guacd binary + libraries (guacamole installs to /opt/guacamole/)
-COPY --from=guacd-source /opt/guacamole/sbin/guacd       /opt/guacamole/sbin/guacd
-COPY --from=guacd-source /opt/guacamole/lib/             /opt/guacamole/lib/
-COPY --from=guacd-source /opt/guacamole/bin/             /opt/guacamole/bin/
 
 # Agent distribution (populated by CI; .keep ensures layer exists)
 COPY agent-dist/ /opt/labtether/agents/
@@ -127,8 +109,7 @@ ENV S6_KEEP_ENV=1 \
     API_PORT=8080 \
     LABTETHER_HTTPS_PORT=8443 \
     PORT=3000 \
-    LABTETHER_API_BASE_URL=http://localhost:8080 \
-    LD_LIBRARY_PATH=/opt/guacamole/lib
+    LABTETHER_API_BASE_URL=http://localhost:8080
 
 EXPOSE 3000 8080 8443
 VOLUME /data

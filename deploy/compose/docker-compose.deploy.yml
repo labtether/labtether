@@ -120,8 +120,7 @@ services:
 
   guacd:
     profiles: ["remote-desktop"]
-    image: ${LABTETHER_IMAGE:?set LABTETHER_IMAGE in .env.deploy}
-    command: ["/opt/guacamole/sbin/guacd", "-f", "-b", "0.0.0.0", "-l", "4822"]
+    image: ${GUACD_IMAGE:-guacamole/guacd:1.6.0}
     restart: unless-stopped
     deploy:
       resources:
