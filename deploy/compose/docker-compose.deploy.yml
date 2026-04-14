@@ -45,7 +45,8 @@ services:
   # For external certs, monitor expiration and renew before expiry.
   # Check cert status: curl -k https://localhost:8443/api/v2/tls/info
   labtether:
-    image: ${LABTETHER_HUB_IMAGE:?set LABTETHER_HUB_IMAGE in .env.deploy}
+    image: ${LABTETHER_IMAGE:?set LABTETHER_IMAGE in .env.deploy}
+    command: ["/usr/local/bin/labtether"]
     restart: unless-stopped
     depends_on:
       labtether-bootstrap:
@@ -95,7 +96,8 @@ services:
       start_period: 15s
 
   web-console:
-    image: ${LABTETHER_WEB_IMAGE:?set LABTETHER_WEB_IMAGE in .env.deploy}
+    image: ${LABTETHER_IMAGE:?set LABTETHER_IMAGE in .env.deploy}
+    command: ["node", "/app/console/server.js"]
     restart: unless-stopped
     depends_on:
       labtether:
@@ -118,7 +120,8 @@ services:
 
   guacd:
     profiles: ["remote-desktop"]
-    image: ${GUACD_IMAGE:?set GUACD_IMAGE in .env.deploy}
+    image: ${LABTETHER_IMAGE:?set LABTETHER_IMAGE in .env.deploy}
+    command: ["/usr/local/sbin/guacd", "-f", "-b", "0.0.0.0", "-l", "4822"]
     restart: unless-stopped
     deploy:
       resources:

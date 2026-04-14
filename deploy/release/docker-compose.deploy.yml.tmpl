@@ -37,7 +37,8 @@ services:
       start_period: 10s
 
   labtether:
-    image: __LABTETHER_HUB_IMAGE__
+    image: __LABTETHER_IMAGE__
+    command: ["/usr/local/bin/labtether"]
     restart: unless-stopped
     depends_on:
       labtether-bootstrap:
@@ -80,7 +81,8 @@ services:
       start_period: 15s
 
   web-console:
-    image: __LABTETHER_WEB_IMAGE__
+    image: __LABTETHER_IMAGE__
+    command: ["node", "/app/console/server.js"]
     restart: unless-stopped
     depends_on:
       labtether:
@@ -98,7 +100,8 @@ services:
 
   guacd:
     profiles: ["remote-desktop"]
-    image: __GUACD_IMAGE__
+    image: __LABTETHER_IMAGE__
+    command: ["/usr/local/sbin/guacd", "-f", "-b", "0.0.0.0", "-l", "4822"]
     restart: unless-stopped
 
 volumes:

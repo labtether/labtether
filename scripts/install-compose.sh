@@ -142,20 +142,13 @@ if [[ "${BUILD_LOCAL}" -eq 1 ]]; then
   # When --build is used, override the image references to use local builds.
   # The deploy compose expects pre-built images via env vars; we point them at
   # locally-built tags and add the build compose overlay.
-  local_hub_image="labtether/hub:${VERSION}"
-  local_web_image="labtether/web-console:${VERSION}"
-  upsert_env_value "LABTETHER_HUB_IMAGE" "${local_hub_image}"
-  upsert_env_value "LABTETHER_WEB_IMAGE" "${local_web_image}"
+  local_image="labtether:${VERSION}"
+  upsert_env_value "LABTETHER_IMAGE" "${local_image}"
 
-  log_info "Building hub image (${local_hub_image})..."
-  docker build -t "${local_hub_image}" \
-    --build-arg SERVICE_DIR=cmd/labtether \
+  log_info "Building all-in-one image (${local_image})..."
+  docker build -t "${local_image}" \
     --build-arg APP_VERSION="${VERSION}" \
-    -f build/go-service.Dockerfile .
-
-  log_info "Building web console image (${local_web_image})..."
-  docker build -t "${local_web_image}" \
-    -f web/console/Dockerfile web/console/
+    -f build/Dockerfile .
 
   log_info "Pulling third-party images..."
   docker compose "${compose_args[@]}" pull postgres
