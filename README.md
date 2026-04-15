@@ -160,6 +160,26 @@ FreeBSD nodes are managed agentlessly via connectors. No agent install required.
   <img src="screenshots/06-files.png" alt="File Manager" width="800" /><br/>
   <em>File Manager — browse and transfer files remotely</em>
 </p>
+<p align="center">
+  <img src="screenshots/04-services.png" alt="Services" width="800" /><br/>
+  <em>Services — monitor and manage running services</em>
+</p>
+<p align="center">
+  <img src="screenshots/07-logs.png" alt="Logs" width="800" /><br/>
+  <em>Logs — centralized log viewer with search and filtering</em>
+</p>
+<p align="center">
+  <img src="screenshots/10-health.png" alt="Health Overview" width="800" /><br/>
+  <em>Health — system health checks at a glance</em>
+</p>
+<p align="center">
+  <img src="screenshots/09-settings.png" alt="Settings" width="800" /><br/>
+  <em>Settings — configure hub, integrations, and users</em>
+</p>
+<p align="center">
+  <img src="screenshots/wave2-login.png" alt="Login" width="800" /><br/>
+  <em>Login — secure authentication with SSO support</em>
+</p>
 </details>
 
 ---
@@ -198,7 +218,7 @@ FreeBSD nodes are managed agentlessly via connectors. No agent install required.
 ## Community
 
 - **Discord** -- [Join the server](DISCORD_INVITE_URL)
-- **Twitter/X** -- [@labtether](https://x.com/labtether)
+- **Twitter/X** -- [@labtether](https://x.com/labtether) &middot; [@Watari_Labs_](https://x.com/Watari_Labs_)
 - **Blog** -- [labtether.com/blog](https://labtether.com/blog)
 - **Live Demo** -- [demo.labtether.com](https://demo.labtether.com) (no signup required)
 
