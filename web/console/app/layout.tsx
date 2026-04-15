@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   title: "LabTether Console",
   description: "Homelab operations console",
   icons: {
-    icon: "/service-icons/terminal.svg",
+    icon: "/logo.svg",
   },
 };
 

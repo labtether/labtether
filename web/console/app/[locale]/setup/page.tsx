@@ -267,15 +267,8 @@ export default function SetupPage() {
           />
 
           <div className="flex flex-col items-center gap-3">
-            <div className="relative">
-              <div className="absolute inset-0 rounded-lg" style={{ background: "var(--accent-glow)", filter: "blur(8px)", animation: "glow-breathe 4s ease-in-out infinite" }} />
-              <span
-                className="relative flex items-center justify-center w-10 h-10 rounded-lg bg-[var(--accent)] text-white text-sm font-medium font-mono"
-                style={{ boxShadow: "0 0 16px var(--accent-glow)" }}
-              >
-                LT
-              </span>
-            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.svg" alt="LabTether" width={48} height={48} />
             <div className="text-center">
               <h1 className="text-xl font-medium text-[var(--text)] font-[family-name:var(--font-heading)]">
                 {step === "account" ? t('setup.title') : t('remoteAccess.title')}

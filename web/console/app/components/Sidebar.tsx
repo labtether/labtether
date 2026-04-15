@@ -122,15 +122,8 @@ export const Sidebar = memo(function Sidebar() {
     >
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-5 h-14 border-b border-[var(--line)]">
-        <div className="relative">
-          <div className="absolute inset-0 rounded-lg" style={BRAND_GLOW_STYLE} />
-          <span
-            className="relative flex items-center justify-center w-7 h-7 rounded-lg bg-[var(--accent)] text-white text-xs font-medium font-mono"
-            style={BRAND_ICON_STYLE}
-          >
-            LT
-          </span>
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.svg" alt="" width={28} height={28} className="shrink-0" aria-hidden="true" />
         <div className="flex flex-col">
           <span className="text-sm font-medium text-[var(--text)] font-[family-name:var(--font-heading)]">{t('brand')}</span>
           <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--muted)] -mt-0.5">{t('brandSub')}</span>
