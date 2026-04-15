@@ -122,7 +122,6 @@ export const Sidebar = memo(function Sidebar() {
     >
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-5 h-14 border-b border-[var(--line)]">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo.svg" alt="" width={28} height={28} className="shrink-0" aria-hidden="true" />
         <div className="flex flex-col">
           <span className="text-sm font-medium text-[var(--text)] font-[family-name:var(--font-heading)]">{t('brand')}</span>
