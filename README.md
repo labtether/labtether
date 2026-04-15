@@ -125,16 +125,38 @@ FreeBSD nodes are managed agentlessly via connectors. No agent install required.
 
 **Fleet Dashboard** -- Health at a glance. CPU, memory, disk, network, and temperature across every node.
 
-**Remote Access** -- Terminal and desktop sessions directly from the browser. No SSH keys or VNC clients needed.
+**Remote Terminal** -- Browser-based shell sessions with snippets, bookmarks, and persistent sessions. No SSH keys needed.
 
-**Alerts and Incidents** -- Define rules, get notified, triage and resolve from one timeline with correlated telemetry.
+**Remote Desktop** -- VNC and SPICE desktop access directly from the browser. Session recordings for audit.
+
+**File Manager** -- Browse, upload, download, and transfer files between devices from one interface.
+
+**SSH Manager** -- Manage SSH connections, keys, and protocols per device. Quick-connect from the command palette.
+
+**Alerts and Incidents** -- Define rules, route notifications, silence during maintenance, and triage from one correlated timeline. Full incident tracking with postmortem analysis.
+
+**Containers** -- Monitor and manage Docker containers and Compose stacks across your fleet.
+
+**Services** -- Discover, group, and monitor web services with health checks and custom icons.
+
+**Logs** -- Centralized log viewer with search, filtering, and journal access across all nodes.
+
+**Topology Map** -- Visualize your infrastructure, dependencies, and network relationships.
+
+**Actions and Automation** -- Save and execute actions across devices. Webhooks and scheduled jobs for hands-free operations.
+
+**Groups and Maintenance** -- Organize assets into groups with maintenance windows and reliability tracking.
 
 **Integrations** -- Connect what you already run: Proxmox VE, TrueNAS, Docker, Portainer, Home Assistant, and Proxmox Backup Server.
 
 **Update Runs** -- Plan and execute maintenance across your fleet with dry-run support and audit trails.
 
+**Security** -- 2FA, OIDC/SSO, RBAC, API keys, TLS management, and a full audit log.
+
+**Command Palette** -- Cmd+K to jump anywhere, quick-connect to devices, or run saved actions.
+
 <details>
-<summary><strong>Screenshots</strong></summary>
+<summary><strong>All Screenshots</strong></summary>
 <br/>
 <p align="center">
   <img src="screenshots/01-dashboard.png" alt="Fleet Dashboard" width="800" /><br/>
@@ -146,39 +168,39 @@ FreeBSD nodes are managed agentlessly via connectors. No agent install required.
 </p>
 <p align="center">
   <img src="screenshots/05-terminal.png" alt="Remote Terminal" width="800" /><br/>
-  <em>Remote Terminal — browser-based SSH, no keys needed</em>
-</p>
-<p align="center">
-  <img src="screenshots/03-topology.png" alt="Topology Map" width="800" /><br/>
-  <em>Topology Map — visualize your infrastructure</em>
-</p>
-<p align="center">
-  <img src="screenshots/08-alerts.png" alt="Alerts and Incidents" width="800" /><br/>
-  <em>Alerts — correlated timeline with telemetry</em>
+  <em>Remote Terminal — browser-based shell with snippets and bookmarks</em>
 </p>
 <p align="center">
   <img src="screenshots/06-files.png" alt="File Manager" width="800" /><br/>
-  <em>File Manager — browse and transfer files remotely</em>
+  <em>File Manager — browse, upload, download, and transfer files</em>
 </p>
 <p align="center">
   <img src="screenshots/04-services.png" alt="Services" width="800" /><br/>
-  <em>Services — monitor and manage running services</em>
+  <em>Services — discover and monitor web services with health checks</em>
+</p>
+<p align="center">
+  <img src="screenshots/03-topology.png" alt="Topology Map" width="800" /><br/>
+  <em>Topology Map — visualize your infrastructure and dependencies</em>
+</p>
+<p align="center">
+  <img src="screenshots/08-alerts.png" alt="Alerts and Incidents" width="800" /><br/>
+  <em>Alerts — correlated timeline with routing and silencing</em>
 </p>
 <p align="center">
   <img src="screenshots/07-logs.png" alt="Logs" width="800" /><br/>
-  <em>Logs — centralized log viewer with search and filtering</em>
+  <em>Logs — centralized viewer with search and filtering</em>
 </p>
 <p align="center">
   <img src="screenshots/10-health.png" alt="Health Overview" width="800" /><br/>
-  <em>Health — system health checks at a glance</em>
+  <em>Health — reliability tracking and system health checks</em>
 </p>
 <p align="center">
   <img src="screenshots/09-settings.png" alt="Settings" width="800" /><br/>
-  <em>Settings — configure hub, integrations, and users</em>
+  <em>Settings — integrations, security, agents, and notifications</em>
 </p>
 <p align="center">
   <img src="screenshots/wave2-login.png" alt="Login" width="800" /><br/>
-  <em>Login — secure authentication with SSO support</em>
+  <em>Login — 2FA, OIDC/SSO, and secure authentication</em>
 </p>
 </details>
 
