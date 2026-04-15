@@ -28,16 +28,16 @@
 <table>
 <tr>
 <td align="center" width="33%">
+<strong>AI-Native</strong><br/>
+Built-in MCP server with 23+ tools. Operate your fleet through Claude, OpenClaw, Cursor, or any AI agent.
+</td>
+<td align="center" width="33%">
 <strong>Cross-Platform</strong><br/>
 Linux, Windows, macOS, FreeBSD — all first-class citizens, managed from one hub.
 </td>
 <td align="center" width="33%">
-<strong>AI Agent Gateway</strong><br/>
-Operate your infrastructure through Claude, Cursor, or any MCP client.
-</td>
-<td align="center" width="33%">
-<strong>Unified Operations</strong><br/>
-Dashboard, remote access, alerts, updates — one URL instead of six tabs.
+<strong>Secure by Default</strong><br/>
+Tailscale integration, 2FA, OIDC/SSO, RBAC, audit logs, and TLS — out of the box.
 </td>
 </tr>
 </table>
@@ -123,37 +123,90 @@ FreeBSD nodes are managed agentlessly via connectors. No agent install required.
 
 ## What You Get
 
-**Fleet Dashboard** -- Health at a glance. CPU, memory, disk, network, and temperature across every node.
+### AI-Powered Operations
 
-**Remote Terminal** -- Browser-based shell sessions with snippets, bookmarks, and persistent sessions. No SSH keys needed.
+<p align="center">
+  <img src="https://img.shields.io/badge/MCP-Model%20Context%20Protocol-8A2BE2?style=for-the-badge" alt="MCP" />
+  <img src="https://img.shields.io/badge/Claude-Compatible-F97316?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude" />
+  <img src="https://img.shields.io/badge/OpenClaw-Compatible-00C853?style=for-the-badge" alt="OpenClaw" />
+</p>
 
-**Remote Desktop** -- VNC and SPICE desktop access directly from the browser. Session recordings for audit.
+LabTether ships a built-in **MCP server** with 23+ tools. Connect Claude, OpenClaw, Cursor, or any MCP-compatible AI agent and operate your infrastructure through natural language:
 
-**File Manager** -- Browse, upload, download, and transfer files between devices from one interface.
+- Run commands across your fleet, restart services, read logs
+- Query container stats, manage Docker stacks, check connector health
+- Browse files, acknowledge alerts, reboot or wake machines
+- Explore topology, list schedules, trigger webhooks
 
-**SSH Manager** -- Manage SSH connections, keys, and protocols per device. Quick-connect from the command palette.
+> *"Restart the nginx container on prod-web-01"* -- your AI agent does it through LabTether's MCP endpoint.
 
-**Alerts and Incidents** -- Define rules, route notifications, silence during maintenance, and triage from one correlated timeline. Full incident tracking with postmortem analysis.
+### Secure Remote Access with Tailscale
 
-**Containers** -- Monitor and manage Docker containers and Compose stacks across your fleet.
+One-click **Tailscale Serve** integration. Expose your hub over HTTPS to your tailnet -- no port forwarding, no dynamic DNS, no certificates to manage. Managed mode handles everything automatically.
 
-**Services** -- Discover, group, and monitor web services with health checks and custom icons.
+### Fleet Dashboard
 
-**Logs** -- Centralized log viewer with search, filtering, and journal access across all nodes.
+Health at a glance. CPU, memory, disk, network, and temperature across every node.
 
-**Topology Map** -- Visualize your infrastructure, dependencies, and network relationships.
+<p align="center">
+  <img src="screenshots/01-dashboard.png" alt="Fleet Dashboard" width="800" />
+</p>
 
-**Actions and Automation** -- Save and execute actions across devices. Webhooks and scheduled jobs for hands-free operations.
+### Remote Terminal and SSH
 
-**Groups and Maintenance** -- Organize assets into groups with maintenance windows and reliability tracking.
+Browser-based shell sessions with snippets, bookmarks, and persistent sessions. Manage SSH connections, keys, and protocols per device. Quick-connect from the command palette -- no SSH keys needed.
 
-**Integrations** -- Connect what you already run: Proxmox VE, TrueNAS, Docker, Portainer, Home Assistant, and Proxmox Backup Server.
+<p align="center">
+  <img src="screenshots/05-terminal.png" alt="Remote Terminal" width="800" />
+</p>
 
-**Update Runs** -- Plan and execute maintenance across your fleet with dry-run support and audit trails.
+### Remote Desktop
 
-**Security** -- 2FA, OIDC/SSO, RBAC, API keys, TLS management, and a full audit log.
+VNC and SPICE desktop access directly from the browser. Session recordings for audit and compliance.
 
-**Command Palette** -- Cmd+K to jump anywhere, quick-connect to devices, or run saved actions.
+### File Manager
+
+Browse, upload, download, and transfer files between devices from one interface.
+
+<p align="center">
+  <img src="screenshots/06-files.png" alt="File Manager" width="800" />
+</p>
+
+### Alerts, Incidents, and Logs
+
+Define alert rules, route notifications, silence during maintenance, and triage from one correlated timeline. Full incident tracking with postmortem analysis. Centralized log viewer with search, filtering, and journal access across all nodes.
+
+<p align="center">
+  <img src="screenshots/08-alerts.png" alt="Alerts" width="800" />
+</p>
+
+### Containers and Services
+
+Monitor and manage Docker containers and Compose stacks across your fleet. Discover, group, and monitor web services with health checks and custom icons.
+
+### Topology Map
+
+Visualize your infrastructure, dependencies, and network relationships. Blast radius analysis for change planning.
+
+<p align="center">
+  <img src="screenshots/03-topology.png" alt="Topology Map" width="800" />
+</p>
+
+### Automation
+
+Save and execute actions across devices. Webhooks and scheduled jobs for hands-free operations. Cron-like scheduling with group-aware execution.
+
+### Integrations
+
+Connect what you already run: Proxmox VE, TrueNAS, Docker, Portainer, Home Assistant, and Proxmox Backup Server. Auto-discovery finds your infrastructure automatically.
+
+### Enterprise Security
+
+2FA, OIDC/SSO, RBAC, API keys, TLS management, Prometheus metrics export, data retention policies, and a full audit log. Everything you need for compliance.
+
+### And More
+
+**Groups and Maintenance** -- Organize assets with maintenance windows and reliability tracking. **Update Runs** -- Plan and execute updates with dry-run support and audit trails. **Command Palette** -- Cmd+K to jump anywhere, quick-connect to devices, or run saved actions. **API Docs** -- Built-in OpenAPI reference for every endpoint.
 
 <details>
 <summary><strong>All Screenshots</strong></summary>
@@ -215,6 +268,8 @@ FreeBSD nodes are managed agentlessly via connectors. No agent install required.
   <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/Portainer-13BEF9?style=for-the-badge&logo=portainer&logoColor=white" alt="Portainer" />
   <img src="https://img.shields.io/badge/Home%20Assistant-41BDF5?style=for-the-badge&logo=homeassistant&logoColor=white" alt="Home Assistant" />
+  <img src="https://img.shields.io/badge/Tailscale-242424?style=for-the-badge&logo=tailscale&logoColor=white" alt="Tailscale" />
+  <img src="https://img.shields.io/badge/MCP-8A2BE2?style=for-the-badge" alt="MCP" />
 </p>
 
 ---
