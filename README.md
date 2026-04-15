@@ -8,10 +8,10 @@
 [![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square)](LICENSE)
-[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white)](DISCORD_INVITE_URL)
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/labtether)
 [![Demo](https://img.shields.io/badge/Demo-Try%20It-FF0080?style=flat-square)](https://demo.labtether.com)
 
-[Website](https://labtether.com) &middot; [Docs](https://labtether.com/docs) &middot; [Wiki](https://labtether.com/docs/wiki) &middot; [Discord](DISCORD_INVITE_URL) &middot; [Demo](https://demo.labtether.com) &middot; [Changelog](CHANGELOG.md)
+[Website](https://labtether.com) &middot; [Docs](https://labtether.com/docs) &middot; [Wiki](https://labtether.com/docs/wiki) &middot; [Discord](https://discord.gg/labtether) &middot; [Demo](https://demo.labtether.com) &middot; [Changelog](CHANGELOG.md)
 
 </div>
 
@@ -294,7 +294,7 @@ Connect what you already run: Proxmox VE, TrueNAS, Docker, Portainer, Home Assis
 
 ## Community
 
-- **Discord** -- [Join the server](DISCORD_INVITE_URL)
+- **Discord** -- [Join the server](https://discord.gg/labtether)
 - **Twitter/X** -- [@labtether](https://x.com/labtether) &middot; [@Watari_Labs_](https://x.com/Watari_Labs_)
 - **Blog** -- [labtether.com/blog](https://labtether.com/blog)
 - **Live Demo** -- [demo.labtether.com](https://demo.labtether.com) (no signup required)
