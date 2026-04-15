@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src=".github/logo.svg" alt="LabTether" width="80" />
+
 # LabTether
 
 **Cross-platform homelab control plane with AI-powered operations.**
