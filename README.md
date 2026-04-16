@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src=".github/logo.svg" alt="LabTether" width="80" />
+<img src=".github/logo.svg" alt="LabTether" width="120" />
 
 # LabTether
 

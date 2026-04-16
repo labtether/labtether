@@ -219,7 +219,7 @@ export default function LoginPage() {
 
           {/* Logo + Heading */}
           <div className="flex flex-col items-center gap-3">
-            <img src="/logo.svg" alt="LabTether" width={48} height={48} />
+            <img src="/logo.svg" alt="LabTether" width={56} height={56} />
             <div className="text-center">
               <h1 className="text-xl font-medium text-[var(--text)] font-[family-name:var(--font-heading)]">{t('brand')}</h1>
               <p className="text-[10px] font-mono uppercase tracking-[0.15em] text-[var(--muted)] mt-0.5">{t('brandSub')}</p>

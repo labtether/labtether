@@ -267,7 +267,7 @@ export default function SetupPage() {
           />
 
           <div className="flex flex-col items-center gap-3">
-            <img src="/logo.svg" alt="LabTether" width={48} height={48} />
+            <img src="/logo.svg" alt="LabTether" width={56} height={56} />
             <div className="text-center">
               <h1 className="text-xl font-medium text-[var(--text)] font-[family-name:var(--font-heading)]">
                 {step === "account" ? t('setup.title') : t('remoteAccess.title')}
