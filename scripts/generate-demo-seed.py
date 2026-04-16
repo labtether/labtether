@@ -84,40 +84,22 @@ ASSETS = [
 
 # (source, target, rel_type, direction, criticality, origin, note)
 EDGES = [
-    # Storage provides to compute
+    # Storage → Compute
     ("asset-truenas", "asset-pve1",    "provides_to", "downstream", "critical", "manual", "NFS datastore for VMs"),
     ("asset-truenas", "asset-pve2",    "provides_to", "downstream", "critical", "manual", "NFS datastore for VMs"),
-    ("asset-truenas", "asset-docker",  "provides_to", "downstream", "high",     "manual", "iSCSI volumes for containers"),
-    ("asset-truenas", "asset-pbs",     "provides_to", "downstream", "high",     "manual", "Backup target NFS share"),
-    ("asset-truenas", "asset-media",   "provides_to", "downstream", "medium",   "manual", "Media library NFS mount"),
-    # Compute runs VMs
-    ("asset-pve1", "asset-gitlab",     "runs_on",     "downstream", "high",     "manual", "VM hosted on pve-node-1"),
-    ("asset-pve1", "asset-dev-ws",     "runs_on",     "downstream", "medium",   "manual", "Dev workstation VM"),
+    # Compute → Services
     ("asset-pve1", "asset-docker",     "runs_on",     "downstream", "high",     "manual", "Docker host VM on Proxmox"),
     ("asset-pve1", "asset-k3s-m",      "runs_on",     "downstream", "high",     "manual", "K3s master VM"),
     ("asset-pve2", "asset-k3s-w1",     "runs_on",     "downstream", "high",     "manual", "K3s worker VM on node 2"),
-    ("asset-pve2", "asset-mc",         "runs_on",     "downstream", "low",      "manual", "Minecraft server VM"),
-    ("asset-pve2", "asset-htpc",       "runs_on",     "downstream", "low",      "manual", "Windows HTPC VM"),
-    # Docker runs containers/services
-    ("asset-docker", "asset-pihole",   "runs_on",     "downstream", "high",     "manual", "Pi-hole Docker container"),
-    ("asset-docker", "asset-hass",     "runs_on",     "downstream", "medium",   "manual", "Home Assistant container"),
-    ("asset-docker", "asset-unifi",    "runs_on",     "downstream", "medium",   "manual", "UniFi controller container"),
+    # Compute → Dev
+    ("asset-pve1", "asset-gitlab",     "runs_on",     "downstream", "high",     "manual", "VM hosted on pve-node-1"),
+    ("asset-pve1", "asset-dev-ws",     "runs_on",     "downstream", "medium",   "manual", "Dev workstation VM"),
     # K3s cluster
     ("asset-k3s-m",  "asset-k3s-w1",  "contains",    "downstream", "high",     "manual", "K3s cluster membership"),
     ("asset-k3s-m",  "asset-mon",      "runs_on",     "downstream", "high",     "manual", "Monitoring stack on K3s"),
-    # Monitoring observes everything
-    ("asset-mon", "asset-pve1",        "depends_on",  "upstream",   "medium",   "suggested", "Prometheus scrape target"),
-    ("asset-mon", "asset-pve2",        "depends_on",  "upstream",   "medium",   "suggested", "Prometheus scrape target"),
-    ("asset-mon", "asset-truenas",     "depends_on",  "upstream",   "medium",   "suggested", "SNMP + node_exporter"),
-    ("asset-mon", "asset-docker",      "depends_on",  "upstream",   "medium",   "suggested", "cAdvisor metrics"),
-    ("asset-mon", "asset-opnsense",    "depends_on",  "upstream",   "medium",   "suggested", "Prometheus scrape target"),
     # Backup chain
-    ("asset-pbs",  "asset-pve1",       "depends_on",  "upstream",   "high",     "manual", "Backs up VMs from pve-node-1"),
-    ("asset-pbs",  "asset-pve2",       "depends_on",  "upstream",   "high",     "manual", "Backs up VMs from pve-node-2"),
-    ("asset-offsite", "asset-pbs",     "depends_on",  "upstream",   "high",     "manual", "Nightly offsite sync from PBS"),
-    ("asset-offsite", "asset-truenas", "depends_on",  "upstream",   "medium",   "manual", "Weekly ZFS send to offsite"),
-    # Network dependency
-    ("asset-opnsense", "asset-pihole", "provides_to", "downstream", "high",     "manual", "DNS upstream for all clients"),
+    ("asset-pbs",     "asset-offsite", "depends_on",  "downstream", "high",     "manual", "Nightly offsite sync from PBS"),
+    ("asset-truenas", "asset-pbs",     "provides_to", "downstream", "high",     "manual", "Backup target NFS share"),
 ]
 
 
@@ -716,31 +698,32 @@ def main():
     out.write(f"    ('{topo_id}', 'My Homelab', '{viewport}'::jsonb, NOW(), NOW())\n")
     out.write("ON CONFLICT (id) DO NOTHING;\n\n")
 
-    # Zones laid out in a clean grid:
+    # Zone layout — wide spacing, large zones, no overlap.
+    # Grid with generous gaps so connections don't cross zones.
     #
-    #  [  Network  ] [    Compute     ] [  Storage  ]
-    #  (0,0 380x280) (420,0 500x280)   (960,0 380x280)
+    #  [ Compute ]        [ Storage ]
+    #  (0,0 500x240)      (600,0 500x240)
     #
-    #  [         Services              ] [   Dev    ]
-    #  (0,320 720x400)                   (760,320 380x280)
+    #  [        Services (wide)          ]  [ Network ]
+    #  (0,340 840x500)                      (940,340 400x300)
     #
-    #                                    [ Remote   ]
-    #                                    (760,640 380x200)
+    #  [ Dev ]            [ Remote ]
+    #  (0,940 500x240)    (600,940 400x200)
     #
-    zid_network  = "10000000-0000-0000-0000-000000000001"
     zid_compute  = "10000000-0000-0000-0000-000000000002"
     zid_storage  = "10000000-0000-0000-0000-000000000003"
     zid_services = "10000000-0000-0000-0000-000000000004"
+    zid_network  = "10000000-0000-0000-0000-000000000001"
     zid_dev      = "10000000-0000-0000-0000-000000000005"
     zid_remote   = "10000000-0000-0000-0000-000000000006"
 
     zones = [
-        (zid_network,  None, "Network",  "blue",   "globe",    0, 0,    380, 280),
-        (zid_compute,  None, "Compute",  "purple", "cpu",      420, 0,  500, 280),
-        (zid_storage,  None, "Storage",  "orange", "database", 960, 0,  380, 280),
-        (zid_services, None, "Services", "green",  "layers",   0, 320,  720, 420),
-        (zid_dev,      None, "Dev",      "cyan",   "code",     760, 320, 380, 280),
-        (zid_remote,   None, "Remote",   "gray",   "radio",    760, 640, 380, 200),
+        (zid_compute,  None, "Compute",  "purple", "cpu",      0, 0,      500, 240),
+        (zid_storage,  None, "Storage",  "orange", "database", 600, 0,    500, 240),
+        (zid_services, None, "Services", "green",  "layers",   0, 340,    840, 500),
+        (zid_network,  None, "Network",  "blue",   "globe",    940, 340,  400, 300),
+        (zid_dev,      None, "Dev",      "cyan",   "code",     0, 940,    500, 240),
+        (zid_remote,   None, "Remote",   "gray",   "radio",    600, 940,  400, 200),
     ]
 
     out.write("INSERT INTO topology_zones (id, topology_id, parent_zone_id, label, color, icon, position, size, sort_order, created_at, updated_at) VALUES\n")
@@ -754,30 +737,30 @@ def main():
     # Place assets in zones with positions relative to zone top-left.
     # Each asset gets an (x, y) offset within its zone.
     zone_members = [
-        # Network zone (380x280)
-        (zid_network, "asset-opnsense", 30, 60),
-        (zid_network, "asset-pihole",   180, 60),
-        (zid_network, "asset-unifi",    100, 170),
-        # Compute zone (500x280)
+        # Compute zone (500x240) — top left
         (zid_compute, "asset-pve1",     60, 80),
         (zid_compute, "asset-pve2",     280, 80),
-        # Storage zone (380x280)
-        (zid_storage, "asset-truenas",  50, 60),
-        (zid_storage, "asset-pbs",      210, 60),
-        # Services zone (720x420)
-        (zid_services,"asset-docker",   50, 60),
-        (zid_services,"asset-k3s-m",    250, 60),
-        (zid_services,"asset-k3s-w1",   440, 60),
-        (zid_services,"asset-hass",     50, 200),
-        (zid_services,"asset-media",    250, 200),
-        (zid_services,"asset-mon",      440, 200),
-        (zid_services,"asset-mc",       250, 320),
-        (zid_services,"asset-htpc",     440, 320),
-        # Dev zone (380x280)
-        (zid_dev,     "asset-gitlab",   50, 80),
-        (zid_dev,     "asset-dev-ws",   210, 80),
-        # Remote zone (380x200)
-        (zid_remote,  "asset-offsite",  130, 60),
+        # Storage zone (500x240) — top right
+        (zid_storage, "asset-truenas",  60, 80),
+        (zid_storage, "asset-pbs",      280, 80),
+        # Services zone (840x500) — middle left, 3-column grid
+        (zid_services,"asset-docker",   60, 70),
+        (zid_services,"asset-k3s-m",    320, 70),
+        (zid_services,"asset-k3s-w1",   580, 70),
+        (zid_services,"asset-hass",     60, 200),
+        (zid_services,"asset-media",    320, 200),
+        (zid_services,"asset-mon",      580, 200),
+        (zid_services,"asset-mc",       160, 340),
+        (zid_services,"asset-htpc",     420, 340),
+        # Network zone (400x300) — middle right
+        (zid_network, "asset-opnsense", 60, 70),
+        (zid_network, "asset-pihole",   220, 70),
+        (zid_network, "asset-unifi",    140, 180),
+        # Dev zone (500x240) — bottom left
+        (zid_dev,     "asset-gitlab",   60, 80),
+        (zid_dev,     "asset-dev-ws",   280, 80),
+        # Remote zone (400x200) — bottom right
+        (zid_remote,  "asset-offsite",  140, 70),
     ]
 
     out.write("INSERT INTO zone_members (zone_id, asset_id, position, sort_order) VALUES\n")
@@ -787,24 +770,22 @@ def main():
     out.write(",\n".join(zm_rows))
     out.write("\nON CONFLICT (zone_id, asset_id) DO NOTHING;\n\n")
 
-    # Topology connections (visual edges on the canvas, based on key asset_edges)
+    # Topology connections — only the key relationships to keep it clean.
+    # Rule: max 1-2 connections per node to avoid spaghetti.
     topo_connections = [
-        ("asset-truenas", "asset-pve1",    "provides_to",  "NFS datastore"),
-        ("asset-truenas", "asset-pve2",    "provides_to",  "NFS datastore"),
-        ("asset-truenas", "asset-docker",  "provides_to",  "iSCSI volumes"),
-        ("asset-truenas", "asset-pbs",     "provides_to",  "Backup target"),
-        ("asset-truenas", "asset-media",   "provides_to",  "Media library"),
-        ("asset-pve1",    "asset-docker",  "runs_on",      "VM"),
-        ("asset-pve1",    "asset-k3s-m",   "runs_on",      "VM"),
-        ("asset-pve1",    "asset-gitlab",  "runs_on",      "VM"),
-        ("asset-pve1",    "asset-dev-ws",  "runs_on",      "VM"),
-        ("asset-pve2",    "asset-k3s-w1",  "runs_on",      "VM"),
-        ("asset-pve2",    "asset-mc",      "runs_on",      "VM"),
-        ("asset-pve2",    "asset-htpc",    "runs_on",      "VM"),
-        ("asset-k3s-m",   "asset-k3s-w1", "contains",     "Cluster"),
-        ("asset-k3s-m",   "asset-mon",     "runs_on",      "K3s workload"),
-        ("asset-pbs",     "asset-offsite", "provides_to",  "Offsite sync"),
-        ("asset-opnsense","asset-pihole",  "provides_to",  "DNS upstream"),
+        # Compute → Services (VMs host the services)
+        ("asset-pve1",    "asset-docker",  "runs_on",      ""),
+        ("asset-pve1",    "asset-k3s-m",   "runs_on",      ""),
+        ("asset-pve2",    "asset-k3s-w1",  "runs_on",      ""),
+        # Storage → Compute (NFS backing)
+        ("asset-truenas", "asset-pve1",    "provides_to",  ""),
+        ("asset-truenas", "asset-pve2",    "provides_to",  ""),
+        # Backup chain
+        ("asset-pbs",     "asset-offsite", "provides_to",  ""),
+        # K3s cluster
+        ("asset-k3s-m",   "asset-k3s-w1", "contains",     ""),
+        # Compute → Dev
+        ("asset-pve1",    "asset-gitlab",  "runs_on",      ""),
     ]
 
     out.write("INSERT INTO topology_connections (id, topology_id, source_asset_id, target_asset_id, relationship, user_defined, label, created_at) VALUES\n")
