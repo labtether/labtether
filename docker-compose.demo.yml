@@ -48,4 +48,4 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-labtether}
     volumes:
       - labtether-bootstrap:/bootstrap:ro
-      - ./scripts/demo-seed.sql:/seed/demo-seed.sql:ro
+      - ../../scripts/demo-seed.sql:/seed/demo-seed.sql:ro
