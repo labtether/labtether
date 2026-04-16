@@ -5,18 +5,6 @@ import { hasLabtetherSessionCookie, isMutationRequestOriginAllowed, isMutatingMe
 
 const locales = ["en", "de", "fr", "es", "zh"] as const;
 
-/** Runtime demo mode check — must be a function call so the bundler cannot
- *  statically evaluate it and tree-shake the guarded code path. */
-function isDemoMode(): boolean {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const env: Record<string, string | undefined> = (globalThis as any).process?.env ?? {};
-    return env.NEXT_PUBLIC_DEMO_MODE === "true" || env.LABTETHER_DEMO_MODE === "true";
-  } catch {
-    return false;
-  }
-}
-
 const publicAPIPaths = new Set<string>([
   "/api/auth/login",
   "/api/auth/login/2fa",
@@ -36,18 +24,6 @@ const handleI18nRouting = createMiddleware({
 
 export function proxy(request: NextRequest) {
   const { pathname } = new URL(request.url);
-
-  // Demo mode: auto-provision a session for unauthenticated page visits.
-  // NEXT_PUBLIC_ vars are inlined at build time. Turbopack aggressively
-  // tree-shakes any branch guarded by a build-time-false condition, even
-  // if OR'd with a runtime check. Use only a runtime check here.
-  if (isDemoMode()) {
-    const cookies = request.headers.get("cookie") ?? "";
-    if (!hasLabtetherSessionCookie(cookies) && !pathname.startsWith("/api/")) {
-      const redirect = encodeURIComponent(pathname);
-      return Response.redirect(new URL(`/api/demo/session?redirect=${redirect}`, request.url), 307);
-    }
-  }
 
   if (pathname.startsWith("/api/") || pathname.startsWith("/api")) {
     if (request.method === "OPTIONS") {

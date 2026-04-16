@@ -32,6 +32,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [challengeToken, setChallengeToken] = useState<string | null>(null);
   const [totpCode, setTotpCode] = useState("");
+  const [demoMode, setDemoMode] = useState(false);
   const submitAbortRef = useRef<AbortController | null>(null);
   const submitSeqRef = useRef(0);
 
@@ -67,6 +68,24 @@ export default function LoginPage() {
       submitAbortRef.current?.abort();
       submitAbortRef.current = null;
     };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function checkDemoMode() {
+      try {
+        const response = await fetch("/api/demo/session", { method: "HEAD", cache: "no-store" });
+        if (!cancelled && response.status !== 404) {
+          setDemoMode(true);
+          setUsername("demo");
+          setPassword("demo-viewer");
+        }
+      } catch {
+        // Not in demo mode.
+      }
+    }
+    void checkDemoMode();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -260,6 +279,14 @@ export default function LoginPage() {
             </>
           ) : (
             <>
+              {demoMode ? (
+                <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg px-4 py-3 text-center space-y-1">
+                  <p className="text-sm font-medium text-blue-400">Demo Instance</p>
+                  <p className="text-xs text-[var(--muted)]">
+                    Credentials are pre-filled. Just hit sign in.
+                  </p>
+                </div>
+              ) : null}
               <p className="text-sm text-[var(--muted)] text-center">{t('login.subtitle')}</p>
               {oidcEnabled ? (
                 <Button type="button" variant="secondary" className="w-full" onClick={handleOIDCLogin}>
