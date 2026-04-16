@@ -658,6 +658,7 @@ def main():
     out.write("-- TRUNCATE\n")
     out.write("-- ════════════════════════════════════════════════════════════════\n")
     out.write("TRUNCATE\n")
+    out.write("    zone_members, topology_connections, topology_zones, topology_layouts,\n")
     out.write("    asset_edges, metric_samples, alert_instances, alert_rules,\n")
     out.write("    incident_events, incident_alert_links, incidents,\n")
     out.write("    log_events, audit_events, groups, action_runs, assets\n")
@@ -702,6 +703,115 @@ def main():
         created = ts(NOW - timedelta(days=random.randint(30, 180)))
         rows.append(f"    ({sql_str(eid)}, {sql_str(src)}, {sql_str(tgt)}, {sql_str(rel)}, {sql_str(direction)}, {sql_str(crit)}, {sql_str(origin)}, {conf}, NULL, {sql_json({'note': note})}, '{created}', '{created}')")
     out.write(",\n".join(rows))
+    out.write("\nON CONFLICT DO NOTHING;\n\n")
+
+    # Topology layout — zones with positioned assets
+    out.write("-- ════════════════════════════════════════════════════════════════\n")
+    out.write("-- TOPOLOGY LAYOUT\n")
+    out.write("-- ════════════════════════════════════════════════════════════════\n")
+
+    topo_id = "00000000-0000-0000-0000-000000000001"
+    viewport = json.dumps({"x": 100, "y": 50, "zoom": 0.75})
+    out.write(f"INSERT INTO topology_layouts (id, name, viewport, created_at, updated_at) VALUES\n")
+    out.write(f"    ('{topo_id}', 'My Homelab', '{viewport}'::jsonb, NOW(), NOW())\n")
+    out.write("ON CONFLICT (id) DO NOTHING;\n\n")
+
+    # Zones laid out in a clean grid:
+    #
+    #  [  Network  ] [    Compute     ] [  Storage  ]
+    #  (0,0 380x280) (420,0 500x280)   (960,0 380x280)
+    #
+    #  [         Services              ] [   Dev    ]
+    #  (0,320 720x400)                   (760,320 380x280)
+    #
+    #                                    [ Remote   ]
+    #                                    (760,640 380x200)
+    #
+    zid_network  = "10000000-0000-0000-0000-000000000001"
+    zid_compute  = "10000000-0000-0000-0000-000000000002"
+    zid_storage  = "10000000-0000-0000-0000-000000000003"
+    zid_services = "10000000-0000-0000-0000-000000000004"
+    zid_dev      = "10000000-0000-0000-0000-000000000005"
+    zid_remote   = "10000000-0000-0000-0000-000000000006"
+
+    zones = [
+        (zid_network,  None, "Network",  "blue",   "globe",    0, 0,    380, 280),
+        (zid_compute,  None, "Compute",  "purple", "cpu",      420, 0,  500, 280),
+        (zid_storage,  None, "Storage",  "orange", "database", 960, 0,  380, 280),
+        (zid_services, None, "Services", "green",  "layers",   0, 320,  720, 420),
+        (zid_dev,      None, "Dev",      "cyan",   "code",     760, 320, 380, 280),
+        (zid_remote,   None, "Remote",   "gray",   "radio",    760, 640, 380, 200),
+    ]
+
+    out.write("INSERT INTO topology_zones (id, topology_id, parent_zone_id, label, color, icon, position, size, sort_order, created_at, updated_at) VALUES\n")
+    zone_rows = []
+    for zid, parent, label, color, icon, x, y, w, h in zones:
+        parent_sql = f"'{parent}'" if parent else "NULL"
+        zone_rows.append(f"    ('{zid}', '{topo_id}', {parent_sql}, {sql_str(label)}, {sql_str(color)}, {sql_str(icon)}, {sql_json({'x':x,'y':y})}, {sql_json({'width':w,'height':h})}, 0, NOW(), NOW())")
+    out.write(",\n".join(zone_rows))
+    out.write("\nON CONFLICT (id) DO NOTHING;\n\n")
+
+    # Place assets in zones with positions relative to zone top-left.
+    # Each asset gets an (x, y) offset within its zone.
+    zone_members = [
+        # Network zone (380x280)
+        (zid_network, "asset-opnsense", 30, 60),
+        (zid_network, "asset-pihole",   180, 60),
+        (zid_network, "asset-unifi",    100, 170),
+        # Compute zone (500x280)
+        (zid_compute, "asset-pve1",     60, 80),
+        (zid_compute, "asset-pve2",     280, 80),
+        # Storage zone (380x280)
+        (zid_storage, "asset-truenas",  50, 60),
+        (zid_storage, "asset-pbs",      210, 60),
+        # Services zone (720x420)
+        (zid_services,"asset-docker",   50, 60),
+        (zid_services,"asset-k3s-m",    250, 60),
+        (zid_services,"asset-k3s-w1",   440, 60),
+        (zid_services,"asset-hass",     50, 200),
+        (zid_services,"asset-media",    250, 200),
+        (zid_services,"asset-mon",      440, 200),
+        (zid_services,"asset-mc",       250, 320),
+        (zid_services,"asset-htpc",     440, 320),
+        # Dev zone (380x280)
+        (zid_dev,     "asset-gitlab",   50, 80),
+        (zid_dev,     "asset-dev-ws",   210, 80),
+        # Remote zone (380x200)
+        (zid_remote,  "asset-offsite",  130, 60),
+    ]
+
+    out.write("INSERT INTO zone_members (zone_id, asset_id, position, sort_order) VALUES\n")
+    zm_rows = []
+    for zid, aid, x, y in zone_members:
+        zm_rows.append(f"    ('{zid}', {sql_str(aid)}, {sql_json({'x':x,'y':y})}, 0)")
+    out.write(",\n".join(zm_rows))
+    out.write("\nON CONFLICT (zone_id, asset_id) DO NOTHING;\n\n")
+
+    # Topology connections (visual edges on the canvas, based on key asset_edges)
+    topo_connections = [
+        ("asset-truenas", "asset-pve1",    "provides_to",  "NFS datastore"),
+        ("asset-truenas", "asset-pve2",    "provides_to",  "NFS datastore"),
+        ("asset-truenas", "asset-docker",  "provides_to",  "iSCSI volumes"),
+        ("asset-truenas", "asset-pbs",     "provides_to",  "Backup target"),
+        ("asset-truenas", "asset-media",   "provides_to",  "Media library"),
+        ("asset-pve1",    "asset-docker",  "runs_on",      "VM"),
+        ("asset-pve1",    "asset-k3s-m",   "runs_on",      "VM"),
+        ("asset-pve1",    "asset-gitlab",  "runs_on",      "VM"),
+        ("asset-pve1",    "asset-dev-ws",  "runs_on",      "VM"),
+        ("asset-pve2",    "asset-k3s-w1",  "runs_on",      "VM"),
+        ("asset-pve2",    "asset-mc",      "runs_on",      "VM"),
+        ("asset-pve2",    "asset-htpc",    "runs_on",      "VM"),
+        ("asset-k3s-m",   "asset-k3s-w1", "contains",     "Cluster"),
+        ("asset-k3s-m",   "asset-mon",     "runs_on",      "K3s workload"),
+        ("asset-pbs",     "asset-offsite", "provides_to",  "Offsite sync"),
+        ("asset-opnsense","asset-pihole",  "provides_to",  "DNS upstream"),
+    ]
+
+    out.write("INSERT INTO topology_connections (id, topology_id, source_asset_id, target_asset_id, relationship, user_defined, label, created_at) VALUES\n")
+    tc_rows = []
+    for src, tgt, rel, label in topo_connections:
+        tc_rows.append(f"    ('{uid()}', '{topo_id}', {sql_str(src)}, {sql_str(tgt)}, {sql_str(rel)}, true, {sql_str(label)}, NOW())")
+    out.write(",\n".join(tc_rows))
     out.write("\nON CONFLICT DO NOTHING;\n\n")
 
     # Alert rules
