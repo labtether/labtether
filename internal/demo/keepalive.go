@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// assetProfile defines the per-asset CPU generation parameters.
+// assetProfile defines the per-asset metric generation parameters.
 type assetProfile struct {
 	cpuBase      float64
 	cpuAmplitude float64
@@ -21,50 +21,7 @@ type assetProfile struct {
 	diskBase     float64
 }
 
-// onlineAssetIDs are the 8 assets that are kept "online" (last_seen_at refreshed).
-var onlineAssetIDs = []string{
-	"asset-proxmox-1",
-	"asset-docker-host-1",
-	"asset-pihole",
-	"asset-home-assistant",
-	"asset-backup-server",
-	"asset-media-server",
-	"asset-k3s-node-1",
-	"asset-monitoring",
-}
-
-var profiles = map[string]assetProfile{
-	"asset-proxmox-1":      {cpuBase: 45, cpuAmplitude: 20, memBase: 72, diskBase: 68},
-	"asset-docker-host-1":  {cpuBase: 35, cpuAmplitude: 15, memBase: 65, diskBase: 55},
-	"asset-pihole":         {cpuBase: 12, cpuAmplitude: 8, memBase: 38, diskBase: 22},
-	"asset-home-assistant": {cpuBase: 20, cpuAmplitude: 10, memBase: 52, diskBase: 45},
-	"asset-backup-server":  {cpuBase: 25, cpuAmplitude: 18, memBase: 80, diskBase: 82},
-	"asset-media-server":   {cpuBase: 55, cpuAmplitude: 20, memBase: 70, diskBase: 88},
-	"asset-k3s-node-1":     {cpuBase: 40, cpuAmplitude: 15, memBase: 58, diskBase: 50},
-	"asset-monitoring":     {cpuBase: 30, cpuAmplitude: 12, memBase: 48, diskBase: 35},
-}
-
 var defaultProfile = assetProfile{cpuBase: 30, cpuAmplitude: 12, memBase: 55, diskBase: 50}
-
-// activityTemplates defines realistic synthetic audit events.
-var activityTemplates = []struct {
-	eventType string
-	target    string
-	reason    string
-}{
-	{"health_check", "asset-proxmox-1", "periodic health check completed"},
-	{"container_sync", "asset-docker-host-1", "container inventory synchronized"},
-	{"dns_refresh", "asset-pihole", "DNS blocklist statistics refreshed"},
-	{"automation_run", "asset-home-assistant", "automation engine cycle completed"},
-	{"backup_verify", "asset-backup-server", "backup integrity verification passed"},
-	{"media_scan", "asset-media-server", "media library scan completed"},
-	{"cluster_reconcile", "asset-k3s-node-1", "k3s cluster state reconciled"},
-	{"metric_collection", "asset-monitoring", "metric collection cycle completed"},
-	{"pool_refresh", "asset-proxmox-1", "storage pool status refreshed"},
-	{"network_scan", "asset-pihole", "network device discovery sweep completed"},
-	{"certificate_check", "asset-docker-host-1", "TLS certificate expiry check passed"},
-	{"snapshot_cleanup", "asset-backup-server", "old snapshots pruned"},
-}
 
 // RunKeepalive starts the demo keepalive loop. It runs every 30 seconds
 // and refreshes asset timestamps, inserts synthetic metrics, generates
@@ -108,12 +65,27 @@ func runTick(ctx context.Context, pool *pgxpool.Pool) {
 	pruneOldMetrics(ctx, pool)
 }
 
-// refreshAssets updates last_seen_at for online assets and keeps stale assets stale.
+// refreshAssets updates last_seen_at for all online/degraded assets and keeps
+// offline assets stale. Discovers assets from the DB rather than hardcoding.
 func refreshAssets(ctx context.Context, pool *pgxpool.Pool) {
-	for _, id := range onlineAssetIDs {
-		offset := 5 + rand.IntN(41) // 5-45 seconds
+	// Refresh all online/degraded assets.
+	rows, err := pool.Query(ctx,
+		`SELECT id FROM assets WHERE status IN ('online', 'degraded')`,
+	)
+	if err != nil {
+		log.Printf("demo: refreshAssets query: %v", err)
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			continue
+		}
+		offset := 5 + rand.IntN(55) // 5-59 seconds ago
 		_, err := pool.Exec(ctx,
-			`UPDATE assets SET last_seen_at = NOW() - ($1 || ' seconds')::interval WHERE id = $2`,
+			`UPDATE assets SET last_seen_at = NOW() - ($1 || ' seconds')::interval, updated_at = NOW() WHERE id = $2`,
 			fmt.Sprintf("%d", offset), id,
 		)
 		if err != nil {
@@ -121,29 +93,39 @@ func refreshAssets(ctx context.Context, pool *pgxpool.Pool) {
 		}
 	}
 
-	// Keep stale assets stale.
-	staleAssets := []struct {
-		id       string
-		interval string
-	}{
-		{"asset-dev-vm", "2 hours"},
-		{"asset-truenas-main", "4 minutes"},
-	}
-	for _, sa := range staleAssets {
-		_, err := pool.Exec(ctx,
-			`UPDATE assets SET last_seen_at = NOW() - $1::interval WHERE id = $2`,
-			sa.interval, sa.id,
-		)
-		if err != nil {
-			log.Printf("demo: refreshAssets stale %s: %v", sa.id, err)
-		}
+	// Keep offline assets stale — bump last_seen_at to maintain a consistent
+	// "offline for N hours" appearance without it drifting to days.
+	_, err = pool.Exec(ctx,
+		`UPDATE assets SET last_seen_at = NOW() - INTERVAL '3 hours', updated_at = NOW() WHERE status = 'offline'`,
+	)
+	if err != nil {
+		log.Printf("demo: refreshAssets offline: %v", err)
 	}
 }
 
-// insertMetrics inserts 4 metric rows (cpu, mem, disk, network) for each online asset.
+// insertMetrics inserts 4 metric rows (cpu, mem, disk, network) for each
+// online/degraded asset. Discovers assets from the DB.
 func insertMetrics(ctx context.Context, pool *pgxpool.Pool) {
 	now := time.Now()
-	for _, id := range onlineAssetIDs {
+	rows, err := pool.Query(ctx,
+		`SELECT id FROM assets WHERE status IN ('online', 'degraded')`,
+	)
+	if err != nil {
+		log.Printf("demo: insertMetrics query: %v", err)
+		return
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			continue
+		}
+		ids = append(ids, id)
+	}
+
+	for _, id := range ids {
 		cpu := GenerateCPU(id, now)
 		mem := generateMemory(id)
 		disk := generateDisk(id)
@@ -172,23 +154,51 @@ func insertMetrics(ctx context.Context, pool *pgxpool.Pool) {
 	}
 }
 
-// pruneOldMetrics removes metric samples older than 24 hours.
+// pruneOldMetrics removes metric samples older than 7 days.
 func pruneOldMetrics(ctx context.Context, pool *pgxpool.Pool) {
 	_, err := pool.Exec(ctx,
-		`DELETE FROM metric_samples WHERE collected_at < NOW() - INTERVAL '24 hours'`,
+		`DELETE FROM metric_samples WHERE collected_at < NOW() - INTERVAL '7 days'`,
 	)
 	if err != nil {
 		log.Printf("demo: pruneOldMetrics: %v", err)
 	}
 }
 
-// insertActivity inserts a synthetic audit event.
+// insertActivity inserts a synthetic audit event using a random online asset.
 func insertActivity(ctx context.Context, pool *pgxpool.Pool) {
-	tmpl := activityTemplates[rand.IntN(len(activityTemplates))]
-	_, err := pool.Exec(ctx,
+	templates := []struct {
+		eventType string
+		reason    string
+	}{
+		{"health_check", "periodic health check completed"},
+		{"container_sync", "container inventory synchronized"},
+		{"dns_refresh", "DNS blocklist statistics refreshed"},
+		{"automation_run", "automation engine cycle completed"},
+		{"backup_verify", "backup integrity verification passed"},
+		{"media_scan", "media library scan completed"},
+		{"cluster_reconcile", "cluster state reconciled"},
+		{"metric_collection", "metric collection cycle completed"},
+		{"pool_refresh", "storage pool status refreshed"},
+		{"network_scan", "network device discovery sweep completed"},
+		{"certificate_check", "TLS certificate expiry check passed"},
+		{"snapshot_cleanup", "old snapshots pruned"},
+	}
+
+	// Pick a random online asset as target.
+	var target string
+	err := pool.QueryRow(ctx,
+		`SELECT id FROM assets WHERE status IN ('online', 'degraded') ORDER BY random() LIMIT 1`,
+	).Scan(&target)
+	if err != nil {
+		log.Printf("demo: insertActivity target: %v", err)
+		return
+	}
+
+	tmpl := templates[rand.IntN(len(templates))]
+	_, err = pool.Exec(ctx,
 		`INSERT INTO audit_events (id, type, actor_id, target, session_id, command_id, decision, reason, details, timestamp)
 		 VALUES (gen_random_uuid()::text, $1, 'system', $2, '', '', 'allow', $3, '{}'::jsonb, NOW())`,
-		tmpl.eventType, tmpl.target, tmpl.reason,
+		tmpl.eventType, target, tmpl.reason,
 	)
 	if err != nil {
 		log.Printf("demo: insertActivity: %v", err)
@@ -220,10 +230,7 @@ func cycleAlerts(ctx context.Context, pool *pgxpool.Pool) {
 // a sinusoidal wave with per-asset base/amplitude and random noise.
 // Exported for testing.
 func GenerateCPU(assetID string, t time.Time) float64 {
-	p, ok := profiles[assetID]
-	if !ok {
-		p = defaultProfile
-	}
+	p := profileFor(assetID)
 	// 600-second period sinusoidal wave.
 	phase := 2 * math.Pi * float64(t.Unix()) / 600.0
 	noise := rand.Float64()*20 - 10 // rand(-10,10)
@@ -232,19 +239,13 @@ func GenerateCPU(assetID string, t time.Time) float64 {
 }
 
 func generateMemory(assetID string) float64 {
-	p, ok := profiles[assetID]
-	if !ok {
-		p = defaultProfile
-	}
+	p := profileFor(assetID)
 	noise := rand.Float64()*6 - 3 // rand(-3,3)
 	return clamp(p.memBase+noise, 30, 90)
 }
 
 func generateDisk(assetID string) float64 {
-	p, ok := profiles[assetID]
-	if !ok {
-		p = defaultProfile
-	}
+	p := profileFor(assetID)
 	noise := rand.Float64()*2 - 1 // rand(-1,1)
 	return clamp(p.diskBase+noise, 10, 95)
 }
@@ -254,6 +255,45 @@ func generateNetwork() float64 {
 		return 1 + rand.Float64()*29 // 1-30 Mbps
 	}
 	return 50 + rand.Float64()*450 // 50-500 Mbps
+}
+
+func profileFor(assetID string) assetProfile {
+	if p, ok := profiles[assetID]; ok {
+		return p
+	}
+	return defaultProfile
+}
+
+// profiles maps known asset IDs to metric generation parameters.
+// Assets not in this map get the default profile.
+var profiles = map[string]assetProfile{
+	"asset-pve1":     {cpuBase: 35, cpuAmplitude: 12, memBase: 72, diskBase: 52},
+	"asset-pve2":     {cpuBase: 28, cpuAmplitude: 10, memBase: 58, diskBase: 44},
+	"asset-truenas":  {cpuBase: 25, cpuAmplitude: 10, memBase: 68, diskBase: 91},
+	"asset-pbs":      {cpuBase: 10, cpuAmplitude: 8, memBase: 42, diskBase: 65},
+	"asset-opnsense": {cpuBase: 8, cpuAmplitude: 4, memBase: 32, diskBase: 18},
+	"asset-pihole":   {cpuBase: 6, cpuAmplitude: 3, memBase: 28, diskBase: 15},
+	"asset-unifi":    {cpuBase: 12, cpuAmplitude: 5, memBase: 45, diskBase: 22},
+	"asset-docker":   {cpuBase: 22, cpuAmplitude: 10, memBase: 62, diskBase: 48},
+	"asset-k3s-m":    {cpuBase: 30, cpuAmplitude: 8, memBase: 58, diskBase: 40},
+	"asset-k3s-w1":   {cpuBase: 35, cpuAmplitude: 10, memBase: 65, diskBase: 38},
+	"asset-hass":     {cpuBase: 14, cpuAmplitude: 6, memBase: 48, diskBase: 35},
+	"asset-media":    {cpuBase: 20, cpuAmplitude: 15, memBase: 78, diskBase: 55},
+	"asset-mon":      {cpuBase: 18, cpuAmplitude: 5, memBase: 55, diskBase: 32},
+	"asset-gitlab":   {cpuBase: 15, cpuAmplitude: 20, memBase: 40, diskBase: 52},
+	"asset-mc":       {cpuBase: 8, cpuAmplitude: 15, memBase: 62, diskBase: 35},
+	"asset-offsite":  {cpuBase: 5, cpuAmplitude: 3, memBase: 30, diskBase: 42},
+	"asset-htpc":     {cpuBase: 5, cpuAmplitude: 10, memBase: 45, diskBase: 60},
+}
+
+// OnlineAssetIDs returns a copy of the online asset IDs slice for testing.
+// Deprecated: keepalive now discovers assets from the database.
+func OnlineAssetIDs() []string {
+	ids := make([]string, 0, len(profiles))
+	for id := range profiles {
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 // clamp restricts v to the range [min, max].
@@ -273,11 +313,4 @@ func randomDuration(min, max time.Duration) time.Duration {
 		return min
 	}
 	return min + time.Duration(rand.Int64N(int64(max-min+1)))
-}
-
-// OnlineAssetIDs returns a copy of the online asset IDs slice for testing.
-func OnlineAssetIDs() []string {
-	out := make([]string, len(onlineAssetIDs))
-	copy(out, onlineAssetIDs)
-	return out
 }

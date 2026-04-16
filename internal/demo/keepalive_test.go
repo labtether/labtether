@@ -8,9 +8,9 @@ import (
 func TestGenerateCPU_KnownAsset(t *testing.T) {
 	now := time.Now()
 	for i := range 100 {
-		v := GenerateCPU("asset-proxmox-1", now.Add(time.Duration(i)*time.Second))
+		v := GenerateCPU("asset-pve1", now.Add(time.Duration(i)*time.Second))
 		if v < 5 || v > 85 {
-			t.Fatalf("iteration %d: GenerateCPU(asset-proxmox-1) = %f, want [5,85]", i, v)
+			t.Fatalf("iteration %d: GenerateCPU(asset-pve1) = %f, want [5,85]", i, v)
 		}
 	}
 }
@@ -61,7 +61,7 @@ func TestRandomDuration(t *testing.T) {
 
 func TestOnlineAssetIDsCount(t *testing.T) {
 	ids := OnlineAssetIDs()
-	if len(ids) != 8 {
-		t.Fatalf("OnlineAssetIDs() returned %d entries, want 8", len(ids))
+	if len(ids) != len(profiles) {
+		t.Fatalf("OnlineAssetIDs() returned %d entries, want %d", len(ids), len(profiles))
 	}
 }
