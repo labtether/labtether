@@ -189,7 +189,7 @@ export function DashboardFirstRunChecklistCard({
                   Connect the MCP gateway
                 </a>
                 <a
-                  href="https://discord.gg/labtether"
+                  href="https://discord.gg/Be6Fa9hv"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="block rounded-lg px-3 py-2 bg-[var(--panel-glass)] border border-[var(--panel-border)] text-xs text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors"
