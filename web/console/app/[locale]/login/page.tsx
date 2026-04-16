@@ -7,6 +7,8 @@ import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 
+const LOCALE_PREFIXES = ["/en", "/de", "/fr", "/es", "/zh"];
+
 function safeNextPath(value: string | null): string {
   if (!value || !value.startsWith("/")) return "/";
   // Prevent protocol-relative/open redirects.
@@ -14,6 +16,12 @@ function safeNextPath(value: string | null): string {
   // Block javascript: and data: URIs that could bypass the leading "/" check via encoding.
   const lower = value.toLowerCase();
   if (lower.includes("javascript:") || lower.includes("data:")) return "/";
+  // Strip locale prefix — next-intl's router.push adds it automatically.
+  // Without this, /en → router.push("/en") → /en/en → 404.
+  for (const prefix of LOCALE_PREFIXES) {
+    if (value === prefix) return "/";
+    if (value.startsWith(prefix + "/")) return value.slice(prefix.length);
+  }
   return value;
 }
 
