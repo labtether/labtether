@@ -9,11 +9,11 @@ import (
 // demoReadOnlyMiddleware blocks all mutating HTTP requests in demo mode.
 func demoReadOnlyMiddleware(next http.Handler) http.Handler {
 	allowedPOSTPaths := map[string]bool{
-		"/api/demo/session":  true,
-		"/api/auth/login":    true,
+		"/api/demo/session":   true,
+		"/api/auth/login":     true,
 		"/api/auth/login/2fa": true,
-		"/auth/login":        true,
-		"/auth/login/2fa":    true,
+		"/auth/login":         true,
+		"/auth/login/2fa":     true,
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
