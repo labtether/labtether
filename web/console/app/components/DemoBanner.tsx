@@ -1,7 +1,7 @@
 "use client";
 
-export function DemoBanner() {
-  if (process.env.NEXT_PUBLIC_DEMO_MODE !== "true") return null;
+export function DemoBanner({ demoMode }: { demoMode?: boolean }) {
+  if (!demoMode) return null;
 
   return (
     <div className="bg-blue-600 text-white text-center text-sm py-2 px-4 shrink-0">

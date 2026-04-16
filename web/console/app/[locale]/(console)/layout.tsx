@@ -181,7 +181,7 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
 export default function ConsoleLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
-      <DemoBanner />
+      <DemoBanner demoMode={process.env.NEXT_PUBLIC_DEMO_MODE === "true" || process.env.LABTETHER_DEMO_MODE === "true"} />
       <ThemeProvider>
         <AuthProvider>
           <StatusProvider>

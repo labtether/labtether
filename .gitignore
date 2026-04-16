@@ -57,6 +57,7 @@ venv/
 .env
 .env.deploy
 .env*.local
+!.env.demo
 web/console/e2e/certs/*.pem
 
 # Temp

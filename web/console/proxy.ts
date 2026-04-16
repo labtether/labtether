@@ -26,7 +26,9 @@ export function proxy(request: NextRequest) {
   const { pathname } = new URL(request.url);
 
   // Demo mode: auto-provision a session for unauthenticated page visits.
-  if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
+  // Use the server-only env var — NEXT_PUBLIC_ vars are baked at build time
+  // and won't reflect runtime docker-compose environment overrides.
+  if (process.env.NEXT_PUBLIC_DEMO_MODE === "true" || process.env.LABTETHER_DEMO_MODE === "true") {
     const cookies = request.headers.get("cookie") ?? "";
     if (!hasLabtetherSessionCookie(cookies) && !pathname.startsWith("/api/")) {
       const redirect = encodeURIComponent(pathname);
