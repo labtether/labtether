@@ -7,6 +7,7 @@
 # - Hub TLS disabled (internal only, not exposed)
 # - Hub HTTP bound to localhost only (console proxies API calls)
 # - No admin user — demo mode auto-provisions a read-only viewer session
+# - Demo seed runs automatically after hub is healthy
 services:
   labtether:
     environment:
@@ -19,8 +20,6 @@ services:
       - LABTETHER_ADMIN_PASSWORD=
     ports:
       - "127.0.0.1:8080:8080"
-    volumes:
-      - ./scripts/demo-seed.sql:/scripts/demo-seed.sql:ro
 
   web-console:
     environment:
@@ -28,3 +27,25 @@ services:
       - LABTETHER_DEMO_MODE=true
     ports:
       - "0.0.0.0:80:3000"
+
+  demo-seed:
+    image: ${POSTGRES_IMAGE:-postgres:18-alpine}
+    restart: "no"
+    depends_on:
+      labtether:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        export PGPASSWORD="$$(cat /bootstrap/postgres/password)"
+        echo "Waiting 5s for migrations to complete..."
+        sleep 5
+        psql -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -f /seed/demo-seed.sql
+        echo "Demo seed complete."
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-labtether}
+      POSTGRES_USER: ${POSTGRES_USER:-labtether}
+    volumes:
+      - labtether-bootstrap:/bootstrap:ro
+      - ./scripts/demo-seed.sql:/seed/demo-seed.sql:ro
