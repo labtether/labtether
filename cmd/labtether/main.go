@@ -1,8 +1,5 @@
 package main
 
-// version is set at build time via ldflags: -X main.version=...
-var version string
-
 import (
 	"context"
 	"crypto/rand"
@@ -26,6 +23,9 @@ import (
 	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
+
+// version is set at build time via ldflags: -X main.version=...
+var version string
 
 const (
 	maxActorIDLength          = 64
