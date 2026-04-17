@@ -225,6 +225,8 @@ func (s *apiServer) buildHTTPHandlers(
 		"/auth/bootstrap":                      s.handleAuthBootstrapSetup,
 		"/auth/logout":                         s.handleAuthLogout,
 		"/auth/me":                             s.withAuth(s.handleAuthMe),
+		"/auth/me/password":                    s.withAuth(s.handleChangePassword),
+		"/auth/account":                        s.withAuth(s.handleDeleteOwnAccount),
 		"/auth/2fa/setup":                      s.withAuth(s.handle2FASetup),
 		"/auth/2fa/verify":                     s.withAuth(s.handle2FAVerify),
 		"/auth/2fa":                            s.withAuth(s.handle2FADisable),

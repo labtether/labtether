@@ -491,6 +491,10 @@ func (d *Deps) HandleAuthUserActions(w http.ResponseWriter, r *http.Request) {
 		user.Role = role
 	}
 	if req.Password != nil {
+		if auth.NormalizeRole(user.Role) == auth.RoleOwner && d.UserIDFromContext(r.Context()) != user.ID {
+			servicehttp.WriteError(w, http.StatusForbidden, "cannot change owner password")
+			return
+		}
 		password := strings.TrimSpace(*req.Password)
 		if err := ValidateLoginRequest(LoginRequest{Username: user.Username, Password: password}); err != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())

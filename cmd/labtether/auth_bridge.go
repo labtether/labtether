@@ -75,6 +75,14 @@ func (s *apiServer) handleAuthMe(w http.ResponseWriter, r *http.Request) {
 	s.ensureAuthDeps().HandleAuthMe(w, r)
 }
 
+func (s *apiServer) handleChangePassword(w http.ResponseWriter, r *http.Request) {
+	s.ensureAuthDeps().HandleChangePassword(w, r)
+}
+
+func (s *apiServer) handleDeleteOwnAccount(w http.ResponseWriter, r *http.Request) {
+	s.ensureAuthDeps().HandleDeleteOwnAccount(w, r)
+}
+
 func (s *apiServer) handle2FASetup(w http.ResponseWriter, r *http.Request) {
 	s.ensureAuthDeps().Handle2FASetup(w, r)
 }
