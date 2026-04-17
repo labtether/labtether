@@ -34,6 +34,12 @@ type BinaryEntry struct {
 	SHA256    string `json:"sha256"`
 	SizeBytes int64  `json:"size_bytes,omitempty"`
 	URL       string `json:"url"`
+	// Signature is the ed25519 signature over the canonical release
+	// payload (see labtether-agent/scripts/release/sign-release.go). The hub
+	// does not verify this; it plumbs it through so the agent can verify
+	// against LABTETHER_AUTO_UPDATE_TRUSTED_PUBLIC_KEY. Empty when the
+	// release was not signed at build time.
+	Signature string `json:"signature,omitempty"`
 }
 
 // LoadAgentManifest reads and parses the agent-manifest.json file from dir.

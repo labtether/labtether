@@ -122,7 +122,7 @@ func (d *Deps) HandleAgentReleaseLatest(w http.ResponseWriter, r *http.Request) 
 		version = "unknown"
 	}
 
-	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
+	response := map[string]any{
 		"version":      version,
 		"os":           agentOS,
 		"arch":         arch,
@@ -131,5 +131,9 @@ func (d *Deps) HandleAgentReleaseLatest(w http.ResponseWriter, r *http.Request) 
 		"sha256":       bin.SHA256,
 		"url":          binaryURL,
 		"published_at": m.GeneratedAt,
-	})
+	}
+	if bin.Signature != "" {
+		response["signature"] = bin.Signature
+	}
+	servicehttp.WriteJSON(w, http.StatusOK, response)
 }

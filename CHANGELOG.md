@@ -8,6 +8,11 @@ with the current release contract and will grow forward from here.
 
 ## [Unreleased]
 
+### Security
+- Admin users can no longer reset the Owner account's password via `PATCH /auth/users/{id}`; the handler rejects password-change requests targeting the owner unless the caller is the owner themselves.
+- `POST /auth/me/password` (self-service password change, current-password verified) and `DELETE /auth/account` (self-delete, owner-exempt) are now registered on the HTTP mux; the handlers existed but the routes were not wired, causing the web console's account settings to 404.
+- Agent release manifest now plumbs an optional per-binary `signature` field end-to-end. `agent-manifest.json` and `GET /api/v1/agent/releases/latest` both carry the signature when the upstream agent release includes one, so agents configured with `LABTETHER_AUTO_UPDATE_TRUSTED_PUBLIC_KEY` can verify updates without contacting GitHub directly.
+
 ### Added
 
 - Repository license published as Apache-2.0.

@@ -72,9 +72,28 @@ for platform_binary in "${PLATFORMS[@]}"; do
   SHA256=$(sha256_file "${OUTPUT_DIR}/${BINARY_NAME}")
   SIZE=$(file_size "${OUTPUT_DIR}/${BINARY_NAME}")
 
+  # Download the optional release signature, produced by the labtether-agent
+  # release workflow's "Sign release metadata" step. Empty when the release
+  # was published without a signing key.
+  SIG_ASSET="${BINARY_NAME}-${GO_VERSION}.sig"
+  SIG_URL=$(echo "${GO_RELEASE}" | jq -r --arg name "${SIG_ASSET}" '.assets[] | select(.name == $name) | .browser_download_url // ""' 2>/dev/null || echo "")
+  SIGNATURE=""
+  if [[ -n "${SIG_URL}" && "${SIG_URL}" != "null" ]]; then
+    echo "  Downloading ${SIG_ASSET}..."
+    if [[ -n "${AUTH_HEADER}" ]]; then
+      SIGNATURE=$(curl -fsSL -H "${AUTH_HEADER}" -H "Accept: application/octet-stream" -L "${SIG_URL}" | tr -d '[:space:]' || echo "")
+    else
+      SIGNATURE=$(curl -fsSL -L "${SIG_URL}" | tr -d '[:space:]' || echo "")
+    fi
+  fi
+
   if [[ "${FIRST}" != "true" ]]; then GO_BINARIES_JSON+=","; fi
   FIRST=false
-  GO_BINARIES_JSON+="\"${PLATFORM}\":{\"name\":\"${BINARY_NAME}\",\"sha256\":\"${SHA256}\",\"size_bytes\":${SIZE},\"url\":\"https://github.com/${GO_AGENT_REPO}/releases/download/${GO_VERSION}/${BINARY_NAME}\"}"
+  SIG_JSON=""
+  if [[ -n "${SIGNATURE}" ]]; then
+    SIG_JSON=",\"signature\":\"${SIGNATURE}\""
+  fi
+  GO_BINARIES_JSON+="\"${PLATFORM}\":{\"name\":\"${BINARY_NAME}\",\"sha256\":\"${SHA256}\",\"size_bytes\":${SIZE},\"url\":\"https://github.com/${GO_AGENT_REPO}/releases/download/${GO_VERSION}/${BINARY_NAME}\"${SIG_JSON}}"
 done
 GO_BINARIES_JSON+="}"
 
