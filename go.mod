@@ -10,7 +10,7 @@ require (
 	github.com/hirochachacha/go-smb2 v1.1.0
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/jlaffaye/ftp v0.2.0
-	github.com/labtether/protocol v0.1.0
+	github.com/labtether/protocol v1.4.0
 	github.com/mark3labs/mcp-go v0.47.1
 	github.com/pkg/sftp v1.13.10
 	github.com/pquerna/otp v1.5.0
