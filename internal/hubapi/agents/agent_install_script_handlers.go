@@ -2,10 +2,11 @@ package agents
 
 import (
 	"fmt"
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
 // handleAgentInstallScript serves a self-contained bash install script for
@@ -79,12 +80,22 @@ func SanitizeSHA256Hex(raw string) (string, bool) {
 //  3. installs the CA locally (+ optional system trust update),
 //  4. fetches install.sh using CA-verified TLS and executes it with --tls-ca-file.
 func GenerateBootstrapScript(hubURL, expectedCAFingerprint string) string {
-	return fmt.Sprintf(agentBootstrapScriptTemplate(), hubURL, expectedCAFingerprint)
+	return fmt.Sprintf(
+		agentBootstrapScriptTemplate(),
+		hubURL,
+		expectedCAFingerprint,
+		shellSingleQuote(hubURL),
+		shellSingleQuote(expectedCAFingerprint),
+	)
 }
 
 // GenerateInstallScript returns the full text of the bash install script.
 // hubURL is the HTTP base URL of the hub (e.g. "http://192.168.1.10:8080").
 // wsURL  is the WebSocket agent URL  (e.g. "ws://192.168.1.10:8080/ws/agent").
 func GenerateInstallScript(hubURL, wsURL string) string {
-	return fmt.Sprintf(agentInstallScriptTemplate(), hubURL, wsURL)
+	return fmt.Sprintf(agentInstallScriptTemplate(), hubURL, wsURL, shellSingleQuote(hubURL), shellSingleQuote(wsURL))
+}
+
+func shellSingleQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'"
 }

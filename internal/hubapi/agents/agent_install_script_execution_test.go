@@ -101,6 +101,34 @@ func TestBootstrapScriptExecutesPinnedInstallFlow(t *testing.T) {
 	}
 }
 
+func TestGeneratedScriptsShellQuoteInterpolatedLiterals(t *testing.T) {
+	hubURL := `https://hub.example.com/path/$(touch injected)'suffix`
+	wsURL := `wss://hub.example.com/path/$(touch injected)'suffix/ws/agent`
+
+	installScript := GenerateInstallScript(hubURL, wsURL)
+	for _, want := range []string{
+		`HUB_URL='https://hub.example.com/path/$(touch injected)'"'"'suffix'`,
+		`WS_URL='wss://hub.example.com/path/$(touch injected)'"'"'suffix/ws/agent'`,
+	} {
+		if !strings.Contains(installScript, want) {
+			t.Fatalf("expected install script to contain shell-quoted literal %q, got:\n%s", want, installScript)
+		}
+	}
+	for _, forbidden := range []string{
+		`HUB_URL="https://hub.example.com/path/$(touch injected)'suffix"`,
+		`WS_URL="wss://hub.example.com/path/$(touch injected)'suffix/ws/agent"`,
+	} {
+		if strings.Contains(installScript, forbidden) {
+			t.Fatalf("install script contains unsafe double-quoted literal %q", forbidden)
+		}
+	}
+
+	bootstrapScript := GenerateBootstrapScript(hubURL, strings.Repeat("a", 64))
+	if !strings.Contains(bootstrapScript, `HUB_URL='https://hub.example.com/path/$(touch injected)'"'"'suffix'`) {
+		t.Fatalf("expected bootstrap script to shell-quote HUB_URL, got:\n%s", bootstrapScript)
+	}
+}
+
 func TestInstallScriptReinstallPreservesPersistedTokenWithoutEnrollmentToken(t *testing.T) {
 	root, env := newAgentScriptHarness(t, strings.Repeat("c", 64))
 
