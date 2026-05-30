@@ -30,6 +30,9 @@ func (d *Deps) HandleDockerHosts(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	if !requireDockerScope(w, r, "docker:read") {
+		return
+	}
 	if d.DockerCoordinator == nil {
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"hosts": []any{}})
 		return
@@ -38,6 +41,9 @@ func (d *Deps) HandleDockerHosts(w http.ResponseWriter, r *http.Request) {
 	hosts := d.DockerCoordinator.ListHosts()
 	summaries := make([]DockerHostSummary, 0, len(hosts))
 	for _, h := range hosts {
+		if !dockerHostAllowed(r, h, "") {
+			continue
+		}
 		norm := NormalizeDockerHostLookupID(h.AgentID)
 		summaries = append(summaries, DockerHostSummary{
 			AgentID:        h.AgentID,
@@ -76,6 +82,9 @@ func (d *Deps) HandleDockerHostActions(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusNotFound, "missing host id")
 		return
 	}
+	if !requireDockerScope(w, r, dockerScopeForMethod(r.Method)) {
+		return
+	}
 
 	if d.DockerCoordinator == nil {
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "docker coordinator not available")
@@ -94,6 +103,9 @@ func (d *Deps) HandleDockerHostActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
+		if !requireDockerHostAccess(w, r, host, hostID) {
+			return
+		}
 		enriched := DockerHostWithContainerStats(host)
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"host": enriched})
 		return
@@ -105,6 +117,9 @@ func (d *Deps) HandleDockerHostActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
+		if !requireDockerHostAccess(w, r, host, hostID) {
+			return
+		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 			"containers": DockerContainersWithStats(host.Containers, host.Stats),
 		})
@@ -113,16 +128,25 @@ func (d *Deps) HandleDockerHostActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
+		if !requireDockerHostAccess(w, r, host, hostID) {
+			return
+		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"images": host.Images})
 	case "stacks":
 		if r.Method != http.MethodGet {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
+		if !requireDockerHostAccess(w, r, host, hostID) {
+			return
+		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"stacks": host.ComposeStacks})
 	case "action":
 		if r.Method != http.MethodPost {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		if !requireDockerHostAccess(w, r, host, hostID) {
 			return
 		}
 		var body struct {
@@ -252,6 +276,12 @@ func (d *Deps) HandleDockerContainerActions(w http.ResponseWriter, r *http.Reque
 		servicehttp.WriteError(w, http.StatusNotFound, "missing container id")
 		return
 	}
+	if !requireDockerScope(w, r, dockerScopeForMethod(r.Method)) {
+		return
+	}
+	if !requireDockerAssetAccess(w, r, containerAssetID) {
+		return
+	}
 
 	if d.DockerCoordinator == nil {
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "docker coordinator not available")
@@ -369,6 +399,12 @@ func (d *Deps) HandleDockerStackActions(w http.ResponseWriter, r *http.Request) 
 	stackAssetID := strings.TrimSpace(parts[0])
 	if stackAssetID == "" {
 		servicehttp.WriteError(w, http.StatusNotFound, "missing stack id")
+		return
+	}
+	if !requireDockerScope(w, r, dockerScopeForMethod(r.Method)) {
+		return
+	}
+	if !requireDockerAssetAccess(w, r, stackAssetID) {
 		return
 	}
 
