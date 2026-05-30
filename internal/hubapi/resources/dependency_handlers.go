@@ -23,9 +23,15 @@ func (d *Deps) HandleDependencies(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
+		if !requireAPIScope(w, r, "topology:read") {
+			return
+		}
 		assetID := strings.TrimSpace(r.URL.Query().Get("asset_id"))
 		if assetID == "" {
 			servicehttp.WriteError(w, http.StatusBadRequest, "asset_id query parameter is required")
+			return
+		}
+		if !requireAssetAccess(w, r, assetID) {
 			return
 		}
 		deps, err := d.DependencyStore.ListAssetDependencies(assetID, parseLimit(r, 50))
@@ -33,8 +39,12 @@ func (d *Deps) HandleDependencies(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list dependencies")
 			return
 		}
+		deps = filterDependenciesByAssetAccess(r, deps)
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"dependencies": deps})
 	case http.MethodPost:
+		if !requireAPIScope(w, r, "topology:write") {
+			return
+		}
 		if !d.EnforceRateLimit(w, r, "dependencies.create", 120, time.Minute) {
 			return
 		}
@@ -51,6 +61,9 @@ func (d *Deps) HandleDependencies(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.SourceAssetID == req.TargetAssetID {
 			servicehttp.WriteError(w, http.StatusBadRequest, "source_asset_id and target_asset_id must be different")
+			return
+		}
+		if !requireAssetAccess(w, r, req.SourceAssetID, req.TargetAssetID) {
 			return
 		}
 		if err := ValidateDependencyRequest(req); err != nil {
@@ -95,6 +108,9 @@ func (d *Deps) HandleDependencyActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
+		if !requireAPIScope(w, r, "topology:read") {
+			return
+		}
 
 		assetIDs := ParseDependencyAssetIDs(
 			r.URL.Query().Get("asset_ids"),
@@ -102,6 +118,9 @@ func (d *Deps) HandleDependencyActions(w http.ResponseWriter, r *http.Request) {
 		)
 		if len(assetIDs) == 0 {
 			servicehttp.WriteError(w, http.StatusBadRequest, "asset_ids query parameter is required")
+			return
+		}
+		if !requireAssetAccess(w, r, assetIDs...) {
 			return
 		}
 
@@ -120,6 +139,7 @@ func (d *Deps) HandleDependencyActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list dependencies")
 			return
 		}
+		deps = filterDependenciesByAssetAccess(r, deps)
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 			"dependencies": deps,
 			"asset_ids":    assetIDs,
@@ -133,9 +153,15 @@ func (d *Deps) HandleDependencyActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
+		if !requireAPIScope(w, r, "topology:read") {
+			return
+		}
 		root := strings.TrimSpace(r.URL.Query().Get("root"))
 		if root == "" {
 			servicehttp.WriteError(w, http.StatusBadRequest, "root query parameter is required")
+			return
+		}
+		if !requireAssetAccess(w, r, root) {
 			return
 		}
 		depth := 3
@@ -154,6 +180,8 @@ func (d *Deps) HandleDependencyActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to compute upstream causes")
 			return
 		}
+		downstream = filterImpactNodesByAssetAccess(r, downstream)
+		upstream = filterImpactNodesByAssetAccess(r, upstream)
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 			"root":       root,
 			"depth":      depth,
@@ -177,6 +205,9 @@ func (d *Deps) HandleDependencyActions(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
+		if !requireAPIScope(w, r, "topology:read") {
+			return
+		}
 		dep, ok, err := d.DependencyStore.GetAssetDependency(depID)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load dependency")
@@ -186,8 +217,26 @@ func (d *Deps) HandleDependencyActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusNotFound, "dependency not found")
 			return
 		}
+		if !requireAssetAccess(w, r, dep.SourceAssetID, dep.TargetAssetID) {
+			return
+		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"dependency": dep})
 	case http.MethodDelete:
+		if !requireAPIScope(w, r, "topology:write") {
+			return
+		}
+		dep, ok, err := d.DependencyStore.GetAssetDependency(depID)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load dependency")
+			return
+		}
+		if !ok {
+			servicehttp.WriteError(w, http.StatusNotFound, "dependency not found")
+			return
+		}
+		if !requireAssetAccess(w, r, dep.SourceAssetID, dep.TargetAssetID) {
+			return
+		}
 		if err := d.DependencyStore.DeleteAssetDependency(depID); err != nil {
 			if err == dependencies.ErrDependencyNotFound {
 				servicehttp.WriteError(w, http.StatusNotFound, "dependency not found")
@@ -208,18 +257,28 @@ func (d *Deps) HandleAssetDependencies(w http.ResponseWriter, r *http.Request, a
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "dependency store unavailable")
 		return
 	}
+	if !requireAssetAccess(w, r, assetID) {
+		return
+	}
 
 	// /assets/{id}/dependencies
 	if len(subParts) == 0 {
 		switch r.Method {
 		case http.MethodGet:
+			if !requireAPIScope(w, r, "topology:read") {
+				return
+			}
 			deps, err := d.DependencyStore.ListAssetDependencies(assetID, parseLimit(r, 50))
 			if err != nil {
 				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list dependencies")
 				return
 			}
+			deps = filterDependenciesByAssetAccess(r, deps)
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"dependencies": deps})
 		case http.MethodPost:
+			if !requireAPIScope(w, r, "topology:write") {
+				return
+			}
 			if !d.EnforceRateLimit(w, r, "dependencies.create", 120, time.Minute) {
 				return
 			}
@@ -230,6 +289,9 @@ func (d *Deps) HandleAssetDependencies(w http.ResponseWriter, r *http.Request, a
 			}
 			if req.SourceAssetID == "" {
 				req.SourceAssetID = assetID
+			}
+			if !requireAssetAccess(w, r, req.SourceAssetID, req.TargetAssetID) {
+				return
 			}
 			if err := ValidateDependencyRequest(req); err != nil {
 				servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
@@ -276,6 +338,9 @@ func (d *Deps) HandleAssetDependencies(w http.ResponseWriter, r *http.Request, a
 		depID := strings.TrimSpace(subParts[0])
 		switch r.Method {
 		case http.MethodGet:
+			if !requireAPIScope(w, r, "topology:read") {
+				return
+			}
 			dep, ok, err := d.DependencyStore.GetAssetDependency(depID)
 			if err != nil {
 				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load dependency")
@@ -285,8 +350,26 @@ func (d *Deps) HandleAssetDependencies(w http.ResponseWriter, r *http.Request, a
 				servicehttp.WriteError(w, http.StatusNotFound, "dependency not found")
 				return
 			}
+			if !requireAssetAccess(w, r, dep.SourceAssetID, dep.TargetAssetID) {
+				return
+			}
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"dependency": dep})
 		case http.MethodDelete:
+			if !requireAPIScope(w, r, "topology:write") {
+				return
+			}
+			dep, ok, err := d.DependencyStore.GetAssetDependency(depID)
+			if err != nil {
+				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load dependency")
+				return
+			}
+			if !ok {
+				servicehttp.WriteError(w, http.StatusNotFound, "dependency not found")
+				return
+			}
+			if !requireAssetAccess(w, r, dep.SourceAssetID, dep.TargetAssetID) {
+				return
+			}
 			if err := d.DependencyStore.DeleteAssetDependency(depID); err != nil {
 				if err == dependencies.ErrDependencyNotFound {
 					servicehttp.WriteError(w, http.StatusNotFound, "dependency not found")
@@ -314,6 +397,12 @@ func (d *Deps) HandleAssetBlastRadius(w http.ResponseWriter, r *http.Request, as
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	if !requireAPIScope(w, r, "topology:read") {
+		return
+	}
+	if !requireAssetAccess(w, r, assetID) {
+		return
+	}
 
 	maxDepth := 5
 	if raw := r.URL.Query().Get("max_depth"); raw != "" {
@@ -327,6 +416,7 @@ func (d *Deps) HandleAssetBlastRadius(w http.ResponseWriter, r *http.Request, as
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to compute blast radius")
 		return
 	}
+	nodes = filterImpactNodesByAssetAccess(r, nodes)
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"asset_id": assetID, "nodes": nodes, "max_depth": maxDepth})
 }
 
@@ -337,6 +427,12 @@ func (d *Deps) HandleAssetUpstream(w http.ResponseWriter, r *http.Request, asset
 	}
 	if r.Method != http.MethodGet {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if !requireAPIScope(w, r, "topology:read") {
+		return
+	}
+	if !requireAssetAccess(w, r, assetID) {
 		return
 	}
 
@@ -352,6 +448,7 @@ func (d *Deps) HandleAssetUpstream(w http.ResponseWriter, r *http.Request, asset
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to compute upstream causes")
 		return
 	}
+	nodes = filterImpactNodesByAssetAccess(r, nodes)
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"asset_id": assetID, "nodes": nodes, "max_depth": maxDepth})
 }
 

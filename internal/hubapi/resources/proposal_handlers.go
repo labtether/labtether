@@ -21,11 +21,15 @@ func (d *Deps) HandleProposals(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
+		if !requireAPIScope(w, r, "discovery:read") {
+			return
+		}
 		proposals, err := d.EdgeStore.ListProposals()
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list proposals")
 			return
 		}
+		proposals = filterEdgesByAssetAccess(r, proposals)
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"proposals": proposals})
 
 	default:
@@ -63,6 +67,25 @@ func (d *Deps) HandleProposalActions(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != http.MethodPost {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if action != "accept" && action != "dismiss" {
+		servicehttp.WriteError(w, http.StatusNotFound, "unknown action: must be accept or dismiss")
+		return
+	}
+	if !requireAPIScope(w, r, "discovery:write") {
+		return
+	}
+	proposal, ok, err := d.EdgeStore.GetEdge(proposalID)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load proposal")
+		return
+	}
+	if !ok {
+		servicehttp.WriteError(w, http.StatusNotFound, "proposal not found")
+		return
+	}
+	if !requireAssetAccess(w, r, proposal.SourceAssetID, proposal.TargetAssetID) {
 		return
 	}
 

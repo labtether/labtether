@@ -26,6 +26,9 @@ func (d *Deps) HandleEdges(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
+		if !requireAPIScope(w, r, "topology:read") {
+			return
+		}
 		// Support both asset_id (single) and asset_ids (comma-separated batch)
 		assetIDsRaw := strings.TrimSpace(r.URL.Query().Get("asset_ids"))
 		if assetIDsRaw == "" {
@@ -34,6 +37,11 @@ func (d *Deps) HandleEdges(w http.ResponseWriter, r *http.Request) {
 		if assetIDsRaw == "" {
 			servicehttp.WriteError(w, http.StatusBadRequest, "asset_id or asset_ids query parameter is required")
 			return
+		}
+		for _, assetID := range strings.Split(assetIDsRaw, ",") {
+			if !requireAssetAccess(w, r, assetID) {
+				return
+			}
 		}
 		limit := parseLimit(r, 50)
 		var edgeList []edges.Edge
@@ -51,9 +59,13 @@ func (d *Deps) HandleEdges(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list edges")
 			return
 		}
+		edgeList = filterEdgesByAssetAccess(r, edgeList)
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"edges": edgeList})
 
 	case http.MethodPost:
+		if !requireAPIScope(w, r, "topology:write") {
+			return
+		}
 		if !d.EnforceRateLimit(w, r, "edges.create", 120, time.Minute) {
 			return
 		}
@@ -70,6 +82,9 @@ func (d *Deps) HandleEdges(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.SourceAssetID == req.TargetAssetID {
 			servicehttp.WriteError(w, http.StatusBadRequest, "source_asset_id and target_asset_id must be different")
+			return
+		}
+		if !requireAssetAccess(w, r, req.SourceAssetID, req.TargetAssetID) {
 			return
 		}
 		if err := validateEdgeRequest(req); err != nil {
@@ -136,6 +151,9 @@ func (d *Deps) HandleEdgeByID(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
+		if !requireAPIScope(w, r, "topology:read") {
+			return
+		}
 		edge, ok, err := d.EdgeStore.GetEdge(edgeID)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load edge")
@@ -145,9 +163,27 @@ func (d *Deps) HandleEdgeByID(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusNotFound, "edge not found")
 			return
 		}
+		if !requireAssetAccess(w, r, edge.SourceAssetID, edge.TargetAssetID) {
+			return
+		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"edge": edge})
 
 	case http.MethodPatch:
+		if !requireAPIScope(w, r, "topology:write") {
+			return
+		}
+		edge, ok, err := d.EdgeStore.GetEdge(edgeID)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load edge")
+			return
+		}
+		if !ok {
+			servicehttp.WriteError(w, http.StatusNotFound, "edge not found")
+			return
+		}
+		if !requireAssetAccess(w, r, edge.SourceAssetID, edge.TargetAssetID) {
+			return
+		}
 		var body struct {
 			RelationshipType string `json:"relationship_type"`
 			Criticality      string `json:"criticality"`
@@ -167,6 +203,21 @@ func (d *Deps) HandleEdgeByID(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"status": "updated"})
 
 	case http.MethodDelete:
+		if !requireAPIScope(w, r, "topology:write") {
+			return
+		}
+		edge, ok, err := d.EdgeStore.GetEdge(edgeID)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load edge")
+			return
+		}
+		if !ok {
+			servicehttp.WriteError(w, http.StatusNotFound, "edge not found")
+			return
+		}
+		if !requireAssetAccess(w, r, edge.SourceAssetID, edge.TargetAssetID) {
+			return
+		}
 		if err := d.EdgeStore.DeleteEdge(edgeID); err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				servicehttp.WriteError(w, http.StatusNotFound, "edge not found")
@@ -189,9 +240,15 @@ func (d *Deps) HandleEdgeTree(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	if !requireAPIScope(w, r, "topology:read") {
+		return
+	}
 	root := strings.TrimSpace(r.URL.Query().Get("root"))
 	if root == "" {
 		servicehttp.WriteError(w, http.StatusBadRequest, "root query parameter is required")
+		return
+	}
+	if !requireAssetAccess(w, r, root) {
 		return
 	}
 	depth := 3
@@ -208,6 +265,7 @@ func (d *Deps) HandleEdgeTree(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to compute edge tree")
 		return
 	}
+	nodes = filterTreeNodesByAssetAccess(r, nodes)
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"root":  root,
 		"depth": depth,
@@ -222,9 +280,15 @@ func (d *Deps) HandleEdgeAncestors(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	if !requireAPIScope(w, r, "topology:read") {
+		return
+	}
 	assetID := strings.TrimSpace(r.URL.Query().Get("id"))
 	if assetID == "" {
 		servicehttp.WriteError(w, http.StatusBadRequest, "id query parameter is required")
+		return
+	}
+	if !requireAssetAccess(w, r, assetID) {
 		return
 	}
 	depth := 3
@@ -241,6 +305,7 @@ func (d *Deps) HandleEdgeAncestors(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to compute edge ancestors")
 		return
 	}
+	nodes = filterTreeNodesByAssetAccess(r, nodes)
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"id":    assetID,
 		"depth": depth,

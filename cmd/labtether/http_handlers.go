@@ -344,11 +344,11 @@ func (s *apiServer) buildHTTPHandlers(
 
 	if envOrDefaultBool("DEV_MODE", false) {
 		log.Printf("labtether: DEV_MODE enabled — pprof endpoints registered at /debug/pprof/")
-		handlers["/debug/pprof/"] = s.withAuth(pprof.Index)
-		handlers["/debug/pprof/cmdline"] = s.withAuth(pprof.Cmdline)
-		handlers["/debug/pprof/profile"] = s.withAuth(pprof.Profile)
-		handlers["/debug/pprof/symbol"] = s.withAuth(pprof.Symbol)
-		handlers["/debug/pprof/trace"] = s.withAuth(pprof.Trace)
+		handlers["/debug/pprof/"] = s.withAdminAuth(pprof.Index)
+		handlers["/debug/pprof/cmdline"] = s.withAdminAuth(pprof.Cmdline)
+		handlers["/debug/pprof/profile"] = s.withAdminAuth(pprof.Profile)
+		handlers["/debug/pprof/symbol"] = s.withAdminAuth(pprof.Symbol)
+		handlers["/debug/pprof/trace"] = s.withAdminAuth(pprof.Trace)
 	}
 
 	return handlers

@@ -23,6 +23,9 @@ func (d *Deps) HandleComposites(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodPost:
+		if !requireAPIScope(w, r, "topology:write") {
+			return
+		}
 		if !d.EnforceRateLimit(w, r, "composites.create", 60, time.Minute) {
 			return
 		}
@@ -50,6 +53,9 @@ func (d *Deps) HandleComposites(w http.ResponseWriter, r *http.Request) {
 				servicehttp.WriteError(w, http.StatusBadRequest, "facet_asset_ids must not include primary_asset_id")
 				return
 			}
+		}
+		if !requireAssetAccess(w, r, append([]string{req.PrimaryAssetID}, req.FacetAssetIDs...)...) {
+			return
 		}
 		composite, err := d.EdgeStore.CreateComposite(req)
 		if err != nil {
@@ -101,6 +107,24 @@ func (d *Deps) HandleCompositeActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
+		if !requireAPIScope(w, r, "topology:write") {
+			return
+		}
+		composite, ok, err := d.EdgeStore.GetComposite(compositeID)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load composite")
+			return
+		}
+		if !ok {
+			servicehttp.WriteError(w, http.StatusNotFound, "composite not found")
+			return
+		}
+		if !requireCompositeAccess(w, r, composite) {
+			return
+		}
+		if !requireAssetAccess(w, r, memberAssetID) {
+			return
+		}
 		if err := d.EdgeStore.DetachMember(compositeID, memberAssetID); err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to detach member")
 			return
@@ -116,6 +140,9 @@ func (d *Deps) HandleCompositeActions(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
+		if !requireAPIScope(w, r, "topology:read") {
+			return
+		}
 		composite, ok, err := d.EdgeStore.GetComposite(compositeID)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load composite")
@@ -125,9 +152,27 @@ func (d *Deps) HandleCompositeActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusNotFound, "composite not found")
 			return
 		}
+		if !requireCompositeAccess(w, r, composite) {
+			return
+		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"composite": composite})
 
 	case http.MethodPatch:
+		if !requireAPIScope(w, r, "topology:write") {
+			return
+		}
+		composite, ok, err := d.EdgeStore.GetComposite(compositeID)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load composite")
+			return
+		}
+		if !ok {
+			servicehttp.WriteError(w, http.StatusNotFound, "composite not found")
+			return
+		}
+		if !requireCompositeAccess(w, r, composite) {
+			return
+		}
 		var body struct {
 			PrimaryAssetID string `json:"primary_asset_id"`
 		}
@@ -138,6 +183,9 @@ func (d *Deps) HandleCompositeActions(w http.ResponseWriter, r *http.Request) {
 		body.PrimaryAssetID = strings.TrimSpace(body.PrimaryAssetID)
 		if body.PrimaryAssetID == "" {
 			servicehttp.WriteError(w, http.StatusBadRequest, "primary_asset_id is required")
+			return
+		}
+		if !requireAssetAccess(w, r, body.PrimaryAssetID) {
 			return
 		}
 		if err := d.EdgeStore.ChangePrimary(compositeID, body.PrimaryAssetID); err != nil {
