@@ -211,7 +211,7 @@ func (d *Deps) handleFileConnectionUpload(w http.ResponseWriter, r *http.Request
 	// and forwarding it to protocol adapters (especially WebDAV) can cause
 	// server rejections on size mismatches. Let the adapter handle buffering.
 	if err := fs.Write(r.Context(), filePath, r.Body, -1); err != nil {
-		servicehttp.WriteError(w, http.StatusBadRequest, fmt.Sprintf("upload failed: %s", err.Error()))
+		writeFileConnectionUploadError(w, err)
 		return
 	}
 
@@ -219,6 +219,15 @@ func (d *Deps) handleFileConnectionUpload(w http.ResponseWriter, r *http.Request
 		"ok":   true,
 		"path": filePath,
 	})
+}
+
+func writeFileConnectionUploadError(w http.ResponseWriter, err error) {
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		servicehttp.WriteError(w, http.StatusRequestEntityTooLarge, "file exceeds 512 MB limit")
+		return
+	}
+	servicehttp.WriteError(w, http.StatusBadRequest, fmt.Sprintf("upload failed: %s", err.Error()))
 }
 
 // --- Mkdir ---
