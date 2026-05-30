@@ -248,10 +248,13 @@ function readServiceToken(): string {
   }
 
   try {
-    _cachedServiceToken = readFileSync(serviceTokenFilePath(), "utf8").trim();
+    _cachedServiceToken = readFileSync(/* turbopackIgnore: true */ serviceTokenFilePath(), "utf8").trim();
   } catch {
     try {
-      const raw = readFileSync(join(envOrDefault("LABTETHER_INSTALL_STATE_DIR", "/labtether-data/install"), "secrets.json"), "utf8");
+      const raw = readFileSync(
+        join(/* turbopackIgnore: true */ envOrDefault("LABTETHER_INSTALL_STATE_DIR", "/labtether-data/install"), "secrets.json"),
+        "utf8",
+      );
       const parsed = JSON.parse(raw) as PersistedInstallSecrets;
       _cachedServiceToken = parsed.api_token?.trim() || "";
     } catch {
