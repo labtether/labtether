@@ -349,20 +349,7 @@ func (d *Deps) HandleFileUpload(w http.ResponseWriter, r *http.Request, assetID 
 			Data: data,
 		})
 	}); err != nil {
-		securityruntime.Logf("file: upload relay error for %s: %v", filePath, err)
-		var sendErr UploadRelaySendError
-		var responseErr UploadAgentResponseError
-		var agentErr UploadAgentWriteError
-		switch {
-		case errors.As(err, &responseErr):
-			servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
-		case errors.As(err, &agentErr):
-			servicehttp.WriteError(w, http.StatusBadRequest, agentErr.message)
-		case errors.As(err, &sendErr):
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to relay data to agent")
-		default:
-			servicehttp.WriteError(w, http.StatusInternalServerError, "upload failed")
-		}
+		writeFileUploadRelayError(w, filePath, err)
 		return
 	}
 
@@ -381,6 +368,26 @@ func (d *Deps) HandleFileUpload(w http.ResponseWriter, r *http.Request, assetID 
 		servicehttp.WriteJSON(w, http.StatusOK, result)
 	case <-time.After(fileRequestTimeout):
 		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
+	}
+}
+
+func writeFileUploadRelayError(w http.ResponseWriter, filePath string, err error) {
+	securityruntime.Logf("file: upload relay error for %s: %v", filePath, err)
+	var maxBytesErr *http.MaxBytesError
+	var sendErr UploadRelaySendError
+	var responseErr UploadAgentResponseError
+	var agentErr UploadAgentWriteError
+	switch {
+	case errors.As(err, &maxBytesErr):
+		servicehttp.WriteError(w, http.StatusRequestEntityTooLarge, "file exceeds 512 MB limit")
+	case errors.As(err, &responseErr):
+		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
+	case errors.As(err, &agentErr):
+		servicehttp.WriteError(w, http.StatusBadRequest, agentErr.message)
+	case errors.As(err, &sendErr):
+		servicehttp.WriteError(w, http.StatusBadGateway, "failed to relay data to agent")
+	default:
+		servicehttp.WriteError(w, http.StatusInternalServerError, "upload failed")
 	}
 }
 
