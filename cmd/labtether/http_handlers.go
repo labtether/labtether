@@ -312,7 +312,7 @@ func (s *apiServer) buildHTTPHandlers(
 		"/edges/":                              s.withAuth(s.handleEdgeByID),
 		"/composites":                          s.withAuth(s.handleComposites),
 		"/composites/":                         s.withAuth(s.handleCompositeActions),
-		"/discovery/run":                       s.withAuth(s.handleDiscoveryRun),
+		"/discovery/run":                       s.withAuth(requireScope("discovery:write", s.handleDiscoveryRun)),
 		"/discovery/proposals":                 s.withAuth(s.handleProposals),
 		"/discovery/proposals/":                s.withAuth(s.handleProposalActions),
 		"/assets/bulk/move":                    s.withAuth(requireScope("assets:write", s.handleAssetBulkMove)),
