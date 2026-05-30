@@ -199,7 +199,7 @@ func (d *Deps) HandleAuthOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create session")
 		return
 	}
-	auth.SetSessionCookie(w, raw, auth.SessionDuration, d.sessionCookieSecure(r))
+	auth.SetSessionCookie(w, raw, auth.SessionDuration)
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"user":       auth.UserInfo{ID: user.ID, Username: user.Username, Role: auth.NormalizeRole(user.Role)},
@@ -521,7 +521,7 @@ func (d *Deps) HandleAuthUserActions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if user.ID == d.UserIDFromContext(r.Context()) {
-			auth.ClearSessionCookie(w, d.sessionCookieSecure(r))
+			auth.ClearSessionCookie(w)
 		}
 	}
 

@@ -87,19 +87,12 @@ func (d *Deps) CompleteLogin(w http.ResponseWriter, r *http.Request, user auth.U
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create session")
 		return
 	}
-	auth.SetSessionCookie(w, raw, auth.SessionDuration, d.sessionCookieSecure(r))
+	auth.SetSessionCookie(w, raw, auth.SessionDuration)
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"user":       auth.UserInfo{ID: user.ID, Username: user.Username, Role: auth.NormalizeRole(user.Role)},
 		"session_id": session.ID,
 		"expires_at": session.ExpiresAt,
 	})
-}
-
-func (d *Deps) sessionCookieSecure(r *http.Request) bool {
-	if d != nil && d.CookieSecure != nil {
-		return d.CookieSecure(r)
-	}
-	return d != nil && d.TLSEnabled
 }
 
 // TryRecoveryCode attempts to consume a recovery code for 2FA.
@@ -222,7 +215,7 @@ func (d *Deps) Handle2FAVerify(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to revoke active sessions")
 		return
 	}
-	auth.ClearSessionCookie(w, d.sessionCookieSecure(r))
+	auth.ClearSessionCookie(w)
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"status":         "enabled",
@@ -283,7 +276,7 @@ func (d *Deps) Handle2FADisable(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to revoke active sessions")
 		return
 	}
-	auth.ClearSessionCookie(w, d.sessionCookieSecure(r))
+	auth.ClearSessionCookie(w)
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "disabled"})
 }
@@ -352,7 +345,7 @@ func (d *Deps) Handle2FARecoveryCodes(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to revoke active sessions")
 		return
 	}
-	auth.ClearSessionCookie(w, d.sessionCookieSecure(r))
+	auth.ClearSessionCookie(w)
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"recovery_codes": rawCodes,
