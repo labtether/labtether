@@ -1,5 +1,5 @@
 // Type definitions for @novnc/novnc
-declare module "@novnc/novnc/lib/rfb" {
+declare module "@novnc/novnc" {
   interface RFBOptions {
     shared?: boolean;
     credentials?: { username?: string; password?: string; target?: string };

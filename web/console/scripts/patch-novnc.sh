@@ -13,15 +13,11 @@ require_command() {
 }
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-NO_VNC_FILE="${SCRIPT_DIR}/../node_modules/@novnc/novnc/lib/util/browser.js"
+NO_VNC_FILE="${SCRIPT_DIR}/../node_modules/@novnc/novnc/core/util/browser.js"
 
-# Patch @novnc/novnc to remove a top-level await in lib/util/browser.js.
-# noVNC v1.6.0 ships a Babel-compiled CJS file that contains a top-level
-# `await` for WebCodecs H264 detection. This breaks Turbopack (Next.js 16)
-# which wraps async CJS modules in a context where `exports` is undefined.
-# The fix: replace the top-level await with a .then() callback so the
-# module stays synchronous. The capability flag starts as `false` and gets
-# updated when the async check completes (fine for feature detection).
+# Patch @novnc/novnc to remove a top-level await in core/util/browser.js.
+# noVNC's WebCodecs H264 detection does not need to block module evaluation;
+# keeping it asynchronous also avoids Turbopack module-wrapper edge cases.
 
 require_command grep
 require_command sed
@@ -31,8 +27,8 @@ if [ ! -f "$NO_VNC_FILE" ]; then
   exit 0
 fi
 
-if grep -q '^exports.supportsWebCodecsH264Decode = supportsWebCodecsH264Decode = await' "$NO_VNC_FILE"; then
-  sed -i.bak 's/^exports.supportsWebCodecsH264Decode = supportsWebCodecsH264Decode = await _checkWebCodecsH264DecodeSupport();/_checkWebCodecsH264DecodeSupport().then(function(r) { exports.supportsWebCodecsH264Decode = supportsWebCodecsH264Decode = r; });/' "$NO_VNC_FILE"
+if grep -q '^supportsWebCodecsH264Decode = await _checkWebCodecsH264DecodeSupport();' "$NO_VNC_FILE"; then
+  sed -i.bak 's/^supportsWebCodecsH264Decode = await _checkWebCodecsH264DecodeSupport();/_checkWebCodecsH264DecodeSupport().then((result) => { supportsWebCodecsH264Decode = result; });/' "$NO_VNC_FILE"
   rm -f "${NO_VNC_FILE}.bak"
   log_info "patched @novnc/novnc: removed top-level await in browser.js"
 else

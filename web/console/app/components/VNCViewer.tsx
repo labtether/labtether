@@ -1,13 +1,13 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import type RFB from "@novnc/novnc/lib/rfb";
+import type RFB from "@novnc/novnc";
 import type {
   RFBDisconnectEvent,
   RFBSecurityFailureEvent,
   RFBCredentialsRequiredEvent,
   RFBClipboardEvent,
-} from "@novnc/novnc/lib/rfb";
+} from "@novnc/novnc";
 
 export type VNCViewerHandle = {
   disconnect: () => void;
@@ -202,7 +202,7 @@ const VNCViewer = forwardRef<VNCViewerHandle, VNCViewerProps>(function VNCViewer
         const testRFBClass = (window as TestWindow).__labtetherTestRFBClass;
         const RFBClass =
           testRFBClass ??
-          (await import("@novnc/novnc/lib/rfb")).default;
+          (await import("@novnc/novnc")).default;
         if (cancelled) {
           return;
         }
