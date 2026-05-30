@@ -19,8 +19,8 @@ set -euo pipefail
 #         curl -fsSL %[1]s/install.sh | sudo bash -s -- --tls-skip-verify true
 #         curl -fsSL %[1]s/install.sh | sudo bash -s -- --tls-ca-file /etc/labtether/ca.crt
 
-HUB_URL="%[1]s"
-WS_URL="%[2]s"
+HUB_URL=%[3]s
+WS_URL=%[4]s
 BINARY_DEST="/usr/local/bin/labtether-agent"
 LABTETHER_CLI_DEST="/usr/local/bin/labtether"
 CONFIG_DIR="/etc/labtether"

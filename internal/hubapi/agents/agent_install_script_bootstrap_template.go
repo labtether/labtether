@@ -9,8 +9,8 @@ set -euo pipefail
 #   curl -kfsSL "%[1]s/api/v1/agent/bootstrap.sh?ca_fingerprint_sha256=%[2]s" | sudo bash
 #   curl -kfsSL "%[1]s/api/v1/agent/bootstrap.sh?ca_fingerprint_sha256=%[2]s" | sudo bash -s -- --enrollment-token <token>
 
-HUB_URL="%[1]s"
-EXPECTED_CA_FINGERPRINT="%[2]s"
+HUB_URL=%[3]s
+EXPECTED_CA_FINGERPRINT=%[4]s
 CA_DEST="/etc/labtether/ca.crt"
 TMP_CA="$(mktemp)"
 TMP_INSTALL="$(mktemp)"
