@@ -41,7 +41,10 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-labtether}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-labtether}  # override in .env for non-dev use
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      # Postgres 18 stores data below a major-versioned subdirectory. Mount the
+      # parent directory so fresh volumes work on amd64 and future pg_upgrade
+      # flows can link across version-specific data directories.
+      - postgres-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U labtether"]
       interval: 5s
