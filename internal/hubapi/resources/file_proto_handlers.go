@@ -79,6 +79,10 @@ func (d *Deps) getPooledFS(w http.ResponseWriter, r *http.Request, connID string
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load file connection")
 		return nil, nil, false
 	}
+	if !d.canAccessFileConnection(r, fc) {
+		servicehttp.WriteError(w, http.StatusForbidden, "file connection access denied")
+		return nil, nil, false
+	}
 
 	config, err := d.buildConnectionConfig(fc)
 	if err != nil {

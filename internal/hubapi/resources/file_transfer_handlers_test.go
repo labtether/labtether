@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/labtether/labtether/internal/apiv2"
+	"github.com/labtether/labtether/internal/fileproto"
 	"github.com/labtether/labtether/internal/persistence"
 )
 
@@ -58,6 +60,69 @@ func (s *testFileTransferStore) UpdateFileTransfer(_ context.Context, ft *persis
 
 func (s *testFileTransferStore) ListActiveFileTransfers(context.Context) ([]persistence.FileTransfer, error) {
 	return nil, nil
+}
+
+func (s *testFileTransferStore) Count() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.transfers)
+}
+
+type testTransferFileConnectionStore struct {
+	connections map[string]*persistence.FileConnection
+}
+
+func newTestTransferFileConnectionStore(connections ...*persistence.FileConnection) *testTransferFileConnectionStore {
+	store := &testTransferFileConnectionStore{connections: make(map[string]*persistence.FileConnection, len(connections))}
+	for _, connection := range connections {
+		cloned := *connection
+		store.connections[connection.ID] = &cloned
+	}
+	return store
+}
+
+func (s *testTransferFileConnectionStore) ListFileConnections(context.Context) ([]persistence.FileConnection, error) {
+	out := make([]persistence.FileConnection, 0, len(s.connections))
+	for _, connection := range s.connections {
+		out = append(out, *connection)
+	}
+	return out, nil
+}
+
+func (s *testTransferFileConnectionStore) GetFileConnection(_ context.Context, id string) (*persistence.FileConnection, error) {
+	connection, ok := s.connections[id]
+	if !ok {
+		return nil, persistence.ErrNotFound
+	}
+	cloned := *connection
+	return &cloned, nil
+}
+
+func (s *testTransferFileConnectionStore) CreateFileConnection(_ context.Context, fc *persistence.FileConnection) error {
+	cloned := *fc
+	s.connections[fc.ID] = &cloned
+	return nil
+}
+
+func (s *testTransferFileConnectionStore) UpdateFileConnection(_ context.Context, fc *persistence.FileConnection) error {
+	if _, ok := s.connections[fc.ID]; !ok {
+		return persistence.ErrNotFound
+	}
+	cloned := *fc
+	s.connections[fc.ID] = &cloned
+	return nil
+}
+
+func (s *testTransferFileConnectionStore) DeleteFileConnection(_ context.Context, id string) error {
+	if _, ok := s.connections[id]; !ok {
+		return persistence.ErrNotFound
+	}
+	delete(s.connections, id)
+	return nil
+}
+
+func decodeFileTransferTestJSONBody(_ http.ResponseWriter, r *http.Request, dst any) error {
+	return json.NewDecoder(r.Body).Decode(dst)
 }
 
 func TestHandleGetFileTransferHidesOtherActors(t *testing.T) {
@@ -115,6 +180,45 @@ func TestHandleGetFileTransferReturnsOwnerTransfer(t *testing.T) {
 	}
 	if resp.Transfer.ID != "ftx_3" {
 		t.Fatalf("expected transfer ftx_3, got %q", resp.Transfer.ID)
+	}
+}
+
+func TestHandleStartFileTransferRejectsOtherActorConnectionBeforeCreate(t *testing.T) {
+	pool := fileproto.NewPool()
+	defer pool.Close()
+
+	transferStore := newTestFileTransferStore()
+	deps := &Deps{
+		FileProtoPool: pool,
+		FileConnectionStore: newTestTransferFileConnectionStore(
+			&persistence.FileConnection{ID: "source-owned-by-a", ActorID: "actor-a"},
+			&persistence.FileConnection{ID: "dest-owned-by-b", ActorID: "actor-b"},
+		),
+		FileTransferStore: transferStore,
+		PrincipalActorID:  apiv2.PrincipalActorID,
+		ActiveTransfers:   &sync.Map{},
+		DecodeJSONBody:    decodeFileTransferTestJSONBody,
+	}
+
+	body := strings.NewReader(`{
+		"source_type":"connection",
+		"source_id":"source-owned-by-a",
+		"source_path":"/data/source.txt",
+		"dest_type":"connection",
+		"dest_id":"dest-owned-by-b",
+		"dest_path":"/data/source.txt"
+	}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/file-transfers", body)
+	req = req.WithContext(apiv2.ContextWithPrincipal(req.Context(), "actor-b", "operator"))
+	rec := httptest.NewRecorder()
+
+	deps.HandleFileTransfers(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := transferStore.Count(); got != 0 {
+		t.Fatalf("expected no transfer records to be created, got %d", got)
 	}
 }
 

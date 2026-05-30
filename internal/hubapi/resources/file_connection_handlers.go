@@ -100,6 +100,7 @@ func (d *Deps) handleListFileConnections(w http.ResponseWriter, r *http.Request)
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list file connections")
 		return
 	}
+	connections = d.filterFileConnectionsForActor(r, connections)
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"connections": connections})
 }
 
@@ -160,6 +161,7 @@ func (d *Deps) handleCreateFileConnection(w http.ResponseWriter, r *http.Request
 
 	// Create file connection record.
 	fc := &persistence.FileConnection{
+		ActorID:      d.currentActorID(r),
 		Name:         req.Name,
 		Protocol:     req.Protocol,
 		Host:         req.Host,
@@ -167,6 +169,11 @@ func (d *Deps) handleCreateFileConnection(w http.ResponseWriter, r *http.Request
 		InitialPath:  req.InitialPath,
 		CredentialID: &created.ID,
 		ExtraConfig:  req.ExtraConfig,
+	}
+	if d.PrincipalActorID != nil && fc.ActorID == "" {
+		_ = d.CredentialStore.DeleteCredentialProfile(created.ID)
+		servicehttp.WriteError(w, http.StatusForbidden, "actor is required")
+		return
 	}
 	if err := d.FileConnectionStore.CreateFileConnection(r.Context(), fc); err != nil {
 		// Best-effort cleanup of the credential profile.
@@ -210,6 +217,10 @@ func (d *Deps) handleUpdateFileConnection(w http.ResponseWriter, r *http.Request
 			return
 		}
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load file connection")
+		return
+	}
+	if !d.canAccessFileConnection(r, existing) {
+		servicehttp.WriteError(w, http.StatusForbidden, "file connection access denied")
 		return
 	}
 
@@ -355,6 +366,10 @@ func (d *Deps) handleDeleteFileConnection(w http.ResponseWriter, r *http.Request
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load file connection")
 		return
 	}
+	if !d.canAccessFileConnection(r, existing) {
+		servicehttp.WriteError(w, http.StatusForbidden, "file connection access denied")
+		return
+	}
 
 	// Delete the file connection first.
 	if err := d.FileConnectionStore.DeleteFileConnection(r.Context(), connID); err != nil {
@@ -457,6 +472,10 @@ func (d *Deps) handleFileConnectionTestSaved(w http.ResponseWriter, r *http.Requ
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load file connection")
 		return
 	}
+	if !d.canAccessFileConnection(r, fc) {
+		servicehttp.WriteError(w, http.StatusForbidden, "file connection access denied")
+		return
+	}
 
 	config, err := d.buildConnectionConfig(fc)
 	if err != nil {
@@ -533,6 +552,44 @@ func (d *Deps) buildConnectionConfig(fc *persistence.FileConnection) (fileproto.
 	}
 
 	return config, nil
+}
+
+func (d *Deps) currentActorID(r *http.Request) string {
+	if d.PrincipalActorID == nil || r == nil {
+		return ""
+	}
+	return strings.TrimSpace(d.PrincipalActorID(r.Context()))
+}
+
+func (d *Deps) canAccessFileConnection(r *http.Request, fc *persistence.FileConnection) bool {
+	if fc == nil {
+		return false
+	}
+	if d.PrincipalActorID == nil {
+		return true
+	}
+	actorID := d.currentActorID(r)
+	if actorID == "" {
+		return false
+	}
+	return strings.TrimSpace(fc.ActorID) == actorID
+}
+
+func (d *Deps) filterFileConnectionsForActor(r *http.Request, connections []persistence.FileConnection) []persistence.FileConnection {
+	if d.PrincipalActorID == nil {
+		return connections
+	}
+	actorID := d.currentActorID(r)
+	if actorID == "" || len(connections) == 0 {
+		return []persistence.FileConnection{}
+	}
+	filtered := make([]persistence.FileConnection, 0, len(connections))
+	for _, connection := range connections {
+		if strings.TrimSpace(connection.ActorID) == actorID {
+			filtered = append(filtered, connection)
+		}
+	}
+	return filtered
 }
 
 func (d *Deps) testFileConnection(ctx context.Context, config fileproto.ConnectionConfig) map[string]any {

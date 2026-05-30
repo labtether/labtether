@@ -18,6 +18,7 @@ import (
 
 var errFileDownloadTimedOut = errors.New("file download timed out")
 var errFileDownloadBackpressured = errors.New("file download could not keep up with the agent stream")
+var errFileDownloadInvalidAgentResponse = errors.New("invalid agent response")
 
 func (d *Deps) HandleFileList(w http.ResponseWriter, r *http.Request, assetID string) {
 	if r.Method != http.MethodGet {
@@ -116,17 +117,6 @@ func (d *Deps) HandleFileDownloadWithTimeout(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	tempFile, err := os.CreateTemp("", "labtether-download-*")
-	if err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to prepare download buffer")
-		return
-	}
-	tempPath := tempFile.Name()
-	defer func() {
-		_ = tempFile.Close()
-		_ = os.Remove(tempPath)
-	}()
-
 	firstChunk, err := receiveFileDownloadChunk(bridge, timeout)
 	if err != nil {
 		if errors.Is(err, errFileDownloadTimedOut) {
@@ -144,34 +134,19 @@ func (d *Deps) HandleFileDownloadWithTimeout(w http.ResponseWriter, r *http.Requ
 		servicehttp.WriteError(w, http.StatusBadRequest, firstChunk.Error)
 		return
 	}
-
 	firstPayload, err := DecodeFileDownloadChunk(firstChunk)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
 		return
 	}
-
-	if len(firstPayload) > 0 {
-		if _, err := tempFile.Write(firstPayload); err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to buffer download")
-			return
-		}
-	}
-	if err := bufferRemainingDownloadChunks(tempFile, bridge, filePath, timeout, firstChunk.Done); err != nil {
-		switch {
-		case errors.Is(err, errFileDownloadTimedOut):
-			servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
-		case errors.Is(err, errFileDownloadBackpressured):
-			servicehttp.WriteError(w, http.StatusBadGateway, err.Error())
-		case errors.Is(err, errFileDownloadAgentFailed):
-			servicehttp.WriteError(w, http.StatusBadGateway, err.Error())
-		default:
-			servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
-		}
+	if firstChunk.Offset != 0 {
+		servicehttp.WriteError(w, http.StatusBadGateway, "agent sent invalid file chunk offset")
 		return
 	}
-	if _, err := tempFile.Seek(0, io.SeekStart); err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to finalize download")
+
+	const maxDownloadBytes = 512 * 1024 * 1024
+	if int64(len(firstPayload)) > maxDownloadBytes {
+		servicehttp.WriteError(w, http.StatusBadGateway, "agent download exceeded 512 MB limit")
 		return
 	}
 
@@ -181,10 +156,36 @@ func (d *Deps) HandleFileDownloadWithTimeout(w http.ResponseWriter, r *http.Requ
 		filename = "download"
 	}
 
+	spool, err := os.CreateTemp("", "labtether-download-*")
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to prepare download")
+		return
+	}
+	defer func() {
+		if err := spool.Close(); err != nil {
+			securityruntime.Logf("file: failed to close download spool for %s: %v", filePath, err)
+		}
+		if err := os.Remove(spool.Name()); err != nil {
+			securityruntime.Logf("file: failed to remove download spool for %s: %v", filePath, err)
+		}
+	}()
+
+	written, err := spoolFileDownloadChunks(spool, bridge, filePath, timeout, firstChunk, firstPayload, maxDownloadBytes)
+	if err != nil {
+		writeFileDownloadError(w, err)
+		return
+	}
+	if _, err := spool.Seek(0, io.SeekStart); err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to prepare download")
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", written))
 	w.WriteHeader(http.StatusOK)
-	if _, err := io.Copy(w, tempFile); err != nil {
+
+	if _, err := io.Copy(w, spool); err != nil {
 		securityruntime.Logf("file: failed to write download response for %s: %v", filePath, err)
 	}
 }
@@ -222,9 +223,13 @@ func DecodeFileDownloadChunk(chunk agentmgr.FileDataPayload) ([]byte, error) {
 
 var errFileDownloadAgentFailed = errors.New("agent reported a file download failure")
 
-func bufferRemainingDownloadChunks(dst *os.File, bridge *FileBridge, filePath string, timeout time.Duration, firstChunkDone bool) error {
-	if firstChunkDone {
-		return nil
+func spoolFileDownloadChunks(dst io.Writer, bridge *FileBridge, filePath string, timeout time.Duration, firstChunk agentmgr.FileDataPayload, firstPayload []byte, maxBytes int64) (int64, error) {
+	var written int64
+	if err := writeFileDownloadChunk(dst, firstPayload, firstChunk.Offset, &written, maxBytes); err != nil {
+		return written, err
+	}
+	if firstChunk.Done {
+		return written, nil
 	}
 	for {
 		chunk, err := receiveFileDownloadChunk(bridge, timeout)
@@ -235,24 +240,58 @@ func bufferRemainingDownloadChunks(dst *os.File, bridge *FileBridge, filePath st
 			if errors.Is(err, errFileDownloadBackpressured) {
 				securityruntime.Logf("file: download backpressure exceeded for %s", filePath)
 			}
-			return err
+			return written, err
 		}
 		if chunk.Error != "" {
 			securityruntime.Logf("file: download error for %s: %s", filePath, chunk.Error)
-			return fmt.Errorf("%w: %s", errFileDownloadAgentFailed, chunk.Error)
+			return written, fmt.Errorf("%w: %s", errFileDownloadAgentFailed, chunk.Error)
 		}
 		payload, err := DecodeFileDownloadChunk(chunk)
 		if err != nil {
-			return err
+			return written, fmt.Errorf("%w: %v", errFileDownloadInvalidAgentResponse, err)
 		}
-		if len(payload) > 0 {
-			if _, err := dst.Write(payload); err != nil {
-				return err
-			}
+		if err := writeFileDownloadChunk(dst, payload, chunk.Offset, &written, maxBytes); err != nil {
+			return written, err
 		}
 		if chunk.Done {
-			return nil
+			return written, nil
 		}
+	}
+}
+
+func writeFileDownloadChunk(dst io.Writer, payload []byte, offset int64, written *int64, maxBytes int64) error {
+	if offset != *written {
+		return fmt.Errorf("%w: agent sent invalid file chunk offset: got %d want %d", errFileDownloadInvalidAgentResponse, offset, *written)
+	}
+	if maxBytes > 0 && *written+int64(len(payload)) > maxBytes {
+		return fmt.Errorf("agent download exceeded %d byte limit", maxBytes)
+	}
+	if len(payload) == 0 {
+		return nil
+	}
+	n, err := dst.Write(payload)
+	if err != nil {
+		return err
+	}
+	if n != len(payload) {
+		return io.ErrShortWrite
+	}
+	*written += int64(n)
+	return nil
+}
+
+func writeFileDownloadError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, errFileDownloadTimedOut):
+		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
+	case errors.Is(err, errFileDownloadBackpressured):
+		servicehttp.WriteError(w, http.StatusBadGateway, "agent response stream exceeded backpressure limit")
+	case errors.Is(err, errFileDownloadAgentFailed):
+		servicehttp.WriteError(w, http.StatusBadGateway, err.Error())
+	case errors.Is(err, errFileDownloadInvalidAgentResponse):
+		servicehttp.WriteError(w, http.StatusBadGateway, err.Error())
+	default:
+		servicehttp.WriteError(w, http.StatusInternalServerError, "download failed")
 	}
 }
 
@@ -291,6 +330,18 @@ func (d *Deps) HandleFileUpload(w http.ResponseWriter, r *http.Request, assetID 
 	defer d.FileBridges.Delete(requestID)
 
 	if _, err := RelayFileUploadChunks(r.Body, requestID, filePath, fileChunkSizeHub, func(payload agentmgr.FileWriteData) error {
+		select {
+		case msg := <-bridge.Ch:
+			var result agentmgr.FileWrittenData
+			if err := json.Unmarshal(msg.Data, &result); err != nil {
+				return UploadAgentResponseError{err: err}
+			}
+			if result.Error != "" {
+				return UploadAgentWriteError{message: result.Error}
+			}
+			return UploadAgentWriteError{message: "agent completed upload before hub finished relaying request body"}
+		default:
+		}
 		data, _ := json.Marshal(payload)
 		return agentConn.Send(agentmgr.Message{
 			Type: agentmgr.MsgFileWrite,
@@ -300,9 +351,16 @@ func (d *Deps) HandleFileUpload(w http.ResponseWriter, r *http.Request, assetID 
 	}); err != nil {
 		securityruntime.Logf("file: upload relay error for %s: %v", filePath, err)
 		var sendErr UploadRelaySendError
-		if errors.As(err, &sendErr) {
+		var responseErr UploadAgentResponseError
+		var agentErr UploadAgentWriteError
+		switch {
+		case errors.As(err, &responseErr):
+			servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
+		case errors.As(err, &agentErr):
+			servicehttp.WriteError(w, http.StatusBadRequest, agentErr.message)
+		case errors.As(err, &sendErr):
 			servicehttp.WriteError(w, http.StatusBadGateway, "failed to relay data to agent")
-		} else {
+		default:
 			servicehttp.WriteError(w, http.StatusInternalServerError, "upload failed")
 		}
 		return
@@ -401,4 +459,27 @@ func (e UploadRelaySendError) Error() string {
 
 func (e UploadRelaySendError) Unwrap() error {
 	return e.err
+}
+
+type UploadAgentResponseError struct {
+	err error
+}
+
+func (e UploadAgentResponseError) Error() string {
+	return fmt.Sprintf("parse agent upload response: %v", e.err)
+}
+
+func (e UploadAgentResponseError) Unwrap() error {
+	return e.err
+}
+
+type UploadAgentWriteError struct {
+	message string
+}
+
+func (e UploadAgentWriteError) Error() string {
+	if strings.TrimSpace(e.message) == "" {
+		return "agent rejected upload"
+	}
+	return e.message
 }

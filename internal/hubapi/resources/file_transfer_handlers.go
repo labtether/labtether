@@ -3,6 +3,7 @@ package resources
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"path"
@@ -22,6 +23,8 @@ const progressThrottleInterval = 500 * time.Millisecond
 
 // progressThrottleBytes is the minimum bytes between DB progress updates.
 const progressThrottleBytes int64 = 1 << 20 // 1 MB
+
+var errFileConnectionAccessDenied = errors.New("file connection access denied")
 
 func (d *Deps) fileTransferActorID(ctx context.Context) string {
 	if d.PrincipalActorID != nil {
@@ -119,9 +122,19 @@ func (d *Deps) handleStartFileTransfer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	actorID := d.fileTransferActorID(r.Context())
+	if err := d.ensureCanAccessTransferConnection(r.Context(), req.SourceID, actorID); err != nil {
+		d.writeTransferConnectionError(w, err)
+		return
+	}
+	if err := d.ensureCanAccessTransferConnection(r.Context(), req.DestID, actorID); err != nil {
+		d.writeTransferConnectionError(w, err)
+		return
+	}
+
 	// Create the pending transfer record.
 	ft := &persistence.FileTransfer{
-		ActorID:    d.fileTransferActorID(r.Context()),
+		ActorID:    actorID,
 		SourceType: req.SourceType,
 		SourceID:   req.SourceID,
 		SourcePath: req.SourcePath,
@@ -144,6 +157,28 @@ func (d *Deps) handleStartFileTransfer(w http.ResponseWriter, r *http.Request) {
 	go d.runFileTransfer(transferCtx, cancelTransfer, ft.ID, req) // #nosec G118 -- File transfers intentionally outlive the initiating HTTP request and use an explicit cancel handle.
 
 	servicehttp.WriteJSON(w, http.StatusAccepted, map[string]any{"transfer": ft})
+}
+
+func (d *Deps) ensureCanAccessTransferConnection(ctx context.Context, connectionID, actorID string) error {
+	fc, err := d.FileConnectionStore.GetFileConnection(ctx, connectionID)
+	if err != nil {
+		return err
+	}
+	if d.PrincipalActorID != nil && strings.TrimSpace(fc.ActorID) != strings.TrimSpace(actorID) {
+		return errFileConnectionAccessDenied
+	}
+	return nil
+}
+
+func (d *Deps) writeTransferConnectionError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, persistence.ErrNotFound):
+		servicehttp.WriteError(w, http.StatusNotFound, "file connection not found")
+	case errors.Is(err, errFileConnectionAccessDenied):
+		servicehttp.WriteError(w, http.StatusForbidden, "file connection access denied")
+	default:
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load file connection")
+	}
 }
 
 // --- Get Transfer ---
@@ -215,6 +250,12 @@ func (d *Deps) runFileTransfer(ctx context.Context, cancel context.CancelFunc, t
 	}()
 
 	bgCtx := context.Background()
+	transfer, err := d.FileTransferStore.GetFileTransfer(bgCtx, transferID)
+	if err != nil {
+		log.Printf("file-transfers: failed to load transfer %s: %v", transferID, err)
+		return
+	}
+	actorID := strings.TrimSpace(transfer.ActorID)
 
 	// Helper to mark failure.
 	markFailed := func(errMsg string) {
@@ -233,14 +274,14 @@ func (d *Deps) runFileTransfer(ctx context.Context, cancel context.CancelFunc, t
 	}
 
 	// Resolve source connection config.
-	srcConfig, err := d.resolveConnectionConfig(bgCtx, req.SourceID)
+	srcConfig, err := d.resolveConnectionConfig(bgCtx, req.SourceID, actorID)
 	if err != nil {
 		markFailed("failed to resolve source connection: " + err.Error())
 		return
 	}
 
 	// Resolve dest connection config.
-	dstConfig, err := d.resolveConnectionConfig(bgCtx, req.DestID)
+	dstConfig, err := d.resolveConnectionConfig(bgCtx, req.DestID, actorID)
 	if err != nil {
 		markFailed("failed to resolve destination connection: " + err.Error())
 		return
@@ -343,10 +384,13 @@ func (d *Deps) runFileTransfer(ctx context.Context, cancel context.CancelFunc, t
 }
 
 // resolveConnectionConfig loads a file connection by ID and builds its ConnectionConfig.
-func (d *Deps) resolveConnectionConfig(ctx context.Context, connectionID string) (fileproto.ConnectionConfig, error) {
+func (d *Deps) resolveConnectionConfig(ctx context.Context, connectionID, actorID string) (fileproto.ConnectionConfig, error) {
 	fc, err := d.FileConnectionStore.GetFileConnection(ctx, connectionID)
 	if err != nil {
 		return fileproto.ConnectionConfig{}, err
+	}
+	if d.PrincipalActorID != nil && strings.TrimSpace(fc.ActorID) != strings.TrimSpace(actorID) {
+		return fileproto.ConnectionConfig{}, fmt.Errorf("file connection access denied")
 	}
 	return d.buildConnectionConfig(fc)
 }

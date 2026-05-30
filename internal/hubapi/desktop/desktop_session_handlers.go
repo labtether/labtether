@@ -300,16 +300,21 @@ func (d *Deps) HandleDesktopSessionActions(w http.ResponseWriter, r *http.Reques
 	}
 
 	if len(parts) < 2 {
-		if r.Method == http.MethodDelete {
+		switch r.Method {
+		case http.MethodGet:
+			servicehttp.WriteJSON(w, http.StatusOK, session)
+			return
+		case http.MethodDelete:
 			if err := d.TerminateDesktopSession(session); err != nil {
 				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete desktop session")
 				return
 			}
 			w.WriteHeader(http.StatusNoContent)
 			return
+		default:
+			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
 		}
-		servicehttp.WriteJSON(w, http.StatusOK, session)
-		return
 	}
 
 	action := strings.TrimSpace(parts[1])

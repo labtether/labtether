@@ -534,6 +534,7 @@ type SettingsStore interface {
 // FileConnection represents a saved remote file system connection (SFTP, FTP, SMB, WebDAV).
 type FileConnection struct {
 	ID           string         `json:"id"`
+	ActorID      string         `json:"-"`
 	Name         string         `json:"name"`
 	Protocol     string         `json:"protocol"`
 	Host         string         `json:"host"`

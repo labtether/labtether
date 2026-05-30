@@ -2566,5 +2566,44 @@ func postgresSchemaMigrations() []schemaMigration {
 		},
 	})
 
+	migrations = append(migrations, schemaMigration{
+		Version: 80,
+		Name:    "file_connections_actor_scope",
+		Statements: []string{
+			`ALTER TABLE file_connections ADD COLUMN IF NOT EXISTS actor_id TEXT NOT NULL DEFAULT ''`,
+			`CREATE INDEX IF NOT EXISTS idx_file_connections_actor_updated ON file_connections(actor_id, updated_at DESC)`,
+		},
+	})
+
+	migrations = append(migrations, schemaMigration{
+		Version: 81,
+		Name:    "file_connections_actor_backfill_single_owner",
+		Statements: []string{
+			`DO $$
+			DECLARE
+				owner_count INTEGER := 0;
+				legacy_owner_id TEXT := '';
+			BEGIN
+				IF EXISTS (
+					SELECT 1
+					  FROM information_schema.columns
+					 WHERE table_name = 'users'
+					   AND column_name = 'role'
+				) THEN
+					SELECT COUNT(*), COALESCE(MIN(id), '')
+					  INTO owner_count, legacy_owner_id
+					  FROM users
+					 WHERE role = 'owner';
+
+					IF owner_count = 1 AND legacy_owner_id <> '' THEN
+						UPDATE file_connections
+						   SET actor_id = legacy_owner_id
+						 WHERE actor_id = '';
+					END IF;
+				END IF;
+			END $$`,
+		},
+	})
+
 	return migrations
 }

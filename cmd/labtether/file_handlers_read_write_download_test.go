@@ -262,6 +262,9 @@ func TestHandleFileDownloadReturnsExplicitFailureOnMidStreamAgentError(t *testin
 	if strings.Contains(rec.Body.String(), "partial") {
 		t.Fatalf("expected no partial payload to be returned, got %q", rec.Body.String())
 	}
+	if !strings.Contains(rec.Body.String(), "An internal error occurred.") {
+		t.Fatalf("expected sanitized midstream error in body, got %q", rec.Body.String())
+	}
 }
 
 func TestDeliverFileResponseFailsBackpressuredConsumer(t *testing.T) {

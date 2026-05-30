@@ -23,6 +23,7 @@ func scanFileConnection(row fileConnectionScanner) (FileConnection, error) {
 	var extraConfig []byte
 	if err := row.Scan(
 		&fc.ID,
+		&fc.ActorID,
 		&fc.Name,
 		&fc.Protocol,
 		&fc.Host,
@@ -43,7 +44,7 @@ func scanFileConnection(row fileConnectionScanner) (FileConnection, error) {
 
 // --- columns ---
 
-const fileConnectionColumns = `id, name, protocol, host, port, initial_path, credential_id, extra_config, created_at, updated_at`
+const fileConnectionColumns = `id, actor_id, name, protocol, host, port, initial_path, credential_id, extra_config, created_at, updated_at`
 
 // --- store methods ---
 
@@ -97,9 +98,10 @@ func (s *PostgresStore) CreateFileConnection(ctx context.Context, fc *FileConnec
 	}
 
 	_, err = s.pool.Exec(ctx,
-		`INSERT INTO file_connections (id, name, protocol, host, port, initial_path, credential_id, extra_config, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10)`,
+		`INSERT INTO file_connections (id, actor_id, name, protocol, host, port, initial_path, credential_id, extra_config, created_at, updated_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11)`,
 		fc.ID,
+		strings.TrimSpace(fc.ActorID),
 		strings.TrimSpace(fc.Name),
 		strings.TrimSpace(fc.Protocol),
 		strings.TrimSpace(fc.Host),
@@ -124,10 +126,11 @@ func (s *PostgresStore) UpdateFileConnection(ctx context.Context, fc *FileConnec
 
 	tag, err := s.pool.Exec(ctx,
 		`UPDATE file_connections
-		 SET name = $2, protocol = $3, host = $4, port = $5,
-		     initial_path = $6, credential_id = $7, extra_config = $8::jsonb, updated_at = $9
-		 WHERE id = $1`,
+			 SET actor_id = $2, name = $3, protocol = $4, host = $5, port = $6,
+			     initial_path = $7, credential_id = $8, extra_config = $9::jsonb, updated_at = $10
+			 WHERE id = $1`,
 		strings.TrimSpace(fc.ID),
+		strings.TrimSpace(fc.ActorID),
 		strings.TrimSpace(fc.Name),
 		strings.TrimSpace(fc.Protocol),
 		strings.TrimSpace(fc.Host),

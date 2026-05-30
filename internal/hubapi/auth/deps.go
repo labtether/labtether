@@ -52,6 +52,12 @@ type Deps struct {
 
 	// TLS state (for setting Secure on cookies).
 	TLSEnabled bool
+	// CookieSecure resolves per-request Secure cookie behavior when the hub is
+	// behind a trusted HTTPS terminator.
+	CookieSecure func(r *http.Request) bool
+	// ValidateOIDCRedirectURI validates callback redirects against the public hub
+	// origin visible to the current request.
+	ValidateOIDCRedirectURI func(r *http.Request, raw string) (string, error)
 
 	// 2FA challenge store + TOTP encryption key.
 	ChallengeStore    *auth.ChallengeStore

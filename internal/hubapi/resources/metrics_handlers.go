@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/persistence"
@@ -56,6 +57,16 @@ func (d *Deps) HandleMetricsOverview(w http.ResponseWriter, r *http.Request) {
 		filtered := make([]assets.Asset, 0, len(assetList))
 		for _, assetEntry := range assetList {
 			if strings.TrimSpace(assetEntry.GroupID) == groupID {
+				filtered = append(filtered, assetEntry)
+			}
+		}
+		assetList = filtered
+	}
+	allowedAssets := apiv2.AllowedAssetsFromContext(r.Context())
+	if allowedAssets != nil {
+		filtered := make([]assets.Asset, 0, len(assetList))
+		for _, assetEntry := range assetList {
+			if apiv2.AssetCheck(allowedAssets, assetEntry.ID) {
 				filtered = append(filtered, assetEntry)
 			}
 		}
@@ -164,6 +175,10 @@ func (d *Deps) HandleAssetMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	assetID := strings.TrimSpace(path)
+	if !apiv2.AssetCheck(apiv2.AllowedAssetsFromContext(r.Context()), assetID) {
+		apiv2.WriteAssetForbidden(w, assetID)
+		return
+	}
 	if d.AssetStore == nil {
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "asset store unavailable")
 		return

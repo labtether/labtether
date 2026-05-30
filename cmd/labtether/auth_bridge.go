@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/labtether/labtether/internal/auth"
 	authpkg "github.com/labtether/labtether/internal/hubapi/auth"
@@ -13,12 +16,14 @@ import (
 // buildAuthDeps constructs the auth.Deps from the apiServer's fields.
 func (s *apiServer) buildAuthDeps() *authpkg.Deps {
 	return &authpkg.Deps{
-		AuthStore:         s.authStore,
-		OIDCRef:           s.oidcRef,
-		SettingsStore:     s.db,
-		TLSEnabled:        s.tlsState.Enabled,
-		ChallengeStore:    s.challengeStore,
-		TOTPEncryptionKey: s.totpEncryptionKey,
+		AuthStore:               s.authStore,
+		OIDCRef:                 s.oidcRef,
+		SettingsStore:           s.db,
+		TLSEnabled:              s.tlsState.Enabled,
+		CookieSecure:            s.sessionCookieSecure,
+		ValidateOIDCRedirectURI: s.validateOIDCRedirectURI,
+		ChallengeStore:          s.challengeStore,
+		TOTPEncryptionKey:       s.totpEncryptionKey,
 
 		// Credential and API key stores.
 		CredentialStore: s.credentialStore,
@@ -121,7 +126,57 @@ func (s *apiServer) handleAuthUserActions(w http.ResponseWriter, r *http.Request
 
 // completeLogin delegates to the auth package.
 func (s *apiServer) completeLogin(w http.ResponseWriter, user auth.User) {
-	s.ensureAuthDeps().CompleteLogin(w, user)
+	s.ensureAuthDeps().CompleteLogin(w, nil, user)
+}
+
+func (s *apiServer) validateOIDCRedirectURI(r *http.Request, raw string) (string, error) {
+	redirectURI, err := authpkg.ValidateAuthRedirectURI(raw)
+	if err != nil {
+		return "", err
+	}
+	parsed, err := url.Parse(redirectURI)
+	if err != nil {
+		return "", fmt.Errorf("redirect_uri is invalid")
+	}
+	if s == nil || r == nil {
+		return redirectURI, nil
+	}
+
+	allowedHosts := make(map[string]struct{})
+	for _, host := range sameOriginAllowedHosts(r) {
+		addAllowedRedirectHost(allowedHosts, host)
+	}
+	if origin := strings.TrimSpace(r.Header.Get("Origin")); origin != "" {
+		if originURL, parseErr := url.Parse(origin); parseErr == nil {
+			addAllowedRedirectHost(allowedHosts, originURL.Host)
+		}
+	}
+	if external, ok := sanitizeExternalBaseURL(strings.TrimSpace(s.externalURL)); ok {
+		if externalURL, parseErr := url.Parse(external); parseErr == nil {
+			addAllowedRedirectHost(allowedHosts, externalURL.Host)
+		}
+	}
+	if len(allowedHosts) == 0 {
+		return redirectURI, nil
+	}
+	redirectHost := strings.ToLower(strings.TrimSpace(parsed.Host))
+	if _, ok := allowedHosts[redirectHost]; ok {
+		return redirectURI, nil
+	}
+	redirectHostname := requestHostname(parsed.Host)
+	for allowed := range allowedHosts {
+		if isLoopbackHostname(redirectHostname) && isLoopbackHostname(requestHostname(allowed)) {
+			return redirectURI, nil
+		}
+	}
+	return "", fmt.Errorf("redirect_uri host is not allowed")
+}
+
+func addAllowedRedirectHost(hosts map[string]struct{}, host string) {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if host != "" {
+		hosts[host] = struct{}{}
+	}
 }
 
 // Package-level function aliases delegating to the auth package.

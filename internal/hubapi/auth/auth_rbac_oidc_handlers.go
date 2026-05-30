@@ -76,6 +76,13 @@ func (d *Deps) HandleAuthProviders(w http.ResponseWriter, r *http.Request) {
 	servicehttp.WriteJSON(w, http.StatusOK, payload)
 }
 
+func (d *Deps) validateOIDCRedirectURI(r *http.Request, raw string) (string, error) {
+	if d != nil && d.ValidateOIDCRedirectURI != nil {
+		return d.ValidateOIDCRedirectURI(r, raw)
+	}
+	return ValidateAuthRedirectURI(raw)
+}
+
 // HandleAuthOIDCStart handles POST /auth/oidc/start.
 func (d *Deps) HandleAuthOIDCStart(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -96,7 +103,7 @@ func (d *Deps) HandleAuthOIDCStart(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusBadRequest, "invalid oidc start payload")
 		return
 	}
-	redirectURI, err := ValidateAuthRedirectURI(req.RedirectURI)
+	redirectURI, err := d.validateOIDCRedirectURI(r, req.RedirectURI)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -154,7 +161,7 @@ func (d *Deps) HandleAuthOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusBadRequest, "invalid oidc callback payload")
 		return
 	}
-	redirectURI, err := ValidateAuthRedirectURI(req.RedirectURI)
+	redirectURI, err := d.validateOIDCRedirectURI(r, req.RedirectURI)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -192,7 +199,7 @@ func (d *Deps) HandleAuthOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create session")
 		return
 	}
-	auth.SetSessionCookie(w, raw, auth.SessionDuration, d.TLSEnabled)
+	auth.SetSessionCookie(w, raw, auth.SessionDuration, d.sessionCookieSecure(r))
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"user":       auth.UserInfo{ID: user.ID, Username: user.Username, Role: auth.NormalizeRole(user.Role)},
@@ -514,7 +521,7 @@ func (d *Deps) HandleAuthUserActions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if user.ID == d.UserIDFromContext(r.Context()) {
-			auth.ClearSessionCookie(w, d.TLSEnabled)
+			auth.ClearSessionCookie(w, d.sessionCookieSecure(r))
 		}
 	}
 

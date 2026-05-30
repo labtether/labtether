@@ -179,6 +179,19 @@ func forwardedHeaderHost(raw string) string {
 	return ""
 }
 
+func forwardedHeaderProto(raw string) string {
+	for _, entry := range strings.Split(raw, ",") {
+		for _, part := range strings.Split(entry, ";") {
+			key, value, ok := strings.Cut(part, "=")
+			if !ok || !strings.EqualFold(strings.TrimSpace(key), "proto") {
+				continue
+			}
+			return strings.Trim(strings.TrimSpace(value), "\"")
+		}
+	}
+	return ""
+}
+
 func isTrustedForwardedHostSource(r *http.Request) bool {
 	clientHost := requestClientKey(r)
 	if clientHost == "" {
@@ -189,6 +202,30 @@ func isTrustedForwardedHostSource(r *http.Request) bool {
 		return false
 	}
 	return ip.IsLoopback() || ip.IsPrivate()
+}
+
+func isLoopbackRequestSource(r *http.Request) bool {
+	clientHost := requestClientKey(r)
+	if clientHost == "" {
+		return false
+	}
+	ip := net.ParseIP(strings.Trim(clientHost, "[]"))
+	return ip != nil && ip.IsLoopback()
+}
+
+func requestForwardedProtoHTTPS(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(firstForwardedValue(r.Header.Get("X-Forwarded-Proto"))), "https") {
+		return true
+	}
+	return strings.EqualFold(strings.TrimSpace(forwardedHeaderProto(r.Header.Get("Forwarded"))), "https")
+}
+
+func externalURLIsHTTPS(raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	return err == nil && strings.EqualFold(parsed.Scheme, "https")
 }
 
 func dedupeNonEmptyHosts(hosts []string) []string {
@@ -349,9 +386,9 @@ func (s *apiServer) withAuth(next http.HandlerFunc) http.HandlerFunc {
 				servicehttp.WriteError(w, http.StatusServiceUnavailable, "api key authentication unavailable")
 				return
 			}
-			// Reject API keys over plain HTTP.
-			isTLS := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
-			if !s.tlsState.Enabled && !isTLS {
+			// Reject API keys over plain HTTP. Forwarded proto is trusted only
+			// from loopback reverse proxies; LAN clients can spoof it directly.
+			if !s.apiKeyRequestIsSecure(r) {
 				servicehttp.WriteError(w, http.StatusForbidden, "api keys require HTTPS")
 				return
 			}
@@ -432,6 +469,28 @@ func methodAllowedForRole(role, method string) bool {
 		return true
 	}
 	return auth.HasWritePrivileges(role)
+}
+
+func (s *apiServer) apiKeyRequestIsSecure(r *http.Request) bool {
+	if r != nil && r.TLS != nil {
+		return true
+	}
+	if s != nil && s.tlsState.Enabled {
+		return true
+	}
+	return isLoopbackRequestSource(r) && requestForwardedProtoHTTPS(r)
+}
+
+func (s *apiServer) sessionCookieSecure(r *http.Request) bool {
+	if r != nil && r.TLS != nil {
+		return true
+	}
+	if s != nil {
+		if s.tlsState.Enabled || externalURLIsHTTPS(s.externalURL) {
+			return true
+		}
+	}
+	return isTrustedForwardedHostSource(r) && requestForwardedProtoHTTPS(r)
 }
 
 func (s *apiServer) validateOwnerTokenRequest(r *http.Request) bool {

@@ -56,7 +56,7 @@ func (d *Deps) HandleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	d.CompleteLogin(w, user)
+	d.CompleteLogin(w, r, user)
 }
 
 // HandleAuthLogout handles POST /auth/logout.
@@ -77,7 +77,7 @@ func (d *Deps) HandleAuthLogout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	auth.ClearSessionCookie(w, d.TLSEnabled)
+	auth.ClearSessionCookie(w, d.sessionCookieSecure(r))
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"status": "logged_out"})
 }
 
@@ -123,7 +123,7 @@ func (d *Deps) HandleDeleteOwnAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	auth.ClearSessionCookie(w, d.TLSEnabled)
+	auth.ClearSessionCookie(w, d.sessionCookieSecure(r))
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
