@@ -258,7 +258,6 @@ func newTestAuthDeps(t *testing.T) (*Deps, *memAuthStore) {
 	return &Deps{
 		AuthStore:                 store,
 		OIDCRef:                   &OIDCProviderRef{},
-		TLSEnabled:                false,
 		ChallengeStore:            auth.NewChallengeStore(),
 		TOTPEncryptionKey:         make([]byte, 32),
 		OIDCStates:                make(map[string]OIDCAuthState),

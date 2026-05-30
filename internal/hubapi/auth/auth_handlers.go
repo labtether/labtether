@@ -77,7 +77,7 @@ func (d *Deps) HandleAuthLogout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	auth.ClearSessionCookie(w, d.sessionCookieSecure(r))
+	auth.ClearSessionCookie(w)
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"status": "logged_out"})
 }
 
@@ -123,7 +123,7 @@ func (d *Deps) HandleDeleteOwnAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	auth.ClearSessionCookie(w, d.sessionCookieSecure(r))
+	auth.ClearSessionCookie(w)
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 

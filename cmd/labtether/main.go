@@ -481,18 +481,6 @@ func (s *apiServer) apiKeyRequestIsSecure(r *http.Request) bool {
 	return isLoopbackRequestSource(r) && requestForwardedProtoHTTPS(r)
 }
 
-func (s *apiServer) sessionCookieSecure(r *http.Request) bool {
-	if r != nil && r.TLS != nil {
-		return true
-	}
-	if s != nil {
-		if s.tlsState.Enabled || externalURLIsHTTPS(s.externalURL) {
-			return true
-		}
-	}
-	return isTrustedForwardedHostSource(r) && requestForwardedProtoHTTPS(r)
-}
-
 func (s *apiServer) validateOwnerTokenRequest(r *http.Request) bool {
 	if s == nil || s.authValidator == nil {
 		return false

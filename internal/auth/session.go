@@ -31,26 +31,26 @@ func HashToken(raw string) string {
 	return base64.RawURLEncoding.EncodeToString(hash[:])
 }
 
-func SetSessionCookie(w http.ResponseWriter, token string, maxAge time.Duration, secure bool) {
-	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure is intentionally caller-controlled for local HTTP mode; HttpOnly and SameSite are always enforced.
+func SetSessionCookie(w http.ResponseWriter, token string, maxAge time.Duration) {
+	http.SetCookie(w, &http.Cookie{
 		Name:     SessionCookieName,
 		Value:    token,
 		Path:     "/",
 		MaxAge:   int(maxAge.Seconds()),
 		HttpOnly: true,
-		Secure:   secure,
+		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
 	})
 }
 
-func ClearSessionCookie(w http.ResponseWriter, secure bool) {
-	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure is intentionally caller-controlled for local HTTP mode; HttpOnly and SameSite are always enforced.
+func ClearSessionCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
 		Name:     SessionCookieName,
 		Value:    "",
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   secure,
+		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
 	})
 }

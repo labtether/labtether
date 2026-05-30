@@ -19,8 +19,6 @@ func (s *apiServer) buildAuthDeps() *authpkg.Deps {
 		AuthStore:               s.authStore,
 		OIDCRef:                 s.oidcRef,
 		SettingsStore:           s.db,
-		TLSEnabled:              s.tlsState.Enabled,
-		CookieSecure:            s.sessionCookieSecure,
 		ValidateOIDCRedirectURI: s.validateOIDCRedirectURI,
 		ChallengeStore:          s.challengeStore,
 		TOTPEncryptionKey:       s.totpEncryptionKey,
