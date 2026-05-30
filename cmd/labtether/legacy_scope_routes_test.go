@@ -52,6 +52,12 @@ func TestLegacyRoutesEnforceAPIKeyScopes(t *testing.T) {
 			method:     http.MethodGet,
 			path:       "/status/aggregate",
 		},
+		{
+			name:       "legacy discovery run missing write scope",
+			handlerKey: "/discovery/run",
+			method:     http.MethodPost,
+			path:       "/discovery/run",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := invokeLegacyRoute(t, handlers[tc.handlerKey], tc.method, tc.path, key, tc.body)
