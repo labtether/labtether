@@ -62,12 +62,12 @@ func (d *Deps) HandleLogin2FA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if auth.ValidateTOTPCode(secret, req.Code) {
-		d.CompleteLogin(w, user)
+		d.CompleteLogin(w, r, user)
 		return
 	}
 
 	if d.TryRecoveryCode(user, req.Code) {
-		d.CompleteLogin(w, user)
+		d.CompleteLogin(w, r, user)
 		return
 	}
 
@@ -75,7 +75,7 @@ func (d *Deps) HandleLogin2FA(w http.ResponseWriter, r *http.Request) {
 }
 
 // CompleteLogin creates a session and sets the session cookie.
-func (d *Deps) CompleteLogin(w http.ResponseWriter, user auth.User) {
+func (d *Deps) CompleteLogin(w http.ResponseWriter, r *http.Request, user auth.User) {
 	raw, hashed, err := auth.GenerateSessionToken()
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create session")
@@ -87,12 +87,19 @@ func (d *Deps) CompleteLogin(w http.ResponseWriter, user auth.User) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create session")
 		return
 	}
-	auth.SetSessionCookie(w, raw, auth.SessionDuration, d.TLSEnabled)
+	auth.SetSessionCookie(w, raw, auth.SessionDuration, d.sessionCookieSecure(r))
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"user":       auth.UserInfo{ID: user.ID, Username: user.Username, Role: auth.NormalizeRole(user.Role)},
 		"session_id": session.ID,
 		"expires_at": session.ExpiresAt,
 	})
+}
+
+func (d *Deps) sessionCookieSecure(r *http.Request) bool {
+	if d != nil && d.CookieSecure != nil {
+		return d.CookieSecure(r)
+	}
+	return d != nil && d.TLSEnabled
 }
 
 // TryRecoveryCode attempts to consume a recovery code for 2FA.
@@ -215,7 +222,7 @@ func (d *Deps) Handle2FAVerify(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to revoke active sessions")
 		return
 	}
-	auth.ClearSessionCookie(w, d.TLSEnabled)
+	auth.ClearSessionCookie(w, d.sessionCookieSecure(r))
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"status":         "enabled",
@@ -276,7 +283,7 @@ func (d *Deps) Handle2FADisable(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to revoke active sessions")
 		return
 	}
-	auth.ClearSessionCookie(w, d.TLSEnabled)
+	auth.ClearSessionCookie(w, d.sessionCookieSecure(r))
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "disabled"})
 }
@@ -345,7 +352,7 @@ func (d *Deps) Handle2FARecoveryCodes(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to revoke active sessions")
 		return
 	}
-	auth.ClearSessionCookie(w, d.TLSEnabled)
+	auth.ClearSessionCookie(w, d.sessionCookieSecure(r))
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"recovery_codes": rawCodes,

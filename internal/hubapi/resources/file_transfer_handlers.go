@@ -3,6 +3,7 @@ package resources
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"path"
@@ -215,6 +216,12 @@ func (d *Deps) runFileTransfer(ctx context.Context, cancel context.CancelFunc, t
 	}()
 
 	bgCtx := context.Background()
+	transfer, err := d.FileTransferStore.GetFileTransfer(bgCtx, transferID)
+	if err != nil {
+		log.Printf("file-transfers: failed to load transfer %s: %v", transferID, err)
+		return
+	}
+	actorID := strings.TrimSpace(transfer.ActorID)
 
 	// Helper to mark failure.
 	markFailed := func(errMsg string) {
@@ -233,14 +240,14 @@ func (d *Deps) runFileTransfer(ctx context.Context, cancel context.CancelFunc, t
 	}
 
 	// Resolve source connection config.
-	srcConfig, err := d.resolveConnectionConfig(bgCtx, req.SourceID)
+	srcConfig, err := d.resolveConnectionConfig(bgCtx, req.SourceID, actorID)
 	if err != nil {
 		markFailed("failed to resolve source connection: " + err.Error())
 		return
 	}
 
 	// Resolve dest connection config.
-	dstConfig, err := d.resolveConnectionConfig(bgCtx, req.DestID)
+	dstConfig, err := d.resolveConnectionConfig(bgCtx, req.DestID, actorID)
 	if err != nil {
 		markFailed("failed to resolve destination connection: " + err.Error())
 		return
@@ -343,10 +350,13 @@ func (d *Deps) runFileTransfer(ctx context.Context, cancel context.CancelFunc, t
 }
 
 // resolveConnectionConfig loads a file connection by ID and builds its ConnectionConfig.
-func (d *Deps) resolveConnectionConfig(ctx context.Context, connectionID string) (fileproto.ConnectionConfig, error) {
+func (d *Deps) resolveConnectionConfig(ctx context.Context, connectionID, actorID string) (fileproto.ConnectionConfig, error) {
 	fc, err := d.FileConnectionStore.GetFileConnection(ctx, connectionID)
 	if err != nil {
 		return fileproto.ConnectionConfig{}, err
+	}
+	if d.PrincipalActorID != nil && strings.TrimSpace(fc.ActorID) != strings.TrimSpace(actorID) {
+		return fileproto.ConnectionConfig{}, fmt.Errorf("file connection access denied")
 	}
 	return d.buildConnectionConfig(fc)
 }

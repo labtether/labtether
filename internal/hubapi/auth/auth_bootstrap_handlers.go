@@ -101,5 +101,5 @@ func (d *Deps) HandleAuthBootstrapSetup(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	d.CompleteLogin(w, user)
+	d.CompleteLogin(w, r, user)
 }

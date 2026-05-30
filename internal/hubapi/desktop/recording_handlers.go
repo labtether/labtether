@@ -116,13 +116,20 @@ func (d *Deps) listRecordings(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "database unavailable")
 		return
 	}
-	rows, err := d.DBPool.Query(
-		r.Context(),
-		`SELECT id, session_id, asset_id, actor_id, protocol, file_path, file_size, duration_ms, status, created_at, stopped_at
-		 FROM session_recordings
-		 ORDER BY created_at DESC
-		 LIMIT 100`,
-	)
+	query := `SELECT id, session_id, asset_id, actor_id, protocol, file_path, file_size, duration_ms, status, created_at, stopped_at
+		FROM session_recordings
+		ORDER BY created_at DESC
+		LIMIT 100`
+	args := []any{}
+	if !auth.HasAdminPrivileges(d.UserRoleFromContext(r.Context())) {
+		query = `SELECT id, session_id, asset_id, actor_id, protocol, file_path, file_size, duration_ms, status, created_at, stopped_at
+			FROM session_recordings
+			WHERE actor_id = $1
+			ORDER BY created_at DESC
+			LIMIT 100`
+		args = append(args, d.PrincipalActorID(r.Context()))
+	}
+	rows, err := d.DBPool.Query(r.Context(), query, args...)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to query recordings")
 		return
@@ -188,8 +195,6 @@ func (d *Deps) listRecordings(w http.ResponseWriter, r *http.Request) {
 func (d *Deps) startRecordingRequest(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		SessionID string `json:"session_id"`
-		AssetID   string `json:"asset_id,omitempty"`
-		Protocol  string `json:"protocol,omitempty"`
 	}
 	if err := d.DecodeJSONBody(w, r, &req); err != nil {
 		servicehttp.WriteError(w, http.StatusBadRequest, "invalid request body")
@@ -214,18 +219,17 @@ func (d *Deps) startRecordingRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	assetID := strings.TrimSpace(req.AssetID)
-	if assetID == "" {
-		if session, ok, err := d.TerminalStore.GetSession(sessionID); err == nil && ok {
-			assetID = session.Target
-		} else {
-			assetID = sessionID
-		}
+	session, ok, err := d.TerminalStore.GetSession(sessionID)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to resolve recording session")
+		return
 	}
-	protocol := NormalizeDesktopProtocol(req.Protocol)
-	if protocol == "" {
-		protocol = "vnc"
+	if !ok {
+		servicehttp.WriteError(w, http.StatusNotFound, "desktop session not found")
+		return
 	}
+	assetID := strings.TrimSpace(session.Target)
+	protocol := d.ResolveDesktopProtocol(session, r)
 	recording, alreadyRecording, err := bridge.StartRecordingLocked(func() (*ActiveRecording, error) {
 		return d.StartRecording(sessionID, assetID, d.UserIDFromContext(r.Context()), protocol)
 	})
