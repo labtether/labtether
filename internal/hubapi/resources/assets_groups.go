@@ -81,6 +81,7 @@ func (d *Deps) HandleAssets(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list assets")
 		return
 	}
+	assetList = filterAssetsByAssetAccess(r, assetList)
 
 	if tag := strings.TrimSpace(r.URL.Query().Get("tag")); tag != "" {
 		normalized := assets.NormalizeTags([]string{tag})
@@ -199,6 +200,9 @@ func (d *Deps) HandleAssetActions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if path == "heartbeat" {
+		if !requireAPIScope(w, r, "assets:write") {
+			return
+		}
 		d.HandleRecordAssetHeartbeat(w, r)
 		return
 	}
@@ -212,6 +216,12 @@ func (d *Deps) HandleAssetActions(w http.ResponseWriter, r *http.Request) {
 	assetID := strings.TrimSpace(parts[0])
 	if assetID == "" {
 		servicehttp.WriteError(w, http.StatusNotFound, "asset path not found")
+		return
+	}
+	if !requireAssetActionScope(w, r, parts) {
+		return
+	}
+	if !requireAssetAccess(w, r, assetID) {
 		return
 	}
 
@@ -437,4 +447,89 @@ func (d *Deps) HandleAssetActions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	servicehttp.WriteError(w, http.StatusNotFound, "unknown asset action")
+}
+
+func requireAssetActionScope(w http.ResponseWriter, r *http.Request, parts []string) bool {
+	if len(parts) == 0 {
+		return true
+	}
+
+	required := ""
+	if len(parts) == 1 {
+		switch {
+		case isSafeHTTPMethod(r.Method):
+			required = "assets:read"
+		default:
+			required = "assets:write"
+		}
+	}
+
+	if len(parts) == 2 {
+		switch parts[1] {
+		case "wake":
+			required = "assets:power"
+		case "displays":
+			required = "assets:read"
+		case "blast-radius", "upstream":
+			required = "topology:read"
+		case "dependencies":
+			if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch || r.Method == http.MethodDelete {
+				required = "topology:write"
+			} else {
+				required = "topology:read"
+			}
+		case "protocols":
+			if r.Method == http.MethodPost {
+				required = "assets:write"
+			} else {
+				required = "assets:read"
+			}
+		}
+	}
+
+	if len(parts) >= 3 {
+		switch {
+		case parts[1] == "terminal" && parts[2] == "config":
+			if isSafeHTTPMethod(r.Method) {
+				required = "terminal:read"
+			} else {
+				required = "terminal:write"
+			}
+		case parts[1] == "desktop" && parts[2] == "credentials":
+			if isSafeHTTPMethod(r.Method) {
+				required = "credentials:read"
+			} else {
+				required = "credentials:write"
+			}
+		case parts[1] == "dependencies":
+			if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch || r.Method == http.MethodDelete {
+				required = "topology:write"
+			} else {
+				required = "topology:read"
+			}
+		case parts[1] == "protocols" && len(parts) == 4 && parts[3] == "test":
+			required = "assets:exec"
+		case parts[1] == "protocols" && len(parts) == 4 && parts[2] == "ssh" && parts[3] == "push-hub-key":
+			required = "assets:write"
+		case parts[1] == "protocols":
+			if isSafeHTTPMethod(r.Method) {
+				required = "assets:read"
+			} else {
+				required = "assets:write"
+			}
+		}
+	}
+
+	if required == "" {
+		if isSafeHTTPMethod(r.Method) {
+			required = "assets:read"
+		} else {
+			required = "assets:write"
+		}
+	}
+	return requireAPIScope(w, r, required)
+}
+
+func isSafeHTTPMethod(method string) bool {
+	return method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions
 }

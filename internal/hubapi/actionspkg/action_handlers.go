@@ -42,6 +42,10 @@ func (d *Deps) HandleActionExecute(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "actions:exec") {
+		apiv2.WriteScopeForbidden(w, "actions:exec")
+		return
+	}
 	if d.EnforceRateLimit != nil && !d.EnforceRateLimit(w, r, "actions.execute", 120, time.Minute) {
 		return
 	}
@@ -137,6 +141,10 @@ func (d *Deps) HandleActionExecute(w http.ResponseWriter, r *http.Request) {
 	case actions.RunTypeCommand:
 		if req.Target == "" || req.Command == "" {
 			servicehttp.WriteError(w, http.StatusBadRequest, "command actions require target and command")
+			return
+		}
+		if !apiv2.AssetCheck(apiv2.AllowedAssetsFromContext(r.Context()), req.Target) {
+			apiv2.WriteAssetForbidden(w, req.Target)
 			return
 		}
 	case actions.RunTypeConnectorAction:
