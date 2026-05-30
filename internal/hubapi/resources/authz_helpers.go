@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/labtether/labtether/internal/apiv2"
+	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/dependencies"
 	"github.com/labtether/labtether/internal/edges"
 )
@@ -30,6 +31,23 @@ func requireAssetAccess(w http.ResponseWriter, r *http.Request, assetIDs ...stri
 		}
 	}
 	return true
+}
+
+func filterAssetsByAssetAccess(r *http.Request, assetList []assets.Asset) []assets.Asset {
+	allowed := apiv2.AllowedAssetsFromContext(r.Context())
+	if len(allowed) == 0 {
+		return assetList
+	}
+	filtered := make([]assets.Asset, 0, len(assetList))
+	for _, assetEntry := range assetList {
+		if apiv2.AssetCheck(allowed, assetEntry.ID) {
+			filtered = append(filtered, assetEntry)
+		}
+	}
+	if filtered == nil {
+		return []assets.Asset{}
+	}
+	return filtered
 }
 
 func filterDependenciesByAssetAccess(r *http.Request, deps []dependencies.Dependency) []dependencies.Dependency {
