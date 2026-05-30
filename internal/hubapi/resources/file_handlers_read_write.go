@@ -269,10 +269,14 @@ func writeFileDownloadChunk(dst io.Writer, payload []byte, offset int64, written
 	if len(payload) == 0 {
 		return nil
 	}
-	if _, err := dst.Write(payload); err != nil {
+	n, err := dst.Write(payload)
+	if err != nil {
 		return err
 	}
-	*written += int64(len(payload))
+	if n != len(payload) {
+		return io.ErrShortWrite
+	}
+	*written += int64(n)
 	return nil
 }
 
