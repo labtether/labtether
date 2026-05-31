@@ -2,15 +2,29 @@ package mcpserver
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/terminal"
 )
 
 type mockAssetStore struct {
 	assets []assets.Asset
+}
+
+func toolResultText(t *testing.T, result *mcp.CallToolResult) string {
+	t.Helper()
+	if result == nil || len(result.Content) == 0 {
+		t.Fatal("expected tool result text content")
+	}
+	text, ok := result.Content[0].(mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected text content, got %T", result.Content[0])
+	}
+	return text.Text
 }
 
 func (m *mockAssetStore) ListAssets() ([]assets.Asset, error) { return m.assets, nil }
@@ -200,6 +214,78 @@ func TestHandleSystemDisks_NoAgent(t *testing.T) {
 	}
 }
 
+func TestHandleServicesRestartRejectsShellMetacharacters(t *testing.T) {
+	deps := newTestDeps()
+	deps.GetScopes = func(ctx context.Context) []string { return []string{"services:write"} }
+	deps.ExecuteViaAgent = func(job terminal.CommandJob) terminal.CommandResult {
+		t.Fatalf("ExecuteViaAgent should not be called for invalid service names; got %q", job.Command)
+		return terminal.CommandResult{}
+	}
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"asset_id": "srv1", "service_name": "sshd.service>pwn"}
+
+	result, err := deps.handleServicesRestart(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("should return error for shell metacharacters in service name")
+	}
+}
+
+func TestHandleDockerContainerToolsRejectShellMetacharacters(t *testing.T) {
+	deps := newTestDeps()
+	deps.GetScopes = func(ctx context.Context) []string { return []string{"docker:read"} }
+	deps.ExecuteViaAgent = func(job terminal.CommandJob) terminal.CommandResult {
+		t.Fatalf("ExecuteViaAgent should not be called for invalid container IDs; got %q", job.Command)
+		return terminal.CommandResult{}
+	}
+
+	for _, tc := range []struct {
+		name string
+		run  func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error)
+	}{
+		{name: "logs", run: deps.handleDockerContainerLogs},
+		{name: "stats", run: deps.handleDockerContainerStats},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := mcp.CallToolRequest{}
+			req.Params.Arguments = map[string]any{"asset_id": "srv1", "container_id": "web>pwn"}
+
+			result, err := tc.run(context.Background(), req)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !result.IsError {
+				t.Fatal("should return error for shell metacharacters in container ID")
+			}
+		})
+	}
+}
+
+func TestHandleDockerContainerLogsBuildsSafeCommand(t *testing.T) {
+	deps := newTestDeps()
+	deps.GetScopes = func(ctx context.Context) []string { return []string{"docker:read"} }
+	var gotCommand string
+	deps.ExecuteViaAgent = func(job terminal.CommandJob) terminal.CommandResult {
+		gotCommand = job.Command
+		return terminal.CommandResult{Status: "succeeded", Output: "ok"}
+	}
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"asset_id": "srv1", "container_id": "web.1_abc-2", "tail": 5}
+
+	result, err := deps.handleDockerContainerLogs(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatal("should allow Docker-style IDs and names")
+	}
+	if gotCommand != "docker logs --tail 5 web.1_abc-2 2>&1" {
+		t.Fatalf("unexpected command %q", gotCommand)
+	}
+}
+
 func TestHandleDockerHosts_NilDep(t *testing.T) {
 	deps := newTestDeps()
 	deps.GetScopes = func(ctx context.Context) []string { return []string{"docker:read"} }
@@ -229,7 +315,7 @@ func TestHandleMetricsOverview_NilDep(t *testing.T) {
 func TestHandleDockerHosts_WithData(t *testing.T) {
 	deps := newTestDeps()
 	deps.GetScopes = func(ctx context.Context) []string { return []string{"docker:read"} }
-	deps.ListDockerHosts = func() ([]map[string]any, error) {
+	deps.ListDockerHosts = func(ctx context.Context) ([]map[string]any, error) {
 		return []map[string]any{{"agent_id": "agent1", "containers": 3}}, nil
 	}
 	result, err := deps.handleDockerHosts(context.Background(), mcp.CallToolRequest{})
@@ -238,6 +324,33 @@ func TestHandleDockerHosts_WithData(t *testing.T) {
 	}
 	if result.IsError {
 		t.Fatal("should not return error when dep is configured")
+	}
+}
+
+func TestHandleDockerHostsFiltersAllowedAssets(t *testing.T) {
+	deps := newTestDeps()
+	deps.GetScopes = func(ctx context.Context) []string { return []string{"docker:read"} }
+	deps.GetAllowedAssets = func(ctx context.Context) []string { return []string{"srv1"} }
+	deps.ListDockerHosts = func(ctx context.Context) ([]map[string]any, error) {
+		return []map[string]any{
+			{"agent_id": "srv1", "containers": 1},
+			{"agent_id": "srv2", "containers": 2},
+		}, nil
+	}
+
+	result, err := deps.handleDockerHosts(context.Background(), mcp.CallToolRequest{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatal("should not return error when dep is configured")
+	}
+	text := toolResultText(t, result)
+	if !strings.Contains(text, "srv1") {
+		t.Fatalf("expected allowed host in response, got %s", text)
+	}
+	if strings.Contains(text, "srv2") {
+		t.Fatalf("response leaked disallowed docker host: %s", text)
 	}
 }
 

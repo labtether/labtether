@@ -67,8 +67,8 @@ func (d *Deps) handleServicesList(ctx context.Context, req mcp.CallToolRequest) 
 func (d *Deps) handleServicesRestart(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	assetID, _ := req.RequireString("asset_id")
 	serviceName, _ := req.RequireString("service_name")
-	if strings.ContainsAny(serviceName, " \t\n\r;|&`$(){}") {
-		return mcp.NewToolResultError("invalid service_name: contains disallowed characters"), nil
+	if err := validateSafeShellAtom("service_name", serviceName); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
 	}
 	output, err := d.execOnAsset(ctx, "services:write", assetID,
 		fmt.Sprintf("systemctl restart %s 2>&1 && echo 'restarted'", serviceName))

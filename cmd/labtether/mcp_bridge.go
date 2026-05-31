@@ -3,11 +3,14 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/labtether/labtether/internal/apikeys"
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/connectorsdk"
 	"github.com/labtether/labtether/internal/mcpserver"
@@ -65,14 +68,18 @@ func (s *apiServer) handleMCP() http.HandlerFunc {
 
 // --- Dependency constructors ---
 
-func (s *apiServer) mcpListDockerHosts() func() ([]map[string]any, error) {
+func (s *apiServer) mcpListDockerHosts() func(context.Context) ([]map[string]any, error) {
 	if s.dockerCoordinator == nil {
 		return nil
 	}
-	return func() ([]map[string]any, error) {
+	return func(ctx context.Context) ([]map[string]any, error) {
 		hosts := s.dockerCoordinator.ListHosts()
 		out := make([]map[string]any, 0, len(hosts))
+		allowedAssets := allowedAssetsFromContext(ctx)
 		for _, h := range hosts {
+			if !apikeys.AssetAllowed(allowedAssets, h.AgentID) {
+				continue
+			}
 			b, err := json.Marshal(h)
 			if err != nil {
 				log.Printf("mcp: mcpListDockerHosts: marshal skip: %v", err)
@@ -89,11 +96,11 @@ func (s *apiServer) mcpListDockerHosts() func() ([]map[string]any, error) {
 	}
 }
 
-func (s *apiServer) mcpListDockerContainers() func(hostID string) ([]map[string]any, error) {
+func (s *apiServer) mcpListDockerContainers() func(context.Context, string) ([]map[string]any, error) {
 	if s.dockerCoordinator == nil {
 		return nil
 	}
-	return func(hostID string) ([]map[string]any, error) {
+	return func(ctx context.Context, hostID string) ([]map[string]any, error) {
 		host, ok := s.dockerCoordinator.GetHost(hostID)
 		if !ok {
 			// Fall back to normalized lookup.
@@ -101,6 +108,9 @@ func (s *apiServer) mcpListDockerContainers() func(hostID string) ([]map[string]
 		}
 		if !ok {
 			return nil, nil
+		}
+		if !apikeys.AssetAllowed(allowedAssetsFromContext(ctx), host.AgentID) {
+			return nil, fmt.Errorf("access denied to asset: %s", host.AgentID)
 		}
 		out := make([]map[string]any, 0, len(host.Containers))
 		for _, c := range host.Containers {
@@ -120,17 +130,34 @@ func (s *apiServer) mcpListDockerContainers() func(hostID string) ([]map[string]
 	}
 }
 
-func (s *apiServer) mcpRestartDockerContainer() func(containerID string) error {
+func (s *apiServer) mcpRestartDockerContainer() func(context.Context, string) error {
 	if s.dockerCoordinator == nil {
 		return nil
 	}
-	return func(containerID string) error {
-		_, err := s.dockerCoordinator.ExecuteAction(
-			context.Background(),
+	return func(ctx context.Context, containerID string) error {
+		host, _, ok := s.dockerCoordinator.FindContainer(containerID)
+		if !ok {
+			return fmt.Errorf("container not found: %s", containerID)
+		}
+		if !apikeys.AssetAllowed(allowedAssetsFromContext(ctx), host.AgentID) {
+			return fmt.Errorf("access denied to asset: %s", host.AgentID)
+		}
+		result, err := s.dockerCoordinator.ExecuteAction(
+			ctx,
 			"container.restart",
 			connectorsdk.ActionRequest{TargetID: containerID},
 		)
-		return err
+		if err != nil {
+			return err
+		}
+		if !strings.EqualFold(strings.TrimSpace(result.Status), "succeeded") {
+			message := strings.TrimSpace(result.Message)
+			if message == "" {
+				message = "docker container restart failed"
+			}
+			return fmt.Errorf("%s", message)
+		}
+		return nil
 	}
 }
 

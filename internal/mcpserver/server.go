@@ -34,9 +34,9 @@ type Deps struct {
 
 	// Optional hub-internal dependencies. When nil, the relevant tool returns
 	// errNotConfigured rather than panicking.
-	ListDockerHosts        func() ([]map[string]any, error)
-	ListDockerContainers   func(hostID string) ([]map[string]any, error)
-	RestartDockerContainer func(containerID string) error
+	ListDockerHosts        func(ctx context.Context) ([]map[string]any, error)
+	ListDockerContainers   func(ctx context.Context, hostID string) ([]map[string]any, error)
+	RestartDockerContainer func(ctx context.Context, containerID string) error
 	ListAlerts             func() ([]map[string]any, error)
 	AcknowledgeAlert       func(alertID string) error
 	ListGroups             func() ([]map[string]any, error)
