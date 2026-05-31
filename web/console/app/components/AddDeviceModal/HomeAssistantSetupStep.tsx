@@ -19,8 +19,8 @@ type HomeAssistantSetupStepProps = {
   setupMode: SetupMode;
 };
 
-const CUSTOM_INTEGRATION_DOC_URL = "https://github.com/labtether/labtether/blob/main/integrations/homeassistant/README.md";
-const ADDON_DOC_URL = "https://github.com/labtether/labtether/blob/main/docs/HOME_ASSISTANT_ADDON.md";
+const CUSTOM_INTEGRATION_DOC_URL = "https://github.com/labtether/labtether-homeassistant/blob/main/README.md";
+const ADDON_DOC_URL = "https://github.com/labtether/labtether-homeassistant/blob/main/addon/labtether/README.md";
 
 type CopyRowProps = {
   label: string;
