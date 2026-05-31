@@ -35,12 +35,7 @@ func (d *Deps) handleProxmoxNodeSyslog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := 500
-	if rawLimit := strings.TrimSpace(r.URL.Query().Get("limit")); rawLimit != "" {
-		if parsed, parseErr := strconv.Atoi(rawLimit); parseErr == nil && parsed > 0 {
-			limit = parsed
-		}
-	}
+	limit := parseProxmoxSyslogLimit(r.URL.Query().Get("limit"))
 	since := strings.TrimSpace(r.URL.Query().Get("since"))
 	collectorID := strings.TrimSpace(r.URL.Query().Get("collector_id"))
 
@@ -65,4 +60,22 @@ func (d *Deps) handleProxmoxNodeSyslog(w http.ResponseWriter, r *http.Request) {
 		"node":  node,
 		"lines": lines,
 	})
+}
+
+const (
+	defaultProxmoxSyslogLimit = 500
+	maxProxmoxSyslogLimit     = 2000
+)
+
+func parseProxmoxSyslogLimit(raw string) int {
+	limit := defaultProxmoxSyslogLimit
+	if trimmed := strings.TrimSpace(raw); trimmed != "" {
+		if parsed, parseErr := strconv.Atoi(trimmed); parseErr == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	if limit > maxProxmoxSyslogLimit {
+		return maxProxmoxSyslogLimit
+	}
+	return limit
 }
