@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -174,7 +175,7 @@ func Run(ctx context.Context, cfg Config) error {
 
 	go func() {
 		<-ctx.Done()
-		timeoutSec := envIntOrDefault("LABTETHER_SHUTDOWN_TIMEOUT_SECONDS", 15)
+		timeoutSec := envPositiveIntOrDefault("LABTETHER_SHUTDOWN_TIMEOUT_SECONDS", 15)
 		log.Printf("labtether: shutdown initiated, draining connections (timeout %ds)...", timeoutSec)
 		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Duration(timeoutSec)*time.Second)
 		defer cancel()
@@ -354,15 +355,15 @@ func WriteError(w http.ResponseWriter, status int, message string) {
 	WriteJSON(w, status, map[string]any{"error": message})
 }
 
-// envIntOrDefault reads an environment variable as an integer, returning the
-// default value if the variable is unset or cannot be parsed.
-func envIntOrDefault(key string, defaultVal int) int {
+// envPositiveIntOrDefault reads an environment variable as a positive integer,
+// returning the default value if the variable is unset, malformed, or non-positive.
+func envPositiveIntOrDefault(key string, defaultVal int) int {
 	v := os.Getenv(key)
 	if v == "" {
 		return defaultVal
 	}
-	var n int
-	if _, err := fmt.Sscanf(v, "%d", &n); err != nil {
+	n, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil || n <= 0 {
 		log.Printf("labtether: invalid value for %s=%q, using default %d", key, v, defaultVal)
 		return defaultVal
 	}

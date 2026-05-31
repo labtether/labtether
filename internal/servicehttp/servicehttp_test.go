@@ -214,6 +214,32 @@ func TestBearerAuthMiddleware(t *testing.T) {
 	}
 }
 
+func TestEnvPositiveIntOrDefault(t *testing.T) {
+	const key = "LABTETHER_TEST_POSITIVE_INT"
+	tests := []struct {
+		name string
+		raw  string
+		want int
+	}{
+		{name: "valid", raw: "42", want: 42},
+		{name: "trimmed", raw: " 42 ", want: 42},
+		{name: "malformedSuffix", raw: "42abc", want: 15},
+		{name: "scientificNotation", raw: "1e2", want: 15},
+		{name: "empty", raw: "", want: 15},
+		{name: "zero", raw: "0", want: 15},
+		{name: "negative", raw: "-1", want: 15},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(key, tt.raw)
+			if got := envPositiveIntOrDefault(key, 15); got != tt.want {
+				t.Fatalf("envPositiveIntOrDefault(%q) = %d, want %d", tt.raw, got, tt.want)
+			}
+		})
+	}
+}
+
 // helper: start a servicehttp server on an ephemeral port and return its base URL.
 func startTestServer(t *testing.T, cfg Config) (baseURL string, cancel context.CancelFunc) {
 	t.Helper()

@@ -1,6 +1,7 @@
 package telemetry
 
 import (
+	"math"
 	"testing"
 	"time"
 )
@@ -64,5 +65,55 @@ func TestMetricSample_LabelsEmpty(t *testing.T) {
 	}
 	if len(s.Labels) != 0 {
 		t.Errorf("expected empty Labels, got len=%d", len(s.Labels))
+	}
+}
+
+func TestSamplesFromHeartbeatMetadataSkipsNonFiniteValues(t *testing.T) {
+	now := time.Now().UTC()
+	samples := SamplesFromHeartbeatMetadata("asset-1", now, map[string]string{
+		MetricCPUUsedPercent:       "42",
+		MetricMemoryUsedPercent:    "NaN",
+		MetricDiskUsedPercent:      "+Inf",
+		MetricTemperatureCelsius:   "-Inf",
+		MetricNetworkRXBytesPerSec: "512",
+	})
+
+	byMetric := make(map[string]MetricSample, len(samples))
+	for _, sample := range samples {
+		byMetric[sample.Metric] = sample
+	}
+
+	if got := byMetric[MetricCPUUsedPercent].Value; got != 42 {
+		t.Fatalf("cpu sample = %v, want 42", got)
+	}
+	if got := byMetric[MetricNetworkRXBytesPerSec].Value; got != 512 {
+		t.Fatalf("rx sample = %v, want 512", got)
+	}
+	for _, metric := range []string{MetricMemoryUsedPercent, MetricDiskUsedPercent, MetricTemperatureCelsius} {
+		if _, ok := byMetric[metric]; ok {
+			t.Fatalf("unexpected non-finite sample for %s", metric)
+		}
+	}
+}
+
+func TestBuildDirectSamplesSkipsNonFiniteValues(t *testing.T) {
+	temp := math.Inf(1)
+	samples := BuildDirectSamples("asset-1", time.Now().UTC(), 15, math.NaN(), math.Inf(-1), 1024, math.Inf(1), &temp)
+
+	byMetric := make(map[string]MetricSample, len(samples))
+	for _, sample := range samples {
+		byMetric[sample.Metric] = sample
+	}
+
+	if got := byMetric[MetricCPUUsedPercent].Value; got != 15 {
+		t.Fatalf("cpu sample = %v, want 15", got)
+	}
+	if got := byMetric[MetricNetworkRXBytesPerSec].Value; got != 1024 {
+		t.Fatalf("rx sample = %v, want 1024", got)
+	}
+	for _, metric := range []string{MetricMemoryUsedPercent, MetricDiskUsedPercent, MetricNetworkTXBytesPerSec, MetricTemperatureCelsius} {
+		if _, ok := byMetric[metric]; ok {
+			t.Fatalf("unexpected non-finite sample for %s", metric)
+		}
 	}
 }

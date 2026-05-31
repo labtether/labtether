@@ -2,6 +2,7 @@ package truenas
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -68,7 +69,7 @@ func anyToBool(value any) (bool, bool) {
 func anyToFloat(value any) float64 {
 	switch typed := value.(type) {
 	case float64:
-		return typed
+		return finiteFloatOrZero(typed)
 	case int:
 		return float64(typed)
 	case string:
@@ -76,7 +77,7 @@ func anyToFloat(value any) float64 {
 		if err != nil {
 			return 0
 		}
-		return f
+		return finiteFloatOrZero(f)
 	case map[string]any:
 		for _, key := range []string{"rawvalue", "parsed", "value"} {
 			if nested, ok := typed[key]; ok && nested != nil {
@@ -90,10 +91,18 @@ func anyToFloat(value any) float64 {
 // formatFloat converts a float64 byte count to its integer string representation.
 // Zero values are returned as "0".
 func formatFloat(value float64) string {
+	value = finiteFloatOrZero(value)
 	if value == 0 {
 		return "0"
 	}
 	return strconv.FormatInt(int64(value), 10)
+}
+
+func finiteFloatOrZero(value float64) float64 {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return 0
+	}
+	return value
 }
 
 // normalizeID converts a raw name or path into a URL/key-safe identifier by
@@ -148,7 +157,7 @@ func parseFloat(s string) float64 {
 	if err != nil {
 		return 0
 	}
-	return f
+	return finiteFloatOrZero(f)
 }
 
 // clampPercent restricts a percentage value to the [0, 100] range.
