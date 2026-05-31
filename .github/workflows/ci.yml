@@ -191,6 +191,9 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Script unit tests
+        run: node --test scripts/lib/http-redirect.test.js
+
       - name: Docs quality checks
         run: make check-docs
 
