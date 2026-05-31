@@ -18,6 +18,8 @@ type workerBootstrap struct {
 	counters         *workerCounters
 }
 
+const maxConfiguredJobWorkers = 64
+
 func initializeWorkerSubsystem(ctx context.Context, srv *apiServer, pgStore *persistence.PostgresStore) workerBootstrap {
 	counters := &workerCounters{}
 
@@ -68,6 +70,9 @@ func configuredJobWorkerCount() int {
 	}
 	if workerCount < 1 {
 		return 1
+	}
+	if workerCount > maxConfiguredJobWorkers {
+		return maxConfiguredJobWorkers
 	}
 	return workerCount
 }
