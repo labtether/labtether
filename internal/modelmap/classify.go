@@ -1,6 +1,7 @@
 package modelmap
 
 import (
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -228,6 +229,9 @@ func copyFloatAttr(out map[string]any, metadata map[string]string, attrKey strin
 		}
 		parsed, err := strconv.ParseFloat(raw, 64)
 		if err != nil {
+			continue
+		}
+		if math.IsNaN(parsed) || math.IsInf(parsed, 0) {
 			continue
 		}
 		out[attrKey] = parsed

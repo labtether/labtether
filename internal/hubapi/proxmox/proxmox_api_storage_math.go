@@ -25,7 +25,7 @@ func ParseMetadataFloat(metadata map[string]string, keys ...string) (float64, bo
 			continue
 		}
 		parsed, err := strconv.ParseFloat(raw, 64)
-		if err != nil {
+		if err != nil || math.IsNaN(parsed) || math.IsInf(parsed, 0) {
 			continue
 		}
 		return parsed, true

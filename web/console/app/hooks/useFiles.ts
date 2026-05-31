@@ -186,7 +186,8 @@ export function useFiles() {
             return;
           }
           const clHeader = res.headers.get("content-length");
-          const total = clHeader ? parseInt(clHeader, 10) : -1;
+          const parsedTotal = clHeader ? Number(clHeader.trim()) : -1;
+          const total = Number.isInteger(parsedTotal) && parsedTotal >= 0 ? parsedTotal : -1;
           const reader = res.body?.getReader();
           if (!reader) {
             setDownloadProgress(null);

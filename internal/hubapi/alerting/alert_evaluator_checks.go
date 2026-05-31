@@ -3,6 +3,7 @@ package alerting
 import (
 	"context"
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -405,17 +406,27 @@ func (d *Deps) evaluateSyntheticCheck(_ context.Context, rule alerts.Rule) (bool
 func toFloat64(v any) (float64, bool) {
 	switch val := v.(type) {
 	case float64:
-		return val, true
+		return finiteFloat64(val)
 	case int:
 		return float64(val), true
 	case int64:
 		return float64(val), true
 	case string:
-		f, err := strconv.ParseFloat(val, 64)
-		return f, err == nil
+		f, err := strconv.ParseFloat(strings.TrimSpace(val), 64)
+		if err != nil {
+			return 0, false
+		}
+		return finiteFloat64(f)
 	default:
 		return 0, false
 	}
+}
+
+func finiteFloat64(value float64) (float64, bool) {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return 0, false
+	}
+	return value, true
 }
 
 func conditionString(condition map[string]any, key string) string {

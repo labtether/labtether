@@ -235,7 +235,11 @@ export function settingValue(
 }
 
 export function parseIntSetting(value: string, fallback: number): number {
-  const parsed = Number.parseInt(value, 10);
+  const trimmed = value.trim();
+  if (!/^[0-9]+$/.test(trimmed)) {
+    return fallback;
+  }
+  const parsed = Number(trimmed);
   if (!Number.isFinite(parsed) || parsed <= 0) {
     return fallback;
   }

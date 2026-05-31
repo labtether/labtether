@@ -90,7 +90,7 @@ export function compatConnectorLabel(connector: string): string {
 
 export function formatCompatConfidence(raw?: string): string {
   if (!raw) return "";
-  const parsed = Number.parseFloat(raw);
+  const parsed = Number(raw.trim());
   if (!Number.isFinite(parsed) || parsed <= 0) return "";
   const bounded = Math.max(0, Math.min(1, parsed));
   return `${Math.round(bounded * 100)}%`;

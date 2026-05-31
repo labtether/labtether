@@ -51,7 +51,7 @@ func (d *Deps) HandleWebServiceCompat(w http.ResponseWriter, r *http.Request) {
 	minConfidence := defaultCompatMinConfidence
 	if raw := strings.TrimSpace(r.URL.Query().Get("min_confidence")); raw != "" {
 		parsed, err := strconv.ParseFloat(raw, 64)
-		if err != nil || parsed < 0 || parsed > 1 {
+		if _, ok := finiteFloat(parsed); err != nil || !ok || parsed < 0 || parsed > 1 {
 			servicehttp.WriteError(w, http.StatusBadRequest, "min_confidence must be a number between 0 and 1")
 			return
 		}
@@ -133,6 +133,9 @@ func parseCompatConfidence(raw string) float64 {
 	}
 	value, err := strconv.ParseFloat(trimmed, 64)
 	if err != nil {
+		return 0
+	}
+	if _, ok := finiteFloat(value); !ok {
 		return 0
 	}
 	if value < 0 {

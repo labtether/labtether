@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -142,9 +143,13 @@ func (c *PrometheusClient) fetchJSON(ctx context.Context, endpoint string, out a
 func parsePromSampleValue(raw any) (float64, error) {
 	switch typed := raw.(type) {
 	case string:
-		return strconv.ParseFloat(typed, 64)
+		parsed, err := strconv.ParseFloat(strings.TrimSpace(typed), 64)
+		if err != nil {
+			return 0, err
+		}
+		return finitePromFloat(parsed)
 	case float64:
-		return typed, nil
+		return finitePromFloat(typed)
 	default:
 		return 0, fmt.Errorf("unsupported prom value type %T", raw)
 	}
@@ -153,16 +158,30 @@ func parsePromSampleValue(raw any) (float64, error) {
 func parsePromSampleTS(raw any) (int64, error) {
 	switch typed := raw.(type) {
 	case float64:
-		return int64(typed), nil
-	case string:
-		parsed, err := strconv.ParseFloat(typed, 64)
+		parsed, err := finitePromFloat(typed)
 		if err != nil {
+			return 0, err
+		}
+		return int64(parsed), nil
+	case string:
+		parsed, err := strconv.ParseFloat(strings.TrimSpace(typed), 64)
+		if err != nil {
+			return 0, err
+		}
+		if _, err := finitePromFloat(parsed); err != nil {
 			return 0, err
 		}
 		return int64(parsed), nil
 	default:
 		return 0, fmt.Errorf("unsupported prom timestamp type %T", raw)
 	}
+}
+
+func finitePromFloat(value float64) (float64, error) {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return 0, fmt.Errorf("non-finite prometheus sample value %v", value)
+	}
+	return value, nil
 }
 
 type promQueryResponse struct {

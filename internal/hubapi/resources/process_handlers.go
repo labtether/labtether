@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"sort"
 	"strconv"
@@ -363,8 +364,8 @@ func ParseProcessCommandOutput(output string) []agentmgr.ProcessInfo {
 		if err != nil {
 			continue
 		}
-		cpuPct, _ := strconv.ParseFloat(fields[2], 64)
-		memPct, _ := strconv.ParseFloat(fields[3], 64)
+		cpuPct := parseProcessFloat(fields[2])
+		memPct := parseProcessFloat(fields[3])
 		memRSS, _ := strconv.ParseInt(fields[4], 10, 64) // RSS in KB
 		command := strings.Join(fields[5:], " ")
 		name := command
@@ -387,4 +388,12 @@ func ParseProcessCommandOutput(output string) []agentmgr.ProcessInfo {
 		})
 	}
 	return processes
+}
+
+func parseProcessFloat(raw string) float64 {
+	value, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+	if err != nil || math.IsNaN(value) || math.IsInf(value, 0) {
+		return 0
+	}
+	return value
 }

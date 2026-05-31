@@ -253,7 +253,7 @@ function parseTimingHeader(value: string | null): number {
   if (!value) {
     return 0;
   }
-  const parsed = Number.parseFloat(value);
+  const parsed = Number(value.trim());
   if (!Number.isFinite(parsed) || parsed < 0) {
     return 0;
   }

@@ -3,6 +3,7 @@ package shared
 import (
 	"encoding/base64"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -39,7 +40,7 @@ func CollectorAnyTime(value any) time.Time {
 	case time.Time:
 		return typed.UTC()
 	case float64:
-		if typed > 0 {
+		if isFiniteFloat64(typed) && typed > 0 {
 			return time.Unix(int64(typed), 0).UTC()
 		}
 	case int64:
@@ -61,7 +62,7 @@ func CollectorAnyTime(value any) time.Time {
 		if parsed, err := time.Parse(time.RFC3339, trimmed); err == nil {
 			return parsed.UTC()
 		}
-		if unix, err := strconv.ParseFloat(trimmed, 64); err == nil && unix > 0 {
+		if unix, err := strconv.ParseFloat(trimmed, 64); err == nil && isFiniteFloat64(unix) && unix > 0 {
 			return time.Unix(int64(unix), 0).UTC()
 		}
 	}
@@ -124,7 +125,9 @@ func ParseAnyInt64(value any) (int64, bool) {
 	case int:
 		return int64(typed), true
 	case float64:
-		return int64(typed), true
+		if isFiniteFloat64(typed) {
+			return int64(typed), true
+		}
 	case string:
 		trimmed := strings.TrimSpace(typed)
 		if trimmed == "" {
@@ -164,16 +167,20 @@ func TrueNASAlertMessage(alert map[string]any) string {
 func AnyToFloat64(value any) float64 {
 	switch typed := value.(type) {
 	case float64:
-		return typed
+		if isFiniteFloat64(typed) {
+			return typed
+		}
 	case float32:
-		return float64(typed)
+		if converted := float64(typed); isFiniteFloat64(converted) {
+			return converted
+		}
 	case int:
 		return float64(typed)
 	case int64:
 		return float64(typed)
 	case string:
 		parsed, err := strconv.ParseFloat(strings.TrimSpace(typed), 64)
-		if err == nil {
+		if err == nil && isFiniteFloat64(parsed) {
 			return parsed
 		}
 	}
@@ -190,7 +197,9 @@ func ParseAnyBoolLoose(value any) (bool, bool) {
 	case int64:
 		return typed != 0, true
 	case float64:
-		return typed != 0, true
+		if isFiniteFloat64(typed) {
+			return typed != 0, true
+		}
 	case string:
 		parsed, err := strconv.ParseBool(strings.TrimSpace(typed))
 		if err == nil {
@@ -221,7 +230,7 @@ func ParseAnyTimestamp(value any) (time.Time, bool) {
 			return time.Unix(int64(typed), 0).UTC(), true
 		}
 	case float64:
-		if typed > 0 {
+		if isFiniteFloat64(typed) && typed > 0 {
 			return time.Unix(int64(typed), 0).UTC(), true
 		}
 	case string:
@@ -232,9 +241,13 @@ func ParseAnyTimestamp(value any) (time.Time, bool) {
 		if parsed, err := time.Parse(time.RFC3339Nano, trimmed); err == nil {
 			return parsed.UTC(), true
 		}
-		if unix, err := strconv.ParseFloat(trimmed, 64); err == nil && unix > 0 {
+		if unix, err := strconv.ParseFloat(trimmed, 64); err == nil && isFiniteFloat64(unix) && unix > 0 {
 			return time.Unix(int64(unix), 0).UTC(), true
 		}
 	}
 	return time.Time{}, false
+}
+
+func isFiniteFloat64(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0)
 }

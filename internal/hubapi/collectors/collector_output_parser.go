@@ -2,6 +2,7 @@ package collectors
 
 import (
 	"encoding/json"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -147,17 +148,27 @@ func NormalizeMetricKey(key string) string {
 func toFloat(v any) (float64, bool) {
 	switch val := v.(type) {
 	case float64:
-		return val, true
+		return finiteFloat(val)
 	case float32:
-		return float64(val), true
+		return finiteFloat(float64(val))
 	case int:
 		return float64(val), true
 	case int64:
 		return float64(val), true
 	case string:
-		f, err := strconv.ParseFloat(val, 64)
-		return f, err == nil
+		f, err := strconv.ParseFloat(strings.TrimSpace(val), 64)
+		if err != nil {
+			return 0, false
+		}
+		return finiteFloat(f)
 	default:
 		return 0, false
 	}
+}
+
+func finiteFloat(value float64) (float64, bool) {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return 0, false
+	}
+	return value, true
 }
