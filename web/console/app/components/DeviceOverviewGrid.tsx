@@ -49,6 +49,15 @@ function meta(asset: Asset, key: string): string {
   return asset.metadata?.[key]?.trim() ?? "";
 }
 
+export function parseBackupAgeDays(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(trimmed)) {
+    return null;
+  }
+  const days = Number(trimmed);
+  return Number.isFinite(days) ? days : null;
+}
+
 function wrapDrilldownCard(
   card: ReactNode,
   onOpenDetails: (() => void) | undefined,
@@ -213,11 +222,11 @@ function StorageCard({ asset, diskPercent, onOpenDetails }: { asset: Asset; disk
     }
   }
 
-  const days = parseInt(daysSinceBackup, 10);
-  const backupColor = backupState === "none" || isNaN(days) ? "bg-red-500" : days <= 1 ? "bg-emerald-500" : days <= 7 ? "bg-amber-500" : "bg-red-500";
-  const backupText = backupState === "none" || isNaN(days)
+  const days = parseBackupAgeDays(daysSinceBackup);
+  const backupColor = backupState === "none" || days == null ? "bg-red-500" : days <= 1 ? "bg-emerald-500" : days <= 7 ? "bg-amber-500" : "bg-red-500";
+  const backupText = backupState === "none" || days == null
     ? "No backups"
-    : days === 0 ? "Today" : `${days}d ago`;
+    : days < 1 ? "Today" : `${Math.floor(days)}d ago`;
 
   const card = (
     <Card className={onOpenDetails ? "h-full transition-colors hover:border-[var(--accent)] hover:bg-[var(--surface)]" : ""}>
