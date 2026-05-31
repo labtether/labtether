@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/labtether/labtether/internal/connectorsdk"
 )
 
 func TestConnectorTestConnectionSuccess(t *testing.T) {
@@ -90,6 +92,85 @@ func TestConnectorTestConnectionRejectsOversizedResponse(t *testing.T) {
 	}
 	if !strings.Contains(health.Message, "response exceeded") {
 		t.Fatalf("expected oversized response error, got %q", health.Message)
+	}
+}
+
+func TestConnectorExecuteServiceCallUsesSafeServicePath(t *testing.T) {
+	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
+
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/services/light/turn_on" {
+			t.Fatalf("unexpected path: %s", r.URL.EscapedPath())
+		}
+		var body map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		if body["entity_id"] != "light.office" {
+			t.Fatalf("entity_id = %q, want light.office", body["entity_id"])
+		}
+		if body["brightness"] != "128" {
+			t.Fatalf("brightness = %q, want 128", body["brightness"])
+		}
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	connector := NewWithConfig(Config{
+		BaseURL:    server.URL,
+		Token:      "token-1",
+		SkipVerify: true,
+		Timeout:    2 * time.Second,
+	})
+
+	result, err := connector.ExecuteAction(context.Background(), "service.call", connectorsdk.ActionRequest{
+		TargetID: "light.office",
+		Params: map[string]string{
+			"service":    "light.turn_on",
+			"brightness": "128",
+		},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteAction() unexpected error: %v", err)
+	}
+	if result.Status != "succeeded" {
+		t.Fatalf("ExecuteAction().Status = %q, want succeeded: %s", result.Status, result.Message)
+	}
+}
+
+func TestConnectorExecuteServiceCallRejectsUnsafeServicePath(t *testing.T) {
+	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
+
+	called := false
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		t.Fatalf("unexpected request to %s", r.URL.EscapedPath())
+	}))
+	defer server.Close()
+
+	connector := NewWithConfig(Config{
+		BaseURL:    server.URL,
+		Token:      "token-1",
+		SkipVerify: true,
+		Timeout:    2 * time.Second,
+	})
+
+	result, err := connector.ExecuteAction(context.Background(), "service.call", connectorsdk.ActionRequest{
+		Params: map[string]string{
+			"service": "light.turn_on/unsafe",
+		},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteAction() unexpected error: %v", err)
+	}
+	if result.Status != "failed" {
+		t.Fatalf("ExecuteAction().Status = %q, want failed", result.Status)
+	}
+	if !strings.Contains(result.Message, "service domain/action") {
+		t.Fatalf("expected unsafe service validation error, got %q", result.Message)
+	}
+	if called {
+		t.Fatal("unsafe service should be rejected before making a request")
 	}
 }
 

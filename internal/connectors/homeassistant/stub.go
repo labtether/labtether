@@ -9,6 +9,7 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -341,7 +342,7 @@ func (c *Connector) ExecuteAction(ctx context.Context, actionID string, req conn
 			body["entity_id"] = target
 		}
 
-		payload, err := c.request(ctx, http.MethodPost, fmt.Sprintf("/api/services/%s/%s", domain, action), body)
+		payload, err := c.request(ctx, http.MethodPost, fmt.Sprintf("/api/services/%s/%s", url.PathEscape(domain), url.PathEscape(action)), body)
 		if err != nil {
 			return connectorsdk.ActionResult{Status: "failed", Message: err.Error()}, nil
 		}
@@ -434,7 +435,26 @@ func parseService(value string) (string, string, error) {
 	if domain == "" || action == "" {
 		return "", "", fmt.Errorf("service must be domain.action")
 	}
+	if !validServicePathPart(domain) || !validServicePathPart(action) {
+		return "", "", fmt.Errorf("service domain/action may contain only lowercase letters, digits, and underscores")
+	}
 	return domain, action, nil
+}
+
+func validServicePathPart(value string) bool {
+	for _, ch := range value {
+		if ch >= 'a' && ch <= 'z' {
+			continue
+		}
+		if ch >= '0' && ch <= '9' {
+			continue
+		}
+		if ch == '_' {
+			continue
+		}
+		return false
+	}
+	return value != ""
 }
 
 func truncatePayload(payload []byte) string {
