@@ -14,7 +14,7 @@ func anyToString(value any) string {
 	case string:
 		return typed
 	case float64:
-		return strconv.FormatInt(int64(typed), 10)
+		return finiteNumberString(typed)
 	case int:
 		return strconv.Itoa(typed)
 	case bool:
@@ -95,7 +95,11 @@ func formatFloat(value float64) string {
 	if value == 0 {
 		return "0"
 	}
-	return strconv.FormatInt(int64(value), 10)
+	parsed, ok := finiteIntegralInt64(value)
+	if !ok {
+		return "0"
+	}
+	return strconv.FormatInt(parsed, 10)
 }
 
 func finiteFloatOrZero(value float64) float64 {
@@ -104,6 +108,31 @@ func finiteFloatOrZero(value float64) float64 {
 	}
 	return value
 }
+
+func finiteNumberString(value float64) string {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return ""
+	}
+	if parsed, ok := finiteIntegralInt64(value); ok {
+		return strconv.FormatInt(parsed, 10)
+	}
+	return strconv.FormatFloat(value, 'g', -1, 64)
+}
+
+func finiteIntegralInt64(value float64) (int64, bool) {
+	if math.Trunc(value) != value {
+		return 0, false
+	}
+	if value < minInt64AsFloat || value >= maxInt64ExclusiveAsFloat {
+		return 0, false
+	}
+	return int64(value), true
+}
+
+const (
+	minInt64AsFloat          = -9223372036854775808.0
+	maxInt64ExclusiveAsFloat = 9223372036854775808.0
+)
 
 // normalizeID converts a raw name or path into a URL/key-safe identifier by
 // lower-casing it and replacing separators with distinct substitutes to avoid

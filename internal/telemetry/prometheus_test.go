@@ -17,3 +17,11 @@ func TestParsePromSampleTSRejectsNonFinite(t *testing.T) {
 		}
 	}
 }
+
+func TestParsePromSampleTSRejectsOutOfRange(t *testing.T) {
+	for _, raw := range []any{"1e100", 1e100} {
+		if got, err := parsePromSampleTS(raw); err == nil {
+			t.Fatalf("parsePromSampleTS(%#v) = %v, nil; want error", raw, got)
+		}
+	}
+}

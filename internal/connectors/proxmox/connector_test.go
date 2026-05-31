@@ -247,6 +247,9 @@ func TestParseComputeTargetAndHelpers(t *testing.T) {
 	if got := vmidString(0); got != "" {
 		t.Fatalf("expected vmidString(0) to be empty, got %q", got)
 	}
+	if got := vmidString(1e100); got != "" {
+		t.Fatalf("expected vmidString(1e100) to be empty, got %q", got)
+	}
 
 	if got := normalizeID("Storage/PVE01 Local"); got != "storage-pve01-local" {
 		t.Fatalf("unexpected normalizeID result: %q", got)
@@ -265,6 +268,9 @@ func TestParseComputeTargetAndHelpers(t *testing.T) {
 	}
 	if got := anyToString(42); got != "42" {
 		t.Fatalf("unexpected anyToString(int) result: %q", got)
+	}
+	if got := anyToString(1e100); got != "1e+100" {
+		t.Fatalf("unexpected anyToString(1e100) result: %q", got)
 	}
 }
 

@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -548,10 +550,13 @@ func notificationAnyToString(value any) string {
 	case int64:
 		return fmt.Sprintf("%d", typed)
 	case float64:
-		if typed == float64(int64(typed)) {
+		if math.IsNaN(typed) || math.IsInf(typed, 0) {
+			return ""
+		}
+		if typed >= minInt64AsFloat && typed < maxInt64ExclusiveAsFloat && math.Trunc(typed) == typed {
 			return fmt.Sprintf("%d", int64(typed))
 		}
-		return fmt.Sprintf("%f", typed)
+		return strconv.FormatFloat(typed, 'g', -1, 64)
 	case bool:
 		if typed {
 			return "true"
@@ -561,6 +566,11 @@ func notificationAnyToString(value any) string {
 		return ""
 	}
 }
+
+const (
+	minInt64AsFloat          = -9223372036854775808.0
+	maxInt64ExclusiveAsFloat = 9223372036854775808.0
+)
 
 func cloneAlertLabels(input map[string]string) map[string]string {
 	if len(input) == 0 {
