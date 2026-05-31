@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -141,8 +142,11 @@ func ComputeGroupDrift(profile groupprofiles.Profile, groupAssets []assets.Asset
 	// Check expected_asset_count
 	if raw, ok := profile.Config["expected_asset_count"]; ok {
 		checkedFields++
-		expected := toIntFromAny(raw)
-		if expected > 0 && len(groupAssets) != expected {
+		expected, valid := toIntFromAny(raw)
+		if !valid || expected < 0 {
+			driftedFields++
+			driftReasons = append(driftReasons, "expected_asset_count must be a non-negative integer")
+		} else if len(groupAssets) != expected {
 			driftedFields++
 			driftReasons = append(driftReasons, fmt.Sprintf("expected %d assets, found %d", expected, len(groupAssets)))
 		}
@@ -187,8 +191,11 @@ func ComputeGroupDrift(profile groupprofiles.Profile, groupAssets []assets.Asset
 	// Check min_online_percent
 	if raw, ok := profile.Config["min_online_percent"]; ok {
 		checkedFields++
-		minPct := toFloat64FromAny(raw)
-		if minPct > 0 && len(groupAssets) > 0 {
+		minPct, valid := toFloat64FromAny(raw)
+		if !valid || minPct < 0 || minPct > 100 {
+			driftedFields++
+			driftReasons = append(driftReasons, "min_online_percent must be a number from 0 to 100")
+		} else if minPct > 0 && len(groupAssets) > 0 {
 			onlineCount := 0
 			for _, a := range groupAssets {
 				if strings.EqualFold(strings.TrimSpace(a.Status), "online") {
@@ -215,34 +222,54 @@ func ComputeGroupDrift(profile groupprofiles.Profile, groupAssets []assets.Asset
 	return groupprofiles.DriftStatusCompliant, details
 }
 
-func toIntFromAny(v any) int {
+func toIntFromAny(v any) (int, bool) {
 	switch val := v.(type) {
 	case float64:
-		return int(val)
+		if math.Trunc(val) != val || val > float64(maxIntValue) || val < float64(minIntValue) {
+			return 0, false
+		}
+		return int(val), true
 	case int:
-		return val
+		return val, true
 	case int64:
-		return int(val)
+		if val > int64(maxIntValue) || val < int64(minIntValue) {
+			return 0, false
+		}
+		return int(val), true
 	case string:
-		n, _ := strconv.Atoi(val)
-		return n
+		n, err := strconv.Atoi(strings.TrimSpace(val))
+		if err != nil {
+			return 0, false
+		}
+		return n, true
 	default:
-		return 0
+		return 0, false
 	}
 }
 
-func toFloat64FromAny(v any) float64 {
+func toFloat64FromAny(v any) (float64, bool) {
 	switch val := v.(type) {
 	case float64:
-		return val
+		if math.IsNaN(val) || math.IsInf(val, 0) {
+			return 0, false
+		}
+		return val, true
 	case int:
-		return float64(val)
+		return float64(val), true
 	case int64:
-		return float64(val)
+		return float64(val), true
 	case string:
-		f, _ := strconv.ParseFloat(val, 64)
-		return f
+		f, err := strconv.ParseFloat(strings.TrimSpace(val), 64)
+		if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
+			return 0, false
+		}
+		return f, true
 	default:
-		return 0
+		return 0, false
 	}
 }
+
+const (
+	maxIntValue = int(^uint(0) >> 1)
+	minIntValue = -maxIntValue - 1
+)
