@@ -262,6 +262,13 @@ func TestConfiguredJobWorkerCountUsesConfiguredValue(t *testing.T) {
 	}
 }
 
+func TestConfiguredJobWorkerCountClampsMaximum(t *testing.T) {
+	t.Setenv("JOB_WORKERS", "100000")
+	if got := configuredJobWorkerCount(); got != maxConfiguredJobWorkers {
+		t.Fatalf("expected worker count to clamp to %d, got %d", maxConfiguredJobWorkers, got)
+	}
+}
+
 func TestLoadPolicyConfigFromEnvUsesProductDefaults(t *testing.T) {
 	t.Setenv("STRUCTURED_ENABLED", "")
 	t.Setenv("INTERACTIVE_ENABLED", "")
