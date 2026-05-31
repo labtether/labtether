@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { X, ChevronRight, ChevronLeft, Pencil, Check } from "lucide-react";
 import { Input } from "../../../components/ui/Input";
+import { parsePortInput } from "../../../lib/portParsing";
 import {
   type RemoteViewProtocol,
   defaultPort,
@@ -42,7 +43,7 @@ function parseURI(input: string): {
   return {
     protocol,
     host: match[2],
-    port: match[3] ? parseInt(match[3], 10) : defaultPort(protocol),
+    port: match[3] ? parsePortInput(match[3], defaultPort(protocol)) : defaultPort(protocol),
   };
 }
 
@@ -190,11 +191,10 @@ export default function QuickConnectDialog({
 
   const handleConnect = useCallback(
     (withCredentials: boolean) => {
-      const parsedPort = parseInt(port, 10);
       onConnect({
         protocol,
         host: host.trim(),
-        port: Number.isFinite(parsedPort) && parsedPort > 0 ? parsedPort : defaultPort(protocol),
+        port: parsePortInput(port, defaultPort(protocol)),
         ...(withCredentials && username.trim()
           ? { username: username.trim() }
           : {}),

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import type { QuickConnectParams } from "../../hooks/useSession";
+import { parsePortInput } from "../../lib/portParsing";
 
 type AuthMethod = "password" | "private_key";
 
@@ -55,10 +56,9 @@ export default function QuickConnectDialog({
       const trimmedUsername = username.trim();
       if (!trimmedHost || !trimmedUsername) return;
 
-      const parsedPort = parseInt(port, 10);
       const params: QuickConnectParams = {
         host: trimmedHost,
-        port: Number.isFinite(parsedPort) && parsedPort > 0 ? parsedPort : 22,
+        port: parsePortInput(port, 22),
         username: trimmedUsername,
         auth_method: authMethod,
         strict_host_key: strictHostKey,

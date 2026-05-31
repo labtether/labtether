@@ -5,6 +5,7 @@ import { Plus, X } from "lucide-react";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import type { HopConfig } from "../console/models";
+import { parsePortInput } from "../lib/portParsing";
 
 type JumpChainEditorProps = {
   value: HopConfig[];
@@ -71,7 +72,7 @@ export function JumpChainEditor({
                   placeholder="Port"
                   value={hop.port}
                   onChange={(e) =>
-                    updateHop(index, "port", parseInt(e.target.value, 10) || 22)
+                    updateHop(index, "port", parsePortInput(e.target.value, 22))
                   }
                   disabled={disabled}
                   className="!py-1.5 !text-xs"

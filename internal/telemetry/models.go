@@ -1,6 +1,7 @@
 package telemetry
 
 import (
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -210,6 +211,9 @@ func SamplesFromHeartbeatMetadata(assetID string, collectedAt time.Time, metadat
 		if err != nil {
 			continue
 		}
+		if !isFiniteMetricValue(value) {
+			continue
+		}
 		out = append(out, MetricSample{
 			AssetID:     assetID,
 			Metric:      mapping.Metric,
@@ -231,17 +235,27 @@ func BuildDirectSamples(assetID string, collectedAt time.Time,
 	if assetID == "" {
 		return nil
 	}
-	out := []MetricSample{
-		{AssetID: assetID, Metric: MetricCPUUsedPercent, Unit: "percent", Value: cpu, CollectedAt: collectedAt},
-		{AssetID: assetID, Metric: MetricMemoryUsedPercent, Unit: "percent", Value: mem, CollectedAt: collectedAt},
-		{AssetID: assetID, Metric: MetricDiskUsedPercent, Unit: "percent", Value: disk, CollectedAt: collectedAt},
-		{AssetID: assetID, Metric: MetricNetworkRXBytesPerSec, Unit: "bytes_per_sec", Value: netRX, CollectedAt: collectedAt},
-		{AssetID: assetID, Metric: MetricNetworkTXBytesPerSec, Unit: "bytes_per_sec", Value: netTX, CollectedAt: collectedAt},
-	}
+	out := make([]MetricSample, 0, 6)
+	out = appendMetricSampleIfFinite(out, MetricSample{AssetID: assetID, Metric: MetricCPUUsedPercent, Unit: "percent", Value: cpu, CollectedAt: collectedAt})
+	out = appendMetricSampleIfFinite(out, MetricSample{AssetID: assetID, Metric: MetricMemoryUsedPercent, Unit: "percent", Value: mem, CollectedAt: collectedAt})
+	out = appendMetricSampleIfFinite(out, MetricSample{AssetID: assetID, Metric: MetricDiskUsedPercent, Unit: "percent", Value: disk, CollectedAt: collectedAt})
+	out = appendMetricSampleIfFinite(out, MetricSample{AssetID: assetID, Metric: MetricNetworkRXBytesPerSec, Unit: "bytes_per_sec", Value: netRX, CollectedAt: collectedAt})
+	out = appendMetricSampleIfFinite(out, MetricSample{AssetID: assetID, Metric: MetricNetworkTXBytesPerSec, Unit: "bytes_per_sec", Value: netTX, CollectedAt: collectedAt})
 	if temp != nil {
-		out = append(out, MetricSample{AssetID: assetID, Metric: MetricTemperatureCelsius, Unit: "celsius", Value: *temp, CollectedAt: collectedAt})
+		out = appendMetricSampleIfFinite(out, MetricSample{AssetID: assetID, Metric: MetricTemperatureCelsius, Unit: "celsius", Value: *temp, CollectedAt: collectedAt})
 	}
 	return out
+}
+
+func appendMetricSampleIfFinite(out []MetricSample, sample MetricSample) []MetricSample {
+	if !isFiniteMetricValue(sample.Value) {
+		return out
+	}
+	return append(out, sample)
+}
+
+func isFiniteMetricValue(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0)
 }
 
 func firstMetadataValue(metadata map[string]string, keys ...string) (string, bool) {

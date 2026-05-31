@@ -1,6 +1,7 @@
 package truenas
 
 import (
+	"math"
 	"reflect"
 	"testing"
 
@@ -49,6 +50,11 @@ func TestAnyToFloat(t *testing.T) {
 		{"string zero", "0", 0},
 		{"string empty", "", 0},
 		{"string non-numeric", "abc", 0},
+		{"string nan", "NaN", 0},
+		{"string positive infinity", "+Inf", 0},
+		{"string negative infinity", "-Inf", 0},
+		{"float64 nan", math.NaN(), 0},
+		{"float64 infinity", math.Inf(1), 0},
 		{"nil", nil, 0},
 		// TrueNAS nested value map — should unwrap
 		{"nested rawvalue", map[string]any{"rawvalue": "1024"}, 1024},
@@ -61,6 +67,27 @@ func TestAnyToFloat(t *testing.T) {
 			got := anyToFloat(tt.input)
 			if got != tt.want {
 				t.Errorf("anyToFloat(%v) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFormatFloatRejectsNonFiniteValues(t *testing.T) {
+	allowInsecureTransportForTrueNASTests(t)
+	tests := []struct {
+		name  string
+		input float64
+		want  string
+	}{
+		{name: "nan", input: math.NaN(), want: "0"},
+		{name: "positiveInfinity", input: math.Inf(1), want: "0"},
+		{name: "negativeInfinity", input: math.Inf(-1), want: "0"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := formatFloat(tt.input); got != tt.want {
+				t.Fatalf("formatFloat(%v) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
 	}

@@ -20,6 +20,7 @@ import {
 } from "./remoteBookmarksClient";
 import { PageHeader } from "../../../components/PageHeader";
 import { Input, Select } from "../../../components/ui/Input";
+import { parsePortInput } from "../../../lib/portParsing";
 import QuickConnectDialog from "./QuickConnectDialog";
 
 // ── Props ──
@@ -136,7 +137,7 @@ export default function NewTabPage({
         label: bookmarkLabel.trim() || host,
         protocol: bookmarkProtocol,
         host,
-        port: parseInt(bookmarkPort, 10) || defaultPort(bookmarkProtocol),
+        port: parsePortInput(bookmarkPort, defaultPort(bookmarkProtocol)),
       });
       setBookmarks((prev) => [...prev, created]);
       setShowBookmarkForm(false);

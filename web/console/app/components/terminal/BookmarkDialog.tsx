@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
+import { parsePortInput } from "../../lib/portParsing";
 
 type Bookmark = {
   id: string;
@@ -95,7 +96,6 @@ export default function BookmarkDialog({
       const trimmedTitle = title.trim();
       if (!trimmedTitle) return;
 
-      const parsedPort = parseInt(port, 10);
       const formData: BookmarkFormData = {
         title: trimmedTitle,
       };
@@ -104,8 +104,7 @@ export default function BookmarkDialog({
         formData.asset_id = assetId.trim();
       } else {
         if (host.trim()) formData.host = host.trim();
-        formData.port =
-          Number.isFinite(parsedPort) && parsedPort > 0 ? parsedPort : 22;
+        formData.port = parsePortInput(port, 22);
         if (username.trim()) formData.username = username.trim();
       }
 
