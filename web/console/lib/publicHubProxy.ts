@@ -18,6 +18,28 @@ function publicRequestProto(request: NextRequest): string {
 
 const MAX_PUBLIC_BODY_BYTES = 1 << 20; // 1 MiB — matches backend MaxJSONBodyBytes
 
+type ContentLengthCheck =
+  | { ok: true }
+  | { ok: false; status: 400 | 413; message: string };
+
+export function validatePublicContentLength(raw: string | null): ContentLengthCheck {
+  if (raw === null || raw.trim() === "") {
+    return { ok: true };
+  }
+
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    return { ok: false, status: 400, message: "invalid content-length" };
+  }
+
+  const contentLength = Number(trimmed);
+  if (!Number.isSafeInteger(contentLength) || contentLength > MAX_PUBLIC_BODY_BYTES) {
+    return { ok: false, status: 413, message: "request body too large" };
+  }
+
+  return { ok: true };
+}
+
 export async function proxyPublicHubRequest(request: NextRequest, upstreamPath: string): Promise<NextResponse> {
   const base = await resolvedBackendBaseURLs();
   const upstreamURL = new URL(upstreamPath, `${base.api.replace(/\/+$/, "")}/`);
@@ -61,9 +83,9 @@ export async function proxyPublicHubRequest(request: NextRequest, upstreamPath: 
   };
 
   if (request.method !== "GET" && request.method !== "HEAD") {
-    const contentLength = Number(request.headers.get("content-length") ?? "0");
-    if (contentLength > MAX_PUBLIC_BODY_BYTES) {
-      return new NextResponse("request body too large", { status: 413 });
+    const contentLengthCheck = validatePublicContentLength(request.headers.get("content-length"));
+    if (!contentLengthCheck.ok) {
+      return new NextResponse(contentLengthCheck.message, { status: contentLengthCheck.status });
     }
     const body = await request.arrayBuffer();
     if (body.byteLength > MAX_PUBLIC_BODY_BYTES) {
