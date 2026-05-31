@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 )
@@ -35,8 +34,8 @@ func (d *Deps) handleConnectorsHealth(ctx context.Context, req mcp.CallToolReque
 func (d *Deps) handleDockerContainerLogs(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	assetID, _ := req.RequireString("asset_id")
 	containerID, _ := req.RequireString("container_id")
-	if strings.ContainsAny(containerID, " \t\n\r;|&`$(){}") {
-		return mcp.NewToolResultError("invalid container_id: contains disallowed characters"), nil
+	if err := validateSafeShellAtom("container_id", containerID); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
 	}
 	tail := req.GetInt("tail", 100)
 	if tail < 1 {
@@ -58,8 +57,8 @@ func (d *Deps) handleDockerContainerLogs(ctx context.Context, req mcp.CallToolRe
 func (d *Deps) handleDockerContainerStats(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	assetID, _ := req.RequireString("asset_id")
 	containerID, _ := req.RequireString("container_id")
-	if strings.ContainsAny(containerID, " \t\n\r;|&`$(){}") {
-		return mcp.NewToolResultError("invalid container_id: contains disallowed characters"), nil
+	if err := validateSafeShellAtom("container_id", containerID); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
 	}
 	output, err := d.execOnAsset(ctx, "docker:read", assetID,
 		fmt.Sprintf("docker stats --no-stream %s 2>&1", containerID))

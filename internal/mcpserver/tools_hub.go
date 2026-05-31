@@ -9,6 +9,8 @@ import (
 	"fmt"
 
 	"github.com/mark3labs/mcp-go/mcp"
+
+	"github.com/labtether/labtether/internal/apikeys"
 )
 
 const errNotConfigured = "This tool requires hub dependencies that are not configured."
@@ -22,12 +24,28 @@ func (d *Deps) handleDockerHosts(ctx context.Context, req mcp.CallToolRequest) (
 	if d.ListDockerHosts == nil {
 		return mcp.NewToolResultError(errNotConfigured), nil
 	}
-	hosts, err := d.ListDockerHosts()
+	hosts, err := d.ListDockerHosts(ctx)
 	if err != nil {
 		return mcp.NewToolResultError("failed to list docker hosts: " + err.Error()), nil
 	}
+	hosts = filterDockerHostsForContext(ctx, d, hosts)
 	data, _ := json.MarshalIndent(hosts, "", "  ")
 	return mcp.NewToolResultText(string(data)), nil
+}
+
+func filterDockerHostsForContext(ctx context.Context, d *Deps, hosts []map[string]any) []map[string]any {
+	allowed := d.GetAllowedAssets(ctx)
+	if allowed == nil {
+		return hosts
+	}
+	filtered := make([]map[string]any, 0, len(hosts))
+	for _, host := range hosts {
+		agentID, _ := host["agent_id"].(string)
+		if apikeys.AssetAllowed(allowed, agentID) {
+			filtered = append(filtered, host)
+		}
+	}
+	return filtered
 }
 
 func (d *Deps) handleDockerContainers(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -38,7 +56,7 @@ func (d *Deps) handleDockerContainers(ctx context.Context, req mcp.CallToolReque
 		return mcp.NewToolResultError(errNotConfigured), nil
 	}
 	hostID, _ := req.RequireString("host_id")
-	containers, err := d.ListDockerContainers(hostID)
+	containers, err := d.ListDockerContainers(ctx, hostID)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to list containers for host %s: %s", hostID, err.Error())), nil
 	}
@@ -54,7 +72,7 @@ func (d *Deps) handleDockerContainerRestart(ctx context.Context, req mcp.CallToo
 		return mcp.NewToolResultError(errNotConfigured), nil
 	}
 	containerID, _ := req.RequireString("container_id")
-	if err := d.RestartDockerContainer(containerID); err != nil {
+	if err := d.RestartDockerContainer(ctx, containerID); err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to restart container %s: %s", containerID, err.Error())), nil
 	}
 	data, _ := json.Marshal(map[string]any{"container_id": containerID, "restarted": true})
