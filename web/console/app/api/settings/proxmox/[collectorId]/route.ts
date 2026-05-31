@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { backendAuthHeadersWithCookie, resolvedBackendBaseURLs } from "../../../../../lib/backend";
 import { isMutationRequestOriginAllowed } from "../../../../../lib/proxyAuth";
+import { boolValue, clampInterval, numberValue, safeJSON, stringValue } from "../../shared";
 
 export const dynamic = "force-dynamic";
 
@@ -223,47 +224,5 @@ export async function POST(
       { error: error instanceof Error ? error.message : "failed to save collector settings" },
       { status: 502 },
     );
-  }
-}
-
-function stringValue(value: unknown): string {
-  if (typeof value === "string") return value.trim();
-  if (typeof value === "number") return String(value);
-  if (typeof value === "boolean") return value ? "true" : "false";
-  return "";
-}
-
-function boolValue(value: unknown, fallback: boolean): boolean {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "string") {
-    const lowered = value.trim().toLowerCase();
-    if (lowered === "true") return true;
-    if (lowered === "false") return false;
-  }
-  if (typeof value === "number") return value !== 0;
-  return fallback;
-}
-
-function numberValue(value: unknown, fallback: number): number {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim() !== "") {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return fallback;
-}
-
-function clampInterval(value: number): number {
-  if (!Number.isFinite(value) || value <= 0) return 60;
-  if (value < 15) return 15;
-  if (value > 3600) return 3600;
-  return Math.floor(value);
-}
-
-async function safeJSON(response: Response): Promise<unknown | null> {
-  try {
-    return await response.json();
-  } catch {
-    return null;
   }
 }

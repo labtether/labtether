@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { backendAuthHeadersWithCookie, resolvedBackendBaseURLs } from "../../../../lib/backend";
 import { isMutationRequestOriginAllowed } from "../../../../lib/proxyAuth";
+import { clampInterval, numberValue, safeJSON, slugify, stringValue } from "../shared";
 
 export const dynamic = "force-dynamic";
 
@@ -121,7 +122,7 @@ export async function POST(request: Request) {
       }
       collectorResponsePayload = patchPayload;
     } else {
-      const assetID = `docker-cluster-${slugify(clusterName)}`;
+      const assetID = `docker-cluster-${slugify(clusterName, "docker")}`;
       const heartbeatRes = await fetch(`${base.api}/assets/heartbeat`, {
         method: "POST",
         cache: "no-store",
@@ -179,58 +180,5 @@ export async function POST(request: Request) {
       { error: error instanceof Error ? error.message : "failed to save docker settings" },
       { status: 502 }
     );
-  }
-}
-
-function stringValue(value: unknown): string {
-  if (typeof value === "string") {
-    return value.trim();
-  }
-  if (typeof value === "number") {
-    return String(value);
-  }
-  if (typeof value === "boolean") {
-    return value ? "true" : "false";
-  }
-  return "";
-}
-
-function numberValue(value: unknown, fallback: number): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === "string" && value.trim() !== "") {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-  return fallback;
-}
-
-function clampInterval(value: number): number {
-  if (!Number.isFinite(value) || value <= 0) {
-    return 60;
-  }
-  if (value < 15) return 15;
-  if (value > 3600) return 3600;
-  return Math.floor(value);
-}
-
-function slugify(value: string): string {
-  const trimmed = value.trim().toLowerCase();
-  if (!trimmed) return "docker";
-  const slug = trimmed
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+/g, "")
-    .replace(/-+$/g, "");
-  return slug || "docker";
-}
-
-async function safeJSON(response: Response): Promise<unknown | null> {
-  try {
-    return await response.json();
-  } catch {
-    return null;
   }
 }
