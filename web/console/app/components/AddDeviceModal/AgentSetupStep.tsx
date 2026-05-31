@@ -63,6 +63,15 @@ function normalizeHubURL(raw: string): string {
   return raw.trim().replace(/\/+$/, "");
 }
 
+function parseBoundedDecimalInt(raw: string, min: number, max: number, fallback: number): number {
+  const trimmed = raw.trim();
+  if (!/^[0-9]+$/.test(trimmed)) {
+    return fallback;
+  }
+  const parsed = Number(trimmed);
+  return Number.isInteger(parsed) && parsed >= min && parsed <= max ? parsed : fallback;
+}
+
 function manualInstallCommand(platform: Platform, token: string, wsURL: string): string {
   if (platform === "windows") {
     return `$env:LABTETHER_ENROLLMENT_TOKEN="${token}"\n$env:LABTETHER_WS_URL="${wsURL}"\n.\\labtether-agent.exe`;
@@ -104,10 +113,7 @@ function linuxInstallerCommand(hubURL: string, token: string, options: LinuxInst
     const endpoint = options.dockerEndpoint.trim() || defaultLinuxInstallOptions.dockerEndpoint;
     flags.push(`--docker-endpoint ${shellQuote(endpoint)}`);
 
-    const parsedInterval = Number.parseInt(options.dockerDiscoveryIntervalSec, 10);
-    const boundedInterval = Number.isFinite(parsedInterval) && parsedInterval >= 5 && parsedInterval <= 3600
-      ? parsedInterval
-      : 30;
+    const boundedInterval = parseBoundedDecimalInt(options.dockerDiscoveryIntervalSec, 5, 3600, 30);
     flags.push(`--docker-discovery-interval ${boundedInterval}`);
   }
 

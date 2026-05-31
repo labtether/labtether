@@ -32,6 +32,29 @@ func TestDeriveAssetCanonical(t *testing.T) {
 	}
 }
 
+func TestDeriveAssetCanonicalSkipsNonFiniteFloatMetadata(t *testing.T) {
+	t.Parallel()
+
+	_, _, attrs := DeriveAssetCanonical("docker", "docker-container", map[string]string{
+		"cpu_percent":    "NaN",
+		"memory_percent": "Inf",
+		"disk_percent":   "33.1",
+	})
+
+	if attrs == nil {
+		t.Fatalf("expected derived attributes")
+	}
+	if _, ok := attrs["cpu_used_percent"]; ok {
+		t.Fatalf("cpu_used_percent should be omitted for non-finite metadata: %#v", attrs["cpu_used_percent"])
+	}
+	if _, ok := attrs["memory_used_percent"]; ok {
+		t.Fatalf("memory_used_percent should be omitted for non-finite metadata: %#v", attrs["memory_used_percent"])
+	}
+	if got, ok := attrs["disk_used_percent"].(float64); !ok || got != 33.1 {
+		t.Fatalf("disk_used_percent = %#v, want 33.1", attrs["disk_used_percent"])
+	}
+}
+
 func TestCanonicalizeConnectorAssetSetsClassKind(t *testing.T) {
 	t.Parallel()
 

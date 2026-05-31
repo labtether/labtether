@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -297,7 +298,7 @@ func CollectorAnyTime(value any) time.Time {
 	case time.Time:
 		return typed.UTC()
 	case float64:
-		if typed > 0 {
+		if isFiniteCollectorTimeFloat(typed) && typed > 0 {
 			return time.Unix(int64(typed), 0).UTC()
 		}
 	case int64:
@@ -319,9 +320,13 @@ func CollectorAnyTime(value any) time.Time {
 		if parsed, err := time.Parse(time.RFC3339, trimmed); err == nil {
 			return parsed.UTC()
 		}
-		if unix, err := strconv.ParseFloat(trimmed, 64); err == nil && unix > 0 {
+		if unix, err := strconv.ParseFloat(trimmed, 64); err == nil && isFiniteCollectorTimeFloat(unix) && unix > 0 {
 			return time.Unix(int64(unix), 0).UTC()
 		}
 	}
 	return time.Now().UTC()
+}
+
+func isFiniteCollectorTimeFloat(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0)
 }

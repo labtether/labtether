@@ -26,7 +26,9 @@ function normalizeMode(value: string): GroupingMode {
 }
 
 function normalizeThreshold(value: string, fallback: string): string {
-  const parsed = Number.parseInt(value.trim(), 10);
+  const trimmed = value.trim();
+  if (!/^[0-9]+$/.test(trimmed)) return fallback;
+  const parsed = Number(trimmed);
   if (!Number.isFinite(parsed)) return fallback;
   return String(Math.max(0, Math.min(100, parsed)));
 }
