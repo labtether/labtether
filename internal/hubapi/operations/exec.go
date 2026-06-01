@@ -19,6 +19,16 @@ const (
 	MaxExecTimeout     = 300
 )
 
+func normalizeExecTimeoutSeconds(timeoutSec int) int {
+	if timeoutSec <= 0 {
+		return DefaultExecTimeout
+	}
+	if timeoutSec > MaxExecTimeout {
+		return MaxExecTimeout
+	}
+	return timeoutSec
+}
+
 // ExecRequest is the JSON body for a single-asset exec request.
 type ExecRequest struct {
 	Command string `json:"command"`
@@ -63,12 +73,7 @@ func (d *ExecDeps) HandleAssetExec(w http.ResponseWriter, r *http.Request, asset
 		apiv2.WriteError(w, http.StatusBadRequest, "validation", "command is required")
 		return
 	}
-	if req.Timeout <= 0 {
-		req.Timeout = DefaultExecTimeout
-	}
-	if req.Timeout > MaxExecTimeout {
-		req.Timeout = MaxExecTimeout
-	}
+	req.Timeout = normalizeExecTimeoutSeconds(req.Timeout)
 
 	result := d.ExecOnAsset(r, assetID, req.Command, req.Timeout)
 	if result.Error != "" {
@@ -94,10 +99,7 @@ func (d *ExecDeps) HandleAssetExec(w http.ResponseWriter, r *http.Request, asset
 
 // ExecOnAsset runs a command on a single asset via the agent manager.
 func (d *ExecDeps) ExecOnAsset(r *http.Request, assetID, command string, timeoutSec int) ExecResult {
-	// NOTE: timeoutSec is validated by callers but not enforced at the exec layer.
-	// The agent execution timeout is managed by the hub's agent manager internally.
-	// This parameter is reserved for future per-command deadline support.
-	_ = timeoutSec
+	timeoutSec = normalizeExecTimeoutSeconds(timeoutSec)
 
 	if d.AgentMgr == nil || !d.AgentMgr.IsConnected(assetID) {
 		// Check if asset exists to give a better error message.
@@ -119,6 +121,7 @@ func (d *ExecDeps) ExecOnAsset(r *http.Request, assetID, command string, timeout
 		Target:      assetID,
 		Command:     command,
 		Mode:        "structured",
+		TimeoutSec:  timeoutSec,
 		RequestedAt: time.Now().UTC(),
 	})
 	elapsed := time.Since(start)
@@ -156,12 +159,7 @@ func (d *ExecDeps) HandleExecMulti(w http.ResponseWriter, r *http.Request) {
 		apiv2.WriteError(w, http.StatusBadRequest, "validation", "command is required")
 		return
 	}
-	if req.Timeout <= 0 {
-		req.Timeout = DefaultExecTimeout
-	}
-	if req.Timeout > MaxExecTimeout {
-		req.Timeout = MaxExecTimeout
-	}
+	req.Timeout = normalizeExecTimeoutSeconds(req.Timeout)
 
 	// Resolve targets.
 	targets := req.Targets
