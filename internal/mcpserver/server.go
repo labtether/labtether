@@ -54,6 +54,21 @@ type Deps struct {
 	ConnectorsHealth func(ctx context.Context) ([]map[string]any, error)
 }
 
+const (
+	defaultExecTimeoutSeconds = 30
+	maxExecTimeoutSeconds     = 300
+)
+
+func normalizeExecTimeoutSeconds(timeout int) int {
+	if timeout <= 0 {
+		return defaultExecTimeoutSeconds
+	}
+	if timeout > maxExecTimeoutSeconds {
+		return maxExecTimeoutSeconds
+	}
+	return timeout
+}
+
 // NewServer creates and returns an MCP server with all LabTether tools.
 func NewServer(deps *Deps) *server.MCPServer {
 	s := server.NewMCPServer(
@@ -507,10 +522,7 @@ func (d *Deps) handleExec(ctx context.Context, req mcp.CallToolRequest) (*mcp.Ca
 
 	assetID, _ := req.RequireString("asset_id")
 	command, _ := req.RequireString("command")
-	timeout := req.GetInt("timeout", 30)
-	if timeout > 300 {
-		timeout = 300
-	}
+	timeout := normalizeExecTimeoutSeconds(req.GetInt("timeout", defaultExecTimeoutSeconds))
 
 	if err := d.assetCheck(ctx, assetID); err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
@@ -525,10 +537,6 @@ func (d *Deps) handleExec(ctx context.Context, req mcp.CallToolRequest) (*mcp.Ca
 		return mcp.NewToolResultError(msg), nil
 	}
 
-	// NOTE: The timeout parameter is validated but not currently enforced at
-	// the MCP layer. The agent execution timeout is controlled by the hub's
-	// agent manager. This parameter is reserved for future use when the
-	// agent protocol supports per-command deadlines.
 	cmdResult := d.ExecuteViaAgent(terminal.CommandJob{
 		JobID:       idgen.New("mcp"),
 		SessionID:   idgen.New("mcps"),
@@ -537,6 +545,7 @@ func (d *Deps) handleExec(ctx context.Context, req mcp.CallToolRequest) (*mcp.Ca
 		Target:      assetID,
 		Command:     command,
 		Mode:        "structured",
+		TimeoutSec:  timeout,
 		RequestedAt: time.Now().UTC(),
 	})
 
@@ -560,10 +569,7 @@ func (d *Deps) handleExecMulti(ctx context.Context, req mcp.CallToolRequest) (*m
 	}
 
 	command, _ := req.RequireString("command")
-	timeout := req.GetInt("timeout", 30)
-	if timeout > 300 {
-		timeout = 300
-	}
+	timeout := normalizeExecTimeoutSeconds(req.GetInt("timeout", defaultExecTimeoutSeconds))
 
 	// Extract targets array
 	args := req.GetArguments()
@@ -610,10 +616,6 @@ func (d *Deps) handleExecMulti(ctx context.Context, req mcp.CallToolRequest) (*m
 				mu.Unlock()
 				return
 			}
-			// NOTE: The timeout parameter is validated but not currently enforced at
-			// the MCP layer. The agent execution timeout is controlled by the hub's
-			// agent manager. This parameter is reserved for future use when the
-			// agent protocol supports per-command deadlines.
 			cmdResult := d.ExecuteViaAgent(terminal.CommandJob{
 				JobID:       idgen.New("mcp"),
 				SessionID:   idgen.New("mcps"),
@@ -622,6 +624,7 @@ func (d *Deps) handleExecMulti(ctx context.Context, req mcp.CallToolRequest) (*m
 				Target:      t,
 				Command:     command,
 				Mode:        "structured",
+				TimeoutSec:  timeout,
 				RequestedAt: time.Now().UTC(),
 			})
 			exitCode := 0

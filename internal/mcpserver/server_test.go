@@ -130,6 +130,95 @@ func TestHandleExec_AssetOffline(t *testing.T) {
 	}
 }
 
+func TestHandleExecPassesTimeoutToAgentCommand(t *testing.T) {
+	deps := newTestDeps()
+	var captured terminal.CommandJob
+	deps.ExecuteViaAgent = func(job terminal.CommandJob) terminal.CommandResult {
+		captured = job
+		return terminal.CommandResult{Status: "succeeded", Output: "ok"}
+	}
+
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"asset_id": "srv1", "command": "uptime", "timeout": 45}
+	result, err := deps.handleExec(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatal("should not return error for connected asset")
+	}
+	if captured.TimeoutSec != 45 {
+		t.Fatalf("TimeoutSec = %d, want 45", captured.TimeoutSec)
+	}
+}
+
+func TestHandleExecNormalizesTimeoutBounds(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		raw  int
+		want int
+	}{
+		{name: "default", raw: 0, want: defaultExecTimeoutSeconds},
+		{name: "negative", raw: -5, want: defaultExecTimeoutSeconds},
+		{name: "max", raw: maxExecTimeoutSeconds + 1, want: maxExecTimeoutSeconds},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			deps := newTestDeps()
+			var captured terminal.CommandJob
+			deps.ExecuteViaAgent = func(job terminal.CommandJob) terminal.CommandResult {
+				captured = job
+				return terminal.CommandResult{Status: "succeeded", Output: "ok"}
+			}
+
+			req := mcp.CallToolRequest{}
+			req.Params.Arguments = map[string]any{"asset_id": "srv1", "command": "uptime", "timeout": tc.raw}
+			result, err := deps.handleExec(context.Background(), req)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.IsError {
+				t.Fatal("should not return error for connected asset")
+			}
+			if captured.TimeoutSec != tc.want {
+				t.Fatalf("TimeoutSec = %d, want %d", captured.TimeoutSec, tc.want)
+			}
+		})
+	}
+}
+
+func TestHandleExecMultiPassesClampedTimeoutToAgentCommands(t *testing.T) {
+	deps := newTestDeps()
+	deps.AgentMgr = &mockAgentMgr{connected: map[string]bool{"srv1": true, "srv2": true}}
+	captured := make(chan terminal.CommandJob, 2)
+	deps.ExecuteViaAgent = func(job terminal.CommandJob) terminal.CommandResult {
+		captured <- job
+		return terminal.CommandResult{Status: "succeeded", Output: "ok"}
+	}
+
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{
+		"targets": []any{"srv1", "srv2"},
+		"command": "uptime",
+		"timeout": maxExecTimeoutSeconds + 99,
+	}
+	result, err := deps.handleExecMulti(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatal("should not return error for connected assets")
+	}
+	if len(captured) != 2 {
+		t.Fatalf("captured %d jobs, want 2", len(captured))
+	}
+	for i := 0; i < 2; i++ {
+		job := <-captured
+		if job.TimeoutSec != maxExecTimeoutSeconds {
+			t.Fatalf("TimeoutSec for %s = %d, want %d", job.Target, job.TimeoutSec, maxExecTimeoutSeconds)
+		}
+	}
+}
+
 // --- New tool tests ---
 
 func TestHandleServicesList_ScopeDenied(t *testing.T) {
