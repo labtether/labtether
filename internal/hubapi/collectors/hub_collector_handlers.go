@@ -50,8 +50,16 @@ func (d *Deps) HandleHubCollectors(w http.ResponseWriter, r *http.Request) {
 		} else {
 			req.CollectorType = normalized
 		}
+		if err := hubcollector.ValidateCreateIntervalSeconds(req.IntervalSeconds); err != nil {
+			servicehttp.WriteError(w, http.StatusBadRequest, "interval_seconds is out of range")
+			return
+		}
 		collector, err := d.HubCollectorStore.CreateHubCollector(req)
 		if err != nil {
+			if err == hubcollector.ErrInvalidInterval {
+				servicehttp.WriteError(w, http.StatusBadRequest, "interval_seconds is out of range")
+				return
+			}
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create hub collector")
 			return
 		}
@@ -132,10 +140,18 @@ func (d *Deps) HandleHubCollectorActions(w http.ResponseWriter, r *http.Request)
 			servicehttp.WriteError(w, http.StatusBadRequest, "invalid hub collector payload")
 			return
 		}
+		if req.IntervalSeconds != nil && hubcollector.ValidateIntervalSeconds(*req.IntervalSeconds) != nil {
+			servicehttp.WriteError(w, http.StatusBadRequest, "interval_seconds is out of range")
+			return
+		}
 		updated, err := d.HubCollectorStore.UpdateHubCollector(collectorID, req)
 		if err != nil {
 			if err == hubcollector.ErrCollectorNotFound {
 				servicehttp.WriteError(w, http.StatusNotFound, "hub collector not found")
+				return
+			}
+			if err == hubcollector.ErrInvalidInterval {
+				servicehttp.WriteError(w, http.StatusBadRequest, "interval_seconds is out of range")
 				return
 			}
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update hub collector")

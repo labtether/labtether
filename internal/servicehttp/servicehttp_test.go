@@ -240,6 +240,15 @@ func TestEnvPositiveIntOrDefault(t *testing.T) {
 	}
 }
 
+func TestEnvPositiveIntInRangeOrDefaultRejectsOutOfRangeValue(t *testing.T) {
+	const key = "LABTETHER_TEST_POSITIVE_INT_RANGE"
+	t.Setenv(key, "3601")
+
+	if got := envPositiveIntInRangeOrDefault(key, 15, 3600); got != 15 {
+		t.Fatalf("envPositiveIntInRangeOrDefault() = %d, want default 15", got)
+	}
+}
+
 // helper: start a servicehttp server on an ephemeral port and return its base URL.
 func startTestServer(t *testing.T, cfg Config) (baseURL string, cancel context.CancelFunc) {
 	t.Helper()

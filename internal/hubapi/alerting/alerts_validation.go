@@ -57,17 +57,17 @@ func ValidateCreateAlertRuleRequest(req alerts.CreateRuleRequest) error {
 	if req.Status != "" && alerts.NormalizeRuleStatus(req.Status) == "" {
 		return errors.New("status must be active or paused")
 	}
-	if req.CooldownSeconds < 0 {
-		return errors.New("cooldown_seconds must be >= 0")
+	if err := validateStoredDurationSeconds("cooldown_seconds", req.CooldownSeconds); err != nil {
+		return err
 	}
-	if req.ReopenAfterSeconds < 0 {
-		return errors.New("reopen_after_seconds must be >= 0")
+	if err := validateStoredDurationSeconds("reopen_after_seconds", req.ReopenAfterSeconds); err != nil {
+		return err
 	}
-	if req.EvaluationIntervalSeconds < 0 {
-		return errors.New("evaluation_interval_seconds must be >= 0")
+	if err := validateStoredDurationSeconds("evaluation_interval_seconds", req.EvaluationIntervalSeconds); err != nil {
+		return err
 	}
-	if req.WindowSeconds < 0 {
-		return errors.New("window_seconds must be >= 0")
+	if err := validateStoredDurationSeconds("window_seconds", req.WindowSeconds); err != nil {
+		return err
 	}
 	if len(req.Condition) == 0 {
 		return errors.New("condition is required")
@@ -138,17 +138,25 @@ func ValidateUpdateAlertRuleRequest(existing alerts.Rule, req alerts.UpdateRuleR
 			return errors.New("severity must be critical, high, medium, or low")
 		}
 	}
-	if req.CooldownSeconds != nil && *req.CooldownSeconds < 0 {
-		return errors.New("cooldown_seconds must be >= 0")
+	if req.CooldownSeconds != nil {
+		if err := validateStoredDurationSeconds("cooldown_seconds", *req.CooldownSeconds); err != nil {
+			return err
+		}
 	}
-	if req.ReopenAfterSeconds != nil && *req.ReopenAfterSeconds < 0 {
-		return errors.New("reopen_after_seconds must be >= 0")
+	if req.ReopenAfterSeconds != nil {
+		if err := validateStoredDurationSeconds("reopen_after_seconds", *req.ReopenAfterSeconds); err != nil {
+			return err
+		}
 	}
-	if req.EvaluationIntervalSeconds != nil && *req.EvaluationIntervalSeconds < 0 {
-		return errors.New("evaluation_interval_seconds must be >= 0")
+	if req.EvaluationIntervalSeconds != nil {
+		if err := validateStoredDurationSeconds("evaluation_interval_seconds", *req.EvaluationIntervalSeconds); err != nil {
+			return err
+		}
 	}
-	if req.WindowSeconds != nil && *req.WindowSeconds < 0 {
-		return errors.New("window_seconds must be >= 0")
+	if req.WindowSeconds != nil {
+		if err := validateStoredDurationSeconds("window_seconds", *req.WindowSeconds); err != nil {
+			return err
+		}
 	}
 	if req.Targets != nil {
 		if len(*req.Targets) > MaxAlertTargetCount {
@@ -162,6 +170,16 @@ func ValidateUpdateAlertRuleRequest(existing alerts.Rule, req alerts.UpdateRuleR
 				return errors.New("each alert target must provide exactly one of asset_id, group_id, or selector")
 			}
 		}
+	}
+	return nil
+}
+
+func validateStoredDurationSeconds(field string, value int) error {
+	if value < 0 {
+		return fmt.Errorf("%s must be >= 0", field)
+	}
+	if value > alerts.MaxDurationSeconds {
+		return fmt.Errorf("%s is out of range", field)
 	}
 	return nil
 }

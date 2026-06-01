@@ -38,22 +38,34 @@ func (s *PostgresStore) CreateAlertRule(req alerts.CreateRuleRequest) (alerts.Ru
 		cooldownSeconds = 0
 	}
 	if cooldownSeconds == 0 {
-		cooldownSeconds = 300
+		cooldownSeconds = alerts.DefaultCooldownSeconds
+	}
+	if cooldownSeconds > alerts.MaxDurationSeconds {
+		return alerts.Rule{}, alerts.ErrInvalidDurationSeconds
 	}
 	reopenAfterSeconds := req.ReopenAfterSeconds
 	if reopenAfterSeconds < 0 {
 		reopenAfterSeconds = 0
 	}
 	if reopenAfterSeconds == 0 {
-		reopenAfterSeconds = 60
+		reopenAfterSeconds = alerts.DefaultReopenAfterSeconds
+	}
+	if reopenAfterSeconds > alerts.MaxDurationSeconds {
+		return alerts.Rule{}, alerts.ErrInvalidDurationSeconds
 	}
 	evaluationIntervalSeconds := req.EvaluationIntervalSeconds
 	if evaluationIntervalSeconds <= 0 {
-		evaluationIntervalSeconds = 30
+		evaluationIntervalSeconds = alerts.DefaultEvaluationIntervalSeconds
+	}
+	if evaluationIntervalSeconds > alerts.MaxDurationSeconds {
+		return alerts.Rule{}, alerts.ErrInvalidDurationSeconds
 	}
 	windowSeconds := req.WindowSeconds
 	if windowSeconds <= 0 {
-		windowSeconds = 300
+		windowSeconds = alerts.DefaultWindowSeconds
+	}
+	if windowSeconds > alerts.MaxDurationSeconds {
+		return alerts.Rule{}, alerts.ErrInvalidDurationSeconds
 	}
 
 	conditionPayload, err := marshalAnyMap(req.Condition)
@@ -317,17 +329,25 @@ func (s *PostgresStore) UpdateAlertRule(id string, req alerts.UpdateRuleRequest)
 			return alerts.Rule{}, errors.New("invalid alert rule severity")
 		}
 	}
-	if req.CooldownSeconds != nil && *req.CooldownSeconds < 0 {
-		return alerts.Rule{}, errors.New("cooldown_seconds must be >= 0")
+	if req.CooldownSeconds != nil {
+		if err := validateStoredAlertDurationSeconds("cooldown_seconds", *req.CooldownSeconds); err != nil {
+			return alerts.Rule{}, err
+		}
 	}
-	if req.ReopenAfterSeconds != nil && *req.ReopenAfterSeconds < 0 {
-		return alerts.Rule{}, errors.New("reopen_after_seconds must be >= 0")
+	if req.ReopenAfterSeconds != nil {
+		if err := validateStoredAlertDurationSeconds("reopen_after_seconds", *req.ReopenAfterSeconds); err != nil {
+			return alerts.Rule{}, err
+		}
 	}
-	if req.EvaluationIntervalSeconds != nil && *req.EvaluationIntervalSeconds <= 0 {
-		return alerts.Rule{}, errors.New("evaluation_interval_seconds must be > 0")
+	if req.EvaluationIntervalSeconds != nil {
+		if err := validateStoredAlertDurationSeconds("evaluation_interval_seconds", *req.EvaluationIntervalSeconds); err != nil {
+			return alerts.Rule{}, err
+		}
 	}
-	if req.WindowSeconds != nil && *req.WindowSeconds <= 0 {
-		return alerts.Rule{}, errors.New("window_seconds must be > 0")
+	if req.WindowSeconds != nil {
+		if err := validateStoredAlertDurationSeconds("window_seconds", *req.WindowSeconds); err != nil {
+			return alerts.Rule{}, err
+		}
 	}
 
 	// Wrap the read-then-write in a single transaction to prevent TOCTOU races.
@@ -390,10 +410,18 @@ func (s *PostgresStore) UpdateAlertRule(id string, req alerts.UpdateRuleRequest)
 		rule.ReopenAfterSeconds = *req.ReopenAfterSeconds
 	}
 	if req.EvaluationIntervalSeconds != nil {
-		rule.EvaluationIntervalSeconds = *req.EvaluationIntervalSeconds
+		interval := *req.EvaluationIntervalSeconds
+		if interval <= 0 {
+			interval = alerts.DefaultEvaluationIntervalSeconds
+		}
+		rule.EvaluationIntervalSeconds = interval
 	}
 	if req.WindowSeconds != nil {
-		rule.WindowSeconds = *req.WindowSeconds
+		window := *req.WindowSeconds
+		if window <= 0 {
+			window = alerts.DefaultWindowSeconds
+		}
+		rule.WindowSeconds = window
 	}
 	if req.Condition != nil {
 		rule.Condition = cloneAnyMap(*req.Condition)
@@ -502,6 +530,16 @@ func (s *PostgresStore) UpdateAlertRule(id string, req alerts.UpdateRuleRequest)
 		return alerts.Rule{}, alerts.ErrRuleNotFound
 	}
 	return updated, nil
+}
+
+func validateStoredAlertDurationSeconds(field string, value int) error {
+	if value < 0 {
+		return fmt.Errorf("%s must be >= 0", field)
+	}
+	if value > alerts.MaxDurationSeconds {
+		return fmt.Errorf("%s is out of range", field)
+	}
+	return nil
 }
 
 func (s *PostgresStore) DeleteAlertRule(id string) error {

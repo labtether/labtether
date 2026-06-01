@@ -27,6 +27,7 @@ type schemaMigration struct {
 const defaultDBStatementTimeout = 30 * time.Second
 const defaultLogEventsWatermarkRefreshInterval = 3 * time.Second
 const schemaMigrationAdvisoryLockKey int64 = 0x4c545348454d41 // "LTSHEMA"
+const maxDBPoolDurationMinutes = 153722867
 
 func NewPostgresStore(ctx context.Context, databaseURL string) (*PostgresStore, error) {
 	if databaseURL == "" {
@@ -39,8 +40,8 @@ func NewPostgresStore(ctx context.Context, databaseURL string) (*PostgresStore, 
 	}
 	maxConns := envIntOrDefault("LABTETHER_DB_MAX_CONNS", 10)
 	minConns := envIntOrDefault("LABTETHER_DB_MIN_CONNS", 2)
-	lifetimeMin := envIntOrDefault("LABTETHER_DB_MAX_CONN_LIFETIME_MIN", 5)
-	idleMin := envIntOrDefault("LABTETHER_DB_MAX_CONN_IDLE_TIME_MIN", 1)
+	lifetimeMin := envIntInRangeOrDefault("LABTETHER_DB_MAX_CONN_LIFETIME_MIN", 5, maxDBPoolDurationMinutes)
+	idleMin := envIntInRangeOrDefault("LABTETHER_DB_MAX_CONN_IDLE_TIME_MIN", 1, maxDBPoolDurationMinutes)
 
 	config.MaxConns = clampPositiveInt32(maxConns)
 	config.MinConns = clampPositiveInt32(minConns)
@@ -92,12 +93,19 @@ func dbStatementTimeout() time.Duration {
 }
 
 func envIntOrDefault(key string, fallback int) int {
+	return envIntInRangeOrDefault(key, fallback, 0)
+}
+
+func envIntInRangeOrDefault(key string, fallback int, maxValue int) int {
 	raw := strings.TrimSpace(os.Getenv(key))
 	if raw == "" {
 		return fallback
 	}
 	parsed, err := strconv.Atoi(raw)
 	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	if maxValue > 0 && parsed > maxValue {
 		return fallback
 	}
 	return parsed

@@ -101,9 +101,9 @@ func (s *PostgresStore) CreateSyntheticCheck(req synthetic.CreateCheckRequest) (
 		return synthetic.Check{}, errors.New("invalid check_type")
 	}
 
-	intervalSeconds := req.IntervalSeconds
-	if intervalSeconds <= 0 {
-		intervalSeconds = 60
+	intervalSeconds, err := synthetic.CreateIntervalSeconds(req.IntervalSeconds)
+	if err != nil {
+		return synthetic.Check{}, err
 	}
 	enabled := true
 	if req.Enabled != nil {
@@ -207,11 +207,12 @@ func (s *PostgresStore) ListDueSyntheticChecks(ctx context.Context, now time.Tim
 	rows, err := s.pool.Query(ctx,
 		fmt.Sprintf(`SELECT %s FROM synthetic_checks
 		 WHERE enabled = true
-		   AND interval_seconds > 0
+		   AND interval_seconds BETWEEN 1 AND $2
 		   AND (last_run_at IS NULL OR last_run_at + make_interval(secs => interval_seconds) <= $1)
 		 ORDER BY COALESCE(last_run_at, to_timestamp(0)) ASC, created_at ASC
-		 LIMIT $2`, syntheticCheckColumns),
+		 LIMIT $3`, syntheticCheckColumns),
 		now.UTC(),
+		synthetic.MaxIntervalSeconds,
 		limit,
 	)
 	if err != nil {
@@ -249,6 +250,9 @@ func (s *PostgresStore) UpdateSyntheticCheck(id string, req synthetic.UpdateChec
 		existing.Config = cloneAnyMap(*req.Config)
 	}
 	if req.IntervalSeconds != nil {
+		if err := synthetic.ValidateIntervalSeconds(*req.IntervalSeconds); err != nil {
+			return synthetic.Check{}, err
+		}
 		existing.IntervalSeconds = *req.IntervalSeconds
 	}
 	if req.Enabled != nil {

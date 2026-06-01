@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -58,5 +59,62 @@ func TestMemorySyntheticStoreListDueSyntheticChecksOrdersOldestFirst(t *testing.
 	}
 	if due[0].ID != first.ID || due[1].ID != second.ID {
 		t.Fatalf("unexpected due order: got [%s %s], want [%s %s]", due[0].ID, due[1].ID, first.ID, second.ID)
+	}
+}
+
+func TestMemorySyntheticStoreRejectsOutOfRangeIntervals(t *testing.T) {
+	store := NewMemorySyntheticStore()
+
+	_, err := store.CreateSyntheticCheck(synthetic.CreateCheckRequest{
+		Name:            "Too Large",
+		CheckType:       synthetic.CheckTypeHTTP,
+		Target:          "https://example.com",
+		IntervalSeconds: synthetic.MaxIntervalSeconds + 1,
+	})
+	if !errors.Is(err, synthetic.ErrInvalidInterval) {
+		t.Fatalf("create error = %v, want ErrInvalidInterval", err)
+	}
+
+	check, err := store.CreateSyntheticCheck(synthetic.CreateCheckRequest{
+		Name:      "Homepage",
+		CheckType: synthetic.CheckTypeHTTP,
+		Target:    "https://example.com",
+	})
+	if err != nil {
+		t.Fatalf("create check: %v", err)
+	}
+
+	tooLarge := synthetic.MaxIntervalSeconds + 1
+	_, err = store.UpdateSyntheticCheck(check.ID, synthetic.UpdateCheckRequest{IntervalSeconds: &tooLarge})
+	if !errors.Is(err, synthetic.ErrInvalidInterval) {
+		t.Fatalf("update error = %v, want ErrInvalidInterval", err)
+	}
+}
+
+func TestMemorySyntheticStoreListDueSyntheticChecksSkipsOutOfRangeIntervals(t *testing.T) {
+	store := NewMemorySyntheticStore()
+	now := time.Now().UTC()
+	lastRunAt := now.Add(-time.Hour)
+
+	store.mu.Lock()
+	store.checks["overflow"] = synthetic.Check{
+		ID:              "overflow",
+		Name:            "Overflow",
+		CheckType:       synthetic.CheckTypeHTTP,
+		Target:          "https://example.com",
+		IntervalSeconds: synthetic.MaxIntervalSeconds + 1,
+		Enabled:         true,
+		LastRunAt:       &lastRunAt,
+		CreatedAt:       now.Add(-time.Hour),
+		UpdatedAt:       now.Add(-time.Hour),
+	}
+	store.mu.Unlock()
+
+	due, err := store.ListDueSyntheticChecks(context.Background(), now, 10)
+	if err != nil {
+		t.Fatalf("list due checks: %v", err)
+	}
+	if len(due) != 0 {
+		t.Fatalf("expected no due checks, got %d", len(due))
 	}
 }

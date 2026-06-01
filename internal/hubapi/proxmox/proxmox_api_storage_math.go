@@ -246,7 +246,8 @@ func ParseStorageInsightsWindow(raw string) time.Duration {
 	parsed := time.Duration(0)
 	if strings.HasSuffix(raw, "d") {
 		days, err := strconv.Atoi(strings.TrimSpace(strings.TrimSuffix(raw, "d")))
-		if err != nil || days <= 0 {
+		maxDays := int(maxWindow / (24 * time.Hour))
+		if err != nil || days <= 0 || days > maxDays {
 			return fallback
 		}
 		parsed = time.Duration(days) * 24 * time.Hour

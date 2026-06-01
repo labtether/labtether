@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/synthetic"
 )
 
@@ -65,12 +66,7 @@ func ExecuteSyntheticCheck(check synthetic.Check) synthetic.Result {
 
 func executeHTTPCheck(check synthetic.Check) synthetic.Result {
 	start := time.Now()
-	timeout := 10 * time.Second
-	if t, ok := check.Config["timeout_seconds"]; ok {
-		if ts, ok := t.(float64); ok && ts > 0 {
-			timeout = time.Duration(ts) * time.Second
-		}
-	}
+	timeout := syntheticTimeout(check.Config, 10*time.Second)
 
 	client := &http.Client{Timeout: timeout, Transport: SharedSyntheticHTTPTransport}
 	resp, err := client.Get(check.Target)
@@ -138,12 +134,7 @@ func executeHTTPCheck(check synthetic.Check) synthetic.Result {
 
 func executeTCPCheck(check synthetic.Check) synthetic.Result {
 	start := time.Now()
-	timeout := 3 * time.Second
-	if t, ok := check.Config["timeout_seconds"]; ok {
-		if ts, ok := t.(float64); ok && ts > 0 {
-			timeout = time.Duration(ts) * time.Second
-		}
-	}
+	timeout := syntheticTimeout(check.Config, 3*time.Second)
 
 	conn, err := net.DialTimeout("tcp", check.Target, timeout)
 	latencyMS := int(time.Since(start).Milliseconds())
@@ -290,4 +281,8 @@ func executeTLSCheck(check synthetic.Check) synthetic.Result {
 		},
 		CheckedAt: time.Now().UTC(),
 	}
+}
+
+func syntheticTimeout(config map[string]any, fallback time.Duration) time.Duration {
+	return shared.CollectorConfigDuration(config, "timeout_seconds", fallback)
 }

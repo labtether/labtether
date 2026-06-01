@@ -2,6 +2,7 @@ package shared
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -61,16 +62,25 @@ func CollectorConfigDuration(config map[string]any, key string, fallback time.Du
 			return parsed
 		}
 		if seconds, err := strconv.Atoi(trimmed); err == nil && seconds > 0 {
-			return time.Duration(seconds) * time.Second
+			return DurationFromPositiveSeconds(float64(seconds), fallback)
 		}
 	case float64:
-		if typed > 0 {
-			return time.Duration(typed) * time.Second
-		}
+		return DurationFromPositiveSeconds(typed, fallback)
 	case int:
 		if typed > 0 {
-			return time.Duration(typed) * time.Second
+			return DurationFromPositiveSeconds(float64(typed), fallback)
 		}
 	}
 	return fallback
+}
+
+func DurationFromPositiveSeconds(seconds float64, fallback time.Duration) time.Duration {
+	if math.IsNaN(seconds) || math.IsInf(seconds, 0) || seconds <= 0 {
+		return fallback
+	}
+	nanos := seconds * float64(time.Second)
+	if math.IsNaN(nanos) || math.IsInf(nanos, 0) || nanos < 1 || nanos > float64(math.MaxInt64) {
+		return fallback
+	}
+	return time.Duration(nanos)
 }

@@ -38,12 +38,19 @@ const (
 	InstanceStatusFiring       = "firing"
 	InstanceStatusAcknowledged = "acknowledged"
 	InstanceStatusResolved     = "resolved"
+
+	MaxDurationSeconds               = 1<<31 - 1
+	DefaultCooldownSeconds           = 300
+	DefaultReopenAfterSeconds        = 60
+	DefaultEvaluationIntervalSeconds = 30
+	DefaultWindowSeconds             = 300
 )
 
 var (
-	ErrRuleNotFound         = errors.New("alert rule not found")
-	ErrRuleValidation       = errors.New("invalid alert rule")
-	ErrRuleTargetValidation = errors.New("invalid alert rule target")
+	ErrRuleNotFound           = errors.New("alert rule not found")
+	ErrRuleValidation         = errors.New("invalid alert rule")
+	ErrRuleTargetValidation   = errors.New("invalid alert rule target")
+	ErrInvalidDurationSeconds = errors.New("invalid alert duration seconds")
 )
 
 type RuleTargetInput struct {
@@ -141,6 +148,20 @@ func NormalizeSeverity(value string) string {
 	default:
 		return ""
 	}
+}
+
+func ValidateDurationSeconds(value int) error {
+	if value < 0 || value > MaxDurationSeconds {
+		return ErrInvalidDurationSeconds
+	}
+	return nil
+}
+
+func DurationFromSeconds(value int, fallback time.Duration) time.Duration {
+	if value <= 0 || value > MaxDurationSeconds {
+		return fallback
+	}
+	return time.Duration(value) * time.Second
 }
 
 func NormalizeRuleStatus(value string) string {

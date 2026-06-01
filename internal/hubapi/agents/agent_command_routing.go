@@ -14,6 +14,8 @@ import (
 
 type PendingAgentCommand = shared.PendingAgentCommand
 
+const maxAgentCommandTimeout = 5 * time.Minute
+
 // executeViaAgent sends a command to a connected agent over WebSocket and
 // waits for the result with a timeout.
 func (d *Deps) ExecuteViaAgent(cmdJob terminal.CommandJob) terminal.CommandResult {
@@ -29,10 +31,10 @@ func (d *Deps) ExecuteViaAgent(cmdJob terminal.CommandJob) terminal.CommandResul
 		}
 	}
 
-	timeout := shared.EnvOrDefaultDuration("TERMINAL_COMMAND_TIMEOUT", 30*time.Second)
-	if cmdJob.TimeoutSec > 0 {
-		timeout = time.Duration(cmdJob.TimeoutSec) * time.Second
-	}
+	timeout := agentCommandTimeoutFromSeconds(
+		cmdJob.TimeoutSec,
+		shared.EnvOrDefaultDuration("TERMINAL_COMMAND_TIMEOUT", 30*time.Second),
+	)
 
 	req := agentmgr.CommandRequestData{
 		JobID:     cmdJob.JobID,
@@ -105,6 +107,23 @@ func (d *Deps) ExecuteViaAgent(cmdJob terminal.CommandJob) terminal.CommandResul
 			CompletedAt: time.Now().UTC(),
 		}
 	}
+}
+
+func agentCommandTimeoutFromSeconds(timeoutSec int, fallback time.Duration) time.Duration {
+	if fallback <= 0 {
+		fallback = 30 * time.Second
+	}
+	if timeoutSec <= 0 {
+		if fallback > maxAgentCommandTimeout {
+			return maxAgentCommandTimeout
+		}
+		return fallback
+	}
+	maxSeconds := int(maxAgentCommandTimeout / time.Second)
+	if timeoutSec > maxSeconds {
+		return maxAgentCommandTimeout
+	}
+	return time.Duration(timeoutSec) * time.Second
 }
 
 // executeUpdateViaAgent sends an update.request to a connected agent and waits
