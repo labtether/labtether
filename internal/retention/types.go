@@ -114,7 +114,7 @@ func ParseDuration(raw string) (time.Duration, error) {
 
 	if strings.HasSuffix(trimmed, "w") {
 		base := strings.TrimSpace(strings.TrimSuffix(trimmed, "w"))
-		parsed, err := strconv.Atoi(base)
+		parsed, err := parsePositiveDurationCount(base, 7*24*time.Hour)
 		if err != nil || parsed <= 0 {
 			return 0, fmt.Errorf("invalid week duration: %s", raw)
 		}
@@ -123,7 +123,7 @@ func ParseDuration(raw string) (time.Duration, error) {
 
 	if strings.HasSuffix(trimmed, "d") {
 		base := strings.TrimSpace(strings.TrimSuffix(trimmed, "d"))
-		parsed, err := strconv.Atoi(base)
+		parsed, err := parsePositiveDurationCount(base, 24*time.Hour)
 		if err != nil || parsed <= 0 {
 			return 0, fmt.Errorf("invalid day duration: %s", raw)
 		}
@@ -138,6 +138,17 @@ func ParseDuration(raw string) (time.Duration, error) {
 		return 0, fmt.Errorf("duration must be positive")
 	}
 	return duration, nil
+}
+
+func parsePositiveDurationCount(raw string, unit time.Duration) (int64, error) {
+	parsed, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || parsed <= 0 {
+		return 0, fmt.Errorf("invalid duration count")
+	}
+	if unit <= 0 || parsed > int64(1<<63-1)/int64(unit) {
+		return 0, fmt.Errorf("duration is too large")
+	}
+	return parsed, nil
 }
 
 type Preset struct {
