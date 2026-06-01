@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+const (
+	minInt64AsFloat          = -9223372036854775808.0
+	maxInt64ExclusiveAsFloat = 9223372036854775808.0
+)
+
 // CollectorAnyString converts an arbitrary value to a trimmed string.
 func CollectorAnyString(value any) string {
 	switch typed := value.(type) {
@@ -40,8 +45,8 @@ func CollectorAnyTime(value any) time.Time {
 	case time.Time:
 		return typed.UTC()
 	case float64:
-		if isFiniteFloat64(typed) && typed > 0 {
-			return time.Unix(int64(typed), 0).UTC()
+		if parsed, ok := unixTimeFromFloat64(typed); ok {
+			return parsed
 		}
 	case int64:
 		if typed > 0 {
@@ -62,8 +67,10 @@ func CollectorAnyTime(value any) time.Time {
 		if parsed, err := time.Parse(time.RFC3339, trimmed); err == nil {
 			return parsed.UTC()
 		}
-		if unix, err := strconv.ParseFloat(trimmed, 64); err == nil && isFiniteFloat64(unix) && unix > 0 {
-			return time.Unix(int64(unix), 0).UTC()
+		if unix, err := strconv.ParseFloat(trimmed, 64); err == nil {
+			if parsed, ok := unixTimeFromFloat64(unix); ok {
+				return parsed
+			}
 		}
 	}
 	return time.Now().UTC()
@@ -125,9 +132,7 @@ func ParseAnyInt64(value any) (int64, bool) {
 	case int:
 		return int64(typed), true
 	case float64:
-		if isFiniteFloat64(typed) {
-			return int64(typed), true
-		}
+		return boundedInt64FromFloat(typed)
 	case string:
 		trimmed := strings.TrimSpace(typed)
 		if trimmed == "" {
@@ -230,8 +235,8 @@ func ParseAnyTimestamp(value any) (time.Time, bool) {
 			return time.Unix(int64(typed), 0).UTC(), true
 		}
 	case float64:
-		if isFiniteFloat64(typed) && typed > 0 {
-			return time.Unix(int64(typed), 0).UTC(), true
+		if parsed, ok := unixTimeFromFloat64(typed); ok {
+			return parsed, true
 		}
 	case string:
 		trimmed := strings.TrimSpace(typed)
@@ -241,11 +246,34 @@ func ParseAnyTimestamp(value any) (time.Time, bool) {
 		if parsed, err := time.Parse(time.RFC3339Nano, trimmed); err == nil {
 			return parsed.UTC(), true
 		}
-		if unix, err := strconv.ParseFloat(trimmed, 64); err == nil && isFiniteFloat64(unix) && unix > 0 {
-			return time.Unix(int64(unix), 0).UTC(), true
+		if unix, err := strconv.ParseFloat(trimmed, 64); err == nil {
+			if parsed, ok := unixTimeFromFloat64(unix); ok {
+				return parsed, true
+			}
 		}
 	}
 	return time.Time{}, false
+}
+
+func boundedInt64FromFloat(value float64) (int64, bool) {
+	if !isFiniteFloat64(value) {
+		return 0, false
+	}
+	if value < minInt64AsFloat || value >= maxInt64ExclusiveAsFloat {
+		return 0, false
+	}
+	return int64(value), true
+}
+
+func unixTimeFromFloat64(value float64) (time.Time, bool) {
+	if !isFiniteFloat64(value) || value <= 0 {
+		return time.Time{}, false
+	}
+	seconds, fraction := math.Modf(value)
+	if seconds < minInt64AsFloat || seconds >= maxInt64ExclusiveAsFloat {
+		return time.Time{}, false
+	}
+	return time.Unix(int64(seconds), int64(fraction*1_000_000_000)).UTC(), true
 }
 
 func isFiniteFloat64(value float64) bool {

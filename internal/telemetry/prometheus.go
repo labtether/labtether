@@ -14,6 +14,11 @@ import (
 	"github.com/labtether/labtether/internal/securityruntime"
 )
 
+const (
+	minInt64AsFloat          = -9223372036854775808.0
+	maxInt64ExclusiveAsFloat = 9223372036854775808.0
+)
+
 type Point struct {
 	TS    int64   `json:"ts"`
 	Value float64 `json:"value"`
@@ -162,6 +167,9 @@ func parsePromSampleTS(raw any) (int64, error) {
 		if err != nil {
 			return 0, err
 		}
+		if err := validatePromTimestampRange(parsed); err != nil {
+			return 0, err
+		}
 		return int64(parsed), nil
 	case string:
 		parsed, err := strconv.ParseFloat(strings.TrimSpace(typed), 64)
@@ -171,10 +179,20 @@ func parsePromSampleTS(raw any) (int64, error) {
 		if _, err := finitePromFloat(parsed); err != nil {
 			return 0, err
 		}
+		if err := validatePromTimestampRange(parsed); err != nil {
+			return 0, err
+		}
 		return int64(parsed), nil
 	default:
 		return 0, fmt.Errorf("unsupported prom timestamp type %T", raw)
 	}
+}
+
+func validatePromTimestampRange(value float64) error {
+	if value < minInt64AsFloat || value >= maxInt64ExclusiveAsFloat {
+		return fmt.Errorf("prom timestamp out of range")
+	}
+	return nil
 }
 
 func finitePromFloat(value float64) (float64, error) {

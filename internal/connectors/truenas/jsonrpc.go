@@ -557,9 +557,15 @@ func anyToIdentifier(value any) string {
 	case string:
 		return strings.TrimSpace(typed)
 	case float64:
-		return strings.TrimSpace(strconv.FormatInt(int64(typed), 10))
+		if parsed, ok := finiteIntegralInt64(typed); ok {
+			return strings.TrimSpace(strconv.FormatInt(parsed, 10))
+		}
+		return ""
 	case float32:
-		return strings.TrimSpace(strconv.FormatInt(int64(typed), 10))
+		if parsed, ok := finiteIntegralInt64(float64(typed)); ok {
+			return strings.TrimSpace(strconv.FormatInt(parsed, 10))
+		}
+		return ""
 	case int:
 		return strings.TrimSpace(strconv.Itoa(typed))
 	case int64:

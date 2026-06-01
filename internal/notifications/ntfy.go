@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -77,8 +78,14 @@ func notificationPriority(value any) (int, bool) {
 	case int32:
 		return clampPriority(int(typed)), true
 	case int64:
+		if !int64FitsInt(typed) {
+			return 0, false
+		}
 		return clampPriority(int(typed)), true
 	case float64:
+		if math.IsNaN(typed) || math.IsInf(typed, 0) || math.Trunc(typed) != typed || !float64FitsInt(typed) {
+			return 0, false
+		}
 		return clampPriority(int(typed)), true
 	case string:
 		trimmed := strings.TrimSpace(typed)
@@ -103,4 +110,18 @@ func clampPriority(value int) int {
 		return 5
 	}
 	return value
+}
+
+func float64FitsInt(value float64) bool {
+	if strconv.IntSize == 32 {
+		return value >= -2147483648.0 && value <= 2147483647.0
+	}
+	return value >= -9223372036854775808.0 && value < 9223372036854775808.0
+}
+
+func int64FitsInt(value int64) bool {
+	if strconv.IntSize == 32 {
+		return value >= -2147483648 && value <= 2147483647
+	}
+	return true
 }

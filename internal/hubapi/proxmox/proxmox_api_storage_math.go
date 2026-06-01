@@ -10,6 +10,11 @@ import (
 	telemetrypkg "github.com/labtether/labtether/internal/telemetry"
 )
 
+const (
+	minInt64ValueFloat     = -9223372036854775808.0
+	maxInt64ExclusiveFloat = 9223372036854775808.0
+)
+
 func ParsePositiveInt(raw string) (int, bool) {
 	parsed, err := strconv.Atoi(strings.TrimSpace(raw))
 	if err != nil || parsed <= 0 {
@@ -42,20 +47,27 @@ func ParseAnyInt64(value any) (int64, bool) {
 	case int:
 		return int64(typed), true
 	case float64:
-		if !math.IsNaN(typed) && !math.IsInf(typed, 0) {
-			return int64(typed), true
-		}
+		return boundedInt64FromFloat(typed)
 	case float32:
-		if !math.IsNaN(float64(typed)) && !math.IsInf(float64(typed), 0) {
-			return int64(typed), true
-		}
+		return boundedInt64FromFloat(float64(typed))
 	case string:
 		parsed, err := strconv.ParseFloat(strings.TrimSpace(typed), 64)
-		if err == nil && !math.IsNaN(parsed) && !math.IsInf(parsed, 0) {
-			return int64(parsed), true
+		if err != nil {
+			return 0, false
 		}
+		return boundedInt64FromFloat(parsed)
 	}
 	return 0, false
+}
+
+func boundedInt64FromFloat(value float64) (int64, bool) {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return 0, false
+	}
+	if value < minInt64ValueFloat || value >= maxInt64ExclusiveFloat {
+		return 0, false
+	}
+	return int64(value), true
 }
 
 func AnalyzeDiskGrowth(points []telemetrypkg.Point) (float64, string, int64) {

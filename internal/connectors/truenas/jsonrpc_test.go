@@ -1305,6 +1305,8 @@ func TestParseSubscriptionIDAndIdentifierHelpers(t *testing.T) {
 		{name: "nil", value: nil, want: ""},
 		{name: "string", value: " abc ", want: "abc"},
 		{name: "float64", value: float64(5), want: "5"},
+		{name: "float64 huge", value: 1e100, want: ""},
+		{name: "float64 fractional", value: 5.5, want: ""},
 		{name: "float32", value: float32(7), want: "7"},
 		{name: "int", value: 9, want: "9"},
 		{name: "int64", value: int64(11), want: "11"},

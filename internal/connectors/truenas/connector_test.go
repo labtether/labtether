@@ -18,6 +18,7 @@ func TestAnyToString(t *testing.T) {
 		{"string", "hello", "hello"},
 		{"empty string", "", ""},
 		{"float64", float64(42), "42"},
+		{"float64 huge", 1e100, "1e+100"},
 		{"float64 zero", float64(0), "0"},
 		{"int", 7, "7"},
 		{"bool true", true, "true"},
@@ -82,6 +83,7 @@ func TestFormatFloatRejectsNonFiniteValues(t *testing.T) {
 		{name: "nan", input: math.NaN(), want: "0"},
 		{name: "positiveInfinity", input: math.Inf(1), want: "0"},
 		{name: "negativeInfinity", input: math.Inf(-1), want: "0"},
+		{name: "outOfRange", input: 1e100, want: "0"},
 	}
 
 	for _, tt := range tests {
