@@ -1,19 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolvedBackendBaseURLs } from "./backend";
 
-function firstForwardedValue(raw: string | null): string {
-  return raw?.split(",")[0]?.trim() ?? "";
-}
-
 function publicRequestHost(request: NextRequest): string {
-  return firstForwardedValue(request.headers.get("x-forwarded-host"))
-    || request.headers.get("host")?.trim()
-    || request.nextUrl.host;
+  return request.headers.get("host")?.trim() || request.nextUrl.host;
 }
 
 function publicRequestProto(request: NextRequest): string {
-  return firstForwardedValue(request.headers.get("x-forwarded-proto"))
-    || request.nextUrl.protocol.replace(":", "");
+  const proto = request.nextUrl.protocol.replace(":", "").toLowerCase();
+  return proto === "http" || proto === "https" ? proto : "http";
 }
 
 const MAX_PUBLIC_BODY_BYTES = 1 << 20; // 1 MiB — matches backend MaxJSONBodyBytes

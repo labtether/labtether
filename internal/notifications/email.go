@@ -3,10 +3,13 @@ package notifications
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/smtp"
 	"strconv"
 	"strings"
 )
+
+const defaultSMTPPort = 587
 
 type EmailAdapter struct{}
 
@@ -18,16 +21,9 @@ func (e *EmailAdapter) Send(_ context.Context, config map[string]any, payload ma
 		return fmt.Errorf("email config missing smtp_host")
 	}
 
-	port := 587
-	if p, ok := config["smtp_port"]; ok {
-		switch v := p.(type) {
-		case float64:
-			port = int(v)
-		case string:
-			if parsed, err := strconv.Atoi(v); err == nil {
-				port = parsed
-			}
-		}
+	port, err := smtpPortFromConfig(config["smtp_port"])
+	if err != nil {
+		return err
 	}
 
 	user, _ := config["smtp_user"].(string)
@@ -65,4 +61,40 @@ func (e *EmailAdapter) Send(_ context.Context, config map[string]any, payload ma
 	}
 
 	return nil
+}
+
+func smtpPortFromConfig(raw any) (int, error) {
+	if raw == nil {
+		return defaultSMTPPort, nil
+	}
+
+	var port int64
+	switch typed := raw.(type) {
+	case int:
+		port = int64(typed)
+	case int64:
+		port = typed
+	case float64:
+		if math.IsInf(typed, 0) || math.IsNaN(typed) || math.Trunc(typed) != typed || typed < 1 || typed > 65535 {
+			return 0, fmt.Errorf("email config invalid smtp_port")
+		}
+		port = int64(typed)
+	case string:
+		trimmed := strings.TrimSpace(typed)
+		if trimmed == "" {
+			return defaultSMTPPort, nil
+		}
+		parsed, err := strconv.ParseInt(trimmed, 10, 64)
+		if err != nil {
+			return 0, fmt.Errorf("email config invalid smtp_port")
+		}
+		port = parsed
+	default:
+		return 0, fmt.Errorf("email config invalid smtp_port")
+	}
+
+	if port < 1 || port > 65535 {
+		return 0, fmt.Errorf("email config smtp_port out of range")
+	}
+	return int(port), nil
 }
