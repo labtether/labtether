@@ -58,22 +58,36 @@ func (s *apiServer) checkStaleProtocolConfigs(ctx context.Context) {
 		return
 	}
 
-	sem := make(chan struct{}, protocolHealthMaxConcurrent)
+	runProtocolConfigHealthChecks(ctx, configs, protocolHealthMaxConcurrent, s.testProtocolConfig)
+}
+
+func runProtocolConfigHealthChecks(ctx context.Context, configs []*protocols.ProtocolConfig, maxConcurrent int, test func(context.Context, *protocols.ProtocolConfig)) {
+	if len(configs) == 0 || maxConcurrent <= 0 {
+		return
+	}
+
+	sem := make(chan struct{}, maxConcurrent)
 	var wg sync.WaitGroup
 
 	for _, pc := range configs {
 		select {
 		case <-ctx.Done():
-			break
+			wg.Wait()
+			return
 		default:
 		}
 
-		sem <- struct{}{}
+		select {
+		case <-ctx.Done():
+			wg.Wait()
+			return
+		case sem <- struct{}{}:
+		}
 		wg.Add(1)
 		go func(pc *protocols.ProtocolConfig) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			s.testProtocolConfig(ctx, pc)
+			test(ctx, pc)
 		}(pc)
 	}
 	wg.Wait()
