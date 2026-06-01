@@ -60,9 +60,9 @@ func (d *Deps) EvaluateHeartbeatStaleWithPrefetch(
 ) (bool, error) {
 	windowSec := rule.WindowSeconds
 	if windowSec <= 0 {
-		windowSec = 300
+		windowSec = alerts.DefaultWindowSeconds
 	}
-	threshold := time.Now().UTC().Add(-time.Duration(windowSec) * time.Second)
+	threshold := time.Now().UTC().Add(-alerts.DurationFromSeconds(windowSec, time.Duration(alerts.DefaultWindowSeconds)*time.Second))
 
 	targetAssets, err := d.resolveRuleTargetAssetsWithCapabilities(rule, prefetchedAssets, prefetchedCapabilities, true)
 	if err != nil {
@@ -92,10 +92,10 @@ func (d *Deps) EvaluateMetricThresholdWithPrefetch(
 
 	windowSec := rule.WindowSeconds
 	if windowSec <= 0 {
-		windowSec = 300
+		windowSec = alerts.DefaultWindowSeconds
 	}
 	now := time.Now().UTC()
-	windowStart := now.Add(-time.Duration(windowSec) * time.Second)
+	windowStart := now.Add(-alerts.DurationFromSeconds(windowSec, time.Duration(alerts.DefaultWindowSeconds)*time.Second))
 
 	threshold, _ := toFloat64(rule.Condition["threshold"])
 	operator, _ := rule.Condition["operator"].(string)
@@ -185,10 +185,10 @@ func (d *Deps) EvaluateMetricDeadmanWithPrefetch(
 
 	windowSec := rule.WindowSeconds
 	if windowSec <= 0 {
-		windowSec = 300
+		windowSec = alerts.DefaultWindowSeconds
 	}
 	now := time.Now().UTC()
-	windowStart := now.Add(-time.Duration(windowSec) * time.Second)
+	windowStart := now.Add(-alerts.DurationFromSeconds(windowSec, time.Duration(alerts.DefaultWindowSeconds)*time.Second))
 
 	targetAssets, err := d.resolveRuleTargetAssetsWithCapabilities(rule, prefetchedAssets, prefetchedCapabilities, true)
 	if err != nil {
@@ -255,10 +255,10 @@ func (d *Deps) EvaluateLogPatternWithPrefetch(
 
 	windowSec := rule.WindowSeconds
 	if windowSec <= 0 {
-		windowSec = 300
+		windowSec = alerts.DefaultWindowSeconds
 	}
 	now := time.Now().UTC()
-	windowStart := now.Add(-time.Duration(windowSec) * time.Second)
+	windowStart := now.Add(-alerts.DurationFromSeconds(windowSec, time.Duration(alerts.DefaultWindowSeconds)*time.Second))
 
 	pattern, _ := rule.Condition["pattern"].(string)
 	if pattern == "" {

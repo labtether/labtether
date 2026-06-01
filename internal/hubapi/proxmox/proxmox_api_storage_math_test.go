@@ -1,6 +1,9 @@
 package proxmox
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestParseMetadataFloatRejectsNonFiniteValues(t *testing.T) {
 	metadata := map[string]string{
@@ -30,5 +33,18 @@ func TestParseAnyInt64RejectsUnsafeFloatConversions(t *testing.T) {
 	}
 	if got, ok := ParseAnyInt64(float64(42)); !ok || got != 42 {
 		t.Fatalf("ParseAnyInt64(42) = %d, %v; want 42, true", got, ok)
+	}
+}
+
+func TestParseStorageInsightsWindowRejectsOverflowingDayCount(t *testing.T) {
+	const fallback = 7 * 24 * time.Hour
+	if got := ParseStorageInsightsWindow("281474976710657d"); got != fallback {
+		t.Fatalf("ParseStorageInsightsWindow(overflow) = %s, want %s", got, fallback)
+	}
+}
+
+func TestParseStorageInsightsWindowAcceptsBoundedDayCount(t *testing.T) {
+	if got := ParseStorageInsightsWindow("30d"); got != 30*24*time.Hour {
+		t.Fatalf("ParseStorageInsightsWindow(30d) = %s, want 720h", got)
 	}
 }

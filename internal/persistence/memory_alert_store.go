@@ -48,22 +48,34 @@ func (m *MemoryAlertStore) CreateAlertRule(req alerts.CreateRuleRequest) (alerts
 		cooldownSeconds = 0
 	}
 	if cooldownSeconds == 0 {
-		cooldownSeconds = 300
+		cooldownSeconds = alerts.DefaultCooldownSeconds
+	}
+	if cooldownSeconds > alerts.MaxDurationSeconds {
+		return alerts.Rule{}, alerts.ErrInvalidDurationSeconds
 	}
 	reopenAfterSeconds := req.ReopenAfterSeconds
 	if reopenAfterSeconds < 0 {
 		reopenAfterSeconds = 0
 	}
 	if reopenAfterSeconds == 0 {
-		reopenAfterSeconds = 60
+		reopenAfterSeconds = alerts.DefaultReopenAfterSeconds
+	}
+	if reopenAfterSeconds > alerts.MaxDurationSeconds {
+		return alerts.Rule{}, alerts.ErrInvalidDurationSeconds
 	}
 	evaluationIntervalSeconds := req.EvaluationIntervalSeconds
 	if evaluationIntervalSeconds <= 0 {
-		evaluationIntervalSeconds = 30
+		evaluationIntervalSeconds = alerts.DefaultEvaluationIntervalSeconds
+	}
+	if evaluationIntervalSeconds > alerts.MaxDurationSeconds {
+		return alerts.Rule{}, alerts.ErrInvalidDurationSeconds
 	}
 	windowSeconds := req.WindowSeconds
 	if windowSeconds <= 0 {
-		windowSeconds = 300
+		windowSeconds = alerts.DefaultWindowSeconds
+	}
+	if windowSeconds > alerts.MaxDurationSeconds {
+		return alerts.Rule{}, alerts.ErrInvalidDurationSeconds
 	}
 
 	createdBy := strings.TrimSpace(req.CreatedBy)
@@ -196,6 +208,9 @@ func (m *MemoryAlertStore) UpdateAlertRule(id string, req alerts.UpdateRuleReque
 		if cooldown < 0 {
 			cooldown = 0
 		}
+		if cooldown > alerts.MaxDurationSeconds {
+			return alerts.Rule{}, alerts.ErrInvalidDurationSeconds
+		}
 		rule.CooldownSeconds = cooldown
 	}
 	if req.ReopenAfterSeconds != nil {
@@ -203,19 +218,28 @@ func (m *MemoryAlertStore) UpdateAlertRule(id string, req alerts.UpdateRuleReque
 		if reopenAfter < 0 {
 			reopenAfter = 0
 		}
+		if reopenAfter > alerts.MaxDurationSeconds {
+			return alerts.Rule{}, alerts.ErrInvalidDurationSeconds
+		}
 		rule.ReopenAfterSeconds = reopenAfter
 	}
 	if req.EvaluationIntervalSeconds != nil {
 		interval := *req.EvaluationIntervalSeconds
 		if interval <= 0 {
-			interval = 30
+			interval = alerts.DefaultEvaluationIntervalSeconds
+		}
+		if interval > alerts.MaxDurationSeconds {
+			return alerts.Rule{}, alerts.ErrInvalidDurationSeconds
 		}
 		rule.EvaluationIntervalSeconds = interval
 	}
 	if req.WindowSeconds != nil {
 		window := *req.WindowSeconds
 		if window <= 0 {
-			window = 300
+			window = alerts.DefaultWindowSeconds
+		}
+		if window > alerts.MaxDurationSeconds {
+			return alerts.Rule{}, alerts.ErrInvalidDurationSeconds
 		}
 		rule.WindowSeconds = window
 	}

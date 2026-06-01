@@ -16,10 +16,15 @@ const (
 	CollectorTypePortainer     = "portainer"
 	CollectorTypeDocker        = "docker"
 	CollectorTypeHomeAssistant = "homeassistant"
+
+	DefaultIntervalSeconds = 60
+	MinIntervalSeconds     = 1
+	MaxIntervalSeconds     = 1<<31 - 1
 )
 
 var (
 	ErrCollectorNotFound = errors.New("hub collector not found")
+	ErrInvalidInterval   = errors.New("invalid hub collector interval_seconds")
 )
 
 type Collector struct {
@@ -73,4 +78,35 @@ func NormalizeCollectorType(value string) string {
 	default:
 		return ""
 	}
+}
+
+func ValidateIntervalSeconds(value int) error {
+	if value < MinIntervalSeconds || value > MaxIntervalSeconds {
+		return ErrInvalidInterval
+	}
+	return nil
+}
+
+func ValidateCreateIntervalSeconds(value int) error {
+	if value == 0 {
+		return nil
+	}
+	return ValidateIntervalSeconds(value)
+}
+
+func CreateIntervalSeconds(value int) (int, error) {
+	if value == 0 {
+		return DefaultIntervalSeconds, nil
+	}
+	if err := ValidateIntervalSeconds(value); err != nil {
+		return 0, err
+	}
+	return value, nil
+}
+
+func IntervalDuration(value int) time.Duration {
+	if ValidateIntervalSeconds(value) != nil {
+		return 0
+	}
+	return time.Duration(value) * time.Second
 }

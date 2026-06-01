@@ -56,6 +56,43 @@ func TestHandleSyntheticCheckActionsRejectsNonPositiveIntervalOnUpdate(t *testin
 	}
 }
 
+func TestHandleSyntheticChecksRejectsOutOfRangeIntervalOnCreate(t *testing.T) {
+	deps := newTestResourcesDeps(t)
+	payload := []byte(`{"name":"Homepage","check_type":"http","target":"https://example.com","interval_seconds":2147483648}`)
+	req := httptest.NewRequest(http.MethodPost, "/synthetic-checks", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	deps.HandleSyntheticChecks(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleSyntheticCheckActionsRejectsOutOfRangeIntervalOnUpdate(t *testing.T) {
+	deps := newTestResourcesDeps(t)
+	check, err := deps.SyntheticStore.CreateSyntheticCheck(synthetic.CreateCheckRequest{
+		Name:      "Homepage",
+		CheckType: synthetic.CheckTypeHTTP,
+		Target:    "https://example.com",
+	})
+	if err != nil {
+		t.Fatalf("failed to create check: %v", err)
+	}
+
+	payload := []byte(`{"interval_seconds":2147483648}`)
+	req := httptest.NewRequest(http.MethodPatch, "/synthetic-checks/"+check.ID, bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	deps.HandleSyntheticCheckActions(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestHandleSyntheticCheckActionsResultsReturnsExistingCheckResults(t *testing.T) {
 	deps := newTestResourcesDeps(t)
 	check, err := deps.SyntheticStore.CreateSyntheticCheck(synthetic.CreateCheckRequest{

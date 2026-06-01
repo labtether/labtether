@@ -36,9 +36,9 @@ func (m *MemorySyntheticStore) CreateSyntheticCheck(req synthetic.CreateCheckReq
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
-	interval := req.IntervalSeconds
-	if interval <= 0 {
-		interval = 60
+	interval, err := synthetic.CreateIntervalSeconds(req.IntervalSeconds)
+	if err != nil {
+		return synthetic.Check{}, err
 	}
 
 	check := synthetic.Check{
@@ -104,10 +104,11 @@ func (m *MemorySyntheticStore) ListDueSyntheticChecks(_ context.Context, now tim
 		if !check.Enabled {
 			continue
 		}
-		if check.IntervalSeconds <= 0 {
+		interval := synthetic.IntervalDuration(check.IntervalSeconds)
+		if interval <= 0 {
 			continue
 		}
-		if check.LastRunAt != nil && now.Sub(*check.LastRunAt) < time.Duration(check.IntervalSeconds)*time.Second {
+		if check.LastRunAt != nil && now.Sub(*check.LastRunAt) < interval {
 			continue
 		}
 		out = append(out, check)
@@ -152,6 +153,9 @@ func (m *MemorySyntheticStore) UpdateSyntheticCheck(id string, req synthetic.Upd
 		check.Config = *req.Config
 	}
 	if req.IntervalSeconds != nil {
+		if err := synthetic.ValidateIntervalSeconds(*req.IntervalSeconds); err != nil {
+			return synthetic.Check{}, err
+		}
 		check.IntervalSeconds = *req.IntervalSeconds
 	}
 	if req.Enabled != nil {

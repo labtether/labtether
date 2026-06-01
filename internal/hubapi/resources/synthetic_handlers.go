@@ -53,8 +53,16 @@ func (d *Deps) HandleSyntheticChecks(w http.ResponseWriter, r *http.Request) {
 		} else {
 			req.CheckType = normalized
 		}
+		if err := synthetic.ValidateCreateIntervalSeconds(req.IntervalSeconds); err != nil {
+			servicehttp.WriteError(w, http.StatusBadRequest, "interval_seconds is out of range")
+			return
+		}
 		check, err := d.SyntheticStore.CreateSyntheticCheck(req)
 		if err != nil {
+			if err == synthetic.ErrInvalidInterval {
+				servicehttp.WriteError(w, http.StatusBadRequest, "interval_seconds is out of range")
+				return
+			}
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create synthetic check")
 			return
 		}
@@ -149,14 +157,18 @@ func (d *Deps) HandleSyntheticCheckActions(w http.ResponseWriter, r *http.Reques
 			}
 			req.Target = &trimmed
 		}
-		if req.IntervalSeconds != nil && *req.IntervalSeconds <= 0 {
-			servicehttp.WriteError(w, http.StatusBadRequest, "interval_seconds must be greater than zero")
+		if req.IntervalSeconds != nil && synthetic.ValidateIntervalSeconds(*req.IntervalSeconds) != nil {
+			servicehttp.WriteError(w, http.StatusBadRequest, "interval_seconds is out of range")
 			return
 		}
 		updated, err := d.SyntheticStore.UpdateSyntheticCheck(checkID, req)
 		if err != nil {
 			if err == synthetic.ErrCheckNotFound {
 				servicehttp.WriteError(w, http.StatusNotFound, "synthetic check not found")
+				return
+			}
+			if err == synthetic.ErrInvalidInterval {
+				servicehttp.WriteError(w, http.StatusBadRequest, "interval_seconds is out of range")
 				return
 			}
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update synthetic check")

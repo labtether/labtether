@@ -100,9 +100,9 @@ func (d *Deps) RunPendingCollectors(ctx context.Context) int {
 		// Check if enough time has elapsed since last collection
 		if collector.LastCollectedAt != nil {
 			now := time.Now().UTC()
-			interval := time.Duration(collector.IntervalSeconds) * time.Second
+			interval := hubcollector.IntervalDuration(collector.IntervalSeconds)
 			if interval <= 0 {
-				interval = 60 * time.Second
+				interval = time.Duration(hubcollector.DefaultIntervalSeconds) * time.Second
 			}
 			if now.Sub(*collector.LastCollectedAt) < interval {
 				continue

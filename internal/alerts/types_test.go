@@ -1,7 +1,9 @@
 package alerts
 
 import (
+	"errors"
 	"testing"
+	"time"
 )
 
 func TestNormalizeSeverity(t *testing.T) {
@@ -160,5 +162,23 @@ func TestGenerateFingerprint(t *testing.T) {
 	}
 	if fp4 == fp1 {
 		t.Error("fingerprint with no labels should differ from fingerprint with labels")
+	}
+}
+
+func TestValidateDurationSecondsRejectsValuesOutsideStorageBounds(t *testing.T) {
+	for _, value := range []int{-1, MaxDurationSeconds + 1} {
+		if err := ValidateDurationSeconds(value); !errors.Is(err, ErrInvalidDurationSeconds) {
+			t.Fatalf("ValidateDurationSeconds(%d) error = %v, want ErrInvalidDurationSeconds", value, err)
+		}
+	}
+}
+
+func TestDurationFromSecondsRejectsOutOfRangeValuesBeforeConversion(t *testing.T) {
+	fallback := 5 * time.Second
+	if got := DurationFromSeconds(MaxDurationSeconds+1, fallback); got != fallback {
+		t.Fatalf("duration = %s, want fallback %s", got, fallback)
+	}
+	if got := DurationFromSeconds(MaxDurationSeconds, fallback); got <= 0 || got == fallback {
+		t.Fatalf("duration = %s, want positive bounded duration", got)
 	}
 }

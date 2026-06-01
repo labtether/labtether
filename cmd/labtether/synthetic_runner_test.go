@@ -165,6 +165,15 @@ func TestRunPendingSyntheticChecksFallbackFiltersNonPositiveAndNotDueIntervals(t
 					Enabled:         true,
 					IntervalSeconds: 0,
 				},
+				{
+					ID:              "overflowing-interval",
+					Name:            "Overflowing",
+					CheckType:       "unsupported",
+					Target:          "unused",
+					Enabled:         true,
+					IntervalSeconds: synthetic.MaxIntervalSeconds + 1,
+					LastRunAt:       timePtr(now.Add(-2 * time.Minute)),
+				},
 			},
 		},
 	}

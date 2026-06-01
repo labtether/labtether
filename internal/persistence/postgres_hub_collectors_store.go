@@ -70,9 +70,9 @@ func (s *PostgresStore) CreateHubCollector(req hubcollector.CreateCollectorReque
 		return hubcollector.Collector{}, errors.New("invalid collector_type")
 	}
 
-	intervalSeconds := req.IntervalSeconds
-	if intervalSeconds <= 0 {
-		intervalSeconds = 60
+	intervalSeconds, err := hubcollector.CreateIntervalSeconds(req.IntervalSeconds)
+	if err != nil {
+		return hubcollector.Collector{}, err
 	}
 	enabled := true
 	if req.Enabled != nil {
@@ -173,6 +173,9 @@ func (s *PostgresStore) UpdateHubCollector(id string, req hubcollector.UpdateCol
 		existing.Enabled = *req.Enabled
 	}
 	if req.IntervalSeconds != nil {
+		if err := hubcollector.ValidateIntervalSeconds(*req.IntervalSeconds); err != nil {
+			return hubcollector.Collector{}, err
+		}
 		existing.IntervalSeconds = *req.IntervalSeconds
 	}
 

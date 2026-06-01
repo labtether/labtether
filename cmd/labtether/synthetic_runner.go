@@ -55,7 +55,7 @@ checkLoop:
 		default:
 		}
 
-		if check.IntervalSeconds <= 0 {
+		if synthetic.IntervalDuration(check.IntervalSeconds) <= 0 {
 			continue
 		}
 		if _, running := s.syntheticCheckRunState.LoadOrStore(check.ID, struct{}{}); running {
@@ -96,10 +96,11 @@ func (s *apiServer) dueSyntheticChecks(ctx context.Context, now time.Time, limit
 
 	due := make([]synthetic.Check, 0, len(checks))
 	for _, check := range checks {
-		if check.IntervalSeconds <= 0 {
+		interval := synthetic.IntervalDuration(check.IntervalSeconds)
+		if interval <= 0 {
 			continue
 		}
-		if check.LastRunAt != nil && now.Sub(*check.LastRunAt) < time.Duration(check.IntervalSeconds)*time.Second {
+		if check.LastRunAt != nil && now.Sub(*check.LastRunAt) < interval {
 			continue
 		}
 		due = append(due, check)

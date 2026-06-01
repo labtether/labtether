@@ -17,6 +17,8 @@ import (
 	"time"
 )
 
+const maxShutdownTimeoutSeconds = 3600
+
 // DBPinger is satisfied by *pgxpool.Pool and any other type that can ping the database.
 type DBPinger interface {
 	Ping(ctx context.Context) error
@@ -175,7 +177,7 @@ func Run(ctx context.Context, cfg Config) error {
 
 	go func() {
 		<-ctx.Done()
-		timeoutSec := envPositiveIntOrDefault("LABTETHER_SHUTDOWN_TIMEOUT_SECONDS", 15)
+		timeoutSec := envPositiveIntInRangeOrDefault("LABTETHER_SHUTDOWN_TIMEOUT_SECONDS", 15, maxShutdownTimeoutSeconds)
 		log.Printf("labtether: shutdown initiated, draining connections (timeout %ds)...", timeoutSec)
 		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Duration(timeoutSec)*time.Second)
 		defer cancel()
@@ -358,6 +360,10 @@ func WriteError(w http.ResponseWriter, status int, message string) {
 // envPositiveIntOrDefault reads an environment variable as a positive integer,
 // returning the default value if the variable is unset, malformed, or non-positive.
 func envPositiveIntOrDefault(key string, defaultVal int) int {
+	return envPositiveIntInRangeOrDefault(key, defaultVal, 0)
+}
+
+func envPositiveIntInRangeOrDefault(key string, defaultVal int, maxVal int) int {
 	v := os.Getenv(key)
 	if v == "" {
 		return defaultVal
@@ -365,6 +371,10 @@ func envPositiveIntOrDefault(key string, defaultVal int) int {
 	n, err := strconv.Atoi(strings.TrimSpace(v))
 	if err != nil || n <= 0 {
 		log.Printf("labtether: invalid value for %s=%q, using default %d", key, v, defaultVal)
+		return defaultVal
+	}
+	if maxVal > 0 && n > maxVal {
+		log.Printf("labtether: value for %s=%q exceeds maximum %d, using default %d", key, v, maxVal, defaultVal)
 		return defaultVal
 	}
 	return n

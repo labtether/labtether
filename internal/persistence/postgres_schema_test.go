@@ -71,6 +71,14 @@ func TestDBStatementTimeoutInvalidFallsBackToDefault(t *testing.T) {
 	}
 }
 
+func TestEnvIntInRangeOrDefaultRejectsOutOfRangeValue(t *testing.T) {
+	t.Setenv("LABTETHER_TEST_INT_RANGE", "153722868")
+
+	if got := envIntInRangeOrDefault("LABTETHER_TEST_INT_RANGE", 5, maxDBPoolDurationMinutes); got != 5 {
+		t.Fatalf("envIntInRangeOrDefault() = %d, want fallback 5", got)
+	}
+}
+
 func TestSchemaMigrationChecksumIsStable(t *testing.T) {
 	m := schemaMigration{
 		Version:    1,
