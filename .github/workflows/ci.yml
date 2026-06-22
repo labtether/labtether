@@ -11,7 +11,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -47,7 +47,7 @@ jobs:
       DEV_MODE: "true"
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -161,7 +161,7 @@ jobs:
         working-directory: web/console
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -184,7 +184,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -214,7 +214,7 @@ jobs:
         working-directory: web/console
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -251,7 +251,7 @@ jobs:
         working-directory: web/console
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -285,10 +285,10 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout hub
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Checkout labtether-agent
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: labtether/labtether-agent
           path: labtether-agent
