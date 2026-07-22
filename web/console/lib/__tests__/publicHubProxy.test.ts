@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
-import { proxyPublicHubRequest, validatePublicContentLength } from "../publicHubProxy";
+import { publicHubOriginHeaders, proxyPublicHubRequest, validatePublicContentLength } from "../publicHubProxy";
 
 function makePublicRequest(url: string, headers: Record<string, string> = {}): NextRequest {
   return {
@@ -54,6 +54,20 @@ describe("validatePublicContentLength", () => {
 });
 
 describe("proxyPublicHubRequest", () => {
+  it("reconstructs browser-facing origin headers without trusting forwarded input", () => {
+    const request = makePublicRequest("https://console.example.test/api/settings/enrollment", {
+      host: "console.example.test:9443",
+      "x-forwarded-host": "attacker.example",
+      "x-forwarded-proto": "http",
+    });
+
+    const headers = publicHubOriginHeaders(request);
+
+    expect(headers.get("Host")).toBeNull();
+    expect(headers.get("X-Forwarded-Host")).toBe("console.example.test:9443");
+    expect(headers.get("X-Forwarded-Proto")).toBe("https");
+  });
+
   it("does not trust client-supplied forwarded host or proto headers", async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response("ok", { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
@@ -72,7 +86,7 @@ describe("proxyPublicHubRequest", () => {
     }
     const [, init] = proxyCall;
     const headers = init.headers as Headers;
-    expect(headers.get("Host")).toBe("console.example.test");
+    expect(headers.get("Host")).toBeNull();
     expect(headers.get("X-Forwarded-Host")).toBe("console.example.test");
     expect(headers.get("X-Forwarded-Proto")).toBe("https");
   });
