@@ -381,7 +381,7 @@ jobs:
 
       - name: Prepare environment
         run: |
-          cp .env.example .env
+          install -m 600 .env.example .env
           cat >> .env <<'EOF'
           POSTGRES_USER=labtether
           POSTGRES_DB=labtether
