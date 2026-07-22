@@ -162,7 +162,6 @@ jobs:
           ./scripts/perf/backend-hotspot-apples.sh \
             --label ci-hotspot \
             --api-base "http://localhost:8080" \
-            --token "${LABTETHER_API_TOKEN}" \
             --aggregate-calls 240 \
             --live-calls 480 \
             --concurrency 16 \
@@ -381,16 +380,20 @@ jobs:
 
       - name: Prepare environment
         run: |
+          set -Eeuo pipefail
           install -m 600 .env.example .env
-          cat >> .env <<'EOF'
-          POSTGRES_USER=labtether
-          POSTGRES_DB=labtether
-          POSTGRES_PASSWORD=ci-smoke-pw
-          LABTETHER_OWNER_TOKEN=ci-owner-token
-          LABTETHER_API_TOKEN=ci-owner-token
-          LABTETHER_ADMIN_PASSWORD=ci-admin-pw
-          EOF
-          printf 'LABTETHER_ENCRYPTION_KEY=%s\n' "$(openssl rand -base64 32)" >> .env
+          ci_token="$(openssl rand -hex 32)"
+          echo "::add-mask::${ci_token}"
+          {
+            printf 'POSTGRES_USER=labtether\n'
+            printf 'POSTGRES_DB=labtether\n'
+            printf 'POSTGRES_PASSWORD=ci-smoke-pw\n'
+            printf 'LABTETHER_OWNER_TOKEN=%s\n' "${ci_token}"
+            printf 'LABTETHER_API_TOKEN=%s\n' "${ci_token}"
+            printf 'LABTETHER_ADMIN_PASSWORD=ci-admin-pw\n'
+            printf 'LABTETHER_ENCRYPTION_KEY=%s\n' "$(openssl rand -base64 32)"
+          } >> .env
+          printf 'LABTETHER_API_TOKEN=%s\n' "${ci_token}" >> "${GITHUB_ENV}"
 
       - name: Validate opt-in QA agent profile rendering
         run: |
@@ -403,11 +406,10 @@ jobs:
           COMPOSE_PROFILES=ci-agent docker compose config --services | grep -Fxq qa-agent
 
       - name: Smoke test
-        run: ./scripts/smoke-test.sh --keep
+        # Downstream steps intentionally reuse this isolated runner's stack.
+        run: ./scripts/smoke-test.sh --reuse-compose-stack --keep
 
       - name: Verify real agent is connected over authenticated WSS
-        env:
-          LABTETHER_API_TOKEN: ci-owner-token
         run: |
           set -Eeuo pipefail
           trap 'docker compose ps -a qa-agent || true; docker compose logs --no-color qa-agent || true' ERR

@@ -89,7 +89,10 @@ func ScopedCollectorHeartbeatRequest(collectorID string, req assets.HeartbeatReq
 	if req.Metadata == nil {
 		req.Metadata = make(map[string]string, 3)
 	} else {
-		cloned := make(map[string]string, len(req.Metadata)+2)
+		// Metadata cardinality originates at connector boundaries. Avoid deriving
+		// an allocation size (or doing overflow-prone capacity arithmetic) from it;
+		// these maps are deliberately small and can grow normally while cloning.
+		cloned := make(map[string]string, 3)
 		for key, value := range req.Metadata {
 			cloned[key] = value
 		}

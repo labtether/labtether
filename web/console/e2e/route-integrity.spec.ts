@@ -66,6 +66,10 @@ function coreRouteMock(context: MockRouteContext): Promise<boolean> | boolean {
     return fulfillJSON(route, { runs: [] }).then(() => true);
   }
 
+  if (pathname === "/api/v2/actions") {
+    return fulfillJSON(route, { actions: [] }).then(() => true);
+  }
+
   if (pathname === "/api/groups") {
     return fulfillJSON(route, { groups: [] }).then(() => true);
   }

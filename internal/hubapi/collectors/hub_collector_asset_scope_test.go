@@ -8,6 +8,33 @@ import (
 	"github.com/labtether/labtether/internal/persistence"
 )
 
+func TestScopedCollectorHeartbeatRequestClonesMetadataWithoutMutatingInput(t *testing.T) {
+	t.Parallel()
+	original := map[string]string{
+		"existing": "preserved",
+		"second":   "value",
+	}
+	req := assets.HeartbeatRequest{
+		AssetID:  "proxmox-vm-101",
+		Metadata: original,
+	}
+
+	got := ScopedCollectorHeartbeatRequest("collector-a", req)
+	if got.Metadata["existing"] != "preserved" || got.Metadata["second"] != "value" {
+		t.Fatalf("metadata clone lost input entries: %#v", got.Metadata)
+	}
+	if got.Metadata["collector_id"] != "collector-a" {
+		t.Fatalf("collector_id = %q, want collector-a", got.Metadata["collector_id"])
+	}
+	got.Metadata["existing"] = "changed"
+	if original["existing"] != "preserved" {
+		t.Fatalf("input metadata was mutated: %#v", original)
+	}
+	if _, ok := original[collectorNativeAssetIDMetadataKey]; ok {
+		t.Fatalf("collector metadata leaked into input map: %#v", original)
+	}
+}
+
 func TestProcessScopedCollectorHeartbeatKeepsRepeatedNativeIDsDistinct(t *testing.T) {
 	t.Parallel()
 	store := persistence.NewMemoryAssetStore()

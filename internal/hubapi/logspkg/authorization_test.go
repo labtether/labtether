@@ -7,11 +7,41 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/logs"
 	"github.com/labtether/labtether/internal/persistence"
 )
+
+func TestQueryAuthorizedEventsDoesNotAllocateFromUntrustedLimit(t *testing.T) {
+	store := persistence.NewMemoryLogStore()
+	now := time.Now().UTC()
+	if err := store.AppendEvent(logs.Event{
+		AssetID:   "asset-a",
+		Source:    "test",
+		Level:     "info",
+		Message:   "bounded allocation proof",
+		Timestamp: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	d := &Deps{LogStore: store}
+	ctx := apiv2.ContextWithAllowedAssets(context.Background(), []string{"asset-a"})
+	req := httptest.NewRequest(http.MethodGet, "/logs/query", nil).WithContext(ctx)
+	events, err := d.queryAuthorizedEvents(req, logs.QueryRequest{
+		From:  now.Add(-time.Minute),
+		To:    now.Add(time.Minute),
+		Limit: int(^uint(0) >> 1),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || events[0].AssetID != "asset-a" {
+		t.Fatalf("authorized events = %#v, want one asset-a event", events)
+	}
+}
 
 func TestRestrictedLogViewsFilterGlobalAndSecretViews(t *testing.T) {
 	store := persistence.NewMemoryLogStore()

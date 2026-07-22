@@ -414,3 +414,23 @@ func TestEmailAdapterRejectsSubjectHeaderInjectionBeforeDial(t *testing.T) {
 		t.Fatal("SMTP dial occurred before subject injection was rejected")
 	}
 }
+
+func TestBuildSMTPMessageKeepsBodyTextAfterHeaderBoundary(t *testing.T) {
+	message := string(buildSMTPMessage(
+		"sender@example.com",
+		"recipient@example.com",
+		"incident update",
+		"Bcc: attacker@example.com\r\nX-Injected: true\r\n\r\nbody",
+	))
+
+	header, body, ok := strings.Cut(message, "\r\n\r\n")
+	if !ok {
+		t.Fatal("SMTP message is missing the header/body boundary")
+	}
+	if strings.Contains(header, "attacker@example.com") || strings.Contains(header, "X-Injected") {
+		t.Fatalf("body text crossed into SMTP headers: %q", header)
+	}
+	if !strings.HasPrefix(body, "Bcc: attacker@example.com\r\nX-Injected: true") {
+		t.Fatalf("body text was not preserved after the boundary: %q", body)
+	}
+}

@@ -183,6 +183,10 @@ func sendSMTPMessage(parent context.Context, host string, port int, user, pass, 
 	if err != nil {
 		return smtpServerError(ctx, "email SMTP data rejected", err)
 	}
+	// Send validates/encodes every header-derived field before buildSMTPMessage,
+	// and buildSMTPMessage places the normalized body after a fixed CRLF/CRLF
+	// separator. Arbitrary body text therefore cannot become an SMTP header.
+	// codeql[go/email-injection]
 	if _, err := writer.Write(message); err != nil {
 		_ = writer.Close()
 		return smtpServerError(ctx, "email SMTP write failed", err)

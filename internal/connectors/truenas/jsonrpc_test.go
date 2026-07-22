@@ -198,6 +198,23 @@ func newTestClient(serverURL string) *Client {
 	}
 }
 
+func TestDialTrueNASWebSocketRejectsDisallowedEndpointBeforeNetworkDial(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "false")
+	t.Setenv("LABTETHER_OUTBOUND_ALLOWLIST_MODE", "false")
+	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "false")
+
+	conn, err := dialTrueNASWebSocket(context.Background(), "wss://127.0.0.1:443/websocket", false, maxWebSocketMessageBytes)
+	if err == nil {
+		if conn != nil {
+			_ = conn.Close()
+		}
+		t.Fatal("expected outbound policy to reject a loopback endpoint")
+	}
+	if !strings.Contains(err.Error(), "loopback") {
+		t.Fatalf("dial rejection = %v, want loopback policy error", err)
+	}
+}
+
 func TestDialTrueNASWebSocketEnforcesFragmentedResponseLimit(t *testing.T) {
 	allowInsecureTransportForTrueNASTests(t)
 

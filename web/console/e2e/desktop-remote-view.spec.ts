@@ -1311,7 +1311,7 @@ test("desktop VNC toolbar shortcuts pass through to remote keys", async ({
     ]);
 });
 
-test("desktop VNC mouse button returns focus to the remote viewer without pointer lock", async ({
+test("desktop VNC mouse button returns focus and enters pointer lock", async ({
   page,
 }) => {
   const sessionRequests: Array<Record<string, unknown>> = [];
@@ -1344,7 +1344,7 @@ test("desktop VNC mouse button returns focus to the remote viewer without pointe
     .poll(() =>
       page.evaluate(() => document.pointerLockElement?.tagName ?? ""),
     )
-    .toBe("");
+    .toBe("CANVAS");
 });
 
 test("desktop VNC keyboard capture returns typing to the remote viewer", async ({
@@ -1549,6 +1549,12 @@ test("desktop VNC shows a fallback cursor when the remote cursor is hidden", asy
 
   await page.getByTitle("Send mouse to remote session").click();
 
+  await expect(page.locator(".vncContainer").first()).not.toHaveAttribute(
+    "data-cursor-fallback",
+    "visible",
+  );
+
+  await page.getByTitle("Mouse ready in remote session").click();
   await expect(page.locator(".vncContainer").first()).toHaveAttribute(
     "data-cursor-fallback",
     "visible",

@@ -175,7 +175,7 @@ test.describe("files browser context actions", () => {
 
     await page.goto("/files");
 
-    await page.getByLabel("Target Device").selectOption(ASSET_ID);
+    await page.getByRole("button", { name: /Files Node/ }).click();
     await expect(page.locator('[data-file-entry-name="alpha.txt"]').first()).toBeVisible();
 
     const rowFor = (name: string) => page.locator(`[data-file-entry-name="${name}"]`).first();
@@ -274,7 +274,7 @@ test.describe("files browser context actions", () => {
 
     await page.goto("/files");
 
-    await page.getByLabel("Target Device").selectOption(ASSET_ID);
+    await page.getByRole("button", { name: /Files Node/ }).click();
     await expect(page.locator('[data-file-entry-name="docs"]').first()).toBeVisible();
 
     const docsRow = page.locator('[data-file-entry-name="docs"]').first();

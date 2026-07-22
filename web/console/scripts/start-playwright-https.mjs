@@ -19,6 +19,7 @@ const keyPath = process.env.PLAYWRIGHT_TLS_KEY_PATH
 
 function ensureTLSMaterial() {
   if (existsSync(certPath) && existsSync(keyPath)) {
+    startProxy();
     return;
   }
   mkdirSync(path.dirname(certPath), { recursive: true });
@@ -68,6 +69,10 @@ const standalone = spawn(
       ...process.env,
       HOSTNAME: httpHost,
       PORT: String(httpPort),
+      // This process is reached through exactly one local HTTPS proxy hop.
+      // Make the test fixture's trust boundary explicit so same-origin CSRF
+      // validation compares against the public HTTPS origin.
+      LABTETHER_TRUST_PROXY_HOPS: "1",
     },
     stdio: "inherit",
   },

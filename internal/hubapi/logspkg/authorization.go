@@ -11,6 +11,8 @@ import (
 	"github.com/labtether/labtether/internal/logs"
 )
 
+const authorizedEventInitialCapacity = 200
+
 func savedViewAllowed(ctx context.Context, assetID string) bool {
 	if len(apiv2.AllowedAssetsFromContext(ctx)) == 0 {
 		return true
@@ -41,7 +43,10 @@ func (d *Deps) queryAuthorizedEvents(r *http.Request, query logs.QueryRequest) (
 		return []logs.Event{}, nil
 	}
 
-	events := make([]logs.Event, 0, query.Limit)
+	// The request limit is bounded by the HTTP parser, but this helper also has
+	// internal callers. Keep allocation independent of caller-controlled input;
+	// the backing slice can grow normally when a larger valid limit is used.
+	events := make([]logs.Event, 0, authorizedEventInitialCapacity)
 	for _, assetID := range targets {
 		assetQuery := query
 		assetQuery.AssetID = assetID

@@ -146,6 +146,26 @@ async function installConsoleApiMocks(page: Page, unmocked: Set<string>) {
       return;
     }
 
+    if (pathname === "/api/assets" && method === "GET") {
+      await fulfillJSON(route, { assets: [] });
+      return;
+    }
+
+    if (pathname === "/api/terminal/snippets" && method === "GET") {
+      await fulfillJSON(route, []);
+      return;
+    }
+
+    if (pathname === "/api/v1/discovery/proposals" && method === "GET") {
+      await fulfillJSON(route, { proposals: [] });
+      return;
+    }
+
+    if (pathname === "/api/links/suggestions" && method === "GET") {
+      await fulfillJSON(route, { suggestions: [] });
+      return;
+    }
+
     if (pathname === "/api/settings/runtime") {
       await fulfillJSON(route, runtimeSettingsPayload);
       return;
