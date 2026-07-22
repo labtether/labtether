@@ -25,7 +25,7 @@ RUN CGO_ENABLED=0 \
       -o /out/labtether ./cmd/labtether
 
 # ── Stage 2: Node dependency install ─────────────────────────
-FROM node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS node-deps
+FROM node:26-alpine@sha256:e88a35be04478413b7c71c455cd9865de9b9360e1f43456be5951032d7ac1a66 AS node-deps
 
 WORKDIR /app
 COPY web/console/package.json web/console/package-lock.json web/console/.npmrc ./
@@ -33,7 +33,7 @@ COPY web/console/scripts/ ./scripts/
 RUN npm ci
 
 # ── Stage 3: Next.js build ───────────────────────────────────
-FROM node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS node-builder
+FROM node:26-alpine@sha256:e88a35be04478413b7c71c455cd9865de9b9360e1f43456be5951032d7ac1a66 AS node-builder
 
 WORKDIR /app
 COPY --from=node-deps /app/node_modules ./node_modules
@@ -43,7 +43,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 # ── Stage 4: Runtime ─────────────────────────────────────────
-FROM alpine:3.23@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40
+FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
 SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 
 ARG S6_OVERLAY_VERSION=3.2.0.2
@@ -70,7 +70,7 @@ RUN set -eux; \
 
 # Runtime dependencies
 RUN apk add --no-cache \
-    bash=5.3.3-r1 \
+    bash=5.3.9-r1 \
     ca-certificates=20260611-r0 \
     nodejs=24.17.0-r0 \
     postgresql18=18.4-r0 \
