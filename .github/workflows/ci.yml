@@ -45,7 +45,11 @@ jobs:
           go install github.com/securego/gosec/v2/cmd/gosec@v2.25.0
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
           go install github.com/zricethezav/gitleaks/v8@v8.30.1
+          go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
           echo "${GOBIN}" >> "${GITHUB_PATH}"
+
+      - name: Scan Go dependencies for reachable vulnerabilities
+        run: govulncheck ./...
 
       - name: Strict gosec gate
         run: make security-gosec
