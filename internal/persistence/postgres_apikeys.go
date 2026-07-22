@@ -81,7 +81,7 @@ func (s *PostgresStore) ListAPIKeys(ctx context.Context) ([]apikeys.APIKey, erro
 	return keys, rows.Err()
 }
 
-func (s *PostgresStore) UpdateAPIKey(ctx context.Context, id string, name *string, scopes *[]string, allowedAssets *[]string, expiresAt *time.Time) error {
+func (s *PostgresStore) UpdateAPIKey(ctx context.Context, id string, name *string, scopes *[]string, allowedAssets *[]string, expiresAt **time.Time) error {
 	var setClauses []string
 	var args []any
 	argIdx := 1
@@ -111,7 +111,11 @@ func (s *PostgresStore) UpdateAPIKey(ctx context.Context, id string, name *strin
 	}
 	if expiresAt != nil {
 		setClauses = append(setClauses, fmt.Sprintf("expires_at = $%d", argIdx))
-		args = append(args, *expiresAt)
+		if *expiresAt == nil {
+			args = append(args, nil)
+		} else {
+			args = append(args, **expiresAt)
+		}
 		argIdx++
 	}
 
@@ -122,8 +126,14 @@ func (s *PostgresStore) UpdateAPIKey(ctx context.Context, id string, name *strin
 	query := fmt.Sprintf("UPDATE api_keys SET %s WHERE id = $%d",
 		strings.Join(setClauses, ", "), argIdx)
 	args = append(args, id)
-	_, err := s.pool.Exec(ctx, query, args...)
-	return err
+	result, err := s.pool.Exec(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return apikeys.ErrNotFound
+	}
+	return nil
 }
 
 // DeleteAPIKey removes a key by ID. Returns nil even if the key does not exist

@@ -2,6 +2,7 @@ package bridge
 
 import (
 	"context"
+	"math"
 	"sync"
 	"testing"
 	"time"
@@ -86,9 +87,9 @@ func TestRegistryRunFlushes(t *testing.T) {
 	b := &mockBridge{
 		name: "fast-bridge",
 		samples: []telemetry.MetricSample{
-			{AssetID: "asset-run", Metric: telemetry.MetricCPUUsedPercent, Value: 10.0},
+			{AssetID: "asset-run", Metric: telemetry.MetricCPUUsedPercent, Unit: "percent", Value: 10.0, CollectedAt: time.Now().UTC()},
 		},
-		interval: 10 * time.Millisecond,
+		interval: time.Hour,
 	}
 	r.Register(b)
 
@@ -130,5 +131,41 @@ func TestRegistryRunFlushes(t *testing.T) {
 	}
 	if first.Metric != telemetry.MetricCPUUsedPercent {
 		t.Errorf("unexpected Metric: %q", first.Metric)
+	}
+}
+
+type panicBridge struct{}
+
+func (*panicBridge) Name() string                      { return "panic-bridge" }
+func (*panicBridge) Interval() time.Duration           { return time.Second }
+func (*panicBridge) Collect() []telemetry.MetricSample { panic("forced") }
+
+func TestRegistryFiltersInvalidSamplesAndRecoversSourcePanics(t *testing.T) {
+	r := NewRegistry()
+	r.Register(&mockBridge{name: "mixed", interval: time.Second, samples: []telemetry.MetricSample{
+		{AssetID: "asset-1", Metric: telemetry.MetricCPUUsedPercent, Unit: "percent", Value: 42, CollectedAt: time.Now().UTC()},
+		{AssetID: "asset-1", Metric: telemetry.MetricCPUUsedPercent, Unit: "percent", Value: 42},
+		{AssetID: "asset-1", Metric: telemetry.MetricCPUUsedPercent, Unit: "percent", Value: math.NaN(), CollectedAt: time.Now().UTC()},
+	}})
+	r.Register(&panicBridge{})
+
+	all := r.CollectAll()
+	if len(all) != 3 {
+		t.Fatalf("CollectAll should retain raw one-shot samples for diagnostics, got %d", len(all))
+	}
+	if got := validBridgeSamples(all); len(got) != 1 || got[0].Value != 42 {
+		t.Fatalf("validated samples = %+v, want one finite timestamped sample", got)
+	}
+}
+
+func TestValidBridgeSamplesDoesNotLetInvalidPrefixStarveValidTail(t *testing.T) {
+	samples := make([]telemetry.MetricSample, telemetry.MaxMetricSamplesPerAppend+1)
+	samples[len(samples)-1] = telemetry.MetricSample{
+		AssetID: "asset-tail", Metric: telemetry.MetricCPUUsedPercent, Unit: "percent", Value: 42,
+		CollectedAt: time.Now().UTC(),
+	}
+	got := validBridgeSamples(samples)
+	if len(got) != 1 || got[0].AssetID != "asset-tail" {
+		t.Fatalf("validated tail sample = %+v", got)
 	}
 }

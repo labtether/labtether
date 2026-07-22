@@ -8,8 +8,11 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/labtether/labtether/internal/certmgr"
 )
 
 func TestSecurityHeadersMiddleware(t *testing.T) {
@@ -39,6 +42,15 @@ func TestSecurityHeadersMiddleware(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+}
+
+func TestResolveBindAddressDefaultsToLoopback(t *testing.T) {
+	if got := resolveBindAddress(""); got != "127.0.0.1" {
+		t.Fatalf("default bind address = %q, want loopback", got)
+	}
+	if got := resolveBindAddress(" 0.0.0.0 "); got != "0.0.0.0" {
+		t.Fatalf("explicit bind address = %q, want explicit value", got)
 	}
 }
 
@@ -110,11 +122,11 @@ func TestRedirectHandler_StripsPort(t *testing.T) {
 	}
 }
 
-func TestRedirectHandlerWithWebSocketBypass_DesktopStreamUpgrade(t *testing.T) {
+func TestRedirectHandlerWithTLSInfoPassthrough_DesktopStreamUpgradeRequiresTLS(t *testing.T) {
 	wsHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 	})
-	handler := RedirectToHTTPSWithWebSocketBypass(8443, wsHandler)
+	handler := RedirectToHTTPSWithTLSInfoPassthrough(8443, wsHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "http://example.com/desktop/sessions/sess-1/stream?ticket=abc", nil)
 	req.Host = "example.com:8080"
@@ -123,19 +135,20 @@ func TestRedirectHandlerWithWebSocketBypass_DesktopStreamUpgrade(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusTeapot {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusTeapot)
+	if rec.Code != http.StatusMovedPermanently {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusMovedPermanently)
 	}
-	if got := rec.Header().Get("Location"); got != "" {
-		t.Fatalf("Location = %q, want empty", got)
+	want := "https://example.com:8443/desktop/sessions/sess-1/stream?ticket=abc"
+	if got := rec.Header().Get("Location"); got != want {
+		t.Fatalf("Location = %q, want %q", got, want)
 	}
 }
 
-func TestRedirectHandlerWithWebSocketBypass_NonWebSocketStillRedirects(t *testing.T) {
+func TestRedirectHandlerWithTLSInfoPassthrough_NonWebSocketStillRedirects(t *testing.T) {
 	wsHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 	})
-	handler := RedirectToHTTPSWithWebSocketBypass(8443, wsHandler)
+	handler := RedirectToHTTPSWithTLSInfoPassthrough(8443, wsHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "http://example.com/desktop/sessions/sess-1/stream?ticket=abc", nil)
 	req.Host = "example.com:8080"
@@ -151,14 +164,14 @@ func TestRedirectHandlerWithWebSocketBypass_NonWebSocketStillRedirects(t *testin
 	}
 }
 
-func TestRedirectHandlerWithWebSocketBypass_TLSInfoPassthrough(t *testing.T) {
+func TestRedirectHandlerWithTLSInfoPassthrough_TLSInfoPassthrough(t *testing.T) {
 	muxHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		WriteJSON(w, http.StatusOK, map[string]any{
 			"tls_source":  "built_in",
 			"tls_enabled": true,
 		})
 	})
-	handler := RedirectToHTTPSWithWebSocketBypass(8443, muxHandler)
+	handler := RedirectToHTTPSWithTLSInfoPassthrough(8443, muxHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "http://example.com/api/v1/tls/info", nil)
 	req.Host = "example.com:8080"
@@ -286,6 +299,316 @@ func startTestServer(t *testing.T, cfg Config) (baseURL string, cancel context.C
 	return "", nil
 }
 
+func freeTCPPort(t *testing.T) int {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen for free port: %v", err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	if err := ln.Close(); err != nil {
+		t.Fatalf("close free-port listener: %v", err)
+	}
+	return port
+}
+
+func waitForTCPServer(t *testing.T, port int) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	address := fmt.Sprintf("127.0.0.1:%d", port)
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout("tcp", address, 50*time.Millisecond)
+		if err == nil {
+			_ = conn.Close()
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("server %s did not start within deadline", address)
+}
+
+type shutdownServerStub struct {
+	shutdownErr error
+	closeErr    error
+	closeCalls  int
+}
+
+func (s *shutdownServerStub) Shutdown(context.Context) error {
+	return s.shutdownErr
+}
+
+func (s *shutdownServerStub) Close() error {
+	s.closeCalls++
+	return s.closeErr
+}
+
+func TestDrainHTTPServerForcesCloseAndPreservesTimeoutClassification(t *testing.T) {
+	server := &shutdownServerStub{shutdownErr: context.DeadlineExceeded}
+
+	err := drainHTTPServer("test", server, time.Second)
+	if !errors.Is(err, ErrHTTPDrainIncomplete) {
+		t.Fatalf("drain error = %v, want ErrHTTPDrainIncomplete", err)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("drain error = %v, want DeadlineExceeded", err)
+	}
+	if server.closeCalls != 1 {
+		t.Fatalf("Close calls = %d, want 1", server.closeCalls)
+	}
+	if got := classifyHTTPDrainFailure(err); got != "timeout" {
+		t.Fatalf("classification = %q, want timeout", got)
+	}
+}
+
+func TestRunCancelsActiveHandlerContextBeforeGracefulDrain(t *testing.T) {
+	t.Setenv("LABTETHER_SHUTDOWN_TIMEOUT_SECONDS", "2")
+	port := freeTCPPort(t)
+	started := make(chan struct{})
+	handlerStopped := make(chan struct{})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- Run(ctx, Config{
+			Name:        "shutdown-context-test",
+			BindAddress: "127.0.0.1",
+			Port:        fmt.Sprintf("%d", port),
+			ExtraHandlers: map[string]http.HandlerFunc{
+				"/slow": func(w http.ResponseWriter, r *http.Request) {
+					close(started)
+					<-r.Context().Done()
+					close(handlerStopped)
+				},
+			},
+		})
+	}()
+	waitForTCPServer(t, port)
+
+	requestDone := make(chan struct{})
+	go func() {
+		resp, _ := http.Get(fmt.Sprintf("http://127.0.0.1:%d/slow", port))
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		close(requestDone)
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("slow handler did not start")
+	}
+	cancel()
+
+	select {
+	case <-handlerStopped:
+	case <-time.After(time.Second):
+		t.Fatal("active handler context was not canceled")
+	}
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("Run returned error after context-aware handler drain: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Run did not return after context-aware handler stopped")
+	}
+	select {
+	case <-requestDone:
+	case <-time.After(time.Second):
+		t.Fatal("request did not finish")
+	}
+}
+
+func TestRunPropagatesShutdownTimeoutAfterForcedClose(t *testing.T) {
+	t.Setenv("LABTETHER_SHUTDOWN_TIMEOUT_SECONDS", "1")
+	port := freeTCPPort(t)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- Run(ctx, Config{
+			Name:        "shutdown-timeout-test",
+			BindAddress: "127.0.0.1",
+			Port:        fmt.Sprintf("%d", port),
+			ExtraHandlers: map[string]http.HandlerFunc{
+				"/blocked": func(http.ResponseWriter, *http.Request) {
+					close(started)
+					<-release
+				},
+			},
+		})
+	}()
+	waitForTCPServer(t, port)
+
+	requestDone := make(chan struct{})
+	go func() {
+		resp, _ := http.Get(fmt.Sprintf("http://127.0.0.1:%d/blocked", port))
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		close(requestDone)
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("blocked handler did not start")
+	}
+	cancel()
+
+	select {
+	case err := <-errCh:
+		if !errors.Is(err, ErrHTTPDrainIncomplete) {
+			t.Fatalf("Run error = %v, want ErrHTTPDrainIncomplete", err)
+		}
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("Run error = %v, want DeadlineExceeded", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Run did not return after forced close")
+	}
+
+	releaseOnce.Do(func() { close(release) })
+	select {
+	case <-requestDone:
+	case <-time.After(time.Second):
+		t.Fatal("forced-close request did not finish")
+	}
+}
+
+func TestRunWaitsForActiveMainHandlerShutdown(t *testing.T) {
+	t.Setenv("LABTETHER_SHUTDOWN_TIMEOUT_SECONDS", "2")
+	port := freeTCPPort(t)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- Run(ctx, Config{
+			Name:        "shutdown-main-test",
+			BindAddress: "127.0.0.1",
+			Port:        fmt.Sprintf("%d", port),
+			ExtraHandlers: map[string]http.HandlerFunc{
+				"/slow": func(w http.ResponseWriter, _ *http.Request) {
+					close(started)
+					<-release
+					w.WriteHeader(http.StatusNoContent)
+				},
+			},
+		})
+	}()
+	waitForTCPServer(t, port)
+
+	requestDone := make(chan error, 1)
+	go func() {
+		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/slow", port))
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		requestDone <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("slow main handler did not start")
+	}
+	cancel()
+
+	select {
+	case err := <-errCh:
+		t.Fatalf("Run returned before active main handler drained: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	releaseOnce.Do(func() { close(release) })
+	if err := <-requestDone; err != nil {
+		t.Fatalf("slow main request failed: %v", err)
+	}
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("Run returned error after main drain: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Run did not return after main handler drained")
+	}
+}
+
+func TestRunWaitsForActiveRedirectHandlerShutdown(t *testing.T) {
+	t.Setenv("LABTETHER_SHUTDOWN_TIMEOUT_SECONDS", "2")
+	mainPort := freeTCPPort(t)
+	redirectPort := freeTCPPort(t)
+	certs, err := certmgr.Provision(t.TempDir(), "127.0.0.1")
+	if err != nil {
+		t.Fatalf("provision test certificate: %v", err)
+	}
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- Run(ctx, Config{
+			Name:             "shutdown-redirect-test",
+			BindAddress:      "127.0.0.1",
+			Port:             fmt.Sprintf("%d", mainPort),
+			TLSCertFile:      certs.ServerCertPath,
+			TLSKeyFile:       certs.ServerKeyPath,
+			RedirectHTTPPort: fmt.Sprintf("%d", redirectPort),
+			HTTPSPort:        mainPort,
+			ExtraHandlers: map[string]http.HandlerFunc{
+				"/api/v1/tls/info": func(w http.ResponseWriter, _ *http.Request) {
+					close(started)
+					<-release
+					w.WriteHeader(http.StatusNoContent)
+				},
+			},
+		})
+	}()
+	waitForTCPServer(t, mainPort)
+	waitForTCPServer(t, redirectPort)
+
+	requestDone := make(chan error, 1)
+	go func() {
+		resp, requestErr := http.Get(fmt.Sprintf("http://127.0.0.1:%d/api/v1/tls/info", redirectPort))
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		requestDone <- requestErr
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("slow redirect handler did not start")
+	}
+	cancel()
+
+	select {
+	case err := <-errCh:
+		t.Fatalf("Run returned before active redirect handler drained: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	releaseOnce.Do(func() { close(release) })
+	if err := <-requestDone; err != nil {
+		t.Fatalf("slow redirect request failed: %v", err)
+	}
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("Run returned error after redirect drain: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Run did not return after redirect handler drained")
+	}
+}
+
 func TestReadyz_NoCheckReturnsReady(t *testing.T) {
 	base, cancel := startTestServer(t, Config{})
 	defer cancel()
@@ -306,6 +629,26 @@ func TestReadyz_NoCheckReturnsReady(t *testing.T) {
 	}
 	if body["ready"] != true {
 		t.Fatalf("ready = %v, want true", body["ready"])
+	}
+}
+
+func TestVersionUsesConfiguredBuildVersionWhenEnvironmentIsUnset(t *testing.T) {
+	t.Setenv("APP_VERSION", "")
+	base, cancel := startTestServer(t, Config{Version: "qa-exact-build"})
+	defer cancel()
+
+	resp, err := http.Get(base + "/version")
+	if err != nil {
+		t.Fatalf("GET /version: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got := body["version"]; got != "qa-exact-build" {
+		t.Fatalf("version = %v, want qa-exact-build", got)
 	}
 }
 

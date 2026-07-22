@@ -21,19 +21,14 @@ type UpdateScopeExecutor func(job updates.Job, target, scope string) updates.Run
 func ExecuteActionInProcess(job actions.Job, registry *connectorsdk.Registry) actions.Result {
 	switch actions.NormalizeRunType(job.Type) {
 	case actions.RunTypeCommand:
-		status := actions.StatusSucceeded
-		output := fmt.Sprintf("simulated action command on %s: %s", job.Target, job.Command)
-		if strings.Contains(strings.ToLower(job.Command), "fail") {
-			status = actions.StatusFailed
-			output = "simulated action command failure"
-		}
-
+		status := actions.StatusFailed
+		output := "command execution requires a connected agent runtime"
 		return actions.Result{
 			JobID:       job.JobID,
 			RunID:       job.RunID,
 			Status:      status,
-			Output:      output,
-			Steps:       []actions.StepResult{{Name: "execute_command", Status: status, Output: output}},
+			Error:       output,
+			Steps:       []actions.StepResult{{Name: "execute_command", Status: status, Error: output}},
 			CompletedAt: time.Now().UTC(),
 		}
 	case actions.RunTypeConnectorAction:
@@ -144,7 +139,16 @@ func ExecuteUpdateWithExecutor(job updates.Job, executor UpdateScopeExecutor) up
 	for _, target := range targets {
 		for _, scope := range scopes {
 			var entry updates.RunResultEntry
-			if executor != nil {
+			normalizedScopes, scopeErr := updates.NormalizeExecutableScopes([]string{scope})
+			if scopeErr != nil {
+				entry = updates.RunResultEntry{
+					Target:  target,
+					Scope:   scope,
+					Status:  updates.StatusFailed,
+					Summary: scopeErr.Error(),
+				}
+			} else if executor != nil {
+				scope = normalizedScopes[0]
 				entry = executor(job, target, scope)
 				if strings.TrimSpace(entry.Target) == "" {
 					entry.Target = target
@@ -163,17 +167,10 @@ func ExecuteUpdateWithExecutor(job updates.Job, executor UpdateScopeExecutor) up
 				}
 			} else {
 				entry = updates.RunResultEntry{
-					Target: target,
-					Scope:  scope,
-					Status: updates.StatusSucceeded,
-				}
-				if strings.Contains(strings.ToLower(target), "fail") || strings.Contains(strings.ToLower(scope), "fail") {
-					entry.Status = updates.StatusFailed
-					entry.Summary = "simulated update failure"
-				} else if job.DryRun {
-					entry.Summary = fmt.Sprintf("dry-run validated %s on %s", scope, target)
-				} else {
-					entry.Summary = fmt.Sprintf("applied %s on %s", scope, target)
+					Target:  target,
+					Scope:   scope,
+					Status:  updates.StatusFailed,
+					Summary: "update executor unavailable; no changes applied",
 				}
 			}
 			if entry.Status == updates.StatusFailed {

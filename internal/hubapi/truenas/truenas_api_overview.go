@@ -32,18 +32,18 @@ func (d *Deps) HandleTrueNASOverview(ctx context.Context, w http.ResponseWriter,
 
 	var sysInfo map[string]any
 	if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, "system.info", nil, &sysInfo); err != nil {
-		warnings = AppendTrueNASWarning(warnings, "system info unavailable: "+err.Error())
+		warnings = AppendTrueNASWarning(warnings, trueNASWarning("system info unavailable", err))
 	}
 
 	pools := make([]map[string]any, 0, 8)
 	if err := CallTrueNASQueryWithRetries(ctx, runtime.Client, "pool.query", &pools); err != nil {
-		warnings = AppendTrueNASWarning(warnings, "pools unavailable: "+err.Error())
+		warnings = AppendTrueNASWarning(warnings, trueNASWarning("pools unavailable", err))
 		pools = nil
 	}
 
 	rawServices := make([]map[string]any, 0, 16)
 	if err := CallTrueNASQueryWithRetries(ctx, runtime.Client, "service.query", &rawServices); err != nil {
-		warnings = AppendTrueNASWarning(warnings, "services unavailable: "+err.Error())
+		warnings = AppendTrueNASWarning(warnings, trueNASWarning("services unavailable", err))
 		rawServices = nil
 	}
 	services := make([]TrueNASServiceEntry, 0, len(rawServices))
@@ -53,7 +53,7 @@ func (d *Deps) HandleTrueNASOverview(ctx context.Context, w http.ResponseWriter,
 
 	alerts := make([]map[string]any, 0, 16)
 	if err := CallTrueNASQueryWithRetries(ctx, runtime.Client, "alert.list", &alerts); err != nil {
-		warnings = AppendTrueNASWarning(warnings, "alerts unavailable: "+err.Error())
+		warnings = AppendTrueNASWarning(warnings, trueNASWarning("alerts unavailable", err))
 		alerts = nil
 	}
 

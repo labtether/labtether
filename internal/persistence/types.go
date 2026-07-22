@@ -40,6 +40,11 @@ var ErrNotFound = errors.New("not found")
 // an existing record.
 var ErrAlreadyExists = errors.New("already exists")
 
+// ErrUpdatePlanActive is returned when an update plan still has queued or
+// running work. Callers must leave both the plan and its runs intact and retry
+// deletion only after every associated run reaches a terminal state.
+var ErrUpdatePlanActive = errors.New("update plan has queued or running runs")
+
 // ReliabilityRecord stores a historical group reliability score snapshot.
 type ReliabilityRecord struct {
 	ID          string         `json:"id"`
@@ -60,6 +65,8 @@ type TerminalStore interface {
 	DeleteTerminalSession(id string) error
 	AddCommand(sessionID string, req terminal.CreateCommandRequest, target, mode string) (terminal.Command, error)
 	UpdateCommandResult(sessionID, commandID, status, output string) error
+	GetCommand(commandID string) (terminal.Command, bool, error)
+	DeleteCommand(commandID string) error
 	ListCommands(sessionID string) ([]terminal.Command, error)
 	ListRecentCommands(limit int) ([]terminal.Command, error)
 }
@@ -157,11 +164,95 @@ type TelemetryDynamicStore interface {
 	DynamicSnapshotMany(assetIDs []string, at time.Time) (map[string]telemetry.DynamicSnapshot, error)
 }
 
+// TelemetryLabeledSnapshotStore is the cancellation-aware, cardinality-bounded
+// Prometheus path. It preserves the latest sample for every distinct
+// (asset, raw metric, labels) series rather than collapsing labeled sub-series
+// into a single value per raw metric.
+type TelemetryLabeledSnapshotStore interface {
+	LatestLabeledMetricSnapshots(ctx context.Context, assetIDs []string, at time.Time, maxSeries int) (map[string][]telemetry.MetricSample, error)
+}
+
+// TelemetryHubMetricStore exposes persisted non-asset hub gauges. These
+// samples never appear in AssetStore and are merged only into observability
+// outputs such as the Prometheus scrape.
+type TelemetryHubMetricStore interface {
+	HubMetricSnapshots(ctx context.Context, at time.Time, maxSeries int) (map[string][]telemetry.MetricSample, error)
+}
+
+// AlertRuleMetricSnapshot is the latest evaluation timing for one active rule.
+type AlertRuleMetricSnapshot struct {
+	RuleID     string
+	RuleName   string
+	DurationMS int
+}
+
+// AlertMetricsSnapshot combines an exact aggregate rule count with a bounded
+// list of per-rule timing series.
+type AlertMetricsSnapshot struct {
+	ActiveRuleCount     int64
+	FiringInstanceCount int64
+	RuleEvaluations     []AlertRuleMetricSnapshot
+}
+
+// AlertMetricsSnapshotStore avoids a capped list plus one evaluation query per
+// rule in the Prometheus bridge.
+type AlertMetricsSnapshotStore interface {
+	AlertMetricsSnapshot(ctx context.Context, maxRuleSeries int) (AlertMetricsSnapshot, error)
+}
+
+// ReliabilityMetricSnapshot is the latest materialized reliability score for
+// one group, including the stable identity labels required by Prometheus.
+type ReliabilityMetricSnapshot struct {
+	GroupID   string
+	GroupName string
+	Score     int
+}
+
+// ReliabilityMetricSnapshotStore loads latest-per-group reliability values in
+// one deterministic, cancellation-aware, cardinality-bounded operation.
+type ReliabilityMetricSnapshotStore interface {
+	LatestReliabilityMetricSnapshots(ctx context.Context, at time.Time, maxGroups int) ([]ReliabilityMetricSnapshot, error)
+}
+
 // TelemetryAlertBatchStore is an optional optimization interface for alert
 // evaluation paths that only need one metric or simple sample presence checks.
 type TelemetryAlertBatchStore interface {
 	MetricSeriesBatch(assetIDs []string, metric string, start, end time.Time, step time.Duration) (map[string]telemetry.Series, error)
 	AssetsWithSamples(assetIDs []string, start, end time.Time) (map[string]bool, error)
+}
+
+// ErrTelemetryQueryLimitExceeded means a caller-visible telemetry query would
+// require more raw rows than its explicit memory/work budget permits.
+var ErrTelemetryQueryLimitExceeded = errors.New("telemetry query row limit exceeded")
+
+// ErrHubMetricSnapshotLimitExceeded means the persisted hub-scope cardinality
+// exceeded the explicit scrape work budget.
+var ErrHubMetricSnapshotLimitExceeded = errors.New("hub metric snapshot series limit exceeded")
+
+// ErrAlertMetricSnapshotLimitExceeded means a caller requested more per-rule
+// alert series than the bounded observability snapshot permits.
+var ErrAlertMetricSnapshotLimitExceeded = errors.New("alert metric snapshot series limit exceeded")
+
+// ErrReliabilityMetricSnapshotLimitExceeded means a caller requested more
+// group reliability series than the bounded observability snapshot permits.
+var ErrReliabilityMetricSnapshotLimitExceeded = errors.New("reliability metric snapshot series limit exceeded")
+
+var (
+	ErrTelemetrySnapshotAssetLimitExceeded  = errors.New("telemetry snapshot asset limit exceeded")
+	ErrTelemetrySnapshotRowLimitExceeded    = errors.New("telemetry snapshot raw row limit exceeded")
+	ErrTelemetrySnapshotSeriesLimitExceeded = errors.New("telemetry snapshot series limit exceeded")
+)
+
+var (
+	ErrMetricSampleBatchLimitExceeded = errors.New("metric sample batch count limit exceeded")
+	ErrMetricSampleBatchBytesExceeded = errors.New("metric sample batch byte limit exceeded")
+)
+
+// TelemetryQueryBatchStore is the cancellation-aware, work-bounded batch path
+// used by interactive/API queries. Background alert evaluation intentionally
+// retains the narrower TelemetryAlertBatchStore contract above.
+type TelemetryQueryBatchStore interface {
+	MetricSeriesBatchContext(ctx context.Context, assetIDs []string, metric string, start, end time.Time, step time.Duration, maxRawPoints int) (map[string]telemetry.Series, error)
 }
 
 // LogStore provides normalized log/event persistence and query paths.
@@ -309,15 +400,57 @@ type CredentialStore interface {
 	DeleteDesktopConfig(assetID string) error
 }
 
+const (
+	CredentialProfilePerOwnerLimit = 100
+	CredentialProfileGlobalLimit   = 500
+)
+
+var (
+	ErrCredentialProfileOwnerLimit  = errors.New("credential profile owner limit reached")
+	ErrCredentialProfileGlobalLimit = errors.New("credential profile global limit reached")
+	ErrCredentialProfileInUse       = errors.New("credential profile is in use")
+	ErrCredentialProfileProtected   = errors.New("credential profile is protected")
+)
+
+// CredentialProfileReference is a redacted aggregate reference count. It
+// intentionally excludes asset names, hosts, usernames, and configuration.
+type CredentialProfileReference struct {
+	Resource string `json:"resource"`
+	Count    int    `json:"count"`
+}
+
+// CredentialProfileReferenceSummary describes all live bindings that prevent
+// safe deletion of one credential profile.
+type CredentialProfileReferenceSummary struct {
+	Total      int                          `json:"total"`
+	References []CredentialProfileReference `json:"references"`
+}
+
+// CredentialProfileLifecycleStore is the atomic lifecycle extension used by
+// the global credential manager. Keeping it separate preserves the narrower
+// runtime lookup contract used by protocol subsystems and test doubles.
+type CredentialProfileLifecycleStore interface {
+	CreateCredentialProfileBounded(profile credentials.Profile, ownerID string, perOwnerLimit, globalLimit int) (credentials.Profile, error)
+	DeleteCredentialProfileIfUnreferenced(id string) (CredentialProfileReferenceSummary, error)
+}
+
 // AuthStore provides persistence for user accounts and sessions.
 type AuthStore interface {
 	GetUserByID(id string) (auth.User, bool, error)
 	GetUserByUsername(username string) (auth.User, bool, error)
+	GetUserByOIDCIdentity(provider, issuer, subject string) (auth.User, bool, error)
+	// GetUserByOIDCSubject is retained only for issuer-less users created before
+	// issuer-scoped OIDC identity bindings were introduced.
 	GetUserByOIDCSubject(provider, subject string) (auth.User, bool, error)
 	ListUsers(limit int) ([]auth.User, error)
 	BootstrapFirstUser(username, passwordHash string) (auth.User, bool, error)
 	CreateUser(username, passwordHash string) (auth.User, error)
 	CreateUserWithRole(username, passwordHash, role, authProvider, oidcSubject string) (auth.User, error)
+	CreateUserWithOIDCIdentity(username, passwordHash, role, authProvider, oidcIssuer, oidcSubject string) (auth.User, error)
+	// BindLegacyOIDCIdentity atomically assigns an issuer to one matching
+	// issuer-less OIDC user. The boolean is false when the legacy binding no
+	// longer matches, allowing callers to resolve concurrent adoption safely.
+	BindLegacyOIDCIdentity(id, authProvider, oidcSubject, oidcIssuer string) (auth.User, bool, error)
 	UpdateUserPasswordHash(id, passwordHash string) error
 	UpdateUserRole(id, role string) error
 	DeleteUser(id string) error
@@ -340,7 +473,7 @@ type APIKeyStore interface {
 	LookupAPIKeyByHash(ctx context.Context, secretHash string) (apikeys.APIKey, bool, error)
 	GetAPIKey(ctx context.Context, id string) (apikeys.APIKey, bool, error)
 	ListAPIKeys(ctx context.Context) ([]apikeys.APIKey, error)
-	UpdateAPIKey(ctx context.Context, id string, name *string, scopes *[]string, allowedAssets *[]string, expiresAt *time.Time) error
+	UpdateAPIKey(ctx context.Context, id string, name *string, scopes *[]string, allowedAssets *[]string, expiresAt **time.Time) error
 	DeleteAPIKey(ctx context.Context, id string) error
 	TouchAPIKeyLastUsed(ctx context.Context, id string) error
 }
@@ -384,7 +517,7 @@ type NotificationStore interface {
 	CreateNotificationRecord(req notifications.CreateRecordRequest) (notifications.Record, error)
 	ListNotificationHistory(limit int, channelID string) ([]notifications.Record, error)
 	ListPendingRetries(ctx context.Context, now time.Time, limit int) ([]notifications.Record, error)
-	UpdateRetryState(ctx context.Context, id string, retryCount int, nextRetryAt *time.Time, status, errorMessage string) error
+	UpdateRetryState(ctx context.Context, id string, retryCount int, nextRetryAt *time.Time, status, errorMessage string, payload map[string]any) error
 }
 
 // DependencyStore provides persistence for asset dependencies and blast-radius queries.
@@ -418,6 +551,26 @@ type SyntheticStore interface {
 // last-run first so older checks do not starve behind frequently updated rows.
 type DueSyntheticCheckStore interface {
 	ListDueSyntheticChecks(ctx context.Context, now time.Time, limit int) ([]synthetic.Check, error)
+}
+
+// SyntheticMetricSnapshot is the latest persisted result for one enabled
+// synthetic check. Target URLs are deliberately excluded because they may
+// contain credentials or high-cardinality query values and must never become
+// telemetry labels.
+type SyntheticMetricSnapshot struct {
+	CheckID   string
+	CheckName string
+	CheckType string
+	ResultID  string
+	Status    string
+	LatencyMS *int
+	CheckedAt time.Time
+}
+
+// SyntheticMetricSnapshotStore loads latest check results with one bounded,
+// deadline-aware read instead of one ListSyntheticResults query per check.
+type SyntheticMetricSnapshotStore interface {
+	LatestSyntheticMetricSnapshots(ctx context.Context, maxChecks int) ([]SyntheticMetricSnapshot, error)
 }
 
 // HubCollectorStore provides persistence for hub-initiated collectors.
@@ -456,6 +609,7 @@ type EnrollmentStore interface {
 	RevokeEnrollmentToken(id string) error
 	ListEnrollmentTokens(limit int) ([]enrollment.EnrollmentToken, error)
 	CreateAgentToken(assetID, tokenHash, enrolledVia string, expiresAt time.Time) (enrollment.AgentToken, error)
+	RotateAgentToken(assetID, tokenHash, enrolledVia string, expiresAt time.Time) (enrollment.AgentToken, error)
 	ValidateAgentToken(tokenHash string) (enrollment.AgentToken, bool, error)
 	TouchAgentTokenLastUsed(id string) error
 	RevokeAgentToken(id string) error
@@ -480,6 +634,7 @@ type LinkSuggestion struct {
 // LinkSuggestionStore provides persistence for asset link suggestions.
 type LinkSuggestionStore interface {
 	CreateLinkSuggestion(sourceAssetID, targetAssetID, matchReason string, confidence float64) (LinkSuggestion, error)
+	GetLinkSuggestion(id string) (LinkSuggestion, bool, error)
 	ListPendingLinkSuggestions() ([]LinkSuggestion, error)
 	ResolveLinkSuggestion(id, status, resolvedBy string) error
 }
@@ -578,6 +733,13 @@ type FileTransfer struct {
 	CompletedAt      *time.Time `json:"completed_at,omitempty"`
 }
 
+// File-transfer list bounds cap both response size and OFFSET scan work.
+const (
+	FileTransferListDefaultLimit = 50
+	FileTransferListMaxLimit     = 100
+	FileTransferListMaxOffset    = 10_000
+)
+
 // FileConnectionStore provides persistence for remote file connection profiles.
 type FileConnectionStore interface {
 	ListFileConnections(ctx context.Context) ([]FileConnection, error)
@@ -601,6 +763,10 @@ type FileTransferStore interface {
 	GetFileTransfer(ctx context.Context, id string) (*FileTransfer, error)
 	CreateFileTransfer(ctx context.Context, ft *FileTransfer) error
 	UpdateFileTransfer(ctx context.Context, ft *FileTransfer) error
+	// ListFileTransfers returns only records owned by actorID. The result is
+	// ordered newest-first by the sortable transfer ID, and total is computed
+	// after applying the optional exact status filter but before pagination.
+	ListFileTransfers(ctx context.Context, actorID, status string, limit, offset int) ([]FileTransfer, int, error)
 	ListActiveFileTransfers(ctx context.Context) ([]FileTransfer, error)
 }
 
@@ -608,9 +774,23 @@ type FileTransferStore interface {
 type ScheduleStore interface {
 	CreateScheduledTask(ctx context.Context, task schedules.ScheduledTask) error
 	GetScheduledTask(ctx context.Context, id string) (schedules.ScheduledTask, bool, error)
-	ListScheduledTasks(ctx context.Context) ([]schedules.ScheduledTask, error)
-	UpdateScheduledTask(ctx context.Context, id string, name *string, cronExpr *string, command *string, targets *[]string, groupID *string, enabled *bool) error
+	ListScheduledTasks(ctx context.Context, limit, offset int) ([]schedules.ScheduledTask, int, error)
+	UpdateScheduledTask(ctx context.Context, id string, name *string, cronExpr *string, command *string, targets *[]string, groupID *string, enabled *bool, nextRun schedules.NextRunUpdate) error
 	DeleteScheduledTask(ctx context.Context, id string) error
+}
+
+// ScheduleExecutionStore is the production scheduler's durable outbox. A due
+// schedule advance and its leased job-queue insertion must commit atomically so
+// multiple hub instances cannot dispatch the same occurrence twice.
+type ScheduleExecutionStore interface {
+	// ListScheduledTasksForEvaluation returns at most limit enabled definitions
+	// that need work now, ordered so repeated bounded passes drain the backlog.
+	ListScheduledTasksForEvaluation(ctx context.Context, now time.Time, limit int) ([]schedules.ScheduledTask, error)
+	InitializeScheduledTaskNextRun(ctx context.Context, id string, nextRunAt time.Time) (bool, error)
+	ClaimScheduledTaskExecution(ctx context.Context, claim schedules.ExecutionClaim) (bool, error)
+	BeginScheduledTaskExecution(ctx context.Context, scheduleID, jobID string) (bool, error)
+	MarkScheduledTaskInvalid(ctx context.Context, id, errorMessage string) error
+	CompleteScheduledTaskExecution(ctx context.Context, scheduleID, jobID, status, errorMessage string, completedAt time.Time) error
 }
 
 // WebhookStore provides persistence for webhook subscriptions.

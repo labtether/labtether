@@ -18,22 +18,33 @@ func Transfer(
 	dstFS RemoteFS, dstPath string,
 	progress TransferProgress,
 ) (int64, error) {
-	reader, size, err := srcFS.Read(ctx, srcPath)
+	opCtx, cancel := WithOperationTimeout(ctx)
+	defer cancel()
+
+	reader, size, err := srcFS.Read(opCtx, srcPath)
 	if err != nil {
 		return 0, fmt.Errorf("read source: %w", err)
 	}
 	defer reader.Close()
+	if err := validateTransferSize(size); err != nil {
+		return 0, err
+	}
+
+	limited := newBoundedReader(opCtx, reader, MaxTransferBytes, ErrTransferTooLarge)
 
 	// Wrap reader with progress tracking and cancellation.
 	pr := &progressReader{
-		ctx:      ctx,
-		reader:   reader,
+		ctx:      opCtx,
+		reader:   limited,
 		total:    size,
 		progress: progress,
 	}
 
-	if err := dstFS.Write(ctx, dstPath, pr, size); err != nil {
+	if err := dstFS.Write(opCtx, dstPath, pr, size); err != nil {
 		return pr.transferred, fmt.Errorf("write dest: %w", err)
+	}
+	if err := limited.terminalError(); err != nil {
+		return pr.transferred, fmt.Errorf("read source: %w", err)
 	}
 	return pr.transferred, nil
 }

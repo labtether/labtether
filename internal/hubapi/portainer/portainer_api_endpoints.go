@@ -6,7 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
@@ -29,6 +31,10 @@ type portainerEndpointSummary struct {
 
 // HandlePortainerEndpoints handles GET /portainer/endpoints — list all Portainer endpoints.
 func (d *Deps) HandlePortainerEndpoints(w http.ResponseWriter, r *http.Request) {
+	if shared.HasAssetRestriction(r.Context()) {
+		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "asset-restricted api keys cannot access global Portainer endpoints")
+		return
+	}
 	if r.Method != http.MethodGet {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return

@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"golang.org/x/crypto/ssh"
+
+	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
 func mustPublicKey(t *testing.T) ssh.PublicKey {
@@ -62,6 +64,7 @@ func TestBuildCollectorSSHHostKeyCallbackRejectsUnexpectedKey(t *testing.T) {
 }
 
 func TestBuildCollectorSSHHostKeyCallbackSupportsExplicitInsecureMode(t *testing.T) {
+	t.Setenv(shared.EnvAllowInsecureSSHHostKeys, "true")
 	callback, insecure, err := buildCollectorSSHHostKeyCallback(map[string]any{
 		"strict_host_key": false,
 	})
@@ -73,5 +76,17 @@ func TestBuildCollectorSSHHostKeyCallbackSupportsExplicitInsecureMode(t *testing
 	}
 	if !insecure {
 		t.Fatalf("expected insecure flag to be true")
+	}
+}
+
+func TestBuildCollectorSSHHostKeyCallbackFailsClosedWithoutGlobalAcknowledgement(t *testing.T) {
+	t.Setenv(shared.EnvAllowInsecureSSHHostKeys, "")
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("SSH_KNOWN_HOSTS_PATH", "")
+	t.Setenv("SSH_KNOWN_HOSTS_PATHS", "")
+	if callback, insecure, err := buildCollectorSSHHostKeyCallback(map[string]any{
+		"strict_host_key": false,
+	}); err == nil || callback != nil || insecure {
+		t.Fatalf("expected fail-closed callback without global acknowledgement, callback=%v insecure=%v err=%v", callback, insecure, err)
 	}
 }

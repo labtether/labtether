@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/servicehttp"
 	"github.com/labtether/labtether/internal/terminal"
 )
@@ -61,6 +62,13 @@ func (d *Deps) HandleBookmarkActions(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusForbidden, "bookmark access denied")
 		return
 	}
+	bookmarkTarget := strings.TrimSpace(bookmark.AssetID)
+	if bookmarkTarget == "" {
+		bookmarkTarget = strings.TrimSpace(bookmark.Host)
+	}
+	if !d.requireTargetAccess(w, r, bookmarkTarget) {
+		return
+	}
 
 	if len(parts) == 1 {
 		switch r.Method {
@@ -90,16 +98,22 @@ func (d *Deps) HandleBookmarkActions(w http.ResponseWriter, r *http.Request) {
 
 func (d *Deps) listBookmarks(w http.ResponseWriter, r *http.Request) {
 	actorID := d.PrincipalActorID(r.Context())
-	queryActorID := actorID
-	if d.IsOwnerActor(actorID) {
-		queryActorID = "owner"
-	}
-	bookmarks, err := d.TerminalBookmarkStore.ListBookmarks(queryActorID)
+	bookmarks, err := d.TerminalBookmarkStore.ListBookmarks(actorID)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list bookmarks")
 		return
 	}
-	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"bookmarks": bookmarks})
+	filtered := bookmarks[:0]
+	for _, bookmark := range bookmarks {
+		target := strings.TrimSpace(bookmark.AssetID)
+		if target == "" {
+			target = strings.TrimSpace(bookmark.Host)
+		}
+		if apiv2.AssetCheckContext(r.Context(), target) {
+			filtered = append(filtered, bookmark)
+		}
+	}
+	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"bookmarks": filtered})
 }
 
 func (d *Deps) createBookmark(w http.ResponseWriter, r *http.Request) {
@@ -122,6 +136,16 @@ func (d *Deps) createBookmark(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.AssetID == "" && req.Host == "" {
 		servicehttp.WriteError(w, http.StatusBadRequest, "asset_id or host is required")
+		return
+	}
+	target := req.AssetID
+	if target == "" {
+		target = req.Host
+	}
+	if !d.requireTargetAccess(w, r, target) {
+		return
+	}
+	if strings.TrimSpace(req.CredentialProfileID) != "" && !apiv2.RequireScope(w, r, "credentials:use") {
 		return
 	}
 
@@ -172,6 +196,20 @@ func (d *Deps) updateBookmark(w http.ResponseWriter, r *http.Request, bookmark t
 		servicehttp.WriteError(w, http.StatusBadRequest, "asset_id or host is required")
 		return
 	}
+	nextTarget := nextAssetID
+	if nextTarget == "" {
+		nextTarget = nextHost
+	}
+	if !d.requireTargetAccess(w, r, nextTarget) {
+		return
+	}
+	nextCredentialProfileID := bookmark.CredentialProfileID
+	if req.CredentialProfileID != nil {
+		nextCredentialProfileID = strings.TrimSpace(*req.CredentialProfileID)
+	}
+	if nextCredentialProfileID != "" && !apiv2.RequireScope(w, r, "credentials:use") {
+		return
+	}
 
 	updated, err := d.TerminalBookmarkStore.UpdateBookmark(bookmark.ID, req)
 	if err != nil {
@@ -191,6 +229,9 @@ func (d *Deps) deleteBookmark(w http.ResponseWriter, bookmark terminal.Bookmark)
 
 func (d *Deps) connectBookmark(w http.ResponseWriter, r *http.Request, bookmark terminal.Bookmark) {
 	if !d.EnforceRateLimit(w, r, "terminal.bookmark.connect", 60, time.Minute) {
+		return
+	}
+	if strings.TrimSpace(bookmark.CredentialProfileID) != "" && !apiv2.RequireScope(w, r, "credentials:use") {
 		return
 	}
 

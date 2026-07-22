@@ -140,7 +140,6 @@ func (d *Deps) HandleDesktopSPICEStream(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	addr := net.JoinHostPort(validatedHost, strconv.Itoa(validatedPort))
 	tlsConfig, err := NewProxmoxTLSConfig(spiceTarget.SkipVerify, spiceTarget.CA)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusBadGateway, "failed to prepare SPICE TLS: "+shared.SanitizeUpstreamError(err.Error()))
@@ -149,22 +148,33 @@ func (d *Deps) HandleDesktopSPICEStream(w http.ResponseWriter, r *http.Request, 
 	if net.ParseIP(validatedHost) == nil {
 		tlsConfig.ServerName = validatedHost
 	}
-	dialer := &net.Dialer{Timeout: 10 * time.Second}
-	spiceConn, err := tls.DialWithDialer(dialer, "tcp", addr, tlsConfig)
+	rawConn, err := securityruntime.DialOutboundTCPContext(r.Context(), validatedHost, validatedPort, 10*time.Second)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusBadGateway, "failed to connect to SPICE: "+shared.SanitizeUpstreamError(err.Error()))
 		return
 	}
+	spiceConn := tls.Client(rawConn, tlsConfig)
+	if err := spiceConn.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		_ = rawConn.Close()
+		servicehttp.WriteError(w, http.StatusBadGateway, "failed to prepare SPICE connection")
+		return
+	}
+	if err := spiceConn.HandshakeContext(r.Context()); err != nil {
+		_ = spiceConn.Close()
+		servicehttp.WriteError(w, http.StatusBadGateway, "failed to connect to SPICE: "+shared.SanitizeUpstreamError(err.Error()))
+		return
+	}
+	_ = spiceConn.SetDeadline(time.Time{})
 	defer spiceConn.Close()
 
-	wsConn, err := d.TerminalWebSocketUpgrader.Upgrade(w, r, nil)
+	wsConn, err := shared.UpgradeWebSocket(d.TerminalWebSocketUpgrader, w, r, nil)
 	if err != nil {
 		return
 	}
-	defer wsConn.Close()
 	wsConn.SetReadLimit(d.MaxDesktopInputReadBytes)
+	defer wsConn.Close()
 
-	log.Printf("desktop: proxied SPICE stream for %s -> %s", session.ID, addr)
+	log.Printf("desktop: proxied SPICE stream for %s -> %s:%d", session.ID, validatedHost, validatedPort)
 
 	// Bidirectional bridge: browser WS ↔ SPICE TCP.
 	done := make(chan struct{})

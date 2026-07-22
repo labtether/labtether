@@ -5,13 +5,17 @@ package resources
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/hubapi/shared"
+	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/platforms"
 	"github.com/labtether/labtether/internal/servicehttp"
 	"github.com/labtether/labtether/internal/telemetry"
@@ -65,6 +69,9 @@ func (d *Deps) HandleRecordAssetHeartbeat(w http.ResponseWriter, r *http.Request
 		servicehttp.WriteError(w, http.StatusBadRequest, "asset_id, type, name, and source are required")
 		return
 	}
+	if !apiv2.RequireAssetAccess(w, r, req.AssetID) {
+		return
+	}
 	if err := validateMaxLen("asset_id", req.AssetID, maxHeartbeatAssetIDLen); err != nil {
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -81,7 +88,14 @@ func (d *Deps) HandleRecordAssetHeartbeat(w http.ResponseWriter, r *http.Request
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if req.GroupID != "" && d.GroupStore != nil {
+	// Group placement is operator-owned after enrollment. Identity-bound agent
+	// heartbeats preserve the asset's stored group transactionally, so ignore a
+	// stale client-side value before validating ordinary mutable heartbeats.
+	identityBoundAgentHeartbeat := shared.AgentTokenIDFromContext(r.Context()) != "" ||
+		strings.EqualFold(req.Source, "agent") && shared.ExistingAgentHeartbeatOnlyFromContext(r.Context())
+	if identityBoundAgentHeartbeat {
+		req.GroupID = ""
+	} else if req.GroupID != "" && d.GroupStore != nil {
 		_, ok, err := d.GroupStore.GetGroup(req.GroupID)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to validate group")
@@ -93,7 +107,54 @@ func (d *Deps) HandleRecordAssetHeartbeat(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	assetEntry, err := d.ProcessHeartbeatRequest(req)
+	var assetEntry *assets.Asset
+	var err error
+	if agentTokenID := shared.AgentTokenIDFromContext(r.Context()); agentTokenID != "" {
+		if d.EnrollmentTransactions == nil {
+			servicehttp.WriteError(w, http.StatusServiceUnavailable, "agent heartbeat transaction unavailable")
+			return
+		}
+		commitCtx, cancelCommit := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancelCommit()
+		committed, commitErr := d.EnrollmentTransactions.CommitAuthenticatedAgentHeartbeat(commitCtx, agentTokenID, req)
+		if commitErr != nil {
+			if errors.Is(commitErr, persistence.ErrAgentCredentialInactive) || errors.Is(commitErr, persistence.ErrNotFound) {
+				servicehttp.WriteError(w, http.StatusUnauthorized, "agent credential is no longer active")
+			} else {
+				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to record heartbeat")
+			}
+			return
+		}
+		assetEntry = &committed
+		d.processCommittedHeartbeatSideEffects(committed, req)
+	} else if strings.EqualFold(req.Source, "agent") && shared.SharedAgentHeartbeatDisabledFromContext(r.Context()) {
+		servicehttp.WriteError(w, http.StatusUnauthorized, "per-agent credential required for agent heartbeat")
+		return
+	} else if strings.EqualFold(req.Source, "agent") && shared.ExistingAgentHeartbeatOnlyFromContext(r.Context()) {
+		// Owner/admin/API-key authority may refresh a legacy agent asset, but it
+		// must not recreate an identity that was never enrolled or that an
+		// operator decommissioned. This path also strips identity TOFU metadata in
+		// the persistence transaction.
+		if d.EnrollmentTransactions == nil {
+			servicehttp.WriteError(w, http.StatusServiceUnavailable, "agent heartbeat transaction unavailable")
+			return
+		}
+		commitCtx, cancelCommit := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancelCommit()
+		committed, commitErr := d.EnrollmentTransactions.CommitExistingOwnerAgentHeartbeat(commitCtx, req)
+		if commitErr != nil {
+			if errors.Is(commitErr, persistence.ErrNotFound) {
+				servicehttp.WriteError(w, http.StatusConflict, "agent asset must already be enrolled")
+			} else {
+				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to record heartbeat")
+			}
+			return
+		}
+		assetEntry = &committed
+		d.processCommittedHeartbeatSideEffects(committed, req)
+	} else {
+		assetEntry, err = d.ProcessHeartbeatRequest(req)
+	}
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to record heartbeat")
 		return
@@ -114,10 +175,14 @@ func (d *Deps) ProcessHeartbeatRequest(req assets.HeartbeatRequest) (*assets.Ass
 		return nil, fmt.Errorf("upsert asset heartbeat: %w", err)
 	}
 
+	d.processCommittedHeartbeatSideEffects(assetEntry, req)
+	return &assetEntry, nil
+}
+
+func (d *Deps) processCommittedHeartbeatSideEffects(assetEntry assets.Asset, req assets.HeartbeatRequest) {
 	if d.PersistCanonicalHeartbeatFn != nil {
 		d.PersistCanonicalHeartbeatFn(assetEntry, req)
 	}
-
 	samples := telemetry.SamplesFromHeartbeatMetadata(assetEntry.ID, assetEntry.LastSeenAt, req.Metadata)
 	if len(samples) > 0 && d.TelemetryStore != nil {
 		if err := d.TelemetryStore.AppendSamples(context.Background(), samples); err != nil {
@@ -125,7 +190,6 @@ func (d *Deps) ProcessHeartbeatRequest(req assets.HeartbeatRequest) (*assets.Ass
 		}
 	}
 
-	return &assetEntry, nil
 }
 
 // Validation length constants for heartbeat fields. These mirror the constants

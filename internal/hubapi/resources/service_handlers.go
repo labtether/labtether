@@ -118,6 +118,9 @@ func (d *Deps) handleServiceAction(w http.ResponseWriter, r *http.Request, asset
 		servicehttp.WriteError(w, http.StatusBadRequest, "invalid action: must be one of start, stop, restart, enable, disable")
 		return
 	}
+	if !d.enforceAssetActionGuard(w, assetID) {
+		return
+	}
 
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {

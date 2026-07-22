@@ -3,10 +3,14 @@ package fileproto
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -171,6 +175,109 @@ func TestWebDAVConnectNilExtraConfig(t *testing.T) {
 	// Should default to HTTPS on port 443.
 	if !contains(err.Error(), "https://192.0.2.1:443") {
 		t.Errorf("expected https://192.0.2.1:443 in error, got: %v", err)
+	}
+}
+
+type webDAVRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f webDAVRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func webDAVTestClient(transport http.RoundTripper) *WebDAVClient {
+	return &WebDAVClient{
+		config:    ConnectionConfig{Username: "user", Secret: "pass"},
+		baseURL:   "http://webdav.test",
+		transport: transport,
+	}
+}
+
+func TestWebDAVListRejectsOversizeMultistatusResponse(t *testing.T) {
+	body := `<?xml version="1.0"?><d:multistatus xmlns:d="DAV:"><d:response><d:href>/` +
+		strings.Repeat("x", MaxListResponseBytes) +
+		`</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>`
+	client := webDAVTestClient(webDAVRoundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusMultiStatus,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(body)),
+		}, nil
+	}))
+
+	_, err := client.List(context.Background(), "/", true)
+	if !errors.Is(err, ErrResponseTooLarge) {
+		t.Fatalf("expected ErrResponseTooLarge, got %v", err)
+	}
+}
+
+func TestWebDAVListHonorsCallerDeadline(t *testing.T) {
+	client := webDAVTestClient(webDAVRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		<-req.Context().Done()
+		return nil, req.Context().Err()
+	}))
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer cancel()
+
+	_, err := client.List(ctx, "/", true)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected context deadline, got %v", err)
+	}
+}
+
+type webDAVFailingReader struct {
+	sent bool
+	err  error
+}
+
+func (r *webDAVFailingReader) Read(p []byte) (int, error) {
+	if !r.sent {
+		r.sent = true
+		return copy(p, "partial"), nil
+	}
+	return 0, r.err
+}
+
+func TestWebDAVWriteCleansPartialDestinationOnReadFailure(t *testing.T) {
+	sourceErr := errors.New("synthetic source failure")
+	var deleteSeen atomic.Bool
+	client := webDAVTestClient(webDAVRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		switch req.Method {
+		case http.MethodPut:
+			_, err := io.Copy(io.Discard, req.Body)
+			if err != nil {
+				return nil, err
+			}
+			return &http.Response{StatusCode: http.StatusCreated, Header: make(http.Header), Body: http.NoBody}, nil
+		case http.MethodDelete:
+			deleteSeen.Store(true)
+			return &http.Response{StatusCode: http.StatusNoContent, Header: make(http.Header), Body: http.NoBody}, nil
+		default:
+			return nil, fmt.Errorf("unexpected method %s", req.Method)
+		}
+	}))
+
+	err := client.Write(context.Background(), "/partial.bin", &webDAVFailingReader{err: sourceErr}, -1)
+	if !errors.Is(err, sourceErr) {
+		t.Fatalf("expected source error, got %v", err)
+	}
+	if !deleteSeen.Load() {
+		t.Fatal("partial destination was not deleted")
+	}
+}
+
+func TestWebDAVWriteRejectsReportedOversizeBeforeRequest(t *testing.T) {
+	var requests atomic.Int32
+	client := webDAVTestClient(webDAVRoundTripFunc(func(*http.Request) (*http.Response, error) {
+		requests.Add(1)
+		return nil, errors.New("unexpected request")
+	}))
+
+	err := client.Write(context.Background(), "/huge.bin", strings.NewReader("small"), MaxTransferBytes+1)
+	if !errors.Is(err, ErrTransferTooLarge) {
+		t.Fatalf("expected ErrTransferTooLarge, got %v", err)
+	}
+	if got := requests.Load(); got != 0 {
+		t.Fatalf("made %d requests for rejected upload", got)
 	}
 }
 

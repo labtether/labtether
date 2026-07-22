@@ -7,10 +7,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/connectors/docker"
+	"github.com/labtether/labtether/internal/hubapi/groupfeatures"
 )
 
 func TestDockerV1HandlersRequireAPIKeyScopes(t *testing.T) {
@@ -67,6 +69,46 @@ func TestDockerV1ContainerActionsRequireWriteScope(t *testing.T) {
 	deps.HandleDockerContainerActions(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 for container action without docker:write, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestDockerMutationHandlersHonorMaintenanceBlockActions(t *testing.T) {
+	coord := docker.NewCoordinator(nil)
+	coord.HandleDiscovery("agent-01", dockerDiscovery("agent-01", "abc123def456ab"))
+	var evaluated []string
+	deps := &Deps{
+		DockerCoordinator: coord,
+		EvaluateAssetGuardrails: func(assetID string, _ time.Time) (groupfeatures.GroupMaintenanceGuardrails, error) {
+			evaluated = append(evaluated, assetID)
+			return groupfeatures.GroupMaintenanceGuardrails{GroupID: "group-1", BlockActions: true}, nil
+		},
+	}
+	ctx := apiv2.ContextWithScopes(context.Background(), []string{"docker:write"})
+
+	tests := []struct {
+		name string
+		path string
+		run  func(http.ResponseWriter, *http.Request)
+		want string
+	}{
+		{name: "host", path: "/api/v1/docker/hosts/agent-01/action", run: deps.HandleDockerHostActions, want: "agent-01"},
+		{name: "container", path: "/api/v1/docker/containers/docker-ct-agent-01-abc123def456/action", run: deps.HandleDockerContainerActions, want: "docker-ct-agent-01-abc123def456"},
+		{name: "stack", path: "/api/v1/docker/stacks/docker-stack-agent-01-lab/action", run: deps.HandleDockerStackActions, want: "docker-stack-agent-01-lab"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			evaluated = nil
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, test.path, strings.NewReader(`{"action":"restart"}`)).WithContext(ctx)
+			test.run(recorder, request)
+			if recorder.Code != http.StatusLocked {
+				t.Fatalf("status = %d, want 423: %s", recorder.Code, recorder.Body.String())
+			}
+			if len(evaluated) != 1 || evaluated[0] != test.want {
+				t.Fatalf("evaluated assets = %+v, want [%s]", evaluated, test.want)
+			}
+		})
 	}
 }
 

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -11,13 +13,28 @@ import (
 
 	"github.com/labtether/labtether/internal/assets"
 	actionspkg "github.com/labtether/labtether/internal/hubapi/actionspkg"
+	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/policy"
 )
 
 // --- Saved Actions ---
 
+func seedSavedActionAsset(t *testing.T, s *apiServer, assetID string) {
+	t.Helper()
+	if _, err := s.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: assetID,
+		Name:    assetID,
+		Source:  "agent",
+		Type:    "host",
+		Status:  "online",
+	}); err != nil {
+		t.Fatalf("seed saved-action asset %q: %v", assetID, err)
+	}
+}
+
 func TestHandleV2SavedActions_Create(t *testing.T) {
 	s := newTestAPIServer(t)
+	seedSavedActionAsset(t, s, "host-01")
 
 	body := `{"name":"restart-web","steps":[{"name":"restart nginx","command":"systemctl restart nginx","target":"host-01"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/actions", strings.NewReader(body))
@@ -85,6 +102,7 @@ func TestHandleV2SavedActions_Create_MissingSteps(t *testing.T) {
 
 func TestHandleV2SavedActions_List(t *testing.T) {
 	s := newTestAPIServer(t)
+	seedSavedActionAsset(t, s, "host-01")
 
 	// Create one first.
 	createBody := `{"name":"my-action","steps":[{"name":"step1","command":"uptime","target":"host-01"}]}`
@@ -122,6 +140,7 @@ func TestHandleV2SavedActions_List(t *testing.T) {
 
 func TestHandleV2SavedActions_ListScopesToActor(t *testing.T) {
 	s := newTestAPIServer(t)
+	seedSavedActionAsset(t, s, "host-01")
 
 	for _, actorID := range []string{"owner-a", "owner-b"} {
 		req := httptest.NewRequest(http.MethodPost, "/api/v2/actions", strings.NewReader(
@@ -163,6 +182,7 @@ func TestHandleV2SavedActions_ListScopesToActor(t *testing.T) {
 
 func TestHandleV2SavedActions_ListSupportsLimitAndOffset(t *testing.T) {
 	s := newTestAPIServer(t)
+	seedSavedActionAsset(t, s, "host-01")
 
 	for i := 0; i < 3; i++ {
 		req := httptest.NewRequest(http.MethodPost, "/api/v2/actions", strings.NewReader(
@@ -225,6 +245,7 @@ func TestHandleV2SavedActions_Create_ValidatesSteps(t *testing.T) {
 
 func TestHandleV2SavedActionActions_Delete(t *testing.T) {
 	s := newTestAPIServer(t)
+	seedSavedActionAsset(t, s, "host-01")
 
 	// Create one first.
 	createBody := `{"name":"to-delete","steps":[{"name":"step1","command":"uptime","target":"host-01"}]}`
@@ -276,6 +297,7 @@ func TestHandleV2SavedActionActions_Delete(t *testing.T) {
 
 func TestHandleV2SavedActionActions_DeleteOtherActorReturnsNotFound(t *testing.T) {
 	s := newTestAPIServer(t)
+	seedSavedActionAsset(t, s, "host-01")
 
 	createReq := httptest.NewRequest(http.MethodPost, "/api/v2/actions", strings.NewReader(
 		`{"name":"owner-action","steps":[{"name":"step1","command":"uptime","target":"host-01"}]}`,
@@ -306,6 +328,7 @@ func TestHandleV2SavedActionActions_DeleteOtherActorReturnsNotFound(t *testing.T
 
 func TestHandleV2SavedActionActions_GetOtherActorReturnsNotFound(t *testing.T) {
 	s := newTestAPIServer(t)
+	seedSavedActionAsset(t, s, "host-01")
 
 	createReq := httptest.NewRequest(http.MethodPost, "/api/v2/actions", strings.NewReader(
 		`{"name":"owner-action","steps":[{"name":"step1","command":"uptime","target":"host-01"}]}`,
@@ -336,6 +359,7 @@ func TestHandleV2SavedActionActions_GetOtherActorReturnsNotFound(t *testing.T) {
 
 func TestHandleV2SavedActionActions_RunAppliesPolicyChecksPerStep(t *testing.T) {
 	s := newTestAPIServer(t)
+	seedSavedActionAsset(t, s, "host-01")
 
 	cfg := policy.DefaultEvaluatorConfig()
 	cfg.AllowlistMode = true
@@ -638,7 +662,111 @@ func TestHandleV2MetricsQuery_MethodNotAllowed(t *testing.T) {
 	}
 }
 
+func TestHandleV2MetricsQueryRejectsExcessiveAssetsAndWindow(t *testing.T) {
+	s := newTestAPIServer(t)
+	ids := make([]string, 0, maxMetricsQueryAssets+1)
+	for i := 0; i < maxMetricsQueryAssets+1; i++ {
+		ids = append(ids, "asset-"+strconv.Itoa(i))
+	}
+	for _, rawURL := range []string{
+		"/api/v2/metrics/query?asset_ids=" + strings.Join(ids, ",") + "&metric=cpu_percent",
+		"/api/v2/metrics/query?asset_ids=asset-1&metric=cpu_percent&from=2026-01-01T00:00:00Z&to=2026-02-01T00:00:01Z",
+		"/api/v2/metrics/query?asset_ids=asset-1&metric=not_a_supported_metric",
+	} {
+		req := httptest.NewRequest(http.MethodGet, rawURL, nil)
+		req = req.WithContext(contextWithPrincipal(req.Context(), "admin", "admin"))
+		rec := httptest.NewRecorder()
+		s.handleV2MetricsQuery(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("%s: status=%d, want 400; body=%s", rawURL, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+func TestHandleV2MetricsQueryClampsStepToBoundResponsePoints(t *testing.T) {
+	s := newTestAPIServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/metrics/query?asset_ids=asset-1&metric=cpu_percent&from=2026-07-13T00:00:00Z&to=2026-07-14T00:00:00Z&step=1s", nil)
+	req = req.WithContext(contextWithPrincipal(req.Context(), "admin", "admin"))
+	rec := httptest.NewRecorder()
+	s.handleV2MetricsQuery(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		Data struct {
+			Step string `json:"step"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	step, err := time.ParseDuration(response.Data.Step)
+	if err != nil {
+		t.Fatalf("parse step %q: %v", response.Data.Step, err)
+	}
+	minimum := metricsQueryMinimumStep(24 * time.Hour)
+	if step < minimum {
+		t.Fatalf("step=%s, want at least %s", step, minimum)
+	}
+}
+
 // ─── POST/GET /api/v2/file-transfers ──────────────────────────────────────
+
+type v2FileTransferListStore struct {
+	transfers []persistence.FileTransfer
+	actorID   string
+	status    string
+	limit     int
+	offset    int
+}
+
+func (s *v2FileTransferListStore) GetFileTransfer(_ context.Context, id string) (*persistence.FileTransfer, error) {
+	for i := range s.transfers {
+		if s.transfers[i].ID == id {
+			transfer := s.transfers[i]
+			return &transfer, nil
+		}
+	}
+	return nil, persistence.ErrNotFound
+}
+
+func (s *v2FileTransferListStore) CreateFileTransfer(_ context.Context, transfer *persistence.FileTransfer) error {
+	s.transfers = append(s.transfers, *transfer)
+	return nil
+}
+
+func (s *v2FileTransferListStore) UpdateFileTransfer(_ context.Context, transfer *persistence.FileTransfer) error {
+	for i := range s.transfers {
+		if s.transfers[i].ID == transfer.ID {
+			s.transfers[i] = *transfer
+			return nil
+		}
+	}
+	return persistence.ErrNotFound
+}
+
+func (s *v2FileTransferListStore) ListFileTransfers(_ context.Context, actorID, status string, limit, offset int) ([]persistence.FileTransfer, int, error) {
+	s.actorID = actorID
+	s.status = status
+	s.limit = limit
+	s.offset = offset
+	filtered := make([]persistence.FileTransfer, 0, len(s.transfers))
+	for _, transfer := range s.transfers {
+		if transfer.ActorID == actorID && (status == "" || transfer.Status == status) {
+			filtered = append(filtered, transfer)
+		}
+	}
+	sort.Slice(filtered, func(i, j int) bool { return filtered[i].ID > filtered[j].ID })
+	total := len(filtered)
+	if offset >= total {
+		return []persistence.FileTransfer{}, total, nil
+	}
+	return append([]persistence.FileTransfer(nil), filtered[offset:min(offset+limit, total)]...), total, nil
+}
+
+func (s *v2FileTransferListStore) ListActiveFileTransfers(context.Context) ([]persistence.FileTransfer, error) {
+	return []persistence.FileTransfer{}, nil
+}
 
 func TestHandleV2FileTransfers_GetScopeDenied(t *testing.T) {
 	s := newTestAPIServer(t)
@@ -653,14 +781,104 @@ func TestHandleV2FileTransfers_GetScopeDenied(t *testing.T) {
 	}
 }
 
-func TestHandleV2FileTransfers_GetReturns501(t *testing.T) {
+func TestHandleV2FileTransfers_GetDelegatesActorScopedFilteredPage(t *testing.T) {
 	s := newTestAPIServer(t)
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/file-transfers", nil)
-	req = req.WithContext(contextWithPrincipal(req.Context(), "admin", "admin"))
+	store := &v2FileTransferListStore{transfers: []persistence.FileTransfer{
+		{ID: "ftx_500", ActorID: "actor-b", Status: "completed"},
+		{ID: "ftx_400", ActorID: "actor-a", Status: "pending"},
+		{ID: "ftx_300", ActorID: "actor-a", Status: "completed"},
+		{ID: "ftx_100", ActorID: "actor-a", Status: "completed"},
+	}}
+	s.fileTransferStore = store
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/file-transfers?status=completed&limit=1&offset=1", nil)
+	req = req.WithContext(contextWithPrincipal(req.Context(), "actor-a", "admin"))
 	rec := httptest.NewRecorder()
 	s.handleV2FileTransfers(rec, req)
-	if rec.Code != http.StatusNotImplemented {
-		t.Fatalf("expected 501, got %d: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		RequestID string `json:"request_id"`
+		Data      struct {
+			Transfers []persistence.FileTransfer `json:"transfers"`
+			Total     int                        `json:"total"`
+			Limit     int                        `json:"limit"`
+			Offset    int                        `json:"offset"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.RequestID == "" {
+		t.Fatal("v2 response is missing request_id")
+	}
+	if response.Data.Total != 2 || response.Data.Limit != 1 || response.Data.Offset != 1 {
+		t.Fatalf("pagination=%+v", response.Data)
+	}
+	if len(response.Data.Transfers) != 1 || response.Data.Transfers[0].ID != "ftx_100" {
+		t.Fatalf("transfers=%+v, want second matching actor-a record", response.Data.Transfers)
+	}
+	if strings.Contains(rec.Body.String(), "ftx_500") || strings.Contains(rec.Body.String(), "actor-a") || strings.Contains(rec.Body.String(), "actor-b") {
+		t.Fatalf("v2 response disclosed actor data: %s", rec.Body.String())
+	}
+	if store.actorID != "actor-a" || store.status != "completed" || store.limit != 1 || store.offset != 1 {
+		t.Fatalf("delegated query actor=%q status=%q limit=%d offset=%d", store.actorID, store.status, store.limit, store.offset)
+	}
+}
+
+func TestHandleV2FileTransfers_GetRejectsOutOfBoundsPagination(t *testing.T) {
+	s := newTestAPIServer(t)
+	store := &v2FileTransferListStore{}
+	s.fileTransferStore = store
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/file-transfers?limit=101", nil)
+	req = req.WithContext(contextWithPrincipal(req.Context(), "actor-a", "admin"))
+	rec := httptest.NewRecorder()
+
+	s.handleV2FileTransfers(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if store.actorID != "" {
+		t.Fatalf("invalid pagination reached persistence for actor %q", store.actorID)
+	}
+}
+
+func TestV2OpenAPIFileTransferListContractIsImplementedAndBounded(t *testing.T) {
+	var document struct {
+		Paths map[string]map[string]any `json:"paths"`
+	}
+	if err := json.Unmarshal([]byte(v2OpenAPISpec), &document); err != nil {
+		t.Fatalf("decode OpenAPI: %v", err)
+	}
+	operation, ok := document.Paths["/api/v2/file-transfers"]["get"].(map[string]any)
+	if !ok {
+		t.Fatal("GET /api/v2/file-transfers missing from OpenAPI")
+	}
+	responses, ok := operation["responses"].(map[string]any)
+	if !ok || responses["200"] == nil || responses["501"] != nil {
+		t.Fatalf("responses=%v, want implemented 200 contract without 501", operation["responses"])
+	}
+	parameters, ok := operation["parameters"].([]any)
+	if !ok || len(parameters) != 3 {
+		t.Fatalf("parameters=%v, want status, limit, and offset", operation["parameters"])
+	}
+	seen := make(map[string]map[string]any, len(parameters))
+	for _, rawParameter := range parameters {
+		parameter, _ := rawParameter.(map[string]any)
+		name, _ := parameter["name"].(string)
+		schema, _ := parameter["schema"].(map[string]any)
+		seen[name] = schema
+	}
+	if seen["limit"]["maximum"] != float64(persistence.FileTransferListMaxLimit) || seen["offset"]["maximum"] != float64(persistence.FileTransferListMaxOffset) {
+		t.Fatalf("pagination schemas=%v, want limits %d/%d", seen, persistence.FileTransferListMaxLimit, persistence.FileTransferListMaxOffset)
+	}
+	statusEnum, _ := seen["status"]["enum"].([]any)
+	if len(statusEnum) != 4 {
+		t.Fatalf("status schema=%v, want four persisted states", seen["status"])
+	}
+	if description, _ := operation["description"].(string); !strings.Contains(description, "authenticated actor") || !strings.Contains(description, "newest-first") {
+		t.Fatalf("description=%q is missing isolation or ordering semantics", description)
 	}
 }
 
@@ -965,6 +1183,207 @@ func TestHandleV2OpenAPI_OK(t *testing.T) {
 	}
 	if doc["paths"] == nil {
 		t.Error("expected paths object in spec")
+	}
+}
+
+func TestHandleV2OpenAPIAdvertisesImplementedAssetSubpaths(t *testing.T) {
+	var doc struct {
+		Paths map[string]map[string]json.RawMessage `json:"paths"`
+	}
+	if err := json.Unmarshal([]byte(v2OpenAPISpec), &doc); err != nil {
+		t.Fatalf("openapi spec is not valid JSON: %v", err)
+	}
+
+	expected := map[string][]string{
+		"/api/v2/assets/{id}/exec":                    {"post"},
+		"/api/v2/assets/{id}/files":                   {"get", "delete"},
+		"/api/v2/assets/{id}/files/read":              {"get"},
+		"/api/v2/assets/{id}/files/write":             {"post"},
+		"/api/v2/assets/{id}/files/mkdir":             {"post"},
+		"/api/v2/assets/{id}/files/rename":            {"post"},
+		"/api/v2/assets/{id}/files/copy":              {"post"},
+		"/api/v2/assets/{id}/processes":               {"get"},
+		"/api/v2/assets/{id}/processes/kill":          {"post"},
+		"/api/v2/assets/{id}/services":                {"get"},
+		"/api/v2/assets/{id}/services/{name}/start":   {"post"},
+		"/api/v2/assets/{id}/services/{name}/stop":    {"post"},
+		"/api/v2/assets/{id}/services/{name}/restart": {"post"},
+		"/api/v2/assets/{id}/network":                 {"get"},
+		"/api/v2/assets/{id}/disks":                   {"get"},
+		"/api/v2/assets/{id}/packages":                {"get"},
+		"/api/v2/assets/{id}/packages/upgradable":     {"get"},
+		"/api/v2/assets/{id}/packages/install":        {"post"},
+		"/api/v2/assets/{id}/packages/update":         {"post"},
+		"/api/v2/assets/{id}/packages/upgrade":        {"post"},
+		"/api/v2/assets/{id}/cron":                    {"get"},
+		"/api/v2/assets/{id}/users":                   {"get"},
+		"/api/v2/assets/{id}/logs":                    {"get"},
+	}
+	for path, methods := range expected {
+		pathItem, ok := doc.Paths[path]
+		if !ok {
+			t.Errorf("implemented asset path %q is absent from OpenAPI", path)
+			continue
+		}
+		for _, method := range methods {
+			if _, ok := pathItem[method]; !ok {
+				t.Errorf("implemented asset operation %s %s is absent from OpenAPI", method, path)
+			}
+		}
+	}
+}
+
+func TestHandleV2OpenAPIMatchesImplementedAdvancedMethods(t *testing.T) {
+	var doc struct {
+		Paths map[string]map[string]json.RawMessage `json:"paths"`
+	}
+	if err := json.Unmarshal([]byte(v2OpenAPISpec), &doc); err != nil {
+		t.Fatalf("openapi spec is not valid JSON: %v", err)
+	}
+
+	expected := map[string][]string{
+		"/api/v2/assets/{id}":                       {"delete", "get", "patch", "put"},
+		"/api/v2/groups/{id}":                       {"delete", "get", "patch", "put"},
+		"/api/v2/docker/hosts":                      {"get"},
+		"/api/v2/docker/hosts/{id}":                 {"get"},
+		"/api/v2/docker/containers/{id}/action":     {"post"},
+		"/api/v2/docker/stacks/{id}/action":         {"post"},
+		"/api/v2/updates/plans/{id}":                {"delete", "get"},
+		"/api/v2/updates/plans/{id}/execute":        {"post"},
+		"/api/v2/updates/runs/{id}":                 {"delete", "get"},
+		"/api/v2/alerts/{id}":                       {"delete", "get"},
+		"/api/v2/alerts/{id}/ack":                   {"post"},
+		"/api/v2/alerts/{id}/resolve":               {"post"},
+		"/api/v2/alerts/rules/{id}":                 {"delete", "get", "patch", "put"},
+		"/api/v2/incidents/{id}":                    {"delete", "get", "patch", "put"},
+		"/api/v2/connectors/{id}/test":              {"post"},
+		"/api/v2/connectors/{id}/discover":          {"get"},
+		"/api/v2/connectors/{id}/health":            {"get"},
+		"/api/v2/connectors/{id}/actions":           {"get"},
+		"/api/v2/credentials/profiles/{id}":         {"delete", "get"},
+		"/api/v2/credentials/profiles/{id}/rotate":  {"post"},
+		"/api/v2/terminal/snippets/{id}":            {"delete", "get", "put"},
+		"/api/v2/agents/{id}/settings":              {"get", "patch"},
+		"/api/v2/hub/tailscale":                     {"get", "post"},
+		"/api/v2/web-services":                      {"get", "post"},
+		"/api/v2/web-services/{id}":                 {"delete", "patch", "put"},
+		"/api/v2/collectors/{id}":                   {"delete", "get", "patch", "put"},
+		"/api/v2/collectors/{id}/run":               {"post"},
+		"/api/v2/notifications/channels":            {"get", "post"},
+		"/api/v2/synthetic-checks/{id}":             {"delete", "get", "patch", "put"},
+		"/api/v2/discovery/proposals/{id}/accept":   {"post"},
+		"/api/v2/discovery/proposals/{id}/dismiss":  {"post"},
+		"/api/v2/dependencies/{id}":                 {"delete", "get"},
+		"/api/v2/dependencies/batch":                {"get"},
+		"/api/v2/dependencies/graph":                {"get"},
+		"/api/v2/edges":                             {"get", "post"},
+		"/api/v2/edges/{id}":                        {"delete", "get", "patch"},
+		"/api/v2/edges/tree":                        {"get"},
+		"/api/v2/edges/ancestors":                   {"get"},
+		"/api/v2/composites":                        {"post"},
+		"/api/v2/composites/{id}":                   {"get", "patch"},
+		"/api/v2/composites/{id}/members/{assetId}": {"delete"},
+		"/api/v2/topology/zones":                    {"post"},
+		"/api/v2/topology/zones/{id}":               {"delete", "put"},
+		"/api/v2/topology/zones/{id}/members":       {"put"},
+		"/api/v2/topology/zones/reorder":            {"put"},
+		"/api/v2/topology/connections":              {"post"},
+		"/api/v2/topology/connections/{id}":         {"delete", "put"},
+		"/api/v2/topology/viewport":                 {"put"},
+		"/api/v2/failover-pairs/{id}":               {"delete", "get", "patch", "put"},
+		"/api/v2/logs/views/{id}":                   {"delete", "get", "patch", "put"},
+		"/api/v2/settings/prometheus":               {"get", "patch"},
+		"/api/v2/keys/{id}":                         {"delete", "get", "patch"},
+	}
+
+	for path, want := range expected {
+		pathItem, ok := doc.Paths[path]
+		if !ok {
+			t.Errorf("implemented path %q is absent from OpenAPI", path)
+			continue
+		}
+		got := make([]string, 0, len(pathItem))
+		for key := range pathItem {
+			if key != "parameters" {
+				got = append(got, key)
+			}
+		}
+		sort.Strings(got)
+		sort.Strings(want)
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Errorf("OpenAPI methods for %s = %v, want %v", path, got, want)
+		}
+	}
+
+	for _, path := range []string{
+		"/api/v2/agents/{id}",
+		"/api/v2/connectors/{id}",
+		"/api/v2/discovery/proposals/{id}",
+		"/api/v2/docker/stacks/{id}",
+	} {
+		if _, ok := doc.Paths[path]; ok {
+			t.Errorf("OpenAPI still advertises unimplemented path %q", path)
+		}
+	}
+}
+
+func TestHandleV2WebServicesPostCreatesManualService(t *testing.T) {
+	s := newTestAPIServer(t)
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/web-services", strings.NewReader(
+		`{"name":"Lab UI","category":"Infrastructure","url":"https://lab.example.test"}`,
+	))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(contextWithPrincipal(req.Context(), "admin", "admin"))
+	rec := httptest.NewRecorder()
+
+	s.handleV2WebServices(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"name":"Lab UI"`) {
+		t.Fatalf("created service missing from response: %s", rec.Body.String())
+	}
+}
+
+func TestHandleV2WebServicesRejectsUnadvertisedMethods(t *testing.T) {
+	s := newTestAPIServer(t)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v2/web-services", nil)
+	req = req.WithContext(contextWithPrincipal(req.Context(), "admin", "admin"))
+	rec := httptest.NewRecorder()
+
+	s.handleV2WebServices(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleV2HubStatusRejectsMutatingMethods(t *testing.T) {
+	s := newTestAPIServer(t)
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/hub/status", nil)
+	req = req.WithContext(contextWithPrincipal(req.Context(), "admin", "admin"))
+	rec := httptest.NewRecorder()
+
+	s.handleV2HubStatus(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleV2HubTLSDeleteRequiresAdminScope(t *testing.T) {
+	s := newTestAPIServer(t)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v2/hub/tls", nil)
+	ctx := contextWithPrincipal(req.Context(), "admin", "admin")
+	ctx = contextWithScopes(ctx, []string{"hub:read"})
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	s.handleV2HubTLS(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

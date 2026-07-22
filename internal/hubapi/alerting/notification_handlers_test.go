@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/labtether/labtether/internal/hubapi/testutil"
 	"github.com/labtether/labtether/internal/notifications"
@@ -56,5 +57,30 @@ func TestValidateCreateRouteRequestRejectsUnsupportedGroupingAndRepeatSettings(t
 	})
 	if err == nil {
 		t.Fatal("expected unsupported grouping settings to be rejected")
+	}
+}
+
+func TestNotificationChannelTestIsRateLimitedBeforeDelivery(t *testing.T) {
+	deps := newTestAlertingDeps(t)
+	var gotBucket string
+	var gotLimit int
+	var gotWindow time.Duration
+	deps.EnforceRateLimit = func(w http.ResponseWriter, _ *http.Request, bucket string, limit int, window time.Duration) bool {
+		gotBucket = bucket
+		gotLimit = limit
+		gotWindow = window
+		http.Error(w, "rate limited", http.StatusTooManyRequests)
+		return false
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/notifications/channels/channel-1/test", nil)
+	rec := httptest.NewRecorder()
+	deps.HandleNotificationChannelTest(rec, req)
+
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("test status = %d, want %d", rec.Code, http.StatusTooManyRequests)
+	}
+	if gotBucket != "notifications.channels.test" || gotLimit != 30 || gotWindow != time.Minute {
+		t.Fatalf("rate limit = %q %d %s, want notifications.channels.test 30 1m", gotBucket, gotLimit, gotWindow)
 	}
 }

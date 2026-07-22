@@ -185,16 +185,20 @@ func (m *MemoryUpdateStore) CreateUpdatePlan(req updates.CreatePlanRequest) (upd
 		defaultDryRun = *req.DefaultDryRun
 	}
 
-	scopes := sanitizeStringSlice(req.Scopes)
-	if len(scopes) == 0 {
-		scopes = append([]string(nil), updates.DefaultScopes...)
+	scopes, err := updates.NormalizeExecutableScopes(req.Scopes)
+	if err != nil {
+		return updates.Plan{}, err
+	}
+	targets, err := updates.NormalizeTargets(req.Targets)
+	if err != nil {
+		return updates.Plan{}, err
 	}
 
 	plan := updates.Plan{
 		ID:            idgen.New("upln"),
 		Name:          strings.TrimSpace(req.Name),
 		Description:   strings.TrimSpace(req.Description),
-		Targets:       sanitizeStringSlice(req.Targets),
+		Targets:       targets,
 		Scopes:        scopes,
 		DefaultDryRun: defaultDryRun,
 		CreatedAt:     now,
@@ -243,8 +247,21 @@ func (m *MemoryUpdateStore) GetUpdatePlan(id string) (updates.Plan, bool, error)
 func (m *MemoryUpdateStore) DeleteUpdatePlan(id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	id = strings.TrimSpace(id)
 	if _, ok := m.plans[id]; !ok {
 		return ErrNotFound
+	}
+	for _, run := range m.runs {
+		if run.PlanID == id && (run.Status == updates.StatusQueued || run.Status == updates.StatusRunning) {
+			return ErrUpdatePlanActive
+		}
+	}
+	// Match PostgreSQL's ON DELETE CASCADE behavior so the in-memory store
+	// cannot retain terminal runs whose plan no longer exists.
+	for runID, run := range m.runs {
+		if run.PlanID == id {
+			delete(m.runs, runID)
+		}
 	}
 	delete(m.plans, id)
 	return nil
@@ -274,6 +291,10 @@ func (m *MemoryUpdateStore) CreateUpdateRun(plan updates.Plan, req updates.Execu
 	}
 
 	m.mu.Lock()
+	if _, ok := m.plans[plan.ID]; !ok {
+		m.mu.Unlock()
+		return updates.Run{}, ErrNotFound
+	}
 	m.runs[run.ID] = run
 	m.mu.Unlock()
 	return cloneUpdateRun(run), nil

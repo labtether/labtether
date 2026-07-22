@@ -11,8 +11,13 @@ import (
 	"github.com/labtether/labtether/internal/updates"
 )
 
-// DefaultUpdateAgentTimeout is the default timeout for agent-executed update jobs.
-const DefaultUpdateAgentTimeout = 10 * time.Minute
+const (
+	// DefaultUpdateAgentTimeout is the default timeout for agent-executed update jobs.
+	DefaultUpdateAgentTimeout = 10 * time.Minute
+	// DefaultUpdatePreviewTimeout bounds the read-only inventory request used by
+	// dry runs independently from the much longer live package-update timeout.
+	DefaultUpdatePreviewTimeout = 30 * time.Second
+)
 
 // UpdateExecutorDeps holds the narrow set of dependencies required for
 // executing update scopes against connected agents. It is separate from
@@ -28,6 +33,11 @@ type UpdateExecutorDeps struct {
 	// ExecuteUpdateViaAgent dispatches an update command to a connected agent.
 	// The signature matches agents.Deps.ExecuteUpdateViaAgent.
 	ExecuteUpdateViaAgent func(jobID, target, mode string, packages []string, timeout time.Duration, force bool) agentmgr.CommandResultData
+
+	// PreviewOSPackageUpdatesViaAgent requests a read-only, validated package
+	// update inventory from the connected agent. It must never dispatch an
+	// update.request or apply changes.
+	PreviewOSPackageUpdatesViaAgent func(requestID, target string, timeout time.Duration) agentmgr.CommandResultData
 }
 
 // ExecuteUpdateScope dispatches a single update scope for a target asset.
@@ -35,7 +45,7 @@ func (d *UpdateExecutorDeps) ExecuteUpdateScope(job updates.Job, target, scope s
 	entry := updates.RunResultEntry{
 		Target: target,
 		Scope:  scope,
-		Status: updates.StatusSucceeded,
+		Status: updates.StatusFailed,
 	}
 
 	normalizedScope := strings.ToLower(strings.TrimSpace(scope))
@@ -43,11 +53,7 @@ func (d *UpdateExecutorDeps) ExecuteUpdateScope(job updates.Job, target, scope s
 	case updates.ScopeOSPackages:
 		return d.executeOSPackageUpdateScope(job, target, scope)
 	default:
-		if job.DryRun {
-			entry.Summary = fmt.Sprintf("dry-run validated %s on %s", scope, target)
-		} else {
-			entry.Summary = fmt.Sprintf("scope %s is not implemented yet on %s; no changes applied", scope, target)
-		}
+		entry.Summary = fmt.Sprintf("update scope %q is not supported; no changes applied to %s", normalizedScope, target)
 		return entry
 	}
 }
@@ -88,11 +94,33 @@ func (d *UpdateExecutorDeps) executeOSPackageUpdateScope(job updates.Job, target
 	}
 
 	if job.DryRun {
+		if d.PreviewOSPackageUpdatesViaAgent == nil {
+			entry.Summary = "package update preview unavailable; no changes applied"
+			return entry
+		}
+		requestID := idgen.New("updpreview")
+		result := d.PreviewOSPackageUpdatesViaAgent(requestID, target, DefaultUpdatePreviewTimeout)
+		entry.Summary = SummarizeUpdateOutput(result.Output)
+		if updates.NormalizeStatus(result.Status) != updates.StatusSucceeded {
+			entry.Status = updates.StatusFailed
+			if entry.Summary == "" {
+				entry.Summary = fmt.Sprintf("package update preview failed on %s; no changes applied", target)
+			}
+			return entry
+		}
+		if entry.Summary == "" {
+			entry.Status = updates.StatusFailed
+			entry.Summary = fmt.Sprintf("agent returned an empty package update preview for %s; no changes applied", target)
+			return entry
+		}
 		entry.Status = updates.StatusSucceeded
-		entry.Summary = fmt.Sprintf("dry-run validated linux package update path on %s", target)
 		return entry
 	}
 
+	if d.ExecuteUpdateViaAgent == nil {
+		entry.Summary = "package update executor unavailable; no changes applied"
+		return entry
+	}
 	requestID := idgen.New("updreq")
 	result := d.ExecuteUpdateViaAgent(requestID, target, updates.ScopeOSPackages, nil, DefaultUpdateAgentTimeout, false)
 	status := updates.NormalizeStatus(result.Status)

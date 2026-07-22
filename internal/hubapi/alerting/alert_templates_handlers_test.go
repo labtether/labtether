@@ -2,12 +2,14 @@ package alerting
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/labtether/labtether/internal/alerts"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/hubapi/collectors"
 )
@@ -71,6 +73,7 @@ func TestHandleAlertTemplateActionsEnableCreatesAndDeDupeRules(t *testing.T) {
 		"/alerts/templates/mobile.reconnect_storm/enable",
 		bytes.NewReader(requestBody),
 	)
+	req = req.WithContext(apiv2.ContextWithPrincipal(context.Background(), "operator-1", "operator"))
 	rec := httptest.NewRecorder()
 
 	deps.HandleAlertTemplateActions(rec, req)
@@ -100,6 +103,9 @@ func TestHandleAlertTemplateActionsEnableCreatesAndDeDupeRules(t *testing.T) {
 	}
 	if created.Rule.Metadata["template_id"] != "mobile.reconnect_storm" {
 		t.Fatalf("expected metadata template_id, got %q", created.Rule.Metadata["template_id"])
+	}
+	if created.Rule.CreatedBy != "operator-1" {
+		t.Fatalf("created_by=%q, want authenticated actor", created.Rule.CreatedBy)
 	}
 
 	// Second call should reuse the existing template-backed rule.

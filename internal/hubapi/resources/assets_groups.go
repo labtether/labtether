@@ -489,6 +489,8 @@ func requireAssetActionScope(w http.ResponseWriter, r *http.Request, parts []str
 
 	if len(parts) >= 3 {
 		switch {
+		case parts[1] == "desktop" && parts[2] == "credentials" && len(parts) >= 4 && parts[3] == "retrieve":
+			required = "credentials:use"
 		case parts[1] == "terminal" && parts[2] == "config":
 			if isSafeHTTPMethod(r.Method) {
 				required = "terminal:read"

@@ -99,6 +99,7 @@ func NewProxmoxDialer(skipVerify bool, caPEM string) (*websocket.Dialer, error) 
 	}
 	return &websocket.Dialer{
 		HandshakeTimeout: 15 * time.Second,
+		NetDialContext:   securityruntime.OutboundTCPDialContext(15 * time.Second),
 		TLSClientConfig:  tlsConfig,
 		Subprotocols:     []string{"binary"},
 	}, nil

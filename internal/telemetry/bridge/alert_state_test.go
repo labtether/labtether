@@ -11,6 +11,19 @@ type mockAlertStateSource struct {
 	entries []AlertStateEntry
 }
 
+type mockAlertStateSnapshotSource struct {
+	entries     []AlertStateEntry
+	evaluations []AlertRuleEvalEntry
+}
+
+func (m *mockAlertStateSnapshotSource) AllAlertStateMetrics() []AlertStateEntry {
+	panic("snapshot-capable source must not use the legacy aggregate path")
+}
+
+func (m *mockAlertStateSnapshotSource) AllAlertMetricsSnapshot() ([]AlertStateEntry, []AlertRuleEvalEntry) {
+	return m.entries, m.evaluations
+}
+
 func (m *mockAlertStateSource) AllAlertStateMetrics() []AlertStateEntry {
 	return m.entries
 }
@@ -40,11 +53,14 @@ func TestAlertStateBridgeCollect(t *testing.T) {
 
 	byKey := make(map[string]telemetry.MetricSample, len(samples))
 	for _, s := range samples {
-		byKey[s.AssetID+":"+s.Metric] = s
+		if s.AssetID != "" {
+			t.Fatalf("hub metric unexpectedly referenced asset %q", s.AssetID)
+		}
+		byKey[s.Scope+":"+s.Metric] = s
 	}
 
-	assertSample(t, byKey, "hub-alerts", telemetry.MetricAlertsFiring, "count", 3)
-	assertSample(t, byKey, "hub-alerts", telemetry.MetricAlertsRules, "count", 12)
+	assertSample(t, byKey, telemetry.MetricScopeHubAlerts, telemetry.MetricAlertsFiring, "count", 3)
+	assertSample(t, byKey, telemetry.MetricScopeHubAlerts, telemetry.MetricAlertsRules, "count", 12)
 }
 
 func TestAlertStateBridgeZeroValues(t *testing.T) {
@@ -67,11 +83,14 @@ func TestAlertStateBridgeZeroValues(t *testing.T) {
 
 	byKey := make(map[string]telemetry.MetricSample, len(samples))
 	for _, s := range samples {
-		byKey[s.AssetID+":"+s.Metric] = s
+		if s.AssetID != "" {
+			t.Fatalf("hub metric unexpectedly referenced asset %q", s.AssetID)
+		}
+		byKey[s.Scope+":"+s.Metric] = s
 	}
 
-	assertSample(t, byKey, "hub-alerts", telemetry.MetricAlertsFiring, "count", 0)
-	assertSample(t, byKey, "hub-alerts", telemetry.MetricAlertsRules, "count", 0)
+	assertSample(t, byKey, telemetry.MetricScopeHubAlerts, telemetry.MetricAlertsFiring, "count", 0)
+	assertSample(t, byKey, telemetry.MetricScopeHubAlerts, telemetry.MetricAlertsRules, "count", 0)
 }
 
 func TestAlertStateBridgeEmpty(t *testing.T) {
@@ -81,5 +100,37 @@ func TestAlertStateBridgeEmpty(t *testing.T) {
 	samples := b.Collect()
 	if len(samples) != 0 {
 		t.Fatalf("expected 0 samples from empty source, got %d", len(samples))
+	}
+}
+
+func TestAlertStateBridgeSnapshotKeepsDuplicateRuleNamesDistinct(t *testing.T) {
+	source := &mockAlertStateSnapshotSource{
+		entries: []AlertStateEntry{{FiringCount: 501, RulesCount: 502}},
+		evaluations: []AlertRuleEvalEntry{
+			{RuleID: "rule-a", RuleName: "duplicate", DurationMS: 8},
+			{RuleID: "rule-b", RuleName: "duplicate", DurationMS: 9},
+		},
+	}
+	samples := NewAlertStateBridge(source).Collect()
+	if len(samples) != 4 {
+		t.Fatalf("sample count = %d, want 4", len(samples))
+	}
+	byRuleID := make(map[string]telemetry.MetricSample)
+	for _, sample := range samples {
+		if sample.Metric != telemetry.MetricAlertEvaluationDurationMs {
+			continue
+		}
+		byRuleID[sample.Labels["rule_id"]] = sample
+	}
+	if len(byRuleID) != 2 || byRuleID["rule-a"].Value != 8 || byRuleID["rule-b"].Value != 9 {
+		t.Fatalf("duplicate-name rule samples collapsed or changed: %+v", byRuleID)
+	}
+	for _, sample := range byRuleID {
+		if sample.Labels["rule_name"] != "duplicate" {
+			t.Fatalf("rule_name label changed: %+v", sample.Labels)
+		}
+		if _, err := telemetry.NormalizeHubMetricSample(sample); err != nil {
+			t.Fatalf("bridge emitted invalid hub sample: %v", err)
+		}
 	}
 }

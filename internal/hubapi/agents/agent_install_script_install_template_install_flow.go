@@ -130,25 +130,25 @@ else
   fi
 fi
 
-if [[ -n "${RELEASE_JSON}" ]]; then
-  EXPECTED_SHA256=$(echo "${RELEASE_JSON}" | grep -o '"sha256":"[^"]*"' | head -1 | cut -d'"' -f4)
-  if [[ -n "${EXPECTED_SHA256}" ]]; then
-    ACTUAL_SHA256=$(sha256sum "${TMP_BINARY}" 2>/dev/null | awk '{print $1}')
-    if [[ -z "${ACTUAL_SHA256}" ]]; then
-      ACTUAL_SHA256=$(shasum -a 256 "${TMP_BINARY}" 2>/dev/null | awk '{print $1}')
-    fi
-    if [[ "${ACTUAL_SHA256}" != "${EXPECTED_SHA256}" ]]; then
-      error "SHA256 mismatch! Expected: ${EXPECTED_SHA256}, Got: ${ACTUAL_SHA256}"
-      rm -f "${TMP_BINARY}"
-      exit 1
-    fi
-    success "SHA256 verified"
-  else
-    warn "Could not extract checksum from release metadata, skipping verification"
-  fi
-else
-  warn "Could not fetch release metadata, skipping verification"
+if [[ -z "${RELEASE_JSON}" ]]; then
+  error "Could not fetch release metadata; refusing an unverified install."
+  exit 1
 fi
+EXPECTED_SHA256=$(echo "${RELEASE_JSON}" | grep -o '"sha256":"[^"]*"' | head -1 | cut -d'"' -f4)
+if [[ ! "${EXPECTED_SHA256}" =~ ^[a-f0-9]{64}$ ]]; then
+  error "Release metadata did not contain a valid SHA256; refusing an unverified install."
+  exit 1
+fi
+ACTUAL_SHA256=$(sha256sum "${TMP_BINARY}" 2>/dev/null | awk '{print $1}')
+if [[ -z "${ACTUAL_SHA256}" ]]; then
+  ACTUAL_SHA256=$(shasum -a 256 "${TMP_BINARY}" 2>/dev/null | awk '{print $1}')
+fi
+if [[ "${ACTUAL_SHA256}" != "${EXPECTED_SHA256}" ]]; then
+  error "SHA256 mismatch! Expected: ${EXPECTED_SHA256}, Got: ${ACTUAL_SHA256}"
+  rm -f "${TMP_BINARY}"
+  exit 1
+fi
+success "SHA256 verified"
 
 chmod 755 "${TMP_BINARY}"
 mv "${TMP_BINARY}" "${BINARY_DEST}"
@@ -161,19 +161,26 @@ step 5 "Configuring"
 mkdir -p "${CONFIG_DIR}"
 chmod 750 "${CONFIG_DIR}"
 
+if [[ -n "${ENROLLMENT_TOKEN}" ]]; then
+  printf '%%s\n' "${ENROLLMENT_TOKEN}" > "${ENROLLMENT_TOKEN_FILE}"
+  chmod 600 "${ENROLLMENT_TOKEN_FILE}"
+fi
+
 cat > "${ENV_FILE}" <<EOF
 LABTETHER_WS_URL=${WS_URL}
-LABTETHER_ENROLLMENT_TOKEN=${ENROLLMENT_TOKEN}
+LABTETHER_ENROLLMENT_TOKEN_FILE=${ENROLLMENT_TOKEN_FILE}
 LABTETHER_TOKEN_FILE=${TOKEN_FILE}
 LABTETHER_DOCKER_ENABLED=${DOCKER_ENABLED}
 LABTETHER_DOCKER_SOCKET="${DOCKER_ENDPOINT}"
 LABTETHER_DOCKER_DISCOVERY_INTERVAL=${DOCKER_DISCOVERY_INTERVAL}
 LABTETHER_FILES_ROOT_MODE=${FILES_ROOT_MODE}
 LABTETHER_AUTO_UPDATE=${AUTO_UPDATE}
+LABTETHER_LOW_POWER_MODE=${LOW_POWER_MODE}
+LABTETHER_LOG_STREAM_ENABLED=${LOG_STREAM_ENABLED}
 LABTETHER_TLS_SKIP_VERIFY=${TLS_SKIP_VERIFY}
 LABTETHER_TLS_CA_FILE=${TLS_CA_FILE}
 EOF
-chmod 640 "${ENV_FILE}"
+chmod 600 "${ENV_FILE}"
 success "Environment ${SYM_ARROW} ${ENV_FILE}"
 
 LABTETHER_WRAPPER_INSTALLED=0

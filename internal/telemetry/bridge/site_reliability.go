@@ -13,7 +13,8 @@ type SiteReliabilitySource interface {
 }
 
 // SiteReliabilityEntry holds site-level reliability score and identifying labels.
-// This is a hub-level metric (not per-asset); AssetID is fixed to "hub-reliability".
+// This is a hub-level metric (not per-asset) and is written to the validated
+// hub-reliability telemetry scope.
 type SiteReliabilityEntry struct {
 	Score  float64           // 0-100
 	Labels map[string]string // site_id, site_name
@@ -38,8 +39,8 @@ func (b *SiteReliabilityBridge) Name() string { return "site-reliability" }
 func (b *SiteReliabilityBridge) Interval() time.Duration { return 300 * time.Second }
 
 // Collect iterates all site reliability entries from the source and produces
-// 1 MetricSample per entry: site_reliability_score, keyed to the synthetic
-// asset ID "hub-reliability".
+// 1 MetricSample per entry: site_reliability_score, written to the non-asset
+// hub-reliability scope.
 func (b *SiteReliabilityBridge) Collect() []telemetry.MetricSample {
 	entries := b.source.AllSiteReliabilityMetrics()
 	if len(entries) == 0 {
@@ -51,7 +52,7 @@ func (b *SiteReliabilityBridge) Collect() []telemetry.MetricSample {
 
 	for _, e := range entries {
 		out = append(out, telemetry.MetricSample{
-			AssetID:     "hub-reliability",
+			Scope:       telemetry.MetricScopeHubReliability,
 			Metric:      telemetry.MetricSiteReliabilityScore,
 			Unit:        "score",
 			Value:       e.Score,

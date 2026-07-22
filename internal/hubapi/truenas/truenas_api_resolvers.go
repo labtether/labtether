@@ -19,7 +19,7 @@ func WriteTrueNASResolveError(w http.ResponseWriter, err error) {
 	case errors.Is(err, ErrTrueNASAssetNotFound), errors.Is(err, ErrAssetNotTrueNAS):
 		servicehttp.WriteError(w, http.StatusNotFound, err.Error())
 	default:
-		servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+		writeTrueNASError(w, http.StatusBadGateway, "truenas runtime unavailable", err)
 	}
 }
 

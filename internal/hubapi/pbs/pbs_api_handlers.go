@@ -3,15 +3,17 @@ package pbs
 import (
 	"context"
 	"fmt"
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	pbsconnector "github.com/labtether/labtether/internal/connectors/pbs"
+	"github.com/labtether/labtether/internal/hubapi/shared"
+	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
@@ -113,6 +115,9 @@ func (d *Deps) HandlePBSAssets(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusNotFound, "pbs asset path not found")
 		return
 	}
+	if !apiv2.RequireAssetAccess(w, r, assetID) {
+		return
+	}
 	if len(parts) < 2 {
 		servicehttp.WriteError(w, http.StatusNotFound, "unknown pbs asset action")
 		return
@@ -145,7 +150,7 @@ func (d *Deps) HandlePBSAssets(w http.ResponseWriter, r *http.Request) {
 
 	// Read-only legacy actions require GET.
 	switch action {
-	case "details", "groups", "verification", "certificates":
+	case "details", "verification", "certificates":
 		if r.Method != http.MethodGet {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
@@ -165,20 +170,45 @@ func (d *Deps) HandlePBSAssets(w http.ResponseWriter, r *http.Request) {
 
 	switch action {
 	case "details":
+		if !d.requirePBSAggregateAccess(w, r, asset, collectorID) {
+			return
+		}
 		response, loadErr := d.LoadPBSAssetDetails(ctx, asset, runtime)
 		if loadErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to load pbs details: "+loadErr.Error())
+			// A details refresh is a direct liveness probe of the configured PBS
+			// endpoint. Reconcile a failed probe immediately so a user does not
+			// keep seeing Online while the actionable upstream error is visible.
+			// Do not improve an already-offline state to merely unresponsive.
+			if _, heartbeatErr := d.upsertPBSAssetRefreshStatus(asset, pbsFailedRefreshStatus(asset.Status)); heartbeatErr != nil {
+				securityruntime.Logf("pbs: details failed and asset liveness reconciliation failed: %v", heartbeatErr)
+			}
+			writePBSError(w, http.StatusBadGateway, "failed to load pbs details", loadErr)
 			return
+		}
+		// A completed details request has just exercised the configured PBS
+		// credentials and a critical upstream read. Treat that as fresh liveness
+		// evidence so a user-initiated refresh can recover an asset that was
+		// previously marked offline. Failed reads reconcile to unresponsive or
+		// preserve an already-offline state in the branch above.
+		if _, heartbeatErr := d.upsertPBSAssetRefreshStatus(asset, "online"); heartbeatErr != nil {
+			securityruntime.Logf("pbs: details succeeded but asset liveness reconciliation failed: %v", heartbeatErr)
+			response.Warnings = DedupeNonEmptyWarnings(append(response.Warnings, "asset status refresh unavailable"))
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, response)
 
 	case "groups":
 		if len(parts) >= 3 && strings.TrimSpace(parts[2]) == "forget" {
+			if !d.requirePBSStoreAccess(w, r, asset, collectorID, r.URL.Query().Get("store")) {
+				return
+			}
 			d.HandlePBSGroupForget(ctx, w, r, collectorID)
 			return
 		}
 		if r.Method != http.MethodGet {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		if !d.requirePBSAggregateAccess(w, r, asset, collectorID) {
 			return
 		}
 		d.HandlePBSAssetGroups(ctx, w, asset, runtime)
@@ -188,9 +218,15 @@ func (d *Deps) HandlePBSAssets(w http.ResponseWriter, r *http.Request) {
 			sub := strings.TrimSpace(parts[2])
 			switch sub {
 			case "verify":
+				if !d.requirePBSStoreAccess(w, r, asset, collectorID, r.URL.Query().Get("store")) {
+					return
+				}
 				d.HandlePBSSnapshotVerify(ctx, w, r, collectorID)
 				return
 			case "forget":
+				if !d.requirePBSStoreAccess(w, r, asset, collectorID, r.URL.Query().Get("store")) {
+					return
+				}
 				d.HandlePBSSnapshotForget(ctx, w, r, collectorID)
 				return
 			}
@@ -199,27 +235,55 @@ func (d *Deps) HandlePBSAssets(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
+		requestedStore := strings.TrimSpace(r.URL.Query().Get("store"))
+		if requestedStore == "" {
+			requestedStore = PBSStoreFromAsset(asset)
+		}
+		if !d.requirePBSStoreAccess(w, r, asset, collectorID, requestedStore) {
+			return
+		}
 		d.HandlePBSAssetSnapshots(ctx, w, r, asset, runtime)
 
 	case "verification":
+		if !d.requirePBSAggregateAccess(w, r, asset, collectorID) {
+			return
+		}
 		d.HandlePBSAssetVerification(ctx, w, asset, runtime)
 
 	case "verify-jobs":
+		if !d.requirePBSCollectorAccess(w, r, collectorID) {
+			return
+		}
 		d.HandlePBSVerifyJobs(ctx, w, r, collectorID, parts[1:])
 
 	case "prune-jobs":
+		if !d.requirePBSCollectorAccess(w, r, collectorID) {
+			return
+		}
 		d.HandlePBSPruneJobs(ctx, w, r, collectorID, parts[1:])
 
 	case "sync-jobs":
+		if !d.requirePBSCollectorAccess(w, r, collectorID) {
+			return
+		}
 		d.HandlePBSSyncJobs(ctx, w, r, collectorID, parts[1:])
 
 	case "remotes":
+		if !d.requirePBSCollectorAccess(w, r, collectorID) {
+			return
+		}
 		d.HandlePBSRemotes(ctx, w, r, collectorID)
 
 	case "traffic-control":
+		if !d.requirePBSCollectorAccess(w, r, collectorID) {
+			return
+		}
 		d.HandlePBSTrafficControl(ctx, w, r, collectorID, parts[1:])
 
 	case "certificates":
+		if !d.requirePBSCollectorAccess(w, r, collectorID) {
+			return
+		}
 		d.HandlePBSCertificates(ctx, w, r, collectorID)
 
 	case "datastores":
@@ -230,19 +294,64 @@ func (d *Deps) HandlePBSAssets(w http.ResponseWriter, r *http.Request) {
 		}
 		ds := strings.TrimSpace(parts[2])
 		sub := strings.TrimSpace(parts[3])
+		if !d.requirePBSStoreAccess(w, r, asset, collectorID, ds) {
+			return
+		}
 		switch sub {
 		case "gc":
 			d.HandlePBSDatastoreGC(ctx, w, r, collectorID, ds)
+		case "verify":
+			d.HandlePBSDatastoreVerify(ctx, w, r, collectorID, ds)
 		case "maintenance":
 			d.HandlePBSDatastoreMaintenance(ctx, w, r, collectorID, ds)
+		case "maintenance-enable":
+			d.HandlePBSDatastoreMaintenanceMode(ctx, w, r, collectorID, ds, "read-only")
+		case "maintenance-disable":
+			d.HandlePBSDatastoreMaintenanceMode(ctx, w, r, collectorID, ds, "")
 		default:
 			servicehttp.WriteError(w, http.StatusNotFound, "unknown datastore action")
 		}
 	}
 }
 
+func (d *Deps) upsertPBSAssetRefreshStatus(asset assets.Asset, status string) (assets.Asset, error) {
+	return d.AssetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID:  asset.ID,
+		Type:     asset.Type,
+		Name:     asset.Name,
+		Source:   asset.Source,
+		GroupID:  asset.GroupID,
+		Status:   status,
+		Platform: asset.Platform,
+		Metadata: clonePBSAssetMetadata(asset.Metadata),
+	})
+}
+
+func pbsFailedRefreshStatus(currentStatus string) string {
+	switch strings.ToLower(strings.TrimSpace(currentStatus)) {
+	case "offline", "down", "critical", "error", "unhealthy", "failed", "stopped", "exited", "dead", "unknown", "unavailable":
+		return "offline"
+	default:
+		return "unresponsive"
+	}
+}
+
+func clonePBSAssetMetadata(metadata map[string]string) map[string]string {
+	if len(metadata) == 0 {
+		return nil
+	}
+	cloned := make(map[string]string, len(metadata))
+	for key, value := range metadata {
+		cloned[key] = value
+	}
+	return cloned
+}
+
 // handlePBSTaskRoutes dispatches /pbs/tasks/{node}/{upid}/{action}.
 func (d *Deps) HandlePBSTaskRoutes(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobal(w, r, "tasks") {
+		return
+	}
 	path := strings.TrimPrefix(r.URL.Path, "/pbs/tasks/")
 	if path == r.URL.Path || path == "" {
 		servicehttp.WriteError(w, http.StatusNotFound, "missing task path")
@@ -282,7 +391,7 @@ func (d *Deps) HandlePBSTaskStatus(w http.ResponseWriter, r *http.Request) {
 	collectorID := strings.TrimSpace(r.URL.Query().Get("collector_id"))
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "pbs runtime unavailable: "+err.Error())
+		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
 		return
 	}
 
@@ -291,7 +400,7 @@ func (d *Deps) HandlePBSTaskStatus(w http.ResponseWriter, r *http.Request) {
 
 	status, err := runtime.Client.GetTaskStatus(ctx, node, upid)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to fetch pbs task status: "+err.Error())
+		writePBSError(w, http.StatusBadGateway, "failed to fetch pbs task status", err)
 		return
 	}
 
@@ -324,7 +433,7 @@ func (d *Deps) HandlePBSTaskLog(w http.ResponseWriter, r *http.Request) {
 	collectorID := strings.TrimSpace(r.URL.Query().Get("collector_id"))
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "pbs runtime unavailable: "+err.Error())
+		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
 		return
 	}
 
@@ -333,7 +442,7 @@ func (d *Deps) HandlePBSTaskLog(w http.ResponseWriter, r *http.Request) {
 
 	lines, err := runtime.Client.GetTaskLog(ctx, node, upid, limit)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to fetch pbs task log: "+err.Error())
+		writePBSError(w, http.StatusBadGateway, "failed to fetch pbs task log", err)
 		return
 	}
 
@@ -362,7 +471,7 @@ func (d *Deps) HandlePBSTaskStop(w http.ResponseWriter, r *http.Request) {
 	collectorID := strings.TrimSpace(r.URL.Query().Get("collector_id"))
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "pbs runtime unavailable: "+err.Error())
+		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
 		return
 	}
 
@@ -370,7 +479,7 @@ func (d *Deps) HandlePBSTaskStop(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	if err := runtime.Client.StopTask(ctx, node, upid); err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to stop pbs task: "+err.Error())
+		writePBSError(w, http.StatusBadGateway, "failed to stop pbs task", err)
 		return
 	}
 
@@ -389,7 +498,7 @@ func (d *Deps) LoadPBSAssetDetails(ctx context.Context, asset assets.Asset, runt
 
 	version, err := runtime.Client.GetVersion(ctx)
 	if err != nil {
-		warnings = append(warnings, "version unavailable: "+err.Error())
+		warnings = append(warnings, pbsWarning("version unavailable", err))
 	} else {
 		response.Version = strings.TrimSpace(version.Release)
 		if response.Version == "" {
@@ -414,7 +523,7 @@ func (d *Deps) LoadPBSAssetDetails(ctx context.Context, asset assets.Asset, runt
 
 		tasks, taskErr := runtime.Client.ListNodeTasks(ctx, node, 60)
 		if taskErr != nil {
-			warnings = append(warnings, "task listing unavailable: "+taskErr.Error())
+			warnings = append(warnings, pbsWarning("task listing unavailable", taskErr))
 		} else {
 			response.Tasks = FilterAndSortPBSTasks(tasks, store, 40)
 		}
@@ -426,7 +535,7 @@ func (d *Deps) LoadPBSAssetDetails(ctx context.Context, asset assets.Asset, runt
 	usageByStore := map[string]pbsconnector.DatastoreUsage{}
 	usage, usageErr := runtime.Client.ListDatastoreUsage(ctx)
 	if usageErr != nil {
-		warnings = append(warnings, "datastore usage unavailable: "+usageErr.Error())
+		warnings = append(warnings, pbsWarning("datastore usage unavailable", usageErr))
 	} else {
 		for _, entry := range usage {
 			storeName := strings.TrimSpace(entry.Store)
@@ -503,7 +612,7 @@ func (d *Deps) LoadPBSAssetDetails(ctx context.Context, asset assets.Asset, runt
 
 	tasks, taskErr := runtime.Client.ListNodeTasks(ctx, node, 80)
 	if taskErr != nil {
-		warnings = append(warnings, "task listing unavailable: "+taskErr.Error())
+		warnings = append(warnings, pbsWarning("task listing unavailable", taskErr))
 	} else {
 		response.Tasks = FilterAndSortPBSTasks(tasks, "", 50)
 	}
@@ -610,7 +719,7 @@ func (d *Deps) ResolvePBSStoreList(ctx context.Context, asset assets.Asset, runt
 	}
 	datastores, err := runtime.Client.ListDatastores(ctx)
 	if err != nil {
-		return nil, []string{"datastore listing unavailable: " + err.Error()}
+		return nil, []string{pbsWarning("datastore listing unavailable", err)}
 	}
 	names := make([]string, 0, len(datastores))
 	for _, ds := range datastores {
@@ -673,7 +782,7 @@ func (d *Deps) HandlePBSAssetSnapshots(ctx context.Context, w http.ResponseWrite
 
 	snapshots, err := runtime.Client.ListDatastoreSnapshots(ctx, storeName)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to list snapshots: "+err.Error())
+		writePBSError(w, http.StatusBadGateway, "failed to list snapshots", err)
 		return
 	}
 

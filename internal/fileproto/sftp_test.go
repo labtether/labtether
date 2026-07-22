@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"path"
 	"testing"
 
@@ -37,6 +38,8 @@ type testSFTPEnv struct {
 // cleaned up automatically.
 func startTestSFTPServer(t *testing.T) testSFTPEnv {
 	t.Helper()
+	t.Setenv("LABTETHER_OUTBOUND_ALLOW_PRIVATE", "true")
+	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
 
 	// Generate an ephemeral host key.
 	_, hostPriv, err := ed25519.GenerateKey(rand.Reader)
@@ -243,6 +246,72 @@ func TestSFTPWriteReadDelete(t *testing.T) {
 	_, _, err = client.Read(ctx, filePath)
 	if err == nil {
 		t.Error("expected error reading deleted file")
+	}
+}
+
+type sftpFailingReader struct {
+	sent bool
+	err  error
+}
+
+func (r *sftpFailingReader) Read(p []byte) (int, error) {
+	if !r.sent {
+		r.sent = true
+		return copy(p, "partial"), nil
+	}
+	return 0, r.err
+}
+
+func TestSFTPWriteRejectsReportedOversizeWithoutCreatingFile(t *testing.T) {
+	env := startTestSFTPServer(t)
+	defer env.Cleanup()
+	client := testConnect(t, env)
+	target := p(env, "oversize.bin")
+
+	err := client.Write(context.Background(), target, bytes.NewReader([]byte("fixture")), MaxTransferBytes+1)
+	if !errors.Is(err, ErrTransferTooLarge) {
+		t.Fatalf("expected ErrTransferTooLarge, got %v", err)
+	}
+	if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("rejected upload created a file: %v", err)
+	}
+}
+
+func TestSFTPWriteRemovesPartialFileAfterSourceFailure(t *testing.T) {
+	env := startTestSFTPServer(t)
+	defer env.Cleanup()
+	client := testConnect(t, env)
+	target := p(env, "partial.bin")
+	sourceErr := errors.New("synthetic source failure")
+
+	err := client.Write(context.Background(), target, &sftpFailingReader{err: sourceErr}, -1)
+	if !errors.Is(err, sourceErr) {
+		t.Fatalf("expected source error, got %v", err)
+	}
+	if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("partial destination remains: %v", err)
+	}
+}
+
+func TestSFTPRecursiveDeleteDepthLimit(t *testing.T) {
+	env := startTestSFTPServer(t)
+	defer env.Cleanup()
+	client := testConnect(t, env)
+	root := p(env, "too-deep")
+	current := root
+	for i := 0; i < MaxRecursiveDeleteDepth+1; i++ {
+		current = path.Join(current, "d")
+		if err := os.MkdirAll(current, 0755); err != nil {
+			t.Fatalf("create depth %d: %v", i, err)
+		}
+	}
+
+	err := client.Delete(context.Background(), root)
+	if !errors.Is(err, ErrDeleteLimitExceeded) {
+		t.Fatalf("expected ErrDeleteLimitExceeded, got %v", err)
+	}
+	if _, err := os.Stat(root); err != nil {
+		t.Fatalf("root was removed despite rejected delete: %v", err)
 	}
 }
 

@@ -3,14 +3,13 @@ package collectors
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/logs"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
@@ -83,6 +82,9 @@ type webServiceSyncRequest struct {
 
 // HandleWebServiceSync handles POST /api/v1/services/web/sync — trigger immediate rediscovery.
 func (d *Deps) HandleWebServiceSync(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobal(w, r, "web-service synchronization") {
+		return
+	}
 	if r.Method != http.MethodPost {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -95,8 +97,8 @@ func (d *Deps) HandleWebServiceSync(w http.ResponseWriter, r *http.Request) {
 	targetHost := strings.TrimSpace(r.URL.Query().Get("host"))
 	if targetHost == "" && r.Body != nil {
 		var req webServiceSyncRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
-			servicehttp.WriteError(w, http.StatusBadRequest, "invalid request body")
+		if _, err := shared.DecodeOptionalJSONBody(w, r, &req); err != nil {
+			servicehttp.WriteError(w, shared.JSONDecodeErrorStatus(err), "invalid request body")
 			return
 		}
 		targetHost = strings.TrimSpace(req.HostAssetID)

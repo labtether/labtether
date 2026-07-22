@@ -2,7 +2,6 @@ package proxmox
 
 import (
 	"context"
-	"encoding/json"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strings"
@@ -42,6 +41,11 @@ func (d *Deps) handleProxmoxAssetHA(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusNotFound, "asset is not proxmox-backed")
 		return
 	}
+	// HA configuration and migration involve cluster-wide placement state and
+	// may affect source and destination nodes beyond the path asset.
+	if !d.requireProxmoxCollectorAccess(w, r, target.CollectorID) {
+		return
+	}
 
 	runtime, err := d.LoadProxmoxRuntime(target.CollectorID)
 	if err != nil {
@@ -74,7 +78,7 @@ func (d *Deps) proxmoxHAMigrate(w http.ResponseWriter, r *http.Request, ctx cont
 	var req struct {
 		TargetNode string `json:"target_node"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := shared.DecodeJSONBody(w, r, &req); err != nil {
 		servicehttp.WriteError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
 		return
 	}
@@ -111,7 +115,7 @@ func (d *Deps) proxmoxHAMigrate(w http.ResponseWriter, r *http.Request, ctx cont
 
 func (d *Deps) proxmoxHAUpdateConfig(w http.ResponseWriter, r *http.Request, ctx context.Context, target ProxmoxSessionTarget, runtime *ProxmoxRuntime) {
 	var config map[string]any
-	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
+	if err := shared.DecodeJSONBody(w, r, &config); err != nil {
 		servicehttp.WriteError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
 		return
 	}

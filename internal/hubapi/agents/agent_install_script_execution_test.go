@@ -19,8 +19,13 @@ func TestInstallScriptExecutesInstallFlow(t *testing.T) {
 	if err := os.WriteFile(caPath, []byte("test-ca"), 0o644); err != nil {
 		t.Fatalf("write CA file: %v", err)
 	}
+	enrollmentTokenSource := filepath.Join(root, "fixtures", "enrollment-token")
+	if err := os.WriteFile(enrollmentTokenSource, []byte("enroll-123\n"), 0o600); err != nil {
+		t.Fatalf("write enrollment token file: %v", err)
+	}
 
 	script := rewriteAgentScriptForHarness(GenerateInstallScript("https://hub.example.com", "wss://hub.example.com/ws/agent"), root)
+	env = append(env, "LABTETHER_LOW_POWER_MODE=true", "LABTETHER_LOG_STREAM_ENABLED=false")
 	_, err := runGeneratedShellScript(t, script, env,
 		"--docker-enabled", "true",
 		"--docker-endpoint", "/var/run/docker.sock",
@@ -28,7 +33,7 @@ func TestInstallScriptExecutesInstallFlow(t *testing.T) {
 		"--files-root-mode", "full",
 		"--auto-update", "false",
 		"--skip-vnc-prereqs",
-		"--enrollment-token", "enroll-123",
+		"--enrollment-token-file", enrollmentTokenSource,
 		"--tls-ca-file", caPath,
 	)
 	if err != nil {
@@ -36,19 +41,38 @@ func TestInstallScriptExecutesInstallFlow(t *testing.T) {
 	}
 
 	envFile := mustReadFile(t, filepath.Join(root, "etc/labtether/agent.env"))
+	if info, err := os.Stat(filepath.Join(root, "etc/labtether/agent.env")); err != nil {
+		t.Fatal(err)
+	} else if info.Mode().Perm() != 0o600 {
+		t.Fatalf("agent environment file mode = %o, want 600", info.Mode().Perm())
+	}
 	for _, want := range []string{
 		"LABTETHER_WS_URL=wss://hub.example.com/ws/agent",
-		"LABTETHER_ENROLLMENT_TOKEN=enroll-123",
+		"LABTETHER_ENROLLMENT_TOKEN_FILE=" + filepath.Join(root, "etc/labtether/enrollment-token"),
 		"LABTETHER_DOCKER_ENABLED=true",
 		`LABTETHER_DOCKER_SOCKET="/var/run/docker.sock"`,
 		"LABTETHER_DOCKER_DISCOVERY_INTERVAL=45",
 		"LABTETHER_FILES_ROOT_MODE=full",
 		"LABTETHER_AUTO_UPDATE=false",
+		"LABTETHER_LOW_POWER_MODE=true",
+		"LABTETHER_LOG_STREAM_ENABLED=false",
 		"LABTETHER_TLS_CA_FILE=" + caPath,
 	} {
 		if !strings.Contains(envFile, want) {
 			t.Fatalf("expected env file to contain %q, got:\n%s", want, envFile)
 		}
+	}
+	if strings.Contains(envFile, "LABTETHER_ENROLLMENT_TOKEN=") {
+		t.Fatal("environment file contains a plaintext enrollment token")
+	}
+	managedEnrollmentToken := filepath.Join(root, "etc/labtether/enrollment-token")
+	if got := mustReadFile(t, managedEnrollmentToken); got != "enroll-123\n" {
+		t.Fatalf("managed enrollment token = %q", got)
+	}
+	if info, err := os.Stat(managedEnrollmentToken); err != nil {
+		t.Fatal(err)
+	} else if info.Mode().Perm() != 0o600 {
+		t.Fatalf("managed enrollment token mode = %o, want 600", info.Mode().Perm())
 	}
 
 	if _, err := os.Stat(filepath.Join(root, "usr/local/bin/labtether-agent")); err != nil {
@@ -74,9 +98,13 @@ func TestInstallScriptExecutesInstallFlow(t *testing.T) {
 func TestBootstrapScriptExecutesPinnedInstallFlow(t *testing.T) {
 	expectedFingerprint := strings.Repeat("b", 64)
 	root, env := newAgentScriptHarness(t, expectedFingerprint)
+	enrollmentTokenSource := filepath.Join(root, "bootstrap-enrollment-token")
+	if err := os.WriteFile(enrollmentTokenSource, []byte("bootstrap-token\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	script := rewriteAgentScriptForHarness(GenerateBootstrapScript("https://hub.example.com", expectedFingerprint), root)
-	output, err := runGeneratedShellScript(t, script, env, "--enrollment-token", "bootstrap-token")
+	output, err := runGeneratedShellScript(t, script, env, "--enrollment-token-file", enrollmentTokenSource)
 	if err != nil {
 		t.Fatalf("run bootstrap script: %v", err)
 	}
@@ -94,10 +122,82 @@ func TestBootstrapScriptExecutesPinnedInstallFlow(t *testing.T) {
 		}
 	}
 
-	for _, want := range []string{"--tls-ca-file", caPath, "--enrollment-token", "bootstrap-token"} {
+	for _, want := range []string{"--tls-ca-file", caPath, "--enrollment-token-file", enrollmentTokenSource} {
 		if !strings.Contains(installArgs, want) {
 			t.Fatalf("expected bootstrap-installed script args to contain %q, got:\n%s", want, installArgs)
 		}
+	}
+}
+
+func TestInstallScriptRejectsWorldReadableEnrollmentTokenFile(t *testing.T) {
+	root, env := newAgentScriptHarness(t, strings.Repeat("f", 64))
+	tokenFile := filepath.Join(root, "enrollment-token")
+	if err := os.WriteFile(tokenFile, []byte("enroll-123\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	script := rewriteAgentScriptForHarness(GenerateInstallScript("https://hub.example.com", "wss://hub.example.com/ws/agent"), root)
+	output, err := runGeneratedShellScript(t, script, env, "--enrollment-token-file", tokenFile)
+	if err == nil {
+		t.Fatal("expected insecure enrollment token file mode to be rejected")
+	}
+	if !strings.Contains(output, "chmod 600") {
+		t.Fatalf("expected private-mode guidance, got:\n%s", output)
+	}
+}
+
+func TestInstallScriptEnrollmentTokenFileLineEndings(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		content string
+	}{
+		{name: "no terminal newline", content: "enroll-123"},
+		{name: "terminal LF", content: "enroll-123\n"},
+		{name: "terminal CRLF", content: "enroll-123\r\n"},
+	} {
+		t.Run("accepts "+tc.name, func(t *testing.T) {
+			root, env := newAgentScriptHarness(t, strings.Repeat("f", 64))
+			tokenFile := filepath.Join(root, "enrollment-token")
+			if err := os.WriteFile(tokenFile, []byte(tc.content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			script := rewriteAgentScriptForHarness(GenerateInstallScript("https://hub.example.com", "wss://hub.example.com/ws/agent"), root)
+			if output, err := runGeneratedShellScript(t, script, env, "--skip-vnc-prereqs", "--enrollment-token-file", tokenFile); err != nil {
+				t.Fatalf("expected token file to be accepted: %v\n%s", err, output)
+			}
+			if got := mustReadFile(t, filepath.Join(root, "etc/labtether/enrollment-token")); got != "enroll-123\n" {
+				t.Fatalf("managed enrollment token = %q, want one normalized terminal LF", got)
+			}
+		})
+	}
+
+	for _, tc := range []struct {
+		name    string
+		content string
+	}{
+		{name: "embedded LF", content: "enroll\n123"},
+		{name: "embedded CRLF", content: "enroll\r\n123"},
+		{name: "two terminal LF sequences", content: "enroll-123\n\n"},
+		{name: "two terminal CRLF sequences", content: "enroll-123\r\n\r\n"},
+		{name: "terminal CR", content: "enroll-123\r"},
+	} {
+		t.Run("rejects "+tc.name, func(t *testing.T) {
+			root, env := newAgentScriptHarness(t, strings.Repeat("f", 64))
+			tokenFile := filepath.Join(root, "enrollment-token")
+			if err := os.WriteFile(tokenFile, []byte(tc.content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			script := rewriteAgentScriptForHarness(GenerateInstallScript("https://hub.example.com", "wss://hub.example.com/ws/agent"), root)
+			output, err := runGeneratedShellScript(t, script, env, "--skip-vnc-prereqs", "--enrollment-token-file", tokenFile)
+			if err == nil {
+				t.Fatal("expected token file with disallowed line endings to be rejected")
+			}
+			if !strings.Contains(output, "exactly one token with at most one terminal newline") {
+				t.Fatalf("expected line-ending rejection, got:\n%s", output)
+			}
+		})
 	}
 }
 
@@ -392,6 +492,11 @@ if [[ "${url}" == "http://localhost:8090/agent/status" ]]; then
   exit 0
 fi
 
+if [[ "${url}" == *"/api/v1/agent/releases/latest?arch="* ]]; then
+  printf '{"sha256":"%s"}\n' "${LABTETHER_TEST_BINARY_SHA256}"
+  exit 0
+fi
+
 exit 1
 `)
 
@@ -434,6 +539,10 @@ cat "${infile}"
 
 	writeExecutable(t, filepath.Join(binDir, "sha256sum"), `#!/bin/bash
 set -euo pipefail
+if [[ $# -gt 0 ]]; then
+  printf '%s  %s\n' "${LABTETHER_TEST_BINARY_SHA256}" "$1"
+  exit 0
+fi
 cat >/dev/null
 printf '%s  -\n' "${LABTETHER_TEST_CA_FINGERPRINT}"
 `)
@@ -452,6 +561,7 @@ printf 'update-ca-trust %s\n' "$*" >> "${LABTETHER_TEST_LOG_DIR}/ca-tools.log"
 		"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"LABTETHER_TEST_LOG_DIR="+logDir,
 		"LABTETHER_TEST_CA_FINGERPRINT="+expectedFingerprint,
+		"LABTETHER_TEST_BINARY_SHA256="+strings.Repeat("c", 64),
 	)
 	return root, env
 }

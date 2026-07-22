@@ -41,6 +41,7 @@ func (d *Deps) TryProxmoxTerminalStream(w http.ResponseWriter, r *http.Request, 
 		securityruntime.Logf("terminal-proxmox: failed to dial websocket: %v", err)
 		return fmt.Errorf("dial websocket: %w", err)
 	}
+	shared.LimitUpstreamTerminalMessages(proxmoxConn)
 	defer proxmoxConn.Close()
 	securityruntime.Logf("terminal-proxmox: websocket connected")
 
@@ -72,11 +73,12 @@ func (d *Deps) TryProxmoxTerminalStream(w http.ResponseWriter, r *http.Request, 
 
 	// Past this point we own the HTTP response — return nil so the caller
 	// does not attempt SSH fallback.
-	wsConn, err := d.TerminalWebSocketUpgrader.Upgrade(w, r, nil)
+	wsConn, err := shared.UpgradeWebSocket(d.TerminalWebSocketUpgrader, w, r, nil)
 	if err != nil {
 		securityruntime.Logf("terminal-proxmox: browser websocket upgrade failed: %v", err)
 		return nil // response already hijacked by upgrade attempt
 	}
+	shared.LimitBrowserInteractiveMessages(wsConn)
 	defer wsConn.Close()
 
 	// Forward any data that came after the "OK" (e.g. initial prompt).

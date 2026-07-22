@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/labtether/labtether/internal/commandpolicy"
 )
 
 const (
@@ -304,6 +306,10 @@ func ValidateShellCommand(command string) error {
 	if normalized == "" {
 		return errors.New(defaultShellCommandFallback)
 	}
+	argv, err := commandpolicy.ParseArgv(command)
+	if err != nil {
+		return err
+	}
 
 	for _, blocked := range parseCSVEnv(envShellBlockedSubstrings, defaultShellBlockedSubstrings) {
 		token := normalizeShellCommand(blocked)
@@ -331,18 +337,37 @@ func ValidateShellCommand(command string) error {
 		return nil
 	}
 
-	for _, prefix := range parseCSVEnv(envShellAllowlistPrefixes, defaultShellAllowlistPrefixes) {
-		normalizedPrefix := normalizeShellCommand(prefix)
-		if normalizedPrefix == "" {
-			continue
-		}
-		if strings.HasPrefix(normalized, normalizedPrefix) {
+	for _, rule := range parseCSVEnv(envShellAllowlistPrefixes, defaultShellAllowlistPrefixes) {
+		if commandpolicy.MatchesRule(argv, rule) {
 			return nil
 		}
 	}
 
 	return fmt.Errorf("command not in allowlist")
 }
+
+// ParseValidatedShellCommand validates a structured command and returns the
+// exact argv that must be executed without a local shell.
+func ParseValidatedShellCommand(command string) ([]string, error) {
+	if err := ValidateShellCommand(command); err != nil {
+		return nil, err
+	}
+	argv, err := commandpolicy.ParseArgv(command)
+	if err != nil {
+		return nil, err
+	}
+	// A direct exec is only shell-free if the selected program is not itself a
+	// command interpreter. Otherwise an allowed `sh -c "..."` (or platform
+	// equivalent) would recreate the injection surface one level down.
+	switch normalizeExecutableName(argv[0]) {
+	case "sh", "bash", "zsh", "dash", "ash", "cmd", "powershell", "pwsh", "osascript":
+		return nil, fmt.Errorf("shell interpreters are not allowed in structured commands")
+	}
+	return argv, nil
+}
+
+// QuoteCommandArgv safely serializes argv for SSH's remote command string.
+func QuoteCommandArgv(argv []string) string { return commandpolicy.QuoteArgv(argv) }
 
 func NewCommandContext(ctx context.Context, name string, args ...string) (*exec.Cmd, error) {
 	if err := ValidateExecBinary(name); err != nil {

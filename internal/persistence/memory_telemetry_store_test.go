@@ -2,6 +2,8 @@ package persistence
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -56,6 +58,230 @@ func TestMemoryTelemetryStoreSnapshotManyReturnsLatestValues(t *testing.T) {
 	if assetTwo.MemoryUsedPercent == nil || *assetTwo.MemoryUsedPercent != 70 {
 		t.Fatalf("expected asset-2 memory=70, got %+v", assetTwo.MemoryUsedPercent)
 	}
+}
+
+func TestMemoryTelemetryStoreKeepsHubScopesOutOfAssetSnapshots(t *testing.T) {
+	store := NewMemoryTelemetryStore()
+	now := time.Now().UTC()
+	if err := store.AppendSamples(context.Background(), []telemetry.MetricSample{
+		{
+			Scope:       telemetry.MetricScopeHubAlerts,
+			Metric:      telemetry.MetricAlertEvaluationDurationMs,
+			Unit:        "ms",
+			Value:       2,
+			CollectedAt: now,
+			Labels:      map[string]string{"rule_id": "rule-disk-full", "rule_name": "disk-full"},
+		},
+		{
+			Scope:       telemetry.MetricScopeHubAlerts,
+			Metric:      telemetry.MetricAlertsRules,
+			Unit:        "count",
+			Value:       99,
+			CollectedAt: now.Add(-telemetry.HubMetricSnapshotMaxAge - time.Second),
+		},
+	}); err != nil {
+		t.Fatalf("append hub sample: %v", err)
+	}
+
+	assetSnapshots, err := store.DynamicSnapshotMany([]string{telemetry.MetricScopeHubAlerts}, now)
+	if err != nil {
+		t.Fatalf("load asset snapshots: %v", err)
+	}
+	if got := len(assetSnapshots[telemetry.MetricScopeHubAlerts].Metrics); got != 0 {
+		t.Fatalf("hub scope leaked into asset snapshots: %d metrics", got)
+	}
+
+	hubSnapshots, err := store.HubMetricSnapshots(
+		context.Background(),
+		now,
+		telemetry.MaxHubMetricSnapshotSeries,
+	)
+	if err != nil {
+		t.Fatalf("load hub snapshots: %v", err)
+	}
+	samples := hubSnapshots[telemetry.MetricScopeHubAlerts]
+	if len(samples) != 1 {
+		t.Fatalf("fresh hub snapshot sample count = %d, want 1 (stale series must expire)", len(samples))
+	}
+	if samples[0].AssetID != "" || samples[0].Scope != telemetry.MetricScopeHubAlerts {
+		t.Fatalf("hub sample has invalid identity: %+v", samples[0])
+	}
+	if got := samples[0].Labels["rule_id"]; got != "rule-disk-full" {
+		t.Fatalf("rule_id label = %q, want rule-disk-full", got)
+	}
+	if got := samples[0].Labels["rule_name"]; got != "disk-full" {
+		t.Fatalf("rule_name label = %q, want disk-full", got)
+	}
+}
+
+func TestMemoryHubMetricSnapshotsDeepCopyLabels(t *testing.T) {
+	store := NewMemoryTelemetryStore()
+	now := time.Now().UTC()
+	if err := store.AppendSamples(context.Background(), []telemetry.MetricSample{{
+		Scope: telemetry.MetricScopeHubAlerts, Metric: telemetry.MetricAlertEvaluationDurationMs,
+		Unit: "ms", Value: 4, CollectedAt: now,
+		Labels: map[string]string{"rule_id": "rule-copy", "rule_name": "original"},
+	}}); err != nil {
+		t.Fatalf("append hub sample: %v", err)
+	}
+
+	first, err := store.HubMetricSnapshots(context.Background(), now.Add(time.Second), telemetry.MaxHubMetricSnapshotSeries)
+	if err != nil {
+		t.Fatalf("first hub snapshot: %v", err)
+	}
+	first[telemetry.MetricScopeHubAlerts][0].Labels["rule_name"] = "mutated"
+	second, err := store.HubMetricSnapshots(context.Background(), now.Add(time.Second), telemetry.MaxHubMetricSnapshotSeries)
+	if err != nil {
+		t.Fatalf("second hub snapshot: %v", err)
+	}
+	if got := second[telemetry.MetricScopeHubAlerts][0].Labels["rule_name"]; got != "original" {
+		t.Fatalf("caller mutation leaked into stored labels: %q", got)
+	}
+}
+
+func TestMemoryTelemetryStoreRejectsUnsupportedOrMixedHubScope(t *testing.T) {
+	store := NewMemoryTelemetryStore()
+	for _, sample := range []telemetry.MetricSample{
+		{Scope: "hub-arbitrary", Metric: telemetry.MetricAlertsRules, Unit: "count"},
+		{AssetID: "asset-1", Scope: telemetry.MetricScopeHubAlerts, Metric: telemetry.MetricAlertsRules, Unit: "count"},
+		{Scope: telemetry.MetricScopeHubAlerts, Metric: telemetry.MetricSiteReliabilityScore, Unit: "score", Labels: map[string]string{"site_id": "site-1", "site_name": "Site"}},
+		{Scope: telemetry.MetricScopeHubAlerts, Metric: telemetry.MetricAlertsFiring, Unit: "count", Labels: map[string]string{"unexpected": "label"}},
+		{Scope: telemetry.MetricScopeHubAlerts, Metric: telemetry.MetricAlertEvaluationDurationMs, Unit: "ms", Labels: map[string]string{"rule_name": "missing-id"}},
+	} {
+		if err := store.AppendSamples(context.Background(), []telemetry.MetricSample{sample}); err == nil {
+			t.Fatalf("expected invalid hub sample to be rejected: %+v", sample)
+		}
+	}
+	if err := store.AppendSamples(context.Background(), []telemetry.MetricSample{
+		{Scope: telemetry.MetricScopeHubAlerts, Metric: telemetry.MetricAlertsRules, Unit: "count"},
+		{Scope: "hub-arbitrary", Metric: telemetry.MetricAlertsRules, Unit: "count"},
+	}); err == nil {
+		t.Fatal("expected mixed batch with unsupported scope to fail")
+	}
+	hubSnapshots, err := store.HubMetricSnapshots(
+		context.Background(),
+		time.Now().UTC(),
+		telemetry.MaxHubMetricSnapshotSeries,
+	)
+	if err != nil {
+		t.Fatalf("load hub snapshots: %v", err)
+	}
+	if len(hubSnapshots) != 0 {
+		t.Fatalf("invalid batch was partially persisted: %+v", hubSnapshots)
+	}
+}
+
+func TestMemoryTelemetryStoreCanonicalizesEmptyHubLabelsAndZeroTimestamp(t *testing.T) {
+	store := NewMemoryTelemetryStore()
+	if err := store.AppendSamples(context.Background(), []telemetry.MetricSample{
+		{Scope: telemetry.MetricScopeHubAlerts, Metric: telemetry.MetricAlertsRules, Unit: "count", Value: 1, CollectedAt: time.Now().UTC().Add(-time.Second)},
+		{Scope: telemetry.MetricScopeHubAlerts, Metric: telemetry.MetricAlertsRules, Unit: "count", Value: 2, Labels: map[string]string{}},
+	}); err != nil {
+		t.Fatalf("append canonical hub samples: %v", err)
+	}
+
+	snapshots, err := store.HubMetricSnapshots(context.Background(), time.Now().UTC().Add(time.Second), telemetry.MaxHubMetricSnapshotSeries)
+	if err != nil {
+		t.Fatalf("load hub snapshots: %v", err)
+	}
+	samples := snapshots[telemetry.MetricScopeHubAlerts]
+	if len(samples) != 1 {
+		t.Fatalf("nil and empty labels produced %d series, want 1", len(samples))
+	}
+	if samples[0].Value != 2 || !samples[0].CollectedAt.After(time.Now().UTC().Add(-time.Minute)) {
+		t.Fatalf("zero timestamp was not normalized to a fresh latest sample: %+v", samples[0])
+	}
+	if samples[0].Labels != nil {
+		t.Fatalf("empty labels were not canonicalized to nil: %#v", samples[0].Labels)
+	}
+}
+
+func TestMemoryTelemetryStoreBoundsHubCardinalityWithoutPartialWrite(t *testing.T) {
+	store := NewMemoryTelemetryStore()
+	now := time.Now().UTC()
+	samples := make([]telemetry.MetricSample, telemetry.MaxHubMetricSeriesPerScope+1)
+	for i := range samples {
+		id := fmt.Sprintf("site-%04d", i)
+		samples[i] = telemetry.MetricSample{
+			Scope: telemetry.MetricScopeHubReliability, Metric: telemetry.MetricSiteReliabilityScore,
+			Unit: "score", Value: float64(i), CollectedAt: now,
+			Labels: map[string]string{"site_id": id, "site_name": id},
+		}
+	}
+	if err := store.AppendSamples(context.Background(), samples); !errors.Is(err, ErrHubMetricSnapshotLimitExceeded) {
+		t.Fatalf("oversized append error = %v, want ErrHubMetricSnapshotLimitExceeded", err)
+	}
+	snapshots, err := store.HubMetricSnapshots(context.Background(), now.Add(time.Second), telemetry.MaxHubMetricSnapshotSeries)
+	if err != nil {
+		t.Fatalf("load hub snapshots: %v", err)
+	}
+	if len(snapshots) != 0 {
+		t.Fatalf("oversized batch partially persisted: %+v", snapshots)
+	}
+}
+
+func TestMemoryTelemetryStoreHubSnapshotContextAndLimit(t *testing.T) {
+	store := NewMemoryTelemetryStore()
+	now := time.Now().UTC()
+	if err := store.AppendSamples(context.Background(), []telemetry.MetricSample{
+		{Scope: telemetry.MetricScopeHubAlerts, Metric: telemetry.MetricAlertsFiring, Unit: "count", CollectedAt: now},
+		{Scope: telemetry.MetricScopeHubAlerts, Metric: telemetry.MetricAlertsRules, Unit: "count", CollectedAt: now},
+	}); err != nil {
+		t.Fatalf("append hub samples: %v", err)
+	}
+	if _, err := store.HubMetricSnapshots(context.Background(), now, 1); !errors.Is(err, ErrHubMetricSnapshotLimitExceeded) {
+		t.Fatalf("bounded snapshot error = %v, want ErrHubMetricSnapshotLimitExceeded", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := store.HubMetricSnapshots(ctx, now, telemetry.MaxHubMetricSnapshotSeries); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled snapshot error = %v, want context.Canceled", err)
+	}
+}
+
+func TestMemoryHubCompactionUsesEventTimeAndLastAppendTieBreak(t *testing.T) {
+	store := NewMemoryTelemetryStore()
+	now := time.Now().UTC()
+	freshLabels := map[string]string{"rule_id": "rule-fresh", "rule_name": "fresh"}
+	if err := store.AppendSamples(context.Background(), []telemetry.MetricSample{{
+		Scope: telemetry.MetricScopeHubAlerts, Metric: telemetry.MetricAlertEvaluationDurationMs,
+		Unit: "ms", Value: 1, CollectedAt: now, Labels: freshLabels,
+	}}); err != nil {
+		t.Fatalf("append fresh hub sample: %v", err)
+	}
+
+	lateSeries := make([]telemetry.MetricSample, telemetry.MaxHubMetricSeriesPerScope)
+	for i := range lateSeries {
+		id := fmt.Sprintf("rule-late-%04d", i)
+		lateSeries[i] = telemetry.MetricSample{
+			Scope: telemetry.MetricScopeHubAlerts, Metric: telemetry.MetricAlertEvaluationDurationMs,
+			Unit: "ms", Value: float64(i), CollectedAt: now.Add(-5*time.Minute + time.Duration(i)*time.Nanosecond),
+			Labels: map[string]string{"rule_id": id, "rule_name": "late"},
+		}
+	}
+	if err := store.AppendSamples(context.Background(), lateSeries); err != nil {
+		t.Fatalf("append late hub series: %v", err)
+	}
+	if err := store.AppendSamples(context.Background(), []telemetry.MetricSample{{
+		Scope: telemetry.MetricScopeHubAlerts, Metric: telemetry.MetricAlertEvaluationDurationMs,
+		Unit: "ms", Value: 777, CollectedAt: now, Labels: freshLabels,
+	}}); err != nil {
+		t.Fatalf("append equal-time replacement: %v", err)
+	}
+
+	snapshots, err := store.HubMetricSnapshots(context.Background(), now.Add(time.Second), telemetry.MaxHubMetricSnapshotSeries)
+	if err != nil {
+		t.Fatalf("load hub snapshots: %v", err)
+	}
+	for _, sample := range snapshots[telemetry.MetricScopeHubAlerts] {
+		if sample.Labels["rule_id"] == "rule-fresh" {
+			if sample.Value != 777 {
+				t.Fatalf("equal-time tie kept value %v, want last append 777", sample.Value)
+			}
+			return
+		}
+	}
+	t.Fatal("late old series churn evicted the freshest hub series")
 }
 
 func TestMemoryTelemetryStoreEviction(t *testing.T) {

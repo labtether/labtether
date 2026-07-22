@@ -12,6 +12,7 @@ import (
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/connectors/docker"
 	"github.com/labtether/labtether/internal/connectorsdk"
+	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
 )
 
 // Deps holds all dependencies required by the docker handler package.
@@ -46,6 +47,10 @@ type Deps struct {
 
 	// Docker coordinator action execution (wrapping dockerCoordinator.ExecuteAction).
 	ExecuteDockerAction func(ctx context.Context, actionID string, req connectorsdk.ActionRequest) (connectorsdk.ActionResult, error)
+
+	// EvaluateAssetGuardrails resolves group maintenance constraints for an
+	// operator action targeting a Docker host or derived asset.
+	EvaluateAssetGuardrails maintenanceguard.EvaluateAssetFunc
 
 	// Docker collector trigger on discovery.
 	TriggerDockerCollectorRunForDiscovery func()

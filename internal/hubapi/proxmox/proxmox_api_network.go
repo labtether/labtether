@@ -2,7 +2,6 @@ package proxmox
 
 import (
 	"context"
-	"encoding/json"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strings"
@@ -59,7 +58,7 @@ func (d *Deps) handleProxmoxNodeNetworkCRUD(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		var config map[string]any
-		if decErr := json.NewDecoder(r.Body).Decode(&config); decErr != nil {
+		if decErr := shared.DecodeJSONBody(w, r, &config); decErr != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, "invalid request body: "+decErr.Error())
 			return
 		}
@@ -83,7 +82,7 @@ func (d *Deps) handleProxmoxNodeNetworkCRUD(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		var config map[string]any
-		if decErr := json.NewDecoder(r.Body).Decode(&config); decErr != nil {
+		if decErr := shared.DecodeJSONBody(w, r, &config); decErr != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, "invalid request body: "+decErr.Error())
 			return
 		}

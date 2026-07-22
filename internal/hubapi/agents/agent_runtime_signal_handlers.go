@@ -15,10 +15,25 @@ import (
 	"github.com/labtether/labtether/internal/logs"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/platforms"
+	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/telemetry"
 )
 
+const (
+	// The shared WebSocket frame limit is intentionally large for file and
+	// desktop traffic. Log message types need much tighter, type-specific caps
+	// before JSON decoding so a trusted-but-compromised agent cannot force a
+	// 32 MiB allocation on each log message.
+	maxAgentLogStreamPayloadBytes = 512 << 10
+	maxAgentLogBatchPayloadBytes  = 10 << 20
+	maxAgentHeartbeatPayloadBytes = 512 << 10
+)
+
 func (d *Deps) ProcessAgentHeartbeat(conn *agentmgr.AgentConn, msg agentmgr.Message) {
+	if len(msg.Data) > maxAgentHeartbeatPayloadBytes {
+		securityruntime.Logf("agentws: rejected oversized heartbeat from %s (%d bytes)", conn.AssetID, len(msg.Data))
+		return
+	}
 	var data agentmgr.HeartbeatData
 	if err := json.Unmarshal(msg.Data, &data); err != nil {
 		log.Printf("agentws: invalid heartbeat data from %s: %v", conn.AssetID, err)
@@ -72,8 +87,38 @@ func (d *Deps) ProcessAgentHeartbeat(conn *agentmgr.AgentConn, msg agentmgr.Mess
 		conn.SetMeta("agent_version", reportedVersion)
 	}
 
-	if _, err := d.ProcessHeartbeatRequest(req); err != nil {
-		log.Printf("agentws: heartbeat processing failed for %s: %v", conn.AssetID, err)
+	var heartbeatErr error
+	switch strings.TrimSpace(conn.Meta("auth.mode")) {
+	case "agent-token":
+		tokenID := strings.TrimSpace(conn.Meta("auth.agent_token_id"))
+		if tokenID == "" || d.ProcessAuthenticatedAgentHeartbeat == nil {
+			heartbeatErr = persistence.ErrAgentCredentialInactive
+		} else {
+			_, heartbeatErr = d.ProcessAuthenticatedAgentHeartbeat(tokenID, req)
+		}
+	case "owner-token":
+		// Owner-token transport is legacy/bootstrap authority, not a durable
+		// per-agent identity. It may refresh an existing asset but may never
+		// recreate one that an operator decommissioned.
+		if d.ProcessExistingOwnerAgentHeartbeat == nil {
+			heartbeatErr = persistence.ErrAgentEnrollmentTransactionsUnavailable
+		} else {
+			_, heartbeatErr = d.ProcessExistingOwnerAgentHeartbeat(req)
+		}
+	default:
+		// In-process tests and non-WebSocket callers do not carry auth metadata.
+		_, heartbeatErr = d.ProcessHeartbeatRequest(req)
+	}
+	if heartbeatErr != nil {
+		log.Printf("agentws: heartbeat processing failed for %s: %v", conn.AssetID, heartbeatErr)
+		if strings.TrimSpace(conn.Meta("auth.mode")) != "" {
+			if d.AgentMgr != nil {
+				d.AgentMgr.UnregisterIfMatch(conn.AssetID, conn)
+			} else {
+				conn.Close()
+			}
+		}
+		return
 	}
 	d.AutoProvisionDockerCollectorIfNeeded(conn.AssetID, data.Connectors)
 
@@ -160,26 +205,48 @@ func (d *Deps) ProcessAgentCommandResult(conn *agentmgr.AgentConn, msg agentmgr.
 }
 
 func (d *Deps) ProcessAgentLogStream(conn *agentmgr.AgentConn, msg agentmgr.Message) {
+	assetID := ""
+	if conn != nil {
+		assetID = conn.AssetID
+	}
+	if len(msg.Data) > maxAgentLogStreamPayloadBytes {
+		securityruntime.Logf("agentws: rejected oversized log stream from %s (%d bytes)", assetID, len(msg.Data))
+		return
+	}
 	var data agentmgr.LogStreamData
 	if err := json.Unmarshal(msg.Data, &data); err != nil {
-		log.Printf("agentws: invalid log stream from %s: %v", conn.AssetID, err)
+		securityruntime.Logf("agentws: invalid log stream from %s: %v", assetID, err)
 		return
 	}
 
 	if d.LogStore != nil {
-		_ = d.LogStore.AppendEvent(logs.Event{
-			AssetID: conn.AssetID,
+		if err := d.LogStore.AppendEvent(logs.Event{
+			AssetID: assetID,
 			Source:  data.Source,
 			Level:   data.Level,
 			Message: data.Message,
-		})
+		}); err != nil {
+			securityruntime.Logf("agentws: rejected log stream from %s: %v", assetID, err)
+		}
 	}
 }
 
 func (d *Deps) ProcessAgentLogBatch(conn *agentmgr.AgentConn, msg agentmgr.Message) {
+	assetID := ""
+	if conn != nil {
+		assetID = conn.AssetID
+	}
+	if len(msg.Data) > maxAgentLogBatchPayloadBytes {
+		securityruntime.Logf("agentws: rejected oversized log batch from %s (%d bytes)", assetID, len(msg.Data))
+		return
+	}
 	var data agentmgr.LogBatchData
 	if err := json.Unmarshal(msg.Data, &data); err != nil {
-		log.Printf("agentws: invalid log batch from %s: %v", conn.AssetID, err)
+		securityruntime.Logf("agentws: invalid log batch from %s: %v", assetID, err)
+		return
+	}
+	if len(data.Entries) > logs.MaxEventsPerBatch {
+		securityruntime.Logf("agentws: rejected oversized log batch from %s (%d entries)", assetID, len(data.Entries))
 		return
 	}
 
@@ -187,18 +254,27 @@ func (d *Deps) ProcessAgentLogBatch(conn *agentmgr.AgentConn, msg agentmgr.Messa
 		events := make([]logs.Event, 0, len(data.Entries))
 		for _, entry := range data.Entries {
 			events = append(events, logs.Event{
-				AssetID: conn.AssetID,
+				AssetID: assetID,
 				Source:  entry.Source,
 				Level:   entry.Level,
 				Message: entry.Message,
 			})
 		}
+		if _, err := logs.EventBatchEnvelopeBytes(events); err != nil {
+			securityruntime.Logf("agentws: rejected invalid log batch from %s: %v", assetID, err)
+			return
+		}
 		if batchAppender, ok := d.LogStore.(persistence.LogBatchAppendStore); ok {
-			_ = batchAppender.AppendEvents(events)
+			if err := batchAppender.AppendEvents(events); err != nil {
+				securityruntime.Logf("agentws: rejected log batch from %s: %v", assetID, err)
+			}
 			return
 		}
 		for _, event := range events {
-			_ = d.LogStore.AppendEvent(event)
+			if err := d.LogStore.AppendEvent(event); err != nil {
+				securityruntime.Logf("agentws: rejected log batch event from %s: %v", assetID, err)
+				return
+			}
 		}
 	}
 }

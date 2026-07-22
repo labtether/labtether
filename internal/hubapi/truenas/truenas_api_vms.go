@@ -47,7 +47,7 @@ func (d *Deps) HandleTrueNASVMs(ctx context.Context, w http.ResponseWriter, r *h
 			if tnconnector.IsMethodNotFound(err) {
 				supported = false
 			} else {
-				warnings = AppendTrueNASWarning(warnings, "VMs unavailable: "+err.Error())
+				warnings = AppendTrueNASWarning(warnings, trueNASWarning("VMs unavailable", err))
 			}
 			vms = nil
 		}
@@ -93,7 +93,7 @@ func (d *Deps) HandleTrueNASVMs(ctx context.Context, w http.ResponseWriter, r *h
 				servicehttp.WriteError(w, http.StatusNotImplemented, "VM management is not supported on TrueNAS CORE")
 				return
 			}
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to "+vmAction+" VM: "+err.Error())
+			writeTrueNASError(w, http.StatusBadGateway, "failed to perform VM action", err)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, TrueNASVMActionResponse{

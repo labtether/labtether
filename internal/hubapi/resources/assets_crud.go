@@ -116,6 +116,9 @@ func (d *Deps) V2CreateAsset(w http.ResponseWriter, r *http.Request) {
 		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to create asset")
 		return
 	}
+	if d.Broadcast != nil {
+		d.Broadcast("asset.created", map[string]any{"asset_id": created.ID})
+	}
 	apiv2.WriteJSON(w, http.StatusCreated, created)
 }
 
@@ -139,18 +142,37 @@ func (d *Deps) V2UpdateAsset(w http.ResponseWriter, r *http.Request, assetID str
 		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to update asset")
 		return
 	}
+	if d.Broadcast != nil {
+		d.Broadcast("asset.updated", map[string]any{"asset_id": updated.ID})
+	}
 	apiv2.WriteJSON(w, http.StatusOK, updated)
 }
 
 // V2DeleteAsset handles DELETE /api/v2/assets/{id}.
-func (d *Deps) V2DeleteAsset(w http.ResponseWriter, _ *http.Request, assetID string) {
-	if err := d.AssetStore.DeleteAsset(assetID); err != nil {
+func (d *Deps) V2DeleteAsset(w http.ResponseWriter, r *http.Request, assetID string) {
+	assetEntry, ok, err := d.AssetStore.GetAsset(assetID)
+	if err != nil {
+		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to load asset")
+		return
+	}
+	if !ok {
+		apiv2.WriteError(w, http.StatusNotFound, "asset_not_found", "no asset with id: "+assetID)
+		return
+	}
+	if err := d.DeleteAsset(r.Context(), assetEntry); err != nil {
 		if errors.Is(err, persistence.ErrNotFound) {
 			apiv2.WriteError(w, http.StatusNotFound, "asset_not_found", "no asset with id: "+assetID)
 			return
 		}
+		if errors.Is(err, ErrConnectedAgentDeletion) {
+			apiv2.WriteError(w, http.StatusConflict, "agent_connected", ErrConnectedAgentDeletion.Error())
+			return
+		}
 		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to delete asset")
 		return
+	}
+	if d.Broadcast != nil {
+		d.Broadcast("asset.deleted", map[string]any{"asset_id": assetID})
 	}
 	apiv2.WriteJSON(w, http.StatusOK, map[string]string{"status": "deleted", "asset_id": assetID})
 }

@@ -29,10 +29,14 @@ func NewMemoryLogStore() *MemoryLogStore {
 }
 
 func (m *MemoryLogStore) AppendEvent(event logs.Event) error {
+	normalized, _, _, err := normalizeLogEventForInsert(event)
+	if err != nil {
+		return err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.appendEventLocked(event)
+	m.appendEventLocked(normalized)
 	return nil
 }
 
@@ -40,29 +44,19 @@ func (m *MemoryLogStore) AppendEvents(events []logs.Event) error {
 	if len(events) == 0 {
 		return nil
 	}
+	normalized, _, err := normalizeLogEventsForInsert(events)
+	if err != nil {
+		return err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for _, event := range events {
+	for _, event := range normalized {
 		m.appendEventLocked(event)
 	}
 	return nil
 }
 
 func (m *MemoryLogStore) appendEventLocked(event logs.Event) {
-	if event.ID == "" {
-		event.ID = idgen.New("log")
-	}
-	if event.Timestamp.IsZero() {
-		event.Timestamp = time.Now().UTC()
-	}
-	if event.Level == "" {
-		event.Level = "info"
-	}
-	if event.Source == "" {
-		event.Source = "labtether"
-	}
-
-	event.Fields = cloneMetadata(event.Fields)
 	m.events = append(m.events, event)
 	if event.Timestamp.After(m.latestWatermark) {
 		m.latestWatermark = event.Timestamp.UTC()

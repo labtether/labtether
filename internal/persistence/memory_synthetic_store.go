@@ -203,6 +203,57 @@ func (m *MemorySyntheticStore) ListSyntheticResults(checkID string, limit int) (
 	return out, nil
 }
 
+func (m *MemorySyntheticStore) LatestSyntheticMetricSnapshots(ctx context.Context, maxChecks int) ([]SyntheticMetricSnapshot, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if maxChecks <= 0 || maxChecks > 500 {
+		maxChecks = 500
+	}
+	m.mu.RLock()
+	out := make([]SyntheticMetricSnapshot, 0, min(len(m.checks), maxChecks))
+	visited := 0
+	for checkID, check := range m.checks {
+		visited++
+		if visited%128 == 0 {
+			if err := ctx.Err(); err != nil {
+				m.mu.RUnlock()
+				return nil, err
+			}
+		}
+		if !check.Enabled || len(m.results[checkID]) == 0 {
+			continue
+		}
+		result := m.results[checkID][0]
+		for _, candidate := range m.results[checkID][1:] {
+			if candidate.CheckedAt.After(result.CheckedAt) ||
+				(candidate.CheckedAt.Equal(result.CheckedAt) && candidate.ID > result.ID) {
+				result = candidate
+			}
+		}
+		var latency *int
+		if result.LatencyMS != nil {
+			value := *result.LatencyMS
+			latency = &value
+		}
+		out = append(out, SyntheticMetricSnapshot{
+			CheckID: check.ID, CheckName: check.Name, CheckType: check.CheckType,
+			ResultID: result.ID, Status: result.Status, LatencyMS: latency, CheckedAt: result.CheckedAt,
+		})
+	}
+	m.mu.RUnlock()
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].CheckedAt.Equal(out[j].CheckedAt) {
+			return out[i].CheckedAt.After(out[j].CheckedAt)
+		}
+		return out[i].CheckID < out[j].CheckID
+	})
+	if len(out) > maxChecks {
+		out = out[:maxChecks]
+	}
+	return out, nil
+}
+
 func (m *MemorySyntheticStore) UpdateSyntheticCheckStatus(id string, status string, runAt time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

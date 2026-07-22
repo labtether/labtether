@@ -149,6 +149,9 @@ func (d *Deps) HandleDockerHostActions(w http.ResponseWriter, r *http.Request) {
 		if !requireDockerHostAccess(w, r, host, hostID) {
 			return
 		}
+		if !d.enforceAssetActionGuard(w, host.AgentID) {
+			return
+		}
 		var body struct {
 			Action   string            `json:"action"`
 			TargetID string            `json:"target_id,omitempty"`
@@ -350,6 +353,12 @@ func (d *Deps) HandleDockerContainerActions(w http.ResponseWriter, r *http.Reque
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
+		if !d.enforceAssetActionGuard(w, containerAssetID) {
+			return
+		}
+		if !strings.EqualFold(strings.TrimSpace(containerAssetID), strings.TrimSpace(host.AgentID)) && !d.enforceAssetActionGuard(w, host.AgentID) {
+			return
+		}
 		var body struct {
 			Action string            `json:"action"`
 			Params map[string]string `json:"params,omitempty"`
@@ -422,6 +431,9 @@ func (d *Deps) HandleDockerStackActions(w http.ResponseWriter, r *http.Request) 
 	case "action":
 		if r.Method != http.MethodPost {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		if !d.enforceAssetActionGuard(w, stackAssetID) {
 			return
 		}
 		var body struct {

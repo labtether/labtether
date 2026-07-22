@@ -1,6 +1,13 @@
 package savedactions
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+const MaxActionsPerActor = 500
+
+var ErrCapacity = errors.New("saved action capacity reached")
 
 // SavedAction represents a reusable named command sequence stored in the hub.
 type SavedAction struct {

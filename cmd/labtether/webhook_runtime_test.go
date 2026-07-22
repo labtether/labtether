@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/labtether/labtether/internal/notifications"
 )
 
 func TestWebhookRelayDeliversBroadcastEventsAndMarksTriggered(t *testing.T) {
@@ -81,8 +83,97 @@ func TestWebhookRelayDeliversBroadcastEventsAndMarksTriggered(t *testing.T) {
 	if received.body["type"] != "asset.online" {
 		t.Fatalf("expected payload type asset.online, got %v", received.body["type"])
 	}
+	if eventID, _ := received.body["id"].(string); eventID == "" {
+		t.Fatal("expected a unique event id in the webhook payload")
+	}
 
 	waitForWebhookTrigger(t, s, webhookID)
+}
+
+func TestWebhookDispatchDoesNotLetOneSlowSubscriptionBlockAnother(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
+	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
+
+	s := newTestAPIServer(t)
+	s.webhookEventCh = make(chan webhookDispatchEvent, 32)
+	adapter := s.notificationDispatcher.Adapters["webhook"].(*notifications.WebhookAdapter)
+
+	slowStarted := make(chan struct{})
+	releaseSlow := make(chan struct{})
+	slowServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		close(slowStarted)
+		<-releaseSlow
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer slowServer.Close()
+	fastReceived := make(chan struct{}, 1)
+	fastServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fastReceived <- struct{}{}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer fastServer.Close()
+
+	for index, endpoint := range []string{slowServer.URL, fastServer.URL} {
+		id := createWebhookForTest(t, s, `{"name":"parallel","url":"https://example.com/hook","events":["asset.online"]}`)
+		stored, ok, err := s.webhookStore.GetWebhook(context.Background(), id)
+		if err != nil || !ok {
+			t.Fatalf("load webhook %d: ok=%v err=%v", index, ok, err)
+		}
+		stored.URL = endpoint
+		if err := s.webhookStore.UpdateWebhook(context.Background(), stored); err != nil {
+			t.Fatalf("update webhook %d: %v", index, err)
+		}
+	}
+	s.invalidateWebhookCache()
+
+	event := webhookDispatchEvent{
+		ID:        "evt-parallel",
+		EventType: "asset.online",
+		Data:      json.RawMessage(`{"asset_id":"asset-1"}`),
+		Timestamp: time.Now().UTC(),
+	}
+	done := make(chan struct{})
+	go func() {
+		s.dispatchWebhookEvent(context.Background(), adapter, event)
+		close(done)
+	}()
+
+	select {
+	case <-slowStarted:
+	case <-time.After(2 * time.Second):
+		close(releaseSlow)
+		t.Fatal("slow subscription was not reached")
+	}
+	select {
+	case <-fastReceived:
+	case <-time.After(750 * time.Millisecond):
+		close(releaseSlow)
+		t.Fatal("fast subscription was blocked behind the slow subscription")
+	}
+	close(releaseSlow)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("parallel webhook dispatch did not finish")
+	}
+}
+
+func TestEnqueueWebhookEventRejectsUnboundedOrUnencodableData(t *testing.T) {
+	s := newTestAPIServer(t)
+	s.webhookEventCh = make(chan webhookDispatchEvent, 2)
+
+	s.enqueueWebhookEvent("oversized.event", strings.Repeat("x", maxWebhookEventDataBytes+1), time.Now())
+	s.enqueueWebhookEvent("invalid.event", make(chan struct{}), time.Now())
+	s.enqueueWebhookEvent(strings.Repeat("e", maxWebhookEventTypeBytes+1), map[string]any{"ok": true}, time.Now())
+	s.enqueueWebhookEvent("invalid/event", map[string]any{"ok": true}, time.Now())
+	if got := len(s.webhookEventCh); got != 0 {
+		t.Fatalf("queued rejected events = %d, want 0", got)
+	}
+
+	s.enqueueWebhookEvent("valid.event", map[string]any{"ok": true}, time.Now())
+	if got := len(s.webhookEventCh); got != 1 {
+		t.Fatalf("queued valid events = %d, want 1", got)
+	}
 }
 
 func TestWebhookRelaySkipsNonMatchingEvents(t *testing.T) {

@@ -92,6 +92,129 @@ func TestMemoryAssetStoreGroupPersistsAcrossHeartbeatsWithoutGroupID(t *testing.
 	}
 }
 
+func TestMemoryAssetStoreBackfillsAndPreservesAgentIdentityAnchor(t *testing.T) {
+	store := NewMemoryAssetStore()
+	const (
+		assetID            = "identity-node"
+		trustedFingerprint = "LT-TRUSTED-FINGERPRINT"
+		trustedAlgorithm   = "ed25519"
+		verifiedAt         = "2026-07-14T09:00:00Z"
+	)
+
+	if _, err := store.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: assetID,
+		Type:    "host",
+		Name:    "Identity Node",
+		Source:  "agent",
+		Status:  "online",
+		Metadata: map[string]string{
+			"cpu_percent": "10",
+		},
+	}); err != nil {
+		t.Fatalf("create asset without identity anchor: %v", err)
+	}
+
+	backfilled, err := store.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: assetID,
+		Type:    "host",
+		Name:    "Identity Node",
+		Source:  "agent",
+		Status:  "online",
+		Metadata: map[string]string{
+			assets.MetadataKeyAgentDeviceFingerprint:  trustedFingerprint,
+			assets.MetadataKeyAgentDeviceKeyAlgorithm: trustedAlgorithm,
+			assets.MetadataKeyAgentIdentityVerifiedAt: verifiedAt,
+			"cpu_percent": "20",
+		},
+		AllowAgentIdentityTOFU: true,
+	})
+	if err != nil {
+		t.Fatalf("backfill identity anchor: %v", err)
+	}
+	assertAgentIdentityAnchor(t, backfilled, trustedFingerprint, trustedAlgorithm, "")
+
+	conflicting, err := store.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: assetID,
+		Type:    "host",
+		Name:    "Identity Node",
+		Source:  "agent",
+		Status:  "online",
+		Metadata: map[string]string{
+			assets.MetadataKeyAgentDeviceFingerprint:  "LT-ATTACKER-FINGERPRINT",
+			assets.MetadataKeyAgentDeviceKeyAlgorithm: "attacker-algorithm",
+			assets.MetadataKeyAgentIdentityVerifiedAt: "2099-01-01T00:00:00Z",
+			"cpu_percent": "30",
+		},
+	})
+	if err != nil {
+		t.Fatalf("apply conflicting routine heartbeat: %v", err)
+	}
+	assertAgentIdentityAnchor(t, conflicting, trustedFingerprint, trustedAlgorithm, "")
+	if conflicting.Metadata["cpu_percent"] != "30" {
+		t.Fatalf("routine metadata did not update: %+v", conflicting.Metadata)
+	}
+
+	missing, err := store.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: assetID,
+		Type:    "host",
+		Name:    "Identity Node",
+		Source:  "agent",
+		Status:  "online",
+		Metadata: map[string]string{
+			"cpu_percent": "40",
+		},
+	})
+	if err != nil {
+		t.Fatalf("apply heartbeat without identity metadata: %v", err)
+	}
+	assertAgentIdentityAnchor(t, missing, trustedFingerprint, trustedAlgorithm, "")
+}
+
+func TestMemoryAssetStoreAllowsVerifiedAgentIdentityRotation(t *testing.T) {
+	store := NewMemoryAssetStore()
+	if _, err := store.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: "identity-rotation-node",
+		Type:    "host",
+		Name:    "Identity Rotation Node",
+		Source:  "agent",
+		Metadata: map[string]string{
+			assets.MetadataKeyAgentDeviceFingerprint:  "LT-OLD-FINGERPRINT",
+			assets.MetadataKeyAgentDeviceKeyAlgorithm: "ed25519",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	rotated, err := store.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: "identity-rotation-node",
+		Type:    "host",
+		Name:    "Identity Rotation Node",
+		Source:  "agent",
+		Metadata: map[string]string{
+			assets.MetadataKeyAgentDeviceFingerprint:  "LT-NEW-FINGERPRINT",
+			assets.MetadataKeyAgentDeviceKeyAlgorithm: "ed25519",
+		},
+		AllowAgentIdentityRotation: true,
+	})
+	if err != nil {
+		t.Fatalf("rotate verified identity anchor: %v", err)
+	}
+	assertAgentIdentityAnchor(t, rotated, "LT-NEW-FINGERPRINT", "ed25519", "")
+}
+
+func assertAgentIdentityAnchor(t *testing.T, asset assets.Asset, fingerprint, keyAlgorithm, verifiedAt string) {
+	t.Helper()
+	if got := asset.Metadata[assets.MetadataKeyAgentDeviceFingerprint]; got != fingerprint {
+		t.Fatalf("device fingerprint=%q, want %q", got, fingerprint)
+	}
+	if got := asset.Metadata[assets.MetadataKeyAgentDeviceKeyAlgorithm]; got != keyAlgorithm {
+		t.Fatalf("device key algorithm=%q, want %q", got, keyAlgorithm)
+	}
+	if got := asset.Metadata[assets.MetadataKeyAgentIdentityVerifiedAt]; got != verifiedAt {
+		t.Fatalf("identity verified_at=%q, want %q", got, verifiedAt)
+	}
+}
+
 func ptr(value string) *string {
 	return &value
 }

@@ -26,11 +26,17 @@ const jumpChainHopDialTimeout = 6 * time.Second
 // ResolveSessionSSHConfig resolves the SSH configuration for a terminal session.
 // Priority order:
 //  1. Inline SSH config (Quick Connect sessions)
-//  2. asset_protocol_configs row for SSH
-//  3. Environment variable fallback
+//  2. Ephemeral process-local Quick Connect config by session ID
+//  3. asset_protocol_configs row for SSH
+//  4. Environment variable fallback
 func (d *Deps) ResolveSessionSSHConfig(session terminal.Session) (*terminal.SSHConfig, error) {
 	if session.InlineSSHConfig != nil {
 		return session.InlineSSHConfig, nil
+	}
+	if d.EphemeralSSHConfigs != nil {
+		if config, ok := d.EphemeralSSHConfigs.Get(session.ID); ok {
+			return config, nil
+		}
 	}
 
 	if d.GetProtocolConfig != nil {
@@ -71,13 +77,13 @@ func (d *Deps) resolveProtocolConfigSSH(pc *protocols.ProtocolConfig, assetID st
 		Host:          host,
 		Port:          port,
 		User:          strings.TrimSpace(pc.Username),
-		StrictHostKey: false,
+		StrictHostKey: true,
 	}
 
 	if len(pc.Config) > 0 && string(pc.Config) != "null" && string(pc.Config) != "{}" {
 		var sshCfg protocols.SSHConfig
 		if err := unmarshalProtocolConfigJSON(pc.Config, &sshCfg); err == nil {
-			resolved.StrictHostKey = sshCfg.StrictHostKey
+			resolved.StrictHostKey = sshCfg.StrictHostKey || !shared.InsecureSSHHostKeysAllowed()
 			resolved.HostKey = strings.TrimSpace(sshCfg.HostKey)
 		}
 	}
@@ -148,7 +154,7 @@ func (d *Deps) ResolveAssetTerminalConfig(cfg credentials.AssetTerminalConfig) (
 		Host:          strings.TrimSpace(cfg.Host),
 		Port:          cfg.Port,
 		User:          strings.TrimSpace(cfg.Username),
-		StrictHostKey: cfg.StrictHostKey,
+		StrictHostKey: cfg.StrictHostKey || !shared.InsecureSSHHostKeysAllowed(),
 		HostKey:       strings.TrimSpace(cfg.HostKey),
 	}
 
@@ -258,38 +264,27 @@ func (d *Deps) resolveSSHAuthMethods(cfg *terminal.SSHConfig) ([]ssh.AuthMethod,
 }
 
 func (d *Deps) buildSSHHostKeyCallback(cfg *terminal.SSHConfig) (ssh.HostKeyCallback, error) {
-	if cfg == nil || !cfg.StrictHostKey {
-		// #nosec G106 -- explicit non-strict host-key mode for local/dev operator flows.
-		return ssh.InsecureIgnoreHostKey(), nil
+	strict := true
+	expected := ""
+	if cfg != nil {
+		strict = cfg.StrictHostKey
+		expected = strings.TrimSpace(cfg.HostKey)
 	}
-
-	expected := strings.TrimSpace(cfg.HostKey)
-	if expected == "" {
-		knownHostsCallback, err := shared.BuildKnownHostsHostKeyCallback()
-		if err != nil {
-			return nil, errors.New("strict host key enabled but no SSH_HOST_KEY provided and no known_hosts file is available")
-		}
-		return knownHostsCallback, nil
+	callback, err := shared.BuildSSHHostKeyCallback(strict, expected)
+	if err != nil {
+		return nil, errors.New("strict host key enabled but no SSH_HOST_KEY provided and no known_hosts file is available")
 	}
-
-	return func(_ string, _ net.Addr, key ssh.PublicKey) error {
-		fingerprint := strings.TrimSpace(ssh.FingerprintSHA256(key))
-		if strings.EqualFold(fingerprint, expected) {
-			return nil
-		}
-
-		encoded := strings.TrimSpace(base64.StdEncoding.EncodeToString(key.Marshal()))
-		if strings.EqualFold(encoded, expected) {
-			return nil
-		}
-
-		return errors.New("host key mismatch")
-	}, nil
+	return callback, nil
 }
 
 // ResolveJumpChainHops resolves each hop in a JumpChain into a ResolvedHop
 // by looking up credential profiles and decrypting secrets.
 func (d *Deps) ResolveJumpChainHops(chain terminal.JumpChain) ([]terminal.ResolvedHop, error) {
+	var err error
+	chain, err = terminal.NormalizeJumpChain(chain)
+	if err != nil {
+		return nil, err
+	}
 	if len(chain.Hops) == 0 {
 		return nil, nil
 	}
@@ -316,7 +311,7 @@ func (d *Deps) ResolveJumpChainHops(chain terminal.JumpChain) ([]terminal.Resolv
 			Host:          host,
 			Port:          port,
 			User:          username,
-			StrictHostKey: false,
+			StrictHostKey: true,
 		}
 
 		profileID := strings.TrimSpace(hop.CredentialProfileID)
@@ -392,8 +387,8 @@ func (d *Deps) ResolveJumpChain(groupID string) ([]terminal.ResolvedHop, error) 
 		return nil, nil
 	}
 
-	var chain terminal.JumpChain
-	if err := json.Unmarshal(group.JumpChain, &chain); err != nil {
+	chain, err := terminal.DecodeJumpChain(group.JumpChain)
+	if err != nil {
 		return nil, fmt.Errorf("jump chain: invalid config: %w", err)
 	}
 	if len(chain.Hops) == 0 {

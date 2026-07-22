@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	pbsconnector "github.com/labtether/labtether/internal/connectors/pbs"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
@@ -20,7 +21,7 @@ import (
 func (d *Deps) HandlePBSVerifyJobs(ctx context.Context, w http.ResponseWriter, r *http.Request, collectorID string, subParts []string) {
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "pbs runtime unavailable: "+err.Error())
+		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
 		return
 	}
 
@@ -31,7 +32,7 @@ func (d *Deps) HandlePBSVerifyJobs(ctx context.Context, w http.ResponseWriter, r
 		case http.MethodGet:
 			jobs, listErr := runtime.Client.ListVerifyJobs(ctx)
 			if listErr != nil {
-				servicehttp.WriteError(w, http.StatusBadGateway, "failed to list verify jobs: "+listErr.Error())
+				writePBSError(w, http.StatusBadGateway, "failed to list verify jobs", listErr)
 				return
 			}
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
@@ -43,11 +44,11 @@ func (d *Deps) HandlePBSVerifyJobs(ctx context.Context, w http.ResponseWriter, r
 				return
 			}
 			if parseErr := r.ParseForm(); parseErr != nil {
-				servicehttp.WriteError(w, http.StatusBadRequest, "invalid form body: "+parseErr.Error())
+				writePBSError(w, http.StatusBadRequest, "invalid form body", parseErr)
 				return
 			}
 			if createErr := runtime.Client.CreateVerifyJob(ctx, r.PostForm); createErr != nil {
-				servicehttp.WriteError(w, http.StatusBadGateway, "failed to create verify job: "+createErr.Error())
+				writePBSError(w, http.StatusBadGateway, "failed to create verify job", createErr)
 				return
 			}
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "created"})
@@ -74,7 +75,7 @@ func (d *Deps) HandlePBSVerifyJobs(ctx context.Context, w http.ResponseWriter, r
 		}
 		upid, runErr := runtime.Client.RunVerifyJob(ctx, jobID)
 		if runErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to run verify job: "+runErr.Error())
+			writePBSError(w, http.StatusBadGateway, "failed to run verify job", runErr)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"upid": upid})
@@ -88,11 +89,11 @@ func (d *Deps) HandlePBSVerifyJobs(ctx context.Context, w http.ResponseWriter, r
 			return
 		}
 		if parseErr := r.ParseForm(); parseErr != nil {
-			servicehttp.WriteError(w, http.StatusBadRequest, "invalid form body: "+parseErr.Error())
+			writePBSError(w, http.StatusBadRequest, "invalid form body", parseErr)
 			return
 		}
 		if updateErr := runtime.Client.UpdateVerifyJob(ctx, jobID, r.PostForm); updateErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to update verify job: "+updateErr.Error())
+			writePBSError(w, http.StatusBadGateway, "failed to update verify job", updateErr)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "updated"})
@@ -101,7 +102,7 @@ func (d *Deps) HandlePBSVerifyJobs(ctx context.Context, w http.ResponseWriter, r
 			return
 		}
 		if deleteErr := runtime.Client.DeleteVerifyJob(ctx, jobID); deleteErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to delete verify job: "+deleteErr.Error())
+			writePBSError(w, http.StatusBadGateway, "failed to delete verify job", deleteErr)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
@@ -122,7 +123,7 @@ func (d *Deps) HandlePBSVerifyJobs(ctx context.Context, w http.ResponseWriter, r
 func (d *Deps) HandlePBSPruneJobs(ctx context.Context, w http.ResponseWriter, r *http.Request, collectorID string, subParts []string) {
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "pbs runtime unavailable: "+err.Error())
+		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
 		return
 	}
 
@@ -131,7 +132,7 @@ func (d *Deps) HandlePBSPruneJobs(ctx context.Context, w http.ResponseWriter, r 
 		case http.MethodGet:
 			jobs, listErr := runtime.Client.ListPruneJobs(ctx)
 			if listErr != nil {
-				servicehttp.WriteError(w, http.StatusBadGateway, "failed to list prune jobs: "+listErr.Error())
+				writePBSError(w, http.StatusBadGateway, "failed to list prune jobs", listErr)
 				return
 			}
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
@@ -143,11 +144,11 @@ func (d *Deps) HandlePBSPruneJobs(ctx context.Context, w http.ResponseWriter, r 
 				return
 			}
 			if parseErr := r.ParseForm(); parseErr != nil {
-				servicehttp.WriteError(w, http.StatusBadRequest, "invalid form body: "+parseErr.Error())
+				writePBSError(w, http.StatusBadRequest, "invalid form body", parseErr)
 				return
 			}
 			if createErr := runtime.Client.CreatePruneJob(ctx, r.PostForm); createErr != nil {
-				servicehttp.WriteError(w, http.StatusBadGateway, "failed to create prune job: "+createErr.Error())
+				writePBSError(w, http.StatusBadGateway, "failed to create prune job", createErr)
 				return
 			}
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "created"})
@@ -176,7 +177,42 @@ func (d *Deps) HandlePBSPruneJobs(ctx context.Context, w http.ResponseWriter, r 
 			}
 			upid, runErr := runtime.Client.RunPruneJob(ctx, jobID)
 			if runErr != nil {
-				servicehttp.WriteError(w, http.StatusBadGateway, "failed to run prune job: "+runErr.Error())
+				writePBSError(w, http.StatusBadGateway, "failed to run prune job", runErr)
+				return
+			}
+			servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"upid": upid})
+		case "simulate":
+			if !d.RequireAdminAuth(w, r) {
+				return
+			}
+			jobs, listErr := runtime.Client.ListPruneJobs(ctx)
+			if listErr != nil {
+				writePBSError(w, http.StatusBadGateway, "failed to load prune job for simulation", listErr)
+				return
+			}
+			var selected *pbsconnector.PruneJob
+			for i := range jobs {
+				if strings.TrimSpace(jobs[i].ID) == jobID {
+					selected = &jobs[i]
+					break
+				}
+			}
+			if selected == nil {
+				servicehttp.WriteError(w, http.StatusNotFound, "prune job not found")
+				return
+			}
+			upid, simulateErr := runtime.Client.StartPruneDatastore(ctx, selected.Store, pbsconnector.PruneOptions{
+				DryRun:      true,
+				NS:          selected.NS,
+				KeepLast:    pbsIntValue(selected.KeepLast),
+				KeepHourly:  pbsIntValue(selected.KeepHourly),
+				KeepDaily:   pbsIntValue(selected.KeepDaily),
+				KeepWeekly:  pbsIntValue(selected.KeepWeekly),
+				KeepMonthly: pbsIntValue(selected.KeepMonthly),
+				KeepYearly:  pbsIntValue(selected.KeepYearly),
+			})
+			if simulateErr != nil {
+				writePBSError(w, http.StatusBadGateway, "failed to simulate prune job", simulateErr)
 				return
 			}
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"upid": upid})
@@ -192,11 +228,11 @@ func (d *Deps) HandlePBSPruneJobs(ctx context.Context, w http.ResponseWriter, r 
 			return
 		}
 		if parseErr := r.ParseForm(); parseErr != nil {
-			servicehttp.WriteError(w, http.StatusBadRequest, "invalid form body: "+parseErr.Error())
+			writePBSError(w, http.StatusBadRequest, "invalid form body", parseErr)
 			return
 		}
 		if updateErr := runtime.Client.UpdatePruneJob(ctx, jobID, r.PostForm); updateErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to update prune job: "+updateErr.Error())
+			writePBSError(w, http.StatusBadGateway, "failed to update prune job", updateErr)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "updated"})
@@ -205,13 +241,20 @@ func (d *Deps) HandlePBSPruneJobs(ctx context.Context, w http.ResponseWriter, r 
 			return
 		}
 		if deleteErr := runtime.Client.DeletePruneJob(ctx, jobID); deleteErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to delete prune job: "+deleteErr.Error())
+			writePBSError(w, http.StatusBadGateway, "failed to delete prune job", deleteErr)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 	default:
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+func pbsIntValue(value *int) int {
+	if value == nil {
+		return 0
+	}
+	return *value
 }
 
 // handlePBSSyncJobs dispatches sync-job CRUD and run actions.
@@ -225,7 +268,7 @@ func (d *Deps) HandlePBSPruneJobs(ctx context.Context, w http.ResponseWriter, r 
 func (d *Deps) HandlePBSSyncJobs(ctx context.Context, w http.ResponseWriter, r *http.Request, collectorID string, subParts []string) {
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "pbs runtime unavailable: "+err.Error())
+		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
 		return
 	}
 
@@ -234,7 +277,7 @@ func (d *Deps) HandlePBSSyncJobs(ctx context.Context, w http.ResponseWriter, r *
 		case http.MethodGet:
 			jobs, listErr := runtime.Client.ListSyncJobs(ctx)
 			if listErr != nil {
-				servicehttp.WriteError(w, http.StatusBadGateway, "failed to list sync jobs: "+listErr.Error())
+				writePBSError(w, http.StatusBadGateway, "failed to list sync jobs", listErr)
 				return
 			}
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
@@ -246,11 +289,11 @@ func (d *Deps) HandlePBSSyncJobs(ctx context.Context, w http.ResponseWriter, r *
 				return
 			}
 			if parseErr := r.ParseForm(); parseErr != nil {
-				servicehttp.WriteError(w, http.StatusBadRequest, "invalid form body: "+parseErr.Error())
+				writePBSError(w, http.StatusBadRequest, "invalid form body", parseErr)
 				return
 			}
 			if createErr := runtime.Client.CreateSyncJob(ctx, r.PostForm); createErr != nil {
-				servicehttp.WriteError(w, http.StatusBadGateway, "failed to create sync job: "+createErr.Error())
+				writePBSError(w, http.StatusBadGateway, "failed to create sync job", createErr)
 				return
 			}
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "created"})
@@ -276,7 +319,7 @@ func (d *Deps) HandlePBSSyncJobs(ctx context.Context, w http.ResponseWriter, r *
 		}
 		upid, runErr := runtime.Client.RunSyncJob(ctx, jobID)
 		if runErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to run sync job: "+runErr.Error())
+			writePBSError(w, http.StatusBadGateway, "failed to run sync job", runErr)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"upid": upid})
@@ -289,11 +332,11 @@ func (d *Deps) HandlePBSSyncJobs(ctx context.Context, w http.ResponseWriter, r *
 			return
 		}
 		if parseErr := r.ParseForm(); parseErr != nil {
-			servicehttp.WriteError(w, http.StatusBadRequest, "invalid form body: "+parseErr.Error())
+			writePBSError(w, http.StatusBadRequest, "invalid form body", parseErr)
 			return
 		}
 		if updateErr := runtime.Client.UpdateSyncJob(ctx, jobID, r.PostForm); updateErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to update sync job: "+updateErr.Error())
+			writePBSError(w, http.StatusBadGateway, "failed to update sync job", updateErr)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "updated"})
@@ -302,7 +345,7 @@ func (d *Deps) HandlePBSSyncJobs(ctx context.Context, w http.ResponseWriter, r *
 			return
 		}
 		if deleteErr := runtime.Client.DeleteSyncJob(ctx, jobID); deleteErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to delete sync job: "+deleteErr.Error())
+			writePBSError(w, http.StatusBadGateway, "failed to delete sync job", deleteErr)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "deleted"})

@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"github.com/labtether/labtether/internal/securityruntime"
 )
 
 const (
@@ -19,8 +22,6 @@ const (
 // target host:port. At least one of password or privateKey must be non-empty.
 func TestSSH(ctx context.Context, host string, port int, username, password, privateKey string, hostKeyCallback ssh.HostKeyCallback) *TestResult {
 	start := time.Now()
-
-	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
 
 	authMethods := make([]ssh.AuthMethod, 0, 2)
 	if password := strings.TrimSpace(password); password != "" {
@@ -47,9 +48,11 @@ func TestSSH(ctx context.Context, host string, port int, username, password, pri
 	}
 
 	if hostKeyCallback == nil {
-		// #nosec G106 -- test-only connectivity probe; operator is aware that
-		// host key validation is skipped during reachability tests.
-		hostKeyCallback = ssh.InsecureIgnoreHostKey()
+		return &TestResult{
+			Success:   false,
+			LatencyMs: time.Since(start).Milliseconds(),
+			Error:     "SSH host key callback is required",
+		}
 	}
 
 	cfg := &ssh.ClientConfig{
@@ -62,7 +65,7 @@ func TestSSH(ctx context.Context, host string, port int, username, password, pri
 	dialCtx, cancel := context.WithTimeout(ctx, handshakeTimeout)
 	defer cancel()
 
-	conn, err := (&net.Dialer{}).DialContext(dialCtx, "tcp", addr)
+	client, err := securityruntime.DialOutboundSSHContext(dialCtx, host, port, cfg, dialTimeout)
 	if err != nil {
 		return &TestResult{
 			Success:   false,
@@ -70,17 +73,6 @@ func TestSSH(ctx context.Context, host string, port int, username, password, pri
 			Error:     "connection failed: " + err.Error(),
 		}
 	}
-	defer conn.Close()
-
-	sshConn, chans, reqs, err := ssh.NewClientConn(conn, addr, cfg)
-	if err != nil {
-		return &TestResult{
-			Success:   false,
-			LatencyMs: time.Since(start).Milliseconds(),
-			Error:     "SSH handshake failed: " + err.Error(),
-		}
-	}
-	client := ssh.NewClient(sshConn, chans, reqs)
 	defer client.Close()
 
 	return &TestResult{
@@ -94,13 +86,10 @@ func TestSSH(ctx context.Context, host string, port int, username, password, pri
 func TestTelnet(ctx context.Context, host string, port int) *TestResult {
 	start := time.Now()
 
-	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
-
 	dialCtx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
 
-	var d net.Dialer
-	conn, err := d.DialContext(dialCtx, "tcp", addr)
+	conn, err := securityruntime.DialOutboundTCPContext(dialCtx, host, port, dialTimeout)
 	if err != nil {
 		return &TestResult{
 			Success:   false,
@@ -141,13 +130,10 @@ func TestTelnet(ctx context.Context, host string, port int) *TestResult {
 func TestVNC(ctx context.Context, host string, port int) *TestResult {
 	start := time.Now()
 
-	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
-
 	dialCtx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
 
-	var d net.Dialer
-	conn, err := d.DialContext(dialCtx, "tcp", addr)
+	conn, err := securityruntime.DialOutboundTCPContext(dialCtx, host, port, dialTimeout)
 	if err != nil {
 		return &TestResult{
 			Success:   false,
@@ -201,13 +187,10 @@ func TestVNC(ctx context.Context, host string, port int) *TestResult {
 func TestRDP(ctx context.Context, host string, port int, guacdAddr string) *TestResult {
 	start := time.Now()
 
-	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
-
 	dialCtx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
 
-	var d net.Dialer
-	conn, err := d.DialContext(dialCtx, "tcp", addr)
+	conn, err := securityruntime.DialOutboundTCPContext(dialCtx, host, port, dialTimeout)
 	if err != nil {
 		return &TestResult{
 			Success:   false,
@@ -226,7 +209,16 @@ func TestRDP(ctx context.Context, host string, port int, guacdAddr string) *Test
 	if guacdAddr != "" {
 		guacdDialCtx, guacdCancel := context.WithTimeout(ctx, dialTimeout)
 		defer guacdCancel()
-		guacdConn, guacdErr := (&net.Dialer{}).DialContext(guacdDialCtx, "tcp", strings.TrimSpace(guacdAddr))
+		guacdHost, guacdPortRaw, splitErr := net.SplitHostPort(strings.TrimSpace(guacdAddr))
+		guacdPort, portErr := strconv.Atoi(guacdPortRaw)
+		if splitErr != nil || portErr != nil {
+			return &TestResult{
+				Success:   false,
+				LatencyMs: time.Since(start).Milliseconds(),
+				Error:     "invalid guacd address",
+			}
+		}
+		guacdConn, guacdErr := securityruntime.DialOutboundTCPContext(guacdDialCtx, guacdHost, guacdPort, dialTimeout)
 		if guacdErr != nil {
 			return &TestResult{
 				Success:   false,

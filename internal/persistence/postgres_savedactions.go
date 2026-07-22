@@ -13,6 +13,10 @@ import (
 )
 
 func (s *PostgresStore) CreateSavedAction(ctx context.Context, action savedactions.SavedAction) error {
+	action.CreatedBy = strings.TrimSpace(action.CreatedBy)
+	if action.CreatedBy == "" {
+		action.CreatedBy = "system"
+	}
 	stepsJSON, err := json.Marshal(action.Steps)
 	if err != nil {
 		return fmt.Errorf("marshal steps: %w", err)
@@ -20,12 +24,30 @@ func (s *PostgresStore) CreateSavedAction(ctx context.Context, action savedactio
 	if action.Steps == nil {
 		stepsJSON = []byte("[]")
 	}
-	_, err = s.pool.Exec(ctx,
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "saved-actions:"+action.CreatedBy); err != nil {
+		return err
+	}
+	var actorActionCount int
+	if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM saved_actions WHERE created_by = $1`, action.CreatedBy).Scan(&actorActionCount); err != nil {
+		return err
+	}
+	if actorActionCount >= savedactions.MaxActionsPerActor {
+		return savedactions.ErrCapacity
+	}
+	_, err = tx.Exec(ctx,
 		`INSERT INTO saved_actions (id, name, description, steps, created_by, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6)`,
 		action.ID, action.Name, action.Description, stepsJSON, action.CreatedBy, action.CreatedAt,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *PostgresStore) GetSavedAction(ctx context.Context, actorID, id string) (savedactions.SavedAction, bool, error) {

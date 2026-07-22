@@ -9,7 +9,9 @@ import (
 	"testing"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/credentials"
 	"github.com/labtether/labtether/internal/policy"
 	"github.com/labtether/labtether/internal/terminal"
 )
@@ -47,6 +49,254 @@ func TestHandleDesktopSessionsAcceptsManagedAssetTarget(t *testing.T) {
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201 for managed asset target, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleDesktopSessionsDesktopCredentialRequiresScopeForAPIKey(t *testing.T) {
+	sut := newTestAPIServer(t)
+	const assetID = "desktop-node-saved-credential"
+	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: assetID,
+		Type:    "node",
+		Name:    "Desktop Node Saved Credential",
+		Source:  "manual",
+		Status:  "online",
+	}); err != nil {
+		t.Fatalf("failed to seed asset: %v", err)
+	}
+	if _, err := sut.credentialStore.SaveDesktopConfig(credentials.AssetDesktopConfig{
+		AssetID:             assetID,
+		CredentialProfileID: "cred-desktop-saved",
+	}); err != nil {
+		t.Fatalf("failed to seed desktop credential binding: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/desktop/sessions", bytes.NewBufferString(`{"target":"`+assetID+`","protocol":"rdp"}`))
+	req = req.WithContext(apiv2.ContextWithScopes(req.Context(), []string{"assets:control"}))
+	rec := httptest.NewRecorder()
+	sut.handleDesktopSessions(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("saved desktop credential scope status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	sessions, err := sut.terminalStore.ListSessions()
+	if err != nil {
+		t.Fatalf("list sessions: %v", err)
+	}
+	if len(sessions) != 0 {
+		t.Fatal("unauthorized saved desktop credential request created a session")
+	}
+}
+
+func TestHandleDesktopSessionsCreatesCanonicalDirectSessionWithoutPersistingCredentials(t *testing.T) {
+	sut := newTestAPIServer(t)
+	secret := "synthetic-direct-rdp-secret"
+	req := httptest.NewRequest(http.MethodPost, "/desktop/sessions", bytes.NewBufferString(
+		`{"protocol":"rdp","direct_target":{"host":"192.0.2.50","port":3389,"username":"qa-user","password":"`+secret+`"}}`,
+	))
+	req = req.WithContext(contextWithPrincipal(req.Context(), "actor-direct", "admin"))
+	rec := httptest.NewRecorder()
+	sut.handleDesktopSessions(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("direct create status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), secret) || strings.Contains(rec.Body.String(), "qa-user") {
+		t.Fatalf("direct session response exposed ephemeral credentials: %s", rec.Body.String())
+	}
+	var created terminal.Session
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode direct session: %v", err)
+	}
+	if created.Target != "192.0.2.50:3389" || created.ActorID != "actor-direct" {
+		t.Fatalf("unexpected direct session identity: %+v", created)
+	}
+	opts := sut.getDesktopSessionOptions(created.ID)
+	if !opts.Direct || opts.DirectHost != "192.0.2.50" || opts.DirectPort != 3389 ||
+		opts.DirectUsername != "qa-user" || opts.DirectPassword != secret {
+		t.Fatalf("direct session options mismatch: %+v", opts)
+	}
+}
+
+func TestHandleDesktopSessionsDirectCredentialsRequireScopeForAPIKey(t *testing.T) {
+	sut := newTestAPIServer(t)
+	req := httptest.NewRequest(http.MethodPost, "/desktop/sessions", bytes.NewBufferString(
+		`{"protocol":"rdp","direct_target":{"host":"192.0.2.51","port":3389,"password":"secret"}}`,
+	))
+	req = req.WithContext(apiv2.ContextWithScopes(req.Context(), []string{"assets:control"}))
+	rec := httptest.NewRecorder()
+	sut.handleDesktopSessions(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("direct credential scope status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	sessions, err := sut.terminalStore.ListSessions()
+	if err != nil {
+		t.Fatalf("list sessions: %v", err)
+	}
+	if len(sessions) != 0 {
+		t.Fatal("unauthorized direct credential request created a session")
+	}
+}
+
+func TestHandleDesktopSessionsRejectsAssetRestrictedDirectTarget(t *testing.T) {
+	sut := newTestAPIServer(t)
+	req := httptest.NewRequest(http.MethodPost, "/desktop/sessions", bytes.NewBufferString(
+		`{"protocol":"vnc","direct_target":{"host":"192.0.2.52","port":5900}}`,
+	))
+	req = req.WithContext(apiv2.ContextWithAllowedAssets(req.Context(), []string{"asset-1"}))
+	rec := httptest.NewRecorder()
+	sut.handleDesktopSessions(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("asset-restricted direct status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleDesktopSessionsRejectsInvalidOptionsBeforeCreatingSession(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "unknown protocol", body: `{"target":"desktop-node-options","protocol":"telnet"}`},
+		{name: "unknown quality", body: `{"target":"desktop-node-options","quality":"ultra"}`},
+		{name: "control in display", body: `{"target":"desktop-node-options","display":"main\nsecondary"}`},
+		{name: "oversized display", body: `{"target":"desktop-node-options","display":"` + strings.Repeat("d", 257) + `"}`},
+		{name: "direct recording", body: `{"protocol":"rdp","record":true,"direct_target":{"host":"192.0.2.53","port":3389}}`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			sut := newTestAPIServer(t)
+			if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+				AssetID: "desktop-node-options",
+				Type:    "node",
+				Name:    "Desktop Node Options",
+				Source:  "manual",
+				Status:  "online",
+			}); err != nil {
+				t.Fatalf("failed to seed asset: %v", err)
+			}
+
+			req := httptest.NewRequest(http.MethodPost, "/desktop/sessions", bytes.NewBufferString(tc.body))
+			req = req.WithContext(contextWithUserID(req.Context(), "actor-options"))
+			rec := httptest.NewRecorder()
+			sut.handleDesktopSessions(rec, req)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestDirectDesktopSessionOptionsAreIsolatedAndProtocolCannotBeOverridden(t *testing.T) {
+	sut := newTestAPIServer(t)
+	create := func(actor, host, secret, protocol string) terminal.Session {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/desktop/sessions", bytes.NewBufferString(
+			`{"protocol":"`+protocol+`","direct_target":{"host":"`+host+`","port":3389,"password":"`+secret+`"}}`,
+		))
+		req = req.WithContext(contextWithPrincipal(req.Context(), actor, "admin"))
+		rec := httptest.NewRecorder()
+		sut.handleDesktopSessions(rec, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create %s status=%d body=%s", actor, rec.Code, rec.Body.String())
+		}
+		var session terminal.Session
+		if err := json.Unmarshal(rec.Body.Bytes(), &session); err != nil {
+			t.Fatalf("decode %s session: %v", actor, err)
+		}
+		return session
+	}
+	first := create("actor-a", "192.0.2.60", "secret-a", "vnc")
+	second := create("actor-b", "192.0.2.61", "secret-b", "rdp")
+	firstOpts, secondOpts := sut.getDesktopSessionOptions(first.ID), sut.getDesktopSessionOptions(second.ID)
+	if firstOpts.DirectPassword != "secret-a" || secondOpts.DirectPassword != "secret-b" || firstOpts.DirectHost == secondOpts.DirectHost {
+		t.Fatalf("direct session options crossed boundaries: first=%+v second=%+v", firstOpts, secondOpts)
+	}
+
+	overrideReq := httptest.NewRequest(http.MethodGet, "/desktop/sessions/"+first.ID+"/stream?protocol=rdp", nil)
+	if got := sut.ensureDesktopDeps().ResolveDesktopProtocol(first, overrideReq); got != "vnc" {
+		t.Fatalf("creation-time protocol was overridden by stream query: got %q", got)
+	}
+	crossActorReq := httptest.NewRequest(http.MethodGet, "/desktop/sessions/"+first.ID, nil)
+	crossActorReq = crossActorReq.WithContext(contextWithUserID(crossActorReq.Context(), "actor-b"))
+	crossActorRec := httptest.NewRecorder()
+	sut.handleDesktopSessionActions(crossActorRec, crossActorReq)
+	if crossActorRec.Code != http.StatusForbidden {
+		t.Fatalf("cross-actor direct session access status=%d body=%s", crossActorRec.Code, crossActorRec.Body.String())
+	}
+}
+
+func TestDirectSPICETicketUsesEphemeralPasswordWithoutURLLeak(t *testing.T) {
+	sut := newTestAPIServer(t)
+	secret := "synthetic-direct-spice-secret"
+	createReq := httptest.NewRequest(http.MethodPost, "/desktop/sessions", bytes.NewBufferString(
+		`{"protocol":"spice","direct_target":{"host":"192.0.2.75","port":5930,"password":"`+secret+`"}}`,
+	))
+	createReq = createReq.WithContext(contextWithPrincipal(createReq.Context(), "actor-spice", "admin"))
+	createRec := httptest.NewRecorder()
+	sut.handleDesktopSessions(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("direct SPICE create status=%d body=%s", createRec.Code, createRec.Body.String())
+	}
+	var created terminal.Session
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode direct SPICE session: %v", err)
+	}
+
+	ticketReq := httptest.NewRequest(http.MethodPost, "/desktop/sessions/"+created.ID+"/spice-ticket", nil)
+	ticketReq = ticketReq.WithContext(contextWithPrincipal(ticketReq.Context(), "actor-spice", "admin"))
+	ticketRec := httptest.NewRecorder()
+	sut.handleDesktopSessionActions(ticketRec, ticketReq)
+	if ticketRec.Code != http.StatusCreated {
+		t.Fatalf("direct SPICE ticket status=%d body=%s", ticketRec.Code, ticketRec.Body.String())
+	}
+	var payload struct {
+		StreamPath string `json:"stream_path"`
+		Password   string `json:"password"`
+		Type       string `json:"type"`
+	}
+	if err := json.Unmarshal(ticketRec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode direct SPICE ticket: %v", err)
+	}
+	if payload.Password != secret || payload.Type != "spice" {
+		t.Fatalf("unexpected direct SPICE ticket payload: %+v", payload)
+	}
+	if !strings.Contains(payload.StreamPath, "/desktop/sessions/"+created.ID+"/stream?") {
+		t.Fatalf("unexpected direct SPICE stream path: %q", payload.StreamPath)
+	}
+	if strings.Contains(payload.StreamPath, secret) {
+		t.Fatal("direct SPICE password leaked into stream URL")
+	}
+}
+
+func TestDirectSPICETicketAllowsPasswordlessEndpoint(t *testing.T) {
+	sut := newTestAPIServer(t)
+	createReq := httptest.NewRequest(http.MethodPost, "/desktop/sessions", bytes.NewBufferString(
+		`{"protocol":"spice","direct_target":{"host":"192.0.2.76","port":5930}}`,
+	))
+	createReq = createReq.WithContext(contextWithPrincipal(createReq.Context(), "actor-spice-empty", "admin"))
+	createRec := httptest.NewRecorder()
+	sut.handleDesktopSessions(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("passwordless direct SPICE create status=%d body=%s", createRec.Code, createRec.Body.String())
+	}
+	var created terminal.Session
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode passwordless direct SPICE session: %v", err)
+	}
+
+	ticketReq := httptest.NewRequest(http.MethodPost, "/desktop/sessions/"+created.ID+"/spice-ticket", nil)
+	ticketReq = ticketReq.WithContext(contextWithPrincipal(ticketReq.Context(), "actor-spice-empty", "admin"))
+	ticketRec := httptest.NewRecorder()
+	sut.handleDesktopSessionActions(ticketRec, ticketReq)
+	if ticketRec.Code != http.StatusCreated {
+		t.Fatalf("passwordless direct SPICE ticket status=%d body=%s", ticketRec.Code, ticketRec.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(ticketRec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode passwordless direct SPICE ticket: %v", err)
+	}
+	password, exists := payload["password"]
+	if !exists || password != "" {
+		t.Fatalf("passwordless direct SPICE response must carry an explicit empty password, got %#v", payload)
 	}
 }
 

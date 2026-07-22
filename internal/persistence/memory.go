@@ -49,6 +49,15 @@ func (m *MemoryTerminalStore) UpdateCommandResult(sessionID, commandID, status, 
 	return m.store.UpdateCommandResult(sessionID, commandID, status, output)
 }
 
+func (m *MemoryTerminalStore) GetCommand(commandID string) (terminal.Command, bool, error) {
+	command, ok := m.store.GetCommand(commandID)
+	return command, ok, nil
+}
+
+func (m *MemoryTerminalStore) DeleteCommand(commandID string) error {
+	return m.store.DeleteCommand(commandID)
+}
+
 func (m *MemoryTerminalStore) ListCommands(sessionID string) ([]terminal.Command, error) {
 	return m.store.ListCommands(sessionID)
 }
@@ -213,14 +222,17 @@ func applyAssetCanonical(asset assets.Asset) assets.Asset {
 
 func (m *MemoryAssetStore) UpsertAssetHeartbeat(req assets.HeartbeatRequest) (assets.Asset, error) {
 	now := time.Now().UTC()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.upsertAssetHeartbeatLocked(req, now), nil
+}
+
+func (m *MemoryAssetStore) upsertAssetHeartbeatLocked(req assets.HeartbeatRequest, now time.Time) assets.Asset {
 	status := req.Status
 	if status == "" {
 		status = "online"
 	}
 	groupID := strings.TrimSpace(req.GroupID)
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	existing, ok := m.assets[req.AssetID]
 	if !ok {
@@ -228,7 +240,7 @@ func (m *MemoryAssetStore) UpsertAssetHeartbeat(req assets.HeartbeatRequest) (as
 	}
 
 	overrideName := strings.TrimSpace(existing.Metadata[assets.MetadataKeyNameOverride])
-	metadata := cloneMetadata(req.Metadata)
+	metadata := mergeHeartbeatIdentityAnchor(existing.Metadata, req.Metadata, req.AllowAgentIdentityRotation, req.AllowAgentIdentityTOFU)
 	if overrideName != "" {
 		if metadata == nil {
 			metadata = map[string]string{}
@@ -258,7 +270,7 @@ func (m *MemoryAssetStore) UpsertAssetHeartbeat(req assets.HeartbeatRequest) (as
 	existing.Tags = cloneStringSlice(existing.Tags)
 	existing.Metadata = cloneMetadata(existing.Metadata)
 	existing.Attributes = cloneAnyMap(existing.Attributes)
-	return existing, nil
+	return existing
 }
 
 func (m *MemoryAssetStore) ListAssets() ([]assets.Asset, error) {

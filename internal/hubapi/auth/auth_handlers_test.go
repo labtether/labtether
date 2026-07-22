@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -54,11 +56,22 @@ func (s *memAuthStore) GetUserByUsername(username string) (auth.User, bool, erro
 	return auth.User{}, false, nil
 }
 
+func (s *memAuthStore) GetUserByOIDCIdentity(provider, issuer, subject string) (auth.User, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, u := range s.users {
+		if u.AuthProvider == provider && u.OIDCIssuer == issuer && u.OIDCSubject == subject {
+			return u, true, nil
+		}
+	}
+	return auth.User{}, false, nil
+}
+
 func (s *memAuthStore) GetUserByOIDCSubject(provider, subject string) (auth.User, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, u := range s.users {
-		if u.AuthProvider == provider && u.OIDCSubject == subject {
+		if u.AuthProvider == provider && u.OIDCIssuer == "" && u.OIDCSubject == subject {
 			return u, true, nil
 		}
 	}
@@ -103,6 +116,48 @@ func (s *memAuthStore) CreateUserWithRole(username, passwordHash, role, provider
 	}
 	s.users = append(s.users, u)
 	return u, nil
+}
+
+func (s *memAuthStore) CreateUserWithOIDCIdentity(
+	username, passwordHash, role, provider, issuer, subject string,
+) (auth.User, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, existing := range s.users {
+		if existing.Username == username {
+			return auth.User{}, fmt.Errorf("user %q already exists", username)
+		}
+		if existing.AuthProvider == provider && existing.OIDCIssuer == issuer && existing.OIDCSubject == subject {
+			return auth.User{}, fmt.Errorf("oidc identity already exists")
+		}
+	}
+	u := auth.User{
+		ID: s.genID(), Username: username, PasswordHash: passwordHash,
+		Role: role, AuthProvider: provider, OIDCIssuer: issuer, OIDCSubject: subject,
+		CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+	s.users = append(s.users, u)
+	return u, nil
+}
+
+func (s *memAuthStore) BindLegacyOIDCIdentity(
+	id, provider, subject, issuer string,
+) (auth.User, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, existing := range s.users {
+		if existing.ID != id && existing.AuthProvider == provider && existing.OIDCIssuer == issuer && existing.OIDCSubject == subject {
+			return auth.User{}, false, fmt.Errorf("oidc identity already exists")
+		}
+	}
+	for i := range s.users {
+		if s.users[i].ID == id && s.users[i].AuthProvider == provider && s.users[i].OIDCIssuer == "" && s.users[i].OIDCSubject == subject {
+			s.users[i].OIDCIssuer = issuer
+			s.users[i].UpdatedAt = time.Now().UTC()
+			return s.users[i], true, nil
+		}
+	}
+	return auth.User{}, false, nil
 }
 
 func (s *memAuthStore) UpdateUserPasswordHash(id, hash string) error {
@@ -394,10 +449,12 @@ func TestHandleAuthBootstrapStatusReturnsFalseAfterSetup(t *testing.T) {
 }
 
 func TestHandleAuthBootstrapSetupRejectsWeakPassword(t *testing.T) {
+	t.Setenv("LABTETHER_SETUP_TOKEN", "test-local-setup-token")
 	deps, _ := newTestAuthDeps(t)
 	body, _ := json.Marshal(BootstrapSetupRequest{Username: "admin", Password: "password"})
 	req := httptest.NewRequest(http.MethodPost, "/auth/bootstrap", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(BootstrapSetupTokenHeader(), "test-local-setup-token")
 	rec := httptest.NewRecorder()
 	deps.HandleAuthBootstrapSetup(rec, req)
 	if rec.Code != http.StatusBadRequest {
@@ -406,14 +463,31 @@ func TestHandleAuthBootstrapSetupRejectsWeakPassword(t *testing.T) {
 }
 
 func TestHandleAuthBootstrapSetupSucceeds(t *testing.T) {
+	t.Setenv("LABTETHER_SETUP_TOKEN", "test-local-setup-token")
 	deps, _ := newTestAuthDeps(t)
 	body, _ := json.Marshal(BootstrapSetupRequest{Username: "admin", Password: "secureP@ssw0rd!"})
 	req := httptest.NewRequest(http.MethodPost, "/auth/bootstrap", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(BootstrapSetupTokenHeader(), "test-local-setup-token")
 	rec := httptest.NewRecorder()
 	deps.HandleAuthBootstrapSetup(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleAuthBootstrapSetupFailsClosedWithoutConfiguredToken(t *testing.T) {
+	t.Setenv("LABTETHER_SETUP_TOKEN", "")
+	t.Setenv("LABTETHER_SETUP_TOKEN_FILE", filepath.Join(t.TempDir(), "missing-token"))
+	deps, _ := newTestAuthDeps(t)
+	body, _ := json.Marshal(BootstrapSetupRequest{Username: "admin", Password: "secureP@ssw0rd!"})
+	req := httptest.NewRequest(http.MethodPost, "/auth/bootstrap", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(BootstrapSetupTokenHeader(), "attacker-controlled")
+	rec := httptest.NewRecorder()
+	deps.HandleAuthBootstrapSetup(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 when setup token is not configured, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

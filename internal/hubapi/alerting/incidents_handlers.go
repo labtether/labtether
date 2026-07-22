@@ -7,7 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/groups"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/incidents"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/servicehttp"
@@ -38,6 +40,17 @@ func (d *Deps) HandleIncidents(w http.ResponseWriter, r *http.Request) {
 				servicehttp.WriteError(w, http.StatusNotFound, "group not found")
 				return
 			}
+			if shared.HasAssetRestriction(r.Context()) {
+				groupAccess, authErr := d.accessibleGroupIDs(r.Context())
+				if authErr != nil {
+					writeAssetScopeForbidden(w, "unable to prove incident group scope")
+					return
+				}
+				if _, allowed := groupAccess[groupID]; !allowed {
+					writeAssetScopeForbidden(w, "api key does not have access to every asset in this incident group")
+					return
+				}
+			}
 		}
 
 		listed, err := d.IncidentStore.ListIncidents(persistence.IncidentFilter{
@@ -53,6 +66,25 @@ func (d *Deps) HandleIncidents(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list incidents")
 			return
 		}
+		if shared.HasAssetRestriction(r.Context()) {
+			groupAccess, authErr := d.accessibleGroupIDs(r.Context())
+			if authErr != nil {
+				writeAssetScopeForbidden(w, "unable to prove incident asset scope")
+				return
+			}
+			filtered := make([]incidents.Incident, 0, len(listed))
+			for _, incident := range listed {
+				allowed, checkErr := d.incidentAllowed(r.Context(), incident, groupAccess)
+				if checkErr != nil {
+					servicehttp.WriteError(w, http.StatusInternalServerError, "failed to authorize incidents")
+					return
+				}
+				if allowed {
+					filtered = append(filtered, incident)
+				}
+			}
+			listed = filtered
+		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"incidents": listed})
 	case http.MethodPost:
 		if !d.EnforceRateLimit(w, r, "incidents.create", 120, time.Minute) {
@@ -65,6 +97,7 @@ func (d *Deps) HandleIncidents(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		normalizeCreateIncidentRequest(&req)
+		req.CreatedBy = apiv2.PrincipalActorID(r.Context())
 		if err := validateCreateIncidentRequest(req); err != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 			return
@@ -85,12 +118,20 @@ func (d *Deps) HandleIncidents(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		if shared.HasAssetRestriction(r.Context()) {
+			groupAccess, authErr := d.accessibleGroupIDs(r.Context())
+			if authErr != nil || !incidentReferencesAllowed(r.Context(), req.GroupID, req.PrimaryAssetID, groupAccess) {
+				writeAssetScopeForbidden(w, "api key may only create incidents scoped to explicitly allowed assets")
+				return
+			}
+		}
 
 		incident, err := d.IncidentStore.CreateIncident(req)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create incident")
 			return
 		}
+		d.dispatchIncidentNotificationAsync(incident, "incident.created")
 		servicehttp.WriteJSON(w, http.StatusCreated, map[string]any{"incident": incident})
 	default:
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -112,6 +153,18 @@ func (d *Deps) HandleIncidentActions(w http.ResponseWriter, r *http.Request) {
 	incidentID := strings.TrimSpace(parts[0])
 	if incidentID == "" {
 		servicehttp.WriteError(w, http.StatusNotFound, "incident path not found")
+		return
+	}
+	existingIncident, ok, err := d.IncidentStore.GetIncident(incidentID)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load incident")
+		return
+	}
+	if !ok {
+		servicehttp.WriteError(w, http.StatusNotFound, "incident not found")
+		return
+	}
+	if !d.requireIncidentAccess(w, r, existingIncident) {
 		return
 	}
 
@@ -170,6 +223,21 @@ func (d *Deps) HandleIncidentActions(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 			}
+			if shared.HasAssetRestriction(r.Context()) {
+				prospective := existingIncident
+				if req.GroupID != nil {
+					prospective.GroupID = strings.TrimSpace(*req.GroupID)
+				}
+				if req.PrimaryAssetID != nil {
+					prospective.PrimaryAssetID = strings.TrimSpace(*req.PrimaryAssetID)
+				}
+				groupAccess, authErr := d.accessibleGroupIDs(r.Context())
+				allowed, checkErr := d.incidentAllowed(r.Context(), prospective, groupAccess)
+				if authErr != nil || checkErr != nil || !allowed {
+					writeAssetScopeForbidden(w, "incident update would exceed the api key asset allowlist")
+					return
+				}
+			}
 
 			updated, err := d.IncidentStore.UpdateIncident(incidentID, req)
 			if err != nil {
@@ -184,6 +252,13 @@ func (d *Deps) HandleIncidentActions(w http.ResponseWriter, r *http.Request) {
 				}
 				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update incident")
 				return
+			}
+			if event := incidentMaterialTransitionEvent(existingIncident, updated); event != "" {
+				d.dispatchIncidentNotificationAsync(updated, event)
+			} else if incidentLiveActivityContentChanged(existingIncident, updated) {
+				// Content-only changes refresh an existing Live Activity without
+				// producing another user-visible incident notification.
+				d.dispatchIncidentNotificationAsync(updated, "incident.updated")
 			}
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"incident": updated})
 		case http.MethodDelete:
@@ -211,6 +286,10 @@ func (d *Deps) HandleIncidentActions(w http.ResponseWriter, r *http.Request) {
 				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete incident")
 				return
 			}
+			finalIncident := existingIncident
+			finalIncident.Status = incidents.StatusClosed
+			finalIncident.UpdatedAt = time.Now().UTC()
+			d.dispatchIncidentNotificationAsync(finalIncident, "incident.resolved")
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "incident_id": incidentID})
 		default:
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -233,18 +312,54 @@ func (d *Deps) HandleIncidentActions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		normalizeLinkAlertRequest(&req)
+		// Incident-link attribution is authoritative server context, not a
+		// caller-selected label.
+		req.CreatedBy = apiv2.PrincipalActorID(r.Context())
 		if err := validateLinkAlertRequest(req); err != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		if req.AlertRuleID != "" {
-			if _, ok, err := d.AlertStore.GetAlertRule(req.AlertRuleID); err != nil {
+			if d.AlertStore == nil {
+				servicehttp.WriteError(w, http.StatusServiceUnavailable, "alert store unavailable")
+				return
+			}
+			rule, ok, err := d.AlertStore.GetAlertRule(req.AlertRuleID)
+			if err != nil {
 				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load alert rule")
 				return
 			} else if !ok {
 				servicehttp.WriteError(w, http.StatusNotFound, "alert rule not found")
 				return
 			}
+			if !d.requireAlertRuleAccess(w, r, rule) {
+				return
+			}
+		}
+		if shared.HasAssetRestriction(r.Context()) && req.AlertInstanceID != "" {
+			if d.AlertInstanceStore == nil {
+				servicehttp.WriteError(w, http.StatusServiceUnavailable, "alert instance store unavailable")
+				return
+			}
+			instance, found, loadErr := d.AlertInstanceStore.GetAlertInstance(req.AlertInstanceID)
+			if loadErr != nil {
+				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load alert instance")
+				return
+			}
+			if !found {
+				servicehttp.WriteError(w, http.StatusNotFound, "alert instance not found")
+				return
+			}
+			groupAccess, authErr := d.accessibleGroupIDs(r.Context())
+			allowed, checkErr := d.alertInstanceAllowed(r.Context(), instance, groupAccess)
+			if authErr != nil || checkErr != nil || !allowed {
+				writeAssetScopeForbidden(w, "api key does not have access to this alert instance")
+				return
+			}
+		}
+		if shared.HasAssetRestriction(r.Context()) && req.AlertRuleID == "" && req.AlertInstanceID == "" {
+			writeAssetScopeForbidden(w, "fingerprint-only alert links cannot be proven to stay within the asset allowlist")
+			return
 		}
 
 		link, err := d.IncidentStore.LinkIncidentAlert(incidentID, req)
@@ -286,7 +401,53 @@ func (d *Deps) HandleIncidentActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list incident alert links")
 			return
 		}
+		if shared.HasAssetRestriction(r.Context()) {
+			groupAccess, authErr := d.accessibleGroupIDs(r.Context())
+			if authErr != nil {
+				writeAssetScopeForbidden(w, "unable to prove alert link asset scope")
+				return
+			}
+			filtered := make([]incidents.AlertLink, 0, len(links))
+			for _, link := range links {
+				allowed, loadErr := d.incidentAlertLinkAllowed(r.Context(), link, groupAccess)
+				if loadErr != nil {
+					servicehttp.WriteError(w, http.StatusInternalServerError, "failed to authorize alert links")
+					return
+				}
+				if allowed {
+					filtered = append(filtered, link)
+				}
+			}
+			links = filtered
+		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"links": links})
+		return
+	}
+
+	if len(parts) == 2 && parts[1] == "timeline" {
+		if r.Method != http.MethodGet {
+			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		if d.IncidentEventStore == nil {
+			servicehttp.WriteError(w, http.StatusServiceUnavailable, "incident event store unavailable")
+			return
+		}
+
+		if _, ok, err := d.IncidentStore.GetIncident(incidentID); err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load incident")
+			return
+		} else if !ok {
+			servicehttp.WriteError(w, http.StatusNotFound, "incident not found")
+			return
+		}
+
+		events, err := d.IncidentEventStore.ListIncidentEvents(incidentID, parseLimit(r, 50))
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list incident events")
+			return
+		}
+		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"events": events})
 		return
 	}
 
@@ -338,6 +499,9 @@ func (d *Deps) HandleIncidentActions(w http.ResponseWriter, r *http.Request) {
 		req.Role = strings.TrimSpace(req.Role)
 		if req.AssetID == "" {
 			servicehttp.WriteError(w, http.StatusBadRequest, "asset_id is required")
+			return
+		}
+		if !apiv2.RequireAssetAccess(w, r, req.AssetID) {
 			return
 		}
 		if incidents.NormalizeAssetRole(req.Role) == "" {

@@ -11,15 +11,17 @@ import (
 )
 
 type MemoryAlertStore struct {
-	mu          sync.RWMutex
-	rules       map[string]alerts.Rule
-	evaluations map[string][]alerts.Evaluation
+	mu                sync.RWMutex
+	rules             map[string]alerts.Rule
+	evaluations       map[string][]alerts.Evaluation
+	latestEvaluations map[string]alerts.Evaluation
 }
 
 func NewMemoryAlertStore() *MemoryAlertStore {
 	return &MemoryAlertStore{
-		rules:       make(map[string]alerts.Rule),
-		evaluations: make(map[string][]alerts.Evaluation),
+		rules:             make(map[string]alerts.Rule),
+		evaluations:       make(map[string][]alerts.Evaluation),
+		latestEvaluations: make(map[string]alerts.Evaluation),
 	}
 }
 
@@ -280,6 +282,7 @@ func (m *MemoryAlertStore) DeleteAlertRule(id string) error {
 	}
 	delete(m.rules, id)
 	delete(m.evaluations, id)
+	delete(m.latestEvaluations, id)
 	return nil
 }
 
@@ -287,7 +290,8 @@ func (m *MemoryAlertStore) RecordAlertEvaluation(ruleID string, evaluation alert
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	rule, ok := m.rules[strings.TrimSpace(ruleID)]
+	ruleID = strings.TrimSpace(ruleID)
+	rule, ok := m.rules[ruleID]
 	if !ok {
 		return alerts.Evaluation{}, alerts.ErrRuleNotFound
 	}
@@ -327,6 +331,11 @@ func (m *MemoryAlertStore) RecordAlertEvaluation(ruleID string, evaluation alert
 	}
 
 	m.evaluations[ruleID] = append(m.evaluations[ruleID], created)
+	latest, hasLatest := m.latestEvaluations[ruleID]
+	if !hasLatest || created.EvaluatedAt.After(latest.EvaluatedAt) ||
+		(created.EvaluatedAt.Equal(latest.EvaluatedAt) && created.ID > latest.ID) {
+		m.latestEvaluations[ruleID] = created
+	}
 	rule.LastEvaluatedAt = &evaluatedAt
 	m.rules[ruleID] = rule
 	return cloneAlertEvaluation(created), nil

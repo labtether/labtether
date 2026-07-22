@@ -2,12 +2,12 @@ package truenas
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
@@ -38,7 +38,7 @@ func (d *Deps) HandleTrueNASDatasets(ctx context.Context, w http.ResponseWriter,
 			datasets := make([]map[string]any, 0, 32)
 			warnings := make([]string, 0, 2)
 			if err := CallTrueNASQueryWithRetries(ctx, runtime.Client, "pool.dataset.query", &datasets); err != nil {
-				warnings = AppendTrueNASWarning(warnings, "datasets unavailable: "+err.Error())
+				warnings = AppendTrueNASWarning(warnings, trueNASWarning("datasets unavailable", err))
 				datasets = nil
 			}
 			servicehttp.WriteJSON(w, http.StatusOK, TrueNASDatasetsResponse{
@@ -52,13 +52,13 @@ func (d *Deps) HandleTrueNASDatasets(ctx context.Context, w http.ResponseWriter,
 				return
 			}
 			var params map[string]any
-			if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
-				servicehttp.WriteError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+			if err := shared.DecodeJSONBody(w, r, &params); err != nil {
+				writeTrueNASError(w, http.StatusBadRequest, "invalid request body", err)
 				return
 			}
 			var created map[string]any
 			if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, "pool.dataset.create", []any{params}, &created); err != nil {
-				servicehttp.WriteError(w, http.StatusBadGateway, "failed to create dataset: "+err.Error())
+				writeTrueNASError(w, http.StatusBadGateway, "failed to create dataset", err)
 				return
 			}
 			d.InvalidateTrueNASCaches(asset.ID, runtime.CollectorID)
@@ -87,13 +87,13 @@ func (d *Deps) HandleTrueNASDatasets(ctx context.Context, w http.ResponseWriter,
 			return
 		}
 		var params map[string]any
-		if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
-			servicehttp.WriteError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+		if err := shared.DecodeJSONBody(w, r, &params); err != nil {
+			writeTrueNASError(w, http.StatusBadRequest, "invalid request body", err)
 			return
 		}
 		var updated map[string]any
 		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, "pool.dataset.update", []any{datasetID, params}, &updated); err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to update dataset: "+err.Error())
+			writeTrueNASError(w, http.StatusBadGateway, "failed to update dataset", err)
 			return
 		}
 		d.InvalidateTrueNASCaches(asset.ID, runtime.CollectorID)
@@ -108,7 +108,7 @@ func (d *Deps) HandleTrueNASDatasets(ctx context.Context, w http.ResponseWriter,
 			return
 		}
 		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, "pool.dataset.delete", []any{datasetID}, nil); err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to delete dataset: "+err.Error())
+			writeTrueNASError(w, http.StatusBadGateway, "failed to delete dataset", err)
 			return
 		}
 		d.InvalidateTrueNASCaches(asset.ID, runtime.CollectorID)

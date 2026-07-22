@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/credentials"
 	"github.com/labtether/labtether/internal/hubapi/shared"
@@ -108,6 +109,9 @@ func (d *Deps) HandleAssetTerminalConfig(w http.ResponseWriter, r *http.Request,
 			cfg.Port = 22
 		}
 		if cfg.CredentialProfileID != "" {
+			if !apiv2.RequireScope(w, r, "credentials:use") {
+				return
+			}
 			if _, ok, err := d.CredentialStore.GetCredentialProfile(cfg.CredentialProfileID); err != nil {
 				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to validate credential profile")
 				return
@@ -147,6 +151,9 @@ func (d *Deps) HandleAssetTerminalConfig(w http.ResponseWriter, r *http.Request,
 
 // HandleAuditEvents handles GET /audit/events.
 func (d *Deps) HandleAuditEvents(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobal(w, r, "audit events") {
+		return
+	}
 	if r.Method != http.MethodGet {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return

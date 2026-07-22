@@ -6,6 +6,7 @@ package admin
 import (
 	"context"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/labtether/labtether/internal/audit"
@@ -35,6 +36,10 @@ type ProtocolConfigDB interface {
 // handler package. All mutation of shared state (TLSState, caches) goes
 // through the function fields and pointer fields below.
 type Deps struct {
+	// runtimeSettingsMu serializes sensitive setting migration, updates, and
+	// resets so a legacy migration cannot overwrite a concurrent secret change.
+	runtimeSettingsMu sync.Mutex
+
 	// Store interfaces.
 	RuntimeStore    persistence.RuntimeSettingsStore
 	AuditStore      persistence.AuditStore
@@ -67,6 +72,9 @@ type Deps struct {
 	// HubIdentity is the cached hub SSH identity used for hub key push.
 	// The pointer may be nil on first use; EnsureHubIdentity provides lazy init.
 	HubIdentity *HubSSHIdentity
+	// CurrentHubIdentity returns an immutable snapshot of the active identity.
+	// Production uses it so rotations never race cached dependency pointers.
+	CurrentHubIdentity func() *HubSSHIdentity
 
 	// DataDir is the hub's data directory (used for TLS file materialization).
 	DataDir string
@@ -87,6 +95,10 @@ type Deps struct {
 	// ApplySecurityRuntimeOverrides propagates security-relevant runtime
 	// overrides to the global securityruntime package state.
 	ApplySecurityRuntimeOverrides func(overrides map[string]string)
+
+	// ApplyPrometheusRemoteWriteSettings atomically replaces the live
+	// remote_write worker after a persisted settings mutation.
+	ApplyPrometheusRemoteWriteSettings func() error
 
 	// InvalidateWebServiceURLGroupingConfigCache drops the cached URL-grouping
 	// config so the next request reloads from the runtime settings store.
@@ -125,6 +137,10 @@ type Deps struct {
 	// tailscale sub-commands. If nil the package-level TailscaleRunner var is
 	// used. Tests in cmd/labtether inject this to control command output.
 	TailscaleRunnerOverride func(timeout time.Duration, path string, args ...string) ([]byte, error)
+
+	// PrometheusRemoteWriteTester overrides the outbound connection test. It is
+	// injected by tests; production uses TestPrometheusRemoteWriteConnection.
+	PrometheusRemoteWriteTester func(ctx context.Context, url, username, password string) PrometheusTestConnectionResponse
 }
 
 // AuditEventAlias is a type alias for audit.Event so that bridge callers do not
@@ -149,6 +165,17 @@ func (d *Deps) principalActorID(ctx context.Context) string {
 		return d.PrincipalActorID(ctx)
 	}
 	return ""
+}
+
+func (d *Deps) currentHubIdentity() *HubSSHIdentity {
+	if d.CurrentHubIdentity != nil {
+		return d.CurrentHubIdentity()
+	}
+	if d.HubIdentity == nil {
+		return nil
+	}
+	identity := *d.HubIdentity
+	return &identity
 }
 
 // appendAuditEventBestEffort is a package-local helper delegating to the

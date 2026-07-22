@@ -89,11 +89,25 @@ func (d *Deps) HandleLogsQuery(w http.ResponseWriter, r *http.Request) {
 		Limit:         queryLimit,
 		ExcludeFields: !includeFields && groupID == "",
 	}
+	if query.AssetID != "" && !apiv2.RequireAssetAccess(w, r, query.AssetID) {
+		return
+	}
+	if len(apiv2.AllowedAssetsFromContext(r.Context())) > 0 {
+		if groupID != "" {
+			allowedGroupAssets := make([]string, 0, len(query.GroupAssetIDs))
+			for _, assetID := range query.GroupAssetIDs {
+				if apiv2.AssetCheckContext(r.Context(), assetID) {
+					allowedGroupAssets = append(allowedGroupAssets, assetID)
+				}
+			}
+			query.GroupAssetIDs = allowedGroupAssets
+		}
+	}
 	if groupID != "" && !includeFields {
 		query.FieldKeys = []string{"group_id"}
 	}
 
-	events, err := d.LogStore.QueryEvents(query)
+	events, err := d.queryAuthorizedEvents(r, query)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to query logs")
 		return
@@ -206,6 +220,21 @@ func (d *Deps) HandleLogSources(w http.ResponseWriter, r *http.Request) {
 			traceErr,
 		)
 	}()
+
+	if len(apiv2.AllowedAssetsFromContext(r.Context())) > 0 {
+		mode = "asset_allowlist"
+		listed, from, to, err := d.authorizedSourceSummaries(r, groupID, includeAll, limit)
+		traceWindowStart = from
+		traceWindowEnd = to
+		if err != nil {
+			traceErr = err
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list authorized log sources")
+			return
+		}
+		sources = listed
+		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"sources": sources})
+		return
+	}
 
 	if groupID == "" {
 		if includeAll {
@@ -381,7 +410,13 @@ func (d *Deps) HandleLogViews(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list log views")
 			return
 		}
-		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"views": views})
+		filtered := views[:0]
+		for _, view := range views {
+			if savedViewAllowed(r.Context(), view.AssetID) {
+				filtered = append(filtered, view)
+			}
+		}
+		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"views": filtered})
 	case http.MethodPost:
 		var req logs.SavedViewRequest
 		if err := shared.DecodeJSONBody(w, r, &req); err != nil {
@@ -395,6 +430,9 @@ func (d *Deps) HandleLogViews(w http.ResponseWriter, r *http.Request) {
 		req.Name = strings.TrimSpace(req.Name)
 		if req.Name == "" {
 			servicehttp.WriteError(w, http.StatusBadRequest, "name is required")
+			return
+		}
+		if !requireSavedViewAccess(w, r, req.AssetID) {
 			return
 		}
 
@@ -426,19 +464,22 @@ func (d *Deps) HandleLogViewActions(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusNotFound, "unknown log view action")
 		return
 	}
+	existing, ok, err := d.LogStore.GetView(apiv2.PrincipalActorID(r.Context()), viewID)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load log view")
+		return
+	}
+	if !ok {
+		servicehttp.WriteError(w, http.StatusNotFound, "log view not found")
+		return
+	}
+	if !requireSavedViewAccess(w, r, existing.AssetID) {
+		return
+	}
 
 	switch r.Method {
 	case http.MethodGet:
-		view, ok, err := d.LogStore.GetView(apiv2.PrincipalActorID(r.Context()), viewID)
-		if err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load log view")
-			return
-		}
-		if !ok {
-			servicehttp.WriteError(w, http.StatusNotFound, "log view not found")
-			return
-		}
-		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"view": view})
+		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"view": existing})
 	case http.MethodPut, http.MethodPatch:
 		var req logs.SavedViewRequest
 		if err := shared.DecodeJSONBody(w, r, &req); err != nil {
@@ -452,6 +493,9 @@ func (d *Deps) HandleLogViewActions(w http.ResponseWriter, r *http.Request) {
 		req.Name = strings.TrimSpace(req.Name)
 		if req.Name == "" {
 			servicehttp.WriteError(w, http.StatusBadRequest, "name is required")
+			return
+		}
+		if !requireSavedViewAccess(w, r, req.AssetID) {
 			return
 		}
 		view, err := d.LogStore.UpdateView(apiv2.PrincipalActorID(r.Context()), viewID, req)

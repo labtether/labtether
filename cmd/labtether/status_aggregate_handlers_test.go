@@ -252,3 +252,96 @@ func TestHandleStatusAggregateScopesTerminalDataAndETagsByActor(t *testing.T) {
 		t.Fatalf("expected actor-scoped ETag cache to return 304, got %d", actorCachedRec.Code)
 	}
 }
+
+func TestHandleStatusAggregateEnforcesScopesAndAssetAllowlist(t *testing.T) {
+	sut := newTestAPIServer(t)
+	for _, assetID := range []string{"asset-a", "asset-b"} {
+		if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+			AssetID: assetID,
+			Name:    assetID,
+			Type:    "node",
+			Source:  "agent",
+			Status:  "online",
+		}); err != nil {
+			t.Fatalf("seed %s: %v", assetID, err)
+		}
+	}
+
+	const actorID = "apikey:key-status"
+	for _, assetID := range []string{"asset-a", "asset-b"} {
+		session, err := sut.terminalStore.CreateSession(terminal.CreateSessionRequest{
+			ActorID: actorID,
+			Target:  assetID,
+			Mode:    "interactive",
+		})
+		if err != nil {
+			t.Fatalf("create %s session: %v", assetID, err)
+		}
+		if _, err := sut.terminalStore.AddCommand(session.ID, terminal.CreateCommandRequest{
+			ActorID: actorID,
+			Command: "uptime",
+		}, assetID, session.Mode); err != nil {
+			t.Fatalf("create %s command: %v", assetID, err)
+		}
+	}
+
+	fullCtx := contextWithPrincipal(context.Background(), actorID, "operator")
+	fullCtx = contextWithScopes(fullCtx, []string{"hub:read", "assets:read", "logs:read", "terminal:read"})
+	fullCtx = contextWithAllowedAssets(fullCtx, []string{"asset-a"})
+
+	handler := sut.handleStatusAggregate(nil, nil)
+	req := httptest.NewRequest(http.MethodGet, "/status/aggregate", nil).WithContext(fullCtx)
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected aggregate 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var filtered struct {
+		Assets           []assets.Asset     `json:"assets"`
+		Sessions         []terminal.Session `json:"sessions"`
+		RecentCommands   []terminal.Command `json:"recentCommands"`
+		RecentLogs       []json.RawMessage  `json:"recentLogs"`
+		Telemetry        []json.RawMessage  `json:"telemetryOverview"`
+		RecentAudit      []json.RawMessage  `json:"recentAudit"`
+		DeadLetters      []json.RawMessage  `json:"deadLetters"`
+		UpdatePlans      []json.RawMessage  `json:"updatePlans"`
+		GroupReliability []json.RawMessage  `json:"groupReliability"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &filtered); err != nil {
+		t.Fatalf("decode filtered aggregate: %v", err)
+	}
+	if len(filtered.Assets) != 1 || filtered.Assets[0].ID != "asset-a" {
+		t.Fatalf("expected only asset-a, got %+v", filtered.Assets)
+	}
+	if len(filtered.Sessions) != 1 || filtered.Sessions[0].Target != "asset-a" {
+		t.Fatalf("expected only asset-a session, got %+v", filtered.Sessions)
+	}
+	if len(filtered.RecentCommands) != 1 || filtered.RecentCommands[0].Target != "asset-a" {
+		t.Fatalf("expected only asset-a command, got %+v", filtered.RecentCommands)
+	}
+	if len(filtered.Telemetry) != 0 || len(filtered.RecentAudit) != 0 || len(filtered.DeadLetters) != 0 || len(filtered.UpdatePlans) != 0 || len(filtered.GroupReliability) != 0 {
+		t.Fatalf("aggregate exposed data without its underlying scope: %+v", filtered)
+	}
+
+	hubOnlyCtx := contextWithPrincipal(context.Background(), actorID, "operator")
+	hubOnlyCtx = contextWithScopes(hubOnlyCtx, []string{"hub:read"})
+	hubOnlyCtx = contextWithAllowedAssets(hubOnlyCtx, []string{"asset-a"})
+	hubOnlyReq := httptest.NewRequest(http.MethodGet, "/status/aggregate", nil).WithContext(hubOnlyCtx)
+	hubOnlyRec := httptest.NewRecorder()
+	handler(hubOnlyRec, hubOnlyReq)
+	if hubOnlyRec.Code != http.StatusOK {
+		t.Fatalf("expected hub-only aggregate 200, got %d: %s", hubOnlyRec.Code, hubOnlyRec.Body.String())
+	}
+	var hubOnly struct {
+		Assets         []assets.Asset     `json:"assets"`
+		Sessions       []terminal.Session `json:"sessions"`
+		RecentCommands []terminal.Command `json:"recentCommands"`
+	}
+	if err := json.Unmarshal(hubOnlyRec.Body.Bytes(), &hubOnly); err != nil {
+		t.Fatalf("decode hub-only aggregate: %v", err)
+	}
+	if len(hubOnly.Assets) != 0 || len(hubOnly.Sessions) != 0 || len(hubOnly.RecentCommands) != 0 {
+		t.Fatalf("hub:read implicitly exposed underlying resources: %+v", hubOnly)
+	}
+}

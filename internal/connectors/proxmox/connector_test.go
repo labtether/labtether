@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labtether/labtether/internal/assetid"
 	"github.com/labtether/labtether/internal/connectorsdk"
 )
 
@@ -111,20 +112,20 @@ func TestConnectorDiscoverAndHealth(t *testing.T) {
 		t.Fatalf("unexpected health response: %+v", health)
 	}
 
-	stubConnector := &Connector{}
-	stubAssets, err := stubConnector.Discover(context.Background())
+	unconfiguredConnector := &Connector{}
+	unconfiguredAssets, err := unconfiguredConnector.Discover(context.Background())
 	if err != nil {
-		t.Fatalf("stub discover failed: %v", err)
+		t.Fatalf("unconfigured discover failed: %v", err)
 	}
-	if len(stubAssets) == 0 {
-		t.Fatalf("expected stub assets")
+	if unconfiguredAssets == nil || len(unconfiguredAssets) != 0 {
+		t.Fatalf("expected non-nil empty unconfigured inventory, got %+v", unconfiguredAssets)
 	}
-	stubHealth, err := stubConnector.TestConnection(context.Background())
+	unconfiguredHealth, err := unconfiguredConnector.TestConnection(context.Background())
 	if err != nil {
-		t.Fatalf("stub TestConnection returned error: %v", err)
+		t.Fatalf("unconfigured TestConnection returned error: %v", err)
 	}
-	if stubHealth.Status != "ok" || !strings.Contains(stubHealth.Message, "stub mode") {
-		t.Fatalf("unexpected stub health: %+v", stubHealth)
+	if unconfiguredHealth.Status != "failed" || !strings.Contains(unconfiguredHealth.Message, "not configured") {
+		t.Fatalf("unexpected unconfigured health: %+v", unconfiguredHealth)
 	}
 
 	errConnector := &Connector{clientErr: errors.New("broken config")}
@@ -228,6 +229,13 @@ func TestParseComputeTargetAndHelpers(t *testing.T) {
 	node, vmid, err = parseComputeTarget(connectorsdk.ActionRequest{TargetID: "proxmox-vm-101"}, "pve01")
 	if err != nil || node != "pve01" || vmid != "101" {
 		t.Fatalf("expected proxmox-vm-101 to use default node, got node=%q vmid=%q err=%v", node, vmid, err)
+	}
+
+	node, vmid, err = parseComputeTarget(connectorsdk.ActionRequest{
+		TargetID: assetid.ScopeCollectorAssetID("proxmox-vm-101", "collector-proxmox-a"),
+	}, "pve01")
+	if err != nil || node != "pve01" || vmid != "101" {
+		t.Fatalf("expected scoped target to use native VMID, got node=%q vmid=%q err=%v", node, vmid, err)
 	}
 
 	node, vmid, err = parseComputeTarget(connectorsdk.ActionRequest{
@@ -359,5 +367,79 @@ func TestConnectorExecuteTaskActionMappings(t *testing.T) {
 	}
 	if _, err := connector.executeTaskAction(context.Background(), "unknown.action", "pve01", "100", nil); err == nil {
 		t.Fatalf("expected unsupported action to fail")
+	}
+}
+
+func TestConnectorAdvertisedActionsDryRunValidateAndUnconfiguredFailsClosed(t *testing.T) {
+	allowInsecureTransportForProxmoxTests(t)
+	client, err := NewClient(Config{
+		BaseURL:     "https://proxmox.invalid",
+		TokenID:     "root@pam!ltqa",
+		TokenSecret: "disposable",
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	connector := &Connector{client: client, defaultNode: "pve01"}
+	params := map[string]string{
+		"snapshot_name": "ltqa-snapshot",
+		"target_node":   "pve02",
+		"storage":       "ltqa-store",
+		"mode":          "snapshot",
+		"new_name":      "ltqa-clone",
+		"new_id":        "101",
+		"disk":          "scsi0",
+		"size":          "+1G",
+	}
+	for _, descriptor := range connector.Actions() {
+		if descriptor.ID == "vm.snapshot" || descriptor.ID == "ct.snapshot" {
+			if len(descriptor.Parameters) != 1 || descriptor.Parameters[0].Required {
+				t.Fatalf("automatic snapshot label must remain optional: %+v", descriptor)
+			}
+		}
+		result, execErr := connector.ExecuteAction(context.Background(), descriptor.ID, connectorsdk.ActionRequest{
+			TargetID: "pve01/100",
+			Params:   params,
+			DryRun:   true,
+		})
+		if execErr != nil || result.Status != "succeeded" {
+			t.Fatalf("advertised action %q dry-run = %+v, err=%v", descriptor.ID, result, execErr)
+		}
+	}
+
+	invalid := []struct {
+		actionID string
+		params   map[string]string
+	}{
+		{actionID: "unknown.action"},
+		{actionID: "vm.migrate"},
+		{actionID: "vm.backup", params: map[string]string{"mode": "unsafe"}},
+		{actionID: "vm.clone", params: map[string]string{"new_id": "0"}},
+		{actionID: "vm.clone_from_template", params: map[string]string{"new_id": "101"}},
+		{actionID: "vm.disk_resize", params: map[string]string{"disk": "scsi0"}},
+	}
+	for _, test := range invalid {
+		result, execErr := connector.ExecuteAction(context.Background(), test.actionID, connectorsdk.ActionRequest{
+			TargetID: "pve01/100",
+			Params:   test.params,
+			DryRun:   true,
+		})
+		if execErr != nil || result.Status != "failed" {
+			t.Fatalf("invalid dry-run %q = %+v, err=%v", test.actionID, result, execErr)
+		}
+	}
+
+	unconfigured := &Connector{defaultNode: "pve01"}
+	for _, descriptor := range unconfigured.Actions() {
+		for _, dryRun := range []bool{false, true} {
+			result, execErr := unconfigured.ExecuteAction(context.Background(), descriptor.ID, connectorsdk.ActionRequest{
+				TargetID: "pve01/100",
+				Params:   params,
+				DryRun:   dryRun,
+			})
+			if execErr != nil || result.Status != "failed" || !strings.Contains(result.Message, "not configured") {
+				t.Fatalf("unconfigured action %q dry_run=%v did not fail closed: %+v, err=%v", descriptor.ID, dryRun, result, execErr)
+			}
+		}
 	}
 }

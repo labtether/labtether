@@ -54,6 +54,32 @@ func TestValidateShellCommandAllowlist(t *testing.T) {
 	}
 }
 
+func TestValidateShellCommandRejectsPrefixAndOperatorBypasses(t *testing.T) {
+	t.Setenv(envShellAllowlistMode, "true")
+	t.Setenv(envShellAllowlistPrefixes, "uptime,systemctl status")
+	for _, command := range []string{"uptime-extra", "uptime; id", "uptime && id", "systemctl restart sshd"} {
+		if err := ValidateShellCommand(command); err == nil {
+			t.Fatalf("expected %q to be rejected", command)
+		}
+	}
+}
+
+func TestParseValidatedShellCommandRejectsNestedInterpreters(t *testing.T) {
+	t.Setenv(envShellAllowlistMode, "false")
+	for _, command := range []string{
+		`sh -c "id"`,
+		`bash -c "id"`,
+		`cmd /c whoami`,
+		`powershell -Command Get-Process`,
+		`pwsh -c Get-Process`,
+		`osascript -e "display dialog hi"`,
+	} {
+		if _, err := ParseValidatedShellCommand(command); err == nil {
+			t.Fatalf("expected nested interpreter %q to be rejected", command)
+		}
+	}
+}
+
 func TestValidateShellCommandAllowlistEnabledByDefault(t *testing.T) {
 	t.Setenv(envShellAllowlistMode, "")
 	if err := ValidateShellCommand("uptime"); err != nil {

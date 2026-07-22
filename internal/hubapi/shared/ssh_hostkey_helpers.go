@@ -1,7 +1,9 @@
 package shared
 
 import (
+	"encoding/base64"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +11,45 @@ import (
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 )
+
+const EnvAllowInsecureSSHHostKeys = "LABTETHER_ALLOW_INSECURE_SSH_HOST_KEYS"
+
+// InsecureSSHHostKeysAllowed is the single, explicit escape hatch for
+// disabling SSH server identity verification. A per-asset false setting is
+// not sufficient by itself, which prevents zero-value configuration from
+// silently downgrading every SSH connection.
+func InsecureSSHHostKeysAllowed() bool {
+	return EnvOrDefaultBool(EnvAllowInsecureSSHHostKeys, false)
+}
+
+// BuildSSHHostKeyCallback applies the process-wide fail-closed SSH identity
+// policy consistently. Non-strict mode requires both the caller's explicit
+// opt-out and LABTETHER_ALLOW_INSECURE_SSH_HOST_KEYS=true. Expected keys may
+// be OpenSSH authorized-key text, SHA256 fingerprints, or raw base64 keys.
+func BuildSSHHostKeyCallback(strict bool, expected string) (ssh.HostKeyCallback, error) {
+	expected = strings.TrimSpace(expected)
+	if !strict && InsecureSSHHostKeysAllowed() {
+		// nosemgrep: go.lang.security.audit.crypto.insecure_ssh.avoid-ssh-insecure-ignore-host-key -- reachable only after both per-connection opt-out and explicit process-wide acknowledgement.
+		return ssh.InsecureIgnoreHostKey(), nil // #nosec G106 -- guarded by both caller intent and a process-wide acknowledgement.
+	}
+	if expected == "" {
+		return BuildKnownHostsHostKeyCallback()
+	}
+	if publicKey, _, _, _, err := ssh.ParseAuthorizedKey([]byte(expected)); err == nil {
+		return ssh.FixedHostKey(publicKey), nil
+	}
+	return func(_ string, _ net.Addr, key ssh.PublicKey) error {
+		fingerprint := strings.TrimSpace(ssh.FingerprintSHA256(key))
+		if strings.EqualFold(fingerprint, expected) {
+			return nil
+		}
+		encoded := base64.StdEncoding.EncodeToString(key.Marshal())
+		if strings.EqualFold(encoded, expected) {
+			return nil
+		}
+		return fmt.Errorf("host key mismatch")
+	}, nil
+}
 
 func BuildKnownHostsHostKeyCallback() (ssh.HostKeyCallback, error) {
 	paths := DiscoverKnownHostsFiles()

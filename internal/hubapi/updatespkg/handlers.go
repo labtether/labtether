@@ -44,6 +44,15 @@ func (d *Deps) HandleUpdatePlans(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list update plans")
 			return
 		}
+		if shared.HasAssetRestriction(r.Context()) {
+			filtered := make([]updates.Plan, 0, len(plans))
+			for _, plan := range plans {
+				if updatePlanAllowed(r.Context(), plan) {
+					filtered = append(filtered, plan)
+				}
+			}
+			plans = filtered
+		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"plans": plans})
 	case http.MethodPost:
 		if d.EnforceRateLimit != nil && !d.EnforceRateLimit(w, r, "updates.plan.create", 60, time.Minute) {
@@ -71,13 +80,22 @@ func (d *Deps) HandleUpdatePlans(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusBadRequest, "too many scopes")
 			return
 		}
-		for i, target := range req.Targets {
+		for _, target := range req.Targets {
 			target = strings.TrimSpace(target)
 			if err := shared.ValidateMaxLen("target", target, maxTargetLength); err != nil {
 				servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			req.Targets[i] = target
+		}
+		normalizedTargets, err := updates.NormalizeTargets(req.Targets)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		req.Targets = normalizedTargets
+		if !shared.AllAssetsAllowed(r.Context(), req.Targets...) {
+			apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "api key may only create update plans containing explicitly allowed assets")
+			return
 		}
 		for i, scope := range req.Scopes {
 			scope = strings.TrimSpace(scope)
@@ -87,6 +105,12 @@ func (d *Deps) HandleUpdatePlans(w http.ResponseWriter, r *http.Request) {
 			}
 			req.Scopes[i] = scope
 		}
+		normalizedScopes, err := updates.NormalizeExecutableScopes(req.Scopes)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		req.Scopes = normalizedScopes
 		plan, err := d.UpdateStore.CreateUpdatePlan(req)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create update plan")
@@ -123,11 +147,35 @@ func (d *Deps) HandleUpdatePlanActions(w http.ResponseWriter, r *http.Request) {
 				servicehttp.WriteError(w, http.StatusNotFound, "update plan not found")
 				return
 			}
+			if !requireUpdatePlanAccess(w, r, plan) {
+				return
+			}
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"plan": plan})
 		case http.MethodDelete:
+			plan, ok, err := d.UpdateStore.GetUpdatePlan(planID)
+			if err != nil {
+				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load update plan")
+				return
+			}
+			if !ok {
+				servicehttp.WriteError(w, http.StatusNotFound, "update plan not found")
+				return
+			}
+			if !requireUpdatePlanAccess(w, r, plan) {
+				return
+			}
 			if err := d.UpdateStore.DeleteUpdatePlan(planID); err != nil {
 				if errors.Is(err, persistence.ErrNotFound) {
 					servicehttp.WriteError(w, http.StatusNotFound, "update plan not found")
+					return
+				}
+				if errors.Is(err, persistence.ErrUpdatePlanActive) {
+					apiv2.WriteError(
+						w,
+						http.StatusConflict,
+						"update_plan_active",
+						"Update plan cannot be deleted while runs are queued or running.",
+					)
 					return
 				}
 				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete update plan")
@@ -160,6 +208,13 @@ func (d *Deps) HandleUpdatePlanActions(w http.ResponseWriter, r *http.Request) {
 	}
 	if !ok {
 		servicehttp.WriteError(w, http.StatusNotFound, "update plan not found")
+		return
+	}
+	if !requireUpdatePlanAccess(w, r, plan) {
+		return
+	}
+	if _, err := updates.NormalizeExecutableScopes(plan.Scopes); err != nil {
+		servicehttp.WriteError(w, http.StatusConflict, "update plan contains an unsupported scope; recreate the plan with a supported scope")
 		return
 	}
 
@@ -310,9 +365,10 @@ func (d *Deps) HandleUpdatePlanActions(w http.ResponseWriter, r *http.Request) {
 
 	if d.LogStore != nil {
 		if err := d.LogStore.AppendEvent(logs.Event{
-			ID:        fmt.Sprintf("log_update_queued_%s", job.JobID),
-			Source:    "updates",
-			Level:     "info",
+			ID:     fmt.Sprintf("log_update_queued_%s", job.JobID),
+			Source: "updates",
+			Level:  "info",
+			// nosemgrep: go.lang.security.injection.tainted-sql-string.tainted-sql-string -- this formats a stored log message; it is never executed as SQL.
 			Message:   fmt.Sprintf("update run queued: %s", plan.Name),
 			Timestamp: run.CreatedAt,
 			Fields:    logFields,
@@ -347,6 +403,27 @@ func (d *Deps) HandleUpdateRuns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if shared.HasAssetRestriction(r.Context()) {
+		planAccess := make(map[string]bool, len(runs))
+		filtered := make([]updates.Run, 0, len(runs))
+		for _, run := range runs {
+			allowed, cached := planAccess[run.PlanID]
+			if !cached {
+				plan, ok, loadErr := d.UpdateStore.GetUpdatePlan(run.PlanID)
+				if loadErr != nil {
+					servicehttp.WriteError(w, http.StatusInternalServerError, "failed to authorize update runs")
+					return
+				}
+				allowed = ok && updatePlanAllowed(r.Context(), plan)
+				planAccess[run.PlanID] = allowed
+			}
+			if allowed {
+				filtered = append(filtered, run)
+			}
+		}
+		runs = filtered
+	}
+
 	groupID := shared.GroupIDQueryParam(r)
 	if groupID != "" {
 		if d.GroupStore == nil {
@@ -364,6 +441,9 @@ func (d *Deps) HandleUpdateRuns(w http.ResponseWriter, r *http.Request) {
 		}
 		if !ok {
 			servicehttp.WriteError(w, http.StatusNotFound, "group not found")
+			return
+		}
+		if !d.requireGroupAccess(w, r, groupID) {
 			return
 		}
 
@@ -417,8 +497,40 @@ func (d *Deps) HandleUpdateRunActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusNotFound, "update run not found")
 			return
 		}
+		plan, planOK, err := d.UpdateStore.GetUpdatePlan(run.PlanID)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to authorize update run")
+			return
+		}
+		if !planOK || !requireUpdatePlanAccess(w, r, plan) {
+			if !planOK {
+				servicehttp.WriteError(w, http.StatusForbidden, "update run plan is unavailable")
+			}
+			return
+		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"run": run})
 	case http.MethodDelete:
+		run, ok, err := d.UpdateStore.GetUpdateRun(runID)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load update run")
+			return
+		}
+		if !ok {
+			servicehttp.WriteError(w, http.StatusNotFound, "update run not found")
+			return
+		}
+		plan, planOK, err := d.UpdateStore.GetUpdatePlan(run.PlanID)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to authorize update run")
+			return
+		}
+		if !planOK {
+			servicehttp.WriteError(w, http.StatusForbidden, "update run plan is unavailable")
+			return
+		}
+		if !requireUpdatePlanAccess(w, r, plan) {
+			return
+		}
 		if err := d.UpdateStore.DeleteUpdateRun(runID); err != nil {
 			if errors.Is(err, persistence.ErrNotFound) {
 				servicehttp.WriteError(w, http.StatusNotFound, "update run not found")

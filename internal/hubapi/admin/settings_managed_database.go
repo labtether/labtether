@@ -6,8 +6,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/hubapi/shared"
+	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
@@ -58,7 +60,7 @@ func (d *Deps) HandleManagedDatabaseSettings(w http.ResponseWriter, r *http.Requ
 	}
 	payload, password, err := d.managedDatabaseSettingsPayload()
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusServiceUnavailable, err.Error())
+		writeAdminInternalError(w, http.StatusServiceUnavailable, "managed database settings unavailable", err)
 		return
 	}
 	payload.PasswordAvailable = payload.Managed && strings.TrimSpace(password) != ""
@@ -78,13 +80,16 @@ func (d *Deps) HandleManagedDatabasePasswordReveal(w http.ResponseWriter, r *htt
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	if !apiv2.RequireScope(w, r, "credentials:use") {
+		return
+	}
 	if !d.enforceRateLimit(w, r, managedDatabaseRevealRateLimitKey, managedDatabaseRevealRateLimitMax, managedDatabaseRevealRateLimitWind) {
 		return
 	}
 
 	payload, password, err := d.managedDatabaseSettingsPayload()
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusServiceUnavailable, err.Error())
+		writeAdminInternalError(w, http.StatusServiceUnavailable, "managed database settings unavailable", err)
 		return
 	}
 	password = strings.TrimSpace(password)
@@ -119,6 +124,7 @@ func (d *Deps) managedDatabaseSettingsPayload() (ManagedDatabaseSettingsPayload,
 
 	_, secrets, _, err := d.InstallStateStore.Load()
 	if err != nil {
+		securityruntime.Logf("managed database settings: failed to load install state: %v", err)
 		return payload, "", errManagedDatabaseSettingsUnavailable
 	}
 	password := strings.TrimSpace(secrets.PostgresPassword)

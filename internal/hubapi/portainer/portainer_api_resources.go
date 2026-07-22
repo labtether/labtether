@@ -3,11 +3,12 @@ package portainer
 import (
 	"context"
 	"encoding/json"
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
@@ -22,6 +23,9 @@ func (d *Deps) HandlePortainerImages(ctx context.Context, w http.ResponseWriter,
 	epID, err := portainerEndpointID(asset)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !d.requirePortainerEndpointAccess(w, r, strconv.Itoa(epID)) {
 		return
 	}
 
@@ -108,6 +112,9 @@ func (d *Deps) HandlePortainerVolumes(ctx context.Context, w http.ResponseWriter
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if !d.requirePortainerEndpointAccess(w, r, strconv.Itoa(epID)) {
+		return
+	}
 
 	if len(subParts) == 0 {
 		switch r.Method {
@@ -183,6 +190,9 @@ func (d *Deps) HandlePortainerNetworks(ctx context.Context, w http.ResponseWrite
 	epID, err := portainerEndpointID(asset)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !d.requirePortainerEndpointAccess(w, r, strconv.Itoa(epID)) {
 		return
 	}
 

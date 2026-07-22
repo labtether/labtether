@@ -2,6 +2,7 @@ package proxmox
 
 import (
 	"context"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strings"
@@ -12,6 +13,9 @@ import (
 
 // handleProxmoxTaskRoutes dispatches /proxmox/tasks/{node}/{upid}/{action}
 func (d *Deps) HandleProxmoxTaskRoutes(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobal(w, r, "tasks") {
+		return
+	}
 	path := strings.TrimPrefix(r.URL.Path, "/proxmox/tasks/")
 	if path == r.URL.Path || path == "" {
 		servicehttp.WriteError(w, http.StatusNotFound, "missing task path")
@@ -38,6 +42,9 @@ func (d *Deps) HandleProxmoxAssets(w http.ResponseWriter, r *http.Request) {
 	assetID := strings.TrimSpace(parts[0])
 	if assetID == "" {
 		servicehttp.WriteError(w, http.StatusNotFound, "proxmox asset path not found")
+		return
+	}
+	if !apiv2.RequireAssetAccess(w, r, assetID) {
 		return
 	}
 	if len(parts) < 2 {
@@ -90,6 +97,9 @@ func (d *Deps) HandleProxmoxAssets(w http.ResponseWriter, r *http.Request) {
 	}
 	if !ok {
 		servicehttp.WriteError(w, http.StatusNotFound, "asset is not proxmox-backed")
+		return
+	}
+	if !d.requireProxmoxCollectorAccess(w, r, target.CollectorID) {
 		return
 	}
 

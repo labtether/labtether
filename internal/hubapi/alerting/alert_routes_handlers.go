@@ -10,6 +10,9 @@ import (
 )
 
 func (d *Deps) HandleAlertRoutes(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobal(w, r, "alert routes") {
+		return
+	}
 	if r.URL.Path != "/alerts/routes" {
 		servicehttp.WriteError(w, http.StatusNotFound, "not found")
 		return
@@ -52,6 +55,9 @@ func (d *Deps) HandleAlertRoutes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *Deps) HandleAlertRouteActions(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobal(w, r, "alert routes") {
+		return
+	}
 	path := strings.TrimPrefix(r.URL.Path, "/alerts/routes/")
 	if path == r.URL.Path || path == "" {
 		servicehttp.WriteError(w, http.StatusNotFound, "route path not found")

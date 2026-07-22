@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/labtether/labtether/internal/securityruntime"
 )
@@ -58,17 +57,14 @@ func (w *WebhookAdapter) Send(ctx context.Context, config map[string]any, payloa
 		}
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := newNotificationHTTPClient()
 	resp, err := securityruntime.DoOutboundRequest(client, req)
 	if err != nil {
 		return fmt.Errorf("webhook request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode >= 400 {
-		return fmt.Errorf("webhook returned status %d", resp.StatusCode)
-	}
-	return nil
+	return notificationResponseError("webhook", resp.StatusCode)
 }
 
 func webhookSignature(secret, timestamp string, body []byte) string {

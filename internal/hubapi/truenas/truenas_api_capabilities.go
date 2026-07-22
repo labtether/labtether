@@ -47,7 +47,7 @@ func (d *Deps) HandleTrueNASCapabilities(ctx context.Context, w http.ResponseWri
 	case tnconnector.IsMethodNotFound(vmErr):
 		caps.IsScale = false
 	default:
-		caps.Warnings = AppendTrueNASWarning(caps.Warnings, "vm capability detection unavailable: "+vmErr.Error())
+		caps.Warnings = AppendTrueNASWarning(caps.Warnings, trueNASWarning("vm capability detection unavailable", vmErr))
 	}
 
 	// Detect SCALE apps availability via app.query.
@@ -60,7 +60,7 @@ func (d *Deps) HandleTrueNASCapabilities(ctx context.Context, w http.ResponseWri
 		case tnconnector.IsMethodNotFound(appErr):
 			caps.HasApps = false
 		default:
-			caps.Warnings = AppendTrueNASWarning(caps.Warnings, "apps capability detection unavailable: "+appErr.Error())
+			caps.Warnings = AppendTrueNASWarning(caps.Warnings, trueNASWarning("apps capability detection unavailable", appErr))
 		}
 	}
 

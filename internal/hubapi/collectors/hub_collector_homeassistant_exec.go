@@ -14,31 +14,39 @@ import (
 )
 
 func (d *Deps) executeHomeAssistantCollector(ctx context.Context, collector hubcollector.Collector) {
+	lifecycle := NewCollectorLifecycle(d, collector, "homeassistant", hubcollector.CollectorTypeHomeAssistant)
+	failUnavailable := func(message string) {
+		d.markHomeAssistantParentUnavailable(collector)
+		lifecycle.Fail(message)
+	}
+	failUnavailablef := func(format string, args ...any) {
+		failUnavailable(fmt.Sprintf(format, args...))
+	}
+
 	if d.CredentialStore == nil || d.SecretsManager == nil {
-		d.UpdateCollectorStatus(collector.ID, "error", "credential store unavailable")
+		failUnavailable("credential store unavailable")
 		return
 	}
-	lifecycle := NewCollectorLifecycle(d, collector, "homeassistant", hubcollector.CollectorTypeHomeAssistant)
 
 	baseURL := CollectorConfigString(collector.Config, "base_url")
 	credentialID := CollectorConfigString(collector.Config, "credential_id")
 	if baseURL == "" {
-		lifecycle.Fail("missing base_url in config")
+		failUnavailable("missing base_url in config")
 		return
 	}
 	if credentialID == "" {
-		lifecycle.Fail("missing credential_id in config")
+		failUnavailable("missing credential_id in config")
 		return
 	}
 
 	cred, ok, err := d.CredentialStore.GetCredentialProfile(credentialID)
 	if err != nil || !ok {
-		lifecycle.Fail("credential not found")
+		failUnavailable("credential not found")
 		return
 	}
 	token, err := d.SecretsManager.DecryptString(cred.SecretCiphertext, cred.ID)
 	if err != nil {
-		lifecycle.Fail("failed to decrypt credential")
+		failUnavailable("failed to decrypt credential")
 		return
 	}
 
@@ -58,7 +66,7 @@ func (d *Deps) executeHomeAssistantCollector(ctx context.Context, collector hubc
 
 	discovered, err := connector.Discover(collectorCtx)
 	if err != nil {
-		lifecycle.Failf("home assistant discovery failed: %v", err)
+		failUnavailablef("home assistant discovery failed: %v", err)
 		return
 	}
 
@@ -103,7 +111,8 @@ func (d *Deps) executeHomeAssistantCollector(ctx context.Context, collector hubc
 			Status:   normalizeHomeAssistantStatus(metadata),
 			Metadata: metadata,
 		}
-		if _, err := d.ProcessHeartbeatRequest(req); err != nil {
+		req = ScopedCollectorHeartbeatRequest(collector.ID, req)
+		if _, err := d.ProcessScopedCollectorHeartbeat(collector.ID, req); err != nil {
 			log.Printf("hub collector homeassistant: failed to upsert %s: %v", discoveredAsset.ID, err)
 			upsertFailures++
 			continue
@@ -185,6 +194,70 @@ func (d *Deps) executeHomeAssistantCollector(ctx context.Context, collector hubc
 	}
 
 	d.UpdateCollectorStatus(collector.ID, "ok", "")
+}
+
+// markHomeAssistantParentUnavailable records connector reachability without
+// replacing the last successful Home Assistant inventory. The parent heartbeat
+// is refreshed as offline, while its existing name and metadata are carried
+// forward so a failed poll cannot masquerade stale details as a fresh sync.
+func (d *Deps) markHomeAssistantParentUnavailable(collector hubcollector.Collector) {
+	assetID := strings.TrimSpace(collector.AssetID)
+	if assetID == "" || d.AssetStore == nil || d.ProcessHeartbeatRequest == nil {
+		return
+	}
+
+	name := strings.TrimSpace(CollectorConfigString(collector.Config, "display_name"))
+	assetType := "connector-cluster"
+	metadata := map[string]string{
+		"connector_type": "homeassistant",
+	}
+	if baseURL := strings.TrimSpace(CollectorConfigString(collector.Config, "base_url")); baseURL != "" {
+		metadata["collector_base_url"] = baseURL
+	}
+
+	existing, ok, err := d.AssetStore.GetAsset(assetID)
+	if err != nil {
+		// Do not risk replacing the last successful metadata when the read needed
+		// to preserve it failed. The collector error is still recorded below.
+		return
+	}
+	if ok {
+		existingSource := strings.ToLower(strings.TrimSpace(existing.Source))
+		if existingSource != "homeassistant" && existingSource != "home-assistant" {
+			return
+		}
+		if existingName := strings.TrimSpace(existing.Name); existingName != "" {
+			name = existingName
+		}
+		if existingType := strings.TrimSpace(existing.Type); existingType != "" {
+			assetType = existingType
+		}
+		metadata = cloneStringMap(existing.Metadata)
+		if metadata == nil {
+			metadata = make(map[string]string)
+		}
+	}
+
+	metadata["connector_type"] = "homeassistant"
+	if _, ok := metadata["collector_base_url"]; !ok {
+		if baseURL := strings.TrimSpace(CollectorConfigString(collector.Config, "base_url")); baseURL != "" {
+			metadata["collector_base_url"] = baseURL
+		}
+	}
+	if name == "" {
+		name = assetID
+	}
+
+	d.RefreshCollectorParentAsset(CollectorParentAssetRefreshOptions{
+		Collector:      collector,
+		Source:         "homeassistant",
+		AssetType:      assetType,
+		Name:           name,
+		Status:         "offline",
+		Metadata:       metadata,
+		LogPrefix:      "hub collector homeassistant",
+		FailureSubject: "unavailable cluster asset",
+	})
 }
 
 func normalizeHomeAssistantStatus(metadata map[string]string) string {

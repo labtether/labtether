@@ -210,10 +210,10 @@ func (d *Deps) HandleActionExecute(w http.ResponseWriter, r *http.Request) {
 		auditCheck.Reason = checkRes.Reason
 	}
 	auditCheckDetails := map[string]any{
-		"type":         req.Type,
-		"command":      req.Command,
-		"connector_id": req.ConnectorID,
-		"action_id":    req.ActionID,
+		"type":          req.Type,
+		"command_bytes": len([]byte(req.Command)),
+		"connector_id":  req.ConnectorID,
+		"action_id":     req.ActionID,
 	}
 	if requestedActorID != "" && requestedActorID != req.ActorID {
 		auditCheckDetails["requested_actor_label"] = requestedActorID

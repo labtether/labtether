@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -50,11 +52,16 @@ func writeTestManifestForBinaries(t *testing.T, dir string, binaries map[string]
 		if i > 0 {
 			entries += ","
 		}
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatalf("read test binary %s: %v", name, err)
+		}
+		digest := sha256.Sum256(data)
 		entries += `
         "` + key + `": {
           "name": "` + name + `",
-          "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-          "size_bytes": 0
+          "sha256": "` + fmt.Sprintf("%x", digest[:]) + `",
+          "size_bytes": ` + fmt.Sprintf("%d", len(data)) + `
         }`
 		i++
 	}
@@ -320,6 +327,9 @@ func TestHandleAgentInstallScript(t *testing.T) {
 			if !strings.Contains(body, "--enrollment-token") {
 				t.Errorf("script does not contain --enrollment-token support")
 			}
+			if !strings.Contains(body, "--enrollment-token-file") {
+				t.Errorf("script does not contain file-backed enrollment token support")
+			}
 			if !strings.Contains(body, "--auto-install-vnc") {
 				t.Errorf("script does not contain --auto-install-vnc support")
 			}
@@ -457,6 +467,7 @@ func TestGenerateInstallScript(t *testing.T) {
 		{"auto update flag", "--auto-update"},
 		{"force update flag", "--force-update"},
 		{"enrollment token flag", "--enrollment-token"},
+		{"enrollment token file flag", "--enrollment-token-file"},
 		{"tls skip verify flag", "--tls-skip-verify"},
 		{"tls ca file flag", "--tls-ca-file"},
 		{"root check", "EUID"},
@@ -473,7 +484,7 @@ func TestGenerateInstallScript(t *testing.T) {
 		{"device key file", "device-key"},
 		{"device public key file", "device-key.pub"},
 		{"LABTETHER_WS_URL", "LABTETHER_WS_URL"},
-		{"LABTETHER_ENROLLMENT_TOKEN", "LABTETHER_ENROLLMENT_TOKEN"},
+		{"LABTETHER_ENROLLMENT_TOKEN_FILE", "LABTETHER_ENROLLMENT_TOKEN_FILE"},
 		{"LABTETHER_DOCKER_ENABLED", "LABTETHER_DOCKER_ENABLED"},
 		{"LABTETHER_DOCKER_SOCKET", "LABTETHER_DOCKER_SOCKET"},
 		{"LABTETHER_DOCKER_DISCOVERY_INTERVAL", "LABTETHER_DOCKER_DISCOVERY_INTERVAL"},

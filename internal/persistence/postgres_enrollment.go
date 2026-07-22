@@ -3,6 +3,8 @@ package persistence
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -12,21 +14,41 @@ import (
 )
 
 func (s *PostgresStore) CreateEnrollmentToken(tokenHash, label string, expiresAt time.Time, maxUses int) (enrollment.EnrollmentToken, error) {
-	now := time.Now().UTC()
-	tok := enrollment.EnrollmentToken{
-		ID:        idgen.New("etok"),
-		Label:     label,
-		ExpiresAt: expiresAt,
-		MaxUses:   maxUses,
-		UseCount:  0,
-		CreatedAt: now,
+	if err := enrollment.ValidateStoredTokenMaxUses(maxUses); err != nil {
+		return enrollment.EnrollmentToken{}, err
 	}
-	_, err := s.pool.Exec(context.Background(),
+	ttl, err := databaseTTL(expiresAt)
+	if err != nil {
+		return enrollment.EnrollmentToken{}, err
+	}
+	tok := enrollment.EnrollmentToken{
+		ID:       idgen.New("etok"),
+		Label:    label,
+		MaxUses:  maxUses,
+		UseCount: 0,
+	}
+	ctx := context.Background()
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return enrollment.EnrollmentToken{}, err
+	}
+	defer tx.Rollback(ctx)
+	if err := lockAgentEnrollmentIssuance(ctx, tx); err != nil {
+		return enrollment.EnrollmentToken{}, err
+	}
+	err = tx.QueryRow(ctx,
 		`INSERT INTO enrollment_tokens (id, token_hash, label, expires_at, max_uses, use_count, created_at)
-		 VALUES ($1, $2, $3, $4, $5, 0, $6)`,
-		tok.ID, tokenHash, tok.Label, tok.ExpiresAt, tok.MaxUses, tok.CreatedAt,
-	)
-	return tok, err
+		 VALUES ($1, $2, $3, clock_timestamp() + ($4::double precision * interval '1 second'), $5, 0, clock_timestamp())
+		 RETURNING expires_at, created_at`,
+		tok.ID, tokenHash, tok.Label, ttl.Seconds(), tok.MaxUses,
+	).Scan(&tok.ExpiresAt, &tok.CreatedAt)
+	if err != nil {
+		return enrollment.EnrollmentToken{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return enrollment.EnrollmentToken{}, err
+	}
+	return tok, nil
 }
 
 func (s *PostgresStore) ValidateEnrollmentToken(tokenHash string) (enrollment.EnrollmentToken, bool, error) {
@@ -34,7 +56,12 @@ func (s *PostgresStore) ValidateEnrollmentToken(tokenHash string) (enrollment.En
 	var revokedAt *time.Time
 	err := s.pool.QueryRow(context.Background(),
 		`SELECT id, label, expires_at, max_uses, use_count, created_at, revoked_at
-		 FROM enrollment_tokens WHERE token_hash = $1`, tokenHash,
+		 FROM enrollment_tokens
+		 WHERE token_hash = $1
+		   AND revoked_at IS NULL
+		   AND expires_at > clock_timestamp()
+		   AND max_uses BETWEEN 1 AND $2
+		   AND use_count < max_uses`, tokenHash, enrollment.HardTokenMaxUsesCeiling,
 	).Scan(&tok.ID, &tok.Label, &tok.ExpiresAt, &tok.MaxUses, &tok.UseCount, &tok.CreatedAt, &revokedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -44,34 +71,22 @@ func (s *PostgresStore) ValidateEnrollmentToken(tokenHash string) (enrollment.En
 	}
 	tok.RevokedAt = revokedAt
 
-	now := time.Now().UTC()
-	if revokedAt != nil {
-		return tok, false, nil
-	}
-	if now.After(tok.ExpiresAt) {
-		return tok, false, nil
-	}
-	if tok.MaxUses > 0 && tok.UseCount >= tok.MaxUses {
-		return tok, false, nil
-	}
 	return tok, true, nil
 }
 
 func (s *PostgresStore) ConsumeEnrollmentToken(tokenHash string) (enrollment.EnrollmentToken, bool, error) {
 	var tok enrollment.EnrollmentToken
 	var revokedAt *time.Time
-	now := time.Now().UTC()
-
 	err := s.pool.QueryRow(context.Background(),
 		`UPDATE enrollment_tokens
 		 SET use_count = use_count + 1
 		 WHERE token_hash = $1
 		   AND revoked_at IS NULL
-		   AND expires_at > $2
-		   AND (max_uses <= 0 OR use_count < max_uses)
+		   AND expires_at > clock_timestamp()
+		   AND max_uses BETWEEN 1 AND $2
+		   AND use_count < max_uses
 		 RETURNING id, label, expires_at, max_uses, use_count, created_at, revoked_at`,
-		tokenHash,
-		now,
+		tokenHash, enrollment.HardTokenMaxUsesCeiling,
 	).Scan(&tok.ID, &tok.Label, &tok.ExpiresAt, &tok.MaxUses, &tok.UseCount, &tok.CreatedAt, &revokedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -85,21 +100,32 @@ func (s *PostgresStore) ConsumeEnrollmentToken(tokenHash string) (enrollment.Enr
 }
 
 func (s *PostgresStore) IncrementEnrollmentTokenUse(id string) error {
-	_, err := s.pool.Exec(context.Background(),
-		`UPDATE enrollment_tokens SET use_count = use_count + 1 WHERE id = $1`, id,
-	)
+	var foundID string
+	err := s.pool.QueryRow(context.Background(),
+		`UPDATE enrollment_tokens
+		 SET use_count = use_count + 1
+		 WHERE id = $1
+		   AND revoked_at IS NULL
+		   AND expires_at > clock_timestamp()
+		   AND max_uses BETWEEN 1 AND $2
+		   AND use_count < max_uses
+		 RETURNING id`,
+		id, enrollment.HardTokenMaxUsesCeiling,
+	).Scan(&foundID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrEnrollmentTokenInvalid
+	}
 	return err
 }
 
 func (s *PostgresStore) RevokeEnrollmentToken(id string) error {
-	now := time.Now().UTC()
 	var foundID string
 	err := s.pool.QueryRow(context.Background(),
 		`UPDATE enrollment_tokens
-		 SET revoked_at = COALESCE(revoked_at, $1)
-		 WHERE id = $2
+		 SET revoked_at = COALESCE(revoked_at, clock_timestamp())
+		 WHERE id = $1
 		 RETURNING id`,
-		now, id,
+		id,
 	).Scan(&foundID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -137,30 +163,130 @@ func (s *PostgresStore) ListEnrollmentTokens(limit int) ([]enrollment.Enrollment
 }
 
 func (s *PostgresStore) CreateAgentToken(assetID, tokenHash, enrolledVia string, expiresAt time.Time) (enrollment.AgentToken, error) {
-	now := time.Now().UTC()
+	assetID = strings.TrimSpace(assetID)
+	if assetID == "" {
+		return enrollment.AgentToken{}, fmt.Errorf("asset id is required")
+	}
+	ttl, err := databaseTTL(expiresAt)
+	if err != nil {
+		return enrollment.AgentToken{}, err
+	}
+	ctx := context.Background()
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return enrollment.AgentToken{}, err
+	}
+	defer tx.Rollback(ctx)
+	if err := lockAgentIdentityAsset(ctx, tx, assetID); err != nil {
+		return enrollment.AgentToken{}, err
+	}
+	if err := lockAgentEnrollmentIssuance(ctx, tx); err != nil {
+		return enrollment.AgentToken{}, err
+	}
 	tok := enrollment.AgentToken{
 		ID:          idgen.New("atok"),
 		AssetID:     assetID,
 		Status:      "active",
 		EnrolledVia: enrolledVia,
-		ExpiresAt:   expiresAt.UTC(),
-		CreatedAt:   now,
 	}
-	_, err := s.pool.Exec(context.Background(),
+	err = tx.QueryRow(ctx,
 		`INSERT INTO agent_tokens (id, asset_id, token_hash, status, enrolled_via, expires_at, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		tok.ID, tok.AssetID, tokenHash, tok.Status, tok.EnrolledVia, tok.ExpiresAt, tok.CreatedAt,
-	)
-	return tok, err
+		 VALUES ($1, $2, $3, $4, $5, clock_timestamp() + ($6::double precision * interval '1 second'), clock_timestamp())
+		 RETURNING expires_at, created_at`,
+		tok.ID, tok.AssetID, tokenHash, tok.Status, tok.EnrolledVia, ttl.Seconds(),
+	).Scan(&tok.ExpiresAt, &tok.CreatedAt)
+	if err != nil {
+		return enrollment.AgentToken{}, err
+	}
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO agent_identity_state (asset_id, credential_rotated_at)
+		 SELECT $1, clock_timestamp() FROM assets WHERE id = $1
+		 ON CONFLICT (asset_id) DO UPDATE SET credential_rotated_at = clock_timestamp()`,
+		assetID,
+	); err != nil {
+		return enrollment.AgentToken{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return enrollment.AgentToken{}, err
+	}
+	return tok, nil
+}
+
+// RotateAgentToken atomically revokes every active credential for an asset and
+// inserts its replacement. This prevents a continuity-proven re-enrollment
+// from leaving duplicate active credentials or an intermediate committed
+// state with all tokens revoked.
+func (s *PostgresStore) RotateAgentToken(assetID, tokenHash, enrolledVia string, expiresAt time.Time) (enrollment.AgentToken, error) {
+	assetID = strings.TrimSpace(assetID)
+	if assetID == "" {
+		return enrollment.AgentToken{}, fmt.Errorf("asset id is required")
+	}
+	ctx := context.Background()
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return enrollment.AgentToken{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	ttl, err := databaseTTL(expiresAt)
+	if err != nil {
+		return enrollment.AgentToken{}, err
+	}
+	// Serialize rotations per asset so two distinct one-time enrollment tokens
+	// cannot both commit an active replacement credential.
+	if err := lockAgentIdentityAsset(ctx, tx, assetID); err != nil {
+		return enrollment.AgentToken{}, err
+	}
+	if err := lockAgentEnrollmentIssuance(ctx, tx); err != nil {
+		return enrollment.AgentToken{}, err
+	}
+	if _, err := tx.Exec(ctx,
+		`UPDATE agent_tokens
+		 SET status = 'revoked', revoked_at = COALESCE(revoked_at, clock_timestamp())
+		 WHERE asset_id = $1 AND status = 'active'`,
+		assetID,
+	); err != nil {
+		return enrollment.AgentToken{}, err
+	}
+
+	tok := enrollment.AgentToken{
+		ID:          idgen.New("atok"),
+		AssetID:     assetID,
+		Status:      "active",
+		EnrolledVia: enrolledVia,
+	}
+	if err := tx.QueryRow(ctx,
+		`INSERT INTO agent_tokens (id, asset_id, token_hash, status, enrolled_via, expires_at, created_at)
+		 VALUES ($1, $2, $3, $4, $5, clock_timestamp() + ($6::double precision * interval '1 second'), clock_timestamp())
+		 RETURNING expires_at, created_at`,
+		tok.ID, tok.AssetID, tokenHash, tok.Status, tok.EnrolledVia, ttl.Seconds(),
+	).Scan(&tok.ExpiresAt, &tok.CreatedAt); err != nil {
+		return enrollment.AgentToken{}, err
+	}
+	// Legacy callers may create orphan token rows for tests. Mark a rotation
+	// only when the stable asset exists; production enrollment always uses the
+	// transactional enrollment methods below.
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO agent_identity_state (asset_id, credential_rotated_at)
+		 SELECT $1, clock_timestamp() FROM assets WHERE id = $1
+		 ON CONFLICT (asset_id) DO UPDATE SET credential_rotated_at = clock_timestamp()`,
+		assetID,
+	); err != nil {
+		return enrollment.AgentToken{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return enrollment.AgentToken{}, err
+	}
+	return tok, nil
 }
 
 func (s *PostgresStore) ValidateAgentToken(tokenHash string) (enrollment.AgentToken, bool, error) {
 	var tok enrollment.AgentToken
 	var lastUsedAt, revokedAt *time.Time
-	now := time.Now().UTC()
 	err := s.pool.QueryRow(context.Background(),
 		`SELECT id, asset_id, status, enrolled_via, expires_at, last_used_at, created_at, revoked_at
-		 FROM agent_tokens WHERE token_hash = $1 AND status = 'active' AND expires_at > $2`, tokenHash, now,
+		 FROM agent_tokens
+		 WHERE token_hash = $1 AND status = 'active' AND revoked_at IS NULL AND expires_at > clock_timestamp()`, tokenHash,
 	).Scan(&tok.ID, &tok.AssetID, &tok.Status, &tok.EnrolledVia, &tok.ExpiresAt, &lastUsedAt, &tok.CreatedAt, &revokedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -174,23 +300,21 @@ func (s *PostgresStore) ValidateAgentToken(tokenHash string) (enrollment.AgentTo
 }
 
 func (s *PostgresStore) TouchAgentTokenLastUsed(id string) error {
-	now := time.Now().UTC()
 	_, err := s.pool.Exec(context.Background(),
-		`UPDATE agent_tokens SET last_used_at = $1 WHERE id = $2`, now, id,
+		`UPDATE agent_tokens SET last_used_at = clock_timestamp() WHERE id = $1`, id,
 	)
 	return err
 }
 
 func (s *PostgresStore) RevokeAgentToken(id string) error {
-	now := time.Now().UTC()
 	var foundID string
 	err := s.pool.QueryRow(context.Background(),
 		`UPDATE agent_tokens
 		 SET status = 'revoked',
-		     revoked_at = COALESCE(revoked_at, $1)
-		 WHERE id = $2
+		     revoked_at = COALESCE(revoked_at, clock_timestamp())
+		 WHERE id = $1
 		 RETURNING id`,
-		now, id,
+		id,
 	).Scan(&foundID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -202,9 +326,8 @@ func (s *PostgresStore) RevokeAgentToken(id string) error {
 }
 
 func (s *PostgresStore) RevokeAgentTokensByAsset(assetID string) error {
-	now := time.Now().UTC()
 	_, err := s.pool.Exec(context.Background(),
-		`UPDATE agent_tokens SET status = 'revoked', revoked_at = $1 WHERE asset_id = $2 AND status = 'active'`, now, assetID,
+		`UPDATE agent_tokens SET status = 'revoked', revoked_at = clock_timestamp() WHERE asset_id = $1 AND status = 'active'`, assetID,
 	)
 	return err
 }
@@ -221,8 +344,12 @@ func (s *PostgresStore) DeleteDeadTokens() (int, int, error) {
 	enrollTag, err := tx.Exec(ctx,
 		`DELETE FROM enrollment_tokens
 		 WHERE revoked_at IS NOT NULL
-		    OR expires_at < NOW()
-		    OR (max_uses > 0 AND use_count >= max_uses)`)
+		    OR expires_at <= clock_timestamp()
+		    OR max_uses < 1
+		    OR max_uses > $1
+		    OR use_count >= max_uses`,
+		enrollment.HardTokenMaxUsesCeiling,
+	)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -230,8 +357,8 @@ func (s *PostgresStore) DeleteDeadTokens() (int, int, error) {
 	// Delete agent tokens that are revoked and were never used by a device.
 	agentTag, err := tx.Exec(ctx,
 		`DELETE FROM agent_tokens
-		 WHERE status = 'revoked'
-		   AND last_used_at IS NULL`)
+		 WHERE (status = 'revoked' AND last_used_at IS NULL)
+		    OR (status = 'pending' AND expires_at <= clock_timestamp())`)
 	if err != nil {
 		return 0, 0, err
 	}

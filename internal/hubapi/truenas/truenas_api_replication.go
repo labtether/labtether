@@ -39,7 +39,7 @@ func (d *Deps) HandleTrueNASReplication(ctx context.Context, w http.ResponseWrit
 		replications := make([]map[string]any, 0, 16)
 		warnings := make([]string, 0, 2)
 		if err := CallTrueNASQueryWithRetries(ctx, runtime.Client, "replication.query", &replications); err != nil {
-			warnings = AppendTrueNASWarning(warnings, "replication tasks unavailable: "+err.Error())
+			warnings = AppendTrueNASWarning(warnings, trueNASWarning("replication tasks unavailable", err))
 			replications = nil
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, TrueNASReplicationResponse{
@@ -78,7 +78,7 @@ func (d *Deps) HandleTrueNASReplication(ctx context.Context, w http.ResponseWrit
 			return
 		}
 		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, "replication.run", []any{replID}, nil); err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to run replication task: "+err.Error())
+			writeTrueNASError(w, http.StatusBadGateway, "failed to run replication task", err)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, TrueNASReplicationActionResponse{

@@ -3,6 +3,7 @@ package bulkpkg
 import (
 	"net/http"
 
+	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
 	"github.com/labtether/labtether/internal/persistence"
 )
 
@@ -25,4 +26,7 @@ type Deps struct {
 	// on a single asset. Using a function field avoids importing cmd/labtether
 	// (which would be a circular import).
 	ExecOnAsset func(r *http.Request, assetID, command string, timeoutSec int) ExecResult
+	// EvaluateAssetGuardrails resolves group maintenance constraints before
+	// any target in a bulk mutation is dispatched.
+	EvaluateAssetGuardrails maintenanceguard.EvaluateAssetFunc
 }

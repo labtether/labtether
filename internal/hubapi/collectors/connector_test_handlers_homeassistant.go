@@ -26,25 +26,24 @@ func (d *Deps) HandleHomeAssistantConnectorTest(w http.ResponseWriter, r *http.R
 	baseURL := strings.TrimSpace(req.BaseURL)
 	token := strings.TrimSpace(req.Token)
 	credentialID := strings.TrimSpace(req.CredentialID)
+	credentialProfile, credentialOK := d.loadAuthorizedCredentialProfile(w, r, credentialID)
+	if !credentialOK {
+		return
+	}
 
 	if token == "" && credentialID != "" {
-		if d.CredentialStore == nil || d.SecretsManager == nil {
+		if d.SecretsManager == nil {
 			servicehttp.WriteError(w, http.StatusServiceUnavailable, "credential store unavailable")
 			return
 		}
-		profile, ok, err := d.CredentialStore.GetCredentialProfile(credentialID)
-		if err != nil || !ok {
-			servicehttp.WriteError(w, http.StatusBadRequest, "credential_id not found")
-			return
-		}
-		decrypted, err := d.SecretsManager.DecryptString(profile.SecretCiphertext, profile.ID)
+		decrypted, err := d.SecretsManager.DecryptString(credentialProfile.SecretCiphertext, credentialProfile.ID)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, "failed to decrypt credential secret")
 			return
 		}
 		token = strings.TrimSpace(decrypted)
 		if baseURL == "" {
-			baseURL = strings.TrimSpace(profile.Metadata["base_url"])
+			baseURL = strings.TrimSpace(credentialProfile.Metadata["base_url"])
 		}
 	}
 

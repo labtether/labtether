@@ -43,6 +43,8 @@ func TestPushAgentSettingsApplyIncludesStoredFingerprint(t *testing.T) {
 		Metadata: map[string]string{
 			"agent_device_fingerprint": "fp-expected",
 		},
+		// This fixture represents an already-verified enrolled identity anchor.
+		AllowAgentIdentityRotation: true,
 	}); err != nil {
 		t.Fatalf("seed asset: %v", err)
 	}
@@ -102,6 +104,70 @@ func TestPushAgentSettingsApplyIncludesStoredFingerprint(t *testing.T) {
 	}
 	if state.Values[agentsettings.SettingKeyLogLevel] != "debug" {
 		t.Fatalf("state log level=%q, want debug", state.Values[agentsettings.SettingKeyLogLevel])
+	}
+}
+
+func TestAgentSettingsPatchAndResetExcludeLocalOnlyValuesFromApply(t *testing.T) {
+	sut := newTestAPIServer(t)
+	sut.agentMgr = agentmgr.NewManager()
+
+	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	defer cleanup()
+	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-settings-filter", "linux"))
+	defer sut.agentMgr.Unregister("node-settings-filter")
+
+	readApply := func() agentmgr.AgentSettingsApplyData {
+		t.Helper()
+		_ = clientConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+		var outbound agentmgr.Message
+		if err := clientConn.ReadJSON(&outbound); err != nil {
+			t.Fatalf("read outbound settings apply: %v", err)
+		}
+		if outbound.Type != agentmgr.MsgAgentSettingsApply {
+			t.Fatalf("message type=%q, want %q", outbound.Type, agentmgr.MsgAgentSettingsApply)
+		}
+		var payload agentmgr.AgentSettingsApplyData
+		if err := json.Unmarshal(outbound.Data, &payload); err != nil {
+			t.Fatalf("decode settings apply: %v", err)
+		}
+		for _, localOnlyKey := range []string{
+			agentsettings.SettingKeyAllowRemoteOverrides,
+			agentsettings.SettingKeyTLSCAFile,
+			agentsettings.SettingKeyTLSSkipVerify,
+		} {
+			if _, exists := payload.Values[localOnlyKey]; exists {
+				t.Fatalf("local-only setting %q leaked into remote apply payload: %+v", localOnlyKey, payload.Values)
+			}
+		}
+		return payload
+	}
+
+	patchReq := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/v1/agents/node-settings-filter/settings",
+		strings.NewReader(`{"values":{"collect_interval_sec":"11"}}`),
+	)
+	patchRec := httptest.NewRecorder()
+	sut.handleAgentSettingsRoutes(patchRec, patchReq)
+	if patchRec.Code != http.StatusOK {
+		t.Fatalf("patch status=%d body=%s", patchRec.Code, patchRec.Body.String())
+	}
+	if got := readApply().Values[agentsettings.SettingKeyCollectIntervalSec]; got != "11" {
+		t.Fatalf("patched collect interval=%q, want 11", got)
+	}
+
+	resetReq := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/agents/node-settings-filter/settings/reset",
+		strings.NewReader(`{"keys":["collect_interval_sec"]}`),
+	)
+	resetRec := httptest.NewRecorder()
+	sut.handleAgentSettingsRoutes(resetRec, resetReq)
+	if resetRec.Code != http.StatusOK {
+		t.Fatalf("reset status=%d body=%s", resetRec.Code, resetRec.Body.String())
+	}
+	if got := readApply().Values[agentsettings.SettingKeyCollectIntervalSec]; got != "10" {
+		t.Fatalf("reset collect interval=%q, want default 10", got)
 	}
 }
 

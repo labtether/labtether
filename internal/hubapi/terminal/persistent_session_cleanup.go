@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gorilla/websocket"
+
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/terminal"
@@ -29,10 +31,27 @@ func (d *Deps) TerminatePersistentTerminalRuntime(persistent terminal.Persistent
 	if tmuxSessionName == "" {
 		return nil
 	}
+	// Creation only stores metadata. Without an attach timestamp there is no
+	// remote tmux runtime to terminate, so deletion must not invent a cleanup
+	// dependency or strand a never-used saved shell.
+	if persistent.LastAttachedAt == nil {
+		return nil
+	}
 
 	target := strings.TrimSpace(persistent.Target)
 	if target == "" {
 		return fmt.Errorf("%w: missing target", ErrPersistentTerminalCleanupUnavailable)
+	}
+
+	if d.AgentMgr != nil {
+		agentConn, connected := d.AgentMgr.Get(target)
+		if connected && strings.TrimSpace(agentConn.Meta("terminal.tmux.has")) == "false" {
+			// LTQA-110 legacy recovery: older hubs could mark a plain agent
+			// shell as persistent even after the agent explicitly reported no
+			// tmux. ClosePersistentTerminalAttachments terminates that real
+			// shell; there is no tmux runtime to kill.
+			return nil
+		}
 	}
 
 	if d.AgentMgr != nil && d.AgentMgr.IsConnected(target) {
@@ -51,6 +70,53 @@ func (d *Deps) TerminatePersistentTerminalRuntime(persistent terminal.Persistent
 	}
 	if err := PersistentTmuxCleanupSSHFunc(d, resolvedSSHConfig, tmuxSessionName); err != nil {
 		return fmt.Errorf("failed to end saved shell over ssh: %w", err)
+	}
+	return nil
+}
+
+// ClosePersistentTerminalAttachments terminates the concrete interactive
+// sessions linked to a persistent record before tmux and metadata cleanup. It
+// returns transport failures to the caller instead of claiming deletion while
+// a plain agent shell may still be running.
+func (d *Deps) ClosePersistentTerminalAttachments(persistent terminal.PersistentSession, sessions []terminal.Session) error {
+	persistentID := strings.TrimSpace(persistent.ID)
+	if persistentID == "" {
+		return errors.New("persistent session id is required for attachment cleanup")
+	}
+
+	if active, loaded := d.ActivePersistentConns.LoadAndDelete(persistentID); loaded {
+		wsConn, ok := active.(*websocket.Conn)
+		if !ok {
+			return errors.New("persistent terminal connection registry is invalid")
+		}
+		_ = wsConn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseNormalClosure, "persistent session deleted"),
+			time.Now().Add(2*time.Second),
+		)
+		if err := wsConn.Close(); err != nil {
+			return fmt.Errorf("failed to close attached persistent terminal connection: %w", err)
+		}
+	}
+
+	for _, session := range sessions {
+		if strings.TrimSpace(session.PersistentSessionID) != persistentID {
+			continue
+		}
+		if d.AgentMgr != nil {
+			if agentConn, ok := d.AgentMgr.Get(strings.TrimSpace(session.Target)); ok {
+				if err := SendTerminalCloseWithError(agentConn, session.ID); err != nil {
+					return fmt.Errorf("failed to close attached agent terminal session: %w", err)
+				}
+			}
+		}
+		if d.TerminalBridges != nil {
+			if value, ok := d.TerminalBridges.Load(session.ID); ok {
+				if bridge, ok := value.(*TerminalBridge); ok {
+					bridge.CloseWithReason("persistent_session_deleted")
+				}
+			}
+		}
 	}
 	return nil
 }

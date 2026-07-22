@@ -54,7 +54,8 @@ func (d *Deps) executeProxmoxCollector(ctx context.Context, collector hubcollect
 			continue
 		}
 		eligibleResources++
-		if _, err := d.ProcessHeartbeatRequest(req); err != nil {
+		req = ScopedCollectorHeartbeatRequest(collector.ID, req)
+		if _, err := d.ProcessScopedCollectorHeartbeat(collector.ID, req); err != nil {
 			log.Printf("hub collector proxmox: failed to upsert %s: %v", req.AssetID, err)
 			upsertFailures++
 			continue
@@ -79,7 +80,7 @@ func (d *Deps) executeProxmoxCollector(ctx context.Context, collector hubcollect
 	}
 
 	taskLogs := 0
-	if ingested, taskErr := d.ingestProxmoxTaskLogs(collectorCtx, client, collector.AssetID); taskErr != nil {
+	if ingested, taskErr := d.ingestProxmoxTaskLogs(collectorCtx, client, collector.AssetID, collector.ID); taskErr != nil {
 		log.Printf("hub collector proxmox: failed to ingest task logs: %v", taskErr)
 	} else {
 		taskLogs = ingested

@@ -123,6 +123,13 @@ func (s *PostgresStore) PruneExpiredData(now time.Time, settings retention.Setti
 		now.Add(-settings.MetricsWindow)); err != nil {
 		return retention.PruneResult{}, err
 	}
+	hubMetricsDeleted, err := s.pruneExecDirect(
+		`DELETE FROM hub_metric_samples WHERE collected_at < $1`,
+		now.Add(-settings.MetricsWindow))
+	if err != nil {
+		return retention.PruneResult{}, err
+	}
+	result.MetricsDeleted += hubMetricsDeleted
 	if result.AuditDeleted, err = s.pruneExecDirect(
 		`DELETE FROM audit_events WHERE timestamp < $1`,
 		now.Add(-settings.AuditWindow)); err != nil {
@@ -383,7 +390,63 @@ func (s *PostgresStore) DeleteRuntimeSettingOverrides(keys []string) error {
 	return err
 }
 
+const credentialProfileCardinalityLockID int64 = 0x4c5443524544
+
+type credentialProfileQueryRower interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
 func (s *PostgresStore) CreateCredentialProfile(profile credentials.Profile) (credentials.Profile, error) {
+	return createCredentialProfile(context.Background(), s.pool, profile)
+}
+
+func (s *PostgresStore) CreateCredentialProfileBounded(
+	profile credentials.Profile,
+	ownerID string,
+	perOwnerLimit, globalLimit int,
+) (credentials.Profile, error) {
+	ctx := context.Background()
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return credentials.Profile{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, credentialProfileCardinalityLockID); err != nil {
+		return credentials.Profile{}, err
+	}
+	if globalLimit > 0 {
+		var total int
+		if err = tx.QueryRow(ctx, `SELECT COUNT(*) FROM credential_profiles`).Scan(&total); err != nil {
+			return credentials.Profile{}, err
+		}
+		if total >= globalLimit {
+			return credentials.Profile{}, ErrCredentialProfileGlobalLimit
+		}
+	}
+
+	profile.CreatedBy = strings.TrimSpace(ownerID)
+	if profile.CreatedBy != "" && perOwnerLimit > 0 {
+		var ownerTotal int
+		if err = tx.QueryRow(ctx, `SELECT COUNT(*) FROM credential_profiles WHERE created_by = $1`, profile.CreatedBy).Scan(&ownerTotal); err != nil {
+			return credentials.Profile{}, err
+		}
+		if ownerTotal >= perOwnerLimit {
+			return credentials.Profile{}, ErrCredentialProfileOwnerLimit
+		}
+	}
+
+	created, err := createCredentialProfile(ctx, tx, profile)
+	if err != nil {
+		return credentials.Profile{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return credentials.Profile{}, err
+	}
+	return created, nil
+}
+
+func createCredentialProfile(ctx context.Context, q credentialProfileQueryRower, profile credentials.Profile) (credentials.Profile, error) {
 	now := time.Now().UTC()
 	if strings.TrimSpace(profile.ID) == "" {
 		profile.ID = idgen.New("cred")
@@ -397,7 +460,7 @@ func (s *PostgresStore) CreateCredentialProfile(profile credentials.Profile) (cr
 		return credentials.Profile{}, err
 	}
 
-	created, err := scanCredentialProfile(s.pool.QueryRow(context.Background(),
+	created, err := scanCredentialProfile(q.QueryRow(ctx,
 		`INSERT INTO credential_profiles (
 			id,
 			name,
@@ -405,6 +468,7 @@ func (s *PostgresStore) CreateCredentialProfile(profile credentials.Profile) (cr
 			username,
 			description,
 			status,
+			created_by,
 			metadata,
 			secret_ciphertext,
 			passphrase_ciphertext,
@@ -413,7 +477,7 @@ func (s *PostgresStore) CreateCredentialProfile(profile credentials.Profile) (cr
 			rotated_at,
 			expires_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $10, $10, $11)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $11, $11, $12)
 		RETURNING
 			id,
 			name,
@@ -421,6 +485,7 @@ func (s *PostgresStore) CreateCredentialProfile(profile credentials.Profile) (cr
 			username,
 			description,
 			status,
+			created_by,
 			metadata,
 			secret_ciphertext,
 			passphrase_ciphertext,
@@ -435,9 +500,10 @@ func (s *PostgresStore) CreateCredentialProfile(profile credentials.Profile) (cr
 		nullIfBlank(profile.Username),
 		nullIfBlank(profile.Description),
 		status,
+		strings.TrimSpace(profile.CreatedBy),
 		metadataPayload,
-		strings.TrimSpace(profile.SecretCiphertext),
-		nullIfBlank(profile.PassphraseCiphertext),
+		profile.SecretCiphertext,
+		nullIfEmptyExact(profile.PassphraseCiphertext),
 		now,
 		nullTime(profile.ExpiresAt),
 	))
@@ -477,9 +543,10 @@ func (s *PostgresStore) UpdateCredentialProfile(profile credentials.Profile) (cr
 			name,
 			kind,
 			username,
-			description,
-			status,
-			metadata,
+				description,
+				status,
+				created_by,
+				metadata,
 			secret_ciphertext,
 			passphrase_ciphertext,
 			created_at,
@@ -494,8 +561,8 @@ func (s *PostgresStore) UpdateCredentialProfile(profile credentials.Profile) (cr
 		nullIfBlank(profile.Description),
 		status,
 		metadataPayload,
-		strings.TrimSpace(profile.SecretCiphertext),
-		nullIfBlank(profile.PassphraseCiphertext),
+		profile.SecretCiphertext,
+		nullIfEmptyExact(profile.PassphraseCiphertext),
 		now,
 		nullTime(profile.RotatedAt),
 		nullTime(profile.ExpiresAt),
@@ -524,9 +591,10 @@ func (s *PostgresStore) UpdateCredentialProfileSecret(id, secretCiphertext, pass
 			name,
 			kind,
 			username,
-			description,
-			status,
-			metadata,
+				description,
+				status,
+				created_by,
+				metadata,
 			secret_ciphertext,
 			passphrase_ciphertext,
 			created_at,
@@ -535,8 +603,8 @@ func (s *PostgresStore) UpdateCredentialProfileSecret(id, secretCiphertext, pass
 			last_used_at,
 			expires_at`,
 		strings.TrimSpace(id),
-		strings.TrimSpace(secretCiphertext),
-		nullIfBlank(passphraseCiphertext),
+		secretCiphertext,
+		nullIfEmptyExact(passphraseCiphertext),
 		now,
 		nullTime(expiresAt),
 	))
@@ -556,9 +624,10 @@ func (s *PostgresStore) GetCredentialProfile(id string) (credentials.Profile, bo
 			name,
 			kind,
 			username,
-			description,
-			status,
-			metadata,
+				description,
+				status,
+				created_by,
+				metadata,
 			secret_ciphertext,
 			passphrase_ciphertext,
 			created_at,
@@ -593,9 +662,10 @@ func (s *PostgresStore) ListCredentialProfiles(limit int) ([]credentials.Profile
 			name,
 			kind,
 			username,
-			description,
-			status,
-			metadata,
+				description,
+				status,
+				created_by,
+				metadata,
 			secret_ciphertext,
 			passphrase_ciphertext,
 			created_at,
@@ -657,6 +727,74 @@ func (s *PostgresStore) DeleteCredentialProfile(id string) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+func (s *PostgresStore) DeleteCredentialProfileIfUnreferenced(id string) (CredentialProfileReferenceSummary, error) {
+	ctx := context.Background()
+	id = strings.TrimSpace(id)
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return CredentialProfileReferenceSummary{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var kind string
+	if err = tx.QueryRow(ctx, `SELECT kind FROM credential_profiles WHERE id = $1 FOR UPDATE`, id).Scan(&kind); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return CredentialProfileReferenceSummary{}, ErrNotFound
+		}
+		return CredentialProfileReferenceSummary{}, err
+	}
+	if strings.TrimSpace(kind) == credentials.KindHubSSHIdentity {
+		return CredentialProfileReferenceSummary{}, ErrCredentialProfileProtected
+	}
+
+	checks := []struct {
+		resource string
+		query    string
+	}{
+		{"asset_terminal_configs", `SELECT COUNT(*) FROM asset_terminal_configs WHERE credential_profile_id = $1`},
+		{"asset_desktop_configs", `SELECT COUNT(*) FROM asset_desktop_configs WHERE credential_profile_id = $1`},
+		{"asset_protocol_configs", `SELECT COUNT(*) FROM asset_protocol_configs WHERE credential_profile_id = $1`},
+		{"terminal_session_bookmarks", `SELECT COUNT(*) FROM terminal_session_bookmarks WHERE credential_profile_id = $1`},
+		{"group_jump_chains", `SELECT COUNT(*) FROM groups WHERE jump_chain @> jsonb_build_object('hops', jsonb_build_array(jsonb_build_object('credential_profile_id', $1::text)))`},
+		{"hub_collectors", `SELECT COUNT(*) FROM hub_collectors WHERE config->>'credential_id' = $1`},
+		{"remote_bookmarks", `SELECT COUNT(*) FROM remote_bookmarks WHERE credential_id = $1`},
+		{"file_connections", `SELECT COUNT(*) FROM file_connections WHERE credential_id = $1`},
+	}
+	summary := CredentialProfileReferenceSummary{References: []CredentialProfileReference{}}
+	for _, check := range checks {
+		count := 0
+		if err = tx.QueryRow(ctx, check.query, id).Scan(&count); err != nil {
+			return CredentialProfileReferenceSummary{}, err
+		}
+		if count > 0 {
+			summary.References = append(summary.References, CredentialProfileReference{Resource: check.resource, Count: count})
+			summary.Total += count
+		}
+	}
+	if summary.Total > 0 {
+		return summary, ErrCredentialProfileInUse
+	}
+
+	tag, err := tx.Exec(ctx, `DELETE FROM credential_profiles WHERE id = $1`, id)
+	if err != nil {
+		return CredentialProfileReferenceSummary{}, err
+	}
+	if tag.RowsAffected() == 0 {
+		return CredentialProfileReferenceSummary{}, ErrNotFound
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return CredentialProfileReferenceSummary{}, err
+	}
+	return summary, nil
+}
+
+func nullIfEmptyExact(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
 }
 
 func (s *PostgresStore) SaveAssetTerminalConfig(cfg credentials.AssetTerminalConfig) (credentials.AssetTerminalConfig, error) {

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"net/http"
 	"strings"
 	"time"
@@ -13,6 +12,9 @@ import (
 // --- Credentials ---
 
 func (s *apiServer) handleV2Credentials(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobalAPI(w, r, "credential profiles") {
+		return
+	}
 	scope := "credentials:read"
 	if r.Method == http.MethodPost {
 		scope = "credentials:write"
@@ -26,6 +28,9 @@ func (s *apiServer) handleV2Credentials(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *apiServer) handleV2CredentialActions(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobalAPI(w, r, "credential profiles") {
+		return
+	}
 	scope := "credentials:read"
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "credentials:write"
@@ -62,6 +67,15 @@ func (s *apiServer) handleV2TerminalHistory(w http.ResponseWriter, r *http.Reque
 	apiv2.WrapV1Handler(s.handleRecentCommands)(w, r)
 }
 
+func (s *apiServer) handleV2TerminalHistoryActions(w http.ResponseWriter, r *http.Request) {
+	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "terminal:write") {
+		apiv2.WriteScopeForbidden(w, "terminal:write")
+		return
+	}
+	r.URL.Path = strings.Replace(r.URL.Path, "/api/v2/terminal/history/", "/terminal/commands/", 1)
+	apiv2.WrapV1Handler(s.handleTerminalCommandActions)(w, r)
+}
+
 func (s *apiServer) handleV2TerminalSnippets(w http.ResponseWriter, r *http.Request) {
 	scope := "terminal:read"
 	if r.Method == http.MethodPost {
@@ -73,6 +87,19 @@ func (s *apiServer) handleV2TerminalSnippets(w http.ResponseWriter, r *http.Requ
 	}
 	r.URL.Path = "/terminal/snippets"
 	apiv2.WrapV1Handler(s.handleTerminalSnippets)(w, r)
+}
+
+func (s *apiServer) handleV2TerminalSnippetActions(w http.ResponseWriter, r *http.Request) {
+	scope := "terminal:read"
+	if apiv2.IsMutatingMethod(r.Method) {
+		scope = "terminal:write"
+	}
+	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+		apiv2.WriteScopeForbidden(w, scope)
+		return
+	}
+	r.URL.Path = strings.Replace(r.URL.Path, "/api/v2/terminal/snippets/", "/terminal/snippets/", 1)
+	apiv2.WrapV1Handler(s.handleTerminalSnippetActions)(w, r)
 }
 
 // --- Agent Lifecycle ---
@@ -126,13 +153,25 @@ func (s *apiServer) handleV2AgentsPendingReject(w http.ResponseWriter, r *http.R
 // --- Hub Status ---
 
 func (s *apiServer) handleV2HubStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "GET required")
+		return
+	}
 	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "hub:read") {
 		apiv2.WriteScopeForbidden(w, "hub:read")
 		return
 	}
 	agentCount := 0
 	if s.agentMgr != nil {
-		agentCount = s.agentMgr.Count()
+		if len(allowedAssetsFromContext(r.Context())) == 0 {
+			agentCount = s.agentMgr.Count()
+		} else {
+			for _, assetID := range s.agentMgr.ConnectedAssets() {
+				if apiv2.AssetCheckContext(r.Context(), assetID) {
+					agentCount++
+				}
+			}
+		}
 	}
 	apiv2.WriteJSON(w, http.StatusOK, map[string]any{
 		"status":           "running",
@@ -151,8 +190,14 @@ func (s *apiServer) handleV2HubAgents(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *apiServer) handleV2HubTLS(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdminAuth(w, r) {
+		return
+	}
+	if denyAssetRestrictedGlobalAPI(w, r, "hub TLS settings") {
+		return
+	}
 	scope := "hub:read"
-	if r.Method == http.MethodPost {
+	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "hub:admin"
 	}
 	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
@@ -164,8 +209,15 @@ func (s *apiServer) handleV2HubTLS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *apiServer) handleV2HubTailscale(w http.ResponseWriter, r *http.Request) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "hub:read") {
-		apiv2.WriteScopeForbidden(w, "hub:read")
+	if denyAssetRestrictedGlobalAPI(w, r, "hub Tailscale settings") {
+		return
+	}
+	scope := "hub:read"
+	if apiv2.IsMutatingMethod(r.Method) {
+		scope = "hub:admin"
+	}
+	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
 	r.URL.Path = "/settings/tailscale/serve"
@@ -175,16 +227,30 @@ func (s *apiServer) handleV2HubTailscale(w http.ResponseWriter, r *http.Request)
 // --- Web Services ---
 
 func (s *apiServer) handleV2WebServices(w http.ResponseWriter, r *http.Request) {
-	scope := "web-services:read"
-	if r.Method == http.MethodPost {
+	var (
+		scope   string
+		path    string
+		handler http.HandlerFunc
+	)
+	switch r.Method {
+	case http.MethodGet:
+		scope = "web-services:read"
+		path = "/api/v1/services/web"
+		handler = s.handleWebServices
+	case http.MethodPost:
 		scope = "web-services:write"
+		path = "/api/v1/services/web/manual"
+		handler = s.handleWebServiceManual
+	default:
+		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "GET or POST required")
+		return
 	}
 	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
-	r.URL.Path = "/api/v1/services/web"
-	apiv2.WrapV1Handler(s.handleWebServices)(w, r)
+	r.URL.Path = path
+	apiv2.WrapV1Handler(handler)(w, r)
 }
 
 func (s *apiServer) handleV2WebServiceSync(w http.ResponseWriter, r *http.Request) {
@@ -194,6 +260,19 @@ func (s *apiServer) handleV2WebServiceSync(w http.ResponseWriter, r *http.Reques
 	}
 	r.URL.Path = "/api/v1/services/web/sync"
 	apiv2.WrapV1Handler(s.handleWebServiceSync)(w, r)
+}
+
+func (s *apiServer) handleV2WebServiceActions(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPatch && r.Method != http.MethodPut && r.Method != http.MethodDelete {
+		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "PATCH, PUT, or DELETE required")
+		return
+	}
+	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "web-services:write") {
+		apiv2.WriteScopeForbidden(w, "web-services:write")
+		return
+	}
+	r.URL.Path = strings.Replace(r.URL.Path, "/api/v2/web-services/", "/api/v1/services/web/manual/", 1)
+	apiv2.WrapV1Handler(s.handleWebServiceManualActions)(w, r)
 }
 
 // --- Hub Collectors ---
@@ -227,8 +306,12 @@ func (s *apiServer) handleV2CollectorActions(w http.ResponseWriter, r *http.Requ
 // --- Notifications ---
 
 func (s *apiServer) handleV2NotificationChannels(w http.ResponseWriter, r *http.Request) {
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "notifications:read") {
-		apiv2.WriteScopeForbidden(w, "notifications:read")
+	scope := "notifications:read"
+	if apiv2.IsMutatingMethod(r.Method) {
+		scope = "notifications:write"
+	}
+	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
 	r.URL.Path = "/notifications/channels"
@@ -346,6 +429,19 @@ func (s *apiServer) handleV2Edges(w http.ResponseWriter, r *http.Request) {
 	apiv2.WrapV1Handler(s.handleEdges)(w, r)
 }
 
+func (s *apiServer) handleV2EdgeActions(w http.ResponseWriter, r *http.Request) {
+	scope := "topology:read"
+	if apiv2.IsMutatingMethod(r.Method) {
+		scope = "topology:write"
+	}
+	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+		apiv2.WriteScopeForbidden(w, scope)
+		return
+	}
+	r.URL.Path = strings.Replace(r.URL.Path, "/api/v2/edges/", "/edges/", 1)
+	apiv2.WrapV1Handler(s.handleEdgeByID)(w, r)
+}
+
 func (s *apiServer) handleV2Composites(w http.ResponseWriter, r *http.Request) {
 	scope := "topology:read"
 	if apiv2.IsMutatingMethod(r.Method) {
@@ -403,6 +499,9 @@ func (s *apiServer) handleV2FailoverPairActions(w http.ResponseWriter, r *http.R
 // --- Dead Letters ---
 
 func (s *apiServer) handleV2DeadLetters(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobalAPI(w, r, "dead-letter jobs") {
+		return
+	}
 	scope := "dead-letters:read"
 	if r.Method == http.MethodPost || r.Method == http.MethodDelete {
 		scope = "dead-letters:write"
@@ -457,6 +556,12 @@ func (s *apiServer) handleV2LogViewActions(w http.ResponseWriter, r *http.Reques
 // --- Prometheus Settings ---
 
 func (s *apiServer) handleV2PrometheusSettings(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdminAuth(w, r) {
+		return
+	}
+	if denyAssetRestrictedGlobalAPI(w, r, "Prometheus settings") {
+		return
+	}
 	scope := "settings:read"
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "settings:write"
@@ -474,8 +579,8 @@ func (s *apiServer) handleV2PrometheusSettings(w http.ResponseWriter, r *http.Re
 // handleV2FileTransfers handles collection-level requests:
 //
 //	POST /api/v2/file-transfers  – start a new transfer (scope: files:write)
-//	GET  /api/v2/file-transfers  – list transfers (scope: files:read; returns
-//	                              501 since the v1 layer has no list endpoint)
+//	GET  /api/v2/file-transfers  – list the authenticated actor's transfers
+//	                              (scope: files:read)
 func (s *apiServer) handleV2FileTransfers(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -483,8 +588,8 @@ func (s *apiServer) handleV2FileTransfers(w http.ResponseWriter, r *http.Request
 			apiv2.WriteScopeForbidden(w, "files:read")
 			return
 		}
-		apiv2.WriteError(w, http.StatusNotImplemented, "not_implemented",
-			"listing all file transfers is not yet supported; query individual transfers by ID")
+		r.URL.Path = "/api/v1/file-transfers"
+		apiv2.WrapV1Handler(s.handleFileTransfers)(w, r)
 	case http.MethodPost:
 		if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "files:write") {
 			apiv2.WriteScopeForbidden(w, "files:write")
@@ -536,6 +641,12 @@ func (s *apiServer) handleV2FileTransferActions(w http.ResponseWriter, r *http.R
 // It delegates to the same connection-test logic used by the v1 endpoint
 // (/settings/prometheus/test-connection), wrapped in the v2 response envelope.
 func (s *apiServer) handleV2PrometheusTest(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdminAuth(w, r) {
+		return
+	}
+	if denyAssetRestrictedGlobalAPI(w, r, "Prometheus connection tests") {
+		return
+	}
 	if r.Method != http.MethodPost {
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST required")
 		return
@@ -545,34 +656,8 @@ func (s *apiServer) handleV2PrometheusTest(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if !s.enforceRateLimit(
-		w, r,
-		prometheusTestConnectionRateLimitKey,
-		prometheusTestConnectionRateLimitCount,
-		prometheusTestConnectionRateLimitWindow,
-	) {
-		return
-	}
-
-	var req prometheusTestConnectionRequest
-	if err := decodeJSONBody(w, r, &req); err != nil {
-		return
-	}
-
-	targetURL := strings.TrimSpace(req.URL)
-	if targetURL == "" {
-		apiv2.WriteJSON(w, http.StatusOK, prometheusTestConnectionResponse{
-			Success: false,
-			Error:   errPrometheusURLRequired,
-		})
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), prometheusTestConnectionTimeout)
-	defer cancel()
-
-	result := testPrometheusRemoteWriteConnection(ctx, targetURL, req.Username, req.Password)
-	apiv2.WriteJSON(w, http.StatusOK, result)
+	r.URL.Path = "/settings/prometheus/test-connection"
+	apiv2.WrapV1Handler(s.handlePrometheusTestConnection)(w, r)
 }
 
 // --- TLS Renew ---
@@ -586,12 +671,18 @@ func (s *apiServer) handleV2PrometheusTest(w http.ResponseWriter, r *http.Reques
 //     by the hub automatically.
 //   - TLS disabled:            returns 422.
 func (s *apiServer) handleV2HubTLSRenew(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdminAuth(w, r) {
+		return
+	}
+	if denyAssetRestrictedGlobalAPI(w, r, "hub TLS renewal") {
+		return
+	}
 	if r.Method != http.MethodPost {
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST required")
 		return
 	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "settings:write") {
-		apiv2.WriteScopeForbidden(w, "settings:write")
+	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), "hub:admin") {
+		apiv2.WriteScopeForbidden(w, "hub:admin")
 		return
 	}
 

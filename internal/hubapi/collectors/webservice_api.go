@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/apiv2"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
@@ -27,9 +29,13 @@ func (d *Deps) HandleWebServices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hostFilter := r.URL.Query().Get("host")
+	if strings.TrimSpace(hostFilter) != "" && !apiv2.RequireAssetAccess(w, r, hostFilter) {
+		return
+	}
 	serviceIDFilter := strings.TrimSpace(r.URL.Query().Get("service_id"))
 	includeHidden := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("include_hidden")), "true")
 	standaloneOnly := r.URL.Query().Get("standalone") == "true"
+	restricted := shared.HasAssetRestriction(r.Context())
 	detailLevel := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("detail")))
 	if detailLevel == "" {
 		detailLevel = webServiceDetailFull
@@ -44,6 +50,15 @@ func (d *Deps) HandleWebServices(w http.ResponseWriter, r *http.Request) {
 	}
 	if services == nil {
 		services = []agentmgr.DiscoveredWebService{}
+	}
+	if restricted {
+		filtered := make([]agentmgr.DiscoveredWebService, 0, len(services))
+		for _, service := range services {
+			if apiv2.AssetCheckContext(r.Context(), service.HostAssetID) {
+				filtered = append(filtered, service)
+			}
+		}
+		services = filtered
 	}
 	if standaloneOnly {
 		filtered := make([]agentmgr.DiscoveredWebService, 0)
@@ -66,15 +81,17 @@ func (d *Deps) HandleWebServices(w http.ResponseWriter, r *http.Request) {
 	}
 	grouped, suggestions := applyWebServiceURLGrouping(services, d.ResolveWebServiceURLGroupingConfig())
 	services = grouped
-	d.URLGroupingSuggestionsMu.Lock()
-	d.URLGroupingSuggestions = suggestions
-	d.URLGroupingSuggestionsMu.Unlock()
+	if !restricted {
+		d.URLGroupingSuggestionsMu.Lock()
+		d.URLGroupingSuggestions = suggestions
+		d.URLGroupingSuggestionsMu.Unlock()
+	}
 	d.WebServiceCoordinator.AttachHealthSummaries(services)
 
 	// Persist auto-detected alt URLs from grouping engine to database only when
 	// expanded fields are requested. Compact polling paths can synthesize the
 	// same aliases on demand without paying the write cost on every refresh.
-	if includeExpandedFields && d.DB != nil {
+	if includeExpandedFields && d.DB != nil && !restricted {
 		for _, svc := range services {
 			if raw, ok := svc.Metadata["alt_urls"]; ok && raw != "" {
 				for _, altURL := range strings.Split(raw, ",") {
@@ -104,10 +121,11 @@ func (d *Deps) HandleWebServices(w http.ResponseWriter, r *http.Request) {
 		for index, svc := range services {
 			compact[index] = compactDiscoveredService(svc)
 		}
-		discoveryStats := d.WebServiceCoordinator.DiscoveryStats(hostFilter)
 		resp := map[string]any{
-			"services":        compact,
-			"discovery_stats": discoveryStats,
+			"services": compact,
+		}
+		if !restricted || strings.TrimSpace(hostFilter) != "" {
+			resp["discovery_stats"] = d.WebServiceCoordinator.DiscoveryStats(hostFilter)
 		}
 		if len(suggestions) > 0 {
 			resp["suggestions"] = suggestions
@@ -141,10 +159,11 @@ func (d *Deps) HandleWebServices(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	discoveryStats := d.WebServiceCoordinator.DiscoveryStats(hostFilter)
 	resp := map[string]any{
-		"services":        enriched,
-		"discovery_stats": discoveryStats,
+		"services": enriched,
+	}
+	if !restricted || strings.TrimSpace(hostFilter) != "" {
+		resp["discovery_stats"] = d.WebServiceCoordinator.DiscoveryStats(hostFilter)
 	}
 	if len(suggestions) > 0 {
 		resp["suggestions"] = suggestions
@@ -178,6 +197,9 @@ func cloneWebServiceMetadataMap(in map[string]string) map[string]string {
 
 // HandleWebServiceCategories handles GET /api/v1/services/web/categories.
 func (d *Deps) HandleWebServiceCategories(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobal(w, r, "web-service categories") {
+		return
+	}
 	if r.Method != http.MethodGet {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return

@@ -2,7 +2,6 @@ package proxmox
 
 import (
 	"context"
-	"encoding/json"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strings"
@@ -59,15 +58,19 @@ func (d *Deps) handleProxmoxAssetBackup(w http.ResponseWriter, r *http.Request) 
 		servicehttp.WriteError(w, http.StatusBadRequest, "asset missing vmid")
 		return
 	}
+	// The selected storage and resulting task are collector-wide resources and
+	// cannot be proven to affect only the VM named in the URL.
+	if !d.requireProxmoxCollectorAccess(w, r, target.CollectorID) {
+		return
+	}
 
 	var req struct {
 		Storage string `json:"storage"`
 		Mode    string `json:"mode"`
 	}
-	if decErr := json.NewDecoder(r.Body).Decode(&req); decErr != nil {
-		// Body is optional — use empty defaults.
-		req.Storage = ""
-		req.Mode = ""
+	if _, decErr := shared.DecodeOptionalJSONBody(w, r, &req); decErr != nil {
+		servicehttp.WriteError(w, shared.JSONDecodeErrorStatus(decErr), "invalid backup payload")
+		return
 	}
 
 	if strings.TrimSpace(req.Mode) == "" {

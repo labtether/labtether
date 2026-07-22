@@ -2,11 +2,12 @@ package servicehttp
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"runtime/debug"
 	"sync"
 	"time"
+
+	"github.com/labtether/labtether/internal/securityruntime"
 )
 
 // RecoverMiddleware wraps an HTTP handler to catch panics. On panic it logs
@@ -15,7 +16,7 @@ func RecoverMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
-				log.Printf("http: panic recovered on %s %s: %v\n%s", r.Method, r.URL.Path, err, debug.Stack())
+				securityruntime.Logf("http: panic recovered on %s %s: %v\n%s", r.Method, r.URL.Path, err, debug.Stack())
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusInternalServerError)
 				_, _ = w.Write([]byte(`{"error":"internal server error"}`))
@@ -45,7 +46,7 @@ func SafeGo(ctx context.Context, wg *sync.WaitGroup, name string, fn func(ctx co
 			func() {
 				defer func() {
 					if err := recover(); err != nil {
-						log.Printf("safego[%s]: panic recovered: %v\n%s", name, err, debug.Stack())
+						securityruntime.Logf("safego[%s]: panic recovered: %v\n%s", name, err, debug.Stack())
 					}
 				}()
 				fn(ctx)

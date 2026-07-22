@@ -115,6 +115,9 @@ func TestSanitizeNextPath(t *testing.T) {
 		{"javascript:alert(1)", "/"},
 		{"data:text/html,evil", "/"},
 		{"/JAVASCRIPT:x", "/"},
+		{"/\\evil.example/path", "/"},
+		{"/%5cevil.example/path", "/"},
+		{"/safe\nLocation: https://evil.example", "/"},
 		{"  /trimmed  ", "/trimmed"},
 	}
 	for _, tt := range tests {
@@ -376,5 +379,121 @@ func TestUniqueUsername(t *testing.T) {
 	}
 	if name != "bob" {
 		t.Fatalf("expected bob, got %q", name)
+	}
+}
+
+func TestResolveOIDCUserScopesSameSubjectByVerifiedIssuer(t *testing.T) {
+	deps, store := newTestAuthDeps(t)
+	deps.OIDCRef.Swap(nil, true)
+	hash, err := auth.HashPassword("owner-test-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CreateUserWithRole("owner", hash, auth.RoleOwner, "local", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	first, created, err := deps.ResolveOIDCUser(auth.OIDCIdentity{
+		Issuer:            "https://issuer-a.example/application/o/labtether/",
+		Subject:           "shared-subject",
+		PreferredUsername: "operator",
+		Role:              auth.RoleAdmin,
+	})
+	if err != nil || !created {
+		t.Fatalf("resolve first issuer: created=%t err=%v", created, err)
+	}
+	second, created, err := deps.ResolveOIDCUser(auth.OIDCIdentity{
+		Issuer:            "https://issuer-b.example/application/o/labtether/",
+		Subject:           "shared-subject",
+		PreferredUsername: "operator",
+		Role:              auth.RoleOperator,
+	})
+	if err != nil || !created {
+		t.Fatalf("resolve second issuer: created=%t err=%v", created, err)
+	}
+	if first.ID == second.ID {
+		t.Fatal("the same subject from two issuers resolved to one account")
+	}
+	if first.OIDCIssuer == second.OIDCIssuer || first.OIDCSubject != second.OIDCSubject {
+		t.Fatalf("unexpected issuer-scoped identities: first=%#v second=%#v", first, second)
+	}
+}
+
+func TestResolveOIDCUserAdoptsLegacyBindingWithoutRoleRemap(t *testing.T) {
+	deps, store := newTestAuthDeps(t)
+	deps.OIDCRef.Swap(nil, true)
+	hash, err := auth.HashPassword("legacy-random-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := store.CreateUserWithRole(
+		"legacy-admin",
+		hash,
+		auth.RoleAdmin,
+		"oidc",
+		"legacy-subject",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resolved, created, err := deps.ResolveOIDCUser(auth.OIDCIdentity{
+		Issuer:            "https://current-issuer.example/application/o/labtether/",
+		Subject:           "legacy-subject",
+		PreferredUsername: "renamed-user",
+		Role:              auth.RoleViewer,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created || resolved.ID != legacy.ID {
+		t.Fatalf("legacy user was not adopted in place: created=%t user=%#v", created, resolved)
+	}
+	if resolved.Role != auth.RoleAdmin {
+		t.Fatalf("legacy adoption remapped role to %q, want %q", resolved.Role, auth.RoleAdmin)
+	}
+	if resolved.OIDCIssuer != "https://current-issuer.example/application/o/labtether/" {
+		t.Fatalf("legacy issuer binding = %q", resolved.OIDCIssuer)
+	}
+}
+
+func TestResolveOIDCUserDoesNotReuseAdoptedLegacyUserForAnotherIssuer(t *testing.T) {
+	deps, store := newTestAuthDeps(t)
+	deps.OIDCRef.Swap(nil, true)
+	hash, err := auth.HashPassword("legacy-random-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := store.CreateUserWithRole("legacy-user", hash, auth.RoleOperator, "oidc", "shared-subject")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	adopted, created, err := deps.ResolveOIDCUser(auth.OIDCIdentity{
+		Issuer:  "https://issuer-a.example/",
+		Subject: "shared-subject",
+		Role:    auth.RoleOperator,
+	})
+	if err != nil || created || adopted.ID != legacy.ID {
+		t.Fatalf("adopt legacy user: created=%t user=%#v err=%v", created, adopted, err)
+	}
+
+	other, created, err := deps.ResolveOIDCUser(auth.OIDCIdentity{
+		Issuer:  "https://issuer-b.example/",
+		Subject: "shared-subject",
+		Role:    auth.RoleViewer,
+	})
+	if err != nil || !created {
+		t.Fatalf("resolve second issuer: created=%t err=%v", created, err)
+	}
+	if other.ID == legacy.ID {
+		t.Fatal("a second issuer took over the adopted legacy account")
+	}
+}
+
+func TestResolveOIDCUserRequiresVerifiedIssuer(t *testing.T) {
+	deps, _ := newTestAuthDeps(t)
+	if _, _, err := deps.ResolveOIDCUser(auth.OIDCIdentity{Subject: "subject"}); err == nil {
+		t.Fatal("issuer-less OIDC identity was accepted")
 	}
 }

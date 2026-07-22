@@ -23,6 +23,16 @@ func NewMemorySavedActionStore() SavedActionStore {
 func (m *memorySavedActionStore) CreateSavedAction(_ context.Context, action savedactions.SavedAction) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	action.CreatedBy = savedActionActorID(action.CreatedBy)
+	actorActionCount := 0
+	for _, existing := range m.data {
+		if savedActionActorID(existing.CreatedBy) == action.CreatedBy {
+			actorActionCount++
+		}
+	}
+	if actorActionCount >= savedactions.MaxActionsPerActor {
+		return savedactions.ErrCapacity
+	}
 	if _, exists := m.data[action.ID]; exists {
 		return fmt.Errorf("saved action already exists: %s", action.ID)
 	}

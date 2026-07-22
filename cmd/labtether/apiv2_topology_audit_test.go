@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -55,6 +56,84 @@ func TestHandleV2TopologyZoneReorderReturnsNotFound(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
 	}
+}
+
+func TestTopologyBulkMutationsRejectExcessCardinality(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		body any
+		call func(*apiServer, *httptest.ResponseRecorder, *http.Request)
+	}{
+		{
+			name: "members",
+			path: "/api/v2/topology/zones/zone-a/members",
+			body: map[string]any{"members": repeatedTopologyMembers(maxTopologyMutationItems + 1)},
+			call: func(s *apiServer, rec *httptest.ResponseRecorder, req *http.Request) {
+				s.handleV2TopologyZoneMembers(rec, req, "zone-a")
+			},
+		},
+		{
+			name: "reorder",
+			path: "/api/v2/topology/zones/reorder",
+			body: map[string]any{"updates": repeatedTopologyReorders(maxTopologyMutationItems + 1)},
+			call: func(s *apiServer, rec *httptest.ResponseRecorder, req *http.Request) {
+				s.handleV2TopologyZoneReorder(rec, req)
+			},
+		},
+		{
+			name: "auto place",
+			path: "/api/v2/topology/auto-place",
+			body: map[string]any{"placements": repeatedTopologyPlacements(maxTopologyMutationItems + 1)},
+			call: func(s *apiServer, rec *httptest.ResponseRecorder, req *http.Request) {
+				s.handleV2TopologyAutoPlace(rec, req)
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newTestAPIServer(t)
+			s.topologyStore = &mockTopologyStore{}
+			payload, err := json.Marshal(tc.body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req := httptest.NewRequest(http.MethodPut, tc.path, bytes.NewReader(payload))
+			if tc.name == "auto place" {
+				req.Method = http.MethodPost
+			}
+			req = req.WithContext(contextWithPrincipal(req.Context(), "admin", "admin"))
+			rec := httptest.NewRecorder()
+			tc.call(s, rec, req)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func repeatedTopologyMembers(count int) []topology.ZoneMember {
+	items := make([]topology.ZoneMember, count)
+	for i := range items {
+		items[i].AssetID = "asset"
+	}
+	return items
+}
+
+func repeatedTopologyReorders(count int) []topology.ZoneReorder {
+	items := make([]topology.ZoneReorder, count)
+	for i := range items {
+		items[i].ZoneID = "zone"
+	}
+	return items
+}
+
+func repeatedTopologyPlacements(count int) []map[string]string {
+	items := make([]map[string]string, count)
+	for i := range items {
+		items[i] = map[string]string{"asset_id": "asset", "zone_id": "zone"}
+	}
+	return items
 }
 
 func TestTopologyAutoSeedClearsPartialStateOnMemberFailure(t *testing.T) {

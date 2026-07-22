@@ -51,6 +51,7 @@ func (d *Deps) HandleProxmoxDesktopStream(w http.ResponseWriter, r *http.Request
 		servicehttp.WriteError(w, http.StatusBadGateway, "failed to connect proxmox websocket: "+shared.SanitizeUpstreamError(err.Error()))
 		return
 	}
+	shared.LimitUpstreamDesktopMessages(proxmoxConn)
 	defer proxmoxConn.Close()
 	securityruntime.Logf("desktop-proxmox: proxmox websocket connected")
 
@@ -65,11 +66,12 @@ func (d *Deps) HandleProxmoxDesktopStream(w http.ResponseWriter, r *http.Request
 	}
 	securityruntime.Logf("desktop-proxmox: VNC auth succeeded (version=%s)", rfbVersion)
 
-	wsConn, err := d.TerminalWebSocketUpgrader.Upgrade(w, r, nil)
+	wsConn, err := shared.UpgradeWebSocket(d.TerminalWebSocketUpgrader, w, r, nil)
 	if err != nil {
 		securityruntime.Logf("desktop-proxmox: failed to upgrade browser websocket: %v", err)
 		return
 	}
+	shared.LimitBrowserInteractiveMessages(wsConn)
 	defer wsConn.Close()
 
 	// Send a "no auth required" RFB handshake to the browser.

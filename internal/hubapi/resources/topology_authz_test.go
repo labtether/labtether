@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -48,6 +49,33 @@ func TestLegacyTopologyHandlersRequireAPIKeyScopes(t *testing.T) {
 	}
 	if store.createCompositeCalls != 0 {
 		t.Fatalf("composite store was called despite missing scope")
+	}
+}
+
+func TestCompositeCreationRejectsFacetAmplification(t *testing.T) {
+	d := newTestResourcesDeps(t)
+	store := &authzEdgeStore{}
+	d.EdgeStore = store
+
+	tooMany := make([]string, maxCompositeFacetAssets+1)
+	for i := range tooMany {
+		tooMany[i] = fmt.Sprintf("asset-%d", i)
+	}
+	for _, facets := range [][]string{tooMany, []string{"asset-1", "asset-1"}} {
+		body, err := json.Marshal(edges.CreateCompositeRequest{PrimaryAssetID: "primary", FacetAssetIDs: facets})
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest(http.MethodPost, "/composites", bytes.NewReader(body))
+		req = req.WithContext(apiv2.ContextWithScopes(req.Context(), []string{"topology:write"}))
+		rec := httptest.NewRecorder()
+		d.HandleComposites(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+		}
+	}
+	if store.createCompositeCalls != 0 {
+		t.Fatalf("invalid facets reached store %d times", store.createCompositeCalls)
 	}
 }
 

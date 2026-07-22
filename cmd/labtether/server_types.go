@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/auth"
 	"github.com/labtether/labtether/internal/connectors/docker"
 	"github.com/labtether/labtether/internal/connectors/webservice"
@@ -28,6 +29,7 @@ import (
 	pbspkg "github.com/labtether/labtether/internal/hubapi/pbs"
 	portainerpkg "github.com/labtether/labtether/internal/hubapi/portainer"
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
+	respkg "github.com/labtether/labtether/internal/hubapi/resources"
 	schedulespkg "github.com/labtether/labtether/internal/hubapi/schedulespkg"
 	sharedpkg "github.com/labtether/labtether/internal/hubapi/shared"
 	statusaggpkg "github.com/labtether/labtether/internal/hubapi/statusagg"
@@ -41,6 +43,7 @@ import (
 	"github.com/labtether/labtether/internal/jobqueue"
 	"github.com/labtether/labtether/internal/notifications"
 	"github.com/labtether/labtether/internal/persistence"
+	"github.com/labtether/labtether/internal/powercontrol"
 	"github.com/labtether/labtether/internal/secrets"
 	"github.com/labtether/labtether/internal/telemetry/bridge"
 	"github.com/labtether/labtether/internal/terminal"
@@ -90,6 +93,7 @@ type apiServer struct {
 	scheduleStore                 persistence.ScheduleStore
 	webhookStore                  persistence.WebhookStore
 	savedActionStore              persistence.SavedActionStore
+	fileTransferStore             persistence.FileTransferStore
 	edgeStore                     edges.Store
 	topologyStore                 topology.Store
 	linkSuggestionStore           persistence.LinkSuggestionStore
@@ -100,12 +104,17 @@ type apiServer struct {
 	authValidator                 *auth.TokenValidator
 	oidcRef                       *authpkg.OIDCProviderRef
 	agentMgr                      *agentmgr.AgentManager
+	allowLegacySharedAgentAuth    bool
+	powerCoordinator              *powercontrol.Coordinator
 	broadcaster                   *EventBroadcaster
 	dockerCoordinator             *docker.Coordinator
 	webServiceCoordinator         *webservice.Coordinator
 	bridgeRegistry                *bridge.Registry
+	prometheusRemoteWriteRuntime  *prometheusRemoteWriteRuntime
 	notificationDispatcher        NotificationDispatcher
 	collectorDispatchSem          chan struct{}
+	hubIdentityOperationMu        sync.Mutex
+	hubIdentityMu                 sync.RWMutex
 	hubIdentity                   *hubSSHIdentity
 	tlsState                      TLSState
 	pendingAgentCmds              sync.Map // map[jobID]pendingAgentCommand
@@ -122,6 +131,7 @@ type apiServer struct {
 	journalBridges                sync.Map // map[requestID]*journalBridge
 	diskBridges                   sync.Map // map[requestID]*diskBridge
 	networkBridges                sync.Map // map[requestID]*networkBridge
+	wolPending                    respkg.WoLPendingRegistry
 	packageBridges                sync.Map // map[requestID]*packageBridge
 	cronBridges                   sync.Map // map[requestID]*cronBridge
 	usersBridges                  sync.Map // map[requestID]*usersBridge
@@ -150,6 +160,7 @@ type apiServer struct {
 	agentsDeps                    *agentspkg.Deps
 	terminalDepsOnce              sync.Once
 	terminalDeps                  *terminalpkg.Deps
+	ephemeralSSHConfigs           *terminalpkg.EphemeralSSHConfigStore
 	desktopDepsOnce               sync.Once
 	desktopDeps                   *desktoppkg.Deps
 	proxmoxDeps                   *proxmoxpkg.Deps
@@ -166,6 +177,7 @@ type apiServer struct {
 	dockerDeps                    *dockerpkg.Deps
 	operationsDepsOnce            sync.Once
 	operationsDeps                *opspkg.ExecDeps
+	powerCoordinatorOnce          sync.Once
 	actionsDepsOnce               sync.Once
 	actionsDeps                   *actionspkg.Deps
 	updatesDepsOnce               sync.Once
@@ -209,7 +221,9 @@ type apiServer struct {
 	totpEncryptionKey             []byte
 	installStateStore             *installstate.Store
 	backgroundWG                  sync.WaitGroup
+	liveActivityDispatchCh        chan liveActivityDispatchJob
 	apiKeyTouchCh                 chan string
+	auditEventCh                  chan audit.Event
 }
 
 // StatusCache is now defined in internal/hubapi/statusagg. The type alias
@@ -246,16 +260,20 @@ type StreamTicketStore struct {
 }
 
 type streamTicket struct {
-	SessionID string
-	ActorID   string
-	Role      string
-	ExpiresAt time.Time
+	SessionID     string
+	ActorID       string
+	Role          string
+	Scopes        []string
+	AllowedAssets []string
+	APIKeyID      string
+	ExpiresAt     time.Time
 }
 
 type oidcAuthState = authpkg.OIDCAuthState
 
 type workerCounters struct {
-	processed        atomic.Uint64
-	processedActions atomic.Uint64
-	processedUpdates atomic.Uint64
+	processed          atomic.Uint64
+	processedActions   atomic.Uint64
+	processedUpdates   atomic.Uint64
+	processedSchedules atomic.Uint64
 }

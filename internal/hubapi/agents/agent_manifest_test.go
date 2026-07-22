@@ -3,6 +3,7 @@ package agents
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -84,6 +85,25 @@ func TestLoadAgentManifest_MissingFile(t *testing.T) {
 	_, err := LoadAgentManifest(t.TempDir())
 	if err == nil {
 		t.Fatal("expected error for missing manifest")
+	}
+}
+
+func TestLoadAgentManifest_RejectsSymlinkEscape(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation may require elevated privileges on Windows")
+	}
+
+	dir := t.TempDir()
+	outsideManifest := filepath.Join(t.TempDir(), ManifestFilename)
+	if err := os.WriteFile(outsideManifest, []byte(`{"schema_version":1,"agents":{}}`), 0o600); err != nil {
+		t.Fatalf("write outside manifest: %v", err)
+	}
+	if err := os.Symlink(outsideManifest, filepath.Join(dir, ManifestFilename)); err != nil {
+		t.Fatalf("create manifest symlink: %v", err)
+	}
+
+	if _, err := LoadAgentManifest(dir); err == nil {
+		t.Fatal("expected manifest symlink escaping the agent directory to be rejected")
 	}
 }
 

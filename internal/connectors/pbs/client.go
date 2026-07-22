@@ -237,6 +237,9 @@ func (c *Client) StartVerify(ctx context.Context, store string) (string, error) 
 
 func (c *Client) StartPruneDatastore(ctx context.Context, store string, opts PruneOptions) (string, error) {
 	values := neturl.Values{}
+	if namespace := strings.TrimSpace(opts.NS); namespace != "" {
+		values.Set("ns", namespace)
+	}
 	if opts.DryRun {
 		values.Set("dry-run", "1")
 	}
@@ -477,6 +480,11 @@ func (c *Client) getData(ctx context.Context, path string, out any) error {
 }
 
 func (c *Client) requestRaw(ctx context.Context, method, path string, values neturl.Values) ([]byte, error) {
+	if ctx != nil {
+		if err := context.Cause(ctx); err != nil {
+			return nil, err
+		}
+	}
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}

@@ -335,6 +335,74 @@ func TestHandlePackageListAndActionBridgeAgentResponses(t *testing.T) {
 		}
 	})
 
+	t.Run("upgradable package list", func(t *testing.T) {
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+
+			var outbound agentmgr.Message
+			if err := clientConn.ReadJSON(&outbound); err != nil {
+				t.Errorf("read outbound: %v", err)
+				return
+			}
+			if outbound.Type != agentmgr.MsgPackageList {
+				t.Errorf("outbound type=%q, want %q", outbound.Type, agentmgr.MsgPackageList)
+				return
+			}
+			var request struct {
+				RequestID string `json:"request_id"`
+				Inventory string `json:"inventory"`
+			}
+			if err := json.Unmarshal(outbound.Data, &request); err != nil {
+				t.Errorf("decode package list payload: %v", err)
+				return
+			}
+			if request.Inventory != "upgradable" {
+				t.Errorf("inventory=%q, want upgradable", request.Inventory)
+				return
+			}
+
+			raw, _ := json.Marshal(map[string]any{
+				"request_id": request.RequestID,
+				"inventory":  "upgradable",
+				"packages": []map[string]any{{
+					"name":              "curl",
+					"version":           "8.5.0",
+					"available_version": "8.6.0",
+					"status":            "upgradable",
+				}},
+			})
+			sut.processAgentPackageListed(&agentmgr.AgentConn{AssetID: "node-pkg"}, agentmgr.Message{
+				Type: agentmgr.MsgPackageListed,
+				ID:   request.RequestID,
+				Data: raw,
+			})
+		}()
+
+		req := httptest.NewRequest(http.MethodGet, "/packages/node-pkg/upgradable", nil)
+		rec := httptest.NewRecorder()
+		sut.handlePackages(rec, req)
+		<-done
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+		}
+		var response struct {
+			Inventory string `json:"inventory"`
+			Packages  []struct {
+				Name             string `json:"name"`
+				Version          string `json:"version"`
+				AvailableVersion string `json:"available_version"`
+			} `json:"packages"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if response.Inventory != "upgradable" || len(response.Packages) != 1 || response.Packages[0].AvailableVersion != "8.6.0" {
+			t.Fatalf("unexpected response %+v", response)
+		}
+	})
+
 	t.Run("package action", func(t *testing.T) {
 		done := make(chan struct{})
 		go func() {
@@ -391,6 +459,41 @@ func TestHandlePackageListAndActionBridgeAgentResponses(t *testing.T) {
 		}
 		if !response.OK || !response.RebootRequired || response.Output != "installed" {
 			t.Fatalf("unexpected response %+v", response)
+		}
+	})
+
+	t.Run("update alias forwards canonical upgrade", func(t *testing.T) {
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			var outbound agentmgr.Message
+			if err := clientConn.ReadJSON(&outbound); err != nil {
+				t.Errorf("read outbound: %v", err)
+				return
+			}
+			var request agentmgr.PackageActionData
+			if err := json.Unmarshal(outbound.Data, &request); err != nil {
+				t.Errorf("decode action: %v", err)
+				return
+			}
+			if request.Action != "upgrade" || strings.Join(request.Packages, ",") != "curl" {
+				t.Errorf("unexpected canonical request %+v", request)
+				return
+			}
+			raw, _ := json.Marshal(agentmgr.PackageResultData{RequestID: request.RequestID, OK: true, Output: "updated"})
+			sut.processAgentPackageResult(&agentmgr.AgentConn{AssetID: "node-pkg"}, agentmgr.Message{
+				Type: agentmgr.MsgPackageResult,
+				ID:   request.RequestID,
+				Data: raw,
+			})
+		}()
+
+		req := httptest.NewRequest(http.MethodPost, "/packages/node-pkg/update", strings.NewReader(`{"packages":["curl"]}`))
+		rec := httptest.NewRecorder()
+		sut.handlePackages(rec, req)
+		<-done
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 		}
 	})
 }

@@ -90,7 +90,10 @@ func dedupeSortedStrings(values []string) []string {
 // --- apiServer methods (thin wrappers around resourcespkg persistence helpers) ---
 
 func (s *apiServer) persistCanonicalHeartbeat(assetEntry assets.Asset, req assets.HeartbeatRequest) {
-	source := canonicalProviderName(firstNonEmptyString(req.Source, assetEntry.Source))
+	// The committed asset is authoritative. Heartbeat payloads are untrusted and
+	// must not select a canonical provider/binding after persistence has already
+	// normalized their source (for example, an agent reporting "proxmox").
+	source := canonicalProviderName(firstNonEmptyString(assetEntry.Source, req.Source))
 	resourcespkg.PersistCanonicalHeartbeat(s.canonicalStore, assetEntry, source, time.Now().UTC())
 }
 

@@ -35,6 +35,10 @@ func (s *apiServer) consumeEventTicket(ticket string) bool {
 	if entry.SessionID != "__browser_events__" {
 		return false
 	}
+	if entry.APIKeyID != "" && len(entry.AllowedAssets) > 0 {
+		delete(s.streamTicketStore.Tickets, ticket)
+		return false
+	}
 
 	delete(s.streamTicketStore.Tickets, ticket)
 	return true

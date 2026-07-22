@@ -4,14 +4,17 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 
+	"github.com/labtether/labtether/internal/apiv2"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
@@ -35,6 +38,9 @@ func (d *Deps) HandlePortainerContainerExec(w http.ResponseWriter, r *http.Reque
 	if !d.RequireAdminAuth(w, r) {
 		return
 	}
+	if !apiv2.RequireScope(w, r, "connectors:write") {
+		return
+	}
 	if r.Method != http.MethodGet {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -55,6 +61,9 @@ func (d *Deps) HandlePortainerContainerExec(w http.ResponseWriter, r *http.Reque
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if !d.requirePortainerResourceAccess(w, r, strconv.Itoa(epID), "container_id", containerID) {
+		return
+	}
 
 	shell := portainerExecShellFromQuery(r.URL.Query().Get("shell"))
 
@@ -69,7 +78,7 @@ func (d *Deps) HandlePortainerContainerExec(w http.ResponseWriter, r *http.Reque
 	securityruntime.Logf("portainer-exec: exec instance created exec_id=%.16s", execID)
 
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
-	wsURL, _, wsErr := runtime.Client.ExecWebSocketURL(ctx2, epID, execID)
+	wsURL, wsToken, wsErr := runtime.Client.ExecWebSocketURL(ctx2, epID, execID)
 	cancel2()
 	if wsErr != nil {
 		securityruntime.Logf("portainer-exec: get ws url failed: %v", wsErr)
@@ -77,21 +86,23 @@ func (d *Deps) HandlePortainerContainerExec(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	portainerConn, err := dialPortainerExecSocket(wsURL, runtime.SkipVerify)
+	portainerConn, err := dialPortainerExecSocket(wsURL, wsToken, runtime.SkipVerify)
 	if err != nil {
 		securityruntime.Logf("portainer-exec: dial portainer ws failed: %v", err)
 		servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
 		return
 	}
+	shared.LimitUpstreamTerminalMessages(portainerConn)
 	defer portainerConn.Close()
 	securityruntime.Logf("portainer-exec: portainer ws connected")
 
 	// Upgrade the browser connection. Past this point we own the response.
-	browserConn, err := d.TerminalWebSocketUpgrader.Upgrade(w, r, nil)
+	browserConn, err := shared.UpgradeWebSocket(d.TerminalWebSocketUpgrader, w, r, nil)
 	if err != nil {
 		// Upgrade already wrote an error response.
 		return
 	}
+	shared.LimitBrowserInteractiveMessages(browserConn)
 	defer browserConn.Close()
 
 	securityruntime.Logf("portainer-exec: bridge started asset=%s container=%.12s", assetID, containerID)
@@ -99,9 +110,24 @@ func (d *Deps) HandlePortainerContainerExec(w http.ResponseWriter, r *http.Reque
 	securityruntime.Logf("portainer-exec: bridge ended asset=%s container=%.12s", assetID, containerID)
 }
 
-// dialPortainerExecSocket dials the Portainer exec WebSocket URL.
-// The URL already contains the JWT token as a query parameter.
-func dialPortainerExecSocket(wsURL string, skipVerify bool) (*websocket.Conn, error) {
+// dialPortainerExecSocket dials the Portainer exec WebSocket URL using the JWT
+// Authorization header expected by current Portainer releases.
+func dialPortainerExecSocket(wsURL, token string, skipVerify bool) (*websocket.Conn, error) {
+	parsed, err := url.Parse(wsURL)
+	if err != nil || (parsed.Scheme != "ws" && parsed.Scheme != "wss") {
+		return nil, fmt.Errorf("invalid exec websocket URL")
+	}
+	if token == "" || len(token) > 16*1024 {
+		return nil, fmt.Errorf("invalid exec websocket credentials")
+	}
+	for _, char := range []byte(token) {
+		if char <= 0x20 || char >= 0x7f {
+			return nil, fmt.Errorf("invalid exec websocket credentials")
+		}
+	}
+	if parsed.User != nil || parsed.Query().Get("token") != "" || portainerExecURLContainsSecret(wsURL, token) {
+		return nil, fmt.Errorf("exec websocket credentials must not appear in URL")
+	}
 	if _, err := securityruntime.ValidateOutboundURL(
 		strings.Replace(strings.Replace(wsURL, "wss://", "https://", 1), "ws://", "http://", 1),
 	); err != nil {
@@ -110,6 +136,7 @@ func dialPortainerExecSocket(wsURL string, skipVerify bool) (*websocket.Conn, er
 
 	dialer := &websocket.Dialer{
 		HandshakeTimeout: 15 * time.Second,
+		NetDialContext:   securityruntime.OutboundTCPDialContext(15 * time.Second),
 		TLSClientConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12,
 			// #nosec G402 -- runtime-configurable for self-signed homelab certs.
@@ -117,7 +144,9 @@ func dialPortainerExecSocket(wsURL string, skipVerify bool) (*websocket.Conn, er
 		},
 	}
 
-	conn, httpResp, err := dialer.Dial(wsURL, nil)
+	headers := http.Header{}
+	headers.Set("Authorization", "Bearer "+token)
+	conn, httpResp, err := dialer.Dial(wsURL, headers)
 	if err != nil {
 		detail := err.Error()
 		if httpResp != nil {
@@ -130,9 +159,32 @@ func dialPortainerExecSocket(wsURL string, skipVerify bool) (*websocket.Conn, er
 				detail = fmt.Sprintf("%s (HTTP %d)", detail, httpResp.StatusCode)
 			}
 		}
-		return nil, fmt.Errorf("dial portainer exec: %s", detail)
+		return nil, fmt.Errorf("dial portainer exec: %s", redactPortainerExecSecret(detail, token))
 	}
 	return conn, nil
+}
+
+func portainerExecURLContainsSecret(wsURL, token string) bool {
+	if strings.Contains(wsURL, token) {
+		return true
+	}
+	for _, escaped := range []string{url.QueryEscape(token), url.PathEscape(token)} {
+		if escaped != token && strings.Contains(wsURL, escaped) {
+			return true
+		}
+	}
+	return false
+}
+
+func redactPortainerExecSecret(value, token string) string {
+	if token == "" {
+		return value
+	}
+	redacted := strings.ReplaceAll(value, token, "[REDACTED]")
+	if escaped := url.QueryEscape(token); escaped != token {
+		redacted = strings.ReplaceAll(redacted, escaped, "[REDACTED]")
+	}
+	return redacted
 }
 
 // bridgePortainerExec bidirectionally proxies data between the browser WebSocket

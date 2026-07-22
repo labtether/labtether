@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -30,27 +31,71 @@ import (
 )
 
 func runHub(ctx context.Context) error {
+	bindAddress, err := resolveHubBindAddress()
+	if err != nil {
+		return newStartupFailure(startupFailureServerRuntime, err)
+	}
+	if err := validateExplicitHubExposureAuth(
+		bindAddress,
+		os.Getenv("LABTETHER_OWNER_TOKEN"),
+		os.Getenv("LABTETHER_API_TOKEN"),
+	); err != nil {
+		return newStartupFailure(startupFailureAuthConfiguration, err)
+	}
+
 	databaseURL := envOrDefault("DATABASE_URL", persistence.DefaultDatabaseURL("localhost"))
 	pgStore, err := persistence.NewPostgresStore(ctx, databaseURL)
 	if err != nil {
-		return fmt.Errorf("labtether failed to initialize postgres store: %w", err)
+		return newDatabaseStartupFailure(err)
 	}
-	defer pgStore.Close()
+	runtimeDrained := true
+	httpConnectionsDrained := true
+	defer func() {
+		closeHubPostgresStore(runtimeDrained, pgStore)
+	}()
+
+	runtimeLease, err := pgStore.AcquireHubRuntimeLease(ctx)
+	if err != nil {
+		return newStartupFailure(startupFailureRuntimeOwnership, err)
+	}
+	defer func() {
+		releaseHubRuntimeLease(runtimeDrained, runtimeLease)
+	}()
+	leaseCtx, cancelForLease := context.WithCancelCause(ctx)
+	leaseMonitorDone := make(chan struct{})
+	go func() {
+		defer close(leaseMonitorDone)
+		monitorHubRuntimeLease(
+			leaseCtx,
+			runtimeLease,
+			hubRuntimeLeaseCheckInterval,
+			hubRuntimeLeasePingTimeout,
+			cancelForLease,
+		)
+	}()
+	defer func() {
+		cancelForLease(nil)
+		<-leaseMonitorDone
+	}()
+	ctx = leaseCtx
 
 	dataDir := envOrDefault("LABTETHER_DATA_DIR", "data")
 	runtimeSecrets, err := resolveRuntimeInstallSecrets(newInstallStateStore(dataDir))
 	if err != nil {
-		return fmt.Errorf("labtether startup failed: install state init failed: %w", err)
+		return newStartupFailure(startupFailureInstallState, err)
+	}
+	if err := validateHubExposureAuth(bindAddress, runtimeSecrets); err != nil {
+		return newStartupFailure(startupFailureAuthConfiguration, err)
 	}
 
 	authValidator := auth.NewTokenValidator(runtimeSecrets.OwnerToken, runtimeSecrets.APIToken)
 	if !authValidator.Configured() {
-		return fmt.Errorf("labtether startup failed: runtime auth token is not configured")
+		return newStartupFailure(startupFailureAuthConfiguration, errors.New("runtime auth token is not configured"))
 	}
 
 	secretsManager, err := loadSecretsManager(runtimeSecrets.EncryptionKey)
 	if err != nil {
-		return fmt.Errorf("labtether startup failed: invalid runtime encryption key: %w", err)
+		return newStartupFailure(startupFailureEncryptionConfig, err)
 	}
 	if secretsManager == nil {
 		log.Printf("labtether warning: runtime encryption key not set; credential encryption endpoints are disabled")
@@ -60,7 +105,7 @@ func runHub(ctx context.Context) error {
 	if demoMode {
 		demoConfirm := envOrDefault("LABTETHER_DEMO_CONFIRM", "")
 		if demoConfirm != "yes-this-is-a-demo-instance" {
-			return fmt.Errorf("LABTETHER_DEMO_MODE=true requires LABTETHER_DEMO_CONFIRM=yes-this-is-a-demo-instance")
+			return newStartupFailure(startupFailureDemoConfiguration, errors.New("demo mode confirmation is not configured"))
 		}
 		log.Println("WARNING: DEMO MODE ENABLED — this instance is public, read-only, and unauthenticated. Do not use for production.")
 	}
@@ -76,7 +121,7 @@ func runHub(ctx context.Context) error {
 	// Bootstrap admin user for MVP single-user auth.
 	if !demoMode {
 		if err := bootstrapAdminUser(pgStore); err != nil {
-			return fmt.Errorf("labtether startup failed: admin bootstrap failed: %w", err)
+			return newStartupFailure(startupFailureAdminBootstrap, err)
 		}
 	}
 
@@ -93,7 +138,7 @@ func runHub(ctx context.Context) error {
 	if demoMode {
 		srv.demoRateLimiter = newDemoSessionRateLimiter(10, time.Minute)
 		if err := srv.bootstrapDemoUser(); err != nil {
-			return fmt.Errorf("labtether startup failed: %w", err)
+			return newStartupFailure(startupFailureDemoBootstrap, err)
 		}
 		go demo.RunKeepalive(ctx, pgStore.Pool())
 	}
@@ -101,7 +146,7 @@ func runHub(ctx context.Context) error {
 	// Derive TOTP encryption key for 2FA secret storage.
 	totpKey, err := deriveTOTPKey(runtimeSecrets.EncryptionKey)
 	if err != nil {
-		return fmt.Errorf("labtether startup failed: could not derive TOTP encryption key: %w", err)
+		return newStartupFailure(startupFailureTOTPKey, err)
 	}
 	srv.totpEncryptionKey = totpKey
 
@@ -122,8 +167,22 @@ func runHub(ctx context.Context) error {
 		}
 	}()
 
-	worker := initializeWorkerSubsystem(ctx, srv, pgStore)
-	startRuntimeLoops(ctx, srv, pgStore, worker.state, worker.retentionTracker)
+	runtimeCtx, stopRuntime := context.WithCancel(ctx)
+	collectorRuntime := srv.ensureCollectorsDeps()
+	collectorRuntime.CollectorRuntimeContext = runtimeCtx
+	defer func() {
+		runtimeDrained = finalizeHubRuntimeDrain(
+			srv,
+			stopRuntime,
+			hubRuntimeShutdownTimeout,
+			httpConnectionsDrained,
+		)
+		if runtimeDrained {
+			log.Printf("labtether: runtime shutdown complete")
+		}
+	}()
+	worker := initializeWorkerSubsystem(runtimeCtx, srv, pgStore)
+	startRuntimeLoops(runtimeCtx, srv, pgStore, worker.state, worker.retentionTracker)
 
 	// --- TLS mode resolution ---
 	tlsMode := envOrDefault("LABTETHER_TLS_MODE", "auto")
@@ -147,6 +206,7 @@ func runHub(ctx context.Context) error {
 	}
 
 	var port string
+	builtInSANHosts := builtInCertificateSANHosts(srv.externalURL)
 	switch defaultTLSMode {
 	case "disabled":
 		port = httpPort
@@ -154,7 +214,7 @@ func runHub(ctx context.Context) error {
 
 	case "external":
 		if tlsCertFile == "" || tlsKeyFile == "" {
-			return fmt.Errorf("labtether: TLS mode 'external' requires LABTETHER_TLS_CERT and LABTETHER_TLS_KEY")
+			return newStartupFailure(startupFailureTLSConfiguration, errors.New("external TLS certificate or key path is not configured"))
 		}
 		port = httpsPort
 		srv.tlsState.Enabled = true
@@ -165,9 +225,9 @@ func runHub(ctx context.Context) error {
 
 		// Always provision the built-in self-signed CA so LAN-only agents
 		// can still pin it, regardless of which cert the HTTPS listener uses.
-		builtInResult, builtInErr := certmgr.Provision(certsDir)
+		builtInResult, builtInErr := certmgr.Provision(certsDir, builtInSANHosts...)
 		if builtInErr != nil {
-			return fmt.Errorf("labtether: built-in CA provisioning failed: %w", builtInErr)
+			return newStartupFailure(startupFailureTLSConfiguration, builtInErr)
 		}
 		srv.tlsState.CACertPEM = builtInResult.CACertPEM
 		srv.tlsState.CertReloader = builtInResult.Reloader
@@ -175,7 +235,7 @@ func runHub(ctx context.Context) error {
 		shareCACert(builtInResult.CACertPEM, "/ca")
 
 		// Prefer Tailscale cert (publicly trusted) over self-signed.
-		if tsCertPath, tsKeyPath, tsDomain, tsErr := provisionTailscaleCert(certsDir); tsErr == nil {
+		if tsCertPath, tsKeyPath, tsDomain, tsErr := provisionTailscaleCert(certsDir); tsErr == nil && shouldUseTailscaleCertificate(tsDomain, builtInSANHosts) {
 			tlsCertFile = tsCertPath
 			tlsKeyFile = tsKeyPath
 			defaultTLSSource = tlsSourceTailscale
@@ -184,7 +244,11 @@ func runHub(ctx context.Context) error {
 			go tsReloader.Run(ctx)
 			log.Printf("labtether: TLS using Tailscale cert for %s — serving HTTPS on :%s", tsDomain, httpsPort)
 		} else {
-			log.Printf("labtether: Tailscale cert not available (%v), using built-in self-signed", tsErr)
+			if tsErr == nil {
+				log.Printf("labtether: Tailscale cert for %s does not cover configured external host %s, using built-in self-signed", tsDomain, builtInSANHosts[0])
+			} else {
+				log.Printf("labtether: Tailscale cert not available (%v), using built-in self-signed", tsErr)
+			}
 			tlsCertFile = builtInResult.ServerCertPath
 			tlsKeyFile = builtInResult.ServerKeyPath
 		}
@@ -198,12 +262,12 @@ func runHub(ctx context.Context) error {
 	srv.tlsState.CertFile = tlsCertFile
 	srv.tlsState.KeyFile = tlsKeyFile
 	if v, err := strconv.Atoi(httpsPort); err != nil {
-		return fmt.Errorf("labtether: invalid LABTETHER_HTTPS_PORT %q: %w", httpsPort, err)
+		return newStartupFailure(startupFailureTLSConfiguration, err)
 	} else {
 		srv.tlsState.HttpsPort = v
 	}
 	if v, err := strconv.Atoi(httpPort); err != nil {
-		return fmt.Errorf("labtether: invalid LABTETHER_HTTP_PORT %q: %w", httpPort, err)
+		return newStartupFailure(startupFailureTLSConfiguration, err)
 	} else {
 		srv.tlsState.HttpPort = v
 	}
@@ -224,7 +288,7 @@ func runHub(ctx context.Context) error {
 		} else {
 			staticProvider, err := newStaticHubCertificateProvider(tlsCertFile, tlsKeyFile)
 			if err != nil {
-				return fmt.Errorf("labtether: load active TLS key pair: %w", err)
+				return newStartupFailure(startupFailureTLSConfiguration, err)
 			}
 			srv.tlsState.CertSwitcher.SetProvider(staticProvider.GetCertificate)
 			srv.tlsState.DefaultGetCertificate = staticProvider.GetCertificate
@@ -262,7 +326,10 @@ func runHub(ctx context.Context) error {
 
 	portInt, portErr := strconv.Atoi(port)
 	if portErr != nil || portInt < 1 || portInt > 65535 {
-		return fmt.Errorf("labtether: invalid port %q (must be 1-65535)", port)
+		if portErr == nil {
+			portErr = errors.New("port is outside the valid range")
+		}
+		return newStartupFailure(startupFailureTLSConfiguration, portErr)
 	}
 	if strings.TrimSpace(srv.externalURL) != "" {
 		if _, ok := srv.sanitizedExternalHubURL(); !ok {
@@ -289,7 +356,7 @@ func runHub(ctx context.Context) error {
 	if srv.tlsState.Enabled {
 		redirectPort = httpPort
 		if v, err := strconv.Atoi(port); err != nil {
-			return fmt.Errorf("labtether: invalid HTTPS port %q for redirect: %w", port, err)
+			return newStartupFailure(startupFailureTLSConfiguration, err)
 		} else {
 			httpsPortInt = v
 		}
@@ -339,7 +406,9 @@ func runHub(ctx context.Context) error {
 
 	httpCfg := servicehttp.Config{
 		Name:             "labtether",
+		Version:          version,
 		Port:             port,
+		BindAddress:      bindAddress,
 		TLSCertFile:      tlsCertFile,
 		TLSKeyFile:       tlsKeyFile,
 		RedirectHTTPPort: redirectPort,
@@ -357,10 +426,161 @@ func runHub(ctx context.Context) error {
 		httpCfg.GetCertificate = srv.tlsState.CertSwitcher.GetCertificate
 	}
 
-	if err := servicehttp.Run(ctx, httpCfg); err != nil {
-		return fmt.Errorf("service run failed: %w", err)
+	runErr := servicehttp.Run(ctx, httpCfg)
+	if errors.Is(runErr, servicehttp.ErrHTTPDrainIncomplete) {
+		httpConnectionsDrained = false
+	}
+	if cause := context.Cause(ctx); errors.Is(cause, persistence.ErrHubRuntimeLeaseLost) {
+		if runErr != nil {
+			cause = errors.Join(cause, runErr)
+		}
+		return newStartupFailure(startupFailureRuntimeOwnership, cause)
+	}
+	if runErr != nil {
+		return newStartupFailure(startupFailureServerRuntime, runErr)
 	}
 	return nil
+}
+
+const hubRuntimeShutdownTimeout = 30 * time.Second
+
+type hubRuntimeLeaseReleaser interface {
+	Release(context.Context) error
+}
+
+type hubPostgresCloser interface {
+	Close()
+}
+
+// releaseHubRuntimeLease releases the single-active fence only after every
+// tracked runtime worker has stopped. If the bounded drain times out, keeping
+// the lease until process exit prevents a replacement hub from starting while
+// runaway work from this runtime can still touch shared state.
+func releaseHubRuntimeLease(runtimeDrained bool, runtimeLease hubRuntimeLeaseReleaser) {
+	if runtimeLease == nil {
+		return
+	}
+	if !runtimeDrained {
+		log.Printf("labtether warning: runtime drain incomplete; keeping live runtime lease until process exit")
+		return
+	}
+	releaseCtx, stopRelease := context.WithTimeout(context.Background(), 3*time.Second)
+	defer stopRelease()
+	if err := runtimeLease.Release(releaseCtx); err != nil && !errors.Is(err, persistence.ErrHubRuntimeLeaseLost) {
+		log.Printf("labtether warning: live runtime lease release failed")
+	}
+}
+
+// closeHubPostgresStore closes the pool only after every tracked runtime worker
+// has stopped using it. pgxpool.Close waits for checked-out connections, so
+// calling it after a timed-out drain both exposes workers to a closed pool and
+// defeats the shutdown bound. Process exit safely closes the pool in that
+// exceptional path while the runtime lease remains held until the same exit.
+func closeHubPostgresStore(runtimeDrained bool, pgStore hubPostgresCloser) {
+	if pgStore == nil {
+		return
+	}
+	if !runtimeDrained {
+		log.Printf("labtether warning: runtime drain incomplete; keeping postgres pool available until process exit")
+		return
+	}
+	pgStore.Close()
+}
+
+// finalizeHubRuntimeDrain combines the HTTP and managed-worker drain results.
+// Once HTTP reports an incomplete drain, waiting for other workers cannot make
+// the process safe to hand over: cancel all remaining admissions and return
+// immediately so main terminates the process while the lease and pool remain
+// fenced until that exit.
+func finalizeHubRuntimeDrain(
+	srv *apiServer,
+	stopRuntime context.CancelFunc,
+	timeout time.Duration,
+	httpConnectionsDrained bool,
+) bool {
+	if !httpConnectionsDrained {
+		beginHubRuntimeShutdown(srv, stopRuntime)
+		log.Printf("labtether warning: HTTP drain incomplete; forcing process termination with runtime resources fenced")
+		return false
+	}
+	return shutdownHubRuntime(srv, stopRuntime, timeout)
+}
+
+func beginHubRuntimeShutdown(srv *apiServer, stopRuntime context.CancelFunc) <-chan struct{} {
+	var collectorsDone <-chan struct{}
+	if srv != nil && srv.collectorsDeps != nil {
+		collectorsDone = srv.collectorsDeps.BeginCollectorShutdown()
+	} else {
+		idle := make(chan struct{})
+		close(idle)
+		collectorsDone = idle
+	}
+	if stopRuntime != nil {
+		stopRuntime()
+	}
+	return collectorsDone
+}
+
+// shutdownHubRuntime closes collector admission before canceling the runtime,
+// then waits for both managed background loops and already-active collector
+// executions. PostgreSQL and the runtime lease are deferred outside this
+// function, so they stay available until this bounded drain completes.
+func shutdownHubRuntime(srv *apiServer, stopRuntime context.CancelFunc, timeout time.Duration) bool {
+	if timeout <= 0 {
+		timeout = hubRuntimeShutdownTimeout
+	}
+
+	collectorsDone := beginHubRuntimeShutdown(srv, stopRuntime)
+
+	backgroundDone := make(chan struct{})
+	go func() {
+		if srv != nil {
+			srv.backgroundWG.Wait()
+		}
+		close(backgroundDone)
+	}()
+
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	for backgroundDone != nil || collectorsDone != nil {
+		select {
+		case <-backgroundDone:
+			backgroundDone = nil
+		case <-collectorsDone:
+			collectorsDone = nil
+		case <-deadline.C:
+			log.Printf("labtether warning: runtime shutdown drain timed out after %s", timeout)
+			return false
+		}
+	}
+	return true
+}
+
+// builtInCertificateSANHosts returns the externally advertised HTTPS hostname
+// or IP so the built-in server certificate is valid for the exact URL shown to
+// users and agents. Invalid and non-HTTPS external URLs are never trusted as
+// certificate inputs.
+func builtInCertificateSANHosts(rawExternalURL string) []string {
+	sanitized, ok := sanitizeExternalBaseURL(strings.TrimSpace(rawExternalURL))
+	if !ok {
+		return nil
+	}
+	parsed, err := url.Parse(sanitized)
+	if err != nil || !strings.EqualFold(parsed.Scheme, "https") {
+		return nil
+	}
+	host := strings.TrimSpace(parsed.Hostname())
+	if host == "" {
+		return nil
+	}
+	return []string{host}
+}
+
+func shouldUseTailscaleCertificate(tailscaleDomain string, externalHosts []string) bool {
+	if len(externalHosts) == 0 {
+		return true
+	}
+	return strings.EqualFold(strings.TrimSuffix(strings.TrimSpace(tailscaleDomain), "."), externalHosts[0])
 }
 
 type runtimeInstallSecrets struct {
@@ -474,13 +694,71 @@ func writeRuntimeAPITokenFile(token string) error {
 	if path == "" {
 		return nil
 	}
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return errors.New("runtime api token is empty")
+	}
+	path = filepath.Clean(path)
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil { // #nosec G703 -- Directory is derived from the fixed runtime token file path.
 		return fmt.Errorf("create runtime api token directory: %w", err)
 	}
-	if err := os.WriteFile(path, []byte(strings.TrimSpace(token)), 0o600); err != nil { // #nosec G703 -- Runtime token file path is package-controlled state.
-		return fmt.Errorf("write runtime api token file: %w", err)
+	dirInfo, err := os.Lstat(dir)
+	if err != nil {
+		return fmt.Errorf("inspect runtime api token directory: %w", err)
 	}
+	if !dirInfo.IsDir() || dirInfo.Mode()&os.ModeSymlink != 0 {
+		return errors.New("runtime api token directory must be a real directory")
+	}
+
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return fmt.Errorf("open runtime api token directory: %w", err)
+	}
+	defer func() { _ = root.Close() }()
+
+	name := filepath.Base(path)
+	if name == "." || name == string(filepath.Separator) || name == "" {
+		return errors.New("runtime api token file path is invalid")
+	}
+	if info, statErr := root.Lstat(name); statErr == nil {
+		if !info.Mode().IsRegular() && info.Mode()&os.ModeSymlink == 0 {
+			return errors.New("runtime api token destination must be a regular file or symlink")
+		}
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		return fmt.Errorf("inspect runtime api token destination: %w", statErr)
+	}
+
+	randomSuffix := make([]byte, 16)
+	if _, err := rand.Read(randomSuffix); err != nil {
+		return fmt.Errorf("generate runtime api token temp name: %w", err)
+	}
+	tmpName := "." + name + "." + hex.EncodeToString(randomSuffix) + ".tmp"
+	tmp, err := root.OpenFile(tmpName, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return fmt.Errorf("create runtime api token temp file: %w", err)
+	}
+	removeTemp := true
+	defer func() {
+		if removeTemp {
+			_ = root.Remove(tmpName)
+		}
+	}()
+	if _, err := io.WriteString(tmp, token); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("write runtime api token temp file: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("sync runtime api token temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close runtime api token temp file: %w", err)
+	}
+	if err := root.Rename(tmpName, name); err != nil {
+		return fmt.Errorf("install runtime api token file: %w", err)
+	}
+	removeTemp = false
 	return nil
 }
 

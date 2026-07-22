@@ -67,6 +67,7 @@ type Job struct {
 	ActionID    string            `json:"action_id,omitempty"`
 	Params      map[string]string `json:"params,omitempty"`
 	DryRun      bool              `json:"dry_run,omitempty"`
+	TimeoutSec  int               `json:"timeout_sec,omitempty"`
 	RequestedAt time.Time         `json:"requested_at"`
 }
 

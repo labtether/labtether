@@ -15,12 +15,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/assetid"
 	"github.com/labtether/labtether/internal/connectorsdk"
 	"github.com/labtether/labtether/internal/securityruntime"
 )
 
-const maxResponseBytes = 32 * 1024 * 1024
-const maxMetadataValueLength = 512
+const (
+	maxResponseBytes       = 32 * 1024 * 1024
+	maxActionResponseBytes = 1 * 1024 * 1024
+	maxTokenBytes          = 16 * 1024
+	maxMetadataValueLength = 512
+)
 
 type Connector struct {
 	baseURL    string
@@ -79,7 +84,7 @@ func (c *Connector) Capabilities() connectorsdk.Capabilities {
 
 func (c *Connector) Discover(ctx context.Context) ([]connectorsdk.Asset, error) {
 	if !c.isConfigured() {
-		return c.stubAssets(), nil
+		return []connectorsdk.Asset{}, nil
 	}
 
 	payload, err := c.request(ctx, http.MethodGet, "/api/states", nil)
@@ -143,7 +148,7 @@ func (c *Connector) Discover(ctx context.Context) ([]connectorsdk.Asset, error) 
 
 func (c *Connector) TestConnection(ctx context.Context) (connectorsdk.Health, error) {
 	if !c.isConfigured() {
-		return connectorsdk.Health{Status: "ok", Message: "home assistant connector running in stub mode (missing env config)"}, nil
+		return connectorsdk.Health{Status: "failed", Message: "home assistant connector is not configured"}, nil
 	}
 
 	_, err := c.request(ctx, http.MethodGet, "/api/", nil)
@@ -273,7 +278,14 @@ func (c *Connector) Actions() []connectorsdk.ActionDescriptor {
 }
 
 func (c *Connector) ExecuteAction(ctx context.Context, actionID string, req connectorsdk.ActionRequest) (connectorsdk.ActionResult, error) {
-	target := strings.TrimSpace(req.TargetID)
+	if !c.isConfigured() {
+		return connectorsdk.ActionResult{
+			Status:  "failed",
+			Message: "home assistant connector is not configured; actions are unavailable",
+		}, nil
+	}
+
+	target := assetid.NativeCollectorAssetID(req.TargetID)
 	if req.DryRun {
 		switch actionID {
 		case "entity.toggle":
@@ -284,27 +296,9 @@ func (c *Connector) ExecuteAction(ctx context.Context, actionID string, req conn
 		case "service.call":
 			service := strings.TrimSpace(req.Params["service"])
 			if service == "" {
-				service = "homeassistant.update_entity"
+				return connectorsdk.ActionResult{Status: "failed", Message: "service is required"}, nil
 			}
 			return connectorsdk.ActionResult{Status: "succeeded", Message: "dry-run: service call validated", Output: fmt.Sprintf("would call %s", service)}, nil
-		default:
-			return connectorsdk.ActionResult{Status: "failed", Message: "unsupported action"}, nil
-		}
-	}
-
-	if !c.isConfigured() {
-		switch actionID {
-		case "entity.toggle":
-			if target == "" {
-				return connectorsdk.ActionResult{Status: "failed", Message: "target_id is required"}, nil
-			}
-			return connectorsdk.ActionResult{Status: "succeeded", Message: "entity toggled (stub mode)", Output: fmt.Sprintf("toggled %s", target)}, nil
-		case "service.call":
-			service := strings.TrimSpace(req.Params["service"])
-			if service == "" {
-				service = "homeassistant.update_entity"
-			}
-			return connectorsdk.ActionResult{Status: "succeeded", Message: "service called (stub mode)", Output: fmt.Sprintf("called %s", service)}, nil
 		default:
 			return connectorsdk.ActionResult{Status: "failed", Message: "unsupported action"}, nil
 		}
@@ -320,11 +314,11 @@ func (c *Connector) ExecuteAction(ctx context.Context, actionID string, req conn
 		if err != nil {
 			return connectorsdk.ActionResult{Status: "failed", Message: err.Error()}, nil
 		}
-		return connectorsdk.ActionResult{Status: "succeeded", Message: "entity toggled", Output: truncatePayload(payload)}, nil
+		return connectorsdk.ActionResult{Status: "succeeded", Message: "entity toggled", Output: truncatePayloadRedacted(payload, c.token)}, nil
 	case "service.call":
 		service := strings.TrimSpace(req.Params["service"])
 		if service == "" {
-			service = "homeassistant.update_entity"
+			return connectorsdk.ActionResult{Status: "failed", Message: "service is required"}, nil
 		}
 		domain, action, err := parseService(service)
 		if err != nil {
@@ -346,7 +340,7 @@ func (c *Connector) ExecuteAction(ctx context.Context, actionID string, req conn
 		if err != nil {
 			return connectorsdk.ActionResult{Status: "failed", Message: err.Error()}, nil
 		}
-		return connectorsdk.ActionResult{Status: "succeeded", Message: "service called", Output: truncatePayload(payload)}, nil
+		return connectorsdk.ActionResult{Status: "succeeded", Message: "service called", Output: truncatePayloadRedacted(payload, c.token)}, nil
 	default:
 		return connectorsdk.ActionResult{Status: "failed", Message: "unsupported action"}, nil
 	}
@@ -357,6 +351,9 @@ func (c *Connector) request(ctx context.Context, method, path string, body map[s
 		path = "/" + path
 	}
 	url := c.baseURL + path
+	if err := validateToken(c.token); err != nil {
+		return nil, fmt.Errorf("invalid home assistant token: %w", err)
+	}
 
 	var reader io.Reader
 	if body != nil {
@@ -382,16 +379,20 @@ func (c *Connector) request(ctx context.Context, method, path string, body map[s
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("home assistant api returned %d", resp.StatusCode)
+	}
 
-	payload, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
+	responseLimit := maxResponseBytes
+	if method != http.MethodGet {
+		responseLimit = maxActionResponseBytes
+	}
+	payload, err := io.ReadAll(io.LimitReader(resp.Body, int64(responseLimit)+1))
 	if err != nil {
 		return nil, err
 	}
-	if len(payload) > maxResponseBytes {
-		return nil, fmt.Errorf("home assistant response exceeded %d bytes", maxResponseBytes)
-	}
-	if resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("home assistant api returned %d: %s", resp.StatusCode, strings.TrimSpace(string(payload)))
+	if len(payload) > responseLimit {
+		return nil, fmt.Errorf("home assistant response exceeded %d bytes", responseLimit)
 	}
 	return payload, nil
 }
@@ -400,28 +401,19 @@ func (c *Connector) isConfigured() bool {
 	return c.baseURL != "" && c.token != ""
 }
 
-func (c *Connector) stubAssets() []connectorsdk.Asset {
-	return []connectorsdk.Asset{
-		{
-			ID:     "ha-entity-sensor-labtemp",
-			Type:   "ha-entity",
-			Name:   "Lab Temperature",
-			Source: c.ID(),
-			Metadata: map[string]string{
-				"domain": "sensor",
-				"unit":   "C",
-			},
-		},
-		{
-			ID:     "ha-entity-switch-rack-fan",
-			Type:   "ha-entity",
-			Name:   "Rack Fan",
-			Source: c.ID(),
-			Metadata: map[string]string{
-				"domain": "switch",
-			},
-		},
+func validateToken(token string) error {
+	if token == "" {
+		return fmt.Errorf("token is empty")
 	}
+	if len(token) > maxTokenBytes {
+		return fmt.Errorf("token exceeds size limit")
+	}
+	for _, char := range []byte(token) {
+		if char <= 0x20 || char >= 0x7f {
+			return fmt.Errorf("token contains invalid characters")
+		}
+	}
+	return nil
 }
 
 func parseService(value string) (string, string, error) {
@@ -463,6 +455,14 @@ func truncatePayload(payload []byte) string {
 		return trimmed
 	}
 	return trimmed[:512] + "..."
+}
+
+func truncatePayloadRedacted(payload []byte, secret string) string {
+	if secret == "" {
+		return truncatePayload(payload)
+	}
+	redacted := bytes.ReplaceAll(payload, []byte(secret), []byte("[REDACTED]"))
+	return truncatePayload(redacted)
 }
 
 func anyToString(value any) string {

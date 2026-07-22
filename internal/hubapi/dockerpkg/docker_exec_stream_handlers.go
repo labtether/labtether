@@ -11,6 +11,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/servicehttp"
 	"github.com/labtether/labtether/internal/terminal"
 )
@@ -42,10 +43,11 @@ func (d *Deps) HandleDockerExecTerminalStream(
 		return
 	}
 
-	wsConn, err := d.TerminalWebSocketUpgrader.Upgrade(w, r, nil)
+	wsConn, err := shared.UpgradeWebSocket(&d.TerminalWebSocketUpgrader, w, r, nil)
 	if err != nil {
 		return
 	}
+	shared.LimitBrowserInteractiveMessages(wsConn)
 	defer wsConn.Close()
 
 	cols, rows := d.ParseTerminalSize(r.URL.Query().Get("cols"), r.URL.Query().Get("rows"))

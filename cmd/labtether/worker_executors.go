@@ -18,7 +18,7 @@ type workerQueryStatsReader interface {
 func (s *apiServer) workerStatsHandler(
 	workerState *workerRuntimeState,
 	retentionTracker *retentionState,
-	processed, processedActions, processedUpdates *atomic.Uint64,
+	processed, processedActions, processedUpdates, processedSchedules *atomic.Uint64,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		retentionTracker.Mu.RLock()
@@ -46,10 +46,11 @@ func (s *apiServer) workerStatsHandler(
 		queryStatsLimit := parseWorkerQueryStatsLimit(r.URL.Query().Get("query_limit"))
 
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
-			"processed_jobs":        processed.Load(),
-			"processed_action_runs": processedActions.Load(),
-			"processed_update_runs": processedUpdates.Load(),
-			"connected_agents":      connectedAgents,
+			"processed_jobs":          processed.Load(),
+			"processed_action_runs":   processedActions.Load(),
+			"processed_update_runs":   processedUpdates.Load(),
+			"processed_schedule_runs": processedSchedules.Load(),
+			"connected_agents":        connectedAgents,
 			"queue": map[string]any{
 				"max_deliveries": workerState.MaxDeliveries(),
 			},

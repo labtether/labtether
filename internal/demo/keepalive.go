@@ -4,10 +4,11 @@ package demo
 
 import (
 	"context"
+	cryptorand "crypto/rand"
 	"fmt"
 	"log"
 	"math"
-	"math/rand/v2"
+	"math/big"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -83,7 +84,7 @@ func refreshAssets(ctx context.Context, pool *pgxpool.Pool) {
 		if err := rows.Scan(&id); err != nil {
 			continue
 		}
-		offset := 5 + rand.IntN(55) // 5-59 seconds ago
+		offset := 5 + randomIntN(55)
 		_, err := pool.Exec(ctx,
 			`UPDATE assets SET last_seen_at = NOW() - ($1 || ' seconds')::interval, updated_at = NOW() WHERE id = $2`,
 			fmt.Sprintf("%d", offset), id,
@@ -194,7 +195,7 @@ func insertActivity(ctx context.Context, pool *pgxpool.Pool) {
 		return
 	}
 
-	tmpl := templates[rand.IntN(len(templates))]
+	tmpl := templates[randomIntN(len(templates))]
 	_, err = pool.Exec(ctx,
 		`INSERT INTO audit_events (id, type, actor_id, target, session_id, command_id, decision, reason, details, timestamp)
 		 VALUES (gen_random_uuid()::text, $1, 'system', $2, '', '', 'allow', $3, '{}'::jsonb, NOW())`,
@@ -233,28 +234,28 @@ func GenerateCPU(assetID string, t time.Time) float64 {
 	p := profileFor(assetID)
 	// 600-second period sinusoidal wave.
 	phase := 2 * math.Pi * float64(t.Unix()) / 600.0
-	noise := rand.Float64()*20 - 10 // rand(-10,10)
+	noise := randomFloat64()*20 - 10
 	v := p.cpuBase + p.cpuAmplitude*math.Sin(phase) + noise
 	return clamp(v, 5, 85)
 }
 
 func generateMemory(assetID string) float64 {
 	p := profileFor(assetID)
-	noise := rand.Float64()*6 - 3 // rand(-3,3)
+	noise := randomFloat64()*6 - 3
 	return clamp(p.memBase+noise, 30, 90)
 }
 
 func generateDisk(assetID string) float64 {
 	p := profileFor(assetID)
-	noise := rand.Float64()*2 - 1 // rand(-1,1)
+	noise := randomFloat64()*2 - 1
 	return clamp(p.diskBase+noise, 10, 95)
 }
 
 func generateNetwork() float64 {
-	if rand.Float64() < 0.85 {
-		return 1 + rand.Float64()*29 // 1-30 Mbps
+	if randomFloat64() < 0.85 {
+		return 1 + randomFloat64()*29
 	}
-	return 50 + rand.Float64()*450 // 50-500 Mbps
+	return 50 + randomFloat64()*450
 }
 
 func profileFor(assetID string) assetProfile {
@@ -312,5 +313,33 @@ func randomDuration(min, max time.Duration) time.Duration {
 	if min >= max {
 		return min
 	}
-	return min + time.Duration(rand.Int64N(int64(max-min+1)))
+	return min + time.Duration(randomInt64N(int64(max-min+1)))
+}
+
+// randomInt64N returns a crypto-backed integer in [0, n). Demo generation is
+// not a security decision, but using the process CSPRNG keeps this helper safe
+// if its output is ever reused in a security-sensitive context. OS entropy
+// failure is unrecoverable here, so fail closed instead of substituting a weak
+// or predictable source.
+func randomInt64N(n int64) int64 {
+	if n <= 1 {
+		return 0
+	}
+	value, err := cryptorand.Int(cryptorand.Reader, big.NewInt(n))
+	if err != nil {
+		panic(fmt.Sprintf("demo: secure random source failed: %v", err))
+	}
+	return value.Int64()
+}
+
+func randomIntN(n int) int {
+	if n <= 1 {
+		return 0
+	}
+	return int(randomInt64N(int64(n)))
+}
+
+func randomFloat64() float64 {
+	const floatPrecision = int64(1 << 53)
+	return float64(randomInt64N(floatPrecision)) / float64(floatPrecision)
 }

@@ -11,6 +11,8 @@ import (
 	"github.com/labtether/labtether/internal/updates"
 )
 
+const maxRateLimitWindows = 4096
+
 // Thin aliases delegating to internal/hubapi/shared so that callers
 // inside cmd/labtether/ keep compiling without a mass rename.
 
@@ -66,44 +68,7 @@ func (s *apiServer) enforceRateLimit(w http.ResponseWriter, r *http.Request, buc
 	if limit <= 0 || window <= 0 {
 		return true
 	}
-
-	now := time.Now().UTC()
-	key := bucket + ":" + requestClientKey(r)
-
-	s.rateLimiter.Mu.Lock()
-	if s.rateLimiter.Windows == nil {
-		s.rateLimiter.Windows = make(map[string]rateCounter, 64)
-	}
-
-	// Prune expired entries at most once per minute to prevent unbounded map
-	// growth without blocking every request with a full map scan.
-	if len(s.rateLimiter.Windows) > 100 && now.After(s.rateLimiter.PrunedAt.Add(time.Minute)) {
-		for k, v := range s.rateLimiter.Windows {
-			if now.After(v.ResetAt) {
-				delete(s.rateLimiter.Windows, k)
-			}
-		}
-		s.rateLimiter.PrunedAt = now
-	}
-
-	counter := s.rateLimiter.Windows[key]
-	if counter.ResetAt.IsZero() || now.After(counter.ResetAt) {
-		counter = rateCounter{
-			Count:   0,
-			ResetAt: now.Add(window),
-		}
-	}
-	if counter.Count >= limit {
-		s.rateLimiter.Windows[key] = counter
-		s.rateLimiter.Mu.Unlock()
-		servicehttp.WriteError(w, http.StatusTooManyRequests, "rate limit exceeded")
-		return false
-	}
-	counter.Count++
-	s.rateLimiter.Windows[key] = counter
-	s.rateLimiter.Mu.Unlock()
-
-	return true
+	return s.enforceRateLimitKey(w, bucket+":"+requestClientKey(r), limit, window)
 }
 
 // enforceRateLimitGlobal is like enforceRateLimit but uses the bucket key as-is
@@ -113,22 +78,35 @@ func (s *apiServer) enforceRateLimitGlobal(w http.ResponseWriter, bucket string,
 	if limit <= 0 || window <= 0 {
 		return true
 	}
+	return s.enforceRateLimitKey(w, bucket, limit, window)
+}
 
+func (s *apiServer) enforceRateLimitKey(w http.ResponseWriter, key string, limit int, window time.Duration) bool {
 	now := time.Now().UTC()
-	key := bucket
 
 	s.rateLimiter.Mu.Lock()
 	if s.rateLimiter.Windows == nil {
 		s.rateLimiter.Windows = make(map[string]rateCounter, 64)
 	}
 
-	if len(s.rateLimiter.Windows) > 100 && now.After(s.rateLimiter.PrunedAt.Add(time.Minute)) {
+	if (len(s.rateLimiter.Windows) > 100 && now.After(s.rateLimiter.PrunedAt.Add(time.Minute))) || len(s.rateLimiter.Windows) >= maxRateLimitWindows {
 		for k, v := range s.rateLimiter.Windows {
 			if now.After(v.ResetAt) {
 				delete(s.rateLimiter.Windows, k)
 			}
 		}
 		s.rateLimiter.PrunedAt = now
+	}
+	if _, exists := s.rateLimiter.Windows[key]; !exists && len(s.rateLimiter.Windows) >= maxRateLimitWindows {
+		var evictKey string
+		var earliest time.Time
+		for candidate, value := range s.rateLimiter.Windows {
+			if earliest.IsZero() || value.ResetAt.Before(earliest) {
+				evictKey = candidate
+				earliest = value.ResetAt
+			}
+		}
+		delete(s.rateLimiter.Windows, evictKey)
 	}
 
 	counter := s.rateLimiter.Windows[key]

@@ -183,6 +183,9 @@ func ProxmoxTaskMatchesVMID(task proxmox.Task, vmid string) bool {
 
 // handleProxmoxClusterStatus handles GET /proxmox/cluster/status
 func (d *Deps) HandleProxmoxClusterStatus(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobal(w, r, "cluster status") {
+		return
+	}
 	if r.Method != http.MethodGet {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -247,6 +250,9 @@ func (d *Deps) HandleProxmoxNodeNetwork(w http.ResponseWriter, r *http.Request) 
 
 // handleProxmoxNodeRoutes dispatches /proxmox/nodes/{node}/{action}
 func (d *Deps) HandleProxmoxNodeRoutes(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobal(w, r, "node operations") {
+		return
+	}
 	path := strings.TrimPrefix(r.URL.Path, "/proxmox/nodes/")
 	if path == r.URL.Path || path == "" {
 		servicehttp.WriteError(w, http.StatusNotFound, "missing node path")

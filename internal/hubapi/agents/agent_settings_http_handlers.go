@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/agentsettings"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/logs"
 	"github.com/labtether/labtether/internal/servicehttp"
 	"github.com/labtether/labtether/internal/terminal"
@@ -52,6 +53,9 @@ func (d *Deps) HandleAgentSettingsRoutes(w http.ResponseWriter, r *http.Request)
 	assetID, err := url.PathUnescape(strings.TrimSpace(parts[0]))
 	if err != nil || strings.TrimSpace(assetID) == "" {
 		servicehttp.WriteError(w, http.StatusBadRequest, "invalid asset id")
+		return
+	}
+	if !apiv2.RequireAssetAccess(w, r, assetID) {
 		return
 	}
 
@@ -102,7 +106,7 @@ func (d *Deps) HandleAgentSettingsRoutes(w http.ResponseWriter, r *http.Request)
 func (d *Deps) HandleAgentSettingsGet(w http.ResponseWriter, _ *http.Request, assetID string) {
 	payload, err := d.BuildAgentSettingsPayload(assetID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, err.Error())
+		writeAgentSettingsInternalError(w, "failed to load agent settings", err)
 		return
 	}
 	servicehttp.WriteJSON(w, http.StatusOK, payload)
@@ -135,10 +139,16 @@ func (d *Deps) HandleAgentSettingsPatch(w http.ResponseWriter, r *http.Request, 
 
 	storeValues := make(map[string]string, len(normalized))
 	for key, value := range normalized {
-		storeValues[AgentSettingStoreKey(assetID, key)] = value
+		storeKey := AgentSettingStoreKey(assetID, key)
+		stored, encodeErr := d.encodeAgentSettingForStore(key, storeKey, value)
+		if encodeErr != nil {
+			writeAgentSettingsInternalError(w, "failed to protect agent settings", encodeErr)
+			return
+		}
+		storeValues[storeKey] = stored
 	}
 	if _, err := d.RuntimeStore.SaveRuntimeSettingOverrides(storeValues); err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to save agent settings")
+		writeAgentSettingsInternalError(w, "failed to save agent settings", err)
 		return
 	}
 
@@ -149,7 +159,7 @@ func (d *Deps) HandleAgentSettingsPatch(w http.ResponseWriter, r *http.Request, 
 
 	payload, err := d.BuildAgentSettingsPayload(assetID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, err.Error())
+		writeAgentSettingsInternalError(w, "failed to load agent settings", err)
 		return
 	}
 	servicehttp.WriteJSON(w, http.StatusOK, payload)
@@ -189,7 +199,7 @@ func (d *Deps) HandleAgentSettingsReset(w http.ResponseWriter, r *http.Request, 
 	}
 
 	if err := d.RuntimeStore.DeleteRuntimeSettingOverrides(keys); err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to reset settings")
+		writeAgentSettingsInternalError(w, "failed to reset settings", err)
 		return
 	}
 
@@ -200,7 +210,7 @@ func (d *Deps) HandleAgentSettingsReset(w http.ResponseWriter, r *http.Request, 
 
 	payload, err := d.BuildAgentSettingsPayload(assetID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, err.Error())
+		writeAgentSettingsInternalError(w, "failed to load agent settings", err)
 		return
 	}
 	servicehttp.WriteJSON(w, http.StatusOK, payload)
@@ -218,7 +228,7 @@ func (d *Deps) HandleAgentSettingsDockerTest(w http.ResponseWriter, r *http.Requ
 
 	effective, err := d.CollectEffectiveAgentSettingValues(assetID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to resolve effective settings")
+		writeAgentSettingsInternalError(w, "failed to resolve effective settings", err)
 		return
 	}
 	if raw := strings.TrimSpace(req.Enabled); raw != "" {

@@ -428,7 +428,7 @@ func TestHandlePBSAssetsGuardAndErrorBranches(t *testing.T) {
 		Type:    "storage-pool",
 		Name:    "backup",
 		Source:  "pbs",
-		Status:  "online",
+		Status:  "offline",
 		Metadata: map[string]string{
 			"store":        "backup",
 			"collector_id": "collector-pbs-asset-error",
@@ -444,6 +444,44 @@ func TestHandlePBSAssetsGuardAndErrorBranches(t *testing.T) {
 		t.Fatalf("expected 502 when detail load fails, got %d", rec.Code)
 	}
 	assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
+	failedAsset, exists, err := sut.assetStore.GetAsset("pbs-datastore-backup")
+	if err != nil || !exists {
+		t.Fatalf("load pbs asset after failed refresh: exists=%v err=%v", exists, err)
+	}
+	if failedAsset.Status != "offline" {
+		t.Fatalf("expected failed details refresh not to improve offline status, got %q", failedAsset.Status)
+	}
+
+	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: "pbs-datastore-online-backup",
+		Type:    "storage-pool",
+		Name:    "backup",
+		Source:  "pbs",
+		Status:  "online",
+		Metadata: map[string]string{
+			"store":        "backup",
+			"collector_id": "collector-pbs-asset-error",
+		},
+	}); err != nil {
+		t.Fatalf("seed online pbs datastore asset: %v", err)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/pbs/assets/pbs-datastore-online-backup/details", nil)
+	rec = httptest.NewRecorder()
+	sut.handlePBSAssets(rec, req)
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("expected 502 when online asset detail refresh fails, got %d", rec.Code)
+	}
+	failedOnlineAsset, exists, err := sut.assetStore.GetAsset("pbs-datastore-online-backup")
+	if err != nil || !exists {
+		t.Fatalf("load online pbs asset after failed refresh: exists=%v err=%v", exists, err)
+	}
+	if failedOnlineAsset.Status != "unresponsive" {
+		t.Fatalf("expected failed details refresh to mark online asset unresponsive, got %q", failedOnlineAsset.Status)
+	}
+	if failedOnlineAsset.Metadata["store"] != "backup" || failedOnlineAsset.Metadata["collector_id"] != "collector-pbs-asset-error" {
+		t.Fatalf("expected failed details refresh to retain inventory identity metadata, got %#v", failedOnlineAsset.Metadata)
+	}
 }
 
 func TestLoadPBSAssetDetailsDatastoreAndServerBranches(t *testing.T) {

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/assetid"
 	"github.com/labtether/labtether/internal/connectorsdk"
 )
 
@@ -78,8 +79,8 @@ func (c *Connector) TestConnection(ctx context.Context) (connectorsdk.Health, er
 	}
 	if !c.isConfigured() {
 		return connectorsdk.Health{
-			Status:  "ok",
-			Message: "pbs connector running in stub mode (missing env config)",
+			Status:  "failed",
+			Message: "pbs connector is not configured",
 		}, nil
 	}
 
@@ -103,7 +104,7 @@ func (c *Connector) TestConnection(ctx context.Context) (connectorsdk.Health, er
 
 func (c *Connector) Discover(ctx context.Context) ([]connectorsdk.Asset, error) {
 	if !c.isConfigured() {
-		return c.stubAssets(), nil
+		return []connectorsdk.Asset{}, nil
 	}
 
 	datastores, err := c.client.ListDatastores(ctx)
@@ -284,9 +285,16 @@ func (c *Connector) ExecuteAction(ctx context.Context, actionID string, req conn
 		}, nil
 	}
 
-	store := firstNonEmpty(strings.TrimSpace(req.Params["store"]), strings.TrimSpace(req.TargetID))
+	targetStore := assetid.NativeCollectorAssetID(req.TargetID)
+	targetStore = strings.TrimPrefix(targetStore, "pbs-datastore-")
+	store := firstNonEmpty(strings.TrimSpace(req.Params["store"]), strings.TrimSpace(targetStore))
 	if store == "" {
 		return connectorsdk.ActionResult{Status: "failed", Message: "store is required"}, nil
+	}
+	switch actionID {
+	case "datastore.verify", "datastore.prune", "datastore.gc":
+	default:
+		return connectorsdk.ActionResult{Status: "failed", Message: "unsupported action"}, nil
 	}
 
 	if req.DryRun {
@@ -326,20 +334,6 @@ func (c *Connector) ExecuteAction(ctx context.Context, actionID string, req conn
 
 func (c *Connector) isConfigured() bool {
 	return c.client != nil && c.client.IsConfigured()
-}
-
-func (c *Connector) stubAssets() []connectorsdk.Asset {
-	return []connectorsdk.Asset{
-		{
-			ID:     "pbs-server-stub",
-			Type:   "storage-controller",
-			Name:   "pbs-stub",
-			Source: c.ID(),
-			Metadata: map[string]string{
-				"note": "stub mode - configure PBS_BASE_URL, PBS_TOKEN_ID, and PBS_TOKEN_SECRET",
-			},
-		},
-	}
 }
 
 func (c *Connector) serverLabel() string {

@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	tnconnector "github.com/labtether/labtether/internal/connectors/truenas"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/terminal"
 )
@@ -103,10 +104,11 @@ func (d *Deps) TryTrueNASTerminalStream(w http.ResponseWriter, r *http.Request, 
 	upgrader := websocket.Upgrader{
 		CheckOrigin: d.CheckSameOrigin,
 	}
-	browserWS, err := upgrader.Upgrade(w, r, nil)
+	browserWS, err := shared.UpgradeWebSocket(&upgrader, w, r, nil)
 	if err != nil {
 		return fmt.Errorf("browser ws upgrade: %w", err)
 	}
+	shared.LimitBrowserInteractiveMessages(browserWS)
 	defer browserWS.Close()
 
 	// Step 3: Connect to TrueNAS shell endpoint.
@@ -115,6 +117,7 @@ func (d *Deps) TryTrueNASTerminalStream(w http.ResponseWriter, r *http.Request, 
 		return fmt.Errorf("truenas shell endpoint blocked by runtime policy: %w", err)
 	}
 	dialer := websocket.Dialer{
+		NetDialContext: securityruntime.OutboundTCPDialContext(target.Timeout),
 		TLSClientConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12,
 			// #nosec G402 -- user-controlled homelab setting for self-signed certs.
@@ -127,6 +130,7 @@ func (d *Deps) TryTrueNASTerminalStream(w http.ResponseWriter, r *http.Request, 
 		_ = browserWS.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("Failed to connect to TrueNAS shell: %v\r\n", err)))
 		return fmt.Errorf("truenas shell dial: %w", err)
 	}
+	shared.LimitUpstreamTerminalMessages(nasWS)
 	defer nasWS.Close()
 
 	// Step 4: Send auth message with token and options.

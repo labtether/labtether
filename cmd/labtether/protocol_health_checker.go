@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/labtether/labtether/internal/credentials"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/protocols"
 )
 
@@ -132,18 +134,16 @@ func (s *apiServer) testProtocolConfig(ctx context.Context, pc *protocols.Protoc
 	switch pc.Protocol {
 	case protocols.ProtocolSSH:
 		username := strings.TrimSpace(pc.Username)
-		var hostKeyCallback ssh.HostKeyCallback
 		var sshCfg protocols.SSHConfig
 		if len(pc.Config) > 0 {
 			_ = json.Unmarshal(pc.Config, &sshCfg)
 		}
-		if sshCfg.StrictHostKey && sshCfg.HostKey != "" {
-			hostPub, _, _, _, parseErr := ssh.ParseAuthorizedKey([]byte(sshCfg.HostKey))
-			if parseErr == nil {
-				hostKeyCallback = ssh.FixedHostKey(hostPub)
-			}
+		hostKeyCallback, callbackErr := buildProtocolHealthSSHHostKeyCallback(sshCfg)
+		if callbackErr != nil {
+			result = &protocols.TestResult{Success: false, Error: callbackErr.Error()}
+		} else {
+			result = protocols.TestSSH(testCtx, host, pc.Port, username, password, privateKey, hostKeyCallback)
 		}
-		result = protocols.TestSSH(testCtx, host, pc.Port, username, password, privateKey, hostKeyCallback)
 	case protocols.ProtocolTelnet:
 		result = protocols.TestTelnet(testCtx, host, pc.Port)
 	case protocols.ProtocolVNC:
@@ -175,4 +175,12 @@ func (s *apiServer) testProtocolConfig(ctx context.Context, pc *protocols.Protoc
 	if updateErr := s.db.UpdateProtocolTestResult(ctx, pc.AssetID, pc.Protocol, status, testErr); updateErr != nil {
 		log.Printf("protocol-health: failed to store result for %s/%s: %v", pc.AssetID, pc.Protocol, updateErr)
 	}
+}
+
+func buildProtocolHealthSSHHostKeyCallback(cfg protocols.SSHConfig) (ssh.HostKeyCallback, error) {
+	callback, err := shared.BuildSSHHostKeyCallback(cfg.StrictHostKey, cfg.HostKey)
+	if err != nil {
+		return nil, fmt.Errorf("SSH host key verification requires a configured host key or known_hosts entry: %w", err)
+	}
+	return callback, nil
 }

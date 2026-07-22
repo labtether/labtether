@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -214,33 +215,86 @@ func TestPushBadURL(t *testing.T) {
 	}
 }
 
+func TestPushDoesNotFollowRedirectOrLeakCredentials(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
+	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
+
+	var redirectedRequests atomic.Int32
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		redirectedRequests.Add(1)
+		if r.Header.Get("Authorization") != "" {
+			t.Error("redirect target received authorization header")
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer target.Close()
+
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if username, password, ok := r.BasicAuth(); !ok || username != "operator" || password != "exact secret" {
+			t.Errorf("origin basic auth = %q:%q, %v", username, password, ok)
+		}
+		w.Header().Set("Location", target.URL+"/write")
+		w.WriteHeader(http.StatusTemporaryRedirect)
+	}))
+	defer origin.Close()
+
+	err := Push(context.Background(), origin.URL, []byte("x"), "operator", "exact secret")
+	if err == nil {
+		t.Fatal("expected redirect response to fail")
+	}
+	if redirectedRequests.Load() != 0 {
+		t.Fatalf("redirect target received %d requests", redirectedRequests.Load())
+	}
+	for _, sensitive := range []string{origin.URL, target.URL, "operator", "exact secret"} {
+		if strings.Contains(err.Error(), sensitive) {
+			t.Fatalf("push error leaked sensitive endpoint or credential data: %q", err)
+		}
+	}
+}
+
 // ---- Worker tests ----
 
 // mockSource is an in-memory SampleSource.
 type mockSource struct {
 	samples []SampleWithLabels
+	next    Cursor
+	err     error
 }
 
-func (m *mockSource) SamplesSince(_ context.Context, since time.Time, limit int) ([]SampleWithLabels, error) {
-	var out []SampleWithLabels
-	for _, s := range m.samples {
-		if t := TimeFromMillis(s.Timestamp); t.After(since) {
-			out = append(out, s)
-			if len(out) >= limit {
-				break
-			}
-		}
+func (m *mockSource) SamplesAfter(_ context.Context, cursor Cursor, limit int) (Batch, error) {
+	if m.err != nil {
+		return Batch{}, m.err
 	}
-	return out, nil
+	if len(m.samples) == 0 {
+		if m.next != (Cursor{}) {
+			return Batch{Next: m.next}, nil
+		}
+		return Batch{Next: cursor}, nil
+	}
+	next := m.next
+	if next == (Cursor{}) {
+		next = Cursor{AssetSampleID: cursor.AssetSampleID + int64(len(m.samples))}
+	}
+	return Batch{Samples: append([]SampleWithLabels(nil), m.samples...), Next: next}, nil
 }
 
-// mockHWM is an in-memory HighWaterMark.
-type mockHWM struct {
-	t time.Time
+// mockCursor is an in-memory durable cursor.
+type mockCursor struct {
+	cursor  Cursor
+	loadErr error
+	saveErr error
 }
 
-func (m *mockHWM) Get(_ context.Context) (time.Time, error) { return m.t, nil }
-func (m *mockHWM) Set(_ context.Context, t time.Time) error { m.t = t; return nil }
+func (m *mockCursor) LoadRemoteWriteCursor(_ context.Context, _ string) (Cursor, error) {
+	return m.cursor, m.loadErr
+}
+func (m *mockCursor) SaveRemoteWriteCursor(_ context.Context, _ string, cursor Cursor, _ time.Time) error {
+	if m.saveErr != nil {
+		return m.saveErr
+	}
+	m.cursor = cursor
+	return nil
+}
 
 func TestWorkerPushesBatch(t *testing.T) {
 	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
@@ -261,14 +315,17 @@ func TestWorkerPushesBatch(t *testing.T) {
 			{Labels: map[string]string{"__name__": "mem"}, Value: 20.0, Timestamp: now.Add(time.Second).UnixMilli()},
 		},
 	}
-	hwm := &mockHWM{}
+	cursors := &mockCursor{}
 
 	cfg := Config{
 		Enabled:  true,
 		URL:      srv.URL,
-		Interval: 20 * time.Millisecond,
+		Interval: MinInterval,
 	}
-	worker := NewWorker(cfg, source, hwm)
+	worker, err := NewWorker(cfg, source, cursors)
+	if err != nil {
+		t.Fatalf("NewWorker: %v", err)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
@@ -280,37 +337,14 @@ func TestWorkerPushesBatch(t *testing.T) {
 	}
 
 	// High-water mark must have advanced.
-	if hwm.t.IsZero() {
+	if cursors.cursor.AssetSampleID != 2 {
 		t.Fatal("expected high-water mark to be advanced after push")
 	}
 }
 
-func TestWorkerDisabledDoesNotPush(t *testing.T) {
-	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
-	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
-
-	var pushCount atomic.Int32
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		pushCount.Add(1)
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer srv.Close()
-
-	cfg := Config{
-		Enabled:  false,
-		URL:      srv.URL,
-		Interval: 10 * time.Millisecond,
-	}
-	worker := NewWorker(cfg, &mockSource{}, &mockHWM{})
-
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-
-	worker.Run(ctx) // returns immediately when Enabled == false
-
-	if pushCount.Load() != 0 {
-		t.Fatalf("expected no pushes, got %d", pushCount.Load())
+func TestNewWorkerRejectsDisabledConfiguration(t *testing.T) {
+	if _, err := NewWorker(Config{Enabled: false, Interval: MinInterval}, &mockSource{}, &mockCursor{}); err == nil {
+		t.Fatal("expected disabled worker construction to fail")
 	}
 }
 
@@ -336,9 +370,12 @@ func TestWorkerBacksOffOnError(t *testing.T) {
 	cfg := Config{
 		Enabled:  true,
 		URL:      srv.URL,
-		Interval: 20 * time.Millisecond,
+		Interval: MinInterval,
 	}
-	worker := NewWorker(cfg, source, &mockHWM{})
+	worker, err := NewWorker(cfg, source, &mockCursor{})
+	if err != nil {
+		t.Fatalf("NewWorker: %v", err)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 	defer cancel()
@@ -367,10 +404,13 @@ func TestWorkerEmptySourceNoRequest(t *testing.T) {
 	cfg := Config{
 		Enabled:  true,
 		URL:      srv.URL,
-		Interval: 20 * time.Millisecond,
+		Interval: MinInterval,
 	}
 	// Source with no samples — worker should skip pushing.
-	worker := NewWorker(cfg, &mockSource{}, &mockHWM{})
+	worker, err := NewWorker(cfg, &mockSource{}, &mockCursor{})
+	if err != nil {
+		t.Fatalf("NewWorker: %v", err)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()

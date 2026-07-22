@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/labtether/labtether/internal/assetid"
 	"github.com/labtether/labtether/internal/hubcollector"
 )
 
@@ -67,7 +68,7 @@ func TestExecutePortainerCollectorUsesConfiguredClusterNameForSingleEndpoint(t *
 
 	sut.executePortainerCollector(context.Background(), collector)
 
-	asset, exists, err := sut.assetStore.GetAsset("portainer-endpoint-1")
+	asset, exists, err := sut.assetStore.GetAsset(assetid.ScopeCollectorAssetID("portainer-endpoint-1", collector.ID))
 	if err != nil {
 		t.Fatalf("GetAsset() error = %v", err)
 	}
@@ -93,7 +94,7 @@ func TestExecutePortainerCollectorUsesConfiguredClusterNameForSingleEndpoint(t *
 		t.Fatalf("portainer_version = %q, want %q", asset.Metadata["portainer_version"], "2.21.5")
 	}
 
-	containerAsset, exists, err := sut.assetStore.GetAsset("portainer-container-1-abc123def456")
+	containerAsset, exists, err := sut.assetStore.GetAsset(assetid.ScopeCollectorAssetID("portainer-container-1-abc123def456", collector.ID))
 	if err != nil {
 		t.Fatalf("GetAsset(container) error = %v", err)
 	}
@@ -104,7 +105,7 @@ func TestExecutePortainerCollectorUsesConfiguredClusterNameForSingleEndpoint(t *
 		t.Fatalf("container ports = %q, want %q", containerAsset.Metadata["ports"], "8080->80/tcp")
 	}
 
-	stackAsset, exists, err := sut.assetStore.GetAsset("portainer-stack-5")
+	stackAsset, exists, err := sut.assetStore.GetAsset(assetid.ScopeCollectorAssetID("portainer-stack-5", collector.ID))
 	if err != nil {
 		t.Fatalf("GetAsset(stack) error = %v", err)
 	}
@@ -162,7 +163,7 @@ func TestExecutePortainerCollectorKeepsEndpointNamesWhenMultipleEndpointsExist(t
 
 	sut.executePortainerCollector(context.Background(), collector)
 
-	localAsset, exists, err := sut.assetStore.GetAsset("portainer-endpoint-1")
+	localAsset, exists, err := sut.assetStore.GetAsset(assetid.ScopeCollectorAssetID("portainer-endpoint-1", collector.ID))
 	if err != nil {
 		t.Fatalf("GetAsset(endpoint-1) error = %v", err)
 	}
@@ -176,7 +177,7 @@ func TestExecutePortainerCollectorKeepsEndpointNamesWhenMultipleEndpointsExist(t
 		t.Fatalf("local portainer_endpoint_name = %q, want empty", localAsset.Metadata["portainer_endpoint_name"])
 	}
 
-	edgeAsset, exists, err := sut.assetStore.GetAsset("portainer-endpoint-2")
+	edgeAsset, exists, err := sut.assetStore.GetAsset(assetid.ScopeCollectorAssetID("portainer-endpoint-2", collector.ID))
 	if err != nil {
 		t.Fatalf("GetAsset(endpoint-2) error = %v", err)
 	}
@@ -185,5 +186,66 @@ func TestExecutePortainerCollectorKeepsEndpointNamesWhenMultipleEndpointsExist(t
 	}
 	if edgeAsset.Name != "edge" {
 		t.Fatalf("edge asset.Name = %q, want %q", edgeAsset.Name, "edge")
+	}
+}
+
+func TestExecuteFourPortainerCollectorsKeepRepeatedEndpointIDDistinct(t *testing.T) {
+	allowInsecureTransportForConnectorTests(t)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/system/version", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"ServerVersion":"2.43.0"}`))
+	})
+	mux.HandleFunc("/api/endpoints", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`[{"Id":2,"Name":"local","Type":1,"URL":"unix:///var/run/docker.sock","Status":1}]`))
+	})
+	mux.HandleFunc("/api/endpoints/2/docker/containers/json", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`[]`))
+	})
+	mux.HandleFunc("/api/stacks", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`[]`))
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	sut := newTestAPIServer(t)
+	store := newRecordingHubCollectorStore()
+	sut.hubCollectorStore = store
+	credentialID := seedPortainerCredentialProfile(t, sut, "svc@local!automation", "ptr-secret-value", server.URL)
+
+	collectorIDs := []string{
+		"collector-portainer-delta",
+		"collector-portainer-zeta",
+		"collector-portainer-omega",
+		"collector-portainer-tau",
+	}
+	for _, collectorID := range collectorIDs {
+		collector := hubcollector.Collector{
+			ID:            collectorID,
+			AssetID:       "portainer-cluster-" + collectorID,
+			CollectorType: hubcollector.CollectorTypePortainer,
+			Enabled:       true,
+			Config: map[string]any{
+				"base_url":      server.URL,
+				"credential_id": credentialID,
+				"auth_method":   "api_key",
+				"skip_verify":   true,
+			},
+		}
+		sut.executePortainerCollector(context.Background(), collector)
+	}
+
+	for _, collectorID := range collectorIDs {
+		id := assetid.ScopeCollectorAssetID("portainer-endpoint-2", collectorID)
+		asset, ok, err := sut.assetStore.GetAsset(id)
+		if err != nil || !ok {
+			t.Fatalf("expected scoped endpoint %s: ok=%v err=%v", id, ok, err)
+		}
+		if asset.Metadata["collector_id"] != collectorID {
+			t.Fatalf("asset %s collector_id = %q", id, asset.Metadata["collector_id"])
+		}
+	}
+	if _, ok, err := sut.assetStore.GetAsset("portainer-endpoint-2"); err != nil || ok {
+		t.Fatalf("unexpected ambiguous legacy endpoint: ok=%v err=%v", ok, err)
 	}
 }

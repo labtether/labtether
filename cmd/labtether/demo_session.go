@@ -98,11 +98,17 @@ func (rl *demoSessionRateLimiter) allow(ip string) bool {
 // redirects to the console. It is an UNAUTHENTICATED endpoint — its entire
 // purpose is to give anonymous visitors a read-only session.
 //
-// POST /api/demo/session?redirect=/some/path
+// GET|POST /api/demo/session?redirect=/some/path creates a demo session.
+// HEAD reports whether demo mode is enabled without creating a session.
 func (s *apiServer) handleDemoSession(w http.ResponseWriter, r *http.Request) {
 	// Only available in demo mode.
 	if !s.demoMode {
 		http.NotFound(w, r)
+		return
+	}
+
+	if r.Method == http.MethodHead {
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 

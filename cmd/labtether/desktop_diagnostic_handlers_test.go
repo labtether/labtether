@@ -48,6 +48,18 @@ func TestHandleDesktopDiagnoseRequestRejectsDisconnectedAgent(t *testing.T) {
 	}
 }
 
+func TestHandleDesktopDiagnoseRequestEnforcesAPIKeyAssetAllowlist(t *testing.T) {
+	sut := newTestAPIServer(t)
+	req := httptest.NewRequest(http.MethodPost, "/desktop/diagnose/srv2", nil)
+	req = req.WithContext(contextWithAllowedAssets(req.Context(), []string{"srv1"}))
+	rec := httptest.NewRecorder()
+
+	sut.handleDesktopDiagnoseRequest(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for disallowed diagnostic target, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestHandleDesktopDiagnoseRequestBridgesAgentSuccess(t *testing.T) {
 	sut := newTestAPIServer(t)
 	sut.agentMgr = agentmgr.NewManager()

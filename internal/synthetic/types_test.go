@@ -2,8 +2,20 @@ package synthetic
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
+
+func TestValidateConfigBoundsAndCompilesMatchBody(t *testing.T) {
+	if err := ValidateConfig(map[string]any{"match_body": "ok.*"}); err != nil {
+		t.Fatalf("valid pattern rejected: %v", err)
+	}
+	for _, value := range []any{123, "[", strings.Repeat("x", MaxMatchBodyPatternLen+1)} {
+		if err := ValidateConfig(map[string]any{"match_body": value}); err == nil {
+			t.Fatalf("expected validation error for %#v", value)
+		}
+	}
+}
 
 func TestCreateIntervalSecondsDefaultsOnlyWhenOmitted(t *testing.T) {
 	got, err := CreateIntervalSeconds(0)

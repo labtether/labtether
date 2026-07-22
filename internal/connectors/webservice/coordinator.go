@@ -107,12 +107,14 @@ func (c *Coordinator) HandleReport(agentID string, msg agentmgr.Message) {
 	for _, raw := range data.Services {
 		svc := cloneDiscoveredService(raw)
 		svc.HostAssetID = normalizeServiceHostID(svc.HostAssetID, reportHostID)
-		c.recordServiceHealthSampleLocked(svc.HostAssetID, svc.ID, svc.Status, svc.ResponseMs, now)
 		services = append(services, svc)
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	for _, svc := range services {
+		c.recordServiceHealthSampleLocked(svc.HostAssetID, svc.ID, svc.Status, svc.ResponseMs, now)
+	}
 
 	c.hosts[agentID] = &hostEntry{
 		services:  services,

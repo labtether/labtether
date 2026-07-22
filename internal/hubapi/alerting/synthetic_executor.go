@@ -1,16 +1,18 @@
 package alerting
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
 	"net/http"
 	"regexp"
 	"strconv"
-	"sync"
+	"strings"
 	"time"
 
 	"github.com/labtether/labtether/internal/hubapi/shared"
+	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/synthetic"
 )
 
@@ -23,22 +25,11 @@ var SharedSyntheticHTTPTransport = &http.Transport{
 	IdleConnTimeout:     90 * time.Second,
 }
 
-// syntheticRegexCache caches compiled regexps for body-match patterns so
-// that recurring checks don't re-compile the same pattern every cycle.
-var syntheticRegexCache sync.Map // pattern string → *regexp.Regexp
-
-// CachedRegexp returns a compiled regexp for the given pattern, caching the
-// result so that recurring checks don't re-compile the same pattern.
+// CachedRegexp retains its historical name for callers, but deliberately does
+// not retain user-controlled patterns. Patterns are validated and bounded on
+// write, making a fresh compile cheap while avoiding a permanent memory cache.
 func CachedRegexp(pattern string) (*regexp.Regexp, error) {
-	if cached, ok := syntheticRegexCache.Load(pattern); ok {
-		return cached.(*regexp.Regexp), nil
-	}
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		return nil, err
-	}
-	syntheticRegexCache.Store(pattern, re)
-	return re, nil
+	return regexp.Compile(pattern)
 }
 
 // ExecuteSyntheticCheck runs a single check against the target using the
@@ -68,8 +59,14 @@ func executeHTTPCheck(check synthetic.Check) synthetic.Result {
 	start := time.Now()
 	timeout := syntheticTimeout(check.Config, 10*time.Second)
 
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	req, err := securityruntime.NewOutboundRequestWithContext(ctx, http.MethodGet, check.Target, nil)
 	client := &http.Client{Timeout: timeout, Transport: SharedSyntheticHTTPTransport}
-	resp, err := client.Get(check.Target)
+	var resp *http.Response
+	if err == nil {
+		resp, err = securityruntime.DoOutboundRequest(client, req)
+	}
 	latencyMS := int(time.Since(start).Milliseconds())
 
 	if err != nil {
@@ -114,7 +111,7 @@ func executeHTTPCheck(check synthetic.Check) synthetic.Result {
 			errMsg = fmt.Sprintf("invalid body regex: %v", reErr)
 		} else if !re.Match(body[:n]) {
 			status = synthetic.ResultStatusFail
-			errMsg = fmt.Sprintf("body did not match pattern: %s", pattern)
+			errMsg = "body did not match configured pattern"
 		}
 	}
 
@@ -136,7 +133,14 @@ func executeTCPCheck(check synthetic.Check) synthetic.Result {
 	start := time.Now()
 	timeout := syntheticTimeout(check.Config, 3*time.Second)
 
-	conn, err := net.DialTimeout("tcp", check.Target, timeout)
+	host, port, targetErr := parseSyntheticHostPort(check.Target)
+	var conn net.Conn
+	var err error
+	if targetErr != nil {
+		err = targetErr
+	} else {
+		conn, err = securityruntime.DialOutboundTCPTimeout(host, port, timeout)
+	}
 	latencyMS := int(time.Since(start).Milliseconds())
 
 	if err != nil {
@@ -163,7 +167,11 @@ func executeTCPCheck(check synthetic.Check) synthetic.Result {
 func executeDNSCheck(check synthetic.Check) synthetic.Result {
 	start := time.Now()
 
-	addrs, err := net.LookupHost(check.Target)
+	var addrs []string
+	err := securityruntime.ValidateOutboundDialTarget(check.Target, 53)
+	if err == nil {
+		addrs, err = net.LookupHost(check.Target)
+	}
 	latencyMS := int(time.Since(start).Milliseconds())
 
 	if err != nil {
@@ -213,8 +221,28 @@ func executeTLSCheck(check synthetic.Check) synthetic.Result {
 	start := time.Now()
 	timeout := 10 * time.Second
 
-	dialer := &net.Dialer{Timeout: timeout}
-	conn, err := tls.DialWithDialer(dialer, "tcp", check.Target, &tls.Config{MinVersion: tls.VersionTLS12})
+	host, port, targetErr := parseSyntheticHostPort(check.Target)
+	var conn *tls.Conn
+	var err error
+	if targetErr != nil {
+		err = targetErr
+	} else {
+		rawConn, dialErr := securityruntime.DialOutboundTCPTimeout(host, port, timeout)
+		if dialErr != nil {
+			err = dialErr
+		} else {
+			conn = tls.Client(rawConn, &tls.Config{MinVersion: tls.VersionTLS12, ServerName: host})
+			if deadlineErr := conn.SetDeadline(time.Now().Add(timeout)); deadlineErr != nil {
+				err = deadlineErr
+				_ = conn.Close()
+			} else if handshakeErr := conn.Handshake(); handshakeErr != nil {
+				err = handshakeErr
+				_ = conn.Close()
+			} else {
+				_ = conn.SetDeadline(time.Time{})
+			}
+		}
+	}
 	latencyMS := int(time.Since(start).Milliseconds())
 
 	if err != nil {
@@ -281,6 +309,21 @@ func executeTLSCheck(check synthetic.Check) synthetic.Result {
 		},
 		CheckedAt: time.Now().UTC(),
 	}
+}
+
+func parseSyntheticHostPort(target string) (string, int, error) {
+	host, portRaw, err := net.SplitHostPort(strings.TrimSpace(target))
+	if err != nil {
+		return "", 0, fmt.Errorf("target must be host:port: %w", err)
+	}
+	port, err := strconv.Atoi(portRaw)
+	if err != nil || port <= 0 || port > 65535 {
+		return "", 0, fmt.Errorf("invalid target port %q", portRaw)
+	}
+	if strings.TrimSpace(host) == "" {
+		return "", 0, fmt.Errorf("target host is required")
+	}
+	return host, port, nil
 }
 
 func syntheticTimeout(config map[string]any, fallback time.Duration) time.Duration {

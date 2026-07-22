@@ -18,6 +18,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/labtether/labtether/internal/hubapi/shared"
+	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -34,13 +35,13 @@ func (d *Deps) HandleSSHTerminalStream(w http.ResponseWriter, r *http.Request, s
 	traceLog := shared.StreamTraceLogValue(traceID)
 	logContext := fmt.Sprintf("session=%s target=%s trace=%s", session.ID, session.Target, traceLog)
 
-	wsConn, err := d.TerminalWebSocketUpgrader.Upgrade(w, r, nil)
+	wsConn, err := shared.UpgradeWebSocket(&d.TerminalWebSocketUpgrader, w, r, nil)
 	if err != nil {
 		log.Printf("terminal-ssh: upgrade_failed %s err=%v", logContext, err) // #nosec G706 -- Log fields are bounded session/runtime identifiers and local upgrade errors.
 		return
 	}
-	defer wsConn.Close()
 	wsConn.SetReadLimit(maxTerminalInputReadBytes)
+	defer wsConn.Close()
 
 	// Concurrent session registry: evict any previous WebSocket for this
 	// persistent session before registering the new one.
@@ -143,7 +144,17 @@ func (d *Deps) HandleSSHTerminalStream(w http.ResponseWriter, r *http.Request, s
 			SSHDialMaxAttempts,
 			SSHDialRetryDelay,
 			func(network, target string, cfg *ssh.ClientConfig) (*ssh.Client, error) {
-				return ssh.Dial(network, target, cfg)
+				host, portRaw, err := net.SplitHostPort(target)
+				if err != nil {
+					return nil, err
+				}
+				port, err := strconv.Atoi(portRaw)
+				if err != nil {
+					return nil, err
+				}
+				ctx, cancel := context.WithTimeout(r.Context(), SSHDialAttemptTimeout)
+				defer cancel()
+				return securityruntime.DialOutboundSSHContext(ctx, host, port, cfg, SSHDialAttemptTimeout)
 			},
 			time.Sleep,
 			func(attempt, attempts int) {
@@ -465,6 +476,12 @@ func (d *Deps) scrollbackFlushLoop(ctx context.Context, persistentSessionID stri
 				_ = d.TerminalScrollbackStore.UpsertScrollback(persistentSessionID, snap, ringBuf.ByteSize(), ringBuf.Lines())
 			}
 		case <-ctx.Done():
+			if d.TerminalScrollbackStore != nil {
+				snap := ringBuf.Snapshot()
+				if len(snap) > 0 {
+					_ = d.TerminalScrollbackStore.UpsertScrollback(persistentSessionID, snap, ringBuf.ByteSize(), ringBuf.Lines())
+				}
+			}
 			return
 		}
 	}

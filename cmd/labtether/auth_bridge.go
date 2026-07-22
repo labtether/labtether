@@ -32,11 +32,14 @@ func (s *apiServer) buildAuthDeps() *authpkg.Deps {
 
 		AppendAuditEventBestEffort: s.appendAuditEventBestEffort,
 		EnforceRateLimit:           s.enforceRateLimit,
+		EnforceRateLimitGlobal:     s.enforceRateLimitGlobal,
 		ValidateOwnerTokenRequest:  s.validateOwnerTokenRequest,
 		UserIDFromContext:          principalActorID,
+		UserRoleFromContext:        userRoleFromContext,
 
-		WrapAuth:  s.withAuth,
-		WrapAdmin: s.withAdminAuth,
+		WrapAuth:        s.withAuth,
+		WrapSelfService: s.withSelfServiceAuth,
+		WrapAdmin:       s.withAdminAuth,
 	}
 }
 
@@ -114,6 +117,14 @@ func (s *apiServer) handleAuthOIDCCallback(w http.ResponseWriter, r *http.Reques
 	s.ensureAuthDeps().HandleAuthOIDCCallback(w, r)
 }
 
+func (s *apiServer) handleAuthOIDCMobileStart(w http.ResponseWriter, r *http.Request) {
+	s.ensureAuthDeps().HandleAuthOIDCMobileStart(w, r)
+}
+
+func (s *apiServer) handleAuthOIDCMobileCallback(w http.ResponseWriter, r *http.Request) {
+	s.ensureAuthDeps().HandleAuthOIDCMobileCallback(w, r)
+}
+
 func (s *apiServer) handleAuthUsers(w http.ResponseWriter, r *http.Request) {
 	s.ensureAuthDeps().HandleAuthUsers(w, r)
 }
@@ -137,44 +148,34 @@ func (s *apiServer) validateOIDCRedirectURI(r *http.Request, raw string) (string
 		return "", fmt.Errorf("redirect_uri is invalid")
 	}
 	if s == nil || r == nil {
-		return redirectURI, nil
+		return "", fmt.Errorf("redirect_uri origin cannot be verified")
 	}
 
-	allowedHosts := make(map[string]struct{})
-	for _, host := range sameOriginAllowedHosts(r) {
-		addAllowedRedirectHost(allowedHosts, host)
-	}
-	if origin := strings.TrimSpace(r.Header.Get("Origin")); origin != "" {
-		if originURL, parseErr := url.Parse(origin); parseErr == nil {
-			addAllowedRedirectHost(allowedHosts, originURL.Host)
+	allowedOrigins := append([]networkOrigin(nil), sameOriginAllowedOrigins(r)...)
+	// Origin is caller-controlled and must not widen the OIDC redirect allowlist
+	// unless it has already passed the hub's exact-origin policy. Otherwise a
+	// client could select an arbitrary callback host merely by supplying a
+	// matching Origin header.
+	if origin := strings.TrimSpace(r.Header.Get("Origin")); origin != "" && checkSameOrigin(r) {
+		if originValue, ok := parseNetworkOrigin(origin); ok {
+			allowedOrigins = append(allowedOrigins, originValue)
 		}
 	}
 	if external, ok := sanitizeExternalBaseURL(strings.TrimSpace(s.externalURL)); ok {
-		if externalURL, parseErr := url.Parse(external); parseErr == nil {
-			addAllowedRedirectHost(allowedHosts, externalURL.Host)
+		if externalOrigin, parseOK := parseNetworkOrigin(external); parseOK {
+			allowedOrigins = append(allowedOrigins, externalOrigin)
 		}
 	}
-	if len(allowedHosts) == 0 {
-		return redirectURI, nil
+	redirectOrigin, ok := parseNetworkOrigin(parsed.Scheme + "://" + parsed.Host)
+	if !ok {
+		return "", fmt.Errorf("redirect_uri origin is invalid")
 	}
-	redirectHost := strings.ToLower(strings.TrimSpace(parsed.Host))
-	if _, ok := allowedHosts[redirectHost]; ok {
-		return redirectURI, nil
-	}
-	redirectHostname := requestHostname(parsed.Host)
-	for allowed := range allowedHosts {
-		if isLoopbackHostname(redirectHostname) && isLoopbackHostname(requestHostname(allowed)) {
+	for _, allowed := range allowedOrigins {
+		if networkOriginsMatch(redirectOrigin, allowed) {
 			return redirectURI, nil
 		}
 	}
-	return "", fmt.Errorf("redirect_uri host is not allowed")
-}
-
-func addAllowedRedirectHost(hosts map[string]struct{}, host string) {
-	host = strings.ToLower(strings.TrimSpace(host))
-	if host != "" {
-		hosts[host] = struct{}{}
-	}
+	return "", fmt.Errorf("redirect_uri origin is not allowed")
 }
 
 // Package-level function aliases delegating to the auth package.

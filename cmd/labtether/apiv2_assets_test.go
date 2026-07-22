@@ -119,6 +119,9 @@ func TestHandleV2Assets_AssetDenied(t *testing.T) {
 
 func TestHandleV2Assets_Create(t *testing.T) {
 	s := newTestAPIServer(t)
+	s.broadcaster = newEventBroadcaster()
+	s.webhookEventCh = make(chan webhookDispatchEvent, 1)
+	s.broadcaster.SetOnEvent(s.enqueueWebhookEvent)
 
 	body := `{"name":"pi4","ip":"192.168.1.50","platform":"linux"}`
 	req := httptest.NewRequest("POST", "/api/v2/assets", strings.NewReader(body))
@@ -132,10 +135,14 @@ func TestHandleV2Assets_Create(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
+	assertQueuedWebhookEvent(t, s.webhookEventCh, "asset.created")
 }
 
 func TestHandleV2Assets_Delete(t *testing.T) {
 	s := newTestAPIServer(t)
+	s.broadcaster = newEventBroadcaster()
+	s.webhookEventCh = make(chan webhookDispatchEvent, 1)
+	s.broadcaster.SetOnEvent(s.enqueueWebhookEvent)
 	_, err := s.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: "todelete", Name: "Delete Me", Status: "offline", Platform: "linux",
 		Source: "manual", Type: "host",
@@ -153,6 +160,45 @@ func TestHandleV2Assets_Delete(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	assertQueuedWebhookEvent(t, s.webhookEventCh, "asset.deleted")
+}
+
+func TestHandleV2Assets_UpdatePublishesAdvertisedWebhookEvent(t *testing.T) {
+	s := newTestAPIServer(t)
+	s.broadcaster = newEventBroadcaster()
+	s.webhookEventCh = make(chan webhookDispatchEvent, 1)
+	s.broadcaster.SetOnEvent(s.enqueueWebhookEvent)
+	if _, err := s.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: "toupdate", Name: "Before", Status: "offline", Platform: "linux",
+		Source: "manual", Type: "host",
+	}); err != nil {
+		t.Fatalf("create asset: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v2/assets/toupdate", strings.NewReader(`{"name":"After"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(contextWithPrincipal(req.Context(), "admin", "admin"))
+	rec := httptest.NewRecorder()
+	s.handleV2AssetActions(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	assertQueuedWebhookEvent(t, s.webhookEventCh, "asset.updated")
+}
+
+func assertQueuedWebhookEvent(t *testing.T, events <-chan webhookDispatchEvent, expected string) {
+	t.Helper()
+	select {
+	case event := <-events:
+		if event.EventType != expected {
+			t.Fatalf("event type = %q, want %q", event.EventType, expected)
+		}
+		if event.ID == "" || len(event.Data) == 0 {
+			t.Fatalf("event is missing bounded id/data: %#v", event)
+		}
+	default:
+		t.Fatalf("expected queued webhook event %q", expected)
 	}
 }
 

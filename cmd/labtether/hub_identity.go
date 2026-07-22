@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -22,11 +23,108 @@ const hubIdentityProfileName = "hub-identity"
 
 type hubSSHIdentity = shared.HubSSHIdentity
 
+func normalizeHubSSHKeyType(keyType string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(keyType)) {
+	case "", "ed25519":
+		return "ed25519", nil
+	case "rsa":
+		return "rsa", nil
+	default:
+		return "", fmt.Errorf("unsupported hub SSH key type")
+	}
+}
+
+func hubSSHKeyTypeFromPublicKey(publicKey ssh.PublicKey) (string, error) {
+	if publicKey == nil {
+		return "", fmt.Errorf("hub SSH public key is unavailable")
+	}
+	switch publicKey.Type() {
+	case ssh.KeyAlgoED25519:
+		return "ed25519", nil
+	case ssh.KeyAlgoRSA, ssh.KeyAlgoRSASHA256, ssh.KeyAlgoRSASHA512:
+		return "rsa", nil
+	default:
+		return "", fmt.Errorf("unsupported persisted hub SSH key algorithm %q", publicKey.Type())
+	}
+}
+
+type sshHubKeyInfo struct {
+	PublicKey         string `json:"public_key"`
+	KeyType           string `json:"key_type"`
+	FingerprintSHA256 string `json:"fingerprint_sha256"`
+}
+
+func hubSSHKeyInfoForIdentity(identity *hubSSHIdentity) (sshHubKeyInfo, error) {
+	if identity == nil {
+		return sshHubKeyInfo{}, fmt.Errorf("hub SSH identity is unavailable")
+	}
+	publicKey, _, _, _, err := ssh.ParseAuthorizedKey([]byte(identity.PublicKey))
+	if err != nil {
+		return sshHubKeyInfo{}, fmt.Errorf("failed to parse hub SSH public key: %w", err)
+	}
+	keyType, err := hubSSHKeyTypeFromPublicKey(publicKey)
+	if err != nil {
+		return sshHubKeyInfo{}, err
+	}
+	if configuredType := strings.TrimSpace(identity.KeyType); configuredType != "" && configuredType != keyType {
+		return sshHubKeyInfo{}, fmt.Errorf("hub SSH identity key type is inconsistent")
+	}
+	return sshHubKeyInfo{
+		PublicKey:         identity.PublicKey,
+		KeyType:           keyType,
+		FingerprintSHA256: ssh.FingerprintSHA256(publicKey),
+	}, nil
+}
+
+func (s *apiServer) currentHubSSHIdentity() *hubSSHIdentity {
+	if s == nil {
+		return nil
+	}
+	s.hubIdentityMu.RLock()
+	defer s.hubIdentityMu.RUnlock()
+	if s.hubIdentity == nil {
+		return nil
+	}
+	identity := *s.hubIdentity
+	return &identity
+}
+
+func (s *apiServer) setHubSSHIdentity(identity *hubSSHIdentity) {
+	if s == nil {
+		return
+	}
+	s.hubIdentityMu.Lock()
+	defer s.hubIdentityMu.Unlock()
+	if identity == nil {
+		s.hubIdentity = nil
+		return
+	}
+	copy := *identity
+	s.hubIdentity = &copy
+}
+
+func (s *apiServer) ensureCurrentHubSSHIdentity() (*hubSSHIdentity, error) {
+	s.hubIdentityOperationMu.Lock()
+	defer s.hubIdentityOperationMu.Unlock()
+	if identity := s.currentHubSSHIdentity(); identity != nil {
+		return identity, nil
+	}
+	identity, err := ensureHubSSHIdentity(s)
+	if err != nil {
+		return nil, err
+	}
+	s.setHubSSHIdentity(identity)
+	return s.currentHubSSHIdentity(), nil
+}
+
 // generateHubSSHKeypair creates a new SSH keypair of the requested type.
-// keyType must be "rsa" for RSA 4096 or anything else (including "") for Ed25519.
-// Returns the OpenSSH PEM-encoded private key, the authorized_keys public key
-// string, and the canonical key type name.
+// Supported key types are Ed25519 (the default) and RSA 4096.
+// Returns the OpenSSH PEM-encoded private key and authorized_keys public key.
 func generateHubSSHKeypair(keyType string) (privPEM []byte, pubKeyStr string, err error) {
+	keyType, err = normalizeHubSSHKeyType(keyType)
+	if err != nil {
+		return nil, "", err
+	}
 	switch keyType {
 	case "rsa":
 		rsaKey, err := rsa.GenerateKey(rand.Reader, 4096)
@@ -42,7 +140,7 @@ func generateHubSSHKeypair(keyType string) (privPEM []byte, pubKeyStr string, er
 			return nil, "", fmt.Errorf("failed to create RSA signer: %w", err)
 		}
 		return pem.EncodeToMemory(block), string(ssh.MarshalAuthorizedKey(signer.PublicKey())), nil
-	default: // "ed25519"
+	case "ed25519":
 		_, privKey, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to generate ED25519 keypair: %w", err)
@@ -57,6 +155,7 @@ func generateHubSSHKeypair(keyType string) (privPEM []byte, pubKeyStr string, er
 		}
 		return pem.EncodeToMemory(block), string(ssh.MarshalAuthorizedKey(signer.PublicKey())), nil
 	}
+	return nil, "", fmt.Errorf("unsupported hub SSH key type")
 }
 
 // ensureHubSSHIdentity generates or loads the hub's SSH keypair.
@@ -65,6 +164,9 @@ func generateHubSSHKeypair(keyType string) (privPEM []byte, pubKeyStr string, er
 func ensureHubSSHIdentity(s *apiServer) (*hubSSHIdentity, error) {
 	if s.secretsManager == nil {
 		return nil, fmt.Errorf("encryption not configured; cannot manage hub SSH identity")
+	}
+	if s.credentialStore == nil {
+		return nil, fmt.Errorf("credential store not configured; cannot manage hub SSH identity")
 	}
 
 	// Check for existing hub identity profile.
@@ -76,35 +178,37 @@ func ensureHubSSHIdentity(s *apiServer) (*hubSSHIdentity, error) {
 		if p.Kind == credentials.KindHubSSHIdentity && p.Name == hubIdentityProfileName {
 			privPEM, decErr := s.secretsManager.DecryptString(p.SecretCiphertext, p.ID)
 			if decErr != nil {
-				// Encryption key changed — delete the broken profile and regenerate.
-				log.Printf("hub-identity: existing profile %s cannot be decrypted (key mismatch?), regenerating", p.ID)
-				if delErr := s.credentialStore.DeleteCredentialProfile(p.ID); delErr != nil {
-					log.Printf("hub-identity: failed to delete broken profile %s: %v", p.ID, delErr)
-				}
-				break
+				// Never delete and silently regenerate an identity whose private key
+				// cannot be decrypted. Agents may still trust it, so replacement must
+				// be an explicit recovery decision rather than a startup side effect.
+				return nil, fmt.Errorf("failed to decrypt existing hub SSH identity: %w", decErr)
 			}
 			signer, parseErr := ssh.ParsePrivateKey([]byte(privPEM))
 			if parseErr != nil {
 				return nil, fmt.Errorf("failed to parse hub SSH private key: %w", parseErr)
 			}
 			pubKey := string(ssh.MarshalAuthorizedKey(signer.PublicKey()))
+			keyType, typeErr := hubSSHKeyTypeFromPublicKey(signer.PublicKey())
+			if typeErr != nil {
+				return nil, typeErr
+			}
 			log.Printf("hub-identity: loaded existing SSH keypair (profile %s)", p.ID)
 			return &hubSSHIdentity{
 				ProfileID: p.ID,
 				PublicKey: pubKey,
+				KeyType:   keyType,
 			}, nil
 		}
 	}
 
 	// Generate new keypair using the configured key type.
-	keyType := envOrDefault("LABTETHER_SSH_KEY_TYPE", "ed25519")
+	keyType, err := normalizeHubSSHKeyType(envOrDefault("LABTETHER_SSH_KEY_TYPE", "ed25519"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid LABTETHER_SSH_KEY_TYPE: %w", err)
+	}
 	privPEM, pubKeyStr, err := generateHubSSHKeypair(keyType)
 	if err != nil {
 		return nil, err
-	}
-	// Normalize keyType to canonical name (empty string -> "ed25519").
-	if keyType != "rsa" {
-		keyType = "ed25519"
 	}
 
 	// Encrypt private key for storage (AAD-bound to profile ID).
@@ -165,11 +269,16 @@ func (s *apiServer) handleHubSSHPublicKey(w http.ResponseWriter, r *http.Request
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	if s.hubIdentity == nil {
+	identity := s.currentHubSSHIdentity()
+	if identity == nil {
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "hub SSH identity not configured")
 		return
 	}
-	servicehttp.WriteJSON(w, http.StatusOK, map[string]string{
-		"public_key": s.hubIdentity.PublicKey,
-	})
+	info, err := hubSSHKeyInfoForIdentity(identity)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusServiceUnavailable, "hub SSH identity metadata unavailable")
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	servicehttp.WriteJSON(w, http.StatusOK, info)
 }

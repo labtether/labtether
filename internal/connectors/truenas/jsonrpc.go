@@ -18,6 +18,11 @@ import (
 // globalRequestID is a process-wide monotonically increasing JSON-RPC request counter.
 var globalRequestID atomic.Uint64
 
+// maxWebSocketMessageBytes bounds individual TrueNAS JSON-RPC responses and
+// subscription events. Inventory responses can be large, so this remains
+// generous while preventing an upstream from assembling unbounded messages.
+const maxWebSocketMessageBytes int64 = 16 << 20
+
 // wsConn is the subset of websocket.Conn used by Client.Call. It is an
 // interface to allow deterministic transport failure tests.
 type wsConn interface {
@@ -29,11 +34,16 @@ type wsConn interface {
 }
 
 var dialWS = func(ctx context.Context, endpoint string, skipVerify bool) (wsConn, error) {
+	return dialTrueNASWebSocket(ctx, endpoint, skipVerify, maxWebSocketMessageBytes)
+}
+
+func dialTrueNASWebSocket(ctx context.Context, endpoint string, skipVerify bool, maxReadBytes int64) (wsConn, error) {
 	validatedEndpoint, err := securityruntime.ValidateOutboundURL(endpoint)
 	if err != nil {
 		return nil, err
 	}
 	dialer := websocket.Dialer{
+		NetDialContext: securityruntime.OutboundTCPDialContext(30 * time.Second),
 		TLSClientConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12,
 			// #nosec G402 -- user-controlled homelab setting for self-signed certs.
@@ -45,6 +55,7 @@ var dialWS = func(ctx context.Context, endpoint string, skipVerify bool) (wsConn
 	if err != nil {
 		return nil, err
 	}
+	conn.SetReadLimit(maxReadBytes)
 	return conn, nil
 }
 

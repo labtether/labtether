@@ -6,7 +6,6 @@ package mcpserver
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -23,10 +22,12 @@ func (d *Deps) handleSchedulesList(ctx context.Context, req mcp.CallToolRequest)
 	}
 	items, err := d.ListSchedules(ctx)
 	if err != nil {
-		return mcp.NewToolResultError("failed to list schedules: " + err.Error()), nil
+		return mcp.NewToolResultError("failed to list schedules"), nil
 	}
-	data, _ := json.MarshalIndent(items, "", "  ")
-	return mcp.NewToolResultText(string(data)), nil
+	if err := validateCollectionSize("schedule list", len(items)); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return toolJSON(items), nil
 }
 
 // --- Webhooks ---
@@ -35,15 +36,20 @@ func (d *Deps) handleWebhooksList(ctx context.Context, req mcp.CallToolRequest) 
 	if err := d.scopeCheck(ctx, "webhooks:read"); err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
+	if err := d.unrestrictedGlobalRead(ctx, "webhooks"); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	if d.ListWebhooks == nil {
 		return mcp.NewToolResultError(errNotConfigured), nil
 	}
 	items, err := d.ListWebhooks(ctx)
 	if err != nil {
-		return mcp.NewToolResultError("failed to list webhooks: " + err.Error()), nil
+		return mcp.NewToolResultError("failed to list webhooks"), nil
 	}
-	data, _ := json.MarshalIndent(items, "", "  ")
-	return mcp.NewToolResultText(string(data)), nil
+	if err := validateCollectionSize("webhook list", len(items)); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return toolJSON(items), nil
 }
 
 // --- Saved Actions ---
@@ -57,10 +63,12 @@ func (d *Deps) handleSavedActionsList(ctx context.Context, req mcp.CallToolReque
 	}
 	items, err := d.ListSavedActions(ctx)
 	if err != nil {
-		return mcp.NewToolResultError("failed to list saved actions: " + err.Error()), nil
+		return mcp.NewToolResultError("failed to list saved actions"), nil
 	}
-	data, _ := json.MarshalIndent(items, "", "  ")
-	return mcp.NewToolResultText(string(data)), nil
+	if err := validateCollectionSize("saved action list", len(items)); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return toolJSON(items), nil
 }
 
 // --- Credentials ---
@@ -69,16 +77,21 @@ func (d *Deps) handleCredentialsList(ctx context.Context, req mcp.CallToolReques
 	if err := d.scopeCheck(ctx, "credentials:read"); err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
+	if err := d.unrestrictedGlobalRead(ctx, "credential profiles"); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	if d.ListCredentialProfiles == nil {
 		return mcp.NewToolResultError(errNotConfigured), nil
 	}
 	// Secrets are stripped by the closure before being returned here.
 	items, err := d.ListCredentialProfiles(ctx)
 	if err != nil {
-		return mcp.NewToolResultError("failed to list credential profiles: " + err.Error()), nil
+		return mcp.NewToolResultError("failed to list credential profiles"), nil
 	}
-	data, _ := json.MarshalIndent(items, "", "  ")
-	return mcp.NewToolResultText(string(data)), nil
+	if err := validateCollectionSize("credential profile list", len(items)); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return toolJSON(items), nil
 }
 
 // --- Topology edges ---
@@ -90,16 +103,21 @@ func (d *Deps) handleTopologyEdges(ctx context.Context, req mcp.CallToolRequest)
 	if d.GetEdgesForAsset == nil {
 		return mcp.NewToolResultError(errNotConfigured), nil
 	}
-	assetID, _ := req.RequireString("asset_id")
+	assetID, inputErr := requireAssetID(req)
+	if inputErr != nil {
+		return mcp.NewToolResultError(inputErr.Error()), nil
+	}
 	if err := d.assetCheck(ctx, assetID); err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	edges, err := d.GetEdgesForAsset(ctx, assetID)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to get edges for asset %s: %s", assetID, err.Error())), nil
+		return mcp.NewToolResultError(fmt.Sprintf("failed to get edges for asset %s", assetID)), nil
 	}
-	data, _ := json.MarshalIndent(edges, "", "  ")
-	return mcp.NewToolResultText(string(data)), nil
+	if err := validateCollectionSize("topology edge list", len(edges)); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return toolJSON(edges), nil
 }
 
 // --- Update plans ---
@@ -113,8 +131,10 @@ func (d *Deps) handleUpdatesListPlans(ctx context.Context, req mcp.CallToolReque
 	}
 	items, err := d.ListUpdatePlans(ctx)
 	if err != nil {
-		return mcp.NewToolResultError("failed to list update plans: " + err.Error()), nil
+		return mcp.NewToolResultError("failed to list update plans"), nil
 	}
-	data, _ := json.MarshalIndent(items, "", "  ")
-	return mcp.NewToolResultText(string(data)), nil
+	if err := validateCollectionSize("update plan list", len(items)); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return toolJSON(items), nil
 }

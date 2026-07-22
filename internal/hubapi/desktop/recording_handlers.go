@@ -2,6 +2,7 @@ package desktop
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/auth"
 	"github.com/labtether/labtether/internal/idgen"
 	"github.com/labtether/labtether/internal/servicehttp"
@@ -169,6 +171,9 @@ func (d *Deps) listRecordings(w http.ResponseWriter, r *http.Request) {
 		if !d.canAccessRecordingMetadata(r.Context(), sessionID, actorID) {
 			continue
 		}
+		if !apiv2.AssetCheckContext(r.Context(), assetID) {
+			continue
+		}
 		recordings = append(recordings, RecordingResponsePayload(RecordingMetadata{
 			ID:         id,
 			SessionID:  sessionID,
@@ -275,6 +280,9 @@ func (d *Deps) authorizeRecordingSessionAccess(w http.ResponseWriter, r *http.Re
 		servicehttp.WriteError(w, http.StatusNotFound, "desktop session not found")
 		return false
 	}
+	if !apiv2.RequireAssetAccess(w, r, session.Target) {
+		return false
+	}
 	if !d.canAccessRecordingSession(r.Context(), session.ActorID) {
 		servicehttp.WriteError(w, http.StatusForbidden, "session access denied")
 		return false
@@ -338,13 +346,13 @@ func DefaultStartRecording(dbPool *pgxpool.Pool, sessionID, assetID, actorID, pr
 		protocol = "vnc"
 	}
 
-	if err := os.MkdirAll(RecordingsDir, 0o700); err != nil {
+	if err := ensurePrivateRecordingDir(RecordingsDir); err != nil {
 		return nil, fmt.Errorf("create recordings dir: %w", err)
 	}
 	recordingID := idgen.New("rec")
 	filename := fmt.Sprintf("%s_%s.bin", recordingID, time.Now().UTC().Format("20060102T150405"))
 	filePath := filepath.Join(RecordingsDir, filename)
-	file, err := os.Create(filePath) // #nosec G304 -- Recording file path is generated under the fixed recordings directory.
+	file, err := openPrivateRecordingFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("create recording file: %w", err)
 	}
@@ -378,6 +386,29 @@ func DefaultStartRecording(dbPool *pgxpool.Pool, sessionID, assetID, actorID, pr
 		File:      file,
 		StartedAt: now,
 	}, nil
+}
+
+func openPrivateRecordingFile(path string) (*os.File, error) {
+	return os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) // #nosec G304 -- Caller supplies a generated path inside the validated recordings directory.
+}
+
+func ensurePrivateRecordingDir(dir string) error {
+	info, err := os.Lstat(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return err
+		}
+		info, err = os.Lstat(dir)
+	}
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return fmt.Errorf("recordings path is not a real directory")
+	}
+	// MkdirAll does not tighten an existing directory. Recordings contain
+	// operator session bytes, so enforce the permission on every use.
+	return os.Chmod(dir, 0o700) // #nosec G302 -- This is a directory and therefore requires owner execute permission.
 }
 
 // StopRecordingBySession stops the recording for a given session.

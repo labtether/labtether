@@ -84,7 +84,7 @@ func newTestAPIServer(t *testing.T) *apiServer {
 
 	groupStore := persistence.NewMemoryGroupStore()
 	syntheticStore := persistence.NewMemorySyntheticStore()
-	enrollmentStore := persistence.NewMemoryEnrollmentStore()
+	enrollmentStore := persistence.NewMemoryEnrollmentStoreWithGroupStore(assetStore, groupStore)
 	adminResetStore := persistence.NewMemoryAdminResetStore()
 	linkSuggestionStore := persistence.NewMemoryLinkSuggestionStore()
 	authStore := persistence.NewMemoryAuthStore()

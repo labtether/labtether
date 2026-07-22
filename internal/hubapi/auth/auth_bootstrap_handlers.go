@@ -1,8 +1,8 @@
 package auth
 
 import (
+	"errors"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/labtether/labtether/internal/auth"
@@ -54,11 +54,24 @@ func (d *Deps) HandleAuthBootstrapSetup(w http.ResponseWriter, r *http.Request) 
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "authentication unavailable")
 		return
 	}
-	if !d.ValidateOwnerTokenRequest(r) {
-		servicehttp.WriteError(w, http.StatusUnauthorized, "bootstrap setup requires service authorization")
+	setupRequired, err := AuthBootstrapSetupRequired(d.AuthStore)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to determine bootstrap status")
+		return
+	}
+	if !setupRequired {
+		servicehttp.WriteError(w, http.StatusConflict, "setup already completed")
 		return
 	}
 	if !d.EnforceRateLimit(w, r, "auth.bootstrap.setup", 10, time.Minute) {
+		return
+	}
+	if err := ValidateBootstrapSetupToken(r.Header.Get(BootstrapSetupTokenHeader())); err != nil {
+		if errors.Is(err, ErrBootstrapSetupTokenNotConfigured) {
+			servicehttp.WriteError(w, http.StatusServiceUnavailable, "bootstrap setup token is not configured")
+			return
+		}
+		servicehttp.WriteError(w, http.StatusUnauthorized, "invalid bootstrap setup token")
 		return
 	}
 
@@ -69,7 +82,6 @@ func (d *Deps) HandleAuthBootstrapSetup(w http.ResponseWriter, r *http.Request) 
 	}
 
 	req.Username = NormalizeUsername(req.Username)
-	req.Password = strings.TrimSpace(req.Password)
 	if err := ValidateLoginRequest(LoginRequest{Username: req.Username, Password: req.Password}); err != nil {
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -101,5 +113,6 @@ func (d *Deps) HandleAuthBootstrapSetup(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	ConsumeBootstrapSetupToken()
 	d.CompleteLogin(w, r, user)
 }

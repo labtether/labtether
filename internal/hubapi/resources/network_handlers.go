@@ -113,6 +113,9 @@ func (d *Deps) handleNetworkAction(w http.ResponseWriter, r *http.Request, asset
 		servicehttp.WriteError(w, http.StatusBadRequest, "invalid action: must be apply or rollback")
 		return
 	}
+	if !d.enforceAssetActionGuard(w, assetID) {
+		return
+	}
 
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {

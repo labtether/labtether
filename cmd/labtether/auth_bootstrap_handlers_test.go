@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/auth"
+	authpkg "github.com/labtether/labtether/internal/hubapi/auth"
 )
 
 type fakeBootstrapAuthStore struct {
@@ -23,12 +24,28 @@ func (f *fakeBootstrapAuthStore) GetUserByID(id string) (auth.User, bool, error)
 	return auth.User{}, false, nil
 }
 
+func (f *fakeBootstrapAuthStore) GetUserByOIDCIdentity(provider, issuer, subject string) (auth.User, bool, error) {
+	return auth.User{}, false, nil
+}
+
 func (f *fakeBootstrapAuthStore) GetUserByOIDCSubject(provider, subject string) (auth.User, bool, error) {
 	return auth.User{}, false, nil
 }
 
 func (f *fakeBootstrapAuthStore) CreateUserWithRole(username, passwordHash, role, authProvider, oidcSubject string) (auth.User, error) {
 	return f.CreateUser(username, passwordHash)
+}
+
+func (f *fakeBootstrapAuthStore) CreateUserWithOIDCIdentity(
+	username, passwordHash, role, authProvider, oidcIssuer, oidcSubject string,
+) (auth.User, error) {
+	return f.CreateUser(username, passwordHash)
+}
+
+func (f *fakeBootstrapAuthStore) BindLegacyOIDCIdentity(
+	id, authProvider, oidcSubject, oidcIssuer string,
+) (auth.User, bool, error) {
+	return auth.User{}, false, nil
 }
 
 func (f *fakeBootstrapAuthStore) SetUserTOTPSecret(id, encryptedSecret string) error {
@@ -110,11 +127,12 @@ func TestHandleAuthBootstrapStatusReportsSetupRequired(t *testing.T) {
 }
 
 func TestHandleAuthBootstrapSetupCreatesUserAndSession(t *testing.T) {
+	t.Setenv("LABTETHER_SETUP_TOKEN", "bootstrap-token")
 	store := &fakeBootstrapAuthStore{fakeAdminBootstrapStore: &fakeAdminBootstrapStore{}}
 	sut := apiServer{authStore: store, authValidator: auth.NewTokenValidator("bootstrap-token")}
 	req := httptest.NewRequest(http.MethodPost, "/auth/bootstrap", strings.NewReader(`{"username":"Owner.One","password":"correct-horse-battery"}`))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer bootstrap-token")
+	req.Header.Set(authpkg.BootstrapSetupTokenHeader(), "bootstrap-token")
 	rec := httptest.NewRecorder()
 
 	sut.handleAuthBootstrapSetup(rec, req)
@@ -154,7 +172,8 @@ func TestHandleAuthBootstrapSetupRejectsWhenAlreadyConfigured(t *testing.T) {
 	}
 }
 
-func TestHandleAuthBootstrapSetupRequiresServiceAuthorization(t *testing.T) {
+func TestHandleAuthBootstrapSetupRequiresLocalSetupToken(t *testing.T) {
+	t.Setenv("LABTETHER_SETUP_TOKEN", "bootstrap-token")
 	store := &fakeBootstrapAuthStore{fakeAdminBootstrapStore: &fakeAdminBootstrapStore{}}
 	sut := apiServer{authStore: store, authValidator: auth.NewTokenValidator("bootstrap-token")}
 	req := httptest.NewRequest(http.MethodPost, "/auth/bootstrap", strings.NewReader(`{"username":"owner","password":"correct-horse-battery"}`))

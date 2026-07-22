@@ -8,7 +8,13 @@ import (
 
 // buildHomeAssistantDeps constructs the homeassistantpkg.Deps from apiServer's fields.
 func (s *apiServer) buildHomeAssistantDeps() *homeassistantpkg.Deps {
-	return &homeassistantpkg.Deps{}
+	return &homeassistantpkg.Deps{
+		AssetStore:        s.assetStore,
+		HubCollectorStore: s.hubCollectorStore,
+		CredentialStore:   s.credentialStore,
+		SecretsManager:    s.secretsManager,
+		RequireAdminAuth:  s.requireAdminAuth,
+	}
 }
 
 // ensureHomeAssistantDeps returns homeassistantDeps, creating and caching on first call.
@@ -16,6 +22,11 @@ func (s *apiServer) ensureHomeAssistantDeps() *homeassistantpkg.Deps {
 	s.homeassistantDepsOnce.Do(func() {
 		s.homeassistantDeps = s.buildHomeAssistantDeps()
 	})
+	s.homeassistantDeps.AssetStore = s.assetStore
+	s.homeassistantDeps.HubCollectorStore = s.hubCollectorStore
+	s.homeassistantDeps.CredentialStore = s.credentialStore
+	s.homeassistantDeps.SecretsManager = s.secretsManager
+	s.homeassistantDeps.RequireAdminAuth = s.requireAdminAuth
 	return s.homeassistantDeps
 }
 

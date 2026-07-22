@@ -73,7 +73,7 @@ func (s *PostgresStore) ListReliabilityHistory(groupID string, days int) ([]Reli
 	rows, err := s.pool.Query(context.Background(),
 		fmt.Sprintf(`SELECT %s FROM group_reliability_history
 		 WHERE group_id = $1 AND computed_at > now() - make_interval(days => $2)
-		 ORDER BY computed_at DESC`, reliabilityRecordColumns),
+		 ORDER BY computed_at DESC, id DESC`, reliabilityRecordColumns),
 		strings.TrimSpace(groupID),
 		days,
 	)

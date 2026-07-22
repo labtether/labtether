@@ -35,18 +35,17 @@ func (d *Deps) HandlePortainerConnectorTest(w http.ResponseWriter, r *http.Reque
 	username := strings.TrimSpace(req.Username)
 	password := strings.TrimSpace(req.Password)
 	credentialID := strings.TrimSpace(req.CredentialID)
+	credentialProfile, credentialOK := d.loadAuthorizedCredentialProfile(w, r, credentialID)
+	if !credentialOK {
+		return
+	}
 
 	if tokenSecret == "" && password == "" && credentialID != "" {
-		if d.CredentialStore == nil || d.SecretsManager == nil {
+		if d.SecretsManager == nil {
 			servicehttp.WriteError(w, http.StatusServiceUnavailable, "credential store unavailable")
 			return
 		}
-		profile, ok, err := d.CredentialStore.GetCredentialProfile(credentialID)
-		if err != nil || !ok {
-			servicehttp.WriteError(w, http.StatusBadRequest, "credential_id not found")
-			return
-		}
-		decrypted, err := d.SecretsManager.DecryptString(profile.SecretCiphertext, profile.ID)
+		decrypted, err := d.SecretsManager.DecryptString(credentialProfile.SecretCiphertext, credentialProfile.ID)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, "failed to decrypt credential secret")
 			return
@@ -54,13 +53,13 @@ func (d *Deps) HandlePortainerConnectorTest(w http.ResponseWriter, r *http.Reque
 		if authMethod == "password" {
 			password = strings.TrimSpace(decrypted)
 			if username == "" {
-				username = strings.TrimSpace(profile.Username)
+				username = strings.TrimSpace(credentialProfile.Username)
 			}
 		} else {
 			tokenSecret = strings.TrimSpace(decrypted)
 		}
 		if baseURL == "" {
-			baseURL = strings.TrimSpace(profile.Metadata["base_url"])
+			baseURL = strings.TrimSpace(credentialProfile.Metadata["base_url"])
 		}
 	}
 

@@ -54,6 +54,7 @@ func (s *apiServer) buildDockerDeps() *dockerpkg.Deps {
 			}
 			return s.dockerCoordinator.ExecuteAction(ctx, actionID, req)
 		},
+		EvaluateAssetGuardrails: s.ensureGroupFeaturesDeps().EvaluateAssetGuardrails,
 		TriggerDockerCollectorRunForDiscovery: func() {
 			s.triggerDockerCollectorRunForDiscovery()
 		},

@@ -37,6 +37,17 @@ func (d *Deps) StoreOIDCState(state string, entry OIDCAuthState) bool {
 
 // ConsumeOIDCState atomically retrieves and removes a pending OIDC state entry.
 func (d *Deps) ConsumeOIDCState(state, redirectURI string) (OIDCAuthState, bool) {
+	return d.consumeOIDCStateForFlow(state, redirectURI, OIDCAuthFlowWeb)
+}
+
+// ConsumeMobileOIDCState consumes only state created by the native PKCE start
+// endpoint. It cannot consume a web login attempt, even if the caller somehow
+// obtains its state value.
+func (d *Deps) ConsumeMobileOIDCState(state, redirectURI string) (OIDCAuthState, bool) {
+	return d.consumeOIDCStateForFlow(state, redirectURI, OIDCAuthFlowMobile)
+}
+
+func (d *Deps) consumeOIDCStateForFlow(state, redirectURI string, expectedFlow OIDCAuthFlow) (OIDCAuthState, bool) {
 	if d == nil {
 		return OIDCAuthState{}, false
 	}
@@ -58,6 +69,15 @@ func (d *Deps) ConsumeOIDCState(state, redirectURI string) (OIDCAuthState, bool)
 		return OIDCAuthState{}, false
 	}
 	if !strings.EqualFold(strings.TrimSpace(entry.RedirectURI), redirectURI) {
+		return OIDCAuthState{}, false
+	}
+	if expectedFlow == OIDCAuthFlowWeb {
+		// Empty is accepted for backward compatibility with state created before
+		// flows were tagged; all new web state is tagged explicitly.
+		if entry.Flow != "" && entry.Flow != OIDCAuthFlowWeb {
+			return OIDCAuthState{}, false
+		}
+	} else if entry.Flow != expectedFlow {
 		return OIDCAuthState{}, false
 	}
 	return entry, true

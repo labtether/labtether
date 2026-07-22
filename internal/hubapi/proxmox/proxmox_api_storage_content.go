@@ -2,7 +2,6 @@ package proxmox
 
 import (
 	"context"
-	"encoding/json"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strings"
@@ -68,7 +67,7 @@ func (d *Deps) handleProxmoxStorageContent(w http.ResponseWriter, r *http.Reques
 			Filename string `json:"filename"`
 			URL      string `json:"url"`
 		}
-		if decErr := json.NewDecoder(r.Body).Decode(&req); decErr != nil {
+		if decErr := shared.DecodeJSONBody(w, r, &req); decErr != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, "invalid request body: "+decErr.Error())
 			return
 		}

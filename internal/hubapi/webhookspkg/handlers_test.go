@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/labtether/labtether/internal/apiv2"
@@ -99,6 +100,81 @@ func TestHandleV2WebhookCreate_BadURL(t *testing.T) {
 	d.HandleV2WebhookCreate(w, r)
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", w.Code)
+	}
+}
+
+func TestHandleV2WebhookCreate_RejectsOversizedOrAmbiguousInputs(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload map[string]any
+	}{
+		{
+			name: "oversized URL",
+			payload: map[string]any{
+				"name": "test",
+				"url":  "https://example.com/" + strings.Repeat("a", maxWebhookURLLength),
+			},
+		},
+		{
+			name: "URL fragment",
+			payload: map[string]any{
+				"name": "test",
+				"url":  "https://example.com/hook#ignored",
+			},
+		},
+		{
+			name: "URL userinfo",
+			payload: map[string]any{
+				"name": "test",
+				"url":  "https://user@example.com/hook",
+			},
+		},
+		{
+			name: "oversized secret",
+			payload: map[string]any{
+				"name":   "test",
+				"url":    "https://example.com/hook",
+				"secret": strings.Repeat("s", maxWebhookSecretLength+1),
+			},
+		},
+		{
+			name: "oversized event",
+			payload: map[string]any{
+				"name":   "test",
+				"url":    "https://example.com/hook",
+				"events": []string{strings.Repeat("e", maxWebhookEventLength+1)},
+			},
+		},
+		{
+			name: "event with separator",
+			payload: map[string]any{
+				"name":   "test",
+				"url":    "https://example.com/hook",
+				"events": []string{"alert/fired"},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			d := newDeps()
+			w := httptest.NewRecorder()
+			d.HandleV2WebhookCreate(w, newReq(http.MethodPost, "/api/v2/webhooks", test.payload, nil))
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestNormalizeWebhookEventsAcceptsDocumentedSyntaxAtBoundary(t *testing.T) {
+	event := "A" + strings.Repeat("a", maxWebhookEventLength-3) + "-1"
+	events, err := normalizeWebhookEvents([]string{event, event})
+	if err != nil {
+		t.Fatalf("normalize events: %v", err)
+	}
+	if len(events) != 1 || events[0] != event {
+		t.Fatalf("events = %#v, want one exact deduplicated event", events)
 	}
 }
 

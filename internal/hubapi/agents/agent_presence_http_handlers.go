@@ -5,6 +5,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
@@ -17,10 +18,22 @@ func (d *Deps) HandleConnectedAgents(w http.ResponseWriter, r *http.Request) {
 	}
 	assets := d.AgentMgr.ConnectedAssets()
 	assetsInfo := d.AgentMgr.ConnectedAssetsInfo()
+	filteredAssets := assets[:0]
+	for _, assetID := range assets {
+		if apiv2.AssetCheckContext(r.Context(), assetID) {
+			filteredAssets = append(filteredAssets, assetID)
+		}
+	}
+	filteredInfo := assetsInfo[:0]
+	for _, info := range assetsInfo {
+		if apiv2.AssetCheckContext(r.Context(), info.ID) {
+			filteredInfo = append(filteredInfo, info)
+		}
+	}
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
-		"count":      d.AgentMgr.Count(),
-		"assets":     assets,
-		"assetsInfo": assetsInfo,
+		"count":      len(filteredAssets),
+		"assets":     filteredAssets,
+		"assetsInfo": filteredInfo,
 	})
 }
 
@@ -45,9 +58,15 @@ func (d *Deps) HandleAgentPresence(w http.ResponseWriter, r *http.Request) {
 	if records == nil {
 		records = []persistence.AgentPresence{}
 	}
+	filtered := records[:0]
+	for _, record := range records {
+		if apiv2.AssetCheckContext(r.Context(), record.AssetID) {
+			filtered = append(filtered, record)
+		}
+	}
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
-		"count":    len(records),
-		"presence": records,
+		"count":    len(filtered),
+		"presence": filtered,
 	})
 }
 

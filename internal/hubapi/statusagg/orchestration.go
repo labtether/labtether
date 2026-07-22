@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/labtether/labtether/internal/actions"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/connectorsdk"
@@ -48,80 +49,146 @@ func (d *Deps) collectAggregateCollections(
 	// a parameter and actorID is used to filter their results.
 	assetGroup := AssetGroupLookup(allAssets)
 	actorID := principalActorID(ctx)
+	ownerPrincipal := apiv2.IsOwnerPrincipal(ctx)
+	restrictedAssets := statusHasAssetRestriction(ctx)
+	canReadGroups := statusHasScope(ctx, "groups:read")
+	canReadConnectors := statusHasScope(ctx, "connectors:read")
+	canReadTerminal := statusHasScope(ctx, "terminal:read")
+	canReadAudit := statusHasScope(ctx, "audit:read")
+	canReadLogs := statusHasScope(ctx, "logs:read")
+	canReadActions := statusHasScope(ctx, "actions:read")
+	canReadUpdates := statusHasScope(ctx, "updates:read")
+	canReadDeadLetters := statusHasScope(ctx, "dead-letters:read")
 
 	var (
 		c  aggregateCollections
 		wg sync.WaitGroup
 	)
 	c.assetGroup = assetGroup
+	c.groups = []groups.Group{}
+	c.connectors = []connectorsdk.Descriptor{}
+	c.sessions = []terminal.Session{}
+	c.recentCommands = []terminal.Command{}
+	c.recentAudit = []audit.Event{}
+	c.recentLogs = []logs.Event{}
+	c.logSources = []logs.SourceSummary{}
+	c.groupReliability = []groupfeatures.GroupReliabilityRecord{}
+	c.actionRuns = []actions.Run{}
+	c.updatePlans = []updates.Plan{}
+	c.updateRuns = []updates.Run{}
+	c.deadLetterEvents = []shared.DeadLetterEventResponse{}
+	c.deadLetterStats = shared.DeadLetterAnalyticsResponse{}
 
 	wg.Add(11)
 
 	go func() {
 		defer wg.Done()
-		c.groups = d.listGroups()
+		if canReadGroups {
+			c.groups = filterStatusGroups(ctx, d.listGroups(), allAssets)
+		}
 	}()
 
 	go func() {
 		defer wg.Done()
-		c.connectors = d.listConnectors()
+		if canReadConnectors {
+			c.connectors = d.listConnectors()
+		}
 	}()
 
 	go func() {
 		defer wg.Done()
-		c.sessions = filterSessions(d.listSessions(), actorID)
+		if canReadTerminal {
+			c.sessions = filterSessions(d.listSessions(), actorID, ownerPrincipal)
+		}
 	}()
 
 	go func() {
 		defer wg.Done()
-		c.recentCommands = filterCommands(d.listRecentCommands(12), actorID)
+		if canReadTerminal {
+			c.recentCommands = filterCommands(d.listRecentCommands(12), actorID, ownerPrincipal)
+		}
 	}()
 
 	go func() {
 		defer wg.Done()
-		c.recentAudit = filterAuditEvents(d.listRecentAudit(20), actorID)
+		if canReadAudit && !restrictedAssets {
+			c.recentAudit = filterAuditEvents(d.listRecentAudit(20), actorID, ownerPrincipal)
+		}
 	}()
 
 	go func() {
 		defer wg.Done()
-		c.recentLogs = d.listRecentLogs(groupFilter, assetGroup)
+		if canReadLogs {
+			c.recentLogs = d.listRecentLogs(groupFilter, assetGroup)
+		}
 	}()
 
 	go func() {
 		defer wg.Done()
-		c.logSources = d.listLogSources(groupFilter, assetGroup, caller)
+		if canReadLogs && !restrictedAssets {
+			c.logSources = d.listLogSources(groupFilter, assetGroup, caller)
+		}
 	}()
 
 	go func() {
 		defer wg.Done()
-		c.actionRuns = d.listActionRuns(groupFilter, assetGroup)
+		if canReadActions {
+			c.actionRuns = d.listActionRuns(groupFilter, assetGroup)
+		}
 	}()
 
 	go func() {
 		defer wg.Done()
-		c.updatePlans = d.listUpdatePlans(12)
+		if canReadUpdates {
+			c.updatePlans = d.listUpdatePlans(12)
+		}
 	}()
 
 	go func() {
 		defer wg.Done()
-		c.updateRuns = d.listUpdateRuns(groupFilter, assetGroup)
+		if canReadUpdates {
+			c.updateRuns = d.listUpdateRuns(groupFilter, assetGroup)
+		}
 	}()
 
 	go func() {
 		defer wg.Done()
-		deadLetters := d.loadDeadLetters()
-		c.deadLetterEvents = deadLetters.Events
-		c.deadLetterTotal = deadLetters.Total
-		c.deadLetterStats = deadLetters.Analytics
+		if canReadDeadLetters && !restrictedAssets {
+			deadLetters := d.loadDeadLetters()
+			c.deadLetterEvents = deadLetters.Events
+			c.deadLetterTotal = deadLetters.Total
+			c.deadLetterStats = deadLetters.Analytics
+		}
 	}()
 
 	wg.Wait()
-	c.groupReliability = d.listGroupReliability(c.groups, allAssets)
+	if canReadGroups && canReadLogs && canReadActions && canReadUpdates && statusHasScope(ctx, "metrics:read") && !restrictedAssets {
+		c.groupReliability = d.listGroupReliability(c.groups, allAssets)
+	}
+
+	if restrictedAssets {
+		allowedAssetIDs := make(map[string]struct{}, len(allAssets))
+		for _, assetEntry := range allAssets {
+			allowedAssetIDs[strings.TrimSpace(assetEntry.ID)] = struct{}{}
+		}
+		allowedGroupIDs := make(map[string]struct{}, len(c.groups))
+		for _, groupEntry := range c.groups {
+			allowedGroupIDs[strings.TrimSpace(groupEntry.ID)] = struct{}{}
+		}
+		c.recentLogs = filterStatusLogs(c.recentLogs, allowedAssetIDs)
+		c.actionRuns = filterStatusActionRuns(c.actionRuns, allowedAssetIDs)
+		var allowedPlanIDs map[string]struct{}
+		c.updatePlans, allowedPlanIDs = filterStatusUpdatePlans(c.updatePlans, allowedAssetIDs)
+		c.updateRuns = filterStatusUpdateRuns(c.updateRuns, allowedPlanIDs, allowedAssetIDs)
+		c.sessions = filterStatusSessions(c.sessions, allowedAssetIDs)
+		c.recentCommands = filterStatusCommands(c.recentCommands, allowedAssetIDs)
+		c.groupReliability = filterStatusReliability(c.groupReliability, allowedGroupIDs)
+	}
 	return c
 }
 
-func filterSessions(sessions []terminal.Session, actorID string) []terminal.Session {
-	if isOwnerActor(actorID) {
+func filterSessions(sessions []terminal.Session, actorID string, ownerPrincipal bool) []terminal.Session {
+	if ownerPrincipal {
 		return sessions
 	}
 	filtered := make([]terminal.Session, 0, len(sessions))
@@ -133,8 +200,8 @@ func filterSessions(sessions []terminal.Session, actorID string) []terminal.Sess
 	return filtered
 }
 
-func filterCommands(commands []terminal.Command, actorID string) []terminal.Command {
-	if isOwnerActor(actorID) {
+func filterCommands(commands []terminal.Command, actorID string, ownerPrincipal bool) []terminal.Command {
+	if ownerPrincipal {
 		return commands
 	}
 	filtered := make([]terminal.Command, 0, len(commands))
@@ -146,8 +213,8 @@ func filterCommands(commands []terminal.Command, actorID string) []terminal.Comm
 	return filtered
 }
 
-func filterAuditEvents(events []audit.Event, actorID string) []audit.Event {
-	if isOwnerActor(actorID) {
+func filterAuditEvents(events []audit.Event, actorID string, ownerPrincipal bool) []audit.Event {
+	if ownerPrincipal {
 		return events
 	}
 	filtered := make([]audit.Event, 0, len(events))
@@ -162,10 +229,11 @@ func filterAuditEvents(events []audit.Event, actorID string) []audit.Event {
 // terminalScopeKey returns a cache scope key that differentiates owner
 // sessions from per-actor sessions. It is used as part of the singleflight
 // key so two simultaneous requests from different actors never share results.
-func terminalScopeKey(actorID string) string {
-	if isOwnerActor(actorID) {
+func terminalScopeKey(ctx context.Context) string {
+	if apiv2.IsOwnerPrincipal(ctx) {
 		return "owner"
 	}
+	actorID := principalActorID(ctx)
 	actorID = strings.TrimSpace(actorID)
 	if actorID == "" {
 		return "actor:owner"

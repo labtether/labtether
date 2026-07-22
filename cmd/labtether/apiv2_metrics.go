@@ -1,12 +1,26 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/labtether/labtether/internal/apiv2"
+	"github.com/labtether/labtether/internal/metricschema"
 	"github.com/labtether/labtether/internal/persistence"
+	"github.com/labtether/labtether/internal/telemetry"
+)
+
+const (
+	maxMetricsQueryAssets    = 64
+	maxMetricsQueryAssetLen  = 255
+	maxMetricsQueryWindow    = 30 * 24 * time.Hour
+	maxMetricsQueryPoints    = 2000
+	maxMetricsQueryRawPoints = 200_000
+	metricsQueryTimeout      = 15 * time.Second
+	metricsQueryRateLimit    = 120
 )
 
 func (s *apiServer) handleV2MetricsOverview(w http.ResponseWriter, r *http.Request) {
@@ -40,6 +54,9 @@ func (s *apiServer) handleV2MetricsQuery(w http.ResponseWriter, r *http.Request)
 		apiv2.WriteError(w, http.StatusServiceUnavailable, "unavailable", "telemetry store unavailable")
 		return
 	}
+	if !s.enforceRateLimit(w, r, "v2.metrics.query", metricsQueryRateLimit, time.Minute) {
+		return
+	}
 
 	q := r.URL.Query()
 
@@ -50,9 +67,22 @@ func (s *apiServer) handleV2MetricsQuery(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	parts := strings.Split(rawIDs, ",")
+	if len(parts) > maxMetricsQueryAssets {
+		apiv2.WriteError(w, http.StatusBadRequest, "validation", "too many asset_ids")
+		return
+	}
 	assetIDs := make([]string, 0, len(parts))
+	seenAssetIDs := make(map[string]struct{}, len(parts))
 	for _, p := range parts {
 		if id := strings.TrimSpace(p); id != "" {
+			if len(id) > maxMetricsQueryAssetLen {
+				apiv2.WriteError(w, http.StatusBadRequest, "validation", "asset_id is too long")
+				return
+			}
+			if _, exists := seenAssetIDs[id]; exists {
+				continue
+			}
+			seenAssetIDs[id] = struct{}{}
 			assetIDs = append(assetIDs, id)
 		}
 	}
@@ -75,9 +105,14 @@ func (s *apiServer) handleV2MetricsQuery(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Parse metric name.
-	metric := strings.TrimSpace(q.Get("metric"))
-	if metric == "" {
+	rawMetric := strings.TrimSpace(q.Get("metric"))
+	if rawMetric == "" {
 		apiv2.WriteError(w, http.StatusBadRequest, "validation", "metric is required")
+		return
+	}
+	metric := canonicalMetricsQueryMetric(rawMetric)
+	if metric == "" {
+		apiv2.WriteError(w, http.StatusBadRequest, "validation", "unsupported metric")
 		return
 	}
 
@@ -106,6 +141,10 @@ func (s *apiServer) handleV2MetricsQuery(w http.ResponseWriter, r *http.Request)
 		apiv2.WriteError(w, http.StatusBadRequest, "validation", "from must be before to")
 		return
 	}
+	if to.Sub(from) > maxMetricsQueryWindow {
+		apiv2.WriteError(w, http.StatusBadRequest, "validation", "metrics query window exceeds 30 days")
+		return
+	}
 
 	window := to.Sub(from)
 	step := metricsQueryAutoStep(window)
@@ -117,11 +156,26 @@ func (s *apiServer) handleV2MetricsQuery(w http.ResponseWriter, r *http.Request)
 		}
 		step = d
 	}
+	minimumStep := metricsQueryMinimumStep(window)
+	if step < minimumStep {
+		step = minimumStep
+	}
 
-	// Use the optimised batch path when the store supports it.
-	if batchStore, ok := s.telemetryStore.(persistence.TelemetryAlertBatchStore); ok {
-		results, err := batchStore.MetricSeriesBatch(filtered, metric, from, to, step)
+	queryCtx, cancel := context.WithTimeout(r.Context(), metricsQueryTimeout)
+	defer cancel()
+
+	// Prefer the cancellation-aware and work-bounded batch path for API calls.
+	if batchStore, ok := s.telemetryStore.(persistence.TelemetryQueryBatchStore); ok {
+		results, err := batchStore.MetricSeriesBatchContext(queryCtx, filtered, metric, from, to, step, maxMetricsQueryRawPoints)
 		if err != nil {
+			if errors.Is(err, persistence.ErrTelemetryQueryLimitExceeded) {
+				apiv2.WriteError(w, http.StatusUnprocessableEntity, "query_too_large", "telemetry query exceeds the raw-point budget; use a shorter time range")
+				return
+			}
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				apiv2.WriteError(w, http.StatusGatewayTimeout, "timeout", "telemetry query timed out or was canceled")
+				return
+			}
 			apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to query telemetry")
 			return
 		}
@@ -138,6 +192,10 @@ func (s *apiServer) handleV2MetricsQuery(w http.ResponseWriter, r *http.Request)
 	// Fallback: query per-asset and extract the requested metric.
 	results := make(map[string]any, len(filtered))
 	for _, id := range filtered {
+		if err := queryCtx.Err(); err != nil {
+			apiv2.WriteError(w, http.StatusGatewayTimeout, "timeout", "telemetry query timed out or was canceled")
+			return
+		}
 		series, err := s.telemetryStore.Series(id, from, to, step)
 		if err != nil {
 			apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to query telemetry for asset "+id)
@@ -157,6 +215,36 @@ func (s *apiServer) handleV2MetricsQuery(w http.ResponseWriter, r *http.Request)
 		"step":    step.String(),
 		"results": results,
 	})
+}
+
+func canonicalMetricsQueryMetric(metric string) string {
+	switch metric {
+	case metricschema.HeartbeatKeyCPUPercent:
+		metric = telemetry.MetricCPUUsedPercent
+	case metricschema.HeartbeatKeyMemoryPercent:
+		metric = telemetry.MetricMemoryUsedPercent
+	case metricschema.HeartbeatKeyDiskPercent:
+		metric = telemetry.MetricDiskUsedPercent
+	case metricschema.HeartbeatKeyTempCelsius:
+		metric = telemetry.MetricTemperatureCelsius
+	}
+	for _, definition := range telemetry.CanonicalMetrics() {
+		if metric == definition.Metric {
+			return metric
+		}
+	}
+	return ""
+}
+
+func metricsQueryMinimumStep(window time.Duration) time.Duration {
+	if window <= 0 {
+		return time.Second
+	}
+	step := (window + maxMetricsQueryPoints - 1) / maxMetricsQueryPoints
+	if step < time.Second {
+		return time.Second
+	}
+	return step
 }
 
 // metricsQueryAutoStep chooses a reasonable default step duration for a query window.

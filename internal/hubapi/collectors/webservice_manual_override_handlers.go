@@ -43,6 +43,9 @@ type webServiceOverrideRequest struct {
 
 // HandleWebServiceManual handles GET/POST /api/v1/services/web/manual.
 func (d *Deps) HandleWebServiceManual(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobal(w, r, "web-service manual configuration") {
+		return
+	}
 	if r.URL.Path != "/api/v1/services/web/manual" {
 		servicehttp.WriteError(w, http.StatusNotFound, "not found")
 		return
@@ -93,6 +96,9 @@ func (d *Deps) HandleWebServiceManual(w http.ResponseWriter, r *http.Request) {
 
 // HandleWebServiceManualActions handles PATCH/DELETE /api/v1/services/web/manual/{id}.
 func (d *Deps) HandleWebServiceManualActions(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobal(w, r, "web-service manual configuration") {
+		return
+	}
 	trimmed := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/v1/services/web/manual/"))
 	if trimmed == "" || trimmed == r.URL.Path {
 		servicehttp.WriteError(w, http.StatusNotFound, "manual service path not found")
@@ -197,6 +203,9 @@ func (d *Deps) HandleWebServiceManualActions(w http.ResponseWriter, r *http.Requ
 
 // HandleWebServiceOverrides handles GET/POST/DELETE /api/v1/services/web/overrides.
 func (d *Deps) HandleWebServiceOverrides(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobal(w, r, "web-service overrides") {
+		return
+	}
 	if r.URL.Path != "/api/v1/services/web/overrides" {
 		servicehttp.WriteError(w, http.StatusNotFound, "not found")
 		return

@@ -15,9 +15,19 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/labtether/labtether/internal/securityruntime"
 )
 
 const maxShutdownTimeoutSeconds = 3600
+
+const defaultBindAddress = "127.0.0.1"
+
+// ErrHTTPDrainIncomplete means at least one HTTP server failed to prove that
+// all active handlers stopped within its graceful-shutdown bound. Callers that
+// own shared runtime state must treat this as a failed drain and terminate
+// without releasing their ownership fence.
+var ErrHTTPDrainIncomplete = errors.New("http connection drain incomplete")
 
 // DBPinger is satisfied by *pgxpool.Pool and any other type that can ping the database.
 type DBPinger interface {
@@ -27,8 +37,9 @@ type DBPinger interface {
 // Config defines shared HTTP settings for LabTether services.
 type Config struct {
 	Name             string
+	Version          string // optional build version used when APP_VERSION is unset
 	Port             string
-	BindAddress      string // optional: listener bind address (default 0.0.0.0)
+	BindAddress      string // optional: listener bind address (default 127.0.0.1)
 	AuthToken        string // #nosec G117 -- Runtime auth token config, not a hardcoded secret.
 	ExtraHandlers    map[string]http.HandlerFunc
 	TLSCertFile      string       // optional: path to TLS certificate file
@@ -44,6 +55,91 @@ type Config struct {
 	GetCertificate func(*tls.ClientHelloInfo) (*tls.Certificate, error)
 }
 
+// HTTPDrainError preserves the underlying graceful-shutdown and force-close
+// errors while exposing a stable sentinel to runtime owners. Error intentionally
+// reports only a bounded classification rather than transport details.
+type HTTPDrainError struct {
+	Server      string
+	ShutdownErr error
+	CloseErr    error
+}
+
+func (e *HTTPDrainError) Error() string {
+	if e == nil {
+		return ErrHTTPDrainIncomplete.Error()
+	}
+	return fmt.Sprintf(
+		"%s: server=%s class=%s",
+		ErrHTTPDrainIncomplete,
+		strings.TrimSpace(e.Server),
+		classifyHTTPDrainFailure(e.ShutdownErr),
+	)
+}
+
+func (e *HTTPDrainError) Unwrap() []error {
+	if e == nil {
+		return nil
+	}
+	errs := []error{ErrHTTPDrainIncomplete}
+	if e.ShutdownErr != nil {
+		errs = append(errs, e.ShutdownErr)
+	}
+	if e.CloseErr != nil {
+		errs = append(errs, e.CloseErr)
+	}
+	return errs
+}
+
+type httpServerShutdowner interface {
+	Shutdown(context.Context) error
+	Close() error
+}
+
+func drainHTTPServer(name string, server httpServerShutdowner, timeout time.Duration) error {
+	if server == nil {
+		return nil
+	}
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	shutdownErr := server.Shutdown(shutdownCtx)
+	if shutdownErr == nil {
+		return nil
+	}
+
+	// Shutdown does not force active connections closed when its context
+	// expires. Close them before returning so the owning process can terminate
+	// promptly instead of continuing to serve after losing its runtime fence.
+	closeErr := server.Close()
+	forceClose := "complete"
+	if closeErr != nil && !errors.Is(closeErr, http.ErrServerClosed) && !errors.Is(closeErr, net.ErrClosed) {
+		forceClose = "failed"
+	}
+	log.Printf(
+		"%s HTTP drain incomplete: class=%s force_close=%s",
+		strings.TrimSpace(name),
+		classifyHTTPDrainFailure(shutdownErr),
+		forceClose,
+	)
+	return &HTTPDrainError{
+		Server:      name,
+		ShutdownErr: shutdownErr,
+		CloseErr:    closeErr,
+	}
+}
+
+func classifyHTTPDrainFailure(err error) string {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	case errors.Is(err, context.Canceled):
+		return "canceled"
+	case errors.Is(err, net.ErrClosed), errors.Is(err, http.ErrServerClosed):
+		return "connection_closed"
+	default:
+		return "shutdown_error"
+	}
+}
+
 // Run starts a minimal HTTP server with common health endpoints.
 func Run(ctx context.Context, cfg Config) error {
 	if cfg.Name == "" {
@@ -52,9 +148,9 @@ func Run(ctx context.Context, cfg Config) error {
 	if cfg.Port == "" {
 		cfg.Port = "8080"
 	}
-	if strings.TrimSpace(cfg.BindAddress) == "" {
-		cfg.BindAddress = "0.0.0.0"
-	}
+	cfg.BindAddress = resolveBindAddress(cfg.BindAddress)
+	serverCtx, stopServers := context.WithCancel(ctx)
+	defer stopServers()
 
 	mux := http.NewServeMux()
 	startedAt := time.Now().UTC()
@@ -100,13 +196,16 @@ func Run(ctx context.Context, cfg Config) error {
 	})
 
 	mux.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
-		version := os.Getenv("APP_VERSION")
-		if version == "" {
-			version = "dev"
+		resolvedVersion := strings.TrimSpace(os.Getenv("APP_VERSION"))
+		if resolvedVersion == "" {
+			resolvedVersion = strings.TrimSpace(cfg.Version)
+		}
+		if resolvedVersion == "" {
+			resolvedVersion = "dev"
 		}
 		WriteJSON(w, http.StatusOK, map[string]any{
 			"service":    cfg.Name,
-			"version":    version,
+			"version":    resolvedVersion,
 			"started_at": startedAt.Format(time.RFC3339),
 		})
 	})
@@ -130,6 +229,7 @@ func Run(ctx context.Context, cfg Config) error {
 	server := &http.Server{
 		Addr:              addr,
 		Handler:           handler,
+		BaseContext:       func(net.Listener) context.Context { return serverCtx },
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,
@@ -146,26 +246,23 @@ func Run(ctx context.Context, cfg Config) error {
 		server.TLSConfig = tlsCfg
 	}
 
-	// Start HTTP→HTTPS redirect listener if configured.
-	// Use WebSocket bypass so that the Next.js rewrite proxy (targeting the
-	// HTTP port) can complete WebSocket upgrades for desktop/terminal streams
-	// without being 301-redirected to HTTPS.
+	// Start HTTP→HTTPS redirect listener if configured. Remote-control
+	// WebSockets must use the TLS listener; allowing an Upgrade through this
+	// plaintext port exposes one-time tickets and terminal/desktop contents.
+	redirectShutdownResult := make(chan error, 1)
 	if useTLS && cfg.RedirectHTTPPort != "" {
-		redirectHandler := RedirectToHTTPSWithWebSocketBypass(cfg.HTTPSPort, mux)
+		redirectHandler := RedirectToHTTPSWithTLSInfoPassthrough(cfg.HTTPSPort, mux)
 		redirectServer := &http.Server{
 			Addr:              net.JoinHostPort(cfg.BindAddress, cfg.RedirectHTTPPort),
 			Handler:           redirectHandler,
+			BaseContext:       func(net.Listener) context.Context { return serverCtx },
 			ReadHeaderTimeout: 5 * time.Second,
 			ReadTimeout:       5 * time.Second,
 			WriteTimeout:      5 * time.Second,
 		}
 		go func() {
-			<-ctx.Done()
-			shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-			defer cancel()
-			if err := redirectServer.Shutdown(shutdownCtx); err != nil {
-				log.Printf("%s redirect server shutdown error: %v", cfg.Name, err)
-			}
+			<-serverCtx.Done()
+			redirectShutdownResult <- drainHTTPServer(cfg.Name+" redirect", redirectServer, 5*time.Second)
 		}()
 		go func() {
 			log.Printf("%s HTTP redirect listener on %s:%s → HTTPS :%d", cfg.Name, cfg.BindAddress, cfg.RedirectHTTPPort, cfg.HTTPSPort)
@@ -173,18 +270,16 @@ func Run(ctx context.Context, cfg Config) error {
 				log.Printf("%s redirect server error: %v", cfg.Name, err)
 			}
 		}()
+	} else {
+		redirectShutdownResult <- nil
 	}
 
+	serverShutdownResult := make(chan error, 1)
 	go func() {
-		<-ctx.Done()
+		<-serverCtx.Done()
 		timeoutSec := envPositiveIntInRangeOrDefault("LABTETHER_SHUTDOWN_TIMEOUT_SECONDS", 15, maxShutdownTimeoutSeconds)
 		log.Printf("labtether: shutdown initiated, draining connections (timeout %ds)...", timeoutSec)
-		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Duration(timeoutSec)*time.Second)
-		defer cancel()
-		if err := server.Shutdown(shutdownCtx); err != nil {
-			log.Printf("%s graceful shutdown error: %v", cfg.Name, err)
-		}
-		log.Printf("labtether: shutdown complete")
+		serverShutdownResult <- drainHTTPServer(cfg.Name, server, time.Duration(timeoutSec)*time.Second)
 	}()
 
 	var listenErr error
@@ -195,14 +290,29 @@ func Run(ctx context.Context, cfg Config) error {
 		log.Printf("%s listening on %s", cfg.Name, addr)
 		listenErr = server.ListenAndServe()
 	}
-	if listenErr != nil {
-		if errors.Is(listenErr, http.ErrServerClosed) {
-			return nil
-		}
-		return listenErr
+	// ListenAndServe returns as soon as Shutdown closes the listener, before
+	// active handlers necessarily finish. Keep ownership of the runtime until
+	// both the main and redirect servers have completed their bounded drains.
+	stopServers()
+	serverShutdownErr := <-serverShutdownResult
+	redirectShutdownErr := <-redirectShutdownResult
+	drainErr := errors.Join(serverShutdownErr, redirectShutdownErr)
+	// This only completes the HTTP listener/handler drain. Callers may still
+	// need to stop background runtimes before releasing shared resources.
+	if drainErr == nil {
+		log.Printf("%s HTTP connection drain complete", cfg.Name)
 	}
+	if errors.Is(listenErr, http.ErrServerClosed) {
+		listenErr = nil
+	}
+	return errors.Join(listenErr, drainErr)
+}
 
-	return nil
+func resolveBindAddress(raw string) string {
+	if resolved := strings.TrimSpace(raw); resolved != "" {
+		return resolved
+	}
+	return defaultBindAddress
 }
 
 // BearerAuth wraps a handler and enforces Authorization: Bearer token for all
@@ -285,56 +395,31 @@ func RedirectToHTTPS(httpsPort int) http.Handler {
 	})
 }
 
-// RedirectToHTTPSWithWebSocketBypass wraps RedirectToHTTPS while allowing
-// WebSocket upgrade requests on stream endpoints to pass through unchanged.
-// It also passes through /api/v1/tls/info so the dev frontend script can
+// RedirectToHTTPSWithTLSInfoPassthrough redirects every application request,
+// including WebSocket upgrades, while allowing the non-sensitive TLS metadata
+// probe used during local development.
 // probe the backend's active TLS source over plain HTTP before it knows
 // which cert to trust.
-func RedirectToHTTPSWithWebSocketBypass(httpsPort int, wsHandler http.Handler) http.Handler {
+func RedirectToHTTPSWithTLSInfoPassthrough(httpsPort int, tlsInfoHandler http.Handler) http.Handler {
 	redirectHandler := RedirectToHTTPS(httpsPort)
-	if wsHandler == nil {
+	if tlsInfoHandler == nil {
 		return redirectHandler
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Pass through TLS info on the HTTP port so the dev script can
 		// probe the backend's active TLS source without needing TLS.
 		if r.URL.Path == "/api/v1/tls/info" {
-			wsHandler.ServeHTTP(w, r)
-			return
-		}
-		if isWebSocketUpgradeRequest(r) && isRedirectWebSocketBypassPath(r.URL.Path) {
-			wsHandler.ServeHTTP(w, r)
+			tlsInfoHandler.ServeHTTP(w, r)
 			return
 		}
 		redirectHandler.ServeHTTP(w, r)
 	})
 }
 
-func isWebSocketUpgradeRequest(r *http.Request) bool {
-	if r == nil {
-		return false
-	}
-	if !strings.EqualFold(strings.TrimSpace(r.Header.Get("Upgrade")), "websocket") {
-		return false
-	}
-	connectionHeader := strings.ToLower(r.Header.Get("Connection"))
-	return strings.Contains(connectionHeader, "upgrade")
-}
-
-func isRedirectWebSocketBypassPath(path string) bool {
-	if path == "/ws/events" {
-		return true
-	}
-	return isSessionStreamPath(path, "/desktop/sessions/") || isSessionStreamPath(path, "/terminal/sessions/")
-}
-
-func isSessionStreamPath(path, prefix string) bool {
-	if !strings.HasPrefix(path, prefix) {
-		return false
-	}
-	remainder := strings.TrimPrefix(path, prefix)
-	parts := strings.Split(remainder, "/")
-	return len(parts) == 2 && parts[0] != "" && parts[1] == "stream"
+// RedirectToHTTPSWithWebSocketBypass is a compatibility alias. WebSocket
+// bypass behavior was removed; all upgrades are redirected to TLS.
+func RedirectToHTTPSWithWebSocketBypass(httpsPort int, tlsInfoHandler http.Handler) http.Handler {
+	return RedirectToHTTPSWithTLSInfoPassthrough(httpsPort, tlsInfoHandler)
 }
 
 // WriteJSON writes a JSON response payload.
@@ -370,11 +455,11 @@ func envPositiveIntInRangeOrDefault(key string, defaultVal int, maxVal int) int 
 	}
 	n, err := strconv.Atoi(strings.TrimSpace(v))
 	if err != nil || n <= 0 {
-		log.Printf("labtether: invalid value for %s=%q, using default %d", key, v, defaultVal)
+		securityruntime.Logf("labtether: invalid value for %s=%q, using default %d", key, v, defaultVal)
 		return defaultVal
 	}
 	if maxVal > 0 && n > maxVal {
-		log.Printf("labtether: value for %s=%q exceeds maximum %d, using default %d", key, v, maxVal, defaultVal)
+		securityruntime.Logf("labtether: value for %s=%q exceeds maximum %d, using default %d", key, v, maxVal, defaultVal)
 		return defaultVal
 	}
 	return n

@@ -2,8 +2,11 @@ package mcpserver
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 
@@ -52,6 +55,9 @@ func newTestDeps() *Deps {
 		GetScopes:        func(ctx context.Context) []string { return []string{"assets:read", "assets:exec"} },
 		GetAllowedAssets: func(ctx context.Context) []string { return nil },
 		GetActorID:       func(ctx context.Context) string { return "test" },
+		AuthorizeMutation: func(context.Context, string, string) error {
+			return nil
+		},
 	}
 }
 
@@ -219,6 +225,153 @@ func TestHandleExecMultiPassesClampedTimeoutToAgentCommands(t *testing.T) {
 	}
 }
 
+func TestHandleExecMultiDeduplicatesTargets(t *testing.T) {
+	deps := newTestDeps()
+	var calls atomic.Int64
+	deps.ExecuteViaAgent = func(job terminal.CommandJob) terminal.CommandResult {
+		calls.Add(1)
+		return terminal.CommandResult{Status: "succeeded", Output: job.Target}
+	}
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{
+		"targets": []any{" srv1 ", "srv1", "srv1"},
+		"command": "uptime",
+	}
+	result, err := deps.handleExecMulti(context.Background(), req)
+	if err != nil || result.IsError {
+		t.Fatalf("exec_multi failed: err=%v result=%v", err, result)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("duplicate target executed %d times, want 1", got)
+	}
+}
+
+func TestHandleExecMultiRejectsExcessTargetsBeforeDispatch(t *testing.T) {
+	deps := newTestDeps()
+	deps.ExecuteViaAgent = func(job terminal.CommandJob) terminal.CommandResult {
+		t.Fatalf("ExecuteViaAgent called for oversized request: %#v", job)
+		return terminal.CommandResult{}
+	}
+	targets := make([]any, maxExecMultiTargets+1)
+	for i := range targets {
+		targets[i] = "srv1"
+	}
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"targets": targets, "command": "uptime"}
+	result, err := deps.handleExecMulti(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.IsError {
+		t.Fatal("oversized target list should be rejected")
+	}
+}
+
+func TestHandleExecMultiCapsConcurrency(t *testing.T) {
+	deps := newTestDeps()
+	targets := make([]any, maxExecMultiTargets)
+	connected := make(map[string]bool, len(targets))
+	for i := range targets {
+		target := fmt.Sprintf("srv-%02d", i)
+		targets[i] = target
+		connected[target] = true
+	}
+	deps.AgentMgr = &mockAgentMgr{connected: connected}
+
+	var current atomic.Int64
+	var maximum atomic.Int64
+	var dispatched atomic.Int64
+	started := make(chan struct{}, maxExecMultiConcurrency)
+	release := make(chan struct{})
+	deps.ExecuteViaAgent = func(job terminal.CommandJob) terminal.CommandResult {
+		active := current.Add(1)
+		for {
+			observed := maximum.Load()
+			if active <= observed || maximum.CompareAndSwap(observed, active) {
+				break
+			}
+		}
+		if dispatched.Add(1) <= maxExecMultiConcurrency {
+			started <- struct{}{}
+		}
+		<-release
+		current.Add(-1)
+		return terminal.CommandResult{Status: "succeeded"}
+	}
+
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"targets": targets, "command": "uptime"}
+	done := make(chan *mcp.CallToolResult, 1)
+	go func() {
+		result, _ := deps.handleExecMulti(context.Background(), req)
+		done <- result
+	}()
+	for range maxExecMultiConcurrency {
+		select {
+		case <-started:
+		case <-time.After(2 * time.Second):
+			t.Fatal("worker pool did not reach expected concurrency")
+		}
+	}
+	if got := maximum.Load(); got > maxExecMultiConcurrency {
+		t.Fatalf("observed concurrency %d, max allowed %d", got, maxExecMultiConcurrency)
+	}
+	close(release)
+	select {
+	case result := <-done:
+		if result == nil || result.IsError {
+			t.Fatalf("exec_multi failed: %#v", result)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("exec_multi did not complete")
+	}
+	if got := maximum.Load(); got > maxExecMultiConcurrency {
+		t.Fatalf("observed concurrency %d, max allowed %d", got, maxExecMultiConcurrency)
+	}
+}
+
+func TestMCPResourcesRequireTheirReadScopes(t *testing.T) {
+	tests := []struct {
+		name   string
+		scopes []string
+		read   func(*Deps) error
+	}{
+		{
+			name:   "assets",
+			scopes: []string{"alerts:read"},
+			read: func(deps *Deps) error {
+				_, err := deps.handleAssetsResource(context.Background(), mcp.ReadResourceRequest{})
+				return err
+			},
+		},
+		{
+			name:   "alerts",
+			scopes: []string{"assets:read"},
+			read: func(deps *Deps) error {
+				_, err := deps.handleActiveAlertsResource(context.Background(), mcp.ReadResourceRequest{})
+				return err
+			},
+		},
+		{
+			name:   "groups",
+			scopes: []string{"assets:read"},
+			read: func(deps *Deps) error {
+				_, err := deps.handleGroupsResource(context.Background(), mcp.ReadResourceRequest{})
+				return err
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			deps := newTestDeps()
+			deps.GetScopes = func(context.Context) []string { return tc.scopes }
+			if err := tc.read(deps); err == nil || !strings.Contains(err.Error(), "insufficient scope") {
+				t.Fatalf("expected insufficient-scope error, got %v", err)
+			}
+		})
+	}
+}
+
 // --- New tool tests ---
 
 func TestHandleServicesList_ScopeDenied(t *testing.T) {
@@ -289,6 +442,49 @@ func TestHandleAssetReboot_ScopeDenied(t *testing.T) {
 	}
 }
 
+func TestHandleAssetPowerUsesTypedExecutorNeverRawCommand(t *testing.T) {
+	deps := newTestDeps()
+	deps.GetScopes = func(context.Context) []string { return []string{"assets:power"} }
+	deps.ExecuteViaAgent = func(job terminal.CommandJob) terminal.CommandResult {
+		t.Fatalf("raw command executor must not be used for power action: %q", job.Command)
+		return terminal.CommandResult{}
+	}
+	var gotAsset, gotAction string
+	deps.ExecutePowerAction = func(_ context.Context, assetID, action string) (string, error) {
+		gotAsset, gotAction = assetID, action
+		return "reboot accepted", nil
+	}
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"asset_id": "srv1"}
+	result, err := deps.handleAssetReboot(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError || toolResultText(t, result) != "reboot accepted" {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	if gotAsset != "srv1" || gotAction != "reboot" {
+		t.Fatalf("typed call asset=%q action=%q", gotAsset, gotAction)
+	}
+}
+
+func TestHandleAssetPowerPropagatesTypedRejection(t *testing.T) {
+	deps := newTestDeps()
+	deps.GetScopes = func(context.Context) []string { return []string{"assets:power"} }
+	deps.ExecutePowerAction = func(context.Context, string, string) (string, error) {
+		return "", fmt.Errorf("power action rejected")
+	}
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"asset_id": "srv1"}
+	result, err := deps.handleAssetShutdown(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError || !strings.Contains(toolResultText(t, result), "rejected") {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
 func TestHandleSystemDisks_NoAgent(t *testing.T) {
 	deps := newTestDeps()
 	deps.GetScopes = func(ctx context.Context) []string { return []string{"disks:read"} }
@@ -352,13 +548,18 @@ func TestHandleDockerContainerToolsRejectShellMetacharacters(t *testing.T) {
 	}
 }
 
-func TestHandleDockerContainerLogsBuildsSafeCommand(t *testing.T) {
+func TestHandleDockerContainerLogsUsesTypedDependency(t *testing.T) {
 	deps := newTestDeps()
 	deps.GetScopes = func(ctx context.Context) []string { return []string{"docker:read"} }
-	var gotCommand string
 	deps.ExecuteViaAgent = func(job terminal.CommandJob) terminal.CommandResult {
-		gotCommand = job.Command
-		return terminal.CommandResult{Status: "succeeded", Output: "ok"}
+		t.Fatalf("raw command executor must not be used for Docker logs: %q", job.Command)
+		return terminal.CommandResult{}
+	}
+	var gotAsset, gotContainer string
+	var gotTail int
+	deps.DockerContainerLogs = func(_ context.Context, assetID, containerID string, tail int) (string, error) {
+		gotAsset, gotContainer, gotTail = assetID, containerID, tail
+		return "ok", nil
 	}
 	req := mcp.CallToolRequest{}
 	req.Params.Arguments = map[string]any{"asset_id": "srv1", "container_id": "web.1_abc-2", "tail": 5}
@@ -370,8 +571,8 @@ func TestHandleDockerContainerLogsBuildsSafeCommand(t *testing.T) {
 	if result.IsError {
 		t.Fatal("should allow Docker-style IDs and names")
 	}
-	if gotCommand != "docker logs --tail 5 web.1_abc-2 2>&1" {
-		t.Fatalf("unexpected command %q", gotCommand)
+	if gotAsset != "srv1" || gotContainer != "web.1_abc-2" || gotTail != 5 {
+		t.Fatalf("typed Docker log call asset=%q container=%q tail=%d", gotAsset, gotContainer, gotTail)
 	}
 }
 
@@ -446,7 +647,7 @@ func TestHandleDockerHostsFiltersAllowedAssets(t *testing.T) {
 func TestHandleAlertsList_WithData(t *testing.T) {
 	deps := newTestDeps()
 	deps.GetScopes = func(ctx context.Context) []string { return []string{"alerts:read"} }
-	deps.ListAlerts = func() ([]map[string]any, error) {
+	deps.ListAlerts = func(context.Context) ([]map[string]any, error) {
 		return []map[string]any{{"id": "alert1", "status": "firing"}}, nil
 	}
 	result, err := deps.handleAlertsList(context.Background(), mcp.CallToolRequest{})

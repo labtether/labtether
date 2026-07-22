@@ -294,6 +294,15 @@ func TestProcessAgentPackageListedRejectsMismatchedSender(t *testing.T) {
 	default:
 	}
 
+	payload.ID = "different-request"
+	srv.processAgentPackageListed(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
+	select {
+	case <-bridge.Ch:
+		t.Fatal("expected mismatched envelope/package request id to be ignored")
+	default:
+	}
+
+	payload.ID = "req-pkg-asset-bound"
 	srv.processAgentPackageListed(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
 	case <-bridge.Ch:
@@ -322,6 +331,15 @@ func TestProcessAgentPackageResultRejectsMismatchedSender(t *testing.T) {
 	default:
 	}
 
+	payload.ID = "different-request"
+	srv.processAgentPackageResult(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
+	select {
+	case <-bridge.Ch:
+		t.Fatal("expected mismatched envelope/package result id to be ignored")
+	default:
+	}
+
+	payload.ID = "req-pkg-result-asset-bound"
 	srv.processAgentPackageResult(&agentmgr.AgentConn{AssetID: "node-1"}, payload)
 	select {
 	case <-bridge.Ch:

@@ -34,7 +34,10 @@ var (
 
 func CanonicalizeConnectorAssets(connectorID string, assets []connectorsdk.Asset) []connectorsdk.Asset {
 	if len(assets) == 0 {
-		return nil
+		if assets == nil {
+			return nil
+		}
+		return []connectorsdk.Asset{}
 	}
 	out := make([]connectorsdk.Asset, 0, len(assets))
 	for _, asset := range assets {

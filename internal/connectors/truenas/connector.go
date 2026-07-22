@@ -10,8 +10,6 @@ import (
 )
 
 // Connector implements connectorsdk.Connector for TrueNAS via WebSocket JSON-RPC 2.0.
-// When client is nil the connector runs in stub mode, returning synthetic assets
-// so that the connector registry can be populated without requiring live config.
 type Connector struct {
 	client *Client
 }
@@ -24,7 +22,7 @@ type Config struct {
 	Timeout    time.Duration
 }
 
-// New returns a Connector in stub mode (no live TrueNAS connection).
+// New returns an unconfigured Connector (no live TrueNAS connection).
 // Used by the connector registry during startup when no config is provided.
 func New() *Connector {
 	return &Connector{}
@@ -77,8 +75,8 @@ func (c *Connector) isConfigured() bool {
 func (c *Connector) TestConnection(ctx context.Context) (connectorsdk.Health, error) {
 	if !c.isConfigured() {
 		return connectorsdk.Health{
-			Status:  "ok",
-			Message: "truenas connector running in stub mode (missing config)",
+			Status:  "failed",
+			Message: "truenas connector is not configured",
 		}, nil
 	}
 
@@ -124,20 +122,4 @@ func (c *Connector) callQuery(ctx context.Context, method string, dest any) erro
 		}
 	}
 	return retryErr
-}
-
-// stubAssets returns a single synthetic asset used in stub mode so that the
-// connector is visible in the UI without requiring a live TrueNAS instance.
-func (c *Connector) stubAssets() []connectorsdk.Asset {
-	return []connectorsdk.Asset{
-		{
-			ID:     "truenas-controller-stub",
-			Type:   "storage-controller",
-			Name:   "truenas-stub",
-			Source: c.ID(),
-			Metadata: map[string]string{
-				"note": "stub mode — configure TRUENAS_BASE_URL and TRUENAS_API_KEY",
-			},
-		},
-	}
 }

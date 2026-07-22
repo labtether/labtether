@@ -11,7 +11,7 @@ import (
 
 func (c *Connector) Discover(ctx context.Context) ([]connectorsdk.Asset, error) {
 	if !c.isConfigured() {
-		return c.stubAssets(), nil
+		return []connectorsdk.Asset{}, nil
 	}
 
 	assets := make([]connectorsdk.Asset, 0, 32)
@@ -348,7 +348,7 @@ func (c *Connector) Discover(ctx context.Context) ([]connectorsdk.Asset, error) 
 	}
 
 	if len(assets) == 0 {
-		return c.stubAssets(), nil
+		return []connectorsdk.Asset{}, nil
 	}
 	return assets, nil
 }

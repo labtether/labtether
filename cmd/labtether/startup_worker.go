@@ -47,6 +47,7 @@ func initializeWorkerSubsystem(ctx context.Context, srv *apiServer, pgStore *per
 	jqWorker.Register(jobqueue.KindTerminalCommand, srv.handleTerminalCommandJob(&counters.processed))
 	jqWorker.Register(jobqueue.KindActionRun, srv.handleActionRunJob(&counters.processedActions))
 	jqWorker.Register(jobqueue.KindUpdateRun, srv.handleUpdateRunJob(&counters.processedUpdates))
+	jqWorker.Register(jobqueue.KindScheduleRun, srv.handleScheduleRunJob(&counters.processedSchedules))
 	jqWorker.OnDeadLetter(srv.recordDeadLetter)
 	for i := 0; i < workerCount; i++ {
 		go jqWorker.Run(ctx)

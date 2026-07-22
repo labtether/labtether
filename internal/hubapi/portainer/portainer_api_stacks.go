@@ -3,12 +3,13 @@ package portainer
 import (
 	"context"
 	"encoding/json"
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"io"
 	"net/http"
 	"strconv"
 
 	"github.com/labtether/labtether/internal/assets"
+	portainerconnector "github.com/labtether/labtether/internal/connectors/portainer"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
@@ -24,24 +25,50 @@ import (
 //	POST {sid}/redeploy   — redeploy a git-based stack
 //	POST {sid}/remove     — remove a stack
 func (d *Deps) HandlePortainerStacks(ctx context.Context, w http.ResponseWriter, r *http.Request, asset assets.Asset, runtime *PortainerRuntime, subParts []string) {
+	// Every stack mutation changes the target environment and is therefore an
+	// administrator-only operation. Check this before resolving or querying the
+	// upstream Portainer instance so an unauthorized caller cannot trigger work.
+	if r.Method != http.MethodGet {
+		if !d.RequireAdminAuth(w, r) {
+			return
+		}
+	}
+
 	epID, err := portainerEndpointID(asset)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	// GET /portainer/assets/{id}/stacks — list all stacks.
+	stacks, err := runtime.Client.GetStacks(ctx)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+		return
+	}
+	endpointStacks := make([]portainerconnector.Stack, 0, len(stacks))
+	for _, stack := range stacks {
+		if stack.EndpointID == epID {
+			endpointStacks = append(endpointStacks, stack)
+		}
+	}
+
+	// GET /portainer/assets/{id}/stacks — list stacks for this endpoint.
 	if len(subParts) == 0 {
 		if r.Method != http.MethodGet {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		stacks, err := runtime.Client.GetStacks(ctx)
-		if err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
-			return
+		if shared.HasAssetRestriction(r.Context()) {
+			filtered := make([]portainerconnector.Stack, 0, len(endpointStacks))
+			for _, stack := range endpointStacks {
+				allowed, authErr := d.portainerResourceAllowed(r.Context(), strconv.Itoa(epID), "stack_id", strconv.Itoa(stack.ID))
+				if authErr == nil && allowed {
+					filtered = append(filtered, stack)
+				}
+			}
+			endpointStacks = filtered
 		}
-		WritePortainerJSON(w, stacks, nil)
+		WritePortainerJSON(w, endpointStacks, nil)
 		return
 	}
 
@@ -61,6 +88,20 @@ func (d *Deps) HandlePortainerStacks(ctx context.Context, w http.ResponseWriter,
 		servicehttp.WriteError(w, http.StatusNotFound, "unknown stack action")
 		return
 	}
+	stackInEndpoint := false
+	for _, stack := range endpointStacks {
+		if stack.ID == stackID {
+			stackInEndpoint = true
+			break
+		}
+	}
+	if !stackInEndpoint {
+		servicehttp.WriteError(w, http.StatusNotFound, "stack not found in this endpoint")
+		return
+	}
+	if !d.requirePortainerResourceAccess(w, r, strconv.Itoa(epID), "stack_id", stackIDStr) {
+		return
+	}
 
 	subAction := subParts[1]
 
@@ -76,9 +117,6 @@ func (d *Deps) HandlePortainerStacks(ctx context.Context, w http.ResponseWriter,
 			WritePortainerJSON(w, content, nil)
 
 		case http.MethodPut:
-			if !d.RequireAdminAuth(w, r) {
-				return
-			}
 			body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 			if err != nil {
 				servicehttp.WriteError(w, http.StatusBadRequest, "failed to read request body")
@@ -138,9 +176,6 @@ func (d *Deps) HandlePortainerStacks(ctx context.Context, w http.ResponseWriter,
 	case "remove":
 		if r.Method != http.MethodPost {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
-			return
-		}
-		if !d.RequireAdminAuth(w, r) {
 			return
 		}
 		if err := runtime.Client.RemoveStack(ctx, stackID, epID); err != nil {

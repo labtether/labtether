@@ -1,11 +1,14 @@
 package agentmgr
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -190,4 +193,115 @@ func TestConcurrentAccess(t *testing.T) {
 	}
 
 	wg.Wait()
+}
+
+func TestCloseRejectsQueuedCredentialValidatedWrites(t *testing.T) {
+	conn, cleanup := newTestConn(t, "queued-revoke", "linux")
+	defer cleanup()
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var validations atomic.Int32
+	conn.SetCredentialValidator(func() error {
+		if validations.Add(1) == 1 {
+			close(entered)
+			<-release
+		}
+		return nil
+	})
+
+	const writers = 16
+	errs := make(chan error, writers)
+	for i := 0; i < writers; i++ {
+		go func() {
+			errs <- conn.Send(Message{Type: MsgConfigUpdate})
+		}()
+	}
+	<-entered
+	closed := make(chan struct{})
+	go func() {
+		conn.Close()
+		close(closed)
+	}()
+	deadline := time.Now().Add(time.Second)
+	for !conn.rejected.Load() && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if !conn.rejected.Load() {
+		t.Fatal("close did not mark the connection rejected before waiting on the active writer")
+	}
+	close(release)
+	<-closed
+	for i := 0; i < writers; i++ {
+		if err := <-errs; !errors.Is(err, ErrAgentCredentialRejected) {
+			t.Fatalf("queued writer %d error=%v", i, err)
+		}
+	}
+	if got := validations.Load(); got != 1 {
+		t.Fatalf("credential validations=%d, want only in-progress writer", got)
+	}
+}
+
+func TestAgentAdmissionEnforcesGlobalAndSourceLimitsAndReleasesOnce(t *testing.T) {
+	m := NewManager()
+	releaseA, rejected := m.TryReserveAdmission("192.0.2.1", 2, 1)
+	if rejected != AdmissionAllowed {
+		t.Fatalf("first admission rejected=%v", rejected)
+	}
+	if _, rejected := m.TryReserveAdmission("192.0.2.1", 2, 1); rejected != AdmissionSourceLimit {
+		t.Fatalf("same-source rejection=%v, want source limit", rejected)
+	}
+	releaseB, rejected := m.TryReserveAdmission("192.0.2.2", 2, 1)
+	if rejected != AdmissionAllowed {
+		t.Fatalf("second source rejected=%v", rejected)
+	}
+	if _, rejected := m.TryReserveAdmission("192.0.2.3", 2, 1); rejected != AdmissionGlobalLimit {
+		t.Fatalf("global rejection=%v, want global limit", rejected)
+	}
+	if got := m.AdmissionCount(); got != 2 {
+		t.Fatalf("admissions=%d, want 2", got)
+	}
+	releaseA()
+	releaseA()
+	if got := m.AdmissionCount(); got != 1 {
+		t.Fatalf("idempotent release admissions=%d, want 1", got)
+	}
+	if releaseC, rejected := m.TryReserveAdmission("192.0.2.1", 2, 1); rejected != AdmissionAllowed {
+		t.Fatalf("released source was not admitted: %v", rejected)
+	} else {
+		releaseC()
+	}
+	releaseB()
+	if got := m.AdmissionCount(); got != 0 {
+		t.Fatalf("final admissions=%d, want 0", got)
+	}
+}
+
+func TestCredentialValidationLeaseBoundsAuthoritativeChecks(t *testing.T) {
+	conn := NewAgentConn(nil, "leased", "linux")
+	var validations atomic.Int32
+	conn.SetCredentialValidatorWithLease(func() error {
+		validations.Add(1)
+		return nil
+	}, 20*time.Millisecond)
+
+	if err := conn.ValidateCredential(); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.ValidateCredential(); err != nil {
+		t.Fatal(err)
+	}
+	if got := validations.Load(); got != 1 {
+		t.Fatalf("validations within lease=%d, want 1", got)
+	}
+	time.Sleep(25 * time.Millisecond)
+	if err := conn.ValidateCredential(); err != nil {
+		t.Fatal(err)
+	}
+	if got := validations.Load(); got != 2 {
+		t.Fatalf("validations after lease=%d, want 2", got)
+	}
+	conn.rejected.Store(true)
+	if err := conn.ValidateCredential(); !errors.Is(err, ErrAgentCredentialRejected) {
+		t.Fatalf("local invalidation error=%v", err)
+	}
 }

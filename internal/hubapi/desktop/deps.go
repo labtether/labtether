@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/policy"
 	"github.com/labtether/labtether/internal/protocols"
@@ -74,7 +75,6 @@ type Deps struct {
 	DecodeJSONBody             func(w http.ResponseWriter, r *http.Request, dst any) error
 	ValidateMaxLen             func(field, value string, maxLen int) error
 	PrincipalActorID           func(ctx context.Context) string
-	IsOwnerActor               func(actorID string) bool
 	CanAccessOwnedSession      func(r *http.Request, sessionActorID string) bool
 	GenerateRequestID          func() string
 	SanitizeUpstreamError      func(msg string) string
@@ -87,6 +87,7 @@ type Deps struct {
 	UserIDFromContext          func(ctx context.Context) string
 	UserRoleFromContext        func(ctx context.Context) string
 	CheckSameOrigin            func(r *http.Request) bool
+	EvaluateAssetGuardrails    maintenanceguard.EvaluateAssetFunc
 
 	// Protocol config lookup for manual device connections.
 	GetProtocolConfig func(ctx context.Context, assetID, protocol string) (*protocols.ProtocolConfig, error)

@@ -21,21 +21,23 @@ func TestServiceHealthBridgeCollect(t *testing.T) {
 			{
 				AssetID:       "web-asset-monitor01",
 				ResponseMs:    142.5,
+				HasResponse:   true,
 				UptimePercent: 99.9,
+				HasUptime:     true,
 				Status:        1,
 				Labels: map[string]string{
-					"service_name": "homepage",
-					"service_url":  "https://example.com",
+					"target": "svc-homepage", "service_name": "homepage",
 				},
 			},
 			{
 				AssetID:       "web-asset-monitor01",
 				ResponseMs:    0,
+				HasResponse:   true,
 				UptimePercent: 72.3,
+				HasUptime:     true,
 				Status:        0,
 				Labels: map[string]string{
-					"service_name": "api",
-					"service_url":  "https://api.example.com/health",
+					"target": "svc-api", "service_name": "api",
 				},
 			},
 		},
@@ -83,10 +85,10 @@ func TestServiceHealthBridgeEmpty(t *testing.T) {
 	}
 }
 
-func TestServiceHealthBridgeLabelsHaveServiceNameAndURL(t *testing.T) {
+func TestServiceHealthBridgeLabelsExcludeSensitiveURL(t *testing.T) {
 	wantLabels := map[string]string{
+		"target":       "svc-grafana",
 		"service_name": "grafana",
-		"service_url":  "http://grafana.local:3000",
 	}
 
 	source := &mockServiceHealthSource{
@@ -94,7 +96,9 @@ func TestServiceHealthBridgeLabelsHaveServiceNameAndURL(t *testing.T) {
 			{
 				AssetID:       "web-asset-monitor02",
 				ResponseMs:    80.0,
+				HasResponse:   true,
 				UptimePercent: 100.0,
+				HasUptime:     true,
 				Status:        1,
 				Labels:        wantLabels,
 			},
@@ -109,6 +113,9 @@ func TestServiceHealthBridgeLabelsHaveServiceNameAndURL(t *testing.T) {
 	}
 
 	for _, s := range samples {
+		if _, leaked := s.Labels["service_url"]; leaked {
+			t.Fatalf("metric %q leaked service_url label", s.Metric)
+		}
 		if s.Labels == nil {
 			t.Errorf("metric %q: expected labels, got nil", s.Metric)
 			continue

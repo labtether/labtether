@@ -55,7 +55,7 @@ func (d *Deps) HandleTLSSettings(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		resp, err := d.buildTLSSettingsResponse(false)
 		if err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, err.Error())
+			writeAdminInternalError(w, http.StatusInternalServerError, "failed to load tls settings", err)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, resp)
@@ -90,17 +90,17 @@ func (d *Deps) handleTLSSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	keyCiphertext, err := d.SecretsManager.EncryptString(keyPEM, opspkg.TLSOverrideAAD)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to encrypt uploaded tls key")
+		writeAdminInternalError(w, http.StatusInternalServerError, "failed to encrypt uploaded tls key", err)
 		return
 	}
 	certPath, keyPath, err := opspkg.MaterializeUploadedTLSFiles(d.DataDir, certPEM, keyPEM)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to materialize uploaded tls certificate")
+		writeAdminInternalError(w, http.StatusInternalServerError, "failed to materialize uploaded tls certificate", err)
 		return
 	}
 	provider, err := opspkg.NewStaticHubCertificateProvider(certPath, keyPath)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load uploaded tls certificate")
+		writeAdminInternalError(w, http.StatusInternalServerError, "failed to load uploaded tls certificate", err)
 		return
 	}
 	updatedAt := time.Now().UTC()
@@ -109,7 +109,7 @@ func (d *Deps) handleTLSSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 		opspkg.TLSOverrideKeyCipherKey: keyCiphertext,
 		opspkg.TLSOverrideUpdatedAtKey: updatedAt.Format(time.RFC3339),
 	}); err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to persist uploaded tls certificate")
+		writeAdminInternalError(w, http.StatusInternalServerError, "failed to persist uploaded tls certificate", err)
 		return
 	}
 
@@ -136,7 +136,7 @@ func (d *Deps) handleTLSSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 
 	resp, buildErr := d.buildTLSSettingsResponse(restartRequired)
 	if buildErr != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, buildErr.Error())
+		writeAdminInternalError(w, http.StatusInternalServerError, "failed to load tls settings", buildErr)
 		return
 	}
 	servicehttp.WriteJSON(w, http.StatusOK, resp)
@@ -152,7 +152,7 @@ func (d *Deps) handleTLSSettingsClear(w http.ResponseWriter, r *http.Request) {
 		opspkg.TLSOverrideKeyCipherKey,
 		opspkg.TLSOverrideUpdatedAtKey,
 	}); err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to clear uploaded tls certificate")
+		writeAdminInternalError(w, http.StatusInternalServerError, "failed to clear uploaded tls certificate", err)
 		return
 	}
 
@@ -185,7 +185,7 @@ func (d *Deps) handleTLSSettingsClear(w http.ResponseWriter, r *http.Request) {
 
 	resp, buildErr := d.buildTLSSettingsResponse(restartRequired)
 	if buildErr != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, buildErr.Error())
+		writeAdminInternalError(w, http.StatusInternalServerError, "failed to load tls settings", buildErr)
 		return
 	}
 	servicehttp.WriteJSON(w, http.StatusOK, resp)

@@ -73,6 +73,7 @@ type AgentSettingDefinition struct {
 	RestartRequired bool
 	HubManaged      bool
 	LocalOnly       bool
+	Sensitive       bool
 }
 
 var agentSettingDefinitions = []AgentSettingDefinition{
@@ -286,6 +287,7 @@ var agentSettingDefinitions = []AgentSettingDefinition{
 		Type:         AgentSettingTypeString,
 		DefaultValue: "",
 		HubManaged:   true,
+		Sensitive:    true,
 	},
 	{
 		Key:             SettingKeyWebRTCWaylandExperimentalEnabled,
@@ -400,6 +402,7 @@ func NormalizeAgentSettingValue(key, raw string) (string, error) {
 		if definition.Key == SettingKeyWebRTCTURNURL ||
 			definition.Key == SettingKeyWebRTCTURNUser ||
 			definition.Key == SettingKeyWebRTCTURNPass ||
+			definition.Key == SettingKeyWebRTCWaylandPipeWireNodeID ||
 			definition.Key == SettingKeyTLSCAFile {
 			return value, nil
 		}

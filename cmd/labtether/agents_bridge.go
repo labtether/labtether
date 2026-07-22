@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"runtime/debug"
 	"time"
@@ -8,23 +9,40 @@ import (
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/credentials"
+	"github.com/labtether/labtether/internal/enrollment"
 	agentspkg "github.com/labtether/labtether/internal/hubapi/agents"
 	"github.com/labtether/labtether/internal/hubapi/shared"
+	"github.com/labtether/labtether/internal/persistence"
+	"github.com/labtether/labtether/internal/securityruntime"
+	"github.com/labtether/labtether/internal/telemetry"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
 // buildAgentsDeps constructs the agents.Deps from the apiServer's fields.
 func (s *apiServer) buildAgentsDeps() *agentspkg.Deps {
-	return &agentspkg.Deps{
-		AssetStore:      s.assetStore,
-		EnrollmentStore: s.enrollmentStore,
-		PresenceStore:   s.presenceStore,
-		RuntimeStore:    s.runtimeStore,
-		TelemetryStore:  s.telemetryStore,
-		LogStore:        s.logStore,
-		CredentialStore: s.credentialStore,
+	enrollmentTransactions, _ := s.enrollmentStore.(persistence.AgentEnrollmentTransactionStore)
+	deps := &agentspkg.Deps{
+		AssetStore:             s.assetStore,
+		EnrollmentStore:        s.enrollmentStore,
+		EnrollmentTransactions: enrollmentTransactions,
+		PresenceStore:          s.presenceStore,
+		RuntimeStore:           s.runtimeStore,
+		TelemetryStore:         s.telemetryStore,
+		LogStore:               s.logStore,
+		CredentialStore:        s.credentialStore,
+		SecretsManager:         s.secretsManager,
 
 		AgentMgr: s.agentMgr,
+		EnrollmentTokenMaxUses: enrollment.BoundedLimit(
+			envOrDefaultInt("LABTETHER_ENROLLMENT_TOKEN_MAX_USES", enrollment.DefaultTokenMaxUsesCeiling),
+			enrollment.DefaultTokenMaxUsesCeiling,
+			enrollment.HardTokenMaxUsesCeiling,
+		),
+		MaxEnrolledAgents: enrollment.BoundedLimit(
+			envOrDefaultInt("LABTETHER_MAX_ENROLLED_AGENTS", enrollment.DefaultMaxEnrolledAgents),
+			enrollment.DefaultMaxEnrolledAgents,
+			enrollment.HardMaxEnrolledAgents,
+		),
 
 		Broadcast: func(eventType string, data map[string]any) {
 			if s.broadcaster != nil {
@@ -35,10 +53,13 @@ func (s *apiServer) buildAgentsDeps() *agentspkg.Deps {
 		PendingAgents:    s.pendingAgents,
 		PendingAgentCmds: &s.pendingAgentCmds,
 
-		HubIdentity: s.hubIdentity,
-		CACertPEM:   s.tlsState.CACertPEM,
-		AgentCache:  s.agentCache,
-		TLSEnabled:  s.tlsState.Enabled,
+		HubIdentity: s.currentHubSSHIdentity(),
+		CurrentHubIdentity: func() *shared.HubSSHIdentity {
+			return s.currentHubSSHIdentity()
+		},
+		CACertPEM:  s.tlsState.CACertPEM,
+		AgentCache: s.agentCache,
+		TLSEnabled: s.tlsState.Enabled,
 
 		AgentWebSocketUpgrader: agentWebSocketUpgrader,
 
@@ -48,6 +69,42 @@ func (s *apiServer) buildAgentsDeps() *agentspkg.Deps {
 
 		ProcessHeartbeatRequest: func(req assets.HeartbeatRequest) (*assets.Asset, error) {
 			return s.processHeartbeatRequest(req)
+		},
+		ProcessAuthenticatedAgentHeartbeat: func(agentTokenID string, req assets.HeartbeatRequest) (*assets.Asset, error) {
+			if enrollmentTransactions == nil {
+				return nil, persistence.ErrAgentEnrollmentTransactionsUnavailable
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			assetEntry, err := enrollmentTransactions.CommitAuthenticatedAgentHeartbeat(ctx, agentTokenID, req)
+			if err != nil {
+				return nil, err
+			}
+			s.persistCanonicalHeartbeat(assetEntry, req)
+			if samples := telemetry.SamplesFromHeartbeatMetadata(assetEntry.ID, assetEntry.LastSeenAt, req.Metadata); len(samples) > 0 && s.telemetryStore != nil {
+				if err := s.telemetryStore.AppendSamples(context.Background(), samples); err != nil {
+					securityruntime.Logf("agentws: failed to append authenticated heartbeat samples for %s: %v", assetEntry.ID, err)
+				}
+			}
+			return &assetEntry, nil
+		},
+		ProcessExistingOwnerAgentHeartbeat: func(req assets.HeartbeatRequest) (*assets.Asset, error) {
+			if enrollmentTransactions == nil {
+				return nil, persistence.ErrAgentEnrollmentTransactionsUnavailable
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			assetEntry, err := enrollmentTransactions.CommitExistingOwnerAgentHeartbeat(ctx, req)
+			if err != nil {
+				return nil, err
+			}
+			s.persistCanonicalHeartbeat(assetEntry, req)
+			if samples := telemetry.SamplesFromHeartbeatMetadata(assetEntry.ID, assetEntry.LastSeenAt, req.Metadata); len(samples) > 0 && s.telemetryStore != nil {
+				if err := s.telemetryStore.AppendSamples(context.Background(), samples); err != nil {
+					securityruntime.Logf("agentws: failed to append owner heartbeat samples for %s: %v", assetEntry.ID, err)
+				}
+			}
+			return &assetEntry, nil
 		},
 		AutoProvisionDockerCollectorIfNeeded: func(agentAssetID string, connectors []agentmgr.ConnectorInfo) {
 			s.autoProvisionDockerCollectorIfNeeded(agentAssetID, connectors)
@@ -70,6 +127,14 @@ func (s *apiServer) buildAgentsDeps() *agentspkg.Deps {
 			return s.credentialStore.SaveAssetTerminalConfig(cfg)
 		},
 	}
+	if deps.RuntimeStore != nil {
+		if overrides, err := deps.RuntimeStore.ListRuntimeSettingOverrides(); err == nil {
+			if err := deps.MigrateSensitiveAgentSettingOverrides(overrides); err != nil {
+				securityruntime.Logf("agent settings: failed to migrate sensitive overrides: %v", err)
+			}
+		}
+	}
+	return deps
 }
 
 // ensureAgentsDeps returns the agents deps, creating and caching on first call.
@@ -132,10 +197,14 @@ func (s *apiServer) processAgentSettingsState(conn *agentmgr.AgentConn, msg agen
 }
 
 func (s *apiServer) sendSSHKeyInstall(conn *agentmgr.AgentConn) {
+	s.hubIdentityOperationMu.Lock()
+	defer s.hubIdentityOperationMu.Unlock()
 	s.ensureAgentsDeps().SendSSHKeyInstall(conn)
 }
 
 func (s *apiServer) sendSSHKeyRemove(conn *agentmgr.AgentConn) {
+	s.hubIdentityOperationMu.Lock()
+	defer s.hubIdentityOperationMu.Unlock()
 	s.ensureAgentsDeps().SendSSHKeyRemove(conn)
 }
 
@@ -209,6 +278,14 @@ func (s *apiServer) handleAgentBinary(w http.ResponseWriter, r *http.Request) {
 
 func (s *apiServer) handleAgentReleaseLatest(w http.ResponseWriter, r *http.Request) {
 	s.ensureAgentsDeps().HandleAgentReleaseLatest(w, r)
+}
+
+func (s *apiServer) handleAgentManifest(w http.ResponseWriter, r *http.Request) {
+	s.ensureAgentsDeps().HandleAgentManifest(w, r)
+}
+
+func (s *apiServer) handleAgentCacheRefresh(w http.ResponseWriter, r *http.Request) {
+	s.ensureAgentsDeps().HandleAgentCacheRefresh(w, r)
 }
 
 func (s *apiServer) handleAgentInstallScript(w http.ResponseWriter, r *http.Request) {
@@ -322,7 +399,7 @@ func decodePendingEnrollmentAssetID(w http.ResponseWriter, r *http.Request) (str
 	return agentspkg.DecodePendingEnrollmentAssetID(w, r)
 }
 func resolveApprovedAssetID(agent *pendingAgent, pendingAssetID string) string {
-	return agentspkg.ResolveApprovedAssetID(agent, pendingAssetID)
+	return agentspkg.ResolveApprovedAssetID(agentspkg.PendingAgentInfo{Hostname: agent.Hostname}, pendingAssetID)
 }
 func sendPendingEnrollmentDecision(agent *pendingAgent, msgType string, data any, closeReason string) error {
 	return agentspkg.SendPendingEnrollmentDecision(agent, msgType, data, closeReason)
@@ -372,8 +449,9 @@ func agentSettingStoreKey(assetID, key string) string {
 // Test-seam: cmd/labtether tests write to agentspkg.PendingEnrollmentAfterFunc directly.
 
 const (
-	maxPendingHostnameIDLen     = 64               // mirrors agents.maxPendingHostnameIDLen
-	maxPendingEnrollmentAgents  = 200              // mirrors agents.maxPendingEnrollmentAgents
-	maxPendingEnrollmentPerIP   = 5                // mirrors agents.maxPendingEnrollmentPerIP
-	maxPendingEnrollmentTimeout = 10 * time.Minute // mirrors agents.maxPendingEnrollmentTimeout
+	maxPendingHostnameIDLen           = 64               // mirrors agents.maxPendingHostnameIDLen
+	maxPendingEnrollmentAgents        = 200              // mirrors agents.maxPendingEnrollmentAgents
+	maxPendingEnrollmentPerIP         = 5                // mirrors agents.maxPendingEnrollmentPerIP
+	maxPendingEnrollmentTimeout       = 10 * time.Minute // mirrors agents.maxPendingEnrollmentTimeout
+	maxPendingEnrollmentProofMessages = 4                // mirrors agents.maxPendingEnrollmentProofMessages
 )

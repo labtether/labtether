@@ -9,15 +9,77 @@ import (
 
 // AgentManager tracks active WebSocket connections from agents.
 type AgentManager struct {
-	mu    sync.RWMutex
-	conns map[string]*AgentConn
+	mu              sync.RWMutex
+	conns           map[string]*AgentConn
+	admissions      int
+	admissionsByKey map[string]int
 }
 
 // NewManager creates an empty AgentManager.
 func NewManager() *AgentManager {
 	return &AgentManager{
-		conns: make(map[string]*AgentConn),
+		conns:           make(map[string]*AgentConn),
+		admissionsByKey: make(map[string]int),
 	}
+}
+
+type AdmissionRejection int
+
+const (
+	AdmissionAllowed AdmissionRejection = iota
+	AdmissionGlobalLimit
+	AdmissionSourceLimit
+)
+
+// TryReserveAdmission atomically reserves capacity for an authenticated or
+// in-flight agent WebSocket. The returned release function is idempotent and
+// must remain held for the full lifetime of the socket.
+func (m *AgentManager) TryReserveAdmission(sourceKey string, globalLimit, sourceLimit int) (func(), AdmissionRejection) {
+	if m == nil || globalLimit <= 0 || sourceLimit <= 0 {
+		return func() {}, AdmissionGlobalLimit
+	}
+	sourceKey = strings.TrimSpace(sourceKey)
+	if sourceKey == "" {
+		sourceKey = "unknown"
+	}
+	m.mu.Lock()
+	if m.admissions >= globalLimit {
+		m.mu.Unlock()
+		return func() {}, AdmissionGlobalLimit
+	}
+	if m.admissionsByKey[sourceKey] >= sourceLimit {
+		m.mu.Unlock()
+		return func() {}, AdmissionSourceLimit
+	}
+	m.admissions++
+	m.admissionsByKey[sourceKey]++
+	m.mu.Unlock()
+
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			m.mu.Lock()
+			if m.admissions > 0 {
+				m.admissions--
+			}
+			if count := m.admissionsByKey[sourceKey]; count <= 1 {
+				delete(m.admissionsByKey, sourceKey)
+			} else {
+				m.admissionsByKey[sourceKey] = count - 1
+			}
+			m.mu.Unlock()
+		})
+	}, AdmissionAllowed
+}
+
+// AdmissionCount returns the number of reserved live/in-flight sockets.
+func (m *AgentManager) AdmissionCount() int {
+	if m == nil {
+		return 0
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.admissions
 }
 
 // Register adds an agent connection. If an existing connection for the same

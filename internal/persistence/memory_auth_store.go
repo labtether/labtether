@@ -1,7 +1,9 @@
 package persistence
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -53,11 +55,27 @@ func (s *MemoryAuthStore) GetUserByUsername(username string) (auth.User, bool, e
 	return auth.User{}, false, nil
 }
 
+func (s *MemoryAuthStore) GetUserByOIDCIdentity(provider, issuer, subject string) (auth.User, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	issuer = strings.TrimSpace(issuer)
+	subject = strings.TrimSpace(subject)
+	for _, u := range s.users {
+		if u.AuthProvider == provider && u.OIDCIssuer == issuer && u.OIDCSubject == subject {
+			return u, true, nil
+		}
+	}
+	return auth.User{}, false, nil
+}
+
 func (s *MemoryAuthStore) GetUserByOIDCSubject(provider, subject string) (auth.User, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	subject = strings.TrimSpace(subject)
 	for _, u := range s.users {
-		if u.AuthProvider == provider && u.OIDCSubject == subject {
+		if u.AuthProvider == provider && u.OIDCIssuer == "" && u.OIDCSubject == subject {
 			return u, true, nil
 		}
 	}
@@ -138,6 +156,67 @@ func (s *MemoryAuthStore) CreateUserWithRole(username, passwordHash, role, authP
 	}
 	s.users = append(s.users, u)
 	return u, nil
+}
+
+func (s *MemoryAuthStore) CreateUserWithOIDCIdentity(
+	username, passwordHash, role, authProvider, oidcIssuer, oidcSubject string,
+) (auth.User, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	authProvider = strings.ToLower(strings.TrimSpace(authProvider))
+	oidcIssuer = strings.TrimSpace(oidcIssuer)
+	oidcSubject = strings.TrimSpace(oidcSubject)
+	if authProvider == "" || oidcIssuer == "" || oidcSubject == "" {
+		return auth.User{}, fmt.Errorf("oidc provider, issuer, and subject are required")
+	}
+	for _, u := range s.users {
+		if u.Username == username {
+			return auth.User{}, fmt.Errorf("user %q already exists", username)
+		}
+		if u.AuthProvider == authProvider && u.OIDCIssuer == oidcIssuer && u.OIDCSubject == oidcSubject {
+			return auth.User{}, fmt.Errorf("oidc identity already exists")
+		}
+	}
+	now := time.Now().UTC()
+	u := auth.User{
+		ID:           s.nextUserID(),
+		Username:     username,
+		PasswordHash: passwordHash,
+		Role:         role,
+		AuthProvider: authProvider,
+		OIDCIssuer:   oidcIssuer,
+		OIDCSubject:  oidcSubject,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	s.users = append(s.users, u)
+	return u, nil
+}
+
+func (s *MemoryAuthStore) BindLegacyOIDCIdentity(
+	id, authProvider, oidcSubject, oidcIssuer string,
+) (auth.User, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	authProvider = strings.ToLower(strings.TrimSpace(authProvider))
+	oidcSubject = strings.TrimSpace(oidcSubject)
+	oidcIssuer = strings.TrimSpace(oidcIssuer)
+	if strings.TrimSpace(id) == "" || authProvider == "" || oidcSubject == "" || oidcIssuer == "" {
+		return auth.User{}, false, fmt.Errorf("legacy oidc binding and issuer are required")
+	}
+	for _, u := range s.users {
+		if u.ID != id && u.AuthProvider == authProvider && u.OIDCIssuer == oidcIssuer && u.OIDCSubject == oidcSubject {
+			return auth.User{}, false, fmt.Errorf("oidc identity already exists")
+		}
+	}
+	for i, u := range s.users {
+		if u.ID == id && u.AuthProvider == authProvider && u.OIDCIssuer == "" && u.OIDCSubject == oidcSubject {
+			s.users[i].OIDCIssuer = oidcIssuer
+			s.users[i].UpdatedAt = time.Now().UTC()
+			return s.users[i], true, nil
+		}
+	}
+	return auth.User{}, false, nil
 }
 
 func (s *MemoryAuthStore) UpdateUserPasswordHash(id, passwordHash string) error {
@@ -247,8 +326,36 @@ func (s *MemoryAuthStore) UpdateUserRecoveryCodes(id, recoveryCodes string) erro
 }
 
 func (s *MemoryAuthStore) ConsumeRecoveryCode(userID, code string) (bool, error) {
-	// Simplified: always returns false for in-memory tests.
-	return false, nil
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	userID = strings.TrimSpace(userID)
+	for i, user := range s.users {
+		if user.ID != userID {
+			continue
+		}
+		if strings.TrimSpace(user.TOTPRecoveryCodes) == "" {
+			return false, nil
+		}
+		var hashes []string
+		if err := json.Unmarshal([]byte(user.TOTPRecoveryCodes), &hashes); err != nil {
+			return false, nil
+		}
+		for index, hash := range hashes {
+			if !auth.CheckRecoveryCode(code, hash) {
+				continue
+			}
+			hashes = append(hashes[:index], hashes[index+1:]...)
+			updated, err := json.Marshal(hashes)
+			if err != nil {
+				return false, err
+			}
+			s.users[i].TOTPRecoveryCodes = string(updated)
+			s.users[i].UpdatedAt = time.Now().UTC()
+			return true, nil
+		}
+		return false, nil
+	}
+	return false, auth.ErrUserNotFound
 }
 
 func (s *MemoryAuthStore) CreateAuthSession(userID, tokenHash string, expiresAt time.Time) (auth.Session, error) {

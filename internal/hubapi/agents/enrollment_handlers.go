@@ -2,7 +2,6 @@ package agents
 
 import (
 	"errors"
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"log"
 	"net"
 	"net/http"
@@ -13,6 +12,7 @@ import (
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/auth"
 	"github.com/labtether/labtether/internal/enrollment"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/platforms"
 	"github.com/labtether/labtether/internal/servicehttp"
@@ -41,7 +41,7 @@ func (d *Deps) HandleEnroll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if d.EnrollmentStore == nil {
+	if d.EnrollmentStore == nil || d.EnrollmentTransactions == nil {
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "enrollment not available")
 		return
 	}
@@ -61,24 +61,14 @@ func (d *Deps) HandleEnroll(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusBadRequest, "enrollment_token is required")
 		return
 	}
-	if strings.TrimSpace(req.Hostname) == "" {
-		servicehttp.WriteError(w, http.StatusBadRequest, "hostname is required")
+	hostname, validHostname := validEnrollmentHostname(req.Hostname, false)
+	if !validHostname {
+		servicehttp.WriteError(w, http.StatusBadRequest, "hostname must be valid UTF-8, at most 253 bytes, and contain no control characters")
 		return
 	}
+	req.Hostname = hostname
 
-	// Validate enrollment token without consuming it yet — we check for
-	// conflicts first so that duplicate hostnames don't burn one-time tokens.
 	tokenHash := auth.HashToken(strings.TrimSpace(req.EnrollmentToken))
-	_, valid, err := d.EnrollmentStore.ValidateEnrollmentToken(tokenHash)
-	if err != nil {
-		log.Printf("enroll: error validating enrollment token: %v", err)
-		servicehttp.WriteError(w, http.StatusInternalServerError, "enrollment error")
-		return
-	}
-	if !valid {
-		servicehttp.WriteError(w, http.StatusUnauthorized, "invalid or expired enrollment token")
-		return
-	}
 
 	// Generate asset ID from hostname (normalized to safe characters).
 	assetID := NormalizeHostnameForAssetID(req.Hostname)
@@ -87,26 +77,9 @@ func (d *Deps) HandleEnroll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resolvedPlatform := platforms.Resolve(req.Platform, "", "", "", "")
-	if d.AssetStore != nil {
-		if _, exists, err := d.AssetStore.GetAsset(assetID); err != nil {
-			log.Printf("enroll: failed to validate existing asset %s: %v", assetID, err)
-			servicehttp.WriteError(w, http.StatusInternalServerError, "enrollment error")
-			return
-		} else if exists {
-			servicehttp.WriteError(w, http.StatusConflict, "hostname is already enrolled; create a new asset identity before re-enrolling")
-			return
-		}
-	}
-
-	// Now atomically consume the token after all precondition checks pass.
-	etok, valid, err := d.EnrollmentStore.ConsumeEnrollmentToken(tokenHash)
-	if err != nil {
-		log.Printf("enroll: error consuming enrollment token: %v", err)
-		servicehttp.WriteError(w, http.StatusInternalServerError, "enrollment error")
-		return
-	}
-	if !valid {
-		servicehttp.WriteError(w, http.StatusUnauthorized, "enrollment token was consumed by a concurrent request")
+	deviceFingerprint, proofVersion, identityProofProvided, identityProofErr := verifyTokenEnrollmentIdentity(req, assetID)
+	if identityProofErr != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, "invalid device identity proof")
 		return
 	}
 
@@ -119,25 +92,40 @@ func (d *Deps) HandleEnroll(w http.ResponseWriter, r *http.Request) {
 	}
 	expiresAt := NewAgentTokenExpiry(time.Now().UTC())
 
-	// Store agent token
-	if _, err := d.EnrollmentStore.CreateAgentToken(assetID, hashedToken, etok.ID, expiresAt); err != nil {
-		log.Printf("enroll: error creating agent token: %v", err)
-		servicehttp.WriteError(w, http.StatusInternalServerError, "enrollment error")
+	keyAlgorithm := ""
+	if identityProofProvided {
+		keyAlgorithm = strings.ToLower(strings.TrimSpace(req.DeviceKeyAlg))
+	}
+	commitResult, err := d.EnrollmentTransactions.CommitAgentEnrollment(r.Context(), persistence.AgentEnrollmentCommitRequest{
+		AssetID:             assetID,
+		Hostname:            strings.TrimSpace(req.Hostname),
+		Platform:            resolvedPlatform,
+		GroupID:             strings.TrimSpace(req.GroupID),
+		EnrollmentTokenHash: tokenHash,
+		AgentTokenHash:      hashedToken,
+		AgentTokenExpiresAt: expiresAt,
+		DeviceFingerprint:   deviceFingerprint,
+		DeviceKeyAlgorithm:  keyAlgorithm,
+		DeviceProofVersion:  proofVersion,
+		MaxEnrolledAgents:   d.MaxEnrolledAgents,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, persistence.ErrEnrollmentTokenInvalid):
+			servicehttp.WriteError(w, http.StatusUnauthorized, "invalid or expired enrollment token")
+		case errors.Is(err, persistence.ErrAgentIdentityProofV2Required),
+			errors.Is(err, persistence.ErrRecoveryRequiresSingleUseToken),
+			errors.Is(err, persistence.ErrAgentIdentityContinuityConflict):
+			servicehttp.WriteError(w, http.StatusConflict, "hostname is already enrolled; valid single-use device identity continuity proof is required")
+		case errors.Is(err, persistence.ErrEnrollmentTokenPredatesRotation):
+			servicehttp.WriteError(w, http.StatusConflict, "enrollment token was issued before the latest credential rotation; create a new single-use token")
+		case errors.Is(err, persistence.ErrAgentFleetCapacityReached):
+			servicehttp.WriteError(w, http.StatusConflict, "agent fleet capacity reached; decommission an enrolled agent or raise the configured limit")
+		default:
+			log.Printf("enroll: atomic enrollment failed: %v", err)
+			servicehttp.WriteError(w, http.StatusInternalServerError, "enrollment error")
+		}
 		return
-	}
-
-	// Upsert asset via heartbeat
-	hbReq := assets.HeartbeatRequest{
-		AssetID:  assetID,
-		Type:     "node",
-		Name:     req.Hostname,
-		Source:   "agent",
-		GroupID:  strings.TrimSpace(req.GroupID),
-		Status:   "online",
-		Platform: resolvedPlatform,
-	}
-	if _, err := d.ProcessHeartbeatRequest(hbReq); err != nil {
-		log.Printf("enroll: heartbeat upsert failed for %s: %v", assetID, err)
 	}
 
 	// Reuse the same public connection resolver as discovery/install flows so
@@ -150,6 +138,7 @@ func (d *Deps) HandleEnroll(w http.ResponseWriter, r *http.Request) {
 	servicehttp.WriteJSON(w, http.StatusOK, enrollment.EnrollResponse{
 		AgentToken: rawToken,
 		AssetID:    assetID,
+		GroupID:    strings.TrimSpace(commitResult.Asset.GroupID),
 		HubWSURL:   hubWSURL,
 		HubAPIURL:  hubAPIURL,
 		CACertPEM:  string(d.CACertPEM),
@@ -214,9 +203,12 @@ func (d *Deps) HandleEnrollmentTokens(w http.ResponseWriter, r *http.Request) {
 		if req.TTLHours > 720 { // max 30 days
 			req.TTLHours = 720
 		}
-		if req.MaxUses <= 0 {
-			req.MaxUses = 1
+		maxUses, err := enrollment.NormalizeRequestedTokenMaxUses(req.MaxUses, d.EnrollmentTokenMaxUses)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+			return
 		}
+		req.MaxUses = maxUses
 
 		expiresAt := time.Now().UTC().Add(time.Duration(req.TTLHours) * time.Hour)
 
@@ -229,6 +221,10 @@ func (d *Deps) HandleEnrollmentTokens(w http.ResponseWriter, r *http.Request) {
 
 		tok, err := d.EnrollmentStore.CreateEnrollmentToken(hashedToken, req.Label, expiresAt, req.MaxUses)
 		if err != nil {
+			if validateErr := enrollment.ValidateStoredTokenMaxUses(req.MaxUses); validateErr != nil {
+				servicehttp.WriteError(w, http.StatusBadRequest, validateErr.Error())
+				return
+			}
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create enrollment token")
 			return
 		}
@@ -315,7 +311,7 @@ func (d *Deps) HandleAgentTokens(w http.ResponseWriter, r *http.Request) {
 		}
 		deviceFingerprints = make(map[string]string, len(assetList))
 		for _, asset := range assetList {
-			if fingerprint := strings.TrimSpace(asset.Metadata["agent_device_fingerprint"]); fingerprint != "" {
+			if fingerprint := strings.TrimSpace(asset.Metadata[assets.MetadataKeyAgentDeviceFingerprint]); fingerprint != "" {
 				deviceFingerprints[asset.ID] = fingerprint
 			}
 		}
@@ -391,6 +387,18 @@ func (d *Deps) HandleAgentTokenActions(w http.ResponseWriter, r *http.Request) {
 		}
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to revoke agent token")
 		return
+	}
+	// Drop a matching local socket immediately. Other hub replicas enforce the
+	// same revocation before their next inbound message, ping, or outbound send
+	// through the connection credential validator.
+	if d.AgentMgr != nil {
+		for _, assetID := range d.AgentMgr.ConnectedAssets() {
+			conn, ok := d.AgentMgr.Get(assetID)
+			if !ok || strings.TrimSpace(conn.Meta("auth.agent_token_id")) != id {
+				continue
+			}
+			d.AgentMgr.UnregisterIfMatch(assetID, conn)
+		}
 	}
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
 }

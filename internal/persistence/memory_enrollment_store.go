@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -10,24 +11,45 @@ import (
 
 // MemoryEnrollmentStore provides an in-memory implementation of EnrollmentStore for testing.
 type MemoryEnrollmentStore struct {
-	mu               sync.RWMutex
-	enrollmentTokens map[string]enrollment.EnrollmentToken // id -> token
-	enrollmentByHash map[string]string                     // tokenHash -> id
-	agentTokens      map[string]enrollment.AgentToken      // id -> token
-	agentByHash      map[string]string                     // tokenHash -> id
-	nextID           int
+	mu                sync.RWMutex
+	enrollmentTokens  map[string]enrollment.EnrollmentToken // id -> token
+	enrollmentByHash  map[string]string                     // tokenHash -> id
+	agentTokens       map[string]enrollment.AgentToken      // id -> token
+	agentByHash       map[string]string                     // tokenHash -> id
+	identityRotatedAt map[string]time.Time                  // assetID -> latest durable credential rotation
+	nextID            int
+	assetStore        *MemoryAssetStore
+	groupStore        *MemoryGroupStore
 }
 
-func NewMemoryEnrollmentStore() *MemoryEnrollmentStore {
-	return &MemoryEnrollmentStore{
-		enrollmentTokens: make(map[string]enrollment.EnrollmentToken),
-		enrollmentByHash: make(map[string]string),
-		agentTokens:      make(map[string]enrollment.AgentToken),
-		agentByHash:      make(map[string]string),
+func NewMemoryEnrollmentStore(assetStores ...*MemoryAssetStore) *MemoryEnrollmentStore {
+	store := &MemoryEnrollmentStore{
+		enrollmentTokens:  make(map[string]enrollment.EnrollmentToken),
+		enrollmentByHash:  make(map[string]string),
+		agentTokens:       make(map[string]enrollment.AgentToken),
+		agentByHash:       make(map[string]string),
+		identityRotatedAt: make(map[string]time.Time),
 	}
+	if len(assetStores) > 0 {
+		store.assetStore = assetStores[0]
+	}
+	return store
+}
+
+// NewMemoryEnrollmentStoreWithGroupStore enables the same initial enrollment
+// placement validation enforced by Postgres. Tests that exercise HTTP
+// enrollment should use this constructor so a stale group id cannot create an
+// in-memory state that production would reject at the foreign-key boundary.
+func NewMemoryEnrollmentStoreWithGroupStore(assetStore *MemoryAssetStore, groupStore *MemoryGroupStore) *MemoryEnrollmentStore {
+	store := NewMemoryEnrollmentStore(assetStore)
+	store.groupStore = groupStore
+	return store
 }
 
 func (m *MemoryEnrollmentStore) CreateEnrollmentToken(tokenHash, label string, expiresAt time.Time, maxUses int) (enrollment.EnrollmentToken, error) {
+	if err := enrollment.ValidateStoredTokenMaxUses(maxUses); err != nil {
+		return enrollment.EnrollmentToken{}, err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -60,10 +82,10 @@ func (m *MemoryEnrollmentStore) ValidateEnrollmentToken(tokenHash string) (enrol
 	if tok.RevokedAt != nil {
 		return tok, false, nil
 	}
-	if now.After(tok.ExpiresAt) {
+	if !now.Before(tok.ExpiresAt) {
 		return tok, false, nil
 	}
-	if tok.MaxUses > 0 && tok.UseCount >= tok.MaxUses {
+	if tok.MaxUses < 1 || tok.MaxUses > enrollment.HardTokenMaxUsesCeiling || tok.UseCount >= tok.MaxUses {
 		return tok, false, nil
 	}
 	return tok, true, nil
@@ -83,10 +105,10 @@ func (m *MemoryEnrollmentStore) ConsumeEnrollmentToken(tokenHash string) (enroll
 	if tok.RevokedAt != nil {
 		return tok, false, nil
 	}
-	if now.After(tok.ExpiresAt) {
+	if !now.Before(tok.ExpiresAt) {
 		return tok, false, nil
 	}
-	if tok.MaxUses > 0 && tok.UseCount >= tok.MaxUses {
+	if tok.MaxUses < 1 || tok.MaxUses > enrollment.HardTokenMaxUsesCeiling || tok.UseCount >= tok.MaxUses {
 		return tok, false, nil
 	}
 
@@ -101,7 +123,11 @@ func (m *MemoryEnrollmentStore) IncrementEnrollmentTokenUse(id string) error {
 
 	tok, ok := m.enrollmentTokens[id]
 	if !ok {
-		return fmt.Errorf("enrollment token %s not found", id)
+		return ErrEnrollmentTokenInvalid
+	}
+	now := time.Now().UTC()
+	if tok.RevokedAt != nil || !now.Before(tok.ExpiresAt) || tok.MaxUses < 1 || tok.MaxUses > enrollment.HardTokenMaxUsesCeiling || tok.UseCount >= tok.MaxUses {
+		return ErrEnrollmentTokenInvalid
 	}
 	tok.UseCount++
 	m.enrollmentTokens[id] = tok
@@ -143,6 +169,14 @@ func (m *MemoryEnrollmentStore) ListEnrollmentTokens(limit int) ([]enrollment.En
 }
 
 func (m *MemoryEnrollmentStore) CreateAgentToken(assetID, tokenHash, enrolledVia string, expiresAt time.Time) (enrollment.AgentToken, error) {
+	assetID = strings.TrimSpace(assetID)
+	if assetID == "" {
+		return enrollment.AgentToken{}, fmt.Errorf("asset id is required")
+	}
+	if m.assetStore != nil {
+		m.assetStore.mu.Lock()
+		defer m.assetStore.mu.Unlock()
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -158,6 +192,51 @@ func (m *MemoryEnrollmentStore) CreateAgentToken(assetID, tokenHash, enrolledVia
 	}
 	m.agentTokens[tok.ID] = tok
 	m.agentByHash[tokenHash] = tok.ID
+	if m.assetStore != nil {
+		if _, exists := m.assetStore.assets[assetID]; exists {
+			m.identityRotatedAt[assetID] = now
+		}
+	}
+	return tok, nil
+}
+
+func (m *MemoryEnrollmentStore) RotateAgentToken(assetID, tokenHash, enrolledVia string, expiresAt time.Time) (enrollment.AgentToken, error) {
+	assetID = strings.TrimSpace(assetID)
+	if assetID == "" {
+		return enrollment.AgentToken{}, fmt.Errorf("asset id is required")
+	}
+	if m.assetStore != nil {
+		m.assetStore.mu.Lock()
+		defer m.assetStore.mu.Unlock()
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	now := time.Now().UTC()
+	for id, existing := range m.agentTokens {
+		if existing.AssetID == assetID && existing.Status == "active" {
+			existing.Status = "revoked"
+			existing.RevokedAt = &now
+			m.agentTokens[id] = existing
+		}
+	}
+
+	m.nextID++
+	tok := enrollment.AgentToken{
+		ID:          fmt.Sprintf("atok-%d", m.nextID),
+		AssetID:     assetID,
+		Status:      "active",
+		EnrolledVia: enrolledVia,
+		ExpiresAt:   expiresAt.UTC(),
+		CreatedAt:   now,
+	}
+	m.agentTokens[tok.ID] = tok
+	m.agentByHash[tokenHash] = tok.ID
+	if m.assetStore != nil {
+		if _, exists := m.assetStore.assets[assetID]; exists {
+			m.identityRotatedAt[assetID] = now
+		}
+	}
 	return tok, nil
 }
 
@@ -170,7 +249,7 @@ func (m *MemoryEnrollmentStore) ValidateAgentToken(tokenHash string) (enrollment
 		return enrollment.AgentToken{}, false, nil
 	}
 	tok := m.agentTokens[id]
-	if tok.Status != "active" {
+	if tok.Status != "active" || tok.RevokedAt != nil {
 		return tok, false, nil
 	}
 	if !time.Now().UTC().Before(tok.ExpiresAt) {
@@ -234,8 +313,10 @@ func (m *MemoryEnrollmentStore) DeleteDeadTokens() (int, int, error) {
 	enrollDeleted := 0
 	for id, tok := range m.enrollmentTokens {
 		isDead := tok.RevokedAt != nil ||
-			now.After(tok.ExpiresAt) ||
-			(tok.MaxUses > 0 && tok.UseCount >= tok.MaxUses)
+			!now.Before(tok.ExpiresAt) ||
+			tok.MaxUses < 1 ||
+			tok.MaxUses > enrollment.HardTokenMaxUsesCeiling ||
+			tok.UseCount >= tok.MaxUses
 		if isDead {
 			delete(m.enrollmentTokens, id)
 			for hash, hid := range m.enrollmentByHash {
@@ -249,7 +330,7 @@ func (m *MemoryEnrollmentStore) DeleteDeadTokens() (int, int, error) {
 
 	agentDeleted := 0
 	for id, tok := range m.agentTokens {
-		if tok.Status == "revoked" && tok.LastUsedAt == nil {
+		if (tok.Status == "revoked" && tok.LastUsedAt == nil) || (tok.Status == "pending" && !now.Before(tok.ExpiresAt)) {
 			delete(m.agentTokens, id)
 			for hash, hid := range m.agentByHash {
 				if hid == id {

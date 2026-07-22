@@ -73,6 +73,13 @@ func (m *MemoryLinkSuggestionStore) ListPendingLinkSuggestions() ([]LinkSuggesti
 	return out, nil
 }
 
+func (m *MemoryLinkSuggestionStore) GetLinkSuggestion(id string) (LinkSuggestion, bool, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	suggestion, ok := m.suggestions[strings.TrimSpace(id)]
+	return suggestion, ok, nil
+}
+
 func (m *MemoryLinkSuggestionStore) ResolveLinkSuggestion(id, status, resolvedBy string) error {
 	now := time.Now().UTC()
 	id = strings.TrimSpace(id)

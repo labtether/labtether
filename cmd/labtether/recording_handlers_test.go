@@ -75,6 +75,30 @@ func TestAuthorizeRecordingSessionAccessHonorsOwnerAndAdminSemantics(t *testing.
 	}
 }
 
+func TestAuthorizeRecordingSessionAccessEnforcesAPIKeyAssetAllowlist(t *testing.T) {
+	sut := newTestAPIServer(t)
+	session, err := sut.terminalStore.CreateSession(terminal.CreateSessionRequest{
+		ActorID: "actor-a",
+		Target:  "srv2",
+		Mode:    "desktop",
+	})
+	if err != nil {
+		t.Fatalf("create desktop session: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/recordings/"+session.ID, nil)
+	ctx := contextWithPrincipal(req.Context(), "apikey:key-a", "admin")
+	ctx = contextWithAllowedAssets(ctx, []string{"srv1"})
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+	if sut.authorizeRecordingSessionAccess(rec, req, session.ID) {
+		t.Fatal("asset-restricted admin API key accessed another asset's recording")
+	}
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for disallowed recording asset, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestCanAccessRecordingMetadataUsesDesktopSessionOwnership(t *testing.T) {
 	sut := newTestAPIServer(t)
 	session, err := sut.terminalStore.CreateSession(terminal.CreateSessionRequest{

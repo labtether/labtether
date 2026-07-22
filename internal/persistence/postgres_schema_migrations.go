@@ -2605,5 +2605,318 @@ func postgresSchemaMigrations() []schemaMigration {
 		},
 	})
 
+	migrations = append(migrations, schemaMigration{
+		Version: 82,
+		Name:    "push_device_notification_preferences",
+		Statements: []string{
+			`ALTER TABLE push_devices ADD COLUMN IF NOT EXISTS environment TEXT NOT NULL DEFAULT '' CHECK (environment IN ('', 'sandbox', 'production'))`,
+			`ALTER TABLE push_devices ADD COLUMN IF NOT EXISTS notify_critical_alerts BOOLEAN NOT NULL DEFAULT TRUE`,
+			`ALTER TABLE push_devices ADD COLUMN IF NOT EXISTS notify_node_offline BOOLEAN NOT NULL DEFAULT TRUE`,
+			`ALTER TABLE push_devices ADD COLUMN IF NOT EXISTS notify_service_down BOOLEAN NOT NULL DEFAULT TRUE`,
+			`ALTER TABLE push_devices ADD COLUMN IF NOT EXISTS push_category TEXT NOT NULL DEFAULT 'critical_only' CHECK (push_category IN ('critical_only', 'all_alerts', 'alerts_and_incidents'))`,
+			`ALTER TABLE push_devices ADD COLUMN IF NOT EXISTS minimum_severity TEXT NOT NULL DEFAULT 'warning' CHECK (minimum_severity IN ('info', 'warning', 'high', 'critical'))`,
+			`ALTER TABLE push_devices ADD COLUMN IF NOT EXISTS quiet_hours_enabled BOOLEAN NOT NULL DEFAULT FALSE`,
+			`ALTER TABLE push_devices ADD COLUMN IF NOT EXISTS quiet_hours_start_minutes INTEGER NOT NULL DEFAULT 1320 CHECK (quiet_hours_start_minutes BETWEEN 0 AND 1439)`,
+			`ALTER TABLE push_devices ADD COLUMN IF NOT EXISTS quiet_hours_end_minutes INTEGER NOT NULL DEFAULT 420 CHECK (quiet_hours_end_minutes BETWEEN 0 AND 1439)`,
+			`ALTER TABLE push_devices ADD COLUMN IF NOT EXISTS digest_window_seconds INTEGER NOT NULL DEFAULT 180 CHECK (digest_window_seconds BETWEEN 30 AND 86400)`,
+		},
+	})
+
+	migrations = append(migrations, schemaMigration{
+		Version: 83,
+		Name:    "terminal_user_state_actor_scope",
+		Statements: []string{
+			`ALTER TABLE terminal_workspace_tabs ADD COLUMN IF NOT EXISTS actor_id TEXT NOT NULL DEFAULT ''`,
+			`ALTER TABLE terminal_snippets ADD COLUMN IF NOT EXISTS actor_id TEXT NOT NULL DEFAULT ''`,
+			`DO $$
+			DECLARE
+				owner_count INTEGER := 0;
+				legacy_actor_id TEXT := 'owner';
+			BEGIN
+				IF EXISTS (
+					SELECT 1
+					  FROM information_schema.columns
+					 WHERE table_name = 'users'
+					   AND column_name = 'role'
+				) THEN
+					SELECT COUNT(*), COALESCE(MIN(id), 'owner')
+					  INTO owner_count, legacy_actor_id
+					  FROM users
+					 WHERE role = 'owner';
+
+					IF owner_count <> 1 OR legacy_actor_id = '' THEN
+						legacy_actor_id := 'owner';
+					END IF;
+				END IF;
+
+				UPDATE terminal_workspace_tabs
+				   SET actor_id = legacy_actor_id
+				 WHERE actor_id = '';
+				UPDATE terminal_snippets
+				   SET actor_id = legacy_actor_id
+				 WHERE actor_id = '';
+
+				IF legacy_actor_id <> 'default' THEN
+					INSERT INTO terminal_preferences (
+						user_id, theme, font_family, font_size, cursor_style,
+						cursor_blink, scrollback, toolbar_keys, auto_reconnect, updated_at
+					)
+					SELECT legacy_actor_id, theme, font_family, font_size, cursor_style,
+						cursor_blink, scrollback, toolbar_keys, auto_reconnect, updated_at
+					  FROM terminal_preferences
+					 WHERE user_id = 'default'
+					ON CONFLICT (user_id) DO NOTHING;
+
+					DELETE FROM terminal_preferences WHERE user_id = 'default';
+				END IF;
+			END $$`,
+			`ALTER TABLE terminal_workspace_tabs ALTER COLUMN actor_id DROP DEFAULT`,
+			`ALTER TABLE terminal_snippets ALTER COLUMN actor_id DROP DEFAULT`,
+			`CREATE INDEX IF NOT EXISTS idx_terminal_workspace_tabs_actor_order ON terminal_workspace_tabs(actor_id, sort_order, created_at)`,
+			`CREATE INDEX IF NOT EXISTS idx_terminal_snippets_actor_scope_order ON terminal_snippets(actor_id, scope, sort_order, created_at)`,
+		},
+	})
+
+	migrations = append(migrations, schemaMigration{
+		Version: 84,
+		Name:    "push_device_timezone_and_token_ownership",
+		Statements: []string{
+			`ALTER TABLE push_devices ADD COLUMN IF NOT EXISTS time_zone TEXT NOT NULL DEFAULT 'UTC'`,
+			`DELETE FROM push_devices stale
+			 USING push_devices winner
+			 WHERE stale.id <> winner.id
+			   AND stale.device_id = winner.device_id
+			   AND stale.bundle_id = winner.bundle_id
+			   AND stale.environment = winner.environment
+			   AND (stale.updated_at < winner.updated_at OR (stale.updated_at = winner.updated_at AND stale.id < winner.id))`,
+			`DELETE FROM push_devices stale
+			 USING push_devices winner
+			 WHERE stale.id <> winner.id
+			   AND stale.push_token = winner.push_token
+			   AND stale.bundle_id = winner.bundle_id
+			   AND stale.environment = winner.environment
+			   AND (stale.updated_at < winner.updated_at OR (stale.updated_at = winner.updated_at AND stale.id < winner.id))`,
+			`CREATE UNIQUE INDEX IF NOT EXISTS idx_push_devices_device_topic_environment
+				ON push_devices(device_id, bundle_id, environment)`,
+			`CREATE UNIQUE INDEX IF NOT EXISTS idx_push_devices_token_topic_environment
+				ON push_devices(push_token, bundle_id, environment)`,
+		},
+	})
+
+	migrations = append(migrations, schemaMigration{
+		Version: 85,
+		Name:    "oidc_issuer_scoped_identity",
+		Statements: []string{
+			`ALTER TABLE users ADD COLUMN IF NOT EXISTS oidc_issuer TEXT`,
+			`DROP INDEX IF EXISTS idx_users_auth_provider_subject`,
+			`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_auth_provider_issuer_subject
+				ON users(auth_provider, oidc_issuer, oidc_subject)
+				WHERE oidc_subject IS NOT NULL
+				  AND oidc_issuer IS NOT NULL
+				  AND BTRIM(oidc_issuer) <> ''`,
+			`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_auth_provider_legacy_subject
+				ON users(auth_provider, oidc_subject)
+				WHERE oidc_subject IS NOT NULL
+				  AND (oidc_issuer IS NULL OR BTRIM(oidc_issuer) = '')`,
+		},
+	})
+
+	migrations = append(migrations, schemaMigration{
+		Version: 86,
+		Name:    "push_device_timezone_unknown_default",
+		Statements: []string{
+			`ALTER TABLE push_devices ALTER COLUMN time_zone SET DEFAULT ''`,
+		},
+	})
+
+	migrations = append(migrations, schemaMigration{
+		Version: 87,
+		Name:    "hub_metric_samples",
+		Statements: []string{
+			`CREATE TABLE IF NOT EXISTS hub_metric_samples (
+				id BIGSERIAL PRIMARY KEY,
+				scope TEXT NOT NULL CHECK (scope IN ('hub-alerts', 'hub-reliability')),
+				metric TEXT NOT NULL,
+				unit TEXT NOT NULL,
+				value DOUBLE PRECISION NOT NULL,
+				collected_at TIMESTAMPTZ NOT NULL,
+				labels JSONB
+			)`,
+			`CREATE INDEX IF NOT EXISTS idx_hub_metric_samples_scope_metric_time
+				ON hub_metric_samples(scope, metric, collected_at DESC)`,
+			`CREATE INDEX IF NOT EXISTS idx_hub_metric_samples_time
+				ON hub_metric_samples(collected_at DESC)`,
+		},
+	})
+
+	migrations = append(migrations, schemaMigration{
+		Version: 88,
+		Name:    "metric_samples_bounded_labeled_snapshot_index",
+		Statements: []string{
+			`CREATE INDEX IF NOT EXISTS idx_metric_samples_asset_time_labeled_snapshot
+				ON metric_samples(asset_id, collected_at DESC, id DESC)`,
+		},
+	})
+
+	migrations = append(migrations, schemaMigration{
+		Version: 89,
+		Name:    "live_activity_push_tokens",
+		Statements: []string{
+			`CREATE TABLE IF NOT EXISTS live_activity_push_tokens (
+				id TEXT PRIMARY KEY,
+				user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+				device_id TEXT NOT NULL,
+				activity_id TEXT NOT NULL,
+				incident_id TEXT NOT NULL,
+				token_ciphertext TEXT NOT NULL,
+				token_hash TEXT NOT NULL,
+				bundle_id TEXT NOT NULL,
+				environment TEXT NOT NULL CHECK (environment IN ('sandbox', 'production')),
+				show_full_details BOOLEAN NOT NULL DEFAULT FALSE,
+					retry_count INTEGER NOT NULL DEFAULT 0 CHECK (retry_count BETWEEN 0 AND 255),
+					delivery_generation BIGINT NOT NULL DEFAULT 0,
+				next_retry_at TIMESTAMPTZ,
+					pending_state_ciphertext TEXT NOT NULL DEFAULT '',
+					last_delivered_incident_updated_at TIMESTAMPTZ,
+				expires_at TIMESTAMPTZ NOT NULL,
+				created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+				UNIQUE(user_id, device_id, activity_id),
+				UNIQUE(token_hash, bundle_id, environment)
+			)`,
+			`CREATE INDEX IF NOT EXISTS idx_live_activity_tokens_incident_expiry
+				ON live_activity_push_tokens(incident_id, expires_at)`,
+			`CREATE INDEX IF NOT EXISTS idx_live_activity_tokens_retry
+				ON live_activity_push_tokens(next_retry_at)
+				WHERE next_retry_at IS NOT NULL`,
+			`CREATE INDEX IF NOT EXISTS idx_live_activity_tokens_expiry
+				ON live_activity_push_tokens(expires_at)`,
+		},
+	})
+
+	migrations = append(migrations, schemaMigration{
+		Version: 90,
+		Name:    "scheduled_task_execution_state",
+		Statements: []string{
+			`ALTER TABLE scheduled_tasks ADD COLUMN IF NOT EXISTS last_run_status TEXT NOT NULL DEFAULT ''`,
+			`ALTER TABLE scheduled_tasks ADD COLUMN IF NOT EXISTS last_error TEXT NOT NULL DEFAULT ''`,
+			`ALTER TABLE scheduled_tasks ADD COLUMN IF NOT EXISTS last_run_job_id TEXT`,
+			`CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled_next_run
+				ON scheduled_tasks(next_run_at ASC NULLS FIRST, id ASC)
+				WHERE enabled = TRUE`,
+		},
+	})
+
+	migrations = append(migrations, schemaMigration{
+		Version: 91,
+		Name:    "durable_push_alert_digests",
+		Statements: []string{
+			`CREATE TABLE IF NOT EXISTS push_alert_digest_states (
+				push_device_id TEXT PRIMARY KEY REFERENCES push_devices(id) ON DELETE CASCADE,
+				channel_id TEXT NOT NULL REFERENCES notification_channels(id) ON DELETE CASCADE,
+				window_seconds INTEGER NOT NULL CHECK (window_seconds BETWEEN 30 AND 86400),
+				due_at TIMESTAMPTZ NOT NULL,
+				expires_at TIMESTAMPTZ NOT NULL,
+				retry_count INTEGER NOT NULL DEFAULT 0 CHECK (retry_count BETWEEN 0 AND 8),
+				delivery_generation BIGINT NOT NULL DEFAULT 0,
+				lease_expires_at TIMESTAMPTZ,
+				created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+				CHECK (expires_at > created_at)
+			)`,
+			`CREATE INDEX IF NOT EXISTS idx_push_alert_digest_states_due
+				ON push_alert_digest_states(due_at ASC, push_device_id ASC)`,
+			`CREATE INDEX IF NOT EXISTS idx_push_alert_digest_states_expiry
+				ON push_alert_digest_states(expires_at ASC)`,
+			`CREATE TABLE IF NOT EXISTS push_alert_digest_events (
+				id TEXT PRIMARY KEY,
+				push_device_id TEXT NOT NULL REFERENCES push_alert_digest_states(push_device_id) ON DELETE CASCADE,
+				dedupe_key TEXT NOT NULL CHECK (dedupe_key ~ '^[0-9a-f]{64}$'),
+				severity TEXT NOT NULL CHECK (severity IN ('info', 'warning')),
+				node_offline BOOLEAN NOT NULL DEFAULT FALSE,
+				service_down BOOLEAN NOT NULL DEFAULT FALSE,
+				group_ids JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(group_ids) = 'array'),
+				maintenance_scope_complete BOOLEAN NOT NULL DEFAULT TRUE,
+				expires_at TIMESTAMPTZ NOT NULL,
+				created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+				UNIQUE(push_device_id, dedupe_key),
+				CHECK (expires_at > created_at)
+			)`,
+			`CREATE INDEX IF NOT EXISTS idx_push_alert_digest_events_device_time
+				ON push_alert_digest_events(push_device_id, created_at ASC, id ASC)`,
+			`CREATE INDEX IF NOT EXISTS idx_push_alert_digest_events_expiry
+				ON push_alert_digest_events(expires_at ASC)`,
+		},
+	})
+
+	migrations = append(migrations, schemaMigration{
+		Version: 92,
+		Name:    "prepared_agent_approval_tokens",
+		Statements: []string{
+			`ALTER TABLE agent_tokens DROP CONSTRAINT IF EXISTS agent_tokens_status_check`,
+			`ALTER TABLE agent_tokens ADD CONSTRAINT agent_tokens_status_check CHECK (status IN ('pending', 'active', 'revoked'))`,
+		},
+	})
+
+	migrations = append(migrations, schemaMigration{
+		Version: 93,
+		Name:    "durable_agent_identity_state",
+		Statements: []string{
+			`CREATE TABLE IF NOT EXISTS agent_identity_state (
+				asset_id TEXT PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
+				credential_rotated_at TIMESTAMPTZ NOT NULL
+			)`,
+			`INSERT INTO agent_identity_state (asset_id, credential_rotated_at)
+			 SELECT a.id, GREATEST(a.created_at, COALESCE(MAX(t.created_at), a.created_at))
+			 FROM assets a
+			 LEFT JOIN agent_tokens t ON t.asset_id = a.id
+			 WHERE LOWER(BTRIM(a.source)) = 'agent' OR t.asset_id IS NOT NULL
+			 GROUP BY a.id, a.created_at
+			 ON CONFLICT (asset_id) DO UPDATE SET
+				credential_rotated_at = GREATEST(agent_identity_state.credential_rotated_at, EXCLUDED.credential_rotated_at)`,
+		},
+	})
+
+	migrations = append(migrations, schemaMigration{
+		Version: 94,
+		Name:    "prometheus_remote_write_replay_state",
+		Statements: []string{
+			`CREATE TABLE IF NOT EXISTS prometheus_remote_write_state (
+				singleton BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),
+				endpoint_fingerprint TEXT NOT NULL CHECK (endpoint_fingerprint ~ '^[0-9a-f]{64}$'),
+				asset_sample_id BIGINT NOT NULL DEFAULT 0 CHECK (asset_sample_id >= 0),
+				hub_sample_id BIGINT NOT NULL DEFAULT 0 CHECK (hub_sample_id >= 0),
+				last_advanced_at TIMESTAMPTZ,
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+			)`,
+		},
+	})
+
+	migrations = append(migrations, schemaMigration{
+		Version: 95,
+		Name:    "credential_profile_lifecycle_guards",
+		Statements: []string{
+			`ALTER TABLE credential_profiles ADD COLUMN IF NOT EXISTS created_by TEXT NOT NULL DEFAULT ''`,
+			`CREATE INDEX IF NOT EXISTS idx_credential_profiles_created_by ON credential_profiles(created_by, created_at DESC)`,
+			`CREATE INDEX IF NOT EXISTS idx_asset_desktop_configs_credential ON asset_desktop_configs(credential_profile_id)`,
+			`CREATE INDEX IF NOT EXISTS idx_asset_protocol_configs_credential ON asset_protocol_configs(credential_profile_id)`,
+			`CREATE INDEX IF NOT EXISTS idx_terminal_session_bookmarks_credential ON terminal_session_bookmarks(credential_profile_id)`,
+			`CREATE INDEX IF NOT EXISTS idx_remote_bookmarks_credential ON remote_bookmarks(credential_id)`,
+			`CREATE INDEX IF NOT EXISTS idx_file_connections_credential ON file_connections(credential_id)`,
+			`CREATE INDEX IF NOT EXISTS idx_hub_collectors_credential ON hub_collectors((config->>'credential_id'))`,
+			`CREATE INDEX IF NOT EXISTS idx_groups_jump_chain_gin ON groups USING GIN (jump_chain jsonb_path_ops) WHERE jump_chain IS NOT NULL`,
+		},
+	})
+
+	migrations = append(migrations, schemaMigration{
+		Version: 96,
+		Name:    "hub_synthetic_metric_scope",
+		Statements: []string{
+			`ALTER TABLE hub_metric_samples DROP CONSTRAINT IF EXISTS hub_metric_samples_scope_check`,
+			`ALTER TABLE hub_metric_samples ADD CONSTRAINT hub_metric_samples_scope_check
+				CHECK (scope IN ('hub-alerts', 'hub-reliability', 'hub-synthetic'))`,
+		},
+	})
+
 	return migrations
 }

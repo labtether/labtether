@@ -76,6 +76,8 @@ func TestPostgresMigrationsCreateCanonicalTables(t *testing.T) {
 		"group_profile_assignments",
 		"group_profile_drift_checks",
 		"group_failover_pairs",
+		"push_alert_digest_states",
+		"push_alert_digest_events",
 	}
 	for _, table := range tables {
 		assertTableExists(t, store, table)

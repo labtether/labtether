@@ -668,8 +668,8 @@ func TestExecuteActionInProcessFallbackBranch(t *testing.T) {
 		Target:  "host-1",
 		Command: "echo ok",
 	})
-	if result.Status != actions.StatusSucceeded {
-		t.Fatalf("expected command-run fallback to succeed, got %+v", result)
+	if result.Status != actions.StatusFailed || !strings.Contains(result.Error, "not connected") {
+		t.Fatalf("expected disconnected command-run fallback to fail closed, got %+v", result)
 	}
 }
 

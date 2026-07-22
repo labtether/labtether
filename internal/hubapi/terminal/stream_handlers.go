@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/protocols"
 	"github.com/labtether/labtether/internal/servicehttp"
@@ -42,6 +43,9 @@ func (d *Deps) HandleSessionStream(w http.ResponseWriter, r *http.Request, sessi
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	if !d.enforceAssetActionGuard(w, session.Target) {
+		return
+	}
 	defer d.MarkPersistentTerminalStreamDetached(session)
 	traceID := shared.BrowserStreamTraceID(r)
 	traceLog := shared.StreamTraceLogValue(traceID)
@@ -52,7 +56,7 @@ func (d *Deps) HandleSessionStream(w http.ResponseWriter, r *http.Request, sessi
 			servicehttp.WriteError(w, http.StatusForbidden, "hub local terminal is disabled")
 			return
 		}
-		if !d.IsOwnerActor(d.PrincipalActorID(r.Context())) {
+		if !apiv2.IsOwnerPrincipal(r.Context()) {
 			servicehttp.WriteError(w, http.StatusForbidden, "hub local terminal requires owner role")
 			return
 		}

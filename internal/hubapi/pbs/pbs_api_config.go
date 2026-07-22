@@ -17,7 +17,7 @@ import (
 func (d *Deps) HandlePBSRemotes(ctx context.Context, w http.ResponseWriter, r *http.Request, collectorID string) {
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "pbs runtime unavailable: "+err.Error())
+		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
 		return
 	}
 
@@ -25,7 +25,7 @@ func (d *Deps) HandlePBSRemotes(ctx context.Context, w http.ResponseWriter, r *h
 	case http.MethodGet:
 		remotes, listErr := runtime.Client.ListRemotes(ctx)
 		if listErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to list remotes: "+listErr.Error())
+			writePBSError(w, http.StatusBadGateway, "failed to list remotes", listErr)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
@@ -37,11 +37,11 @@ func (d *Deps) HandlePBSRemotes(ctx context.Context, w http.ResponseWriter, r *h
 			return
 		}
 		if parseErr := r.ParseForm(); parseErr != nil {
-			servicehttp.WriteError(w, http.StatusBadRequest, "invalid form body: "+parseErr.Error())
+			writePBSError(w, http.StatusBadRequest, "invalid form body", parseErr)
 			return
 		}
 		if createErr := runtime.Client.CreateRemote(ctx, r.PostForm); createErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to create remote: "+createErr.Error())
+			writePBSError(w, http.StatusBadGateway, "failed to create remote", createErr)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "created"})
@@ -60,7 +60,7 @@ func (d *Deps) HandlePBSRemotes(ctx context.Context, w http.ResponseWriter, r *h
 func (d *Deps) HandlePBSTrafficControl(ctx context.Context, w http.ResponseWriter, r *http.Request, collectorID string, subParts []string) {
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "pbs runtime unavailable: "+err.Error())
+		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
 		return
 	}
 
@@ -69,7 +69,7 @@ func (d *Deps) HandlePBSTrafficControl(ctx context.Context, w http.ResponseWrite
 		case http.MethodGet:
 			rules, listErr := runtime.Client.ListTrafficControl(ctx)
 			if listErr != nil {
-				servicehttp.WriteError(w, http.StatusBadGateway, "failed to list traffic control rules: "+listErr.Error())
+				writePBSError(w, http.StatusBadGateway, "failed to list traffic control rules", listErr)
 				return
 			}
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
@@ -81,11 +81,11 @@ func (d *Deps) HandlePBSTrafficControl(ctx context.Context, w http.ResponseWrite
 				return
 			}
 			if parseErr := r.ParseForm(); parseErr != nil {
-				servicehttp.WriteError(w, http.StatusBadRequest, "invalid form body: "+parseErr.Error())
+				writePBSError(w, http.StatusBadRequest, "invalid form body", parseErr)
 				return
 			}
 			if createErr := runtime.Client.CreateTrafficControl(ctx, r.PostForm); createErr != nil {
-				servicehttp.WriteError(w, http.StatusBadGateway, "failed to create traffic control rule: "+createErr.Error())
+				writePBSError(w, http.StatusBadGateway, "failed to create traffic control rule", createErr)
 				return
 			}
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "created"})
@@ -107,11 +107,11 @@ func (d *Deps) HandlePBSTrafficControl(ctx context.Context, w http.ResponseWrite
 			return
 		}
 		if parseErr := r.ParseForm(); parseErr != nil {
-			servicehttp.WriteError(w, http.StatusBadRequest, "invalid form body: "+parseErr.Error())
+			writePBSError(w, http.StatusBadRequest, "invalid form body", parseErr)
 			return
 		}
 		if updateErr := runtime.Client.UpdateTrafficControl(ctx, ruleName, r.PostForm); updateErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to update traffic control rule: "+updateErr.Error())
+			writePBSError(w, http.StatusBadGateway, "failed to update traffic control rule", updateErr)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "updated"})
@@ -120,7 +120,7 @@ func (d *Deps) HandlePBSTrafficControl(ctx context.Context, w http.ResponseWrite
 			return
 		}
 		if deleteErr := runtime.Client.DeleteTrafficControl(ctx, ruleName); deleteErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to delete traffic control rule: "+deleteErr.Error())
+			writePBSError(w, http.StatusBadGateway, "failed to delete traffic control rule", deleteErr)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
@@ -138,13 +138,13 @@ func (d *Deps) HandlePBSCertificates(ctx context.Context, w http.ResponseWriter,
 
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "pbs runtime unavailable: "+err.Error())
+		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
 		return
 	}
 
 	certs, certsErr := runtime.Client.GetCertificateInfo(ctx)
 	if certsErr != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to fetch certificate info: "+certsErr.Error())
+		writePBSError(w, http.StatusBadGateway, "failed to fetch certificate info", certsErr)
 		return
 	}
 
@@ -171,20 +171,42 @@ func (d *Deps) HandlePBSDatastoreMaintenance(ctx context.Context, w http.Respons
 		return
 	}
 
-	runtime, err := d.LoadPBSRuntime(collectorID)
-	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "pbs runtime unavailable: "+err.Error())
-		return
-	}
-
 	if parseErr := r.ParseForm(); parseErr != nil {
-		servicehttp.WriteError(w, http.StatusBadRequest, "invalid form body: "+parseErr.Error())
+		writePBSError(w, http.StatusBadRequest, "invalid form body", parseErr)
 		return
 	}
 	mode := strings.TrimSpace(r.FormValue("mode"))
+	d.setPBSDatastoreMaintenanceMode(ctx, w, collectorID, store, mode)
+}
+
+// HandlePBSDatastoreMaintenanceMode supports the console's explicit enter and
+// exit routes without relying on an otherwise-empty form body.
+func (d *Deps) HandlePBSDatastoreMaintenanceMode(ctx context.Context, w http.ResponseWriter, r *http.Request, collectorID, store, mode string) {
+	if r.Method != http.MethodPost {
+		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if !d.RequireAdminAuth(w, r) {
+		return
+	}
+
+	store = strings.TrimSpace(store)
+	if store == "" {
+		servicehttp.WriteError(w, http.StatusBadRequest, "datastore name is required")
+		return
+	}
+	d.setPBSDatastoreMaintenanceMode(ctx, w, collectorID, store, strings.TrimSpace(mode))
+}
+
+func (d *Deps) setPBSDatastoreMaintenanceMode(ctx context.Context, w http.ResponseWriter, collectorID, store, mode string) {
+	runtime, err := d.LoadPBSRuntime(collectorID)
+	if err != nil {
+		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
+		return
+	}
 
 	if maintenanceErr := runtime.Client.SetDatastoreMaintenanceMode(ctx, store, mode); maintenanceErr != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to set maintenance mode: "+maintenanceErr.Error())
+		writePBSError(w, http.StatusBadGateway, "failed to set maintenance mode", maintenanceErr)
 		return
 	}
 

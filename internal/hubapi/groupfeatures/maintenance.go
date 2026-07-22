@@ -14,6 +14,9 @@ import (
 
 // HandleGroupMaintenanceWindowsCollection handles GET/POST /api/v1/groups/:id/maintenance-windows.
 func (d *Deps) HandleGroupMaintenanceWindowsCollection(w http.ResponseWriter, r *http.Request, groupID string) {
+	if !d.requireGroupAccess(w, r, groupID) {
+		return
+	}
 	switch r.Method {
 	case http.MethodGet:
 		limit := shared.ParseLimit(r, 50)
@@ -68,6 +71,9 @@ func (d *Deps) HandleGroupMaintenanceWindowsCollection(w http.ResponseWriter, r 
 
 // HandleGroupMaintenanceWindowActions handles GET/PUT/PATCH/DELETE on a single window.
 func (d *Deps) HandleGroupMaintenanceWindowActions(w http.ResponseWriter, r *http.Request, groupID, windowID string) {
+	if !d.requireGroupAccess(w, r, groupID) {
+		return
+	}
 	switch r.Method {
 	case http.MethodGet:
 		window, ok, err := d.GroupMaintenanceStore.GetGroupMaintenanceWindow(groupID, windowID)
@@ -212,6 +218,44 @@ func (d *Deps) ResolveGroupIDsForTargets(targets []string) (map[string]struct{},
 // the given time. It is the canonical entry point used by handler packages
 // that receive this method as an injected function field.
 func (d *Deps) EvaluateGuardrails(groupID string, at time.Time) (GroupMaintenanceGuardrails, error) {
+	return d.GroupGuardrails(groupID, at)
+}
+
+// EvaluateAssetGuardrails resolves an asset's current group and returns the
+// maintenance constraints that apply to actions targeting that asset. Unknown
+// assets and ungrouped assets have no group maintenance constraints; their
+// owning handlers remain responsible for returning the appropriate not-found
+// response.
+func (d *Deps) EvaluateAssetGuardrails(assetID string, at time.Time) (GroupMaintenanceGuardrails, error) {
+	assetID = strings.TrimSpace(assetID)
+	if assetID == "" || d.AssetStore == nil {
+		return GroupMaintenanceGuardrails{}, nil
+	}
+
+	assetEntry, ok, err := d.AssetStore.GetAsset(assetID)
+	if err != nil {
+		return GroupMaintenanceGuardrails{}, err
+	}
+	if !ok {
+		return GroupMaintenanceGuardrails{}, nil
+	}
+	groupID := strings.TrimSpace(assetEntry.GroupID)
+	if groupID == "" {
+		// Connector-derived child assets (for example Docker containers and
+		// compose stacks) carry their controlling agent ID in metadata. Inherit
+		// the host asset's maintenance window when the child has not been placed
+		// in a group explicitly.
+		parentAssetID := strings.TrimSpace(assetEntry.Metadata["agent_id"])
+		if parentAssetID != "" && !strings.EqualFold(parentAssetID, assetEntry.ID) {
+			parentAsset, parentOK, parentErr := d.AssetStore.GetAsset(parentAssetID)
+			if parentErr != nil {
+				return GroupMaintenanceGuardrails{}, parentErr
+			}
+			if parentOK {
+				groupID = strings.TrimSpace(parentAsset.GroupID)
+			}
+		}
+	}
 	return d.GroupGuardrails(groupID, at)
 }
 

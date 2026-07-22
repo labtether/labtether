@@ -13,11 +13,13 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/credentials"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/idgen"
 	"github.com/labtether/labtether/internal/protocols"
+	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
@@ -31,6 +33,9 @@ var validSSHPubKeyRe = regexp.MustCompile(`^ssh-\S+ [A-Za-z0-9+/=]+(?: \S+)?$`)
 func (d *Deps) HandleListProtocolConfigs(w http.ResponseWriter, r *http.Request, assetID string) {
 	if r.Method != http.MethodGet {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if !apiv2.RequireAssetAccess(w, r, assetID) {
 		return
 	}
 
@@ -57,6 +62,9 @@ type protocolConfigRequest struct {
 func (d *Deps) HandleCreateProtocolConfig(w http.ResponseWriter, r *http.Request, assetID string) {
 	if r.Method != http.MethodPost {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if !apiv2.RequireAssetAccess(w, r, assetID) {
 		return
 	}
 
@@ -97,16 +105,8 @@ func (d *Deps) HandleCreateProtocolConfig(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if req.CredentialProfileID != "" && d.CredentialStore != nil {
-		_, ok, err := d.CredentialStore.GetCredentialProfile(req.CredentialProfileID)
-		if err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to validate credential profile")
-			return
-		}
-		if !ok {
-			servicehttp.WriteError(w, http.StatusBadRequest, "credential_profile_id does not reference an existing profile")
-			return
-		}
+	if !d.authorizeCredentialBinding(w, r, req.CredentialProfileID) {
+		return
 	}
 
 	existing, err := d.DB.GetProtocolConfig(r.Context(), assetID, req.Protocol)
@@ -153,6 +153,9 @@ func (d *Deps) HandleUpdateProtocolConfig(w http.ResponseWriter, r *http.Request
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	if !apiv2.RequireAssetAccess(w, r, assetID) {
+		return
+	}
 
 	protocol = strings.TrimSpace(protocol)
 	if err := protocols.ValidateProtocol(protocol); err != nil {
@@ -191,16 +194,8 @@ func (d *Deps) HandleUpdateProtocolConfig(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if req.CredentialProfileID != "" && d.CredentialStore != nil {
-		_, ok, err := d.CredentialStore.GetCredentialProfile(req.CredentialProfileID)
-		if err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to validate credential profile")
-			return
-		}
-		if !ok {
-			servicehttp.WriteError(w, http.StatusBadRequest, "credential_profile_id does not reference an existing profile")
-			return
-		}
+	if !d.authorizeCredentialBinding(w, r, req.CredentialProfileID) {
+		return
 	}
 
 	enabled := true
@@ -235,10 +230,37 @@ func (d *Deps) HandleUpdateProtocolConfig(w http.ResponseWriter, r *http.Request
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"protocol": pc})
 }
 
+func (d *Deps) authorizeCredentialBinding(w http.ResponseWriter, r *http.Request, profileID string) bool {
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		return true
+	}
+	if !apiv2.RequireScope(w, r, "credentials:use") {
+		return false
+	}
+	if d.CredentialStore == nil {
+		servicehttp.WriteError(w, http.StatusServiceUnavailable, "credential store unavailable")
+		return false
+	}
+	_, ok, err := d.CredentialStore.GetCredentialProfile(profileID)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to validate credential profile")
+		return false
+	}
+	if !ok {
+		servicehttp.WriteError(w, http.StatusBadRequest, "credential_profile_id does not reference an existing profile")
+		return false
+	}
+	return true
+}
+
 // HandleDeleteProtocolConfig handles DELETE /assets/{id}/protocols/{protocol}.
 func (d *Deps) HandleDeleteProtocolConfig(w http.ResponseWriter, r *http.Request, assetID, protocol string) {
 	if r.Method != http.MethodDelete {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if !apiv2.RequireAssetAccess(w, r, assetID) {
 		return
 	}
 
@@ -274,6 +296,9 @@ func (d *Deps) HandleTestProtocolConnection(w http.ResponseWriter, r *http.Reque
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	if !apiv2.RequireAssetAccess(w, r, assetID) {
+		return
+	}
 
 	protocol = strings.TrimSpace(protocol)
 	if err := protocols.ValidateProtocol(protocol); err != nil {
@@ -295,6 +320,9 @@ func (d *Deps) HandleTestProtocolConnection(w http.ResponseWriter, r *http.Reque
 	}
 	if pc == nil {
 		servicehttp.WriteError(w, http.StatusNotFound, "protocol config not found")
+		return
+	}
+	if strings.TrimSpace(pc.CredentialProfileID) != "" && !apiv2.RequireScope(w, r, "credentials:use") {
 		return
 	}
 
@@ -355,16 +383,14 @@ func (d *Deps) HandleTestProtocolConnection(w http.ResponseWriter, r *http.Reque
 	switch protocol {
 	case protocols.ProtocolSSH:
 		username := strings.TrimSpace(pc.Username)
-		var hostKeyCallback ssh.HostKeyCallback
 		var sshCfg protocols.SSHConfig
 		if len(pc.Config) > 0 {
 			_ = json.Unmarshal(pc.Config, &sshCfg)
 		}
-		if sshCfg.StrictHostKey && sshCfg.HostKey != "" {
-			hostPub, _, _, _, parseErr := ssh.ParseAuthorizedKey([]byte(sshCfg.HostKey))
-			if parseErr == nil {
-				hostKeyCallback = ssh.FixedHostKey(hostPub)
-			}
+		hostKeyCallback, err := shared.BuildSSHHostKeyCallback(sshCfg.StrictHostKey, sshCfg.HostKey)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusBadRequest, "SSH host key verification requires a configured host key or known_hosts entry")
+			return
 		}
 		result = protocols.TestSSH(r.Context(), host, pc.Port, username, password, privateKey, hostKeyCallback)
 	case protocols.ProtocolTelnet:
@@ -415,6 +441,9 @@ func (d *Deps) HandlePushHubKey(w http.ResponseWriter, r *http.Request, assetID 
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	if !apiv2.RequireAssetAccess(w, r, assetID) {
+		return
+	}
 
 	pc, err := d.DB.GetProtocolConfig(r.Context(), assetID, protocols.ProtocolSSH)
 	if err != nil {
@@ -425,6 +454,9 @@ func (d *Deps) HandlePushHubKey(w http.ResponseWriter, r *http.Request, assetID 
 		servicehttp.WriteError(w, http.StatusNotFound, "SSH protocol config not found")
 		return
 	}
+	if strings.TrimSpace(pc.CredentialProfileID) != "" && !apiv2.RequireScope(w, r, "credentials:use") {
+		return
+	}
 
 	username := strings.TrimSpace(pc.Username)
 	if username == "" {
@@ -433,7 +465,7 @@ func (d *Deps) HandlePushHubKey(w http.ResponseWriter, r *http.Request, assetID 
 	}
 
 	// Ensure hub identity is available.
-	hubIdentity := d.HubIdentity
+	hubIdentity := d.currentHubIdentity()
 	if hubIdentity == nil {
 		if d.EnsureHubIdentity == nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "hub SSH identity management is not configured")
@@ -445,7 +477,9 @@ func (d *Deps) HandlePushHubKey(w http.ResponseWriter, r *http.Request, assetID 
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to initialise hub SSH identity")
 			return
 		}
-		d.HubIdentity = hubIdentity
+		if d.CurrentHubIdentity == nil {
+			d.HubIdentity = hubIdentity
+		}
 	}
 
 	// Resolve host.
@@ -488,7 +522,6 @@ func (d *Deps) HandlePushHubKey(w http.ResponseWriter, r *http.Request, assetID 
 		return
 	}
 
-	addr := fmt.Sprintf("%s:%d", host, pc.Port)
 	hostKeyCallback, hostKeyErr := buildHubKeyPushHostKeyCallback(pc.Config)
 	if hostKeyErr != nil {
 		servicehttp.WriteError(w, http.StatusBadRequest, hostKeyErr.Error())
@@ -502,7 +535,7 @@ func (d *Deps) HandlePushHubKey(w http.ResponseWriter, r *http.Request, assetID 
 		Timeout:         10 * time.Second,
 	}
 
-	client, err := ssh.Dial("tcp", addr, sshCfg)
+	client, err := securityruntime.DialOutboundSSHContext(r.Context(), host, pc.Port, sshCfg, 10*time.Second)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusBadGateway, fmt.Sprintf("SSH connection failed: %v", err))
 		return
@@ -579,7 +612,7 @@ if ($existing -notcontains $key) { Add-Content -Path $authKeys -Value $key }
 		Timeout:         10 * time.Second,
 	}
 
-	verifyClient, err := ssh.Dial("tcp", addr, verifyCfg)
+	verifyClient, err := securityruntime.DialOutboundSSHContext(r.Context(), host, pc.Port, verifyCfg, 10*time.Second)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusBadGateway, fmt.Sprintf("hub key verification failed — key may not have been installed correctly: %v", err))
 		return

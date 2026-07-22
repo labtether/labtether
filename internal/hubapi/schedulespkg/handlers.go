@@ -3,6 +3,7 @@ package schedulespkg
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,8 +15,9 @@ import (
 )
 
 const (
-	maxScheduleNameLength   = 200
-	maxScheduleTargetsCount = 500
+	maxScheduleNameLength    = 200
+	maxScheduleCommandLength = 4096
+	maxScheduleTargetsCount  = 500
 )
 
 // HandleV2Schedules routes collection-level schedule requests (GET list, POST create).
@@ -70,13 +72,49 @@ func (d *Deps) HandleV2ScheduleActions(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// V2ListSchedules returns all scheduled tasks.
+// V2ListSchedules returns a bounded, deterministic page of scheduled tasks.
 func (d *Deps) V2ListSchedules(w http.ResponseWriter, r *http.Request) {
 	if d.ScheduleStore == nil {
 		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "schedule store not configured")
 		return
 	}
-	tasks, err := d.ScheduleStore.ListScheduledTasks(r.Context())
+	page, perPage, offset, ok := scheduleListPagination(w, r)
+	if !ok {
+		return
+	}
+	var (
+		tasks []schedules.ScheduledTask
+		total int
+		err   error
+	)
+	if shared.HasAssetRestriction(r.Context()) {
+		// Authorization must happen before pagination so restricted principals do
+		// not learn hidden definition counts or receive sparse, misleading pages.
+		// The global creation cap keeps this exceptional scan explicitly bounded.
+		var all []schedules.ScheduledTask
+		all, total, err = d.ScheduleStore.ListScheduledTasks(r.Context(), schedules.MaxScheduledTasksGlobal+1, 0)
+		if err == nil && total > schedules.MaxScheduledTasksGlobal {
+			err = schedules.ErrScheduledTaskCapacityExceeded
+		}
+		if err == nil {
+			filtered := make([]schedules.ScheduledTask, 0, len(all))
+			for _, task := range all {
+				allowed, _ := d.scheduleAllowed(r.Context(), task)
+				if allowed {
+					filtered = append(filtered, task)
+				}
+			}
+			total = len(filtered)
+			if offset < total {
+				filtered = filtered[offset:min(offset+perPage, total)]
+			} else {
+				filtered = []schedules.ScheduledTask{}
+			}
+			tasks = filtered
+		}
+	} else {
+		tasks, total, err = d.ScheduleStore.ListScheduledTasks(r.Context(), perPage, offset)
+	}
 	if err != nil {
 		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to list schedules")
 		return
@@ -84,7 +122,7 @@ func (d *Deps) V2ListSchedules(w http.ResponseWriter, r *http.Request) {
 	if tasks == nil {
 		tasks = []schedules.ScheduledTask{}
 	}
-	apiv2.WriteList(w, http.StatusOK, tasks, len(tasks), 1, len(tasks))
+	apiv2.WriteList(w, http.StatusOK, tasks, total, page, perPage)
 }
 
 // V2CreateSchedule creates a new scheduled task.
@@ -113,9 +151,19 @@ func (d *Deps) V2CreateSchedule(w http.ResponseWriter, r *http.Request) {
 		apiv2.WriteError(w, http.StatusBadRequest, "validation", "cron_expr is required")
 		return
 	}
+	now := time.Now().UTC()
+	nextRunAt, err := schedules.NextRun(req.CronExpr, now)
+	if err != nil {
+		apiv2.WriteError(w, http.StatusBadRequest, "validation", err.Error())
+		return
+	}
 	req.Command = strings.TrimSpace(req.Command)
 	if req.Command == "" {
 		apiv2.WriteError(w, http.StatusBadRequest, "validation", "command is required")
+		return
+	}
+	if len(req.Command) > maxScheduleCommandLength {
+		apiv2.WriteError(w, http.StatusBadRequest, "validation", "command exceeds maximum length")
 		return
 	}
 	req.GroupID = strings.TrimSpace(req.GroupID)
@@ -124,8 +172,23 @@ func (d *Deps) V2CreateSchedule(w http.ResponseWriter, r *http.Request) {
 		apiv2.WriteError(w, http.StatusBadRequest, "validation", "too many targets")
 		return
 	}
+	if len(req.Targets) == 0 && req.GroupID == "" {
+		apiv2.WriteError(w, http.StatusBadRequest, "validation", "at least one target or group_id is required")
+		return
+	}
+	enabled := true
+	if req.Enabled != nil {
+		enabled = *req.Enabled
+	}
+	if enabled && !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "actions:exec") {
+		apiv2.WriteScopeForbidden(w, "actions:exec")
+		return
+	}
 
-	now := time.Now().UTC()
+	var scheduledNextRunAt *time.Time
+	if enabled {
+		scheduledNextRunAt = &nextRunAt
+	}
 	task := schedules.ScheduledTask{
 		ID:        idgen.New("sched"),
 		Name:      req.Name,
@@ -133,20 +196,58 @@ func (d *Deps) V2CreateSchedule(w http.ResponseWriter, r *http.Request) {
 		Command:   req.Command,
 		Targets:   req.Targets,
 		GroupID:   req.GroupID,
-		Enabled:   true,
+		Enabled:   enabled,
 		CreatedBy: apiv2.PrincipalActorID(r.Context()),
 		CreatedAt: now,
+		NextRunAt: scheduledNextRunAt,
 	}
 	if task.Targets == nil {
 		task.Targets = []string{}
 	}
+	if !d.requireScheduleAccess(w, r, task) {
+		return
+	}
 
-	if err := d.ScheduleStore.CreateScheduledTask(r.Context(), task); err != nil {
+	if err := d.ScheduleStore.CreateScheduledTask(r.Context(), task); errors.Is(err, schedules.ErrScheduledTaskCapacityExceeded) {
+		apiv2.WriteError(w, http.StatusConflict, "capacity", "scheduled task capacity reached")
+		return
+	} else if err != nil {
 		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to create schedule")
 		return
 	}
 
 	apiv2.WriteJSON(w, http.StatusCreated, task)
+}
+
+func scheduleListPagination(w http.ResponseWriter, r *http.Request) (page, perPage, offset int, ok bool) {
+	page = 1
+	perPage = schedules.MaxScheduledTaskPageSize
+	if raw := strings.TrimSpace(r.URL.Query().Get("page")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 {
+			apiv2.WriteError(w, http.StatusBadRequest, "validation", "page must be a positive integer")
+			return 0, 0, 0, false
+		}
+		page = parsed
+	}
+	rawPerPage := strings.TrimSpace(r.URL.Query().Get("per_page"))
+	if rawPerPage == "" {
+		rawPerPage = strings.TrimSpace(r.URL.Query().Get("page_size"))
+	}
+	if rawPerPage != "" {
+		parsed, err := strconv.Atoi(rawPerPage)
+		if err != nil || parsed < 1 || parsed > schedules.MaxScheduledTaskPageSize {
+			apiv2.WriteError(w, http.StatusBadRequest, "validation", "per_page must be between 1 and 100")
+			return 0, 0, 0, false
+		}
+		perPage = parsed
+	}
+	maxPage := schedules.MaxScheduledTasksGlobal/perPage + 2
+	if page > maxPage {
+		apiv2.WriteError(w, http.StatusBadRequest, "validation", "page exceeds scheduled task capacity")
+		return 0, 0, 0, false
+	}
+	return page, perPage, (page - 1) * perPage, true
 }
 
 // V2GetSchedule returns a single scheduled task by ID.
@@ -164,6 +265,9 @@ func (d *Deps) V2GetSchedule(w http.ResponseWriter, r *http.Request, id string) 
 		apiv2.WriteError(w, http.StatusNotFound, "not_found", "no schedule with id: "+id)
 		return
 	}
+	if !d.requireScheduleAccess(w, r, task) {
+		return
+	}
 	apiv2.WriteJSON(w, http.StatusOK, task)
 }
 
@@ -171,6 +275,18 @@ func (d *Deps) V2GetSchedule(w http.ResponseWriter, r *http.Request, id string) 
 func (d *Deps) V2UpdateSchedule(w http.ResponseWriter, r *http.Request, id string) {
 	if d.ScheduleStore == nil {
 		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "schedule store not configured")
+		return
+	}
+	existing, ok, err := d.ScheduleStore.GetScheduledTask(r.Context(), id)
+	if err != nil {
+		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to get schedule")
+		return
+	}
+	if !ok {
+		apiv2.WriteError(w, http.StatusNotFound, "not_found", "schedule not found")
+		return
+	}
+	if !d.requireScheduleAccess(w, r, existing) {
 		return
 	}
 
@@ -210,6 +326,10 @@ func (d *Deps) V2UpdateSchedule(w http.ResponseWriter, r *http.Request, id strin
 			return
 		}
 		req.CronExpr = &trimmed
+		if _, err := schedules.NextRun(trimmed, time.Now().UTC()); err != nil {
+			apiv2.WriteError(w, http.StatusBadRequest, "validation", err.Error())
+			return
+		}
 	}
 	if req.Command != nil {
 		trimmed := strings.TrimSpace(*req.Command)
@@ -218,6 +338,10 @@ func (d *Deps) V2UpdateSchedule(w http.ResponseWriter, r *http.Request, id strin
 			return
 		}
 		req.Command = &trimmed
+		if len(trimmed) > maxScheduleCommandLength {
+			apiv2.WriteError(w, http.StatusBadRequest, "validation", "command exceeds maximum length")
+			return
+		}
 	}
 	if req.Targets != nil {
 		normalizedTargets := normalizeScheduleTargets(*req.Targets)
@@ -231,8 +355,45 @@ func (d *Deps) V2UpdateSchedule(w http.ResponseWriter, r *http.Request, id strin
 		trimmed := strings.TrimSpace(*req.GroupID)
 		req.GroupID = &trimmed
 	}
+	prospective := existing
+	if req.CronExpr != nil {
+		prospective.CronExpr = *req.CronExpr
+	}
+	if req.Command != nil {
+		prospective.Command = *req.Command
+	}
+	if req.Targets != nil {
+		prospective.Targets = append([]string(nil), (*req.Targets)...)
+	}
+	if req.GroupID != nil {
+		prospective.GroupID = *req.GroupID
+	}
+	if req.Enabled != nil {
+		prospective.Enabled = *req.Enabled
+	}
+	if len(prospective.Targets) == 0 && prospective.GroupID == "" {
+		apiv2.WriteError(w, http.StatusBadRequest, "validation", "at least one target or group_id is required")
+		return
+	}
+	if prospective.Enabled && !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "actions:exec") {
+		apiv2.WriteScopeForbidden(w, "actions:exec")
+		return
+	}
+	if !d.requireScheduleAccess(w, r, prospective) {
+		return
+	}
+	enabledChanged := req.Enabled != nil && *req.Enabled != existing.Enabled
+	nextRun := schedules.NextRunUpdate{Set: req.CronExpr != nil || enabledChanged}
+	if nextRun.Set && prospective.Enabled {
+		next, err := schedules.NextRun(prospective.CronExpr, time.Now().UTC())
+		if err != nil {
+			apiv2.WriteError(w, http.StatusBadRequest, "validation", err.Error())
+			return
+		}
+		nextRun.Value = &next
+	}
 
-	if err := d.ScheduleStore.UpdateScheduledTask(r.Context(), id, req.Name, req.CronExpr, req.Command, req.Targets, req.GroupID, req.Enabled); err != nil {
+	if err := d.ScheduleStore.UpdateScheduledTask(r.Context(), id, req.Name, req.CronExpr, req.Command, req.Targets, req.GroupID, req.Enabled, nextRun); err != nil {
 		if errors.Is(err, persistence.ErrNotFound) {
 			apiv2.WriteError(w, http.StatusNotFound, "not_found", "schedule not found")
 			return
@@ -257,6 +418,18 @@ func (d *Deps) V2UpdateSchedule(w http.ResponseWriter, r *http.Request, id strin
 func (d *Deps) V2DeleteSchedule(w http.ResponseWriter, r *http.Request, id string) {
 	if d.ScheduleStore == nil {
 		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "schedule store not configured")
+		return
+	}
+	task, ok, err := d.ScheduleStore.GetScheduledTask(r.Context(), id)
+	if err != nil {
+		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to get schedule")
+		return
+	}
+	if !ok {
+		apiv2.WriteError(w, http.StatusNotFound, "not_found", "schedule not found")
+		return
+	}
+	if !d.requireScheduleAccess(w, r, task) {
 		return
 	}
 	if err := d.ScheduleStore.DeleteScheduledTask(r.Context(), id); err != nil {

@@ -1,6 +1,7 @@
 package topology
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/labtether/labtether/internal/edges"
@@ -10,6 +11,13 @@ func TestMergeConnections_EmptyInputs(t *testing.T) {
 	result := MergeConnections("test-topology", nil, nil)
 	if len(result) != 0 {
 		t.Errorf("expected empty result, got %d items", len(result))
+	}
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal empty result: %v", err)
+	}
+	if string(encoded) != "[]" {
+		t.Fatalf("empty result encoded as %s, want []", encoded)
 	}
 }
 

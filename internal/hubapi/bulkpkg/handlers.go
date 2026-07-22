@@ -1,6 +1,7 @@
 package bulkpkg
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/audit"
+	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
@@ -22,6 +24,12 @@ var validServiceActions = map[string]bool{
 	"disable": true,
 	"status":  true,
 }
+
+const (
+	maxBulkServiceRawTargets  = 64
+	maxBulkServiceTargets     = 64
+	maxBulkServiceConcurrency = 8
+)
 
 // HandleV2BulkServiceAction handles POST /api/v2/bulk/service-action.
 // It runs a systemctl action against a named service on multiple target assets
@@ -42,6 +50,11 @@ func (d *Deps) HandleV2BulkServiceAction(w http.ResponseWriter, r *http.Request)
 		Targets []string `json:"targets"`
 	}
 	if err := shared.DecodeJSONBody(w, r, &req); err != nil {
+		return
+	}
+	if len(req.Targets) > maxBulkServiceRawTargets {
+		apiv2.WriteError(w, http.StatusBadRequest, "validation",
+			fmt.Sprintf("too many targets: maximum is %d", maxBulkServiceRawTargets))
 		return
 	}
 
@@ -85,6 +98,11 @@ func (d *Deps) HandleV2BulkServiceAction(w http.ResponseWriter, r *http.Request)
 			deniedTargets = append(deniedTargets, normalizedTarget)
 			continue
 		}
+		if len(filteredTargets) >= maxBulkServiceTargets {
+			apiv2.WriteError(w, http.StatusBadRequest, "validation",
+				fmt.Sprintf("too many accessible targets: maximum is %d", maxBulkServiceTargets))
+			return
+		}
 		filteredTargets = append(filteredTargets, normalizedTarget)
 	}
 	if len(deniedTargets) > 0 {
@@ -95,25 +113,46 @@ func (d *Deps) HandleV2BulkServiceAction(w http.ResponseWriter, r *http.Request)
 		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "none of the requested targets are accessible with this API key")
 		return
 	}
-
-	results := make(map[string]any)
-	var mu sync.Mutex
-	var wg sync.WaitGroup
 	for _, target := range filteredTargets {
-		wg.Add(1)
-		go func(t string) {
-			defer wg.Done()
-			result := d.ExecOnAsset(r, t, command, 30)
-			mu.Lock()
-			if result.Error != "" {
-				results[t] = map[string]any{"error": result.Error, "message": result.Message}
-			} else {
-				results[t] = map[string]any{"status": "ok", "output": result.Stdout}
-			}
-			mu.Unlock()
-		}(target)
+		if !maintenanceguard.EnforceAssetAction(w, target, d.EvaluateAssetGuardrails) {
+			return
+		}
 	}
+
+	orderedResults := make([]ExecResult, len(filteredTargets))
+	jobs := make(chan int)
+	var wg sync.WaitGroup
+	workerCount := min(maxBulkServiceConcurrency, len(filteredTargets))
+	for worker := 0; worker < workerCount; worker++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for index := range jobs {
+				orderedResults[index] = d.ExecOnAsset(r, filteredTargets[index], command, 30)
+			}
+		}()
+	}
+	for index := range filteredTargets {
+		jobs <- index
+	}
+	close(jobs)
 	wg.Wait()
+
+	results := make(map[string]any, len(filteredTargets))
+	for index, target := range filteredTargets {
+		result := orderedResults[index]
+		if result.Error != "" {
+			results[target] = map[string]any{"error": result.Error, "message": result.Message}
+		} else if result.ExitCode != 0 {
+			results[target] = map[string]any{
+				"status":    "failed",
+				"exit_code": result.ExitCode,
+				"output":    result.Stdout,
+			}
+		} else {
+			results[target] = map[string]any{"status": "ok", "exit_code": 0, "output": result.Stdout}
+		}
+	}
 
 	shared.AppendAuditEventBestEffort(d.AuditStore, audit.Event{
 		Type:      "api.bulk.service_action",

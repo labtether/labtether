@@ -1,6 +1,7 @@
 package updates
 
 import (
+	"fmt"
 	"strings"
 	"time"
 )
@@ -17,7 +18,62 @@ const (
 	ScopeFirmware    = "firmware"
 )
 
-var DefaultScopes = []string{ScopeOSPackages, ScopeDockerImage}
+// DefaultScopes contains only scopes with an end-to-end executor. Keep roadmap
+// scope constants above so persisted legacy plans can be identified and
+// rejected honestly, but never advertise an unimplemented scope as a default.
+var DefaultScopes = []string{ScopeOSPackages}
+
+// NormalizeTargets trims and deduplicates update targets. Every currently
+// executable update scope is asset-bound, so accepting an empty target list
+// would only create a plan that later attempts the synthetic "global" target
+// and fails at execution time.
+func NormalizeTargets(values []string) ([]string, error) {
+	if len(values) == 0 {
+		return nil, fmt.Errorf("at least one update target is required")
+	}
+
+	result := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		target := strings.TrimSpace(value)
+		if target == "" {
+			return nil, fmt.Errorf("update target must not be empty")
+		}
+		if _, ok := seen[target]; ok {
+			continue
+		}
+		seen[target] = struct{}{}
+		result = append(result, target)
+	}
+	return result, nil
+}
+
+// NormalizeExecutableScopes trims, normalizes, and deduplicates update scopes.
+// It rejects known roadmap scopes and unknown values until an end-to-end
+// executor exists for them.
+func NormalizeExecutableScopes(values []string) ([]string, error) {
+	if len(values) == 0 {
+		return append([]string(nil), DefaultScopes...), nil
+	}
+
+	result := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		scope := strings.ToLower(strings.TrimSpace(value))
+		if scope == "" {
+			return nil, fmt.Errorf("update scope must not be empty")
+		}
+		if scope != ScopeOSPackages {
+			return nil, fmt.Errorf("update scope %q is not supported", scope)
+		}
+		if _, ok := seen[scope]; ok {
+			continue
+		}
+		seen[scope] = struct{}{}
+		result = append(result, scope)
+	}
+	return result, nil
+}
 
 type CreatePlanRequest struct {
 	Name          string   `json:"name"`

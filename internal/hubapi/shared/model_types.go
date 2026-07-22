@@ -70,6 +70,8 @@ type RuntimeSettingEntry struct {
 	OverrideValue  string   `json:"override_value,omitempty"`
 	EffectiveValue string   `json:"effective_value"`
 	Source         string   `json:"source"`
+	Sensitive      bool     `json:"sensitive"`
+	Configured     bool     `json:"configured"`
 	AllowedValues  []string `json:"allowed_values,omitempty"`
 	MinInt         int      `json:"min_int,omitempty"`
 	MaxInt         int      `json:"max_int,omitempty"`

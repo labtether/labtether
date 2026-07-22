@@ -62,7 +62,7 @@ func (d *Deps) HandleTrueNASServices(ctx context.Context, w http.ResponseWriter,
 		rawServices := make([]map[string]any, 0, 16)
 		warnings := make([]string, 0, 2)
 		if err := CallTrueNASQueryWithRetries(ctx, runtime.Client, "service.query", &rawServices); err != nil {
-			warnings = AppendTrueNASWarning(warnings, "services unavailable: "+err.Error())
+			warnings = AppendTrueNASWarning(warnings, trueNASWarning("services unavailable", err))
 			rawServices = nil
 		}
 		services := make([]TrueNASServiceEntry, 0, len(rawServices))
@@ -100,7 +100,7 @@ func (d *Deps) HandleTrueNASServices(ctx context.Context, w http.ResponseWriter,
 		}
 		method := "service." + serviceAction
 		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, method, []any{serviceName}, nil); err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to "+serviceAction+" service: "+err.Error())
+			writeTrueNASError(w, http.StatusBadGateway, "failed to perform service action", err)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, TrueNASServiceActionResponse{
@@ -132,7 +132,7 @@ func (d *Deps) HandleTrueNASServices(ctx context.Context, w http.ResponseWriter,
 		// We need the numeric service ID. Look it up by name first.
 		rawServices := make([]map[string]any, 0, 16)
 		if err := CallTrueNASQueryWithRetries(ctx, runtime.Client, "service.query", &rawServices); err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to query services: "+err.Error())
+			writeTrueNASError(w, http.StatusBadGateway, "failed to query services", err)
 			return
 		}
 		serviceID := ""
@@ -148,7 +148,7 @@ func (d *Deps) HandleTrueNASServices(ctx context.Context, w http.ResponseWriter,
 			return
 		}
 		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, "service.update", []any{serviceID, map[string]any{"enable": body.Enable}}, nil); err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to update service: "+err.Error())
+			writeTrueNASError(w, http.StatusBadGateway, "failed to update service", err)
 			return
 		}
 		action := "enabled"

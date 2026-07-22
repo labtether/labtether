@@ -2,15 +2,61 @@ package resources
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
 
+	"github.com/labtether/labtether/internal/apiv2"
+	"github.com/labtether/labtether/internal/credentials"
 	"github.com/labtether/labtether/internal/groups"
 	"github.com/labtether/labtether/internal/hubapi/testutil"
 )
+
+func TestGroupJumpChainRequiresCredentialUseAndValidatesBounds(t *testing.T) {
+	deps := newTestResourcesDeps(t)
+	profile, err := deps.CredentialStore.CreateCredentialProfile(credentials.Profile{
+		ID: "cred-jump", Name: "Jump host", Kind: credentials.KindSSHPassword,
+	})
+	if err != nil {
+		t.Fatalf("create credential: %v", err)
+	}
+	payload := []byte(`{"name":"Secured","jump_chain":{"hops":[{"host":"jump.internal","username":"root","credential_profile_id":"` + profile.ID + `"}]}}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/groups", bytes.NewReader(payload))
+	req = req.WithContext(apiv2.ContextWithScopes(context.Background(), []string{"groups:write"}))
+	rec := httptest.NewRecorder()
+	deps.HandleGroups(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 without credentials:use, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/groups", bytes.NewReader(payload))
+	req = req.WithContext(apiv2.ContextWithScopes(context.Background(), []string{"groups:write", "credentials:use"}))
+	rec = httptest.NewRecorder()
+	deps.HandleGroups(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201 with credentials:use, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	hops := make([]map[string]any, 9)
+	for i := range hops {
+		hops[i] = map[string]any{"host": "jump.internal", "username": "root", "credential_profile_id": profile.ID + string(rune('a'+i))}
+	}
+	overflow, err := json.Marshal(map[string]any{"name": "Too many", "jump_chain": map[string]any{"hops": hops}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req = httptest.NewRequest(http.MethodPost, "/groups", bytes.NewReader(overflow))
+	req = req.WithContext(apiv2.ContextWithScopes(context.Background(), []string{"groups:write", "credentials:use"}))
+	rec = httptest.NewRecorder()
+	deps.HandleGroups(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for oversized chain, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
 
 func newTestResourcesDeps(t *testing.T) *Deps {
 	t.Helper()

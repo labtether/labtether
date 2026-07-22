@@ -366,6 +366,43 @@ func (s *PostgresStore) ListSyntheticResults(checkID string, limit int) ([]synth
 	return out, rows.Err()
 }
 
+func (s *PostgresStore) LatestSyntheticMetricSnapshots(ctx context.Context, maxChecks int) ([]SyntheticMetricSnapshot, error) {
+	if maxChecks <= 0 || maxChecks > 500 {
+		maxChecks = 500
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT c.id, c.name, c.check_type,
+		       latest.id, latest.status, latest.latency_ms, latest.checked_at
+		  FROM synthetic_checks AS c
+		  JOIN LATERAL (
+		        SELECT r.id, r.status, r.latency_ms, r.checked_at
+		          FROM synthetic_check_results AS r
+		         WHERE r.check_id = c.id
+		         ORDER BY r.checked_at DESC, r.id DESC
+		         LIMIT 1
+		       ) AS latest ON true
+		 WHERE c.enabled = true
+		 ORDER BY latest.checked_at DESC, c.id ASC
+		 LIMIT $1`, maxChecks)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]SyntheticMetricSnapshot, 0, maxChecks)
+	for rows.Next() {
+		var snapshot SyntheticMetricSnapshot
+		if err := rows.Scan(
+			&snapshot.CheckID, &snapshot.CheckName, &snapshot.CheckType,
+			&snapshot.ResultID, &snapshot.Status, &snapshot.LatencyMS, &snapshot.CheckedAt,
+		); err != nil {
+			return nil, err
+		}
+		snapshot.CheckedAt = snapshot.CheckedAt.UTC()
+		out = append(out, snapshot)
+	}
+	return out, rows.Err()
+}
+
 func (s *PostgresStore) UpdateSyntheticCheckStatus(id string, status string, runAt time.Time) error {
 	tag, err := s.pool.Exec(context.Background(),
 		`UPDATE synthetic_checks

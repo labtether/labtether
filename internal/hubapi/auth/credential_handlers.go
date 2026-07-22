@@ -7,25 +7,105 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
+	"github.com/labtether/labtether/internal/audit"
+	authmodel "github.com/labtether/labtether/internal/auth"
 	"github.com/labtether/labtether/internal/credentials"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/idgen"
+	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/policy"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
 const (
-	maxCredentialNameLength = 120
-	maxCredentialKindLength = 32
-	maxCredentialSecretLen  = 16384
-	maxActorIDLength        = 64
-	maxCommandLength        = 4096
+	maxCredentialNameLength       = 120
+	maxCredentialKindLength       = 32
+	maxCredentialSecretLen        = 16384
+	maxCredentialBodyBytes        = 64 * 1024
+	maxCredentialReasonLen        = 512
+	maxCredentialProfileIDLen     = 255
+	maxCredentialMetadataEntries  = 32
+	maxCredentialMetadataKeyLen   = 64
+	maxCredentialMetadataValueLen = 1024
+	maxCredentialMetadataTotalLen = 8192
+	maxActorIDLength              = 64
+	maxCommandLength              = 4096
+
+	credentialProfileCreatedAuditType = "credential.profile.created" // #nosec G101 -- Audit event identifier, not credential material.
+	credentialProfileRotatedAuditType = "credential.profile.rotated" // #nosec G101 -- Audit event identifier, not credential material.
+	credentialProfileDeletedAuditType = "credential.profile.deleted" // #nosec G101 -- Audit event identifier, not credential material.
+	credentialProfileAuditWarning     = "api warning: failed to append credential profile audit event"
 )
+
+func (d *Deps) appendCredentialProfileAudit(r *http.Request, eventType, profileID, action, kind string) {
+	if d.AppendAuditEventBestEffort == nil {
+		return
+	}
+	event := audit.NewEvent(eventType)
+	event.ActorID = d.actorIDFromContext(r.Context())
+	event.Target = strings.TrimSpace(profileID)
+	event.Decision = "applied"
+	event.Details = map[string]any{
+		"resource_type": "credential_profile",
+		"action":        action,
+		"kind":          credentialProfileAuditKind(kind),
+	}
+	d.AppendAuditEventBestEffort(event, credentialProfileAuditWarning)
+}
+
+func credentialProfileAuditKind(kind string) string {
+	switch strings.TrimSpace(kind) {
+	case credentials.KindSSHPassword,
+		credentials.KindSSHPrivateKey,
+		credentials.KindHubSSHIdentity,
+		credentials.KindVNCPassword,
+		credentials.KindProxmoxAPIToken,
+		credentials.KindProxmoxPassword,
+		credentials.KindPBSAPIToken,
+		credentials.KindPortainerAPIKey,
+		credentials.KindTrueNASAPIKey,
+		credentials.KindHomeAssistantToken,
+		credentials.KindTelnetPassword,
+		credentials.KindRDPPassword,
+		credentials.KindFTPPassword,
+		credentials.KindSMBCredentials,
+		credentials.KindWebDAVCredentials:
+		return strings.TrimSpace(kind)
+	default:
+		return "unknown"
+	}
+}
+
+// Cookie sessions carry nil API scopes, so scope middleware alone would allow
+// viewer/operator sessions to mutate the global credential vault. Scoped API
+// keys retain their explicit credentials:write contract; interactive sessions
+// must have owner/admin privileges.
+func (d *Deps) authorizeCredentialProfileMutation(w http.ResponseWriter, r *http.Request) bool {
+	if !apiv2.IsMutatingMethod(r.Method) || apiv2.ScopesFromContext(r.Context()) != nil || d.UserRoleFromContext == nil {
+		return true
+	}
+	role := strings.TrimSpace(d.UserRoleFromContext(r.Context()))
+	// Empty roles are possible only for trusted direct/internal handler calls;
+	// production HTTP registration authenticates and assigns a role first.
+	if role == "" || authmodel.HasAdminPrivileges(role) {
+		return true
+	}
+	servicehttp.WriteError(w, http.StatusForbidden, "administrator access is required to modify credential profiles")
+	return false
+}
 
 // HandleCredentialProfiles handles GET/POST /credentials/profiles.
 func (d *Deps) HandleCredentialProfiles(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/credentials/profiles" {
 		servicehttp.WriteError(w, http.StatusNotFound, "not found")
+		return
+	}
+	if shared.HasAssetRestriction(r.Context()) {
+		servicehttp.WriteError(w, http.StatusForbidden, "asset-restricted API keys cannot access global credential profiles")
+		return
+	}
+	if !d.authorizeCredentialProfileMutation(w, r) {
 		return
 	}
 	if d.CredentialStore == nil {
@@ -50,9 +130,16 @@ func (d *Deps) HandleCredentialProfiles(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
+		lifecycleStore, ok := d.CredentialStore.(persistence.CredentialProfileLifecycleStore)
+		if !ok {
+			servicehttp.WriteError(w, http.StatusServiceUnavailable, "credential lifecycle store unavailable")
+			return
+		}
+
+		r.Body = http.MaxBytesReader(w, r.Body, maxCredentialBodyBytes)
 		var req credentials.CreateProfileRequest
 		if err := shared.DecodeJSONBody(w, r, &req); err != nil {
-			servicehttp.WriteError(w, http.StatusBadRequest, "invalid credential profile payload")
+			servicehttp.WriteError(w, shared.JSONDecodeErrorStatus(err), "invalid credential profile payload")
 			return
 		}
 		if err := validateCreateProfileRequest(req); err != nil {
@@ -62,15 +149,15 @@ func (d *Deps) HandleCredentialProfiles(w http.ResponseWriter, r *http.Request) 
 
 		profileID := idgen.New("cred")
 
-		secretCiphertext, err := d.SecretsManager.EncryptString(strings.TrimSpace(req.Secret), profileID)
+		secretCiphertext, err := d.SecretsManager.EncryptString(req.Secret, profileID)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to encrypt credential secret")
 			return
 		}
 
 		passphraseCiphertext := ""
-		if strings.TrimSpace(req.Passphrase) != "" {
-			passphraseCiphertext, err = d.SecretsManager.EncryptString(strings.TrimSpace(req.Passphrase), profileID)
+		if req.Passphrase != "" {
+			passphraseCiphertext, err = d.SecretsManager.EncryptString(req.Passphrase, profileID)
 			if err != nil {
 				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to encrypt passphrase")
 				return
@@ -90,11 +177,21 @@ func (d *Deps) HandleCredentialProfiles(w http.ResponseWriter, r *http.Request) 
 			ExpiresAt:            cloneTimePtr(req.ExpiresAt),
 		}
 
-		created, err := d.CredentialStore.CreateCredentialProfile(profile)
+		created, err := lifecycleStore.CreateCredentialProfileBounded(
+			profile,
+			d.actorIDFromContext(r.Context()),
+			persistence.CredentialProfilePerOwnerLimit,
+			persistence.CredentialProfileGlobalLimit,
+		)
 		if err != nil {
+			if errors.Is(err, persistence.ErrCredentialProfileOwnerLimit) || errors.Is(err, persistence.ErrCredentialProfileGlobalLimit) {
+				servicehttp.WriteError(w, http.StatusConflict, err.Error())
+				return
+			}
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create credential profile")
 			return
 		}
+		d.appendCredentialProfileAudit(r, credentialProfileCreatedAuditType, created.ID, "create", created.Kind)
 
 		servicehttp.WriteJSON(w, http.StatusCreated, map[string]any{"profile": created})
 	default:
@@ -110,6 +207,13 @@ func (d *Deps) HandleCredentialProfileActions(w http.ResponseWriter, r *http.Req
 		servicehttp.WriteError(w, http.StatusNotFound, "credential profile path not found")
 		return
 	}
+	if shared.HasAssetRestriction(r.Context()) {
+		servicehttp.WriteError(w, http.StatusForbidden, "asset-restricted API keys cannot access global credential profiles")
+		return
+	}
+	if !d.authorizeCredentialProfileMutation(w, r) {
+		return
+	}
 	if d.CredentialStore == nil {
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "credential store unavailable")
 		return
@@ -117,7 +221,7 @@ func (d *Deps) HandleCredentialProfileActions(w http.ResponseWriter, r *http.Req
 
 	parts := strings.Split(path, "/")
 	profileID := strings.TrimSpace(parts[0])
-	if profileID == "" {
+	if !validCredentialProfileID(profileID) || len(parts) > 2 {
 		servicehttp.WriteError(w, http.StatusNotFound, "credential profile path not found")
 		return
 	}
@@ -137,10 +241,29 @@ func (d *Deps) HandleCredentialProfileActions(w http.ResponseWriter, r *http.Req
 		case http.MethodGet:
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"profile": profile})
 		case http.MethodDelete:
-			if err := d.CredentialStore.DeleteCredentialProfile(profileID); err != nil {
+			lifecycleStore, available := d.CredentialStore.(persistence.CredentialProfileLifecycleStore)
+			if !available {
+				servicehttp.WriteError(w, http.StatusServiceUnavailable, "credential lifecycle store unavailable")
+				return
+			}
+			references, deleteErr := lifecycleStore.DeleteCredentialProfileIfUnreferenced(profileID)
+			if errors.Is(deleteErr, persistence.ErrCredentialProfileInUse) {
+				servicehttp.WriteJSON(w, http.StatusConflict, map[string]any{
+					"error":           "credential profile is in use",
+					"reference_count": references.Total,
+					"references":      references.References,
+				})
+				return
+			}
+			if errors.Is(deleteErr, persistence.ErrCredentialProfileProtected) {
+				servicehttp.WriteError(w, http.StatusConflict, "the hub SSH identity is protected and cannot be deleted")
+				return
+			}
+			if deleteErr != nil {
 				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete credential profile")
 				return
 			}
+			d.appendCredentialProfileAudit(r, credentialProfileDeletedAuditType, profileID, "delete", profile.Kind)
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "profile_id": profileID})
 		default:
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -161,13 +284,12 @@ func (d *Deps) HandleCredentialProfileActions(w http.ResponseWriter, r *http.Req
 			return
 		}
 
+		r.Body = http.MaxBytesReader(w, r.Body, maxCredentialBodyBytes)
 		var req credentials.RotateProfileRequest
 		if err := shared.DecodeJSONBody(w, r, &req); err != nil {
-			servicehttp.WriteError(w, http.StatusBadRequest, "invalid credential rotation payload")
+			servicehttp.WriteError(w, shared.JSONDecodeErrorStatus(err), "invalid credential rotation payload")
 			return
 		}
-		req.Secret = strings.TrimSpace(req.Secret)
-		req.Passphrase = strings.TrimSpace(req.Passphrase)
 		req.Reason = strings.TrimSpace(req.Reason)
 		if req.Secret == "" {
 			servicehttp.WriteError(w, http.StatusBadRequest, "secret is required")
@@ -179,6 +301,14 @@ func (d *Deps) HandleCredentialProfileActions(w http.ResponseWriter, r *http.Req
 		}
 		if err := shared.ValidateMaxLen("passphrase", req.Passphrase, maxCredentialSecretLen); err != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if req.Reason == "" {
+			servicehttp.WriteError(w, http.StatusBadRequest, "rotation reason is required")
+			return
+		}
+		if err := shared.ValidateMaxLen("reason", req.Reason, maxCredentialReasonLen); err != nil || hasControlCharacters(req.Reason) {
+			servicehttp.WriteError(w, http.StatusBadRequest, "rotation reason is invalid")
 			return
 		}
 
@@ -201,6 +331,7 @@ func (d *Deps) HandleCredentialProfileActions(w http.ResponseWriter, r *http.Req
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to rotate credential profile secret")
 			return
 		}
+		d.appendCredentialProfileAudit(r, credentialProfileRotatedAuditType, profileID, "rotate", updated.Kind)
 
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 			"profile": updated,
@@ -288,6 +419,9 @@ func (d *Deps) handleGetDesktopCredentials(w http.ResponseWriter, assetID string
 func (d *Deps) HandleRetrieveDesktopCredentials(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if !apiv2.RequireScope(w, r, "credentials:use") {
 		return
 	}
 	if d.CredentialStore == nil || d.SecretsManager == nil {
@@ -488,50 +622,48 @@ func (d *Deps) authorizeDesktopAssetAccess(w http.ResponseWriter, r *http.Reques
 
 // validateCreateProfileRequest validates the fields in a CreateProfileRequest.
 func validateCreateProfileRequest(req credentials.CreateProfileRequest) error {
-	req.Name = strings.TrimSpace(req.Name)
-	req.Kind = strings.TrimSpace(req.Kind)
-	req.Username = strings.TrimSpace(req.Username)
-	req.Description = strings.TrimSpace(req.Description)
-	req.Secret = strings.TrimSpace(req.Secret)
-	req.Passphrase = strings.TrimSpace(req.Passphrase)
+	name := strings.TrimSpace(req.Name)
+	kind := strings.TrimSpace(req.Kind)
+	username := strings.TrimSpace(req.Username)
+	description := strings.TrimSpace(req.Description)
 
-	if req.Name == "" {
+	if name == "" {
 		return errors.New("name is required")
 	}
-	if req.Kind == "" {
+	if kind == "" {
 		return errors.New("kind is required")
 	}
 	if req.Secret == "" {
 		return errors.New("secret is required")
 	}
-	if req.Kind != credentials.KindSSHPassword &&
-		req.Kind != credentials.KindSSHPrivateKey &&
-		req.Kind != credentials.KindVNCPassword &&
-		req.Kind != credentials.KindProxmoxAPIToken &&
-		req.Kind != credentials.KindProxmoxPassword &&
-		req.Kind != credentials.KindPBSAPIToken &&
-		req.Kind != credentials.KindPortainerAPIKey &&
-		req.Kind != credentials.KindTrueNASAPIKey &&
-		req.Kind != credentials.KindHomeAssistantToken &&
-		req.Kind != credentials.KindTelnetPassword &&
-		req.Kind != credentials.KindRDPPassword &&
-		req.Kind != credentials.KindFTPPassword &&
-		req.Kind != credentials.KindSMBCredentials &&
-		req.Kind != credentials.KindWebDAVCredentials {
+	if kind != credentials.KindSSHPassword &&
+		kind != credentials.KindSSHPrivateKey &&
+		kind != credentials.KindVNCPassword &&
+		kind != credentials.KindProxmoxAPIToken &&
+		kind != credentials.KindProxmoxPassword &&
+		kind != credentials.KindPBSAPIToken &&
+		kind != credentials.KindPortainerAPIKey &&
+		kind != credentials.KindTrueNASAPIKey &&
+		kind != credentials.KindHomeAssistantToken &&
+		kind != credentials.KindTelnetPassword &&
+		kind != credentials.KindRDPPassword &&
+		kind != credentials.KindFTPPassword &&
+		kind != credentials.KindSMBCredentials &&
+		kind != credentials.KindWebDAVCredentials {
 		return fmt.Errorf(
 			"kind must be one of the supported credential types (ssh_password, ssh_private_key, vnc_password, proxmox_api_token, proxmox_password, pbs_api_token, portainer_api_key, truenas_api_key, homeassistant_token, telnet_password, rdp_password, ftp_password, smb_credentials, webdav_credentials)",
 		)
 	}
-	if err := shared.ValidateMaxLen("name", req.Name, maxCredentialNameLength); err != nil {
+	if err := shared.ValidateMaxLen("name", name, maxCredentialNameLength); err != nil {
 		return err
 	}
-	if err := shared.ValidateMaxLen("kind", req.Kind, maxCredentialKindLength); err != nil {
+	if err := shared.ValidateMaxLen("kind", kind, maxCredentialKindLength); err != nil {
 		return err
 	}
-	if err := shared.ValidateMaxLen("username", req.Username, maxActorIDLength); err != nil {
+	if err := shared.ValidateMaxLen("username", username, maxActorIDLength); err != nil {
 		return err
 	}
-	if err := shared.ValidateMaxLen("description", req.Description, maxCommandLength); err != nil {
+	if err := shared.ValidateMaxLen("description", description, maxCommandLength); err != nil {
 		return err
 	}
 	if err := shared.ValidateMaxLen("secret", req.Secret, maxCredentialSecretLen); err != nil {
@@ -540,7 +672,59 @@ func validateCreateProfileRequest(req credentials.CreateProfileRequest) error {
 	if err := shared.ValidateMaxLen("passphrase", req.Passphrase, maxCredentialSecretLen); err != nil {
 		return err
 	}
+	if hasControlCharacters(name) || hasControlCharacters(username) || hasControlCharacters(description) {
+		return errors.New("name, username, and description must not contain control characters")
+	}
+	if err := validateCredentialMetadata(req.Metadata); err != nil {
+		return err
+	}
 	return nil
+}
+
+func validateCredentialMetadata(metadata map[string]string) error {
+	if len(metadata) > maxCredentialMetadataEntries {
+		return fmt.Errorf("metadata exceeds maximum entry count %d", maxCredentialMetadataEntries)
+	}
+	seen := make(map[string]struct{}, len(metadata))
+	total := 0
+	for rawKey, rawValue := range metadata {
+		key := strings.TrimSpace(rawKey)
+		value := strings.TrimSpace(rawValue)
+		if key == "" || hasControlCharacters(key) {
+			return errors.New("metadata keys must be non-empty and must not contain control characters")
+		}
+		if _, exists := seen[key]; exists {
+			return errors.New("metadata contains duplicate normalized keys")
+		}
+		seen[key] = struct{}{}
+		if len(key) > maxCredentialMetadataKeyLen {
+			return fmt.Errorf("metadata key exceeds max length %d", maxCredentialMetadataKeyLen)
+		}
+		if len(value) > maxCredentialMetadataValueLen {
+			return fmt.Errorf("metadata value exceeds max length %d", maxCredentialMetadataValueLen)
+		}
+		total += len(key) + len(value)
+		if total > maxCredentialMetadataTotalLen {
+			return fmt.Errorf("metadata exceeds aggregate max length %d", maxCredentialMetadataTotalLen)
+		}
+	}
+	return nil
+}
+
+func validCredentialProfileID(id string) bool {
+	if id == "" || len(id) > maxCredentialProfileIDLen || id == "." || id == ".." {
+		return false
+	}
+	return !strings.ContainsAny(id, "/\\") && !hasControlCharacters(id)
+}
+
+func hasControlCharacters(value string) bool {
+	for _, r := range value {
+		if r < 0x20 || r == 0x7f {
+			return true
+		}
+	}
+	return false
 }
 
 func cloneTimePtr(value *time.Time) *time.Time {

@@ -3,14 +3,16 @@ package terminal
 import (
 	"errors"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/labtether/labtether/internal/idgen"
 )
 
-var ErrSessionNotFound = errors.New("session not found")
+var (
+	ErrSessionNotFound = errors.New("session not found")
+	ErrCommandNotFound = errors.New("command not found")
+)
 
 type Store struct {
 	mu                 sync.RWMutex
@@ -138,7 +140,7 @@ func (s *Store) CreateOrUpdatePersistentSession(req CreatePersistentSessionReque
 	if persistent.Title == "" {
 		persistent.Title = target
 	}
-	persistent.TmuxSessionName = buildPersistentTmuxSessionName(persistent.ID)
+	persistent.TmuxSessionName = TmuxSessionNameForID(persistent.ID)
 	s.persistentSessions[persistent.ID] = persistent
 	return persistent
 }
@@ -293,7 +295,42 @@ func (s *Store) UpdateCommandResult(sessionID, commandID, status, output string)
 			return nil
 		}
 	}
-	return errors.New("command not found")
+	return ErrCommandNotFound
+}
+
+func (s *Store) GetCommand(commandID string) (Command, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, commands := range s.commands {
+		for _, command := range commands {
+			if command.ID == commandID {
+				return command, true
+			}
+		}
+	}
+	return Command{}, false
+}
+
+func (s *Store) DeleteCommand(commandID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for sessionID, commands := range s.commands {
+		for index := range commands {
+			if commands[index].ID != commandID {
+				continue
+			}
+			commands = append(commands[:index], commands[index+1:]...)
+			if len(commands) == 0 {
+				delete(s.commands, sessionID)
+			} else {
+				s.commands[sessionID] = commands
+			}
+			return nil
+		}
+	}
+	return ErrCommandNotFound
 }
 
 func (s *Store) ListCommands(sessionID string) ([]Command, error) {
@@ -308,16 +345,4 @@ func (s *Store) ListCommands(sessionID string) ([]Command, error) {
 	out := make([]Command, len(list))
 	copy(out, list)
 	return out, nil
-}
-
-func buildPersistentTmuxSessionName(id string) string {
-	trimmed := strings.TrimSpace(id)
-	if trimmed == "" {
-		return "lt-shell"
-	}
-	name := "lt-" + trimmed
-	if len(name) > 24 {
-		name = name[:24]
-	}
-	return name
 }

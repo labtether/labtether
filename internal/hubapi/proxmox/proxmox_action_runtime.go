@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/actions"
+	"github.com/labtether/labtether/internal/assetid"
 	"github.com/labtether/labtether/internal/connectorsdk"
 	"github.com/labtether/labtether/internal/hubcollector"
 )
@@ -63,8 +64,104 @@ func (d *Deps) ExecuteActionInProcess(job actions.Job) actions.Result {
 			CompletedAt: time.Now().UTC(),
 		}
 	}
+	if runType == actions.RunTypeConnectorAction {
+		if err := d.validateGenericConnectorActionRoute(job); err != nil {
+			return failedConnectorActionResult(job, err.Error())
+		}
+	}
 
 	return d.ExecuteActionInProcessFn(job, d.ConnectorRegistry)
+}
+
+func (d *Deps) validateGenericConnectorActionRoute(job actions.Job) error {
+	collectorType := collectorTypeForConnectorAction(job.ConnectorID)
+	if collectorType == "" || collectorType == hubcollector.CollectorTypeProxmox {
+		return nil
+	}
+
+	target := strings.TrimSpace(job.Target)
+	assetCollectorID := ""
+	targetIsScoped := false
+	if _, ok := assetid.CollectorScopeFromAssetID(target); ok {
+		targetIsScoped = true
+	}
+	if d.AssetStore != nil && target != "" {
+		asset, ok, err := d.AssetStore.GetAsset(target)
+		if err != nil {
+			return fmt.Errorf("cannot verify connector action target ownership")
+		}
+		if ok {
+			assetCollectorID = strings.TrimSpace(asset.Metadata["collector_id"])
+			if sourceType := collectorTypeForConnectorAction(asset.Source); sourceType != "" && sourceType != collectorType {
+				return fmt.Errorf("connector action target belongs to %s, not %s", sourceType, collectorType)
+			}
+		}
+	}
+
+	if d.HubCollectorStore == nil {
+		if targetIsScoped || assetCollectorID != "" {
+			return fmt.Errorf("cannot verify collector-aware action routing for %s", collectorType)
+		}
+		return nil
+	}
+	collectors, err := d.HubCollectorStore.ListHubCollectors(200, true)
+	if err != nil {
+		if targetIsScoped || assetCollectorID != "" {
+			return fmt.Errorf("cannot verify collector-aware action routing for %s", collectorType)
+		}
+		return nil
+	}
+
+	matching := make([]hubcollector.Collector, 0, 2)
+	for _, collector := range collectors {
+		if hubcollector.NormalizeCollectorType(collector.CollectorType) == collectorType {
+			matching = append(matching, collector)
+		}
+	}
+	if len(matching) > 1 {
+		return fmt.Errorf("multiple active %s collectors are configured; generic connector actions are disabled until collector-aware runtime dispatch is available", collectorType)
+	}
+	if assetCollectorID != "" {
+		if len(matching) == 0 || strings.TrimSpace(matching[0].ID) != assetCollectorID {
+			return fmt.Errorf("connector action target references an inactive or mismatched %s collector", collectorType)
+		}
+	}
+	return nil
+}
+
+func collectorTypeForConnectorAction(connectorID string) string {
+	switch strings.ToLower(strings.TrimSpace(connectorID)) {
+	case "home-assistant", hubcollector.CollectorTypeHomeAssistant:
+		return hubcollector.CollectorTypeHomeAssistant
+	case hubcollector.CollectorTypePortainer:
+		return hubcollector.CollectorTypePortainer
+	case hubcollector.CollectorTypePBS:
+		return hubcollector.CollectorTypePBS
+	case hubcollector.CollectorTypeTrueNAS:
+		return hubcollector.CollectorTypeTrueNAS
+	case hubcollector.CollectorTypeProxmox:
+		return hubcollector.CollectorTypeProxmox
+	case hubcollector.CollectorTypeDocker:
+		return hubcollector.CollectorTypeDocker
+	default:
+		return ""
+	}
+}
+
+func failedConnectorActionResult(job actions.Job, message string) actions.Result {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		message = "connector action routing failed"
+	}
+	return actions.Result{
+		JobID:       job.JobID,
+		RunID:       job.RunID,
+		Status:      actions.StatusFailed,
+		Error:       message,
+		Output:      message,
+		Steps:       []actions.StepResult{{Name: "connector_route", Status: actions.StatusFailed, Error: message}},
+		CompletedAt: time.Now().UTC(),
+	}
 }
 
 func ProxmoxActionErrorMessage(err error) string {

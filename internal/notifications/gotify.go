@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/labtether/labtether/internal/securityruntime"
 )
@@ -50,15 +49,12 @@ func (g *GotifyAdapter) Send(ctx context.Context, config map[string]any, payload
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Gotify-Key", appToken)
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := newNotificationHTTPClient()
 	resp, err := securityruntime.DoOutboundRequest(client, req)
 	if err != nil {
 		return fmt.Errorf("gotify request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode >= 400 {
-		return fmt.Errorf("gotify returned status %d", resp.StatusCode)
-	}
-	return nil
+	return notificationResponseError("gotify", resp.StatusCode)
 }

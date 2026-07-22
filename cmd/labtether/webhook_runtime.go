@@ -2,29 +2,54 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/labtether/labtether/internal/idgen"
 	"github.com/labtether/labtether/internal/notifications"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/webhooks"
 )
 
 type webhookDispatchEvent struct {
+	ID        string
 	EventType string
-	Data      any
+	Data      json.RawMessage
 	Timestamp time.Time
 }
+
+const (
+	maxWebhookEventDataBytes   = 256 << 10
+	maxWebhookEventTypeBytes   = 128
+	webhookDeliveryConcurrency = 8
+)
 
 func (s *apiServer) enqueueWebhookEvent(eventType string, data any, at time.Time) {
 	if s == nil || s.webhookEventCh == nil {
 		return
 	}
+	eventType = strings.TrimSpace(eventType)
+	if !validRuntimeWebhookEventType(eventType) {
+		log.Printf("webhooks: rejecting invalid event type")
+		return
+	}
+	eventData, err := json.Marshal(data)
+	if err != nil {
+		log.Printf("webhooks: rejecting event %q because its data is not JSON encodable", eventType)
+		return
+	}
+	if len(eventData) > maxWebhookEventDataBytes {
+		log.Printf("webhooks: rejecting event %q because its data exceeds %d bytes", eventType, maxWebhookEventDataBytes)
+		return
+	}
 	event := webhookDispatchEvent{
-		EventType: strings.TrimSpace(eventType),
-		Data:      data,
+		ID:        idgen.New("evt"),
+		EventType: eventType,
+		Data:      eventData,
 		Timestamp: at.UTC(),
 	}
 	if event.EventType == "" {
@@ -35,6 +60,20 @@ func (s *apiServer) enqueueWebhookEvent(eventType string, data any, at time.Time
 	default:
 		log.Printf("webhooks: dropping event %q because relay queue is full", event.EventType)
 	}
+}
+
+func validRuntimeWebhookEventType(eventType string) bool {
+	if len(eventType) == 0 || len(eventType) > maxWebhookEventTypeBytes {
+		return false
+	}
+	for _, char := range []byte(eventType) {
+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') || char == '.' || char == '_' || char == '-' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func (s *apiServer) invalidateWebhookCache() {
@@ -77,37 +116,52 @@ func (s *apiServer) dispatchWebhookEvent(ctx context.Context, adapter *notificat
 	}
 
 	payload := map[string]any{
+		"id":   event.ID,
 		"type": event.EventType,
 		"data": event.Data,
 		"ts":   event.Timestamp.UTC().Format(time.RFC3339),
 	}
+	var wg sync.WaitGroup
+	deliverySem := make(chan struct{}, webhookDeliveryConcurrency)
 	for _, wh := range hooks {
 		if !wh.Enabled || !webhookMatchesEvent(wh, event.EventType) {
 			continue
 		}
+		wh := wh
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			select {
+			case deliverySem <- struct{}{}:
+				defer func() { <-deliverySem }()
+			case <-ctx.Done():
+				return
+			}
 
-		config := map[string]any{
-			"url":        wh.URL,
-			"event_type": event.EventType,
-			"timestamp":  payload["ts"],
-		}
-		secret, err := s.runtimeWebhookSecret(ctx, wh)
-		if err != nil {
-			log.Printf("webhooks: %s secret unavailable: %v", wh.ID, err)
-			continue
-		}
-		if secret != "" {
-			config["secret"] = secret
-		}
-		if err := adapter.Send(ctx, config, payload); err != nil {
-			log.Printf("webhooks: %s delivery failed for %q: %v", wh.ID, event.EventType, err)
-			continue
-		}
-		if err := s.webhookStore.MarkWebhookTriggered(ctx, wh.ID, event.Timestamp); err != nil && !errors.Is(err, persistence.ErrNotFound) {
-			log.Printf("webhooks: %s trigger timestamp update failed: %v", wh.ID, err)
-		}
-		s.setWebhookCacheLastTriggered(wh.ID, event.Timestamp)
+			config := map[string]any{
+				"url":        wh.URL,
+				"event_type": event.EventType,
+				"timestamp":  payload["ts"],
+			}
+			secret, err := s.runtimeWebhookSecret(ctx, wh)
+			if err != nil {
+				log.Printf("webhooks: %s secret unavailable: %v", wh.ID, err)
+				return
+			}
+			if secret != "" {
+				config["secret"] = secret
+			}
+			if err := adapter.Send(ctx, config, payload); err != nil {
+				log.Printf("webhooks: %s delivery failed for %q: %v", wh.ID, event.EventType, err)
+				return
+			}
+			if err := s.webhookStore.MarkWebhookTriggered(ctx, wh.ID, event.Timestamp); err != nil && !errors.Is(err, persistence.ErrNotFound) {
+				log.Printf("webhooks: %s trigger timestamp update failed: %v", wh.ID, err)
+			}
+			s.setWebhookCacheLastTriggered(wh.ID, event.Timestamp)
+		}()
 	}
+	wg.Wait()
 }
 
 func (s *apiServer) listDispatchWebhooks(ctx context.Context) ([]webhooks.Webhook, error) {

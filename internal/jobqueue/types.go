@@ -13,6 +13,7 @@ const (
 	KindTerminalCommand JobKind = "terminal_command"
 	KindActionRun       JobKind = "action_run"
 	KindUpdateRun       JobKind = "update_run"
+	KindScheduleRun     JobKind = "schedule_run"
 )
 
 // JobStatus tracks lifecycle state of a job.
@@ -50,6 +51,7 @@ var ValidKinds = map[JobKind]bool{
 	KindTerminalCommand: true,
 	KindActionRun:       true,
 	KindUpdateRun:       true,
+	KindScheduleRun:     true,
 }
 
 // ValidStatuses is the set of valid job statuses.

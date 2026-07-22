@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,32 +24,222 @@ var (
 	canonicalTelemetryMetricNamesCached []string
 )
 
+const maxMetricSamplesPerInsert = 10000 // 60,000 bind params; PostgreSQL maximum is 65,535.
+
 func (s *PostgresStore) AppendSamples(ctx context.Context, samples []telemetry.MetricSample) error {
+	if ctx == nil {
+		return fmt.Errorf("metric append context is required")
+	}
+	if len(samples) == 0 {
+		return nil
+	}
+	if err := validateMetricSampleBatch(ctx, samples); err != nil {
+		return err
+	}
+
+	assetSamples := make([]telemetry.MetricSample, 0, len(samples))
+	hubSamples := make([]telemetry.MetricSample, 0, len(samples))
+	incomingHubSeries := make(map[string]map[string]struct{}, 2)
+	now := time.Now().UTC()
+	for _, sample := range samples {
+		sm := sample
+		sm.Scope = strings.TrimSpace(sm.Scope)
+		if sm.Scope != "" {
+			var err error
+			sm, err = telemetry.NormalizeHubMetricSample(sm)
+			if err != nil {
+				return err
+			}
+			seriesKey, err := hubMetricSeriesKey(sm)
+			if err != nil {
+				return err
+			}
+			series := incomingHubSeries[sm.Scope]
+			if series == nil {
+				series = make(map[string]struct{})
+				incomingHubSeries[sm.Scope] = series
+			}
+			series[seriesKey] = struct{}{}
+			if len(series) > telemetry.MaxHubMetricSeriesPerScope {
+				return ErrHubMetricSnapshotLimitExceeded
+			}
+		} else {
+			sm.AssetID = strings.TrimSpace(sm.AssetID)
+			sm.Metric = strings.TrimSpace(sm.Metric)
+			sm.Unit = strings.TrimSpace(sm.Unit)
+			if sm.AssetID == "" || sm.Metric == "" || sm.Unit == "" {
+				return fmt.Errorf("asset metric sample requires non-empty asset_id, metric, and unit")
+			}
+		}
+		if sm.CollectedAt.IsZero() {
+			sm.CollectedAt = now
+		} else {
+			sm.CollectedAt = sm.CollectedAt.UTC()
+		}
+		if sm.Scope != "" {
+			hubSamples = append(hubSamples, sm)
+		} else {
+			assetSamples = append(assetSamples, sm)
+		}
+	}
+	if len(assetSamples) == 0 && len(hubSamples) == 0 {
+		return nil
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(context.Background())
+
+	missingAssetIDs := make(map[string]struct{})
+	var skippedSamples int64
+	for start := 0; start < len(assetSamples); start += maxMetricSamplesPerInsert {
+		end := min(start+maxMetricSamplesPerInsert, len(assetSamples))
+		chunkErr := s.appendAssetMetricSamples(ctx, tx, assetSamples[start:end])
+		if chunkErr == nil {
+			continue
+		}
+		var unknownAssetsErr *UnknownMetricAssetsError
+		if !errors.As(chunkErr, &unknownAssetsErr) {
+			return chunkErr
+		}
+		skippedSamples += unknownAssetsErr.SkippedSamples
+		for _, assetID := range unknownAssetsErr.AssetIDs {
+			missingAssetIDs[assetID] = struct{}{}
+		}
+	}
+	writtenHubScopes := make(map[string]struct{}, len(incomingHubSeries))
+	for _, sample := range hubSamples {
+		writtenHubScopes[sample.Scope] = struct{}{}
+	}
+	hubScopes := make([]string, 0, len(writtenHubScopes))
+	for scope := range writtenHubScopes {
+		hubScopes = append(hubScopes, scope)
+	}
+	sort.Strings(hubScopes)
+	for _, scope := range hubScopes {
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "labtether:hub-metrics:"+scope); err != nil {
+			return err
+		}
+	}
+	for start := 0; start < len(hubSamples); start += maxMetricSamplesPerInsert {
+		end := min(start+maxMetricSamplesPerInsert, len(hubSamples))
+		if err := s.appendHubMetricSamples(ctx, tx, hubSamples[start:end]); err != nil {
+			return err
+		}
+	}
+	for _, scope := range hubScopes {
+		if err := s.compactHubMetricScope(ctx, tx, scope); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	if skippedSamples > 0 {
+		ids := make([]string, 0, len(missingAssetIDs))
+		for assetID := range missingAssetIDs {
+			ids = append(ids, assetID)
+		}
+		sort.Strings(ids)
+		return &UnknownMetricAssetsError{AssetIDs: ids, SkippedSamples: skippedSamples}
+	}
+	return nil
+}
+
+// UnknownMetricAssetsError reports a partial telemetry write. Samples for
+// existing assets were persisted, while samples for the listed missing assets
+// were rejected. Callers must surface this error so stale producers remain
+// observable instead of silently losing data.
+type UnknownMetricAssetsError struct {
+	AssetIDs       []string
+	SkippedSamples int64
+}
+
+func (e *UnknownMetricAssetsError) Error() string {
+	if e == nil {
+		return ""
+	}
+	ids := e.AssetIDs
+	const maxReportedAssetIDs = 8
+	if len(ids) > maxReportedAssetIDs {
+		ids = ids[:maxReportedAssetIDs]
+	}
+	return fmt.Sprintf("skipped %d metric samples for %d unknown assets: %q", e.SkippedSamples, len(e.AssetIDs), ids)
+}
+
+// appendAssetMetricSamples inserts samples for assets that exist in the same
+// statement snapshot. The join prevents a missing/deleted asset from causing a
+// batch FK violation (and an error-driven N+1 retry storm), while the result
+// reports every skipped ID explicitly.
+func (s *PostgresStore) appendAssetMetricSamples(ctx context.Context, tx pgx.Tx, samples []telemetry.MetricSample) error {
 	if len(samples) == 0 {
 		return nil
 	}
 
-	var valid []telemetry.MetricSample
-	for _, sample := range samples {
-		if sample.AssetID == "" || sample.Metric == "" || sample.Unit == "" {
-			continue
+	var b strings.Builder
+	b.WriteString("WITH incoming (asset_id, metric, unit, value, collected_at, labels) AS (VALUES ")
+	args := make([]any, 0, len(samples)*6)
+	for i, sample := range samples {
+		if i > 0 {
+			b.WriteByte(',')
 		}
-		sm := sample
-		if sm.CollectedAt.IsZero() {
-			sm.CollectedAt = time.Now().UTC()
+		base := i * 6
+		if i == 0 {
+			fmt.Fprintf(&b, "($%d::text, $%d::text, $%d::text, $%d::double precision, $%d::timestamptz, $%d::jsonb)", base+1, base+2, base+3, base+4, base+5, base+6)
 		} else {
-			sm.CollectedAt = sm.CollectedAt.UTC()
+			fmt.Fprintf(&b, "($%d, $%d, $%d, $%d, $%d, $%d::jsonb)", base+1, base+2, base+3, base+4, base+5, base+6)
 		}
-		valid = append(valid, sm)
+		labelsArg, err := labelsToJSONArg(sample.Labels)
+		if err != nil {
+			return fmt.Errorf("marshal labels for sample %q/%q: %w", sample.AssetID, sample.Metric, err)
+		}
+		args = append(args, sample.AssetID, sample.Metric, sample.Unit, sample.Value, sample.CollectedAt, labelsArg)
 	}
-	if len(valid) == 0 {
+	b.WriteString(`), inserted AS (
+		INSERT INTO metric_samples (asset_id, metric, unit, value, collected_at, labels)
+		SELECT incoming.asset_id, incoming.metric, incoming.unit, incoming.value, incoming.collected_at, incoming.labels
+		  FROM incoming
+		  JOIN assets ON assets.id = incoming.asset_id
+		RETURNING 1
+	)
+	SELECT
+		(SELECT COUNT(*) FROM inserted),
+		(SELECT COUNT(*) FROM incoming WHERE NOT EXISTS (SELECT 1 FROM assets WHERE assets.id = incoming.asset_id)),
+		COALESCE(
+			(SELECT ARRAY_AGG(DISTINCT incoming.asset_id ORDER BY incoming.asset_id)
+			   FROM incoming
+			  WHERE NOT EXISTS (SELECT 1 FROM assets WHERE assets.id = incoming.asset_id)),
+			ARRAY[]::text[]
+		)`)
+
+	var (
+		insertedCount int64
+		skippedCount  int64
+		missingIDs    []string
+	)
+	if err := tx.QueryRow(ctx, b.String(), args...).Scan(&insertedCount, &skippedCount, &missingIDs); err != nil {
+		return err
+	}
+	if skippedCount > 0 {
+		return &UnknownMetricAssetsError{AssetIDs: missingIDs, SkippedSamples: skippedCount}
+	}
+	if insertedCount != int64(len(samples)) {
+		return fmt.Errorf("metric sample insert count mismatch: inserted %d of %d", insertedCount, len(samples))
+	}
+	return nil
+}
+
+func (s *PostgresStore) appendHubMetricSamples(ctx context.Context, tx pgx.Tx, samples []telemetry.MetricSample) error {
+	if len(samples) == 0 {
 		return nil
 	}
 
 	var b strings.Builder
-	b.WriteString("INSERT INTO metric_samples (asset_id, metric, unit, value, collected_at, labels) VALUES ")
-	args := make([]any, 0, len(valid)*6)
-	for i, sample := range valid {
+	b.WriteString("INSERT INTO hub_metric_samples (scope, metric, unit, value, collected_at, labels) VALUES ")
+	args := make([]any, 0, len(samples)*6)
+	for i, sample := range samples {
 		if i > 0 {
 			b.WriteByte(',')
 		}
@@ -56,46 +247,57 @@ func (s *PostgresStore) AppendSamples(ctx context.Context, samples []telemetry.M
 		fmt.Fprintf(&b, "($%d, $%d, $%d, $%d, $%d, $%d::jsonb)", base+1, base+2, base+3, base+4, base+5, base+6)
 		labelsArg, err := labelsToJSONArg(sample.Labels)
 		if err != nil {
-			return fmt.Errorf("marshal labels for sample %q/%q: %w", sample.AssetID, sample.Metric, err)
+			return fmt.Errorf("marshal labels for hub sample %q/%q: %w", sample.Scope, sample.Metric, err)
 		}
-		args = append(args, sample.AssetID, sample.Metric, sample.Unit, sample.Value, sample.CollectedAt, labelsArg)
+		args = append(args, sample.Scope, sample.Metric, sample.Unit, sample.Value, sample.CollectedAt, labelsArg)
 	}
-
-	_, err := s.pool.Exec(ctx, b.String(), args...)
-	if err == nil {
-		return nil
-	}
-
-	// If the batch fails (typically FK violation when a bridge emits samples
-	// for asset IDs not yet registered), retry each sample individually so
-	// valid samples are still persisted and only unknown asset IDs are skipped.
-	if !isFKViolation(err) {
-		return err
-	}
-	var firstErr error
-	for _, sample := range valid {
-		labelsArg, _ := labelsToJSONArg(sample.Labels)
-		_, sErr := s.pool.Exec(ctx,
-			"INSERT INTO metric_samples (asset_id, metric, unit, value, collected_at, labels) VALUES ($1, $2, $3, $4, $5, $6::jsonb)",
-			sample.AssetID, sample.Metric, sample.Unit, sample.Value, sample.CollectedAt, labelsArg,
-		)
-		if sErr != nil && firstErr == nil && !isFKViolation(sErr) {
-			firstErr = sErr
-		}
-	}
-	return firstErr
+	_, err := tx.Exec(ctx, b.String(), args...)
+	return err
 }
 
-// isFKViolation returns true if the error is a Postgres foreign key constraint
-// violation (SQLSTATE 23503). Used to gracefully skip metric samples whose
-// asset_id has not yet been registered by the discovery cycle.
-func isFKViolation(err error) bool {
-	if err == nil {
-		return false
-	}
-	// pgx wraps the SQLSTATE in the error message. Check for the code directly.
-	return strings.Contains(err.Error(), "SQLSTATE 23503") ||
-		strings.Contains(err.Error(), "violates foreign key constraint")
+// compactHubMetricScope applies the same event-time policy as the memory
+// store: keep the 1,024 freshest distinct series and the 16 freshest history
+// rows per retained series. Late old batches cannot evict fresher series.
+func (s *PostgresStore) compactHubMetricScope(ctx context.Context, tx pgx.Tx, scope string) error {
+	_, err := tx.Exec(ctx, `
+		WITH latest_series AS MATERIALIZED (
+			SELECT DISTINCT ON (metric, COALESCE(labels, '{}'::jsonb))
+			       metric,
+			       COALESCE(labels, '{}'::jsonb) AS labels_key,
+			       collected_at,
+			       id
+			  FROM hub_metric_samples
+			 WHERE scope = $1
+			 ORDER BY metric, COALESCE(labels, '{}'::jsonb), collected_at DESC, id DESC
+		), kept_series AS MATERIALIZED (
+			SELECT metric, labels_key
+			  FROM latest_series
+			 ORDER BY collected_at DESC, id DESC, metric, labels_key
+			 LIMIT $2
+		), ranked_rows AS MATERIALIZED (
+			SELECT sample.id,
+			       ROW_NUMBER() OVER (
+				   PARTITION BY sample.metric, COALESCE(sample.labels, '{}'::jsonb)
+				   ORDER BY sample.collected_at DESC, sample.id DESC
+			       ) AS history_rank,
+			       EXISTS (
+				   SELECT 1
+				     FROM kept_series
+				    WHERE kept_series.metric = sample.metric
+				      AND kept_series.labels_key = COALESCE(sample.labels, '{}'::jsonb)
+			       ) AS keep_series
+			  FROM hub_metric_samples AS sample
+			 WHERE sample.scope = $1
+		)
+		DELETE FROM hub_metric_samples AS sample
+		 USING ranked_rows
+		 WHERE sample.id = ranked_rows.id
+		   AND (NOT ranked_rows.keep_series OR ranked_rows.history_rank > $3)`,
+		scope,
+		telemetry.MaxHubMetricSeriesPerScope,
+		telemetry.MaxHubMetricHistoryPerSeries,
+	)
+	return err
 }
 
 // labelsToJSONArg converts a labels map to a JSONB-compatible argument.
@@ -111,6 +313,69 @@ func labelsToJSONArg(labels map[string]string) (any, error) {
 		return nil, err
 	}
 	return string(b), nil
+}
+
+// HubMetricSnapshots returns the latest sample for each
+// (scope, metric, labels) series. Hub scopes are intentionally separate from
+// assets and are consumed by the Prometheus adapter without becoming
+// user-visible device rows.
+func (s *PostgresStore) HubMetricSnapshots(ctx context.Context, at time.Time, maxSeries int) (map[string][]telemetry.MetricSample, error) {
+	if ctx == nil {
+		return nil, fmt.Errorf("hub metric snapshot context is required")
+	}
+	if maxSeries <= 0 || maxSeries > telemetry.MaxHubMetricSnapshotSeries {
+		return nil, ErrHubMetricSnapshotLimitExceeded
+	}
+	rows, err := s.pool.Query(ctx,
+		`SELECT DISTINCT ON (scope, metric, COALESCE(labels, '{}'::jsonb))
+			scope, metric, unit, value, collected_at, labels
+		 FROM hub_metric_samples
+		 WHERE collected_at <= $1
+		   AND collected_at >= $2
+		 ORDER BY scope, metric, COALESCE(labels, '{}'::jsonb), collected_at DESC, id DESC
+		 LIMIT $3`,
+		at.UTC(),
+		at.UTC().Add(-telemetry.HubMetricSnapshotMaxAge),
+		maxSeries+1,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make(map[string][]telemetry.MetricSample, 2)
+	seriesCount := 0
+	for rows.Next() {
+		var (
+			sample    telemetry.MetricSample
+			labelsRaw []byte
+		)
+		if err := rows.Scan(&sample.Scope, &sample.Metric, &sample.Unit, &sample.Value, &sample.CollectedAt, &labelsRaw); err != nil {
+			return nil, err
+		}
+		if len(labelsRaw) > 0 {
+			if err := json.Unmarshal(labelsRaw, &sample.Labels); err != nil {
+				return nil, fmt.Errorf("decode labels for hub sample %q/%q: %w", sample.Scope, sample.Metric, err)
+			}
+		}
+		normalized, err := telemetry.NormalizeHubMetricSample(sample)
+		if err != nil {
+			return nil, fmt.Errorf("invalid persisted hub sample %q/%q: %w", sample.Scope, sample.Metric, err)
+		}
+		if _, err := telemetry.MetricSampleEnvelopeBytes(normalized); err != nil {
+			return nil, fmt.Errorf("invalid persisted hub sample envelope %q/%q: %w", sample.Scope, sample.Metric, err)
+		}
+		sample = normalized
+		if seriesCount >= maxSeries {
+			return nil, ErrHubMetricSnapshotLimitExceeded
+		}
+		out[sample.Scope] = append(out[sample.Scope], sample)
+		seriesCount++
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+	return out, nil
 }
 
 func (s *PostgresStore) DynamicSnapshotForAsset(assetID string, at time.Time) (telemetry.DynamicSnapshot, error) {
@@ -399,6 +664,24 @@ func (s *PostgresStore) HasTelemetrySamples(assetIDs []string, start, end time.T
 }
 
 func (s *PostgresStore) MetricSeriesBatch(assetIDs []string, metric string, start, end time.Time, step time.Duration) (map[string]telemetry.Series, error) {
+	return s.metricSeriesBatch(context.Background(), assetIDs, metric, start, end, step, 0)
+}
+
+// MetricSeriesBatchContext is the cancellation-aware, row-bounded query path
+// for interactive/API requests. maxRawPoints must be positive; one extra row
+// is requested so an oversized result fails rather than returning a misleading
+// partial series.
+func (s *PostgresStore) MetricSeriesBatchContext(ctx context.Context, assetIDs []string, metric string, start, end time.Time, step time.Duration, maxRawPoints int) (map[string]telemetry.Series, error) {
+	if ctx == nil {
+		return nil, errors.New("telemetry query context is required")
+	}
+	if maxRawPoints <= 0 {
+		return nil, errors.New("telemetry query row limit must be positive")
+	}
+	return s.metricSeriesBatch(ctx, assetIDs, metric, start, end, step, maxRawPoints)
+}
+
+func (s *PostgresStore) metricSeriesBatch(ctx context.Context, assetIDs []string, metric string, start, end time.Time, step time.Duration, maxRawPoints int) (map[string]telemetry.Series, error) {
 	cleanIDs := normalizeLogAssetIDs(assetIDs)
 	out := make(map[string]telemetry.Series, len(cleanIDs))
 	metric = strings.TrimSpace(metric)
@@ -411,18 +694,21 @@ func (s *PostgresStore) MetricSeriesBatch(assetIDs []string, metric string, star
 		return out, nil
 	}
 
-	rows, err := s.pool.Query(context.Background(),
-		`SELECT asset_id, collected_at, value
+	query := `SELECT asset_id, collected_at, value
 		 FROM metric_samples
 		 WHERE asset_id = ANY($1::text[])
 		   AND metric = $2
 		   AND collected_at >= $3
 		   AND collected_at <= $4
-		 ORDER BY asset_id ASC, collected_at ASC`,
-		cleanIDs,
-		metric,
-		start.UTC(),
-		end.UTC(),
+		 ORDER BY asset_id ASC, collected_at ASC`
+	args := []any{cleanIDs, metric, start.UTC(), end.UTC()}
+	if maxRawPoints > 0 {
+		query += " LIMIT $5"
+		args = append(args, maxRawPoints+1)
+	}
+	rows, err := s.pool.Query(ctx,
+		query,
+		args...,
 	)
 	if err != nil {
 		return nil, err
@@ -430,6 +716,7 @@ func (s *PostgresStore) MetricSeriesBatch(assetIDs []string, metric string, star
 	defer rows.Close()
 
 	rawPoints := make(map[string][]telemetry.Point, len(cleanIDs))
+	rawPointCount := 0
 	for rows.Next() {
 		var assetID string
 		var collectedAt time.Time
@@ -440,6 +727,10 @@ func (s *PostgresStore) MetricSeriesBatch(assetIDs []string, metric string, star
 		assetID = strings.TrimSpace(assetID)
 		if assetID == "" {
 			continue
+		}
+		rawPointCount++
+		if maxRawPoints > 0 && rawPointCount > maxRawPoints {
+			return nil, ErrTelemetryQueryLimitExceeded
 		}
 		rawPoints[assetID] = append(rawPoints[assetID], telemetry.Point{
 			TS:    collectedAt.Unix(),
@@ -468,7 +759,7 @@ func (s *PostgresStore) AssetsWithSamples(assetIDs []string, start, end time.Tim
 }
 
 func (s *PostgresStore) AppendEvent(event logs.Event) error {
-	normalized, fieldsPayload, err := normalizeLogEventForInsert(event)
+	normalized, fieldsPayload, _, err := normalizeLogEventForInsert(event)
 	if err != nil {
 		return err
 	}
@@ -499,18 +790,14 @@ func (s *PostgresStore) AppendEvents(events []logs.Event) error {
 		return nil
 	}
 
-	normalized := make([]logs.Event, 0, len(events))
-	payloads := make([]string, 0, len(events))
+	normalized, payloads, err := normalizeLogEventsForInsert(events)
+	if err != nil {
+		return err
+	}
 	latest := time.Unix(0, 0).UTC()
-	for _, event := range events {
-		normalizedEvent, fieldsPayload, err := normalizeLogEventForInsert(event)
-		if err != nil {
-			return err
-		}
-		normalized = append(normalized, normalizedEvent)
-		payloads = append(payloads, fieldsPayload)
-		if normalizedEvent.Timestamp.After(latest) {
-			latest = normalizedEvent.Timestamp.UTC()
+	for _, event := range normalized {
+		if event.Timestamp.After(latest) {
+			latest = event.Timestamp.UTC()
 		}
 	}
 	if len(normalized) == 0 {
@@ -561,7 +848,7 @@ func (s *PostgresStore) AppendEvents(events []logs.Event) error {
 	return nil
 }
 
-func normalizeLogEventForInsert(event logs.Event) (logs.Event, string, error) {
+func normalizeLogEventForInsert(event logs.Event) (logs.Event, string, int, error) {
 	if event.ID == "" {
 		event.ID = idgen.New("log")
 	}
@@ -578,12 +865,17 @@ func normalizeLogEventForInsert(event logs.Event) (logs.Event, string, error) {
 		event.Message = "event"
 	}
 	event.Level = strings.ToLower(strings.TrimSpace(event.Level))
+	eventBytes, err := logs.EventEnvelopeBytes(event)
+	if err != nil {
+		return logs.Event{}, "", 0, err
+	}
+	event.Fields = cloneMetadata(event.Fields)
 
 	fieldsPayload, err := marshalStringMap(event.Fields)
 	if err != nil {
-		return logs.Event{}, "", err
+		return logs.Event{}, "", 0, err
 	}
-	return event, fieldsPayload, nil
+	return event, fieldsPayload, eventBytes, nil
 }
 
 func (s *PostgresStore) QueryEvents(req logs.QueryRequest) ([]logs.Event, error) {
@@ -1128,7 +1420,10 @@ func (s *PostgresStore) TelemetryWatermark() (time.Time, error) {
 	var watermark time.Time
 	if err := s.pool.QueryRow(
 		context.Background(),
-		`SELECT COALESCE(MAX(collected_at), to_timestamp(0)) FROM metric_samples`,
+		`SELECT GREATEST(
+			COALESCE((SELECT MAX(collected_at) FROM metric_samples), to_timestamp(0)),
+			COALESCE((SELECT MAX(collected_at) FROM hub_metric_samples), to_timestamp(0))
+		)`,
 	).Scan(&watermark); err != nil {
 		return time.Time{}, err
 	}

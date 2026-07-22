@@ -2,7 +2,7 @@ package mcpserver
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -27,20 +27,43 @@ type Deps struct {
 		IsConnected(assetID string) bool
 	}
 	ExecuteViaAgent func(job terminal.CommandJob) terminal.CommandResult
+	// ExecutePowerAction uses the dedicated typed agent power protocol. It must
+	// never be implemented through ExecuteViaAgent/raw shell.
+	ExecutePowerAction func(ctx context.Context, assetID, action string) (string, error)
 	// Scope/asset context for the current request.
 	GetScopes        func(ctx context.Context) []string
 	GetAllowedAssets func(ctx context.Context) []string
 	GetActorID       func(ctx context.Context) string
+	// AuthorizeMutation enforces maintenance and bounded admission immediately
+	// before an MCP mutation is dispatched. Mutations fail closed when it is nil.
+	AuthorizeMutation func(ctx context.Context, tool, target string) error
+	// AuditMutation records redacted, principal-attributed mutation outcomes.
+	AuditMutation func(ctx context.Context, tool, target, decision, reason string, details map[string]any)
+
+	// Typed agent operations. These deliberately avoid ExecuteViaAgent because
+	// the endpoint command policy rejects shell expressions and because each
+	// capability has its own correlated wire protocol.
+	ListServices   func(ctx context.Context, assetID string) (any, error)
+	RestartService func(ctx context.Context, assetID, serviceName string) (any, error)
+	ListFiles      func(ctx context.Context, assetID, path string) (any, error)
+	ReadFile       func(ctx context.Context, assetID, path string) (any, error)
+	ListProcesses  func(ctx context.Context, assetID string) (any, error)
+	ListNetwork    func(ctx context.Context, assetID string) (any, error)
+	ListDisks      func(ctx context.Context, assetID string) (any, error)
+	ListPackages   func(ctx context.Context, assetID string) (any, error)
 
 	// Optional hub-internal dependencies. When nil, the relevant tool returns
 	// errNotConfigured rather than panicking.
 	ListDockerHosts        func(ctx context.Context) ([]map[string]any, error)
 	ListDockerContainers   func(ctx context.Context, hostID string) ([]map[string]any, error)
 	RestartDockerContainer func(ctx context.Context, containerID string) error
-	ListAlerts             func() ([]map[string]any, error)
-	AcknowledgeAlert       func(alertID string) error
-	ListGroups             func() ([]map[string]any, error)
-	MetricsOverview        func() (map[string]any, error)
+	ListAlerts             func(ctx context.Context) ([]map[string]any, error)
+	AcknowledgeAlert       func(ctx context.Context, alertID string) error
+	ListGroups             func(ctx context.Context) ([]map[string]any, error)
+	MetricsOverview        func(ctx context.Context) (map[string]any, error)
+	WakeAsset              func(ctx context.Context, assetID string) (map[string]any, error)
+	DockerContainerLogs    func(ctx context.Context, assetID, containerID string, tail int) (string, error)
+	DockerContainerStats   func(ctx context.Context, assetID, containerID string) (map[string]any, error)
 
 	// Operational store closures.
 	ListSchedules          func(ctx context.Context) ([]map[string]any, error)
@@ -57,6 +80,8 @@ type Deps struct {
 const (
 	defaultExecTimeoutSeconds = 30
 	maxExecTimeoutSeconds     = 300
+	maxExecMultiTargets       = 64
+	maxExecMultiConcurrency   = 8
 )
 
 func normalizeExecTimeoutSeconds(timeout int) int {
@@ -388,7 +413,9 @@ func NewServer(deps *Deps) *server.MCPServer {
 		deps.handleGroupsResource,
 	)
 
-	// TODO: Expand MCP tools to cover full API surface:
+	// MCP is intentionally a curated automation surface rather than a mirror of
+	// every REST mutation. The broader operations below remain REST/console-only
+	// until they have equally strict MCP schemas, authorization and safety gates:
 	// - File write/delete/rename/copy/mkdir
 	// - Services start/stop (not just restart)
 	// - Processes kill
@@ -401,7 +428,7 @@ func NewServer(deps *Deps) *server.MCPServer {
 	// - Collectors, web services
 	// - Search, audit, settings
 	//
-	// TODO: Add MCP resources:
+	// Candidate future read-only resources, subject to the same authorization contract:
 	// - labtether://assets/{id} (per-asset detail)
 	// - labtether://metrics/overview (fleet health)
 
@@ -411,6 +438,9 @@ func NewServer(deps *Deps) *server.MCPServer {
 // --- Tool Handlers ---
 
 func (d *Deps) scopeCheck(ctx context.Context, scope string) error {
+	if d == nil || d.GetScopes == nil {
+		return errors.New("MCP authorization context is unavailable")
+	}
 	scopes := d.GetScopes(ctx)
 	if scopes == nil {
 		return nil // session auth — full access
@@ -422,6 +452,12 @@ func (d *Deps) scopeCheck(ctx context.Context, scope string) error {
 }
 
 func (d *Deps) assetCheck(ctx context.Context, assetID string) error {
+	if d == nil || d.GetAllowedAssets == nil {
+		return errors.New("MCP asset authorization context is unavailable")
+	}
+	if strings.TrimSpace(assetID) == "" || len(assetID) > maxMCPIdentifierBytes {
+		return errors.New("invalid asset_id")
+	}
 	allowed := d.GetAllowedAssets(ctx)
 	if !apikeys.AssetAllowed(allowed, assetID) {
 		return fmt.Errorf("access denied to asset: %s", assetID)
@@ -429,11 +465,27 @@ func (d *Deps) assetCheck(ctx context.Context, assetID string) error {
 	return nil
 }
 
+func (d *Deps) unrestrictedGlobalRead(ctx context.Context, object string) error {
+	if d == nil || d.GetAllowedAssets == nil {
+		return errors.New("MCP asset authorization context is unavailable")
+	}
+	if len(d.GetAllowedAssets(ctx)) > 0 {
+		return fmt.Errorf("asset-restricted API keys cannot access global %s", object)
+	}
+	return nil
+}
+
 func (d *Deps) handleWhoami(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if d == nil || d.GetScopes == nil || d.GetAllowedAssets == nil || d.AssetStore == nil {
+		return mcp.NewToolResultError(errMCPDependencyUnavailable.Error()), nil
+	}
 	scopes := d.GetScopes(ctx)
 	allowed := d.GetAllowedAssets(ctx)
 
-	allAssets, _ := d.AssetStore.ListAssets()
+	allAssets, err := d.AssetStore.ListAssets()
+	if err != nil {
+		return mcp.NewToolResultError("failed to list accessible assets"), nil
+	}
 	var accessibleAssets []map[string]any
 	for _, a := range allAssets {
 		if !apikeys.AssetAllowed(allowed, a.ID) {
@@ -444,14 +496,16 @@ func (d *Deps) handleWhoami(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 			"status": a.Status, "online": a.Status == "online",
 		})
 	}
+	if err := validateCollectionSize("accessible asset inventory", len(accessibleAssets)); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 
 	result := map[string]any{
 		"scopes":           scopes,
 		"allowed_assets":   allowed,
 		"available_assets": accessibleAssets,
 	}
-	data, _ := json.MarshalIndent(result, "", "  ")
-	return mcp.NewToolResultText(string(data)), nil
+	return toolJSON(result), nil
 }
 
 func (d *Deps) handleAssetsList(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -459,14 +513,22 @@ func (d *Deps) handleAssetsList(ctx context.Context, req mcp.CallToolRequest) (*
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
+	if d.AssetStore == nil || d.GetAllowedAssets == nil {
+		return mcp.NewToolResultError(errMCPDependencyUnavailable.Error()), nil
+	}
 	allAssets, err := d.AssetStore.ListAssets()
 	if err != nil {
 		return mcp.NewToolResultError("failed to list assets"), nil
 	}
-
 	allowed := d.GetAllowedAssets(ctx)
-	statusFilter := req.GetString("status", "")
-	platformFilter := req.GetString("platform", "")
+	statusFilter := strings.TrimSpace(req.GetString("status", ""))
+	platformFilter := strings.TrimSpace(req.GetString("platform", ""))
+	if len(statusFilter) > 32 || len(platformFilter) > 32 {
+		return mcp.NewToolResultError("status and platform filters are limited to 32 bytes"), nil
+	}
+	if statusFilter != "" && !strings.EqualFold(statusFilter, "online") && !strings.EqualFold(statusFilter, "offline") {
+		return mcp.NewToolResultError("status must be online or offline"), nil
+	}
 
 	var filtered []map[string]any
 	for _, a := range allAssets {
@@ -484,9 +546,11 @@ func (d *Deps) handleAssetsList(ctx context.Context, req mcp.CallToolRequest) (*
 			"status": a.Status, "type": a.Type, "source": a.Source,
 		})
 	}
+	if err := validateCollectionSize("filtered asset inventory", len(filtered)); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 
-	data, _ := json.MarshalIndent(filtered, "", "  ")
-	return mcp.NewToolResultText(string(data)), nil
+	return toolJSON(filtered), nil
 }
 
 func (d *Deps) handleAssetsGet(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -494,11 +558,17 @@ func (d *Deps) handleAssetsGet(ctx context.Context, req mcp.CallToolRequest) (*m
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	assetID, _ := req.RequireString("asset_id")
+	assetID, inputErr := requireAssetID(req)
+	if inputErr != nil {
+		return mcp.NewToolResultError(inputErr.Error()), nil
+	}
 	if err := d.assetCheck(ctx, assetID); err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
+	if d.AssetStore == nil {
+		return mcp.NewToolResultError(errMCPDependencyUnavailable.Error()), nil
+	}
 	asset, ok, err := d.AssetStore.GetAsset(assetID)
 	if err != nil {
 		return mcp.NewToolResultError("failed to load asset"), nil
@@ -511,8 +581,7 @@ func (d *Deps) handleAssetsGet(ctx context.Context, req mcp.CallToolRequest) (*m
 		"asset":           asset,
 		"agent_connected": d.AgentMgr != nil && d.AgentMgr.IsConnected(assetID),
 	}
-	data, _ := json.MarshalIndent(result, "", "  ")
-	return mcp.NewToolResultText(string(data)), nil
+	return toolJSON(result), nil
 }
 
 func (d *Deps) handleExec(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -520,21 +589,41 @@ func (d *Deps) handleExec(ctx context.Context, req mcp.CallToolRequest) (*mcp.Ca
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	assetID, _ := req.RequireString("asset_id")
-	command, _ := req.RequireString("command")
+	assetID, err := requireAssetID(req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	command, err := requireCommand(req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	timeout := normalizeExecTimeoutSeconds(req.GetInt("timeout", defaultExecTimeoutSeconds))
 
 	if err := d.assetCheck(ctx, assetID); err != nil {
+		d.auditMutation(ctx, "exec", assetID, "denied", errorReason(err), map[string]any{"command_bytes": len([]byte(command))})
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
 	if d.AgentMgr == nil || !d.AgentMgr.IsConnected(assetID) {
-		asset, ok, _ := d.AssetStore.GetAsset(assetID)
+		var asset assets.Asset
+		var ok bool
+		if d.AssetStore != nil {
+			asset, ok, _ = d.AssetStore.GetAsset(assetID)
+		}
 		msg := assetID + " agent is not connected"
 		if ok {
 			msg = fmt.Sprintf("%s agent is not connected (last seen: %s)", assetID, asset.LastSeenAt.Format(time.RFC3339))
 		}
+		d.auditMutation(ctx, "exec", assetID, "failed", "asset_offline", map[string]any{"command_bytes": len([]byte(command))})
 		return mcp.NewToolResultError(msg), nil
+	}
+	if d.ExecuteViaAgent == nil || d.GetActorID == nil {
+		d.auditMutation(ctx, "exec", assetID, "failed", "dependency_unavailable", map[string]any{"command_bytes": len([]byte(command))})
+		return mcp.NewToolResultError(errMCPDependencyUnavailable.Error()), nil
+	}
+	if err := d.checkMutation(ctx, "exec", assetID); err != nil {
+		d.auditMutation(ctx, "exec", assetID, "denied", errorReason(err), map[string]any{"command_bytes": len([]byte(command))})
+		return mcp.NewToolResultError(err.Error()), nil
 	}
 
 	cmdResult := d.ExecuteViaAgent(terminal.CommandJob{
@@ -549,17 +638,42 @@ func (d *Deps) handleExec(ctx context.Context, req mcp.CallToolRequest) (*mcp.Ca
 		RequestedAt: time.Now().UTC(),
 	})
 
+	succeeded := strings.EqualFold(strings.TrimSpace(cmdResult.Status), "succeeded")
 	exitCode := 0
-	if !strings.EqualFold(strings.TrimSpace(cmdResult.Status), "succeeded") {
+	if !succeeded {
 		exitCode = 1
 	}
+	// Reserve enough room for worst-case JSON escaping plus response metadata.
+	output, truncated := truncateUTF8(strings.TrimSpace(cmdResult.Output), maxMCPJSONBytes/8)
 
 	result := map[string]any{
 		"asset_id":  assetID,
 		"exit_code": exitCode,
-		"output":    strings.TrimSpace(cmdResult.Output),
+		"output":    output,
 	}
-	data, _ := json.MarshalIndent(result, "", "  ")
+	if truncated {
+		result["output_truncated"] = true
+	}
+	decision := "succeeded"
+	if !succeeded {
+		decision = "failed"
+	}
+	reason := ""
+	if !succeeded {
+		reason = "command_failed"
+	}
+	d.auditMutation(ctx, "exec", assetID, decision, reason, map[string]any{
+		"command_bytes": len([]byte(command)),
+		"exit_code":     exitCode,
+		"truncated":     truncated,
+	})
+	data, encodeErr := marshalBoundedJSON(result, true)
+	if encodeErr != nil {
+		return mcp.NewToolResultError(encodeErr.Error()), nil
+	}
+	if !succeeded {
+		return mcp.NewToolResultError(string(data)), nil
+	}
 	return mcp.NewToolResultText(string(data)), nil
 }
 
@@ -568,7 +682,10 @@ func (d *Deps) handleExecMulti(ctx context.Context, req mcp.CallToolRequest) (*m
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	command, _ := req.RequireString("command")
+	command, err := requireCommand(req)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	timeout := normalizeExecTimeoutSeconds(req.GetInt("timeout", defaultExecTimeoutSeconds))
 
 	// Extract targets array
@@ -581,9 +698,16 @@ func (d *Deps) handleExecMulti(ctx context.Context, req mcp.CallToolRequest) (*m
 	if !ok {
 		return mcp.NewToolResultError("targets must be an array of strings"), nil
 	}
+	if len(targetsSlice) > maxExecMultiTargets {
+		return mcp.NewToolResultError(fmt.Sprintf("targets must contain at most %d entries", maxExecMultiTargets)), nil
+	}
 
+	if d.GetAllowedAssets == nil {
+		return mcp.NewToolResultError(errMCPDependencyUnavailable.Error()), nil
+	}
 	allowed := d.GetAllowedAssets(ctx)
-	var targets []string
+	targets := make([]string, 0, len(targetsSlice))
+	seen := make(map[string]struct{}, len(targetsSlice))
 	var invalidCount int
 	for _, t := range targetsSlice {
 		s, ok := t.(string)
@@ -591,6 +715,15 @@ func (d *Deps) handleExecMulti(ctx context.Context, req mcp.CallToolRequest) (*m
 			invalidCount++
 			continue
 		}
+		s = strings.TrimSpace(s)
+		if s == "" || len(s) > maxMCPIdentifierBytes || strings.ContainsAny(s, "/\\\r\n") || strings.IndexByte(s, 0) >= 0 {
+			invalidCount++
+			continue
+		}
+		if _, duplicate := seen[s]; duplicate {
+			continue
+		}
+		seen[s] = struct{}{}
 		if apikeys.AssetAllowed(allowed, s) {
 			targets = append(targets, s)
 		}
@@ -602,57 +735,130 @@ func (d *Deps) handleExecMulti(ctx context.Context, req mcp.CallToolRequest) (*m
 		}
 		return mcp.NewToolResultError("no accessible targets provided"), nil
 	}
-
-	results := make(map[string]any)
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	for _, target := range targets {
-		wg.Add(1)
-		go func(t string) {
-			defer wg.Done()
-			if d.AgentMgr == nil || !d.AgentMgr.IsConnected(t) {
-				mu.Lock()
-				results[t] = map[string]any{"error": "asset_offline"}
-				mu.Unlock()
-				return
-			}
-			cmdResult := d.ExecuteViaAgent(terminal.CommandJob{
-				JobID:       idgen.New("mcp"),
-				SessionID:   idgen.New("mcps"),
-				CommandID:   idgen.New("mcpc"),
-				ActorID:     d.GetActorID(ctx),
-				Target:      t,
-				Command:     command,
-				Mode:        "structured",
-				TimeoutSec:  timeout,
-				RequestedAt: time.Now().UTC(),
-			})
-			exitCode := 0
-			if !strings.EqualFold(strings.TrimSpace(cmdResult.Status), "succeeded") {
-				exitCode = 1
-			}
-			mu.Lock()
-			results[t] = map[string]any{
-				"exit_code": exitCode,
-				"output":    strings.TrimSpace(cmdResult.Output),
-			}
-			mu.Unlock()
-		}(target)
+	if d.AgentMgr == nil || d.ExecuteViaAgent == nil || d.GetActorID == nil {
+		for _, target := range targets {
+			d.auditMutation(ctx, "exec_multi", target, "failed", "dependency_unavailable", map[string]any{"command_bytes": len([]byte(command))})
+		}
+		return mcp.NewToolResultError(errMCPDependencyUnavailable.Error()), nil
 	}
+
+	type execMultiResult struct {
+		target string
+		value  any
+	}
+	resultSlots := make([]execMultiResult, len(targets))
+	for index, target := range targets {
+		resultSlots[index].target = target
+	}
+	perTargetOutputLimit := maxMCPJSONBytes / max(8, len(targets)*8)
+	jobs := make(chan int)
+	var wg sync.WaitGroup
+	workerCount := min(len(targets), maxExecMultiConcurrency)
+	for range workerCount {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for index := range jobs {
+				t := targets[index]
+				if d.AgentMgr == nil || !d.AgentMgr.IsConnected(t) {
+					resultSlots[index].value = map[string]any{"error": "asset_offline"}
+					d.auditMutation(ctx, "exec_multi", t, "failed", "asset_offline", map[string]any{"command_bytes": len([]byte(command))})
+					continue
+				}
+				if err := ctx.Err(); err != nil {
+					resultSlots[index].value = map[string]any{"error": "request_canceled"}
+					continue
+				}
+				// Authorize immediately before dispatch so maintenance changes and
+				// admission limits cannot be bypassed by time spent in the queue.
+				if err := d.checkMutation(ctx, "exec_multi", t); err != nil {
+					resultSlots[index].value = map[string]any{"error": errorReason(err)}
+					d.auditMutation(ctx, "exec_multi", t, "denied", errorReason(err), map[string]any{"command_bytes": len([]byte(command))})
+					continue
+				}
+				cmdResult := d.ExecuteViaAgent(terminal.CommandJob{
+					JobID:       idgen.New("mcp"),
+					SessionID:   idgen.New("mcps"),
+					CommandID:   idgen.New("mcpc"),
+					ActorID:     d.GetActorID(ctx),
+					Target:      t,
+					Command:     command,
+					Mode:        "structured",
+					TimeoutSec:  timeout,
+					RequestedAt: time.Now().UTC(),
+				})
+				exitCode := 0
+				if !strings.EqualFold(strings.TrimSpace(cmdResult.Status), "succeeded") {
+					exitCode = 1
+				}
+				output, truncated := truncateUTF8(strings.TrimSpace(cmdResult.Output), perTargetOutputLimit)
+				value := map[string]any{
+					"exit_code": exitCode,
+					"output":    output,
+				}
+				if truncated {
+					value["output_truncated"] = true
+				}
+				resultSlots[index].value = value
+				decision := "succeeded"
+				if exitCode != 0 {
+					decision = "failed"
+				}
+				reason := ""
+				if exitCode != 0 {
+					reason = "command_failed"
+				}
+				d.auditMutation(ctx, "exec_multi", t, decision, reason, map[string]any{
+					"command_bytes": len([]byte(command)),
+					"exit_code":     exitCode,
+					"truncated":     truncated,
+				})
+			}
+		}()
+	}
+	for index := range targets {
+		select {
+		case jobs <- index:
+		case <-ctx.Done():
+			resultSlots[index].value = map[string]any{"error": "request_canceled"}
+		}
+	}
+	close(jobs)
 	wg.Wait()
 
-	data, _ := json.MarshalIndent(results, "", "  ")
+	results := make(map[string]any, len(resultSlots))
+	succeededCount := 0
+	for _, result := range resultSlots {
+		results[result.target] = result.value
+		if value, ok := result.value.(map[string]any); ok {
+			if exitCode, ok := value["exit_code"].(int); ok && exitCode == 0 {
+				succeededCount++
+			}
+		}
+	}
+	data, err := marshalBoundedJSON(results, true)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	if succeededCount == 0 {
+		return mcp.NewToolResultError(string(data)), nil
+	}
 	return mcp.NewToolResultText(string(data)), nil
 }
 
 // --- Resource Handlers ---
 
 func (d *Deps) handleAssetsResource(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-	allAssets, err := d.AssetStore.ListAssets()
-	if err != nil {
+	if err := d.scopeCheck(ctx, "assets:read"); err != nil {
 		return nil, err
 	}
-
+	if d.AssetStore == nil || d.GetAllowedAssets == nil {
+		return nil, errMCPDependencyUnavailable
+	}
+	allAssets, err := d.AssetStore.ListAssets()
+	if err != nil {
+		return nil, errors.New("failed to list assets")
+	}
 	allowed := d.GetAllowedAssets(ctx)
 	var accessible []map[string]any
 	for _, a := range allAssets {
@@ -664,8 +870,14 @@ func (d *Deps) handleAssetsResource(ctx context.Context, req mcp.ReadResourceReq
 			"status": a.Status, "last_seen": a.LastSeenAt,
 		})
 	}
+	if err := validateCollectionSize("accessible asset inventory", len(accessible)); err != nil {
+		return nil, err
+	}
 
-	data, _ := json.Marshal(accessible)
+	data, err := marshalBoundedJSON(accessible, false)
+	if err != nil {
+		return nil, err
+	}
 	return []mcp.ResourceContents{
 		mcp.TextResourceContents{
 			URI:      req.Params.URI,
@@ -676,18 +888,26 @@ func (d *Deps) handleAssetsResource(ctx context.Context, req mcp.ReadResourceReq
 }
 
 func (d *Deps) handleActiveAlertsResource(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-	var payload []map[string]any
-	if d.ListAlerts != nil {
-		alerts, err := d.ListAlerts()
-		if err != nil {
-			return nil, err
-		}
-		payload = alerts
+	if err := d.scopeCheck(ctx, "alerts:read"); err != nil {
+		return nil, err
+	}
+	if d.ListAlerts == nil {
+		return nil, errMCPDependencyUnavailable
+	}
+	payload, err := d.ListAlerts(ctx)
+	if err != nil {
+		return nil, errors.New("failed to list alerts")
 	}
 	if payload == nil {
 		payload = []map[string]any{}
 	}
-	data, _ := json.Marshal(payload)
+	if err := validateCollectionSize("alert list", len(payload)); err != nil {
+		return nil, err
+	}
+	data, err := marshalBoundedJSON(payload, false)
+	if err != nil {
+		return nil, err
+	}
 	return []mcp.ResourceContents{
 		mcp.TextResourceContents{
 			URI:      req.Params.URI,
@@ -698,18 +918,26 @@ func (d *Deps) handleActiveAlertsResource(ctx context.Context, req mcp.ReadResou
 }
 
 func (d *Deps) handleGroupsResource(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-	var payload []map[string]any
-	if d.ListGroups != nil {
-		groups, err := d.ListGroups()
-		if err != nil {
-			return nil, err
-		}
-		payload = groups
+	if err := d.scopeCheck(ctx, "groups:read"); err != nil {
+		return nil, err
+	}
+	if d.ListGroups == nil {
+		return nil, errMCPDependencyUnavailable
+	}
+	payload, err := d.ListGroups(ctx)
+	if err != nil {
+		return nil, errors.New("failed to list groups")
 	}
 	if payload == nil {
 		payload = []map[string]any{}
 	}
-	data, _ := json.Marshal(payload)
+	if err := validateCollectionSize("group list", len(payload)); err != nil {
+		return nil, err
+	}
+	data, err := marshalBoundedJSON(payload, false)
+	if err != nil {
+		return nil, err
+	}
 	return []mcp.ResourceContents{
 		mcp.TextResourceContents{
 			URI:      req.Params.URI,

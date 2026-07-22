@@ -7,7 +7,15 @@ import (
 
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/dependencies"
+	"github.com/labtether/labtether/internal/hubapi/shared"
+	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/servicehttp"
+)
+
+const (
+	maxBulkMoveRawAssetIDs    = 256
+	maxBulkMoveUniqueAssetIDs = 64
+	maxBulkMoveAssetIDLength  = 255
 )
 
 // HandleLinkSuggestions handles GET /links/suggestions.
@@ -27,6 +35,15 @@ func (d *Deps) HandleLinkSuggestions(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list link suggestions")
 			return
+		}
+		if shared.HasAssetRestriction(r.Context()) {
+			filtered := make([]persistence.LinkSuggestion, 0, len(suggestions))
+			for _, suggestion := range suggestions {
+				if shared.AllAssetsAllowed(r.Context(), suggestion.SourceAssetID, suggestion.TargetAssetID) {
+					filtered = append(filtered, suggestion)
+				}
+			}
+			suggestions = filtered
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"suggestions": suggestions})
 	default:
@@ -54,13 +71,23 @@ func (d *Deps) HandleLinkSuggestionActions(w http.ResponseWriter, r *http.Reques
 
 	switch r.Method {
 	case http.MethodPut:
+		suggestion, ok, err := d.LinkSuggestionStore.GetLinkSuggestion(id)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load link suggestion")
+			return
+		}
+		if !ok {
+			servicehttp.WriteError(w, http.StatusNotFound, "link suggestion not found")
+			return
+		}
+		if !requireAssetAccess(w, r, suggestion.SourceAssetID, suggestion.TargetAssetID) {
+			return
+		}
 		if !d.EnforceRateLimit(w, r, "links.suggestions.resolve", 120, time.Minute) {
 			return
 		}
 		var req struct {
-			Status        string `json:"status"`
-			SourceAssetID string `json:"source_asset_id"`
-			TargetAssetID string `json:"target_asset_id"`
+			Status string `json:"status"`
 		}
 		if err := d.DecodeJSONBody(w, r, &req); err != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, "invalid request payload")
@@ -79,8 +106,8 @@ func (d *Deps) HandleLinkSuggestionActions(w http.ResponseWriter, r *http.Reques
 
 		// If accepted, create a 'contains' dependency edge between source and target.
 		if status == "accepted" && d.DependencyStore != nil {
-			sourceID := strings.TrimSpace(req.SourceAssetID)
-			targetID := strings.TrimSpace(req.TargetAssetID)
+			sourceID := strings.TrimSpace(suggestion.SourceAssetID)
+			targetID := strings.TrimSpace(suggestion.TargetAssetID)
 			if sourceID != "" && targetID != "" {
 				_, _ = d.DependencyStore.CreateAssetDependency(dependencies.CreateDependencyRequest{
 					SourceAssetID:    sourceID,
@@ -132,6 +159,9 @@ func (d *Deps) HandleManualLink(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusBadRequest, "source_id and target_id must be different")
 			return
 		}
+		if !requireAssetAccess(w, r, sourceID, targetID) {
+			return
+		}
 
 		dep, err := d.DependencyStore.CreateAssetDependency(dependencies.CreateDependencyRequest{
 			SourceAssetID:    sourceID,
@@ -178,9 +208,38 @@ func (d *Deps) HandleAssetBulkMove(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusBadRequest, "asset_ids is required")
 			return
 		}
+		if len(req.AssetIDs) > maxBulkMoveRawAssetIDs {
+			servicehttp.WriteError(w, http.StatusBadRequest, "asset_ids exceeds maximum request size")
+			return
+		}
+		assetIDs := make([]string, 0, min(len(req.AssetIDs), maxBulkMoveUniqueAssetIDs))
+		seenAssetIDs := make(map[string]struct{}, len(req.AssetIDs))
+		for _, rawAssetID := range req.AssetIDs {
+			assetID := strings.TrimSpace(rawAssetID)
+			if assetID == "" || len(assetID) > maxBulkMoveAssetIDLength {
+				servicehttp.WriteError(w, http.StatusBadRequest, "asset_ids must contain valid non-empty identifiers")
+				return
+			}
+			if _, duplicate := seenAssetIDs[assetID]; duplicate {
+				continue
+			}
+			seenAssetIDs[assetID] = struct{}{}
+			if len(assetIDs) >= maxBulkMoveUniqueAssetIDs {
+				servicehttp.WriteError(w, http.StatusBadRequest, "asset_ids exceeds maximum of 64 unique assets")
+				return
+			}
+			assetIDs = append(assetIDs, assetID)
+		}
 		groupID := strings.TrimSpace(req.GroupID)
+		if !requireAssetAccess(w, r, assetIDs...) {
+			return
+		}
 
-		if groupID != "" && d.GroupStore != nil {
+		if groupID != "" {
+			if d.GroupStore == nil {
+				servicehttp.WriteError(w, http.StatusServiceUnavailable, "group store unavailable")
+				return
+			}
 			_, ok, err := d.GroupStore.GetGroup(groupID)
 			if err != nil {
 				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to validate group")
@@ -190,14 +249,13 @@ func (d *Deps) HandleAssetBulkMove(w http.ResponseWriter, r *http.Request) {
 				servicehttp.WriteError(w, http.StatusNotFound, "group not found")
 				return
 			}
+			if !d.requireGroupAccess(w, r, groupID) {
+				return
+			}
 		}
 
 		updated := 0
-		for _, assetID := range req.AssetIDs {
-			assetID = strings.TrimSpace(assetID)
-			if assetID == "" {
-				continue
-			}
+		for _, assetID := range assetIDs {
 			gid := groupID
 			_, err := d.AssetStore.UpdateAsset(assetID, assets.UpdateRequest{GroupID: &gid})
 			if err != nil {

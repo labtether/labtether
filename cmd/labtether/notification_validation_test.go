@@ -7,13 +7,33 @@ import (
 )
 
 func TestValidateCreateChannelRequestAcceptsNtfyAndGotify(t *testing.T) {
-	for _, channelType := range []string{notifications.ChannelTypeNtfy, notifications.ChannelTypeGotify} {
+	tests := []struct {
+		channelType string
+		config      map[string]any
+	}{
+		{
+			channelType: notifications.ChannelTypeNtfy,
+			config: map[string]any{
+				"server_url": "https://ntfy.example.invalid",
+				"topic":      "operations",
+			},
+		},
+		{
+			channelType: notifications.ChannelTypeGotify,
+			config: map[string]any{
+				"server_url": "https://gotify.example.invalid",
+				"app_token":  "synthetic-test-token",
+			},
+		},
+	}
+	for _, test := range tests {
 		err := validateCreateChannelRequest(notifications.CreateChannelRequest{
-			Name: "ops",
-			Type: channelType,
+			Name:   "ops",
+			Type:   test.channelType,
+			Config: test.config,
 		})
 		if err != nil {
-			t.Fatalf("validateCreateChannelRequest(%s) returned error: %v", channelType, err)
+			t.Fatalf("validateCreateChannelRequest(%s) returned error: %v", test.channelType, err)
 		}
 	}
 }

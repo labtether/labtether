@@ -17,6 +17,7 @@ type User struct {
 	Username          string     `json:"username"`
 	Role              string     `json:"role"`
 	AuthProvider      string     `json:"auth_provider"`
+	OIDCIssuer        string     `json:"oidc_issuer,omitempty"`
 	OIDCSubject       string     `json:"oidc_subject,omitempty"`
 	PasswordHash      string     `json:"-"`
 	TOTPSecret        string     `json:"-"`

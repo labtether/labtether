@@ -11,6 +11,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/labtether/labtether/internal/hubapi/shared"
+	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -39,8 +40,7 @@ func (d *Deps) HandleTelnetStream(w http.ResponseWriter, r *http.Request, sessio
 	traceLog := shared.StreamTraceLogValue(traceID)
 	logContext := fmt.Sprintf("session=%s target=%s:%d trace=%s", session.ID, host, port, traceLog)
 
-	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
-	tcpConn, err := net.DialTimeout("tcp", addr, telnetDialTimeout) // #nosec G704 -- Telnet target comes from resolved protocol config, not raw browser input.
+	tcpConn, err := securityruntime.DialOutboundTCPTimeout(host, port, telnetDialTimeout)
 	if err != nil {
 		log.Printf("terminal-telnet: connect_failed %s err=%v", logContext, err) // #nosec G706 -- Log fields are bounded session/runtime identifiers and local dial errors.
 		http.Error(w, "telnet connection failed", http.StatusBadGateway)
@@ -48,13 +48,13 @@ func (d *Deps) HandleTelnetStream(w http.ResponseWriter, r *http.Request, sessio
 	}
 	defer tcpConn.Close()
 
-	wsConn, err := d.TerminalWebSocketUpgrader.Upgrade(w, r, nil)
+	wsConn, err := shared.UpgradeWebSocket(&d.TerminalWebSocketUpgrader, w, r, nil)
 	if err != nil {
 		log.Printf("terminal-telnet: upgrade_failed %s err=%v", logContext, err) // #nosec G706 -- Log fields are bounded session/runtime identifiers and local upgrade errors.
 		return
 	}
-	defer wsConn.Close()
 	wsConn.SetReadLimit(maxTerminalInputReadBytes)
+	defer wsConn.Close()
 
 	log.Printf("terminal-telnet: stream_connected %s", logContext) // #nosec G706 -- Log context is composed from bounded session/runtime identifiers.
 

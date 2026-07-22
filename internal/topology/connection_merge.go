@@ -17,7 +17,9 @@ func MergeConnections(topologyID string, topoConns []Connection, assetEdges []ed
 		topoByKey[k] = tc
 	}
 
-	var result []MergedConnection
+	// Keep the JSON contract stable for an empty topology. A nil slice encodes
+	// as null, which breaks clients that correctly model this field as a list.
+	result := make([]MergedConnection, 0, len(topoConns)+len(assetEdges))
 
 	// Add all non-deleted topology connections
 	for _, tc := range topoConns {

@@ -39,6 +39,9 @@ func (d *Deps) HandleGroupTimeline(w http.ResponseWriter, r *http.Request, group
 		servicehttp.WriteError(w, http.StatusNotFound, "group not found")
 		return
 	}
+	if !d.requireGroupAccess(w, r, groupID) {
+		return
+	}
 
 	window := shared.ParseDurationParam(r.URL.Query().Get("window"), 24*time.Hour, 5*time.Minute, 14*24*time.Hour)
 	now := time.Now().UTC()

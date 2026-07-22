@@ -2,6 +2,9 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 
@@ -95,10 +98,11 @@ func (s *apiServer) handleV2AssetServices(w http.ResponseWriter, r *http.Request
 func (s *apiServer) handleV2AssetServiceActions(w http.ResponseWriter, r *http.Request, assetID, subPath string) {
 	// subPath is "{name}/{action}" e.g. "nginx/restart"
 	parts := strings.SplitN(subPath, "/", 2)
-	if len(parts) != 2 {
+	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" {
 		apiv2.WriteError(w, http.StatusBadRequest, "validation", "expected /services/{name}/{action}")
 		return
 	}
+	serviceName := strings.TrimSpace(parts[0])
 	action := parts[1]
 	switch action {
 	case "start", "stop", "restart":
@@ -110,6 +114,17 @@ func (s *apiServer) handleV2AssetServiceActions(w http.ResponseWriter, r *http.R
 		apiv2.WriteError(w, http.StatusBadRequest, "validation", "invalid action: "+action)
 		return
 	}
-	r.URL.Path = "/services/" + assetID + "/" + subPath
+	// The legacy handler expects the action in the path and the service name in
+	// the JSON body. Adapt the V2 path-shaped contract here, and make the path's
+	// service name authoritative rather than accepting a conflicting body value.
+	body, _ := json.Marshal(struct {
+		Service string `json:"service"`
+	}{Service: serviceName})
+	if r.Body != nil {
+		defer r.Body.Close()
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	r.ContentLength = int64(len(body))
+	r.URL.Path = "/services/" + assetID + "/" + action
 	apiv2.WrapV1Handler(s.handleServices)(w, r)
 }

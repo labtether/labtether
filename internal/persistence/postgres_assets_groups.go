@@ -13,25 +13,46 @@ import (
 )
 
 func (s *PostgresStore) UpsertAssetHeartbeat(req assets.HeartbeatRequest) (assets.Asset, error) {
-	now := time.Now().UTC()
+	ctx := context.Background()
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return assets.Asset{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	if err := lockAgentIdentityAsset(ctx, tx, req.AssetID); err != nil {
+		return assets.Asset{}, err
+	}
+	asset, err := upsertAssetHeartbeatTx(ctx, tx, req, time.Now().UTC())
+	if err != nil {
+		return assets.Asset{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return assets.Asset{}, err
+	}
+	return asset, nil
+}
+
+func upsertAssetHeartbeatTx(ctx context.Context, tx pgx.Tx, req assets.HeartbeatRequest, now time.Time) (assets.Asset, error) {
 	status := req.Status
 	if status == "" {
 		status = "online"
 	}
 	groupID := strings.TrimSpace(req.GroupID)
-
-	metadataPayload, err := marshalStringMap(req.Metadata)
+	metadata := cloneMetadata(req.Metadata)
+	if !req.AllowAgentIdentityRotation {
+		delete(metadata, assets.MetadataKeyAgentIdentityVerifiedAt)
+		if !req.AllowAgentIdentityTOFU {
+			delete(metadata, assets.MetadataKeyAgentDeviceFingerprint)
+			delete(metadata, assets.MetadataKeyAgentDeviceKeyAlgorithm)
+		}
+	}
+	metadataPayload, err := marshalStringMap(metadata)
 	if err != nil {
 		return assets.Asset{}, err
 	}
 
-	tx, err := s.pool.Begin(context.Background())
-	if err != nil {
-		return assets.Asset{}, err
-	}
-	defer tx.Rollback(context.Background())
-
-	_, err = tx.Exec(context.Background(),
+	_, err = tx.Exec(ctx,
 		`INSERT INTO assets (id, type, name, source, group_id, status, platform, metadata, created_at, updated_at, last_seen_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $9, $9)
 		 ON CONFLICT (id) DO UPDATE
@@ -41,11 +62,38 @@ func (s *PostgresStore) UpsertAssetHeartbeat(req assets.HeartbeatRequest) (asset
 		     group_id = COALESCE(EXCLUDED.group_id, assets.group_id),
 		     status = EXCLUDED.status,
 		     platform = EXCLUDED.platform,
-		     metadata = CASE
-		         WHEN NULLIF(BTRIM(assets.metadata->>'name_override'), '') IS NOT NULL
-		         THEN jsonb_set(EXCLUDED.metadata, '{name_override}', to_jsonb(assets.metadata->>'name_override'), true)
-		         ELSE EXCLUDED.metadata
-		     END,
+		     metadata =
+		       (CASE
+		          WHEN $10::boolean THEN EXCLUDED.metadata
+		          ELSE
+		            (CASE
+		               WHEN NULLIF(BTRIM(assets.metadata->>'agent_device_fingerprint'), '') IS NOT NULL
+		                 AND LOWER(COALESCE(NULLIF(BTRIM(EXCLUDED.metadata->>'agent_device_fingerprint'), ''), ''))
+		                   <> LOWER(BTRIM(assets.metadata->>'agent_device_fingerprint'))
+		               THEN EXCLUDED.metadata - 'agent_device_key_alg'
+		               ELSE EXCLUDED.metadata
+		             END)
+		            || CASE
+		                 WHEN NULLIF(BTRIM(assets.metadata->>'agent_device_fingerprint'), '') IS NOT NULL
+		                 THEN jsonb_build_object('agent_device_fingerprint', assets.metadata->>'agent_device_fingerprint')
+		                 ELSE '{}'::jsonb
+		               END
+		            || CASE
+		                 WHEN NULLIF(BTRIM(assets.metadata->>'agent_device_key_alg'), '') IS NOT NULL
+		                 THEN jsonb_build_object('agent_device_key_alg', assets.metadata->>'agent_device_key_alg')
+		                 ELSE '{}'::jsonb
+		               END
+		            || CASE
+		                 WHEN NULLIF(BTRIM(assets.metadata->>'agent_identity_verified_at'), '') IS NOT NULL
+		                 THEN jsonb_build_object('agent_identity_verified_at', assets.metadata->>'agent_identity_verified_at')
+		                 ELSE '{}'::jsonb
+		               END
+		        END)
+		       || CASE
+		            WHEN NULLIF(BTRIM(assets.metadata->>'name_override'), '') IS NOT NULL
+		            THEN jsonb_build_object('name_override', assets.metadata->>'name_override')
+		            ELSE '{}'::jsonb
+		          END,
 		     updated_at = EXCLUDED.updated_at,
 		     last_seen_at = EXCLUDED.last_seen_at`,
 		req.AssetID,
@@ -57,12 +105,13 @@ func (s *PostgresStore) UpsertAssetHeartbeat(req assets.HeartbeatRequest) (asset
 		req.Platform,
 		metadataPayload,
 		now,
+		req.AllowAgentIdentityRotation,
 	)
 	if err != nil {
 		return assets.Asset{}, err
 	}
 
-	_, err = tx.Exec(context.Background(),
+	_, err = tx.Exec(ctx,
 		`INSERT INTO asset_heartbeats (id, asset_id, source, status, metadata, received_at)
 		 VALUES ($1, $2, $3, $4, $5::jsonb, $6)`,
 		idgen.New("hb"),
@@ -76,16 +125,12 @@ func (s *PostgresStore) UpsertAssetHeartbeat(req assets.HeartbeatRequest) (asset
 		return assets.Asset{}, err
 	}
 
-	asset, err := scanAsset(tx.QueryRow(context.Background(),
+	asset, err := scanAsset(tx.QueryRow(ctx,
 		`SELECT id, type, name, source, group_id, status, platform, metadata, tags, created_at, updated_at, last_seen_at, host, transport_type
 		 FROM assets WHERE id = $1`,
 		req.AssetID,
 	))
 	if err != nil {
-		return assets.Asset{}, err
-	}
-
-	if err := tx.Commit(context.Background()); err != nil {
 		return assets.Asset{}, err
 	}
 

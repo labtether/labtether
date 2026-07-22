@@ -15,6 +15,7 @@ import (
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/agentsettings"
 	"github.com/labtether/labtether/internal/runtimesettings"
+	"github.com/labtether/labtether/internal/securityruntime"
 )
 
 const AgentSettingsStorePrefix = "agent.settings."
@@ -37,6 +38,8 @@ type AgentSettingEntry struct {
 	HubManaged      bool     `json:"hub_managed"`
 	LocalOnly       bool     `json:"local_only"`
 	Drift           bool     `json:"drift,omitempty"`
+	Sensitive       bool     `json:"sensitive,omitempty"`
+	Configured      bool     `json:"configured,omitempty"`
 }
 
 type AgentSettingsViewState struct {
@@ -105,17 +108,28 @@ func (d *Deps) CollectEffectiveAgentSettingValues(assetID string) (map[string]st
 	if err != nil {
 		return nil, err
 	}
+	if err := d.MigrateSensitiveAgentSettingOverrides(overrides); err != nil {
+		return nil, err
+	}
 	for _, definition := range definitions {
 		if globalKey, ok := AgentSettingGlobalDefaultKey(definition.Key); ok {
 			if raw, ok := overrides[globalKey]; ok {
-				if normalized, err := agentsettings.NormalizeAgentSettingValue(definition.Key, raw); err == nil {
+				decoded, decodeErr := d.decodeAgentSettingFromStore(definition.Key, globalKey, raw)
+				if decodeErr != nil {
+					return nil, decodeErr
+				}
+				if normalized, err := agentsettings.NormalizeAgentSettingValue(definition.Key, decoded); err == nil {
 					effective[definition.Key] = normalized
 				}
 			}
 		}
 		assetKey := AgentSettingStoreKey(assetID, definition.Key)
 		if raw, ok := overrides[assetKey]; ok {
-			if normalized, err := agentsettings.NormalizeAgentSettingValue(definition.Key, raw); err == nil {
+			decoded, decodeErr := d.decodeAgentSettingFromStore(definition.Key, assetKey, raw)
+			if decodeErr != nil {
+				return nil, decodeErr
+			}
+			if normalized, err := agentsettings.NormalizeAgentSettingValue(definition.Key, decoded); err == nil {
 				effective[definition.Key] = normalized
 			}
 		}
@@ -175,7 +189,8 @@ func (d *Deps) BuildAgentSettingsPayload(assetID string) (AgentSettingsPayload, 
 	if releaseOS != "" && releaseArch != "" {
 		latestVersion, publishedAt, err := d.LatestAgentVersionForPlatform(releaseOS, releaseArch)
 		if err != nil {
-			payload.AgentVersionError = err.Error()
+			securityruntime.Logf("agent settings: release lookup failed: %v", err)
+			payload.AgentVersionError = "agent release information unavailable"
 		} else {
 			payload.LatestAgentVersion = latestVersion
 			payload.LatestAgentPublishedAt = publishedAt
@@ -206,6 +221,9 @@ func (d *Deps) BuildAgentSettingsPayload(assetID string) (AgentSettingsPayload, 
 	if d.RuntimeStore != nil {
 		all, err := d.RuntimeStore.ListRuntimeSettingOverrides()
 		if err == nil {
+			if migrateErr := d.MigrateSensitiveAgentSettingOverrides(all); migrateErr != nil {
+				return payload, migrateErr
+			}
 			prefix := AgentSettingStorePrefixForAsset(assetID)
 			for key, value := range all {
 				if strings.HasPrefix(key, prefix) {
@@ -229,13 +247,23 @@ func (d *Deps) BuildAgentSettingsPayload(assetID string) (AgentSettingsPayload, 
 		overrideValue := ""
 		globalValue := ""
 		if raw, ok := global[definition.Key]; ok {
-			if normalized, err := agentsettings.NormalizeAgentSettingValue(definition.Key, raw); err == nil {
+			globalKey, _ := AgentSettingGlobalDefaultKey(definition.Key)
+			decoded, decodeErr := d.decodeAgentSettingFromStore(definition.Key, globalKey, raw)
+			if decodeErr != nil {
+				return payload, decodeErr
+			}
+			if normalized, err := agentsettings.NormalizeAgentSettingValue(definition.Key, decoded); err == nil {
 				globalValue = normalized
 				source = "hub-default"
 			}
 		}
 		if raw, ok := overrides[definition.Key]; ok {
-			if normalized, err := agentsettings.NormalizeAgentSettingValue(definition.Key, raw); err == nil {
+			assetKey := AgentSettingStoreKey(assetID, definition.Key)
+			decoded, decodeErr := d.decodeAgentSettingFromStore(definition.Key, assetKey, raw)
+			if decodeErr != nil {
+				return payload, decodeErr
+			}
+			if normalized, err := agentsettings.NormalizeAgentSettingValue(definition.Key, decoded); err == nil {
 				overrideValue = normalized
 				source = "hub-override"
 			}
@@ -248,6 +276,13 @@ func (d *Deps) BuildAgentSettingsPayload(assetID string) (AgentSettingsPayload, 
 			stateValueKnown = true
 		}
 		drift := stateValueKnown && stateValue != effectiveValue
+		configured := definition.Sensitive && effectiveValue != ""
+		if definition.Sensitive {
+			effectiveValue = ""
+			overrideValue = ""
+			globalValue = ""
+			stateValue = ""
+		}
 		entry := AgentSettingEntry{
 			Key:             definition.Key,
 			Label:           definition.Label,
@@ -266,6 +301,8 @@ func (d *Deps) BuildAgentSettingsPayload(assetID string) (AgentSettingsPayload, 
 			HubManaged:      definition.HubManaged,
 			LocalOnly:       definition.LocalOnly,
 			Drift:           drift,
+			Sensitive:       definition.Sensitive,
+			Configured:      configured,
 		}
 		payload.Settings = append(payload.Settings, entry)
 	}
@@ -280,13 +317,16 @@ func (d *Deps) BuildAgentSettingsPayload(assetID string) (AgentSettingsPayload, 
 			RestartRequired:      state.RestartRequired,
 			AllowRemoteOverrides: state.AllowRemoteOverrides,
 			Fingerprint:          state.Fingerprint,
-			Values:               CloneAgentSettingValues(state.Values),
+			Values:               redactSensitiveAgentSettingValues(state.Values),
 		}
 	}
 	return payload, nil
 }
 
 func (d *Deps) LatestAgentVersionForPlatform(agentOS, arch string) (string, string, error) {
+	if d.AgentCache == nil {
+		return "", "", fmt.Errorf("agent cache not configured")
+	}
 	m := d.AgentCache.Manifest()
 	if m == nil {
 		return "", "", fmt.Errorf("agent manifest not loaded")
