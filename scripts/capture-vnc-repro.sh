@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+set +x
+set +a
+umask 077
+
+unset EXTERNAL_API_TOKEN EXTERNAL_OWNER_TOKEN AUTH_TOKEN
+EXTERNAL_API_TOKEN="${LABTETHER_API_TOKEN-}"
+EXTERNAL_OWNER_TOKEN="${LABTETHER_OWNER_TOKEN-}"
+unset LABTETHER_API_TOKEN LABTETHER_OWNER_TOKEN
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ENV_FILE:-${PROJECT_ROOT}/.env}"
@@ -17,8 +25,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/script-common.sh"
 
 EXTERNAL_API_BASE_URL="${LABTETHER_API_BASE_URL-}"
-EXTERNAL_API_TOKEN="${LABTETHER_API_TOKEN-}"
-EXTERNAL_OWNER_TOKEN="${LABTETHER_OWNER_TOKEN-}"
+EXTERNAL_CA_FILE="${LABTETHER_CA_FILE-}"
+EXTERNAL_INSECURE_TLS="${LABTETHER_INSECURE_TLS-}"
+CLI_CA_FILE=""
+CLI_INSECURE_TLS=0
 
 BANNER_FILE=""
 declare -a BANNER_LINES=()
@@ -46,12 +56,16 @@ Options:
   --output <path>             Write report to an explicit path
   --run-smoke                 Also run desktop smoke against the target and include output
   --verbose                   Include fuller API payloads in the report
+  --ca-file <path>            Verify HTTPS with this CA bundle
+  --insecure-tls              Rejected for authenticated capture runs
   -h, --help                  Show this help
 
 Environment:
   ENV_FILE=/path/to/.env
   LOOKBACK_MINUTES=20
   LABTETHER_VNC_REPRO_TRACE_ID=ios-...
+  LABTETHER_CA_FILE=/path/to/ca.crt
+  LABTETHER_INSECURE_TLS=1    # rejected by this authenticated script
 
 Notes:
   - Run this from the same timezone as the iOS banner when possible; the banner
@@ -64,6 +78,7 @@ USAGE
 require_json_tools() {
   require_command curl
   require_command jq
+  require_command mktemp
   require_command rg
   require_command tmux
 }
@@ -75,17 +90,29 @@ run_request() {
   local url=$4
   local payload=${5:-}
 
-  local -a args=("-sS" "-w" $'\n%{http_code}' -X "$method" "$url")
-  if [[ "${url}" == https://* ]]; then
-    args+=("-k")
+  local -a args=("-sS" "--connect-timeout" "${REPRO_CONNECT_TIMEOUT_SECONDS:-5}" "--max-time" "${REPRO_REQUEST_TIMEOUT_SECONDS:-30}" "-w" $'\n%{http_code}' -X "$method" "$url")
+  if ! labtether_build_curl_request_args "$url" 1; then
+    printf -v "$__body_var" '%s' ''
+    printf -v "$__status_var" '%s' '000'
+    return 1
   fi
-  args+=(-H "Authorization: Bearer ${AUTH_TOKEN}")
+  args=("${LABTETHER_CURL_REQUEST_ARGS[@]}" "${args[@]}")
   if [[ -n "$payload" ]]; then
-    args+=(-H "Content-Type: application/json" --data "$payload")
+    args+=(-H "Content-Type: application/json" --data-binary @-)
   fi
 
   local response
-  response=$(curl "${args[@]}" || true)
+  if [[ -n "$payload" ]]; then
+    if ! response=$(labtether_curl "${args[@]}" <<<"$payload"); then
+      printf -v "$__body_var" '%s' "$response"
+      printf -v "$__status_var" '%s' '000'
+      return 1
+    fi
+  elif ! response=$(labtether_curl "${args[@]}"); then
+    printf -v "$__body_var" '%s' "$response"
+    printf -v "$__status_var" '%s' '000'
+    return 1
+  fi
 
   local parsed_status
   parsed_status=$(printf '%s' "$response" | tail -n 1)
@@ -263,9 +290,16 @@ run_smoke_capture() {
   if [[ "$RUN_SMOKE" != "1" ]]; then
     return
   fi
+  local -a smoke_args=(--verbose)
+  if [[ -n "${LABTETHER_CA_FILE:-}" ]]; then
+    smoke_args+=(--ca-file "$LABTETHER_CA_FILE")
+  elif labtether_value_is_true "${LABTETHER_INSECURE_TLS:-0}"; then
+    smoke_args+=(--insecure-tls)
+  fi
   {
     printf '\n[desktop smoke baseline]\n'
-    LABTETHER_DESKTOP_SMOKE_TARGET="$TARGET" "${PROJECT_ROOT}/scripts/desktop-smoke-test.sh" --verbose || true
+    ENV_FILE="$ENV_FILE" LABTETHER_DESKTOP_SMOKE_TARGET="$TARGET" \
+      "${PROJECT_ROOT}/scripts/desktop-smoke-test.sh" "${smoke_args[@]}" || true
   } >>"$report"
 }
 
@@ -301,6 +335,13 @@ while [[ $# -gt 0 ]]; do
     --verbose)
       VERBOSE=1
       ;;
+    --ca-file)
+      CLI_CA_FILE="${2:-}"
+      shift
+      ;;
+    --insecure-tls)
+      CLI_INSECURE_TLS=1
+      ;;
     -h|--help)
       usage
       exit 0
@@ -328,34 +369,57 @@ if [[ ! -f "$ENV_FILE" ]]; then
   echo "Missing env file: $ENV_FILE" >&2
   exit 1
 fi
+labtether_require_private_env_file "$ENV_FILE" || exit 1
 
 require_json_tools
 
-set -a
-# shellcheck source=/dev/null
-source "$ENV_FILE"
-set +a
+unset SOURCED_API_TOKEN SOURCED_OWNER_TOKEN SOURCED_API_BASE_URL SOURCED_CA_FILE SOURCED_INSECURE_TLS AUTH_TOKEN
+labtether_read_env_value SOURCED_API_TOKEN "$ENV_FILE" LABTETHER_API_TOKEN || exit 1
+labtether_read_env_value SOURCED_OWNER_TOKEN "$ENV_FILE" LABTETHER_OWNER_TOKEN || exit 1
+labtether_read_env_value SOURCED_API_BASE_URL "$ENV_FILE" LABTETHER_API_BASE_URL || exit 1
+labtether_read_env_value SOURCED_CA_FILE "$ENV_FILE" LABTETHER_CA_FILE || exit 1
+labtether_read_env_value SOURCED_INSECURE_TLS "$ENV_FILE" LABTETHER_INSECURE_TLS || exit 1
+
+LABTETHER_API_BASE_URL="$SOURCED_API_BASE_URL"
+LABTETHER_CA_FILE="$SOURCED_CA_FILE"
+LABTETHER_INSECURE_TLS="${SOURCED_INSECURE_TLS:-0}"
 
 if [[ -n "$EXTERNAL_API_BASE_URL" ]]; then
   LABTETHER_API_BASE_URL="$EXTERNAL_API_BASE_URL"
 fi
-if [[ -n "$EXTERNAL_API_TOKEN" ]]; then
-  LABTETHER_API_TOKEN="$EXTERNAL_API_TOKEN"
+if [[ -n "$EXTERNAL_CA_FILE" ]]; then
+  LABTETHER_CA_FILE="$EXTERNAL_CA_FILE"
 fi
-if [[ -n "$EXTERNAL_OWNER_TOKEN" ]]; then
-  LABTETHER_OWNER_TOKEN="$EXTERNAL_OWNER_TOKEN"
+if [[ -n "$EXTERNAL_INSECURE_TLS" ]]; then
+  LABTETHER_INSECURE_TLS="$EXTERNAL_INSECURE_TLS"
+fi
+if [[ -n "$CLI_CA_FILE" ]]; then
+  LABTETHER_CA_FILE="$CLI_CA_FILE"
+fi
+if [[ "$CLI_INSECURE_TLS" == "1" ]]; then
+  LABTETHER_INSECURE_TLS=1
 fi
 
 API_BASE="${LABTETHER_API_BASE_URL:-http://localhost:8080}"
-AUTH_TOKEN="${LABTETHER_API_TOKEN:-${LABTETHER_OWNER_TOKEN:-}}"
+AUTH_TOKEN="${EXTERNAL_API_TOKEN:-${EXTERNAL_OWNER_TOKEN:-${SOURCED_API_TOKEN:-${SOURCED_OWNER_TOKEN:-}}}}"
 
 if [[ -z "$AUTH_TOKEN" ]]; then
   echo "No LABTETHER_API_TOKEN or LABTETHER_OWNER_TOKEN found in $ENV_FILE" >&2
   exit 1
 fi
+labtether_validate_tls_options || exit 1
+if labtether_value_is_true "${LABTETHER_INSECURE_TLS:-0}"; then
+  echo "Authenticated capture refuses --insecure-tls; provide --ca-file or use OS trust" >&2
+  exit 1
+fi
+labtether_prepare_curl_auth "$AUTH_TOKEN" || exit 1
+labtether_clear_token_environment
+unset SOURCED_API_TOKEN SOURCED_OWNER_TOKEN SOURCED_API_BASE_URL SOURCED_CA_FILE SOURCED_INSECURE_TLS
+trap labtether_cleanup_curl_security EXIT
 
 if [[ "$API_BASE" == http://* ]]; then
-  health_probe="$(curl -sS --max-time 5 "${API_BASE}/healthz" 2>/dev/null || true)"
+  labtether_build_curl_request_args "${API_BASE}/healthz" 0 || exit 1
+  health_probe="$(labtether_curl "${LABTETHER_CURL_REQUEST_ARGS[@]}" -sS --connect-timeout 2 --max-time 5 "${API_BASE}/healthz" 2>/dev/null || true)"
   if [[ "${health_probe}" == *'"status":"redirect_active"'* ]]; then
     base_no_scheme="${API_BASE#http://}"
     host_port="${base_no_scheme%%/*}"
@@ -374,7 +438,10 @@ fi
 
 timestamp="$(date '+%Y%m%d-%H%M%S')"
 if [[ -z "$OUTPUT_PATH" ]]; then
-  OUTPUT_PATH="/tmp/labtether-vnc-repro-report-${timestamp}.txt"
+  OUTPUT_PATH=$(mktemp "${TMPDIR:-/tmp}/labtether-vnc-repro-report-${timestamp}.XXXXXX")
+  chmod 600 "$OUTPUT_PATH"
+else
+  labtether_prepare_private_output_file "$OUTPUT_PATH" || exit 1
 fi
 
 asset_body=""
@@ -386,10 +453,13 @@ if [[ "$asset_status" != "200" ]]; then
 fi
 
 connected_agents_body=""
+# run_request writes through the variable names passed as its first two args.
+# shellcheck disable=SC2034
 connected_agents_status=""
 run_request connected_agents_body connected_agents_status GET "$API_BASE/agents/connected"
 
 presence_body=""
+# shellcheck disable=SC2034
 presence_status=""
 run_request presence_body presence_status GET "$API_BASE/agents/presence"
 

@@ -46,8 +46,6 @@ fi
 
 emit_dev_runtime_warnings
 
-backend_args=()
-frontend_args=()
 log_info "Launching backend dev session..."
 if [[ "${RESTART_SESSIONS}" -eq 1 ]]; then
   "${PROJECT_ROOT}/scripts/dev-backend-bg.sh" --restart
@@ -63,21 +61,35 @@ else
 fi
 
 INSTALL_URL=""
-CURL_PREFIX="curl -fsSL"
-CURL_CMD=(curl -fsSL)
+CURL_PREFIX="curl --disable -fsSL"
+CURL_CMD=(labtether_curl --disable -fsSL)
+DEV_CA_FILE="${LABTETHER_CA_FILE:-${PROJECT_ROOT}/data/certs/ca.crt}"
+if [[ -f "$DEV_CA_FILE" && -r "$DEV_CA_FILE" ]]; then
+  LABTETHER_CA_FILE="$DEV_CA_FILE"
+fi
 attempt=0
 
 while [[ "${attempt}" -lt 60 ]]; do
-  if curl -kfsSL "https://localhost:8443/install.sh" -o /dev/null 2>/dev/null; then
+  labtether_build_curl_request_args "https://localhost:8443/install.sh" 0 || exit 1
+  if labtether_curl "${LABTETHER_CURL_REQUEST_ARGS[@]}" -fsSL --connect-timeout 2 --max-time 5 "https://localhost:8443/install.sh" -o /dev/null 2>/dev/null; then
     INSTALL_URL="https://localhost:8443/install.sh"
-    CURL_PREFIX="curl -kfsSL"
-    CURL_CMD=(curl -kfsSL)
+    if [[ -n "${LABTETHER_CA_FILE:-}" ]]; then
+      CURL_PREFIX="curl --disable --noproxy '*' --cacert ${LABTETHER_CA_FILE} -fsSL"
+    else
+      CURL_PREFIX="curl --disable --noproxy '*' -fsSL"
+    fi
+    CURL_CMD=(labtether_curl "${LABTETHER_CURL_REQUEST_ARGS[@]}" -fsSL --connect-timeout 5 --max-time 30)
     break
   fi
-  if curl -fsSL "http://localhost:8080/install.sh" -o /dev/null 2>/dev/null; then
+  labtether_build_curl_request_args "http://localhost:8080/install.sh" 0 || exit 1
+  if labtether_curl "${LABTETHER_CURL_REQUEST_ARGS[@]}" -fsSL --connect-timeout 2 --max-time 5 "http://localhost:8080/install.sh" -o /dev/null 2>/dev/null; then
     INSTALL_URL="http://localhost:8080/install.sh"
-    CURL_PREFIX="curl -fsSL"
-    CURL_CMD=(curl -fsSL)
+    if labtether_value_is_true "${LABTETHER_ALLOW_PROXY:-0}"; then
+      CURL_PREFIX="curl --disable -fsSL"
+    else
+      CURL_PREFIX="curl --disable --noproxy '*' -fsSL"
+    fi
+    CURL_CMD=(labtether_curl "${LABTETHER_CURL_REQUEST_ARGS[@]}" -fsSL --connect-timeout 5 --max-time 30)
     break
   fi
   attempt=$((attempt + 1))
@@ -101,5 +113,5 @@ else
 fi
 
 log_info "Recommended Linux install command (compatibility-first):"
-printf '  %s %s | sudo bash -s -- --enrollment-token <token> --install-vnc-prereqs\n' "${CURL_PREFIX}" "${INSTALL_URL}"
+printf '  %s %s -o labtether-install.sh && sudo bash labtether-install.sh --enrollment-token-file /secure/path/enrollment-token --install-vnc-prereqs\n' "${CURL_PREFIX}" "${INSTALL_URL}"
 log_info "Note: --auto-install-vnc remains accepted as an alias on newer hubs."

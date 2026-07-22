@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+set +x
+set +a
+umask 077
+
+unset EXTERNAL_API_TOKEN EXTERNAL_OWNER_TOKEN AUTH_TOKEN
+EXTERNAL_API_TOKEN="${LABTETHER_API_TOKEN-}"
+EXTERNAL_OWNER_TOKEN="${LABTETHER_OWNER_TOKEN-}"
+unset LABTETHER_API_TOKEN LABTETHER_OWNER_TOKEN
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ENV_FILE:-${PROJECT_ROOT}/.env}"
@@ -14,10 +22,14 @@ PROBE_STREAM="${LABTETHER_DESKTOP_SMOKE_PROBE_STREAM:-1}"
 PROBE_AUDIO="${LABTETHER_DESKTOP_SMOKE_PROBE_AUDIO:-0}"
 LIST_TARGETS=0
 VERBOSE=0
+WS_HANDSHAKE_KEY=""
+AUDIO_WS_HANDSHAKE_KEY=""
 
 EXTERNAL_API_BASE_URL="${LABTETHER_API_BASE_URL-}"
-EXTERNAL_API_TOKEN="${LABTETHER_API_TOKEN-}"
-EXTERNAL_OWNER_TOKEN="${LABTETHER_OWNER_TOKEN-}"
+EXTERNAL_CA_FILE="${LABTETHER_CA_FILE-}"
+EXTERNAL_INSECURE_TLS="${LABTETHER_INSECURE_TLS-}"
+CLI_CA_FILE=""
+CLI_INSECURE_TLS=0
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
@@ -41,6 +53,8 @@ Options:
   --no-probe-stream           Skip the live desktop WebSocket probe
   --probe-audio               Also probe the VNC audio sideband (requires --expect-agent-vnc)
   --verbose                   Print response bodies for easier debugging
+  --ca-file <path>            Verify HTTPS with this CA bundle
+  --insecure-tls              Rejected for authenticated desktop smoke runs
   -h, --help                  Show this help
 
 Environment:
@@ -54,6 +68,8 @@ Environment:
   LABTETHER_DESKTOP_SMOKE_PROBE_STREAM=1
   LABTETHER_DESKTOP_SMOKE_PROBE_AUDIO=0
   TIMEOUT_SECONDS=30
+  LABTETHER_CA_FILE=/path/to/ca.crt
+  LABTETHER_INSECURE_TLS=1    # rejected by this authenticated script
 USAGE
 }
 
@@ -64,6 +80,7 @@ log() {
 require_json_tools() {
   require_command curl
   require_command jq
+  require_command openssl
 }
 
 assert_equal() {
@@ -107,6 +124,13 @@ extract_json_string() {
   printf '%s' "$json" | sed -n "s/.*\"${key}\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\\1/p" | head -n 1
 }
 
+print_verbose_json() {
+  local label=$1
+  local json=$2
+  [[ "$VERBOSE" == "1" ]] || return 0
+  printf '%s: %s\n' "$label" "$(labtether_redact_json_for_log "$json")"
+}
+
 run_request() {
   local __body_var=$1
   local __status_var=$2
@@ -114,17 +138,29 @@ run_request() {
   local url=$4
   local payload=${5:-}
 
-  local -a args=("-sS" "-w" $'\n%{http_code}' -X "$method" "$url")
-  if [[ "${url}" == https://* ]]; then
-    args+=("-k")
+  local -a args=("-sS" "--connect-timeout" "${DESKTOP_CONNECT_TIMEOUT_SECONDS:-5}" "--max-time" "$TIMEOUT_SECONDS" "-w" $'\n%{http_code}' -X "$method" "$url")
+  if ! labtether_build_curl_request_args "$url" 1; then
+    printf -v "$__body_var" '%s' ''
+    printf -v "$__status_var" '%s' '000'
+    return 1
   fi
-  args+=(-H "Authorization: Bearer ${AUTH_TOKEN}")
+  args=("${LABTETHER_CURL_REQUEST_ARGS[@]}" "${args[@]}")
   if [[ -n "$payload" ]]; then
-    args+=(-H "Content-Type: application/json" --data "$payload")
+    args+=(-H "Content-Type: application/json" --data-binary @-)
   fi
 
   local response
-  response=$(curl "${args[@]}" || true)
+  if [[ -n "$payload" ]]; then
+    if ! response=$(labtether_curl "${args[@]}" <<<"$payload"); then
+      printf -v "$__body_var" '%s' "$response"
+      printf -v "$__status_var" '%s' '000'
+      return 1
+    fi
+  elif ! response=$(labtether_curl "${args[@]}"); then
+    printf -v "$__body_var" '%s' "$response"
+    printf -v "$__status_var" '%s' '000'
+    return 1
+  fi
 
   local parsed_status
   parsed_status=$(printf '%s' "$response" | tail -n 1)
@@ -280,18 +316,18 @@ build_http_url() {
 probe_websocket() {
   local label=$1
   local ws_url=$2
-  local headers=""
   local status=""
 
+  labtether_build_curl_request_args "$ws_url" 1 || exit 1
+  local -a curl_security_args=("${LABTETHER_CURL_REQUEST_ARGS[@]}")
   status=$(
     {
-      curl -sk --http1.1 --max-time "$TIMEOUT_SECONDS" -o /dev/null -D - \
+      labtether_curl "${curl_security_args[@]}" -sS --http1.1 --connect-timeout 5 --max-time "$TIMEOUT_SECONDS" -o /dev/null -D - \
         -H "Connection: Upgrade" \
         -H "Upgrade: websocket" \
         -H "Sec-WebSocket-Version: 13" \
-        -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
+        -H "Sec-WebSocket-Key: ${WS_HANDSHAKE_KEY}" \
         -H "Origin: https://localhost:3000" \
-        -H "Authorization: Bearer ${AUTH_TOKEN}" \
         "$ws_url" || true
     } | tr -d '\r' | awk '$1 ~ /^HTTP\/1\.[01]$/ {code=$2} END {print code}'
   )
@@ -307,31 +343,33 @@ probe_websocket() {
 probe_vnc_with_audio() {
   local desktop_ws_url=$1
   local audio_ws_url=$2
-  local desktop_headers=""
   local audio_status=""
   local desktop_pid=""
 
-  curl -sk --http1.1 --max-time "$TIMEOUT_SECONDS" -o /dev/null -D - \
+  labtether_build_curl_request_args "$desktop_ws_url" 1 || exit 1
+  local -a desktop_curl_security_args=("${LABTETHER_CURL_REQUEST_ARGS[@]}")
+  labtether_build_curl_request_args "$audio_ws_url" 1 || exit 1
+  local -a audio_curl_security_args=("${LABTETHER_CURL_REQUEST_ARGS[@]}")
+
+  labtether_curl "${desktop_curl_security_args[@]}" -sS --http1.1 --connect-timeout 5 --max-time "$TIMEOUT_SECONDS" -o /dev/null -D - \
     -H "Connection: Upgrade" \
     -H "Upgrade: websocket" \
     -H "Sec-WebSocket-Version: 13" \
-    -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
+    -H "Sec-WebSocket-Key: ${WS_HANDSHAKE_KEY}" \
     -H "Origin: https://localhost:3000" \
-    -H "Authorization: Bearer ${AUTH_TOKEN}" \
-    "$desktop_ws_url" >/tmp/labtether-desktop-smoke-desktop-probe.log 2>&1 &
+    "$desktop_ws_url" >"${LABTETHER_SECURE_CURL_DIR}/desktop-probe.log" 2>&1 &
   desktop_pid=$!
 
   sleep 1
 
   audio_status=$(
     {
-      curl -sk --http1.1 --max-time "$TIMEOUT_SECONDS" -o /dev/null -D - \
+      labtether_curl "${audio_curl_security_args[@]}" -sS --http1.1 --connect-timeout 5 --max-time "$TIMEOUT_SECONDS" -o /dev/null -D - \
         -H "Connection: Upgrade" \
         -H "Upgrade: websocket" \
         -H "Sec-WebSocket-Version: 13" \
-        -H "Sec-WebSocket-Key: bXlhdWRpb3NhbXBsZWtleQ==" \
+        -H "Sec-WebSocket-Key: ${AUDIO_WS_HANDSHAKE_KEY}" \
         -H "Origin: https://localhost:3000" \
-        -H "Authorization: Bearer ${AUTH_TOKEN}" \
         "$audio_ws_url" || true
     } | tr -d '\r' | awk '$1 ~ /^HTTP\/1\.[01]$/ {code=$2} END {print code}'
   )
@@ -382,6 +420,13 @@ while [[ $# -gt 0 ]]; do
     --verbose)
       VERBOSE=1
       ;;
+    --ca-file)
+      CLI_CA_FILE="${2:-}"
+      shift
+      ;;
+    --insecure-tls)
+      CLI_INSECURE_TLS=1
+      ;;
     -h|--help)
       usage
       exit 0
@@ -399,34 +444,59 @@ if [[ ! -f "$ENV_FILE" ]]; then
   echo "Missing env file: $ENV_FILE" >&2
   exit 1
 fi
+labtether_require_private_env_file "$ENV_FILE" || exit 1
 
 require_json_tools
+WS_HANDSHAKE_KEY="$(openssl rand -base64 16)"
+AUDIO_WS_HANDSHAKE_KEY="$(openssl rand -base64 16)"
 
-set -a
-# shellcheck source=/dev/null
-source "$ENV_FILE"
-set +a
+unset SOURCED_API_TOKEN SOURCED_OWNER_TOKEN SOURCED_API_BASE_URL SOURCED_CA_FILE SOURCED_INSECURE_TLS AUTH_TOKEN
+labtether_read_env_value SOURCED_API_TOKEN "$ENV_FILE" LABTETHER_API_TOKEN || exit 1
+labtether_read_env_value SOURCED_OWNER_TOKEN "$ENV_FILE" LABTETHER_OWNER_TOKEN || exit 1
+labtether_read_env_value SOURCED_API_BASE_URL "$ENV_FILE" LABTETHER_API_BASE_URL || exit 1
+labtether_read_env_value SOURCED_CA_FILE "$ENV_FILE" LABTETHER_CA_FILE || exit 1
+labtether_read_env_value SOURCED_INSECURE_TLS "$ENV_FILE" LABTETHER_INSECURE_TLS || exit 1
+
+LABTETHER_API_BASE_URL="$SOURCED_API_BASE_URL"
+LABTETHER_CA_FILE="$SOURCED_CA_FILE"
+LABTETHER_INSECURE_TLS="${SOURCED_INSECURE_TLS:-0}"
 
 if [[ -n "$EXTERNAL_API_BASE_URL" ]]; then
   LABTETHER_API_BASE_URL="$EXTERNAL_API_BASE_URL"
 fi
-if [[ -n "$EXTERNAL_API_TOKEN" ]]; then
-  LABTETHER_API_TOKEN="$EXTERNAL_API_TOKEN"
+if [[ -n "$EXTERNAL_CA_FILE" ]]; then
+  LABTETHER_CA_FILE="$EXTERNAL_CA_FILE"
 fi
-if [[ -n "$EXTERNAL_OWNER_TOKEN" ]]; then
-  LABTETHER_OWNER_TOKEN="$EXTERNAL_OWNER_TOKEN"
+if [[ -n "$EXTERNAL_INSECURE_TLS" ]]; then
+  LABTETHER_INSECURE_TLS="$EXTERNAL_INSECURE_TLS"
+fi
+if [[ -n "$CLI_CA_FILE" ]]; then
+  LABTETHER_CA_FILE="$CLI_CA_FILE"
+fi
+if [[ "$CLI_INSECURE_TLS" == "1" ]]; then
+  LABTETHER_INSECURE_TLS=1
 fi
 
 API_BASE="${LABTETHER_API_BASE_URL:-http://localhost:8080}"
-AUTH_TOKEN="${LABTETHER_API_TOKEN:-${LABTETHER_OWNER_TOKEN:-}}"
+AUTH_TOKEN="${EXTERNAL_API_TOKEN:-${EXTERNAL_OWNER_TOKEN:-${SOURCED_API_TOKEN:-${SOURCED_OWNER_TOKEN:-}}}}"
 
 if [[ -z "$AUTH_TOKEN" ]]; then
   echo "No LABTETHER_API_TOKEN or LABTETHER_OWNER_TOKEN found in $ENV_FILE" >&2
   exit 1
 fi
+labtether_validate_tls_options || exit 1
+if labtether_value_is_true "${LABTETHER_INSECURE_TLS:-0}"; then
+  echo "Authenticated desktop smoke refuses --insecure-tls; provide --ca-file or use OS trust" >&2
+  exit 1
+fi
+labtether_prepare_curl_auth "$AUTH_TOKEN" || exit 1
+labtether_clear_token_environment
+unset SOURCED_API_TOKEN SOURCED_OWNER_TOKEN SOURCED_API_BASE_URL SOURCED_CA_FILE SOURCED_INSECURE_TLS
+trap labtether_cleanup_curl_security EXIT
 
 if [[ "$API_BASE" == http://* ]]; then
-  health_probe="$(curl -sS --max-time 5 "${API_BASE}/healthz" 2>/dev/null || true)"
+  labtether_build_curl_request_args "${API_BASE}/healthz" 0 || exit 1
+  health_probe="$(labtether_curl "${LABTETHER_CURL_REQUEST_ARGS[@]}" -sS --connect-timeout 2 --max-time 5 "${API_BASE}/healthz" 2>/dev/null || true)"
   if [[ "${health_probe}" == *'"status":"redirect_active"'* ]]; then
     base_no_scheme="${API_BASE#http://}"
     host_port="${base_no_scheme%%/*}"
@@ -565,33 +635,51 @@ fi
 
 desktop_session_id=""
 cleanup() {
-  if [[ -z "${desktop_session_id:-}" ]]; then
-    return
-  fi
+  local original_rc=$?
+  trap - EXIT INT TERM HUP
+  set +e
+  local cleanup_failed=0
   local cleanup_body=""
   local cleanup_status=""
-  run_request cleanup_body cleanup_status DELETE "$API_BASE/desktop/sessions/${desktop_session_id}"
-  if [[ "$cleanup_status" == "204" || "$cleanup_status" == "404" ]]; then
-    printf '  [PASS] cleanup desktop session %s (%s)\n' "$desktop_session_id" "$cleanup_status"
-  else
-    printf '  [WARN] cleanup desktop session %s failed (%s)\n' "$desktop_session_id" "${cleanup_status:-000}"
-    [[ "$VERBOSE" == "1" && -n "$cleanup_body" ]] && printf 'cleanup body: %s\n' "$cleanup_body"
+  if [[ -n "${desktop_session_id:-}" ]]; then
+    run_request cleanup_body cleanup_status DELETE "$API_BASE/desktop/sessions/${desktop_session_id}" || true
+    if [[ "$cleanup_status" == "204" || "$cleanup_status" == "404" ]]; then
+      printf '  [PASS] cleanup desktop session %s (%s)\n' "$desktop_session_id" "$cleanup_status"
+    else
+      printf '  [FAIL] cleanup desktop session %s failed (%s)\n' "$desktop_session_id" "${cleanup_status:-000}"
+      [[ -n "$cleanup_body" ]] && print_verbose_json "cleanup body" "$cleanup_body"
+      cleanup_failed=1
+    fi
   fi
+  labtether_cleanup_curl_security || cleanup_failed=1
+  if [[ "$cleanup_failed" == "1" ]]; then
+    original_rc=1
+  fi
+  exit "$original_rc"
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 129' HUP
+trap 'exit 143' TERM
 
-create_payload=$(printf '{"target":"%s","quality":"%s","protocol":"%s","record":%s' \
-  "$TARGET" "$QUALITY" "$PROTOCOL" "$RECORD")
-if [[ -n "$DISPLAY_NAME" ]]; then
-  create_payload+=$(printf ',"display":"%s"' "$DISPLAY_NAME")
+record_json=false
+if is_truthy "$RECORD"; then
+  record_json=true
 fi
-create_payload+='}'
+create_payload=$(jq -cn \
+  --arg target "$TARGET" \
+  --arg quality "$QUALITY" \
+  --arg protocol "$PROTOCOL" \
+  --arg display "$DISPLAY_NAME" \
+  --argjson record "$record_json" \
+  '{target:$target,quality:$quality,protocol:$protocol,record:$record}
+   + (if $display == "" then {} else {display:$display} end)')
 
 body=""
 status=""
 run_request body status POST "$API_BASE/desktop/sessions" "$create_payload"
 assert_equal "POST /desktop/sessions" "201" "$status"
-[[ "$VERBOSE" == "1" ]] && printf 'create response: %s\n' "$body"
+print_verbose_json "create response" "$body"
 
 desktop_session_id=$(extract_json_string "id" "$body")
 assert_nonempty "desktop session id parsed" "$desktop_session_id"
@@ -608,7 +696,7 @@ if [[ "$PROTOCOL" == "spice" ]]; then
   status=""
   run_request body status POST "$API_BASE/desktop/sessions/${desktop_session_id}/spice-ticket"
   assert_equal "POST /desktop/sessions/{id}/spice-ticket" "201" "$status"
-  [[ "$VERBOSE" == "1" ]] && printf 'spice ticket response: %s\n' "$body"
+  print_verbose_json "spice ticket response" "$body"
 
   stream_path=$(extract_json_string "stream_path" "$body")
   password=$(extract_json_string "password" "$body")
@@ -621,7 +709,7 @@ else
   status=""
   run_request body status POST "$API_BASE/desktop/sessions/${desktop_session_id}/stream-ticket"
   assert_equal "POST /desktop/sessions/{id}/stream-ticket" "201" "$status"
-  [[ "$VERBOSE" == "1" ]] && printf 'stream ticket response: %s\n' "$body"
+  print_verbose_json "stream ticket response" "$body"
 
   ticket=$(extract_json_string "ticket" "$body")
   stream_path=$(extract_json_string "stream_path" "$body")

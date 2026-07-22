@@ -12,18 +12,18 @@ if ! require_command psql; then
   exit 1
 fi
 
-if [[ -f "${ENV_FILE}" ]]; then
-  set -a
-  # shellcheck source=/dev/null
-  source "${ENV_FILE}"
-  set +a
+database_url="${DATABASE_URL-}"
+export -n database_url 2>/dev/null || true
+unset DATABASE_URL
+if [[ -z "$database_url" && ( -e "${ENV_FILE}" || -L "${ENV_FILE}" ) ]]; then
+  labtether_require_private_env_file "${ENV_FILE}" || exit 1
+  labtether_read_env_value database_url "${ENV_FILE}" DATABASE_URL || exit 1
 fi
-
-DB_URL="${DATABASE_URL:-postgres://labtether:labtether@localhost:5432/labtether?sslmode=disable}"
+database_url="${database_url:-postgres://labtether:labtether@localhost:5432/labtether?sslmode=disable}"
 
 echo "Migration status (applied migrations):"
 echo ""
-psql "$DB_URL" --no-psqlrc -c "
+PGDATABASE="$database_url" psql --no-psqlrc --set=ON_ERROR_STOP=on -c "
 SELECT
   version,
   name,
@@ -32,3 +32,4 @@ SELECT
 FROM schema_migrations
 ORDER BY version ASC;
 "
+unset database_url

@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+set +x
+set +a
+umask 077
+
+unset AUTH_TOKEN DATABASE_URL POSTGRES_PASSWORD
+unset LABTETHER_API_TOKEN LABTETHER_OWNER_TOKEN LABTETHER_ADMIN_PASSWORD LABTETHER_ENCRYPTION_KEY LABTETHER_SETUP_TOKEN
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ENV_FILE:-${PROJECT_ROOT}/.env}"
 
 RUN_PREFLIGHT=1
 RUN_RUNTIME=1
+CLI_CA_FILE=""
+CLI_INSECURE_TLS=0
 
 # shellcheck source=/dev/null
 source "${PROJECT_ROOT}/scripts/lib/script-common.sh"
@@ -19,6 +27,9 @@ Validate LabTether setup readiness and runtime health.
 Options:
   --preflight    Run dependency/env checks only.
   --runtime      Run runtime/health checks only.
+  --ca-file <path>
+                 Verify HTTPS checks with this CA bundle.
+  --insecure-tls Disable TLS verification for unauthenticated diagnostics only.
   -h, --help     Show this help.
 USAGE
 }
@@ -30,6 +41,13 @@ while [[ $# -gt 0 ]]; do
       ;;
     --runtime)
       RUN_PREFLIGHT=0
+      ;;
+    --ca-file)
+      CLI_CA_FILE="${2:-}"
+      shift
+      ;;
+    --insecure-tls)
+      CLI_INSECURE_TLS=1
       ;;
     -h|--help)
       usage
@@ -43,6 +61,19 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
+
+if [[ -n "$CLI_CA_FILE" ]]; then
+  # Read by the sourced script-common request helper.
+  # shellcheck disable=SC2034
+  LABTETHER_CA_FILE="$CLI_CA_FILE"
+fi
+if [[ "$CLI_INSECURE_TLS" == "1" ]]; then
+  # Read by the sourced script-common request helper.
+  # shellcheck disable=SC2034
+  LABTETHER_INSECURE_TLS=1
+  log_warn "TLS verification disabled: runtime HTTPS results are connectivity-only, not security proof"
+fi
+labtether_validate_tls_options || exit 1
 
 FAILURES=0
 WARNINGS=0
@@ -65,9 +96,9 @@ resolve_compose_cmd() {
 
 read_env_value() {
   local key=$1
-  local line
-  line=$(grep -E "^${key}=" "${ENV_FILE}" | head -n 1 || true)
-  printf '%s' "${line#*=}"
+  local parsed_value=""
+  labtether_read_env_value parsed_value "$ENV_FILE" "$key" || return 1
+  printf '%s' "$parsed_value"
 }
 
 is_placeholder() {
@@ -77,11 +108,8 @@ is_placeholder() {
 
 http_code() {
   local url=$1
-  if [[ "${url}" == https://* ]]; then
-    curl -k -sS -o /dev/null -w "%{http_code}" --max-time 6 "${url}" || true
-  else
-    curl -sS -o /dev/null -w "%{http_code}" --max-time 6 "${url}" || true
-  fi
+  labtether_build_curl_request_args "$url" 0 || { printf '000'; return; }
+  labtether_curl "${LABTETHER_CURL_REQUEST_ARGS[@]}" -sS -o /dev/null -w "%{http_code}" --connect-timeout 3 --max-time 6 "${url}" || true
 }
 
 check_port_conflict() {
@@ -92,7 +120,7 @@ check_port_conflict() {
   fi
 
   local conflicts
-  conflicts=$(pgrep -a -f "labtether|next-server|next dev|node.*${port}" 2>/dev/null | while read -r pid cmd_line; do
+  conflicts=$(pgrep -a -f "labtether|next-server|next dev|node.*${port}" 2>/dev/null | while read -r pid _; do
     local cmd
     cmd=$(ps -o comm= -p "${pid}" 2>/dev/null || true)
     if [[ "${cmd}" != "docker" && "${cmd}" != "com.docker.b" && "${cmd}" != "vpnkit-bridg" && "${cmd}" != "ssh" ]]; then
@@ -140,13 +168,19 @@ if [[ "${RUN_PREFLIGHT}" -eq 1 ]]; then
     fail "docker daemon is not reachable"
   fi
 
-  if [[ -f "${ENV_FILE}" ]]; then
-    pass "env file found at ${ENV_FILE}"
+  env_file_safe=0
+  if [[ -e "${ENV_FILE}" || -L "${ENV_FILE}" ]]; then
+    if labtether_require_private_env_file "$ENV_FILE"; then
+      pass "private env file found at ${ENV_FILE}"
+      env_file_safe=1
+    else
+      fail "env file is not a private caller-owned regular file"
+    fi
   else
     warn "env file not found at ${ENV_FILE}; release deploy artifacts may not need one"
   fi
 
-  if [[ -f "${ENV_FILE}" ]]; then
+  if [[ "$env_file_safe" -eq 1 ]]; then
     admin_password="$(read_env_value "LABTETHER_ADMIN_PASSWORD")"
     if [[ -z "${admin_password// }" ]]; then
       pass "LABTETHER_ADMIN_PASSWORD omitted; website setup flow will create the first admin"
@@ -155,6 +189,7 @@ if [[ "${RUN_PREFLIGHT}" -eq 1 ]]; then
     else
       pass "LABTETHER_ADMIN_PASSWORD is configured"
     fi
+    unset admin_password
   fi
 
   check_port_conflict 3000

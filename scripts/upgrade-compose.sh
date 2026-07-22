@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+umask 077
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="${COMPOSE_FILE:-${PROJECT_ROOT}/deploy/compose/docker-compose.deploy.yml}"
@@ -55,12 +56,17 @@ if [[ -z "${VERSION}" ]]; then
   log_fail "--version is required (example: ./scripts/upgrade-compose.sh --version v1.2.4)"
   exit 1
 fi
+if [[ ! "${VERSION}" =~ ^v[0-9A-Za-z][0-9A-Za-z._-]{0,127}$ ]]; then
+  log_fail "version must start with v and contain only letters, digits, dot, underscore, or hyphen"
+  exit 1
+fi
 
-if [[ ! -f "${ENV_FILE}" ]]; then
+if [[ ! -f "${ENV_FILE}" || -L "${ENV_FILE}" ]]; then
   log_fail "missing deploy env file: ${ENV_FILE}"
   log_info "Run ./scripts/install-compose.sh first."
   exit 1
 fi
+labtether_lock_down_private_file "${ENV_FILE}" "deploy env file" || exit 1
 
 if ! require_command docker; then
   exit 1
@@ -74,7 +80,7 @@ upsert_env_value() {
   local key=$1
   local value=$2
   local tmp_file
-  tmp_file="$(mktemp)"
+  tmp_file="$(mktemp "${ENV_FILE}.tmp.XXXXXX")"
 
   awk -v k="$key" -v v="$value" -F= '
     BEGIN { written = 0 }
@@ -82,7 +88,9 @@ upsert_env_value() {
     { print }
     END { if (!written) print k "=" v }
   ' "${ENV_FILE}" > "${tmp_file}"
+  chmod 600 "${tmp_file}"
   mv "${tmp_file}" "${ENV_FILE}"
+  chmod 600 "${ENV_FILE}"
 }
 
 upsert_env_value "LABTETHER_VERSION" "${VERSION}"

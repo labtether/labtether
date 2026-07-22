@@ -1,5 +1,60 @@
 #!/bin/sh
+set -eu
+
 export NODE_ENV=production
-export LABTETHER_API_BASE_URL=http://127.0.0.1:${API_PORT:-8080}
-cd /app/console
-exec /command/s6-setuidgid labtether node server.js
+export NEXT_TELEMETRY_DISABLED=1
+export HOSTNAME=0.0.0.0
+
+case "${LABTETHER_TLS_MODE:-auto}" in
+  disabled)
+    export LABTETHER_API_BASE_URL="${LABTETHER_API_BASE_URL:-http://localhost:${API_PORT:-8080}}"
+    ;;
+  *)
+    export LABTETHER_API_BASE_URL="${LABTETHER_API_BASE_URL:-https://localhost:${LABTETHER_HTTPS_PORT:-8443}}"
+    export NEXT_PUBLIC_HUB_API_PORT="${LABTETHER_HTTPS_PORT:-8443}"
+    if [ "${LABTETHER_TLS_MODE:-auto}" = "auto" ] && [ -z "${NODE_EXTRA_CA_CERTS:-}" ]; then
+      export NODE_EXTRA_CA_CERTS=/data/certs/ca.crt
+    fi
+    ;;
+esac
+export LABTETHER_WS_PROXY_CONNECT_HOST="${LABTETHER_WS_PROXY_CONNECT_HOST:-127.0.0.1}"
+
+# s6 considers a longrun dependency ready once its process starts. Wait until
+# the hub has provisioned a configured private CA before Node snapshots
+# NODE_EXTRA_CA_CERTS at process startup. Public-cert and plaintext modes do
+# not require this file.
+if [ -n "${NODE_EXTRA_CA_CERTS:-}" ]; then
+  attempt=0
+  while [ "$attempt" -lt 60 ] && [ ! -r "$NODE_EXTRA_CA_CERTS" ]; do
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+  if [ ! -r "$NODE_EXTRA_CA_CERTS" ]; then
+    echo "console: configured CA file did not become readable" >&2
+    exit 1
+  fi
+fi
+
+cd /app/console || exit 1
+# Do not inherit hub/database bootstrap credentials through S6_KEEP_ENV. The
+# console authenticates through the narrow runtime token file and needs only
+# its routing/proxy configuration.
+exec /command/s6-setuidgid labtether /usr/bin/env -i \
+  HOME=/home/labtether \
+  PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+  NODE_ENV="$NODE_ENV" \
+  NEXT_TELEMETRY_DISABLED="$NEXT_TELEMETRY_DISABLED" \
+  HOSTNAME="$HOSTNAME" \
+  PORT="${PORT:-3000}" \
+  LABTETHER_API_BASE_URL="$LABTETHER_API_BASE_URL" \
+  LABTETHER_AGENT_BASE_URL="${LABTETHER_AGENT_BASE_URL:-}" \
+  LABTETHER_WS_PROXY_CONNECT_HOST="$LABTETHER_WS_PROXY_CONNECT_HOST" \
+  LABTETHER_API_TOKEN_FILE="${LABTETHER_API_TOKEN_FILE:-/run/labtether/api-token}" \
+  LABTETHER_CSRF_ALLOWED_ORIGINS="${LABTETHER_CSRF_ALLOWED_ORIGINS:-}" \
+  LABTETHER_RUNTIME_OVERRIDE_ALLOWED_ORIGINS="${LABTETHER_RUNTIME_OVERRIDE_ALLOWED_ORIGINS:-}" \
+  LABTETHER_TRUST_PROXY_HOPS="${LABTETHER_TRUST_PROXY_HOPS:-0}" \
+  LABTETHER_DEMO_MODE="${LABTETHER_DEMO_MODE:-}" \
+  NEXT_PUBLIC_DEMO_MODE="${NEXT_PUBLIC_DEMO_MODE:-}" \
+  NEXT_PUBLIC_HUB_API_PORT="${NEXT_PUBLIC_HUB_API_PORT:-}" \
+  NODE_EXTRA_CA_CERTS="${NODE_EXTRA_CA_CERTS:-}" \
+  node scripts/console-runtime.mjs server.js

@@ -4,6 +4,9 @@
 #   ./scripts/perf/backend-hotspot-thresholds.sh --summary /path/to/summary.json
 
 set -euo pipefail
+set +x
+set +a
+umask 077
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 # shellcheck source=/dev/null
@@ -15,6 +18,9 @@ fi
 if ! require_command awk; then
   exit 1
 fi
+for command_name in basename chmod dirname mktemp mv rm stat; do
+  require_command "$command_name" || exit 1
+done
 
 usage() {
   cat <<'USAGE'
@@ -58,6 +64,11 @@ MAX_WINDOWED_SOURCES_MEAN_MS="${LT_BACKEND_HOTSPOT_MAX_WINDOWED_SOURCES_MEAN_MS:
 MAX_FULL_FIELDS_CALLS="${LT_BACKEND_HOTSPOT_MAX_FULL_FIELDS_CALLS:-500}"
 MAX_AGGREGATE_P95_REGRESSION_PCT="${LT_BACKEND_HOTSPOT_MAX_AGGREGATE_P95_REGRESSION_PCT:-40}"
 MAX_LIVE_P95_REGRESSION_PCT="${LT_BACKEND_HOTSPOT_MAX_LIVE_P95_REGRESSION_PCT:-40}"
+report_tmp=""
+cleanup_report_tmp() {
+  [[ -z "$report_tmp" ]] || rm -f -- "$report_tmp"
+}
+trap cleanup_report_tmp EXIT INT TERM HUP
 
 while (($# > 0)); do
   case "$1" in
@@ -122,14 +133,25 @@ if [[ -z "${SUMMARY}" ]]; then
   usage
   exit 1
 fi
-if [[ ! -f "${SUMMARY}" ]]; then
-  log_fail "summary does not exist: ${SUMMARY}"
+if [[ ! -f "${SUMMARY}" || -L "${SUMMARY}" ]]; then
+  log_fail "summary must be a non-symlink regular file: ${SUMMARY}"
   exit 1
 fi
-if [[ -n "${BASELINE}" && ! -f "${BASELINE}" ]]; then
-  log_fail "baseline does not exist: ${BASELINE}"
+if [[ -n "${BASELINE}" && ( ! -f "${BASELINE}" || -L "${BASELINE}" ) ]]; then
+  log_fail "baseline must be a non-symlink regular file: ${BASELINE}"
   exit 1
 fi
+input_files=("$SUMMARY")
+if [[ -n "$BASELINE" ]]; then
+  input_files+=("$BASELINE")
+fi
+for input_file in "${input_files[@]}"; do
+  input_size=$(stat -f '%z' "$input_file" 2>/dev/null || stat -c '%s' "$input_file" 2>/dev/null || true)
+  if [[ ! "$input_size" =~ ^[0-9]+$ || "$input_size" -gt $((50 * 1024 * 1024)) ]]; then
+    log_fail "performance summary exceeds the 50 MiB input limit: $input_file"
+    exit 1
+  fi
+done
 
 float_le() {
   local lhs=$1
@@ -310,7 +332,13 @@ if [[ -n "${BASELINE}" ]]; then
 fi
 
 if [[ -n "${WRITE_REPORT}" ]]; then
-  mkdir -p "$(dirname "${WRITE_REPORT}")"
+  report_parent=$(dirname "$WRITE_REPORT")
+  labtether_prepare_owned_output_dir "$report_parent" "threshold report output directory" || exit 1
+  if [[ ( -e "$WRITE_REPORT" || -L "$WRITE_REPORT" ) && ( ! -f "$WRITE_REPORT" || -L "$WRITE_REPORT" ) ]]; then
+    log_fail "threshold report destination must be a regular non-symlink file when it exists: $WRITE_REPORT"
+    exit 1
+  fi
+  report_tmp=$(mktemp "${report_parent}/.$(basename "$WRITE_REPORT").tmp.XXXXXX")
   jq -n \
     --arg summary "${SUMMARY}" \
     --arg baseline "${BASELINE}" \
@@ -366,7 +394,10 @@ if [[ -n "${WRITE_REPORT}" ]]; then
         max_live_p95_regression_pct: $max_live_p95_regression_pct
       },
       failures: $failures
-    }' > "${WRITE_REPORT}"
+    }' > "$report_tmp"
+  chmod 0644 "$report_tmp"
+  mv -f "$report_tmp" "$WRITE_REPORT"
+  report_tmp=""
   log_info "Report: ${WRITE_REPORT}"
 fi
 

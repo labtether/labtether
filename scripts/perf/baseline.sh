@@ -17,6 +17,15 @@
 #   ./scripts/perf/baseline.sh --skip-endpoints   # skip endpoint measurement, still auth-probes if services found
 
 set -euo pipefail
+set +x
+set +a
+umask 077
+
+unset EARLY_API_TOKEN EARLY_OWNER_TOKEN EARLY_ADMIN_PASSWORD AUTH_TOKEN LOGIN_PASSWORD
+EARLY_API_TOKEN="${LABTETHER_API_TOKEN-}"
+EARLY_OWNER_TOKEN="${LABTETHER_OWNER_TOKEN-}"
+EARLY_ADMIN_PASSWORD="${LABTETHER_ADMIN_PASSWORD-}"
+unset LABTETHER_API_TOKEN LABTETHER_OWNER_TOKEN LABTETHER_ADMIN_PASSWORD
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
@@ -39,12 +48,13 @@ LabTether status-path baseline measurement
 Options:
   --console-base URL     Console origin (auto-detect by default)
   --api-base URL         Backend API origin (auto-detect by default)
-  --token TOKEN          Bearer token for backend and trusted console proxy routes
+  --token-file PATH      Read bearer token from a mode-0600 file
   --username USER        Login username when bearer token is not provided (default: admin)
-  --password PASS        Login password when bearer token is not provided (default: password)
+  --password-file PATH   Read login password from a mode-0600 file
   --samples N            Calls per endpoint (default: 3)
   --output-root DIR      Artifact root (default: tmp/perf/runs)
   --connect-timeout N    Seconds before a probe/curl connection times out (default: 3)
+  --ca-file PATH         Verify HTTPS with this CA bundle
   --offline              Emit machine/process snapshot only; skip all HTTP checks and endpoint
                          measurement. Exits 0. Useful for validating the harness without a
                          running backend.
@@ -63,14 +73,18 @@ USAGE
 
 CONSOLE_BASE="${LABTETHER_CONSOLE_BASE_URL:-}"
 API_BASE="${LABTETHER_API_BASE_URL:-}"
-AUTH_TOKEN="${LABTETHER_API_TOKEN:-${LABTETHER_OWNER_TOKEN:-}}"
+AUTH_TOKEN="${EARLY_API_TOKEN:-${EARLY_OWNER_TOKEN:-}}"
 LOGIN_USERNAME="${LABTETHER_ADMIN_USERNAME:-admin}"
-LOGIN_PASSWORD="${LABTETHER_ADMIN_PASSWORD:-password}"
+LOGIN_PASSWORD="${EARLY_ADMIN_PASSWORD:-password}"
+unset EARLY_API_TOKEN EARLY_OWNER_TOKEN EARLY_ADMIN_PASSWORD
 SAMPLES=3
 OUTPUT_ROOT="tmp/perf/runs"
 CONNECT_TIMEOUT="${LABTETHER_PERF_CONNECT_TIMEOUT:-3}"
 OFFLINE=0
 SKIP_ENDPOINTS=0
+CLI_CA_FILE=""
+TOKEN_FILE=""
+PASSWORD_FILE=""
 
 while (($# > 0)); do
   case "$1" in
@@ -82,17 +96,21 @@ while (($# > 0)); do
       API_BASE="${2:-}"
       shift 2
       ;;
-    --token)
-      AUTH_TOKEN="${2:-}"
+    --token-file)
+      TOKEN_FILE="${2:-}"
       shift 2
       ;;
     --username)
       LOGIN_USERNAME="${2:-}"
       shift 2
       ;;
-    --password)
-      LOGIN_PASSWORD="${2:-}"
+    --password-file)
+      PASSWORD_FILE="${2:-}"
       shift 2
+      ;;
+    --token|--password)
+      log_fail "$1 is disabled because secret values must not be passed in process arguments; use the corresponding -file option or environment fallback"
+      exit 1
       ;;
     --samples)
       SAMPLES="${2:-}"
@@ -104,6 +122,10 @@ while (($# > 0)); do
       ;;
     --connect-timeout)
       CONNECT_TIMEOUT="${2:-}"
+      shift 2
+      ;;
+    --ca-file)
+      CLI_CA_FILE="${2:-}"
       shift 2
       ;;
     --offline)
@@ -126,6 +148,31 @@ while (($# > 0)); do
   esac
 done
 
+if [[ -n "$TOKEN_FILE" ]]; then
+  labtether_read_private_secret_file AUTH_TOKEN "$TOKEN_FILE" "bearer token file" || exit 1
+fi
+if [[ -n "$PASSWORD_FILE" ]]; then
+  labtether_read_private_secret_file LOGIN_PASSWORD "$PASSWORD_FILE" "login password file" || exit 1
+fi
+
+if [[ -n "$CLI_CA_FILE" ]]; then
+  # Read by the sourced script-common request helper.
+  # shellcheck disable=SC2034
+  LABTETHER_CA_FILE="$CLI_CA_FILE"
+fi
+labtether_validate_tls_options || exit 1
+if labtether_value_is_true "${LABTETHER_INSECURE_TLS:-0}"; then
+  log_fail "authenticated baseline measurement refuses disabled TLS verification; use --ca-file or OS trust"
+  exit 1
+fi
+if [[ -n "$AUTH_TOKEN" ]]; then
+  labtether_prepare_curl_auth "$AUTH_TOKEN" || exit 1
+fi
+labtether_clear_token_environment
+export -n LOGIN_PASSWORD 2>/dev/null || true
+unset LABTETHER_ADMIN_PASSWORD
+trap labtether_cleanup_curl_security EXIT
+
 if ! [[ "${SAMPLES}" =~ ^[0-9]+$ ]] || [[ "${SAMPLES}" -le 0 ]]; then
   log_fail "--samples must be a positive integer"
   exit 1
@@ -137,8 +184,8 @@ if ! [[ "${CONNECT_TIMEOUT}" =~ ^[0-9]+$ ]] || [[ "${CONNECT_TIMEOUT}" -le 0 ]];
 fi
 
 timestamp="$(date +%Y%m%d-%H%M%S)"
-OUTDIR="${OUTPUT_ROOT}/${timestamp}-status-baseline"
-mkdir -p "${OUTDIR}"
+OUTDIR=""
+labtether_make_private_run_dir OUTDIR "$OUTPUT_ROOT" "${timestamp}-status-baseline" || exit 1
 
 CONSOLE_COOKIE_JAR=""
 BACKEND_COOKIE_JAR=""
@@ -149,6 +196,7 @@ cleanup() {
   if [[ -n "${BACKEND_COOKIE_JAR}" && -f "${BACKEND_COOKIE_JAR}" ]]; then
     rm -f "${BACKEND_COOKIE_JAR}"
   fi
+  labtether_cleanup_curl_security
 }
 trap cleanup EXIT
 
@@ -203,15 +251,19 @@ is_reachable() {
   local url=$1
   local expected_kind=$2
   local status
+  local probe_url="${url}/healthz"
   if [[ "${expected_kind}" == "console" ]]; then
-    status="$(curl -k -s --max-time "${CONNECT_TIMEOUT}" -o /dev/null -w '%{http_code}' \
-      "${url}/api/auth/bootstrap/status" 2>/dev/null || true)"
+    probe_url="${url}/api/auth/bootstrap/status"
+    labtether_build_curl_request_args "$probe_url" 0 || return 1
+    status="$(labtether_curl "${LABTETHER_CURL_REQUEST_ARGS[@]}" -s --connect-timeout "${CONNECT_TIMEOUT}" --max-time "${CONNECT_TIMEOUT}" -o /dev/null -w '%{http_code}' \
+      "$probe_url" 2>/dev/null || true)"
     [[ "${status}" != "000" && "${status}" != "404" && -n "${status}" ]]
     return
   fi
 
-  status="$(curl -k -s --max-time "${CONNECT_TIMEOUT}" -o /dev/null -w '%{http_code}' \
-    "${url}/healthz" 2>/dev/null || true)"
+  labtether_build_curl_request_args "$probe_url" 0 || return 1
+  status="$(labtether_curl "${LABTETHER_CURL_REQUEST_ARGS[@]}" -s --connect-timeout "${CONNECT_TIMEOUT}" --max-time "${CONNECT_TIMEOUT}" -o /dev/null -w '%{http_code}' \
+    "$probe_url" 2>/dev/null || true)"
   [[ "${status}" == "200" ]]
 }
 
@@ -347,18 +399,20 @@ login_with_session() {
   local path=$4
   local response_body
   response_body="$(mktemp)"
-  local payload
-  payload="$(jq -n --arg username "${LOGIN_USERNAME}" --arg password "${LOGIN_PASSWORD}" '{username: $username, password: $password}')"
+  local payload=""
+  labtether_build_login_json payload "${LOGIN_USERNAME}" "${LOGIN_PASSWORD}" || exit 1
   local code
-  code="$(curl -k -sS -L \
+  labtether_build_curl_request_args "${base}${path}" 0 1 || exit 1
+  code="$(labtether_curl "${LABTETHER_CURL_REQUEST_ARGS[@]}" -sS \
+    --connect-timeout "$CONNECT_TIMEOUT" \
     --max-time "$((CONNECT_TIMEOUT * 5))" \
     -c "${cookie_jar}" \
     -o "${response_body}" \
     -w '%{http_code}' \
     -H 'Content-Type: application/json' \
     -X POST \
-    --data "${payload}" \
-    "${base}${path}" || true)"
+    --data-binary @- \
+    "${base}${path}" <<<"${payload}" || true)"
   if [[ "${code}" != "200" ]]; then
     log_fail "${kind} login failed (${base}${path} -> ${code})"
     cat "${response_body}" > "${OUTDIR}/${kind}-login-error.json"
@@ -366,7 +420,7 @@ login_with_session() {
     exit 1
   fi
   if jq -e '.requires_2fa == true' "${response_body}" >/dev/null 2>&1; then
-    log_fail "${kind} login requires 2FA; pass --token or use a local non-2FA baseline account"
+    log_fail "${kind} login requires 2FA; use --token-file or a local non-2FA baseline account"
     cat "${response_body}" > "${OUTDIR}/${kind}-login-error.json"
     rm -f "${response_body}"
     exit 1
@@ -421,13 +475,16 @@ run_samples() {
     headers_file="$(mktemp)"
     body_file="$(mktemp)"
     if [[ "${auth_mode}" == "token" ]]; then
-      curl_output="$(curl -k -sS -D "${headers_file}" -o "${body_file}" \
+      labtether_build_curl_request_args "${base}${path}" 1 || exit 1
+      curl_output="$(labtether_curl "${LABTETHER_CURL_REQUEST_ARGS[@]}" -sS -D "${headers_file}" -o "${body_file}" \
+        --connect-timeout "$CONNECT_TIMEOUT" \
         --max-time "$((CONNECT_TIMEOUT * 10))" \
-        -H "Authorization: Bearer ${AUTH_TOKEN}" \
         -w '%{http_code}\t%{size_download}\t%{time_starttransfer}\t%{time_total}' \
         "${base}${path}" || true)"
     else
-      curl_output="$(curl -k -sS -D "${headers_file}" -o "${body_file}" \
+      labtether_build_curl_request_args "${base}${path}" 0 || exit 1
+      curl_output="$(labtether_curl "${LABTETHER_CURL_REQUEST_ARGS[@]}" -sS -D "${headers_file}" -o "${body_file}" \
+        --connect-timeout "$CONNECT_TIMEOUT" \
         --max-time "$((CONNECT_TIMEOUT * 10))" \
         -b "${cookie_jar}" \
         -w '%{http_code}\t%{size_download}\t%{time_starttransfer}\t%{time_total}' \

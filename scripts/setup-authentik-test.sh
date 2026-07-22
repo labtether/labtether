@@ -6,6 +6,19 @@
 # Prerequisites: Authentik must be running (docker compose -f deploy/testing/docker-compose.authentik.yml up -d)
 
 set -euo pipefail
+set +x
+set +a
+umask 077
+
+unset AUTHENTIK_TOKEN AUTH_TOKEN
+
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=/dev/null
+source "${PROJECT_ROOT}/scripts/lib/script-common.sh"
+
+for command_name in curl jq mktemp python3 seq; do
+    require_command "$command_name" || exit 1
+done
 
 AUTHENTIK_URL="http://localhost:9000"
 # Bootstrap token set in docker-compose.authentik.yml
@@ -23,23 +36,38 @@ info()  { echo -e "${GREEN}[+]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[!]${NC} $*"; }
 error() { echo -e "${RED}[x]${NC} $*"; exit 1; }
 
-AUTH_HEADER="Authorization: Bearer ${AUTHENTIK_TOKEN}"
+AUTH_TOKEN="$AUTHENTIK_TOKEN"
+labtether_prepare_curl_auth "$AUTH_TOKEN" || exit 1
+unset AUTHENTIK_TOKEN AUTH_TOKEN
+trap labtether_cleanup_curl_security EXIT
 
 # --- Helper: API call ---
 api() {
     local method="$1" endpoint="$2"
     shift 2
-    curl -sf "${AUTHENTIK_URL}/api/v3${endpoint}" \
+    local payload=""
+    if [[ "${1:-}" == "-d" || "${1:-}" == "--data" ]]; then
+        payload="${2:-}"
+        shift 2
+    fi
+    labtether_build_curl_request_args "${AUTHENTIK_URL}/api/v3${endpoint}" 1 || return 1
+    local -a args=("${LABTETHER_CURL_REQUEST_ARGS[@]}" -sf --connect-timeout 5 --max-time 30 \
+        --max-filesize $((10 * 1024 * 1024)) \
+        "${AUTHENTIK_URL}/api/v3${endpoint}" \
         -X "$method" \
-        -H "$AUTH_HEADER" \
-        -H "Content-Type: application/json" \
-        "$@"
+        -H "Content-Type: application/json" "$@")
+    if [[ -n "$payload" ]]; then
+        labtether_curl "${args[@]}" --data-binary @- <<<"$payload"
+    else
+        labtether_curl "${args[@]}"
+    fi
 }
 
 # --- Wait for Authentik to be ready ---
 info "Waiting for Authentik to be ready..."
 for i in $(seq 1 60); do
-    if curl -sf "${AUTHENTIK_URL}/-/health/ready/" >/dev/null 2>&1; then
+    labtether_build_curl_request_args "${AUTHENTIK_URL}/-/health/ready/" 0 || exit 1
+    if labtether_curl "${LABTETHER_CURL_REQUEST_ARGS[@]}" -sf --max-filesize 1048576 --connect-timeout 2 --max-time 5 "${AUTHENTIK_URL}/-/health/ready/" >/dev/null 2>&1; then
         info "Authentik is ready."
         break
     fi
@@ -53,6 +81,9 @@ done
 info "Verifying API access..."
 API_CHECK=$(api GET "/core/users/me/" 2>/dev/null) || error "API authentication failed. Is the bootstrap token correct?"
 ADMIN_USER=$(echo "$API_CHECK" | python3 -c "import sys,json; print(json.load(sys.stdin)['user']['username'])" 2>/dev/null)
+if [[ -z "$ADMIN_USER" || "$ADMIN_USER" =~ [[:cntrl:]] ]]; then
+    error "Authentik returned an invalid administrator username."
+fi
 info "Authenticated as: ${ADMIN_USER}"
 
 # --- Check if provider already exists ---
@@ -98,48 +129,50 @@ else
 
     # --- Build provider payload ---
     info "Creating OAuth2/OIDC provider..."
-    PROVIDER_PAYLOAD=$(python3 -c "
-import json
-payload = {
-    'name': 'labtether-oidc-test',
-    'authorization_flow': '${AUTH_FLOW}',
-    'client_type': 'confidential',
-    'redirect_uris': '${LABTETHER_CALLBACK_URL}',
-    'sub_mode': 'hashed_user_id',
-    'include_claims_in_id_token': True,
-    'property_mappings': [],
-    'access_code_validity': 'minutes=1',
-    'access_token_validity': 'minutes=5',
-    'refresh_token_validity': 'days=30',
-}
-keypair_pk = '${KEYPAIR_PK}'
-if keypair_pk:
-    payload['signing_key'] = keypair_pk
-print(json.dumps(payload))
-")
+    PROVIDER_PAYLOAD=$(jq -cn \
+        --arg authorization_flow "$AUTH_FLOW" \
+        --arg redirect_uri "$LABTETHER_CALLBACK_URL" \
+        --arg signing_key "$KEYPAIR_PK" '
+        {
+          name: "labtether-oidc-test",
+          authorization_flow: $authorization_flow,
+          client_type: "confidential",
+          redirect_uris: $redirect_uri,
+          sub_mode: "hashed_user_id",
+          include_claims_in_id_token: true,
+          property_mappings: [],
+          access_code_validity: "minutes=1",
+          access_token_validity: "minutes=5",
+          refresh_token_validity: "days=30"
+        } + (if $signing_key == "" then {} else {signing_key: $signing_key} end)')
 
     PROVIDER_RESPONSE=$(api POST "/providers/oauth2/" -d "$PROVIDER_PAYLOAD")
     if ! echo "$PROVIDER_RESPONSE" | grep -q '"pk"'; then
-        echo "Provider creation failed: $PROVIDER_RESPONSE" >&2
+        printf 'Provider creation failed: %s\n' "$(labtether_redact_json_for_log "$PROVIDER_RESPONSE")" >&2
         error "Failed to create OAuth2 provider."
     fi
     PROVIDER_PK=$(echo "$PROVIDER_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['pk'])")
     CLIENT_ID=$(echo "$PROVIDER_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['client_id'])")
     CLIENT_SECRET=$(echo "$PROVIDER_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['client_secret'])")
 
+    if [[ ! "$PROVIDER_PK" =~ ^[0-9]+$ ]]; then
+        error "Authentik returned an invalid provider identifier."
+    fi
+
     # --- Create application ---
     info "Creating Authentik application..."
-    APP_RESPONSE=$(api POST "/core/applications/" -d "{
-        \"name\": \"LabTether\",
-        \"slug\": \"labtether\",
-        \"provider\": ${PROVIDER_PK},
-        \"meta_launch_url\": \"http://localhost:3000\"
-    }" 2>/dev/null) || true
+    APP_PAYLOAD=$(jq -cn --argjson provider "$PROVIDER_PK" '{
+      name: "LabTether",
+      slug: "labtether",
+      provider: $provider,
+      meta_launch_url: "http://localhost:3000"
+    }')
+    APP_RESPONSE=$(api POST "/core/applications/" -d "$APP_PAYLOAD" 2>/dev/null) || true
 
     if echo "$APP_RESPONSE" | grep -q '"pk"'; then
         info "OIDC application created successfully."
     else
-        warn "Application creation response: ${APP_RESPONSE}"
+        warn "Application creation response: $(labtether_redact_json_for_log "$APP_RESPONSE")"
     fi
 fi
 
@@ -154,15 +187,27 @@ TEST_USER_RESPONSE=$(api POST "/core/users/" -d '{
 
 if echo "$TEST_USER_RESPONSE" | grep -q '"pk"'; then
     TEST_USER_PK=$(echo "$TEST_USER_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['pk'])")
+    if [[ ! "$TEST_USER_PK" =~ ^[0-9]+$ ]]; then
+        error "Authentik returned an invalid test-user identifier."
+    fi
     # Set password
     api POST "/core/users/${TEST_USER_PK}/set_password/" -d '{"password": "testpass123!"}' >/dev/null 2>&1 || true
-    info "Test user created: testuser / testpass123!"
+    info "Test user created (credentials remain in this testing-only setup script)."
 else
     warn "Test user 'testuser' may already exist (that's fine)."
 fi
 
 # --- Output results ---
 ISSUER_URL="${AUTHENTIK_URL}/application/o/labtether/"
+OIDC_ENV_FILE="$(mktemp "${TMPDIR:-/tmp}/labtether-authentik-oidc.env.XXXXXX")"
+{
+    printf 'export LABTETHER_OIDC_ISSUER_URL=%q\n' "$ISSUER_URL"
+    printf 'export LABTETHER_OIDC_CLIENT_ID=%q\n' "$CLIENT_ID"
+    printf 'export LABTETHER_OIDC_CLIENT_SECRET=%q\n' "$CLIENT_SECRET"
+    printf 'export LABTETHER_OIDC_DISPLAY_NAME=%q\n' 'Authentik'
+} >"$OIDC_ENV_FILE"
+chmod 600 "$OIDC_ENV_FILE"
+unset CLIENT_SECRET
 
 echo ""
 echo "============================================================"
@@ -170,15 +215,10 @@ echo "  OIDC Test Setup Complete"
 echo "============================================================"
 echo ""
 echo "Authentik UI:     ${AUTHENTIK_URL}"
-echo "Admin login:      akadmin / testing-only-password"
-echo "Test user:        testuser / testpass123!"
+echo "Testing account credentials remain in the local testing compose/script files."
 echo ""
-echo "Add these env vars to your LabTether dev environment:"
-echo ""
-echo "  export LABTETHER_OIDC_ISSUER_URL=${ISSUER_URL}"
-echo "  export LABTETHER_OIDC_CLIENT_ID=${CLIENT_ID}"
-echo "  export LABTETHER_OIDC_CLIENT_SECRET=${CLIENT_SECRET}"
-echo "  export LABTETHER_OIDC_DISPLAY_NAME=Authentik"
+echo "OIDC environment written to a mode-0600 file: ${OIDC_ENV_FILE}"
+printf 'Load it with: source %q\n' "$OIDC_ENV_FILE"
 echo ""
 echo "Then restart the LabTether backend to pick up the OIDC config."
 echo "============================================================"

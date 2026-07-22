@@ -1,0 +1,13 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Non-secret API key identity marker used by principal classification tests"
+condition = "AND"
+regexTarget = "match"
+regexes = [
+  '''apikey:key_01JOWNER''',
+]
+paths = [
+  '''internal/apiv2/principal_test\.go$''',
+]

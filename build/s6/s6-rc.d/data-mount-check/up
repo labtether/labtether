@@ -1,0 +1,1 @@
+/bin/sh -c "exec /etc/s6-overlay/scripts/require-data-mount.sh"
