@@ -368,9 +368,28 @@ jobs:
       - name: Build agent image locally
         run: |
           docker build \
-            --tag labtether-agent:ci \
+            --tag labtether-agent:ci-base \
             --build-arg VERSION=ci \
             labtether-agent
+          docker build --tag labtether-agent:ci - <<'DOCKERFILE'
+          FROM labtether-agent:ci-base
+          USER root
+          RUN apk update
+          USER agent
+          DOCKERFILE
+
+      - name: Verify Alpine package-index fixture
+        run: |
+          docker run --rm --entrypoint /bin/sh labtether-agent:ci -eu -c '
+            output="$(apk version -l "<" 2>&1)"
+            case "${output}" in
+              *WARNING:*)
+                echo "apk package-index fixture emitted a warning" >&2
+                exit 1
+                ;;
+            esac
+            printf "%s\n" "${output}" | grep -Eq "^Installed:[[:space:]]+Available:$"
+          '
 
       - name: Verify fail-closed agent release manifest generation
         run: go test ./scripts/release/verify-agent-release -count=1
