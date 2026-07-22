@@ -153,6 +153,22 @@ for (config_name, service_name), expected_image in expected.items():
         raise SystemExit(
             f"{config_name}/{service_name}: expected {expected_image}, got {actual}"
         )
+
+qa_agent = configs["development"]["qa-agent"]
+qa_environment = qa_agent.get("environment", {})
+if qa_agent.get("user") != "1001:1001":
+    raise SystemExit("development/qa-agent: explicit unprivileged UID/GID is required")
+if qa_environment.get("LABTETHER_API_TOKEN") != "":
+    raise SystemExit("development/qa-agent: shared API token fallback must be disabled")
+if qa_environment.get("LABTETHER_ENROLLMENT_TOKEN_FILE") != "/run/labtether-enrollment/enrollment-token":
+    raise SystemExit("development/qa-agent: file-backed one-use enrollment is required")
+qa_enrollment_mounts = [
+    mount
+    for mount in qa_agent.get("volumes", [])
+    if mount.get("target") == "/run/labtether-enrollment"
+]
+if len(qa_enrollment_mounts) != 1 or qa_enrollment_mounts[0].get("read_only") is True:
+    raise SystemExit("development/qa-agent: writable enrollment-token volume is required for consume-and-delete")
 PY
 
 # The developer Compose file and release template are one security contract.
