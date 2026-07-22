@@ -115,7 +115,27 @@ func TestCappedOutputWriterDrainsConcurrentWritesWithoutGrowing(t *testing.T) {
 	}
 }
 
-func TestExecuteLocalCommandCapsInfiniteOutputDuringExecution(t *testing.T) {
+func TestExecuteLocalCommandCapsOutputDuringExecution(t *testing.T) {
+	t.Setenv("LABTETHER_EXEC_ALLOWLIST_MODE", "true")
+	t.Setenv("LABTETHER_EXEC_ALLOWED_BINARIES", "printf")
+	t.Setenv("LABTETHER_SHELL_COMMAND_ALLOWLIST_MODE", "true")
+	t.Setenv("LABTETHER_SHELL_COMMAND_ALLOWLIST_PREFIXES", "printf")
+	payload := strings.Repeat("x", 16*1024)
+	output, err := ExecuteLocalCommand(terminal.CommandJob{Command: "printf %s " + payload}, CommandExecutorConfig{
+		Mode: ExecutorModeLocal, Timeout: 5 * time.Second, MaxOutputBytes: 1024,
+	})
+	if err != nil {
+		t.Fatalf("execute bounded output command: %v", err)
+	}
+	if !strings.Contains(output, "output truncated") {
+		t.Fatalf("expected bounded truncation marker, got %q", output)
+	}
+	if len(output) > 1200 {
+		t.Fatalf("bounded output length=%d", len(output))
+	}
+}
+
+func TestExecuteLocalCommandTimesOutInfiniteOutputWithinBound(t *testing.T) {
 	t.Setenv("LABTETHER_EXEC_ALLOWLIST_MODE", "true")
 	t.Setenv("LABTETHER_EXEC_ALLOWED_BINARIES", "yes")
 	t.Setenv("LABTETHER_SHELL_COMMAND_ALLOWLIST_MODE", "true")
@@ -125,9 +145,6 @@ func TestExecuteLocalCommandCapsInfiniteOutputDuringExecution(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "timed out") {
 		t.Fatalf("expected timeout, got %v", err)
-	}
-	if !strings.Contains(output, "output truncated") {
-		t.Fatalf("expected bounded truncation marker, got %q", output)
 	}
 	if len(output) > 1200 {
 		t.Fatalf("bounded output length=%d", len(output))
