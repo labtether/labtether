@@ -14,6 +14,11 @@ import (
 
 const EnvAllowInsecureSSHHostKeys = "LABTETHER_ALLOW_INSECURE_SSH_HOST_KEYS"
 
+const (
+	EnvSSHKnownHostsPath  = "SSH_KNOWN_HOSTS_PATH"
+	EnvSSHKnownHostsPaths = "SSH_KNOWN_HOSTS_PATHS"
+)
+
 // InsecureSSHHostKeysAllowed is the single, explicit escape hatch for
 // disabling SSH server identity verification. A per-asset false setting is
 // not sufficient by itself, which prevents zero-value configuration from
@@ -81,17 +86,24 @@ func DiscoverKnownHostsFiles() []string {
 		}
 	}
 
-	for _, raw := range strings.Split(EnvOrDefault("SSH_KNOWN_HOSTS_PATHS", ""), ",") {
-		add(raw)
-	}
-	for _, raw := range strings.Split(EnvOrDefault("SSH_KNOWN_HOSTS_PATH", ""), ",") {
-		add(raw)
+	customPathsConfigured := false
+	for _, key := range []string{EnvSSHKnownHostsPaths, EnvSSHKnownHostsPath} {
+		raw, configured := os.LookupEnv(key)
+		customPathsConfigured = customPathsConfigured || configured
+		for _, path := range strings.Split(raw, ",") {
+			add(path)
+		}
 	}
 
-	if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
-		add(filepath.Join(home, ".ssh", "known_hosts"))
+	// Explicit path configuration is authoritative, including an explicitly
+	// empty value. This lets operators and tests fail closed without silently
+	// inheriting host identity material from the runtime image.
+	if !customPathsConfigured {
+		if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
+			add(filepath.Join(home, ".ssh", "known_hosts"))
+		}
+		add("/etc/ssh/ssh_known_hosts")
 	}
-	add("/etc/ssh/ssh_known_hosts")
 
 	return paths
 }

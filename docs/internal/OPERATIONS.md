@@ -565,7 +565,9 @@ the separate authenticated `update.request` path and can change the target.
 SSH connections verify the server identity by default. Configure an asset or
 protocol host key, or mount a `known_hosts` file and set
 `SSH_KNOWN_HOSTS_PATH`. A per-asset `strict_host_key=false` value does not
-disable verification on its own.
+disable verification on its own. An explicitly configured
+`SSH_KNOWN_HOSTS_PATH` or `SSH_KNOWN_HOSTS_PATHS` is authoritative; an empty
+value disables runtime-image defaults and therefore fails closed.
 
 For short-lived recovery only, an operator may explicitly acknowledge the
 man-in-the-middle risk by setting

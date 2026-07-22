@@ -131,12 +131,12 @@ jobs:
             -c pg_stat_statements.track=all >/dev/null
 
           for ((attempt = 0; attempt < 60; attempt++)); do
-            if docker exec "${PG_CONTAINER}" pg_isready -U labtether -d labtether >/dev/null 2>&1; then
+            if docker exec "${PG_CONTAINER}" psql -U labtether -d labtether -tAc "SELECT 1" >/dev/null 2>&1; then
               break
             fi
             sleep 1
           done
-          docker exec "${PG_CONTAINER}" pg_isready -U labtether -d labtether >/dev/null
+          docker exec "${PG_CONTAINER}" psql -U labtether -d labtether -tAc "SELECT 1" >/dev/null
           docker exec "${PG_CONTAINER}" psql -U labtether -d labtether -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;" >/dev/null
 
           go build -o build/labtether ./cmd/labtether
