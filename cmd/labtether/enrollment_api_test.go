@@ -16,6 +16,7 @@ import (
 	"github.com/labtether/labtether/internal/agentidentity"
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/auth"
+	"github.com/labtether/labtether/internal/certmgr"
 	"github.com/labtether/labtether/internal/enrollment"
 	"github.com/labtether/labtether/internal/groups"
 )
@@ -188,7 +189,7 @@ func TestDiscoverEndpoint_IgnoresHTTPExternalURLWhenTLSEnabled(t *testing.T) {
 	}
 }
 
-func TestDiscoverEndpoint_PrefersTailscaleCandidateWhenAvailable(t *testing.T) {
+func TestDiscoverEndpoint_PrefersExactRequestOriginOverDiscoveredCandidates(t *testing.T) {
 	t.Setenv("API_PORT", "8080")
 
 	disableTailscaleResolutionForTest(t)
@@ -217,14 +218,97 @@ func TestDiscoverEndpoint_PrefersTailscaleCandidateWhenAvailable(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to decode discover response: %v", err)
 	}
-	if resp.HubURL != "http://100.96.0.5:8080" {
-		t.Fatalf("expected tailscale hub_url, got %q", resp.HubURL)
+	if resp.HubURL != "http://localhost:8080" {
+		t.Fatalf("expected exact request-origin hub_url, got %q", resp.HubURL)
 	}
-	if len(resp.HubCandidates) < 2 {
-		t.Fatalf("expected at least two hub candidates, got %d", len(resp.HubCandidates))
+	if len(resp.HubCandidates) < 3 {
+		t.Fatalf("expected at least three hub candidates, got %d", len(resp.HubCandidates))
 	}
-	if resp.HubCandidates[0].Kind != "tailscale" {
-		t.Fatalf("expected first hub candidate kind tailscale, got %q", resp.HubCandidates[0].Kind)
+	if resp.HubCandidates[0].Kind != "request" {
+		t.Fatalf("expected first hub candidate kind request, got %q", resp.HubCandidates[0].Kind)
+	}
+	if resp.HubCandidates[1].Kind != "tailscale" {
+		t.Fatalf("expected discovered tailscale candidate to remain available, got %q", resp.HubCandidates[1].Kind)
+	}
+}
+
+func TestDiscoverEndpoint_UsesTrustedForwardedHTTPOrigin(t *testing.T) {
+	disableTailscaleResolutionForTest(t)
+
+	sut := newTestAPIServer(t)
+	sut.tlsState.Enabled = true
+	req := httptest.NewRequest(http.MethodGet, "https://labtether:8443/api/v1/discover", nil)
+	req.Host = "labtether:8443"
+	req.RemoteAddr = "127.0.0.1:40000"
+	req.Header.Set("X-Forwarded-Host", "console.example:3000")
+	req.Header.Set("X-Forwarded-Proto", "http")
+	rec := httptest.NewRecorder()
+	sut.handleDiscover(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	var resp discoverResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode discover response: %v", err)
+	}
+	if resp.APIURL != "http://console.example:3000" {
+		t.Fatalf("expected api_url to use trusted public origin, got %q", resp.APIURL)
+	}
+	if resp.WSURL != "ws://console.example:3000/ws/agent" {
+		t.Fatalf("expected ws_url to use trusted public origin, got %q", resp.WSURL)
+	}
+	if resp.EnrollURL != "http://console.example:3000/api/v1/enroll" {
+		t.Fatalf("expected enroll_url to use trusted public origin, got %q", resp.EnrollURL)
+	}
+}
+
+func TestDiscoverEndpoint_BuiltInCAForwardedHTTPSUsesOperatorManagedTrust(t *testing.T) {
+	disableTailscaleResolutionForTest(t)
+
+	ca, err := certmgr.GenerateCA()
+	if err != nil {
+		t.Fatalf("generate CA: %v", err)
+	}
+	sut := newTestAPIServer(t)
+	sut.externalURL = "https://proxy.example"
+	sut.tlsState.Enabled = true
+	sut.tlsState.Source = tlsSourceBuiltIn
+	sut.tlsState.CACertPEM = certmgr.CertPEM(ca.Cert)
+	req := httptest.NewRequest(http.MethodGet, "https://labtether:8443/api/v1/discover", nil)
+	req.Host = "labtether:8443"
+	req.RemoteAddr = "127.0.0.1:40000"
+	req.Header.Set("X-Forwarded-Host", "proxy.example:443")
+	req.Header.Set("X-Forwarded-Proto", "https")
+	rec := httptest.NewRecorder()
+	sut.handleDiscover(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var resp discoverResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode discover response: %v", err)
+	}
+	if resp.APIURL != "https://proxy.example" || resp.WSURL != "wss://proxy.example/ws/agent" {
+		t.Fatalf("unexpected forwarded discover origin: %+v", resp)
+	}
+	if len(resp.HubCandidates) != 1 {
+		t.Fatalf("expected one forwarded candidate, got %+v", resp.HubCandidates)
+	}
+	candidate := resp.HubCandidates[0]
+	if candidate.Kind != "external" {
+		t.Fatalf("expected matching external candidate to remain deduplicated, got kind=%q", candidate.Kind)
+	}
+	if candidate.TrustMode != tlsTrustModeCustomTLS {
+		t.Fatalf("discover trust_mode=%q, want %q", candidate.TrustMode, tlsTrustModeCustomTLS)
+	}
+	if candidate.BootstrapStrategy != tlsBootstrapStrategyInstall {
+		t.Fatalf("discover bootstrap_strategy=%q, want %q", candidate.BootstrapStrategy, tlsBootstrapStrategyInstall)
+	}
+	if candidate.BootstrapURL != "" {
+		t.Fatalf("discover exposed internal-CA bootstrap URL %q", candidate.BootstrapURL)
 	}
 }
 

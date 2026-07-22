@@ -3,6 +3,44 @@ export type StatusEntry = {
   color: "emerald" | "red" | "amber" | "zinc";
 };
 
+export type AssetPresentationStatus = "online" | "unresponsive" | "offline" | "unknown";
+
+const explicitOfflineAssetStatuses = new Set([
+  "offline",
+  "down",
+  "critical",
+  "error",
+  "unhealthy",
+  "failed",
+  "stopped",
+  "exited",
+  "dead",
+  "unknown",
+  "unavailable",
+]);
+
+const explicitUnresponsiveAssetStatuses = new Set([
+  "warning",
+  "degraded",
+  "restarting",
+  "stale",
+  "unresponsive",
+]);
+
+export function resolveAssetPresentationStatus(
+  assetStatus: string,
+  freshnessStatus: AssetPresentationStatus,
+): AssetPresentationStatus {
+  const normalizedStatus = assetStatus.trim().toLowerCase();
+  if (explicitOfflineAssetStatuses.has(normalizedStatus)) {
+    return "offline";
+  }
+  if (explicitUnresponsiveAssetStatuses.has(normalizedStatus)) {
+    return "unresponsive";
+  }
+  return freshnessStatus;
+}
+
 export const statusConfig: Record<string, StatusEntry> = {
   // Severity
   critical: { label: "Critical", color: "red" },

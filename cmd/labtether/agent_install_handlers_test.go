@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/labtether/labtether/internal/certmgr"
 	agentspkg "github.com/labtether/labtether/internal/hubapi/agents"
 )
 
@@ -208,15 +210,18 @@ func TestHandleAgentInstallScript(t *testing.T) {
 	tailscaleFallbackPaths = func() []string { return nil }
 
 	tests := []struct {
-		name          string
-		externalURL   string
-		host          string
-		tlsEnabled    bool
-		wantHubURL    string
-		wantWSURL     string
-		wantShebang   bool
-		wantUninstall bool
-		wantPurge     bool
+		name           string
+		externalURL    string
+		host           string
+		tlsEnabled     bool
+		remoteAddr     string
+		forwardedHost  string
+		forwardedProto string
+		wantHubURL     string
+		wantWSURL      string
+		wantShebang    bool
+		wantUninstall  bool
+		wantPurge      bool
 	}{
 		{
 			name:          "hub URL derived from Host header",
@@ -262,6 +267,20 @@ func TestHandleAgentInstallScript(t *testing.T) {
 			wantUninstall: true,
 			wantPurge:     true,
 		},
+		{
+			name:           "trusted HTTP console proxy origin",
+			externalURL:    "",
+			host:           "labtether:8443",
+			tlsEnabled:     true,
+			remoteAddr:     "127.0.0.1:40000",
+			forwardedHost:  "console.example:3000",
+			forwardedProto: "http",
+			wantHubURL:     "http://console.example:3000",
+			wantWSURL:      "ws://console.example:3000/ws/agent",
+			wantShebang:    true,
+			wantUninstall:  true,
+			wantPurge:      true,
+		},
 	}
 
 	for _, tc := range tests {
@@ -276,6 +295,15 @@ func TestHandleAgentInstallScript(t *testing.T) {
 
 			req := httptest.NewRequest(http.MethodGet, "/install.sh", nil)
 			req.Host = tc.host
+			if tc.remoteAddr != "" {
+				req.RemoteAddr = tc.remoteAddr
+			}
+			if tc.forwardedHost != "" {
+				req.Header.Set("X-Forwarded-Host", tc.forwardedHost)
+			}
+			if tc.forwardedProto != "" {
+				req.Header.Set("X-Forwarded-Proto", tc.forwardedProto)
+			}
 			rec := httptest.NewRecorder()
 
 			srv.handleAgentInstallScript(rec, req)
@@ -349,6 +377,52 @@ func TestHandleAgentInstallScript(t *testing.T) {
 				t.Errorf("script does not contain labtether uninstall helper command")
 			}
 		})
+	}
+}
+
+func TestHandleAgentInstallScriptBuiltInCAUsesTrustedForwardedHTTPSOrigin(t *testing.T) {
+	withHealthyTailscaleHTTPSUnavailable(t)
+	withMockHubInterfaces(t, nil, map[int][]net.Addr{})
+
+	ca, err := certmgr.GenerateCA()
+	if err != nil {
+		t.Fatalf("generate CA: %v", err)
+	}
+	srv := &apiServer{
+		tlsState: TLSState{
+			Enabled:   true,
+			Source:    tlsSourceBuiltIn,
+			CACertPEM: certmgr.CertPEM(ca.Cert),
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, "https://labtether:8443/install.sh", nil)
+	req.Host = "labtether:8443"
+	req.RemoteAddr = "127.0.0.1:40000"
+	req.Header.Set("X-Forwarded-Host", "proxy.example")
+	req.Header.Set("X-Forwarded-Proto", "https")
+	rec := httptest.NewRecorder()
+
+	srv.handleAgentInstallScript(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200 (body: %q)", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, want := range []string{
+		"https://proxy.example",
+		"wss://proxy.example/ws/agent",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("forwarded HTTPS installer missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"https://labtether:8443",
+		"ca_fingerprint_sha256=",
+		"/api/v1/agent/bootstrap.sh",
+	} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("forwarded HTTPS installer unexpectedly contains %q", forbidden)
+		}
 	}
 }
 

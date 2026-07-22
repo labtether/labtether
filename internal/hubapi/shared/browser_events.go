@@ -250,10 +250,19 @@ func (d *BrowserEventsDeps) HandleBrowserEvents(w http.ResponseWriter, r *http.R
 	authenticated := false
 
 	// Check one-time ticket (preferred for browser WS — avoids token in URL).
-	if ticket := strings.TrimSpace(r.URL.Query().Get("ticket")); ticket != "" {
+	ticketSupplied := r.URL.Query().Has("ticket")
+	if ticket := strings.TrimSpace(r.URL.Query().Get("ticket")); ticketSupplied && ticket != "" {
 		if d.ConsumeEventTicket != nil {
 			authenticated = d.ConsumeEventTicket(ticket)
 		}
+	}
+	// A supplied ticket is authoritative. Falling back to a cookie or bearer
+	// token after an invalid, expired, or replayed ticket would defeat the
+	// ticket's one-time semantics and make a captured ticket URL reusable in an
+	// otherwise authenticated browser context.
+	if ticketSupplied && !authenticated {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
 	}
 
 	// Fallback: cookie session auth.

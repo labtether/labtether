@@ -73,6 +73,11 @@ type HubConnectionResolverDeps struct {
 
 	// DefaultPort is the hub's listen port as a string (e.g. "8080").
 	DefaultPort string
+
+	// ResolveTrustedForwardedRequestOrigin returns a public scheme/host pair
+	// only when the request came from a trusted reverse proxy. The returned pair
+	// is validated again before use.
+	ResolveTrustedForwardedRequestOrigin func(r *http.Request) (scheme, host string, ok bool)
 }
 
 var (
@@ -114,6 +119,79 @@ func (d *HubConnectionResolverDeps) hubSchemes() (string, string) {
 	return "http", "ws"
 }
 
+// requestOrigin returns the exact origin used for the current request. The
+// direct host always uses the hub's transport scheme (or the request's TLS
+// state when present). A trusted proxy may supply a different public scheme,
+// but only as a complete, valid host/proto pair.
+func (d *HubConnectionResolverDeps) requestOrigin(r *http.Request) (httpScheme, wsScheme, host string, forwarded bool) {
+	httpScheme, wsScheme = d.hubSchemes()
+	if r == nil {
+		return httpScheme, wsScheme, "", false
+	}
+	if r.TLS != nil {
+		httpScheme, wsScheme = "https", "wss"
+	}
+
+	host, _ = SanitizeHostPort(r.Host)
+	if d.ResolveTrustedForwardedRequestOrigin == nil {
+		return httpScheme, wsScheme, host, false
+	}
+	forwardedScheme, forwardedHost, ok := d.ResolveTrustedForwardedRequestOrigin(r)
+	if !ok {
+		return httpScheme, wsScheme, host, false
+	}
+	forwardedScheme, forwardedHost, ok = sanitizeForwardedOriginPair(forwardedScheme, forwardedHost)
+	if !ok {
+		return httpScheme, wsScheme, host, false
+	}
+	if forwardedScheme == "https" {
+		return "https", "wss", forwardedHost, true
+	}
+	return "http", "ws", forwardedHost, true
+}
+
+func sanitizeForwardedOriginPair(rawScheme, rawHost string) (scheme, host string, ok bool) {
+	scheme = strings.ToLower(strings.TrimSpace(rawScheme))
+	if scheme != "http" && scheme != "https" {
+		return "", "", false
+	}
+	host, ok = SanitizeHostPort(rawHost)
+	if !ok {
+		return "", "", false
+	}
+	return scheme, host, true
+}
+
+// normalizedHTTPOriginKey returns a canonical origin identity using scheme,
+// hostname, and effective port. Paths do not participate in HTTP origin
+// equality, while an omitted default port equals its explicit form.
+func normalizedHTTPOriginKey(raw string) (string, bool) {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.User != nil {
+		return "", false
+	}
+	scheme := strings.ToLower(strings.TrimSpace(parsed.Scheme))
+	if scheme != "http" && scheme != "https" {
+		return "", false
+	}
+	hostname := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(parsed.Hostname()), "."))
+	if hostname == "" {
+		return "", false
+	}
+	if ip := net.ParseIP(hostname); ip != nil {
+		hostname = ip.String()
+	}
+	port := parsed.Port()
+	if port == "" {
+		if scheme == "https" {
+			port = "443"
+		} else {
+			port = "80"
+		}
+	}
+	return scheme + "://" + net.JoinHostPort(hostname, port), true
+}
+
 // sanitizedExternalHubURL validates and returns the external base URL.
 // In TLS mode only https:// external URLs are accepted.
 func (d *HubConnectionResolverDeps) sanitizedExternalHubURL() (string, bool) {
@@ -146,15 +224,16 @@ func (d *HubConnectionResolverDeps) ResolveHubConnectionSelection(r *http.Reques
 		defaultPort = strconv.Itoa(EnvOrDefaultInt("API_PORT", 8080))
 	}
 
-	requestHost := ""
-	requestHostIsLoopback := false
-	if sanitized, ok := SanitizeHostPort(r.Host); ok {
-		requestHost = sanitized
-		requestHostIsLoopback = IsLoopbackHost(sanitized)
-		if port := HostPortPort(sanitized); port != "" {
+	directHost := ""
+	if r != nil {
+		directHost, _ = SanitizeHostPort(r.Host)
+	}
+	if directHost != "" {
+		if port := HostPortPort(directHost); port != "" {
 			defaultPort = port
 		}
 	}
+	requestHTTPScheme, requestWSScheme, requestHost, requestOriginForwarded := d.requestOrigin(r)
 
 	candidates := make([]HubConnectionCandidate, 0, 8)
 	seen := map[string]struct{}{}
@@ -163,11 +242,14 @@ func (d *HubConnectionResolverDeps) ResolveHubConnectionSelection(r *http.Reques
 		if host == "" {
 			return
 		}
-		hostKey := strings.ToLower(host)
-		if _, exists := seen[hostKey]; exists {
+		candidateKey := "host:" + strings.ToLower(host)
+		if originKey, ok := normalizedHTTPOriginKey(hubURL); ok {
+			candidateKey = "origin:" + originKey
+		}
+		if _, exists := seen[candidateKey]; exists {
 			return
 		}
-		seen[hostKey] = struct{}{}
+		seen[candidateKey] = struct{}{}
 		candidate := HubConnectionCandidate{
 			Kind:   kind,
 			Label:  label,
@@ -191,6 +273,44 @@ func (d *HubConnectionResolverDeps) ResolveHubConnectionSelection(r *http.Reques
 			fmt.Sprintf("%s://%s/ws/agent", wsScheme, sanitized),
 		)
 	}
+	addRequestCandidate := func() {
+		sanitized, ok := SanitizeHostPort(requestHost)
+		if !ok {
+			return
+		}
+		label := "Request host"
+		if IsLoopbackHost(sanitized) {
+			label = "Localhost"
+		}
+		requestHubURL := fmt.Sprintf("%s://%s", requestHTTPScheme, sanitized)
+		requestWSURL := fmt.Sprintf("%s://%s/ws/agent", requestWSScheme, sanitized)
+		if requestOriginForwarded {
+			requestOriginKey, requestOriginOK := normalizedHTTPOriginKey(requestHubURL)
+			if requestOriginOK {
+				for i := range candidates {
+					candidateOriginKey, candidateOriginOK := normalizedHTTPOriginKey(candidates[i].HubURL)
+					if !candidateOriginOK || candidateOriginKey != requestOriginKey {
+						continue
+					}
+					if candidates[i].Kind != "tailscale_https" {
+						d.describeForwardedRequestCandidate(&candidates[i])
+					}
+					return
+				}
+			}
+		}
+		candidateCount := len(candidates)
+		addCandidate(
+			"request",
+			label,
+			sanitized,
+			requestHubURL,
+			requestWSURL,
+		)
+		if requestOriginForwarded && len(candidates) > candidateCount {
+			d.describeForwardedRequestCandidate(&candidates[len(candidates)-1])
+		}
+	}
 
 	if candidate, ok := d.resolveHealthyTailscaleHTTPSCandidate(); ok {
 		addCandidate(candidate.Kind, candidate.Label, candidate.Host, candidate.HubURL, candidate.WSURL)
@@ -208,9 +328,7 @@ func (d *HubConnectionResolverDeps) ResolveHubConnectionSelection(r *http.Reques
 		}
 	}
 
-	if requestHost != "" && !requestHostIsLoopback {
-		addHostCandidate("request", "Request host", requestHost)
-	}
+	addRequestCandidate()
 
 	tailscaleHosts, lanHosts := d.discoverInterfaceHosts(defaultPort)
 	for _, host := range tailscaleHosts {
@@ -218,10 +336,6 @@ func (d *HubConnectionResolverDeps) ResolveHubConnectionSelection(r *http.Reques
 	}
 	for _, host := range lanHosts {
 		addHostCandidate("lan", "LAN", host)
-	}
-
-	if requestHost != "" && requestHostIsLoopback {
-		addHostCandidate("request", "Localhost", requestHost)
 	}
 
 	if len(candidates) == 0 {
@@ -261,6 +375,20 @@ func (d *HubConnectionResolverDeps) describeCandidate(candidate *HubConnectionCa
 		candidate.BootstrapStrategy = d.BootstrapStrategyInstall
 		candidate.PreferredReason = "This target uses operator-managed TLS. Agents rely on the endpoint certificate chaining to their normal OS trust store."
 	}
+}
+
+// describeForwardedRequestCandidate prevents the hub's direct TLS certificate
+// metadata from being applied to an HTTPS origin terminated by a trusted
+// reverse proxy. The proxy certificate is operator-managed and cannot safely
+// use a bootstrap URL pinned to the hub's internal CA.
+func (d *HubConnectionResolverDeps) describeForwardedRequestCandidate(candidate *HubConnectionCandidate) {
+	if d == nil || candidate == nil || !strings.HasPrefix(candidate.HubURL, "https://") {
+		return
+	}
+	candidate.TrustMode = d.TrustModeCustomTLS
+	candidate.BootstrapStrategy = d.BootstrapStrategyInstall
+	candidate.BootstrapURL = ""
+	candidate.PreferredReason = "This HTTPS request origin is terminated by a trusted reverse proxy. Agents rely on the proxy certificate chaining to their normal OS trust store."
 }
 
 // isBuiltInCA reports whether the hub is using its own self-signed CA cert.

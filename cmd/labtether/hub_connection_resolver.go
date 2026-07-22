@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"strings"
 
 	adminpkg "github.com/labtether/labtether/internal/hubapi/admin"
 	"github.com/labtether/labtether/internal/hubapi/shared"
@@ -49,12 +50,13 @@ func (s *apiServer) resolveHubConnectionSelection(r *http.Request) hubConnection
 // listHubInterfaces and listHubInterfaceAddrs are always honoured.
 func (s *apiServer) buildHubConnectionResolverDeps() *shared.HubConnectionResolverDeps {
 	return &shared.HubConnectionResolverDeps{
-		ExternalURL:        s.externalURL,
-		TLSEnabled:         s.tlsState.Enabled,
-		CACertPEM:          s.tlsState.CACertPEM,
-		DefaultPort:        "",
-		ListInterfaces:     listHubInterfaces,
-		ListInterfaceAddrs: listHubInterfaceAddrs,
+		ExternalURL:                          s.externalURL,
+		TLSEnabled:                           s.tlsState.Enabled,
+		CACertPEM:                            s.tlsState.CACertPEM,
+		DefaultPort:                          "",
+		ListInterfaces:                       listHubInterfaces,
+		ListInterfaceAddrs:                   listHubInterfaceAddrs,
+		ResolveTrustedForwardedRequestOrigin: resolveTrustedForwardedRequestOrigin,
 
 		CurrentTLSCertType: s.currentTLSCertType,
 		BuildPinnedBootstrapURL: func(hubURL string, caCertPEM []byte) string {
@@ -73,6 +75,105 @@ func (s *apiServer) buildHubConnectionResolverDeps() *shared.HubConnectionResolv
 		BootstrapStrategyInstall:  tlsBootstrapStrategyInstall,
 		BootstrapStrategyPinnedCA: tlsBootstrapStrategyPinnedCA,
 	}
+}
+
+// resolveTrustedForwardedRequestOrigin returns the complete public origin
+// supplied by a trusted reverse proxy. It does not mix X-Forwarded-* and
+// Forwarded values, and a malformed or partial pair fails closed.
+func resolveTrustedForwardedRequestOrigin(r *http.Request) (scheme, host string, ok bool) {
+	if r == nil || !isTrustedForwardedHostSource(r) {
+		return "", "", false
+	}
+
+	xForwardedHosts := r.Header.Values("X-Forwarded-Host")
+	xForwardedProtos := r.Header.Values("X-Forwarded-Proto")
+	if len(xForwardedHosts) > 0 || len(xForwardedProtos) > 0 {
+		if len(xForwardedHosts) != 1 || len(xForwardedProtos) != 1 ||
+			strings.Contains(xForwardedHosts[0], ",") || strings.Contains(xForwardedProtos[0], ",") {
+			return "", "", false
+		}
+		return sanitizeForwardedRequestOrigin(
+			xForwardedProtos[0],
+			xForwardedHosts[0],
+		)
+	}
+
+	forwardedValues := r.Header.Values("Forwarded")
+	if len(forwardedValues) != 1 || strings.Contains(forwardedValues[0], ",") {
+		return "", "", false
+	}
+	return strictForwardedRequestOrigin(forwardedValues[0])
+}
+
+func sanitizeForwardedRequestOrigin(rawScheme, rawHost string) (scheme, host string, ok bool) {
+	scheme = strings.ToLower(strings.TrimSpace(rawScheme))
+	if scheme != "http" && scheme != "https" {
+		return "", "", false
+	}
+	host, ok = shared.SanitizeHostPort(rawHost)
+	if !ok {
+		return "", "", false
+	}
+	return scheme, host, true
+}
+
+// strictForwardedRequestOrigin parses the first RFC 7239 Forwarded element
+// without changing the more permissive parser used by the existing CORS path.
+// Duplicate, partial, or malformed public-origin fields fail closed.
+func strictForwardedRequestOrigin(forwarded string) (scheme, host string, ok bool) {
+	var rawScheme, rawHost string
+	var sawScheme, sawHost bool
+	for _, part := range strings.Split(strings.TrimSpace(forwarded), ";") {
+		key, value, found := strings.Cut(part, "=")
+		if !found {
+			return "", "", false
+		}
+		switch strings.ToLower(strings.TrimSpace(key)) {
+		case "proto":
+			if sawScheme {
+				return "", "", false
+			}
+			rawScheme, ok = strictForwardedOriginValue(value)
+			if !ok {
+				return "", "", false
+			}
+			sawScheme = true
+		case "host":
+			if sawHost {
+				return "", "", false
+			}
+			rawHost, ok = strictForwardedOriginValue(value)
+			if !ok {
+				return "", "", false
+			}
+			sawHost = true
+		}
+	}
+	if !sawScheme || !sawHost {
+		return "", "", false
+	}
+	return sanitizeForwardedRequestOrigin(rawScheme, rawHost)
+}
+
+func strictForwardedOriginValue(raw string) (string, bool) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "", false
+	}
+	if strings.HasPrefix(value, "\"") {
+		if len(value) < 2 || !strings.HasSuffix(value, "\"") {
+			return "", false
+		}
+		value = value[1 : len(value)-1]
+		if value == "" || strings.ContainsAny(value, "\\\"") {
+			return "", false
+		}
+		return value, true
+	}
+	if strings.Contains(value, "\"") {
+		return "", false
+	}
+	return value, true
 }
 
 // tailscaleServeStatusToShared converts the admin package's

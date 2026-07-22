@@ -1,4 +1,5 @@
 import { assetFreshnessLabel } from "../../../console/formatters";
+import { resolveAssetPresentationStatus } from "../../../lib/status";
 import type { Asset, TelemetryOverviewAsset } from "../../../console/models";
 import {
   childParentKey,
@@ -84,9 +85,9 @@ export function assetFreshness(asset: Asset): Freshness {
     freshness === "unresponsive" ||
     freshness === "offline"
   ) {
-    return freshness;
+    return resolveAssetPresentationStatus(asset.status, freshness);
   }
-  return "unknown";
+  return resolveAssetPresentationStatus(asset.status, "unknown");
 }
 
 function freshnessRank(freshness: Freshness): number {

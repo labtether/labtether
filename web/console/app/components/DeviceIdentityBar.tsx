@@ -5,6 +5,7 @@ import { Badge } from "./ui/Badge";
 import { MiniBar } from "./ui/MiniBar";
 import type { Asset, TelemetryOverviewAsset } from "../console/models";
 import { friendlySourceLabel, sourceIcon } from "../console/taxonomy";
+import { resolveAssetPresentationStatus } from "../lib/status";
 
 type DeviceIdentityBarProps = {
   asset: Asset;
@@ -20,43 +21,18 @@ type DeviceIdentityBarProps = {
   onDelete?: () => void;
 };
 
-const explicitOfflineStatuses = new Set([
-  "offline",
-  "down",
-  "critical",
-  "error",
-  "unhealthy",
-  "failed",
-  "stopped",
-  "exited",
-  "dead",
-  "unknown",
-  "unavailable",
-]);
-
-const explicitUnresponsiveStatuses = new Set([
-  "warning",
-  "degraded",
-  "restarting",
-  "stale",
-  "unresponsive",
-]);
-
 function identityStatusBadge(
   assetStatus: string,
   freshnessStatus: DeviceIdentityBarProps["freshnessStatus"],
 ): "online" | "stale" | "offline" {
-  const normalizedStatus = assetStatus.trim().toLowerCase();
-  if (explicitOfflineStatuses.has(normalizedStatus)) {
-    return "offline";
-  }
-  if (explicitUnresponsiveStatuses.has(normalizedStatus)) {
-    return "stale";
-  }
-  if (freshnessStatus === "ok") {
+  const resolvedStatus = resolveAssetPresentationStatus(
+    assetStatus,
+    freshnessStatus === "ok" ? "online" : freshnessStatus === "pending" ? "unresponsive" : "offline",
+  );
+  if (resolvedStatus === "online") {
     return "online";
   }
-  return freshnessStatus === "pending" ? "stale" : "offline";
+  return resolvedStatus === "unresponsive" ? "stale" : "offline";
 }
 
 function metadataFallbackMetrics(
