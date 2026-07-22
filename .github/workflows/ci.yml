@@ -181,9 +181,9 @@ jobs:
             --write-report "${RUN_DIR}/threshold-report.json"
 
           ./scripts/perf/backend-hotspot-explain.sh \
-            --scenario projected-site \
+            --scenario projected-group \
             --dsn "${DATABASE_URL}" \
-            --output "${RUN_DIR}/explain-projected-site.json"
+            --output "${RUN_DIR}/explain-projected-group.json"
 
           ./scripts/perf/backend-hotspot-explain.sh \
             --scenario sources-windowed \
