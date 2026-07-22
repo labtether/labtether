@@ -84,7 +84,7 @@ func TestResolveHubConnectionSelectionForwardedOriginRequiresTrust(t *testing.T)
 	deps.ListInterfaces = func() ([]net.Interface, error) { return nil, nil }
 	deps.TLSEnabled = true
 	deps.ResolveTrustedForwardedRequestOrigin = func(*http.Request) (string, string, bool) {
-		return "", "", false
+		return "http", "attacker.example", false
 	}
 	req := httptest.NewRequest(http.MethodGet, "https://labtether:8443/api/v1/discover", nil)
 	req.Host = "labtether:8443"

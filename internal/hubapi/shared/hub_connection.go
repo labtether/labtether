@@ -137,6 +137,9 @@ func (d *HubConnectionResolverDeps) requestOrigin(r *http.Request) (httpScheme, 
 		return httpScheme, wsScheme, host, false
 	}
 	forwardedScheme, forwardedHost, ok := d.ResolveTrustedForwardedRequestOrigin(r)
+	if !ok {
+		return httpScheme, wsScheme, host, false
+	}
 	forwardedScheme, forwardedHost, ok = sanitizeForwardedOriginPair(forwardedScheme, forwardedHost)
 	if !ok {
 		return httpScheme, wsScheme, host, false
