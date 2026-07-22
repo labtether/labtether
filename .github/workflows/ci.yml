@@ -356,7 +356,7 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           repository: labtether/labtether-agent
-          ref: 02c4bb0ea7c333a0cad26d6ab69fa5e3a2c5faee
+          ref: ab663ef9d7e3a60b2adde2b945d7387a75e2aac1
           persist-credentials: false
           path: labtether-agent
 
@@ -471,10 +471,6 @@ jobs:
             test ! -e /run/labtether-enrollment/enrollment-token
           '
 
-      - name: Dump container logs on failure
-        if: failure()
-        run: COMPOSE_PROFILES=ci-agent docker compose logs --no-color 2>&1 | tail -100 || true
-
       - name: Integration test
         run: |
           INTEGRATION_MANAGE_STACK=false \
@@ -482,6 +478,10 @@ jobs:
               --allow-remote-exec \
               --target labtether-ci-agent \
               --ca-file "${RUNNER_TEMP}/labtether-ca/ca.crt"
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: COMPOSE_PROFILES=ci-agent docker compose logs --no-color 2>&1 | tail -100 || true
 
       - name: Tear down
         if: always()
