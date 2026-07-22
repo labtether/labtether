@@ -249,6 +249,13 @@ function logUpstreamError(pathname, error) {
   console.error(`console-runtime-proxy: upstream failure for ${pathname} (${safeErrorCode(error)})`);
 }
 
+function closeDownstreamOnUpstreamResponseError(upstreamResponse, downstream, pathname) {
+  upstreamResponse.on("error", (error) => {
+    logUpstreamError(pathname, error);
+    downstream.destroy();
+  });
+}
+
 function proxyHttpRequest(request, response, target, parsedTarget, forwarding) {
   const upstream = requestFactory(target)(
     upstreamRequestOptions(request, target, parsedTarget, forwarding, false),
@@ -259,6 +266,7 @@ function proxyHttpRequest(request, response, target, parsedTarget, forwarding) {
         if (value != null && !blockedHeaders.has(name.toLowerCase())) responseHeaders[name] = value;
       }
       response.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.statusMessage, responseHeaders);
+      closeDownstreamOnUpstreamResponseError(upstreamResponse, response, parsedTarget.pathname);
       upstreamResponse.pipe(response);
     },
   );
@@ -310,6 +318,7 @@ function proxyWebSocketUpgrade(request, socket, head, target, parsedTarget, forw
   });
   upstream.on("response", (upstreamResponse) => {
     writeRawResponseHead(socket, upstreamResponse);
+    closeDownstreamOnUpstreamResponseError(upstreamResponse, socket, parsedTarget.pathname);
     upstreamResponse.pipe(socket);
   });
   upstream.on("error", (error) => {

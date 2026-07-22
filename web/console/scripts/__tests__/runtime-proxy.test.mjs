@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { connect } from "node:net";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createRuntimeProxyServer,
   isAllowedProxyPath,
@@ -40,6 +40,7 @@ function rawRequest(port, request) {
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(openServers.splice(0).map(closeServer));
 });
 
@@ -185,6 +186,24 @@ describe("runtime proxy forwarding", () => {
       url: "/ws/agent?probe=1",
       authorization: "Bearer retained-token",
     });
+  });
+
+  it("closes the downstream response when the upstream response stream fails", async () => {
+    const upstream = createServer((_request, response) => {
+      response.writeHead(200, { "content-length": "8", "content-type": "text/plain" });
+      response.write("part", () => response.destroy(new Error("forced upstream response failure")));
+    });
+    const upstreamPort = await listen(upstream);
+    const proxy = createRuntimeProxyServer(parseProxyTarget(`http://127.0.0.1:${upstreamPort}`));
+    const proxyPort = await listen(proxy);
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(
+      fetch(`http://127.0.0.1:${proxyPort}/ws/agent`).then((response) => response.text()),
+    ).rejects.toThrow();
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining("upstream failure for /ws/agent"),
+    );
   });
 
   it("removes headers nominated by Connection in both proxy directions", async () => {

@@ -200,21 +200,19 @@ func (m *MemoryEnrollmentStore) FinalizeAgentApproval(ctx context.Context, req A
 		return assets.Asset{}, ErrAgentIdentityContinuityConflict
 	}
 
-	asset, exists := m.assetStore.assets[req.AssetID]
-	if exists {
+	if _, exists := m.assetStore.assets[req.AssetID]; exists {
 		return assets.Asset{}, ErrAgentApprovalAssetConflict
-	} else {
-		asset = assets.Asset{
-			ID:         req.AssetID,
-			Type:       "node",
-			Name:       req.Hostname,
-			Source:     "agent",
-			Status:     "pending",
-			Platform:   req.Platform,
-			Metadata:   map[string]string{},
-			CreatedAt:  now,
-			LastSeenAt: now,
-		}
+	}
+	asset := assets.Asset{
+		ID:         req.AssetID,
+		Type:       "node",
+		Name:       req.Hostname,
+		Source:     "agent",
+		Status:     "pending",
+		Platform:   req.Platform,
+		Metadata:   map[string]string{},
+		CreatedAt:  now,
+		LastSeenAt: now,
 	}
 	asset.Metadata[assets.MetadataKeyAgentDeviceFingerprint] = fingerprint
 	asset.Metadata[assets.MetadataKeyAgentDeviceKeyAlgorithm] = algorithm

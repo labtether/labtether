@@ -286,7 +286,7 @@ func (s *PostgresStore) FinalizeAgentApproval(ctx context.Context, req AgentAppr
 		return assets.Asset{}, err
 	}
 
-	asset, exists, err := selectAgentIdentityAsset(ctx, tx, assetID)
+	_, exists, err := selectAgentIdentityAsset(ctx, tx, assetID)
 	if err != nil {
 		return assets.Asset{}, err
 	}
@@ -294,7 +294,7 @@ func (s *PostgresStore) FinalizeAgentApproval(ctx context.Context, req AgentAppr
 		return assets.Asset{}, ErrAgentApprovalAssetConflict
 	}
 	now := time.Now().UTC()
-	asset = assets.Asset{
+	asset := assets.Asset{
 		ID:       assetID,
 		Type:     "node",
 		Name:     strings.TrimSpace(req.Hostname),
