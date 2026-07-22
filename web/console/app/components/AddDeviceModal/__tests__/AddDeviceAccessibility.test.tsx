@@ -74,12 +74,9 @@ describe("AddDeviceModal accessibility", () => {
     const close = document.body.querySelector<HTMLButtonElement>('button[aria-label="Close Add Device dialog"]');
     expect(close).not.toBeNull();
 
-    await act(async () => {
-      close?.click();
-      await new Promise((resolve) => window.setTimeout(resolve, 0));
-    });
+    await act(async () => close?.click());
 
     expect(document.body.querySelector('[role="dialog"]')).toBeNull();
-    expect(document.activeElement).toBe(opener);
+    await vi.waitFor(() => expect(document.activeElement).toBe(opener));
   });
 });
