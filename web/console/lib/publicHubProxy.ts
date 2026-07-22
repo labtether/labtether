@@ -10,6 +10,19 @@ function publicRequestProto(request: NextRequest): string {
   return proto === "http" || proto === "https" ? proto : "http";
 }
 
+export function publicHubOriginHeaders(request: NextRequest): Headers {
+  const host = publicRequestHost(request);
+  const proto = publicRequestProto(request);
+  const headers = new Headers();
+
+  // Reconstruct these values from the request URL and Host header. Do not
+  // relay client-supplied forwarding headers: the Hub trusts this console
+  // proxy to describe the browser-facing origin used for generated URLs.
+  headers.set("X-Forwarded-Host", host);
+  headers.set("X-Forwarded-Proto", proto);
+  return headers;
+}
+
 const MAX_PUBLIC_BODY_BYTES = 1 << 20; // 1 MiB — matches backend MaxJSONBodyBytes
 
 type ContentLengthCheck =
@@ -45,8 +58,7 @@ export async function proxyPublicHubRequest(request: NextRequest, upstreamPath: 
   const range = request.headers.get("range");
   const ifNoneMatch = request.headers.get("if-none-match");
   const ifModifiedSince = request.headers.get("if-modified-since");
-  const host = publicRequestHost(request);
-  const proto = publicRequestProto(request);
+  const originHeaders = publicHubOriginHeaders(request);
 
   if (contentType) {
     headers.set("Content-Type", contentType);
@@ -66,9 +78,7 @@ export async function proxyPublicHubRequest(request: NextRequest, upstreamPath: 
 
   // Preserve the public origin so generated URLs stay on the frontend/Tailscale
   // host instead of collapsing back to the internal backend address.
-  headers.set("Host", host);
-  headers.set("X-Forwarded-Host", host);
-  headers.set("X-Forwarded-Proto", proto);
+  originHeaders.forEach((value, name) => headers.set(name, value));
 
   const init: RequestInit = {
     method: request.method,

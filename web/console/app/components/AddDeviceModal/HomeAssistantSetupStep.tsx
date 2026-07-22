@@ -7,7 +7,7 @@ import { Input } from "../ui/Input";
 import { useToast } from "../../contexts/ToastContext";
 import { useStatusControls } from "../../contexts/StatusContext";
 import { useHomeAssistantSettings } from "../../hooks/useHomeAssistantSettings";
-import { useEnrollment } from "../../hooks/useEnrollment";
+import { useEnrollment, type HubConnectionCandidate } from "../../hooks/useEnrollment";
 import { baseURLHostLabel, validateHTTPSOrHTTPURL, validatePollIntervalSeconds } from "./validation";
 import { monitorCollectorRunWithRetry } from "./collectorSync";
 import type { AddDeviceAddedEvent, AddDeviceCompatPrefill, SetupMode } from "./types";
@@ -22,6 +22,101 @@ type HomeAssistantSetupStepProps = {
 
 const CUSTOM_INTEGRATION_DOC_URL = "https://github.com/labtether/labtether-homeassistant/blob/main/README.md";
 const ADDON_DOC_URL = "https://github.com/labtether/labtether-homeassistant/blob/main/addon/labtether/README.md";
+const HOME_ASSISTANT_HUB_KINDS = new Set(["external", "tailscale_https", "tailscale"]);
+
+function normalizedOrigin(rawURL: string): string {
+  try {
+    const parsed = new URL(rawURL);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
+    if (parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) return "";
+    return parsed.origin;
+  } catch {
+    return "";
+  }
+}
+
+export function homeAssistantHubCandidates(
+  candidates: HubConnectionCandidate[],
+  consoleOrigin: string,
+): HubConnectionCandidate[] {
+  const normalizedConsoleOrigin = normalizedOrigin(consoleOrigin);
+  return candidates.filter((candidate) => {
+    if (!HOME_ASSISTANT_HUB_KINDS.has(candidate.kind)) return false;
+    const candidateOrigin = normalizedOrigin(candidate.hub_url);
+    return candidateOrigin !== "" && candidateOrigin !== normalizedConsoleOrigin;
+  });
+}
+
+export function preferredHomeAssistantHubURL(
+  candidates: HubConnectionCandidate[],
+  selectedHubURL: string,
+  consoleOrigin: string,
+): string {
+  const eligibleCandidates = homeAssistantHubCandidates(candidates, consoleOrigin);
+  const selectedCandidate = eligibleCandidates.find(
+    (candidate) => candidate.hub_url === selectedHubURL
+      && !validateHomeAssistantHubOrigin(candidate.hub_url)
+      && !homeAssistantHubHTTPWarning(candidate.hub_url),
+  );
+  if (selectedCandidate) return selectedCandidate.hub_url;
+  return eligibleCandidates.find(
+    (candidate) => !validateHomeAssistantHubOrigin(candidate.hub_url)
+      && !homeAssistantHubHTTPWarning(candidate.hub_url),
+  )?.hub_url ?? "";
+}
+
+function normalizedHostname(rawHostname: string): string {
+  return rawHostname.trim().toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+}
+
+function isLoopbackHostname(rawHostname: string): boolean {
+  const hostname = normalizedHostname(rawHostname);
+  if (hostname === "localhost" || hostname === "::1") return true;
+  const octets = hostname.split(".");
+  return octets.length === 4
+    && octets.every((octet) => /^\d{1,3}$/.test(octet) && Number(octet) <= 255)
+    && Number(octets[0]) === 127;
+}
+
+export function validateHomeAssistantHubOrigin(rawURL: string): string {
+  const value = rawURL.trim();
+  if (!value) return "Enter a direct LabTether Hub URL that Home Assistant can reach.";
+  if ([...value].some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint < 0x20 || codePoint === 0x7f;
+  })) {
+    return "LabTether Hub Address contains invalid control characters.";
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return "LabTether Hub Address must be a valid URL.";
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return "LabTether Hub Address must start with http:// or https://.";
+  }
+  if (!parsed.hostname || parsed.username || parsed.password) {
+    return "LabTether Hub Address must be a credential-free origin.";
+  }
+  if (parsed.pathname !== "/" || parsed.search || parsed.hash) {
+    return "LabTether Hub Address must not include a path, query, or fragment.";
+  }
+  if (parsed.port === "0") {
+    return "LabTether Hub Address must use a valid port.";
+  }
+  return "";
+}
+
+export function homeAssistantHubHTTPWarning(rawURL: string): string {
+  if (validateHomeAssistantHubOrigin(rawURL)) return "";
+  const parsed = new URL(rawURL.trim());
+  if (parsed.protocol === "http:" && !isLoopbackHostname(parsed.hostname)) {
+    return "Plain HTTP requires explicitly enabling Allow insecure HTTP in Home Assistant.";
+  }
+  return "";
+}
 
 type CopyRowProps = {
   label: string;
@@ -100,10 +195,11 @@ export function HomeAssistantSetupStep({ onBack, onClose, onAdded, compatPrefill
   const {
     hubURL: selectedHubURL,
     hubCandidates,
-    selectHubURL,
   } = useEnrollment();
 
   const [formError, setFormError] = useState("");
+  const [integrationHubURL, setIntegrationHubURL] = useState("");
+  const integrationHubURLTouchedRef = useRef(false);
   const prefillAppliedRef = useRef(false);
   const [selectedCompatBaseURL, setSelectedCompatBaseURL] = useState("");
   const selectedCompat = compatPrefills.find((item) => item.baseURL === selectedCompatBaseURL) ?? compatPrefills[0];
@@ -140,13 +236,24 @@ export function HomeAssistantSetupStep({ onBack, onClose, onAdded, compatPrefill
     prefillAppliedRef.current = true;
   }, [applyCompatPrefill, loading, configured, selectedCompat, baseURL, displayName]);
 
-  const fallbackHubURL = useMemo(() => {
+  const consoleOrigin = useMemo(() => {
     if (typeof window === "undefined") {
-      return "https://<labtether-host>";
+      return "";
     }
     return window.location.origin;
   }, []);
-  const integrationHubURL = selectedHubURL || fallbackHubURL;
+  const integrationHubCandidates = useMemo(
+    () => homeAssistantHubCandidates(hubCandidates, consoleOrigin),
+    [hubCandidates, consoleOrigin],
+  );
+
+  useEffect(() => {
+    if (integrationHubURLTouchedRef.current) return;
+    setIntegrationHubURL(preferredHomeAssistantHubURL(hubCandidates, selectedHubURL, consoleOrigin));
+  }, [hubCandidates, selectedHubURL, consoleOrigin]);
+
+  const integrationHubURLError = validateHomeAssistantHubOrigin(integrationHubURL);
+  const integrationHubURLWarning = homeAssistantHubHTTPWarning(integrationHubURL);
 
   const baseURLError = validateHTTPSOrHTTPURL(baseURL);
   const intervalError = validatePollIntervalSeconds(intervalSeconds);
@@ -263,26 +370,37 @@ export function HomeAssistantSetupStep({ onBack, onClose, onAdded, compatPrefill
 
       <div className="space-y-2 rounded-lg border border-[var(--line)] p-3">
         <p className="text-xs font-medium text-[var(--muted)]">Quick Config Values</p>
-        {hubCandidates.length > 1 ? (
-          <div className="space-y-1">
-            <label htmlFor="homeassistant-hub-url" className="block text-xs font-medium text-[var(--muted)]">
-              LabTether Hub Address
-            </label>
-            <select
-              id="homeassistant-hub-url"
-              value={selectedHubURL}
-              onChange={(event) => selectHubURL(event.target.value)}
-              className="w-full rounded-md border border-[var(--line)] bg-[var(--surface)] px-2 py-2 text-xs text-[var(--text)]"
-            >
-              {hubCandidates.map((candidate) => (
+        <div className="space-y-1">
+          <label htmlFor="homeassistant-hub-url" className="block text-xs font-medium text-[var(--muted)]">
+            LabTether Hub Address
+          </label>
+          <Input
+            id="homeassistant-hub-url"
+            list={integrationHubCandidates.length > 0 ? "homeassistant-hub-candidates" : undefined}
+            value={integrationHubURL}
+            onChange={(event) => {
+              integrationHubURLTouchedRef.current = true;
+              setIntegrationHubURL(event.target.value);
+            }}
+            placeholder="https://labtether.example:8443"
+            aria-describedby="homeassistant-hub-url-help"
+          />
+          {integrationHubCandidates.length > 0 ? (
+            <datalist id="homeassistant-hub-candidates">
+              {integrationHubCandidates.map((candidate) => (
                 <option key={candidate.hub_url} value={candidate.hub_url}>
-                  {candidate.label ? `${candidate.label}: ` : ""}{candidate.hub_url}
+                  {candidate.label || candidate.kind}
                 </option>
               ))}
-            </select>
-          </div>
-        ) : null}
-        <CopyRow label="LabTether Hub URL" value={integrationHubURL} />
+            </datalist>
+          ) : null}
+          <p id="homeassistant-hub-url-help" className="text-xs text-[var(--muted)]">
+            Use the direct Hub address, not this web console address. Configured external and Tailscale addresses are suggested; enter a reachable LAN address manually when needed.
+          </p>
+          {integrationHubURLError ? <p role="alert" className="text-xs text-[var(--warn)]">{integrationHubURLError}</p> : null}
+          {integrationHubURLWarning ? <p role="alert" className="text-xs text-[var(--warn)]">{integrationHubURLWarning}</p> : null}
+        </div>
+        {integrationHubURLError ? null : <CopyRow label="LabTether Hub URL" value={integrationHubURL.trim()} />}
         <CopyRow label="Token variable" value="LABTETHER_OWNER_TOKEN" />
         <p className="text-xs text-[var(--muted)]">
           Use an address that the Home Assistant host can reach; do not use localhost unless both products run on the same host.
