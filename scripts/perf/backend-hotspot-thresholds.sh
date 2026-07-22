@@ -146,7 +146,7 @@ if [[ -n "$BASELINE" ]]; then
   input_files+=("$BASELINE")
 fi
 for input_file in "${input_files[@]}"; do
-  input_size=$(stat -f '%z' "$input_file" 2>/dev/null || stat -c '%s' "$input_file" 2>/dev/null || true)
+  input_size=$(labtether_file_size "$input_file" 2>/dev/null || true)
   if [[ ! "$input_size" =~ ^[0-9]+$ || "$input_size" -gt $((50 * 1024 * 1024)) ]]; then
     log_fail "performance summary exceeds the 50 MiB input limit: $input_file"
     exit 1

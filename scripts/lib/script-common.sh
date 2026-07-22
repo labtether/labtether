@@ -55,6 +55,28 @@ labtether_file_owner_uid() {
   fi
 }
 
+labtether_file_mode() {
+  local path=$1
+  if stat -f '%Lp' "$path" >/dev/null 2>&1; then
+    stat -f '%Lp' "$path"
+  elif stat -c '%a' "$path" >/dev/null 2>&1; then
+    stat -c '%a' "$path"
+  else
+    return 1
+  fi
+}
+
+labtether_file_size() {
+  local path=$1
+  if stat -f '%z' "$path" >/dev/null 2>&1; then
+    stat -f '%z' "$path"
+  elif stat -c '%s' "$path" >/dev/null 2>&1; then
+    stat -c '%s' "$path"
+  else
+    return 1
+  fi
+}
+
 labtether_require_private_file() {
   local path=$1
   local label=${2:-secret file}

@@ -44,7 +44,7 @@ if [[ ! -d "$ICONS_DIR" || -L "$ICONS_DIR" ]]; then
   exit 1
 fi
 icons_owner=$(labtether_file_owner_uid "$ICONS_DIR" 2>/dev/null || true)
-icons_mode=$(stat -f '%Lp' "$ICONS_DIR" 2>/dev/null || stat -c '%a' "$ICONS_DIR" 2>/dev/null || true)
+icons_mode=$(labtether_file_mode "$ICONS_DIR" 2>/dev/null || true)
 if [[ "$icons_owner" != "$(id -u)" || ! "$icons_mode" =~ ^[0-7]{3,4}$ || "${icons_mode: -2:1}" =~ [2367] || "${icons_mode: -1}" =~ [2367] ]]; then
   log_fail "icon destination must be caller-owned and not group/other writable: $ICONS_DIR"
   exit 1

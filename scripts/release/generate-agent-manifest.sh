@@ -43,8 +43,18 @@ if [[ ! -f "${TRUSTED_PUBLIC_KEY_FILE}" || -L "${TRUSTED_PUBLIC_KEY_FILE}" ]]; t
   echo "generate-agent-manifest: trusted agent release public key must be a regular, non-symlink file" >&2
   exit 2
 fi
-key_owner="$(stat -f '%u' "${TRUSTED_PUBLIC_KEY_FILE}" 2>/dev/null || stat -c '%u' "${TRUSTED_PUBLIC_KEY_FILE}" 2>/dev/null || true)"
-key_mode="$(stat -f '%Lp' "${TRUSTED_PUBLIC_KEY_FILE}" 2>/dev/null || stat -c '%a' "${TRUSTED_PUBLIC_KEY_FILE}" 2>/dev/null || true)"
+portable_stat() {
+  local gnu_format=$1
+  local bsd_format=$2
+  local path=$3
+  if stat -c "$gnu_format" -- "$path" >/dev/null 2>&1; then
+    stat -c "$gnu_format" -- "$path"
+  else
+    stat -f "$bsd_format" -- "$path"
+  fi
+}
+key_owner="$(portable_stat '%u' '%u' "${TRUSTED_PUBLIC_KEY_FILE}" 2>/dev/null || true)"
+key_mode="$(portable_stat '%a' '%Lp' "${TRUSTED_PUBLIC_KEY_FILE}" 2>/dev/null || true)"
 if [[ "$key_owner" != "$(id -u)" && "$key_owner" != "0" ]]; then
   echo "generate-agent-manifest: trusted public key must be owned by the current user or root" >&2
   exit 2
@@ -80,8 +90,8 @@ if [[ ! -d "${OUTPUT_DIR}" || -L "${OUTPUT_DIR}" ]]; then
   echo "generate-agent-manifest: output path must remain a non-symlink directory" >&2
   exit 2
 fi
-output_owner="$(stat -f '%u' "${OUTPUT_DIR}" 2>/dev/null || stat -c '%u' "${OUTPUT_DIR}" 2>/dev/null || true)"
-output_mode="$(stat -f '%Lp' "${OUTPUT_DIR}" 2>/dev/null || stat -c '%a' "${OUTPUT_DIR}" 2>/dev/null || true)"
+output_owner="$(portable_stat '%u' '%u' "${OUTPUT_DIR}" 2>/dev/null || true)"
+output_mode="$(portable_stat '%a' '%Lp' "${OUTPUT_DIR}" 2>/dev/null || true)"
 if [[ -z "$output_owner" || "$output_owner" != "$(id -u)" ]]; then
   echo "generate-agent-manifest: output directory must be owned by the current user" >&2
   exit 2
