@@ -476,7 +476,12 @@ jobs:
         run: COMPOSE_PROFILES=ci-agent docker compose logs --no-color 2>&1 | tail -100 || true
 
       - name: Integration test
-        run: make integration-test
+        run: |
+          INTEGRATION_MANAGE_STACK=false \
+            ./scripts/integration-queue-flow.sh \
+              --allow-remote-exec \
+              --target labtether-ci-agent \
+              --ca-file "${RUNNER_TEMP}/labtether-ca/ca.crt"
 
       - name: Tear down
         if: always()
