@@ -4,7 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Copy, Check, Loader2 } from "lucide-react";
 import { Button } from "../ui/Button";
 import { Input, Select } from "../ui/Input";
-import { useEnrollment, type HubConnectionCandidate } from "../../hooks/useEnrollment";
+import {
+  deleteEnrollmentToken,
+  useEnrollment,
+  type HubConnectionCandidate,
+} from "../../hooks/useEnrollment";
 import { useFastStatus } from "../../contexts/StatusContext";
 import { useToast } from "../../contexts/ToastContext";
 import type { AddDeviceAddedEvent } from "./types";
@@ -13,7 +17,7 @@ type Platform = "linux" | "macos" | "windows";
 type LinuxDockerMode = "auto" | "true" | "false";
 type FilesRootMode = "home" | "full";
 
-type LinuxInstallOptions = {
+export type LinuxInstallOptions = {
   dockerEnabled: LinuxDockerMode;
   dockerEndpoint: string;
   dockerDiscoveryIntervalSec: string;
@@ -41,16 +45,36 @@ const defaultLinuxInstallOptions: LinuxInstallOptions = {
   includeEnrollmentToken: true,
 };
 
-function CopyButton({ text }: { text: string }) {
+function CopyButton({
+  text,
+  label,
+  onCopy,
+}: {
+  text: string;
+  label: string;
+  onCopy?: () => void;
+}) {
   const [copied, setCopied] = useState(false);
   const handleCopy = useCallback(() => {
-    void navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }, [text]);
+    void navigator.clipboard.writeText(text).then(() => {
+      onCopy?.();
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [onCopy, text]);
   return (
-    <button onClick={handleCopy} className="p-1 rounded hover:bg-[var(--hover)] transition-colors duration-150" title="Copy">
-      {copied ? <Check size={14} className="text-[var(--ok)]" /> : <Copy size={14} className="text-[var(--muted)]" />}
+    <button
+      type="button"
+      onClick={handleCopy}
+      aria-label={`Copy ${label}`}
+      className="p-1 rounded hover:bg-[var(--hover)] transition-colors duration-150"
+      title={`Copy ${label}`}
+    >
+      {copied ? (
+        <Check size={14} className="text-[var(--ok)]" />
+      ) : (
+        <Copy size={14} className="text-[var(--muted)]" />
+      )}
     </button>
   );
 }
@@ -59,27 +83,76 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
 
+function powershellQuote(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
 function normalizeHubURL(raw: string): string {
   return raw.trim().replace(/\/+$/, "");
 }
 
-function parseBoundedDecimalInt(raw: string, min: number, max: number, fallback: number): number {
+function pinnedCAFingerprint(
+  hubURL: string,
+  candidate: HubConnectionCandidate | null | undefined,
+): string {
+  if (
+    candidate?.bootstrap_strategy !== "pinned_ca_bootstrap" ||
+    !candidate.bootstrap_url
+  ) {
+    return "";
+  }
+
+  try {
+    const base = new URL(hubURL);
+    const bootstrap = new URL(candidate.bootstrap_url);
+    const expectedPath = `${base.pathname.replace(/\/+$/, "")}/api/v1/agent/bootstrap.sh`;
+    const fingerprint =
+      bootstrap.searchParams.get("ca_fingerprint_sha256") ?? "";
+    if (
+      base.protocol !== "https:" ||
+      base.username ||
+      base.password ||
+      bootstrap.origin !== base.origin ||
+      bootstrap.pathname !== expectedPath ||
+      !/^[a-fA-F0-9]{64}$/.test(fingerprint)
+    ) {
+      return "";
+    }
+    return fingerprint.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function parseBoundedDecimalInt(
+  raw: string,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
   const trimmed = raw.trim();
   if (!/^[0-9]+$/.test(trimmed)) {
     return fallback;
   }
   const parsed = Number(trimmed);
-  return Number.isInteger(parsed) && parsed >= min && parsed <= max ? parsed : fallback;
+  return Number.isInteger(parsed) && parsed >= min && parsed <= max
+    ? parsed
+    : fallback;
 }
 
-function manualInstallCommand(platform: Platform, token: string, wsURL: string): string {
+export function manualInstallCommand(
+  platform: Platform,
+  wsURL: string,
+): string {
   if (platform === "windows") {
-    return `$env:LABTETHER_ENROLLMENT_TOKEN="${token}"\n$env:LABTETHER_WS_URL="${wsURL}"\n.\\labtether-agent.exe`;
+    return `$tokenFile = Join-Path $env:TEMP "labtether-enrollment-token-$PID"\n$secureToken = Read-Host "Paste enrollment token" -AsSecureString\n$pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureToken)\ntry {\n  [IO.File]::WriteAllText($tokenFile, [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer))\n} finally {\n  [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)\n}\n$env:LABTETHER_ENROLLMENT_TOKEN_FILE=$tokenFile\n$env:LABTETHER_WS_URL=${powershellQuote(wsURL)}\ntry {\n  .\\labtether-agent.exe\n} finally {\n  Remove-Item -Force -ErrorAction SilentlyContinue $tokenFile\n  Remove-Item Env:LABTETHER_ENROLLMENT_TOKEN_FILE -ErrorAction SilentlyContinue\n}`;
   }
-  return `LABTETHER_ENROLLMENT_TOKEN="${token}" \\\n  LABTETHER_WS_URL="${wsURL}" \\\n  ./labtether-agent`;
+  return `bash <<'LABTETHER_AGENT'\nset -euo pipefail\numask 077\ntoken_file="$(mktemp)"\ntrap 'rm -f "$token_file"' EXIT\nread -r -s -p 'Paste enrollment token: ' token\nprintf '\\n'\nprintf '%s\\n' "$token" > "$token_file"\nunset token\nLABTETHER_ENROLLMENT_TOKEN_FILE="$token_file" \\\n  LABTETHER_WS_URL=${shellQuote(wsURL)} \\\n  ./labtether-agent\nLABTETHER_AGENT`;
 }
 
-function trustModeLabel(candidate: HubConnectionCandidate | null | undefined): string {
+function trustModeLabel(
+  candidate: HubConnectionCandidate | null | undefined,
+): string {
   switch (candidate?.trust_mode) {
     case "public_tls":
       return "Public / Tailscale trusted TLS";
@@ -94,11 +167,15 @@ function trustModeLabel(candidate: HubConnectionCandidate | null | undefined): s
   }
 }
 
-function linuxInstallerCommand(hubURL: string, token: string, options: LinuxInstallOptions, candidate?: HubConnectionCandidate | null): string {
+export function linuxInstallerCommand(
+  hubURL: string,
+  options: LinuxInstallOptions,
+  candidate?: HubConnectionCandidate | null,
+): string {
   const base = normalizeHubURL(hubURL);
-  const bootstrapURL = candidate?.bootstrap_url?.trim() ?? "";
-  const usePinnedBootstrap = candidate?.bootstrap_strategy === "pinned_ca_bootstrap" && bootstrapURL !== "";
-  const scriptURL = usePinnedBootstrap ? bootstrapURL : `${base}/install.sh`;
+  const expectedCAFingerprint = pinnedCAFingerprint(base, candidate);
+  const usePinnedBootstrap = expectedCAFingerprint !== "";
+  const managedCAPath = "/etc/labtether/ca.crt";
   const flags: string[] = [
     `--docker-enabled ${options.dockerEnabled}`,
     `--files-root-mode ${options.filesRootMode}`,
@@ -110,33 +187,81 @@ function linuxInstallerCommand(hubURL: string, token: string, options: LinuxInst
   }
 
   if (options.dockerEnabled !== "false") {
-    const endpoint = options.dockerEndpoint.trim() || defaultLinuxInstallOptions.dockerEndpoint;
+    const endpoint =
+      options.dockerEndpoint.trim() ||
+      defaultLinuxInstallOptions.dockerEndpoint;
     flags.push(`--docker-endpoint ${shellQuote(endpoint)}`);
 
-    const boundedInterval = parseBoundedDecimalInt(options.dockerDiscoveryIntervalSec, 5, 3600, 30);
+    const boundedInterval = parseBoundedDecimalInt(
+      options.dockerDiscoveryIntervalSec,
+      5,
+      3600,
+      30,
+    );
     flags.push(`--docker-discovery-interval ${boundedInterval}`);
   }
 
-  if (options.includeEnrollmentToken && token.trim() !== "") {
-    flags.push(`--enrollment-token ${shellQuote(token.trim())}`);
-  }
   if (options.forceUpdate) {
     flags.push("--force-update");
   }
 
-  const curlFlags = usePinnedBootstrap ? "-kfsSL" : "-fsSL";
-  return `curl ${curlFlags} ${shellQuote(scriptURL)} | sudo bash -s -- \\\n  ${flags.join(" \\\n  ")}`;
+  if (usePinnedBootstrap) {
+    flags.unshift(`--tls-ca-file ${shellQuote(managedCAPath)}`);
+  }
+
+  const installerDownload = usePinnedBootstrap
+    ? `ca_file="$(mktemp)"
+expected_ca_fingerprint=${shellQuote(expectedCAFingerprint)}
+curl -kfsSL ${shellQuote(`${base}/api/v1/ca.crt`)} -o "$ca_file"
+if ! command -v openssl >/dev/null 2>&1; then
+  echo 'Error: openssl is required to verify the LabTether CA.' >&2
+  exit 1
+fi
+if command -v sha256sum >/dev/null 2>&1; then
+  actual_ca_fingerprint="$(openssl x509 -in "$ca_file" -outform DER | sha256sum | awk '{print $1}')"
+elif command -v shasum >/dev/null 2>&1; then
+  actual_ca_fingerprint="$(openssl x509 -in "$ca_file" -outform DER | shasum -a 256 | awk '{print $1}')"
+else
+  echo 'Error: sha256sum or shasum is required to verify the LabTether CA.' >&2
+  exit 1
+fi
+actual_ca_fingerprint="$(printf '%s' "$actual_ca_fingerprint" | tr '[:upper:]' '[:lower:]')"
+if [[ "$actual_ca_fingerprint" != "$expected_ca_fingerprint" ]]; then
+  echo 'Error: LabTether CA fingerprint mismatch; refusing to run downloaded content.' >&2
+  exit 1
+fi
+sudo install -d -m 0755 /etc/labtether
+sudo install -m 0644 "$ca_file" ${shellQuote(managedCAPath)}
+curl --cacert "$ca_file" -fsSL ${shellQuote(`${base}/install.sh`)} -o "$installer"`
+    : `curl -fsSL ${shellQuote(`${base}/install.sh`)} -o "$installer"`;
+  const tokenSetup = options.includeEnrollmentToken
+    ? `read -r -s -p 'Paste enrollment token: ' token\nprintf '\\n'\nprintf '%s\\n' "$token" > "$token_file"\nunset token\ntoken_args=(--enrollment-token-file "$token_file")`
+    : "token_args=()";
+  const tokenArgsExpansion = "$" + "{token_args[@]}";
+  return `bash <<'LABTETHER_INSTALL'\nset -euo pipefail\numask 077\ninstaller="$(mktemp)"\ntoken_file="$(mktemp)"\nca_file=""\ncleanup() {\n  rm -f "$installer" "$token_file"\n  if [[ -n "$ca_file" ]]; then rm -f "$ca_file"; fi\n}\ntrap cleanup EXIT\n${installerDownload}\nchmod 700 "$installer"\n${tokenSetup}\nsudo bash "$installer" "${tokenArgsExpansion}" \\\n  ${flags.join(" \\\n  ")}\nLABTETHER_INSTALL`;
 }
 
 function formatHubCandidateOption(candidate: HubConnectionCandidate): string {
-  const label = candidate.label || (candidate.kind === "tailscale" ? "Tailscale" : candidate.kind === "lan" ? "LAN" : "Connection");
+  const label =
+    candidate.label ||
+    (candidate.kind === "tailscale"
+      ? "Tailscale"
+      : candidate.kind === "lan"
+        ? "LAN"
+        : "Connection");
   return candidate.host ? `${label} (${candidate.host})` : label;
 }
 
-export function AgentSetupStep({ onBack, onClose, onAdded }: AgentSetupStepProps) {
+export function AgentSetupStep({
+  onBack,
+  onClose,
+  onAdded,
+}: AgentSetupStepProps) {
   const { addToast } = useToast();
   const [platform, setPlatform] = useState<Platform>("linux");
-  const [linuxOptions, setLinuxOptions] = useState<LinuxInstallOptions>(defaultLinuxInstallOptions);
+  const [linuxOptions, setLinuxOptions] = useState<LinuxInstallOptions>(
+    defaultLinuxInstallOptions,
+  );
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const {
     hubURL,
@@ -152,7 +277,8 @@ export function AgentSetupStep({ onBack, onClose, onAdded }: AgentSetupStepProps
     error,
   } = useEnrollment();
   const selectedCandidate = useMemo(
-    () => hubCandidates.find((candidate) => candidate.hub_url === hubURL) ?? null,
+    () =>
+      hubCandidates.find((candidate) => candidate.hub_url === hubURL) ?? null,
     [hubCandidates, hubURL],
   );
   const status = useFastStatus();
@@ -160,15 +286,40 @@ export function AgentSetupStep({ onBack, onClose, onAdded }: AgentSetupStepProps
   const [deviceDetected, setDeviceDetected] = useState(false);
   const detectionHandledRef = useRef(false);
   const autoCloseTimerRef = useRef<number | null>(null);
+  const mountedRef = useRef(true);
+  const currentTokenIDRef = useRef("");
+  const tokenConsumedRef = useRef(false);
+  const tokenCopiedRef = useRef(false);
+  const discardedTokenIDsRef = useRef(new Set<string>());
+
+  const discardUntouchedToken = useCallback((tokenID: string) => {
+    if (
+      !tokenID ||
+      tokenConsumedRef.current ||
+      tokenCopiedRef.current ||
+      discardedTokenIDsRef.current.has(tokenID)
+    ) {
+      return;
+    }
+    discardedTokenIDsRef.current.add(tokenID);
+    void deleteEnrollmentToken(tokenID, { keepalive: true }).catch(() => {
+      // This is best-effort teardown during navigation. The token remains
+      // visible in Settings if the request cannot complete, so an operator can
+      // revoke it explicitly rather than receiving a false cleanup message.
+    });
+  }, []);
 
   const isLinux = platform === "linux";
   const installerCommand = useMemo(
-    () => (hubURL ? linuxInstallerCommand(hubURL, newRawToken, linuxOptions, selectedCandidate) : ""),
-    [hubURL, newRawToken, linuxOptions, selectedCandidate]
+    () =>
+      hubURL
+        ? linuxInstallerCommand(hubURL, linuxOptions, selectedCandidate)
+        : "",
+    [hubURL, linuxOptions, selectedCandidate],
   );
   const fallbackCommand = useMemo(
-    () => manualInstallCommand(platform, newRawToken, wsURL),
-    [platform, newRawToken, wsURL]
+    () => manualInstallCommand(platform, wsURL),
+    [platform, wsURL],
   );
 
   // Capture baseline asset count once status has loaded
@@ -180,18 +331,38 @@ export function AgentSetupStep({ onBack, onClose, onAdded }: AgentSetupStepProps
 
   // Auto-generate a token on mount
   useEffect(() => {
-    void generateToken("add-device-wizard", 24, 1);
-    return () => clearNewToken();
-  }, [clearNewToken, generateToken]);
+    mountedRef.current = true;
+    void generateToken("add-device-wizard", 24, 1).then((tokenID) => {
+      currentTokenIDRef.current = tokenID;
+      if (!mountedRef.current) {
+        discardUntouchedToken(tokenID);
+      }
+    });
+    return () => {
+      mountedRef.current = false;
+      discardUntouchedToken(currentTokenIDRef.current);
+      clearNewToken();
+    };
+  }, [clearNewToken, discardUntouchedToken, generateToken]);
+
+  useEffect(() => {
+    currentTokenIDRef.current = newTokenID;
+  }, [newTokenID]);
 
   // Poll for new device
   useEffect(() => {
-    if (!newRawToken || deviceDetected || initialAssetCount.current === null) return;
+    if (!newRawToken || deviceDetected || initialAssetCount.current === null)
+      return;
     const currentCount = status?.assets?.length ?? 0;
     const createdEnrollmentToken = newTokenID
       ? enrollmentTokens.find((token) => token.id === newTokenID)
       : null;
-    const tokenConsumed = Boolean(createdEnrollmentToken && createdEnrollmentToken.use_count > 0);
+    const tokenConsumed = Boolean(
+      createdEnrollmentToken && createdEnrollmentToken.use_count > 0,
+    );
+    if (tokenConsumed) {
+      tokenConsumedRef.current = true;
+    }
     if (currentCount > initialAssetCount.current || tokenConsumed) {
       setDeviceDetected(true);
     }
@@ -228,8 +399,12 @@ export function AgentSetupStep({ onBack, onClose, onAdded }: AgentSetupStepProps
         <div className="w-10 h-10 rounded-full bg-[var(--ok-glow)] flex items-center justify-center">
           <Check size={20} className="text-[var(--ok)]" />
         </div>
-        <p className="text-sm font-medium text-[var(--text)]">Device connected successfully</p>
-        <Button variant="primary" onClick={onClose}>Done</Button>
+        <p className="text-sm font-medium text-[var(--text)]">
+          Device connected successfully
+        </p>
+        <Button variant="primary" onClick={onClose}>
+          Done
+        </Button>
       </div>
     );
   }
@@ -260,24 +435,41 @@ export function AgentSetupStep({ onBack, onClose, onAdded }: AgentSetupStepProps
 
       {generating ? (
         <div className="flex items-center gap-2 py-4 text-sm text-[var(--muted)]">
-          <Loader2 size={16} className="animate-spin" /> Generating enrollment token...
+          <Loader2 size={16} className="animate-spin" /> Generating enrollment
+          token...
         </div>
       ) : newRawToken ? (
         <>
           {/* Token */}
           <div>
-            <p className="text-xs font-medium text-[var(--muted)] mb-1">Enrollment Token</p>
+            <p className="text-xs font-medium text-[var(--muted)] mb-1">
+              Enrollment Token
+            </p>
             <div className="flex items-center gap-2 bg-[var(--surface)] rounded-lg px-3 py-2">
-              <code className="text-xs text-[var(--text)] flex-1 truncate">{newRawToken}</code>
-              <CopyButton text={newRawToken} />
+              <code className="text-xs text-[var(--text)] flex-1 truncate">
+                {newRawToken}
+              </code>
+              <CopyButton
+                text={newRawToken}
+                label="enrollment token"
+                onCopy={() => {
+                  tokenCopiedRef.current = true;
+                }}
+              />
             </div>
           </div>
 
           {/* Hub info */}
           {hubCandidates.length > 1 ? (
             <div>
-              <p className="text-xs font-medium text-[var(--muted)] mb-1">Connection Target</p>
-              <Select value={hubURL} onChange={(event) => selectHubURL(event.target.value)}>
+              <p className="text-xs font-medium text-[var(--muted)] mb-1">
+                Connection Target
+              </p>
+              <Select
+                aria-label="Connection target"
+                value={hubURL}
+                onChange={(event) => selectHubURL(event.target.value)}
+              >
                 {hubCandidates.map((candidate) => (
                   <option key={candidate.hub_url} value={candidate.hub_url}>
                     {formatHubCandidateOption(candidate)}
@@ -289,50 +481,75 @@ export function AgentSetupStep({ onBack, onClose, onAdded }: AgentSetupStepProps
 
           {selectedCandidate?.preferred_reason ? (
             <div className="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--muted)]">
-              <span className="font-medium text-[var(--text)]">{trustModeLabel(selectedCandidate)}.</span>{" "}
+              <span className="font-medium text-[var(--text)]">
+                {trustModeLabel(selectedCandidate)}.
+              </span>{" "}
               {selectedCandidate.preferred_reason}
             </div>
           ) : null}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <p className="text-xs font-medium text-[var(--muted)] mb-1">Hub URL</p>
+              <p className="text-xs font-medium text-[var(--muted)] mb-1">
+                Hub URL
+              </p>
               <div className="flex items-center gap-1 bg-[var(--surface)] rounded-lg px-3 py-2">
-                <code className="text-xs text-[var(--text)] flex-1 truncate">{hubURL}</code>
-                <CopyButton text={hubURL} />
+                <code className="text-xs text-[var(--text)] flex-1 truncate">
+                  {hubURL}
+                </code>
+                <CopyButton text={hubURL} label="Hub URL" />
               </div>
             </div>
             <div>
-              <p className="text-xs font-medium text-[var(--muted)] mb-1">WebSocket URL</p>
+              <p className="text-xs font-medium text-[var(--muted)] mb-1">
+                WebSocket URL
+              </p>
               <div className="flex items-center gap-1 bg-[var(--surface)] rounded-lg px-3 py-2">
-                <code className="text-xs text-[var(--text)] flex-1 truncate">{wsURL}</code>
-                <CopyButton text={wsURL} />
+                <code className="text-xs text-[var(--text)] flex-1 truncate">
+                  {wsURL}
+                </code>
+                <CopyButton text={wsURL} label="WebSocket URL" />
               </div>
             </div>
           </div>
 
-	          {isLinux ? (
-	            <div className="space-y-3 rounded-lg border border-[var(--line)] p-3">
-	              <div>
-	                <p className="text-xs font-medium text-[var(--text)] mb-1">Linux Installer Script (Recommended)</p>
-	                <p className="text-xs text-[var(--muted)]">Choose the normal access settings here, then run the generated one-line installer.</p>
-                  {selectedCandidate?.bootstrap_strategy === "pinned_ca_bootstrap" ? (
-                    <p className="mt-1 text-xs text-[var(--warn)]">
-                      This target uses LabTether&apos;s built-in CA, so the generated command bootstraps trust before running the installer.
-                    </p>
-                  ) : selectedCandidate?.trust_mode === "custom_tls" ? (
-                    <p className="mt-1 text-xs text-[var(--muted)]">
-                      This target uses operator-managed TLS. Make sure the uploaded certificate chain is already trusted by the target machine.
-                    </p>
-                  ) : null}
-	              </div>
+          {isLinux ? (
+            <div className="space-y-3 rounded-lg border border-[var(--line)] p-3">
+              <div>
+                <p className="text-xs font-medium text-[var(--text)] mb-1">
+                  Linux Installer Script (Recommended)
+                </p>
+                <p className="text-xs text-[var(--muted)]">
+                  Choose the normal access settings here, then run the generated
+                  installer.
+                </p>
+                {selectedCandidate?.bootstrap_strategy ===
+                "pinned_ca_bootstrap" ? (
+                  <p className="mt-1 text-xs text-[var(--warn)]">
+                    This target uses LabTether&apos;s built-in CA, so the
+                    generated command bootstraps trust before running the
+                    installer.
+                  </p>
+                ) : selectedCandidate?.trust_mode === "custom_tls" ? (
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    This target uses operator-managed TLS. Make sure the
+                    uploaded certificate chain is already trusted by the target
+                    machine.
+                  </p>
+                ) : null}
+              </div>
 
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
                   File access
                   <Select
                     value={linuxOptions.filesRootMode}
-                    onChange={(event) => setLinuxOptions((current) => ({ ...current, filesRootMode: event.target.value as FilesRootMode }))}
+                    onChange={(event) =>
+                      setLinuxOptions((current) => ({
+                        ...current,
+                        filesRootMode: event.target.value as FilesRootMode,
+                      }))
+                    }
                   >
                     <option value="home">Home-only access</option>
                     <option value="full">Full disk access</option>
@@ -343,7 +560,12 @@ export function AgentSetupStep({ onBack, onClose, onAdded }: AgentSetupStepProps
                   <input
                     type="checkbox"
                     checked={linuxOptions.autoInstallVNC}
-                    onChange={(event) => setLinuxOptions((current) => ({ ...current, autoInstallVNC: event.target.checked }))}
+                    onChange={(event) =>
+                      setLinuxOptions((current) => ({
+                        ...current,
+                        autoInstallVNC: event.target.checked,
+                      }))
+                    }
                   />
                   Enable desktop prerequisites for VNC/remote view
                 </label>
@@ -352,7 +574,12 @@ export function AgentSetupStep({ onBack, onClose, onAdded }: AgentSetupStepProps
                   <input
                     type="checkbox"
                     checked={linuxOptions.autoUpdateEnabled}
-                    onChange={(event) => setLinuxOptions((current) => ({ ...current, autoUpdateEnabled: event.target.checked }))}
+                    onChange={(event) =>
+                      setLinuxOptions((current) => ({
+                        ...current,
+                        autoUpdateEnabled: event.target.checked,
+                      }))
+                    }
                   />
                   Keep the agent updated automatically
                 </label>
@@ -365,9 +592,12 @@ export function AgentSetupStep({ onBack, onClose, onAdded }: AgentSetupStepProps
                   className="flex w-full items-center justify-between px-3 py-2 text-left"
                 >
                   <span>
-                    <span className="block text-xs font-medium text-[var(--text)]">Advanced settings</span>
+                    <span className="block text-xs font-medium text-[var(--text)]">
+                      Advanced settings
+                    </span>
                     <span className="block text-[11px] text-[var(--muted)]">
-                      Docker discovery, force update, manual token control, and fallback binary install.
+                      Docker discovery, force update, manual token control, and
+                      fallback binary install.
                     </span>
                   </span>
                   <span className="text-xs text-[var(--muted)]">
@@ -381,7 +611,13 @@ export function AgentSetupStep({ onBack, onClose, onAdded }: AgentSetupStepProps
                       Docker mode
                       <Select
                         value={linuxOptions.dockerEnabled}
-                        onChange={(event) => setLinuxOptions((current) => ({ ...current, dockerEnabled: event.target.value as LinuxDockerMode }))}
+                        onChange={(event) =>
+                          setLinuxOptions((current) => ({
+                            ...current,
+                            dockerEnabled: event.target
+                              .value as LinuxDockerMode,
+                          }))
+                        }
                       >
                         <option value="auto">auto</option>
                         <option value="true">true</option>
@@ -397,7 +633,12 @@ export function AgentSetupStep({ onBack, onClose, onAdded }: AgentSetupStepProps
                         max={3600}
                         value={linuxOptions.dockerDiscoveryIntervalSec}
                         disabled={linuxOptions.dockerEnabled === "false"}
-                        onChange={(event) => setLinuxOptions((current) => ({ ...current, dockerDiscoveryIntervalSec: event.target.value }))}
+                        onChange={(event) =>
+                          setLinuxOptions((current) => ({
+                            ...current,
+                            dockerDiscoveryIntervalSec: event.target.value,
+                          }))
+                        }
                       />
                     </label>
 
@@ -406,7 +647,12 @@ export function AgentSetupStep({ onBack, onClose, onAdded }: AgentSetupStepProps
                       <Input
                         value={linuxOptions.dockerEndpoint}
                         disabled={linuxOptions.dockerEnabled === "false"}
-                        onChange={(event) => setLinuxOptions((current) => ({ ...current, dockerEndpoint: event.target.value }))}
+                        onChange={(event) =>
+                          setLinuxOptions((current) => ({
+                            ...current,
+                            dockerEndpoint: event.target.value,
+                          }))
+                        }
                         placeholder="/var/run/docker.sock"
                       />
                     </label>
@@ -415,7 +661,12 @@ export function AgentSetupStep({ onBack, onClose, onAdded }: AgentSetupStepProps
                       <input
                         type="checkbox"
                         checked={linuxOptions.forceUpdate}
-                        onChange={(event) => setLinuxOptions((current) => ({ ...current, forceUpdate: event.target.checked }))}
+                        onChange={(event) =>
+                          setLinuxOptions((current) => ({
+                            ...current,
+                            forceUpdate: event.target.checked,
+                          }))
+                        }
                       />
                       Force update immediately after install
                     </label>
@@ -424,17 +675,29 @@ export function AgentSetupStep({ onBack, onClose, onAdded }: AgentSetupStepProps
                       <input
                         type="checkbox"
                         checked={linuxOptions.includeEnrollmentToken}
-                        onChange={(event) => setLinuxOptions((current) => ({ ...current, includeEnrollmentToken: event.target.checked }))}
+                        onChange={(event) =>
+                          setLinuxOptions((current) => ({
+                            ...current,
+                            includeEnrollmentToken: event.target.checked,
+                          }))
+                        }
                       />
-                      Include one-time enrollment token
+                      Prompt for one-time enrollment token
                     </label>
 
                     <div className="md:col-span-2">
-                      <p className="text-xs font-medium text-[var(--muted)] mb-1">Manual binary command</p>
+                      <p className="text-xs font-medium text-[var(--muted)] mb-1">
+                        Manual binary command
+                      </p>
                       <div className="relative bg-[var(--panel)] rounded-lg px-3 py-2">
-                        <pre className="text-xs text-[var(--text)] whitespace-pre-wrap">{fallbackCommand}</pre>
+                        <pre className="text-xs text-[var(--text)] whitespace-pre-wrap">
+                          {fallbackCommand}
+                        </pre>
                         <div className="absolute top-2 right-2">
-                          <CopyButton text={fallbackCommand} />
+                          <CopyButton
+                            text={fallbackCommand}
+                            label="manual binary command"
+                          />
                         </div>
                       </div>
                     </div>
@@ -444,16 +707,24 @@ export function AgentSetupStep({ onBack, onClose, onAdded }: AgentSetupStepProps
 
               {!linuxOptions.includeEnrollmentToken ? (
                 <p className="text-xs text-[var(--warn)]">
-                  Token disabled: this install uses pending approval flow instead of auto-enrollment.
+                  Token disabled: this install uses pending approval flow
+                  instead of auto-enrollment.
                 </p>
               ) : null}
 
               <div>
-                <p className="text-xs font-medium text-[var(--muted)] mb-1">Run on Linux target</p>
+                <p className="text-xs font-medium text-[var(--muted)] mb-1">
+                  Run on Linux target
+                </p>
                 <div className="relative bg-[var(--surface)] rounded-lg px-3 py-2">
-                  <pre className="text-xs text-[var(--text)] whitespace-pre-wrap">{installerCommand}</pre>
+                  <pre className="text-xs text-[var(--text)] whitespace-pre-wrap">
+                    {installerCommand}
+                  </pre>
                   <div className="absolute top-2 right-2">
-                    <CopyButton text={installerCommand} />
+                    <CopyButton
+                      text={installerCommand}
+                      label="Linux installer command"
+                    />
                   </div>
                 </div>
               </div>
@@ -463,11 +734,18 @@ export function AgentSetupStep({ onBack, onClose, onAdded }: AgentSetupStepProps
           {/* Manual command */}
           {!isLinux ? (
             <div>
-              <p className="text-xs font-medium text-[var(--muted)] mb-1">Run on target device</p>
+              <p className="text-xs font-medium text-[var(--muted)] mb-1">
+                Run on target device
+              </p>
               <div className="relative bg-[var(--surface)] rounded-lg px-3 py-2">
-                <pre className="text-xs text-[var(--text)] whitespace-pre-wrap">{fallbackCommand}</pre>
+                <pre className="text-xs text-[var(--text)] whitespace-pre-wrap">
+                  {fallbackCommand}
+                </pre>
                 <div className="absolute top-2 right-2">
-                  <CopyButton text={fallbackCommand} />
+                  <CopyButton
+                    text={fallbackCommand}
+                    label={`${platform} agent command`}
+                  />
                 </div>
               </div>
             </div>

@@ -4,6 +4,17 @@ interface RateLimitEntry {
 }
 
 const store = new Map<string, RateLimitEntry>();
+export const MAX_RATE_LIMIT_ENTRIES = 10_000;
+
+function ensureCapacity(): void {
+  if (store.size < MAX_RATE_LIMIT_ENTRIES) return;
+  pruneExpired();
+  while (store.size >= MAX_RATE_LIMIT_ENTRIES) {
+    const oldest = store.keys().next().value as string | undefined;
+    if (oldest === undefined) break;
+    store.delete(oldest);
+  }
+}
 
 export function checkRateLimit(
   key: string,
@@ -19,6 +30,7 @@ export function checkRateLimit(
 
   const current = store.get(key);
   if (!current) {
+    ensureCapacity();
     store.set(key, { count: 1, resetAt: now + windowMs });
     return { success: true, remaining: maxAttempts - 1, resetAt: now + windowMs };
   }
@@ -38,7 +50,10 @@ export function pruneExpired(): void {
   }
 }
 
-// Prune expired entries every 60 seconds to prevent memory growth
-if (typeof setInterval !== "undefined") {
-  setInterval(pruneExpired, 60_000);
+export function rateLimitStoreSize(): number {
+  return store.size;
+}
+
+export function resetRateLimitStore(): void {
+  store.clear();
 }

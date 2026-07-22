@@ -7,6 +7,8 @@ import NewTabPage from "./NewTabPage";
 import RemoteViewSession from "./RemoteViewSession";
 import { defaultPort } from "./types";
 import type { RemoteViewProtocol, RemoteViewConnectionState } from "./types";
+import { useAuth } from "../../../contexts/AuthContext";
+import { hasWriteRole } from "../../../lib/roles";
 import {
   getBookmarkCredentials,
   createBookmark,
@@ -16,6 +18,21 @@ import {
 // ── Page ──
 
 export default function RemoteViewPage() {
+  const { user } = useAuth();
+
+  if (!hasWriteRole(user?.role)) {
+    return (
+      <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-glass)] p-6">
+        <h1 className="text-base font-medium text-[var(--text)]">Remote View</h1>
+        <p className="mt-2 text-sm text-[var(--muted)]">Operator access is required to start remote desktop sessions.</p>
+      </div>
+    );
+  }
+
+  return <RemoteViewPageContent />;
+}
+
+function RemoteViewPageContent() {
   const tabs = useRemoteViewTabsState();
   const activeTab = tabs.activeTab;
 

@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Bell, Globe, Mail, MessageSquare, MoreHorizontal, Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Button } from "../../../../components/ui/Button";
 import { Card } from "../../../../components/ui/Card";
 import { useNotificationChannels } from "../../../../hooks/useNotificationChannels";
 import type { NotificationChannel } from "../../../../hooks/useNotificationChannels";
+import { sanitizeErrorMessage } from "../../../../lib/sanitizeErrorMessage";
 import { AddChannelDialog } from "./AddChannelDialog";
 import { EditChannelDialog } from "./EditChannelDialog";
 
@@ -48,6 +49,7 @@ function ChannelRow({ channel, onToggle, onEdit, onDelete, onTest, menuOpen, onM
   const t = useTranslations("notifications");
   const isSending = testState?.id === channel.id && testState.status === "sending";
   const testResult = testState?.id === channel.id && testState.status !== "sending" ? testState : null;
+  const menuId = `notification-channel-menu-${encodeURIComponent(channel.id)}`;
 
   return (
     <div className="flex items-center gap-3 px-3 py-2.5 border-t border-[var(--line)]">
@@ -55,7 +57,7 @@ function ChannelRow({ channel, onToggle, onEdit, onDelete, onTest, menuOpen, onM
       <div className="min-w-0 flex-1">
         <p className="text-sm text-[var(--text)] truncate">{channel.name}</p>
         {testResult && (
-          <p className={`text-xs mt-0.5 ${testResult.status === "ok" ? "text-[var(--good)]" : "text-[var(--bad)]"}`}>
+          <p role="status" aria-live="polite" className={`text-xs mt-0.5 ${testResult.status === "ok" ? "text-[var(--good)]" : "text-[var(--bad)]"}`}>
             {testResult.status === "ok" ? t("testSent") : `${t("testFailed")}${testResult.message ? `: ${testResult.message}` : ""}`}
           </p>
         )}
@@ -64,7 +66,7 @@ function ChannelRow({ channel, onToggle, onEdit, onDelete, onTest, menuOpen, onM
       <button
         role="switch"
         aria-checked={channel.enabled}
-        aria-label={channel.enabled ? t("enabled") : t("disabled")}
+        aria-label={`${channel.name}: ${channel.enabled ? t("enabled") : t("disabled")}`}
         onClick={() => onToggle(!channel.enabled)}
         className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--control-focus-ring)] ${
           channel.enabled ? "bg-[var(--accent)]" : "bg-[var(--line)]"
@@ -81,12 +83,16 @@ function ChannelRow({ channel, onToggle, onEdit, onDelete, onTest, menuOpen, onM
           onClick={onMenuToggle}
           className="flex items-center justify-center h-7 w-7 rounded-md text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--hover)] transition-colors cursor-pointer bg-transparent border-none"
           aria-label="Channel actions"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          aria-controls={menuId}
         >
           <MoreHorizontal size={15} />
         </button>
         {menuOpen && (
-          <div className="absolute right-0 top-full z-10 mt-1 w-36 rounded-lg border border-[var(--line)] bg-[var(--panel)] shadow-[var(--shadow-panel)] py-1">
+          <div id={menuId} role="menu" className="absolute right-0 top-full z-10 mt-1 w-36 rounded-lg border border-[var(--line)] bg-[var(--panel)] shadow-[var(--shadow-panel)] py-1">
             <button
+              role="menuitem"
               className="w-full px-3 py-1.5 text-left text-xs text-[var(--text)] hover:bg-[var(--hover)] transition-colors cursor-pointer bg-transparent border-none disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={onTest}
               disabled={isSending}
@@ -94,12 +100,14 @@ function ChannelRow({ channel, onToggle, onEdit, onDelete, onTest, menuOpen, onM
               {isSending ? "..." : t("test")}
             </button>
             <button
+              role="menuitem"
               className="w-full px-3 py-1.5 text-left text-xs text-[var(--text)] hover:bg-[var(--hover)] transition-colors cursor-pointer bg-transparent border-none"
               onClick={onEdit}
             >
               {t("edit")}
             </button>
             <button
+              role="menuitem"
               className="w-full px-3 py-1.5 text-left text-xs text-[var(--bad)] hover:bg-[var(--hover)] transition-colors cursor-pointer bg-transparent border-none"
               onClick={onDelete}
             >
@@ -138,14 +146,15 @@ function DeleteConfirmDialog({ channel, onClose, onConfirm }: DeleteConfirmDialo
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={() => { if (!deleting) onClose(); }}
+      onKeyDown={(event) => { if (event.key === "Escape" && !deleting) onClose(); }}
     >
-      <div onClick={(e) => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="delete-notification-channel-title" onClick={(e) => e.stopPropagation()}>
         <Card className="w-[28rem] max-w-[92vw] space-y-4">
-          <h3 className="text-sm font-medium text-[var(--text)]">{t("deleteDialog.title")}</h3>
+          <h3 id="delete-notification-channel-title" className="text-sm font-medium text-[var(--text)]">{t("deleteDialog.title")}</h3>
           <p className="text-xs text-[var(--muted)]">
             {t("deleteDialog.body", { name: channel.name })}
           </p>
-          {error ? <p className="text-xs text-[var(--bad)]">{error}</p> : null}
+          {error ? <p role="alert" className="text-xs text-[var(--bad)]">{error}</p> : null}
           <div className="flex items-center justify-end gap-2">
             <Button variant="secondary" onClick={onClose} disabled={deleting}>{t("cancel")}</Button>
             <Button variant="danger" loading={deleting} onClick={() => { void handleConfirm(); }}>{t("deleteDialog.confirm")}</Button>
@@ -158,16 +167,23 @@ function DeleteConfirmDialog({ channel, onClose, onConfirm }: DeleteConfirmDialo
 
 export function NotificationChannelsCard() {
   const t = useTranslations("notifications");
-  const { channels, loading, error, createChannel, updateChannel, deleteChannel, toggleEnabled, testChannel } = useNotificationChannels();
+  const { channels, capabilities, loading, error, createChannel, updateChannel, deleteChannel, toggleEnabled, testChannel } = useNotificationChannels();
   const [dialog, setDialog] = useState<Dialog>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [testState, setTestState] = useState<TestState>(null);
+  const [actionError, setActionError] = useState("");
+  const testResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (testResetTimer.current) clearTimeout(testResetTimer.current);
+  }, []);
 
   const handleToggle = async (channel: NotificationChannel, enabled: boolean) => {
+    setActionError("");
     try {
       await toggleEnabled(channel.id, enabled);
-    } catch {
-      // toggle failure is silent — state reverts on refresh
+    } catch (err) {
+      setActionError(sanitizeErrorMessage(err instanceof Error ? err.message : "", "Failed to update notification channel."));
     }
   };
 
@@ -188,9 +204,18 @@ export function NotificationChannelsCard() {
   const handleTest = async (channel: NotificationChannel) => {
     setOpenMenuId(null);
     setTestState({ id: channel.id, status: "sending" });
-    const result = await testChannel(channel.id);
+    let result: { success: boolean; error?: string };
+    try {
+      result = await testChannel(channel.id);
+    } catch (err) {
+      result = {
+        success: false,
+        error: sanitizeErrorMessage(err instanceof Error ? err.message : "", "Test request failed."),
+      };
+    }
     setTestState({ id: channel.id, status: result.success ? "ok" : "error", message: result.error });
-    setTimeout(() => {
+    if (testResetTimer.current) clearTimeout(testResetTimer.current);
+    testResetTimer.current = setTimeout(() => {
       setTestState((prev) => (prev?.id === channel.id ? null : prev));
     }, 5000);
   };
@@ -211,8 +236,10 @@ export function NotificationChannelsCard() {
         )}
 
         {!loading && error && (
-          <p className="text-xs text-[var(--bad)]">{error}</p>
+          <p role="alert" className="text-xs text-[var(--bad)]">{error}</p>
         )}
+
+        {actionError && <p role="alert" className="text-xs text-[var(--bad)] mb-2">{actionError}</p>}
 
         {!loading && !error && channels.length === 0 && (
           <p className="text-xs text-[var(--muted)] py-1">{t("empty")}</p>
@@ -239,12 +266,14 @@ export function NotificationChannelsCard() {
 
       <AddChannelDialog
         open={dialog?.type === "add"}
+        allowInsecureSMTP={capabilities.smtp_insecure_transport_allowed}
         onClose={() => setDialog(null)}
         onConfirm={createChannel}
       />
 
       <EditChannelDialog
         channel={dialog?.type === "edit" ? dialog.channel : null}
+        allowInsecureSMTP={capabilities.smtp_insecure_transport_allowed}
         onClose={() => setDialog(null)}
         onConfirm={updateChannel}
       />

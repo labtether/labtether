@@ -1486,7 +1486,8 @@ test("add device pbs flow tests and saves connector settings", async ({ page }) 
             base_url: "",
             token_id: "",
             display_name: "",
-            skip_verify: true,
+            skip_verify: false,
+            ca_pem: "",
             interval_seconds: 60,
           },
         }),
@@ -1505,7 +1506,8 @@ test("add device pbs flow tests and saves connector settings", async ({ page }) 
           base_url: String(savedSettings.base_url ?? ""),
           token_id: String(savedSettings.token_id ?? ""),
           display_name: String(savedSettings.display_name ?? ""),
-          skip_verify: Boolean(savedSettings.skip_verify ?? true),
+          skip_verify: Boolean(savedSettings.skip_verify ?? false),
+          ca_pem: String(savedSettings.ca_pem ?? ""),
           interval_seconds: Number(savedSettings.interval_seconds ?? 60),
         },
       }),
@@ -1552,24 +1554,27 @@ test("add device pbs flow tests and saves connector settings", async ({ page }) 
   await page.getByRole("button", { name: "Add Device", exact: true }).click();
   await page.getByRole("button", { name: /Proxmox Backup/i }).first().click();
 
-  await expect(page.getByText("Connect PBS")).toBeVisible();
+  await expect(page.getByText("Connect PBS", { exact: true })).toBeVisible();
 
   const testButton = page.getByRole("button", { name: "Test Connection", exact: true });
   const saveButton = page.getByRole("button", { name: "Save, Sync & Close", exact: true });
   await expect(saveButton).toBeDisabled();
 
-  await page.getByPlaceholder("https://pbs.local:8007").fill("https://pbs.local:8007/");
-  await page.getByPlaceholder("root@pam!labtether").fill("root@pam!labtether");
-  await page.getByPlaceholder("Required for initial setup").fill("pbs-secret");
+  await page.getByLabel("Base URL", { exact: true }).fill("https://pbs.local:8007/");
+  await page.getByLabel("Token ID", { exact: true }).fill("root@pam!labtether");
+  await page.getByLabel("Token Secret", { exact: true }).fill("pbs-secret");
+  await page.getByLabel("Custom CA certificate (PEM)", { exact: true }).fill(
+    "-----BEGIN CERTIFICATE-----\nqa-ca\n-----END CERTIFICATE-----",
+  );
 
   await expect(saveButton).toBeEnabled();
   await testButton.click();
   await expect(page.getByText("PBS API reachable.")).toBeVisible();
 
-  await page.getByPlaceholder("Homelab PBS").fill("Lab PBS");
+  await page.getByLabel("Display Name", { exact: true }).fill("Lab PBS");
   await page.getByRole("button", { name: "Save, Sync & Close", exact: true }).click();
 
-  await expect(page.getByText("Connect PBS")).toHaveCount(0);
+  await expect(page.getByText("Connect PBS", { exact: true })).toHaveCount(0);
   await expect(page.getByText("PBS connector saved.")).toBeVisible();
 
   expect(lastTestPayload).not.toBeNull();
@@ -1577,7 +1582,8 @@ test("add device pbs flow tests and saves connector settings", async ({ page }) 
     base_url: "https://pbs.local:8007/",
     token_id: "root@pam!labtether",
     token_secret: "pbs-secret",
-    skip_verify: true,
+    skip_verify: false,
+    ca_pem: "-----BEGIN CERTIFICATE-----\nqa-ca\n-----END CERTIFICATE-----",
   });
 
   expect(lastSavePayload).not.toBeNull();
@@ -1586,7 +1592,8 @@ test("add device pbs flow tests and saves connector settings", async ({ page }) 
     token_id: "root@pam!labtether",
     token_secret: "pbs-secret",
     display_name: "Lab PBS",
-    skip_verify: true,
+    skip_verify: false,
+    ca_pem: "-----BEGIN CERTIFICATE-----\nqa-ca\n-----END CERTIFICATE-----",
   });
 });
 
@@ -1624,13 +1631,13 @@ test("add device pbs flow surfaces test-connection failures", async ({ page }) =
   await page.getByRole("button", { name: "Add Device", exact: true }).click();
   await page.getByRole("button", { name: /Proxmox Backup/i }).first().click();
 
-  await expect(page.getByText("Connect PBS")).toBeVisible();
-  await page.getByPlaceholder("https://pbs.local:8007").fill("https://pbs.local:8007/");
-  await page.getByPlaceholder("root@pam!labtether").fill("root@pam!labtether");
+  await expect(page.getByText("Connect PBS", { exact: true })).toBeVisible();
+  await page.getByLabel("Base URL", { exact: true }).fill("https://pbs.local:8007/");
+  await page.getByLabel("Token ID", { exact: true }).fill("root@pam!labtether");
 
   await page.getByRole("button", { name: "Test Connection", exact: true }).click();
   await expect(page.getByText("pbs test failed")).toBeVisible();
-  await expect(page.getByText("Connect PBS")).toBeVisible();
+  await expect(page.getByText("Connect PBS", { exact: true })).toBeVisible();
 });
 
 test("add device truenas flow tests and saves connector settings", async ({ page }) => {

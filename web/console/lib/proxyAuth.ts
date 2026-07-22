@@ -1,3 +1,5 @@
+import { trustedProxyHopCount } from "./clientIdentity";
+
 const trustedServicePathPrefixes = [
   "/api/status",
   "/api/status/live",
@@ -50,8 +52,12 @@ function deriveExpectedOrigin(request: RequestLike): string | null {
     return null;
   }
 
-  const proto = firstForwardedValue(request.headers.get("x-forwarded-proto")) || fallbackURL.protocol.replace(":", "");
-  const host = firstForwardedValue(request.headers.get("x-forwarded-host")) || request.headers.get("host") || fallbackURL.host;
+  const trustForwardedOrigin = trustedProxyHopCount() > 0;
+  const proto = (trustForwardedOrigin ? firstForwardedValue(request.headers.get("x-forwarded-proto")) : "")
+    || fallbackURL.protocol.replace(":", "");
+  const host = (trustForwardedOrigin ? firstForwardedValue(request.headers.get("x-forwarded-host")) : "")
+    || request.headers.get("host")
+    || fallbackURL.host;
   if (!proto || !host) {
     return null;
   }
@@ -102,7 +108,11 @@ export function isMutationRequestOriginAllowed(request: RequestLike): boolean {
   const originHeader = request.headers.get("origin")?.trim() ?? "";
   if (originHeader === "") {
     const fetchSite = (request.headers.get("sec-fetch-site") ?? "").trim().toLowerCase();
-    return fetchSite === "" || fetchSite === "same-origin" || fetchSite === "same-site" || fetchSite === "none";
+    // A sibling host is "same-site" for Fetch Metadata and SameSite cookies,
+    // but it is not the same origin. If a privacy layer strips Origin, fail
+    // closed for that case while preserving native/CLI requests (no Fetch
+    // Metadata) and genuine same-origin browser requests.
+    return fetchSite === "" || fetchSite === "same-origin" || fetchSite === "none";
   }
 
   let parsedOrigin: URL;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { PBSRecentTasksCard } from "../PBSRecentTasksCard";
 import { PBSTaskDetailsCard } from "../PBSTaskDetailsCard";
@@ -18,6 +18,7 @@ type Props = {
 };
 
 export function PBSTasksTab({ assetId }: Props) {
+  const taskTypeFilterID = useId();
   const { details, refresh: refreshDetails } = usePBSDetails(assetId);
 
   const collectorID = details?.collector_id?.trim() ?? "";
@@ -36,6 +37,7 @@ export function PBSTasksTab({ assetId }: Props) {
   const [taskLoading, setTaskLoading] = useState(false);
   const [taskError, setTaskError] = useState<string | null>(null);
   const [stopError, setStopError] = useState<string | null>(null);
+  const [stopSuccess, setStopSuccess] = useState<string | null>(null);
   const [stoppingTask, setStoppingTask] = useState(false);
 
   const selectedTaskRef = useRef<PBSTask | null>(null);
@@ -78,6 +80,7 @@ export function PBSTasksTab({ assetId }: Props) {
       setTaskLoading(true);
       setTaskError(null);
       setStopError(null);
+      setStopSuccess(null);
       try {
         const [statusRes, logRes] = await Promise.all([
           fetch(`/api/pbs/tasks/${encodeURIComponent(node)}/${encodeURIComponent(upid)}/status${query}`, {
@@ -126,6 +129,7 @@ export function PBSTasksTab({ assetId }: Props) {
         return;
       }
       await fetchTaskDetails(selectedTask);
+      setStopSuccess(`Stop requested for ${selectedTask.worker_id || selectedTask.upid}.`);
       refreshDetails();
     } catch (err) {
       setStopError(err instanceof Error ? err.message : "failed to stop task");
@@ -145,7 +149,12 @@ export function PBSTasksTab({ assetId }: Props) {
     <div className="space-y-4">
       {/* Filters */}
       <div className="flex flex-wrap gap-2 items-center">
+        <label htmlFor={taskTypeFilterID} className="sr-only">
+          Task type
+        </label>
         <select
+          id={taskTypeFilterID}
+          aria-label="Task type"
           className="rounded border border-[var(--line)] bg-[var(--surface)] text-xs text-[var(--text)] px-2 py-1"
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
@@ -177,6 +186,7 @@ export function PBSTasksTab({ assetId }: Props) {
         selectedTask={selectedTask}
         onSelectTask={(task) => {
           setStopError(null);
+          setStopSuccess(null);
           setSelectedTask(task);
         }}
       />
@@ -189,6 +199,7 @@ export function PBSTasksTab({ assetId }: Props) {
           taskLoading={taskLoading}
           stoppingTask={stoppingTask}
           error={visibleTaskError}
+          statusMessage={stopSuccess}
           nodeFallback={nodeFallback}
           onRefresh={() => { void fetchTaskDetails(selectedTask); }}
           onStopTask={() => { void handleStopTask(); }}

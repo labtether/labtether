@@ -4,9 +4,14 @@ const SECRET_KV_PATTERN = /(["']?(?:token_secret|password|api_key|secret|authori
 const AUTH_HEADER_PATTERN = /(authorization\s*[:=]\s*)([^\s,;]+(?:\s+[^\s,;]+)?)/gi;
 const PVE_TOKEN_PATTERN = /(pveapitoken=[^=\s]+)=([^\s,;]+)/gi;
 const URL_CREDENTIAL_PATTERN = /(https?:\/\/[^/\s:@]+:)([^@/\s]+)(@)/gi;
+const GENERIC_UPSTREAM_ERRORS = new Set([
+  "an internal error occurred.",
+  "internal server error",
+]);
 
 export function sanitizeErrorMessage(rawMessage: string, fallback: string, secrets: string[] = []): string {
-  const base = (rawMessage ?? "").trim() || fallback;
+  const raw = (rawMessage ?? "").trim();
+  const base = !raw || GENERIC_UPSTREAM_ERRORS.has(raw.toLowerCase()) ? fallback : raw;
   let sanitized = base
     .replaceAll(SECRET_KV_PATTERN, `$1${REDACTED}`)
     .replaceAll(AUTH_HEADER_PATTERN, `$1${REDACTED}`)

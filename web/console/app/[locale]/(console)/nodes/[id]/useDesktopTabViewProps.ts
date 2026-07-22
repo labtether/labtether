@@ -2,6 +2,7 @@
 
 import {
   useCallback,
+  useEffect,
   useMemo,
   useState,
   type ComponentProps,
@@ -54,7 +55,6 @@ type UseDesktopTabViewPropsArgs = {
   networkQuality: "good" | "fair" | "poor" | null;
   scalingMode: ScalingMode;
   setScalingMode: (mode: ScalingMode) => void;
-  viewerFocused: boolean;
   focusActiveViewer: () => void;
   restoreViewerFocus: () => void;
   vncRef: RefObject<VNCViewerHandle | null>;
@@ -153,7 +153,6 @@ export function useDesktopTabViewProps({
   networkQuality,
   scalingMode,
   setScalingMode,
-  viewerFocused,
   focusActiveViewer,
   restoreViewerFocus,
   vncRef,
@@ -202,7 +201,24 @@ export function useDesktopTabViewProps({
   adaptiveQuality,
 }: UseDesktopTabViewPropsArgs) {
   const [fileDrawerOpen, setFileDrawerOpen] = useState(false);
+  const [pointerLocked, setPointerLocked] = useState(false);
   const pointerLockSupported = protocol === "vnc";
+
+  useEffect(() => {
+    const updatePointerLock = () => {
+      const locked = document.pointerLockElement;
+      setPointerLocked(
+        protocol === "vnc" &&
+          !!locked &&
+          !!viewerWrapperRef.current?.contains(locked),
+      );
+    };
+    updatePointerLock();
+    document.addEventListener("pointerlockchange", updatePointerLock);
+    return () => {
+      document.removeEventListener("pointerlockchange", updatePointerLock);
+    };
+  }, [protocol, viewerWrapperRef]);
 
   const handleProtocolChange = useCallback(
     (nextProtocol: DesktopProtocol) => {
@@ -218,6 +234,8 @@ export function useDesktopTabViewProps({
     }
     if (document.pointerLockElement) {
       vncRef.current?.exitPointerLock();
+    } else {
+      vncRef.current?.requestPointerLock();
     }
     focusActiveViewer();
     restoreViewerFocus();
@@ -302,7 +320,7 @@ export function useDesktopTabViewProps({
       onQualityChange: setQuality,
       scalingMode,
       onScalingModeChange: setScalingMode,
-      pointerLocked: protocol === "vnc" && viewerFocused,
+      pointerLocked,
       pointerLockSupported,
       onPointerLockToggle: handlePointerLockToggle,
       viewOnly,
@@ -345,13 +363,15 @@ export function useDesktopTabViewProps({
       onPerformanceOverlayToggle: togglePerfOverlay,
       keyboardGrabState: keyboardGrab.state,
       onKeyboardGrabToggle: handleKeyboardGrabToggle,
-      onSendShortcut: handleSendShortcut,
+      onSendShortcut: protocol === "spice" ? undefined : handleSendShortcut,
       reconnectState,
       onReconnectNow: () => {
         void connect();
       },
-      isTouchDevice: virtualKeyboard.isTouchDevice,
-      onToggleVirtualKeyboard: virtualKeyboard.toggle,
+      isTouchDevice:
+        protocol === "spice" ? false : virtualKeyboard.isTouchDevice,
+      onToggleVirtualKeyboard:
+        protocol === "spice" ? undefined : virtualKeyboard.toggle,
       clipboardSyncing: clipboard.syncing,
       clipboardLastSync: clipboard.lastSync,
       onClipboardPull: clipboard.pullFromRemote,
@@ -406,6 +426,7 @@ export function useDesktopTabViewProps({
       latencyMs,
       networkQuality,
       nodeId,
+      pointerLocked,
       pointerLockSupported,
       protocol,
       quality,
@@ -429,7 +450,6 @@ export function useDesktopTabViewProps({
       toggleRecording,
       uploadTargetDir,
       viewOnly,
-      viewerFocused,
       viewerMetrics,
       viewerWrapperRef,
       virtualKeyboard.isTouchDevice,

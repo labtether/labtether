@@ -13,8 +13,13 @@ export type NotificationChannel = {
   updated_at: string;
 };
 
+export type NotificationChannelCapabilities = {
+  smtp_insecure_transport_allowed: boolean;
+};
+
 type ChannelsPayload = {
   channels?: NotificationChannel[];
+  capabilities?: Partial<NotificationChannelCapabilities>;
   error?: string;
 };
 
@@ -23,12 +28,60 @@ type ChannelPayload = {
 };
 
 type TestChannelPayload = {
-  success: boolean;
+  success?: boolean;
   error?: string;
 };
 
+async function safePayload<T extends object>(response: Response): Promise<Partial<T>> {
+  try {
+    const value: unknown = await response.json();
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as Partial<T>;
+    }
+  } catch {
+    // Callers provide a bounded, non-sensitive fallback for malformed replies.
+  }
+  return {};
+}
+
+function safeChannelError(error: unknown, fallback: string): Error {
+  const message = error instanceof Error ? error.message : "";
+  return new Error(sanitizeErrorMessage(message, fallback));
+}
+
+export async function requestNotificationChannelTest(id: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(`/api/notifications/channels/${encodeURIComponent(id)}/test`, {
+      method: "POST",
+      signal: AbortSignal.timeout(20_000),
+    });
+    const data = await safePayload<TestChannelPayload>(response);
+    if (!response.ok) {
+      return {
+        success: false,
+        error: sanitizeErrorMessage(data.error || "", `test request failed (${response.status})`),
+      };
+    }
+    if (data.success !== true) {
+      return {
+        success: false,
+        error: sanitizeErrorMessage(data.error || "", "test delivery was not confirmed"),
+      };
+    }
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: sanitizeErrorMessage(error instanceof Error ? error.message : "", "test request failed"),
+    };
+  }
+}
+
 export function useNotificationChannels() {
   const [channels, setChannels] = useState<NotificationChannel[]>([]);
+  const [capabilities, setCapabilities] = useState<NotificationChannelCapabilities>({
+    smtp_insecure_transport_allowed: false,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -37,12 +90,16 @@ export function useNotificationChannels() {
     setError("");
     try {
       const response = await fetch("/api/notifications/channels", { cache: "no-store", signal: AbortSignal.timeout(15_000) });
-      const payload = (await response.json()) as ChannelsPayload;
+      const payload = await safePayload<ChannelsPayload>(response);
       if (!response.ok) {
         throw new Error(payload.error || `failed to load notification channels (${response.status})`);
       }
       setChannels(payload.channels ?? []);
+      setCapabilities({
+        smtp_insecure_transport_allowed: payload.capabilities?.smtp_insecure_transport_allowed === true,
+      });
     } catch (err) {
+      setCapabilities({ smtp_insecure_transport_allowed: false });
       setError(sanitizeErrorMessage(err instanceof Error ? err.message : "", "failed to load notification channels"));
     } finally {
       setLoading(false);
@@ -54,70 +111,78 @@ export function useNotificationChannels() {
   }, [refresh]);
 
   const createChannel = useCallback(async (payload: Record<string, unknown>) => {
-    const response = await fetch("/api/notifications/channels", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(15_000),
-      body: JSON.stringify(payload),
-    });
-    const data = (await response.json()) as ChannelPayload;
-    if (!response.ok) {
-      throw new Error(data.error || `failed to create notification channel (${response.status})`);
+    try {
+      const response = await fetch("/api/notifications/channels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(15_000),
+        body: JSON.stringify(payload),
+      });
+      const data = await safePayload<ChannelPayload>(response);
+      if (!response.ok) {
+        throw new Error(data.error || `failed to create notification channel (${response.status})`);
+      }
+      await refresh();
+    } catch (error) {
+      throw safeChannelError(error, "failed to create notification channel");
     }
-    await refresh();
   }, [refresh]);
 
   const updateChannel = useCallback(async (id: string, payload: Record<string, unknown>) => {
-    const response = await fetch(`/api/notifications/channels/${encodeURIComponent(id)}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(15_000),
-      body: JSON.stringify(payload),
-    });
-    const data = (await response.json()) as ChannelPayload;
-    if (!response.ok) {
-      throw new Error(data.error || `failed to update notification channel (${response.status})`);
+    try {
+      const response = await fetch(`/api/notifications/channels/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(15_000),
+        body: JSON.stringify(payload),
+      });
+      const data = await safePayload<ChannelPayload>(response);
+      if (!response.ok) {
+        throw new Error(data.error || `failed to update notification channel (${response.status})`);
+      }
+      await refresh();
+    } catch (error) {
+      throw safeChannelError(error, "failed to update notification channel");
     }
-    await refresh();
   }, [refresh]);
 
   const deleteChannel = useCallback(async (id: string) => {
-    const response = await fetch(`/api/notifications/channels/${encodeURIComponent(id)}`, {
-      method: "DELETE",
-      signal: AbortSignal.timeout(15_000),
-    });
-    const data = (await response.json()) as ChannelPayload;
-    if (!response.ok) {
-      throw new Error(data.error || `failed to delete notification channel (${response.status})`);
+    try {
+      const response = await fetch(`/api/notifications/channels/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        signal: AbortSignal.timeout(15_000),
+      });
+      const data = await safePayload<ChannelPayload>(response);
+      if (!response.ok) {
+        throw new Error(data.error || `failed to delete notification channel (${response.status})`);
+      }
+      await refresh();
+    } catch (error) {
+      throw safeChannelError(error, "failed to delete notification channel");
     }
-    await refresh();
   }, [refresh]);
 
   const toggleEnabled = useCallback(async (id: string, enabled: boolean) => {
-    const response = await fetch(`/api/notifications/channels/${encodeURIComponent(id)}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(15_000),
-      body: JSON.stringify({ enabled }),
-    });
-    const data = (await response.json()) as ChannelPayload;
-    if (!response.ok) {
-      throw new Error(data.error || `failed to update notification channel (${response.status})`);
+    try {
+      const response = await fetch(`/api/notifications/channels/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(15_000),
+        body: JSON.stringify({ enabled }),
+      });
+      const data = await safePayload<ChannelPayload>(response);
+      if (!response.ok) {
+        throw new Error(data.error || `failed to update notification channel (${response.status})`);
+      }
+      await refresh();
+    } catch (error) {
+      throw safeChannelError(error, "failed to update notification channel");
     }
-    await refresh();
   }, [refresh]);
 
   const testChannel = useCallback(async (id: string): Promise<{ success: boolean; error?: string }> => {
-    const response = await fetch(`/api/notifications/channels/${encodeURIComponent(id)}/test`, {
-      method: "POST",
-      signal: AbortSignal.timeout(20_000),
-    });
-    const data = (await response.json()) as TestChannelPayload;
-    if (!response.ok) {
-      return { success: false, error: data.error || `test request failed (${response.status})` };
-    }
-    return { success: data.success, error: data.error };
+    return requestNotificationChannelTest(id);
   }, []);
 
-  return { channels, loading, error, refresh, createChannel, updateChannel, deleteChannel, toggleEnabled, testChannel };
+  return { channels, capabilities, loading, error, refresh, createChannel, updateChannel, deleteChannel, toggleEnabled, testChannel };
 }

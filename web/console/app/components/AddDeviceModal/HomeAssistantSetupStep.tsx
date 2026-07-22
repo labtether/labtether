@@ -7,6 +7,7 @@ import { Input } from "../ui/Input";
 import { useToast } from "../../contexts/ToastContext";
 import { useStatusControls } from "../../contexts/StatusContext";
 import { useHomeAssistantSettings } from "../../hooks/useHomeAssistantSettings";
+import { useEnrollment } from "../../hooks/useEnrollment";
 import { baseURLHostLabel, validateHTTPSOrHTTPURL, validatePollIntervalSeconds } from "./validation";
 import { monitorCollectorRunWithRetry } from "./collectorSync";
 import type { AddDeviceAddedEvent, AddDeviceCompatPrefill, SetupMode } from "./types";
@@ -44,6 +45,7 @@ function CopyRow({ label, value }: CopyRowProps) {
         <button
           type="button"
           onClick={handleCopy}
+          aria-label={`Copy ${label}`}
           className="rounded p-1 transition-colors duration-150 hover:bg-[var(--hover)]"
           title={`Copy ${label}`}
         >
@@ -95,6 +97,11 @@ export function HomeAssistantSetupStep({ onBack, onClose, onAdded, compatPrefill
     testConnection,
     runNow,
   } = useHomeAssistantSettings();
+  const {
+    hubURL: selectedHubURL,
+    hubCandidates,
+    selectHubURL,
+  } = useEnrollment();
 
   const [formError, setFormError] = useState("");
   const prefillAppliedRef = useRef(false);
@@ -135,11 +142,11 @@ export function HomeAssistantSetupStep({ onBack, onClose, onAdded, compatPrefill
 
   const fallbackHubURL = useMemo(() => {
     if (typeof window === "undefined") {
-      return "http://<labtether-host>:8080";
+      return "https://<labtether-host>";
     }
-    const protocol = window.location.protocol === "https:" ? "https:" : "http:";
-    return `${protocol}//${window.location.hostname}:8080`;
+    return window.location.origin;
   }, []);
+  const integrationHubURL = selectedHubURL || fallbackHubURL;
 
   const baseURLError = validateHTTPSOrHTTPURL(baseURL);
   const intervalError = validatePollIntervalSeconds(intervalSeconds);
@@ -195,9 +202,9 @@ export function HomeAssistantSetupStep({ onBack, onClose, onAdded, compatPrefill
 
   return (
     <div className="space-y-4">
-      {error && <p className="text-xs text-[var(--bad)]">{error}</p>}
-      {message && <p className="text-xs text-[var(--ok)]">{message}</p>}
-      {formError ? <p className="text-xs text-[var(--warn)]">{formError}</p> : null}
+      {error && <p role="alert" className="text-xs text-[var(--bad)]">{error}</p>}
+      {message && <p role="status" aria-live="polite" className="text-xs text-[var(--ok)]">{message}</p>}
+      {formError ? <p role="alert" className="text-xs text-[var(--warn)]">{formError}</p> : null}
 
       {compatPrefills.length > 1 && (
         <div>
@@ -256,18 +263,41 @@ export function HomeAssistantSetupStep({ onBack, onClose, onAdded, compatPrefill
 
       <div className="space-y-2 rounded-lg border border-[var(--line)] p-3">
         <p className="text-xs font-medium text-[var(--muted)]">Quick Config Values</p>
-        <CopyRow label="Hub URL (example)" value={baseURL || fallbackHubURL} />
+        {hubCandidates.length > 1 ? (
+          <div className="space-y-1">
+            <label htmlFor="homeassistant-hub-url" className="block text-xs font-medium text-[var(--muted)]">
+              LabTether Hub Address
+            </label>
+            <select
+              id="homeassistant-hub-url"
+              value={selectedHubURL}
+              onChange={(event) => selectHubURL(event.target.value)}
+              className="w-full rounded-md border border-[var(--line)] bg-[var(--surface)] px-2 py-2 text-xs text-[var(--text)]"
+            >
+              {hubCandidates.map((candidate) => (
+                <option key={candidate.hub_url} value={candidate.hub_url}>
+                  {candidate.label ? `${candidate.label}: ` : ""}{candidate.hub_url}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+        <CopyRow label="LabTether Hub URL" value={integrationHubURL} />
         <CopyRow label="Token variable" value="LABTETHER_OWNER_TOKEN" />
+        <p className="text-xs text-[var(--muted)]">
+          Use an address that the Home Assistant host can reach; do not use localhost unless both products run on the same host.
+        </p>
       </div>
 
       <div>
-        <label className="mb-1 block text-xs font-medium text-[var(--muted)]">Base URL</label>
-        <Input value={baseURL} onChange={(event) => setBaseURL(event.target.value)} placeholder="http://homeassistant.local:8123" />
+        <label htmlFor="homeassistant-base-url" className="mb-1 block text-xs font-medium text-[var(--muted)]">Home Assistant Base URL</label>
+        <Input id="homeassistant-base-url" value={baseURL} onChange={(event) => setBaseURL(event.target.value)} placeholder="http://homeassistant.local:8123" />
       </div>
 
       <div>
-        <label className="mb-1 block text-xs font-medium text-[var(--muted)]">Long-Lived Access Token</label>
+        <label htmlFor="homeassistant-access-token" className="mb-1 block text-xs font-medium text-[var(--muted)]">Long-Lived Access Token</label>
         <Input
+          id="homeassistant-access-token"
           type="password"
           value={token}
           onChange={(event) => setToken(event.target.value)}
@@ -284,15 +314,16 @@ export function HomeAssistantSetupStep({ onBack, onClose, onAdded, compatPrefill
       </div>
 
       <div>
-        <label className="mb-1 block text-xs font-medium text-[var(--muted)]">Display Name</label>
-        <Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Home Assistant" />
+        <label htmlFor="homeassistant-display-name" className="mb-1 block text-xs font-medium text-[var(--muted)]">Display Name</label>
+        <Input id="homeassistant-display-name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Home Assistant" />
       </div>
 
       {setupMode === "advanced" ? (
         <>
           <div>
-            <label className="mb-1 block text-xs font-medium text-[var(--muted)]">Poll Interval (s)</label>
+            <label htmlFor="homeassistant-poll-interval" className="mb-1 block text-xs font-medium text-[var(--muted)]">Poll Interval (s)</label>
             <Input
+              id="homeassistant-poll-interval"
               type="number"
               min={15}
               max={3600}

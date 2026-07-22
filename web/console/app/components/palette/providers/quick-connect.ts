@@ -3,12 +3,13 @@ import type { PaletteItem, PaletteProvider } from "../../../contexts/PaletteCont
 
 const QUICK_CONNECT_REGEX = /^([\w.-]+@)?[\w.-]+(:\d+)?$/;
 
-export function createQuickConnectProvider(routerPush: (href: string) => void): PaletteProvider {
+export function createQuickConnectProvider(routerPush: (href: string) => void, enabled = true): PaletteProvider {
   return {
     id: "quick-connect",
     group: "Quick Connect",
     priority: 5,
     search(query: string): PaletteItem[] {
+      if (!enabled) return [];
       const q = query.trim();
       if (!QUICK_CONNECT_REGEX.test(q)) return [];
 

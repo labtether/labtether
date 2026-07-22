@@ -21,12 +21,29 @@ type UserPayload = {
   error?: string;
 };
 
-export function useHubUsers() {
+export async function readUserPayload(response: Response): Promise<UserPayload> {
+  if (response.status === 204) {
+    return {};
+  }
+  try {
+    return (await response.json()) as UserPayload;
+  } catch {
+    return {};
+  }
+}
+
+export function useHubUsers(enabled = true) {
   const [users, setUsers] = useState<HubUser[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState("");
 
   const refresh = useCallback(async () => {
+    if (!enabled) {
+      setUsers([]);
+      setLoading(false);
+      setError("");
+      return;
+    }
     setLoading(true);
     setError("");
     try {
@@ -41,7 +58,7 @@ export function useHubUsers() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
     void refresh();
@@ -54,7 +71,7 @@ export function useHubUsers() {
       signal: AbortSignal.timeout(15_000),
       body: JSON.stringify(payload),
     });
-    const data = (await response.json()) as UserPayload;
+    const data = await readUserPayload(response);
     if (!response.ok) {
       throw new Error(data.error || `failed to create user (${response.status})`);
     }
@@ -68,7 +85,7 @@ export function useHubUsers() {
       signal: AbortSignal.timeout(15_000),
       body: JSON.stringify({ role }),
     });
-    const data = (await response.json()) as UserPayload;
+    const data = await readUserPayload(response);
     if (!response.ok) {
       throw new Error(data.error || `failed to update user role (${response.status})`);
     }
@@ -82,7 +99,7 @@ export function useHubUsers() {
       signal: AbortSignal.timeout(15_000),
       body: JSON.stringify({ password }),
     });
-    const data = (await response.json()) as UserPayload;
+    const data = await readUserPayload(response);
     if (!response.ok) {
       throw new Error(data.error || `failed to reset password (${response.status})`);
     }
@@ -93,7 +110,7 @@ export function useHubUsers() {
       method: "DELETE",
       signal: AbortSignal.timeout(15_000),
     });
-    const data = (await response.json()) as UserPayload;
+    const data = await readUserPayload(response);
     if (!response.ok) {
       throw new Error(data.error || `failed to delete user (${response.status})`);
     }
@@ -105,7 +122,7 @@ export function useHubUsers() {
       method: "DELETE",
       signal: AbortSignal.timeout(15_000),
     });
-    const data = (await response.json()) as UserPayload;
+    const data = await readUserPayload(response);
     if (!response.ok) {
       throw new Error(data.error || `failed to revoke sessions (${response.status})`);
     }

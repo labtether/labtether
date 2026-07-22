@@ -72,7 +72,11 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/api/:path*",
-    "/((?!_next|ws|desktop/sessions|terminal/sessions|.*\\..*).*)"
+    // File transfer route handlers enforce auth and CSRF locally so request
+    // bodies can stream directly to the hub without proxy.ts buffering or
+    // truncating large uploads.
+    "/api/((?!files(?:/|$)).*)",
+    "/api",
+    "/((?!_next|api/files(?:/|$)|ws|desktop/sessions|terminal/sessions|.*\\..*).*)"
   ]
 };

@@ -1,8 +1,11 @@
 "use client";
 
+import { useState } from "react";
+
 import { Button } from "../../../../components/ui/Button";
 import { Card } from "../../../../components/ui/Card";
 import type { PBSTask, PBSTaskLogLine, PBSTaskStatus } from "./pbsTabModel";
+import { PBSActionConfirmation } from "./pbs/PBSActionConfirmation";
 
 type PBSTaskDetailsCardProps = {
   selectedTask: PBSTask;
@@ -11,6 +14,7 @@ type PBSTaskDetailsCardProps = {
   taskLoading: boolean;
   stoppingTask: boolean;
   error: string | null;
+  statusMessage?: string | null;
   nodeFallback: string;
   onRefresh: () => void;
   onStopTask: () => void;
@@ -23,10 +27,18 @@ export function PBSTaskDetailsCard({
   taskLoading,
   stoppingTask,
   error,
+  statusMessage,
   nodeFallback,
   onRefresh,
   onStopTask,
 }: PBSTaskDetailsCardProps) {
+  const [confirmingStop, setConfirmingStop] = useState(false);
+  const normalizedStatus = (taskStatus?.status || selectedTask.status || "").trim().toLowerCase();
+  const taskFinished =
+    Boolean(selectedTask.endtime && selectedTask.endtime > 0) ||
+    Boolean(taskStatus?.exitstatus?.trim()) ||
+    Boolean(normalizedStatus && !normalizedStatus.includes("run") && !normalizedStatus.includes("active"));
+
   return (
     <Card>
       <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
@@ -35,12 +47,31 @@ export function PBSTaskDetailsCard({
           <Button size="sm" onClick={onRefresh} disabled={taskLoading || stoppingTask}>
             {taskLoading ? "Refreshing..." : "Refresh"}
           </Button>
-          <Button size="sm" onClick={onStopTask} disabled={taskLoading || stoppingTask}>
-            {stoppingTask ? "Stopping..." : "Stop Task"}
+          <Button
+            size="sm"
+            onClick={() => setConfirmingStop(true)}
+            disabled={taskLoading || stoppingTask || taskFinished}
+          >
+            {stoppingTask ? "Stopping..." : taskFinished ? "Task Finished" : "Stop Task"}
           </Button>
         </div>
       </div>
-      {error ? <p className="text-xs text-[var(--bad)] mb-3">{error}</p> : null}
+      {confirmingStop ? (
+        <div className="mb-3">
+          <PBSActionConfirmation
+            message={`Confirm stop task ${selectedTask.worker_id || selectedTask.upid}?`}
+            confirmLabel="Confirm Stop"
+            busy={stoppingTask}
+            onConfirm={() => {
+              setConfirmingStop(false);
+              onStopTask();
+            }}
+            onCancel={() => setConfirmingStop(false)}
+          />
+        </div>
+      ) : null}
+      {error ? <p role="alert" className="text-xs text-[var(--bad)] mb-3">{error}</p> : null}
+      {statusMessage ? <p role="status" className="text-xs text-[var(--ok)] mb-3">{statusMessage}</p> : null}
       <div className="flex flex-wrap gap-2 mb-3">
         <Chip label="Node" value={selectedTask.node || nodeFallback} />
         <Chip label="Worker" value={selectedTask.worker_type || "task"} />

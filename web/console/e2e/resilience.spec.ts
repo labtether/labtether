@@ -81,6 +81,27 @@ test("expired deep-link session redirects to login and returns to target after s
   ).toBeVisible();
 });
 
+test("login visibly announces rejected credentials", async ({ page }) => {
+  await installConsoleApiMocks(page, {
+    customRoute: async ({ pathname, method, fulfillJSON }) => {
+      if (pathname === "/api/auth/login" && method === "POST") {
+        await fulfillJSON({ error: "invalid credentials" }, 401);
+        return true;
+      }
+      return false;
+    },
+  });
+
+  await page.goto("/login");
+  await page.getByLabel("Username").fill("admin");
+  await page.getByLabel("Password").fill("wrong-password");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+
+  await expect(page.getByRole("alert").filter({ hasText: "invalid credentials" })).toBeVisible();
+  await expect(page.getByLabel("Username")).toHaveValue("admin");
+  await expect(page.getByLabel("Password")).toHaveValue("");
+});
+
 test("login rejects unsafe next redirects and lands on root after sign-in", async ({ page }) => {
   await installConsoleApiMocks(page);
 
@@ -89,7 +110,13 @@ test("login rejects unsafe next redirects and lands on root after sign-in", asyn
   await page.getByLabel("Password").fill("password");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
 
-  await expect(page).toHaveURL(/\/$/);
+  // next-intl canonicalizes the default locale root to /en in production.
+  // Either canonical form is local; the attacker-controlled origin must never
+  // survive the redirect.
+  await expect(page).toHaveURL(/\/(?:en)?$/);
+  expect(new URL(page.url()).origin).toBe(test.info().project.use.baseURL
+    ? new URL(String(test.info().project.use.baseURL)).origin
+    : new URL(page.url()).origin);
 });
 
 test("origin guard rejects cross-origin mutating requests", async ({ request }) => {

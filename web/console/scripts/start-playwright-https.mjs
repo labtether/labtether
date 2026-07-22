@@ -58,7 +58,10 @@ function ensureTLSMaterial() {
 
 const standalone = spawn(
   process.execPath,
-  [path.join(".next", "standalone", "server.js")],
+  [
+    path.join("scripts", "console-runtime.mjs"),
+    path.join(".next", "standalone", "server.js"),
+  ],
   {
     cwd: consoleRoot,
     env: {

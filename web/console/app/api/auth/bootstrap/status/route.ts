@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { backendAuthHeaders, resolvedBackendBaseURLs } from "../../../../../lib/backend";
+import { resolvedBackendBaseURLs } from "../../../../../lib/backend";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +9,6 @@ export async function GET() {
   try {
     const response = await fetch(`${base.api}/auth/bootstrap/status`, {
       cache: "no-store",
-      headers: backendAuthHeaders(),
     });
 
     const payload = await safeJSON(response);

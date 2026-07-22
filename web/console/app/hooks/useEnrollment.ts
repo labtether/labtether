@@ -30,13 +30,24 @@ type EnrollmentState = {
   newRawToken: string;
   newTokenID: string;
   generating: boolean;
-  generateToken: (label: string, ttlHours: number, maxUses: number) => Promise<void>;
+  generateToken: (label: string, ttlHours: number, maxUses: number) => Promise<string>;
   revokeEnrollmentToken: (id: string) => Promise<void>;
   revokeAgentToken: (id: string) => Promise<void>;
   cleanupDeadTokens: () => Promise<{ enrollment_deleted: number; agent_deleted: number } | null>;
   clearNewToken: () => void;
   refresh: () => void;
 };
+
+export async function deleteEnrollmentToken(
+  id: string,
+  options: { keepalive?: boolean } = {},
+): Promise<void> {
+  const res = await fetch(`/api/settings/enrollment/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    keepalive: options.keepalive,
+  });
+  if (!res.ok) throw new Error("Failed to revoke token");
+}
 
 function readStoredHubSelection(): string {
   if (typeof window === "undefined") {
@@ -181,11 +192,14 @@ export function useEnrollment(): EnrollmentState {
       });
       if (!res.ok) throw new Error("Failed to generate enrollment token");
       const data = ensureRecord(await res.json().catch(() => null));
+      const tokenID = ensureString(ensureRecord(data?.token)?.id);
       setNewRawToken(ensureString(data?.raw_token));
-      setNewTokenID(ensureString(ensureRecord(data?.token)?.id));
+      setNewTokenID(tokenID);
       refresh();
+      return tokenID;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
+      return "";
     } finally {
       setGenerating(false);
     }
@@ -193,8 +207,7 @@ export function useEnrollment(): EnrollmentState {
 
   const revokeEnrollmentToken = useCallback(async (id: string) => {
     try {
-      const res = await fetch(`/api/settings/enrollment/${encodeURIComponent(id)}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to revoke token");
+      await deleteEnrollmentToken(id);
       refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");

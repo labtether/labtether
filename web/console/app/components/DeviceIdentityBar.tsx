@@ -20,6 +20,45 @@ type DeviceIdentityBarProps = {
   onDelete?: () => void;
 };
 
+const explicitOfflineStatuses = new Set([
+  "offline",
+  "down",
+  "critical",
+  "error",
+  "unhealthy",
+  "failed",
+  "stopped",
+  "exited",
+  "dead",
+  "unknown",
+  "unavailable",
+]);
+
+const explicitUnresponsiveStatuses = new Set([
+  "warning",
+  "degraded",
+  "restarting",
+  "stale",
+  "unresponsive",
+]);
+
+function identityStatusBadge(
+  assetStatus: string,
+  freshnessStatus: DeviceIdentityBarProps["freshnessStatus"],
+): "online" | "stale" | "offline" {
+  const normalizedStatus = assetStatus.trim().toLowerCase();
+  if (explicitOfflineStatuses.has(normalizedStatus)) {
+    return "offline";
+  }
+  if (explicitUnresponsiveStatuses.has(normalizedStatus)) {
+    return "stale";
+  }
+  if (freshnessStatus === "ok") {
+    return "online";
+  }
+  return freshnessStatus === "pending" ? "stale" : "offline";
+}
+
 function metadataFallbackMetrics(
   meta?: Record<string, string>,
 ): Partial<TelemetryOverviewAsset["metrics"]> | undefined {
@@ -64,12 +103,7 @@ export function DeviceIdentityBar({
 }: DeviceIdentityBarProps) {
   const metrics = telemetry?.metrics ?? metadataFallbackMetrics(asset.metadata);
 
-  const statusBadge =
-    freshnessStatus === "ok"
-      ? "online"
-      : freshnessStatus === "pending"
-        ? "stale"
-        : "offline";
+  const statusBadge = identityStatusBadge(asset.status, freshnessStatus);
 
   const os =
     asset.metadata?.os_pretty_name || asset.metadata?.os_name || "";

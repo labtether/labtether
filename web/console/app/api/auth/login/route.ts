@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { resolvedBackendBaseURLs, upstreamErrorPayload } from "../../../../lib/backend";
 import { isMutationRequestOriginAllowed } from "../../../../lib/proxyAuth";
 import { checkRateLimit } from "../../../../lib/rateLimit";
+import { loginRateLimitKey } from "../../../../lib/clientIdentity";
 
 export const dynamic = "force-dynamic";
 
@@ -18,31 +19,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
   }
 
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
-    || request.headers.get("x-real-ip")
-    || "unknown";
-
-  const { success, resetAt } = checkRateLimit(`login:${ip}`);
-  if (!success) {
-    return Response.json(
-      { error: "Too many login attempts. Try again later." },
-      {
-        status: 429,
-        headers: {
-          "Retry-After": String(Math.ceil((resetAt - Date.now()) / 1000)),
-          "X-RateLimit-Remaining": "0",
-        },
-      }
-    );
-  }
-
-  const base = await resolvedBackendBaseURLs();
   try {
     const raw = await request.json();
     const body = parseLoginRequest(raw);
     if (!body) {
       return NextResponse.json({ error: "username and password are required" }, { status: 400 });
     }
+    const { success, resetAt } = checkRateLimit(loginRateLimitKey(body.username, request.headers), 10, 15 * 60_000);
+    if (!success) {
+      return Response.json(
+        { error: "Too many login attempts. Try again later." },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(Math.max(1, Math.ceil((resetAt - Date.now()) / 1000))),
+            "X-RateLimit-Remaining": "0",
+          },
+        },
+      );
+    }
+    const base = await resolvedBackendBaseURLs();
     const response = await fetch(`${base.api}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

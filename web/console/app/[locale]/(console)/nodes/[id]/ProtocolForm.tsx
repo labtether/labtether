@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Button } from "../../../../components/ui/Button";
 import { Input } from "../../../../components/ui/Input";
+import { CredentialProfileSelect } from "../../../../components/credentials/CredentialProfileSelect";
+import { useCredentialProfiles } from "../../../../hooks/useCredentialProfiles";
 import type { ProtocolConfig, ProtocolType, TestResult } from "./useProtocolConfigs";
 
 const DEFAULT_PORTS: Record<ProtocolType, number> = {
@@ -22,6 +24,14 @@ const PROTOCOL_OPTIONS: { value: ProtocolType; label: string }[] = [
 ];
 
 const PROTOCOLS_WITH_USERNAME: ProtocolType[] = ["ssh", "telnet", "rdp"];
+
+const PROTOCOL_CREDENTIAL_KINDS: Record<ProtocolType, readonly string[]> = {
+  ssh: ["ssh_password", "ssh_private_key", "hub_ssh_identity"],
+  telnet: ["telnet_password"],
+  vnc: ["vnc_password"],
+  rdp: ["rdp_password"],
+  ard: ["vnc_password"],
+};
 
 type ProtocolFormProps = {
   assetId: string;
@@ -47,6 +57,7 @@ export function ProtocolForm({
   const [port, setPort] = useState<number>(initial?.port ?? DEFAULT_PORTS[initial?.protocol ?? "ssh"]);
   const [username, setUsername] = useState(initial?.username ?? "");
   const [credentialProfileId, setCredentialProfileId] = useState(initial?.credential_profile_id ?? "");
+  const credentialProfiles = useCredentialProfiles();
 
   // SSH-specific
   const [strictHostKey, setStrictHostKey] = useState<boolean>((initial?.config?.["strict_host_key"] as boolean | undefined) ?? false);
@@ -65,6 +76,7 @@ export function ProtocolForm({
   const handleProtocolChange = (next: ProtocolType) => {
     setProtocol(next);
     setPort(DEFAULT_PORTS[next]);
+    setCredentialProfileId("");
     setTestResult(null);
     setShowKeyInstallBanner(false);
   };
@@ -92,7 +104,7 @@ export function ProtocolForm({
       };
       if (host.trim()) data.host = host.trim();
       if (username.trim()) data.username = username.trim();
-      if (credentialProfileId.trim()) data.credential_profile_id = credentialProfileId.trim();
+      data.credential_profile_id = credentialProfileId.trim();
 
       const result = await onSave(data);
       if (!result.ok) {
@@ -203,11 +215,15 @@ export function ProtocolForm({
 
       {/* Credential profile */}
       <div>
-        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Credential Profile ID</label>
-        <Input
+        <CredentialProfileSelect
+          id="protocol-credential-profile"
+          label="Credential profile"
           value={credentialProfileId}
-          onChange={(e) => setCredentialProfileId(e.target.value)}
-          placeholder="Optional credential profile ID"
+          onChange={setCredentialProfileId}
+          profiles={credentialProfiles.profiles}
+          loading={credentialProfiles.loading}
+          error={credentialProfiles.error}
+          allowedKinds={PROTOCOL_CREDENTIAL_KINDS[protocol]}
         />
         <p className="mt-1 text-[11px] text-[var(--muted)]">Leave blank to use the default credential for this device.</p>
       </div>

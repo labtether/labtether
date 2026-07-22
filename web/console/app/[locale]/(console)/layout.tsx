@@ -22,6 +22,7 @@ import { Sidebar } from "../../components/Sidebar";
 import { CommandPalette } from "../../components/CommandPalette";
 import { MobileNavToggle, MobileNavOverlay, useMobileNav } from "../../components/MobileNav";
 import { usePresenceToasts } from "../../hooks/usePresenceToasts";
+import { hasWriteRole } from "../../lib/roles";
 import { useCallback, useEffect, useMemo, useRef, type CSSProperties, type PointerEvent } from "react";
 
 const GLOW_ORB_1_STYLE: CSSProperties = {
@@ -54,7 +55,7 @@ const CURSOR_GLOW_STYLE: CSSProperties = {
 function BuiltInPaletteProviders() {
   const router = useRouter();
   const { user } = useAuth();
-  const isAdmin = user?.role === "owner" || user?.role === "admin";
+  const canWrite = hasWriteRole(user?.role);
   const statusRef = useRef<ReturnType<typeof useFastStatus>>(null);
   const status = useFastStatus();
   statusRef.current = status;
@@ -63,6 +64,7 @@ function BuiltInPaletteProviders() {
   const snippetsRef = useRef<import("../../hooks/useTerminalSnippets").TerminalSnippet[]>([]);
   const snippetsFetchedRef = useRef(false);
   useEffect(() => {
+    if (!canWrite) return;
     if (snippetsFetchedRef.current) return;
     fetch("/api/terminal/snippets", { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : Promise.reject()))
@@ -75,7 +77,7 @@ function BuiltInPaletteProviders() {
         }
       })
       .catch(() => {});
-  }, []);
+  }, [canWrite]);
 
   const push = useCallback((href: string) => router.push(href), [router]);
   const getStatus = useCallback(() => statusRef.current, []);
@@ -94,13 +96,13 @@ function BuiltInPaletteProviders() {
     [router],
   );
 
-  const navProvider = useMemo(() => createNavigationProvider(push, isAdmin), [push, isAdmin]);
+  const navProvider = useMemo(() => createNavigationProvider(push, user?.role), [push, user?.role]);
   const devicesProvider = useMemo(() => createDevicesProvider(getStatus, handleDeviceSelect), [getStatus, handleDeviceSelect]);
-  const actionsProvider = useMemo(() => createDeviceActionsProvider(getStatus, push), [getStatus, push]);
-  const settingsProvider = useMemo(() => createSettingsProvider(push, isAdmin), [push, isAdmin]);
-  const quickConnectProvider = useMemo(() => createQuickConnectProvider(push), [push]);
-  const recentProvider = useMemo(() => createRecentProvider(push), [push]);
-  const snippetsProvider = useMemo(() => createSnippetsProvider(getSnippets, handleSnippetInsert), [getSnippets, handleSnippetInsert]);
+  const actionsProvider = useMemo(() => createDeviceActionsProvider(getStatus, push, canWrite), [getStatus, push, canWrite]);
+  const settingsProvider = useMemo(() => createSettingsProvider(push, user?.role), [push, user?.role]);
+  const quickConnectProvider = useMemo(() => createQuickConnectProvider(push, canWrite), [push, canWrite]);
+  const recentProvider = useMemo(() => createRecentProvider(push, canWrite), [push, canWrite]);
+  const snippetsProvider = useMemo(() => createSnippetsProvider(getSnippets, handleSnippetInsert, canWrite), [getSnippets, handleSnippetInsert, canWrite]);
 
   usePaletteRegister(navProvider);
   usePaletteRegister(devicesProvider);
@@ -151,7 +153,7 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
       {/* Subtle noise texture for surface depth */}
       <div className="noise-texture fixed inset-0 pointer-events-none z-0" aria-hidden="true" />
       <Sidebar />
-      <MobileNavToggle onToggle={toggle} />
+      <MobileNavToggle open={open} onToggle={toggle} />
       <MobileNavOverlay open={open} onClose={close} />
       {/* Ambient glow layer */}
       <div className="fixed inset-0 pointer-events-none z-0" aria-hidden="true">

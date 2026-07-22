@@ -61,38 +61,46 @@ export default function RemoteViewTabBar({
 }: RemoteViewTabBarProps) {
   return (
     <div className="flex items-center gap-0.5 px-2 py-1 border-b border-[var(--line)] overflow-x-auto bg-[var(--surface)]">
-      {tabs.map((tab) => {
-        const isActive = tab.id === activeTabId;
-        return (
-          <button
-            key={tab.id}
-            onClick={() => onSetActiveTab(tab.id)}
-            className={`group flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs whitespace-nowrap transition-colors duration-[var(--dur-fast)] ${
-              isActive
-                ? "bg-[var(--panel-glass)] text-[var(--text)] shadow-sm"
-                : "text-[var(--text-secondary)] hover:bg-[var(--panel-glass)]/50"
-            }`}
-          >
-            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${protocolDotClass(tab.protocol)}`} />
-            <span className="max-w-[140px] truncate">{tab.label}</span>
-            <span
-              role="button"
-              tabIndex={-1}
-              className={`ml-0.5 p-0.5 rounded hover:bg-[var(--hover)] ${
-                isActive ? "opacity-60 hover:opacity-100" : "opacity-0 group-hover:opacity-60 hover:!opacity-100"
+      <div role="tablist" aria-label="Remote view tabs" className="flex items-center gap-0.5">
+        {tabs.map((tab) => {
+          const isActive = tab.id === activeTabId;
+          return (
+            <div
+              key={tab.id}
+              className={`group flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs whitespace-nowrap transition-colors duration-[var(--dur-fast)] ${
+                isActive
+                  ? "bg-[var(--panel-glass)] text-[var(--text)] shadow-sm"
+                  : "text-[var(--text-secondary)] hover:bg-[var(--panel-glass)]/50"
               }`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemoveTab(tab.id);
-              }}
             >
-              <X className="w-3 h-3" />
-            </span>
-          </button>
-        );
-      })}
+              <button
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                className="flex min-w-0 items-center gap-1.5 bg-transparent border-none"
+                onClick={() => onSetActiveTab(tab.id)}
+              >
+                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${protocolDotClass(tab.protocol)}`} />
+                <span className="max-w-[140px] truncate">{tab.label}</span>
+              </button>
+              <button
+                type="button"
+                aria-label={`Close ${tab.label} tab`}
+                className={`ml-0.5 p-0.5 rounded hover:bg-[var(--hover)] ${
+                  isActive ? "opacity-60 hover:opacity-100" : "opacity-0 group-hover:opacity-60 hover:!opacity-100 focus-visible:opacity-100"
+                }`}
+                onClick={() => onRemoveTab(tab.id)}
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          );
+        })}
+      </div>
 
       <button
+        type="button"
+        aria-label="New tab"
         onClick={onAddTab}
         className="flex-shrink-0 p-1.5 rounded-md text-[var(--text-secondary)] hover:bg-[var(--panel-glass)]/50 transition-colors duration-[var(--dur-fast)]"
         title="New tab"

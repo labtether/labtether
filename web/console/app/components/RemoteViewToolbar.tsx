@@ -680,9 +680,12 @@ export function RemoteViewToolbar({
       </>
     ) : null;
 
+  const availableShortcuts = onSendShortcut
+    ? REMOTE_SHORTCUTS
+    : REMOTE_SHORTCUTS.filter((shortcut) => shortcut.id === "ctrl-alt-del");
   const shortcutButtons = (
     <div className="flex items-center gap-0.5">
-      {REMOTE_SHORTCUTS.map((shortcut) => (
+      {availableShortcuts.map((shortcut) => (
         <button
           key={shortcut.id}
           type="button"

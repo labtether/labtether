@@ -20,7 +20,6 @@ export default function UpdatesPage() {
     updatePlanTargets,
     setUpdatePlanTargets,
     updatePlanScopes,
-    setUpdatePlanScopes,
     updatePlanDryRun,
     setUpdatePlanDryRun,
     updatePlanSubmitting,
@@ -50,8 +49,9 @@ export default function UpdatesPage() {
             <span className="text-xs font-medium text-[var(--muted)]" data-tooltip={t('updates.scopes.tooltip')}>{t('updates.scopes.label')}</span>
             <Input
               value={updatePlanScopes}
-              onChange={(event) => setUpdatePlanScopes(event.target.value)}
               placeholder={t('updates.scopes.placeholder')}
+              readOnly
+              aria-readonly="true"
             />
           </label>
           <label className="flex items-center gap-2 text-sm text-[var(--text)]">

@@ -10,6 +10,8 @@ import {
 import { buildBrowserWsUrl } from "../lib/ws";
 import { currentRoutePerfName, reportRoutePerfMetric } from "../hooks/useRoutePerfTelemetry";
 import { runtimeSettingKeys, telemetryWindows } from "../console/models";
+import { useAuth } from "./AuthContext";
+import { hasAdminRole } from "../lib/roles";
 import type {
   LiveStatusResponse,
   RuntimeSettingEntry,
@@ -516,6 +518,8 @@ function areSlowStatusSlicesEqual(left: StatusResponse, right: StatusResponse): 
 }
 
 export function StatusProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  const canReadRuntimeSettings = hasAdminRole(user?.role);
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -796,6 +800,10 @@ export function StatusProvider({ children }: { children: ReactNode }) {
   );
 
   const loadRuntimeSettings = useCallback(async () => {
+    if (!canReadRuntimeSettings) {
+      setRuntimeSettings([]);
+      return;
+    }
     try {
       const response = await fetch("/api/settings/runtime", { cache: "no-store" });
       if (!response.ok) {
@@ -806,7 +814,7 @@ export function StatusProvider({ children }: { children: ReactNode }) {
     } catch {
       // runtime settings unavailable — use defaults
     }
-  }, []);
+  }, [canReadRuntimeSettings]);
 
   useEffect(() => {
     void loadRuntimeSettings();
@@ -1333,6 +1341,11 @@ export function StatusProvider({ children }: { children: ReactNode }) {
             const msg = JSON.parse(event.data) as { type?: string };
             const pushTypes = ["alert.fired", "alert.resolved", "heartbeat.update", "job.completed", "agent.connected", "agent.disconnected"];
             if (msg.type && pushTypes.includes(msg.type)) {
+              if (msg.type.startsWith("alert.")) {
+                window.dispatchEvent(new CustomEvent("labtether:alert-event", {
+                  detail: { type: msg.type },
+                }));
+              }
               if (wsDebouncerRef.current) clearTimeout(wsDebouncerRef.current);
               wsDebouncerRef.current = setTimeout(() => {
                 wsDebouncerRef.current = null;
@@ -1459,7 +1472,7 @@ export function StatusProvider({ children }: { children: ReactNode }) {
     if (!fastSummary) {
       return "Connecting...";
     }
-    return `${fastSummary.servicesUp}/${fastSummary.servicesTotal} online`;
+    return `${fastSummary.servicesUp}/${fastSummary.servicesTotal} services online`;
   }, [fastSummary]);
 
   const fastStatus = useMemo<FastStatusSlice | null>(() => {

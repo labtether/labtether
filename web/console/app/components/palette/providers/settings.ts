@@ -1,5 +1,6 @@
-import { Settings, Shield, Key, Database, Globe, Palette, UserCog, Lock } from "lucide-react";
+import { Settings, Globe, Palette, UserCog, Lock } from "lucide-react";
 import type { PaletteItem, PaletteProvider } from "../../../contexts/PaletteContext";
+import { meetsMinimumRole, type MinimumRole } from "../../../lib/roles";
 
 interface SettingsEntry {
   id: string;
@@ -7,7 +8,7 @@ interface SettingsEntry {
   description: string;
   href: string;
   keywords: string[];
-  adminOnly?: boolean;
+  minimumRole?: MinimumRole;
 }
 
 const SETTINGS_ITEMS: SettingsEntry[] = [
@@ -17,14 +18,14 @@ const SETTINGS_ITEMS: SettingsEntry[] = [
     description: "General hub settings and configuration",
     href: "/settings",
     keywords: ["settings", "configuration", "general"],
+    minimumRole: "admin",
   },
   {
     id: "settings-users",
     label: "Users",
-    description: "Manage user accounts and roles",
+    description: "Account security and user administration",
     href: "/users",
     keywords: ["users", "accounts", "roles", "members"],
-    adminOnly: true,
   },
   {
     id: "settings-security",
@@ -32,21 +33,23 @@ const SETTINGS_ITEMS: SettingsEntry[] = [
     description: "TLS, agent setup, database, and security settings",
     href: "/security",
     keywords: ["security", "tls", "ssl", "certificate", "https", "agent", "setup", "install", "endpoint", "database", "postgres", "storage", "db"],
-    adminOnly: true,
+    minimumRole: "admin",
   },
   {
     id: "settings-discovery",
     label: "Discovery",
     description: "Network and asset discovery configuration",
-    href: "/settings/discovery",
+    href: "/settings?tab=advanced",
     keywords: ["discovery", "network", "scan", "detect"],
+    minimumRole: "admin",
   },
   {
     id: "settings-appearance",
     label: "Appearance",
     description: "Theme, fonts, and visual preferences",
-    href: "/settings/appearance",
+    href: "/settings?tab=general",
     keywords: ["appearance", "theme", "fonts", "colors", "dark", "light"],
+    minimumRole: "admin",
   },
 ];
 
@@ -58,7 +61,7 @@ const ICONS = {
   "settings-appearance": Palette,
 } as const;
 
-export function createSettingsProvider(routerPush: (href: string) => void, isAdmin: boolean): PaletteProvider {
+export function createSettingsProvider(routerPush: (href: string) => void, role?: string): PaletteProvider {
   return {
     id: "settings",
     group: "Settings",
@@ -66,7 +69,7 @@ export function createSettingsProvider(routerPush: (href: string) => void, isAdm
     search(query: string): PaletteItem[] {
       const q = query.trim().toLowerCase();
       return SETTINGS_ITEMS.filter((entry) => {
-        if (entry.adminOnly && !isAdmin) return false;
+        if (!meetsMinimumRole(role, entry.minimumRole)) return false;
         if (q === "") return true;
         return (
           entry.label.toLowerCase().includes(q) ||

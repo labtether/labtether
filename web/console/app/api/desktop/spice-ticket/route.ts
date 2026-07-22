@@ -1,14 +1,20 @@
-import { NextResponse } from "next/server";
-
-import { backendAuthHeadersWithCookie, resolvedBackendBaseURLs, shouldUseSecureWebSocket } from "../../../../lib/backend";
+import {
+  backendAuthHeadersWithCookie,
+  resolvedBackendBaseURLs,
+  shouldUseSecureWebSocket,
+} from "../../../../lib/backend";
 import { isMutationRequestOriginAllowed } from "../../../../lib/proxyAuth";
+import {
+  desktopProxyJSON,
+  desktopUpstreamError,
+  desktopUpstreamTimeoutMs,
+  readDesktopSessionIDRequest,
+  safeDesktopResponseJSON,
+} from "../proxy";
 
-type SpiceTicketRequest = {
-  sessionId: string;
-};
+export const dynamic = "force-dynamic";
 
 type SpiceTicketPayload = {
-  session_id?: string;
   ticket?: string;
   expires_at?: string;
   stream_path?: string;
@@ -16,68 +22,68 @@ type SpiceTicketPayload = {
   type?: string;
   ca?: string;
   proxy?: string;
-  error?: string;
 };
 
 export async function POST(request: Request) {
   if (!isMutationRequestOriginAllowed(request)) {
-    return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
+    return desktopProxyJSON({ error: "forbidden origin" }, 403);
   }
 
-  let body: SpiceTicketRequest;
-  try {
-    body = (await request.json()) as SpiceTicketRequest;
-  } catch {
-    return NextResponse.json({ error: "invalid JSON payload" }, { status: 400 });
-  }
-
-  const sessionId = body.sessionId?.trim();
-  if (!sessionId) {
-    return NextResponse.json({ error: "sessionId is required" }, { status: 400 });
+  const parsed = await readDesktopSessionIDRequest(request);
+  if ("error" in parsed) {
+    return desktopProxyJSON({ error: parsed.error }, parsed.status);
   }
 
   try {
     const base = await resolvedBackendBaseURLs();
-    const response = await fetch(`${base.api}/desktop/sessions/${encodeURIComponent(sessionId)}/spice-ticket`, {
-      method: "POST",
-      cache: "no-store",
-      headers: {
-        ...backendAuthHeadersWithCookie(request),
+    const response = await fetch(
+      `${base.api}/desktop/sessions/${encodeURIComponent(parsed.sessionID)}/spice-ticket`,
+      {
+        method: "POST",
+        cache: "no-store",
+        signal: AbortSignal.timeout(desktopUpstreamTimeoutMs),
+        headers: backendAuthHeadersWithCookie(request),
       },
-    });
-    const payload = (await safeJSON<SpiceTicketPayload>(response)) ?? {};
-    if (!response.ok) {
-      return NextResponse.json({ error: payload.error || "failed to fetch spice ticket" }, { status: response.status || 502 });
-    }
-
-    // Modern same-origin transport shape.
-    if (payload.stream_path && payload.password) {
-      return NextResponse.json({
-        sessionId,
-        ticket: payload.ticket,
-        expiresAt: payload.expires_at,
-        streamPath: payload.stream_path,
-        secure: shouldUseSecureWebSocket(request),
-        password: payload.password,
-        type: payload.type,
-        ca: payload.ca,
-        proxy: payload.proxy,
-      });
-    }
-
-    return NextResponse.json({ error: "spice stream path unavailable from backend" }, { status: 502 });
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "failed to fetch spice ticket" },
-      { status: 502 },
     );
-  }
-}
+    const payload = ((await safeDesktopResponseJSON(response)) ??
+      {}) as SpiceTicketPayload;
+    if (!response.ok) {
+      return desktopUpstreamError(
+        response,
+        payload,
+        "failed to fetch SPICE ticket",
+      );
+    }
 
-async function safeJSON<T>(response: Response): Promise<T | null> {
-  try {
-    return (await response.json()) as T;
+    const streamPath =
+      typeof payload.stream_path === "string" ? payload.stream_path.trim() : "";
+    if (
+      !streamPath ||
+      streamPath.length > 4096 ||
+      /[\u0000-\u001f\u007f-\u009f]/u.test(streamPath) ||
+      typeof payload.password !== "string"
+    ) {
+      return desktopProxyJSON(
+        { error: "SPICE stream path unavailable from backend" },
+        502,
+      );
+    }
+
+    return desktopProxyJSON({
+      sessionId: parsed.sessionID,
+      ticket: payload.ticket,
+      expiresAt: payload.expires_at,
+      streamPath,
+      secure: shouldUseSecureWebSocket(request),
+      password: payload.password,
+      type: payload.type,
+      ca: payload.ca,
+      proxy: payload.proxy,
+    });
   } catch {
-    return null;
+    return desktopProxyJSON(
+      { error: "SPICE ticket endpoint unavailable" },
+      502,
+    );
   }
 }

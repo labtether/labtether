@@ -208,10 +208,10 @@ export function ProxmoxDetailsTab({
 
       {effectiveTab === "console" && isVMorCT && (
         <ProxmoxConsoleTab
+          assetId={nodeId}
           proxmoxNode={proxmoxNode}
           proxmoxVMID={proxmoxVMID}
           effectiveKind={effectiveKind}
-          proxmoxCollectorID={proxmoxCollectorID}
         />
       )}
 

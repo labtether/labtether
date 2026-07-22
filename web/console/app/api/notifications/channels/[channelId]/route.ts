@@ -1,7 +1,12 @@
-import { NextResponse } from "next/server";
-
 import { backendAuthHeadersWithCookie, resolvedBackendBaseURLs } from "../../../../../lib/backend";
 import { isMutationRequestOriginAllowed } from "../../../../../lib/proxyAuth";
+import {
+  notificationBackendUnavailableResponse,
+  notificationJSONResponse,
+  notificationRequestErrorResponse,
+  readNotificationRequestJSON,
+  safeNotificationResponseJSON,
+} from "../../proxy";
 
 export const dynamic = "force-dynamic";
 
@@ -10,27 +15,25 @@ function backendPath(baseURL: string, channelId: string): string {
 }
 
 export async function GET(request: Request, context: { params: Promise<{ channelId: string }> }) {
-  const { channelId } = await context.params;
-  const base = await resolvedBackendBaseURLs();
-  const authHeaders = backendAuthHeadersWithCookie(request);
   try {
+    const { channelId } = await context.params;
+    const base = await resolvedBackendBaseURLs();
+    const authHeaders = backendAuthHeadersWithCookie(request);
     const response = await fetch(backendPath(base.api, channelId), { cache: "no-store", headers: authHeaders });
-    const payload = await safeJSON(response);
+    const payload = await safeNotificationResponseJSON(response);
     if (!response.ok) {
-      return NextResponse.json(payload ?? { error: "failed to load notification channel" }, { status: response.status });
+      return notificationJSONResponse(payload ?? { error: "failed to load notification channel" }, response.status);
     }
-    return NextResponse.json(payload ?? {});
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "backend error" },
-      { status: 502 },
-    );
+    if (payload === null) return notificationBackendUnavailableResponse();
+    return notificationJSONResponse(payload);
+  } catch {
+    return notificationBackendUnavailableResponse();
   }
 }
 
 export async function PATCH(request: Request, context: { params: Promise<{ channelId: string }> }) {
   if (!isMutationRequestOriginAllowed(request)) {
-    return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
+    return notificationJSONResponse({ error: "forbidden origin" }, 403);
   }
 
   return mutateChannel(request, context, "PATCH");
@@ -38,7 +41,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ chann
 
 export async function PUT(request: Request, context: { params: Promise<{ channelId: string }> }) {
   if (!isMutationRequestOriginAllowed(request)) {
-    return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
+    return notificationJSONResponse({ error: "forbidden origin" }, 403);
   }
 
   return mutateChannel(request, context, "PUT");
@@ -46,28 +49,26 @@ export async function PUT(request: Request, context: { params: Promise<{ channel
 
 export async function DELETE(request: Request, context: { params: Promise<{ channelId: string }> }) {
   if (!isMutationRequestOriginAllowed(request)) {
-    return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
+    return notificationJSONResponse({ error: "forbidden origin" }, 403);
   }
 
-  const { channelId } = await context.params;
-  const base = await resolvedBackendBaseURLs();
-  const authHeaders = backendAuthHeadersWithCookie(request);
   try {
+    const { channelId } = await context.params;
+    const base = await resolvedBackendBaseURLs();
+    const authHeaders = backendAuthHeadersWithCookie(request);
     const response = await fetch(backendPath(base.api, channelId), {
       method: "DELETE",
       headers: authHeaders,
       cache: "no-store",
     });
-    const payload = await safeJSON(response);
+    const payload = await safeNotificationResponseJSON(response);
     if (!response.ok) {
-      return NextResponse.json(payload ?? { error: "failed to delete notification channel" }, { status: response.status });
+      return notificationJSONResponse(payload ?? { error: "failed to delete notification channel" }, response.status);
     }
-    return NextResponse.json(payload ?? {});
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "backend error" },
-      { status: 502 },
-    );
+    if (payload === null) return notificationBackendUnavailableResponse();
+    return notificationJSONResponse(payload);
+  } catch {
+    return notificationBackendUnavailableResponse();
   }
 }
 
@@ -76,34 +77,30 @@ async function mutateChannel(
   context: { params: Promise<{ channelId: string }> },
   method: "PATCH" | "PUT",
 ) {
-  const { channelId } = await context.params;
-  const base = await resolvedBackendBaseURLs();
-  const authHeaders = backendAuthHeadersWithCookie(request);
+  let body: Record<string, unknown>;
   try {
-    const body = await request.json();
+    body = await readNotificationRequestJSON(request);
+  } catch (error) {
+    return notificationRequestErrorResponse(error) ?? notificationJSONResponse({ error: "invalid request body" }, 400);
+  }
+
+  try {
+    const { channelId } = await context.params;
+    const base = await resolvedBackendBaseURLs();
+    const authHeaders = backendAuthHeadersWithCookie(request);
     const response = await fetch(backendPath(base.api, channelId), {
       method,
       headers: { ...authHeaders, "Content-Type": "application/json" },
       body: JSON.stringify(body),
       cache: "no-store",
     });
-    const payload = await safeJSON(response);
+    const payload = await safeNotificationResponseJSON(response);
     if (!response.ok) {
-      return NextResponse.json(payload ?? { error: "failed to update notification channel" }, { status: response.status });
+      return notificationJSONResponse(payload ?? { error: "failed to update notification channel" }, response.status);
     }
-    return NextResponse.json(payload ?? {});
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "backend error" },
-      { status: 502 },
-    );
-  }
-}
-
-async function safeJSON(response: Response): Promise<unknown | null> {
-  try {
-    return await response.json();
+    if (payload === null) return notificationBackendUnavailableResponse();
+    return notificationJSONResponse(payload);
   } catch {
-    return null;
+    return notificationBackendUnavailableResponse();
   }
 }

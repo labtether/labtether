@@ -44,6 +44,7 @@ export function AlertsInboxTab({
   const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
   const [sortField, setSortField] = useState<"started_at" | "severity">("started_at");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const ruleNames = useMemo(() => new Map(rules.map((rule) => [rule.id, rule.name])), [rules]);
 
   const filteredAlerts = useMemo(() => {
     return instances.filter((alert) => {
@@ -136,7 +137,7 @@ export function AlertsInboxTab({
                 >
                   <Badge status={alert.severity} />
                   <div className="flex-1 min-w-0">
-                    <span className="text-sm font-medium text-[var(--text)] block truncate">{alert.labels?.rule_name ?? alert.rule_id}</span>
+                    <span className="text-sm font-medium text-[var(--text)] block truncate">{alert.labels?.rule_name ?? ruleNames.get(alert.rule_id) ?? alert.rule_id}</span>
                     <span className="text-xs text-[var(--muted)] block truncate">
                       {alert.annotations?.summary ?? `Started ${new Date(alert.started_at).toLocaleString()}`}
                     </span>

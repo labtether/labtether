@@ -6,20 +6,13 @@ import { Card } from "../../../../components/ui/Card";
 import { Button } from "../../../../components/ui/Button";
 import { Input, Select } from "../../../../components/ui/Input";
 import { SkeletonRow } from "../../../../components/ui/Skeleton";
-
-// Setting keys (must match runtimesettings.Key* constants in Go)
-const KEYS = {
-  scrapeEnabled: "prometheus.scrape_enabled",
-  remoteWriteEnabled: "prometheus.remote_write_enabled",
-  remoteWriteURL: "prometheus.remote_write_url",
-  remoteWriteUsername: "prometheus.remote_write_username",
-  remoteWritePassword: "prometheus.remote_write_password",
-  remoteWriteInterval: "prometheus.remote_write_interval",
-  processMetricsEnabled: "prometheus.process_metrics_enabled",
-  processMetricsTopN: "prometheus.process_metrics_top_n",
-} as const;
-
-type SettingsMap = Record<string, string>;
+import {
+  PROMETHEUS_SETTING_KEYS as KEYS,
+  buildPrometheusPatch,
+  buildPrometheusSettingsState,
+  buildPrometheusTestRequest,
+  type PrometheusSettingsMap as SettingsMap,
+} from "./prometheusSettings";
 
 type TestState = "idle" | "testing" | "ok" | "error";
 
@@ -86,6 +79,7 @@ export function PrometheusExportCard() {
   // Test-connection state
   const [testState, setTestState] = useState<TestState>("idle");
   const [testMessage, setTestMessage] = useState<string | null>(null);
+  const [passwordConfigured, setPasswordConfigured] = useState(false);
 
   // Draft copy of mutable fields
   const [draft, setDraft] = useState<SettingsMap>({});
@@ -95,18 +89,14 @@ export function PrometheusExportCard() {
     setError(null);
     try {
       const res = await fetch("/api/settings/runtime", { cache: "no-store" });
-      const payload = await res.json().catch(() => null) as { settings?: Array<{ key: string; effective_value: string }> } | null;
+      const payload = await res.json().catch(() => null) as { settings?: Array<{ key: string; effective_value?: string; sensitive?: boolean; configured?: boolean }> } | null;
       if (!res.ok) {
         throw new Error((payload as { error?: string })?.error ?? `load failed: ${res.status}`);
       }
-      const map: SettingsMap = {};
-      for (const entry of (payload?.settings ?? [])) {
-        if (Object.values(KEYS).includes(entry.key as typeof KEYS[keyof typeof KEYS])) {
-          map[entry.key] = entry.effective_value;
-        }
-      }
-      setSettings(map);
-      setDraft(map);
+      const state = buildPrometheusSettingsState(payload?.settings ?? []);
+      setSettings(state.values);
+      setDraft(state.values);
+      setPasswordConfigured(state.passwordConfigured);
     } catch (err) {
       setError(err instanceof Error ? err.message : "failed to load prometheus settings");
     } finally {
@@ -131,13 +121,7 @@ export function PrometheusExportCard() {
     setMessage(null);
     setError(null);
     try {
-      const values: SettingsMap = {};
-      for (const key of Object.values(KEYS)) {
-        const next = (draft[key] ?? "").trim();
-        if (next !== (settings[key] ?? "").trim()) {
-          values[key] = next;
-        }
-      }
+      const values = buildPrometheusPatch(draft, settings);
       if (Object.keys(values).length === 0) {
         setMessage(t("prometheus.noChanges"));
         return;
@@ -147,18 +131,14 @@ export function PrometheusExportCard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ values }),
       });
-      const payload = await res.json().catch(() => null) as { settings?: Array<{ key: string; effective_value: string }>; error?: string } | null;
+      const payload = await res.json().catch(() => null) as { settings?: Array<{ key: string; effective_value?: string; sensitive?: boolean; configured?: boolean }>; error?: string } | null;
       if (!res.ok) {
         throw new Error(payload?.error ?? `save failed: ${res.status}`);
       }
-      const map: SettingsMap = {};
-      for (const entry of (payload?.settings ?? [])) {
-        if (Object.values(KEYS).includes(entry.key as typeof KEYS[keyof typeof KEYS])) {
-          map[entry.key] = entry.effective_value;
-        }
-      }
-      setSettings(map);
-      setDraft(map);
+      const state = buildPrometheusSettingsState(payload?.settings ?? []);
+      setSettings(state.values);
+      setDraft(state.values);
+      setPasswordConfigured(state.passwordConfigured);
       setMessage(t("prometheus.saved"));
     } catch (err) {
       setError(err instanceof Error ? err.message : "failed to save prometheus settings");
@@ -174,11 +154,7 @@ export function PrometheusExportCard() {
       const res = await fetch("/api/settings/prometheus/test-connection", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: (draft[KEYS.remoteWriteURL] ?? "").trim(),
-          username: (draft[KEYS.remoteWriteUsername] ?? "").trim(),
-          password: (draft[KEYS.remoteWritePassword] ?? "").trim(),
-        }),
+        body: JSON.stringify(buildPrometheusTestRequest(draft, passwordConfigured)),
       });
       const payload = await res.json().catch(() => null) as { success?: boolean; error?: string } | null;
       if (!res.ok) {
@@ -197,7 +173,7 @@ export function PrometheusExportCard() {
       setTestState("error");
       setTestMessage(err instanceof Error ? err.message : "Connection test failed.");
     }
-  }, [t, draft]);
+  }, [t, draft, passwordConfigured]);
 
   // Convenience reads from draft
   const scrapeEnabled = boolStr(draft[KEYS.scrapeEnabled], false);
@@ -289,7 +265,13 @@ export function PrometheusExportCard() {
                       onChange={(e) => set(KEYS.remoteWritePassword, e.target.value)}
                       placeholder={t("prometheus.passwordPlaceholder")}
                       disabled={saving}
+                      autoComplete="new-password"
                     />
+                    {passwordConfigured && !(draft[KEYS.remoteWritePassword] ?? "") ? (
+                      <span className="text-[11px] text-[var(--muted)]">
+                        {t("prometheus.passwordConfigured")}
+                      </span>
+                    ) : null}
                   </label>
                   <label className="flex flex-col gap-1.5 text-xs text-[var(--muted)]">
                     {t("prometheus.pushInterval")}

@@ -1,37 +1,52 @@
-import { NextResponse } from "next/server";
-
-import { backendAuthHeadersWithCookie, resolvedBackendBaseURLs } from "../../../../lib/backend";
+import {
+  backendAuthHeadersWithCookie,
+  resolvedBackendBaseURLs,
+} from "../../../../lib/backend";
 import { isMutationRequestOriginAllowed } from "../../../../lib/proxyAuth";
+import {
+  desktopProxyJSON,
+  desktopUpstreamError,
+  desktopUpstreamTimeoutMs,
+  safeDesktopResponseJSON,
+  validDesktopResourceID,
+} from "../../desktop/proxy";
 
-export async function POST(request: Request, { params }: { params: Promise<{ sessionId: string }> }) {
+export const dynamic = "force-dynamic";
+
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ sessionId: string }> },
+) {
   if (!isMutationRequestOriginAllowed(request)) {
-    return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
+    return desktopProxyJSON({ error: "forbidden origin" }, 403);
+  }
+
+  const { sessionId } = await params;
+  if (!validDesktopResourceID(sessionId)) {
+    return desktopProxyJSON({ error: "invalid recording session id" }, 400);
   }
 
   try {
-    const { sessionId } = await params;
     const base = await resolvedBackendBaseURLs();
-    const response = await fetch(`${base.api}/recordings/${encodeURIComponent(sessionId)}`, {
-      method: "POST",
-      cache: "no-store",
-      headers: {
-        ...backendAuthHeadersWithCookie(request),
+    const response = await fetch(
+      `${base.api}/recordings/${encodeURIComponent(sessionId.trim())}`,
+      {
+        method: "POST",
+        cache: "no-store",
+        signal: AbortSignal.timeout(desktopUpstreamTimeoutMs),
+        headers: backendAuthHeadersWithCookie(request),
       },
-    });
-    const payload = await safeJSON(response);
-    return NextResponse.json(payload ?? { error: "failed to stop recording" }, { status: response.status });
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "failed to stop recording" },
-      { status: 502 },
     );
-  }
-}
-
-async function safeJSON(response: Response): Promise<unknown | null> {
-  try {
-    return await response.json();
+    const payload = await safeDesktopResponseJSON(response);
+    if (!response.ok) {
+      return desktopUpstreamError(
+        response,
+        payload,
+        "failed to stop recording",
+      );
+    }
+    return desktopProxyJSON(payload ?? { stopped: true }, response.status);
   } catch {
-    return null;
+    return desktopProxyJSON({ error: "failed to stop recording" }, 502);
   }
 }

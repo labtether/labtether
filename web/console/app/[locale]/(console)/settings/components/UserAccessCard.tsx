@@ -90,7 +90,7 @@ export function UserAccessCard({ canManageUsers }: UserAccessCardProps) {
   const handleCreateUser = async () => {
     resetStatus();
     const username = newUsername.trim().toLowerCase();
-    const password = newPassword.trim();
+		const password = newPassword;
 
     if (username === "") {
       setUsersError("Username is required");
@@ -140,7 +140,7 @@ export function UserAccessCard({ canManageUsers }: UserAccessCardProps) {
     resetStatus();
 
     const nextRole = roleDraftByUserID[user.id] ?? user.role;
-    const nextPassword = (passwordDraftByUserID[user.id] ?? "").trim();
+		const nextPassword = passwordDraftByUserID[user.id] ?? "";
 
     const payload: Record<string, string> = {};
     if (nextRole !== user.role) {
@@ -745,4 +745,3 @@ function normalizeRole(role: unknown): UserRole {
       return "viewer";
   }
 }
-

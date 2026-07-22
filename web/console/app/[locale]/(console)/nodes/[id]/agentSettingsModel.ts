@@ -16,6 +16,8 @@ export type AgentSettingEntry = {
   hub_managed: boolean;
   local_only: boolean;
   drift?: boolean;
+  sensitive?: boolean;
+  configured?: boolean;
 };
 
 export type AgentSettingsState = {

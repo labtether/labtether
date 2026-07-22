@@ -29,10 +29,10 @@ export function CreateUserDialog({ open, onClose, onConfirm }: CreateUserDialogP
 
   if (!open) return null;
 
-  const handleConfirm = async () => {
-    const u = username.trim().toLowerCase();
-    const pw = password.trim();
-    const cpw = confirmPassword.trim();
+	const handleConfirm = async () => {
+		const u = username.trim().toLowerCase();
+		const pw = password;
+		const cpw = confirmPassword;
 
     if (!u) {
       setError("Username is required.");
@@ -85,9 +85,17 @@ export function CreateUserDialog({ open, onClose, onConfirm }: CreateUserDialogP
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={handleClose}
     >
-      <div onClick={(e) => e.stopPropagation()}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-user-dialog-title"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") handleClose();
+        }}
+      >
         <Card className="w-[32rem] max-w-[92vw] space-y-4">
-          <h3 className="text-sm font-medium text-[var(--text)]">Add User</h3>
+          <h3 id="create-user-dialog-title" className="text-sm font-medium text-[var(--text)]">Add User</h3>
           <label className="block space-y-1">
             <span className="text-[10px] text-[var(--muted)]">Username</span>
             <Input
@@ -106,6 +114,8 @@ export function CreateUserDialog({ open, onClose, onConfirm }: CreateUserDialogP
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="At least 8 characters"
+              maxLength={256}
+              autoComplete="new-password"
               disabled={creating}
             />
           </label>
@@ -116,6 +126,8 @@ export function CreateUserDialog({ open, onClose, onConfirm }: CreateUserDialogP
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Repeat password"
+              maxLength={256}
+              autoComplete="new-password"
               disabled={creating}
             />
           </label>

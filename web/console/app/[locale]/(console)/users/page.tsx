@@ -15,6 +15,7 @@ import { ResetPasswordDialog } from "./ResetPasswordDialog";
 import { DeleteUserDialog } from "./DeleteUserDialog";
 import { useToast } from "../../../contexts/ToastContext";
 import { AccountSecurityCard } from "../settings/components/AccountSecurityCard";
+import { hasAdminRole } from "../../../lib/roles";
 
 type Dialog =
   | { type: "create" }
@@ -26,11 +27,10 @@ type Dialog =
 export default function UsersPage() {
   const t = useTranslations("users");
   const { user: currentUser } = useAuth();
-  const { users, loading, error, createUser, updateRole, resetPassword, deleteUser, revokeSessions } = useHubUsers();
+  const canManage = hasAdminRole(currentUser?.role);
+  const { users, loading, error, createUser, updateRole, resetPassword, deleteUser, revokeSessions } = useHubUsers(canManage);
   const { addToast } = useToast();
   const [dialog, setDialog] = useState<Dialog>(null);
-
-  const canManage = currentUser?.role === "owner" || currentUser?.role === "admin";
 
   const handleCreate = async (payload: { username: string; password: string; role: string }) => {
     await createUser(payload);

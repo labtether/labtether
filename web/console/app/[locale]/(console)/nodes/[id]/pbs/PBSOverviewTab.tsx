@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 
 import { Card } from "../../../../../components/ui/Card";
+import { useStatusControls } from "../../../../../contexts/StatusContext";
 import {
   backupStaleness,
   formatBytes,
@@ -18,7 +19,8 @@ type Props = {
 };
 
 export function PBSOverviewTab({ assetId }: Props) {
-  const { details, loading, error, refresh } = usePBSDetails(assetId);
+  const { fetchStatus } = useStatusControls();
+  const { details, loading, error, refresh } = usePBSDetails(assetId, fetchStatus);
 
   const sortedDatastores = useMemo(() => {
     if (!details) return [];

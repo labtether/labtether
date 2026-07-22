@@ -16,13 +16,14 @@ function timeAgo(isoString: string): string {
   return `${days}d ago`;
 }
 
-export function createRecentProvider(routerPush: (href: string) => void): PaletteProvider {
-  const recents = loadRecentTargets();
+export function createRecentProvider(routerPush: (href: string) => void, enabled = true): PaletteProvider {
+  const recents = enabled ? loadRecentTargets() : [];
   return {
     id: "recent",
     group: "Recent",
     priority: 15,
     search(query: string): PaletteItem[] {
+      if (!enabled) return [];
       const q = query.trim().toLowerCase();
       return recents
         .filter((rt) => {

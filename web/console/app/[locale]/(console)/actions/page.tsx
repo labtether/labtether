@@ -11,12 +11,14 @@ import { EmptyState } from "../../../components/ui/EmptyState";
 import { Input } from "../../../components/ui/Input";
 import { Select } from "../../../components/ui/Input";
 import { useActions } from "../../../hooks/useActions";
+import { SavedActionsCard } from "./SavedActionsCard";
 
 export default function ActionsPage() {
   const t = useTranslations('actions');
   const {
     actionParameters,
     actionParamValues,
+    assets,
     connectors,
     selectedConnector,
     setSelectedConnector,
@@ -104,27 +106,13 @@ export default function ActionsPage() {
             <p className="text-xs text-[var(--muted)]">{t('runAction.parameters.none')}</p>
           )}
           <label className={`flex items-center gap-2 text-sm text-[var(--text)] select-none ${actionSupportsDryRun ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}>
-            <span
-              role="checkbox"
-              aria-checked={actionSupportsDryRun && actionDryRun}
-              aria-disabled={!actionSupportsDryRun}
-              tabIndex={actionSupportsDryRun ? 0 : -1}
-              onClick={() => {
-                if (actionSupportsDryRun) {
-                  setActionDryRun(!actionDryRun);
-                }
-              }}
-              onKeyDown={(event) => {
-                if (!actionSupportsDryRun) return;
-                if (event.key === " " || event.key === "Enter") {
-                  event.preventDefault();
-                  setActionDryRun(!actionDryRun);
-                }
-              }}
-              className={`inline-flex items-center justify-center w-4 h-4 rounded border transition-colors ${(actionSupportsDryRun && actionDryRun) ? "border-[var(--accent)] bg-[var(--accent)] text-white" : "border-[var(--line)] bg-transparent"}`}
-            >
-              {actionSupportsDryRun && actionDryRun ? <span className="text-[10px] leading-none">&#10003;</span> : null}
-            </span>
+            <input
+              type="checkbox"
+              checked={actionSupportsDryRun && actionDryRun}
+              disabled={!actionSupportsDryRun}
+              onChange={(event) => setActionDryRun(event.target.checked)}
+              className="h-4 w-4 rounded border border-[var(--line)] accent-[var(--accent)]"
+            />
             <span data-tooltip={actionSupportsDryRun ? t('runAction.previewOnly.tooltip') : t('runAction.previewOnly.unsupportedTooltip')}>
               {t('runAction.previewOnly.label')}
             </span>
@@ -137,6 +125,8 @@ export default function ActionsPage() {
         {connectorActionsError ? <p className="mt-3 text-xs text-[var(--bad)]">{connectorActionsError}</p> : null}
         {actionMessage ? <p className="mt-3 text-xs text-[var(--muted)]">{actionMessage}</p> : null}
       </Card>
+
+      <SavedActionsCard assets={assets} />
 
       <Card>
         <h2 className="text-xs font-mono uppercase tracking-wider text-[var(--muted)] mb-2">{t('history.heading')}</h2>

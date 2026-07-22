@@ -77,6 +77,7 @@ export default function DisplayPicker({ assetId, value, onSelect }: DisplayPicke
     <div className="flex items-center gap-2">
       <span className="text-xs text-[var(--muted)]">Display</span>
       <Select
+        aria-label="Display"
         className="min-w-[180px]"
         value={selectedValue}
         onChange={(event) => handleChange(event.target.value)}

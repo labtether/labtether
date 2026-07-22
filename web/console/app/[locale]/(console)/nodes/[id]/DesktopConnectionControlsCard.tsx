@@ -52,6 +52,7 @@ export function DesktopConnectionControlsCard({
     <Card className="flex flex-col md:flex-row md:items-center md:justify-between mb-4 gap-3 py-2">
       <div className="flex flex-wrap items-center gap-2">
         <Select
+          aria-label="Desktop quality"
           className="min-w-[110px]"
           value={quality}
           onChange={(event) => onQualityChange(event.target.value)}
@@ -62,6 +63,7 @@ export function DesktopConnectionControlsCard({
           <option value="high">High</option>
         </Select>
         <Select
+          aria-label="Desktop protocol"
           className="min-w-[120px]"
           value={protocol}
           onChange={(event) => onProtocolChange(event.target.value as DesktopProtocol)}

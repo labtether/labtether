@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { sanitizeErrorMessage } from "../../../../../lib/sanitizeErrorMessage";
 import {
   normalizePBSAssetDetailsResponse,
   type PBSAssetDetailsResponse,
@@ -44,7 +45,26 @@ type PBSDetailsState = {
   error: string | null;
 };
 
-export function usePBSDetails(assetId: string): PBSDetailsState & { refresh: () => void } {
+const PBS_DETAILS_ERROR_FALLBACK =
+  "Unable to reach Proxmox Backup Server. Check that it is online and the connector settings are correct, then try again.";
+
+function pbsDetailsErrorMessage(rawMessage: string): string {
+  const raw = rawMessage.trim();
+  const normalized = raw.toLowerCase();
+  const isGenericTransportError =
+    normalized === "failed to fetch" ||
+    /^failed to load pbs details(?:\s*\(\d+\))?$/.test(normalized) ||
+    /^request failed(?:\s*\(\d+\))?$/.test(normalized);
+  return sanitizeErrorMessage(
+    isGenericTransportError ? "" : raw,
+    PBS_DETAILS_ERROR_FALLBACK,
+  );
+}
+
+export function usePBSDetails(
+  assetId: string,
+  onManualRefreshSettled?: () => void | Promise<void>,
+): PBSDetailsState & { refresh: () => void } {
   const [state, setState] = useState<PBSDetailsState>({
     details: null,
     loading: false,
@@ -53,8 +73,22 @@ export function usePBSDetails(assetId: string): PBSDetailsState & { refresh: () 
 
   const seqRef = useRef(0);
   const latestRef = useRef(0);
+  const onManualRefreshSettledRef = useRef(onManualRefreshSettled);
 
-  const fetchDetails = useCallback(async () => {
+  useEffect(() => {
+    onManualRefreshSettledRef.current = onManualRefreshSettled;
+  }, [onManualRefreshSettled]);
+
+  const notifyManualRefreshSettled = useCallback(() => {
+    try {
+      void Promise.resolve(onManualRefreshSettledRef.current?.()).catch(() => undefined);
+    } catch {
+      // Parent status refresh failures must not replace valid PBS details or
+      // the actionable upstream error from the details request itself.
+    }
+  }, []);
+
+  const fetchDetails = useCallback(async (notifyStatus = false) => {
     const id = ++seqRef.current;
     latestRef.current = id;
     setState((prev) => ({ ...prev, loading: true, error: null }));
@@ -68,15 +102,25 @@ export function usePBSDetails(assetId: string): PBSDetailsState & { refresh: () 
       }
       if (latestRef.current !== id) return;
       setState({ details: payload, loading: false, error: null });
+      if (notifyStatus) {
+        notifyManualRefreshSettled();
+      }
     } catch (err) {
       if (latestRef.current !== id) return;
-      setState({
-        details: null,
+      setState((previous) => ({
+        // Keep the last successful inventory visible while clearly labeling
+        // the refresh failure. A first-load failure still has no cached data.
+        details: previous.details,
         loading: false,
-        error: err instanceof Error ? err.message : "failed to load pbs details",
-      });
+        error: pbsDetailsErrorMessage(
+          err instanceof Error ? err.message : "failed to load pbs details",
+        ),
+      }));
+      if (notifyStatus) {
+        notifyManualRefreshSettled();
+      }
     }
-  }, [assetId]);
+  }, [assetId, notifyManualRefreshSettled]);
 
   useEffect(() => {
     void fetchDetails();
@@ -84,5 +128,5 @@ export function usePBSDetails(assetId: string): PBSDetailsState & { refresh: () 
     return () => clearInterval(interval);
   }, [fetchDetails]);
 
-  return { ...state, refresh: () => { void fetchDetails(); } };
+  return { ...state, refresh: () => { void fetchDetails(true); } };
 }

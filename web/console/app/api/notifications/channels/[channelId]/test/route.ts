@@ -1,19 +1,22 @@
-import { NextResponse } from "next/server";
-
 import { backendAuthHeadersWithCookie, resolvedBackendBaseURLs } from "../../../../../../lib/backend";
 import { isMutationRequestOriginAllowed } from "../../../../../../lib/proxyAuth";
+import {
+  notificationBackendUnavailableResponse,
+  notificationJSONResponse,
+  safeNotificationResponseJSON,
+} from "../../../proxy";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request, context: { params: Promise<{ channelId: string }> }) {
   if (!isMutationRequestOriginAllowed(request)) {
-    return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
+    return notificationJSONResponse({ success: false, error: "forbidden origin" }, 403);
   }
 
-  const { channelId } = await context.params;
-  const base = await resolvedBackendBaseURLs();
-  const authHeaders = backendAuthHeadersWithCookie(request);
   try {
+    const { channelId } = await context.params;
+    const base = await resolvedBackendBaseURLs();
+    const authHeaders = backendAuthHeadersWithCookie(request);
     const response = await fetch(
       `${base.api}/notifications/channels/${encodeURIComponent(channelId)}/test`,
       {
@@ -22,26 +25,16 @@ export async function POST(request: Request, context: { params: Promise<{ channe
         cache: "no-store",
       },
     );
-    const payload = await safeJSON(response);
+    const payload = await safeNotificationResponseJSON(response);
     if (!response.ok) {
-      return NextResponse.json(
+      return notificationJSONResponse(
         payload ?? { success: false, error: "failed to send test notification" },
-        { status: response.status },
+        response.status,
       );
     }
-    return NextResponse.json(payload ?? { success: true });
-  } catch (error) {
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "backend error" },
-      { status: 502 },
-    );
-  }
-}
-
-async function safeJSON(response: Response): Promise<unknown | null> {
-  try {
-    return await response.json();
+    if (payload === null) return notificationBackendUnavailableResponse(true);
+    return notificationJSONResponse(payload);
   } catch {
-    return null;
+    return notificationBackendUnavailableResponse(true);
   }
 }

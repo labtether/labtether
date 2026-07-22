@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import {
   hasLabtetherSessionCookie,
   hasServiceModeAuthHeader,
@@ -7,6 +7,10 @@ import {
   isTrustedServiceProxyPath,
   isProxyRequestAuthorized,
 } from "../proxyAuth";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 /**
  * Helper to build a Request-like object for testing isMutationRequestOriginAllowed.
@@ -143,6 +147,29 @@ describe("isMutationRequestOriginAllowed", () => {
     expect(isMutationRequestOriginAllowed(req)).toBe(false);
   });
 
+  it("ignores spoofed forwarded origin headers by default", () => {
+    const req = makeRequest("POST", {
+      cookie: "labtether_session=abc123",
+      origin: "https://evil.example",
+      host: "hub.local:3000",
+      forwardedProto: "https",
+      forwardedHost: "evil.example",
+    });
+    expect(isMutationRequestOriginAllowed(req)).toBe(false);
+  });
+
+  it("honors forwarded origin only with an explicit trusted proxy hop", () => {
+    vi.stubEnv("LABTETHER_TRUST_PROXY_HOPS", "1");
+    const req = makeRequest("POST", {
+      cookie: "labtether_session=abc123",
+      origin: "https://hub.example",
+      host: "console:3000",
+      forwardedProto: "https",
+      forwardedHost: "hub.example",
+    });
+    expect(isMutationRequestOriginAllowed(req)).toBe(true);
+  });
+
   // Test 5: Browser + no auth at all -> deny (unless same-origin signals)
   it("denies browser POST with no auth and cross-origin", () => {
     const req = makeRequest("POST", {
@@ -169,6 +196,15 @@ describe("isMutationRequestOriginAllowed", () => {
       host: "hub.local:3000",
     });
     expect(isMutationRequestOriginAllowed(req)).toBe(true);
+  });
+
+  it("denies POST with no origin and sec-fetch-site=same-site", () => {
+    const req = makeRequest("POST", {
+      cookie: "labtether_session=abc123",
+      secFetchSite: "same-site",
+      host: "hub.local:3000",
+    });
+    expect(isMutationRequestOriginAllowed(req)).toBe(false);
   });
 
   // Service token + Origin matching request host -> allow

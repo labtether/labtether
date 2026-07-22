@@ -8,6 +8,23 @@ import type {
 
 const API_BASE = "/api/topology";
 
+export function normalizeTopologyState(value: unknown): TopologyState | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const raw = value as Partial<TopologyState>;
+  return {
+    ...raw,
+    id: typeof raw.id === "string" ? raw.id : "",
+    name: typeof raw.name === "string" ? raw.name : "",
+    zones: Array.isArray(raw.zones) ? raw.zones : [],
+    members: Array.isArray(raw.members) ? raw.members : [],
+    connections: Array.isArray(raw.connections) ? raw.connections : [],
+    unsorted: Array.isArray(raw.unsorted) ? raw.unsorted : [],
+    viewport: raw.viewport && typeof raw.viewport === "object"
+      ? raw.viewport
+      : { x: 0, y: 0, zoom: 1 },
+  };
+}
+
 export function useTopologyData() {
   const [topology, setTopology] = useState<TopologyState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -25,7 +42,8 @@ export function useTopologyData() {
       if (!res.ok) throw new Error(`Failed to load topology: ${res.status}`);
       const json = await res.json();
       // Backend wraps in v2 envelope: { data: TopologyState }
-      const data: TopologyState = json.data ?? json;
+      const data = normalizeTopologyState(json.data ?? json);
+      if (!data) throw new Error("Failed to load topology: invalid response");
       setTopology(data);
       setError(null);
     } catch (e) {

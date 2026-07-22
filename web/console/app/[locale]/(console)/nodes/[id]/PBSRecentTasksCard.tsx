@@ -1,6 +1,5 @@
 "use client";
 
-import { useMemo, useState } from "react";
 import { Badge } from "../../../../components/ui/Badge";
 import { Card } from "../../../../components/ui/Card";
 import { formatRelativeEpoch, pbsTaskStatusBadge } from "./pbsTabModel";
@@ -35,38 +34,15 @@ function taskTypeLabel(workerType: string): string {
 }
 
 export function PBSRecentTasksCard({ tasks, selectedTask, onSelectTask }: PBSRecentTasksCardProps) {
-  const [filter, setFilter] = useState<"all" | "errors" | "running">("all");
-
-  const filteredTasks = useMemo(() => {
-    if (filter === "all") return tasks;
-    if (filter === "errors") return tasks.filter((t) => pbsTaskStatusBadge(t.status) === "bad");
-    return tasks.filter((t) => pbsTaskStatusBadge(t.status) === "pending");
-  }, [tasks, filter]);
-
   return (
     <Card>
       <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
         <h2 className="text-sm font-medium text-[var(--text)]">Recent PBS Tasks</h2>
-        <span className="text-xs text-[var(--muted)]">{filteredTasks.length} tasks</span>
+        <span className="text-xs text-[var(--muted)]">{tasks.length} tasks</span>
       </div>
-      <div className="flex gap-1 mb-3">
-        {(["all", "errors", "running"] as const).map((tab) => (
-          <button
-            key={tab}
-            className={`rounded-md px-2.5 py-1 text-xs transition-colors ${
-              filter === tab
-                ? "bg-[var(--hover)] text-[var(--text)] font-medium"
-                : "text-[var(--muted)] hover:text-[var(--text)]"
-            }`}
-            onClick={() => setFilter(tab)}
-          >
-            {tab === "all" ? "All" : tab === "errors" ? "Errors" : "Running"}
-          </button>
-        ))}
-      </div>
-      {filteredTasks.length > 0 ? (
+      {tasks.length > 0 ? (
         <ul className="divide-y divide-[var(--line)]">
-          {filteredTasks.slice(0, 30).map((task) => {
+          {tasks.slice(0, 30).map((task) => {
             const active = selectedTask?.upid === task.upid;
             return (
               <li key={task.upid} className="py-2">

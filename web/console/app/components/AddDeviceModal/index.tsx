@@ -120,7 +120,12 @@ export function AddDeviceModal({ open, onClose, onAdded }: AddDeviceModalProps) 
   }, []);
 
   return (
-    <Modal open={open} onClose={handleClose}>
+    <Modal
+      open={open}
+      onClose={handleClose}
+      ariaTitle={selectedSource ? `Add Device: ${sourceLabels[selectedSource]}` : "Add Device"}
+      description="Choose a connection source and configure it for LabTether."
+    >
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--line)]">
         <div className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
@@ -132,7 +137,12 @@ export function AddDeviceModal({ open, onClose, onAdded }: AddDeviceModalProps) 
             </>
           )}
         </div>
-        <button onClick={handleClose} className="p-1 rounded hover:bg-[var(--hover)] transition-colors duration-150">
+        <button
+          type="button"
+          onClick={handleClose}
+          aria-label="Close Add Device dialog"
+          className="p-1 rounded hover:bg-[var(--hover)] transition-colors duration-150"
+        >
           <X size={16} className="text-[var(--muted)]" />
         </button>
       </div>

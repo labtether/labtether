@@ -65,10 +65,9 @@ export function PortainerStacksTab({ assetId }: Props) {
     setActionError(null);
     setActionInFlight(`${stackId}-${action}`);
     try {
-      const method = action === "remove" ? "DELETE" : "POST";
       await portainerAction(
         `/api/portainer/assets/${encodeURIComponent(assetId)}/stacks/${encodeURIComponent(stackId)}/${action}`,
-        method,
+        "POST",
       );
       await load();
     } catch (err) {

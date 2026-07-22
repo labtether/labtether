@@ -55,6 +55,10 @@ export function PBSDatastoresCard({ datastores, assetId }: Props) {
             <tbody>
               {datastores.map((store) => {
                 const isExpanded = expandedStore === store.store;
+                const detailsID = `pbs-datastore-${assetId}-${store.store}`.replace(
+                  /[^a-zA-Z0-9_-]/g,
+                  "-",
+                );
                 const threshold = usageThreshold(store.usage_percent);
                 const lastBackupEpoch = store.last_backup_at
                   ? new Date(store.last_backup_at).getTime() / 1000
@@ -71,13 +75,18 @@ export function PBSDatastoresCard({ datastores, assetId }: Props) {
                 return (
                   <Fragment key={store.store}>
                     <tr
-                      className={`border-b border-[var(--line)] border-opacity-30 cursor-pointer transition-colors duration-[var(--dur-fast)] hover:bg-[var(--hover)] ${
+                      className={`border-b border-[var(--line)] border-opacity-30 transition-colors duration-[var(--dur-fast)] ${
                         isExpanded ? "bg-[var(--hover)]" : ""
                       }`}
-                      onClick={() => handleRowClick(store.store)}
                     >
                       <td className="py-2 px-2 text-[var(--text)] font-medium">
-                        <span className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-1.5 rounded text-left hover:text-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                          aria-expanded={isExpanded}
+                          aria-controls={detailsID}
+                          onClick={() => handleRowClick(store.store)}
+                        >
                           <span
                             className="text-[var(--muted)] text-[10px] select-none"
                             aria-hidden="true"
@@ -85,7 +94,7 @@ export function PBSDatastoresCard({ datastores, assetId }: Props) {
                             {isExpanded ? "\u25BE" : "\u25B8"}
                           </span>
                           {store.store}
-                        </span>
+                        </button>
                       </td>
                       <td className="py-2 px-2">
                         <Badge status={pbsStatusBadge(store.status)} size="sm" />
@@ -128,7 +137,7 @@ export function PBSDatastoresCard({ datastores, assetId }: Props) {
                       </td>
                     </tr>
                     {isExpanded && (
-                      <tr>
+                      <tr id={detailsID}>
                         <td colSpan={7} className="p-0 border-b border-[var(--line)] border-opacity-30">
                           <PBSDatastoreDrilldown store={store} assetId={assetId} />
                         </td>

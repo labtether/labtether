@@ -16,6 +16,8 @@ type DashboardFirstRunChecklistCardProps = {
   connectorCount: number;
   recentCommandCount: number;
   recentLogCount: number;
+  canWrite: boolean;
+  canAdmin: boolean;
   onAddDevice: () => void;
 };
 
@@ -33,6 +35,8 @@ export function DashboardFirstRunChecklistCard({
   connectorCount,
   recentCommandCount,
   recentLogCount,
+  canWrite,
+  canAdmin,
   onAddDevice,
 }: DashboardFirstRunChecklistCardProps) {
   const [dismissed, setDismissed] = useState(false);
@@ -155,15 +159,21 @@ export function DashboardFirstRunChecklistCard({
 
           {!allComplete ? (
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Button size="sm" variant="primary" onClick={onAddDevice}>
-                + Add Device
-              </Button>
-              <Link href="/settings" className="text-xs text-[var(--accent)] hover:underline inline-flex items-center gap-1">
-                Open Connector Settings <ArrowRight size={12} />
-              </Link>
-              <Link href="/terminal" className="text-xs text-[var(--accent)] hover:underline inline-flex items-center gap-1">
-                Open Terminal <ArrowRight size={12} />
-              </Link>
+              {canWrite ? (
+                <Button size="sm" variant="primary" onClick={onAddDevice}>
+                  + Add Device
+                </Button>
+              ) : null}
+              {canAdmin ? (
+                <Link href="/settings" className="text-xs text-[var(--accent)] hover:underline inline-flex items-center gap-1">
+                  Open Connector Settings <ArrowRight size={12} />
+                </Link>
+              ) : null}
+              {canWrite ? (
+                <Link href="/terminal" className="text-xs text-[var(--accent)] hover:underline inline-flex items-center gap-1">
+                  Open Terminal <ArrowRight size={12} />
+                </Link>
+              ) : null}
               <Link href="/logs" className="text-xs text-[var(--accent)] hover:underline inline-flex items-center gap-1">
                 Open Logs <ArrowRight size={12} />
               </Link>
@@ -174,12 +184,14 @@ export function DashboardFirstRunChecklistCard({
                 Core workflows validated. Here&apos;s what to explore next:
               </p>
               <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <Link
-                  href="/settings"
-                  className="block rounded-lg px-3 py-2 bg-[var(--panel-glass)] border border-[var(--panel-border)] text-xs text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors"
-                >
-                  Set up alert notifications
-                </Link>
+                {canAdmin ? (
+                  <Link
+                    href="/settings"
+                    className="block rounded-lg px-3 py-2 bg-[var(--panel-glass)] border border-[var(--panel-border)] text-xs text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors"
+                  >
+                    Set up alert notifications
+                  </Link>
+                ) : null}
                 <a
                   href="https://labtether.com/docs/guides/mcp-gateway"
                   target="_blank"

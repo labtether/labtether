@@ -1,31 +1,46 @@
-import { NextResponse } from "next/server";
+import {
+  backendAuthHeadersWithCookie,
+  resolvedBackendBaseURLs,
+} from "../../../../lib/backend";
+import {
+  desktopProxyJSON,
+  desktopUpstreamError,
+  desktopUpstreamTimeoutMs,
+  safeDesktopResponseJSON,
+  validDesktopResourceID,
+} from "../../desktop/proxy";
 
-import { backendAuthHeadersWithCookie, resolvedBackendBaseURLs } from "../../../../lib/backend";
+export const dynamic = "force-dynamic";
 
-export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    const { id } = await params;
-    const base = await resolvedBackendBaseURLs();
-    const response = await fetch(`${base.api}/assets/${encodeURIComponent(id)}/displays`, {
-      cache: "no-store",
-      headers: {
-        ...backendAuthHeadersWithCookie(request),
-      },
-    });
-    const payload = await safeJSON(response);
-    return NextResponse.json(payload ?? { displays: [] }, { status: response.status });
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "display query failed" },
-      { status: 502 },
-    );
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  if (!validDesktopResourceID(id)) {
+    return desktopProxyJSON({ error: "invalid asset id" }, 400);
   }
-}
 
-async function safeJSON(response: Response): Promise<unknown | null> {
   try {
-    return await response.json();
+    const base = await resolvedBackendBaseURLs();
+    const response = await fetch(
+      `${base.api}/assets/${encodeURIComponent(id.trim())}/displays`,
+      {
+        cache: "no-store",
+        signal: AbortSignal.timeout(desktopUpstreamTimeoutMs),
+        headers: backendAuthHeadersWithCookie(request),
+      },
+    );
+    const payload = await safeDesktopResponseJSON(response);
+    if (!response.ok) {
+      return desktopUpstreamError(
+        response,
+        payload,
+        "failed to query displays",
+      );
+    }
+    return desktopProxyJSON(payload ?? { displays: [] }, response.status);
   } catch {
-    return null;
+    return desktopProxyJSON({ error: "display query failed" }, 502);
   }
 }

@@ -9,6 +9,7 @@ interface ActionDef {
   icon: LucideIcon;
   hrefSuffix: string;
   description: string;
+  writeRequired?: boolean;
 }
 
 const DEVICE_ACTIONS: ActionDef[] = [
@@ -18,6 +19,7 @@ const DEVICE_ACTIONS: ActionDef[] = [
     icon: TerminalSquare,
     hrefSuffix: "",
     description: "Open terminal session",
+    writeRequired: true,
   },
   {
     key: "desktop",
@@ -25,6 +27,7 @@ const DEVICE_ACTIONS: ActionDef[] = [
     icon: Monitor,
     hrefSuffix: "/desktop",
     description: "Open remote desktop",
+    writeRequired: true,
   },
   {
     key: "details",
@@ -52,6 +55,7 @@ const DEVICE_ACTIONS: ActionDef[] = [
 export function createDeviceActionsProvider(
   getStatus: () => FastStatusSlice | null,
   routerPush: (href: string) => void,
+  canWrite: boolean,
 ): PaletteProvider {
   return {
     id: "device-actions",
@@ -78,6 +82,7 @@ export function createDeviceActionsProvider(
         if (!deviceMatches) continue;
 
         for (const actionDef of DEVICE_ACTIONS) {
+          if (actionDef.writeRequired && !canWrite) continue;
           const actionMatches =
             q === "" ||
             deviceName.toLowerCase().includes(q) ||

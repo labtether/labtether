@@ -1,15 +1,9 @@
 import { NextResponse } from "next/server";
 import { resolvedBackendBaseURLs } from "../../../../../lib/backend";
+import { safeLocalRedirectPath } from "../../../../../lib/safeRedirect";
+import { markResponseNoStore } from "../../../../../lib/noStoreResponse";
 
 export const dynamic = "force-dynamic";
-
-function safeNextPath(value: string | null): string {
-  if (!value || !value.startsWith("/")) return "/";
-  if (value.startsWith("//")) return "/";
-  const lower = value.toLowerCase();
-  if (lower.includes("javascript:") || lower.includes("data:")) return "/";
-  return value;
-}
 
 export async function GET(request: Request) {
   const requestURL = new URL(request.url);
@@ -17,7 +11,7 @@ export async function GET(request: Request) {
   const origin = `${requestURL.protocol}//${host}`;
   const base = await resolvedBackendBaseURLs();
   const redirectURI = `${origin}/api/auth/oidc/callback`;
-  const nextPath = safeNextPath(requestURL.searchParams.get("next"));
+  const nextPath = safeLocalRedirectPath(requestURL.searchParams.get("next"));
 
   try {
     const response = await fetch(`${base.api}/auth/oidc/start`, {
@@ -29,12 +23,12 @@ export async function GET(request: Request) {
 
     const payload = await safeJSON(response) as { auth_url?: string; error?: string } | null;
     if (!response.ok || !payload?.auth_url) {
-      return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(payload?.error ?? "SSO unavailable")}`, requestURL));
+      return markResponseNoStore(NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(payload?.error ?? "SSO unavailable")}`, requestURL)));
     }
 
-    return NextResponse.redirect(payload.auth_url);
+    return markResponseNoStore(NextResponse.redirect(payload.auth_url));
   } catch {
-    return NextResponse.redirect(new URL("/login?error=SSO%20unavailable", requestURL));
+    return markResponseNoStore(NextResponse.redirect(new URL("/login?error=SSO%20unavailable", requestURL)));
   }
 }
 

@@ -1,11 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { backendAuthHeadersWithCookie, resolvedBackendBaseURLs } from "../../../../lib/backend";
+import { isMutationRequestOriginAllowed } from "../../../../lib/proxyAuth";
 
 /**
  * Proxy all /api/remote-bookmarks/* requests to the hub's /api/v1/remote-bookmarks/* endpoint.
  * Supports GET (list), POST (create), PUT (update), DELETE (remove).
  */
 async function proxyToHub(request: NextRequest, { params }: { params: Promise<{ path?: string[] }> }) {
+  if (
+    request.method !== "GET"
+    && request.method !== "HEAD"
+    && !isMutationRequestOriginAllowed(request)
+  ) {
+    return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
+  }
+
   const { path } = await params;
   // Encode each path segment individually to prevent path traversal
   const subPath = path ? path.map(encodeURIComponent).join("/") : "";
@@ -30,6 +39,7 @@ async function proxyToHub(request: NextRequest, { params }: { params: Promise<{ 
     const fetchOptions: RequestInit = {
       method: request.method,
       headers,
+      cache: "no-store",
     };
 
     // Forward body for POST/PUT.
@@ -39,6 +49,10 @@ async function proxyToHub(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const response = await fetch(url, fetchOptions);
+
+    if (response.status === 204 || response.status === 304) {
+      return new NextResponse(null, { status: response.status });
+    }
 
     // For downloads, stream the response body directly.
     const disposition = response.headers.get("content-disposition");
@@ -56,7 +70,12 @@ async function proxyToHub(request: NextRequest, { params }: { params: Promise<{ 
     const text = await response.text();
     try {
       const data = JSON.parse(text);
-      return NextResponse.json(data, { status: response.status });
+      return NextResponse.json(data, {
+        status: response.status,
+        headers: subPath.endsWith("/credentials")
+          ? { "Cache-Control": "no-store, private", Pragma: "no-cache" }
+          : undefined,
+      });
     } catch {
       return new NextResponse(text, {
         status: response.status,
