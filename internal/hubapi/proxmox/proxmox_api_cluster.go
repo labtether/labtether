@@ -13,6 +13,9 @@ import (
 // handleProxmoxClusterResources handles GET /proxmox/cluster/resources
 // Returns all cluster resources including nodes, VMs, containers, and storage.
 func (d *Deps) HandleProxmoxClusterResources(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobal(w, r, "cluster resources") {
+		return
+	}
 	if r.Method != http.MethodGet {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return

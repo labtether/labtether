@@ -83,7 +83,7 @@ func (d *Deps) precomputeFingerprint(
 	groupFilter string,
 ) string {
 	gen := d.Cache.Generation.Load()
-	scopeKey := terminalScopeKey(principalActorID(ctx))
+	scopeKey := statusScopeKey(ctx)
 
 	processedJobs := uint64(0)
 	if d.ProcessedJobs != nil {
@@ -130,7 +130,7 @@ func (d *Deps) HandleStatusAggregate() http.HandlerFunc {
 
 		gf := groupFilter(r)
 		caller := shared.SourceQueryCaller(r, "status.aggregate")
-		scopeKey := terminalScopeKey(principalActorID(r.Context()))
+		scopeKey := statusScopeKey(r.Context())
 		cacheKey := gf + "|" + scopeKey
 
 		var allAssets []assets.Asset
@@ -204,8 +204,8 @@ func (d *Deps) BuildLiveResponse(ctx context.Context, gf string) LiveResponse {
 // BuildLiveResponseDeduped deduplicates concurrent live response builds for
 // the same group/asset fingerprint using a singleflight group.
 func (d *Deps) BuildLiveResponseDeduped(ctx context.Context, gf string) LiveResponse {
-	assetsAll := d.listAssets()
-	key := "live:" + strings.TrimSpace(gf) + ":" + CanonicalAssetFingerprint(assetsAll)
+	assetsAll := filterStatusAssets(ctx, d.listAssets())
+	key := "live:" + strings.TrimSpace(gf) + ":" + statusScopeKey(ctx) + ":" + CanonicalAssetFingerprint(assetsAll)
 	value, _, _ := d.Cache.LiveBuildGroup.Do(key, func() (any, error) {
 		return d.buildLiveResponseWithAssets(ctx, gf, assetsAll), nil
 	})
@@ -224,7 +224,10 @@ func (d *Deps) buildLiveResponseWithAssets(
 	now := time.Now().UTC()
 	assetsFiltered := FilterAssetsByGroup(assetsAll, gf)
 	endpoints := d.collectEndpointResults(ctx)
-	telemetryOverview := d.buildTelemetryOverview(assetsFiltered, now)
+	telemetryOverview := []shared.AssetTelemetryOverview{}
+	if statusHasScope(ctx, "metrics:read") {
+		telemetryOverview = d.buildTelemetryOverview(assetsFiltered, now)
+	}
 	servicesUp, servicesTotal := d.webServiceSummary(assetsFiltered)
 
 	return LiveResponse{
@@ -256,11 +259,12 @@ func (d *Deps) buildResponseDeduped(
 	if allAssets == nil {
 		allAssets = d.listAssets()
 	}
+	allAssets = filterStatusAssets(ctx, allAssets)
 	processedJobs := uint64(0)
 	if d.ProcessedJobs != nil {
 		processedJobs = d.ProcessedJobs.Load()
 	}
-	scopeKey := terminalScopeKey(principalActorID(ctx))
+	scopeKey := statusScopeKey(ctx)
 	key := strings.Join([]string{
 		"full",
 		strings.TrimSpace(gf),

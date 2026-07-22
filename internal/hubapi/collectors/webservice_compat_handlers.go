@@ -35,6 +35,9 @@ const (
 )
 
 func (d *Deps) HandleWebServiceCompat(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobal(w, r, "web-service compatibility data") {
+		return
+	}
 	if r.Method != http.MethodGet {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return

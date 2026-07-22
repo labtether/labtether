@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "../../../../../components/ui/Button";
 import { Card } from "../../../../../components/ui/Card";
+import { PBSActionConfirmation } from "./PBSActionConfirmation";
 import { pbsAction, pbsFetch } from "./usePBSData";
 
 type Props = {
@@ -42,14 +43,23 @@ function normalizePruneJobs(value: unknown): PruneJob[] {
       ns: typeof j.ns === "string" ? j.ns : undefined,
       schedule: typeof j.schedule === "string" ? j.schedule : undefined,
       comment: typeof j.comment === "string" ? j.comment : undefined,
-      keep_last: typeof j.keep_last === "number" ? j.keep_last : undefined,
-      keep_hourly: typeof j.keep_hourly === "number" ? j.keep_hourly : undefined,
-      keep_daily: typeof j.keep_daily === "number" ? j.keep_daily : undefined,
-      keep_weekly: typeof j.keep_weekly === "number" ? j.keep_weekly : undefined,
-      keep_monthly: typeof j.keep_monthly === "number" ? j.keep_monthly : undefined,
-      keep_yearly: typeof j.keep_yearly === "number" ? j.keep_yearly : undefined,
+      keep_last: numericJobField(j, "keep_last", "keep-last"),
+      keep_hourly: numericJobField(j, "keep_hourly", "keep-hourly"),
+      keep_daily: numericJobField(j, "keep_daily", "keep-daily"),
+      keep_weekly: numericJobField(j, "keep_weekly", "keep-weekly"),
+      keep_monthly: numericJobField(j, "keep_monthly", "keep-monthly"),
+      keep_yearly: numericJobField(j, "keep_yearly", "keep-yearly"),
     };
   });
+}
+
+function numericJobField(
+  job: Record<string, unknown>,
+  snakeCase: string,
+  pbsName: string,
+): number | undefined {
+  const value = job[snakeCase] ?? job[pbsName];
+  return typeof value === "number" ? value : undefined;
 }
 
 function retentionSummary(job: PruneJob): string {
@@ -69,6 +79,11 @@ export function PBSPruneJobsTab({ assetId }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [actionInFlight, setActionInFlight] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<{
+    action: "run" | "simulate" | "delete";
+    id: string;
+  } | null>(null);
 
   const seqRef = useRef(0);
   const latestRef = useRef(0);
@@ -101,13 +116,18 @@ export function PBSPruneJobsTab({ assetId }: Props) {
     async (jobId: string) => {
       const seq = ++actionSeq.current;
       setActionError(null);
+      setActionSuccess(null);
+      setConfirmation(null);
       setActionInFlight(`run-${jobId}`);
       try {
         await pbsAction(
           `/api/pbs/assets/${encodeURIComponent(assetId)}/prune-jobs/${encodeURIComponent(jobId)}/run`,
           "POST",
         );
-        if (actionSeq.current === seq) void fetchJobs();
+        if (actionSeq.current === seq) {
+          setActionSuccess(`Prune job ${jobId} started.`);
+          void fetchJobs();
+        }
       } catch (err) {
         if (actionSeq.current === seq)
           setActionError(err instanceof Error ? err.message : "run failed");
@@ -122,13 +142,18 @@ export function PBSPruneJobsTab({ assetId }: Props) {
     async (jobId: string) => {
       const seq = ++actionSeq.current;
       setActionError(null);
+      setActionSuccess(null);
+      setConfirmation(null);
       setActionInFlight(`simulate-${jobId}`);
       try {
         await pbsAction(
           `/api/pbs/assets/${encodeURIComponent(assetId)}/prune-jobs/${encodeURIComponent(jobId)}/simulate`,
           "POST",
         );
-        if (actionSeq.current === seq) void fetchJobs();
+        if (actionSeq.current === seq) {
+          setActionSuccess(`Prune job ${jobId} simulation started.`);
+          void fetchJobs();
+        }
       } catch (err) {
         if (actionSeq.current === seq)
           setActionError(err instanceof Error ? err.message : "simulate failed");
@@ -143,13 +168,18 @@ export function PBSPruneJobsTab({ assetId }: Props) {
     async (jobId: string) => {
       const seq = ++actionSeq.current;
       setActionError(null);
+      setActionSuccess(null);
+      setConfirmation(null);
       setActionInFlight(`delete-${jobId}`);
       try {
         await pbsAction(
           `/api/pbs/assets/${encodeURIComponent(assetId)}/prune-jobs/${encodeURIComponent(jobId)}`,
           "DELETE",
         );
-        if (actionSeq.current === seq) void fetchJobs();
+        if (actionSeq.current === seq) {
+          setActionSuccess(`Prune job ${jobId} deleted.`);
+          void fetchJobs();
+        }
       } catch (err) {
         if (actionSeq.current === seq)
           setActionError(err instanceof Error ? err.message : "delete failed");
@@ -161,7 +191,21 @@ export function PBSPruneJobsTab({ assetId }: Props) {
   );
 
   return (
-    <Card>
+    <div className="space-y-4">
+      {confirmation ? (
+        <PBSActionConfirmation
+          message={`Confirm ${confirmation.action} prune job ${confirmation.id}?`}
+          confirmLabel={confirmation.action === "delete" ? "Confirm Delete" : "Confirm"}
+          busy={actionInFlight !== null}
+          onConfirm={() => {
+            if (confirmation.action === "run") void doRun(confirmation.id);
+            else if (confirmation.action === "simulate") void doSimulate(confirmation.id);
+            else void doDelete(confirmation.id);
+          }}
+          onCancel={() => setConfirmation(null)}
+        />
+      ) : null}
+      <Card>
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <h2 className="text-sm font-medium text-[var(--text)]">Prune Jobs</h2>
         <Button size="sm" variant="ghost" onClick={() => void fetchJobs()} disabled={loading}>
@@ -169,7 +213,8 @@ export function PBSPruneJobsTab({ assetId }: Props) {
         </Button>
       </div>
 
-      {actionError ? <p className="mb-3 text-xs text-[var(--bad)]">{actionError}</p> : null}
+      {actionError ? <p role="alert" className="mb-3 text-xs text-[var(--bad)]">{actionError}</p> : null}
+      {actionSuccess ? <p role="status" className="mb-3 text-xs text-[var(--ok)]">{actionSuccess}</p> : null}
 
       {error ? (
         <p className="text-xs text-[var(--bad)]">{error}</p>
@@ -203,7 +248,7 @@ export function PBSPruneJobsTab({ assetId }: Props) {
                         variant="ghost"
                         disabled={!!actionInFlight}
                         loading={actionInFlight === `run-${job.id}`}
-                        onClick={() => void doRun(job.id)}
+                        onClick={() => setConfirmation({ action: "run", id: job.id })}
                       >
                         Run
                       </Button>
@@ -212,7 +257,7 @@ export function PBSPruneJobsTab({ assetId }: Props) {
                         variant="ghost"
                         disabled={!!actionInFlight}
                         loading={actionInFlight === `simulate-${job.id}`}
-                        onClick={() => void doSimulate(job.id)}
+                        onClick={() => setConfirmation({ action: "simulate", id: job.id })}
                       >
                         Simulate
                       </Button>
@@ -221,7 +266,7 @@ export function PBSPruneJobsTab({ assetId }: Props) {
                         variant="ghost"
                         disabled={!!actionInFlight}
                         loading={actionInFlight === `delete-${job.id}`}
-                        onClick={() => void doDelete(job.id)}
+                        onClick={() => setConfirmation({ action: "delete", id: job.id })}
                       >
                         Delete
                       </Button>
@@ -233,6 +278,7 @@ export function PBSPruneJobsTab({ assetId }: Props) {
           </table>
         </div>
       )}
-    </Card>
+      </Card>
+    </div>
   );
 }

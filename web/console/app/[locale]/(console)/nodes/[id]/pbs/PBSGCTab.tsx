@@ -5,6 +5,7 @@ import { useMemo, useRef, useState, useCallback } from "react";
 import { Badge } from "../../../../../components/ui/Badge";
 import { Button } from "../../../../../components/ui/Button";
 import { Card } from "../../../../../components/ui/Card";
+import { PBSActionConfirmation } from "./PBSActionConfirmation";
 import {
   formatRelativeEpoch,
   pbsTaskStatusBadge,
@@ -21,6 +22,8 @@ export function PBSGCTab({ assetId }: Props) {
   const { details, loading, error, refresh } = usePBSDetails(assetId);
   const [actionInFlight, setActionInFlight] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<string | null>(null);
   const actionSeq = useRef(0);
 
   const sortedDatastores = useMemo(() => {
@@ -46,13 +49,18 @@ export function PBSGCTab({ assetId }: Props) {
     async (store: string) => {
       const seq = ++actionSeq.current;
       setActionError(null);
+      setActionSuccess(null);
+      setConfirmation(null);
       setActionInFlight(`gc-${store}`);
       try {
         await pbsAction(
           `/api/pbs/assets/${encodeURIComponent(assetId)}/datastores/${encodeURIComponent(store)}/gc`,
           "POST",
         );
-        if (actionSeq.current === seq) refresh();
+        if (actionSeq.current === seq) {
+          setActionSuccess(`Garbage collection requested for ${store}.`);
+          refresh();
+        }
       } catch (err) {
         if (actionSeq.current === seq)
           setActionError(err instanceof Error ? err.message : "GC failed");
@@ -73,6 +81,15 @@ export function PBSGCTab({ assetId }: Props) {
 
   return (
     <div className="space-y-4">
+      {confirmation ? (
+        <PBSActionConfirmation
+          message={`Confirm garbage collection on ${confirmation}?`}
+          confirmLabel="Confirm GC"
+          busy={actionInFlight !== null}
+          onConfirm={() => void doGC(confirmation)}
+          onCancel={() => setConfirmation(null)}
+        />
+      ) : null}
       <Card>
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h2 className="text-sm font-medium text-[var(--text)]">Garbage Collection</h2>
@@ -80,7 +97,8 @@ export function PBSGCTab({ assetId }: Props) {
             {loading ? "Refreshing..." : "Refresh"}
           </Button>
         </div>
-        {actionError ? <p className="mb-3 text-xs text-[var(--bad)]">{actionError}</p> : null}
+        {actionError ? <p role="alert" className="mb-3 text-xs text-[var(--bad)]">{actionError}</p> : null}
+        {actionSuccess ? <p role="status" className="mb-3 text-xs text-[var(--ok)]">{actionSuccess}</p> : null}
         {sortedDatastores.length === 0 ? (
           <p className="text-xs text-[var(--muted)]">No datastores available.</p>
         ) : (
@@ -125,7 +143,7 @@ export function PBSGCTab({ assetId }: Props) {
                           variant="ghost"
                           disabled={!!actionInFlight}
                           loading={actionInFlight === `gc-${ds.store}`}
-                          onClick={() => void doGC(ds.store)}
+                          onClick={() => setConfirmation(ds.store)}
                         >
                           Run GC
                         </Button>

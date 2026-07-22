@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"log"
 	"net/http"
 	"strings"
@@ -21,7 +23,7 @@ func (d *Deps) HandleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "authentication unavailable")
 		return
 	}
-	if !d.EnforceRateLimit(w, r, "auth.login", 10, time.Minute) {
+	if d.EnforceRateLimitGlobal != nil && !d.EnforceRateLimitGlobal(w, "auth.login.global", 120, time.Minute) {
 		return
 	}
 
@@ -35,13 +37,27 @@ func (d *Deps) HandleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	accountBucket := loginAccountBucket(req.Username)
+	if !d.EnforceRateLimit(w, r, accountBucket, 10, time.Minute) {
+		return
+	}
+	if d.EnforceRateLimitGlobal != nil && !d.EnforceRateLimitGlobal(w, accountBucket+":global", 20, time.Minute) {
+		return
+	}
 
 	user, ok, err := d.AuthStore.GetUserByUsername(req.Username)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to look up user")
 		return
 	}
-	if !ok || strings.TrimSpace(strings.ToLower(user.AuthProvider)) != "local" || !auth.CheckPassword(req.Password, user.PasswordHash) {
+	localUser := ok && strings.EqualFold(strings.TrimSpace(user.AuthProvider), "local")
+	passwordOK := false
+	if localUser {
+		passwordOK = auth.CheckPassword(req.Password, user.PasswordHash)
+	} else {
+		passwordOK = auth.CheckDummyPassword(req.Password)
+	}
+	if !localUser || !passwordOK {
 		servicehttp.WriteError(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
@@ -57,6 +73,12 @@ func (d *Deps) HandleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	d.CompleteLogin(w, r, user)
+}
+
+func loginAccountBucket(username string) string {
+	normalized := strings.ToLower(strings.TrimSpace(username))
+	digest := sha256.Sum256([]byte(normalized))
+	return "auth.login.account:" + hex.EncodeToString(digest[:8])
 }
 
 // HandleAuthLogout handles POST /auth/logout.

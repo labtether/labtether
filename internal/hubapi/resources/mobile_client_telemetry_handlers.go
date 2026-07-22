@@ -11,7 +11,14 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/logs"
+	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/servicehttp"
+)
+
+const (
+	maxMobileTelemetryBatch        = 100
+	telemetryIngestRateLimitBucket = "telemetry.ingest"
+	telemetryIngestRateLimitCount  = 60
 )
 
 type mobileClientTelemetryRequest struct {
@@ -43,6 +50,9 @@ func (d *Deps) HandleMobileClientTelemetry(w http.ResponseWriter, r *http.Reques
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "log store unavailable")
 		return
 	}
+	if d.EnforceRateLimit != nil && !d.EnforceRateLimit(w, r, telemetryIngestRateLimitBucket, telemetryIngestRateLimitCount, time.Minute) {
+		return
+	}
 
 	requests, err := decodeMobileClientTelemetryRequests(r)
 	if err != nil {
@@ -53,7 +63,12 @@ func (d *Deps) HandleMobileClientTelemetry(w http.ResponseWriter, r *http.Reques
 		servicehttp.WriteError(w, http.StatusBadRequest, "invalid telemetry payload")
 		return
 	}
+	if len(requests) > maxMobileTelemetryBatch {
+		servicehttp.WriteError(w, http.StatusBadRequest, "telemetry batch contains too many events")
+		return
+	}
 
+	events := make([]logs.Event, 0, len(requests))
 	for _, req := range requests {
 		route := SanitizeMobileTelemetryKey(req.Route)
 		if route == "" {
@@ -61,13 +76,10 @@ func (d *Deps) HandleMobileClientTelemetry(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		metric := strings.TrimSpace(req.Metric)
+		metric := normalizeTelemetryText(req.Metric, 120)
 		if metric == "" {
 			servicehttp.WriteError(w, http.StatusBadRequest, "metric is required")
 			return
-		}
-		if len(metric) > 120 {
-			metric = metric[:120]
 		}
 
 		durationMS := req.DurationMS
@@ -79,10 +91,7 @@ func (d *Deps) HandleMobileClientTelemetry(w http.ResponseWriter, r *http.Reques
 			durationMS = 3_600_000
 		}
 
-		status := strings.ToLower(strings.TrimSpace(req.Status))
-		if len(status) > 40 {
-			status = status[:40]
-		}
+		status := normalizeTelemetryText(strings.ToLower(req.Status), 40)
 
 		platform := SanitizeMobileTelemetryKey(req.Platform)
 		if platform == "" {
@@ -104,16 +113,10 @@ func (d *Deps) HandleMobileClientTelemetry(w http.ResponseWriter, r *http.Reques
 			}
 			fields["sample_size"] = strconv.Itoa(req.SampleSize)
 		}
-		if trimmed := strings.TrimSpace(req.AppVersion); trimmed != "" {
-			if len(trimmed) > 40 {
-				trimmed = trimmed[:40]
-			}
+		if trimmed := normalizeTelemetryText(req.AppVersion, 40); trimmed != "" {
 			fields["app_version"] = trimmed
 		}
-		if trimmed := strings.TrimSpace(req.Build); trimmed != "" {
-			if len(trimmed) > 40 {
-				trimmed = trimmed[:40]
-			}
+		if trimmed := normalizeTelemetryText(req.Build, 40); trimmed != "" {
 			fields["build"] = trimmed
 		}
 
@@ -121,16 +124,29 @@ func (d *Deps) HandleMobileClientTelemetry(w http.ResponseWriter, r *http.Reques
 			fields["meta_"+key] = value
 		}
 
-		if err := d.LogStore.AppendEvent(logs.Event{
+		events = append(events, logs.Event{
 			Source:    "mobile_client_telemetry",
 			Level:     mobileTelemetryLevel(status),
 			Message:   "mobile client telemetry metric",
 			Fields:    fields,
 			Timestamp: time.Now().UTC(),
-		}); err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to persist telemetry event")
-			return
+		})
+	}
+
+	var persistErr error
+	if batchStore, ok := d.LogStore.(persistence.LogBatchAppendStore); ok {
+		persistErr = batchStore.AppendEvents(events)
+	} else {
+		for _, event := range events {
+			if err := d.LogStore.AppendEvent(event); err != nil {
+				persistErr = err
+				break
+			}
 		}
+	}
+	if persistErr != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to persist telemetry event")
+		return
 	}
 
 	servicehttp.WriteJSON(w, http.StatusAccepted, map[string]any{

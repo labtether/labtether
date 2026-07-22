@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
+set +x
+set +a
+umask 077
 
 SESSION_NAME="${LABTETHER_BACKEND_TMUX_SESSION:-labtether-backend}"
-LOG_FILE="${LABTETHER_BACKEND_LOG_FILE:-/tmp/labtether-dev-backend.log}"
-PID_FILE="${LABTETHER_BACKEND_PID_FILE:-/tmp/labtether-dev-backend.pid}"
+LOG_FILE="${LABTETHER_BACKEND_LOG_FILE:-${TMPDIR:-/tmp}/labtether-dev-backend.log}"
+PID_FILE="${LABTETHER_BACKEND_PID_FILE:-${TMPDIR:-/tmp}/labtether-dev-backend.pid}"
 RESTART_SESSION=0
 STOP_SESSION=0
 
@@ -28,8 +31,8 @@ Options:
 
 Environment:
   LABTETHER_BACKEND_TMUX_SESSION   Session name (default: labtether-backend)
-  LABTETHER_BACKEND_LOG_FILE       Log file path (default: /tmp/labtether-dev-backend.log)
-  LABTETHER_BACKEND_PID_FILE       PID file path (default: /tmp/labtether-dev-backend.pid)
+  LABTETHER_BACKEND_LOG_FILE       Private log path (default: the per-user temporary directory)
+  LABTETHER_BACKEND_PID_FILE       Private PID path (default: the per-user temporary directory)
 USAGE
 }
 
@@ -81,57 +84,48 @@ wait_for_backend_ready() {
   return 1
 }
 
-find_backend_pids() {
-  ps -Ao pid=,command= | awk '
-    index($0, "/build/labtether") {
-      print $1
-    }
-  '
+read_running_backend_pid() {
+  local __result_var=$1
+  local pid=""
+  if [[ ! -e "$PID_FILE" && ! -L "$PID_FILE" ]]; then
+    return 1
+  fi
+  labtether_lock_down_private_file "$PID_FILE" "backend PID file" || return 2
+  pid=$(<"$PID_FILE")
+  if [[ ! "$pid" =~ ^[0-9]+$ || "$pid" == "0" ]]; then
+    log_fail "backend PID file does not contain a valid process ID: $PID_FILE"
+    return 2
+  fi
+  if ! kill -0 "$pid" 2>/dev/null; then
+    rm -f -- "$PID_FILE"
+    return 1
+  fi
+  local command_line=""
+  command_line=$(ps -o command= -p "$pid" 2>/dev/null || true)
+  if [[ "$command_line" != *"/build/labtether"* && "$command_line" != *"./build/labtether"* && "$command_line" != *"/scripts/dev-backend-run.sh"* ]]; then
+    log_fail "refusing to use PID $pid because it is not a LabTether backend process"
+    return 2
+  fi
+  printf -v "$__result_var" '%s' "$pid"
 }
 
 stop_backend_processes() {
-  local found=0
   local pid=""
-  local pid_list=()
-
-  if [[ -f "${PID_FILE}" ]]; then
-    pid=$(cat "${PID_FILE}" 2>/dev/null || true)
-    if [[ -n "${pid}" ]]; then
-      pid_list+=("${pid}")
+  local read_rc=0
+  read_running_backend_pid pid || read_rc=$?
+  if [[ "$read_rc" -ne 0 ]]; then
+    return "$read_rc"
+  fi
+  kill "$pid" 2>/dev/null || true
+  if ! wait_for_exit "$pid" 10; then
+    kill -9 "$pid" 2>/dev/null || true
+    if ! wait_for_exit "$pid" 5; then
+      log_fail "backend PID $pid did not stop"
+      return 2
     fi
   fi
-
-  while IFS= read -r pid; do
-    [[ -n "${pid}" ]] || continue
-    pid_list+=("${pid}")
-  done < <(find_backend_pids)
-
-  if [[ ${#pid_list[@]} -eq 0 ]]; then
-    return 1
-  fi
-
-  local unique_pids=()
-  local seen=" "
-  for pid in "${pid_list[@]}"; do
-    [[ "${seen}" == *" ${pid} "* ]] && continue
-    seen="${seen}${pid} "
-    unique_pids+=("${pid}")
-  done
-
-  for pid in "${unique_pids[@]}"; do
-    if kill -0 "${pid}" 2>/dev/null; then
-      found=1
-      kill "${pid}" 2>/dev/null || true
-      if ! wait_for_exit "${pid}" 10; then
-        kill -9 "${pid}" 2>/dev/null || true
-        wait_for_exit "${pid}" 5 || true
-      fi
-      log_info "Stopped backend PID ${pid}."
-    fi
-  done
-
-  rm -f "${PID_FILE}"
-  [[ "${found}" -eq 1 ]]
+  rm -f -- "$PID_FILE"
+  log_info "Stopped backend PID ${pid}."
 }
 
 while [[ $# -gt 0 ]]; do
@@ -170,14 +164,29 @@ fi
 emit_dev_runtime_warnings
 
 if [[ "${USE_TMUX}" -eq 0 ]]; then
+  running_pid=""
   if [[ "${STOP_SESSION}" -eq 1 || "${RESTART_SESSION}" -eq 1 ]]; then
-    if stop_backend_processes; then
+    stop_rc=0
+    stop_backend_processes || stop_rc=$?
+    if [[ "$stop_rc" -eq 0 ]]; then
       if [[ "${STOP_SESSION}" -eq 1 ]]; then
         exit 0
       fi
+    elif [[ "$stop_rc" -eq 2 ]]; then
+      exit 1
     elif [[ "${STOP_SESSION}" -eq 1 ]]; then
       log_info "Backend PID file '${PID_FILE}' is not running."
       exit 0
+    fi
+  else
+    running_rc=0
+    read_running_backend_pid running_pid || running_rc=$?
+    if [[ "$running_rc" -eq 0 ]]; then
+      log_info "Backend is already running as PID ${running_pid}."
+      log_info "Logs: ${LOG_FILE}"
+      exit 0
+    elif [[ "$running_rc" -eq 2 ]]; then
+      exit 1
     fi
   fi
 fi
@@ -207,6 +216,12 @@ fi
 
 export LABTETHER_TLS_MODE="${LABTETHER_TLS_MODE:-auto}"
 
+if [[ -e "$LOG_FILE" || -L "$LOG_FILE" ]]; then
+  labtether_lock_down_private_file "$LOG_FILE" "backend log file" || exit 1
+else
+  labtether_prepare_private_output_file "$LOG_FILE" || exit 1
+fi
+
 # On macOS, tmux runs as a daemon under launchd. Processes it spawns inherit
 # tmux's TCC context which lacks Local Network permission (ad-hoc signed CLI
 # tools are silently denied and never listed in System Settings). This blocks
@@ -221,31 +236,15 @@ if [[ "${USE_TMUX}" -eq 0 ]]; then
   # permissions. Avoid `make dev-backend` here; detached `make` invocations
   # proved unreliable on macOS even when the same command worked interactively.
   cd "${PROJECT_ROOT}"
-  {
-    echo "Building Go backend..."
-    mkdir -p build
-    go build -o build/labtether ./cmd/labtether
-  } >> "${LOG_FILE}" 2>&1
-
-  set -a
-  if [[ -f .env ]]; then
-    # shellcheck source=/dev/null
-    . ./.env
+  if [[ -e "$PID_FILE" || -L "$PID_FILE" ]]; then
+    labtether_lock_down_private_file "$PID_FILE" "backend PID file" || exit 1
+  else
+    labtether_prepare_private_output_file "$PID_FILE" || exit 1
   fi
-  set +a
-
-  # Preserve an intentionally blank password so /setup can handle first-run bootstrap.
-  nohup env \
-    DATABASE_URL="${DATABASE_URL:-postgres://labtether:labtether@localhost:5432/labtether?sslmode=disable}" \
-    LABTETHER_OWNER_TOKEN="${LABTETHER_OWNER_TOKEN:-dev-owner-token-change-me}" \
-    LABTETHER_ADMIN_PASSWORD="${LABTETHER_ADMIN_PASSWORD-password}" \
-    LABTETHER_ENCRYPTION_KEY="${LABTETHER_ENCRYPTION_KEY:?LABTETHER_ENCRYPTION_KEY must be set (generate: openssl rand -base64 32)}" \
-    LABTETHER_TLS_MODE="${LABTETHER_TLS_MODE:-auto}" \
-    API_PORT="${API_PORT:-8080}" \
-    ./build/labtether >> "${LOG_FILE}" 2>&1 < /dev/null &
+  nohup "${PROJECT_ROOT}/scripts/dev-backend-run.sh" >> "${LOG_FILE}" 2>&1 < /dev/null &
   BACKEND_PID=$!
   disown "${BACKEND_PID}" 2>/dev/null || true
-  echo "${BACKEND_PID}" > "${PID_FILE}"
+  printf '%s\n' "${BACKEND_PID}" > "${PID_FILE}"
 
   # Fail fast if the detached process exits immediately.
   sleep 1
@@ -254,9 +253,9 @@ if [[ "${USE_TMUX}" -eq 0 ]]; then
     exit 1
   fi
 
-  if ! wait_for_backend_ready "${BACKEND_PID}" 15; then
+  if ! wait_for_backend_ready "${BACKEND_PID}" 60; then
     if kill -0 "${BACKEND_PID}" 2>/dev/null; then
-      log_fail "backend did not become reachable within 15s; inspect ${LOG_FILE}"
+      log_fail "backend did not become reachable within 60s; inspect ${LOG_FILE}"
     else
       log_fail "backend exited before becoming ready; inspect ${LOG_FILE}"
     fi
@@ -267,7 +266,10 @@ if [[ "${USE_TMUX}" -eq 0 ]]; then
   log_info "Stop: kill ${BACKEND_PID}"
   log_info "Logs: ${LOG_FILE}"
 else
-  tmux new-session -d -s "${SESSION_NAME}" "make dev-backend | tee -a '${LOG_FILE}'"
+  printf -v quoted_runner '%q' "${PROJECT_ROOT}/scripts/dev-backend-run.sh"
+  printf -v quoted_log '%q' "$LOG_FILE"
+  tmux new-session -d -s "${SESSION_NAME}" -c "${PROJECT_ROOT}" \
+    "${quoted_runner} 2>&1 | tee -a ${quoted_log}"
 
   log_info "Backend started."
   log_info "Session: ${SESSION_NAME}"

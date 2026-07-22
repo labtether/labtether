@@ -28,37 +28,43 @@ const (
 )
 
 type Definition struct {
-	Key           string
-	Label         string
-	Description   string
-	Scope         string
-	Type          ValueType
-	EnvVar        string
-	DefaultValue  string
-	MinInt        int
-	MaxInt        int
-	AllowedValues []string
-	AllowEmpty    bool
+	Key                string
+	Label              string
+	Description        string
+	Scope              string
+	Type               ValueType
+	EnvVar             string
+	DefaultValue       string
+	Sensitive          bool
+	MinInt             int
+	MaxInt             int
+	MinDuration        time.Duration
+	MaxDuration        time.Duration
+	MaxBytes           int
+	PreserveWhitespace bool
+	AllowedValues      []string
+	AllowEmpty         bool
 }
 
 const (
-	KeyConsolePollIntervalSeconds   = "console.poll_interval_seconds"
-	KeyConsoleDefaultTelemetry      = "console.default_telemetry_window"
-	KeyConsoleDefaultLogWindow      = "console.default_log_window"
-	KeyConsoleLogQueryLimit         = "console.log_query_limit"
-	KeyConsoleDefaultActorID        = "console.default_actor_id"
-	KeyConsoleDefaultActionDryRun   = "console.default_action_dry_run"
-	KeyConsoleDefaultUpdateDryRun   = "console.default_update_dry_run"
-	KeyRoutingAPIBaseURL            = "routing.api_base_url"
-	KeyRoutingAgentBaseURL          = "routing.agent_base_url"
-	KeyWorkerQueueMaxDeliveries     = "worker.queue_max_deliveries"
-	KeyWorkerRetentionApply         = "worker.retention_apply_interval"
-	KeyPolicyStructuredEnabled      = "policy.structured_enabled"
-	KeyPolicyInteractiveEnabled     = "policy.interactive_enabled"
-	KeyPolicyConnectorEnabled       = "policy.connector_enabled"
-	KeySecurityOutboundAllowPrivate = "security.outbound_allow_private"
-	KeyRemoteAccessMode             = "remote_access.mode"
-	KeyRemoteAccessTailscaleTarget  = "remote_access.tailscale_serve_target"
+	KeyConsolePollIntervalSeconds     = "console.poll_interval_seconds"
+	KeyConsoleDefaultTelemetry        = "console.default_telemetry_window"
+	KeyConsoleDefaultLogWindow        = "console.default_log_window"
+	KeyConsoleLogQueryLimit           = "console.log_query_limit"
+	KeyConsoleDefaultActorID          = "console.default_actor_id"
+	KeyConsoleDefaultActionDryRun     = "console.default_action_dry_run"
+	KeyConsoleDefaultUpdateDryRun     = "console.default_update_dry_run"
+	KeyRoutingAPIBaseURL              = "routing.api_base_url"
+	KeyRoutingAgentBaseURL            = "routing.agent_base_url"
+	KeyWorkerQueueMaxDeliveries       = "worker.queue_max_deliveries"
+	KeyWorkerRetentionApply           = "worker.retention_apply_interval"
+	KeyPolicyStructuredEnabled        = "policy.structured_enabled"
+	KeyPolicyInteractiveEnabled       = "policy.interactive_enabled"
+	KeyPolicyConnectorEnabled         = "policy.connector_enabled"
+	KeySecurityOutboundAllowPrivate   = "security.outbound_allow_private"
+	KeySecurityOutboundAllowLinkLocal = "security.outbound_allow_link_local"
+	KeyRemoteAccessMode               = "remote_access.mode"
+	KeyRemoteAccessTailscaleTarget    = "remote_access.tailscale_serve_target"
 
 	KeyServicesDiscoveryDefaultDockerEnabled            = "services.discovery_default_docker_enabled"
 	KeyServicesDiscoveryDefaultProxyEnabled             = "services.discovery_default_proxy_enabled"
@@ -229,6 +235,15 @@ var definitions = []Definition{
 		AllowedValues: []string{"auto", "true", "false"},
 	},
 	{
+		Key:          KeySecurityOutboundAllowLinkLocal,
+		Label:        "Link-Local Outbound Targets",
+		Description:  "Explicitly allow outbound connections to IPv4 or IPv6 link-local addresses. Keep disabled unless a managed device specifically requires link-local access.",
+		Scope:        "security",
+		Type:         ValueTypeBool,
+		EnvVar:       "LABTETHER_OUTBOUND_ALLOW_LINK_LOCAL",
+		DefaultValue: "false",
+	},
+	{
 		Key:           KeyRemoteAccessMode,
 		Label:         "Remote Access Mode",
 		Description:   "Preferred operator-facing remote access mode. serve keeps Tailscale HTTPS recommended, manual assumes you will manage access yourself, and off suppresses the recommendation for now.",
@@ -387,6 +402,7 @@ var definitions = []Definition{
 		Type:         ValueTypeURL,
 		EnvVar:       "LABTETHER_PROMETHEUS_REMOTE_WRITE_URL",
 		DefaultValue: "",
+		MaxBytes:     4096,
 		AllowEmpty:   true,
 	},
 	{
@@ -397,17 +413,21 @@ var definitions = []Definition{
 		Type:         ValueTypeString,
 		EnvVar:       "LABTETHER_PROMETHEUS_REMOTE_WRITE_USERNAME",
 		DefaultValue: "",
+		MaxBytes:     512,
 		AllowEmpty:   true,
 	},
 	{
-		Key:          KeyPrometheusRemoteWritePassword,
-		Label:        "Remote Write Password",
-		Description:  "Optional HTTP Basic Auth password for remote_write. Stored encrypted when a secrets manager is available.",
-		Scope:        "prometheus",
-		Type:         ValueTypeString,
-		EnvVar:       "LABTETHER_PROMETHEUS_REMOTE_WRITE_PASSWORD",
-		DefaultValue: "",
-		AllowEmpty:   true,
+		Key:                KeyPrometheusRemoteWritePassword,
+		Label:              "Remote Write Password",
+		Description:        "Optional HTTP Basic Auth password for remote_write. Stored encrypted when a secrets manager is available.",
+		Scope:              "prometheus",
+		Type:               ValueTypeString,
+		EnvVar:             "LABTETHER_PROMETHEUS_REMOTE_WRITE_PASSWORD",
+		DefaultValue:       "",
+		Sensitive:          true,
+		MaxBytes:           4096,
+		PreserveWhitespace: true,
+		AllowEmpty:         true,
 	},
 	{
 		Key:          KeyPrometheusRemoteWriteInterval,
@@ -417,6 +437,8 @@ var definitions = []Definition{
 		Type:         ValueTypeDuration,
 		EnvVar:       "LABTETHER_PROMETHEUS_REMOTE_WRITE_INTERVAL",
 		DefaultValue: "30s",
+		MinDuration:  10 * time.Second,
+		MaxDuration:  time.Hour,
 	},
 	{
 		Key:          KeyProcessMetricsEnabled,
@@ -462,7 +484,13 @@ func DefinitionByKey(key string) (Definition, bool) {
 }
 
 func NormalizeValue(def Definition, raw string) (string, error) {
-	value := strings.TrimSpace(raw)
+	value := raw
+	if !def.PreserveWhitespace {
+		value = strings.TrimSpace(value)
+	}
+	if def.MaxBytes > 0 && len(value) > def.MaxBytes {
+		return "", fmt.Errorf("%s must be at most %d bytes", def.Key, def.MaxBytes)
+	}
 	switch def.Type {
 	case ValueTypeString:
 		if value == "" && !def.AllowEmpty {
@@ -492,6 +520,12 @@ func NormalizeValue(def Definition, raw string) (string, error) {
 		if err != nil || parsed <= 0 {
 			return "", fmt.Errorf("%s must be a positive duration", def.Key)
 		}
+		if def.MinDuration > 0 && parsed < def.MinDuration {
+			return "", fmt.Errorf("%s must be >= %s", def.Key, def.MinDuration)
+		}
+		if def.MaxDuration > 0 && parsed > def.MaxDuration {
+			return "", fmt.Errorf("%s must be <= %s", def.Key, def.MaxDuration)
+		}
 		return parsed.String(), nil
 	case ValueTypeEnum:
 		for _, allowed := range def.AllowedValues {
@@ -518,8 +552,8 @@ func ResolveEnvValue(def Definition, lookup func(string) string) string {
 	if lookup == nil || strings.TrimSpace(def.EnvVar) == "" {
 		return ""
 	}
-	raw := strings.TrimSpace(lookup(def.EnvVar))
-	if raw == "" {
+	raw := lookup(def.EnvVar)
+	if raw == "" || (!def.PreserveWhitespace && strings.TrimSpace(raw) == "") {
 		return ""
 	}
 	normalized, err := NormalizeValue(def, raw)
@@ -530,10 +564,10 @@ func ResolveEnvValue(def Definition, lookup func(string) string) string {
 }
 
 func EffectiveValue(def Definition, envValue, overrideValue string) (string, Source) {
-	if strings.TrimSpace(overrideValue) != "" {
+	if overrideValue != "" && (def.PreserveWhitespace || strings.TrimSpace(overrideValue) != "") {
 		return overrideValue, SourceUI
 	}
-	if strings.TrimSpace(envValue) != "" {
+	if envValue != "" && (def.PreserveWhitespace || strings.TrimSpace(envValue) != "") {
 		return envValue, SourceDocker
 	}
 	return def.DefaultValue, SourceDefault

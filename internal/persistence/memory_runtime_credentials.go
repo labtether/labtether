@@ -79,6 +79,14 @@ func NewMemoryCredentialStore() *MemoryCredentialStore {
 }
 
 func (m *MemoryCredentialStore) CreateCredentialProfile(profile credentials.Profile) (credentials.Profile, error) {
+	return m.CreateCredentialProfileBounded(profile, profile.CreatedBy, 0, 0)
+}
+
+func (m *MemoryCredentialStore) CreateCredentialProfileBounded(
+	profile credentials.Profile,
+	ownerID string,
+	perOwnerLimit, globalLimit int,
+) (credentials.Profile, error) {
 	now := time.Now().UTC()
 	if strings.TrimSpace(profile.ID) == "" {
 		profile.ID = idgen.New("cred")
@@ -97,9 +105,29 @@ func (m *MemoryCredentialStore) CreateCredentialProfile(profile credentials.Prof
 	if profile.RotatedAt == nil {
 		profile.RotatedAt = &now
 	}
+	profile.CreatedBy = strings.TrimSpace(ownerID)
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	_, exists := m.profiles[profile.ID]
+	boundedCreate := perOwnerLimit > 0 || globalLimit > 0
+	if exists && boundedCreate {
+		return credentials.Profile{}, errors.New("credential profile already exists")
+	}
+	if globalLimit > 0 && !exists && len(m.profiles) >= globalLimit {
+		return credentials.Profile{}, ErrCredentialProfileGlobalLimit
+	}
+	if profile.CreatedBy != "" && perOwnerLimit > 0 {
+		ownerCount := 0
+		for _, existing := range m.profiles {
+			if existing.CreatedBy == profile.CreatedBy {
+				ownerCount++
+			}
+		}
+		if ownerCount >= perOwnerLimit {
+			return credentials.Profile{}, ErrCredentialProfileOwnerLimit
+		}
+	}
 	m.profiles[profile.ID] = cloneCredentialProfile(profile)
 	return cloneCredentialProfile(profile), nil
 }
@@ -122,8 +150,8 @@ func (m *MemoryCredentialStore) UpdateCredentialProfile(profile credentials.Prof
 		existing.Status = "active"
 	}
 	existing.Metadata = cloneMetadata(profile.Metadata)
-	existing.SecretCiphertext = strings.TrimSpace(profile.SecretCiphertext)
-	existing.PassphraseCiphertext = strings.TrimSpace(profile.PassphraseCiphertext)
+	existing.SecretCiphertext = profile.SecretCiphertext
+	existing.PassphraseCiphertext = profile.PassphraseCiphertext
 	existing.UpdatedAt = time.Now().UTC()
 	existing.RotatedAt = cloneTimePtr(profile.RotatedAt)
 	existing.ExpiresAt = cloneTimePtr(profile.ExpiresAt)
@@ -142,8 +170,8 @@ func (m *MemoryCredentialStore) UpdateCredentialProfileSecret(id, secretCipherte
 	}
 
 	now := time.Now().UTC()
-	profile.SecretCiphertext = strings.TrimSpace(secretCiphertext)
-	profile.PassphraseCiphertext = strings.TrimSpace(passphraseCiphertext)
+	profile.SecretCiphertext = secretCiphertext
+	profile.PassphraseCiphertext = passphraseCiphertext
 	profile.UpdatedAt = now
 	profile.RotatedAt = &now
 	if expiresAt != nil {
@@ -210,6 +238,48 @@ func (m *MemoryCredentialStore) DeleteCredentialProfile(id string) error {
 	}
 	delete(m.profiles, id)
 	return nil
+}
+
+func (m *MemoryCredentialStore) DeleteCredentialProfileIfUnreferenced(id string) (CredentialProfileReferenceSummary, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	id = strings.TrimSpace(id)
+	profile, ok := m.profiles[id]
+	if !ok {
+		return CredentialProfileReferenceSummary{}, ErrNotFound
+	}
+	if profile.Kind == credentials.KindHubSSHIdentity {
+		return CredentialProfileReferenceSummary{}, ErrCredentialProfileProtected
+	}
+
+	summary := CredentialProfileReferenceSummary{References: []CredentialProfileReference{}}
+	terminalCount := 0
+	for _, cfg := range m.terminalConfig {
+		if cfg.CredentialProfileID == id {
+			terminalCount++
+		}
+	}
+	if terminalCount > 0 {
+		summary.References = append(summary.References, CredentialProfileReference{Resource: "asset_terminal_configs", Count: terminalCount})
+		summary.Total += terminalCount
+	}
+	desktopCount := 0
+	for _, cfg := range m.desktopConfig {
+		if cfg.CredentialProfileID == id {
+			desktopCount++
+		}
+	}
+	if desktopCount > 0 {
+		summary.References = append(summary.References, CredentialProfileReference{Resource: "asset_desktop_configs", Count: desktopCount})
+		summary.Total += desktopCount
+	}
+	if summary.Total > 0 {
+		return summary, ErrCredentialProfileInUse
+	}
+
+	delete(m.profiles, id)
+	return summary, nil
 }
 
 func (m *MemoryCredentialStore) SaveAssetTerminalConfig(cfg credentials.AssetTerminalConfig) (credentials.AssetTerminalConfig, error) {

@@ -14,10 +14,11 @@ type SyntheticChecksSource interface {
 
 // SyntheticCheckEntry holds per-check metric values and identifying labels.
 type SyntheticCheckEntry struct {
-	AssetID   string
-	LatencyMs float64
-	Status    float64           // 0=fail, 1=ok, 2=timeout
-	Labels    map[string]string // check_type, target
+	LatencyMs   float64
+	HasLatency  bool
+	Status      float64 // 0=fail, 1=ok, 2=timeout
+	CollectedAt time.Time
+	Labels      map[string]string // check_id, check_name, check_type; never target
 }
 
 // SyntheticChecksBridge is a MetricsBridge that reads synthetic check results
@@ -45,30 +46,33 @@ func (b *SyntheticChecksBridge) Collect() []telemetry.MetricSample {
 		return nil
 	}
 
-	now := time.Now().UTC()
 	out := make([]telemetry.MetricSample, 0, len(entries)*2)
 
 	for _, e := range entries {
 		labels := e.Labels
+		collectedAt := e.CollectedAt.UTC()
+		if collectedAt.IsZero() {
+			continue
+		}
 
-		out = append(out,
-			telemetry.MetricSample{
-				AssetID:     e.AssetID,
+		if e.HasLatency {
+			out = append(out, telemetry.MetricSample{
+				Scope:       telemetry.MetricScopeHubSynthetic,
 				Metric:      telemetry.MetricSyntheticLatencyMs,
 				Unit:        "ms",
 				Value:       e.LatencyMs,
-				CollectedAt: now,
+				CollectedAt: collectedAt,
 				Labels:      labels,
-			},
-			telemetry.MetricSample{
-				AssetID:     e.AssetID,
-				Metric:      telemetry.MetricSyntheticStatus,
-				Unit:        "status",
-				Value:       e.Status,
-				CollectedAt: now,
-				Labels:      labels,
-			},
-		)
+			})
+		}
+		out = append(out, telemetry.MetricSample{
+			Scope:       telemetry.MetricScopeHubSynthetic,
+			Metric:      telemetry.MetricSyntheticStatus,
+			Unit:        "status",
+			Value:       e.Status,
+			CollectedAt: collectedAt,
+			Labels:      labels,
+		})
 	}
 
 	return out

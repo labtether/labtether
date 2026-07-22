@@ -1,9 +1,10 @@
 package main
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
+
+	"github.com/labtether/labtether/internal/servicehttp"
 )
 
 // demoReadOnlyMiddleware blocks all mutating HTTP requests in demo mode.
@@ -29,9 +30,7 @@ func demoReadOnlyMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		servicehttp.WriteJSON(w, http.StatusForbidden, map[string]any{
 			"error": "This is a read-only demo instance. Install LabTether to get full access.",
 			"demo":  true,
 		})

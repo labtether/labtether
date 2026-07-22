@@ -2,12 +2,41 @@ package terminal
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"strconv"
 	"strings"
 
 	"github.com/labtether/labtether/internal/agentmgr"
 )
+
+var (
+	ErrPersistentAgentTmuxUnavailable = errors.New("persistent terminal sessions require tmux, but the connected agent reports tmux is unavailable")
+	ErrPersistentAgentTmuxPending     = errors.New("persistent terminal tmux capability is still being detected; retry after the agent probe completes")
+)
+
+// ValidatePersistentAgentTmux prevents a persistent-session request from
+// silently degrading to a plain shell. A missing cached result triggers the
+// existing bounded asynchronous probe and asks the caller to retry instead of
+// creating state that cannot be cleaned up as a tmux-backed session.
+func (d *Deps) ValidatePersistentAgentTmux(agentConn *agentmgr.AgentConn) error {
+	if agentConn == nil {
+		return ErrPersistentAgentTmuxPending
+	}
+
+	switch strings.TrimSpace(agentConn.Meta("terminal.tmux.has")) {
+	case "true":
+		return nil
+	case "false":
+		// Refresh a potentially stale negative result so installing tmux does
+		// not require an agent reconnect before the next retry can succeed.
+		d.StartAgentTmuxProbeAsync(agentConn)
+		return ErrPersistentAgentTmuxUnavailable
+	default:
+		d.StartAgentTmuxProbeAsync(agentConn)
+		return ErrPersistentAgentTmuxPending
+	}
+}
 
 // ProbeAgentTmux returns cached tmux capability metadata when available.
 // If unknown, it triggers an async probe and returns immediately (no connect-path wait).

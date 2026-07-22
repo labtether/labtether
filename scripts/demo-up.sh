@@ -5,9 +5,10 @@ set -euo pipefail
 # demo-up.sh — One-command LabTether demo launcher
 #
 # Usage:
-#   ./scripts/demo-up.sh              # Start/restart the demo
-#   ./scripts/demo-up.sh --fresh      # Nuke everything and start fresh
-#   ./scripts/demo-up.sh --down       # Tear down the demo
+#   LABTETHER_IMAGE='ghcr.io/labtether/labtether:vX.Y.Z@sha256:<64 hex>' ./scripts/demo-up.sh
+#   LABTETHER_IMAGE='ghcr.io/labtether/labtether:vX.Y.Z@sha256:<64 hex>' ./scripts/demo-up.sh --fresh
+#   LABTETHER_IMAGE='ghcr.io/labtether/labtether:vX.Y.Z@sha256:<64 hex>' ./scripts/demo-up.sh --down
+#   LABTETHER_IMAGE='ghcr.io/labtether/labtether:vX.Y.Z@sha256:<64 hex>' ./scripts/demo-up.sh --check
 #
 # Prerequisites:
 #   - Docker with compose v2
@@ -60,21 +61,55 @@ for arg in "$@"; do
   case "$arg" in
     --fresh) ACTION="fresh" ;;
     --down)  ACTION="down" ;;
+    --check) ACTION="check" ;;
     --help|-h)
-      echo "Usage: $0 [--fresh | --down]"
+      echo "Usage: LABTETHER_IMAGE='image@sha256:<digest>' $0 [--fresh | --down | --check]"
       echo ""
       echo "  (no args)   Start or restart the demo"
       echo "  --fresh     Nuke volumes/images and start from scratch"
       echo "  --down      Tear down the demo completely"
+      echo "  --check     Validate the immutable Compose inputs without changing containers"
+      echo ""
+      echo "LABTETHER_IMAGE must name an immutable LabTether release image."
       exit 0
       ;;
     *) echo "Unknown arg: $arg"; exit 1 ;;
   esac
 done
 
+# The public demo must never follow a mutable image tag. Compose gives the
+# invoking environment precedence over .env.demo, so require an explicit OCI
+# digest here and export it for every action, including teardown.
+LABTETHER_IMAGE="${LABTETHER_IMAGE:-}"
+if [[ ! "${LABTETHER_IMAGE}" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; then
+  echo "Error: LABTETHER_IMAGE must be an explicit image@sha256 digest." >&2
+  echo "Example: LABTETHER_IMAGE='ghcr.io/labtether/labtether:vX.Y.Z@sha256:<64 hex>' $0" >&2
+  exit 1
+fi
+export LABTETHER_IMAGE
+
+rendered_image_count=0
+while IFS= read -r image; do
+  [[ -z "${image}" ]] && continue
+  rendered_image_count=$((rendered_image_count + 1))
+  if [[ ! "${image}" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; then
+    echo "Error: rendered demo service image is not immutable: ${image}" >&2
+    exit 1
+  fi
+done < <("${COMPOSE_CMD[@]}" config --images)
+if [[ "${rendered_image_count}" -eq 0 ]]; then
+  echo "Error: demo Compose configuration rendered no service images." >&2
+  exit 1
+fi
+
 # ── Actions ────────────────────────────────────────────────────
 
 case "$ACTION" in
+  check)
+    echo "Demo Compose configuration is valid and all service images are immutable."
+    exit 0
+    ;;
+
   down)
     echo "Tearing down demo..."
     "${COMPOSE_CMD[@]}" down -v --remove-orphans
@@ -98,7 +133,7 @@ esac
 if [[ "$ACTION" != "down" ]]; then
   echo ""
   echo "Waiting for hub to become healthy..."
-  for i in $(seq 1 30); do
+  for _ in $(seq 1 30); do
     if "${COMPOSE_CMD[@]}" ps --format json 2>/dev/null | grep -q '"Health":"healthy"'; then
       break
     fi

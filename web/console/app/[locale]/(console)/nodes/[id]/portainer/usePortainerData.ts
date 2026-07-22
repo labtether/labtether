@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export type PortainerOverviewData = {
-  version: string;
-  endpoint: string;
-  url: string;
+  server_version?: string;
+  endpoint_name?: string;
+  endpoint_url?: string;
   containers: {
     running: number;
     stopped: number;

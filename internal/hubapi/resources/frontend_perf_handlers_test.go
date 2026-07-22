@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/labtether/labtether/internal/logs"
 )
@@ -48,6 +50,27 @@ func TestHandleFrontendPerfTelemetryAppendsLogEvent(t *testing.T) {
 	}
 	if events[0].Fields["meta_window"] != "1h" {
 		t.Fatalf("expected metadata field meta_window=1h, got %q", events[0].Fields["meta_window"])
+	}
+}
+
+func TestFrontendPerfMetadataBoundsAreUTF8Safe(t *testing.T) {
+	if got := SanitizeFrontendPerfMetadataKey(strings.Repeat("a", 1000)); len(got) != 80 {
+		t.Fatalf("metadata key bytes=%d, want 80", len(got))
+	}
+	value := strings.Repeat("界", 61)
+	normalized := NormalizeFrontendPerfMetadata(map[string]any{
+		"unicode": value,
+		"nul":     "bad\x00value",
+	})
+	if got := normalized["unicode"]; len(got) > 180 || !utf8.ValidString(got) {
+		t.Fatalf("metadata value is not safely bounded UTF-8: bytes=%d valid=%v", len(got), utf8.ValidString(got))
+	}
+	if _, ok := normalized["nul"]; ok {
+		t.Fatal("NUL metadata value must be dropped")
+	}
+	metric := normalizeTelemetryText(strings.Repeat("x", 119)+"界", 120)
+	if len(metric) != 119 || !utf8.ValidString(metric) {
+		t.Fatalf("metric truncation bytes=%d valid=%v", len(metric), utf8.ValidString(metric))
 	}
 }
 

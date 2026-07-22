@@ -272,7 +272,7 @@ func TestConnectorExecuteActionDispatchMatrix(t *testing.T) {
 	}
 }
 
-func TestConnectorNotConfiguredPaths(t *testing.T) {
+func TestConnectorUnconfiguredModeFailsClosed(t *testing.T) {
 	allowInsecureTransportForTrueNASTests(t)
 	connector := New()
 
@@ -280,24 +280,25 @@ func TestConnectorNotConfiguredPaths(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TestConnection() unexpected error: %v", err)
 	}
-	if health.Status != "ok" {
-		t.Fatalf("TestConnection().Status = %q, want ok", health.Status)
+	if health.Status != "failed" || !strings.Contains(health.Message, "not configured") {
+		t.Fatalf("TestConnection() = %+v, want failed unconfigured health", health)
 	}
 
 	assets, err := connector.Discover(context.Background())
 	if err != nil {
-		t.Fatalf("Discover() unexpected error in stub mode: %v", err)
+		t.Fatalf("Discover() unexpected error in unconfigured mode: %v", err)
 	}
-	if len(assets) == 0 {
-		t.Fatalf("expected stub asset in unconfigured mode")
+	if assets == nil || len(assets) != 0 {
+		t.Fatalf("expected non-nil empty unconfigured inventory, got %+v", assets)
 	}
 
-	result, err := connector.ExecuteAction(context.Background(), "system.reboot", connectorsdk.ActionRequest{})
-	if err != nil {
-		t.Fatalf("ExecuteAction() unexpected error: %v", err)
-	}
-	if result.Status != "failed" {
-		t.Fatalf("ExecuteAction() status = %q, want failed", result.Status)
+	for _, descriptor := range connector.Actions() {
+		for _, dryRun := range []bool{false, true} {
+			result, execErr := connector.ExecuteAction(context.Background(), descriptor.ID, connectorsdk.ActionRequest{DryRun: dryRun})
+			if execErr != nil || result.Status != "failed" || !strings.Contains(result.Message, "not configured") {
+				t.Fatalf("ExecuteAction(%q, dry_run=%v) = %+v, err=%v, want fail-closed unconfigured result", descriptor.ID, dryRun, result, execErr)
+			}
+		}
 	}
 }
 
@@ -410,7 +411,7 @@ func TestConnectorTestConnectionFailureAndMessageVariants(t *testing.T) {
 	}
 }
 
-func TestConnectorDiscoverReturnsStubWhenOptionalQueriesAllFail(t *testing.T) {
+func TestConnectorDiscoverReturnsNoSyntheticInventoryWhenOptionalQueriesAllFail(t *testing.T) {
 	allowInsecureTransportForTrueNASTests(t)
 	srv := mockTrueNASServer(t, func(conn *websocket.Conn, call rpcCall) {
 		switch call.Method {
@@ -433,8 +434,8 @@ func TestConnectorDiscoverReturnsStubWhenOptionalQueriesAllFail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Discover() error = %v", err)
 	}
-	if len(assets) != 1 || assets[0].ID != "truenas-controller-stub" {
-		t.Fatalf("Discover() expected stub fallback asset, got %#v", assets)
+	if assets == nil || len(assets) != 0 {
+		t.Fatalf("Discover() expected non-nil empty inventory, got %#v", assets)
 	}
 }
 

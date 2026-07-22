@@ -1,14 +1,17 @@
 package terminal
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
 	"net"
+	"strconv"
 	"time"
 
 	"golang.org/x/crypto/ssh"
 
+	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -38,7 +41,7 @@ func DialSSHChain(
 
 	if len(hops) == 0 {
 		// Direct dial — no intermediate hops.
-		client, err := ssh.Dial("tcp", target.Addr, target.ClientConfig)
+		client, err := dialDirectSSH(target.Addr, target.ClientConfig, hopDialTimeout)
 		if err != nil {
 			return nil, nil, fmt.Errorf("direct ssh dial to %s failed: %w", target.Addr, err)
 		}
@@ -59,7 +62,7 @@ func DialSSHChain(
 	if first.ClientConfig == nil {
 		return nil, nil, fmt.Errorf("hop 0 (%s) has nil client config", first.Addr)
 	}
-	firstClient, err := ssh.Dial("tcp", first.Addr, first.ClientConfig)
+	firstClient, err := dialDirectSSH(first.Addr, first.ClientConfig, hopDialTimeout)
 	if err != nil {
 		return nil, nil, fmt.Errorf("ssh dial to hop 0 (%s) failed: %w", first.Addr, err)
 	}
@@ -116,6 +119,20 @@ func DialSSHChain(
 
 	finalClient := ssh.NewClient(sshConn, chans, reqs)
 	return finalClient, intermediates, nil
+}
+
+func dialDirectSSH(address string, config *ssh.ClientConfig, timeout time.Duration) (*ssh.Client, error) {
+	host, portRaw, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, err
+	}
+	port, err := strconv.Atoi(portRaw)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return securityruntime.DialOutboundSSHContext(ctx, host, port, config, timeout)
 }
 
 func dialWithTimeout(client *ssh.Client, addr string, timeout time.Duration) (net.Conn, error) {

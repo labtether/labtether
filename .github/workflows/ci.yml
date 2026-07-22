@@ -5,22 +5,27 @@ on:
   push:
     branches: ["main", "master", "codex/**"]
 
+permissions:
+  contents: read
+
 jobs:
   go-checks:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: "1.26"
 
       - name: Check formatting
         run: |
-          UNFORMATTED=$(gofmt -l $(find . -name '*.go' -not -path './vendor/*'))
+          UNFORMATTED="$(find . -name '*.go' -not -path './vendor/*' -print0 | xargs -0 gofmt -l)"
           if [ -n "$UNFORMATTED" ]; then
             echo "Go files need formatting:"
             echo "$UNFORMATTED"
@@ -33,6 +38,45 @@ jobs:
       - name: Go test
         run: go test ./...
 
+      - name: Install pinned source-quality tools
+        env:
+          GOBIN: ${{ runner.temp }}/quality-bin
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.25.0
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          go install github.com/zricethezav/gitleaks/v8@v8.30.1
+          go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
+          echo "${GOBIN}" >> "${GITHUB_PATH}"
+
+      - name: Scan Go dependencies for reachable vulnerabilities
+        run: govulncheck ./...
+
+      - name: Strict gosec gate
+        run: make security-gosec
+
+      - name: Lint GitHub Actions workflows
+        run: actionlint
+
+      - name: Scan current source for secrets
+        run: gitleaks dir . --no-banner --redact --timeout 300
+
+  go-race:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.26"
+
+      - name: Go race test
+        run: go test -race ./...
+
   perf-gate:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -42,24 +86,27 @@ jobs:
       LABTETHER_API_TOKEN: dev-owner-token-change-me
       LABTETHER_ADMIN_USERNAME: admin
       LABTETHER_ADMIN_PASSWORD: password
-      LABTETHER_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
       LABTETHER_TLS_MODE: disabled
       DEV_MODE: "true"
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Generate ephemeral CI encryption key
+        shell: bash
+        run: printf 'LABTETHER_ENCRYPTION_KEY=%s\n' "$(openssl rand -base64 32)" >> "$GITHUB_ENV"
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: "1.26"
 
       - name: Backend hotspot perf gate
-        continue-on-error: true
         run: make perf-gate
 
       - name: Run reduced apples harness + thresholds
-        continue-on-error: true
         run: |
           set -euo pipefail
           ARTIFACT_ROOT="/tmp/labtether-perf-artifacts"
@@ -83,17 +130,17 @@ jobs:
             -e POSTGRES_PASSWORD=labtether \
             -e POSTGRES_DB=labtether \
             -p 5432:5432 \
-            postgres:18 \
+            postgres:18-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15 \
             -c shared_preload_libraries=pg_stat_statements \
             -c pg_stat_statements.track=all >/dev/null
 
-          for i in $(seq 1 60); do
-            if docker exec "${PG_CONTAINER}" pg_isready -U labtether -d labtether >/dev/null 2>&1; then
+          for ((attempt = 0; attempt < 60; attempt++)); do
+            if docker exec "${PG_CONTAINER}" psql -U labtether -d labtether -tAc "SELECT 1" >/dev/null 2>&1; then
               break
             fi
             sleep 1
           done
-          docker exec "${PG_CONTAINER}" pg_isready -U labtether -d labtether >/dev/null
+          docker exec "${PG_CONTAINER}" psql -U labtether -d labtether -tAc "SELECT 1" >/dev/null
           docker exec "${PG_CONTAINER}" psql -U labtether -d labtether -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;" >/dev/null
 
           go build -o build/labtether ./cmd/labtether
@@ -101,7 +148,7 @@ jobs:
           BACKEND_PID=$!
           echo "${BACKEND_PID}" > "${ARTIFACT_ROOT}/backend.pid"
 
-          for i in $(seq 1 60); do
+          for ((attempt = 0; attempt < 60; attempt++)); do
             if curl -fsS --max-time 2 "http://localhost:8080/healthz" >/dev/null 2>&1; then
               break
             fi
@@ -119,7 +166,6 @@ jobs:
           ./scripts/perf/backend-hotspot-apples.sh \
             --label ci-hotspot \
             --api-base "http://localhost:8080" \
-            --token "${LABTETHER_API_TOKEN}" \
             --aggregate-calls 240 \
             --live-calls 480 \
             --concurrency 16 \
@@ -128,7 +174,10 @@ jobs:
             --output-root "${RUN_ROOT}" \
             --no-auto-compare
 
-          RUN_DIR="$(ls -1dt "${RUN_ROOT}"/*-ci-hotspot | head -1)"
+          # backend-hotspot-apples.sh appends mktemp's random suffix to the
+          # requested label (for example, ci-hotspot.ABC123).
+          RUN_DIR="$(find "${RUN_ROOT}" -mindepth 1 -maxdepth 1 -type d -name '*-ci-hotspot.*' -print -quit)"
+          test -n "${RUN_DIR}"
           echo "RUN_DIR=${RUN_DIR}" >> "${GITHUB_ENV}"
 
           ./scripts/perf/backend-hotspot-thresholds.sh \
@@ -136,9 +185,9 @@ jobs:
             --write-report "${RUN_DIR}/threshold-report.json"
 
           ./scripts/perf/backend-hotspot-explain.sh \
-            --scenario projected-site \
+            --scenario projected-group \
             --dsn "${DATABASE_URL}" \
-            --output "${RUN_DIR}/explain-projected-site.json"
+            --output "${RUN_DIR}/explain-projected-group.json"
 
           ./scripts/perf/backend-hotspot-explain.sh \
             --scenario sources-windowed \
@@ -147,7 +196,7 @@ jobs:
 
       - name: Upload backend perf artifacts
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: backend-hotspot-perf-artifacts
           path: /tmp/labtether-perf-artifacts
@@ -161,10 +210,12 @@ jobs:
         working-directory: web/console
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: "24"
           cache: "npm"
@@ -173,26 +224,40 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+
+      - name: Unit tests
+        run: npm test
+
       - name: Lint
         run: npm run lint
 
       - name: Build
         run: npm run build
 
+      - name: Standalone runtime WebSocket proxy regression
+        run: npm run test:runtime-proxy:standalone
+
   docs-checks:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: "24"
 
       - name: Script unit tests
         run: node --test scripts/lib/http-redirect.test.js
+
+      - name: Deploy hardening contract
+        run: ./scripts/ci/test-deploy-hardening.sh
 
       - name: Docs quality checks
         run: make check-docs
@@ -214,10 +279,12 @@ jobs:
         working-directory: web/console
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: "24"
           cache: "npm"
@@ -230,12 +297,11 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run E2E over self-signed HTTPS
-        continue-on-error: true
         run: npm run test:e2e:https -- --ignore-snapshots
 
       - name: Upload HTTPS E2E Playwright artifacts
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: web-e2e-https-playwright
           path: |
@@ -251,10 +317,12 @@ jobs:
         working-directory: web/console
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: "24"
           cache: "npm"
@@ -267,12 +335,11 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run visual regression over self-signed HTTPS
-        continue-on-error: true
         run: npm run test:visual:https
 
       - name: Upload HTTPS visual Playwright artifacts
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: web-visual-https-playwright
           path: |
@@ -285,49 +352,160 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout hub
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
 
       - name: Checkout labtether-agent
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           repository: labtether/labtether-agent
+          ref: ab663ef9d7e3a60b2adde2b945d7387a75e2aac1
+          persist-credentials: false
           path: labtether-agent
+
+      - name: Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.26"
 
       - name: Build agent image locally
         run: |
           docker build \
-            --tag ghcr.io/labtether/labtether-agent:latest \
-            --build-arg APP_VERSION=ci \
+            --tag labtether-agent:ci-base \
+            --build-arg VERSION=ci \
             labtether-agent
+          docker build --tag labtether-agent:ci - <<'DOCKERFILE'
+          FROM labtether-agent:ci-base
+          USER root
+          RUN apk update
+          USER agent
+          DOCKERFILE
 
-      - name: Generate agent manifest and binaries
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./scripts/release/generate-agent-manifest.sh ci ./agent-dist
+      - name: Verify Alpine package-index fixture
+        run: |
+          docker run --rm --entrypoint /bin/sh labtether-agent:ci -eu -c '
+            output="$(apk version -l "<" 2>&1)"
+            case "${output}" in
+              *WARNING:*)
+                echo "apk package-index fixture emitted a warning" >&2
+                exit 1
+                ;;
+            esac
+            printf "%s\n" "${output}" | grep -Eq "^Installed:[[:space:]]+Available:$"
+          '
+
+      - name: Verify fail-closed agent release manifest generation
+        run: go test ./scripts/release/verify-agent-release -count=1
+
+      - name: Prepare agent distribution build context
+        run: mkdir -p ./agent-dist && touch ./agent-dist/.keep
 
       - name: Prepare environment
         run: |
-          cp .env.example .env
-          cat >> .env <<'EOF'
-          POSTGRES_USER=labtether
-          POSTGRES_DB=labtether
-          POSTGRES_PASSWORD=ci-smoke-pw
-          LABTETHER_OWNER_TOKEN=ci-owner-token
-          LABTETHER_API_TOKEN=ci-owner-token
-          LABTETHER_ENCRYPTION_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
-          LABTETHER_ADMIN_PASSWORD=ci-admin-pw
-          EOF
+          set -Eeuo pipefail
+          install -m 600 .env.example .env
+          ci_token="$(openssl rand -hex 32)"
+          echo "::add-mask::${ci_token}"
+          {
+            printf 'POSTGRES_USER=labtether\n'
+            printf 'POSTGRES_DB=labtether\n'
+            printf 'POSTGRES_PASSWORD=ci-smoke-pw\n'
+            printf 'LABTETHER_OWNER_TOKEN=%s\n' "${ci_token}"
+            printf 'LABTETHER_API_TOKEN=%s\n' "${ci_token}"
+            printf 'LABTETHER_ADMIN_PASSWORD=ci-admin-pw\n'
+            printf 'LABTETHER_ENCRYPTION_KEY=%s\n' "$(openssl rand -base64 32)"
+            printf 'LABTETHER_ALLOW_LEGACY_SHARED_AGENT_AUTH=false\n'
+          } >> .env
+          printf 'LABTETHER_API_TOKEN=%s\n' "${ci_token}" >> "${GITHUB_ENV}"
+
+      - name: Validate opt-in QA agent profile rendering
+        run: |
+          set -Eeuo pipefail
+          if env -u COMPOSE_PROFILES docker compose config --services | grep -Fxq qa-agent; then
+            echo "qa-agent must not be part of the default Compose service set" >&2
+            exit 1
+          fi
+          COMPOSE_PROFILES=ci-agent docker compose config --quiet
+          COMPOSE_PROFILES=ci-agent docker compose config --services | grep -Fxq qa-agent
+          COMPOSE_PROFILES=ci-agent docker compose config --format json |
+            jq -e '
+              .services["qa-agent"].environment.LABTETHER_API_TOKEN == "" and
+              .services["qa-agent"].environment.LABTETHER_ENROLLMENT_TOKEN_FILE == "/run/labtether-enrollment/enrollment-token" and
+              .services.labtether.environment.LABTETHER_ALLOW_LEGACY_SHARED_AGENT_AUTH == "false"
+            ' >/dev/null
 
       - name: Smoke test
-        run: ./scripts/smoke-test.sh --keep
+        # Downstream steps intentionally reuse this isolated runner's stack.
+        run: ./scripts/smoke-test.sh --reuse-compose-stack --keep
+
+      - name: Stage one-use agent enrollment
+        run: |
+          set -Eeuo pipefail
+          # shellcheck source=/dev/null
+          source ./scripts/lib/script-common.sh
+          trap labtether_cleanup_curl_security EXIT INT TERM HUP
+          mkdir -p "${RUNNER_TEMP}/labtether-ca"
+          docker compose cp labtether:/ca/ca.crt "${RUNNER_TEMP}/labtether-ca/ca.crt"
+          export LABTETHER_CA_FILE="${RUNNER_TEMP}/labtether-ca/ca.crt"
+          labtether_prepare_curl_auth "${LABTETHER_API_TOKEN}"
+          labtether_clear_token_environment
+          enrollment_url=https://localhost:8443/settings/enrollment
+          labtether_build_curl_request_args "${enrollment_url}" 1 1
+          printf '%s\n' '{"label":"labtether-ci-agent","ttl_hours":1,"max_uses":1}' |
+            labtether_curl "${LABTETHER_CURL_REQUEST_ARGS[@]}" \
+              --silent --show-error --fail-with-body \
+              --request POST \
+              --header 'Content-Type: application/json' \
+              --data-binary @- \
+              "${enrollment_url}" |
+            jq -er 'select(.token.max_uses == 1 and (.token.id | type == "string" and length > 0)) | .raw_token | select(type == "string" and length > 0)' |
+            COMPOSE_PROFILES=ci-agent docker compose run --rm --no-deps -T \
+              --user 0:0 \
+              --cap-add CHOWN \
+              --entrypoint /bin/sh \
+              qa-agent \
+              -c '
+                set -eu
+                directory=/run/labtether-enrollment
+                token_file="${directory}/enrollment-token"
+                test ! -e "${token_file}"
+                chmod 0700 "${directory}"
+                umask 077
+                cat > "${token_file}"
+                test -s "${token_file}"
+                chmod 0600 "${token_file}"
+                chown 1001:1001 "${token_file}" "${directory}"
+              '
+
+      - name: Verify real agent is connected over authenticated WSS
+        run: |
+          set -Eeuo pipefail
+          trap 'COMPOSE_PROFILES=ci-agent docker compose ps -a qa-agent || true; COMPOSE_PROFILES=ci-agent docker compose logs --no-color qa-agent || true' ERR
+          COMPOSE_PROFILES=ci-agent docker compose up -d --no-deps qa-agent
+          go run ./scripts/ci/assert-connected-agent \
+            --base-url https://localhost:8443 \
+            --ca-file "${RUNNER_TEMP}/labtether-ca/ca.crt" \
+            --asset-id labtether-ci-agent \
+            --timeout 60s
+          COMPOSE_PROFILES=ci-agent docker compose exec -T qa-agent /bin/sh -eu -c '
+            test -z "${LABTETHER_API_TOKEN:-}"
+            test -s /tmp/labtether/agent-token
+            test ! -e /run/labtether-enrollment/enrollment-token
+          '
+
+      - name: Integration test
+        run: |
+          INTEGRATION_MANAGE_STACK=false \
+            ./scripts/integration-queue-flow.sh \
+              --allow-remote-exec \
+              --target labtether-ci-agent \
+              --ca-file "${RUNNER_TEMP}/labtether-ca/ca.crt"
 
       - name: Dump container logs on failure
         if: failure()
-        run: docker compose logs --no-color 2>&1 | tail -100 || true
-
-      - name: Integration test
-        run: make integration-test
+        run: COMPOSE_PROFILES=ci-agent docker compose logs --no-color 2>&1 | tail -100 || true
 
       - name: Tear down
         if: always()
-        run: docker compose down || true
+        run: COMPOSE_PROFILES=ci-agent docker compose down -v || true

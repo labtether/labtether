@@ -38,7 +38,12 @@ function normalizeCertificates(value: unknown): Certificate[] {
       san: Array.isArray(c.san)
         ? c.san.filter((s): s is string => typeof s === "string")
         : undefined,
-      not_after: typeof c.not_after === "number" ? c.not_after : undefined,
+      not_after:
+        typeof c.not_after === "number"
+          ? c.not_after
+          : typeof c.notafter === "number"
+            ? c.notafter
+            : undefined,
       fingerprint: typeof c.fingerprint === "string" ? c.fingerprint : undefined,
     };
   });

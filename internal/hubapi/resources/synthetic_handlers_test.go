@@ -5,10 +5,31 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/labtether/labtether/internal/synthetic"
 )
+
+func TestSyntheticHandlersRejectOversizedOrInvalidBodyPattern(t *testing.T) {
+	deps := newTestResourcesDeps(t)
+	for _, pattern := range []string{strings.Repeat("x", synthetic.MaxMatchBodyPatternLen+1), "["} {
+		payload := `{"name":"bounded","check_type":"http","target":"https://example.com","config":{"match_body":"` + pattern + `"}}`
+		req := httptest.NewRequest(http.MethodPost, "/synthetic-checks", bytes.NewBufferString(payload))
+		rec := httptest.NewRecorder()
+		deps.HandleSyntheticChecks(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400 for pattern length %d, got %d: %s", len(pattern), rec.Code, rec.Body.String())
+		}
+	}
+	checks, err := deps.SyntheticStore.ListSyntheticChecks(10, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(checks) != 0 {
+		t.Fatalf("rejected patterns must not be persisted: %#v", checks)
+	}
+}
 
 func TestHandleSyntheticCheckActionsResultsMissingCheckReturnsNotFound(t *testing.T) {
 	deps := newTestResourcesDeps(t)

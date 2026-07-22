@@ -8,11 +8,91 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 )
+
+func TestExecWebSocketURLUsesCurrentAndLegacyExecIdentifiersWithoutLeakingJWT(t *testing.T) {
+	allowInsecureTransportForPortainerTests(t)
+	const jwt = "sensitive-jwt"
+	execID := strings.Repeat("a", portainerExecIDLength)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/auth" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"jwt":"` + jwt + `"}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(Config{BaseURL: server.URL, Username: "admin", Password: "secret"})
+	wsURL, token, err := client.ExecWebSocketURL(context.Background(), 7, execID)
+	if err != nil {
+		t.Fatalf("ExecWebSocketURL: %v", err)
+	}
+	if token != jwt {
+		t.Fatalf("token = %q, want JWT returned by auth", token)
+	}
+	parsed, err := url.Parse(wsURL)
+	if err != nil {
+		t.Fatalf("parse websocket URL: %v", err)
+	}
+	if parsed.Scheme != "ws" || parsed.Query().Get("endpointId") != "7" || parsed.Query().Get("id") != execID || parsed.Query().Get("execId") != execID {
+		t.Fatalf("unexpected websocket URL %q", wsURL)
+	}
+	if strings.Contains(wsURL, jwt) || parsed.Query().Get("token") != "" {
+		t.Fatalf("websocket URL leaked JWT: %q", wsURL)
+	}
+}
+
+func TestDecodePortainerExecIDAcceptsBoundedCurrentAndLegacyShapes(t *testing.T) {
+	execID := strings.Repeat("a", portainerExecIDLength)
+	for _, payload := range []string{
+		`{"Id":"` + execID + `"}`,
+		`{"id":"` + execID + `"}`,
+		`{"execId":"` + execID + `"}`,
+		`{"Id":"` + execID + `","id":"` + execID + `","execId":"` + execID + `"}`,
+	} {
+		got, err := decodePortainerExecID([]byte(payload))
+		if err != nil || got != execID {
+			t.Fatalf("decodePortainerExecID(%s) = %q, %v", payload, got, err)
+		}
+	}
+}
+
+func TestDecodePortainerExecIDRejectsUnboundedMalformedAndConflictingShapes(t *testing.T) {
+	valid := strings.Repeat("a", portainerExecIDLength)
+	tests := []string{
+		`{}`,
+		`{"id":"short"}`,
+		`{"id":"` + strings.Repeat("a", portainerExecIDLength+1) + `"}`,
+		`{"id":"` + strings.Repeat("z", portainerExecIDLength) + `"}`,
+		`{"id":123}`,
+		`{"Id":"` + valid + `","execId":"` + strings.Repeat("b", portainerExecIDLength) + `"}`,
+	}
+	for _, payload := range tests {
+		if got, err := decodePortainerExecID([]byte(payload)); err == nil {
+			t.Fatalf("decodePortainerExecID(%s) unexpectedly returned %q", payload, got)
+		}
+	}
+}
+
+func TestValidatePortainerJWTRejectsEmptyOversizeAndControlCharacters(t *testing.T) {
+	if err := validatePortainerJWT("header.payload.signature"); err != nil {
+		t.Fatalf("valid JWT rejected: %v", err)
+	}
+	for _, jwt := range []string{
+		"",
+		strings.Repeat("a", maxJWTBytes+1),
+		"header.payload.signature\nreflected-header",
+	} {
+		if err := validatePortainerJWT(jwt); err == nil {
+			t.Fatalf("invalid JWT of length %d accepted", len(jwt))
+		}
+	}
+}
 
 func allowInsecureTransportForPortainerTests(t *testing.T) {
 	t.Helper()

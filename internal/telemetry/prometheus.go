@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"net/url"
@@ -15,8 +16,9 @@ import (
 )
 
 const (
-	minInt64AsFloat          = -9223372036854775808.0
-	maxInt64ExclusiveAsFloat = 9223372036854775808.0
+	minInt64AsFloat            = -9223372036854775808.0
+	maxInt64ExclusiveAsFloat   = 9223372036854775808.0
+	maxPrometheusResponseBytes = 8 * 1024 * 1024
 )
 
 type Point struct {
@@ -139,7 +141,17 @@ func (c *PrometheusClient) fetchJSON(ctx context.Context, endpoint string, out a
 		return fmt.Errorf("prometheus returned status %d", resp.StatusCode)
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+	if resp.ContentLength > maxPrometheusResponseBytes {
+		return fmt.Errorf("prometheus response exceeds %d byte limit", maxPrometheusResponseBytes)
+	}
+	payload, err := io.ReadAll(io.LimitReader(resp.Body, maxPrometheusResponseBytes+1))
+	if err != nil {
+		return err
+	}
+	if len(payload) > maxPrometheusResponseBytes {
+		return fmt.Errorf("prometheus response exceeds %d byte limit", maxPrometheusResponseBytes)
+	}
+	if err := json.Unmarshal(payload, out); err != nil {
 		return err
 	}
 	return nil

@@ -22,6 +22,8 @@ interface Schedule {
   enabled: boolean;
   last_run_at?: string;
   next_run_at?: string;
+  last_run_status?: string;
+  last_error?: string;
 }
 
 interface SchedulesResponse {
@@ -61,6 +63,7 @@ function ScheduleModal({ mode, initial, saving, error, onClose, onSubmit }: Sche
   const [command, setCommand] = useState(initial?.command ?? "");
   const [targetsRaw, setTargetsRaw] = useState((initial?.targets ?? []).join(", "));
   const [groupId, setGroupId] = useState(initial?.group_id ?? "");
+  const [enabled, setEnabled] = useState(initial?.enabled ?? true);
 
   // Close on Escape
   useEffect(() => {
@@ -85,6 +88,7 @@ function ScheduleModal({ mode, initial, saving, error, onClose, onSubmit }: Sche
       command: command.trim(),
       targets,
       group_id: groupId.trim() || undefined,
+      enabled,
     });
   }
 
@@ -156,6 +160,16 @@ function ScheduleModal({ mode, initial, saving, error, onClose, onSubmit }: Sche
               placeholder={t("groupPlaceholder")}
               disabled={saving}
             />
+          </label>
+
+          <label className="flex items-center gap-2 text-xs text-[var(--text)]">
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={(event) => setEnabled(event.target.checked)}
+              disabled={saving}
+            />
+            {t("enabled")}
           </label>
 
           {error ? <p className="text-xs text-[var(--bad)]">{error}</p> : null}
@@ -430,6 +444,9 @@ export default function SchedulesPage() {
                   <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] hidden lg:table-cell">
                     {t("targets")}
                   </th>
+                  <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">
+                    {t("status")}
+                  </th>
                   <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">
                     {/* actions */}
                   </th>
@@ -459,13 +476,27 @@ export default function SchedulesPage() {
 
                     {/* Targets */}
                     <td className="px-4 py-3 hidden lg:table-cell">
-                      {s.targets.length === 0 ? (
-                        <span className="text-xs text-[var(--muted)]">{t("allDevices")}</span>
+                      {s.targets.length === 0 && s.group_id ? (
+                        <span className="text-xs text-[var(--muted)]">{t("groupTarget", { group: s.group_id })}</span>
+                      ) : s.targets.length === 0 ? (
+                        <span className="text-xs text-[var(--bad)]">{t("noTargets")}</span>
                       ) : (
                         <span className="inline-flex items-center rounded-full border border-[var(--control-border)] px-2 py-0.5 text-[10px] text-[var(--control-fg-muted)]">
                           {t("targetsCount", { count: s.targets.length })}
                         </span>
                       )}
+                    </td>
+
+                    <td className="px-4 py-3 text-xs text-[var(--muted)]">
+                      <span className={s.enabled ? "text-[var(--good)]" : "text-[var(--muted)]"}>
+                        {s.enabled ? (s.last_run_status || t("scheduled")) : t("disabled")}
+                      </span>
+                      {s.next_run_at && s.enabled ? (
+                        <span className="mt-0.5 block text-[10px]">
+                          {new Date(s.next_run_at).toLocaleString()}
+                        </span>
+                      ) : null}
+                      {s.last_error ? <span className="mt-0.5 block max-w-[220px] truncate text-[10px] text-[var(--bad)]" title={s.last_error}>{s.last_error}</span> : null}
                     </td>
 
                     {/* Actions */}

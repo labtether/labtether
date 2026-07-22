@@ -8,6 +8,7 @@ type GuacModule = typeof import("guacamole-common-js");
 export interface GuacamoleViewerHandle {
   disconnect: () => void;
   sendCtrlAltDel: () => void;
+  sendKey: (keysym: number, down: boolean) => void;
   focus: () => void;
 }
 
@@ -59,6 +60,9 @@ const GuacamoleViewer = forwardRef<GuacamoleViewerHandle, GuacamoleViewerProps>(
       client.sendKeyEvent(0, 0xffff);
       client.sendKeyEvent(0, 0xffe9);
       client.sendKeyEvent(0, 0xffe3);
+    },
+    sendKey: (keysym: number, down: boolean) => {
+      clientRef.current?.sendKeyEvent(down ? 1 : 0, keysym);
     },
     focus: () => {
       containerRef.current?.focus();

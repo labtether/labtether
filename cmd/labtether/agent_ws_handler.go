@@ -1,27 +1,107 @@
 package main
 
 import (
-	"log"
+	"context"
+	"encoding/json"
 	"net/http"
 	"runtime/debug"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/gorilla/websocket"
 
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/auth"
+	"github.com/labtether/labtether/internal/enrollment"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/securityruntime"
 )
 
 const (
-	agentPingInterval    = 30 * time.Second
-	agentReadDeadline    = 60 * time.Second
-	agentWriteDeadline   = agentmgr.AgentWriteDeadline
-	maxAgentMessageBytes = 32 << 20 // 32MB — covers file chunks and VNC frames
+	agentPingInterval           = 30 * time.Second
+	agentReadDeadline           = 60 * time.Second
+	agentWriteDeadline          = agentmgr.AgentWriteDeadline
+	maxAgentMessageBytes        = 32 << 20 // 32MB — covers file chunks and VNC frames
+	maxAgentWSAssetIDBytes      = 255
+	maxAgentWSPlatformBytes     = 64
+	maxAgentWSAgentVersionBytes = 128
+	maxAgentWSMessageTypeBytes  = 128
+
+	defaultAgentWSCredentialLease = 2 * time.Second
+	minAgentWSCredentialLease     = 250 * time.Millisecond
+	maxAgentWSCredentialLease     = 5 * time.Second
+
+	defaultAgentWSMessagesPerSecond = 256
+	defaultAgentWSMessageBurst      = 512
+	hardAgentWSMessagesPerSecond    = 8192
+	hardAgentWSMessageBurst         = 16384
+	defaultAgentWSBytesPerSecond    = 16 << 20
+	defaultAgentWSByteBurst         = 64 << 20
+	hardAgentWSBytesPerSecond       = 256 << 20
+	hardAgentWSByteBurst            = 1 << 30
 )
+
+type agentWSInboundBudget struct {
+	messagesPerSecond float64
+	messageBurst      float64
+	bytesPerSecond    float64
+	byteBurst         float64
+	messageTokens     float64
+	byteTokens        float64
+	lastRefill        time.Time
+}
+
+func newAgentWSInboundBudget() *agentWSInboundBudget {
+	messagesPerSecond := boundedAgentWSEnvInt("LABTETHER_AGENT_WS_MESSAGES_PER_SECOND", defaultAgentWSMessagesPerSecond, hardAgentWSMessagesPerSecond)
+	messageBurst := boundedAgentWSEnvInt("LABTETHER_AGENT_WS_MESSAGE_BURST", defaultAgentWSMessageBurst, hardAgentWSMessageBurst)
+	bytesPerSecond := boundedAgentWSEnvInt("LABTETHER_AGENT_WS_BYTES_PER_SECOND", defaultAgentWSBytesPerSecond, hardAgentWSBytesPerSecond)
+	byteBurst := boundedAgentWSEnvInt("LABTETHER_AGENT_WS_BYTE_BURST", defaultAgentWSByteBurst, hardAgentWSByteBurst)
+	return &agentWSInboundBudget{
+		messagesPerSecond: float64(messagesPerSecond),
+		messageBurst:      float64(messageBurst),
+		bytesPerSecond:    float64(bytesPerSecond),
+		byteBurst:         float64(byteBurst),
+		messageTokens:     float64(messageBurst),
+		byteTokens:        float64(byteBurst),
+		lastRefill:        time.Now(),
+	}
+}
+
+func (b *agentWSInboundBudget) allow(frameBytes int, now time.Time) bool {
+	if b == nil || frameBytes < 0 {
+		return false
+	}
+	elapsed := now.Sub(b.lastRefill).Seconds()
+	if elapsed > 0 {
+		b.messageTokens = min(b.messageBurst, b.messageTokens+elapsed*b.messagesPerSecond)
+		b.byteTokens = min(b.byteBurst, b.byteTokens+elapsed*b.bytesPerSecond)
+		b.lastRefill = now
+	}
+	if b.messageTokens < 1 || b.byteTokens < float64(frameBytes) {
+		return false
+	}
+	b.messageTokens--
+	b.byteTokens -= float64(frameBytes)
+	return true
+}
+
+func boundedAgentWSEnvInt(key string, fallback, hardMax int) int {
+	return enrollment.BoundedLimit(envOrDefaultInt(key, fallback), fallback, hardMax)
+}
+
+func configuredAgentWSCredentialLease() time.Duration {
+	lease := envOrDefaultDuration("LABTETHER_AGENT_WS_CREDENTIAL_LEASE", defaultAgentWSCredentialLease)
+	if lease < minAgentWSCredentialLease {
+		return minAgentWSCredentialLease
+	}
+	if lease > maxAgentWSCredentialLease {
+		return maxAgentWSCredentialLease
+	}
+	return lease
+}
 
 var agentWebSocketUpgrader = websocket.Upgrader{
 	// Agent clients are non-browser and typically omit Origin.
@@ -43,6 +123,9 @@ func (s *apiServer) buildWSRouter() shared.WSRouter {
 	}
 	router[agentmgr.MsgCommandResult] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 		s.processAgentCommandResult(conn, msg)
+	}
+	router[agentmgr.MsgPowerResult] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
+		s.processAgentPowerResult(conn, msg)
 	}
 	router[agentmgr.MsgPong] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 		s.processAgentPong(conn, msg)
@@ -224,27 +307,47 @@ func (s *apiServer) handleAgentWebSocket(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	assetID := strings.TrimSpace(r.Header.Get("X-Asset-ID"))
-	platform := strings.TrimSpace(r.Header.Get("X-Platform"))
-	agentVersion := strings.TrimSpace(r.Header.Get("X-Agent-Version"))
+	assetID, assetIDValid := boundedAgentWebSocketHeader(r.Header.Get("X-Asset-ID"), maxAgentWSAssetIDBytes)
+	platform, platformValid := boundedAgentWebSocketHeader(r.Header.Get("X-Platform"), maxAgentWSPlatformBytes)
+	agentVersion, agentVersionValid := boundedAgentWebSocketHeader(r.Header.Get("X-Agent-Version"), maxAgentWSAgentVersionBytes)
+	upgradeHeaders := http.Header{}
 	if assetID == "" {
 		http.Error(w, "X-Asset-ID header required", http.StatusBadRequest)
 		return
 	}
+	if !assetIDValid {
+		http.Error(w, "invalid X-Asset-ID header", http.StatusBadRequest)
+		return
+	}
+	if !platformValid {
+		http.Error(w, "invalid X-Platform header", http.StatusBadRequest)
+		return
+	}
+	if !agentVersionValid {
+		http.Error(w, "invalid X-Agent-Version header", http.StatusBadRequest)
+		return
+	}
 
-	// Authenticate before upgrading — owner token first, then per-agent token fallback.
+	// Authenticate before upgrading. Per-agent bearer credentials are the
+	// default; the historical shared owner-token path is opt-in only.
 	agentTokenID := ""
-	if !s.validateOwnerTokenRequest(r) {
+	ownerAuthenticated := s.allowLegacySharedAgentAuth && s.validateOwnerTokenRequest(r)
+	if !ownerAuthenticated {
 		// Try per-agent token auth
 		extracted := auth.ExtractBearerToken(r)
 		if extracted == "" || s.enrollmentStore == nil {
 			// If the agent requests enrollment approval flow, park it in pending state.
 			if r.Header.Get("X-Request-Enrollment") == "true" {
+				releaseAdmission, admitted := s.reserveAgentWSAdmission(w, r)
+				if !admitted {
+					return
+				}
+				defer releaseAdmission()
 				s.handlePendingEnrollment(w, r)
 				return
 			}
 			securityruntime.Logf("agentws: rejected connection from %s: no valid token (asset=%s)",
-				r.RemoteAddr, r.Header.Get("X-Asset-ID"))
+				r.RemoteAddr, assetID)
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
@@ -252,41 +355,90 @@ func (s *apiServer) handleAgentWebSocket(w http.ResponseWriter, r *http.Request)
 		agentTok, valid, err := s.enrollmentStore.ValidateAgentToken(hashed)
 		if err != nil || !valid {
 			securityruntime.Logf("agentws: rejected connection from %s: invalid agent token (asset=%s)",
-				r.RemoteAddr, r.Header.Get("X-Asset-ID"))
+				r.RemoteAddr, assetID)
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		tokenAssetID := strings.TrimSpace(agentTok.AssetID)
-		if tokenAssetID == "" || !strings.EqualFold(tokenAssetID, assetID) {
+		tokenAssetID, tokenAssetIDValid := boundedAgentWebSocketHeader(agentTok.AssetID, maxAgentWSAssetIDBytes)
+		if tokenAssetID == "" || !tokenAssetIDValid {
 			securityruntime.Logf(
-				"agentws: rejected connection from %s: token asset mismatch (token_asset=%s header_asset=%s)",
+				"agentws: rejected connection from %s: token has no valid bound asset (header_asset=%s)",
 				r.RemoteAddr,
-				tokenAssetID,
 				assetID,
 			)
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		if !strings.EqualFold(tokenAssetID, assetID) {
+			// The validated token binding is authoritative. Older agents only
+			// persisted the bearer token, not the canonical asset ID returned by
+			// enrollment, so a restart could present their pre-enrollment display
+			// name here. Binding the connection to tokenAssetID preserves isolation
+			// while allowing those agents to self-heal.
+			securityruntime.Logf(
+				"agentws: normalized stale agent asset header from %s to token-bound asset %s for %s",
+				assetID,
+				tokenAssetID,
+				r.RemoteAddr,
+			)
+		}
+		assetID = tokenAssetID
+		upgradeHeaders.Set("X-LabTether-Asset-ID", tokenAssetID)
 		agentTokenID = agentTok.ID
-		// Touch last_used_at in background with timeout to prevent goroutine pile-up.
-		go func() {
-			_ = s.enrollmentStore.TouchAgentTokenLastUsed(agentTok.ID)
-		}()
 	}
-	_ = agentTokenID // used for audit if needed later
+	if ownerAuthenticated {
+		if s.assetStore == nil {
+			http.Error(w, "agent asset unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if _, exists, err := s.assetStore.GetAsset(assetID); err != nil {
+			http.Error(w, "agent asset unavailable", http.StatusServiceUnavailable)
+			return
+		} else if !exists {
+			securityruntime.Logf("agentws: rejected owner-token connection for missing asset %s", assetID)
+			http.Error(w, "agent asset must already be enrolled", http.StatusConflict)
+			return
+		}
+	}
+	releaseAdmission, admitted := s.reserveAgentWSAdmission(w, r)
+	if !admitted {
+		return
+	}
+	defer releaseAdmission()
 
-	wsConn, err := agentWebSocketUpgrader.Upgrade(w, r, nil)
+	wsConn, err := shared.UpgradeWebSocket(&agentWebSocketUpgrader, w, r, upgradeHeaders)
 	if err != nil {
 		securityruntime.Logf("agentws: upgrade failed for %s: %v", assetID, err)
 		return
 	}
+	wsConn.SetReadLimit(maxAgentMessageBytes)
+	if agentTokenID != "" && !s.agentWSCredentialStillValid(agentTokenID, assetID) {
+		_ = wsConn.Close()
+		return
+	}
 
 	conn := agentmgr.NewAgentConn(wsConn, assetID, platform)
+	if agentTokenID != "" {
+		conn.SetMeta("auth.mode", "agent-token")
+		conn.SetMeta("auth.agent_token_id", agentTokenID)
+		conn.SetCredentialValidatorWithLease(s.agentWSCredentialValidator(agentTokenID, assetID), configuredAgentWSCredentialLease())
+	} else {
+		conn.SetMeta("auth.mode", "owner-token")
+	}
 	if agentVersion != "" {
 		conn.SetMeta("agent_version", agentVersion)
 	}
-	wsConn.SetReadLimit(maxAgentMessageBytes)
 	s.agentMgr.Register(conn)
+	credentialValid := true
+	if agentTokenID != "" {
+		credentialValid = s.agentWSCredentialStillValid(agentTokenID, assetID)
+	} else if _, exists, err := s.assetStore.GetAsset(assetID); err != nil || !exists {
+		credentialValid = false
+	}
+	if !credentialValid {
+		s.agentMgr.UnregisterIfMatch(assetID, conn)
+		return
+	}
 
 	// Track presence in DB.
 	sessionID := generateRequestID()
@@ -353,7 +505,7 @@ func (s *apiServer) handleAgentWebSocket(w http.ResponseWriter, r *http.Request)
 	}()
 
 	// Send hub SSH public key for auto-provisioning.
-	if s.hubIdentity != nil {
+	if s.currentHubSSHIdentity() != nil {
 		s.sendSSHKeyInstall(conn)
 	}
 
@@ -365,6 +517,9 @@ func (s *apiServer) handleAgentWebSocket(w http.ResponseWriter, r *http.Request)
 
 	// Pong handler resets the read deadline.
 	conn.SetPongHandler(func(_ string) error {
+		if err := conn.ValidateCredential(); err != nil {
+			return err
+		}
 		return conn.SetReadDeadline(time.Now().Add(agentReadDeadline))
 	})
 
@@ -381,6 +536,9 @@ func (s *apiServer) handleAgentWebSocket(w http.ResponseWriter, r *http.Request)
 			case <-ticker.C:
 				if err := conn.WritePing(); err != nil {
 					securityruntime.Logf("agentws: ping failed for %s: %v", assetID, err)
+					if s.agentMgr != nil {
+						s.agentMgr.UnregisterIfMatch(assetID, conn)
+					}
 					return
 				}
 			}
@@ -390,26 +548,104 @@ func (s *apiServer) handleAgentWebSocket(w http.ResponseWriter, r *http.Request)
 	// Build the closure-based router once per connection.
 	router := s.buildWSRouter()
 
-	// Read loop.
+	// Read loop. Account for the exact raw frame size before unmarshalling.
+	inboundBudget := newAgentWSInboundBudget()
 	_ = conn.SetReadDeadline(time.Now().Add(agentReadDeadline))
 	for {
-		var msg agentmgr.Message
-		if err := conn.ReadJSON(&msg); err != nil {
+		_, payload, err := conn.ReadMessage()
+		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
 				securityruntime.Logf("agentws: read error for %s: %v", assetID, err)
 			}
 			return
 		}
+		if !inboundBudget.allow(len(payload), time.Now()) {
+			securityruntime.Logf("agentws: inbound budget exceeded for %s", assetID)
+			_ = conn.WriteClose(websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "inbound rate limit exceeded"))
+			return
+		}
 
+		// Revalidate before parsing attacker-controlled JSON. Heartbeats perform
+		// a second atomic validation with their asset update to close the delete
+		// race.
+		if err := conn.ValidateCredential(); err != nil {
+			if s.agentMgr != nil {
+				s.agentMgr.UnregisterIfMatch(assetID, conn)
+			}
+			return
+		}
+		var msg agentmgr.Message
+		if err := json.Unmarshal(payload, &msg); err != nil {
+			securityruntime.Logf("agentws: malformed message from %s: %v", assetID, err)
+			_ = conn.WriteClose(websocket.FormatCloseMessage(websocket.CloseUnsupportedData, "invalid JSON message"))
+			return
+		}
+		messageType, validMessageType := boundedAgentWebSocketHeader(msg.Type, maxAgentWSMessageTypeBytes)
+		if messageType == "" || !validMessageType {
+			securityruntime.Logf("agentws: rejected invalid message type from %s", assetID)
+			_ = conn.WriteClose(websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "invalid message type"))
+			return
+		}
+		msg.Type = messageType
 		conn.TouchLastMessage()
 		s.dispatchAgentWebSocketMessage(router, assetID, conn, msg)
 	}
 }
 
+func (s *apiServer) reserveAgentWSAdmission(w http.ResponseWriter, r *http.Request) (func(), bool) {
+	if s.agentMgr == nil {
+		http.Error(w, "agent connection manager unavailable", http.StatusServiceUnavailable)
+		return func() {}, false
+	}
+	globalLimit := boundedAgentWSEnvInt("LABTETHER_MAX_AGENT_CONNECTIONS", enrollment.DefaultMaxAgentConnections, enrollment.HardMaxAgentConnections)
+	sourceLimit := boundedAgentWSEnvInt("LABTETHER_MAX_AGENT_CONNECTIONS_PER_SOURCE", enrollment.DefaultMaxConnectionsPerPeer, enrollment.HardMaxConnectionsPerPeer)
+	release, rejection := s.agentMgr.TryReserveAdmission(shared.RequestClientKey(r), globalLimit, sourceLimit)
+	switch rejection {
+	case agentmgr.AdmissionAllowed:
+		return release, true
+	case agentmgr.AdmissionSourceLimit:
+		w.Header().Set("Retry-After", "1")
+		http.Error(w, "too many agent connections from source", http.StatusTooManyRequests)
+	default:
+		w.Header().Set("Retry-After", "1")
+		http.Error(w, "agent connection capacity reached", http.StatusServiceUnavailable)
+	}
+	return func() {}, false
+}
+
+func (s *apiServer) agentWSCredentialStillValid(tokenID, assetID string) bool {
+	return s.agentWSCredentialValidator(tokenID, assetID)() == nil
+}
+
+func (s *apiServer) agentWSCredentialValidator(tokenID, assetID string) func() error {
+	return func() error {
+		transactions, ok := s.enrollmentStore.(persistence.AgentEnrollmentTransactionStore)
+		if !ok || strings.TrimSpace(tokenID) == "" {
+			return persistence.ErrAgentCredentialInactive
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		return transactions.ValidateActiveAgentTokenID(ctx, tokenID, assetID)
+	}
+}
+
+func boundedAgentWebSocketHeader(raw string, maxBytes int) (string, bool) {
+	value := strings.TrimSpace(raw)
+	if len(value) > maxBytes || !utf8.ValidString(value) {
+		return "", false
+	}
+	for _, r := range value {
+		if unicode.IsControl(r) {
+			return "", false
+		}
+	}
+	return value, true
+}
+
 func (s *apiServer) dispatchAgentWebSocketMessage(router shared.WSRouter, assetID string, conn *agentmgr.AgentConn, msg agentmgr.Message) {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Printf("agentws: panic in handler for message type %q from %s: %v\n%s", msg.Type, assetID, err, debug.Stack())
+			securityruntime.Logf("agentws: panic in handler for message type %q from %s: %v\n%s", msg.Type, assetID, err, debug.Stack())
 		}
 	}()
 	handler, ok := router[msg.Type]

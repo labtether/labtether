@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labtether/labtether/internal/assetid"
 	"github.com/labtether/labtether/internal/connectorsdk"
 )
 
@@ -23,41 +24,36 @@ func TestConnectorID(t *testing.T) {
 	}
 }
 
-func TestConnectorStubMode(t *testing.T) {
+func TestConnectorUnconfiguredModeFailsClosed(t *testing.T) {
 	allowInsecureTransportForPortainerTests(t)
-	// New() with no env vars should return a stub connector.
-	c := New()
+	c := NewWithClient(nil)
 
 	assets, err := c.Discover(context.Background())
 	if err != nil {
 		t.Fatalf("Discover failed: %v", err)
 	}
-	if len(assets) != 1 {
-		t.Fatalf("expected 1 stub asset, got %d", len(assets))
-	}
-	if assets[0].Source != "portainer" {
-		t.Fatalf("expected source 'portainer', got %q", assets[0].Source)
-	}
-	if assets[0].ID != "portainer-endpoint-stub" {
-		t.Fatalf("expected stub asset ID, got %q", assets[0].ID)
-	}
-	if assets[0].Type != "container-host" {
-		t.Fatalf("expected type 'container-host', got %q", assets[0].Type)
-	}
-	if assets[0].Metadata["note"] == "" {
-		t.Fatal("expected stub asset to have a 'note' metadata field")
+	if assets == nil || len(assets) != 0 {
+		t.Fatalf("expected non-nil empty unconfigured inventory, got %+v", assets)
 	}
 
-	// TestConnection in stub mode should return ok.
 	health, err := c.TestConnection(context.Background())
 	if err != nil {
 		t.Fatalf("TestConnection failed: %v", err)
 	}
-	if health.Status != "ok" {
-		t.Fatalf("expected status 'ok', got %q", health.Status)
+	if health.Status != "failed" {
+		t.Fatalf("expected status 'failed', got %q", health.Status)
 	}
-	if !strings.Contains(health.Message, "stub mode") {
-		t.Fatalf("expected stub mode message, got %q", health.Message)
+	if !strings.Contains(health.Message, "not configured") {
+		t.Fatalf("expected unconfigured message, got %q", health.Message)
+	}
+
+	for _, descriptor := range c.Actions() {
+		for _, dryRun := range []bool{false, true} {
+			result, execErr := c.ExecuteAction(context.Background(), descriptor.ID, connectorsdk.ActionRequest{DryRun: dryRun})
+			if execErr != nil || result.Status != "failed" || !strings.Contains(result.Message, "not configured") {
+				t.Fatalf("ExecuteAction(%q, dry_run=%v) = %+v, err=%v, want fail-closed unconfigured result", descriptor.ID, dryRun, result, execErr)
+			}
+		}
 	}
 }
 
@@ -334,6 +330,12 @@ func TestParseContainerTarget(t *testing.T) {
 			wantCtrID: "abc123def456-extra-chars",
 		},
 		{
+			name:      "valid collector-scoped id",
+			target:    assetid.ScopeCollectorAssetID("portainer-container-2-abc123def456", "collector-portainer-a"),
+			wantEpID:  2,
+			wantCtrID: "abc123def456",
+		},
+		{
 			name:        "missing prefix",
 			target:      "container-1-abc123",
 			wantErr:     true,
@@ -414,6 +416,11 @@ func TestParseStackTarget(t *testing.T) {
 			name:   "valid large id",
 			target: "portainer-stack-999",
 			wantID: 999,
+		},
+		{
+			name:   "valid collector-scoped id",
+			target: assetid.ScopeCollectorAssetID("portainer-stack-5", "collector-portainer-a"),
+			wantID: 5,
 		},
 		{
 			name:        "missing prefix",
@@ -681,7 +688,7 @@ func TestTestConnectionConfiguredPaths(t *testing.T) {
 
 func TestDiscoverFallbackAndFailures(t *testing.T) {
 	allowInsecureTransportForPortainerTests(t)
-	t.Run("empty discovery falls back to stub", func(t *testing.T) {
+	t.Run("empty discovery returns no synthetic inventory", func(t *testing.T) {
 		mux := http.NewServeMux()
 		mux.HandleFunc("/api/endpoints", func(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode([]Endpoint{})
@@ -702,8 +709,8 @@ func TestDiscoverFallbackAndFailures(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected discover error: %v", err)
 		}
-		if len(assets) != 1 || assets[0].ID != "portainer-endpoint-stub" {
-			t.Fatalf("expected stub asset fallback, got %+v", assets)
+		if assets == nil || len(assets) != 0 {
+			t.Fatalf("expected non-nil empty inventory, got %+v", assets)
 		}
 	})
 

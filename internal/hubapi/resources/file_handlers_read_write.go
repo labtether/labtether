@@ -19,6 +19,7 @@ import (
 var errFileDownloadTimedOut = errors.New("file download timed out")
 var errFileDownloadBackpressured = errors.New("file download could not keep up with the agent stream")
 var errFileDownloadInvalidAgentResponse = errors.New("invalid agent response")
+var errFileDownloadTooLarge = errors.New("file download exceeded byte limit")
 
 func (d *Deps) HandleFileList(w http.ResponseWriter, r *http.Request, assetID string) {
 	if r.Method != http.MethodGet {
@@ -80,6 +81,14 @@ func (d *Deps) HandleFileDownload(w http.ResponseWriter, r *http.Request, assetI
 }
 
 func (d *Deps) HandleFileDownloadWithTimeout(w http.ResponseWriter, r *http.Request, assetID string, timeout time.Duration) {
+	const maxDownloadBytes = 512 * 1024 * 1024
+	d.HandleFileDownloadWithLimit(w, r, assetID, timeout, maxDownloadBytes)
+}
+
+// HandleFileDownloadWithLimit performs the normal correlated agent download
+// flow while allowing trusted internal callers (such as MCP) to impose a much
+// smaller response limit than the browser download endpoint.
+func (d *Deps) HandleFileDownloadWithLimit(w http.ResponseWriter, r *http.Request, assetID string, timeout time.Duration, maxDownloadBytes int64) {
 	if r.Method != http.MethodGet {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -144,9 +153,8 @@ func (d *Deps) HandleFileDownloadWithTimeout(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	const maxDownloadBytes = 512 * 1024 * 1024
 	if int64(len(firstPayload)) > maxDownloadBytes {
-		servicehttp.WriteError(w, http.StatusBadGateway, "agent download exceeded 512 MB limit")
+		servicehttp.WriteError(w, http.StatusRequestEntityTooLarge, "agent download exceeded byte limit")
 		return
 	}
 
@@ -264,7 +272,7 @@ func writeFileDownloadChunk(dst io.Writer, payload []byte, offset int64, written
 		return fmt.Errorf("%w: agent sent invalid file chunk offset: got %d want %d", errFileDownloadInvalidAgentResponse, offset, *written)
 	}
 	if maxBytes > 0 && *written+int64(len(payload)) > maxBytes {
-		return fmt.Errorf("agent download exceeded %d byte limit", maxBytes)
+		return fmt.Errorf("%w: %d bytes", errFileDownloadTooLarge, maxBytes)
 	}
 	if len(payload) == 0 {
 		return nil
@@ -290,6 +298,8 @@ func writeFileDownloadError(w http.ResponseWriter, err error) {
 		servicehttp.WriteError(w, http.StatusBadGateway, err.Error())
 	case errors.Is(err, errFileDownloadInvalidAgentResponse):
 		servicehttp.WriteError(w, http.StatusBadGateway, err.Error())
+	case errors.Is(err, errFileDownloadTooLarge):
+		servicehttp.WriteError(w, http.StatusRequestEntityTooLarge, "agent download exceeded byte limit")
 	default:
 		servicehttp.WriteError(w, http.StatusInternalServerError, "download failed")
 	}
@@ -299,6 +309,9 @@ func writeFileDownloadError(w http.ResponseWriter, err error) {
 func (d *Deps) HandleFileUpload(w http.ResponseWriter, r *http.Request, assetID string) {
 	if r.Method != http.MethodPost {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if !d.enforceAssetActionGuard(w, assetID) {
 		return
 	}
 

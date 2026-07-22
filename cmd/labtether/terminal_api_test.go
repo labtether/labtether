@@ -92,6 +92,9 @@ func TestStreamTicketLifecycle(t *testing.T) {
 	sessionID := mustCreateSession(t, sut)
 
 	ctx := contextWithPrincipal(context.Background(), "usr-stream-01", auth.RoleAdmin)
+	ctx = contextWithScopes(ctx, []string{"terminal:read", "credentials:use"})
+	ctx = contextWithAllowedAssets(ctx, []string{"srv1"})
+	ctx = contextWithAPIKeyID(ctx, "key-stream-01")
 	ticket, _, err := sut.issueStreamTicket(ctx, sessionID)
 	if err != nil {
 		t.Fatalf("failed to issue stream ticket: %v", err)
@@ -107,6 +110,15 @@ func TestStreamTicketLifecycle(t *testing.T) {
 	}
 	if got := userRoleFromContext(authReq.Context()); got != auth.RoleAdmin {
 		t.Fatalf("expected ticket role to be restored, got %q", got)
+	}
+	if got := scopesFromContext(authReq.Context()); len(got) != 2 || got[0] != "terminal:read" || got[1] != "credentials:use" {
+		t.Fatalf("expected ticket scopes to be restored, got %#v", got)
+	}
+	if got := allowedAssetsFromContext(authReq.Context()); len(got) != 1 || got[0] != "srv1" {
+		t.Fatalf("expected ticket asset allowlist to be restored, got %#v", got)
+	}
+	if got := apiKeyIDFromContext(authReq.Context()); got != "key-stream-01" {
+		t.Fatalf("expected ticket API key id to be restored, got %q", got)
 	}
 
 	replayReq := httptest.NewRequest(http.MethodGet, "/terminal/sessions/"+sessionID+"/stream?ticket="+ticket, nil)
@@ -144,6 +156,113 @@ func TestSessionStreamTicketEndpoint(t *testing.T) {
 	}
 	if !strings.Contains(payload.StreamPath, "/terminal/sessions/"+sessionID+"/stream") {
 		t.Fatalf("unexpected stream path: %s", payload.StreamPath)
+	}
+}
+
+func TestTerminalCommandAuditDoesNotPersistRawCommand(t *testing.T) {
+	sut := newTestAPIServer(t)
+	sessionID := mustCreateSession(t, sut)
+	secretCommand := "uptime"
+	payload, err := json.Marshal(map[string]any{"command": secretCommand})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/terminal/sessions/"+sessionID+"/commands", bytes.NewReader(payload))
+	req = req.WithContext(contextWithPrincipal(req.Context(), "owner", auth.RoleOwner))
+	rec := httptest.NewRecorder()
+
+	sut.handleSessionActions(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want queue-unavailable 503", rec.Code)
+	}
+
+	events, err := sut.auditStore.List(100, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), `"command":"`+secretCommand+`"`) {
+		t.Fatalf("audit events persisted raw terminal command: %s", encoded)
+	}
+	foundMetadata := false
+	for _, event := range events {
+		if event.Type == "terminal.command.policy_checked" {
+			if got := event.Details["command_bytes"]; got == len([]byte(secretCommand)) {
+				foundMetadata = true
+			}
+		}
+	}
+	if !foundMetadata {
+		t.Fatal("expected non-sensitive command length metadata in policy audit")
+	}
+}
+
+func TestQuickSessionCredentialsRemainEphemeralAndResolveAfterPersistentReload(t *testing.T) {
+	sut := newTestAPIServer(t)
+	deps := sut.ensureTerminalDeps()
+	secret := "LTQA_QUICK_CONNECT_SECRET_62bc"
+	body, err := json.Marshal(map[string]any{
+		"host": "192.0.2.10", "port": 22, "username": "qa-user",
+		"auth_method": "password", "password": secret, "strict_host_key": true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/terminal/quick-session", bytes.NewReader(body))
+	req = req.WithContext(contextWithPrincipal(req.Context(), "owner", auth.RoleOwner))
+	rec := httptest.NewRecorder()
+	deps.HandleQuickSession(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status=%d, want 201; body=%s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), secret) {
+		t.Fatal("quick-session response exposed the credential")
+	}
+	var response struct {
+		Session terminal.Session `json:"session"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	stored, ok, err := sut.terminalStore.GetSession(response.Session.ID)
+	if err != nil || !ok {
+		t.Fatalf("reload persistent session: ok=%t err=%v", ok, err)
+	}
+	if stored.InlineSSHConfig != nil {
+		t.Fatal("persistent terminal store retained inline SSH credentials")
+	}
+	resolved, err := deps.ResolveSessionSSHConfig(stored)
+	if err != nil {
+		t.Fatalf("resolve ephemeral quick-session config: %v", err)
+	}
+	if resolved.Password != secret || resolved.Host != "192.0.2.10" || resolved.User != "qa-user" {
+		t.Fatal("resolved quick-session config did not match the process-local credential")
+	}
+
+	events, err := sut.auditStore.List(100, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encodedEvents, err := json.Marshal(events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encodedEvents), secret) {
+		t.Fatal("quick-session audit persisted the credential")
+	}
+
+	deleteReq := httptest.NewRequest(http.MethodDelete, "/terminal/sessions/"+stored.ID, nil)
+	deleteReq = deleteReq.WithContext(contextWithPrincipal(deleteReq.Context(), "owner", auth.RoleOwner))
+	deleteRec := httptest.NewRecorder()
+	deps.HandleSessionActions(deleteRec, deleteReq)
+	if deleteRec.Code != http.StatusOK {
+		t.Fatalf("delete status=%d, want 200; body=%s", deleteRec.Code, deleteRec.Body.String())
+	}
+	if _, ok := deps.EphemeralSSHConfigs.Get(stored.ID); ok {
+		t.Fatal("session deletion did not remove ephemeral SSH credentials")
 	}
 }
 
@@ -407,6 +526,36 @@ func TestPersistentSessionCreateAppliesInteractivePolicy(t *testing.T) {
 	}
 }
 
+func TestCreatePersistentSessionRejectsConnectedAgentWithoutTmux(t *testing.T) {
+	sut := newTestAPIServer(t)
+	sut.agentMgr = agentmgr.NewManager()
+
+	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	defer cleanup()
+	agentConn := agentmgr.NewAgentConn(serverConn, "lab-host-01", "linux")
+	agentConn.SetMeta("terminal.tmux.has", "false")
+	sut.agentMgr.Register(agentConn)
+	defer sut.agentMgr.Unregister("lab-host-01")
+	sut.resetTerminalDepsForTest()
+
+	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader([]byte(`{"target":"lab-host-01","title":"Ops Shell"}`)))
+	createReq = createReq.WithContext(contextWithUserID(createReq.Context(), "actor-a"))
+	createRec := httptest.NewRecorder()
+	sut.handlePersistentSessions(createRec, createReq)
+
+	if createRec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 creating a persistent session without tmux, got %d: %s", createRec.Code, createRec.Body.String())
+	}
+	persistentSessions, err := sut.terminalPersistentStore.ListPersistentSessions()
+	if err != nil {
+		t.Fatalf("list persistent sessions: %v", err)
+	}
+	if len(persistentSessions) != 0 {
+		t.Fatalf("expected no persistent metadata after capability rejection, got %d records", len(persistentSessions))
+	}
+	_ = waitForAgentTerminalMessage(t, clientConn, agentmgr.MsgTerminalProbe)
+}
+
 func TestAttachPersistentSessionAppliesInteractivePolicy(t *testing.T) {
 	sut := newTestAPIServer(t)
 
@@ -438,6 +587,57 @@ func TestAttachPersistentSessionAppliesInteractivePolicy(t *testing.T) {
 	if attachRec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 attaching persistent session when interactive mode is disabled, got %d", attachRec.Code)
 	}
+}
+
+func TestAttachPersistentSessionRejectsConnectedAgentWithoutTmuxAndStaysDetached(t *testing.T) {
+	sut := newTestAPIServer(t)
+
+	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader([]byte(`{"target":"lab-host-01","title":"Ops Shell"}`)))
+	createReq = createReq.WithContext(contextWithUserID(createReq.Context(), "actor-a"))
+	createRec := httptest.NewRecorder()
+	sut.handlePersistentSessions(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("expected 201 creating persistent metadata, got %d", createRec.Code)
+	}
+	var created struct {
+		PersistentSession terminal.PersistentSession `json:"persistent_session"`
+	}
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+
+	sut.agentMgr = agentmgr.NewManager()
+	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	defer cleanup()
+	agentConn := agentmgr.NewAgentConn(serverConn, "lab-host-01", "linux")
+	agentConn.SetMeta("terminal.tmux.has", "false")
+	sut.agentMgr.Register(agentConn)
+	defer sut.agentMgr.Unregister("lab-host-01")
+	sut.resetTerminalDepsForTest()
+
+	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.PersistentSession.ID+"/attach", nil)
+	attachReq = attachReq.WithContext(contextWithUserID(attachReq.Context(), "actor-a"))
+	attachRec := httptest.NewRecorder()
+	sut.handlePersistentSessionActions(attachRec, attachReq)
+	if attachRec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 attaching a persistent session without tmux, got %d: %s", attachRec.Code, attachRec.Body.String())
+	}
+
+	persistent, ok, err := sut.terminalPersistentStore.GetPersistentSession(created.PersistentSession.ID)
+	if err != nil || !ok {
+		t.Fatalf("reload persistent session: ok=%t err=%v", ok, err)
+	}
+	if persistent.Status != "detached" || persistent.LastAttachedAt != nil {
+		t.Fatalf("capability rejection created false attached state: %+v", persistent)
+	}
+	sessions, err := sut.terminalStore.ListSessions()
+	if err != nil {
+		t.Fatalf("list terminal sessions: %v", err)
+	}
+	if len(sessions) != 0 {
+		t.Fatalf("expected no attached terminal session after capability rejection, got %d", len(sessions))
+	}
+	_ = waitForAgentTerminalMessage(t, clientConn, agentmgr.MsgTerminalProbe)
 }
 
 func TestAttachPersistentSessionReturnsUpdatedAttachedState(t *testing.T) {
@@ -585,7 +785,7 @@ func TestPersistentSessionListFiltersByAuthenticatedActor(t *testing.T) {
 	}
 }
 
-func TestDeletePersistentSessionRequiresRemoteCleanupPath(t *testing.T) {
+func TestDeleteNeverAttachedPersistentSessionDoesNotRequireRemoteCleanup(t *testing.T) {
 	sut := newTestAPIServer(t)
 
 	createPayload := []byte(`{"target":"lab-host-01","title":"Ops Shell"}`)
@@ -609,16 +809,95 @@ func TestDeletePersistentSessionRequiresRemoteCleanupPath(t *testing.T) {
 	deleteRec := httptest.NewRecorder()
 	sut.handlePersistentSessionActions(deleteRec, deleteReq)
 
-	if deleteRec.Code != http.StatusConflict {
-		t.Fatalf("expected 409 when remote cleanup path is unavailable, got %d", deleteRec.Code)
+	if deleteRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 deleting never-attached metadata, got %d: %s", deleteRec.Code, deleteRec.Body.String())
 	}
 
 	_, ok, err := sut.terminalPersistentStore.GetPersistentSession(created.PersistentSession.ID)
 	if err != nil {
 		t.Fatalf("failed to reload persistent session: %v", err)
 	}
-	if !ok {
-		t.Fatal("expected persistent session to remain when delete cleanup cannot run")
+	if ok {
+		t.Fatal("expected never-attached persistent metadata to be deleted")
+	}
+}
+
+func TestDeleteLegacyPlainAgentPersistentSessionClosesActualShellAndRemovesState(t *testing.T) {
+	sut := newTestAPIServer(t)
+
+	createReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions", bytes.NewReader([]byte(`{"target":"lab-host-01","title":"Legacy Shell"}`)))
+	createReq = createReq.WithContext(contextWithUserID(createReq.Context(), "actor-a"))
+	createRec := httptest.NewRecorder()
+	sut.handlePersistentSessions(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("expected 201 creating persistent metadata, got %d", createRec.Code)
+	}
+	var created struct {
+		PersistentSession terminal.PersistentSession `json:"persistent_session"`
+	}
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+
+	// Reproduce the r6 legacy state: attach was accepted before a connected
+	// agent's explicit has_tmux=false result was enforced.
+	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.PersistentSession.ID+"/attach", nil)
+	attachReq = attachReq.WithContext(contextWithUserID(attachReq.Context(), "actor-a"))
+	attachRec := httptest.NewRecorder()
+	sut.handlePersistentSessionActions(attachRec, attachReq)
+	if attachRec.Code != http.StatusCreated {
+		t.Fatalf("expected 201 reproducing legacy attached state, got %d", attachRec.Code)
+	}
+	var attached struct {
+		Session terminal.Session `json:"session"`
+	}
+	if err := json.Unmarshal(attachRec.Body.Bytes(), &attached); err != nil {
+		t.Fatalf("decode attach response: %v", err)
+	}
+
+	sut.agentMgr = agentmgr.NewManager()
+	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	defer cleanup()
+	agentConn := agentmgr.NewAgentConn(serverConn, "lab-host-01", "linux")
+	agentConn.SetMeta("terminal.tmux.has", "false")
+	sut.agentMgr.Register(agentConn)
+	defer sut.agentMgr.Unregister("lab-host-01")
+	sut.resetTerminalDepsForTest()
+
+	closed := make(chan struct{})
+	go func() {
+		defer close(closed)
+		message := waitForAgentTerminalMessage(t, clientConn, agentmgr.MsgTerminalClose)
+		var closeData agentmgr.TerminalCloseData
+		if err := json.Unmarshal(message.Data, &closeData); err != nil {
+			t.Errorf("decode terminal close payload: %v", err)
+			return
+		}
+		if closeData.SessionID != attached.Session.ID {
+			t.Errorf("closed session=%q, want %q", closeData.SessionID, attached.Session.ID)
+		}
+	}()
+
+	deleteReq := httptest.NewRequest(http.MethodDelete, "/terminal/persistent-sessions/"+created.PersistentSession.ID, nil)
+	deleteReq = deleteReq.WithContext(contextWithUserID(deleteReq.Context(), "actor-a"))
+	deleteRec := httptest.NewRecorder()
+	sut.handlePersistentSessionActions(deleteRec, deleteReq)
+	<-closed
+	if deleteRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 cleaning legacy plain-shell state, got %d: %s", deleteRec.Code, deleteRec.Body.String())
+	}
+
+	if _, ok, err := sut.terminalPersistentStore.GetPersistentSession(created.PersistentSession.ID); err != nil || ok {
+		t.Fatalf("persistent state remains after cleanup: ok=%t err=%v", ok, err)
+	}
+	sessions, err := sut.terminalStore.ListSessions()
+	if err != nil {
+		t.Fatalf("list terminal sessions: %v", err)
+	}
+	for _, session := range sessions {
+		if session.PersistentSessionID == created.PersistentSession.ID {
+			t.Fatalf("attached session %s remains after cleanup", session.ID)
+		}
 	}
 }
 
@@ -765,7 +1044,9 @@ func TestDeletePersistentSessionUsesTerminalScopedAgentCleanup(t *testing.T) {
 	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "lab-host-01", "linux"))
+	agentConn := agentmgr.NewAgentConn(serverConn, "lab-host-01", "linux")
+	agentConn.SetMeta("terminal.tmux.has", "true")
+	sut.agentMgr.Register(agentConn)
 	defer sut.agentMgr.Unregister("lab-host-01")
 
 	createPayload := []byte(`{"target":"lab-host-01","title":"Ops Shell"}`)
@@ -784,13 +1065,30 @@ func TestDeletePersistentSessionUsesTerminalScopedAgentCleanup(t *testing.T) {
 		t.Fatalf("failed to decode create response: %v", err)
 	}
 
+	attachReq := httptest.NewRequest(http.MethodPost, "/terminal/persistent-sessions/"+created.PersistentSession.ID+"/attach", nil)
+	attachReq = attachReq.WithContext(contextWithUserID(attachReq.Context(), "actor-a"))
+	attachRec := httptest.NewRecorder()
+	sut.handlePersistentSessionActions(attachRec, attachReq)
+	if attachRec.Code != http.StatusCreated {
+		t.Fatalf("expected 201 attaching persistent session, got %d: %s", attachRec.Code, attachRec.Body.String())
+	}
+
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 
 		var outbound agentmgr.Message
 		if err := clientConn.ReadJSON(&outbound); err != nil {
-			t.Errorf("read outbound cleanup message: %v", err)
+			t.Errorf("read outbound terminal close message: %v", err)
+			return
+		}
+		if outbound.Type != agentmgr.MsgTerminalClose {
+			t.Errorf("outbound type=%q, want %q", outbound.Type, agentmgr.MsgTerminalClose)
+			return
+		}
+
+		if err := clientConn.ReadJSON(&outbound); err != nil {
+			t.Errorf("read outbound tmux cleanup message: %v", err)
 			return
 		}
 		if outbound.Type != agentmgr.MsgTerminalTmuxKill {

@@ -2,10 +2,14 @@ package admin
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/runtimesettings"
 	"github.com/labtether/labtether/internal/servicehttp"
 	"github.com/labtether/labtether/internal/telemetry/remotewrite"
@@ -27,14 +31,19 @@ const (
 
 	// ErrPrometheusURLRequired is the error message for a missing Prometheus URL.
 	ErrPrometheusURLRequired = "url is required"
+
+	errPrometheusStoredPasswordConflict    = "password must be omitted when using the stored password"
+	errPrometheusStoredPasswordMismatch    = "stored password reuse requires the exact configured url and username"
+	errPrometheusStoredPasswordUnavailable = "stored prometheus password is not configured"
 )
 
 // PrometheusTestConnectionRequest is the request body for
 // POST /settings/prometheus/test-connection.
 type PrometheusTestConnectionRequest struct {
-	URL      string `json:"url"`
-	Username string `json:"username"`
-	Password string `json:"password"` // #nosec G117 -- Request payload intentionally carries runtime credential material.
+	URL               string `json:"url"`
+	Username          string `json:"username"`
+	Password          string `json:"password"` // #nosec G117 -- Request payload intentionally carries runtime credential material.
+	UseStoredPassword bool   `json:"use_stored_password,omitempty"`
 }
 
 // PrometheusTestConnectionResponse is the response body for
@@ -81,10 +90,48 @@ func (d *Deps) HandlePrometheusTestConnection(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	username := strings.TrimSpace(req.Username)
+	password := req.Password
+	if req.UseStoredPassword {
+		if req.Password != "" {
+			servicehttp.WriteError(w, http.StatusBadRequest, errPrometheusStoredPasswordConflict)
+			return
+		}
+		if !apiv2.RequireScope(w, r, "credentials:use") {
+			return
+		}
+		if d.RuntimeStore == nil {
+			servicehttp.WriteError(w, http.StatusServiceUnavailable, "prometheus credentials unavailable")
+			return
+		}
+
+		d.runtimeSettingsMu.Lock()
+		values, _, err := shared.ResolveRuntimeSettingEffectiveValues(d.RuntimeStore, d.SecretsManager)
+		d.runtimeSettingsMu.Unlock()
+		if err != nil {
+			writeAdminInternalError(w, http.StatusServiceUnavailable, "prometheus credentials unavailable", err)
+			return
+		}
+		if targetURL != values[runtimesettings.KeyPrometheusRemoteWriteURL] ||
+			username != values[runtimesettings.KeyPrometheusRemoteWriteUsername] {
+			servicehttp.WriteError(w, http.StatusBadRequest, errPrometheusStoredPasswordMismatch)
+			return
+		}
+		password = values[runtimesettings.KeyPrometheusRemoteWritePassword]
+		if password == "" {
+			servicehttp.WriteError(w, http.StatusBadRequest, errPrometheusStoredPasswordUnavailable)
+			return
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), PrometheusTestConnectionTimeout)
 	defer cancel()
 
-	result := TestPrometheusRemoteWriteConnection(ctx, targetURL, req.Username, req.Password)
+	tester := d.PrometheusRemoteWriteTester
+	if tester == nil {
+		tester = TestPrometheusRemoteWriteConnection
+	}
+	result := tester(ctx, targetURL, username, password)
 	servicehttp.WriteJSON(w, http.StatusOK, result)
 }
 
@@ -92,6 +139,16 @@ func (d *Deps) HandlePrometheusTestConnection(w http.ResponseWriter, r *http.Req
 // remote_write endpoint and returns a structured success/failure response.
 // Exported so that apiv2_advanced.go can call it via the bridge.
 func TestPrometheusRemoteWriteConnection(ctx context.Context, url, username, password string) PrometheusTestConnectionResponse {
+	config, err := remotewrite.NormalizeConfig(remotewrite.Config{
+		Enabled:  true,
+		URL:      url,
+		Username: username,
+		Password: password,
+		Interval: remotewrite.DefaultInterval,
+	})
+	if err != nil {
+		return PrometheusTestConnectionResponse{Success: false, Error: err.Error()}
+	}
 	sample := remotewrite.SampleWithLabels{
 		Labels: map[string]string{
 			"__name__": prometheusTestMetricName,
@@ -109,7 +166,7 @@ func TestPrometheusRemoteWriteConnection(ctx context.Context, url, username, pas
 		}
 	}
 
-	if err := remotewrite.Push(ctx, url, body, username, password); err != nil {
+	if err := remotewrite.Push(ctx, config.URL, body, config.Username, config.Password); err != nil {
 		return PrometheusTestConnectionResponse{
 			Success: false,
 			Error:   err.Error(),
@@ -117,6 +174,69 @@ func TestPrometheusRemoteWriteConnection(ctx context.Context, url, username, pas
 	}
 
 	return PrometheusTestConnectionResponse{Success: true}
+}
+
+func (d *Deps) validatePrometheusRemoteWriteMutation(changes map[string]string, resetKeys []string) error {
+	if !prometheusRemoteWriteKeysTouched(changes, resetKeys) {
+		return nil
+	}
+	remoteKeys := prometheusRemoteWriteSettingKeys()
+	values, _, err := shared.ResolveRuntimeSettingEffectiveValues(d.RuntimeStore, d.SecretsManager)
+	if err != nil {
+		return fmt.Errorf("prometheus remote write settings are unavailable")
+	}
+	for key, value := range changes {
+		if _, ok := remoteKeys[key]; !ok {
+			continue
+		}
+		definition, _ := runtimesettings.DefinitionByKey(key)
+		envValue := runtimesettings.ResolveEnvValue(definition, os.Getenv)
+		values[key], _ = runtimesettings.EffectiveValue(definition, envValue, value)
+	}
+	if changes == nil && len(resetKeys) == 0 {
+		resetKeys = make([]string, 0, len(remoteKeys))
+		for key := range remoteKeys {
+			resetKeys = append(resetKeys, key)
+		}
+	}
+	for _, key := range resetKeys {
+		if _, ok := remoteKeys[key]; !ok {
+			continue
+		}
+		definition, _ := runtimesettings.DefinitionByKey(key)
+		envValue := runtimesettings.ResolveEnvValue(definition, os.Getenv)
+		values[key], _ = runtimesettings.EffectiveValue(definition, envValue, "")
+	}
+	_, err = remotewrite.ConfigFromRuntimeValues(values)
+	return err
+}
+
+func prometheusRemoteWriteSettingKeys() map[string]struct{} {
+	return map[string]struct{}{
+		runtimesettings.KeyPrometheusRemoteWriteEnabled:  {},
+		runtimesettings.KeyPrometheusRemoteWriteURL:      {},
+		runtimesettings.KeyPrometheusRemoteWriteUsername: {},
+		runtimesettings.KeyPrometheusRemoteWritePassword: {},
+		runtimesettings.KeyPrometheusRemoteWriteInterval: {},
+	}
+}
+
+func prometheusRemoteWriteKeysTouched(changes map[string]string, resetKeys []string) bool {
+	remoteKeys := prometheusRemoteWriteSettingKeys()
+	if changes == nil && len(resetKeys) == 0 {
+		return true
+	}
+	for key := range changes {
+		if _, ok := remoteKeys[key]; ok {
+			return true
+		}
+	}
+	for _, key := range resetKeys {
+		if _, ok := remoteKeys[key]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // PrometheusSettingsEnabled returns the effective value of a boolean runtime

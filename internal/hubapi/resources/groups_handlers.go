@@ -6,8 +6,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/groups"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
@@ -24,12 +26,24 @@ func (d *Deps) HandleGroups(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
+		var accessible map[string]struct{}
+		if shared.HasAssetRestriction(r.Context()) {
+			_, _, loaded, ok := d.loadGroupAuthorizationScope(r)
+			if !ok {
+				servicehttp.WriteError(w, http.StatusServiceUnavailable, "asset authorization stores unavailable")
+				return
+			}
+			accessible = loaded
+		}
 		format := strings.TrimSpace(r.URL.Query().Get("format"))
 		if format == "tree" {
 			tree, err := d.GroupStore.GetGroupTree()
 			if err != nil {
 				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load group tree")
 				return
+			}
+			if accessible != nil {
+				tree = filterGroupTreeForAccess(tree, accessible)
 			}
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"tree": tree})
 			return
@@ -39,6 +53,20 @@ func (d *Deps) HandleGroups(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list groups")
 			return
+		}
+		if accessible != nil {
+			filtered := make([]groups.Group, 0, len(accessible))
+			for _, groupEntry := range allGroups {
+				if _, ok := accessible[strings.TrimSpace(groupEntry.ID)]; ok {
+					if parentID := strings.TrimSpace(groupEntry.ParentGroupID); parentID != "" {
+						if _, parentAllowed := accessible[parentID]; !parentAllowed {
+							groupEntry.ParentGroupID = ""
+						}
+					}
+					filtered = append(filtered, groupEntry)
+				}
+			}
+			allGroups = filtered
 		}
 
 		if r.URL.Query().Get("has_location") == "true" {
@@ -54,6 +82,9 @@ func (d *Deps) HandleGroups(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"groups": allGroups})
 
 	case http.MethodPost:
+		if denyAssetRestrictedGlobal(w, r, "group configuration") {
+			return
+		}
 		if !d.EnforceRateLimit(w, r, "groups.create", 120, time.Minute) {
 			return
 		}
@@ -68,6 +99,13 @@ func (d *Deps) HandleGroups(w http.ResponseWriter, r *http.Request) {
 		if req.Name == "" {
 			servicehttp.WriteError(w, http.StatusBadRequest, "name is required")
 			return
+		}
+		if req.JumpChain != nil {
+			normalized, ok := d.normalizeGroupJumpChain(w, r, req.JumpChain)
+			if !ok {
+				return
+			}
+			req.JumpChain = normalized
 		}
 
 		created, err := d.GroupStore.CreateGroup(req)
@@ -97,6 +135,10 @@ func (d *Deps) HandleGroupActions(w http.ResponseWriter, r *http.Request) {
 	groupID := strings.TrimSpace(parts[0])
 	if groupID == "" {
 		servicehttp.WriteError(w, http.StatusNotFound, "group path not found")
+		return
+	}
+	if shared.HasAssetRestriction(r.Context()) && r.Method != http.MethodGet {
+		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "asset-restricted api keys cannot mutate global group configuration")
 		return
 	}
 
@@ -134,6 +176,9 @@ func (d *Deps) HandleGroupActions(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
+		if !d.requireGroupAccess(w, r, groupID) {
+			return
+		}
 		g, ok, err := d.GroupStore.GetGroup(groupID)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load group")
@@ -154,6 +199,13 @@ func (d *Deps) HandleGroupActions(w http.ResponseWriter, r *http.Request) {
 		if err := d.DecodeJSONBody(w, r, &req); err != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, "invalid group payload")
 			return
+		}
+		if req.JumpChain != nil {
+			normalized, ok := d.normalizeGroupJumpChain(w, r, req.JumpChain)
+			if !ok {
+				return
+			}
+			req.JumpChain = normalized
 		}
 
 		updated, err := d.GroupStore.UpdateGroup(groupID, req)

@@ -17,12 +17,19 @@ import (
 )
 
 const (
-	maxWebhookNameLength = 120
-	maxWebhookEventCount = 64
+	maxWebhookNameLength   = 120
+	maxWebhookURLLength    = 4_096
+	maxWebhookSecretLength = 4_096
+	maxWebhookEventCount   = 64
+	maxWebhookEventLength  = 128
 )
 
 // HandleV2Webhooks routes collection-level webhook requests (GET list, POST create).
 func (d *Deps) HandleV2Webhooks(w http.ResponseWriter, r *http.Request) {
+	if shared.HasAssetRestriction(r.Context()) {
+		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "asset-restricted api keys cannot access global webhooks")
+		return
+	}
 	scope := "webhooks:read"
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "webhooks:write"
@@ -43,6 +50,10 @@ func (d *Deps) HandleV2Webhooks(w http.ResponseWriter, r *http.Request) {
 
 // HandleV2WebhookActions routes per-resource webhook requests (GET, PUT/PATCH, DELETE).
 func (d *Deps) HandleV2WebhookActions(w http.ResponseWriter, r *http.Request) {
+	if shared.HasAssetRestriction(r.Context()) {
+		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "asset-restricted api keys cannot access global webhooks")
+		return
+	}
 	scope := "webhooks:read"
 	if apiv2.IsMutatingMethod(r.Method) {
 		scope = "webhooks:write"
@@ -101,6 +112,10 @@ func (d *Deps) HandleV2WebhookCreate(w http.ResponseWriter, r *http.Request) {
 		apiv2.WriteError(w, http.StatusBadRequest, "validation", err.Error())
 		return
 	}
+	if len(req.Secret) > maxWebhookSecretLength {
+		apiv2.WriteError(w, http.StatusBadRequest, "validation", "secret is too long")
+		return
+	}
 
 	webhookID := idgen.New("wh")
 	secretCiphertext, err := d.encryptWebhookSecret(req.Secret, webhookID)
@@ -131,7 +146,7 @@ func (d *Deps) HandleV2WebhookCreate(w http.ResponseWriter, r *http.Request) {
 		Type:      "webhook.created",
 		ActorID:   apiv2.PrincipalActorID(r.Context()),
 		Target:    wh.ID,
-		Details:   map[string]any{"name": wh.Name, "url": wh.URL, "events": wh.Events},
+		Details:   map[string]any{"name": wh.Name, "events": wh.Events},
 		Timestamp: now,
 	}, "webhook created: "+wh.Name)
 
@@ -227,6 +242,10 @@ func (d *Deps) HandleV2WebhookUpdate(w http.ResponseWriter, r *http.Request, id 
 		}
 		req.Events = &normalizedEvents
 	}
+	if req.Secret != nil && len(*req.Secret) > maxWebhookSecretLength {
+		apiv2.WriteError(w, http.StatusBadRequest, "validation", "secret is too long")
+		return
+	}
 
 	updated := existing
 	if req.Name != nil {
@@ -260,6 +279,19 @@ func (d *Deps) HandleV2WebhookUpdate(w http.ResponseWriter, r *http.Request, id 
 		return
 	}
 	d.invalidateWebhookCache()
+	shared.AppendAuditEventBestEffort(d.AuditStore, audit.Event{
+		Type:    "webhook.updated",
+		ActorID: apiv2.PrincipalActorID(r.Context()),
+		Target:  id,
+		Details: map[string]any{
+			"name_changed":    req.Name != nil,
+			"url_changed":     req.URL != nil,
+			"secret_changed":  req.Secret != nil,
+			"events_changed":  req.Events != nil,
+			"enabled_changed": req.Enabled != nil,
+		},
+		Timestamp: time.Now().UTC(),
+	}, "webhook updated: "+id)
 	apiv2.WriteJSON(w, http.StatusOK, updated)
 }
 
@@ -293,12 +325,22 @@ func (d *Deps) HandleV2WebhookDelete(w http.ResponseWriter, r *http.Request, id 
 }
 
 func validateWebhookURL(raw string) error {
-	parsedURL, parseErr := url.Parse(strings.TrimSpace(raw))
+	raw = strings.TrimSpace(raw)
+	if len(raw) > maxWebhookURLLength {
+		return errors.New("url is too long")
+	}
+	parsedURL, parseErr := url.Parse(raw)
 	if parseErr != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
 		return errors.New("url must use http or https scheme")
 	}
-	if strings.TrimSpace(parsedURL.Host) == "" {
+	if strings.TrimSpace(parsedURL.Host) == "" || strings.TrimSpace(parsedURL.Hostname()) == "" {
 		return errors.New("url host is required")
+	}
+	if parsedURL.User != nil {
+		return errors.New("url userinfo credentials are not supported")
+	}
+	if parsedURL.Fragment != "" {
+		return errors.New("url fragments are not supported")
 	}
 	return nil
 }
@@ -307,13 +349,16 @@ func normalizeWebhookEvents(events []string) ([]string, error) {
 	if len(events) == 0 {
 		return []string{}, nil
 	}
+	if len(events) > maxWebhookEventCount {
+		return nil, errors.New("too many events")
+	}
 
 	normalized := make([]string, 0, len(events))
 	seen := make(map[string]struct{}, len(events))
 	for _, event := range events {
 		event = strings.TrimSpace(event)
-		if event == "" {
-			return nil, errors.New("event names cannot be blank")
+		if !validWebhookEventName(event) {
+			return nil, errors.New("event names must be 1-128 ASCII letters, digits, dots, underscores, or hyphens")
 		}
 		if _, ok := seen[event]; ok {
 			continue
@@ -321,15 +366,25 @@ func normalizeWebhookEvents(events []string) ([]string, error) {
 		seen[event] = struct{}{}
 		normalized = append(normalized, event)
 	}
-	if len(normalized) > maxWebhookEventCount {
-		return nil, errors.New("too many events")
-	}
 	slices.Sort(normalized)
 	return normalized, nil
 }
 
+func validWebhookEventName(event string) bool {
+	if len(event) == 0 || len(event) > maxWebhookEventLength {
+		return false
+	}
+	for _, char := range []byte(event) {
+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') || char == '.' || char == '_' || char == '-' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
 func (d *Deps) encryptWebhookSecret(secret string, webhookID string) (string, error) {
-	secret = strings.TrimSpace(secret)
 	if secret == "" {
 		return "", nil
 	}

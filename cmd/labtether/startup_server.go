@@ -3,10 +3,13 @@ package main
 import (
 	"context"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/assetstatus"
+	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/auth"
 	"github.com/labtether/labtether/internal/connectors/docker"
 	"github.com/labtether/labtether/internal/connectors/homeassistant"
@@ -71,53 +74,55 @@ func newAPIServer(
 	oidcRef *authpkg.OIDCProviderRef,
 	installStateStore *installstate.Store,
 ) *apiServer {
+	agentManager := agentmgr.NewManager()
 	srv := &apiServer{
-		db:                      pgStore,
-		terminalStore:           pgStore,
-		terminalPersistentStore: pgStore,
-		terminalBookmarkStore:   pgStore,
-		terminalScrollbackStore: pgStore,
-		terminalInMemStore:      terminal.NewStore(),
-		auditStore:              pgStore,
-		assetStore:              pgStore,
-		groupStore:              pgStore,
-		groupMaintenanceStore:   pgStore,
-		groupProfileStore:       pgStore,
-		failoverStore:           pgStore,
-		credentialStore:         pgStore,
-		canonicalStore:          pgStore,
-		telemetryStore:          pgStore,
-		logStore:                pgStore,
-		actionStore:             pgStore,
-		updateStore:             pgStore,
-		alertStore:              pgStore,
-		alertInstanceStore:      pgStore,
-		incidentStore:           pgStore,
-		retentionStore:          pgStore,
-		runtimeStore:            pgStore,
-		authStore:               pgStore,
-		notificationStore:       pgStore,
-		dependencyStore:         pgStore,
-		syntheticStore:          pgStore,
-		incidentEventStore:      pgStore,
-		hubCollectorStore:       pgStore,
-		enrollmentStore:         pgStore,
-		adminResetStore:         pgStore,
-		presenceStore:           pgStore,
-		apiKeyStore:             pgStore,
-		scheduleStore:           pgStore,
-		webhookStore:            pgStore,
-		savedActionStore:        pgStore,
-		edgeStore:               pgStore,
-		topologyStore:           topology.NewPostgresStore(pgStore.Pool()),
-		linkSuggestionStore:     pgStore,
-		secretsManager:          secretsManager,
-		policyState:             policyState,
-		connectorRegistry:       registry,
-		authValidator:           authValidator,
-		oidcRef:                 oidcRef,
-		agentMgr:                agentmgr.NewManager(),
-		broadcaster:             newEventBroadcaster(),
+		db:                         pgStore,
+		terminalStore:              pgStore,
+		terminalPersistentStore:    pgStore,
+		terminalBookmarkStore:      pgStore,
+		terminalScrollbackStore:    pgStore,
+		terminalInMemStore:         terminal.NewStore(),
+		auditStore:                 pgStore,
+		assetStore:                 assetstatus.NewStore(pgStore, agentManager),
+		groupStore:                 pgStore,
+		groupMaintenanceStore:      pgStore,
+		groupProfileStore:          pgStore,
+		failoverStore:              pgStore,
+		credentialStore:            pgStore,
+		canonicalStore:             pgStore,
+		telemetryStore:             pgStore,
+		logStore:                   pgStore,
+		actionStore:                pgStore,
+		updateStore:                pgStore,
+		alertStore:                 pgStore,
+		alertInstanceStore:         pgStore,
+		incidentStore:              pgStore,
+		retentionStore:             pgStore,
+		runtimeStore:               pgStore,
+		authStore:                  pgStore,
+		notificationStore:          pgStore,
+		dependencyStore:            pgStore,
+		syntheticStore:             pgStore,
+		incidentEventStore:         pgStore,
+		hubCollectorStore:          pgStore,
+		enrollmentStore:            pgStore,
+		adminResetStore:            pgStore,
+		presenceStore:              pgStore,
+		apiKeyStore:                pgStore,
+		scheduleStore:              pgStore,
+		webhookStore:               pgStore,
+		savedActionStore:           pgStore,
+		edgeStore:                  pgStore,
+		topologyStore:              topology.NewPostgresStore(pgStore.Pool()),
+		linkSuggestionStore:        pgStore,
+		secretsManager:             secretsManager,
+		policyState:                policyState,
+		connectorRegistry:          registry,
+		authValidator:              authValidator,
+		oidcRef:                    oidcRef,
+		agentMgr:                   agentManager,
+		allowLegacySharedAgentAuth: envOrDefaultBool("LABTETHER_ALLOW_LEGACY_SHARED_AGENT_AUTH", false),
+		broadcaster:                newEventBroadcaster(),
 		notificationDispatcher: NotificationDispatcher{
 			Adapters:    defaultNotificationAdapters(),
 			DispatchSem: make(chan struct{}, 32),
@@ -137,13 +142,15 @@ func newAPIServer(
 			}
 			return cache
 		}(),
-		externalURL:       strings.TrimRight(strings.TrimSpace(envOrDefault("LABTETHER_EXTERNAL_URL", "")), "/"),
-		pendingAgents:     newPendingAgents(),
-		challengeStore:    auth.NewChallengeStore(),
-		installStateStore: installStateStore,
-		fileProtoPool:     fileproto.NewPool(),
-		apiKeyTouchCh:     make(chan string, 100),
-		webhookEventCh:    make(chan webhookDispatchEvent, 256),
+		externalURL:            strings.TrimRight(strings.TrimSpace(envOrDefault("LABTETHER_EXTERNAL_URL", "")), "/"),
+		pendingAgents:          newPendingAgents(),
+		challengeStore:         auth.NewChallengeStore(),
+		installStateStore:      installStateStore,
+		fileProtoPool:          fileproto.NewPool(),
+		apiKeyTouchCh:          make(chan string, 100),
+		auditEventCh:           make(chan audit.Event, 512),
+		liveActivityDispatchCh: make(chan liveActivityDispatchJob, 128),
+		webhookEventCh:         make(chan webhookDispatchEvent, 256),
 	}
 	// Wire broadcaster to bump status aggregate generation on every mutation event.
 	srv.broadcaster.SetOnBroadcast(func() { srv.statusCache.Generation.Add(1) })
@@ -159,8 +166,14 @@ func newAPIServer(
 // Errors are non-fatal: mDNS is a best-effort discovery mechanism and the
 // hub operates normally without it.
 func startMDNSAdvertiser(ctx context.Context, port int) {
-	version := envOrDefault("APP_VERSION", "dev")
-	advertiser, err := discovery.NewMDNSAdvertiser(port, version)
+	advertisedVersion := strings.TrimSpace(os.Getenv("APP_VERSION"))
+	if advertisedVersion == "" {
+		advertisedVersion = strings.TrimSpace(version)
+	}
+	if advertisedVersion == "" {
+		advertisedVersion = "dev"
+	}
+	advertiser, err := discovery.NewMDNSAdvertiser(port, advertisedVersion)
 	if err != nil {
 		log.Printf("labtether: mDNS advertiser init failed (discovery disabled): %v", err)
 		return
@@ -192,7 +205,7 @@ func configureServerRuntime(ctx context.Context, srv *apiServer, registry *conne
 		if identityErr != nil {
 			log.Printf("labtether warning: hub SSH identity not available: %v", identityErr)
 		} else {
-			srv.hubIdentity = identity
+			srv.setHubSSHIdentity(identity)
 		}
 	}
 }

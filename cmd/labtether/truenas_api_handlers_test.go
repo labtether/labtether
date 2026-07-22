@@ -2,6 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -29,6 +32,23 @@ type trueNASRPCError struct {
 	Message string
 }
 
+// isExpectedTrueNASRPCTestDisconnect recognizes transport shutdown from the
+// collector's best-effort subscription worker during test teardown. Primary
+// RPC failures still fail their caller assertions, while malformed protocol
+// traffic and non-transport errors remain visible here.
+func isExpectedTrueNASRPCTestDisconnect(err error) bool {
+	return errors.Is(err, io.EOF) ||
+		errors.Is(err, io.ErrUnexpectedEOF) ||
+		errors.Is(err, net.ErrClosed) ||
+		errors.Is(err, websocket.ErrCloseSent) ||
+		websocket.IsCloseError(
+			err,
+			websocket.CloseNormalClosure,
+			websocket.CloseGoingAway,
+			websocket.CloseAbnormalClosure,
+		)
+}
+
 func newTrueNASRPCServer(t *testing.T, handler func(method string, params []any) (any, *trueNASRPCError)) *httptest.Server {
 	t.Helper()
 	allowInsecureTransportForConnectorTests(t)
@@ -37,33 +57,47 @@ func newTrueNASRPCServer(t *testing.T, handler func(method string, params []any)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			t.Fatalf("upgrade failed: %v", err)
+			if !isExpectedTrueNASRPCTestDisconnect(err) {
+				t.Errorf("upgrade failed: %v", err)
+			}
+			return
 		}
 		defer conn.Close()
 
 		var authReq trueNASRPCRequest
 		if err := conn.ReadJSON(&authReq); err != nil {
-			t.Fatalf("read auth request: %v", err)
+			if !isExpectedTrueNASRPCTestDisconnect(err) {
+				t.Errorf("read auth request: %v", err)
+			}
+			return
 		}
 		if authReq.Method != "auth.login_with_api_key" {
-			t.Fatalf("expected auth.login_with_api_key, got %s", authReq.Method)
+			t.Errorf("expected auth.login_with_api_key, got %s", authReq.Method)
+			return
 		}
 		if err := conn.WriteJSON(map[string]any{
 			"jsonrpc": "2.0",
 			"id":      authReq.ID,
 			"result":  true,
 		}); err != nil {
-			t.Fatalf("write auth response: %v", err)
+			if !isExpectedTrueNASRPCTestDisconnect(err) {
+				t.Errorf("write auth response: %v", err)
+			}
+			return
 		}
 
 		var req trueNASRPCRequest
 		if err := conn.ReadJSON(&req); err != nil {
-			t.Fatalf("read rpc request: %v", err)
+			if !isExpectedTrueNASRPCTestDisconnect(err) {
+				t.Errorf("read rpc request: %v", err)
+			}
+			return
 		}
 		params := make([]any, 0, 4)
 		if len(req.Params) > 0 {
 			if err := json.Unmarshal(req.Params, &params); err != nil {
-				t.Fatalf("decode request params: %v", err)
+				t.Errorf("decode request params: %v", err)
+				return
 			}
 		}
 
@@ -77,7 +111,9 @@ func newTrueNASRPCServer(t *testing.T, handler func(method string, params []any)
 					"message": rpcErr.Message,
 				},
 			}); err != nil {
-				t.Fatalf("write rpc error response: %v", err)
+				if !isExpectedTrueNASRPCTestDisconnect(err) {
+					t.Errorf("write rpc error response: %v", err)
+				}
 			}
 			return
 		}
@@ -87,11 +123,35 @@ func newTrueNASRPCServer(t *testing.T, handler func(method string, params []any)
 			"id":      req.ID,
 			"result":  result,
 		}); err != nil {
-			t.Fatalf("write rpc result response: %v", err)
+			if !isExpectedTrueNASRPCTestDisconnect(err) {
+				t.Errorf("write rpc result response: %v", err)
+			}
 		}
 	}))
 
 	return server
+}
+
+func TestIsExpectedTrueNASRPCTestDisconnect(t *testing.T) {
+	for _, err := range []error{
+		io.EOF,
+		io.ErrUnexpectedEOF,
+		net.ErrClosed,
+		websocket.ErrCloseSent,
+		&websocket.CloseError{Code: websocket.CloseNormalClosure},
+		&websocket.CloseError{Code: websocket.CloseGoingAway},
+		&websocket.CloseError{Code: websocket.CloseAbnormalClosure},
+	} {
+		if !isExpectedTrueNASRPCTestDisconnect(err) {
+			t.Fatalf("expected transport close to be recognized: %v", err)
+		}
+	}
+	if isExpectedTrueNASRPCTestDisconnect(errors.New("malformed authentication payload")) {
+		t.Fatal("must not classify protocol failures as teardown disconnects")
+	}
+	if isExpectedTrueNASRPCTestDisconnect(&websocket.CloseError{Code: websocket.CloseProtocolError}) {
+		t.Fatal("must not classify WebSocket protocol failures as teardown disconnects")
+	}
 }
 
 func createTrueNASCredentialProfile(t *testing.T, sut *apiServer, credentialID, secret, baseURL string) {

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+umask 077
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ENV_FILE:-${PROJECT_ROOT}/.env}"
@@ -68,14 +69,18 @@ fi
 
 ensure_env_file() {
   if [[ -f "${ENV_FILE}" ]]; then
-    return 0
+    labtether_lock_down_private_file "${ENV_FILE}" "bootstrap env file"
+    return
+  fi
+  if [[ -e "${ENV_FILE}" || -L "${ENV_FILE}" ]]; then
+    log_fail "env path exists but is not a regular file: ${ENV_FILE}"
+    return 1
   fi
   if [[ ! -f "${ENV_TEMPLATE}" ]]; then
     log_fail "missing env template: ${ENV_TEMPLATE}"
     return 1
   fi
-  cp "${ENV_TEMPLATE}" "${ENV_FILE}"
-  chmod 600 "${ENV_FILE}"
+  labtether_create_private_file_from_template "${ENV_TEMPLATE}" "${ENV_FILE}" "bootstrap env file" || return 1
   log_pass "created ${ENV_FILE} from ${ENV_TEMPLATE}"
 }
 
@@ -90,7 +95,7 @@ upsert_env_value() {
   local key=$1
   local value=$2
   local tmp_file
-  tmp_file="$(mktemp)"
+  tmp_file="$(mktemp "${ENV_FILE}.tmp.XXXXXX")"
 
   awk -v k="$key" -v v="$value" -F= '
     BEGIN { written = 0 }
@@ -98,6 +103,7 @@ upsert_env_value() {
     { print }
     END { if (!written) print k "=" v }
   ' "${ENV_FILE}" > "${tmp_file}"
+  chmod 600 "${tmp_file}"
   mv "${tmp_file}" "${ENV_FILE}"
   chmod 600 "${ENV_FILE}"
 }
@@ -214,8 +220,6 @@ else
   log_info "Skipping setup doctor (--skip-doctor)."
 fi
 
-admin_password="$(read_env_value "LABTETHER_ADMIN_PASSWORD")"
-
 cat <<EOF
 
 LabTether bootstrap complete.
@@ -223,7 +227,7 @@ LabTether bootstrap complete.
 - Console: https://localhost:3000
 - API health: http://localhost:8080/healthz
 - Default user: admin
-- Admin password: ${admin_password}
+- Admin password source: LABTETHER_ADMIN_PASSWORD in the private ${ENV_FILE} file
 
 If the browser warns about a self-signed cert, install the hub CA:
 https://localhost:8443/api/v1/tls/ca.crt

@@ -21,6 +21,12 @@ This guide provides version-specific upgrade notes. Always follow the general up
 - **New API endpoints:** `GET /api/v1/agent/manifest`, `POST /api/v1/agent/cache/refresh`.
 - **Database migrations:** v73 (audit_events_indexes) — adds indexes for audit event queries. No downtime required.
 
+### Current development release
+
+- **Agent auth default:** shared owner-token authentication for agent WebSockets and legacy HTTP heartbeats is now disabled. Temporarily set `LABTETHER_ALLOW_LEGACY_SHARED_AGENT_AUTH=true` only while migrating an old agent to a per-agent credential.
+- **Enrollment controls:** one-use tokens are the default; token-use, durable-fleet, live-socket, inbound-rate, and credential-revalidation ceilings are configurable with the variables documented in `OPERATIONS.md` and `.env.example`.
+- **Database migration:** v93 (`durable_agent_identity_state`) backfills a durable credential-rotation marker for existing agent assets. The marker prevents pre-issued enrollment tokens from being replayed after a later credential rotation and provides durable fleet accounting. The migration is transactional and requires no planned downtime.
+
 ### v2026.1
 
 - Initial public release.

@@ -1,9 +1,10 @@
 "use client";
 
 import { Link } from "../../../../../i18n/navigation";
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 
+import { startCollectorRun, waitForCollectorRun } from "../../../../components/AddDeviceModal/collectorSync";
 import { Button } from "../../../../components/ui/Button";
 import { Card } from "../../../../components/ui/Card";
 import { formatAge, formatMetadataLabel, formatMetadataValue } from "../../../../console/formatters";
@@ -15,6 +16,7 @@ import {
   isHomeAssistantHubAsset,
 } from "../../../../console/taxonomy";
 import { useFastStatus, useStatusControls } from "../../../../contexts/StatusContext";
+import { sanitizeErrorMessage } from "../../../../lib/sanitizeErrorMessage";
 
 type HomeAssistantTabProps = {
   asset: Asset;
@@ -55,6 +57,105 @@ const HUB_PRIMARY_METADATA_KEYS = new Set([
 ]);
 
 const UNAVAILABLE_STATES = new Set(["unknown", "unavailable", "offline"]);
+const HOME_ASSISTANT_UNREACHABLE_MESSAGE =
+  "Unable to reach Home Assistant. Check that it is online and that the connector Base URL and network path are correct, then try again.";
+
+type RefreshFeedback = {
+  kind: "error" | "warning" | "success";
+  message: string;
+};
+
+function homeAssistantRefreshErrorMessage(rawMessage: string): string {
+  const sanitized = sanitizeErrorMessage(rawMessage, HOME_ASSISTANT_UNREACHABLE_MESSAGE);
+  const normalized = sanitized.toLowerCase();
+  if (
+    normalized.includes("connection refused")
+    || normalized.includes("no route to host")
+    || normalized.includes("network is unreachable")
+    || normalized.includes("deadline exceeded")
+    || normalized.includes("timed out")
+    || normalized.includes("timeout")
+    || normalized.includes("failed to fetch")
+    || /home assistant api returned 5\d\d/.test(normalized)
+  ) {
+    return HOME_ASSISTANT_UNREACHABLE_MESSAGE;
+  }
+  return `Home Assistant refresh failed: ${sanitized}`;
+}
+
+function useHomeAssistantManualRefresh(asset: Asset) {
+  const { fetchStatus } = useStatusControls();
+  const [refreshing, setRefreshing] = useState(false);
+  const [feedback, setFeedback] = useState<RefreshFeedback | null>(null);
+  const collectorID = asset.metadata?.collector_id?.trim() ?? "";
+
+  const refresh = useCallback(async () => {
+    if (!collectorID) {
+      setFeedback({
+        kind: "error",
+        message: "This Home Assistant asset is missing its collector link. Open connector settings and repair the Home Assistant collector before retrying.",
+      });
+      return;
+    }
+
+    setRefreshing(true);
+    setFeedback(null);
+    try {
+      const startedAtMs = await startCollectorRun(collectorID);
+      const result = await waitForCollectorRun(collectorID, startedAtMs);
+      await fetchStatus();
+
+      if (!result.ok) {
+        setFeedback({
+          kind: "error",
+          message: `${homeAssistantRefreshErrorMessage(result.error ?? "")} Showing data from the last successful sync.`,
+        });
+        return;
+      }
+
+      if (result.warning) {
+        const warning = sanitizeErrorMessage(result.warning, "The collector completed with warnings.");
+        setFeedback({
+          kind: "warning",
+          message: `Home Assistant refresh completed with warnings: ${warning} Some displayed entity data may be from the last successful sync.`,
+        });
+        return;
+      }
+
+      setFeedback({ kind: "success", message: "Home Assistant data refreshed from the connector." });
+    } catch (error) {
+      await fetchStatus();
+      setFeedback({
+        kind: "error",
+        message: `${homeAssistantRefreshErrorMessage(error instanceof Error ? error.message : "")} Showing data from the last successful sync.`,
+      });
+    } finally {
+      setRefreshing(false);
+    }
+  }, [collectorID, fetchStatus]);
+
+  return { feedback, refresh, refreshing };
+}
+
+function RefreshFeedbackBanner({ feedback }: { feedback: RefreshFeedback | null }) {
+  if (!feedback) {
+    return null;
+  }
+  const color = feedback.kind === "error"
+    ? "var(--bad)"
+    : feedback.kind === "warning"
+      ? "var(--warn)"
+      : "var(--good)";
+  return (
+    <div
+      role={feedback.kind === "error" ? "alert" : "status"}
+      className="mb-4 rounded-lg border px-3 py-2 text-sm text-[var(--text)]"
+      style={{ borderColor: color }}
+    >
+      {feedback.message}
+    </div>
+  );
+}
 
 function metadataValue(metadata: Record<string, string> | undefined, key: string): string | null {
   const raw = metadata?.[key];
@@ -124,7 +225,7 @@ function MetadataListCard({ title, entries }: { title: string; entries: Metadata
 
 function HomeAssistantHubTab({ asset }: { asset: Asset }) {
   const status = useFastStatus();
-  const { fetchStatus } = useStatusControls();
+  const { feedback, refresh, refreshing } = useHomeAssistantManualRefresh(asset);
   const hubKey = useMemo(() => hostParentKey(asset), [asset]);
   const childEntities = useMemo(() => {
     const assets = status?.assets ?? [];
@@ -194,14 +295,15 @@ function HomeAssistantHubTab({ asset }: { asset: Asset }) {
           <Button
             size="sm"
             variant="secondary"
-            onClick={() => {
-              void fetchStatus();
-            }}
+            disabled={refreshing}
+            onClick={() => { void refresh(); }}
           >
-            <RefreshCw size={14} />
-            Refresh
+            <RefreshCw size={14} className={refreshing ? "animate-spin" : undefined} />
+            {refreshing ? "Refreshing..." : "Refresh"}
           </Button>
         </div>
+
+        <RefreshFeedbackBanner feedback={feedback} />
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           {syncRows.map((row) => (
@@ -273,7 +375,7 @@ function HomeAssistantHubTab({ asset }: { asset: Asset }) {
 
 function HomeAssistantEntityTab({ asset }: { asset: Asset }) {
   const status = useFastStatus();
-  const { fetchStatus } = useStatusControls();
+  const { feedback, refresh, refreshing } = useHomeAssistantManualRefresh(asset);
 
   const parentHub = useMemo(() => {
     const assets = status?.assets ?? [];
@@ -316,14 +418,15 @@ function HomeAssistantEntityTab({ asset }: { asset: Asset }) {
           <Button
             size="sm"
             variant="secondary"
-            onClick={() => {
-              void fetchStatus();
-            }}
+            disabled={refreshing}
+            onClick={() => { void refresh(); }}
           >
-            <RefreshCw size={14} />
-            Refresh
+            <RefreshCw size={14} className={refreshing ? "animate-spin" : undefined} />
+            {refreshing ? "Refreshing..." : "Refresh"}
           </Button>
         </div>
+
+        <RefreshFeedbackBanner feedback={feedback} />
 
         <div className="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-4 py-4">
           <p className="text-xs uppercase tracking-wide text-[var(--muted)]">Current State</p>

@@ -6,10 +6,19 @@
 #   ./scripts/perf/backend-hotspot-apples.sh --label post9
 #
 # Auth options:
-#   1) bearer token via LABTETHER_API_TOKEN/LABTETHER_OWNER_TOKEN (or --token)
-#   2) session login via --username/--password (or LABTETHER_ADMIN_USERNAME/PASSWORD)
+#   1) bearer token via LABTETHER_API_TOKEN/LABTETHER_OWNER_TOKEN or --token-file
+#   2) session login via environment or a mode-0600 password file
 
 set -euo pipefail
+set +x
+set +a
+umask 077
+
+unset EARLY_API_TOKEN EARLY_OWNER_TOKEN EARLY_ADMIN_PASSWORD AUTH_TOKEN LOGIN_PASSWORD
+EARLY_API_TOKEN="${LABTETHER_API_TOKEN-}"
+EARLY_OWNER_TOKEN="${LABTETHER_OWNER_TOKEN-}"
+EARLY_ADMIN_PASSWORD="${LABTETHER_ADMIN_PASSWORD-}"
+unset LABTETHER_API_TOKEN LABTETHER_OWNER_TOKEN LABTETHER_ADMIN_PASSWORD
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
@@ -29,14 +38,15 @@ Run repeatable backend hotspot profiling against status aggregate routes.
 Options:
   --label NAME               Label suffix for run directory (default: backend-highconcurrency-apples)
   --api-base URL             Backend API base URL (default: http://localhost:8080)
-  --token TOKEN              Bearer token (default: LABTETHER_API_TOKEN or LABTETHER_OWNER_TOKEN)
+  --token-file PATH          Read bearer token from a mode-0600 file
   --username USER            Login username when bearer token is not provided (default: admin)
-  --password PASS            Login password when bearer token is not provided (default: password)
+  --password-file PATH       Read login password from a mode-0600 file
   --aggregate-calls N        Number of /status/aggregate calls (default: 2400)
   --live-calls N             Number of /status/aggregate/live calls (default: 4800)
   --concurrency N            Concurrent request workers per batch (default: 24)
   --cpu-seconds N            CPU profile duration seconds (default: 30)
   --output-root DIR          Output root (default: tmp/perf/runs)
+  --ca-file PATH             Verify HTTPS with this CA bundle
   --compare-to PATH          Baseline summary.json or run directory to compare against
   --no-auto-compare          Disable automatic compare report generation
   --skip-pprof               Skip pprof captures
@@ -50,9 +60,10 @@ USAGE
 
 LABEL="backend-highconcurrency-apples"
 API_BASE="${LABTETHER_API_BASE_URL:-http://localhost:8080}"
-AUTH_TOKEN="${LABTETHER_API_TOKEN:-${LABTETHER_OWNER_TOKEN:-}}"
+AUTH_TOKEN="${EARLY_API_TOKEN:-${EARLY_OWNER_TOKEN:-}}"
 LOGIN_USERNAME="${LABTETHER_ADMIN_USERNAME:-admin}"
-LOGIN_PASSWORD="${LABTETHER_ADMIN_PASSWORD:-password}"
+LOGIN_PASSWORD="${EARLY_ADMIN_PASSWORD:-password}"
+unset EARLY_API_TOKEN EARLY_OWNER_TOKEN EARLY_ADMIN_PASSWORD
 AGGREGATE_CALLS=2400
 LIVE_CALLS=4800
 CONCURRENCY=24
@@ -61,6 +72,9 @@ OUTPUT_ROOT="tmp/perf/runs"
 SKIP_PPROF=0
 COMPARE_TO=""
 AUTO_COMPARE=1
+CLI_CA_FILE=""
+TOKEN_FILE=""
+PASSWORD_FILE=""
 
 while (($# > 0)); do
   case "$1" in
@@ -72,17 +86,21 @@ while (($# > 0)); do
       API_BASE="${2:-}"
       shift 2
       ;;
-    --token)
-      AUTH_TOKEN="${2:-}"
+    --token-file)
+      TOKEN_FILE="${2:-}"
       shift 2
       ;;
     --username)
       LOGIN_USERNAME="${2:-}"
       shift 2
       ;;
-    --password)
-      LOGIN_PASSWORD="${2:-}"
+    --password-file)
+      PASSWORD_FILE="${2:-}"
       shift 2
+      ;;
+    --token|--password)
+      log_fail "$1 is disabled because secret values must not be passed in process arguments; use the corresponding -file option or environment fallback"
+      exit 1
       ;;
     --aggregate-calls)
       AGGREGATE_CALLS="${2:-}"
@@ -102,6 +120,10 @@ while (($# > 0)); do
       ;;
     --output-root)
       OUTPUT_ROOT="${2:-}"
+      shift 2
+      ;;
+    --ca-file)
+      CLI_CA_FILE="${2:-}"
       shift 2
       ;;
     --compare-to)
@@ -128,6 +150,29 @@ while (($# > 0)); do
   esac
 done
 
+if [[ -n "$TOKEN_FILE" ]]; then
+  labtether_read_private_secret_file AUTH_TOKEN "$TOKEN_FILE" "bearer token file" || exit 1
+fi
+if [[ -n "$PASSWORD_FILE" ]]; then
+  labtether_read_private_secret_file LOGIN_PASSWORD "$PASSWORD_FILE" "login password file" || exit 1
+fi
+
+if [[ -n "$CLI_CA_FILE" ]]; then
+  LABTETHER_CA_FILE="$CLI_CA_FILE"
+fi
+labtether_validate_tls_options || exit 1
+if labtether_value_is_true "${LABTETHER_INSECURE_TLS:-0}"; then
+  log_fail "authenticated hotspot profiling refuses disabled TLS verification; use --ca-file or OS trust"
+  exit 1
+fi
+if [[ -n "$AUTH_TOKEN" ]]; then
+  labtether_prepare_curl_auth "$AUTH_TOKEN" || exit 1
+fi
+labtether_clear_token_environment
+export -n LOGIN_PASSWORD 2>/dev/null || true
+unset LABTETHER_ADMIN_PASSWORD
+trap labtether_cleanup_curl_security EXIT
+
 if ! [[ "${AGGREGATE_CALLS}" =~ ^[0-9]+$ ]] || ! [[ "${LIVE_CALLS}" =~ ^[0-9]+$ ]] || ! [[ "${CONCURRENCY}" =~ ^[0-9]+$ ]] || ! [[ "${CPU_SECONDS}" =~ ^[0-9]+$ ]]; then
   log_fail "numeric options must be integers"
   exit 1
@@ -139,14 +184,15 @@ if [[ "${CONCURRENCY}" -le 0 ]]; then
 fi
 
 timestamp="$(date +%Y%m%d-%H%M%S)"
-outdir="${OUTPUT_ROOT}/${timestamp}-${LABEL}"
-mkdir -p "${outdir}"
+outdir=""
+labtether_make_private_run_dir outdir "$OUTPUT_ROOT" "${timestamp}-${LABEL}" || exit 1
 
 COOKIE_JAR=""
 cleanup() {
   if [[ -n "${COOKIE_JAR}" && -f "${COOKIE_JAR}" ]]; then
     rm -f "${COOKIE_JAR}"
   fi
+  labtether_cleanup_curl_security
 }
 trap cleanup EXIT
 
@@ -160,35 +206,40 @@ if [[ -n "${AUTH_TOKEN}" ]]; then
 else
   log_info "Auth mode: session login (${LOGIN_USERNAME})"
   COOKIE_JAR="$(mktemp)"
-  login_payload="$(jq -n --arg username "${LOGIN_USERNAME}" --arg password "${LOGIN_PASSWORD}" '{username: $username, password: $password}')"
-  login_code="$(curl -k -L --post301 --post302 --post303 -sS \
+  login_payload=""
+  labtether_build_login_json login_payload "${LOGIN_USERNAME}" "${LOGIN_PASSWORD}" || exit 1
+  labtether_build_curl_request_args "${API_BASE}/auth/login" 0 1 || exit 1
+  login_code="$(labtether_curl "${LABTETHER_CURL_REQUEST_ARGS[@]}" -sS \
+    --connect-timeout 5 --max-time 30 \
     -c "${COOKIE_JAR}" \
     -o "${outdir}/login-response.json" \
     -w '%{http_code}' \
     -H 'Content-Type: application/json' \
     -X POST \
-    --data "${login_payload}" \
-    "${API_BASE}/auth/login" || true)"
+    --data-binary @- \
+    "${API_BASE}/auth/login" <<<"${login_payload}" || true)"
   if [[ "${login_code}" != "200" ]]; then
     log_fail "session login failed (${API_BASE}/auth/login -> ${login_code})"
     exit 1
   fi
 fi
 
-CURL_COMMON=(-sS -L -k)
+CURL_COMMON=(-sS --connect-timeout 5 --max-time 120)
 if [[ -n "${AUTH_TOKEN}" ]]; then
-  CURL_COMMON+=(-H "Authorization: Bearer ${AUTH_TOKEN}")
+  labtether_build_curl_request_args "${API_BASE}/healthz" 1 || exit 1
+  CURL_COMMON=("${LABTETHER_CURL_REQUEST_ARGS[@]}" "${CURL_COMMON[@]}")
 else
-  CURL_COMMON+=(-b "${COOKIE_JAR}")
+  labtether_build_curl_request_args "${API_BASE}/healthz" 0 || exit 1
+  CURL_COMMON=("${LABTETHER_CURL_REQUEST_ARGS[@]}" "${CURL_COMMON[@]}" -b "${COOKIE_JAR}")
 fi
 
-health_code="$(curl "${CURL_COMMON[@]}" -o /dev/null -w '%{http_code}' "${API_BASE}/healthz" || true)"
+health_code="$(labtether_curl "${CURL_COMMON[@]}" -o /dev/null -w '%{http_code}' "${API_BASE}/healthz" || true)"
 if [[ "${health_code}" != "200" ]]; then
   log_fail "health check failed (${API_BASE}/healthz -> ${health_code})"
   exit 1
 fi
 
-pprof_code="$(curl "${CURL_COMMON[@]}" -o /dev/null -w '%{http_code}' "${API_BASE}/debug/pprof/" || true)"
+pprof_code="$(labtether_curl "${CURL_COMMON[@]}" -o /dev/null -w '%{http_code}' "${API_BASE}/debug/pprof/" || true)"
 if [[ "${SKIP_PPROF}" -eq 0 && "${pprof_code}" != "200" ]]; then
   log_fail "pprof endpoint unavailable (${API_BASE}/debug/pprof/ -> ${pprof_code})"
   log_fail "run backend in DEV_MODE with auth token and retry, or pass --skip-pprof"
@@ -197,7 +248,7 @@ fi
 
 capture_worker_stats() {
   local out_file=$1
-  curl "${CURL_COMMON[@]}" "${API_BASE}/worker/stats?query_limit=all" > "${out_file}"
+  labtether_curl "${CURL_COMMON[@]}" "${API_BASE}/worker/stats?query_limit=all" > "${out_file}"
 }
 
 run_endpoint_batch() {
@@ -212,22 +263,35 @@ run_endpoint_batch() {
   export LT_BATCH_REQUEST_DIR="${request_dir}"
   export LT_BATCH_ENDPOINT="${endpoint}"
   export LT_BATCH_API_BASE="${API_BASE}"
-  export LT_BATCH_AUTH_TOKEN="${AUTH_TOKEN}"
+  export LT_BATCH_AUTH_CONFIG="${LABTETHER_CURL_AUTH_CONFIG_FILE}"
+  export LT_BATCH_CA_FILE="${LABTETHER_CA_FILE:-}"
   export LT_BATCH_COOKIE_JAR="${COOKIE_JAR}"
+  export LT_BATCH_ALLOW_PROXY="${LABTETHER_ALLOW_PROXY:-0}"
 
   local started_at
   started_at="$(date +%s)"
 
+  # The single-quoted program is intentionally expanded by each child bash;
+  # LT_BATCH_* values are exported immediately above.
+  # shellcheck disable=SC2016
   seq 1 "${calls}" | xargs -P "${CONCURRENCY}" -I{} bash -c '
+    unset CURL_CA_BUNDLE SSL_CERT_FILE SSL_CERT_DIR SSLKEYLOGFILE CURL_HOME NETRC CURL_SSL_BACKEND
     idx="$1"
     outfile="${LT_BATCH_REQUEST_DIR}/${idx}.tsv"
-    auth_args=()
-    if [[ -n "${LT_BATCH_AUTH_TOKEN}" ]]; then
-      auth_args=(-H "Authorization: Bearer ${LT_BATCH_AUTH_TOKEN}")
-    elif [[ -n "${LT_BATCH_COOKIE_JAR}" ]]; then
-      auth_args=(-b "${LT_BATCH_COOKIE_JAR}")
+    auth_args=(--disable)
+    case "$(printf "%s" "${LT_BATCH_ALLOW_PROXY:-0}" | tr "[:upper:]" "[:lower:]")" in
+      1|true|yes|on) ;;
+      *) auth_args+=(--noproxy "*") ;;
+    esac
+    if [[ -n "${LT_BATCH_CA_FILE}" ]]; then
+      auth_args+=(--cacert "${LT_BATCH_CA_FILE}")
     fi
-    result="$(curl -k -L -sS -o /dev/null -w "%{http_code}\t%{time_total}" "${auth_args[@]}" "${LT_BATCH_API_BASE}${LT_BATCH_ENDPOINT}" 2>/dev/null || true)"
+    if [[ -n "${LT_BATCH_AUTH_CONFIG}" ]]; then
+      auth_args+=(--config "${LT_BATCH_AUTH_CONFIG}")
+    elif [[ -n "${LT_BATCH_COOKIE_JAR}" ]]; then
+      auth_args+=(-b "${LT_BATCH_COOKIE_JAR}")
+    fi
+    result="$(curl "${auth_args[@]}" -sS --connect-timeout 5 --max-time 120 -o /dev/null -w "%{http_code}\t%{time_total}" "${LT_BATCH_API_BASE}${LT_BATCH_ENDPOINT}" 2>/dev/null || true)"
     if [[ -z "${result}" ]]; then
       result="000\t0"
     fi
@@ -331,30 +395,38 @@ resolve_compare_summary() {
   fi
 
   local candidate
-  for candidate in "${OUTPUT_ROOT}"/*-"${LABEL}"/summary.json; do
+  local newest=""
+  for candidate in \
+    "${OUTPUT_ROOT}"/*-"${LABEL}"/summary.json \
+    "${OUTPUT_ROOT}"/*-"${LABEL}".*/summary.json; do
     if [[ "${candidate}" == "${outdir}/summary.json" ]]; then
       continue
     fi
-    if [[ -f "${candidate}" ]]; then
-      printf '%s\n' "${candidate}"
-      return
+    if [[ -f "${candidate}" && ( -z "$newest" || "$candidate" -nt "$newest" ) ]]; then
+      newest="$candidate"
     fi
   done
+  if [[ -n "$newest" ]]; then
+    printf '%s\n' "$newest"
+    return
+  fi
 
+  newest=""
   for candidate in "${OUTPUT_ROOT}"/*/summary.json; do
     if [[ "${candidate}" == "${outdir}/summary.json" ]]; then
       continue
     fi
-    if [[ -f "${candidate}" ]]; then
-      printf '%s\n' "${candidate}"
-      return
+    if [[ -f "${candidate}" && ( -z "$newest" || "$candidate" -nt "$newest" ) ]]; then
+      newest="$candidate"
     fi
   done
+  [[ -z "$newest" ]] || printf '%s\n' "$newest"
 }
 
 build_compare_report() {
   local baseline_summary=$1
-  local compare_file="${outdir}/compare-vs-$(basename "$(dirname "${baseline_summary}")").md"
+  local compare_file
+  compare_file="${outdir}/compare-vs-$(basename "$(dirname "${baseline_summary}")").md"
   local candidate_summary="${outdir}/summary.json"
 
   get_query_metric() {
@@ -365,6 +437,18 @@ build_compare_report() {
     jq -r --arg key_primary "${key_primary}" --arg key_secondary "${key_secondary}" --arg metric "${metric}" '
       (.key_deltas[$key_primary][$metric]
        // .key_deltas[$key_secondary][$metric]
+       // null)
+    ' "${file}"
+  }
+
+  get_snapshot_metric() {
+    local file=$1
+    local metric=$2
+    jq -r --arg metric "${metric}" '
+      (.key_deltas.batch_snapshot_distinct[$metric]
+       // .key_deltas.batch_snapshot_lateral[$metric]
+       // .key_deltas.batch_snapshot_new_lateral[$metric]
+       // .key_deltas.snapshot_single_distinct[$metric]
        // null)
     ' "${file}"
   }
@@ -392,10 +476,10 @@ build_compare_report() {
   }
 
   local base_batch_total cand_batch_total base_batch_mean cand_batch_mean
-  base_batch_total="$(get_query_metric "${baseline_summary}" "batch_snapshot_lateral" "batch_snapshot_new_lateral" "total_ms_delta")"
-  cand_batch_total="$(get_query_metric "${candidate_summary}" "batch_snapshot_lateral" "batch_snapshot_new_lateral" "total_ms_delta")"
-  base_batch_mean="$(get_query_metric "${baseline_summary}" "batch_snapshot_lateral" "batch_snapshot_new_lateral" "mean_ms_after")"
-  cand_batch_mean="$(get_query_metric "${candidate_summary}" "batch_snapshot_lateral" "batch_snapshot_new_lateral" "mean_ms_after")"
+  base_batch_total="$(get_snapshot_metric "${baseline_summary}" "total_ms_delta")"
+  cand_batch_total="$(get_snapshot_metric "${candidate_summary}" "total_ms_delta")"
+  base_batch_mean="$(get_snapshot_metric "${baseline_summary}" "mean_ms_after")"
+  cand_batch_mean="$(get_snapshot_metric "${candidate_summary}" "mean_ms_after")"
 
   local base_sources_total cand_sources_total base_sources_mean cand_sources_mean
   base_sources_total="$(get_query_metric "${baseline_summary}" "sources_groupby_windowed" "sources_groupby_windowed" "total_ms_delta")"
@@ -467,9 +551,9 @@ jq -n \
 
 if [[ "${SKIP_PPROF}" -eq 0 ]]; then
   log_info "Capturing pprof artifacts..."
-  curl "${CURL_COMMON[@]}" "${API_BASE}/debug/pprof/goroutine?debug=1" > "${outdir}/goroutines.txt"
-  curl "${CURL_COMMON[@]}" "${API_BASE}/debug/pprof/heap" > "${outdir}/heap.pb.gz"
-  curl "${CURL_COMMON[@]}" "${API_BASE}/debug/pprof/profile?seconds=${CPU_SECONDS}" > "${outdir}/cpu.pb.gz"
+  labtether_curl "${CURL_COMMON[@]}" "${API_BASE}/debug/pprof/goroutine?debug=1" > "${outdir}/goroutines.txt"
+  labtether_curl "${CURL_COMMON[@]}" "${API_BASE}/debug/pprof/heap" > "${outdir}/heap.pb.gz"
+  labtether_curl "${CURL_COMMON[@]}" "${API_BASE}/debug/pprof/profile?seconds=${CPU_SECONDS}" > "${outdir}/cpu.pb.gz"
 
   if has_command go; then
     go tool pprof -sample_index=alloc_space -top "${outdir}/heap.pb.gz" > "${outdir}/heap-alloc-top.txt" || true
@@ -520,6 +604,7 @@ jq -n \
     source_query_aggregates: ($afterDoc.performance.source_queries_top // []),
     top10: ($delta[:10]),
     key_deltas: {
+      batch_snapshot_distinct: first_match("SELECT DISTINCT ON \\(asset_id, metric\\) asset_id, metric, value FROM metric_samples WHERE asset_id = ANY"),
       batch_snapshot_lateral: first_match("WITH asset_ids AS.*LATERAL"),
       snapshot_single_distinct: first_match("SELECT DISTINCT ON \\(metric\\) metric, value FROM metric_samples WHERE asset_id = \\$1"),
       queryevents_groupid_projected: first_match("projected_group_id"),

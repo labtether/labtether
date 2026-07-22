@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/alerts"
+	"github.com/labtether/labtether/internal/apiv2"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
@@ -23,6 +25,20 @@ func (d *Deps) HandleAlertInstances(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	if ruleID := strings.TrimSpace(r.URL.Query().Get("rule_id")); shared.HasAssetRestriction(r.Context()) && ruleID != "" {
+		rule, ok, err := d.AlertStore.GetAlertRule(ruleID)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to authorize alert rule")
+			return
+		}
+		if !ok {
+			servicehttp.WriteError(w, http.StatusNotFound, "alert rule not found")
+			return
+		}
+		if !d.requireAlertRuleAccess(w, r, rule) {
+			return
+		}
+	}
 
 	instances, err := d.AlertInstanceStore.ListAlertInstances(persistence.AlertInstanceFilter{
 		Limit:    parseLimit(r, 50),
@@ -34,6 +50,25 @@ func (d *Deps) HandleAlertInstances(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list alert instances")
 		return
+	}
+	if shared.HasAssetRestriction(r.Context()) {
+		groupAccess, authErr := d.accessibleGroupIDs(r.Context())
+		if authErr != nil {
+			writeAssetScopeForbidden(w, "unable to prove alert instance asset scope")
+			return
+		}
+		filtered := make([]alerts.AlertInstance, 0, len(instances))
+		for _, instance := range instances {
+			allowed, checkErr := d.alertInstanceAllowed(r.Context(), instance, groupAccess)
+			if checkErr != nil {
+				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to authorize alert instances")
+				return
+			}
+			if allowed {
+				filtered = append(filtered, instance)
+			}
+		}
+		instances = filtered
 	}
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"instances": instances})
 }
@@ -68,9 +103,34 @@ func (d *Deps) HandleAlertInstanceActions(w http.ResponseWriter, r *http.Request
 				servicehttp.WriteError(w, http.StatusNotFound, "alert instance not found")
 				return
 			}
+			if shared.HasAssetRestriction(r.Context()) {
+				groupAccess, authErr := d.accessibleGroupIDs(r.Context())
+				allowed, checkErr := d.alertInstanceAllowed(r.Context(), inst, groupAccess)
+				if authErr != nil || checkErr != nil || !allowed {
+					writeAssetScopeForbidden(w, "api key does not have access to this alert instance")
+					return
+				}
+			}
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"instance": inst})
 			return
 		case http.MethodDelete:
+			inst, ok, err := d.AlertInstanceStore.GetAlertInstance(instanceID)
+			if err != nil {
+				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load alert instance")
+				return
+			}
+			if !ok {
+				servicehttp.WriteError(w, http.StatusNotFound, "alert instance not found")
+				return
+			}
+			if shared.HasAssetRestriction(r.Context()) {
+				groupAccess, authErr := d.accessibleGroupIDs(r.Context())
+				allowed, checkErr := d.alertInstanceAllowed(r.Context(), inst, groupAccess)
+				if authErr != nil || checkErr != nil || !allowed {
+					writeAssetScopeForbidden(w, "api key does not have access to this alert instance")
+					return
+				}
+			}
 			if err := d.AlertInstanceStore.DeleteAlertInstance(instanceID); err != nil {
 				if strings.Contains(strings.ToLower(err.Error()), "not found") {
 					servicehttp.WriteError(w, http.StatusNotFound, "alert instance not found")
@@ -94,6 +154,23 @@ func (d *Deps) HandleAlertInstanceActions(w http.ResponseWriter, r *http.Request
 		}
 		if !d.EnforceRateLimit(w, r, "alerts.instances.ack", 120, time.Minute) {
 			return
+		}
+		inst, ok, err := d.AlertInstanceStore.GetAlertInstance(instanceID)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load alert instance")
+			return
+		}
+		if !ok {
+			servicehttp.WriteError(w, http.StatusNotFound, "alert instance not found")
+			return
+		}
+		if shared.HasAssetRestriction(r.Context()) {
+			groupAccess, authErr := d.accessibleGroupIDs(r.Context())
+			allowed, checkErr := d.alertInstanceAllowed(r.Context(), inst, groupAccess)
+			if authErr != nil || checkErr != nil || !allowed {
+				writeAssetScopeForbidden(w, "api key does not have access to this alert instance")
+				return
+			}
 		}
 		updated, err := d.AlertInstanceStore.UpdateAlertInstanceStatus(instanceID, alerts.InstanceStatusAcknowledged)
 		if err != nil {
@@ -119,6 +196,23 @@ func (d *Deps) HandleAlertInstanceActions(w http.ResponseWriter, r *http.Request
 		}
 		if !d.EnforceRateLimit(w, r, "alerts.instances.resolve", 120, time.Minute) {
 			return
+		}
+		inst, ok, err := d.AlertInstanceStore.GetAlertInstance(instanceID)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load alert instance")
+			return
+		}
+		if !ok {
+			servicehttp.WriteError(w, http.StatusNotFound, "alert instance not found")
+			return
+		}
+		if shared.HasAssetRestriction(r.Context()) {
+			groupAccess, authErr := d.accessibleGroupIDs(r.Context())
+			allowed, checkErr := d.alertInstanceAllowed(r.Context(), inst, groupAccess)
+			if authErr != nil || checkErr != nil || !allowed {
+				writeAssetScopeForbidden(w, "api key does not have access to this alert instance")
+				return
+			}
 		}
 		updated, err := d.AlertInstanceStore.UpdateAlertInstanceStatus(instanceID, alerts.InstanceStatusResolved)
 		if err != nil {
@@ -149,6 +243,9 @@ func (d *Deps) HandleAlertSilences(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "alert instance store unavailable")
 		return
 	}
+	if denyAssetRestrictedGlobal(w, r, "alert silences") {
+		return
+	}
 
 	switch r.Method {
 	case http.MethodGet:
@@ -172,6 +269,9 @@ func (d *Deps) HandleAlertSilences(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		// Attribution is derived from the authenticated request. Never trust a
+		// caller-supplied created_by value for an operational suppression record.
+		req.CreatedBy = apiv2.PrincipalActorID(r.Context())
 		silence, err := d.AlertInstanceStore.CreateAlertSilence(req)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create silence")
@@ -191,6 +291,9 @@ func (d *Deps) HandleAlertSilenceActions(w http.ResponseWriter, r *http.Request)
 	}
 	if d.AlertInstanceStore == nil {
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "alert instance store unavailable")
+		return
+	}
+	if denyAssetRestrictedGlobal(w, r, "alert silences") {
 		return
 	}
 

@@ -21,6 +21,9 @@ func (d *Deps) HandleRetentionSettings(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "retention settings unavailable")
 		return
 	}
+	if denyAssetRestrictedGlobal(w, r, "retention settings") {
+		return
+	}
 
 	switch r.Method {
 	case http.MethodGet:

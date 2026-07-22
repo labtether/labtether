@@ -18,7 +18,6 @@ import (
 	"unicode/utf16"
 
 	"github.com/labtether/labtether/internal/hubcollector"
-	"github.com/labtether/labtether/internal/logs"
 	"github.com/labtether/labtether/internal/securityruntime"
 )
 
@@ -103,22 +102,17 @@ func (d *Deps) executeWinRMCollector(ctx context.Context, collector hubcollector
 	output, err := ExecuteWinRMCommand(ctx, endpoint, user, password, script, useHTTPS, skipVerify, caPEM)
 	if err != nil {
 		d.UpdateCollectorStatus(collector.ID, "error", fmt.Sprintf("WinRM execution failed: %v", err))
-	} else {
-		d.UpdateCollectorStatus(collector.ID, "ok", "")
+		d.appendCollectorOutputLog(collector.AssetID, "hub-collector-winrm", "error", output)
+		return
 	}
 
-	// Store output as log event
-	if d.LogStore != nil && output != "" {
-		_ = d.LogStore.AppendEvent(logs.Event{
-			AssetID: collector.AssetID,
-			Source:  "hub-collector-winrm",
-			Level:   "info",
-			Message: output,
-		})
+	d.appendCollectorOutputLog(collector.AssetID, "hub-collector-winrm", "info", output)
+	if err := d.ingestCollectorTelemetry(ctx, collector, output); err != nil {
+		log.Printf("hub collector: failed to ingest WinRM telemetry for collector %s: %v", collector.ID, err)
+		d.UpdateCollectorStatus(collector.ID, "error", "telemetry ingest failed")
+		return
 	}
-
-	// Try to parse output as structured telemetry
-	d.ingestCollectorTelemetry(collector, output)
+	d.UpdateCollectorStatus(collector.ID, "ok", "")
 }
 
 // ExecuteWinRMCommand performs WinRM command execution via the WS-Management SOAP

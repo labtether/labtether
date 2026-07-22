@@ -5,12 +5,12 @@ func agentBootstrapScriptTemplate() string {
 set -euo pipefail
 
 # LabTether Agent TLS Bootstrap
-# Usage:
-#   curl -kfsSL "%[1]s/api/v1/agent/bootstrap.sh?ca_fingerprint_sha256=%[2]s" | sudo bash
-#   curl -kfsSL "%[1]s/api/v1/agent/bootstrap.sh?ca_fingerprint_sha256=%[2]s" | sudo bash -s -- --enrollment-token <token>
+# Obtain the generated pinned-CA install command from the authenticated
+# LabTether console. Never execute this script directly from an unauthenticated
+# curl -k/wget --no-check-certificate download: verify its provenance first.
 
-HUB_URL=%[3]s
-EXPECTED_CA_FINGERPRINT=%[4]s
+HUB_URL=%[1]s
+EXPECTED_CA_FINGERPRINT=%[2]s
 CA_DEST="/etc/labtether/ca.crt"
 TMP_CA="$(mktemp)"
 TMP_INSTALL="$(mktemp)"

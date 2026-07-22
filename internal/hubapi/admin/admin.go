@@ -34,7 +34,7 @@ func (d *Deps) HandleAdminReset(w http.ResponseWriter, r *http.Request) {
 
 	result, err := d.AdminResetStore.ResetAllData()
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "reset failed: "+err.Error())
+		writeAdminInternalError(w, http.StatusInternalServerError, "reset failed", err)
 		return
 	}
 

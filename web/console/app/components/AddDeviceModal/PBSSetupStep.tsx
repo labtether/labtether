@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
@@ -35,6 +35,8 @@ export function PBSSetupStep({ onBack, onClose, onAdded, compatPrefills = [], se
     setIntervalSeconds,
     skipVerify,
     setSkipVerify,
+    caPEM,
+    setCAPEM,
     collectorID,
     credentialID,
     configured,
@@ -50,6 +52,7 @@ export function PBSSetupStep({ onBack, onClose, onAdded, compatPrefills = [], se
   } = usePBSSettings();
 
   const [formError, setFormError] = useState("");
+  const fieldID = useId();
   const prefillAppliedRef = useRef(false);
   const [selectedCompatBaseURL, setSelectedCompatBaseURL] = useState("");
   const selectedCompat = compatPrefills.find((item) => item.baseURL === selectedCompatBaseURL) ?? compatPrefills[0];
@@ -146,8 +149,11 @@ export function PBSSetupStep({ onBack, onClose, onAdded, compatPrefills = [], se
 
       {compatPrefills.length > 1 && (
         <div>
-          <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Detected Endpoint</label>
+          <label htmlFor={`${fieldID}-detected-endpoint`} className="text-xs font-medium text-[var(--muted)] mb-1 block">
+            Detected Endpoint
+          </label>
           <select
+            id={`${fieldID}-detected-endpoint`}
             value={selectedCompatBaseURL || compatPrefills[0].baseURL}
             onChange={(event) => {
               const nextBaseURL = event.target.value;
@@ -170,8 +176,14 @@ export function PBSSetupStep({ onBack, onClose, onAdded, compatPrefills = [], se
       )}
 
       <div>
-        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Base URL</label>
-        <Input value={baseURL} onChange={(e) => setBaseURL(e.target.value)} placeholder="https://pbs.local:8007" />
+        <label htmlFor={`${fieldID}-base-url`} className="text-xs font-medium text-[var(--muted)] mb-1 block">Base URL</label>
+        <Input
+          id={`${fieldID}-base-url`}
+          value={baseURL}
+          onChange={(e) => setBaseURL(e.target.value)}
+          placeholder="https://pbs.local:8007"
+          aria-invalid={Boolean(baseURLError)}
+        />
       </div>
 
       <div className="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
@@ -182,42 +194,84 @@ export function PBSSetupStep({ onBack, onClose, onAdded, compatPrefills = [], se
       </div>
 
       <div>
-        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Token ID</label>
-        <Input value={tokenID} onChange={(e) => setTokenID(e.target.value)} placeholder="root@pam!labtether" />
-      </div>
-
-      <div>
-        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Token Secret</label>
+        <label htmlFor={`${fieldID}-token-id`} className="text-xs font-medium text-[var(--muted)] mb-1 block">Token ID</label>
         <Input
-          type="password"
-          value={tokenSecret}
-          onChange={(e) => setTokenSecret(e.target.value)}
-          placeholder={configured ? "•••••••• (unchanged)" : "Required for initial setup"}
+          id={`${fieldID}-token-id`}
+          value={tokenID}
+          onChange={(e) => setTokenID(e.target.value)}
+          placeholder="root@pam!labtether"
+          autoComplete="off"
+          aria-invalid={Boolean(tokenIDError)}
         />
       </div>
 
       <div>
-        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Display Name</label>
-        <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Homelab PBS" />
+        <label htmlFor={`${fieldID}-token-secret`} className="text-xs font-medium text-[var(--muted)] mb-1 block">Token Secret</label>
+        <Input
+          id={`${fieldID}-token-secret`}
+          type="password"
+          value={tokenSecret}
+          onChange={(e) => setTokenSecret(e.target.value)}
+          placeholder={configured ? "•••••••• (unchanged)" : "Required for initial setup"}
+          autoComplete="off"
+          aria-invalid={Boolean(secretRequiredError)}
+        />
+      </div>
+
+      <div>
+        <label htmlFor={`${fieldID}-display-name`} className="text-xs font-medium text-[var(--muted)] mb-1 block">Display Name</label>
+        <Input
+          id={`${fieldID}-display-name`}
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
+          placeholder="Homelab PBS"
+          autoComplete="off"
+        />
       </div>
 
       {setupMode === "advanced" ? (
         <>
           <div>
-            <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Poll Interval (s)</label>
+            <label htmlFor={`${fieldID}-poll-interval`} className="text-xs font-medium text-[var(--muted)] mb-1 block">Poll Interval (s)</label>
             <Input
+              id={`${fieldID}-poll-interval`}
               type="number"
               min={15}
               max={3600}
               value={intervalSeconds}
               onChange={(e) => setIntervalSeconds(Number(e.target.value) || 60)}
+              aria-invalid={Boolean(intervalError)}
             />
           </div>
 
-          <label className="flex items-center gap-2 text-xs text-[var(--muted)]">
-            <input type="checkbox" checked={skipVerify} onChange={(e) => setSkipVerify(e.target.checked)} />
+          <label htmlFor={`${fieldID}-skip-verify`} className="flex items-center gap-2 text-xs text-[var(--muted)]">
+            <input
+              id={`${fieldID}-skip-verify`}
+              type="checkbox"
+              checked={skipVerify}
+              onChange={(e) => setSkipVerify(e.target.checked)}
+            />
             Skip TLS certificate verification
           </label>
+
+          <div>
+            <label htmlFor={`${fieldID}-ca-pem`} className="text-xs font-medium text-[var(--muted)] mb-1 block">
+              Custom CA certificate (PEM)
+            </label>
+            <textarea
+              id={`${fieldID}-ca-pem`}
+              className="w-full bg-transparent border border-[var(--line)] rounded-lg px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:outline-none focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_var(--accent-subtle)] transition-[border-color,box-shadow] duration-[var(--dur-fast)] resize-y"
+              rows={4}
+              value={caPEM}
+              onChange={(e) => setCAPEM(e.target.value)}
+              placeholder="-----BEGIN CERTIFICATE-----"
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              Paste the issuing CA certificate chain to keep TLS verification enabled. Prefer this to skipping verification.
+            </p>
+          </div>
         </>
       ) : (
         <p className="text-xs text-[var(--muted)]">Default setup uses 60s polling with TLS verification enabled.</p>

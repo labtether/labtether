@@ -4,7 +4,9 @@ package resources
 // from cmd/labtether/assets_heartbeat_handlers.go.
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -14,18 +16,38 @@ import (
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
+var ErrConnectedAgentDeletion = errors.New("connected agent assets must be stopped or uninstalled before deletion")
+
 // HandleDeleteAsset handles DELETE /assets/{id}. It decommissions an asset
 // with best-effort SSH key cleanup, token revocation, coordinator removal,
 // attached child cascade, and final store delete.
 func (d *Deps) HandleDeleteAsset(w http.ResponseWriter, assetEntry assets.Asset) {
+	if err := d.DeleteAsset(context.Background(), assetEntry); err != nil {
+		switch {
+		case errors.Is(err, ErrConnectedAgentDeletion):
+			servicehttp.WriteError(w, http.StatusConflict, ErrConnectedAgentDeletion.Error())
+		case errors.Is(err, persistence.ErrNotFound):
+			servicehttp.WriteError(w, http.StatusNotFound, "asset not found")
+		default:
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete asset")
+		}
+		return
+	}
+	assetID := strings.TrimSpace(assetEntry.ID)
+	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "asset_id": assetID})
+}
+
+// DeleteAsset applies the same decommission policy for both v1 and v2. Agent
+// assets are removed through the persistence transaction that also revokes all
+// active or prepared credentials under the per-asset identity lock.
+func (d *Deps) DeleteAsset(ctx context.Context, assetEntry assets.Asset) error {
 	assetID := strings.TrimSpace(assetEntry.ID)
 
 	if isConnectedAgentAsset(assetEntry, d.AgentMgr) {
 		if d.SendSSHKeyRemoveToAsset != nil {
 			d.SendSSHKeyRemoveToAsset(assetID)
 		}
-		servicehttp.WriteError(w, http.StatusConflict, "connected agent assets must be stopped or uninstalled before deletion")
-		return
+		return ErrConnectedAgentDeletion
 	}
 
 	// Best-effort: ask agent to remove hub SSH key before disconnecting.
@@ -37,13 +59,8 @@ func (d *Deps) HandleDeleteAsset(w http.ResponseWriter, assetEntry assets.Asset)
 		}
 	}
 
-	// Revoke agent tokens (agent_tokens has no FK cascade to assets).
-	if d.EnrollmentStore != nil {
-		_ = d.EnrollmentStore.RevokeAgentTokensByAsset(assetID)
-	}
 	if err := d.deleteAutoDockerCollectorsForAsset(assetID); err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete attached docker collectors")
-		return
+		return fmt.Errorf("delete attached docker collectors: %w", err)
 	}
 
 	// Disconnect agent WebSocket connection.
@@ -59,32 +76,31 @@ func (d *Deps) HandleDeleteAsset(w http.ResponseWriter, assetEntry assets.Asset)
 
 	// Remove attached infrastructure children for non-docker host sources.
 	if err := d.deleteAttachedInfraAssets(assetEntry); err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete attached infrastructure assets")
-		return
+		return fmt.Errorf("delete attached infrastructure assets: %w", err)
 	}
 
 	// Always attempt docker-child cleanup for the deleted asset ID.
 	// This covers non-agent parent assets (for example connector-discovered hosts)
 	// that still own docker children via metadata.agent_id links.
 	if err := d.deleteAttachedDockerAssets(assetID); err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete attached docker assets")
-		return
+		return fmt.Errorf("delete attached docker assets: %w", err)
 	}
 
-	// Delete asset — FK cascades handle child rows (heartbeats, metrics, etc.).
-	if err := d.AssetStore.DeleteAsset(assetID); err != nil {
-		if errors.Is(err, persistence.ErrNotFound) {
-			servicehttp.WriteError(w, http.StatusNotFound, "asset not found")
-			return
+	if d.EnrollmentTransactions != nil {
+		if err := d.EnrollmentTransactions.DecommissionAgentAsset(ctx, assetID); err != nil {
+			return err
 		}
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete asset")
-		return
+	} else if NormalizeSource(assetEntry.Source) == "agent" {
+		return persistence.ErrAgentEnrollmentTransactionsUnavailable
+	} else if err := d.AssetStore.DeleteAsset(assetID); err != nil {
+		return err
 	}
-
-	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
-		"deleted":  true,
-		"asset_id": assetID,
-	})
+	// Close any connection that registered after the initial connected check but
+	// before the atomic revocation/delete committed.
+	if d.AgentMgr != nil {
+		d.AgentMgr.Unregister(assetID)
+	}
+	return nil
 }
 
 func (d *Deps) deleteAttachedDockerAssets(agentAssetID string) error {

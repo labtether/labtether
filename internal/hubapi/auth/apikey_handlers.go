@@ -2,6 +2,9 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -18,7 +21,37 @@ const (
 	maxAPIKeyNameLength = 120
 	maxAPIKeyScopeCount = 64
 	maxAPIKeyAssetCount = 200
+	maxAPIKeyAssetIDLen = 255
 )
+
+func normalizeAPIKeyAllowedAssets(values []string) ([]string, error) {
+	if len(values) > maxAPIKeyAssetCount {
+		return nil, fmt.Errorf("too many allowed_assets")
+	}
+	if len(values) == 0 {
+		return nil, nil
+	}
+
+	normalized := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		assetID := strings.TrimSpace(value)
+		if assetID == "" || len(assetID) > maxAPIKeyAssetIDLen {
+			return nil, fmt.Errorf("allowed_assets contains an invalid asset id")
+		}
+		for _, char := range assetID {
+			if char < 0x20 || char == 0x7f {
+				return nil, fmt.Errorf("allowed_assets contains an invalid asset id")
+			}
+		}
+		if _, duplicate := seen[assetID]; duplicate {
+			return nil, fmt.Errorf("allowed_assets must not contain duplicates")
+		}
+		seen[assetID] = struct{}{}
+		normalized = append(normalized, assetID)
+	}
+	return normalized, nil
+}
 
 // HandleAPIKeys handles GET/POST /api/v2/keys.
 func (d *Deps) HandleAPIKeys(w http.ResponseWriter, r *http.Request) {
@@ -71,6 +104,10 @@ func (d *Deps) handleAPIKeyCreate(w http.ResponseWriter, r *http.Request) {
 		apiv2.WriteError(w, http.StatusBadRequest, "validation", "invalid role")
 		return
 	}
+	if req.Role == internalauth.RoleOwner {
+		apiv2.WriteError(w, http.StatusBadRequest, "validation", "owner role is reserved")
+		return
+	}
 	if err := apikeys.ValidateScopes(req.Scopes); err != nil {
 		apiv2.WriteError(w, http.StatusBadRequest, "validation", err.Error())
 		return
@@ -79,10 +116,12 @@ func (d *Deps) handleAPIKeyCreate(w http.ResponseWriter, r *http.Request) {
 		apiv2.WriteError(w, http.StatusBadRequest, "validation", "too many scopes")
 		return
 	}
-	if len(req.AllowedAssets) > maxAPIKeyAssetCount {
-		apiv2.WriteError(w, http.StatusBadRequest, "validation", "too many allowed_assets")
+	allowedAssets, err := normalizeAPIKeyAllowedAssets(req.AllowedAssets)
+	if err != nil {
+		apiv2.WriteError(w, http.StatusBadRequest, "validation", err.Error())
 		return
 	}
+	req.AllowedAssets = allowedAssets
 
 	generated, err := apikeys.GenerateKey()
 	if err != nil {
@@ -195,12 +234,17 @@ func (d *Deps) handleAPIKeyUpdate(w http.ResponseWriter, r *http.Request, id str
 	}
 
 	var req struct {
-		Name          *string    `json:"name,omitempty"`
-		Scopes        *[]string  `json:"scopes,omitempty"`
-		AllowedAssets *[]string  `json:"allowed_assets,omitempty"`
-		ExpiresAt     *time.Time `json:"expires_at,omitempty"`
+		Name          *string         `json:"name,omitempty"`
+		Role          *string         `json:"role,omitempty"`
+		Scopes        *[]string       `json:"scopes,omitempty"`
+		AllowedAssets *[]string       `json:"allowed_assets,omitempty"`
+		ExpiresAt     json.RawMessage `json:"expires_at,omitempty"`
 	}
 	if err := d.decodeJSONBodyV2(w, r, &req); err != nil {
+		return
+	}
+	if req.Role != nil {
+		apiv2.WriteError(w, http.StatusBadRequest, "validation", "api key role cannot be changed")
 		return
 	}
 
@@ -217,9 +261,41 @@ func (d *Deps) handleAPIKeyUpdate(w http.ResponseWriter, r *http.Request, id str
 			apiv2.WriteError(w, http.StatusBadRequest, "validation", err.Error())
 			return
 		}
+		if len(*req.Scopes) > maxAPIKeyScopeCount {
+			apiv2.WriteError(w, http.StatusBadRequest, "validation", "too many scopes")
+			return
+		}
+	}
+	if req.AllowedAssets != nil {
+		normalized, err := normalizeAPIKeyAllowedAssets(*req.AllowedAssets)
+		if err != nil {
+			apiv2.WriteError(w, http.StatusBadRequest, "validation", err.Error())
+			return
+		}
+		req.AllowedAssets = &normalized
+	}
+	var expiresAtUpdate **time.Time
+	if len(req.ExpiresAt) > 0 {
+		if strings.TrimSpace(string(req.ExpiresAt)) == "null" {
+			var clearExpiry *time.Time
+			expiresAtUpdate = &clearExpiry
+		} else {
+			var expiresAt time.Time
+			if err := json.Unmarshal(req.ExpiresAt, &expiresAt); err != nil || expiresAt.IsZero() {
+				apiv2.WriteError(w, http.StatusBadRequest, "validation", "expires_at must be an RFC3339 timestamp or null")
+				return
+			}
+			expiresAt = expiresAt.UTC()
+			expiresAtValue := &expiresAt
+			expiresAtUpdate = &expiresAtValue
+		}
 	}
 
-	if err := d.APIKeyStore.UpdateAPIKey(r.Context(), id, req.Name, req.Scopes, req.AllowedAssets, req.ExpiresAt); err != nil {
+	if err := d.APIKeyStore.UpdateAPIKey(r.Context(), id, req.Name, req.Scopes, req.AllowedAssets, expiresAtUpdate); err != nil {
+		if errors.Is(err, apikeys.ErrNotFound) {
+			apiv2.WriteError(w, http.StatusNotFound, "not_found", "key not found")
+			return
+		}
 		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to update key")
 		return
 	}

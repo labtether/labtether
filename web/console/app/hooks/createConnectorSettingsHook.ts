@@ -223,7 +223,7 @@ export function createConnectorSettingsHook<
         setError(
           sanitizeErrorMessage(
             err instanceof Error ? err.message : "",
-            `failed to test ${adapter.messageKey} connection`,
+            `Failed to test ${adapter.displayName} connection. Check the endpoint, credentials, network access, and TLS settings.`,
             getSensitiveValues(),
           ),
         );

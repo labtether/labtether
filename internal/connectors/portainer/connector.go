@@ -10,19 +10,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/assetid"
 	"github.com/labtether/labtether/internal/connectorsdk"
 )
 
 // Connector implements connectorsdk.Connector for Portainer.
-// When client is nil (or unconfigured) the connector runs in stub mode,
-// returning synthetic assets so the registry can be populated without
-// requiring a live Portainer instance.
 type Connector struct {
 	client *Client
 }
 
 // New creates a Connector from environment variables.
-// Returns a stub connector if PORTAINER_BASE_URL is empty.
+// Returns an unconfigured connector if PORTAINER_BASE_URL is empty.
 func New() *Connector {
 	baseURL := strings.TrimSpace(os.Getenv("PORTAINER_BASE_URL"))
 	if baseURL == "" {
@@ -89,8 +87,8 @@ func (c *Connector) isConfigured() bool {
 func (c *Connector) TestConnection(ctx context.Context) (connectorsdk.Health, error) {
 	if !c.isConfigured() {
 		return connectorsdk.Health{
-			Status:  "ok",
-			Message: "portainer connector running in stub mode (missing PORTAINER_BASE_URL)",
+			Status:  "failed",
+			Message: "portainer connector is not configured",
 		}, nil
 	}
 
@@ -132,7 +130,7 @@ func (c *Connector) TestConnection(ctx context.Context) (connectorsdk.Health, er
 // failures are logged and skipped rather than failing the whole discovery run.
 func (c *Connector) Discover(ctx context.Context) ([]connectorsdk.Asset, error) {
 	if !c.isConfigured() {
-		return c.stubAssets(), nil
+		return []connectorsdk.Asset{}, nil
 	}
 
 	assets := make([]connectorsdk.Asset, 0, 32)
@@ -245,25 +243,9 @@ func (c *Connector) Discover(ctx context.Context) ([]connectorsdk.Asset, error) 
 	}
 
 	if len(assets) == 0 {
-		return c.stubAssets(), nil
+		return []connectorsdk.Asset{}, nil
 	}
 	return assets, nil
-}
-
-// stubAssets returns a single synthetic asset used in stub mode so that the
-// connector is visible in the UI without requiring a live Portainer instance.
-func (c *Connector) stubAssets() []connectorsdk.Asset {
-	return []connectorsdk.Asset{
-		{
-			ID:     "portainer-endpoint-stub",
-			Type:   "container-host",
-			Name:   "portainer-stub",
-			Source: "portainer",
-			Metadata: map[string]string{
-				"note": "stub mode — configure PORTAINER_BASE_URL and auth credentials",
-			},
-		},
-	}
 }
 
 // Actions returns the set of operations that can be executed against Portainer.
@@ -515,6 +497,7 @@ func (c *Connector) executeStackAction(ctx context.Context, actionID string, req
 // parseContainerTarget extracts endpointID and containerID from a target
 // formatted as "portainer-container-{endpointID}-{containerID}".
 func parseContainerTarget(target string) (int, string, error) {
+	target = assetid.NativeCollectorAssetID(target)
 	const prefix = "portainer-container-"
 	if !strings.HasPrefix(target, prefix) {
 		return 0, "", fmt.Errorf("invalid container target format: %q (expected prefix %q)", target, prefix)
@@ -542,6 +525,7 @@ func parseContainerTarget(target string) (int, string, error) {
 
 // parseStackTarget extracts stackID from a target formatted as "portainer-stack-{id}".
 func parseStackTarget(target string) (int, error) {
+	target = assetid.NativeCollectorAssetID(target)
 	const prefix = "portainer-stack-"
 	if !strings.HasPrefix(target, prefix) {
 		return 0, fmt.Errorf("invalid stack target format: %q (expected prefix %q)", target, prefix)

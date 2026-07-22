@@ -1,6 +1,7 @@
 package alerting
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"sync"
@@ -8,7 +9,10 @@ import (
 
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/audit"
+	"github.com/labtether/labtether/internal/hubapi/groupfeatures"
 	"github.com/labtether/labtether/internal/hubapi/shared"
+	"github.com/labtether/labtether/internal/incidents"
 	"github.com/labtether/labtether/internal/model"
 	"github.com/labtether/labtether/internal/notifications"
 	"github.com/labtether/labtether/internal/persistence"
@@ -23,6 +27,9 @@ const (
 	MaxIncidentTitleLength  = 160
 	MaxIncidentSummaryLen   = 4096
 	MaxIncidentLinkIDLength = 255
+	MaxSilenceMatcherCount  = 16
+	MaxSilenceMatcherKeyLen = 128
+	MaxSilenceMatcherValLen = 512
 )
 
 // Deps holds all dependencies required by the alerting handler package.
@@ -38,6 +45,8 @@ type Deps struct {
 	AssetStore         persistence.AssetStore
 	DependencyStore    persistence.DependencyStore
 	NotificationStore  persistence.NotificationStore
+	PushDeviceStore    PushDeviceStore
+	LiveActivityStore  LiveActivityStore
 	CanonicalStore     persistence.CanonicalModelStore
 	TelemetryStore     persistence.TelemetryStore
 	SyntheticStore     persistence.SyntheticStore
@@ -50,12 +59,24 @@ type Deps struct {
 	NotificationAdapters map[string]notifications.Adapter
 	NotificationSem      chan struct{}
 	NotificationWG       *sync.WaitGroup
+	NotificationSecrets  NotificationSecretsManager
+	// DispatchIncidentLiveActivity schedules ActivityKit delivery for material
+	// incident transitions. It must return without performing network I/O.
+	DispatchIncidentLiveActivity func(incident incidents.Incident, event string)
+	// LiveActivityUserCanMutate revalidates current server-side role at send
+	// time so a role downgrade immediately removes lock-screen actions.
+	LiveActivityUserCanMutate func(userID string) bool
 
-	// Auth middleware injected from cmd/labtether.
-	EnforceRateLimit func(w http.ResponseWriter, r *http.Request, bucket string, limit int, window time.Duration) bool
+	// Auth and audit helpers injected from cmd/labtether.
+	EnforceRateLimit           func(w http.ResponseWriter, r *http.Request, bucket string, limit int, window time.Duration) bool
+	PrincipalActorID           func(ctx context.Context) string
+	AppendAuditEventBestEffort func(event audit.Event, logMessage string)
 
 	// Event broadcaster (nil-safe; called from broadcastEvent).
 	Broadcast func(eventType string, data map[string]any)
+
+	// EvaluateGuardrails resolves active maintenance constraints for a group.
+	EvaluateGuardrails func(groupID string, at time.Time) (groupfeatures.GroupMaintenanceGuardrails, error)
 
 	// Agent manager for push notifications.
 	AgentMgr *agentmgr.AgentManager
@@ -76,6 +97,38 @@ type Deps struct {
 	WrapAdmin func(http.HandlerFunc) http.HandlerFunc
 }
 
+// NotificationSecretsManager is the narrow encryption contract needed for
+// notification-channel configuration. Ciphertext is bound to a channel and
+// field path through per-value AAD.
+type NotificationSecretsManager interface {
+	EncryptString(plaintext, aad string) (string, error)
+	DecryptString(ciphertext, aad string) (string, error)
+}
+
+// PushDeviceStore is the narrow persistence contract needed for APNs fanout.
+type PushDeviceStore interface {
+	GetAllPushTokens(ctx context.Context) ([]persistence.PushDevice, error)
+	DeletePushDeviceByToken(ctx context.Context, pushToken, bundleID, environment string) error
+}
+
+// LiveActivityStore persists encrypted, expiring ActivityKit delivery tokens
+// and bounded retry state. Implementations must never return tokens via API
+// responses or logs.
+type LiveActivityStore interface {
+	UpsertLiveActivityPushToken(context.Context, persistence.LiveActivityPushToken) error
+	DeleteLiveActivityPushToken(context.Context, string, string, string, string) error
+	DeleteLiveActivityPushTokenByOwnerAndID(context.Context, string, string, string, string, string) error
+	DeleteLiveActivityPushTokenByID(context.Context, string) error
+	DeleteLiveActivityPushTokenByGeneration(context.Context, string, int64) error
+	ListLiveActivityPushTokensForIncident(context.Context, string, time.Time) ([]persistence.LiveActivityPushToken, error)
+	ListDueLiveActivityPushTokens(context.Context, time.Time, int) ([]persistence.LiveActivityPushToken, error)
+	ListLiveActivityPushTokensForReconciliation(context.Context, time.Time, int) ([]persistence.LiveActivityPushToken, error)
+	ClaimLiveActivityPushDelivery(context.Context, string, int64, string, time.Time, time.Time, int) (int64, bool, error)
+	MarkLiveActivityPushRetry(context.Context, string, int64, int, time.Time, string) error
+	ClearLiveActivityPushRetry(context.Context, string, int64, time.Time) error
+	DeleteExpiredLiveActivityPushTokens(context.Context, time.Time) error
+}
+
 // RegisterRoutes registers all alerting, incident, and notification API routes on the given mux.
 func RegisterRoutes(mux *http.ServeMux, d *Deps) {
 	mux.HandleFunc("/alerts/rules", d.WrapAuth(d.HandleAlertRules))
@@ -91,6 +144,7 @@ func RegisterRoutes(mux *http.ServeMux, d *Deps) {
 
 	mux.HandleFunc("/incidents", d.WrapAuth(d.HandleIncidents))
 	mux.HandleFunc("/incidents/", d.WrapAuth(d.HandleIncidentActions))
+	mux.HandleFunc("/live-activities/incidents/", d.WrapAuth(d.HandleIncidentLiveActivityTokens))
 
 	mux.HandleFunc("/notifications/channels", d.WrapAuth(d.HandleNotificationChannels))
 	mux.HandleFunc("/notifications/channels/", d.WrapAuth(d.RouteNotificationChannelActions))
@@ -101,6 +155,19 @@ func RegisterRoutes(mux *http.ServeMux, d *Deps) {
 func (d *Deps) broadcastEvent(eventType string, data map[string]any) {
 	if d.Broadcast != nil {
 		d.Broadcast(eventType, data)
+	}
+}
+
+func (d *Deps) principalActorID(ctx context.Context) string {
+	if d.PrincipalActorID != nil {
+		return d.PrincipalActorID(ctx)
+	}
+	return ""
+}
+
+func (d *Deps) appendAuditEventBestEffort(event audit.Event, logMessage string) {
+	if d.AppendAuditEventBestEffort != nil {
+		d.AppendAuditEventBestEffort(event, logMessage)
 	}
 }
 

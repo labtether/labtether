@@ -12,6 +12,7 @@ import (
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/credentials"
+	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
 	"github.com/labtether/labtether/internal/jobqueue"
 	"github.com/labtether/labtether/internal/logs"
 	"github.com/labtether/labtether/internal/persistence"
@@ -74,11 +75,11 @@ type Deps struct {
 	IssueStreamTicket          func(ctx context.Context, sessionID string) (string, time.Time, error)
 	ConsumeStreamTicketAuth    func(r *http.Request) (*http.Request, bool)
 	PrincipalActorID           func(ctx context.Context) string
-	IsOwnerActor               func(actorID string) bool
 	DecodeJSONBody             func(w http.ResponseWriter, r *http.Request, dst any) error
 	ValidateMaxLen             func(field, value string, maxLen int) error
 	AppendAuditEventBestEffort func(event audit.Event, logMessage string)
 	AppendLogEventBestEffort   func(event logs.Event, logMessage string)
+	EvaluateAssetGuardrails    maintenanceguard.EvaluateAssetFunc
 
 	// Terminal stream routing — injected to avoid circular deps with proxmox/truenas.
 	ResolveDockerExecSessionTarget func(target string) (agentID, containerID string, ok bool)
@@ -97,6 +98,9 @@ type Deps struct {
 
 	// In-memory terminal store for ring buffer access (scrollback capture).
 	TerminalInMemStore *terminal.Store
+	// EphemeralSSHConfigs retains Quick Connect credentials only in process
+	// memory, keyed by the persisted session ID and bounded by TTL/capacity.
+	EphemeralSSHConfigs *EphemeralSSHConfigStore
 
 	// SSH command execution for persistent session cleanup.
 	ExecuteSSHCommandFn func(job terminal.CommandJob, mode string, timeout time.Duration, maxOutput int) (string, error)
@@ -133,6 +137,7 @@ func RegisterRoutes(handlers map[string]http.HandlerFunc, d *Deps) {
 	handlers["/terminal/sessions"] = d.WrapAuth(d.HandleSessions)
 	handlers["/terminal/sessions/"] = d.WrapAuth(d.HandleSessionActions)
 	handlers["/terminal/commands/recent"] = d.WrapAuth(d.HandleRecentCommands)
+	handlers["/terminal/commands/"] = d.WrapAuth(d.HandleCommandActions)
 	handlers["/terminal/quick-session"] = d.WrapAuth(d.HandleQuickSession)
 }
 

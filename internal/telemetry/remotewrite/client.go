@@ -22,11 +22,16 @@ package remotewrite
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
+	"errors"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/golang/snappy"
 	"github.com/labtether/labtether/internal/securityruntime"
@@ -42,6 +47,26 @@ type SampleWithLabels struct {
 	Timestamp int64 // Unix milliseconds
 }
 
+const (
+	MaxSamplesPerRequest  = 500
+	MaxLabelsPerSample    = 64
+	MaxLabelNameBytes     = 128
+	MaxLabelValueBytes    = 1024
+	MaxSampleBytes        = 24 * 1024
+	MaxRequestBodyBytes   = 4 * 1024 * 1024
+	maxResponseDrainBytes = 64 * 1024
+)
+
+var errRequestBodyTooLarge = errors.New("remotewrite: request body exceeds limit")
+
+type receiverStatusError struct {
+	statusCode int
+}
+
+func (e *receiverStatusError) Error() string {
+	return fmt.Sprintf("remotewrite: receiver returned status %d", e.statusCode)
+}
+
 // SerializeWriteRequest encodes samples into a snappy-compressed protobuf body
 // suitable for HTTP POST to a Prometheus remote_write endpoint.
 //
@@ -53,6 +78,9 @@ type SampleWithLabels struct {
 func SerializeWriteRequest(samples []SampleWithLabels) ([]byte, error) {
 	if len(samples) == 0 {
 		return nil, nil
+	}
+	if len(samples) > MaxSamplesPerRequest {
+		return nil, fmt.Errorf("remotewrite: sample count exceeds limit")
 	}
 
 	// Group samples by their sorted label set.
@@ -69,6 +97,9 @@ func SerializeWriteRequest(samples []SampleWithLabels) ([]byte, error) {
 	groups := make(map[string]*tsEntry)
 
 	for _, s := range samples {
+		if err := validateSample(s); err != nil {
+			return nil, err
+		}
 		key := labelFingerprint(s.Labels)
 		if _, exists := groups[key]; !exists {
 			order = append(order, key)
@@ -82,6 +113,14 @@ func SerializeWriteRequest(samples []SampleWithLabels) ([]byte, error) {
 	var buf bytes.Buffer
 	for _, key := range order {
 		entry := groups[key]
+		sort.SliceStable(entry.samples, func(i, j int) bool {
+			return entry.samples[i].Timestamp < entry.samples[j].Timestamp
+		})
+		for i := 1; i < len(entry.samples); i++ {
+			if entry.samples[i-1].Timestamp == entry.samples[i].Timestamp {
+				return nil, fmt.Errorf("remotewrite: duplicate timestamp for one series")
+			}
+		}
 		tsBytes := encodeTimeSeries(entry.labels, entry.samples)
 		// WriteRequest.timeseries = field 1, type LEN
 		buf.Write(protowire.AppendTag(nil, 1, protowire.BytesType))
@@ -89,23 +128,105 @@ func SerializeWriteRequest(samples []SampleWithLabels) ([]byte, error) {
 	}
 
 	compressed := snappy.Encode(nil, buf.Bytes())
+	if len(compressed) > MaxRequestBodyBytes {
+		return nil, errRequestBodyTooLarge
+	}
 	return compressed, nil
 }
 
-// remoteWriteClient is the HTTP client used by Push. It has a 30-second timeout
+func validateSample(sample SampleWithLabels) error {
+	if sample.Timestamp <= 0 {
+		return fmt.Errorf("remotewrite: sample timestamp must be positive")
+	}
+	if len(sample.Labels) == 0 || len(sample.Labels) > MaxLabelsPerSample {
+		return fmt.Errorf("remotewrite: sample label count is invalid")
+	}
+	metricName, hasName := sample.Labels["__name__"]
+	if !hasName || !validMetricName(metricName) {
+		return fmt.Errorf("remotewrite: sample metric name is invalid")
+	}
+	total := 24
+	for name, value := range sample.Labels {
+		if !validLabelName(name) || len(name) > MaxLabelNameBytes || !utf8.ValidString(name) {
+			return fmt.Errorf("remotewrite: sample label name is invalid")
+		}
+		if len(value) > MaxLabelValueBytes || !utf8.ValidString(value) || strings.ContainsRune(value, '\x00') {
+			return fmt.Errorf("remotewrite: sample label value exceeds limit")
+		}
+		total += len(name) + len(value)
+	}
+	if total > MaxSampleBytes {
+		return fmt.Errorf("remotewrite: sample exceeds byte limit")
+	}
+	return nil
+}
+
+func validMetricName(value string) bool {
+	if value == "" || len(value) > MaxLabelValueBytes || !utf8.ValidString(value) {
+		return false
+	}
+	for i, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '_' || r == ':' || (i > 0 && r >= '0' && r <= '9') {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func validLabelName(value string) bool {
+	if value == "" {
+		return false
+	}
+	for i, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '_' || (i > 0 && r >= '0' && r <= '9') {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+// remoteWriteClient is the HTTP client used by Push. It has a 15-second timeout
 // to prevent goroutine leaks on stalled remote_write endpoints. We do not use
 // http.DefaultClient because it has no timeout.
 var remoteWriteClient = &http.Client{
-	Timeout: 30 * time.Second,
+	Timeout: 15 * time.Second,
+	CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+		// Never forward Basic Auth or a receiver-specific request to another
+		// origin. Operators must configure the final write endpoint explicitly.
+		return http.ErrUseLastResponse
+	},
+	Transport: &http.Transport{
+		Proxy:                 nil,
+		MaxConnsPerHost:       4,
+		MaxIdleConnsPerHost:   2,
+		IdleConnTimeout:       30 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second,
+	},
 }
+
+var outboundPushSlots = make(chan struct{}, 4)
 
 // Push sends a serialized WriteRequest body to the given remote_write URL.
 // It sets the required Content-Type, Content-Encoding, and version headers.
 // HTTP 2xx responses are treated as success; any other status is an error.
 func Push(ctx context.Context, url string, body []byte, username, password string) error {
+	if ctx == nil {
+		return fmt.Errorf("remotewrite: request context is required")
+	}
+	if len(body) == 0 || len(body) > MaxRequestBodyBytes {
+		return fmt.Errorf("remotewrite: request body size is invalid")
+	}
+	select {
+	case outboundPushSlots <- struct{}{}:
+		defer func() { <-outboundPushSlots }()
+	case <-ctx.Done():
+		return fmt.Errorf("remotewrite: request canceled before dispatch")
+	}
 	req, err := securityruntime.NewOutboundRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("remotewrite: build request: %w", err)
+		return fmt.Errorf("remotewrite: endpoint is invalid or disallowed")
 	}
 	req.Header.Set("Content-Type", "application/x-protobuf")
 	req.Header.Set("Content-Encoding", "snappy")
@@ -117,12 +238,13 @@ func Push(ctx context.Context, url string, body []byte, username, password strin
 
 	resp, err := securityruntime.DoOutboundRequest(remoteWriteClient, req)
 	if err != nil {
-		return fmt.Errorf("remotewrite: http post: %w", err)
+		return fmt.Errorf("remotewrite: request failed")
 	}
 	defer resp.Body.Close()
+	_, _ = io.CopyN(io.Discard, resp.Body, maxResponseDrainBytes)
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("remotewrite: unexpected status %d from %s", resp.StatusCode, url)
+		return &receiverStatusError{statusCode: resp.StatusCode}
 	}
 	return nil
 }
@@ -206,12 +328,13 @@ func sortedLabels(labels map[string]string) [][2]string {
 func labelFingerprint(labels map[string]string) string {
 	pairs := sortedLabels(labels)
 	var buf bytes.Buffer
-	for i, p := range pairs {
-		if i > 0 {
-			buf.WriteByte(',')
-		}
+	var size [4]byte
+	for _, p := range pairs {
+		binary.BigEndian.PutUint32(size[:], uint32(len(p[0]))) // #nosec G115 -- validateSample caps label names at 128 bytes.
+		buf.Write(size[:])
 		buf.WriteString(p[0])
-		buf.WriteByte('=')
+		binary.BigEndian.PutUint32(size[:], uint32(len(p[1]))) // #nosec G115 -- validateSample caps label values at 1024 bytes.
+		buf.Write(size[:])
 		buf.WriteString(p[1])
 	}
 	return buf.String()

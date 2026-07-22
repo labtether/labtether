@@ -9,6 +9,7 @@ import {
   cancelTransfer as cancelTransferApi,
 } from "./fileTransferClient";
 import type { FileSource } from "./useFileTabsState";
+import { joinTransferDestinationPath } from "./fileTransferPaths";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -100,13 +101,14 @@ export function useFileTransfers() {
       const dst = sourceToTransferFields(destSource);
 
       for (const filePath of sourceFiles) {
+        const destinationFilePath = joinTransferDestinationPath(destPath, filePath);
         const req: StartTransferRequest = {
           source_type: src.type,
           source_id: src.id,
           source_path: filePath,
           dest_type: dst.type,
           dest_id: dst.id,
-          dest_path: destPath,
+          dest_path: destinationFilePath,
         };
         try {
           const transfer = await startTransfer(req);
@@ -120,7 +122,7 @@ export function useFileTransfers() {
             source_path: filePath,
             dest_type: dst.type,
             dest_id: dst.id,
-            dest_path: destPath,
+            dest_path: destinationFilePath,
             file_name: filePath.split("/").pop() ?? filePath,
             bytes_transferred: 0,
             status: "failed",

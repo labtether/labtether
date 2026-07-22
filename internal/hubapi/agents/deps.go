@@ -12,6 +12,7 @@ import (
 	"github.com/labtether/labtether/internal/credentials"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/persistence"
+	"github.com/labtether/labtether/internal/secrets"
 )
 
 // Deps holds all dependencies required by the agents handler package.
@@ -19,16 +20,22 @@ import (
 // in other cmd/labtether subsystems are injected as function fields.
 type Deps struct {
 	// Store interfaces
-	AssetStore      persistence.AssetStore
-	EnrollmentStore persistence.EnrollmentStore
-	PresenceStore   persistence.PresenceStore
-	RuntimeStore    persistence.RuntimeSettingsStore
-	TelemetryStore  persistence.TelemetryStore
-	LogStore        persistence.LogStore
-	CredentialStore persistence.CredentialStore
+	AssetStore             persistence.AssetStore
+	EnrollmentStore        persistence.EnrollmentStore
+	EnrollmentTransactions persistence.AgentEnrollmentTransactionStore
+	PresenceStore          persistence.PresenceStore
+	RuntimeStore           persistence.RuntimeSettingsStore
+	TelemetryStore         persistence.TelemetryStore
+	LogStore               persistence.LogStore
+	CredentialStore        persistence.CredentialStore
+	SecretsManager         *secrets.Manager
 
 	// Agent manager
 	AgentMgr *agentmgr.AgentManager
+
+	// Enrollment safety ceilings (hard-bounded by the server at startup).
+	EnrollmentTokenMaxUses int
+	MaxEnrolledAgents      int
 
 	// Broadcaster for SSE events.
 	Broadcast func(eventType string, data map[string]any)
@@ -44,6 +51,8 @@ type Deps struct {
 
 	// Hub identity for SSH key provisioning.
 	HubIdentity *shared.HubSSHIdentity
+	// CurrentHubIdentity returns an immutable snapshot of the active identity.
+	CurrentHubIdentity func() *shared.HubSSHIdentity
 
 	// CA certificate PEM for enrollment.
 	CACertPEM []byte
@@ -64,6 +73,8 @@ type Deps struct {
 
 	// Cross-cutting methods injected from cmd/labtether.
 	ProcessHeartbeatRequest              func(req assets.HeartbeatRequest) (*assets.Asset, error)
+	ProcessAuthenticatedAgentHeartbeat   func(agentTokenID string, req assets.HeartbeatRequest) (*assets.Asset, error)
+	ProcessExistingOwnerAgentHeartbeat   func(req assets.HeartbeatRequest) (*assets.Asset, error)
 	AutoProvisionDockerCollectorIfNeeded func(agentAssetID string, connectors []agentmgr.ConnectorInfo)
 	ResolveHubURL                        func(r *http.Request) string
 	ResolveHubConnectionSelection        func(r *http.Request) shared.HubConnectionSelection
@@ -80,6 +91,17 @@ func (d *Deps) broadcastEvent(eventType string, data map[string]any) {
 	if d.Broadcast != nil {
 		d.Broadcast(eventType, data)
 	}
+}
+
+func (d *Deps) currentHubIdentity() *shared.HubSSHIdentity {
+	if d.CurrentHubIdentity != nil {
+		return d.CurrentHubIdentity()
+	}
+	if d.HubIdentity == nil {
+		return nil
+	}
+	identity := *d.HubIdentity
+	return &identity
 }
 
 // RegisterRoutes registers all agent-related HTTP routes on the given handler map.

@@ -7,15 +7,21 @@ import (
 	"net"
 	"path"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
+
+	"github.com/labtether/labtether/internal/securityruntime"
 )
 
 // SFTPClient implements RemoteFS over SFTP (SSH File Transfer Protocol).
 type SFTPClient struct {
 	sshConn             *ssh.Client
 	sftp                *sftp.Client
+	rawConn             net.Conn
+	opMu                sync.Mutex
 	config              ConnectionConfig
 	CapturedHostKey     string // populated by TOFU callback
 	CapturedFingerprint string // populated by TOFU callback
@@ -23,6 +29,8 @@ type SFTPClient struct {
 
 // Connect establishes an SSH connection and opens an SFTP session.
 func (c *SFTPClient) Connect(ctx context.Context, cfg ConnectionConfig) error {
+	opCtx, cancel := WithOperationTimeout(ctx)
+	defer cancel()
 	c.config = cfg
 
 	port := cfg.Port
@@ -45,12 +53,19 @@ func (c *SFTPClient) Connect(ctx context.Context, cfg ConnectionConfig) error {
 
 	addr := net.JoinHostPort(cfg.Host, fmt.Sprintf("%d", port))
 
-	// Use context-aware dialer so callers can cancel/timeout.
-	dialer := net.Dialer{}
-	conn, err := dialer.DialContext(ctx, "tcp", addr)
+	// Resolve once and validate the actual destination before connecting so a
+	// stored hostname cannot be used for DNS-rebinding SSRF.
+	conn, err := securityruntime.DialOutboundTCPContext(opCtx, cfg.Host, port, 15*time.Second)
 	if err != nil {
 		return fmt.Errorf("sftp dial %s: %w", addr, err)
 	}
+	deadline, _ := opCtx.Deadline()
+	if err := conn.SetDeadline(deadline); err != nil {
+		closeAndLog("close raw TCP connection after failed SFTP deadline setup", conn.Close)
+		return fmt.Errorf("sftp set handshake deadline: %w", err)
+	}
+	stopDeadline := watchConnCancellation(opCtx, conn)
+	defer stopDeadline()
 
 	// Perform SSH handshake over the raw connection.
 	sshConn, chans, reqs, err := ssh.NewClientConn(conn, addr, sshCfg)
@@ -58,12 +73,27 @@ func (c *SFTPClient) Connect(ctx context.Context, cfg ConnectionConfig) error {
 		closeAndLog("close raw TCP connection after failed SFTP handshake", conn.Close)
 		return fmt.Errorf("sftp ssh handshake: %w", err)
 	}
+	c.rawConn = conn
 	c.sshConn = ssh.NewClient(sshConn, chans, reqs)
 
 	c.sftp, err = sftp.NewClient(c.sshConn)
 	if err != nil {
 		closeAndLog("close SSH client after failed SFTP session setup", c.sshConn.Close)
+		c.rawConn = nil
 		return fmt.Errorf("sftp session: %w", err)
+	}
+	stopDeadline()
+	if err := opCtx.Err(); err != nil {
+		closeAndLog("close SFTP client after cancelled setup", c.sftp.Close)
+		closeAndLog("close SSH client after cancelled setup", c.sshConn.Close)
+		c.rawConn = nil
+		return fmt.Errorf("sftp connect canceled: %w", err)
+	}
+	if err := conn.SetDeadline(time.Time{}); err != nil {
+		closeAndLog("close SFTP client after failed deadline reset", c.sftp.Close)
+		closeAndLog("close SSH client after failed deadline reset", c.sshConn.Close)
+		c.rawConn = nil
+		return fmt.Errorf("sftp clear handshake deadline: %w", err)
 	}
 
 	return nil
@@ -71,65 +101,108 @@ func (c *SFTPClient) Connect(ctx context.Context, cfg ConnectionConfig) error {
 
 // List returns directory entries at the given path.
 // Hidden files (names starting with ".") are excluded unless showHidden is true.
-func (c *SFTPClient) List(_ context.Context, dirPath string, showHidden bool) ([]FileEntry, error) {
-	entries, err := c.sftp.ReadDir(dirPath)
+func (c *SFTPClient) List(ctx context.Context, dirPath string, showHidden bool) ([]FileEntry, error) {
+	opCtx, cleanup, err := beginNetConnOperation(ctx, &c.opMu, c.rawConn)
+	if err != nil {
+		return nil, fmt.Errorf("sftp list %s: %w", dirPath, err)
+	}
+	defer cleanup()
+
+	entries, err := c.sftp.ReadDirContext(opCtx, dirPath)
 	if err != nil {
 		return nil, fmt.Errorf("sftp list %s: %w", dirPath, err)
 	}
 
-	result := make([]FileEntry, 0, len(entries))
+	result := make([]FileEntry, 0, min(len(entries), MaxVisibleListEntries))
+	limiter := newListingLimiter(showHidden)
 	for _, fi := range entries {
 		name := fi.Name()
-		if !showHidden && strings.HasPrefix(name, ".") {
-			continue
-		}
-		result = append(result, FileEntry{
+		entry := FileEntry{
 			Name:        name,
 			Path:        path.Join(dirPath, name),
 			IsDir:       fi.IsDir(),
 			Size:        fi.Size(),
 			ModTime:     fi.ModTime(),
 			Permissions: fi.Mode().String(),
-		})
+		}
+		result, err = limiter.append(result, entry)
+		if err != nil {
+			return nil, fmt.Errorf("sftp list %s: %w", dirPath, err)
+		}
 	}
 	return result, nil
 }
 
 // Read opens a remote file and returns an io.ReadCloser plus the file size.
-func (c *SFTPClient) Read(_ context.Context, filePath string) (io.ReadCloser, int64, error) {
+func (c *SFTPClient) Read(ctx context.Context, filePath string) (io.ReadCloser, int64, error) {
+	opCtx, cleanup, err := beginNetConnOperation(ctx, &c.opMu, c.rawConn)
+	if err != nil {
+		return nil, 0, fmt.Errorf("sftp read %s: %w", filePath, err)
+	}
 	info, err := c.sftp.Stat(filePath)
 	if err != nil {
+		cleanup()
 		return nil, 0, fmt.Errorf("sftp stat %s: %w", filePath, err)
 	}
 	if info.IsDir() {
+		cleanup()
 		return nil, 0, fmt.Errorf("sftp read: %s is a directory", filePath)
+	}
+	if err := validateTransferSize(info.Size()); err != nil {
+		cleanup()
+		return nil, 0, err
 	}
 
 	f, err := c.sftp.Open(filePath)
 	if err != nil {
+		cleanup()
 		return nil, 0, fmt.Errorf("sftp open %s: %w", filePath, err)
 	}
-	return f, info.Size(), nil
+	return newBoundedOperationReadCloser(opCtx, f, MaxTransferBytes, ErrTransferTooLarge, cleanup), info.Size(), nil
 }
 
 // Write creates or overwrites a remote file with the contents of r.
 // On error, the partial file is removed as best-effort cleanup.
-func (c *SFTPClient) Write(_ context.Context, filePath string, r io.Reader, _ int64) error {
+func (c *SFTPClient) Write(ctx context.Context, filePath string, r io.Reader, size int64) error {
+	if err := validateTransferSize(size); err != nil {
+		return err
+	}
+	opCtx, cleanup, err := beginNetConnOperation(ctx, &c.opMu, c.rawConn)
+	if err != nil {
+		return fmt.Errorf("sftp write %s: %w", filePath, err)
+	}
+	defer cleanup()
+
 	f, err := c.sftp.Create(filePath)
 	if err != nil {
 		return fmt.Errorf("sftp create %s: %w", filePath, err)
 	}
 
-	if _, copyErr := io.Copy(f, r); copyErr != nil {
+	limited := newBoundedReader(opCtx, r, MaxTransferBytes, ErrTransferTooLarge)
+	if _, copyErr := io.CopyBuffer(f, limited, make([]byte, fileCopyBufferSize)); copyErr != nil {
 		closeAndLog("close partial SFTP file", f.Close)
-		removeAndLog("remove partial SFTP file", func() error { return c.sftp.Remove(filePath) })
+		c.removePartial(filePath)
 		return fmt.Errorf("sftp write %s: %w", filePath, copyErr)
 	}
-	return f.Close()
+	if readErr := limited.terminalError(); readErr != nil {
+		closeAndLog("close partial SFTP file", f.Close)
+		c.removePartial(filePath)
+		return fmt.Errorf("sftp write %s: %w", filePath, readErr)
+	}
+	if err := f.Close(); err != nil {
+		c.removePartial(filePath)
+		return fmt.Errorf("sftp close %s: %w", filePath, err)
+	}
+	return nil
 }
 
 // Mkdir creates the directory and any necessary parents.
-func (c *SFTPClient) Mkdir(_ context.Context, dirPath string) error {
+func (c *SFTPClient) Mkdir(ctx context.Context, dirPath string) error {
+	_, cleanup, err := beginNetConnOperation(ctx, &c.opMu, c.rawConn)
+	if err != nil {
+		return fmt.Errorf("sftp mkdir %s: %w", dirPath, err)
+	}
+	defer cleanup()
 	if err := c.sftp.MkdirAll(dirPath); err != nil {
 		return fmt.Errorf("sftp mkdir %s: %w", dirPath, err)
 	}
@@ -137,13 +210,18 @@ func (c *SFTPClient) Mkdir(_ context.Context, dirPath string) error {
 }
 
 // Delete removes a file or directory (recursively for directories).
-func (c *SFTPClient) Delete(_ context.Context, targetPath string) error {
+func (c *SFTPClient) Delete(ctx context.Context, targetPath string) error {
+	opCtx, cleanup, err := beginNetConnOperation(ctx, &c.opMu, c.rawConn)
+	if err != nil {
+		return fmt.Errorf("sftp delete %s: %w", targetPath, err)
+	}
+	defer cleanup()
 	info, err := c.sftp.Stat(targetPath)
 	if err != nil {
 		return fmt.Errorf("sftp stat %s: %w", targetPath, err)
 	}
 	if info.IsDir() {
-		return c.removeAll(targetPath)
+		return c.removeAll(opCtx, targetPath, 0, &deleteBudget{})
 	}
 	if err := c.sftp.Remove(targetPath); err != nil {
 		return fmt.Errorf("sftp remove %s: %w", targetPath, err)
@@ -152,7 +230,12 @@ func (c *SFTPClient) Delete(_ context.Context, targetPath string) error {
 }
 
 // Rename moves/renames a remote file or directory.
-func (c *SFTPClient) Rename(_ context.Context, oldPath, newPath string) error {
+func (c *SFTPClient) Rename(ctx context.Context, oldPath, newPath string) error {
+	_, cleanup, err := beginNetConnOperation(ctx, &c.opMu, c.rawConn)
+	if err != nil {
+		return fmt.Errorf("sftp rename %s -> %s: %w", oldPath, newPath, err)
+	}
+	defer cleanup()
 	if err := c.sftp.Rename(oldPath, newPath); err != nil {
 		return fmt.Errorf("sftp rename %s -> %s: %w", oldPath, newPath, err)
 	}
@@ -161,13 +244,21 @@ func (c *SFTPClient) Rename(_ context.Context, oldPath, newPath string) error {
 
 // Copy duplicates a file within the same SFTP connection.
 // Directory copy is not supported and returns ErrNotSupported.
-func (c *SFTPClient) Copy(_ context.Context, srcPath, dstPath string) error {
+func (c *SFTPClient) Copy(ctx context.Context, srcPath, dstPath string) error {
+	opCtx, cleanup, err := beginNetConnOperation(ctx, &c.opMu, c.rawConn)
+	if err != nil {
+		return fmt.Errorf("sftp copy %s -> %s: %w", srcPath, dstPath, err)
+	}
+	defer cleanup()
 	info, err := c.sftp.Stat(srcPath)
 	if err != nil {
 		return fmt.Errorf("sftp stat %s: %w", srcPath, err)
 	}
 	if info.IsDir() {
 		return ErrNotSupported
+	}
+	if err := validateTransferSize(info.Size()); err != nil {
+		return err
 	}
 
 	src, err := c.sftp.Open(srcPath)
@@ -180,16 +271,29 @@ func (c *SFTPClient) Copy(_ context.Context, srcPath, dstPath string) error {
 	if err != nil {
 		return fmt.Errorf("sftp create %s: %w", dstPath, err)
 	}
-	defer dst.Close()
-
-	if _, err := io.Copy(dst, src); err != nil {
+	limited := newBoundedReader(opCtx, src, MaxTransferBytes, ErrTransferTooLarge)
+	if _, err := io.CopyBuffer(dst, limited, make([]byte, fileCopyBufferSize)); err != nil {
+		closeAndLog("close partial SFTP copy", dst.Close)
+		c.removePartial(dstPath)
 		return fmt.Errorf("sftp copy %s -> %s: %w", srcPath, dstPath, err)
+	}
+	if readErr := limited.terminalError(); readErr != nil {
+		closeAndLog("close partial SFTP copy", dst.Close)
+		c.removePartial(dstPath)
+		return fmt.Errorf("sftp copy %s -> %s: %w", srcPath, dstPath, readErr)
+	}
+	if err := dst.Close(); err != nil {
+		c.removePartial(dstPath)
+		return fmt.Errorf("sftp close copy %s: %w", dstPath, err)
 	}
 	return nil
 }
 
 // Close tears down the SFTP session and underlying SSH connection.
 func (c *SFTPClient) Close() error {
+	c.opMu.Lock()
+	defer c.opMu.Unlock()
+	setProtocolCloseDeadline(c.rawConn)
 	var firstErr error
 	if c.sftp != nil {
 		if err := c.sftp.Close(); err != nil {
@@ -200,7 +304,14 @@ func (c *SFTPClient) Close() error {
 		if err := c.sshConn.Close(); err != nil && firstErr == nil {
 			firstErr = err
 		}
+	} else if c.rawConn != nil {
+		if err := c.rawConn.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
 	}
+	c.sftp = nil
+	c.sshConn = nil
+	c.rawConn = nil
 	return firstErr
 }
 
@@ -249,17 +360,30 @@ func (c *SFTPClient) buildHostKeyCallback(cfg ConnectionConfig) ssh.HostKeyCallb
 	}
 }
 
-// removeAll recursively removes a directory and all its contents.
-func (c *SFTPClient) removeAll(dirPath string) error {
-	entries, err := c.sftp.ReadDir(dirPath)
+// removeAll recursively removes a directory and all its contents within a
+// fixed depth and entry budget.
+func (c *SFTPClient) removeAll(ctx context.Context, dirPath string, depth int, budget *deleteBudget) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := budget.enter(depth, 0); err != nil {
+		return err
+	}
+	entries, err := c.sftp.ReadDirContext(ctx, dirPath)
 	if err != nil {
 		return fmt.Errorf("sftp readdir %s: %w", dirPath, err)
 	}
+	if err := budget.enter(depth, len(entries)); err != nil {
+		return err
+	}
 
 	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		fullPath := path.Join(dirPath, entry.Name())
 		if entry.IsDir() {
-			if err := c.removeAll(fullPath); err != nil {
+			if err := c.removeAll(ctx, fullPath, depth+1, budget); err != nil {
 				return err
 			}
 		} else {
@@ -273,4 +397,11 @@ func (c *SFTPClient) removeAll(dirPath string) error {
 		return fmt.Errorf("sftp rmdir %s: %w", dirPath, err)
 	}
 	return nil
+}
+
+func (c *SFTPClient) removePartial(filePath string) {
+	if c.rawConn != nil {
+		_ = c.rawConn.SetDeadline(time.Now().Add(10 * time.Second))
+	}
+	removeAndLog("remove partial SFTP file", func() error { return c.sftp.Remove(filePath) })
 }

@@ -29,6 +29,9 @@ type groupingSettingsPatchRequest struct {
 
 // HandleWebServiceAltURLs handles GET/POST/DELETE /api/v1/services/web/alt-urls/[id].
 func (d *Deps) HandleWebServiceAltURLs(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobal(w, r, "web-service alternate URLs") {
+		return
+	}
 	switch r.Method {
 	case http.MethodGet:
 		webServiceID := strings.TrimSpace(r.URL.Query().Get("web_service_id"))
@@ -155,6 +158,9 @@ func (d *Deps) syntheticAltURLs(webServiceID string, persisted []persistence.Web
 
 // HandleWebServiceNeverGroupRules handles GET/POST/DELETE /api/v1/services/web/never-group-rules.
 func (d *Deps) HandleWebServiceNeverGroupRules(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobal(w, r, "web-service grouping rules") {
+		return
+	}
 	if r.URL.Path != "/api/v1/services/web/never-group-rules" {
 		servicehttp.WriteError(w, http.StatusNotFound, "not found")
 		return
@@ -224,6 +230,9 @@ func (d *Deps) HandleWebServiceNeverGroupRules(w http.ResponseWriter, r *http.Re
 
 // HandleWebServiceGroupingSettings handles GET/PATCH /api/v1/services/web/grouping-settings.
 func (d *Deps) HandleWebServiceGroupingSettings(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobal(w, r, "web-service grouping settings") {
+		return
+	}
 	if r.URL.Path != "/api/v1/services/web/grouping-settings" {
 		servicehttp.WriteError(w, http.StatusNotFound, "not found")
 		return
@@ -278,6 +287,9 @@ func (d *Deps) HandleWebServiceGroupingSettings(w http.ResponseWriter, r *http.R
 // HandleWebServiceGroupingSuggestionResponse handles POST /api/v1/services/web/grouping-suggestions/{id}/{action}.
 // Action must be "accept" or "deny".
 func (d *Deps) HandleWebServiceGroupingSuggestionResponse(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobal(w, r, "web-service grouping suggestions") {
+		return
+	}
 	if r.Method != http.MethodPost {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return

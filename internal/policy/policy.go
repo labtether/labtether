@@ -1,6 +1,10 @@
 package policy
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/labtether/labtether/internal/commandpolicy"
+)
 
 type CheckRequest struct {
 	ActorID string `json:"actor_id"`
@@ -92,18 +96,17 @@ func Evaluate(req CheckRequest, cfg EvaluatorConfig) CheckResponse {
 	}
 
 	if cfg.AllowlistMode && strings.EqualFold(req.Action, "command_execute") {
-		command := strings.ToLower(strings.TrimSpace(req.Command))
-		if command == "" {
+		argv, err := commandpolicy.ParseArgv(req.Command)
+		if err != nil {
+			return CheckResponse{Allowed: false, Reason: err.Error(), Mode: normalizedMode}
+		}
+		if len(argv) == 0 {
 			return CheckResponse{Allowed: false, Reason: "command is required", Mode: normalizedMode}
 		}
 
 		allowed := false
-		for _, prefix := range cfg.AllowlistPrefixes {
-			prefix = strings.ToLower(strings.TrimSpace(prefix))
-			if prefix == "" {
-				continue
-			}
-			if strings.HasPrefix(command, prefix) {
+		for _, rule := range cfg.AllowlistPrefixes {
+			if commandpolicy.MatchesRule(argv, rule) {
 				allowed = true
 				break
 			}

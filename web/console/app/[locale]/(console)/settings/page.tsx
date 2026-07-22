@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { PageHeader } from "../../../components/PageHeader";
 import { useTheme, accentOptions } from "../../../contexts/ThemeContext";
@@ -26,6 +27,10 @@ import { BackupExportCard } from "./components/BackupExportCard";
 import { ApiKeysCard } from "./components/ApiKeysCard";
 import { McpConnectionCard } from "./components/McpConnectionCard";
 import { ApiReferenceCard } from "./components/ApiReferenceCard";
+import { SSHHubKeyCard } from "./components/SSHHubKeyCard";
+import { CredentialProfilesCard } from "./components/CredentialProfilesCard";
+import { useAuth } from "../../../contexts/AuthContext";
+import { hasAdminRole } from "../../../lib/roles";
 
 const SECTION_HEADING = "text-xs font-semibold uppercase tracking-wider text-[var(--muted)]";
 
@@ -39,6 +44,26 @@ type PollIntervalValue = (typeof POLL_INTERVAL_VALUES)[number];
 
 export default function SettingsPage() {
   const t = useTranslations('settings');
+  const { user } = useAuth();
+
+  if (!hasAdminRole(user?.role)) {
+    return (
+      <>
+        <PageHeader title={t('title')} subtitle={t('subtitle')} />
+        <Card>
+          <p className="text-sm text-[var(--muted)]">Administrator access is required to view hub settings.</p>
+        </Card>
+      </>
+    );
+  }
+
+  return <SettingsPageContent />;
+}
+
+function SettingsPageContent() {
+  const t = useTranslations('settings');
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
     if (typeof window === "undefined") return "general";
     const stored = localStorage.getItem(TAB_LS_KEY) as SettingsTab | null;
@@ -49,6 +74,12 @@ export default function SettingsPage() {
     setActiveTab(tab);
     localStorage.setItem(TAB_LS_KEY, tab);
   }, []);
+
+  useEffect(() => {
+    if (requestedTab && TAB_OPTIONS.includes(requestedTab as SettingsTab)) {
+      handleTabChange(requestedTab as SettingsTab);
+    }
+  }, [handleTabChange, requestedTab]);
 
   const { theme, setTheme, density, setDensity, accent, setAccent } = useTheme();
   const assetNameMap = useStatusAssetNameMap();
@@ -179,6 +210,10 @@ export default function SettingsPage() {
 
       {activeTab === "advanced" && (
         <>
+          <SSHHubKeyCard />
+
+          <CredentialProfilesCard />
+
           <ServiceDiscoveryDefaultsCard
             runtimeSettings={runtimeSettings}
             runtimeDraftValues={runtimeDraftValues}

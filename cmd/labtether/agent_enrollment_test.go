@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
@@ -17,7 +18,22 @@ import (
 
 	"github.com/labtether/labtether/internal/agentidentity"
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/persistence"
 )
+
+type cancelOnFinalizeEnrollmentStore struct {
+	persistence.EnrollmentStore
+	persistence.AgentEnrollmentTransactionStore
+	cancelRequest          context.CancelFunc
+	finalizeContextWasLive bool
+}
+
+func (s *cancelOnFinalizeEnrollmentStore) FinalizeAgentApproval(ctx context.Context, req persistence.AgentApprovalFinalizeRequest) (assets.Asset, error) {
+	s.cancelRequest()
+	s.finalizeContextWasLive = ctx.Err() == nil
+	return s.AgentEnrollmentTransactionStore.FinalizeAgentApproval(ctx, req)
+}
 
 func TestBuildPendingEnrollmentAssetID(t *testing.T) {
 	id := buildPendingEnrollmentAssetID(" Lab Host/01 ")
@@ -523,6 +539,66 @@ func TestHandlePendingEnrollmentAcceptsLargeValidProof(t *testing.T) {
 	t.Fatalf("expected pending agent %q to verify with large proof payload", challenge.ConnectionID)
 }
 
+func TestHandlePendingEnrollmentClosesAfterInvalidProofBudget(t *testing.T) {
+	sut := newTestAPIServer(t)
+	sut.pendingAgents = newPendingAgents()
+	server := httptest.NewServer(http.HandlerFunc(sut.handlePendingEnrollment))
+	defer server.Close()
+
+	headers := http.Header{}
+	headers.Set("X-Hostname", "proof-budget-node")
+	client, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http"), headers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	var challenge agentmgr.Message
+	if err := client.ReadJSON(&challenge); err != nil || challenge.Type != agentmgr.MsgEnrollmentChallenge {
+		t.Fatalf("challenge=%+v err=%v", challenge, err)
+	}
+	for i := 0; i < maxPendingEnrollmentProofMessages; i++ {
+		if err := client.WriteJSON(agentmgr.Message{Type: agentmgr.MsgEnrollmentProof, Data: json.RawMessage(`{}`)}); err != nil {
+			t.Fatalf("invalid proof %d: %v", i+1, err)
+		}
+	}
+	_ = client.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if _, _, err := client.ReadMessage(); err == nil {
+		t.Fatal("pending socket remained open after proof budget exhaustion")
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for sut.pendingAgents.Count() != 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if sut.pendingAgents.Count() != 0 {
+		t.Fatal("proof-budget socket remained in pending capacity registry")
+	}
+}
+
+func TestHandlePendingEnrollmentRejectsUnexpectedMessageType(t *testing.T) {
+	sut := newTestAPIServer(t)
+	sut.pendingAgents = newPendingAgents()
+	server := httptest.NewServer(http.HandlerFunc(sut.handlePendingEnrollment))
+	defer server.Close()
+	headers := http.Header{}
+	headers.Set("X-Hostname", "unexpected-message-node")
+	client, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http"), headers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	var challenge agentmgr.Message
+	if err := client.ReadJSON(&challenge); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.WriteJSON(agentmgr.Message{Type: agentmgr.MsgHeartbeat, Data: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
+	}
+	_ = client.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if _, _, err := client.ReadMessage(); err == nil {
+		t.Fatal("unexpected pending message did not close socket")
+	}
+}
+
 func TestHandlePendingEnrollmentTimesOutAndCleansUp(t *testing.T) {
 	sut := newTestAPIServer(t)
 	sut.pendingAgents = newPendingAgents()
@@ -888,6 +964,7 @@ func TestHandleApproveAgentSuccess(t *testing.T) {
 		Platform:           "linux",
 		ConnectedAt:        verifiedAt,
 		DeviceFingerprint:  "sha256:test",
+		DeviceKeyAlg:       agentidentity.KeyAlgorithmEd25519,
 		IdentityVerified:   true,
 		IdentityVerifiedAt: &verifiedAt,
 		Conn:               serverConn,
@@ -947,6 +1024,63 @@ func TestHandleApproveAgentSuccess(t *testing.T) {
 	}
 	if strings.TrimSpace(approved.Token) == "" {
 		t.Fatalf("expected issued token in approval payload")
+	}
+	_ = clientConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if _, _, err := clientConn.ReadMessage(); err == nil {
+		t.Fatal("approved pending socket remained open after finalization")
+	}
+}
+
+func TestHandleApproveAgentFinalizesWithIndependentContext(t *testing.T) {
+	sut := newTestAPIServer(t)
+	sut.pendingAgents = newPendingAgents()
+	underlyingEnrollment := sut.enrollmentStore
+	transactions, ok := underlyingEnrollment.(persistence.AgentEnrollmentTransactionStore)
+	if !ok {
+		t.Fatal("test enrollment store lacks transaction interface")
+	}
+	requestCtx, cancelRequest := context.WithCancel(context.Background())
+	wrapped := &cancelOnFinalizeEnrollmentStore{
+		EnrollmentStore:                 underlyingEnrollment,
+		AgentEnrollmentTransactionStore: transactions,
+		cancelRequest:                   cancelRequest,
+	}
+	sut.enrollmentStore = wrapped
+
+	serverConn, clientConn, cleanup := createWSPairForPendingEnrollmentTest(t)
+	defer cleanup()
+	verifiedAt := time.Now().UTC()
+	sut.pendingAgents.Add(&pendingAgent{
+		AssetID:            "pending-cancel-1",
+		Hostname:           "cancel-node",
+		Platform:           "linux",
+		DeviceFingerprint:  "LT-CANCEL-CONTEXT",
+		DeviceKeyAlg:       agentidentity.KeyAlgorithmEd25519,
+		IdentityVerified:   true,
+		IdentityVerifiedAt: &verifiedAt,
+		Conn:               serverConn,
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/approve", bytes.NewReader([]byte(`{"asset_id":"pending-cancel-1"}`))).WithContext(requestCtx)
+	rec := httptest.NewRecorder()
+	sut.handleApproveAgent(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("request cancellation prevented finalization: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !wrapped.finalizeContextWasLive {
+		t.Fatal("finalization reused the canceled operator request context")
+	}
+	tokens, err := underlyingEnrollment.ListAgentTokens(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tokens) != 1 || tokens[0].AssetID != "cancel-node" || tokens[0].Status != "active" {
+		t.Fatalf("independent finalization token state=%+v", tokens)
+	}
+	_ = clientConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	var approval agentmgr.Message
+	if err := clientConn.ReadJSON(&approval); err != nil || approval.Type != agentmgr.MsgEnrollmentApproved {
+		t.Fatalf("approval message=%+v err=%v", approval, err)
 	}
 }
 

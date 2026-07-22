@@ -53,12 +53,15 @@ func TestStore_AppendAndList(t *testing.T) {
 		t.Errorf("List(3) returned %d events, want 3", len(limited))
 	}
 
-	// The limited result should be the last 3 events
-	allLast3 := all[2:]
+	// Both full and limited results are newest-first.
+	allFirst3 := all[:3]
 	for i := range 3 {
-		if limited[i].ID != allLast3[i].ID {
-			t.Errorf("limited[%d].ID = %q, want %q", i, limited[i].ID, allLast3[i].ID)
+		if limited[i].ID != allFirst3[i].ID {
+			t.Errorf("limited[%d].ID = %q, want %q", i, limited[i].ID, allFirst3[i].ID)
 		}
+	}
+	if all[0].Target != "asset-E" || all[4].Target != "asset-A" {
+		t.Fatalf("List order = %q ... %q, want newest-first", all[0].Target, all[4].Target)
 	}
 }
 

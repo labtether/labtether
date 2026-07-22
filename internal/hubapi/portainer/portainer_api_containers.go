@@ -2,11 +2,12 @@ package portainer
 
 import (
 	"context"
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strconv"
 
 	"github.com/labtether/labtether/internal/assets"
+	portainerconnector "github.com/labtether/labtether/internal/connectors/portainer"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
@@ -40,6 +41,16 @@ func (d *Deps) HandlePortainerContainers(ctx context.Context, w http.ResponseWri
 			servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
 			return
 		}
+		if shared.HasAssetRestriction(r.Context()) {
+			filtered := make([]portainerconnector.Container, 0, len(containers))
+			for _, container := range containers {
+				allowed, authErr := d.portainerResourceAllowed(r.Context(), strconv.Itoa(epID), "container_id", container.ID)
+				if authErr == nil && allowed {
+					filtered = append(filtered, container)
+				}
+			}
+			containers = filtered
+		}
 		WritePortainerJSON(w, containers, nil)
 		return
 	}
@@ -53,6 +64,9 @@ func (d *Deps) HandlePortainerContainers(ctx context.Context, w http.ResponseWri
 
 	if len(subParts) < 2 {
 		servicehttp.WriteError(w, http.StatusNotFound, "unknown container action")
+		return
+	}
+	if !d.requirePortainerResourceAccess(w, r, strconv.Itoa(epID), "container_id", containerID) {
 		return
 	}
 

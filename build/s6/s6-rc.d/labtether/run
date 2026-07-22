@@ -1,5 +1,28 @@
 #!/bin/sh
-PG_PASS=$(cat /data/config/postgres-password)
+set -eu
+
+password_dir=/data/config
+password_file=$password_dir/postgres-password
+if [ -L "$password_dir" ] || [ ! -d "$password_dir" ] || [ -L "$password_file" ] || [ ! -f "$password_file" ]; then
+  echo "labtether: refusing an unsafe managed PostgreSQL password path" >&2
+  exit 1
+fi
+expected_owner="$(id -u labtether):$(id -g labtether)"
+actual_owner="$(stat -c '%u:%g' "$password_file")"
+actual_mode="$(stat -c '%a' "$password_file")"
+actual_links="$(stat -c '%h' "$password_file")"
+actual_size="$(wc -c < "$password_file" | tr -d '[:space:]')"
+PG_PASS=$(cat "$password_file")
+if [ "$actual_owner" != "$expected_owner" ] || [ "$actual_mode" != 400 ] || [ "$actual_links" != 1 ] || [ "$actual_size" -ne 44 ] || [ "${#PG_PASS}" -ne 44 ] || ! printf '%s' "$PG_PASS" | LC_ALL=C grep -Eq '^[A-Za-z0-9_-]{43}=$'; then
+  echo "labtether: refusing an invalid managed PostgreSQL password" >&2
+  exit 1
+fi
+for identifier in "${POSTGRES_USER:-}" "${POSTGRES_DB:-}"; do
+  if ! printf '%s' "$identifier" | LC_ALL=C grep -Eq '^[A-Za-z_][A-Za-z0-9_]{0,62}$'; then
+    echo "labtether: refusing an unsafe PostgreSQL identifier" >&2
+    exit 1
+  fi
+done
 export DATABASE_URL="postgres://${POSTGRES_USER}:${PG_PASS}@127.0.0.1:5432/${POSTGRES_DB}?sslmode=disable"
 export LABTETHER_ENV=production
 export LABTETHER_MANAGED_POSTGRES=true
@@ -7,6 +30,19 @@ export LABTETHER_DATA_DIR=/data
 export LABTETHER_AGENT_DIR=/opt/labtether/agents
 export LABTETHER_AGENT_CACHE_DIR=/data/agents
 export LABTETHER_API_TOKEN_FILE=/run/labtether/api-token
-export GUACD_HOST=${GUACD_HOST:-127.0.0.1}
-export GUACD_PORT=${GUACD_PORT:-4822}
+export GUACD_HOST="${GUACD_HOST:-127.0.0.1}"
+export GUACD_PORT="${GUACD_PORT:-4822}"
+export SSL_CERT_DIR="${SSL_CERT_DIR:-/etc/ssl/certs:/data/certs}"
+if [ -z "${LABTETHER_API_BASE_URL:-}" ]; then
+  internal_hostname="$(hostname)"
+  if ! printf '%s' "$internal_hostname" | LC_ALL=C grep -Eq '^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$'; then
+    echo "labtether: refusing an unsafe container hostname" >&2
+    exit 1
+  fi
+  if [ "${LABTETHER_TLS_MODE:-auto}" = disabled ]; then
+    export LABTETHER_API_BASE_URL="http://${internal_hostname}:${API_PORT:-8080}"
+  else
+    export LABTETHER_API_BASE_URL="https://${internal_hostname}:${LABTETHER_HTTPS_PORT:-8443}"
+  fi
+fi
 exec /command/s6-setuidgid labtether /usr/local/bin/labtether

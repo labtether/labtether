@@ -119,8 +119,11 @@ export function AdvancedSettingsCard({
                       ) : (
                         <Input
                           className={controlWidthClass}
-                          title={`Current value: ${draftValue}`}
+                          title={entry.sensitive ? (entry.configured ? "A value is configured; leave blank to keep it unchanged" : "No value configured") : `Current value: ${draftValue}`}
+                          type={entry.sensitive ? "password" : undefined}
                           value={draftValue}
+                          placeholder={entry.sensitive && entry.configured ? "Configured — leave blank to keep unchanged" : undefined}
+                          autoComplete={entry.sensitive ? "new-password" : undefined}
                           onChange={(event) =>
                             setRuntimeDraftValues((current) => ({ ...current, [entry.key]: event.target.value }))
                           }

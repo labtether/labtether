@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/assetid"
 	"github.com/labtether/labtether/internal/connectors/proxmox"
 	"github.com/labtether/labtether/internal/connectors/truenas"
 	"github.com/labtether/labtether/internal/logs"
@@ -36,11 +37,7 @@ func (d *Deps) AppendConnectorLogEventWithID(eventID, assetID, source, level, me
 	if at.IsZero() {
 		at = time.Now().UTC()
 	}
-	if fields != nil {
-		fields = cloneStringMap(fields)
-	}
-
-	_ = d.LogStore.AppendEvent(logs.Event{
+	event := logs.Event{
 		ID:        strings.TrimSpace(eventID),
 		AssetID:   strings.TrimSpace(assetID),
 		Source:    trimmedSource,
@@ -48,7 +45,18 @@ func (d *Deps) AppendConnectorLogEventWithID(eventID, assetID, source, level, me
 		Message:   trimmedMessage,
 		Fields:    fields,
 		Timestamp: at.UTC(),
-	})
+	}
+	// Validate before cloning potentially remote connector fields. The store
+	// validates again as the universal boundary, but this early check prevents
+	// an oversized connector response from causing another full-size copy.
+	if _, err := logs.EventEnvelopeBytes(event); err != nil {
+		return
+	}
+	if fields != nil {
+		event.Fields = cloneStringMap(fields)
+	}
+
+	_ = d.LogStore.AppendEvent(event)
 }
 
 func cloneStringMap(in map[string]string) map[string]string {
@@ -88,7 +96,7 @@ func StableConnectorLogID(prefix, key string) string {
 	return trimmedPrefix + "_" + encoded
 }
 
-func (d *Deps) ingestProxmoxTaskLogs(ctx context.Context, client *proxmox.Client, fallbackAssetID string) (int, error) {
+func (d *Deps) ingestProxmoxTaskLogs(ctx context.Context, client *proxmox.Client, fallbackAssetID, collectorID string) (int, error) {
 	tasks, err := client.ListClusterTasks(ctx, "", "", 30)
 	if err != nil {
 		return 0, err
@@ -101,20 +109,25 @@ func (d *Deps) ingestProxmoxTaskLogs(ctx context.Context, client *proxmox.Client
 			continue
 		}
 
+		assetID := ProxmoxTaskAssetID(task, fallbackAssetID)
+		if assetID != strings.TrimSpace(fallbackAssetID) {
+			assetID = assetid.ScopeCollectorAssetID(assetID, collectorID)
+		}
 		d.AppendConnectorLogEventWithID(
-			StableConnectorLogID("log_proxmox_task", upid),
-			ProxmoxTaskAssetID(task, fallbackAssetID),
+			StableConnectorLogID("log_proxmox_task", strings.TrimSpace(collectorID)+"|"+upid),
+			assetID,
 			"proxmox",
 			ProxmoxTaskLevel(task),
 			proxmoxTaskMessage(task),
 			map[string]string{
-				"upid":        upid,
-				"node":        strings.TrimSpace(task.Node),
-				"task_type":   strings.TrimSpace(task.Type),
-				"task_target": strings.TrimSpace(task.ID),
-				"task_status": strings.TrimSpace(task.Status),
-				"exit_status": strings.TrimSpace(task.ExitStatus),
-				"user":        strings.TrimSpace(task.User),
+				"upid":         upid,
+				"node":         strings.TrimSpace(task.Node),
+				"task_type":    strings.TrimSpace(task.Type),
+				"task_target":  strings.TrimSpace(task.ID),
+				"task_status":  strings.TrimSpace(task.Status),
+				"exit_status":  strings.TrimSpace(task.ExitStatus),
+				"user":         strings.TrimSpace(task.User),
+				"collector_id": strings.TrimSpace(collectorID),
 			},
 			proxmoxTaskTimestamp(task),
 		)
@@ -202,6 +215,10 @@ func proxmoxTaskTimestamp(task proxmox.Task) time.Time {
 }
 
 func (d *Deps) IngestTrueNASAlertLogs(ctx context.Context, client *truenas.Client, fallbackAssetID string) (int, error) {
+	return d.IngestTrueNASAlertLogsForCollector(ctx, client, fallbackAssetID, "")
+}
+
+func (d *Deps) IngestTrueNASAlertLogsForCollector(ctx context.Context, client *truenas.Client, fallbackAssetID, collectorID string) (int, error) {
 	alerts := make([]map[string]any, 0, 32)
 	if err := client.Call(ctx, "alert.list", nil, &alerts); err != nil {
 		if truenas.IsMethodNotFound(err) {
@@ -225,7 +242,7 @@ func (d *Deps) IngestTrueNASAlertLogs(ctx context.Context, client *truenas.Clien
 
 		assetID := strings.TrimSpace(fallbackAssetID)
 		if hostname := strings.TrimSpace(CollectorAnyString(alert["hostname"])); hostname != "" {
-			assetID = "truenas-host-" + NormalizeAssetKey(hostname)
+			assetID = assetid.ScopeCollectorAssetID("truenas-host-"+NormalizeAssetKey(hostname), collectorID)
 		}
 
 		fields := map[string]string{
@@ -238,9 +255,16 @@ func (d *Deps) IngestTrueNASAlertLogs(ctx context.Context, client *truenas.Clien
 		if hostname := strings.TrimSpace(CollectorAnyString(alert["hostname"])); hostname != "" {
 			fields["hostname"] = hostname
 		}
+		if strings.TrimSpace(collectorID) != "" {
+			fields["collector_id"] = strings.TrimSpace(collectorID)
+		}
+		stableKey := key
+		if strings.TrimSpace(collectorID) != "" {
+			stableKey = strings.TrimSpace(collectorID) + "|" + key
+		}
 
 		d.AppendConnectorLogEventWithID(
-			StableConnectorLogID("log_truenas_alert", key),
+			StableConnectorLogID("log_truenas_alert", stableKey),
 			assetID,
 			"truenas",
 			normalizeCollectorLogLevel(CollectorAnyString(alert["level"])),

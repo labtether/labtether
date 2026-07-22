@@ -6,11 +6,28 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/edges"
+	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/topology"
 )
+
+const (
+	maxTopologyMutationItems    = 1000
+	maxTopologyIdentifierLength = 255
+	topologyMutationRateLimit   = 120
+)
+
+func (s *apiServer) enforceTopologyMutationLimit(w http.ResponseWriter, r *http.Request) bool {
+	return s.enforceRateLimit(w, r, "v2.topology.mutate", topologyMutationRateLimit, time.Minute)
+}
+
+func writeTopologyInternalError(w http.ResponseWriter, clientMessage string, err error) {
+	securityruntime.Logf("topology: %s: %v", clientMessage, err)
+	apiv2.WriteError(w, http.StatusInternalServerError, "internal", clientMessage)
+}
 
 // ---------------------------------------------------------------------------
 // GET /api/v2/topology — full topology state
@@ -28,13 +45,13 @@ func (s *apiServer) handleV2Topology(w http.ResponseWriter, r *http.Request) {
 
 	layout, err := s.topologyStore.GetOrCreateLayout()
 	if err != nil {
-		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to get layout: "+err.Error())
+		writeTopologyInternalError(w, "failed to get layout", err)
 		return
 	}
 
 	zones, err := s.topologyStore.ListZones(layout.ID)
 	if err != nil {
-		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to list zones: "+err.Error())
+		writeTopologyInternalError(w, "failed to list zones", err)
 		return
 	}
 
@@ -50,20 +67,20 @@ func (s *apiServer) handleV2Topology(w http.ResponseWriter, r *http.Request) {
 
 	members, err := s.topologyStore.ListMembers(layout.ID)
 	if err != nil {
-		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to list members: "+err.Error())
+		writeTopologyInternalError(w, "failed to list members", err)
 		return
 	}
 
 	topoConns, err := s.topologyStore.ListConnections(layout.ID)
 	if err != nil {
-		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to list connections: "+err.Error())
+		writeTopologyInternalError(w, "failed to list connections", err)
 		return
 	}
 
 	// Get all asset IDs for edge lookup.
 	allAssets, err := s.assetStore.ListAssets()
 	if err != nil {
-		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to list assets: "+err.Error())
+		writeTopologyInternalError(w, "failed to list assets", err)
 		return
 	}
 
@@ -254,7 +271,7 @@ func (s *apiServer) handleV2TopologyZones(w http.ResponseWriter, r *http.Request
 	if req.TopologyID == "" {
 		layout, err := s.topologyStore.GetOrCreateLayout()
 		if err != nil {
-			apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to get layout: "+err.Error())
+			writeTopologyInternalError(w, "failed to get layout", err)
 			return
 		}
 		req.TopologyID = layout.ID
@@ -267,7 +284,7 @@ func (s *apiServer) handleV2TopologyZones(w http.ResponseWriter, r *http.Request
 
 	zone, err := s.topologyStore.CreateZone(req)
 	if err != nil {
-		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to create zone: "+err.Error())
+		writeTopologyInternalError(w, "failed to create zone", err)
 		return
 	}
 
@@ -323,7 +340,7 @@ func (s *apiServer) handleV2TopologyZoneActions(w http.ResponseWriter, r *http.R
 				apiv2.WriteError(w, http.StatusNotFound, "not_found", "zone not found")
 				return
 			}
-			apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to update zone: "+err.Error())
+			writeTopologyInternalError(w, "failed to update zone", err)
 			return
 		}
 		apiv2.WriteJSON(w, http.StatusOK, map[string]string{"status": "updated"})
@@ -338,7 +355,7 @@ func (s *apiServer) handleV2TopologyZoneActions(w http.ResponseWriter, r *http.R
 				apiv2.WriteError(w, http.StatusNotFound, "not_found", "zone not found")
 				return
 			}
-			apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to delete zone: "+err.Error())
+			writeTopologyInternalError(w, "failed to delete zone", err)
 			return
 		}
 		apiv2.WriteJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
@@ -358,6 +375,14 @@ func (s *apiServer) handleV2TopologyZoneMembers(w http.ResponseWriter, r *http.R
 		apiv2.WriteScopeForbidden(w, "topology:write")
 		return
 	}
+	if !s.enforceTopologyMutationLimit(w, r) {
+		return
+	}
+	zoneID = strings.TrimSpace(zoneID)
+	if zoneID == "" || len(zoneID) > maxTopologyIdentifierLength {
+		apiv2.WriteError(w, http.StatusBadRequest, "validation", "zone_id is invalid")
+		return
+	}
 
 	var req struct {
 		Members []topology.ZoneMember `json:"members"`
@@ -365,14 +390,30 @@ func (s *apiServer) handleV2TopologyZoneMembers(w http.ResponseWriter, r *http.R
 	if err := decodeJSONBody(w, r, &req); err != nil {
 		return
 	}
+	if len(req.Members) > maxTopologyMutationItems {
+		apiv2.WriteError(w, http.StatusBadRequest, "validation", "members exceeds maximum of 1000")
+		return
+	}
 
 	// Set zone_id on all members.
+	seenAssets := make(map[string]struct{}, len(req.Members))
 	for i := range req.Members {
+		assetID := strings.TrimSpace(req.Members[i].AssetID)
+		if assetID == "" || len(assetID) > maxTopologyIdentifierLength {
+			apiv2.WriteError(w, http.StatusBadRequest, "validation", "each member requires a valid asset_id")
+			return
+		}
+		if _, duplicate := seenAssets[assetID]; duplicate {
+			apiv2.WriteError(w, http.StatusBadRequest, "validation", "members must not contain duplicate asset_ids")
+			return
+		}
+		seenAssets[assetID] = struct{}{}
+		req.Members[i].AssetID = assetID
 		req.Members[i].ZoneID = zoneID
 	}
 
 	if err := s.topologyStore.SetMembers(zoneID, req.Members); err != nil {
-		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to set members: "+err.Error())
+		writeTopologyInternalError(w, "failed to set members", err)
 		return
 	}
 
@@ -389,6 +430,9 @@ func (s *apiServer) handleV2TopologyZoneReorder(w http.ResponseWriter, r *http.R
 		apiv2.WriteScopeForbidden(w, "topology:write")
 		return
 	}
+	if !s.enforceTopologyMutationLimit(w, r) {
+		return
+	}
 
 	var req struct {
 		Updates []topology.ZoneReorder `json:"updates"`
@@ -401,13 +445,33 @@ func (s *apiServer) handleV2TopologyZoneReorder(w http.ResponseWriter, r *http.R
 		apiv2.WriteError(w, http.StatusBadRequest, "validation", "updates array is required")
 		return
 	}
+	if len(req.Updates) > maxTopologyMutationItems {
+		apiv2.WriteError(w, http.StatusBadRequest, "validation", "updates exceeds maximum of 1000")
+		return
+	}
+	seenZones := make(map[string]struct{}, len(req.Updates))
+	for i := range req.Updates {
+		zoneID := strings.TrimSpace(req.Updates[i].ZoneID)
+		parentZoneID := strings.TrimSpace(req.Updates[i].ParentZoneID)
+		if zoneID == "" || len(zoneID) > maxTopologyIdentifierLength || len(parentZoneID) > maxTopologyIdentifierLength {
+			apiv2.WriteError(w, http.StatusBadRequest, "validation", "each update requires valid zone identifiers")
+			return
+		}
+		if _, duplicate := seenZones[zoneID]; duplicate {
+			apiv2.WriteError(w, http.StatusBadRequest, "validation", "updates must not contain duplicate zone_ids")
+			return
+		}
+		seenZones[zoneID] = struct{}{}
+		req.Updates[i].ZoneID = zoneID
+		req.Updates[i].ParentZoneID = parentZoneID
+	}
 
 	if err := s.topologyStore.ReorderZones(req.Updates); err != nil {
 		if errors.Is(err, topology.ErrNotFound) {
 			apiv2.WriteError(w, http.StatusNotFound, "not_found", "zone not found")
 			return
 		}
-		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to reorder zones: "+err.Error())
+		writeTopologyInternalError(w, "failed to reorder zones", err)
 		return
 	}
 
@@ -431,12 +495,12 @@ func (s *apiServer) handleV2TopologyReset(w http.ResponseWriter, r *http.Request
 
 	layout, err := s.topologyStore.GetOrCreateLayout()
 	if err != nil {
-		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to get layout: "+err.Error())
+		writeTopologyInternalError(w, "failed to get layout", err)
 		return
 	}
 
 	if err := s.topologyStore.ClearTopology(layout.ID); err != nil {
-		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to clear topology: "+err.Error())
+		writeTopologyInternalError(w, "failed to clear topology", err)
 		return
 	}
 
@@ -501,7 +565,7 @@ func (s *apiServer) handleV2TopologyConnections(w http.ResponseWriter, r *http.R
 	if req.TopologyID == "" {
 		layout, err := s.topologyStore.GetOrCreateLayout()
 		if err != nil {
-			apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to get layout: "+err.Error())
+			writeTopologyInternalError(w, "failed to get layout", err)
 			return
 		}
 		req.TopologyID = layout.ID
@@ -511,7 +575,7 @@ func (s *apiServer) handleV2TopologyConnections(w http.ResponseWriter, r *http.R
 
 	conn, err := s.topologyStore.CreateConnection(req)
 	if err != nil {
-		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to create connection: "+err.Error())
+		writeTopologyInternalError(w, "failed to create connection", err)
 		return
 	}
 
@@ -553,7 +617,7 @@ func (s *apiServer) handleV2TopologyConnection(w http.ResponseWriter, r *http.Re
 				apiv2.WriteError(w, http.StatusNotFound, "not_found", "connection not found")
 				return
 			}
-			apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to update connection: "+err.Error())
+			writeTopologyInternalError(w, "failed to update connection", err)
 			return
 		}
 		apiv2.WriteJSON(w, http.StatusOK, map[string]string{"status": "updated"})
@@ -568,7 +632,7 @@ func (s *apiServer) handleV2TopologyConnection(w http.ResponseWriter, r *http.Re
 				apiv2.WriteError(w, http.StatusNotFound, "not_found", "connection not found")
 				return
 			}
-			apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to delete connection: "+err.Error())
+			writeTopologyInternalError(w, "failed to delete connection", err)
 			return
 		}
 		apiv2.WriteJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
@@ -602,7 +666,7 @@ func (s *apiServer) handleV2TopologyViewport(w http.ResponseWriter, r *http.Requ
 			apiv2.WriteError(w, http.StatusNotFound, "not_found", "no layout exists")
 			return
 		}
-		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to update viewport: "+err.Error())
+		writeTopologyInternalError(w, "failed to update viewport", err)
 		return
 	}
 
@@ -625,31 +689,31 @@ func (s *apiServer) handleV2TopologyUnsorted(w http.ResponseWriter, r *http.Requ
 
 	layout, err := s.topologyStore.GetOrCreateLayout()
 	if err != nil {
-		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to get layout: "+err.Error())
+		writeTopologyInternalError(w, "failed to get layout", err)
 		return
 	}
 
 	allAssets, err := s.assetStore.ListAssets()
 	if err != nil {
-		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to list assets: "+err.Error())
+		writeTopologyInternalError(w, "failed to list assets", err)
 		return
 	}
 
 	zones, err := s.topologyStore.ListZones(layout.ID)
 	if err != nil {
-		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to list zones: "+err.Error())
+		writeTopologyInternalError(w, "failed to list zones", err)
 		return
 	}
 
 	members, err := s.topologyStore.ListMembers(layout.ID)
 	if err != nil {
-		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to list members: "+err.Error())
+		writeTopologyInternalError(w, "failed to list members", err)
 		return
 	}
 
 	dismissed, err := s.topologyStore.ListDismissed(layout.ID)
 	if err != nil {
-		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to list dismissed: "+err.Error())
+		writeTopologyInternalError(w, "failed to list dismissed", err)
 		return
 	}
 
@@ -728,6 +792,9 @@ func (s *apiServer) handleV2TopologyAutoPlace(w http.ResponseWriter, r *http.Req
 		apiv2.WriteScopeForbidden(w, "topology:write")
 		return
 	}
+	if !s.enforceTopologyMutationLimit(w, r) {
+		return
+	}
 
 	var req struct {
 		Placements []struct {
@@ -743,6 +810,10 @@ func (s *apiServer) handleV2TopologyAutoPlace(w http.ResponseWriter, r *http.Req
 		apiv2.WriteError(w, http.StatusBadRequest, "validation", "placements array is required")
 		return
 	}
+	if len(req.Placements) > maxTopologyMutationItems {
+		apiv2.WriteError(w, http.StatusBadRequest, "validation", "placements exceeds maximum of 1000")
+		return
+	}
 
 	// Group placements by zone.
 	byZone := make(map[string][]topology.ZoneMember)
@@ -756,6 +827,10 @@ func (s *apiServer) handleV2TopologyAutoPlace(w http.ResponseWriter, r *http.Req
 		}
 		assetID := strings.TrimSpace(p.AssetID)
 		zoneID := strings.TrimSpace(p.ZoneID)
+		if len(assetID) > maxTopologyIdentifierLength || len(zoneID) > maxTopologyIdentifierLength {
+			apiv2.WriteError(w, http.StatusBadRequest, "validation", "placement identifiers are too long")
+			return
+		}
 		if _, exists := seenAssets[assetID]; exists {
 			apiv2.WriteError(w, http.StatusBadRequest, "validation", "each asset may only be placed once per request")
 			return
@@ -779,12 +854,12 @@ func (s *apiServer) handleV2TopologyAutoPlace(w http.ResponseWriter, r *http.Req
 	// Fetch layout and all existing members once, outside the loop.
 	layout, err := s.topologyStore.GetOrCreateLayout()
 	if err != nil {
-		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to get layout: "+err.Error())
+		writeTopologyInternalError(w, "failed to get layout", err)
 		return
 	}
 	allMembers, err := s.topologyStore.ListMembers(layout.ID)
 	if err != nil {
-		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to list members: "+err.Error())
+		writeTopologyInternalError(w, "failed to list members", err)
 		return
 	}
 
@@ -807,7 +882,7 @@ func (s *apiServer) handleV2TopologyAutoPlace(w http.ResponseWriter, r *http.Req
 		}
 
 		if err := s.topologyStore.SetMembers(zoneID, merged); err != nil {
-			apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to place assets: "+err.Error())
+			writeTopologyInternalError(w, "failed to place assets", err)
 			return
 		}
 		placed += len(newMembers)
@@ -932,12 +1007,12 @@ func (s *apiServer) handleV2TopologyDismiss(w http.ResponseWriter, r *http.Reque
 
 	layout, err := s.topologyStore.GetOrCreateLayout()
 	if err != nil {
-		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to get layout: "+err.Error())
+		writeTopologyInternalError(w, "failed to get layout", err)
 		return
 	}
 
 	if err := s.topologyStore.DismissAsset(layout.ID, req.AssetID); err != nil {
-		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to dismiss asset: "+err.Error())
+		writeTopologyInternalError(w, "failed to dismiss asset", err)
 		return
 	}
 
@@ -963,7 +1038,7 @@ func (s *apiServer) handleV2TopologyUndismiss(w http.ResponseWriter, r *http.Req
 
 	layout, err := s.topologyStore.GetOrCreateLayout()
 	if err != nil {
-		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to get layout: "+err.Error())
+		writeTopologyInternalError(w, "failed to get layout", err)
 		return
 	}
 
@@ -972,7 +1047,7 @@ func (s *apiServer) handleV2TopologyUndismiss(w http.ResponseWriter, r *http.Req
 			apiv2.WriteError(w, http.StatusNotFound, "not_found", "dismissed asset not found")
 			return
 		}
-		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to undismiss asset: "+err.Error())
+		writeTopologyInternalError(w, "failed to undismiss asset", err)
 		return
 	}
 

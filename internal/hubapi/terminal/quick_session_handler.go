@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/audit"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/policy"
 	"github.com/labtether/labtether/internal/servicehttp"
 	"github.com/labtether/labtether/internal/terminal"
@@ -82,6 +83,12 @@ func (d *Deps) HandleQuickSession(w http.ResponseWriter, r *http.Request) {
 
 	// Build the target label for the session (used in logs and UI).
 	target := req.Host
+	if !d.requireTargetAccess(w, r, target) {
+		return
+	}
+	if !d.enforceAssetActionGuard(w, target) {
+		return
+	}
 
 	// Policy check: quick sessions must pass session_start just like regular sessions.
 	checkRes := policy.Evaluate(policy.CheckRequest{
@@ -106,7 +113,9 @@ func (d *Deps) HandleQuickSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Attach inline SSH config and source marker to the in-memory session.
+	// Attach inline SSH config and source marker only to the response value. The
+	// credential itself is retained in the bounded process-local store below;
+	// UpdateSession must never receive it because production uses Postgres.
 	session.Source = "quick_connect"
 	session.InlineSSHConfig = &terminal.SSHConfig{
 		Host:                 req.Host,
@@ -115,12 +124,16 @@ func (d *Deps) HandleQuickSession(w http.ResponseWriter, r *http.Request) {
 		Password:             req.Password,
 		PrivateKey:           req.PrivateKey,
 		PrivateKeyPassphrase: req.Passphrase,
-		StrictHostKey:        req.StrictHostKey,
+		StrictHostKey:        effectiveQuickSessionStrictHostKey(req.StrictHostKey),
 	}
-
-	// Persist the updated session (with Source and InlineSSHConfig) back to the store.
-	if err := d.TerminalStore.UpdateSession(session); err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update quick session")
+	if d.EphemeralSSHConfigs == nil {
+		_ = d.TerminalStore.DeleteTerminalSession(session.ID)
+		servicehttp.WriteError(w, http.StatusServiceUnavailable, "quick session credentials unavailable")
+		return
+	}
+	if err := d.EphemeralSSHConfigs.Put(session.ID, session.InlineSSHConfig); err != nil {
+		_ = d.TerminalStore.DeleteTerminalSession(session.ID)
+		servicehttp.WriteError(w, http.StatusServiceUnavailable, "quick session credential capacity reached")
 		return
 	}
 
@@ -138,4 +151,8 @@ func (d *Deps) HandleQuickSession(w http.ResponseWriter, r *http.Request) {
 	d.AppendAuditEventBestEffort(auditEvent, "api warning: failed to append quick session audit event")
 
 	servicehttp.WriteJSON(w, http.StatusCreated, map[string]any{"session": session})
+}
+
+func effectiveQuickSessionStrictHostKey(requested bool) bool {
+	return requested || !shared.InsecureSSHHostKeysAllowed()
 }

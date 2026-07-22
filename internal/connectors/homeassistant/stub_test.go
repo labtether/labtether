@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labtether/labtether/internal/assetid"
 	"github.com/labtether/labtether/internal/connectorsdk"
 )
 
@@ -37,6 +38,22 @@ func TestConnectorTestConnectionSuccess(t *testing.T) {
 	}
 	if health.Status != "ok" {
 		t.Fatalf("TestConnection().Status = %q, want ok", health.Status)
+	}
+}
+
+func TestConnectorExecuteActionAcceptsCollectorScopedEntityTarget(t *testing.T) {
+	t.Parallel()
+	connector := NewWithConfig(Config{BaseURL: "https://homeassistant.invalid", Token: "disposable"})
+	target := assetid.ScopeCollectorAssetID("light.office", "collector-ha-a")
+	result, err := connector.ExecuteAction(context.Background(), "entity.toggle", connectorsdk.ActionRequest{
+		TargetID: target,
+		DryRun:   true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != "succeeded" || !strings.Contains(result.Output, "light.office") || strings.Contains(result.Output, "--ltc-") {
+		t.Fatalf("scoped entity target was not normalized: %+v", result)
 	}
 }
 
@@ -171,6 +188,98 @@ func TestConnectorExecuteServiceCallRejectsUnsafeServicePath(t *testing.T) {
 	}
 	if called {
 		t.Fatal("unsafe service should be rejected before making a request")
+	}
+}
+
+func TestConnectorServiceCallRequiresAdvertisedServiceParameter(t *testing.T) {
+	connector := NewWithConfig(Config{BaseURL: "https://homeassistant.invalid", Token: "disposable"})
+	for _, dryRun := range []bool{false, true} {
+		result, err := connector.ExecuteAction(context.Background(), "service.call", connectorsdk.ActionRequest{DryRun: dryRun})
+		if err != nil || result.Status != "failed" || !strings.Contains(result.Message, "service is required") {
+			t.Fatalf("missing service dry_run=%v result=%+v err=%v", dryRun, result, err)
+		}
+	}
+}
+
+func TestConnectorActionErrorDoesNotReflectUpstreamBody(t *testing.T) {
+	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
+	const reflectedSecret = "qa-ha-long-lived-token"
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "reflected "+reflectedSecret, http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	connector := NewWithConfig(Config{
+		BaseURL: server.URL, Token: reflectedSecret, SkipVerify: true, Timeout: 2 * time.Second,
+	})
+	result, err := connector.ExecuteAction(context.Background(), "entity.toggle", connectorsdk.ActionRequest{TargetID: "light.qa"})
+	if err != nil || result.Status != "failed" || strings.Contains(result.Message, reflectedSecret) || strings.Contains(result.Message, "reflected") {
+		t.Fatalf("upstream body reached action error: result=%+v err=%v", result, err)
+	}
+}
+
+func TestConnectorActionSuccessRedactsReflectedToken(t *testing.T) {
+	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
+	const reflectedSecret = "qa-ha-long-lived-token"
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"token":"` + reflectedSecret + `"}`))
+	}))
+	defer server.Close()
+
+	connector := NewWithConfig(Config{
+		BaseURL: server.URL, Token: reflectedSecret, SkipVerify: true, Timeout: 2 * time.Second,
+	})
+	result, err := connector.ExecuteAction(context.Background(), "entity.toggle", connectorsdk.ActionRequest{TargetID: "light.qa"})
+	if err != nil || result.Status != "succeeded" || strings.Contains(result.Output, reflectedSecret) || !strings.Contains(result.Output, "[REDACTED]") {
+		t.Fatalf("reflected token was not redacted: result=%+v err=%v", result, err)
+	}
+}
+
+func TestTruncatePayloadRedactsTokenAcrossOutputBoundary(t *testing.T) {
+	const secret = "boundary-secret-token"
+	payload := []byte(strings.Repeat("x", 500) + secret + strings.Repeat("y", 500))
+	output := truncatePayloadRedacted(payload, secret)
+	if strings.Contains(output, secret) || strings.Contains(output, "boundary-secr") || !strings.Contains(output, "[REDACTED]") {
+		t.Fatalf("boundary token was partially exposed: %q", output)
+	}
+}
+
+func TestValidateTokenRejectsEmptyOversizeAndControlCharacters(t *testing.T) {
+	if err := validateToken("valid-disposable-token"); err != nil {
+		t.Fatalf("valid token rejected: %v", err)
+	}
+	for _, token := range []string{"", strings.Repeat("a", maxTokenBytes+1), "token\nheader"} {
+		if err := validateToken(token); err == nil {
+			t.Fatalf("invalid token of length %d accepted", len(token))
+		}
+	}
+}
+
+func TestConnectorRejectsInvalidTokenBeforeOutboundRequest(t *testing.T) {
+	called := false
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		called = true
+	}))
+	defer server.Close()
+
+	connector := NewWithConfig(Config{BaseURL: server.URL, Token: "token\nforged-header"})
+	result, err := connector.ExecuteAction(context.Background(), "entity.toggle", connectorsdk.ActionRequest{TargetID: "light.qa"})
+	if err != nil || result.Status != "failed" || !strings.Contains(result.Message, "invalid home assistant token") || called {
+		t.Fatalf("invalid token was not rejected before network use: result=%+v err=%v called=%v", result, err, called)
+	}
+}
+
+func TestConnectorActionResponseHasSmallerBoundThanInventory(t *testing.T) {
+	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(strings.Repeat("x", maxActionResponseBytes+1)))
+	}))
+	defer server.Close()
+
+	connector := NewWithConfig(Config{BaseURL: server.URL, Token: "disposable", SkipVerify: true})
+	result, err := connector.ExecuteAction(context.Background(), "entity.toggle", connectorsdk.ActionRequest{TargetID: "light.qa"})
+	if err != nil || result.Status != "failed" || !strings.Contains(result.Message, "exceeded") {
+		t.Fatalf("oversized action response was not rejected: result=%+v err=%v", result, err)
 	}
 }
 
@@ -385,5 +494,32 @@ func TestConnectorFetchConfigReturnsVersionAndLocation(t *testing.T) {
 	}
 	if config.LocationName != "My Home" {
 		t.Fatalf("LocationName = %q, want My Home", config.LocationName)
+	}
+}
+
+func TestConnectorUnconfiguredModeFailsClosed(t *testing.T) {
+	connector := NewWithConfig(Config{})
+
+	health, err := connector.TestConnection(context.Background())
+	if err != nil || health.Status != "failed" || !strings.Contains(health.Message, "not configured") {
+		t.Fatalf("TestConnection() = %+v, err=%v, want failed unconfigured health", health, err)
+	}
+
+	assets, err := connector.Discover(context.Background())
+	if err != nil || assets == nil || len(assets) != 0 {
+		t.Fatalf("Discover() = %+v, err=%v, want non-nil empty inventory", assets, err)
+	}
+
+	for _, descriptor := range connector.Actions() {
+		for _, dryRun := range []bool{false, true} {
+			result, execErr := connector.ExecuteAction(context.Background(), descriptor.ID, connectorsdk.ActionRequest{
+				TargetID: "light.disposable",
+				Params:   map[string]string{"service": "light.turn_on"},
+				DryRun:   dryRun,
+			})
+			if execErr != nil || result.Status != "failed" || !strings.Contains(result.Message, "not configured") {
+				t.Fatalf("ExecuteAction(%q, dry_run=%v) = %+v, err=%v, want fail-closed unconfigured result", descriptor.ID, dryRun, result, execErr)
+			}
+		}
 	}
 }

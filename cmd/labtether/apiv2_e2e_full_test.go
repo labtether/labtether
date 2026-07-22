@@ -513,7 +513,6 @@ func TestE2E_FullFunctionality(t *testing.T) {
 			"/api/v2/dead-letters",
 			"/api/v2/audit/events",
 			"/api/v2/logs/views",
-			"/api/v2/hub/tls",
 			"/api/v2/web-services",
 			"/api/v2/agents/pending",
 		}
@@ -525,16 +524,22 @@ func TestE2E_FullFunctionality(t *testing.T) {
 				notAuthError(t, resp)
 			})
 		}
+
+		// Hub TLS exposes global trust configuration and requires an admin role,
+		// even when an operator API key carries wildcard scopes.
+		tlsResp := doReq(t, "GET", "/api/v2/hub/tls", wildcardKey, "")
+		mustStatus(t, tlsResp, http.StatusForbidden)
 	})
 
 	// ── 11. Home Assistant ─────────────────────────────────────────────
 	t.Run("homeassistant", func(t *testing.T) {
-		// GET /api/v2/homeassistant/entities → 501 (stub)
+		// GET /api/v2/homeassistant/entities returns the persisted HA entity
+		// collection even when no HA collector is configured.
 		resp := doReq(t, "GET", "/api/v2/homeassistant/entities", ownerToken, "")
-		if resp.StatusCode != http.StatusNotImplemented {
+		if resp.StatusCode != http.StatusOK {
 			raw, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
-			t.Fatalf("homeassistant entities: expected 501, got %d: %s", resp.StatusCode, string(raw))
+			t.Fatalf("homeassistant entities: expected 200, got %d: %s", resp.StatusCode, string(raw))
 		}
 		resp.Body.Close()
 	})

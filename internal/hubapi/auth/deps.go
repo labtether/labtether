@@ -64,14 +64,18 @@ type Deps struct {
 
 	// Auth middleware injected from cmd/labtether.
 	EnforceRateLimit          func(w http.ResponseWriter, r *http.Request, bucket string, limit int, window time.Duration) bool
+	EnforceRateLimitGlobal    func(w http.ResponseWriter, bucket string, limit int, window time.Duration) bool
 	ValidateOwnerTokenRequest func(r *http.Request) bool
 
 	// Context extractors injected from cmd/labtether.
-	UserIDFromContext func(ctx context.Context) string
+	UserIDFromContext   func(ctx context.Context) string
+	UserRoleFromContext func(ctx context.Context) string
 
-	// WrapAuth / WrapAdmin for route registration.
-	WrapAuth  func(http.HandlerFunc) http.HandlerFunc
-	WrapAdmin func(http.HandlerFunc) http.HandlerFunc
+	// Authentication wrappers for route registration. WrapSelfService admits
+	// authenticated read-only users only to mutations of their own identity.
+	WrapAuth        func(http.HandlerFunc) http.HandlerFunc
+	WrapSelfService func(http.HandlerFunc) http.HandlerFunc
+	WrapAdmin       func(http.HandlerFunc) http.HandlerFunc
 }
 
 // OIDCAuthState holds the pending OIDC authentication state.
@@ -79,26 +83,44 @@ type OIDCAuthState struct {
 	Nonce       string
 	NextPath    string
 	RedirectURI string
-	ExpiresAt   time.Time
+	Flow        OIDCAuthFlow
+	// CodeChallenge is populated only for the native mobile PKCE flow.
+	CodeChallenge string
+	ExpiresAt     time.Time
 }
+
+// OIDCAuthFlow prevents one callback surface from consuming state created for
+// another surface.
+type OIDCAuthFlow string
+
+const (
+	OIDCAuthFlowWeb    OIDCAuthFlow = "web"
+	OIDCAuthFlowMobile OIDCAuthFlow = "mobile"
+)
 
 // RegisterRoutes registers all auth API routes on the given mux.
 func RegisterRoutes(mux *http.ServeMux, d *Deps) {
+	wrapSelfService := d.WrapSelfService
+	if wrapSelfService == nil {
+		wrapSelfService = d.WrapAuth
+	}
 	mux.HandleFunc("/auth/login", d.HandleAuthLogin)
 	mux.HandleFunc("/auth/login/2fa", d.HandleLogin2FA)
 	mux.HandleFunc("/auth/bootstrap/status", d.HandleAuthBootstrapStatus)
 	mux.HandleFunc("/auth/bootstrap", d.HandleAuthBootstrapSetup)
 	mux.HandleFunc("/auth/logout", d.HandleAuthLogout)
 	mux.HandleFunc("/auth/me", d.WrapAuth(d.HandleAuthMe))
-	mux.HandleFunc("/auth/me/password", d.WrapAuth(d.HandleChangePassword))
-	mux.HandleFunc("/auth/account", d.WrapAuth(d.HandleDeleteOwnAccount))
-	mux.HandleFunc("/auth/2fa/setup", d.WrapAuth(d.Handle2FASetup))
-	mux.HandleFunc("/auth/2fa/verify", d.WrapAuth(d.Handle2FAVerify))
-	mux.HandleFunc("/auth/2fa", d.WrapAuth(d.Handle2FADisable))
-	mux.HandleFunc("/auth/2fa/recovery-codes", d.WrapAuth(d.Handle2FARecoveryCodes))
+	mux.HandleFunc("/auth/me/password", wrapSelfService(d.HandleChangePassword))
+	mux.HandleFunc("/auth/account", wrapSelfService(d.HandleDeleteOwnAccount))
+	mux.HandleFunc("/auth/2fa/setup", wrapSelfService(d.Handle2FASetup))
+	mux.HandleFunc("/auth/2fa/verify", wrapSelfService(d.Handle2FAVerify))
+	mux.HandleFunc("/auth/2fa", wrapSelfService(d.Handle2FADisable))
+	mux.HandleFunc("/auth/2fa/recovery-codes", wrapSelfService(d.Handle2FARecoveryCodes))
 	mux.HandleFunc("/auth/providers", d.HandleAuthProviders)
 	mux.HandleFunc("/auth/oidc/start", d.HandleAuthOIDCStart)
 	mux.HandleFunc("/auth/oidc/callback", d.HandleAuthOIDCCallback)
+	mux.HandleFunc("/auth/oidc/mobile/start", d.HandleAuthOIDCMobileStart)
+	mux.HandleFunc("/auth/oidc/mobile/callback", d.HandleAuthOIDCMobileCallback)
 	mux.HandleFunc("/auth/users", d.WrapAdmin(d.HandleAuthUsers))
 	mux.HandleFunc("/auth/users/", d.WrapAdmin(d.HandleAuthUserActions))
 }

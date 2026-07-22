@@ -2,7 +2,7 @@ package collectors
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"math"
 	"net"
 	neturl "net/url"
@@ -118,27 +118,36 @@ func normalizeProxmoxStatus(status string) string {
 	}
 }
 
-// ingestCollectorTelemetry parses collector output into normalized metric samples
-// and stores them in the telemetry store.
-func (d *Deps) ingestCollectorTelemetry(collector hubcollector.Collector, output string) {
+// ingestCollectorTelemetry parses collector output into normalized metric
+// samples and stores them. Persistence failures are returned so a collector is
+// never reported healthy while its telemetry was silently discarded.
+func (d *Deps) ingestCollectorTelemetry(ctx context.Context, collector hubcollector.Collector, output string) error {
+	if ctx == nil {
+		return fmt.Errorf("collector telemetry context is required")
+	}
 	if d.TelemetryStore == nil || output == "" {
-		return
+		return nil
 	}
 	responseFormat, _ := collector.Config["response_format"].(string)
-	samples, _ := ParseCollectorOutput(output, responseFormat, collector.AssetID)
+	samples, err := ParseCollectorOutput(output, responseFormat, collector.AssetID)
+	if err != nil {
+		return err
+	}
 	if len(samples) == 0 {
-		return
+		return nil
 	}
 	metricSamples := make([]telemetry.MetricSample, len(samples))
 	for i, cs := range samples {
 		metricSamples[i] = telemetry.MetricSample{
 			AssetID:     cs.AssetID,
 			Metric:      cs.Metric,
+			Unit:        cs.Unit,
 			Value:       cs.Value,
 			CollectedAt: cs.Timestamp,
 		}
 	}
-	if err := d.TelemetryStore.AppendSamples(context.Background(), metricSamples); err != nil {
-		log.Printf("hub collector: failed to ingest telemetry for asset %s: %v", collector.AssetID, err)
+	if err := d.TelemetryStore.AppendSamples(ctx, metricSamples); err != nil {
+		return err
 	}
+	return nil
 }

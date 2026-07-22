@@ -49,12 +49,12 @@ func (d *Deps) HandleTrueNASDisks(ctx context.Context, w http.ResponseWriter, r 
 		warnings := make([]string, 0, 2)
 		disks := make([]map[string]any, 0, 32)
 		if err := CallTrueNASQueryWithRetries(ctx, runtime.Client, "disk.query", &disks); err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to query disks: "+err.Error())
+			writeTrueNASError(w, http.StatusBadGateway, "failed to query disks", err)
 			return
 		}
 		temps := map[string]any{}
 		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, "disk.temperatures", nil, &temps); err != nil {
-			warnings = AppendTrueNASWarning(warnings, "disk temperatures unavailable: "+err.Error())
+			warnings = AppendTrueNASWarning(warnings, trueNASWarning("disk temperatures unavailable", err))
 			temps = nil
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, TrueNASDisksResponse{
@@ -94,7 +94,7 @@ func (d *Deps) HandleTrueNASDisks(ctx context.Context, w http.ResponseWriter, r 
 		}
 		params := []any{[]any{map[string]any{"identifier": diskName, "type": testType}}}
 		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, "smart.test.manual_test", params, nil); err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to start SMART test: "+err.Error())
+			writeTrueNASError(w, http.StatusBadGateway, "failed to start SMART test", err)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, TrueNASDiskSMARTTestResponse{
@@ -111,7 +111,7 @@ func (d *Deps) HandleTrueNASDisks(ctx context.Context, w http.ResponseWriter, r 
 		}
 		allResults := make([]map[string]any, 0, 32)
 		if err := CallTrueNASQueryWithRetries(ctx, runtime.Client, "smart.test.results", &allResults); err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to query SMART results: "+err.Error())
+			writeTrueNASError(w, http.StatusBadGateway, "failed to query SMART results", err)
 			return
 		}
 		// Filter to the requested disk.

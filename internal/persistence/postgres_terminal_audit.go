@@ -218,7 +218,7 @@ func (s *PostgresStore) UpdateCommandResult(sessionID, commandID, status, output
 		return err
 	}
 	if cmdTag.RowsAffected() == 0 {
-		return errors.New("command not found")
+		return terminal.ErrCommandNotFound
 	}
 
 	_, _ = s.pool.Exec(context.Background(),
@@ -226,6 +226,48 @@ func (s *PostgresStore) UpdateCommandResult(sessionID, commandID, status, output
 		sessionID,
 		time.Now().UTC(),
 	)
+	return nil
+}
+
+func (s *PostgresStore) GetCommand(commandID string) (terminal.Command, bool, error) {
+	row := s.pool.QueryRow(context.Background(),
+		`SELECT id, session_id, actor_id, target, body, mode, status, output, created_at, updated_at
+		 FROM terminal_commands WHERE id = $1`,
+		commandID,
+	)
+
+	command := terminal.Command{}
+	if err := row.Scan(
+		&command.ID,
+		&command.SessionID,
+		&command.ActorID,
+		&command.Target,
+		&command.Body,
+		&command.Mode,
+		&command.Status,
+		&command.Output,
+		&command.CreatedAt,
+		&command.UpdatedAt,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return terminal.Command{}, false, nil
+		}
+		return terminal.Command{}, false, err
+	}
+	return command, true, nil
+}
+
+func (s *PostgresStore) DeleteCommand(commandID string) error {
+	result, err := s.pool.Exec(context.Background(),
+		`DELETE FROM terminal_commands WHERE id = $1`,
+		commandID,
+	)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return terminal.ErrCommandNotFound
+	}
 	return nil
 }
 

@@ -35,17 +35,22 @@ type BinaryEntry struct {
 	SizeBytes int64  `json:"size_bytes,omitempty"`
 	URL       string `json:"url"`
 	// Signature is the ed25519 signature over the canonical release
-	// payload (see labtether-agent/scripts/release/sign-release.go). The hub
-	// does not verify this; it plumbs it through so the agent can verify
-	// against LABTETHER_AUTO_UPDATE_TRUSTED_PUBLIC_KEY. Empty when the
-	// release was not signed at build time.
+	// payload (see labtether-agent/scripts/release/sign-release.go). The release
+	// pipeline verifies it against the hub's pinned agent release key before
+	// embedding it; the hub then plumbs it through so the agent can independently
+	// verify against LABTETHER_AUTO_UPDATE_TRUSTED_PUBLIC_KEY.
 	Signature string `json:"signature,omitempty"`
 }
 
 // LoadAgentManifest reads and parses the agent-manifest.json file from dir.
 func LoadAgentManifest(dir string) (*AgentManifest, error) {
-	path := filepath.Join(dir, ManifestFilename)
-	data, err := os.ReadFile(path)
+	root, err := os.OpenRoot(filepath.Clean(dir))
+	if err != nil {
+		return nil, fmt.Errorf("open agent manifest directory: %w", err)
+	}
+	defer func() { _ = root.Close() }()
+
+	data, err := root.ReadFile(ManifestFilename)
 	if err != nil {
 		return nil, fmt.Errorf("read agent manifest: %w", err)
 	}

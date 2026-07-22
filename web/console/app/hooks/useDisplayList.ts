@@ -50,7 +50,10 @@ export function useDisplayList(nodeId: string, enabled: boolean) {
     if (!nodeId || !enabled) return;
     setState((s) => ({ ...s, loading: true, error: null }));
     try {
-      const res = await fetch(`/api/v1/nodes/${nodeId}/displays`);
+      // Use the authenticated console route. The generic /api/v1 catch-all is
+      // intentionally limited to public bootstrap endpoints and will return
+      // 404 for authenticated agent operations.
+      const res = await fetch(`/api/displays/${encodeURIComponent(nodeId)}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json().catch(() => null)) as { displays?: unknown; error?: unknown } | null;
       if (typeof data?.error === "string" && data.error !== "") throw new Error(data.error);

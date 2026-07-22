@@ -32,25 +32,37 @@ func (s *apiServer) handleV2AssetDisks(w http.ResponseWriter, r *http.Request, a
 
 // handleV2AssetPackages handles GET/POST /api/v2/assets/{id}/packages[/subPath]
 func (s *apiServer) handleV2AssetPackages(w http.ResponseWriter, r *http.Request, assetID, subPath string) {
-	scope := "packages:read"
-	if r.Method == http.MethodPost {
-		scope = "packages:write"
-	}
-	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
-		apiv2.WriteScopeForbidden(w, scope)
+	subPath = strings.TrimPrefix(subPath, "/")
+	if strings.Contains(subPath, "/") {
+		apiv2.WriteError(w, http.StatusNotFound, "not_found", "unknown packages sub-path")
 		return
 	}
-	subPath = strings.TrimPrefix(subPath, "/")
+
+	var scope string
 	switch subPath {
 	case "", "upgradable":
+		if r.Method != http.MethodGet {
+			apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "GET required")
+			return
+		}
+		scope = "packages:read"
 		r.URL.Path = "/packages/" + assetID
 		if subPath == "upgradable" {
 			r.URL.Path = "/packages/" + assetID + "/upgradable"
 		}
-	case "install", "update":
+	case "install", "update", "upgrade":
+		if r.Method != http.MethodPost {
+			apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST required")
+			return
+		}
+		scope = "packages:write"
 		r.URL.Path = "/packages/" + assetID + "/" + subPath
 	default:
 		apiv2.WriteError(w, http.StatusNotFound, "not_found", "unknown packages sub-path")
+		return
+	}
+	if !apiv2.ScopeCheck(scopesFromContext(r.Context()), scope) {
+		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
 	apiv2.WrapV1Handler(s.handlePackages)(w, r)
@@ -165,12 +177,7 @@ func (s *apiServer) handleV2AssetReboot(w http.ResponseWriter, r *http.Request, 
 		apiv2.WriteScopeForbidden(w, "assets:power")
 		return
 	}
-	result := s.v2ExecOnAsset(r, assetID, "reboot", 10)
-	if result.Error != "" {
-		apiv2.WriteError(w, http.StatusConflict, result.Error, result.Message)
-		return
-	}
-	apiv2.WriteJSON(w, http.StatusOK, map[string]string{"status": "rebooting", "asset_id": assetID})
+	s.handleV2AssetPowerAction(w, r, assetID, "reboot")
 }
 
 // handleV2AssetShutdown handles POST /api/v2/assets/{id}/shutdown
@@ -183,10 +190,5 @@ func (s *apiServer) handleV2AssetShutdown(w http.ResponseWriter, r *http.Request
 		apiv2.WriteScopeForbidden(w, "assets:power")
 		return
 	}
-	result := s.v2ExecOnAsset(r, assetID, "shutdown -h now", 10)
-	if result.Error != "" {
-		apiv2.WriteError(w, http.StatusConflict, result.Error, result.Message)
-		return
-	}
-	apiv2.WriteJSON(w, http.StatusOK, map[string]string{"status": "shutting_down", "asset_id": assetID})
+	s.handleV2AssetPowerAction(w, r, assetID, "shutdown")
 }

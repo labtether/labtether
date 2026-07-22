@@ -10,11 +10,31 @@ type Props = {
   assetId: string;
 };
 
+type DatastoreAction = "gc" | "verify" | "maintenance-enable" | "maintenance-disable";
+
+function datastoreActionLabel(action: DatastoreAction): string {
+  switch (action) {
+    case "gc":
+      return "run garbage collection";
+    case "verify":
+      return "start verification";
+    case "maintenance-enable":
+      return "enter read-only maintenance";
+    case "maintenance-disable":
+      return "exit maintenance";
+  }
+}
+
 export function PBSDatastoresTab({ assetId }: Props) {
   const { details, loading, error, refresh } = usePBSDetails(assetId);
 
   const [actionInFlight, setActionInFlight] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<{
+    store: string;
+    action: DatastoreAction;
+  } | null>(null);
   const actionSeq = useRef(0);
 
   const sortedDatastores = useMemo(() => {
@@ -29,16 +49,27 @@ export function PBSDatastoresTab({ assetId }: Props) {
   }, [details]);
 
   const doAction = useCallback(
-    async (store: string, action: "gc" | "verify" | "maintenance-enable" | "maintenance-disable") => {
+    async (store: string, action: DatastoreAction) => {
       const seq = ++actionSeq.current;
       setActionError(null);
+      setActionSuccess(null);
+      setConfirmation(null);
       setActionInFlight(`${action}-${store}`);
       try {
-        await pbsAction(
+        const result = await pbsAction(
           `/api/pbs/assets/${encodeURIComponent(assetId)}/datastores/${encodeURIComponent(store)}/${action}`,
           "POST",
         );
-        if (actionSeq.current === seq) refresh();
+        if (actionSeq.current === seq) {
+          const upid =
+            result && typeof result === "object" && "upid" in result
+              ? String((result as { upid?: unknown }).upid ?? "").trim()
+              : "";
+          setActionSuccess(
+            `${datastoreActionLabel(action)} requested for ${store}${upid ? ` (${upid})` : ""}.`,
+          );
+          refresh();
+        }
       } catch (err) {
         if (actionSeq.current === seq) {
           setActionError(err instanceof Error ? err.message : `${action} failed`);
@@ -61,7 +92,27 @@ export function PBSDatastoresTab({ assetId }: Props) {
   return (
     <div className="space-y-4">
       {actionError ? (
-        <p className="text-xs text-[var(--bad)]">{actionError}</p>
+        <p role="alert" className="text-xs text-[var(--bad)]">{actionError}</p>
+      ) : null}
+      {actionSuccess ? (
+        <p role="status" className="text-xs text-[var(--ok)]">{actionSuccess}</p>
+      ) : null}
+      {confirmation ? (
+        <div role="alert" className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--warn)] px-3 py-2 text-xs text-[var(--text)]">
+          <span>
+            Confirm: {datastoreActionLabel(confirmation.action)} on {confirmation.store}?
+          </span>
+          <Button
+            size="sm"
+            variant="danger"
+            onClick={() => void doAction(confirmation.store, confirmation.action)}
+          >
+            Confirm
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setConfirmation(null)}>
+            Cancel
+          </Button>
+        </div>
       ) : null}
 
       <PBSDatastoresCard datastores={sortedDatastores} assetId={assetId} />
@@ -94,7 +145,7 @@ export function PBSDatastoresTab({ assetId }: Props) {
                         variant="ghost"
                         disabled={!!actionInFlight}
                         loading={actionInFlight === `gc-${ds.store}`}
-                        onClick={() => { void doAction(ds.store, "gc"); }}
+                        onClick={() => setConfirmation({ store: ds.store, action: "gc" })}
                       >
                         Run GC
                       </Button>
@@ -103,7 +154,7 @@ export function PBSDatastoresTab({ assetId }: Props) {
                         variant="ghost"
                         disabled={!!actionInFlight}
                         loading={actionInFlight === `verify-${ds.store}`}
-                        onClick={() => { void doAction(ds.store, "verify"); }}
+                        onClick={() => setConfirmation({ store: ds.store, action: "verify" })}
                       >
                         Verify
                       </Button>
@@ -113,7 +164,7 @@ export function PBSDatastoresTab({ assetId }: Props) {
                           variant="ghost"
                           disabled={!!actionInFlight}
                           loading={actionInFlight === `maintenance-disable-${ds.store}`}
-                          onClick={() => { void doAction(ds.store, "maintenance-disable"); }}
+                          onClick={() => setConfirmation({ store: ds.store, action: "maintenance-disable" })}
                         >
                           Exit Maintenance
                         </Button>
@@ -123,7 +174,7 @@ export function PBSDatastoresTab({ assetId }: Props) {
                           variant="ghost"
                           disabled={!!actionInFlight}
                           loading={actionInFlight === `maintenance-enable-${ds.store}`}
-                          onClick={() => { void doAction(ds.store, "maintenance-enable"); }}
+                          onClick={() => setConfirmation({ store: ds.store, action: "maintenance-enable" })}
                         >
                           Enter Maintenance
                         </Button>

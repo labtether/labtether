@@ -90,6 +90,7 @@ func scanCredentialProfile(row credentialProfileScanner) (credentials.Profile, e
 		&username,
 		&description,
 		&profile.Status,
+		&profile.CreatedBy,
 		&metadata,
 		&profile.SecretCiphertext,
 		&passphraseCiphertext,

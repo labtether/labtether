@@ -12,20 +12,12 @@ import (
 )
 
 // isConnectedAgentAsset reports whether the asset is currently connected
-// via a live agent WebSocket and is sourced from the "agent" source.
+// via a live agent WebSocket. Stored source metadata is not part of this trust
+// decision because a compromised heartbeat may have reported it historically.
 // Returns false when mgr is nil.
 func isConnectedAgentAsset(assetEntry assets.Asset, mgr *agentmgr.AgentManager) bool {
 	if mgr == nil {
 		return false
 	}
-	if !mgr.IsConnected(strings.TrimSpace(assetEntry.ID)) {
-		return false
-	}
-
-	switch NormalizeSource(assetEntry.Source) {
-	case "agent":
-		return true
-	default:
-		return false
-	}
+	return mgr.IsConnected(strings.TrimSpace(assetEntry.ID))
 }

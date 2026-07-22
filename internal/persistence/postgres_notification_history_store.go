@@ -127,9 +127,11 @@ func (s *PostgresStore) ListPendingRetries(ctx context.Context, now time.Time, l
 	return out, rows.Err()
 }
 
-// UpdateRetryState updates the retry_count, next_retry_at, and status columns
-// for the notification record with the given id.
-func (s *PostgresStore) UpdateRetryState(ctx context.Context, id string, retryCount int, nextRetryAt *time.Time, status, errorMessage string) error {
+// UpdateRetryState updates retry accounting and, when payload is non-nil, the
+// durable retry target snapshot in the same statement. Atomicity is important
+// for partial fanout: advancing the counter without narrowing the target set
+// would duplicate deliveries on the next attempt.
+func (s *PostgresStore) UpdateRetryState(ctx context.Context, id string, retryCount int, nextRetryAt *time.Time, status, errorMessage string, payload map[string]any) error {
 	status = notifications.NormalizeRecordStatus(status)
 	if status == "" {
 		status = notifications.RecordStatusFailed
@@ -141,11 +143,20 @@ func (s *PostgresStore) UpdateRetryState(ctx context.Context, id string, retryCo
 	} else {
 		errorValue = nullIfBlank(strings.TrimSpace(errorMessage))
 	}
+	var payloadValue any
+	if payload != nil {
+		encoded, err := marshalAnyMap(payload)
+		if err != nil {
+			return err
+		}
+		payloadValue = encoded
+	}
 	_, err := s.pool.Exec(ctx,
 		`UPDATE notification_history
-		SET retry_count = $1, next_retry_at = $2, status = $3, error = $4, sent_at = $5
-		WHERE id = $6`,
-		retryCount, nextRetryAt, status, errorValue, sentAt, strings.TrimSpace(id),
+		SET retry_count = $1, next_retry_at = $2, status = $3, error = $4, sent_at = $5,
+			payload = COALESCE($6::jsonb, payload)
+		WHERE id = $7`,
+		retryCount, nextRetryAt, status, errorValue, sentAt, payloadValue, strings.TrimSpace(id),
 	)
 	return err
 }

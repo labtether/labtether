@@ -207,15 +207,18 @@ func (d *Deps) Handle2FAVerify(w http.ResponseWriter, r *http.Request) {
 	}
 	codesJSON, _ := json.Marshal(hashedCodes)
 
+	retainedCurrent, err := revokeOtherUserSessions(d.AuthStore, userID, r)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to revoke active sessions")
+		return
+	}
 	if err := d.AuthStore.ConfirmUserTOTP(userID, string(codesJSON)); err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to confirm 2FA")
 		return
 	}
-	if err := d.AuthStore.DeleteSessionsByUserID(userID); err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to revoke active sessions")
-		return
+	if !retainedCurrent {
+		auth.ClearSessionCookie(w)
 	}
-	auth.ClearSessionCookie(w)
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"status":         "enabled",
@@ -268,15 +271,18 @@ func (d *Deps) Handle2FADisable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	retainedCurrent, err := revokeOtherUserSessions(d.AuthStore, userID, r)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to revoke active sessions")
+		return
+	}
 	if err := d.AuthStore.ClearUserTOTP(userID); err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to disable 2FA")
 		return
 	}
-	if err := d.AuthStore.DeleteSessionsByUserID(userID); err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to revoke active sessions")
-		return
+	if !retainedCurrent {
+		auth.ClearSessionCookie(w)
 	}
-	auth.ClearSessionCookie(w)
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "disabled"})
 }
@@ -337,15 +343,18 @@ func (d *Deps) Handle2FARecoveryCodes(w http.ResponseWriter, r *http.Request) {
 	}
 	codesJSON, _ := json.Marshal(hashedCodes)
 
+	retainedCurrent, err := revokeOtherUserSessions(d.AuthStore, userID, r)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to revoke active sessions")
+		return
+	}
 	if err := d.AuthStore.UpdateUserRecoveryCodes(userID, string(codesJSON)); err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update recovery codes")
 		return
 	}
-	if err := d.AuthStore.DeleteSessionsByUserID(userID); err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to revoke active sessions")
-		return
+	if !retainedCurrent {
+		auth.ClearSessionCookie(w)
 	}
-	auth.ClearSessionCookie(w)
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"recovery_codes": rawCodes,

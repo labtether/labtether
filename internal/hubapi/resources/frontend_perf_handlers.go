@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/labtether/labtether/internal/logs"
 	"github.com/labtether/labtether/internal/servicehttp"
@@ -33,6 +34,9 @@ func (d *Deps) HandleFrontendPerfTelemetry(w http.ResponseWriter, r *http.Reques
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "log store unavailable")
 		return
 	}
+	if d.EnforceRateLimit != nil && !d.EnforceRateLimit(w, r, telemetryIngestRateLimitBucket, telemetryIngestRateLimitCount, time.Minute) {
+		return
+	}
 
 	var req frontendPerfTelemetryRequest
 	if err := decodeJSONBody(w, r, &req); err != nil {
@@ -48,13 +52,10 @@ func (d *Deps) HandleFrontendPerfTelemetry(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	metric := strings.TrimSpace(req.Metric)
+	metric := normalizeTelemetryText(req.Metric, 120)
 	if metric == "" {
 		servicehttp.WriteError(w, http.StatusBadRequest, "metric is required")
 		return
-	}
-	if len(metric) > 120 {
-		metric = metric[:120]
 	}
 
 	durationMS := req.DurationMS
@@ -66,10 +67,7 @@ func (d *Deps) HandleFrontendPerfTelemetry(w http.ResponseWriter, r *http.Reques
 		durationMS = 3_600_000
 	}
 
-	status := strings.ToLower(strings.TrimSpace(req.Status))
-	if len(status) > 40 {
-		status = status[:40]
-	}
+	status := normalizeTelemetryText(strings.ToLower(req.Status), 40)
 
 	fields := map[string]string{
 		"route":       route,
@@ -119,11 +117,9 @@ func NormalizeFrontendPerfMetadata(input map[string]any) map[string]string {
 			continue
 		}
 		formatted := FormatFrontendPerfMetadataValue(value)
+		formatted = normalizeTelemetryText(formatted, 180)
 		if formatted == "" {
 			continue
-		}
-		if len(formatted) > 180 {
-			formatted = formatted[:180]
 		}
 		out[normalizedKey] = formatted
 	}
@@ -137,13 +133,34 @@ func SanitizeFrontendPerfMetadataKey(key string) string {
 	}
 	key = strings.NewReplacer(" ", "_", "-", "_", "/", "_").Replace(key)
 	builder := strings.Builder{}
-	builder.Grow(len(key))
+	builder.Grow(min(len(key), 80))
 	for _, r := range key {
 		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' {
 			builder.WriteRune(r)
+			if builder.Len() >= 80 {
+				break
+			}
 		}
 	}
 	return strings.Trim(builder.String(), "_")
+}
+
+func normalizeTelemetryText(value string, maxBytes int) string {
+	if maxBytes <= 0 {
+		return ""
+	}
+	value = strings.TrimSpace(value)
+	if value == "" || !utf8.ValidString(value) || strings.IndexByte(value, 0) >= 0 {
+		return ""
+	}
+	if len(value) <= maxBytes {
+		return value
+	}
+	end := maxBytes
+	for end > 0 && !utf8.RuneStart(value[end]) {
+		end--
+	}
+	return value[:end]
 }
 
 func FormatFrontendPerfMetadataValue(value any) string {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "../../../../../components/ui/Button";
 import { Card } from "../../../../../components/ui/Card";
+import { PBSActionConfirmation } from "./PBSActionConfirmation";
 import { pbsAction, pbsFetch } from "./usePBSData";
 
 type Props = {
@@ -12,9 +13,9 @@ type Props = {
 
 type TrafficRule = {
   name: string;
-  rate?: number;
-  burst?: number;
-  network?: string;
+  rate_in?: string;
+  rate_out?: string;
+  network?: string[];
   comment?: string;
 };
 
@@ -32,20 +33,26 @@ function normalizeTrafficRules(value: unknown): TrafficRule[] {
     const r = (entry && typeof entry === "object" ? entry : {}) as Record<string, unknown>;
     return {
       name: typeof r.name === "string" ? r.name : String(r.name ?? ""),
-      rate: typeof r.rate === "number" ? r.rate : undefined,
-      burst: typeof r.burst === "number" ? r.burst : undefined,
-      network: typeof r.network === "string" ? r.network : undefined,
+      rate_in:
+        typeof r.rate_in === "string"
+          ? r.rate_in
+          : typeof r["rate-in"] === "string"
+            ? r["rate-in"]
+            : undefined,
+      rate_out:
+        typeof r.rate_out === "string"
+          ? r.rate_out
+          : typeof r["rate-out"] === "string"
+            ? r["rate-out"]
+            : undefined,
+      network: Array.isArray(r.network)
+        ? r.network.filter((entry): entry is string => typeof entry === "string")
+        : typeof r.network === "string"
+          ? [r.network]
+          : undefined,
       comment: typeof r.comment === "string" ? r.comment : undefined,
     };
   });
-}
-
-function formatRate(bps?: number): string {
-  if (bps == null) return "\u2014";
-  if (bps >= 1_000_000_000) return `${(bps / 1_000_000_000).toFixed(1)} Gbps`;
-  if (bps >= 1_000_000) return `${(bps / 1_000_000).toFixed(1)} Mbps`;
-  if (bps >= 1_000) return `${(bps / 1_000).toFixed(1)} Kbps`;
-  return `${bps} bps`;
 }
 
 export function PBSTrafficControlTab({ assetId }: Props) {
@@ -54,6 +61,8 @@ export function PBSTrafficControlTab({ assetId }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [actionInFlight, setActionInFlight] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<string | null>(null);
 
   const seqRef = useRef(0);
   const latestRef = useRef(0);
@@ -86,13 +95,18 @@ export function PBSTrafficControlTab({ assetId }: Props) {
     async (name: string) => {
       const seq = ++actionSeq.current;
       setActionError(null);
+      setActionSuccess(null);
+      setConfirmation(null);
       setActionInFlight(`delete-${name}`);
       try {
         await pbsAction(
           `/api/pbs/assets/${encodeURIComponent(assetId)}/traffic-control/${encodeURIComponent(name)}`,
           "DELETE",
         );
-        if (actionSeq.current === seq) void fetchRules();
+        if (actionSeq.current === seq) {
+          setActionSuccess(`Traffic control rule ${name} deleted.`);
+          void fetchRules();
+        }
       } catch (err) {
         if (actionSeq.current === seq)
           setActionError(err instanceof Error ? err.message : "delete failed");
@@ -104,7 +118,17 @@ export function PBSTrafficControlTab({ assetId }: Props) {
   );
 
   return (
-    <Card>
+    <div className="space-y-4">
+      {confirmation ? (
+        <PBSActionConfirmation
+          message={`Confirm delete traffic control rule ${confirmation}?`}
+          confirmLabel="Confirm Delete"
+          busy={actionInFlight !== null}
+          onConfirm={() => void doDelete(confirmation)}
+          onCancel={() => setConfirmation(null)}
+        />
+      ) : null}
+      <Card>
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <h2 className="text-sm font-medium text-[var(--text)]">Traffic Control</h2>
         <Button size="sm" variant="ghost" onClick={() => void fetchRules()} disabled={loading}>
@@ -112,7 +136,8 @@ export function PBSTrafficControlTab({ assetId }: Props) {
         </Button>
       </div>
 
-      {actionError ? <p className="mb-3 text-xs text-[var(--bad)]">{actionError}</p> : null}
+      {actionError ? <p role="alert" className="mb-3 text-xs text-[var(--bad)]">{actionError}</p> : null}
+      {actionSuccess ? <p role="status" className="mb-3 text-xs text-[var(--ok)]">{actionSuccess}</p> : null}
 
       {error ? (
         <p className="text-xs text-[var(--bad)]">{error}</p>
@@ -127,8 +152,8 @@ export function PBSTrafficControlTab({ assetId }: Props) {
               <tr className="border-b border-[var(--line)]">
                 <th className="py-1 px-2 text-left text-[var(--muted)] font-medium">Name</th>
                 <th className="py-1 px-2 text-left text-[var(--muted)] font-medium">Network</th>
-                <th className="py-1 px-2 text-left text-[var(--muted)] font-medium">Rate Limit</th>
-                <th className="py-1 px-2 text-left text-[var(--muted)] font-medium">Burst</th>
+                <th className="py-1 px-2 text-left text-[var(--muted)] font-medium">Inbound Limit</th>
+                <th className="py-1 px-2 text-left text-[var(--muted)] font-medium">Outbound Limit</th>
                 <th className="py-1 px-2 text-left text-[var(--muted)] font-medium">Comment</th>
                 <th className="py-1 px-2 text-right text-[var(--muted)] font-medium">Actions</th>
               </tr>
@@ -137,9 +162,9 @@ export function PBSTrafficControlTab({ assetId }: Props) {
               {rules.map((rule) => (
                 <tr key={rule.name} className="border-b border-[var(--line)] border-opacity-30">
                   <td className="py-2 px-2 text-[var(--text)] font-medium">{rule.name}</td>
-                  <td className="py-2 px-2 text-[var(--muted)]">{rule.network || "\u2014"}</td>
-                  <td className="py-2 px-2 text-[var(--muted)]">{formatRate(rule.rate)}</td>
-                  <td className="py-2 px-2 text-[var(--muted)]">{formatRate(rule.burst)}</td>
+                  <td className="py-2 px-2 text-[var(--muted)]">{rule.network?.join(", ") || "\u2014"}</td>
+                  <td className="py-2 px-2 text-[var(--muted)]">{rule.rate_in || "\u2014"}</td>
+                  <td className="py-2 px-2 text-[var(--muted)]">{rule.rate_out || "\u2014"}</td>
                   <td className="py-2 px-2 text-[var(--muted)]">{rule.comment || "\u2014"}</td>
                   <td className="py-2 px-2 text-right">
                     <Button
@@ -147,7 +172,7 @@ export function PBSTrafficControlTab({ assetId }: Props) {
                       variant="ghost"
                       disabled={!!actionInFlight}
                       loading={actionInFlight === `delete-${rule.name}`}
-                      onClick={() => void doDelete(rule.name)}
+                      onClick={() => setConfirmation(rule.name)}
                     >
                       Delete
                     </Button>
@@ -158,6 +183,7 @@ export function PBSTrafficControlTab({ assetId }: Props) {
           </table>
         </div>
       )}
-    </Card>
+      </Card>
+    </div>
   );
 }

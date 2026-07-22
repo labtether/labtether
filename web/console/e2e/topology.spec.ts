@@ -185,8 +185,14 @@ function buildTopologyPayload(
     }
     return [{
       id: dependency.id,
-      source_asset_id: dependency.source_asset_id,
-      target_asset_id: dependency.target_asset_id,
+      // Stored `contains` edges are parent -> child; the topology display
+      // contract uses child -> parent for its containment-like connections.
+      source_asset_id: dependency.relationship_type.trim().toLowerCase() === "contains"
+        ? dependency.target_asset_id
+        : dependency.source_asset_id,
+      target_asset_id: dependency.relationship_type.trim().toLowerCase() === "contains"
+        ? dependency.source_asset_id
+        : dependency.target_asset_id,
       relationship,
       user_defined: false,
       label: "",

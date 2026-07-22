@@ -32,7 +32,6 @@ type DesktopSessionLike = {
 };
 
 type DesktopSessionControlsOptions = {
-  nodeId: string;
   nodeName: string;
   protocol: DesktopProtocol;
   selectedDisplay: string;
@@ -104,7 +103,6 @@ function resetDesktopRuntimeState(options: {
 }
 
 export function useDesktopSessionControls({
-  nodeId,
   nodeName,
   protocol,
   selectedDisplay,
@@ -254,8 +252,6 @@ export function useDesktopSessionControls({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           session_id: session.activeSessionId,
-          asset_id: nodeId,
-          protocol,
         }),
       });
       if (response.ok) {
@@ -268,7 +264,6 @@ export function useDesktopSessionControls({
     browserRecorderRef,
     browserRecordingChunksRef,
     browserRecordingSupported,
-    nodeId,
     nodeName,
     protocol,
     serverRecording,

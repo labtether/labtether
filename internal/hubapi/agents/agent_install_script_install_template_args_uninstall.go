@@ -77,6 +77,15 @@ while [[ $# -gt 0 ]]; do
       ENROLLMENT_TOKEN="$2"
       shift 2
       ;;
+    --enrollment-token-file)
+      if [[ $# -lt 2 ]]; then
+        error "--enrollment-token-file requires a value."
+        show_usage
+        exit 1
+      fi
+      ENROLLMENT_TOKEN_SOURCE_FILE="$2"
+      shift 2
+      ;;
     --vnc-prereqs)
       if [[ $# -lt 2 ]]; then
         error "--vnc-prereqs requires a value."
@@ -127,6 +136,57 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -n "${ENROLLMENT_TOKEN}" && -n "${ENROLLMENT_TOKEN_SOURCE_FILE}" ]]; then
+  error "Use only one of --enrollment-token or --enrollment-token-file."
+  exit 1
+fi
+if [[ -n "${ENROLLMENT_TOKEN_SOURCE_FILE}" ]]; then
+  if [[ -L "${ENROLLMENT_TOKEN_SOURCE_FILE}" || ! -f "${ENROLLMENT_TOKEN_SOURCE_FILE}" ]]; then
+    error "Enrollment token file must be a regular, non-symlink file."
+    exit 1
+  fi
+  TOKEN_SOURCE_MODE="$(stat -c '%%a' "${ENROLLMENT_TOKEN_SOURCE_FILE}" 2>/dev/null || stat -f '%%Lp' "${ENROLLMENT_TOKEN_SOURCE_FILE}" 2>/dev/null || true)"
+  if [[ ! "${TOKEN_SOURCE_MODE}" =~ ^[0-7]{3,4}$ ]] || (( (8#${TOKEN_SOURCE_MODE} & 8#077) != 0 )); then
+    error "Enrollment token file must not be readable or writable by group/other users (use chmod 600)."
+    exit 1
+  fi
+  if [[ "$(wc -c < "${ENROLLMENT_TOKEN_SOURCE_FILE}")" -gt 4096 ]]; then
+    error "Enrollment token file is unexpectedly large."
+    exit 1
+  fi
+  # Append a sentinel before command substitution so Bash does not silently
+  # strip every trailing newline from the token file. Accept at most one
+  # conventional terminal newline (LF or CRLF), then reject any remaining
+  # line break instead of joining multiple lines into a different token.
+  TOKEN_FILE_CONTENT="$(cat -- "${ENROLLMENT_TOKEN_SOURCE_FILE}"; printf '\001')"
+  TOKEN_FILE_CONTENT="${TOKEN_FILE_CONTENT%%$'\001'}"
+  if [[ "${TOKEN_FILE_CONTENT}" == *$'\r\n' ]]; then
+    TOKEN_FILE_CONTENT="${TOKEN_FILE_CONTENT%%$'\r\n'}"
+  elif [[ "${TOKEN_FILE_CONTENT}" == *$'\n' ]]; then
+    TOKEN_FILE_CONTENT="${TOKEN_FILE_CONTENT%%$'\n'}"
+  fi
+  if [[ "${TOKEN_FILE_CONTENT}" == *$'\r'* || "${TOKEN_FILE_CONTENT}" == *$'\n'* ]]; then
+    error "Enrollment token file must contain exactly one token with at most one terminal newline."
+    exit 1
+  fi
+  ENROLLMENT_TOKEN="${TOKEN_FILE_CONTENT}"
+  unset TOKEN_FILE_CONTENT
+  if [[ -z "${ENROLLMENT_TOKEN}" || "${ENROLLMENT_TOKEN}" =~ [[:space:]] ]]; then
+    error "Enrollment token file contains an invalid token."
+    exit 1
+  fi
+fi
+LOW_POWER_MODE="$(echo "${LOW_POWER_MODE}" | tr '[:upper:]' '[:lower:]')"
+LOG_STREAM_ENABLED="$(echo "${LOG_STREAM_ENABLED}" | tr '[:upper:]' '[:lower:]')"
+if [[ "${LOW_POWER_MODE}" != "true" && "${LOW_POWER_MODE}" != "false" ]]; then
+  error "LABTETHER_LOW_POWER_MODE must be true or false."
+  exit 1
+fi
+if [[ "${LOG_STREAM_ENABLED}" != "true" && "${LOG_STREAM_ENABLED}" != "false" ]]; then
+  error "LABTETHER_LOG_STREAM_ENABLED must be true or false."
+  exit 1
+fi
 
 print_banner
 

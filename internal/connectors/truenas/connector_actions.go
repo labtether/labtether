@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/labtether/labtether/internal/assetid"
 	"github.com/labtether/labtether/internal/connectorsdk"
 )
 
@@ -320,7 +321,8 @@ func (c *Connector) ExecuteAction(ctx context.Context, actionID string, req conn
 	case "smart.test":
 		disk := strings.TrimSpace(req.Params["disk"])
 		if disk == "" {
-			disk = strings.TrimSpace(req.TargetID)
+			disk = assetid.NativeCollectorAssetID(req.TargetID)
+			disk = strings.TrimPrefix(disk, "truenas-disk-")
 		}
 		if disk == "" {
 			return connectorsdk.ActionResult{Status: "failed", Message: "disk is required"}, nil

@@ -48,9 +48,9 @@ export function PortainerOverviewTab({ assetId }: Props) {
       <Card>
         <h2 className="mb-3 text-sm font-medium text-[var(--text)]">Server Info</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <StatItem label="Version" value={data.version || "--"} />
-          <StatItem label="Endpoint" value={data.endpoint || "--"} />
-          <StatItem label="URL" value={data.url || "--"} />
+          <StatItem label="Version" value={data.server_version || "--"} />
+          <StatItem label="Endpoint" value={data.endpoint_name || "--"} />
+          <StatItem label="URL" value={data.endpoint_url || "--"} />
         </div>
       </Card>
 

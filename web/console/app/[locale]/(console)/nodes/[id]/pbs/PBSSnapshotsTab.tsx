@@ -11,7 +11,8 @@ import {
   normalizePBSSnapshotsResponse,
   type PBSSnapshotEntry,
 } from "../pbsTabModel";
-import { pbsAction } from "./usePBSData";
+import { pbsAction, usePBSDetails } from "./usePBSData";
+import { PBSActionConfirmation } from "./PBSActionConfirmation";
 
 type Props = {
   assetId: string;
@@ -24,6 +25,7 @@ type StoreFilter = {
 };
 
 export function PBSSnapshotsTab({ assetId }: Props) {
+  const { details, loading: detailsLoading } = usePBSDetails(assetId);
   const [snapshots, setSnapshots] = useState<PBSSnapshotEntry[]>([]);
   const [currentStore, setCurrentStore] = useState("");
   const [storeInput, setStoreInput] = useState("");
@@ -34,13 +36,30 @@ export function PBSSnapshotsTab({ assetId }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [actionInFlight, setActionInFlight] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmForgetId, setConfirmForgetId] = useState<string | null>(null);
   const [confirmBulkForget, setConfirmBulkForget] = useState(false);
+  const [confirmVerifyId, setConfirmVerifyId] = useState<string | null>(null);
 
   const seqRef = useRef(0);
   const latestRef = useRef(0);
   const actionSeq = useRef(0);
+
+  const datastoreNames = useMemo(() => {
+    if (!details) return [];
+    const stores =
+      details.kind === "server"
+        ? (details.datastores ?? []).map((datastore) => datastore.store)
+        : [details.datastore?.store || details.store || ""];
+    return Array.from(new Set(stores.map((store) => store.trim()).filter(Boolean))).sort();
+  }, [details]);
+
+  useEffect(() => {
+    if (!storeInput && datastoreNames.length > 0) {
+      setStoreInput(datastoreNames[0]);
+    }
+  }, [datastoreNames, storeInput]);
 
   const fetchSnapshots = useCallback(
     async (filter: StoreFilter) => {
@@ -94,10 +113,12 @@ export function PBSSnapshotsTab({ assetId }: Props) {
       const key = snapshotKey(snap);
       const seq = ++actionSeq.current;
       setActionError(null);
+      setActionSuccess(null);
+      setConfirmVerifyId(null);
       setActionInFlight(`verify-${key}`);
       try {
         await pbsAction(
-          `/api/pbs/assets/${encodeURIComponent(assetId)}/snapshots/verify`,
+          `/api/pbs/assets/${encodeURIComponent(assetId)}/snapshots/verify?store=${encodeURIComponent(currentStore)}`,
           "POST",
           {
             store: currentStore,
@@ -107,6 +128,7 @@ export function PBSSnapshotsTab({ assetId }: Props) {
           },
         );
         if (actionSeq.current === seq) {
+          setActionSuccess(`Snapshot verification requested for ${snap.backup_type}/${snap.backup_id}.`);
           void fetchSnapshots({ store: currentStore, backupType: typeInput, backupId: idInput });
         }
       } catch (err) {
@@ -125,20 +147,22 @@ export function PBSSnapshotsTab({ assetId }: Props) {
       const key = snapshotKey(snap);
       const seq = ++actionSeq.current;
       setActionError(null);
+      setActionSuccess(null);
       setActionInFlight(`forget-${key}`);
       setConfirmForgetId(null);
       try {
+        const params = new URLSearchParams({
+          store: currentStore,
+          "backup-type": snap.backup_type,
+          "backup-id": snap.backup_id,
+          "backup-time": String(snap.backup_time),
+        });
         await pbsAction(
-          `/api/pbs/assets/${encodeURIComponent(assetId)}/snapshots/forget`,
-          "POST",
-          {
-            store: currentStore,
-            backup_type: snap.backup_type,
-            backup_id: snap.backup_id,
-            backup_time: snap.backup_time,
-          },
+          `/api/pbs/assets/${encodeURIComponent(assetId)}/snapshots/forget?${params.toString()}`,
+          "DELETE",
         );
         if (actionSeq.current === seq) {
+          setActionSuccess(`Snapshot ${key} forgotten.`);
           setSelected((prev) => {
             const next = new Set(prev);
             next.delete(key);
@@ -160,18 +184,33 @@ export function PBSSnapshotsTab({ assetId }: Props) {
   const doBulkForget = useCallback(async () => {
     const seq = ++actionSeq.current;
     setActionError(null);
+    setActionSuccess(null);
     setActionInFlight("bulk-forget");
     setConfirmBulkForget(false);
-    const keys = Array.from(selected);
+    const protectedKeys = new Set(
+      snapshots.filter((snapshot) => snapshot.protected).map((snapshot) => snapshotKey(snapshot)),
+    );
+    const keys = Array.from(selected).filter((key) => !protectedKeys.has(key));
+    if (keys.length === 0) {
+      setActionInFlight(null);
+      setSelected(new Set());
+      setActionError("Protected snapshots cannot be forgotten.");
+      return;
+    }
     const errors: string[] = [];
     for (const key of keys) {
       const [bType, bId, bTimeStr] = key.split("/");
       const bTime = parseInt(bTimeStr ?? "0", 10);
       try {
+        const params = new URLSearchParams({
+          store: currentStore,
+          "backup-type": bType,
+          "backup-id": bId,
+          "backup-time": String(bTime),
+        });
         await pbsAction(
-          `/api/pbs/assets/${encodeURIComponent(assetId)}/snapshots/forget`,
-          "POST",
-          { store: currentStore, backup_type: bType, backup_id: bId, backup_time: bTime },
+          `/api/pbs/assets/${encodeURIComponent(assetId)}/snapshots/forget?${params.toString()}`,
+          "DELETE",
         );
       } catch (err) {
         errors.push(err instanceof Error ? err.message : key);
@@ -181,8 +220,9 @@ export function PBSSnapshotsTab({ assetId }: Props) {
     setActionInFlight(null);
     setSelected(new Set());
     if (errors.length > 0) setActionError(`Failed: ${errors.join(", ")}`);
+    else setActionSuccess(`${keys.length} snapshot${keys.length === 1 ? "" : "s"} forgotten.`);
     void fetchSnapshots({ store: currentStore, backupType: typeInput, backupId: idInput });
-  }, [assetId, currentStore, fetchSnapshots, idInput, selected, typeInput]);
+  }, [assetId, currentStore, fetchSnapshots, idInput, selected, snapshots, typeInput]);
 
   return (
     <Card>
@@ -190,16 +230,42 @@ export function PBSSnapshotsTab({ assetId }: Props) {
         <h2 className="text-sm font-medium text-[var(--text)]">Snapshots</h2>
       </div>
 
+      {confirmVerifyId ? (
+        <div className="mb-4">
+          <PBSActionConfirmation
+            message={`Confirm verification of snapshot ${confirmVerifyId}?`}
+            confirmLabel="Confirm Verify"
+            busy={actionInFlight !== null}
+            onConfirm={() => {
+              const snapshot = snapshots.find((entry) => snapshotKey(entry) === confirmVerifyId);
+              if (snapshot) void doVerify(snapshot);
+            }}
+            onCancel={() => setConfirmVerifyId(null)}
+          />
+        </div>
+      ) : null}
+
       {/* Filter controls */}
       <div className="flex flex-wrap gap-2 items-end mb-4">
         <label className="flex flex-col gap-1">
           <span className="text-xs text-[var(--muted)]">Datastore</span>
-          <input
+          <select
+            aria-label="Datastore"
             className="rounded border border-[var(--line)] bg-[var(--panel-glass)] text-xs text-[var(--text)] px-2 py-1"
             value={storeInput}
             onChange={(e) => setStoreInput(e.target.value)}
-            placeholder="store-name"
-          />
+            disabled={detailsLoading || datastoreNames.length === 0}
+          >
+            {datastoreNames.length === 0 ? (
+              <option value="">No datastores available</option>
+            ) : (
+              datastoreNames.map((store) => (
+                <option key={store} value={store}>
+                  {store}
+                </option>
+              ))
+            )}
+          </select>
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-xs text-[var(--muted)]">Type</span>
@@ -271,10 +337,11 @@ export function PBSSnapshotsTab({ assetId }: Props) {
           ))}
       </div>
 
-      {actionError ? <p className="mb-3 text-xs text-[var(--bad)]">{actionError}</p> : null}
+      {actionError ? <p role="alert" className="mb-3 text-xs text-[var(--bad)]">{actionError}</p> : null}
+      {actionSuccess ? <p role="status" className="mb-3 text-xs text-[var(--ok)]">{actionSuccess}</p> : null}
 
       {!currentStore && !loading ? (
-        <p className="text-xs text-[var(--muted)]">Enter a datastore name and click Load to browse snapshots.</p>
+        <p className="text-xs text-[var(--muted)]">Choose a datastore and click Load to browse snapshots.</p>
       ) : loading && snapshots.length === 0 ? (
         <p className="text-xs text-[var(--muted)]">Loading snapshots...</p>
       ) : error ? (
@@ -313,8 +380,10 @@ export function PBSSnapshotsTab({ assetId }: Props) {
                     <td className="py-2">
                       <input
                         type="checkbox"
+                        aria-label={`Select snapshot ${key}`}
                         checked={selected.has(key)}
                         onChange={() => toggleSelect(key)}
+                        disabled={snap.protected}
                         className="rounded"
                       />
                     </td>
@@ -365,7 +434,7 @@ export function PBSSnapshotsTab({ assetId }: Props) {
                             variant="ghost"
                             disabled={!!actionInFlight}
                             loading={actionInFlight === `verify-${key}`}
-                            onClick={() => { void doVerify(snap); }}
+                            onClick={() => setConfirmVerifyId(key)}
                           >
                             Verify
                           </Button>

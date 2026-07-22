@@ -13,7 +13,7 @@ set -euo pipefail
 #         curl -fsSL %[1]s/install.sh | sudo bash -s -- --files-root-mode full
 #         curl -fsSL %[1]s/install.sh | sudo bash -s -- --auto-update false
 #         curl -fsSL %[1]s/install.sh | sudo bash -s -- --force-update
-#         curl -fsSL %[1]s/install.sh | sudo bash -s -- --enrollment-token <token>
+#         sudo bash install.sh --enrollment-token-file /secure/path/enrollment-token
 #         curl -fsSL %[1]s/install.sh | sudo bash -s -- --install-vnc-prereqs
 #         curl -fsSL %[1]s/install.sh | sudo bash -s -- --auto-install-vnc
 #         curl -fsSL %[1]s/install.sh | sudo bash -s -- --tls-skip-verify true
@@ -26,6 +26,7 @@ LABTETHER_CLI_DEST="/usr/local/bin/labtether"
 CONFIG_DIR="/etc/labtether"
 ENV_FILE="${CONFIG_DIR}/agent.env"
 TOKEN_FILE="${CONFIG_DIR}/agent-token"
+ENROLLMENT_TOKEN_FILE="${CONFIG_DIR}/enrollment-token"
 DEVICE_KEY_FILE="${CONFIG_DIR}/device-key"
 DEVICE_PUBLIC_KEY_FILE="${CONFIG_DIR}/device-key.pub"
 FINGERPRINT_FILE="${CONFIG_DIR}/device-fingerprint"
@@ -40,6 +41,9 @@ FILES_ROOT_MODE="home"
 AUTO_UPDATE="true"
 FORCE_UPDATE=0
 ENROLLMENT_TOKEN=""
+ENROLLMENT_TOKEN_SOURCE_FILE=""
+LOW_POWER_MODE="${LABTETHER_LOW_POWER_MODE:-false}"
+LOG_STREAM_ENABLED="${LABTETHER_LOG_STREAM_ENABLED:-true}"
 VNC_PREREQS_MODE="ask"
 TLS_SKIP_VERIFY="false"
 TLS_CA_FILE=""
@@ -308,8 +312,15 @@ Options:
       Enable startup self-update checks (default: true).
   --force-update
       Force a one-time self-update check immediately after install.
+  LABTETHER_LOW_POWER_MODE=true (environment)
+      Use reduced-frequency collection defaults.
+  LABTETHER_LOG_STREAM_ENABLED=false (environment)
+      Disable continuous system-log streaming.
   --enrollment-token <token>
-      Optional one-time enrollment token to auto-enroll without pending approval flow.
+      Legacy one-time enrollment token argument. Prefer --enrollment-token-file
+      so the credential is not exposed in shell history or process arguments.
+  --enrollment-token-file <path>
+      Read the one-time enrollment token from a private regular file.
   --vnc-prereqs <ask|install|skip>
       Manage desktop prerequisite installation on Linux (default: ask).
   --install-vnc-prereqs

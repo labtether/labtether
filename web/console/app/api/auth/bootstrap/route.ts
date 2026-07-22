@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
-import { backendAuthHeaders, resolvedBackendBaseURLs, upstreamErrorPayload } from "../../../../lib/backend";
+import { resolvedBackendBaseURLs, upstreamErrorPayload } from "../../../../lib/backend";
 import { isMutationRequestOriginAllowed } from "../../../../lib/proxyAuth";
 
 export const dynamic = "force-dynamic";
 
-function parseBootstrapRequest(raw: unknown): { username: string; password: string } | null {
+function parseBootstrapRequest(raw: unknown): { username: string; password: string; setupToken: string } | null {
   if (typeof raw !== "object" || raw === null) return null;
   const obj = raw as Record<string, unknown>;
   if (typeof obj.username !== "string" || !obj.username.trim()) return null;
   if (typeof obj.password !== "string" || !obj.password) return null;
-  return { username: obj.username.trim(), password: obj.password };
+  if (typeof obj.setup_token !== "string" || !obj.setup_token.trim() || obj.setup_token.length > 512) return null;
+  return { username: obj.username.trim(), password: obj.password, setupToken: obj.setup_token.trim() };
 }
 
 export async function POST(request: Request) {
@@ -22,13 +23,16 @@ export async function POST(request: Request) {
     const raw = await request.json();
     const body = parseBootstrapRequest(raw);
     if (!body) {
-      return NextResponse.json({ error: "username and password are required" }, { status: 400 });
+      return NextResponse.json({ error: "setup token, username, and password are required" }, { status: 400 });
     }
 
     const response = await fetch(`${base.api}/auth/bootstrap`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...backendAuthHeaders() },
-      body: JSON.stringify(body),
+      headers: {
+        "Content-Type": "application/json",
+        "X-Labtether-Setup-Token": body.setupToken,
+      },
+      body: JSON.stringify({ username: body.username, password: body.password }),
       cache: "no-store",
     });
 

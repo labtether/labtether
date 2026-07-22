@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labtether/labtether/internal/schedules"
 )
@@ -19,7 +22,9 @@ type scheduleCreateResponse struct {
 type scheduleListResponse struct {
 	Data []schedules.ScheduledTask `json:"data"`
 	Meta struct {
-		Total int `json:"total"`
+		Total   int `json:"total"`
+		Page    int `json:"page"`
+		PerPage int `json:"per_page"`
 	} `json:"meta"`
 }
 
@@ -56,6 +61,9 @@ func TestHandleV2Schedules_Create(t *testing.T) {
 	if !task.Enabled {
 		t.Error("expected task to be enabled by default")
 	}
+	if task.NextRunAt == nil || !task.NextRunAt.After(task.CreatedAt) {
+		t.Errorf("expected a future next_run_at, got created=%s next=%v", task.CreatedAt, task.NextRunAt)
+	}
 	if len(task.Targets) != 2 {
 		t.Errorf("expected 2 targets, got %d", len(task.Targets))
 	}
@@ -71,6 +79,9 @@ func TestHandleV2Schedules_Create_ValidationErrors(t *testing.T) {
 		{"missing name", `{"cron_expr":"0 2 * * *","command":"uptime"}`},
 		{"missing cron_expr", `{"name":"task","command":"uptime"}`},
 		{"missing command", `{"name":"task","cron_expr":"0 2 * * *"}`},
+		{"missing targets", `{"name":"task","cron_expr":"0 2 * * *","command":"uptime"}`},
+		{"invalid cron", `{"name":"task","cron_expr":"not a cron","command":"uptime","targets":["node-1"]}`},
+		{"seconds cron is unsupported", `{"name":"task","cron_expr":"* * * * * *","command":"uptime","targets":["node-1"]}`},
 	}
 
 	for _, tc := range cases {
@@ -87,6 +98,39 @@ func TestHandleV2Schedules_Create_ValidationErrors(t *testing.T) {
 				t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
 			}
 		})
+	}
+}
+
+func TestHandleV2Schedules_DisabledAPIKeyDefinitionCannotBeEnabledWithoutActionScope(t *testing.T) {
+	s := newTestAPIServer(t)
+	body := `{"name":"disabled","cron_expr":"@hourly","command":"uptime","targets":["node-1"],"enabled":false}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/schedules", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	ctx := contextWithPrincipal(req.Context(), "apikey:key-1", "operator")
+	ctx = contextWithScopes(ctx, []string{"schedules:write"})
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+	s.handleV2Schedules(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create disabled schedule: expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var created scheduleCreateResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if created.Data.Enabled || created.Data.NextRunAt != nil {
+		t.Fatalf("disabled schedule = %+v", created.Data)
+	}
+
+	patch := httptest.NewRequest(http.MethodPatch, "/api/v2/schedules/"+created.Data.ID, strings.NewReader(`{"enabled":true}`))
+	patch.Header.Set("Content-Type", "application/json")
+	patchCtx := contextWithPrincipal(patch.Context(), "apikey:key-1", "operator")
+	patchCtx = contextWithScopes(patchCtx, []string{"schedules:write"})
+	patch = patch.WithContext(patchCtx)
+	patchRec := httptest.NewRecorder()
+	s.handleV2ScheduleActions(patchRec, patch)
+	if patchRec.Code != http.StatusForbidden || !strings.Contains(patchRec.Body.String(), "actions:exec") {
+		t.Fatalf("enable without actions scope: got %d: %s", patchRec.Code, patchRec.Body.String())
 	}
 }
 
@@ -113,7 +157,7 @@ func TestHandleV2Schedules_List(t *testing.T) {
 
 	// Create two tasks first.
 	for _, name := range []string{"task-a", "task-b"} {
-		body := `{"name":"` + name + `","cron_expr":"@daily","command":"echo ` + name + `"}`
+		body := `{"name":"` + name + `","cron_expr":"@daily","command":"echo ` + name + `","targets":["node-1"]}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v2/schedules", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		ctx := contextWithPrincipal(req.Context(), "admin", "admin")
@@ -148,11 +192,73 @@ func TestHandleV2Schedules_List(t *testing.T) {
 	}
 }
 
+func TestHandleV2SchedulesListIsPaginatedAndBounded(t *testing.T) {
+	s := newTestAPIServer(t)
+	now := time.Now().UTC()
+	for i := 0; i < 105; i++ {
+		err := s.scheduleStore.CreateScheduledTask(context.Background(), schedules.ScheduledTask{
+			ID: fmt.Sprintf("schedule-page-%03d", i), Name: "Page", CronExpr: "@hourly", Command: "uptime",
+			Targets: []string{"node-1"}, CreatedBy: "admin", CreatedAt: now.Add(time.Duration(i) * time.Second),
+		})
+		if err != nil {
+			t.Fatalf("seed schedule %d: %v", i, err)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/schedules?page=2&per_page=50", nil)
+	req = req.WithContext(contextWithPrincipal(req.Context(), "admin", "admin"))
+	recorder := httptest.NewRecorder()
+	s.handleV2Schedules(recorder, req)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response scheduleListResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Data) != 50 || response.Meta.Total != 105 || response.Meta.Page != 2 || response.Meta.PerPage != 50 {
+		t.Fatalf("page response len=%d meta=%+v", len(response.Data), response.Meta)
+	}
+
+	invalid := httptest.NewRequest(http.MethodGet, "/api/v2/schedules?per_page=101", nil)
+	invalid = invalid.WithContext(contextWithPrincipal(invalid.Context(), "admin", "admin"))
+	invalidRecorder := httptest.NewRecorder()
+	s.handleV2Schedules(invalidRecorder, invalid)
+	if invalidRecorder.Code != http.StatusBadRequest {
+		t.Fatalf("unbounded per_page status=%d body=%s", invalidRecorder.Code, invalidRecorder.Body.String())
+	}
+}
+
+func TestHandleV2SchedulesCreateReturnsConflictAtPrincipalCapacity(t *testing.T) {
+	s := newTestAPIServer(t)
+	for i := 0; i < schedules.MaxScheduledTasksPerPrincipal; i++ {
+		err := s.scheduleStore.CreateScheduledTask(context.Background(), schedules.ScheduledTask{
+			ID: fmt.Sprintf("schedule-cap-%03d", i), Name: "Capacity", CronExpr: "@hourly", Command: "uptime",
+			Targets: []string{"node-1"}, CreatedBy: "admin",
+		})
+		if err != nil {
+			t.Fatalf("seed schedule %d: %v", i, err)
+		}
+	}
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v2/schedules",
+		strings.NewReader(`{"name":"over-cap","cron_expr":"@hourly","command":"uptime","targets":["node-1"]}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(contextWithPrincipal(req.Context(), "admin", "admin"))
+	recorder := httptest.NewRecorder()
+	s.handleV2Schedules(recorder, req)
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("status=%d want %d body=%s", recorder.Code, http.StatusConflict, recorder.Body.String())
+	}
+}
+
 func TestHandleV2ScheduleActions_Delete(t *testing.T) {
 	s := newTestAPIServer(t)
 
 	// Create a task.
-	body := `{"name":"to-delete","cron_expr":"@hourly","command":"cleanup"}`
+	body := `{"name":"to-delete","cron_expr":"@hourly","command":"cleanup","targets":["node-1"]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/schedules", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	ctx := contextWithPrincipal(req.Context(), "admin", "admin")
@@ -197,7 +303,7 @@ func TestHandleV2ScheduleActions_Patch(t *testing.T) {
 	s := newTestAPIServer(t)
 
 	// Create a task.
-	body := `{"name":"patch-me","cron_expr":"@hourly","command":"echo before"}`
+	body := `{"name":"patch-me","cron_expr":"@hourly","command":"echo before","targets":["node-1"]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/schedules", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	ctx := contextWithPrincipal(req.Context(), "admin", "admin")

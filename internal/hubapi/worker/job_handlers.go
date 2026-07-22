@@ -14,6 +14,7 @@ import (
 	opspkg "github.com/labtether/labtether/internal/hubapi/operations"
 	"github.com/labtether/labtether/internal/jobqueue"
 	"github.com/labtether/labtether/internal/logs"
+	"github.com/labtether/labtether/internal/schedules"
 	"github.com/labtether/labtether/internal/terminal"
 	"github.com/labtether/labtether/internal/updates"
 )
@@ -31,10 +32,47 @@ func (d *Deps) HandleTerminalCommandJob(processed *atomic.Uint64) jobqueue.Handl
 
 		// Route via WebSocket if agent is connected; otherwise fall through to SSH/simulated/local.
 		var result terminal.CommandResult
-		if d.AgentMgr != nil && d.AgentMgr.IsConnected(cmdJob.Target) && d.ExecuteViaAgent != nil {
+		maintenanceBlocked, maintenanceErr := d.assetActionBlocked(cmdJob.Target)
+		if maintenanceErr != nil {
+			result = terminal.CommandResult{
+				JobID:       cmdJob.JobID,
+				SessionID:   cmdJob.SessionID,
+				CommandID:   cmdJob.CommandID,
+				Status:      "failed",
+				Output:      "maintenance guardrail evaluation failed",
+				CompletedAt: time.Now().UTC(),
+			}
+		} else if maintenanceBlocked {
+			result = terminal.CommandResult{
+				JobID:       cmdJob.JobID,
+				SessionID:   cmdJob.SessionID,
+				CommandID:   cmdJob.CommandID,
+				Status:      "failed",
+				Output:      "blocked by active maintenance window",
+				CompletedAt: time.Now().UTC(),
+			}
+		} else if d.AgentMgr != nil && d.AgentMgr.IsConnected(cmdJob.Target) && d.ExecuteViaAgent != nil {
 			result = d.ExecuteViaAgent(cmdJob)
 		} else {
-			result = opspkg.ExecuteCommand(cmdJob)
+			if d.PrepareTerminalCommand != nil {
+				if err := d.PrepareTerminalCommand(&cmdJob); err != nil {
+					result = terminal.CommandResult{
+						JobID:       cmdJob.JobID,
+						SessionID:   cmdJob.SessionID,
+						CommandID:   cmdJob.CommandID,
+						Status:      "failed",
+						Output:      fmt.Sprintf("command preparation failed: %v", err),
+						CompletedAt: time.Now().UTC(),
+					}
+				}
+			}
+			if result.Status == "" {
+				if d.ExecuteTerminalCommand != nil {
+					result = d.ExecuteTerminalCommand(cmdJob)
+				} else {
+					result = opspkg.ExecuteCommand(cmdJob)
+				}
+			}
 		}
 
 		if err := d.TerminalStore.UpdateCommandResult(result.SessionID, result.CommandID, result.Status, result.Output); err != nil {
@@ -47,8 +85,8 @@ func (d *Deps) HandleTerminalCommandJob(processed *atomic.Uint64) jobqueue.Handl
 		auditEvent.CommandID = result.CommandID
 		auditEvent.Decision = result.Status
 		auditEvent.Details = map[string]any{
-			"output": result.Output,
-			"job_id": result.JobID,
+			"output_bytes": len([]byte(result.Output)),
+			"job_id":       result.JobID,
 		}
 		if d.AuditStore != nil {
 			if err := d.AuditStore.Append(auditEvent); err != nil {
@@ -106,7 +144,28 @@ func (d *Deps) HandleActionRunJob(processed *atomic.Uint64) jobqueue.HandlerFunc
 		}
 
 		processed.Add(1)
-		result := d.ExecuteActionInProcess(actionJob)
+		var result actions.Result
+		maintenanceBlocked, maintenanceErr := d.assetActionBlocked(actionJob.Target)
+		switch {
+		case maintenanceErr != nil:
+			result = actions.Result{
+				JobID:       actionJob.JobID,
+				RunID:       actionJob.RunID,
+				Status:      actions.StatusFailed,
+				Error:       "maintenance guardrail evaluation failed",
+				CompletedAt: time.Now().UTC(),
+			}
+		case maintenanceBlocked:
+			result = actions.Result{
+				JobID:       actionJob.JobID,
+				RunID:       actionJob.RunID,
+				Status:      actions.StatusFailed,
+				Error:       "blocked by active maintenance window",
+				CompletedAt: time.Now().UTC(),
+			}
+		default:
+			result = d.ExecuteActionInProcess(actionJob)
+		}
 
 		if err := d.ActionStore.ApplyActionResult(result); err != nil {
 			return fmt.Errorf("apply action result: %w", err)
@@ -117,9 +176,10 @@ func (d *Deps) HandleActionRunJob(processed *atomic.Uint64) jobqueue.HandlerFunc
 		auditEvent.SessionID = result.RunID
 		auditEvent.Decision = result.Status
 		auditEvent.Details = map[string]any{
-			"output": result.Output,
-			"job_id": result.JobID,
-			"error":  result.Error,
+			"output_bytes": len([]byte(result.Output)),
+			"error_bytes":  len([]byte(result.Error)),
+			"has_error":    result.Error != "",
+			"job_id":       result.JobID,
 		}
 		if err := d.AuditStore.Append(auditEvent); err != nil {
 			log.Printf("labtether worker: failed to append action completion audit: %v", err)
@@ -159,6 +219,12 @@ func (d *Deps) HandleActionRunJob(processed *atomic.Uint64) jobqueue.HandlerFunc
 
 		if d.Broadcast != nil {
 			d.Broadcast("job.completed", map[string]any{"kind": "action_run"})
+			d.Broadcast("action.completed", map[string]any{
+				"job_id": result.JobID,
+				"run_id": result.RunID,
+				"status": result.Status,
+				"target": actionJob.Target,
+			})
 		}
 
 		return nil
@@ -228,10 +294,29 @@ func (d *Deps) HandleUpdateRunJob(processed *atomic.Uint64) jobqueue.HandlerFunc
 
 		if d.Broadcast != nil {
 			d.Broadcast("job.completed", map[string]any{"kind": "update_run"})
+			d.Broadcast("update.completed", map[string]any{
+				"job_id":  result.JobID,
+				"run_id":  result.RunID,
+				"status":  result.Status,
+				"plan_id": updateJob.Plan.ID,
+				"dry_run": updateJob.DryRun,
+			})
 		}
 
 		return nil
 	}
+}
+
+func (d *Deps) assetActionBlocked(assetID string) (bool, error) {
+	assetID = strings.TrimSpace(assetID)
+	if assetID == "" || d.EvaluateAssetGuardrails == nil {
+		return false, nil
+	}
+	guardrails, err := d.EvaluateAssetGuardrails(assetID, time.Now().UTC())
+	if err != nil {
+		return true, err
+	}
+	return guardrails.BlockActions, nil
 }
 
 // RecordDeadLetter is the callback invoked when a job exceeds max attempts.
@@ -243,10 +328,16 @@ func (d *Deps) RecordDeadLetter(ctx context.Context, job *jobqueue.Job, jobErr e
 		errMsg = strings.TrimSpace(jobErr.Error())
 	}
 
+	deliveries := uint64(0)
+	if d.IntToUint64NonNegative != nil {
+		deliveries = d.IntToUint64NonNegative(job.Attempts)
+	} else if job.Attempts > 0 {
+		deliveries = uint64(job.Attempts)
+	}
 	dlqEvent := jobqueue.NewDeadLetterEvent(
 		"worker."+string(job.Kind),
 		string(job.Kind),
-		d.IntToUint64NonNegative(job.Attempts),
+		deliveries,
 		job.Payload,
 		jobErr,
 	)
@@ -284,6 +375,22 @@ func (d *Deps) RecordDeadLetter(ctx context.Context, job *jobqueue.Job, jobErr e
 	if d.AuditStore != nil {
 		if err := d.AuditStore.Append(auditEvent); err != nil {
 			log.Printf("labtether worker: failed to persist dead-letter audit event: %v", err)
+		}
+	}
+
+	if job.Kind == jobqueue.KindScheduleRun && d.ScheduleExecutionStore != nil {
+		var execution schedules.ExecutionJob
+		if err := json.Unmarshal(job.Payload, &execution); err == nil && execution.ScheduleID != "" && execution.JobID != "" {
+			if err := d.ScheduleExecutionStore.CompleteScheduledTaskExecution(
+				ctx,
+				execution.ScheduleID,
+				execution.JobID,
+				actions.StatusFailed,
+				"schedule execution exhausted its bounded queue retries",
+				time.Now().UTC(),
+			); err != nil {
+				log.Printf("labtether worker: failed to mark dead-lettered schedule execution: %v", err)
+			}
 		}
 	}
 }

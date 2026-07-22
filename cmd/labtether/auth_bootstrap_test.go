@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -103,6 +104,8 @@ func TestBootstrapAdminUserRejectsWeakPasswordInProduction(t *testing.T) {
 func TestBootstrapAdminUserSkipsAutoCreateInProductionWithoutPassword(t *testing.T) {
 	t.Setenv("LABTETHER_ENV", "production")
 	t.Setenv("LABTETHER_ADMIN_PASSWORD", "")
+	dataDir := t.TempDir()
+	t.Setenv("LABTETHER_DATA_DIR", dataDir)
 
 	store := &fakeAdminBootstrapStore{}
 	if err := bootstrapAdminUser(store); err != nil {
@@ -110,6 +113,9 @@ func TestBootstrapAdminUserSkipsAutoCreateInProductionWithoutPassword(t *testing
 	}
 	if store.createCount != 0 {
 		t.Fatalf("expected no bootstrap user creation, got %d", store.createCount)
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, "install", "setup-token")); err != nil {
+		t.Fatalf("expected local first-run setup token: %v", err)
 	}
 }
 

@@ -3,11 +3,12 @@ package proxmox
 import (
 	"crypto/sha256"
 	"fmt"
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/assetid"
 	"github.com/labtether/labtether/internal/connectors/proxmox"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/hubcollector"
 )
 
@@ -47,11 +48,12 @@ func (d *Deps) ResolveProxmoxSessionTarget(assetID string) (ProxmoxSessionTarget
 	}
 
 	if target.VMID == "" {
+		nativeAssetID := assetid.NativeCollectorAssetID(asset.ID)
 		switch target.Kind {
 		case "qemu":
-			target.VMID = strings.TrimPrefix(strings.TrimSpace(asset.ID), "proxmox-vm-")
+			target.VMID = strings.TrimPrefix(nativeAssetID, "proxmox-vm-")
 		case "lxc":
-			target.VMID = strings.TrimPrefix(strings.TrimSpace(asset.ID), "proxmox-ct-")
+			target.VMID = strings.TrimPrefix(nativeAssetID, "proxmox-ct-")
 		}
 	}
 	if target.Kind == "storage" {

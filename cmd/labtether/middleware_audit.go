@@ -1,13 +1,15 @@
 package main
 
 import (
-	"log"
+	"bufio"
+	"net"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/idgen"
+	"github.com/labtether/labtether/internal/securityruntime"
 )
 
 // statusCapturingWriter wraps an http.ResponseWriter to capture the HTTP
@@ -48,6 +50,22 @@ func (w *statusCapturingWriter) Flush() {
 	if f, ok := w.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
+}
+
+// Hijack preserves WebSocket and other upgraded connections through the
+// audit wrapper. Libraries such as gorilla/websocket use a direct
+// http.Hijacker type assertion and do not walk Unwrap chains.
+func (w *statusCapturingWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hijacker, ok := w.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, http.ErrNotSupported
+	}
+	conn, rw, err := hijacker.Hijack()
+	if err == nil && !w.written {
+		w.statusCode = http.StatusSwitchingProtocols
+		w.written = true
+	}
+	return conn, rw, err
 }
 
 // isAuditSkippedPath reports whether the given path should be excluded from
@@ -103,7 +121,7 @@ func (s *apiServer) auditMiddleware(next http.Handler) http.Handler {
 		// capture the authenticated actor. This middleware log uses client IP for correlation.
 		clientIP := requestClientKey(r)
 
-		log.Printf("audit: %s %s %d %dms ip=%s",
+		securityruntime.Logf("audit: %s %s %d %dms ip=%s",
 			r.Method, path, sw.statusCode, duration.Milliseconds(), clientIP)
 
 		// Best-effort append to the audit store -- never fail the request.
@@ -122,11 +140,13 @@ func (s *apiServer) auditMiddleware(next http.Handler) http.Handler {
 					"client_ip":   clientIP,
 				},
 			}
-			go func() {
-				if err := s.auditStore.Append(event); err != nil {
-					log.Printf("audit: failed to append event: %v", err)
-				}
-			}()
+			select {
+			case s.auditEventCh <- event:
+			default:
+				// The request path must not create unbounded goroutines or block on
+				// persistence. A saturated queue intentionally drops low-value
+				// request telemetry; handler-level security audit events remain.
+			}
 		}
 	})
 }

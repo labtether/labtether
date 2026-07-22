@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../../../../../components/ui/Button";
 import { Card } from "../../../../../components/ui/Card";
 import { PBSVerificationCard } from "../PBSVerificationCard";
+import { PBSActionConfirmation } from "./PBSActionConfirmation";
 import { pbsAction, pbsFetch } from "./usePBSData";
 
 type Props = {
@@ -37,8 +38,13 @@ function normalizeVerifyJobs(value: unknown): VerifyJob[] {
       store: typeof j.store === "string" ? j.store : "",
       schedule: typeof j.schedule === "string" ? j.schedule : undefined,
       comment: typeof j.comment === "string" ? j.comment : undefined,
-      ignore_verified: j.ignore_verified === true,
-      outdated_after: typeof j.outdated_after === "number" ? j.outdated_after : undefined,
+      ignore_verified: j.ignore_verified === true || j["ignore-verified"] === true,
+      outdated_after:
+        typeof j.outdated_after === "number"
+          ? j.outdated_after
+          : typeof j["outdated-after"] === "number"
+            ? j["outdated-after"]
+            : undefined,
     };
   });
 }
@@ -49,6 +55,8 @@ export function PBSVerificationTab({ assetId }: Props) {
   const [jobsError, setJobsError] = useState<string | null>(null);
   const [actionInFlight, setActionInFlight] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<{ action: "run" | "delete"; id: string } | null>(null);
 
   const seqRef = useRef(0);
   const latestRef = useRef(0);
@@ -81,13 +89,18 @@ export function PBSVerificationTab({ assetId }: Props) {
     async (jobId: string) => {
       const seq = ++actionSeq.current;
       setActionError(null);
+      setActionSuccess(null);
+      setConfirmation(null);
       setActionInFlight(`run-${jobId}`);
       try {
         await pbsAction(
           `/api/pbs/assets/${encodeURIComponent(assetId)}/verify-jobs/${encodeURIComponent(jobId)}/run`,
           "POST",
         );
-        if (actionSeq.current === seq) void fetchJobs();
+        if (actionSeq.current === seq) {
+          setActionSuccess(`Verification job ${jobId} started.`);
+          void fetchJobs();
+        }
       } catch (err) {
         if (actionSeq.current === seq)
           setActionError(err instanceof Error ? err.message : "run failed");
@@ -102,13 +115,18 @@ export function PBSVerificationTab({ assetId }: Props) {
     async (jobId: string) => {
       const seq = ++actionSeq.current;
       setActionError(null);
+      setActionSuccess(null);
+      setConfirmation(null);
       setActionInFlight(`delete-${jobId}`);
       try {
         await pbsAction(
           `/api/pbs/assets/${encodeURIComponent(assetId)}/verify-jobs/${encodeURIComponent(jobId)}`,
           "DELETE",
         );
-        if (actionSeq.current === seq) void fetchJobs();
+        if (actionSeq.current === seq) {
+          setActionSuccess(`Verification job ${jobId} deleted.`);
+          void fetchJobs();
+        }
       } catch (err) {
         if (actionSeq.current === seq)
           setActionError(err instanceof Error ? err.message : "delete failed");
@@ -123,6 +141,20 @@ export function PBSVerificationTab({ assetId }: Props) {
     <div className="space-y-4">
       <PBSVerificationCard assetId={assetId} />
 
+      {confirmation ? (
+        <PBSActionConfirmation
+          message={`Confirm ${confirmation.action} verification job ${confirmation.id}?`}
+          confirmLabel={confirmation.action === "delete" ? "Confirm Delete" : "Confirm Run"}
+          busy={actionInFlight !== null}
+          onConfirm={() =>
+            void (confirmation.action === "delete"
+              ? doDelete(confirmation.id)
+              : doRun(confirmation.id))
+          }
+          onCancel={() => setConfirmation(null)}
+        />
+      ) : null}
+
       <Card>
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h2 className="text-sm font-medium text-[var(--text)]">Verification Jobs</h2>
@@ -131,7 +163,8 @@ export function PBSVerificationTab({ assetId }: Props) {
           </Button>
         </div>
 
-        {actionError ? <p className="mb-3 text-xs text-[var(--bad)]">{actionError}</p> : null}
+        {actionError ? <p role="alert" className="mb-3 text-xs text-[var(--bad)]">{actionError}</p> : null}
+        {actionSuccess ? <p role="status" className="mb-3 text-xs text-[var(--ok)]">{actionSuccess}</p> : null}
 
         {jobsError ? (
           <p className="text-xs text-[var(--bad)]">{jobsError}</p>
@@ -167,7 +200,7 @@ export function PBSVerificationTab({ assetId }: Props) {
                           variant="ghost"
                           disabled={!!actionInFlight}
                           loading={actionInFlight === `run-${job.id}`}
-                          onClick={() => void doRun(job.id)}
+                          onClick={() => setConfirmation({ action: "run", id: job.id })}
                         >
                           Run
                         </Button>
@@ -176,7 +209,7 @@ export function PBSVerificationTab({ assetId }: Props) {
                           variant="ghost"
                           disabled={!!actionInFlight}
                           loading={actionInFlight === `delete-${job.id}`}
-                          onClick={() => void doDelete(job.id)}
+                          onClick={() => setConfirmation({ action: "delete", id: job.id })}
                         >
                           Delete
                         </Button>

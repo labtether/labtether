@@ -109,7 +109,8 @@ func (d *Deps) ExecuteTrueNASCollector(ctx context.Context, collector hubcollect
 			Platform: "",
 			Metadata: metadata,
 		}
-		if _, err := d.ProcessHeartbeatRequest(req); err != nil {
+		req = ScopedCollectorHeartbeatRequest(collector.ID, req)
+		if _, err := d.ProcessScopedCollectorHeartbeat(collector.ID, req); err != nil {
 			log.Printf("hub collector truenas: failed to upsert %s: %v", asset.ID, err)
 			upsertFailures++
 			continue
@@ -130,7 +131,7 @@ func (d *Deps) ExecuteTrueNASCollector(ctx context.Context, collector hubcollect
 	} else {
 		d.EnsureTrueNASSubscriptionWorker(ctx, collector.ID, runtimeClient)
 	}
-	if ingestedAlerts, alertErr := d.IngestTrueNASAlertLogs(collectorCtx, truenasClient, collector.AssetID); alertErr != nil {
+	if ingestedAlerts, alertErr := d.IngestTrueNASAlertLogsForCollector(collectorCtx, truenasClient, collector.AssetID, collector.ID); alertErr != nil {
 		log.Printf("hub collector truenas: failed to ingest alert logs: %v", alertErr)
 	} else {
 		alertLogs = ingestedAlerts

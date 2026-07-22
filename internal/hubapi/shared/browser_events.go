@@ -11,6 +11,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/auth"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
@@ -203,13 +204,20 @@ type BrowserEventsDeps struct {
 	// Broadcaster is the live event broadcaster shared with the rest of the hub.
 	Broadcaster *EventBroadcaster
 
-	// CheckOrigin validates the WebSocket upgrade Origin header. When nil, all
-	// origins are permitted (not recommended for production).
+	// CheckOrigin validates the WebSocket upgrade Origin header. It is required;
+	// a nil policy causes the upgrade to fail closed.
 	CheckOrigin func(r *http.Request) bool
 
-	// MaxReadBytes is the read limit applied to each browser WebSocket
-	// connection. Zero means no limit.
+	// MaxReadBytes may lower the default browser-control read limit. Zero or a
+	// value above the default uses the secure default instead.
 	MaxReadBytes int64
+}
+
+func browserEventsReadLimit(configured int64) int64 {
+	if configured <= 0 || configured > MaxBrowserControlMessageBytes {
+		return MaxBrowserControlMessageBytes
+	}
+	return configured
 }
 
 // HandleEventTicket issues a one-time ticket for WebSocket event streaming.
@@ -217,6 +225,13 @@ type BrowserEventsDeps struct {
 func (d *BrowserEventsDeps) HandleEventTicket(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	// The broadcaster currently emits a global event feed. Until event
+	// envelopes carry a uniformly trustworthy asset identifier for per-client
+	// filtering, an asset-restricted API key must not subscribe to that feed.
+	if apiv2.APIKeyIDFromContext(r.Context()) != "" && len(apiv2.AllowedAssetsFromContext(r.Context())) > 0 {
+		servicehttp.WriteError(w, http.StatusForbidden, "asset-restricted API keys cannot subscribe to the global event stream")
 		return
 	}
 	ticket, expiresAt, err := d.IssueStreamTicket(r.Context(), "__browser_events__")
@@ -260,19 +275,14 @@ func (d *BrowserEventsDeps) HandleBrowserEvents(w http.ResponseWriter, r *http.R
 		}
 	}
 
-	upgrader := websocket.Upgrader{}
-	if d.CheckOrigin != nil {
-		upgrader.CheckOrigin = d.CheckOrigin
-	}
+	upgrader := websocket.Upgrader{CheckOrigin: d.CheckOrigin}
 
-	wsConn, err := upgrader.Upgrade(w, r, nil)
+	wsConn, err := UpgradeWebSocket(&upgrader, w, r, nil)
 	if err != nil {
 		log.Printf("browser events: upgrade failed: %v", err)
 		return
 	}
-	if d.MaxReadBytes > 0 {
-		wsConn.SetReadLimit(d.MaxReadBytes)
-	}
+	setWebSocketReadLimit(wsConn, browserEventsReadLimit(d.MaxReadBytes))
 
 	if d.Broadcaster == nil {
 		_ = wsConn.Close()

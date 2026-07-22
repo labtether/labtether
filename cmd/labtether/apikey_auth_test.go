@@ -6,6 +6,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
+
+	"github.com/labtether/labtether/internal/apikeys"
+	"github.com/labtether/labtether/internal/auth"
 )
 
 func TestScopesFromContext(t *testing.T) {
@@ -81,6 +85,54 @@ func TestWithAuth_APIKey_InvalidKey_Returns401(t *testing.T) {
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401 for invalid API key, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestWithAuthAPIKeyRejectsInvalidPersistedScopes(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		scopes []string
+	}{
+		{name: "nil", scopes: nil},
+		{name: "empty", scopes: []string{}},
+		{name: "unknown", scopes: []string{"unknown:read"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newTestAPIServer(t)
+			generated, err := apikeys.GenerateKey()
+			if err != nil {
+				t.Fatalf("generate key: %v", err)
+			}
+			if err := s.apiKeyStore.CreateAPIKey(context.Background(), apikeys.APIKey{
+				ID:         "key_invalid_scopes_" + tc.name,
+				Name:       "malformed persisted key",
+				Prefix:     generated.Prefix,
+				SecretHash: generated.Hash,
+				Role:       auth.RoleOperator,
+				Scopes:     tc.scopes,
+				CreatedAt:  time.Now().UTC(),
+			}); err != nil {
+				t.Fatalf("seed malformed API key: %v", err)
+			}
+
+			called := false
+			handler := s.withAuth(func(w http.ResponseWriter, _ *http.Request) {
+				called = true
+				w.WriteHeader(http.StatusOK)
+			})
+			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			req.TLS = &tls.ConnectionState{}
+			req.Header.Set("Authorization", "Bearer "+generated.Raw)
+			rec := httptest.NewRecorder()
+			handler(rec, req)
+
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("expected 401 for invalid persisted scopes, got %d: %s", rec.Code, rec.Body.String())
+			}
+			if called {
+				t.Fatal("invalid persisted API key reached protected handler")
+			}
+		})
 	}
 }
 

@@ -1,4 +1,4 @@
-.PHONY: help fmt lint test check check-docs build bootstrap install-compose upgrade-compose setup-doctor db-backup db-restore package-ha-addon-repo security-gosec coverage-portainer perf-gate dev-up dev-up-restart dev-backend dev-backend-bg dev-backend-bg-restart dev-backend-stop dev-frontend dev-frontend-bg dev-frontend-bg-restart dev-frontend-stop dev-stop-all db-migrate db-migrate-status compose-up compose-up-fast compose-down compose-logs smoke-test desktop-smoke-test integration-test check-port check-go check-docker check-docker-compose check-node check-npm check-ps check-find
+.PHONY: help fmt lint test check check-docs script-security build bootstrap install-compose upgrade-compose setup-doctor db-backup db-restore package-ha-addon-repo security-gosec coverage-portainer perf-gate dev-up dev-up-restart dev-backend dev-backend-bg dev-backend-bg-restart dev-backend-stop dev-frontend dev-frontend-bg dev-frontend-bg-restart dev-frontend-stop dev-stop-all db-migrate db-migrate-status compose-up compose-up-fast compose-down compose-logs smoke-test desktop-smoke-test integration-test check-port check-go check-docker check-docker-compose check-node check-npm check-ps check-find
 
 help:
 	@echo "Targets:"
@@ -7,6 +7,7 @@ help:
 	@echo "  test           - Run go test ./..."
 	@echo "  check          - Quick validation: go vet + go test + tsc --noEmit"
 	@echo "  check-docs     - Docs quality gates: markdown lint + local broken-link check"
+	@echo "  script-security - Offline credential/TLS safety checks for shell request helpers"
 	@echo "  build          - Build hub binary to build/labtether"
 	@echo "  bootstrap      - One-command first-time setup (env + migrate + compose + smoke + doctor)"
 	@echo "  install-compose - Prepare .env.deploy and start the release-image deploy stack (VERSION=vX.Y.Z)"
@@ -82,6 +83,9 @@ check: check-go check-node check-npm
 check-docs: check-node check-npm
 	@./scripts/check-docs.sh
 
+script-security:
+	@./scripts/ci/test-script-security.sh
+
 build: check-go
 	@mkdir -p build
 	@go build -o build/labtether ./cmd/labtether
@@ -136,20 +140,7 @@ dev-up-restart: check-go check-node check-npm
 	@./scripts/dev-up.sh --restart
 
 dev-backend: check-go
-	@echo "Building Go backend..."
-	@mkdir -p build
-	@go build -o build/labtether ./cmd/labtether
-	@echo "Starting backend on :8080 (Postgres must be running)..."
-	@set -a; \
-	if [ -f .env ]; then . ./.env; fi; \
-	set +a; \
-	DATABASE_URL="$${DATABASE_URL:-postgres://labtether:labtether@localhost:5432/labtether?sslmode=disable}" \
-	LABTETHER_OWNER_TOKEN="$${LABTETHER_OWNER_TOKEN:-dev-owner-token-change-me}" \
-	LABTETHER_ADMIN_PASSWORD="$${LABTETHER_ADMIN_PASSWORD-password}" \
-	LABTETHER_ENCRYPTION_KEY="$${LABTETHER_ENCRYPTION_KEY:?LABTETHER_ENCRYPTION_KEY must be set (generate: openssl rand -base64 32)}" \
-	LABTETHER_TLS_MODE="$${LABTETHER_TLS_MODE:-auto}" \
-	API_PORT="$${API_PORT:-8080}" \
-	./build/labtether
+	@./scripts/dev-backend-run.sh
 
 dev-backend-bg: check-go
 	@./scripts/dev-backend-bg.sh
@@ -234,5 +225,3 @@ desktop-smoke-test:
 
 integration-test:
 	@./scripts/integration-queue-flow.sh
-
-

@@ -5,19 +5,41 @@ import { useTranslations } from "next-intl";
 import { Copy, Check, ChevronDown, ChevronRight } from "lucide-react";
 import { Card } from "../../../../components/ui/Card";
 
-const MCP_TOOL_GROUPS = [
-  { name: "Asset Management", tools: "assets_list, assets_get" },
-  { name: "Command Execution", tools: "exec, exec_multi" },
-  { name: "Service Management", tools: "services_list, services_restart" },
-  { name: "File Operations", tools: "files_list, files_read" },
-  { name: "Docker", tools: "docker_hosts, docker_containers, docker_container_restart, docker_container_logs, docker_container_stats" },
-  { name: "System Info", tools: "system_processes, system_network, system_disks, system_packages" },
-  { name: "Alerts", tools: "alerts_list, alerts_acknowledge" },
-  { name: "Power Management", tools: "asset_reboot, asset_shutdown, asset_wake" },
-  { name: "Other", tools: "groups, metrics, schedules, webhooks, saved_actions, credentials, topology, updates, connectors" },
+export const MCP_TOOL_GROUPS = [
+  { name: "Identity", tools: ["whoami"] },
+  { name: "Asset Management", tools: ["assets_list", "assets_get"] },
+  { name: "Command Execution", tools: ["exec", "exec_multi"] },
+  { name: "Service Management", tools: ["services_list", "services_restart"] },
+  { name: "File Operations", tools: ["files_list", "files_read"] },
+  { name: "Docker", tools: ["docker_hosts", "docker_containers", "docker_container_restart", "docker_container_logs", "docker_container_stats"] },
+  { name: "System Info", tools: ["system_processes", "system_network", "system_disks", "system_packages"] },
+  { name: "Alerts", tools: ["alerts_list", "alerts_acknowledge"] },
+  { name: "Power Management", tools: ["asset_reboot", "asset_shutdown", "asset_wake"] },
+  { name: "Other", tools: ["groups_list", "metrics_overview", "schedules_list", "webhooks_list", "saved_actions_list", "credentials_list", "topology_edges", "updates_list_plans", "connectors_health"] },
 ] as const;
 
-const TOTAL_TOOLS = 23;
+export const TOTAL_TOOLS = MCP_TOOL_GROUPS.reduce((total, group) => total + group.tools.length, 0);
+
+const MCP_API_KEY_PLACEHOLDER = "<LABTETHER_API_KEY>";
+
+export function buildMcpConnectionSnippets(mcpUrl: string) {
+  return {
+    claude: `claude mcp add --transport http labtether ${mcpUrl} --header "Authorization: Bearer ${MCP_API_KEY_PLACEHOLDER}"`,
+    generic: JSON.stringify(
+      {
+        mcpServers: {
+          labtether: {
+            url: mcpUrl,
+            transport: "streamable-http",
+            headers: { Authorization: `Bearer ${MCP_API_KEY_PLACEHOLDER}` },
+          },
+        },
+      },
+      null,
+      2,
+    ),
+  };
+}
 
 function CopyButton({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false);
@@ -71,12 +93,7 @@ export function McpConnectionCard() {
 
   const mcpUrl = hubUrl ? `${hubUrl}/mcp` : "";
 
-  const claudeSnippet = `claude mcp add labtether ${mcpUrl}`;
-  const genericSnippet = JSON.stringify(
-    { mcpServers: { labtether: { url: mcpUrl, transport: "streamable-http" } } },
-    null,
-    2,
-  );
+  const snippets = buildMcpConnectionSnippets(mcpUrl);
 
   return (
     <Card className="mb-6">
@@ -106,10 +123,10 @@ export function McpConnectionCard() {
           <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--muted)]">
             {t("mcp.claudeCode")}
           </span>
-          <CopyButton text={claudeSnippet} label="Copy Claude Code command" />
+          <CopyButton text={snippets.claude} label="Copy Claude Code command" />
         </div>
         <pre className="text-xs font-mono text-[var(--text)] bg-[var(--surface)] border border-[var(--panel-border)] rounded-lg p-3 overflow-x-auto">
-          {claudeSnippet}
+          {snippets.claude}
         </pre>
       </div>
 
@@ -119,10 +136,10 @@ export function McpConnectionCard() {
           <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--muted)]">
             {t("mcp.genericConfig")}
           </span>
-          <CopyButton text={genericSnippet} label="Copy MCP config" />
+          <CopyButton text={snippets.generic} label="Copy MCP config" />
         </div>
         <pre className="text-xs font-mono text-[var(--text)] bg-[var(--surface)] border border-[var(--panel-border)] rounded-lg p-3 overflow-x-auto">
-          {genericSnippet}
+          {snippets.generic}
         </pre>
       </div>
 
@@ -144,7 +161,7 @@ export function McpConnectionCard() {
           {MCP_TOOL_GROUPS.map((group) => (
             <div key={group.name}>
               <span className="text-xs text-[var(--text)]">{group.name}</span>
-              <span className="text-[10px] font-mono text-[var(--muted)] ml-2">{group.tools}</span>
+              <span className="text-[10px] font-mono text-[var(--muted)] ml-2">{group.tools.join(", ")}</span>
             </div>
           ))}
         </div>

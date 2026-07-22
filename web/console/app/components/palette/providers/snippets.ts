@@ -5,6 +5,7 @@ import type { TerminalSnippet } from "../../../hooks/useTerminalSnippets";
 export function createSnippetsProvider(
   getSnippets: () => TerminalSnippet[],
   onInsert: (command: string) => void,
+  enabled = true,
 ): PaletteProvider {
   return {
     id: "snippets",
@@ -12,6 +13,7 @@ export function createSnippetsProvider(
     priority: 40,
     shortcut: "!",
     search(query: string): PaletteItem[] {
+      if (!enabled) return [];
       // Strip leading "!" trigger character
       const stripped = query.startsWith("!") ? query.slice(1) : query;
       const q = stripped.trim().toLowerCase();

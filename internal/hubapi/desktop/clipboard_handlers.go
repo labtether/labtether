@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
@@ -74,7 +75,10 @@ func (d *Deps) handleClipboardGet(w http.ResponseWriter, r *http.Request, assetI
 		var body struct {
 			Format string `json:"format"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err == nil && body.Format != "" {
+		if _, err := shared.DecodeOptionalJSONBody(w, r, &body); err != nil {
+			servicehttp.WriteError(w, shared.JSONDecodeErrorStatus(err), "invalid clipboard request payload")
+			return
+		} else if body.Format != "" {
 			format = body.Format
 		}
 	}
@@ -120,6 +124,9 @@ func (d *Deps) handleClipboardGet(w http.ResponseWriter, r *http.Request, assetI
 
 // handleClipboardSet writes content to the agent's clipboard.
 func (d *Deps) handleClipboardSet(w http.ResponseWriter, r *http.Request, assetID string) {
+	if !d.enforceAssetActionGuard(w, assetID) {
+		return
+	}
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {
 		servicehttp.WriteError(w, http.StatusBadGateway, "agent disconnected")
@@ -127,7 +134,7 @@ func (d *Deps) handleClipboardSet(w http.ResponseWriter, r *http.Request, assetI
 	}
 
 	var body agentmgr.ClipboardSetData
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := shared.DecodeJSONBody(w, r, &body); err != nil {
 		servicehttp.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}

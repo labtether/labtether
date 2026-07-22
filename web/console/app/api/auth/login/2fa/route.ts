@@ -2,13 +2,14 @@ import { NextResponse } from "next/server";
 import { resolvedBackendBaseURLs, upstreamErrorPayload } from "../../../../../lib/backend";
 import { isMutationRequestOriginAllowed } from "../../../../../lib/proxyAuth";
 import { checkRateLimit } from "../../../../../lib/rateLimit";
+import { trustedClientIdentity } from "../../../../../lib/clientIdentity";
 
 export const dynamic = "force-dynamic";
 
 function parse2FARequest(raw: unknown): { challenge_token: string; code: string } | null {
   if (typeof raw !== "object" || raw === null) return null;
   const obj = raw as Record<string, unknown>;
-  if (typeof obj.challenge_token !== "string" || !obj.challenge_token) return null;
+  if (typeof obj.challenge_token !== "string" || !obj.challenge_token || obj.challenge_token.length > 512) return null;
   if (typeof obj.code !== "string" || !obj.code.trim()) return null;
   return { challenge_token: obj.challenge_token, code: obj.code.trim() };
 }
@@ -18,31 +19,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "forbidden origin" }, { status: 403 });
   }
 
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
-    || request.headers.get("x-real-ip")
-    || "unknown";
-
-  const { success, resetAt } = checkRateLimit(`login:${ip}`);
-  if (!success) {
-    return Response.json(
-      { error: "Too many login attempts. Try again later." },
-      {
-        status: 429,
-        headers: {
-          "Retry-After": String(Math.ceil((resetAt - Date.now()) / 1000)),
-          "X-RateLimit-Remaining": "0",
-        },
-      }
-    );
-  }
-
-  const base = await resolvedBackendBaseURLs();
   try {
     const raw = await request.json();
     const body = parse2FARequest(raw);
     if (!body) {
       return NextResponse.json({ error: "challenge_token and code are required" }, { status: 400 });
     }
+    const challengeKey = body.challenge_token.slice(0, 64);
+    const { success, resetAt } = checkRateLimit(
+      `login-2fa:${challengeKey}:${trustedClientIdentity(request.headers)}`,
+      10,
+      15 * 60_000,
+    );
+    if (!success) {
+      return Response.json(
+        { error: "Too many login attempts. Try again later." },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(Math.max(1, Math.ceil((resetAt - Date.now()) / 1000))),
+            "X-RateLimit-Remaining": "0",
+          },
+        },
+      );
+    }
+    const base = await resolvedBackendBaseURLs();
     const response = await fetch(`${base.api}/auth/login/2fa`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

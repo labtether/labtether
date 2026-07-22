@@ -148,9 +148,12 @@ This means the SQL statements for an already-applied migration were edited in so
    ```
 
 2. Common causes:
-   - Database connection failure: verify `DATABASE_URL` in `.env.deploy`
+   - Database connection failure: verify `POSTGRES_USER`, `POSTGRES_DB`, and
+     the `labtether-bootstrap` password volume; production Compose constructs
+     `DATABASE_URL` inside the container and does not store its password in
+     `.env.deploy`
    - Migration error: check logs for the failing migration version, restore backup, report issue
-   - Port conflict: ensure port 8080 is available
+   - Port conflict: ensure the configured 8080/8443 bind ports are available
 
 3. If the issue is migration-related, roll back using the procedure above.
 

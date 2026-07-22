@@ -5,7 +5,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/groupfailover"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
@@ -26,8 +28,27 @@ func (d *Deps) HandleFailoverPairs(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list failover pairs")
 			return
 		}
+		if shared.HasAssetRestriction(r.Context()) {
+			_, _, accessible, ok := d.loadGroupAuthorizationScope(r)
+			if !ok {
+				servicehttp.WriteError(w, http.StatusServiceUnavailable, "asset authorization stores unavailable")
+				return
+			}
+			filtered := make([]groupfailover.FailoverPair, 0, len(pairs))
+			for _, pair := range pairs {
+				_, primaryAllowed := accessible[strings.TrimSpace(pair.PrimaryGroupID)]
+				_, backupAllowed := accessible[strings.TrimSpace(pair.BackupGroupID)]
+				if primaryAllowed && backupAllowed {
+					filtered = append(filtered, pair)
+				}
+			}
+			pairs = filtered
+		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"pairs": pairs})
 	case http.MethodPost:
+		if denyAssetRestrictedGlobal(w, r, "group failover configuration") {
+			return
+		}
 		if !d.EnforceRateLimit(w, r, "failover.create", 120, time.Minute) {
 			return
 		}
@@ -86,11 +107,21 @@ func (d *Deps) HandleFailoverPairActions(w http.ResponseWriter, r *http.Request)
 		servicehttp.WriteError(w, http.StatusNotFound, "failover pair path not found")
 		return
 	}
+	if shared.HasAssetRestriction(r.Context()) && r.Method != http.MethodGet {
+		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "asset-restricted api keys cannot mutate global group failover configuration")
+		return
+	}
 
 	// POST /group-failover-pairs/{id}/check-readiness
 	if len(parts) == 2 && parts[1] == "check-readiness" {
 		if r.Method != http.MethodPost {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		if d.EnforceRateLimit == nil || !d.EnforceRateLimit(w, r, "failover.readiness.check", 30, time.Minute) {
+			if d.EnforceRateLimit == nil {
+				servicehttp.WriteError(w, http.StatusServiceUnavailable, "failover readiness admission unavailable")
+			}
 			return
 		}
 		pair, ok, err := d.FailoverStore.GetFailoverPair(pairID)
@@ -102,15 +133,16 @@ func (d *Deps) HandleFailoverPairActions(w http.ResponseWriter, r *http.Request)
 			servicehttp.WriteError(w, http.StatusNotFound, "failover pair not found")
 			return
 		}
-		score := 0
-		if d.GroupStore != nil {
-			if _, ok, err := d.GroupStore.GetGroup(pair.PrimaryGroupID); err == nil && ok {
-				score += 50
-			}
-			if _, ok, err := d.GroupStore.GetGroup(pair.BackupGroupID); err == nil && ok {
-				score += 50
-			}
+		if d.GroupStore == nil || d.AssetStore == nil {
+			servicehttp.WriteError(w, http.StatusServiceUnavailable, "failover readiness inventory unavailable")
+			return
 		}
+		snapshot, err := LoadFailoverReadinessSnapshot(d.GroupStore, d.AssetStore)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load failover readiness inventory")
+			return
+		}
+		score := ComputeFailoverReadiness(pair, snapshot)
 		now := time.Now().UTC()
 		if err := d.FailoverStore.UpdateFailoverReadiness(pairID, score, now); err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update readiness score")
@@ -139,6 +171,9 @@ func (d *Deps) HandleFailoverPairActions(w http.ResponseWriter, r *http.Request)
 		}
 		if !ok {
 			servicehttp.WriteError(w, http.StatusNotFound, "failover pair not found")
+			return
+		}
+		if !d.requireGroupAccess(w, r, pair.PrimaryGroupID, pair.BackupGroupID) {
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"pair": pair})

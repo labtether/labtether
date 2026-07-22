@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/idgen"
@@ -36,15 +37,16 @@ func (d *Deps) HandleSessions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		actorID := d.PrincipalActorID(r.Context())
-		if !d.IsOwnerActor(actorID) {
-			filtered := make([]terminal.Session, 0, len(sessions))
-			for _, session := range sessions {
-				if strings.TrimSpace(session.ActorID) == actorID {
-					filtered = append(filtered, session)
-				}
+		filtered := make([]terminal.Session, 0, len(sessions))
+		for _, session := range sessions {
+			if !apiv2.AssetCheckContext(r.Context(), session.Target) {
+				continue
 			}
-			sessions = filtered
+			if apiv2.IsOwnerPrincipal(r.Context()) || strings.TrimSpace(session.ActorID) == actorID {
+				filtered = append(filtered, session)
+			}
 		}
+		sessions = filtered
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"sessions": sessions})
 	case http.MethodPost:
 		d.createSession(w, r)
@@ -70,6 +72,12 @@ func (d *Deps) createSession(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusBadRequest, "target is required")
 		return
 	}
+	if !d.requireTargetAccess(w, r, req.Target) {
+		return
+	}
+	if !d.requireCredentialUseForTarget(w, r, req.Target) {
+		return
+	}
 	req.ActorID = d.PrincipalActorID(r.Context())
 	if req.Mode == "" {
 		req.Mode = "structured"
@@ -90,6 +98,9 @@ func (d *Deps) createSession(w http.ResponseWriter, r *http.Request) {
 	case "structured", "interactive":
 	default:
 		servicehttp.WriteError(w, http.StatusBadRequest, "mode must be structured or interactive")
+		return
+	}
+	if !d.enforceAssetActionGuard(w, req.Target) {
 		return
 	}
 
@@ -152,6 +163,9 @@ func (d *Deps) HandleSessionActions(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusForbidden, "session access denied")
 		return
 	}
+	if !d.requireTargetAccess(w, r, session.Target) {
+		return
+	}
 
 	if len(parts) == 1 {
 		switch r.Method {
@@ -165,6 +179,9 @@ func (d *Deps) HandleSessionActions(w http.ResponseWriter, r *http.Request) {
 				}
 				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete session")
 				return
+			}
+			if d.EphemeralSSHConfigs != nil {
+				d.EphemeralSSHConfigs.Delete(session.ID)
 			}
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "session_id": session.ID})
 		default:
@@ -187,6 +204,9 @@ func (d *Deps) HandleSessionActions(w http.ResponseWriter, r *http.Request) {
 			}
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"commands": commands})
 		case http.MethodPost:
+			if !d.requireCredentialUseForTarget(w, r, session.Target) {
+				return
+			}
 			d.createCommand(w, r, session)
 		default:
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -195,11 +215,17 @@ func (d *Deps) HandleSessionActions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(parts) == 2 && parts[1] == "stream" {
+		if !d.requireCredentialUseForTarget(w, r, session.Target) {
+			return
+		}
 		d.HandleSessionStream(w, r, session)
 		return
 	}
 
 	if len(parts) == 2 && parts[1] == "stream-ticket" {
+		if !d.requireCredentialUseForTarget(w, r, session.Target) {
+			return
+		}
 		d.HandleSessionStreamTicket(w, r, session)
 		return
 	}
@@ -238,15 +264,16 @@ func (d *Deps) HandleRecentCommands(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	actorID := d.PrincipalActorID(r.Context())
-	if !d.IsOwnerActor(actorID) {
-		filtered := make([]terminal.Command, 0, len(commands))
-		for _, command := range commands {
-			if strings.TrimSpace(command.ActorID) == actorID {
-				filtered = append(filtered, command)
-			}
+	filtered := make([]terminal.Command, 0, len(commands))
+	for _, command := range commands {
+		if !apiv2.AssetCheckContext(r.Context(), command.Target) {
+			continue
 		}
-		commands = filtered
+		if apiv2.IsOwnerPrincipal(r.Context()) || strings.TrimSpace(command.ActorID) == actorID {
+			filtered = append(filtered, command)
+		}
 	}
+	commands = filtered
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"commands": commands})
 }
@@ -280,6 +307,9 @@ func (d *Deps) createCommand(w http.ResponseWriter, r *http.Request, session ter
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if !d.enforceAssetActionGuard(w, session.Target) {
+		return
+	}
 
 	checkRes := policy.Evaluate(policy.CheckRequest{
 		ActorID: req.ActorID,
@@ -298,7 +328,7 @@ func (d *Deps) createCommand(w http.ResponseWriter, r *http.Request, session ter
 		auditCheck.Decision = "denied"
 		auditCheck.Reason = checkRes.Reason
 	}
-	auditCheckDetails := map[string]any{"command": req.Command}
+	auditCheckDetails := map[string]any{"command_bytes": len([]byte(req.Command))}
 	if requestedActorID != "" && requestedActorID != req.ActorID {
 		auditCheckDetails["requested_actor_label"] = requestedActorID
 	}
@@ -331,21 +361,13 @@ func (d *Deps) createCommand(w http.ResponseWriter, r *http.Request, session ter
 		RequestedAt: cmd.CreatedAt,
 	}
 
-	resolvedSSHConfig, err := d.ResolveSessionSSHConfig(session)
-	if err != nil {
-		_ = d.TerminalStore.UpdateCommandResult(session.ID, cmd.ID, "failed", fmt.Sprintf("ssh config resolution failed: %v", err))
-		servicehttp.WriteError(w, http.StatusBadRequest, fmt.Sprintf("unable to resolve ssh config: %v", err))
-		return
-	}
-	job.SSHConfig = resolvedSSHConfig
-
 	if d.JobQueue == nil {
 		_ = d.TerminalStore.UpdateCommandResult(session.ID, cmd.ID, "failed", "queue unavailable")
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "command queue unavailable")
 		return
 	}
 
-	payload, err := json.Marshal(job)
+	payload, err := marshalTerminalCommandJob(job)
 	if err != nil {
 		_ = d.TerminalStore.UpdateCommandResult(session.ID, cmd.ID, "failed", "failed to marshal command job")
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to serialize command")
@@ -365,10 +387,10 @@ func (d *Deps) createCommand(w http.ResponseWriter, r *http.Request, session ter
 	auditQueued.CommandID = cmd.ID
 	auditQueued.Decision = "queued"
 	auditQueuedDetails := map[string]any{
-		"job_id":    job.JobID,
-		"command":   req.Command,
-		"mode":      session.Mode,
-		"transport": "postgres",
+		"job_id":        job.JobID,
+		"command_bytes": len([]byte(req.Command)),
+		"mode":          session.Mode,
+		"transport":     "postgres",
 	}
 	if requestedActorID != "" && requestedActorID != req.ActorID {
 		auditQueuedDetails["requested_actor_label"] = requestedActorID
@@ -381,7 +403,7 @@ func (d *Deps) createCommand(w http.ResponseWriter, r *http.Request, session ter
 		AssetID:   session.Target,
 		Source:    "terminal",
 		Level:     "info",
-		Message:   fmt.Sprintf("command queued: %s", req.Command),
+		Message:   fmt.Sprintf("command %s queued", cmd.ID),
 		Timestamp: cmd.CreatedAt,
 		Fields: map[string]string{
 			"session_id": session.ID,
@@ -400,9 +422,18 @@ func (d *Deps) createCommand(w http.ResponseWriter, r *http.Request, session ter
 	})
 }
 
+// marshalTerminalCommandJob guarantees that durable queue payloads never
+// contain decrypted SSH passwords, private keys, or passphrases. The worker
+// resolves connection material in memory immediately before fallback SSH
+// execution.
+func marshalTerminalCommandJob(job terminal.CommandJob) ([]byte, error) {
+	job.SSHConfig = nil
+	return json.Marshal(job)
+}
+
 func (d *Deps) canAccessOwnedSession(r *http.Request, sessionActorID string) bool {
 	actorID := d.PrincipalActorID(r.Context())
-	if d.IsOwnerActor(actorID) {
+	if apiv2.IsOwnerPrincipal(r.Context()) {
 		return true
 	}
 	return strings.TrimSpace(sessionActorID) == actorID

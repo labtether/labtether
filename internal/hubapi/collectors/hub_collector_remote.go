@@ -3,15 +3,16 @@ package collectors
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/ssh"
 
@@ -20,6 +21,104 @@ import (
 	"github.com/labtether/labtether/internal/logs"
 	"github.com/labtether/labtether/internal/securityruntime"
 )
+
+const (
+	maxRemoteCollectorOutputBytes     = 8 * 1024 * 1024
+	maxPersistedCollectorLogBytes     = 4 * 1024
+	collectorLogOutputTruncatedMarker = "\n[collector output truncated]"
+)
+
+var errRemoteCollectorOutputLimit = errors.New("remote collector output exceeded safe limit")
+
+// boundedCollectorOutput applies one shared byte ceiling across stdout and
+// stderr. SSH may copy both streams concurrently, so the budget and buffers
+// are protected by one lock. Returning a short write with an error stops the
+// SSH stream instead of continuing to discard attacker-controlled output.
+type boundedCollectorOutput struct {
+	mu       sync.Mutex
+	maxBytes int
+	stdout   bytes.Buffer
+	stderr   bytes.Buffer
+	overflow bool
+}
+
+type boundedCollectorStream struct {
+	output *boundedCollectorOutput
+	stderr bool
+}
+
+func newBoundedCollectorOutput(maxBytes int) *boundedCollectorOutput {
+	return &boundedCollectorOutput{maxBytes: maxBytes}
+}
+
+func (o *boundedCollectorOutput) stdoutWriter() io.Writer {
+	return boundedCollectorStream{output: o}
+}
+
+func (o *boundedCollectorOutput) stderrWriter() io.Writer {
+	return boundedCollectorStream{output: o, stderr: true}
+}
+
+func (w boundedCollectorStream) Write(p []byte) (int, error) {
+	if w.output == nil {
+		return 0, errRemoteCollectorOutputLimit
+	}
+	o := w.output
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.maxBytes < 0 || o.overflow {
+		o.overflow = true
+		return 0, errRemoteCollectorOutputLimit
+	}
+	used := o.stdout.Len() + o.stderr.Len()
+	remaining := o.maxBytes - used
+	if remaining < 0 {
+		remaining = 0
+	}
+	target := &o.stdout
+	if w.stderr {
+		target = &o.stderr
+	}
+	if len(p) > remaining {
+		written := 0
+		if remaining > 0 {
+			written, _ = target.Write(p[:remaining])
+		}
+		o.overflow = true
+		return written, errRemoteCollectorOutputLimit
+	}
+	return target.Write(p)
+}
+
+func (o *boundedCollectorOutput) snapshot(includeStderr bool) (string, bool) {
+	if o == nil {
+		return "", true
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	output := o.stdout.String()
+	if includeStderr && o.stderr.Len() > 0 {
+		if output != "" && len(output)+o.stderr.Len() < o.maxBytes {
+			output += "\n"
+		}
+		output += o.stderr.String()
+	}
+	return output, o.overflow
+}
+
+func readRemoteCollectorOutput(reader io.Reader, maxBytes int) (string, error) {
+	if reader == nil || maxBytes < 0 {
+		return "", errRemoteCollectorOutputLimit
+	}
+	body, err := io.ReadAll(io.LimitReader(reader, int64(maxBytes)+1))
+	if err != nil {
+		return "", err
+	}
+	if len(body) > maxBytes {
+		return "", errRemoteCollectorOutputLimit
+	}
+	return string(body), nil
+}
 
 func (d *Deps) executeSSHCollector(ctx context.Context, collector hubcollector.Collector) {
 	host, _ := collector.Config["host"].(string)
@@ -102,8 +201,9 @@ func (d *Deps) executeSSHCollector(ctx context.Context, collector hubcollector.C
 		}
 	}
 
-	addr := net.JoinHostPort(host, portStr)
-	client, err := ssh.Dial("tcp", addr, sshConfig)
+	dialCtx, dialCancel := context.WithTimeout(ctx, 15*time.Second)
+	defer dialCancel()
+	client, err := securityruntime.DialOutboundSSHContext(dialCtx, host, validatedPort, sshConfig, 15*time.Second)
 	if err != nil {
 		d.UpdateCollectorStatus(collector.ID, "error", fmt.Sprintf("SSH dial failed: %v", err))
 		return
@@ -117,9 +217,9 @@ func (d *Deps) executeSSHCollector(ctx context.Context, collector hubcollector.C
 	}
 	defer session.Close()
 
-	var stdout, stderr bytes.Buffer
-	session.Stdout = &stdout
-	session.Stderr = &stderr
+	collectorOutput := newBoundedCollectorOutput(maxRemoteCollectorOutputBytes)
+	session.Stdout = collectorOutput.stdoutWriter()
+	session.Stderr = collectorOutput.stderrWriter()
 
 	// Use context for timeout
 	done := make(chan error, 1)
@@ -132,29 +232,24 @@ func (d *Deps) executeSSHCollector(ctx context.Context, collector hubcollector.C
 		d.UpdateCollectorStatus(collector.ID, "error", "context cancelled")
 		return
 	case err := <-done:
-		output := stdout.String()
+		output, overflow := collectorOutput.snapshot(err != nil)
+		if overflow {
+			d.UpdateCollectorStatus(collector.ID, "error", fmt.Sprintf("collector output exceeded %d byte limit", maxRemoteCollectorOutputBytes))
+			return
+		}
 		if err != nil {
-			errOutput := stderr.String()
-			if errOutput != "" {
-				output = output + "\n" + errOutput
-			}
 			d.UpdateCollectorStatus(collector.ID, "error", fmt.Sprintf("script failed: %v", err))
-		} else {
-			d.UpdateCollectorStatus(collector.ID, "ok", "")
+			d.appendCollectorOutputLog(collector.AssetID, "hub-collector", "error", output)
+			return
 		}
 
-		// Store output as log event
-		if d.LogStore != nil && output != "" {
-			_ = d.LogStore.AppendEvent(logs.Event{
-				AssetID: collector.AssetID,
-				Source:  "hub-collector",
-				Level:   "info",
-				Message: output,
-			})
+		d.appendCollectorOutputLog(collector.AssetID, "hub-collector", "info", output)
+		if err := d.ingestCollectorTelemetry(ctx, collector, output); err != nil {
+			log.Printf("hub collector: failed to ingest SSH telemetry for collector %s: %v", collector.ID, err)
+			d.UpdateCollectorStatus(collector.ID, "error", "telemetry ingest failed")
+			return
 		}
-
-		// Try to parse output as structured telemetry
-		d.ingestCollectorTelemetry(collector, output)
+		d.UpdateCollectorStatus(collector.ID, "ok", "")
 	}
 }
 
@@ -232,31 +327,60 @@ func (d *Deps) executeAPICollector(ctx context.Context, collector hubcollector.C
 	}
 	defer resp.Body.Close()
 
-	body, readErr := io.ReadAll(io.LimitReader(resp.Body, 32*1024*1024))
+	output, readErr := readRemoteCollectorOutput(resp.Body, maxRemoteCollectorOutputBytes)
 	if readErr != nil {
-		d.UpdateCollectorStatus(collector.ID, "error", fmt.Sprintf("failed to read API response body: %v", readErr))
+		if errors.Is(readErr, errRemoteCollectorOutputLimit) {
+			d.UpdateCollectorStatus(collector.ID, "error", fmt.Sprintf("API response exceeded %d byte limit", maxRemoteCollectorOutputBytes))
+		} else {
+			d.UpdateCollectorStatus(collector.ID, "error", fmt.Sprintf("failed to read API response body: %v", readErr))
+		}
 		return
 	}
-	output := string(body)
 
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		d.UpdateCollectorStatus(collector.ID, "ok", "")
-	} else {
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		d.UpdateCollectorStatus(collector.ID, "error", fmt.Sprintf("API returned status %d", resp.StatusCode))
+		d.appendCollectorOutputLog(collector.AssetID, "hub-collector-api", "error", output)
+		return
 	}
 
-	// Store output as log event
-	if d.LogStore != nil && output != "" {
-		_ = d.LogStore.AppendEvent(logs.Event{
-			AssetID: collector.AssetID,
-			Source:  "hub-collector-api",
-			Level:   "info",
-			Message: output,
-		})
+	d.appendCollectorOutputLog(collector.AssetID, "hub-collector-api", "info", output)
+	if err := d.ingestCollectorTelemetry(ctx, collector, output); err != nil {
+		log.Printf("hub collector: failed to ingest API telemetry for collector %s: %v", collector.ID, err)
+		d.UpdateCollectorStatus(collector.ID, "error", "telemetry ingest failed")
+		return
+	}
+	d.UpdateCollectorStatus(collector.ID, "ok", "")
+}
+
+func (d *Deps) appendCollectorOutputLog(assetID, source, level, output string) {
+	if d.LogStore == nil || output == "" {
+		return
+	}
+	_ = d.LogStore.AppendEvent(logs.Event{
+		AssetID: assetID,
+		Source:  source,
+		Level:   level,
+		Message: collectorOutputForLog(output),
+	})
+}
+
+// collectorOutputForLog keeps diagnostic log records small even when a
+// collector legitimately returns a larger telemetry payload. Parsing retains
+// the separate maxRemoteCollectorOutputBytes budget; persisting every accepted
+// payload wholesale would otherwise let a one-second collector amplify into
+// hundreds of GiB of log storage per day. Invalid UTF-8 is normalized because
+// PostgreSQL text columns reject it.
+func collectorOutputForLog(output string) string {
+	output = strings.ToValidUTF8(output, "\uFFFD")
+	if len(output) <= maxPersistedCollectorLogBytes {
+		return output
 	}
 
-	// Try to parse output as structured telemetry
-	d.ingestCollectorTelemetry(collector, output)
+	contentBytes := maxPersistedCollectorLogBytes - len(collectorLogOutputTruncatedMarker)
+	for contentBytes > 0 && !utf8.ValidString(output[:contentBytes]) {
+		contentBytes--
+	}
+	return output[:contentBytes] + collectorLogOutputTruncatedMarker
 }
 
 func BuildCollectorSSHHostKeyCallback(config map[string]any) (ssh.HostKeyCallback, bool, error) {
@@ -268,29 +392,9 @@ func BuildCollectorSSHHostKeyCallback(config map[string]any) (ssh.HostKeyCallbac
 	}
 
 	expectedHostKey := CollectorConfigString(config, "host_key")
-	if !strictHostKey {
-		// #nosec G106 -- explicit operator override for non-production/self-signed environments.
-		return ssh.InsecureIgnoreHostKey(), true, nil //nolint:gosec // #nosec G106 -- explicit operator override
+	callback, err := shared.BuildSSHHostKeyCallback(strictHostKey, expectedHostKey)
+	if err != nil {
+		return nil, false, fmt.Errorf("strict host key enabled but no host_key provided and no known_hosts file is available")
 	}
-	if expectedHostKey == "" {
-		knownHostsCallback, err := shared.BuildKnownHostsHostKeyCallback()
-		if err != nil {
-			return nil, false, fmt.Errorf("strict host key enabled but no host_key provided and no known_hosts file is available")
-		}
-		return knownHostsCallback, false, nil
-	}
-
-	return func(_ string, _ net.Addr, key ssh.PublicKey) error {
-		fingerprint := strings.TrimSpace(ssh.FingerprintSHA256(key))
-		if strings.EqualFold(fingerprint, expectedHostKey) {
-			return nil
-		}
-
-		encoded := base64.StdEncoding.EncodeToString(key.Marshal())
-		if strings.EqualFold(encoded, expectedHostKey) {
-			return nil
-		}
-
-		return fmt.Errorf("host key mismatch")
-	}, false, nil
+	return callback, !strictHostKey && shared.InsecureSSHHostKeysAllowed(), nil
 }

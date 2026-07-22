@@ -8,6 +8,7 @@ import (
 
 	"github.com/labtether/labtether/internal/alerts"
 	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/groupmaintenance"
 	"github.com/labtether/labtether/internal/groups"
 	"github.com/labtether/labtether/internal/model"
 	"github.com/labtether/labtether/internal/notifications"
@@ -79,7 +80,10 @@ func newNotificationStoreStub() *notificationStoreStub {
 }
 
 func (s *notificationStoreStub) CreateNotificationChannel(req notifications.CreateChannelRequest) (notifications.Channel, error) {
-	id := "nch-" + req.Name
+	id := strings.TrimSpace(req.ID)
+	if id == "" {
+		id = "nch-" + req.Name
+	}
 	enabled := true
 	if req.Enabled != nil {
 		enabled = *req.Enabled
@@ -304,7 +308,7 @@ func (s *notificationStoreStub) ListPendingRetries(_ context.Context, now time.T
 	return out, nil
 }
 
-func (s *notificationStoreStub) UpdateRetryState(_ context.Context, id string, retryCount int, nextRetryAt *time.Time, status, errorMessage string) error {
+func (s *notificationStoreStub) UpdateRetryState(_ context.Context, id string, retryCount int, nextRetryAt *time.Time, status, errorMessage string, payload map[string]any) error {
 	s.retryUpdates = append(s.retryUpdates, notificationRetryUpdate{
 		ID:          id,
 		RetryCount:  retryCount,
@@ -320,6 +324,9 @@ func (s *notificationStoreStub) UpdateRetryState(_ context.Context, id string, r
 		s.records[idx].NextRetryAt = nextRetryAt
 		s.records[idx].Status = status
 		s.records[idx].Error = errorMessage
+		if payload != nil {
+			s.records[idx].Payload = cloneAnyMap(payload)
+		}
 		if status == notifications.RecordStatusSent {
 			sentAt := time.Now().UTC()
 			s.records[idx].SentAt = &sentAt
@@ -398,6 +405,59 @@ func TestDispatchAlertNotifications_SendsWebhookAndEmail(t *testing.T) {
 		if record.Status != notifications.RecordStatusSent {
 			t.Fatalf("expected sent status, got %+v", record)
 		}
+	}
+}
+
+func TestDispatchAlertNotifications_MaintenanceSuppressesDelivery(t *testing.T) {
+	sut := newTestAPIServer(t)
+	sut.groupMaintenanceStore = &maintenanceOnlyGroupMaintenanceStore{}
+	groupID := mustCreateGroup(t, sut, "Notification Maintenance", "notification-maintenance")
+	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: "node-1",
+		GroupID: groupID,
+		Status:  "online",
+	}); err != nil {
+		t.Fatalf("seed asset: %v", err)
+	}
+	if _, err := sut.groupMaintenanceStore.CreateGroupMaintenanceWindow(groupID, groupmaintenance.CreateMaintenanceWindowRequest{
+		Name:           "Suppress alert delivery",
+		StartAt:        time.Now().UTC().Add(-time.Minute),
+		EndAt:          time.Now().UTC().Add(time.Minute),
+		SuppressAlerts: true,
+	}); err != nil {
+		t.Fatalf("create maintenance window: %v", err)
+	}
+
+	store := newNotificationStoreStub()
+	store.channels["chan-webhook"] = notifications.Channel{
+		ID:      "chan-webhook",
+		Name:    "Webhook",
+		Type:    notifications.ChannelTypeWebhook,
+		Enabled: true,
+	}
+	store.routes["route-all"] = notifications.Route{
+		ID:         "route-all",
+		Name:       "All alerts",
+		ChannelIDs: []string{"chan-webhook"},
+		Enabled:    true,
+	}
+	adapter := &fakeNotificationAdapter{typ: notifications.ChannelTypeWebhook}
+	sut.notificationStore = store
+	sut.notificationDispatcher.Adapters = map[string]notifications.Adapter{
+		notifications.ChannelTypeWebhook: adapter,
+	}
+	rule := alerts.Rule{
+		ID:       "rule-1",
+		Name:     "Node offline",
+		Severity: alerts.SeverityCritical,
+		Targets:  []alerts.RuleTarget{{ID: "target-1", AssetID: "node-1"}},
+	}
+
+	sut.dispatchAlertNotifications(rule, "inst-1", "firing")
+	sut.waitForNotificationDispatches()
+
+	if len(adapter.calls) != 0 || len(store.records) != 0 {
+		t.Fatalf("maintenance-suppressed delivery calls=%d records=%d", len(adapter.calls), len(store.records))
 	}
 }
 

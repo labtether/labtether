@@ -31,9 +31,11 @@ func (s *apiServer) buildHTTPHandlers(
 		"/terminal/persistent-sessions/": s.withAuth(requireReadWriteScopes("terminal:read", "terminal:write", s.handlePersistentSessionActions)),
 		"/terminal/sessions":             s.withAuth(requireReadWriteScopes("terminal:read", "terminal:write", s.handleSessions)),
 		"/terminal/sessions/":            s.withAuth(requireReadWriteScopes("terminal:read", "terminal:write", s.handleSessionActions)),
+		"/terminal/quick-session":        s.withAuth(requireScope("terminal:write", s.handleQuickSession)),
 		"/terminal/bookmarks":            s.withAuth(requireReadWriteScopes("terminal:read", "terminal:write", s.handleBookmarks)),
 		"/terminal/bookmarks/":           s.withAuth(requireReadWriteScopes("terminal:read", "terminal:write", s.handleBookmarkActions)),
 		"/terminal/commands/recent":      s.withAuth(requireScope("terminal:read", s.handleRecentCommands)),
+		"/terminal/commands/":            s.withAuth(requireScope("terminal:write", s.handleTerminalCommandActions)),
 		"/group-profiles":                s.withAuth(requireReadWriteScopes("groups:read", "groups:write", s.handleGroupProfiles)),
 		"/group-profiles/":               s.withAuth(requireReadWriteScopes("groups:read", "groups:write", s.handleGroupProfileActions)),
 		"/group-failover-pairs":          s.withAuth(requireReadWriteScopes("failover:read", "failover:write", s.handleFailoverPairs)),
@@ -42,14 +44,14 @@ func (s *apiServer) buildHTTPHandlers(
 		"/groups/":                       s.withAuth(requireReadWriteScopes("groups:read", "groups:write", s.handleGroupActions)),
 		"/assets":                        s.withAuth(requireScope("assets:read", s.handleAssets)),
 		"/assets/manual":                 s.withAuth(requireScope("assets:write", s.handleManualDeviceRoutes)),
+		"/assets/heartbeat":              s.withAgentHeartbeatAuth(s.handleAssetActions),
 		"/assets/":                       s.withAuth(s.handleAssetActions),
 		"/credentials/profiles":          s.withAuth(requireReadWriteScopes("credentials:read", "credentials:write", s.handleCredentialProfiles)),
 		"/credentials/profiles/":         s.withAuth(requireReadWriteScopes("credentials:read", "credentials:write", s.handleCredentialProfileActions)),
 		// /metrics is an exact-match path (no trailing slash) so it does not
-		// conflict with /metrics/overview or /metrics/assets/ above.
-		// The endpoint is intentionally unauthenticated for Prometheus scraping;
-		// a settings toggle (Task 10) will gate it when that feature ships.
-		"/metrics":                                   s.handlePrometheusMetrics(),
+		// conflict with /metrics/overview or /metrics/assets/ above. Scrapers
+		// authenticate with an API key carrying metrics:read.
+		"/metrics":                                   s.withAuth(requireScope("metrics:read", guardAssetRestrictedGlobalAPI("Prometheus metrics", s.handlePrometheusMetrics()))),
 		"/metrics/overview":                          s.withAuth(requireScope("metrics:read", s.handleMetricsOverview)),
 		"/metrics/assets/":                           s.withAuth(requireScope("metrics:read", requireAssetFromPath("/metrics/assets/", s.handleAssetMetrics))),
 		"/logs/query":                                s.withAuth(requireScope("logs:read", s.handleLogsQuery)),
@@ -57,8 +59,8 @@ func (s *apiServer) buildHTTPHandlers(
 		"/logs/sources":                              s.withAuth(requireScope("logs:read", s.handleLogSources)),
 		"/logs/views":                                s.withAuth(requireReadWriteScopes("logs:read", "logs:write", s.handleLogViews)),
 		"/logs/views/":                               s.withAuth(requireReadWriteScopes("logs:read", "logs:write", s.handleLogViewActions)),
-		"/telemetry/frontend/perf":                   s.withAuth(s.handleFrontendPerfTelemetry),
-		"/telemetry/mobile/client":                   s.withAuth(s.handleMobileClientTelemetry),
+		"/telemetry/frontend/perf":                   s.withAuth(requireScope("logs:write", s.handleFrontendPerfTelemetry)),
+		"/telemetry/mobile/client":                   s.withAuth(requireScope("logs:write", s.handleMobileClientTelemetry)),
 		"/queue/dead-letters":                        s.withAuth(requireReadWriteScopes("dead-letters:read", "dead-letters:write", s.handleDeadLetters)),
 		"/connectors":                                s.withAuth(requireScope("connectors:read", s.handleListConnectors)),
 		"/connectors/":                               s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.handleConnectorActions)),
@@ -72,7 +74,8 @@ func (s *apiServer) buildHTTPHandlers(
 		"/pbs/assets/":                               s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.handlePBSAssets)),
 		"/pbs/tasks/":                                s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.handlePBSTaskRoutes)),
 		"/truenas/assets/":                           s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.handleTrueNASAssets)),
-		"/portainer/assets/":                         s.withAuth(requireScope("connectors:read", s.handlePortainerAssets)),
+		"/portainer/endpoints":                       s.withAuth(requireScope("connectors:read", s.handlePortainerEndpoints)),
+		"/portainer/assets/":                         s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.handlePortainerAssets)),
 		"/api/v1/services/web":                       s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", s.handleWebServices)),
 		"/api/v1/services/web/compat":                s.withAuth(requireScope("web-services:read", s.handleWebServiceCompat)),
 		"/api/v1/services/web/categories":            s.withAuth(requireScope("web-services:read", s.handleWebServiceCategories)),
@@ -135,9 +138,11 @@ func (s *apiServer) buildHTTPHandlers(
 		"/api/v2/credentials/profiles":  s.withAuth(s.handleV2Credentials),
 		"/api/v2/credentials/profiles/": s.withAuth(s.handleV2CredentialActions),
 		// Terminal
-		"/api/v2/terminal/sessions": s.withAuth(s.handleV2TerminalSessions),
-		"/api/v2/terminal/history":  s.withAuth(s.handleV2TerminalHistory),
-		"/api/v2/terminal/snippets": s.withAuth(s.handleV2TerminalSnippets),
+		"/api/v2/terminal/sessions":  s.withAuth(s.handleV2TerminalSessions),
+		"/api/v2/terminal/history":   s.withAuth(s.handleV2TerminalHistory),
+		"/api/v2/terminal/history/":  s.withAuth(s.handleV2TerminalHistoryActions),
+		"/api/v2/terminal/snippets":  s.withAuth(s.handleV2TerminalSnippets),
+		"/api/v2/terminal/snippets/": s.withAuth(s.handleV2TerminalSnippetActions),
 		// Agents
 		"/api/v2/agents":                 s.withAuth(s.handleV2Agents),
 		"/api/v2/agents/":                s.withAuth(s.handleV2AgentActions),
@@ -147,11 +152,12 @@ func (s *apiServer) buildHTTPHandlers(
 		// Hub
 		"/api/v2/hub/status":    s.withAuth(s.handleV2HubStatus),
 		"/api/v2/hub/agents":    s.withAuth(s.handleV2HubAgents),
-		"/api/v2/hub/tls":       s.withAuth(s.handleV2HubTLS),
-		"/api/v2/hub/tls/renew": s.withAuth(s.handleV2HubTLSRenew),
+		"/api/v2/hub/tls":       s.withAdminAuth(s.handleV2HubTLS),
+		"/api/v2/hub/tls/renew": s.withAdminAuth(s.handleV2HubTLSRenew),
 		"/api/v2/hub/tailscale": s.withAuth(s.handleV2HubTailscale),
 		// Web Services
 		"/api/v2/web-services":      s.withAuth(s.handleV2WebServices),
+		"/api/v2/web-services/":     s.withAuth(s.handleV2WebServiceActions),
 		"/api/v2/web-services/sync": s.withAuth(s.handleV2WebServiceSync),
 		// Collectors
 		"/api/v2/collectors":  s.withAuth(s.handleV2Collectors),
@@ -170,20 +176,21 @@ func (s *apiServer) buildHTTPHandlers(
 		"/api/v2/dependencies":  s.withAuth(s.handleV2Dependencies),
 		"/api/v2/dependencies/": s.withAuth(s.handleV2DependencyActions),
 		"/api/v2/edges":         s.withAuth(s.handleV2Edges),
+		"/api/v2/edges/":        s.withAuth(s.handleV2EdgeActions),
 		"/api/v2/composites":    s.withAuth(s.handleV2Composites),
 		"/api/v2/composites/":   s.withAuth(s.handleV2CompositeActions),
 		// Topology Canvas
-		"/api/v2/topology":              s.withAuth(s.handleV2Topology),
-		"/api/v2/topology/zones":        s.withAuth(s.handleV2TopologyZones),
-		"/api/v2/topology/zones/":       s.withAuth(s.handleV2TopologyZoneActions),
-		"/api/v2/topology/connections":  s.withAuth(s.handleV2TopologyConnections),
-		"/api/v2/topology/connections/": s.withAuth(s.handleV2TopologyConnection),
-		"/api/v2/topology/viewport":     s.withAuth(s.handleV2TopologyViewport),
-		"/api/v2/topology/unsorted":     s.withAuth(s.handleV2TopologyUnsorted),
-		"/api/v2/topology/auto-place":   s.withAuth(s.handleV2TopologyAutoPlace),
-		"/api/v2/topology/reset":        s.withAuth(s.handleV2TopologyReset),
-		"/api/v2/topology/dismiss":      s.withAuth(s.handleV2TopologyDismiss),
-		"/api/v2/topology/dismiss/":     s.withAuth(s.handleV2TopologyUndismiss),
+		"/api/v2/topology":              s.withAuth(guardAssetRestrictedGlobalAPI("topology canvas", s.handleV2Topology)),
+		"/api/v2/topology/zones":        s.withAuth(guardAssetRestrictedGlobalAPI("topology canvas", s.handleV2TopologyZones)),
+		"/api/v2/topology/zones/":       s.withAuth(guardAssetRestrictedGlobalAPI("topology canvas", s.handleV2TopologyZoneActions)),
+		"/api/v2/topology/connections":  s.withAuth(guardAssetRestrictedGlobalAPI("topology canvas", s.handleV2TopologyConnections)),
+		"/api/v2/topology/connections/": s.withAuth(guardAssetRestrictedGlobalAPI("topology canvas", s.handleV2TopologyConnection)),
+		"/api/v2/topology/viewport":     s.withAuth(guardAssetRestrictedGlobalAPI("topology canvas", s.handleV2TopologyViewport)),
+		"/api/v2/topology/unsorted":     s.withAuth(guardAssetRestrictedGlobalAPI("topology canvas", s.handleV2TopologyUnsorted)),
+		"/api/v2/topology/auto-place":   s.withAuth(guardAssetRestrictedGlobalAPI("topology canvas", s.handleV2TopologyAutoPlace)),
+		"/api/v2/topology/reset":        s.withAuth(guardAssetRestrictedGlobalAPI("topology canvas", s.handleV2TopologyReset)),
+		"/api/v2/topology/dismiss":      s.withAuth(guardAssetRestrictedGlobalAPI("topology canvas", s.handleV2TopologyDismiss)),
+		"/api/v2/topology/dismiss/":     s.withAuth(guardAssetRestrictedGlobalAPI("topology canvas", s.handleV2TopologyUndismiss)),
 		// Failover
 		"/api/v2/failover-pairs":  s.withAuth(s.handleV2FailoverPairs),
 		"/api/v2/failover-pairs/": s.withAuth(s.handleV2FailoverPairActions),
@@ -196,8 +203,8 @@ func (s *apiServer) buildHTTPHandlers(
 		"/api/v2/logs/views":  s.withAuth(s.handleV2LogViews),
 		"/api/v2/logs/views/": s.withAuth(s.handleV2LogViewActions),
 		// Prometheus Settings
-		"/api/v2/settings/prometheus":      s.withAuth(s.handleV2PrometheusSettings),
-		"/api/v2/settings/prometheus/test": s.withAuth(s.handleV2PrometheusTest),
+		"/api/v2/settings/prometheus":      s.withAdminAuth(s.handleV2PrometheusSettings),
+		"/api/v2/settings/prometheus/test": s.withAdminAuth(s.handleV2PrometheusTest),
 		// Events
 		"/api/v2/events/stream":     s.withAuth(s.handleV2EventStream),
 		"/api/v1/file-connections":  s.withAuth(requireReadWriteScopes("files:read", "files:write", s.handleFileConnections)),
@@ -225,17 +232,19 @@ func (s *apiServer) buildHTTPHandlers(
 		"/auth/bootstrap":                      s.handleAuthBootstrapSetup,
 		"/auth/logout":                         s.handleAuthLogout,
 		"/auth/me":                             s.withAuth(s.handleAuthMe),
-		"/auth/me/password":                    s.withAuth(s.handleChangePassword),
-		"/auth/account":                        s.withAuth(s.handleDeleteOwnAccount),
-		"/auth/2fa/setup":                      s.withAuth(s.handle2FASetup),
-		"/auth/2fa/verify":                     s.withAuth(s.handle2FAVerify),
-		"/auth/2fa":                            s.withAuth(s.handle2FADisable),
-		"/auth/2fa/recovery-codes":             s.withAuth(s.handle2FARecoveryCodes),
+		"/auth/me/password":                    s.withSelfServiceAuth(s.handleChangePassword),
+		"/auth/account":                        s.withSelfServiceAuth(s.handleDeleteOwnAccount),
+		"/auth/2fa/setup":                      s.withSelfServiceAuth(s.handle2FASetup),
+		"/auth/2fa/verify":                     s.withSelfServiceAuth(s.handle2FAVerify),
+		"/auth/2fa":                            s.withSelfServiceAuth(s.handle2FADisable),
+		"/auth/2fa/recovery-codes":             s.withSelfServiceAuth(s.handle2FARecoveryCodes),
 		"/auth/providers":                      s.handleAuthProviders,
 		"/auth/oidc/start":                     s.handleAuthOIDCStart,
 		"/auth/oidc/callback":                  s.handleAuthOIDCCallback,
-		"/auth/users":                          s.withAdminAuth(requireReadWriteScopes("settings:read", "settings:write", s.handleAuthUsers)),
-		"/auth/users/":                         s.withAdminAuth(requireReadWriteScopes("settings:read", "settings:write", s.handleAuthUserActions)),
+		"/auth/oidc/mobile/start":              s.handleAuthOIDCMobileStart,
+		"/auth/oidc/mobile/callback":           s.handleAuthOIDCMobileCallback,
+		"/auth/users":                          s.withAdminAuth(requireReadWriteScopes("settings:read", "settings:write", guardAssetRestrictedGlobalAPI("user administration", s.handleAuthUsers))),
+		"/auth/users/":                         s.withAdminAuth(requireReadWriteScopes("settings:read", "settings:write", guardAssetRestrictedGlobalAPI("user administration", s.handleAuthUserActions))),
 		"/alerts/rules":                        s.withAuth(requireReadWriteScopes("alerts:read", "alerts:write", s.handleAlertRules)),
 		"/alerts/rules/":                       s.withAuth(requireReadWriteScopes("alerts:read", "alerts:write", s.handleAlertRuleActions)),
 		"/alerts/templates":                    s.withAuth(requireReadWriteScopes("alerts:read", "alerts:write", s.handleAlertTemplates)),
@@ -251,17 +260,18 @@ func (s *apiServer) buildHTTPHandlers(
 		"/notifications/history":               s.withAuth(requireScope("notifications:read", s.handleNotificationHistory)),
 		"/incidents":                           s.withAuth(requireReadWriteScopes("alerts:read", "alerts:write", s.handleIncidents)),
 		"/incidents/":                          s.withAuth(requireReadWriteScopes("alerts:read", "alerts:write", s.handleIncidentActions)),
+		"/live-activities/incidents/":          s.withAuth(requireScope("alerts:read", s.handleIncidentLiveActivityTokens)),
 		"/settings/retention":                  s.withAuth(requireReadWriteScopes("settings:read", "settings:write", s.handleRetentionSettings)),
-		"/settings/oidc":                       s.withAdminAuth(requireReadWriteScopes("settings:read", "settings:write", s.handleOIDCSettings)),
-		"/settings/oidc/apply":                 s.withAdminAuth(requireScope("settings:write", s.handleOIDCSettingsApply)),
-		"/settings/managed-database":           s.withAdminAuth(requireReadWriteScopes("settings:read", "settings:write", s.handleManagedDatabaseSettings)),
-		"/settings/managed-database/reveal":    s.withAdminAuth(requireScope("settings:read", s.handleManagedDatabasePasswordReveal)),
-		"/settings/runtime":                    s.withAdminAuth(requireReadWriteScopes("settings:read", "settings:write", s.handleRuntimeSettings)),
-		"/settings/runtime/reset":              s.withAdminAuth(requireScope("settings:write", s.handleRuntimeSettingsReset)),
+		"/settings/oidc":                       s.withAdminAuth(requireReadWriteScopes("settings:read", "settings:write", guardAssetRestrictedGlobalAPI("OIDC settings", s.handleOIDCSettings))),
+		"/settings/oidc/apply":                 s.withAdminAuth(requireScope("settings:write", guardAssetRestrictedGlobalAPI("OIDC settings", s.handleOIDCSettingsApply))),
+		"/settings/managed-database":           s.withAdminAuth(requireReadWriteScopes("settings:read", "settings:write", guardAssetRestrictedGlobalAPI("managed database settings", s.handleManagedDatabaseSettings))),
+		"/settings/managed-database/reveal":    s.withAdminAuth(requireScope("settings:read", requireScope("credentials:use", guardAssetRestrictedGlobalAPI("managed database credentials", s.handleManagedDatabasePasswordReveal)))),
+		"/settings/runtime":                    s.withAdminAuth(requireReadWriteScopes("settings:read", "settings:write", guardAssetRestrictedGlobalAPI("runtime settings", s.handleRuntimeSettings))),
+		"/settings/runtime/reset":              s.withAdminAuth(requireScope("settings:write", guardAssetRestrictedGlobalAPI("runtime settings", s.handleRuntimeSettingsReset))),
 		"/settings/restart":                    s.withAdminAuth(requireScope("settings:write", s.handleRestartSettings)),
-		"/settings/tls":                        s.withAdminAuth(requireReadWriteScopes("hub:read", "hub:admin", s.handleTLSSettings)),
-		"/settings/prometheus/test-connection": s.withAdminAuth(requireScope("settings:read", s.handlePrometheusTestConnection)),
-		"/settings/tailscale/serve":            s.withAuth(requireReadWriteScopes("hub:read", "hub:admin", s.handleTailscaleServeStatus)),
+		"/settings/tls":                        s.withAdminAuth(requireReadWriteScopes("hub:read", "hub:admin", guardAssetRestrictedGlobalAPI("TLS settings", s.handleTLSSettings))),
+		"/settings/prometheus/test-connection": s.withAdminAuth(requireScope("settings:read", guardAssetRestrictedGlobalAPI("Prometheus settings", s.handlePrometheusTestConnection))),
+		"/settings/tailscale/serve":            s.withAuth(requireReadWriteScopes("hub:read", "hub:admin", guardAssetRestrictedGlobalAPI("Tailscale Serve settings", s.handleTailscaleServeStatus))),
 		"/audit/events":                        s.withAuth(requireScope("audit:read", s.handleAuditEvents)),
 		"/policy/check":                        s.withAuth(requireScope("settings:read", s.handlePolicyCheck)),
 		"/api/v1/enroll":                       s.handleEnroll,
@@ -270,16 +280,19 @@ func (s *apiServer) buildHTTPHandlers(
 		"/api/v1/tls/info":                     s.handleTLSInfo,
 		"/api/v1/agent/binary":                 s.handleAgentBinary,
 		"/api/v1/agent/releases/latest":        s.handleAgentReleaseLatest,
+		"/api/v1/agent/manifest":               s.withAuth(requireScope("agents:read", s.handleAgentManifest)),
+		"/api/v1/agent/cache/refresh":          s.withAdminAuth(requireScope("agents:write", guardAssetRestrictedGlobalAPI("agent cache refresh", s.handleAgentCacheRefresh))),
 		"/api/v1/agent/install.sh":             s.handleAgentInstallScript,
 		"/api/v1/agent/bootstrap.sh":           s.handleAgentBootstrapScript,
 		"/install.sh":                          s.handleAgentInstallScript,
-		"/settings/enrollment":                 s.withAdminAuth(requireReadWriteScopes("agents:read", "agents:write", s.handleEnrollmentTokens)),
-		"/settings/enrollment/":                s.withAdminAuth(requireReadWriteScopes("agents:read", "agents:write", s.handleEnrollmentTokenActions)),
-		"/settings/agent-tokens":               s.withAdminAuth(requireReadWriteScopes("agents:read", "agents:write", s.handleAgentTokens)),
-		"/settings/agent-tokens/":              s.withAdminAuth(requireReadWriteScopes("agents:read", "agents:write", s.handleAgentTokenActions)),
-		"/settings/tokens/cleanup":             s.withAdminAuth(requireScope("agents:write", s.handleTokenCleanup)),
-		"/hub/ssh-public-key":                  s.withAuth(requireScope("hub:read", s.handleHubSSHPublicKey)),
-		"/settings/ssh-hub-key/rotate":         s.withAdminAuth(requireScope("hub:admin", s.handleSSHHubKeyRotate)),
+		"/settings/enrollment":                 s.withAdminAuth(requireReadWriteScopes("agents:read", "agents:write", guardAssetRestrictedGlobalAPI("enrollment tokens", s.handleEnrollmentTokens))),
+		"/settings/enrollment/":                s.withAdminAuth(requireReadWriteScopes("agents:read", "agents:write", guardAssetRestrictedGlobalAPI("enrollment tokens", s.handleEnrollmentTokenActions))),
+		"/settings/agent-tokens":               s.withAdminAuth(requireReadWriteScopes("agents:read", "agents:write", guardAssetRestrictedGlobalAPI("agent tokens", s.handleAgentTokens))),
+		"/settings/agent-tokens/":              s.withAdminAuth(requireReadWriteScopes("agents:read", "agents:write", guardAssetRestrictedGlobalAPI("agent tokens", s.handleAgentTokenActions))),
+		"/settings/tokens/cleanup":             s.withAdminAuth(requireScope("agents:write", guardAssetRestrictedGlobalAPI("agent token cleanup", s.handleTokenCleanup))),
+		"/hub/ssh-public-key":                  s.withAuth(requireScope("hub:read", guardAssetRestrictedGlobalAPI("hub SSH public key", s.handleHubSSHPublicKey))),
+		"/settings/ssh-hub-key":                s.withAdminAuth(requireScope("hub:read", guardAssetRestrictedGlobalAPI("hub SSH key settings", s.handleHubSSHPublicKey))),
+		"/settings/ssh-hub-key/rotate":         s.withAdminAuth(requireScope("hub:admin", guardAssetRestrictedGlobalAPI("hub SSH key rotation", s.handleSSHHubKeyRotate))),
 		"/desktop/sessions":                    s.withAuth(requireReadWriteScopes("terminal:read", "terminal:write", s.handleDesktopSessions)),
 		"/desktop/sessions/":                   s.withAuth(requireReadWriteScopes("terminal:read", "terminal:write", s.handleDesktopSessionActions)),
 		"/desktop/diagnose/":                   s.withAuth(requireScope("terminal:read", s.handleDesktopDiagnoseRequest)),
@@ -296,7 +309,7 @@ func (s *apiServer) buildHTTPHandlers(
 		"/api/v1/nodes/":                       s.withAuth(requireReadWriteScopes("assets:read", "assets:write", requireAssetFromPath("/api/v1/nodes/", s.handleNodeSubRoutes))),
 		"/ws/agent":                            s.handleAgentWebSocket,
 		"/ws/events":                           s.handleBrowserEvents,
-		"/ws/events/ticket":                    s.withAuth(requireScope("events:subscribe", s.handleEventTicket)),
+		"/ws/events/ticket":                    s.withReadCapabilityAuth(requireScope("events:subscribe", s.handleEventTicket)),
 		"/agents/connected":                    s.withAuth(requireScope("agents:read", s.handleConnectedAgents)),
 		"/agents/presence":                     s.withAuth(requireScope("agents:read", s.handleAgentPresence)),
 		"/api/v1/agents/":                      s.withAuth(requireReadWriteScopes("agents:read", "agents:write", requireAssetFromPath("/api/v1/agents/", s.handleAgentSettingsRoutes))),
@@ -320,35 +333,44 @@ func (s *apiServer) buildHTTPHandlers(
 		"/synthetic-checks/":                   s.withAuth(requireReadWriteScopes("assets:read", "assets:write", s.handleSyntheticCheckActions)),
 		"/hub-collectors":                      s.withAuth(requireReadWriteScopes("collectors:read", "collectors:write", s.handleHubCollectors)),
 		"/hub-collectors/":                     s.withAuth(requireReadWriteScopes("collectors:read", "collectors:write", s.handleHubCollectorActions)),
-		"/api/v1/devices/register":             s.withAuth(requireScope("assets:write", s.handleDeviceRegister)),
-		"/admin/reset":                         s.withAdminAuth(requireScope("settings:write", s.handleAdminReset)),
-		"/api/v2/keys":                         s.withAdminAuth(requireReadWriteScopes("settings:read", "settings:write", s.handleAPIKeys)),
-		"/api/v2/keys/":                        s.withAdminAuth(requireReadWriteScopes("settings:read", "settings:write", s.handleAPIKeyActions)),
-		"/api/v2/schedules":                    s.withAuth(s.handleV2Schedules),
-		"/api/v2/schedules/":                   s.withAuth(s.handleV2ScheduleActions),
-		"/api/v2/webhooks":                     s.withAuth(s.handleV2Webhooks),
-		"/api/v2/webhooks/":                    s.withAuth(s.handleV2WebhookActions),
-		"/api/v2/whoami":                       s.withAuth(s.handleV2Whoami),
-		"/api/v2/assets":                       s.withAuth(s.handleV2Assets),
-		"/api/v2/assets/":                      s.withAuth(s.handleV2AssetActions),
-		"/api/v2/exec":                         s.withAuth(s.handleV2ExecMulti),
-		"/api/v2/actions":                      s.withAuth(s.handleV2SavedActions),
-		"/api/v2/actions/":                     s.withAuth(s.handleV2SavedActionActions),
-		"/api/v2/search":                       s.withAuth(s.handleV2Search),
-		"/api/v2/bulk/service-action":          s.withAuth(s.handleV2BulkServiceAction),
-		"/api/v2/bulk/file-push":               s.withAuth(s.handleV2BulkFilePush),
-		"/worker/stats":                        s.withAuth(requireScope("hub:read", s.workerStatsHandler(workerState, retentionTracker, &counters.processed, &counters.processedActions, &counters.processedUpdates))),
+		// Push registration is self-scoped to the authenticated user's device;
+		// viewer accounts must be able to opt in/out without asset mutation rights.
+		"/api/v1/devices/register":    s.withAuth(s.handleDeviceRegister),
+		"/api/v1/devices/deregister":  s.withAuth(s.handleDeviceDeregister),
+		"/admin/reset":                s.withAdminAuth(requireScope("settings:write", guardAssetRestrictedGlobalAPI("administrative reset", s.handleAdminReset))),
+		"/api/v2/keys":                s.withAdminAuth(requireReadWriteScopes("settings:read", "settings:write", guardAssetRestrictedGlobalAPI("API key administration", s.handleAPIKeys))),
+		"/api/v2/keys/":               s.withAdminAuth(requireReadWriteScopes("settings:read", "settings:write", guardAssetRestrictedGlobalAPI("API key administration", s.handleAPIKeyActions))),
+		"/api/v2/schedules":           s.withAuth(s.handleV2Schedules),
+		"/api/v2/schedules/":          s.withAuth(s.handleV2ScheduleActions),
+		"/api/v2/webhooks":            s.withAuth(s.handleV2Webhooks),
+		"/api/v2/webhooks/":           s.withAuth(s.handleV2WebhookActions),
+		"/api/v2/whoami":              s.withAuth(s.handleV2Whoami),
+		"/api/v2/assets":              s.withAuth(s.handleV2Assets),
+		"/api/v2/assets/":             s.withAuth(s.handleV2AssetActions),
+		"/api/v2/exec":                s.withAuth(s.handleV2ExecMulti),
+		"/api/v2/actions":             s.withAuth(s.handleV2SavedActions),
+		"/api/v2/actions/":            s.withAuth(s.handleV2SavedActionActions),
+		"/api/v2/search":              s.withAuth(s.handleV2Search),
+		"/api/v2/bulk/service-action": s.withAuth(s.handleV2BulkServiceAction),
+		"/api/v2/bulk/file-push":      s.withAuth(s.handleV2BulkFilePush),
+		"/worker/stats":               s.withAuth(requireScope("hub:read", guardAssetRestrictedGlobalAPI("worker statistics", s.workerStatsHandler(workerState, retentionTracker, &counters.processed, &counters.processedActions, &counters.processedUpdates, &counters.processedSchedules)))),
 		// MCP (Model Context Protocol) endpoint for AI agent tool discovery
-		"/mcp": s.withAuth(s.handleMCP()),
+		// MCP applies scopes and asset allow-lists per tool/resource. Keeping a
+		// global-resource guard here would reject every asset-restricted key
+		// before those narrower checks can run.
+		// MCP encodes both reads and mutations as POST requests. Authenticate the
+		// transport here, then let per-tool scopes, asset allowlists, and the MCP
+		// mutation policy enforce the operation-specific authorization boundary.
+		"/mcp": s.withReadCapabilityAuth(s.handleMCP()),
 	}
 
 	if envOrDefaultBool("DEV_MODE", false) {
 		log.Printf("labtether: DEV_MODE enabled — pprof endpoints registered at /debug/pprof/")
-		handlers["/debug/pprof/"] = s.withAdminAuth(pprof.Index)
-		handlers["/debug/pprof/cmdline"] = s.withAdminAuth(pprof.Cmdline)
-		handlers["/debug/pprof/profile"] = s.withAdminAuth(pprof.Profile)
-		handlers["/debug/pprof/symbol"] = s.withAdminAuth(pprof.Symbol)
-		handlers["/debug/pprof/trace"] = s.withAdminAuth(pprof.Trace)
+		handlers["/debug/pprof/"] = s.withAdminAuth(guardAssetRestrictedGlobalAPI("debug profiles", pprof.Index))
+		handlers["/debug/pprof/cmdline"] = s.withAdminAuth(guardAssetRestrictedGlobalAPI("debug profiles", pprof.Cmdline))
+		handlers["/debug/pprof/profile"] = s.withAdminAuth(guardAssetRestrictedGlobalAPI("debug profiles", pprof.Profile))
+		handlers["/debug/pprof/symbol"] = s.withAdminAuth(guardAssetRestrictedGlobalAPI("debug profiles", pprof.Symbol))
+		handlers["/debug/pprof/trace"] = s.withAdminAuth(guardAssetRestrictedGlobalAPI("debug profiles", pprof.Trace))
 	}
 
 	return handlers
@@ -357,10 +379,9 @@ func (s *apiServer) buildHTTPHandlers(
 // handlePrometheusMetrics returns an http.HandlerFunc that serves the
 // Prometheus metrics exposition format at the exact path /metrics.
 //
-// The endpoint is unauthenticated by design so that external Prometheus
-// servers can scrape it without credentials. It is gated by the
-// prometheus.scrape_enabled runtime setting (default: false). When disabled
-// it returns 404 with a plain-text explanation.
+// The endpoint requires a bearer credential carrying metrics:read and is also
+// gated by the prometheus.scrape_enabled runtime setting (default: false).
+// When disabled it returns 404 with a plain-text explanation.
 func (s *apiServer) handlePrometheusMetrics() http.HandlerFunc {
 	src := newPrometheusSnapshotSource(s)
 	h := promexport.NewHandler(src)

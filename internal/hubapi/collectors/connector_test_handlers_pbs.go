@@ -28,28 +28,27 @@ func (d *Deps) HandlePBSConnectorTest(w http.ResponseWriter, r *http.Request) {
 	tokenID := strings.TrimSpace(req.TokenID)
 	tokenSecret := strings.TrimSpace(req.TokenSecret)
 	credentialID := strings.TrimSpace(req.CredentialID)
+	credentialProfile, credentialOK := d.loadAuthorizedCredentialProfile(w, r, credentialID)
+	if !credentialOK {
+		return
+	}
 
 	if tokenSecret == "" && credentialID != "" {
-		if d.CredentialStore == nil || d.SecretsManager == nil {
+		if d.SecretsManager == nil {
 			servicehttp.WriteError(w, http.StatusServiceUnavailable, "credential store unavailable")
 			return
 		}
-		profile, ok, err := d.CredentialStore.GetCredentialProfile(credentialID)
-		if err != nil || !ok {
-			servicehttp.WriteError(w, http.StatusBadRequest, "credential_id not found")
-			return
-		}
-		decrypted, err := d.SecretsManager.DecryptString(profile.SecretCiphertext, profile.ID)
+		decrypted, err := d.SecretsManager.DecryptString(credentialProfile.SecretCiphertext, credentialProfile.ID)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, "failed to decrypt credential secret")
 			return
 		}
 		tokenSecret = strings.TrimSpace(decrypted)
 		if tokenID == "" {
-			tokenID = strings.TrimSpace(profile.Username)
+			tokenID = strings.TrimSpace(credentialProfile.Username)
 		}
 		if baseURL == "" {
-			baseURL = strings.TrimSpace(profile.Metadata["base_url"])
+			baseURL = strings.TrimSpace(credentialProfile.Metadata["base_url"])
 		}
 	}
 

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/assetid"
 	"github.com/labtether/labtether/internal/connectorsdk"
 )
 
@@ -47,7 +48,7 @@ func (c *Connector) Actions() []connectorsdk.ActionDescriptor {
 			RequiresTarget: true,
 			SupportsDryRun: true,
 			Parameters: []connectorsdk.ActionParameter{
-				{Key: "snapshot_name", Label: "Snapshot Name", Required: true, Description: "Snapshot label."},
+				{Key: "snapshot_name", Label: "Snapshot Name", Description: "Snapshot label; an automatic LabTether timestamp label is used when omitted."},
 			},
 		},
 		{
@@ -95,7 +96,7 @@ func (c *Connector) Actions() []connectorsdk.ActionDescriptor {
 			RequiresTarget: true,
 			SupportsDryRun: true,
 			Parameters: []connectorsdk.ActionParameter{
-				{Key: "snapshot_name", Label: "Snapshot Name", Required: true, Description: "Snapshot label."},
+				{Key: "snapshot_name", Label: "Snapshot Name", Description: "Snapshot label; an automatic LabTether timestamp label is used when omitted."},
 			},
 		},
 		// Phase 2: Extended lifecycle
@@ -261,8 +262,21 @@ func (c *Connector) Actions() []connectorsdk.ActionDescriptor {
 }
 
 func (c *Connector) ExecuteAction(ctx context.Context, actionID string, req connectorsdk.ActionRequest) (connectorsdk.ActionResult, error) {
+	if c.clientErr != nil {
+		return connectorsdk.ActionResult{Status: "failed", Message: c.clientErr.Error()}, nil
+	}
+	if !c.isConfigured() {
+		return connectorsdk.ActionResult{
+			Status:  "failed",
+			Message: "proxmox connector is not configured; actions are unavailable",
+		}, nil
+	}
+
 	node, vmid, err := parseComputeTarget(req, c.defaultNode)
 	if err != nil {
+		return connectorsdk.ActionResult{Status: "failed", Message: err.Error()}, nil
+	}
+	if err := validateTaskAction(actionID, req.Params); err != nil {
 		return connectorsdk.ActionResult{Status: "failed", Message: err.Error()}, nil
 	}
 	started := time.Now().UTC()
@@ -273,17 +287,6 @@ func (c *Connector) ExecuteAction(ctx context.Context, actionID string, req conn
 			Status:  "succeeded",
 			Message: "dry-run: action validated",
 			Output:  fmt.Sprintf("would execute %s on %s", actionID, targetLabel),
-		}, nil
-	}
-
-	if c.clientErr != nil {
-		return connectorsdk.ActionResult{Status: "failed", Message: c.clientErr.Error()}, nil
-	}
-	if !c.isConfigured() {
-		return connectorsdk.ActionResult{
-			Status:  "succeeded",
-			Message: "action executed (stub mode)",
-			Output:  fmt.Sprintf("%s on %s", actionID, targetLabel),
 		}, nil
 	}
 
@@ -341,6 +344,9 @@ func (c *Connector) ExecuteAction(ctx context.Context, actionID string, req conn
 }
 
 func (c *Connector) executeTaskAction(ctx context.Context, actionID, node, vmid string, params map[string]string) (string, error) {
+	if err := validateTaskAction(actionID, params); err != nil {
+		return "", err
+	}
 	switch actionID {
 	case "vm.start":
 		return c.client.StartVM(ctx, node, vmid)
@@ -471,10 +477,62 @@ func (c *Connector) executeTaskAction(ctx context.Context, actionID, node, vmid 
 		return "", fmt.Errorf("unsupported action")
 	}
 }
+
+func validateTaskAction(actionID string, params map[string]string) error {
+	param := func(key string) string { return strings.TrimSpace(params[key]) }
+	require := func(key string) error {
+		if param(key) == "" {
+			return fmt.Errorf("%s is required", key)
+		}
+		return nil
+	}
+	validateNewID := func() error {
+		if err := require("new_id"); err != nil {
+			return err
+		}
+		newID, err := strconv.Atoi(param("new_id"))
+		if err != nil || newID <= 0 {
+			return fmt.Errorf("new_id must be a positive integer")
+		}
+		return nil
+	}
+
+	switch actionID {
+	case "vm.start", "vm.stop", "vm.shutdown", "vm.reboot",
+		"ct.start", "ct.stop", "ct.shutdown", "ct.reboot",
+		"vm.snapshot", "ct.snapshot", "vm.suspend", "vm.resume",
+		"vm.force_stop", "ct.force_stop":
+		return nil
+	case "vm.migrate", "ct.migrate":
+		return require("target_node")
+	case "vm.snapshot.delete", "vm.snapshot.rollback", "ct.snapshot.delete", "ct.snapshot.rollback":
+		return require("snapshot_name")
+	case "vm.backup", "ct.backup":
+		mode := strings.ToLower(param("mode"))
+		if mode != "" && mode != "snapshot" && mode != "suspend" && mode != "stop" {
+			return fmt.Errorf("mode must be snapshot, suspend, or stop")
+		}
+		return nil
+	case "vm.clone", "ct.clone":
+		return validateNewID()
+	case "vm.clone_from_template", "ct.clone_from_template":
+		if err := validateNewID(); err != nil {
+			return err
+		}
+		return require("new_name")
+	case "vm.disk_resize":
+		if err := require("disk"); err != nil {
+			return err
+		}
+		return require("size")
+	default:
+		return fmt.Errorf("unsupported action")
+	}
+}
 func parseComputeTarget(req connectorsdk.ActionRequest, defaultNode string) (string, string, error) {
 	node := strings.TrimSpace(req.Params["node"])
 	vmid := strings.TrimSpace(req.Params["vmid"])
-	target := strings.TrimSpace(req.TargetID)
+	target := assetid.NativeCollectorAssetID(req.TargetID)
 
 	if target != "" {
 		switch {
@@ -505,8 +563,9 @@ func parseComputeTarget(req connectorsdk.ActionRequest, defaultNode string) (str
 	if node == "" || vmid == "" {
 		return "", "", fmt.Errorf("target must be node/vmid (or provide node + vmid params)")
 	}
-	if _, err := strconv.Atoi(vmid); err != nil {
-		return "", "", fmt.Errorf("vmid must be numeric")
+	parsedVMID, err := strconv.Atoi(vmid)
+	if err != nil || parsedVMID <= 0 {
+		return "", "", fmt.Errorf("vmid must be a positive integer")
 	}
 
 	return node, vmid, nil

@@ -42,10 +42,13 @@ func TestSiteReliabilityBridgeCollect(t *testing.T) {
 
 	byKey := make(map[string]telemetry.MetricSample, len(samples))
 	for _, s := range samples {
-		byKey[s.AssetID+":"+s.Metric] = s
+		if s.AssetID != "" {
+			t.Fatalf("hub metric unexpectedly referenced asset %q", s.AssetID)
+		}
+		byKey[s.Scope+":"+s.Metric] = s
 	}
 
-	assertSample(t, byKey, "hub-reliability", telemetry.MetricSiteReliabilityScore, "score", 99.5)
+	assertSample(t, byKey, telemetry.MetricScopeHubReliability, telemetry.MetricSiteReliabilityScore, "score", 99.5)
 }
 
 func TestSiteReliabilityBridgeLabels(t *testing.T) {

@@ -13,12 +13,18 @@ import (
 	"github.com/labtether/labtether/internal/dependencies"
 	respkg "github.com/labtether/labtether/internal/hubapi/resources"
 	"github.com/labtether/labtether/internal/hubapi/shared"
+	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/servicehttp"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
 // buildResourcesDeps constructs the resources.Deps from the apiServer's fields.
 func (s *apiServer) buildResourcesDeps() *respkg.Deps {
+	enrollmentTransactions, _ := s.enrollmentStore.(persistence.AgentEnrollmentTransactionStore)
+	fileTransferStore := s.fileTransferStore
+	if fileTransferStore == nil {
+		fileTransferStore = s.db
+	}
 	return &respkg.Deps{
 		AgentMgr:            s.agentMgr,
 		AssetStore:          s.assetStore,
@@ -37,7 +43,7 @@ func (s *apiServer) buildResourcesDeps() *respkg.Deps {
 		DB:                  s.db,
 		FileProtoPool:       s.fileProtoPool,
 		FileConnectionStore: s.db,
-		FileTransferStore:   s.db,
+		FileTransferStore:   fileTransferStore,
 		ActiveTransfers:     &s.activeTransfers,
 		RemoteBookmarkStore: s.db,
 
@@ -47,6 +53,7 @@ func (s *apiServer) buildResourcesDeps() *respkg.Deps {
 		JournalBridges: &s.journalBridges,
 		DiskBridges:    &s.diskBridges,
 		NetworkBridges: &s.networkBridges,
+		WoLPending:     &s.wolPending,
 		PackageBridges: &s.packageBridges,
 		CronBridges:    &s.cronBridges,
 		UsersBridges:   &s.usersBridges,
@@ -60,12 +67,18 @@ func (s *apiServer) buildResourcesDeps() *respkg.Deps {
 			return s.executeViaAgent(job)
 		},
 
-		EnforceRateLimit:  s.enforceRateLimit,
-		PrincipalActorID:  func(ctx context.Context) string { return principalActorID(ctx) },
-		UserIDFromContext: func(ctx context.Context) string { return userIDFromContext(ctx) },
-		SecretsManager:    s.secretsManager,
+		EnforceRateLimit:        s.enforceRateLimit,
+		EvaluateAssetGuardrails: s.ensureGroupFeaturesDeps().EvaluateAssetGuardrails,
+		PrincipalActorID:        func(ctx context.Context) string { return principalActorID(ctx) },
+		UserIDFromContext:       func(ctx context.Context) string { return userIDFromContext(ctx) },
+		SecretsManager:          s.secretsManager,
 		AppendAuditEventBestEffort: func(event audit.Event, logMessage string) {
 			s.appendAuditEventBestEffort(event, logMessage)
+		},
+		Broadcast: func(eventType string, data map[string]any) {
+			if s.broadcaster != nil {
+				s.broadcaster.Broadcast(eventType, data)
+			}
 		},
 
 		ManualDeviceDB: func() respkg.ManualDeviceExecer {
@@ -76,8 +89,9 @@ func (s *apiServer) buildResourcesDeps() *respkg.Deps {
 		}(),
 
 		// Heartbeat and delete cascade dependencies.
-		EnrollmentStore:   s.enrollmentStore,
-		HubCollectorStore: s.hubCollectorStore,
+		EnrollmentStore:        s.enrollmentStore,
+		EnrollmentTransactions: enrollmentTransactions,
+		HubCollectorStore:      s.hubCollectorStore,
 		RemoveDockerHost: func(assetID string) {
 			if s.dockerCoordinator != nil {
 				s.dockerCoordinator.RemoveHost(assetID)
@@ -89,7 +103,7 @@ func (s *apiServer) buildResourcesDeps() *respkg.Deps {
 			}
 		},
 		SendSSHKeyRemoveToAsset: func(assetID string) {
-			if s.hubIdentity == nil || s.agentMgr == nil {
+			if s.currentHubSSHIdentity() == nil || s.agentMgr == nil {
 				return
 			}
 			if conn, ok := s.agentMgr.Get(assetID); ok {
@@ -456,6 +470,9 @@ func (s *apiServer) handleCompositeActions(w http.ResponseWriter, r *http.Reques
 
 // Discovery run handler
 func (s *apiServer) handleDiscoveryRun(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobalAPI(w, r, "discovery") {
+		return
+	}
 	if r.Method != "POST" {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -480,6 +497,9 @@ func (s *apiServer) handleAssetBulkMove(w http.ResponseWriter, r *http.Request) 
 }
 func (s *apiServer) handleDeviceRegister(w http.ResponseWriter, r *http.Request) {
 	s.ensureResourcesDeps().HandleDeviceRegister(w, r)
+}
+func (s *apiServer) handleDeviceDeregister(w http.ResponseWriter, r *http.Request) {
+	s.ensureResourcesDeps().HandleDeviceDeregister(w, r)
 }
 func (s *apiServer) handleRestartSettings(w http.ResponseWriter, r *http.Request) {
 	s.ensureResourcesDeps().HandleRestartSettings(w, r)

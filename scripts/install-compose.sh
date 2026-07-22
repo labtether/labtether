@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+umask 077
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="${COMPOSE_FILE:-${PROJECT_ROOT}/deploy/compose/docker-compose.deploy.yml}"
@@ -66,6 +67,10 @@ if [[ -z "${VERSION}" ]]; then
   log_fail "--version is required (example: ./scripts/install-compose.sh --version v1.2.3)"
   exit 1
 fi
+if [[ ! "${VERSION}" =~ ^v[0-9A-Za-z][0-9A-Za-z._-]{0,127}$ ]]; then
+  log_fail "version must start with v and contain only letters, digits, dot, underscore, or hyphen"
+  exit 1
+fi
 
 if ! require_command docker; then
   exit 1
@@ -76,14 +81,18 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 ensure_env_file() {
   if [[ -f "${ENV_FILE}" ]]; then
-    return 0
+    labtether_lock_down_private_file "${ENV_FILE}" "deploy env file"
+    return
+  fi
+  if [[ -e "${ENV_FILE}" || -L "${ENV_FILE}" ]]; then
+    log_fail "env path exists but is not a regular file: ${ENV_FILE}"
+    return 1
   fi
   if [[ ! -f "${ENV_TEMPLATE}" ]]; then
     log_fail "missing env template: ${ENV_TEMPLATE}"
     return 1
   fi
-  cp "${ENV_TEMPLATE}" "${ENV_FILE}"
-  chmod 600 "${ENV_FILE}"
+  labtether_create_private_file_from_template "${ENV_TEMPLATE}" "${ENV_FILE}" "deploy env file" || return 1
   log_pass "created ${ENV_FILE} from ${ENV_TEMPLATE}"
 }
 
@@ -98,7 +107,7 @@ upsert_env_value() {
   local key=$1
   local value=$2
   local tmp_file
-  tmp_file="$(mktemp)"
+  tmp_file="$(mktemp "${ENV_FILE}.tmp.XXXXXX")"
 
   awk -v k="$key" -v v="$value" -F= '
     BEGIN { written = 0 }
@@ -106,6 +115,7 @@ upsert_env_value() {
     { print }
     END { if (!written) print k "=" v }
   ' "${ENV_FILE}" > "${tmp_file}"
+  chmod 600 "${tmp_file}"
   mv "${tmp_file}" "${ENV_FILE}"
   chmod 600 "${ENV_FILE}"
 }
@@ -181,6 +191,9 @@ else
   cat <<EOF
 - Finish setup in the browser: http://localhost:3000/setup
 EOF
+  printf '%s\n' '- Retrieve the one-time token only in a private interactive terminal with:'
+  printf '  docker compose --env-file %q -f %q exec -T labtether sh -c %q\n' \
+    "$ENV_FILE" "$COMPOSE_FILE" 'cat /bootstrap/auth/setup-token'
 fi
 
 cat <<EOF

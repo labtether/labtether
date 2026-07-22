@@ -25,7 +25,7 @@ type ConnectAgentsCardProps = {
   enrollError: string;
   newRawToken: string;
   generating: boolean;
-  generateToken: (label: string, ttlHours: number, maxUses: number) => Promise<void> | void;
+  generateToken: (label: string, ttlHours: number, maxUses: number) => Promise<unknown> | void;
   revokeEnrollmentToken: (id: string) => Promise<void> | void;
   revokeAgentToken: (id: string) => Promise<void> | void;
   cleanupDeadTokens: () => Promise<{ enrollment_deleted: number; agent_deleted: number } | null>;
@@ -200,7 +200,7 @@ docker run -e LABTETHER_ENROLLMENT_TOKEN="${newRawToken}" \\
   -e LABTETHER_WS_URL="${wsURL}" \\
   labtether/labtether-agent
 
-# Bare metal (Linux/FreeBSD)
+# Bare metal (Linux)
 export LABTETHER_ENROLLMENT_TOKEN="${newRawToken}"
 export LABTETHER_WS_URL="${wsURL}"
 ./labtether-agent

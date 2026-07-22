@@ -66,6 +66,61 @@ func TestHandleV2Webhooks_Create(t *testing.T) {
 	}
 }
 
+func TestHandleV2Webhooks_PreservesSecretBytesAndOmitsEndpointFromAudit(t *testing.T) {
+	s := newTestAPIServer(t)
+	secretValue := "  exact hmac bytes  "
+	endpoint := "https://example.com/hooks/opaque-path-value"
+	payload, err := json.Marshal(map[string]any{
+		"name":   "byte-integrity",
+		"url":    endpoint,
+		"secret": secretValue,
+		"events": []string{"alert.fired"},
+	})
+	if err != nil {
+		t.Fatalf("marshal create payload: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/webhooks", strings.NewReader(string(payload)))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(contextWithPrincipal(req.Context(), "admin", "admin"))
+	rec := httptest.NewRecorder()
+	s.handleV2Webhooks(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var response struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	stored, ok, err := s.webhookStore.GetWebhook(req.Context(), response.Data.ID)
+	if err != nil || !ok {
+		t.Fatalf("load webhook: ok=%v err=%v", ok, err)
+	}
+	decrypted, err := s.secretsManager.DecryptString(stored.SecretCiphertext, stored.ID)
+	if err != nil {
+		t.Fatalf("decrypt webhook secret: %v", err)
+	}
+	if decrypted != secretValue {
+		t.Fatalf("decrypted secret bytes changed: got %q", decrypted)
+	}
+
+	events, err := s.auditStore.List(20, 0)
+	if err != nil {
+		t.Fatalf("list audit events: %v", err)
+	}
+	encodedEvents, err := json.Marshal(events)
+	if err != nil {
+		t.Fatalf("marshal audit events: %v", err)
+	}
+	if strings.Contains(string(encodedEvents), endpoint) || strings.Contains(string(encodedEvents), secretValue) {
+		t.Fatal("webhook audit event retained endpoint or HMAC secret material")
+	}
+}
+
 func TestHandleV2Webhooks_Create_MissingName(t *testing.T) {
 	s := newTestAPIServer(t)
 	handler := s.handleV2Webhooks

@@ -1,6 +1,20 @@
 package homeassistantpkg
 
-// Deps holds all dependencies required by the homeassistant handler package.
-// The v2 HA handlers are currently stubs that return 501; this struct will
-// grow when the Home Assistant integration is fully implemented.
-type Deps struct{}
+import (
+	"net/http"
+
+	"github.com/labtether/labtether/internal/persistence"
+	"github.com/labtether/labtether/internal/secrets"
+)
+
+// Deps holds the persisted inventory and encrypted runtime configuration used
+// by the Home Assistant v2 API. Runtime credentials are decrypted only for the
+// duration of the outbound request and are never returned by these handlers.
+type Deps struct {
+	AssetStore        persistence.AssetStore
+	HubCollectorStore persistence.HubCollectorStore
+	CredentialStore   persistence.CredentialStore
+	SecretsManager    *secrets.Manager
+
+	RequireAdminAuth func(http.ResponseWriter, *http.Request) bool
+}

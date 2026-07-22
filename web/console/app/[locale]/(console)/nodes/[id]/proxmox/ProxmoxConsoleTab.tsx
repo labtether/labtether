@@ -1,35 +1,25 @@
 "use client";
 
 import { Card } from "../../../../../components/ui/Card";
+import { Link } from "../../../../../../i18n/navigation";
 
 type Props = {
+  assetId: string;
   proxmoxNode: string;
   proxmoxVMID: string;
   effectiveKind: string;
-  proxmoxCollectorID: string;
 };
 
 export function ProxmoxConsoleTab({
+  assetId,
   proxmoxNode,
   proxmoxVMID,
   effectiveKind,
-  proxmoxCollectorID,
 }: Props) {
   const isVM = effectiveKind === "qemu";
   const isCT = effectiveKind === "lxc";
 
-  const collectorSuffix = proxmoxCollectorID
-    ? `&collector_id=${encodeURIComponent(proxmoxCollectorID)}`
-    : "";
-
-  let consoleURL: string | null = null;
-  if (proxmoxNode && proxmoxVMID) {
-    if (isVM) {
-      consoleURL = `/api/proxmox/nodes/${encodeURIComponent(proxmoxNode)}/qemu/${encodeURIComponent(proxmoxVMID)}/vncproxy?console=1${collectorSuffix}`;
-    } else if (isCT) {
-      consoleURL = `/api/proxmox/nodes/${encodeURIComponent(proxmoxNode)}/lxc/${encodeURIComponent(proxmoxVMID)}/vncproxy?console=1${collectorSuffix}`;
-    }
-  }
+  const consoleURL = assetId ? `/nodes/${encodeURIComponent(assetId)}?panel=desktop` : null;
 
   const consoleType = isVM ? "QEMU VNC" : isCT ? "LXC Console" : "Console";
 
@@ -53,14 +43,12 @@ export function ProxmoxConsoleTab({
               <p className="text-xs text-[var(--muted)]">VMID: <code>{proxmoxVMID}</code></p>
             </div>
             {consoleURL ? (
-              <a
+              <Link
                 href={consoleURL}
-                target="_blank"
-                rel="noopener noreferrer"
                 className="rounded border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text)] hover:bg-[var(--hover)] transition-colors"
               >
-                Open Console
-              </a>
+                Open Secure Console
+              </Link>
             ) : null}
           </div>
         ) : (
@@ -69,7 +57,7 @@ export function ProxmoxConsoleTab({
           </p>
         )}
         <p className="text-[10px] text-[var(--muted)]">
-          Console access proxies through the Proxmox VNC endpoint via the LabTether backend.
+          Console access uses LabTether&apos;s authenticated desktop-session bridge so generated Proxmox tickets stay server-side.
         </p>
       </div>
     </Card>

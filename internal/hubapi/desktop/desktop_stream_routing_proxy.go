@@ -11,6 +11,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/protocols"
 	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
@@ -55,8 +56,27 @@ func (d *Deps) HandleDesktopStream(w http.ResponseWriter, r *http.Request, sessi
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	opts := d.GetDesktopSessionOptions(session.ID)
+	if !opts.Direct {
+		if !d.enforceAssetActionGuard(w, session.Target) {
+			return
+		}
+	}
 
 	protocol := d.ResolveDesktopProtocol(session, r)
+	if opts.Direct {
+		switch protocol {
+		case "rdp":
+			d.HandleGuacdDesktopStream(w, r, session)
+		case "spice":
+			d.HandleDirectSPICEStream(w, r, session)
+		case "vnc":
+			d.handleDirectVNCProxyWithConfig(w, r, session, opts.DirectHost, opts.DirectPort, false)
+		default:
+			servicehttp.WriteError(w, http.StatusBadRequest, "unsupported direct desktop protocol")
+		}
+		return
+	}
 	if protocol == "webrtc" {
 		if d.ShouldUseWebRTC(session.Target) {
 			d.HandleWebRTCStream(w, r, session)
@@ -170,13 +190,16 @@ func (d *Deps) HandleDesktopStream(w http.ResponseWriter, r *http.Request, sessi
 
 // ResolveDesktopProtocol determines the effective desktop protocol for a session.
 func (d *Deps) ResolveDesktopProtocol(session terminal.Session, r *http.Request) string {
-	queryProtocol := NormalizeDesktopProtocol(r.URL.Query().Get("protocol"))
-	if queryProtocol != "" && queryProtocol != "vnc" {
-		return queryProtocol
-	}
 	opts := d.GetDesktopSessionOptions(session.ID)
 	if opts.Protocol != "" {
 		return NormalizeDesktopProtocol(opts.Protocol)
+	}
+	// Query selection is retained only for legacy sessions that predate the
+	// server-side options entry. Once a session has options, its creation-time
+	// protocol is authoritative and a stream URL cannot override it.
+	queryProtocol := NormalizeDesktopProtocol(r.URL.Query().Get("protocol"))
+	if queryProtocol != "" && queryProtocol != "vnc" {
+		return queryProtocol
 	}
 	if d.AssetStore != nil {
 		if assetEntry, ok, err := d.AssetStore.GetAsset(session.Target); err == nil && ok {
@@ -256,12 +279,12 @@ func (d *Deps) handleDirectVNCProxyWithConfig(w http.ResponseWriter, r *http.Req
 	}
 	defer vncConn.Close()
 
-	wsConn, err := d.TerminalWebSocketUpgrader.Upgrade(w, r, nil)
+	wsConn, err := shared.UpgradeWebSocket(d.TerminalWebSocketUpgrader, w, r, nil)
 	if err != nil {
 		return
 	}
-	defer wsConn.Close()
 	wsConn.SetReadLimit(d.MaxDesktopInputReadBytes)
+	defer wsConn.Close()
 
 	securityruntime.Logf("desktop: direct VNC proxy for %s -> %s", session.ID, addr)
 

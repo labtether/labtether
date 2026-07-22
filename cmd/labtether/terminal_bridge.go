@@ -15,6 +15,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/credentials"
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
@@ -38,6 +39,9 @@ func dbPoolOrNil(db *persistence.PostgresStore) *pgxpool.Pool {
 // fields to the Deps methods that now own those implementations, using closures
 // that capture d to avoid circular assignment during struct initialization.
 func (s *apiServer) buildTerminalDeps() *terminalpkg.Deps {
+	if s.ephemeralSSHConfigs == nil {
+		s.ephemeralSSHConfigs = terminalpkg.NewEphemeralSSHConfigStore(0)
+	}
 	d := &terminalpkg.Deps{
 		TerminalStore:           s.terminalStore,
 		TerminalPersistentStore: s.terminalPersistentStore,
@@ -74,9 +78,6 @@ func (s *apiServer) buildTerminalDeps() *terminalpkg.Deps {
 		PrincipalActorID: func(ctx context.Context) string {
 			return principalActorID(ctx)
 		},
-		IsOwnerActor: func(actorID string) bool {
-			return isOwnerActor(actorID)
-		},
 		DecodeJSONBody: func(w http.ResponseWriter, r *http.Request, dst any) error {
 			return decodeJSONBody(w, r, dst)
 		},
@@ -89,6 +90,7 @@ func (s *apiServer) buildTerminalDeps() *terminalpkg.Deps {
 		AppendLogEventBestEffort: func(event logs.Event, logMessage string) {
 			s.appendLogEventBestEffort(event, logMessage)
 		},
+		EvaluateAssetGuardrails: s.ensureGroupFeaturesDeps().EvaluateAssetGuardrails,
 
 		ResolveDockerExecSessionTarget: func(target string) (string, string, bool) {
 			return s.resolveDockerExecSessionTarget(target)
@@ -131,7 +133,8 @@ func (s *apiServer) buildTerminalDeps() *terminalpkg.Deps {
 			return s.credentialStore.SaveAssetTerminalConfig(cfg)
 		},
 
-		TerminalInMemStore: s.terminalInMemStore,
+		TerminalInMemStore:  s.terminalInMemStore,
+		EphemeralSSHConfigs: s.ephemeralSSHConfigs,
 
 		ExecuteSSHCommandFn: func(job terminal.CommandJob, mode string, timeout time.Duration, maxOutput int) (string, error) {
 			return executeSSHCommand(job, commandExecutorConfig{
@@ -171,6 +174,14 @@ func (s *apiServer) handleSessionActions(w http.ResponseWriter, r *http.Request)
 
 func (s *apiServer) handleRecentCommands(w http.ResponseWriter, r *http.Request) {
 	s.ensureTerminalDeps().HandleRecentCommands(w, r)
+}
+
+func (s *apiServer) handleTerminalCommandActions(w http.ResponseWriter, r *http.Request) {
+	s.ensureTerminalDeps().HandleCommandActions(w, r)
+}
+
+func (s *apiServer) handleQuickSession(w http.ResponseWriter, r *http.Request) {
+	s.ensureTerminalDeps().HandleQuickSession(w, r)
 }
 
 func (s *apiServer) handleTerminalPreferences(w http.ResponseWriter, r *http.Request) {
@@ -282,14 +293,10 @@ type terminalControlMessage = terminalpkg.TerminalControlMessage
 // and used by other cmd/labtether files.
 func canAccessOwnedSession(r *http.Request, sessionActorID string) bool {
 	actorID := principalActorID(r.Context())
-	if isOwnerActor(actorID) {
+	if apiv2.IsOwnerPrincipal(r.Context()) {
 		return true
 	}
 	return strings.TrimSpace(sessionActorID) == actorID
-}
-
-func isOwnerActor(actorID string) bool {
-	return strings.TrimSpace(actorID) == "owner"
 }
 
 // Function aliases for exported terminal package functions.

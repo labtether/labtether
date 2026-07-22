@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/labtether/labtether/internal/servicehttp"
@@ -48,25 +47,12 @@ func (d *Deps) HandleAgentBinary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	binaryPath, err := d.AgentCache.ResolveBinaryPath(bin.Name)
+	f, info, err := d.AgentCache.OpenVerifiedBinary(bin.Name, bin.SHA256, bin.SizeBytes)
 	if err != nil {
 		http.Error(w, "agent binary not found", http.StatusNotFound)
 		return
 	}
-
-	// #nosec G304 -- binaryPath is constrained by AgentCache.ResolveBinaryPath path-traversal check.
-	f, err := os.Open(binaryPath)
-	if err != nil {
-		http.Error(w, "failed to open agent binary", http.StatusInternalServerError)
-		return
-	}
-	defer f.Close()
-
-	info, err := f.Stat()
-	if err != nil {
-		http.Error(w, "failed to stat agent binary", http.StatusInternalServerError)
-		return
-	}
+	defer func() { _ = f.Close() }()
 
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, bin.Name))

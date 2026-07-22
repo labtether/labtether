@@ -79,6 +79,7 @@ export function useDesktopViewerRuntime({
 
   const virtualKeyboard = useVirtualKeyboard((keysym, down) => {
     if (protocol === "vnc") vncRef.current?.sendKey?.(keysym, down);
+    else if (protocol === "rdp") guacRef.current?.sendKey?.(keysym, down);
     else if (protocol === "webrtc") webrtcRef.current?.sendKey?.(keysym, down);
   });
 
@@ -165,6 +166,8 @@ export function useDesktopViewerRuntime({
       focusActiveViewer();
       const sendKey = (keysym: number, down: boolean) => {
         if (protocol === "vnc") vncRef.current?.sendKey?.(keysym, down);
+        else if (protocol === "rdp")
+          guacRef.current?.sendKey?.(keysym, down);
         else if (protocol === "webrtc")
           webrtcRef.current?.sendKey?.(keysym, down);
       };
@@ -172,7 +175,14 @@ export function useDesktopViewerRuntime({
       for (const ks of [...keysyms].reverse()) sendKey(ks, false);
       restoreViewerFocus();
     },
-    [focusActiveViewer, protocol, restoreViewerFocus, vncRef, webrtcRef],
+    [
+      focusActiveViewer,
+      guacRef,
+      protocol,
+      restoreViewerFocus,
+      vncRef,
+      webrtcRef,
+    ],
   );
 
   const handleFileDropUpload = useCallback(

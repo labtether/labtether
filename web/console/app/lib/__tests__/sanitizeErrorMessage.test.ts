@@ -7,6 +7,13 @@ describe("sanitizeErrorMessage", () => {
     expect(sanitizeErrorMessage("   ", "fallback")).toBe("fallback");
   });
 
+  it("replaces generic upstream failures with the operation-specific fallback", () => {
+    expect(sanitizeErrorMessage("An internal error occurred.", "Check the connector settings.")).toBe(
+      "Check the connector settings.",
+    );
+    expect(sanitizeErrorMessage("internal server error", "Try again later.")).toBe("Try again later.");
+  });
+
   it("passes through clean messages", () => {
     expect(sanitizeErrorMessage("connection refused", "err")).toBe(
       "connection refused",

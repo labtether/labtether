@@ -2,12 +2,12 @@ package truenas
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
@@ -40,7 +40,7 @@ func (d *Deps) HandleTrueNASSnapshots(ctx context.Context, w http.ResponseWriter
 			snapshots := make([]map[string]any, 0, 64)
 			warnings := make([]string, 0, 2)
 			if err := CallTrueNASQueryWithRetries(ctx, runtime.Client, "zfs.snapshot.query", &snapshots); err != nil {
-				warnings = AppendTrueNASWarning(warnings, "snapshots unavailable: "+err.Error())
+				warnings = AppendTrueNASWarning(warnings, trueNASWarning("snapshots unavailable", err))
 				snapshots = nil
 			}
 			servicehttp.WriteJSON(w, http.StatusOK, TrueNASSnapshotsResponse{
@@ -57,8 +57,8 @@ func (d *Deps) HandleTrueNASSnapshots(ctx context.Context, w http.ResponseWriter
 				Dataset string `json:"dataset"`
 				Name    string `json:"name"`
 			}
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				servicehttp.WriteError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+			if err := shared.DecodeJSONBody(w, r, &body); err != nil {
+				writeTrueNASError(w, http.StatusBadRequest, "invalid request body", err)
 				return
 			}
 			body.Dataset = strings.TrimSpace(body.Dataset)
@@ -70,7 +70,7 @@ func (d *Deps) HandleTrueNASSnapshots(ctx context.Context, w http.ResponseWriter
 			var created map[string]any
 			params := []any{map[string]any{"dataset": body.Dataset, "name": body.Name}}
 			if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, "zfs.snapshot.create", params, &created); err != nil {
-				servicehttp.WriteError(w, http.StatusBadGateway, "failed to create snapshot: "+err.Error())
+				writeTrueNASError(w, http.StatusBadGateway, "failed to create snapshot", err)
 				return
 			}
 			d.InvalidateTrueNASCaches(asset.ID, runtime.CollectorID)
@@ -102,7 +102,7 @@ func (d *Deps) HandleTrueNASSnapshots(ctx context.Context, w http.ResponseWriter
 			return
 		}
 		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, "zfs.snapshot.delete", []any{snapshotID}, nil); err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to delete snapshot: "+err.Error())
+			writeTrueNASError(w, http.StatusBadGateway, "failed to delete snapshot", err)
 			return
 		}
 		d.InvalidateTrueNASCaches(asset.ID, runtime.CollectorID)
@@ -126,7 +126,7 @@ func (d *Deps) HandleTrueNASSnapshots(ctx context.Context, w http.ResponseWriter
 			return
 		}
 		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, "zfs.snapshot.rollback", []any{snapshotID}, nil); err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to rollback snapshot: "+err.Error())
+			writeTrueNASError(w, http.StatusBadGateway, "failed to rollback snapshot", err)
 			return
 		}
 		d.InvalidateTrueNASCaches(asset.ID, runtime.CollectorID)
@@ -147,8 +147,8 @@ func (d *Deps) HandleTrueNASSnapshots(ctx context.Context, w http.ResponseWriter
 		var body struct {
 			DatasetDst string `json:"dataset_dst"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			servicehttp.WriteError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+		if err := shared.DecodeJSONBody(w, r, &body); err != nil {
+			writeTrueNASError(w, http.StatusBadRequest, "invalid request body", err)
 			return
 		}
 		body.DatasetDst = strings.TrimSpace(body.DatasetDst)
@@ -158,7 +158,7 @@ func (d *Deps) HandleTrueNASSnapshots(ctx context.Context, w http.ResponseWriter
 		}
 		params := []any{map[string]any{"snapshot": snapshotID, "dataset_dst": body.DatasetDst}}
 		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, "zfs.snapshot.clone", params, nil); err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to clone snapshot: "+err.Error())
+			writeTrueNASError(w, http.StatusBadGateway, "failed to clone snapshot", err)
 			return
 		}
 		d.InvalidateTrueNASCaches(asset.ID, runtime.CollectorID)

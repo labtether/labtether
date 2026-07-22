@@ -9,6 +9,11 @@ import (
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
+const (
+	maxCompositeFacetAssets   = 64
+	maxCompositeAssetIDLength = 255
+)
+
 // HandleComposites handles POST /composites (create composite).
 // Registered at /composites (exact match).
 func (d *Deps) HandleComposites(w http.ResponseWriter, r *http.Request) {
@@ -43,9 +48,18 @@ func (d *Deps) HandleComposites(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusBadRequest, "facet_asset_ids must contain at least one entry")
 			return
 		}
+		if len(req.FacetAssetIDs) > maxCompositeFacetAssets {
+			servicehttp.WriteError(w, http.StatusBadRequest, "facet_asset_ids exceeds maximum of 64")
+			return
+		}
+		if len(req.PrimaryAssetID) > maxCompositeAssetIDLength {
+			servicehttp.WriteError(w, http.StatusBadRequest, "primary_asset_id is too long")
+			return
+		}
+		seenFacets := make(map[string]struct{}, len(req.FacetAssetIDs))
 		for i, id := range req.FacetAssetIDs {
 			req.FacetAssetIDs[i] = strings.TrimSpace(id)
-			if req.FacetAssetIDs[i] == "" {
+			if req.FacetAssetIDs[i] == "" || len(req.FacetAssetIDs[i]) > maxCompositeAssetIDLength {
 				servicehttp.WriteError(w, http.StatusBadRequest, "facet_asset_ids must not contain empty values")
 				return
 			}
@@ -53,6 +67,11 @@ func (d *Deps) HandleComposites(w http.ResponseWriter, r *http.Request) {
 				servicehttp.WriteError(w, http.StatusBadRequest, "facet_asset_ids must not include primary_asset_id")
 				return
 			}
+			if _, duplicate := seenFacets[req.FacetAssetIDs[i]]; duplicate {
+				servicehttp.WriteError(w, http.StatusBadRequest, "facet_asset_ids must not contain duplicates")
+				return
+			}
+			seenFacets[req.FacetAssetIDs[i]] = struct{}{}
 		}
 		if !requireAssetAccess(w, r, append([]string{req.PrimaryAssetID}, req.FacetAssetIDs...)...) {
 			return

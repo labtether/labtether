@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../../../../../components/ui/Button";
 import { PBSBackupCoverageCard } from "../PBSBackupCoverageCard";
+import { normalizePBSGroupsResponse } from "../pbsTabModel";
 import { pbsAction } from "./usePBSData";
 
 type Props = {
@@ -14,28 +15,37 @@ export function PBSBackupGroupsTab({ assetId }: Props) {
   const [actionInFlight, setActionInFlight] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [groupsRefreshKey, setGroupsRefreshKey] = useState(0);
   const actionSeq = useRef(0);
 
   const doForgetGroup = useCallback(
-    async (store: string, backupType: string, backupId: string) => {
+    async (store: string, backupType: string, backupId: string): Promise<boolean> => {
       const key = `${store}/${backupType}/${backupId}`;
       const seq = ++actionSeq.current;
       setActionError(null);
       setActionSuccess(null);
       setActionInFlight(`forget-${key}`);
       try {
+        const params = new URLSearchParams({
+          store,
+          "backup-type": backupType,
+          "backup-id": backupId,
+        });
         await pbsAction(
-          `/api/pbs/assets/${encodeURIComponent(assetId)}/groups/forget`,
-          "POST",
-          { store, backup_type: backupType, backup_id: backupId },
+          `/api/pbs/assets/${encodeURIComponent(assetId)}/groups/forget?${params.toString()}`,
+          "DELETE",
         );
         if (actionSeq.current === seq) {
           setActionSuccess(`Forgot group ${backupType}/${backupId} in ${store}`);
+          setGroupsRefreshKey((current) => current + 1);
+          return true;
         }
+        return false;
       } catch (err) {
         if (actionSeq.current === seq) {
           setActionError(err instanceof Error ? err.message : "forget failed");
         }
+        return false;
       } finally {
         if (actionSeq.current === seq) setActionInFlight(null);
       }
@@ -43,16 +53,12 @@ export function PBSBackupGroupsTab({ assetId }: Props) {
     [assetId],
   );
 
-  // Expose forget action via a context or just render the card plus a note.
-  // The core group table is rendered by PBSBackupCoverageCard which handles
-  // its own data fetching. The forget action is surfaced here as a secondary
-  // action panel to keep the existing card working without modification.
   return (
     <div className="space-y-4">
-      {actionError ? <p className="text-xs text-[var(--bad)]">{actionError}</p> : null}
-      {actionSuccess ? <p className="text-xs text-[var(--ok)]">{actionSuccess}</p> : null}
+      {actionError ? <p role="alert" className="text-xs text-[var(--bad)]">{actionError}</p> : null}
+      {actionSuccess ? <p role="status" className="text-xs text-[var(--ok)]">{actionSuccess}</p> : null}
 
-      <PBSBackupCoverageCard assetId={assetId} />
+      <PBSBackupCoverageCard assetId={assetId} refreshKey={groupsRefreshKey} />
 
       <ForgetGroupForm
         assetId={assetId}
@@ -70,14 +76,59 @@ export function PBSBackupGroupsTab({ assetId }: Props) {
 type ForgetFormProps = {
   assetId: string;
   actionInFlight: string | null;
-  onForget: (store: string, backupType: string, backupId: string) => void;
+  onForget: (store: string, backupType: string, backupId: string) => Promise<boolean>;
 };
 
-function ForgetGroupForm({ actionInFlight, onForget }: ForgetFormProps) {
-  const [store, setStore] = useState("");
-  const [backupType, setBackupType] = useState("vm");
-  const [backupId, setBackupId] = useState("");
+function ForgetGroupForm({ assetId, actionInFlight, onForget }: ForgetFormProps) {
   const [showForm, setShowForm] = useState(false);
+  const [groupOptions, setGroupOptions] = useState<
+    Array<{ key: string; store: string; backupType: string; backupId: string }>
+  >([]);
+  const [selectedGroupKey, setSelectedGroupKey] = useState("");
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [groupsError, setGroupsError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+
+  useEffect(() => {
+    if (!showForm) return;
+    let cancelled = false;
+    setGroupsLoading(true);
+    setGroupsError(null);
+    fetch(`/api/pbs/assets/${encodeURIComponent(assetId)}/groups`, { cache: "no-store" })
+      .then(async (response) => {
+        const payload = normalizePBSGroupsResponse(await response.json().catch(() => null));
+        if (!response.ok) {
+          throw new Error(payload.error || `failed to load backup groups (${response.status})`);
+        }
+        if (cancelled) return;
+        const options = payload.datastores.flatMap((datastore) =>
+          datastore.groups.map((group) => ({
+            key: `${datastore.store}/${group.backup_type}/${group.backup_id}`,
+            store: datastore.store,
+            backupType: group.backup_type,
+            backupId: group.backup_id,
+          })),
+        );
+        setGroupOptions(options);
+        setSelectedGroupKey((current) => current || options[0]?.key || "");
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setGroupsError(err instanceof Error ? err.message : "failed to load backup groups");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setGroupsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [assetId, showForm]);
+
+  const selectedGroup = useMemo(
+    () => groupOptions.find((group) => group.key === selectedGroupKey),
+    [groupOptions, selectedGroupKey],
+  );
 
   if (!showForm) {
     return (
@@ -97,50 +148,79 @@ function ForgetGroupForm({ actionInFlight, onForget }: ForgetFormProps) {
       </p>
       <div className="flex flex-wrap gap-2 items-end">
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-[var(--muted)]">Datastore</span>
-          <input
-            className="rounded border border-[var(--line)] bg-[var(--panel-glass)] text-xs text-[var(--text)] px-2 py-1"
-            value={store}
-            onChange={(e) => setStore(e.target.value)}
-            placeholder="store-name"
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-[var(--muted)]">Type</span>
+          <span className="text-xs text-[var(--muted)]">Backup group</span>
           <select
+            aria-label="Backup group"
             className="rounded border border-[var(--line)] bg-[var(--panel-glass)] text-xs text-[var(--text)] px-2 py-1"
-            value={backupType}
-            onChange={(e) => setBackupType(e.target.value)}
+            value={selectedGroupKey}
+            onChange={(e) => {
+              setSelectedGroupKey(e.target.value);
+              setConfirming(false);
+            }}
+            disabled={groupsLoading || groupOptions.length === 0}
           >
-            <option value="vm">vm</option>
-            <option value="ct">ct</option>
-            <option value="host">host</option>
+            {groupOptions.length === 0 ? (
+              <option value="">{groupsLoading ? "Loading groups..." : "No groups available"}</option>
+            ) : (
+              groupOptions.map((group) => (
+                <option key={group.key} value={group.key}>
+                  {group.store} — {group.backupType}/{group.backupId}
+                </option>
+              ))
+            )}
           </select>
         </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-[var(--muted)]">ID</span>
-          <input
-            className="rounded border border-[var(--line)] bg-[var(--panel-glass)] text-xs text-[var(--text)] px-2 py-1"
-            value={backupId}
-            onChange={(e) => setBackupId(e.target.value)}
-            placeholder="100"
-          />
-        </label>
+        {confirming && selectedGroup ? (
+          <>
+            <span role="alert" className="text-xs text-[var(--warn)]">
+              Confirm permanent removal of {selectedGroup.backupType}/{selectedGroup.backupId} from {selectedGroup.store}.
+            </span>
+            <Button
+              size="sm"
+              variant="danger"
+              disabled={!!actionInFlight}
+              loading={actionInFlight?.startsWith("forget-") ?? false}
+              onClick={async () => {
+                const forgotten = await onForget(
+                  selectedGroup.store,
+                  selectedGroup.backupType,
+                  selectedGroup.backupId,
+                );
+                if (!forgotten) return;
+                setConfirming(false);
+                setShowForm(false);
+                setSelectedGroupKey("");
+                setGroupOptions([]);
+              }}
+            >
+              Confirm Forget
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
+              Back
+            </Button>
+          </>
+        ) : (
+          <Button
+            size="sm"
+            variant="danger"
+            disabled={!selectedGroup || !!actionInFlight}
+            onClick={() => setConfirming(true)}
+          >
+            Review Forget
+          </Button>
+        )}
         <Button
           size="sm"
-          variant="danger"
-          disabled={!store || !backupId || !!actionInFlight}
-          loading={actionInFlight?.startsWith("forget-") ?? false}
+          variant="ghost"
           onClick={() => {
-            if (store && backupId) onForget(store, backupType, backupId);
+            setConfirming(false);
+            setShowForm(false);
           }}
         >
-          Forget
-        </Button>
-        <Button size="sm" variant="ghost" onClick={() => setShowForm(false)}>
           Cancel
         </Button>
       </div>
+      {groupsError ? <p role="alert" className="text-xs text-[var(--bad)]">{groupsError}</p> : null}
     </div>
   );
 }

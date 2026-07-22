@@ -15,9 +15,10 @@ import {
 
 type Props = {
   assetId: string;
+  refreshKey?: number;
 };
 
-export function PBSBackupCoverageCard({ assetId }: Props) {
+export function PBSBackupCoverageCard({ assetId, refreshKey = 0 }: Props) {
   const [data, setData] = useState<PBSGroupsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +60,7 @@ export function PBSBackupCoverageCard({ assetId }: Props) {
 
   useEffect(() => {
     void fetchGroups();
-  }, [fetchGroups]);
+  }, [fetchGroups, refreshKey]);
 
   const toggleStore = useCallback((store: string) => {
     setExpandedStores((prev) => {

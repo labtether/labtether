@@ -77,6 +77,10 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       );
     }
 
+    if (response.status === 204) {
+      return new Response(null, { status: 204 });
+    }
+
     return NextResponse.json(payload ?? {}, { status: response.status });
   } catch {
     return NextResponse.json({ error: "users endpoint unavailable" }, { status: 502 });

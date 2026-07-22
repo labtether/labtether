@@ -271,7 +271,8 @@ export function AlertRulesTab({
       return;
     }
     if (ruleForm.targetType !== "global" && !ruleForm.targetId.trim()) {
-      setRuleError(`Choose a ${ruleForm.targetType} target for this rule.`);
+      const article = ruleForm.targetType === "asset" ? "an" : "a";
+      setRuleError(`Choose ${article} ${ruleForm.targetType} target for this rule.`);
       return;
     }
 

@@ -35,7 +35,7 @@ Built-in MCP server with 23+ tools. Operate your fleet through Claude, OpenClaw,
 </td>
 <td align="center" width="33%">
 <strong>Cross-Platform</strong><br/>
-Linux, Windows, macOS, FreeBSD — all first-class citizens, managed from one hub.
+Linux and macOS are supported, Windows support is partial, and FreeBSD is planned — all tracked from one hub.
 </td>
 <td align="center" width="33%">
 <strong>Secure by Default</strong><br/>
@@ -53,7 +53,7 @@ You run Proxmox, TrueNAS, Docker, maybe Home Assistant. Each has its own dashboa
 LabTether replaces the tab sprawl with one dashboard, one timeline, one URL.
 
 - **One dashboard** for metrics, logs, alerts, incidents, and actions -- no tab sprawl.
-- **Multi-platform** -- manage Linux, Windows, macOS, and FreeBSD from one place.
+- **Multi-platform** -- manage supported Linux and macOS nodes, plus the current Windows surface, from one place. See the platform matrix for exact coverage.
 - **Self-hosted** -- Docker Compose + Postgres. Your data never leaves your network.
 - **Integrations** -- Proxmox, TrueNAS, Docker, Portainer, Home Assistant, and more.
 
@@ -61,30 +61,29 @@ LabTether replaces the tab sprawl with one dashboard, one timeline, one URL.
 
 ## Quick Start
 
-Get a full LabTether hub running in under 5 minutes. You need Docker.
-
-**One command:**
+Get a full LabTether hub running in under 5 minutes. You need Docker and Docker
+Compose 2.33.1 or newer. Download and inspect the release installer, then pin
+the release you intend to run:
 
 ```bash
-docker run -d --name labtether \
-  -p 3000:3000 -p 8443:8443 \
-  -v labtether-data:/data \
-  ghcr.io/labtether/labtether:latest
+curl --proto '=https' --tlsv1.2 -fsSLo install-labtether.sh https://labtether.com/install.sh
+less install-labtether.sh
+LABTETHER_VERSION=vX.Y.Z bash install-labtether.sh
 ```
 
-Open **http://localhost:3000** — the setup wizard walks you through the rest. TLS certificates are generated automatically.
+The installer verifies coordinated release checksums, verifies signed GitHub
+provenance when `gh` is available, and deploys digest-pinned images. Open
+**http://localhost:3000** when it finishes; the setup wizard walks you through
+the rest. TLS certificates are generated automatically.
 
 > Full guide with Tailscale remote access, custom TLS, OIDC SSO, and multi-user setup at [labtether.com/docs](https://labtether.com/docs).
 
 ### Advanced: Docker Compose
 
-For split services, external Postgres, or resource limits:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/labtether/labtether/main/deploy/compose/docker-compose.deploy.yml \
-  -o docker-compose.yml
-docker compose up -d
-```
+The verified installer writes the release-specific Compose file, environment
+template, manifest, and checksums into its install directory. Customize those
+pinned artifacts for split services, external Postgres, or resource limits;
+do not deploy the mutable `main` branch or `latest` image tag directly.
 
 ---
 
@@ -94,13 +93,33 @@ Agents are optional -- connectors like Proxmox and TrueNAS work without them. Ag
 
 ### Linux
 
-Download the agent binary from [Releases](https://github.com/labtether/labtether-agent/releases/latest) (amd64 or arm64), then enroll:
+Choose an exact release, verify its checksum and GitHub build attestation, then enroll:
 
 ```bash
-curl -fsSL https://github.com/labtether/labtether-agent/releases/latest/download/labtether-agent-linux-amd64 \
-  -o /usr/local/bin/labtether-agent
-chmod +x /usr/local/bin/labtether-agent
-labtether-agent --hub wss://your-hub:8443/ws/agent --enrollment-token YOUR_TOKEN
+VERSION=vX.Y.Z
+ASSET=labtether-agent-linux-amd64
+tmp_dir="$(mktemp -d)"
+curl --proto '=https' --tlsv1.2 -fL \
+  "https://github.com/labtether/labtether-agent/releases/download/${VERSION}/${ASSET}" \
+  -o "${tmp_dir}/${ASSET}"
+curl --proto '=https' --tlsv1.2 -fL \
+  "https://github.com/labtether/labtether-agent/releases/download/${VERSION}/${ASSET}.sha256" \
+  -o "${tmp_dir}/${ASSET}.sha256"
+(cd "$tmp_dir" && sha256sum --check "${ASSET}.sha256")
+gh attestation verify "${tmp_dir}/${ASSET}" -R labtether/labtether-agent
+sudo install -m 0755 "${tmp_dir}/${ASSET}" /usr/local/bin/labtether-agent
+rm -rf "$tmp_dir"
+umask 077
+token_file="$(mktemp)"
+trap 'rm -f "$token_file"' EXIT
+read -r -s -p 'Enrollment token: ' enrollment_token
+printf '\n'
+printf '%s\n' "$enrollment_token" > "$token_file"
+unset enrollment_token
+sudo env \
+  LABTETHER_WS_URL=wss://your-hub:8443/ws/agent \
+  LABTETHER_ENROLLMENT_TOKEN_FILE="$token_file" \
+  /usr/local/bin/labtether-agent
 ```
 
 Or use the hub's generated install command -- it handles the download automatically.
@@ -113,11 +132,16 @@ Download **LabTether Agent.app** from [Releases](https://github.com/labtether/la
 
 ### Windows
 
-Download **LabTether Agent** from [Releases](https://github.com/labtether/labtether-win/releases/latest) and run the installer. The system tray icon handles enrollment.
+The cross-platform endpoint agent publishes Windows `amd64` and `arm64`
+binaries. Use the hub-generated PowerShell onboarding command; the separate
+native system-tray application remains planned.
 
 ### FreeBSD
 
-FreeBSD nodes are managed agentlessly via connectors. No agent install required.
+FreeBSD endpoint management is planned. The source currently cross-compiles in
+CI, but there is no published FreeBSD agent artifact or agentless connector
+contract yet. A FreeBSD host can still be represented as a manual inventory
+device and reached through a separately configured generic protocol such as SSH.
 
 > Agent docs: [labtether.com/docs/install-upgrade/agent-install-commands-by-os](https://labtether.com/docs/install-upgrade/agent-install-commands-by-os)
 
@@ -289,7 +313,7 @@ Connect what you already run: Proxmox VE, TrueNAS, Docker, Portainer, Home Assis
 |:---|:---------|:------------|
 | **[Windows Agent](https://github.com/labtether/labtether-win)** | Windows 10+ | Native system tray app with service management and auto-updates. |
 | **[macOS Agent](https://github.com/labtether/labtether-mac)** | macOS 13+ | Menu bar app with status, enrollment, and notifications. |
-| **FreeBSD Agent** | FreeBSD 13+ | Endpoint agent for BSD-based systems. |
+| **FreeBSD Agent** | FreeBSD 13+ | Planned; source/runtime hooks exist, but no public release artifact is published. |
 | **iOS & iPad Companion** | iPhone / iPad | Mobile fleet monitoring, push notifications, and live activities. One-time purchase, no subscriptions. |
 
 ---

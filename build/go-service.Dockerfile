@@ -1,4 +1,4 @@
-FROM golang:1.26-alpine AS builder
+FROM golang:1.26-alpine@sha256:0178a641fbb4858c5f1b48e34bdaabe0350a330a1b1149aabd498d0699ff5fb2 AS builder
 
 ARG SERVICE_DIR
 ARG APP_VERSION=dev
@@ -16,11 +16,11 @@ RUN CGO_ENABLED=0 \
     go build -trimpath -ldflags="-s -w -X main.version=${APP_VERSION}" -o /out/service ./${SERVICE_DIR}
 RUN mkdir -p /out/data /out/ca
 
-FROM alpine:3.21
+FROM alpine:3.23@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40
 RUN apk add --no-cache \
-    bash \
-    ca-certificates
-RUN adduser -D -u 65532 labtether
+    bash=5.3.3-r1 \
+    ca-certificates=20260611-r0 && \
+    adduser -D -u 65532 labtether
 COPY --from=builder /out/service /service
 COPY --from=builder --chown=65532:65532 /out/data /data
 COPY --from=builder --chown=65532:65532 /out/ca /ca

@@ -1,6 +1,9 @@
 package runtimesettings
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestServiceDiscoveryDefinitionsPresent(t *testing.T) {
 	tests := []struct {
@@ -53,6 +56,19 @@ func TestSecurityOutboundAllowPrivateDefinitionPresent(t *testing.T) {
 	}
 }
 
+func TestSecurityOutboundAllowLinkLocalDefinitionPresent(t *testing.T) {
+	definition, ok := DefinitionByKey(KeySecurityOutboundAllowLinkLocal)
+	if !ok {
+		t.Fatalf("expected runtime setting definition for %s", KeySecurityOutboundAllowLinkLocal)
+	}
+	if definition.Type != ValueTypeBool {
+		t.Fatalf("definition %s type = %s; want %s", definition.Key, definition.Type, ValueTypeBool)
+	}
+	if definition.DefaultValue != "false" {
+		t.Fatalf("definition %s default = %q; want false", definition.Key, definition.DefaultValue)
+	}
+}
+
 func TestServiceDiscoveryStringRulesAllowEmpty(t *testing.T) {
 	tests := []string{
 		KeyServicesDiscoveryDefaultPortScanPorts,
@@ -91,5 +107,38 @@ func TestServiceDiscoveryDefaultLANScanMaxHostsNormalization(t *testing.T) {
 
 	if _, err := NormalizeValue(definition, "0"); err == nil {
 		t.Fatalf("expected validation error for value below minimum")
+	}
+}
+
+func TestPrometheusRemoteWriteRuntimeSettingBoundsAndSecretBytes(t *testing.T) {
+	interval, ok := DefinitionByKey(KeyPrometheusRemoteWriteInterval)
+	if !ok {
+		t.Fatal("missing remote write interval definition")
+	}
+	for _, invalid := range []string{"9s", "1h1ns", "0s", "not-a-duration"} {
+		if _, err := NormalizeValue(interval, invalid); err == nil {
+			t.Fatalf("NormalizeValue(interval, %q) unexpectedly succeeded", invalid)
+		}
+	}
+	for _, valid := range []string{"10s", "30s", "1h"} {
+		if _, err := NormalizeValue(interval, valid); err != nil {
+			t.Fatalf("NormalizeValue(interval, %q): %v", valid, err)
+		}
+	}
+
+	password, ok := DefinitionByKey(KeyPrometheusRemoteWritePassword)
+	if !ok {
+		t.Fatal("missing remote write password definition")
+	}
+	const exact = "  exact secret bytes  "
+	normalized, err := NormalizeValue(password, exact)
+	if err != nil || normalized != exact {
+		t.Fatalf("NormalizeValue(password)=%q error=%v", normalized, err)
+	}
+	if effective, source := EffectiveValue(password, "", "   "); effective != "   " || source != SourceUI {
+		t.Fatalf("space-only password effective=%q source=%q", effective, source)
+	}
+	if _, err := NormalizeValue(password, strings.Repeat("x", password.MaxBytes+1)); err == nil {
+		t.Fatal("oversized password unexpectedly succeeded")
 	}
 }

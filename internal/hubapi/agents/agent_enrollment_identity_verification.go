@@ -23,8 +23,9 @@ func (d *Deps) SendPendingEnrollmentChallenge(agent *PendingAgent) error {
 		return fmt.Errorf("generate challenge nonce: %w", err)
 	}
 	expiresAt := time.Now().UTC().Add(pendingChallengeTTL)
-	agent.ChallengeNonce = nonce
-	agent.ChallengeExpiresAt = expiresAt
+	if !d.PendingAgents.SetChallenge(agent.AssetID, agent.Conn, nonce, expiresAt) {
+		return fmt.Errorf("pending agent is no longer available for challenge")
+	}
 
 	payload, err := json.Marshal(agentmgr.EnrollmentChallengeData{
 		ConnectionID: agent.AssetID,
@@ -58,18 +59,22 @@ func (d *Deps) VerifyPendingEnrollmentProof(agent *PendingAgent, msg agentmgr.Me
 		return fmt.Errorf("decode proof: %w", err)
 	}
 
+	snapshot, ok := d.PendingAgents.ChallengeSnapshot(agent.AssetID, agent.Conn)
+	if !ok {
+		return fmt.Errorf("pending challenge is no longer active")
+	}
 	connectionID := strings.TrimSpace(proof.ConnectionID)
 	nonce := strings.TrimSpace(proof.Nonce)
 	if connectionID == "" || nonce == "" {
 		return fmt.Errorf("missing connection_id or nonce")
 	}
-	if connectionID != agent.AssetID {
+	if connectionID != snapshot.AssetID {
 		return fmt.Errorf("connection_id mismatch")
 	}
-	if agent.ChallengeNonce == "" || nonce != agent.ChallengeNonce {
+	if snapshot.Nonce == "" || nonce != snapshot.Nonce {
 		return fmt.Errorf("nonce mismatch")
 	}
-	if !agent.ChallengeExpiresAt.IsZero() && time.Now().UTC().After(agent.ChallengeExpiresAt) {
+	if !snapshot.Expires.IsZero() && time.Now().UTC().After(snapshot.Expires) {
 		return fmt.Errorf("challenge expired")
 	}
 
@@ -106,14 +111,16 @@ func (d *Deps) VerifyPendingEnrollmentProof(agent *PendingAgent, msg agentmgr.Me
 	}
 
 	verifiedAt := time.Now().UTC()
-	d.PendingAgents.mu.Lock()
-	agent.DeviceFingerprint = expectedFingerprint
-	agent.DeviceKeyAlg = agentidentity.KeyAlgorithmEd25519
-	agent.DevicePublicKey = strings.TrimSpace(proof.PublicKey)
-	agent.IdentityVerified = true
-	agent.IdentityVerifiedAt = &verifiedAt
-	agent.ChallengeNonce = ""
-	agent.ChallengeExpiresAt = time.Time{}
-	d.PendingAgents.mu.Unlock()
+	if _, ok := d.PendingAgents.CommitIdentityProof(
+		agent.AssetID,
+		agent.Conn,
+		snapshot.Nonce,
+		expectedFingerprint,
+		agentidentity.KeyAlgorithmEd25519,
+		strings.TrimSpace(proof.PublicKey),
+		verifiedAt,
+	); !ok {
+		return fmt.Errorf("pending challenge changed before proof commit")
+	}
 	return nil
 }

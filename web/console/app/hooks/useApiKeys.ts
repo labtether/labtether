@@ -28,6 +28,13 @@ export type CreatedKeyResponse = ApiKeyInfo & {
   raw_key: string;
 };
 
+export type UpdateKeyRequest = {
+  name?: string;
+  scopes?: string[];
+  allowed_assets?: string[];
+  expires_at?: string | null;
+};
+
 /* v2 API response envelopes — all responses wrapped in { request_id, data } or { error, message, status } */
 
 type V2ListPayload = {
@@ -114,5 +121,22 @@ export function useApiKeys() {
     [refresh],
   );
 
-  return { keys, loading, error, refresh, createKey, revokeKey };
+  const updateKey = useCallback(
+    async (id: string, req: UpdateKeyRequest) => {
+      const response = await fetch(`/api/v2/keys/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(15_000),
+        body: JSON.stringify(req),
+      });
+      const payload = (await response.json().catch(() => ({}))) as V2MutatePayload;
+      if (!response.ok) {
+        throw new Error(payload.message || payload.error || `failed to update API key (${response.status})`);
+      }
+      await refresh();
+    },
+    [refresh],
+  );
+
+  return { keys, loading, error, refresh, createKey, updateKey, revokeKey };
 }

@@ -71,10 +71,12 @@ func (d *Deps) HandleWorkspaceTabActions(w http.ResponseWriter, r *http.Request)
 
 func (d *Deps) listWorkspaceTabs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	actorID := d.requestActorID(ctx)
 	rows, err := d.DBPool.Query(ctx,
 		`SELECT id, name, layout, panes, panel_sizes, sort_order, created_at, updated_at
 		 FROM terminal_workspace_tabs
-		 ORDER BY sort_order, created_at`,
+		 WHERE actor_id = $1
+		 ORDER BY sort_order, created_at`, actorID,
 	)
 	if err != nil {
 		if terminalWorkspaceSchemaMissing(err) {
@@ -153,10 +155,11 @@ func (d *Deps) createWorkspaceTab(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+	actorID := d.requestActorID(ctx)
 	_, err := d.DBPool.Exec(ctx,
-		`INSERT INTO terminal_workspace_tabs (id, name, layout, panes, panel_sizes, sort_order, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		tab.ID, tab.Name, tab.Layout, tab.Panes, tab.PanelSizes, tab.SortOrder, tab.CreatedAt, tab.UpdatedAt,
+		`INSERT INTO terminal_workspace_tabs (id, actor_id, name, layout, panes, panel_sizes, sort_order, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		tab.ID, actorID, tab.Name, tab.Layout, tab.Panes, tab.PanelSizes, tab.SortOrder, tab.CreatedAt, tab.UpdatedAt,
 	)
 	if err != nil {
 		if terminalWorkspaceSchemaMissing(err) {
@@ -172,10 +175,11 @@ func (d *Deps) createWorkspaceTab(w http.ResponseWriter, r *http.Request) {
 
 func (d *Deps) getWorkspaceTab(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
+	actorID := d.requestActorID(ctx)
 	var tab WorkspaceTab
 	err := d.DBPool.QueryRow(ctx,
 		`SELECT id, name, layout, panes, panel_sizes, sort_order, created_at, updated_at
-		 FROM terminal_workspace_tabs WHERE id = $1`, id,
+		 FROM terminal_workspace_tabs WHERE id = $1 AND actor_id = $2`, id, actorID,
 	).Scan(
 		&tab.ID, &tab.Name, &tab.Layout, &tab.Panes, &tab.PanelSizes,
 		&tab.SortOrder, &tab.CreatedAt, &tab.UpdatedAt,
@@ -214,10 +218,11 @@ func (d *Deps) updateWorkspaceTab(w http.ResponseWriter, r *http.Request, id str
 	}
 
 	ctx := r.Context()
+	actorID := d.requestActorID(ctx)
 	var tab WorkspaceTab
 	err := d.DBPool.QueryRow(ctx,
 		`SELECT id, name, layout, panes, panel_sizes, sort_order, created_at, updated_at
-		 FROM terminal_workspace_tabs WHERE id = $1`, id,
+		 FROM terminal_workspace_tabs WHERE id = $1 AND actor_id = $2`, id, actorID,
 	).Scan(
 		&tab.ID, &tab.Name, &tab.Layout, &tab.Panes, &tab.PanelSizes,
 		&tab.SortOrder, &tab.CreatedAt, &tab.UpdatedAt,
@@ -256,8 +261,8 @@ func (d *Deps) updateWorkspaceTab(w http.ResponseWriter, r *http.Request, id str
 
 	_, err = d.DBPool.Exec(ctx,
 		`UPDATE terminal_workspace_tabs SET name = $2, layout = $3, panes = $4, panel_sizes = $5, sort_order = $6, updated_at = $7
-		 WHERE id = $1`,
-		tab.ID, tab.Name, tab.Layout, tab.Panes, tab.PanelSizes, tab.SortOrder, tab.UpdatedAt,
+		 WHERE id = $1 AND actor_id = $8`,
+		tab.ID, tab.Name, tab.Layout, tab.Panes, tab.PanelSizes, tab.SortOrder, tab.UpdatedAt, actorID,
 	)
 	if err != nil {
 		if terminalWorkspaceSchemaMissing(err) {
@@ -273,8 +278,9 @@ func (d *Deps) updateWorkspaceTab(w http.ResponseWriter, r *http.Request, id str
 
 func (d *Deps) deleteWorkspaceTab(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
+	actorID := d.requestActorID(ctx)
 	tag, err := d.DBPool.Exec(ctx,
-		`DELETE FROM terminal_workspace_tabs WHERE id = $1`, id,
+		`DELETE FROM terminal_workspace_tabs WHERE id = $1 AND actor_id = $2`, id, actorID,
 	)
 	if err != nil {
 		if terminalWorkspaceSchemaMissing(err) {

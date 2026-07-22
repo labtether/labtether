@@ -80,7 +80,7 @@ func (c *Connector) TestConnection(ctx context.Context) (connectorsdk.Health, er
 		return connectorsdk.Health{Status: "failed", Message: c.clientErr.Error()}, nil
 	}
 	if !c.isConfigured() {
-		return connectorsdk.Health{Status: "ok", Message: "proxmox connector running in stub mode (missing env config)"}, nil
+		return connectorsdk.Health{Status: "failed", Message: "proxmox connector is not configured"}, nil
 	}
 
 	release, err := c.client.GetVersion(ctx)

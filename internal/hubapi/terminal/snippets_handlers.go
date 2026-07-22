@@ -70,6 +70,7 @@ func (d *Deps) HandleTerminalSnippetActions(w http.ResponseWriter, r *http.Reque
 
 func (d *Deps) listTerminalSnippets(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	actorID := d.requestActorID(ctx)
 	scope := strings.TrimSpace(r.URL.Query().Get("scope"))
 
 	var rows pgx.Rows
@@ -78,14 +79,15 @@ func (d *Deps) listTerminalSnippets(w http.ResponseWriter, r *http.Request) {
 		rows, err = d.DBPool.Query(ctx,
 			`SELECT id, name, command, description, scope, shortcut, sort_order, created_at, updated_at
 			 FROM terminal_snippets
-			 WHERE scope = $1 OR scope = 'global'
-			 ORDER BY sort_order, created_at`, scope,
+			 WHERE actor_id = $1 AND (scope = $2 OR scope = 'global')
+			 ORDER BY sort_order, created_at`, actorID, scope,
 		)
 	} else {
 		rows, err = d.DBPool.Query(ctx,
 			`SELECT id, name, command, description, scope, shortcut, sort_order, created_at, updated_at
 			 FROM terminal_snippets
-			 ORDER BY sort_order, created_at`,
+			 WHERE actor_id = $1
+			 ORDER BY sort_order, created_at`, actorID,
 		)
 	}
 	if err != nil {
@@ -165,10 +167,11 @@ func (d *Deps) createTerminalSnippet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+	actorID := d.requestActorID(ctx)
 	_, err := d.DBPool.Exec(ctx,
-		`INSERT INTO terminal_snippets (id, name, command, description, scope, shortcut, sort_order, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-		snip.ID, snip.Name, snip.Command, snip.Description,
+		`INSERT INTO terminal_snippets (id, actor_id, name, command, description, scope, shortcut, sort_order, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		snip.ID, actorID, snip.Name, snip.Command, snip.Description,
 		snip.Scope, snip.Shortcut, snip.SortOrder, snip.CreatedAt, snip.UpdatedAt,
 	)
 	if err != nil {
@@ -181,10 +184,11 @@ func (d *Deps) createTerminalSnippet(w http.ResponseWriter, r *http.Request) {
 
 func (d *Deps) getTerminalSnippet(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
+	actorID := d.requestActorID(ctx)
 	var snip TerminalSnippet
 	err := d.DBPool.QueryRow(ctx,
 		`SELECT id, name, command, description, scope, shortcut, sort_order, created_at, updated_at
-		 FROM terminal_snippets WHERE id = $1`, id,
+		 FROM terminal_snippets WHERE id = $1 AND actor_id = $2`, id, actorID,
 	).Scan(
 		&snip.ID, &snip.Name, &snip.Command, &snip.Description,
 		&snip.Scope, &snip.Shortcut, &snip.SortOrder,
@@ -221,10 +225,11 @@ func (d *Deps) updateTerminalSnippet(w http.ResponseWriter, r *http.Request, id 
 	}
 
 	ctx := r.Context()
+	actorID := d.requestActorID(ctx)
 	var snip TerminalSnippet
 	err := d.DBPool.QueryRow(ctx,
 		`SELECT id, name, command, description, scope, shortcut, sort_order, created_at, updated_at
-		 FROM terminal_snippets WHERE id = $1`, id,
+		 FROM terminal_snippets WHERE id = $1 AND actor_id = $2`, id, actorID,
 	).Scan(
 		&snip.ID, &snip.Name, &snip.Command, &snip.Description,
 		&snip.Scope, &snip.Shortcut, &snip.SortOrder,
@@ -263,9 +268,9 @@ func (d *Deps) updateTerminalSnippet(w http.ResponseWriter, r *http.Request, id 
 
 	_, err = d.DBPool.Exec(ctx,
 		`UPDATE terminal_snippets SET name = $2, command = $3, description = $4, scope = $5, shortcut = $6, sort_order = $7, updated_at = $8
-		 WHERE id = $1`,
+		 WHERE id = $1 AND actor_id = $9`,
 		snip.ID, snip.Name, snip.Command, snip.Description,
-		snip.Scope, snip.Shortcut, snip.SortOrder, snip.UpdatedAt,
+		snip.Scope, snip.Shortcut, snip.SortOrder, snip.UpdatedAt, actorID,
 	)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update snippet")
@@ -277,8 +282,9 @@ func (d *Deps) updateTerminalSnippet(w http.ResponseWriter, r *http.Request, id 
 
 func (d *Deps) deleteTerminalSnippet(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
+	actorID := d.requestActorID(ctx)
 	tag, err := d.DBPool.Exec(ctx,
-		`DELETE FROM terminal_snippets WHERE id = $1`, id,
+		`DELETE FROM terminal_snippets WHERE id = $1 AND actor_id = $2`, id, actorID,
 	)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete snippet")

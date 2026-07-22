@@ -9,8 +9,9 @@ import (
 // buildBulkDeps constructs the bulkpkg.Deps from the apiServer's fields.
 func (s *apiServer) buildBulkDeps() *bulkpkg.Deps {
 	return &bulkpkg.Deps{
-		AuditStore:  s.auditStore,
-		ExecOnAsset: s.execOnAssetForBulk,
+		AuditStore:              s.auditStore,
+		ExecOnAsset:             s.execOnAssetForBulk,
+		EvaluateAssetGuardrails: s.ensureGroupFeaturesDeps().EvaluateAssetGuardrails,
 	}
 }
 

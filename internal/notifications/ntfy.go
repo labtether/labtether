@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/labtether/labtether/internal/securityruntime"
 )
@@ -58,17 +57,14 @@ func (n *NtfyAdapter) Send(ctx context.Context, config map[string]any, payload m
 		req.SetBasicAuth(username, payloadString(config, "password"))
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := newNotificationHTTPClient()
 	resp, err := securityruntime.DoOutboundRequest(client, req)
 	if err != nil {
 		return fmt.Errorf("ntfy request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode >= 400 {
-		return fmt.Errorf("ntfy returned status %d", resp.StatusCode)
-	}
-	return nil
+	return notificationResponseError("ntfy", resp.StatusCode)
 }
 
 func notificationPriority(value any) (int, bool) {

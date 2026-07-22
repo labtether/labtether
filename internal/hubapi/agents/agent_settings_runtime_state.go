@@ -8,6 +8,7 @@ import (
 
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/agentsettings"
+	"github.com/labtether/labtether/internal/securityruntime"
 )
 
 type AgentSettingsRuntimeState struct {
@@ -37,13 +38,19 @@ func (d *Deps) PushAgentSettingsApply(assetID string, values map[string]string) 
 			expectedFingerprint = strings.TrimSpace(asset.Metadata["agent_device_fingerprint"])
 		}
 	}
+	remoteValues := CloneAgentSettingValues(values)
+	for key := range remoteValues {
+		if definition, ok := agentsettings.AgentSettingDefinitionByKey(key); ok && definition.LocalOnly {
+			delete(remoteValues, key)
+		}
+	}
 
 	requestID := shared.GenerateRequestID()
 	revision := time.Now().UTC().Format(time.RFC3339Nano)
 	payload := agentmgr.AgentSettingsApplyData{
 		RequestID:           requestID,
 		Revision:            revision,
-		Values:              CloneAgentSettingValues(values),
+		Values:              remoteValues,
 		ExpectedFingerprint: expectedFingerprint,
 	}
 	data, err := json.Marshal(payload)
@@ -55,10 +62,11 @@ func (d *Deps) PushAgentSettingsApply(assetID string, values map[string]string) 
 		Type: agentmgr.MsgAgentSettingsApply,
 		Data: data,
 	}); err != nil {
+		securityruntime.Logf("agent settings: failed to send apply request: %v", err)
 		d.SetAgentSettingsRuntimeState(assetID, AgentSettingsRuntimeState{
 			Status:      "send_failed",
 			Revision:    revision,
-			LastError:   err.Error(),
+			LastError:   "failed to send settings to agent",
 			UpdatedAt:   time.Now().UTC(),
 			Fingerprint: expectedFingerprint,
 		})
@@ -70,7 +78,7 @@ func (d *Deps) PushAgentSettingsApply(assetID string, values map[string]string) 
 		Revision:    revision,
 		UpdatedAt:   time.Now().UTC(),
 		Fingerprint: expectedFingerprint,
-		Values:      CloneAgentSettingValues(values),
+		Values:      CloneAgentSettingValues(remoteValues),
 	})
 }
 
@@ -96,13 +104,18 @@ func (d *Deps) ProcessAgentSettingsApplied(conn *agentmgr.AgentConn, msg agentmg
 		return
 	}
 	status := "applied"
+	lastError := ""
 	if !data.Applied {
 		status = "failed"
+		if strings.TrimSpace(data.Error) != "" {
+			securityruntime.Logf("agent settings: agent reported apply failure: %v", data.Error)
+		}
+		lastError = safeAgentSettingsApplyError(data.Error)
 	}
 	state := AgentSettingsRuntimeState{
 		Status:          status,
 		Revision:        strings.TrimSpace(data.Revision),
-		LastError:       strings.TrimSpace(data.Error),
+		LastError:       lastError,
 		UpdatedAt:       time.Now().UTC(),
 		RestartRequired: data.RestartRequired,
 		Fingerprint:     strings.TrimSpace(data.Fingerprint),

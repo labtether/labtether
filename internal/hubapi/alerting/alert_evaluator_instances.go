@@ -184,10 +184,14 @@ func (d *Deps) MaybeAutoCreateIncident(rule alerts.Rule, instance alerts.AlertIn
 		log.Printf("alert evaluator: failed to link alert to incident: %v", err)
 	}
 
+	d.dispatchIncidentNotificationAsync(inc, "incident.created")
 	log.Printf("alert evaluator: auto-created incident %s from critical alert %s", inc.ID, rule.Name)
 }
 
 func (d *Deps) isAlertSuppressed(rule alerts.Rule, prefetch *alertSuppressionPrefetch) bool {
+	if d.isAlertMaintenanceSuppressed(rule) {
+		return true
+	}
 	var silences []alerts.AlertSilence
 	if prefetch != nil {
 		silences = prefetch.activeSilences
@@ -220,10 +224,11 @@ func matchesSilence(rule alerts.Rule, silence alerts.AlertSilence) bool {
 	return true
 }
 
-func (d *Deps) resolveStaleInstances(rule alerts.Rule) {
+func (d *Deps) resolveStaleInstances(rule alerts.Rule, suppressionPrefetch *alertSuppressionPrefetch) {
 	if d.AlertInstanceStore == nil {
 		return
 	}
+	suppressed := d.isAlertSuppressed(rule, suppressionPrefetch)
 	instances, err := d.AlertInstanceStore.ListAlertInstances(persistence.AlertInstanceFilter{
 		RuleID: rule.ID,
 		Status: alerts.InstanceStatusFiring,
@@ -234,6 +239,9 @@ func (d *Deps) resolveStaleInstances(rule alerts.Rule) {
 	}
 	for _, inst := range instances {
 		_, _ = d.AlertInstanceStore.UpdateAlertInstanceStatus(inst.ID, alerts.InstanceStatusResolved)
+		if suppressed {
+			continue
+		}
 		d.broadcastEvent("alert.resolved", map[string]any{"rule_id": rule.ID, "instance_id": inst.ID})
 		d.dispatchAlertNotificationsAsync(rule, inst.ID, "resolved")
 

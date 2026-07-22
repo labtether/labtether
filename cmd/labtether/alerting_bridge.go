@@ -6,10 +6,17 @@ import (
 
 	"github.com/labtether/labtether/internal/alerts"
 	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/auth"
 	alertingpkg "github.com/labtether/labtether/internal/hubapi/alerting"
+	"github.com/labtether/labtether/internal/incidents"
 	"github.com/labtether/labtether/internal/model"
 	"github.com/labtether/labtether/internal/notifications"
 )
+
+type liveActivityDispatchJob struct {
+	Incident incidents.Incident
+	Event    string
+}
 
 // buildAlertingDeps constructs the alerting.Deps from the apiServer's fields.
 func (s *apiServer) buildAlertingDeps() *alertingpkg.Deps {
@@ -22,6 +29,8 @@ func (s *apiServer) buildAlertingDeps() *alertingpkg.Deps {
 		AssetStore:         s.assetStore,
 		DependencyStore:    s.dependencyStore,
 		NotificationStore:  s.notificationStore,
+		PushDeviceStore:    s.db,
+		LiveActivityStore:  s.db,
 		CanonicalStore:     s.canonicalStore,
 		TelemetryStore:     s.telemetryStore,
 		SyntheticStore:     s.syntheticStore,
@@ -33,14 +42,47 @@ func (s *apiServer) buildAlertingDeps() *alertingpkg.Deps {
 		NotificationAdapters: s.notificationDispatcher.Adapters,
 		NotificationSem:      s.notificationDispatcher.DispatchSem,
 		NotificationWG:       &s.notificationDispatcher.DispatchWG,
+		NotificationSecrets:  s.secretsManager,
+		DispatchIncidentLiveActivity: func(incident incidents.Incident, event string) {
+			if s.liveActivityDispatchCh == nil {
+				return
+			}
+			// A bounded queue keeps incident mutation latency independent from APNs.
+			// When saturated, the next material transition and foreground sync still
+			// converge on current state without spawning unbounded goroutines.
+			select {
+			case s.liveActivityDispatchCh <- liveActivityDispatchJob{Incident: incident, Event: event}:
+			default:
+				// Preserve the newest material state (especially a terminal resolved
+				// transition) by evicting one stale queued snapshot under saturation.
+				select {
+				case <-s.liveActivityDispatchCh:
+				default:
+				}
+				select {
+				case s.liveActivityDispatchCh <- liveActivityDispatchJob{Incident: incident, Event: event}:
+				default:
+				}
+			}
+		},
+		LiveActivityUserCanMutate: func(userID string) bool {
+			if s.authStore == nil {
+				return false
+			}
+			user, ok, err := s.authStore.GetUserByID(userID)
+			return err == nil && ok && auth.HasWritePrivileges(user.Role)
+		},
 
-		EnforceRateLimit: s.enforceRateLimit,
+		EnforceRateLimit:           s.enforceRateLimit,
+		PrincipalActorID:           principalActorID,
+		AppendAuditEventBestEffort: s.appendAuditEventBestEffort,
 
 		Broadcast: func(eventType string, data map[string]any) {
 			if s.broadcaster != nil {
 				s.broadcaster.Broadcast(eventType, data)
 			}
 		},
+		EvaluateGuardrails: s.ensureGroupFeaturesDeps().EvaluateGuardrails,
 
 		AgentMgr: s.agentMgr,
 
@@ -127,6 +169,10 @@ func (s *apiServer) handleIncidentActions(w http.ResponseWriter, r *http.Request
 	s.ensureAlertingDeps().HandleIncidentActions(w, r)
 }
 
+func (s *apiServer) handleIncidentLiveActivityTokens(w http.ResponseWriter, r *http.Request) {
+	s.ensureAlertingDeps().HandleIncidentLiveActivityTokens(w, r)
+}
+
 func (s *apiServer) handleNotificationChannels(w http.ResponseWriter, r *http.Request) {
 	s.ensureAlertingDeps().HandleNotificationChannels(w, r)
 }
@@ -151,6 +197,25 @@ func (s *apiServer) runIncidentCorrelator(ctx context.Context) {
 
 func (s *apiServer) runNotificationRetryLoop(ctx context.Context) {
 	s.ensureAlertingDeps().RunNotificationRetryLoop(ctx)
+}
+
+func (s *apiServer) runLiveActivityRetryLoop(ctx context.Context) {
+	s.ensureAlertingDeps().RunLiveActivityRetryLoop(ctx)
+}
+
+func (s *apiServer) runLiveActivityDispatchLoop(ctx context.Context) {
+	if s.liveActivityDispatchCh == nil {
+		<-ctx.Done()
+		return
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case job := <-s.liveActivityDispatchCh:
+			s.ensureAlertingDeps().DeliverIncidentLiveActivity(job.Incident, job.Event)
+		}
+	}
 }
 
 func (s *apiServer) waitForNotificationDispatches() {

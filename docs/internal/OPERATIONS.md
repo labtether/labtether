@@ -11,19 +11,126 @@ For go-live and public-release prep, use:
 
 ## API Key Operations
 
+Keep bearer values out of the process list. Create a private curl config once
+for the current shell, and point curl at the hub CA (omit `--cacert` only when
+the certificate is already trusted by the operating system):
+
+```bash
+set +x
+set +a
+umask 077
+LABTETHER_CURL_AUTH="$(mktemp)"
+trap 'rm -f "$LABTETHER_CURL_AUTH"' EXIT
+set_labtether_curl_bearer() {
+  local token=$1 escaped
+  export -n token 2>/dev/null || true
+  export -n escaped 2>/dev/null || true
+  [[ ! "$token" =~ [[:cntrl:]] ]] || return 1
+  escaped=${token//\\/\\\\}
+  escaped=${escaped//\"/\\\"}
+  printf 'header = "Authorization: Bearer %s"\n' "$escaped" >"$LABTETHER_CURL_AUTH"
+  chmod 600 "$LABTETHER_CURL_AUTH"
+}
+set_labtether_curl_bearer "$LABTETHER_OWNER_TOKEN"
+unset LABTETHER_OWNER_TOKEN
+unset CURL_CA_BUNDLE SSL_CERT_FILE SSL_CERT_DIR SSLKEYLOGFILE CURL_HOME NETRC CURL_SSL_BACKEND
+CURL=(curl --disable --noproxy '*' --proto '=https' --proto-redir '=https' --config "$LABTETHER_CURL_AUTH")
+if [[ -n "${LABTETHER_CA_FILE:-}" ]]; then
+  CURL+=(--cacert "$LABTETHER_CA_FILE")
+fi
+```
+
+LabTether scripts bypass ambient HTTP proxy variables by default so credentials
+cannot be silently routed through a proxy. Set `LABTETHER_ALLOW_PROXY=1` only
+when that proxy path is explicitly trusted and required.
+
+## Hub runtime ownership
+
+Run exactly one live hub API/worker process for a PostgreSQL database. Agent
+WebSockets, terminal/desktop streams, and their correlated replies are
+process-local, so active-active replicas are not a supported deployment mode.
+At startup the hub claims a dedicated PostgreSQL advisory lease. A second hub
+using the same database exits with the sanitized `runtime_ownership` startup
+code before it serves traffic or starts workers. The lease connection is
+checked every second; losing that exact database session stops the hub instead
+of allowing a second process to overlap it.
+
+Container restart policy provides the safe failover model: stop or lose the
+active process, then let one replacement acquire the lease and reconnect the
+agents. Do not place two simultaneously serving hub containers behind a load
+balancer. Standalone migrators and database backup/read tooling do not claim
+the live-runtime lease and remain compatible.
+
+## Agent Enrollment and Socket Guardrails
+
+Production agents authenticate with their own per-agent bearer. The historical
+owner/API-token agent WebSocket and heartbeat path is disabled by default. Set
+`LABTETHER_ALLOW_LEGACY_SHARED_AGENT_AUTH=true` only as a short migration bridge
+for an already-trusted legacy agent, enroll that agent, and then remove the
+override. This switch does not weaken normal operator API authentication.
+
+Enrollment tokens default to one use. `LABTETHER_ENROLLMENT_TOKEN_MAX_USES`
+sets the administrator-facing ceiling (default `256`, absolute maximum `4096`).
+Recovery of an existing identity additionally requires a single-use token
+created after the most recent credential rotation. Creating tokens ahead of a
+recovery window is intentionally rejected, even if the device proof is valid.
+
+`LABTETHER_MAX_ENROLLED_AGENTS` limits durable agent identities (default `1024`,
+absolute maximum `65536`). Revoking or expiring a bearer does not free a fleet
+slot. Only explicit agent decommission removes the durable identity marker.
+Pending console approvals reserve a slot so concurrent approvals cannot exceed
+the limit.
+
+Live WebSockets have independent admission and traffic limits:
+
+- `LABTETHER_MAX_AGENT_CONNECTIONS` defaults to `2048` (hard maximum `65536`).
+- `LABTETHER_MAX_AGENT_CONNECTIONS_PER_SOURCE` defaults to `256` (hard maximum `4096`).
+- `LABTETHER_AGENT_WS_MESSAGES_PER_SECOND` / `LABTETHER_AGENT_WS_MESSAGE_BURST` default to `256` / `512`.
+- `LABTETHER_AGENT_WS_BYTES_PER_SECOND` / `LABTETHER_AGENT_WS_BYTE_BURST` default to 16 MiB/s / 64 MiB.
+- `LABTETHER_AGENT_WS_CREDENTIAL_LEASE` defaults to `2s` and is clamped to `250ms` through `5s`. Local revocation closes the matching socket immediately; the lease bounds cross-replica database revalidation delay.
+
+The byte burst must remain at least as large as the largest legitimate agent
+frame. LabTether currently permits a bounded 32 MiB frame for file and desktop
+stream data. Rate-limit closures use WebSocket policy-violation status; source
+admission returns HTTP `429`, while global capacity returns HTTP `503`.
+
+## Console ingress isolation
+
+Production Compose does not publish port 3000 directly from `web-console`.
+That service holds the narrow hub service-token mount and remains attached only
+to the internal `console-plane`. A separate `console-ingress` process from the
+same digest-pinned LabTether image owns the host port, has no secret mounts, and
+forwards TCP only to `web-console:3000`. Its second network exists solely so
+Docker Desktop, Colima, and native Docker do not need to publish a port from an
+internal-only container.
+
+The shared image deliberately has no Dockerfile `VOLUME` instruction: Docker
+allocates those anonymous volumes before Compose can mask them, leaking one on
+every split-service recreation. The hub Compose service instead declares its
+named `/data` volume explicitly. All-in-one startup fails its preflight when
+`/data` is not a real mount, while the read-only split console services receive
+no `/data` mount at all. The ingress command also starts through `env -i`; only
+its temporary home and bounded connection ceiling reach the proxy process.
+
+`LABTETHER_CONSOLE_BIND` remains `127.0.0.1` by default. If an operator exposes
+it more broadly, normal host firewall and trusted reverse-proxy controls still
+apply. `LABTETHER_CONSOLE_INGRESS_MAX_CONNECTIONS` defaults to `512` and is
+hard-bounded by the ingress process to `4096`.
+
 ### Creating API Keys
 
 API keys are created via the v2 API. Only owner or admin accounts can create keys.
 
 ```bash
-curl -sX POST https://hub:8443/api/v2/keys \
-  -H "Authorization: Bearer ${LABTETHER_OWNER_TOKEN}" \
+"${CURL[@]}" -sS -X POST https://hub:8443/api/v2/keys \
   -H "Content-Type: application/json" \
-  -d '{
+  --data-binary @- <<'JSON'
+  {
     "name": "ci-automation",
     "scopes": ["assets:read", "assets:exec"],
     "allowed_asset_ids": ["asset-id-1", "asset-id-2"]
-  }'
+  }
+JSON
 ```
 
 The response includes the raw key (`lt_<prefix>_<secret>`) exactly once. Store it immediately — it cannot be retrieved again.
@@ -37,8 +144,9 @@ Fields:
 ### Verifying a Key
 
 ```bash
-curl -s https://hub:8443/api/v2/whoami \
-  -H "Authorization: Bearer lt_<prefix>_<secret>"
+set_labtether_curl_bearer "$LABTETHER_API_KEY"
+unset LABTETHER_API_KEY
+"${CURL[@]}" -sS https://hub:8443/api/v2/whoami
 ```
 
 Returns the key metadata (name, scopes, allowed assets, expiry) without exposing the raw secret.
@@ -50,8 +158,9 @@ API key usage is recorded as audit events in the log store with `source=api_key_
 Query recent key audit events:
 
 ```bash
-curl -s "https://hub:8443/logs/query?source=api_key_audit&window=24h" \
-  -H "Authorization: Bearer ${LABTETHER_OWNER_TOKEN}"
+set_labtether_curl_bearer "$LABTETHER_OWNER_TOKEN"
+unset LABTETHER_OWNER_TOKEN
+"${CURL[@]}" -sS "https://hub:8443/logs/query?source=api_key_audit&window=24h"
 ```
 
 Audit events include:
@@ -65,8 +174,7 @@ Audit events include:
 Revoke a key by its prefix:
 
 ```bash
-curl -sX DELETE https://hub:8443/api/v2/keys/lt_<prefix> \
-  -H "Authorization: Bearer ${LABTETHER_OWNER_TOKEN}"
+"${CURL[@]}" -sS -X DELETE https://hub:8443/api/v2/keys/lt_<prefix>
 ```
 
 Revocation is immediate. In-flight requests authenticated with the revoked key will fail on their next scope/auth check. A `key_deleted` audit event is recorded on revocation.
@@ -74,8 +182,7 @@ Revocation is immediate. In-flight requests authenticated with the revoked key w
 To list all active keys (metadata only — raw secrets are never returned):
 
 ```bash
-curl -s https://hub:8443/api/v2/keys \
-  -H "Authorization: Bearer ${LABTETHER_OWNER_TOKEN}"
+"${CURL[@]}" -sS https://hub:8443/api/v2/keys
 ```
 
 ### Rate Limiting Behavior
@@ -437,3 +544,33 @@ integrations/homeassistant/addon/
 - When a finding is real runtime data rather than a hardcoded secret, arbitrary path, or raw log-injection vector, prefer narrow inline `#nosec` comments on the exact field/callsite over a central allowlist entry. This removed the main-tree `G117`, `G304`, `G706`, `G704`, `G703`, `G705`, `G204`, `G402`, and `G101` buckets while keeping the justification adjacent to the schema field, controlled-path access, bounded runtime log site, or explicit operator opt-in that triggered the scanner.
 - `scripts/check-gosec-allowlist.sh` now treats an empty finding set as success and retries once if `gosec` produces invalid/empty JSON. This avoids false-red gates when the scanner emits stderr noise or when the filtered result set is legitimately zero.
 - `scripts/check-gosec-allowlist.sh` now defaults its install hint to `gosec v2.25.0`. The March 22 follow-up validated the repo against that newer scanner generation, cleared the newly surfaced `G115`, `G117`, `G118`, `G122`, `G124`, `G702`, `G703`, and `G706` findings, and confirmed the previous ad hoc `package main` SSA-builder warning no longer appears on the upgraded raw scan.
+
+## Update-plan dry runs
+
+The executable update-plan scope is currently `os_packages`. A dry run sends a
+read-only `package.list` request with `inventory=upgradable` to each connected
+agent and records the validated package count and a bounded sample of version
+changes. It never sends `update.request`, and its result explicitly states that
+no changes were applied.
+
+Agents must echo the `upgradable` inventory discriminator and return complete
+current/available version fields. A legacy agent that ignores the discriminator,
+an unavailable preview bridge, a timeout, or a malformed response fails the dry
+run. The hub does not fall back to reporting platform/connectivity validation as
+a successful preview. Upgrade the agent before retrying. A live update run uses
+the separate authenticated `update.request` path and can change the target.
+
+# SSH host-key verification
+
+SSH connections verify the server identity by default. Configure an asset or
+protocol host key, or mount a `known_hosts` file and set
+`SSH_KNOWN_HOSTS_PATH`. A per-asset `strict_host_key=false` value does not
+disable verification on its own. An explicitly configured
+`SSH_KNOWN_HOSTS_PATH` or `SSH_KNOWN_HOSTS_PATHS` is authoritative; an empty
+value disables runtime-image defaults and therefore fails closed.
+
+For short-lived recovery only, an operator may explicitly acknowledge the
+man-in-the-middle risk by setting
+`LABTETHER_ALLOW_INSECURE_SSH_HOST_KEYS=true` together with the per-connection
+non-strict setting. Remove the process-wide override immediately after the
+recovery operation.

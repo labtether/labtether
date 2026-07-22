@@ -26,26 +26,25 @@ func (d *Deps) HandleTrueNASConnectorTest(w http.ResponseWriter, r *http.Request
 	baseURL := strings.TrimSpace(req.BaseURL)
 	apiKey := strings.TrimSpace(req.APIKey)
 	credentialID := strings.TrimSpace(req.CredentialID)
+	credentialProfile, credentialOK := d.loadAuthorizedCredentialProfile(w, r, credentialID)
+	if !credentialOK {
+		return
+	}
 
 	// Resolve API key from credential when not provided inline.
 	if apiKey == "" && credentialID != "" {
-		if d.CredentialStore == nil || d.SecretsManager == nil {
+		if d.SecretsManager == nil {
 			servicehttp.WriteError(w, http.StatusServiceUnavailable, "credential store unavailable")
 			return
 		}
-		profile, ok, err := d.CredentialStore.GetCredentialProfile(credentialID)
-		if err != nil || !ok {
-			servicehttp.WriteError(w, http.StatusBadRequest, "credential_id not found")
-			return
-		}
-		decrypted, err := d.SecretsManager.DecryptString(profile.SecretCiphertext, profile.ID)
+		decrypted, err := d.SecretsManager.DecryptString(credentialProfile.SecretCiphertext, credentialProfile.ID)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, "failed to decrypt credential secret")
 			return
 		}
 		apiKey = strings.TrimSpace(decrypted)
 		if baseURL == "" {
-			baseURL = strings.TrimSpace(profile.Metadata["base_url"])
+			baseURL = strings.TrimSpace(credentialProfile.Metadata["base_url"])
 		}
 	}
 	if baseURL == "" || apiKey == "" {

@@ -104,13 +104,13 @@ func (d *Deps) HandleAgentDesktopStream(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	wsConn, err := d.TerminalWebSocketUpgrader.Upgrade(w, r, nil)
+	wsConn, err := shared.UpgradeWebSocket(d.TerminalWebSocketUpgrader, w, r, nil)
 	if err != nil {
 		log.Printf("desktop-agent: upgrade_failed session=%s target=%s trace=%s err=%v", session.ID, session.Target, traceLog, err) // #nosec G706 -- Session, target, and trace IDs are hub-controlled runtime identifiers.
 		return
 	}
-	defer wsConn.Close()
 	wsConn.SetReadLimit(d.MaxDesktopInputReadBytes)
+	defer wsConn.Close()
 	connectStart := time.Now()
 
 	opts := d.GetDesktopSessionOptions(session.ID)

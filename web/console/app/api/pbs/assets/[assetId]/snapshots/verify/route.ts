@@ -24,8 +24,15 @@ export async function POST(request: Request, { params }: Params) {
   let body: unknown;
   try { body = await request.json(); } catch { body = undefined; }
 
+  const incomingURL = new URL(request.url);
+  const bodyRecord = body && typeof body === "object" ? body as Record<string, unknown> : {};
+  const store = incomingURL.searchParams.get("store")?.trim()
+    || (typeof bodyRecord.store === "string" ? bodyRecord.store.trim() : "");
+  const upstreamURL = new URL(`${base.api}/pbs/assets/${assetID}/snapshots/verify`);
+  if (store) upstreamURL.searchParams.set("store", store);
+
   try {
-    const response = await fetch(`${base.api}/pbs/assets/${assetID}/snapshots/verify`, {
+    const response = await fetch(upstreamURL, {
       method: "POST",
       headers: { ...authHeaders, "Content-Type": "application/json" },
       body: JSON.stringify(body ?? {}),

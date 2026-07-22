@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/labtether/labtether/internal/apiv2"
+	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/persistence"
 )
 
@@ -34,9 +35,17 @@ func (d *SearchDeps) HandleV2Search(w http.ResponseWriter, r *http.Request) {
 	queryLower := strings.ToLower(query)
 
 	results := map[string]any{}
+	allAssets := []assets.Asset(nil)
+	assetsLoaded := false
 
 	// Search assets.
-	if allAssets, err := d.AssetStore.ListAssets(); err == nil {
+	if d.AssetStore != nil {
+		if listed, err := d.AssetStore.ListAssets(); err == nil {
+			allAssets = listed
+			assetsLoaded = true
+		}
+	}
+	if assetsLoaded {
 		var matchingAssets []map[string]any
 		allowed := apiv2.AllowedAssetsFromContext(r.Context())
 		for _, a := range allAssets {
@@ -61,7 +70,11 @@ func (d *SearchDeps) HandleV2Search(w http.ResponseWriter, r *http.Request) {
 	if d.GroupStore != nil {
 		if groups, err := d.GroupStore.ListGroups(); err == nil {
 			var matchingGroups []map[string]any
+			accessibleGroups := AccessibleGroupIDs(r.Context(), groups, allAssets)
 			for _, g := range groups {
+				if _, ok := accessibleGroups[strings.TrimSpace(g.ID)]; !ok {
+					continue
+				}
 				if strings.Contains(strings.ToLower(g.ID), queryLower) ||
 					strings.Contains(strings.ToLower(g.Name), queryLower) {
 					matchingGroups = append(matchingGroups, map[string]any{

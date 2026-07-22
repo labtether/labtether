@@ -11,10 +11,13 @@ import (
 
 // transferMockFS is a minimal in-memory RemoteFS for transfer tests.
 type transferMockFS struct {
-	mu       sync.Mutex
-	files    map[string][]byte
-	readErr  error // if set, Read returns this error
-	writeErr error // if set, Write returns this error
+	mu              sync.Mutex
+	files           map[string][]byte
+	readErr         error // if set, Read returns this error
+	writeErr        error // if set, Write returns this error
+	reportedSize    int64
+	hasReportedSize bool
+	writeCalls      int
 }
 
 func newTransferMockFS() *transferMockFS {
@@ -41,12 +44,17 @@ func (m *transferMockFS) Read(_ context.Context, path string) (io.ReadCloser, in
 	if !ok {
 		return nil, 0, errors.New("file not found")
 	}
-	return io.NopCloser(bytes.NewReader(data)), int64(len(data)), nil
+	size := int64(len(data))
+	if m.hasReportedSize {
+		size = m.reportedSize
+	}
+	return io.NopCloser(bytes.NewReader(data)), size, nil
 }
 
 func (m *transferMockFS) Write(_ context.Context, path string, r io.Reader, _ int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.writeCalls++
 	if m.writeErr != nil {
 		return m.writeErr
 	}
@@ -56,6 +64,12 @@ func (m *transferMockFS) Write(_ context.Context, path string, r io.Reader, _ in
 	}
 	m.files[path] = data
 	return nil
+}
+
+func (m *transferMockFS) getWriteCalls() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.writeCalls
 }
 
 func (m *transferMockFS) getFile(path string) ([]byte, bool) {
@@ -209,5 +223,21 @@ func TestTransfer_DestWriteError(t *testing.T) {
 	}
 	if !errors.Is(err, dst.writeErr) {
 		t.Fatalf("expected wrapped writeErr, got: %v", err)
+	}
+}
+
+func TestTransferRejectsReportedOversizeBeforeDestinationWrite(t *testing.T) {
+	src := newTransferMockFS()
+	src.putFile("/data.bin", []byte("small fixture"))
+	src.hasReportedSize = true
+	src.reportedSize = MaxTransferBytes + 1
+	dst := newTransferMockFS()
+
+	_, err := Transfer(context.Background(), src, "/data.bin", dst, "/out.bin", nil)
+	if !errors.Is(err, ErrTransferTooLarge) {
+		t.Fatalf("expected ErrTransferTooLarge, got %v", err)
+	}
+	if calls := dst.getWriteCalls(); calls != 0 {
+		t.Fatalf("destination Write called %d times", calls)
 	}
 }

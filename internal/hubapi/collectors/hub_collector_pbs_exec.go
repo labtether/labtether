@@ -13,16 +13,19 @@ import (
 	"github.com/labtether/labtether/internal/connectorsdk"
 	"github.com/labtether/labtether/internal/hubcollector"
 	"github.com/labtether/labtether/internal/metricschema"
+	"github.com/labtether/labtether/internal/telemetry"
 )
 
 func (d *Deps) executePBSCollector(ctx context.Context, collector hubcollector.Collector) {
+	if collectorContextCanceled(ctx) {
+		return
+	}
 	if d.CredentialStore == nil || d.SecretsManager == nil {
 		d.UpdateCollectorStatus(collector.ID, "error", "credential store unavailable")
 		return
 	}
 
 	lifecycle := NewCollectorLifecycle(d, collector, "pbs", hubcollector.CollectorTypePBS)
-	logFields := lifecycle.logFields
 
 	baseURL := CollectorConfigString(collector.Config, "base_url")
 	credentialID := CollectorConfigString(collector.Config, "credential_id")
@@ -37,11 +40,17 @@ func (d *Deps) executePBSCollector(ctx context.Context, collector hubcollector.C
 	}
 
 	cred, ok, err := d.CredentialStore.GetCredentialProfile(credentialID)
+	if collectorContextCanceled(ctx) {
+		return
+	}
 	if err != nil || !ok {
 		lifecycle.Fail("credential not found")
 		return
 	}
 	tokenSecret, err := d.SecretsManager.DecryptString(cred.SecretCiphertext, cred.ID)
+	if collectorContextCanceled(ctx) {
+		return
+	}
 	if err != nil {
 		lifecycle.Fail("failed to decrypt credential")
 		return
@@ -78,15 +87,45 @@ func (d *Deps) executePBSCollector(ctx context.Context, collector hubcollector.C
 
 	collectorCtx, collectorCancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer collectorCancel()
+	d.executePBSCollectorWithClient(collectorCtx, collector, lifecycle, baseURL, client)
+}
+
+type pbsCollectorClient interface {
+	ListDatastores(context.Context) ([]pbs.Datastore, error)
+	ListDatastoreUsage(context.Context) ([]pbs.DatastoreUsage, error)
+	GetVersion(context.Context) (pbs.Version, error)
+	GetDatastoreStatus(context.Context, string, bool) (pbs.DatastoreStatus, error)
+	ListDatastoreGroups(context.Context, string) ([]pbs.BackupGroup, error)
+	ListDatastoreSnapshots(context.Context, string) ([]pbs.BackupSnapshot, error)
+	ListNodeTasks(context.Context, string, int) ([]pbs.Task, error)
+}
+
+func (d *Deps) executePBSCollectorWithClient(
+	collectorCtx context.Context,
+	collector hubcollector.Collector,
+	lifecycle CollectorLifecycle,
+	baseURL string,
+	client pbsCollectorClient,
+) {
+	if collectorContextCanceled(collectorCtx) {
+		return
+	}
+	logFields := lifecycle.logFields
 
 	datastores, err := client.ListDatastores(collectorCtx)
 	if err != nil {
+		if collectorContextCanceled(collectorCtx) {
+			return
+		}
 		lifecycle.Failf("pbs list datastores failed: %v", err)
 		return
 	}
 
 	usageByStore := make(map[string]pbs.DatastoreUsage, len(datastores))
 	if usage, usageErr := client.ListDatastoreUsage(collectorCtx); usageErr != nil {
+		if collectorContextCanceled(collectorCtx) {
+			return
+		}
 		log.Printf("hub collector pbs: datastore usage call failed: %v", usageErr)
 	} else {
 		for _, entry := range usage {
@@ -95,6 +134,9 @@ func (d *Deps) executePBSCollector(ctx context.Context, collector hubcollector.C
 				usageByStore[store] = entry
 			}
 		}
+	}
+	if collectorContextCanceled(collectorCtx) {
+		return
 	}
 
 	// Fetch server version for root asset enrichment (best-effort).
@@ -105,6 +147,9 @@ func (d *Deps) executePBSCollector(ctx context.Context, collector hubcollector.C
 			pbsVersion = release
 		}
 	}
+	if collectorContextCanceled(collectorCtx) {
+		return
+	}
 
 	visibleDatastores := 0
 	discovered := 0
@@ -113,9 +158,15 @@ func (d *Deps) executePBSCollector(ctx context.Context, collector hubcollector.C
 	var aggregateTotalBytes, aggregateUsedBytes int64
 	var totalSnapshotCount, totalGroupCount int
 	var latestBackupEpoch int64
+	metricCollectedAt := time.Now().UTC()
+	metricSamples := make([]telemetry.MetricSample, 0, min(len(datastores), telemetry.MaxBridgePBSDataStoreSeries)*6)
+	metricDatastores := 0
 	snapshotAssets := make([]connectorsdk.Asset, 0, len(datastores)+1)
 	endpointHost, endpointIP := CollectorEndpointIdentity(baseURL)
 	for _, datastore := range datastores {
+		if collectorContextCanceled(collectorCtx) {
+			return
+		}
 		store := strings.TrimSpace(datastore.Store)
 		if store == "" {
 			continue
@@ -140,6 +191,9 @@ func (d *Deps) executePBSCollector(ctx context.Context, collector hubcollector.C
 		}
 
 		status, statusErr := client.GetDatastoreStatus(collectorCtx, store, true)
+		if collectorContextCanceled(collectorCtx) {
+			return
+		}
 		if statusErr != nil {
 			log.Printf("hub collector pbs: failed to load status for %s: %v", store, statusErr)
 		}
@@ -170,7 +224,10 @@ func (d *Deps) executePBSCollector(ctx context.Context, collector hubcollector.C
 		if mountStatus := strings.TrimSpace(status.MountStatus); mountStatus != "" {
 			metadata["mount_status"] = mountStatus
 		}
+		gcPendingKnown := status.GCStatus != nil
+		gcPendingBytes := int64(0)
 		if status.GCStatus != nil {
+			gcPendingBytes = status.GCStatus.PendingBytes
 			if upid := strings.TrimSpace(status.GCStatus.UPID); upid != "" {
 				metadata["gc_last_upid"] = upid
 			}
@@ -183,20 +240,38 @@ func (d *Deps) executePBSCollector(ctx context.Context, collector hubcollector.C
 		}
 
 		if groups, groupsErr := client.ListDatastoreGroups(collectorCtx, store); groupsErr != nil {
+			if collectorContextCanceled(collectorCtx) {
+				return
+			}
 			log.Printf("hub collector pbs: failed to load groups for %s: %v", store, groupsErr)
 		} else {
 			metadata["group_count"] = strconv.Itoa(len(groups))
 		}
+		if collectorContextCanceled(collectorCtx) {
+			return
+		}
 
+		backupCountKnown := false
+		backupCount := 0
+		latestDatastoreBackupEpoch := int64(0)
 		if snapshots, snapshotsErr := client.ListDatastoreSnapshots(collectorCtx, store); snapshotsErr != nil {
+			if collectorContextCanceled(collectorCtx) {
+				return
+			}
 			log.Printf("hub collector pbs: failed to load snapshots for %s: %v", store, snapshotsErr)
 		} else {
+			backupCountKnown = true
+			backupCount = len(snapshots)
 			metadata["snapshot_count"] = strconv.Itoa(len(snapshots))
 			if latestBackup := latestPBSSnapshotEpoch(snapshots); latestBackup > 0 {
+				latestDatastoreBackupEpoch = latestBackup
 				backupAt := time.Unix(latestBackup, 0).UTC()
 				metadata["last_backup_at"] = backupAt.Format(time.RFC3339)
 				metadata["days_since_backup"] = formatMetricValue(time.Since(backupAt).Hours() / 24)
 			}
+		}
+		if collectorContextCanceled(collectorCtx) {
+			return
 		}
 		// Accumulate aggregate storage totals for root asset.
 		aggregateTotalBytes += total
@@ -227,15 +302,35 @@ func (d *Deps) executePBSCollector(ctx context.Context, collector hubcollector.C
 			Platform: "",
 			Metadata: metadata,
 		}
-		if _, err := d.ProcessHeartbeatRequest(req); err != nil {
+		req = ScopedCollectorHeartbeatRequest(collector.ID, req)
+		if collectorContextCanceled(collectorCtx) {
+			return
+		}
+		if _, err := d.ProcessScopedCollectorHeartbeat(collector.ID, req); err != nil {
 			log.Printf("hub collector pbs: failed to upsert %s: %v", req.AssetID, err)
 			upsertFailures++
 			continue
+		}
+		if collectorContextCanceled(collectorCtx) {
+			return
+		}
+		if metricDatastores < telemetry.MaxBridgePBSDataStoreSeries {
+			metricSamples = append(metricSamples, PBSDatastoreMetricSamples(PBSDatastoreMetricSnapshot{
+				AssetID: req.AssetID, Datastore: store, CollectedAt: metricCollectedAt,
+				Total: total, Used: used, Available: avail,
+				BackupCountKnown: backupCountKnown, BackupCount: backupCount,
+				LatestBackupEpoch: latestDatastoreBackupEpoch,
+				GCPendingKnown:    gcPendingKnown, GCPendingBytes: gcPendingBytes,
+			})...)
+			metricDatastores++
 		}
 		snapshotAssets = append(snapshotAssets, ConnectorSnapshotAssetFromHeartbeat(req, ""))
 		discovered++
 	}
 
+	if collectorContextCanceled(collectorCtx) {
+		return
+	}
 	if collector.AssetID != "" {
 		rootName := CollectorConfigString(collector.Config, "display_name")
 		if rootName == "" {
@@ -293,6 +388,9 @@ func (d *Deps) executePBSCollector(ctx context.Context, collector hubcollector.C
 			snapshotAssets = append(snapshotAssets, rootAsset)
 		}
 	}
+	if collectorContextCanceled(collectorCtx) {
+		return
+	}
 
 	var snapshotConnector connectorsdk.Connector
 	if d.ConnectorRegistry != nil {
@@ -301,6 +399,23 @@ func (d *Deps) executePBSCollector(ctx context.Context, collector hubcollector.C
 		}
 	}
 	d.PersistCanonicalConnectorSnapshot("pbs", collector.ID, "PBS", "", snapshotConnector, snapshotAssets)
+	if collectorContextCanceled(collectorCtx) {
+		return
+	}
+
+	metricAppendFailed := false
+	if len(metricSamples) > 0 && d.TelemetryStore != nil {
+		if err := d.TelemetryStore.AppendSamples(collectorCtx, metricSamples); err != nil {
+			if collectorContextCanceled(collectorCtx) {
+				return
+			}
+			metricAppendFailed = true
+			log.Printf("hub collector pbs: failed to persist datastore telemetry: %v", err)
+		}
+	}
+	if collectorContextCanceled(collectorCtx) {
+		return
+	}
 
 	if visibleDatastores == 0 {
 		lifecycle.Partial("no datastores discovered from PBS")
@@ -314,7 +429,6 @@ func (d *Deps) executePBSCollector(ctx context.Context, collector hubcollector.C
 		lifecycle.Partialf("partial PBS inventory persisted: datastores=%d upsert_failures=%d", discovered, upsertFailures)
 		return
 	}
-
 	taskCount := 0
 	collectedTasks := make([]pbs.Task, 0, 30)
 	node := CollectorConfigString(collector.Config, "node")
@@ -322,10 +436,19 @@ func (d *Deps) executePBSCollector(ctx context.Context, collector hubcollector.C
 		taskCount = len(tasks)
 		collectedTasks = tasks
 	} else {
+		if collectorContextCanceled(collectorCtx) {
+			return
+		}
 		log.Printf("hub collector pbs: failed to list node tasks: %v", taskErr)
+	}
+	if collectorContextCanceled(collectorCtx) {
+		return
 	}
 
 	for _, task := range collectedTasks {
+		if collectorContextCanceled(collectorCtx) {
+			return
+		}
 		upid := strings.TrimSpace(task.UPID)
 		if upid == "" {
 			continue
@@ -359,6 +482,13 @@ func (d *Deps) executePBSCollector(ctx context.Context, collector hubcollector.C
 			eventAt,
 		)
 	}
+	if metricAppendFailed {
+		if collectorContextCanceled(collectorCtx) {
+			return
+		}
+		lifecycle.Partialf("PBS inventory and recent tasks persisted but datastore telemetry persistence failed: recent_tasks=%d", taskCount)
+		return
+	}
 
 	summaryMessage := fmt.Sprintf("collector run complete: datastores=%d recent_tasks=%d", discovered, taskCount)
 	d.AppendConnectorLogEventWithID(
@@ -370,7 +500,63 @@ func (d *Deps) executePBSCollector(ctx context.Context, collector hubcollector.C
 		logFields,
 		time.Now().UTC(),
 	)
+	if collectorContextCanceled(collectorCtx) {
+		return
+	}
 	d.UpdateCollectorStatus(collector.ID, "ok", "")
+}
+
+// PBSDatastoreMetricSnapshot is the exact data already loaded during one PBS
+// collector pass. It avoids an export-only second poll while preserving which
+// optional API calls actually succeeded.
+type PBSDatastoreMetricSnapshot struct {
+	AssetID           string
+	Datastore         string
+	CollectedAt       time.Time
+	Total             int64
+	Used              int64
+	Available         int64
+	BackupCountKnown  bool
+	BackupCount       int
+	LatestBackupEpoch int64
+	GCPendingKnown    bool
+	GCPendingBytes    int64
+}
+
+func PBSDatastoreMetricSamples(snapshot PBSDatastoreMetricSnapshot) []telemetry.MetricSample {
+	if strings.TrimSpace(snapshot.AssetID) == "" || strings.TrimSpace(snapshot.Datastore) == "" || snapshot.CollectedAt.IsZero() {
+		return nil
+	}
+	labels := map[string]string{"datastore": strings.TrimSpace(snapshot.Datastore)}
+	out := make([]telemetry.MetricSample, 0, 6)
+	appendSample := func(metric, unit string, value float64) {
+		sample := telemetry.MetricSample{
+			AssetID: snapshot.AssetID, Metric: metric, Unit: unit, Value: value,
+			CollectedAt: snapshot.CollectedAt.UTC(), Labels: labels,
+		}
+		if _, err := telemetry.MetricSampleEnvelopeBytes(sample); err == nil {
+			out = append(out, sample)
+		}
+	}
+	if snapshot.Total > 0 && snapshot.Used >= 0 && snapshot.Used <= snapshot.Total &&
+		snapshot.Available >= 0 && snapshot.Available <= snapshot.Total && snapshot.Used <= snapshot.Total-snapshot.Available {
+		appendSample(telemetry.MetricStorageTotalBytes, "bytes", float64(snapshot.Total))
+		appendSample(telemetry.MetricStorageUsedBytes, "bytes", float64(snapshot.Used))
+		appendSample(telemetry.MetricStorageAvailableBytes, "bytes", float64(snapshot.Available))
+	}
+	if snapshot.BackupCountKnown && snapshot.BackupCount >= 0 {
+		appendSample(telemetry.MetricBackupCount, "count", float64(snapshot.BackupCount))
+	}
+	if snapshot.LatestBackupEpoch > 0 {
+		age := snapshot.CollectedAt.Sub(time.Unix(snapshot.LatestBackupEpoch, 0)).Seconds()
+		if age >= 0 {
+			appendSample(telemetry.MetricBackupAgeSeconds, "seconds", age)
+		}
+	}
+	if snapshot.GCPendingKnown && snapshot.GCPendingBytes >= 0 {
+		appendSample(telemetry.MetricGCPendingBytes, "bytes", float64(snapshot.GCPendingBytes))
+	}
+	return out
 }
 
 func latestPBSSnapshotEpoch(snapshots []pbs.BackupSnapshot) int64 {

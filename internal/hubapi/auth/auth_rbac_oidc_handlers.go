@@ -2,6 +2,7 @@ package auth
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/auth"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/servicehttp"
@@ -20,6 +22,11 @@ const (
 	authUsersRoute      = "/auth/users"
 	authUsersRouteSlash = "/auth/users/"
 	oidcStateTTL        = 10 * time.Minute
+	oidcMobileStateTTL  = 5 * time.Minute
+	// MobileOIDCRedirectURI is the single native callback registered by the
+	// LabTether iOS/iPadOS application. PKCE protects authorization codes even
+	// if another installed app claims the custom scheme.
+	MobileOIDCRedirectURI = "com.labtether.mobile:/oauth2redirect" // #nosec G101 -- Public application callback URI, not credential material.
 )
 
 // ErrOIDCSetupRequired is returned when OIDC sign-in is attempted before initial setup.
@@ -34,6 +41,19 @@ type authOIDCCallbackRequest struct {
 	Code        string `json:"code"`
 	State       string `json:"state"`
 	RedirectURI string `json:"redirect_uri"`
+}
+
+type authOIDCMobileStartRequest struct {
+	RedirectURI         string `json:"redirect_uri"`
+	CodeChallenge       string `json:"code_challenge"`
+	CodeChallengeMethod string `json:"code_challenge_method"`
+}
+
+type authOIDCMobileCallbackRequest struct {
+	Code         string `json:"code"`
+	State        string `json:"state"`
+	RedirectURI  string `json:"redirect_uri"`
+	CodeVerifier string `json:"code_verifier"`
 }
 
 type authCreateUserRequest struct {
@@ -67,10 +87,13 @@ func (d *Deps) HandleAuthProviders(w http.ResponseWriter, r *http.Request) {
 	}
 	if oidcProvider != nil {
 		payload["oidc"] = map[string]any{
-			"enabled":        true,
-			"display_name":   oidcProvider.DisplayName(),
-			"issuer":         oidcProvider.IssuerURL(),
-			"auto_provision": oidcAutoProvision,
+			"enabled":                true,
+			"display_name":           oidcProvider.DisplayName(),
+			"issuer":                 oidcProvider.IssuerURL(),
+			"auto_provision":         oidcAutoProvision,
+			"mobile_supported":       true,
+			"mobile_redirect_uri":    MobileOIDCRedirectURI,
+			"pkce_methods_supported": []string{auth.PKCECodeChallengeMethodS256},
 		}
 	}
 	servicehttp.WriteJSON(w, http.StatusOK, payload)
@@ -85,6 +108,7 @@ func (d *Deps) validateOIDCRedirectURI(r *http.Request, raw string) (string, err
 
 // HandleAuthOIDCStart handles POST /auth/oidc/start.
 func (d *Deps) HandleAuthOIDCStart(w http.ResponseWriter, r *http.Request) {
+	setOIDCNoStoreHeaders(w)
 	if r.Method != http.MethodPost {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -92,6 +116,9 @@ func (d *Deps) HandleAuthOIDCStart(w http.ResponseWriter, r *http.Request) {
 	oidcProvider, _ := d.OIDCRef.Get()
 	if oidcProvider == nil {
 		servicehttp.WriteError(w, http.StatusNotFound, "oidc is not enabled")
+		return
+	}
+	if d.EnforceRateLimitGlobal != nil && !d.EnforceRateLimitGlobal(w, "auth.oidc.web.start.global", 120, time.Minute) {
 		return
 	}
 	if !d.EnforceRateLimit(w, r, "auth.oidc.start", 20, time.Minute) {
@@ -124,6 +151,7 @@ func (d *Deps) HandleAuthOIDCStart(w http.ResponseWriter, r *http.Request) {
 		Nonce:       nonce,
 		NextPath:    SanitizeNextPath(req.Next),
 		RedirectURI: redirectURI,
+		Flow:        OIDCAuthFlowWeb,
 		ExpiresAt:   expiresAt,
 	}) {
 		servicehttp.WriteError(w, http.StatusTooManyRequests, "too many pending oidc sign-in attempts")
@@ -140,8 +168,85 @@ func (d *Deps) HandleAuthOIDCStart(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HandleAuthOIDCCallback handles POST /auth/oidc/callback.
-func (d *Deps) HandleAuthOIDCCallback(w http.ResponseWriter, r *http.Request) {
+// HandleAuthOIDCMobileStart handles POST /auth/oidc/mobile/start. The native
+// app owns the verifier and sends only its S256 challenge at this stage.
+func (d *Deps) HandleAuthOIDCMobileStart(w http.ResponseWriter, r *http.Request) {
+	setOIDCNoStoreHeaders(w)
+	if r.Method != http.MethodPost {
+		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	oidcProvider, _ := d.OIDCRef.Get()
+	if oidcProvider == nil {
+		servicehttp.WriteError(w, http.StatusNotFound, "oidc is not enabled")
+		return
+	}
+	if d.EnforceRateLimitGlobal != nil && !d.EnforceRateLimitGlobal(w, "auth.oidc.mobile.start.global", 120, time.Minute) {
+		return
+	}
+	if !d.EnforceRateLimit(w, r, "auth.oidc.mobile.start", 20, time.Minute) {
+		return
+	}
+
+	var req authOIDCMobileStartRequest
+	if err := shared.DecodeJSONBody(w, r, &req); err != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, "invalid oidc mobile start payload")
+		return
+	}
+	redirectURI, err := ValidateMobileOIDCRedirectURI(req.RedirectURI)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.CodeChallengeMethod != auth.PKCECodeChallengeMethodS256 {
+		servicehttp.WriteError(w, http.StatusBadRequest, "code_challenge_method must be S256")
+		return
+	}
+	codeChallenge := strings.TrimSpace(req.CodeChallenge)
+	if err := auth.ValidatePKCECodeChallenge(codeChallenge); err != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, "invalid pkce code challenge")
+		return
+	}
+
+	state, err := RandomURLToken(32)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to generate oidc state")
+		return
+	}
+	nonce, err := RandomURLToken(32)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to generate oidc nonce")
+		return
+	}
+	authURL, err := oidcProvider.BuildAuthURLWithPKCE(state, nonce, redirectURI, codeChallenge)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to build oidc auth url")
+		return
+	}
+
+	expiresAt := time.Now().UTC().Add(oidcMobileStateTTL)
+	if !d.StoreOIDCState(state, OIDCAuthState{
+		Nonce:         nonce,
+		RedirectURI:   redirectURI,
+		Flow:          OIDCAuthFlowMobile,
+		CodeChallenge: codeChallenge,
+		ExpiresAt:     expiresAt,
+	}) {
+		servicehttp.WriteError(w, http.StatusTooManyRequests, "too many pending oidc sign-in attempts")
+		return
+	}
+	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
+		"auth_url":   authURL,
+		"state":      state,
+		"expires_at": expiresAt,
+	})
+}
+
+// HandleAuthOIDCMobileCallback handles POST /auth/oidc/mobile/callback. It
+// consumes state before contacting the provider and requires proof of the
+// verifier bound at start, then creates the same cookie session as web OIDC.
+func (d *Deps) HandleAuthOIDCMobileCallback(w http.ResponseWriter, r *http.Request) {
+	setOIDCNoStoreHeaders(w)
 	if r.Method != http.MethodPost {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -155,25 +260,37 @@ func (d *Deps) HandleAuthOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "authentication unavailable")
 		return
 	}
-
-	var req authOIDCCallbackRequest
-	if err := shared.DecodeJSONBody(w, r, &req); err != nil {
-		servicehttp.WriteError(w, http.StatusBadRequest, "invalid oidc callback payload")
+	if d.EnforceRateLimitGlobal != nil && !d.EnforceRateLimitGlobal(w, "auth.oidc.mobile.callback.global", 120, time.Minute) {
 		return
 	}
-	redirectURI, err := d.validateOIDCRedirectURI(r, req.RedirectURI)
+	if !d.EnforceRateLimit(w, r, "auth.oidc.mobile.callback", 20, time.Minute) {
+		return
+	}
+
+	var req authOIDCMobileCallbackRequest
+	if err := shared.DecodeJSONBody(w, r, &req); err != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, "invalid oidc mobile callback payload")
+		return
+	}
+	redirectURI, err := ValidateMobileOIDCRedirectURI(req.RedirectURI)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	state, ok := d.ConsumeOIDCState(strings.TrimSpace(req.State), redirectURI)
-	if !ok {
-		servicehttp.WriteError(w, http.StatusBadRequest, "oidc state is invalid or expired")
+	codeChallenge, err := auth.PKCECodeChallengeS256(req.CodeVerifier)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, "oidc state or pkce verifier is invalid or expired")
+		return
+	}
+	state, ok := d.ConsumeMobileOIDCState(strings.TrimSpace(req.State), redirectURI)
+	if !ok || subtle.ConstantTimeCompare([]byte(state.CodeChallenge), []byte(codeChallenge)) != 1 {
+		servicehttp.WriteError(w, http.StatusBadRequest, "oidc state or pkce verifier is invalid or expired")
 		return
 	}
 
-	identity, err := oidcProvider.ExchangeCode(r.Context(), req.Code, state.Nonce, redirectURI)
+	identity, err := oidcProvider.ExchangeCodeWithPKCE(r.Context(), req.Code, state.Nonce, redirectURI, req.CodeVerifier)
 	if err != nil {
+		d.appendOIDCAudit("native_mobile", "deny", "provider_exchange_failed", auth.User{}, auth.Session{}, false)
 		servicehttp.WriteError(w, http.StatusUnauthorized, "oidc authentication failed")
 		return
 	}
@@ -200,6 +317,114 @@ func (d *Deps) HandleAuthOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	auth.SetSessionCookie(w, raw, auth.SessionDuration)
+	d.appendOIDCAudit("native_mobile", "allow", "", user, session, created)
+
+	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
+		"user":       auth.UserInfo{ID: user.ID, Username: user.Username, Role: auth.NormalizeRole(user.Role)},
+		"created":    created,
+		"session_id": session.ID,
+		"expires_at": session.ExpiresAt,
+	})
+}
+
+func (d *Deps) appendOIDCAudit(clientType, decision, reason string, user auth.User, session auth.Session, created bool) {
+	if d == nil || d.AppendAuditEventBestEffort == nil {
+		return
+	}
+	details := map[string]any{
+		"client_type": clientType,
+		"provider":    "oidc",
+	}
+	if user.ID != "" {
+		details["role"] = auth.NormalizeRole(user.Role)
+		details["created"] = created
+	}
+	d.AppendAuditEventBestEffort(audit.Event{
+		Type:      "auth.oidc.login",
+		ActorID:   user.ID,
+		Target:    "oidc",
+		SessionID: session.ID,
+		Decision:  decision,
+		Reason:    reason,
+		Details:   details,
+		Timestamp: time.Now().UTC(),
+	}, clientType+" oidc login "+decision)
+}
+
+func setOIDCNoStoreHeaders(w http.ResponseWriter) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Pragma", "no-cache")
+}
+
+// HandleAuthOIDCCallback handles POST /auth/oidc/callback.
+func (d *Deps) HandleAuthOIDCCallback(w http.ResponseWriter, r *http.Request) {
+	setOIDCNoStoreHeaders(w)
+	if r.Method != http.MethodPost {
+		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	oidcProvider, _ := d.OIDCRef.Get()
+	if oidcProvider == nil {
+		servicehttp.WriteError(w, http.StatusNotFound, "oidc is not enabled")
+		return
+	}
+	if d.AuthStore == nil {
+		servicehttp.WriteError(w, http.StatusServiceUnavailable, "authentication unavailable")
+		return
+	}
+	if d.EnforceRateLimitGlobal != nil && !d.EnforceRateLimitGlobal(w, "auth.oidc.web.callback.global", 120, time.Minute) {
+		return
+	}
+	if !d.EnforceRateLimit(w, r, "auth.oidc.callback", 20, time.Minute) {
+		return
+	}
+
+	var req authOIDCCallbackRequest
+	if err := shared.DecodeJSONBody(w, r, &req); err != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, "invalid oidc callback payload")
+		return
+	}
+	redirectURI, err := d.validateOIDCRedirectURI(r, req.RedirectURI)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	state, ok := d.ConsumeOIDCState(strings.TrimSpace(req.State), redirectURI)
+	if !ok {
+		servicehttp.WriteError(w, http.StatusBadRequest, "oidc state is invalid or expired")
+		return
+	}
+
+	identity, err := oidcProvider.ExchangeCode(r.Context(), req.Code, state.Nonce, redirectURI)
+	if err != nil {
+		d.appendOIDCAudit("web", "deny", "provider_exchange_failed", auth.User{}, auth.Session{}, false)
+		servicehttp.WriteError(w, http.StatusUnauthorized, "oidc authentication failed")
+		return
+	}
+
+	user, created, err := d.ResolveOIDCUser(identity)
+	if err != nil {
+		if errors.Is(err, ErrOIDCSetupRequired) {
+			servicehttp.WriteError(w, http.StatusConflict, "complete initial setup before using single sign-on")
+			return
+		}
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to provision oidc user")
+		return
+	}
+
+	raw, hashed, err := auth.GenerateSessionToken()
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create session")
+		return
+	}
+	expiresAt := time.Now().UTC().Add(auth.SessionDuration)
+	session, err := d.AuthStore.CreateAuthSession(user.ID, hashed, expiresAt)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create session")
+		return
+	}
+	auth.SetSessionCookie(w, raw, auth.SessionDuration)
+	d.appendOIDCAudit("web", "allow", "", user, session, created)
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"user":       auth.UserInfo{ID: user.ID, Username: user.Username, Role: auth.NormalizeRole(user.Role)},
@@ -212,9 +437,15 @@ func (d *Deps) HandleAuthOIDCCallback(w http.ResponseWriter, r *http.Request) {
 
 // ResolveOIDCUser finds or creates a user from an OIDC identity.
 func (d *Deps) ResolveOIDCUser(identity auth.OIDCIdentity) (auth.User, bool, error) {
+	const provider = "oidc"
+	issuer := strings.TrimSpace(identity.Issuer)
+	subject := strings.TrimSpace(identity.Subject)
+	if issuer == "" || subject == "" {
+		return auth.User{}, false, errors.New("verified oidc issuer and subject are required")
+	}
 	desiredRole := OIDCAssignableRole(identity.Role)
 
-	user, ok, err := d.AuthStore.GetUserByOIDCSubject("oidc", identity.Subject)
+	user, ok, err := d.AuthStore.GetUserByOIDCIdentity(provider, issuer, subject)
 	if err != nil {
 		return auth.User{}, false, err
 	}
@@ -226,9 +457,46 @@ func (d *Deps) ResolveOIDCUser(identity auth.OIDCIdentity) (auth.User, bool, err
 		}
 		return user, false, nil
 	}
+
+	// Users provisioned before issuer-scoped identities have a subject but no
+	// issuer. Adopt that exact row once, atomically. The first adoption preserves
+	// its current role instead of applying a claim-driven role change as an
+	// incidental side effect of the schema migration. Later logins follow the
+	// existing role synchronization policy above.
+	legacyUser, legacyOK, err := d.AuthStore.GetUserByOIDCSubject(provider, subject)
+	if err != nil {
+		return auth.User{}, false, err
+	}
+	if legacyOK {
+		boundUser, bound, bindErr := d.AuthStore.BindLegacyOIDCIdentity(
+			legacyUser.ID,
+			provider,
+			subject,
+			issuer,
+		)
+		if bindErr == nil && bound {
+			return boundUser, false, nil
+		}
+
+		// A concurrent login for the same verified issuer may have completed
+		// the one-time binding. Accept it only when it is the same user; a
+		// competing issuer or a different user fails closed.
+		currentUser, currentOK, currentErr := d.AuthStore.GetUserByOIDCIdentity(provider, issuer, subject)
+		if currentErr != nil {
+			return auth.User{}, false, currentErr
+		}
+		if currentOK && currentUser.ID == legacyUser.ID {
+			return currentUser, false, nil
+		}
+		if bindErr != nil {
+			return auth.User{}, false, bindErr
+		}
+		return auth.User{}, false, errors.New("legacy oidc identity was bound by a competing issuer")
+	}
+
 	_, oidcAutoProvision := d.OIDCRef.Get()
 	if !oidcAutoProvision {
-		return auth.User{}, false, fmt.Errorf("oidc user %q is not provisioned", identity.Subject)
+		return auth.User{}, false, fmt.Errorf("oidc user %q is not provisioned", subject)
 	}
 	if setupRequired, setupErr := AuthBootstrapSetupRequired(d.AuthStore); setupErr != nil {
 		return auth.User{}, false, setupErr
@@ -245,12 +513,13 @@ func (d *Deps) ResolveOIDCUser(identity auth.OIDCIdentity) (auth.User, bool, err
 	if err != nil {
 		return auth.User{}, false, err
 	}
-	createdUser, err := d.AuthStore.CreateUserWithRole(
+	createdUser, err := d.AuthStore.CreateUserWithOIDCIdentity(
 		username,
 		passwordHash,
 		desiredRole,
-		"oidc",
-		identity.Subject,
+		provider,
+		issuer,
+		subject,
 	)
 	if err != nil {
 		return auth.User{}, false, err
@@ -502,7 +771,7 @@ func (d *Deps) HandleAuthUserActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusForbidden, "cannot change owner password")
 			return
 		}
-		password := strings.TrimSpace(*req.Password)
+		password := *req.Password
 		if err := ValidateLoginRequest(LoginRequest{Username: user.Username, Password: password}); err != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 			return
@@ -512,12 +781,12 @@ func (d *Deps) HandleAuthUserActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to hash password")
 			return
 		}
-		if err := d.AuthStore.UpdateUserPasswordHash(user.ID, hash); err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update password")
-			return
-		}
 		if err := d.AuthStore.DeleteSessionsByUserID(user.ID); err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to revoke active sessions")
+			return
+		}
+		if err := d.AuthStore.UpdateUserPasswordHash(user.ID, hash); err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update password")
 			return
 		}
 		if user.ID == d.UserIDFromContext(r.Context()) {
@@ -606,7 +875,7 @@ func (d *Deps) handleUserSessions(w http.ResponseWriter, r *http.Request, userID
 // SanitizeNextPath sanitizes a redirect-next path.
 func SanitizeNextPath(next string) string {
 	next = strings.TrimSpace(next)
-	if next == "" {
+	if next == "" || strings.Contains(next, "\\") || strings.ContainsAny(next, "\x00\r\n") {
 		return "/"
 	}
 	parsed, err := url.ParseRequestURI(next)
@@ -616,7 +885,7 @@ func SanitizeNextPath(next string) string {
 	if parsed.IsAbs() || parsed.Host != "" {
 		return "/"
 	}
-	if !strings.HasPrefix(parsed.Path, "/") || strings.HasPrefix(parsed.Path, "//") {
+	if !strings.HasPrefix(parsed.Path, "/") || strings.HasPrefix(parsed.Path, "//") || strings.Contains(parsed.Path, "\\") {
 		return "/"
 	}
 	lower := strings.ToLower(parsed.Path)
@@ -663,6 +932,16 @@ func ValidateAuthRedirectURI(raw string) (string, error) {
 		return "", fmt.Errorf("redirect_uri must target the oidc callback endpoint")
 	}
 	return parsed.String(), nil
+}
+
+// ValidateMobileOIDCRedirectURI enforces the native app's single registered
+// callback. No caller-provided custom scheme, host, path, query, or fragment is
+// accepted, so the public start endpoint cannot become an open redirect.
+func ValidateMobileOIDCRedirectURI(raw string) (string, error) {
+	if strings.TrimSpace(raw) != MobileOIDCRedirectURI {
+		return "", fmt.Errorf("redirect_uri must exactly match %s", MobileOIDCRedirectURI)
+	}
+	return MobileOIDCRedirectURI, nil
 }
 
 // RandomURLToken generates a random URL-safe base64 token.

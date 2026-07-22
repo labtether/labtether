@@ -78,15 +78,17 @@ type CreateCommandRequest struct {
 }
 
 type CommandJob struct {
-	JobID       string     `json:"job_id"`
-	SessionID   string     `json:"session_id"`
-	CommandID   string     `json:"command_id"`
-	ActorID     string     `json:"actor_id"`
-	Target      string     `json:"target"`
-	Command     string     `json:"command"`
-	Mode        string     `json:"mode"`
-	TimeoutSec  int        `json:"timeout_sec,omitempty"`
-	SSHConfig   *SSHConfig `json:"ssh_config,omitempty"`
+	JobID      string `json:"job_id"`
+	SessionID  string `json:"session_id"`
+	CommandID  string `json:"command_id"`
+	ActorID    string `json:"actor_id"`
+	Target     string `json:"target"`
+	Command    string `json:"command"`
+	Mode       string `json:"mode"`
+	TimeoutSec int    `json:"timeout_sec,omitempty"`
+	// SSHConfig is execution-only decrypted material. It must never be included
+	// in durable job payloads, API responses, audit events, or dead letters.
+	SSHConfig   *SSHConfig `json:"-"`
 	RequestedAt time.Time  `json:"requested_at"`
 }
 

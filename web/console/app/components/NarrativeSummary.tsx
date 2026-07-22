@@ -267,7 +267,7 @@ function buildSentences(status: NarrativeStatus): Sentence[] {
       node: (
         <span>
           {phrase(
-            `${summary.connectorCount} ${plural(summary.connectorCount, "connector")} reporting.`,
+            `${summary.connectorCount} connector ${plural(summary.connectorCount, "type")} available.`,
             "muted",
           )}
         </span>

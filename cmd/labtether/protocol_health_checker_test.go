@@ -5,8 +5,26 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/protocols"
 )
+
+func TestProtocolHealthSSHHostKeyCallbackFailsClosedByDefault(t *testing.T) {
+	t.Setenv(shared.EnvAllowInsecureSSHHostKeys, "")
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("SSH_KNOWN_HOSTS_PATH", "")
+	t.Setenv("SSH_KNOWN_HOSTS_PATHS", "")
+	if callback, err := buildProtocolHealthSSHHostKeyCallback(protocols.SSHConfig{StrictHostKey: false}); err == nil || callback != nil {
+		t.Fatalf("expected missing host identity material to fail closed, callback=%v err=%v", callback, err)
+	}
+}
+
+func TestProtocolHealthSSHHostKeyCallbackAllowsAcknowledgedInsecureMode(t *testing.T) {
+	t.Setenv(shared.EnvAllowInsecureSSHHostKeys, "true")
+	if callback, err := buildProtocolHealthSSHHostKeyCallback(protocols.SSHConfig{StrictHostKey: false}); err != nil || callback == nil {
+		t.Fatalf("expected acknowledged insecure callback, callback=%v err=%v", callback, err)
+	}
+}
 
 func TestRunProtocolConfigHealthChecksStopsWhenContextAlreadyCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())

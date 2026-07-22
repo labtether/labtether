@@ -12,6 +12,8 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/labtether/labtether/internal/guacamole"
+	"github.com/labtether/labtether/internal/hubapi/shared"
+	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
 	"github.com/labtether/labtether/internal/terminal"
 )
@@ -34,10 +36,25 @@ func (d *Deps) HandleGuacdDesktopStream(w http.ResponseWriter, r *http.Request, 
 		}
 	}
 
-	targetHost, targetPort, username, password := d.ResolveRDPTarget(session.Target)
+	targetHost, targetPort, username, password := d.ResolveRDPTarget(session)
+	// Guacd performs the target connection out-of-process. Resolve and validate
+	// every managed or direct target here, then pass guacd only the approved IP
+	// literal. This prevents a second DNS lookup/rebinding hop and applies the
+	// loopback/link-local/private-network policy uniformly to asset metadata.
+	resolvedHost, resolveErr := securityruntime.ResolveOutboundTCPHost(r.Context(), targetHost, targetPort)
+	if resolveErr != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, "invalid RDP target: "+d.SanitizeUpstreamError(resolveErr.Error()))
+		return
+	}
+	targetHost = resolvedHost
 	client, err := guacamole.Connect(guacdHost, guacdPort)
 	if err != nil {
 		log.Printf("rdp: guacd connect failed: %v", err)
+		servicehttp.WriteError(w, http.StatusBadGateway, "guacd unavailable")
+		return
+	}
+	defer client.Close()
+	if err := client.SetDeadline(time.Now().Add(15 * time.Second)); err != nil {
 		servicehttp.WriteError(w, http.StatusBadGateway, "guacd unavailable")
 		return
 	}
@@ -48,9 +65,16 @@ func (d *Deps) HandleGuacdDesktopStream(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	// guacd responds with "args" after protocol selection.
-	if _, _, err := client.ReadInstruction(); err != nil {
+	// guacd responds with "args" after protocol selection. Preserve the
+	// advertised order; it is version-dependent.
+	opcode, argNames, err := client.ReadInstruction()
+	if err != nil {
 		log.Printf("rdp: read args failed: %v", err)
+		servicehttp.WriteError(w, http.StatusBadGateway, "guacd handshake failed")
+		return
+	}
+	if opcode != "args" || len(argNames) == 0 {
+		log.Printf("rdp: unexpected guacd handshake opcode=%s", opcode) // #nosec G706 -- Value comes from the reviewed guacd control channel, not direct user input.
 		servicehttp.WriteError(w, http.StatusBadGateway, "guacd handshake failed")
 		return
 	}
@@ -73,7 +97,14 @@ func (d *Deps) HandleGuacdDesktopStream(w http.ResponseWriter, r *http.Request, 
 		"drive-path":        "",
 		"create-drive-path": "",
 	}
-	if err := client.SendConnect(params); err != nil {
+	if err := client.SendHandshake(argNames, params, guacamole.ClientInformation{
+		Width:          1920,
+		Height:         1080,
+		DPI:            96,
+		AudioMIMETypes: []string{"audio/L16", "audio/L8"},
+		ImageMIMETypes: []string{"image/png", "image/jpeg"},
+		Name:           "LabTether",
+	}); err != nil {
 		log.Printf("rdp: connect instruction failed: %v", err)
 		servicehttp.WriteError(w, http.StatusBadGateway, "guacd connect failed")
 		return
@@ -90,12 +121,16 @@ func (d *Deps) HandleGuacdDesktopStream(w http.ResponseWriter, r *http.Request, 
 		servicehttp.WriteError(w, http.StatusBadGateway, "guacd did not return ready")
 		return
 	}
-
-	browserWS, err := d.TerminalWebSocketUpgrader.Upgrade(w, r, nil)
-	if err != nil {
-		_ = client.Close()
+	if err := client.SetDeadline(time.Time{}); err != nil {
+		servicehttp.WriteError(w, http.StatusBadGateway, "guacd session setup failed")
 		return
 	}
+
+	browserWS, err := shared.UpgradeWebSocket(d.TerminalWebSocketUpgrader, w, r, nil)
+	if err != nil {
+		return
+	}
+	shared.LimitBrowserInteractiveMessages(browserWS)
 	defer browserWS.Close()
 	var writeMu sync.Mutex
 	stopKeepalive := d.StartBrowserWSKeepalive(browserWS, &writeMu, "desktop-rdp:"+session.ID)
@@ -138,7 +173,6 @@ func (d *Deps) HandleGuacdDesktopStream(w http.ResponseWriter, r *http.Request, 
 	for {
 		select {
 		case <-done:
-			_ = client.Close()
 			return
 		default:
 		}
@@ -155,7 +189,6 @@ func (d *Deps) HandleGuacdDesktopStream(w http.ResponseWriter, r *http.Request, 
 		}
 	}
 
-	_ = client.Close()
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
@@ -163,7 +196,12 @@ func (d *Deps) HandleGuacdDesktopStream(w http.ResponseWriter, r *http.Request, 
 }
 
 // ResolveRDPTarget resolves the RDP connection target for an asset.
-func (d *Deps) ResolveRDPTarget(assetID string) (host string, port int, username string, password string) {
+func (d *Deps) ResolveRDPTarget(session terminal.Session) (host string, port int, username string, password string) {
+	opts := d.GetDesktopSessionOptions(session.ID)
+	if opts.Direct {
+		return opts.DirectHost, opts.DirectPort, opts.DirectUsername, opts.DirectPassword
+	}
+	assetID := session.Target
 	host = strings.TrimSpace(assetID)
 	port = 3389
 

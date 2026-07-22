@@ -198,6 +198,75 @@ func TestProcessAgentTerminalHandlersIgnoreMismatchedSender(t *testing.T) {
 	}
 }
 
+func TestProcessAgentTerminalStartedRejectsMissingRequiredTmux(t *testing.T) {
+	var srv apiServer
+	bridge := &terminalBridge{
+		OutputCh:        make(chan []byte, 1),
+		ClosedCh:        make(chan struct{}),
+		ExpectedAgentID: "node-1",
+		SessionID:       "sess-persistent",
+		Target:          "node-1",
+		RequireTmux:     true,
+	}
+	srv.terminalBridges.Store("sess-persistent", bridge)
+
+	conn := &agentmgr.AgentConn{AssetID: "node-1"}
+	conn.SetMeta("terminal.tmux.has", "true")
+	startedData, err := json.Marshal(agentmgr.TerminalStartedData{
+		SessionID:    "sess-persistent",
+		TmuxAttached: false,
+	})
+	if err != nil {
+		t.Fatalf("marshal terminal started payload: %v", err)
+	}
+
+	srv.processAgentTerminalStarted(conn, agentmgr.Message{Data: startedData})
+
+	select {
+	case <-bridge.ClosedCh:
+	default:
+		t.Fatal("expected persistent bridge to close when the agent did not attach tmux")
+	}
+	if got := bridge.CloseReasonOr(""); got != "tmux_unavailable" {
+		t.Fatalf("close reason=%q, want tmux_unavailable", got)
+	}
+	if got := conn.Meta("terminal.tmux.has"); got != "false" {
+		t.Fatalf("cached tmux capability=%q, want false", got)
+	}
+	select {
+	case <-bridge.OutputCh:
+		t.Fatal("expected no ready marker after non-tmux shell startup")
+	default:
+	}
+}
+
+func TestHandleAgentTerminalStreamRejectsPersistentSessionWhenTmuxUnavailable(t *testing.T) {
+	sut := newTestAPIServer(t)
+	sut.agentMgr = agentmgr.NewManager()
+
+	agentServerConn, agentClientConn, agentCleanup := newWebSocketPair(t)
+	defer agentCleanup()
+	agentConn := agentmgr.NewAgentConn(agentServerConn, "node-1", "linux")
+	agentConn.SetMeta("terminal.tmux.has", "false")
+	sut.agentMgr.Register(agentConn)
+	defer sut.agentMgr.Unregister("node-1")
+	sut.resetTerminalDepsForTest()
+
+	session := terminal.Session{
+		ID:                  "sess-persistent",
+		Target:              "node-1",
+		PersistentSessionID: "persistent-1",
+	}
+	req := httptest.NewRequest(http.MethodGet, "/terminal/sessions/sess-persistent/stream", nil)
+	rec := httptest.NewRecorder()
+	sut.handleAgentTerminalStream(rec, req, session)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 streaming a persistent shell without tmux, got %d: %s", rec.Code, rec.Body.String())
+	}
+	_ = waitForAgentTerminalMessage(t, agentClientConn, agentmgr.MsgTerminalProbe)
+}
+
 func TestBridgeAgentInputIdleNoPanicAndClosesOnSessionEnd(t *testing.T) {
 	var srv apiServer
 

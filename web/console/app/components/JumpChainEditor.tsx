@@ -6,6 +6,11 @@ import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import type { HopConfig } from "../console/models";
 import { parsePortInput } from "../lib/portParsing";
+import {
+  CredentialProfileSelect,
+  sshCredentialKinds,
+} from "./credentials/CredentialProfileSelect";
+import { useCredentialProfiles } from "../hooks/useCredentialProfiles";
 
 type JumpChainEditorProps = {
   value: HopConfig[];
@@ -22,6 +27,8 @@ export function JumpChainEditor({
   onChange,
   disabled = false,
 }: JumpChainEditorProps) {
+  const credentialProfiles = useCredentialProfiles(!disabled || value.length > 0);
+
   const addHop = useCallback(() => {
     onChange([...value, emptyHop()]);
   }, [value, onChange]);
@@ -86,14 +93,18 @@ export function JumpChainEditor({
                   disabled={disabled}
                   className="!py-1.5 !text-xs"
                 />
-                <Input
-                  placeholder="Credential Profile ID"
+                <CredentialProfileSelect
+                  id={`jump-hop-${index}-credential-profile`}
+                  ariaLabel={`Jump host ${index + 1} credential profile`}
                   value={hop.credential_profile_id}
-                  onChange={(e) =>
-                    updateHop(index, "credential_profile_id", e.target.value)
-                  }
+                  onChange={(next) => updateHop(index, "credential_profile_id", next)}
+                  profiles={credentialProfiles.profiles}
+                  loading={credentialProfiles.loading}
+                  error={index === 0 ? credentialProfiles.error : null}
+                  allowedKinds={sshCredentialKinds}
                   disabled={disabled}
-                  className="!py-1.5 !text-xs"
+                  className="min-w-0 [&_select]:!py-1.5 [&_select]:!text-xs"
+                  emptyLabel="No credential"
                 />
               </div>
               <button

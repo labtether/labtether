@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "../../../../../components/ui/Button";
 import { Card } from "../../../../../components/ui/Card";
+import { PBSActionConfirmation } from "./PBSActionConfirmation";
 import { pbsAction, pbsFetch } from "./usePBSData";
 
 type Props = {
@@ -18,6 +19,8 @@ type SyncJob = {
   schedule?: string;
   comment?: string;
   remove_vanished?: boolean;
+  verified_only?: boolean;
+  transfer_last?: number;
 };
 
 type SyncJobsResponse = {
@@ -36,10 +39,22 @@ function normalizeSyncJobs(value: unknown): SyncJob[] {
       id: typeof j.id === "string" ? j.id : String(j.id ?? ""),
       store: typeof j.store === "string" ? j.store : "",
       remote: typeof j.remote === "string" ? j.remote : undefined,
-      remote_store: typeof j.remote_store === "string" ? j.remote_store : undefined,
+      remote_store:
+        typeof j.remote_store === "string"
+          ? j.remote_store
+          : typeof j["remote-store"] === "string"
+            ? j["remote-store"]
+            : undefined,
       schedule: typeof j.schedule === "string" ? j.schedule : undefined,
       comment: typeof j.comment === "string" ? j.comment : undefined,
-      remove_vanished: j.remove_vanished === true,
+      remove_vanished: j.remove_vanished === true || j["remove-vanished"] === true,
+      verified_only: j.verified_only === true || j["verified-only"] === true,
+      transfer_last:
+        typeof j.transfer_last === "number"
+          ? j.transfer_last
+          : typeof j["transfer-last"] === "number"
+            ? j["transfer-last"]
+            : undefined,
     };
   });
 }
@@ -50,6 +65,8 @@ export function PBSSyncJobsTab({ assetId }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [actionInFlight, setActionInFlight] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<{ action: "run" | "delete"; id: string } | null>(null);
 
   const seqRef = useRef(0);
   const latestRef = useRef(0);
@@ -82,13 +99,18 @@ export function PBSSyncJobsTab({ assetId }: Props) {
     async (jobId: string) => {
       const seq = ++actionSeq.current;
       setActionError(null);
+      setActionSuccess(null);
+      setConfirmation(null);
       setActionInFlight(`run-${jobId}`);
       try {
         await pbsAction(
           `/api/pbs/assets/${encodeURIComponent(assetId)}/sync-jobs/${encodeURIComponent(jobId)}/run`,
           "POST",
         );
-        if (actionSeq.current === seq) void fetchJobs();
+        if (actionSeq.current === seq) {
+          setActionSuccess(`Sync job ${jobId} started.`);
+          void fetchJobs();
+        }
       } catch (err) {
         if (actionSeq.current === seq)
           setActionError(err instanceof Error ? err.message : "run failed");
@@ -103,13 +125,18 @@ export function PBSSyncJobsTab({ assetId }: Props) {
     async (jobId: string) => {
       const seq = ++actionSeq.current;
       setActionError(null);
+      setActionSuccess(null);
+      setConfirmation(null);
       setActionInFlight(`delete-${jobId}`);
       try {
         await pbsAction(
           `/api/pbs/assets/${encodeURIComponent(assetId)}/sync-jobs/${encodeURIComponent(jobId)}`,
           "DELETE",
         );
-        if (actionSeq.current === seq) void fetchJobs();
+        if (actionSeq.current === seq) {
+          setActionSuccess(`Sync job ${jobId} deleted.`);
+          void fetchJobs();
+        }
       } catch (err) {
         if (actionSeq.current === seq)
           setActionError(err instanceof Error ? err.message : "delete failed");
@@ -121,7 +148,21 @@ export function PBSSyncJobsTab({ assetId }: Props) {
   );
 
   return (
-    <Card>
+    <div className="space-y-4">
+      {confirmation ? (
+        <PBSActionConfirmation
+          message={`Confirm ${confirmation.action} sync job ${confirmation.id}?`}
+          confirmLabel={confirmation.action === "delete" ? "Confirm Delete" : "Confirm Run"}
+          busy={actionInFlight !== null}
+          onConfirm={() =>
+            void (confirmation.action === "delete"
+              ? doDelete(confirmation.id)
+              : doRun(confirmation.id))
+          }
+          onCancel={() => setConfirmation(null)}
+        />
+      ) : null}
+      <Card>
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <h2 className="text-sm font-medium text-[var(--text)]">Sync Jobs</h2>
         <Button size="sm" variant="ghost" onClick={() => void fetchJobs()} disabled={loading}>
@@ -129,7 +170,8 @@ export function PBSSyncJobsTab({ assetId }: Props) {
         </Button>
       </div>
 
-      {actionError ? <p className="mb-3 text-xs text-[var(--bad)]">{actionError}</p> : null}
+      {actionError ? <p role="alert" className="mb-3 text-xs text-[var(--bad)]">{actionError}</p> : null}
+      {actionSuccess ? <p role="status" className="mb-3 text-xs text-[var(--ok)]">{actionSuccess}</p> : null}
 
       {error ? (
         <p className="text-xs text-[var(--bad)]">{error}</p>
@@ -147,6 +189,8 @@ export function PBSSyncJobsTab({ assetId }: Props) {
                 <th className="py-1 px-2 text-left text-[var(--muted)] font-medium">Remote</th>
                 <th className="py-1 px-2 text-left text-[var(--muted)] font-medium">Remote Store</th>
                 <th className="py-1 px-2 text-left text-[var(--muted)] font-medium">Schedule</th>
+                <th className="py-1 px-2 text-left text-[var(--muted)] font-medium">Verified Only</th>
+                <th className="py-1 px-2 text-left text-[var(--muted)] font-medium">Transfer Last</th>
                 <th className="py-1 px-2 text-right text-[var(--muted)] font-medium">Actions</th>
               </tr>
             </thead>
@@ -158,6 +202,8 @@ export function PBSSyncJobsTab({ assetId }: Props) {
                   <td className="py-2 px-2 text-[var(--muted)]">{job.remote || "\u2014"}</td>
                   <td className="py-2 px-2 text-[var(--muted)]">{job.remote_store || "\u2014"}</td>
                   <td className="py-2 px-2 text-[var(--muted)]">{job.schedule || "\u2014"}</td>
+                  <td className="py-2 px-2 text-[var(--muted)]">{job.verified_only ? "yes" : "no"}</td>
+                  <td className="py-2 px-2 text-[var(--muted)]">{job.transfer_last ?? "\u2014"}</td>
                   <td className="py-2 px-2 text-right">
                     <div className="flex items-center justify-end gap-1">
                       <Button
@@ -165,7 +211,7 @@ export function PBSSyncJobsTab({ assetId }: Props) {
                         variant="ghost"
                         disabled={!!actionInFlight}
                         loading={actionInFlight === `run-${job.id}`}
-                        onClick={() => void doRun(job.id)}
+                        onClick={() => setConfirmation({ action: "run", id: job.id })}
                       >
                         Run
                       </Button>
@@ -174,7 +220,7 @@ export function PBSSyncJobsTab({ assetId }: Props) {
                         variant="ghost"
                         disabled={!!actionInFlight}
                         loading={actionInFlight === `delete-${job.id}`}
-                        onClick={() => void doDelete(job.id)}
+                        onClick={() => setConfirmation({ action: "delete", id: job.id })}
                       >
                         Delete
                       </Button>
@@ -186,6 +232,7 @@ export function PBSSyncJobsTab({ assetId }: Props) {
           </table>
         </div>
       )}
-    </Card>
+      </Card>
+    </div>
   );
 }

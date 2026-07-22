@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { parsePortInput } from "../../lib/portParsing";
+import {
+  CredentialProfileSelect,
+  sshCredentialKinds,
+} from "../credentials/CredentialProfileSelect";
+import { useCredentialProfiles } from "../../hooks/useCredentialProfiles";
 
 type Bookmark = {
   id: string;
@@ -42,6 +47,7 @@ export default function BookmarkDialog({
   const [port, setPort] = useState("22");
   const [username, setUsername] = useState("");
   const [credentialProfileId, setCredentialProfileId] = useState("");
+  const credentialProfiles = useCredentialProfiles(isOpen);
 
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const prevOpenRef = useRef(false);
@@ -240,22 +246,16 @@ export default function BookmarkDialog({
           </label>
 
           {/* Credential Profile */}
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-[var(--muted)]">
-              Credential Profile ID{" "}
-              <span className="text-xs font-normal text-[var(--muted)]">
-                (optional)
-              </span>
-            </span>
-            <input
-              type="text"
-              value={credentialProfileId}
-              onChange={(e) => setCredentialProfileId(e.target.value)}
-              placeholder="profile-uuid"
-              className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none transition-colors placeholder:text-[var(--muted)]/50 focus:border-[var(--accent)]"
-              autoComplete="off"
-            />
-          </label>
+          <CredentialProfileSelect
+            id="bookmark-credential-profile"
+            label="Credential profile (optional)"
+            value={credentialProfileId}
+            onChange={setCredentialProfileId}
+            profiles={credentialProfiles.profiles}
+            loading={credentialProfiles.loading}
+            error={credentialProfiles.error}
+            allowedKinds={sshCredentialKinds}
+          />
 
           {/* Asset-linked hint */}
           {assetLinked && (

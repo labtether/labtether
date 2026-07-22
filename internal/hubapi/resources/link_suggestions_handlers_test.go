@@ -343,6 +343,47 @@ func TestBulkMoveSkipsNonExistentAssets(t *testing.T) {
 	}
 }
 
+func TestBulkMoveDeduplicatesAssetsBeforeUpdating(t *testing.T) {
+	deps := newTestResourcesDeps(t)
+	createTestAssetForLinks(t, deps.AssetStore, "host-1", "server", "Host 1")
+	payload, _ := json.Marshal(map[string]any{
+		"asset_ids": []string{" host-1 ", "host-1", "host-1"},
+		"group_id":  "",
+	})
+	req := httptest.NewRequest(http.MethodPut, "/assets/bulk/move", bytes.NewReader(payload))
+	rec := httptest.NewRecorder()
+	deps.HandleAssetBulkMove(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		Updated int `json:"updated"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Updated != 1 {
+		t.Fatalf("duplicate asset updated %d times, want 1", response.Updated)
+	}
+}
+
+func TestBulkMoveRejectsExcessCardinality(t *testing.T) {
+	deps := newTestResourcesDeps(t)
+	for _, count := range []int{maxBulkMoveRawAssetIDs + 1, maxBulkMoveUniqueAssetIDs + 1} {
+		assetIDs := make([]string, count)
+		for i := range assetIDs {
+			assetIDs[i] = fmt.Sprintf("host-%d", i)
+		}
+		payload, _ := json.Marshal(map[string]any{"asset_ids": assetIDs})
+		req := httptest.NewRequest(http.MethodPut, "/assets/bulk/move", bytes.NewReader(payload))
+		rec := httptest.NewRecorder()
+		deps.HandleAssetBulkMove(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("count=%d: expected 400, got %d: %s", count, rec.Code, rec.Body.String())
+		}
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Test helpers
 // ---------------------------------------------------------------------------

@@ -15,8 +15,11 @@ import (
 )
 
 const (
-	DefaultExecTimeout = 30
-	MaxExecTimeout     = 300
+	DefaultExecTimeout        = 30
+	MaxExecTimeout            = 300
+	maxExecMultiRawTargets    = 64
+	maxExecMultiUniqueTargets = 64
+	maxExecMultiConcurrency   = 8
 )
 
 func normalizeExecTimeoutSeconds(timeoutSec int) int {
@@ -53,6 +56,33 @@ type ExecResult struct {
 	Message    string `json:"message,omitempty"`
 }
 
+func normalizeExecMultiTargets(rawTargets []string) ([]string, error) {
+	seen := make(map[string]struct{}, min(len(rawTargets), maxExecMultiUniqueTargets+1))
+	targets := make([]string, 0, min(len(rawTargets), maxExecMultiUniqueTargets))
+	for _, rawTarget := range rawTargets {
+		if err := appendExecMultiTarget(&targets, seen, rawTarget); err != nil {
+			return nil, err
+		}
+	}
+	return targets, nil
+}
+
+func appendExecMultiTarget(targets *[]string, seen map[string]struct{}, rawTarget string) error {
+	target := strings.TrimSpace(rawTarget)
+	if target == "" {
+		return nil
+	}
+	if _, exists := seen[target]; exists {
+		return nil
+	}
+	if len(*targets) >= maxExecMultiUniqueTargets {
+		return fmt.Errorf("too many targets: maximum is %d", maxExecMultiUniqueTargets)
+	}
+	seen[target] = struct{}{}
+	*targets = append(*targets, target)
+	return nil
+}
+
 // HandleAssetExec handles POST /api/v2/assets/{id}/exec.
 func (d *ExecDeps) HandleAssetExec(w http.ResponseWriter, r *http.Request, assetID string) {
 	if r.Method != http.MethodPost {
@@ -61,6 +91,10 @@ func (d *ExecDeps) HandleAssetExec(w http.ResponseWriter, r *http.Request, asset
 	}
 	if !apiv2.ScopeCheck(d.ScopesFromContext(r.Context()), "assets:exec") {
 		apiv2.WriteScopeForbidden(w, "assets:exec")
+		return
+	}
+	if d.AllowedAssetsFromContext == nil || !apiv2.AssetCheck(d.AllowedAssetsFromContext(r.Context()), assetID) {
+		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "asset is not accessible with this API key")
 		return
 	}
 
@@ -87,12 +121,11 @@ func (d *ExecDeps) HandleAssetExec(w http.ResponseWriter, r *http.Request, asset
 		return
 	}
 	apiv2.WriteJSON(w, http.StatusOK, result)
-	// TODO: Comprehensive per-request audit logging for all API v2 endpoints is planned.
 	d.AppendAuditEventBestEffort(audit.Event{
 		Type:      "api.exec",
 		ActorID:   d.PrincipalActorID(r.Context()),
 		Target:    assetID,
-		Details:   map[string]any{"command": req.Command, "exit_code": result.ExitCode},
+		Details:   map[string]any{"command_bytes": len([]byte(req.Command)), "exit_code": result.ExitCode},
 		Timestamp: time.Now().UTC(),
 	}, "v2 exec on "+assetID)
 }
@@ -160,17 +193,34 @@ func (d *ExecDeps) HandleExecMulti(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Timeout = normalizeExecTimeoutSeconds(req.Timeout)
+	req.Group = strings.TrimSpace(req.Group)
+
+	if len(req.Targets) > maxExecMultiRawTargets {
+		apiv2.WriteError(w, http.StatusBadRequest, "validation",
+			fmt.Sprintf("too many targets: maximum is %d", maxExecMultiRawTargets))
+		return
+	}
 
 	// Resolve targets.
-	targets := req.Targets
+	targets, err := normalizeExecMultiTargets(req.Targets)
+	if err != nil {
+		apiv2.WriteError(w, http.StatusBadRequest, "validation", err.Error())
+		return
+	}
 	if req.Group != "" && len(targets) == 0 {
 		// Resolve group members via GroupAssetStore if available.
 		if groupAssetStore, ok := d.AssetStore.(persistence.GroupAssetStore); ok {
 			members, err := groupAssetStore.ListAssetsByGroup(req.Group)
 			if err == nil {
+				expandedTargets := make([]string, 0, min(len(members), maxExecMultiUniqueTargets+1))
+				seenExpandedTargets := make(map[string]struct{}, min(len(members), maxExecMultiUniqueTargets+1))
 				for _, m := range members {
-					targets = append(targets, m.ID)
+					if err := appendExecMultiTarget(&expandedTargets, seenExpandedTargets, m.ID); err != nil {
+						apiv2.WriteError(w, http.StatusBadRequest, "validation", err.Error())
+						return
+					}
 				}
+				targets = expandedTargets
 			}
 		}
 	}
@@ -187,32 +237,45 @@ func (d *ExecDeps) HandleExecMulti(w http.ResponseWriter, r *http.Request) {
 			filteredTargets = append(filteredTargets, t)
 		}
 	}
+	if len(filteredTargets) > maxExecMultiUniqueTargets {
+		apiv2.WriteError(w, http.StatusBadRequest, "validation",
+			fmt.Sprintf("too many accessible targets: maximum is %d", maxExecMultiUniqueTargets))
+		return
+	}
 
 	if len(filteredTargets) == 0 {
 		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "none of the requested targets are accessible with this API key")
 		return
 	}
 
-	// Fan-out execution in parallel.
-	results := make(map[string]ExecResult)
-	var mu sync.Mutex
+	// Fan out through a fixed-size worker pool. Results are written to stable
+	// request-order slots and reduced only after all workers finish.
+	orderedResults := make([]ExecResult, len(filteredTargets))
+	jobs := make(chan int)
 	var wg sync.WaitGroup
-	for _, target := range filteredTargets {
+	workerCount := min(maxExecMultiConcurrency, len(filteredTargets))
+	for worker := 0; worker < workerCount; worker++ {
 		wg.Add(1)
-		go func(t string) {
+		go func() {
 			defer wg.Done()
-			result := d.ExecOnAsset(r, t, req.Command, req.Timeout)
-			mu.Lock()
-			results[t] = result
-			mu.Unlock()
-		}(target)
+			for index := range jobs {
+				orderedResults[index] = d.ExecOnAsset(r, filteredTargets[index], req.Command, req.Timeout)
+			}
+		}()
 	}
+	for index := range filteredTargets {
+		jobs <- index
+	}
+	close(jobs)
 	wg.Wait()
 
+	results := make(map[string]ExecResult, len(filteredTargets))
 	succeeded := 0
 	failed := 0
-	for _, res := range results {
-		if res.Error != "" {
+	for index, target := range filteredTargets {
+		res := orderedResults[index]
+		results[target] = res
+		if res.Error != "" || res.ExitCode != 0 {
 			failed++
 		} else {
 			succeeded++

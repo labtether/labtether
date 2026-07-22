@@ -8,10 +8,14 @@ import (
 
 func TestBuildSecurityRuntimeEnvOverrides(t *testing.T) {
 	values := buildSecurityRuntimeEnvOverrides(map[string]string{
-		runtimesettings.KeySecurityOutboundAllowPrivate: "false",
+		runtimesettings.KeySecurityOutboundAllowPrivate:   "false",
+		runtimesettings.KeySecurityOutboundAllowLinkLocal: "true",
 	})
 	if got := values["LABTETHER_OUTBOUND_ALLOW_PRIVATE"]; got != "false" {
 		t.Fatalf("expected outbound private override false, got %q", got)
+	}
+	if got := values["LABTETHER_OUTBOUND_ALLOW_LINK_LOCAL"]; got != "true" {
+		t.Fatalf("expected outbound link-local override true, got %q", got)
 	}
 
 	values = buildSecurityRuntimeEnvOverrides(map[string]string{

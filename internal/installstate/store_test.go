@@ -1,6 +1,8 @@
 package installstate
 
 import (
+	"bytes"
+	"encoding/base64"
 	"errors"
 	"os"
 	"path/filepath"
@@ -23,7 +25,7 @@ func TestStoreSaveAndLoadRoundTrip(t *testing.T) {
 	secrets := Secrets{
 		OwnerToken:       "owner-token",
 		APIToken:         "api-token",
-		EncryptionKey:    "MDEyMzQ1Njc4OUFCQ0RFRjAxMjM0NTY3ODlBQkNERUY=",
+		EncryptionKey:    base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{0x41}, 32)),
 		PostgresPassword: "postgres-password",
 	}
 

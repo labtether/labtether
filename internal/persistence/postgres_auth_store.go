@@ -15,7 +15,7 @@ import (
 )
 
 const authStoreQueryTimeout = 5 * time.Second
-const authUserSelectColumns = `id, username, role, auth_provider, oidc_subject, password_hash, totp_secret, totp_verified_at, totp_recovery_codes, created_at, updated_at`
+const authUserSelectColumns = `id, username, role, auth_provider, oidc_issuer, oidc_subject, password_hash, totp_secret, totp_verified_at, totp_recovery_codes, created_at, updated_at`
 
 func authStoreContext() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), authStoreQueryTimeout)
@@ -57,6 +57,30 @@ func (s *PostgresStore) GetUserByUsername(username string) (auth.User, bool, err
 	return user, true, nil
 }
 
+func (s *PostgresStore) GetUserByOIDCIdentity(provider, issuer, subject string) (auth.User, bool, error) {
+	ctx, cancel := authStoreContext()
+	defer cancel()
+
+	user, err := scanUser(s.pool.QueryRow(ctx,
+		`SELECT `+authUserSelectColumns+`
+			 FROM users
+			 WHERE auth_provider = $1 AND oidc_issuer = $2 AND oidc_subject = $3`,
+		strings.ToLower(strings.TrimSpace(provider)),
+		strings.TrimSpace(issuer),
+		strings.TrimSpace(subject),
+	))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return auth.User{}, false, nil
+		}
+		return auth.User{}, false, err
+	}
+	return user, true, nil
+}
+
+// GetUserByOIDCSubject finds only issuer-less legacy bindings. New OIDC users
+// must be looked up with GetUserByOIDCIdentity so subjects from two issuers can
+// never alias one another.
 func (s *PostgresStore) GetUserByOIDCSubject(provider, subject string) (auth.User, bool, error) {
 	ctx, cancel := authStoreContext()
 	defer cancel()
@@ -64,8 +88,9 @@ func (s *PostgresStore) GetUserByOIDCSubject(provider, subject string) (auth.Use
 	user, err := scanUser(s.pool.QueryRow(ctx,
 		`SELECT `+authUserSelectColumns+`
 		 FROM users
-		 WHERE auth_provider = $1 AND oidc_subject = $2`,
-		strings.TrimSpace(provider),
+			 WHERE auth_provider = $1 AND oidc_subject = $2
+			   AND (oidc_issuer IS NULL OR BTRIM(oidc_issuer) = '')`,
+		strings.ToLower(strings.TrimSpace(provider)),
 		strings.TrimSpace(subject),
 	))
 	if err != nil {
@@ -180,6 +205,70 @@ func (s *PostgresStore) CreateUserWithRole(username, passwordHash, role, authPro
 		passwordHash,
 		now,
 	))
+}
+
+func (s *PostgresStore) CreateUserWithOIDCIdentity(
+	username, passwordHash, role, authProvider, oidcIssuer, oidcSubject string,
+) (auth.User, error) {
+	now := time.Now().UTC()
+	ctx, cancel := authStoreContext()
+	defer cancel()
+	authProvider = strings.ToLower(strings.TrimSpace(authProvider))
+	oidcIssuer = strings.TrimSpace(oidcIssuer)
+	oidcSubject = strings.TrimSpace(oidcSubject)
+	if authProvider == "" || oidcIssuer == "" || oidcSubject == "" {
+		return auth.User{}, errors.New("oidc provider, issuer, and subject are required")
+	}
+
+	return scanUser(s.pool.QueryRow(ctx,
+		`INSERT INTO users (id, username, role, auth_provider, oidc_issuer, oidc_subject, password_hash, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+		 RETURNING `+authUserSelectColumns,
+		idgen.New("usr"),
+		strings.TrimSpace(username),
+		auth.NormalizeRole(role),
+		authProvider,
+		oidcIssuer,
+		oidcSubject,
+		passwordHash,
+		now,
+	))
+}
+
+func (s *PostgresStore) BindLegacyOIDCIdentity(
+	id, authProvider, oidcSubject, oidcIssuer string,
+) (auth.User, bool, error) {
+	now := time.Now().UTC()
+	ctx, cancel := authStoreContext()
+	defer cancel()
+	authProvider = strings.ToLower(strings.TrimSpace(authProvider))
+	oidcSubject = strings.TrimSpace(oidcSubject)
+	oidcIssuer = strings.TrimSpace(oidcIssuer)
+	if strings.TrimSpace(id) == "" || authProvider == "" || oidcSubject == "" || oidcIssuer == "" {
+		return auth.User{}, false, errors.New("legacy oidc binding and issuer are required")
+	}
+
+	user, err := scanUser(s.pool.QueryRow(ctx,
+		`UPDATE users
+		 SET oidc_issuer = $1, updated_at = $2
+		 WHERE id = $3
+		   AND auth_provider = $4
+		   AND oidc_subject = $5
+		   AND (oidc_issuer IS NULL OR BTRIM(oidc_issuer) = '')
+		 RETURNING `+authUserSelectColumns,
+		oidcIssuer,
+		now,
+		strings.TrimSpace(id),
+		authProvider,
+		oidcSubject,
+	))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return auth.User{}, false, nil
+		}
+		return auth.User{}, false, err
+	}
+	return user, true, nil
 }
 
 func (s *PostgresStore) UpdateUserPasswordHash(id, passwordHash string) error {

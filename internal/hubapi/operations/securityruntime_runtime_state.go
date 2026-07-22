@@ -21,6 +21,9 @@ func BuildSecurityRuntimeEnvOverrides(overrides map[string]string) map[string]st
 	if raw := strings.TrimSpace(overrides[runtimesettings.KeySecurityOutboundAllowPrivate]); raw != "" && !strings.EqualFold(raw, "auto") {
 		values["LABTETHER_OUTBOUND_ALLOW_PRIVATE"] = raw
 	}
+	if raw := strings.TrimSpace(overrides[runtimesettings.KeySecurityOutboundAllowLinkLocal]); raw != "" {
+		values["LABTETHER_OUTBOUND_ALLOW_LINK_LOCAL"] = raw
+	}
 	if len(values) == 0 {
 		return nil
 	}

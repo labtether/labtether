@@ -116,10 +116,48 @@ func TestActionRunQueueUnavailable(t *testing.T) {
 	}
 }
 
+func TestActionPolicyAuditDoesNotPersistRawCommand(t *testing.T) {
+	sut := newTestAPIServer(t)
+	secretCommand := "printf LTQA_ACTION_SECRET_b92d"
+	payload, err := json.Marshal(map[string]any{
+		"type":    "command",
+		"target":  "lab-host-01",
+		"command": secretCommand,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/actions/execute", bytes.NewReader(payload))
+	req = req.WithContext(contextWithPrincipal(req.Context(), "audit-redaction-user", "operator"))
+	rec := httptest.NewRecorder()
+	sut.handleActionExecute(rec, req)
+
+	events, err := sut.auditStore.List(100, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), secretCommand) || strings.Contains(string(encoded), "LTQA_ACTION_SECRET_b92d") {
+		t.Fatalf("audit events persisted raw action command: %s", encoded)
+	}
+	foundMetadata := false
+	for _, event := range events {
+		if event.Type == "actions.run.policy_checked" && event.Details["command_bytes"] == len([]byte(secretCommand)) {
+			foundMetadata = true
+		}
+	}
+	if !foundMetadata {
+		t.Fatal("expected non-sensitive command length metadata in action policy audit")
+	}
+}
+
 func TestUpdatePlanCreateAndExecuteQueueUnavailable(t *testing.T) {
 	sut := newTestAPIServer(t)
 
-	createPayload := []byte(`{"name":"Weekly Updates","targets":["lab-host-01"],"scopes":["os_packages","docker_images"],"default_dry_run":true}`)
+	createPayload := []byte(`{"name":"Weekly Updates","targets":["lab-host-01"],"scopes":["os_packages"],"default_dry_run":true}`)
 	createReq := httptest.NewRequest(http.MethodPost, "/updates/plans", bytes.NewReader(createPayload))
 	createRec := httptest.NewRecorder()
 	sut.handleUpdatePlans(createRec, createReq)
@@ -169,6 +207,44 @@ func TestUpdatePlanCreateAndExecuteQueueUnavailable(t *testing.T) {
 	}
 	if !foundQueueFailure {
 		t.Fatalf("expected updates.run.queued failed audit event when queue is unavailable")
+	}
+}
+
+func TestUpdatePlanCreateRejectsUnsupportedScope(t *testing.T) {
+	sut := newTestAPIServer(t)
+	payload := []byte(`{"name":"Unsupported Updates","targets":["lab-host-01"],"scopes":["docker_images"]}`)
+	req := httptest.NewRequest(http.MethodPost, "/updates/plans", bytes.NewReader(payload))
+	rec := httptest.NewRecorder()
+
+	sut.handleUpdatePlans(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "not supported") {
+		t.Fatalf("expected unsupported-scope error, got %s", rec.Body.String())
+	}
+}
+
+func TestUpdatePlanCreateRejectsMissingOrBlankTargets(t *testing.T) {
+	for _, payload := range []string{
+		`{"name":"Missing Target","scopes":["os_packages"]}`,
+		`{"name":"Blank Target","targets":[" "],"scopes":["os_packages"]}`,
+	} {
+		t.Run(payload, func(t *testing.T) {
+			sut := newTestAPIServer(t)
+			req := httptest.NewRequest(http.MethodPost, "/updates/plans", strings.NewReader(payload))
+			rec := httptest.NewRecorder()
+
+			sut.handleUpdatePlans(rec, req)
+
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+			}
+			if !strings.Contains(strings.ToLower(rec.Body.String()), "target") {
+				t.Fatalf("expected target validation error, got %s", rec.Body.String())
+			}
+		})
 	}
 }
 

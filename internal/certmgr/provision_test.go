@@ -77,6 +77,57 @@ func TestProvision_ExistingCerts(t *testing.T) {
 	}
 }
 
+func TestProvision_ConfiguredExternalHostsAreCoveredAndPersistAcrossRenewal(t *testing.T) {
+	certsDir := filepath.Join(t.TempDir(), "certs")
+
+	initial, err := Provision(certsDir)
+	if err != nil {
+		t.Fatalf("initial Provision() error: %v", err)
+	}
+	initialCert, err := LoadKeyPair(initial.ServerCertPath, initial.ServerKeyPath)
+	if err != nil {
+		t.Fatalf("LoadKeyPair(initial server) error: %v", err)
+	}
+
+	result, err := Provision(certsDir, "hub.example.test", "192.0.2.25")
+	if err != nil {
+		t.Fatalf("Provision() with configured hosts error: %v", err)
+	}
+	configuredCert, err := LoadKeyPair(result.ServerCertPath, result.ServerKeyPath)
+	if err != nil {
+		t.Fatalf("LoadKeyPair(configured server) error: %v", err)
+	}
+	if bytes.Equal(initialCert.CertDER, configuredCert.CertDER) {
+		t.Fatal("expected the existing certificate to be reissued when configured hosts are missing")
+	}
+	for _, host := range []string{"hub.example.test", "192.0.2.25"} {
+		if err := configuredCert.Cert.VerifyHostname(host); err != nil {
+			t.Errorf("configured certificate does not cover %q: %v", host, err)
+		}
+	}
+
+	beforeRenewal := append([]byte(nil), configuredCert.CertDER...)
+	if err := result.Reloader.ForceRenew(); err != nil {
+		t.Fatalf("ForceRenew() error: %v", err)
+	}
+	renewed, err := result.Reloader.GetCertificate(&tls.ClientHelloInfo{})
+	if err != nil {
+		t.Fatalf("GetCertificate() after renewal error: %v", err)
+	}
+	if bytes.Equal(beforeRenewal, renewed.Certificate[0]) {
+		t.Fatal("expected ForceRenew() to replace the certificate")
+	}
+	renewedLeaf, err := parseCertLeaf(renewed)
+	if err != nil {
+		t.Fatalf("parseCertLeaf(renewed) error: %v", err)
+	}
+	for _, host := range []string{"hub.example.test", "192.0.2.25"} {
+		if err := renewedLeaf.VerifyHostname(host); err != nil {
+			t.Errorf("renewed certificate does not cover %q: %v", host, err)
+		}
+	}
+}
+
 func TestProvision_MissingCAKey_Errors(t *testing.T) {
 	dir := t.TempDir()
 	certsDir := filepath.Join(dir, "certs")

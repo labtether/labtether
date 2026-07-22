@@ -11,18 +11,17 @@ type SourceOption = {
   label: string;
   description: string;
   icon: LucideIcon;
-  available: boolean;
 };
 
 const sources: SourceOption[] = [
-  { id: "agent", label: "Agent", description: "Install LabTether agent on any device", icon: Server, available: true },
-  { id: "proxmox", label: "Proxmox VE", description: "Connect a Proxmox cluster via API", icon: Container, available: true },
-  { id: "pbs", label: "Proxmox Backup", description: "Connect a PBS server via API", icon: Archive, available: true },
-  { id: "docker", label: "Docker", description: "Connect Docker hosts and workloads", icon: Ship, available: true },
-  { id: "portainer", label: "Portainer", description: "Connect via Portainer API", icon: HardDrive, available: true },
-  { id: "truenas", label: "TrueNAS", description: "Connect a TrueNAS system via API", icon: Database, available: true },
-  { id: "homeassistant", label: "Home Assistant", description: "Install integration or review add-on setup", icon: House, available: true },
-  { id: "manual", label: "Manual Device", description: "SSH, Telnet, VNC, RDP, or ARD", icon: Pencil, available: true },
+  { id: "agent", label: "Agent", description: "Install LabTether agent on any device", icon: Server },
+  { id: "proxmox", label: "Proxmox VE", description: "Connect a Proxmox cluster via API", icon: Container },
+  { id: "pbs", label: "Proxmox Backup", description: "Connect a PBS server via API", icon: Archive },
+  { id: "docker", label: "Docker", description: "Connect Docker hosts and workloads", icon: Ship },
+  { id: "portainer", label: "Portainer", description: "Connect via Portainer API", icon: HardDrive },
+  { id: "truenas", label: "TrueNAS", description: "Connect a TrueNAS system via API", icon: Database },
+  { id: "homeassistant", label: "Home Assistant", description: "Install integration or review add-on setup", icon: House },
+  { id: "manual", label: "Manual Device", description: "SSH, Telnet, VNC, RDP, or ARD", icon: Pencil },
 ];
 
 type SourcePickerProps = {
@@ -47,20 +46,10 @@ export function SourcePicker({ onSelect, prefillBySource = {} }: SourcePickerPro
           return (
             <button
               key={source.id}
-              disabled={!source.available}
               onClick={() => onSelect(source.id)}
-              className={`relative flex flex-col items-start gap-2 p-4 rounded-lg border text-left transition-colors duration-150 ${
-                source.available
-                  ? "border-[var(--line)] hover:border-[var(--muted)] hover:bg-[var(--hover)] cursor-pointer"
-                  : "border-[var(--line)] opacity-40 cursor-not-allowed"
-              }`}
+              className="relative flex flex-col items-start gap-2 p-4 rounded-lg border border-[var(--line)] text-left transition-colors duration-150 hover:border-[var(--muted)] hover:bg-[var(--hover)] cursor-pointer"
             >
-              {!source.available && (
-                <span className="absolute top-2 right-2 text-[10px] font-medium uppercase tracking-wider text-[var(--muted)]">
-                  Coming Soon
-                </span>
-              )}
-              {source.available && suggestion && (
+              {suggestion && (
                 <span className="absolute top-2 right-2 text-[10px] font-medium uppercase tracking-wider text-[var(--ok)]">
                   Detected
                 </span>

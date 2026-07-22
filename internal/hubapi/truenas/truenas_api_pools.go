@@ -37,7 +37,7 @@ func (d *Deps) HandleTrueNASPools(ctx context.Context, w http.ResponseWriter, r 
 		pools := make([]map[string]any, 0, 8)
 		warnings := make([]string, 0, 2)
 		if err := CallTrueNASQueryWithRetries(ctx, runtime.Client, "pool.query", &pools); err != nil {
-			warnings = AppendTrueNASWarning(warnings, "pools unavailable: "+err.Error())
+			warnings = AppendTrueNASWarning(warnings, trueNASWarning("pools unavailable", err))
 			pools = nil
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, TrueNASPoolsResponse{
@@ -71,7 +71,7 @@ func (d *Deps) HandleTrueNASPools(ctx context.Context, w http.ResponseWriter, r 
 			return
 		}
 		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, "pool.scrub.run", []any{poolName}, nil); err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to start pool scrub: "+err.Error())
+			writeTrueNASError(w, http.StatusBadGateway, "failed to start pool scrub", err)
 			return
 		}
 		d.InvalidateTrueNASCaches(asset.ID, runtime.CollectorID)

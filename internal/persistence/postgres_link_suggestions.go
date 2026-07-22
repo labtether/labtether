@@ -78,6 +78,24 @@ func (s *PostgresStore) ListPendingLinkSuggestions() ([]LinkSuggestion, error) {
 	return out, rows.Err()
 }
 
+func (s *PostgresStore) GetLinkSuggestion(id string) (LinkSuggestion, bool, error) {
+	row := s.pool.QueryRow(context.Background(),
+		`SELECT id, source_asset_id, target_asset_id, match_reason,
+			confidence, status, created_at, resolved_at, resolved_by
+		 FROM asset_link_suggestions
+		 WHERE id = $1`,
+		strings.TrimSpace(id),
+	)
+	suggestion, err := scanLinkSuggestion(row)
+	if err == pgx.ErrNoRows {
+		return LinkSuggestion{}, false, nil
+	}
+	if err != nil {
+		return LinkSuggestion{}, false, err
+	}
+	return suggestion, true, nil
+}
+
 func (s *PostgresStore) ResolveLinkSuggestion(id, status, resolvedBy string) error {
 	now := time.Now().UTC()
 	tag, err := s.pool.Exec(context.Background(),

@@ -81,6 +81,27 @@ test("expired deep-link session redirects to login and returns to target after s
   ).toBeVisible();
 });
 
+test("login visibly announces rejected credentials", async ({ page }) => {
+  await installConsoleApiMocks(page, {
+    customRoute: async ({ pathname, method, fulfillJSON }) => {
+      if (pathname === "/api/auth/login" && method === "POST") {
+        await fulfillJSON({ error: "invalid credentials" }, 401);
+        return true;
+      }
+      return false;
+    },
+  });
+
+  await page.goto("/login");
+  await page.getByLabel("Username").fill("admin");
+  await page.getByLabel("Password").fill("wrong-password");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+
+  await expect(page.getByRole("alert").filter({ hasText: "invalid credentials" })).toBeVisible();
+  await expect(page.getByLabel("Username")).toHaveValue("admin");
+  await expect(page.getByLabel("Password")).toHaveValue("");
+});
+
 test("login rejects unsafe next redirects and lands on root after sign-in", async ({ page }) => {
   await installConsoleApiMocks(page);
 
@@ -89,7 +110,13 @@ test("login rejects unsafe next redirects and lands on root after sign-in", asyn
   await page.getByLabel("Password").fill("password");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
 
-  await expect(page).toHaveURL(/\/$/);
+  // next-intl canonicalizes the default locale root to /en in production.
+  // Either canonical form is local; the attacker-controlled origin must never
+  // survive the redirect.
+  await expect(page).toHaveURL(/\/(?:en)?$/);
+  expect(new URL(page.url()).origin).toBe(test.info().project.use.baseURL
+    ? new URL(String(test.info().project.use.baseURL)).origin
+    : new URL(page.url()).origin);
 });
 
 test("origin guard rejects cross-origin mutating requests", async ({ request }) => {
@@ -655,7 +682,7 @@ for (const statusCode of [401, 403, 429, 500]) {
     await page.getByRole("button", { name: "Test Connection", exact: true }).click();
 
     await expect(page.getByText(`pbs test failed (${statusCode})`)).toBeVisible();
-    await expect(page.getByText("Connect PBS")).toBeVisible();
+    await expect(page.getByText("Connect PBS", { exact: true })).toBeVisible();
   });
 }
 
@@ -732,7 +759,7 @@ test("pbs setup save failures keep the wizard open with actionable error", async
 
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByText("failed to save pbs settings (500)")).toBeVisible();
-  await expect(dialog.getByText("Connect PBS")).toBeVisible();
+  await expect(dialog.getByText("Connect PBS", { exact: true })).toBeVisible();
 });
 
 test("pbs setup recovers after transient test/save failures with retry", async ({ page }) => {
@@ -782,7 +809,7 @@ test("pbs setup recovers after transient test/save failures with retry", async (
   await page.getByRole("button", { name: "Save, Sync & Close", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByText("temporary backend unavailable")).toBeVisible();
-  await expect(dialog.getByText("Connect PBS")).toBeVisible();
+  await expect(dialog.getByText("Connect PBS", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Save, Sync & Close", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -790,6 +817,41 @@ test("pbs setup recovers after transient test/save failures with retry", async (
 
 test("status websocket retries after connection failures", async ({ page, browserName }) => {
   let wsEndpointCalls = 0;
+
+  await page.addInitScript(() => {
+    class FailingWebSocket {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSING = 2;
+      static readonly CLOSED = 3;
+
+      readonly url: string;
+      readyState = FailingWebSocket.CONNECTING;
+      onopen: ((event: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      onclose: ((event: CloseEvent) => void) | null = null;
+
+      constructor(url: string | URL) {
+        this.url = String(url);
+        window.setTimeout(() => this.onerror?.(new Event("error")), 0);
+      }
+
+      close() {
+        if (this.readyState === FailingWebSocket.CLOSED) return;
+        this.readyState = FailingWebSocket.CLOSED;
+        window.setTimeout(() => this.onclose?.(new CloseEvent("close")), 0);
+      }
+
+      send() {}
+      addEventListener() {}
+      removeEventListener() {}
+      dispatchEvent() { return true; }
+    }
+
+    (window as unknown as { WebSocket: typeof WebSocket }).WebSocket =
+      FailingWebSocket as unknown as typeof WebSocket;
+  });
 
   await installConsoleApiMocks(page, {
     customRoute: async ({ pathname, fulfillJSON }) => {
@@ -804,9 +866,10 @@ test("status websocket retries after connection failures", async ({ page, browse
 
   await page.goto("/nodes");
   await expect(page.getByRole("heading", { name: "Devices", level: 1, exact: true })).toBeVisible();
-  await page.waitForTimeout(browserName === "webkit" ? 10_500 : 7_500);
-
-  expect(wsEndpointCalls).toBeGreaterThanOrEqual(browserName === "webkit" ? 1 : 2);
+  await expect.poll(
+    () => wsEndpointCalls,
+    { timeout: browserName === "webkit" ? 10_500 : 7_500 },
+  ).toBeGreaterThanOrEqual(2);
 });
 
 test("hidden-tab pauses fast polling and visible-tab resumes without duplicate loops", async ({ page, context }) => {
@@ -985,8 +1048,7 @@ test("pbs task lifecycle works in node detail (status, log, stop)", async ({ pag
           task: {
             upid: taskUPID,
             node: "localhost",
-            status: "stopped",
-            exitstatus: "OK",
+            status: "running",
           },
         });
         return true;
@@ -1011,13 +1073,15 @@ test("pbs task lifecycle works in node detail (status, log, stop)", async ({ pag
 
   await page.goto(`/nodes/${encodeURIComponent(pbsAsset.id)}?panel=pbs`);
   await expect(page.locator("main").getByRole("heading", { name: "Lab PBS", exact: true }).first()).toBeVisible();
+  await page.getByRole("button", { name: "Tasks", exact: true }).click();
   await expect(page.getByText("Recent PBS Tasks")).toBeVisible();
 
-  await page.getByRole("button", { name: /backup/i }).first().click();
+  await page.getByRole("button").filter({ hasText: taskUPID }).click();
   await expect(page.getByText("Task Details")).toBeVisible();
   await expect(page.getByText("start backup job")).toBeVisible();
 
   await page.getByRole("button", { name: "Stop Task", exact: true }).click();
+  await page.getByRole("button", { name: "Confirm Stop", exact: true }).click();
   await expect.poll(() => stopCalls).toBeGreaterThanOrEqual(1);
 });
 
@@ -1066,9 +1130,10 @@ test("pbs task lifecycle surfaces status/log backend errors in node detail", asy
 
   await page.goto(`/nodes/${encodeURIComponent(pbsAsset.id)}?panel=pbs`);
   await expect(page.locator("main").getByRole("heading", { name: "Lab PBS", exact: true }).first()).toBeVisible();
+  await page.getByRole("button", { name: "Tasks", exact: true }).click();
   await expect(page.getByText("Recent PBS Tasks")).toBeVisible();
 
-  const backupTaskButton = page.getByRole("button", { name: /backup/i }).first();
+  const backupTaskButton = page.getByRole("button").filter({ hasText: taskUPID });
   await expect(backupTaskButton).toBeVisible();
   await backupTaskButton.click();
   await expect(page.getByText("Task Details")).toBeVisible({ timeout: 10_000 });
@@ -1119,7 +1184,6 @@ test("pbs task lifecycle handles stop backend 500 without breaking task panel", 
             upid: taskUPID,
             node: "localhost",
             status: "running",
-            exitstatus: "n/a",
           },
         });
         return true;
@@ -1140,8 +1204,9 @@ test("pbs task lifecycle handles stop backend 500 without breaking task panel", 
 
   await page.goto(`/nodes/${encodeURIComponent(pbsAsset.id)}?panel=pbs`);
   await expect(page.locator("main").getByRole("heading", { name: "Lab PBS", exact: true }).first()).toBeVisible();
+  await page.getByRole("button", { name: "Tasks", exact: true }).click();
 
-  const backupTaskButton = page.getByRole("button", { name: /backup/i }).first();
+  const backupTaskButton = page.getByRole("button").filter({ hasText: taskUPID });
   const taskDetailsHeading = page.getByText("Task Details");
   let taskDetailsVisible = false;
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -1158,6 +1223,7 @@ test("pbs task lifecycle handles stop backend 500 without breaking task panel", 
   await expect(page.getByText("task still running")).toBeVisible({ timeout: 10_000 });
 
   await page.getByRole("button", { name: "Stop Task", exact: true }).click();
+  await page.getByRole("button", { name: "Confirm Stop", exact: true }).click();
   await page.waitForTimeout(750);
   if (stopStatuses.length > 0) {
     expect(stopStatuses.at(-1)).toBe(500);

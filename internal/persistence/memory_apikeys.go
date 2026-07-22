@@ -58,12 +58,12 @@ func (m *memoryAPIKeyStore) ListAPIKeys(_ context.Context) ([]apikeys.APIKey, er
 	return result, nil
 }
 
-func (m *memoryAPIKeyStore) UpdateAPIKey(_ context.Context, id string, name *string, scopes *[]string, allowedAssets *[]string, expiresAt *time.Time) error {
+func (m *memoryAPIKeyStore) UpdateAPIKey(_ context.Context, id string, name *string, scopes *[]string, allowedAssets *[]string, expiresAt **time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	k, ok := m.keys[id]
 	if !ok {
-		return fmt.Errorf("key not found: %s", id)
+		return apikeys.ErrNotFound
 	}
 	if name != nil {
 		k.Name = *name
@@ -75,7 +75,7 @@ func (m *memoryAPIKeyStore) UpdateAPIKey(_ context.Context, id string, name *str
 		k.AllowedAssets = *allowedAssets
 	}
 	if expiresAt != nil {
-		k.ExpiresAt = expiresAt
+		k.ExpiresAt = *expiresAt
 	}
 	m.keys[id] = k
 	return nil

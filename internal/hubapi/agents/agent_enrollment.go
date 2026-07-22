@@ -1,7 +1,9 @@
 package agents
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"log"
 	"net/http"
@@ -12,8 +14,8 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/labtether/labtether/internal/agentmgr"
-	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/auth"
+	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/platforms"
 	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
@@ -34,6 +36,9 @@ type PendingAgent struct {
 	IdentityVerifiedAt *time.Time `json:"identity_verified_at,omitempty"`
 	ChallengeNonce     string
 	ChallengeExpiresAt time.Time
+	DecisionClaimed    bool
+	ClaimVersion       uint64
+	Disconnected       bool
 	ConnMu             sync.Mutex      // protects writes to conn
 	Conn               *websocket.Conn // unexported — used to send approval/rejection
 }
@@ -58,13 +63,30 @@ type PendingAgents struct {
 	agents map[string]*PendingAgent
 }
 
+type PendingDecisionClaim struct {
+	Info         PendingAgentInfo
+	conn         *websocket.Conn
+	connMu       *sync.Mutex
+	record       *PendingAgent
+	claimVersion uint64
+}
+
+var (
+	ErrPendingAgentNotFound         = errors.New("pending agent not found")
+	ErrPendingAgentAlreadyClaimed   = errors.New("pending agent decision already in progress")
+	ErrPendingAgentIdentityUnproven = errors.New("pending agent identity is not verified")
+	ErrPendingCapacityReached       = errors.New("pending enrollment capacity reached")
+	ErrPendingPerIPCapacityReached  = errors.New("pending enrollment source capacity reached")
+)
+
 const (
-	maxPendingEnrollmentAgents       = 200
-	maxPendingEnrollmentPerIP        = 5
-	maxPendingEnrollmentTimeout      = 10 * time.Minute
-	pendingChallengeTTL              = 2 * time.Minute
-	maxAgentMessageBytes             = 32 << 20 // 32MB — matches agent_ws_handler.go
-	maxPendingEnrollmentMessageBytes = maxAgentMessageBytes
+	maxPendingEnrollmentAgents        = 200
+	maxPendingEnrollmentPerIP         = 5
+	maxPendingEnrollmentTimeout       = 10 * time.Minute
+	pendingChallengeTTL               = 2 * time.Minute
+	pendingApprovalDeliveryTTL        = 2 * time.Minute
+	maxPendingEnrollmentMessageBytes  = 64 << 10
+	maxPendingEnrollmentProofMessages = 4
 
 	maxPendingFingerprintLen = 160
 	maxPendingKeyAlgLen      = 64
@@ -85,6 +107,12 @@ func (d *Deps) HandlePendingEnrollment(w http.ResponseWriter, r *http.Request) {
 	deviceKeyAlg := strings.ToLower(SanitizePendingIdentityHeader(r.Header.Get("X-Device-Key-Alg"), maxPendingKeyAlgLen))
 	devicePublicKey := SanitizePendingIdentityHeader(r.Header.Get("X-Device-Public-Key"), maxPendingPublicKeyLen)
 	remoteIP := shared.RequestClientKey(r)
+	if normalizedHostname, ok := validEnrollmentHostname(hostname, true); !ok {
+		servicehttp.WriteError(w, http.StatusBadRequest, "hostname must be valid UTF-8, at most 253 bytes, and contain no control characters")
+		return
+	} else {
+		hostname = normalizedHostname
+	}
 
 	if !d.EnforceRateLimit(w, r, "agent.enrollment.pending", 20, time.Minute) {
 		return
@@ -111,7 +139,7 @@ func (d *Deps) HandlePendingEnrollment(w http.ResponseWriter, r *http.Request) {
 	// Derive a temporary, unique asset ID for this pending connection.
 	tempAssetID := BuildPendingEnrollmentAssetID(hostname)
 
-	wsConn, err := d.AgentWebSocketUpgrader.Upgrade(w, r, nil)
+	wsConn, err := shared.UpgradeWebSocket(&d.AgentWebSocketUpgrader, w, r, nil)
 	if err != nil {
 		securityruntime.Logf("enrollment: WebSocket upgrade failed for pending agent %s: %v", hostname, err)
 		return
@@ -130,7 +158,17 @@ func (d *Deps) HandlePendingEnrollment(w http.ResponseWriter, r *http.Request) {
 		Conn:              wsConn,
 	}
 
-	d.PendingAgents.Add(agent)
+	if err := d.PendingAgents.TryAdd(agent, maxPendingEnrollmentAgents, maxPendingEnrollmentPerIP); err != nil {
+		closeReason := "pending enrollment capacity reached"
+		if errors.Is(err, ErrPendingPerIPCapacityReached) {
+			closeReason = "too many pending enrollment connections from this source"
+		}
+		_ = wsConn.WriteControl(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseTryAgainLater, closeReason),
+			time.Now().Add(agentmgr.AgentWriteDeadline))
+		_ = wsConn.Close()
+		return
+	}
 	securityruntime.Logf("enrollment: pending agent connected hostname=%s asset_id=%s remote=%s", hostname, tempAssetID, remoteIP)
 
 	d.broadcastEvent("enrollment.pending", map[string]any{
@@ -147,7 +185,7 @@ func (d *Deps) HandlePendingEnrollment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	defer func() {
-		d.PendingAgents.Remove(tempAssetID)
+		d.PendingAgents.RemoveIfMatch(tempAssetID, wsConn)
 		_ = wsConn.Close()
 		securityruntime.Logf("enrollment: pending agent disconnected hostname=%s asset_id=%s", hostname, tempAssetID)
 		d.broadcastEvent("enrollment.pending_removed", map[string]any{
@@ -162,6 +200,8 @@ func (d *Deps) HandlePendingEnrollment(w http.ResponseWriter, r *http.Request) {
 
 	// Hold the connection open while waiting for operator decision and for
 	// enrollment proof messages from the pending agent.
+	proofMessages := 0
+	proofAccepted := false
 	for {
 		_, payload, err := wsConn.ReadMessage()
 		if err != nil {
@@ -173,32 +213,54 @@ func (d *Deps) HandlePendingEnrollment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		proofMessages++
+		if proofMessages > maxPendingEnrollmentProofMessages || proofAccepted {
+			closePendingEnrollmentAgent(agent, websocket.ClosePolicyViolation, "enrollment proof already completed")
+			return
+		}
+
 		var msg agentmgr.Message
 		if err := json.Unmarshal(payload, &msg); err != nil {
+			if proofMessages >= maxPendingEnrollmentProofMessages {
+				closePendingEnrollmentAgent(agent, websocket.ClosePolicyViolation, "invalid enrollment proof budget exhausted")
+				return
+			}
 			continue
 		}
 
-		switch msg.Type {
-		case agentmgr.MsgEnrollmentProof:
-			if err := d.VerifyPendingEnrollmentProof(agent, msg); err != nil {
-				securityruntime.Logf("enrollment: invalid proof asset_id=%s: %v", tempAssetID, err)
-				continue
-			}
-			securityruntime.Logf("enrollment: pending identity verified hostname=%s asset_id=%s fp=%s",
-				hostname, tempAssetID, agent.DeviceFingerprint)
-			d.broadcastEvent("enrollment.pending_verified", map[string]any{
-				"asset_id":           tempAssetID,
-				"hostname":           hostname,
-				"device_fingerprint": agent.DeviceFingerprint,
-				"identity_verified":  true,
-			})
+		if msg.Type != agentmgr.MsgEnrollmentProof {
+			closePendingEnrollmentAgent(agent, websocket.ClosePolicyViolation, "unexpected pending enrollment message")
+			return
 		}
+		if err := d.VerifyPendingEnrollmentProof(agent, msg); err != nil {
+			// Do not log attacker-controlled proof fields or decoder errors. The
+			// server-generated asset ID is sufficient for bounded diagnostics.
+			securityruntime.Logf("enrollment: invalid proof asset_id=%s", tempAssetID)
+			if proofMessages >= maxPendingEnrollmentProofMessages {
+				closePendingEnrollmentAgent(agent, websocket.ClosePolicyViolation, "invalid enrollment proof budget exhausted")
+				return
+			}
+			continue
+		}
+		proofAccepted = true
+		info, _ := d.PendingAgents.Get(tempAssetID)
+		securityruntime.Logf("enrollment: pending identity verified hostname=%s asset_id=%s fp=%s",
+			hostname, tempAssetID, info.DeviceFingerprint)
+		d.broadcastEvent("enrollment.pending_verified", map[string]any{
+			"asset_id":           tempAssetID,
+			"hostname":           hostname,
+			"device_fingerprint": info.DeviceFingerprint,
+			"identity_verified":  true,
+		})
 	}
 }
 
 // handleListPendingAgents returns the list of agents waiting for enrollment approval.
 // GET /api/v1/agents/pending
 func (d *Deps) HandleListPendingAgents(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedEnrollment(w, r) {
+		return
+	}
 	if r.Method != http.MethodGet {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -218,6 +280,9 @@ func (d *Deps) HandleListPendingAgents(w http.ResponseWriter, r *http.Request) {
 // per-agent token, upserts its asset record, and notifies it via WebSocket.
 // POST /api/v1/agents/approve
 func (d *Deps) HandleApproveAgent(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedEnrollment(w, r) {
+		return
+	}
 	if r.Method != http.MethodPost {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -228,89 +293,126 @@ func (d *Deps) HandleApproveAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	agent, ok := d.PendingAgents.Get(assetID)
-	if !ok {
-		servicehttp.WriteError(w, http.StatusNotFound, "pending agent not found")
-		return
-	}
-	if !agent.IdentityVerified {
-		servicehttp.WriteError(w, http.StatusConflict, "pending agent identity is not verified yet")
+	claim, err := d.PendingAgents.ClaimDecision(assetID, true)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrPendingAgentNotFound):
+			servicehttp.WriteError(w, http.StatusNotFound, "pending agent not found")
+		case errors.Is(err, ErrPendingAgentIdentityUnproven):
+			servicehttp.WriteError(w, http.StatusConflict, "pending agent identity is not verified yet")
+		default:
+			servicehttp.WriteError(w, http.StatusConflict, "pending agent decision already in progress")
+		}
 		return
 	}
 
-	if d.EnrollmentStore == nil {
+	if d.EnrollmentTransactions == nil {
+		if !d.PendingAgents.ReleaseDecision(claim) {
+			log.Printf("enrollment: lost pending decision ownership while enrollment store was unavailable asset_id=%s", assetID) // #nosec G706 -- Asset IDs are hub-generated identifiers.
+		}
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "enrollment store not available")
 		return
 	}
 
-	stableAssetID := ResolveApprovedAssetID(agent, assetID)
-
-	// Revoke any existing agent token for this asset before issuing a new one.
-	_ = d.EnrollmentStore.RevokeAgentTokensByAsset(stableAssetID)
+	stableAssetID := ResolveApprovedAssetID(claim.Info, assetID)
 
 	// Generate a per-agent token.
 	rawToken, hashedToken, err := auth.GenerateSessionToken()
 	if err != nil {
+		if !d.PendingAgents.ReleaseDecision(claim) {
+			log.Printf("enrollment: lost pending decision ownership after token generation failure asset_id=%s", assetID) // #nosec G706 -- Asset IDs are hub-generated identifiers.
+		}
 		log.Printf("enrollment: failed to generate agent token for %s: %v", stableAssetID, err) // #nosec G706 -- Asset IDs are hub-generated identifiers.
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to generate agent token")
 		return
 	}
 	expiresAt := NewAgentTokenExpiry(time.Now().UTC())
 
-	if _, err := d.EnrollmentStore.CreateAgentToken(stableAssetID, hashedToken, "console-approval", expiresAt); err != nil {
-		log.Printf("enrollment: failed to store agent token for %s: %v", stableAssetID, err) // #nosec G706 -- Asset IDs are hub-generated identifiers.
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to store agent token")
+	prepared, err := d.EnrollmentTransactions.PrepareAgentApproval(r.Context(), persistence.AgentApprovalPrepareRequest{
+		AssetID:                stableAssetID,
+		AgentTokenHash:         hashedToken,
+		PreparedTokenExpiresAt: time.Now().UTC().Add(pendingApprovalDeliveryTTL),
+		MaxEnrolledAgents:      d.MaxEnrolledAgents,
+	})
+	if err != nil {
+		if !d.PendingAgents.ReleaseDecision(claim) {
+			log.Printf("enrollment: lost pending decision ownership after token prepare failure asset_id=%s", assetID) // #nosec G706 -- Asset IDs are hub-generated identifiers.
+		}
+		log.Printf("enrollment: failed to prepare agent token for %s: %v", stableAssetID, err) // #nosec G706 -- Asset IDs are hub-generated identifiers.
+		if errors.Is(err, persistence.ErrAgentApprovalAssetConflict) {
+			servicehttp.WriteError(w, http.StatusConflict, "an enrolled asset already uses this hostname; use identity recovery instead")
+			return
+		}
+		if errors.Is(err, persistence.ErrAgentFleetCapacityReached) {
+			servicehttp.WriteError(w, http.StatusConflict, "agent fleet capacity reached; decommission an enrolled agent or raise the configured limit")
+			return
+		}
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to prepare agent token")
 		return
 	}
-
-	// Upsert the asset record so it appears in the asset inventory.
-	metadata := map[string]string{}
-	if agent.DeviceFingerprint != "" {
-		metadata["agent_device_fingerprint"] = agent.DeviceFingerprint
-	}
-	if agent.DeviceKeyAlg != "" {
-		metadata["agent_device_key_alg"] = agent.DeviceKeyAlg
-	}
-	if agent.IdentityVerifiedAt != nil {
-		metadata["agent_identity_verified_at"] = agent.IdentityVerifiedAt.UTC().Format(time.RFC3339)
-	}
-	hbReq := assets.HeartbeatRequest{
-		AssetID:  stableAssetID,
-		Type:     "node",
-		Name:     agent.Hostname,
-		Source:   "agent",
-		Status:   "pending",
-		Platform: agent.Platform,
-		Metadata: metadata,
-	}
-	if _, err := d.ProcessHeartbeatRequest(hbReq); err != nil {
-		log.Printf("enrollment: heartbeat upsert failed for %s: %v", stableAssetID, err) // #nosec G706 -- Asset IDs are hub-generated identifiers.
-		// Non-fatal — the token is issued, so continue.
+	cancelPrepared := func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cleanupCancel()
+		if cancelErr := d.EnrollmentTransactions.CancelAgentApproval(cleanupCtx, prepared.ID); cancelErr != nil {
+			log.Printf("enrollment: failed to cancel prepared token %s: %v", prepared.ID, cancelErr) // #nosec G706 -- Token IDs are hub-generated identifiers.
+		}
 	}
 
 	// Send the approval message with token and final asset ID over WebSocket.
-	if err := SendPendingEnrollmentDecision(agent, agentmgr.MsgEnrollmentApproved, agentmgr.EnrollmentApprovedData{
+	if err := SendPendingEnrollmentClaimDecision(claim, agentmgr.MsgEnrollmentApproved, agentmgr.EnrollmentApprovedData{
 		Token:   rawToken,
 		AssetID: stableAssetID,
 	}, ""); err != nil {
+		cancelPrepared()
+		if !d.PendingAgents.ReleaseDecision(claim) {
+			log.Printf("enrollment: lost pending decision ownership after approval delivery failure asset_id=%s", assetID) // #nosec G706 -- Asset IDs are hub-generated identifiers.
+		}
 		log.Printf("enrollment: failed to send approval to %s: %v", stableAssetID, err) // #nosec G706 -- Asset IDs are hub-generated identifiers.
-		// Close the connection so the read loop exits and the agent reconnects
-		// with its new token instead of lingering in a zombie state.
-		_ = agent.Conn.Close()
+		servicehttp.WriteError(w, http.StatusBadGateway, "failed to deliver approval to agent")
+		return
 	}
 
-	d.PendingAgents.Remove(assetID)
-	log.Printf("enrollment: approved pending agent hostname=%s stable_asset_id=%s", agent.Hostname, stableAssetID) // #nosec G706 -- Hostname and asset ID are bounded enrollment fields already persisted by the hub.
+	// Delivery is irreversible from the agent's perspective: it has already
+	// adopted the raw token. Finalization therefore uses an independent bounded
+	// context so an operator HTTP cancellation cannot strand an invalid bearer.
+	finalizeCtx, finalizeCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer finalizeCancel()
+	if _, err := d.EnrollmentTransactions.FinalizeAgentApproval(finalizeCtx, persistence.AgentApprovalFinalizeRequest{
+		PreparedTokenID:     prepared.ID,
+		AssetID:             stableAssetID,
+		Hostname:            claim.Info.Hostname,
+		Platform:            claim.Info.Platform,
+		DeviceFingerprint:   claim.Info.DeviceFingerprint,
+		DeviceKeyAlgorithm:  claim.Info.DeviceKeyAlg,
+		AgentTokenExpiresAt: expiresAt,
+	}); err != nil {
+		cancelPrepared()
+		_ = claim.conn.Close()
+		if !d.PendingAgents.CompleteDecision(claim) {
+			log.Printf("enrollment: lost pending decision ownership after approval finalization failure asset_id=%s", assetID) // #nosec G706 -- Asset IDs are hub-generated identifiers.
+		}
+		log.Printf("enrollment: failed to finalize approval for %s: %v", stableAssetID, err) // #nosec G706 -- Asset IDs are hub-generated identifiers.
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to finalize agent approval")
+		return
+	}
+
+	if !d.PendingAgents.CompleteDecision(claim) {
+		log.Printf("enrollment: approval finalized after pending session ownership was lost asset_id=%s", assetID) // #nosec G706 -- Asset IDs are hub-generated identifiers.
+	}
+	if err := ClosePendingEnrollmentClaim(claim, "enrollment approved"); err != nil {
+		log.Printf("enrollment: approval finalized but pending socket close failed asset_id=%s: %v", assetID, err) // #nosec G706 -- Asset IDs are hub-generated identifiers.
+	}
+	log.Printf("enrollment: approved pending agent hostname=%s stable_asset_id=%s", claim.Info.Hostname, stableAssetID) // #nosec G706 -- Hostname and asset ID are bounded enrollment fields already persisted by the hub.
 
 	d.broadcastEvent("enrollment.approved", map[string]any{
 		"asset_id": stableAssetID,
-		"hostname": agent.Hostname,
+		"hostname": claim.Info.Hostname,
 	})
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"status":             "approved",
 		"asset_id":           stableAssetID,
-		"device_fingerprint": agent.DeviceFingerprint,
+		"device_fingerprint": claim.Info.DeviceFingerprint,
 		"identity_verified":  true,
 	})
 }
@@ -319,6 +421,9 @@ func (d *Deps) HandleApproveAgent(w http.ResponseWriter, r *http.Request) {
 // WebSocket, and closes the connection.
 // POST /api/v1/agents/reject
 func (d *Deps) HandleRejectAgent(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedEnrollment(w, r) {
+		return
+	}
 	if r.Method != http.MethodPost {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -329,25 +434,38 @@ func (d *Deps) HandleRejectAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	agent, ok := d.PendingAgents.Get(assetID)
-	if !ok {
-		servicehttp.WriteError(w, http.StatusNotFound, "pending agent not found")
+	claim, err := d.PendingAgents.ClaimDecision(assetID, false)
+	if err != nil {
+		if errors.Is(err, ErrPendingAgentNotFound) {
+			servicehttp.WriteError(w, http.StatusNotFound, "pending agent not found")
+		} else {
+			servicehttp.WriteError(w, http.StatusConflict, "pending agent decision already in progress")
+		}
 		return
 	}
 
 	// Send rejection message before closing the connection.
-	if err := SendPendingEnrollmentDecision(agent, agentmgr.MsgEnrollmentRejected, agentmgr.EnrollmentRejectedData{
+	if err := SendPendingEnrollmentClaimDecision(claim, agentmgr.MsgEnrollmentRejected, agentmgr.EnrollmentRejectedData{
 		Reason: "rejected by operator",
 	}, "enrollment rejected"); err != nil {
+		if !d.PendingAgents.ReleaseDecision(claim) {
+			log.Printf("enrollment: lost pending decision ownership after rejection delivery failure asset_id=%s", assetID) // #nosec G706 -- Asset IDs are hub-generated identifiers.
+		}
 		log.Printf("enrollment: failed to send rejection to %s: %v", assetID, err) // #nosec G706 -- Asset IDs are hub-generated identifiers.
+		servicehttp.WriteError(w, http.StatusBadGateway, "failed to deliver rejection to agent")
+		return
 	}
 
-	d.PendingAgents.Remove(assetID)
-	log.Printf("enrollment: rejected pending agent hostname=%s asset_id=%s", agent.Hostname, assetID) // #nosec G706 -- Hostname and asset ID are bounded enrollment fields already persisted by the hub.
+	if !d.PendingAgents.CompleteDecision(claim) {
+		log.Printf("enrollment: rejection delivered after pending session ownership was lost asset_id=%s", assetID) // #nosec G706 -- Asset IDs are hub-generated identifiers.
+		servicehttp.WriteError(w, http.StatusConflict, "pending session ended during rejection")
+		return
+	}
+	log.Printf("enrollment: rejected pending agent hostname=%s asset_id=%s", claim.Info.Hostname, assetID) // #nosec G706 -- Hostname and asset ID are bounded enrollment fields already persisted by the hub.
 
 	d.broadcastEvent("enrollment.rejected", map[string]any{
 		"asset_id": assetID,
-		"hostname": agent.Hostname,
+		"hostname": claim.Info.Hostname,
 	})
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{

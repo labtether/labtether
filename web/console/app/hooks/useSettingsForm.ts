@@ -32,6 +32,8 @@ function normalizeRuntimeSettingEntry(value: unknown): RuntimeSettingEntry | nul
     override_value: ensureString(raw.override_value) || undefined,
     effective_value: ensureString(raw.effective_value),
     source,
+    sensitive: raw.sensitive === true,
+    configured: raw.configured === true,
     allowed_values: allowedValues.length > 0 ? allowedValues : undefined,
     min_int: typeof raw.min_int === "number" && Number.isFinite(raw.min_int) ? raw.min_int : undefined,
     max_int: typeof raw.max_int === "number" && Number.isFinite(raw.max_int) ? raw.max_int : undefined,

@@ -53,6 +53,20 @@ func TestRingBuffer_EmptySnapshot(t *testing.T) {
 	}
 }
 
+func TestRingBufferSeedIfEmptyDoesNotDuplicatePersistedData(t *testing.T) {
+	rb := NewRingBuffer(10)
+	if !rb.SeedIfEmpty([]byte("persisted\n")) {
+		t.Fatal("expected first seed to initialize the buffer")
+	}
+	if rb.SeedIfEmpty([]byte("duplicate\n")) {
+		t.Fatal("expected second seed to be ignored")
+	}
+	rb.Write([]byte("live\n"))
+	if got := string(rb.Snapshot()); got != "persisted\nlive\n" {
+		t.Fatalf("snapshot=%q", got)
+	}
+}
+
 func TestRingBuffer_LargeEviction(t *testing.T) {
 	rb := NewRingBuffer(3)
 	for i := 0; i < 100; i++ {

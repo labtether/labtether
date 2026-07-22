@@ -19,8 +19,16 @@ type AlertRuleEvalSource interface {
 	AllAlertRuleEvalMetrics() []AlertRuleEvalEntry
 }
 
+// AlertStateSnapshotSource is the preferred bounded path. It loads aggregate
+// counts and the latest per-rule evaluations together so a bridge collection
+// does not issue one persistence query per active rule.
+type AlertStateSnapshotSource interface {
+	AllAlertMetricsSnapshot() ([]AlertStateEntry, []AlertRuleEvalEntry)
+}
+
 // AlertStateEntry holds hub-level alert firing and rules counts.
-// This is a hub-level metric (not per-asset); AssetID is fixed to "hub-alerts".
+// This is a hub-level metric (not per-asset) and is written to the validated
+// hub-alerts telemetry scope.
 type AlertStateEntry struct {
 	FiringCount float64
 	RulesCount  float64
@@ -29,6 +37,7 @@ type AlertStateEntry struct {
 
 // AlertRuleEvalEntry holds per-rule evaluation timing.
 type AlertRuleEvalEntry struct {
+	RuleID     string
 	RuleName   string
 	DurationMS float64
 }
@@ -51,12 +60,23 @@ func (b *AlertStateBridge) Name() string { return "alert-state" }
 func (b *AlertStateBridge) Interval() time.Duration { return 60 * time.Second }
 
 // Collect iterates all alert state entries from the source and produces 2
-// MetricSamples per entry: alerts_firing and alerts_rules, keyed to the
-// synthetic asset ID "hub-alerts". If the source also implements
+// MetricSamples per entry: alerts_firing and alerts_rules, written to the
+// non-asset hub-alerts scope. If the source also implements
 // AlertRuleEvalSource, per-rule alert_evaluation_duration_ms samples are
 // appended.
 func (b *AlertStateBridge) Collect() []telemetry.MetricSample {
-	entries := b.source.AllAlertStateMetrics()
+	var (
+		entries         []AlertStateEntry
+		ruleEvaluations []AlertRuleEvalEntry
+	)
+	if snapshotSource, ok := b.source.(AlertStateSnapshotSource); ok {
+		entries, ruleEvaluations = snapshotSource.AllAlertMetricsSnapshot()
+	} else {
+		entries = b.source.AllAlertStateMetrics()
+		if evalSource, ok := b.source.(AlertRuleEvalSource); ok {
+			ruleEvaluations = evalSource.AllAlertRuleEvalMetrics()
+		}
+	}
 	if len(entries) == 0 {
 		return nil
 	}
@@ -69,7 +89,7 @@ func (b *AlertStateBridge) Collect() []telemetry.MetricSample {
 
 		out = append(out,
 			telemetry.MetricSample{
-				AssetID:     "hub-alerts",
+				Scope:       telemetry.MetricScopeHubAlerts,
 				Metric:      telemetry.MetricAlertsFiring,
 				Unit:        "count",
 				Value:       e.FiringCount,
@@ -77,7 +97,7 @@ func (b *AlertStateBridge) Collect() []telemetry.MetricSample {
 				Labels:      labels,
 			},
 			telemetry.MetricSample{
-				AssetID:     "hub-alerts",
+				Scope:       telemetry.MetricScopeHubAlerts,
 				Metric:      telemetry.MetricAlertsRules,
 				Unit:        "count",
 				Value:       e.RulesCount,
@@ -87,18 +107,15 @@ func (b *AlertStateBridge) Collect() []telemetry.MetricSample {
 		)
 	}
 
-	// Per-rule evaluation duration (optional source interface).
-	if evalSource, ok := b.source.(AlertRuleEvalSource); ok {
-		for _, re := range evalSource.AllAlertRuleEvalMetrics() {
-			out = append(out, telemetry.MetricSample{
-				AssetID:     "hub-alerts",
-				Metric:      telemetry.MetricAlertEvaluationDurationMs,
-				Unit:        "ms",
-				Value:       re.DurationMS,
-				CollectedAt: now,
-				Labels:      map[string]string{"rule_name": re.RuleName},
-			})
-		}
+	for _, re := range ruleEvaluations {
+		out = append(out, telemetry.MetricSample{
+			Scope:       telemetry.MetricScopeHubAlerts,
+			Metric:      telemetry.MetricAlertEvaluationDurationMs,
+			Unit:        "ms",
+			Value:       re.DurationMS,
+			CollectedAt: now,
+			Labels:      map[string]string{"rule_id": re.RuleID, "rule_name": re.RuleName},
+		})
 	}
 
 	return out

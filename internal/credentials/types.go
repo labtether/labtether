@@ -23,20 +23,24 @@ const (
 // Profile stores credential metadata and encrypted payloads used by terminal execution.
 // SecretCiphertext/PassphraseCiphertext are storage-only fields and must never be exposed to clients.
 type Profile struct {
-	ID                   string            `json:"id"`
-	Name                 string            `json:"name"`
-	Kind                 string            `json:"kind"`
-	Username             string            `json:"username,omitempty"`
-	Description          string            `json:"description,omitempty"`
-	Status               string            `json:"status,omitempty"`
-	Metadata             map[string]string `json:"metadata,omitempty"`
-	CreatedAt            time.Time         `json:"created_at"`
-	UpdatedAt            time.Time         `json:"updated_at"`
-	RotatedAt            *time.Time        `json:"rotated_at,omitempty"`
-	LastUsedAt           *time.Time        `json:"last_used_at,omitempty"`
-	ExpiresAt            *time.Time        `json:"expires_at,omitempty"`
-	SecretCiphertext     string            `json:"-"`
-	PassphraseCiphertext string            `json:"-"`
+	ID          string            `json:"id"`
+	Name        string            `json:"name"`
+	Kind        string            `json:"kind"`
+	Username    string            `json:"username,omitempty"`
+	Description string            `json:"description,omitempty"`
+	Status      string            `json:"status,omitempty"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
+	CreatedAt   time.Time         `json:"created_at"`
+	UpdatedAt   time.Time         `json:"updated_at"`
+	RotatedAt   *time.Time        `json:"rotated_at,omitempty"`
+	LastUsedAt  *time.Time        `json:"last_used_at,omitempty"`
+	ExpiresAt   *time.Time        `json:"expires_at,omitempty"`
+	// CreatedBy is trusted lifecycle metadata used for per-principal cardinality
+	// enforcement. It is storage-only so inventory responses do not disclose
+	// internal principal identifiers.
+	CreatedBy            string `json:"-"`
+	SecretCiphertext     string `json:"-"`
+	PassphraseCiphertext string `json:"-"`
 }
 
 type CreateProfileRequest struct {

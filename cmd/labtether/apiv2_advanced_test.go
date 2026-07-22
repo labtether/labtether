@@ -266,7 +266,7 @@ func TestHandleV2HAEntities_ScopeWriteDenied(t *testing.T) {
 }
 
 // TestHandleV2HAEntities_ScopeAllowed verifies that a GET with read scope
-// passes the scope gate (returns 501 because HA is not implemented, not 403).
+// passes the scope gate.
 func TestHandleV2HAEntities_ScopeAllowed(t *testing.T) {
 	s := newTestAPIServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/homeassistant/entities", nil)
@@ -337,5 +337,58 @@ func TestHandleV2PrometheusSettings_WriteScope(t *testing.T) {
 	s.handleV2PrometheusSettings(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 for PATCH without settings:write scope, got %d", rec.Code)
+	}
+}
+
+func TestHandleV2NotificationChannelsRequiresWriteScopeForMutation(t *testing.T) {
+	s := newTestAPIServer(t)
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/notifications/channels", nil)
+	ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
+	ctx = contextWithScopes(ctx, []string{"notifications:read"})
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+	s.handleV2NotificationChannels(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for POST without notifications:write, got %d", rec.Code)
+	}
+}
+
+func TestV2AdminSettingsRejectOperatorDespiteRecognizedScopes(t *testing.T) {
+	s := newTestAPIServer(t)
+	for _, tc := range []struct {
+		name   string
+		method string
+		path   string
+		scopes []string
+	}{
+		{name: "tls read", method: http.MethodGet, path: "/api/v2/hub/tls", scopes: []string{"hub:read"}},
+		{name: "tls write", method: http.MethodPost, path: "/api/v2/hub/tls", scopes: []string{"hub:admin"}},
+		{name: "tls renew", method: http.MethodPost, path: "/api/v2/hub/tls/renew", scopes: []string{"hub:admin"}},
+		{name: "prometheus read", method: http.MethodGet, path: "/api/v2/settings/prometheus", scopes: []string{"settings:read"}},
+		{name: "prometheus write", method: http.MethodPatch, path: "/api/v2/settings/prometheus", scopes: []string{"settings:write"}},
+		{name: "prometheus test", method: http.MethodPost, path: "/api/v2/settings/prometheus/test", scopes: []string{"settings:write"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			ctx := contextWithPrincipal(req.Context(), "apikey:k1", "operator")
+			ctx = contextWithScopes(ctx, tc.scopes)
+			req = req.WithContext(ctx)
+			rec := httptest.NewRecorder()
+
+			switch tc.path {
+			case "/api/v2/hub/tls":
+				s.handleV2HubTLS(rec, req)
+			case "/api/v2/hub/tls/renew":
+				s.handleV2HubTLSRenew(rec, req)
+			case "/api/v2/settings/prometheus":
+				s.handleV2PrometheusSettings(rec, req)
+			case "/api/v2/settings/prometheus/test":
+				s.handleV2PrometheusTest(rec, req)
+			}
+
+			if rec.Code != http.StatusForbidden {
+				t.Fatalf("expected operator to be denied, got %d: %s", rec.Code, rec.Body.String())
+			}
+		})
 	}
 }

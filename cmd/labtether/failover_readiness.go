@@ -3,21 +3,19 @@ package main
 import (
 	"context"
 	"log"
-	"strings"
 	"time"
 
-	"github.com/labtether/labtether/internal/groups"
 	resourcespkg "github.com/labtether/labtether/internal/hubapi/resources"
 )
 
-// Type aliases so that call-sites within this package are unchanged.
-type failoverReadinessAssetCounts = resourcespkg.FailoverReadinessAssetCounts
+// Type alias so that call-sites within this package are unchanged.
 type failoverReadinessSnapshot = resourcespkg.FailoverReadinessSnapshot
 
 func (s *apiServer) runFailoverReadinessChecker(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Hour)
 	defer ticker.Stop()
 	log.Printf("failover readiness checker started (interval=1h)")
+	s.checkAllFailoverReadiness(ctx)
 
 	for {
 		select {
@@ -44,12 +42,13 @@ func (s *apiServer) checkAllFailoverReadiness(ctx context.Context) {
 		return
 	}
 
-	snapshot := s.buildFailoverReadinessSnapshot()
-	if !snapshot.GroupsLoaded {
-		log.Printf("failover readiness: skipped run because group snapshot is unavailable")
+	snapshot, err := s.buildFailoverReadinessSnapshot()
+	if err != nil {
+		log.Printf("failover readiness: skipped run because the inventory snapshot is unavailable: %v", err)
 		return
 	}
 
+	now := time.Now().UTC()
 	for _, pair := range pairs {
 		select {
 		case <-ctx.Done():
@@ -58,49 +57,12 @@ func (s *apiServer) checkAllFailoverReadiness(ctx context.Context) {
 		}
 
 		score := resourcespkg.ComputeFailoverReadiness(pair, snapshot)
-		now := time.Now().UTC()
 		if err := s.failoverStore.UpdateFailoverReadiness(pair.ID, score, now); err != nil {
 			log.Printf("failover readiness: failed to update pair %s: %v", pair.ID, err)
 		}
 	}
 }
 
-func (s *apiServer) buildFailoverReadinessSnapshot() failoverReadinessSnapshot {
-	snapshot := failoverReadinessSnapshot{
-		GroupsByID:         map[string]groups.Group{},
-		GroupsLoaded:       false,
-		AssetCountsByGroup: map[string]failoverReadinessAssetCounts{},
-		AssetsLoaded:       false,
-	}
-	if s.groupStore == nil {
-		return snapshot
-	}
-
-	groupList, err := s.groupStore.ListGroups()
-	if err != nil {
-		log.Printf("failover readiness: failed to list groups: %v", err)
-		return snapshot
-	}
-	snapshot.GroupsByID = make(map[string]groups.Group, len(groupList))
-	for _, groupEntry := range groupList {
-		groupID := strings.TrimSpace(groupEntry.ID)
-		if groupID == "" {
-			continue
-		}
-		snapshot.GroupsByID[groupID] = groupEntry
-	}
-	snapshot.GroupsLoaded = true
-
-	if s.assetStore == nil {
-		return snapshot
-	}
-
-	assetList, err := s.assetStore.ListAssets()
-	if err != nil {
-		log.Printf("failover readiness: failed to list assets: %v", err)
-		return snapshot
-	}
-	snapshot.AssetsLoaded = true
-	snapshot.AssetCountsByGroup = resourcespkg.FailoverAssetCountsByGroup(assetList)
-	return snapshot
+func (s *apiServer) buildFailoverReadinessSnapshot() (failoverReadinessSnapshot, error) {
+	return resourcespkg.LoadFailoverReadinessSnapshot(s.groupStore, s.assetStore)
 }

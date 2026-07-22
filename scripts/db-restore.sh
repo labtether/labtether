@@ -5,6 +5,9 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ENV_FILE:-${PROJECT_ROOT}/.env}"
 YES=0
 
+# shellcheck source=/dev/null
+source "${PROJECT_ROOT}/scripts/lib/script-common.sh"
+
 usage() {
   cat <<'USAGE'
 Usage: scripts/db-restore.sh [options] <backup-file.sql.gz|backup-file.sql>
@@ -49,8 +52,8 @@ if [[ -z "${BACKUP_FILE}" ]]; then
   exit 1
 fi
 
-if [[ ! -f "${BACKUP_FILE}" ]]; then
-  echo "backup file not found: ${BACKUP_FILE}" >&2
+if [[ ! -f "${BACKUP_FILE}" || -L "${BACKUP_FILE}" ]]; then
+  echo "backup file must be a non-symlink regular file: ${BACKUP_FILE}" >&2
   exit 1
 fi
 
@@ -66,16 +69,16 @@ if [[ "${BACKUP_FILE}" == *.gz ]]; then
   fi
 fi
 
-if [[ -f "${ENV_FILE}" ]]; then
-  set -a
-  # shellcheck source=/dev/null
-  source "${ENV_FILE}"
-  set +a
+database_url="${DATABASE_URL-}"
+export -n database_url 2>/dev/null || true
+unset DATABASE_URL
+if [[ -z "$database_url" && ( -e "${ENV_FILE}" || -L "${ENV_FILE}" ) ]]; then
+  labtether_require_private_env_file "${ENV_FILE}" || exit 1
+  labtether_read_env_value database_url "${ENV_FILE}" DATABASE_URL || exit 1
 fi
+database_url="${database_url:-postgres://labtether:labtether@localhost:5432/labtether?sslmode=disable}"
 
-DB_URL="${DATABASE_URL:-postgres://labtether:labtether@localhost:5432/labtether?sslmode=disable}"
-
-echo "Target database: ${DB_URL}"
+echo "Target database: configured DATABASE_URL (credentials hidden)"
 echo "Backup file: ${BACKUP_FILE}"
 echo ""
 echo "WARNING: this will overwrite data in the target database."
@@ -90,9 +93,10 @@ fi
 
 echo "Restoring..."
 if [[ "${BACKUP_FILE}" == *.gz ]]; then
-  gzip -dc "${BACKUP_FILE}" | psql "${DB_URL}"
+  gzip -dc "${BACKUP_FILE}" | PGDATABASE="$database_url" psql --no-psqlrc --set=ON_ERROR_STOP=on
 else
-  psql "${DB_URL}" < "${BACKUP_FILE}"
+  PGDATABASE="$database_url" psql --no-psqlrc --set=ON_ERROR_STOP=on < "${BACKUP_FILE}"
 fi
+unset database_url
 
 echo "Restore complete."

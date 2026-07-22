@@ -199,6 +199,7 @@ type TaskLogLine struct {
 
 type PruneOptions struct {
 	DryRun      bool
+	NS          string
 	KeepLast    int
 	KeepHourly  int
 	KeepDaily   int
@@ -215,6 +216,7 @@ type VerifyJob struct {
 	Comment        string `json:"comment,omitempty"`
 	Disabled       bool   `json:"disable,omitempty"`
 	IgnoreVerified bool   `json:"ignore-verified,omitempty"`
+	OutdatedAfter  *int   `json:"outdated-after,omitempty"`
 	MaxDepth       *int   `json:"max-depth,omitempty"`
 }
 
@@ -244,6 +246,8 @@ type SyncJob struct {
 	Comment        string `json:"comment,omitempty"`
 	Disabled       bool   `json:"disable,omitempty"`
 	RemoveVanished bool   `json:"remove-vanished,omitempty"`
+	VerifiedOnly   bool   `json:"verified-only,omitempty"`
+	TransferLast   *int   `json:"transfer-last,omitempty"`
 }
 
 // Remote represents a PBS remote (pull source) configuration entry.
@@ -258,10 +262,11 @@ type Remote struct {
 
 // TrafficRule represents a PBS traffic control rule.
 type TrafficRule struct {
-	Name    string `json:"name"`
-	RateIn  string `json:"rate-in,omitempty"`
-	RateOut string `json:"rate-out,omitempty"`
-	Comment string `json:"comment,omitempty"`
+	Name    string   `json:"name"`
+	RateIn  string   `json:"rate-in,omitempty"`
+	RateOut string   `json:"rate-out,omitempty"`
+	Network []string `json:"network,omitempty"`
+	Comment string   `json:"comment,omitempty"`
 }
 
 // CertInfo represents a PBS node certificate entry.

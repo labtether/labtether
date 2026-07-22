@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/policy"
 	"github.com/labtether/labtether/internal/servicehttp"
@@ -63,6 +64,9 @@ func (d *Deps) HandlePersistentSessionActions(w http.ResponseWriter, r *http.Req
 		servicehttp.WriteError(w, http.StatusForbidden, "persistent session access denied")
 		return
 	}
+	if !d.requireTargetAccess(w, r, persistent.Target) {
+		return
+	}
 
 	if len(parts) == 1 {
 		switch r.Method {
@@ -81,6 +85,9 @@ func (d *Deps) HandlePersistentSessionActions(w http.ResponseWriter, r *http.Req
 	if len(parts) == 2 && parts[1] == "attach" {
 		if r.Method != http.MethodPost {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		if !d.requireCredentialUseForTarget(w, r, persistent.Target) {
 			return
 		}
 		d.attachPersistentSession(w, r, persistent)
@@ -105,7 +112,7 @@ func (d *Deps) listPersistentSessions(w http.ResponseWriter, r *http.Request) {
 		sessions []terminal.PersistentSession
 		err      error
 	)
-	if !d.IsOwnerActor(actorID) {
+	if !apiv2.IsOwnerPrincipal(r.Context()) {
 		if scopedStore, ok := d.TerminalPersistentStore.(persistence.TerminalPersistentSessionActorStore); ok {
 			sessions, err = scopedStore.ListPersistentSessionsByActor(actorID)
 		} else {
@@ -127,6 +134,13 @@ func (d *Deps) listPersistentSessions(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list persistent sessions")
 		return
 	}
+	filtered := sessions[:0]
+	for _, session := range sessions {
+		if apiv2.AssetCheckContext(r.Context(), session.Target) {
+			filtered = append(filtered, session)
+		}
+	}
+	sessions = filtered
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"persistent_sessions": sessions})
 }
 
@@ -147,11 +161,28 @@ func (d *Deps) createPersistentSession(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusBadRequest, "target is required")
 		return
 	}
+	if err := d.ValidateMaxLen("target", req.Target, d.MaxTargetLength); err != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if req.Title == "" {
 		req.Title = req.Target
 	}
+	if err := d.ValidateMaxLen("title", req.Title, d.MaxTargetLength); err != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !d.requireTargetAccess(w, r, req.Target) {
+		return
+	}
+	if !d.requireCredentialUseForTarget(w, r, req.Target) {
+		return
+	}
 	if IsHubLocalTerminalTarget(req.Target) {
 		servicehttp.WriteError(w, http.StatusBadRequest, "hub local terminal does not support persistent tmux sessions")
+		return
+	}
+	if !d.enforceAssetActionGuard(w, req.Target) {
 		return
 	}
 	checkRes := policy.Evaluate(policy.CheckRequest{
@@ -162,6 +193,9 @@ func (d *Deps) createPersistentSession(w http.ResponseWriter, r *http.Request) {
 	}, d.PolicyState.Current())
 	if !checkRes.Allowed {
 		servicehttp.WriteError(w, http.StatusForbidden, checkRes.Reason)
+		return
+	}
+	if !d.requireConnectedAgentTmux(w, req.Target) {
 		return
 	}
 
@@ -183,6 +217,14 @@ func (d *Deps) updatePersistentSession(w http.ResponseWriter, r *http.Request, p
 		servicehttp.WriteError(w, http.StatusBadRequest, "invalid persistent session payload")
 		return
 	}
+	if req.Title != nil {
+		title := strings.TrimSpace(*req.Title)
+		if err := d.ValidateMaxLen("title", title, d.MaxTargetLength); err != nil {
+			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		req.Title = &title
+	}
 
 	updated, err := d.TerminalPersistentStore.UpdatePersistentSession(persistent.ID, req)
 	if err != nil {
@@ -193,6 +235,9 @@ func (d *Deps) updatePersistentSession(w http.ResponseWriter, r *http.Request, p
 }
 
 func (d *Deps) attachPersistentSession(w http.ResponseWriter, r *http.Request, persistent terminal.PersistentSession) {
+	if !d.enforceAssetActionGuard(w, persistent.Target) {
+		return
+	}
 	checkRes := policy.Evaluate(policy.CheckRequest{
 		ActorID: persistent.ActorID,
 		Target:  persistent.Target,
@@ -201,6 +246,9 @@ func (d *Deps) attachPersistentSession(w http.ResponseWriter, r *http.Request, p
 	}, d.PolicyState.Current())
 	if !checkRes.Allowed {
 		servicehttp.WriteError(w, http.StatusForbidden, checkRes.Reason)
+		return
+	}
+	if !d.requireConnectedAgentTmux(w, persistent.Target) {
 		return
 	}
 
@@ -239,6 +287,23 @@ func (d *Deps) attachPersistentSession(w http.ResponseWriter, r *http.Request, p
 	})
 }
 
+func (d *Deps) requireConnectedAgentTmux(w http.ResponseWriter, target string) bool {
+	if d.AgentMgr == nil {
+		return true
+	}
+	agentConn, ok := d.AgentMgr.Get(strings.TrimSpace(target))
+	if !ok {
+		// A disconnected target may still use the direct SSH path, where tmux
+		// availability is checked by the remote command itself.
+		return true
+	}
+	if err := d.ValidatePersistentAgentTmux(agentConn); err != nil {
+		servicehttp.WriteError(w, http.StatusConflict, err.Error())
+		return false
+	}
+	return true
+}
+
 func (d *Deps) detachPersistentSession(w http.ResponseWriter, persistent terminal.PersistentSession) {
 	detached, err := d.TerminalPersistentStore.MarkPersistentSessionDetached(persistent.ID, time.Now().UTC())
 	if err != nil {
@@ -249,6 +314,24 @@ func (d *Deps) detachPersistentSession(w http.ResponseWriter, persistent termina
 }
 
 func (d *Deps) deletePersistentSession(w http.ResponseWriter, persistent terminal.PersistentSession) {
+	if !d.enforceAssetActionGuard(w, persistent.Target) {
+		return
+	}
+	sessions, err := d.TerminalStore.ListSessions()
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load attached terminal sessions")
+		return
+	}
+	attachedSessions := make([]terminal.Session, 0, 1)
+	for _, session := range sessions {
+		if strings.TrimSpace(session.PersistentSessionID) == persistent.ID {
+			attachedSessions = append(attachedSessions, session)
+		}
+	}
+	if err := d.ClosePersistentTerminalAttachments(persistent, attachedSessions); err != nil {
+		servicehttp.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
 	if err := d.TerminatePersistentTerminalRuntime(persistent); err != nil {
 		status := http.StatusBadGateway
 		if errors.Is(err, ErrPersistentTerminalCleanupUnavailable) {
@@ -257,17 +340,10 @@ func (d *Deps) deletePersistentSession(w http.ResponseWriter, persistent termina
 		servicehttp.WriteError(w, status, err.Error())
 		return
 	}
-	sessions, err := d.TerminalStore.ListSessions()
-	if err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load attached terminal sessions")
-		return
-	}
-	for _, session := range sessions {
-		if strings.TrimSpace(session.PersistentSessionID) == persistent.ID {
-			if err := d.TerminalStore.DeleteTerminalSession(session.ID); err != nil {
-				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to remove attached terminal sessions")
-				return
-			}
+	for _, session := range attachedSessions {
+		if err := d.TerminalStore.DeleteTerminalSession(session.ID); err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to remove attached terminal sessions")
+			return
 		}
 	}
 	if err := d.TerminalPersistentStore.DeletePersistentSession(persistent.ID); err != nil {

@@ -20,6 +20,8 @@ const (
 	maxEndpoints             = 10
 	maxContainersPerEndpoint = 100
 	maxResponseBytes         = 32 * 1024 * 1024 // 32 MB
+	maxJWTBytes              = 16 * 1024
+	portainerExecIDLength    = 64
 	jwtCacheDuration         = 7*time.Hour + 30*time.Minute
 )
 
@@ -180,6 +182,12 @@ func (c *Client) authenticate(ctx context.Context) error {
 	}
 	if result.JWT == "" {
 		return fmt.Errorf("empty JWT in auth response")
+	}
+	if len(result.JWT) > maxJWTBytes {
+		return fmt.Errorf("JWT in auth response exceeds size limit")
+	}
+	if err := validatePortainerJWT(result.JWT); err != nil {
+		return fmt.Errorf("invalid JWT in auth response: %w", err)
 	}
 
 	c.jwt = result.JWT
@@ -665,24 +673,82 @@ func (c *Client) CreateExec(ctx context.Context, endpointID int, containerID str
 	if err != nil {
 		return "", fmt.Errorf("create exec instance: %w", err)
 	}
-	var result struct {
-		ID string `json:"Id"`
-	}
-	if err := json.Unmarshal(payload, &result); err != nil {
+	execID, err := decodePortainerExecID(payload)
+	if err != nil {
 		return "", fmt.Errorf("decode exec response: %w", err)
 	}
-	if result.ID == "" {
-		return "", fmt.Errorf("portainer returned empty exec ID")
+	return execID, nil
+}
+
+func decodePortainerExecID(payload []byte) (string, error) {
+	var result map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &result); err != nil {
+		return "", err
 	}
-	return result.ID, nil
+	var selected string
+	for _, key := range []string{"Id", "id", "execId"} {
+		raw, ok := result[key]
+		if !ok {
+			continue
+		}
+		var candidate string
+		if err := json.Unmarshal(raw, &candidate); err != nil {
+			return "", fmt.Errorf("%s must be a string", key)
+		}
+		if candidate == "" {
+			continue
+		}
+		if selected != "" && candidate != selected {
+			return "", fmt.Errorf("conflicting exec IDs in response")
+		}
+		selected = candidate
+	}
+	if err := validatePortainerExecID(selected); err != nil {
+		return "", err
+	}
+	return selected, nil
+}
+
+func validatePortainerExecID(execID string) error {
+	if len(execID) != portainerExecIDLength {
+		return fmt.Errorf("portainer exec ID must be %d hexadecimal characters", portainerExecIDLength)
+	}
+	for _, char := range execID {
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') && (char < 'A' || char > 'F') {
+			return fmt.Errorf("portainer exec ID must be hexadecimal")
+		}
+	}
+	return nil
+}
+
+func validatePortainerJWT(jwt string) error {
+	if jwt == "" {
+		return fmt.Errorf("JWT is empty")
+	}
+	if len(jwt) > maxJWTBytes {
+		return fmt.Errorf("JWT exceeds size limit")
+	}
+	for _, char := range []byte(jwt) {
+		if char <= 0x20 || char >= 0x7f {
+			return fmt.Errorf("JWT contains invalid characters")
+		}
+	}
+	return nil
 }
 
 // ExecWebSocketURL returns the WebSocket URL and auth token for connecting to an
-// exec session via Portainer's /api/websocket/exec endpoint.
+// exec session via Portainer's /api/websocket/exec endpoint. The token must be
+// sent in an Authorization header; keeping it out of the URL avoids exposing it
+// through access logs and is required by current Portainer releases.
 // wsURL uses the ws:// or wss:// scheme matching the client base URL.
 func (c *Client) ExecWebSocketURL(ctx context.Context, endpointID int, execID string) (wsURL string, token string, err error) {
-	// Portainer requires a JWT token even when the primary auth mode is API key,
-	// because the /api/websocket/exec endpoint authenticates via query parameter.
+	if endpointID <= 0 {
+		return "", "", fmt.Errorf("portainer endpoint ID must be positive")
+	}
+	if err := validatePortainerExecID(execID); err != nil {
+		return "", "", err
+	}
+	// Portainer requires a JWT token even when the primary auth mode is API key.
 	// If apiKey auth is configured, we must obtain a JWT by authenticating first.
 	if c.apiKey != "" {
 		// For API-key-only clients we cannot obtain a JWT; the caller must
@@ -707,10 +773,13 @@ func (c *Client) ExecWebSocketURL(ctx context.Context, endpointID int, execID st
 		wsBase = "ws://" + base
 	}
 
-	wsURL = fmt.Sprintf("%s/api/websocket/exec?endpointId=%d&token=%s&execId=%s",
+	// Current Portainer releases use `id`; older releases used `execId`.
+	// Supplying both is safe because each handler ignores the unknown field and
+	// preserves compatibility across the supported homelab upgrade path.
+	wsURL = fmt.Sprintf("%s/api/websocket/exec?endpointId=%d&id=%s&execId=%s",
 		wsBase,
 		endpointID,
-		url.QueryEscape(jwt),
+		url.QueryEscape(execID),
 		url.QueryEscape(execID),
 	)
 	return wsURL, jwt, nil

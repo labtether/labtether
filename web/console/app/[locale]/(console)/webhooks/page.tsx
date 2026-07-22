@@ -10,19 +10,7 @@ import { Input } from "../../../components/ui/Input";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { SkeletonRow } from "../../../components/ui/Skeleton";
 import { apiFetch, apiMutate } from "../../../lib/api";
-
-// ── Types ──
-
-interface WebhookRecord {
-  id: string;
-  name: string;
-  url: string;
-  secret?: string;
-  events: string[];
-  enabled: boolean;
-  last_triggered_at?: string | null;
-  created_at?: string;
-}
+import { webhookRecordsFromPayload, type WebhookRecord } from "./webhookPayload";
 
 // ── Constants ──
 
@@ -37,6 +25,10 @@ const EVENT_TYPES = [
   "action.completed",
   "update.completed",
 ] as const;
+
+const MAX_WEBHOOK_NAME_LENGTH = 120;
+const MAX_WEBHOOK_URL_LENGTH = 4096;
+const MAX_WEBHOOK_SECRET_LENGTH = 4096;
 
 // ── Helpers ──
 
@@ -125,9 +117,14 @@ function WebhookModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={() => { if (!saving) onClose(); }}
     >
-      <div onClick={(e) => e.stopPropagation()}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="webhook-dialog-title"
+        onClick={(e) => e.stopPropagation()}
+      >
         <Card className="w-[36rem] max-w-[92vw] space-y-4">
-          <h3 className="text-sm font-medium text-[var(--text)]">
+          <h3 id="webhook-dialog-title" className="text-sm font-medium text-[var(--text)]">
             {mode === "create" ? t("createWebhook") : t("editWebhook")}
           </h3>
 
@@ -139,6 +136,8 @@ function WebhookModal({
               onChange={(e) => setName(e.target.value)}
               placeholder={t("namePlaceholder")}
               disabled={saving}
+              maxLength={MAX_WEBHOOK_NAME_LENGTH}
+              autoFocus
             />
           </label>
 
@@ -151,6 +150,7 @@ function WebhookModal({
               placeholder={t("urlPlaceholder")}
               disabled={saving}
               type="url"
+              maxLength={MAX_WEBHOOK_URL_LENGTH}
             />
           </label>
 
@@ -163,6 +163,7 @@ function WebhookModal({
               placeholder={t("secretPlaceholder")}
               disabled={saving}
               type="password"
+              maxLength={MAX_WEBHOOK_SECRET_LENGTH}
             />
           </label>
 
@@ -224,6 +225,7 @@ export default function WebhooksPage() {
   const [webhooks, setWebhooks] = useState<WebhookRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Modal state
   const [showCreate, setShowCreate] = useState(false);
@@ -245,7 +247,7 @@ export default function WebhooksPage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const { response, data } = await apiFetch<{ webhooks: WebhookRecord[] }>(
+      const { response, data } = await apiFetch<unknown>(
         "/api/v2/webhooks",
       );
       if (!response.ok) {
@@ -255,7 +257,7 @@ export default function WebhooksPage() {
             : `Failed to load webhooks (${response.status})`;
         throw new Error(msg);
       }
-      setWebhooks(data?.webhooks ?? []);
+      setWebhooks(webhookRecordsFromPayload(data));
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Failed to load webhooks.");
     } finally {
@@ -302,11 +304,12 @@ export default function WebhooksPage() {
       }
       setModalSaving(true);
       setModalError("");
+      setActionError(null);
       try {
         await apiMutate<WebhookRecord>("/api/v2/webhooks", "POST", {
           name,
           url,
-          secret: fields.secret.trim() || undefined,
+          secret: fields.secret.length > 0 ? fields.secret : undefined,
           events: fields.events,
         });
         setShowCreate(false);
@@ -344,6 +347,7 @@ export default function WebhooksPage() {
       }
       setModalSaving(true);
       setModalError("");
+      setActionError(null);
       try {
         await apiMutate<WebhookRecord>(
           `/api/v2/webhooks/${encodeURIComponent(editTarget.id)}`,
@@ -351,7 +355,7 @@ export default function WebhooksPage() {
           {
             name,
             url,
-            secret: fields.secret.trim() || undefined,
+            secret: fields.secret.length > 0 ? fields.secret : undefined,
             events: fields.events,
             enabled: editTarget.enabled,
           },
@@ -372,12 +376,13 @@ export default function WebhooksPage() {
   const handleDelete = useCallback(
     async (id: string) => {
       setDeleting(true);
+      setActionError(null);
       try {
         await apiMutate(`/api/v2/webhooks/${encodeURIComponent(id)}`, "DELETE");
         setDeleteTarget(null);
         await load();
-      } catch {
-        // swallow — row will remain
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : "Failed to delete webhook.");
       } finally {
         setDeleting(false);
       }
@@ -390,6 +395,7 @@ export default function WebhooksPage() {
   const handleToggleEnabled = useCallback(
     async (webhook: WebhookRecord) => {
       setTogglingIds((prev) => new Set(prev).add(webhook.id));
+      setActionError(null);
       try {
         await apiMutate<WebhookRecord>(
           `/api/v2/webhooks/${encodeURIComponent(webhook.id)}`,
@@ -397,8 +403,8 @@ export default function WebhooksPage() {
           { enabled: !webhook.enabled },
         );
         await load();
-      } catch {
-        // swallow — toggle reverts visually on reload failure
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : "Failed to update webhook.");
       } finally {
         setTogglingIds((prev) => {
           const next = new Set(prev);
@@ -424,6 +430,12 @@ export default function WebhooksPage() {
           </Button>
         }
       />
+
+      {actionError ? (
+        <div role="alert" className="mb-3 rounded-lg border border-[var(--bad)]/40 bg-[var(--bad)]/10 px-3 py-2 text-xs text-[var(--bad)]">
+          {actionError}
+        </div>
+      ) : null}
 
       <Card variant="flush">
         {loading ? (
@@ -515,6 +527,7 @@ export default function WebhooksPage() {
                       <button
                         type="button"
                         title={wh.enabled ? "Enabled — click to disable" : "Disabled — click to enable"}
+                        aria-label={`${wh.enabled ? "Disable" : "Enable"} ${wh.name}`}
                         disabled={isToggling}
                         onClick={() => { void handleToggleEnabled(wh); }}
                         className="inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
@@ -566,6 +579,8 @@ export default function WebhooksPage() {
                               variant="ghost"
                               size="sm"
                               onClick={() => openEdit(wh)}
+                              aria-label={`${t("editWebhook")}: ${wh.name}`}
+                              title={t("editWebhook")}
                             >
                               <Pencil size={12} />
                             </Button>
@@ -573,6 +588,8 @@ export default function WebhooksPage() {
                               variant="ghost"
                               size="sm"
                               onClick={() => setDeleteTarget(wh.id)}
+                              aria-label={`${t("delete")}: ${wh.name}`}
+                              title={t("delete")}
                             >
                               <Trash2 size={12} />
                             </Button>

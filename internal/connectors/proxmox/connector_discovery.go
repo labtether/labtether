@@ -9,7 +9,7 @@ import (
 
 func (c *Connector) Discover(ctx context.Context) ([]connectorsdk.Asset, error) {
 	if !c.isConfigured() {
-		return c.stubAssets(), nil
+		return []connectorsdk.Asset{}, nil
 	}
 
 	resources, err := c.client.GetClusterResources(ctx)
@@ -124,41 +124,7 @@ func (c *Connector) Discover(ctx context.Context) ([]connectorsdk.Asset, error) 
 	}
 
 	if len(assets) == 0 {
-		return c.stubAssets(), nil
+		return []connectorsdk.Asset{}, nil
 	}
 	return assets, nil
-}
-func (c *Connector) stubAssets() []connectorsdk.Asset {
-	return []connectorsdk.Asset{
-		{
-			ID:     "proxmox-node-pve01",
-			Type:   "hypervisor-node",
-			Name:   "pve01",
-			Source: c.ID(),
-			Metadata: map[string]string{
-				"cluster": "homelab",
-				"status":  "online",
-			},
-		},
-		{
-			ID:     "proxmox-vm-100",
-			Type:   "vm",
-			Name:   "labtether-dev",
-			Source: c.ID(),
-			Metadata: map[string]string{
-				"node": "pve01",
-				"vmid": "100",
-			},
-		},
-		{
-			ID:     "proxmox-ct-101",
-			Type:   "container",
-			Name:   "monitoring-ct",
-			Source: c.ID(),
-			Metadata: map[string]string{
-				"node": "pve01",
-				"vmid": "101",
-			},
-		},
-	}
 }

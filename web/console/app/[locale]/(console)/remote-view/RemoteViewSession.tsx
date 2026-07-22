@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { GuacamoleViewerHandle } from "../../../components/GuacamoleViewer";
 import {
@@ -15,9 +15,12 @@ import type {
   WebRTCViewerHandle,
 } from "../../../components/WebRTCViewer";
 import { useConnectedAgents } from "../../../hooks/useConnectedAgents";
+import { useDisplayList } from "../../../hooks/useDisplayList";
 import { useFullscreen } from "../../../hooks/useFullscreen";
 import { useLatency } from "../../../hooks/useLatency";
 import { useSession } from "../../../hooks/useSession";
+import { useDesktopViewerFocus } from "../nodes/[id]/useDesktopViewerFocus";
+import { useDesktopViewerRuntime } from "../nodes/[id]/useDesktopViewerRuntime";
 import type { RemoteViewTab, RemoteViewConnectionState } from "./types";
 import { toDesktopProtocol } from "./types";
 
@@ -29,7 +32,8 @@ function buildSessionTarget(tab: RemoteViewTab): string {
     return tab.target.assetId;
   }
   if (tab.target) {
-    return `${tab.target.host}:${tab.target.port}`;
+    const host = tab.target.host.includes(":") ? `[${tab.target.host}]` : tab.target.host;
+    return `${host}:${tab.target.port}`;
   }
   return "";
 }
@@ -50,6 +54,22 @@ export default function RemoteViewSession({
 }: RemoteViewSessionProps) {
   const desktopProtocol = tab.protocol ? toDesktopProtocol(tab.protocol) : "vnc";
   const sessionTarget = buildSessionTarget(tab);
+  const directTarget = useMemo(
+    () =>
+      tab.type !== "device" && tab.target
+        ? {
+            host: tab.target.host,
+            port: tab.target.port,
+            ...(desktopProtocol === "rdp" || desktopProtocol === "spice"
+              ? {
+                  username: initialCredentials?.username,
+                  password: initialCredentials?.password,
+                }
+              : {}),
+          }
+        : undefined,
+    [tab.type, tab.target, desktopProtocol, initialCredentials],
+  );
 
   // ── Core session hook ──
   const session = useSession({
@@ -74,9 +94,12 @@ export default function RemoteViewSession({
   const [audioMuted, setAudioMuted] = useState(false);
   const [volume, setVolume] = useState(1);
   const [recording, setRecording] = useState(false);
+  const [recordingBusy, setRecordingBusy] = useState(false);
   const [fileDrawerOpen, setFileDrawerOpen] = useState(false);
-  const [_webrtcStats, setWebRTCStats] = useState<WebRTCConnectionStats | null>(null);
-  const [_webrtcStream, setWebRTCStream] = useState<MediaStream | null>(null);
+  const [selectedDisplay, setSelectedDisplay] = useState("");
+  const [pointerLocked, setPointerLocked] = useState(false);
+  const [webrtcStats, setWebRTCStats] = useState<WebRTCConnectionStats | null>(null);
+  const [webrtcStream, setWebRTCStream] = useState<MediaStream | null>(null);
 
   const { isFullscreen, toggleFullscreen } = useFullscreen(viewerWrapperRef);
   const latencyMs = useLatency(session.connectionState === "connected");
@@ -85,6 +108,37 @@ export default function RemoteViewSession({
   const recordingSupported = desktopProtocol === "vnc" && targetHasAgent;
   const pointerLockSupported = desktopProtocol === "vnc";
   const nodeId = tab.target?.assetId || tab.id;
+  const displayList = useDisplayList(
+    nodeId,
+    targetHasAgent && session.connectionState === "connected",
+  );
+  const { focusActiveViewer, restoreViewerFocus } = useDesktopViewerFocus({
+      protocol: desktopProtocol,
+      viewerWrapperRef,
+      vncRef,
+      guacRef,
+      spiceRef,
+      webrtcRef,
+    });
+  const viewerRuntime = useDesktopViewerRuntime({
+    nodeId,
+    protocol: desktopProtocol,
+    targetHasAgent,
+    isFullscreen,
+    audioMuted,
+    volume,
+    viewerWrapperRef,
+    vncRef,
+    guacRef,
+    spiceRef,
+    webrtcRef,
+    session,
+    webrtcStats,
+    webrtcStream,
+    transportLabel: (tab.protocol ?? desktopProtocol).toUpperCase(),
+    focusActiveViewer,
+    restoreViewerFocus,
+  });
 
   // ── Credential state ──
   const [credentialRequest, setCredentialRequest] = useState<VNCCredentialRequest | null>(null);
@@ -100,6 +154,7 @@ export default function RemoteViewSession({
 
   const handleDesktopDisconnect = useCallback(
     (detail: { clean: boolean; reason?: string }) => {
+      setRecording(false);
       session.handleDisconnected(detail);
     },
     [session],
@@ -128,7 +183,7 @@ export default function RemoteViewSession({
       }
     }
     // Priority 2: VNC password from the stream ticket (password-only flows)
-    const autoPassword = session.vncPassword?.trim();
+    const autoPassword = session.vncPassword;
     if (autoPassword && request.types.includes("password") && !request.types.includes("username")) {
       vncRef.current?.sendCredentials({ password: autoPassword });
       return;
@@ -153,35 +208,148 @@ export default function RemoteViewSession({
     if (desktopProtocol === "vnc") vncRef.current?.sendCtrlAltDel();
     if (desktopProtocol === "rdp") guacRef.current?.sendCtrlAltDel();
     if (desktopProtocol === "spice") spiceRef.current?.sendCtrlAltDel();
-  }, [desktopProtocol]);
+    restoreViewerFocus();
+  }, [desktopProtocol, restoreViewerFocus]);
 
   const handleDisconnect = useCallback(() => {
+    vncRef.current?.disconnect();
+    guacRef.current?.disconnect();
+    spiceRef.current?.disconnect();
+    webrtcRef.current?.disconnect();
+    setRecording(false);
     session.disconnect();
   }, [session]);
 
   const handleRetry = useCallback(() => {
-    void session.connect(undefined, { protocol: desktopProtocol });
-  }, [session, desktopProtocol]);
+    void session.connect(undefined, {
+      protocol: desktopProtocol,
+      directTarget,
+      display: selectedDisplay,
+      record: false,
+    });
+  }, [session, desktopProtocol, directTarget, selectedDisplay]);
 
   const handlePointerLockToggle = useCallback(() => {
     if (!pointerLockSupported) return;
     if (document.pointerLockElement) {
       vncRef.current?.exitPointerLock();
+    } else {
+      vncRef.current?.requestPointerLock();
     }
-  }, [pointerLockSupported]);
+    restoreViewerFocus();
+  }, [pointerLockSupported, restoreViewerFocus]);
 
-  const toggleRecording = useCallback(() => {
-    setRecording((prev) => !prev);
-  }, []);
+  const toggleRecording = useCallback(async () => {
+    if (!recordingSupported || !session.activeSessionId || recordingBusy) {
+      return;
+    }
+    setRecordingBusy(true);
+    try {
+      const response = recording
+        ? await fetch(
+            `/api/recordings/${encodeURIComponent(session.activeSessionId)}`,
+            { method: "POST" },
+          )
+        : await fetch("/api/recordings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              session_id: session.activeSessionId,
+            }),
+          });
+      if (response.ok) {
+        setRecording((current) => !current);
+      }
+    } catch {
+      // The existing recording state remains authoritative on failure.
+    } finally {
+      setRecordingBusy(false);
+    }
+  }, [
+    recording,
+    recordingBusy,
+    recordingSupported,
+    session.activeSessionId,
+  ]);
+
+  const handleDisplayChange = useCallback(
+    (displayName: string) => {
+      setSelectedDisplay(displayName);
+      if (session.connectionState !== "connected") return;
+      vncRef.current?.disconnect();
+      guacRef.current?.disconnect();
+      spiceRef.current?.disconnect();
+      webrtcRef.current?.disconnect();
+      setRecording(false);
+      session.disconnect();
+      void session.connect(undefined, {
+        protocol: desktopProtocol,
+        directTarget,
+        display: displayName,
+        record: false,
+      });
+    },
+    [desktopProtocol, directTarget, session],
+  );
+
+  const handleKeyboardGrabToggle = useCallback(() => {
+    if (viewerRuntime.keyboardGrab.state === "active") {
+      viewerRuntime.keyboardGrab.deactivate();
+      restoreViewerFocus();
+      return;
+    }
+    focusActiveViewer();
+    void viewerRuntime.keyboardGrab.activate(
+      viewerWrapperRef.current ?? undefined,
+    );
+    restoreViewerFocus();
+  }, [
+    focusActiveViewer,
+    restoreViewerFocus,
+    viewerRuntime.keyboardGrab,
+  ]);
+
+  const handleQualitySuggestionApply = useCallback(() => {
+    const suggestion = viewerRuntime.adaptiveQuality.suggestion;
+    const next = suggestion
+      ? viewerRuntime.adaptiveQuality.getNextQuality(suggestion)
+      : null;
+    if (!next) return;
+    session.setQuality(next);
+    viewerRuntime.adaptiveQuality.applyQuality(next);
+  }, [session, viewerRuntime.adaptiveQuality]);
 
   const handleScreenshot = useCallback(() => {
     const canvas = viewerWrapperRef.current?.querySelector("canvas");
     if (!canvas) return;
-    const link = document.createElement("a");
-    link.download = `${tab.label}-${new Date().toISOString().slice(0, 19)}.png`;
-    link.href = (canvas as HTMLCanvasElement).toDataURL("image/png");
-    link.click();
+    try {
+      const safeLabel =
+        tab.label.replace(/[^a-z0-9._-]+/gi, "-").slice(0, 80) ||
+        "remote-view";
+      const link = document.createElement("a");
+      link.download = `${safeLabel}-${new Date().toISOString().slice(0, 19)}.png`;
+      link.href = (canvas as HTMLCanvasElement).toDataURL("image/png");
+      link.click();
+    } catch {
+      // A cross-origin or otherwise tainted canvas cannot be exported safely.
+    }
   }, [tab.label]);
+
+  useEffect(() => {
+    const updatePointerLock = () => {
+      const locked = document.pointerLockElement;
+      setPointerLocked(
+        desktopProtocol === "vnc" &&
+          !!locked &&
+          !!viewerWrapperRef.current?.contains(locked),
+      );
+    };
+    updatePointerLock();
+    document.addEventListener("pointerlockchange", updatePointerLock);
+    return () => {
+      document.removeEventListener("pointerlockchange", updatePointerLock);
+    };
+  }, [desktopProtocol]);
 
   // ── Auto-connect on mount when target is available ──
   const hasAutoConnected = useRef(false);
@@ -192,9 +360,14 @@ export default function RemoteViewSession({
       !hasAutoConnected.current
     ) {
       hasAutoConnected.current = true;
-      void session.connect(sessionTarget, { protocol: desktopProtocol });
+      void session.connect(sessionTarget, {
+        protocol: desktopProtocol,
+        directTarget,
+        display: selectedDisplay,
+        record: false,
+      });
     }
-  }, [sessionTarget, session, desktopProtocol]);
+  }, [sessionTarget, session, desktopProtocol, directTarget, selectedDisplay]);
 
   // ── Sync connection state to parent tab bar ──
   useEffect(() => {
@@ -225,13 +398,22 @@ export default function RemoteViewSession({
   // ── Credential overlay ──
   const credentialOverlay = credentialRequest ? (
     <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-20">
-      <div className="bg-[var(--surface)] border border-[var(--line)] rounded-lg p-6 w-80 shadow-lg">
-        <h3 className="text-sm font-semibold text-[var(--text)] mb-3">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="remote-view-auth-title"
+        className="bg-[var(--surface)] border border-[var(--line)] rounded-lg p-6 w-80 shadow-lg"
+      >
+        <h3
+          id="remote-view-auth-title"
+          className="text-sm font-semibold text-[var(--text)] mb-3"
+        >
           Authentication Required
         </h3>
         {credentialRequest.types?.includes("username") && (
           <input
             type="text"
+            aria-label="Username"
             placeholder="Username"
             value={credUsername}
             onChange={(e) => setCredUsername(e.target.value)}
@@ -239,17 +421,20 @@ export default function RemoteViewSession({
             autoFocus
           />
         )}
-        <input
-          type="password"
-          placeholder="Password"
-          value={credPassword}
-          onChange={(e) => setCredPassword(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleCredentialSubmit();
-          }}
-          className="w-full mb-3 px-3 py-1.5 rounded border border-[var(--line)] bg-[var(--input)] text-[var(--text)] text-sm"
-          autoFocus={!credentialRequest.types?.includes("username")}
-        />
+        {credentialRequest.types?.includes("password") && (
+          <input
+            type="password"
+            aria-label="Password"
+            placeholder="Password"
+            value={credPassword}
+            onChange={(e) => setCredPassword(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleCredentialSubmit();
+            }}
+            className="w-full mb-3 px-3 py-1.5 rounded border border-[var(--line)] bg-[var(--input)] text-[var(--text)] text-sm"
+            autoFocus={!credentialRequest.types?.includes("username")}
+          />
+        )}
         <div className="flex justify-end gap-2">
           <button
             type="button"
@@ -283,8 +468,8 @@ export default function RemoteViewSession({
     // Connection state
     connectionState: session.connectionState,
     latencyMs,
-    transportLabel: desktopProtocol.toUpperCase(),
-    networkQuality: undefined,
+    transportLabel: viewerRuntime.effectiveTransportLabel,
+    networkQuality: viewerRuntime.networkQuality,
 
     // Protocol / stream
     protocol: desktopProtocol,
@@ -301,7 +486,7 @@ export default function RemoteViewSession({
     onScalingModeChange: setScalingMode,
 
     // Pointer lock
-    pointerLocked: false,
+    pointerLocked,
     pointerLockSupported,
     onPointerLockToggle: handlePointerLockToggle,
 
@@ -311,13 +496,18 @@ export default function RemoteViewSession({
 
     // Recording
     recording,
-    recordingSupported,
-    onToggleRecording: toggleRecording,
+    recordingSupported: recordingSupported && !recordingBusy,
+    onToggleRecording: () => {
+      void toggleRecording();
+    },
 
     // Audio
     audioMuted,
     onAudioToggle: () => setAudioMuted((v) => !v),
-    audioUnavailable: desktopProtocol === "vnc",
+    audioUnavailable:
+      desktopProtocol === "vnc" &&
+      (viewerRuntime.audioSideband.status === "unavailable" ||
+        viewerRuntime.audioSideband.status === "error"),
     volume,
     onVolumeChange: setVolume,
 
@@ -334,7 +524,6 @@ export default function RemoteViewSession({
     // File drop
     targetHasAgent,
     uploadTargetDir,
-    onFileDropUpload: undefined,
 
     // Viewer refs
     vncRef,
@@ -354,49 +543,88 @@ export default function RemoteViewSession({
     // Credential overlay
     credentialOverlay,
 
-    // Performance overlay (Phase 1 — not wired yet for remote-view tabs)
-    metrics: undefined,
-    showPerformanceOverlay: false,
-    onPerformanceOverlayToggle: undefined,
+    // Performance overlay
+    metrics: viewerRuntime.viewerMetrics,
+    showPerformanceOverlay: viewerRuntime.showPerfOverlay,
+    onPerformanceOverlayToggle: viewerRuntime.togglePerfOverlay,
 
-    // Keyboard grab (not wired yet for remote-view tabs)
-    keyboardGrabState: undefined,
-    onKeyboardGrabToggle: undefined,
-    onSendShortcut: undefined,
+    // Keyboard grab and shortcuts
+    keyboardGrabState: viewerRuntime.keyboardGrab.state,
+    onKeyboardGrabToggle: handleKeyboardGrabToggle,
+    onSendShortcut:
+      desktopProtocol === "spice"
+        ? undefined
+        : viewerRuntime.handleSendShortcut,
 
     // Reconnect overlay
-    reconnectState: undefined,
+    reconnectState: viewerRuntime.reconnectState,
     onReconnectNow: () => {
-      void session.connect(sessionTarget, { protocol: desktopProtocol });
+      void session.connect(sessionTarget, {
+        protocol: desktopProtocol,
+        directTarget,
+        display: selectedDisplay,
+        record: false,
+      });
     },
 
     // Touch support
-    isTouchDevice: undefined,
-    onToggleVirtualKeyboard: undefined,
+    isTouchDevice:
+      desktopProtocol === "spice"
+        ? false
+        : viewerRuntime.virtualKeyboard.isTouchDevice,
+    onToggleVirtualKeyboard:
+      desktopProtocol === "spice"
+        ? undefined
+        : viewerRuntime.virtualKeyboard.toggle,
 
     // Clipboard sync
-    clipboardSyncing: undefined,
-    clipboardLastSync: undefined,
-    onClipboardPull: undefined,
-    onClipboardPush: undefined,
+    clipboardSyncing: targetHasAgent
+      ? viewerRuntime.clipboard.syncing
+      : undefined,
+    clipboardLastSync: targetHasAgent
+      ? viewerRuntime.clipboard.lastSync
+      : undefined,
+    onClipboardPull: targetHasAgent
+      ? viewerRuntime.clipboard.pullFromRemote
+      : undefined,
+    onClipboardPush: targetHasAgent
+      ? viewerRuntime.clipboard.pushToRemote
+      : undefined,
 
-    // Adaptive quality (not wired yet for remote-view tabs)
-    adaptiveQualityEnabled: undefined,
-    onAdaptiveQualityToggle: undefined,
-    qualitySuggestion: undefined,
-    onQualitySuggestionApply: undefined,
-    onQualitySuggestionDismiss: undefined,
+    // Adaptive quality
+    adaptiveQualityEnabled: viewerRuntime.adaptiveQuality.autoEnabled,
+    onAdaptiveQualityToggle: () =>
+      viewerRuntime.adaptiveQuality.setAutoEnabled(
+        !viewerRuntime.adaptiveQuality.autoEnabled,
+      ),
+    qualitySuggestion: viewerRuntime.adaptiveQuality.suggestion,
+    onQualitySuggestionApply: handleQualitySuggestionApply,
+    onQualitySuggestionDismiss:
+      viewerRuntime.adaptiveQuality.dismissSuggestion,
 
     // File download / drawer
-    onDownloadFile: undefined,
-    fileDownloading: false,
+    onDownloadFile: targetHasAgent
+      ? viewerRuntime.fileDownload.downloadFile
+      : undefined,
+    fileDownloading: targetHasAgent
+      ? viewerRuntime.fileDownload.downloading
+      : false,
     fileDrawerOpen,
     onFileDrawerToggle: () => setFileDrawerOpen((v) => !v),
 
     // Monitor picker
-    displays: undefined,
-    selectedDisplay: undefined,
-    onDisplayChange: undefined,
+    displays:
+      desktopProtocol === "vnc" && targetHasAgent
+        ? displayList.displays
+        : undefined,
+    selectedDisplay:
+      desktopProtocol === "vnc" && targetHasAgent
+        ? selectedDisplay
+        : undefined,
+    onDisplayChange:
+      desktopProtocol === "vnc" && targetHasAgent
+        ? handleDisplayChange
+        : undefined,
   };
 
   return <RemoteViewerShell {...shellProps} />;

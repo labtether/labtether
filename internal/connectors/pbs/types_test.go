@@ -47,3 +47,21 @@ func TestBackupSnapshotUnmarshalAcceptsStringFiles(t *testing.T) {
 		t.Fatalf("unexpected files: got %#v want %#v", snapshot.Files, want)
 	}
 }
+
+func TestPBSJobTypesPreserveSafetyAndRetentionFields(t *testing.T) {
+	var verify VerifyJob
+	if err := json.Unmarshal([]byte(`{"id":"weekly","store":"backup","ignore-verified":true,"outdated-after":30}`), &verify); err != nil {
+		t.Fatalf("unmarshal verify job: %v", err)
+	}
+	if !verify.IgnoreVerified || verify.OutdatedAfter == nil || *verify.OutdatedAfter != 30 {
+		t.Fatalf("verify safety fields lost: %+v", verify)
+	}
+
+	var syncJob SyncJob
+	if err := json.Unmarshal([]byte(`{"id":"offsite","store":"backup","remote-store":"remote","verified-only":true,"remove-vanished":false,"transfer-last":3}`), &syncJob); err != nil {
+		t.Fatalf("unmarshal sync job: %v", err)
+	}
+	if !syncJob.VerifiedOnly || syncJob.TransferLast == nil || *syncJob.TransferLast != 3 {
+		t.Fatalf("sync safety fields lost: %+v", syncJob)
+	}
+}

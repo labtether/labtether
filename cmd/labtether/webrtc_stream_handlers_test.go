@@ -251,6 +251,15 @@ func TestHandleWebRTCStreamForwardsBrowserSignalsAndSendsStop(t *testing.T) {
 	if stopped.SessionID != session.ID {
 		t.Fatalf("unexpected stop payload %+v", stopped)
 	}
+	stoppedAck, err := json.Marshal(agentmgr.WebRTCStoppedData{SessionID: session.ID, Reason: "user requested"})
+	if err != nil {
+		t.Fatalf("marshal stopped acknowledgement: %v", err)
+	}
+	sut.processAgentWebRTCStopped(&agentmgr.AgentConn{AssetID: "node-1"}, agentmgr.Message{Data: stoppedAck})
+	browserStopped := readWebRTCBrowserMessage(t, browserConn)
+	if browserStopped.Type != "stopped" {
+		t.Fatalf("browser message type=%q, want stopped", browserStopped.Type)
+	}
 
 	waitForWebRTCBridgeRemoval(t, sut, session.ID)
 }
@@ -293,6 +302,16 @@ func TestHandleWebRTCStreamIgnoresMalformedAndUnknownBrowserSignals(t *testing.T
 	if err := browserConn.WriteJSON(map[string]any{"type": "stop"}); err != nil {
 		t.Fatalf("write stop: %v", err)
 	}
+	// assertNoAgentMessageWithin() intentionally expires this test websocket's
+	// read deadline, after which gorilla/websocket cannot perform another read.
+	// Give the handler time to consume stop, then inject the agent acknowledgement
+	// directly through the same production handler.
+	time.Sleep(50 * time.Millisecond)
+	stoppedAck, err := json.Marshal(agentmgr.WebRTCStoppedData{SessionID: session.ID})
+	if err != nil {
+		t.Fatalf("marshal stopped acknowledgement: %v", err)
+	}
+	sut.processAgentWebRTCStopped(&agentmgr.AgentConn{AssetID: "node-1"}, agentmgr.Message{Data: stoppedAck})
 	waitForWebRTCBridgeRemoval(t, sut, session.ID)
 }
 

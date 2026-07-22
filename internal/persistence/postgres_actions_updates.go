@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/labtether/labtether/internal/actions"
 	"github.com/labtether/labtether/internal/idgen"
@@ -258,10 +259,13 @@ func (s *PostgresStore) CreateUpdatePlan(req updates.CreatePlanRequest) (updates
 		defaultDryRun = *req.DefaultDryRun
 	}
 
-	targets := sanitizeStringSlice(req.Targets)
-	scopes := sanitizeStringSlice(req.Scopes)
-	if len(scopes) == 0 {
-		scopes = append([]string(nil), updates.DefaultScopes...)
+	targets, err := updates.NormalizeTargets(req.Targets)
+	if err != nil {
+		return updates.Plan{}, err
+	}
+	scopes, err := updates.NormalizeExecutableScopes(req.Scopes)
+	if err != nil {
+		return updates.Plan{}, err
 	}
 
 	targetPayload, err := marshalStringSlice(targets)
@@ -355,17 +359,52 @@ func (s *PostgresStore) GetUpdatePlan(id string) (updates.Plan, bool, error) {
 }
 
 func (s *PostgresStore) DeleteUpdatePlan(id string) error {
-	tag, err := s.pool.Exec(context.Background(),
-		`DELETE FROM update_plans WHERE id = $1`,
-		strings.TrimSpace(id),
-	)
+	ctx := context.Background()
+	id = strings.TrimSpace(id)
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	if tag.RowsAffected() == 0 {
-		return ErrNotFound
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Lock the parent row before checking run state. Foreign-key inserts into
+	// update_runs take a conflicting key-share lock, so a concurrent execution
+	// either becomes visible to this transaction and blocks deletion, or fails
+	// after this transaction commits the deletion. That closes the check/delete
+	// race without relying on application-level timing.
+	var lockedID string
+	if err := tx.QueryRow(ctx,
+		`SELECT id FROM update_plans WHERE id = $1 FOR UPDATE`,
+		id,
+	).Scan(&lockedID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
 	}
-	return nil
+
+	var active bool
+	if err := tx.QueryRow(ctx,
+		`SELECT EXISTS (
+			SELECT 1
+			  FROM update_runs
+			 WHERE plan_id = $1
+			   AND status IN ($2, $3)
+		)`,
+		id,
+		updates.StatusQueued,
+		updates.StatusRunning,
+	).Scan(&active); err != nil {
+		return err
+	}
+	if active {
+		return ErrUpdatePlanActive
+	}
+
+	if _, err := tx.Exec(ctx, `DELETE FROM update_plans WHERE id = $1`, id); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *PostgresStore) CreateUpdateRun(plan updates.Plan, req updates.ExecutePlanRequest) (updates.Run, error) {
@@ -409,6 +448,13 @@ func (s *PostgresStore) CreateUpdateRun(plan updates.Plan, req updates.ExecutePl
 		run.CreatedAt,
 	)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			// Keep the Postgres contract aligned with MemoryUpdateStore when a
+			// concurrent plan deletion wins before this run can acquire its FK
+			// key-share lock.
+			return updates.Run{}, ErrNotFound
+		}
 		return updates.Run{}, err
 	}
 

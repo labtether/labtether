@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	opspkg "github.com/labtether/labtether/internal/hubapi/operations"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/runtimesettings"
+	"github.com/labtether/labtether/internal/servicehttp"
 )
 
 // buildAdminDeps constructs the admin.Deps from the apiServer's fields.
@@ -28,8 +30,11 @@ func (s *apiServer) buildAdminDeps() *adminpkg.Deps {
 		WebServiceCoordinator: s.webServiceCoordinator,
 		DockerCoordinator:     s.dockerCoordinator,
 
-		HubIdentity: s.hubIdentity,
-		DataDir:     s.dataDir,
+		HubIdentity: s.currentHubSSHIdentity(),
+		CurrentHubIdentity: func() *shared.HubSSHIdentity {
+			return s.currentHubSSHIdentity()
+		},
+		DataDir: s.dataDir,
 
 		DecodeJSONBody: func(w http.ResponseWriter, r *http.Request, dst any) error {
 			return decodeJSONBody(w, r, dst)
@@ -38,20 +43,23 @@ func (s *apiServer) buildAdminDeps() *adminpkg.Deps {
 		AppendAuditEventBestEffort: func(event adminpkg.AuditEventAlias, logMessage string) {
 			s.appendAuditEventBestEffort(event, logMessage)
 		},
-		ApplySecurityRuntimeOverrides:              applySecurityRuntimeOverrides,
+		ApplySecurityRuntimeOverrides: applySecurityRuntimeOverrides,
+		ApplyPrometheusRemoteWriteSettings: func() error {
+			if s.prometheusRemoteWriteRuntime == nil {
+				if s.db != nil {
+					return fmt.Errorf("prometheus remote write runtime is unavailable")
+				}
+				return nil
+			}
+			return s.prometheusRemoteWriteRuntime.Apply()
+		},
 		InvalidateWebServiceURLGroupingConfigCache: s.invalidateWebServiceURLGroupingConfigCache,
 		InvalidateStatusCaches:                     s.invalidateStatusCaches,
 		PrincipalActorID: func(ctx context.Context) string {
 			return principalActorID(ctx)
 		},
 		EnsureHubIdentity: func(d *adminpkg.Deps) (*shared.HubSSHIdentity, error) {
-			identity, err := ensureHubSSHIdentity(s)
-			if err != nil {
-				return nil, err
-			}
-			// Keep apiServer in sync.
-			s.hubIdentity = identity
-			return identity, nil
+			return s.ensureCurrentHubSSHIdentity()
 		},
 		LoadHubPrivateKeyPEM: func(identity *shared.HubSSHIdentity) (string, error) {
 			return s.loadHubPrivateKeyPEM(identity)
@@ -143,6 +151,12 @@ func (s *apiServer) handleTestProtocolConnection(w http.ResponseWriter, r *http.
 }
 
 func (s *apiServer) handlePushHubKey(w http.ResponseWriter, r *http.Request, assetID string) {
+	if _, err := s.ensureCurrentHubSSHIdentity(); err != nil {
+		servicehttp.WriteError(w, http.StatusServiceUnavailable, "hub SSH identity is unavailable")
+		return
+	}
+	s.hubIdentityOperationMu.Lock()
+	defer s.hubIdentityOperationMu.Unlock()
 	s.ensureAdminDeps().HandlePushHubKey(w, r, assetID)
 }
 

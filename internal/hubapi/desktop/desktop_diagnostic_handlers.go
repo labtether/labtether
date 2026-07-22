@@ -27,6 +27,9 @@ func (d *Deps) HandleDesktopDiagnoseRequest(w http.ResponseWriter, r *http.Reque
 		servicehttp.WriteError(w, http.StatusBadRequest, "asset id required")
 		return
 	}
+	if !d.requireTargetAccess(w, r, assetID) {
+		return
+	}
 
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {

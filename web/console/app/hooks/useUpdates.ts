@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useSlowStatus, useStatusControls, useStatusSettings } from "../contexts/StatusContext";
+import { EXECUTABLE_UPDATE_SCOPES, parseUpdatePlanInput } from "./updatePlanValidation";
 
 export function useUpdates() {
   const status = useSlowStatus();
@@ -13,7 +14,7 @@ export function useUpdates() {
 
   const [updatePlanName, setUpdatePlanName] = useState<string>("");
   const [updatePlanTargets, setUpdatePlanTargets] = useState<string>("");
-  const [updatePlanScopes, setUpdatePlanScopes] = useState<string>("");
+  const updatePlanScopes = EXECUTABLE_UPDATE_SCOPES.join(",");
   const [updatePlanDryRun, setUpdatePlanDryRun] = useState<boolean>(defaultUpdateDryRun);
   const [updatePlanSubmitting, setUpdatePlanSubmitting] = useState(false);
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
@@ -25,14 +26,14 @@ export function useUpdates() {
       return;
     }
 
-    const targets = updatePlanTargets
-      .split(",")
-      .map((entry) => entry.trim())
-      .filter((entry) => entry.length > 0);
-    const scopes = updatePlanScopes
-      .split(",")
-      .map((entry) => entry.trim())
-      .filter((entry) => entry.length > 0);
+    let targets: string[];
+    let scopes: string[];
+    try {
+      ({ targets, scopes } = parseUpdatePlanInput(updatePlanTargets, updatePlanScopes));
+    } catch (error) {
+      setUpdateMessage(error instanceof Error ? error.message : "Invalid update plan.");
+      return;
+    }
 
     setUpdatePlanSubmitting(true);
     setUpdateMessage(null);
@@ -87,7 +88,6 @@ export function useUpdates() {
     updatePlanTargets,
     setUpdatePlanTargets,
     updatePlanScopes,
-    setUpdatePlanScopes,
     updatePlanDryRun,
     setUpdatePlanDryRun,
     updatePlanSubmitting,

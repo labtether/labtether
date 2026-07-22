@@ -245,7 +245,11 @@ func (c *Client) requestRaw(ctx context.Context, method, path string, values net
 		if err != nil {
 			return nil, fmt.Errorf("acquire session ticket: %w", err)
 		}
-		req.AddCookie(&http.Cookie{Name: "PVEAuthCookie", Value: ticket}) // #nosec G124 -- Outbound API client cookie header, not a browser session cookie.
+		// PVEAuthCookie is an outbound Proxmox request credential. Secure and
+		// HttpOnly are Set-Cookie/browser attributes and are never serialized by
+		// net/http into this client-side Cookie request header.
+		// nosemgrep: go.lang.security.audit.net.cookie-missing-httponly.cookie-missing-httponly,go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure -- browser-only Set-Cookie attributes do not apply to an outbound Cookie header.
+		req.AddCookie(&http.Cookie{Name: "PVEAuthCookie", Value: ticket}) // #nosec G124 -- outbound API header, not a browser cookie.
 		if method != http.MethodGet {
 			req.Header.Set("CSRFPreventionToken", csrf)
 		}

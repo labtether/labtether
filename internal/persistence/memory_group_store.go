@@ -12,14 +12,16 @@ import (
 
 // MemoryGroupStore is an in-memory GroupStore for unit tests.
 type MemoryGroupStore struct {
-	mu     sync.RWMutex
-	groups map[string]groups.Group
+	mu                 sync.RWMutex
+	groups             map[string]groups.Group
+	reliabilityHistory map[string][]ReliabilityRecord
 }
 
 // NewMemoryGroupStore returns an empty MemoryGroupStore.
 func NewMemoryGroupStore() *MemoryGroupStore {
 	return &MemoryGroupStore{
-		groups: make(map[string]groups.Group),
+		groups:             make(map[string]groups.Group),
+		reliabilityHistory: make(map[string][]ReliabilityRecord),
 	}
 }
 
@@ -43,6 +45,7 @@ func (m *MemoryGroupStore) CreateGroup(req groups.CreateRequest) (groups.Group, 
 		Latitude:      cloneFloatPtr(req.Latitude),
 		Longitude:     cloneFloatPtr(req.Longitude),
 		Metadata:      cloneMetadata(req.Metadata),
+		JumpChain:     cloneJSON(req.JumpChain),
 		CreatedAt:     now,
 		UpdatedAt:     now,
 	}
@@ -173,6 +176,9 @@ func (m *MemoryGroupStore) UpdateGroup(id string, req groups.UpdateRequest) (gro
 	if req.Metadata != nil {
 		g.Metadata = cloneMetadata(req.Metadata)
 	}
+	if req.JumpChain != nil {
+		g.JumpChain = cloneJSON(req.JumpChain)
+	}
 
 	g.UpdatedAt = now
 	m.groups[id] = g
@@ -201,6 +207,7 @@ func (m *MemoryGroupStore) DeleteGroup(id string) error {
 	}
 
 	delete(m.groups, id)
+	delete(m.reliabilityHistory, id)
 	return nil
 }
 
@@ -242,5 +249,13 @@ func cloneGroup(input groups.Group) groups.Group {
 	out.Latitude = cloneFloatPtr(input.Latitude)
 	out.Longitude = cloneFloatPtr(input.Longitude)
 	out.Metadata = cloneMetadata(input.Metadata)
+	out.JumpChain = cloneJSON(input.JumpChain)
 	return out
+}
+
+func cloneJSON(input []byte) []byte {
+	if input == nil {
+		return nil
+	}
+	return append([]byte(nil), input...)
 }

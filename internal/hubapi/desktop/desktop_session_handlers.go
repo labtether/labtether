@@ -4,13 +4,18 @@ import (
 	cryptorand "crypto/rand"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	neturl "net/url"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/apiv2"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/policy"
+	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
 	"github.com/labtether/labtether/internal/terminal"
 )
@@ -23,6 +28,11 @@ type DesktopSessionOptions struct {
 	Record         bool
 	VNCPassword    string
 	FallbackReason string
+	Direct         bool
+	DirectHost     string
+	DirectPort     int
+	DirectUsername string
+	DirectPassword string // #nosec G117 -- Ephemeral, in-memory-only RDP/SPICE session credential.
 }
 
 // DesktopSPICEProxyTarget holds SPICE proxy connection details for a session.
@@ -52,7 +62,7 @@ func NormalizeDesktopProtocol(raw string) string {
 
 const (
 	vncSessionPasswordLength = 8
-	vncPasswordAlphabet      = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+	vncPasswordAlphabet      = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789" // gitleaks:allow -- public character alphabet, not a credential
 )
 
 func generateSessionVNCPassword() (string, error) {
@@ -69,7 +79,7 @@ func generateSessionVNCPassword() (string, error) {
 
 func (d *Deps) SetDesktopSessionOptions(sessionID string, opts DesktopSessionOptions) {
 	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
+	if d == nil || d.DesktopSessionMu == nil || d.DesktopSessionOpts == nil || sessionID == "" {
 		return
 	}
 	d.DesktopSessionMu.Lock()
@@ -81,6 +91,9 @@ func (d *Deps) SetDesktopSessionOptions(sessionID string, opts DesktopSessionOpt
 }
 
 func (d *Deps) GetDesktopSessionOptions(sessionID string) DesktopSessionOptions {
+	if d == nil || d.DesktopSessionMu == nil || d.DesktopSessionOpts == nil {
+		return DesktopSessionOptions{}
+	}
 	d.DesktopSessionMu.RLock()
 	defer d.DesktopSessionMu.RUnlock()
 	if *d.DesktopSessionOpts == nil {
@@ -91,7 +104,7 @@ func (d *Deps) GetDesktopSessionOptions(sessionID string) DesktopSessionOptions 
 
 func (d *Deps) ClearDesktopSessionOptions(sessionID string) {
 	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
+	if d == nil || d.DesktopSessionMu == nil || d.DesktopSessionOpts == nil || sessionID == "" {
 		return
 	}
 	d.DesktopSessionMu.Lock()
@@ -188,36 +201,117 @@ func (d *Deps) HandleDesktopSessions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Target   string `json:"target"`
-		Quality  string `json:"quality,omitempty"`
-		Display  string `json:"display,omitempty"`
-		Protocol string `json:"protocol,omitempty"`
-		Record   bool   `json:"record,omitempty"`
+		Target       string `json:"target"`
+		Quality      string `json:"quality,omitempty"`
+		Display      string `json:"display,omitempty"`
+		Protocol     string `json:"protocol,omitempty"`
+		Record       bool   `json:"record,omitempty"`
+		DirectTarget *struct {
+			Host     string  `json:"host"`
+			Port     int     `json:"port"`
+			Username *string `json:"username,omitempty"`
+			Password *string `json:"password,omitempty"`
+		} `json:"direct_target,omitempty"`
 	}
 	if err := d.DecodeJSONBody(w, r, &req); err != nil {
 		servicehttp.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
+	protocolInput := strings.ToLower(strings.TrimSpace(req.Protocol))
+	if protocolInput != "" && protocolInput != "vnc" && protocolInput != "webrtc" && protocolInput != "rdp" && protocolInput != "spice" {
+		servicehttp.WriteError(w, http.StatusBadRequest, "invalid desktop protocol")
+		return
+	}
+	protocol := NormalizeDesktopProtocol(req.Protocol)
+	quality := strings.ToLower(strings.TrimSpace(req.Quality))
+	if quality == "" {
+		quality = "medium"
+	}
+	if quality != "low" && quality != "medium" && quality != "high" {
+		servicehttp.WriteError(w, http.StatusBadRequest, "invalid desktop quality")
+		return
+	}
+	display := strings.TrimSpace(req.Display)
+	if len(display) > 256 || strings.IndexFunc(display, unicode.IsControl) >= 0 {
+		servicehttp.WriteError(w, http.StatusBadRequest, "invalid desktop display")
+		return
+	}
 	target := strings.TrimSpace(req.Target)
-	if target == "" {
-		servicehttp.WriteError(w, http.StatusBadRequest, "target is required")
-		return
-	}
-	if err := d.ValidateMaxLen("target", target, d.MaxTargetLength); err != nil {
-		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	if d.AssetStore == nil {
-		servicehttp.WriteError(w, http.StatusServiceUnavailable, "asset inventory unavailable")
-		return
-	}
-	if _, ok, err := d.AssetStore.GetAsset(target); err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to resolve desktop target")
-		return
-	} else if !ok {
-		servicehttp.WriteError(w, http.StatusBadRequest, "target must reference a managed asset")
-		return
+	directOpts := DesktopSessionOptions{}
+	if req.DirectTarget != nil {
+		if shared.HasAssetRestriction(r.Context()) {
+			servicehttp.WriteError(w, http.StatusForbidden, "asset-restricted API keys cannot create direct desktop sessions")
+			return
+		}
+		if protocol == "webrtc" {
+			servicehttp.WriteError(w, http.StatusBadRequest, "direct WebRTC sessions require a managed agent")
+			return
+		}
+		if req.Record {
+			servicehttp.WriteError(w, http.StatusBadRequest, "direct desktop recording is not supported")
+			return
+		}
+		host, port, err := securityruntime.ValidateOutboundEndpoint(req.DirectTarget.Host, req.DirectTarget.Port)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusBadRequest, "invalid direct desktop target: "+err.Error())
+			return
+		}
+		username, password := "", ""
+		if req.DirectTarget.Username != nil {
+			username = strings.TrimSpace(*req.DirectTarget.Username)
+		}
+		if req.DirectTarget.Password != nil {
+			password = *req.DirectTarget.Password
+		}
+		if len(username) > 256 {
+			servicehttp.WriteError(w, http.StatusBadRequest, "direct desktop username too long (max 256 characters)")
+			return
+		}
+		if len(password) > 16*1024 {
+			servicehttp.WriteError(w, http.StatusBadRequest, "direct desktop password too long (max 16384 characters)")
+			return
+		}
+		if (req.DirectTarget.Username != nil || req.DirectTarget.Password != nil) && !apiv2.RequireScope(w, r, "credentials:use") {
+			return
+		}
+		target = net.JoinHostPort(host, fmt.Sprintf("%d", port))
+		directOpts = DesktopSessionOptions{
+			Direct:         true,
+			DirectHost:     host,
+			DirectPort:     port,
+			DirectUsername: username,
+			DirectPassword: password,
+		}
+	} else {
+		if target == "" {
+			servicehttp.WriteError(w, http.StatusBadRequest, "target is required")
+			return
+		}
+		if !d.requireTargetAccess(w, r, target) {
+			return
+		}
+		if !d.requireCredentialUseForTarget(w, r, target) {
+			return
+		}
+		if err := d.ValidateMaxLen("target", target, d.MaxTargetLength); err != nil {
+			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if d.AssetStore == nil {
+			servicehttp.WriteError(w, http.StatusServiceUnavailable, "asset inventory unavailable")
+			return
+		}
+		if _, ok, err := d.AssetStore.GetAsset(target); err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to resolve desktop target")
+			return
+		} else if !ok {
+			servicehttp.WriteError(w, http.StatusBadRequest, "target must reference a managed asset")
+			return
+		}
+		if !d.enforceAssetActionGuard(w, target) {
+			return
+		}
 	}
 
 	actorID := d.PrincipalActorID(r.Context())
@@ -242,26 +336,22 @@ func (d *Deps) HandleDesktopSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	quality := strings.ToLower(strings.TrimSpace(req.Quality))
-	if quality == "" {
-		quality = "medium"
-	}
-	if quality != "low" && quality != "medium" && quality != "high" {
-		quality = "medium"
-	}
-	d.SetDesktopSessionOptions(session.ID, DesktopSessionOptions{
-		Protocol: NormalizeDesktopProtocol(req.Protocol),
-		Quality:  quality,
-		Display:  strings.TrimSpace(req.Display),
-		Record:   req.Record,
-	})
-	go func(sessionID string) {
+	directOpts.Protocol = protocol
+	directOpts.Quality = quality
+	directOpts.Display = display
+	directOpts.Record = req.Record
+	d.SetDesktopSessionOptions(session.ID, directOpts)
+	go func(createdSession terminal.Session, direct bool) {
 		timer := time.NewTimer(15 * time.Minute)
 		defer timer.Stop()
 		<-timer.C
-		d.ClearDesktopSessionOptions(sessionID)
-		d.ClearDesktopSPICEProxyTarget(sessionID)
-	}(session.ID)
+		if direct {
+			_ = d.TerminateDesktopSession(createdSession)
+			return
+		}
+		d.ClearDesktopSessionOptions(createdSession.ID)
+		d.ClearDesktopSPICEProxyTarget(createdSession.ID)
+	}(session, directOpts.Direct)
 
 	servicehttp.WriteJSON(w, http.StatusCreated, session)
 }
@@ -298,6 +388,16 @@ func (d *Deps) HandleDesktopSessionActions(w http.ResponseWriter, r *http.Reques
 		servicehttp.WriteError(w, http.StatusForbidden, "session access denied")
 		return
 	}
+	opts := d.GetDesktopSessionOptions(session.ID)
+	if opts.Direct {
+		if !d.requireCredentialUseForDirectSession(w, r, opts) {
+			return
+		}
+	} else {
+		if !d.requireTargetAccess(w, r, session.Target) {
+			return
+		}
+	}
 
 	if len(parts) < 2 {
 		switch r.Method {
@@ -320,12 +420,25 @@ func (d *Deps) HandleDesktopSessionActions(w http.ResponseWriter, r *http.Reques
 	action := strings.TrimSpace(parts[1])
 	switch action {
 	case "stream-ticket":
+		if !opts.Direct && !d.requireCredentialUseForTarget(w, r, session.Target) {
+			return
+		}
 		d.HandleDesktopStreamTicket(w, r, session)
 	case "stream":
+		if !opts.Direct && !d.requireCredentialUseForTarget(w, r, session.Target) {
+			return
+		}
 		d.HandleDesktopStream(w, r, session)
 	case "audio":
+		if !opts.Direct && !d.requireCredentialUseForTarget(w, r, session.Target) {
+			return
+		}
 		d.HandleDesktopAudioStream(w, r, session)
 	case "spice-ticket":
+		if opts.Direct {
+			d.HandleDirectSPICETicket(w, r, session)
+			return
+		}
 		d.HandleDesktopSPICETicket(w, r, session)
 	default:
 		servicehttp.WriteError(w, http.StatusNotFound, "not found")

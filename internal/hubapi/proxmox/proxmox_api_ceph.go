@@ -17,6 +17,9 @@ import (
 //	POST /proxmox/ceph/osd/{node}/{id}/in  — mark OSD in
 //	POST /proxmox/ceph/osd/{node}/{id}/out — mark OSD out
 func (d *Deps) HandleProxmoxCeph(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobal(w, r, "Ceph operations") {
+		return
+	}
 	path := strings.TrimPrefix(r.URL.Path, "/proxmox/ceph/")
 	parts := strings.SplitN(path, "/", 5)
 	if len(parts) == 0 || parts[0] == "" {
@@ -96,6 +99,9 @@ func (d *Deps) HandleProxmoxCeph(w http.ResponseWriter, r *http.Request) {
 
 // handleProxmoxCephStatus handles GET /proxmox/ceph/status
 func (d *Deps) HandleProxmoxCephStatus(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobal(w, r, "Ceph status") {
+		return
+	}
 	if r.Method != http.MethodGet {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return

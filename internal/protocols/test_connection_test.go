@@ -6,7 +6,16 @@ import (
 	"testing"
 )
 
+func TestSSHRejectsMissingHostKeyCallback(t *testing.T) {
+	result := TestSSH(context.Background(), "192.0.2.10", 22, "operator", "password", "", nil)
+	if result.Success || result.Error != "SSH host key callback is required" {
+		t.Fatalf("expected fail-closed missing callback result, got %#v", result)
+	}
+}
+
 func TestRDPReportsGuacdReachableOnlyWhenDialSucceeds(t *testing.T) {
+	t.Setenv("LABTETHER_OUTBOUND_ALLOW_PRIVATE", "true")
+	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
 	targetListener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen target: %v", err)
@@ -36,6 +45,8 @@ func TestRDPReportsGuacdReachableOnlyWhenDialSucceeds(t *testing.T) {
 }
 
 func TestRDPFailsWhenGuacdDialFails(t *testing.T) {
+	t.Setenv("LABTETHER_OUTBOUND_ALLOW_PRIVATE", "true")
+	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
 	targetListener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen target: %v", err)

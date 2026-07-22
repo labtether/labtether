@@ -6,6 +6,14 @@ const (
 	// MetadataKeyNameOverride stores a user-managed display name that should not
 	// be replaced by heartbeat-reported names.
 	MetadataKeyNameOverride = "name_override"
+
+	// These fields form the agent device-identity trust-on-first-use anchor.
+	// Routine heartbeats are bearer-authenticated but do not carry a fresh
+	// device-key signature, so once populated these values must be immutable
+	// unless a separately verified enrollment flow explicitly rotates them.
+	MetadataKeyAgentDeviceFingerprint  = "agent_device_fingerprint"
+	MetadataKeyAgentDeviceKeyAlgorithm = "agent_device_key_alg"
+	MetadataKeyAgentIdentityVerifiedAt = "agent_identity_verified_at"
 )
 
 // Asset represents an inventory object tracked by LabTether.
@@ -39,6 +47,16 @@ type HeartbeatRequest struct {
 	Status   string            `json:"status,omitempty"`
 	Platform string            `json:"platform,omitempty"`
 	Metadata map[string]string `json:"metadata,omitempty"`
+
+	// AllowAgentIdentityRotation is internal-only and must be set exclusively by
+	// a flow that has separately verified possession of the replacement device
+	// private key. It is intentionally unavailable to JSON heartbeat clients.
+	AllowAgentIdentityRotation bool `json:"-"`
+
+	// AllowAgentIdentityTOFU is internal-only and is set by the persistence
+	// transaction after it validates an active, asset-bound agent token. Generic
+	// admin/API-key and owner-token heartbeats must leave it false.
+	AllowAgentIdentityTOFU bool `json:"-"`
 }
 
 // UpdateRequest applies partial updates to editable asset fields.

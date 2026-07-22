@@ -85,12 +85,13 @@ export function AgentSettingsEditorSection({
                   <Badge status={settingControlSourceStatus(setting.source)} size="sm" />
                   {setting.restart_required ? <span>Restart required</span> : null}
                   {setting.drift ? <span className="text-[var(--warn)]">Runtime drift detected</span> : null}
+				  {setting.sensitive && setting.configured ? <span>Secret configured</span> : null}
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-[var(--muted)]">
-                  <span>Default: {setting.default_value}</span>
-                  {setting.global_value ? <span>Global: {setting.global_value}</span> : null}
-                  {setting.override_value ? <span>Override: {setting.override_value}</span> : null}
-                  {setting.state_value ? <span>Reported: {setting.state_value}</span> : null}
+				  {!setting.sensitive ? <span>Default: {setting.default_value}</span> : null}
+				  {!setting.sensitive && setting.global_value ? <span>Global: {setting.global_value}</span> : null}
+				  {!setting.sensitive && setting.override_value ? <span>Override: {setting.override_value}</span> : null}
+				  {!setting.sensitive && setting.state_value ? <span>Reported: {setting.state_value}</span> : null}
                 </div>
               </div>
               <div className="w-full">

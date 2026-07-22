@@ -1,24 +1,118 @@
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   labtether-bootstrap:
-    image: __POSTGRES_IMAGE__
+    image: __LABTETHER_IMAGE__
+    user: "0:0"
     restart: "no"
+    network_mode: none
+    logging: *default-logging
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
     entrypoint:
       - /bin/sh
       - -ec
       - |
-        umask 022
-        mkdir -p /bootstrap/postgres
-        if [ ! -s /bootstrap/postgres/password ]; then
-          dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '\n' | tr '+/' '-_' > /bootstrap/postgres/password
-          printf '\n' >> /bootstrap/postgres/password
-          chmod 0444 /bootstrap/postgres/password
+        umask 077
+        validate_secret_file() {
+          secret_path="$$1"
+          expected_owner="$$2"
+          expected_mode="$$3"
+          if [ -L "$$secret_path" ] || [ ! -f "$$secret_path" ]; then
+            echo "bootstrap: refusing unsafe secret file: $$secret_path" >&2
+            exit 1
+          fi
+          actual_owner="$$(stat -c '%u:%g' "$$secret_path")"
+          actual_mode="$$(stat -c '%a' "$$secret_path")"
+          actual_links="$$(stat -c '%h' "$$secret_path")"
+          actual_size="$$(wc -c < "$$secret_path" | tr -d '[:space:]')"
+          secret_value="$$(cat "$$secret_path")"
+          if [ "$$actual_owner" != "$$expected_owner" ] || [ "$$actual_mode" != "$$expected_mode" ] || [ "$$actual_links" != 1 ]; then
+            echo "bootstrap: refusing secret with unsafe ownership, mode, or link count: $$secret_path" >&2
+            exit 1
+          fi
+          if { [ "$$actual_size" -ne 44 ] && [ "$$actual_size" -ne 45 ]; } || [ "$${#secret_value}" -ne 44 ] || ! printf '%s' "$$secret_value" | LC_ALL=C grep -Eq '^[A-Za-z0-9_-]{43}=$'; then
+            echo "bootstrap: refusing malformed secret file: $$secret_path" >&2
+            exit 1
+          fi
+        }
+        create_secret_file() {
+          secret_path="$$1"
+          secret_owner="$$2"
+          secret_mode="$$3"
+          secret_dir="$${secret_path%/*}"
+          secret_tmp="$$(mktemp "$$secret_dir/.labtether-secret.XXXXXX")"
+          trap 'rm -f "$$secret_tmp"' EXIT HUP INT TERM
+          dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '\n' | tr '+/' '-_' > "$$secret_tmp"
+          chmod "$$secret_mode" "$$secret_tmp"
+          chown "$$secret_owner" "$$secret_tmp"
+          if [ -e "$$secret_path" ] || [ -L "$$secret_path" ]; then
+            echo "bootstrap: secret destination appeared during initialization: $$secret_path" >&2
+            exit 1
+          fi
+          mv "$$secret_tmp" "$$secret_path"
+          trap - EXIT HUP INT TERM
+        }
+        for directory in /bootstrap/postgres /bootstrap/auth; do
+          if [ -L "$$directory" ] || { [ -e "$$directory" ] && [ ! -d "$$directory" ]; }; then
+            echo "bootstrap: refusing unsafe secret directory: $$directory" >&2
+            exit 1
+          fi
+          mkdir -p "$$directory"
+        done
+        chown 0:0 /bootstrap/postgres
+        chmod 0755 /bootstrap/postgres
+        chown 65532:65532 /bootstrap/auth
+        chmod 0700 /bootstrap/auth
+        if [ ! -e /bootstrap/postgres/password ] && [ ! -L /bootstrap/postgres/password ]; then
+          create_secret_file /bootstrap/postgres/password 0:0 0444
         fi
+        validate_secret_file /bootstrap/postgres/password 0:0 444
+        if [ ! -e /bootstrap/auth/setup-token ] && [ ! -L /bootstrap/auth/setup-token ]; then
+          create_secret_file /bootstrap/auth/setup-token 65532:65532 0400
+        fi
+        validate_secret_file /bootstrap/auth/setup-token 65532:65532 400
     volumes:
       - labtether-bootstrap:/bootstrap
+      - labtether-auth-bootstrap:/bootstrap/auth
+    deploy:
+      resources:
+        limits:
+          pids: 64
 
   postgres:
     image: __POSTGRES_IMAGE__
     restart: unless-stopped
+    logging: *default-logging
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,mode=1777
+      - /var/run/postgresql:rw,noexec,nosuid,nodev,uid=70,gid=70,mode=3777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    networks:
+      - data-plane
     depends_on:
       labtether-bootstrap:
         condition: service_completed_successfully
@@ -28,18 +122,39 @@ services:
       POSTGRES_PASSWORD_FILE: /bootstrap/postgres/password
     volumes:
       - labtether-bootstrap:/bootstrap:ro
-      - postgres-data:/var/lib/postgresql/data
+      # PostgreSQL 18 stores clusters in major-versioned subdirectories and
+      # rejects the legacy /var/lib/postgresql/data mount.
+      - postgres-data:/var/lib/postgresql
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+          pids: 256
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-labtether} -d ${POSTGRES_DB:-labtether}"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 5s
       timeout: 5s
       retries: 5
       start_period: 10s
 
+  # TLS: Built-in auto-provisioned certs renew automatically.
+  # For external certs, monitor expiration and renew before expiry.
+  # Check cert status: curl -k https://localhost:8443/api/v2/tls/info
   labtether:
     image: __LABTETHER_IMAGE__
-    command: ["/usr/local/bin/labtether"]
+    # Auto-generated TLS certificates include the container hostname as a SAN,
+    # giving the console a stable, verifiable internal HTTPS identity.
+    hostname: labtether
     restart: unless-stopped
+    # Reap helper processes spawned by container health probes. Without an init
+    # process, BusyBox wget's TLS helper can become an orphaned zombie under the
+    # Go server at PID 1 until the container exhausts its PID limit.
+    init: true
+    logging: *default-logging
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,uid=65532,gid=65532,mode=0700
     depends_on:
       labtether-bootstrap:
         condition: service_completed_successfully
@@ -54,27 +169,107 @@ services:
       LABTETHER_ADMIN_PASSWORD: ${LABTETHER_ADMIN_PASSWORD:-}
       LABTETHER_MANAGED_POSTGRES: "true"
       LABTETHER_TLS_MODE: ${LABTETHER_TLS_MODE:-auto}
+      LABTETHER_EXTERNAL_URL: ${LABTETHER_EXTERNAL_URL:-}
+      LABTETHER_CORS_ALLOWED_ORIGINS: ${LABTETHER_CORS_ALLOWED_ORIGINS:-}
+      # Trust only the bundled console service by default. Operators adding a
+      # different reverse proxy must name it or provide a narrow source CIDR.
+      LABTETHER_TRUST_PROXY_HOSTS: ${LABTETHER_TRUST_PROXY_HOSTS:-web-console}
+      LABTETHER_TRUST_PROXY_CIDRS: ${LABTETHER_TRUST_PROXY_CIDRS:-}
+      LABTETHER_AGENT_MANIFEST_REFRESH: ${LABTETHER_AGENT_MANIFEST_REFRESH:-false}
+      LABTETHER_ENROLLMENT_TOKEN_MAX_USES: ${LABTETHER_ENROLLMENT_TOKEN_MAX_USES:-256}
+      LABTETHER_MAX_ENROLLED_AGENTS: ${LABTETHER_MAX_ENROLLED_AGENTS:-1024}
+      LABTETHER_MAX_AGENT_CONNECTIONS: ${LABTETHER_MAX_AGENT_CONNECTIONS:-2048}
+      LABTETHER_MAX_AGENT_CONNECTIONS_PER_SOURCE: ${LABTETHER_MAX_AGENT_CONNECTIONS_PER_SOURCE:-256}
+      LABTETHER_AGENT_WS_CREDENTIAL_LEASE: ${LABTETHER_AGENT_WS_CREDENTIAL_LEASE:-2s}
+      LABTETHER_AGENT_WS_MESSAGES_PER_SECOND: ${LABTETHER_AGENT_WS_MESSAGES_PER_SECOND:-256}
+      LABTETHER_AGENT_WS_MESSAGE_BURST: ${LABTETHER_AGENT_WS_MESSAGE_BURST:-512}
+      LABTETHER_AGENT_WS_BYTES_PER_SECOND: ${LABTETHER_AGENT_WS_BYTES_PER_SECOND:-16777216}
+      LABTETHER_AGENT_WS_BYTE_BURST: ${LABTETHER_AGENT_WS_BYTE_BURST:-67108864}
+      LABTETHER_ALLOW_LEGACY_SHARED_AGENT_AUTH: ${LABTETHER_ALLOW_LEGACY_SHARED_AGENT_AUTH:-false}
+      # Homelab integrations intentionally target RFC1918/ULA hosts. Keep
+      # loopback and link-local denied so connectors cannot pivot into this
+      # container or cloud metadata services.
+      LABTETHER_OUTBOUND_ALLOW_PRIVATE: ${LABTETHER_OUTBOUND_ALLOW_PRIVATE:-true}
+      LABTETHER_OUTBOUND_ALLOW_LOOPBACK: ${LABTETHER_OUTBOUND_ALLOW_LOOPBACK:-false}
+      LABTETHER_OUTBOUND_ALLOW_LINK_LOCAL: ${LABTETHER_OUTBOUND_ALLOW_LINK_LOCAL:-false}
+      # Use the verified container-local TLS route for the hub's own status
+      # probe. This avoids weakening the global insecure-transport policy just
+      # to health-check the current process.
+      LABTETHER_INTERNAL_API_BASE_URL: ${LABTETHER_INTERNAL_API_BASE_URL:-}
+      # Preserve the system CA roots used by public HTTPS connectors while
+      # also trusting the private CA published into the shared /ca volume.
+      SSL_CERT_DIR: /etc/ssl/certs:/ca
       LABTETHER_DATA_DIR: /data
       LABTETHER_API_TOKEN_FILE: /run/labtether/api-token
+      LABTETHER_SETUP_TOKEN_FILE: /bootstrap/auth/setup-token
       GUACD_HOST: ${GUACD_HOST:-guacd}
       GUACD_PORT: ${GUACD_PORT:-4822}
     entrypoint:
       - /bin/sh
       - -ec
       - |
+        for identifier in "$${POSTGRES_USER}" "$${POSTGRES_DB}"; do
+          if ! printf '%s' "$$identifier" | LC_ALL=C grep -Eq '^[A-Za-z_][A-Za-z0-9_]{0,62}$'; then
+            echo "labtether: refusing an unsafe PostgreSQL identifier" >&2
+            exit 1
+          fi
+        done
         export POSTGRES_PASSWORD="$$(cat /bootstrap/postgres/password)"
+        if [ "$${#POSTGRES_PASSWORD}" -ne 44 ] || ! printf '%s' "$${POSTGRES_PASSWORD}" | LC_ALL=C grep -Eq '^[A-Za-z0-9_-]{43}=$'; then
+          echo "labtether: refusing an invalid managed PostgreSQL password" >&2
+          exit 1
+        fi
         export DATABASE_URL="postgres://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@postgres:5432/$${POSTGRES_DB}?sslmode=disable"
-        exec /service
+        if [ -n "$${LABTETHER_INTERNAL_API_BASE_URL:-}" ]; then
+          export LABTETHER_API_BASE_URL="$${LABTETHER_INTERNAL_API_BASE_URL}"
+        elif [ "$${LABTETHER_TLS_MODE:-auto}" = disabled ]; then
+          export LABTETHER_API_BASE_URL="http://labtether:8080"
+        else
+          export LABTETHER_API_BASE_URL="https://labtether:8443"
+        fi
+        exec /usr/local/bin/labtether
+    user: "65532:65532"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      data-plane: {}
+      console-plane: {}
+      desktop-plane: {}
+      egress:
+        gw_priority: 1
     ports:
       - "${LABTETHER_HTTP_BIND:-127.0.0.1}:8080:8080"
       - "${LABTETHER_HTTPS_BIND:-127.0.0.1}:8443:8443"
     volumes:
       - labtether-bootstrap:/bootstrap:ro
+      - labtether-auth-bootstrap:/bootstrap/auth
       - labtether-data:/data
       - labtether-ca:/ca
       - labtether-service-auth:/run/labtether
+      - labtether-agent-cache:/data/agents
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+          pids: 512
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/healthz"]
+      # Use the Node runtime already present for the bundled console. This
+      # avoids BusyBox wget's orphan-prone TLS helper and verifies both the hub
+      # and its managed PostgreSQL dependency. Certificate verification is
+      # skipped only for this container-local probe of the auto-generated cert.
+      test:
+        - CMD
+        - /usr/bin/node
+        - -e
+        - >-
+          const secure=process.env.LABTETHER_TLS_MODE!=='disabled';
+          const transport=require(secure?'node:https':'node:http');
+          const req=transport.get({hostname:'127.0.0.1',port:secure?8443:8080,path:'/healthz',rejectUnauthorized:false,timeout:3000},res=>{let body='';res.setEncoding('utf8');res.on('data',chunk=>{body+=chunk});res.on('end',()=>{try{const data=JSON.parse(body);process.exit(res.statusCode===200&&data.status==='ok'&&data.postgres==='ok'?0:1)}catch{process.exit(1)}})});
+          req.on('timeout',()=>req.destroy(new Error('timeout')));
+          req.on('error',()=>process.exit(1));
       interval: 10s
       timeout: 5s
       retries: 3
@@ -82,30 +277,154 @@ services:
 
   web-console:
     image: __LABTETHER_IMAGE__
-    command: ["node", "/app/console/server.js"]
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        if [ -n "$${LABTETHER_INTERNAL_API_BASE_URL:-}" ]; then
+          export LABTETHER_API_BASE_URL="$${LABTETHER_INTERNAL_API_BASE_URL}"
+        elif [ "$${LABTETHER_TLS_MODE:-auto}" = disabled ]; then
+          export LABTETHER_API_BASE_URL="http://labtether:8080"
+          export NEXT_PUBLIC_HUB_API_PORT="$${NEXT_PUBLIC_HUB_API_PORT:-8080}"
+          unset NODE_EXTRA_CA_CERTS
+        else
+          export LABTETHER_API_BASE_URL="https://labtether:8443"
+          export NEXT_PUBLIC_HUB_API_PORT="$${NEXT_PUBLIC_HUB_API_PORT:-8443}"
+        fi
+        exec node /app/console/scripts/console-runtime.mjs /app/console/server.js
     restart: unless-stopped
+    logging: *default-logging
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,uid=65532,gid=65532,mode=0700
+      - /app/console/.next/cache:rw,noexec,nosuid,nodev,uid=65532,gid=65532,mode=0700
     depends_on:
       labtether:
         condition: service_healthy
     environment:
       PORT: 3000
-      LABTETHER_API_BASE_URL: http://labtether:8080
-      NEXT_PUBLIC_HUB_API_PORT: "8080"
+      HOSTNAME: 0.0.0.0
+      NEXT_TELEMETRY_DISABLED: "1"
+      # Default to the verified built-in TLS identity. External/private PKI
+      # deployments can override the URL, TCP connection host, and CA file
+      # independently without disabling certificate verification.
+      LABTETHER_TLS_MODE: ${LABTETHER_TLS_MODE:-auto}
+      LABTETHER_INTERNAL_API_BASE_URL: ${LABTETHER_INTERNAL_API_BASE_URL:-}
+      LABTETHER_WS_PROXY_CONNECT_HOST: ${LABTETHER_INTERNAL_CONNECT_HOST:-labtether}
+      NEXT_PUBLIC_HUB_API_PORT: ${NEXT_PUBLIC_HUB_API_PORT:-}
       LABTETHER_API_TOKEN_FILE: /run/labtether/api-token
-    ports:
-      - "${LABTETHER_CONSOLE_BIND:-127.0.0.1}:3000:3000"
+      LABTETHER_CSRF_ALLOWED_ORIGINS: ${LABTETHER_CORS_ALLOWED_ORIGINS:-}
+      LABTETHER_TRUST_PROXY_HOPS: ${LABTETHER_TRUST_PROXY_HOPS:-0}
+      NODE_EXTRA_CA_CERTS: ${LABTETHER_INTERNAL_CA_FILE-/ca/ca.crt}
     volumes:
       - labtether-ca:/ca:ro
       - labtether-service-auth:/run/labtether:ro
+    user: "65532:65532"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - console-plane
+    healthcheck:
+      test: ["CMD", "node", "-e", "const s=require('node:net').createConnection({host:'127.0.0.1',port:3000});s.setTimeout(3000);s.once('connect',()=>{s.destroy();process.exit(0)});s.once('timeout',()=>{s.destroy();process.exit(1)});s.once('error',()=>process.exit(1));"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+          pids: 256
+
+  # Docker Desktop/Colima cannot reliably publish a port from a container that
+  # is attached only to an internal network. Keep all service credentials on
+  # web-console and publish through this fixed-target, no-secret TCP sidecar.
+  console-ingress:
+    image: __LABTETHER_IMAGE__
+    command:
+      - /usr/bin/env
+      - -i
+      - HOME=/tmp
+      - LABTETHER_CONSOLE_INGRESS_MAX_CONNECTIONS=${LABTETHER_CONSOLE_INGRESS_MAX_CONNECTIONS:-512}
+      - /usr/bin/node
+      - /app/console/scripts/console-ingress.mjs
+    restart: unless-stopped
+    logging: *default-logging
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,uid=65532,gid=65532,mode=0700
+    depends_on:
+      web-console:
+        condition: service_healthy
+    ports:
+      - "${LABTETHER_CONSOLE_BIND:-127.0.0.1}:3000:3000"
+    user: "65532:65532"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      console-plane: {}
+      ingress-plane:
+        gw_priority: 1
+    healthcheck:
+      test: ["CMD", "node", "-e", "const s=require('node:net').createConnection({host:'127.0.0.1',port:3000});s.setTimeout(3000);s.once('connect',()=>{s.destroy();process.exit(0)});s.once('timeout',()=>{s.destroy();process.exit(1)});s.once('error',()=>process.exit(1));"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+          pids: 64
 
   guacd:
     profiles: ["remote-desktop"]
     image: __GUACD_IMAGE__
     restart: unless-stopped
+    logging: *default-logging
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,mode=1777
+      - /home/guacd:rw,noexec,nosuid,nodev,uid=1000,gid=1000,mode=0700
+    user: "1000:1000"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # guacd opens the RDP/VNC/SSH connection itself, so it needs egress while
+    # remaining isolated from the database and console networks.
+    networks:
+      desktop-plane: {}
+      egress:
+        gw_priority: 1
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+          pids: 256
 
 volumes:
   labtether-bootstrap:
+  labtether-auth-bootstrap:
   postgres-data:
   labtether-data:
   labtether-ca:
   labtether-service-auth:
+  labtether-agent-cache:
+
+networks:
+  data-plane:
+    internal: true
+  console-plane:
+    internal: true
+  desktop-plane:
+    internal: true
+  ingress-plane:
+  egress:

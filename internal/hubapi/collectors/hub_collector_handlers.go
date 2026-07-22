@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/hubcollector"
 	"github.com/labtether/labtether/internal/servicehttp"
@@ -29,7 +30,16 @@ func (d *Deps) HandleHubCollectors(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list hub collectors")
 			return
 		}
-		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"collectors": collectors})
+		if shared.HasAssetRestriction(r.Context()) {
+			filtered := make([]hubcollector.Collector, 0, len(collectors))
+			for _, collector := range collectors {
+				if apiv2.AssetCheckContext(r.Context(), collector.AssetID) {
+					filtered = append(filtered, collector)
+				}
+			}
+			collectors = filtered
+		}
+		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"collectors": redactHubCollectors(collectors)})
 	case http.MethodPost:
 		if !d.EnforceRateLimit(w, r, "hubcollector.create", 120, time.Minute) {
 			return
@@ -44,6 +54,9 @@ func (d *Deps) HandleHubCollectors(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusBadRequest, "asset_id is required")
 			return
 		}
+		if !apiv2.RequireAssetAccess(w, r, req.AssetID) {
+			return
+		}
 		if normalized := hubcollector.NormalizeCollectorType(req.CollectorType); normalized == "" {
 			servicehttp.WriteError(w, http.StatusBadRequest, "collector_type must be one of: ssh, winrm, api, proxmox, pbs, truenas, portainer, docker, homeassistant")
 			return
@@ -52,6 +65,9 @@ func (d *Deps) HandleHubCollectors(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := hubcollector.ValidateCreateIntervalSeconds(req.IntervalSeconds); err != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, "interval_seconds is out of range")
+			return
+		}
+		if !d.authorizeCollectorConfig(w, r, req.Config) {
 			return
 		}
 		collector, err := d.HubCollectorStore.CreateHubCollector(req)
@@ -63,7 +79,7 @@ func (d *Deps) HandleHubCollectors(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create hub collector")
 			return
 		}
-		servicehttp.WriteJSON(w, http.StatusCreated, map[string]any{"collector": collector})
+		servicehttp.WriteJSON(w, http.StatusCreated, map[string]any{"collector": redactHubCollector(collector)})
 	default:
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
@@ -86,6 +102,18 @@ func (d *Deps) HandleHubCollectorActions(w http.ResponseWriter, r *http.Request)
 		servicehttp.WriteError(w, http.StatusNotFound, "hub collector path not found")
 		return
 	}
+	collectorScope, ok, err := d.HubCollectorStore.GetHubCollector(collectorID)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load hub collector")
+		return
+	}
+	if !ok {
+		servicehttp.WriteError(w, http.StatusNotFound, "hub collector not found")
+		return
+	}
+	if !apiv2.RequireAssetAccess(w, r, collectorScope.AssetID) {
+		return
+	}
 
 	if len(parts) == 2 && parts[1] == "run" {
 		if r.Method != http.MethodPost {
@@ -95,15 +123,18 @@ func (d *Deps) HandleHubCollectorActions(w http.ResponseWriter, r *http.Request)
 		if !d.EnforceRateLimit(w, r, "hubcollector.run", 240, time.Minute) {
 			return
 		}
-
-		if err := d.RunHubCollectorNow(collectorID); err != nil {
-			if err == hubcollector.ErrCollectorNotFound {
-				servicehttp.WriteError(w, http.StatusNotFound, "hub collector not found")
-				return
-			}
-			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to start collector run")
+		credentialID, err := collectorCredentialID(collectorScope.Config)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "collector credential binding is invalid")
 			return
 		}
+		if credentialID != "" {
+			if _, ok := d.loadAuthorizedCredentialProfile(w, r, credentialID); !ok {
+				return
+			}
+		}
+
+		d.runLoadedHubCollectorNow(collectorScope)
 
 		servicehttp.WriteJSON(w, http.StatusAccepted, map[string]any{
 			"status":       "started",
@@ -121,16 +152,7 @@ func (d *Deps) HandleHubCollectorActions(w http.ResponseWriter, r *http.Request)
 	// GET/PATCH/DELETE /hub-collectors/{id}
 	switch r.Method {
 	case http.MethodGet:
-		collector, ok, err := d.HubCollectorStore.GetHubCollector(collectorID)
-		if err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load hub collector")
-			return
-		}
-		if !ok {
-			servicehttp.WriteError(w, http.StatusNotFound, "hub collector not found")
-			return
-		}
-		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"collector": collector})
+		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"collector": redactHubCollector(collectorScope)})
 	case http.MethodPatch, http.MethodPut:
 		if !d.EnforceRateLimit(w, r, "hubcollector.update", 180, time.Minute) {
 			return
@@ -143,6 +165,21 @@ func (d *Deps) HandleHubCollectorActions(w http.ResponseWriter, r *http.Request)
 		if req.IntervalSeconds != nil && hubcollector.ValidateIntervalSeconds(*req.IntervalSeconds) != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, "interval_seconds is out of range")
 			return
+		}
+		if req.Config != nil && !d.authorizeCollectorConfig(w, r, *req.Config) {
+			return
+		}
+		if collectorUpdateInvokesExistingCredential(collectorScope, req) {
+			credentialID, err := collectorCredentialID(collectorScope.Config)
+			if err != nil {
+				servicehttp.WriteError(w, http.StatusInternalServerError, "collector credential binding is invalid")
+				return
+			}
+			if credentialID != "" {
+				if _, ok := d.loadAuthorizedCredentialProfile(w, r, credentialID); !ok {
+					return
+				}
+			}
 		}
 		updated, err := d.HubCollectorStore.UpdateHubCollector(collectorID, req)
 		if err != nil {
@@ -157,7 +194,7 @@ func (d *Deps) HandleHubCollectorActions(w http.ResponseWriter, r *http.Request)
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update hub collector")
 			return
 		}
-		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"collector": updated})
+		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"collector": redactHubCollector(updated)})
 	case http.MethodDelete:
 		if err := d.HubCollectorStore.DeleteHubCollector(collectorID); err != nil {
 			if err == hubcollector.ErrCollectorNotFound {
@@ -182,8 +219,16 @@ func (d *Deps) RunHubCollectorNow(collectorID string) error {
 		return hubcollector.ErrCollectorNotFound
 	}
 
-	d.UpdateCollectorStatus(collector.ID, "running", "")
-	d.startCollectorRun(context.Background(), collector, true)
+	d.runLoadedHubCollectorNow(collector)
 
 	return nil
+}
+
+func (d *Deps) runLoadedHubCollectorNow(collector hubcollector.Collector) {
+	d.UpdateCollectorStatus(collector.ID, "running", "")
+	runCtx := d.CollectorRuntimeContext
+	if runCtx == nil {
+		runCtx = context.Background()
+	}
+	d.startCollectorRun(runCtx, collector, true)
 }

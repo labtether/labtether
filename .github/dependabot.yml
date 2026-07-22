@@ -7,6 +7,8 @@ updates:
       day: "monday"
       time: "09:00"
       timezone: "America/New_York"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 10
     labels:
       - "dependencies"
@@ -26,6 +28,8 @@ updates:
       day: "monday"
       time: "09:15"
       timezone: "America/New_York"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 10
     labels:
       - "dependencies"
@@ -45,9 +49,29 @@ updates:
       day: "monday"
       time: "09:30"
       timezone: "America/New_York"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
       - "ci"
     commit-message:
       prefix: "deps(actions)"
+
+  - package-ecosystem: "docker"
+    directories:
+      - "/build"
+      - "/web/console"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:45"
+      timezone: "America/New_York"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "containers"
+    commit-message:
+      prefix: "deps(docker)"

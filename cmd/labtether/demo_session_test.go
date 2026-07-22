@@ -54,6 +54,23 @@ func TestHandleDemoSession_DisabledWhenNotDemoMode(t *testing.T) {
 	}
 }
 
+func TestHandleDemoSession_HeadReportsDemoModeWithoutCreatingSession(t *testing.T) {
+	s := newTestAPIServer(t)
+	s.demoMode = true
+	s.demoRateLimiter = newDemoSessionRateLimiter(10, time.Minute)
+
+	req := httptest.NewRequest(http.MethodHead, "/api/demo/session", nil)
+	rec := httptest.NewRecorder()
+	s.handleDemoSession(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 when demo mode is enabled, got %d", rec.Code)
+	}
+	if len(rec.Result().Cookies()) != 0 {
+		t.Fatal("HEAD demo probe must not create a session cookie")
+	}
+}
+
 func TestHandleDemoSession_RateLimitExceeded(t *testing.T) {
 	s := newTestAPIServer(t)
 	s.demoMode = true

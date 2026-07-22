@@ -23,6 +23,8 @@ import { DashboardProblemWorkloadsBanner } from "./DashboardProblemWorkloadsBann
 import { DashboardFirstRunChecklistCard } from "./DashboardFirstRunChecklistCard";
 import { useDashboardFleetFocus } from "./useDashboardFleetFocus";
 import { fleetAvg, fmtPct, timeAgo, topMetricLabel, topMetricValue } from "./dashboardPageUtils";
+import { useAuth } from "../../contexts/AuthContext";
+import { hasAdminRole, hasWriteRole } from "../../lib/roles";
 
 const TopologyHero = dynamic(
   () => import("../../components/TopologyHero").then((module) => module.TopologyHero),
@@ -44,6 +46,9 @@ type HotspotTab = "cpu" | "memory" | "disk";
 
 export default function DashboardPage() {
   const t = useTranslations('dashboard');
+  const { user } = useAuth();
+  const canWrite = hasWriteRole(user?.role);
+  const canAdmin = hasAdminRole(user?.role);
   const status = useFastStatus();
   const slowStatus = useSlowStatus();
   const { loading, error } = useStatusControls();
@@ -183,9 +188,11 @@ export default function DashboardPage() {
           >
             {t('export')}
           </Button>
-            <Button variant="primary" size="sm" onClick={() => setAddDeviceOpen(true)}>
-              {t('addDevice')}
-            </Button>
+            {canWrite ? (
+              <Button variant="primary" size="sm" onClick={() => setAddDeviceOpen(true)}>
+                {t('addDevice')}
+              </Button>
+            ) : null}
           </div>
         }
       />
@@ -214,6 +221,8 @@ export default function DashboardPage() {
         connectorCount={connectorCount}
         recentCommandCount={recentCommandCount}
         recentLogCount={recentLogCount}
+        canWrite={canWrite}
+        canAdmin={canAdmin}
         onAddDevice={() => setAddDeviceOpen(true)}
       />
 
@@ -375,10 +384,12 @@ export default function DashboardPage() {
       </Card>
 
       {/* Add Device Modal */}
-      <AddDeviceModal
-        open={addDeviceOpen}
-        onClose={() => setAddDeviceOpen(false)}
-      />
+      {canWrite ? (
+        <AddDeviceModal
+          open={addDeviceOpen}
+          onClose={() => setAddDeviceOpen(false)}
+        />
+      ) : null}
       </div>
     </RoutePerfBoundary>
   );

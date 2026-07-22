@@ -19,6 +19,9 @@ func (d *Deps) HandleGroupProfiles(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "group profile store unavailable")
 		return
 	}
+	if denyAssetRestrictedGlobal(w, r, "group profiles") {
+		return
+	}
 
 	switch r.Method {
 	case http.MethodGet:
@@ -26,6 +29,9 @@ func (d *Deps) HandleGroupProfiles(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list group profiles")
 			return
+		}
+		for i := range profiles {
+			profiles[i] = d.sanitizeLegacyGroupProfile(profiles[i])
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"profiles": profiles})
 	case http.MethodPost:
@@ -47,6 +53,12 @@ func (d *Deps) HandleGroupProfiles(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusBadRequest, "config is required")
 			return
 		}
+		normalizedConfig, err := groupprofiles.NormalizeConfig(req.Config)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		req.Config = normalizedConfig
 		profile, err := d.GroupProfileStore.CreateGroupProfile(req)
 		if err != nil {
 			if strings.Contains(strings.ToLower(err.Error()), "duplicate") ||
@@ -71,6 +83,9 @@ func (d *Deps) HandleGroupProfileActions(w http.ResponseWriter, r *http.Request)
 	}
 	if d.GroupProfileStore == nil {
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "group profile store unavailable")
+		return
+	}
+	if denyAssetRestrictedGlobal(w, r, "group profiles") {
 		return
 	}
 
@@ -156,7 +171,7 @@ func (d *Deps) HandleGroupProfileActions(w http.ResponseWriter, r *http.Request)
 			servicehttp.WriteError(w, http.StatusNotFound, "group profile not found")
 			return
 		}
-		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"profile": profile})
+		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"profile": d.sanitizeLegacyGroupProfile(profile)})
 	case http.MethodPatch, http.MethodPut:
 		if !d.EnforceRateLimit(w, r, "groupprofiles.update", 180, time.Minute) {
 			return
@@ -174,6 +189,14 @@ func (d *Deps) HandleGroupProfileActions(w http.ResponseWriter, r *http.Request)
 			}
 			req.Name = &trimmed
 		}
+		if req.Config != nil {
+			normalizedConfig, err := groupprofiles.NormalizeConfig(*req.Config)
+			if err != nil {
+				servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			req.Config = &normalizedConfig
+		}
 		updated, err := d.GroupProfileStore.UpdateGroupProfile(profileID, req)
 		if err != nil {
 			if err == groupprofiles.ErrProfileNotFound {
@@ -183,7 +206,7 @@ func (d *Deps) HandleGroupProfileActions(w http.ResponseWriter, r *http.Request)
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update group profile")
 			return
 		}
-		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"profile": updated})
+		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"profile": d.sanitizeLegacyGroupProfile(updated)})
 	case http.MethodDelete:
 		if err := d.GroupProfileStore.DeleteGroupProfile(profileID); err != nil {
 			if err == groupprofiles.ErrProfileNotFound {
@@ -197,4 +220,15 @@ func (d *Deps) HandleGroupProfileActions(w http.ResponseWriter, r *http.Request)
 	default:
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+func (d *Deps) sanitizeLegacyGroupProfile(profile groupprofiles.Profile) groupprofiles.Profile {
+	safe := groupprofiles.SanitizeLegacyConfig(profile.Config)
+	if len(safe) != len(profile.Config) && d.GroupProfileStore != nil {
+		if updated, err := d.GroupProfileStore.UpdateGroupProfile(profile.ID, groupprofiles.UpdateProfileRequest{Config: &safe}); err == nil {
+			profile = updated
+		}
+	}
+	profile.Config = safe
+	return profile
 }

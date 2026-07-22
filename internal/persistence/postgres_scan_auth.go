@@ -12,6 +12,7 @@ type userScanner interface {
 
 func scanUser(row userScanner) (auth.User, error) {
 	user := auth.User{}
+	oidcIssuer := sql.NullString{}
 	oidcSubject := sql.NullString{}
 	totpSecret := sql.NullString{}
 	totpVerifiedAt := sql.NullTime{}
@@ -21,6 +22,7 @@ func scanUser(row userScanner) (auth.User, error) {
 		&user.Username,
 		&user.Role,
 		&user.AuthProvider,
+		&oidcIssuer,
 		&oidcSubject,
 		&user.PasswordHash,
 		&totpSecret,
@@ -30,6 +32,9 @@ func scanUser(row userScanner) (auth.User, error) {
 		&user.UpdatedAt,
 	); err != nil {
 		return auth.User{}, err
+	}
+	if oidcIssuer.Valid {
+		user.OIDCIssuer = oidcIssuer.String
 	}
 	if oidcSubject.Valid {
 		user.OIDCSubject = oidcSubject.String

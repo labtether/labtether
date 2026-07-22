@@ -1,6 +1,7 @@
 package resources
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -38,5 +39,25 @@ func TestWriteFileUploadRelayErrorMapsMaxBytesToPayloadTooLarge(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "file exceeds 512 MB limit") {
 		t.Fatalf("expected upload limit message, got %s", rec.Body.String())
+	}
+}
+
+func TestFileDownloadLimitStopsBeforeWritingOversizedChunk(t *testing.T) {
+	var dst strings.Builder
+	written := int64(3)
+	err := writeFileDownloadChunk(&dst, []byte("four"), 3, &written, 6)
+	if !errors.Is(err, errFileDownloadTooLarge) {
+		t.Fatalf("expected download size error, got %v", err)
+	}
+	if written != 3 || dst.Len() != 0 {
+		t.Fatalf("oversized chunk was partially written: written=%d body=%q", written, dst.String())
+	}
+}
+
+func TestWriteFileDownloadErrorMapsLimitToPayloadTooLarge(t *testing.T) {
+	rec := httptest.NewRecorder()
+	writeFileDownloadError(rec, errFileDownloadTooLarge)
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }

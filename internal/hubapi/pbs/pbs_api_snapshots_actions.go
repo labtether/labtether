@@ -28,13 +28,13 @@ func (d *Deps) HandlePBSSnapshotVerify(ctx context.Context, w http.ResponseWrite
 
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "pbs runtime unavailable: "+err.Error())
+		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
 		return
 	}
 
 	upid, verifyErr := runtime.Client.StartVerify(ctx, store)
 	if verifyErr != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to start verify: "+verifyErr.Error())
+		writePBSError(w, http.StatusBadGateway, "failed to start verify", verifyErr)
 		return
 	}
 
@@ -73,12 +73,12 @@ func (d *Deps) HandlePBSSnapshotForget(ctx context.Context, w http.ResponseWrite
 
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "pbs runtime unavailable: "+err.Error())
+		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
 		return
 	}
 
 	if forgetErr := runtime.Client.ForgetSnapshot(ctx, store, backupType, backupID, backupTime); forgetErr != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to forget snapshot: "+forgetErr.Error())
+		writePBSError(w, http.StatusBadGateway, "failed to forget snapshot", forgetErr)
 		return
 	}
 
@@ -107,12 +107,12 @@ func (d *Deps) HandlePBSGroupForget(ctx context.Context, w http.ResponseWriter, 
 
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "pbs runtime unavailable: "+err.Error())
+		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
 		return
 	}
 
 	if forgetErr := runtime.Client.ForgetGroup(ctx, store, backupType, backupID); forgetErr != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to forget group: "+forgetErr.Error())
+		writePBSError(w, http.StatusBadGateway, "failed to forget group", forgetErr)
 		return
 	}
 

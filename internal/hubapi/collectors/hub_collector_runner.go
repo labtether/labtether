@@ -118,17 +118,17 @@ func (d *Deps) RunPendingCollectors(ctx context.Context) int {
 }
 
 func (d *Deps) ExecuteCollector(ctx context.Context, collector hubcollector.Collector) {
-	if !d.TryBeginCollectorRun(collector.ID) {
+	if !d.tryBeginTrackedCollectorRun(collector.ID) {
 		log.Printf("hub collector: collector %s already running, skipping duplicate trigger", collector.ID)
 		return
 	}
-	defer d.FinishCollectorRun(collector.ID)
+	defer d.finishTrackedCollectorRun(collector.ID)
 
 	d.executeCollectorBody(ctx, collector)
 }
 
 func (d *Deps) startCollectorRun(ctx context.Context, collector hubcollector.Collector, waitForSlot bool) bool {
-	if !d.TryBeginCollectorRun(collector.ID) {
+	if !d.tryBeginTrackedCollectorRun(collector.ID) {
 		log.Printf("hub collector: collector %s already running, skipping duplicate trigger", collector.ID)
 		return false
 	}
@@ -136,7 +136,7 @@ func (d *Deps) startCollectorRun(ctx context.Context, collector hubcollector.Col
 	dispatchSem := d.CollectorDispatchSem
 	if dispatchSem == nil {
 		go func() {
-			defer d.FinishCollectorRun(collector.ID)
+			defer d.finishTrackedCollectorRun(collector.ID)
 			runCtx, cancel := context.WithTimeout(ctx, hubCollectorMaxRunDuration)
 			defer cancel()
 			d.executeCollectorBody(runCtx, collector)
@@ -148,13 +148,13 @@ func (d *Deps) startCollectorRun(ctx context.Context, collector hubcollector.Col
 		select {
 		case dispatchSem <- struct{}{}:
 		default:
-			d.FinishCollectorRun(collector.ID)
+			d.finishTrackedCollectorRun(collector.ID)
 			return false
 		}
 
 		go func() {
 			defer func() { <-dispatchSem }()
-			defer d.FinishCollectorRun(collector.ID)
+			defer d.finishTrackedCollectorRun(collector.ID)
 
 			runCtx, cancel := context.WithTimeout(ctx, hubCollectorMaxRunDuration)
 			defer cancel()
@@ -169,7 +169,7 @@ func (d *Deps) startCollectorRun(ctx context.Context, collector hubcollector.Col
 			if acquired {
 				<-dispatchSem
 			}
-			d.FinishCollectorRun(collector.ID)
+			d.finishTrackedCollectorRun(collector.ID)
 		}()
 
 		select {
@@ -187,10 +187,15 @@ func (d *Deps) startCollectorRun(ctx context.Context, collector hubcollector.Col
 }
 
 func (d *Deps) executeCollectorBody(ctx context.Context, collector hubcollector.Collector) {
+	if collectorContextCanceled(ctx) {
+		return
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("hub collector: panic in %s collector %s: %v", collector.CollectorType, collector.ID, r) // #nosec G706 -- Collector type and ID are bounded persisted identifiers; panic value is local runtime state.
-			d.UpdateCollectorStatus(collector.ID, "error", fmt.Sprintf("panic: %v", r))
+			if !collectorContextCanceled(ctx) {
+				d.UpdateCollectorStatus(collector.ID, "error", fmt.Sprintf("panic: %v", r))
+			}
 		}
 	}()
 
@@ -202,10 +207,25 @@ func (d *Deps) executeCollectorBody(ctx context.Context, collector hubcollector.
 	}
 
 	executor(d, ctx, collector)
+	if collectorContextCanceled(ctx) {
+		return
+	}
 
 	// After each successful collection cycle, schedule a throttled link
 	// suggestion pass. This keeps the detector off the collector hot path.
 	d.scheduleLinkSuggestionDetection()
+}
+
+func collectorContextCanceled(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+		return false
+	}
 }
 
 func (d *Deps) TryBeginCollectorRun(collectorID string) bool {
@@ -235,6 +255,50 @@ func (d *Deps) FinishCollectorRun(collectorID string) {
 		return
 	}
 	flag.Store(false)
+}
+
+func (d *Deps) tryBeginTrackedCollectorRun(collectorID string) bool {
+	d.CollectorLifecycleMu.Lock()
+	defer d.CollectorLifecycleMu.Unlock()
+	if d.CollectorRunsClosing || !d.TryBeginCollectorRun(collectorID) {
+		return false
+	}
+	if d.CollectorActiveRuns == 0 {
+		d.CollectorRunsIdle = make(chan struct{})
+	}
+	d.CollectorActiveRuns++
+	return true
+}
+
+func (d *Deps) finishTrackedCollectorRun(collectorID string) {
+	d.FinishCollectorRun(collectorID)
+
+	d.CollectorLifecycleMu.Lock()
+	defer d.CollectorLifecycleMu.Unlock()
+	if d.CollectorActiveRuns <= 0 {
+		return
+	}
+	d.CollectorActiveRuns--
+	if d.CollectorActiveRuns == 0 && d.CollectorRunsIdle != nil {
+		close(d.CollectorRunsIdle)
+		d.CollectorRunsIdle = nil
+	}
+}
+
+// BeginCollectorShutdown rejects new collector executions and returns a
+// channel that closes after every execution admitted before shutdown exits.
+// The lifecycle mutex makes admission and shutdown atomic, avoiding the
+// sync.WaitGroup Add-versus-Wait race during SIGTERM.
+func (d *Deps) BeginCollectorShutdown() <-chan struct{} {
+	d.CollectorLifecycleMu.Lock()
+	defer d.CollectorLifecycleMu.Unlock()
+	d.CollectorRunsClosing = true
+	if d.CollectorActiveRuns == 0 || d.CollectorRunsIdle == nil {
+		idle := make(chan struct{})
+		close(idle)
+		return idle
+	}
+	return d.CollectorRunsIdle
 }
 
 func (d *Deps) scheduleLinkSuggestionDetection() {

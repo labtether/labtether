@@ -195,17 +195,27 @@ function GroupsTable({ groups, expandedGroup, onGroupClick, snapshotsLoading, sn
                 {sortedGroups.map((group) => {
                     const key = `${group.backup_type}/${group.backup_id}`;
                     const isGroupExpanded = expandedGroup === key;
+                    const detailsID = `pbs-group-${groups.store}-${key}`.replace(
+                      /[^a-zA-Z0-9_-]/g,
+                      "-",
+                    );
                     const staleness = backupStaleness(group.last_backup);
                     return (
                       <Fragment key={key}>
                         <tr
-                          className={`border-b border-[var(--line)] border-opacity-30 cursor-pointer transition-colors duration-[var(--dur-fast)] hover:bg-[var(--hover)] ${
+                          className={`border-b border-[var(--line)] border-opacity-30 transition-colors duration-[var(--dur-fast)] ${
                             isGroupExpanded ? "bg-[var(--hover)]" : ""
                           }`}
-                          onClick={() => onGroupClick(group)}
                         >
                           <td className="py-1.5 px-2">
-                            <span className="inline-flex items-center gap-1">
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                              aria-label={`${isGroupExpanded ? "Collapse" : "Expand"} ${group.backup_type} ${group.backup_id} snapshots`}
+                              aria-expanded={isGroupExpanded}
+                              aria-controls={detailsID}
+                              onClick={() => onGroupClick(group)}
+                            >
                               <span
                                 className="text-[var(--muted)] text-[10px] select-none"
                                 aria-hidden="true"
@@ -213,7 +223,7 @@ function GroupsTable({ groups, expandedGroup, onGroupClick, snapshotsLoading, sn
                                 {isGroupExpanded ? "\u25BE" : "\u25B8"}
                               </span>
                               <GroupTypeBadge type={group.backup_type} />
-                            </span>
+                            </button>
                           </td>
                           <td className="py-1.5 px-2 text-[var(--text)] font-medium">
                             {group.backup_id}
@@ -236,7 +246,7 @@ function GroupsTable({ groups, expandedGroup, onGroupClick, snapshotsLoading, sn
 
                         {/* Section 4: Snapshots for expanded group */}
                         {isGroupExpanded && (
-                          <tr>
+                          <tr id={detailsID}>
                             <td colSpan={5} className="p-0 border-b border-[var(--line)] border-opacity-30">
                               <SnapshotList
                                 loading={snapshotsLoading}

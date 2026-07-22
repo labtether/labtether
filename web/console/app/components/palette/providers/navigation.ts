@@ -1,7 +1,8 @@
 import type { PaletteItem, PaletteProvider } from "../../../contexts/PaletteContext";
-import { navGroups } from "../../Sidebar";
+import { navGroups } from "../../../lib/navigation";
+import { meetsMinimumRole } from "../../../lib/roles";
 
-export function createNavigationProvider(routerPush: (href: string) => void, isAdmin: boolean): PaletteProvider {
+export function createNavigationProvider(routerPush: (href: string) => void, role?: string): PaletteProvider {
   return {
     id: "navigation",
     group: "Pages",
@@ -11,7 +12,7 @@ export function createNavigationProvider(routerPush: (href: string) => void, isA
       const items: PaletteItem[] = [];
       for (const group of navGroups) {
         for (const item of group.items) {
-          if (item.adminOnly && !isAdmin) continue;
+          if (!meetsMinimumRole(role, item.minimumRole)) continue;
           if (
             q === "" ||
             item.label.toLowerCase().includes(q) ||

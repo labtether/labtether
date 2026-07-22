@@ -26,7 +26,23 @@ func NewRingBuffer(maxLines int) *RingBuffer {
 func (rb *RingBuffer) Write(p []byte) {
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
+	rb.writeLocked(p)
+}
 
+// SeedIfEmpty initializes an unused buffer exactly once. This is used to load
+// persisted scrollback before live output begins without duplicating that seed
+// when two reconnect paths race.
+func (rb *RingBuffer) SeedIfEmpty(p []byte) bool {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+	if rb.count != 0 || len(rb.partial) != 0 || len(p) == 0 {
+		return false
+	}
+	rb.writeLocked(p)
+	return true
+}
+
+func (rb *RingBuffer) writeLocked(p []byte) {
 	data := p
 	if len(rb.partial) > 0 {
 		data = append(rb.partial, p...)

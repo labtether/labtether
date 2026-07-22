@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/labtether/labtether/internal/assetid"
+
 	"github.com/labtether/labtether/internal/connectorsdk"
 )
 
@@ -177,7 +179,18 @@ func paramOrTarget(req connectorsdk.ActionRequest, paramKey string) string {
 	if v := strings.TrimSpace(req.Params[paramKey]); v != "" {
 		return v
 	}
-	return strings.TrimSpace(req.TargetID)
+	target := assetid.NativeCollectorAssetID(req.TargetID)
+	prefixes := map[string]string{
+		"pool_name":   "truenas-storage-pool-",
+		"snapshot_id": "truenas-snapshot-",
+		"service":     "truenas-service-",
+		"vm_id":       "truenas-vm-",
+		"app_name":    "truenas-app-",
+	}
+	if prefix := prefixes[paramKey]; prefix != "" {
+		target = strings.TrimPrefix(target, prefix)
+	}
+	return strings.TrimSpace(target)
 }
 
 // parseFloat converts a string to float64, returning 0 on failure.

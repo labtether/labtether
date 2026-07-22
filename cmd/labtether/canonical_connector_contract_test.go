@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/connectorsdk"
@@ -689,6 +690,28 @@ func TestPersistCanonicalHeartbeatWritesCheckpointAndBinding(t *testing.T) {
 	}
 	if !containsTab(binding.Tabs, "services") || !containsTab(binding.Tabs, "interfaces") {
 		t.Fatalf("expected capability tabs in binding, got %v", binding.Tabs)
+	}
+}
+
+func TestPersistCanonicalHeartbeatUsesCommittedSource(t *testing.T) {
+	t.Parallel()
+	sut := newTestAPIServer(t)
+	assetID := "canonical-source-authority"
+	now := time.Now().UTC()
+	committed := assets.Asset{
+		ID: assetID, Type: "host", Name: assetID, Source: "agent", Status: "online",
+		Platform: "linux", LastSeenAt: now, UpdatedAt: now, CreatedAt: now,
+	}
+	sut.persistCanonicalHeartbeat(committed, assets.HeartbeatRequest{
+		AssetID: assetID, Source: "proxmox",
+	})
+	agentProviderID := canonicalProviderInstanceID(model.ProviderKindAgent, "agent", assetID)
+	if _, ok, err := sut.canonicalStore.GetProviderInstance(agentProviderID); err != nil || !ok {
+		t.Fatalf("committed agent provider missing ok=%v err=%v", ok, err)
+	}
+	forgedProviderID := canonicalProviderInstanceID(model.ProviderKindConnector, "proxmox", assetID)
+	if _, ok, err := sut.canonicalStore.GetProviderInstance(forgedProviderID); err != nil || ok {
+		t.Fatalf("payload-selected provider exists=%v err=%v", ok, err)
 	}
 }
 

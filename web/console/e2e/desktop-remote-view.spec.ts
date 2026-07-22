@@ -1038,19 +1038,16 @@ test("desktop protocol switching hides stale display selections before WebRTC co
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
 
-  const selectors = page.locator("select");
-  await expect(page.getByRole("button", { name: "Connect" })).toBeVisible();
-  await expect(selectors.nth(1)).toHaveValue("webrtc");
-  await expect(page.getByText("Display", { exact: true })).toHaveCount(0);
-
-  await selectors.nth(1).selectOption("vnc");
+  const selectors = page.locator("main select");
+  await expect(page.getByRole("button", { name: "Connect", exact: true })).toBeVisible();
+  await expect(selectors.nth(1)).toHaveValue("vnc");
   await expect(page.getByText("Display", { exact: true })).toBeVisible();
   await selectors.nth(2).selectOption("Display 2");
 
   await selectors.nth(1).selectOption("webrtc");
   await expect(page.getByText("Display", { exact: true })).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect
     .poll(() => sessionRequests.at(-1) ?? null)
     .toMatchObject({
@@ -1084,13 +1081,13 @@ test("desktop Proxmox QEMU defaults to VNC while still offering SPICE", async ({
 
   await page.goto("/nodes/proxmox-vm-100?panel=desktop");
 
-  const selectors = page.locator("select");
+  const selectors = page.locator("main select");
   await expect(selectors.nth(1)).toHaveValue("vnc");
   await expect(selectors.nth(1)).toContainText("VNC (Recommended)");
   await expect(selectors.nth(1)).toContainText("SPICE (Optional)");
   await expect(page.getByText("Display", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect
     .poll(() => sessionRequests.at(-1)?.protocol ?? null)
@@ -1106,12 +1103,12 @@ test("desktop VNC connect preserves the selected monitor in the session request"
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
 
-  const selectors = page.locator("select");
+  const selectors = page.locator("main select");
   await selectors.nth(1).selectOption("vnc");
   await expect(page.getByText("Display", { exact: true })).toBeVisible();
   await selectors.nth(2).selectOption("Display 2");
 
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect
     .poll(() => sessionRequests.at(-1) ?? null)
@@ -1131,7 +1128,8 @@ test("desktop WebRTC renders multi-monitor streams as a stitched layout", async 
   await installDesktopApiMocks(page, { sessionRequests });
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("combobox", { name: "Desktop protocol" }).selectOption("webrtc");
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect
     .poll(() => sessionRequests.at(-1)?.protocol ?? null)
@@ -1150,7 +1148,8 @@ test("desktop WebRTC native scaling uses a scrollable 1:1 container", async ({
   await installDesktopApiMocks(page, { sessionRequests });
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("combobox", { name: "Desktop protocol" }).selectOption("webrtc");
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect
     .poll(() => sessionRequests.at(-1)?.protocol ?? null)
@@ -1195,9 +1194,9 @@ test("desktop VNC viewer focuses on click for input readiness", async ({
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
 
-  const selectors = page.locator("select");
+  const selectors = page.locator("main select");
   await selectors.nth(1).selectOption("vnc");
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect
     .poll(() => sessionRequests.at(-1)?.protocol ?? null)
@@ -1228,9 +1227,9 @@ test("desktop VNC native scaling keeps remote drag input enabled", async ({
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
 
-  const selectors = page.locator("select");
+  const selectors = page.locator("main select");
   await selectors.nth(1).selectOption("vnc");
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect
     .poll(() => sessionRequests.at(-1)?.protocol ?? null)
@@ -1281,14 +1280,15 @@ test("desktop VNC toolbar shortcuts pass through to remote keys", async ({
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
 
-  const selectors = page.locator("select");
+  const selectors = page.locator("main select");
   await selectors.nth(1).selectOption("vnc");
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect
     .poll(() => sessionRequests.at(-1)?.protocol ?? null)
     .toBe("vnc");
 
+  await page.getByTitle("More viewer tools").click();
   await page.getByTitle("Alt+Tab").click();
   await expect
     .poll(() =>
@@ -1311,7 +1311,7 @@ test("desktop VNC toolbar shortcuts pass through to remote keys", async ({
     ]);
 });
 
-test("desktop VNC mouse button returns focus to the remote viewer without pointer lock", async ({
+test("desktop VNC mouse button returns focus and enters pointer lock", async ({
   page,
 }) => {
   const sessionRequests: Array<Record<string, unknown>> = [];
@@ -1320,9 +1320,9 @@ test("desktop VNC mouse button returns focus to the remote viewer without pointe
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
 
-  const selectors = page.locator("select");
+  const selectors = page.locator("main select");
   await selectors.nth(1).selectOption("vnc");
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect
     .poll(() => sessionRequests.at(-1)?.protocol ?? null)
@@ -1344,7 +1344,7 @@ test("desktop VNC mouse button returns focus to the remote viewer without pointe
     .poll(() =>
       page.evaluate(() => document.pointerLockElement?.tagName ?? ""),
     )
-    .toBe("");
+    .toBe("CANVAS");
 });
 
 test("desktop VNC keyboard capture returns typing to the remote viewer", async ({
@@ -1356,14 +1356,15 @@ test("desktop VNC keyboard capture returns typing to the remote viewer", async (
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
 
-  const selectors = page.locator("select");
+  const selectors = page.locator("main select");
   await selectors.nth(1).selectOption("vnc");
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect
     .poll(() => sessionRequests.at(-1)?.protocol ?? null)
     .toBe("vnc");
 
+  await page.getByTitle("More viewer tools").click();
   await page.getByTitle("Send keyboard to remote session").click();
   await expect
     .poll(() =>
@@ -1404,9 +1405,9 @@ test("desktop VNC toolbar supports clipboard sync through the agent API", async 
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
 
-  const selectors = page.locator("select");
+  const selectors = page.locator("main select");
   await selectors.nth(1).selectOption("vnc");
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect
     .poll(() => sessionRequests.at(-1)?.protocol ?? null)
@@ -1456,9 +1457,9 @@ test("desktop VNC drag-and-drop upload falls back to the files API", async ({
   await installDesktopApiMocks(page, { sessionRequests, fileUploads });
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
-  const selectors = page.locator("select");
+  const selectors = page.locator("main select");
   await selectors.nth(1).selectOption("vnc");
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect
     .poll(() => sessionRequests.at(-1)?.protocol ?? null)
@@ -1533,9 +1534,9 @@ test("desktop VNC shows a fallback cursor when the remote cursor is hidden", asy
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
 
-  const selectors = page.locator("select");
+  const selectors = page.locator("main select");
   await selectors.nth(1).selectOption("vnc");
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect
     .poll(() => sessionRequests.at(-1)?.protocol ?? null)
@@ -1548,6 +1549,12 @@ test("desktop VNC shows a fallback cursor when the remote cursor is hidden", asy
 
   await page.getByTitle("Send mouse to remote session").click();
 
+  await expect(page.locator(".vncContainer").first()).not.toHaveAttribute(
+    "data-cursor-fallback",
+    "visible",
+  );
+
+  await page.getByTitle("Mouse ready in remote session").click();
   await expect(page.locator(".vncContainer").first()).toHaveAttribute(
     "data-cursor-fallback",
     "visible",
@@ -1562,7 +1569,8 @@ test("desktop WebRTC toolbar supports browser recording and clipboard sync", asy
   await installDesktopApiMocks(page, { sessionRequests });
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("combobox", { name: "Desktop protocol" }).selectOption("webrtc");
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect
     .poll(() => sessionRequests.at(-1)?.protocol ?? null)
@@ -1579,8 +1587,6 @@ test("desktop WebRTC toolbar supports browser recording and clipboard sync", asy
     .toContain("pc:connected");
   await expect(page.getByTitle("Disconnect")).toBeVisible({ timeout: 15000 });
   await expect(page.getByTitle("Start recording")).toBeVisible({ timeout: 15000 });
-  await expect(page.getByTitle("Pull clipboard from remote")).toBeVisible({ timeout: 15000 });
-  await expect(page.getByTitle("Push clipboard to remote")).toBeVisible({ timeout: 15000 });
   await expect(page.getByLabel("Volume")).toBeVisible({ timeout: 15000 });
 
   await page.getByTitle("Start recording").click();
@@ -1604,6 +1610,9 @@ test("desktop WebRTC toolbar supports browser recording and clipboard sync", asy
     )
     .toEqual({ starts: 1, stops: 1 });
 
+  await page.getByTitle("More viewer tools").click();
+  await expect(page.getByTitle("Pull clipboard from remote")).toBeVisible();
+  await expect(page.getByTitle("Push clipboard to remote")).toBeVisible();
   await page.getByTitle("Push clipboard to remote").click();
   await expect
     .poll(() =>
@@ -1630,7 +1639,8 @@ test("desktop WebRTC drag-and-drop upload sends file transfer chunks", async ({
   await installDesktopApiMocks(page, { sessionRequests });
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("combobox", { name: "Desktop protocol" }).selectOption("webrtc");
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect
     .poll(() => sessionRequests.at(-1)?.protocol ?? null)
@@ -1705,7 +1715,8 @@ test("desktop fullscreen toolbar defaults to bottom and supports top toggle plus
   await installDesktopApiMocks(page, { sessionRequests });
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("combobox", { name: "Desktop protocol" }).selectOption("webrtc");
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect
     .poll(() => sessionRequests.at(-1)?.protocol ?? null)
@@ -1761,7 +1772,8 @@ test("desktop relay-backed WebRTC falls back to VNC and recovers back to WebRTC"
   await installDesktopApiMocks(page, { sessionRequests });
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("combobox", { name: "Desktop protocol" }).selectOption("webrtc");
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect
     .poll(() => sessionRequests.at(0)?.protocol ?? null)
@@ -1807,10 +1819,10 @@ test("desktop VNC reconnect now preserves the chosen monitor and clears the queu
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
 
-  const selectors = page.locator("select");
+  const selectors = page.locator("main select");
   await selectors.nth(1).selectOption("vnc");
   await selectors.nth(2).selectOption("Display 2");
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect
     .poll(() => sessionRequests.at(0) ?? null)
@@ -1858,9 +1870,9 @@ test("desktop VNC audio unavailable state clears after reconnect recovery", asyn
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
 
-  const selectors = page.locator("select");
+  const selectors = page.locator("main select");
   await selectors.nth(1).selectOption("vnc");
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect
     .poll(() => sessionRequests.at(0)?.protocol ?? null)
@@ -1870,9 +1882,9 @@ test("desktop VNC audio unavailable state clears after reconnect recovery", asyn
   await expect(page.getByLabel("Volume")).toHaveCount(0);
 
   await page.getByTitle("Disconnect").click();
-  await expect(page.getByRole("button", { name: "Connect" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Connect", exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect.poll(() => sessionRequests.length).toBe(2);
   await expect(page.getByTitle("Audio unavailable")).toHaveCount(0);
   await expect(page.getByTitle("Mute audio")).toBeVisible();
@@ -1927,9 +1939,9 @@ test("desktop VNC reconnect exhaustion surfaces Try Again and can recover", asyn
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
 
-  const selectors = page.locator("select");
+  const selectors = page.locator("main select");
   await selectors.nth(1).selectOption("vnc");
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect
     .poll(() => sessionRequests.length)
@@ -1969,9 +1981,9 @@ test("desktop VNC credentials prompt supports retry after auth failure", async (
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
 
-  const selectors = page.locator("select");
+  const selectors = page.locator("main select");
   await selectors.nth(1).selectOption("vnc");
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect(page.getByText("Authentication Required", { exact: true })).toBeVisible();
   await page.getByPlaceholder("Username").fill("operator");
@@ -2034,9 +2046,9 @@ test("desktop VNC password-only challenge auto-submits the session password", as
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
 
-  const selectors = page.locator("select");
+  const selectors = page.locator("main select");
   await selectors.nth(1).selectOption("vnc");
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect.poll(() => sessionRequests.length).toBe(1);
   await expect(page.getByTitle("Disconnect")).toBeVisible();
@@ -2088,17 +2100,17 @@ test("desktop VNC password-only auto-submit resets across reconnects", async ({
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
 
-  const selectors = page.locator("select");
+  const selectors = page.locator("main select");
   await selectors.nth(1).selectOption("vnc");
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect.poll(() => sessionRequests.length).toBe(1);
   await expect(page.getByTitle("Disconnect")).toBeVisible();
 
   await page.getByTitle("Disconnect").click();
-  await expect(page.getByRole("button", { name: "Connect" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Connect", exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect.poll(() => sessionRequests.length).toBe(2);
   await expect(page.getByTitle("Disconnect")).toBeVisible();
@@ -2152,9 +2164,9 @@ test("desktop VNC stored password falls back to the visible prompt after one fai
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
 
-  const selectors = page.locator("select");
+  const selectors = page.locator("main select");
   await selectors.nth(1).selectOption("vnc");
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect.poll(() => sessionRequests.length).toBe(1);
   await expect(page.getByText("VNC Password Required", { exact: true })).toBeVisible();

@@ -1,5 +1,17 @@
 #!/bin/sh
-mkdir -p /data/postgres /run/postgresql
+set -eu
+
+for directory in /data/postgres /run/postgresql; do
+  if [ -L "$directory" ] || { [ -e "$directory" ] && [ ! -d "$directory" ]; }; then
+    echo "postgres: refusing unsafe runtime directory: $directory" >&2
+    exit 1
+  fi
+  mkdir -p "$directory"
+  if find "$directory" -type l -print -quit | grep -q .; then
+    echo "postgres: refusing symlinks below runtime directory: $directory" >&2
+    exit 1
+  fi
+done
 chown -R postgres:postgres /data/postgres /run/postgresql
 if [ ! -f /data/postgres/PG_VERSION ]; then
   /command/s6-setuidgid postgres initdb -D /data/postgres --auth-local=trust --auth-host=scram-sha-256

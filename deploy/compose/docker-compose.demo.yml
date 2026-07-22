@@ -2,8 +2,8 @@
 ## Extends docker-compose.deploy.yml with demo mode, seed job, and relaxed bind addresses.
 ##
 ## Usage:
-##   ./scripts/demo-up.sh
-##   or: docker compose --env-file .env.demo -f deploy/compose/docker-compose.deploy.yml -f deploy/compose/docker-compose.demo.yml up -d
+##   LABTETHER_IMAGE='ghcr.io/labtether/labtether:vX.Y.Z@sha256:<64 hex>' ./scripts/demo-up.sh
+##   or: LABTETHER_IMAGE='ghcr.io/labtether/labtether:vX.Y.Z@sha256:<64 hex>' docker compose --env-file .env.demo -f deploy/compose/docker-compose.deploy.yml -f deploy/compose/docker-compose.demo.yml up -d
 ##
 ## The demo-seed service runs once after the hub is healthy, inserting sample
 ## assets, alerts, incidents, logs, and the apple-review viewer account.

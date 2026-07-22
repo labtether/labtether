@@ -85,11 +85,7 @@ export function DesktopTab({ nodeId }: { nodeId: string }) {
   const { isFullscreen, toggleFullscreen } = useFullscreen(viewerWrapperRef);
   const latencyMs = useLatency(session.connectionState === "connected");
 
-  const {
-    viewerFocused,
-    focusActiveViewer,
-    restoreViewerFocus,
-  } = useDesktopViewerFocus({
+  const { focusActiveViewer, restoreViewerFocus } = useDesktopViewerFocus({
     protocol,
     viewerWrapperRef,
     vncRef,
@@ -126,7 +122,6 @@ export function DesktopTab({ nodeId }: { nodeId: string }) {
     handleSessionPanelDisconnect,
     switchProtocol,
   } = useDesktopSessionControls({
-    nodeId,
     nodeName,
     protocol,
     selectedDisplay,
@@ -246,7 +241,6 @@ export function DesktopTab({ nodeId }: { nodeId: string }) {
     networkQuality,
     scalingMode,
     setScalingMode,
-    viewerFocused,
     focusActiveViewer,
     restoreViewerFocus,
     vncRef,

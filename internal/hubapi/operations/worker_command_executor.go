@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -19,10 +20,55 @@ import (
 )
 
 const (
-	ExecutorModeSimulated = "simulated"
-	ExecutorModeSSH       = "ssh"
-	ExecutorModeLocal     = "local"
+	ExecutorModeDisabled   = "disabled"
+	ExecutorModeSimulated  = "simulated"
+	ExecutorModeSSH        = "ssh"
+	ExecutorModeLocal      = "local"
+	defaultMaxOutputBytes  = 64 * 1024
+	absoluteMaxOutputBytes = 10 * 1024 * 1024
 )
+
+// cappedOutputWriter retains at most limit bytes while reporting every write
+// as consumed. Assigning the same concurrency-safe writer to stdout and stderr
+// keeps draining a noisy child process without allowing output buffering to
+// grow without bound.
+type cappedOutputWriter struct {
+	mu    sync.Mutex
+	data  []byte
+	total int64
+	limit int
+}
+
+func newCappedOutputWriter(limit int) *cappedOutputWriter {
+	if limit <= 0 {
+		limit = 8 * 1024
+	}
+	if limit > absoluteMaxOutputBytes {
+		limit = absoluteMaxOutputBytes
+	}
+	return &cappedOutputWriter{data: make([]byte, 0, limit), limit: limit}
+}
+
+func (w *cappedOutputWriter) Write(payload []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.total += int64(len(payload))
+	if remaining := w.limit - len(w.data); remaining > 0 {
+		retain := min(remaining, len(payload))
+		w.data = append(w.data, payload[:retain]...)
+	}
+	return len(payload), nil
+}
+
+func (w *cappedOutputWriter) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	prefix := strings.TrimSpace(string(w.data))
+	if w.total <= int64(len(w.data)) {
+		return prefix
+	}
+	return fmt.Sprintf("%s\n...output truncated (%d bytes total)", prefix, w.total)
+}
 
 // CommandExecutorConfig holds configuration for executing terminal commands.
 type CommandExecutorConfig struct {
@@ -55,23 +101,25 @@ func ExecuteCommand(job terminal.CommandJob) terminal.CommandResult {
 
 // LoadCommandExecutorConfig reads the command executor configuration from environment.
 func LoadCommandExecutorConfig() CommandExecutorConfig {
-	mode := strings.ToLower(strings.TrimSpace(shared.EnvOrDefault("TERMINAL_EXECUTOR_MODE", ExecutorModeSimulated)))
+	mode := strings.ToLower(strings.TrimSpace(shared.EnvOrDefault("TERMINAL_EXECUTOR_MODE", ExecutorModeDisabled)))
 	switch mode {
-	case ExecutorModeSSH, ExecutorModeLocal:
+	case ExecutorModeSimulated, ExecutorModeSSH, ExecutorModeLocal:
 	default:
-		mode = ExecutorModeSimulated
+		mode = ExecutorModeDisabled
 	}
 
 	return CommandExecutorConfig{
 		Mode:           mode,
 		Timeout:        shared.EnvOrDefaultDuration("TERMINAL_COMMAND_TIMEOUT", 30*time.Second),
-		MaxOutputBytes: shared.EnvOrDefaultInt("TERMINAL_MAX_OUTPUT_BYTES", 64*1024),
+		MaxOutputBytes: min(shared.EnvOrDefaultInt("TERMINAL_MAX_OUTPUT_BYTES", defaultMaxOutputBytes), absoluteMaxOutputBytes),
 	}
 }
 
 // ExecuteConfiguredCommand runs a terminal command using the given config.
 func ExecuteConfiguredCommand(job terminal.CommandJob, cfg CommandExecutorConfig) (string, string) {
 	switch cfg.Mode {
+	case ExecutorModeSimulated:
+		return ExecuteSimulatedCommand(job)
 	case ExecutorModeSSH:
 		output, err := ExecuteSSHCommand(job, cfg)
 		if err != nil {
@@ -85,7 +133,7 @@ func ExecuteConfiguredCommand(job terminal.CommandJob, cfg CommandExecutorConfig
 		}
 		return "succeeded", output
 	default:
-		return ExecuteSimulatedCommand(job)
+		return "failed", "command executor unavailable: target agent is disconnected and no fallback executor is configured"
 	}
 }
 
@@ -100,27 +148,36 @@ func ExecuteSimulatedCommand(job terminal.CommandJob) (string, string) {
 	return status, output
 }
 
-// ExecuteLocalCommand runs a command locally via shell.
+// ExecuteLocalCommand runs a validated argv directly without invoking a shell.
 func ExecuteLocalCommand(job terminal.CommandJob, cfg CommandExecutorConfig) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
 	defer cancel()
 
-	if err := securityruntime.ValidateShellCommand(job.Command); err != nil {
-		return "", err
-	}
-	cmd, err := securityruntime.NewCommandContext(ctx, "sh", "-lc", job.Command)
+	argv, err := securityruntime.ParseValidatedShellCommand(job.Command)
 	if err != nil {
 		return "", err
 	}
-	output, err := cmd.CombinedOutput()
-	if ctx.Err() == context.DeadlineExceeded {
-		return TruncateOutput(output, cfg.MaxOutputBytes), fmt.Errorf("command timed out after %s", cfg.Timeout)
+	cmd, err := securityruntime.NewCommandContext(ctx, argv[0], argv[1:]...)
+	if err != nil {
+		return "", err
 	}
-	return TruncateOutput(output, cfg.MaxOutputBytes), err
+	output := newCappedOutputWriter(cfg.MaxOutputBytes)
+	cmd.Stdout = output
+	cmd.Stderr = output
+	err = cmd.Run()
+	if ctx.Err() == context.DeadlineExceeded {
+		return output.String(), fmt.Errorf("command timed out after %s", cfg.Timeout)
+	}
+	return output.String(), err
 }
 
 // ExecuteSSHCommand runs a command on a remote host via SSH.
 func ExecuteSSHCommand(job terminal.CommandJob, cfg CommandExecutorConfig) (string, error) {
+	argv, err := securityruntime.ParseValidatedShellCommand(job.Command)
+	if err != nil {
+		return "", err
+	}
+	remoteCommand := securityruntime.QuoteCommandArgv(argv)
 	sshConfig, err := ResolveJobSSHConfig(job)
 	if err != nil {
 		return "", err
@@ -143,11 +200,9 @@ func ExecuteSSHCommand(job terminal.CommandJob, cfg CommandExecutorConfig) (stri
 		Timeout:         cfg.Timeout,
 	}
 
-	if err := securityruntime.ValidateOutboundDialTarget(sshConfig.Host, sshConfig.Port); err != nil {
-		return "", err
-	}
-	addr := net.JoinHostPort(sshConfig.Host, strconv.Itoa(sshConfig.Port))
-	client, err := ssh.Dial("tcp", addr, clientConfig)
+	dialCtx, dialCancel := context.WithTimeout(context.Background(), cfg.Timeout)
+	defer dialCancel()
+	client, err := securityruntime.DialOutboundSSHContext(dialCtx, sshConfig.Host, sshConfig.Port, clientConfig, cfg.Timeout)
 	if err != nil {
 		return "", fmt.Errorf("ssh dial failed: %w", err)
 	}
@@ -159,14 +214,13 @@ func ExecuteSSHCommand(job terminal.CommandJob, cfg CommandExecutorConfig) (stri
 	}
 	defer session.Close()
 
-	type runResult struct {
-		out []byte
-		err error
-	}
+	output := newCappedOutputWriter(cfg.MaxOutputBytes)
+	session.Stdout = output
+	session.Stderr = output
+	type runResult struct{ err error }
 	resultCh := make(chan runResult, 1)
 	go func() {
-		out, runErr := session.CombinedOutput(job.Command)
-		resultCh <- runResult{out: out, err: runErr}
+		resultCh <- runResult{err: session.Run(remoteCommand)}
 	}()
 
 	timer := time.NewTimer(cfg.Timeout)
@@ -174,11 +228,11 @@ func ExecuteSSHCommand(job terminal.CommandJob, cfg CommandExecutorConfig) (stri
 
 	select {
 	case result := <-resultCh:
-		return TruncateOutput(result.out, cfg.MaxOutputBytes), result.err
+		return output.String(), result.err
 	case <-timer.C:
 		_ = session.Close()
 		_ = client.Close()
-		return "", fmt.Errorf("ssh command timed out after %s", cfg.Timeout)
+		return output.String(), fmt.Errorf("ssh command timed out after %s", cfg.Timeout)
 	}
 }
 
@@ -237,32 +291,11 @@ func BuildSSHHostKeyCallback(cfg *terminal.SSHConfig) (ssh.HostKeyCallback, erro
 			expected = strings.TrimSpace(cfg.HostKey)
 		}
 	}
-
-	if !strict {
-		// #nosec G106 -- explicit non-strict host-key mode for local/dev operator flows.
-		return ssh.InsecureIgnoreHostKey(), nil
+	callback, err := shared.BuildSSHHostKeyCallback(strict, expected)
+	if err != nil {
+		return nil, fmt.Errorf("strict host key enabled but no SSH_HOST_KEY provided and no known_hosts file is available")
 	}
-	if expected == "" {
-		knownHostsCallback, err := shared.BuildKnownHostsHostKeyCallback()
-		if err != nil {
-			return nil, fmt.Errorf("strict host key enabled but no SSH_HOST_KEY provided and no known_hosts file is available")
-		}
-		return knownHostsCallback, nil
-	}
-
-	return func(_ string, _ net.Addr, key ssh.PublicKey) error {
-		fingerprint := strings.TrimSpace(ssh.FingerprintSHA256(key))
-		if strings.EqualFold(fingerprint, expected) {
-			return nil
-		}
-
-		encoded := base64.StdEncoding.EncodeToString(key.Marshal())
-		if strings.EqualFold(encoded, expected) {
-			return nil
-		}
-
-		return fmt.Errorf("host key mismatch")
-	}, nil
+	return callback, nil
 }
 
 // ResolveSSHAuthMethods resolves SSH authentication methods from config and environment.

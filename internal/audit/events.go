@@ -55,14 +55,17 @@ func (s *Store) List(limit int) []Event {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	if limit <= 0 || limit >= len(s.events) {
-		out := make([]Event, len(s.events))
-		copy(out, s.events)
-		return out
+	count := len(s.events)
+	if limit > 0 && limit < count {
+		count = limit
 	}
 
-	start := len(s.events) - limit
-	out := make([]Event, limit)
-	copy(out, s.events[start:])
+	// Match the Postgres audit store and the public API contract: newest events
+	// come first. Reversing while copying also prevents callers from observing
+	// or mutating the store's backing slice.
+	out := make([]Event, count)
+	for index := range count {
+		out[index] = s.events[len(s.events)-1-index]
+	}
 	return out
 }

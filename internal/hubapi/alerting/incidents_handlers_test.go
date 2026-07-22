@@ -2,10 +2,14 @@ package alerting
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/labtether/labtether/internal/apiv2"
+	"github.com/labtether/labtether/internal/incidents"
 )
 
 func TestHandleIncidentsListGroupFilterReturnsServiceUnavailableWithoutGroupStore(t *testing.T) {
@@ -18,6 +22,73 @@ func TestHandleIncidentsListGroupFilterReturnsServiceUnavailableWithoutGroupStor
 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 when group store is unavailable, got %d", rec.Code)
+	}
+}
+
+func TestHandleIncidentLinkAlertUsesAuthenticatedActor(t *testing.T) {
+	deps := newTestAlertingDeps(t)
+
+	createReq := httptest.NewRequest(
+		http.MethodPost,
+		"/incidents",
+		bytes.NewReader([]byte(`{"title":"Actor Attribution","severity":"medium"}`)),
+	)
+	createRec := httptest.NewRecorder()
+	deps.HandleIncidents(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create incident: got %d body=%s", createRec.Code, createRec.Body.String())
+	}
+	var created struct {
+		Incident incidents.Incident `json:"incident"`
+	}
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+
+	linkReq := httptest.NewRequest(
+		http.MethodPost,
+		"/incidents/"+created.Incident.ID+"/link-alert",
+		bytes.NewReader([]byte(`{"alert_fingerprint":"fingerprint-1","link_type":"related","created_by":"spoofed"}`)),
+	)
+	linkReq = linkReq.WithContext(apiv2.ContextWithPrincipal(context.Background(), "operator-1", "operator"))
+	linkRec := httptest.NewRecorder()
+	deps.HandleIncidentActions(linkRec, linkReq)
+	if linkRec.Code != http.StatusCreated {
+		t.Fatalf("link alert: got %d body=%s", linkRec.Code, linkRec.Body.String())
+	}
+	var linked struct {
+		Link incidents.AlertLink `json:"link"`
+	}
+	if err := json.Unmarshal(linkRec.Body.Bytes(), &linked); err != nil {
+		t.Fatal(err)
+	}
+	if linked.Link.CreatedBy != "operator-1" {
+		t.Fatalf("created_by=%q, want authenticated actor", linked.Link.CreatedBy)
+	}
+}
+
+func TestHandleIncidentsCreateUsesAuthenticatedActor(t *testing.T) {
+	deps := newTestAlertingDeps(t)
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/incidents",
+		bytes.NewReader([]byte(`{"title":"Actor Attribution","severity":"medium","created_by":"spoofed"}`)),
+	)
+	req = req.WithContext(apiv2.ContextWithPrincipal(context.Background(), "operator-1", "operator"))
+	rec := httptest.NewRecorder()
+	deps.HandleIncidents(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create incident: got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		Incident incidents.Incident `json:"incident"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Incident.CreatedBy != "operator-1" {
+		t.Fatalf("created_by=%q, want authenticated actor", response.Incident.CreatedBy)
 	}
 }
 

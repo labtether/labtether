@@ -60,18 +60,6 @@ func principalActorID(ctx context.Context) string {
 	return apiv2.PrincipalActorID(ctx)
 }
 
-// isOwnerActor reports whether actorID represents the owner principal.
-func isOwnerActor(actorID string) bool {
-	trimmed := actorID
-	for len(trimmed) > 0 && trimmed[0] == ' ' {
-		trimmed = trimmed[1:]
-	}
-	for len(trimmed) > 0 && trimmed[len(trimmed)-1] == ' ' {
-		trimmed = trimmed[:len(trimmed)-1]
-	}
-	return trimmed == "owner"
-}
-
 // loadUpdatePlansByID bulk-loads update plans by ID and returns a map keyed
 // by plan ID. It is the package-local equivalent of apiServer.loadUpdatePlansByID.
 func (d *Deps) loadUpdatePlansByID(planIDs []string) (map[string]updates.Plan, error) {

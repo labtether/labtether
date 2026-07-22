@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/labtether/labtether/internal/assetid"
 	"github.com/labtether/labtether/internal/connectorsdk"
 )
 
@@ -259,6 +260,11 @@ func TestParamOrTarget(t *testing.T) {
 		TargetID: "fallback-target",
 	}, "pool_name"); got != "fallback-target" {
 		t.Fatalf("paramOrTarget() fallback = %q, want fallback-target", got)
+	}
+	if got := paramOrTarget(connectorsdk.ActionRequest{
+		TargetID: assetid.ScopeCollectorAssetID("truenas-storage-pool-mainpool", "collector-truenas-a"),
+	}, "pool_name"); got != "mainpool" {
+		t.Fatalf("paramOrTarget() scoped pool = %q, want mainpool", got)
 	}
 }
 

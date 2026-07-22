@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/labtether/labtether/internal/alerts"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
@@ -104,6 +105,9 @@ type enableAlertTemplateRequest struct {
 }
 
 func (d *Deps) HandleAlertTemplates(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobal(w, r, "alert templates") {
+		return
+	}
 	if r.URL.Path != "/alerts/templates" {
 		servicehttp.WriteError(w, http.StatusNotFound, "not found")
 		return
@@ -122,6 +126,9 @@ func (d *Deps) HandleAlertTemplates(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *Deps) HandleAlertTemplateActions(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobal(w, r, "alert templates") {
+		return
+	}
 	if !strings.HasPrefix(r.URL.Path, "/alerts/templates/") {
 		servicehttp.WriteError(w, http.StatusNotFound, "not found")
 		return
@@ -162,7 +169,7 @@ func (d *Deps) HandleAlertTemplateActions(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	createRequest := template.toCreateRequest(req.CreatedBy)
+	createRequest := template.toCreateRequest(apiv2.PrincipalActorID(r.Context()))
 	if strings.TrimSpace(req.Name) != "" {
 		createRequest.Name = req.Name
 	}

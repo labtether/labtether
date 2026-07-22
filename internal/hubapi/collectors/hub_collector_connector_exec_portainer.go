@@ -209,7 +209,8 @@ func (d *Deps) ExecutePortainerCollector(ctx context.Context, collector hubcolle
 			Platform: "",
 			Metadata: metadata,
 		}
-		if _, err := d.ProcessHeartbeatRequest(req); err != nil {
+		req = ScopedCollectorHeartbeatRequest(collector.ID, req)
+		if _, err := d.ProcessScopedCollectorHeartbeat(collector.ID, req); err != nil {
 			log.Printf("hub collector portainer: failed to upsert %s: %v", asset.ID, err)
 			upsertFailures++
 			continue

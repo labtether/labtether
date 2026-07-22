@@ -2,12 +2,32 @@ package pbs
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestClientCanceledContextShortCircuitsRequest(t *testing.T) {
+	client, err := NewClient(Config{
+		BaseURL:     "://malformed-and-must-not-be-validated",
+		TokenID:     "qa@pbs!labtether",
+		TokenSecret: "secret",
+	})
+	if err != nil {
+		t.Fatalf("NewClient failed: %v", err)
+	}
+
+	leaseLost := errors.New("runtime lease lost")
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(leaseLost)
+	_, err = client.GetVersion(ctx)
+	if !errors.Is(err, leaseLost) {
+		t.Fatalf("GetVersion error = %v, want canceled context cause", err)
+	}
+}
 
 func TestNewClientInvalidCAPEM(t *testing.T) {
 	_, err := NewClient(Config{
@@ -108,6 +128,9 @@ func TestClientDatastoreTaskAndActionEndpoints(t *testing.T) {
 			if got := r.Form.Get("keep-daily"); got != "7" {
 				t.Fatalf("expected keep-daily=7, got %q", got)
 			}
+			if got := r.Form.Get("ns"); got != "offsite/qa" {
+				t.Fatalf("expected ns=offsite/qa, got %q", got)
+			}
 			_, _ = w.Write([]byte(`{"data":"UPID:PRUNE:1"}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/api2/json/admin/datastore/store-a/gc":
 			_, _ = w.Write([]byte(`{"data":"UPID:GC:2"}`))
@@ -177,7 +200,7 @@ func TestClientDatastoreTaskAndActionEndpoints(t *testing.T) {
 		t.Fatalf("StartVerify unexpected result: upid=%q err=%v", verifyUPID, err)
 	}
 
-	pruneUPID, err := client.StartPruneDatastore(context.Background(), "store-a", PruneOptions{DryRun: true, KeepDaily: 7})
+	pruneUPID, err := client.StartPruneDatastore(context.Background(), "store-a", PruneOptions{DryRun: true, NS: "offsite/qa", KeepDaily: 7})
 	if err != nil || pruneUPID != "UPID:PRUNE:1" {
 		t.Fatalf("StartPruneDatastore unexpected result: upid=%q err=%v", pruneUPID, err)
 	}

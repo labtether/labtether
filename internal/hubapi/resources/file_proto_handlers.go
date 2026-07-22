@@ -2,17 +2,42 @@ package resources
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path"
 	"strings"
 
 	"github.com/labtether/labtether/internal/fileproto"
 	"github.com/labtether/labtether/internal/persistence"
+	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
+
+func writeFileProtocolError(w http.ResponseWriter, status int, clientMessage string, err error) {
+	securityruntime.Logf("file protocol: %s: %v", clientMessage, err)
+	servicehttp.WriteError(w, status, clientMessage)
+}
+
+func writeFileOperationError(w http.ResponseWriter, fallbackStatus int, clientMessage string, err error) {
+	switch {
+	case errors.Is(err, errFileOperationCapacity):
+		securityruntime.Logf("file protocol: operation capacity reached: %v", err)
+		writeFileOperationCapacityError(w)
+	case errors.Is(err, fileproto.ErrListLimitExceeded),
+		errors.Is(err, fileproto.ErrResponseTooLarge),
+		errors.Is(err, fileproto.ErrTransferTooLarge),
+		errors.Is(err, fileproto.ErrDeleteLimitExceeded):
+		writeFileProtocolError(w, http.StatusRequestEntityTooLarge, "operation exceeds configured resource limits", err)
+	case errors.Is(err, context.DeadlineExceeded):
+		writeFileProtocolError(w, http.StatusGatewayTimeout, "file operation timed out", err)
+	default:
+		writeFileProtocolError(w, fallbackStatus, clientMessage, err)
+	}
+}
 
 // fileProtoOps is the set of path actions handled as file operations
 // (as opposed to CRUD or test actions on the connection resource itself).
@@ -34,6 +59,17 @@ func IsFileProtoOp(action string) bool {
 
 // dispatchFileProtoOp routes a file operation to the appropriate handler.
 func (d *Deps) dispatchFileProtoOp(w http.ResponseWriter, r *http.Request, connID, action string) {
+	release, ok := interactiveFileOperationAdmission.tryAcquire()
+	if !ok {
+		writeFileOperationCapacityError(w)
+		return
+	}
+	defer release()
+
+	opCtx, cancel := fileproto.WithOperationTimeout(r.Context())
+	defer cancel()
+	r = r.WithContext(opCtx)
+
 	switch action {
 	case "list":
 		d.handleFileConnectionList(w, r, connID)
@@ -76,7 +112,7 @@ func (d *Deps) getPooledFS(w http.ResponseWriter, r *http.Request, connID string
 			servicehttp.WriteError(w, http.StatusNotFound, "file connection not found")
 			return nil, nil, false
 		}
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load file connection")
+		writeFileProtocolError(w, http.StatusInternalServerError, "failed to load file connection", err)
 		return nil, nil, false
 	}
 	if !d.canAccessFileConnection(r, fc) {
@@ -86,13 +122,13 @@ func (d *Deps) getPooledFS(w http.ResponseWriter, r *http.Request, connID string
 
 	config, err := d.buildConnectionConfig(fc)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to build connection config: %s", err.Error()))
+		writeFileProtocolError(w, http.StatusInternalServerError, "failed to build connection config", err)
 		return nil, nil, false
 	}
 
 	fs, err := d.FileProtoPool.Get(r.Context(), connID, config)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, fmt.Sprintf("connection failed: %s", err.Error()))
+		writeFileProtocolError(w, http.StatusBadGateway, "file connection failed", err)
 		return nil, nil, false
 	}
 
@@ -125,14 +161,31 @@ func (d *Deps) handleFileConnectionList(w http.ResponseWriter, r *http.Request, 
 
 	entries, err := fs.List(r.Context(), dirPath, showHidden)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadRequest, fmt.Sprintf("listing failed: %s", err.Error()))
+		writeFileOperationError(w, http.StatusBadRequest, "listing failed", err)
 		return
 	}
 
-	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
+	writeBoundedFileListing(w, dirPath, entries)
+}
+
+func writeBoundedFileListing(w http.ResponseWriter, dirPath string, entries []fileproto.FileEntry) {
+	payload, err := json.Marshal(map[string]any{
 		"path":    dirPath,
 		"entries": entries,
 	})
+	if err != nil {
+		writeFileProtocolError(w, http.StatusInternalServerError, "failed to encode listing", err)
+		return
+	}
+	if len(payload) > fileproto.MaxListResponseBytes {
+		writeFileProtocolError(w, http.StatusRequestEntityTooLarge, "operation exceeds configured resource limits", fileproto.ErrResponseTooLarge)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(payload); err != nil {
+		securityruntime.Logf("file protocol: failed to write listing response: %v", err)
+	}
 }
 
 // --- Download ---
@@ -156,10 +209,14 @@ func (d *Deps) handleFileConnectionDownload(w http.ResponseWriter, r *http.Reque
 
 	reader, size, err := fs.Read(r.Context(), filePath)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadRequest, fmt.Sprintf("read failed: %s", err.Error()))
+		writeFileOperationError(w, http.StatusBadRequest, "read failed", err)
 		return
 	}
 	defer reader.Close()
+	if size > fileproto.MaxTransferBytes {
+		writeFileOperationError(w, http.StatusBadRequest, "read failed", fileproto.ErrTransferTooLarge)
+		return
+	}
 
 	filename := path.Base(filePath)
 	if filename == "" || filename == "." || filename == "/" {
@@ -176,6 +233,7 @@ func (d *Deps) handleFileConnectionDownload(w http.ResponseWriter, r *http.Reque
 	if _, err := io.Copy(w, reader); err != nil {
 		// Headers already sent, cannot write an error response.
 		// The client will see a truncated body.
+		securityruntime.Logf("file protocol: download stream failed: %v", err)
 		return
 	}
 }
@@ -194,13 +252,12 @@ func (d *Deps) handleFileConnectionUpload(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Enforce 512MB upload limit.
-	const maxUploadBytes int64 = 512 * 1024 * 1024
-	if r.ContentLength > maxUploadBytes {
+	// Enforce the transfer limit both from the declared size and while reading.
+	if r.ContentLength > fileproto.MaxTransferBytes {
 		servicehttp.WriteError(w, http.StatusRequestEntityTooLarge, "file exceeds 512 MB limit")
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, fileproto.MaxTransferBytes)
 
 	fs, _, ok := d.getPooledFS(w, r, connID)
 	if !ok {
@@ -223,11 +280,12 @@ func (d *Deps) handleFileConnectionUpload(w http.ResponseWriter, r *http.Request
 
 func writeFileConnectionUploadError(w http.ResponseWriter, err error) {
 	var maxBytesErr *http.MaxBytesError
-	if errors.As(err, &maxBytesErr) {
+	if errors.As(err, &maxBytesErr) || errors.Is(err, fileproto.ErrTransferTooLarge) {
+		securityruntime.Logf("file protocol: upload exceeded size limit: %v", err)
 		servicehttp.WriteError(w, http.StatusRequestEntityTooLarge, "file exceeds 512 MB limit")
 		return
 	}
-	servicehttp.WriteError(w, http.StatusBadRequest, fmt.Sprintf("upload failed: %s", err.Error()))
+	writeFileOperationError(w, http.StatusBadRequest, "upload failed", err)
 }
 
 // --- Mkdir ---
@@ -250,7 +308,7 @@ func (d *Deps) handleFileConnectionMkdir(w http.ResponseWriter, r *http.Request,
 	}
 
 	if err := fs.Mkdir(r.Context(), dirPath); err != nil {
-		servicehttp.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mkdir failed: %s", err.Error()))
+		writeFileOperationError(w, http.StatusBadRequest, "mkdir failed", err)
 		return
 	}
 
@@ -280,7 +338,7 @@ func (d *Deps) handleFileConnectionDeleteOp(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := fs.Delete(r.Context(), filePath); err != nil {
-		servicehttp.WriteError(w, http.StatusBadRequest, fmt.Sprintf("delete failed: %s", err.Error()))
+		writeFileOperationError(w, http.StatusBadRequest, "delete failed", err)
 		return
 	}
 
@@ -321,7 +379,7 @@ func (d *Deps) handleFileConnectionRename(w http.ResponseWriter, r *http.Request
 	}
 
 	if err := fs.Rename(r.Context(), req.OldPath, req.NewPath); err != nil {
-		servicehttp.WriteError(w, http.StatusBadRequest, fmt.Sprintf("rename failed: %s", err.Error()))
+		writeFileOperationError(w, http.StatusBadRequest, "rename failed", err)
 		return
 	}
 
@@ -368,7 +426,7 @@ func (d *Deps) handleFileConnectionCopy(w http.ResponseWriter, r *http.Request, 
 		err = d.copyViaReadWrite(r.Context(), fs, req.SrcPath, req.DstPath)
 	}
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadRequest, fmt.Sprintf("copy failed: %s", err.Error()))
+		writeFileOperationError(w, http.StatusBadRequest, "copy failed", err)
 		return
 	}
 
@@ -379,16 +437,65 @@ func (d *Deps) handleFileConnectionCopy(w http.ResponseWriter, r *http.Request, 
 	})
 }
 
-// copyViaReadWrite implements a server-side copy fallback by reading from src
-// and writing to dst through the same RemoteFS session.
+// copyViaReadWrite implements a copy fallback through a bounded, private
+// temporary file. Staging is necessary because FTP/SMB sessions serialize
+// operations: retaining the source stream while opening the destination on the
+// same session would deadlock. It also ensures the source is complete and
+// within limits before the destination is touched.
 func (d *Deps) copyViaReadWrite(ctx context.Context, fs fileproto.RemoteFS, srcPath, dstPath string) error {
+	release, ok := stagedFileCopyAdmission.tryAcquire()
+	if !ok {
+		return errFileOperationCapacity
+	}
+	defer release()
+
 	reader, size, err := fs.Read(ctx, srcPath)
 	if err != nil {
 		return fmt.Errorf("read source: %w", err)
 	}
-	defer reader.Close()
+	readerClosed := false
+	defer func() {
+		if !readerClosed {
+			_ = reader.Close()
+		}
+	}()
+	if size > fileproto.MaxTransferBytes {
+		return fileproto.ErrTransferTooLarge
+	}
 
-	if err := fs.Write(ctx, dstPath, reader, size); err != nil {
+	tmp, err := os.CreateTemp("", "labtether-file-copy-*")
+	if err != nil {
+		return fmt.Errorf("stage source: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer func() {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+	}()
+
+	written, err := io.CopyBuffer(tmp, io.LimitReader(reader, fileproto.MaxTransferBytes), make([]byte, 64*1024))
+	if err != nil {
+		return fmt.Errorf("stage source: %w", err)
+	}
+	if written == fileproto.MaxTransferBytes {
+		var probe [1]byte
+		n, probeErr := reader.Read(probe[:])
+		if n > 0 {
+			return fileproto.ErrTransferTooLarge
+		}
+		if probeErr != nil && !errors.Is(probeErr, io.EOF) {
+			return fmt.Errorf("stage source: %w", probeErr)
+		}
+	}
+	if err := reader.Close(); err != nil {
+		return fmt.Errorf("close source: %w", err)
+	}
+	readerClosed = true
+	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("rewind staged source: %w", err)
+	}
+
+	if err := fs.Write(ctx, dstPath, tmp, written); err != nil {
 		return fmt.Errorf("write destination: %w", err)
 	}
 	return nil

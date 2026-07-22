@@ -45,10 +45,12 @@ func (d *Deps) HandleRuntimeSettings(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "runtime settings unavailable")
 		return
 	}
+	d.runtimeSettingsMu.Lock()
+	defer d.runtimeSettingsMu.Unlock()
 
 	switch r.Method {
 	case http.MethodGet:
-		d.writeRuntimeSettingsPayload(w)
+		d.writeRuntimeSettingsPayloadLocked(w)
 	case http.MethodPatch:
 		if !d.enforceRateLimit(
 			w,
@@ -74,17 +76,26 @@ func (d *Deps) HandleRuntimeSettings(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusBadRequest, runtimeSettingsValuesRequiredError)
 			return
 		}
+		if err := d.validatePrometheusRemoteWriteMutation(normalized, nil); err != nil {
+			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 
-		overrides, err := d.RuntimeStore.SaveRuntimeSettingOverrides(normalized)
+		stored, err := shared.PrepareRuntimeOverridesForStorage(normalized, d.SecretsManager)
+		if err != nil {
+			writeAdminInternalError(w, http.StatusServiceUnavailable, "runtime secret storage unavailable", err)
+			return
+		}
+		overrides, err := d.RuntimeStore.SaveRuntimeSettingOverrides(stored)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, runtimeSettingsSaveFailureError)
 			return
 		}
 		if d.PolicyState != nil {
-			d.PolicyState.ApplyOverrides(overrides)
+			d.PolicyState.ApplyOverrides(shared.NonSensitiveRuntimeOverrides(overrides))
 		}
 		if d.ApplySecurityRuntimeOverrides != nil {
-			d.ApplySecurityRuntimeOverrides(overrides)
+			d.ApplySecurityRuntimeOverrides(shared.NonSensitiveRuntimeOverrides(overrides))
 		}
 		if d.InvalidateWebServiceURLGroupingConfigCache != nil {
 			d.InvalidateWebServiceURLGroupingConfigCache()
@@ -102,7 +113,13 @@ func (d *Deps) HandleRuntimeSettings(w http.ResponseWriter, r *http.Request) {
 			"count": len(updatedKeys),
 		}
 		d.appendAuditEventBestEffort(auditEvent, runtimeSettingsUpdateAuditWarning)
-		d.writeRuntimeSettingsPayload(w)
+		if d.ApplyPrometheusRemoteWriteSettings != nil && prometheusRemoteWriteKeysTouched(normalized, nil) {
+			if err := d.ApplyPrometheusRemoteWriteSettings(); err != nil {
+				servicehttp.WriteError(w, http.StatusServiceUnavailable, "settings saved but prometheus remote write runtime reload failed")
+				return
+			}
+		}
+		d.writeRuntimeSettingsPayloadLocked(w)
 	default:
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
@@ -131,6 +148,8 @@ func (d *Deps) HandleRuntimeSettingsReset(w http.ResponseWriter, r *http.Request
 	) {
 		return
 	}
+	d.runtimeSettingsMu.Lock()
+	defer d.runtimeSettingsMu.Unlock()
 
 	var req shared.RuntimeSettingsResetRequest
 	if err := d.decodeJSONBody(w, r, &req); err != nil && !errors.Is(err, io.EOF) {
@@ -140,6 +159,10 @@ func (d *Deps) HandleRuntimeSettingsReset(w http.ResponseWriter, r *http.Request
 
 	keys, err := shared.SanitizeRuntimeSettingKeys(req.Keys)
 	if err != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := d.validatePrometheusRemoteWriteMutation(nil, keys); err != nil {
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -153,10 +176,10 @@ func (d *Deps) HandleRuntimeSettingsReset(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if d.PolicyState != nil {
-		d.PolicyState.ApplyOverrides(overrides)
+		d.PolicyState.ApplyOverrides(shared.NonSensitiveRuntimeOverrides(overrides))
 	}
 	if d.ApplySecurityRuntimeOverrides != nil {
-		d.ApplySecurityRuntimeOverrides(overrides)
+		d.ApplySecurityRuntimeOverrides(shared.NonSensitiveRuntimeOverrides(overrides))
 	}
 	if d.InvalidateWebServiceURLGroupingConfigCache != nil {
 		d.InvalidateWebServiceURLGroupingConfigCache()
@@ -171,16 +194,24 @@ func (d *Deps) HandleRuntimeSettingsReset(w http.ResponseWriter, r *http.Request
 		"count": len(resetKeys),
 	}
 	d.appendAuditEventBestEffort(auditEvent, runtimeSettingsResetAuditWarning)
-	d.writeRuntimeSettingsPayload(w)
+	if d.ApplyPrometheusRemoteWriteSettings != nil && prometheusRemoteWriteKeysTouched(nil, keys) {
+		if err := d.ApplyPrometheusRemoteWriteSettings(); err != nil {
+			servicehttp.WriteError(w, http.StatusServiceUnavailable, "settings reset but prometheus remote write runtime reload failed")
+			return
+		}
+	}
+	d.writeRuntimeSettingsPayloadLocked(w)
 }
 
-// writeRuntimeSettingsPayload delegates to the shared helper, which loads all
-// runtime setting definitions and overrides and writes them as JSON.
-func (d *Deps) writeRuntimeSettingsPayload(w http.ResponseWriter) {
-	shared.WriteRuntimeSettingsPayload(w, d.RuntimeStore)
+func (d *Deps) writeRuntimeSettingsPayloadLocked(w http.ResponseWriter) {
+	if err := shared.WriteRuntimeSettingsPayload(w, d.RuntimeStore, d.SecretsManager); err != nil {
+		writeAdminInternalError(w, http.StatusInternalServerError, shared.RuntimeSettingsLoadFailureError, err)
+	}
 }
 
 // WriteRuntimeSettingsPayload is the exported equivalent used by the bridge.
 func (d *Deps) WriteRuntimeSettingsPayload(w http.ResponseWriter) {
-	d.writeRuntimeSettingsPayload(w)
+	d.runtimeSettingsMu.Lock()
+	defer d.runtimeSettingsMu.Unlock()
+	d.writeRuntimeSettingsPayloadLocked(w)
 }

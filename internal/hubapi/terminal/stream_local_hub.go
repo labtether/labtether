@@ -62,13 +62,13 @@ func (d *Deps) HandleHubLocalTerminalStream(w http.ResponseWriter, r *http.Reque
 	traceLog := shared.StreamTraceLogValue(traceID)
 	logContext := fmt.Sprintf("session=%s target=%s trace=%s", session.ID, session.Target, traceLog)
 
-	wsConn, err := d.TerminalWebSocketUpgrader.Upgrade(w, r, nil)
+	wsConn, err := shared.UpgradeWebSocket(&d.TerminalWebSocketUpgrader, w, r, nil)
 	if err != nil {
 		log.Printf("terminal-local: upgrade_failed %s err=%v", logContext, err) // #nosec G706 -- Log fields are bounded session/runtime identifiers and local upgrade errors.
 		return
 	}
-	defer wsConn.Close()
 	wsConn.SetReadLimit(maxTerminalInputReadBytes)
+	defer wsConn.Close()
 	connectStart := time.Now()
 	_ = WriteTerminalStatus(wsConn, "hub_local_shell_starting", "Starting hub local diagnostics shell...", 0, 0, 0)
 

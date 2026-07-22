@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/url"
@@ -11,6 +13,8 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 )
+
+const PKCECodeChallengeMethodS256 = "S256"
 
 type OIDCSettings struct {
 	Enabled            bool
@@ -26,6 +30,7 @@ type OIDCSettings struct {
 }
 
 type OIDCIdentity struct {
+	Issuer            string         `json:"issuer"`
 	Subject           string         `json:"subject"`
 	Email             string         `json:"email,omitempty"`
 	Name              string         `json:"name,omitempty"`
@@ -128,7 +133,59 @@ func (p *OIDCProvider) BuildAuthURL(state, nonce, redirectURI string) (string, e
 	return cfg.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("nonce", nonce)), nil
 }
 
+// BuildAuthURLWithPKCE builds an OIDC authorization URL bound to an RFC 7636
+// S256 code challenge. Native clients keep the corresponding verifier local
+// until the one-time callback exchange.
+func (p *OIDCProvider) BuildAuthURLWithPKCE(state, nonce, redirectURI, codeChallenge string) (string, error) {
+	if !p.Enabled() {
+		return "", errors.New("oidc is not enabled")
+	}
+	state = strings.TrimSpace(state)
+	nonce = strings.TrimSpace(nonce)
+	redirectURI = strings.TrimSpace(redirectURI)
+	codeChallenge = strings.TrimSpace(codeChallenge)
+	if state == "" {
+		return "", errors.New("state is required")
+	}
+	if nonce == "" {
+		return "", errors.New("nonce is required")
+	}
+	if redirectURI == "" {
+		return "", errors.New("redirect uri is required")
+	}
+	if err := ValidatePKCECodeChallenge(codeChallenge); err != nil {
+		return "", err
+	}
+
+	cfg := oauth2.Config{
+		ClientID:     p.settings.ClientID,
+		ClientSecret: p.settings.ClientSecret,
+		Endpoint:     p.provider.Endpoint(),
+		RedirectURL:  redirectURI,
+		Scopes:       p.settings.Scopes,
+	}
+	return cfg.AuthCodeURL(
+		state,
+		oauth2.SetAuthURLParam("nonce", nonce),
+		oauth2.SetAuthURLParam("code_challenge", codeChallenge),
+		oauth2.SetAuthURLParam("code_challenge_method", PKCECodeChallengeMethodS256),
+	), nil
+}
+
 func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, nonce, redirectURI string) (OIDCIdentity, error) {
+	return p.exchangeCode(ctx, code, nonce, redirectURI)
+}
+
+// ExchangeCodeWithPKCE exchanges and verifies a native authorization code
+// while proving possession of the verifier used to create its S256 challenge.
+func (p *OIDCProvider) ExchangeCodeWithPKCE(ctx context.Context, code, nonce, redirectURI, codeVerifier string) (OIDCIdentity, error) {
+	if err := ValidatePKCECodeVerifier(codeVerifier); err != nil {
+		return OIDCIdentity{}, err
+	}
+	return p.exchangeCode(ctx, code, nonce, redirectURI, oauth2.VerifierOption(codeVerifier))
+}
+
+func (p *OIDCProvider) exchangeCode(ctx context.Context, code, nonce, redirectURI string, options ...oauth2.AuthCodeOption) (OIDCIdentity, error) {
 	if !p.Enabled() {
 		return OIDCIdentity{}, errors.New("oidc is not enabled")
 	}
@@ -152,7 +209,7 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, nonce, redirectUR
 		RedirectURL:  redirectURI,
 		Scopes:       p.settings.Scopes,
 	}
-	token, err := cfg.Exchange(ctx, code)
+	token, err := cfg.Exchange(ctx, code, options...)
 	if err != nil {
 		return OIDCIdentity{}, fmt.Errorf("exchange oidc code: %w", err)
 	}
@@ -175,6 +232,7 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, nonce, redirectUR
 	}
 
 	identity := OIDCIdentity{
+		Issuer:            strings.TrimSpace(idToken.Issuer),
 		Subject:           strings.TrimSpace(idToken.Subject),
 		Email:             claimString(claims, "email"),
 		Name:              claimString(claims, "name"),
@@ -182,10 +240,53 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, nonce, redirectUR
 		Claims:            claims,
 		Role:              p.resolveRole(claims),
 	}
+	if identity.Issuer == "" {
+		return OIDCIdentity{}, errors.New("oidc issuer claim is missing")
+	}
 	if identity.Subject == "" {
 		return OIDCIdentity{}, errors.New("oidc subject claim is missing")
 	}
 	return identity, nil
+}
+
+// ValidatePKCECodeChallenge accepts only a canonical SHA-256 base64url value.
+func ValidatePKCECodeChallenge(codeChallenge string) error {
+	if len(codeChallenge) != 43 {
+		return errors.New("pkce code challenge must be a 43-character S256 value")
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(codeChallenge)
+	if err != nil || len(decoded) != sha256.Size || base64.RawURLEncoding.EncodeToString(decoded) != codeChallenge {
+		return errors.New("pkce code challenge must be canonical base64url")
+	}
+	return nil
+}
+
+// ValidatePKCECodeVerifier applies RFC 7636's length and unreserved-character
+// requirements. The value is deliberately not trimmed: any mutation would
+// change its proof value.
+func ValidatePKCECodeVerifier(codeVerifier string) error {
+	if len(codeVerifier) < 43 || len(codeVerifier) > 128 {
+		return errors.New("pkce code verifier must contain 43 to 128 characters")
+	}
+	for _, value := range []byte(codeVerifier) {
+		if (value >= 'A' && value <= 'Z') ||
+			(value >= 'a' && value <= 'z') ||
+			(value >= '0' && value <= '9') ||
+			value == '-' || value == '.' || value == '_' || value == '~' {
+			continue
+		}
+		return errors.New("pkce code verifier contains an invalid character")
+	}
+	return nil
+}
+
+// PKCECodeChallengeS256 returns the canonical S256 challenge for a verifier.
+func PKCECodeChallengeS256(codeVerifier string) (string, error) {
+	if err := ValidatePKCECodeVerifier(codeVerifier); err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256([]byte(codeVerifier))
+	return base64.RawURLEncoding.EncodeToString(digest[:]), nil
 }
 
 func (p *OIDCProvider) resolveRole(claims map[string]any) string {

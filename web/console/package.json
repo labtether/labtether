@@ -3,9 +3,9 @@
   "version": "1.2.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/console-runtime.mjs ./node_modules/next/dist/bin/next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node scripts/console-runtime.mjs ./node_modules/next/dist/bin/next start",
     "lint": "npm run lint:types && npm run lint:ui",
     "tsc": "tsc",
     "lint:types": "npm run -s tsc -- --noEmit",
@@ -13,15 +13,24 @@
     "test:e2e": "env -u NO_COLOR playwright test",
     "test:e2e:https": "env -u NO_COLOR PLAYWRIGHT_SELF_SIGNED_HTTPS=1 playwright test",
     "test": "vitest run",
+    "test:runtime-proxy:standalone": "node scripts/test-runtime-proxy-standalone.mjs",
     "test:watch": "vitest",
     "test:visual:https": "env -u NO_COLOR PLAYWRIGHT_SELF_SIGNED_HTTPS=1 playwright test e2e/visual-regression.spec.ts",
     "postinstall": "sh scripts/patch-novnc.sh"
   },
+  "allowScripts": {
+    "@parcel/watcher@2.5.6": true,
+    "@swc/core@1.15.26": true,
+    "fsevents@2.3.2": true,
+    "fsevents@2.3.3": true,
+    "sharp@0.35.3": true
+  },
   "overrides": {
-    "brace-expansion": "^5.0.5",
+    "brace-expansion": "^5.0.7",
     "flatted": "^3.4.2",
     "picomatch": "^4.0.4",
     "postcss": "^8.5.10",
+    "sharp": "0.35.3",
     "vite": "^8.0.5"
   },
   "dependencies": {
@@ -42,7 +51,7 @@
     "cmdk": "^1.1.1",
     "guacamole-common-js": "^1.5.0",
     "lucide-react": "^1.17.0",
-    "next": "^16.2.6",
+    "next": "^16.2.11",
     "next-intl": "^4.13.0",
     "qrcode": "^1.5.4",
     "react": "^19.2.6",

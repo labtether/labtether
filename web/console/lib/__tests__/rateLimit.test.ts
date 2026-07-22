@@ -98,4 +98,18 @@ describe("pruneExpired", () => {
     expect(result.success).toBe(true);
     expect(result.remaining).toBe(4); // fresh entry
   });
+
+  it("keeps the in-memory store bounded under attacker-controlled keys", async () => {
+    const {
+      checkRateLimit,
+      MAX_RATE_LIMIT_ENTRIES,
+      rateLimitStoreSize,
+      resetRateLimitStore,
+    } = await freshModule();
+    resetRateLimitStore();
+    for (let i = 0; i < MAX_RATE_LIMIT_ENTRIES + 100; i += 1) {
+      checkRateLimit(`attacker-${i}`, 5, 60_000);
+    }
+    expect(rateLimitStoreSize()).toBeLessThanOrEqual(MAX_RATE_LIMIT_ENTRIES);
+  });
 });

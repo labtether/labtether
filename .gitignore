@@ -90,6 +90,10 @@ AGENTS.md
 
 # Playwright MCP logs
 .playwright-mcp/
+.playwright-cli/
+
+# Local installed-product QA runtime material
+/output/qa/
 
 # Superpowers brainstorm cache
 .superpowers/

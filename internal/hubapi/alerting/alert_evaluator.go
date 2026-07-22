@@ -208,7 +208,7 @@ func (d *Deps) EvaluateSingleRule(ctx context.Context, rule alerts.Rule, prefetc
 		triggeredCount = 1
 		d.fireOrRefireAlert(rule, prefetchedSuppression)
 	} else {
-		d.resolveStaleInstances(rule)
+		d.resolveStaleInstances(rule, prefetchedSuppression)
 	}
 
 	_, _ = d.AlertStore.RecordAlertEvaluation(rule.ID, alerts.Evaluation{

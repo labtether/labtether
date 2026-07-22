@@ -22,6 +22,7 @@ const (
 // CollectorSample represents a single metric sample parsed from collector output.
 type CollectorSample struct {
 	Metric    string    `json:"metric"`
+	Unit      string    `json:"unit"`
 	Value     float64   `json:"value"`
 	AssetID   string    `json:"asset_id,omitempty"`
 	Timestamp time.Time `json:"timestamp"`
@@ -61,8 +62,13 @@ func parseJSONOutput(output string, assetID string, now time.Time) ([]CollectorS
 			if !ok {
 				continue
 			}
+			metric := NormalizeMetricKey(k)
+			if metric == "" {
+				continue
+			}
 			samples = append(samples, CollectorSample{
-				Metric:    NormalizeMetricKey(k),
+				Metric:    metric,
+				Unit:      CollectorMetricUnit(metric),
 				Value:     val,
 				AssetID:   assetID,
 				Timestamp: now,
@@ -83,8 +89,13 @@ func parseJSONOutput(output string, assetID string, now time.Time) ([]CollectorS
 			if metric == "" || !ok {
 				continue
 			}
+			metric = NormalizeMetricKey(metric)
+			if metric == "" {
+				continue
+			}
 			samples = append(samples, CollectorSample{
-				Metric:    NormalizeMetricKey(metric),
+				Metric:    metric,
+				Unit:      CollectorMetricUnit(metric),
 				Value:     val,
 				AssetID:   assetID,
 				Timestamp: now,
@@ -114,14 +125,34 @@ func parseKeyValueOutput(output string, assetID string, now time.Time) ([]Collec
 		if err != nil {
 			continue
 		}
+		metric := NormalizeMetricKey(matches[1])
 		samples = append(samples, CollectorSample{
-			Metric:    NormalizeMetricKey(matches[1]),
+			Metric:    metric,
+			Unit:      CollectorMetricUnit(metric),
 			Value:     val,
 			AssetID:   assetID,
 			Timestamp: now,
 		})
 	}
 	return samples, nil
+}
+
+// CollectorMetricUnit supplies a stable non-empty unit for every supported
+// collector sample. Production Postgres persistence rejects empty units, while
+// the in-memory store historically accepted them; keeping the mapping here
+// makes both stores observe the same telemetry. Unknown custom gauges use the
+// explicit neutral unit "value" rather than being silently dropped.
+func CollectorMetricUnit(metric string) string {
+	switch NormalizeMetricKey(metric) {
+	case MetricCPUPercent, MetricMemoryPercent, MetricDiskPercent:
+		return "percent"
+	case MetricTempCelsius:
+		return "celsius"
+	case MetricNetRXBytesPerSec, MetricNetTXBytesPerSec:
+		return "bytes_per_sec"
+	default:
+		return "value"
+	}
 }
 
 // NormalizeMetricKey maps common metric name variants to canonical keys.

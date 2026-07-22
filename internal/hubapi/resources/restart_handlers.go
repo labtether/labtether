@@ -30,6 +30,9 @@ func (d *Deps) HandleRestartSettings(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusNotFound, "not found")
 		return
 	}
+	if denyAssetRestrictedGlobal(w, r, "restart settings") {
+		return
+	}
 	if r.Method != http.MethodPost {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return

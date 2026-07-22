@@ -63,7 +63,24 @@ func (d *Deps) HandleGroupReliabilityCollection(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	records, err := d.BuildGroupReliabilityRecords(groupList, from, to)
+	var records []GroupReliabilityRecord
+	if shared.HasAssetRestriction(r.Context()) {
+		_, assetList, accessible, ok := d.authorizationScope(w, r)
+		if !ok {
+			return
+		}
+		filteredGroups := make([]groups.Group, 0, len(accessible))
+		for _, groupEntry := range groupList {
+			if _, allowed := accessible[strings.TrimSpace(groupEntry.ID)]; allowed {
+				filteredGroups = append(filteredGroups, groupEntry)
+			}
+		}
+		groupList = filteredGroups
+		assetList = shared.FilterAssetsByAccess(r.Context(), assetList)
+		records, err = d.BuildGroupReliabilityRecordsWithAssets(groupList, assetList, from, to)
+	} else {
+		records, err = d.BuildGroupReliabilityRecords(groupList, from, to)
+	}
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to compute group reliability")
 		return
@@ -97,6 +114,9 @@ func (d *Deps) HandleGroupReliabilityByID(w http.ResponseWriter, r *http.Request
 	}
 	if !ok {
 		servicehttp.WriteError(w, http.StatusNotFound, "group not found")
+		return
+	}
+	if !d.requireGroupAccess(w, r, groupID) {
 		return
 	}
 

@@ -2,6 +2,7 @@ package shared
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -31,6 +32,38 @@ func DecodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
 		return fmt.Errorf("request body must contain a single JSON object")
 	}
 	return nil
+}
+
+// DecodeOptionalJSONBody is the size-bounded equivalent for endpoints whose
+// request body may be empty. The boolean reports whether a JSON value was
+// present.
+func DecodeOptionalJSONBody(w http.ResponseWriter, r *http.Request, dst any) (bool, error) {
+	if r == nil || r.Body == nil {
+		return false, nil
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, MaxJSONBodyBytes)
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(dst); err != nil {
+		if errors.Is(err, io.EOF) {
+			return false, nil
+		}
+		return false, err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return false, fmt.Errorf("request body must contain a single JSON object")
+	}
+	return true, nil
+}
+
+// JSONDecodeErrorStatus distinguishes an oversized body from malformed JSON
+// so callers can return the appropriate HTTP status without duplicating
+// MaxBytesError checks.
+func JSONDecodeErrorStatus(err error) int {
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		return http.StatusRequestEntityTooLarge
+	}
+	return http.StatusBadRequest
 }
 
 func MapCommandLevel(status string) string {

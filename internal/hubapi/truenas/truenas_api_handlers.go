@@ -3,6 +3,7 @@ package truenas
 import (
 	"context"
 	"errors"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"sort"
@@ -98,6 +99,9 @@ func (d *Deps) HandleTrueNASAssets(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusNotFound, "truenas asset path not found")
 		return
 	}
+	if !apiv2.RequireAssetAccess(w, r, assetID) {
+		return
+	}
 	if len(parts) < 2 {
 		servicehttp.WriteError(w, http.StatusNotFound, "unknown truenas asset action")
 		return
@@ -131,17 +135,48 @@ func (d *Deps) HandleTrueNASAssets(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
+		asset, err := d.ResolveTrueNASAsset(assetID)
+		if err != nil {
+			WriteTrueNASResolveError(w, err)
+			return
+		}
+		if !d.requireTrueNASCollectorAccess(w, r, strings.TrimSpace(asset.Metadata["collector_id"])) {
+			return
+		}
 		d.HandleTrueNASAssetSMART(w, r, assetID)
 	case "filesystem":
 		if r.Method != http.MethodGet {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
+		asset, err := d.ResolveTrueNASAsset(assetID)
+		if err != nil {
+			WriteTrueNASResolveError(w, err)
+			return
+		}
+		if !d.requireTrueNASCollectorAccess(w, r, strings.TrimSpace(asset.Metadata["collector_id"])) {
+			return
+		}
 		d.HandleTrueNASAssetFilesystem(w, r, assetID)
 	case "overview", "pools", "datasets", "shares", "disks", "services", "snapshots", "replication", "vms":
+		// These APIs operate on the whole appliance even though they are mounted
+		// beneath an asset URL. Check the declared collector before resolving a
+		// runtime, then check the actual runtime collector below in case fallback
+		// selected a different appliance.
+		declaredAsset, err := d.ResolveTrueNASAsset(assetID)
+		if err != nil {
+			WriteTrueNASResolveError(w, err)
+			return
+		}
+		if !d.requireTrueNASCollectorAccess(w, r, strings.TrimSpace(declaredAsset.Metadata["collector_id"])) {
+			return
+		}
 		asset, runtime, err := d.ResolveTrueNASAssetRuntime(assetID)
 		if err != nil {
 			WriteTrueNASResolveError(w, err)
+			return
+		}
+		if !d.requireTrueNASCollectorAccess(w, r, runtime.CollectorID) {
 			return
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
@@ -200,7 +235,7 @@ func (d *Deps) HandleTrueNASAssetEvents(w http.ResponseWriter, r *http.Request, 
 		ExcludeFields: true,
 	})
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to load truenas events: "+err.Error())
+		writeTrueNASError(w, http.StatusBadGateway, "failed to load truenas events", err)
 		return
 	}
 
@@ -218,6 +253,9 @@ func (d *Deps) HandleTrueNASAssetSMART(w http.ResponseWriter, r *http.Request, a
 		WriteTrueNASResolveError(w, err)
 		return
 	}
+	if !d.requireTrueNASCollectorAccess(w, r, runtime.CollectorID) {
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
@@ -228,25 +266,25 @@ func (d *Deps) HandleTrueNASAssetSMART(w http.ResponseWriter, r *http.Request, a
 			cached.AssetID = strings.TrimSpace(asset.ID)
 			cached.CollectorID = strings.TrimSpace(runtime.CollectorID)
 			cached.Hostname = strings.TrimSpace(asset.Metadata["hostname"])
-			cached.Warnings = AppendTrueNASWarning(cached.Warnings, StaleTrueNASReadWarning("live disk health unavailable: "+err.Error(), cached.FetchedAt))
+			cached.Warnings = AppendTrueNASWarning(cached.Warnings, StaleTrueNASReadWarning(trueNASWarning("live disk health unavailable", err), cached.FetchedAt))
 			servicehttp.WriteJSON(w, http.StatusOK, cached)
 			return
 		}
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to query truenas disks: "+err.Error())
+		writeTrueNASError(w, http.StatusBadGateway, "failed to query truenas disks", err)
 		return
 	}
 
 	diskTemps := map[string]any{}
 	warnings := make([]string, 0, 2)
 	if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, "disk.temperatures", nil, &diskTemps); err != nil {
-		warnings = append(warnings, "disk temperatures unavailable: "+err.Error())
+		warnings = append(warnings, trueNASWarning("disk temperatures unavailable", err))
 		diskTemps = map[string]any{}
 	}
 
 	smartResults := make([]map[string]any, 0, 32)
 	if err := CallTrueNASQueryWithRetries(ctx, runtime.Client, "smart.test.results", &smartResults); err != nil {
 		if !tnconnector.IsMethodNotFound(err) {
-			warnings = append(warnings, "SMART test history unavailable: "+err.Error())
+			warnings = append(warnings, trueNASWarning("SMART test history unavailable", err))
 		}
 		smartResults = nil
 	}
@@ -341,6 +379,9 @@ func (d *Deps) HandleTrueNASAssetFilesystem(w http.ResponseWriter, r *http.Reque
 		WriteTrueNASResolveError(w, err)
 		return
 	}
+	if !d.requireTrueNASCollectorAccess(w, r, runtime.CollectorID) {
+		return
+	}
 
 	requestPath := NormalizeTrueNASFilesystemPath(r.URL.Query().Get("path"))
 	limit := 1000
@@ -360,11 +401,11 @@ func (d *Deps) HandleTrueNASAssetFilesystem(w http.ResponseWriter, r *http.Reque
 			cached.AssetID = strings.TrimSpace(asset.ID)
 			cached.Path = requestPath
 			cached.ParentPath = ParentTrueNASFilesystemPath(requestPath)
-			cached.Warnings = AppendTrueNASWarning(cached.Warnings, StaleTrueNASReadWarning("live filesystem browse unavailable: "+err.Error(), cached.FetchedAt))
+			cached.Warnings = AppendTrueNASWarning(cached.Warnings, StaleTrueNASReadWarning(trueNASWarning("live filesystem browse unavailable", err), cached.FetchedAt))
 			servicehttp.WriteJSON(w, http.StatusOK, cached)
 			return
 		}
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to browse filesystem: "+err.Error())
+		writeTrueNASError(w, http.StatusBadGateway, "failed to browse filesystem", err)
 		return
 	}
 

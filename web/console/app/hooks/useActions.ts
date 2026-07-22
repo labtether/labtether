@@ -1,18 +1,20 @@
 "use client";
 
 import { type FormEvent, useCallback, useEffect, useState } from "react";
-import { useSlowStatus, useStatusControls, useStatusSettings } from "../contexts/StatusContext";
+import { useFastStatus, useSlowStatus, useStatusControls, useStatusSettings } from "../contexts/StatusContext";
 import type { ConnectorActionDescriptor } from "../console/models";
 import { buildConnectorActionRequest, syncActionParamValues, type ActionParamValues } from "../lib/actionForm";
 import { ensureArray, ensureRecord, ensureString } from "../lib/responseGuards";
 
 export function useActions() {
+  const fastStatus = useFastStatus();
   const status = useSlowStatus();
   const { fetchStatus, selectedGroupFilter } = useStatusControls();
   const { defaultActorID, defaultActionDryRun } = useStatusSettings();
 
   const actionRuns = status?.actionRuns ?? [];
   const connectors = status?.connectors ?? [];
+  const assets = fastStatus?.assets ?? [];
 
   const [selectedConnector, setSelectedConnector] = useState<string>("");
   const [connectorActions, setConnectorActions] = useState<ConnectorActionDescriptor[]>([]);
@@ -159,6 +161,7 @@ export function useActions() {
   return {
     actionParameters,
     actionParamValues,
+    assets,
     connectors,
     selectedConnector,
     setSelectedConnector,

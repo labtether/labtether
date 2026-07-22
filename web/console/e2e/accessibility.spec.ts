@@ -177,5 +177,5 @@ test("keyboard navigation reaches sidebar links and add-device flow", async ({ p
   expect(reachedAgentSource).toBeTruthy();
 
   await page.keyboard.press("Enter");
-  await expect(page.getByText("Install Agent")).toBeVisible();
+  await expect(page.getByText("Install Agent", { exact: true })).toBeVisible();
 });

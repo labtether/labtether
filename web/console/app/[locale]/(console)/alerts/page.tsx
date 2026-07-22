@@ -24,6 +24,7 @@ export default function AlertsPage() {
     templates,
     silences,
     loading,
+    error,
     ackAlert,
     resolveAlert,
     createSilence,
@@ -50,6 +51,10 @@ export default function AlertsPage() {
         title={t('title')}
         subtitle={t('subtitle.label', { activeInfo: firingCount > 0 ? t('subtitle.active', { count: firingCount }) : '' })}
       />
+
+      {error ? (
+        <p role="alert" className="mb-4 text-xs text-[var(--bad)]">{error}</p>
+      ) : null}
 
       <Card className="mb-4 flex items-center justify-between">
         <SegmentedTabs

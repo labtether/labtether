@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
@@ -27,10 +28,10 @@ func WritePortainerJSON(w http.ResponseWriter, data any, warnings []string) {
 		FetchedAt: time.Now().UTC(),
 		Warnings:  DedupeNonEmptyWarnings(warnings),
 	}
+	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
 }
 
 // handlePortainerAssets dispatches /portainer/assets/{assetID}/{action}[/...].
@@ -44,6 +45,9 @@ func (d *Deps) HandlePortainerAssets(w http.ResponseWriter, r *http.Request) {
 	assetID := strings.TrimSpace(parts[0])
 	if assetID == "" {
 		servicehttp.WriteError(w, http.StatusNotFound, "portainer asset path not found")
+		return
+	}
+	if !apiv2.RequireAssetAccess(w, r, assetID) {
 		return
 	}
 	if len(parts) < 2 {
@@ -103,7 +107,7 @@ func (d *Deps) HandlePortainerAssets(w http.ResponseWriter, r *http.Request) {
 
 	switch action {
 	case "overview":
-		d.HandlePortainerOverview(ctx, w, asset, runtime)
+		d.HandlePortainerOverview(ctx, w, r, asset, runtime)
 	case "containers":
 		d.HandlePortainerContainers(ctx, w, r, asset, runtime, subParts)
 	case "stacks":

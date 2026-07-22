@@ -6,8 +6,10 @@ import (
 	"crypto/x509"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -31,23 +33,25 @@ type ProvisionResult struct {
 // It is safe for concurrent use: GetCertificate and Run may be called from
 // multiple goroutines simultaneously.
 type CertReloader struct {
-	ca       *KeyPair
-	certsDir string
+	ca              *KeyPair
+	certsDir        string
+	additionalHosts []string
 
 	mu   sync.RWMutex
 	cert *tls.Certificate
 }
 
 // newCertReloader builds a CertReloader from an already-provisioned server cert.
-func newCertReloader(ca *KeyPair, certsDir string, serverCertPath, serverKeyPath string) (*CertReloader, error) {
+func newCertReloader(ca *KeyPair, certsDir string, serverCertPath, serverKeyPath string, additionalHosts []string) (*CertReloader, error) {
 	tlsCert, err := tls.LoadX509KeyPair(serverCertPath, serverKeyPath)
 	if err != nil {
 		return nil, fmt.Errorf("certmgr: load TLS key pair for reloader: %w", err)
 	}
 	return &CertReloader{
-		ca:       ca,
-		certsDir: certsDir,
-		cert:     &tlsCert,
+		ca:              ca,
+		certsDir:        certsDir,
+		additionalHosts: normalizeAdditionalHosts(additionalHosts),
+		cert:            &tlsCert,
 	}, nil
 }
 
@@ -119,7 +123,7 @@ func (r *CertReloader) renewNow() error {
 	serverCertPath := filepath.Join(r.certsDir, "server.crt")
 	serverKeyPath := filepath.Join(r.certsDir, "server.key")
 
-	dnsNames, ipStrings := CollectLocalSANs()
+	dnsNames, ipStrings := collectServerSANs(r.additionalHosts)
 	serverKP, err := GenerateServerCert(r.ca, dnsNames, ipStrings)
 	if err != nil {
 		return fmt.Errorf("generate server cert: %w", err)
@@ -152,9 +156,10 @@ func parseCertLeaf(tc *tls.Certificate) (*x509.Certificate, error) {
 }
 
 // Provision ensures a CA and server certificate exist in certsDir, creating
-// or renewing them as needed. It returns paths to all artifacts and the CA
-// certificate PEM bytes (for distribution to agents).
-func Provision(certsDir string) (*ProvisionResult, error) {
+// or renewing them as needed. additionalHosts are operator-advertised DNS names
+// or IP literals that the server certificate must cover. It returns paths to
+// all artifacts and the CA certificate PEM bytes (for distribution to agents).
+func Provision(certsDir string, additionalHosts ...string) (*ProvisionResult, error) {
 	// 1. Create certsDir if it doesn't exist
 	if err := os.MkdirAll(certsDir, 0700); err != nil {
 		return nil, fmt.Errorf("certmgr: create certs directory: %w", err)
@@ -205,6 +210,7 @@ func Provision(certsDir string) (*ProvisionResult, error) {
 		return nil, fmt.Errorf("certmgr: server.crt exists but server.key is missing in %s (possible corruption)", certsDir)
 	}
 
+	additionalHosts = normalizeAdditionalHosts(additionalHosts)
 	needNewServerCert := true
 
 	if serverCertExists && serverKeyExists {
@@ -213,6 +219,8 @@ func Provision(certsDir string) (*ProvisionResult, error) {
 			log.Printf("certmgr: existing server cert is corrupt, regenerating: %v", err)
 		} else if NeedsRenewal(serverKP.Cert, renewalWindow) {
 			log.Printf("certmgr: server cert expiring within 30 days, regenerating")
+		} else if !certificateCoversHosts(serverKP.Cert, additionalHosts) {
+			log.Printf("certmgr: existing server cert is missing configured external host SANs, regenerating")
 		} else {
 			log.Printf("certmgr: loaded existing server cert from %s", certsDir)
 			needNewServerCert = false
@@ -220,7 +228,7 @@ func Provision(certsDir string) (*ProvisionResult, error) {
 	}
 
 	if needNewServerCert {
-		dnsNames, ipStrings := CollectLocalSANs()
+		dnsNames, ipStrings := collectServerSANs(additionalHosts)
 		serverKP, err := GenerateServerCert(ca, dnsNames, ipStrings)
 		if err != nil {
 			return nil, fmt.Errorf("certmgr: generate server cert: %w", err)
@@ -231,7 +239,7 @@ func Provision(certsDir string) (*ProvisionResult, error) {
 		log.Printf("certmgr: generated new server cert in %s", certsDir)
 	}
 
-	reloader, err := newCertReloader(ca, certsDir, serverCertPath, serverKeyPath)
+	reloader, err := newCertReloader(ca, certsDir, serverCertPath, serverKeyPath, additionalHosts)
 	if err != nil {
 		return nil, fmt.Errorf("certmgr: create cert reloader: %w", err)
 	}
@@ -243,6 +251,55 @@ func Provision(certsDir string) (*ProvisionResult, error) {
 		CACertPEM:      CertPEM(ca.Cert),
 		Reloader:       reloader,
 	}, nil
+}
+
+// normalizeAdditionalHosts canonicalizes and de-duplicates operator-configured
+// hosts before they are placed in a certificate. Callers must pass hostnames or
+// IP literals only, without a scheme or port.
+func normalizeAdditionalHosts(hosts []string) []string {
+	seen := make(map[string]struct{}, len(hosts))
+	normalized := make([]string, 0, len(hosts))
+	for _, raw := range hosts {
+		host := strings.TrimSpace(strings.Trim(raw, "[]"))
+		if host == "" {
+			continue
+		}
+		if ip := net.ParseIP(host); ip != nil {
+			host = ip.String()
+		} else {
+			host = strings.ToLower(strings.TrimSuffix(host, "."))
+		}
+		if _, ok := seen[host]; ok {
+			continue
+		}
+		seen[host] = struct{}{}
+		normalized = append(normalized, host)
+	}
+	return normalized
+}
+
+func collectServerSANs(additionalHosts []string) (dnsNames []string, ipStrings []string) {
+	dnsNames, ipStrings = CollectLocalSANs()
+	for _, host := range normalizeAdditionalHosts(additionalHosts) {
+		if net.ParseIP(host) != nil {
+			ipStrings = append(ipStrings, host)
+		} else {
+			dnsNames = append(dnsNames, host)
+		}
+	}
+	return dnsNames, ipStrings
+}
+
+func certificateCoversHosts(cert *x509.Certificate, hosts []string) bool {
+	if cert == nil {
+		return false
+	}
+	for _, host := range normalizeAdditionalHosts(hosts) {
+		if err := cert.VerifyHostname(host); err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 // fileExists returns true if the given path exists and is a regular file.

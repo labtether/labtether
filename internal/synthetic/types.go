@@ -2,6 +2,8 @@ package synthetic
 
 import (
 	"errors"
+	"fmt"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -19,7 +21,30 @@ const (
 	DefaultIntervalSeconds = 60
 	MinIntervalSeconds     = 1
 	MaxIntervalSeconds     = 1<<31 - 1
+	MaxMatchBodyPatternLen = 4096
 )
+
+// ValidateConfig rejects body-match programs that would otherwise consume
+// disproportionate compile memory or fail repeatedly in the scheduler.
+func ValidateConfig(config map[string]any) error {
+	value, exists := config["match_body"]
+	if !exists || value == nil {
+		return nil
+	}
+	pattern, ok := value.(string)
+	if !ok {
+		return errors.New("config.match_body must be a string")
+	}
+	if len(pattern) > MaxMatchBodyPatternLen {
+		return fmt.Errorf("config.match_body exceeds %d bytes", MaxMatchBodyPatternLen)
+	}
+	if pattern != "" {
+		if _, err := regexp.Compile(pattern); err != nil {
+			return fmt.Errorf("config.match_body is not a valid regular expression: %w", err)
+		}
+	}
+	return nil
+}
 
 var (
 	ErrCheckNotFound   = errors.New("synthetic check not found")

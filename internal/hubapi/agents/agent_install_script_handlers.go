@@ -36,9 +36,10 @@ func (d *Deps) HandleAgentInstallScript(w http.ResponseWriter, r *http.Request) 
 //
 //	ca_fingerprint_sha256 — required; expected lowercase/uppercase SHA-256 hex of CA cert
 //
-// Example:
-//
-//	curl -kfsSL "https://hub:8443/api/v1/agent/bootstrap.sh?ca_fingerprint_sha256=<hex>" | sudo bash -s -- --enrollment-token <token>
+// The authenticated console generates a pinned-CA command that verifies the
+// downloaded CA before it downloads or executes installer content. Callers
+// must not execute a bootstrap script fetched through unauthenticated -k
+// transport unless they independently verified the script's provenance.
 func (d *Deps) HandleAgentBootstrapScript(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -82,8 +83,6 @@ func SanitizeSHA256Hex(raw string) (string, bool) {
 func GenerateBootstrapScript(hubURL, expectedCAFingerprint string) string {
 	return fmt.Sprintf(
 		agentBootstrapScriptTemplate(),
-		hubURL,
-		expectedCAFingerprint,
 		shellSingleQuote(hubURL),
 		shellSingleQuote(expectedCAFingerprint),
 	)

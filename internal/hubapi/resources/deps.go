@@ -12,6 +12,7 @@ import (
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/edges"
 	"github.com/labtether/labtether/internal/fileproto"
+	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/terminal"
 )
@@ -71,13 +72,18 @@ type Deps struct {
 	PackageBridges *sync.Map
 	CronBridges    *sync.Map
 	UsersBridges   *sync.Map
+	// WoLPending binds agent-assisted Wake-on-LAN results to the exact relay
+	// and request that the hub dispatched. The zero-value registry is ready to
+	// use; production wiring supplies a process-lifetime instance.
+	WoLPending *WoLPendingRegistry
 
 	// Auth middleware injected from cmd/labtether.
 	WrapAuth func(http.HandlerFunc) http.HandlerFunc
 
 	// Stores for heartbeat and delete cascade logic.
-	EnrollmentStore   persistence.EnrollmentStore
-	HubCollectorStore persistence.HubCollectorStore
+	EnrollmentStore        persistence.EnrollmentStore
+	EnrollmentTransactions persistence.AgentEnrollmentTransactionStore
+	HubCollectorStore      persistence.HubCollectorStore
 
 	// Coordinator removal callbacks (nil-safe in handlers).
 	RemoveDockerHost     func(assetID string)
@@ -127,6 +133,10 @@ type Deps struct {
 	// been exceeded for the given bucket.
 	EnforceRateLimit func(w http.ResponseWriter, r *http.Request, bucket string, limit int, window time.Duration) bool
 
+	// EvaluateAssetGuardrails resolves group maintenance constraints for an
+	// operator action targeting an asset.
+	EvaluateAssetGuardrails maintenanceguard.EvaluateAssetFunc
+
 	// PrincipalActorID extracts the actor ID from the request context.
 	PrincipalActorID func(ctx context.Context) string
 
@@ -138,6 +148,9 @@ type Deps struct {
 
 	// AppendAuditEventBestEffort appends an audit event, logging on failure.
 	AppendAuditEventBestEffort func(event AuditEvent, logMessage string)
+
+	// Broadcast publishes a bounded operator event after a successful mutation.
+	Broadcast func(eventType string, data map[string]any)
 }
 
 // PushDeviceStore is a minimal interface for push device registration.
@@ -202,6 +215,7 @@ func RegisterRoutes(handlers map[string]http.HandlerFunc, d *Deps) {
 	handlers["/links/suggestions/"] = d.WrapAuth(d.HandleLinkSuggestionActions)
 	handlers["/links/manual"] = d.WrapAuth(d.HandleManualLink)
 	handlers["/api/v1/devices/register"] = d.WrapAuth(d.HandleDeviceRegister)
+	handlers["/api/v1/devices/deregister"] = d.WrapAuth(d.HandleDeviceDeregister)
 	handlers["/settings/retention"] = d.WrapAuth(d.HandleRetentionSettings)
 	handlers["/audit/events"] = d.WrapAuth(d.HandleAuditEvents)
 	handlers["/discovery/proposals"] = d.WrapAuth(d.HandleProposals)

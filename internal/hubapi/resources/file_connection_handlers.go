@@ -101,6 +101,9 @@ func (d *Deps) handleListFileConnections(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	connections = d.filterFileConnectionsForActor(r, connections)
+	for i := range connections {
+		connections[i].ExtraConfig = sanitizeLegacyFileConnectionExtraConfig(connections[i].Protocol, connections[i].ExtraConfig)
+	}
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"connections": connections})
 }
 
@@ -145,6 +148,12 @@ func (d *Deps) handleCreateFileConnection(w http.ResponseWriter, r *http.Request
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	normalizedExtra, err := NormalizeFileConnectionExtraConfig(req.Protocol, req.ExtraConfig)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	req.ExtraConfig = normalizedExtra
 
 	// Derive credential kind from protocol + auth_method.
 	kind := credentialKindForFileProtocol(req.Protocol, req.AuthMethod)
@@ -254,6 +263,12 @@ func (d *Deps) handleUpdateFileConnection(w http.ResponseWriter, r *http.Request
 	if req.ExtraConfig != nil {
 		existing.ExtraConfig = req.ExtraConfig
 	}
+	normalizedExtra, err := NormalizeFileConnectionExtraConfig(existing.Protocol, existing.ExtraConfig)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	existing.ExtraConfig = normalizedExtra
 
 	secret := strings.TrimSpace(req.Secret)
 	passphrase := strings.TrimSpace(req.Passphrase)
@@ -446,6 +461,12 @@ func (d *Deps) handleFileConnectionTestStateless(w http.ResponseWriter, r *http.
 		InitialPath: initialPath,
 		ExtraConfig: req.ExtraConfig,
 	}
+	normalizedExtra, err := NormalizeFileConnectionExtraConfig(config.Protocol, config.ExtraConfig)
+	if err != nil {
+		servicehttp.WriteJSON(w, http.StatusBadRequest, map[string]any{"success": false, "error": err.Error()})
+		return
+	}
+	config.ExtraConfig = normalizedExtra
 
 	result := d.testFileConnection(r.Context(), config)
 	servicehttp.WriteJSON(w, http.StatusOK, result)
@@ -493,6 +514,10 @@ func (d *Deps) handleFileConnectionTestSaved(w http.ResponseWriter, r *http.Requ
 // --- helpers ---
 
 func (d *Deps) buildConnectionConfig(fc *persistence.FileConnection) (fileproto.ConnectionConfig, error) {
+	normalizedExtra, err := NormalizeFileConnectionExtraConfig(fc.Protocol, fc.ExtraConfig)
+	if err != nil {
+		return fileproto.ConnectionConfig{}, err
+	}
 	port := 0
 	if fc.Port != nil {
 		port = *fc.Port
@@ -511,7 +536,7 @@ func (d *Deps) buildConnectionConfig(fc *persistence.FileConnection) (fileproto.
 		Host:        fc.Host,
 		Port:        port,
 		InitialPath: initialPath,
-		ExtraConfig: fc.ExtraConfig,
+		ExtraConfig: normalizedExtra,
 	}
 
 	if fc.CredentialID != nil && *fc.CredentialID != "" {

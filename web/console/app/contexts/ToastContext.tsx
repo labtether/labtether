@@ -86,7 +86,13 @@ function ToastContainer({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id
   return (
     <div className="toastContainer">
       {toasts.map((toast) => (
-        <div key={toast.id} className={`toast toast-${toast.type}`}>
+        <div
+          key={toast.id}
+          className={`toast toast-${toast.type}`}
+          role={toast.type === "error" ? "alert" : "status"}
+          aria-live={toast.type === "error" ? "assertive" : "polite"}
+          aria-atomic="true"
+        >
           <span className="toastIcon">{toastIcon(toast.type)}</span>
           <div className="flex items-center gap-2 min-w-0">
             <span className="toastMessage">{toast.message}</span>

@@ -2,6 +2,7 @@ package resources
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -122,5 +123,56 @@ func TestHandleMobileClientTelemetryAcceptsBatchPayload(t *testing.T) {
 	}
 	if len(events) != 2 {
 		t.Fatalf("expected 2 telemetry events, got %d", len(events))
+	}
+}
+
+func TestHandleMobileClientTelemetryRejectsOversizedBatchWithoutWrites(t *testing.T) {
+	deps := newTestResourcesDeps(t)
+	events := make([]map[string]any, maxMobileTelemetryBatch+1)
+	for i := range events {
+		events[i] = map[string]any{"route": "api.logs", "metric": "request.duration"}
+	}
+	payload, err := json.Marshal(map[string]any{"events": events})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/telemetry/mobile/client", bytes.NewReader(payload))
+	rec := httptest.NewRecorder()
+	deps.HandleMobileClientTelemetry(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+	assertNoMobileTelemetryEvents(t, deps)
+}
+
+func TestHandleMobileClientTelemetryValidatesWholeBatchBeforeWrites(t *testing.T) {
+	deps := newTestResourcesDeps(t)
+	req := httptest.NewRequest(http.MethodPost, "/telemetry/mobile/client", bytes.NewBufferString(`{
+		"events":[
+			{"route":"api.logs","metric":"request.duration"},
+			{"route":"","metric":"request.duration"}
+		]
+	}`))
+	rec := httptest.NewRecorder()
+	deps.HandleMobileClientTelemetry(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+	assertNoMobileTelemetryEvents(t, deps)
+}
+
+func assertNoMobileTelemetryEvents(t *testing.T, deps *Deps) {
+	t.Helper()
+	events, err := deps.LogStore.QueryEvents(logs.QueryRequest{
+		Source: "mobile_client_telemetry",
+		From:   time.Now().UTC().Add(-time.Minute),
+		To:     time.Now().UTC().Add(time.Minute),
+		Limit:  5,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 0 {
+		t.Fatalf("invalid batch persisted %d events", len(events))
 	}
 }

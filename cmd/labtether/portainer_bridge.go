@@ -54,6 +54,10 @@ func (s *apiServer) ensurePortainerDeps() *portainerpkg.Deps {
 
 // Forwarding methods.
 
+func (s *apiServer) handlePortainerEndpoints(w http.ResponseWriter, r *http.Request) {
+	s.ensurePortainerDeps().HandlePortainerEndpoints(w, r)
+}
+
 func (s *apiServer) handlePortainerAssets(w http.ResponseWriter, r *http.Request) {
 	s.ensurePortainerDeps().HandlePortainerAssets(w, r)
 }

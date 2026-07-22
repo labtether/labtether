@@ -2,12 +2,16 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 
 	"github.com/labtether/labtether/internal/actions"
+	opspkg "github.com/labtether/labtether/internal/hubapi/operations"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	workerpkg "github.com/labtether/labtether/internal/hubapi/worker"
 	"github.com/labtether/labtether/internal/jobqueue"
+	"github.com/labtether/labtether/internal/persistence"
+	"github.com/labtether/labtether/internal/policy"
 	"github.com/labtether/labtether/internal/terminal"
 	"github.com/labtether/labtether/internal/updates"
 )
@@ -21,17 +25,55 @@ func (s *apiServer) buildWorkerDeps() *workerpkg.Deps {
 		AuditStore:    s.auditStore,
 		LogStore:      s.logStore,
 		PresenceStore: s.presenceStore,
+		ScheduleStore: s.scheduleStore,
+		ScheduleExecutionStore: func() persistence.ScheduleExecutionStore {
+			store, _ := s.scheduleStore.(persistence.ScheduleExecutionStore)
+			return store
+		}(),
+		AssetStore: s.assetStore,
+		GroupStore: s.groupStore,
 
 		AgentMgr: s.agentMgr,
 
 		ExecuteViaAgent: func(job terminal.CommandJob) terminal.CommandResult {
 			return s.executeViaAgent(job)
 		},
+		PrepareTerminalCommand: func(job *terminal.CommandJob) error {
+			if job == nil || job.SSHConfig != nil || opspkg.LoadCommandExecutorConfig().Mode != opspkg.ExecutorModeSSH {
+				return nil
+			}
+			if s.terminalStore == nil {
+				return fmt.Errorf("terminal session store is unavailable")
+			}
+			session, ok, err := s.terminalStore.GetSession(job.SessionID)
+			if err != nil {
+				return fmt.Errorf("load terminal session: %w", err)
+			}
+			if !ok {
+				return fmt.Errorf("terminal session not found")
+			}
+			resolved, err := s.ensureTerminalDeps().ResolveSessionSSHConfig(session)
+			if err != nil {
+				return err
+			}
+			job.SSHConfig = resolved
+			return nil
+		},
+		ExecuteTerminalCommand: func(job terminal.CommandJob) terminal.CommandResult {
+			return opspkg.ExecuteCommand(job)
+		},
 		ExecuteActionInProcess: func(job actions.Job) actions.Result {
 			return s.executeActionInProcess(job)
 		},
 		ExecuteUpdateScope: func(job updates.Job, target, scope string) updates.RunResultEntry {
 			return s.executeUpdateScope(job, target, scope)
+		},
+		EvaluateAssetGuardrails: s.ensureGroupFeaturesDeps().EvaluateAssetGuardrails,
+		AuthorizeScheduleTarget: func(ctx context.Context, actorID, assetID string) error {
+			return s.ensureSchedulesDeps().AuthorizeExecutionTarget(ctx, actorID, assetID)
+		},
+		GetPolicyConfig: func() policy.EvaluatorConfig {
+			return s.policyState.Current()
 		},
 
 		Broadcast: func(eventType string, data map[string]any) {
@@ -66,6 +108,10 @@ func (s *apiServer) handleActionRunJob(processed *atomic.Uint64) jobqueue.Handle
 
 func (s *apiServer) handleUpdateRunJob(processed *atomic.Uint64) jobqueue.HandlerFunc {
 	return s.ensureWorkerDeps().HandleUpdateRunJob(processed)
+}
+
+func (s *apiServer) handleScheduleRunJob(processed *atomic.Uint64) jobqueue.HandlerFunc {
+	return s.ensureWorkerDeps().HandleScheduleRunJob(processed)
 }
 
 func (s *apiServer) recordDeadLetter(ctx context.Context, job *jobqueue.Job, jobErr error) {

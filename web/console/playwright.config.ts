@@ -18,7 +18,7 @@ const webServerCommand = process.env.PLAYWRIGHT_WEB_SERVER_COMMAND
     "if [ -d public ]; then cp -R public .next/standalone/public; fi",
     useSelfSignedHttps
       ? `PLAYWRIGHT_HTTP_PORT=${internalHTTPPort} PLAYWRIGHT_HTTPS_PORT=${publicPort} node scripts/start-playwright-https.mjs`
-      : `HOSTNAME=127.0.0.1 PORT=${internalHTTPPort} node .next/standalone/server.js`,
+      : `HOSTNAME=127.0.0.1 PORT=${internalHTTPPort} node scripts/console-runtime.mjs .next/standalone/server.js`,
   ].join(" && ");
 
 export default defineConfig({

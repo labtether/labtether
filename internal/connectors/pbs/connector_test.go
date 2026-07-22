@@ -8,26 +8,39 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labtether/labtether/internal/assetid"
 	"github.com/labtether/labtether/internal/connectorsdk"
 )
 
-func TestConnectorStubMode(t *testing.T) {
+func TestConnectorUnconfiguredModeFailsClosed(t *testing.T) {
 	connector := NewWithConfig(Config{})
 
 	health, err := connector.TestConnection(context.Background())
 	if err != nil {
 		t.Fatalf("TestConnection returned unexpected error: %v", err)
 	}
-	if health.Status != "ok" || !strings.Contains(strings.ToLower(health.Message), "stub mode") {
-		t.Fatalf("unexpected health response: %+v", health)
+	if health.Status != "failed" || !strings.Contains(strings.ToLower(health.Message), "not configured") {
+		t.Fatalf("unexpected unconfigured health response: %+v", health)
 	}
 
 	assets, err := connector.Discover(context.Background())
 	if err != nil {
 		t.Fatalf("Discover returned unexpected error: %v", err)
 	}
-	if len(assets) != 1 || assets[0].ID != "pbs-server-stub" {
-		t.Fatalf("unexpected stub assets: %+v", assets)
+	if assets == nil || len(assets) != 0 {
+		t.Fatalf("expected non-nil empty unconfigured inventory, got %+v", assets)
+	}
+
+	for _, descriptor := range connector.Actions() {
+		for _, dryRun := range []bool{false, true} {
+			result, execErr := connector.ExecuteAction(context.Background(), descriptor.ID, connectorsdk.ActionRequest{
+				Params: map[string]string{"store": "disposable"},
+				DryRun: dryRun,
+			})
+			if execErr != nil || result.Status != "failed" || !strings.Contains(result.Message, "not configured") {
+				t.Fatalf("ExecuteAction(%q, dry_run=%v) = %+v, err=%v, want fail-closed unconfigured result", descriptor.ID, dryRun, result, execErr)
+			}
+		}
 	}
 }
 
@@ -106,5 +119,37 @@ func TestConnectorDiscoverAndAction(t *testing.T) {
 	}
 	if dryRunResult.Status != "succeeded" || !strings.Contains(dryRunResult.Output, "would run") {
 		t.Fatalf("unexpected dry-run result: %+v", dryRunResult)
+	}
+
+	scopedDryRun, err := connector.ExecuteAction(context.Background(), "datastore.gc", connectorsdk.ActionRequest{
+		TargetID: assetid.ScopeCollectorAssetID("pbs-datastore-store-a", "collector-pbs-a"),
+		DryRun:   true,
+	})
+	if err != nil || !strings.Contains(scopedDryRun.Output, `datastore "store-a"`) {
+		t.Fatalf("scoped target was not resolved to store-a: result=%+v err=%v", scopedDryRun, err)
+	}
+}
+
+func TestConnectorAdvertisedActionsDryRunAndUnknownFailClosed(t *testing.T) {
+	connector := NewWithConfig(Config{
+		BaseURL:     "https://pbs.invalid",
+		TokenID:     "root@pam!ltqa",
+		TokenSecret: "disposable",
+	})
+	for _, descriptor := range connector.Actions() {
+		result, err := connector.ExecuteAction(context.Background(), descriptor.ID, connectorsdk.ActionRequest{
+			Params: map[string]string{"store": "ltqa-store"},
+			DryRun: true,
+		})
+		if err != nil || result.Status != "succeeded" {
+			t.Fatalf("advertised action %q dry-run = %+v, err=%v", descriptor.ID, result, err)
+		}
+	}
+	unknown, err := connector.ExecuteAction(context.Background(), "datastore.destroy", connectorsdk.ActionRequest{
+		Params: map[string]string{"store": "ltqa-store"},
+		DryRun: true,
+	})
+	if err != nil || unknown.Status != "failed" || !strings.Contains(unknown.Message, "unsupported") {
+		t.Fatalf("unknown dry-run did not fail closed: %+v, err=%v", unknown, err)
 	}
 }

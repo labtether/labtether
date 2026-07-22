@@ -28,6 +28,9 @@ func (d *Deps) HandleListConnectors(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *Deps) HandleConnectorActions(w http.ResponseWriter, r *http.Request) {
+	if denyAssetRestrictedGlobal(w, r, "connector operations") {
+		return
+	}
 	path := strings.TrimPrefix(r.URL.Path, "/connectors/")
 	if path == r.URL.Path || path == "" {
 		servicehttp.WriteError(w, http.StatusNotFound, "connector path not found")
@@ -132,6 +135,10 @@ func (d *Deps) HandleConnectorActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteJSON(w, http.StatusOK, result)
 			return
 		}
+		if err := d.ValidateSingletonConnectorActionRoute(resolvedConnectorID, req.TargetID); err != nil {
+			servicehttp.WriteError(w, http.StatusConflict, err.Error())
+			return
+		}
 
 		result, err := connector.ExecuteAction(r.Context(), resolvedActionID, req)
 		if err != nil {
@@ -214,6 +221,10 @@ func (d *Deps) HandlePortainerConnectorActions(w http.ResponseWriter, r *http.Re
 			return
 		}
 
+		if err := d.ValidateSingletonConnectorActionRoute("portainer", req.TargetID); err != nil {
+			servicehttp.WriteError(w, http.StatusConflict, err.Error())
+			return
+		}
 		resolvedActionID := modelmap.ResolveActionID(parts[2], req.TargetID, connector.Actions())
 		result, err := connector.ExecuteAction(r.Context(), resolvedActionID, req)
 		if err != nil {

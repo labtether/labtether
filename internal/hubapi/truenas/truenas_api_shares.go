@@ -42,12 +42,12 @@ func (d *Deps) HandleTrueNASShares(ctx context.Context, w http.ResponseWriter, r
 		warnings := make([]string, 0, 2)
 		smbShares := make([]map[string]any, 0, 16)
 		if err := CallTrueNASQueryWithRetries(ctx, runtime.Client, "sharing.smb.query", &smbShares); err != nil {
-			warnings = AppendTrueNASWarning(warnings, "SMB shares unavailable: "+err.Error())
+			warnings = AppendTrueNASWarning(warnings, trueNASWarning("SMB shares unavailable", err))
 			smbShares = nil
 		}
 		nfsShares := make([]map[string]any, 0, 16)
 		if err := CallTrueNASQueryWithRetries(ctx, runtime.Client, "sharing.nfs.query", &nfsShares); err != nil {
-			warnings = AppendTrueNASWarning(warnings, "NFS shares unavailable: "+err.Error())
+			warnings = AppendTrueNASWarning(warnings, trueNASWarning("NFS shares unavailable", err))
 			nfsShares = nil
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, TrueNASSharesResponse{
@@ -85,7 +85,7 @@ func (d *Deps) HandleTrueNASShares(ctx context.Context, w http.ResponseWriter, r
 		}
 		var created map[string]any
 		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, createMethod, []any{params}, &created); err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to create share: "+err.Error())
+			writeTrueNASError(w, http.StatusBadGateway, "failed to create share", err)
 			return
 		}
 		d.InvalidateTrueNASCaches(asset.ID, runtime.CollectorID)
@@ -117,7 +117,7 @@ func (d *Deps) HandleTrueNASShares(ctx context.Context, w http.ResponseWriter, r
 		}
 		var updated map[string]any
 		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, updateMethod, []any{shareID, params}, &updated); err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to update share: "+err.Error())
+			writeTrueNASError(w, http.StatusBadGateway, "failed to update share", err)
 			return
 		}
 		d.InvalidateTrueNASCaches(asset.ID, runtime.CollectorID)
@@ -133,7 +133,7 @@ func (d *Deps) HandleTrueNASShares(ctx context.Context, w http.ResponseWriter, r
 			return
 		}
 		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, deleteMethod, []any{shareID}, nil); err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to delete share: "+err.Error())
+			writeTrueNASError(w, http.StatusBadGateway, "failed to delete share", err)
 			return
 		}
 		d.InvalidateTrueNASCaches(asset.ID, runtime.CollectorID)

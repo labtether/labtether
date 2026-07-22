@@ -45,7 +45,7 @@ func (s *PostgresStore) CreateOrUpdatePersistentSession(req terminal.CreatePersi
 
 	// No existing session — create new one.
 	id := idgen.New("pts")
-	tmuxSessionName := persistentTmuxSessionName(id)
+	tmuxSessionName := terminal.TmuxSessionNameForID(id)
 	bookmarkID := strings.TrimSpace(req.BookmarkID)
 
 	_, err = s.pool.Exec(context.Background(),
@@ -366,16 +366,4 @@ func scanPersistentSession(scanner persistentSessionScanner) (terminal.Persisten
 		persistent.BookmarkID = *bookmarkID
 	}
 	return persistent, nil
-}
-
-func persistentTmuxSessionName(id string) string {
-	trimmed := strings.TrimSpace(id)
-	if trimmed == "" {
-		return "lt-shell"
-	}
-	name := "lt-" + trimmed
-	if len(name) > 24 {
-		name = name[:24]
-	}
-	return name
 }

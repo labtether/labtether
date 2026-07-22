@@ -146,6 +146,26 @@ async function installConsoleApiMocks(page: Page, unmocked: Set<string>) {
       return;
     }
 
+    if (pathname === "/api/assets" && method === "GET") {
+      await fulfillJSON(route, { assets: [] });
+      return;
+    }
+
+    if (pathname === "/api/terminal/snippets" && method === "GET") {
+      await fulfillJSON(route, []);
+      return;
+    }
+
+    if (pathname === "/api/v1/discovery/proposals" && method === "GET") {
+      await fulfillJSON(route, { proposals: [] });
+      return;
+    }
+
+    if (pathname === "/api/links/suggestions" && method === "GET") {
+      await fulfillJSON(route, { suggestions: [] });
+      return;
+    }
+
     if (pathname === "/api/settings/runtime") {
       await fulfillJSON(route, runtimeSettingsPayload);
       return;
@@ -332,6 +352,9 @@ test.describe("Visual Regression", () => {
   test.beforeEach(async ({ page, browserName }) => {
     test.skip(browserName !== "chromium", "Visual baselines are maintained for chromium only.");
     await page.setViewportSize({ width: 1512, height: 982 });
+    // Settings renders hub uptime from Date.now(). Pin the browser clock so
+    // visual baselines cannot drift as CI crosses an hour boundary.
+    await page.clock.setFixedTime(new Date("2026-07-22T07:00:00.000Z"));
   });
 
   for (const theme of THEMES) {

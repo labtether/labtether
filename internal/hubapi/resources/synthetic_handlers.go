@@ -18,6 +18,9 @@ func (d *Deps) HandleSyntheticChecks(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "synthetic store unavailable")
 		return
 	}
+	if denyAssetRestrictedGlobal(w, r, "synthetic checks") {
+		return
+	}
 
 	switch r.Method {
 	case http.MethodGet:
@@ -57,6 +60,10 @@ func (d *Deps) HandleSyntheticChecks(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusBadRequest, "interval_seconds is out of range")
 			return
 		}
+		if err := synthetic.ValidateConfig(req.Config); err != nil {
+			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		check, err := d.SyntheticStore.CreateSyntheticCheck(req)
 		if err != nil {
 			if err == synthetic.ErrInvalidInterval {
@@ -80,6 +87,9 @@ func (d *Deps) HandleSyntheticCheckActions(w http.ResponseWriter, r *http.Reques
 	}
 	if d.SyntheticStore == nil {
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "synthetic store unavailable")
+		return
+	}
+	if denyAssetRestrictedGlobal(w, r, "synthetic checks") {
 		return
 	}
 
@@ -160,6 +170,12 @@ func (d *Deps) HandleSyntheticCheckActions(w http.ResponseWriter, r *http.Reques
 		if req.IntervalSeconds != nil && synthetic.ValidateIntervalSeconds(*req.IntervalSeconds) != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, "interval_seconds is out of range")
 			return
+		}
+		if req.Config != nil {
+			if err := synthetic.ValidateConfig(*req.Config); err != nil {
+				servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+				return
+			}
 		}
 		updated, err := d.SyntheticStore.UpdateSyntheticCheck(checkID, req)
 		if err != nil {

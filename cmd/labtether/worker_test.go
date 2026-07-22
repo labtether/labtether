@@ -15,6 +15,7 @@ import (
 )
 
 func TestExecuteCommandSuccess(t *testing.T) {
+	t.Setenv("TERMINAL_EXECUTOR_MODE", executorModeSimulated)
 	result := executeCommand(terminal.CommandJob{
 		JobID:       "job_1",
 		SessionID:   "sess_1",
@@ -30,6 +31,7 @@ func TestExecuteCommandSuccess(t *testing.T) {
 }
 
 func TestExecuteCommandFailure(t *testing.T) {
+	t.Setenv("TERMINAL_EXECUTOR_MODE", executorModeSimulated)
 	result := executeCommand(terminal.CommandJob{
 		JobID:       "job_2",
 		SessionID:   "sess_1",
@@ -53,8 +55,8 @@ func TestExecuteActionCommand(t *testing.T) {
 		Command: "uname -a",
 	}, nil)
 
-	if result.Status != actions.StatusSucceeded {
-		t.Fatalf("expected succeeded status, got %s", result.Status)
+	if result.Status != actions.StatusFailed || !strings.Contains(result.Error, "connected agent") {
+		t.Fatalf("expected fail-closed status, got %+v", result)
 	}
 }
 
@@ -71,8 +73,8 @@ func TestExecuteUpdateDryRun(t *testing.T) {
 		},
 	})
 
-	if result.Status != updates.StatusSucceeded {
-		t.Fatalf("expected succeeded status, got %s", result.Status)
+	if result.Status != updates.StatusFailed {
+		t.Fatalf("expected unavailable executor to fail, got %s", result.Status)
 	}
 	if len(result.Results) != 1 {
 		t.Fatalf("expected one result row, got %d", len(result.Results))

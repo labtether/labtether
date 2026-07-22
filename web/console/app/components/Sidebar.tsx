@@ -7,86 +7,9 @@ import { useServiceStatusLabel } from "../contexts/StatusContext";
 import { useDesktopSession } from "../contexts/DesktopSessionContext";
 import { useAuth } from "../contexts/AuthContext";
 import { LanguagePicker } from "./LanguagePicker";
-import {
-  LayoutDashboard,
-  Server,
-  GitBranch,
-  Globe,
-  MapPin,
-  FileText,
-  FolderOpen,
-  Bell,
-  Zap,
-  Shield,
-  Settings,
-  Monitor,
-  TerminalSquare,
-  UserCog,
-  Lock,
-  Boxes,
-  Webhook,
-  Clock,
-  ScrollText,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-
-type NavItem = {
-  href: string;
-  label: string;
-  /** Key into the 'nav' translation namespace. */
-  translationKey: string;
-  icon: LucideIcon;
-  adminOnly?: boolean;
-};
-
-type NavGroup = {
-  category: string;
-  /** Key for the category header, e.g. "categories.overview". */
-  categoryKey: string;
-  items: NavItem[];
-};
-
-const navGroups: NavGroup[] = [
-  {
-    category: "Overview",
-    categoryKey: "categories.overview",
-    items: [
-      { href: "/", label: "Dashboard", translationKey: "dashboard", icon: LayoutDashboard },
-      { href: "/nodes", label: "Devices", translationKey: "devices", icon: Server },
-      { href: "/topology", label: "Topology", translationKey: "topology", icon: GitBranch },
-      { href: "/services", label: "Services", translationKey: "services", icon: Globe },
-      { href: "/containers", label: "Containers", translationKey: "containers", icon: Boxes },
-      { href: "/terminal", label: "Terminal", translationKey: "terminal", icon: TerminalSquare },
-    ],
-  },
-  {
-    category: "Operations",
-    categoryKey: "categories.operations",
-    items: [
-      { href: "/files", label: "Files", translationKey: "files", icon: FolderOpen },
-      { href: "/remote-view", label: "Remote View", translationKey: "remoteView", icon: Monitor },
-      { href: "/logs", label: "Logs", translationKey: "logs", icon: FileText },
-      { href: "/alerts", label: "Alerts", translationKey: "alerts", icon: Bell },
-      { href: "/actions", label: "Actions", translationKey: "actions", icon: Zap },
-      { href: "/webhooks", label: "Webhooks", translationKey: "webhooks", icon: Webhook },
-      { href: "/schedules", label: "Schedules", translationKey: "schedules", icon: Clock },
-    ],
-  },
-  {
-    category: "System",
-    categoryKey: "categories.system",
-    items: [
-      { href: "/groups", label: "Groups", translationKey: "groups", icon: MapPin },
-      { href: "/reliability", label: "Health", translationKey: "health", icon: Shield },
-      { href: "/users", label: "Users", translationKey: "users", icon: UserCog },
-      { href: "/security", label: "Security", translationKey: "security", icon: Lock, adminOnly: true },
-      { href: "/audit-log", label: "Audit Log", translationKey: "auditLog", icon: ScrollText },
-      { href: "/settings", label: "Settings", translationKey: "settings", icon: Settings },
-    ],
-  },
-];
-
-export { navGroups };
+import { Monitor } from "lucide-react";
+import { meetsMinimumRole } from "../lib/roles";
+import { navGroups } from "../lib/navigation";
 
 const SIDEBAR_NAV_STYLE: CSSProperties = {
   background: 'rgba(var(--accent-rgb), 0.01)',
@@ -113,10 +36,10 @@ export const Sidebar = memo(function Sidebar() {
   const { activeSession } = useDesktopSession();
   const t = useTranslations('nav');
   const { user } = useAuth();
-  const isAdmin = user?.role === "owner" || user?.role === "admin";
 
   return (
     <nav
+      aria-label="Primary navigation"
       className="hidden md:flex flex-col fixed top-0 left-0 bottom-0 w-52 border-r border-[var(--line)] z-30"
       style={SIDEBAR_NAV_STYLE}
     >
@@ -138,7 +61,7 @@ export const Sidebar = memo(function Sidebar() {
             </span>
             <div className="space-y-0.5">
               {group.items
-                .filter((item) => !item.adminOnly || isAdmin)
+                .filter((item) => meetsMinimumRole(user?.role, item.minimumRole))
                 .map((item) => {
                 const Icon = item.icon;
                 const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
@@ -146,6 +69,7 @@ export const Sidebar = memo(function Sidebar() {
                   <Link
                     key={item.href}
                     href={item.href}
+                    aria-current={isActive ? "page" : undefined}
                     className={`group relative flex items-center gap-2.5 px-2 h-[34px] rounded-r-lg text-sm transition-colors duration-[var(--dur-instant)] ${
                       isActive
                         ? "border-l-2 border-[var(--accent)] bg-[var(--accent-subtle)] text-[var(--text)] font-medium"

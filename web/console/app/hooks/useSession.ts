@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useFastStatus, useStatusSettings } from "../contexts/StatusContext";
 import { useConnectedAgents } from "./useConnectedAgents";
 import { buildBrowserWsUrl } from "../lib/ws";
+import { persistentSessionIDFromPayload } from "./persistentSessionPayload";
 
 export type SessionType = "terminal" | "desktop";
 export type DesktopProtocol = "vnc" | "rdp" | "spice" | "webrtc";
@@ -78,6 +79,12 @@ export interface TerminalConnectOptions {
   protocol?: DesktopProtocol;
   display?: string;
   record?: boolean;
+  directTarget?: {
+    host: string;
+    port: number;
+    username?: string;
+    password?: string;
+  };
 }
 
 function isNonRetryableDisconnectReason(reason: string): boolean {
@@ -131,6 +138,7 @@ export function useSession({
     protocol: DesktopProtocol;
     display: string;
     record: boolean;
+    directTarget?: TerminalConnectOptions["directTarget"];
   }>({
     protocol: "vnc",
     display: "",
@@ -146,6 +154,24 @@ export function useSession({
       reconnectTimerRef.current = null;
     }
   }, []);
+
+  const terminateDesktopSession = useCallback(
+    (sessionID: string | undefined) => {
+      const normalizedSessionID = sessionID?.trim() ?? "";
+      if (type !== "desktop" || !normalizedSessionID) return;
+      void fetch(
+        `/api/desktop/session/${encodeURIComponent(normalizedSessionID)}`,
+        {
+          method: "DELETE",
+          cache: "no-store",
+          keepalive: true,
+        },
+      ).catch(() => {
+        // Session expiry remains the backend safety net if teardown is unavailable.
+      });
+    },
+    [type],
+  );
 
   const setProgress = useCallback(
     (phase: SessionConnectionPhase, message: string) => {
@@ -199,8 +225,12 @@ export function useSession({
           : "";
       const record =
         type === "desktop" ? (options?.record ?? remembered.record) : false;
+      const directTarget =
+        type === "desktop"
+          ? (options?.directTarget ?? remembered.directTarget)
+          : undefined;
       if (type === "desktop") {
-        lastDesktopOptionsRef.current = { protocol, display, record };
+        lastDesktopOptionsRef.current = { protocol, display, record, directTarget };
       }
 
       const isLatestAttempt = () => connectAttemptRef.current === attemptID;
@@ -209,6 +239,11 @@ export function useSession({
       const reconnecting = !!(
         sessionRef.current && sessionRef.current.target === connectTarget
       );
+      if (type === "desktop" && sessionRef.current) {
+        terminateDesktopSession(sessionRef.current.id);
+        sessionRef.current = null;
+        setActiveSessionId("");
+      }
       setIsReconnecting(reconnecting);
       setReconnectExhausted(false);
       manualDisconnectRef.current = false;
@@ -225,9 +260,8 @@ export function useSession({
         reconnecting ? "Reconnecting session..." : "Creating session...",
       );
 
+      let sessionId = "";
       try {
-        let sessionId = "";
-
         if (type === "terminal") {
           // Reuse terminal session for same target
           if (
@@ -266,12 +300,9 @@ export function useSession({
             });
             let persistentId = "";
             if (ensureRes.ok) {
-              const ensurePayload = (await ensureRes.json()) as {
-                session?: { id?: string };
-                id?: string;
-              } | null;
-              persistentId =
-                ensurePayload?.session?.id || ensurePayload?.id || "";
+              persistentId = persistentSessionIDFromPayload(
+                await ensureRes.json().catch(() => null),
+              );
             }
 
             if (persistentId) {
@@ -334,6 +365,7 @@ export function useSession({
               protocol,
               display,
               record,
+              direct_target: directTarget,
             }),
           });
           const sessionPayload = (await sessionRes.json()) as {
@@ -353,6 +385,7 @@ export function useSession({
         }
 
         if (!isLatestAttempt()) {
+          terminateDesktopSession(sessionId);
           return;
         }
         sessionRef.current = { id: sessionId, target: connectTarget };
@@ -375,13 +408,14 @@ export function useSession({
             ca?: string;
             proxy?: string;
           };
-          if (!spiceRes.ok || !spicePayload.password) {
+          if (!spiceRes.ok || typeof spicePayload.password !== "string") {
             throw new Error(
               spicePayload.error ||
                 `Failed to get SPICE ticket (${spiceRes.status})`,
             );
           }
           if (!isLatestAttempt()) {
+            terminateDesktopSession(sessionId);
             return;
           }
           const resolvedSpiceWsUrl =
@@ -448,6 +482,7 @@ export function useSession({
         }
 
         if (!isLatestAttempt()) {
+          terminateDesktopSession(sessionId);
           return;
         }
         const builtWsUrl =
@@ -462,7 +497,12 @@ export function useSession({
                 secure: ticketPayload.secure,
               })
             : null);
-        setVncPassword(ticketPayload.vncPassword?.trim() || null);
+        setVncPassword(
+          typeof ticketPayload.vncPassword === "string" &&
+            ticketPayload.vncPassword.length > 0
+            ? ticketPayload.vncPassword
+            : null,
+        );
         setWsUrl(builtWsUrl);
         setAudioWsUrl(builtAudioWsUrl);
         setConnectionState(
@@ -470,6 +510,11 @@ export function useSession({
         );
         setProgress("opening-stream", "Opening secure stream...");
       } catch (err) {
+        terminateDesktopSession(sessionId);
+        if (sessionRef.current?.id === sessionId) {
+          sessionRef.current = null;
+          setActiveSessionId("");
+        }
         if (!isLatestAttempt()) {
           return;
         }
@@ -495,10 +540,12 @@ export function useSession({
       quickConnectParams,
       clearReconnectTimer,
       setProgress,
+      terminateDesktopSession,
     ],
   );
 
   const disconnect = useCallback(() => {
+    terminateDesktopSession(sessionRef.current?.id);
     manualDisconnectRef.current = true;
     clearReconnectTimer();
     reconnectAttemptRef.current = 0;
@@ -515,7 +562,7 @@ export function useSession({
     sessionRef.current = null;
     setActiveSessionId("");
     setProgress("idle", "Idle");
-  }, [clearReconnectTimer, setProgress]);
+  }, [clearReconnectTimer, setProgress, terminateDesktopSession]);
 
   const handleConnected = useCallback(() => {
     clearReconnectTimer();
@@ -604,6 +651,7 @@ export function useSession({
         setProgress("idle", "Idle");
         return;
       }
+      terminateDesktopSession(sessionRef.current?.id);
       const isClean = typeof detail === "object" && detail?.clean;
       const disconnectReason =
         typeof detail === "object" ? detail.reason?.trim() ?? "" : "";
@@ -702,18 +750,22 @@ export function useSession({
       connect,
       clearReconnectTimer,
       setProgress,
+      terminateDesktopSession,
     ],
   );
 
   const handleError = useCallback(
     (message: string) => {
+      terminateDesktopSession(sessionRef.current?.id);
+      sessionRef.current = null;
+      setActiveSessionId("");
       setError(message);
       setConnectionState("error");
       setVncPassword(null);
       setAudioWsUrl(null);
       setProgress("error", message.trim() || "Connection failed");
     },
-    [setProgress],
+    [setProgress, terminateDesktopSession],
   );
 
   useEffect(() => {
@@ -748,8 +800,9 @@ export function useSession({
   useEffect(() => {
     return () => {
       clearReconnectTimer();
+      terminateDesktopSession(sessionRef.current?.id);
     };
-  }, [clearReconnectTimer]);
+  }, [clearReconnectTimer, terminateDesktopSession]);
 
   return {
     target,

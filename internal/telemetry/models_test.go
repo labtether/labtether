@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"math"
+	"strings"
 	"testing"
 	"time"
 )
@@ -50,6 +51,35 @@ func TestMetricSample_Labels(t *testing.T) {
 	}
 }
 
+func TestMetricSampleEnvelopeBytesRejectsUnboundedOrNonFiniteInput(t *testing.T) {
+	valid := MetricSample{
+		AssetID: "asset-1", Metric: MetricDiskUsedBytes, Unit: "bytes", Value: 1,
+		Labels: map[string]string{"mount_point": "/data"},
+	}
+	if size, err := MetricSampleEnvelopeBytes(valid); err != nil || size <= 0 || size > MaxMetricSampleBytes {
+		t.Fatalf("valid envelope size=%d err=%v", size, err)
+	}
+
+	cases := []MetricSample{
+		{AssetID: "asset-1", Metric: MetricCPUUsedPercent, Unit: "percent", Value: math.NaN()},
+		{AssetID: "asset-1", Metric: MetricCPUUsedPercent, Unit: "percent", Value: math.Inf(1)},
+		{AssetID: "asset-1", Metric: strings.Repeat("m", MaxMetricNameBytes+1), Unit: "count", Value: 1},
+		{AssetID: "asset-1", Metric: "metric", Unit: strings.Repeat("u", MaxMetricUnitBytes+1), Value: 1},
+		{AssetID: "asset-1", Metric: "metric", Unit: "count", Value: 1, Labels: map[string]string{strings.Repeat("k", MaxMetricLabelKeyBytes+1): "v"}},
+		{AssetID: "asset-1", Metric: "metric", Unit: "count", Value: 1, Labels: map[string]string{"key": strings.Repeat("v", MaxMetricLabelValueBytes+1)}},
+		{AssetID: "asset\x00one", Metric: "metric", Unit: "count", Value: 1},
+		{AssetID: "asset-1", Metric: "metric\x00name", Unit: "count", Value: 1},
+		{AssetID: "asset-1", Metric: "metric", Unit: "count\x00unit", Value: 1},
+		{AssetID: "asset-1", Metric: "metric", Unit: "count", Value: 1, Labels: map[string]string{"bad\x00key": "v"}},
+		{AssetID: "asset-1", Metric: "metric", Unit: "count", Value: 1, Labels: map[string]string{"key": "bad\x00value"}},
+	}
+	for i, sample := range cases {
+		if _, err := MetricSampleEnvelopeBytes(sample); err == nil {
+			t.Fatalf("invalid envelope case %d was accepted", i)
+		}
+	}
+}
+
 func TestMetricSample_LabelsEmpty(t *testing.T) {
 	// An empty (non-nil) map should be valid.
 	s := MetricSample{
@@ -65,6 +95,34 @@ func TestMetricSample_LabelsEmpty(t *testing.T) {
 	}
 	if len(s.Labels) != 0 {
 		t.Errorf("expected empty Labels, got len=%d", len(s.Labels))
+	}
+}
+
+func TestIsHubMetricScopeIsExplicit(t *testing.T) {
+	for _, scope := range []string{MetricScopeHubAlerts, MetricScopeHubReliability, MetricScopeHubSynthetic} {
+		if !IsHubMetricScope(scope) {
+			t.Fatalf("expected supported hub metric scope %q", scope)
+		}
+	}
+	for _, scope := range []string{"", "hub-arbitrary", "asset-1"} {
+		if IsHubMetricScope(scope) {
+			t.Fatalf("unexpected supported hub metric scope %q", scope)
+		}
+	}
+}
+
+func TestNormalizeSyntheticHubMetricUsesClosedNonTargetSchema(t *testing.T) {
+	sample := MetricSample{
+		Scope: MetricScopeHubSynthetic, Metric: MetricSyntheticLatencyMs, Unit: "ms", Value: 12,
+		CollectedAt: time.Now().UTC(),
+		Labels:      map[string]string{"check_id": "check-1", "check_name": "Private endpoint", "check_type": "http"},
+	}
+	if _, err := NormalizeHubMetricSample(sample); err != nil {
+		t.Fatalf("valid synthetic hub sample rejected: %v", err)
+	}
+	sample.Labels["target"] = "https://user:password@example.test/?token=secret"
+	if _, err := NormalizeHubMetricSample(sample); err == nil {
+		t.Fatal("synthetic target label was accepted outside the closed schema")
 	}
 }
 

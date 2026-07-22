@@ -68,8 +68,8 @@ export function BackupExportCard() {
         apiFetch("/api/v2/webhooks"),
         apiFetch("/api/v2/schedules"),
         fetchAllSavedActions(),
-        apiFetch("/alerts/rules"),
-        apiFetch("/notifications/channels"),
+        apiFetch("/api/alerts/rules"),
+        apiFetch("/api/notifications/channels"),
       ]);
 
       const failedEndpoints: string[] = [];
@@ -78,8 +78,8 @@ export function BackupExportCard() {
       if (!webhooksResult.response.ok) failedEndpoints.push("/api/v2/webhooks");
       if (!schedulesResult.response.ok) failedEndpoints.push("/api/v2/schedules");
       if (!savedActionsResult.response.ok) failedEndpoints.push("/api/v2/actions");
-      if (!alertRulesResult.response.ok) failedEndpoints.push("/alerts/rules");
-      if (!notifChannelsResult.response.ok) failedEndpoints.push("/notifications/channels");
+      if (!alertRulesResult.response.ok) failedEndpoints.push("/api/alerts/rules");
+      if (!notifChannelsResult.response.ok) failedEndpoints.push("/api/notifications/channels");
 
       if (failedEndpoints.length > 0) {
         throw new Error(`${t("backup.exportError")}: ${failedEndpoints.join(", ")}`);

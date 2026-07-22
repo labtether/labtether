@@ -129,6 +129,9 @@ func (d *Deps) handleProcessList(w http.ResponseWriter, r *http.Request, assetID
 }
 
 func (d *Deps) handleProcessKill(w http.ResponseWriter, r *http.Request, assetID string) {
+	if !d.enforceAssetActionGuard(w, assetID) {
+		return
+	}
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {
 		servicehttp.WriteError(w, http.StatusBadGateway, "agent disconnected")

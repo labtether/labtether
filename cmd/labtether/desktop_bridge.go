@@ -57,9 +57,6 @@ func (s *apiServer) buildDesktopDeps() *desktoppkg.Deps {
 		PrincipalActorID: func(ctx context.Context) string {
 			return principalActorID(ctx)
 		},
-		IsOwnerActor: func(actorID string) bool {
-			return isOwnerActor(actorID)
-		},
 		CanAccessOwnedSession: func(r *http.Request, sessionActorID string) bool {
 			return canAccessOwnedSession(r, sessionActorID)
 		},
@@ -96,6 +93,7 @@ func (s *apiServer) buildDesktopDeps() *desktoppkg.Deps {
 		CheckSameOrigin: func(r *http.Request) bool {
 			return checkSameOrigin(r)
 		},
+		EvaluateAssetGuardrails: s.ensureGroupFeaturesDeps().EvaluateAssetGuardrails,
 
 		GetProtocolConfig: func(ctx context.Context, assetID, protocol string) (*protocols.ProtocolConfig, error) {
 			if s.db == nil {

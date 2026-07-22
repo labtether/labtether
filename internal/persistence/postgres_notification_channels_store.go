@@ -14,6 +14,10 @@ import (
 
 func (s *PostgresStore) CreateNotificationChannel(req notifications.CreateChannelRequest) (notifications.Channel, error) {
 	now := time.Now().UTC()
+	channelID := strings.TrimSpace(req.ID)
+	if channelID == "" {
+		channelID = idgen.New("nch")
+	}
 	enabled := true
 	if req.Enabled != nil {
 		enabled = *req.Enabled
@@ -28,13 +32,37 @@ func (s *PostgresStore) CreateNotificationChannel(req notifications.CreateChanne
 		`INSERT INTO notification_channels (id, name, type, config, enabled, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4::jsonb, $5, $6, $6)
 		 RETURNING id, name, type, config, enabled, created_at, updated_at`,
-		idgen.New("nch"),
+		channelID,
 		strings.TrimSpace(req.Name),
 		notifications.NormalizeChannelType(req.Type),
 		configPayload,
 		enabled,
 		now,
 	))
+}
+
+// CompareAndSwapNotificationChannelConfig migrates a legacy channel config
+// only when the row still contains the value that was read. This prevents a
+// lazy plaintext migration from overwriting a concurrent operator update.
+func (s *PostgresStore) CompareAndSwapNotificationChannelConfig(id string, expected, replacement map[string]any) (bool, error) {
+	expectedPayload, err := marshalAnyMap(expected)
+	if err != nil {
+		return false, err
+	}
+	replacementPayload, err := marshalAnyMap(replacement)
+	if err != nil {
+		return false, err
+	}
+	tag, err := s.pool.Exec(context.Background(),
+		`UPDATE notification_channels
+		 SET config = $3::jsonb, updated_at = $4
+		 WHERE id = $1 AND config = $2::jsonb`,
+		strings.TrimSpace(id), expectedPayload, replacementPayload, time.Now().UTC(),
+	)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
 }
 
 func (s *PostgresStore) GetNotificationChannel(id string) (notifications.Channel, bool, error) {

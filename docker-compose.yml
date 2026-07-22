@@ -7,16 +7,31 @@ services:
       dockerfile: build/go-service.Dockerfile
       args:
         SERVICE_DIR: cmd/labtether
+    hostname: labtether
     environment:
       # Change via .env or POSTGRES_PASSWORD=secret docker compose up
       DATABASE_URL: postgres://labtether:${POSTGRES_PASSWORD:-labtether}@postgres:5432/labtether?sslmode=disable
       LABTETHER_API_TOKEN_FILE: /run/labtether/api-token
+      LABTETHER_API_BASE_URL: https://labtether:8443
+      LABTETHER_EXTERNAL_URL: ${LABTETHER_EXTERNAL_URL:-}
+      LABTETHER_CORS_ALLOWED_ORIGINS: ${LABTETHER_CORS_ALLOWED_ORIGINS:-}
+      SSL_CERT_FILE: /ca/ca.crt
       LABTETHER_DATA_DIR: /data
       LABTETHER_OWNER_TOKEN: ${LABTETHER_OWNER_TOKEN:-}
       LABTETHER_API_TOKEN: ${LABTETHER_API_TOKEN:-}
       LABTETHER_ENCRYPTION_KEY: ${LABTETHER_ENCRYPTION_KEY:-}
       LABTETHER_ADMIN_USERNAME: ${LABTETHER_ADMIN_USERNAME:-}
       LABTETHER_ADMIN_PASSWORD: ${LABTETHER_ADMIN_PASSWORD:-}
+      LABTETHER_ENROLLMENT_TOKEN_MAX_USES: ${LABTETHER_ENROLLMENT_TOKEN_MAX_USES:-256}
+      LABTETHER_MAX_ENROLLED_AGENTS: ${LABTETHER_MAX_ENROLLED_AGENTS:-1024}
+      LABTETHER_MAX_AGENT_CONNECTIONS: ${LABTETHER_MAX_AGENT_CONNECTIONS:-2048}
+      LABTETHER_MAX_AGENT_CONNECTIONS_PER_SOURCE: ${LABTETHER_MAX_AGENT_CONNECTIONS_PER_SOURCE:-256}
+      LABTETHER_AGENT_WS_CREDENTIAL_LEASE: ${LABTETHER_AGENT_WS_CREDENTIAL_LEASE:-2s}
+      LABTETHER_AGENT_WS_MESSAGES_PER_SECOND: ${LABTETHER_AGENT_WS_MESSAGES_PER_SECOND:-256}
+      LABTETHER_AGENT_WS_MESSAGE_BURST: ${LABTETHER_AGENT_WS_MESSAGE_BURST:-512}
+      LABTETHER_AGENT_WS_BYTES_PER_SECOND: ${LABTETHER_AGENT_WS_BYTES_PER_SECOND:-16777216}
+      LABTETHER_AGENT_WS_BYTE_BURST: ${LABTETHER_AGENT_WS_BYTE_BURST:-67108864}
+      LABTETHER_ALLOW_LEGACY_SHARED_AGENT_AUTH: ${LABTETHER_ALLOW_LEGACY_SHARED_AGENT_AUTH:-false}
       GUACD_HOST: guacd
     ports:
       - "127.0.0.1:8080:8080"
@@ -28,14 +43,14 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/healthz"]
+      test: ["CMD", "wget", "--no-check-certificate", "-q", "-O", "/dev/null", "https://localhost:8443/healthz"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 15s
 
   postgres:
-    image: postgres:18-alpine
+    image: postgres:18-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-labtether}
       POSTGRES_DB: ${POSTGRES_DB:-labtether}
@@ -54,17 +69,78 @@ services:
   web-console:
     build:
       context: ./web/console
-      args:
-        LABTETHER_API_BASE_URL: http://labtether:8080
     environment:
-      LABTETHER_API_BASE_URL: http://labtether:8080
+      HOSTNAME: 0.0.0.0
+      # The built-in certificate includes the labtether service hostname. The
+      # console runtime proxy verifies that identity through the shared CA.
+      LABTETHER_API_BASE_URL: ${LABTETHER_INTERNAL_API_BASE_URL:-https://labtether:8443}
+      LABTETHER_WS_PROXY_CONNECT_HOST: ${LABTETHER_INTERNAL_CONNECT_HOST:-labtether}
       LABTETHER_API_TOKEN_FILE: /run/labtether/api-token
+      LABTETHER_CSRF_ALLOWED_ORIGINS: ${LABTETHER_CORS_ALLOWED_ORIGINS:-}
+      # Set LABTETHER_INTERNAL_CA_FILE to an empty value for a public CA.
+      NODE_EXTRA_CA_CERTS: ${LABTETHER_INTERNAL_CA_FILE-/ca/ca.crt}
     ports:
       - "127.0.0.1:3000:3000"
     volumes:
+      - labtether-ca:/ca:ro
       - labtether-auth:/run/labtether:ro
     depends_on:
       labtether: { condition: service_healthy }
+
+  # Opt-in, container-only agent used by CI to prove the real authenticated
+  # WSS connection path. It is excluded from normal `docker compose up` runs.
+  qa-agent:
+    profiles: [ci-agent]
+    # Deliberately local-only: CI builds this tag from its pinned agent checkout.
+    # A missing image fails closed instead of pulling a mutable registry tag.
+    image: labtether-agent:ci
+    pull_policy: never
+    user: "1001:1001"
+    hostname: labtether-ci-agent
+    restart: "no"
+    environment:
+      AGENT_ASSET_ID: labtether-ci-agent
+      AGENT_NAME: labtether-ci-agent
+      AGENT_PORT: "8090"
+      AGENT_COLLECT_INTERVAL: "5s"
+      AGENT_HEARTBEAT_INTERVAL: "5s"
+      LABTETHER_API_BASE_URL: https://labtether:8443
+      LABTETHER_WS_URL: wss://labtether:8443/ws/agent
+      # CI stages a one-use token in a writable private volume. The agent
+      # consumes and removes it, then persists only its issued agent credential
+      # in the existing tmpfs. Never fall back to the shared owner/API token.
+      LABTETHER_API_TOKEN: ""
+      LABTETHER_ENROLLMENT_TOKEN_FILE: /run/labtether-enrollment/enrollment-token
+      LABTETHER_TLS_CA_FILE: /ca/ca.crt
+      LABTETHER_TLS_SKIP_VERIFY: "false"
+      LABTETHER_ALLOW_INSECURE_TRANSPORT: "false"
+      LABTETHER_TOKEN_FILE: /tmp/labtether/agent-token
+      LABTETHER_AGENT_SETTINGS_FILE: /tmp/labtether/agent-config.json
+      LABTETHER_DEVICE_KEY_FILE: /tmp/labtether/device-key
+      LABTETHER_DEVICE_PUBLIC_KEY_FILE: /tmp/labtether/device-key.pub
+      LABTETHER_DEVICE_FINGERPRINT_FILE: /tmp/labtether/device-fingerprint
+      LABTETHER_AGENT_LOCAL_BIND_ADDRESS: 127.0.0.1
+      LABTETHER_ALLOW_REMOTE_OVERRIDES: "false"
+      LABTETHER_AUTO_UPDATE: "false"
+      LABTETHER_DOCKER_ENABLED: "false"
+      LABTETHER_WEBRTC_ENABLED: "false"
+      LABTETHER_LOG_STREAM_ENABLED: "false"
+      LABTETHER_SERVICES_DISCOVERY_DOCKER_ENABLED: "false"
+      LABTETHER_SERVICES_DISCOVERY_PROXY_ENABLED: "false"
+      LABTETHER_SERVICES_DISCOVERY_PORT_SCAN_ENABLED: "false"
+      LABTETHER_SERVICES_DISCOVERY_LAN_SCAN_ENABLED: "false"
+    volumes:
+      - labtether-ca:/ca:ro
+      - qa-agent-enrollment:/run/labtether-enrollment
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m,mode=700,uid=1001,gid=1001
+    depends_on:
+      labtether: { condition: service_healthy }
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
 
   guacd:
     profiles: [remote-desktop]
@@ -76,3 +152,4 @@ volumes:
   labtether-data:
   labtether-ca:
   labtether-auth:
+  qa-agent-enrollment:

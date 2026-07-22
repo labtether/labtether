@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/alerts"
+	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/groups"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
@@ -36,6 +38,20 @@ func (d *Deps) HandleAlertRules(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list alert rules")
 			return
 		}
+		if shared.HasAssetRestriction(r.Context()) {
+			groupAccess, authErr := d.accessibleGroupIDs(r.Context())
+			if authErr != nil {
+				writeAssetScopeForbidden(w, "unable to prove alert rule asset scope")
+				return
+			}
+			filtered := make([]alerts.Rule, 0, len(rules))
+			for _, rule := range rules {
+				if alertRuleAllowed(r.Context(), rule, groupAccess) {
+					filtered = append(filtered, rule)
+				}
+			}
+			rules = filtered
+		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"rules": rules})
 	case http.MethodPost:
 		if !d.EnforceRateLimit(w, r, "alerts.rule.create", 120, time.Minute) {
@@ -48,6 +64,7 @@ func (d *Deps) HandleAlertRules(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		NormalizeCreateAlertRuleRequest(&req)
+		req.CreatedBy = apiv2.PrincipalActorID(r.Context())
 		if err := ValidateCreateAlertRuleRequest(req); err != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 			return
@@ -63,6 +80,13 @@ func (d *Deps) HandleAlertRules(w http.ResponseWriter, r *http.Request) {
 			}
 			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 			return
+		}
+		if shared.HasAssetRestriction(r.Context()) {
+			groupAccess, authErr := d.accessibleGroupIDs(r.Context())
+			if authErr != nil || !alertRuleInputsAllowed(r.Context(), req.Targets, groupAccess) {
+				writeAssetScopeForbidden(w, "api key may only create alert rules targeting explicitly allowed assets")
+				return
+			}
 		}
 
 		rule, err := d.AlertStore.CreateAlertRule(req)
@@ -111,6 +135,9 @@ func (d *Deps) HandleAlertRuleActions(w http.ResponseWriter, r *http.Request) {
 				servicehttp.WriteError(w, http.StatusNotFound, "alert rule not found")
 				return
 			}
+			if !d.requireAlertRuleAccess(w, r, rule) {
+				return
+			}
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"rule": rule})
 		case http.MethodPatch, http.MethodPut:
 			if !d.EnforceRateLimit(w, r, "alerts.rule.update", 180, time.Minute) {
@@ -123,6 +150,9 @@ func (d *Deps) HandleAlertRuleActions(w http.ResponseWriter, r *http.Request) {
 			}
 			if !ok {
 				servicehttp.WriteError(w, http.StatusNotFound, "alert rule not found")
+				return
+			}
+			if !d.requireAlertRuleAccess(w, r, existingRule) {
 				return
 			}
 
@@ -149,6 +179,13 @@ func (d *Deps) HandleAlertRuleActions(w http.ResponseWriter, r *http.Request) {
 					servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 					return
 				}
+				if shared.HasAssetRestriction(r.Context()) {
+					groupAccess, authErr := d.accessibleGroupIDs(r.Context())
+					if authErr != nil || !alertRuleInputsAllowed(r.Context(), *req.Targets, groupAccess) {
+						writeAssetScopeForbidden(w, "api key may only update alert rules to target explicitly allowed assets")
+						return
+					}
+				}
 			}
 
 			updated, err := d.AlertStore.UpdateAlertRule(ruleID, req)
@@ -167,6 +204,18 @@ func (d *Deps) HandleAlertRuleActions(w http.ResponseWriter, r *http.Request) {
 			}
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"rule": updated})
 		case http.MethodDelete:
+			rule, ok, err := d.AlertStore.GetAlertRule(ruleID)
+			if err != nil {
+				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load alert rule")
+				return
+			}
+			if !ok {
+				servicehttp.WriteError(w, http.StatusNotFound, "alert rule not found")
+				return
+			}
+			if !d.requireAlertRuleAccess(w, r, rule) {
+				return
+			}
 			if err := d.AlertStore.DeleteAlertRule(ruleID); err != nil {
 				if errors.Is(err, alerts.ErrRuleNotFound) {
 					servicehttp.WriteError(w, http.StatusNotFound, "alert rule not found")
@@ -198,6 +247,9 @@ func (d *Deps) HandleAlertRuleActions(w http.ResponseWriter, r *http.Request) {
 		}
 		if !ok {
 			servicehttp.WriteError(w, http.StatusNotFound, "alert rule not found")
+			return
+		}
+		if !d.requireAlertRuleAccess(w, r, rule) {
 			return
 		}
 
@@ -253,6 +305,18 @@ func (d *Deps) HandleAlertRuleActions(w http.ResponseWriter, r *http.Request) {
 	if len(parts) == 2 && parts[1] == "evaluations" {
 		if r.Method != http.MethodGet {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		rule, ok, err := d.AlertStore.GetAlertRule(ruleID)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load alert rule")
+			return
+		}
+		if !ok {
+			servicehttp.WriteError(w, http.StatusNotFound, "alert rule not found")
+			return
+		}
+		if !d.requireAlertRuleAccess(w, r, rule) {
 			return
 		}
 		evaluations, err := d.AlertStore.ListAlertEvaluations(ruleID, parseLimit(r, 50))

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/labtether/labtether/internal/assets"
 )
@@ -37,12 +38,15 @@ type portainerOverviewResponse struct {
 }
 
 // handlePortainerOverview returns a summary overview for a Portainer asset.
-func (d *Deps) HandlePortainerOverview(ctx context.Context, w http.ResponseWriter, asset assets.Asset, runtime *PortainerRuntime) {
+func (d *Deps) HandlePortainerOverview(ctx context.Context, w http.ResponseWriter, r *http.Request, asset assets.Asset, runtime *PortainerRuntime) {
 	endpointID, err := portainerEndpointID(asset)
 	if err != nil {
 		WritePortainerJSON(w, portainerOverviewResponse{
 			Warnings: []string{err.Error()},
 		}, nil)
+		return
+	}
+	if !d.requirePortainerEndpointAccess(w, r, strconv.Itoa(endpointID)) {
 		return
 	}
 
@@ -69,8 +73,11 @@ func (d *Deps) HandlePortainerOverview(ctx context.Context, w http.ResponseWrite
 	if err != nil {
 		warnings = append(warnings, "stacks unavailable: "+err.Error())
 	} else {
-		resp.Stacks.Total = len(stacks)
 		for _, st := range stacks {
+			if st.EndpointID != endpointID {
+				continue
+			}
+			resp.Stacks.Total++
 			// Stack.Status: 1 = active, 2 = inactive.
 			if st.Status == 1 {
 				resp.Stacks.Running++

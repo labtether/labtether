@@ -113,6 +113,7 @@ func heartbeatLoop(ctx context.Context) {
 
 // Constants aliases.
 const (
+	executorModeDisabled  = opspkg.ExecutorModeDisabled
 	executorModeSimulated = opspkg.ExecutorModeSimulated
 	executorModeSSH       = opspkg.ExecutorModeSSH
 	executorModeLocal     = opspkg.ExecutorModeLocal
@@ -245,9 +246,10 @@ func (s *apiServer) ensureOperationsDeps() *opspkg.ExecDeps {
 // buildUpdateExecutorDeps constructs the UpdateExecutorDeps from apiServer fields.
 func (s *apiServer) buildUpdateExecutorDeps() *opspkg.UpdateExecutorDeps {
 	return &opspkg.UpdateExecutorDeps{
-		AgentMgr:              s.agentMgr,
-		AssetStore:            s.assetStore,
-		ExecuteUpdateViaAgent: s.executeUpdateViaAgent,
+		AgentMgr:                        s.agentMgr,
+		AssetStore:                      s.assetStore,
+		ExecuteUpdateViaAgent:           s.executeUpdateViaAgent,
+		PreviewOSPackageUpdatesViaAgent: s.ensureResourcesDeps().PreviewOSPackageUpdatesViaAgent,
 	}
 }
 

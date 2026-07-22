@@ -222,6 +222,7 @@ export function TailscaleServeCard({
                 value={
                   <div className="flex w-full max-w-xs flex-col gap-2 sm:items-end">
                     <Select
+                      aria-label="Preferred Access Mode"
                       className="w-full"
                       value={draftMode}
                       onChange={(event) =>
@@ -267,6 +268,7 @@ export function TailscaleServeCard({
                 value={
                   <div className="flex w-full max-w-sm flex-col gap-2 sm:items-end">
                     <Input
+                      aria-label="Preferred Serve Upstream"
                       className="w-full"
                       value={draftTarget}
                       placeholder={status?.suggested_target || "http://127.0.0.1:8080"}

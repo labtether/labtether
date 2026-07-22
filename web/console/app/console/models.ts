@@ -588,6 +588,8 @@ export type RuntimeSettingEntry = {
   override_value?: string;
   effective_value: string;
   source: "ui" | "docker" | "default";
+  sensitive: boolean;
+  configured: boolean;
   allowed_values?: string[];
   min_int?: number;
   max_int?: number;

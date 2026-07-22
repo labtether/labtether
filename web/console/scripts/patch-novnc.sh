@@ -12,7 +12,7 @@ require_command() {
   fi
 }
 
-SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+SCRIPT_DIR="$(unset CDPATH; cd -- "$(dirname -- "$0")" && pwd)"
 NO_VNC_FILE="${SCRIPT_DIR}/../node_modules/@novnc/novnc/core/util/browser.js"
 
 # Patch @novnc/novnc to remove a top-level await in core/util/browser.js.

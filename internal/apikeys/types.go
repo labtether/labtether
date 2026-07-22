@@ -1,6 +1,11 @@
 package apikeys
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+var ErrNotFound = errors.New("api key not found")
 
 // GeneratedKey is returned from GenerateKey. Raw is shown once to the user;
 // Prefix and Hash are stored.

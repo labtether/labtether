@@ -42,8 +42,13 @@ type Deps struct {
 	WebServiceCoordinator *webservice.Coordinator
 
 	// Concurrency control for collector runs.
-	CollectorDispatchSem chan struct{}
-	CollectorRunState    sync.Map // map[collectorID]*atomic.Bool
+	CollectorDispatchSem    chan struct{}
+	CollectorRunState       sync.Map // map[collectorID]*atomic.Bool
+	CollectorRuntimeContext context.Context
+	CollectorLifecycleMu    sync.Mutex
+	CollectorActiveRuns     int
+	CollectorRunsClosing    bool
+	CollectorRunsIdle       chan struct{}
 
 	// Web service URL grouping cache (owned by this package).
 	WebServiceURLGroupingCfgMu  sync.RWMutex

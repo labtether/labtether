@@ -15,6 +15,9 @@ func (d *Deps) HandleFileMkdir(w http.ResponseWriter, r *http.Request, assetID s
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	if !d.enforceAssetActionGuard(w, assetID) {
+		return
+	}
 
 	dirPath := strings.TrimSpace(r.URL.Query().Get("path"))
 	if dirPath == "" {
@@ -68,6 +71,9 @@ func (d *Deps) HandleFileMkdir(w http.ResponseWriter, r *http.Request, assetID s
 func (d *Deps) HandleFileDelete(w http.ResponseWriter, r *http.Request, assetID string) {
 	if r.Method != http.MethodDelete {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if !d.enforceAssetActionGuard(w, assetID) {
 		return
 	}
 
@@ -125,6 +131,9 @@ func (d *Deps) HandleFileRename(w http.ResponseWriter, r *http.Request, assetID 
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	if !d.enforceAssetActionGuard(w, assetID) {
+		return
+	}
 
 	oldPath := strings.TrimSpace(r.URL.Query().Get("old_path"))
 	newPath := strings.TrimSpace(r.URL.Query().Get("new_path"))
@@ -180,6 +189,9 @@ func (d *Deps) HandleFileRename(w http.ResponseWriter, r *http.Request, assetID 
 func (d *Deps) HandleFileCopy(w http.ResponseWriter, r *http.Request, assetID string) {
 	if r.Method != http.MethodPost {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if !d.enforceAssetActionGuard(w, assetID) {
 		return
 	}
 

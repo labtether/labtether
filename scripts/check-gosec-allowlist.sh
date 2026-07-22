@@ -60,7 +60,7 @@ current_findings="$(
   jq -r --arg prefix "${ROOT_DIR}/" '
     .Issues[]? | [.rule_id, (.file | sub("^" + $prefix; "")), (.line | tostring)] | @tsv
   ' "${tmp_json}" \
-    | rg -v '^[^\t]+\t(\.worktrees|\.claude/worktrees)/' || true
+    | awk -F '\t' '$2 !~ /^(\.worktrees|\.claude\/worktrees)\//' || true
 )"
 
 printf '%s\n' "${current_findings}" | awk 'NF > 0 { print }' | LC_ALL=C sort -u >"${tmp_current}"

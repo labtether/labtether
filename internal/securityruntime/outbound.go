@@ -17,10 +17,18 @@ const (
 	envOutboundAllowedHosts   = "LABTETHER_OUTBOUND_ALLOWED_HOSTS"
 	envOutboundAllowPrivate   = "LABTETHER_OUTBOUND_ALLOW_PRIVATE"
 	envOutboundAllowLoopback  = "LABTETHER_OUTBOUND_ALLOW_LOOPBACK"
+	envOutboundAllowLinkLocal = "LABTETHER_OUTBOUND_ALLOW_LINK_LOCAL"
 	envOutboundAllowedSchemes = "LABTETHER_OUTBOUND_ALLOWED_SCHEMES"
 	envAllowInsecureTransport = "LABTETHER_ALLOW_INSECURE_TRANSPORT"
 	defaultOutboundTimeout    = 30 * time.Second
 )
+
+// InsecureTransportAllowed reports whether the process-wide, explicitly named
+// insecure transport escape hatch is enabled. Protocol-specific callers must
+// still require their own local acknowledgement before using this value.
+func InsecureTransportAllowed() bool {
+	return parseBoolEnv(envAllowInsecureTransport, false)
+}
 
 var defaultAllowedOutboundSchemes = []string{"https", "wss"}
 var privateHostnameSuffixes = []string{".local", ".lan", ".home", ".internal", ".home.arpa"}
@@ -74,7 +82,7 @@ func isPrivateIPAddress(ip net.IP) bool {
 	if ip == nil {
 		return false
 	}
-	return ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast()
+	return ip.IsPrivate()
 }
 
 func isLikelyPrivateHostname(host string) bool {
@@ -124,10 +132,11 @@ func validateOutboundHost(host string) error {
 		parseBoolEnv(envOutboundAllowlistMode, false),
 		parseBoolEnv(envOutboundAllowPrivate, false),
 		parseBoolEnv(envOutboundAllowLoopback, false),
+		parseBoolEnv(envOutboundAllowLinkLocal, false),
 	)
 }
 
-func validateOutboundHostWithPolicy(host string, enforceAllowlist, allowPrivate, allowLoopback bool) error {
+func validateOutboundHostWithPolicy(host string, enforceAllowlist, allowPrivate, allowLoopback, allowLinkLocal bool) error {
 	normalized := normalizeHostname(host)
 	if normalized == "" {
 		return fmt.Errorf("host is required")
@@ -142,15 +151,24 @@ func validateOutboundHostWithPolicy(host string, enforceAllowlist, allowPrivate,
 				break
 			}
 		}
+		if !allowlisted {
+			return fmt.Errorf("outbound host %q is not allowlisted", normalized)
+		}
 	}
 
-	isLoopbackHost, isPrivateHost := hostRiskProfile(normalized)
+	isLoopbackHost, isPrivateHost, isLinkLocalHost := hostRiskProfile(normalized)
 	if isLoopbackHost {
 		if !allowLoopback {
 			return fmt.Errorf("outbound loopback host %q is not allowed", normalized)
 		}
 		if enforceAllowlist && !allowlisted {
 			return fmt.Errorf("outbound host %q is not allowlisted", normalized)
+		}
+		return nil
+	}
+	if isLinkLocalHost {
+		if !allowLinkLocal {
+			return fmt.Errorf("outbound link-local host %q is not allowed", normalized)
 		}
 		return nil
 	}
@@ -165,16 +183,13 @@ func validateOutboundHostWithPolicy(host string, enforceAllowlist, allowPrivate,
 	}
 
 	if !enforceAllowlist {
-		return validateResolvedOutboundHost(normalized, allowLoopback, allowPrivate)
+		return validateResolvedOutboundHost(normalized, allowLoopback, allowPrivate, allowLinkLocal)
 	}
 
-	if err := validateResolvedOutboundHost(normalized, allowLoopback, allowPrivate); err != nil {
+	if err := validateResolvedOutboundHost(normalized, allowLoopback, allowPrivate, allowLinkLocal); err != nil {
 		return err
 	}
-	if allowlisted {
-		return nil
-	}
-	return fmt.Errorf("outbound host %q is not allowlisted", normalized)
+	return nil
 }
 
 func defaultAllowPrivateForScheme(scheme string) bool {
@@ -189,33 +204,36 @@ func resolvedOutboundAllowPrivate(scheme string) bool {
 	return defaultAllowPrivateForScheme(scheme)
 }
 
-func hostRiskProfile(host string) (isLoopback bool, isPrivate bool) {
+func hostRiskProfile(host string) (isLoopback bool, isPrivate bool, isLinkLocal bool) {
 	if ip := net.ParseIP(host); ip != nil {
 		if ip.IsLoopback() {
-			return true, true
+			return true, false, false
 		}
-		return false, isPrivateIPAddress(ip)
+		if ip.IsLinkLocalUnicast() {
+			return false, false, true
+		}
+		return false, isPrivateIPAddress(ip), false
 	}
 	if strings.EqualFold(host, "localhost") {
-		return true, true
+		return true, false, false
 	}
-	resolvedLoopback, resolvedPrivate, resolved := resolvedHostRisk(host)
+	resolvedLoopback, resolvedPrivate, resolvedLinkLocal, resolved := resolvedHostRisk(host)
 	if resolved {
-		return resolvedLoopback, resolvedPrivate
+		return resolvedLoopback, resolvedPrivate, resolvedLinkLocal
 	}
-	return false, isLikelyPrivateHostname(host)
+	return false, isLikelyPrivateHostname(host), false
 }
 
-func resolvedHostRisk(host string) (isLoopback bool, isPrivate bool, resolved bool) {
+func resolvedHostRisk(host string) (isLoopback bool, isPrivate bool, isLinkLocal bool, resolved bool) {
 	host = normalizeHostname(host)
 	if host == "" {
-		return false, false, false
+		return false, false, false, false
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	addrs, err := lookupIPAddrs(ctx, host)
 	if err != nil || len(addrs) == 0 {
-		return false, false, false
+		return false, false, false, false
 	}
 	resolved = true
 	for _, addr := range addrs {
@@ -225,39 +243,54 @@ func resolvedHostRisk(host string) (isLoopback bool, isPrivate bool, resolved bo
 		}
 		if ip.IsLoopback() {
 			isLoopback = true
-			isPrivate = true
+			continue
+		}
+		if ip.IsLinkLocalUnicast() {
+			isLinkLocal = true
 			continue
 		}
 		if isPrivateIPAddress(ip) {
 			isPrivate = true
 		}
 	}
-	return isLoopback, isPrivate, resolved
+	return isLoopback, isPrivate, isLinkLocal, resolved
 }
 
-func validateResolvedOutboundHost(host string, allowLoopback, allowPrivate bool) error {
+func validateResolvedOutboundHost(host string, allowLoopback, allowPrivate, allowLinkLocal bool) error {
 	if ip := net.ParseIP(host); ip != nil {
-		return validateResolvedOutboundIP(host, ip, allowLoopback, allowPrivate)
+		return validateResolvedOutboundIP(host, ip, allowLoopback, allowPrivate, allowLinkLocal)
 	}
 
 	resolvedIPs, err := lookupIP(host)
 	if err != nil {
-		return nil
+		return fmt.Errorf("resolve outbound host %q: %w", host, err)
+	}
+	if len(resolvedIPs) == 0 {
+		return fmt.Errorf("outbound host %q did not resolve", host)
 	}
 	for _, ip := range resolvedIPs {
-		if err := validateResolvedOutboundIP(host, ip, allowLoopback, allowPrivate); err != nil {
+		if err := validateResolvedOutboundIP(host, ip, allowLoopback, allowPrivate, allowLinkLocal); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func validateResolvedOutboundIP(host string, ip net.IP, allowLoopback, allowPrivate bool) error {
+func validateResolvedOutboundIP(host string, ip net.IP, allowLoopback, allowPrivate, allowLinkLocal bool) error {
 	if ip == nil {
-		return nil
+		return fmt.Errorf("outbound host %q resolved to an invalid address", host)
+	}
+	if ip.IsUnspecified() {
+		return fmt.Errorf("outbound host %q resolves to disallowed unspecified address %s", host, ip.String())
+	}
+	if ip.IsMulticast() || ip.Equal(net.IPv4bcast) {
+		return fmt.Errorf("outbound host %q resolves to disallowed multicast or broadcast address %s", host, ip.String())
 	}
 	if ip.IsLoopback() && !allowLoopback {
 		return fmt.Errorf("outbound host %q resolves to disallowed loopback address %s", host, ip.String())
+	}
+	if ip.IsLinkLocalUnicast() && !allowLinkLocal {
+		return fmt.Errorf("outbound host %q resolves to disallowed link-local address %s", host, ip.String())
 	}
 	if isPrivateIPAddress(ip) && !allowPrivate {
 		return fmt.Errorf("outbound host %q resolves to disallowed private address %s", host, ip.String())
@@ -293,7 +326,8 @@ func ValidateOutboundURL(rawURL string) (*url.URL, error) {
 	enforceAllowlist := parseBoolEnv(envOutboundAllowlistMode, false)
 	allowPrivate := resolvedOutboundAllowPrivate(scheme)
 	allowLoopback := parseBoolEnv(envOutboundAllowLoopback, false)
-	if err := validateOutboundHostWithPolicy(parsed.Hostname(), enforceAllowlist, allowPrivate, allowLoopback); err != nil {
+	allowLinkLocal := parseBoolEnv(envOutboundAllowLinkLocal, false)
+	if err := validateOutboundHostWithPolicy(parsed.Hostname(), enforceAllowlist, allowPrivate, allowLoopback, allowLinkLocal); err != nil {
 		return nil, err
 	}
 
@@ -362,8 +396,9 @@ func secureOutboundRoundTripper(base http.RoundTripper, scheme string) http.Roun
 	transport.DialTLSContext = nil
 	allowPrivate := resolvedOutboundAllowPrivate(scheme)
 	allowLoopback := parseBoolEnv(envOutboundAllowLoopback, false)
+	allowLinkLocal := parseBoolEnv(envOutboundAllowLinkLocal, false)
 	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
-		return dialOutboundValidated(ctx, network, address, allowLoopback, allowPrivate)
+		return dialOutboundValidated(ctx, network, address, allowLoopback, allowPrivate, allowLinkLocal)
 	}
 	return transport
 }
@@ -382,7 +417,7 @@ func (rt outboundValidatingRoundTripper) RoundTrip(req *http.Request) (*http.Res
 	return rt.base.RoundTrip(req)
 }
 
-func dialOutboundValidated(ctx context.Context, network, address string, allowLoopback, allowPrivate bool) (net.Conn, error) {
+func dialOutboundValidated(ctx context.Context, network, address string, allowLoopback, allowPrivate, allowLinkLocal bool) (net.Conn, error) {
 	host, port, err := net.SplitHostPort(address)
 	if err != nil {
 		return nil, err
@@ -393,12 +428,12 @@ func dialOutboundValidated(ctx context.Context, network, address string, allowLo
 	}
 	dialer := &net.Dialer{Timeout: defaultOutboundTimeout, KeepAlive: 30 * time.Second}
 	if ip := net.ParseIP(host); ip != nil {
-		if err := validateResolvedOutboundIP(host, ip, allowLoopback, allowPrivate); err != nil {
+		if err := validateResolvedOutboundIP(host, ip, allowLoopback, allowPrivate, allowLinkLocal); err != nil {
 			return nil, err
 		}
 		return dialer.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
 	}
-	addrs, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	addrs, err := lookupIPAddrs(ctx, host)
 	if err != nil {
 		return nil, err
 	}
@@ -406,7 +441,7 @@ func dialOutboundValidated(ctx context.Context, network, address string, allowLo
 		return nil, fmt.Errorf("host %q did not resolve", host)
 	}
 	for _, addr := range addrs {
-		if err := validateResolvedOutboundIP(host, addr.IP, allowLoopback, allowPrivate); err != nil {
+		if err := validateResolvedOutboundIP(host, addr.IP, allowLoopback, allowPrivate, allowLinkLocal); err != nil {
 			return nil, err
 		}
 	}
@@ -434,6 +469,145 @@ func ValidateOutboundDialTarget(host string, port int) error {
 	return validateOutboundHost(host)
 }
 
+// CanonicalizeOutboundHost accepts exactly one host value. It deliberately
+// rejects URLs, userinfo, paths, queries, fragments, embedded ports, control
+// characters, and ambiguous bracket forms before any DNS lookup occurs.
+// IPv6 literals may be supplied bare or inside one matching bracket pair.
+func CanonicalizeOutboundHost(raw string) (string, error) {
+	host := strings.TrimSpace(raw)
+	if host == "" {
+		return "", fmt.Errorf("host is required")
+	}
+	if len(host) > 253 {
+		return "", fmt.Errorf("host too long (max 253 characters)")
+	}
+	for _, char := range host {
+		if char <= 0x20 || char == 0x7f || char > 0x7f {
+			return "", fmt.Errorf("host contains unsupported characters")
+		}
+	}
+	if strings.Contains(host, "://") || strings.ContainsAny(host, "/\\@?#") {
+		return "", fmt.Errorf("host must not contain a URL, userinfo, path, query, or fragment")
+	}
+
+	if strings.HasPrefix(host, "[") || strings.HasSuffix(host, "]") {
+		if !strings.HasPrefix(host, "[") || !strings.HasSuffix(host, "]") || len(host) < 3 {
+			return "", fmt.Errorf("invalid bracketed host")
+		}
+		host = host[1 : len(host)-1]
+		ip := net.ParseIP(host)
+		if ip == nil || ip.To4() != nil {
+			return "", fmt.Errorf("brackets are only valid around an IPv6 literal")
+		}
+		return strings.ToLower(ip.String()), nil
+	}
+	if strings.ContainsAny(host, "[]") {
+		return "", fmt.Errorf("invalid bracketed host")
+	}
+
+	host = strings.TrimSuffix(strings.ToLower(host), ".")
+	if host == "" {
+		return "", fmt.Errorf("host is required")
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return strings.ToLower(ip.String()), nil
+	}
+	if strings.Contains(host, ":") {
+		return "", fmt.Errorf("host must not include a port or malformed IPv6 literal")
+	}
+
+	labels := strings.Split(host, ".")
+	for _, label := range labels {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return "", fmt.Errorf("invalid hostname label")
+		}
+		for _, char := range label {
+			if (char < 'a' || char > 'z') && (char < '0' || char > '9') && char != '-' {
+				return "", fmt.Errorf("invalid hostname character")
+			}
+		}
+	}
+	return host, nil
+}
+
+// ValidateOutboundEndpoint canonicalizes a separately supplied host and port,
+// then applies the process outbound policy (allowlist and public/private,
+// loopback, and link-local controls). The returned host is safe to retain as
+// the authoritative server-side session target.
+func ValidateOutboundEndpoint(rawHost string, port int) (string, int, error) {
+	host, err := CanonicalizeOutboundHost(rawHost)
+	if err != nil {
+		return "", 0, err
+	}
+	if err := ValidateOutboundDialTarget(host, port); err != nil {
+		return "", 0, err
+	}
+	return host, port, nil
+}
+
+// ResolveOutboundTCPHost resolves and validates an endpoint immediately before
+// handing it to an out-of-process TCP client such as guacd. It returns a
+// literal IP so that the downstream process cannot perform a second DNS lookup
+// and bypass the hub's outbound policy.
+func ResolveOutboundTCPHost(ctx context.Context, rawHost string, port int) (string, error) {
+	host, err := CanonicalizeOutboundHost(rawHost)
+	if err != nil {
+		return "", err
+	}
+	if port <= 0 || port > 65535 {
+		return "", fmt.Errorf("invalid port %d", port)
+	}
+
+	enforceAllowlist := parseBoolEnv(envOutboundAllowlistMode, false)
+	if enforceAllowlist {
+		allowed := false
+		for _, pattern := range parseAllowedHostPatterns() {
+			if hostMatchesPattern(host, pattern) {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return "", fmt.Errorf("outbound host %q is not allowlisted", host)
+		}
+	}
+
+	allowPrivate := parseBoolEnv(envOutboundAllowPrivate, false)
+	allowLoopback := parseBoolEnv(envOutboundAllowLoopback, false)
+	allowLinkLocal := parseBoolEnv(envOutboundAllowLinkLocal, false)
+	if strings.EqualFold(host, "localhost") && !allowLoopback {
+		return "", fmt.Errorf("outbound loopback host %q is not allowed", host)
+	}
+	if isLikelyPrivateHostname(host) && net.ParseIP(host) == nil && !allowPrivate {
+		return "", fmt.Errorf("outbound private host %q is not allowed", host)
+	}
+
+	if ip := net.ParseIP(host); ip != nil {
+		if err := validateResolvedOutboundIP(host, ip, allowLoopback, allowPrivate, allowLinkLocal); err != nil {
+			return "", err
+		}
+		return ip.String(), nil
+	}
+	addrs, err := lookupIPAddrs(ctx, host)
+	if err != nil {
+		return "", fmt.Errorf("resolve outbound host %q: %w", host, err)
+	}
+	if len(addrs) == 0 {
+		return "", fmt.Errorf("outbound host %q did not resolve", host)
+	}
+	for _, addr := range addrs {
+		if err := validateResolvedOutboundIP(host, addr.IP, allowLoopback, allowPrivate, allowLinkLocal); err != nil {
+			return "", err
+		}
+	}
+	for _, addr := range addrs {
+		if addr.IP != nil {
+			return addr.IP.String(), nil
+		}
+	}
+	return "", fmt.Errorf("outbound host %q did not resolve to a usable address", host)
+}
+
 func ValidateOutboundHostPort(host, portRaw string, fallbackPort int) (string, int, error) {
 	normalizedHost := strings.TrimSpace(host)
 	if normalizedHost == "" {
@@ -454,22 +628,121 @@ func ValidateOutboundHostPort(host, portRaw string, fallbackPort int) (string, i
 }
 
 func DialOutboundTCPTimeout(host string, port int, timeout time.Duration) (net.Conn, error) {
-	if err := ValidateOutboundDialTarget(host, port); err != nil {
-		return nil, err
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return DialOutboundTCPContext(ctx, host, port, timeout)
+}
+
+// OutboundTCPDialContext returns a net/http- and websocket-compatible dial
+// function that enforces the outbound policy at the actual TCP connection
+// boundary. In particular, it resolves a hostname once, validates every
+// returned address, and only then dials a validated literal IP.
+func OutboundTCPDialContext(timeout time.Duration) func(context.Context, string, string) (net.Conn, error) {
+	return func(ctx context.Context, network, address string) (net.Conn, error) {
+		switch strings.ToLower(strings.TrimSpace(network)) {
+		case "tcp", "tcp4", "tcp6":
+		default:
+			return nil, fmt.Errorf("outbound network %q is not allowed", network)
+		}
+
+		host, portRaw, err := net.SplitHostPort(address)
+		if err != nil {
+			return nil, fmt.Errorf("invalid outbound address %q: %w", address, err)
+		}
+		port, err := strconv.Atoi(portRaw)
+		if err != nil {
+			return nil, fmt.Errorf("invalid outbound port %q: %w", portRaw, err)
+		}
+		return DialOutboundTCPContext(ctx, host, port, timeout)
 	}
-	address := net.JoinHostPort(strings.TrimSpace(host), strconv.Itoa(port))
-	// #nosec G704 -- outbound host validated by ValidateOutboundDialTarget allowlist policy.
-	return net.DialTimeout("tcp", address, timeout)
+}
+
+// DialOutboundTCPContext resolves a hostname once, validates every returned
+// address against outbound policy, and dials a validated literal IP. This
+// removes the validation/dial DNS rebinding window.
+func DialOutboundTCPContext(ctx context.Context, host string, port int, timeout time.Duration) (net.Conn, error) {
+	host = normalizeHostname(host)
+	if host == "" {
+		return nil, fmt.Errorf("host is required")
+	}
+	if port <= 0 || port > 65535 {
+		return nil, fmt.Errorf("invalid port %d", port)
+	}
+
+	enforceAllowlist := parseBoolEnv(envOutboundAllowlistMode, false)
+	if enforceAllowlist {
+		allowed := false
+		for _, pattern := range parseAllowedHostPatterns() {
+			if hostMatchesPattern(host, pattern) {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return nil, fmt.Errorf("outbound host %q is not allowlisted", host)
+		}
+	}
+
+	allowPrivate := parseBoolEnv(envOutboundAllowPrivate, false)
+	allowLoopback := parseBoolEnv(envOutboundAllowLoopback, false)
+	allowLinkLocal := parseBoolEnv(envOutboundAllowLinkLocal, false)
+	if strings.EqualFold(host, "localhost") && !allowLoopback {
+		return nil, fmt.Errorf("outbound loopback host %q is not allowed", host)
+	}
+	if isLikelyPrivateHostname(host) && net.ParseIP(host) == nil && !allowPrivate {
+		return nil, fmt.Errorf("outbound private host %q is not allowed", host)
+	}
+
+	if timeout <= 0 {
+		timeout = defaultOutboundTimeout
+	}
+	dialer := &net.Dialer{Timeout: timeout, KeepAlive: 30 * time.Second}
+	if ip := net.ParseIP(host); ip != nil {
+		if err := validateResolvedOutboundIP(host, ip, allowLoopback, allowPrivate, allowLinkLocal); err != nil {
+			return nil, err
+		}
+		return dialer.DialContext(ctx, "tcp", net.JoinHostPort(ip.String(), strconv.Itoa(port)))
+	}
+
+	addrs, err := lookupIPAddrs(ctx, host)
+	if err != nil {
+		return nil, fmt.Errorf("resolve outbound host %q: %w", host, err)
+	}
+	if len(addrs) == 0 {
+		return nil, fmt.Errorf("outbound host %q did not resolve", host)
+	}
+	for _, addr := range addrs {
+		if err := validateResolvedOutboundIP(host, addr.IP, allowLoopback, allowPrivate, allowLinkLocal); err != nil {
+			return nil, err
+		}
+	}
+	var lastErr error
+	for _, addr := range addrs {
+		if addr.IP == nil {
+			continue
+		}
+		conn, dialErr := dialer.DialContext(ctx, "tcp", net.JoinHostPort(addr.IP.String(), strconv.Itoa(port)))
+		if dialErr == nil {
+			return conn, nil
+		}
+		lastErr = dialErr
+	}
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, fmt.Errorf("outbound host %q did not resolve to a dialable address", host)
 }
 
 func OutboundPolicySummary() map[string]string {
 	allowlistMode := parseBoolEnv(envOutboundAllowlistMode, false)
 	allowPrivate := parseBoolEnv(envOutboundAllowPrivate, false)
 	allowLoopback := parseBoolEnv(envOutboundAllowLoopback, false)
+	allowLinkLocal := parseBoolEnv(envOutboundAllowLinkLocal, false)
 	return map[string]string{
 		"allowlist_mode":           strconv.FormatBool(allowlistMode),
 		"allow_private":            strconv.FormatBool(allowPrivate),
 		"allow_loopback":           strconv.FormatBool(allowLoopback),
+		"allow_link_local":         strconv.FormatBool(allowLinkLocal),
 		"allow_insecure_transport": strconv.FormatBool(parseBoolEnv(envAllowInsecureTransport, false)),
 		"allowed_hosts":            strings.Join(parseAllowedHostPatterns(), ","),
 		"schemes":                  strings.Join(effectiveAllowedOutboundSchemes(), ","),

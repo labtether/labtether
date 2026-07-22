@@ -1,15 +1,9 @@
 import { NextResponse } from "next/server";
 import { resolvedBackendBaseURLs } from "../../../../../lib/backend";
+import { safeLocalRedirectPath } from "../../../../../lib/safeRedirect";
+import { markResponseNoStore } from "../../../../../lib/noStoreResponse";
 
 export const dynamic = "force-dynamic";
-
-function safeNextPath(value: unknown): string {
-  if (typeof value !== "string" || !value.startsWith("/")) return "/";
-  if (value.startsWith("//")) return "/";
-  const lower = value.toLowerCase();
-  if (lower.includes("javascript:") || lower.includes("data:")) return "/";
-  return value;
-}
 
 export async function GET(request: Request) {
   const requestURL = new URL(request.url);
@@ -19,7 +13,7 @@ export async function GET(request: Request) {
   const state = requestURL.searchParams.get("state")?.trim() ?? "";
 
   if (!code || !state) {
-    return NextResponse.redirect(new URL("/login?error=Missing%20OIDC%20callback%20parameters", origin));
+    return markResponseNoStore(NextResponse.redirect(new URL("/login?error=Missing%20OIDC%20callback%20parameters", origin)));
   }
 
   const base = await resolvedBackendBaseURLs();
@@ -35,18 +29,18 @@ export async function GET(request: Request) {
 
     const payload = await safeJSON(response) as { next?: string; error?: string } | null;
     if (!response.ok) {
-      return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(payload?.error ?? "SSO login failed")}`, origin));
+      return markResponseNoStore(NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(payload?.error ?? "SSO login failed")}`, origin)));
     }
 
-    const nextPath = safeNextPath(payload?.next);
-    const redirect = NextResponse.redirect(new URL(nextPath, origin));
+    const nextPath = safeLocalRedirectPath(payload?.next);
+    const redirect = markResponseNoStore(NextResponse.redirect(new URL(nextPath, origin)));
     const setCookie = response.headers.get("set-cookie");
     if (setCookie) {
       redirect.headers.set("set-cookie", setCookie);
     }
     return redirect;
   } catch {
-    return NextResponse.redirect(new URL("/login?error=SSO%20login%20failed", origin));
+    return markResponseNoStore(NextResponse.redirect(new URL("/login?error=SSO%20login%20failed", origin)));
   }
 }
 

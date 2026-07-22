@@ -3,10 +3,10 @@ package pbs
 import (
 	"errors"
 	"fmt"
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strings"
 
+	"github.com/labtether/labtether/internal/assetid"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
@@ -21,7 +21,7 @@ func WritePBSResolveError(w http.ResponseWriter, err error) {
 	case errors.Is(err, ErrPBSAssetNotFound), errors.Is(err, ErrAssetNotPBS):
 		servicehttp.WriteError(w, http.StatusNotFound, err.Error())
 	default:
-		servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
 	}
 }
 
@@ -76,8 +76,9 @@ func PBSStoreFromAsset(asset assets.Asset) string {
 	if store := strings.TrimSpace(asset.Metadata["store"]); store != "" {
 		return store
 	}
-	if strings.HasPrefix(strings.TrimSpace(asset.ID), "pbs-datastore-") {
-		return strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(asset.ID), "pbs-datastore-"))
+	nativeAssetID := assetid.NativeCollectorAssetID(asset.ID)
+	if strings.HasPrefix(nativeAssetID, "pbs-datastore-") {
+		return strings.TrimSpace(strings.TrimPrefix(nativeAssetID, "pbs-datastore-"))
 	}
 	return ""
 }

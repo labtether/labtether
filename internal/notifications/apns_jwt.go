@@ -2,6 +2,7 @@ package notifications
 
 import (
 	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -21,6 +22,9 @@ import (
 func signAPNsJWT(key *ecdsa.PrivateKey, keyID, teamID string, now time.Time) (string, error) {
 	if key == nil {
 		return "", fmt.Errorf("apns jwt: private key is nil")
+	}
+	if key.Curve != elliptic.P256() {
+		return "", fmt.Errorf("apns jwt: private key must use the P-256 curve")
 	}
 
 	header, err := json.Marshal(map[string]string{

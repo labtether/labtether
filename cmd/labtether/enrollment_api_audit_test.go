@@ -67,6 +67,8 @@ func TestHandleAgentTokensUsesSingleAssetListLookup(t *testing.T) {
 		Source:   "agent",
 		Status:   "online",
 		Metadata: map[string]string{"agent_device_fingerprint": "fp-123"},
+		// This fixture represents an enrolled agent with a verified anchor.
+		AllowAgentIdentityRotation: true,
 	}); err != nil {
 		t.Fatalf("upsert asset heartbeat: %v", err)
 	}

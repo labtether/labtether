@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/labtether/labtether/internal/securityruntime"
 )
@@ -17,7 +16,7 @@ type SlackAdapter struct{}
 func (s *SlackAdapter) Type() string { return ChannelTypeSlack }
 
 func (s *SlackAdapter) Send(ctx context.Context, config map[string]any, payload map[string]any) error {
-	webhookURL, _ := config["webhook_url"].(string)
+	webhookURL := firstNonBlank(payloadString(config, "webhook_url"), payloadString(config, "webhookUrl"))
 	if webhookURL == "" {
 		return fmt.Errorf("slack config missing webhook_url")
 	}
@@ -66,16 +65,12 @@ func (s *SlackAdapter) Send(ctx context.Context, config map[string]any, payload 
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := newNotificationHTTPClient()
 	resp, err := securityruntime.DoOutboundRequest(client, req)
 	if err != nil {
 		return fmt.Errorf("slack request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode >= 400 {
-		return fmt.Errorf("slack returned status %d", resp.StatusCode)
-	}
-
-	return nil
+	return notificationResponseError("slack", resp.StatusCode)
 }

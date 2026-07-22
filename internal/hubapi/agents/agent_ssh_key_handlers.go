@@ -16,8 +16,12 @@ func (d *Deps) ProcessAgentSSHKeyRemoved(conn *agentmgr.AgentConn, _ agentmgr.Me
 
 // sendSSHKeyInstall sends the hub SSH public key to a newly connected agent.
 func (d *Deps) SendSSHKeyInstall(conn *agentmgr.AgentConn) {
+	identity := d.currentHubIdentity()
+	if identity == nil {
+		return
+	}
 	data, _ := json.Marshal(agentmgr.SSHKeyInstallData{
-		PublicKey: d.HubIdentity.PublicKey,
+		PublicKey: identity.PublicKey,
 	})
 	if err := conn.Send(agentmgr.Message{
 		Type: agentmgr.MsgSSHKeyInstall,
@@ -29,8 +33,12 @@ func (d *Deps) SendSSHKeyInstall(conn *agentmgr.AgentConn) {
 
 // sendSSHKeyRemove sends a request to the agent to remove the hub's SSH public key.
 func (d *Deps) SendSSHKeyRemove(conn *agentmgr.AgentConn) {
+	identity := d.currentHubIdentity()
+	if identity == nil {
+		return
+	}
 	data, _ := json.Marshal(agentmgr.SSHKeyRemoveData{
-		PublicKey: d.HubIdentity.PublicKey,
+		PublicKey: identity.PublicKey,
 	})
 	if err := conn.Send(agentmgr.Message{
 		Type: agentmgr.MsgSSHKeyRemove,
@@ -50,7 +58,8 @@ func (d *Deps) ProcessAgentSSHKeyInstalled(conn *agentmgr.AgentConn, msg agentmg
 
 	log.Printf("agentws: SSH key installed on %s (user=%s, host=%s)", conn.AssetID, data.Username, data.Hostname)
 
-	if d.CredentialStore == nil || d.HubIdentity == nil {
+	identity := d.currentHubIdentity()
+	if d.CredentialStore == nil || identity == nil {
 		return
 	}
 
@@ -74,7 +83,7 @@ func (d *Deps) ProcessAgentSSHKeyInstalled(conn *agentmgr.AgentConn, msg agentmg
 		Port:                22,
 		Username:            data.Username,
 		StrictHostKey:       true,
-		CredentialProfileID: d.HubIdentity.ProfileID,
+		CredentialProfileID: identity.ProfileID,
 		UpdatedAt:           time.Now().UTC(),
 	}
 

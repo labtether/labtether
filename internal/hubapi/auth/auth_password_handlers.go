@@ -42,9 +42,6 @@ func (d *Deps) HandleChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req.CurrentPassword = strings.TrimSpace(req.CurrentPassword)
-	req.NewPassword = strings.TrimSpace(req.NewPassword)
-
 	if req.CurrentPassword == "" {
 		servicehttp.WriteError(w, http.StatusBadRequest, "current_password is required")
 		return
@@ -81,31 +78,23 @@ func (d *Deps) HandleChangePassword(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to hash password")
 		return
 	}
+
+	// Revoke every other session before changing the credential. A revocation
+	// failure must not leave a newly changed password alongside sessions that
+	// the operator was told had been signed out.
+	retainedCurrent, revokeErr := revokeOtherUserSessions(d.AuthStore, userID, r)
+	if revokeErr != nil {
+		log.Printf("auth: password-change: failed to revoke other sessions for user %s: %v", userID, revokeErr) // #nosec G706 -- User IDs are store-generated identifiers.
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to revoke active sessions")
+		return
+	}
+
 	if err := d.AuthStore.UpdateUserPasswordHash(userID, newHash); err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update password")
 		return
 	}
-
-	// Revoke all sessions except the current one so other devices are signed out.
-	if token := auth.ExtractSessionToken(r); token != "" {
-		currentHash := auth.HashToken(token)
-		sessions, listErr := d.AuthStore.ListSessionsByUserID(userID)
-		if listErr == nil {
-			for _, s := range sessions {
-				if s.TokenHash != currentHash {
-					if delErr := d.AuthStore.DeleteSession(s.ID); delErr != nil {
-						log.Printf("auth: password-change: failed to revoke session %s for user %s: %v", s.ID, userID, delErr) // #nosec G706 -- Session and user IDs are store-generated identifiers.
-					}
-				}
-			}
-		} else {
-			log.Printf("auth: password-change: failed to list sessions for user %s: %v", userID, listErr) // #nosec G706 -- User IDs are store-generated identifiers.
-		}
-	} else {
-		// No current token identifiable — revoke all sessions.
-		if delErr := d.AuthStore.DeleteSessionsByUserID(userID); delErr != nil {
-			log.Printf("auth: password-change: failed to revoke all sessions for user %s: %v", userID, delErr) // #nosec G706 -- User IDs are store-generated identifiers.
-		}
+	if !retainedCurrent {
+		auth.ClearSessionCookie(w)
 	}
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"status": "updated"})

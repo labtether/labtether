@@ -20,9 +20,9 @@ export function ResetPasswordDialog({ user, onClose, onConfirm }: ResetPasswordD
 
   if (!user) return null;
 
-  const handleConfirm = async () => {
-    const pw = password.trim();
-    const cpw = confirmPassword.trim();
+	const handleConfirm = async () => {
+		const pw = password;
+		const cpw = confirmPassword;
 
     if (pw.length < 8) {
       setError("Password must be at least 8 characters.");
@@ -59,9 +59,17 @@ export function ResetPasswordDialog({ user, onClose, onConfirm }: ResetPasswordD
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={handleClose}
     >
-      <div onClick={(e) => e.stopPropagation()}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reset-password-dialog-title"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") handleClose();
+        }}
+      >
         <Card className="w-[28rem] max-w-[92vw] space-y-4">
-          <h3 className="text-sm font-medium text-[var(--text)]">Reset Password</h3>
+          <h3 id="reset-password-dialog-title" className="text-sm font-medium text-[var(--text)]">Reset Password</h3>
           <div className="space-y-1">
             <span className="text-[10px] text-[var(--muted)]">Username</span>
             <p className="text-sm text-[var(--text)] font-mono">{user.username}</p>
@@ -73,6 +81,8 @@ export function ResetPasswordDialog({ user, onClose, onConfirm }: ResetPasswordD
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="At least 8 characters"
+              maxLength={256}
+              autoComplete="new-password"
               disabled={saving}
               autoFocus
             />
@@ -84,6 +94,8 @@ export function ResetPasswordDialog({ user, onClose, onConfirm }: ResetPasswordD
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Repeat password"
+              maxLength={256}
+              autoComplete="new-password"
               disabled={saving}
             />
           </label>

@@ -8,10 +8,12 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -97,11 +99,12 @@ func (d *Deps) HandleWebRTCStream(w http.ResponseWriter, r *http.Request, sessio
 	}
 
 	upgrader := websocket.Upgrader{CheckOrigin: d.CheckSameOrigin}
-	browserWS, err := upgrader.Upgrade(w, r, nil)
+	browserWS, err := shared.UpgradeWebSocket(&upgrader, w, r, nil)
 	if err != nil {
 		log.Printf("webrtc: websocket upgrade failed: %v", err)
 		return
 	}
+	shared.LimitBrowserControlMessages(browserWS)
 	defer browserWS.Close()
 
 	bridge := &WebRTCSignalingBridge{
@@ -136,6 +139,7 @@ func (d *Deps) HandleWebRTCStream(w http.ResponseWriter, r *http.Request, sessio
 		return
 	}
 
+	explicitStop := false
 	for {
 		_, msgBytes, readErr := browserWS.ReadMessage()
 		if readErr != nil {
@@ -189,12 +193,23 @@ func (d *Deps) HandleWebRTCStream(w http.ResponseWriter, r *http.Request, sessio
 			_ = agentConn.Send(agentmgr.Message{Type: agentmgr.MsgWebRTCInput, ID: session.ID, Data: data})
 
 		case "stop":
+			explicitStop = true
 			goto stop
 		}
 	}
 
 stop:
 	SendWebRTCStop(agentConn, session.ID)
+	if explicitStop {
+		// Keep the signaling socket alive briefly so the agent's stopped
+		// acknowledgement can be relayed to the browser. Closing immediately
+		// after sending stop made a successful agent shutdown look like a client
+		// timeout and discarded the final reason/state message.
+		select {
+		case <-bridge.ClosedCh:
+		case <-time.After(3 * time.Second):
+		}
+	}
 }
 
 // ProcessAgentWebRTCCapabilities handles webrtc.capabilities from agent.

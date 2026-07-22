@@ -25,6 +25,11 @@ func (s *apiServer) handleV2AlertActions(w http.ResponseWriter, r *http.Request)
 		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
+	if strings.HasPrefix(r.URL.Path, "/api/v2/alerts/rules/") {
+		r.URL.Path = strings.Replace(r.URL.Path, "/api/v2/alerts/rules/", "/alerts/rules/", 1)
+		apiv2.WrapV1Handler(s.handleAlertRuleActions)(w, r)
+		return
+	}
 	r.URL.Path = strings.Replace(r.URL.Path, "/api/v2/alerts/", "/alerts/instances/", 1)
 	apiv2.WrapV1Handler(s.handleAlertInstanceActions)(w, r)
 }

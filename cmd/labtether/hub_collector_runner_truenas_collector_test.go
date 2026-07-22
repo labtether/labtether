@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/labtether/labtether/internal/assetid"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/connectors/truenas"
 	"github.com/labtether/labtether/internal/credentials"
@@ -323,7 +325,7 @@ func TestExecuteTrueNASCollectorNoAssetsAndSuccess(t *testing.T) {
 			t.Fatalf("expected successful collector status, got %+v", updated)
 		}
 
-		poolAsset, exists, assetErr := sut.assetStore.GetAsset("truenas-storage-pool-mainpool")
+		poolAsset, exists, assetErr := sut.assetStore.GetAsset(assetid.ScopeCollectorAssetID("truenas-storage-pool-mainpool", collector.ID))
 		if assetErr != nil || !exists {
 			t.Fatalf("expected pool asset to be upserted, exists=%v err=%v", exists, assetErr)
 		}
@@ -418,6 +420,62 @@ func TestTrueNASAutoLinkWrappers(t *testing.T) {
 	}
 	if !foundTrueNASLink {
 		t.Fatalf("expected truenas -> proxmox runs_on link")
+	}
+}
+
+func TestExecuteTwoTrueNASCollectorsKeepRepeatedMainPoolDistinct(t *testing.T) {
+	allowInsecureTransportForConnectorTests(t)
+	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
+		switch method {
+		case "system.info":
+			return map[string]any{"hostname": "nas", "version": "25.04.0"}, nil
+		case "pool.query":
+			return []map[string]any{{"id": 1, "name": "MainPool", "status": "ONLINE", "healthy": true}}, nil
+		case "alert.list":
+			return []map[string]any{}, nil
+		default:
+			return nil, &trueNASRPCError{Code: -32601, Message: "Method not found"}
+		}
+	})
+	defer server.Close()
+
+	sut := newTestAPIServer(t)
+	store := newRecordingHubCollectorStore()
+	sut.hubCollectorStore = store
+
+	collectorIDs := []string{"collector-truenas-omega", "collector-truenas-tau"}
+	for index, collectorID := range collectorIDs {
+		credentialID := fmt.Sprintf("cred-truenas-scope-%d", index)
+		createTrueNASCredentialProfile(t, sut, credentialID, "api-key", server.URL)
+		collector := hubcollector.Collector{
+			ID:            collectorID,
+			AssetID:       "truenas-cluster-" + collectorID,
+			CollectorType: hubcollector.CollectorTypeTrueNAS,
+			Enabled:       true,
+			Config: map[string]any{
+				"base_url":      server.URL,
+				"credential_id": credentialID,
+				"skip_verify":   true,
+			},
+		}
+		store.statusByID[collector.ID] = collector
+		ctx, cancel := context.WithTimeout(context.Background(), 600*time.Millisecond)
+		sut.executeTrueNASCollector(ctx, collector)
+		cancel()
+	}
+
+	for _, collectorID := range collectorIDs {
+		id := assetid.ScopeCollectorAssetID("truenas-storage-pool-mainpool", collectorID)
+		asset, ok, err := sut.assetStore.GetAsset(id)
+		if err != nil || !ok {
+			t.Fatalf("expected scoped pool %s: ok=%v err=%v", id, ok, err)
+		}
+		if asset.Metadata["collector_id"] != collectorID {
+			t.Fatalf("pool %s collector_id = %q", id, asset.Metadata["collector_id"])
+		}
+	}
+	if _, ok, err := sut.assetStore.GetAsset("truenas-storage-pool-mainpool"); err != nil || ok {
+		t.Fatalf("unexpected ambiguous legacy pool: ok=%v err=%v", ok, err)
 	}
 }
 
@@ -1232,7 +1290,7 @@ func TestExecuteTrueNASCollectorAssetMetadataEndpointIdentity(t *testing.T) {
 	defer cancel()
 	sut.executeTrueNASCollector(ctx, collector)
 
-	poolAsset, exists, err := sut.assetStore.GetAsset("truenas-storage-pool-mainpool")
+	poolAsset, exists, err := sut.assetStore.GetAsset(assetid.ScopeCollectorAssetID("truenas-storage-pool-mainpool", collector.ID))
 	if err != nil || !exists {
 		t.Fatalf("expected pool asset to exist, exists=%v err=%v", exists, err)
 	}
@@ -1420,7 +1478,7 @@ func TestExecuteTrueNASCollectorHandlesEndpointIdentityMetadata(t *testing.T) {
 	defer cancel()
 	sut.executeTrueNASCollector(ctx, collector)
 
-	poolAsset, exists, err := sut.assetStore.GetAsset("truenas-storage-pool-mainpool")
+	poolAsset, exists, err := sut.assetStore.GetAsset(assetid.ScopeCollectorAssetID("truenas-storage-pool-mainpool", collector.ID))
 	if err != nil || !exists {
 		t.Fatalf("expected pool asset to exist, exists=%v err=%v", exists, err)
 	}
@@ -2303,7 +2361,7 @@ func TestExecuteTrueNASCollectorUsesAssetHeartbeatStatusNormalization(t *testing
 	defer cancel()
 	sut.executeTrueNASCollector(ctx, collector)
 
-	poolAsset, exists, err := sut.assetStore.GetAsset("truenas-storage-pool-faultedpool")
+	poolAsset, exists, err := sut.assetStore.GetAsset(assetid.ScopeCollectorAssetID("truenas-storage-pool-faultedpool", collector.ID))
 	if err != nil || !exists {
 		t.Fatalf("expected faulted pool asset, exists=%v err=%v", exists, err)
 	}

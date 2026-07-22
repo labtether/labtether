@@ -20,18 +20,22 @@ func TestRecoverMiddleware_CatchesPanic(t *testing.T) {
 	defer log.SetOutput(os.Stderr)
 
 	handler := RecoverMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		panic("test panic")
+		panic("test panic\nforged-entry")
 	}))
 
 	req := httptest.NewRequest("GET", "/test", nil)
+	req.URL.Path = "/test\nforged-path"
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("expected 500, got %d", rec.Code)
 	}
-	if !strings.Contains(buf.String(), "test panic") {
+	if !strings.Contains(buf.String(), `test panic\nforged-entry`) {
 		t.Errorf("expected panic logged, got: %s", buf.String())
+	}
+	if strings.Contains(buf.String(), "test panic\nforged-entry") || strings.Contains(buf.String(), "/test\nforged-path") {
+		t.Errorf("expected attacker-controlled newlines to be escaped, got: %q", buf.String())
 	}
 }
 

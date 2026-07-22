@@ -25,9 +25,9 @@ type TerminalPreferences struct {
 	UpdatedAt     time.Time        `json:"updated_at"`
 }
 
-func DefaultTerminalPreferences() TerminalPreferences {
+func DefaultTerminalPreferences(userID string) TerminalPreferences {
 	return TerminalPreferences{
-		UserID:        "default",
+		UserID:        userID,
 		Theme:         "labtether-dark",
 		FontFamily:    "JetBrains Mono",
 		FontSize:      14,
@@ -57,13 +57,14 @@ func (d *Deps) HandleTerminalPreferences(w http.ResponseWriter, r *http.Request)
 
 func (d *Deps) getTerminalPreferences(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	actorID := d.requestActorID(ctx)
 	var prefs TerminalPreferences
 	var toolbarKeys []byte
 
 	err := d.DBPool.QueryRow(ctx,
 		`SELECT user_id, theme, font_family, font_size, cursor_style, cursor_blink,
 		        scrollback, toolbar_keys, auto_reconnect, updated_at
-		 FROM terminal_preferences WHERE user_id = $1`, "default",
+		 FROM terminal_preferences WHERE user_id = $1`, actorID,
 	).Scan(
 		&prefs.UserID, &prefs.Theme, &prefs.FontFamily, &prefs.FontSize,
 		&prefs.CursorStyle, &prefs.CursorBlink, &prefs.Scrollback,
@@ -71,7 +72,7 @@ func (d *Deps) getTerminalPreferences(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			prefs = DefaultTerminalPreferences()
+			prefs = DefaultTerminalPreferences(actorID)
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"preferences": prefs})
 			return
 		}
@@ -107,14 +108,15 @@ func (d *Deps) updateTerminalPreferences(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	prefs := DefaultTerminalPreferences()
-
 	ctx := r.Context()
+	actorID := d.requestActorID(ctx)
+	prefs := DefaultTerminalPreferences(actorID)
+
 	var existingToolbarKeys []byte
 	err := d.DBPool.QueryRow(ctx,
 		`SELECT user_id, theme, font_family, font_size, cursor_style, cursor_blink,
 		        scrollback, toolbar_keys, auto_reconnect, updated_at
-		 FROM terminal_preferences WHERE user_id = $1`, "default",
+		 FROM terminal_preferences WHERE user_id = $1`, actorID,
 	).Scan(
 		&prefs.UserID, &prefs.Theme, &prefs.FontFamily, &prefs.FontSize,
 		&prefs.CursorStyle, &prefs.CursorBlink, &prefs.Scrollback,

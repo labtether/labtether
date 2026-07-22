@@ -24,6 +24,30 @@ type schemaMigration struct {
 	Statements []string
 }
 
+// SchemaMigrationError marks a database initialization failure that occurred
+// while applying or verifying the append-only schema history. Its public error
+// text is intentionally generic because database driver errors can include SQL
+// fragments or data values. The original cause remains available through
+// errors.Unwrap for trusted in-process classification.
+type SchemaMigrationError struct {
+	cause error
+}
+
+func (e *SchemaMigrationError) Error() string {
+	return "database schema migration failed"
+}
+
+func (e *SchemaMigrationError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.cause
+}
+
+func newSchemaMigrationError(cause error) error {
+	return &SchemaMigrationError{cause: cause}
+}
+
 const defaultDBStatementTimeout = 30 * time.Second
 const defaultLogEventsWatermarkRefreshInterval = 3 * time.Second
 const schemaMigrationAdvisoryLockKey int64 = 0x4c545348454d41 // "LTSHEMA"
@@ -74,7 +98,7 @@ func NewPostgresStore(ctx context.Context, databaseURL string) (*PostgresStore, 
 	}
 	if err := store.ensureSchema(ctx); err != nil {
 		pool.Close()
-		return nil, err
+		return nil, newSchemaMigrationError(err)
 	}
 
 	return store, nil
