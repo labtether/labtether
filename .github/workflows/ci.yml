@@ -170,7 +170,9 @@ jobs:
             --output-root "${RUN_ROOT}" \
             --no-auto-compare
 
-          RUN_DIR="$(find "${RUN_ROOT}" -mindepth 1 -maxdepth 1 -type d -name '*-ci-hotspot' -print -quit)"
+          # backend-hotspot-apples.sh appends mktemp's random suffix to the
+          # requested label (for example, ci-hotspot.ABC123).
+          RUN_DIR="$(find "${RUN_ROOT}" -mindepth 1 -maxdepth 1 -type d -name '*-ci-hotspot.*' -print -quit)"
           test -n "${RUN_DIR}"
           echo "RUN_DIR=${RUN_DIR}" >> "${GITHUB_ENV}"
 
@@ -356,7 +358,7 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           repository: labtether/labtether-agent
-          ref: 2793668a47562f2b1f53952bf4b3a5f36f3be7eb
+          ref: 02c4bb0ea7c333a0cad26d6ab69fa5e3a2c5faee
           persist-credentials: false
           path: labtether-agent
 

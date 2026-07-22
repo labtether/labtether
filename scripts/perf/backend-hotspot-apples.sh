@@ -441,6 +441,18 @@ build_compare_report() {
     ' "${file}"
   }
 
+  get_snapshot_metric() {
+    local file=$1
+    local metric=$2
+    jq -r --arg metric "${metric}" '
+      (.key_deltas.batch_snapshot_distinct[$metric]
+       // .key_deltas.batch_snapshot_lateral[$metric]
+       // .key_deltas.batch_snapshot_new_lateral[$metric]
+       // .key_deltas.snapshot_single_distinct[$metric]
+       // null)
+    ' "${file}"
+  }
+
   get_endpoint_metric() {
     local file=$1
     local endpoint=$2
@@ -464,10 +476,10 @@ build_compare_report() {
   }
 
   local base_batch_total cand_batch_total base_batch_mean cand_batch_mean
-  base_batch_total="$(get_query_metric "${baseline_summary}" "batch_snapshot_lateral" "batch_snapshot_new_lateral" "total_ms_delta")"
-  cand_batch_total="$(get_query_metric "${candidate_summary}" "batch_snapshot_lateral" "batch_snapshot_new_lateral" "total_ms_delta")"
-  base_batch_mean="$(get_query_metric "${baseline_summary}" "batch_snapshot_lateral" "batch_snapshot_new_lateral" "mean_ms_after")"
-  cand_batch_mean="$(get_query_metric "${candidate_summary}" "batch_snapshot_lateral" "batch_snapshot_new_lateral" "mean_ms_after")"
+  base_batch_total="$(get_snapshot_metric "${baseline_summary}" "total_ms_delta")"
+  cand_batch_total="$(get_snapshot_metric "${candidate_summary}" "total_ms_delta")"
+  base_batch_mean="$(get_snapshot_metric "${baseline_summary}" "mean_ms_after")"
+  cand_batch_mean="$(get_snapshot_metric "${candidate_summary}" "mean_ms_after")"
 
   local base_sources_total cand_sources_total base_sources_mean cand_sources_mean
   base_sources_total="$(get_query_metric "${baseline_summary}" "sources_groupby_windowed" "sources_groupby_windowed" "total_ms_delta")"
@@ -592,6 +604,7 @@ jq -n \
     source_query_aggregates: ($afterDoc.performance.source_queries_top // []),
     top10: ($delta[:10]),
     key_deltas: {
+      batch_snapshot_distinct: first_match("SELECT DISTINCT ON \\(asset_id, metric\\) asset_id, metric, value FROM metric_samples WHERE asset_id = ANY"),
       batch_snapshot_lateral: first_match("WITH asset_ids AS.*LATERAL"),
       snapshot_single_distinct: first_match("SELECT DISTINCT ON \\(metric\\) metric, value FROM metric_samples WHERE asset_id = \\$1"),
       queryevents_groupid_projected: first_match("projected_group_id"),

@@ -205,8 +205,12 @@ aggregate_fail_rate="$(endpoint_metric "${SUMMARY}" "/status/aggregate" "fail_ra
 live_fail_rate="$(endpoint_metric "${SUMMARY}" "/status/aggregate/live" "fail_rate")"
 query_stats_enabled="$(jq -r 'if .query_stats_enabled != null then .query_stats_enabled else ((.top10 | length) > 0) end' "${SUMMARY}")"
 query_stats_error="$(jq -r '.query_stats_error // ""' "${SUMMARY}")"
-snapshotmany_mean="$(query_metric "${SUMMARY}" "batch_snapshot_lateral" "mean_ms_after")"
-snapshot_metric_key="batch_snapshot_lateral"
+snapshotmany_mean="$(query_metric "${SUMMARY}" "batch_snapshot_distinct" "mean_ms_after")"
+snapshot_metric_key="batch_snapshot_distinct"
+if [[ "${snapshotmany_mean}" == "null" || -z "${snapshotmany_mean}" ]]; then
+  snapshotmany_mean="$(query_metric "${SUMMARY}" "batch_snapshot_lateral" "mean_ms_after")"
+  snapshot_metric_key="batch_snapshot_lateral"
+fi
 if [[ "${snapshotmany_mean}" == "null" || -z "${snapshotmany_mean}" ]]; then
   snapshotmany_mean="$(query_metric "${SUMMARY}" "snapshot_single_distinct" "mean_ms_after")"
   snapshot_metric_key="snapshot_single_distinct"
@@ -251,7 +255,7 @@ if [[ "${query_stats_enabled}" != "true" ]]; then
   fi
 else
   if [[ "${snapshotmany_mean}" == "null" || -z "${snapshotmany_mean}" ]]; then
-    failures+=("missing snapshot query mean_ms_after (expected key_deltas.batch_snapshot_lateral or key_deltas.snapshot_single_distinct)")
+    failures+=("missing snapshot query mean_ms_after (expected a batched or single-asset snapshot query key)")
   elif ! float_le "${snapshotmany_mean}" "${MAX_SNAPSHOTMANY_MEAN_MS}"; then
     failures+=("${snapshot_metric_key} mean ${snapshotmany_mean}ms exceeds ${MAX_SNAPSHOTMANY_MEAN_MS}ms")
   fi
@@ -309,7 +313,7 @@ if [[ -n "${query_stats_error}" ]]; then
   log_info "  query_stats_error: ${query_stats_error}"
 fi
 log_info "  snapshot_query_key: ${snapshot_metric_key}"
-log_info "  SnapshotMany lateral mean ms: ${snapshotmany_mean}"
+log_info "  SnapshotMany query mean ms: ${snapshotmany_mean}"
 log_info "  Windowed sources mean ms: ${windowed_sources_mean}"
 log_info "  QueryEvents full-fields calls_delta: ${full_fields_calls}"
 if [[ -n "${aggregate_p95_regression_pct}" ]]; then
