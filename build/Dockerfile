@@ -25,7 +25,7 @@ RUN CGO_ENABLED=0 \
       -o /out/labtether ./cmd/labtether
 
 # ── Stage 2: Node dependency install ─────────────────────────
-FROM node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS node-deps
+FROM node:26-alpine@sha256:e88a35be04478413b7c71c455cd9865de9b9360e1f43456be5951032d7ac1a66 AS node-deps
 
 WORKDIR /app
 COPY web/console/package.json web/console/package-lock.json web/console/.npmrc ./
@@ -33,7 +33,7 @@ COPY web/console/scripts/ ./scripts/
 RUN npm ci
 
 # ── Stage 3: Next.js build ───────────────────────────────────
-FROM node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS node-builder
+FROM node:26-alpine@sha256:e88a35be04478413b7c71c455cd9865de9b9360e1f43456be5951032d7ac1a66 AS node-builder
 
 WORKDIR /app
 COPY --from=node-deps /app/node_modules ./node_modules
