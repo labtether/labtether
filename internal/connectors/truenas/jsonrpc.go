@@ -54,6 +54,7 @@ func dialTrueNASWebSocket(ctx context.Context, endpoint string, skipVerify bool,
 	// ValidateOutboundURL enforces the configured scheme/host policy, while
 	// OutboundTCPDialContext resolves once, validates every address, and dials a
 	// validated literal IP so DNS rebinding cannot bypass that policy.
+
 	// codeql[go/request-forgery]
 	conn, _, err := dialer.DialContext(ctx, validatedEndpoint.String(), nil)
 	if err != nil {
