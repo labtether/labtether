@@ -337,7 +337,7 @@ func TestCoordinatorExecuteActionRoutes(t *testing.T) {
 			Success:   true,
 		}
 		raw, _ := json.Marshal(resultData)
-		coord.HandleActionResult("agent-01", agentmgr.Message{Type: agentmgr.MsgDockerActionResult, Data: raw})
+		coord.HandleActionResult("agent-01", agentmgr.Message{Type: agentmgr.MsgDockerActionResult, ID: req.RequestID, Data: raw})
 	}()
 
 	result, err := coord.ExecuteAction(context.Background(), "container.restart", connectorsdk.ActionRequest{
@@ -416,7 +416,7 @@ func TestCoordinatorExecuteActionContainerCreateUsesHostTarget(t *testing.T) {
 			Data:      "new-container-id",
 		}
 		raw, _ := json.Marshal(resultData)
-		coord.HandleActionResult("agent-01", agentmgr.Message{Type: agentmgr.MsgDockerActionResult, Data: raw})
+		coord.HandleActionResult("agent-01", agentmgr.Message{Type: agentmgr.MsgDockerActionResult, ID: req.RequestID, Data: raw})
 	}()
 
 	result, err := coord.ExecuteAction(context.Background(), "container.create", connectorsdk.ActionRequest{
@@ -474,7 +474,7 @@ func TestCoordinatorExecuteActionStackDeployUsesHostTarget(t *testing.T) {
 			Output:    "deployed",
 		}
 		raw, _ := json.Marshal(resultData)
-		coord.HandleComposeResult("agent-01", agentmgr.Message{Type: agentmgr.MsgDockerComposeResult, Data: raw})
+		coord.HandleComposeResult("agent-01", agentmgr.Message{Type: agentmgr.MsgDockerComposeResult, ID: req.RequestID, Data: raw})
 	}()
 
 	result, err := coord.ExecuteAction(context.Background(), "stack.deploy", connectorsdk.ActionRequest{
@@ -489,6 +489,133 @@ func TestCoordinatorExecuteActionStackDeployUsesHostTarget(t *testing.T) {
 	}
 	if result.Status != "succeeded" {
 		t.Fatalf("status = %q, want succeeded", result.Status)
+	}
+}
+
+func TestCoordinatorActionResultRequiresExpectedAgentAndMatchingEnvelope(t *testing.T) {
+	var coord *Coordinator
+	mock := &mockAgentCommander{sendFn: func(id string, msg agentmgr.Message) error {
+		if id != "agent-01" {
+			t.Fatalf("sent to agent %q, want agent-01", id)
+		}
+		var req agentmgr.DockerActionData
+		if err := json.Unmarshal(msg.Data, &req); err != nil {
+			t.Fatalf("unmarshal action request: %v", err)
+		}
+
+		spoofed, _ := json.Marshal(agentmgr.DockerActionResultData{
+			RequestID: req.RequestID,
+			Success:   true,
+			Data:      "spoofed-agent",
+		})
+		coord.HandleActionResult("agent-02", agentmgr.Message{
+			Type: agentmgr.MsgDockerActionResult,
+			ID:   req.RequestID,
+			Data: spoofed,
+		})
+
+		mismatched, _ := json.Marshal(agentmgr.DockerActionResultData{
+			RequestID: req.RequestID,
+			Success:   true,
+			Data:      "mismatched-envelope",
+		})
+		coord.HandleActionResult("agent-01", agentmgr.Message{
+			Type: agentmgr.MsgDockerActionResult,
+			ID:   req.RequestID + "-wrong",
+			Data: mismatched,
+		})
+
+		correct, _ := json.Marshal(agentmgr.DockerActionResultData{
+			RequestID: req.RequestID,
+			Success:   true,
+			Data:      "correct-agent",
+		})
+		coord.HandleActionResult("agent-01", agentmgr.Message{
+			Type: agentmgr.MsgDockerActionResult,
+			ID:   req.RequestID,
+			Data: correct,
+		})
+		return nil
+	}}
+
+	coord = NewCoordinator(mock)
+	coord.HandleDiscovery("agent-01", makeDiscoveryMsg(agentmgr.DockerDiscoveryData{
+		HostID:     "agent-01",
+		Containers: []agentmgr.DockerContainerInfo{{ID: "abc123456789ab", Name: "nginx", State: "running"}},
+	}))
+
+	result, err := coord.ExecuteAction(context.Background(), "container.restart", connectorsdk.ActionRequest{
+		TargetID: "docker-ct-agent-01-abc123456789",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != "succeeded" || result.Output != "correct-agent" {
+		t.Fatalf("result = %#v, want only the expected agent's correlated response", result)
+	}
+}
+
+func TestCoordinatorComposeResultRequiresExpectedAgentAndMatchingEnvelope(t *testing.T) {
+	var coord *Coordinator
+	mock := &mockAgentCommander{sendFn: func(id string, msg agentmgr.Message) error {
+		if id != "agent-01" {
+			t.Fatalf("sent to agent %q, want agent-01", id)
+		}
+		var req agentmgr.DockerComposeActionData
+		if err := json.Unmarshal(msg.Data, &req); err != nil {
+			t.Fatalf("unmarshal compose request: %v", err)
+		}
+
+		spoofed, _ := json.Marshal(agentmgr.DockerComposeResultData{
+			RequestID: req.RequestID,
+			Success:   true,
+			Output:    "spoofed-agent",
+		})
+		coord.HandleComposeResult("agent-02", agentmgr.Message{
+			Type: agentmgr.MsgDockerComposeResult,
+			ID:   req.RequestID,
+			Data: spoofed,
+		})
+
+		mismatched, _ := json.Marshal(agentmgr.DockerComposeResultData{
+			RequestID: req.RequestID,
+			Success:   true,
+			Output:    "mismatched-envelope",
+		})
+		coord.HandleComposeResult("agent-01", agentmgr.Message{
+			Type: agentmgr.MsgDockerComposeResult,
+			ID:   req.RequestID + "-wrong",
+			Data: mismatched,
+		})
+
+		correct, _ := json.Marshal(agentmgr.DockerComposeResultData{
+			RequestID: req.RequestID,
+			Success:   true,
+			Output:    "correct-agent",
+		})
+		coord.HandleComposeResult("agent-01", agentmgr.Message{
+			Type: agentmgr.MsgDockerComposeResult,
+			ID:   req.RequestID,
+			Data: correct,
+		})
+		return nil
+	}}
+
+	coord = NewCoordinator(mock)
+	coord.HandleDiscovery("agent-01", makeDiscoveryMsg(agentmgr.DockerDiscoveryData{HostID: "agent-01"}))
+
+	result, err := coord.ExecuteAction(context.Background(), "stack.deploy", connectorsdk.ActionRequest{
+		TargetID: "agent-01",
+		Params: map[string]string{
+			"stack_name":   "demo",
+			"compose_yaml": "services: {}",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != "succeeded" || result.Output != "correct-agent" {
+		t.Fatalf("result = %#v, want only the expected agent's correlated response", result)
 	}
 }
 

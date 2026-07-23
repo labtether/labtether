@@ -344,16 +344,22 @@ func (c *Coordinator) HandleActionResult(agentID string, msg agentmgr.Message) {
 		log.Printf("docker-coordinator: invalid action result from %s: %v", agentID, err)
 		return
 	}
+	if msg.ID == "" || data.RequestID == "" || msg.ID != data.RequestID {
+		log.Printf("docker-coordinator: ignored action result with mismatched correlation from %s", agentID)
+		return
+	}
 
 	c.pendingMu.Lock()
-	ch, ok := c.pendingResults[data.RequestID]
-	if ok {
+	pending, ok := c.pendingResults[data.RequestID]
+	if ok && pending.expectedAgentID == agentID {
 		delete(c.pendingResults, data.RequestID)
+	} else {
+		ok = false
 	}
 	c.pendingMu.Unlock()
 
 	if ok {
-		ch <- data
+		pending.resultCh <- data
 	}
 }
 
@@ -364,16 +370,22 @@ func (c *Coordinator) HandleComposeResult(agentID string, msg agentmgr.Message) 
 		log.Printf("docker-coordinator: invalid compose result from %s: %v", agentID, err)
 		return
 	}
+	if msg.ID == "" || data.RequestID == "" || msg.ID != data.RequestID {
+		log.Printf("docker-coordinator: ignored compose result with mismatched correlation from %s", agentID)
+		return
+	}
 
 	c.pendingMu.Lock()
-	ch, ok := c.pendingCompose[data.RequestID]
-	if ok {
+	pending, ok := c.pendingCompose[data.RequestID]
+	if ok && pending.expectedAgentID == agentID {
 		delete(c.pendingCompose, data.RequestID)
+	} else {
+		ok = false
 	}
 	c.pendingMu.Unlock()
 
 	if ok {
-		ch <- data
+		pending.resultCh <- data
 	}
 }
 

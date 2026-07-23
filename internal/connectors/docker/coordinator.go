@@ -15,6 +15,16 @@ type AgentCommander interface {
 	SendToAgent(assetID string, msg agentmgr.Message) error
 }
 
+type pendingDockerActionResult struct {
+	expectedAgentID string
+	resultCh        chan agentmgr.DockerActionResultData
+}
+
+type pendingDockerComposeResult struct {
+	expectedAgentID string
+	resultCh        chan agentmgr.DockerComposeResultData
+}
+
 // Coordinator manages Docker state from multiple agents and implements connectorsdk.Connector.
 type Coordinator struct {
 	mu       sync.RWMutex
@@ -23,8 +33,8 @@ type Coordinator struct {
 
 	// Pending action results for request-response correlation.
 	pendingMu      sync.Mutex
-	pendingResults map[string]chan agentmgr.DockerActionResultData
-	pendingCompose map[string]chan agentmgr.DockerComposeResultData
+	pendingResults map[string]pendingDockerActionResult
+	pendingCompose map[string]pendingDockerComposeResult
 }
 
 // NewCoordinator creates a new Docker coordinator.
@@ -32,8 +42,8 @@ func NewCoordinator(agentMgr AgentCommander) *Coordinator {
 	return &Coordinator{
 		hosts:          make(map[string]*DockerHost),
 		agentMgr:       agentMgr,
-		pendingResults: make(map[string]chan agentmgr.DockerActionResultData),
-		pendingCompose: make(map[string]chan agentmgr.DockerComposeResultData),
+		pendingResults: make(map[string]pendingDockerActionResult),
+		pendingCompose: make(map[string]pendingDockerComposeResult),
 	}
 }
 
@@ -167,8 +177,8 @@ func (c *Coordinator) ClearAll() {
 	c.mu.Unlock()
 
 	c.pendingMu.Lock()
-	c.pendingResults = make(map[string]chan agentmgr.DockerActionResultData)
-	c.pendingCompose = make(map[string]chan agentmgr.DockerComposeResultData)
+	c.pendingResults = make(map[string]pendingDockerActionResult)
+	c.pendingCompose = make(map[string]pendingDockerComposeResult)
 	c.pendingMu.Unlock()
 }
 

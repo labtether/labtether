@@ -141,7 +141,10 @@ func (c *Coordinator) executeContainerAction(ctx context.Context, actionID strin
 	// arrives before we register the channel.
 	resultCh := make(chan agentmgr.DockerActionResultData, 1)
 	c.pendingMu.Lock()
-	c.pendingResults[requestID] = resultCh
+	c.pendingResults[requestID] = pendingDockerActionResult{
+		expectedAgentID: agentID,
+		resultCh:        resultCh,
+	}
 	c.pendingMu.Unlock()
 
 	defer func() {
@@ -234,7 +237,10 @@ func (c *Coordinator) executeStackAction(ctx context.Context, actionID string, r
 
 	resultCh := make(chan agentmgr.DockerComposeResultData, 1)
 	c.pendingMu.Lock()
-	c.pendingCompose[requestID] = resultCh
+	c.pendingCompose[requestID] = pendingDockerComposeResult{
+		expectedAgentID: agentID,
+		resultCh:        resultCh,
+	}
 	c.pendingMu.Unlock()
 
 	defer func() {
