@@ -148,7 +148,7 @@ fi
 gh_api() {
   local url="$1"
   curl "${curl_common[@]}" \
-    "${github_auth_args[@]}" \
+    ${github_auth_args[@]+"${github_auth_args[@]}"} \
     --max-filesize $((10 * 1024 * 1024)) \
     "${gh_headers[@]}" \
     -- "${url}"
@@ -159,7 +159,7 @@ download_url() {
   local destination="$2"
   local max_bytes="$3"
   curl "${curl_common[@]}" \
-    "${github_auth_args[@]}" \
+    ${github_auth_args[@]+"${github_auth_args[@]}"} \
     --location \
     --max-redirs 5 \
     --max-filesize "${max_bytes}" \
