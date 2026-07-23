@@ -107,7 +107,8 @@ install -m 0600 "${TRUSTED_PUBLIC_KEY_FILE}" "${TRUSTED_PUBLIC_KEY_COPY}"
 VERIFIER="${STAGING_DIR}/verify-agent-release"
 (
   unset GOOS GOARCH
-  go build -trimpath -o "${VERIFIER}" "${ROOT_DIR}/scripts/release/verify-agent-release"
+  cd "${ROOT_DIR}"
+  go build -trimpath -o "${VERIFIER}" ./scripts/release/verify-agent-release
 )
 
 curl_common=(
