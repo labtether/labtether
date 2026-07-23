@@ -50,6 +50,20 @@ if [[ -f "${FINGERPRINT_FILE}" ]]; then
   DEVICE_FINGERPRINT="$(tr -d '\r\n' < "${FINGERPRINT_FILE}" 2>/dev/null || true)"
 fi
 
+# Report preserved enrollment only when the installed agent has written a
+# non-empty, owner-readable private token file. Do not read the token value:
+# this boolean is used only to keep the completion guidance truthful.
+PERSISTED_AGENT_TOKEN=0
+if [[ ! -L "${TOKEN_FILE}" && -f "${TOKEN_FILE}" && -s "${TOKEN_FILE}" && -r "${TOKEN_FILE}" ]]; then
+  TOKEN_FILE_MODE="$(stat -c '%%a' "${TOKEN_FILE}" 2>/dev/null || stat -f '%%Lp' "${TOKEN_FILE}" 2>/dev/null || true)"
+  if [[ "${TOKEN_FILE_MODE}" =~ ^[0-7]{3,4}$ ]] &&
+     (( (8#${TOKEN_FILE_MODE} & 8#400) != 0 )) &&
+     (( (8#${TOKEN_FILE_MODE} & 8#077) == 0 )); then
+    PERSISTED_AGENT_TOKEN=1
+  fi
+fi
+unset TOKEN_FILE_MODE
+
 DOCKER_STATUS="disabled"
 DOCKER_STATUS_TONE="muted"
 if [[ "${DOCKER_ENABLED}" != "false" ]]; then
@@ -131,6 +145,9 @@ fi
 if [[ -n "${ENROLLMENT_TOKEN}" ]]; then
   box_line_tone "success" "${SYM_OK} Auto-enrollment configured"
   box_line_tone "muted" "The agent will connect to LabTether automatically."
+elif [[ "${PERSISTED_AGENT_TOKEN}" -eq 1 ]]; then
+  box_line_tone "success" "${SYM_OK} Existing agent approval preserved"
+  box_line_tone "muted" "The agent is reconnecting to LabTether."
 else
   box_line_tone "warning" "${SYM_WARN} Awaiting approval in LabTether console"
 fi

@@ -43,46 +43,6 @@ func TestAgentSettingGlobalDefaultKeyServiceDiscoveryMappings(t *testing.T) {
 	}
 }
 
-func TestDockerConnectivityTestCommandUnixSocketPath(t *testing.T) {
-	command := dockerConnectivityTestCommand("/var/run/docker.sock")
-	if !strings.Contains(command, "--unix-socket") {
-		t.Fatalf("expected unix socket curl check, got %q", command)
-	}
-	if !strings.Contains(command, "docker --host") {
-		t.Fatalf("expected docker CLI fallback for unix socket, got %q", command)
-	}
-}
-
-func TestDockerConnectivityTestCommandUnixScheme(t *testing.T) {
-	command := dockerConnectivityTestCommand("unix:///custom/docker.sock")
-	if !strings.Contains(command, "--unix-socket") {
-		t.Fatalf("expected unix socket curl check, got %q", command)
-	}
-	if !strings.Contains(command, "unix:///custom/docker.sock") {
-		t.Fatalf("expected unix endpoint in docker CLI fallback, got %q", command)
-	}
-}
-
-func TestDockerConnectivityTestCommandUnixSchemeCaseInsensitive(t *testing.T) {
-	command := dockerConnectivityTestCommand("UNIX:///custom/docker.sock")
-	if !strings.Contains(command, "--unix-socket") {
-		t.Fatalf("expected unix socket curl check, got %q", command)
-	}
-	if !strings.Contains(command, "/custom/docker.sock") {
-		t.Fatalf("expected unix socket path in curl command, got %q", command)
-	}
-}
-
-func TestDockerConnectivityTestCommandHTTP(t *testing.T) {
-	command := dockerConnectivityTestCommand("http://127.0.0.1:2375")
-	if !strings.Contains(command, "/_ping") {
-		t.Fatalf("expected HTTP ping path, got %q", command)
-	}
-	if !strings.Contains(command, "docker --host") {
-		t.Fatalf("expected docker CLI fallback, got %q", command)
-	}
-}
-
 func TestHandleAgentSettingsUpdateAgentInvalidPayload(t *testing.T) {
 	sut := newTestAPIServer(t)
 	sut.agentMgr = agentmgr.NewManager()

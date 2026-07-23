@@ -93,6 +93,10 @@ type DockerEventActor = protocol.DockerEventActor
 type DockerEventData = protocol.DockerEventData
 type DockerActionData = protocol.DockerActionData
 type DockerActionResultData = protocol.DockerActionResultData
+type DockerEndpointTestData = protocol.DockerEndpointTestData
+type DockerEndpointTestResultData = protocol.DockerEndpointTestResultData
+type DockerEndpointTestStatus = protocol.DockerEndpointTestStatus
+type DockerEndpointTestCode = protocol.DockerEndpointTestCode
 type DockerLogsStartData = protocol.DockerLogsStartData
 type DockerLogsStopData = protocol.DockerLogsStopData
 type DockerLogsStreamData = protocol.DockerLogsStreamData
@@ -260,4 +264,17 @@ const (
 	MsgDockerComposeResult  = protocol.MsgDockerComposeResult
 	MsgWebServiceReport     = protocol.MsgWebServiceReport
 	MsgWebServiceSync       = protocol.MsgWebServiceSync
+)
+
+const (
+	MsgDockerEndpointTest                = protocol.MsgDockerEndpointTest
+	MsgDockerEndpointTestResult          = protocol.MsgDockerEndpointTestResult
+	DockerEndpointTestStatusReachable    = protocol.DockerEndpointTestStatusReachable
+	DockerEndpointTestStatusRejected     = protocol.DockerEndpointTestStatusRejected
+	DockerEndpointTestStatusFailed       = protocol.DockerEndpointTestStatusFailed
+	DockerEndpointTestCodeInvalidRequest = protocol.DockerEndpointTestCodeInvalidRequest
+	DockerEndpointTestCodeAssetMismatch  = protocol.DockerEndpointTestCodeAssetMismatch
+	DockerEndpointTestCodeBusy           = protocol.DockerEndpointTestCodeBusy
+	DockerEndpointTestCodeUnreachable    = protocol.DockerEndpointTestCodeUnreachable
+	DockerEndpointTestCodeTimeout        = protocol.DockerEndpointTestCodeTimeout
 )

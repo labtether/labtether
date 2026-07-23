@@ -1,20 +1,21 @@
 package agents
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/agentsettings"
 	"github.com/labtether/labtether/internal/apiv2"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/logs"
 	"github.com/labtether/labtether/internal/servicehttp"
-	"github.com/labtether/labtether/internal/terminal"
 )
 
 type AgentSettingsPatchRequest struct {
@@ -267,16 +268,18 @@ func (d *Deps) HandleAgentSettingsDockerTest(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	command := DockerConnectivityTestCommand(endpoint)
-	jobID := shared.GenerateRequestID()
-	result := d.ExecuteViaAgent(terminal.CommandJob{
-		JobID:     jobID,
-		SessionID: jobID,
-		CommandID: jobID,
-		Target:    assetID,
-		Command:   command,
-	})
-	ok := strings.EqualFold(strings.TrimSpace(result.Status), "succeeded")
+	result, err := d.RunDockerEndpointTest(r.Context(), assetID, endpoint)
+	if err != nil {
+		status := http.StatusBadGateway
+		if errors.Is(err, ErrDockerEndpointTestTimeout) || errors.Is(err, context.DeadlineExceeded) {
+			status = http.StatusGatewayTimeout
+		} else if errors.Is(err, context.Canceled) {
+			return
+		}
+		servicehttp.WriteError(w, status, err.Error())
+		return
+	}
+	ok := result.Status == agentmgr.DockerEndpointTestStatusReachable
 	status := http.StatusOK
 	if !ok {
 		status = http.StatusBadRequest
@@ -284,8 +287,10 @@ func (d *Deps) HandleAgentSettingsDockerTest(w http.ResponseWriter, r *http.Requ
 	servicehttp.WriteJSON(w, status, map[string]any{
 		"ok":       ok,
 		"status":   result.Status,
-		"output":   result.Output,
-		"endpoint": endpoint,
+		"code":     result.Code,
+		"message":  result.Message,
+		"output":   result.Message,
+		"endpoint": result.Endpoint,
 	})
 }
 
@@ -384,33 +389,6 @@ func (d *Deps) HandleAgentSettingsUpdateAgent(w http.ResponseWriter, r *http.Req
 		"force":                       req.Force,
 		"agent_disconnected_expected": status == "succeeded",
 	})
-}
-
-func DockerConnectivityTestCommand(endpoint string) string {
-	endpoint = strings.TrimSpace(endpoint)
-	if endpoint == "" {
-		endpoint = "/var/run/docker.sock"
-	}
-	if strings.HasPrefix(endpoint, "/") {
-		return fmt.Sprintf(
-			"if command -v curl >/dev/null 2>&1; then curl -fsS --max-time 5 --unix-socket %q http://localhost/_ping; elif command -v docker >/dev/null 2>&1; then docker --host %q version >/dev/null 2>&1; else echo curl-or-docker-required; exit 1; fi",
-			endpoint,
-			"unix://"+endpoint,
-		)
-	}
-	if path, ok := TrimUnixEndpointScheme(endpoint); ok {
-		return fmt.Sprintf(
-			"if command -v curl >/dev/null 2>&1; then curl -fsS --max-time 5 --unix-socket %q http://localhost/_ping; elif command -v docker >/dev/null 2>&1; then docker --host %q version >/dev/null 2>&1; else echo curl-or-docker-required; exit 1; fi",
-			path,
-			endpoint,
-		)
-	}
-	endpoint = strings.TrimRight(endpoint, "/")
-	return fmt.Sprintf(
-		"if command -v curl >/dev/null 2>&1; then curl -fsS --max-time 5 %q; elif command -v docker >/dev/null 2>&1; then docker --host %q version >/dev/null 2>&1; else echo curl-or-docker-required; exit 1; fi",
-		endpoint+"/_ping",
-		endpoint,
-	)
 }
 
 func TrimUnixEndpointScheme(endpoint string) (string, bool) {

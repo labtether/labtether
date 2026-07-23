@@ -249,12 +249,102 @@ func TestInstallScriptReinstallPreservesPersistedTokenWithoutEnrollmentToken(t *
 	}
 
 	script := rewriteAgentScriptForHarness(GenerateInstallScript("https://hub.example.com", "wss://hub.example.com/ws/agent"), root)
-	if _, err := runGeneratedShellScript(t, script, env, "--skip-vnc-prereqs", "--tls-ca-file", caPath); err != nil {
+	output, err := runGeneratedShellScript(t, script, env, "--skip-vnc-prereqs", "--tls-ca-file", caPath)
+	if err != nil {
 		t.Fatalf("run reinstall script: %v", err)
 	}
 
 	if got := mustReadFile(t, tokenPath); !strings.Contains(got, "persisted-token") {
 		t.Fatalf("expected persisted token to survive reinstall, got %q", got)
+	}
+	if !strings.Contains(output, "Existing agent approval preserved") || !strings.Contains(output, "reconnecting to LabTether") {
+		t.Fatalf("expected preserved-enrollment summary, got:\n%s", output)
+	}
+	if strings.Contains(output, "persisted-token") {
+		t.Fatalf("install output exposed persisted token value:\n%s", output)
+	}
+}
+
+func TestInstallScriptSummaryRequiresPrivateNonemptyRegularAgentToken(t *testing.T) {
+	tests := []struct {
+		name         string
+		prepareToken func(t *testing.T, tokenPath string)
+	}{
+		{name: "fresh install"},
+		{
+			name: "empty token file",
+			prepareToken: func(t *testing.T, tokenPath string) {
+				t.Helper()
+				if err := os.WriteFile(tokenPath, nil, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+		{
+			name: "unreadable token file",
+			prepareToken: func(t *testing.T, tokenPath string) {
+				t.Helper()
+				if err := os.WriteFile(tokenPath, []byte("must-not-appear"), 0o200); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+		{
+			name: "non-private token file",
+			prepareToken: func(t *testing.T, tokenPath string) {
+				t.Helper()
+				if err := os.WriteFile(tokenPath, []byte("must-not-appear"), 0o640); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+		{
+			name: "non-regular token path",
+			prepareToken: func(t *testing.T, tokenPath string) {
+				t.Helper()
+				if err := os.Mkdir(tokenPath, 0o700); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+		{
+			name: "symlink token path",
+			prepareToken: func(t *testing.T, tokenPath string) {
+				t.Helper()
+				target := filepath.Join(filepath.Dir(tokenPath), "symlink-target")
+				if err := os.WriteFile(target, []byte("must-not-appear"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(target, tokenPath); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root, env := newAgentScriptHarness(t, strings.Repeat("7", 64))
+			tokenPath := filepath.Join(root, "etc/labtether/agent-token")
+			if err := os.MkdirAll(filepath.Dir(tokenPath), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if tc.prepareToken != nil {
+				tc.prepareToken(t, tokenPath)
+			}
+
+			script := rewriteAgentScriptForHarness(GenerateInstallScript("https://hub.example.com", "wss://hub.example.com/ws/agent"), root)
+			output, err := runGeneratedShellScript(t, script, env, "--skip-vnc-prereqs")
+			if err != nil {
+				t.Fatalf("run install script: %v\noutput:\n%s", err, output)
+			}
+			if !strings.Contains(output, "Awaiting approval in LabTether console") {
+				t.Fatalf("expected awaiting-approval summary, got:\n%s", output)
+			}
+			if strings.Contains(output, "Existing agent approval preserved") || strings.Contains(output, "must-not-appear") {
+				t.Fatalf("summary claimed or exposed an unusable token:\n%s", output)
+			}
+		})
 	}
 }
 
@@ -346,6 +436,9 @@ exit 0
 	}
 	if !strings.Contains(output, "Auto-enrollment configured") {
 		t.Fatalf("expected auto-enrollment summary message, got:\n%s", output)
+	}
+	if strings.Contains(output, "enroll-123") {
+		t.Fatalf("install output exposed enrollment token value:\n%s", output)
 	}
 }
 

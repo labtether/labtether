@@ -49,6 +49,12 @@ type Deps struct {
 	// Pending agent commands (shared with cmd/labtether).
 	PendingAgentCmds *sync.Map // map[jobID]shared.PendingAgentCommand
 
+	// Pending typed Docker endpoint probes. The expected connection and asset
+	// are retained with each request so an authenticated peer cannot satisfy a
+	// probe routed to another agent.
+	DockerEndpointTestBridges sync.Map // map[requestID]pendingDockerEndpointTest
+	DockerEndpointTestTimeout time.Duration
+
 	// Hub identity for SSH key provisioning.
 	HubIdentity *shared.HubSSHIdentity
 	// CurrentHubIdentity returns an immutable snapshot of the active identity.
@@ -166,5 +172,8 @@ func RegisterWSHandlers(router map[string]func(*agentmgr.AgentConn, agentmgr.Mes
 	}
 	router[agentmgr.MsgAgentSettingsState] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 		d.ProcessAgentSettingsState(conn, msg)
+	}
+	router[agentmgr.MsgDockerEndpointTestResult] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
+		d.ProcessAgentDockerEndpointTestResult(conn, msg)
 	}
 }
