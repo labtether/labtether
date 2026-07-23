@@ -22,7 +22,7 @@ type dockerEndpointTestOutcome struct {
 	err    error
 }
 
-func newDockerEndpointTestAgentConn(t *testing.T, assetID string) (*agentmgr.AgentManager, *agentmgr.AgentConn, *websocket.Conn) {
+func newDockerEndpointTestAgentConn(t *testing.T, assetID, platform string) (*agentmgr.AgentManager, *agentmgr.AgentConn, *websocket.Conn) {
 	t.Helper()
 	serverConnCh := make(chan *websocket.Conn, 1)
 	release := make(chan struct{})
@@ -42,7 +42,7 @@ func newDockerEndpointTestAgentConn(t *testing.T, assetID string) (*agentmgr.Age
 		t.Fatalf("dial test agent WebSocket: %v", err)
 	}
 	serverConn := <-serverConnCh
-	conn := agentmgr.NewAgentConn(serverConn, assetID, "linux")
+	conn := agentmgr.NewAgentConn(serverConn, assetID, platform)
 	manager := agentmgr.NewManager()
 	manager.Register(conn)
 	t.Cleanup(func() {
@@ -92,7 +92,7 @@ func dockerEndpointResultMessage(t *testing.T, envelopeID string, result agentmg
 }
 
 func TestRunDockerEndpointTestRequiresExactAgentEnvelopeAssetAndEndpoint(t *testing.T) {
-	manager, conn, peer := newDockerEndpointTestAgentConn(t, "node-1")
+	manager, conn, peer := newDockerEndpointTestAgentConn(t, "node-1", "linux")
 	deps := &Deps{AgentMgr: manager, DockerEndpointTestTimeout: time.Second}
 	done := make(chan dockerEndpointTestOutcome, 1)
 	go func() {
@@ -157,7 +157,7 @@ func assertDockerEndpointTestStillPending(
 }
 
 func TestRunDockerEndpointTestTimesOutBoundedly(t *testing.T) {
-	manager, _, peer := newDockerEndpointTestAgentConn(t, "node-1")
+	manager, _, peer := newDockerEndpointTestAgentConn(t, "node-1", "linux")
 	deps := &Deps{AgentMgr: manager, DockerEndpointTestTimeout: 20 * time.Millisecond}
 	done := make(chan error, 1)
 	go func() {
@@ -192,7 +192,7 @@ func TestHandleAgentSettingsDockerTestUsesTypedProbeAndMapsClosedResult(t *testi
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			manager, conn, peer := newDockerEndpointTestAgentConn(t, "node-1")
+			manager, conn, peer := newDockerEndpointTestAgentConn(t, "node-1", "windows")
 			deps := &Deps{
 				AgentMgr:                  manager,
 				RuntimeStore:              testutil.NewRuntimeSettingsStore(),
@@ -200,7 +200,7 @@ func TestHandleAgentSettingsDockerTestUsesTypedProbeAndMapsClosedResult(t *testi
 				EnforceRateLimit:          testutil.NoopRateLimit,
 				DockerEndpointTestTimeout: time.Second,
 			}
-			req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/node-1/settings/test-docker", bytes.NewBufferString(`{"enabled":"true","endpoint":"UNIX:///run/docker.sock"}`))
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/node-1/settings/test-docker", bytes.NewBufferString(`{"enabled":"true","endpoint":"npipe:////./pipe/docker_engine"}`))
 			rec := httptest.NewRecorder()
 			done := make(chan struct{})
 			go func() {
@@ -208,8 +208,8 @@ func TestHandleAgentSettingsDockerTestUsesTypedProbeAndMapsClosedResult(t *testi
 				close(done)
 			}()
 			msg, request := readDockerEndpointTestRequest(t, peer)
-			if request.Endpoint != "unix:///run/docker.sock" {
-				t.Fatalf("typed request endpoint = %q, want normalized endpoint", request.Endpoint)
+			if request.Endpoint != "npipe:////./pipe/docker_engine" {
+				t.Fatalf("typed request endpoint = %q, want canonical npipe endpoint", request.Endpoint)
 			}
 			result := agentmgr.DockerEndpointTestResultData{
 				RequestID: request.RequestID,
