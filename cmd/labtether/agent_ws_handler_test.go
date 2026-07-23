@@ -116,6 +116,7 @@ func TestKnownMessageTypes(t *testing.T) {
 		agentmgr.MsgConfigApplied,
 		agentmgr.MsgAgentSettingsApplied,
 		agentmgr.MsgAgentSettingsState,
+		agentmgr.MsgDockerEndpointTestResult,
 		agentmgr.MsgDockerDiscovery,
 		agentmgr.MsgDockerDiscoveryDelta,
 		agentmgr.MsgDockerStats,

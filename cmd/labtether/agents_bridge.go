@@ -196,6 +196,10 @@ func (s *apiServer) processAgentSettingsState(conn *agentmgr.AgentConn, msg agen
 	s.ensureAgentsDeps().ProcessAgentSettingsState(conn, msg)
 }
 
+func (s *apiServer) processAgentDockerEndpointTestResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
+	s.ensureAgentsDeps().ProcessAgentDockerEndpointTestResult(conn, msg)
+}
+
 func (s *apiServer) sendSSHKeyInstall(conn *agentmgr.AgentConn) {
 	s.hubIdentityOperationMu.Lock()
 	defer s.hubIdentityOperationMu.Unlock()
@@ -416,9 +420,6 @@ func sameAgentSettingsRevision(left, right string) bool {
 }
 func preservesAgentSettingsApplyStatus(status string) bool {
 	return agentspkg.PreservesAgentSettingsApplyStatus(status)
-}
-func dockerConnectivityTestCommand(endpoint string) string {
-	return agentspkg.DockerConnectivityTestCommand(endpoint)
 }
 func trimUnixEndpointScheme(endpoint string) (string, bool) {
 	return agentspkg.TrimUnixEndpointScheme(endpoint)

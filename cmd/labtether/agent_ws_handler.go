@@ -253,6 +253,9 @@ func (s *apiServer) buildWSRouter() shared.WSRouter {
 	router[agentmgr.MsgAgentSettingsState] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 		s.processAgentSettingsState(conn, msg)
 	}
+	router[agentmgr.MsgDockerEndpointTestResult] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
+		s.processAgentDockerEndpointTestResult(conn, msg)
+	}
 	router[agentmgr.MsgDockerDiscovery] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 		s.processAgentDockerDiscovery(conn, msg)
 	}
