@@ -16,6 +16,12 @@ describe("proxy matcher", () => {
     expect(unstable_doesProxyMatch({ config, url: "https://hub.example/api/files/asset-1/upload" })).toBe(false);
   });
 
+  it("bypasses locale and session middleware for the MCP endpoint only", () => {
+    expect(unstable_doesProxyMatch({ config, url: "https://hub.example/mcp" })).toBe(false);
+    expect(unstable_doesProxyMatch({ config, url: "https://hub.example/mcp/admin" })).toBe(true);
+    expect(unstable_doesProxyMatch({ config, url: "https://hub.example/mcpx" })).toBe(true);
+  });
+
   it.each([
     "https://hub.example/api/auth/login",
     "https://hub.example/api/assets",

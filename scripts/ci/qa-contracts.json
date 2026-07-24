@@ -1,0 +1,202 @@
+{
+  "schema_version": 1,
+  "contracts": {
+    "connector-system": {
+      "reason": "PBS and Proxmox connector handler, authorization, and console behavior tests"
+    },
+    "hub-behavior": {
+      "reason": "Focused Hub authorization, scheduling, restore, and runtime behavior tests"
+    },
+    "hub-installed-system": {
+      "reason": "Real Compose stack, authenticated WSS agent, and deploy-image acceptance"
+    },
+    "hub-transport": {
+      "reason": "Agent enrollment, TLS/WSS, MCP, and console proxy transport tests"
+    },
+    "restore-roundtrip": {
+      "reason": "PBS snapshot, backup, and restore-path behavior plus installed-stack acceptance"
+    },
+    "schedule-platform": {
+      "reason": "Schedule API, persistence, and worker execution behavior"
+    }
+  },
+  "high_risk_patterns": [
+    ".github/workflows/**",
+    "build/**",
+    "cmd/labtether/**",
+    "deploy/agents/**",
+    "deploy/compose/**",
+    "deploy/release/**",
+    "internal/**",
+    "scripts/ci/**",
+    "scripts/db-backup.sh",
+    "scripts/db-restore.sh",
+    "scripts/release/**",
+    "web/console/next.config.ts",
+    "web/console/proxy.ts",
+    "web/console/app/**/pbs/**",
+    "web/console/app/**/proxmox/**",
+    "web/console/app/**/schedules/**",
+    "web/console/app/components/AddDeviceModal/PBSSetupStep.tsx",
+    "web/console/app/components/AddDeviceModal/ProxmoxSetupStep.tsx",
+    "web/console/scripts/runtime-proxy.mjs"
+  ],
+  "rules": [
+    {
+      "id": "qa-infrastructure",
+      "reason": "QA selection and workflow changes must exercise every contract they can alter",
+      "patterns": [
+        ".github/workflows/**",
+        "scripts/ci/**"
+      ],
+      "contracts": [
+        "connector-system",
+        "hub-behavior",
+        "hub-transport",
+        "hub-installed-system",
+        "restore-roundtrip",
+        "schedule-platform"
+      ]
+    },
+    {
+      "id": "packaging-signing",
+      "reason": "Packaging, deploy, image, or release changes require installed-image acceptance",
+      "patterns": [
+        ".github/workflows/release.yml",
+        "build/**",
+        "deploy/agents/**",
+        "deploy/compose/**",
+        "deploy/release/**",
+        "scripts/ci/test-deploy-*.sh",
+        "scripts/release/**"
+      ],
+      "contracts": [
+        "hub-installed-system"
+      ]
+    },
+    {
+      "id": "permissions-security",
+      "reason": "Authorization and secret-handling changes require behavioral, transport, and installed checks",
+      "patterns": [
+        "cmd/labtether/*auth*",
+        "cmd/labtether/*authorization*",
+        "internal/apikeys/**",
+        "internal/auth/**",
+        "internal/commandpolicy/**",
+        "internal/credentials/**",
+        "internal/mcpserver/**",
+        "internal/policy/**",
+        "internal/secrets/**",
+        "internal/securityruntime/**"
+      ],
+      "contracts": [
+        "hub-behavior",
+        "hub-transport",
+        "hub-installed-system"
+      ]
+    },
+    {
+      "id": "network-tls-wss",
+      "reason": "Network, enrollment, TLS/WSS, or proxy changes require an authenticated transport proof",
+      "patterns": [
+        "cmd/labtether/*agent*",
+        "cmd/labtether/*enroll*",
+        "cmd/labtether/*network*",
+        "cmd/labtether/*tls*",
+        "cmd/labtether/*websocket*",
+        "internal/agentidentity/**",
+        "internal/agentmgr/**",
+        "internal/certmgr/**",
+        "internal/enrollment/**",
+        "internal/protocols/**",
+        "internal/servicehttp/**",
+        "web/console/next.config.ts",
+        "web/console/proxy.ts",
+        "web/console/scripts/runtime-proxy.mjs"
+      ],
+      "contracts": [
+        "hub-transport",
+        "hub-installed-system"
+      ]
+    },
+    {
+      "id": "pbs-proxmox-connectors",
+      "reason": "PBS or Proxmox handler and UI changes require connector-system behavior and installed acceptance",
+      "patterns": [
+        "cmd/labtether/*pbs*",
+        "cmd/labtether/*proxmox*",
+        "internal/connectors/pbs/**",
+        "internal/connectors/proxmox/**",
+        "internal/hubapi/collectors/*pbs*",
+        "internal/hubapi/collectors/*proxmox*",
+        "internal/hubapi/pbs/**",
+        "internal/hubapi/proxmox/**",
+        "web/console/app/**/pbs/**",
+        "web/console/app/**/proxmox/**",
+        "web/console/app/components/AddDeviceModal/PBSSetupStep.tsx",
+        "web/console/app/components/AddDeviceModal/ProxmoxSetupStep.tsx"
+      ],
+      "contracts": [
+        "connector-system",
+        "hub-installed-system"
+      ]
+    },
+    {
+      "id": "restore-backup",
+      "reason": "Backup or restore changes require focused behavior and an installed stack",
+      "patterns": [
+        "cmd/labtether/*backup*",
+        "cmd/labtether/*pbs*",
+        "cmd/labtether/*restore*",
+        "internal/connectors/pbs/**",
+        "internal/hubapi/pbs/**",
+        "scripts/db-backup.sh",
+        "scripts/db-restore.sh",
+        "web/console/app/**/pbs/**"
+      ],
+      "contracts": [
+        "hub-behavior",
+        "hub-installed-system",
+        "restore-roundtrip"
+      ]
+    },
+    {
+      "id": "scheduling",
+      "reason": "Schedule execution changes require focused behavior and an installed stack",
+      "patterns": [
+        "cmd/labtether/*schedule*",
+        "internal/hubapi/schedulespkg/**",
+        "internal/hubapi/worker/schedule_*",
+        "internal/persistence/*schedule*",
+        "internal/schedules/**",
+        "web/console/app/**/schedules/**"
+      ],
+      "contracts": [
+        "hub-installed-system",
+        "schedule-platform"
+      ]
+    },
+    {
+      "id": "platform-runtime",
+      "reason": "Platform-specific runtime changes require behavior and installed-system acceptance",
+      "patterns": [
+        "internal/platforms/**"
+      ],
+      "contracts": [
+        "hub-behavior",
+        "hub-installed-system"
+      ]
+    },
+    {
+      "id": "hub-runtime-fallback",
+      "reason": "Unclassified Hub runtime changes still require the focused high-risk behavior suite",
+      "patterns": [
+        "cmd/labtether/**",
+        "internal/**"
+      ],
+      "contracts": [
+        "hub-behavior"
+      ]
+    }
+  ]
+}

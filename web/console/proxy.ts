@@ -77,6 +77,6 @@ export const config = {
     // truncating large uploads.
     "/api/((?!files(?:/|$)).*)",
     "/api",
-    "/((?!_next|api/files(?:/|$)|ws|desktop/sessions|terminal/sessions|.*\\..*).*)"
+    "/((?!_next|api/files(?:/|$)|mcp$|ws|desktop/sessions|terminal/sessions|.*\\..*).*)"
   ]
 };

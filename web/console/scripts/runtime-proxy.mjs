@@ -104,6 +104,7 @@ function parseConnectHostname(rawValue) {
 }
 
 export function isAllowedProxyPath(pathname) {
+  if (pathname === "/mcp") return true;
   if (pathname === "/ws/events" || pathname === "/ws/agent") return true;
   if (pathname.startsWith("/desktop/sessions/") || pathname.startsWith("/terminal/sessions/")) return true;
   return /^\/portainer\/assets\/[^/]+\/containers\/[^/]+\/exec$/.test(pathname);
