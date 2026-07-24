@@ -27,6 +27,13 @@ const nextConfig: NextConfig = {
   },
   async rewrites() {
     return [
+      // Expose the Hub's Streamable HTTP MCP endpoint on the same canonical
+      // origin advertised by the console. API-key authorization and MCP
+      // session headers remain end-to-end through the runtime proxy.
+      {
+        source: "/mcp",
+        destination: `${runtimeProxyBaseURL}/mcp`,
+      },
       // Keep browser WebSockets on the frontend origin and proxy upgrade traffic
       // through the loopback-only runtime proxy. The proxy resolves and verifies
       // LABTETHER_API_BASE_URL when the container starts, so standalone builds

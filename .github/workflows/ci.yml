@@ -1,14 +1,53 @@
 name: CI
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches: ["main", "master", "codex/**"]
+    tags: ["v*"]
 
 permissions:
   contents: read
 
 jobs:
+  qa-select:
+    name: Select risk-based QA contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      connector_system: ${{ steps.select.outputs.connector_system }}
+      hub_behavior: ${{ steps.select.outputs.hub_behavior }}
+      hub_installed_system: ${{ steps.select.outputs.hub_installed_system }}
+      hub_transport: ${{ steps.select.outputs.hub_transport }}
+      restore_roundtrip: ${{ steps.select.outputs.restore_roundtrip }}
+      schedule_platform: ${{ steps.select.outputs.schedule_platform }}
+      selected_json: ${{ steps.select.outputs.selected_json }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Test QA contract selector
+        run: python3 -m unittest scripts/ci/test_select_qa_contracts.py
+
+      - name: Select contracts
+        id: select
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          FULL_MODE: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          set -euo pipefail
+          selector=(python3 scripts/ci/select-qa-contracts.py)
+          if [[ "${FULL_MODE}" == "true" || -z "${BASE_SHA}" || "${BASE_SHA}" =~ ^0+$ ]]; then
+            selector+=(--full)
+          else
+            selector+=(--base "${BASE_SHA}" --head "${GITHUB_SHA}")
+          fi
+          "${selector[@]}"
+
   go-checks:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -59,6 +98,178 @@ jobs:
 
       - name: Scan current source for secrets
         run: gitleaks dir . --no-banner --redact --timeout 300
+
+  hub-behavior-contract:
+    name: Contract / Hub high-risk behavior
+    needs: qa-select
+    if: needs.qa-select.outputs.hub_behavior == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26"
+
+      - name: Run authorization, restore, schedule, and runtime contracts
+        run: |
+          go test \
+            ./cmd/labtether \
+            ./internal/apikeys \
+            ./internal/auth \
+            ./internal/connectors/pbs \
+            ./internal/hubapi/pbs \
+            ./internal/hubapi/schedulespkg \
+            ./internal/schedules \
+            ./internal/securityruntime
+
+  connector-system-contract:
+    name: Contract / PBS and Proxmox connectors
+    needs: qa-select
+    if: needs.qa-select.outputs.connector_system == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26"
+
+      - name: Run PBS and Proxmox handler and authorization contracts
+        run: |
+          go test \
+            ./internal/connectors/pbs \
+            ./internal/connectors/proxmox \
+            ./internal/hubapi/pbs \
+            ./internal/hubapi/proxmox
+          go test ./cmd/labtether -run 'PBS|Proxmox'
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: web/console/package-lock.json
+
+      - name: Install console dependencies
+        working-directory: web/console
+        run: npm ci
+
+      - name: Run PBS and Proxmox console contracts
+        working-directory: web/console
+        run: |
+          npx vitest run \
+            'app/[locale]/(console)/nodes/[id]/pbs/__tests__/pbsUserQA.test.tsx' \
+            'app/api/pbs/assets/[assetId]/__tests__/mutationRoutes.test.ts' \
+            'app/api/settings/proxmox/__tests__/route.test.ts' \
+            'app/api/settings/proxmox/[collectorId]/__tests__/route.test.ts'
+
+  restore-roundtrip-contract:
+    name: Contract / Restore and backup paths
+    needs: qa-select
+    if: needs.qa-select.outputs.restore_roundtrip == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26"
+
+      - name: Run PBS snapshot, backup, and restore-path contracts
+        run: |
+          go test ./internal/connectors/pbs ./internal/hubapi/pbs
+          go test ./cmd/labtether -run 'PBS|Backup|Restore|Snapshot'
+          bash -n scripts/db-backup.sh scripts/db-restore.sh
+
+  schedule-platform-contract:
+    name: Contract / Schedule platform behavior
+    needs: qa-select
+    if: needs.qa-select.outputs.schedule_platform == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26"
+
+      - name: Run schedule API, persistence, and worker contracts
+        run: |
+          go test \
+            ./internal/hubapi/schedulespkg \
+            ./internal/hubapi/worker \
+            ./internal/persistence \
+            ./internal/schedules
+          go test ./cmd/labtether -run 'Schedule'
+
+  hub-transport-contract:
+    name: Contract / Hub transport and enrollment
+    needs: qa-select
+    if: needs.qa-select.outputs.hub_transport == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26"
+
+      - name: Run Hub agent, enrollment, TLS/WSS, and MCP contracts
+        run: |
+          go test \
+            ./cmd/labtether \
+            ./internal/agentidentity \
+            ./internal/agentmgr \
+            ./internal/certmgr \
+            ./internal/enrollment \
+            ./internal/mcpserver \
+            ./internal/servicehttp
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: web/console/package-lock.json
+
+      - name: Install console dependencies
+        working-directory: web/console
+        run: npm ci
+
+      - name: Run console transport proxy contracts
+        working-directory: web/console
+        run: |
+          npx vitest run \
+            lib/__tests__/proxyMatcher.test.ts \
+            scripts/__tests__/runtime-proxy.test.mjs
+          npm run build
+          npm run test:runtime-proxy:standalone
 
   go-race:
     runs-on: ubuntu-latest
@@ -348,6 +559,8 @@ jobs:
           if-no-files-found: warn
 
   stack-checks:
+    needs: qa-select
+    if: needs.qa-select.outputs.hub_installed_system == 'true' || needs.qa-select.outputs.connector_system == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

@@ -68,12 +68,14 @@ describe("runtime proxy configuration", () => {
     expect(() => parseProxyTarget(value)).toThrow();
   });
 
-  it("allows only the existing same-origin stream routes", () => {
+  it("allows only the existing same-origin stream routes and MCP endpoint", () => {
+    expect(isAllowedProxyPath("/mcp")).toBe(true);
     expect(isAllowedProxyPath("/ws/events")).toBe(true);
     expect(isAllowedProxyPath("/ws/agent")).toBe(true);
     expect(isAllowedProxyPath("/terminal/sessions/session-1/stream")).toBe(true);
     expect(isAllowedProxyPath("/desktop/sessions/session-1/stream")).toBe(true);
     expect(isAllowedProxyPath("/portainer/assets/a/containers/c/exec")).toBe(true);
+    expect(isAllowedProxyPath("/mcp/admin")).toBe(false);
     expect(isAllowedProxyPath("/api/v1/admin/users")).toBe(false);
     expect(isAllowedProxyPath("/portainer/assets/a/containers/c/exec/extra")).toBe(false);
   });
@@ -185,6 +187,52 @@ describe("runtime proxy forwarding", () => {
       method: "GET",
       url: "/ws/agent?probe=1",
       authorization: "Bearer retained-token",
+    });
+  });
+
+  it("preserves MCP authorization, request bodies, and session headers", async () => {
+    let observed;
+    const upstream = createServer((request, response) => {
+      const chunks = [];
+      request.on("data", (chunk) => chunks.push(chunk));
+      request.on("end", () => {
+        observed = {
+          method: request.method,
+          url: request.url,
+          authorization: request.headers.authorization,
+          contentType: request.headers["content-type"],
+          body: Buffer.concat(chunks).toString("utf8"),
+        };
+        response.writeHead(200, {
+          "content-type": "application/json",
+          "mcp-session-id": "test-session",
+        });
+        response.end('{"jsonrpc":"2.0","id":1,"result":{"ok":true}}');
+      });
+    });
+    const upstreamPort = await listen(upstream);
+    const proxy = createRuntimeProxyServer(parseProxyTarget(`http://127.0.0.1:${upstreamPort}`));
+    const proxyPort = await listen(proxy);
+    const payload = '{"jsonrpc":"2.0","id":1,"method":"initialize"}';
+
+    const response = await fetch(`http://127.0.0.1:${proxyPort}/mcp`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer retained-token",
+        "content-type": "application/json",
+      },
+      body: payload,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("mcp-session-id")).toBe("test-session");
+    expect(await response.json()).toMatchObject({ result: { ok: true } });
+    expect(observed).toEqual({
+      method: "POST",
+      url: "/mcp",
+      authorization: "Bearer retained-token",
+      contentType: "application/json",
+      body: payload,
     });
   });
 
