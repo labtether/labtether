@@ -63,7 +63,7 @@ jobs:
           ./scripts/ci/test-deploy-image-runtime.sh "${LABTETHER_IMAGE}"
 
       - name: Attest pushed image provenance
-        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
         with:
           subject-name: ghcr.io/labtether/labtether
           subject-digest: ${{ steps.build.outputs.digest }}
@@ -87,7 +87,7 @@ jobs:
           ! grep -R --fixed-strings 'exec /service' docker-compose.deploy.yml
 
       - name: Attest deploy release artifacts
-        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
         with:
           subject-path: |
             ${{ runner.temp }}/release-artifacts/docker-compose.deploy.yml
