@@ -412,6 +412,7 @@ jobs:
           name: backend-hotspot-perf-artifacts
           path: /tmp/labtether-perf-artifacts
           if-no-files-found: warn
+          retention-days: 1
 
   web-checks:
     runs-on: ubuntu-latest
@@ -511,7 +512,7 @@ jobs:
         run: npm run test:e2e:https -- --ignore-snapshots
 
       - name: Upload HTTPS E2E Playwright artifacts
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: web-e2e-https-playwright
@@ -519,6 +520,7 @@ jobs:
             web/console/playwright-report
             web/console/test-results
           if-no-files-found: warn
+          retention-days: 1
 
   web-visual-https:
     runs-on: ubuntu-latest
@@ -549,7 +551,7 @@ jobs:
         run: npm run test:visual:https
 
       - name: Upload HTTPS visual Playwright artifacts
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: web-visual-https-playwright
@@ -557,6 +559,7 @@ jobs:
             web/console/playwright-report
             web/console/test-results
           if-no-files-found: warn
+          retention-days: 1
 
   stack-checks:
     needs: qa-select
