@@ -641,6 +641,9 @@ func (d *Deps) HandleAuthUsers(w http.ResponseWriter, r *http.Request) {
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"users": items})
 	case http.MethodPost:
+		if rejectAPIKeyIdentityMutation(w, r) {
+			return
+		}
 		var req authCreateUserRequest
 		if err := shared.DecodeJSONBody(w, r, &req); err != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, "invalid user payload")
@@ -712,13 +715,22 @@ func (d *Deps) HandleAuthUserActions(w http.ResponseWriter, r *http.Request) {
 
 	if strings.HasSuffix(id, "/sessions") {
 		userID := strings.TrimSuffix(id, "/sessions")
+		if r.Method == http.MethodDelete && rejectAPIKeyIdentityMutation(w, r) {
+			return
+		}
 		d.handleUserSessions(w, r, userID)
 		return
 	}
 
 	switch r.Method {
 	case http.MethodPatch:
+		if rejectAPIKeyIdentityMutation(w, r) {
+			return
+		}
 	case http.MethodDelete:
+		if rejectAPIKeyIdentityMutation(w, r) {
+			return
+		}
 		d.handleDeleteUser(w, r, id)
 		return
 	default:

@@ -253,6 +253,9 @@ func (d *Deps) HandleOIDCSettingsPut(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	if rejectAPIKeyIdentityMutation(w, r) {
+		return
+	}
 
 	var req oidcSettingsPutRequest
 	if err := shared.DecodeJSONBody(w, r, &req); err != nil {
@@ -356,6 +359,9 @@ func (d *Deps) HandleOIDCSettingsPut(w http.ResponseWriter, r *http.Request) {
 func (d *Deps) HandleOIDCSettingsApply(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if rejectAPIKeyIdentityMutation(w, r) {
 		return
 	}
 
