@@ -59,3 +59,45 @@ func TestIsOwnerPrincipalUsesRoleInsteadOfActorID(t *testing.T) {
 		})
 	}
 }
+
+func TestIsAPIKeyPrincipal(t *testing.T) {
+	tests := []struct {
+		name string
+		ctx  context.Context
+		want bool
+	}{
+		{
+			name: "explicit key marker",
+			ctx:  ContextWithAPIKeyID(ContextWithPrincipal(context.Background(), "apikey:key_01", "admin"), "key_01"),
+			want: true,
+		},
+		{
+			name: "legacy actor prefix",
+			ctx:  ContextWithPrincipal(context.Background(), "apikey:key_legacy", "admin"),
+			want: true,
+		},
+		{
+			name: "interactive admin",
+			ctx:  ContextWithPrincipal(context.Background(), "usr_01", "admin"),
+			want: false,
+		},
+		{
+			name: "owner bearer",
+			ctx:  ContextWithPrincipal(context.Background(), "owner", "owner"),
+			want: false,
+		},
+		{
+			name: "missing principal",
+			ctx:  context.Background(),
+			want: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsAPIKeyPrincipal(tc.ctx); got != tc.want {
+				t.Fatalf("IsAPIKeyPrincipal() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

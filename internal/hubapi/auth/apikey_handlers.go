@@ -59,6 +59,9 @@ func (d *Deps) HandleAPIKeys(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		d.handleAPIKeysList(w, r)
 	case http.MethodPost:
+		if rejectAPIKeyIdentityMutation(w, r) {
+			return
+		}
 		d.handleAPIKeyCreate(w, r)
 	default:
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
@@ -76,8 +79,14 @@ func (d *Deps) HandleAPIKeyActions(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		d.handleAPIKeyGet(w, r, id)
 	case http.MethodPatch:
+		if rejectAPIKeyIdentityMutation(w, r) {
+			return
+		}
 		d.handleAPIKeyUpdate(w, r, id)
 	case http.MethodDelete:
+		if rejectAPIKeyIdentityMutation(w, r) {
+			return
+		}
 		d.handleAPIKeyDelete(w, r, id)
 	default:
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
