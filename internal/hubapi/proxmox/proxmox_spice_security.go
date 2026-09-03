@@ -40,8 +40,9 @@ func NewProxmoxSPICETLSConfig(skipVerify bool, caPEM, hostSubject string) (*tls.
 		}
 	}
 
-	return &tls.Config{ // #nosec G402 -- VerifyConnection performs chain and exact subject verification.
-		MinVersion:         tls.VersionTLS12,
+	return &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		// #nosec G402 -- VerifyConnection performs chain and exact subject verification.
 		InsecureSkipVerify: true,
 		VerifyConnection: func(state tls.ConnectionState) error {
 			if len(state.PeerCertificates) == 0 {
