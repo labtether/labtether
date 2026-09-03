@@ -20,6 +20,7 @@ const MAX_HOST_BYTES = 255;
 const MAX_DISPLAY_BYTES = 256;
 const MAX_USERNAME_BYTES = 256;
 const MAX_PASSWORD_BYTES = 16 * 1024;
+const MAX_RDP_CERTIFICATE_FINGERPRINTS_BYTES = 4096;
 const UPSTREAM_TIMEOUT_MS = 15_000;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/u;
 
@@ -36,6 +37,9 @@ type CreateDesktopSessionRequest = {
     port: number;
     username?: string;
     password?: string;
+    ignore_certificate?: boolean;
+    allow_legacy_security?: boolean;
+    certificate_fingerprints?: string;
   };
 };
 
@@ -130,15 +134,58 @@ export function parseDesktopRequest(
     }
     const host = direct.host.trim();
     if (!validBoundedText(host, MAX_HOST_BYTES)) return null;
+    if (direct.username !== undefined && typeof direct.username !== "string") {
+      return null;
+    }
+    if (direct.password !== undefined && typeof direct.password !== "string") {
+      return null;
+    }
     if (
-      direct.username !== undefined &&
-      typeof direct.username !== "string"
+      direct.ignore_certificate !== undefined &&
+      typeof direct.ignore_certificate !== "boolean"
     ) {
       return null;
     }
     if (
-      direct.password !== undefined &&
-      typeof direct.password !== "string"
+      direct.allow_legacy_security !== undefined &&
+      typeof direct.allow_legacy_security !== "boolean"
+    ) {
+      return null;
+    }
+    if (
+      direct.certificate_fingerprints !== undefined &&
+      typeof direct.certificate_fingerprints !== "string"
+    ) {
+      return null;
+    }
+    const certificateFingerprints =
+      typeof direct.certificate_fingerprints === "string"
+        ? direct.certificate_fingerprints.trim()
+        : undefined;
+    if (
+      certificateFingerprints !== undefined &&
+      !validBoundedText(
+        certificateFingerprints,
+        MAX_RDP_CERTIFICATE_FINGERPRINTS_BYTES,
+        true,
+      )
+    ) {
+      return null;
+    }
+    if (
+      (direct.ignore_certificate === true ||
+        direct.allow_legacy_security === true ||
+        certificateFingerprints) &&
+      protocolRaw !== "rdp"
+    ) {
+      return null;
+    }
+    if (
+      (certificateFingerprints &&
+        (direct.ignore_certificate === true ||
+          direct.allow_legacy_security === true)) ||
+      (direct.ignore_certificate === true &&
+        direct.allow_legacy_security === true)
     ) {
       return null;
     }
@@ -160,6 +207,15 @@ export function parseDesktopRequest(
       port: direct.port,
       username,
       password,
+      ignore_certificate:
+        typeof direct.ignore_certificate === "boolean"
+          ? direct.ignore_certificate
+          : undefined,
+      allow_legacy_security:
+        typeof direct.allow_legacy_security === "boolean"
+          ? direct.allow_legacy_security
+          : undefined,
+      certificate_fingerprints: certificateFingerprints || undefined,
     };
   }
 

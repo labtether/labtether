@@ -101,9 +101,22 @@ function RemoteViewPageContent() {
       protocol: RemoteViewProtocol;
       username?: string;
       password?: string;
+      ignoreCertificate?: boolean;
+      allowLegacySecurity?: boolean;
+      certificateFingerprints?: string;
       saveBookmark?: { label: string };
     }) => {
-      const { host, port, protocol, username, password, saveBookmark } = params;
+      const {
+        host,
+        port,
+        protocol,
+        username,
+        password,
+        ignoreCertificate,
+        allowLegacySecurity,
+        certificateFingerprints,
+        saveBookmark,
+      } = params;
       const tabId = activeTab.id;
 
       const creds = {
@@ -115,7 +128,13 @@ function RemoteViewPageContent() {
         type: "adhoc",
         label: saveBookmark?.label || host,
         protocol,
-        target: { host, port },
+        target: {
+          host,
+          port,
+          ignoreCertificate,
+          allowLegacySecurity,
+          certificateFingerprints,
+        },
         connectionState: "connecting",
       });
 

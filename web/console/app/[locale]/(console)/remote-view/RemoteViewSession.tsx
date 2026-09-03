@@ -64,6 +64,14 @@ export default function RemoteViewSession({
               ? {
                   username: initialCredentials?.username,
                   password: initialCredentials?.password,
+                  ...(desktopProtocol === "rdp"
+                    ? {
+                        ignore_certificate: tab.target.ignoreCertificate,
+                        allow_legacy_security: tab.target.allowLegacySecurity,
+                        certificate_fingerprints:
+                          tab.target.certificateFingerprints,
+                      }
+                    : {}),
                 }
               : {}),
           }

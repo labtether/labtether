@@ -20,6 +20,9 @@ export interface RemoteViewTab {
     port: number;
     assetId?: string;
     bookmarkId?: string;
+    ignoreCertificate?: boolean;
+    allowLegacySecurity?: boolean;
+    certificateFingerprints?: string;
   };
   connectionState: RemoteViewConnectionState;
   lastConnectedAt?: number;

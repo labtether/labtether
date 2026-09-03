@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
+	"unicode"
 )
 
 // Protocol kind constants for manual device connections.
@@ -74,8 +76,11 @@ type VNCConfig struct {
 
 // RDPConfig holds RDP-specific connection options.
 type RDPConfig struct {
-	Domain     string `json:"domain,omitempty"`
-	NLAEnabled bool   `json:"nla_enabled,omitempty"`
+	Domain                  string `json:"domain,omitempty"`
+	NLAEnabled              bool   `json:"nla_enabled,omitempty"`
+	IgnoreCertificate       bool   `json:"ignore_certificate,omitempty"`
+	AllowLegacySecurity     bool   `json:"allow_legacy_security,omitempty"`
+	CertificateFingerprints string `json:"certificate_fingerprints,omitempty"`
 }
 
 // ARDConfig holds Apple Remote Desktop-specific connection options.
@@ -122,8 +127,8 @@ func ValidateProtocolConfig(protocol string, raw json.RawMessage) error {
 		var cfg VNCConfig
 		return strictUnmarshal(raw, &cfg)
 	case ProtocolRDP:
-		var cfg RDPConfig
-		return strictUnmarshal(raw, &cfg)
+		_, err := DecodeRDPConfig(raw)
+		return err
 	case ProtocolARD:
 		var cfg ARDConfig
 		return strictUnmarshal(raw, &cfg)
@@ -140,6 +145,44 @@ func ValidateProtocolConfig(protocol string, raw json.RawMessage) error {
 	default:
 		return fmt.Errorf("unsupported protocol %q", protocol)
 	}
+}
+
+// DecodeRDPConfig decodes RDP-specific configuration and rejects unknown fields.
+// Empty and null values use the secure defaults in RDPConfig.
+func DecodeRDPConfig(raw json.RawMessage) (RDPConfig, error) {
+	var cfg RDPConfig
+	if len(raw) == 0 || string(raw) == "null" {
+		return cfg, nil
+	}
+	if err := strictUnmarshal(raw, &cfg); err != nil {
+		return RDPConfig{}, err
+	}
+	if err := ValidateRDPConfigOptions(cfg); err != nil {
+		return RDPConfig{}, err
+	}
+	return cfg, nil
+}
+
+// ValidateRDPConfigOptions validates combinations which could otherwise give a
+// false impression that an RDP connection is authenticated by a certificate.
+func ValidateRDPConfigOptions(cfg RDPConfig) error {
+	fingerprints := strings.TrimSpace(cfg.CertificateFingerprints)
+	if len(fingerprints) > 4096 || strings.IndexFunc(fingerprints, unicode.IsControl) >= 0 {
+		return fmt.Errorf("certificate_fingerprints is invalid")
+	}
+	if cfg.IgnoreCertificate && fingerprints != "" {
+		return fmt.Errorf("ignore_certificate cannot be combined with certificate_fingerprints")
+	}
+	if cfg.AllowLegacySecurity && fingerprints != "" {
+		return fmt.Errorf("allow_legacy_security cannot be combined with certificate_fingerprints")
+	}
+	if cfg.AllowLegacySecurity && cfg.NLAEnabled {
+		return fmt.Errorf("allow_legacy_security cannot be combined with nla_enabled")
+	}
+	if cfg.AllowLegacySecurity && cfg.IgnoreCertificate {
+		return fmt.Errorf("allow_legacy_security cannot be combined with ignore_certificate")
+	}
+	return nil
 }
 
 // strictUnmarshal decodes raw JSON into target while rejecting unknown fields.

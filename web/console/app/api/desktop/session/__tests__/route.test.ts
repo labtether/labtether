@@ -89,6 +89,134 @@ describe("desktop session proxy", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("only forwards explicit RDP security options", async () => {
+    const accepted = await POST(
+      new NextRequest("https://console.example.com/api/desktop/session", {
+        method: "POST",
+        headers: {
+          origin: "https://console.example.com",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          protocol: "rdp",
+          direct_target: {
+            host: "192.0.2.70",
+            port: 3389,
+            ignore_certificate: true,
+          },
+        }),
+      }),
+    );
+    expect(accepted.status).toBe(201);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body)).direct_target.ignore_certificate).toBe(
+      true,
+    );
+
+    fetchMock.mockClear();
+    const pinned = await POST(
+      new NextRequest("https://console.example.com/api/desktop/session", {
+        method: "POST",
+        headers: {
+          origin: "https://console.example.com",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          protocol: "rdp",
+          direct_target: {
+            host: "192.0.2.70",
+            port: 3389,
+            certificate_fingerprints: " sha256:AA:BB ",
+          },
+        }),
+      }),
+    );
+    expect(pinned.status).toBe(201);
+    const [, pinnedInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(
+      JSON.parse(String(pinnedInit.body)).direct_target
+        .certificate_fingerprints,
+    ).toBe("sha256:AA:BB");
+
+    fetchMock.mockClear();
+    const legacy = await POST(
+      new NextRequest("https://console.example.com/api/desktop/session", {
+        method: "POST",
+        headers: {
+          origin: "https://console.example.com",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          protocol: "rdp",
+          direct_target: {
+            host: "192.0.2.70",
+            port: 3389,
+            allow_legacy_security: true,
+          },
+        }),
+      }),
+    );
+    expect(legacy.status).toBe(201);
+    const [, legacyInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(
+      JSON.parse(String(legacyInit.body)).direct_target.allow_legacy_security,
+    ).toBe(true);
+
+    fetchMock.mockClear();
+    for (const testCase of [
+      {
+        protocol: "vnc",
+        directTarget: {
+          host: "192.0.2.70",
+          port: 5900,
+          ignore_certificate: true,
+        },
+      },
+      {
+        protocol: "rdp",
+        directTarget: {
+          host: "192.0.2.70",
+          port: 3389,
+          ignore_certificate: "true",
+        },
+      },
+      {
+        protocol: "rdp",
+        directTarget: {
+          host: "192.0.2.70",
+          port: 3389,
+          ignore_certificate: true,
+          certificate_fingerprints: "sha256:AA:BB",
+        },
+      },
+      {
+        protocol: "rdp",
+        directTarget: {
+          host: "192.0.2.70",
+          port: 3389,
+          ignore_certificate: true,
+          allow_legacy_security: true,
+        },
+      },
+    ]) {
+      const response = await POST(
+        new NextRequest("https://console.example.com/api/desktop/session", {
+          method: "POST",
+          headers: {
+            origin: "https://console.example.com",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            protocol: testCase.protocol,
+            direct_target: testCase.directTarget,
+          }),
+        }),
+      );
+      expect(response.status).toBe(400);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("preserves exact password bytes while rejecting invalid protocol and port values", async () => {
     const password = "  exact secret\n";
     const accepted = await POST(
