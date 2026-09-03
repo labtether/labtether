@@ -62,6 +62,11 @@ export function ProtocolForm({
   // SSH-specific
   const [strictHostKey, setStrictHostKey] = useState<boolean>((initial?.config?.["strict_host_key"] as boolean | undefined) ?? false);
 
+  // VNC/ARD-specific
+  const [allowInsecureVNC, setAllowInsecureVNC] = useState<boolean>(
+    (initial?.config?.["allow_insecure_vnc"] as boolean | undefined) ?? false,
+  );
+
   // RDP-specific
   const [rdpDomain, setRdpDomain] = useState<string>((initial?.config?.["domain"] as string | undefined) ?? "");
   const [nla, setNla] = useState<boolean>((initial?.config?.["nla_enabled"] as boolean | undefined) ?? false);
@@ -89,6 +94,7 @@ export function ProtocolForm({
     setProtocol(next);
     setPort(DEFAULT_PORTS[next]);
     setCredentialProfileId("");
+    setAllowInsecureVNC(false);
     setTestResult(null);
     setShowKeyInstallBanner(false);
   };
@@ -106,6 +112,9 @@ export function ProtocolForm({
       if (certificateFingerprints.trim()) {
         cfg["certificate_fingerprints"] = certificateFingerprints.trim();
       }
+    }
+    if (protocol === "vnc" || protocol === "ard") {
+      cfg["allow_insecure_vnc"] = allowInsecureVNC;
     }
     return cfg;
   };
@@ -193,6 +202,24 @@ export function ProtocolForm({
           <p className="text-xs text-[var(--warn)]">
             Telnet connections are unencrypted. Credentials and data are sent in plaintext.
           </p>
+        </div>
+      )}
+
+      {(protocol === "vnc" || protocol === "ard") && (
+        <div className="rounded-lg border border-[var(--warn)]/30 bg-[var(--warn-glow)] px-3 py-2">
+          <label className="flex items-start gap-2 text-xs text-[var(--warn)]">
+            <input
+              type="checkbox"
+              checked={allowInsecureVNC}
+              onChange={(event) => setAllowInsecureVNC(event.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              Allow plain VNC. Screen, keyboard, and login data can be read or
+              changed on the network. The Hub must also enable insecure
+              transport.
+            </span>
+          </label>
         </div>
       )}
 
@@ -416,7 +443,11 @@ export function ProtocolForm({
         </Button>
         <Button
           variant="primary"
-          disabled={saving || testing}
+          disabled={
+            saving ||
+            testing ||
+            ((protocol === "vnc" || protocol === "ard") && !allowInsecureVNC)
+          }
           onClick={() => void handleSave()}
         >
           {saving ? "Saving..." : "Save"}

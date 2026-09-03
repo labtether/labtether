@@ -28,6 +28,7 @@ func scanRemoteBookmark(row remoteBookmarkScanner) (RemoteBookmark, error) {
 		&bm.CredentialID,
 		&bm.SPICESecurityMode,
 		&bm.SPICECAPEM,
+		&bm.AllowInsecureVNC,
 		&bm.CreatedAt,
 		&bm.UpdatedAt,
 	); err != nil {
@@ -42,7 +43,7 @@ func scanRemoteBookmark(row remoteBookmarkScanner) (RemoteBookmark, error) {
 
 // --- columns ---
 
-const remoteBookmarkColumns = `id, label, protocol, host, port, credential_id, spice_security_mode, spice_ca_pem, created_at, updated_at`
+const remoteBookmarkColumns = `id, label, protocol, host, port, credential_id, spice_security_mode, spice_ca_pem, allow_insecure_vnc, created_at, updated_at`
 
 func normalizedRemoteBookmarkSPICESecurityMode(value string) string {
 	mode := strings.ToLower(strings.TrimSpace(value))
@@ -96,8 +97,8 @@ func (s *PostgresStore) CreateRemoteBookmark(ctx context.Context, bm *RemoteBook
 	bm.SPICESecurityMode = normalizedRemoteBookmarkSPICESecurityMode(bm.SPICESecurityMode)
 
 	_, err := s.pool.Exec(ctx,
-		`INSERT INTO remote_bookmarks (id, label, protocol, host, port, credential_id, spice_security_mode, spice_ca_pem, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		`INSERT INTO remote_bookmarks (id, label, protocol, host, port, credential_id, spice_security_mode, spice_ca_pem, allow_insecure_vnc, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 		bm.ID,
 		strings.TrimSpace(bm.Label),
 		strings.TrimSpace(bm.Protocol),
@@ -106,6 +107,7 @@ func (s *PostgresStore) CreateRemoteBookmark(ctx context.Context, bm *RemoteBook
 		bm.CredentialID,
 		bm.SPICESecurityMode,
 		strings.TrimSpace(bm.SPICECAPEM),
+		bm.AllowInsecureVNC,
 		bm.CreatedAt,
 		bm.UpdatedAt,
 	)
@@ -119,7 +121,7 @@ func (s *PostgresStore) UpdateRemoteBookmark(ctx context.Context, bm RemoteBookm
 	tag, err := s.pool.Exec(ctx,
 		`UPDATE remote_bookmarks
 		 SET label = $2, protocol = $3, host = $4, port = $5, credential_id = $6,
-		     spice_security_mode = $7, spice_ca_pem = $8, updated_at = $9
+		     spice_security_mode = $7, spice_ca_pem = $8, allow_insecure_vnc = $9, updated_at = $10
 		 WHERE id = $1`,
 		strings.TrimSpace(bm.ID),
 		strings.TrimSpace(bm.Label),
@@ -129,6 +131,7 @@ func (s *PostgresStore) UpdateRemoteBookmark(ctx context.Context, bm RemoteBookm
 		bm.CredentialID,
 		normalizedRemoteBookmarkSPICESecurityMode(bm.SPICESecurityMode),
 		strings.TrimSpace(bm.SPICECAPEM),
+		bm.AllowInsecureVNC,
 		bm.UpdatedAt,
 	)
 	if err != nil {

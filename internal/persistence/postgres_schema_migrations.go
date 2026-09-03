@@ -3056,5 +3056,13 @@ func postgresSchemaMigrations() []schemaMigration {
 		},
 	})
 
+	migrations = append(migrations, schemaMigration{
+		Version: 101,
+		Name:    "remote_bookmark_vnc_transport_security",
+		Statements: []string{
+			`ALTER TABLE remote_bookmarks ADD COLUMN IF NOT EXISTS allow_insecure_vnc BOOLEAN NOT NULL DEFAULT false`,
+		},
+	})
+
 	return migrations
 }

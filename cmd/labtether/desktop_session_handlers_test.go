@@ -186,11 +186,16 @@ func TestHandleDesktopSessionsRejectsInvalidOptionsBeforeCreatingSession(t *test
 }
 
 func TestDirectDesktopSessionOptionsAreIsolatedAndProtocolCannotBeOverridden(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
 	sut := newTestAPIServer(t)
 	create := func(actor, host, secret, protocol string) terminal.Session {
 		t.Helper()
+		vncOptIn := ""
+		if protocol == "vnc" {
+			vncOptIn = `,"allow_insecure_vnc":true`
+		}
 		req := httptest.NewRequest(http.MethodPost, "/desktop/sessions", bytes.NewBufferString(
-			`{"protocol":"`+protocol+`","direct_target":{"host":"`+host+`","port":3389,"password":"`+secret+`"}}`,
+			`{"protocol":"`+protocol+`","direct_target":{"host":"`+host+`","port":3389,"password":"`+secret+`"`+vncOptIn+`}}`,
 		))
 		req = req.WithContext(contextWithPrincipal(req.Context(), actor, "admin"))
 		rec := httptest.NewRecorder()
@@ -221,6 +226,50 @@ func TestDirectDesktopSessionOptionsAreIsolatedAndProtocolCannotBeOverridden(t *
 	sut.handleDesktopSessionActions(crossActorRec, crossActorReq)
 	if crossActorRec.Code != http.StatusForbidden {
 		t.Fatalf("cross-actor direct session access status=%d body=%s", crossActorRec.Code, crossActorRec.Body.String())
+	}
+}
+
+func TestDirectVNCRequiresSessionAndGlobalOptIn(t *testing.T) {
+	sut := newTestAPIServer(t)
+	create := func(body string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/desktop/sessions", bytes.NewBufferString(body))
+		req = req.WithContext(contextWithPrincipal(req.Context(), "actor-vnc-security", "admin"))
+		rec := httptest.NewRecorder()
+		sut.handleDesktopSessions(rec, req)
+		return rec
+	}
+
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "false")
+	missingLocal := create(`{"protocol":"vnc","direct_target":{"host":"192.0.2.62","port":5900}}`)
+	if missingLocal.Code != http.StatusBadRequest || !strings.Contains(missingLocal.Body.String(), "allow_insecure_vnc") {
+		t.Fatalf("missing local VNC opt-in status=%d body=%s", missingLocal.Code, missingLocal.Body.String())
+	}
+	missingGlobal := create(`{"protocol":"vnc","direct_target":{"host":"192.0.2.62","port":5900,"allow_insecure_vnc":true}}`)
+	if missingGlobal.Code != http.StatusBadRequest || !strings.Contains(missingGlobal.Body.String(), "LABTETHER_ALLOW_INSECURE_TRANSPORT") {
+		t.Fatalf("missing global VNC opt-in status=%d body=%s", missingGlobal.Code, missingGlobal.Body.String())
+	}
+
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
+	allowed := create(`{"protocol":"vnc","direct_target":{"host":"192.0.2.62","port":5900,"allow_insecure_vnc":true}}`)
+	if allowed.Code != http.StatusCreated {
+		t.Fatalf("double-opt-in VNC status=%d body=%s", allowed.Code, allowed.Body.String())
+	}
+	var session terminal.Session
+	if err := json.Unmarshal(allowed.Body.Bytes(), &session); err != nil {
+		t.Fatalf("decode VNC session: %v", err)
+	}
+	if !sut.getDesktopSessionOptions(session.ID).VNCAllowInsecureTransport {
+		t.Fatal("VNC session did not retain its explicit transport opt-in")
+	}
+
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "false")
+	ticketReq := httptest.NewRequest(http.MethodPost, "/desktop/sessions/"+session.ID+"/stream-ticket", nil)
+	ticketReq = ticketReq.WithContext(contextWithPrincipal(ticketReq.Context(), "actor-vnc-security", "admin"))
+	ticketRec := httptest.NewRecorder()
+	sut.handleDesktopSessionActions(ticketRec, ticketReq)
+	if ticketRec.Code != http.StatusBadRequest || !strings.Contains(ticketRec.Body.String(), "LABTETHER_ALLOW_INSECURE_TRANSPORT") {
+		t.Fatalf("VNC ticket did not recheck global opt-in: status=%d body=%s", ticketRec.Code, ticketRec.Body.String())
 	}
 }
 

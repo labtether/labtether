@@ -60,6 +60,7 @@ export default function RemoteViewSession({
         ? {
             host: tab.target.host,
             port: tab.target.port,
+            allow_insecure_vnc: tab.target.allowInsecureVNC,
             ...(desktopProtocol === "rdp" || desktopProtocol === "spice"
               ? {
                   username: initialCredentials?.username,

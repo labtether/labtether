@@ -38,6 +38,7 @@ type CreateDesktopSessionRequest = {
     port: number;
     username?: string;
     password?: string;
+    allow_insecure_vnc?: boolean;
     ignore_certificate?: boolean;
     allow_legacy_security?: boolean;
     certificate_fingerprints?: string;
@@ -144,6 +145,12 @@ export function parseDesktopRequest(
       return null;
     }
     if (
+      direct.allow_insecure_vnc !== undefined &&
+      typeof direct.allow_insecure_vnc !== "boolean"
+    ) {
+      return null;
+    }
+    if (
       direct.ignore_certificate !== undefined &&
       typeof direct.ignore_certificate !== "boolean"
     ) {
@@ -194,6 +201,9 @@ export function parseDesktopRequest(
         certificateFingerprints) &&
       protocolRaw !== "rdp"
     ) {
+      return null;
+    }
+    if (direct.allow_insecure_vnc === true && protocolRaw !== "vnc") {
       return null;
     }
     const spiceCAPEM =
@@ -248,6 +258,10 @@ export function parseDesktopRequest(
       port: direct.port,
       username,
       password,
+      allow_insecure_vnc:
+        typeof direct.allow_insecure_vnc === "boolean"
+          ? direct.allow_insecure_vnc
+          : undefined,
       ignore_certificate:
         typeof direct.ignore_certificate === "boolean"
           ? direct.ignore_certificate
