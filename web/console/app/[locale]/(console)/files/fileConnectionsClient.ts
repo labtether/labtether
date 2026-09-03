@@ -44,8 +44,17 @@ export interface UpdateFileConnectionRequest {
 
 export interface TestResult {
   success: boolean;
+  requires_host_key_confirmation?: boolean;
   latency_ms?: number;
   error?: string;
+  host_key?: string;
+  fingerprint?: string;
+}
+
+export interface TestedSFTPHostKey {
+  endpoint: string;
+  hostKey: string;
+  fingerprint?: string;
 }
 
 export interface ConnectionFileEntry {
@@ -62,6 +71,35 @@ export interface ConnectionFileEntry {
 // ---------------------------------------------------------------------------
 
 type ErrorPayload = { error?: string };
+
+export function sftpEndpointKey(host: string, port: number): string {
+  return `${host.trim().toLowerCase()}\u0000${port}`;
+}
+
+export function trustedSFTPHostKeyForRequest(
+  protocol: string,
+  host: string,
+  port: number,
+  existing: FileConnection | undefined,
+  tested: TestedSFTPHostKey | null,
+): string | undefined {
+  if (protocol !== "sftp") return undefined;
+  const endpoint = sftpEndpointKey(host, port);
+  if (tested?.endpoint === endpoint && tested.hostKey.trim()) {
+    return tested.hostKey.trim();
+  }
+  const existingPort = existing?.port ?? 22;
+  const existingKey = existing?.extra_config?.host_key;
+  if (
+    existing?.protocol === "sftp" &&
+    sftpEndpointKey(existing.host, existingPort) === endpoint &&
+    typeof existingKey === "string" &&
+    existingKey.trim()
+  ) {
+    return existingKey.trim();
+  }
+  return undefined;
+}
 
 async function responseError(response: Response, fallbackMessage: string): Promise<Error> {
   const payload: ErrorPayload = await response.json().catch(() => ({}));
