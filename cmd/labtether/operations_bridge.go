@@ -231,8 +231,9 @@ func (s *apiServer) buildOperationsDeps() *opspkg.ExecDeps {
 		ScopesFromContext: func(ctx context.Context) []string {
 			return scopesFromContext(ctx)
 		},
-		EvaluateCommandPolicy: s.evaluateStructuredCommandPolicy,
-		EnforceRateLimit:      s.enforceRateLimit,
+		EvaluateCommandPolicy:   s.evaluateStructuredCommandPolicy,
+		EvaluateAssetGuardrails: s.ensureGroupFeaturesDeps().EvaluateAssetGuardrails,
+		EnforceRateLimit:        s.enforceRateLimit,
 	}
 }
 

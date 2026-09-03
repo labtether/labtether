@@ -6,8 +6,10 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/groupmaintenance"
 )
 
 func TestHandleV2AssetExec_NoAgent(t *testing.T) {
@@ -105,5 +107,89 @@ func TestHandleV2Exec_MultiTarget(t *testing.T) {
 	}
 	if data["summary"] == nil {
 		t.Error("should have summary")
+	}
+}
+
+func TestV2ExecRoutesRespectGroupMaintenance(t *testing.T) {
+	sut := newTestAPIServer(t)
+	sut.groupMaintenanceStore = &maintenanceOnlyGroupMaintenanceStore{}
+	groupID := mustCreateGroup(t, sut, "Exec Maintenance", "exec-maintenance")
+	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: "srv1", Name: "srv1", Status: "online", Platform: "linux",
+		Source: "agent", Type: "host", GroupID: groupID,
+	}); err != nil {
+		t.Fatalf("seed asset: %v", err)
+	}
+	if _, err := sut.groupMaintenanceStore.CreateGroupMaintenanceWindow(groupID, groupmaintenance.CreateMaintenanceWindowRequest{
+		Name:         "Block exec",
+		StartAt:      time.Now().UTC().Add(-time.Minute),
+		EndAt:        time.Now().UTC().Add(time.Minute),
+		BlockActions: true,
+	}); err != nil {
+		t.Fatalf("create maintenance window: %v", err)
+	}
+
+	tests := []struct {
+		name    string
+		path    string
+		body    string
+		handler func(http.ResponseWriter, *http.Request)
+	}{
+		{
+			name: "single asset",
+			path: "/api/v2/assets/srv1/exec",
+			body: `{"command":"uptime"}`,
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				sut.handleV2AssetExec(w, r, "srv1")
+			},
+		},
+		{
+			name:    "multi asset",
+			path:    "/api/v2/exec",
+			body:    `{"targets":["srv1"],"command":"uptime"}`,
+			handler: sut.handleV2ExecMulti,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
+			req = req.WithContext(contextWithPrincipal(req.Context(), "admin", "admin"))
+			rec := httptest.NewRecorder()
+
+			tc.handler(rec, req)
+
+			if rec.Code != http.StatusLocked || !strings.Contains(rec.Body.String(), "maintenance_blocked") {
+				t.Fatalf("status = %d, want 423 maintenance_blocked; body=%s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestActionAndV2ExecRoutesShareRateLimit(t *testing.T) {
+	sut := newTestAPIServer(t)
+	const sharedExecLimit = 120
+	for index := 0; index < sharedExecLimit; index++ {
+		var path string
+		var handler http.HandlerFunc
+		if index%2 == 0 {
+			path = "/actions/execute"
+			handler = sut.handleActionExecute
+		} else {
+			path = "/api/v2/exec"
+			handler = sut.handleV2ExecMulti
+		}
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`))
+		rec := httptest.NewRecorder()
+		handler(rec, req)
+		if rec.Code == http.StatusTooManyRequests {
+			t.Fatalf("request %d was limited before shared budget was exhausted", index+1)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/exec", strings.NewReader(`{}`))
+	rec := httptest.NewRecorder()
+	sut.handleV2ExecMulti(rec, req)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429 after shared command budget; body=%s", rec.Code, rec.Body.String())
 	}
 }

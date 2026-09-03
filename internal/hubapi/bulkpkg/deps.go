@@ -2,6 +2,7 @@ package bulkpkg
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
 	"github.com/labtether/labtether/internal/persistence"
@@ -29,4 +30,7 @@ type Deps struct {
 	// EvaluateAssetGuardrails resolves group maintenance constraints before
 	// any target in a bulk mutation is dispatched.
 	EvaluateAssetGuardrails maintenanceguard.EvaluateAssetFunc
+	// EnforceRateLimit returns false (and writes 429) if the shared command
+	// execution budget has been exhausted.
+	EnforceRateLimit func(w http.ResponseWriter, r *http.Request, bucket string, limit int, window time.Duration) bool
 }
