@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"context"
 	"net/http"
 	"sync"
 	"time"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/credentials"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/persistence"
@@ -21,6 +23,7 @@ import (
 type Deps struct {
 	// Store interfaces
 	AssetStore             persistence.AssetStore
+	GroupStore             persistence.GroupStore
 	EnrollmentStore        persistence.EnrollmentStore
 	EnrollmentTransactions persistence.AgentEnrollmentTransactionStore
 	PresenceStore          persistence.PresenceStore
@@ -86,6 +89,8 @@ type Deps struct {
 	ResolveHubConnectionSelection        func(r *http.Request) shared.HubConnectionSelection
 	SummarizeUpdateOutput                func(output string) string
 	DefaultUpdateAgentTimeout            time.Duration
+	PrincipalActorID                     func(context.Context) string
+	AppendAuditEventBestEffort           func(event audit.Event, logMessage string)
 
 	// Credential store method helpers.
 	GetAssetTerminalConfig  func(assetID string) (credentials.AssetTerminalConfig, bool, error)

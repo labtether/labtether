@@ -5,17 +5,27 @@ import "time"
 const (
 	DeviceProofVersionV1 = "v1"
 	DeviceProofVersionV2 = "v2"
+
+	TokenScopeAsset         = "asset"
+	TokenScopeGroup         = "group"
+	TokenScopeUnplaced      = "unplaced"
+	TokenScopeUnrestricted  = "unrestricted"
+	TokenScopeLegacyRevoked = "legacy_revoked"
 )
 
 // EnrollmentToken represents a short-lived token that agents use to self-register.
 type EnrollmentToken struct {
-	ID        string     `json:"id"`
-	Label     string     `json:"label"`
-	ExpiresAt time.Time  `json:"expires_at"`
-	MaxUses   int        `json:"max_uses"`
-	UseCount  int        `json:"use_count"`
-	CreatedAt time.Time  `json:"created_at"`
-	RevokedAt *time.Time `json:"revoked_at,omitempty"`
+	ID             string     `json:"id"`
+	Label          string     `json:"label"`
+	ExpiresAt      time.Time  `json:"expires_at"`
+	MaxUses        int        `json:"max_uses"`
+	UseCount       int        `json:"use_count"`
+	CreatedAt      time.Time  `json:"created_at"`
+	RevokedAt      *time.Time `json:"revoked_at,omitempty"`
+	Scope          string     `json:"scope"`
+	AssetID        string     `json:"asset_id,omitempty"`
+	AllowedGroupID string     `json:"allowed_group_id,omitempty"`
+	CreatedBy      string     `json:"created_by,omitempty"`
 }
 
 // AgentToken represents a per-agent API token issued during enrollment.
@@ -57,7 +67,11 @@ type EnrollResponse struct {
 
 // CreateTokenRequest is the admin request to generate a new enrollment token.
 type CreateTokenRequest struct {
-	Label    string `json:"label"`
-	TTLHours int    `json:"ttl_hours"`
-	MaxUses  int    `json:"max_uses"`
+	Label                   string `json:"label"`
+	TTLHours                int    `json:"ttl_hours"`
+	MaxUses                 int    `json:"max_uses"`
+	Scope                   string `json:"scope"`
+	AssetID                 string `json:"asset_id,omitempty"`
+	AllowedGroupID          string `json:"allowed_group_id,omitempty"`
+	AcknowledgeUnrestricted bool   `json:"acknowledge_unrestricted,omitempty"`
 }

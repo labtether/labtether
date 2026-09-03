@@ -12,16 +12,18 @@ const LAN_WS_URL = "ws://192.168.1.25:8080/ws/agent";
 
 test("enrollment connection target persists and add-device installer command follows the selected hub", async ({ page }) => {
   let tokenCounter = 0;
+  const tokenRequests: Record<string, unknown>[] = [];
   const statusPayload = buildStatusPayload();
   const liveStatusPayload = buildLiveStatusPayload();
 
   await installConsoleApiMocks(page, {
     statusPayload,
     liveStatusPayload,
-    customRoute: async ({ pathname, method, fulfillJSON }) => {
+    customRoute: async ({ pathname, method, requestBody, fulfillJSON }) => {
       if (pathname === "/api/settings/enrollment") {
         if (method === "POST") {
           tokenCounter += 1;
+          tokenRequests.push(requestBody);
           await fulfillJSON({
             token: { id: `tok-${tokenCounter}` },
             raw_token: `enroll-token-${tokenCounter}`,
@@ -70,8 +72,10 @@ test("enrollment connection target persists and add-device installer command fol
   await expect(page.getByText(LAN_HUB_URL, { exact: true })).toBeVisible();
   await expect(page.getByText(LAN_WS_URL, { exact: true })).toBeVisible();
 
+  await page.getByLabel("Expected hostname").fill("settings-node");
   await page.getByRole("button", { name: "Create Token", exact: true }).click();
   await expect(page.getByText("Your enrollment token is ready — copy it now:", { exact: true })).toBeVisible();
+  expect(tokenRequests[0]).toMatchObject({ scope: "asset", asset_id: "settings-node", max_uses: 1 });
   await page.getByText("Copy/paste setup", { exact: true }).click();
   await expect(page.locator("pre").filter({ hasText: LAN_WS_URL }).first()).toBeVisible();
 
@@ -85,6 +89,10 @@ test("enrollment connection target persists and add-device installer command fol
   await page.getByRole("button", { name: /^Agent/i }).first().click();
 
   await expect(page.getByText("Install Agent", { exact: true })).toBeVisible();
+  await page.getByLabel("Expected hostname").fill("wizard-node");
+  await page.getByRole("button", { name: "Create one-time token", exact: true }).click();
+  await expect(page.getByText("Enrollment Token", { exact: true })).toBeVisible();
+  expect(tokenRequests[1]).toMatchObject({ scope: "asset", asset_id: "wizard-node", max_uses: 1 });
   await expect(page.getByLabel("Connection target")).toHaveValue(LAN_HUB_URL);
   await expect(page.getByText(LAN_HUB_URL, { exact: true })).toBeVisible();
   await expect(page.getByText(LAN_WS_URL, { exact: true })).toBeVisible();

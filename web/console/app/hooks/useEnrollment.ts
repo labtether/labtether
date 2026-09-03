@@ -30,12 +30,19 @@ type EnrollmentState = {
   newRawToken: string;
   newTokenID: string;
   generating: boolean;
-  generateToken: (label: string, ttlHours: number, maxUses: number) => Promise<string>;
+  generateToken: (label: string, ttlHours: number, maxUses: number, scope: EnrollmentTokenScopeRequest) => Promise<string>;
   revokeEnrollmentToken: (id: string) => Promise<void>;
   revokeAgentToken: (id: string) => Promise<void>;
   cleanupDeadTokens: () => Promise<{ enrollment_deleted: number; agent_deleted: number } | null>;
   clearNewToken: () => void;
   refresh: () => void;
+};
+
+export type EnrollmentTokenScopeRequest = {
+  scope: "asset" | "group" | "unplaced" | "unrestricted";
+  assetID?: string;
+  allowedGroupID?: string;
+  acknowledgeUnrestricted?: boolean;
 };
 
 export async function deleteEnrollmentToken(
@@ -178,7 +185,12 @@ export function useEnrollment(): EnrollmentState {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const generateToken = useCallback(async (label: string, ttlHours: number, maxUses: number) => {
+  const generateToken = useCallback(async (
+    label: string,
+    ttlHours: number,
+    maxUses: number,
+    scope: EnrollmentTokenScopeRequest,
+  ) => {
     setGenerating(true);
     setError("");
     setNewRawToken("");
@@ -188,7 +200,15 @@ export function useEnrollment(): EnrollmentState {
       const res = await fetch("/api/settings/enrollment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label, ttl_hours: ttlHours, max_uses: normalizedMaxUses }),
+        body: JSON.stringify({
+          label,
+          ttl_hours: ttlHours,
+          max_uses: normalizedMaxUses,
+          scope: scope.scope,
+          asset_id: scope.assetID?.trim() || undefined,
+          allowed_group_id: scope.allowedGroupID?.trim() || undefined,
+          acknowledge_unrestricted: scope.acknowledgeUnrestricted || undefined,
+        }),
       });
       if (!res.ok) throw new Error("Failed to generate enrollment token");
       const data = ensureRecord(await res.json().catch(() => null));

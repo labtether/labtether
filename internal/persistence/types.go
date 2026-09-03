@@ -601,8 +601,19 @@ type AdminResetResult struct {
 }
 
 // EnrollmentStore provides persistence for enrollment tokens and per-agent API tokens.
+type CreateEnrollmentTokenParams struct {
+	TokenHash      string
+	Label          string
+	ExpiresAt      time.Time
+	MaxUses        int
+	Scope          string
+	AssetID        string
+	AllowedGroupID string
+	CreatedBy      string
+}
+
 type EnrollmentStore interface {
-	CreateEnrollmentToken(tokenHash, label string, expiresAt time.Time, maxUses int) (enrollment.EnrollmentToken, error)
+	CreateEnrollmentToken(params CreateEnrollmentTokenParams) (enrollment.EnrollmentToken, error)
 	ValidateEnrollmentToken(tokenHash string) (enrollment.EnrollmentToken, bool, error)
 	ConsumeEnrollmentToken(tokenHash string) (enrollment.EnrollmentToken, bool, error)
 	IncrementEnrollmentTokenUse(id string) error

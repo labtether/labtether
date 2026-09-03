@@ -2918,5 +2918,35 @@ func postgresSchemaMigrations() []schemaMigration {
 		},
 	})
 
+	// Version 97 is reserved by the retired-agent identity tombstone security
+	// change. Keep this migration at 98 so the two independently reviewable
+	// fixes can merge without reusing a schema version.
+	migrations = append(migrations, schemaMigration{
+		Version: 98,
+		Name:    "scoped_enrollment_tokens",
+		Statements: []string{
+			`ALTER TABLE enrollment_tokens ADD COLUMN IF NOT EXISTS scope TEXT`,
+			`ALTER TABLE enrollment_tokens ADD COLUMN IF NOT EXISTS asset_id TEXT NOT NULL DEFAULT ''`,
+			`ALTER TABLE enrollment_tokens ADD COLUMN IF NOT EXISTS allowed_group_id TEXT`,
+			`ALTER TABLE enrollment_tokens ADD COLUMN IF NOT EXISTS created_by TEXT NOT NULL DEFAULT ''`,
+			`UPDATE enrollment_tokens
+			 SET scope = 'legacy_revoked', revoked_at = COALESCE(revoked_at, clock_timestamp())
+			 WHERE scope IS NULL`,
+			`ALTER TABLE enrollment_tokens ALTER COLUMN scope SET NOT NULL`,
+			`ALTER TABLE enrollment_tokens DROP CONSTRAINT IF EXISTS enrollment_tokens_scope_check`,
+			`ALTER TABLE enrollment_tokens ADD CONSTRAINT enrollment_tokens_scope_check CHECK (
+				(scope = 'asset' AND asset_id <> '' AND max_uses = 1) OR
+				(scope = 'group' AND asset_id = '' AND allowed_group_id IS NOT NULL AND allowed_group_id <> '') OR
+				(scope IN ('unplaced', 'unrestricted') AND asset_id = '' AND allowed_group_id IS NULL) OR
+				(scope = 'legacy_revoked' AND revoked_at IS NOT NULL)
+			)`,
+			`ALTER TABLE enrollment_tokens DROP CONSTRAINT IF EXISTS enrollment_tokens_creator_check`,
+			`ALTER TABLE enrollment_tokens ADD CONSTRAINT enrollment_tokens_creator_check CHECK (
+				scope = 'legacy_revoked' OR created_by <> ''
+			)`,
+			`CREATE INDEX IF NOT EXISTS idx_enrollment_tokens_allowed_group ON enrollment_tokens(allowed_group_id) WHERE allowed_group_id IS NOT NULL`,
+		},
+	})
+
 	return migrations
 }

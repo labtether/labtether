@@ -23,6 +23,7 @@ func (s *apiServer) buildAgentsDeps() *agentspkg.Deps {
 	enrollmentTransactions, _ := s.enrollmentStore.(persistence.AgentEnrollmentTransactionStore)
 	deps := &agentspkg.Deps{
 		AssetStore:             s.assetStore,
+		GroupStore:             s.groupStore,
 		EnrollmentStore:        s.enrollmentStore,
 		EnrollmentTransactions: enrollmentTransactions,
 		PresenceStore:          s.presenceStore,
@@ -63,9 +64,11 @@ func (s *apiServer) buildAgentsDeps() *agentspkg.Deps {
 
 		AgentWebSocketUpgrader: agentWebSocketUpgrader,
 
-		EnforceRateLimit: s.enforceRateLimit,
-		WrapAuth:         s.withAuth,
-		WrapAdmin:        s.withAdminAuth,
+		EnforceRateLimit:           s.enforceRateLimit,
+		WrapAuth:                   s.withAuth,
+		WrapAdmin:                  s.withAdminAuth,
+		PrincipalActorID:           principalActorID,
+		AppendAuditEventBestEffort: s.appendAuditEventBestEffort,
 
 		ProcessHeartbeatRequest: func(req assets.HeartbeatRequest) (*assets.Asset, error) {
 			return s.processHeartbeatRequest(req)

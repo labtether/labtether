@@ -49,6 +49,9 @@ func (m *MemoryEnrollmentStore) CommitAgentEnrollment(ctx context.Context, req A
 
 	existing, exists := m.assetStore.assets[req.AssetID]
 	if exists {
+		if err := validateEnrollmentRecoveryScope(etok, req.AssetID, existing.GroupID); err != nil {
+			return AgentEnrollmentCommitResult{}, err
+		}
 		if strings.TrimSpace(req.DeviceProofVersion) != enrollment.DeviceProofVersionV2 {
 			return AgentEnrollmentCommitResult{}, ErrAgentIdentityProofV2Required
 		}
@@ -67,13 +70,20 @@ func (m *MemoryEnrollmentStore) CommitAgentEnrollment(ctx context.Context, req A
 			return AgentEnrollmentCommitResult{}, ErrEnrollmentTokenPredatesRotation
 		}
 	} else {
+		effectiveGroupID, err := initialEnrollmentGroupForToken(etok, req.AssetID, req.GroupID)
+		if err != nil {
+			return AgentEnrollmentCommitResult{}, err
+		}
 		if err := validateInitialIdentityFields(req); err != nil {
 			return AgentEnrollmentCommitResult{}, err
 		}
 		if m.enrolledFleetCardinalityLocked(now) >= normalizedMaxEnrolledAgents(req.MaxEnrolledAgents) {
 			return AgentEnrollmentCommitResult{}, ErrAgentFleetCapacityReached
 		}
-		req.GroupID = m.resolveInitialEnrollmentGroupIDLocked(req.GroupID)
+		req.GroupID, err = m.requireEnrollmentGroupLocked(effectiveGroupID)
+		if err != nil {
+			return AgentEnrollmentCommitResult{}, err
+		}
 	}
 
 	// All validation is complete. Mutate both stores as one critical section.
@@ -113,15 +123,18 @@ func (m *MemoryEnrollmentStore) CommitAgentEnrollment(ctx context.Context, req A
 	}, nil
 }
 
-func (m *MemoryEnrollmentStore) resolveInitialEnrollmentGroupIDLocked(groupID string) string {
+func (m *MemoryEnrollmentStore) requireEnrollmentGroupLocked(groupID string) (string, error) {
 	groupID = strings.TrimSpace(groupID)
 	if groupID == "" || m.groupStore == nil {
-		return groupID
+		if groupID != "" && m.groupStore == nil {
+			return "", ErrEnrollmentTokenScopeMismatch
+		}
+		return groupID, nil
 	}
 	if _, exists := m.groupStore.groups[groupID]; !exists {
-		return ""
+		return "", ErrEnrollmentTokenScopeMismatch
 	}
-	return groupID
+	return groupID, nil
 }
 
 func (m *MemoryEnrollmentStore) PrepareAgentApproval(ctx context.Context, req AgentApprovalPrepareRequest) (enrollment.AgentToken, error) {

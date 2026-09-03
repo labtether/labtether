@@ -48,8 +48,8 @@ func TestPostgresEnrollmentStoreRejectsOutOfBoundsStoredMaxUses(t *testing.T) {
 		_, _ = store.pool.Exec(ctx, `DELETE FROM enrollment_tokens WHERE id = $1`, tokenID)
 	})
 	if _, err := store.pool.Exec(ctx,
-		`INSERT INTO enrollment_tokens (id, token_hash, label, expires_at, max_uses, use_count, created_at)
-		 VALUES ($1, $2, 'legacy oversized', clock_timestamp() + interval '1 hour', $3, 0, clock_timestamp())`,
+		`INSERT INTO enrollment_tokens (id, token_hash, label, expires_at, max_uses, use_count, created_at, scope, asset_id, created_by)
+		 VALUES ($1, $2, 'legacy oversized', clock_timestamp() + interval '1 hour', $3, 0, clock_timestamp(), 'unrestricted', '', 'test')`,
 		tokenID, tokenHash, enrollment.HardTokenMaxUsesCeiling+1,
 	); err != nil {
 		t.Fatal(err)

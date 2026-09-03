@@ -15,6 +15,7 @@ var (
 	ErrAgentIdentityContinuityConflict        = errors.New("agent identity continuity check failed")
 	ErrAgentIdentityProofV2Required           = errors.New("agent identity proof v2 is required for recovery")
 	ErrEnrollmentTokenPredatesRotation        = errors.New("enrollment token predates the latest agent credential rotation")
+	ErrEnrollmentTokenScopeMismatch           = errors.New("enrollment token scope does not permit this enrollment")
 	ErrAgentFleetCapacityReached              = errors.New("agent enrollment capacity reached")
 	ErrPreparedAgentApprovalNotFound          = errors.New("prepared agent approval not found")
 	ErrAgentApprovalAssetConflict             = errors.New("an asset with the approved stable id already exists")

@@ -18,6 +18,7 @@ import (
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/auth"
+	"github.com/labtether/labtether/internal/groups"
 	"github.com/labtether/labtether/internal/logs"
 	"github.com/labtether/labtether/internal/persistence"
 )
@@ -600,7 +601,7 @@ func TestHandleAgentWebSocketRevalidatesTokenIDAfterUpgrade(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = rawEnrollment
-	if _, err := sut.enrollmentStore.CreateEnrollmentToken(enrollmentHash, "handshake", now.Add(time.Hour), 1); err != nil {
+	if _, err := sut.enrollmentStore.CreateEnrollmentToken(testEnrollmentTokenParams(enrollmentHash, "handshake", now.Add(time.Hour), 1)); err != nil {
 		t.Fatal(err)
 	}
 	rawAgent, agentHash, err := auth.GenerateSessionToken()
@@ -670,7 +671,7 @@ func TestRevokedLiveAgentHeartbeatCannotResurrectDecommissionedAsset(t *testing.
 	now := time.Now().UTC()
 	_, enrollmentHash, _ := auth.GenerateSessionToken()
 	_, agentHash, _ := auth.GenerateSessionToken()
-	if _, err := sut.enrollmentStore.CreateEnrollmentToken(enrollmentHash, "heartbeat", now.Add(time.Hour), 1); err != nil {
+	if _, err := sut.enrollmentStore.CreateEnrollmentToken(testEnrollmentTokenParams(enrollmentHash, "heartbeat", now.Add(time.Hour), 1)); err != nil {
 		t.Fatal(err)
 	}
 	result, err := transactions.CommitAgentEnrollment(context.Background(), persistence.AgentEnrollmentCommitRequest{
@@ -709,7 +710,7 @@ func TestRevokedLiveAgentCannotSendOrDispatchNonHeartbeatMessages(t *testing.T) 
 	now := time.Now().UTC()
 	_, enrollmentHash, _ := auth.GenerateSessionToken()
 	rawAgent, agentHash, _ := auth.GenerateSessionToken()
-	if _, err := sut.enrollmentStore.CreateEnrollmentToken(enrollmentHash, "live-revoke", now.Add(time.Hour), 1); err != nil {
+	if _, err := sut.enrollmentStore.CreateEnrollmentToken(testEnrollmentTokenParams(enrollmentHash, "live-revoke", now.Add(time.Hour), 1)); err != nil {
 		t.Fatal(err)
 	}
 	result, err := transactions.CommitAgentEnrollment(context.Background(), persistence.AgentEnrollmentCommitRequest{
@@ -778,7 +779,7 @@ func TestRevokedLiveAgentMalformedHeartbeatIsRejectedBeforeInnerDecode(t *testin
 	now := time.Now().UTC()
 	_, enrollmentHash, _ := auth.GenerateSessionToken()
 	rawAgent, agentHash, _ := auth.GenerateSessionToken()
-	if _, err := sut.enrollmentStore.CreateEnrollmentToken(enrollmentHash, "malformed-revoke", now.Add(time.Hour), 1); err != nil {
+	if _, err := sut.enrollmentStore.CreateEnrollmentToken(testEnrollmentTokenParams(enrollmentHash, "malformed-revoke", now.Add(time.Hour), 1)); err != nil {
 		t.Fatal(err)
 	}
 	result, err := transactions.CommitAgentEnrollment(context.Background(), persistence.AgentEnrollmentCommitRequest{
@@ -825,13 +826,17 @@ func TestAuthenticatedWebSocketHeartbeatCannotMoveAgentGroup(t *testing.T) {
 	sut.agentMgr = agentmgr.NewManager()
 	transactions := sut.enrollmentStore.(persistence.AgentEnrollmentTransactionStore)
 	now := time.Now().UTC()
+	trustedGroup, err := sut.groupStore.CreateGroup(groups.CreateRequest{Name: "Trusted", Slug: "trusted"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	_, enrollmentHash, _ := auth.GenerateSessionToken()
 	rawAgent, agentHash, _ := auth.GenerateSessionToken()
-	if _, err := sut.enrollmentStore.CreateEnrollmentToken(enrollmentHash, "group-bound", now.Add(time.Hour), 1); err != nil {
+	if _, err := sut.enrollmentStore.CreateEnrollmentToken(testGroupEnrollmentTokenParams(enrollmentHash, trustedGroup.ID, now.Add(time.Hour), 1)); err != nil {
 		t.Fatal(err)
 	}
 	result, err := transactions.CommitAgentEnrollment(context.Background(), persistence.AgentEnrollmentCommitRequest{
-		AssetID: "ws-group-bound", Hostname: "ws-group-bound", GroupID: "trusted-group",
+		AssetID: "ws-group-bound", Hostname: "ws-group-bound", GroupID: trustedGroup.ID,
 		EnrollmentTokenHash: enrollmentHash, AgentTokenHash: agentHash, AgentTokenExpiresAt: now.Add(time.Hour),
 	})
 	if err != nil {
@@ -841,7 +846,7 @@ func TestAuthenticatedWebSocketHeartbeatCannotMoveAgentGroup(t *testing.T) {
 		t.Fatalf("seeded group-bound token invalid before connect: %v", err)
 	}
 	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
-		AssetID: "ws-group-bound", Type: "node", Name: "ws-group-bound", Source: "agent", GroupID: "trusted-group", Status: "offline",
+		AssetID: "ws-group-bound", Type: "node", Name: "ws-group-bound", Source: "agent", GroupID: trustedGroup.ID, Status: "offline",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -868,7 +873,7 @@ func TestAuthenticatedWebSocketHeartbeatCannotMoveAgentGroup(t *testing.T) {
 			t.Fatal(err)
 		}
 		if exists && stored.Status == "online" {
-			if stored.GroupID != "trusted-group" {
+			if stored.GroupID != trustedGroup.ID {
 				t.Fatalf("authenticated WS heartbeat moved group to %q", stored.GroupID)
 			}
 			return

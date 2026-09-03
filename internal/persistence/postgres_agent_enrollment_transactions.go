@@ -63,6 +63,9 @@ func (s *PostgresStore) CommitAgentEnrollment(ctx context.Context, req AgentEnro
 	}
 
 	if exists {
+		if err := validateEnrollmentRecoveryScope(etok, req.AssetID, existing.GroupID); err != nil {
+			return AgentEnrollmentCommitResult{}, err
+		}
 		if strings.TrimSpace(req.DeviceProofVersion) != enrollment.DeviceProofVersionV2 {
 			return AgentEnrollmentCommitResult{}, ErrAgentIdentityProofV2Required
 		}
@@ -84,13 +87,17 @@ func (s *PostgresStore) CommitAgentEnrollment(ctx context.Context, req AgentEnro
 			return AgentEnrollmentCommitResult{}, ErrEnrollmentTokenPredatesRotation
 		}
 	} else {
+		effectiveGroupID, err := initialEnrollmentGroupForToken(etok, req.AssetID, req.GroupID)
+		if err != nil {
+			return AgentEnrollmentCommitResult{}, err
+		}
 		if err := validateInitialIdentityFields(req); err != nil {
 			return AgentEnrollmentCommitResult{}, err
 		}
 		if err := ensureAgentFleetCapacity(ctx, tx, req.MaxEnrolledAgents); err != nil {
 			return AgentEnrollmentCommitResult{}, err
 		}
-		req.GroupID, err = resolveInitialEnrollmentGroupID(ctx, tx, req.GroupID)
+		req.GroupID, err = requireEnrollmentGroup(ctx, tx, effectiveGroupID)
 		if err != nil {
 			return AgentEnrollmentCommitResult{}, err
 		}
@@ -162,11 +169,9 @@ func (s *PostgresStore) CommitAgentEnrollment(ctx context.Context, req AgentEnro
 	}, nil
 }
 
-// resolveInitialEnrollmentGroupID preserves a valid operator-selected
-// placement while treating an agent's stale or unknown group id as unplaced.
-// FOR KEY SHARE keeps a validated group from being deleted before the asset
-// insert commits, so token consumption and placement remain one transaction.
-func resolveInitialEnrollmentGroupID(ctx context.Context, tx pgx.Tx, groupID string) (string, error) {
+// requireEnrollmentGroup validates a token-authorized placement. FOR KEY SHARE
+// keeps the group alive until the asset and token use commit together.
+func requireEnrollmentGroup(ctx context.Context, tx pgx.Tx, groupID string) (string, error) {
 	groupID = strings.TrimSpace(groupID)
 	if groupID == "" {
 		return "", nil
@@ -174,7 +179,7 @@ func resolveInitialEnrollmentGroupID(ctx context.Context, tx pgx.Tx, groupID str
 	var resolved string
 	err := tx.QueryRow(ctx, `SELECT id FROM groups WHERE id = $1 FOR KEY SHARE`, groupID).Scan(&resolved)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", nil
+		return "", ErrEnrollmentTokenScopeMismatch
 	}
 	if err != nil {
 		return "", err
@@ -510,7 +515,7 @@ func selectValidEnrollmentTokenForUpdate(ctx context.Context, tx pgx.Tx, tokenHa
 	var token enrollment.EnrollmentToken
 	var revokedAt *time.Time
 	err := tx.QueryRow(ctx,
-		`SELECT id, label, expires_at, max_uses, use_count, created_at, revoked_at
+		`SELECT id, label, expires_at, max_uses, use_count, created_at, revoked_at, scope, asset_id, COALESCE(allowed_group_id, ''), created_by
 		 FROM enrollment_tokens
 		 WHERE token_hash = $1
 		   AND revoked_at IS NULL
@@ -519,7 +524,7 @@ func selectValidEnrollmentTokenForUpdate(ctx context.Context, tx pgx.Tx, tokenHa
 		   AND use_count < max_uses
 		 FOR UPDATE`,
 		strings.TrimSpace(tokenHash), enrollment.HardTokenMaxUsesCeiling,
-	).Scan(&token.ID, &token.Label, &token.ExpiresAt, &token.MaxUses, &token.UseCount, &token.CreatedAt, &revokedAt)
+	).Scan(&token.ID, &token.Label, &token.ExpiresAt, &token.MaxUses, &token.UseCount, &token.CreatedAt, &revokedAt, &token.Scope, &token.AssetID, &token.AllowedGroupID, &token.CreatedBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return enrollment.EnrollmentToken{}, false, nil
 	}
