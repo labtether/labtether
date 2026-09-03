@@ -11,6 +11,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/policy"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -57,6 +58,9 @@ func newTestDeps() *Deps {
 		GetActorID:       func(ctx context.Context) string { return "test" },
 		AuthorizeMutation: func(context.Context, string, string) error {
 			return nil
+		},
+		EvaluateCommandPolicy: func(context.Context, string, string) policy.CheckResponse {
+			return policy.CheckResponse{Allowed: true, Mode: "structured"}
 		},
 	}
 }
@@ -133,6 +137,56 @@ func TestHandleExec_AssetOffline(t *testing.T) {
 	}
 	if !result.IsError {
 		t.Fatal("should return error for offline asset")
+	}
+}
+
+func TestHandleExecRejectsCommandDeniedByPolicy(t *testing.T) {
+	deps := newTestDeps()
+	dispatched := false
+	deps.ExecuteViaAgent = func(terminal.CommandJob) terminal.CommandResult {
+		dispatched = true
+		return terminal.CommandResult{Status: "succeeded"}
+	}
+	deps.EvaluateCommandPolicy = func(context.Context, string, string) policy.CheckResponse {
+		return policy.CheckResponse{Allowed: false, Reason: "command not in allowlist", Mode: "structured"}
+	}
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"asset_id": "srv1", "command": "curl example.com"}
+
+	result, err := deps.handleExec(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleExec error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("policy-denied command returned success")
+	}
+	if dispatched {
+		t.Fatal("policy-denied command reached execution backend")
+	}
+}
+
+func TestHandleExecMultiRejectsCommandDeniedByPolicy(t *testing.T) {
+	deps := newTestDeps()
+	dispatched := false
+	deps.ExecuteViaAgent = func(terminal.CommandJob) terminal.CommandResult {
+		dispatched = true
+		return terminal.CommandResult{Status: "succeeded"}
+	}
+	deps.EvaluateCommandPolicy = func(context.Context, string, string) policy.CheckResponse {
+		return policy.CheckResponse{Allowed: false, Reason: "command not in allowlist", Mode: "structured"}
+	}
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"targets": []any{"srv1"}, "command": "curl example.com"}
+
+	result, err := deps.handleExecMulti(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleExecMulti error: %v", err)
+	}
+	if result == nil || !strings.Contains(toolResultText(t, result), "policy_denied") {
+		t.Fatalf("policy denial missing from result: %#v", result)
+	}
+	if dispatched {
+		t.Fatal("policy-denied command reached execution backend")
 	}
 }
 

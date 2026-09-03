@@ -33,12 +33,13 @@ func (s *apiServer) buildMCPServer() *server.MCPServer {
 		ExecuteViaAgent: func(job terminal.CommandJob) terminal.CommandResult {
 			return s.executeViaAgent(job)
 		},
-		ExecutePowerAction: s.mcpExecutePowerAction(),
-		GetScopes:          func(ctx context.Context) []string { return scopesFromContext(ctx) },
-		GetAllowedAssets:   func(ctx context.Context) []string { return allowedAssetsFromContext(ctx) },
-		GetActorID:         func(ctx context.Context) string { return principalActorID(ctx) },
-		AuthorizeMutation:  s.mcpAuthorizeMutation(),
-		AuditMutation:      s.mcpAuditMutation(),
+		ExecutePowerAction:    s.mcpExecutePowerAction(),
+		GetScopes:             func(ctx context.Context) []string { return scopesFromContext(ctx) },
+		GetAllowedAssets:      func(ctx context.Context) []string { return allowedAssetsFromContext(ctx) },
+		GetActorID:            func(ctx context.Context) string { return principalActorID(ctx) },
+		AuthorizeMutation:     s.mcpAuthorizeMutation(),
+		EvaluateCommandPolicy: s.evaluateStructuredCommandPolicy,
+		AuditMutation:         s.mcpAuditMutation(),
 
 		ListServices:   s.mcpListServices(),
 		RestartService: s.mcpRestartService(),

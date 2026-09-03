@@ -231,8 +231,22 @@ func (s *apiServer) buildOperationsDeps() *opspkg.ExecDeps {
 		ScopesFromContext: func(ctx context.Context) []string {
 			return scopesFromContext(ctx)
 		},
-		EnforceRateLimit: s.enforceRateLimit,
+		EvaluateCommandPolicy: s.evaluateStructuredCommandPolicy,
+		EnforceRateLimit:      s.enforceRateLimit,
 	}
+}
+
+func (s *apiServer) evaluateStructuredCommandPolicy(ctx context.Context, assetID, command string) policy.CheckResponse {
+	if s == nil || s.policyState == nil {
+		return policy.CheckResponse{Allowed: false, Reason: "command policy unavailable", Mode: "structured"}
+	}
+	return policy.Evaluate(policy.CheckRequest{
+		ActorID: principalActorID(ctx),
+		Target:  assetID,
+		Mode:    "structured",
+		Action:  "command_execute",
+		Command: command,
+	}, s.policyState.Current())
 }
 
 // ensureOperationsDeps returns the operations deps, creating and caching on first call.

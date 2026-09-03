@@ -13,6 +13,7 @@ import (
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/persistence"
+	"github.com/labtether/labtether/internal/policy"
 	"github.com/labtether/labtether/internal/savedactions"
 )
 
@@ -109,6 +110,7 @@ func TestSavedActionVisibilityAndExecutionAreAllOrNothing(t *testing.T) {
 	deps := Deps{
 		SavedActionStore: actionStore,
 		AssetStore:       assetStore,
+		GetPolicyConfig:  policy.DefaultEvaluatorConfig,
 		ExecOnAsset: func(*http.Request, string, string, int) ExecResult {
 			execCalls++
 			return ExecResult{ExitCode: 0, Stdout: "ok"}
@@ -160,6 +162,47 @@ func TestSavedActionVisibilityAndExecutionAreAllOrNothing(t *testing.T) {
 	}
 }
 
+func TestSavedActionRechecksPolicyBeforeEveryDispatch(t *testing.T) {
+	assetStore := persistence.NewMemoryAssetStore()
+	seedSavedActionTestAsset(t, assetStore, "allowed")
+	actionStore := persistence.NewMemorySavedActionStore()
+	action := savedactions.SavedAction{
+		ID: "act_live_policy", Name: "live policy", CreatedBy: "actor-a", CreatedAt: time.Now().UTC(),
+		Steps: []savedactions.ActionStep{
+			{Name: "one", Command: "uptime", Target: "allowed"},
+			{Name: "two", Command: "uname", Target: "allowed"},
+		},
+	}
+	if err := actionStore.CreateSavedAction(context.Background(), action); err != nil {
+		t.Fatalf("seed action: %v", err)
+	}
+
+	currentPolicy := policy.DefaultEvaluatorConfig()
+	var dispatched []string
+	deps := Deps{
+		SavedActionStore: actionStore,
+		AssetStore:       assetStore,
+		GetPolicyConfig:  func() policy.EvaluatorConfig { return currentPolicy },
+		ExecOnAsset: func(_ *http.Request, _ string, command string, _ int) ExecResult {
+			dispatched = append(dispatched, command)
+			currentPolicy.StructuredEnabled = false
+			return ExecResult{ExitCode: 0, Stdout: "ok"}
+		},
+	}
+
+	rec := httptest.NewRecorder()
+	deps.HandleV2SavedActionActions(rec, savedActionRequest(http.MethodPost, "/api/v2/actions/"+action.ID+"/run", "", []string{"allowed"}))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("run status = %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(dispatched) != 1 || dispatched[0] != "uptime" {
+		t.Fatalf("dispatched commands = %#v, want only first step", dispatched)
+	}
+	if !strings.Contains(rec.Body.String(), `"error":"policy_denied"`) {
+		t.Fatalf("run response did not report policy denial: %s", rec.Body.String())
+	}
+}
+
 func TestSavedActionRunResultsAndAuditsDoNotEchoCommands(t *testing.T) {
 	assetStore := persistence.NewMemoryAssetStore()
 	seedSavedActionTestAsset(t, assetStore, "allowed")
@@ -176,6 +219,7 @@ func TestSavedActionRunResultsAndAuditsDoNotEchoCommands(t *testing.T) {
 	deps := Deps{
 		SavedActionStore: actionStore,
 		AssetStore:       assetStore,
+		GetPolicyConfig:  policy.DefaultEvaluatorConfig,
 		ExecOnAsset: func(*http.Request, string, string, int) ExecResult {
 			return ExecResult{Error: "exec_failed", Message: "command failed"}
 		},

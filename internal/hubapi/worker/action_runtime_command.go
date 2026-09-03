@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/actions"
+	"github.com/labtether/labtether/internal/policy"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -35,6 +36,19 @@ func (d *Deps) ExecuteCommandAction(job actions.Job) actions.Result {
 			Steps:       []actions.StepResult{{Name: "execute_command", Status: actions.StatusFailed, Error: "target agent is not connected"}},
 			CompletedAt: time.Now().UTC(),
 		}
+	}
+	if d.GetPolicyConfig == nil {
+		return commandActionPolicyFailure(job, "command policy is unavailable")
+	}
+	check := policy.Evaluate(policy.CheckRequest{
+		ActorID: job.ActorID,
+		Target:  target,
+		Mode:    "structured",
+		Action:  "command_execute",
+		Command: command,
+	}, d.GetPolicyConfig())
+	if !check.Allowed {
+		return commandActionPolicyFailure(job, "command denied by current policy")
 	}
 
 	cmdResult := d.ExecuteViaAgent(terminal.CommandJob{
@@ -75,6 +89,17 @@ func (d *Deps) ExecuteCommandAction(job actions.Job) actions.Result {
 		Output:      strings.TrimSpace(cmdResult.Output),
 		Error:       errMessage,
 		Steps:       []actions.StepResult{step},
+		CompletedAt: time.Now().UTC(),
+	}
+}
+
+func commandActionPolicyFailure(job actions.Job, message string) actions.Result {
+	return actions.Result{
+		JobID:       job.JobID,
+		RunID:       job.RunID,
+		Status:      actions.StatusFailed,
+		Error:       message,
+		Steps:       []actions.StepResult{{Name: "execute_command", Status: actions.StatusFailed, Error: message}},
 		CompletedAt: time.Now().UTC(),
 	}
 }
