@@ -4,11 +4,18 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/idgen"
 	"github.com/labtether/labtether/internal/persistence"
+)
+
+const (
+	assetUpdateRateLimitBucket = "assets.update"
+	assetUpdateRateLimitCount  = 240
+	assetUpdateRateLimitWindow = time.Minute
 )
 
 // V2ListAssets handles GET /api/v2/assets.
@@ -124,6 +131,9 @@ func (d *Deps) V2CreateAsset(w http.ResponseWriter, r *http.Request) {
 
 // V2UpdateAsset handles PUT/PATCH /api/v2/assets/{id}.
 func (d *Deps) V2UpdateAsset(w http.ResponseWriter, r *http.Request, assetID string) {
+	if d.EnforceRateLimit != nil && !d.EnforceRateLimit(w, r, assetUpdateRateLimitBucket, assetUpdateRateLimitCount, assetUpdateRateLimitWindow) {
+		return
+	}
 	var req assets.UpdateRequest
 	if err := d.DecodeJSONBody(w, r, &req); err != nil {
 		return

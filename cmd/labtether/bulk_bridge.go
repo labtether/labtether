@@ -12,6 +12,7 @@ func (s *apiServer) buildBulkDeps() *bulkpkg.Deps {
 		AuditStore:              s.auditStore,
 		ExecOnAsset:             s.execOnAssetForBulk,
 		EvaluateAssetGuardrails: s.ensureGroupFeaturesDeps().EvaluateAssetGuardrails,
+		EnforceRateLimit:        s.enforceRateLimit,
 	}
 }
 

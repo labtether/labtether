@@ -10,6 +10,7 @@ import (
 
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/audit"
+	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
 	"github.com/labtether/labtether/internal/idgen"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/policy"
@@ -22,6 +23,9 @@ const (
 	maxExecMultiRawTargets    = 64
 	maxExecMultiUniqueTargets = 64
 	maxExecMultiConcurrency   = 8
+	execRateLimitBucket       = "actions.execute"
+	execRateLimitCount        = 120
+	execRateLimitWindow       = time.Minute
 )
 
 func normalizeExecTimeoutSeconds(timeoutSec int) int {
@@ -99,6 +103,9 @@ func (d *ExecDeps) HandleAssetExec(w http.ResponseWriter, r *http.Request, asset
 		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "asset is not accessible with this API key")
 		return
 	}
+	if d.EnforceRateLimit != nil && !d.EnforceRateLimit(w, r, execRateLimitBucket, execRateLimitCount, execRateLimitWindow) {
+		return
+	}
 
 	var req ExecRequest
 	if err := d.DecodeJSONBody(w, r, &req); err != nil {
@@ -111,6 +118,9 @@ func (d *ExecDeps) HandleAssetExec(w http.ResponseWriter, r *http.Request, asset
 	}
 	req.Timeout = normalizeExecTimeoutSeconds(req.Timeout)
 
+	if !maintenanceguard.EnforceAssetAction(w, assetID, d.EvaluateAssetGuardrails) {
+		return
+	}
 	result := d.execPublicCommand(r, assetID, req.Command, req.Timeout)
 	if result.Error != "" {
 		status := http.StatusInternalServerError
@@ -245,6 +255,9 @@ func (d *ExecDeps) HandleExecMulti(w http.ResponseWriter, r *http.Request) {
 		apiv2.WriteScopeForbidden(w, "assets:exec")
 		return
 	}
+	if d.EnforceRateLimit != nil && !d.EnforceRateLimit(w, r, execRateLimitBucket, execRateLimitCount, execRateLimitWindow) {
+		return
+	}
 
 	var req ExecMultiRequest
 	if err := d.DecodeJSONBody(w, r, &req); err != nil {
@@ -309,6 +322,11 @@ func (d *ExecDeps) HandleExecMulti(w http.ResponseWriter, r *http.Request) {
 	if len(filteredTargets) == 0 {
 		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "none of the requested targets are accessible with this API key")
 		return
+	}
+	for _, target := range filteredTargets {
+		if !maintenanceguard.EnforceAssetAction(w, target, d.EvaluateAssetGuardrails) {
+			return
+		}
 	}
 
 	// Fan out through a fixed-size worker pool. Results are written to stable
