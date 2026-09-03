@@ -9,7 +9,7 @@ and the recommended rotation schedule.
 
 | Secret | Env Var | Purpose |
 |--------|---------|---------|
-| Encryption key | `LABTETHER_ENCRYPTION_KEY` | AES-256-GCM encryption of stored credentials (connector passwords, API keys in DB). Also used to derive the TOTP encryption key via HKDF. |
+| Encryption key | `LABTETHER_ENCRYPTION_KEY` | AES-256-GCM encryption of stored credentials and the DB-backed OIDC client secret. Also used to derive the TOTP encryption key via HKDF. |
 | Owner token | `LABTETHER_OWNER_TOKEN` | Primary authentication token for the hub owner / operator. |
 | API token | `LABTETHER_API_TOKEN` | Authentication token for non-browser clients talking to the web-console proxy. |
 | Admin password | `LABTETHER_ADMIN_PASSWORD` | Password for the bootstrapped admin user (MVP single-user auth). |
@@ -31,7 +31,7 @@ AES-256-GCM (see `internal/secrets/manager.go`). Ciphertext is prefixed with
 `v2:` and includes per-row AAD binding.
 
 **Impact:** Changing the key without re-encrypting existing rows will make all
-stored credentials unreadable.
+stored credentials and the DB-backed OIDC client secret unreadable.
 
 ### Procedure
 
@@ -50,7 +50,7 @@ stored credentials unreadable.
    openssl rand -base64 32
    ```
 
-4. **Re-encrypt existing credentials (if any).**
+4. **Re-encrypt existing credentials and OIDC settings (if any).**
    Currently there is no built-in CLI for bulk re-encryption. If you have
    stored credential profiles, you must:
    - Export each credential using the old key (write a small Go program using
@@ -59,7 +59,13 @@ stored credentials unreadable.
      `EncryptString`), preserving the same AAD (credential profile ID).
    - Update the rows in Postgres.
 
-   If no credential profiles exist yet, skip this step.
+   If `system_settings.key = 'oidc'` contains
+   `client_secret_ciphertext`, decrypt and re-encrypt that value with the fixed
+   AAD `system_settings:oidc:client_secret`. Never put the plaintext back into
+   the JSON row.
+
+   If neither stored credential profiles nor a DB-backed OIDC secret exist,
+   skip this step.
 
 5. **Update the key.**
    - Edit `.env` and set `LABTETHER_ENCRYPTION_KEY` to the new value.
@@ -78,6 +84,20 @@ stored credentials unreadable.
      connector sync).
    - Confirm 2FA/TOTP still works (the TOTP key is derived from the encryption
      key via HKDF unless `LABTETHER_TOTP_KEY` is set independently).
+
+### OIDC storage upgrade and rollback
+
+On startup, Hub replaces any legacy plaintext OIDC client secret in
+`system_settings` with encrypted storage. The startup fails if that secret
+cannot be encrypted. Existing database backups, WAL archives, replicas, and
+snapshots may still contain the old plaintext and must be protected or expired.
+Rotate the client secret at the identity provider if any old copy may have been
+exposed.
+
+An older Hub binary cannot read the encrypted field. For rollback, restore the
+matching pre-upgrade database backup, or set `LABTETHER_OIDC_CLIENT_SECRET` and
+do not save OIDC settings from the old UI. Saving from an old binary writes the
+secret as plaintext again.
 
 ---
 
