@@ -79,8 +79,10 @@ func (m *MemoryEnrollmentStore) CommitAgentEnrollment(ctx context.Context, req A
 	etok.UseCount++
 	m.enrollmentTokens[etok.ID] = etok
 
+	revokedAgentTokenIDs := make([]string, 0)
 	for id, token := range m.agentTokens {
 		if token.AssetID == req.AssetID && token.Status == "active" {
+			revokedAgentTokenIDs = append(revokedAgentTokenIDs, token.ID)
 			token.Status = "revoked"
 			token.RevokedAt = timePointer(now)
 			m.agentTokens[id] = token
@@ -105,10 +107,11 @@ func (m *MemoryEnrollmentStore) CommitAgentEnrollment(ctx context.Context, req A
 	m.identityRotatedAt[req.AssetID] = now
 	existing = cloneAssetForReturn(existing)
 	return AgentEnrollmentCommitResult{
-		EnrollmentToken: etok,
-		AgentToken:      agentToken,
-		Asset:           existing,
-		Recovery:        exists,
+		EnrollmentToken:      etok,
+		AgentToken:           agentToken,
+		Asset:                existing,
+		Recovery:             exists,
+		RevokedAgentTokenIDs: revokedAgentTokenIDs,
 	}, nil
 }
 
