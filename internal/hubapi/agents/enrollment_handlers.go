@@ -113,6 +113,8 @@ func (d *Deps) HandleEnroll(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, persistence.ErrEnrollmentTokenInvalid):
 			servicehttp.WriteError(w, http.StatusUnauthorized, "invalid or expired enrollment token")
+		case errors.Is(err, persistence.ErrAgentIdentityRetired):
+			servicehttp.WriteError(w, http.StatusConflict, "agent identity was decommissioned and cannot be reused; enroll with a new hostname/asset ID")
 		case errors.Is(err, persistence.ErrAgentIdentityProofV2Required),
 			errors.Is(err, persistence.ErrRecoveryRequiresSingleUseToken),
 			errors.Is(err, persistence.ErrAgentIdentityContinuityConflict):

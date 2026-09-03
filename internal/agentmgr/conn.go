@@ -164,9 +164,8 @@ func (c *AgentConn) Meta(key string) string {
 	return c.meta[key]
 }
 
-// SetCredentialValidator installs a bounded authoritative credential check for
-// a per-agent connection. Owner/bootstrap connections intentionally leave it
-// unset. The callback must not retain raw bearer material.
+// SetCredentialValidator installs an authoritative credential check for a
+// connection. The callback must not retain raw bearer material.
 func (c *AgentConn) SetCredentialValidator(validator func() error) {
 	c.SetCredentialValidatorWithLease(validator, 0)
 }
@@ -182,9 +181,9 @@ func (c *AgentConn) SetCredentialValidatorWithLease(validator func() error, leas
 	c.credentialMu.Unlock()
 }
 
-// ValidateCredential revalidates the server-side token ID and bound asset.
-// A nil validator preserves compatibility for owner/bootstrap connections and
-// in-process tests that do not represent a per-agent bearer session.
+// ValidateCredential revalidates the server-side credential and bound asset.
+// A nil validator preserves compatibility for in-process tests that do not
+// represent an authenticated agent session.
 func (c *AgentConn) ValidateCredential() error {
 	if c.rejected.Load() {
 		return ErrAgentCredentialRejected

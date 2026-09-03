@@ -870,6 +870,45 @@ func TestHandleApproveAgentRequiresIdentityVerified(t *testing.T) {
 	}
 }
 
+func TestHandleApproveAgentRejectsRetiredIdentity(t *testing.T) {
+	sut := newTestAPIServer(t)
+	transactions, ok := sut.enrollmentStore.(persistence.AgentEnrollmentTransactionStore)
+	if !ok {
+		t.Fatal("test enrollment store lacks transaction interface")
+	}
+	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: "retired-approval", Name: "retired-approval", Type: "node", Source: "agent", Status: "online",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := transactions.DecommissionAgentAsset(context.Background(), "retired-approval"); err != nil {
+		t.Fatal(err)
+	}
+
+	sut.pendingAgents = newPendingAgents()
+	verifiedAt := time.Now().UTC()
+	sut.pendingAgents.Add(&pendingAgent{
+		AssetID:            "pending-retired-approval",
+		Hostname:           "retired-approval",
+		Platform:           "linux",
+		DeviceFingerprint:  "LT-RETIRED-APPROVAL",
+		DeviceKeyAlg:       agentidentity.KeyAlgorithmEd25519,
+		IdentityVerified:   true,
+		IdentityVerifiedAt: &verifiedAt,
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/approve", bytes.NewReader([]byte(`{"asset_id":"pending-retired-approval"}`)))
+	rec := httptest.NewRecorder()
+	sut.handleApproveAgent(rec, req)
+
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "new hostname/asset ID") {
+		t.Fatalf("retired approval status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if _, exists := sut.pendingAgents.Get("pending-retired-approval"); !exists {
+		t.Fatal("retired approval removed the pending agent instead of releasing the decision")
+	}
+}
+
 func TestDecodePendingEnrollmentAssetID(t *testing.T) {
 	t.Run("rejects malformed body", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/approve", bytes.NewReader([]byte(`{`)))

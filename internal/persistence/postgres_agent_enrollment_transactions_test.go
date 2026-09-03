@@ -211,6 +211,237 @@ func TestPostgresDecommissionSerializesAuthenticatedHeartbeat(t *testing.T) {
 	}
 }
 
+func TestPostgresDecommissionPermanentlyRetiresAgentIdentity(t *testing.T) {
+	store := newTestPostgresStore(t)
+	ctx := context.Background()
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	assetID := "retired-agent-" + suffix
+	replacementID := "replacement-agent-" + suffix
+	initialHash := "retired-initial-" + suffix
+	retryHash := "retired-retry-" + suffix
+	t.Cleanup(func() {
+		_, _ = store.pool.Exec(ctx, `DELETE FROM agent_tokens WHERE asset_id = ANY($1)`, []string{assetID, replacementID})
+		_, _ = store.pool.Exec(ctx, `DELETE FROM assets WHERE id = ANY($1)`, []string{assetID, replacementID})
+		_, _ = store.pool.Exec(ctx, `DELETE FROM retired_agent_identities WHERE asset_id = ANY($1)`, []string{assetID, replacementID})
+		_, _ = store.pool.Exec(ctx, `DELETE FROM enrollment_tokens WHERE token_hash = ANY($1)`, []string{initialHash, retryHash})
+	})
+
+	now := time.Now().UTC()
+	if _, err := store.CreateEnrollmentToken(initialHash, "initial", now.Add(time.Hour), 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
+		AssetID: assetID, Hostname: assetID, EnrollmentTokenHash: initialHash,
+		AgentTokenHash: "retired-agent-token-" + suffix, AgentTokenExpiresAt: now.Add(time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DecommissionAgentAsset(ctx, assetID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DecommissionAgentAsset(ctx, assetID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("second decommission error=%v", err)
+	}
+	var tombstones int
+	if err := store.pool.QueryRow(ctx, `SELECT COUNT(*) FROM retired_agent_identities WHERE asset_id = $1`, assetID).Scan(&tombstones); err != nil || tombstones != 1 {
+		t.Fatalf("retired identity tombstones=%d err=%v", tombstones, err)
+	}
+	if retired, err := store.IsAgentIdentityRetired(ctx, assetID); err != nil || !retired {
+		t.Fatalf("retired identity lookup=%v err=%v", retired, err)
+	}
+	if _, err := store.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: assetID, Name: "laundered", Type: "host", Source: "manual", Status: "online",
+	}); !errors.Is(err, ErrAgentIdentityRetired) {
+		t.Fatalf("generic heartbeat reused retired identity: %v", err)
+	}
+	if _, err := store.CommitExistingOwnerAgentHeartbeat(ctx, assets.HeartbeatRequest{
+		AssetID: assetID, Name: "legacy", Type: "node", Source: "agent", Status: "online",
+	}); !errors.Is(err, ErrAgentIdentityRetired) {
+		t.Fatalf("legacy owner heartbeat reused retired identity: %v", err)
+	}
+
+	retryToken, err := store.CreateEnrollmentToken(retryHash, "retry", now.Add(time.Hour), 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
+		AssetID: assetID, Hostname: assetID, EnrollmentTokenHash: retryHash,
+		AgentTokenHash: "retired-retry-agent-" + suffix, AgentTokenExpiresAt: now.Add(time.Hour),
+	})
+	if !errors.Is(err, ErrAgentIdentityRetired) {
+		t.Fatalf("retired identity enrollment error=%v", err)
+	}
+	var useCount int
+	if err := store.pool.QueryRow(ctx, `SELECT use_count FROM enrollment_tokens WHERE id = $1`, retryToken.ID).Scan(&useCount); err != nil || useCount != 0 {
+		t.Fatalf("retirement rejection token use_count=%d err=%v", useCount, err)
+	}
+	if _, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
+		AssetID: assetID, Hostname: assetID, EnrollmentTokenHash: "invalid-token-" + suffix,
+		AgentTokenHash: "invalid-agent-" + suffix, AgentTokenExpiresAt: now.Add(time.Hour),
+	}); !errors.Is(err, ErrEnrollmentTokenInvalid) {
+		t.Fatalf("invalid token leaked retirement state: %v", err)
+	}
+	if _, err := store.PrepareAgentApproval(ctx, AgentApprovalPrepareRequest{
+		AssetID: assetID, AgentTokenHash: "retired-approval-" + suffix, PreparedTokenExpiresAt: now.Add(time.Minute),
+	}); !errors.Is(err, ErrAgentIdentityRetired) {
+		t.Fatalf("retired identity approval error=%v", err)
+	}
+	if _, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
+		AssetID: replacementID, Hostname: replacementID, EnrollmentTokenHash: retryHash,
+		AgentTokenHash: "replacement-agent-token-" + suffix, AgentTokenExpiresAt: now.Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("new replacement identity enrollment: %v", err)
+	}
+}
+
+func TestPostgresPreparedApprovalCannotFinalizeRetiredIdentity(t *testing.T) {
+	store := newTestPostgresStore(t)
+	ctx := context.Background()
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	assetID := "prepared-retired-" + suffix
+	t.Cleanup(func() {
+		_, _ = store.pool.Exec(ctx, `DELETE FROM agent_tokens WHERE asset_id = $1`, assetID)
+		_, _ = store.pool.Exec(ctx, `DELETE FROM assets WHERE id = $1`, assetID)
+		_, _ = store.pool.Exec(ctx, `DELETE FROM retired_agent_identities WHERE asset_id = $1`, assetID)
+	})
+	prepared, err := store.PrepareAgentApproval(ctx, AgentApprovalPrepareRequest{
+		AssetID: assetID, AgentTokenHash: "prepared-retired-token-" + suffix,
+		PreparedTokenExpiresAt: time.Now().UTC().Add(time.Minute),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.pool.Exec(ctx,
+		`INSERT INTO retired_agent_identities (asset_id, retired_at) VALUES ($1, clock_timestamp())`, assetID,
+	); err != nil {
+		t.Fatal(err)
+	}
+	_, err = store.FinalizeAgentApproval(ctx, AgentApprovalFinalizeRequest{
+		PreparedTokenID: prepared.ID, AssetID: assetID, Hostname: assetID,
+		DeviceFingerprint: "LT-RETIRED", DeviceKeyAlgorithm: "ed25519",
+		AgentTokenExpiresAt: time.Now().UTC().Add(time.Hour),
+	})
+	if !errors.Is(err, ErrAgentIdentityRetired) {
+		t.Fatalf("retired prepared approval error=%v", err)
+	}
+}
+
+func TestPostgresNonAgentDeletionDoesNotRetireIdentity(t *testing.T) {
+	store := newTestPostgresStore(t)
+	ctx := context.Background()
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	assetID := "manual-reusable-" + suffix
+	enrollmentHash := "manual-reuse-enrollment-" + suffix
+	t.Cleanup(func() {
+		_, _ = store.pool.Exec(ctx, `DELETE FROM agent_tokens WHERE asset_id = $1`, assetID)
+		_, _ = store.pool.Exec(ctx, `DELETE FROM assets WHERE id = $1`, assetID)
+		_, _ = store.pool.Exec(ctx, `DELETE FROM retired_agent_identities WHERE asset_id = $1`, assetID)
+		_, _ = store.pool.Exec(ctx, `DELETE FROM enrollment_tokens WHERE token_hash = $1`, enrollmentHash)
+	})
+	if _, err := store.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: assetID, Name: "manual", Type: "host", Source: "manual", Status: "online",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DecommissionAgentAsset(ctx, assetID); err != nil {
+		t.Fatal(err)
+	}
+	var tombstones int
+	if err := store.pool.QueryRow(ctx, `SELECT COUNT(*) FROM retired_agent_identities WHERE asset_id = $1`, assetID).Scan(&tombstones); err != nil || tombstones != 0 {
+		t.Fatalf("non-agent tombstones=%d err=%v", tombstones, err)
+	}
+	if _, err := store.CreateEnrollmentToken(enrollmentHash, "reuse", time.Now().UTC().Add(time.Hour), 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
+		AssetID: assetID, Hostname: assetID, EnrollmentTokenHash: enrollmentHash,
+		AgentTokenHash: "manual-reuse-agent-" + suffix, AgentTokenExpiresAt: time.Now().UTC().Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("non-agent ID was not reusable: %v", err)
+	}
+}
+
+func TestPostgresAgentSourceCannotBeDowngradedBeforeDecommission(t *testing.T) {
+	store := newTestPostgresStore(t)
+	ctx := context.Background()
+	assetID := fmt.Sprintf("sticky-agent-%d", time.Now().UnixNano())
+	t.Cleanup(func() {
+		_, _ = store.pool.Exec(ctx, `DELETE FROM agent_tokens WHERE asset_id = $1`, assetID)
+		_, _ = store.pool.Exec(ctx, `DELETE FROM assets WHERE id = $1`, assetID)
+		_, _ = store.pool.Exec(ctx, `DELETE FROM retired_agent_identities WHERE asset_id = $1`, assetID)
+	})
+	if _, err := store.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: assetID, Name: "legacy agent", Type: "node", Source: "agent", Status: "online",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := store.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: assetID, Name: "laundered", Type: "host", Source: "manual", Status: "online",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Source != "agent" {
+		t.Fatalf("generic heartbeat downgraded agent source to %q", updated.Source)
+	}
+	if err := store.DecommissionAgentAsset(ctx, assetID); err != nil {
+		t.Fatal(err)
+	}
+	if retired, err := store.IsAgentIdentityRetired(ctx, assetID); err != nil || !retired {
+		t.Fatalf("downgrade attempt escaped retirement=%v err=%v", retired, err)
+	}
+	if _, err := store.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: assetID, Name: "reused", Type: "host", Source: "manual", Status: "online",
+	}); !errors.Is(err, ErrAgentIdentityRetired) {
+		t.Fatalf("downgraded agent identity was reusable: %v", err)
+	}
+}
+
+func TestPostgresCancelledApprovalDoesNotRetireLaterNonAgentAsset(t *testing.T) {
+	store := newTestPostgresStore(t)
+	ctx := context.Background()
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	assetID := "cancelled-manual-" + suffix
+	pendingHash := "cancelled-manual-pending-" + suffix
+	enrollmentHash := "cancelled-manual-enrollment-" + suffix
+	t.Cleanup(func() {
+		_, _ = store.pool.Exec(ctx, `DELETE FROM agent_tokens WHERE asset_id = $1`, assetID)
+		_, _ = store.pool.Exec(ctx, `DELETE FROM assets WHERE id = $1`, assetID)
+		_, _ = store.pool.Exec(ctx, `DELETE FROM retired_agent_identities WHERE asset_id = $1`, assetID)
+		_, _ = store.pool.Exec(ctx, `DELETE FROM enrollment_tokens WHERE token_hash = $1`, enrollmentHash)
+	})
+	prepared, err := store.PrepareAgentApproval(ctx, AgentApprovalPrepareRequest{
+		AssetID: assetID, AgentTokenHash: pendingHash,
+		PreparedTokenExpiresAt: time.Now().UTC().Add(time.Minute),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CancelAgentApproval(ctx, prepared.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: assetID, Name: "manual", Type: "host", Source: "manual", Status: "online",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DecommissionAgentAsset(ctx, assetID); err != nil {
+		t.Fatal(err)
+	}
+	if retired, err := store.IsAgentIdentityRetired(ctx, assetID); err != nil || retired {
+		t.Fatalf("cancelled approval retired later manual asset=%v err=%v", retired, err)
+	}
+	if _, err := store.CreateEnrollmentToken(enrollmentHash, "reuse", time.Now().UTC().Add(time.Hour), 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
+		AssetID: assetID, Hostname: assetID, EnrollmentTokenHash: enrollmentHash,
+		AgentTokenHash: "cancelled-manual-agent-" + suffix, AgentTokenExpiresAt: time.Now().UTC().Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("cancelled approval blocked later enrollment: %v", err)
+	}
+}
+
 func TestPostgresPreparedApprovalLifecycle(t *testing.T) {
 	store := newTestPostgresStore(t)
 	ctx := context.Background()
@@ -384,6 +615,7 @@ func TestPostgresExistingOwnerHeartbeatCannotRaceDecommission(t *testing.T) {
 	t.Cleanup(func() {
 		_, _ = store.pool.Exec(ctx, `DELETE FROM agent_tokens WHERE asset_id = $1`, assetID)
 		_, _ = store.pool.Exec(ctx, `DELETE FROM assets WHERE id = $1`, assetID)
+		_, _ = store.pool.Exec(ctx, `DELETE FROM retired_agent_identities WHERE asset_id = $1`, assetID)
 	})
 	if _, err := store.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: assetID, Type: "node", Name: assetID, Source: "agent",
@@ -411,7 +643,7 @@ func TestPostgresExistingOwnerHeartbeatCannotRaceDecommission(t *testing.T) {
 	}()
 	close(start)
 	wg.Wait()
-	if err := <-heartbeatErr; err != nil && !errors.Is(err, ErrNotFound) {
+	if err := <-heartbeatErr; err != nil && !errors.Is(err, ErrNotFound) && !errors.Is(err, ErrAgentIdentityRetired) {
 		t.Fatalf("PG owner heartbeat error=%v", err)
 	}
 	if _, exists, err := store.GetAsset(assetID); err != nil || exists {

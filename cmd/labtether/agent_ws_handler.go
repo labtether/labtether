@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"runtime/debug"
 	"strings"
@@ -390,16 +391,13 @@ func (s *apiServer) handleAgentWebSocket(w http.ResponseWriter, r *http.Request)
 		agentTokenID = agentTok.ID
 	}
 	if ownerAuthenticated {
-		if s.assetStore == nil {
+		if err := s.legacyOwnerAgentCredentialValidator(assetID)(); err != nil {
+			if errors.Is(err, persistence.ErrAgentIdentityRetired) || errors.Is(err, persistence.ErrNotFound) {
+				securityruntime.Logf("agentws: rejected owner-token connection for inactive asset %s", assetID)
+				http.Error(w, "agent asset must already be enrolled and active", http.StatusConflict)
+				return
+			}
 			http.Error(w, "agent asset unavailable", http.StatusServiceUnavailable)
-			return
-		}
-		if _, exists, err := s.assetStore.GetAsset(assetID); err != nil {
-			http.Error(w, "agent asset unavailable", http.StatusServiceUnavailable)
-			return
-		} else if !exists {
-			securityruntime.Logf("agentws: rejected owner-token connection for missing asset %s", assetID)
-			http.Error(w, "agent asset must already be enrolled", http.StatusConflict)
 			return
 		}
 	}
@@ -427,19 +425,15 @@ func (s *apiServer) handleAgentWebSocket(w http.ResponseWriter, r *http.Request)
 		conn.SetCredentialValidatorWithLease(s.agentWSCredentialValidator(agentTokenID, assetID), configuredAgentWSCredentialLease())
 	} else {
 		conn.SetMeta("auth.mode", "owner-token")
+		conn.SetCredentialValidator(s.legacyOwnerAgentCredentialValidator(assetID))
 	}
 	if agentVersion != "" {
 		conn.SetMeta("agent_version", agentVersion)
 	}
 	s.agentMgr.Register(conn)
-	credentialValid := true
-	if agentTokenID != "" {
-		credentialValid = s.agentWSCredentialStillValid(agentTokenID, assetID)
-	} else if _, exists, err := s.assetStore.GetAsset(assetID); err != nil || !exists {
-		credentialValid = false
-	}
-	if !credentialValid {
+	if err := conn.ValidateCredential(); err != nil {
 		s.agentMgr.UnregisterIfMatch(assetID, conn)
+		_ = wsConn.Close()
 		return
 	}
 
@@ -629,6 +623,32 @@ func (s *apiServer) agentWSCredentialValidator(tokenID, assetID string) func() e
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		return transactions.ValidateActiveAgentTokenID(ctx, tokenID, assetID)
+	}
+}
+
+func (s *apiServer) legacyOwnerAgentCredentialValidator(assetID string) func() error {
+	return func() error {
+		transactions, ok := s.enrollmentStore.(persistence.AgentEnrollmentTransactionStore)
+		if !ok || s.assetStore == nil {
+			return persistence.ErrAgentEnrollmentTransactionsUnavailable
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		retired, err := transactions.IsAgentIdentityRetired(ctx, assetID)
+		if err != nil {
+			return err
+		}
+		if retired {
+			return persistence.ErrAgentIdentityRetired
+		}
+		_, exists, err := s.assetStore.GetAsset(assetID)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return persistence.ErrNotFound
+		}
+		return nil
 	}
 }
 

@@ -221,6 +221,59 @@ func TestHandleAgentWebSocketRejectsSharedOwnerTokenByDefault(t *testing.T) {
 	}
 }
 
+func TestLegacyOwnerWebSocketCannotReconnectRetiredIdentity(t *testing.T) {
+	sut := newTestAPIServer(t)
+	sut.authValidator = auth.NewTokenValidator("owner-token")
+	sut.allowLegacySharedAgentAuth = true
+	sut.agentMgr = agentmgr.NewManager()
+	transactions := sut.enrollmentStore.(persistence.AgentEnrollmentTransactionStore)
+	now := time.Now().UTC()
+	if _, err := sut.enrollmentStore.CreateEnrollmentToken("retired-ws-enrollment", "retired ws", now.Add(time.Hour), 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := transactions.CommitAgentEnrollment(context.Background(), persistence.AgentEnrollmentCommitRequest{
+		AssetID: "retired-ws-agent", Hostname: "retired-ws-agent",
+		EnrollmentTokenHash: "retired-ws-enrollment", AgentTokenHash: "retired-ws-token",
+		AgentTokenExpiresAt: now.Add(time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := transactions.DecommissionAgentAsset(context.Background(), "retired-ws-agent"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: "retired-ws-agent", Type: "host", Name: "laundered", Source: "manual", Status: "online",
+	}); !errors.Is(err, persistence.ErrAgentIdentityRetired) {
+		t.Fatalf("generic heartbeat reused retired identity: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(sut.handleAgentWebSocket))
+	defer server.Close()
+	headers := http.Header{}
+	headers.Set("Authorization", "Bearer owner-token")
+	headers.Set("X-Asset-ID", "retired-ws-agent")
+	client, response, err := websocket.DefaultDialer.Dial("ws"+server.URL[len("http"):], headers)
+	if client != nil {
+		_ = client.Close()
+	}
+	if err == nil {
+		t.Fatal("retired identity opened a legacy owner WebSocket")
+	}
+	if response == nil || response.StatusCode != http.StatusConflict {
+		statusCode := 0
+		if response != nil {
+			statusCode = response.StatusCode
+		}
+		t.Fatalf("retired owner WebSocket status=%d err=%v, want 409", statusCode, err)
+	}
+	if sut.agentMgr.IsConnected("retired-ws-agent") {
+		t.Fatal("retired identity remained connected")
+	}
+	if err := sut.agentMgr.SendToAgent("retired-ws-agent", agentmgr.Message{Type: agentmgr.MsgCommandRequest}); err == nil {
+		t.Fatal("retired identity remained usable as a command target")
+	}
+}
+
 func TestAgentWSInboundBudgetAccountsForMessagesAndBytes(t *testing.T) {
 	base := time.Now()
 	budget := &agentWSInboundBudget{
