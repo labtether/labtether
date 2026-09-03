@@ -27,6 +27,8 @@ interface QuickConnectDialogProps {
     ignoreCertificate?: boolean;
     allowLegacySecurity?: boolean;
     certificateFingerprints?: string;
+    spiceSecurityMode?: "tls" | "cleartext";
+    spiceCAPEM?: string;
     saveBookmark?: { label: string };
   }) => void;
 }
@@ -149,6 +151,10 @@ export default function QuickConnectDialog({
   const [ignoreCertificate, setIgnoreCertificate] = useState(false);
   const [allowLegacySecurity, setAllowLegacySecurity] = useState(false);
   const [certificateFingerprints, setCertificateFingerprints] = useState("");
+  const [spiceSecurityMode, setSPICESecurityMode] = useState<
+    "tls" | "cleartext"
+  >("tls");
+  const [spiceCAPEM, setSPICECAPEM] = useState("");
   const canSaveBookmark = canSaveQuickConnectBookmark(
     protocol,
     ignoreCertificate,
@@ -174,6 +180,8 @@ export default function QuickConnectDialog({
       setIgnoreCertificate(false);
       setAllowLegacySecurity(false);
       setCertificateFingerprints("");
+      setSPICESecurityMode("tls");
+      setSPICECAPEM("");
       setPrevProtocolDefault(String(defaultPort("vnc")));
     }
   }, [open]);
@@ -197,6 +205,10 @@ export default function QuickConnectDialog({
         setAllowLegacySecurity(false);
         setCertificateFingerprints("");
       }
+      if (newProtocol !== "spice") {
+        setSPICESecurityMode("tls");
+        setSPICECAPEM("");
+      }
       if (port === prevProtocolDefault || port === "") {
         setPort(String(defaultPort(newProtocol)));
       }
@@ -215,6 +227,10 @@ export default function QuickConnectDialog({
         setIgnoreCertificate(false);
         setAllowLegacySecurity(false);
         setCertificateFingerprints("");
+      }
+      if (parsed.protocol !== "spice") {
+        setSPICESecurityMode("tls");
+        setSPICECAPEM("");
       }
       setHost(parsed.host);
       setPort(String(parsed.port));
@@ -247,6 +263,14 @@ export default function QuickConnectDialog({
         ...(protocol === "rdp" && certificateFingerprints.trim()
           ? { certificateFingerprints: certificateFingerprints.trim() }
           : {}),
+        ...(protocol === "spice"
+          ? {
+              spiceSecurityMode,
+              ...(spiceSecurityMode === "tls" && spiceCAPEM.trim()
+                ? { spiceCAPEM: spiceCAPEM.trim() }
+                : {}),
+            }
+          : {}),
         ...(saveBookmark && canSaveBookmark
           ? { saveBookmark: { label: bookmarkNickname.trim() || host.trim() } }
           : {}),
@@ -262,6 +286,8 @@ export default function QuickConnectDialog({
       ignoreCertificate,
       allowLegacySecurity,
       certificateFingerprints,
+      spiceSecurityMode,
+      spiceCAPEM,
       saveBookmark,
       canSaveBookmark,
       bookmarkNickname,
@@ -577,6 +603,48 @@ export default function QuickConnectDialog({
                     This choice applies to this session only. Save as bookmark
                     was turned off.
                   </p>
+                )}
+              </div>
+            )}
+
+            {protocol === "spice" && (
+              <div className="space-y-3 rounded-lg border border-[var(--warn)]/30 bg-[var(--warn-glow)] px-3 py-2">
+                <label className="flex items-start gap-2 text-xs text-[var(--warn)]">
+                  <input
+                    type="checkbox"
+                    checked={spiceSecurityMode === "cleartext"}
+                    onChange={(e) => {
+                      setSPICESecurityMode(
+                        e.target.checked ? "cleartext" : "tls",
+                      );
+                      if (e.target.checked) setSPICECAPEM("");
+                    }}
+                    className="mt-0.5 h-3.5 w-3.5 accent-[var(--warn)]"
+                  />
+                  <span>
+                    Allow plain-text SPICE. This can expose the password,
+                    screen, and keyboard to an attacker. The Hub must also
+                    allow unsafe transport.
+                  </span>
+                </label>
+                {spiceSecurityMode === "tls" && (
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-[var(--warn)]">
+                      Custom CA certificate (optional)
+                    </label>
+                    <textarea
+                      value={spiceCAPEM}
+                      onChange={(e) => setSPICECAPEM(e.target.value)}
+                      maxLength={16 * 1024}
+                      rows={4}
+                      spellCheck={false}
+                      placeholder="-----BEGIN CERTIFICATE-----"
+                      className="w-full resize-y rounded-md border border-[var(--line)] bg-[var(--surface)] px-2 py-1.5 font-mono text-[10px] text-[var(--text)] outline-none focus:border-[var(--accent)]"
+                    />
+                    <p className="mt-1 text-[10px] text-[var(--muted)]">
+                      Leave this blank for a certificate trusted by the Hub.
+                    </p>
+                  </div>
                 )}
               </div>
             )}

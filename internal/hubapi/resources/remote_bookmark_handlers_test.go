@@ -3,6 +3,7 @@ package resources
 import (
 	"context"
 	"encoding/json"
+	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -204,6 +205,70 @@ func TestRemoteBookmarkCredentialScopeRequiredForWriteAndReveal(t *testing.T) {
 	last := (*auditEvents)[len(*auditEvents)-1]
 	if last.Decision != "denied" || last.Reason != "insufficient_scope" {
 		t.Fatalf("denied reveal audit mismatch: %+v", last)
+	}
+}
+
+func TestRemoteBookmarkSPICESecurityDefaultsPersistsAndIsRedactedByProtocol(t *testing.T) {
+	deps, bookmarks, _, _ := newRemoteBookmarkTestDeps(t)
+	tlsServer := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer tlsServer.Close()
+	caPEM := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: tlsServer.Certificate().Raw}))
+	payload, err := json.Marshal(map[string]any{
+		"label":               "Secure SPICE",
+		"protocol":            "spice",
+		"host":                "192.0.2.30",
+		"port":                5930,
+		"spice_security_mode": "tls",
+		"spice_ca_pem":        caPEM,
+	})
+	if err != nil {
+		t.Fatalf("encode SPICE bookmark: %v", err)
+	}
+	created := remoteBookmarkRequest(t, deps, http.MethodPost, remoteBookmarkAPIPrefix, string(payload), nil)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create SPICE bookmark status=%d body=%s", created.Code, created.Body.String())
+	}
+	var response remoteBookmarkResponse
+	if err := json.Unmarshal(created.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode SPICE bookmark: %v", err)
+	}
+	if response.SPICESecurityMode != "tls" || response.SPICECAPEM != strings.TrimSpace(caPEM) {
+		t.Fatalf("SPICE security response mismatch: %+v", response)
+	}
+	stored, err := bookmarks.GetRemoteBookmark(context.Background(), response.ID)
+	if err != nil {
+		t.Fatalf("load SPICE bookmark: %v", err)
+	}
+	if stored.SPICESecurityMode != "tls" || stored.SPICECAPEM != strings.TrimSpace(caPEM) {
+		t.Fatalf("stored SPICE security mismatch: %+v", stored)
+	}
+
+	defaulted := remoteBookmarkRequest(t, deps, http.MethodPost, remoteBookmarkAPIPrefix,
+		`{"label":"Default SPICE","protocol":"spice","host":"192.0.2.31","port":5930}`, nil)
+	if defaulted.Code != http.StatusCreated || !strings.Contains(defaulted.Body.String(), `"spice_security_mode":"tls"`) {
+		t.Fatalf("default SPICE bookmark status=%d body=%s", defaulted.Code, defaulted.Body.String())
+	}
+
+	nonSPICE := remoteBookmarkRequest(t, deps, http.MethodPost, remoteBookmarkAPIPrefix,
+		`{"label":"RDP","protocol":"rdp","host":"192.0.2.32","port":3389}`, nil)
+	if nonSPICE.Code != http.StatusCreated || strings.Contains(nonSPICE.Body.String(), "spice_security_mode") {
+		t.Fatalf("non-SPICE response exposed SPICE fields: status=%d body=%s", nonSPICE.Code, nonSPICE.Body.String())
+	}
+}
+
+func TestRemoteBookmarkCleartextSPICERequiresGlobalOptIn(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "")
+	deps, _, _, _ := newRemoteBookmarkTestDeps(t)
+	payload := `{"label":"Old SPICE","protocol":"spice","host":"192.0.2.33","port":5930,"spice_security_mode":"cleartext"}`
+	denied := remoteBookmarkRequest(t, deps, http.MethodPost, remoteBookmarkAPIPrefix, payload, nil)
+	if denied.Code != http.StatusBadRequest {
+		t.Fatalf("cleartext SPICE without global opt-in status=%d body=%s", denied.Code, denied.Body.String())
+	}
+
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
+	allowed := remoteBookmarkRequest(t, deps, http.MethodPost, remoteBookmarkAPIPrefix, payload, nil)
+	if allowed.Code != http.StatusCreated {
+		t.Fatalf("double-opt-in cleartext bookmark status=%d body=%s", allowed.Code, allowed.Body.String())
 	}
 }
 

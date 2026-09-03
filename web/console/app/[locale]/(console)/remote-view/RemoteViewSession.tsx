@@ -71,7 +71,11 @@ export default function RemoteViewSession({
                         certificate_fingerprints:
                           tab.target.certificateFingerprints,
                       }
-                    : {}),
+                    : {
+                        spice_security_mode:
+                          tab.target.spiceSecurityMode ?? "tls",
+                        spice_ca_pem: tab.target.spiceCAPEM,
+                      }),
                 }
               : {}),
           }

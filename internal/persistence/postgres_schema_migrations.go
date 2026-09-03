@@ -2918,5 +2918,17 @@ func postgresSchemaMigrations() []schemaMigration {
 		},
 	})
 
+	migrations = append(migrations, schemaMigration{
+		Version: 100,
+		Name:    "remote_bookmark_spice_transport_security",
+		Statements: []string{
+			`ALTER TABLE remote_bookmarks ADD COLUMN IF NOT EXISTS spice_security_mode TEXT NOT NULL DEFAULT 'tls'`,
+			`ALTER TABLE remote_bookmarks ADD COLUMN IF NOT EXISTS spice_ca_pem TEXT NOT NULL DEFAULT ''`,
+			`ALTER TABLE remote_bookmarks DROP CONSTRAINT IF EXISTS remote_bookmarks_spice_security_mode_check`,
+			`ALTER TABLE remote_bookmarks ADD CONSTRAINT remote_bookmarks_spice_security_mode_check
+				CHECK (spice_security_mode IN ('tls', 'cleartext'))`,
+		},
+	})
+
 	return migrations
 }

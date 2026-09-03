@@ -26,12 +26,15 @@ func scanRemoteBookmark(row remoteBookmarkScanner) (RemoteBookmark, error) {
 		&bm.Host,
 		&bm.Port,
 		&bm.CredentialID,
+		&bm.SPICESecurityMode,
+		&bm.SPICECAPEM,
 		&bm.CreatedAt,
 		&bm.UpdatedAt,
 	); err != nil {
 		return RemoteBookmark{}, err
 	}
 	bm.HasCredentials = bm.CredentialID != nil
+	bm.SPICESecurityMode = normalizedRemoteBookmarkSPICESecurityMode(bm.SPICESecurityMode)
 	bm.CreatedAt = bm.CreatedAt.UTC()
 	bm.UpdatedAt = bm.UpdatedAt.UTC()
 	return bm, nil
@@ -39,7 +42,15 @@ func scanRemoteBookmark(row remoteBookmarkScanner) (RemoteBookmark, error) {
 
 // --- columns ---
 
-const remoteBookmarkColumns = `id, label, protocol, host, port, credential_id, created_at, updated_at`
+const remoteBookmarkColumns = `id, label, protocol, host, port, credential_id, spice_security_mode, spice_ca_pem, created_at, updated_at`
+
+func normalizedRemoteBookmarkSPICESecurityMode(value string) string {
+	mode := strings.ToLower(strings.TrimSpace(value))
+	if mode == "" {
+		return "tls"
+	}
+	return mode
+}
 
 // --- store methods ---
 
@@ -82,16 +93,19 @@ func (s *PostgresStore) CreateRemoteBookmark(ctx context.Context, bm *RemoteBook
 	bm.ID = idgen.New("rbm")
 	bm.CreatedAt = now
 	bm.UpdatedAt = now
+	bm.SPICESecurityMode = normalizedRemoteBookmarkSPICESecurityMode(bm.SPICESecurityMode)
 
 	_, err := s.pool.Exec(ctx,
-		`INSERT INTO remote_bookmarks (id, label, protocol, host, port, credential_id, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		`INSERT INTO remote_bookmarks (id, label, protocol, host, port, credential_id, spice_security_mode, spice_ca_pem, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 		bm.ID,
 		strings.TrimSpace(bm.Label),
 		strings.TrimSpace(bm.Protocol),
 		strings.TrimSpace(bm.Host),
 		bm.Port,
 		bm.CredentialID,
+		bm.SPICESecurityMode,
+		strings.TrimSpace(bm.SPICECAPEM),
 		bm.CreatedAt,
 		bm.UpdatedAt,
 	)
@@ -104,7 +118,8 @@ func (s *PostgresStore) UpdateRemoteBookmark(ctx context.Context, bm RemoteBookm
 
 	tag, err := s.pool.Exec(ctx,
 		`UPDATE remote_bookmarks
-		 SET label = $2, protocol = $3, host = $4, port = $5, credential_id = $6, updated_at = $7
+		 SET label = $2, protocol = $3, host = $4, port = $5, credential_id = $6,
+		     spice_security_mode = $7, spice_ca_pem = $8, updated_at = $9
 		 WHERE id = $1`,
 		strings.TrimSpace(bm.ID),
 		strings.TrimSpace(bm.Label),
@@ -112,6 +127,8 @@ func (s *PostgresStore) UpdateRemoteBookmark(ctx context.Context, bm RemoteBookm
 		strings.TrimSpace(bm.Host),
 		bm.Port,
 		bm.CredentialID,
+		normalizedRemoteBookmarkSPICESecurityMode(bm.SPICESecurityMode),
+		strings.TrimSpace(bm.SPICECAPEM),
 		bm.UpdatedAt,
 	)
 	if err != nil {

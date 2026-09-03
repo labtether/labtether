@@ -37,6 +37,8 @@ interface NewTabPageProps {
     ignoreCertificate?: boolean;
     allowLegacySecurity?: boolean;
     certificateFingerprints?: string;
+    spiceSecurityMode?: "tls" | "cleartext";
+    spiceCAPEM?: string;
     saveBookmark?: { label: string };
   }) => void;
 }
@@ -401,6 +403,8 @@ export default function NewTabPage({
             ignoreCertificate: params.ignoreCertificate,
             allowLegacySecurity: params.allowLegacySecurity,
             certificateFingerprints: params.certificateFingerprints,
+            spiceSecurityMode: params.spiceSecurityMode,
+            spiceCAPEM: params.spiceCAPEM,
             saveBookmark: params.saveBookmark,
           });
         }}

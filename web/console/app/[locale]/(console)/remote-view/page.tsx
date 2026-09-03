@@ -76,6 +76,8 @@ function RemoteViewPageContent() {
             host: bookmark.host,
             port: bookmark.port,
             bookmarkId: bookmark.id,
+            spiceSecurityMode: bookmark.spice_security_mode,
+            spiceCAPEM: bookmark.spice_ca_pem,
           },
           connectionState: "connecting",
         });
@@ -104,6 +106,8 @@ function RemoteViewPageContent() {
       ignoreCertificate?: boolean;
       allowLegacySecurity?: boolean;
       certificateFingerprints?: string;
+      spiceSecurityMode?: "tls" | "cleartext";
+      spiceCAPEM?: string;
       saveBookmark?: { label: string };
     }) => {
       const {
@@ -115,6 +119,8 @@ function RemoteViewPageContent() {
         ignoreCertificate,
         allowLegacySecurity,
         certificateFingerprints,
+        spiceSecurityMode,
+        spiceCAPEM,
         saveBookmark,
       } = params;
       const tabId = activeTab.id;
@@ -134,6 +140,8 @@ function RemoteViewPageContent() {
           ignoreCertificate,
           allowLegacySecurity,
           certificateFingerprints,
+          spiceSecurityMode,
+          spiceCAPEM,
         },
         connectionState: "connecting",
       });
@@ -147,6 +155,8 @@ function RemoteViewPageContent() {
           port,
           username,
           password,
+          spice_security_mode: spiceSecurityMode,
+          spice_ca_pem: spiceCAPEM,
         }).catch((err) => console.error("Failed to save bookmark:", err));
       }
     },

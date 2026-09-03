@@ -29,25 +29,27 @@ func (s *apiServer) buildProxmoxDeps() *proxmoxpkg.Deps {
 
 		SetDesktopSPICEProxyTarget: func(sessionID string, target proxmoxpkg.DesktopSPICEProxyTarget) {
 			s.setDesktopSPICEProxyTarget(sessionID, desktopSPICEProxyTarget{
-				Host:       target.Host,
-				TLSPort:    target.TLSPort,
-				Password:   target.Password,
-				Type:       target.Type,
-				CA:         target.CA,
-				Proxy:      target.Proxy,
-				SkipVerify: target.SkipVerify,
+				Host:        target.Host,
+				TLSPort:     target.TLSPort,
+				Password:    target.Password,
+				Type:        target.Type,
+				CA:          target.CA,
+				Proxy:       target.Proxy,
+				HostSubject: target.HostSubject,
+				SkipVerify:  target.SkipVerify,
 			})
 		},
 		TakeDesktopSPICEProxyTarget: func(sessionID string) (proxmoxpkg.DesktopSPICEProxyTarget, bool) {
 			t, ok := s.takeDesktopSPICEProxyTarget(sessionID)
 			return proxmoxpkg.DesktopSPICEProxyTarget{
-				Host:       t.Host,
-				TLSPort:    t.TLSPort,
-				Password:   t.Password,
-				Type:       t.Type,
-				CA:         t.CA,
-				Proxy:      t.Proxy,
-				SkipVerify: t.SkipVerify,
+				Host:        t.Host,
+				TLSPort:     t.TLSPort,
+				Password:    t.Password,
+				Type:        t.Type,
+				CA:          t.CA,
+				Proxy:       t.Proxy,
+				HostSubject: t.HostSubject,
+				SkipVerify:  t.SkipVerify,
 			}, ok
 		},
 

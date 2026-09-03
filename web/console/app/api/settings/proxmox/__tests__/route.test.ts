@@ -81,5 +81,9 @@ describe("proxmox settings route", () => {
     expect(fetchMock.mock.calls[6]?.[1]).toMatchObject({ method: "DELETE" });
     expect(fetchMock.mock.calls[7]?.[0]).toBe("http://localhost:8080/assets/proxmox-cluster-homelab");
     expect(fetchMock.mock.calls[7]?.[1]).toMatchObject({ method: "DELETE" });
+    const collectorCreate = JSON.parse(
+      String((fetchMock.mock.calls[5]?.[1] as RequestInit | undefined)?.body),
+    ) as { config?: { spice_skip_verify?: boolean } };
+    expect(collectorCreate.config?.spice_skip_verify).toBe(false);
   });
 });

@@ -64,13 +64,14 @@ func proxmoxCallDESNewCipher(key []byte) (cipher.Block, error) {
 }
 
 type ProxmoxRuntime struct {
-	client      *proxmox.Client
-	authMode    proxmox.AuthMode
-	tokenID     string
-	tokenSecret string
-	skipVerify  bool
-	caPEM       string
-	collectorID string
+	client          *proxmox.Client
+	authMode        proxmox.AuthMode
+	tokenID         string
+	tokenSecret     string
+	skipVerify      bool
+	spiceSkipVerify bool
+	caPEM           string
+	collectorID     string
 }
 
 // Client returns the underlying proxmox API client.
@@ -92,30 +93,35 @@ func (r *ProxmoxRuntime) CollectorID() string { return r.collectorID }
 // SkipVerify returns the skip-verify setting for this runtime.
 func (r *ProxmoxRuntime) SkipVerify() bool { return r.skipVerify }
 
+// SPICESkipVerify returns the separate SPICE certificate bypass setting.
+func (r *ProxmoxRuntime) SPICESkipVerify() bool { return r.spiceSkipVerify }
+
 // AuthMode returns the authentication mode for this runtime.
 func (r *ProxmoxRuntime) AuthMode() proxmox.AuthMode { return r.authMode }
 
 // ProxmoxRuntimeOpts holds options for constructing a ProxmoxRuntime.
 type ProxmoxRuntimeOpts struct {
-	Client      *proxmox.Client
-	AuthMode    proxmox.AuthMode
-	TokenID     string
-	TokenSecret string
-	SkipVerify  bool
-	CAPEM       string
-	CollectorID string
+	Client          *proxmox.Client
+	AuthMode        proxmox.AuthMode
+	TokenID         string
+	TokenSecret     string
+	SkipVerify      bool
+	SPICESkipVerify bool
+	CAPEM           string
+	CollectorID     string
 }
 
 // NewProxmoxRuntimeOpts creates a ProxmoxRuntime from options.
 func NewProxmoxRuntimeOpts(opts ProxmoxRuntimeOpts) *ProxmoxRuntime {
 	return &ProxmoxRuntime{
-		client:      opts.Client,
-		authMode:    opts.AuthMode,
-		tokenID:     opts.TokenID,
-		tokenSecret: opts.TokenSecret,
-		skipVerify:  opts.SkipVerify,
-		caPEM:       opts.CAPEM,
-		collectorID: opts.CollectorID,
+		client:          opts.Client,
+		authMode:        opts.AuthMode,
+		tokenID:         opts.TokenID,
+		tokenSecret:     opts.TokenSecret,
+		skipVerify:      opts.SkipVerify,
+		spiceSkipVerify: opts.SPICESkipVerify,
+		caPEM:           opts.CAPEM,
+		collectorID:     opts.CollectorID,
 	}
 }
 

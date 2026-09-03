@@ -87,6 +87,8 @@ export interface TerminalConnectOptions {
     ignore_certificate?: boolean;
     allow_legacy_security?: boolean;
     certificate_fingerprints?: string;
+    spice_security_mode?: "tls" | "cleartext";
+    spice_ca_pem?: string;
   };
 }
 

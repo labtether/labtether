@@ -3,18 +3,16 @@ package proxmox
 import (
 	"crypto/tls"
 	"fmt"
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"log"
-	"net"
 	"net/http"
 	neturl "net/url"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
 	"github.com/labtether/labtether/internal/terminal"
@@ -64,6 +62,14 @@ func (d *Deps) HandleDesktopSPICETicket(w http.ResponseWriter, r *http.Request, 
 		servicehttp.WriteError(w, http.StatusBadGateway, "proxmox runtime unavailable")
 		return
 	}
+	if err := validateProxmoxSPICEVerificationPolicy(runtime.skipVerify, runtime.spiceSkipVerify); err != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if runtime.spiceSkipVerify && !securityruntime.InsecureTransportAllowed() {
+		servicehttp.WriteError(w, http.StatusBadRequest, "Proxmox SPICE certificate checks can only be disabled when LABTETHER_ALLOW_INSECURE_TRANSPORT=true")
+		return
+	}
 
 	ticket, err := runtime.client.OpenQemuSPICEProxy(r.Context(), target.Node, target.VMID)
 	if err != nil {
@@ -72,12 +78,22 @@ func (d *Deps) HandleDesktopSPICETicket(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	trimmedHost := strings.TrimSpace(ticket.Host)
+	trimmedProxy := strings.TrimSpace(ticket.Proxy)
+	hostSubject := strings.TrimSpace(ticket.HostSubject)
 	effectiveCA := strings.TrimSpace(ticket.CA)
 	if effectiveCA == "" {
 		effectiveCA = strings.TrimSpace(runtime.caPEM)
 	}
-	if trimmedHost == "" || ticket.TLSPort <= 0 || ticket.TLSPort > 65535 {
+	if _, err := validateProxmoxSPICEProxyTicket(trimmedHost, ticket.TLSPort); err != nil {
 		servicehttp.WriteError(w, http.StatusBadGateway, "proxmox SPICE target unavailable")
+		return
+	}
+	if _, _, err := parseProxmoxSPICEProxyEndpoint(trimmedProxy); err != nil {
+		servicehttp.WriteError(w, http.StatusBadGateway, "proxmox SPICE proxy unavailable")
+		return
+	}
+	if _, err := NewProxmoxSPICETLSConfig(runtime.spiceSkipVerify, effectiveCA, hostSubject); err != nil {
+		servicehttp.WriteError(w, http.StatusBadGateway, "proxmox SPICE certificate data unavailable")
 		return
 	}
 
@@ -88,13 +104,14 @@ func (d *Deps) HandleDesktopSPICETicket(w http.ResponseWriter, r *http.Request, 
 	}
 
 	d.SetDesktopSPICEProxyTarget(session.ID, DesktopSPICEProxyTarget{
-		Host:       trimmedHost,
-		TLSPort:    ticket.TLSPort,
-		Password:   ticket.Password,
-		Type:       ticket.Type,
-		CA:         effectiveCA,
-		Proxy:      ticket.Proxy,
-		SkipVerify: runtime.skipVerify,
+		Host:        trimmedHost,
+		TLSPort:     ticket.TLSPort,
+		Password:    ticket.Password,
+		Type:        ticket.Type,
+		CA:          effectiveCA,
+		Proxy:       trimmedProxy,
+		HostSubject: hostSubject,
+		SkipVerify:  runtime.spiceSkipVerify,
 	})
 
 	streamPath := fmt.Sprintf(
@@ -104,14 +121,15 @@ func (d *Deps) HandleDesktopSPICETicket(w http.ResponseWriter, r *http.Request, 
 	)
 
 	servicehttp.WriteJSON(w, http.StatusCreated, map[string]any{
-		"session_id":  session.ID,
-		"ticket":      streamTicket,
-		"expires_at":  expiresAt,
-		"stream_path": streamPath,
-		"password":    ticket.Password,
-		"type":        ticket.Type,
-		"ca":          effectiveCA,
-		"proxy":       ticket.Proxy,
+		"session_id":   session.ID,
+		"ticket":       streamTicket,
+		"expires_at":   expiresAt,
+		"stream_path":  streamPath,
+		"password":     ticket.Password,
+		"type":         ticket.Type,
+		"ca":           effectiveCA,
+		"proxy":        trimmedProxy,
+		"host-subject": hostSubject,
 	})
 }
 
@@ -129,28 +147,29 @@ func (d *Deps) HandleDesktopSPICEStream(w http.ResponseWriter, r *http.Request, 
 
 	host := strings.TrimSpace(spiceTarget.Host)
 	port := spiceTarget.TLSPort
-	if host == "" || port <= 0 || port > 65535 {
+	if spiceTarget.SkipVerify && !securityruntime.InsecureTransportAllowed() {
+		servicehttp.WriteError(w, http.StatusBadRequest, "Proxmox SPICE certificate checks are disabled")
+		return
+	}
+	if _, err := validateProxmoxSPICEProxyTicket(host, port); err != nil {
 		servicehttp.WriteError(w, http.StatusBadGateway, "invalid SPICE target")
 		return
 	}
 
-	validatedHost, validatedPort, validateErr := securityruntime.ValidateOutboundHostPort(host, strconv.Itoa(port), port)
-	if validateErr != nil {
-		servicehttp.WriteError(w, http.StatusBadRequest, "invalid SPICE target: "+shared.SanitizeUpstreamError(validateErr.Error()))
+	proxyHost, proxyPort, err := parseProxmoxSPICEProxyEndpoint(spiceTarget.Proxy)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, "invalid SPICE proxy")
 		return
 	}
 
-	tlsConfig, err := NewProxmoxTLSConfig(spiceTarget.SkipVerify, spiceTarget.CA)
+	tlsConfig, err := NewProxmoxSPICETLSConfig(spiceTarget.SkipVerify, spiceTarget.CA, spiceTarget.HostSubject)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to prepare SPICE TLS: "+shared.SanitizeUpstreamError(err.Error()))
+		servicehttp.WriteError(w, http.StatusBadGateway, "failed to prepare SPICE TLS")
 		return
 	}
-	if net.ParseIP(validatedHost) == nil {
-		tlsConfig.ServerName = validatedHost
-	}
-	rawConn, err := securityruntime.DialOutboundTCPContext(r.Context(), validatedHost, validatedPort, 10*time.Second)
+	rawConn, err := dialProxmoxSPICEProxyTunnel(r.Context(), spiceTarget.Proxy, host, port)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to connect to SPICE: "+shared.SanitizeUpstreamError(err.Error()))
+		servicehttp.WriteError(w, http.StatusBadGateway, "failed to connect to SPICE proxy: "+shared.SanitizeUpstreamError(err.Error()))
 		return
 	}
 	spiceConn := tls.Client(rawConn, tlsConfig)
@@ -174,7 +193,7 @@ func (d *Deps) HandleDesktopSPICEStream(w http.ResponseWriter, r *http.Request, 
 	wsConn.SetReadLimit(d.MaxDesktopInputReadBytes)
 	defer wsConn.Close()
 
-	log.Printf("desktop: proxied SPICE stream for %s -> %s:%d", session.ID, validatedHost, validatedPort)
+	log.Printf("desktop: proxied SPICE stream for %s via %s:%d", session.ID, proxyHost, proxyPort)
 
 	// Bidirectional bridge: browser WS ↔ SPICE TCP.
 	done := make(chan struct{})
