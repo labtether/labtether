@@ -20,6 +20,7 @@ import (
 	"github.com/labtether/labtether/internal/mcpserver"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/schedules"
+	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
 	"github.com/labtether/labtether/internal/terminal"
 )
@@ -436,6 +437,7 @@ func (s *apiServer) mcpListCredentialProfiles() func(ctx context.Context) ([]map
 		}
 		out := make([]map[string]any, 0, len(profiles))
 		for _, p := range profiles {
+			p.Metadata = securityruntime.RedactURLUserinfoValues(p.Metadata)
 			b, err := json.Marshal(p)
 			if err != nil {
 				log.Printf("mcp: mcpListCredentialProfiles: marshal skip: %v", err)

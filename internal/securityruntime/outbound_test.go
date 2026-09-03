@@ -46,6 +46,83 @@ func TestValidateOutboundURLRejectsUnsupportedScheme(t *testing.T) {
 	}
 }
 
+func TestValidateOutboundURLRejectsUserinfoWithoutReflectingIt(t *testing.T) {
+	tests := []string{
+		"https://operator@example.invalid/path",
+		"https://operator:credential-bearing-secret@example.invalid/path",
+		"http://operator:credential-bearing-secret@example.invalid/path",
+		"wss://operator:credential-bearing-secret@example.invalid/socket",
+		"ws://operator:credential-bearing-secret@example.invalid/socket",
+		"ftp://operator:credential-bearing-secret@example.invalid/archive",
+		"https://operator:p%40ssword@example.invalid/path",
+		"https://operator:credential-bearing-secret%zz@example.invalid/path",
+	}
+
+	for _, rawURL := range tests {
+		if _, err := ValidateOutboundURL(rawURL); err == nil {
+			t.Fatalf("expected URL userinfo to fail for %q", rawURL)
+		} else if strings.Contains(err.Error(), "operator") || strings.Contains(err.Error(), "credential-bearing-secret") || strings.Contains(err.Error(), "p%40ssword") {
+			t.Fatalf("userinfo rejection reflected credential material: %v", err)
+		}
+	}
+}
+
+func TestRedactURLUserinfoRemovesCredentials(t *testing.T) {
+	redacted, changed := RedactURLUserinfo(" https://operator:p%40ssword@example.invalid:8443/path?q=safe#fragment ")
+	if !changed {
+		t.Fatal("expected credential-bearing URL to be redacted")
+	}
+	if redacted != "https://example.invalid:8443/path?q=safe#fragment" {
+		t.Fatalf("redacted URL = %q", redacted)
+	}
+	if URLContainsUserinfo(redacted) {
+		t.Fatal("redacted URL still contains userinfo")
+	}
+	if got, changed := RedactURLUserinfo("https://operator:bad%zz@example.invalid/path"); !changed || got != "https://example.invalid/path" {
+		t.Fatalf("malformed credential URL was not safely redacted: got=%q changed=%v", got, changed)
+	}
+	if got, changed := RedactURLUserinfo("//operator:secret@example.invalid/path"); !changed || got != "//example.invalid/path" {
+		t.Fatalf("network-path credential URL was not safely redacted: got=%q changed=%v", got, changed)
+	}
+
+	const safeURL = "https://example.invalid/path"
+	if got, changed := RedactURLUserinfo(safeURL); changed || got != safeURL {
+		t.Fatalf("safe URL changed: got=%q changed=%v", got, changed)
+	}
+}
+
+func TestRedactURLUserinfoInTextRemovesCredentials(t *testing.T) {
+	const message = `request failed for "https://operator:first< secret@example.invalid/path" after redirect to wss://agent:"second >secret"@example.invalid/socket`
+	redacted, changed := RedactURLUserinfoInText(message)
+	if !changed {
+		t.Fatal("expected diagnostic URL credentials to be redacted")
+	}
+	for _, secret := range []string{"operator", "first< secret", "agent", "second >secret"} {
+		if strings.Contains(redacted, secret) {
+			t.Fatalf("redacted diagnostic still contains %q: %s", secret, redacted)
+		}
+	}
+	for _, safeURL := range []string{"https://example.invalid/path", "wss://example.invalid/socket"} {
+		if !strings.Contains(redacted, safeURL) {
+			t.Fatalf("redacted diagnostic lost safe URL %q: %s", safeURL, redacted)
+		}
+	}
+}
+
+func TestRedactURLUserinfoValuesClonesAndRedacts(t *testing.T) {
+	values := map[string]string{
+		"base_url": "https://operator:credential-bearing-secret@example.invalid/path",
+		"safe":     "kept",
+	}
+	redacted := RedactURLUserinfoValues(values)
+	if redacted["base_url"] != "https://example.invalid/path" || redacted["safe"] != "kept" {
+		t.Fatalf("redacted values = %#v", redacted)
+	}
+	if values["base_url"] != "https://operator:credential-bearing-secret@example.invalid/path" {
+		t.Fatalf("input map was mutated: %#v", values)
+	}
+}
+
 func TestValidateOutboundURLRejectsInsecureSchemeByDefault(t *testing.T) {
 	if _, err := ValidateOutboundURL("http://127.0.0.1:8080/healthz"); err == nil {
 		t.Fatalf("expected insecure http scheme to fail without explicit opt-in")

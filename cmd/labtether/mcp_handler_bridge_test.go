@@ -17,6 +17,7 @@ import (
 	"github.com/labtether/labtether/internal/alerts"
 	"github.com/labtether/labtether/internal/assets"
 	dockerconnector "github.com/labtether/labtether/internal/connectors/docker"
+	"github.com/labtether/labtether/internal/credentials"
 	"github.com/labtether/labtether/internal/edges"
 	"github.com/labtether/labtether/internal/groups"
 	respkg "github.com/labtether/labtether/internal/hubapi/resources"
@@ -85,6 +86,43 @@ func TestMCPHTTPRejectsOversizedRequestBeforeParsing(t *testing.T) {
 	sut.handleMCP()(rec, req)
 	if rec.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestMCPListCredentialProfilesRedactsLegacyMetadataURLUserinfo(t *testing.T) {
+	sut := newTestAPIServer(t)
+	const metadataSecret = "credential-bearing-secret"
+	profile, err := sut.credentialStore.CreateCredentialProfile(credentials.Profile{
+		ID:       "cred-mcp-legacy-url",
+		Name:     "legacy MCP URL",
+		Kind:     credentials.KindPortainerAPIKey,
+		Metadata: map[string]string{"base_url": "https://operator:" + metadataSecret + "@example.invalid/path"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	items, err := sut.mcpListCredentialProfiles()(context.Background())
+	if err != nil || len(items) != 1 {
+		t.Fatalf("MCP credential list: items=%#v err=%v", items, err)
+	}
+	encoded, err := json.Marshal(items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "operator") || strings.Contains(string(encoded), metadataSecret) {
+		t.Fatalf("MCP credential list exposed URL userinfo: %s", encoded)
+	}
+	metadata, ok := items[0]["metadata"].(map[string]any)
+	if !ok || metadata["base_url"] != "https://example.invalid/path" {
+		t.Fatalf("MCP credential metadata was not redacted: %#v", items[0]["metadata"])
+	}
+	stored, ok, err := sut.credentialStore.GetCredentialProfile(profile.ID)
+	if err != nil || !ok {
+		t.Fatalf("reload stored profile: ok=%v err=%v", ok, err)
+	}
+	if stored.Metadata["base_url"] != profile.Metadata["base_url"] {
+		t.Fatalf("MCP redaction mutated stored metadata: %#v", stored.Metadata)
 	}
 }
 
