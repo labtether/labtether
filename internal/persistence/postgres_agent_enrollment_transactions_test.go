@@ -277,7 +277,7 @@ func TestPostgresDecommissionPermanentlyRetiresAgentIdentity(t *testing.T) {
 	})
 
 	now := time.Now().UTC()
-	if _, err := store.CreateEnrollmentToken(initialHash, "initial", now.Add(time.Hour), 1); err != nil {
+	if _, err := store.CreateEnrollmentToken(testEnrollmentTokenParams(initialHash, "initial", now.Add(time.Hour), 1)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
@@ -310,7 +310,7 @@ func TestPostgresDecommissionPermanentlyRetiresAgentIdentity(t *testing.T) {
 		t.Fatalf("legacy owner heartbeat reused retired identity: %v", err)
 	}
 
-	retryToken, err := store.CreateEnrollmentToken(retryHash, "retry", now.Add(time.Hour), 2)
+	retryToken, err := store.CreateEnrollmentToken(testEnrollmentTokenParams(retryHash, "retry", now.Add(time.Hour), 2))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -400,7 +400,7 @@ func TestPostgresNonAgentDeletionDoesNotRetireIdentity(t *testing.T) {
 	if err := store.pool.QueryRow(ctx, `SELECT COUNT(*) FROM retired_agent_identities WHERE asset_id = $1`, assetID).Scan(&tombstones); err != nil || tombstones != 0 {
 		t.Fatalf("non-agent tombstones=%d err=%v", tombstones, err)
 	}
-	if _, err := store.CreateEnrollmentToken(enrollmentHash, "reuse", time.Now().UTC().Add(time.Hour), 1); err != nil {
+	if _, err := store.CreateEnrollmentToken(testEnrollmentTokenParams(enrollmentHash, "reuse", time.Now().UTC().Add(time.Hour), 1)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
@@ -481,7 +481,7 @@ func TestPostgresCancelledApprovalDoesNotRetireLaterNonAgentAsset(t *testing.T) 
 	if retired, err := store.IsAgentIdentityRetired(ctx, assetID); err != nil || retired {
 		t.Fatalf("cancelled approval retired later manual asset=%v err=%v", retired, err)
 	}
-	if _, err := store.CreateEnrollmentToken(enrollmentHash, "reuse", time.Now().UTC().Add(time.Hour), 1); err != nil {
+	if _, err := store.CreateEnrollmentToken(testEnrollmentTokenParams(enrollmentHash, "reuse", time.Now().UTC().Add(time.Hour), 1)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
@@ -598,7 +598,7 @@ func TestPostgresUnverifiedHeartbeatAnchorCannotAuthorizeRecovery(t *testing.T) 
 	})
 
 	now := time.Now().UTC()
-	if _, err := store.CreateEnrollmentToken(initialEnrollmentHash, "initial", now.Add(time.Hour), 1); err != nil {
+	if _, err := store.CreateEnrollmentToken(testEnrollmentTokenParams(initialEnrollmentHash, "initial", now.Add(time.Hour), 1)); err != nil {
 		t.Fatal(err)
 	}
 	first, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
@@ -621,7 +621,7 @@ func TestPostgresUnverifiedHeartbeatAnchorCannotAuthorizeRecovery(t *testing.T) 
 	if anchored.Metadata[assets.MetadataKeyAgentIdentityVerifiedAt] != "" {
 		t.Fatalf("bearer heartbeat authored verified marker: %+v", anchored.Metadata)
 	}
-	recoveryToken, err := store.CreateEnrollmentToken(recoveryEnrollmentHash, "recovery", now.Add(time.Hour), 1)
+	recoveryToken, err := store.CreateEnrollmentToken(testEnrollmentTokenParams(recoveryEnrollmentHash, "recovery", now.Add(time.Hour), 1))
 	if err != nil {
 		t.Fatal(err)
 	}

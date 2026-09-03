@@ -355,7 +355,7 @@ func TestMemoryDecommissionPermanentlyRetiresAgentIdentity(t *testing.T) {
 	assetStore := NewMemoryAssetStore()
 	store := NewMemoryEnrollmentStore(assetStore)
 	now := time.Now().UTC()
-	if _, err := store.CreateEnrollmentToken("retire-initial", "initial", now.Add(time.Hour), 1); err != nil {
+	if _, err := store.CreateEnrollmentToken(testEnrollmentTokenParams("retire-initial", "initial", now.Add(time.Hour), 1)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
@@ -387,7 +387,7 @@ func TestMemoryDecommissionPermanentlyRetiresAgentIdentity(t *testing.T) {
 		t.Fatalf("legacy owner heartbeat reused retired identity: %v", err)
 	}
 
-	retryToken, err := store.CreateEnrollmentToken("retire-retry", "retry", now.Add(time.Hour), 2)
+	retryToken, err := store.CreateEnrollmentToken(testEnrollmentTokenParams("retire-retry", "retry", now.Add(time.Hour), 2))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -460,7 +460,7 @@ func TestMemoryNonAgentDeletionDoesNotRetireIdentity(t *testing.T) {
 	if _, retired := assetStore.retiredAgentIDs["manual-reusable"]; retired {
 		t.Fatal("non-agent asset deletion created an agent tombstone")
 	}
-	if _, err := store.CreateEnrollmentToken("manual-reuse-enrollment", "reuse", time.Now().UTC().Add(time.Hour), 1); err != nil {
+	if _, err := store.CreateEnrollmentToken(testEnrollmentTokenParams("manual-reuse-enrollment", "reuse", time.Now().UTC().Add(time.Hour), 1)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
@@ -527,7 +527,7 @@ func TestMemoryCancelledApprovalDoesNotRetireLaterNonAgentAsset(t *testing.T) {
 	if retired, err := store.IsAgentIdentityRetired(ctx, "cancelled-manual"); err != nil || retired {
 		t.Fatalf("cancelled approval retired later manual asset=%v err=%v", retired, err)
 	}
-	if _, err := store.CreateEnrollmentToken("cancelled-manual-enrollment", "reuse", time.Now().UTC().Add(time.Hour), 1); err != nil {
+	if _, err := store.CreateEnrollmentToken(testEnrollmentTokenParams("cancelled-manual-enrollment", "reuse", time.Now().UTC().Add(time.Hour), 1)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
@@ -702,7 +702,7 @@ func TestMemoryIdentityTOFURequiresBoundAgentBearer(t *testing.T) {
 		t.Fatalf("unsigned bearer TOFU authored verified_at: %+v", anchored.Metadata)
 	}
 
-	recoveryToken, err := store.CreateEnrollmentToken("tofu-recovery", "tofu recovery", time.Now().UTC().Add(time.Hour), 1)
+	recoveryToken, err := store.CreateEnrollmentToken(testEnrollmentTokenParams("tofu-recovery", "tofu recovery", time.Now().UTC().Add(time.Hour), 1))
 	if err != nil {
 		t.Fatal(err)
 	}

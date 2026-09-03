@@ -229,7 +229,7 @@ func TestLegacyOwnerWebSocketCannotReconnectRetiredIdentity(t *testing.T) {
 	sut.agentMgr = agentmgr.NewManager()
 	transactions := sut.enrollmentStore.(persistence.AgentEnrollmentTransactionStore)
 	now := time.Now().UTC()
-	if _, err := sut.enrollmentStore.CreateEnrollmentToken("retired-ws-enrollment", "retired ws", now.Add(time.Hour), 1); err != nil {
+	if _, err := sut.enrollmentStore.CreateEnrollmentToken(testEnrollmentTokenParams("retired-ws-enrollment", "retired ws", now.Add(time.Hour), 1)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := transactions.CommitAgentEnrollment(context.Background(), persistence.AgentEnrollmentCommitRequest{
