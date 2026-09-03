@@ -15,6 +15,7 @@ import (
 	"github.com/labtether/labtether/internal/idgen"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/policy"
+	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
@@ -77,6 +78,22 @@ func credentialProfileAuditKind(kind string) string {
 	}
 }
 
+func redactCredentialProfileURLUserinfo(profile credentials.Profile) credentials.Profile {
+	profile.Metadata = securityruntime.RedactURLUserinfoValues(profile.Metadata)
+	return profile
+}
+
+func redactCredentialProfilesURLUserinfo(profiles []credentials.Profile) []credentials.Profile {
+	if profiles == nil {
+		return nil
+	}
+	redacted := make([]credentials.Profile, len(profiles))
+	for i, profile := range profiles {
+		redacted[i] = redactCredentialProfileURLUserinfo(profile)
+	}
+	return redacted
+}
+
 // Cookie sessions carry nil API scopes, so scope middleware alone would allow
 // viewer/operator sessions to mutate the global credential vault. Scoped API
 // keys retain their explicit credentials:write contract; interactive sessions
@@ -120,7 +137,7 @@ func (d *Deps) HandleCredentialProfiles(w http.ResponseWriter, r *http.Request) 
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list credential profiles")
 			return
 		}
-		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"profiles": profiles})
+		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"profiles": redactCredentialProfilesURLUserinfo(profiles)})
 	case http.MethodPost:
 		if !d.EnforceRateLimit(w, r, "credentials.profile.create", 60, time.Minute) {
 			return
@@ -193,7 +210,7 @@ func (d *Deps) HandleCredentialProfiles(w http.ResponseWriter, r *http.Request) 
 		}
 		d.appendCredentialProfileAudit(r, credentialProfileCreatedAuditType, created.ID, "create", created.Kind)
 
-		servicehttp.WriteJSON(w, http.StatusCreated, map[string]any{"profile": created})
+		servicehttp.WriteJSON(w, http.StatusCreated, map[string]any{"profile": redactCredentialProfileURLUserinfo(created)})
 	default:
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
@@ -239,7 +256,7 @@ func (d *Deps) HandleCredentialProfileActions(w http.ResponseWriter, r *http.Req
 	if len(parts) == 1 {
 		switch r.Method {
 		case http.MethodGet:
-			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"profile": profile})
+			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"profile": redactCredentialProfileURLUserinfo(profile)})
 		case http.MethodDelete:
 			lifecycleStore, available := d.CredentialStore.(persistence.CredentialProfileLifecycleStore)
 			if !available {
@@ -334,7 +351,7 @@ func (d *Deps) HandleCredentialProfileActions(w http.ResponseWriter, r *http.Req
 		d.appendCredentialProfileAudit(r, credentialProfileRotatedAuditType, profileID, "rotate", updated.Kind)
 
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
-			"profile": updated,
+			"profile": redactCredentialProfileURLUserinfo(updated),
 			"rotation": map[string]any{
 				"reason": req.Reason,
 			},
@@ -702,6 +719,9 @@ func validateCredentialMetadata(metadata map[string]string) error {
 		}
 		if len(value) > maxCredentialMetadataValueLen {
 			return fmt.Errorf("metadata value exceeds max length %d", maxCredentialMetadataValueLen)
+		}
+		if securityruntime.URLContainsUserinfo(value) {
+			return errors.New("metadata URLs must not contain embedded credentials")
 		}
 		total += len(key) + len(value)
 		if total > maxCredentialMetadataTotalLen {

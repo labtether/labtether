@@ -11,11 +11,13 @@ import (
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/credentials"
 	"github.com/labtether/labtether/internal/hubcollector"
+	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
 var (
 	errCollectorInlineSecret = errors.New("collector config contains inline secret material")
+	errCollectorURLUserinfo  = errors.New("collector config URL contains embedded credentials")
 	errCollectorCredentialID = errors.New("collector config credential_id must be a string")
 )
 
@@ -29,6 +31,9 @@ func validateCollectorConfig(config map[string]any) error {
 	}
 	if collectorConfigContainsSecret(normalized) {
 		return errCollectorInlineSecret
+	}
+	if collectorConfigContainsURLUserinfo(normalized) {
+		return errCollectorURLUserinfo
 	}
 	return nil
 }
@@ -64,6 +69,26 @@ func collectorConfigContainsSecret(value any) bool {
 				return true
 			}
 		}
+	}
+	return false
+}
+
+func collectorConfigContainsURLUserinfo(value any) bool {
+	switch typed := value.(type) {
+	case map[string]any:
+		for _, child := range typed {
+			if collectorConfigContainsURLUserinfo(child) {
+				return true
+			}
+		}
+	case []any:
+		for _, child := range typed {
+			if collectorConfigContainsURLUserinfo(child) {
+				return true
+			}
+		}
+	case string:
+		return securityruntime.URLContainsUserinfo(typed)
 	}
 	return false
 }
@@ -134,7 +159,9 @@ func collectorUpdateInvokesExistingCredential(collector hubcollector.Collector, 
 
 func (d *Deps) authorizeCollectorConfig(w http.ResponseWriter, r *http.Request, config map[string]any) bool {
 	if err := validateCollectorConfig(config); err != nil {
-		if errors.Is(err, errCollectorInlineSecret) {
+		if errors.Is(err, errCollectorURLUserinfo) {
+			servicehttp.WriteError(w, http.StatusBadRequest, "collector URLs must not include credentials; use credential_id")
+		} else if errors.Is(err, errCollectorInlineSecret) {
 			servicehttp.WriteError(w, http.StatusBadRequest, "inline secrets are not allowed in collector config; use credential_id")
 		} else {
 			servicehttp.WriteError(w, http.StatusBadRequest, "collector config must contain valid JSON values")
@@ -182,6 +209,9 @@ func (d *Deps) loadAuthorizedCredentialProfile(w http.ResponseWriter, r *http.Re
 
 func redactHubCollector(collector hubcollector.Collector) hubcollector.Collector {
 	collector.Config = redactCollectorConfig(collector.Config)
+	if redacted, changed := securityruntime.RedactURLUserinfoInText(collector.LastError); changed {
+		collector.LastError = redacted
+	}
 	return collector
 }
 
@@ -227,6 +257,11 @@ func redactCollectorConfigValue(value any) any {
 			redacted[i] = redactCollectorConfigValue(child)
 		}
 		return redacted
+	case string:
+		if redacted, changed := securityruntime.RedactURLUserinfo(typed); changed {
+			return redacted
+		}
+		return typed
 	default:
 		return value
 	}

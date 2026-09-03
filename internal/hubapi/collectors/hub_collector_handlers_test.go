@@ -256,14 +256,69 @@ func TestHandleHubCollectorActionsRejectsInlineSecretConfigOnUpdate(t *testing.T
 	}
 }
 
+func TestHubCollectorWritesRejectURLUserinfo(t *testing.T) {
+	const secretValue = "credential-bearing-secret"
+
+	t.Run("create nested URL", func(t *testing.T) {
+		store := &hubCollectorHandlerStore{}
+		deps := newHubCollectorHandlerDeps(store)
+		req := httptest.NewRequest(http.MethodPost, "/hub-collectors", strings.NewReader(
+			`{"asset_id":"asset-1","collector_type":"api","config":{"nested":{"url":"https://operator:credential-bearing-secret@example.invalid/metrics"}}}`,
+		))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		deps.HandleHubCollectors(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())
+		}
+		if store.createCalls != 0 {
+			t.Fatal("credential-bearing URL reached persistence")
+		}
+		if strings.Contains(rec.Body.String(), secretValue) || strings.Contains(rec.Body.String(), "operator") {
+			t.Fatal("error response reflected URL credentials")
+		}
+	})
+
+	t.Run("update base URL", func(t *testing.T) {
+		store := &hubCollectorHandlerStore{collector: hubcollector.Collector{
+			ID:              "collector-1",
+			AssetID:         "asset-1",
+			CollectorType:   hubcollector.CollectorTypeProxmox,
+			IntervalSeconds: hubcollector.DefaultIntervalSeconds,
+		}}
+		deps := newHubCollectorHandlerDeps(store)
+		req := httptest.NewRequest(http.MethodPatch, "/hub-collectors/collector-1", strings.NewReader(
+			`{"config":{"base_url":"https://operator:credential-bearing-secret@example.invalid:8006"}}`,
+		))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+
+		deps.HandleHubCollectorActions(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())
+		}
+		if store.updateCalls != 0 {
+			t.Fatal("credential-bearing URL update reached persistence")
+		}
+		if strings.Contains(rec.Body.String(), secretValue) || strings.Contains(rec.Body.String(), "operator") {
+			t.Fatal("error response reflected URL credentials")
+		}
+	})
+}
+
 func TestHubCollectorReadResponsesRedactLegacySecretsWithoutMutatingStore(t *testing.T) {
 	const (
 		passwordValue = "synthetic-legacy-password"
 		tokenValue    = "synthetic-legacy-token"
+		urlPassword   = "credential-bearing-url-secret"
 	)
 	nested := map[string]any{
 		"clientSecret": tokenValue,
 		"safe":         "preserved",
+		"endpoint":     "https://nested-user:" + urlPassword + "@nested.example.invalid/path",
 	}
 	store := &hubCollectorHandlerStore{collector: hubcollector.Collector{
 		ID:              "collector-1",
@@ -271,7 +326,7 @@ func TestHubCollectorReadResponsesRedactLegacySecretsWithoutMutatingStore(t *tes
 		CollectorType:   hubcollector.CollectorTypeAPI,
 		IntervalSeconds: hubcollector.DefaultIntervalSeconds,
 		Config: map[string]any{
-			"base_url":       "https://example.invalid",
+			"base_url":       "https://legacy-user:" + urlPassword + "@example.invalid/path",
 			"credential_id":  "credential-profile-1",
 			"token_id":       "operator@realm!collector",
 			"api_key_header": "X-API-Key",
@@ -303,14 +358,15 @@ func TestHubCollectorReadResponsesRedactLegacySecretsWithoutMutatingStore(t *tes
 				t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
 			}
 			body := rec.Body.String()
-			if strings.Contains(body, passwordValue) || strings.Contains(body, tokenValue) {
+			if strings.Contains(body, passwordValue) || strings.Contains(body, tokenValue) || strings.Contains(body, urlPassword) || strings.Contains(body, "legacy-user") || strings.Contains(body, "nested-user") {
 				t.Fatal("collector response exposed persisted secret material")
 			}
 			if !strings.Contains(body, RedactedConnectorSecret) {
 				t.Fatalf("collector response did not contain redaction marker: %s", body)
 			}
 			for _, safeValue := range []string{
-				"https://example.invalid",
+				"https://example.invalid/path",
+				"https://nested.example.invalid/path",
 				"credential-profile-1",
 				"operator@realm!collector",
 				"X-API-Key",
@@ -326,8 +382,43 @@ func TestHubCollectorReadResponsesRedactLegacySecretsWithoutMutatingStore(t *tes
 	if got := store.collector.Config["password"]; got != passwordValue {
 		t.Fatalf("redaction mutated stored password: got %#v", got)
 	}
+	if got := store.collector.Config["base_url"]; got != "https://legacy-user:"+urlPassword+"@example.invalid/path" {
+		t.Fatalf("redaction mutated stored URL: got %#v", got)
+	}
 	if got := nested["clientSecret"]; got != tokenValue {
 		t.Fatalf("redaction mutated nested stored secret: got %#v", got)
+	}
+}
+
+func TestHubCollectorReadResponsesRedactLegacyURLCredentialsFromLastError(t *testing.T) {
+	const secretValue = "credential-bearing<error secret>"
+	const lastError = `request failed: parse "https://error-user:` + secretValue + `@example.invalid/path": invalid URL escape`
+	store := &hubCollectorHandlerStore{collector: hubcollector.Collector{
+		ID:              "collector-1",
+		AssetID:         "asset-1",
+		CollectorType:   hubcollector.CollectorTypeAPI,
+		IntervalSeconds: hubcollector.DefaultIntervalSeconds,
+		Config:          map[string]any{"url": "https://example.invalid/path"},
+		LastStatus:      "error",
+		LastError:       lastError,
+	}}
+	deps := newHubCollectorHandlerDeps(store)
+	rec := httptest.NewRecorder()
+
+	deps.HandleHubCollectorActions(rec, httptest.NewRequest(http.MethodGet, "/hub-collectors/collector-1", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, secretValue) || strings.Contains(body, "error-user") {
+		t.Fatalf("collector response exposed URL credentials from last_error: %s", body)
+	}
+	if !strings.Contains(body, "https://example.invalid/path") {
+		t.Fatalf("collector response lost safe URL from last_error: %s", body)
+	}
+	if store.collector.LastError != lastError {
+		t.Fatal("response redaction mutated stored last_error")
 	}
 }
 
