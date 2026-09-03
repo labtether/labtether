@@ -164,6 +164,77 @@ func TestCredentialProfilePayloadAndPathBounds(t *testing.T) {
 	}); err == nil {
 		t.Fatal("oversized metadata value was accepted")
 	}
+
+	const metadataSecret = "credential-bearing-secret"
+	if err := validateCreateProfileRequest(credentials.CreateProfileRequest{
+		Name:   "metadata URL",
+		Kind:   credentials.KindProxmoxAPIToken,
+		Secret: "encrypted-profile-secret",
+		Metadata: map[string]string{
+			"base_url": "https://operator:" + metadataSecret + "@example.invalid:8006",
+		},
+	}); err == nil {
+		t.Fatal("credential-bearing metadata URL was accepted")
+	} else if strings.Contains(err.Error(), metadataSecret) || strings.Contains(err.Error(), "operator") {
+		t.Fatalf("metadata validation reflected URL credentials: %v", err)
+	}
+}
+
+func TestCredentialProfileResponsesRedactLegacyMetadataURLUserinfo(t *testing.T) {
+	const metadataSecret = "credential-bearing-secret"
+	store := persistence.NewMemoryCredentialStore()
+	profile, err := store.CreateCredentialProfile(credentials.Profile{
+		ID:     "cred-legacy-url",
+		Name:   "legacy URL metadata",
+		Kind:   credentials.KindProxmoxAPIToken,
+		Status: "active",
+		Metadata: map[string]string{
+			"base_url": "https://operator:" + metadataSecret + "@example.invalid:8006/api2/json",
+			"safe":     "preserved",
+		},
+		SecretCiphertext: "encrypted",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deps := &Deps{CredentialStore: store}
+
+	tests := []struct {
+		name string
+		path string
+	}{
+		{name: "list", path: "/credentials/profiles"},
+		{name: "get", path: "/credentials/profiles/" + profile.ID},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			if tt.name == "list" {
+				deps.HandleCredentialProfiles(rec, req)
+			} else {
+				deps.HandleCredentialProfileActions(rec, req)
+			}
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			body := rec.Body.String()
+			if strings.Contains(body, metadataSecret) || strings.Contains(body, "operator") {
+				t.Fatalf("response exposed legacy metadata URL credentials: %s", body)
+			}
+			if !strings.Contains(body, "https://example.invalid:8006/api2/json") || !strings.Contains(body, "preserved") {
+				t.Fatalf("response lost safe metadata: %s", body)
+			}
+		})
+	}
+
+	stored, ok, err := store.GetCredentialProfile(profile.ID)
+	if err != nil || !ok {
+		t.Fatalf("reload stored profile: ok=%v err=%v", ok, err)
+	}
+	if !strings.Contains(stored.Metadata["base_url"], metadataSecret) {
+		t.Fatal("response redaction mutated the stored profile")
+	}
 }
 
 func assertDecryptedCredentialValue(t *testing.T, manager CredentialSecretsManager, ciphertext, aad, want string) {

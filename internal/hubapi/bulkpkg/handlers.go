@@ -29,6 +29,9 @@ const (
 	maxBulkServiceRawTargets  = 64
 	maxBulkServiceTargets     = 64
 	maxBulkServiceConcurrency = 8
+	bulkRateLimitBucket       = "actions.execute"
+	bulkRateLimitCount        = 120
+	bulkRateLimitWindow       = time.Minute
 )
 
 // HandleV2BulkServiceAction handles POST /api/v2/bulk/service-action.
@@ -41,6 +44,9 @@ func (d *Deps) HandleV2BulkServiceAction(w http.ResponseWriter, r *http.Request)
 	}
 	if !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), "bulk:*") {
 		apiv2.WriteScopeForbidden(w, "bulk:*")
+		return
+	}
+	if d.EnforceRateLimit != nil && !d.EnforceRateLimit(w, r, bulkRateLimitBucket, bulkRateLimitCount, bulkRateLimitWindow) {
 		return
 	}
 

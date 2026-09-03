@@ -601,8 +601,19 @@ type AdminResetResult struct {
 }
 
 // EnrollmentStore provides persistence for enrollment tokens and per-agent API tokens.
+type CreateEnrollmentTokenParams struct {
+	TokenHash      string
+	Label          string
+	ExpiresAt      time.Time
+	MaxUses        int
+	Scope          string
+	AssetID        string
+	AllowedGroupID string
+	CreatedBy      string
+}
+
 type EnrollmentStore interface {
-	CreateEnrollmentToken(tokenHash, label string, expiresAt time.Time, maxUses int) (enrollment.EnrollmentToken, error)
+	CreateEnrollmentToken(params CreateEnrollmentTokenParams) (enrollment.EnrollmentToken, error)
 	ValidateEnrollmentToken(tokenHash string) (enrollment.EnrollmentToken, bool, error)
 	ConsumeEnrollmentToken(tokenHash string) (enrollment.EnrollmentToken, bool, error)
 	IncrementEnrollmentTokenUse(id string) error
@@ -703,15 +714,18 @@ type FileConnection struct {
 
 // RemoteBookmark is a saved remote desktop connection to an external host.
 type RemoteBookmark struct {
-	ID             string    `json:"id"`
-	Label          string    `json:"label"`
-	Protocol       string    `json:"protocol"`
-	Host           string    `json:"host"`
-	Port           int       `json:"port"`
-	CredentialID   *string   `json:"credential_id,omitempty"`
-	HasCredentials bool      `json:"has_credentials"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID                string    `json:"id"`
+	Label             string    `json:"label"`
+	Protocol          string    `json:"protocol"`
+	Host              string    `json:"host"`
+	Port              int       `json:"port"`
+	CredentialID      *string   `json:"credential_id,omitempty"`
+	HasCredentials    bool      `json:"has_credentials"`
+	SPICESecurityMode string    `json:"spice_security_mode,omitempty"`
+	SPICECAPEM        string    `json:"spice_ca_pem,omitempty"`
+	AllowInsecureVNC  bool      `json:"allow_insecure_vnc,omitempty"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 // FileTransfer represents a file transfer job between two endpoints.
@@ -740,13 +754,26 @@ const (
 	FileTransferListMaxOffset    = 10_000
 )
 
+var (
+	ErrFileConnectionChanged = errors.New("file connection changed during host key verification")
+	ErrSFTPHostKeyMismatch   = errors.New("sftp host key mismatch")
+)
+
 // FileConnectionStore provides persistence for remote file connection profiles.
 type FileConnectionStore interface {
 	ListFileConnections(ctx context.Context) ([]FileConnection, error)
 	GetFileConnection(ctx context.Context, id string) (*FileConnection, error)
 	CreateFileConnection(ctx context.Context, fc *FileConnection) error
 	UpdateFileConnection(ctx context.Context, fc *FileConnection) error
+	PinSFTPHostKey(ctx context.Context, connectionID, expectedHost string, expectedPort int, presentedKey string) error
 	DeleteFileConnection(ctx context.Context, id string) error
+}
+
+// FileConnectionCredentialStore applies a connection edit and its linked
+// credential edit in one transaction. The boolean selects profile creation
+// for legacy connections that do not have a credential profile yet.
+type FileConnectionCredentialStore interface {
+	UpdateFileConnectionWithCredential(ctx context.Context, fc *FileConnection, profile credentials.Profile, createProfile bool) (credentials.Profile, error)
 }
 
 // RemoteBookmarkStore provides persistence for saved remote desktop bookmarks.

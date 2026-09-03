@@ -78,6 +78,7 @@ func TestPostgresMigrationsCreateCanonicalTables(t *testing.T) {
 		"group_failover_pairs",
 		"push_alert_digest_states",
 		"push_alert_digest_events",
+		"retired_agent_identities",
 	}
 	for _, table := range tables {
 		assertTableExists(t, store, table)
@@ -85,6 +86,23 @@ func TestPostgresMigrationsCreateCanonicalTables(t *testing.T) {
 
 	assertColumnExists(t, store, "groups", "geo_label")
 	assertColumnExists(t, store, "groups", "status")
+}
+
+func TestRetiredAgentIdentityMigrationIsNonCascading(t *testing.T) {
+	for _, migration := range postgresSchemaMigrations() {
+		if migration.Version != 97 {
+			continue
+		}
+		statements := strings.ToLower(strings.Join(migration.Statements, "\n"))
+		if !strings.Contains(statements, "create table if not exists retired_agent_identities") {
+			t.Fatalf("migration v97 does not create the retirement table: %s", statements)
+		}
+		if strings.Contains(statements, "references assets") || strings.Contains(statements, "on delete") {
+			t.Fatalf("retirement tombstone must not cascade with assets: %s", statements)
+		}
+		return
+	}
+	t.Fatal("missing retired agent identity migration v97")
 }
 
 func mustOpenPostgresStoreForMigrationRecovery(t *testing.T, dbURL string) *PostgresStore {

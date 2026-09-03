@@ -7,7 +7,9 @@ import (
 
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/audit"
+	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
 	"github.com/labtether/labtether/internal/persistence"
+	"github.com/labtether/labtether/internal/policy"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -41,6 +43,14 @@ type ExecDeps struct {
 
 	// ScopesFromContext extracts the scopes from the request context.
 	ScopesFromContext func(ctx context.Context) []string
+
+	// EvaluateCommandPolicy applies the Hub's current structured-command policy.
+	// Raw public exec handlers fail closed when it is unavailable.
+	EvaluateCommandPolicy func(ctx context.Context, assetID, command string) policy.CheckResponse
+
+	// EvaluateAssetGuardrails resolves group maintenance constraints before
+	// an operator command is dispatched to an asset.
+	EvaluateAssetGuardrails maintenanceguard.EvaluateAssetFunc
 
 	// EnforceRateLimit returns false (and writes 429) if the rate limit has
 	// been exceeded for the given bucket.

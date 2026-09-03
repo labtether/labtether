@@ -60,10 +60,23 @@ export default function RemoteViewSession({
         ? {
             host: tab.target.host,
             port: tab.target.port,
+            allow_insecure_vnc: tab.target.allowInsecureVNC,
             ...(desktopProtocol === "rdp" || desktopProtocol === "spice"
               ? {
                   username: initialCredentials?.username,
                   password: initialCredentials?.password,
+                  ...(desktopProtocol === "rdp"
+                    ? {
+                        ignore_certificate: tab.target.ignoreCertificate,
+                        allow_legacy_security: tab.target.allowLegacySecurity,
+                        certificate_fingerprints:
+                          tab.target.certificateFingerprints,
+                      }
+                    : {
+                        spice_security_mode:
+                          tab.target.spiceSecurityMode ?? "tls",
+                        spice_ca_pem: tab.target.spiceCAPEM,
+                      }),
                 }
               : {}),
           }

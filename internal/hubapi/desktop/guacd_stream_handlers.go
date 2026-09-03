@@ -1,6 +1,9 @@
 package desktop
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -13,6 +16,7 @@ import (
 
 	"github.com/labtether/labtether/internal/guacamole"
 	"github.com/labtether/labtether/internal/hubapi/shared"
+	"github.com/labtether/labtether/internal/protocols"
 	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
 	"github.com/labtether/labtether/internal/terminal"
@@ -36,17 +40,21 @@ func (d *Deps) HandleGuacdDesktopStream(w http.ResponseWriter, r *http.Request, 
 		}
 	}
 
-	targetHost, targetPort, username, password := d.ResolveRDPTarget(session)
+	target, targetErr := d.ResolveRDPTarget(r.Context(), session)
+	if targetErr != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, "invalid RDP configuration: "+d.SanitizeUpstreamError(targetErr.Error()))
+		return
+	}
 	// Guacd performs the target connection out-of-process. Resolve and validate
 	// every managed or direct target here, then pass guacd only the approved IP
 	// literal. This prevents a second DNS lookup/rebinding hop and applies the
 	// loopback/link-local/private-network policy uniformly to asset metadata.
-	resolvedHost, resolveErr := securityruntime.ResolveOutboundTCPHost(r.Context(), targetHost, targetPort)
+	resolvedHost, resolveErr := securityruntime.ResolveOutboundTCPHost(r.Context(), target.Host, target.Port)
 	if resolveErr != nil {
 		servicehttp.WriteError(w, http.StatusBadRequest, "invalid RDP target: "+d.SanitizeUpstreamError(resolveErr.Error()))
 		return
 	}
-	targetHost = resolvedHost
+	target.Host = resolvedHost
 	client, err := guacamole.Connect(guacdHost, guacdPort)
 	if err != nil {
 		log.Printf("rdp: guacd connect failed: %v", err)
@@ -79,14 +87,12 @@ func (d *Deps) HandleGuacdDesktopStream(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	params := map[string]string{
-		"hostname":          targetHost,
-		"port":              strconv.Itoa(targetPort),
-		"username":          username,
-		"password":          password,
-		"domain":            "",
-		"security":          "any",
-		"ignore-cert":       "true",
+	params := rdpGuacdParams(target)
+	params["hostname"] = target.Host
+	params["port"] = strconv.Itoa(target.Port)
+	params["username"] = target.Username
+	params["password"] = target.Password
+	for key, value := range map[string]string{
 		"disable-auth":      "",
 		"width":             "1920",
 		"height":            "1080",
@@ -96,6 +102,8 @@ func (d *Deps) HandleGuacdDesktopStream(w http.ResponseWriter, r *http.Request, 
 		"enable-printing":   "false",
 		"drive-path":        "",
 		"create-drive-path": "",
+	} {
+		params[key] = value
 	}
 	if err := client.SendHandshake(argNames, params, guacamole.ClientInformation{
 		Width:          1920,
@@ -195,15 +203,63 @@ func (d *Deps) HandleGuacdDesktopStream(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
+// RDPConnectionTarget is the fully resolved connection configuration sent to guacd.
+type RDPConnectionTarget struct {
+	Host                    string
+	Port                    int
+	Username                string
+	Password                string
+	Domain                  string
+	NLAEnabled              bool
+	IgnoreCertificate       bool
+	AllowLegacySecurity     bool
+	CertificateFingerprints string
+}
+
+func rdpGuacdParams(target RDPConnectionTarget) map[string]string {
+	security := "tls"
+	if target.NLAEnabled {
+		security = "nla"
+	}
+	if target.AllowLegacySecurity {
+		security = "rdp"
+	}
+	return map[string]string{
+		"domain":            target.Domain,
+		"security":          security,
+		"ignore-cert":       strconv.FormatBool(target.IgnoreCertificate),
+		"cert-fingerprints": target.CertificateFingerprints,
+	}
+}
+
 // ResolveRDPTarget resolves the RDP connection target for an asset.
-func (d *Deps) ResolveRDPTarget(session terminal.Session) (host string, port int, username string, password string) {
+func (d *Deps) ResolveRDPTarget(ctx context.Context, session terminal.Session) (RDPConnectionTarget, error) {
 	opts := d.GetDesktopSessionOptions(session.ID)
 	if opts.Direct {
-		return opts.DirectHost, opts.DirectPort, opts.DirectUsername, opts.DirectPassword
+		if (opts.RDPIgnoreCertificate || opts.RDPAllowLegacySecurity) && !securityruntime.InsecureTransportAllowed() {
+			return RDPConnectionTarget{}, errors.New("unsafe RDP options cannot be used unless insecure transport is enabled")
+		}
+		cfg := protocols.RDPConfig{
+			IgnoreCertificate:       opts.RDPIgnoreCertificate,
+			AllowLegacySecurity:     opts.RDPAllowLegacySecurity,
+			CertificateFingerprints: opts.RDPCertificateFingerprints,
+		}
+		if err := protocols.ValidateRDPConfigOptions(cfg); err != nil {
+			return RDPConnectionTarget{}, err
+		}
+		return RDPConnectionTarget{
+			Host:                    opts.DirectHost,
+			Port:                    opts.DirectPort,
+			Username:                opts.DirectUsername,
+			Password:                opts.DirectPassword,
+			NLAEnabled:              !opts.RDPAllowLegacySecurity,
+			IgnoreCertificate:       opts.RDPIgnoreCertificate,
+			AllowLegacySecurity:     opts.RDPAllowLegacySecurity,
+			CertificateFingerprints: strings.TrimSpace(opts.RDPCertificateFingerprints),
+		}, nil
 	}
 	assetID := session.Target
-	host = strings.TrimSpace(assetID)
-	port = 3389
+	target := RDPConnectionTarget{Host: strings.TrimSpace(assetID), Port: protocols.DefaultPort(protocols.ProtocolRDP)}
 
 	if d.AssetStore != nil {
 		if assetEntry, ok, err := d.AssetStore.GetAsset(assetID); err == nil && ok {
@@ -216,32 +272,72 @@ func (d *Deps) ResolveRDPTarget(session terminal.Session) (host string, port int
 			}
 			for _, candidate := range candidates {
 				if candidate != "" {
-					host = candidate
+					target.Host = candidate
 					break
 				}
 			}
 			if rawPort := strings.TrimSpace(assetEntry.Metadata["rdp_port"]); rawPort != "" {
 				if parsed, err := strconv.Atoi(rawPort); err == nil && parsed > 0 {
-					port = parsed
+					target.Port = parsed
 				}
 			}
 		}
 	}
 
+	credentialProfileID := ""
+	if d.GetProtocolConfig != nil {
+		pc, err := d.GetProtocolConfig(ctx, assetID, protocols.ProtocolRDP)
+		if err != nil {
+			return RDPConnectionTarget{}, fmt.Errorf("failed to load RDP protocol config: %w", err)
+		}
+		if pc != nil && pc.Enabled {
+			if host := strings.TrimSpace(pc.Host); host != "" {
+				target.Host = host
+			}
+			if pc.Port > 0 {
+				target.Port = pc.Port
+			}
+			target.Username = strings.TrimSpace(pc.Username)
+			credentialProfileID = strings.TrimSpace(pc.CredentialProfileID)
+			cfg, err := protocols.DecodeRDPConfig(pc.Config)
+			if err != nil {
+				return RDPConnectionTarget{}, fmt.Errorf("invalid saved RDP protocol config: %w", err)
+			}
+			target.Domain = strings.TrimSpace(cfg.Domain)
+			target.NLAEnabled = cfg.NLAEnabled
+			target.IgnoreCertificate = cfg.IgnoreCertificate
+			target.AllowLegacySecurity = cfg.AllowLegacySecurity
+			target.CertificateFingerprints = strings.TrimSpace(cfg.CertificateFingerprints)
+		}
+	}
+	if (target.IgnoreCertificate || target.AllowLegacySecurity) && !securityruntime.InsecureTransportAllowed() {
+		return RDPConnectionTarget{}, errors.New("unsafe RDP options cannot be used unless insecure transport is enabled")
+	}
+
 	if d.CredentialStore == nil || d.SecretsManager == nil {
-		return host, port, "", ""
+		return target, nil
 	}
-	cfg, ok, err := d.CredentialStore.GetDesktopConfig(assetID)
-	if err != nil || !ok || strings.TrimSpace(cfg.CredentialProfileID) == "" {
-		return host, port, "", ""
+	if credentialProfileID == "" {
+		cfg, ok, err := d.CredentialStore.GetDesktopConfig(assetID)
+		if err != nil || !ok {
+			return target, nil
+		}
+		credentialProfileID = strings.TrimSpace(cfg.CredentialProfileID)
 	}
-	profile, found, err := d.CredentialStore.GetCredentialProfile(cfg.CredentialProfileID)
+	if credentialProfileID == "" {
+		return target, nil
+	}
+	profile, found, err := d.CredentialStore.GetCredentialProfile(credentialProfileID)
 	if err != nil || !found {
-		return host, port, "", ""
+		return target, nil
+	}
+	if target.Username == "" {
+		target.Username = strings.TrimSpace(profile.Username)
 	}
 	secret, err := d.SecretsManager.DecryptString(profile.SecretCiphertext, profile.ID)
 	if err != nil {
-		return host, port, profile.Username, ""
+		return target, nil
 	}
-	return host, port, profile.Username, secret
+	target.Password = secret
+	return target, nil
 }

@@ -28,6 +28,7 @@ export function ProxmoxSetupStep({ onBack, onClose, onAdded, compatPrefills = []
     tokenSecret, setTokenSecret,
     username, setUsername,
     skipVerify, setSkipVerify,
+    spiceSkipVerify, setSPICESkipVerify,
     clusterName, setClusterName,
     intervalSeconds, setIntervalSeconds,
     collectorID,
@@ -236,7 +237,25 @@ export function ProxmoxSetupStep({ onBack, onClose, onAdded, compatPrefills = []
 
           <label className="flex items-center gap-2 text-xs text-[var(--muted)]">
             <input type="checkbox" checked={skipVerify} onChange={(e) => setSkipVerify(e.target.checked)} />
-            Skip TLS certificate verification
+            Skip Proxmox API certificate verification
+          </label>
+          {skipVerify && !spiceSkipVerify && (
+            <p className="text-xs text-[var(--warn)]">
+              SPICE stays blocked because certificate details from an
+              unverified API cannot be trusted.
+            </p>
+          )}
+          <label className="flex items-start gap-2 text-xs text-[var(--warn)]">
+            <input
+              type="checkbox"
+              checked={spiceSkipVerify}
+              onChange={(e) => setSPICESkipVerify(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              Skip SPICE certificate verification. This is separate from the
+              API setting and also needs the Hub unsafe transport switch.
+            </span>
           </label>
         </>
       ) : (

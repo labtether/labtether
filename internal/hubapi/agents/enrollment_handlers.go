@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/auth"
 	"github.com/labtether/labtether/internal/enrollment"
 	"github.com/labtether/labtether/internal/hubapi/shared"
@@ -111,8 +112,11 @@ func (d *Deps) HandleEnroll(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		switch {
-		case errors.Is(err, persistence.ErrEnrollmentTokenInvalid):
+		case errors.Is(err, persistence.ErrEnrollmentTokenInvalid),
+			errors.Is(err, persistence.ErrEnrollmentTokenScopeMismatch):
 			servicehttp.WriteError(w, http.StatusUnauthorized, "invalid or expired enrollment token")
+		case errors.Is(err, persistence.ErrAgentIdentityRetired):
+			servicehttp.WriteError(w, http.StatusConflict, "agent identity was decommissioned and cannot be reused; enroll with a new hostname/asset ID")
 		case errors.Is(err, persistence.ErrAgentIdentityProofV2Required),
 			errors.Is(err, persistence.ErrRecoveryRequiresSingleUseToken),
 			errors.Is(err, persistence.ErrAgentIdentityContinuityConflict):
@@ -127,6 +131,7 @@ func (d *Deps) HandleEnroll(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	d.disconnectRevokedAgentConnection(assetID, commitResult.RevokedAgentTokenIDs)
 
 	// Reuse the same public connection resolver as discovery/install flows so
 	// auto-enrolled agents stay on the best reachable origin (for example the
@@ -143,6 +148,24 @@ func (d *Deps) HandleEnroll(w http.ResponseWriter, r *http.Request) {
 		HubAPIURL:  hubAPIURL,
 		CACertPEM:  string(d.CACertPEM),
 	})
+}
+
+func (d *Deps) disconnectRevokedAgentConnection(assetID string, revokedTokenIDs []string) {
+	if d.AgentMgr == nil || len(revokedTokenIDs) == 0 {
+		return
+	}
+	conn, ok := d.AgentMgr.Get(assetID)
+	if !ok {
+		return
+	}
+	activeTokenID := strings.TrimSpace(conn.Meta("auth.agent_token_id"))
+	for _, revokedTokenID := range revokedTokenIDs {
+		if activeTokenID != strings.TrimSpace(revokedTokenID) {
+			continue
+		}
+		d.AgentMgr.UnregisterIfMatch(assetID, conn)
+		return
+	}
 }
 
 // handleDiscover returns hub connection info — unauthenticated.
@@ -209,6 +232,60 @@ func (d *Deps) HandleEnrollmentTokens(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		req.MaxUses = maxUses
+		req.Scope = strings.ToLower(strings.TrimSpace(req.Scope))
+		req.AssetID = strings.TrimSpace(req.AssetID)
+		req.AllowedGroupID = strings.TrimSpace(req.AllowedGroupID)
+		switch req.Scope {
+		case enrollment.TokenScopeAsset:
+			req.AssetID = NormalizeHostnameForAssetID(req.AssetID)
+			if req.AssetID == "" {
+				servicehttp.WriteError(w, http.StatusBadRequest, "asset scope requires an expected hostname or asset id")
+				return
+			}
+			if req.MaxUses != 1 {
+				servicehttp.WriteError(w, http.StatusBadRequest, "asset-scoped enrollment tokens must be single-use")
+				return
+			}
+		case enrollment.TokenScopeGroup:
+			if req.AssetID != "" || req.AllowedGroupID == "" {
+				servicehttp.WriteError(w, http.StatusBadRequest, "group scope requires one allowed group and no asset id")
+				return
+			}
+		case enrollment.TokenScopeUnplaced:
+			if req.AssetID != "" || req.AllowedGroupID != "" {
+				servicehttp.WriteError(w, http.StatusBadRequest, "unplaced scope cannot bind an asset or group")
+				return
+			}
+		case enrollment.TokenScopeUnrestricted:
+			if req.AssetID != "" || req.AllowedGroupID != "" || !req.AcknowledgeUnrestricted {
+				servicehttp.WriteError(w, http.StatusBadRequest, "unrestricted scope requires explicit acknowledgement and no asset or group binding")
+				return
+			}
+		default:
+			servicehttp.WriteError(w, http.StatusBadRequest, "a valid enrollment token scope is required")
+			return
+		}
+		if req.AllowedGroupID != "" {
+			if d.GroupStore == nil {
+				servicehttp.WriteError(w, http.StatusServiceUnavailable, "group validation is not available")
+				return
+			}
+			if _, found, err := d.GroupStore.GetGroup(req.AllowedGroupID); err != nil {
+				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to validate allowed group")
+				return
+			} else if !found {
+				servicehttp.WriteError(w, http.StatusBadRequest, "allowed group does not exist")
+				return
+			}
+		}
+		actorID := ""
+		if d.PrincipalActorID != nil {
+			actorID = strings.TrimSpace(d.PrincipalActorID(r.Context()))
+		}
+		if actorID == "" {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to identify enrollment token creator")
+			return
+		}
 
 		expiresAt := time.Now().UTC().Add(time.Duration(req.TTLHours) * time.Hour)
 
@@ -219,7 +296,16 @@ func (d *Deps) HandleEnrollmentTokens(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		tok, err := d.EnrollmentStore.CreateEnrollmentToken(hashedToken, req.Label, expiresAt, req.MaxUses)
+		tok, err := d.EnrollmentStore.CreateEnrollmentToken(persistence.CreateEnrollmentTokenParams{
+			TokenHash:      hashedToken,
+			Label:          req.Label,
+			ExpiresAt:      expiresAt,
+			MaxUses:        req.MaxUses,
+			Scope:          req.Scope,
+			AssetID:        req.AssetID,
+			AllowedGroupID: req.AllowedGroupID,
+			CreatedBy:      actorID,
+		})
 		if err != nil {
 			if validateErr := enrollment.ValidateStoredTokenMaxUses(req.MaxUses); validateErr != nil {
 				servicehttp.WriteError(w, http.StatusBadRequest, validateErr.Error())
@@ -227,6 +313,20 @@ func (d *Deps) HandleEnrollmentTokens(w http.ResponseWriter, r *http.Request) {
 			}
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create enrollment token")
 			return
+		}
+		if d.AppendAuditEventBestEffort != nil {
+			event := audit.NewEvent("enrollment.token.created")
+			event.ActorID = actorID
+			event.Target = tok.ID
+			event.Decision = "allowed"
+			event.Details = map[string]any{
+				"scope":            tok.Scope,
+				"asset_id":         tok.AssetID,
+				"allowed_group_id": tok.AllowedGroupID,
+				"max_uses":         tok.MaxUses,
+				"expires_at":       tok.ExpiresAt,
+			}
+			d.AppendAuditEventBestEffort(event, "api warning: failed to append enrollment token creation audit event")
 		}
 
 		servicehttp.WriteJSON(w, http.StatusCreated, map[string]any{

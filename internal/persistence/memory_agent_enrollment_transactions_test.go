@@ -18,7 +18,7 @@ func TestMemoryCommitAgentEnrollmentRecoveryIsAtomicAndPreservesAsset(t *testing
 	assetStore := NewMemoryAssetStore()
 	store := NewMemoryEnrollmentStore(assetStore)
 	now := time.Now().UTC()
-	_, err := store.CreateEnrollmentToken("initial-enrollment", "initial", now.Add(time.Hour), 10)
+	_, err := store.CreateEnrollmentToken(testEnrollmentTokenParams("initial-enrollment", "initial", now.Add(time.Hour), 10))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestMemoryCommitAgentEnrollmentRecoveryIsAtomicAndPreservesAsset(t *testing
 	assetStore.assets[custom.ID] = custom
 	assetStore.mu.Unlock()
 
-	_, err = store.CreateEnrollmentToken("recovery-enrollment", "recovery", now.Add(time.Hour), 1)
+	_, err = store.CreateEnrollmentToken(testEnrollmentTokenParams("recovery-enrollment", "recovery", now.Add(time.Hour), 1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,6 +63,13 @@ func TestMemoryCommitAgentEnrollmentRecoveryIsAtomicAndPreservesAsset(t *testing
 	if !recovered.Recovery {
 		t.Fatal("expected recovery result")
 	}
+	revokedIDs := make(map[string]bool, len(recovered.RevokedAgentTokenIDs))
+	for _, tokenID := range recovered.RevokedAgentTokenIDs {
+		revokedIDs[tokenID] = true
+	}
+	if len(revokedIDs) != 1 || !revokedIDs[first.AgentToken.ID] {
+		t.Fatalf("revoked token ids=%v, want the old credential", recovered.RevokedAgentTokenIDs)
+	}
 	if recovered.Asset.Name != "Operator name" || recovered.Asset.GroupID != "operator-group" || recovered.Asset.Platform != "operator-platform" || recovered.Asset.Metadata["operator_note"] != "preserve-me" {
 		t.Fatalf("recovery clobbered operator-managed asset: %+v", recovered.Asset)
 	}
@@ -74,7 +81,7 @@ func TestMemoryCommitAgentEnrollmentRecoveryIsAtomicAndPreservesAsset(t *testing
 	}
 }
 
-func TestMemoryCommitAgentEnrollmentResolvesInitialGroupPlacement(t *testing.T) {
+func TestMemoryCommitAgentEnrollmentEnforcesInitialGroupScope(t *testing.T) {
 	ctx := context.Background()
 	assetStore := NewMemoryAssetStore()
 	groupStore := NewMemoryGroupStore()
@@ -85,32 +92,32 @@ func TestMemoryCommitAgentEnrollmentResolvesInitialGroupPlacement(t *testing.T) 
 	store := NewMemoryEnrollmentStoreWithGroupStore(assetStore, groupStore)
 	now := time.Now().UTC()
 
-	if _, err := store.CreateEnrollmentToken("missing-group-enrollment", "missing group", now.Add(time.Hour), 2); err != nil {
+	if _, err := store.CreateEnrollmentToken(testEnrollmentTokenParams("missing-group-enrollment", "missing group", now.Add(time.Hour), 2)); err != nil {
 		t.Fatal(err)
 	}
-	missingGroupResult, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
+	_, err = store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
 		AssetID: "qa-windows-host", Hostname: "QAWindowsHost", Platform: "windows", GroupID: "qa",
 		EnrollmentTokenHash: "missing-group-enrollment", AgentTokenHash: "missing-group-agent-token",
 		AgentTokenExpiresAt: now.Add(time.Hour),
 	})
-	if err != nil {
-		t.Fatalf("missing group enrollment: %v", err)
+	if !errors.Is(err, ErrEnrollmentTokenScopeMismatch) {
+		t.Fatalf("missing group enrollment error=%v", err)
 	}
-	if missingGroupResult.Asset.GroupID != "" {
-		t.Fatalf("missing group was persisted: %q", missingGroupResult.Asset.GroupID)
+	if _, exists, err := assetStore.GetAsset("qa-windows-host"); err != nil || exists {
+		t.Fatalf("rejected group enrollment created asset: exists=%v err=%v", exists, err)
 	}
-	if token, valid, err := store.ValidateEnrollmentToken("missing-group-enrollment"); err != nil || !valid || token.UseCount != 1 {
+	if token, valid, err := store.ValidateEnrollmentToken("missing-group-enrollment"); err != nil || !valid || token.UseCount != 0 {
 		t.Fatalf("missing group token state: token=%+v valid=%v err=%v", token, valid, err)
 	}
-	if token, valid, err := store.ValidateAgentToken("missing-group-agent-token"); err != nil || !valid || token.AssetID != "qa-windows-host" {
+	if token, valid, err := store.ValidateAgentToken("missing-group-agent-token"); err != nil || valid {
 		t.Fatalf("missing group agent token: token=%+v valid=%v err=%v", token, valid, err)
 	}
 
-	if _, err := store.CreateEnrollmentToken("valid-group-enrollment", "valid group", now.Add(time.Hour), 2); err != nil {
+	if _, err := store.CreateEnrollmentToken(testGroupEnrollmentTokenParams("valid-group-enrollment", validGroup.ID, now.Add(time.Hour), 2)); err != nil {
 		t.Fatal(err)
 	}
 	validGroupResult, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
-		AssetID: "grouped-agent", Hostname: "Grouped Agent", Platform: "linux", GroupID: validGroup.ID,
+		AssetID: "grouped-agent", Hostname: "Grouped Agent", Platform: "linux",
 		EnrollmentTokenHash: "valid-group-enrollment", AgentTokenHash: "valid-group-agent-token",
 		AgentTokenExpiresAt: now.Add(time.Hour),
 	})
@@ -122,12 +129,81 @@ func TestMemoryCommitAgentEnrollmentResolvesInitialGroupPlacement(t *testing.T) 
 	}
 }
 
+func TestMemoryAssetScopedEnrollmentRejectsWrongAssetWithoutConsumption(t *testing.T) {
+	ctx := context.Background()
+	assetStore := NewMemoryAssetStore()
+	store := NewMemoryEnrollmentStore(assetStore)
+	now := time.Now().UTC()
+	if _, err := store.CreateEnrollmentToken(testAssetEnrollmentTokenParams("asset-scope", "intended-node", now.Add(time.Hour))); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
+		AssetID: "other-node", Hostname: "other-node", EnrollmentTokenHash: "asset-scope",
+		AgentTokenHash: "wrong-agent-token", AgentTokenExpiresAt: now.Add(time.Hour),
+	})
+	if !errors.Is(err, ErrEnrollmentTokenScopeMismatch) {
+		t.Fatalf("wrong asset error=%v", err)
+	}
+	if _, exists, err := assetStore.GetAsset("other-node"); err != nil || exists {
+		t.Fatalf("wrong asset was created: exists=%v err=%v", exists, err)
+	}
+	if token, valid, err := store.ValidateEnrollmentToken("asset-scope"); err != nil || !valid || token.UseCount != 0 {
+		t.Fatalf("rejected asset scope token=%+v valid=%v err=%v", token, valid, err)
+	}
+	if _, valid, err := store.ValidateAgentToken("wrong-agent-token"); err != nil || valid {
+		t.Fatalf("rejected asset scope issued bearer: valid=%v err=%v", valid, err)
+	}
+
+	result, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
+		AssetID: "intended-node", Hostname: "intended-node", EnrollmentTokenHash: "asset-scope",
+		AgentTokenHash: "right-agent-token", AgentTokenExpiresAt: now.Add(time.Hour),
+	})
+	if err != nil || result.Asset.ID != "intended-node" {
+		t.Fatalf("intended asset enrollment result=%+v err=%v", result, err)
+	}
+}
+
+func TestMemoryRecoveryScopeMismatchPreservesBearerAndToken(t *testing.T) {
+	ctx := context.Background()
+	assetStore := NewMemoryAssetStore()
+	store := NewMemoryEnrollmentStore(assetStore)
+	now := time.Now().UTC()
+	if _, err := store.CreateEnrollmentToken(testEnrollmentTokenParams("initial", "initial", now.Add(time.Hour), 1)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
+		AssetID: "recovery-node", Hostname: "recovery-node", EnrollmentTokenHash: "initial",
+		AgentTokenHash: "old-bearer", AgentTokenExpiresAt: now.Add(time.Hour),
+		DeviceFingerprint: "LT-RECOVERY", DeviceKeyAlgorithm: "ed25519", DeviceProofVersion: enrollment.DeviceProofVersionV1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CreateEnrollmentToken(testAssetEnrollmentTokenParams("wrong-recovery", "other-node", now.Add(time.Hour))); err != nil {
+		t.Fatal(err)
+	}
+	_, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
+		AssetID: "recovery-node", Hostname: "recovery-node", EnrollmentTokenHash: "wrong-recovery",
+		AgentTokenHash: "new-bearer", AgentTokenExpiresAt: now.Add(time.Hour),
+		DeviceFingerprint: "LT-RECOVERY", DeviceKeyAlgorithm: "ed25519", DeviceProofVersion: enrollment.DeviceProofVersionV2,
+	})
+	if !errors.Is(err, ErrEnrollmentTokenScopeMismatch) {
+		t.Fatalf("recovery scope error=%v", err)
+	}
+	if _, valid, _ := store.ValidateAgentToken("old-bearer"); !valid {
+		t.Fatal("scope mismatch revoked the old bearer")
+	}
+	if token, valid, err := store.ValidateEnrollmentToken("wrong-recovery"); err != nil || !valid || token.UseCount != 0 {
+		t.Fatalf("scope mismatch consumed recovery token: token=%+v valid=%v err=%v", token, valid, err)
+	}
+}
+
 func TestMemoryRecoveryRejectsMultiUseWithoutConsumingOrRotating(t *testing.T) {
 	ctx := context.Background()
 	assetStore := NewMemoryAssetStore()
 	store := NewMemoryEnrollmentStore(assetStore)
 	now := time.Now().UTC()
-	_, _ = store.CreateEnrollmentToken("first-enrollment", "first", now.Add(time.Hour), 1)
+	_, _ = store.CreateEnrollmentToken(testEnrollmentTokenParams("first-enrollment", "first", now.Add(time.Hour), 1))
 	_, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
 		AssetID: "node-1", Hostname: "node-1", EnrollmentTokenHash: "first-enrollment",
 		AgentTokenHash: "old-agent-token", AgentTokenExpiresAt: now.Add(time.Hour),
@@ -136,7 +212,7 @@ func TestMemoryRecoveryRejectsMultiUseWithoutConsumingOrRotating(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	multi, _ := store.CreateEnrollmentToken("multi-enrollment", "multi", now.Add(time.Hour), 2)
+	multi, _ := store.CreateEnrollmentToken(testEnrollmentTokenParams("multi-enrollment", "multi", now.Add(time.Hour), 2))
 	_, err = store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
 		AssetID: "node-1", Hostname: "node-1", EnrollmentTokenHash: "multi-enrollment",
 		AgentTokenHash: "new-agent-token", AgentTokenExpiresAt: now.Add(time.Hour),
@@ -164,7 +240,7 @@ func TestMemoryEnrollmentRollbackOnDuplicateAgentHash(t *testing.T) {
 	if _, err := store.CreateAgentToken("other", "duplicate-hash", "test", now.Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
-	token, _ := store.CreateEnrollmentToken("enrollment", "rollback", now.Add(time.Hour), 1)
+	token, _ := store.CreateEnrollmentToken(testEnrollmentTokenParams("enrollment", "rollback", now.Add(time.Hour), 1))
 	if _, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
 		AssetID: "node-rollback", Hostname: "node-rollback", EnrollmentTokenHash: "enrollment",
 		AgentTokenHash: "duplicate-hash", AgentTokenExpiresAt: now.Add(time.Hour),
@@ -234,7 +310,7 @@ func TestMemoryDecommissionWinsAgainstAuthenticatedHeartbeat(t *testing.T) {
 	assetStore := NewMemoryAssetStore()
 	store := NewMemoryEnrollmentStore(assetStore)
 	now := time.Now().UTC()
-	_, _ = store.CreateEnrollmentToken("enrollment", "test", now.Add(time.Hour), 1)
+	_, _ = store.CreateEnrollmentToken(testEnrollmentTokenParams("enrollment", "test", now.Add(time.Hour), 1))
 	result, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
 		AssetID: "node-race", Hostname: "node-race", EnrollmentTokenHash: "enrollment",
 		AgentTokenHash: "agent-hash", AgentTokenExpiresAt: now.Add(time.Hour),
@@ -271,6 +347,195 @@ func TestMemoryDecommissionWinsAgainstAuthenticatedHeartbeat(t *testing.T) {
 	}
 	if _, valid, _ := store.ValidateAgentToken("agent-hash"); valid {
 		t.Fatal("decommission left bearer active")
+	}
+}
+
+func TestMemoryDecommissionPermanentlyRetiresAgentIdentity(t *testing.T) {
+	ctx := context.Background()
+	assetStore := NewMemoryAssetStore()
+	store := NewMemoryEnrollmentStore(assetStore)
+	now := time.Now().UTC()
+	if _, err := store.CreateEnrollmentToken(testEnrollmentTokenParams("retire-initial", "initial", now.Add(time.Hour), 1)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
+		AssetID: "retired-node", Hostname: "retired-node", EnrollmentTokenHash: "retire-initial",
+		AgentTokenHash: "retire-agent", AgentTokenExpiresAt: now.Add(time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DecommissionAgentAsset(ctx, "retired-node"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DecommissionAgentAsset(ctx, "retired-node"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("second decommission error=%v", err)
+	}
+	if _, retired := assetStore.retiredAgentIDs["retired-node"]; !retired {
+		t.Fatal("decommission did not preserve an identity tombstone")
+	}
+	if retired, err := store.IsAgentIdentityRetired(ctx, "retired-node"); err != nil || !retired {
+		t.Fatalf("retired identity lookup=%v err=%v", retired, err)
+	}
+	if _, err := assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: "retired-node", Name: "laundered", Type: "host", Source: "manual", Status: "online",
+	}); !errors.Is(err, ErrAgentIdentityRetired) {
+		t.Fatalf("generic heartbeat reused retired identity: %v", err)
+	}
+	if _, err := store.CommitExistingOwnerAgentHeartbeat(ctx, assets.HeartbeatRequest{
+		AssetID: "retired-node", Name: "legacy", Type: "node", Source: "agent", Status: "online",
+	}); !errors.Is(err, ErrAgentIdentityRetired) {
+		t.Fatalf("legacy owner heartbeat reused retired identity: %v", err)
+	}
+
+	retryToken, err := store.CreateEnrollmentToken(testEnrollmentTokenParams("retire-retry", "retry", now.Add(time.Hour), 2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
+		AssetID: "retired-node", Hostname: "retired-node", EnrollmentTokenHash: "retire-retry",
+		AgentTokenHash: "retire-retry-agent", AgentTokenExpiresAt: now.Add(time.Hour),
+	})
+	if !errors.Is(err, ErrAgentIdentityRetired) {
+		t.Fatalf("retired identity enrollment error=%v", err)
+	}
+	if token, valid, err := store.ValidateEnrollmentToken("retire-retry"); err != nil || !valid || token.ID != retryToken.ID || token.UseCount != 0 {
+		t.Fatalf("retirement rejection mutated token: token=%+v valid=%v err=%v", token, valid, err)
+	}
+	if _, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
+		AssetID: "retired-node", Hostname: "retired-node", EnrollmentTokenHash: "invalid-token",
+		AgentTokenHash: "invalid-agent", AgentTokenExpiresAt: now.Add(time.Hour),
+	}); !errors.Is(err, ErrEnrollmentTokenInvalid) {
+		t.Fatalf("invalid token leaked retirement state: %v", err)
+	}
+	if _, err := store.PrepareAgentApproval(ctx, AgentApprovalPrepareRequest{
+		AssetID: "retired-node", AgentTokenHash: "retired-approval", PreparedTokenExpiresAt: now.Add(time.Minute),
+	}); !errors.Is(err, ErrAgentIdentityRetired) {
+		t.Fatalf("retired identity approval error=%v", err)
+	}
+	if _, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
+		AssetID: "replacement-node", Hostname: "replacement-node", EnrollmentTokenHash: "retire-retry",
+		AgentTokenHash: "replacement-agent", AgentTokenExpiresAt: now.Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("new replacement identity enrollment: %v", err)
+	}
+}
+
+func TestMemoryPreparedApprovalCannotFinalizeRetiredIdentity(t *testing.T) {
+	ctx := context.Background()
+	assetStore := NewMemoryAssetStore()
+	store := NewMemoryEnrollmentStore(assetStore)
+	prepared, err := store.PrepareAgentApproval(ctx, AgentApprovalPrepareRequest{
+		AssetID: "prepared-retired", AgentTokenHash: "prepared-retired-token",
+		PreparedTokenExpiresAt: time.Now().UTC().Add(time.Minute),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assetStore.mu.Lock()
+	assetStore.retiredAgentIDs["prepared-retired"] = time.Now().UTC()
+	assetStore.mu.Unlock()
+
+	_, err = store.FinalizeAgentApproval(ctx, AgentApprovalFinalizeRequest{
+		PreparedTokenID: prepared.ID, AssetID: "prepared-retired", Hostname: "prepared-retired",
+		DeviceFingerprint: "LT-RETIRED", DeviceKeyAlgorithm: "ed25519",
+		AgentTokenExpiresAt: time.Now().UTC().Add(time.Hour),
+	})
+	if !errors.Is(err, ErrAgentIdentityRetired) {
+		t.Fatalf("retired prepared approval error=%v", err)
+	}
+}
+
+func TestMemoryNonAgentDeletionDoesNotRetireIdentity(t *testing.T) {
+	ctx := context.Background()
+	assetStore := NewMemoryAssetStore()
+	store := NewMemoryEnrollmentStore(assetStore)
+	if _, err := assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: "manual-reusable", Name: "manual", Type: "host", Source: "manual", Status: "online",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DecommissionAgentAsset(ctx, "manual-reusable"); err != nil {
+		t.Fatal(err)
+	}
+	if _, retired := assetStore.retiredAgentIDs["manual-reusable"]; retired {
+		t.Fatal("non-agent asset deletion created an agent tombstone")
+	}
+	if _, err := store.CreateEnrollmentToken(testEnrollmentTokenParams("manual-reuse-enrollment", "reuse", time.Now().UTC().Add(time.Hour), 1)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
+		AssetID: "manual-reusable", Hostname: "manual-reusable", EnrollmentTokenHash: "manual-reuse-enrollment",
+		AgentTokenHash: "manual-reuse-agent", AgentTokenExpiresAt: time.Now().UTC().Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("non-agent ID was not reusable: %v", err)
+	}
+}
+
+func TestMemoryAgentSourceCannotBeDowngradedBeforeDecommission(t *testing.T) {
+	ctx := context.Background()
+	assetStore := NewMemoryAssetStore()
+	store := NewMemoryEnrollmentStore(assetStore)
+	if _, err := assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: "sticky-agent", Name: "legacy agent", Type: "node", Source: "agent", Status: "online",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: "sticky-agent", Name: "laundered", Type: "host", Source: "manual", Status: "online",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Source != "agent" {
+		t.Fatalf("generic heartbeat downgraded agent source to %q", updated.Source)
+	}
+	if err := store.DecommissionAgentAsset(ctx, "sticky-agent"); err != nil {
+		t.Fatal(err)
+	}
+	if retired, err := store.IsAgentIdentityRetired(ctx, "sticky-agent"); err != nil || !retired {
+		t.Fatalf("downgrade attempt escaped retirement=%v err=%v", retired, err)
+	}
+	if _, err := assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: "sticky-agent", Name: "reused", Type: "host", Source: "manual", Status: "online",
+	}); !errors.Is(err, ErrAgentIdentityRetired) {
+		t.Fatalf("downgraded agent identity was reusable: %v", err)
+	}
+}
+
+func TestMemoryCancelledApprovalDoesNotRetireLaterNonAgentAsset(t *testing.T) {
+	ctx := context.Background()
+	assetStore := NewMemoryAssetStore()
+	store := NewMemoryEnrollmentStore(assetStore)
+	prepared, err := store.PrepareAgentApproval(ctx, AgentApprovalPrepareRequest{
+		AssetID: "cancelled-manual", AgentTokenHash: "cancelled-manual-pending",
+		PreparedTokenExpiresAt: time.Now().UTC().Add(time.Minute),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CancelAgentApproval(ctx, prepared.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: "cancelled-manual", Name: "manual", Type: "host", Source: "manual", Status: "online",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DecommissionAgentAsset(ctx, "cancelled-manual"); err != nil {
+		t.Fatal(err)
+	}
+	if retired, err := store.IsAgentIdentityRetired(ctx, "cancelled-manual"); err != nil || retired {
+		t.Fatalf("cancelled approval retired later manual asset=%v err=%v", retired, err)
+	}
+	if _, err := store.CreateEnrollmentToken(testEnrollmentTokenParams("cancelled-manual-enrollment", "reuse", time.Now().UTC().Add(time.Hour), 1)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
+		AssetID: "cancelled-manual", Hostname: "cancelled-manual",
+		EnrollmentTokenHash: "cancelled-manual-enrollment", AgentTokenHash: "cancelled-manual-agent",
+		AgentTokenExpiresAt: time.Now().UTC().Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("cancelled approval blocked later enrollment: %v", err)
 	}
 }
 
@@ -381,7 +646,7 @@ func TestMemoryOwnerHeartbeatCannotRaceDecommissionResurrection(t *testing.T) {
 	}()
 	close(start)
 	wg.Wait()
-	if err := <-heartbeatErr; err != nil && !errors.Is(err, ErrNotFound) {
+	if err := <-heartbeatErr; err != nil && !errors.Is(err, ErrNotFound) && !errors.Is(err, ErrAgentIdentityRetired) {
 		t.Fatalf("owner heartbeat error=%v", err)
 	}
 	if _, exists, _ := assetStore.GetAsset("owner-race"); exists {
@@ -408,7 +673,7 @@ func TestMemoryIdentityTOFURequiresBoundAgentBearer(t *testing.T) {
 	}
 
 	now := time.Now().UTC()
-	_, _ = store.CreateEnrollmentToken("tofu-enrollment", "tofu", now.Add(time.Hour), 1)
+	_, _ = store.CreateEnrollmentToken(testEnrollmentTokenParams("tofu-enrollment", "tofu", now.Add(time.Hour), 1))
 	result, err := store.CommitAgentEnrollment(context.Background(), AgentEnrollmentCommitRequest{
 		AssetID: "bearer-anchor", Hostname: "bearer-anchor", EnrollmentTokenHash: "tofu-enrollment",
 		AgentTokenHash: "tofu-agent", AgentTokenExpiresAt: now.Add(time.Hour),
@@ -436,17 +701,36 @@ func TestMemoryIdentityTOFURequiresBoundAgentBearer(t *testing.T) {
 	if anchored.Metadata[assets.MetadataKeyAgentIdentityVerifiedAt] != "" {
 		t.Fatalf("unsigned bearer TOFU authored verified_at: %+v", anchored.Metadata)
 	}
+
+	recoveryToken, err := store.CreateEnrollmentToken(testEnrollmentTokenParams("tofu-recovery", "tofu recovery", time.Now().UTC().Add(time.Hour), 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = store.CommitAgentEnrollment(context.Background(), AgentEnrollmentCommitRequest{
+		AssetID: "bearer-anchor", Hostname: "bearer-anchor", EnrollmentTokenHash: "tofu-recovery",
+		AgentTokenHash: "tofu-replacement", AgentTokenExpiresAt: time.Now().UTC().Add(time.Hour),
+		DeviceFingerprint: "LT-BEARER-TOFU", DeviceKeyAlgorithm: "ed25519", DeviceProofVersion: enrollment.DeviceProofVersionV2,
+	})
+	if !errors.Is(err, ErrAgentIdentityContinuityConflict) {
+		t.Fatalf("unverified TOFU recovery error=%v, want continuity conflict", err)
+	}
+	if token, valid, err := store.ValidateEnrollmentToken("tofu-recovery"); err != nil || !valid || token.ID != recoveryToken.ID || token.UseCount != 0 {
+		t.Fatalf("rejected recovery mutated token: token=%+v valid=%v err=%v", token, valid, err)
+	}
+	if err := store.ValidateActiveAgentTokenID(context.Background(), result.AgentToken.ID, "bearer-anchor"); err != nil {
+		t.Fatalf("rejected recovery invalidated original bearer: %v", err)
+	}
 }
 
 func TestMemoryRecoveryRejectsEnrollmentTokenIssuedBeforeLatestRotation(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryEnrollmentStore(NewMemoryAssetStore())
 	now := time.Now().UTC()
-	_, err := store.CreateEnrollmentToken("initial-order", "initial", now.Add(time.Hour), 1)
+	_, err := store.CreateEnrollmentToken(testEnrollmentTokenParams("initial-order", "initial", now.Add(time.Hour), 1))
 	if err != nil {
 		t.Fatal(err)
 	}
-	stale, err := store.CreateEnrollmentToken("stale-recovery-order", "stale", now.Add(time.Hour), 1)
+	stale, err := store.CreateEnrollmentToken(testEnrollmentTokenParams("stale-recovery-order", "stale", now.Add(time.Hour), 1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -473,7 +757,7 @@ func TestMemoryRecoveryRejectsEnrollmentTokenIssuedBeforeLatestRotation(t *testi
 		t.Fatalf("stale recovery invalidated active token: %v", err)
 	}
 
-	if _, err := store.CreateEnrollmentToken("fresh-recovery-order", "fresh", now.Add(time.Hour), 1); err != nil {
+	if _, err := store.CreateEnrollmentToken(testEnrollmentTokenParams("fresh-recovery-order", "fresh", now.Add(time.Hour), 1)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
@@ -490,7 +774,7 @@ func TestMemoryFleetCapacityIsDurableUntilDecommission(t *testing.T) {
 	assetStore := NewMemoryAssetStore()
 	store := NewMemoryEnrollmentStore(assetStore)
 	now := time.Now().UTC()
-	if _, err := store.CreateEnrollmentToken("capacity-first-enrollment", "first", now.Add(time.Hour), 1); err != nil {
+	if _, err := store.CreateEnrollmentToken(testEnrollmentTokenParams("capacity-first-enrollment", "first", now.Add(time.Hour), 1)); err != nil {
 		t.Fatal(err)
 	}
 	first, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
@@ -504,7 +788,7 @@ func TestMemoryFleetCapacityIsDurableUntilDecommission(t *testing.T) {
 	if err := store.RevokeAgentToken(first.AgentToken.ID); err != nil {
 		t.Fatal(err)
 	}
-	secondEnrollment, err := store.CreateEnrollmentToken("capacity-second-enrollment", "second", now.Add(time.Hour), 1)
+	secondEnrollment, err := store.CreateEnrollmentToken(testEnrollmentTokenParams("capacity-second-enrollment", "second", now.Add(time.Hour), 1))
 	if err != nil {
 		t.Fatal(err)
 	}

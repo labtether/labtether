@@ -15,6 +15,7 @@ import (
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/policy"
+	"github.com/labtether/labtether/internal/protocols"
 	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
 	"github.com/labtether/labtether/internal/terminal"
@@ -22,28 +23,35 @@ import (
 
 // DesktopSessionOptions holds per-session desktop configuration.
 type DesktopSessionOptions struct {
-	Protocol       string
-	Quality        string
-	Display        string
-	Record         bool
-	VNCPassword    string
-	FallbackReason string
-	Direct         bool
-	DirectHost     string
-	DirectPort     int
-	DirectUsername string
-	DirectPassword string // #nosec G117 -- Ephemeral, in-memory-only RDP/SPICE session credential.
+	Protocol                   string
+	Quality                    string
+	Display                    string
+	Record                     bool
+	VNCPassword                string
+	FallbackReason             string
+	Direct                     bool
+	DirectHost                 string
+	DirectPort                 int
+	DirectUsername             string
+	DirectPassword             string // #nosec G117 -- Ephemeral, in-memory-only RDP/SPICE session credential.
+	VNCAllowInsecureTransport  bool
+	RDPIgnoreCertificate       bool
+	RDPAllowLegacySecurity     bool
+	RDPCertificateFingerprints string
+	SPICESecurityMode          string
+	SPICECAPEM                 string
 }
 
 // DesktopSPICEProxyTarget holds SPICE proxy connection details for a session.
 type DesktopSPICEProxyTarget struct {
-	Host       string
-	TLSPort    int
-	Password   string // #nosec G117 -- Session credential is generated or supplied at runtime, not hardcoded.
-	Type       string
-	CA         string
-	Proxy      string
-	SkipVerify bool
+	Host        string
+	TLSPort     int
+	Password    string // #nosec G117 -- Session credential is generated or supplied at runtime, not hardcoded.
+	Type        string
+	CA          string
+	Proxy       string
+	HostSubject string
+	SkipVerify  bool
 }
 
 // NormalizeDesktopProtocol normalizes a protocol string.
@@ -207,10 +215,16 @@ func (d *Deps) HandleDesktopSessions(w http.ResponseWriter, r *http.Request) {
 		Protocol     string `json:"protocol,omitempty"`
 		Record       bool   `json:"record,omitempty"`
 		DirectTarget *struct {
-			Host     string  `json:"host"`
-			Port     int     `json:"port"`
-			Username *string `json:"username,omitempty"`
-			Password *string `json:"password,omitempty"`
+			Host                    string  `json:"host"`
+			Port                    int     `json:"port"`
+			Username                *string `json:"username,omitempty"`
+			Password                *string `json:"password,omitempty"`
+			AllowInsecureVNC        bool    `json:"allow_insecure_vnc,omitempty"`
+			IgnoreCertificate       bool    `json:"ignore_certificate,omitempty"`
+			AllowLegacySecurity     bool    `json:"allow_legacy_security,omitempty"`
+			CertificateFingerprints string  `json:"certificate_fingerprints,omitempty"`
+			SPICESecurityMode       string  `json:"spice_security_mode,omitempty"`
+			SPICECAPEM              string  `json:"spice_ca_pem,omitempty"`
 		} `json:"direct_target,omitempty"`
 	}
 	if err := d.DecodeJSONBody(w, r, &req); err != nil {
@@ -252,6 +266,42 @@ func (d *Deps) HandleDesktopSessions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusBadRequest, "direct desktop recording is not supported")
 			return
 		}
+		fingerprints := strings.TrimSpace(req.DirectTarget.CertificateFingerprints)
+		rdpOptions := protocols.RDPConfig{
+			IgnoreCertificate:       req.DirectTarget.IgnoreCertificate,
+			AllowLegacySecurity:     req.DirectTarget.AllowLegacySecurity,
+			CertificateFingerprints: fingerprints,
+		}
+		if (rdpOptions.IgnoreCertificate || rdpOptions.AllowLegacySecurity || fingerprints != "") && protocol != "rdp" {
+			servicehttp.WriteError(w, http.StatusBadRequest, "RDP security options are only valid for RDP")
+			return
+		}
+		if req.DirectTarget.AllowInsecureVNC && protocol != "vnc" {
+			servicehttp.WriteError(w, http.StatusBadRequest, "allow_insecure_vnc is only valid for VNC")
+			return
+		}
+		if protocol == "vnc" {
+			if !requireInsecureVNCTransport(w, req.DirectTarget.AllowInsecureVNC) {
+				return
+			}
+		}
+		if err := protocols.ValidateRDPConfigOptions(rdpOptions); err != nil {
+			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if (rdpOptions.IgnoreCertificate || rdpOptions.AllowLegacySecurity) && !securityruntime.InsecureTransportAllowed() {
+			servicehttp.WriteError(w, http.StatusBadRequest, "unsafe RDP options require LABTETHER_ALLOW_INSECURE_TRANSPORT=true")
+			return
+		}
+		spiceSecurityMode, spiceCAPEM, err := ValidateDirectSPICESecurityOptions(
+			protocol,
+			req.DirectTarget.SPICESecurityMode,
+			req.DirectTarget.SPICECAPEM,
+		)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		host, port, err := securityruntime.ValidateOutboundEndpoint(req.DirectTarget.Host, req.DirectTarget.Port)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, "invalid direct desktop target: "+err.Error())
@@ -277,11 +327,17 @@ func (d *Deps) HandleDesktopSessions(w http.ResponseWriter, r *http.Request) {
 		}
 		target = net.JoinHostPort(host, fmt.Sprintf("%d", port))
 		directOpts = DesktopSessionOptions{
-			Direct:         true,
-			DirectHost:     host,
-			DirectPort:     port,
-			DirectUsername: username,
-			DirectPassword: password,
+			Direct:                     true,
+			DirectHost:                 host,
+			DirectPort:                 port,
+			DirectUsername:             username,
+			DirectPassword:             password,
+			VNCAllowInsecureTransport:  req.DirectTarget.AllowInsecureVNC,
+			RDPIgnoreCertificate:       req.DirectTarget.IgnoreCertificate,
+			RDPAllowLegacySecurity:     req.DirectTarget.AllowLegacySecurity,
+			RDPCertificateFingerprints: fingerprints,
+			SPICESecurityMode:          spiceSecurityMode,
+			SPICECAPEM:                 spiceCAPEM,
 		}
 	} else {
 		if target == "" {
@@ -455,6 +511,12 @@ func (d *Deps) HandleDesktopStreamTicket(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
+	opts := d.GetDesktopSessionOptions(session.ID)
+	effectiveProtocol := d.ResolveDesktopProtocol(session, r)
+	if effectiveProtocol == "vnc" && opts.Direct && !requireInsecureVNCTransport(w, opts.VNCAllowInsecureTransport) {
+		return
+	}
+
 	ticket, expiresAt, err := d.IssueStreamTicket(r.Context(), session.ID)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to issue stream ticket")
@@ -462,8 +524,6 @@ func (d *Deps) HandleDesktopStreamTicket(w http.ResponseWriter, r *http.Request,
 	}
 	audioTicket := ""
 
-	opts := d.GetDesktopSessionOptions(session.ID)
-	effectiveProtocol := d.ResolveDesktopProtocol(session, r)
 	if effectiveProtocol == "vnc" && d.AgentMgr != nil && d.AgentMgr.IsConnected(session.Target) {
 		if strings.TrimSpace(opts.VNCPassword) == "" {
 			password, err := generateSessionVNCPassword()

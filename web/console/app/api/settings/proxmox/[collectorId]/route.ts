@@ -74,6 +74,7 @@ export async function GET(
         token_id: authMethod === "password" ? "" : (stringValue(config["token_id"]) || credential?.username || ""),
         username: authMethod === "password" ? (stringValue(config["username"]) || credential?.username || "") : "",
         skip_verify: boolValue(config["skip_verify"], false),
+        spice_skip_verify: boolValue(config["spice_skip_verify"], false),
         ca_pem: stringValue(config["ca_pem"]),
         cluster_name: stringValue(config["cluster_name"]),
         interval_seconds: numberValue(config["interval_seconds"], collector.interval_seconds || 60),
@@ -112,6 +113,7 @@ export async function POST(
   const tokenSecret = stringValue(body.token_secret);
   const username = stringValue(body.username);
   const skipVerify = boolValue(body.skip_verify, false);
+  const spiceSkipVerify = boolValue(body.spice_skip_verify, false);
   const caPEM = stringValue(body.ca_pem);
   const clusterName = stringValue(body.cluster_name);
   const intervalSeconds = clampInterval(numberValue(body.interval_seconds, 60));
@@ -158,6 +160,7 @@ export async function POST(
       auth_method: authMethod,
       credential_id: credentialID,
       skip_verify: skipVerify,
+      spice_skip_verify: spiceSkipVerify,
       ca_pem: caPEM,
       cluster_name: clusterName,
       interval_seconds: intervalSeconds,

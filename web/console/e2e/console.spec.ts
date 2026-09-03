@@ -1159,6 +1159,9 @@ test("add device agent linux installer enables install-vnc-prereqs by default", 
   await page.getByRole("button", { name: /^Agent/i }).first().click();
 
   await expect(page.getByText("Install Agent", { exact: true })).toBeVisible();
+  await page.getByLabel("Expected hostname").fill("vnc-test-node");
+  await page.getByRole("button", { name: "Create one-time token", exact: true }).click();
+  await expect(page.getByText("Enrollment Token", { exact: true })).toBeVisible();
   await expect(page.locator("pre").filter({ hasText: "--install-vnc-prereqs" }).first()).toBeVisible();
 
   await page.getByRole("button", { name: /Advanced settings/i }).click();

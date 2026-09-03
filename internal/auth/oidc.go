@@ -6,15 +6,22 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"sort"
 	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/labtether/labtether/internal/securityruntime"
 	"golang.org/x/oauth2"
 )
 
 const PKCECodeChallengeMethodS256 = "S256"
+
+var (
+	ErrOIDCInvalidConfiguration = errors.New("invalid oidc configuration")
+	ErrOIDCProviderUnavailable  = errors.New("oidc provider unavailable")
+)
 
 type OIDCSettings struct {
 	Enabled            bool
@@ -27,6 +34,14 @@ type OIDCSettings struct {
 	DisplayName        string
 	AdminRoleValues    []string
 	OperatorRoleValues []string
+	// AllowedEndpointOrigins is deployment-only. It permits exact, additional
+	// origins for providers whose token or signing-key endpoints differ from
+	// the issuer origin.
+	AllowedEndpointOrigins []string
+	// These deployment-only switches are a strict ceiling on the shared
+	// outbound policy. Link-local OIDC endpoints are never allowed.
+	AllowPrivateEndpoints  bool
+	AllowLoopbackEndpoints bool
 }
 
 type OIDCIdentity struct {
@@ -40,9 +55,10 @@ type OIDCIdentity struct {
 }
 
 type OIDCProvider struct {
-	settings OIDCSettings
-	provider *oidc.Provider
-	verifier *oidc.IDTokenVerifier
+	settings   OIDCSettings
+	provider   *oidc.Provider
+	verifier   *oidc.IDTokenVerifier
+	httpClient *http.Client
 }
 
 func NewOIDCProvider(ctx context.Context, settings OIDCSettings) (*OIDCProvider, error) {
@@ -53,17 +69,19 @@ func NewOIDCProvider(ctx context.Context, settings OIDCSettings) (*OIDCProvider,
 	settings.ClientID = strings.TrimSpace(settings.ClientID)
 	settings.ClientSecret = strings.TrimSpace(settings.ClientSecret)
 	if settings.IssuerURL == "" {
-		return nil, errors.New("oidc issuer url is required")
+		return nil, fmt.Errorf("%w: issuer URL is required", ErrOIDCInvalidConfiguration)
 	}
 	if settings.ClientID == "" {
-		return nil, errors.New("oidc client id is required")
+		return nil, fmt.Errorf("%w: client ID is required", ErrOIDCInvalidConfiguration)
 	}
 	if settings.ClientSecret == "" {
-		return nil, errors.New("oidc client secret is required")
+		return nil, fmt.Errorf("%w: client secret is required", ErrOIDCInvalidConfiguration)
 	}
-	if _, err := url.ParseRequestURI(settings.IssuerURL); err != nil {
-		return nil, fmt.Errorf("invalid oidc issuer url: %w", err)
+	issuerURL, err := validateOIDCIssuerURL(settings.IssuerURL)
+	if err != nil {
+		return nil, err
 	}
+	settings.IssuerURL = issuerURL
 	if len(settings.Scopes) == 0 {
 		settings.Scopes = []string{oidc.ScopeOpenID, "profile", "email"}
 	}
@@ -79,13 +97,107 @@ func NewOIDCProvider(ctx context.Context, settings OIDCSettings) (*OIDCProvider,
 		settings.DisplayName = "OIDC"
 	}
 
-	provider, err := oidc.NewProvider(ctx, settings.IssuerURL)
+	allowedURLs, err := oidcAllowedEndpointURLs(settings)
 	if err != nil {
-		return nil, fmt.Errorf("initialize oidc provider: %w", err)
+		return nil, err
+	}
+	addressPolicy := oidcOutboundAddressPolicy(settings)
+	httpClient, err := securityruntime.NewOriginRestrictedOutboundHTTPClient(nil, addressPolicy, allowedURLs...)
+	if err != nil {
+		return nil, fmt.Errorf("%w: issuer or allowed endpoint origin: %v", ErrOIDCInvalidConfiguration, err)
+	}
+	oidcContext := oidc.ClientContext(ctx, httpClient)
+	provider, err := oidc.NewProvider(oidcContext, settings.IssuerURL)
+	if err != nil {
+		return nil, ErrOIDCProviderUnavailable
+	}
+	if err := validateOIDCProviderEndpoints(provider, addressPolicy, allowedURLs); err != nil {
+		return nil, err
 	}
 	verifier := provider.Verifier(&oidc.Config{ClientID: settings.ClientID})
 
-	return &OIDCProvider{settings: settings, provider: provider, verifier: verifier}, nil
+	return &OIDCProvider{
+		settings:   settings,
+		provider:   provider,
+		verifier:   verifier,
+		httpClient: httpClient,
+	}, nil
+}
+
+func validateOIDCIssuerURL(rawURL string) (string, error) {
+	trimmed := strings.TrimSpace(rawURL)
+	parsed, err := url.ParseRequestURI(trimmed)
+	if err != nil || !parsed.IsAbs() || parsed.Hostname() == "" {
+		return "", fmt.Errorf("%w: issuer URL must be absolute", ErrOIDCInvalidConfiguration)
+	}
+	parsed.Scheme = strings.ToLower(parsed.Scheme)
+	if parsed.Scheme != "https" && parsed.Scheme != "http" {
+		return "", fmt.Errorf("%w: issuer URL must use HTTP or HTTPS", ErrOIDCInvalidConfiguration)
+	}
+	if parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
+		return "", fmt.Errorf("%w: issuer URL must not contain userinfo, a query, or a fragment", ErrOIDCInvalidConfiguration)
+	}
+	return parsed.String(), nil
+}
+
+func oidcAllowedEndpointURLs(settings OIDCSettings) ([]string, error) {
+	issuer, err := url.Parse(settings.IssuerURL)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid issuer URL", ErrOIDCInvalidConfiguration)
+	}
+	allowed := []string{settings.IssuerURL}
+	for _, rawOrigin := range settings.AllowedEndpointOrigins {
+		rawOrigin = strings.TrimSpace(rawOrigin)
+		if rawOrigin == "" {
+			continue
+		}
+		parsed, err := url.ParseRequestURI(rawOrigin)
+		if err != nil || !parsed.IsAbs() || parsed.Hostname() == "" {
+			return nil, fmt.Errorf("%w: allowed endpoint origin must be absolute", ErrOIDCInvalidConfiguration)
+		}
+		parsed.Scheme = strings.ToLower(parsed.Scheme)
+		if parsed.Scheme != strings.ToLower(issuer.Scheme) {
+			return nil, fmt.Errorf("%w: allowed endpoint origins must use the issuer scheme", ErrOIDCInvalidConfiguration)
+		}
+		if parsed.User != nil || (parsed.Path != "" && parsed.Path != "/") || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
+			return nil, fmt.Errorf("%w: allowed endpoint origins must not contain userinfo, paths, queries, or fragments", ErrOIDCInvalidConfiguration)
+		}
+		allowed = append(allowed, rawOrigin)
+	}
+	return allowed, nil
+}
+
+func oidcOutboundAddressPolicy(settings OIDCSettings) securityruntime.OutboundAddressPolicy {
+	return securityruntime.OutboundAddressPolicy{
+		AllowPrivate:   settings.AllowPrivateEndpoints,
+		AllowLoopback:  settings.AllowLoopbackEndpoints,
+		AllowLinkLocal: false,
+	}
+}
+
+func validateOIDCProviderEndpoints(provider *oidc.Provider, addressPolicy securityruntime.OutboundAddressPolicy, allowedURLs []string) error {
+	if provider == nil {
+		return ErrOIDCProviderUnavailable
+	}
+	endpoints := provider.Endpoint()
+	var metadata struct {
+		JWKSURL string `json:"jwks_uri"`
+	}
+	if err := provider.Claims(&metadata); err != nil {
+		return ErrOIDCProviderUnavailable
+	}
+	for name, rawURL := range map[string]string{
+		"token":       endpoints.TokenURL,
+		"signing key": metadata.JWKSURL,
+	} {
+		if strings.TrimSpace(rawURL) == "" {
+			return fmt.Errorf("%w: %s endpoint is required", ErrOIDCInvalidConfiguration, name)
+		}
+		if err := securityruntime.ValidateOutboundURLAgainstOrigins(rawURL, addressPolicy, allowedURLs...); err != nil {
+			return fmt.Errorf("%w: %s endpoint: %v", ErrOIDCInvalidConfiguration, name, err)
+		}
+	}
+	return nil
 }
 
 func (p *OIDCProvider) Enabled() bool {
@@ -209,7 +321,8 @@ func (p *OIDCProvider) exchangeCode(ctx context.Context, code, nonce, redirectUR
 		RedirectURL:  redirectURI,
 		Scopes:       p.settings.Scopes,
 	}
-	token, err := cfg.Exchange(ctx, code, options...)
+	exchangeContext := oidc.ClientContext(ctx, p.httpClient)
+	token, err := cfg.Exchange(exchangeContext, code, options...)
 	if err != nil {
 		return OIDCIdentity{}, fmt.Errorf("exchange oidc code: %w", err)
 	}

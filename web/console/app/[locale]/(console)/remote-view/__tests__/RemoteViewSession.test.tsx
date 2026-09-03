@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { RemoteViewerShellProps } from "../../../../components/RemoteViewerShell";
+import type { RemoteViewTab } from "../types";
 
 const mocks = vi.hoisted(() => ({
   shellProps: null as RemoteViewerShellProps | null,
@@ -135,7 +136,7 @@ let container: HTMLDivElement;
 let root: Root;
 let fetchMock: ReturnType<typeof vi.fn>;
 
-const tab = {
+const tab: RemoteViewTab = {
   id: "tab-1",
   type: "device" as const,
   label: "Test Device",
@@ -150,6 +151,7 @@ const tab = {
 
 beforeEach(() => {
   mocks.shellProps = null;
+  Object.assign(mocks.session, { connectionState: "connected" as const });
   for (const fn of [
     mocks.session.connect,
     mocks.session.disconnect,
@@ -195,11 +197,13 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function renderSession(): Promise<RemoteViewerShellProps> {
+async function renderSession(
+  tabOverride: RemoteViewTab = tab,
+): Promise<RemoteViewerShellProps> {
   await act(async () => {
     root.render(
       <RemoteViewSession
-        tab={tab}
+        tab={tabOverride}
         onConnectionStateChange={vi.fn()}
       />,
     );
@@ -209,6 +213,26 @@ async function renderSession(): Promise<RemoteViewerShellProps> {
 }
 
 describe("RemoteViewSession feature wiring", () => {
+  it("does not send SPICE-only options for a direct VNC session", async () => {
+    Object.assign(mocks.session, { connectionState: "idle" as const });
+    await renderSession({
+      id: "direct-vnc",
+      type: "adhoc",
+      label: "Direct VNC",
+      protocol: "vnc",
+      target: { host: "192.0.2.40", port: 5900 },
+      connectionState: "connecting",
+    });
+
+    expect(mocks.session.connect).toHaveBeenCalledWith(
+      "192.0.2.40:5900",
+      expect.objectContaining({
+        protocol: "vnc",
+        directTarget: { host: "192.0.2.40", port: 5900 },
+      }),
+    );
+  });
+
   it("exposes the complete viewer runtime only for the managed target", async () => {
     const props = await renderSession();
 

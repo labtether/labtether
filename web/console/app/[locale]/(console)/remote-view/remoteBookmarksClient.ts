@@ -7,6 +7,9 @@ export interface RemoteBookmark {
   host: string;
   port: number;
   has_credentials: boolean;
+  allow_insecure_vnc?: boolean;
+  spice_security_mode?: "tls" | "cleartext";
+  spice_ca_pem?: string;
   created_at: string;
   updated_at: string;
 }
@@ -18,6 +21,9 @@ export interface CreateBookmarkRequest {
   port: number;
   username?: string;
   password?: string;
+  allow_insecure_vnc?: boolean;
+  spice_security_mode?: "tls" | "cleartext";
+  spice_ca_pem?: string;
 }
 
 export interface UpdateBookmarkRequest {
@@ -27,6 +33,9 @@ export interface UpdateBookmarkRequest {
   port?: number;
   username?: string;
   password?: string;
+  allow_insecure_vnc?: boolean;
+  spice_security_mode?: "tls" | "cleartext";
+  spice_ca_pem?: string;
 }
 
 const BASE = "/api/remote-bookmarks";

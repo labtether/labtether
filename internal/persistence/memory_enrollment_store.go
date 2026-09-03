@@ -46,9 +46,24 @@ func NewMemoryEnrollmentStoreWithGroupStore(assetStore *MemoryAssetStore, groupS
 	return store
 }
 
-func (m *MemoryEnrollmentStore) CreateEnrollmentToken(tokenHash, label string, expiresAt time.Time, maxUses int) (enrollment.EnrollmentToken, error) {
-	if err := enrollment.ValidateStoredTokenMaxUses(maxUses); err != nil {
+func (m *MemoryEnrollmentStore) CreateEnrollmentToken(params CreateEnrollmentTokenParams) (enrollment.EnrollmentToken, error) {
+	params.TokenHash = strings.TrimSpace(params.TokenHash)
+	params.Scope = strings.TrimSpace(params.Scope)
+	params.AssetID = strings.TrimSpace(params.AssetID)
+	params.AllowedGroupID = strings.TrimSpace(params.AllowedGroupID)
+	params.CreatedBy = strings.TrimSpace(params.CreatedBy)
+	if err := validateEnrollmentTokenCreateParams(params); err != nil {
 		return enrollment.EnrollmentToken{}, err
+	}
+	if params.AllowedGroupID != "" {
+		if m.groupStore == nil {
+			return enrollment.EnrollmentToken{}, ErrEnrollmentTokenScopeMismatch
+		}
+		m.groupStore.mu.RLock()
+		defer m.groupStore.mu.RUnlock()
+		if _, found := m.groupStore.groups[params.AllowedGroupID]; !found {
+			return enrollment.EnrollmentToken{}, ErrEnrollmentTokenScopeMismatch
+		}
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -56,15 +71,19 @@ func (m *MemoryEnrollmentStore) CreateEnrollmentToken(tokenHash, label string, e
 	m.nextID++
 	now := time.Now().UTC()
 	tok := enrollment.EnrollmentToken{
-		ID:        fmt.Sprintf("etok-%d", m.nextID),
-		Label:     label,
-		ExpiresAt: expiresAt,
-		MaxUses:   maxUses,
-		UseCount:  0,
-		CreatedAt: now,
+		ID:             fmt.Sprintf("etok-%d", m.nextID),
+		Label:          params.Label,
+		ExpiresAt:      params.ExpiresAt,
+		MaxUses:        params.MaxUses,
+		UseCount:       0,
+		CreatedAt:      now,
+		Scope:          params.Scope,
+		AssetID:        params.AssetID,
+		AllowedGroupID: params.AllowedGroupID,
+		CreatedBy:      params.CreatedBy,
 	}
 	m.enrollmentTokens[tok.ID] = tok
-	m.enrollmentByHash[tokenHash] = tok.ID
+	m.enrollmentByHash[params.TokenHash] = tok.ID
 	return tok, nil
 }
 

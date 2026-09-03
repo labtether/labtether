@@ -187,6 +187,39 @@ func TestHandleV2Assets_UpdatePublishesAdvertisedWebhookEvent(t *testing.T) {
 	assertQueuedWebhookEvent(t, s.webhookEventCh, "asset.updated")
 }
 
+func TestV1AndV2AssetUpdatesShareRateLimit(t *testing.T) {
+	sut := newTestAPIServer(t)
+	const sharedAssetUpdateLimit = 240
+	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: "rate-update", Name: "Before", Status: "offline", Platform: "linux",
+		Source: "manual", Type: "host",
+	}); err != nil {
+		t.Fatalf("create asset: %v", err)
+	}
+
+	for index := 0; index < sharedAssetUpdateLimit; index++ {
+		path := "/assets/rate-update"
+		handler := sut.handleAssetActions
+		if index%2 == 1 {
+			path = "/api/v2/assets/rate-update"
+			handler = sut.handleV2AssetActions
+		}
+		req := httptest.NewRequest(http.MethodPatch, path, strings.NewReader(`{}`))
+		rec := httptest.NewRecorder()
+		handler(rec, req)
+		if rec.Code == http.StatusTooManyRequests {
+			t.Fatalf("request %d was limited before shared budget was exhausted", index+1)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v2/assets/rate-update", strings.NewReader(`{}`))
+	rec := httptest.NewRecorder()
+	sut.handleV2AssetActions(rec, req)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429 after shared asset-update budget; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func assertQueuedWebhookEvent(t *testing.T, events <-chan webhookDispatchEvent, expected string) {
 	t.Helper()
 	select {

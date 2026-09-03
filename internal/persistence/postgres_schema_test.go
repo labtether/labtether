@@ -48,6 +48,34 @@ func TestPostgresSchemaMigrationsHaveUniqueVersions(t *testing.T) {
 	}
 }
 
+func TestScopedEnrollmentTokenMigrationRevokesLegacyTokensAndRequiresClaims(t *testing.T) {
+	const version = 98
+	for _, migration := range postgresSchemaMigrations() {
+		if migration.Version != version {
+			continue
+		}
+		statements := strings.Join(migration.Statements, "\n")
+		for _, required := range []string{
+			"scope = 'legacy_revoked'",
+			"revoked_at = COALESCE",
+			"ALTER COLUMN scope SET NOT NULL",
+			"scope = 'asset' AND asset_id <> '' AND max_uses = 1",
+			"scope = 'group'",
+			"scope IN ('unplaced', 'unrestricted')",
+			"created_by <> ''",
+		} {
+			if !strings.Contains(statements, required) {
+				t.Fatalf("migration v%d missing %q: %s", version, required, statements)
+			}
+		}
+		if strings.Contains(statements, "REFERENCES groups") {
+			t.Fatal("enrollment token groups must be checked under transaction locks, not cascaded")
+		}
+		return
+	}
+	t.Fatalf("missing scoped enrollment token migration v%d", version)
+}
+
 func TestAppliedPushDeviceTimezoneMigrationChecksumRemainsStable(t *testing.T) {
 	const (
 		version      = 84

@@ -2,10 +2,12 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -15,10 +17,12 @@ import (
 
 	"github.com/labtether/labtether/internal/agentidentity"
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/auth"
 	"github.com/labtether/labtether/internal/certmgr"
 	"github.com/labtether/labtether/internal/enrollment"
 	"github.com/labtether/labtether/internal/groups"
+	"github.com/labtether/labtether/internal/persistence"
 )
 
 func signedTokenEnrollmentRequest(t *testing.T, rawToken, hostname string, publicKey ed25519.PublicKey, privateKey ed25519.PrivateKey) enrollment.EnrollRequest {
@@ -367,8 +371,16 @@ func mustCreateEnrollmentToken(t *testing.T, sut *apiServer) (rawToken string, t
 
 func mustCreateEnrollmentTokenWithMaxUses(t *testing.T, sut *apiServer, maxUses int) (rawToken string, tok enrollment.EnrollmentToken) {
 	t.Helper()
+	return mustCreateEnrollmentTokenWithRequest(t, sut, enrollment.CreateTokenRequest{
+		Label: "test-token", TTLHours: 24, MaxUses: maxUses,
+		Scope: enrollment.TokenScopeUnrestricted, AcknowledgeUnrestricted: true,
+	})
+}
 
-	payload, err := json.Marshal(enrollment.CreateTokenRequest{Label: "test-token", TTLHours: 24, MaxUses: maxUses})
+func mustCreateEnrollmentTokenWithRequest(t *testing.T, sut *apiServer, createRequest enrollment.CreateTokenRequest) (rawToken string, tok enrollment.EnrollmentToken) {
+	t.Helper()
+
+	payload, err := json.Marshal(createRequest)
 	if err != nil {
 		t.Fatalf("encode enrollment token request: %v", err)
 	}
@@ -434,11 +446,112 @@ func TestEnrollmentTokenCreateAndList(t *testing.T) {
 	}
 }
 
+func TestEnrollmentTokenCreationRejectsUnsafeScopesBeforePersisting(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload string
+	}{
+		{name: "missing scope", payload: `{"label":"missing"}`},
+		{name: "asset missing id", payload: `{"scope":"asset","max_uses":1}`},
+		{name: "asset multiple uses", payload: `{"scope":"asset","asset_id":"node","max_uses":2}`},
+		{name: "group missing id", payload: `{"scope":"group","max_uses":1}`},
+		{name: "group does not exist", payload: `{"scope":"group","allowed_group_id":"missing","max_uses":1}`},
+		{name: "unrestricted missing acknowledgement", payload: `{"scope":"unrestricted","max_uses":1}`},
+		{name: "unplaced with group", payload: `{"scope":"unplaced","allowed_group_id":"group","max_uses":1}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sut := newTestAPIServer(t)
+			req := httptest.NewRequest(http.MethodPost, "/settings/enrollment", bytes.NewBufferString(tt.payload))
+			req = req.WithContext(contextWithPrincipal(req.Context(), "operator-a", "admin"))
+			rec := httptest.NewRecorder()
+			sut.handleEnrollmentTokens(rec, req)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			if strings.Contains(rec.Body.String(), "raw_token") {
+				t.Fatalf("rejected request returned a raw token: %s", rec.Body.String())
+			}
+			if tokens, err := sut.enrollmentStore.ListEnrollmentTokens(10); err != nil || len(tokens) != 0 {
+				t.Fatalf("rejected request persisted tokens=%+v err=%v", tokens, err)
+			}
+		})
+	}
+}
+
+func TestEnrollmentTokenCreationPersistsScopeAndWritesRedactedAudit(t *testing.T) {
+	sut := newTestAPIServer(t)
+	payload := []byte(`{"label":"one host","ttl_hours":24,"max_uses":1,"scope":"asset","asset_id":"Expected Host"}`)
+	req := httptest.NewRequest(http.MethodPost, "/settings/enrollment", bytes.NewReader(payload))
+	req = req.WithContext(contextWithPrincipal(req.Context(), "operator-a", "admin"))
+	rec := httptest.NewRecorder()
+	sut.handleEnrollmentTokens(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		Token    enrollment.EnrollmentToken `json:"token"`
+		RawToken string                     `json:"raw_token"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Token.Scope != enrollment.TokenScopeAsset || response.Token.AssetID != "expected-host" || response.Token.CreatedBy != "operator-a" {
+		t.Fatalf("unexpected token claims: %+v", response.Token)
+	}
+	events, err := sut.auditStore.List(10, 0)
+	if err != nil || len(events) != 1 {
+		t.Fatalf("audit events=%+v err=%v", events, err)
+	}
+	encodedAudit, err := json.Marshal(events[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if events[0].Type != "enrollment.token.created" || events[0].ActorID != "operator-a" || events[0].Target != response.Token.ID {
+		t.Fatalf("unexpected audit event: %+v", events[0])
+	}
+	if strings.Contains(string(encodedAudit), response.RawToken) || strings.Contains(string(encodedAudit), auth.HashToken(response.RawToken)) {
+		t.Fatalf("audit event exposed enrollment secret: %s", encodedAudit)
+	}
+}
+
+func TestAssetScopedEnrollmentTokenCannotEnrollAnotherHostname(t *testing.T) {
+	disableTailscaleResolutionForTest(t)
+	sut := newTestAPIServer(t)
+	rawToken, _ := mustCreateEnrollmentTokenWithRequest(t, sut, enrollment.CreateTokenRequest{
+		Label: "one-host", TTLHours: 24, MaxUses: 1,
+		Scope: enrollment.TokenScopeAsset, AssetID: "expected-node",
+	})
+	enroll := func(hostname string) *httptest.ResponseRecorder {
+		payload, err := json.Marshal(enrollment.EnrollRequest{
+			EnrollmentToken: rawToken, Hostname: hostname, Platform: "linux",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/enroll", bytes.NewReader(payload))
+		req.Host = "localhost:8080"
+		req.RemoteAddr = "127.0.0.1:12345"
+		rec := httptest.NewRecorder()
+		sut.handleEnroll(rec, req)
+		return rec
+	}
+	if rec := enroll("other-node"); rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), "invalid or expired enrollment token") {
+		t.Fatalf("wrong hostname status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if token, valid, err := sut.enrollmentStore.ValidateEnrollmentToken(auth.HashToken(rawToken)); err != nil || !valid || token.UseCount != 0 {
+		t.Fatalf("wrong hostname consumed token: token=%+v valid=%v err=%v", token, valid, err)
+	}
+	if rec := enroll("expected-node"); rec.Code != http.StatusOK {
+		t.Fatalf("expected hostname status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestEnrollmentTokenDefaultTTL(t *testing.T) {
 	sut := newTestAPIServer(t)
 
 	// TTL=0 should default to 24h
-	payload := []byte(`{"label":"default-ttl"}`)
+	payload := []byte(`{"label":"default-ttl","scope":"unplaced"}`)
 	req := httptest.NewRequest(http.MethodPost, "/settings/enrollment", bytes.NewReader(payload))
 	rec := httptest.NewRecorder()
 	sut.handleEnrollmentTokens(rec, req)
@@ -465,7 +578,7 @@ func TestEnrollmentTokenDefaultTTL(t *testing.T) {
 func TestEnrollmentTokenDefaultMaxUsesIsOne(t *testing.T) {
 	sut := newTestAPIServer(t)
 
-	payload := []byte(`{"label":"default-max-uses","ttl_hours":24}`)
+	payload := []byte(`{"label":"default-max-uses","ttl_hours":24,"scope":"unplaced"}`)
 	req := httptest.NewRequest(http.MethodPost, "/settings/enrollment", bytes.NewReader(payload))
 	rec := httptest.NewRecorder()
 	sut.handleEnrollmentTokens(rec, req)
@@ -488,7 +601,7 @@ func TestEnrollmentTokenDefaultMaxUsesIsOne(t *testing.T) {
 func TestEnrollmentTokenZeroMaxUsesIsClampedToOne(t *testing.T) {
 	sut := newTestAPIServer(t)
 
-	payload := []byte(`{"label":"zero-max-uses","ttl_hours":24,"max_uses":0}`)
+	payload := []byte(`{"label":"zero-max-uses","ttl_hours":24,"max_uses":0,"scope":"unplaced"}`)
 	req := httptest.NewRequest(http.MethodPost, "/settings/enrollment", bytes.NewReader(payload))
 	rec := httptest.NewRecorder()
 	sut.handleEnrollmentTokens(rec, req)
@@ -636,11 +749,69 @@ func TestEnrollFullFlow(t *testing.T) {
 	}
 }
 
-func TestEnrollClearsUnknownGroupAndPreservesValidPlacement(t *testing.T) {
+func TestEnrollRejectsRetiredAgentIdentityWithoutConsumingToken(t *testing.T) {
+	disableTailscaleResolutionForTest(t)
+	sut := newTestAPIServer(t)
+	transactions, ok := sut.enrollmentStore.(persistence.AgentEnrollmentTransactionStore)
+	if !ok {
+		t.Fatal("test enrollment store lacks transaction interface")
+	}
+
+	firstToken, _ := mustCreateEnrollmentToken(t, sut)
+	firstPayload, _ := json.Marshal(enrollment.EnrollRequest{
+		EnrollmentToken: firstToken,
+		Hostname:        "retired-http-node",
+		Platform:        "linux",
+	})
+	firstReq := httptest.NewRequest(http.MethodPost, "/api/v1/enroll", bytes.NewReader(firstPayload))
+	firstReq.RemoteAddr = "127.0.0.1:12345"
+	firstRec := httptest.NewRecorder()
+	sut.handleEnroll(firstRec, firstReq)
+	if firstRec.Code != http.StatusOK {
+		t.Fatalf("initial enrollment status=%d body=%s", firstRec.Code, firstRec.Body.String())
+	}
+	if err := transactions.DecommissionAgentAsset(context.Background(), "retired-http-node"); err != nil {
+		t.Fatal(err)
+	}
+
+	retryToken, retryRecord := mustCreateEnrollmentToken(t, sut)
+	retryPayload, _ := json.Marshal(enrollment.EnrollRequest{
+		EnrollmentToken: retryToken,
+		Hostname:        "retired-http-node",
+		Platform:        "linux",
+	})
+	retryReq := httptest.NewRequest(http.MethodPost, "/api/v1/enroll", bytes.NewReader(retryPayload))
+	retryReq.RemoteAddr = "127.0.0.1:12345"
+	retryRec := httptest.NewRecorder()
+	sut.handleEnroll(retryRec, retryReq)
+	if retryRec.Code != http.StatusConflict || !strings.Contains(retryRec.Body.String(), "new hostname/asset ID") {
+		t.Fatalf("retired enrollment status=%d body=%s", retryRec.Code, retryRec.Body.String())
+	}
+	if token, valid, err := sut.enrollmentStore.ValidateEnrollmentToken(auth.HashToken(retryToken)); err != nil || !valid || token.ID != retryRecord.ID || token.UseCount != 0 {
+		t.Fatalf("retirement response mutated token: token=%+v valid=%v err=%v", token, valid, err)
+	}
+
+	invalidPayload, _ := json.Marshal(enrollment.EnrollRequest{
+		EnrollmentToken: "invalid-token",
+		Hostname:        "retired-http-node",
+		Platform:        "linux",
+	})
+	invalidReq := httptest.NewRequest(http.MethodPost, "/api/v1/enroll", bytes.NewReader(invalidPayload))
+	invalidReq.RemoteAddr = "127.0.0.1:12345"
+	invalidRec := httptest.NewRecorder()
+	sut.handleEnroll(invalidRec, invalidReq)
+	if invalidRec.Code != http.StatusUnauthorized {
+		t.Fatalf("invalid token leaked retirement state: status=%d body=%s", invalidRec.Code, invalidRec.Body.String())
+	}
+}
+
+func TestEnrollRejectsUnapprovedGroupAndForcesApprovedPlacement(t *testing.T) {
 	disableTailscaleResolutionForTest(t)
 	sut := newTestAPIServer(t)
 
-	rawMissingGroupToken, _ := mustCreateEnrollmentTokenWithMaxUses(t, sut, 2)
+	rawMissingGroupToken, _ := mustCreateEnrollmentTokenWithRequest(t, sut, enrollment.CreateTokenRequest{
+		Label: "unplaced", TTLHours: 24, MaxUses: 2, Scope: enrollment.TokenScopeUnplaced,
+	})
 	missingGroupPayload, err := json.Marshal(enrollment.EnrollRequest{
 		EnrollmentToken: rawMissingGroupToken,
 		Hostname:        "QAWindowsHost",
@@ -655,24 +826,13 @@ func TestEnrollClearsUnknownGroupAndPreservesValidPlacement(t *testing.T) {
 	missingGroupRequest.RemoteAddr = "127.0.0.1:12345"
 	missingGroupRecorder := httptest.NewRecorder()
 	sut.handleEnroll(missingGroupRecorder, missingGroupRequest)
-	if missingGroupRecorder.Code != http.StatusOK {
-		t.Fatalf("missing group enrollment: status=%d body=%s", missingGroupRecorder.Code, missingGroupRecorder.Body.String())
+	if missingGroupRecorder.Code != http.StatusUnauthorized {
+		t.Fatalf("unapproved group enrollment: status=%d body=%s", missingGroupRecorder.Code, missingGroupRecorder.Body.String())
 	}
-	var missingGroupResponse enrollment.EnrollResponse
-	if err := json.Unmarshal(missingGroupRecorder.Body.Bytes(), &missingGroupResponse); err != nil {
-		t.Fatalf("decode missing-group enrollment response: %v", err)
+	if _, exists, err := sut.assetStore.GetAsset("qawindowshost"); err != nil || exists {
+		t.Fatalf("rejected group enrollment created asset: exists=%v err=%v", exists, err)
 	}
-	if missingGroupResponse.GroupID != "" || !bytes.Contains(missingGroupRecorder.Body.Bytes(), []byte(`"group_id":""`)) {
-		t.Fatalf("missing-group response did not return canonical unplaced state: %s", missingGroupRecorder.Body.String())
-	}
-	missingGroupAsset, exists, err := sut.assetStore.GetAsset("qawindowshost")
-	if err != nil || !exists {
-		t.Fatalf("missing group asset: exists=%v err=%v", exists, err)
-	}
-	if missingGroupAsset.GroupID != "" {
-		t.Fatalf("missing group was persisted: %q", missingGroupAsset.GroupID)
-	}
-	if token, valid, err := sut.enrollmentStore.ValidateEnrollmentToken(auth.HashToken(rawMissingGroupToken)); err != nil || !valid || token.UseCount != 1 {
+	if token, valid, err := sut.enrollmentStore.ValidateEnrollmentToken(auth.HashToken(rawMissingGroupToken)); err != nil || !valid || token.UseCount != 0 {
 		t.Fatalf("missing group token state: token=%+v valid=%v err=%v", token, valid, err)
 	}
 
@@ -680,12 +840,36 @@ func TestEnrollClearsUnknownGroupAndPreservesValidPlacement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rawValidGroupToken, _ := mustCreateEnrollmentTokenWithMaxUses(t, sut, 2)
+	rawValidGroupToken, _ := mustCreateEnrollmentTokenWithRequest(t, sut, enrollment.CreateTokenRequest{
+		Label: "group", TTLHours: 24, MaxUses: 2, Scope: enrollment.TokenScopeGroup, AllowedGroupID: validGroup.ID,
+	})
+	otherGroup, err := sut.groupStore.CreateGroup(groups.CreateRequest{Name: "Other group", Slug: "other-group"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	outsideGroupPayload, err := json.Marshal(enrollment.EnrollRequest{
+		EnrollmentToken: rawValidGroupToken,
+		Hostname:        "outside-group-agent",
+		Platform:        "linux",
+		GroupID:         otherGroup.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	outsideGroupRequest := httptest.NewRequest(http.MethodPost, "/api/v1/enroll", bytes.NewReader(outsideGroupPayload))
+	outsideGroupRequest.RemoteAddr = "127.0.0.3:12345"
+	outsideGroupRecorder := httptest.NewRecorder()
+	sut.handleEnroll(outsideGroupRecorder, outsideGroupRequest)
+	if outsideGroupRecorder.Code != http.StatusUnauthorized {
+		t.Fatalf("outside group enrollment: status=%d body=%s", outsideGroupRecorder.Code, outsideGroupRecorder.Body.String())
+	}
+	if token, valid, err := sut.enrollmentStore.ValidateEnrollmentToken(auth.HashToken(rawValidGroupToken)); err != nil || !valid || token.UseCount != 0 {
+		t.Fatalf("outside group consumed token: token=%+v valid=%v err=%v", token, valid, err)
+	}
 	validGroupPayload, err := json.Marshal(enrollment.EnrollRequest{
 		EnrollmentToken: rawValidGroupToken,
 		Hostname:        "grouped-agent",
 		Platform:        "linux",
-		GroupID:         validGroup.ID,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -828,6 +1012,7 @@ func TestEnrollRejectsReEnrollmentForExistingHostname(t *testing.T) {
 func TestEnrollAllowsContinuityProvenReEnrollmentAndRotatesCredential(t *testing.T) {
 	disableTailscaleResolutionForTest(t)
 	sut := newTestAPIServer(t)
+	sut.agentMgr = agentmgr.NewManager()
 
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -857,6 +1042,23 @@ func TestEnrollAllowsContinuityProvenReEnrollmentAndRotatesCredential(t *testing
 	if got := firstAsset.Metadata["agent_device_fingerprint"]; got != wantFingerprint {
 		t.Fatalf("stored fingerprint=%q, want %q", got, wantFingerprint)
 	}
+	firstStoredToken, valid, err := sut.enrollmentStore.ValidateAgentToken(auth.HashToken(firstResponse.AgentToken))
+	if err != nil || !valid {
+		t.Fatalf("load first agent token: valid=%v err=%v", valid, err)
+	}
+	serverConn, _, cleanupConn := createWSPairForPendingEnrollmentTest(t)
+	defer cleanupConn()
+	oldLiveConn := agentmgr.NewAgentConn(serverConn, "continuity-node", "linux")
+	oldLiveConn.SetMeta("auth.mode", "agent-token")
+	oldLiveConn.SetMeta("auth.agent_token_id", firstStoredToken.ID)
+	enrollmentTransactions := sut.enrollmentStore.(persistence.AgentEnrollmentTransactionStore)
+	oldLiveConn.SetCredentialValidatorWithLease(func() error {
+		return enrollmentTransactions.ValidateActiveAgentTokenID(context.Background(), firstStoredToken.ID, "continuity-node")
+	}, 5*time.Second)
+	if err := oldLiveConn.ValidateCredential(); err != nil {
+		t.Fatalf("prime old connection credential lease: %v", err)
+	}
+	sut.agentMgr.Register(oldLiveConn)
 
 	secondRawToken, secondEnrollmentToken := mustCreateEnrollmentTokenWithMaxUses(t, sut, 1)
 	secondRequest := signedContinuityEnrollmentRequest(t, secondRawToken, "continuity-node", publicKey, privateKey)
@@ -875,6 +1077,12 @@ func TestEnrollAllowsContinuityProvenReEnrollmentAndRotatesCredential(t *testing
 	}
 	if secondResponse.AssetID != firstResponse.AssetID {
 		t.Fatalf("asset identity changed from %q to %q", firstResponse.AssetID, secondResponse.AssetID)
+	}
+	if sut.agentMgr.IsConnected("continuity-node") {
+		t.Fatal("recovery left the revoked connection registered")
+	}
+	if err := oldLiveConn.ValidateCredential(); !errors.Is(err, agentmgr.ErrAgentCredentialRejected) {
+		t.Fatalf("revoked connection validation error=%v, want immediate rejection", err)
 	}
 
 	if _, valid, err := sut.enrollmentStore.ValidateAgentToken(auth.HashToken(firstResponse.AgentToken)); err != nil || valid {
@@ -956,6 +1164,76 @@ func TestEnrollRejectsExistingHostnameWhenDeviceKeyDoesNotMatch(t *testing.T) {
 	secondEnrollment, valid, err := sut.enrollmentStore.ValidateEnrollmentToken(auth.HashToken(secondRawToken))
 	if err != nil || !valid || secondEnrollment.UseCount != 0 {
 		t.Fatalf("rejected takeover consumed enrollment token: valid=%v use_count=%d err=%v", valid, secondEnrollment.UseCount, err)
+	}
+}
+
+func TestEnrollRejectsRecoveryFromHeartbeatOnlyFingerprint(t *testing.T) {
+	disableTailscaleResolutionForTest(t)
+	sut := newTestAPIServer(t)
+	sut.tlsState.Enabled = true
+
+	initialEnrollmentToken, _ := mustCreateEnrollmentTokenWithMaxUses(t, sut, 1)
+	initialPayload, _ := json.Marshal(enrollment.EnrollRequest{
+		EnrollmentToken: initialEnrollmentToken,
+		Hostname:        "heartbeat-anchor-node",
+		Platform:        "linux",
+	})
+	initialRequest := httptest.NewRequest(http.MethodPost, "/api/v1/enroll", bytes.NewReader(initialPayload))
+	initialRequest.Host = "localhost:8080"
+	initialRequest.RemoteAddr = "127.0.0.1:12345"
+	initialRecorder := httptest.NewRecorder()
+	sut.handleEnroll(initialRecorder, initialRequest)
+	if initialRecorder.Code != http.StatusOK {
+		t.Fatalf("initial unsigned enrollment: expected 200, got %d: %s", initialRecorder.Code, initialRecorder.Body.String())
+	}
+	var initialResponse enrollment.EnrollResponse
+	if err := json.Unmarshal(initialRecorder.Body.Bytes(), &initialResponse); err != nil {
+		t.Fatalf("decode initial enrollment: %v", err)
+	}
+
+	attackerPublicKey, attackerPrivateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate attacker identity: %v", err)
+	}
+	attackerFingerprint := agentidentity.FingerprintFromPublicKey(attackerPublicKey)
+	heartbeatPayload, _ := json.Marshal(assets.HeartbeatRequest{
+		AssetID: "heartbeat-anchor-node", Type: "host", Name: "Heartbeat anchor node", Source: "agent", Status: "online", Platform: "linux",
+		Metadata: map[string]string{
+			assets.MetadataKeyAgentDeviceFingerprint:  attackerFingerprint,
+			assets.MetadataKeyAgentDeviceKeyAlgorithm: agentidentity.KeyAlgorithmEd25519,
+		},
+	})
+	heartbeatRequest := httptest.NewRequest(http.MethodPost, "https://labtether.test/assets/heartbeat", bytes.NewReader(heartbeatPayload))
+	heartbeatRequest.Header.Set("Authorization", "Bearer "+initialResponse.AgentToken)
+	heartbeatRecorder := httptest.NewRecorder()
+	sut.withAgentHeartbeatAuth(sut.handleAssetActions)(heartbeatRecorder, heartbeatRequest)
+	if heartbeatRecorder.Code != http.StatusAccepted {
+		t.Fatalf("authenticated heartbeat: expected 202, got %d: %s", heartbeatRecorder.Code, heartbeatRecorder.Body.String())
+	}
+	anchored, exists, err := sut.assetStore.GetAsset("heartbeat-anchor-node")
+	if err != nil || !exists {
+		t.Fatalf("load heartbeat anchor: exists=%v err=%v", exists, err)
+	}
+	if anchored.Metadata[assets.MetadataKeyAgentDeviceFingerprint] != attackerFingerprint || anchored.Metadata[assets.MetadataKeyAgentIdentityVerifiedAt] != "" {
+		t.Fatalf("heartbeat identity state=%+v, want matching provisional fingerprint", anchored.Metadata)
+	}
+
+	recoveryRawToken, recoveryToken := mustCreateEnrollmentTokenWithMaxUses(t, sut, 1)
+	recoveryPayload, _ := json.Marshal(signedContinuityEnrollmentRequest(t, recoveryRawToken, "heartbeat-anchor-node", attackerPublicKey, attackerPrivateKey))
+	recoveryRequest := httptest.NewRequest(http.MethodPost, "/api/v1/enroll", bytes.NewReader(recoveryPayload))
+	recoveryRequest.Host = "localhost:8080"
+	recoveryRequest.RemoteAddr = "127.0.0.2:12345"
+	recoveryRecorder := httptest.NewRecorder()
+	sut.handleEnroll(recoveryRecorder, recoveryRequest)
+	if recoveryRecorder.Code != http.StatusConflict {
+		t.Fatalf("unverified recovery: expected 409, got %d: %s", recoveryRecorder.Code, recoveryRecorder.Body.String())
+	}
+	if _, valid, err := sut.enrollmentStore.ValidateAgentToken(auth.HashToken(initialResponse.AgentToken)); err != nil || !valid {
+		t.Fatalf("rejected recovery changed original bearer: valid=%v err=%v", valid, err)
+	}
+	storedRecoveryToken, valid, err := sut.enrollmentStore.ValidateEnrollmentToken(auth.HashToken(recoveryRawToken))
+	if err != nil || !valid || storedRecoveryToken.ID != recoveryToken.ID || storedRecoveryToken.UseCount != 0 {
+		t.Fatalf("rejected recovery changed enrollment token: token=%+v valid=%v err=%v", storedRecoveryToken, valid, err)
 	}
 }
 

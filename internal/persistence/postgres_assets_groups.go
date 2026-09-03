@@ -23,6 +23,13 @@ func (s *PostgresStore) UpsertAssetHeartbeat(req assets.HeartbeatRequest) (asset
 	if err := lockAgentIdentityAsset(ctx, tx, req.AssetID); err != nil {
 		return assets.Asset{}, err
 	}
+	retired, err := isAgentIdentityRetired(ctx, tx, req.AssetID)
+	if err != nil {
+		return assets.Asset{}, err
+	}
+	if retired {
+		return assets.Asset{}, ErrAgentIdentityRetired
+	}
 	asset, err := upsertAssetHeartbeatTx(ctx, tx, req, time.Now().UTC())
 	if err != nil {
 		return assets.Asset{}, err
@@ -52,13 +59,18 @@ func upsertAssetHeartbeatTx(ctx context.Context, tx pgx.Tx, req assets.Heartbeat
 		return assets.Asset{}, err
 	}
 
+	// Once an asset is agent-owned, source remains an identity marker until
+	// decommission. Generic collectors may refresh it but cannot erase that fact.
 	_, err = tx.Exec(ctx,
 		`INSERT INTO assets (id, type, name, source, group_id, status, platform, metadata, created_at, updated_at, last_seen_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $9, $9)
 		 ON CONFLICT (id) DO UPDATE
 		 SET type = EXCLUDED.type,
 		     name = COALESCE(NULLIF(BTRIM(assets.metadata->>'name_override'), ''), EXCLUDED.name),
-		     source = EXCLUDED.source,
+		     source = CASE
+		       WHEN LOWER(BTRIM(assets.source)) = 'agent' THEN assets.source
+		       ELSE EXCLUDED.source
+		     END,
 		     group_id = COALESCE(EXCLUDED.group_id, assets.group_id),
 		     status = EXCLUDED.status,
 		     platform = EXCLUDED.platform,

@@ -110,6 +110,7 @@ func (s *testFileTransferStore) Count() int {
 
 type testTransferFileConnectionStore struct {
 	connections map[string]*persistence.FileConnection
+	pinErr      error
 }
 
 func newTestTransferFileConnectionStore(connections ...*persistence.FileConnection) *testTransferFileConnectionStore {
@@ -150,6 +151,36 @@ func (s *testTransferFileConnectionStore) UpdateFileConnection(_ context.Context
 	}
 	cloned := *fc
 	s.connections[fc.ID] = &cloned
+	return nil
+}
+
+func (s *testTransferFileConnectionStore) PinSFTPHostKey(_ context.Context, connectionID, expectedHost string, expectedPort int, presentedKey string) error {
+	if s.pinErr != nil {
+		return s.pinErr
+	}
+	fc, ok := s.connections[connectionID]
+	if !ok {
+		return persistence.ErrNotFound
+	}
+	actualPort := 22
+	if fc.Port != nil {
+		actualPort = *fc.Port
+	}
+	if fc.Protocol != "sftp" || fc.Host != expectedHost || actualPort != expectedPort {
+		return persistence.ErrFileConnectionChanged
+	}
+	if existing, pinned := fc.ExtraConfig["host_key"]; pinned {
+		if existingKey, ok := existing.(string); !ok || strings.TrimSpace(existingKey) != strings.TrimSpace(presentedKey) {
+			return persistence.ErrSFTPHostKeyMismatch
+		}
+		return nil
+	}
+	extraConfig := make(map[string]any, len(fc.ExtraConfig)+1)
+	for key, value := range fc.ExtraConfig {
+		extraConfig[key] = value
+	}
+	extraConfig["host_key"] = strings.TrimSpace(presentedKey)
+	fc.ExtraConfig = extraConfig
 	return nil
 }
 

@@ -34,6 +34,12 @@ interface NewTabPageProps {
     protocol: RemoteViewProtocol;
     username?: string;
     password?: string;
+    allowInsecureVNC?: boolean;
+    ignoreCertificate?: boolean;
+    allowLegacySecurity?: boolean;
+    certificateFingerprints?: string;
+    spiceSecurityMode?: "tls" | "cleartext";
+    spiceCAPEM?: string;
     saveBookmark?: { label: string };
   }) => void;
 }
@@ -56,6 +62,7 @@ export default function NewTabPage({
   const [bookmarkHost, setBookmarkHost] = useState("");
   const [bookmarkPort, setBookmarkPort] = useState("");
   const [bookmarkProtocol, setBookmarkProtocol] = useState<RemoteViewProtocol>("vnc");
+  const [bookmarkAllowInsecureVNC, setBookmarkAllowInsecureVNC] = useState(false);
   const [bookmarkSaving, setBookmarkSaving] = useState(false);
 
   useEffect(() => {
@@ -120,6 +127,7 @@ export default function NewTabPage({
     setBookmarkLabel("");
     setBookmarkHost("");
     setBookmarkProtocol("vnc");
+    setBookmarkAllowInsecureVNC(false);
     setBookmarkPort(String(defaultPort("vnc")));
     setShowBookmarkForm(true);
   }, []);
@@ -131,6 +139,9 @@ export default function NewTabPage({
   const handleSaveBookmark = useCallback(async () => {
     const host = bookmarkHost.trim();
     if (!host) return;
+    const allowBookmarkPlainVNC =
+      (bookmarkProtocol === "vnc" || bookmarkProtocol === "ard") &&
+      bookmarkAllowInsecureVNC;
     setBookmarkSaving(true);
     try {
       const created = await createBookmark({
@@ -138,6 +149,7 @@ export default function NewTabPage({
         protocol: bookmarkProtocol,
         host,
         port: parsePortInput(bookmarkPort, defaultPort(bookmarkProtocol)),
+        ...(allowBookmarkPlainVNC ? { allow_insecure_vnc: true } : {}),
       });
       setBookmarks((prev) => [...prev, created]);
       setShowBookmarkForm(false);
@@ -146,7 +158,13 @@ export default function NewTabPage({
     } finally {
       setBookmarkSaving(false);
     }
-  }, [bookmarkLabel, bookmarkHost, bookmarkPort, bookmarkProtocol]);
+  }, [
+    bookmarkLabel,
+    bookmarkHost,
+    bookmarkPort,
+    bookmarkProtocol,
+    bookmarkAllowInsecureVNC,
+  ]);
 
   return (
     <div className="flex-1 flex flex-col gap-6 p-4 md:p-6 overflow-y-auto animate-fade-in">
@@ -266,42 +284,68 @@ export default function NewTabPage({
             <p className="text-xs text-[var(--muted)] py-4 text-center">Loading...</p>
           ) : (
             <>
-              {filteredBookmarks.map((bm) => (
-                <div
-                  key={bm.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => onConnectBookmark(bm)}
-                  onKeyDown={(e) => e.key === "Enter" && onConnectBookmark(bm)}
-                  className="group flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-[var(--panel-border)] bg-[var(--panel-glass)] cursor-pointer transition-[border-color,box-shadow] duration-[var(--dur-fast)] hover:border-[var(--accent)]/40 hover:shadow-[0_0_12px_var(--accent-glow)]"
-                >
-                  <span
-                    className={`w-[7px] h-[7px] rounded-full shrink-0 ${PROTOCOL_DOT_COLOR[bm.protocol]}`}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-[var(--text)] truncate">
-                      {bm.label}
-                    </div>
-                    <div className="text-[10px] text-[var(--muted)] font-mono truncate">
-                      {bm.protocol}://{bm.host}:{bm.port}
-                    </div>
-                  </div>
-                  <span
-                    className={`text-[9px] px-[7px] py-0.5 rounded-[5px] border font-medium shrink-0 ${PROTOCOL_BADGE_STYLE[bm.protocol]}`}
-                  >
-                    {bm.protocol.toUpperCase()}
-                  </span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteBookmark(bm.id);
+              {filteredBookmarks.map((bm) => {
+                const blockedPlainVNC =
+                  (bm.protocol === "vnc" || bm.protocol === "ard") &&
+                  !bm.allow_insecure_vnc;
+                return (
+                  <div
+                    key={bm.id}
+                    role="button"
+                    tabIndex={blockedPlainVNC ? -1 : 0}
+                    aria-disabled={blockedPlainVNC}
+                    title={
+                      blockedPlainVNC
+                        ? "Blocked: recreate this bookmark and allow plain VNC"
+                        : undefined
+                    }
+                    onClick={() => {
+                      if (!blockedPlainVNC) onConnectBookmark(bm);
                     }}
-                    className="p-1 rounded opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-[var(--hover)] transition-opacity"
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !blockedPlainVNC) {
+                        onConnectBookmark(bm);
+                      }
+                    }}
+                    className={`group flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-[var(--panel-border)] bg-[var(--panel-glass)] transition-[border-color,box-shadow] duration-[var(--dur-fast)] ${
+                      blockedPlainVNC
+                        ? "cursor-not-allowed opacity-60"
+                        : "cursor-pointer hover:border-[var(--accent)]/40 hover:shadow-[0_0_12px_var(--accent-glow)]"
+                    }`}
                   >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
+                    <span
+                      className={`w-[7px] h-[7px] rounded-full shrink-0 ${PROTOCOL_DOT_COLOR[bm.protocol]}`}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-[var(--text)] truncate">
+                        {bm.label}
+                      </div>
+                      <div className="text-[10px] text-[var(--muted)] font-mono truncate">
+                        {bm.protocol}://{bm.host}:{bm.port}
+                      </div>
+                      {blockedPlainVNC && (
+                        <div className="text-[10px] text-[var(--warn)]">
+                          Plain VNC permission is missing. Recreate this bookmark.
+                        </div>
+                      )}
+                    </div>
+                    <span
+                      className={`text-[9px] px-[7px] py-0.5 rounded-[5px] border font-medium shrink-0 ${PROTOCOL_BADGE_STYLE[bm.protocol]}`}
+                    >
+                      {bm.protocol.toUpperCase()}
+                    </span>
+                    <button
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleDeleteBookmark(bm.id);
+                      }}
+                      className="p-1 rounded opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-[var(--hover)] transition-opacity"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                );
+              })}
 
               {showBookmarkForm ? (
                 <div className="p-3 rounded-lg border border-[var(--line)] bg-[var(--surface)]">
@@ -336,6 +380,7 @@ export default function NewTabPage({
                           const proto = e.target.value as RemoteViewProtocol;
                           setBookmarkProtocol(proto);
                           setBookmarkPort(String(defaultPort(proto)));
+                          setBookmarkAllowInsecureVNC(false);
                         }}
                         className="flex-1"
                       >
@@ -353,6 +398,24 @@ export default function NewTabPage({
                         className="w-20"
                       />
                     </div>
+                    {(bookmarkProtocol === "vnc" ||
+                      bookmarkProtocol === "ard") && (
+                      <label className="flex items-start gap-2 rounded-md border border-[var(--warn)]/30 bg-[var(--warn-glow)] px-2 py-1.5 text-[10px] text-[var(--warn)]">
+                        <input
+                          type="checkbox"
+                          checked={bookmarkAllowInsecureVNC}
+                          onChange={(event) =>
+                            setBookmarkAllowInsecureVNC(event.target.checked)
+                          }
+                          className="mt-0.5"
+                        />
+                        <span>
+                          Allow plain VNC. Screen, keys, and login data can be
+                          read on the network. The Hub must also allow unsafe
+                          transport.
+                        </span>
+                      </label>
+                    )}
                     <div className="flex gap-1.5 pt-1">
                       <button
                         onClick={cancelBookmarkForm}
@@ -362,7 +425,13 @@ export default function NewTabPage({
                       </button>
                       <button
                         onClick={handleSaveBookmark}
-                        disabled={!bookmarkHost.trim() || bookmarkSaving}
+                        disabled={
+                          !bookmarkHost.trim() ||
+                          bookmarkSaving ||
+                          ((bookmarkProtocol === "vnc" ||
+                            bookmarkProtocol === "ard") &&
+                            !bookmarkAllowInsecureVNC)
+                        }
                         className="flex-1 px-2 py-1.5 rounded text-xs font-medium text-white bg-[var(--accent)] hover:opacity-90 transition-opacity duration-[var(--dur-fast)] disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {bookmarkSaving ? "Saving..." : "Save"}
@@ -395,6 +464,12 @@ export default function NewTabPage({
             protocol: params.protocol,
             username: params.username,
             password: params.password,
+            allowInsecureVNC: params.allowInsecureVNC,
+            ignoreCertificate: params.ignoreCertificate,
+            allowLegacySecurity: params.allowLegacySecurity,
+            certificateFingerprints: params.certificateFingerprints,
+            spiceSecurityMode: params.spiceSecurityMode,
+            spiceCAPEM: params.spiceCAPEM,
             saveBookmark: params.saveBookmark,
           });
         }}

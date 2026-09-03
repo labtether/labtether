@@ -6,7 +6,8 @@ const mocks = vi.hoisted(() => ({
   deleteEnrollmentToken: vi.fn(async () => undefined),
   generateToken: vi.fn(async () => "etok_test"),
   clearNewToken: vi.fn(),
-  newTokenID: "",
+  newRawToken: "one-time-token",
+  newTokenID: "etok_test",
 }));
 
 vi.mock("../../../hooks/useEnrollment", () => ({
@@ -17,7 +18,7 @@ vi.mock("../../../hooks/useEnrollment", () => ({
     hubCandidates: [],
     enrollmentTokens: [],
     selectHubURL: vi.fn(),
-    newRawToken: "one-time-token",
+    newRawToken: mocks.newRawToken,
     newTokenID: mocks.newTokenID,
     generating: false,
     generateToken: mocks.generateToken,
@@ -43,7 +44,8 @@ beforeEach(() => {
   mocks.deleteEnrollmentToken.mockClear();
   mocks.generateToken.mockClear();
   mocks.clearNewToken.mockClear();
-  mocks.newTokenID = "";
+  mocks.newRawToken = "one-time-token";
+  mocks.newTokenID = "etok_test";
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: { writeText: vi.fn(async () => undefined) },
@@ -73,6 +75,38 @@ async function unmountStep() {
 }
 
 describe("AgentSetupStep token lifecycle", () => {
+  it("does not mint until an expected hostname is supplied, then requests an asset-bound token", async () => {
+    mocks.newRawToken = "";
+    mocks.newTokenID = "";
+    await mountStep();
+
+    expect(mocks.generateToken).not.toHaveBeenCalled();
+    const hostname = container.querySelector<HTMLInputElement>('input[aria-label="Expected hostname"]');
+    const createButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Create one-time token",
+    );
+    expect(hostname).not.toBeNull();
+    expect(createButton?.disabled).toBe(true);
+    await act(async () => {
+      if (hostname) {
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+        setter?.call(hostname, "Server 01");
+        hostname.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
+    expect(createButton?.disabled).toBe(false);
+    await act(async () => {
+      createButton?.click();
+      await Promise.resolve();
+    });
+    expect(mocks.generateToken).toHaveBeenCalledWith("add-device-wizard", 24, 1, {
+      scope: "asset",
+      assetID: "Server 01",
+    });
+
+    await unmountStep();
+  });
+
   it("revokes an untouched generated token when the user exits", async () => {
     await mountStep();
     await unmountStep();

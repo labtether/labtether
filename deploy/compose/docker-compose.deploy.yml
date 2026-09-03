@@ -171,6 +171,9 @@ services:
       LABTETHER_TLS_MODE: ${LABTETHER_TLS_MODE:-auto}
       LABTETHER_EXTERNAL_URL: ${LABTETHER_EXTERNAL_URL:-}
       LABTETHER_CORS_ALLOWED_ORIGINS: ${LABTETHER_CORS_ALLOWED_ORIGINS:-}
+      LABTETHER_OIDC_ALLOWED_ENDPOINT_ORIGINS: ${LABTETHER_OIDC_ALLOWED_ENDPOINT_ORIGINS:-}
+      LABTETHER_OIDC_ALLOW_PRIVATE: ${LABTETHER_OIDC_ALLOW_PRIVATE:-false}
+      LABTETHER_OIDC_ALLOW_LOOPBACK: ${LABTETHER_OIDC_ALLOW_LOOPBACK:-false}
       # Trust only the bundled console service by default. Operators adding a
       # different reverse proxy must name it or provide a narrow source CIDR.
       LABTETHER_TRUST_PROXY_HOSTS: ${LABTETHER_TRUST_PROXY_HOSTS:-web-console}
@@ -192,6 +195,7 @@ services:
       LABTETHER_OUTBOUND_ALLOW_PRIVATE: ${LABTETHER_OUTBOUND_ALLOW_PRIVATE:-true}
       LABTETHER_OUTBOUND_ALLOW_LOOPBACK: ${LABTETHER_OUTBOUND_ALLOW_LOOPBACK:-false}
       LABTETHER_OUTBOUND_ALLOW_LINK_LOCAL: ${LABTETHER_OUTBOUND_ALLOW_LINK_LOCAL:-false}
+      LABTETHER_ALLOW_INSECURE_TRANSPORT: ${LABTETHER_ALLOW_INSECURE_TRANSPORT:-false}
       # Use the verified container-local TLS route for the hub's own status
       # probe. This avoids weakening the global insecure-transport policy just
       # to health-check the current process.

@@ -340,6 +340,13 @@ func (d *Deps) V2RunSavedAction(w http.ResponseWriter, r *http.Request, id strin
 			stepResults = append(stepResults, preflight[index])
 			continue
 		}
+		// Policy and maintenance settings can change while an earlier step runs.
+		// Re-check the live settings immediately before each command dispatch.
+		if deniedEntry, denied := d.savedActionDeniedStep(r, action, index, step); denied {
+			failedSteps++
+			stepResults = append(stepResults, deniedEntry)
+			continue
+		}
 		remaining := maxSavedActionRunDuration - time.Since(startedAt)
 		if remaining <= 0 {
 			failedSteps++
@@ -429,7 +436,8 @@ func (d *Deps) savedActionDeniedStep(r *http.Request, action savedactions.SavedA
 		}
 	}
 
-	checkRes := policy.CheckResponse{Allowed: true}
+	checkRes := policy.CheckResponse{Allowed: false, Reason: "command policy unavailable", Mode: "structured"}
+	policyError := "policy_unavailable"
 	if d.GetPolicyConfig != nil {
 		checkRes = policy.Evaluate(policy.CheckRequest{
 			ActorID: req.ActorID,
@@ -438,6 +446,7 @@ func (d *Deps) savedActionDeniedStep(r *http.Request, action savedactions.SavedA
 			Action:  "command_execute",
 			Command: req.Command,
 		}, d.GetPolicyConfig())
+		policyError = "policy_denied"
 	}
 	if d.AppendAuditEventBestEffort != nil {
 		event := audit.NewEvent("actions.run.policy_checked")
@@ -460,7 +469,7 @@ func (d *Deps) savedActionDeniedStep(r *http.Request, action savedactions.SavedA
 		return map[string]any{
 			"name":    step.Name,
 			"target":  step.Target,
-			"error":   "policy_denied",
+			"error":   policyError,
 			"message": checkRes.Reason,
 		}, true
 	}

@@ -1,6 +1,7 @@
 package operations
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -9,8 +10,10 @@ import (
 
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/audit"
+	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
 	"github.com/labtether/labtether/internal/idgen"
 	"github.com/labtether/labtether/internal/persistence"
+	"github.com/labtether/labtether/internal/policy"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -20,6 +23,9 @@ const (
 	maxExecMultiRawTargets    = 64
 	maxExecMultiUniqueTargets = 64
 	maxExecMultiConcurrency   = 8
+	execRateLimitBucket       = "actions.execute"
+	execRateLimitCount        = 120
+	execRateLimitWindow       = time.Minute
 )
 
 func normalizeExecTimeoutSeconds(timeoutSec int) int {
@@ -97,6 +103,9 @@ func (d *ExecDeps) HandleAssetExec(w http.ResponseWriter, r *http.Request, asset
 		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "asset is not accessible with this API key")
 		return
 	}
+	if d.EnforceRateLimit != nil && !d.EnforceRateLimit(w, r, execRateLimitBucket, execRateLimitCount, execRateLimitWindow) {
+		return
+	}
 
 	var req ExecRequest
 	if err := d.DecodeJSONBody(w, r, &req); err != nil {
@@ -109,13 +118,23 @@ func (d *ExecDeps) HandleAssetExec(w http.ResponseWriter, r *http.Request, asset
 	}
 	req.Timeout = normalizeExecTimeoutSeconds(req.Timeout)
 
-	result := d.ExecOnAsset(r, assetID, req.Command, req.Timeout)
+	if !maintenanceguard.EnforceAssetAction(w, assetID, d.EvaluateAssetGuardrails) {
+		return
+	}
+	result := d.execPublicCommand(r, assetID, req.Command, req.Timeout)
 	if result.Error != "" {
 		status := http.StatusInternalServerError
 		errorCode := "exec_failed"
-		if result.Error == "asset_offline" {
+		switch result.Error {
+		case "asset_offline":
 			status = http.StatusConflict
 			errorCode = "asset_offline"
+		case "policy_denied":
+			status = http.StatusForbidden
+			errorCode = "policy_denied"
+		case "policy_unavailable":
+			status = http.StatusServiceUnavailable
+			errorCode = "policy_unavailable"
 		}
 		apiv2.WriteError(w, status, errorCode, result.Message)
 		return
@@ -128,6 +147,60 @@ func (d *ExecDeps) HandleAssetExec(w http.ResponseWriter, r *http.Request, asset
 		Details:   map[string]any{"command_bytes": len([]byte(req.Command)), "exit_code": result.ExitCode},
 		Timestamp: time.Now().UTC(),
 	}, "v2 exec on "+assetID)
+}
+
+func (d *ExecDeps) execPublicCommand(r *http.Request, assetID, command string, timeoutSec int) ExecResult {
+	if d == nil {
+		return ExecResult{AssetID: assetID, Error: "policy_unavailable", Message: "command policy unavailable"}
+	}
+	policyResult := d.evaluateCommandPolicy(r.Context(), assetID, command)
+	if !policyResult.Allowed {
+		d.auditCommandPolicyDenial(r.Context(), assetID, command, policyResult.Reason)
+		_, code, message := commandPolicyHTTPError(policyResult.Reason)
+		return ExecResult{AssetID: assetID, Error: code, Message: message}
+	}
+	return d.ExecOnAsset(r, assetID, command, timeoutSec)
+}
+
+func (d *ExecDeps) evaluateCommandPolicy(ctx context.Context, assetID, command string) policy.CheckResponse {
+	if d == nil || d.EvaluateCommandPolicy == nil {
+		return policy.CheckResponse{Allowed: false, Reason: "command policy unavailable", Mode: "structured"}
+	}
+	result := d.EvaluateCommandPolicy(ctx, assetID, command)
+	if !result.Allowed && strings.TrimSpace(result.Reason) == "" {
+		result.Reason = "command denied by policy"
+	}
+	return result
+}
+
+func commandPolicyHTTPError(reason string) (int, string, string) {
+	message := strings.TrimSpace(reason)
+	if message == "" {
+		message = "command denied by policy"
+	}
+	if strings.Contains(strings.ToLower(message), "unavailable") {
+		return http.StatusServiceUnavailable, "policy_unavailable", "command policy unavailable"
+	}
+	return http.StatusForbidden, "policy_denied", message
+}
+
+func (d *ExecDeps) auditCommandPolicyDenial(ctx context.Context, assetID, command, reason string) {
+	if d == nil || d.AppendAuditEventBestEffort == nil {
+		return
+	}
+	actorID := ""
+	if d.PrincipalActorID != nil {
+		actorID = d.PrincipalActorID(ctx)
+	}
+	d.AppendAuditEventBestEffort(audit.Event{
+		Type:      "api.exec.policy_checked",
+		ActorID:   actorID,
+		Target:    assetID,
+		Decision:  "denied",
+		Reason:    strings.TrimSpace(reason),
+		Details:   map[string]any{"command_bytes": len([]byte(command))},
+		Timestamp: time.Now().UTC(),
+	}, "v2 exec command denied by policy on "+assetID)
 }
 
 // ExecOnAsset runs a command on a single asset via the agent manager.
@@ -180,6 +253,9 @@ func (d *ExecDeps) HandleExecMulti(w http.ResponseWriter, r *http.Request) {
 	}
 	if !apiv2.ScopeCheck(d.ScopesFromContext(r.Context()), "assets:exec") {
 		apiv2.WriteScopeForbidden(w, "assets:exec")
+		return
+	}
+	if d.EnforceRateLimit != nil && !d.EnforceRateLimit(w, r, execRateLimitBucket, execRateLimitCount, execRateLimitWindow) {
 		return
 	}
 
@@ -247,6 +323,11 @@ func (d *ExecDeps) HandleExecMulti(w http.ResponseWriter, r *http.Request) {
 		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "none of the requested targets are accessible with this API key")
 		return
 	}
+	for _, target := range filteredTargets {
+		if !maintenanceguard.EnforceAssetAction(w, target, d.EvaluateAssetGuardrails) {
+			return
+		}
+	}
 
 	// Fan out through a fixed-size worker pool. Results are written to stable
 	// request-order slots and reduced only after all workers finish.
@@ -259,7 +340,8 @@ func (d *ExecDeps) HandleExecMulti(w http.ResponseWriter, r *http.Request) {
 		go func() {
 			defer wg.Done()
 			for index := range jobs {
-				orderedResults[index] = d.ExecOnAsset(r, filteredTargets[index], req.Command, req.Timeout)
+				target := filteredTargets[index]
+				orderedResults[index] = d.execPublicCommand(r, target, req.Command, req.Timeout)
 			}
 		}()
 	}

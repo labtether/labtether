@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { Copy, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { EnrollmentToken, AgentTokenSummary } from "../../../../console/models";
-import type { HubConnectionCandidate } from "../../../../hooks/useEnrollment";
+import type { EnrollmentTokenScopeRequest, HubConnectionCandidate } from "../../../../hooks/useEnrollment";
 import { formatAge } from "../../../../console/formatters";
 import { Card } from "../../../../components/ui/Card";
 import { Badge } from "../../../../components/ui/Badge";
@@ -25,7 +25,7 @@ type ConnectAgentsCardProps = {
   enrollError: string;
   newRawToken: string;
   generating: boolean;
-  generateToken: (label: string, ttlHours: number, maxUses: number) => Promise<unknown> | void;
+  generateToken: (label: string, ttlHours: number, maxUses: number, scope: EnrollmentTokenScopeRequest) => Promise<unknown> | void;
   revokeEnrollmentToken: (id: string) => Promise<void> | void;
   revokeAgentToken: (id: string) => Promise<void> | void;
   cleanupDeadTokens: () => Promise<{ enrollment_deleted: number; agent_deleted: number } | null>;
@@ -69,6 +69,10 @@ export function ConnectAgentsCard({
   const t = useTranslations("settings");
   const [cleaning, setCleaning] = useState(false);
   const [cleanupResult, setCleanupResult] = useState("");
+  const [tokenScope, setTokenScope] = useState<EnrollmentTokenScopeRequest["scope"]>("asset");
+  const [tokenAssetID, setTokenAssetID] = useState("");
+  const [tokenGroupID, setTokenGroupID] = useState("");
+  const [acknowledgeUnrestricted, setAcknowledgeUnrestricted] = useState(false);
 
   const { deadEnrollmentCount, deadAgentCount, totalDead } = useMemo(() => {
     const now = new Date();
@@ -84,6 +88,11 @@ export function ConnectAgentsCard({
     () => hubCandidates.find((candidate) => candidate.hub_url === hubURL) ?? null,
     [hubCandidates, hubURL],
   );
+  const scopeReady =
+    (tokenScope === "asset" && tokenAssetID.trim() !== "") ||
+    (tokenScope === "group" && tokenGroupID.trim() !== "") ||
+    tokenScope === "unplaced" ||
+    (tokenScope === "unrestricted" && acknowledgeUnrestricted);
 
   const handleCleanup = async () => {
     if (!window.confirm(t("agents.deleteCount", { count: totalDead }))) return;
@@ -216,6 +225,40 @@ export LABTETHER_WS_URL="${wsURL}"
           <div className="space-y-2 mt-2">
             <p className="text-xs text-[var(--muted)]">{t("agents.createEnrollmentTokenDescription")}</p>
             <div className="flex flex-wrap items-end gap-3">
+              <label className="flex flex-col gap-0.5 text-xs text-[var(--muted)]">
+                <span>Can enroll</span>
+                <Select
+                  aria-label="Enrollment scope"
+                  value={tokenScope}
+                  onChange={(event) => {
+                    const nextScope = event.target.value as EnrollmentTokenScopeRequest["scope"];
+                    setTokenScope(nextScope);
+                    setAcknowledgeUnrestricted(false);
+                    if (nextScope === "asset") setTokenMaxUses(1);
+                  }}
+                >
+                  <option value="asset">One named device</option>
+                  <option value="group">Devices in one group</option>
+                  <option value="unplaced">Any new device, unplaced</option>
+                  <option value="unrestricted">Any device and group</option>
+                </Select>
+              </label>
+              {tokenScope === "asset" ? (
+                <Input
+                  aria-label="Expected hostname"
+                  placeholder="Expected hostname"
+                  value={tokenAssetID}
+                  onChange={(event) => setTokenAssetID(event.target.value)}
+                />
+              ) : null}
+              {tokenScope === "group" ? (
+                <Input
+                  aria-label="Allowed group ID"
+                  placeholder="Allowed group ID"
+                  value={tokenGroupID}
+                  onChange={(event) => setTokenGroupID(event.target.value)}
+                />
+              ) : null}
               <Input
                 placeholder={t("agents.labelPlaceholder")}
                 value={tokenLabel}
@@ -238,18 +281,34 @@ export LABTETHER_WS_URL="${wsURL}"
                   className="w-20"
                   type="number"
                   min={1}
+                  disabled={tokenScope === "asset"}
                   value={tokenMaxUses}
                   onChange={(e) => setTokenMaxUses(Number(e.target.value))}
                 />
               </label>
               <Button
                 variant="primary"
-                disabled={generating}
-                onClick={() => void generateToken(tokenLabel, tokenTTL, tokenMaxUses)}
+                disabled={generating || !scopeReady}
+                onClick={() => void generateToken(tokenLabel, tokenTTL, tokenMaxUses, {
+                  scope: tokenScope,
+                  assetID: tokenScope === "asset" ? tokenAssetID : undefined,
+                  allowedGroupID: tokenScope === "group" ? tokenGroupID : undefined,
+                  acknowledgeUnrestricted: tokenScope === "unrestricted" ? acknowledgeUnrestricted : undefined,
+                })}
               >
                 {generating ? t("agents.generating") : t("agents.createToken")}
               </Button>
             </div>
+            {tokenScope === "unrestricted" ? (
+              <label className="flex max-w-3xl items-start gap-2 text-xs text-[var(--bad)]">
+                <input
+                  type="checkbox"
+                  checked={acknowledgeUnrestricted}
+                  onChange={(event) => setAcknowledgeUnrestricted(event.target.checked)}
+                />
+                I understand this token can enroll any device into any existing group, where automation may run right away.
+              </label>
+            ) : null}
           </div>
         </div>
 
@@ -267,6 +326,12 @@ export LABTETHER_WS_URL="${wsURL}"
                   <li key={tok.id} className="flex flex-wrap items-center gap-3 py-2">
                     <span className="text-sm font-medium text-[var(--text)]">{tok.label || tok.id}</span>
                     <span className="text-xs text-[var(--muted)]">{tok.use_count}{tok.max_uses > 0 ? `/${tok.max_uses}` : ""} uses</span>
+                    <span className="text-xs text-[var(--muted)]">
+                      {tok.scope === "asset" ? `device ${tok.asset_id ?? ""}` :
+                        tok.scope === "group" ? `group ${tok.allowed_group_id ?? ""}` :
+                          tok.scope.replaceAll("_", " ")}
+                    </span>
+                    {tok.created_by ? <span className="text-xs text-[var(--muted)]">by {tok.created_by}</span> : null}
                     <span className="text-xs text-[var(--muted)]">{t("agents.expires", { age: formatAge(tok.expires_at) })}</span>
                     <Badge status={statusLabel} size="sm" />
                     {!isDisabled ? (

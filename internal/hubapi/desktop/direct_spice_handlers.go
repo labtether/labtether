@@ -1,10 +1,16 @@
 package desktop
 
 import (
+	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	neturl "net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +21,123 @@ import (
 	"github.com/labtether/labtether/internal/servicehttp"
 	"github.com/labtether/labtether/internal/terminal"
 )
+
+const (
+	SPICESecurityTLS       = "tls"
+	SPICESecurityCleartext = "cleartext"
+	maxSPICECAPEMBytes     = 16 * 1024
+)
+
+// ValidateDirectSPICESecurityOptions applies safe defaults before a direct
+// SPICE session is created. Cleartext requires a per-session choice and the
+// process-wide unsafe transport gate.
+func ValidateDirectSPICESecurityOptions(protocol, rawMode, rawCAPEM string) (string, string, error) {
+	mode := strings.ToLower(strings.TrimSpace(rawMode))
+	caPEM := strings.TrimSpace(rawCAPEM)
+	if NormalizeDesktopProtocol(protocol) != "spice" {
+		if mode != "" || caPEM != "" {
+			return "", "", errors.New("SPICE security options are only valid for SPICE")
+		}
+		return "", "", nil
+	}
+	if mode == "" {
+		mode = SPICESecurityTLS
+	}
+	if mode != SPICESecurityTLS && mode != SPICESecurityCleartext {
+		return "", "", errors.New("spice_security_mode must be tls or cleartext")
+	}
+	if len(caPEM) > maxSPICECAPEMBytes {
+		return "", "", fmt.Errorf("spice_ca_pem too long (max %d bytes)", maxSPICECAPEMBytes)
+	}
+	if mode == SPICESecurityCleartext {
+		if caPEM != "" {
+			return "", "", errors.New("spice_ca_pem cannot be used with cleartext SPICE")
+		}
+		if !securityruntime.InsecureTransportAllowed() {
+			return "", "", errors.New("cleartext SPICE requires LABTETHER_ALLOW_INSECURE_TRANSPORT=true")
+		}
+		return mode, "", nil
+	}
+	if _, err := NewDirectSPICETLSConfig("localhost", caPEM); err != nil {
+		return "", "", err
+	}
+	return mode, caPEM, nil
+}
+
+// NewDirectSPICETLSConfig builds a verified TLS client configuration. The
+// target host is always used as ServerName, including IP literals, so IP SANs
+// are checked instead of silently skipping peer identity verification.
+func NewDirectSPICETLSConfig(host, caPEM string) (*tls.Config, error) {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return nil, errors.New("SPICE TLS host is required")
+	}
+	var roots *x509.CertPool
+	if strings.TrimSpace(caPEM) != "" {
+		var err error
+		roots, err = x509.SystemCertPool()
+		if err != nil || roots == nil {
+			roots = x509.NewCertPool()
+		}
+		if ok := roots.AppendCertsFromPEM([]byte(caPEM)); !ok {
+			return nil, errors.New("invalid spice_ca_pem certificate bundle")
+		}
+	}
+	return &tls.Config{ // #nosec G402 -- certificate and host verification remain enabled.
+		MinVersion: tls.VersionTLS12,
+		ServerName: host,
+		RootCAs:    roots,
+	}, nil
+}
+
+func connectDirectSPICE(r *http.Request, opts DesktopSessionOptions) (net.Conn, error) {
+	mode := strings.ToLower(strings.TrimSpace(opts.SPICESecurityMode))
+	if mode == "" {
+		mode = SPICESecurityTLS
+	}
+	if mode == SPICESecurityCleartext {
+		if !securityruntime.InsecureTransportAllowed() {
+			return nil, errors.New("cleartext SPICE is disabled")
+		}
+		return securityruntime.DialOutboundTCPContext(r.Context(), opts.DirectHost, opts.DirectPort, 10*time.Second)
+	}
+	if mode != SPICESecurityTLS {
+		return nil, errors.New("invalid SPICE security mode")
+	}
+	tlsConfig, err := NewDirectSPICETLSConfig(opts.DirectHost, opts.SPICECAPEM)
+	if err != nil {
+		return nil, err
+	}
+	rawConn, err := securityruntime.DialOutboundTCPContext(r.Context(), opts.DirectHost, opts.DirectPort, 10*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	return secureDirectSPICEConnection(r.Context(), rawConn, tlsConfig)
+}
+
+func secureDirectSPICEConnection(ctx context.Context, rawConn net.Conn, tlsConfig *tls.Config) (net.Conn, error) {
+	if rawConn == nil {
+		return nil, errors.New("SPICE connection is required")
+	}
+	if tlsConfig == nil {
+		_ = rawConn.Close()
+		return nil, errors.New("SPICE TLS configuration is required")
+	}
+	tlsConn := tls.Client(rawConn, tlsConfig)
+	if err := rawConn.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		_ = rawConn.Close()
+		return nil, err
+	}
+	if err := tlsConn.HandshakeContext(ctx); err != nil {
+		_ = rawConn.Close()
+		return nil, fmt.Errorf("SPICE TLS handshake failed: %w", err)
+	}
+	if err := rawConn.SetDeadline(time.Time{}); err != nil {
+		_ = rawConn.Close()
+		return nil, err
+	}
+	return tlsConn, nil
+}
 
 // HandleDirectSPICETicket issues the browser stream ticket for an ad-hoc
 // SPICE target. Unlike Proxmox SPICE, the password was supplied by the caller
@@ -34,6 +157,10 @@ func (d *Deps) HandleDirectSPICETicket(w http.ResponseWriter, r *http.Request, s
 	}
 	if _, _, err := securityruntime.ValidateOutboundEndpoint(opts.DirectHost, opts.DirectPort); err != nil {
 		servicehttp.WriteError(w, http.StatusBadRequest, "invalid direct SPICE target")
+		return
+	}
+	if strings.EqualFold(strings.TrimSpace(opts.SPICESecurityMode), SPICESecurityCleartext) && !securityruntime.InsecureTransportAllowed() {
+		servicehttp.WriteError(w, http.StatusBadRequest, "cleartext SPICE is disabled")
 		return
 	}
 
@@ -57,9 +184,9 @@ func (d *Deps) HandleDirectSPICETicket(w http.ResponseWriter, r *http.Request, s
 	})
 }
 
-// HandleDirectSPICEStream bridges a browser WebSocket to a conventional
-// cleartext SPICE endpoint (normally port 5930). TLS SPICE endpoints require a
-// managed connector that can provide the expected CA and verification policy.
+// HandleDirectSPICEStream bridges a browser WebSocket to a conventional SPICE
+// endpoint. Direct sessions use verified TLS unless cleartext was explicitly
+// selected and the process-wide unsafe transport gate remains enabled.
 func (d *Deps) HandleDirectSPICEStream(w http.ResponseWriter, r *http.Request, session terminal.Session) {
 	if r.Method != http.MethodGet {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -71,7 +198,11 @@ func (d *Deps) HandleDirectSPICEStream(w http.ResponseWriter, r *http.Request, s
 		return
 	}
 
-	spiceConn, err := securityruntime.DialOutboundTCPContext(r.Context(), opts.DirectHost, opts.DirectPort, 10*time.Second)
+	if _, _, err := securityruntime.ValidateOutboundEndpoint(opts.DirectHost, opts.DirectPort); err != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, "invalid direct SPICE target")
+		return
+	}
+	spiceConn, err := connectDirectSPICE(r, opts)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusBadGateway, "failed to connect to SPICE: "+shared.SanitizeUpstreamError(err.Error()))
 		return

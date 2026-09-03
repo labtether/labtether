@@ -54,7 +54,8 @@ type HeartbeatRequest struct {
 	AllowAgentIdentityRotation bool `json:"-"`
 
 	// AllowAgentIdentityTOFU is internal-only and is set by the persistence
-	// transaction after it validates an active, asset-bound agent token. Generic
+	// transaction after it validates an active, asset-bound agent token. It may
+	// record provisional identity metadata, but never recovery authority. Generic
 	// admin/API-key and owner-token heartbeats must leave it false.
 	AllowAgentIdentityTOFU bool `json:"-"`
 }

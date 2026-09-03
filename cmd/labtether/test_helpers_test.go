@@ -8,9 +8,11 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/labtether/labtether/internal/connectors/webservice"
 	"github.com/labtether/labtether/internal/connectorsdk"
+	"github.com/labtether/labtether/internal/enrollment"
 	"github.com/labtether/labtether/internal/installstate"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/policy"
@@ -18,6 +20,29 @@ import (
 	"github.com/labtether/labtether/internal/secrets"
 	"github.com/labtether/labtether/internal/terminal"
 )
+
+func testEnrollmentTokenParams(tokenHash, label string, expiresAt time.Time, maxUses int) persistence.CreateEnrollmentTokenParams {
+	return persistence.CreateEnrollmentTokenParams{
+		TokenHash: tokenHash,
+		Label:     label,
+		ExpiresAt: expiresAt,
+		MaxUses:   maxUses,
+		Scope:     enrollment.TokenScopeUnrestricted,
+		CreatedBy: "test",
+	}
+}
+
+func testGroupEnrollmentTokenParams(tokenHash, groupID string, expiresAt time.Time, maxUses int) persistence.CreateEnrollmentTokenParams {
+	return persistence.CreateEnrollmentTokenParams{
+		TokenHash:      tokenHash,
+		Label:          "group",
+		ExpiresAt:      expiresAt,
+		MaxUses:        maxUses,
+		Scope:          enrollment.TokenScopeGroup,
+		AllowedGroupID: groupID,
+		CreatedBy:      "test",
+	}
+}
 
 // resetTerminalDepsForTest clears the cached terminal deps and resets the
 // sync.Once guard so the next ensureTerminalDeps call rebuilds from the

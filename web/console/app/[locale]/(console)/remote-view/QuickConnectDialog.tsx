@@ -24,6 +24,12 @@ interface QuickConnectDialogProps {
     port: number;
     username?: string;
     password?: string;
+    allowInsecureVNC?: boolean;
+    ignoreCertificate?: boolean;
+    allowLegacySecurity?: boolean;
+    certificateFingerprints?: string;
+    spiceSecurityMode?: "tls" | "cleartext";
+    spiceCAPEM?: string;
     saveBookmark?: { label: string };
   }) => void;
 }
@@ -45,6 +51,20 @@ function parseURI(input: string): {
     host: match[2],
     port: match[3] ? parsePortInput(match[3], defaultPort(protocol)) : defaultPort(protocol),
   };
+}
+
+export function canSaveQuickConnectBookmark(
+  protocol: RemoteViewProtocol,
+  ignoreCertificate: boolean,
+  allowLegacySecurity: boolean,
+  certificateFingerprints: string,
+): boolean {
+  return (
+    protocol !== "rdp" ||
+    (!ignoreCertificate &&
+      !allowLegacySecurity &&
+      certificateFingerprints.trim() === "")
+  );
 }
 
 // ── Step indicator ──
@@ -129,6 +149,20 @@ export default function QuickConnectDialog({
   const [bookmarkNickname, setBookmarkNickname] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [allowInsecureVNC, setAllowInsecureVNC] = useState(false);
+  const [ignoreCertificate, setIgnoreCertificate] = useState(false);
+  const [allowLegacySecurity, setAllowLegacySecurity] = useState(false);
+  const [certificateFingerprints, setCertificateFingerprints] = useState("");
+  const [spiceSecurityMode, setSPICESecurityMode] = useState<
+    "tls" | "cleartext"
+  >("tls");
+  const [spiceCAPEM, setSPICECAPEM] = useState("");
+  const canSaveBookmark = canSaveQuickConnectBookmark(
+    protocol,
+    ignoreCertificate,
+    allowLegacySecurity,
+    certificateFingerprints,
+  );
 
   const [prevProtocolDefault, setPrevProtocolDefault] = useState(
     String(defaultPort("vnc")),
@@ -145,6 +179,12 @@ export default function QuickConnectDialog({
       setBookmarkNickname("");
       setUsername("");
       setPassword("");
+      setAllowInsecureVNC(false);
+      setIgnoreCertificate(false);
+      setAllowLegacySecurity(false);
+      setCertificateFingerprints("");
+      setSPICESecurityMode("tls");
+      setSPICECAPEM("");
       setPrevProtocolDefault(String(defaultPort("vnc")));
     }
   }, [open]);
@@ -163,6 +203,18 @@ export default function QuickConnectDialog({
   const handleProtocolChange = useCallback(
     (newProtocol: RemoteViewProtocol) => {
       setProtocol(newProtocol);
+      if (newProtocol !== "rdp") {
+        setIgnoreCertificate(false);
+        setAllowLegacySecurity(false);
+        setCertificateFingerprints("");
+      }
+      if (newProtocol !== "vnc" && newProtocol !== "ard") {
+        setAllowInsecureVNC(false);
+      }
+      if (newProtocol !== "spice") {
+        setSPICESecurityMode("tls");
+        setSPICECAPEM("");
+      }
       if (port === prevProtocolDefault || port === "") {
         setPort(String(defaultPort(newProtocol)));
       }
@@ -177,6 +229,18 @@ export default function QuickConnectDialog({
     const parsed = parseURI(value);
     if (parsed) {
       setProtocol(parsed.protocol);
+      if (parsed.protocol !== "rdp") {
+        setIgnoreCertificate(false);
+        setAllowLegacySecurity(false);
+        setCertificateFingerprints("");
+      }
+      if (parsed.protocol !== "vnc" && parsed.protocol !== "ard") {
+        setAllowInsecureVNC(false);
+      }
+      if (parsed.protocol !== "spice") {
+        setSPICESecurityMode("tls");
+        setSPICECAPEM("");
+      }
       setHost(parsed.host);
       setPort(String(parsed.port));
       setPrevProtocolDefault(String(defaultPort(parsed.protocol)));
@@ -199,13 +263,50 @@ export default function QuickConnectDialog({
           ? { username: username.trim() }
           : {}),
         ...(withCredentials && password ? { password } : {}),
-        ...(saveBookmark
+        ...((protocol === "vnc" || protocol === "ard") && allowInsecureVNC
+          ? { allowInsecureVNC: true }
+          : {}),
+        ...(protocol === "rdp" && ignoreCertificate
+          ? { ignoreCertificate: true }
+          : {}),
+        ...(protocol === "rdp" && allowLegacySecurity
+          ? { allowLegacySecurity: true }
+          : {}),
+        ...(protocol === "rdp" && certificateFingerprints.trim()
+          ? { certificateFingerprints: certificateFingerprints.trim() }
+          : {}),
+        ...(protocol === "spice"
+          ? {
+              spiceSecurityMode,
+              ...(spiceSecurityMode === "tls" && spiceCAPEM.trim()
+                ? { spiceCAPEM: spiceCAPEM.trim() }
+                : {}),
+            }
+          : {}),
+        ...(saveBookmark && canSaveBookmark
           ? { saveBookmark: { label: bookmarkNickname.trim() || host.trim() } }
           : {}),
       });
       onClose();
     },
-    [protocol, host, port, username, password, saveBookmark, bookmarkNickname, onConnect, onClose],
+    [
+      protocol,
+      host,
+      port,
+      username,
+      password,
+      allowInsecureVNC,
+      ignoreCertificate,
+      allowLegacySecurity,
+      certificateFingerprints,
+      spiceSecurityMode,
+      spiceCAPEM,
+      saveBookmark,
+      canSaveBookmark,
+      bookmarkNickname,
+      onConnect,
+      onClose,
+    ],
   );
 
   if (!open) return null;
@@ -333,15 +434,18 @@ export default function QuickConnectDialog({
             </div>
 
             {/* Save as bookmark */}
-            <label className="flex items-center gap-2 cursor-pointer select-none">
+            <label className={`flex items-center gap-2 select-none ${canSaveBookmark ? "cursor-pointer" : "cursor-not-allowed"}`}>
               <input
                 type="checkbox"
                 checked={saveBookmark}
                 onChange={(e) => setSaveBookmark(e.target.checked)}
+                disabled={!canSaveBookmark}
                 className="h-3.5 w-3.5 rounded border-[var(--line)] accent-[var(--accent)]"
               />
               <span className="text-xs text-[var(--text)]">
-                Save as bookmark
+                {canSaveBookmark
+                  ? "Save as bookmark"
+                  : "Session-only RDP security choices cannot be bookmarked"}
               </span>
             </label>
 
@@ -444,11 +548,151 @@ export default function QuickConnectDialog({
               />
             </div>
 
+            {protocol === "rdp" && (
+              <div className="space-y-3 rounded-lg border border-[var(--warn)]/30 bg-[var(--warn-glow)] px-3 py-2">
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-[var(--warn)]">
+                    Trusted certificate fingerprint
+                  </label>
+                  <Input
+                    type="text"
+                    value={certificateFingerprints}
+                    onChange={(e) => {
+                      setCertificateFingerprints(e.target.value);
+                      if (e.target.value.trim()) {
+                        setSaveBookmark(false);
+                        setIgnoreCertificate(false);
+                        setAllowLegacySecurity(false);
+                      }
+                    }}
+                    placeholder="sha256:AA:BB:..."
+                    autoComplete="off"
+                  />
+                  <p className="mt-1 text-[10px] text-[var(--muted)]">
+                    Use this for a self-signed certificate or a DNS name pinned
+                    to an IP.
+                  </p>
+                </div>
+                <label className="flex items-start gap-2 text-xs text-[var(--warn)]">
+                  <input
+                    type="checkbox"
+                    checked={ignoreCertificate}
+                    onChange={(e) => {
+                      setIgnoreCertificate(e.target.checked);
+                      if (e.target.checked) {
+                        setSaveBookmark(false);
+                        setAllowLegacySecurity(false);
+                        setCertificateFingerprints("");
+                      }
+                    }}
+                    className="mt-0.5 h-3.5 w-3.5 accent-[var(--warn)]"
+                  />
+                  <span>
+                    Allow an untrusted RDP certificate for this session only.
+                    This can expose the password and screen to an attacker.
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 text-xs text-[var(--warn)]">
+                  <input
+                    type="checkbox"
+                    checked={allowLegacySecurity}
+                    onChange={(e) => {
+                      setAllowLegacySecurity(e.target.checked);
+                      if (e.target.checked) {
+                        setSaveBookmark(false);
+                        setIgnoreCertificate(false);
+                        setCertificateFingerprints("");
+                      }
+                    }}
+                    className="mt-0.5 h-3.5 w-3.5 accent-[var(--warn)]"
+                  />
+                  <span>
+                    Allow old RDP security for this session only. It has no
+                    server certificate and can be intercepted.
+                  </span>
+                </label>
+                {!canSaveBookmark && (
+                  <p className="text-[10px] text-[var(--warn)]">
+                    This choice applies to this session only. Save as bookmark
+                    was turned off.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {(protocol === "vnc" || protocol === "ard") && (
+              <div className="space-y-2 rounded-lg border border-[var(--warn)]/30 bg-[var(--warn-glow)] px-3 py-2">
+                <label className="flex items-start gap-2 text-xs text-[var(--warn)]">
+                  <input
+                    type="checkbox"
+                    checked={allowInsecureVNC}
+                    onChange={(event) => setAllowInsecureVNC(event.target.checked)}
+                    className="mt-0.5 h-3.5 w-3.5 accent-[var(--warn)]"
+                  />
+                  <span>
+                    Allow plain VNC. Screen, keyboard, and login data can be read
+                    or changed on the network. The Hub must also allow unsafe
+                    transport.
+                  </span>
+                </label>
+                {!allowInsecureVNC && (
+                  <p className="text-[10px] text-[var(--warn)]">
+                    This choice is required for a direct VNC connection.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {protocol === "spice" && (
+              <div className="space-y-3 rounded-lg border border-[var(--warn)]/30 bg-[var(--warn-glow)] px-3 py-2">
+                <label className="flex items-start gap-2 text-xs text-[var(--warn)]">
+                  <input
+                    type="checkbox"
+                    checked={spiceSecurityMode === "cleartext"}
+                    onChange={(e) => {
+                      setSPICESecurityMode(
+                        e.target.checked ? "cleartext" : "tls",
+                      );
+                      if (e.target.checked) setSPICECAPEM("");
+                    }}
+                    className="mt-0.5 h-3.5 w-3.5 accent-[var(--warn)]"
+                  />
+                  <span>
+                    Allow plain-text SPICE. This can expose the password,
+                    screen, and keyboard to an attacker. The Hub must also
+                    allow unsafe transport.
+                  </span>
+                </label>
+                {spiceSecurityMode === "tls" && (
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-[var(--warn)]">
+                      Custom CA certificate (optional)
+                    </label>
+                    <textarea
+                      value={spiceCAPEM}
+                      onChange={(e) => setSPICECAPEM(e.target.value)}
+                      maxLength={16 * 1024}
+                      rows={4}
+                      spellCheck={false}
+                      placeholder="-----BEGIN CERTIFICATE-----"
+                      className="w-full resize-y rounded-md border border-[var(--line)] bg-[var(--surface)] px-2 py-1.5 font-mono text-[10px] text-[var(--text)] outline-none focus:border-[var(--accent)]"
+                    />
+                    <p className="mt-1 text-[10px] text-[var(--muted)]">
+                      Leave this blank for a certificate trusted by the Hub.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Connect button */}
             <button
               type="button"
               onClick={() => handleConnect(true)}
-              className="w-full py-2.5 rounded-lg text-white text-sm font-semibold shadow-[0_2px_12px_rgba(255,0,128,0.15)] hover:-translate-y-px hover:shadow-[0_4px_20px_rgba(255,0,128,0.25)] transition-all duration-[var(--dur-fast)]"
+              disabled={
+                (protocol === "vnc" || protocol === "ard") && !allowInsecureVNC
+              }
+              className="w-full py-2.5 rounded-lg text-white text-sm font-semibold shadow-[0_2px_12px_rgba(255,0,128,0.15)] hover:-translate-y-px hover:shadow-[0_4px_20px_rgba(255,0,128,0.25)] transition-all duration-[var(--dur-fast)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
               style={{
                 background: "linear-gradient(135deg, var(--accent), #d4006a)",
               }}
@@ -460,7 +704,10 @@ export default function QuickConnectDialog({
             <button
               type="button"
               onClick={() => handleConnect(false)}
-              className="w-full py-2 rounded-lg border border-[var(--panel-border)] text-sm text-[var(--muted)] hover:border-[var(--line)] hover:text-[var(--text-secondary)] transition-all duration-[var(--dur-fast)]"
+              disabled={
+                (protocol === "vnc" || protocol === "ard") && !allowInsecureVNC
+              }
+              className="w-full py-2 rounded-lg border border-[var(--panel-border)] text-sm text-[var(--muted)] hover:border-[var(--line)] hover:text-[var(--text-secondary)] transition-all duration-[var(--dur-fast)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               Connect without credentials
             </button>

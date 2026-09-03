@@ -4,8 +4,8 @@ import { useCallback, useState } from "react";
 import { ArrowLeft, CheckCircle2, XCircle, Loader2, Trash2 } from "lucide-react";
 import { Button } from "../../../components/ui/Button";
 import { Input, Select } from "../../../components/ui/Input";
-import type { FileConnection, CreateFileConnectionRequest, TestResult } from "./fileConnectionsClient";
-import { createFileConnection, updateFileConnection, deleteFileConnection, testFileConnectionStateless } from "./fileConnectionsClient";
+import type { FileConnection, CreateFileConnectionRequest, TestedSFTPHostKey, TestResult } from "./fileConnectionsClient";
+import { createFileConnection, updateFileConnection, deleteFileConnection, sftpEndpointKey, testFileConnectionStateless, trustedSFTPHostKeyForRequest } from "./fileConnectionsClient";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -46,6 +46,12 @@ const PROTOCOL_ACCENT: Record<string, string> = {
   webdav: "bg-cyan-500",
 };
 
+export function ftpTLSFromExtraConfig(extra: Record<string, unknown>): boolean {
+  if (typeof extra.ftp_tls === "boolean") return extra.ftp_tls;
+  if (typeof extra.use_tls === "boolean") return extra.use_tls;
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -73,7 +79,8 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
 
   // FTP-specific (fall back to old keys for connections saved before the rename)
   const [passiveMode, setPassiveMode] = useState((extra.ftp_passive as boolean) ?? (extra.passive_mode as boolean) ?? true);
-  const [useTLS, setUseTLS] = useState((extra.ftp_tls as boolean) ?? (extra.use_tls as boolean) ?? false);
+  const [useTLS, setUseTLS] = useState(ftpTLSFromExtraConfig(extra));
+  const [allowCleartextFTP, setAllowCleartextFTP] = useState((extra.ftp_allow_cleartext as boolean) ?? false);
 
   // WebDAV-specific (fall back to old scheme key)
   const [webdavTLS, setWebdavTLS] = useState((extra.webdav_tls as boolean) ?? (extra.scheme === "https" || extra.scheme === undefined));
@@ -84,6 +91,7 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
   const [deleting, setDeleting] = useState(false);
   const [formError, setFormError] = useState("");
   const [testResult, setTestResult] = useState<TestResult | null>(null);
+  const [testedSFTPHostKey, setTestedSFTPHostKey] = useState<TestedSFTPHostKey | null>(null);
 
   // ---------------------------------------------------------------------------
   // Build request from form state
@@ -99,9 +107,21 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
     if (protocol === "ftp") {
       extraCfg.ftp_passive = passiveMode;
       extraCfg.ftp_tls = useTLS;
+      if (!useTLS) extraCfg.ftp_allow_cleartext = allowCleartextFTP;
     }
     if (protocol === "webdav") {
       extraCfg.webdav_tls = webdavTLS;
+    }
+
+    const trustedHostKey = trustedSFTPHostKeyForRequest(
+      protocol,
+      host,
+      port,
+      existingConnection,
+      testedSFTPHostKey,
+    );
+    if (trustedHostKey) {
+      extraCfg.host_key = trustedHostKey;
     }
 
     const secret =
@@ -126,6 +146,7 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
   }, [
     protocol, name, host, port, initialPath, username, password,
     authMethod, privateKey, passphrase, domain, shareName, passiveMode, useTLS, webdavTLS,
+    allowCleartextFTP, existingConnection, testedSFTPHostKey,
   ]);
 
   // ---------------------------------------------------------------------------
@@ -136,12 +157,15 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
     if (!name.trim()) return "Connection name is required.";
     if (!host.trim()) return "Host is required.";
     if (protocol === "smb" && !shareName.trim()) return "Share name is required for SMB.";
+    if (protocol === "ftp" && !useTLS && !allowCleartextFTP) {
+      return "Confirm the cleartext FTP warning or use FTPS.";
+    }
     if (requireSecret) {
       const secret = protocol === "sftp" && authMethod === "private_key" ? privateKey : password;
       if (!secret.trim()) return "Credentials are required.";
     }
     return null;
-  }, [name, host, protocol, shareName, authMethod, privateKey, password]);
+  }, [name, host, protocol, shareName, authMethod, privateKey, password, useTLS, allowCleartextFTP]);
 
   // ---------------------------------------------------------------------------
   // Handlers
@@ -157,7 +181,15 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
     setTestResult(null);
     setTesting(true);
     try {
-      const result = await testFileConnectionStateless(buildRequest());
+      const request = buildRequest();
+      const result = await testFileConnectionStateless(request);
+      if (protocol === "sftp" && result.host_key?.trim()) {
+        setTestedSFTPHostKey({
+          endpoint: sftpEndpointKey(request.host, request.port ?? DEFAULT_PORTS.sftp),
+          hostKey: result.host_key.trim(),
+          fingerprint: result.fingerprint,
+        });
+      }
       setTestResult(result);
     } catch (e) {
       setTestResult({
@@ -167,7 +199,7 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
     } finally {
       setTesting(false);
     }
-  }, [validate, buildRequest]);
+  }, [validate, buildRequest, protocol]);
 
   const handleSave = useCallback(async () => {
     // In edit mode, credentials are optional (only update if user entered new ones)
@@ -445,12 +477,32 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
                 <input
                   type="checkbox"
                   checked={useTLS}
-                  onChange={(e) => setUseTLS(e.target.checked)}
+                  onChange={(e) => {
+                    setUseTLS(e.target.checked);
+                    if (e.target.checked) setAllowCleartextFTP(false);
+                  }}
                   className="accent-[var(--accent)]"
                 />
                 Use TLS (FTPS)
               </label>
             </div>
+            {!useTLS && (
+              <div className="md:col-span-2 rounded-lg border border-[var(--bad)]/30 bg-[var(--bad-glow)] px-3 py-2">
+                <label className="flex items-start gap-2 text-xs text-[var(--bad)] cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={allowCleartextFTP}
+                    onChange={(e) => setAllowCleartextFTP(e.target.checked)}
+                    className="mt-0.5 accent-[var(--bad)]"
+                  />
+                  <span>
+                    Allow cleartext FTP. Passwords and files can be read or
+                    changed on the network. The Hub must also enable insecure
+                    transport.
+                  </span>
+                </label>
+              </div>
+            )}
           </>
         )}
 
@@ -496,18 +548,35 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
       {testResult && (
         <div
           className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs ${
-            testResult.success
+            testResult.requires_host_key_confirmation
+              ? "bg-[var(--warn-glow)] text-[var(--warn)]"
+              : testResult.success
               ? "bg-[var(--ok-glow)] text-[var(--ok)]"
               : "bg-[var(--bad-glow)] text-[var(--bad)]"
           }`}
         >
-          {testResult.success ? (
+          {testResult.requires_host_key_confirmation ? (
+            <>
+              <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+              Review this server key, then test again or save it.
+              {testResult.fingerprint && (
+                <span className="text-[var(--muted)] ml-1 break-all">
+                  {testResult.fingerprint}
+                </span>
+              )}
+            </>
+          ) : testResult.success ? (
             <>
               <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
               Connection successful
               {testResult.latency_ms != null && (
                 <span className="text-[var(--muted)] ml-1">
                   ({testResult.latency_ms}ms)
+                </span>
+              )}
+              {testResult.fingerprint && (
+                <span className="text-[var(--muted)] ml-1 break-all">
+                  Server key: {testResult.fingerprint}
                 </span>
               )}
             </>

@@ -1,11 +1,14 @@
 package fileproto
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +30,50 @@ type SFTPClient struct {
 	CapturedFingerprint string // populated by TOFU callback
 }
 
+var errSFTPHostKeyProbeComplete = errors.New("SFTP host key probe complete")
+
+// DiscoverSFTPHostKey performs only the SSH key exchange. It deliberately
+// stops before authentication so a password or private key is never sent to
+// an unapproved server identity.
+func DiscoverSFTPHostKey(ctx context.Context, host string, port int) (string, string, error) {
+	opCtx, cancel := WithOperationTimeout(ctx)
+	defer cancel()
+	if port == 0 {
+		port = DefaultPort("sftp")
+	}
+	addr := net.JoinHostPort(host, strconv.Itoa(port))
+	conn, err := securityruntime.DialOutboundTCPContext(opCtx, host, port, 15*time.Second)
+	if err != nil {
+		return "", "", fmt.Errorf("sftp host key probe dial: %w", err)
+	}
+	defer closeAndLog("close SFTP host key probe connection", conn.Close)
+	deadline, _ := opCtx.Deadline()
+	if err := conn.SetDeadline(deadline); err != nil {
+		return "", "", fmt.Errorf("sftp host key probe deadline: %w", err)
+	}
+	stopDeadline := watchConnCancellation(opCtx, conn)
+	defer stopDeadline()
+
+	var capturedKey string
+	var capturedFingerprint string
+	probeConfig := &ssh.ClientConfig{
+		User: "labtether-host-key-probe",
+		HostKeyCallback: func(_ string, _ net.Addr, key ssh.PublicKey) error {
+			capturedKey = strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key)))
+			capturedFingerprint = ssh.FingerprintSHA256(key)
+			return errSFTPHostKeyProbeComplete
+		},
+	}
+	_, _, _, _ = ssh.NewClientConn(conn, addr, probeConfig)
+	if err := opCtx.Err(); err != nil {
+		return "", "", fmt.Errorf("sftp host key probe canceled: %w", err)
+	}
+	if capturedKey == "" || capturedFingerprint == "" {
+		return "", "", errors.New("SFTP host key probe failed")
+	}
+	return capturedKey, capturedFingerprint, nil
+}
+
 // Connect establishes an SSH connection and opens an SFTP session.
 func (c *SFTPClient) Connect(ctx context.Context, cfg ConnectionConfig) error {
 	opCtx, cancel := WithOperationTimeout(ctx)
@@ -43,7 +90,10 @@ func (c *SFTPClient) Connect(ctx context.Context, cfg ConnectionConfig) error {
 		return fmt.Errorf("sftp auth: %w", err)
 	}
 
-	hostKeyCallback := c.buildHostKeyCallback(cfg)
+	hostKeyCallback, err := c.buildHostKeyCallback(opCtx, cfg)
+	if err != nil {
+		return fmt.Errorf("sftp host key verification: %w", err)
+	}
 
 	sshCfg := &ssh.ClientConfig{
 		User:            cfg.Username,
@@ -339,25 +389,45 @@ func (c *SFTPClient) buildAuth(cfg ConnectionConfig) ([]ssh.AuthMethod, error) {
 	}
 }
 
-// buildHostKeyCallback returns either a fixed host key verifier or a TOFU
-// callback that captures the server's host key on first connection.
-func (c *SFTPClient) buildHostKeyCallback(cfg ConnectionConfig) ssh.HostKeyCallback {
-	if hk, ok := cfg.ExtraConfig["host_key"]; ok {
-		if hkStr, ok := hk.(string); ok && hkStr != "" {
-			pubKey, _, _, _, err := ssh.ParseAuthorizedKey([]byte(hkStr))
-			if err == nil {
-				return ssh.FixedHostKey(pubKey)
-			}
-			// Fall through to TOFU if the stored key can't be parsed.
+// buildHostKeyCallback returns either a fixed host key verifier or a first-use
+// callback. Saved connections must persist the first accepted key before SSH
+// sends credentials.
+func (c *SFTPClient) buildHostKeyCallback(ctx context.Context, cfg ConnectionConfig) (ssh.HostKeyCallback, error) {
+	if rawHostKey, exists := cfg.ExtraConfig["host_key"]; exists {
+		hostKey, ok := rawHostKey.(string)
+		if !ok || strings.TrimSpace(hostKey) == "" {
+			return nil, errors.New("configured SFTP host key is invalid")
 		}
+		pubKey, _, _, rest, err := ssh.ParseAuthorizedKey([]byte(strings.TrimSpace(hostKey)))
+		if err != nil || len(strings.TrimSpace(string(rest))) != 0 {
+			return nil, errors.New("configured SFTP host key is invalid")
+		}
+		return func(_ string, _ net.Addr, presented ssh.PublicKey) error {
+			if !bytes.Equal(pubKey.Marshal(), presented.Marshal()) {
+				return errors.New("SFTP host key changed; connection blocked")
+			}
+			return nil
+		}, nil
 	}
 
-	// TOFU: trust on first use; capture the key for later pinning.
+	if cfg.PersistHostKey == nil {
+		return nil, errors.New("SFTP host key is required")
+	}
+
+	// TOFU: trust on first use only after a saved connection atomically pins
+	// the presented key. The persistence callback runs inside SSH host-key
+	// verification, before password or private-key authentication begins.
 	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
-		c.CapturedHostKey = strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key)))
+		hostKey := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key)))
+		if cfg.PersistHostKey != nil {
+			if err := cfg.PersistHostKey(ctx, hostKey); err != nil {
+				return err
+			}
+		}
+		c.CapturedHostKey = hostKey
 		c.CapturedFingerprint = ssh.FingerprintSHA256(key)
 		return nil
-	}
+	}, nil
 }
 
 // removeAll recursively removes a directory and all its contents within a

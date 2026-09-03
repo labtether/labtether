@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/labtether/labtether/internal/credentials"
@@ -16,7 +17,8 @@ import (
 )
 
 type testFileConnectionStore struct {
-	items map[string]*persistence.FileConnection
+	items           map[string]*persistence.FileConnection
+	credentialStore persistence.CredentialStore
 }
 
 func newTestFileConnectionStore(connections ...*persistence.FileConnection) *testFileConnectionStore {
@@ -76,6 +78,51 @@ func (s *testFileConnectionStore) UpdateFileConnection(_ context.Context, fc *pe
 	return nil
 }
 
+func (s *testFileConnectionStore) UpdateFileConnectionWithCredential(_ context.Context, fc *persistence.FileConnection, profile credentials.Profile, createProfile bool) (credentials.Profile, error) {
+	var (
+		saved credentials.Profile
+		err   error
+	)
+	if createProfile {
+		saved, err = s.credentialStore.CreateCredentialProfile(profile)
+	} else {
+		saved, err = s.credentialStore.UpdateCredentialProfile(profile)
+	}
+	if err != nil {
+		return credentials.Profile{}, err
+	}
+	if err := s.UpdateFileConnection(context.Background(), fc); err != nil {
+		return credentials.Profile{}, err
+	}
+	return saved, nil
+}
+
+func (s *testFileConnectionStore) PinSFTPHostKey(_ context.Context, connectionID, expectedHost string, expectedPort int, presentedKey string) error {
+	fc, ok := s.items[connectionID]
+	if !ok {
+		return persistence.ErrNotFound
+	}
+	actualPort := 22
+	if fc.Port != nil {
+		actualPort = *fc.Port
+	}
+	if fc.Protocol != "sftp" || fc.Host != expectedHost || actualPort != expectedPort {
+		return persistence.ErrFileConnectionChanged
+	}
+	if existing, pinned := fc.ExtraConfig["host_key"]; pinned {
+		if existingKey, ok := existing.(string); !ok || strings.TrimSpace(existingKey) != strings.TrimSpace(presentedKey) {
+			return persistence.ErrSFTPHostKeyMismatch
+		}
+		return nil
+	}
+	fc.ExtraConfig = cloneAnyMapForTest(fc.ExtraConfig)
+	if fc.ExtraConfig == nil {
+		fc.ExtraConfig = map[string]any{}
+	}
+	fc.ExtraConfig["host_key"] = strings.TrimSpace(presentedKey)
+	return nil
+}
+
 func (s *testFileConnectionStore) DeleteFileConnection(_ context.Context, id string) error {
 	if _, ok := s.items[id]; !ok {
 		return persistence.ErrNotFound
@@ -97,6 +144,9 @@ func cloneAnyMapForTest(input map[string]any) map[string]any {
 
 func buildTestFileConnectionDeps(t *testing.T, store persistence.FileConnectionStore, credentialStore persistence.CredentialStore, secretsManager *secrets.Manager) *respkg.Deps {
 	t.Helper()
+	if fileStore, ok := store.(*testFileConnectionStore); ok {
+		fileStore.credentialStore = credentialStore
+	}
 	return &respkg.Deps{
 		FileConnectionStore: store,
 		CredentialStore:     credentialStore,
@@ -138,14 +188,64 @@ func seedFileConnectionCredential(t *testing.T, sut *apiServer, username, kind, 
 	return profile
 }
 
+func TestHandleFileConnectionsCreateRequiresApprovedSFTPHostKey(t *testing.T) {
+	sut := newTestAPIServer(t)
+	store := newTestFileConnectionStore()
+	deps := buildTestFileConnectionDeps(t, store, sut.credentialStore, sut.secretsManager)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/file-connections", bytes.NewBufferString(
+		`{"name":"Primary","protocol":"sftp","host":"files.example.test","username":"operator","secret":"password","auth_method":"password"}`,
+	))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	deps.HandleFileConnections(rec, req)
+
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "approve the SFTP server key") {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(store.items) != 0 {
+		t.Fatalf("unpinned SFTP connection was saved: %#v", store.items)
+	}
+}
+
+func TestHandleFileConnectionsUpdateRequiresApprovedKeyWhenSwitchingToSFTP(t *testing.T) {
+	sut := newTestAPIServer(t)
+	profile := seedFileConnectionCredential(t, sut, "operator", credentials.KindFTPPassword, "old-secret", "")
+	store := newTestFileConnectionStore(&persistence.FileConnection{
+		ID:           "fconn-1",
+		Name:         "Primary",
+		Protocol:     "ftp",
+		Host:         "files.example.test",
+		InitialPath:  "/",
+		CredentialID: &profile.ID,
+	})
+	deps := buildTestFileConnectionDeps(t, store, sut.credentialStore, sut.secretsManager)
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/file-connections/fconn-1", bytes.NewBufferString(`{"protocol":"sftp","auth_method":"password"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	deps.HandleFileConnections(rec, req)
+
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "approve the SFTP server key") {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	stored, err := store.GetFileConnection(context.Background(), "fconn-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Protocol != "ftp" {
+		t.Fatalf("unapproved protocol switch was saved: %#v", stored)
+	}
+}
+
 func TestHandleFileConnectionsUpdatePersistsCredentialUsername(t *testing.T) {
 	sut := newTestAPIServer(t)
-	profile := seedFileConnectionCredential(t, sut, "old-user", credentials.KindSSHPassword, "old-secret", "")
+	profile := seedFileConnectionCredential(t, sut, "old-user", credentials.KindFTPPassword, "old-secret", "")
 
 	store := newTestFileConnectionStore(&persistence.FileConnection{
 		ID:           "fconn-1",
 		Name:         "Primary",
-		Protocol:     "sftp",
+		Protocol:     "ftp",
 		Host:         "files.example.test",
 		InitialPath:  "/",
 		CredentialID: &profile.ID,
@@ -276,12 +376,12 @@ func TestHandleFileConnectionsUpdateRejectsPrivateKeyTransitionWithoutSecret(t *
 
 func TestHandleFileConnectionsUpdateResponseIncludesUpdatedConnection(t *testing.T) {
 	sut := newTestAPIServer(t)
-	profile := seedFileConnectionCredential(t, sut, "old-user", credentials.KindSSHPassword, "old-secret", "")
+	profile := seedFileConnectionCredential(t, sut, "old-user", credentials.KindFTPPassword, "old-secret", "")
 
 	store := newTestFileConnectionStore(&persistence.FileConnection{
 		ID:           "fconn-1",
 		Name:         "Primary",
-		Protocol:     "sftp",
+		Protocol:     "ftp",
 		Host:         "files.example.test",
 		InitialPath:  "/",
 		CredentialID: &profile.ID,

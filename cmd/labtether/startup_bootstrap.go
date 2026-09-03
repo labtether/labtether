@@ -27,8 +27,20 @@ import (
 	authpkg "github.com/labtether/labtether/internal/hubapi/auth"
 	"github.com/labtether/labtether/internal/installstate"
 	"github.com/labtether/labtether/internal/persistence"
+	"github.com/labtether/labtether/internal/secrets"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
+
+type oidcClientSecretMigrator interface {
+	MigrateLegacyOIDCClientSecret(context.Context, *secrets.Manager) error
+}
+
+func migrateOIDCClientSecretAtStartup(ctx context.Context, migrator oidcClientSecretMigrator, manager *secrets.Manager) error {
+	if err := migrator.MigrateLegacyOIDCClientSecret(ctx, manager); err != nil {
+		return newStartupFailure(startupFailureEncryptionConfig, err)
+	}
+	return nil
+}
 
 func runHub(ctx context.Context) error {
 	bindAddress, err := resolveHubBindAddress()
@@ -99,6 +111,9 @@ func runHub(ctx context.Context) error {
 	}
 	if secretsManager == nil {
 		log.Printf("labtether warning: runtime encryption key not set; credential encryption endpoints are disabled")
+	}
+	if err := migrateOIDCClientSecretAtStartup(ctx, pgStore, secretsManager); err != nil {
+		return err
 	}
 
 	demoMode := envOrDefaultBool("LABTETHER_DEMO_MODE", false)

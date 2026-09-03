@@ -20,6 +20,8 @@ const MAX_HOST_BYTES = 255;
 const MAX_DISPLAY_BYTES = 256;
 const MAX_USERNAME_BYTES = 256;
 const MAX_PASSWORD_BYTES = 16 * 1024;
+const MAX_RDP_CERTIFICATE_FINGERPRINTS_BYTES = 4096;
+const MAX_SPICE_CA_PEM_BYTES = 16 * 1024;
 const UPSTREAM_TIMEOUT_MS = 15_000;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/u;
 
@@ -36,6 +38,12 @@ type CreateDesktopSessionRequest = {
     port: number;
     username?: string;
     password?: string;
+    allow_insecure_vnc?: boolean;
+    ignore_certificate?: boolean;
+    allow_legacy_security?: boolean;
+    certificate_fingerprints?: string;
+    spice_security_mode?: "tls" | "cleartext";
+    spice_ca_pem?: string;
   };
 };
 
@@ -130,15 +138,105 @@ export function parseDesktopRequest(
     }
     const host = direct.host.trim();
     if (!validBoundedText(host, MAX_HOST_BYTES)) return null;
+    if (direct.username !== undefined && typeof direct.username !== "string") {
+      return null;
+    }
+    if (direct.password !== undefined && typeof direct.password !== "string") {
+      return null;
+    }
     if (
-      direct.username !== undefined &&
-      typeof direct.username !== "string"
+      direct.allow_insecure_vnc !== undefined &&
+      typeof direct.allow_insecure_vnc !== "boolean"
     ) {
       return null;
     }
     if (
-      direct.password !== undefined &&
-      typeof direct.password !== "string"
+      direct.ignore_certificate !== undefined &&
+      typeof direct.ignore_certificate !== "boolean"
+    ) {
+      return null;
+    }
+    if (
+      direct.allow_legacy_security !== undefined &&
+      typeof direct.allow_legacy_security !== "boolean"
+    ) {
+      return null;
+    }
+    if (
+      direct.certificate_fingerprints !== undefined &&
+      typeof direct.certificate_fingerprints !== "string"
+    ) {
+      return null;
+    }
+    if (
+      direct.spice_security_mode !== undefined &&
+      direct.spice_security_mode !== "tls" &&
+      direct.spice_security_mode !== "cleartext"
+    ) {
+      return null;
+    }
+    if (
+      direct.spice_ca_pem !== undefined &&
+      typeof direct.spice_ca_pem !== "string"
+    ) {
+      return null;
+    }
+    const certificateFingerprints =
+      typeof direct.certificate_fingerprints === "string"
+        ? direct.certificate_fingerprints.trim()
+        : undefined;
+    if (
+      certificateFingerprints !== undefined &&
+      !validBoundedText(
+        certificateFingerprints,
+        MAX_RDP_CERTIFICATE_FINGERPRINTS_BYTES,
+        true,
+      )
+    ) {
+      return null;
+    }
+    if (
+      (direct.ignore_certificate === true ||
+        direct.allow_legacy_security === true ||
+        certificateFingerprints) &&
+      protocolRaw !== "rdp"
+    ) {
+      return null;
+    }
+    if (direct.allow_insecure_vnc === true && protocolRaw !== "vnc") {
+      return null;
+    }
+    const spiceCAPEM =
+      typeof direct.spice_ca_pem === "string"
+        ? direct.spice_ca_pem.trim()
+        : undefined;
+    if (
+      spiceCAPEM !== undefined &&
+      (byteLength(spiceCAPEM) > MAX_SPICE_CA_PEM_BYTES ||
+        /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/u.test(
+          spiceCAPEM,
+        ))
+    ) {
+      return null;
+    }
+    if (
+      (direct.spice_security_mode !== undefined || spiceCAPEM) &&
+      protocolRaw !== "spice"
+    ) {
+      return null;
+    }
+    if (
+      direct.spice_security_mode === "cleartext" &&
+      spiceCAPEM
+    ) {
+      return null;
+    }
+    if (
+      (certificateFingerprints &&
+        (direct.ignore_certificate === true ||
+          direct.allow_legacy_security === true)) ||
+      (direct.ignore_certificate === true &&
+        direct.allow_legacy_security === true)
     ) {
       return null;
     }
@@ -160,6 +258,24 @@ export function parseDesktopRequest(
       port: direct.port,
       username,
       password,
+      allow_insecure_vnc:
+        typeof direct.allow_insecure_vnc === "boolean"
+          ? direct.allow_insecure_vnc
+          : undefined,
+      ignore_certificate:
+        typeof direct.ignore_certificate === "boolean"
+          ? direct.ignore_certificate
+          : undefined,
+      allow_legacy_security:
+        typeof direct.allow_legacy_security === "boolean"
+          ? direct.allow_legacy_security
+          : undefined,
+      certificate_fingerprints: certificateFingerprints || undefined,
+      spice_security_mode:
+        protocolRaw === "spice"
+          ? (direct.spice_security_mode ?? "tls")
+          : undefined,
+      spice_ca_pem: spiceCAPEM || undefined,
     };
   }
 

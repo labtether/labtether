@@ -61,20 +61,26 @@ func (s *PostgresStore) CommitAgentEnrollment(ctx context.Context, req AgentEnro
 	if !valid {
 		return AgentEnrollmentCommitResult{}, ErrEnrollmentTokenInvalid
 	}
+	retired, err := isAgentIdentityRetired(ctx, tx, assetID)
+	if err != nil {
+		return AgentEnrollmentCommitResult{}, err
+	}
+	if retired {
+		return AgentEnrollmentCommitResult{}, ErrAgentIdentityRetired
+	}
 
 	if exists {
+		if err := validateEnrollmentRecoveryScope(etok, req.AssetID, existing.GroupID); err != nil {
+			return AgentEnrollmentCommitResult{}, err
+		}
 		if strings.TrimSpace(req.DeviceProofVersion) != enrollment.DeviceProofVersionV2 {
 			return AgentEnrollmentCommitResult{}, ErrAgentIdentityProofV2Required
 		}
 		if etok.MaxUses != 1 {
 			return AgentEnrollmentCommitResult{}, ErrRecoveryRequiresSingleUseToken
 		}
-		storedFingerprint := strings.TrimSpace(existing.Metadata[assets.MetadataKeyAgentDeviceFingerprint])
-		storedAlgorithm := strings.TrimSpace(existing.Metadata[assets.MetadataKeyAgentDeviceKeyAlgorithm])
-		if storedFingerprint == "" || storedAlgorithm == "" ||
-			storedFingerprint != strings.TrimSpace(req.DeviceFingerprint) ||
-			storedAlgorithm != strings.TrimSpace(req.DeviceKeyAlgorithm) {
-			return AgentEnrollmentCommitResult{}, ErrAgentIdentityContinuityConflict
+		if err := validateVerifiedAgentRecoveryAnchor(existing.Metadata, req.DeviceFingerprint, req.DeviceKeyAlgorithm); err != nil {
+			return AgentEnrollmentCommitResult{}, err
 		}
 		marker, err := selectAgentIdentityMarkerForUpdate(ctx, tx, assetID)
 		if err != nil {
@@ -84,13 +90,17 @@ func (s *PostgresStore) CommitAgentEnrollment(ctx context.Context, req AgentEnro
 			return AgentEnrollmentCommitResult{}, ErrEnrollmentTokenPredatesRotation
 		}
 	} else {
+		effectiveGroupID, err := initialEnrollmentGroupForToken(etok, req.AssetID, req.GroupID)
+		if err != nil {
+			return AgentEnrollmentCommitResult{}, err
+		}
 		if err := validateInitialIdentityFields(req); err != nil {
 			return AgentEnrollmentCommitResult{}, err
 		}
 		if err := ensureAgentFleetCapacity(ctx, tx, req.MaxEnrolledAgents); err != nil {
 			return AgentEnrollmentCommitResult{}, err
 		}
-		req.GroupID, err = resolveInitialEnrollmentGroupID(ctx, tx, req.GroupID)
+		req.GroupID, err = requireEnrollmentGroup(ctx, tx, effectiveGroupID)
 		if err != nil {
 			return AgentEnrollmentCommitResult{}, err
 		}
@@ -125,12 +135,27 @@ func (s *PostgresStore) CommitAgentEnrollment(ctx context.Context, req AgentEnro
 		}
 	}
 
-	if _, err := tx.Exec(ctx,
+	revokedRows, err := tx.Query(ctx,
 		`UPDATE agent_tokens
 		 SET status = 'revoked', revoked_at = COALESCE(revoked_at, clock_timestamp())
-		 WHERE asset_id = $1 AND status = 'active'`,
+		 WHERE asset_id = $1 AND status = 'active'
+		 RETURNING id`,
 		assetID,
-	); err != nil {
+	)
+	if err != nil {
+		return AgentEnrollmentCommitResult{}, err
+	}
+	revokedAgentTokenIDs := make([]string, 0)
+	for revokedRows.Next() {
+		var tokenID string
+		if err := revokedRows.Scan(&tokenID); err != nil {
+			revokedRows.Close()
+			return AgentEnrollmentCommitResult{}, err
+		}
+		revokedAgentTokenIDs = append(revokedAgentTokenIDs, tokenID)
+	}
+	revokedRows.Close()
+	if err := revokedRows.Err(); err != nil {
 		return AgentEnrollmentCommitResult{}, err
 	}
 	agentToken := enrollment.AgentToken{
@@ -155,18 +180,17 @@ func (s *PostgresStore) CommitAgentEnrollment(ctx context.Context, req AgentEnro
 		return AgentEnrollmentCommitResult{}, err
 	}
 	return AgentEnrollmentCommitResult{
-		EnrollmentToken: etok,
-		AgentToken:      agentToken,
-		Asset:           existing,
-		Recovery:        exists,
+		EnrollmentToken:      etok,
+		AgentToken:           agentToken,
+		Asset:                existing,
+		Recovery:             exists,
+		RevokedAgentTokenIDs: revokedAgentTokenIDs,
 	}, nil
 }
 
-// resolveInitialEnrollmentGroupID preserves a valid operator-selected
-// placement while treating an agent's stale or unknown group id as unplaced.
-// FOR KEY SHARE keeps a validated group from being deleted before the asset
-// insert commits, so token consumption and placement remain one transaction.
-func resolveInitialEnrollmentGroupID(ctx context.Context, tx pgx.Tx, groupID string) (string, error) {
+// requireEnrollmentGroup validates a token-authorized placement. FOR KEY SHARE
+// keeps the group alive until the asset and token use commit together.
+func requireEnrollmentGroup(ctx context.Context, tx pgx.Tx, groupID string) (string, error) {
 	groupID = strings.TrimSpace(groupID)
 	if groupID == "" {
 		return "", nil
@@ -174,7 +198,7 @@ func resolveInitialEnrollmentGroupID(ctx context.Context, tx pgx.Tx, groupID str
 	var resolved string
 	err := tx.QueryRow(ctx, `SELECT id FROM groups WHERE id = $1 FOR KEY SHARE`, groupID).Scan(&resolved)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", nil
+		return "", ErrEnrollmentTokenScopeMismatch
 	}
 	if err != nil {
 		return "", err
@@ -200,6 +224,13 @@ func (s *PostgresStore) PrepareAgentApproval(ctx context.Context, req AgentAppro
 	defer tx.Rollback(ctx)
 	if err := lockAgentIdentityAsset(ctx, tx, assetID); err != nil {
 		return enrollment.AgentToken{}, err
+	}
+	retired, err := isAgentIdentityRetired(ctx, tx, assetID)
+	if err != nil {
+		return enrollment.AgentToken{}, err
+	}
+	if retired {
+		return enrollment.AgentToken{}, ErrAgentIdentityRetired
 	}
 	var existingAssetID string
 	if err := tx.QueryRow(ctx, `SELECT id FROM assets WHERE id = $1 FOR UPDATE`, assetID).Scan(&existingAssetID); err == nil {
@@ -286,6 +317,13 @@ func (s *PostgresStore) FinalizeAgentApproval(ctx context.Context, req AgentAppr
 		return assets.Asset{}, err
 	}
 
+	retired, err := isAgentIdentityRetired(ctx, tx, assetID)
+	if err != nil {
+		return assets.Asset{}, err
+	}
+	if retired {
+		return assets.Asset{}, ErrAgentIdentityRetired
+	}
 	_, exists, err := selectAgentIdentityAsset(ctx, tx, assetID)
 	if err != nil {
 		return assets.Asset{}, err
@@ -369,6 +407,31 @@ func (s *PostgresStore) DecommissionAgentAsset(ctx context.Context, assetID stri
 	}
 	defer tx.Rollback(ctx)
 	if err := lockAgentIdentityAsset(ctx, tx, assetID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO retired_agent_identities (asset_id, retired_at)
+		 SELECT a.id, clock_timestamp()
+		 FROM assets a
+		 WHERE a.id = $1
+		   AND (
+			LOWER(BTRIM(a.source)) = 'agent'
+			OR EXISTS (SELECT 1 FROM agent_identity_state i WHERE i.asset_id = a.id)
+			OR EXISTS (
+				SELECT 1
+				FROM agent_tokens t
+				WHERE t.asset_id = a.id
+				  AND (
+					t.status = 'active'
+					OR t.last_used_at IS NOT NULL
+					OR LOWER(BTRIM(t.enrolled_via)) <> 'console-approval'
+				  )
+			)
+		   )
+		 ON CONFLICT (asset_id) DO UPDATE SET
+			retired_at = LEAST(retired_agent_identities.retired_at, EXCLUDED.retired_at)`,
+		assetID,
+	); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx,
@@ -457,6 +520,13 @@ func (s *PostgresStore) CommitExistingOwnerAgentHeartbeat(ctx context.Context, r
 	if err := lockAgentIdentityAsset(ctx, tx, assetID); err != nil {
 		return assets.Asset{}, err
 	}
+	retired, err := isAgentIdentityRetired(ctx, tx, assetID)
+	if err != nil {
+		return assets.Asset{}, err
+	}
+	if retired {
+		return assets.Asset{}, ErrAgentIdentityRetired
+	}
 	var foundID string
 	var existingGroupID *string
 	if err := tx.QueryRow(ctx, `SELECT id, group_id FROM assets WHERE id = $1 FOR UPDATE`, assetID).Scan(&foundID, &existingGroupID); err != nil {
@@ -478,6 +548,15 @@ func (s *PostgresStore) CommitExistingOwnerAgentHeartbeat(ctx context.Context, r
 		return assets.Asset{}, err
 	}
 	return asset, nil
+}
+
+func (s *PostgresStore) IsAgentIdentityRetired(ctx context.Context, assetID string) (bool, error) {
+	var retired bool
+	err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM retired_agent_identities WHERE asset_id = $1)`,
+		strings.TrimSpace(assetID),
+	).Scan(&retired)
+	return retired, err
 }
 
 func (s *PostgresStore) ValidateActiveAgentTokenID(ctx context.Context, agentTokenID, assetID string) error {
@@ -506,11 +585,20 @@ func selectAgentIdentityAsset(ctx context.Context, tx pgx.Tx, assetID string) (a
 	return asset, true, nil
 }
 
+func isAgentIdentityRetired(ctx context.Context, tx pgx.Tx, assetID string) (bool, error) {
+	var retired bool
+	err := tx.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM retired_agent_identities WHERE asset_id = $1)`,
+		strings.TrimSpace(assetID),
+	).Scan(&retired)
+	return retired, err
+}
+
 func selectValidEnrollmentTokenForUpdate(ctx context.Context, tx pgx.Tx, tokenHash string) (enrollment.EnrollmentToken, bool, error) {
 	var token enrollment.EnrollmentToken
 	var revokedAt *time.Time
 	err := tx.QueryRow(ctx,
-		`SELECT id, label, expires_at, max_uses, use_count, created_at, revoked_at
+		`SELECT id, label, expires_at, max_uses, use_count, created_at, revoked_at, scope, asset_id, COALESCE(allowed_group_id, ''), created_by
 		 FROM enrollment_tokens
 		 WHERE token_hash = $1
 		   AND revoked_at IS NULL
@@ -519,7 +607,7 @@ func selectValidEnrollmentTokenForUpdate(ctx context.Context, tx pgx.Tx, tokenHa
 		   AND use_count < max_uses
 		 FOR UPDATE`,
 		strings.TrimSpace(tokenHash), enrollment.HardTokenMaxUsesCeiling,
-	).Scan(&token.ID, &token.Label, &token.ExpiresAt, &token.MaxUses, &token.UseCount, &token.CreatedAt, &revokedAt)
+	).Scan(&token.ID, &token.Label, &token.ExpiresAt, &token.MaxUses, &token.UseCount, &token.CreatedAt, &revokedAt, &token.Scope, &token.AssetID, &token.AllowedGroupID, &token.CreatedBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return enrollment.EnrollmentToken{}, false, nil
 	}

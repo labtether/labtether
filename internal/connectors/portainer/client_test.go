@@ -798,7 +798,7 @@ func TestRequestAndDoRequestErrorPaths(t *testing.T) {
 		client.baseURL = "://bad-url"
 
 		_, err := client.request(context.Background(), http.MethodGet, "/api/system/version", nil, "")
-		if err == nil || !strings.Contains(err.Error(), "missing protocol scheme") {
+		if err == nil || !strings.Contains(err.Error(), "invalid url") {
 			t.Fatalf("expected initial doRequest error, got %v", err)
 		}
 	})
@@ -904,7 +904,7 @@ func TestRequestAndDoRequestErrorPaths(t *testing.T) {
 		client.baseURL = "://bad-url"
 
 		_, _, err := client.doRequest(context.Background(), http.MethodGet, "/api/system/version", nil, "")
-		if err == nil || !strings.Contains(err.Error(), "missing protocol scheme") {
+		if err == nil || !strings.Contains(err.Error(), "invalid url") {
 			t.Fatalf("expected new request error, got %v", err)
 		}
 	})

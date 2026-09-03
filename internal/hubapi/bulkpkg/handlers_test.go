@@ -51,6 +51,35 @@ func TestHandleV2BulkServiceAction_MissingScope(t *testing.T) {
 	}
 }
 
+func TestHandleV2BulkServiceAction_RateLimitPreventsDispatch(t *testing.T) {
+	var callCount atomic.Int32
+	d := newTestDeps()
+	d.ExecOnAsset = func(_ *http.Request, assetID, _ string, _ int) ExecResult {
+		callCount.Add(1)
+		return ExecResult{AssetID: assetID}
+	}
+	d.EnforceRateLimit = func(w http.ResponseWriter, _ *http.Request, bucket string, limit int, window time.Duration) bool {
+		if bucket != bulkRateLimitBucket || limit != bulkRateLimitCount || window != bulkRateLimitWindow {
+			t.Fatalf("rate policy = %q/%d/%s", bucket, limit, window)
+		}
+		http.Error(w, "rate limited", http.StatusTooManyRequests)
+		return false
+	}
+	body := `{"action":"restart","service":"nginx","targets":["srv1"]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/bulk/service-action", strings.NewReader(body))
+	req = req.WithContext(apiv2.ContextWithScopes(req.Context(), []string{"bulk:*"}))
+	rec := httptest.NewRecorder()
+
+	d.HandleV2BulkServiceAction(rec, req)
+
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429; body=%s", rec.Code, rec.Body.String())
+	}
+	if got := callCount.Load(); got != 0 {
+		t.Fatalf("executions = %d, want zero", got)
+	}
+}
+
 func TestHandleV2BulkServiceAction_InvalidAction(t *testing.T) {
 	d := newTestDeps()
 	body := `{"action":"rm -rf","service":"nginx","targets":["srv1"]}`

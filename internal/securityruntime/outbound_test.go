@@ -5,7 +5,10 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -43,6 +46,83 @@ func TestValidateOutboundURLRejectsUnsupportedScheme(t *testing.T) {
 	}
 }
 
+func TestValidateOutboundURLRejectsUserinfoWithoutReflectingIt(t *testing.T) {
+	tests := []string{
+		"https://operator@example.invalid/path",
+		"https://operator:credential-bearing-secret@example.invalid/path",
+		"http://operator:credential-bearing-secret@example.invalid/path",
+		"wss://operator:credential-bearing-secret@example.invalid/socket",
+		"ws://operator:credential-bearing-secret@example.invalid/socket",
+		"ftp://operator:credential-bearing-secret@example.invalid/archive",
+		"https://operator:p%40ssword@example.invalid/path",
+		"https://operator:credential-bearing-secret%zz@example.invalid/path",
+	}
+
+	for _, rawURL := range tests {
+		if _, err := ValidateOutboundURL(rawURL); err == nil {
+			t.Fatalf("expected URL userinfo to fail for %q", rawURL)
+		} else if strings.Contains(err.Error(), "operator") || strings.Contains(err.Error(), "credential-bearing-secret") || strings.Contains(err.Error(), "p%40ssword") {
+			t.Fatalf("userinfo rejection reflected credential material: %v", err)
+		}
+	}
+}
+
+func TestRedactURLUserinfoRemovesCredentials(t *testing.T) {
+	redacted, changed := RedactURLUserinfo(" https://operator:p%40ssword@example.invalid:8443/path?q=safe#fragment ")
+	if !changed {
+		t.Fatal("expected credential-bearing URL to be redacted")
+	}
+	if redacted != "https://example.invalid:8443/path?q=safe#fragment" {
+		t.Fatalf("redacted URL = %q", redacted)
+	}
+	if URLContainsUserinfo(redacted) {
+		t.Fatal("redacted URL still contains userinfo")
+	}
+	if got, changed := RedactURLUserinfo("https://operator:bad%zz@example.invalid/path"); !changed || got != "https://example.invalid/path" {
+		t.Fatalf("malformed credential URL was not safely redacted: got=%q changed=%v", got, changed)
+	}
+	if got, changed := RedactURLUserinfo("//operator:secret@example.invalid/path"); !changed || got != "//example.invalid/path" {
+		t.Fatalf("network-path credential URL was not safely redacted: got=%q changed=%v", got, changed)
+	}
+
+	const safeURL = "https://example.invalid/path"
+	if got, changed := RedactURLUserinfo(safeURL); changed || got != safeURL {
+		t.Fatalf("safe URL changed: got=%q changed=%v", got, changed)
+	}
+}
+
+func TestRedactURLUserinfoInTextRemovesCredentials(t *testing.T) {
+	const message = `request failed for "https://operator:first< secret@example.invalid/path" after redirect to wss://agent:"second >secret"@example.invalid/socket`
+	redacted, changed := RedactURLUserinfoInText(message)
+	if !changed {
+		t.Fatal("expected diagnostic URL credentials to be redacted")
+	}
+	for _, secret := range []string{"operator", "first< secret", "agent", "second >secret"} {
+		if strings.Contains(redacted, secret) {
+			t.Fatalf("redacted diagnostic still contains %q: %s", secret, redacted)
+		}
+	}
+	for _, safeURL := range []string{"https://example.invalid/path", "wss://example.invalid/socket"} {
+		if !strings.Contains(redacted, safeURL) {
+			t.Fatalf("redacted diagnostic lost safe URL %q: %s", safeURL, redacted)
+		}
+	}
+}
+
+func TestRedactURLUserinfoValuesClonesAndRedacts(t *testing.T) {
+	values := map[string]string{
+		"base_url": "https://operator:credential-bearing-secret@example.invalid/path",
+		"safe":     "kept",
+	}
+	redacted := RedactURLUserinfoValues(values)
+	if redacted["base_url"] != "https://example.invalid/path" || redacted["safe"] != "kept" {
+		t.Fatalf("redacted values = %#v", redacted)
+	}
+	if values["base_url"] != "https://operator:credential-bearing-secret@example.invalid/path" {
+		t.Fatalf("input map was mutated: %#v", values)
+	}
+}
+
 func TestValidateOutboundURLRejectsInsecureSchemeByDefault(t *testing.T) {
 	if _, err := ValidateOutboundURL("http://127.0.0.1:8080/healthz"); err == nil {
 		t.Fatalf("expected insecure http scheme to fail without explicit opt-in")
@@ -54,6 +134,232 @@ func TestValidateOutboundURLAllowsInsecureSchemeWhenOptedIn(t *testing.T) {
 	t.Setenv(envOutboundAllowLoopback, "true")
 	if _, err := ValidateOutboundURL("http://127.0.0.1:8080/healthz"); err != nil {
 		t.Fatalf("expected loopback http host to be allowed with insecure opt-in, got %v", err)
+	}
+}
+
+func allowTestLoopbackHTTP(t *testing.T) {
+	t.Helper()
+	t.Setenv(envAllowInsecureTransport, "true")
+	t.Setenv(envOutboundAllowLoopback, "true")
+}
+
+func testLoopbackAddressPolicy() OutboundAddressPolicy {
+	return OutboundAddressPolicy{AllowLoopback: true}
+}
+
+func TestOriginRestrictedOutboundHTTPClientAllowsSameOriginRedirect(t *testing.T) {
+	allowTestLoopbackHTTP(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/start" {
+			http.Redirect(w, r, "/finish", http.StatusFound)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	client, err := NewOriginRestrictedOutboundHTTPClient(nil, testLoopbackAddressPolicy(), server.URL)
+	if err != nil {
+		t.Fatalf("create restricted client: %v", err)
+	}
+	resp, err := client.Get(server.URL + "/start")
+	if err != nil {
+		t.Fatalf("follow same-origin redirect: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
+	}
+}
+
+func TestOriginRestrictedOutboundHTTPClientRejectsCrossOriginRedirect(t *testing.T) {
+	allowTestLoopbackHTTP(t)
+	var targetHits atomic.Int32
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		targetHits.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer target.Close()
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL+"/secret", http.StatusTemporaryRedirect)
+	}))
+	defer source.Close()
+
+	client, err := NewOriginRestrictedOutboundHTTPClient(nil, testLoopbackAddressPolicy(), source.URL, target.URL)
+	if err != nil {
+		t.Fatalf("create restricted client: %v", err)
+	}
+	if _, err := client.Get(source.URL); err == nil || !strings.Contains(err.Error(), "cross-origin redirect") {
+		t.Fatalf("expected cross-origin redirect rejection, got %v", err)
+	}
+	if got := targetHits.Load(); got != 0 {
+		t.Fatalf("redirect target received %d requests, want 0", got)
+	}
+}
+
+func TestOriginRestrictedOutboundHTTPClientRejectsDirectUnapprovedOrigin(t *testing.T) {
+	allowTestLoopbackHTTP(t)
+	var targetHits atomic.Int32
+	allowed := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer allowed.Close()
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		targetHits.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer target.Close()
+
+	client, err := NewOriginRestrictedOutboundHTTPClient(nil, testLoopbackAddressPolicy(), allowed.URL)
+	if err != nil {
+		t.Fatalf("create restricted client: %v", err)
+	}
+	if _, err := client.Get(target.URL); err == nil || !strings.Contains(err.Error(), "origin") {
+		t.Fatalf("expected unapproved-origin rejection, got %v", err)
+	}
+	if got := targetHits.Load(); got != 0 {
+		t.Fatalf("unapproved target received %d requests, want 0", got)
+	}
+}
+
+func TestOriginRestrictedOutboundHTTPClientRejectsUnsafeAddresses(t *testing.T) {
+	t.Setenv(envOutboundAllowPrivate, "false")
+	t.Setenv(envOutboundAllowLoopback, "false")
+	t.Setenv(envOutboundAllowLinkLocal, "false")
+	for _, rawURL := range []string{
+		"https://0.1.2.3/identity",
+		"https://127.0.0.1/identity",
+		"https://10.0.0.8/identity",
+		"https://100.64.0.1/identity",
+		"https://169.254.169.254/latest/meta-data",
+		"https://192.0.2.1/identity",
+		"https://198.18.0.1/identity",
+		"https://[::1]/identity",
+		"https://[fe80::1]/identity",
+		"https://[2001:db8::1]/identity",
+	} {
+		t.Run(rawURL, func(t *testing.T) {
+			if _, err := NewOriginRestrictedOutboundHTTPClient(nil, OutboundAddressPolicy{}, rawURL); err == nil {
+				t.Fatalf("expected %s to be rejected", rawURL)
+			}
+		})
+	}
+}
+
+func TestOriginRestrictedOutboundHTTPClientPrivateOptInStaysNarrow(t *testing.T) {
+	t.Setenv(envOutboundAllowPrivate, "true")
+	policy := OutboundAddressPolicy{AllowPrivate: true}
+	for _, rawURL := range []string{
+		"https://0.1.2.3/identity",
+		"https://192.0.2.1/identity",
+		"https://198.18.0.1/identity",
+		"https://240.0.0.1/identity",
+		"https://[2001:db8::1]/identity",
+	} {
+		t.Run(rawURL, func(t *testing.T) {
+			if _, err := NewOriginRestrictedOutboundHTTPClient(nil, policy, rawURL); err == nil {
+				t.Fatalf("private opt-in must not allow special-use target %s", rawURL)
+			}
+		})
+	}
+	for _, rawURL := range []string{
+		"https://10.0.0.8/identity",
+		"https://100.64.0.1/identity",
+		"https://[fd7a:115c:a1e0::1]/identity",
+	} {
+		t.Run("allowed-"+rawURL, func(t *testing.T) {
+			if _, err := NewOriginRestrictedOutboundHTTPClient(nil, policy, rawURL); err != nil {
+				t.Fatalf("private opt-in should allow private target %s: %v", rawURL, err)
+			}
+		})
+	}
+}
+
+func TestOriginRestrictedOutboundHTTPClientRejectsMixedDNSAnswers(t *testing.T) {
+	t.Setenv(envOutboundAllowPrivate, "false")
+	withMockLookupIPAddrs(t, func(_ context.Context, host string) ([]net.IPAddr, error) {
+		if host != "identity.example.com" {
+			return nil, errors.New("unexpected host")
+		}
+		return []net.IPAddr{
+			{IP: net.ParseIP("8.8.8.8")},
+			{IP: net.ParseIP("10.0.0.8")},
+		}, nil
+	})
+
+	if _, err := NewOriginRestrictedOutboundHTTPClient(nil, OutboundAddressPolicy{}, "https://identity.example.com"); err == nil {
+		t.Fatal("expected mixed public/private DNS answers to be rejected")
+	} else if !strings.Contains(err.Error(), "private") {
+		t.Fatalf("expected private-address rejection, got %v", err)
+	}
+}
+
+func TestOriginRestrictedOutboundHTTPClientDisablesEnvironmentProxy(t *testing.T) {
+	allowTestLoopbackHTTP(t)
+	client, err := NewOriginRestrictedOutboundHTTPClient(nil, testLoopbackAddressPolicy(), "http://127.0.0.1:8080")
+	if err != nil {
+		t.Fatalf("create restricted client: %v", err)
+	}
+	originTransport, ok := client.Transport.(originRestrictedRoundTripper)
+	if !ok {
+		t.Fatalf("transport type = %T, want originRestrictedRoundTripper", client.Transport)
+	}
+	validatingTransport, ok := originTransport.base.(outboundValidatingRoundTripper)
+	if !ok {
+		t.Fatalf("nested transport type = %T, want outboundValidatingRoundTripper", originTransport.base)
+	}
+	transport, ok := validatingTransport.base.(*http.Transport)
+	if !ok {
+		t.Fatalf("base transport type = %T, want *http.Transport", validatingTransport.base)
+	}
+	if transport.Proxy != nil {
+		t.Fatal("restricted client must ignore environment proxies")
+	}
+}
+
+func TestOriginRestrictedOutboundHTTPClientRechecksTightenedPolicyAtDial(t *testing.T) {
+	allowTestLoopbackHTTP(t)
+	var dialLookups atomic.Int32
+	var serverHits atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		serverHits.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	serverURL, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatalf("parse test server URL: %v", err)
+	}
+	rawURL := "http://identity.example.com:" + serverURL.Port()
+	withMockLookupIPAddrs(t, func(_ context.Context, host string) ([]net.IPAddr, error) {
+		if host != "identity.example.com" {
+			return nil, errors.New("unexpected host")
+		}
+		return []net.IPAddr{{IP: net.ParseIP("8.8.8.8")}}, nil
+	})
+	originalLookupDialIPAddrs := lookupDialIPAddrs
+	lookupDialIPAddrs = func(_ context.Context, host string) ([]net.IPAddr, error) {
+		if host != "identity.example.com" {
+			return nil, errors.New("unexpected dial host")
+		}
+		dialLookups.Add(1)
+		return []net.IPAddr{{IP: net.ParseIP("127.0.0.1")}}, nil
+	}
+	t.Cleanup(func() { lookupDialIPAddrs = originalLookupDialIPAddrs })
+
+	client, err := NewOriginRestrictedOutboundHTTPClient(nil, testLoopbackAddressPolicy(), rawURL)
+	if err != nil {
+		t.Fatalf("create client while loopback is allowed: %v", err)
+	}
+	t.Setenv(envOutboundAllowLoopback, "false")
+	if _, err := client.Get(rawURL); err == nil {
+		t.Fatal("expected loopback address returned at dial time to be rejected")
+	} else if !strings.Contains(err.Error(), "loopback") {
+		t.Fatalf("expected loopback rejection, got %v", err)
+	}
+	if got := dialLookups.Load(); got != 1 {
+		t.Fatalf("dial-time DNS checks = %d, want 1", got)
+	}
+	if got := serverHits.Load(); got != 0 {
+		t.Fatalf("rebound target received %d requests, want 0", got)
 	}
 }
 
@@ -339,6 +645,52 @@ func TestValidateOutboundURLRuntimeOverrideCanDisablePrivateHTTPS(t *testing.T) 
 		t.Fatal("expected runtime override to reject private https host")
 	} else if !strings.Contains(err.Error(), "private") {
 		t.Fatalf("expected private-host error, got %v", err)
+	}
+}
+
+func TestOutboundPolicySummaryMatchesEffectivePrivateAddressPolicy(t *testing.T) {
+	tests := []struct {
+		name     string
+		override string
+		https    string
+		wss      string
+		tcp      string
+	}{
+		{name: "unset", override: "", https: "true", wss: "false", tcp: "false"},
+		{name: "explicit true", override: "true", https: "true", wss: "true", tcp: "true"},
+		{name: "explicit false", override: "false", https: "false", wss: "false", tcp: "false"},
+		{name: "invalid fails closed", override: "not-a-bool", https: "false", wss: "false", tcp: "false"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv(envOutboundAllowPrivate, test.override)
+			summary := OutboundPolicySummary()
+			if got := summary["allow_private_https"]; got != test.https {
+				t.Fatalf("allow_private_https=%q, want %q", got, test.https)
+			}
+			if got := summary["allow_private_wss"]; got != test.wss {
+				t.Fatalf("allow_private_wss=%q, want %q", got, test.wss)
+			}
+			if got := summary["allow_private_tcp"]; got != test.tcp {
+				t.Fatalf("allow_private_tcp=%q, want %q", got, test.tcp)
+			}
+			if got := summary["allow_private"]; got != test.https {
+				t.Fatalf("legacy allow_private=%q, want HTTPS value %q", got, test.https)
+			}
+		})
+	}
+}
+
+func TestOutboundPolicySummaryUsesEndToEndWSSPrivateAddressPolicy(t *testing.T) {
+	t.Setenv(envOutboundAllowPrivate, "")
+	if _, err := ValidateOutboundURL("wss://192.168.1.25/socket"); err != nil {
+		t.Fatalf("default WSS URL validation should allow private target: %v", err)
+	}
+	if err := ValidateOutboundDialTarget("192.168.1.25", 443); err == nil {
+		t.Fatal("default raw dial policy should deny the private WSS target")
+	}
+	if got := OutboundPolicySummary()["allow_private_wss"]; got != "false" {
+		t.Fatalf("effective WSS summary=%q, want false", got)
 	}
 }
 

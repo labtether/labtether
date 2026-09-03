@@ -71,7 +71,7 @@ func (d *Deps) HandleDesktopStream(w http.ResponseWriter, r *http.Request, sessi
 		case "spice":
 			d.HandleDirectSPICEStream(w, r, session)
 		case "vnc":
-			d.handleDirectVNCProxyWithConfig(w, r, session, opts.DirectHost, opts.DirectPort, false)
+			d.handleDirectVNCProxyWithConfig(w, r, session, opts.DirectHost, opts.DirectPort, false, opts.VNCAllowInsecureTransport)
 		default:
 			servicehttp.WriteError(w, http.StatusBadRequest, "unsupported direct desktop protocol")
 		}
@@ -134,12 +134,14 @@ func (d *Deps) HandleDesktopStream(w http.ResponseWriter, r *http.Request, sessi
 		}
 		if assetSource == "manual" {
 			// Check VNC protocol config.
+			vncProtocol := protocols.ProtocolVNC
 			vncCfg, vncErr := d.GetProtocolConfig(r.Context(), session.Target, protocols.ProtocolVNC)
 			if vncErr != nil {
 				log.Printf("desktop: vnc protocol config lookup failed session=%s target=%s err=%v", session.ID, session.Target, vncErr)
 			}
 			if vncCfg == nil || vncErr != nil {
 				// Also check ARD as a VNC-compatible protocol.
+				vncProtocol = protocols.ProtocolARD
 				vncCfg, vncErr = d.GetProtocolConfig(r.Context(), session.Target, protocols.ProtocolARD)
 				if vncErr != nil {
 					log.Printf("desktop: ard protocol config lookup failed session=%s target=%s err=%v", session.ID, session.Target, vncErr)
@@ -147,6 +149,11 @@ func (d *Deps) HandleDesktopStream(w http.ResponseWriter, r *http.Request, sessi
 				}
 			}
 			if vncCfg != nil && vncCfg.Enabled {
+				allowInsecureVNC, decodeErr := protocolConfigAllowsInsecureVNC(vncProtocol, vncCfg.Config)
+				if decodeErr != nil {
+					servicehttp.WriteError(w, http.StatusBadGateway, "invalid VNC transport configuration")
+					return
+				}
 				host := strings.TrimSpace(vncCfg.Host)
 				if host == "" && d.AssetStore != nil {
 					if assetEntry, ok, err := d.AssetStore.GetAsset(session.Target); err == nil && ok {
@@ -160,10 +167,9 @@ func (d *Deps) HandleDesktopStream(w http.ResponseWriter, r *http.Request, sessi
 				if port <= 0 {
 					port = protocols.DefaultPort(protocols.ProtocolVNC)
 				}
-				// Manual device VNC/ARD: always use direct proxy, bypassing the env gate.
-				// The host was already validated at creation time via ValidateManualDeviceHost
-				// which permits LAN/private IPs — skip the outbound security validation.
-				d.handleDirectVNCProxyWithConfig(w, r, session, host, port, true)
+				// Manual device VNC/ARD uses the direct proxy. The transport remains
+				// double-gated here, while the host follows the manual-device policy.
+				d.handleDirectVNCProxyWithConfig(w, r, session, host, port, true, allowInsecureVNC)
 				return
 			}
 
@@ -229,19 +235,23 @@ func (d *Deps) handleDirectVNCProxy(w http.ResponseWriter, r *http.Request, sess
 			}
 		}
 	}
-	d.handleDirectVNCProxyWithConfig(w, r, session, host, port, false)
+	d.handleDirectVNCProxyWithConfig(w, r, session, host, port, false, d.desktopDirectProxyEnabled())
 }
 
 // handleDirectVNCProxyWithConfig dials host:port directly and bridges it to
 // the browser WebSocket. It is used by both the legacy agentless fallback path
-// and the manual device protocol config path (where the env gate is bypassed).
+// and the manual device protocol config path.
 //
 // skipOutboundValidation must be true only for manual device paths where the
 // host follows the manual-device policy, including DNS results resolved at
 // connect time. The generic agentless fallback path
 // (skipOutboundValidation=false) enforces the full securityruntime outbound
-// policy.
-func (d *Deps) handleDirectVNCProxyWithConfig(w http.ResponseWriter, r *http.Request, session terminal.Session, host string, port int, skipOutboundValidation bool) {
+// policy. allowInsecureTransport is the path-specific opt-in; the shared
+// LABTETHER_ALLOW_INSECURE_TRANSPORT gate is checked separately on every call.
+func (d *Deps) handleDirectVNCProxyWithConfig(w http.ResponseWriter, r *http.Request, session terminal.Session, host string, port int, skipOutboundValidation, allowInsecureTransport bool) {
+	if !requireInsecureVNCTransport(w, allowInsecureTransport) {
+		return
+	}
 	var addr string
 	if skipOutboundValidation {
 		host = strings.TrimSpace(host)

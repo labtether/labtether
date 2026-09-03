@@ -18,6 +18,7 @@ import (
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/auth"
+	"github.com/labtether/labtether/internal/groups"
 	"github.com/labtether/labtether/internal/logs"
 	"github.com/labtether/labtether/internal/persistence"
 )
@@ -218,6 +219,59 @@ func TestHandleAgentWebSocketRejectsSharedOwnerTokenByDefault(t *testing.T) {
 	sut.handleAgentWebSocket(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("shared owner token status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestLegacyOwnerWebSocketCannotReconnectRetiredIdentity(t *testing.T) {
+	sut := newTestAPIServer(t)
+	sut.authValidator = auth.NewTokenValidator("owner-token")
+	sut.allowLegacySharedAgentAuth = true
+	sut.agentMgr = agentmgr.NewManager()
+	transactions := sut.enrollmentStore.(persistence.AgentEnrollmentTransactionStore)
+	now := time.Now().UTC()
+	if _, err := sut.enrollmentStore.CreateEnrollmentToken(testEnrollmentTokenParams("retired-ws-enrollment", "retired ws", now.Add(time.Hour), 1)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := transactions.CommitAgentEnrollment(context.Background(), persistence.AgentEnrollmentCommitRequest{
+		AssetID: "retired-ws-agent", Hostname: "retired-ws-agent",
+		EnrollmentTokenHash: "retired-ws-enrollment", AgentTokenHash: "retired-ws-token",
+		AgentTokenExpiresAt: now.Add(time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := transactions.DecommissionAgentAsset(context.Background(), "retired-ws-agent"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: "retired-ws-agent", Type: "host", Name: "laundered", Source: "manual", Status: "online",
+	}); !errors.Is(err, persistence.ErrAgentIdentityRetired) {
+		t.Fatalf("generic heartbeat reused retired identity: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(sut.handleAgentWebSocket))
+	defer server.Close()
+	headers := http.Header{}
+	headers.Set("Authorization", "Bearer owner-token")
+	headers.Set("X-Asset-ID", "retired-ws-agent")
+	client, response, err := websocket.DefaultDialer.Dial("ws"+server.URL[len("http"):], headers)
+	if client != nil {
+		_ = client.Close()
+	}
+	if err == nil {
+		t.Fatal("retired identity opened a legacy owner WebSocket")
+	}
+	if response == nil || response.StatusCode != http.StatusConflict {
+		statusCode := 0
+		if response != nil {
+			statusCode = response.StatusCode
+		}
+		t.Fatalf("retired owner WebSocket status=%d err=%v, want 409", statusCode, err)
+	}
+	if sut.agentMgr.IsConnected("retired-ws-agent") {
+		t.Fatal("retired identity remained connected")
+	}
+	if err := sut.agentMgr.SendToAgent("retired-ws-agent", agentmgr.Message{Type: agentmgr.MsgCommandRequest}); err == nil {
+		t.Fatal("retired identity remained usable as a command target")
 	}
 }
 
@@ -600,7 +654,7 @@ func TestHandleAgentWebSocketRevalidatesTokenIDAfterUpgrade(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = rawEnrollment
-	if _, err := sut.enrollmentStore.CreateEnrollmentToken(enrollmentHash, "handshake", now.Add(time.Hour), 1); err != nil {
+	if _, err := sut.enrollmentStore.CreateEnrollmentToken(testEnrollmentTokenParams(enrollmentHash, "handshake", now.Add(time.Hour), 1)); err != nil {
 		t.Fatal(err)
 	}
 	rawAgent, agentHash, err := auth.GenerateSessionToken()
@@ -670,7 +724,7 @@ func TestRevokedLiveAgentHeartbeatCannotResurrectDecommissionedAsset(t *testing.
 	now := time.Now().UTC()
 	_, enrollmentHash, _ := auth.GenerateSessionToken()
 	_, agentHash, _ := auth.GenerateSessionToken()
-	if _, err := sut.enrollmentStore.CreateEnrollmentToken(enrollmentHash, "heartbeat", now.Add(time.Hour), 1); err != nil {
+	if _, err := sut.enrollmentStore.CreateEnrollmentToken(testEnrollmentTokenParams(enrollmentHash, "heartbeat", now.Add(time.Hour), 1)); err != nil {
 		t.Fatal(err)
 	}
 	result, err := transactions.CommitAgentEnrollment(context.Background(), persistence.AgentEnrollmentCommitRequest{
@@ -709,7 +763,7 @@ func TestRevokedLiveAgentCannotSendOrDispatchNonHeartbeatMessages(t *testing.T) 
 	now := time.Now().UTC()
 	_, enrollmentHash, _ := auth.GenerateSessionToken()
 	rawAgent, agentHash, _ := auth.GenerateSessionToken()
-	if _, err := sut.enrollmentStore.CreateEnrollmentToken(enrollmentHash, "live-revoke", now.Add(time.Hour), 1); err != nil {
+	if _, err := sut.enrollmentStore.CreateEnrollmentToken(testEnrollmentTokenParams(enrollmentHash, "live-revoke", now.Add(time.Hour), 1)); err != nil {
 		t.Fatal(err)
 	}
 	result, err := transactions.CommitAgentEnrollment(context.Background(), persistence.AgentEnrollmentCommitRequest{
@@ -778,7 +832,7 @@ func TestRevokedLiveAgentMalformedHeartbeatIsRejectedBeforeInnerDecode(t *testin
 	now := time.Now().UTC()
 	_, enrollmentHash, _ := auth.GenerateSessionToken()
 	rawAgent, agentHash, _ := auth.GenerateSessionToken()
-	if _, err := sut.enrollmentStore.CreateEnrollmentToken(enrollmentHash, "malformed-revoke", now.Add(time.Hour), 1); err != nil {
+	if _, err := sut.enrollmentStore.CreateEnrollmentToken(testEnrollmentTokenParams(enrollmentHash, "malformed-revoke", now.Add(time.Hour), 1)); err != nil {
 		t.Fatal(err)
 	}
 	result, err := transactions.CommitAgentEnrollment(context.Background(), persistence.AgentEnrollmentCommitRequest{
@@ -825,13 +879,17 @@ func TestAuthenticatedWebSocketHeartbeatCannotMoveAgentGroup(t *testing.T) {
 	sut.agentMgr = agentmgr.NewManager()
 	transactions := sut.enrollmentStore.(persistence.AgentEnrollmentTransactionStore)
 	now := time.Now().UTC()
+	trustedGroup, err := sut.groupStore.CreateGroup(groups.CreateRequest{Name: "Trusted", Slug: "trusted"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	_, enrollmentHash, _ := auth.GenerateSessionToken()
 	rawAgent, agentHash, _ := auth.GenerateSessionToken()
-	if _, err := sut.enrollmentStore.CreateEnrollmentToken(enrollmentHash, "group-bound", now.Add(time.Hour), 1); err != nil {
+	if _, err := sut.enrollmentStore.CreateEnrollmentToken(testGroupEnrollmentTokenParams(enrollmentHash, trustedGroup.ID, now.Add(time.Hour), 1)); err != nil {
 		t.Fatal(err)
 	}
 	result, err := transactions.CommitAgentEnrollment(context.Background(), persistence.AgentEnrollmentCommitRequest{
-		AssetID: "ws-group-bound", Hostname: "ws-group-bound", GroupID: "trusted-group",
+		AssetID: "ws-group-bound", Hostname: "ws-group-bound", GroupID: trustedGroup.ID,
 		EnrollmentTokenHash: enrollmentHash, AgentTokenHash: agentHash, AgentTokenExpiresAt: now.Add(time.Hour),
 	})
 	if err != nil {
@@ -841,7 +899,7 @@ func TestAuthenticatedWebSocketHeartbeatCannotMoveAgentGroup(t *testing.T) {
 		t.Fatalf("seeded group-bound token invalid before connect: %v", err)
 	}
 	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
-		AssetID: "ws-group-bound", Type: "node", Name: "ws-group-bound", Source: "agent", GroupID: "trusted-group", Status: "offline",
+		AssetID: "ws-group-bound", Type: "node", Name: "ws-group-bound", Source: "agent", GroupID: trustedGroup.ID, Status: "offline",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -868,7 +926,7 @@ func TestAuthenticatedWebSocketHeartbeatCannotMoveAgentGroup(t *testing.T) {
 			t.Fatal(err)
 		}
 		if exists && stored.Status == "online" {
-			if stored.GroupID != "trusted-group" {
+			if stored.GroupID != trustedGroup.ID {
 				t.Fatalf("authenticated WS heartbeat moved group to %q", stored.GroupID)
 			}
 			return

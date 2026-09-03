@@ -29,6 +29,9 @@ function OIDCSettingsCardInner() {
     setClientID,
     clientSecret,
     setClientSecret,
+    clientSecretConfigured,
+    clearClientSecret,
+    removeClientSecret,
     scopes,
     setScopes,
     roleClaim,
@@ -113,19 +116,31 @@ function OIDCSettingsCardInner() {
             />
           </label>
 
-          <label className="text-xs text-[var(--muted)] flex flex-col gap-1.5">
-            <span className="flex items-center gap-1.5">
+          <div className="text-xs text-[var(--muted)] flex flex-col gap-1.5">
+            <label htmlFor="oidc-client-secret" className="flex items-center gap-1.5">
               {t("oidc.clientSecret")}
               {isEnv("client_secret") ? <EnvBadge /> : null}
-            </span>
+            </label>
             <Input
+              id="oidc-client-secret"
               type="password"
               value={clientSecret}
               onChange={(event) => setClientSecret(event.target.value)}
               placeholder={t("oidc.clientSecretPlaceholder")}
               disabled={loading || isEnv("client_secret")}
             />
-          </label>
+            {!isEnv("client_secret") && clientSecretConfigured && !clearClientSecret ? (
+              <span className="flex items-center justify-between gap-2 text-[var(--muted)]">
+                {t("oidc.clientSecretConfigured")}
+                <Button type="button" size="sm" variant="secondary" onClick={removeClientSecret}>
+                  {t("oidc.removeClientSecret")}
+                </Button>
+              </span>
+            ) : null}
+            {clearClientSecret ? (
+              <span className="text-[var(--bad)]">{t("oidc.clientSecretWillBeRemoved")}</span>
+            ) : null}
+          </div>
 
           <label className="text-xs text-[var(--muted)] flex flex-col gap-1.5">
             <span className="flex items-center gap-1.5">

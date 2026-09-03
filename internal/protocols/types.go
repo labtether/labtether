@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
+	"unicode"
 )
 
 // Protocol kind constants for manual device connections.
@@ -67,20 +69,30 @@ type SSHConfig struct {
 	HubKeyInstalled bool   `json:"hub_key_installed,omitempty"`
 }
 
+// TelnetConfig holds Telnet-specific connection options.
+type TelnetConfig struct {
+	AllowInsecureTransport bool `json:"allow_insecure_telnet,omitempty"`
+}
+
 // VNCConfig holds VNC-specific connection options.
 type VNCConfig struct {
-	DisplayNumber int `json:"display_number,omitempty"`
+	DisplayNumber          int  `json:"display_number,omitempty"`
+	AllowInsecureTransport bool `json:"allow_insecure_vnc,omitempty"`
 }
 
 // RDPConfig holds RDP-specific connection options.
 type RDPConfig struct {
-	Domain     string `json:"domain,omitempty"`
-	NLAEnabled bool   `json:"nla_enabled,omitempty"`
+	Domain                  string `json:"domain,omitempty"`
+	NLAEnabled              bool   `json:"nla_enabled,omitempty"`
+	IgnoreCertificate       bool   `json:"ignore_certificate,omitempty"`
+	AllowLegacySecurity     bool   `json:"allow_legacy_security,omitempty"`
+	CertificateFingerprints string `json:"certificate_fingerprints,omitempty"`
 }
 
 // ARDConfig holds Apple Remote Desktop-specific connection options.
 type ARDConfig struct {
-	AppleDH bool `json:"apple_dh,omitempty"`
+	AppleDH                bool `json:"apple_dh,omitempty"`
+	AllowInsecureTransport bool `json:"allow_insecure_vnc,omitempty"`
 }
 
 // TestResult captures the outcome of a protocol connectivity test.
@@ -108,7 +120,7 @@ func ValidatePort(port int) error {
 }
 
 // ValidateProtocolConfig decodes and validates the raw JSON config for a given protocol.
-// Unknown fields are rejected. Telnet requires no config fields.
+// Unknown fields are rejected.
 func ValidateProtocolConfig(protocol string, raw json.RawMessage) error {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil
@@ -119,27 +131,94 @@ func ValidateProtocolConfig(protocol string, raw json.RawMessage) error {
 		var cfg SSHConfig
 		return strictUnmarshal(raw, &cfg)
 	case ProtocolVNC:
-		var cfg VNCConfig
-		return strictUnmarshal(raw, &cfg)
+		_, err := DecodeVNCConfig(raw)
+		return err
 	case ProtocolRDP:
-		var cfg RDPConfig
-		return strictUnmarshal(raw, &cfg)
+		_, err := DecodeRDPConfig(raw)
+		return err
 	case ProtocolARD:
-		var cfg ARDConfig
-		return strictUnmarshal(raw, &cfg)
+		_, err := DecodeARDConfig(raw)
+		return err
 	case ProtocolTelnet:
-		// Telnet has no configurable fields; any supplied config is rejected.
-		var discard map[string]json.RawMessage
-		if err := strictUnmarshal(raw, &discard); err != nil {
-			return err
-		}
-		if len(discard) > 0 {
-			return fmt.Errorf("telnet protocol does not accept config fields")
-		}
-		return nil
+		_, err := DecodeTelnetConfig(raw)
+		return err
 	default:
 		return fmt.Errorf("unsupported protocol %q", protocol)
 	}
+}
+
+// DecodeTelnetConfig decodes Telnet-specific configuration and rejects unknown fields.
+func DecodeTelnetConfig(raw json.RawMessage) (TelnetConfig, error) {
+	var cfg TelnetConfig
+	if len(raw) == 0 || string(raw) == "null" {
+		return cfg, nil
+	}
+	if err := strictUnmarshal(raw, &cfg); err != nil {
+		return TelnetConfig{}, err
+	}
+	return cfg, nil
+}
+
+// DecodeVNCConfig decodes VNC-specific configuration and rejects unknown fields.
+func DecodeVNCConfig(raw json.RawMessage) (VNCConfig, error) {
+	var cfg VNCConfig
+	if len(raw) == 0 || string(raw) == "null" {
+		return cfg, nil
+	}
+	if err := strictUnmarshal(raw, &cfg); err != nil {
+		return VNCConfig{}, err
+	}
+	return cfg, nil
+}
+
+// DecodeARDConfig decodes ARD-specific configuration and rejects unknown fields.
+func DecodeARDConfig(raw json.RawMessage) (ARDConfig, error) {
+	var cfg ARDConfig
+	if len(raw) == 0 || string(raw) == "null" {
+		return cfg, nil
+	}
+	if err := strictUnmarshal(raw, &cfg); err != nil {
+		return ARDConfig{}, err
+	}
+	return cfg, nil
+}
+
+// DecodeRDPConfig decodes RDP-specific configuration and rejects unknown fields.
+// Empty and null values use the secure defaults in RDPConfig.
+func DecodeRDPConfig(raw json.RawMessage) (RDPConfig, error) {
+	var cfg RDPConfig
+	if len(raw) == 0 || string(raw) == "null" {
+		return cfg, nil
+	}
+	if err := strictUnmarshal(raw, &cfg); err != nil {
+		return RDPConfig{}, err
+	}
+	if err := ValidateRDPConfigOptions(cfg); err != nil {
+		return RDPConfig{}, err
+	}
+	return cfg, nil
+}
+
+// ValidateRDPConfigOptions validates combinations which could otherwise give a
+// false impression that an RDP connection is authenticated by a certificate.
+func ValidateRDPConfigOptions(cfg RDPConfig) error {
+	fingerprints := strings.TrimSpace(cfg.CertificateFingerprints)
+	if len(fingerprints) > 4096 || strings.IndexFunc(fingerprints, unicode.IsControl) >= 0 {
+		return fmt.Errorf("certificate_fingerprints is invalid")
+	}
+	if cfg.IgnoreCertificate && fingerprints != "" {
+		return fmt.Errorf("ignore_certificate cannot be combined with certificate_fingerprints")
+	}
+	if cfg.AllowLegacySecurity && fingerprints != "" {
+		return fmt.Errorf("allow_legacy_security cannot be combined with certificate_fingerprints")
+	}
+	if cfg.AllowLegacySecurity && cfg.NLAEnabled {
+		return fmt.Errorf("allow_legacy_security cannot be combined with nla_enabled")
+	}
+	if cfg.AllowLegacySecurity && cfg.IgnoreCertificate {
+		return fmt.Errorf("allow_legacy_security cannot be combined with ignore_certificate")
+	}
+	return nil
 }
 
 // strictUnmarshal decodes raw JSON into target while rejecting unknown fields.

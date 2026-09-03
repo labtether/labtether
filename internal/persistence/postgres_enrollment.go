@@ -13,19 +13,28 @@ import (
 	"github.com/labtether/labtether/internal/idgen"
 )
 
-func (s *PostgresStore) CreateEnrollmentToken(tokenHash, label string, expiresAt time.Time, maxUses int) (enrollment.EnrollmentToken, error) {
-	if err := enrollment.ValidateStoredTokenMaxUses(maxUses); err != nil {
+func (s *PostgresStore) CreateEnrollmentToken(params CreateEnrollmentTokenParams) (enrollment.EnrollmentToken, error) {
+	params.TokenHash = strings.TrimSpace(params.TokenHash)
+	params.Scope = strings.TrimSpace(params.Scope)
+	params.AssetID = strings.TrimSpace(params.AssetID)
+	params.AllowedGroupID = strings.TrimSpace(params.AllowedGroupID)
+	params.CreatedBy = strings.TrimSpace(params.CreatedBy)
+	if err := validateEnrollmentTokenCreateParams(params); err != nil {
 		return enrollment.EnrollmentToken{}, err
 	}
-	ttl, err := databaseTTL(expiresAt)
+	ttl, err := databaseTTL(params.ExpiresAt)
 	if err != nil {
 		return enrollment.EnrollmentToken{}, err
 	}
 	tok := enrollment.EnrollmentToken{
-		ID:       idgen.New("etok"),
-		Label:    label,
-		MaxUses:  maxUses,
-		UseCount: 0,
+		ID:             idgen.New("etok"),
+		Label:          params.Label,
+		MaxUses:        params.MaxUses,
+		UseCount:       0,
+		Scope:          params.Scope,
+		AssetID:        strings.TrimSpace(params.AssetID),
+		AllowedGroupID: strings.TrimSpace(params.AllowedGroupID),
+		CreatedBy:      strings.TrimSpace(params.CreatedBy),
 	}
 	ctx := context.Background()
 	tx, err := s.pool.Begin(ctx)
@@ -36,11 +45,19 @@ func (s *PostgresStore) CreateEnrollmentToken(tokenHash, label string, expiresAt
 	if err := lockAgentEnrollmentIssuance(ctx, tx); err != nil {
 		return enrollment.EnrollmentToken{}, err
 	}
+	if params.AllowedGroupID != "" {
+		var groupID string
+		if err := tx.QueryRow(ctx, `SELECT id FROM groups WHERE id = $1 FOR KEY SHARE`, params.AllowedGroupID).Scan(&groupID); errors.Is(err, pgx.ErrNoRows) {
+			return enrollment.EnrollmentToken{}, ErrEnrollmentTokenScopeMismatch
+		} else if err != nil {
+			return enrollment.EnrollmentToken{}, err
+		}
+	}
 	err = tx.QueryRow(ctx,
-		`INSERT INTO enrollment_tokens (id, token_hash, label, expires_at, max_uses, use_count, created_at)
-		 VALUES ($1, $2, $3, clock_timestamp() + ($4::double precision * interval '1 second'), $5, 0, clock_timestamp())
+		`INSERT INTO enrollment_tokens (id, token_hash, label, expires_at, max_uses, use_count, created_at, scope, asset_id, allowed_group_id, created_by)
+		 VALUES ($1, $2, $3, clock_timestamp() + ($4::double precision * interval '1 second'), $5, 0, clock_timestamp(), $6, $7, NULLIF($8, ''), $9)
 		 RETURNING expires_at, created_at`,
-		tok.ID, tokenHash, tok.Label, ttl.Seconds(), tok.MaxUses,
+		tok.ID, params.TokenHash, tok.Label, ttl.Seconds(), tok.MaxUses, tok.Scope, tok.AssetID, tok.AllowedGroupID, tok.CreatedBy,
 	).Scan(&tok.ExpiresAt, &tok.CreatedAt)
 	if err != nil {
 		return enrollment.EnrollmentToken{}, err
@@ -55,14 +72,14 @@ func (s *PostgresStore) ValidateEnrollmentToken(tokenHash string) (enrollment.En
 	var tok enrollment.EnrollmentToken
 	var revokedAt *time.Time
 	err := s.pool.QueryRow(context.Background(),
-		`SELECT id, label, expires_at, max_uses, use_count, created_at, revoked_at
+		`SELECT id, label, expires_at, max_uses, use_count, created_at, revoked_at, scope, asset_id, COALESCE(allowed_group_id, ''), created_by
 		 FROM enrollment_tokens
 		 WHERE token_hash = $1
 		   AND revoked_at IS NULL
 		   AND expires_at > clock_timestamp()
 		   AND max_uses BETWEEN 1 AND $2
 		   AND use_count < max_uses`, tokenHash, enrollment.HardTokenMaxUsesCeiling,
-	).Scan(&tok.ID, &tok.Label, &tok.ExpiresAt, &tok.MaxUses, &tok.UseCount, &tok.CreatedAt, &revokedAt)
+	).Scan(&tok.ID, &tok.Label, &tok.ExpiresAt, &tok.MaxUses, &tok.UseCount, &tok.CreatedAt, &revokedAt, &tok.Scope, &tok.AssetID, &tok.AllowedGroupID, &tok.CreatedBy)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return tok, false, nil
@@ -85,9 +102,9 @@ func (s *PostgresStore) ConsumeEnrollmentToken(tokenHash string) (enrollment.Enr
 		   AND expires_at > clock_timestamp()
 		   AND max_uses BETWEEN 1 AND $2
 		   AND use_count < max_uses
-		 RETURNING id, label, expires_at, max_uses, use_count, created_at, revoked_at`,
+		 RETURNING id, label, expires_at, max_uses, use_count, created_at, revoked_at, scope, asset_id, COALESCE(allowed_group_id, ''), created_by`,
 		tokenHash, enrollment.HardTokenMaxUsesCeiling,
-	).Scan(&tok.ID, &tok.Label, &tok.ExpiresAt, &tok.MaxUses, &tok.UseCount, &tok.CreatedAt, &revokedAt)
+	).Scan(&tok.ID, &tok.Label, &tok.ExpiresAt, &tok.MaxUses, &tok.UseCount, &tok.CreatedAt, &revokedAt, &tok.Scope, &tok.AssetID, &tok.AllowedGroupID, &tok.CreatedBy)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return tok, false, nil
@@ -141,7 +158,7 @@ func (s *PostgresStore) ListEnrollmentTokens(limit int) ([]enrollment.Enrollment
 		limit = 50
 	}
 	rows, err := s.pool.Query(context.Background(),
-		`SELECT id, label, expires_at, max_uses, use_count, created_at, revoked_at
+		`SELECT id, label, expires_at, max_uses, use_count, created_at, revoked_at, scope, asset_id, COALESCE(allowed_group_id, ''), created_by
 		 FROM enrollment_tokens ORDER BY created_at DESC LIMIT $1`, limit,
 	)
 	if err != nil {
@@ -153,7 +170,7 @@ func (s *PostgresStore) ListEnrollmentTokens(limit int) ([]enrollment.Enrollment
 	for rows.Next() {
 		var tok enrollment.EnrollmentToken
 		var revokedAt *time.Time
-		if err := rows.Scan(&tok.ID, &tok.Label, &tok.ExpiresAt, &tok.MaxUses, &tok.UseCount, &tok.CreatedAt, &revokedAt); err != nil {
+		if err := rows.Scan(&tok.ID, &tok.Label, &tok.ExpiresAt, &tok.MaxUses, &tok.UseCount, &tok.CreatedAt, &revokedAt, &tok.Scope, &tok.AssetID, &tok.AllowedGroupID, &tok.CreatedBy); err != nil {
 			return nil, err
 		}
 		tok.RevokedAt = revokedAt

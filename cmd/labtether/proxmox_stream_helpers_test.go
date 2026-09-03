@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -546,6 +547,93 @@ func TestLoadProxmoxRuntimeAdditionalBranches(t *testing.T) {
 			t.Fatalf("expected proxmox client initialization to fail for invalid ca_pem")
 		}
 	})
+}
+
+func TestLoadProxmoxRuntimeSeparatesAPIAndSPICECertificateBypasses(t *testing.T) {
+	sut := newTestAPIServer(t)
+	createProxmoxCredentialProfile(t, sut, "cred-spice-tls-split", "labtether@pve!agent", "secret", "https://proxmox.example.local")
+	sut.hubCollectorStore = &stubHubCollectorStore{
+		collectors: []hubcollector.Collector{{
+			ID:            "collector-proxmox-spice-tls-split",
+			CollectorType: hubcollector.CollectorTypeProxmox,
+			Enabled:       true,
+			Config: map[string]any{
+				"base_url":          "https://proxmox.example.local",
+				"token_id":          "labtether@pve!agent",
+				"credential_id":     "cred-spice-tls-split",
+				"skip_verify":       true,
+				"spice_skip_verify": false,
+			},
+		}},
+	}
+
+	runtime, err := sut.loadProxmoxRuntime("")
+	if err != nil {
+		t.Fatalf("load Proxmox runtime: %v", err)
+	}
+	if !runtime.SkipVerify() {
+		t.Fatal("API skip_verify setting was not preserved")
+	}
+	if runtime.SPICESkipVerify() {
+		t.Fatal("API skip_verify silently disabled SPICE certificate verification")
+	}
+}
+
+func TestProxmoxSPICETicketRejectsCertificateDataFromUnverifiedAPI(t *testing.T) {
+	var apiCalls atomic.Int32
+	forgedAPI := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		apiCalls.Add(1)
+		_, _ = w.Write([]byte(`{"data":{"host":"pvespiceproxy:68b8d480:101:pve01::aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","tls-port":61000,"proxy":"http://attacker.example:3128","host-subject":"CN=attacker","ca":"attacker CA"}}`))
+	}))
+	defer forgedAPI.Close()
+
+	sut := newTestAPIServer(t)
+	createProxmoxCredentialProfile(t, sut, "cred-spice-untrusted-api", "labtether@pve!agent", "secret", forgedAPI.URL)
+	sut.hubCollectorStore = &stubHubCollectorStore{
+		collectors: []hubcollector.Collector{{
+			ID:            "collector-spice-untrusted-api",
+			CollectorType: hubcollector.CollectorTypeProxmox,
+			Enabled:       true,
+			Config: map[string]any{
+				"base_url":          forgedAPI.URL,
+				"token_id":          "labtether@pve!agent",
+				"credential_id":     "cred-spice-untrusted-api",
+				"skip_verify":       true,
+				"spice_skip_verify": false,
+			},
+		}},
+	}
+	_, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+		AssetID: "proxmox-vm-101",
+		Type:    "vm",
+		Name:    "pve01",
+		Source:  "proxmox",
+		Status:  "online",
+		Metadata: map[string]string{
+			"proxmox_type": "qemu",
+			"node":         "pve01",
+			"vmid":         "101",
+			"collector_id": "collector-spice-untrusted-api",
+		},
+	})
+	if err != nil {
+		t.Fatalf("seed Proxmox VM: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/desktop/sessions/session-untrusted-api/spice-ticket", nil)
+	rec := httptest.NewRecorder()
+	sut.handleDesktopSPICETicket(rec, req, terminal.Session{
+		ID:     "session-untrusted-api",
+		Target: "proxmox-vm-101",
+		Mode:   "desktop",
+	})
+
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "API certificate") {
+		t.Fatalf("unverified API SPICE status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := apiCalls.Load(); got != 0 {
+		t.Fatalf("fetched %d forged SPICE ticket responses before enforcing API trust", got)
+	}
 }
 
 func TestTranslateBrowserToProxmoxTerm(t *testing.T) {

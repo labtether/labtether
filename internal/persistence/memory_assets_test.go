@@ -1,10 +1,48 @@
 package persistence
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/labtether/labtether/internal/assets"
 )
+
+func TestValidateVerifiedAgentRecoveryAnchor(t *testing.T) {
+	valid := map[string]string{
+		assets.MetadataKeyAgentDeviceFingerprint:  "LT-VERIFIED",
+		assets.MetadataKeyAgentDeviceKeyAlgorithm: "ed25519",
+		assets.MetadataKeyAgentIdentityVerifiedAt: "2026-09-03T01:02:03.456Z",
+	}
+	tests := []struct {
+		name        string
+		metadata    map[string]string
+		fingerprint string
+		algorithm   string
+		wantError   bool
+	}{
+		{name: "valid", metadata: valid, fingerprint: "LT-VERIFIED", algorithm: "ed25519"},
+		{name: "missing marker", metadata: map[string]string{
+			assets.MetadataKeyAgentDeviceFingerprint: "LT-VERIFIED", assets.MetadataKeyAgentDeviceKeyAlgorithm: "ed25519",
+		}, fingerprint: "LT-VERIFIED", algorithm: "ed25519", wantError: true},
+		{name: "malformed marker", metadata: map[string]string{
+			assets.MetadataKeyAgentDeviceFingerprint: "LT-VERIFIED", assets.MetadataKeyAgentDeviceKeyAlgorithm: "ed25519",
+			assets.MetadataKeyAgentIdentityVerifiedAt: "not-a-time",
+		}, fingerprint: "LT-VERIFIED", algorithm: "ed25519", wantError: true},
+		{name: "fingerprint mismatch", metadata: valid, fingerprint: "LT-OTHER", algorithm: "ed25519", wantError: true},
+		{name: "algorithm mismatch", metadata: valid, fingerprint: "LT-VERIFIED", algorithm: "rsa", wantError: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := validateVerifiedAgentRecoveryAnchor(test.metadata, test.fingerprint, test.algorithm)
+			if test.wantError && !errors.Is(err, ErrAgentIdentityContinuityConflict) {
+				t.Fatalf("error=%v, want continuity conflict", err)
+			}
+			if !test.wantError && err != nil {
+				t.Fatalf("valid verified anchor rejected: %v", err)
+			}
+		})
+	}
+}
 
 func TestMemoryAssetStoreManualNameOverridePersistsAcrossHeartbeats(t *testing.T) {
 	store := NewMemoryAssetStore()

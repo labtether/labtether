@@ -83,8 +83,14 @@ func TestSSH(ctx context.Context, host string, port int, username, password, pri
 
 // TestTelnet dials the host:port and waits for any banner data to confirm the
 // service is responding.
-func TestTelnet(ctx context.Context, host string, port int) *TestResult {
+func TestTelnet(ctx context.Context, host string, port int, allowInsecureTransport bool) *TestResult {
 	start := time.Now()
+	if !allowInsecureTransport {
+		return &TestResult{Error: "plain Telnet requires allow_insecure_telnet=true"}
+	}
+	if !securityruntime.InsecureTransportAllowed() {
+		return &TestResult{Error: "plain Telnet requires LABTETHER_ALLOW_INSECURE_TRANSPORT=true"}
+	}
 
 	dialCtx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()

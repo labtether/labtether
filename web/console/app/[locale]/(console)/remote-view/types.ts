@@ -20,6 +20,12 @@ export interface RemoteViewTab {
     port: number;
     assetId?: string;
     bookmarkId?: string;
+    allowInsecureVNC?: boolean;
+    ignoreCertificate?: boolean;
+    allowLegacySecurity?: boolean;
+    certificateFingerprints?: string;
+    spiceSecurityMode?: "tls" | "cleartext";
+    spiceCAPEM?: string;
   };
   connectionState: RemoteViewConnectionState;
   lastConnectedAt?: number;

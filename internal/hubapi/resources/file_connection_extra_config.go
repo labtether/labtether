@@ -35,7 +35,7 @@ func NormalizeFileConnectionExtraConfig(protocol string, config map[string]any) 
 				return nil, errors.New("host_key must contain exactly one valid SSH public key")
 			}
 			normalized[key] = hostKey
-		case "ftp:ftp_tls", "ftp:ftp_passive", "webdav:webdav_tls":
+		case "ftp:ftp_tls", "ftp:ftp_passive", "ftp:ftp_allow_cleartext", "webdav:webdav_tls":
 			flag, ok := value.(bool)
 			if !ok {
 				return nil, fmt.Errorf("%s must be a boolean", key)
@@ -74,6 +74,21 @@ func NormalizeFileConnectionExtraConfig(protocol string, config map[string]any) 
 			return nil, fmt.Errorf("unsupported %s extra_config key: %s", protocol, key)
 		}
 	}
+	if protocol == "ftp" {
+		useTLS := true
+		if configured, ok := normalized["ftp_tls"].(bool); ok {
+			useTLS = configured
+		} else {
+			normalized["ftp_tls"] = true
+		}
+		allowCleartext, _ := normalized["ftp_allow_cleartext"].(bool)
+		if useTLS && allowCleartext {
+			return nil, errors.New("ftp_allow_cleartext cannot be enabled when ftp_tls is true")
+		}
+		if !useTLS && (!allowCleartext || !securityruntime.InsecureTransportAllowed()) {
+			return nil, errors.New("plain FTP requires ftp_allow_cleartext=true and LABTETHER_ALLOW_INSECURE_TRANSPORT=true")
+		}
+	}
 	return normalized, nil
 }
 
@@ -87,11 +102,50 @@ func containsControlRune(value string) bool {
 }
 
 func sanitizeLegacyFileConnectionExtraConfig(protocol string, config map[string]any) map[string]any {
+	if normalized, err := NormalizeFileConnectionExtraConfig(protocol, config); err == nil {
+		return normalized
+	}
+	if strings.EqualFold(strings.TrimSpace(protocol), "ftp") {
+		known := map[string]any{}
+		for _, key := range []string{"ftp_tls", "ftp_passive", "ftp_allow_cleartext"} {
+			if value, ok := config[key]; ok {
+				known[key] = value
+			}
+		}
+		if normalized, err := NormalizeFileConnectionExtraConfig(protocol, known); err == nil {
+			return normalized
+		}
+	}
 	out := map[string]any{}
 	for key, value := range config {
 		if normalized, err := NormalizeFileConnectionExtraConfig(protocol, map[string]any{key: value}); err == nil {
 			out[key] = normalized[key]
 		}
 	}
+	if strings.EqualFold(strings.TrimSpace(protocol), "ftp") {
+		out["ftp_tls"] = true
+	}
 	return out
+}
+
+// preserveExistingSFTPHostKey prevents an ordinary partial update from
+// silently clearing a trusted server identity. Replacing the pin requires an
+// explicit new host_key value.
+func preserveExistingSFTPHostKey(protocol string, current, requested map[string]any) map[string]any {
+	if strings.ToLower(strings.TrimSpace(protocol)) != "sftp" {
+		return requested
+	}
+	if _, explicitlySet := requested["host_key"]; explicitlySet {
+		return requested
+	}
+	existing, pinned := current["host_key"]
+	if !pinned {
+		return requested
+	}
+	merged := make(map[string]any, len(requested)+1)
+	for key, value := range requested {
+		merged[key] = value
+	}
+	merged["host_key"] = existing
+	return merged
 }

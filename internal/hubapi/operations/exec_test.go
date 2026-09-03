@@ -4,17 +4,21 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/hubapi/groupfeatures"
 	"github.com/labtether/labtether/internal/persistence"
+	"github.com/labtether/labtether/internal/policy"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -33,6 +37,9 @@ func newConnectedExecDeps(t *testing.T, captured *terminal.CommandJob) *ExecDeps
 		},
 		PrincipalActorID:         func(context.Context) string { return "tester" },
 		AllowedAssetsFromContext: func(context.Context) []string { return nil },
+		EvaluateCommandPolicy: func(context.Context, string, string) policy.CheckResponse {
+			return policy.CheckResponse{Allowed: true, Mode: "structured"}
+		},
 	}
 }
 
@@ -217,6 +224,190 @@ func TestHandleAssetExecRejectsAssetOutsideAPIKeyAllowlist(t *testing.T) {
 	}
 }
 
+func TestHandleAssetExecRateLimitPreventsDispatch(t *testing.T) {
+	var captured terminal.CommandJob
+	deps := newConnectedExecDeps(t, &captured)
+	dispatched := false
+	deps.ExecuteViaAgent = func(terminal.CommandJob) terminal.CommandResult {
+		dispatched = true
+		return terminal.CommandResult{Status: "succeeded"}
+	}
+	deps.DecodeJSONBody = func(_ http.ResponseWriter, r *http.Request, dst any) error {
+		return json.NewDecoder(r.Body).Decode(dst)
+	}
+	deps.ScopesFromContext = func(context.Context) []string { return []string{"assets:exec"} }
+	deps.EnforceRateLimit = func(w http.ResponseWriter, _ *http.Request, bucket string, limit int, window time.Duration) bool {
+		if bucket != execRateLimitBucket || limit != execRateLimitCount || window != execRateLimitWindow {
+			t.Fatalf("rate policy = %q/%d/%s", bucket, limit, window)
+		}
+		http.Error(w, "rate limited", http.StatusTooManyRequests)
+		return false
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/assets/srv1/exec", strings.NewReader(`{"command":"uptime"}`))
+	rec := httptest.NewRecorder()
+	deps.HandleAssetExec(rec, req, "srv1")
+
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429; body=%s", rec.Code, rec.Body.String())
+	}
+	if dispatched {
+		t.Fatal("rate-limited command reached execution backend")
+	}
+}
+
+func TestHandleAssetExecMaintenancePreventsPolicyAndDispatch(t *testing.T) {
+	var captured terminal.CommandJob
+	deps := newConnectedExecDeps(t, &captured)
+	dispatched := false
+	policyChecks := 0
+	deps.ExecuteViaAgent = func(terminal.CommandJob) terminal.CommandResult {
+		dispatched = true
+		return terminal.CommandResult{Status: "succeeded"}
+	}
+	deps.DecodeJSONBody = func(_ http.ResponseWriter, r *http.Request, dst any) error {
+		return json.NewDecoder(r.Body).Decode(dst)
+	}
+	deps.ScopesFromContext = func(context.Context) []string { return []string{"assets:exec"} }
+	deps.EvaluateCommandPolicy = func(context.Context, string, string) policy.CheckResponse {
+		policyChecks++
+		return policy.CheckResponse{Allowed: true, Mode: "structured"}
+	}
+	deps.EvaluateAssetGuardrails = func(assetID string, _ time.Time) (groupfeatures.GroupMaintenanceGuardrails, error) {
+		if assetID != "srv1" {
+			t.Fatalf("guard target = %q, want srv1", assetID)
+		}
+		return groupfeatures.GroupMaintenanceGuardrails{GroupID: "group-1", BlockActions: true}, nil
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/assets/srv1/exec", strings.NewReader(`{"command":"uptime"}`))
+	rec := httptest.NewRecorder()
+	deps.HandleAssetExec(rec, req, "srv1")
+
+	if rec.Code != http.StatusLocked || !strings.Contains(rec.Body.String(), "maintenance_blocked") {
+		t.Fatalf("status = %d, want 423 maintenance_blocked; body=%s", rec.Code, rec.Body.String())
+	}
+	if policyChecks != 0 || dispatched {
+		t.Fatalf("policy checks = %d, dispatched = %v; want neither", policyChecks, dispatched)
+	}
+}
+
+func TestHandleAssetExecFailsClosedWhenMaintenanceEvaluationFails(t *testing.T) {
+	var captured terminal.CommandJob
+	deps := newConnectedExecDeps(t, &captured)
+	dispatched := false
+	deps.ExecuteViaAgent = func(terminal.CommandJob) terminal.CommandResult {
+		dispatched = true
+		return terminal.CommandResult{Status: "succeeded"}
+	}
+	deps.DecodeJSONBody = func(_ http.ResponseWriter, r *http.Request, dst any) error {
+		return json.NewDecoder(r.Body).Decode(dst)
+	}
+	deps.ScopesFromContext = func(context.Context) []string { return []string{"assets:exec"} }
+	deps.EvaluateAssetGuardrails = func(string, time.Time) (groupfeatures.GroupMaintenanceGuardrails, error) {
+		return groupfeatures.GroupMaintenanceGuardrails{}, errors.New("store unavailable")
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/assets/srv1/exec", strings.NewReader(`{"command":"uptime"}`))
+	rec := httptest.NewRecorder()
+	deps.HandleAssetExec(rec, req, "srv1")
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500; body=%s", rec.Code, rec.Body.String())
+	}
+	if dispatched {
+		t.Fatal("command reached execution backend after maintenance evaluation failed")
+	}
+}
+
+func TestHandleAssetExecRejectsCommandDeniedByPolicy(t *testing.T) {
+	dispatched := false
+	var captured terminal.CommandJob
+	deps := newConnectedExecDeps(t, &captured)
+	deps.ExecuteViaAgent = func(terminal.CommandJob) terminal.CommandResult {
+		dispatched = true
+		return terminal.CommandResult{Status: "succeeded"}
+	}
+	deps.DecodeJSONBody = func(_ http.ResponseWriter, r *http.Request, dst any) error {
+		return json.NewDecoder(r.Body).Decode(dst)
+	}
+	deps.ScopesFromContext = func(context.Context) []string { return []string{"assets:exec"} }
+	deps.EvaluateCommandPolicy = func(context.Context, string, string) policy.CheckResponse {
+		return policy.CheckResponse{Allowed: false, Reason: "command not in allowlist", Mode: "structured"}
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/assets/srv1/exec", strings.NewReader(`{"command":"curl example.com"}`))
+	rec := httptest.NewRecorder()
+	deps.HandleAssetExec(rec, req, "srv1")
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403; body=%s", rec.Code, rec.Body.String())
+	}
+	if dispatched {
+		t.Fatal("policy-denied command reached execution backend")
+	}
+}
+
+func TestHandleAssetExecFailsClosedWithoutCommandPolicy(t *testing.T) {
+	dispatched := false
+	var captured terminal.CommandJob
+	deps := newConnectedExecDeps(t, &captured)
+	deps.ExecuteViaAgent = func(terminal.CommandJob) terminal.CommandResult {
+		dispatched = true
+		return terminal.CommandResult{Status: "succeeded"}
+	}
+	deps.DecodeJSONBody = func(_ http.ResponseWriter, r *http.Request, dst any) error {
+		return json.NewDecoder(r.Body).Decode(dst)
+	}
+	deps.ScopesFromContext = func(context.Context) []string { return []string{"assets:exec"} }
+	deps.EvaluateCommandPolicy = nil
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/assets/srv1/exec", strings.NewReader(`{"command":"uptime"}`))
+	rec := httptest.NewRecorder()
+	deps.HandleAssetExec(rec, req, "srv1")
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503; body=%s", rec.Code, rec.Body.String())
+	}
+	if dispatched {
+		t.Fatal("command reached execution backend without a policy evaluator")
+	}
+}
+
+func TestHandleAssetExecDoesNotSkipPolicyForOfflineAsset(t *testing.T) {
+	dispatched := false
+	var captured terminal.CommandJob
+	deps := newConnectedExecDeps(t, &captured)
+	deps.AgentMgr = agentmgr.NewManager()
+	deps.ExecuteViaAgent = func(terminal.CommandJob) terminal.CommandResult {
+		dispatched = true
+		return terminal.CommandResult{Status: "succeeded"}
+	}
+	deps.DecodeJSONBody = func(_ http.ResponseWriter, r *http.Request, dst any) error {
+		return json.NewDecoder(r.Body).Decode(dst)
+	}
+	deps.ScopesFromContext = func(context.Context) []string { return []string{"assets:exec"} }
+	policyChecks := 0
+	deps.EvaluateCommandPolicy = func(context.Context, string, string) policy.CheckResponse {
+		policyChecks++
+		return policy.CheckResponse{Allowed: false, Reason: "command not in allowlist", Mode: "structured"}
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/assets/srv1/exec", strings.NewReader(`{"command":"curl example.com"}`))
+	rec := httptest.NewRecorder()
+	deps.HandleAssetExec(rec, req, "srv1")
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403; body=%s", rec.Code, rec.Body.String())
+	}
+	if policyChecks != 1 {
+		t.Fatalf("policy checks = %d, want 1", policyChecks)
+	}
+	if dispatched {
+		t.Fatal("offline policy-denied command reached execution backend")
+	}
+}
+
 func TestHandleAssetExecAuditExcludesRawCommand(t *testing.T) {
 	var captured terminal.CommandJob
 	deps := newConnectedExecDeps(t, &captured)
@@ -314,6 +505,95 @@ func TestHandleExecMultiCountsNonzeroExitAsFailure(t *testing.T) {
 	}
 	if envelope.Data.Summary["total"] != 2 || envelope.Data.Summary["succeeded"] != 1 || envelope.Data.Summary["failed"] != 1 {
 		t.Fatalf("summary = %#v, want one success and one failure", envelope.Data.Summary)
+	}
+}
+
+func TestHandleExecMultiRateLimitPreventsDispatch(t *testing.T) {
+	var executions atomic.Int32
+	deps := newExecMultiTestDeps(t, []string{"srv1"}, func(terminal.CommandJob) terminal.CommandResult {
+		executions.Add(1)
+		return terminal.CommandResult{Status: "succeeded"}
+	})
+	deps.EnforceRateLimit = func(w http.ResponseWriter, _ *http.Request, bucket string, limit int, window time.Duration) bool {
+		if bucket != execRateLimitBucket || limit != execRateLimitCount || window != execRateLimitWindow {
+			t.Fatalf("rate policy = %q/%d/%s", bucket, limit, window)
+		}
+		http.Error(w, "rate limited", http.StatusTooManyRequests)
+		return false
+	}
+
+	recorder := handleExecMultiTestRequest(t, deps, ExecMultiRequest{Targets: []string{"srv1"}, Command: "uptime"})
+	if recorder.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429; body=%s", recorder.Code, recorder.Body.String())
+	}
+	if got := executions.Load(); got != 0 {
+		t.Fatalf("executions = %d, want zero", got)
+	}
+}
+
+func TestHandleExecMultiMaintenancePreflightPreventsAllDispatch(t *testing.T) {
+	var executions atomic.Int32
+	deps := newExecMultiTestDeps(t, []string{"srv1", "srv2", "srv3"}, func(terminal.CommandJob) terminal.CommandResult {
+		executions.Add(1)
+		return terminal.CommandResult{Status: "succeeded"}
+	})
+	deps.EvaluateAssetGuardrails = func(assetID string, _ time.Time) (groupfeatures.GroupMaintenanceGuardrails, error) {
+		return groupfeatures.GroupMaintenanceGuardrails{
+			GroupID:      "group-1",
+			BlockActions: assetID == "srv2",
+		}, nil
+	}
+
+	recorder := handleExecMultiTestRequest(t, deps, ExecMultiRequest{
+		Targets: []string{"srv1", "srv2", "srv3"},
+		Command: "uptime",
+	})
+	if recorder.Code != http.StatusLocked || !strings.Contains(recorder.Body.String(), "maintenance_blocked") {
+		t.Fatalf("status = %d, want 423 maintenance_blocked; body=%s", recorder.Code, recorder.Body.String())
+	}
+	if got := executions.Load(); got != 0 {
+		t.Fatalf("executions = %d, want zero when any target is maintenance-blocked", got)
+	}
+}
+
+func TestHandleExecMultiRejectsCommandDeniedByPolicy(t *testing.T) {
+	var mu sync.Mutex
+	executions := 0
+	deps := newExecMultiTestDeps(t, []string{"srv1"}, func(terminal.CommandJob) terminal.CommandResult {
+		mu.Lock()
+		executions++
+		mu.Unlock()
+		return terminal.CommandResult{Status: "succeeded"}
+	})
+	deps.EvaluateCommandPolicy = func(context.Context, string, string) policy.CheckResponse {
+		return policy.CheckResponse{Allowed: false, Reason: "command not in allowlist", Mode: "structured"}
+	}
+
+	recorder := handleExecMultiTestRequest(t, deps, ExecMultiRequest{
+		Targets: []string{"srv1"},
+		Command: "curl example.com",
+	})
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
+	}
+	if executions != 0 {
+		t.Fatalf("policy-denied multi-exec reached execution backend %d times", executions)
+	}
+
+	var envelope struct {
+		Data struct {
+			Results map[string]ExecResult `json:"results"`
+			Summary map[string]int        `json:"summary"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got := envelope.Data.Results["srv1"].Error; got != "policy_denied" {
+		t.Fatalf("result error = %q, want policy_denied", got)
+	}
+	if envelope.Data.Summary["total"] != 1 || envelope.Data.Summary["failed"] != 1 {
+		t.Fatalf("summary = %#v, want one failure", envelope.Data.Summary)
 	}
 }
 
@@ -437,6 +717,9 @@ func newExecMultiTestDeps(
 		PrincipalActorID:         func(context.Context) string { return "tester" },
 		AllowedAssetsFromContext: func(context.Context) []string { return nil },
 		ScopesFromContext:        func(context.Context) []string { return nil },
+		EvaluateCommandPolicy: func(context.Context, string, string) policy.CheckResponse {
+			return policy.CheckResponse{Allowed: true, Mode: "structured"}
+		},
 	}
 }
 

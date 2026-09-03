@@ -104,6 +104,11 @@ func (d *Deps) HandleSessionStream(w http.ResponseWriter, r *http.Request, sessi
 		if err != nil {
 			log.Printf("terminal: telnet protocol config lookup failed session=%s target=%s trace=%s err=%v", session.ID, session.Target, traceLog, err) // #nosec G706 -- Session, target, and trace IDs are hub-controlled runtime identifiers.
 		} else if telnetCfg != nil && telnetCfg.Enabled {
+			telnetOptions, decodeErr := protocols.DecodeTelnetConfig(telnetCfg.Config)
+			if decodeErr != nil {
+				servicehttp.WriteError(w, http.StatusBadGateway, "invalid Telnet transport configuration")
+				return
+			}
 			host := strings.TrimSpace(telnetCfg.Host)
 			// Fall back to asset host if the protocol config has no explicit host.
 			if host == "" && d.AssetStore != nil {
@@ -118,7 +123,7 @@ func (d *Deps) HandleSessionStream(w http.ResponseWriter, r *http.Request, sessi
 			if port <= 0 {
 				port = protocols.DefaultPort(protocols.ProtocolTelnet)
 			}
-			d.HandleTelnetStream(w, r, session, host, port)
+			d.HandleTelnetStream(w, r, session, host, port, telnetOptions.AllowInsecureTransport)
 			return
 		}
 	}

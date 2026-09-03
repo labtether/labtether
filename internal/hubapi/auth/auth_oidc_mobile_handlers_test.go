@@ -36,6 +36,9 @@ type mobileOIDCTestProvider struct {
 
 func newMobileOIDCTestProvider(t *testing.T) (*internalauth.OIDCProvider, *mobileOIDCTestProvider) {
 	t.Helper()
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
+	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
+	t.Setenv("LABTETHER_OIDC_ALLOW_LOOPBACK", "true")
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("generate test oidc key: %v", err)
@@ -88,12 +91,13 @@ func newMobileOIDCTestProvider(t *testing.T) (*internalauth.OIDCProvider, *mobil
 	t.Cleanup(mock.server.Close)
 
 	provider, err := internalauth.NewOIDCProvider(context.Background(), internalauth.OIDCSettings{
-		Enabled:      true,
-		IssuerURL:    issuer,
-		ClientID:     testOIDCClientID,
-		ClientSecret: "test-client-secret", // #nosec G101 -- test-only fixture
-		DefaultRole:  internalauth.RoleViewer,
-		RoleClaim:    "labtether_role",
+		Enabled:                true,
+		IssuerURL:              issuer,
+		ClientID:               testOIDCClientID,
+		ClientSecret:           "test-client-secret", // #nosec G101 -- test-only fixture
+		DefaultRole:            internalauth.RoleViewer,
+		RoleClaim:              "labtether_role",
+		AllowLoopbackEndpoints: true,
 	})
 	if err != nil {
 		t.Fatalf("create test oidc provider: %v", err)

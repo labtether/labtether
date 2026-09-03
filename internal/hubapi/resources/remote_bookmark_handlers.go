@@ -1,6 +1,7 @@
 package resources
 
 import (
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"net/http"
@@ -28,21 +29,25 @@ const (
 	remoteBookmarkMaxUserLength   = 256
 	remoteBookmarkMaxSecretLength = 16 * 1024
 	remoteBookmarkProfileNameMax  = 120
+	remoteBookmarkMaxSPICECAPEM   = 16 * 1024
 )
 
 type remoteBookmarkResponse struct {
-	ID             string    `json:"id"`
-	Label          string    `json:"label"`
-	Protocol       string    `json:"protocol"`
-	Host           string    `json:"host"`
-	Port           int       `json:"port"`
-	HasCredentials bool      `json:"has_credentials"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID                string    `json:"id"`
+	Label             string    `json:"label"`
+	Protocol          string    `json:"protocol"`
+	Host              string    `json:"host"`
+	Port              int       `json:"port"`
+	HasCredentials    bool      `json:"has_credentials"`
+	SPICESecurityMode string    `json:"spice_security_mode,omitempty"`
+	SPICECAPEM        string    `json:"spice_ca_pem,omitempty"`
+	AllowInsecureVNC  bool      `json:"allow_insecure_vnc,omitempty"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 func redactRemoteBookmark(bookmark persistence.RemoteBookmark) remoteBookmarkResponse {
-	return remoteBookmarkResponse{
+	response := remoteBookmarkResponse{
 		ID:             bookmark.ID,
 		Label:          bookmark.Label,
 		Protocol:       bookmark.Protocol,
@@ -52,6 +57,17 @@ func redactRemoteBookmark(bookmark persistence.RemoteBookmark) remoteBookmarkRes
 		CreatedAt:      bookmark.CreatedAt,
 		UpdatedAt:      bookmark.UpdatedAt,
 	}
+	if strings.EqualFold(strings.TrimSpace(bookmark.Protocol), "spice") {
+		response.SPICESecurityMode = strings.ToLower(strings.TrimSpace(bookmark.SPICESecurityMode))
+		if response.SPICESecurityMode == "" {
+			response.SPICESecurityMode = "tls"
+		}
+		response.SPICECAPEM = strings.TrimSpace(bookmark.SPICECAPEM)
+	}
+	if protocol := strings.ToLower(strings.TrimSpace(bookmark.Protocol)); protocol == "vnc" || protocol == "ard" {
+		response.AllowInsecureVNC = bookmark.AllowInsecureVNC
+	}
+	return response
 }
 
 func redactRemoteBookmarks(bookmarks []persistence.RemoteBookmark) []remoteBookmarkResponse {
@@ -92,6 +108,58 @@ func validateRemoteBookmarkFields(label, protocol, host string, port int) (strin
 		return "", "", "", 0, fmt.Errorf("invalid remote bookmark target: %w", err)
 	}
 	return label, protocol, canonicalHost, canonicalPort, nil
+}
+
+func validateRemoteBookmarkSPICESecurity(protocol, rawMode, rawCAPEM string) (string, string, error) {
+	mode := strings.ToLower(strings.TrimSpace(rawMode))
+	caPEM := strings.TrimSpace(rawCAPEM)
+	if protocol != "spice" {
+		if mode != "" || caPEM != "" {
+			return "", "", errors.New("SPICE security options are only valid for SPICE")
+		}
+		return "tls", "", nil
+	}
+	if mode == "" {
+		mode = "tls"
+	}
+	if mode != "tls" && mode != "cleartext" {
+		return "", "", errors.New("spice_security_mode must be tls or cleartext")
+	}
+	if len(caPEM) > remoteBookmarkMaxSPICECAPEM {
+		return "", "", fmt.Errorf("spice_ca_pem too long (max %d bytes)", remoteBookmarkMaxSPICECAPEM)
+	}
+	if mode == "cleartext" {
+		if caPEM != "" {
+			return "", "", errors.New("spice_ca_pem cannot be used with cleartext SPICE")
+		}
+		if !securityruntime.InsecureTransportAllowed() {
+			return "", "", errors.New("cleartext SPICE requires LABTETHER_ALLOW_INSECURE_TRANSPORT=true")
+		}
+		return mode, "", nil
+	}
+	if caPEM != "" {
+		pool := x509.NewCertPool()
+		if ok := pool.AppendCertsFromPEM([]byte(caPEM)); !ok {
+			return "", "", errors.New("invalid spice_ca_pem certificate bundle")
+		}
+	}
+	return mode, caPEM, nil
+}
+
+func validateRemoteBookmarkVNCTransport(protocol string, allowInsecure bool) error {
+	if protocol != "vnc" && protocol != "ard" {
+		if allowInsecure {
+			return errors.New("allow_insecure_vnc is only valid for VNC or ARD")
+		}
+		return nil
+	}
+	if !allowInsecure {
+		return errors.New("plain VNC requires allow_insecure_vnc=true")
+	}
+	if !securityruntime.InsecureTransportAllowed() {
+		return errors.New("plain VNC requires LABTETHER_ALLOW_INSECURE_TRANSPORT=true")
+	}
+	return nil
 }
 
 func (d *Deps) appendRemoteBookmarkCredentialAudit(r *http.Request, bookmarkID, action, protocol, decision, reason string) {
@@ -303,13 +371,16 @@ func (d *Deps) handleListRemoteBookmarks(w http.ResponseWriter, r *http.Request)
 // --- Create ---
 
 type remoteBookmarkCreateRequest struct {
-	Label        string  `json:"label"`
-	Protocol     string  `json:"protocol"`
-	Host         string  `json:"host"`
-	Port         int     `json:"port"`
-	CredentialID *string `json:"credential_id,omitempty"`
-	Username     *string `json:"username,omitempty"`
-	Password     *string `json:"password,omitempty"`
+	Label             string  `json:"label"`
+	Protocol          string  `json:"protocol"`
+	Host              string  `json:"host"`
+	Port              int     `json:"port"`
+	CredentialID      *string `json:"credential_id,omitempty"`
+	Username          *string `json:"username,omitempty"`
+	Password          *string `json:"password,omitempty"`
+	SPICESecurityMode string  `json:"spice_security_mode,omitempty"`
+	SPICECAPEM        string  `json:"spice_ca_pem,omitempty"`
+	AllowInsecureVNC  bool    `json:"allow_insecure_vnc,omitempty"`
 }
 
 func (d *Deps) handleCreateRemoteBookmark(w http.ResponseWriter, r *http.Request) {
@@ -319,6 +390,15 @@ func (d *Deps) handleCreateRemoteBookmark(w http.ResponseWriter, r *http.Request
 	}
 	label, protocol, host, port, err := validateRemoteBookmarkFields(req.Label, req.Protocol, req.Host, req.Port)
 	if err != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	spiceSecurityMode, spiceCAPEM, err := validateRemoteBookmarkSPICESecurity(protocol, req.SPICESecurityMode, req.SPICECAPEM)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := validateRemoteBookmarkVNCTransport(protocol, req.AllowInsecureVNC); err != nil {
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -353,10 +433,13 @@ func (d *Deps) handleCreateRemoteBookmark(w http.ResponseWriter, r *http.Request
 	}
 
 	bm := &persistence.RemoteBookmark{
-		Label:    label,
-		Protocol: protocol,
-		Host:     host,
-		Port:     port,
+		Label:             label,
+		Protocol:          protocol,
+		Host:              host,
+		Port:              port,
+		SPICESecurityMode: spiceSecurityMode,
+		SPICECAPEM:        spiceCAPEM,
+		AllowInsecureVNC:  req.AllowInsecureVNC,
 	}
 	if !hasInlineCredentials && req.CredentialID != nil && strings.TrimSpace(*req.CredentialID) != "" {
 		credentialID := strings.TrimSpace(*req.CredentialID)
@@ -396,13 +479,16 @@ func (d *Deps) handleCreateRemoteBookmark(w http.ResponseWriter, r *http.Request
 // --- Update ---
 
 type remoteBookmarkUpdateRequest struct {
-	Label        string  `json:"label"`
-	Protocol     string  `json:"protocol"`
-	Host         string  `json:"host"`
-	Port         int     `json:"port"`
-	CredentialID *string `json:"credential_id,omitempty"`
-	Username     *string `json:"username,omitempty"`
-	Password     *string `json:"password,omitempty"`
+	Label             string  `json:"label"`
+	Protocol          string  `json:"protocol"`
+	Host              string  `json:"host"`
+	Port              int     `json:"port"`
+	CredentialID      *string `json:"credential_id,omitempty"`
+	Username          *string `json:"username,omitempty"`
+	Password          *string `json:"password,omitempty"`
+	SPICESecurityMode *string `json:"spice_security_mode,omitempty"`
+	SPICECAPEM        *string `json:"spice_ca_pem,omitempty"`
+	AllowInsecureVNC  *bool   `json:"allow_insecure_vnc,omitempty"`
 }
 
 func (d *Deps) handleUpdateRemoteBookmark(w http.ResponseWriter, r *http.Request, bmID string) {
@@ -435,6 +521,32 @@ func (d *Deps) handleUpdateRemoteBookmark(w http.ResponseWriter, r *http.Request
 	}
 	label, protocol, host, port, err = validateRemoteBookmarkFields(label, protocol, host, port)
 	if err != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	spiceSecurityMode, spiceCAPEM := existing.SPICESecurityMode, existing.SPICECAPEM
+	if protocol != "spice" {
+		spiceSecurityMode, spiceCAPEM = "", ""
+	}
+	if req.SPICESecurityMode != nil {
+		spiceSecurityMode = *req.SPICESecurityMode
+	}
+	if req.SPICECAPEM != nil {
+		spiceCAPEM = *req.SPICECAPEM
+	}
+	spiceSecurityMode, spiceCAPEM, err = validateRemoteBookmarkSPICESecurity(protocol, spiceSecurityMode, spiceCAPEM)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	allowInsecureVNC := existing.AllowInsecureVNC
+	if protocol != "vnc" && protocol != "ard" {
+		allowInsecureVNC = false
+	}
+	if req.AllowInsecureVNC != nil {
+		allowInsecureVNC = *req.AllowInsecureVNC
+	}
+	if err := validateRemoteBookmarkVNCTransport(protocol, allowInsecureVNC); err != nil {
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -504,6 +616,8 @@ func (d *Deps) handleUpdateRemoteBookmark(w http.ResponseWriter, r *http.Request
 
 	existing.Label, existing.Protocol, existing.Host, existing.Port = label, protocol, host, port
 	existing.CredentialID = newCredentialID
+	existing.SPICESecurityMode, existing.SPICECAPEM = spiceSecurityMode, spiceCAPEM
+	existing.AllowInsecureVNC = allowInsecureVNC
 
 	if err := d.RemoteBookmarkStore.UpdateRemoteBookmark(r.Context(), *existing); err != nil {
 		if createdProfile != nil {

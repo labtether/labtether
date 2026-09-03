@@ -3,11 +3,19 @@ package fileproto
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,6 +25,154 @@ import (
 // TestFTPImplementsRemoteFS is a compile-time interface compliance check.
 func TestFTPImplementsRemoteFS(t *testing.T) {
 	var _ RemoteFS = (*FTPClient)(nil)
+}
+
+func TestFTPTransportDefaultsToVerifiedTLS(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "false")
+	useTLS, err := ftpTransportUsesTLS(nil)
+	if err != nil {
+		t.Fatalf("secure FTP default rejected: %v", err)
+	}
+	if !useTLS {
+		t.Fatal("FTP did not default to TLS")
+	}
+}
+
+func TestFTPTransportRequiresLocalAndGlobalCleartextOptIns(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "false")
+	config := map[string]any{"ftp_tls": false, "ftp_allow_cleartext": true}
+	if _, err := ftpTransportUsesTLS(config); err == nil {
+		t.Fatal("local opt-in enabled plain FTP without the global gate")
+	}
+	client := &FTPClient{}
+	if err := client.Connect(context.Background(), ConnectionConfig{
+		Host:        "192.0.2.1",
+		Port:        21,
+		ExtraConfig: config,
+	}); err == nil || !strings.Contains(err.Error(), "plain FTP requires") {
+		t.Fatalf("FTP client did not reject cleartext before dialing: %v", err)
+	}
+
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
+	if _, err := ftpTransportUsesTLS(map[string]any{"ftp_tls": false}); err == nil {
+		t.Fatal("global opt-in enabled plain FTP without the local acknowledgement")
+	}
+	useTLS, err := ftpTransportUsesTLS(config)
+	if err != nil {
+		t.Fatalf("double-gated plain FTP rejected: %v", err)
+	}
+	if useTLS {
+		t.Fatal("double-gated plain FTP was changed back to TLS")
+	}
+}
+
+func TestSecureFTPDataConnectionEncryptsAndVerifiesPeer(t *testing.T) {
+	certificate, roots := newFTPTestCertificate(t, "ftp.test")
+	serverRaw, clientRaw := net.Pipe()
+	t.Cleanup(func() {
+		_ = serverRaw.Close()
+		_ = clientRaw.Close()
+	})
+	deadline := time.Now().Add(2 * time.Second)
+	_ = serverRaw.SetDeadline(deadline)
+	_ = clientRaw.SetDeadline(deadline)
+
+	serverTLS := tls.Server(serverRaw, &tls.Config{
+		Certificates: []tls.Certificate{certificate},
+		MinVersion:   tls.VersionTLS12,
+	})
+	serverResult := make(chan error, 1)
+	go func() {
+		if err := serverTLS.Handshake(); err != nil {
+			serverResult <- err
+			return
+		}
+		_, err := serverTLS.Write([]byte("encrypted data"))
+		serverResult <- err
+	}()
+
+	wrapped := secureFTPDataConnection(clientRaw, &tls.Config{
+		ServerName: "ftp.test",
+		RootCAs:    roots,
+		MinVersion: tls.VersionTLS12,
+	})
+	clientTLS, ok := wrapped.(*tls.Conn)
+	if !ok {
+		t.Fatalf("expected TLS-wrapped data connection, got %T", wrapped)
+	}
+	if err := clientTLS.Handshake(); err != nil {
+		t.Fatalf("client TLS handshake: %v", err)
+	}
+	payload := make([]byte, len("encrypted data"))
+	if _, err := io.ReadFull(clientTLS, payload); err != nil {
+		t.Fatalf("read encrypted payload: %v", err)
+	}
+	if got := string(payload); got != "encrypted data" {
+		t.Fatalf("payload = %q, want encrypted data", got)
+	}
+	if err := <-serverResult; err != nil {
+		t.Fatalf("server TLS exchange: %v", err)
+	}
+}
+
+func TestSecureFTPDataConnectionRejectsUntrustedPeer(t *testing.T) {
+	certificate, _ := newFTPTestCertificate(t, "ftp.test")
+	serverRaw, clientRaw := net.Pipe()
+	t.Cleanup(func() {
+		_ = serverRaw.Close()
+		_ = clientRaw.Close()
+	})
+	deadline := time.Now().Add(2 * time.Second)
+	_ = serverRaw.SetDeadline(deadline)
+	_ = clientRaw.SetDeadline(deadline)
+
+	serverTLS := tls.Server(serverRaw, &tls.Config{
+		Certificates: []tls.Certificate{certificate},
+		MinVersion:   tls.VersionTLS12,
+	})
+	serverResult := make(chan error, 1)
+	go func() { serverResult <- serverTLS.Handshake() }()
+
+	clientTLS := secureFTPDataConnection(clientRaw, &tls.Config{
+		ServerName: "ftp.test",
+		RootCAs:    x509.NewCertPool(),
+		MinVersion: tls.VersionTLS12,
+	}).(*tls.Conn)
+	if err := clientTLS.Handshake(); err == nil {
+		t.Fatal("untrusted FTPS data certificate was accepted")
+	}
+	if err := <-serverResult; err == nil {
+		t.Fatal("server handshake unexpectedly succeeded after client rejection")
+	}
+}
+
+func newFTPTestCertificate(t *testing.T, dnsName string) (tls.Certificate, *x509.CertPool) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate TLS key: %v", err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: dnsName},
+		DNSNames:     []string{dnsName},
+		NotBefore:    time.Now().Add(-time.Minute),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create TLS certificate: %v", err)
+	}
+	parsed, err := x509.ParseCertificate(der)
+	if err != nil {
+		t.Fatalf("parse TLS certificate: %v", err)
+	}
+	certificate := tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key, Leaf: parsed}
+	roots := x509.NewCertPool()
+	roots.AddCert(parsed)
+	return certificate, roots
 }
 
 // ---------- integration tests against a real FTP server ----------
@@ -57,16 +213,20 @@ func ftpTestEnv(t *testing.T) (host string, port int, user, pass string) {
 func ftpConnect(t *testing.T) *FTPClient {
 	t.Helper()
 	h, p, u, pw := ftpTestEnv(t)
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
 
 	client := &FTPClient{}
 	cfg := ConnectionConfig{
-		Protocol:    "ftp",
-		Host:        h,
-		Port:        p,
-		Username:    u,
-		Secret:      pw,
-		AuthMethod:  "password",
-		ExtraConfig: map[string]any{},
+		Protocol:   "ftp",
+		Host:       h,
+		Port:       p,
+		Username:   u,
+		Secret:     pw,
+		AuthMethod: "password",
+		ExtraConfig: map[string]any{
+			"ftp_tls":             false,
+			"ftp_allow_cleartext": true,
+		},
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()

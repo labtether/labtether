@@ -104,6 +104,15 @@ func (d *Deps) HandleCreateProtocolConfig(w http.ResponseWriter, r *http.Request
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if !validateRDPTransportSecurity(w, req.Protocol, req.Config) {
+		return
+	}
+	if !validateVNCTransportSecurity(w, req.Protocol, req.Config, true) {
+		return
+	}
+	if !validateTelnetTransportSecurity(w, req.Protocol, req.Config, true) {
+		return
+	}
 
 	if !d.authorizeCredentialBinding(w, r, req.CredentialProfileID) {
 		return
@@ -193,14 +202,22 @@ func (d *Deps) HandleUpdateProtocolConfig(w http.ResponseWriter, r *http.Request
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-
-	if !d.authorizeCredentialBinding(w, r, req.CredentialProfileID) {
-		return
-	}
-
 	enabled := true
 	if req.Enabled != nil {
 		enabled = *req.Enabled
+	}
+	if !validateRDPTransportSecurity(w, protocol, req.Config) {
+		return
+	}
+	if !validateVNCTransportSecurity(w, protocol, req.Config, enabled) {
+		return
+	}
+	if !validateTelnetTransportSecurity(w, protocol, req.Config, enabled) {
+		return
+	}
+
+	if !d.authorizeCredentialBinding(w, r, req.CredentialProfileID) {
+		return
 	}
 
 	pc := protocols.ProtocolConfig{
@@ -228,6 +245,79 @@ func (d *Deps) HandleUpdateProtocolConfig(w http.ResponseWriter, r *http.Request
 	d.appendAuditEventBestEffort(ev, "api warning: failed to append protocol config update audit event")
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"protocol": pc})
+}
+
+func validateRDPTransportSecurity(w http.ResponseWriter, protocol string, raw json.RawMessage) bool {
+	if protocol != protocols.ProtocolRDP {
+		return true
+	}
+	cfg, err := protocols.DecodeRDPConfig(raw)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+		return false
+	}
+	if (cfg.IgnoreCertificate || cfg.AllowLegacySecurity) && !securityruntime.InsecureTransportAllowed() {
+		servicehttp.WriteError(w, http.StatusBadRequest, "unsafe RDP options require LABTETHER_ALLOW_INSECURE_TRANSPORT=true")
+		return false
+	}
+	return true
+}
+
+func validateVNCTransportSecurity(w http.ResponseWriter, protocol string, raw json.RawMessage, enabled bool) bool {
+	var allowInsecure bool
+	switch protocol {
+	case protocols.ProtocolVNC:
+		cfg, err := protocols.DecodeVNCConfig(raw)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+			return false
+		}
+		allowInsecure = cfg.AllowInsecureTransport
+	case protocols.ProtocolARD:
+		cfg, err := protocols.DecodeARDConfig(raw)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+			return false
+		}
+		allowInsecure = cfg.AllowInsecureTransport
+	default:
+		return true
+	}
+	if !enabled {
+		return true
+	}
+	if !allowInsecure {
+		servicehttp.WriteError(w, http.StatusBadRequest, "plain VNC requires allow_insecure_vnc=true")
+		return false
+	}
+	if !securityruntime.InsecureTransportAllowed() {
+		servicehttp.WriteError(w, http.StatusBadRequest, "plain VNC requires LABTETHER_ALLOW_INSECURE_TRANSPORT=true")
+		return false
+	}
+	return true
+}
+
+func validateTelnetTransportSecurity(w http.ResponseWriter, protocol string, raw json.RawMessage, enabled bool) bool {
+	if protocol != protocols.ProtocolTelnet {
+		return true
+	}
+	cfg, err := protocols.DecodeTelnetConfig(raw)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+		return false
+	}
+	if !enabled {
+		return true
+	}
+	if !cfg.AllowInsecureTransport {
+		servicehttp.WriteError(w, http.StatusBadRequest, "plain Telnet requires allow_insecure_telnet=true")
+		return false
+	}
+	if !securityruntime.InsecureTransportAllowed() {
+		servicehttp.WriteError(w, http.StatusBadRequest, "plain Telnet requires LABTETHER_ALLOW_INSECURE_TRANSPORT=true")
+		return false
+	}
+	return true
 }
 
 func (d *Deps) authorizeCredentialBinding(w http.ResponseWriter, r *http.Request, profileID string) bool {
@@ -322,6 +412,9 @@ func (d *Deps) HandleTestProtocolConnection(w http.ResponseWriter, r *http.Reque
 		servicehttp.WriteError(w, http.StatusNotFound, "protocol config not found")
 		return
 	}
+	if !validateTelnetTransportSecurity(w, protocol, pc.Config, true) {
+		return
+	}
 	if strings.TrimSpace(pc.CredentialProfileID) != "" && !apiv2.RequireScope(w, r, "credentials:use") {
 		return
 	}
@@ -345,7 +438,7 @@ func (d *Deps) HandleTestProtocolConnection(w http.ResponseWriter, r *http.Reque
 
 	// Decrypt credential if present.
 	var password, privateKey string
-	if pc.CredentialProfileID != "" && d.CredentialStore != nil && d.SecretsManager != nil {
+	if protocol == protocols.ProtocolSSH && pc.CredentialProfileID != "" && d.CredentialStore != nil && d.SecretsManager != nil {
 		profile, ok, credErr := d.CredentialStore.GetCredentialProfile(pc.CredentialProfileID)
 		if credErr != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load credential profile")
@@ -358,8 +451,7 @@ func (d *Deps) HandleTestProtocolConnection(w http.ResponseWriter, r *http.Reque
 				return
 			}
 			switch profile.Kind {
-			case credentials.KindSSHPassword, credentials.KindTelnetPassword,
-				credentials.KindRDPPassword, credentials.KindVNCPassword:
+			case credentials.KindSSHPassword:
 				password = secret
 			case credentials.KindSSHPrivateKey, credentials.KindHubSSHIdentity:
 				privateKey = secret
@@ -394,7 +486,12 @@ func (d *Deps) HandleTestProtocolConnection(w http.ResponseWriter, r *http.Reque
 		}
 		result = protocols.TestSSH(r.Context(), host, pc.Port, username, password, privateKey, hostKeyCallback)
 	case protocols.ProtocolTelnet:
-		result = protocols.TestTelnet(r.Context(), host, pc.Port)
+		telnetOptions, decodeErr := protocols.DecodeTelnetConfig(pc.Config)
+		if decodeErr != nil {
+			servicehttp.WriteError(w, http.StatusBadRequest, decodeErr.Error())
+			return
+		}
+		result = protocols.TestTelnet(r.Context(), host, pc.Port, telnetOptions.AllowInsecureTransport)
 	case protocols.ProtocolVNC:
 		result = protocols.TestVNC(r.Context(), host, pc.Port)
 	case protocols.ProtocolRDP:
