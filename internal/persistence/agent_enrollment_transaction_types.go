@@ -40,10 +40,11 @@ type AgentEnrollmentCommitRequest struct {
 }
 
 type AgentEnrollmentCommitResult struct {
-	EnrollmentToken enrollment.EnrollmentToken
-	AgentToken      enrollment.AgentToken
-	Asset           assets.Asset
-	Recovery        bool
+	EnrollmentToken      enrollment.EnrollmentToken
+	AgentToken           enrollment.AgentToken
+	Asset                assets.Asset
+	Recovery             bool
+	RevokedAgentTokenIDs []string
 }
 
 type AgentApprovalPrepareRequest struct {

@@ -128,12 +128,27 @@ func (s *PostgresStore) CommitAgentEnrollment(ctx context.Context, req AgentEnro
 		}
 	}
 
-	if _, err := tx.Exec(ctx,
+	revokedRows, err := tx.Query(ctx,
 		`UPDATE agent_tokens
 		 SET status = 'revoked', revoked_at = COALESCE(revoked_at, clock_timestamp())
-		 WHERE asset_id = $1 AND status = 'active'`,
+		 WHERE asset_id = $1 AND status = 'active'
+		 RETURNING id`,
 		assetID,
-	); err != nil {
+	)
+	if err != nil {
+		return AgentEnrollmentCommitResult{}, err
+	}
+	revokedAgentTokenIDs := make([]string, 0)
+	for revokedRows.Next() {
+		var tokenID string
+		if err := revokedRows.Scan(&tokenID); err != nil {
+			revokedRows.Close()
+			return AgentEnrollmentCommitResult{}, err
+		}
+		revokedAgentTokenIDs = append(revokedAgentTokenIDs, tokenID)
+	}
+	revokedRows.Close()
+	if err := revokedRows.Err(); err != nil {
 		return AgentEnrollmentCommitResult{}, err
 	}
 	agentToken := enrollment.AgentToken{
@@ -158,10 +173,11 @@ func (s *PostgresStore) CommitAgentEnrollment(ctx context.Context, req AgentEnro
 		return AgentEnrollmentCommitResult{}, err
 	}
 	return AgentEnrollmentCommitResult{
-		EnrollmentToken: etok,
-		AgentToken:      agentToken,
-		Asset:           existing,
-		Recovery:        exists,
+		EnrollmentToken:      etok,
+		AgentToken:           agentToken,
+		Asset:                existing,
+		Recovery:             exists,
+		RevokedAgentTokenIDs: revokedAgentTokenIDs,
 	}, nil
 }
 

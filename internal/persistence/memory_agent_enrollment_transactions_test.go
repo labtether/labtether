@@ -46,7 +46,6 @@ func TestMemoryCommitAgentEnrollmentRecoveryIsAtomicAndPreservesAsset(t *testing
 	custom.Metadata["operator_note"] = "preserve-me"
 	assetStore.assets[custom.ID] = custom
 	assetStore.mu.Unlock()
-
 	_, err = store.CreateEnrollmentToken("recovery-enrollment", "recovery", now.Add(time.Hour), 1)
 	if err != nil {
 		t.Fatal(err)
@@ -62,6 +61,13 @@ func TestMemoryCommitAgentEnrollmentRecoveryIsAtomicAndPreservesAsset(t *testing
 	}
 	if !recovered.Recovery {
 		t.Fatal("expected recovery result")
+	}
+	revokedIDs := make(map[string]bool, len(recovered.RevokedAgentTokenIDs))
+	for _, tokenID := range recovered.RevokedAgentTokenIDs {
+		revokedIDs[tokenID] = true
+	}
+	if len(revokedIDs) != 1 || !revokedIDs[first.AgentToken.ID] {
+		t.Fatalf("revoked token ids=%v, want the old credential", recovered.RevokedAgentTokenIDs)
 	}
 	if recovered.Asset.Name != "Operator name" || recovered.Asset.GroupID != "operator-group" || recovered.Asset.Platform != "operator-platform" || recovered.Asset.Metadata["operator_note"] != "preserve-me" {
 		t.Fatalf("recovery clobbered operator-managed asset: %+v", recovered.Asset)

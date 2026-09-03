@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -887,6 +888,7 @@ func TestEnrollRejectsReEnrollmentForExistingHostname(t *testing.T) {
 func TestEnrollAllowsContinuityProvenReEnrollmentAndRotatesCredential(t *testing.T) {
 	disableTailscaleResolutionForTest(t)
 	sut := newTestAPIServer(t)
+	sut.agentMgr = agentmgr.NewManager()
 
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -916,6 +918,23 @@ func TestEnrollAllowsContinuityProvenReEnrollmentAndRotatesCredential(t *testing
 	if got := firstAsset.Metadata["agent_device_fingerprint"]; got != wantFingerprint {
 		t.Fatalf("stored fingerprint=%q, want %q", got, wantFingerprint)
 	}
+	firstStoredToken, valid, err := sut.enrollmentStore.ValidateAgentToken(auth.HashToken(firstResponse.AgentToken))
+	if err != nil || !valid {
+		t.Fatalf("load first agent token: valid=%v err=%v", valid, err)
+	}
+	serverConn, _, cleanupConn := createWSPairForPendingEnrollmentTest(t)
+	defer cleanupConn()
+	oldLiveConn := agentmgr.NewAgentConn(serverConn, "continuity-node", "linux")
+	oldLiveConn.SetMeta("auth.mode", "agent-token")
+	oldLiveConn.SetMeta("auth.agent_token_id", firstStoredToken.ID)
+	enrollmentTransactions := sut.enrollmentStore.(persistence.AgentEnrollmentTransactionStore)
+	oldLiveConn.SetCredentialValidatorWithLease(func() error {
+		return enrollmentTransactions.ValidateActiveAgentTokenID(context.Background(), firstStoredToken.ID, "continuity-node")
+	}, 5*time.Second)
+	if err := oldLiveConn.ValidateCredential(); err != nil {
+		t.Fatalf("prime old connection credential lease: %v", err)
+	}
+	sut.agentMgr.Register(oldLiveConn)
 
 	secondRawToken, secondEnrollmentToken := mustCreateEnrollmentTokenWithMaxUses(t, sut, 1)
 	secondRequest := signedContinuityEnrollmentRequest(t, secondRawToken, "continuity-node", publicKey, privateKey)
@@ -934,6 +953,12 @@ func TestEnrollAllowsContinuityProvenReEnrollmentAndRotatesCredential(t *testing
 	}
 	if secondResponse.AssetID != firstResponse.AssetID {
 		t.Fatalf("asset identity changed from %q to %q", firstResponse.AssetID, secondResponse.AssetID)
+	}
+	if sut.agentMgr.IsConnected("continuity-node") {
+		t.Fatal("recovery left the revoked connection registered")
+	}
+	if err := oldLiveConn.ValidateCredential(); !errors.Is(err, agentmgr.ErrAgentCredentialRejected) {
+		t.Fatalf("revoked connection validation error=%v, want immediate rejection", err)
 	}
 
 	if _, valid, err := sut.enrollmentStore.ValidateAgentToken(auth.HashToken(firstResponse.AgentToken)); err != nil || valid {

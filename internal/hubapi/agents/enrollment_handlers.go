@@ -129,6 +129,7 @@ func (d *Deps) HandleEnroll(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	d.disconnectRevokedAgentConnection(assetID, commitResult.RevokedAgentTokenIDs)
 
 	// Reuse the same public connection resolver as discovery/install flows so
 	// auto-enrolled agents stay on the best reachable origin (for example the
@@ -145,6 +146,24 @@ func (d *Deps) HandleEnroll(w http.ResponseWriter, r *http.Request) {
 		HubAPIURL:  hubAPIURL,
 		CACertPEM:  string(d.CACertPEM),
 	})
+}
+
+func (d *Deps) disconnectRevokedAgentConnection(assetID string, revokedTokenIDs []string) {
+	if d.AgentMgr == nil || len(revokedTokenIDs) == 0 {
+		return
+	}
+	conn, ok := d.AgentMgr.Get(assetID)
+	if !ok {
+		return
+	}
+	activeTokenID := strings.TrimSpace(conn.Meta("auth.agent_token_id"))
+	for _, revokedTokenID := range revokedTokenIDs {
+		if activeTokenID != strings.TrimSpace(revokedTokenID) {
+			continue
+		}
+		d.AgentMgr.UnregisterIfMatch(assetID, conn)
+		return
+	}
 }
 
 // handleDiscover returns hub connection info — unauthenticated.

@@ -64,6 +64,13 @@ func TestPostgresAgentEnrollmentTransactionParity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("recovery commit: %v", err)
 	}
+	revokedIDs := make(map[string]bool, len(recovered.RevokedAgentTokenIDs))
+	for _, tokenID := range recovered.RevokedAgentTokenIDs {
+		revokedIDs[tokenID] = true
+	}
+	if len(revokedIDs) != 1 || !revokedIDs[first.AgentToken.ID] {
+		t.Fatalf("revoked PG token ids=%v, want the old credential", recovered.RevokedAgentTokenIDs)
+	}
 	if recovered.Asset.Name != "Operator name" || recovered.Asset.Platform != "operator-platform" || recovered.Asset.Metadata["operator_note"] != "preserve-me" {
 		t.Fatalf("recovery clobbered asset: %+v", recovered.Asset)
 	}
