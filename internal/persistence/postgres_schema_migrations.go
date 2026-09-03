@@ -2918,5 +2918,17 @@ func postgresSchemaMigrations() []schemaMigration {
 		},
 	})
 
+	migrations = append(migrations, schemaMigration{
+		Version: 97,
+		Name:    "retired_agent_identities",
+		Statements: []string{
+			`CREATE TABLE IF NOT EXISTS retired_agent_identities (
+				asset_id TEXT PRIMARY KEY,
+				retired_at TIMESTAMPTZ NOT NULL,
+				CHECK (BTRIM(asset_id) <> '')
+			)`,
+		},
+	})
+
 	return migrations
 }

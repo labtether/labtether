@@ -61,6 +61,13 @@ func (s *PostgresStore) CommitAgentEnrollment(ctx context.Context, req AgentEnro
 	if !valid {
 		return AgentEnrollmentCommitResult{}, ErrEnrollmentTokenInvalid
 	}
+	retired, err := isAgentIdentityRetired(ctx, tx, assetID)
+	if err != nil {
+		return AgentEnrollmentCommitResult{}, err
+	}
+	if retired {
+		return AgentEnrollmentCommitResult{}, ErrAgentIdentityRetired
+	}
 
 	if exists {
 		if strings.TrimSpace(req.DeviceProofVersion) != enrollment.DeviceProofVersionV2 {
@@ -201,6 +208,13 @@ func (s *PostgresStore) PrepareAgentApproval(ctx context.Context, req AgentAppro
 	if err := lockAgentIdentityAsset(ctx, tx, assetID); err != nil {
 		return enrollment.AgentToken{}, err
 	}
+	retired, err := isAgentIdentityRetired(ctx, tx, assetID)
+	if err != nil {
+		return enrollment.AgentToken{}, err
+	}
+	if retired {
+		return enrollment.AgentToken{}, ErrAgentIdentityRetired
+	}
 	var existingAssetID string
 	if err := tx.QueryRow(ctx, `SELECT id FROM assets WHERE id = $1 FOR UPDATE`, assetID).Scan(&existingAssetID); err == nil {
 		return enrollment.AgentToken{}, ErrAgentApprovalAssetConflict
@@ -286,6 +300,13 @@ func (s *PostgresStore) FinalizeAgentApproval(ctx context.Context, req AgentAppr
 		return assets.Asset{}, err
 	}
 
+	retired, err := isAgentIdentityRetired(ctx, tx, assetID)
+	if err != nil {
+		return assets.Asset{}, err
+	}
+	if retired {
+		return assets.Asset{}, ErrAgentIdentityRetired
+	}
 	_, exists, err := selectAgentIdentityAsset(ctx, tx, assetID)
 	if err != nil {
 		return assets.Asset{}, err
@@ -369,6 +390,31 @@ func (s *PostgresStore) DecommissionAgentAsset(ctx context.Context, assetID stri
 	}
 	defer tx.Rollback(ctx)
 	if err := lockAgentIdentityAsset(ctx, tx, assetID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO retired_agent_identities (asset_id, retired_at)
+		 SELECT a.id, clock_timestamp()
+		 FROM assets a
+		 WHERE a.id = $1
+		   AND (
+			LOWER(BTRIM(a.source)) = 'agent'
+			OR EXISTS (SELECT 1 FROM agent_identity_state i WHERE i.asset_id = a.id)
+			OR EXISTS (
+				SELECT 1
+				FROM agent_tokens t
+				WHERE t.asset_id = a.id
+				  AND (
+					t.status = 'active'
+					OR t.last_used_at IS NOT NULL
+					OR LOWER(BTRIM(t.enrolled_via)) <> 'console-approval'
+				  )
+			)
+		   )
+		 ON CONFLICT (asset_id) DO UPDATE SET
+			retired_at = LEAST(retired_agent_identities.retired_at, EXCLUDED.retired_at)`,
+		assetID,
+	); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx,
@@ -457,6 +503,13 @@ func (s *PostgresStore) CommitExistingOwnerAgentHeartbeat(ctx context.Context, r
 	if err := lockAgentIdentityAsset(ctx, tx, assetID); err != nil {
 		return assets.Asset{}, err
 	}
+	retired, err := isAgentIdentityRetired(ctx, tx, assetID)
+	if err != nil {
+		return assets.Asset{}, err
+	}
+	if retired {
+		return assets.Asset{}, ErrAgentIdentityRetired
+	}
 	var foundID string
 	var existingGroupID *string
 	if err := tx.QueryRow(ctx, `SELECT id, group_id FROM assets WHERE id = $1 FOR UPDATE`, assetID).Scan(&foundID, &existingGroupID); err != nil {
@@ -478,6 +531,15 @@ func (s *PostgresStore) CommitExistingOwnerAgentHeartbeat(ctx context.Context, r
 		return assets.Asset{}, err
 	}
 	return asset, nil
+}
+
+func (s *PostgresStore) IsAgentIdentityRetired(ctx context.Context, assetID string) (bool, error) {
+	var retired bool
+	err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM retired_agent_identities WHERE asset_id = $1)`,
+		strings.TrimSpace(assetID),
+	).Scan(&retired)
+	return retired, err
 }
 
 func (s *PostgresStore) ValidateActiveAgentTokenID(ctx context.Context, agentTokenID, assetID string) error {
@@ -504,6 +566,15 @@ func selectAgentIdentityAsset(ctx context.Context, tx pgx.Tx, assetID string) (a
 		return assets.Asset{}, false, err
 	}
 	return asset, true, nil
+}
+
+func isAgentIdentityRetired(ctx context.Context, tx pgx.Tx, assetID string) (bool, error) {
+	var retired bool
+	err := tx.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM retired_agent_identities WHERE asset_id = $1)`,
+		strings.TrimSpace(assetID),
+	).Scan(&retired)
+	return retired, err
 }
 
 func selectValidEnrollmentTokenForUpdate(ctx context.Context, tx pgx.Tx, tokenHash string) (enrollment.EnrollmentToken, bool, error) {

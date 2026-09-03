@@ -343,6 +343,10 @@ func (d *Deps) HandleApproveAgent(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusConflict, "an enrolled asset already uses this hostname; use identity recovery instead")
 			return
 		}
+		if errors.Is(err, persistence.ErrAgentIdentityRetired) {
+			servicehttp.WriteError(w, http.StatusConflict, "agent identity was decommissioned and cannot be reused; enroll with a new hostname/asset ID")
+			return
+		}
 		if errors.Is(err, persistence.ErrAgentFleetCapacityReached) {
 			servicehttp.WriteError(w, http.StatusConflict, "agent fleet capacity reached; decommission an enrolled agent or raise the configured limit")
 			return
@@ -392,6 +396,10 @@ func (d *Deps) HandleApproveAgent(w http.ResponseWriter, r *http.Request) {
 			log.Printf("enrollment: lost pending decision ownership after approval finalization failure asset_id=%s", assetID) // #nosec G706 -- Asset IDs are hub-generated identifiers.
 		}
 		log.Printf("enrollment: failed to finalize approval for %s: %v", stableAssetID, err) // #nosec G706 -- Asset IDs are hub-generated identifiers.
+		if errors.Is(err, persistence.ErrAgentIdentityRetired) {
+			servicehttp.WriteError(w, http.StatusConflict, "agent identity was decommissioned and cannot be reused; enroll with a new hostname/asset ID")
+			return
+		}
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to finalize agent approval")
 		return
 	}

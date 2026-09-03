@@ -203,13 +203,15 @@ func (m *MemoryAuditStore) List(limit, offset int) ([]audit.Event, error) {
 }
 
 type MemoryAssetStore struct {
-	mu     sync.RWMutex
-	assets map[string]assets.Asset
+	mu              sync.RWMutex
+	assets          map[string]assets.Asset
+	retiredAgentIDs map[string]time.Time
 }
 
 func NewMemoryAssetStore() *MemoryAssetStore {
 	return &MemoryAssetStore{
-		assets: make(map[string]assets.Asset),
+		assets:          make(map[string]assets.Asset),
+		retiredAgentIDs: make(map[string]time.Time),
 	}
 }
 
@@ -224,6 +226,9 @@ func (m *MemoryAssetStore) UpsertAssetHeartbeat(req assets.HeartbeatRequest) (as
 	now := time.Now().UTC()
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if _, retired := m.retiredAgentIDs[strings.TrimSpace(req.AssetID)]; retired {
+		return assets.Asset{}, ErrAgentIdentityRetired
+	}
 	return m.upsertAssetHeartbeatLocked(req, now), nil
 }
 
@@ -255,7 +260,11 @@ func (m *MemoryAssetStore) upsertAssetHeartbeatLocked(req assets.HeartbeatReques
 	} else {
 		existing.Name = req.Name
 	}
-	existing.Source = req.Source
+	// Agent source is a durable identity marker. A generic heartbeat may refresh
+	// the asset, but it must not erase the evidence used during decommission.
+	if !ok || !strings.EqualFold(strings.TrimSpace(existing.Source), "agent") {
+		existing.Source = req.Source
+	}
 	if !ok || groupID != "" {
 		existing.GroupID = groupID
 	}

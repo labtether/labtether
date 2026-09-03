@@ -143,7 +143,9 @@ func (d *Deps) HandleRecordAssetHeartbeat(w http.ResponseWriter, r *http.Request
 		defer cancelCommit()
 		committed, commitErr := d.EnrollmentTransactions.CommitExistingOwnerAgentHeartbeat(commitCtx, req)
 		if commitErr != nil {
-			if errors.Is(commitErr, persistence.ErrNotFound) {
+			if errors.Is(commitErr, persistence.ErrAgentIdentityRetired) {
+				servicehttp.WriteError(w, http.StatusConflict, "agent identity was decommissioned; use a new asset ID")
+			} else if errors.Is(commitErr, persistence.ErrNotFound) {
 				servicehttp.WriteError(w, http.StatusConflict, "agent asset must already be enrolled")
 			} else {
 				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to record heartbeat")
@@ -156,7 +158,11 @@ func (d *Deps) HandleRecordAssetHeartbeat(w http.ResponseWriter, r *http.Request
 		assetEntry, err = d.ProcessHeartbeatRequest(req)
 	}
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to record heartbeat")
+		if errors.Is(err, persistence.ErrAgentIdentityRetired) {
+			servicehttp.WriteError(w, http.StatusConflict, "agent identity was decommissioned; use a new asset ID")
+		} else {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to record heartbeat")
+		}
 		return
 	}
 

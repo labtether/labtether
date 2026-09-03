@@ -43,6 +43,9 @@ func (m *MemoryEnrollmentStore) CommitAgentEnrollment(ctx context.Context, req A
 	if !valid {
 		return AgentEnrollmentCommitResult{}, ErrEnrollmentTokenInvalid
 	}
+	if _, retired := m.assetStore.retiredAgentIDs[req.AssetID]; retired {
+		return AgentEnrollmentCommitResult{}, ErrAgentIdentityRetired
+	}
 	if _, duplicate := m.agentByHash[req.AgentTokenHash]; duplicate {
 		return AgentEnrollmentCommitResult{}, fmt.Errorf("agent token hash already exists")
 	}
@@ -139,6 +142,9 @@ func (m *MemoryEnrollmentStore) PrepareAgentApproval(ctx context.Context, req Ag
 	defer m.assetStore.mu.Unlock()
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if _, retired := m.assetStore.retiredAgentIDs[assetID]; retired {
+		return enrollment.AgentToken{}, ErrAgentIdentityRetired
+	}
 	if _, exists := m.assetStore.assets[assetID]; exists {
 		return enrollment.AgentToken{}, ErrAgentApprovalAssetConflict
 	}
@@ -200,6 +206,9 @@ func (m *MemoryEnrollmentStore) FinalizeAgentApproval(ctx context.Context, req A
 		return assets.Asset{}, ErrAgentIdentityContinuityConflict
 	}
 
+	if _, retired := m.assetStore.retiredAgentIDs[req.AssetID]; retired {
+		return assets.Asset{}, ErrAgentIdentityRetired
+	}
 	if _, exists := m.assetStore.assets[req.AssetID]; exists {
 		return assets.Asset{}, ErrAgentApprovalAssetConflict
 	}
@@ -265,15 +274,33 @@ func (m *MemoryEnrollmentStore) DecommissionAgentAsset(ctx context.Context, asse
 	defer m.mu.Unlock()
 
 	assetID = strings.TrimSpace(assetID)
-	if _, ok := m.assetStore.assets[assetID]; !ok {
+	asset, ok := m.assetStore.assets[assetID]
+	if !ok {
 		return ErrNotFound
 	}
 	now := time.Now().UTC()
+	retireIdentity := strings.EqualFold(strings.TrimSpace(asset.Source), "agent")
+	if _, exists := m.identityRotatedAt[assetID]; exists {
+		retireIdentity = true
+	}
 	for id, token := range m.agentTokens {
+		identityBearingToken := token.Status == "active" || token.LastUsedAt != nil ||
+			!strings.EqualFold(strings.TrimSpace(token.EnrolledVia), "console-approval")
 		if token.AssetID == assetID && (token.Status == "active" || token.Status == "pending") {
 			token.Status = "revoked"
 			token.RevokedAt = timePointer(now)
 			m.agentTokens[id] = token
+		}
+		if token.AssetID == assetID && identityBearingToken {
+			retireIdentity = true
+		}
+	}
+	if retireIdentity {
+		if m.assetStore.retiredAgentIDs == nil {
+			m.assetStore.retiredAgentIDs = make(map[string]time.Time)
+		}
+		if _, alreadyRetired := m.assetStore.retiredAgentIDs[assetID]; !alreadyRetired {
+			m.assetStore.retiredAgentIDs[assetID] = now
 		}
 	}
 	delete(m.assetStore.assets, assetID)
@@ -329,6 +356,9 @@ func (m *MemoryEnrollmentStore) CommitExistingOwnerAgentHeartbeat(ctx context.Co
 	}
 	m.assetStore.mu.Lock()
 	defer m.assetStore.mu.Unlock()
+	if _, retired := m.assetStore.retiredAgentIDs[assetID]; retired {
+		return assets.Asset{}, ErrAgentIdentityRetired
+	}
 	existing, exists := m.assetStore.assets[assetID]
 	if !exists {
 		return assets.Asset{}, ErrNotFound
@@ -336,6 +366,19 @@ func (m *MemoryEnrollmentStore) CommitExistingOwnerAgentHeartbeat(ctx context.Co
 	req.Source = "agent"
 	req.GroupID = existing.GroupID
 	return m.assetStore.upsertAssetHeartbeatLocked(req, time.Now().UTC()), nil
+}
+
+func (m *MemoryEnrollmentStore) IsAgentIdentityRetired(ctx context.Context, assetID string) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	if m.assetStore == nil {
+		return false, ErrAgentEnrollmentTransactionsUnavailable
+	}
+	m.assetStore.mu.RLock()
+	defer m.assetStore.mu.RUnlock()
+	_, retired := m.assetStore.retiredAgentIDs[strings.TrimSpace(assetID)]
+	return retired, nil
 }
 
 func (m *MemoryEnrollmentStore) ValidateActiveAgentTokenID(ctx context.Context, agentTokenID, assetID string) error {

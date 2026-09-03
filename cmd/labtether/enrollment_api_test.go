@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
@@ -19,6 +20,7 @@ import (
 	"github.com/labtether/labtether/internal/certmgr"
 	"github.com/labtether/labtether/internal/enrollment"
 	"github.com/labtether/labtether/internal/groups"
+	"github.com/labtether/labtether/internal/persistence"
 )
 
 func signedTokenEnrollmentRequest(t *testing.T, rawToken, hostname string, publicKey ed25519.PublicKey, privateKey ed25519.PrivateKey) enrollment.EnrollRequest {
@@ -633,6 +635,62 @@ func TestEnrollFullFlow(t *testing.T) {
 	}
 	if etok.UseCount != 1 {
 		t.Fatalf("expected enrollment token use_count=1, got %d", etok.UseCount)
+	}
+}
+
+func TestEnrollRejectsRetiredAgentIdentityWithoutConsumingToken(t *testing.T) {
+	disableTailscaleResolutionForTest(t)
+	sut := newTestAPIServer(t)
+	transactions, ok := sut.enrollmentStore.(persistence.AgentEnrollmentTransactionStore)
+	if !ok {
+		t.Fatal("test enrollment store lacks transaction interface")
+	}
+
+	firstToken, _ := mustCreateEnrollmentToken(t, sut)
+	firstPayload, _ := json.Marshal(enrollment.EnrollRequest{
+		EnrollmentToken: firstToken,
+		Hostname:        "retired-http-node",
+		Platform:        "linux",
+	})
+	firstReq := httptest.NewRequest(http.MethodPost, "/api/v1/enroll", bytes.NewReader(firstPayload))
+	firstReq.RemoteAddr = "127.0.0.1:12345"
+	firstRec := httptest.NewRecorder()
+	sut.handleEnroll(firstRec, firstReq)
+	if firstRec.Code != http.StatusOK {
+		t.Fatalf("initial enrollment status=%d body=%s", firstRec.Code, firstRec.Body.String())
+	}
+	if err := transactions.DecommissionAgentAsset(context.Background(), "retired-http-node"); err != nil {
+		t.Fatal(err)
+	}
+
+	retryToken, retryRecord := mustCreateEnrollmentToken(t, sut)
+	retryPayload, _ := json.Marshal(enrollment.EnrollRequest{
+		EnrollmentToken: retryToken,
+		Hostname:        "retired-http-node",
+		Platform:        "linux",
+	})
+	retryReq := httptest.NewRequest(http.MethodPost, "/api/v1/enroll", bytes.NewReader(retryPayload))
+	retryReq.RemoteAddr = "127.0.0.1:12345"
+	retryRec := httptest.NewRecorder()
+	sut.handleEnroll(retryRec, retryReq)
+	if retryRec.Code != http.StatusConflict || !strings.Contains(retryRec.Body.String(), "new hostname/asset ID") {
+		t.Fatalf("retired enrollment status=%d body=%s", retryRec.Code, retryRec.Body.String())
+	}
+	if token, valid, err := sut.enrollmentStore.ValidateEnrollmentToken(auth.HashToken(retryToken)); err != nil || !valid || token.ID != retryRecord.ID || token.UseCount != 0 {
+		t.Fatalf("retirement response mutated token: token=%+v valid=%v err=%v", token, valid, err)
+	}
+
+	invalidPayload, _ := json.Marshal(enrollment.EnrollRequest{
+		EnrollmentToken: "invalid-token",
+		Hostname:        "retired-http-node",
+		Platform:        "linux",
+	})
+	invalidReq := httptest.NewRequest(http.MethodPost, "/api/v1/enroll", bytes.NewReader(invalidPayload))
+	invalidReq.RemoteAddr = "127.0.0.1:12345"
+	invalidRec := httptest.NewRecorder()
+	sut.handleEnroll(invalidRec, invalidReq)
+	if invalidRec.Code != http.StatusUnauthorized {
+		t.Fatalf("invalid token leaked retirement state: status=%d body=%s", invalidRec.Code, invalidRec.Body.String())
 	}
 }
 

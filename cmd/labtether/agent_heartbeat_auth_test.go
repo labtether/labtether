@@ -283,12 +283,21 @@ func TestOwnerHeartbeatCannotCreateOrResurrectAgentSource(t *testing.T) {
 	if stored.Source != "agent" || stored.Metadata[assets.MetadataKeyAgentDeviceFingerprint] != "" || stored.Metadata[assets.MetadataKeyAgentIdentityVerifiedAt] != "" {
 		t.Fatalf("owner refresh trusted unverified identity/source: %+v", stored)
 	}
+	if rec := post(`{"asset_id":"owner-existing-agent","type":"host","name":"Existing","source":"manual","status":"online"}`); rec.Code != http.StatusAccepted {
+		t.Fatalf("generic refresh of existing owner agent status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if stored, exists, err = sut.assetStore.GetAsset("owner-existing-agent"); err != nil || !exists || stored.Source != "agent" {
+		t.Fatalf("generic heartbeat erased agent source: asset=%+v exists=%v err=%v", stored, exists, err)
+	}
 	transactions := sut.enrollmentStore.(persistence.AgentEnrollmentTransactionStore)
 	if err := transactions.DecommissionAgentAsset(context.Background(), "owner-existing-agent"); err != nil {
 		t.Fatal(err)
 	}
 	if rec := post(`{"asset_id":"owner-existing-agent","type":"host","name":"Existing","source":"agent","status":"online"}`); rec.Code != http.StatusConflict {
 		t.Fatalf("decommissioned owner agent heartbeat status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if rec := post(`{"asset_id":"owner-existing-agent","type":"host","name":"Laundered","source":"manual","status":"online"}`); rec.Code != http.StatusConflict {
+		t.Fatalf("decommissioned generic heartbeat status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	if _, exists, _ := sut.assetStore.GetAsset("owner-existing-agent"); exists {
 		t.Fatal("owner heartbeat resurrected decommissioned agent")
