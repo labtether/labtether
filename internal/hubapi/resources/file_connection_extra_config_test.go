@@ -58,6 +58,43 @@ func TestNormalizeFileConnectionExtraConfigRequiresExplicitInsecureTransportOptI
 	}
 }
 
+func TestNormalizeFTPRequiresExplicitCleartextOptIn(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "false")
+
+	secure, err := NormalizeFileConnectionExtraConfig("ftp", nil)
+	if err != nil {
+		t.Fatalf("secure FTP default rejected: %v", err)
+	}
+	if secure["ftp_tls"] != true {
+		t.Fatalf("FTP did not default to verified FTPS: %#v", secure)
+	}
+
+	for _, config := range []map[string]any{
+		{"ftp_tls": false},
+		{"ftp_tls": false, "ftp_allow_cleartext": true},
+		{"ftp_tls": true, "ftp_allow_cleartext": true},
+	} {
+		if _, err := NormalizeFileConnectionExtraConfig("ftp", config); err == nil {
+			t.Fatalf("unsafe or misleading FTP config was accepted: %#v", config)
+		}
+	}
+
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
+	if _, err := NormalizeFileConnectionExtraConfig("ftp", map[string]any{"ftp_tls": false}); err == nil {
+		t.Fatal("global opt-in alone enabled plain FTP")
+	}
+	cleartext, err := NormalizeFileConnectionExtraConfig("ftp", map[string]any{
+		"ftp_tls":             false,
+		"ftp_allow_cleartext": true,
+	})
+	if err != nil {
+		t.Fatalf("double-gated plain FTP rejected: %v", err)
+	}
+	if cleartext["ftp_tls"] != false || cleartext["ftp_allow_cleartext"] != true {
+		t.Fatalf("plain FTP options were not preserved: %#v", cleartext)
+	}
+}
+
 func TestSanitizeLegacyFileConnectionExtraConfigDropsSecretFields(t *testing.T) {
 	config := sanitizeLegacyFileConnectionExtraConfig("ftp", map[string]any{
 		"ftp_tls":  true,
@@ -68,5 +105,15 @@ func TestSanitizeLegacyFileConnectionExtraConfigDropsSecretFields(t *testing.T) 
 	}
 	if config["ftp_tls"] != true {
 		t.Fatalf("supported legacy option was lost: %#v", config)
+	}
+}
+
+func TestSanitizeLegacyFTPDoesNotApproveCleartext(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "false")
+	config := sanitizeLegacyFileConnectionExtraConfig("ftp", map[string]any{
+		"ftp_tls": false,
+	})
+	if config["ftp_tls"] != true {
+		t.Fatalf("legacy plain FTP was not reset to the secure default: %#v", config)
 	}
 }

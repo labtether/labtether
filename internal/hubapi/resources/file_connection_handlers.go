@@ -365,6 +365,9 @@ func (d *Deps) handleUpdateFileConnection(w http.ResponseWriter, r *http.Request
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update file connection")
 		return
 	}
+	if d.FileProtoPool != nil {
+		d.FileProtoPool.Remove(connID)
+	}
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"connection": existing})
 }
