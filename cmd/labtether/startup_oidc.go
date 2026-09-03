@@ -27,6 +27,11 @@ func loadOIDCProviderFromEnv(ctx context.Context) (*auth.OIDCProvider, bool, err
 		DefaultRole:        strings.TrimSpace(envOrDefault("LABTETHER_OIDC_DEFAULT_ROLE", auth.RoleViewer)),
 		AdminRoleValues:    parseCSVTokens(envOrDefault("LABTETHER_OIDC_ADMIN_ROLES", "admin")),
 		OperatorRoleValues: parseCSVTokens(envOrDefault("LABTETHER_OIDC_OPERATOR_ROLES", "operator")),
+		AllowedEndpointOrigins: parseCSVTokens(
+			envOrDefault("LABTETHER_OIDC_ALLOWED_ENDPOINT_ORIGINS", ""),
+		),
+		AllowPrivateEndpoints:  envOrDefaultBool("LABTETHER_OIDC_ALLOW_PRIVATE", false),
+		AllowLoopbackEndpoints: envOrDefaultBool("LABTETHER_OIDC_ALLOW_LOOPBACK", false),
 	}
 	provider, err := auth.NewOIDCProvider(ctx, settings)
 	if err != nil {

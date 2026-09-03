@@ -167,6 +167,13 @@ LABTETHER_TLS_MODE=auto
 # LABTETHER_INTERNAL_CONNECT_HOST=labtether
 # LABTETHER_INTERNAL_CA_FILE=/ca/ca.crt
 # NEXT_PUBLIC_HUB_API_PORT=8443
+# OIDC token and signing-key endpoints use the issuer origin by default.
+# Add exact extra origins only when your identity provider requires them.
+LABTETHER_OIDC_ALLOWED_ENDPOINT_ORIGINS=
+# Private or tailnet IdPs need this deployment-only opt-in. Loopback is for
+# local development only. Link-local OIDC endpoints are always denied.
+LABTETHER_OIDC_ALLOW_PRIVATE=false
+LABTETHER_OIDC_ALLOW_LOOPBACK=false
 LABTETHER_TRUST_PROXY_HOPS=0
 LABTETHER_OUTBOUND_ALLOW_PRIVATE=true
 LABTETHER_OUTBOUND_ALLOW_LOOPBACK=false
