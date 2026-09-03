@@ -35,7 +35,10 @@ const (
 // HandleTelnetStream bridges a WebSocket connection to a raw TCP Telnet endpoint.
 // It performs RFC 854 IAC negotiation and transparently forwards data between
 // the browser and the Telnet server.
-func (d *Deps) HandleTelnetStream(w http.ResponseWriter, r *http.Request, session terminal.Session, host string, port int) {
+func (d *Deps) HandleTelnetStream(w http.ResponseWriter, r *http.Request, session terminal.Session, host string, port int, allowInsecureTransport bool) {
+	if !requireInsecureTelnetTransport(w, allowInsecureTransport) {
+		return
+	}
 	traceID := shared.BrowserStreamTraceID(r)
 	traceLog := shared.StreamTraceLogValue(traceID)
 	logContext := fmt.Sprintf("session=%s target=%s:%d trace=%s", session.ID, host, port, traceLog)

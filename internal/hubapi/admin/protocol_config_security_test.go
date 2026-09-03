@@ -67,3 +67,33 @@ func TestValidateVNCTransportSecurityRequiresGlobalGateForOptIn(t *testing.T) {
 		t.Fatal("expected explicit local and global VNC opt-ins to be accepted")
 	}
 }
+
+func TestValidateTelnetTransportSecurityRequiresBothOptIns(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "false")
+	missingLocal := httptest.NewRecorder()
+	if validateTelnetTransportSecurity(missingLocal, protocols.ProtocolTelnet, json.RawMessage(`{}`), true) {
+		t.Fatal("enabled Telnet config without a local opt-in was accepted")
+	}
+	if !strings.Contains(missingLocal.Body.String(), "allow_insecure_telnet") {
+		t.Fatalf("response did not explain the local Telnet opt-in: %s", missingLocal.Body.String())
+	}
+
+	missingGlobal := httptest.NewRecorder()
+	if validateTelnetTransportSecurity(missingGlobal, protocols.ProtocolTelnet, json.RawMessage(`{"allow_insecure_telnet":true}`), true) {
+		t.Fatal("Telnet config without the global opt-in was accepted")
+	}
+	if !strings.Contains(missingGlobal.Body.String(), "LABTETHER_ALLOW_INSECURE_TRANSPORT") {
+		t.Fatalf("response did not explain the global Telnet gate: %s", missingGlobal.Body.String())
+	}
+	if !validateTelnetTransportSecurity(httptest.NewRecorder(), protocols.ProtocolTelnet, json.RawMessage(`{}`), false) {
+		t.Fatal("disabled Telnet config should not require an unsafe transport opt-in")
+	}
+
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
+	if !validateTelnetTransportSecurity(httptest.NewRecorder(), protocols.ProtocolTelnet, json.RawMessage(`{"allow_insecure_telnet":true}`), true) {
+		t.Fatal("expected explicit local and global Telnet opt-ins to be accepted")
+	}
+	if !validateTelnetTransportSecurity(httptest.NewRecorder(), protocols.ProtocolSSH, json.RawMessage(`{}`), true) {
+		t.Fatal("non-Telnet configs should not be handled by the Telnet transport check")
+	}
+}
