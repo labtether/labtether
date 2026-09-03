@@ -72,8 +72,11 @@ override. This switch does not weaken normal operator API authentication.
 Enrollment tokens default to one use. `LABTETHER_ENROLLMENT_TOKEN_MAX_USES`
 sets the administrator-facing ceiling (default `256`, absolute maximum `4096`).
 Recovery of an existing identity additionally requires a single-use token
-created after the most recent credential rotation. Creating tokens ahead of a
-recovery window is intentionally rejected, even if the device proof is valid.
+created after the most recent credential rotation and a device identity that
+was verified during signed enrollment or console approval. A fingerprint first
+reported by a bearer-authenticated heartbeat is provisional and cannot authorize
+recovery. Creating tokens ahead of a recovery window is intentionally rejected,
+even if the device proof is valid.
 
 `LABTETHER_MAX_ENROLLED_AGENTS` limits durable agent identities (default `1024`,
 absolute maximum `65536`). Revoking or expiring a bearer does not free a fleet

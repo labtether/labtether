@@ -16,6 +16,7 @@ import (
 
 	"github.com/labtether/labtether/internal/agentidentity"
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/auth"
 	"github.com/labtether/labtether/internal/certmgr"
 	"github.com/labtether/labtether/internal/enrollment"
@@ -1014,6 +1015,76 @@ func TestEnrollRejectsExistingHostnameWhenDeviceKeyDoesNotMatch(t *testing.T) {
 	secondEnrollment, valid, err := sut.enrollmentStore.ValidateEnrollmentToken(auth.HashToken(secondRawToken))
 	if err != nil || !valid || secondEnrollment.UseCount != 0 {
 		t.Fatalf("rejected takeover consumed enrollment token: valid=%v use_count=%d err=%v", valid, secondEnrollment.UseCount, err)
+	}
+}
+
+func TestEnrollRejectsRecoveryFromHeartbeatOnlyFingerprint(t *testing.T) {
+	disableTailscaleResolutionForTest(t)
+	sut := newTestAPIServer(t)
+	sut.tlsState.Enabled = true
+
+	initialEnrollmentToken, _ := mustCreateEnrollmentTokenWithMaxUses(t, sut, 1)
+	initialPayload, _ := json.Marshal(enrollment.EnrollRequest{
+		EnrollmentToken: initialEnrollmentToken,
+		Hostname:        "heartbeat-anchor-node",
+		Platform:        "linux",
+	})
+	initialRequest := httptest.NewRequest(http.MethodPost, "/api/v1/enroll", bytes.NewReader(initialPayload))
+	initialRequest.Host = "localhost:8080"
+	initialRequest.RemoteAddr = "127.0.0.1:12345"
+	initialRecorder := httptest.NewRecorder()
+	sut.handleEnroll(initialRecorder, initialRequest)
+	if initialRecorder.Code != http.StatusOK {
+		t.Fatalf("initial unsigned enrollment: expected 200, got %d: %s", initialRecorder.Code, initialRecorder.Body.String())
+	}
+	var initialResponse enrollment.EnrollResponse
+	if err := json.Unmarshal(initialRecorder.Body.Bytes(), &initialResponse); err != nil {
+		t.Fatalf("decode initial enrollment: %v", err)
+	}
+
+	attackerPublicKey, attackerPrivateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate attacker identity: %v", err)
+	}
+	attackerFingerprint := agentidentity.FingerprintFromPublicKey(attackerPublicKey)
+	heartbeatPayload, _ := json.Marshal(assets.HeartbeatRequest{
+		AssetID: "heartbeat-anchor-node", Type: "host", Name: "Heartbeat anchor node", Source: "agent", Status: "online", Platform: "linux",
+		Metadata: map[string]string{
+			assets.MetadataKeyAgentDeviceFingerprint:  attackerFingerprint,
+			assets.MetadataKeyAgentDeviceKeyAlgorithm: agentidentity.KeyAlgorithmEd25519,
+		},
+	})
+	heartbeatRequest := httptest.NewRequest(http.MethodPost, "https://labtether.test/assets/heartbeat", bytes.NewReader(heartbeatPayload))
+	heartbeatRequest.Header.Set("Authorization", "Bearer "+initialResponse.AgentToken)
+	heartbeatRecorder := httptest.NewRecorder()
+	sut.withAgentHeartbeatAuth(sut.handleAssetActions)(heartbeatRecorder, heartbeatRequest)
+	if heartbeatRecorder.Code != http.StatusAccepted {
+		t.Fatalf("authenticated heartbeat: expected 202, got %d: %s", heartbeatRecorder.Code, heartbeatRecorder.Body.String())
+	}
+	anchored, exists, err := sut.assetStore.GetAsset("heartbeat-anchor-node")
+	if err != nil || !exists {
+		t.Fatalf("load heartbeat anchor: exists=%v err=%v", exists, err)
+	}
+	if anchored.Metadata[assets.MetadataKeyAgentDeviceFingerprint] != attackerFingerprint || anchored.Metadata[assets.MetadataKeyAgentIdentityVerifiedAt] != "" {
+		t.Fatalf("heartbeat identity state=%+v, want matching provisional fingerprint", anchored.Metadata)
+	}
+
+	recoveryRawToken, recoveryToken := mustCreateEnrollmentTokenWithMaxUses(t, sut, 1)
+	recoveryPayload, _ := json.Marshal(signedContinuityEnrollmentRequest(t, recoveryRawToken, "heartbeat-anchor-node", attackerPublicKey, attackerPrivateKey))
+	recoveryRequest := httptest.NewRequest(http.MethodPost, "/api/v1/enroll", bytes.NewReader(recoveryPayload))
+	recoveryRequest.Host = "localhost:8080"
+	recoveryRequest.RemoteAddr = "127.0.0.2:12345"
+	recoveryRecorder := httptest.NewRecorder()
+	sut.handleEnroll(recoveryRecorder, recoveryRequest)
+	if recoveryRecorder.Code != http.StatusConflict {
+		t.Fatalf("unverified recovery: expected 409, got %d: %s", recoveryRecorder.Code, recoveryRecorder.Body.String())
+	}
+	if _, valid, err := sut.enrollmentStore.ValidateAgentToken(auth.HashToken(initialResponse.AgentToken)); err != nil || !valid {
+		t.Fatalf("rejected recovery changed original bearer: valid=%v err=%v", valid, err)
+	}
+	storedRecoveryToken, valid, err := sut.enrollmentStore.ValidateEnrollmentToken(auth.HashToken(recoveryRawToken))
+	if err != nil || !valid || storedRecoveryToken.ID != recoveryToken.ID || storedRecoveryToken.UseCount != 0 {
+		t.Fatalf("rejected recovery changed enrollment token: token=%+v valid=%v err=%v", storedRecoveryToken, valid, err)
 	}
 }
 

@@ -2,18 +2,33 @@ package persistence
 
 import (
 	"strings"
+	"time"
 
 	"github.com/labtether/labtether/internal/assets"
 )
 
+func validateVerifiedAgentRecoveryAnchor(metadata map[string]string, fingerprint, keyAlgorithm string) error {
+	storedFingerprint := strings.TrimSpace(metadata[assets.MetadataKeyAgentDeviceFingerprint])
+	storedKeyAlgorithm := strings.TrimSpace(metadata[assets.MetadataKeyAgentDeviceKeyAlgorithm])
+	verifiedAt := strings.TrimSpace(metadata[assets.MetadataKeyAgentIdentityVerifiedAt])
+	if storedFingerprint == "" || storedKeyAlgorithm == "" ||
+		storedFingerprint != strings.TrimSpace(fingerprint) ||
+		storedKeyAlgorithm != strings.TrimSpace(keyAlgorithm) {
+		return ErrAgentIdentityContinuityConflict
+	}
+	if _, err := time.Parse(time.RFC3339Nano, verifiedAt); err != nil {
+		return ErrAgentIdentityContinuityConflict
+	}
+	return nil
+}
+
 // mergeHeartbeatIdentityAnchor applies immutable trust-on-first-use semantics
-// to agent identity metadata. A routine heartbeat may backfill an absent
-// fingerprint because possession of the asset bearer token authenticates that
-// heartbeat, but normal WebSocket/HTTP heartbeats do not prove possession of
-// the device private key. That first backfill is therefore explicitly
-// bearer-authenticated TOFU and must never author the stronger verified-at
-// audit marker. Once present, the fingerprint, key algorithm, and verified-at
-// audit timestamp survive missing or conflicting heartbeat data.
+// to provisional agent identity metadata. A routine heartbeat may backfill an
+// absent fingerprint because possession of the asset bearer token authenticates
+// that heartbeat, but it does not prove possession of the device private key.
+// That first backfill must never author the verified-at marker and cannot be
+// used for identity recovery. Once present, the fingerprint, key algorithm,
+// and verified-at audit timestamp survive missing or conflicting heartbeat data.
 // Only a separately verified enrollment flow may request a rotation.
 func mergeHeartbeatIdentityAnchor(existing, reported map[string]string, allowRotation, allowTOFU bool) map[string]string {
 	merged := cloneMetadata(reported)
