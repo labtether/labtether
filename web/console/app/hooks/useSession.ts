@@ -84,6 +84,9 @@ export interface TerminalConnectOptions {
     port: number;
     username?: string;
     password?: string;
+    ignore_certificate?: boolean;
+    allow_legacy_security?: boolean;
+    certificate_fingerprints?: string;
   };
 }
 

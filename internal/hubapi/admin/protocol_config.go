@@ -104,6 +104,9 @@ func (d *Deps) HandleCreateProtocolConfig(w http.ResponseWriter, r *http.Request
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if !validateRDPTransportSecurity(w, req.Protocol, req.Config) {
+		return
+	}
 
 	if !d.authorizeCredentialBinding(w, r, req.CredentialProfileID) {
 		return
@@ -193,6 +196,9 @@ func (d *Deps) HandleUpdateProtocolConfig(w http.ResponseWriter, r *http.Request
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if !validateRDPTransportSecurity(w, protocol, req.Config) {
+		return
+	}
 
 	if !d.authorizeCredentialBinding(w, r, req.CredentialProfileID) {
 		return
@@ -228,6 +234,22 @@ func (d *Deps) HandleUpdateProtocolConfig(w http.ResponseWriter, r *http.Request
 	d.appendAuditEventBestEffort(ev, "api warning: failed to append protocol config update audit event")
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"protocol": pc})
+}
+
+func validateRDPTransportSecurity(w http.ResponseWriter, protocol string, raw json.RawMessage) bool {
+	if protocol != protocols.ProtocolRDP {
+		return true
+	}
+	cfg, err := protocols.DecodeRDPConfig(raw)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+		return false
+	}
+	if (cfg.IgnoreCertificate || cfg.AllowLegacySecurity) && !securityruntime.InsecureTransportAllowed() {
+		servicehttp.WriteError(w, http.StatusBadRequest, "unsafe RDP options require LABTETHER_ALLOW_INSECURE_TRANSPORT=true")
+		return false
+	}
+	return true
 }
 
 func (d *Deps) authorizeCredentialBinding(w http.ResponseWriter, r *http.Request, profileID string) bool {

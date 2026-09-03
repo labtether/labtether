@@ -24,6 +24,9 @@ interface QuickConnectDialogProps {
     port: number;
     username?: string;
     password?: string;
+    ignoreCertificate?: boolean;
+    allowLegacySecurity?: boolean;
+    certificateFingerprints?: string;
     saveBookmark?: { label: string };
   }) => void;
 }
@@ -45,6 +48,20 @@ function parseURI(input: string): {
     host: match[2],
     port: match[3] ? parsePortInput(match[3], defaultPort(protocol)) : defaultPort(protocol),
   };
+}
+
+export function canSaveQuickConnectBookmark(
+  protocol: RemoteViewProtocol,
+  ignoreCertificate: boolean,
+  allowLegacySecurity: boolean,
+  certificateFingerprints: string,
+): boolean {
+  return (
+    protocol !== "rdp" ||
+    (!ignoreCertificate &&
+      !allowLegacySecurity &&
+      certificateFingerprints.trim() === "")
+  );
 }
 
 // ── Step indicator ──
@@ -129,6 +146,15 @@ export default function QuickConnectDialog({
   const [bookmarkNickname, setBookmarkNickname] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [ignoreCertificate, setIgnoreCertificate] = useState(false);
+  const [allowLegacySecurity, setAllowLegacySecurity] = useState(false);
+  const [certificateFingerprints, setCertificateFingerprints] = useState("");
+  const canSaveBookmark = canSaveQuickConnectBookmark(
+    protocol,
+    ignoreCertificate,
+    allowLegacySecurity,
+    certificateFingerprints,
+  );
 
   const [prevProtocolDefault, setPrevProtocolDefault] = useState(
     String(defaultPort("vnc")),
@@ -145,6 +171,9 @@ export default function QuickConnectDialog({
       setBookmarkNickname("");
       setUsername("");
       setPassword("");
+      setIgnoreCertificate(false);
+      setAllowLegacySecurity(false);
+      setCertificateFingerprints("");
       setPrevProtocolDefault(String(defaultPort("vnc")));
     }
   }, [open]);
@@ -163,6 +192,11 @@ export default function QuickConnectDialog({
   const handleProtocolChange = useCallback(
     (newProtocol: RemoteViewProtocol) => {
       setProtocol(newProtocol);
+      if (newProtocol !== "rdp") {
+        setIgnoreCertificate(false);
+        setAllowLegacySecurity(false);
+        setCertificateFingerprints("");
+      }
       if (port === prevProtocolDefault || port === "") {
         setPort(String(defaultPort(newProtocol)));
       }
@@ -177,6 +211,11 @@ export default function QuickConnectDialog({
     const parsed = parseURI(value);
     if (parsed) {
       setProtocol(parsed.protocol);
+      if (parsed.protocol !== "rdp") {
+        setIgnoreCertificate(false);
+        setAllowLegacySecurity(false);
+        setCertificateFingerprints("");
+      }
       setHost(parsed.host);
       setPort(String(parsed.port));
       setPrevProtocolDefault(String(defaultPort(parsed.protocol)));
@@ -199,13 +238,36 @@ export default function QuickConnectDialog({
           ? { username: username.trim() }
           : {}),
         ...(withCredentials && password ? { password } : {}),
-        ...(saveBookmark
+        ...(protocol === "rdp" && ignoreCertificate
+          ? { ignoreCertificate: true }
+          : {}),
+        ...(protocol === "rdp" && allowLegacySecurity
+          ? { allowLegacySecurity: true }
+          : {}),
+        ...(protocol === "rdp" && certificateFingerprints.trim()
+          ? { certificateFingerprints: certificateFingerprints.trim() }
+          : {}),
+        ...(saveBookmark && canSaveBookmark
           ? { saveBookmark: { label: bookmarkNickname.trim() || host.trim() } }
           : {}),
       });
       onClose();
     },
-    [protocol, host, port, username, password, saveBookmark, bookmarkNickname, onConnect, onClose],
+    [
+      protocol,
+      host,
+      port,
+      username,
+      password,
+      ignoreCertificate,
+      allowLegacySecurity,
+      certificateFingerprints,
+      saveBookmark,
+      canSaveBookmark,
+      bookmarkNickname,
+      onConnect,
+      onClose,
+    ],
   );
 
   if (!open) return null;
@@ -333,15 +395,18 @@ export default function QuickConnectDialog({
             </div>
 
             {/* Save as bookmark */}
-            <label className="flex items-center gap-2 cursor-pointer select-none">
+            <label className={`flex items-center gap-2 select-none ${canSaveBookmark ? "cursor-pointer" : "cursor-not-allowed"}`}>
               <input
                 type="checkbox"
                 checked={saveBookmark}
                 onChange={(e) => setSaveBookmark(e.target.checked)}
+                disabled={!canSaveBookmark}
                 className="h-3.5 w-3.5 rounded border-[var(--line)] accent-[var(--accent)]"
               />
               <span className="text-xs text-[var(--text)]">
-                Save as bookmark
+                {canSaveBookmark
+                  ? "Save as bookmark"
+                  : "Session-only RDP security choices cannot be bookmarked"}
               </span>
             </label>
 
@@ -443,6 +508,78 @@ export default function QuickConnectDialog({
                 }}
               />
             </div>
+
+            {protocol === "rdp" && (
+              <div className="space-y-3 rounded-lg border border-[var(--warn)]/30 bg-[var(--warn-glow)] px-3 py-2">
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-[var(--warn)]">
+                    Trusted certificate fingerprint
+                  </label>
+                  <Input
+                    type="text"
+                    value={certificateFingerprints}
+                    onChange={(e) => {
+                      setCertificateFingerprints(e.target.value);
+                      if (e.target.value.trim()) {
+                        setSaveBookmark(false);
+                        setIgnoreCertificate(false);
+                        setAllowLegacySecurity(false);
+                      }
+                    }}
+                    placeholder="sha256:AA:BB:..."
+                    autoComplete="off"
+                  />
+                  <p className="mt-1 text-[10px] text-[var(--muted)]">
+                    Use this for a self-signed certificate or a DNS name pinned
+                    to an IP.
+                  </p>
+                </div>
+                <label className="flex items-start gap-2 text-xs text-[var(--warn)]">
+                  <input
+                    type="checkbox"
+                    checked={ignoreCertificate}
+                    onChange={(e) => {
+                      setIgnoreCertificate(e.target.checked);
+                      if (e.target.checked) {
+                        setSaveBookmark(false);
+                        setAllowLegacySecurity(false);
+                        setCertificateFingerprints("");
+                      }
+                    }}
+                    className="mt-0.5 h-3.5 w-3.5 accent-[var(--warn)]"
+                  />
+                  <span>
+                    Allow an untrusted RDP certificate for this session only.
+                    This can expose the password and screen to an attacker.
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 text-xs text-[var(--warn)]">
+                  <input
+                    type="checkbox"
+                    checked={allowLegacySecurity}
+                    onChange={(e) => {
+                      setAllowLegacySecurity(e.target.checked);
+                      if (e.target.checked) {
+                        setSaveBookmark(false);
+                        setIgnoreCertificate(false);
+                        setCertificateFingerprints("");
+                      }
+                    }}
+                    className="mt-0.5 h-3.5 w-3.5 accent-[var(--warn)]"
+                  />
+                  <span>
+                    Allow old RDP security for this session only. It has no
+                    server certificate and can be intercepted.
+                  </span>
+                </label>
+                {!canSaveBookmark && (
+                  <p className="text-[10px] text-[var(--warn)]">
+                    This choice applies to this session only. Save as bookmark
+                    was turned off.
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Connect button */}
             <button

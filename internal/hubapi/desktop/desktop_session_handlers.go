@@ -15,6 +15,7 @@ import (
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/policy"
+	"github.com/labtether/labtether/internal/protocols"
 	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
 	"github.com/labtether/labtether/internal/terminal"
@@ -22,17 +23,20 @@ import (
 
 // DesktopSessionOptions holds per-session desktop configuration.
 type DesktopSessionOptions struct {
-	Protocol       string
-	Quality        string
-	Display        string
-	Record         bool
-	VNCPassword    string
-	FallbackReason string
-	Direct         bool
-	DirectHost     string
-	DirectPort     int
-	DirectUsername string
-	DirectPassword string // #nosec G117 -- Ephemeral, in-memory-only RDP/SPICE session credential.
+	Protocol                   string
+	Quality                    string
+	Display                    string
+	Record                     bool
+	VNCPassword                string
+	FallbackReason             string
+	Direct                     bool
+	DirectHost                 string
+	DirectPort                 int
+	DirectUsername             string
+	DirectPassword             string // #nosec G117 -- Ephemeral, in-memory-only RDP/SPICE session credential.
+	RDPIgnoreCertificate       bool
+	RDPAllowLegacySecurity     bool
+	RDPCertificateFingerprints string
 }
 
 // DesktopSPICEProxyTarget holds SPICE proxy connection details for a session.
@@ -207,10 +211,13 @@ func (d *Deps) HandleDesktopSessions(w http.ResponseWriter, r *http.Request) {
 		Protocol     string `json:"protocol,omitempty"`
 		Record       bool   `json:"record,omitempty"`
 		DirectTarget *struct {
-			Host     string  `json:"host"`
-			Port     int     `json:"port"`
-			Username *string `json:"username,omitempty"`
-			Password *string `json:"password,omitempty"`
+			Host                    string  `json:"host"`
+			Port                    int     `json:"port"`
+			Username                *string `json:"username,omitempty"`
+			Password                *string `json:"password,omitempty"`
+			IgnoreCertificate       bool    `json:"ignore_certificate,omitempty"`
+			AllowLegacySecurity     bool    `json:"allow_legacy_security,omitempty"`
+			CertificateFingerprints string  `json:"certificate_fingerprints,omitempty"`
 		} `json:"direct_target,omitempty"`
 	}
 	if err := d.DecodeJSONBody(w, r, &req); err != nil {
@@ -252,6 +259,24 @@ func (d *Deps) HandleDesktopSessions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusBadRequest, "direct desktop recording is not supported")
 			return
 		}
+		fingerprints := strings.TrimSpace(req.DirectTarget.CertificateFingerprints)
+		rdpOptions := protocols.RDPConfig{
+			IgnoreCertificate:       req.DirectTarget.IgnoreCertificate,
+			AllowLegacySecurity:     req.DirectTarget.AllowLegacySecurity,
+			CertificateFingerprints: fingerprints,
+		}
+		if (rdpOptions.IgnoreCertificate || rdpOptions.AllowLegacySecurity || fingerprints != "") && protocol != "rdp" {
+			servicehttp.WriteError(w, http.StatusBadRequest, "RDP security options are only valid for RDP")
+			return
+		}
+		if err := protocols.ValidateRDPConfigOptions(rdpOptions); err != nil {
+			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if (rdpOptions.IgnoreCertificate || rdpOptions.AllowLegacySecurity) && !securityruntime.InsecureTransportAllowed() {
+			servicehttp.WriteError(w, http.StatusBadRequest, "unsafe RDP options require LABTETHER_ALLOW_INSECURE_TRANSPORT=true")
+			return
+		}
 		host, port, err := securityruntime.ValidateOutboundEndpoint(req.DirectTarget.Host, req.DirectTarget.Port)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, "invalid direct desktop target: "+err.Error())
@@ -277,11 +302,14 @@ func (d *Deps) HandleDesktopSessions(w http.ResponseWriter, r *http.Request) {
 		}
 		target = net.JoinHostPort(host, fmt.Sprintf("%d", port))
 		directOpts = DesktopSessionOptions{
-			Direct:         true,
-			DirectHost:     host,
-			DirectPort:     port,
-			DirectUsername: username,
-			DirectPassword: password,
+			Direct:                     true,
+			DirectHost:                 host,
+			DirectPort:                 port,
+			DirectUsername:             username,
+			DirectPassword:             password,
+			RDPIgnoreCertificate:       req.DirectTarget.IgnoreCertificate,
+			RDPAllowLegacySecurity:     req.DirectTarget.AllowLegacySecurity,
+			RDPCertificateFingerprints: fingerprints,
 		}
 	} else {
 		if target == "" {

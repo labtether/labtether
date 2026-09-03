@@ -65,6 +65,18 @@ export function ProtocolForm({
   // RDP-specific
   const [rdpDomain, setRdpDomain] = useState<string>((initial?.config?.["domain"] as string | undefined) ?? "");
   const [nla, setNla] = useState<boolean>((initial?.config?.["nla_enabled"] as boolean | undefined) ?? false);
+  const [ignoreCertificate, setIgnoreCertificate] = useState<boolean>(
+    (initial?.config?.["ignore_certificate"] as boolean | undefined) ?? false,
+  );
+  const [allowLegacySecurity, setAllowLegacySecurity] = useState<boolean>(
+    (initial?.config?.["allow_legacy_security"] as boolean | undefined) ??
+      false,
+  );
+  const [certificateFingerprints, setCertificateFingerprints] =
+    useState<string>(
+      (initial?.config?.["certificate_fingerprints"] as string | undefined) ??
+        "",
+    );
 
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -89,6 +101,11 @@ export function ProtocolForm({
     if (protocol === "rdp") {
       if (rdpDomain.trim()) cfg["domain"] = rdpDomain.trim();
       cfg["nla_enabled"] = nla;
+      cfg["ignore_certificate"] = ignoreCertificate;
+      cfg["allow_legacy_security"] = allowLegacySecurity;
+      if (certificateFingerprints.trim()) {
+        cfg["certificate_fingerprints"] = certificateFingerprints.trim();
+      }
     }
     return cfg;
   };
@@ -255,10 +272,71 @@ export function ProtocolForm({
             <input
               type="checkbox"
               checked={nla}
-              onChange={(e) => setNla(e.target.checked)}
+              onChange={(e) => {
+                setNla(e.target.checked);
+                if (e.target.checked) setAllowLegacySecurity(false);
+              }}
             />
             Network Level Authentication (NLA)
           </label>
+          <div>
+            <label className="text-xs font-medium text-[var(--muted)] mb-1 block">
+              Trusted certificate fingerprint
+            </label>
+            <Input
+              value={certificateFingerprints}
+              onChange={(e) => {
+                setCertificateFingerprints(e.target.value);
+                if (e.target.value.trim()) {
+                  setIgnoreCertificate(false);
+                  setAllowLegacySecurity(false);
+                }
+              }}
+              placeholder="sha256:AA:BB:..."
+            />
+            <p className="mt-1 text-[11px] text-[var(--muted)]">
+              Use this for a self-signed certificate or a DNS name pinned to an
+              IP.
+            </p>
+          </div>
+          <div className="space-y-2 rounded-lg border border-[var(--warn)]/30 bg-[var(--warn-glow)] px-3 py-2">
+            <label className="flex items-start gap-2 text-xs text-[var(--warn)]">
+              <input
+                type="checkbox"
+                checked={ignoreCertificate}
+                onChange={(e) => {
+                  setIgnoreCertificate(e.target.checked);
+                  if (e.target.checked) {
+                    setAllowLegacySecurity(false);
+                    setCertificateFingerprints("");
+                  }
+                }}
+              />
+              <span>
+                Allow an untrusted RDP certificate. This can expose the password
+                and screen to an attacker. The Hub must also enable insecure
+                transport.
+              </span>
+            </label>
+            <label className="flex items-start gap-2 text-xs text-[var(--warn)]">
+              <input
+                type="checkbox"
+                checked={allowLegacySecurity}
+                onChange={(e) => {
+                  setAllowLegacySecurity(e.target.checked);
+                  if (e.target.checked) {
+                    setNla(false);
+                    setIgnoreCertificate(false);
+                    setCertificateFingerprints("");
+                  }
+                }}
+              />
+              <span>
+                Allow old RDP security. It has no server certificate and can be
+                intercepted. The Hub must also enable insecure transport.
+              </span>
+            </label>
+          </div>
         </>
       )}
 
@@ -273,7 +351,23 @@ export function ProtocolForm({
         >
           {testResult.success ? (
             <p className="text-xs text-[var(--ok)]">
-              Connection successful{testResult.latency_ms > 0 ? ` (${testResult.latency_ms}ms)` : ""}.
+              {protocol === "rdp" ? (
+                <>
+                  RDP endpoint and guacd are reachable
+                  {testResult.latency_ms > 0
+                    ? ` (${testResult.latency_ms}ms)`
+                    : ""}
+                  . Certificate, security mode, and sign-in were not tested.
+                </>
+              ) : (
+                <>
+                  Connection successful
+                  {testResult.latency_ms > 0
+                    ? ` (${testResult.latency_ms}ms)`
+                    : ""}
+                  .
+                </>
+              )}
             </p>
           ) : (
             <p className="text-xs text-[var(--bad)]">
@@ -314,7 +408,11 @@ export function ProtocolForm({
           disabled={testing || saving}
           onClick={() => void handleTest()}
         >
-          {testing ? "Testing..." : "Test Connection"}
+          {testing
+            ? "Testing..."
+            : protocol === "rdp"
+              ? "Test Reachability"
+              : "Test Connection"}
         </Button>
         <Button
           variant="primary"

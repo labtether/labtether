@@ -34,6 +34,9 @@ interface NewTabPageProps {
     protocol: RemoteViewProtocol;
     username?: string;
     password?: string;
+    ignoreCertificate?: boolean;
+    allowLegacySecurity?: boolean;
+    certificateFingerprints?: string;
     saveBookmark?: { label: string };
   }) => void;
 }
@@ -395,6 +398,9 @@ export default function NewTabPage({
             protocol: params.protocol,
             username: params.username,
             password: params.password,
+            ignoreCertificate: params.ignoreCertificate,
+            allowLegacySecurity: params.allowLegacySecurity,
+            certificateFingerprints: params.certificateFingerprints,
             saveBookmark: params.saveBookmark,
           });
         }}
