@@ -105,6 +105,8 @@ func (d *Deps) getPooledFS(w http.ResponseWriter, r *http.Request, connID string
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "credential store unavailable")
 		return nil, nil, false
 	}
+	generation := d.FileProtoPool.AcquireGeneration(connID)
+	defer d.FileProtoPool.ReleaseGeneration(connID)
 
 	fc, err := d.FileConnectionStore.GetFileConnection(r.Context(), connID)
 	if err != nil {
@@ -126,7 +128,7 @@ func (d *Deps) getPooledFS(w http.ResponseWriter, r *http.Request, connID string
 		return nil, nil, false
 	}
 
-	fs, err := d.FileProtoPool.Get(r.Context(), connID, config)
+	fs, err := d.FileProtoPool.GetAtGeneration(r.Context(), connID, config, generation)
 	if err != nil {
 		writeFileProtocolError(w, http.StatusBadGateway, "file connection failed", err)
 		return nil, nil, false

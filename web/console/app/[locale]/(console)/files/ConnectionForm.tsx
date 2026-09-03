@@ -46,6 +46,12 @@ const PROTOCOL_ACCENT: Record<string, string> = {
   webdav: "bg-cyan-500",
 };
 
+export function ftpTLSFromExtraConfig(extra: Record<string, unknown>): boolean {
+  if (typeof extra.ftp_tls === "boolean") return extra.ftp_tls;
+  if (typeof extra.use_tls === "boolean") return extra.use_tls;
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -73,7 +79,8 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
 
   // FTP-specific (fall back to old keys for connections saved before the rename)
   const [passiveMode, setPassiveMode] = useState((extra.ftp_passive as boolean) ?? (extra.passive_mode as boolean) ?? true);
-  const [useTLS, setUseTLS] = useState((extra.ftp_tls as boolean) ?? (extra.use_tls as boolean) ?? false);
+  const [useTLS, setUseTLS] = useState(ftpTLSFromExtraConfig(extra));
+  const [allowCleartextFTP, setAllowCleartextFTP] = useState((extra.ftp_allow_cleartext as boolean) ?? false);
 
   // WebDAV-specific (fall back to old scheme key)
   const [webdavTLS, setWebdavTLS] = useState((extra.webdav_tls as boolean) ?? (extra.scheme === "https" || extra.scheme === undefined));
@@ -100,6 +107,7 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
     if (protocol === "ftp") {
       extraCfg.ftp_passive = passiveMode;
       extraCfg.ftp_tls = useTLS;
+      if (!useTLS) extraCfg.ftp_allow_cleartext = allowCleartextFTP;
     }
     if (protocol === "webdav") {
       extraCfg.webdav_tls = webdavTLS;
@@ -138,7 +146,7 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
   }, [
     protocol, name, host, port, initialPath, username, password,
     authMethod, privateKey, passphrase, domain, shareName, passiveMode, useTLS, webdavTLS,
-    existingConnection, testedSFTPHostKey,
+    allowCleartextFTP, existingConnection, testedSFTPHostKey,
   ]);
 
   // ---------------------------------------------------------------------------
@@ -149,12 +157,15 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
     if (!name.trim()) return "Connection name is required.";
     if (!host.trim()) return "Host is required.";
     if (protocol === "smb" && !shareName.trim()) return "Share name is required for SMB.";
+    if (protocol === "ftp" && !useTLS && !allowCleartextFTP) {
+      return "Confirm the cleartext FTP warning or use FTPS.";
+    }
     if (requireSecret) {
       const secret = protocol === "sftp" && authMethod === "private_key" ? privateKey : password;
       if (!secret.trim()) return "Credentials are required.";
     }
     return null;
-  }, [name, host, protocol, shareName, authMethod, privateKey, password]);
+  }, [name, host, protocol, shareName, authMethod, privateKey, password, useTLS, allowCleartextFTP]);
 
   // ---------------------------------------------------------------------------
   // Handlers
@@ -466,12 +477,32 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
                 <input
                   type="checkbox"
                   checked={useTLS}
-                  onChange={(e) => setUseTLS(e.target.checked)}
+                  onChange={(e) => {
+                    setUseTLS(e.target.checked);
+                    if (e.target.checked) setAllowCleartextFTP(false);
+                  }}
                   className="accent-[var(--accent)]"
                 />
                 Use TLS (FTPS)
               </label>
             </div>
+            {!useTLS && (
+              <div className="md:col-span-2 rounded-lg border border-[var(--bad)]/30 bg-[var(--bad-glow)] px-3 py-2">
+                <label className="flex items-start gap-2 text-xs text-[var(--bad)] cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={allowCleartextFTP}
+                    onChange={(e) => setAllowCleartextFTP(e.target.checked)}
+                    className="mt-0.5 accent-[var(--bad)]"
+                  />
+                  <span>
+                    Allow cleartext FTP. Passwords and files can be read or
+                    changed on the network. The Hub must also enable insecure
+                    transport.
+                  </span>
+                </label>
+              </div>
+            )}
           </>
         )}
 

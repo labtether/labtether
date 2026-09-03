@@ -21,18 +21,36 @@ type mockRemoteFS struct {
 	closeCalls   int
 	connectStart chan struct{}
 	connectNext  chan struct{}
+	connectDone  chan struct{}
+	startOnce    sync.Once
+	listStart    chan struct{}
+	listDone     chan struct{}
+	listOnce     sync.Once
 }
 
-func (m *mockRemoteFS) Connect(_ context.Context, _ ConnectionConfig) error {
+func (m *mockRemoteFS) Connect(ctx context.Context, _ ConnectionConfig) error {
+	m.mu.Lock()
+	m.connectCalls++
+	m.mu.Unlock()
 	if m.connectStart != nil {
-		close(m.connectStart)
+		m.startOnce.Do(func() { close(m.connectStart) })
+	}
+	if m.connectDone != nil {
+		select {
+		case <-m.connectDone:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 	if m.connectNext != nil {
-		<-m.connectNext
+		select {
+		case <-m.connectNext:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.connectCalls++
 	if m.connectErr != nil {
 		return m.connectErr
 	}
@@ -100,7 +118,17 @@ func TestPoolConnectionMutationWaitsForConnectAndRejectsStaleConfig(t *testing.T
 	}
 }
 
-func (m *mockRemoteFS) List(_ context.Context, _ string, _ bool) ([]FileEntry, error) {
+func (m *mockRemoteFS) List(ctx context.Context, _ string, _ bool) ([]FileEntry, error) {
+	if m.listStart != nil {
+		m.listOnce.Do(func() { close(m.listStart) })
+	}
+	if m.listDone != nil {
+		select {
+		case <-m.listDone:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.listErr != nil {
@@ -242,6 +270,236 @@ func TestPool_Get_ReusesExistingSession(t *testing.T) {
 	// Should still have exactly 1 session.
 	if n := tp.sessionCount(); n != 1 {
 		t.Fatalf("expected 1 session, got %d", n)
+	}
+}
+
+func TestPool_Get_ReplacesSessionWhenConfigChanges(t *testing.T) {
+	tp := newTestPool()
+	defer tp.Close()
+
+	oldMock := &mockRemoteFS{}
+	newMock := &mockRemoteFS{}
+	oldConfig := ConnectionConfig{
+		Protocol:    "ftp",
+		InitialPath: "/",
+		ExtraConfig: map[string]any{"ftp_tls": false},
+	}
+	newConfig := ConnectionConfig{
+		Protocol:    "ftp",
+		InitialPath: "/",
+		ExtraConfig: map[string]any{"ftp_tls": true},
+	}
+	tp.injectMock("conn-1", oldMock, oldConfig)
+	tp.Pool.newFS = func(string) (RemoteFS, error) { return newMock, nil }
+
+	fs, err := tp.Pool.Get(context.Background(), "conn-1", newConfig)
+	if err != nil {
+		t.Fatalf("get changed config: %v", err)
+	}
+	if fs != newMock {
+		t.Fatal("expected a new session for the changed config")
+	}
+	oldMock.mu.Lock()
+	oldClosed := oldMock.closed
+	oldMock.mu.Unlock()
+	if !oldClosed {
+		t.Fatal("expected the old-config session to be closed")
+	}
+}
+
+func TestPool_Get_DoesNotInsertSessionAfterRemove(t *testing.T) {
+	tp := newTestPool()
+	defer tp.Close()
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	mock := &mockRemoteFS{connectStart: started, connectDone: release}
+	tp.Pool.newFS = func(string) (RemoteFS, error) { return mock, nil }
+	config := ConnectionConfig{Protocol: "sftp", InitialPath: "/"}
+
+	result := make(chan error, 1)
+	go func() {
+		_, err := tp.Pool.Get(context.Background(), "conn-1", config)
+		result <- err
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("connect did not start")
+	}
+	tp.Pool.Remove("conn-1")
+	close(release)
+
+	select {
+	case err := <-result:
+		if !errors.Is(err, ErrConnectionConfigChanged) {
+			t.Fatalf("expected config-changed error, got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Get did not return")
+	}
+	if n := tp.sessionCount(); n != 0 {
+		t.Fatalf("expected no stale cached session, got %d", n)
+	}
+	mock.mu.Lock()
+	closed := mock.closed
+	mock.mu.Unlock()
+	if !closed {
+		t.Fatal("expected stale in-flight session to be closed")
+	}
+}
+
+func TestPool_Close_DoesNotLeakInflightSession(t *testing.T) {
+	tp := newTestPool()
+	started := make(chan struct{})
+	release := make(chan struct{})
+	mock := &mockRemoteFS{connectStart: started, connectDone: release}
+	tp.Pool.newFS = func(string) (RemoteFS, error) { return mock, nil }
+
+	result := make(chan error, 1)
+	go func() {
+		_, err := tp.Pool.Get(
+			context.Background(),
+			"conn-1",
+			ConnectionConfig{Protocol: "sftp", InitialPath: "/"},
+		)
+		result <- err
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("connect did not start")
+	}
+	tp.Close()
+	close(release)
+
+	select {
+	case err := <-result:
+		if !errors.Is(err, ErrPoolClosed) {
+			t.Fatalf("expected pool-closed error, got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Get did not return")
+	}
+	if n := tp.sessionCount(); n != 0 {
+		t.Fatalf("expected no cached sessions after close, got %d", n)
+	}
+	mock.mu.Lock()
+	closed := mock.closed
+	mock.mu.Unlock()
+	if !closed {
+		t.Fatal("expected in-flight session to be closed after pool shutdown")
+	}
+}
+
+func TestPool_GetAtGeneration_RejectsConfigLoadedBeforeRemove(t *testing.T) {
+	tp := newTestPool()
+	defer tp.Close()
+
+	expectedGeneration := tp.Pool.AcquireGeneration("conn-1")
+	defer tp.Pool.ReleaseGeneration("conn-1")
+	tp.Pool.Remove("conn-1")
+	factoryCalled := false
+	tp.Pool.newFS = func(string) (RemoteFS, error) {
+		factoryCalled = true
+		return &mockRemoteFS{}, nil
+	}
+
+	_, err := tp.Pool.GetAtGeneration(
+		context.Background(),
+		"conn-1",
+		ConnectionConfig{Protocol: "sftp", InitialPath: "/"},
+		expectedGeneration,
+	)
+	if !errors.Is(err, ErrConnectionConfigChanged) {
+		t.Fatalf("expected config-changed error, got %v", err)
+	}
+	if factoryCalled {
+		t.Fatal("stale config reached the connection factory")
+	}
+}
+
+func TestPool_Remove_DropsGenerationState(t *testing.T) {
+	tp := newTestPool()
+	defer tp.Close()
+
+	mock := &mockRemoteFS{}
+	config := ConnectionConfig{Protocol: "sftp", InitialPath: "/"}
+	tp.injectMock("test-one-use", mock, config)
+	tp.Pool.mu.Lock()
+	tp.Pool.generations["test-one-use"] = 7
+	tp.Pool.mu.Unlock()
+
+	tp.Pool.Remove("test-one-use")
+
+	tp.Pool.mu.Lock()
+	_, generationExists := tp.Pool.generations["test-one-use"]
+	tp.Pool.mu.Unlock()
+	if generationExists {
+		t.Fatal("transient generation state was retained")
+	}
+	if n := tp.sessionCount(); n != 0 {
+		t.Fatalf("expected no transient cached session, got %d", n)
+	}
+}
+
+func TestPool_FailedGetDropsGenerationState(t *testing.T) {
+	tp := newTestPool()
+	defer tp.Close()
+
+	tp.Pool.newFS = func(string) (RemoteFS, error) {
+		return &mockRemoteFS{connectErr: errors.New("dial failed")}, nil
+	}
+	_, err := tp.Pool.Get(
+		context.Background(),
+		"failed-one-use",
+		ConnectionConfig{Protocol: "sftp", InitialPath: "/"},
+	)
+	if err == nil {
+		t.Fatal("expected connection failure")
+	}
+	tp.Pool.mu.Lock()
+	_, generationExists := tp.Pool.generations["failed-one-use"]
+	_, leaseExists := tp.Pool.leases["failed-one-use"]
+	tp.Pool.mu.Unlock()
+	if generationExists || leaseExists {
+		t.Fatal("failed one-use connection retained generation state")
+	}
+}
+
+func TestPool_Get_DoesNotReturnSessionRemovedDuringHealthCheck(t *testing.T) {
+	tp := newTestPool()
+	defer tp.Close()
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	mock := &mockRemoteFS{listStart: started, listDone: release}
+	config := ConnectionConfig{Protocol: "sftp", InitialPath: "/"}
+	tp.injectMock("conn-1", mock, config)
+
+	result := make(chan error, 1)
+	go func() {
+		_, err := tp.Pool.Get(context.Background(), "conn-1", config)
+		result <- err
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("health check did not start")
+	}
+	tp.Pool.Remove("conn-1")
+	close(release)
+
+	select {
+	case err := <-result:
+		if !errors.Is(err, ErrConnectionConfigChanged) {
+			t.Fatalf("expected config-changed error, got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Get did not return")
 	}
 }
 

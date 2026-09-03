@@ -86,8 +86,38 @@ func (b *ftpDataReadBudget) read(source io.Reader, p []byte) (int, error) {
 	return n, err
 }
 
+func ftpTransportUsesTLS(extraConfig map[string]any) (bool, error) {
+	useTLS := true
+	if raw, ok := extraConfig["ftp_tls"]; ok {
+		configured, valid := raw.(bool)
+		if !valid {
+			return false, fmt.Errorf("ftp_tls must be a boolean")
+		}
+		useTLS = configured
+	}
+	allowCleartext := false
+	if raw, ok := extraConfig["ftp_allow_cleartext"]; ok {
+		configured, valid := raw.(bool)
+		if !valid {
+			return false, fmt.Errorf("ftp_allow_cleartext must be a boolean")
+		}
+		allowCleartext = configured
+	}
+	if useTLS && allowCleartext {
+		return false, fmt.Errorf("ftp_allow_cleartext cannot be enabled when ftp_tls is true")
+	}
+	if !useTLS && (!allowCleartext || !securityruntime.InsecureTransportAllowed()) {
+		return false, fmt.Errorf("plain FTP requires ftp_allow_cleartext=true and LABTETHER_ALLOW_INSECURE_TRANSPORT=true")
+	}
+	return useTLS, nil
+}
+
 // Connect dials the FTP server, optionally upgrades to TLS, and logs in.
 func (c *FTPClient) Connect(ctx context.Context, cfg ConnectionConfig) error {
+	useTLS, err := ftpTransportUsesTLS(cfg.ExtraConfig)
+	if err != nil {
+		return err
+	}
 	opCtx, cancel := WithOperationTimeout(ctx)
 	defer cancel()
 	c.config = cfg
@@ -99,6 +129,14 @@ func (c *FTPClient) Connect(ctx context.Context, cfg ConnectionConfig) error {
 	}
 	addr := net.JoinHostPort(cfg.Host, fmt.Sprintf("%d", port))
 	secureDial := securityruntime.OutboundTCPDialContext(10 * time.Second)
+	var tlsConfig *tls.Config
+	if useTLS {
+		tlsConfig = &tls.Config{
+			ServerName:         cfg.Host,
+			MinVersion:         tls.VersionTLS12,
+			InsecureSkipVerify: false,
+		}
+	}
 	controlDial := true
 	stopControlDeadline := func() {}
 	defer func() { stopControlDeadline() }()
@@ -149,17 +187,18 @@ func (c *FTPClient) Connect(ctx context.Context, cfg ConnectionConfig) error {
 				c.connMu.Unlock()
 			}}
 			c.dataConns[tracked] = struct{}{}
+			if useTLS {
+				// jlaffaye/ftp returns custom-dialer data sockets as-is. Wrap
+				// them here so PROT P encrypts file contents and listings too.
+				return secureFTPDataConnection(tracked, tlsConfig), nil
+			}
 			return tracked, nil
 		}),
 	}
 
 	// FTPS: explicit TLS when ExtraConfig["ftp_tls"] is true.
-	if useTLS, _ := cfg.ExtraConfig["ftp_tls"].(bool); useTLS {
-		opts = append(opts, ftp.DialWithExplicitTLS(&tls.Config{
-			ServerName:         cfg.Host,
-			MinVersion:         tls.VersionTLS12,
-			InsecureSkipVerify: false,
-		}))
+	if useTLS {
+		opts = append(opts, ftp.DialWithExplicitTLS(tlsConfig))
 	}
 
 	// Active mode: disable EPSV when ExtraConfig["ftp_passive"] is explicitly false.
@@ -193,6 +232,10 @@ func (c *FTPClient) Connect(ctx context.Context, cfg ConnectionConfig) error {
 
 	c.conn = conn
 	return nil
+}
+
+func secureFTPDataConnection(conn net.Conn, tlsConfig *tls.Config) net.Conn {
+	return tls.Client(conn, tlsConfig)
 }
 
 // List returns directory entries at the given path.
