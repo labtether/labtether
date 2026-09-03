@@ -76,12 +76,8 @@ func (s *PostgresStore) CommitAgentEnrollment(ctx context.Context, req AgentEnro
 		if etok.MaxUses != 1 {
 			return AgentEnrollmentCommitResult{}, ErrRecoveryRequiresSingleUseToken
 		}
-		storedFingerprint := strings.TrimSpace(existing.Metadata[assets.MetadataKeyAgentDeviceFingerprint])
-		storedAlgorithm := strings.TrimSpace(existing.Metadata[assets.MetadataKeyAgentDeviceKeyAlgorithm])
-		if storedFingerprint == "" || storedAlgorithm == "" ||
-			storedFingerprint != strings.TrimSpace(req.DeviceFingerprint) ||
-			storedAlgorithm != strings.TrimSpace(req.DeviceKeyAlgorithm) {
-			return AgentEnrollmentCommitResult{}, ErrAgentIdentityContinuityConflict
+		if err := validateVerifiedAgentRecoveryAnchor(existing.Metadata, req.DeviceFingerprint, req.DeviceKeyAlgorithm); err != nil {
+			return AgentEnrollmentCommitResult{}, err
 		}
 		marker, err := selectAgentIdentityMarkerForUpdate(ctx, tx, assetID)
 		if err != nil {

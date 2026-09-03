@@ -58,12 +58,8 @@ func (m *MemoryEnrollmentStore) CommitAgentEnrollment(ctx context.Context, req A
 		if etok.MaxUses != 1 {
 			return AgentEnrollmentCommitResult{}, ErrRecoveryRequiresSingleUseToken
 		}
-		storedFingerprint := strings.TrimSpace(existing.Metadata[assets.MetadataKeyAgentDeviceFingerprint])
-		storedAlgorithm := strings.TrimSpace(existing.Metadata[assets.MetadataKeyAgentDeviceKeyAlgorithm])
-		if storedFingerprint == "" || storedAlgorithm == "" ||
-			storedFingerprint != strings.TrimSpace(req.DeviceFingerprint) ||
-			storedAlgorithm != strings.TrimSpace(req.DeviceKeyAlgorithm) {
-			return AgentEnrollmentCommitResult{}, ErrAgentIdentityContinuityConflict
+		if err := validateVerifiedAgentRecoveryAnchor(existing.Metadata, req.DeviceFingerprint, req.DeviceKeyAlgorithm); err != nil {
+			return AgentEnrollmentCommitResult{}, err
 		}
 		marker := m.identityMarkerLocked(req.AssetID, existing)
 		if !etok.CreatedAt.After(marker) {

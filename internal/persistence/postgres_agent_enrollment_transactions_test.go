@@ -533,6 +533,65 @@ func TestPostgresAuthenticatedHeartbeatRejectsOrphanActiveToken(t *testing.T) {
 	}
 }
 
+func TestPostgresUnverifiedHeartbeatAnchorCannotAuthorizeRecovery(t *testing.T) {
+	store := newTestPostgresStore(t)
+	ctx := context.Background()
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	assetID := "unverified-recovery-" + suffix
+	initialEnrollmentHash := "unverified-initial-enrollment-" + suffix
+	recoveryEnrollmentHash := "unverified-recovery-enrollment-" + suffix
+	initialAgentHash := "unverified-initial-agent-" + suffix
+	t.Cleanup(func() {
+		_, _ = store.pool.Exec(ctx, `DELETE FROM agent_tokens WHERE asset_id = $1`, assetID)
+		_, _ = store.pool.Exec(ctx, `DELETE FROM assets WHERE id = $1`, assetID)
+		_, _ = store.pool.Exec(ctx, `DELETE FROM enrollment_tokens WHERE token_hash = ANY($1)`, []string{initialEnrollmentHash, recoveryEnrollmentHash})
+	})
+
+	now := time.Now().UTC()
+	if _, err := store.CreateEnrollmentToken(initialEnrollmentHash, "initial", now.Add(time.Hour), 1); err != nil {
+		t.Fatal(err)
+	}
+	first, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
+		AssetID: assetID, Hostname: assetID, EnrollmentTokenHash: initialEnrollmentHash,
+		AgentTokenHash: initialAgentHash, AgentTokenExpiresAt: now.Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	anchored, err := store.CommitAuthenticatedAgentHeartbeat(ctx, first.AgentToken.ID, assets.HeartbeatRequest{
+		AssetID: assetID, Type: "node", Name: assetID, Source: "agent",
+		Metadata: map[string]string{
+			assets.MetadataKeyAgentDeviceFingerprint:  "LT-PG-BEARER-TOFU",
+			assets.MetadataKeyAgentDeviceKeyAlgorithm: "ed25519",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if anchored.Metadata[assets.MetadataKeyAgentIdentityVerifiedAt] != "" {
+		t.Fatalf("bearer heartbeat authored verified marker: %+v", anchored.Metadata)
+	}
+	recoveryToken, err := store.CreateEnrollmentToken(recoveryEnrollmentHash, "recovery", now.Add(time.Hour), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
+		AssetID: assetID, Hostname: assetID, EnrollmentTokenHash: recoveryEnrollmentHash,
+		AgentTokenHash: "unverified-replacement-" + suffix, AgentTokenExpiresAt: now.Add(time.Hour),
+		DeviceFingerprint: "LT-PG-BEARER-TOFU", DeviceKeyAlgorithm: "ed25519", DeviceProofVersion: enrollment.DeviceProofVersionV2,
+	})
+	if !errors.Is(err, ErrAgentIdentityContinuityConflict) {
+		t.Fatalf("unverified TOFU recovery error=%v, want continuity conflict", err)
+	}
+	var useCount int
+	if err := store.pool.QueryRow(ctx, `SELECT use_count FROM enrollment_tokens WHERE id = $1`, recoveryToken.ID).Scan(&useCount); err != nil || useCount != 0 {
+		t.Fatalf("rejected recovery use_count=%d err=%v", useCount, err)
+	}
+	if err := store.ValidateActiveAgentTokenID(ctx, first.AgentToken.ID, assetID); err != nil {
+		t.Fatalf("rejected recovery invalidated original bearer: %v", err)
+	}
+}
+
 func TestPostgresAgentHeartbeatsPreserveOperatorGroup(t *testing.T) {
 	store := newTestPostgresStore(t)
 	ctx := context.Background()

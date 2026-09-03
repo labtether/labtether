@@ -625,6 +625,25 @@ func TestMemoryIdentityTOFURequiresBoundAgentBearer(t *testing.T) {
 	if anchored.Metadata[assets.MetadataKeyAgentIdentityVerifiedAt] != "" {
 		t.Fatalf("unsigned bearer TOFU authored verified_at: %+v", anchored.Metadata)
 	}
+
+	recoveryToken, err := store.CreateEnrollmentToken("tofu-recovery", "tofu recovery", time.Now().UTC().Add(time.Hour), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = store.CommitAgentEnrollment(context.Background(), AgentEnrollmentCommitRequest{
+		AssetID: "bearer-anchor", Hostname: "bearer-anchor", EnrollmentTokenHash: "tofu-recovery",
+		AgentTokenHash: "tofu-replacement", AgentTokenExpiresAt: time.Now().UTC().Add(time.Hour),
+		DeviceFingerprint: "LT-BEARER-TOFU", DeviceKeyAlgorithm: "ed25519", DeviceProofVersion: enrollment.DeviceProofVersionV2,
+	})
+	if !errors.Is(err, ErrAgentIdentityContinuityConflict) {
+		t.Fatalf("unverified TOFU recovery error=%v, want continuity conflict", err)
+	}
+	if token, valid, err := store.ValidateEnrollmentToken("tofu-recovery"); err != nil || !valid || token.ID != recoveryToken.ID || token.UseCount != 0 {
+		t.Fatalf("rejected recovery mutated token: token=%+v valid=%v err=%v", token, valid, err)
+	}
+	if err := store.ValidateActiveAgentTokenID(context.Background(), result.AgentToken.ID, "bearer-anchor"); err != nil {
+		t.Fatalf("rejected recovery invalidated original bearer: %v", err)
+	}
 }
 
 func TestMemoryRecoveryRejectsEnrollmentTokenIssuedBeforeLatestRotation(t *testing.T) {
