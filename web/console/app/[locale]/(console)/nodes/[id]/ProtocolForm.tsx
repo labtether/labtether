@@ -67,6 +67,11 @@ export function ProtocolForm({
     (initial?.config?.["allow_insecure_vnc"] as boolean | undefined) ?? false,
   );
 
+  // Telnet-specific
+  const [allowInsecureTelnet, setAllowInsecureTelnet] = useState<boolean>(
+    (initial?.config?.["allow_insecure_telnet"] as boolean | undefined) ?? false,
+  );
+
   // RDP-specific
   const [rdpDomain, setRdpDomain] = useState<string>((initial?.config?.["domain"] as string | undefined) ?? "");
   const [nla, setNla] = useState<boolean>((initial?.config?.["nla_enabled"] as boolean | undefined) ?? false);
@@ -95,6 +100,7 @@ export function ProtocolForm({
     setPort(DEFAULT_PORTS[next]);
     setCredentialProfileId("");
     setAllowInsecureVNC(false);
+    setAllowInsecureTelnet(false);
     setTestResult(null);
     setShowKeyInstallBanner(false);
   };
@@ -115,6 +121,9 @@ export function ProtocolForm({
     }
     if (protocol === "vnc" || protocol === "ard") {
       cfg["allow_insecure_vnc"] = allowInsecureVNC;
+    }
+    if (protocol === "telnet") {
+      cfg["allow_insecure_telnet"] = allowInsecureTelnet;
     }
     return cfg;
   };
@@ -196,12 +205,21 @@ export function ProtocolForm({
         </select>
       </div>
 
-      {/* Telnet warning */}
+      {/* Telnet warning and explicit opt-in */}
       {protocol === "telnet" && (
         <div className="rounded-lg border border-[var(--warn)]/30 bg-[var(--warn-glow)] px-3 py-2">
-          <p className="text-xs text-[var(--warn)]">
-            Telnet connections are unencrypted. Credentials and data are sent in plaintext.
-          </p>
+          <label className="flex items-start gap-2 text-xs text-[var(--warn)]">
+            <input
+              type="checkbox"
+              checked={allowInsecureTelnet}
+              onChange={(event) => setAllowInsecureTelnet(event.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              Allow plain Telnet. Passwords, commands, and output can be read or
+              changed on the network. The Hub must also enable insecure transport.
+            </span>
+          </label>
         </div>
       )}
 
@@ -446,7 +464,8 @@ export function ProtocolForm({
           disabled={
             saving ||
             testing ||
-            ((protocol === "vnc" || protocol === "ard") && !allowInsecureVNC)
+            ((protocol === "vnc" || protocol === "ard") && !allowInsecureVNC) ||
+            (protocol === "telnet" && !allowInsecureTelnet)
           }
           onClick={() => void handleSave()}
         >

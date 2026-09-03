@@ -69,6 +69,11 @@ type SSHConfig struct {
 	HubKeyInstalled bool   `json:"hub_key_installed,omitempty"`
 }
 
+// TelnetConfig holds Telnet-specific connection options.
+type TelnetConfig struct {
+	AllowInsecureTransport bool `json:"allow_insecure_telnet,omitempty"`
+}
+
 // VNCConfig holds VNC-specific connection options.
 type VNCConfig struct {
 	DisplayNumber          int  `json:"display_number,omitempty"`
@@ -115,7 +120,7 @@ func ValidatePort(port int) error {
 }
 
 // ValidateProtocolConfig decodes and validates the raw JSON config for a given protocol.
-// Unknown fields are rejected. Telnet requires no config fields.
+// Unknown fields are rejected.
 func ValidateProtocolConfig(protocol string, raw json.RawMessage) error {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil
@@ -135,18 +140,23 @@ func ValidateProtocolConfig(protocol string, raw json.RawMessage) error {
 		_, err := DecodeARDConfig(raw)
 		return err
 	case ProtocolTelnet:
-		// Telnet has no configurable fields; any supplied config is rejected.
-		var discard map[string]json.RawMessage
-		if err := strictUnmarshal(raw, &discard); err != nil {
-			return err
-		}
-		if len(discard) > 0 {
-			return fmt.Errorf("telnet protocol does not accept config fields")
-		}
-		return nil
+		_, err := DecodeTelnetConfig(raw)
+		return err
 	default:
 		return fmt.Errorf("unsupported protocol %q", protocol)
 	}
+}
+
+// DecodeTelnetConfig decodes Telnet-specific configuration and rejects unknown fields.
+func DecodeTelnetConfig(raw json.RawMessage) (TelnetConfig, error) {
+	var cfg TelnetConfig
+	if len(raw) == 0 || string(raw) == "null" {
+		return cfg, nil
+	}
+	if err := strictUnmarshal(raw, &cfg); err != nil {
+		return TelnetConfig{}, err
+	}
+	return cfg, nil
 }
 
 // DecodeVNCConfig decodes VNC-specific configuration and rejects unknown fields.

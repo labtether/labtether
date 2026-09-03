@@ -110,14 +110,13 @@ func (s *apiServer) testProtocolConfig(ctx context.Context, pc *protocols.Protoc
 
 	// Decrypt credential if present.
 	var password, privateKey string
-	if pc.CredentialProfileID != "" && s.credentialStore != nil && s.secretsManager != nil {
+	if pc.Protocol == protocols.ProtocolSSH && pc.CredentialProfileID != "" && s.credentialStore != nil && s.secretsManager != nil {
 		profile, ok, err := s.credentialStore.GetCredentialProfile(pc.CredentialProfileID)
 		if err == nil && ok {
 			secret, decErr := s.secretsManager.DecryptString(profile.SecretCiphertext, profile.ID)
 			if decErr == nil {
 				switch profile.Kind {
-				case credentials.KindSSHPassword, credentials.KindTelnetPassword,
-					credentials.KindRDPPassword, credentials.KindVNCPassword:
+				case credentials.KindSSHPassword:
 					password = secret
 				case credentials.KindSSHPrivateKey, credentials.KindHubSSHIdentity:
 					privateKey = secret
@@ -145,7 +144,12 @@ func (s *apiServer) testProtocolConfig(ctx context.Context, pc *protocols.Protoc
 			result = protocols.TestSSH(testCtx, host, pc.Port, username, password, privateKey, hostKeyCallback)
 		}
 	case protocols.ProtocolTelnet:
-		result = protocols.TestTelnet(testCtx, host, pc.Port)
+		telnetOptions, decodeErr := protocols.DecodeTelnetConfig(pc.Config)
+		if decodeErr != nil {
+			result = &protocols.TestResult{Error: decodeErr.Error()}
+		} else {
+			result = protocols.TestTelnet(testCtx, host, pc.Port, telnetOptions.AllowInsecureTransport)
+		}
 	case protocols.ProtocolVNC:
 		result = protocols.TestVNC(testCtx, host, pc.Port)
 	case protocols.ProtocolRDP:
