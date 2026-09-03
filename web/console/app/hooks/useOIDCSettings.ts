@@ -7,7 +7,7 @@ type OIDCSettingsPayload = {
   enabled?: boolean;
   issuer_url?: string;
   client_id?: string;
-  client_secret?: string;
+  client_secret_configured?: boolean;
   scopes?: string;
   role_claim?: string;
   default_role?: string;
@@ -27,6 +27,8 @@ export function useOIDCSettings() {
   const [issuerURL, setIssuerURL] = useState("");
   const [clientID, setClientID] = useState("");
   const [clientSecret, setClientSecret] = useState("");
+  const [clientSecretConfigured, setClientSecretConfigured] = useState(false);
+  const [clearClientSecret, setClearClientSecret] = useState(false);
   const [scopes, setScopes] = useState("");
   const [roleClaim, setRoleClaim] = useState("");
   const [defaultRole, setDefaultRole] = useState("viewer");
@@ -61,7 +63,9 @@ export function useOIDCSettings() {
       setEnabled(payload.enabled ?? false);
       setIssuerURL(payload.issuer_url ?? "");
       setClientID(payload.client_id ?? "");
-      setClientSecret(payload.client_secret ?? "");
+      setClientSecret("");
+      setClientSecretConfigured(payload.client_secret_configured ?? false);
+      setClearClientSecret(false);
       setScopes(payload.scopes ?? "");
       setRoleClaim(payload.role_claim ?? "");
       setDefaultRole(payload.default_role ?? "viewer");
@@ -96,7 +100,6 @@ export function useOIDCSettings() {
         enabled,
         issuer_url: issuerURL,
         client_id: clientID,
-        client_secret: clientSecret,
         scopes,
         role_claim: roleClaim,
         default_role: defaultRole,
@@ -105,6 +108,11 @@ export function useOIDCSettings() {
         operator_role_values: operatorRoleValues,
         auto_provision: autoProvision,
       };
+      if (clearClientSecret) {
+        body.clear_client_secret = true;
+      } else if (clientSecret.trim()) {
+        body.client_secret = clientSecret;
+      }
 
       const response = await fetch("/api/settings/oidc", {
         method: "PUT",
@@ -125,7 +133,17 @@ export function useOIDCSettings() {
       savingRef.current = false;
       setSaving(false);
     }
-  }, [enabled, issuerURL, clientID, clientSecret, scopes, roleClaim, defaultRole, displayName, adminRoleValues, operatorRoleValues, autoProvision, load]);
+  }, [enabled, issuerURL, clientID, clientSecret, clearClientSecret, scopes, roleClaim, defaultRole, displayName, adminRoleValues, operatorRoleValues, autoProvision, load]);
+
+  const updateClientSecret = useCallback((value: string) => {
+    setClientSecret(value);
+    if (value.trim()) setClearClientSecret(false);
+  }, []);
+
+  const removeClientSecret = useCallback(() => {
+    setClientSecret("");
+    setClearClientSecret(true);
+  }, []);
 
   const apply = useCallback(async () => {
     if (applyingRef.current) {
@@ -163,7 +181,10 @@ export function useOIDCSettings() {
     clientID,
     setClientID,
     clientSecret,
-    setClientSecret,
+    setClientSecret: updateClientSecret,
+    clientSecretConfigured,
+    clearClientSecret,
+    removeClientSecret,
     scopes,
     setScopes,
     roleClaim,

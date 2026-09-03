@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/labtether/labtether/internal/hubapi/testutil"
+	"github.com/labtether/labtether/internal/persistence"
 )
 
 type oidcSettingsStoreStub struct {
@@ -32,11 +33,16 @@ func TestHandleOIDCSettingsApplyKeepsActiveProviderWhenReplacementIsRejected(t *
 	t.Setenv("LABTETHER_OIDC_CLIENT_SECRET", "")
 	t.Setenv("LABTETHER_OIDC_ALLOWED_ENDPOINT_ORIGINS", "")
 
+	manager := testutil.TestSecretsManager(t)
+	ciphertext, err := manager.EncryptString("replacement-secret", persistence.OIDCClientSecretAAD) // #nosec G101 -- test-only fixture
+	if err != nil {
+		t.Fatalf("encrypt test secret: %v", err)
+	}
 	stored, err := json.Marshal(oidcDBSettings{
-		Enabled:      boolPointer(true),
-		IssuerURL:    "http://169.254.169.254/identity",
-		ClientID:     "replacement-client",
-		ClientSecret: "replacement-secret", // #nosec G101 -- test-only fixture
+		Enabled:                boolPointer(true),
+		IssuerURL:              "http://169.254.169.254/identity",
+		ClientID:               "replacement-client",
+		ClientSecretCiphertext: ciphertext,
 	})
 	if err != nil {
 		t.Fatalf("marshal settings: %v", err)
@@ -45,6 +51,7 @@ func TestHandleOIDCSettingsApplyKeepsActiveProviderWhenReplacementIsRejected(t *
 	deps := &Deps{
 		OIDCRef:          ref,
 		SettingsStore:    &oidcSettingsStoreStub{value: stored},
+		SecretsManager:   manager,
 		EnforceRateLimit: testutil.NoopRateLimit,
 	}
 	req := httptest.NewRequest(http.MethodPost, "/settings/oidc/apply", nil)
@@ -75,11 +82,16 @@ func TestHandleOIDCSettingsApplyHidesDiscoveryResponseBody(t *testing.T) {
 	t.Setenv("LABTETHER_OIDC_CLIENT_SECRET", "")
 	t.Setenv("LABTETHER_OIDC_ALLOWED_ENDPOINT_ORIGINS", "")
 
+	manager := testutil.TestSecretsManager(t)
+	ciphertext, err := manager.EncryptString("replacement-secret", persistence.OIDCClientSecretAAD) // #nosec G101 -- test-only fixture
+	if err != nil {
+		t.Fatalf("encrypt test secret: %v", err)
+	}
 	stored, err := json.Marshal(oidcDBSettings{
-		Enabled:      boolPointer(true),
-		IssuerURL:    upstream.URL,
-		ClientID:     "replacement-client",
-		ClientSecret: "replacement-secret", // #nosec G101 -- test-only fixture
+		Enabled:                boolPointer(true),
+		IssuerURL:              upstream.URL,
+		ClientID:               "replacement-client",
+		ClientSecretCiphertext: ciphertext,
 	})
 	if err != nil {
 		t.Fatalf("marshal settings: %v", err)
@@ -88,6 +100,7 @@ func TestHandleOIDCSettingsApplyHidesDiscoveryResponseBody(t *testing.T) {
 	deps := &Deps{
 		OIDCRef:          ref,
 		SettingsStore:    &oidcSettingsStoreStub{value: stored},
+		SecretsManager:   manager,
 		EnforceRateLimit: testutil.NoopRateLimit,
 	}
 	req := httptest.NewRequest(http.MethodPost, "/settings/oidc/apply", nil)

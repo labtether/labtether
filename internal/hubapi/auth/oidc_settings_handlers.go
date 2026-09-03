@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,11 +14,12 @@ import (
 
 	"github.com/labtether/labtether/internal/auth"
 	"github.com/labtether/labtether/internal/hubapi/shared"
+	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
 const (
-	oidcSettingsKey    = "oidc"
+	oidcSettingsKey    = persistence.OIDCSystemSettingsKey
 	oidcSecretMask     = "********************"
 	oidcApplyRateLimit = 5
 )
@@ -46,40 +48,34 @@ func envOrDefaultBool(key string, fallback bool) bool {
 
 // oidcDBSettings is the shape stored as JSON in system_settings.
 type oidcDBSettings struct {
-	Enabled            *bool    `json:"enabled,omitempty"`
-	IssuerURL          string   `json:"issuer_url,omitempty"`
-	ClientID           string   `json:"client_id,omitempty"`
-	ClientSecret       string   `json:"client_secret,omitempty"` // #nosec G117 -- Settings payload intentionally carries runtime OIDC secret material.
-	Scopes             []string `json:"scopes,omitempty"`
-	RoleClaim          string   `json:"role_claim,omitempty"`
-	DefaultRole        string   `json:"default_role,omitempty"`
-	DisplayName        string   `json:"display_name,omitempty"`
-	AdminRoleValues    []string `json:"admin_role_values,omitempty"`
-	OperatorRoleValues []string `json:"operator_role_values,omitempty"`
-	AutoProvision      *bool    `json:"auto_provision,omitempty"`
+	Enabled                *bool    `json:"enabled,omitempty"`
+	IssuerURL              string   `json:"issuer_url,omitempty"`
+	ClientID               string   `json:"client_id,omitempty"`
+	ClientSecretCiphertext string   `json:"client_secret_ciphertext,omitempty"`
+	LegacyClientSecret     string   `json:"client_secret,omitempty"` // #nosec G117 -- Read-only compatibility for rows written before encrypted storage.
+	Scopes                 []string `json:"scopes,omitempty"`
+	RoleClaim              string   `json:"role_claim,omitempty"`
+	DefaultRole            string   `json:"default_role,omitempty"`
+	DisplayName            string   `json:"display_name,omitempty"`
+	AdminRoleValues        []string `json:"admin_role_values,omitempty"`
+	OperatorRoleValues     []string `json:"operator_role_values,omitempty"`
+	AutoProvision          *bool    `json:"auto_provision,omitempty"`
 }
 
 // oidcSettingsPutRequest is the JSON body accepted by PUT /settings/oidc.
 type oidcSettingsPutRequest struct {
-	Enabled            bool   `json:"enabled"`
-	IssuerURL          string `json:"issuer_url"`
-	ClientID           string `json:"client_id"`
-	ClientSecret       string `json:"client_secret"` // #nosec G117 -- Settings payload intentionally carries runtime OIDC secret material.
-	Scopes             string `json:"scopes"`
-	RoleClaim          string `json:"role_claim"`
-	DefaultRole        string `json:"default_role"`
-	DisplayName        string `json:"display_name"`
-	AdminRoleValues    string `json:"admin_role_values"`
-	OperatorRoleValues string `json:"operator_role_values"`
-	AutoProvision      bool   `json:"auto_provision"`
-}
-
-// maskSecret returns the mask sentinel if the value is non-empty.
-func maskSecret(v string) string {
-	if v == "" {
-		return ""
-	}
-	return oidcSecretMask
+	Enabled            bool    `json:"enabled"`
+	IssuerURL          string  `json:"issuer_url"`
+	ClientID           string  `json:"client_id"`
+	ClientSecret       *string `json:"client_secret,omitempty"` // #nosec G117 -- Admin-supplied runtime credential, encrypted before persistence.
+	ClearClientSecret  bool    `json:"clear_client_secret,omitempty"`
+	Scopes             string  `json:"scopes"`
+	RoleClaim          string  `json:"role_claim"`
+	DefaultRole        string  `json:"default_role"`
+	DisplayName        string  `json:"display_name"`
+	AdminRoleValues    string  `json:"admin_role_values"`
+	OperatorRoleValues string  `json:"operator_role_values"`
+	AutoProvision      bool    `json:"auto_provision"`
 }
 
 // csvJoin joins a slice into a comma-separated string.
@@ -120,10 +116,48 @@ func (d *Deps) loadOIDCDBSettings(ctx context.Context) (oidcDBSettings, error) {
 	return out, nil
 }
 
+func storedOIDCClientSecretConfigured(db oidcDBSettings) bool {
+	return strings.TrimSpace(db.ClientSecretCiphertext) != "" || strings.TrimSpace(db.LegacyClientSecret) != ""
+}
+
+func effectiveOIDCClientSecretConfigured(db oidcDBSettings) bool {
+	return strings.TrimSpace(os.Getenv("LABTETHER_OIDC_CLIENT_SECRET")) != "" || storedOIDCClientSecretConfigured(db)
+}
+
+func (d *Deps) decryptOIDCClientSecret(db oidcDBSettings) (string, error) {
+	ciphertext := strings.TrimSpace(db.ClientSecretCiphertext)
+	if ciphertext == "" {
+		return strings.TrimSpace(db.LegacyClientSecret), nil
+	}
+	if d.SecretsManager == nil {
+		return "", errors.New("oidc client secret storage is unavailable")
+	}
+	plain, err := d.SecretsManager.DecryptString(ciphertext, persistence.OIDCClientSecretAAD)
+	if err != nil {
+		return "", fmt.Errorf("decrypt oidc client secret: %w", err)
+	}
+	return strings.TrimSpace(plain), nil
+}
+
+func (d *Deps) encryptOIDCClientSecret(plain string) (string, error) {
+	plain = strings.TrimSpace(plain)
+	if plain == "" {
+		return "", nil
+	}
+	if d.SecretsManager == nil {
+		return "", errors.New("oidc client secret storage is unavailable")
+	}
+	ciphertext, err := d.SecretsManager.EncryptString(plain, persistence.OIDCClientSecretAAD)
+	if err != nil {
+		return "", fmt.Errorf("encrypt oidc client secret: %w", err)
+	}
+	return ciphertext, nil
+}
+
 // mergeOIDCSettings computes effective OIDC settings by layering DB values
 // over hard defaults, with env vars taking highest precedence.
 // It also returns a per-field source map ("env", "db", or "default").
-func mergeOIDCSettings(db oidcDBSettings) (auth.OIDCSettings, map[string]string) {
+func mergeOIDCSettings(db oidcDBSettings, dbClientSecret string, dbClientSecretConfigured bool) (auth.OIDCSettings, map[string]string) {
 	sources := make(map[string]string)
 
 	resolve := func(field, envKey, dbVal, def string) string {
@@ -166,6 +200,18 @@ func mergeOIDCSettings(db oidcDBSettings) (auth.OIDCSettings, map[string]string)
 		sources[field] = "default"
 		return def
 	}
+	resolveSecret := func() string {
+		if envSecret := strings.TrimSpace(os.Getenv("LABTETHER_OIDC_CLIENT_SECRET")); envSecret != "" {
+			sources["client_secret"] = "env"
+			return envSecret
+		}
+		if dbClientSecretConfigured {
+			sources["client_secret"] = "db"
+			return dbClientSecret
+		}
+		sources["client_secret"] = "default"
+		return ""
+	}
 
 	issuerURL := strings.TrimSpace(envOrDefault("LABTETHER_OIDC_ISSUER_URL", ""))
 	clientID := strings.TrimSpace(envOrDefault("LABTETHER_OIDC_CLIENT_ID", ""))
@@ -175,14 +221,13 @@ func mergeOIDCSettings(db oidcDBSettings) (auth.OIDCSettings, map[string]string)
 		issuerURL != "" || clientID != "")
 
 	s := auth.OIDCSettings{
-		Enabled:   enabled,
-		IssuerURL: resolve("issuer_url", "LABTETHER_OIDC_ISSUER_URL", db.IssuerURL, ""),
-		ClientID:  resolve("client_id", "LABTETHER_OIDC_CLIENT_ID", db.ClientID, ""),
-		ClientSecret: resolve("client_secret", "LABTETHER_OIDC_CLIENT_SECRET",
-			db.ClientSecret, ""),
-		RoleClaim:   resolve("role_claim", "LABTETHER_OIDC_ROLE_CLAIM", db.RoleClaim, "labtether_role"),
-		DisplayName: resolve("display_name", "LABTETHER_OIDC_DISPLAY_NAME", db.DisplayName, "Single Sign-On"),
-		DefaultRole: resolve("default_role", "LABTETHER_OIDC_DEFAULT_ROLE", db.DefaultRole, auth.RoleViewer),
+		Enabled:      enabled,
+		IssuerURL:    resolve("issuer_url", "LABTETHER_OIDC_ISSUER_URL", db.IssuerURL, ""),
+		ClientID:     resolve("client_id", "LABTETHER_OIDC_CLIENT_ID", db.ClientID, ""),
+		ClientSecret: resolveSecret(),
+		RoleClaim:    resolve("role_claim", "LABTETHER_OIDC_ROLE_CLAIM", db.RoleClaim, "labtether_role"),
+		DisplayName:  resolve("display_name", "LABTETHER_OIDC_DISPLAY_NAME", db.DisplayName, "Single Sign-On"),
+		DefaultRole:  resolve("default_role", "LABTETHER_OIDC_DEFAULT_ROLE", db.DefaultRole, auth.RoleViewer),
 		Scopes: resolveSlice("scopes", "LABTETHER_OIDC_SCOPES", db.Scopes,
 			[]string{"openid", "profile", "email"}),
 		AdminRoleValues: resolveSlice("admin_role_values", "LABTETHER_OIDC_ADMIN_ROLES",
@@ -213,7 +258,7 @@ func (d *Deps) HandleOIDCSettingsGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	merged, sources := mergeOIDCSettings(db)
+	merged, sources := mergeOIDCSettings(db, "", storedOIDCClientSecretConfigured(db))
 
 	// Compute auto_provision effective value separately (not in OIDCSettings).
 	autoProvision := envOrDefaultBool("LABTETHER_OIDC_AUTO_PROVISION",
@@ -234,20 +279,20 @@ func (d *Deps) HandleOIDCSettingsGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
-		"enabled":              merged.Enabled,
-		"issuer_url":           merged.IssuerURL,
-		"client_id":            merged.ClientID,
-		"client_secret":        maskSecret(merged.ClientSecret),
-		"scopes":               csvJoin(merged.Scopes),
-		"role_claim":           merged.RoleClaim,
-		"default_role":         merged.DefaultRole,
-		"display_name":         merged.DisplayName,
-		"admin_role_values":    csvJoin(merged.AdminRoleValues),
-		"operator_role_values": csvJoin(merged.OperatorRoleValues),
-		"auto_provision":       autoProvision,
-		"sources":              sources,
-		"active":               activeProvider != nil,
-		"active_issuer":        activeIssuer,
+		"enabled":                  merged.Enabled,
+		"issuer_url":               merged.IssuerURL,
+		"client_id":                merged.ClientID,
+		"client_secret_configured": effectiveOIDCClientSecretConfigured(db),
+		"scopes":                   csvJoin(merged.Scopes),
+		"role_claim":               merged.RoleClaim,
+		"default_role":             merged.DefaultRole,
+		"display_name":             merged.DisplayName,
+		"admin_role_values":        csvJoin(merged.AdminRoleValues),
+		"operator_role_values":     csvJoin(merged.OperatorRoleValues),
+		"auto_provision":           autoProvision,
+		"sources":                  sources,
+		"active":                   activeProvider != nil,
+		"active_issuer":            activeIssuer,
 	})
 }
 
@@ -305,27 +350,49 @@ func (d *Deps) HandleOIDCSettingsPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// If the caller sent back the mask, keep the existing secret unchanged.
-	clientSecret := req.ClientSecret
-	if clientSecret == oidcSecretMask {
-		clientSecret = existing.ClientSecret
+	requestedSecret := ""
+	if req.ClientSecret != nil {
+		requestedSecret = strings.TrimSpace(*req.ClientSecret)
+	}
+	if req.ClearClientSecret && requestedSecret != "" && requestedSecret != oidcSecretMask {
+		servicehttp.WriteError(w, http.StatusBadRequest, "client_secret and clear_client_secret cannot be used together")
+		return
+	}
+
+	clientSecretCiphertext := ""
+	switch {
+	case req.ClearClientSecret:
+		// Explicit removal is the only way a blank client_secret clears storage.
+	case requestedSecret != "" && requestedSecret != oidcSecretMask:
+		clientSecretCiphertext, err = d.encryptOIDCClientSecret(requestedSecret)
+	case storedOIDCClientSecretConfigured(existing):
+		existingSecret, decryptErr := d.decryptOIDCClientSecret(existing)
+		if decryptErr != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to preserve oidc client secret")
+			return
+		}
+		clientSecretCiphertext, err = d.encryptOIDCClientSecret(existingSecret)
+	}
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusServiceUnavailable, "oidc client secret encryption is unavailable")
+		return
 	}
 
 	enabled := req.Enabled
 	autoProvision := req.AutoProvision
 
 	updated := oidcDBSettings{
-		Enabled:            &enabled,
-		IssuerURL:          strings.TrimSpace(req.IssuerURL),
-		ClientID:           strings.TrimSpace(req.ClientID),
-		ClientSecret:       strings.TrimSpace(clientSecret),
-		Scopes:             csvSplit(req.Scopes),
-		RoleClaim:          strings.TrimSpace(req.RoleClaim),
-		DefaultRole:        strings.TrimSpace(req.DefaultRole),
-		DisplayName:        strings.TrimSpace(req.DisplayName),
-		AdminRoleValues:    csvSplit(req.AdminRoleValues),
-		OperatorRoleValues: csvSplit(req.OperatorRoleValues),
-		AutoProvision:      &autoProvision,
+		Enabled:                &enabled,
+		IssuerURL:              strings.TrimSpace(req.IssuerURL),
+		ClientID:               strings.TrimSpace(req.ClientID),
+		ClientSecretCiphertext: clientSecretCiphertext,
+		Scopes:                 csvSplit(req.Scopes),
+		RoleClaim:              strings.TrimSpace(req.RoleClaim),
+		DefaultRole:            strings.TrimSpace(req.DefaultRole),
+		DisplayName:            strings.TrimSpace(req.DisplayName),
+		AdminRoleValues:        csvSplit(req.AdminRoleValues),
+		OperatorRoleValues:     csvSplit(req.OperatorRoleValues),
+		AutoProvision:          &autoProvision,
 	}
 
 	raw, err := json.Marshal(updated) // #nosec G117 -- Marshaling runtime OIDC settings for persistence, not embedding a hardcoded secret.
@@ -343,17 +410,17 @@ func (d *Deps) HandleOIDCSettingsPut(w http.ResponseWriter, r *http.Request) {
 	}
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
-		"enabled":              enabled,
-		"issuer_url":           updated.IssuerURL,
-		"client_id":            updated.ClientID,
-		"client_secret":        maskSecret(updated.ClientSecret),
-		"scopes":               csvJoin(updated.Scopes),
-		"role_claim":           updated.RoleClaim,
-		"default_role":         updated.DefaultRole,
-		"display_name":         updated.DisplayName,
-		"admin_role_values":    csvJoin(updated.AdminRoleValues),
-		"operator_role_values": csvJoin(updated.OperatorRoleValues),
-		"auto_provision":       autoProvision,
+		"enabled":                  enabled,
+		"issuer_url":               updated.IssuerURL,
+		"client_id":                updated.ClientID,
+		"client_secret_configured": strings.TrimSpace(os.Getenv("LABTETHER_OIDC_CLIENT_SECRET")) != "" || clientSecretCiphertext != "",
+		"scopes":                   csvJoin(updated.Scopes),
+		"role_claim":               updated.RoleClaim,
+		"default_role":             updated.DefaultRole,
+		"display_name":             updated.DisplayName,
+		"admin_role_values":        csvJoin(updated.AdminRoleValues),
+		"operator_role_values":     csvJoin(updated.OperatorRoleValues),
+		"auto_provision":           autoProvision,
 	})
 }
 
@@ -379,7 +446,16 @@ func (d *Deps) HandleOIDCSettingsApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	merged, _ := mergeOIDCSettings(db)
+	dbSecretConfigured := storedOIDCClientSecretConfigured(db)
+	merged, _ := mergeOIDCSettings(db, "", dbSecretConfigured)
+	if merged.Enabled && strings.TrimSpace(os.Getenv("LABTETHER_OIDC_CLIENT_SECRET")) == "" && dbSecretConfigured {
+		dbClientSecret, decryptErr := d.decryptOIDCClientSecret(db)
+		if decryptErr != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load oidc client secret")
+			return
+		}
+		merged, _ = mergeOIDCSettings(db, dbClientSecret, true)
+	}
 
 	// Compute auto_provision effective value.
 	autoProvision := envOrDefaultBool("LABTETHER_OIDC_AUTO_PROVISION",
