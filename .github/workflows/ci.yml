@@ -668,7 +668,7 @@ jobs:
           labtether_clear_token_environment
           enrollment_url=https://localhost:8443/settings/enrollment
           labtether_build_curl_request_args "${enrollment_url}" 1 1
-          printf '%s\n' '{"label":"labtether-ci-agent","ttl_hours":1,"max_uses":1}' |
+          printf '%s\n' '{"label":"labtether-ci-agent","ttl_hours":1,"max_uses":1,"scope":"asset","asset_id":"labtether-ci-agent"}' |
             labtether_curl "${LABTETHER_CURL_REQUEST_ARGS[@]}" \
               --silent --show-error --fail-with-body \
               --request POST \
