@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	smb2 "github.com/hirochachacha/go-smb2"
+	smb2 "github.com/cloudsoda/go-smb2"
 
 	"github.com/labtether/labtether/internal/securityruntime"
 )
@@ -71,7 +71,7 @@ func (c *SMBClient) Connect(ctx context.Context, cfg ConnectionConfig) error {
 		},
 	}
 
-	session, err := d.DialContext(opCtx, conn)
+	session, err := d.DialConn(opCtx, conn, addr)
 	if err != nil {
 		closeAndLog("close raw TCP connection after failed SMB session setup", conn.Close)
 		c.conn = nil
