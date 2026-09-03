@@ -217,6 +217,75 @@ describe("desktop session proxy", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("defaults SPICE to TLS and only forwards valid SPICE security options", async () => {
+    const caPEM = "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----";
+    const accepted = await POST(
+      new NextRequest("https://console.example.com/api/desktop/session", {
+        method: "POST",
+        headers: {
+          origin: "https://console.example.com",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          protocol: "spice",
+          direct_target: {
+            host: "192.0.2.80",
+            port: 5930,
+            spice_ca_pem: caPEM,
+          },
+        }),
+      }),
+    );
+    expect(accepted.status).toBe(201);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body)).direct_target).toMatchObject({
+      spice_security_mode: "tls",
+      spice_ca_pem: caPEM,
+    });
+
+    fetchMock.mockClear();
+    for (const body of [
+      {
+        protocol: "rdp",
+        direct_target: {
+          host: "192.0.2.80",
+          port: 3389,
+          spice_security_mode: "tls",
+        },
+      },
+      {
+        protocol: "spice",
+        direct_target: {
+          host: "192.0.2.80",
+          port: 5930,
+          spice_security_mode: "cleartext",
+          spice_ca_pem: caPEM,
+        },
+      },
+      {
+        protocol: "spice",
+        direct_target: {
+          host: "192.0.2.80",
+          port: 5930,
+          spice_security_mode: "opportunistic",
+        },
+      },
+    ]) {
+      const response = await POST(
+        new NextRequest("https://console.example.com/api/desktop/session", {
+          method: "POST",
+          headers: {
+            origin: "https://console.example.com",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(body),
+        }),
+      );
+      expect(response.status).toBe(400);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("preserves exact password bytes while rejecting invalid protocol and port values", async () => {
     const password = "  exact secret\n";
     const accepted = await POST(

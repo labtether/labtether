@@ -149,6 +149,10 @@ func (d *Deps) LoadProxmoxRuntime(collectorID string) (*ProxmoxRuntime, error) {
 	if !hasSkip {
 		skipVerify = false
 	}
+	spiceSkipVerify, hasSPICESkip := shared.CollectorConfigBool(selected.Config, "spice_skip_verify")
+	if !hasSPICESkip {
+		spiceSkipVerify = false
+	}
 	caPEM := shared.CollectorConfigString(selected.Config, "ca_pem")
 
 	// Determine auth mode from config. API tokens remain the default.
@@ -181,7 +185,7 @@ func (d *Deps) LoadProxmoxRuntime(collectorID string) (*ProxmoxRuntime, error) {
 	}
 
 	secretHash := fmt.Sprintf("%x", sha256.Sum256([]byte(credential.SecretCiphertext)))
-	configKey := fmt.Sprintf("%s|%s|%s|%s|%v|%s|%s", authMode, baseURL, tokenID+username, credentialID, skipVerify, caPEM, secretHash)
+	configKey := fmt.Sprintf("%s|%s|%s|%s|%v|%v|%s|%s", authMode, baseURL, tokenID+username, credentialID, skipVerify, spiceSkipVerify, caPEM, secretHash)
 
 	// Check cache under read lock.
 	d.ProxmoxCacheMu.RLock()
@@ -221,13 +225,14 @@ func (d *Deps) LoadProxmoxRuntime(collectorID string) (*ProxmoxRuntime, error) {
 	}
 
 	runtime := &ProxmoxRuntime{
-		client:      client,
-		authMode:    authMode,
-		tokenID:     tokenID,
-		tokenSecret: tokenSecret,
-		skipVerify:  skipVerify,
-		caPEM:       caPEM,
-		collectorID: selected.ID,
+		client:          client,
+		authMode:        authMode,
+		tokenID:         tokenID,
+		tokenSecret:     tokenSecret,
+		skipVerify:      skipVerify,
+		spiceSkipVerify: spiceSkipVerify,
+		caPEM:           caPEM,
+		collectorID:     selected.ID,
 	}
 
 	// Store in cache under write lock.

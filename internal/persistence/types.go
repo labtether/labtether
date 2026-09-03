@@ -714,15 +714,17 @@ type FileConnection struct {
 
 // RemoteBookmark is a saved remote desktop connection to an external host.
 type RemoteBookmark struct {
-	ID             string    `json:"id"`
-	Label          string    `json:"label"`
-	Protocol       string    `json:"protocol"`
-	Host           string    `json:"host"`
-	Port           int       `json:"port"`
-	CredentialID   *string   `json:"credential_id,omitempty"`
-	HasCredentials bool      `json:"has_credentials"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID                string    `json:"id"`
+	Label             string    `json:"label"`
+	Protocol          string    `json:"protocol"`
+	Host              string    `json:"host"`
+	Port              int       `json:"port"`
+	CredentialID      *string   `json:"credential_id,omitempty"`
+	HasCredentials    bool      `json:"has_credentials"`
+	SPICESecurityMode string    `json:"spice_security_mode,omitempty"`
+	SPICECAPEM        string    `json:"spice_ca_pem,omitempty"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 // FileTransfer represents a file transfer job between two endpoints.

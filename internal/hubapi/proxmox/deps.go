@@ -16,13 +16,14 @@ import (
 // DesktopSPICEProxyTarget holds the parameters needed to connect a browser
 // to a Proxmox SPICE session.
 type DesktopSPICEProxyTarget struct {
-	Host       string
-	TLSPort    int
-	Password   string // #nosec G117 -- Runtime connector credential, not a hardcoded secret.
-	Type       string
-	CA         string
-	Proxy      string
-	SkipVerify bool
+	Host        string
+	TLSPort     int
+	Password    string // #nosec G117 -- Runtime connector credential, not a hardcoded secret.
+	Type        string
+	CA          string
+	Proxy       string
+	HostSubject string
+	SkipVerify  bool
 }
 
 // Deps holds all dependencies required by the proxmox handler package.

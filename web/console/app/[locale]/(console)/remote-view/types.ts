@@ -23,6 +23,8 @@ export interface RemoteViewTab {
     ignoreCertificate?: boolean;
     allowLegacySecurity?: boolean;
     certificateFingerprints?: string;
+    spiceSecurityMode?: "tls" | "cleartext";
+    spiceCAPEM?: string;
   };
   connectionState: RemoteViewConnectionState;
   lastConnectedAt?: number;

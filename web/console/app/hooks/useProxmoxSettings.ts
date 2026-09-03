@@ -16,6 +16,7 @@ type ProxmoxSettingsPayload = {
     token_id?: string;
     username?: string;
     skip_verify?: boolean;
+    spice_skip_verify?: boolean;
     ca_pem?: string;
     cluster_name?: string;
     interval_seconds?: number;
@@ -66,6 +67,7 @@ export function useProxmoxSettings() {
   const [tokenSecret, setTokenSecret] = useState("");
   const [username, setUsername] = useState("");
   const [skipVerify, setSkipVerify] = useState(false);
+  const [spiceSkipVerify, setSPICESkipVerify] = useState(false);
   const [caPEM, setCAPEM] = useState("");
   const [clusterName, setClusterName] = useState("");
   const [intervalSeconds, setIntervalSeconds] = useState(60);
@@ -104,6 +106,7 @@ export function useProxmoxSettings() {
       setTokenID(payload.settings?.token_id ?? "");
       setUsername(payload.settings?.username ?? "");
       setSkipVerify(payload.settings?.skip_verify ?? false);
+      setSPICESkipVerify(payload.settings?.spice_skip_verify ?? false);
       setCAPEM(payload.settings?.ca_pem ?? "");
       setClusterName(payload.settings?.cluster_name ?? "");
       setIntervalSeconds(payload.settings?.interval_seconds ?? 60);
@@ -133,6 +136,7 @@ export function useProxmoxSettings() {
         base_url: baseURL,
         auth_method: authMethod,
         skip_verify: skipVerify,
+        spice_skip_verify: spiceSkipVerify,
         ca_pem: caPEM,
         cluster_name: clusterName,
         interval_seconds: intervalSeconds,
@@ -178,7 +182,7 @@ export function useProxmoxSettings() {
       savingRef.current = false;
       setSaving(false);
     }
-  }, [baseURL, authMethod, tokenID, tokenSecret, username, skipVerify, caPEM, clusterName, intervalSeconds, load]);
+  }, [baseURL, authMethod, tokenID, tokenSecret, username, skipVerify, spiceSkipVerify, caPEM, clusterName, intervalSeconds, load]);
 
   const testConnection = useCallback(async () => {
     setTesting(true);
@@ -265,6 +269,8 @@ export function useProxmoxSettings() {
     setUsername,
     skipVerify,
     setSkipVerify,
+    spiceSkipVerify,
+    setSPICESkipVerify,
     caPEM,
     setCAPEM,
     clusterName,

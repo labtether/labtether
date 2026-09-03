@@ -47,6 +47,16 @@ func TestNewClientTransportPooling(t *testing.T) {
 	}
 }
 
+func TestSPICETicketParsesHostSubject(t *testing.T) {
+	var ticket SPICETicket
+	if err := json.Unmarshal([]byte(`{"host":"pvespiceproxy:68b8d480:101:pve01::aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","tls-port":61000,"host-subject":"OU=PVE Cluster Node,O=Proxmox Virtual Environment,CN=pve01"}`), &ticket); err != nil {
+		t.Fatalf("decode SPICE ticket: %v", err)
+	}
+	if ticket.HostSubject != "OU=PVE Cluster Node,O=Proxmox Virtual Environment,CN=pve01" {
+		t.Fatalf("host-subject=%q", ticket.HostSubject)
+	}
+}
+
 func TestClientGetClusterResources(t *testing.T) {
 	allowInsecureTransportForProxmoxTests(t)
 	const tokenHeader = "PVEAPIToken=labtether@pve!agent=secret123"

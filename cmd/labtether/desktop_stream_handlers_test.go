@@ -200,6 +200,26 @@ func TestHandleDesktopStreamSPICERequiresPreissuedTicketFlow(t *testing.T) {
 	}
 }
 
+func TestHandleProxmoxSPICEStreamRequiresGlobalGateForSkipVerify(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "")
+	sut := newTestAPIServer(t)
+	sut.setDesktopSPICEProxyTarget("sess-spice-unverified", desktopSPICEProxyTarget{
+		Host:       "192.0.2.90",
+		TLSPort:    61000,
+		SkipVerify: true,
+	})
+	req := httptest.NewRequest(http.MethodGet, "/desktop/sessions/sess-spice-unverified/stream", nil)
+	rec := httptest.NewRecorder()
+	sut.handleDesktopSPICEStream(rec, req, terminal.Session{ID: "sess-spice-unverified", Mode: "desktop"})
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("unverified Proxmox SPICE status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(strings.ToLower(rec.Body.String()), "certificate checks") {
+		t.Fatalf("unverified Proxmox SPICE error was unclear: %s", rec.Body.String())
+	}
+}
+
 func TestNewProxmoxTLSConfigAcceptsProvidedCAPEM(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)

@@ -37,17 +37,20 @@ type DesktopSessionOptions struct {
 	RDPIgnoreCertificate       bool
 	RDPAllowLegacySecurity     bool
 	RDPCertificateFingerprints string
+	SPICESecurityMode          string
+	SPICECAPEM                 string
 }
 
 // DesktopSPICEProxyTarget holds SPICE proxy connection details for a session.
 type DesktopSPICEProxyTarget struct {
-	Host       string
-	TLSPort    int
-	Password   string // #nosec G117 -- Session credential is generated or supplied at runtime, not hardcoded.
-	Type       string
-	CA         string
-	Proxy      string
-	SkipVerify bool
+	Host        string
+	TLSPort     int
+	Password    string // #nosec G117 -- Session credential is generated or supplied at runtime, not hardcoded.
+	Type        string
+	CA          string
+	Proxy       string
+	HostSubject string
+	SkipVerify  bool
 }
 
 // NormalizeDesktopProtocol normalizes a protocol string.
@@ -218,6 +221,8 @@ func (d *Deps) HandleDesktopSessions(w http.ResponseWriter, r *http.Request) {
 			IgnoreCertificate       bool    `json:"ignore_certificate,omitempty"`
 			AllowLegacySecurity     bool    `json:"allow_legacy_security,omitempty"`
 			CertificateFingerprints string  `json:"certificate_fingerprints,omitempty"`
+			SPICESecurityMode       string  `json:"spice_security_mode,omitempty"`
+			SPICECAPEM              string  `json:"spice_ca_pem,omitempty"`
 		} `json:"direct_target,omitempty"`
 	}
 	if err := d.DecodeJSONBody(w, r, &req); err != nil {
@@ -277,6 +282,15 @@ func (d *Deps) HandleDesktopSessions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusBadRequest, "unsafe RDP options require LABTETHER_ALLOW_INSECURE_TRANSPORT=true")
 			return
 		}
+		spiceSecurityMode, spiceCAPEM, err := ValidateDirectSPICESecurityOptions(
+			protocol,
+			req.DirectTarget.SPICESecurityMode,
+			req.DirectTarget.SPICECAPEM,
+		)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		host, port, err := securityruntime.ValidateOutboundEndpoint(req.DirectTarget.Host, req.DirectTarget.Port)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, "invalid direct desktop target: "+err.Error())
@@ -310,6 +324,8 @@ func (d *Deps) HandleDesktopSessions(w http.ResponseWriter, r *http.Request) {
 			RDPIgnoreCertificate:       req.DirectTarget.IgnoreCertificate,
 			RDPAllowLegacySecurity:     req.DirectTarget.AllowLegacySecurity,
 			RDPCertificateFingerprints: fingerprints,
+			SPICESecurityMode:          spiceSecurityMode,
+			SPICECAPEM:                 spiceCAPEM,
 		}
 	} else {
 		if target == "" {

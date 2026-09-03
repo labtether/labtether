@@ -136,12 +136,13 @@ type ProxyTicket struct {
 
 // SPICETicket represents /spiceproxy credentials for browser-side SPICE clients.
 type SPICETicket struct {
-	Host     string `json:"host"`
-	TLSPort  int    `json:"tls-port"`
-	Password string `json:"password"` // #nosec G117 -- Connector payload field carries runtime credential material.
-	CA       string `json:"ca,omitempty"`
-	Type     string `json:"type,omitempty"`
-	Proxy    string `json:"proxy,omitempty"`
+	Host        string `json:"host"`
+	TLSPort     int    `json:"tls-port"`
+	Password    string `json:"password"` // #nosec G117 -- Connector payload field carries runtime credential material.
+	CA          string `json:"ca,omitempty"`
+	Type        string `json:"type,omitempty"`
+	Proxy       string `json:"proxy,omitempty"`
+	HostSubject string `json:"host-subject,omitempty"`
 }
 
 // flexInt handles JSON numbers that may arrive as either int or string.
