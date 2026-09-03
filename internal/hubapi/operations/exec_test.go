@@ -15,6 +15,7 @@ import (
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/persistence"
+	"github.com/labtether/labtether/internal/policy"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -33,6 +34,9 @@ func newConnectedExecDeps(t *testing.T, captured *terminal.CommandJob) *ExecDeps
 		},
 		PrincipalActorID:         func(context.Context) string { return "tester" },
 		AllowedAssetsFromContext: func(context.Context) []string { return nil },
+		EvaluateCommandPolicy: func(context.Context, string, string) policy.CheckResponse {
+			return policy.CheckResponse{Allowed: true, Mode: "structured"}
+		},
 	}
 }
 
@@ -217,6 +221,94 @@ func TestHandleAssetExecRejectsAssetOutsideAPIKeyAllowlist(t *testing.T) {
 	}
 }
 
+func TestHandleAssetExecRejectsCommandDeniedByPolicy(t *testing.T) {
+	dispatched := false
+	var captured terminal.CommandJob
+	deps := newConnectedExecDeps(t, &captured)
+	deps.ExecuteViaAgent = func(terminal.CommandJob) terminal.CommandResult {
+		dispatched = true
+		return terminal.CommandResult{Status: "succeeded"}
+	}
+	deps.DecodeJSONBody = func(_ http.ResponseWriter, r *http.Request, dst any) error {
+		return json.NewDecoder(r.Body).Decode(dst)
+	}
+	deps.ScopesFromContext = func(context.Context) []string { return []string{"assets:exec"} }
+	deps.EvaluateCommandPolicy = func(context.Context, string, string) policy.CheckResponse {
+		return policy.CheckResponse{Allowed: false, Reason: "command not in allowlist", Mode: "structured"}
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/assets/srv1/exec", strings.NewReader(`{"command":"curl example.com"}`))
+	rec := httptest.NewRecorder()
+	deps.HandleAssetExec(rec, req, "srv1")
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403; body=%s", rec.Code, rec.Body.String())
+	}
+	if dispatched {
+		t.Fatal("policy-denied command reached execution backend")
+	}
+}
+
+func TestHandleAssetExecFailsClosedWithoutCommandPolicy(t *testing.T) {
+	dispatched := false
+	var captured terminal.CommandJob
+	deps := newConnectedExecDeps(t, &captured)
+	deps.ExecuteViaAgent = func(terminal.CommandJob) terminal.CommandResult {
+		dispatched = true
+		return terminal.CommandResult{Status: "succeeded"}
+	}
+	deps.DecodeJSONBody = func(_ http.ResponseWriter, r *http.Request, dst any) error {
+		return json.NewDecoder(r.Body).Decode(dst)
+	}
+	deps.ScopesFromContext = func(context.Context) []string { return []string{"assets:exec"} }
+	deps.EvaluateCommandPolicy = nil
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/assets/srv1/exec", strings.NewReader(`{"command":"uptime"}`))
+	rec := httptest.NewRecorder()
+	deps.HandleAssetExec(rec, req, "srv1")
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503; body=%s", rec.Code, rec.Body.String())
+	}
+	if dispatched {
+		t.Fatal("command reached execution backend without a policy evaluator")
+	}
+}
+
+func TestHandleAssetExecDoesNotSkipPolicyForOfflineAsset(t *testing.T) {
+	dispatched := false
+	var captured terminal.CommandJob
+	deps := newConnectedExecDeps(t, &captured)
+	deps.AgentMgr = agentmgr.NewManager()
+	deps.ExecuteViaAgent = func(terminal.CommandJob) terminal.CommandResult {
+		dispatched = true
+		return terminal.CommandResult{Status: "succeeded"}
+	}
+	deps.DecodeJSONBody = func(_ http.ResponseWriter, r *http.Request, dst any) error {
+		return json.NewDecoder(r.Body).Decode(dst)
+	}
+	deps.ScopesFromContext = func(context.Context) []string { return []string{"assets:exec"} }
+	policyChecks := 0
+	deps.EvaluateCommandPolicy = func(context.Context, string, string) policy.CheckResponse {
+		policyChecks++
+		return policy.CheckResponse{Allowed: false, Reason: "command not in allowlist", Mode: "structured"}
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/assets/srv1/exec", strings.NewReader(`{"command":"curl example.com"}`))
+	rec := httptest.NewRecorder()
+	deps.HandleAssetExec(rec, req, "srv1")
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403; body=%s", rec.Code, rec.Body.String())
+	}
+	if policyChecks != 1 {
+		t.Fatalf("policy checks = %d, want 1", policyChecks)
+	}
+	if dispatched {
+		t.Fatal("offline policy-denied command reached execution backend")
+	}
+}
+
 func TestHandleAssetExecAuditExcludesRawCommand(t *testing.T) {
 	var captured terminal.CommandJob
 	deps := newConnectedExecDeps(t, &captured)
@@ -314,6 +406,47 @@ func TestHandleExecMultiCountsNonzeroExitAsFailure(t *testing.T) {
 	}
 	if envelope.Data.Summary["total"] != 2 || envelope.Data.Summary["succeeded"] != 1 || envelope.Data.Summary["failed"] != 1 {
 		t.Fatalf("summary = %#v, want one success and one failure", envelope.Data.Summary)
+	}
+}
+
+func TestHandleExecMultiRejectsCommandDeniedByPolicy(t *testing.T) {
+	var mu sync.Mutex
+	executions := 0
+	deps := newExecMultiTestDeps(t, []string{"srv1"}, func(terminal.CommandJob) terminal.CommandResult {
+		mu.Lock()
+		executions++
+		mu.Unlock()
+		return terminal.CommandResult{Status: "succeeded"}
+	})
+	deps.EvaluateCommandPolicy = func(context.Context, string, string) policy.CheckResponse {
+		return policy.CheckResponse{Allowed: false, Reason: "command not in allowlist", Mode: "structured"}
+	}
+
+	recorder := handleExecMultiTestRequest(t, deps, ExecMultiRequest{
+		Targets: []string{"srv1"},
+		Command: "curl example.com",
+	})
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
+	}
+	if executions != 0 {
+		t.Fatalf("policy-denied multi-exec reached execution backend %d times", executions)
+	}
+
+	var envelope struct {
+		Data struct {
+			Results map[string]ExecResult `json:"results"`
+			Summary map[string]int        `json:"summary"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got := envelope.Data.Results["srv1"].Error; got != "policy_denied" {
+		t.Fatalf("result error = %q, want policy_denied", got)
+	}
+	if envelope.Data.Summary["total"] != 1 || envelope.Data.Summary["failed"] != 1 {
+		t.Fatalf("summary = %#v, want one failure", envelope.Data.Summary)
 	}
 }
 
@@ -437,6 +570,9 @@ func newExecMultiTestDeps(
 		PrincipalActorID:         func(context.Context) string { return "tester" },
 		AllowedAssetsFromContext: func(context.Context) []string { return nil },
 		ScopesFromContext:        func(context.Context) []string { return nil },
+		EvaluateCommandPolicy: func(context.Context, string, string) policy.CheckResponse {
+			return policy.CheckResponse{Allowed: true, Mode: "structured"}
+		},
 	}
 }
 

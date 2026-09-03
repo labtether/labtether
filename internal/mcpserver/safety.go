@@ -136,6 +136,21 @@ func (d *Deps) checkMutation(ctx context.Context, tool, target string) error {
 	return d.AuthorizeMutation(ctx, tool, target)
 }
 
+func (d *Deps) checkCommandPolicy(ctx context.Context, target, command string) error {
+	if d == nil || d.EvaluateCommandPolicy == nil {
+		return errors.New("command policy unavailable")
+	}
+	result := d.EvaluateCommandPolicy(ctx, target, command)
+	if result.Allowed {
+		return nil
+	}
+	reason := strings.TrimSpace(result.Reason)
+	if reason == "" {
+		reason = "command denied by policy"
+	}
+	return fmt.Errorf("command policy denied: %s", reason)
+}
+
 func (d *Deps) auditMutation(ctx context.Context, tool, target, decision, reason string, details map[string]any) {
 	if d == nil || d.AuditMutation == nil {
 		return
@@ -149,6 +164,10 @@ func errorReason(err error) string {
 	}
 	message := strings.ToLower(strings.TrimSpace(err.Error()))
 	switch {
+	case strings.Contains(message, "command policy unavailable"):
+		return "policy_unavailable"
+	case strings.Contains(message, "command policy denied"):
+		return "policy_denied"
 	case strings.Contains(message, "maintenance"):
 		return "maintenance_blocked"
 	case strings.Contains(message, "rate limit"):

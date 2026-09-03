@@ -14,6 +14,7 @@ import (
 	"github.com/labtether/labtether/internal/apikeys"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/idgen"
+	"github.com/labtether/labtether/internal/policy"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -37,6 +38,9 @@ type Deps struct {
 	// AuthorizeMutation enforces maintenance and bounded admission immediately
 	// before an MCP mutation is dispatched. Mutations fail closed when it is nil.
 	AuthorizeMutation func(ctx context.Context, tool, target string) error
+	// EvaluateCommandPolicy applies the Hub's live structured-command policy.
+	// Raw MCP command tools fail closed when it is nil.
+	EvaluateCommandPolicy func(ctx context.Context, assetID, command string) policy.CheckResponse
 	// AuditMutation records redacted, principal-attributed mutation outcomes.
 	AuditMutation func(ctx context.Context, tool, target, decision, reason string, details map[string]any)
 
@@ -625,6 +629,10 @@ func (d *Deps) handleExec(ctx context.Context, req mcp.CallToolRequest) (*mcp.Ca
 		d.auditMutation(ctx, "exec", assetID, "denied", errorReason(err), map[string]any{"command_bytes": len([]byte(command))})
 		return mcp.NewToolResultError(err.Error()), nil
 	}
+	if err := d.checkCommandPolicy(ctx, assetID, command); err != nil {
+		d.auditMutation(ctx, "exec", assetID, "denied", errorReason(err), map[string]any{"command_bytes": len([]byte(command))})
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 
 	cmdResult := d.ExecuteViaAgent(terminal.CommandJob{
 		JobID:       idgen.New("mcp"),
@@ -774,6 +782,12 @@ func (d *Deps) handleExecMulti(ctx context.Context, req mcp.CallToolRequest) (*m
 				if err := d.checkMutation(ctx, "exec_multi", t); err != nil {
 					resultSlots[index].value = map[string]any{"error": errorReason(err)}
 					d.auditMutation(ctx, "exec_multi", t, "denied", errorReason(err), map[string]any{"command_bytes": len([]byte(command))})
+					continue
+				}
+				if err := d.checkCommandPolicy(ctx, t, command); err != nil {
+					reason := errorReason(err)
+					resultSlots[index].value = map[string]any{"error": reason}
+					d.auditMutation(ctx, "exec_multi", t, "denied", reason, map[string]any{"command_bytes": len([]byte(command))})
 					continue
 				}
 				cmdResult := d.ExecuteViaAgent(terminal.CommandJob{
