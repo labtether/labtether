@@ -13,6 +13,7 @@ import (
 	"github.com/labtether/labtether/internal/fileproto"
 	"github.com/labtether/labtether/internal/idgen"
 	"github.com/labtether/labtether/internal/persistence"
+	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
@@ -131,7 +132,6 @@ func (d *Deps) handleCreateFileConnection(w http.ResponseWriter, r *http.Request
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "credential store unavailable")
 		return
 	}
-
 	var req fileConnectionCreateRequest
 	if err := d.DecodeJSONBody(w, r, &req); err != nil {
 		return
@@ -154,6 +154,12 @@ func (d *Deps) handleCreateFileConnection(w http.ResponseWriter, r *http.Request
 		return
 	}
 	req.ExtraConfig = normalizedExtra
+	if req.Protocol == "sftp" {
+		if _, pinned := req.ExtraConfig["host_key"]; !pinned {
+			servicehttp.WriteError(w, http.StatusBadRequest, "test and approve the SFTP server key before saving")
+			return
+		}
+	}
 
 	// Derive credential kind from protocol + auth_method.
 	kind := credentialKindForFileProtocol(req.Protocol, req.AuthMethod)
@@ -218,6 +224,11 @@ func (d *Deps) handleUpdateFileConnection(w http.ResponseWriter, r *http.Request
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "credential store unavailable")
 		return
 	}
+	atomicStore, ok := d.FileConnectionStore.(persistence.FileConnectionCredentialStore)
+	if !ok {
+		servicehttp.WriteError(w, http.StatusServiceUnavailable, "atomic file connection updates unavailable")
+		return
+	}
 
 	existing, err := d.FileConnectionStore.GetFileConnection(r.Context(), connID)
 	if err != nil {
@@ -245,6 +256,10 @@ func (d *Deps) handleUpdateFileConnection(w http.ResponseWriter, r *http.Request
 	req.Passphrase = strings.TrimSpace(req.Passphrase)
 	req.AuthMethod = strings.TrimSpace(req.AuthMethod)
 
+	previousProtocol := existing.Protocol
+	previousHost := existing.Host
+	previousPort := effectiveFileConnectionPort(existing.Protocol, existing.Port)
+	previousExtraConfig := existing.ExtraConfig
 	if req.Name != "" {
 		existing.Name = req.Name
 	}
@@ -261,7 +276,7 @@ func (d *Deps) handleUpdateFileConnection(w http.ResponseWriter, r *http.Request
 		existing.InitialPath = req.InitialPath
 	}
 	if req.ExtraConfig != nil {
-		existing.ExtraConfig = req.ExtraConfig
+		existing.ExtraConfig = preserveExistingSFTPHostKey(existing.Protocol, previousExtraConfig, req.ExtraConfig)
 	}
 	normalizedExtra, err := NormalizeFileConnectionExtraConfig(existing.Protocol, existing.ExtraConfig)
 	if err != nil {
@@ -269,6 +284,17 @@ func (d *Deps) handleUpdateFileConnection(w http.ResponseWriter, r *http.Request
 		return
 	}
 	existing.ExtraConfig = normalizedExtra
+	if existing.Protocol == "sftp" {
+		if _, pinned := normalizedExtra["host_key"]; !pinned {
+			endpointChanged := previousProtocol != "sftp" ||
+				!strings.EqualFold(strings.TrimSpace(previousHost), strings.TrimSpace(existing.Host)) ||
+				previousPort != effectiveFileConnectionPort(existing.Protocol, existing.Port)
+			if endpointChanged {
+				servicehttp.WriteError(w, http.StatusBadRequest, "test and approve the SFTP server key before saving")
+				return
+			}
+		}
+	}
 
 	secret := strings.TrimSpace(req.Secret)
 	passphrase := strings.TrimSpace(req.Passphrase)
@@ -311,6 +337,11 @@ func (d *Deps) handleUpdateFileConnection(w http.ResponseWriter, r *http.Request
 		servicehttp.WriteError(w, http.StatusBadRequest, "secret is required when changing between password and private_key authentication")
 		return
 	}
+	finishPoolMutation := func() {}
+	if d.FileProtoPool != nil {
+		finishPoolMutation = d.FileProtoPool.BeginConnectionMutation(connID)
+	}
+	defer finishPoolMutation()
 
 	if hasProfile {
 		profile.Name = fileConnectionCredentialProfileName(existing.Name)
@@ -338,10 +369,6 @@ func (d *Deps) handleUpdateFileConnection(w http.ResponseWriter, r *http.Request
 			now := time.Now().UTC()
 			profile.RotatedAt = &now
 		}
-		if _, err := d.CredentialStore.UpdateCredentialProfile(profile); err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update credential profile")
-			return
-		}
 	}
 
 	if !hasProfile {
@@ -349,15 +376,20 @@ func (d *Deps) handleUpdateFileConnection(w http.ResponseWriter, r *http.Request
 			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		created, err := d.createFileConnectionCredentialProfile(existing.Name, existing.Protocol, effectiveUsername, desiredKind, secret, passphrase)
+		created, err := d.prepareFileConnectionCredentialProfile(existing.Name, existing.Protocol, effectiveUsername, desiredKind, secret, passphrase)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create credential profile")
 			return
 		}
+		profile = created
 		existing.CredentialID = &created.ID
 	}
 
-	if err := d.FileConnectionStore.UpdateFileConnection(r.Context(), existing); err != nil {
+	if _, err := atomicStore.UpdateFileConnectionWithCredential(r.Context(), existing, profile, !hasProfile); err != nil {
+		if errors.Is(err, persistence.ErrFileConnectionChanged) {
+			servicehttp.WriteError(w, http.StatusConflict, "file connection changed; reload and try again")
+			return
+		}
 		if errors.Is(err, persistence.ErrNotFound) {
 			servicehttp.WriteError(w, http.StatusNotFound, "file connection not found")
 			return
@@ -365,7 +397,6 @@ func (d *Deps) handleUpdateFileConnection(w http.ResponseWriter, r *http.Request
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update file connection")
 		return
 	}
-
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"connection": existing})
 }
 
@@ -385,6 +416,11 @@ func (d *Deps) handleDeleteFileConnection(w http.ResponseWriter, r *http.Request
 		servicehttp.WriteError(w, http.StatusForbidden, "file connection access denied")
 		return
 	}
+	finishPoolMutation := func() {}
+	if d.FileProtoPool != nil {
+		finishPoolMutation = d.FileProtoPool.BeginConnectionMutation(connID)
+	}
+	defer finishPoolMutation()
 
 	// Delete the file connection first.
 	if err := d.FileConnectionStore.DeleteFileConnection(r.Context(), connID); err != nil {
@@ -397,11 +433,6 @@ func (d *Deps) handleDeleteFileConnection(w http.ResponseWriter, r *http.Request
 		if err := d.CredentialStore.DeleteCredentialProfile(*existing.CredentialID); err != nil {
 			log.Printf("file-connections: failed to delete credential profile %s: %v", *existing.CredentialID, err) // #nosec G706 -- Credential IDs are hub-generated identifiers, not raw user input.
 		}
-	}
-
-	// Remove any cached pool session.
-	if d.FileProtoPool != nil {
-		d.FileProtoPool.Remove(connID)
 	}
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "id": connID})
@@ -467,6 +498,29 @@ func (d *Deps) handleFileConnectionTestStateless(w http.ResponseWriter, r *http.
 		return
 	}
 	config.ExtraConfig = normalizedExtra
+	if config.Protocol == "sftp" {
+		if _, pinned := normalizedExtra["host_key"]; !pinned {
+			start := time.Now()
+			hostKey, fingerprint, discoverErr := fileproto.DiscoverSFTPHostKey(r.Context(), config.Host, config.Port)
+			if discoverErr != nil {
+				securityruntime.Logf("file protocol: SFTP host key discovery failed: %v", discoverErr)
+				servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
+					"success": false,
+					"error":   "failed to read the SFTP server key",
+				})
+				return
+			}
+			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
+				"success":                        false,
+				"requires_host_key_confirmation": true,
+				"error":                          "review the SFTP server key, then test again to confirm it",
+				"host_key":                       hostKey,
+				"fingerprint":                    fingerprint,
+				"latency_ms":                     time.Since(start).Milliseconds(),
+			})
+			return
+		}
+	}
 
 	result := d.testFileConnection(r.Context(), config)
 	servicehttp.WriteJSON(w, http.StatusOK, result)
@@ -531,12 +585,47 @@ func (d *Deps) buildConnectionConfig(fc *persistence.FileConnection) (fileproto.
 		initialPath = "/"
 	}
 
+	connectionID := strings.TrimSpace(fc.ID)
 	config := fileproto.ConnectionConfig{
-		Protocol:    fc.Protocol,
-		Host:        fc.Host,
-		Port:        port,
-		InitialPath: initialPath,
-		ExtraConfig: normalizedExtra,
+		ConnectionID: connectionID,
+		Protocol:     fc.Protocol,
+		Host:         fc.Host,
+		Port:         port,
+		InitialPath:  initialPath,
+		ExtraConfig:  normalizedExtra,
+	}
+	expectedUpdatedAt := fc.UpdatedAt
+	config.ValidateCurrent = func(ctx context.Context) error {
+		current, err := d.FileConnectionStore.GetFileConnection(ctx, connectionID)
+		switch {
+		case err == nil && current.UpdatedAt.Equal(expectedUpdatedAt):
+			return nil
+		case err == nil, errors.Is(err, persistence.ErrNotFound):
+			return errors.New("saved file connection changed; retry the operation")
+		default:
+			log.Printf("file-connections: failed to validate current connection %s: %v", connectionID, err) // #nosec G706 -- Connection IDs are hub-generated identifiers.
+			return errors.New("failed to validate saved file connection")
+		}
+	}
+	if fc.Protocol == "sftp" {
+		if _, pinned := normalizedExtra["host_key"]; !pinned {
+			expectedHost := strings.TrimSpace(fc.Host)
+			expectedPort := port
+			config.PersistHostKey = func(ctx context.Context, presentedKey string) error {
+				err := d.FileConnectionStore.PinSFTPHostKey(ctx, connectionID, expectedHost, expectedPort, presentedKey)
+				switch {
+				case err == nil:
+					return nil
+				case errors.Is(err, persistence.ErrSFTPHostKeyMismatch):
+					return errors.New("SFTP host key changed; connection blocked")
+				case errors.Is(err, persistence.ErrFileConnectionChanged), errors.Is(err, persistence.ErrNotFound):
+					return errors.New("SFTP connection changed during host key verification; connection blocked")
+				default:
+					log.Printf("file-connections: failed to pin SFTP host key for %s: %v", connectionID, err) // #nosec G706 -- Connection IDs are hub-generated identifiers.
+					return errors.New("failed to save trusted SFTP host key")
+				}
+			}
+		}
 	}
 
 	if fc.CredentialID != nil && *fc.CredentialID != "" {
@@ -750,7 +839,14 @@ func fileConnectionCredentialProfileDescription(protocol string) string {
 	return fmt.Sprintf("Auto-created for file connection (%s)", strings.TrimSpace(protocol))
 }
 
-func (d *Deps) createFileConnectionCredentialProfile(connectionName, protocol, username, kind, secret, passphrase string) (credentials.Profile, error) {
+func effectiveFileConnectionPort(protocol string, port *int) int {
+	if port != nil && *port != 0 {
+		return *port
+	}
+	return fileproto.DefaultPort(protocol)
+}
+
+func (d *Deps) prepareFileConnectionCredentialProfile(connectionName, protocol, username, kind, secret, passphrase string) (credentials.Profile, error) {
 	profileID := idgen.New("cred")
 	secretCiphertext, err := d.SecretsManager.EncryptString(strings.TrimSpace(secret), profileID)
 	if err != nil {
@@ -765,7 +861,7 @@ func (d *Deps) createFileConnectionCredentialProfile(connectionName, protocol, u
 		}
 	}
 
-	return d.CredentialStore.CreateCredentialProfile(credentials.Profile{
+	return credentials.Profile{
 		ID:                   profileID,
 		Name:                 fileConnectionCredentialProfileName(connectionName),
 		Kind:                 strings.TrimSpace(kind),
@@ -774,5 +870,13 @@ func (d *Deps) createFileConnectionCredentialProfile(connectionName, protocol, u
 		Status:               "active",
 		SecretCiphertext:     secretCiphertext,
 		PassphraseCiphertext: passphraseCiphertext,
-	})
+	}, nil
+}
+
+func (d *Deps) createFileConnectionCredentialProfile(connectionName, protocol, username, kind, secret, passphrase string) (credentials.Profile, error) {
+	profile, err := d.prepareFileConnectionCredentialProfile(connectionName, protocol, username, kind, secret, passphrase)
+	if err != nil {
+		return credentials.Profile{}, err
+	}
+	return d.CredentialStore.CreateCredentialProfile(profile)
 }

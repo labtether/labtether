@@ -514,6 +514,10 @@ func createCredentialProfile(ctx context.Context, q credentialProfileQueryRower,
 }
 
 func (s *PostgresStore) UpdateCredentialProfile(profile credentials.Profile) (credentials.Profile, error) {
+	return updateCredentialProfile(context.Background(), s.pool, profile)
+}
+
+func updateCredentialProfile(ctx context.Context, q credentialProfileQueryRower, profile credentials.Profile) (credentials.Profile, error) {
 	now := time.Now().UTC()
 	status := strings.TrimSpace(profile.Status)
 	if status == "" {
@@ -524,7 +528,7 @@ func (s *PostgresStore) UpdateCredentialProfile(profile credentials.Profile) (cr
 		return credentials.Profile{}, err
 	}
 
-	updated, err := scanCredentialProfile(s.pool.QueryRow(context.Background(),
+	updated, err := scanCredentialProfile(q.QueryRow(ctx,
 		`UPDATE credential_profiles
 		 SET name = $2,
 		     kind = $3,

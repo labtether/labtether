@@ -11,6 +11,8 @@ import (
 	"net"
 	"os"
 	"path"
+	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/pkg/sftp"
@@ -38,6 +40,16 @@ type testSFTPEnv struct {
 // cleaned up automatically.
 func startTestSFTPServer(t *testing.T) testSFTPEnv {
 	t.Helper()
+	return startTestSFTPServerWithPasswordCallback(t, func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
+		if c.User() == "testuser" && string(pass) == "testpass" {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("auth failed")
+	})
+}
+
+func startTestSFTPServerWithPasswordCallback(t *testing.T, passwordCallback func(ssh.ConnMetadata, []byte) (*ssh.Permissions, error)) testSFTPEnv {
+	t.Helper()
 	t.Setenv("LABTETHER_OUTBOUND_ALLOW_PRIVATE", "true")
 	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
 
@@ -53,12 +65,7 @@ func startTestSFTPServer(t *testing.T) testSFTPEnv {
 	hostPubKey := string(ssh.MarshalAuthorizedKey(hostSigner.PublicKey()))
 
 	config := &ssh.ServerConfig{
-		PasswordCallback: func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
-			if c.User() == "testuser" && string(pass) == "testpass" {
-				return nil, nil
-			}
-			return nil, fmt.Errorf("auth failed")
-		},
+		PasswordCallback: passwordCallback,
 	}
 	config.AddHostKey(hostSigner)
 
@@ -176,34 +183,161 @@ func TestSFTPConnectAndClose(t *testing.T) {
 	_ = testConnect(t, env)
 }
 
-func TestSFTPTOFU(t *testing.T) {
-	env := startTestSFTPServer(t)
+func TestSFTPStatelessHostKeyDiscovery(t *testing.T) {
+	var authStarted atomic.Bool
+	env := startTestSFTPServerWithPasswordCallback(t, func(ssh.ConnMetadata, []byte) (*ssh.Permissions, error) {
+		authStarted.Store(true)
+		return nil, nil
+	})
 	defer env.Cleanup()
 
 	host, port, _ := net.SplitHostPort(env.Addr)
 	var portNum int
 	fmt.Sscanf(port, "%d", &portNum)
 
+	hostKey, fingerprint, err := DiscoverSFTPHostKey(context.Background(), host, portNum)
+	if err != nil {
+		t.Fatalf("discover host key: %v", err)
+	}
+	if strings.TrimSpace(hostKey) != strings.TrimSpace(env.HostPubKey) || fingerprint == "" {
+		t.Fatalf("unexpected discovered identity: key=%q fingerprint=%q", hostKey, fingerprint)
+	}
+	if authStarted.Load() {
+		t.Fatal("host key discovery reached SSH authentication")
+	}
+}
+
+func TestSFTPSavedFirstUsePersistsHostKeyBeforeAuthentication(t *testing.T) {
+	var authStarted atomic.Bool
+	env := startTestSFTPServerWithPasswordCallback(t, func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
+		authStarted.Store(true)
+		if c.User() == "testuser" && string(pass) == "testpass" {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("auth failed")
+	})
+	defer env.Cleanup()
+
+	host, port, _ := net.SplitHostPort(env.Addr)
+	var portNum int
+	fmt.Sscanf(port, "%d", &portNum)
+	var persistedBeforeAuth atomic.Bool
+	var persistedKey string
 	client := &SFTPClient{}
-	// No host_key in ExtraConfig => TOFU mode.
-	cfg := ConnectionConfig{
+	err := client.Connect(context.Background(), ConnectionConfig{
 		Protocol:   "sftp",
 		Host:       host,
 		Port:       portNum,
 		Username:   "testuser",
 		Secret:     "testpass",
 		AuthMethod: "password",
-	}
-	if err := client.Connect(context.Background(), cfg); err != nil {
+		PersistHostKey: func(_ context.Context, hostKey string) error {
+			persistedBeforeAuth.Store(!authStarted.Load())
+			persistedKey = hostKey
+			return nil
+		},
+	})
+	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
 	defer client.Close()
-
-	if client.CapturedHostKey == "" {
-		t.Error("expected CapturedHostKey to be populated in TOFU mode")
+	if !persistedBeforeAuth.Load() {
+		t.Fatal("host key was not persisted before authentication")
 	}
-	if client.CapturedFingerprint == "" {
-		t.Error("expected CapturedFingerprint to be populated in TOFU mode")
+	if strings.TrimSpace(persistedKey) != strings.TrimSpace(env.HostPubKey) {
+		t.Fatal("persisted host key did not match the server key")
+	}
+}
+
+func TestSFTPHostKeyPersistenceFailureStopsBeforeAuthentication(t *testing.T) {
+	var authStarted atomic.Bool
+	env := startTestSFTPServerWithPasswordCallback(t, func(ssh.ConnMetadata, []byte) (*ssh.Permissions, error) {
+		authStarted.Store(true)
+		return nil, nil
+	})
+	defer env.Cleanup()
+
+	host, port, _ := net.SplitHostPort(env.Addr)
+	var portNum int
+	fmt.Sscanf(port, "%d", &portNum)
+	client := &SFTPClient{}
+	err := client.Connect(context.Background(), ConnectionConfig{
+		Protocol:   "sftp",
+		Host:       host,
+		Port:       portNum,
+		Username:   "testuser",
+		Secret:     "testpass",
+		AuthMethod: "password",
+		PersistHostKey: func(context.Context, string) error {
+			return errors.New("synthetic persistence failure")
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "synthetic persistence failure") {
+		t.Fatalf("persistence failure was not returned: %v", err)
+	}
+	if authStarted.Load() {
+		t.Fatal("SSH authentication began after host key persistence failed")
+	}
+}
+
+func TestSFTPMissingHostKeyPolicyFailsClosed(t *testing.T) {
+	client := &SFTPClient{}
+	err := client.Connect(context.Background(), ConnectionConfig{
+		Protocol:   "sftp",
+		Host:       "example.invalid",
+		Port:       22,
+		Username:   "testuser",
+		Secret:     "testpass",
+		AuthMethod: "password",
+	})
+	if err == nil || !strings.Contains(err.Error(), "host key is required") {
+		t.Fatalf("missing host key policy did not fail closed: %v", err)
+	}
+}
+
+func TestSFTPInvalidStoredHostKeyFailsClosed(t *testing.T) {
+	client := &SFTPClient{}
+	err := client.Connect(context.Background(), ConnectionConfig{
+		Protocol:    "sftp",
+		Host:        "example.invalid",
+		Port:        22,
+		Username:    "testuser",
+		Secret:      "testpass",
+		AuthMethod:  "password",
+		ExtraConfig: map[string]any{"host_key": "not-a-public-key"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "host key is invalid") {
+		t.Fatalf("invalid stored host key did not fail closed: %v", err)
+	}
+}
+
+func TestSFTPChangedPinnedHostKeyIsBlocked(t *testing.T) {
+	env := startTestSFTPServer(t)
+	defer env.Cleanup()
+	host, port, _ := net.SplitHostPort(env.Addr)
+	var portNum int
+	fmt.Sscanf(port, "%d", &portNum)
+	_, wrongPrivateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrongSigner, err := ssh.NewSignerFromKey(wrongPrivateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	client := &SFTPClient{}
+	err = client.Connect(context.Background(), ConnectionConfig{
+		Protocol:    "sftp",
+		Host:        host,
+		Port:        portNum,
+		Username:    "testuser",
+		Secret:      "testpass",
+		AuthMethod:  "password",
+		ExtraConfig: map[string]any{"host_key": string(ssh.MarshalAuthorizedKey(wrongSigner.PublicKey()))},
+	})
+	if err == nil || !strings.Contains(err.Error(), "host key changed") {
+		t.Fatalf("changed pinned host key was not blocked: %v", err)
 	}
 }
 

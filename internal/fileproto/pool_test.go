@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -18,9 +19,17 @@ type mockRemoteFS struct {
 	connectErr   error // when non-nil, Connect returns this error
 	connectCalls int
 	closeCalls   int
+	connectStart chan struct{}
+	connectNext  chan struct{}
 }
 
 func (m *mockRemoteFS) Connect(_ context.Context, _ ConnectionConfig) error {
+	if m.connectStart != nil {
+		close(m.connectStart)
+	}
+	if m.connectNext != nil {
+		<-m.connectNext
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.connectCalls++
@@ -30,6 +39,65 @@ func (m *mockRemoteFS) Connect(_ context.Context, _ ConnectionConfig) error {
 	m.connected = true
 	m.closed = false
 	return nil
+}
+
+func TestPoolConnectionMutationWaitsForConnectAndRejectsStaleConfig(t *testing.T) {
+	pool := NewPool()
+	defer pool.Close()
+	mock := &mockRemoteFS{
+		connectStart: make(chan struct{}),
+		connectNext:  make(chan struct{}),
+	}
+	pool.newFS = func(string) (RemoteFS, error) { return mock, nil }
+
+	var revision int
+	revision = 1
+	oldConfig := ConnectionConfig{
+		ConnectionID: "conn-race",
+		Protocol:     "sftp",
+		ValidateCurrent: func(context.Context) error {
+			if revision != 1 {
+				return errors.New("saved connection changed")
+			}
+			return nil
+		},
+	}
+	getDone := make(chan error, 1)
+	go func() {
+		_, err := pool.Get(context.Background(), "transfer-race", oldConfig)
+		getDone <- err
+	}()
+	<-mock.connectStart
+
+	mutationStarted := make(chan struct{})
+	mutationDone := make(chan struct{})
+	go func() {
+		finish := pool.BeginConnectionMutation("conn-race")
+		close(mutationStarted)
+		revision = 2
+		finish()
+		close(mutationDone)
+	}()
+	select {
+	case <-mutationStarted:
+		t.Fatal("connection mutation started before in-flight connect finished")
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	close(mock.connectNext)
+	if err := <-getDone; err != nil {
+		t.Fatalf("in-flight connection failed before mutation: %v", err)
+	}
+	<-mutationDone
+	pool.mu.Lock()
+	sessionCount := len(pool.sessions)
+	pool.mu.Unlock()
+	if sessionCount != 0 {
+		t.Fatalf("mutation left %d stale pooled sessions", sessionCount)
+	}
+	if _, err := pool.Get(context.Background(), "transfer-race", oldConfig); err == nil || !strings.Contains(err.Error(), "saved connection changed") {
+		t.Fatalf("stale config was allowed after mutation: %v", err)
+	}
 }
 
 func (m *mockRemoteFS) List(_ context.Context, _ string, _ bool) ([]FileEntry, error) {

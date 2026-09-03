@@ -70,3 +70,20 @@ func TestSanitizeLegacyFileConnectionExtraConfigDropsSecretFields(t *testing.T) 
 		t.Fatalf("supported legacy option was lost: %#v", config)
 	}
 }
+
+func TestPreserveExistingSFTPHostKeyRequiresExplicitReplacement(t *testing.T) {
+	current := map[string]any{"host_key": "trusted-key"}
+	requested := map[string]any{}
+	merged := preserveExistingSFTPHostKey("sftp", current, requested)
+	if merged["host_key"] != "trusted-key" {
+		t.Fatalf("partial update cleared the trusted host key: %#v", merged)
+	}
+	if _, mutated := requested["host_key"]; mutated {
+		t.Fatal("host key preservation mutated the request map")
+	}
+
+	replaced := preserveExistingSFTPHostKey("sftp", current, map[string]any{"host_key": "replacement-key"})
+	if replaced["host_key"] != "replacement-key" {
+		t.Fatalf("explicit host key replacement was ignored: %#v", replaced)
+	}
+}

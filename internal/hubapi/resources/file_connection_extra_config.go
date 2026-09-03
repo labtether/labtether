@@ -95,3 +95,25 @@ func sanitizeLegacyFileConnectionExtraConfig(protocol string, config map[string]
 	}
 	return out
 }
+
+// preserveExistingSFTPHostKey prevents an ordinary partial update from
+// silently clearing a trusted server identity. Replacing the pin requires an
+// explicit new host_key value.
+func preserveExistingSFTPHostKey(protocol string, current, requested map[string]any) map[string]any {
+	if strings.ToLower(strings.TrimSpace(protocol)) != "sftp" {
+		return requested
+	}
+	if _, explicitlySet := requested["host_key"]; explicitlySet {
+		return requested
+	}
+	existing, pinned := current["host_key"]
+	if !pinned {
+		return requested
+	}
+	merged := make(map[string]any, len(requested)+1)
+	for key, value := range requested {
+		merged[key] = value
+	}
+	merged["host_key"] = existing
+	return merged
+}

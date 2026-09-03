@@ -740,13 +740,26 @@ const (
 	FileTransferListMaxOffset    = 10_000
 )
 
+var (
+	ErrFileConnectionChanged = errors.New("file connection changed during host key verification")
+	ErrSFTPHostKeyMismatch   = errors.New("sftp host key mismatch")
+)
+
 // FileConnectionStore provides persistence for remote file connection profiles.
 type FileConnectionStore interface {
 	ListFileConnections(ctx context.Context) ([]FileConnection, error)
 	GetFileConnection(ctx context.Context, id string) (*FileConnection, error)
 	CreateFileConnection(ctx context.Context, fc *FileConnection) error
 	UpdateFileConnection(ctx context.Context, fc *FileConnection) error
+	PinSFTPHostKey(ctx context.Context, connectionID, expectedHost string, expectedPort int, presentedKey string) error
 	DeleteFileConnection(ctx context.Context, id string) error
+}
+
+// FileConnectionCredentialStore applies a connection edit and its linked
+// credential edit in one transaction. The boolean selects profile creation
+// for legacy connections that do not have a credential profile yet.
+type FileConnectionCredentialStore interface {
+	UpdateFileConnectionWithCredential(ctx context.Context, fc *FileConnection, profile credentials.Profile, createProfile bool) (credentials.Profile, error)
 }
 
 // RemoteBookmarkStore provides persistence for saved remote desktop bookmarks.

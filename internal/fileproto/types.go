@@ -25,15 +25,18 @@ type RemoteFS interface {
 
 // ConnectionConfig holds everything needed to connect to a remote filesystem.
 type ConnectionConfig struct {
-	Protocol    string
-	Host        string
-	Port        int // 0 = use protocol default
-	Username    string
-	Secret      string // #nosec G117 -- Runtime auth material for remote file protocols, not a hardcoded credential.
-	Passphrase  string // for encrypted private keys (SFTP)
-	AuthMethod  string // "password", "private_key"
-	InitialPath string
-	ExtraConfig map[string]any // protocol-specific (e.g., smb_share, ftp_passive)
+	ConnectionID    string // saved connection ID used to coordinate edits with active connects
+	Protocol        string
+	Host            string
+	Port            int // 0 = use protocol default
+	Username        string
+	Secret          string // #nosec G117 -- Runtime auth material for remote file protocols, not a hardcoded credential.
+	Passphrase      string // for encrypted private keys (SFTP)
+	AuthMethod      string // "password", "private_key"
+	InitialPath     string
+	ExtraConfig     map[string]any // protocol-specific (e.g., smb_share, ftp_passive)
+	ValidateCurrent func(context.Context) error
+	PersistHostKey  func(context.Context, string) error
 }
 
 // DefaultPort returns the default port for a protocol.

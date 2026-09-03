@@ -4,8 +4,8 @@ import { useCallback, useState } from "react";
 import { ArrowLeft, CheckCircle2, XCircle, Loader2, Trash2 } from "lucide-react";
 import { Button } from "../../../components/ui/Button";
 import { Input, Select } from "../../../components/ui/Input";
-import type { FileConnection, CreateFileConnectionRequest, TestResult } from "./fileConnectionsClient";
-import { createFileConnection, updateFileConnection, deleteFileConnection, testFileConnectionStateless } from "./fileConnectionsClient";
+import type { FileConnection, CreateFileConnectionRequest, TestedSFTPHostKey, TestResult } from "./fileConnectionsClient";
+import { createFileConnection, updateFileConnection, deleteFileConnection, sftpEndpointKey, testFileConnectionStateless, trustedSFTPHostKeyForRequest } from "./fileConnectionsClient";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -84,6 +84,7 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
   const [deleting, setDeleting] = useState(false);
   const [formError, setFormError] = useState("");
   const [testResult, setTestResult] = useState<TestResult | null>(null);
+  const [testedSFTPHostKey, setTestedSFTPHostKey] = useState<TestedSFTPHostKey | null>(null);
 
   // ---------------------------------------------------------------------------
   // Build request from form state
@@ -102,6 +103,17 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
     }
     if (protocol === "webdav") {
       extraCfg.webdav_tls = webdavTLS;
+    }
+
+    const trustedHostKey = trustedSFTPHostKeyForRequest(
+      protocol,
+      host,
+      port,
+      existingConnection,
+      testedSFTPHostKey,
+    );
+    if (trustedHostKey) {
+      extraCfg.host_key = trustedHostKey;
     }
 
     const secret =
@@ -126,6 +138,7 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
   }, [
     protocol, name, host, port, initialPath, username, password,
     authMethod, privateKey, passphrase, domain, shareName, passiveMode, useTLS, webdavTLS,
+    existingConnection, testedSFTPHostKey,
   ]);
 
   // ---------------------------------------------------------------------------
@@ -157,7 +170,15 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
     setTestResult(null);
     setTesting(true);
     try {
-      const result = await testFileConnectionStateless(buildRequest());
+      const request = buildRequest();
+      const result = await testFileConnectionStateless(request);
+      if (protocol === "sftp" && result.host_key?.trim()) {
+        setTestedSFTPHostKey({
+          endpoint: sftpEndpointKey(request.host, request.port ?? DEFAULT_PORTS.sftp),
+          hostKey: result.host_key.trim(),
+          fingerprint: result.fingerprint,
+        });
+      }
       setTestResult(result);
     } catch (e) {
       setTestResult({
@@ -167,7 +188,7 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
     } finally {
       setTesting(false);
     }
-  }, [validate, buildRequest]);
+  }, [validate, buildRequest, protocol]);
 
   const handleSave = useCallback(async () => {
     // In edit mode, credentials are optional (only update if user entered new ones)
@@ -496,18 +517,35 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
       {testResult && (
         <div
           className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs ${
-            testResult.success
+            testResult.requires_host_key_confirmation
+              ? "bg-[var(--warn-glow)] text-[var(--warn)]"
+              : testResult.success
               ? "bg-[var(--ok-glow)] text-[var(--ok)]"
               : "bg-[var(--bad-glow)] text-[var(--bad)]"
           }`}
         >
-          {testResult.success ? (
+          {testResult.requires_host_key_confirmation ? (
+            <>
+              <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+              Review this server key, then test again or save it.
+              {testResult.fingerprint && (
+                <span className="text-[var(--muted)] ml-1 break-all">
+                  {testResult.fingerprint}
+                </span>
+              )}
+            </>
+          ) : testResult.success ? (
             <>
               <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
               Connection successful
               {testResult.latency_ms != null && (
                 <span className="text-[var(--muted)] ml-1">
                   ({testResult.latency_ms}ms)
+                </span>
+              )}
+              {testResult.fingerprint && (
+                <span className="text-[var(--muted)] ml-1 break-all">
+                  Server key: {testResult.fingerprint}
                 </span>
               )}
             </>
