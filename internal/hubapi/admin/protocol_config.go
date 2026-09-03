@@ -107,6 +107,9 @@ func (d *Deps) HandleCreateProtocolConfig(w http.ResponseWriter, r *http.Request
 	if !validateRDPTransportSecurity(w, req.Protocol, req.Config) {
 		return
 	}
+	if !validateVNCTransportSecurity(w, req.Protocol, req.Config, true) {
+		return
+	}
 
 	if !d.authorizeCredentialBinding(w, r, req.CredentialProfileID) {
 		return
@@ -196,17 +199,19 @@ func (d *Deps) HandleUpdateProtocolConfig(w http.ResponseWriter, r *http.Request
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	enabled := true
+	if req.Enabled != nil {
+		enabled = *req.Enabled
+	}
 	if !validateRDPTransportSecurity(w, protocol, req.Config) {
+		return
+	}
+	if !validateVNCTransportSecurity(w, protocol, req.Config, enabled) {
 		return
 	}
 
 	if !d.authorizeCredentialBinding(w, r, req.CredentialProfileID) {
 		return
-	}
-
-	enabled := true
-	if req.Enabled != nil {
-		enabled = *req.Enabled
 	}
 
 	pc := protocols.ProtocolConfig{
@@ -247,6 +252,40 @@ func validateRDPTransportSecurity(w http.ResponseWriter, protocol string, raw js
 	}
 	if (cfg.IgnoreCertificate || cfg.AllowLegacySecurity) && !securityruntime.InsecureTransportAllowed() {
 		servicehttp.WriteError(w, http.StatusBadRequest, "unsafe RDP options require LABTETHER_ALLOW_INSECURE_TRANSPORT=true")
+		return false
+	}
+	return true
+}
+
+func validateVNCTransportSecurity(w http.ResponseWriter, protocol string, raw json.RawMessage, enabled bool) bool {
+	var allowInsecure bool
+	switch protocol {
+	case protocols.ProtocolVNC:
+		cfg, err := protocols.DecodeVNCConfig(raw)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+			return false
+		}
+		allowInsecure = cfg.AllowInsecureTransport
+	case protocols.ProtocolARD:
+		cfg, err := protocols.DecodeARDConfig(raw)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+			return false
+		}
+		allowInsecure = cfg.AllowInsecureTransport
+	default:
+		return true
+	}
+	if !enabled {
+		return true
+	}
+	if !allowInsecure {
+		servicehttp.WriteError(w, http.StatusBadRequest, "plain VNC requires allow_insecure_vnc=true")
+		return false
+	}
+	if !securityruntime.InsecureTransportAllowed() {
+		servicehttp.WriteError(w, http.StatusBadRequest, "plain VNC requires LABTETHER_ALLOW_INSECURE_TRANSPORT=true")
 		return false
 	}
 	return true

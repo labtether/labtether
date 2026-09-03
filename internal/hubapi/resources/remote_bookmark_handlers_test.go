@@ -181,9 +181,10 @@ func TestRemoteBookmarkCredentialsEncryptedRedactedAndAuditedOnReveal(t *testing
 }
 
 func TestRemoteBookmarkCredentialScopeRequiredForWriteAndReveal(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
 	deps, bookmarks, _, auditEvents := newRemoteBookmarkTestDeps(t)
 	deniedCreate := remoteBookmarkRequest(t, deps, http.MethodPost, remoteBookmarkAPIPrefix,
-		`{"label":"Denied","protocol":"vnc","host":"192.0.2.20","port":5900,"password":"secret"}`,
+		`{"label":"Denied","protocol":"vnc","host":"192.0.2.20","port":5900,"password":"secret","allow_insecure_vnc":true}`,
 		[]string{"assets:read"})
 	if deniedCreate.Code != http.StatusForbidden {
 		t.Fatalf("denied create status=%d body=%s", deniedCreate.Code, deniedCreate.Body.String())
@@ -194,7 +195,7 @@ func TestRemoteBookmarkCredentialScopeRequiredForWriteAndReveal(t *testing.T) {
 	}
 
 	created := remoteBookmarkRequest(t, deps, http.MethodPost, remoteBookmarkAPIPrefix,
-		`{"label":"Allowed","protocol":"vnc","host":"192.0.2.21","port":5900,"password":"secret"}`, nil)
+		`{"label":"Allowed","protocol":"vnc","host":"192.0.2.21","port":5900,"password":"secret","allow_insecure_vnc":true}`, nil)
 	var response remoteBookmarkResponse
 	_ = json.Unmarshal(created.Body.Bytes(), &response)
 	deniedReveal := remoteBookmarkRequest(t, deps, http.MethodGet,
@@ -272,6 +273,47 @@ func TestRemoteBookmarkCleartextSPICERequiresGlobalOptIn(t *testing.T) {
 	}
 }
 
+func TestRemoteBookmarkPlainVNCRequiresGlobalOptInAndPersistsChoice(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "false")
+	deps, bookmarks, _, _ := newRemoteBookmarkTestDeps(t)
+	payload := `{"label":"Old VNC","protocol":"vnc","host":"192.0.2.34","port":5900,"allow_insecure_vnc":true}`
+	denied := remoteBookmarkRequest(t, deps, http.MethodPost, remoteBookmarkAPIPrefix, payload, nil)
+	if denied.Code != http.StatusBadRequest || !strings.Contains(denied.Body.String(), "LABTETHER_ALLOW_INSECURE_TRANSPORT") {
+		t.Fatalf("plain VNC without global opt-in status=%d body=%s", denied.Code, denied.Body.String())
+	}
+
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
+	missingLocal := remoteBookmarkRequest(t, deps, http.MethodPost, remoteBookmarkAPIPrefix,
+		`{"label":"No VNC opt-in","protocol":"vnc","host":"192.0.2.34","port":5900}`, nil)
+	if missingLocal.Code != http.StatusBadRequest || !strings.Contains(missingLocal.Body.String(), "allow_insecure_vnc") {
+		t.Fatalf("plain VNC without local opt-in status=%d body=%s", missingLocal.Code, missingLocal.Body.String())
+	}
+	allowed := remoteBookmarkRequest(t, deps, http.MethodPost, remoteBookmarkAPIPrefix, payload, nil)
+	if allowed.Code != http.StatusCreated {
+		t.Fatalf("double-opt-in VNC bookmark status=%d body=%s", allowed.Code, allowed.Body.String())
+	}
+	var response remoteBookmarkResponse
+	if err := json.Unmarshal(allowed.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode VNC bookmark: %v", err)
+	}
+	if !response.AllowInsecureVNC {
+		t.Fatal("VNC bookmark response did not retain the explicit opt-in")
+	}
+	stored, err := bookmarks.GetRemoteBookmark(context.Background(), response.ID)
+	if err != nil {
+		t.Fatalf("load VNC bookmark: %v", err)
+	}
+	if !stored.AllowInsecureVNC {
+		t.Fatal("stored VNC bookmark did not retain the explicit opt-in")
+	}
+
+	wrongProtocol := remoteBookmarkRequest(t, deps, http.MethodPost, remoteBookmarkAPIPrefix,
+		`{"label":"Wrong","protocol":"rdp","host":"192.0.2.35","port":3389,"allow_insecure_vnc":true}`, nil)
+	if wrongProtocol.Code != http.StatusBadRequest {
+		t.Fatalf("VNC opt-in on RDP status=%d body=%s", wrongProtocol.Code, wrongProtocol.Body.String())
+	}
+}
+
 func TestRemoteBookmarkRejectsCrossBookmarkOwnedCredentialReference(t *testing.T) {
 	deps, bookmarks, credentialStore, _ := newRemoteBookmarkTestDeps(t)
 	first := remoteBookmarkRequest(t, deps, http.MethodPost, remoteBookmarkAPIPrefix,
@@ -325,10 +367,11 @@ func TestRemoteBookmarkRelinkingSameOwnedCredentialDoesNotDeleteIt(t *testing.T)
 }
 
 func TestRemoteBookmarkManagedCredentialNameStaysWithinInventoryLimit(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
 	deps, bookmarks, credentialStore, _ := newRemoteBookmarkTestDeps(t)
 	label := strings.Repeat("a", remoteBookmarkMaxLabelLength)
 	created := remoteBookmarkRequest(t, deps, http.MethodPost, remoteBookmarkAPIPrefix,
-		`{"label":"`+label+`","protocol":"vnc","host":"192.0.2.33","port":5900,"password":"secret"}`, nil)
+		`{"label":"`+label+`","protocol":"vnc","host":"192.0.2.33","port":5900,"password":"secret","allow_insecure_vnc":true}`, nil)
 	if created.Code != http.StatusCreated {
 		t.Fatalf("long-label create status=%d body=%s", created.Code, created.Body.String())
 	}
@@ -345,6 +388,7 @@ func TestRemoteBookmarkManagedCredentialNameStaysWithinInventoryLimit(t *testing
 }
 
 func TestRemoteBookmarkRejectsCredentialKindMismatch(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
 	deps, _, credentialStore, _ := newRemoteBookmarkTestDeps(t)
 	profile, err := credentialStore.CreateCredentialProfile(credentials.Profile{
 		ID:               "cred-rdp-only",
@@ -357,7 +401,7 @@ func TestRemoteBookmarkRejectsCredentialKindMismatch(t *testing.T) {
 		t.Fatalf("create profile: %v", err)
 	}
 	response := remoteBookmarkRequest(t, deps, http.MethodPost, remoteBookmarkAPIPrefix,
-		`{"label":"Wrong kind","protocol":"vnc","host":"192.0.2.40","port":5900,"credential_id":"`+profile.ID+`"}`,
+		`{"label":"Wrong kind","protocol":"vnc","host":"192.0.2.40","port":5900,"credential_id":"`+profile.ID+`","allow_insecure_vnc":true}`,
 		[]string{"credentials:use"})
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("kind mismatch status=%d body=%s", response.Code, response.Body.String())

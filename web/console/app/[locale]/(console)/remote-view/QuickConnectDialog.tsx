@@ -24,6 +24,7 @@ interface QuickConnectDialogProps {
     port: number;
     username?: string;
     password?: string;
+    allowInsecureVNC?: boolean;
     ignoreCertificate?: boolean;
     allowLegacySecurity?: boolean;
     certificateFingerprints?: string;
@@ -148,6 +149,7 @@ export default function QuickConnectDialog({
   const [bookmarkNickname, setBookmarkNickname] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [allowInsecureVNC, setAllowInsecureVNC] = useState(false);
   const [ignoreCertificate, setIgnoreCertificate] = useState(false);
   const [allowLegacySecurity, setAllowLegacySecurity] = useState(false);
   const [certificateFingerprints, setCertificateFingerprints] = useState("");
@@ -177,6 +179,7 @@ export default function QuickConnectDialog({
       setBookmarkNickname("");
       setUsername("");
       setPassword("");
+      setAllowInsecureVNC(false);
       setIgnoreCertificate(false);
       setAllowLegacySecurity(false);
       setCertificateFingerprints("");
@@ -205,6 +208,9 @@ export default function QuickConnectDialog({
         setAllowLegacySecurity(false);
         setCertificateFingerprints("");
       }
+      if (newProtocol !== "vnc" && newProtocol !== "ard") {
+        setAllowInsecureVNC(false);
+      }
       if (newProtocol !== "spice") {
         setSPICESecurityMode("tls");
         setSPICECAPEM("");
@@ -227,6 +233,9 @@ export default function QuickConnectDialog({
         setIgnoreCertificate(false);
         setAllowLegacySecurity(false);
         setCertificateFingerprints("");
+      }
+      if (parsed.protocol !== "vnc" && parsed.protocol !== "ard") {
+        setAllowInsecureVNC(false);
       }
       if (parsed.protocol !== "spice") {
         setSPICESecurityMode("tls");
@@ -254,6 +263,9 @@ export default function QuickConnectDialog({
           ? { username: username.trim() }
           : {}),
         ...(withCredentials && password ? { password } : {}),
+        ...((protocol === "vnc" || protocol === "ard") && allowInsecureVNC
+          ? { allowInsecureVNC: true }
+          : {}),
         ...(protocol === "rdp" && ignoreCertificate
           ? { ignoreCertificate: true }
           : {}),
@@ -283,6 +295,7 @@ export default function QuickConnectDialog({
       port,
       username,
       password,
+      allowInsecureVNC,
       ignoreCertificate,
       allowLegacySecurity,
       certificateFingerprints,
@@ -607,6 +620,29 @@ export default function QuickConnectDialog({
               </div>
             )}
 
+            {(protocol === "vnc" || protocol === "ard") && (
+              <div className="space-y-2 rounded-lg border border-[var(--warn)]/30 bg-[var(--warn-glow)] px-3 py-2">
+                <label className="flex items-start gap-2 text-xs text-[var(--warn)]">
+                  <input
+                    type="checkbox"
+                    checked={allowInsecureVNC}
+                    onChange={(event) => setAllowInsecureVNC(event.target.checked)}
+                    className="mt-0.5 h-3.5 w-3.5 accent-[var(--warn)]"
+                  />
+                  <span>
+                    Allow plain VNC. Screen, keyboard, and login data can be read
+                    or changed on the network. The Hub must also allow unsafe
+                    transport.
+                  </span>
+                </label>
+                {!allowInsecureVNC && (
+                  <p className="text-[10px] text-[var(--warn)]">
+                    This choice is required for a direct VNC connection.
+                  </p>
+                )}
+              </div>
+            )}
+
             {protocol === "spice" && (
               <div className="space-y-3 rounded-lg border border-[var(--warn)]/30 bg-[var(--warn-glow)] px-3 py-2">
                 <label className="flex items-start gap-2 text-xs text-[var(--warn)]">
@@ -653,7 +689,10 @@ export default function QuickConnectDialog({
             <button
               type="button"
               onClick={() => handleConnect(true)}
-              className="w-full py-2.5 rounded-lg text-white text-sm font-semibold shadow-[0_2px_12px_rgba(255,0,128,0.15)] hover:-translate-y-px hover:shadow-[0_4px_20px_rgba(255,0,128,0.25)] transition-all duration-[var(--dur-fast)]"
+              disabled={
+                (protocol === "vnc" || protocol === "ard") && !allowInsecureVNC
+              }
+              className="w-full py-2.5 rounded-lg text-white text-sm font-semibold shadow-[0_2px_12px_rgba(255,0,128,0.15)] hover:-translate-y-px hover:shadow-[0_4px_20px_rgba(255,0,128,0.25)] transition-all duration-[var(--dur-fast)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
               style={{
                 background: "linear-gradient(135deg, var(--accent), #d4006a)",
               }}
@@ -665,7 +704,10 @@ export default function QuickConnectDialog({
             <button
               type="button"
               onClick={() => handleConnect(false)}
-              className="w-full py-2 rounded-lg border border-[var(--panel-border)] text-sm text-[var(--muted)] hover:border-[var(--line)] hover:text-[var(--text-secondary)] transition-all duration-[var(--dur-fast)]"
+              disabled={
+                (protocol === "vnc" || protocol === "ard") && !allowInsecureVNC
+              }
+              className="w-full py-2 rounded-lg border border-[var(--panel-border)] text-sm text-[var(--muted)] hover:border-[var(--line)] hover:text-[var(--text-secondary)] transition-all duration-[var(--dur-fast)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               Connect without credentials
             </button>

@@ -76,6 +76,7 @@ function RemoteViewPageContent() {
             host: bookmark.host,
             port: bookmark.port,
             bookmarkId: bookmark.id,
+            allowInsecureVNC: bookmark.allow_insecure_vnc,
             spiceSecurityMode: bookmark.spice_security_mode,
             spiceCAPEM: bookmark.spice_ca_pem,
           },
@@ -103,6 +104,7 @@ function RemoteViewPageContent() {
       protocol: RemoteViewProtocol;
       username?: string;
       password?: string;
+      allowInsecureVNC?: boolean;
       ignoreCertificate?: boolean;
       allowLegacySecurity?: boolean;
       certificateFingerprints?: string;
@@ -116,6 +118,7 @@ function RemoteViewPageContent() {
         protocol,
         username,
         password,
+        allowInsecureVNC,
         ignoreCertificate,
         allowLegacySecurity,
         certificateFingerprints,
@@ -137,6 +140,7 @@ function RemoteViewPageContent() {
         target: {
           host,
           port,
+          allowInsecureVNC,
           ignoreCertificate,
           allowLegacySecurity,
           certificateFingerprints,
@@ -155,6 +159,7 @@ function RemoteViewPageContent() {
           port,
           username,
           password,
+          allow_insecure_vnc: allowInsecureVNC,
           spice_security_mode: spiceSecurityMode,
           spice_ca_pem: spiceCAPEM,
         }).catch((err) => console.error("Failed to save bookmark:", err));

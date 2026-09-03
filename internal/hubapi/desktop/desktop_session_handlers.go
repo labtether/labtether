@@ -34,6 +34,7 @@ type DesktopSessionOptions struct {
 	DirectPort                 int
 	DirectUsername             string
 	DirectPassword             string // #nosec G117 -- Ephemeral, in-memory-only RDP/SPICE session credential.
+	VNCAllowInsecureTransport  bool
 	RDPIgnoreCertificate       bool
 	RDPAllowLegacySecurity     bool
 	RDPCertificateFingerprints string
@@ -218,6 +219,7 @@ func (d *Deps) HandleDesktopSessions(w http.ResponseWriter, r *http.Request) {
 			Port                    int     `json:"port"`
 			Username                *string `json:"username,omitempty"`
 			Password                *string `json:"password,omitempty"`
+			AllowInsecureVNC        bool    `json:"allow_insecure_vnc,omitempty"`
 			IgnoreCertificate       bool    `json:"ignore_certificate,omitempty"`
 			AllowLegacySecurity     bool    `json:"allow_legacy_security,omitempty"`
 			CertificateFingerprints string  `json:"certificate_fingerprints,omitempty"`
@@ -274,6 +276,15 @@ func (d *Deps) HandleDesktopSessions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusBadRequest, "RDP security options are only valid for RDP")
 			return
 		}
+		if req.DirectTarget.AllowInsecureVNC && protocol != "vnc" {
+			servicehttp.WriteError(w, http.StatusBadRequest, "allow_insecure_vnc is only valid for VNC")
+			return
+		}
+		if protocol == "vnc" {
+			if !requireInsecureVNCTransport(w, req.DirectTarget.AllowInsecureVNC) {
+				return
+			}
+		}
 		if err := protocols.ValidateRDPConfigOptions(rdpOptions); err != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 			return
@@ -321,6 +332,7 @@ func (d *Deps) HandleDesktopSessions(w http.ResponseWriter, r *http.Request) {
 			DirectPort:                 port,
 			DirectUsername:             username,
 			DirectPassword:             password,
+			VNCAllowInsecureTransport:  req.DirectTarget.AllowInsecureVNC,
 			RDPIgnoreCertificate:       req.DirectTarget.IgnoreCertificate,
 			RDPAllowLegacySecurity:     req.DirectTarget.AllowLegacySecurity,
 			RDPCertificateFingerprints: fingerprints,
@@ -499,6 +511,12 @@ func (d *Deps) HandleDesktopStreamTicket(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
+	opts := d.GetDesktopSessionOptions(session.ID)
+	effectiveProtocol := d.ResolveDesktopProtocol(session, r)
+	if effectiveProtocol == "vnc" && opts.Direct && !requireInsecureVNCTransport(w, opts.VNCAllowInsecureTransport) {
+		return
+	}
+
 	ticket, expiresAt, err := d.IssueStreamTicket(r.Context(), session.ID)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to issue stream ticket")
@@ -506,8 +524,6 @@ func (d *Deps) HandleDesktopStreamTicket(w http.ResponseWriter, r *http.Request,
 	}
 	audioTicket := ""
 
-	opts := d.GetDesktopSessionOptions(session.ID)
-	effectiveProtocol := d.ResolveDesktopProtocol(session, r)
 	if effectiveProtocol == "vnc" && d.AgentMgr != nil && d.AgentMgr.IsConnected(session.Target) {
 		if strings.TrimSpace(opts.VNCPassword) == "" {
 			password, err := generateSessionVNCPassword()

@@ -89,6 +89,64 @@ describe("desktop session proxy", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("only forwards a typed VNC transport opt-in for VNC", async () => {
+    const accepted = await POST(
+      new NextRequest("https://console.example.com/api/desktop/session", {
+        method: "POST",
+        headers: {
+          origin: "https://console.example.com",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          protocol: "vnc",
+          direct_target: {
+            host: "192.0.2.71",
+            port: 5900,
+            allow_insecure_vnc: true,
+          },
+        }),
+      }),
+    );
+    expect(accepted.status).toBe(201);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(
+      JSON.parse(String(init.body)).direct_target.allow_insecure_vnc,
+    ).toBe(true);
+
+    fetchMock.mockClear();
+    for (const body of [
+      {
+        protocol: "vnc",
+        direct_target: {
+          host: "192.0.2.71",
+          port: 5900,
+          allow_insecure_vnc: "true",
+        },
+      },
+      {
+        protocol: "rdp",
+        direct_target: {
+          host: "192.0.2.71",
+          port: 3389,
+          allow_insecure_vnc: true,
+        },
+      },
+    ]) {
+      const response = await POST(
+        new NextRequest("https://console.example.com/api/desktop/session", {
+          method: "POST",
+          headers: {
+            origin: "https://console.example.com",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(body),
+        }),
+      );
+      expect(response.status).toBe(400);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("only forwards explicit RDP security options", async () => {
     const accepted = await POST(
       new NextRequest("https://console.example.com/api/desktop/session", {

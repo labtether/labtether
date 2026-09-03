@@ -71,7 +71,8 @@ type SSHConfig struct {
 
 // VNCConfig holds VNC-specific connection options.
 type VNCConfig struct {
-	DisplayNumber int `json:"display_number,omitempty"`
+	DisplayNumber          int  `json:"display_number,omitempty"`
+	AllowInsecureTransport bool `json:"allow_insecure_vnc,omitempty"`
 }
 
 // RDPConfig holds RDP-specific connection options.
@@ -85,7 +86,8 @@ type RDPConfig struct {
 
 // ARDConfig holds Apple Remote Desktop-specific connection options.
 type ARDConfig struct {
-	AppleDH bool `json:"apple_dh,omitempty"`
+	AppleDH                bool `json:"apple_dh,omitempty"`
+	AllowInsecureTransport bool `json:"allow_insecure_vnc,omitempty"`
 }
 
 // TestResult captures the outcome of a protocol connectivity test.
@@ -124,14 +126,14 @@ func ValidateProtocolConfig(protocol string, raw json.RawMessage) error {
 		var cfg SSHConfig
 		return strictUnmarshal(raw, &cfg)
 	case ProtocolVNC:
-		var cfg VNCConfig
-		return strictUnmarshal(raw, &cfg)
+		_, err := DecodeVNCConfig(raw)
+		return err
 	case ProtocolRDP:
 		_, err := DecodeRDPConfig(raw)
 		return err
 	case ProtocolARD:
-		var cfg ARDConfig
-		return strictUnmarshal(raw, &cfg)
+		_, err := DecodeARDConfig(raw)
+		return err
 	case ProtocolTelnet:
 		// Telnet has no configurable fields; any supplied config is rejected.
 		var discard map[string]json.RawMessage
@@ -145,6 +147,30 @@ func ValidateProtocolConfig(protocol string, raw json.RawMessage) error {
 	default:
 		return fmt.Errorf("unsupported protocol %q", protocol)
 	}
+}
+
+// DecodeVNCConfig decodes VNC-specific configuration and rejects unknown fields.
+func DecodeVNCConfig(raw json.RawMessage) (VNCConfig, error) {
+	var cfg VNCConfig
+	if len(raw) == 0 || string(raw) == "null" {
+		return cfg, nil
+	}
+	if err := strictUnmarshal(raw, &cfg); err != nil {
+		return VNCConfig{}, err
+	}
+	return cfg, nil
+}
+
+// DecodeARDConfig decodes ARD-specific configuration and rejects unknown fields.
+func DecodeARDConfig(raw json.RawMessage) (ARDConfig, error) {
+	var cfg ARDConfig
+	if len(raw) == 0 || string(raw) == "null" {
+		return cfg, nil
+	}
+	if err := strictUnmarshal(raw, &cfg); err != nil {
+		return ARDConfig{}, err
+	}
+	return cfg, nil
 }
 
 // DecodeRDPConfig decodes RDP-specific configuration and rejects unknown fields.

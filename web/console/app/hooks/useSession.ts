@@ -84,6 +84,7 @@ export interface TerminalConnectOptions {
     port: number;
     username?: string;
     password?: string;
+    allow_insecure_vnc?: boolean;
     ignore_certificate?: boolean;
     allow_legacy_security?: boolean;
     certificate_fingerprints?: string;

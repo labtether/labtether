@@ -712,6 +712,7 @@ type RemoteBookmark struct {
 	HasCredentials    bool      `json:"has_credentials"`
 	SPICESecurityMode string    `json:"spice_security_mode,omitempty"`
 	SPICECAPEM        string    `json:"spice_ca_pem,omitempty"`
+	AllowInsecureVNC  bool      `json:"allow_insecure_vnc,omitempty"`
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
 }
