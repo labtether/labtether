@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"os"
@@ -188,6 +189,9 @@ func mergeOIDCSettings(db oidcDBSettings) (auth.OIDCSettings, map[string]string)
 			db.AdminRoleValues, []string{"admin"}),
 		OperatorRoleValues: resolveSlice("operator_role_values", "LABTETHER_OIDC_OPERATOR_ROLES",
 			db.OperatorRoleValues, []string{"operator"}),
+		AllowedEndpointOrigins: csvSplit(os.Getenv("LABTETHER_OIDC_ALLOWED_ENDPOINT_ORIGINS")),
+		AllowPrivateEndpoints:  envOrDefaultBool("LABTETHER_OIDC_ALLOW_PRIVATE", false),
+		AllowLoopbackEndpoints: envOrDefaultBool("LABTETHER_OIDC_ALLOW_LOOPBACK", false),
 	}
 
 	// auto_provision is not part of OIDCSettings but track its source
@@ -386,7 +390,11 @@ func (d *Deps) HandleOIDCSettingsApply(w http.ResponseWriter, r *http.Request) {
 
 	provider, err := auth.NewOIDCProvider(ctx, merged)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to initialize oidc provider: "+err.Error())
+		if errors.Is(err, auth.ErrOIDCInvalidConfiguration) {
+			servicehttp.WriteError(w, http.StatusBadRequest, "invalid oidc configuration")
+			return
+		}
+		servicehttp.WriteError(w, http.StatusBadGateway, "oidc provider is unavailable")
 		return
 	}
 
