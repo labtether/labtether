@@ -571,6 +571,52 @@ func TestValidateOutboundURLRuntimeOverrideCanDisablePrivateHTTPS(t *testing.T) 
 	}
 }
 
+func TestOutboundPolicySummaryMatchesEffectivePrivateAddressPolicy(t *testing.T) {
+	tests := []struct {
+		name     string
+		override string
+		https    string
+		wss      string
+		tcp      string
+	}{
+		{name: "unset", override: "", https: "true", wss: "false", tcp: "false"},
+		{name: "explicit true", override: "true", https: "true", wss: "true", tcp: "true"},
+		{name: "explicit false", override: "false", https: "false", wss: "false", tcp: "false"},
+		{name: "invalid fails closed", override: "not-a-bool", https: "false", wss: "false", tcp: "false"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv(envOutboundAllowPrivate, test.override)
+			summary := OutboundPolicySummary()
+			if got := summary["allow_private_https"]; got != test.https {
+				t.Fatalf("allow_private_https=%q, want %q", got, test.https)
+			}
+			if got := summary["allow_private_wss"]; got != test.wss {
+				t.Fatalf("allow_private_wss=%q, want %q", got, test.wss)
+			}
+			if got := summary["allow_private_tcp"]; got != test.tcp {
+				t.Fatalf("allow_private_tcp=%q, want %q", got, test.tcp)
+			}
+			if got := summary["allow_private"]; got != test.https {
+				t.Fatalf("legacy allow_private=%q, want HTTPS value %q", got, test.https)
+			}
+		})
+	}
+}
+
+func TestOutboundPolicySummaryUsesEndToEndWSSPrivateAddressPolicy(t *testing.T) {
+	t.Setenv(envOutboundAllowPrivate, "")
+	if _, err := ValidateOutboundURL("wss://192.168.1.25/socket"); err != nil {
+		t.Fatalf("default WSS URL validation should allow private target: %v", err)
+	}
+	if err := ValidateOutboundDialTarget("192.168.1.25", 443); err == nil {
+		t.Fatal("default raw dial policy should deny the private WSS target")
+	}
+	if got := OutboundPolicySummary()["allow_private_wss"]; got != "false" {
+		t.Fatalf("effective WSS summary=%q, want false", got)
+	}
+}
+
 func TestValidateOutboundURLStillRejectsPrivateLoopbackHTTPSByDefault(t *testing.T) {
 	withMockLookupIPAddrs(t, func(_ context.Context, host string) ([]net.IPAddr, error) {
 		if host == "localhost.example.test" {

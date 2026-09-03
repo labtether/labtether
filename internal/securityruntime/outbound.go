@@ -181,7 +181,7 @@ func validateOutboundHost(host string) error {
 	return validateOutboundHostWithPolicy(
 		host,
 		parseBoolEnv(envOutboundAllowlistMode, false),
-		parseBoolEnv(envOutboundAllowPrivate, false),
+		resolvedOutboundAllowPrivateTCP(),
 		parseBoolEnv(envOutboundAllowLoopback, false),
 		parseBoolEnv(envOutboundAllowLinkLocal, false),
 	)
@@ -253,6 +253,14 @@ func resolvedOutboundAllowPrivate(scheme string) bool {
 		return value
 	}
 	return defaultAllowPrivateForScheme(scheme)
+}
+
+func resolvedOutboundAllowPrivateTCP() bool {
+	return parseBoolEnv(envOutboundAllowPrivate, false)
+}
+
+func resolvedOutboundAllowPrivateWSS() bool {
+	return resolvedOutboundAllowPrivate("wss") && resolvedOutboundAllowPrivateTCP()
 }
 
 func hostRiskProfile(host string) (isLoopback bool, isPrivate bool, isLinkLocal bool) {
@@ -838,7 +846,7 @@ func ResolveOutboundTCPHost(ctx context.Context, rawHost string, port int) (stri
 		}
 	}
 
-	allowPrivate := parseBoolEnv(envOutboundAllowPrivate, false)
+	allowPrivate := resolvedOutboundAllowPrivateTCP()
 	allowLoopback := parseBoolEnv(envOutboundAllowLoopback, false)
 	allowLinkLocal := parseBoolEnv(envOutboundAllowLinkLocal, false)
 	if strings.EqualFold(host, "localhost") && !allowLoopback {
@@ -1001,12 +1009,19 @@ func DialOutboundTCPContext(ctx context.Context, host string, port int, timeout 
 
 func OutboundPolicySummary() map[string]string {
 	allowlistMode := parseBoolEnv(envOutboundAllowlistMode, false)
-	allowPrivate := parseBoolEnv(envOutboundAllowPrivate, false)
+	allowPrivateHTTPS := resolvedOutboundAllowPrivate("https")
+	allowPrivateWSS := resolvedOutboundAllowPrivateWSS()
+	allowPrivateTCP := resolvedOutboundAllowPrivateTCP()
 	allowLoopback := parseBoolEnv(envOutboundAllowLoopback, false)
 	allowLinkLocal := parseBoolEnv(envOutboundAllowLinkLocal, false)
+	// allow_private remains a backward-compatible alias for the generic HTTPS
+	// URL policy. Callers needing socket behavior use the transport fields.
 	return map[string]string{
 		"allowlist_mode":           strconv.FormatBool(allowlistMode),
-		"allow_private":            strconv.FormatBool(allowPrivate),
+		"allow_private":            strconv.FormatBool(allowPrivateHTTPS),
+		"allow_private_https":      strconv.FormatBool(allowPrivateHTTPS),
+		"allow_private_wss":        strconv.FormatBool(allowPrivateWSS),
+		"allow_private_tcp":        strconv.FormatBool(allowPrivateTCP),
 		"allow_loopback":           strconv.FormatBool(allowLoopback),
 		"allow_link_local":         strconv.FormatBool(allowLinkLocal),
 		"allow_insecure_transport": strconv.FormatBool(parseBoolEnv(envAllowInsecureTransport, false)),
