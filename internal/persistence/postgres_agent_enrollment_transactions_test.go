@@ -30,7 +30,7 @@ func TestPostgresAgentEnrollmentTransactionParity(t *testing.T) {
 	})
 
 	now := time.Now().UTC()
-	if _, err := store.CreateEnrollmentToken(initialEnrollmentHash, "initial", now.Add(time.Hour), 10); err != nil {
+	if _, err := store.CreateEnrollmentToken(testEnrollmentTokenParams(initialEnrollmentHash, "initial", now.Add(time.Hour), 10)); err != nil {
 		t.Fatal(err)
 	}
 	first, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
@@ -52,7 +52,7 @@ func TestPostgresAgentEnrollmentTransactionParity(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.CreateEnrollmentToken(recoveryEnrollmentHash, "recovery", now.Add(time.Hour), 1); err != nil {
+	if _, err := store.CreateEnrollmentToken(testEnrollmentTokenParams(recoveryEnrollmentHash, "recovery", now.Add(time.Hour), 1)); err != nil {
 		t.Fatal(err)
 	}
 	recovered, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
@@ -81,7 +81,7 @@ func TestPostgresAgentEnrollmentTransactionParity(t *testing.T) {
 		t.Fatalf("new PG bearer valid=%v err=%v", valid, err)
 	}
 
-	multi, err := store.CreateEnrollmentToken(multiEnrollmentHash, "multi", now.Add(time.Hour), 2)
+	multi, err := store.CreateEnrollmentToken(testEnrollmentTokenParams(multiEnrollmentHash, "multi", now.Add(time.Hour), 2))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestPostgresAgentEnrollmentTransactionParity(t *testing.T) {
 	}
 }
 
-func TestPostgresCommitAgentEnrollmentResolvesInitialGroupPlacement(t *testing.T) {
+func TestPostgresCommitAgentEnrollmentEnforcesInitialGroupScope(t *testing.T) {
 	store := newTestPostgresStore(t)
 	ctx := context.Background()
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
@@ -121,39 +121,33 @@ func TestPostgresCommitAgentEnrollmentResolvesInitialGroupPlacement(t *testing.T
 	})
 
 	now := time.Now().UTC()
-	if _, err := store.CreateEnrollmentToken(missingEnrollmentHash, "missing group", now.Add(time.Hour), 2); err != nil {
+	if _, err := store.CreateEnrollmentToken(testEnrollmentTokenParams(missingEnrollmentHash, "missing group", now.Add(time.Hour), 2)); err != nil {
 		t.Fatal(err)
 	}
-	missingResult, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
+	_, err = store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
 		AssetID: missingAssetID, Hostname: "QAWindowsHost", Platform: "windows", GroupID: "qa-missing-" + suffix,
 		EnrollmentTokenHash: missingEnrollmentHash, AgentTokenHash: missingAgentHash,
 		AgentTokenExpiresAt: now.Add(time.Hour),
 	})
-	if err != nil {
-		t.Fatalf("missing group enrollment: %v", err)
+	if !errors.Is(err, ErrEnrollmentTokenScopeMismatch) {
+		t.Fatalf("missing group enrollment error=%v", err)
 	}
-	if missingResult.Asset.GroupID != "" {
-		t.Fatalf("missing group was persisted: %q", missingResult.Asset.GroupID)
+	var missingAssetCount int
+	if err := store.pool.QueryRow(ctx, `SELECT COUNT(*) FROM assets WHERE id = $1`, missingAssetID).Scan(&missingAssetCount); err != nil || missingAssetCount != 0 {
+		t.Fatalf("rejected enrollment asset count=%d err=%v", missingAssetCount, err)
 	}
-	var persistedMissingGroup *string
-	if err := store.pool.QueryRow(ctx, `SELECT group_id FROM assets WHERE id = $1`, missingAssetID).Scan(&persistedMissingGroup); err != nil {
-		t.Fatal(err)
-	}
-	if persistedMissingGroup != nil {
-		t.Fatalf("missing group column=%q, want NULL", *persistedMissingGroup)
-	}
-	if token, valid, err := store.ValidateEnrollmentToken(missingEnrollmentHash); err != nil || !valid || token.UseCount != 1 {
+	if token, valid, err := store.ValidateEnrollmentToken(missingEnrollmentHash); err != nil || !valid || token.UseCount != 0 {
 		t.Fatalf("missing group token state: token=%+v valid=%v err=%v", token, valid, err)
 	}
-	if token, valid, err := store.ValidateAgentToken(missingAgentHash); err != nil || !valid || token.AssetID != missingAssetID {
+	if token, valid, err := store.ValidateAgentToken(missingAgentHash); err != nil || valid {
 		t.Fatalf("missing group agent token: token=%+v valid=%v err=%v", token, valid, err)
 	}
 
-	if _, err := store.CreateEnrollmentToken(validEnrollmentHash, "valid group", now.Add(time.Hour), 2); err != nil {
+	if _, err := store.CreateEnrollmentToken(testGroupEnrollmentTokenParams(validEnrollmentHash, validGroup.ID, now.Add(time.Hour), 2)); err != nil {
 		t.Fatal(err)
 	}
 	validResult, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
-		AssetID: validAssetID, Hostname: "Grouped Agent", Platform: "linux", GroupID: validGroup.ID,
+		AssetID: validAssetID, Hostname: "Grouped Agent", Platform: "linux",
 		EnrollmentTokenHash: validEnrollmentHash, AgentTokenHash: validAgentHash,
 		AgentTokenExpiresAt: now.Add(time.Hour),
 	})
@@ -162,6 +156,55 @@ func TestPostgresCommitAgentEnrollmentResolvesInitialGroupPlacement(t *testing.T
 	}
 	if validResult.Asset.GroupID != validGroup.ID {
 		t.Fatalf("valid group=%q, want %q", validResult.Asset.GroupID, validGroup.ID)
+	}
+}
+
+func TestPostgresAssetScopedEnrollmentRejectsWrongAssetWithoutConsumption(t *testing.T) {
+	store := newTestPostgresStore(t)
+	ctx := context.Background()
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	intendedAssetID := "intended-scope-" + suffix
+	wrongAssetID := "wrong-scope-" + suffix
+	tokenHash := "asset-scope-token-" + suffix
+	wrongAgentHash := "asset-scope-wrong-agent-" + suffix
+	rightAgentHash := "asset-scope-right-agent-" + suffix
+	t.Cleanup(func() {
+		_, _ = store.pool.Exec(ctx, `DELETE FROM agent_tokens WHERE asset_id = ANY($1)`, []string{intendedAssetID, wrongAssetID})
+		_, _ = store.pool.Exec(ctx, `DELETE FROM assets WHERE id = ANY($1)`, []string{intendedAssetID, wrongAssetID})
+		_, _ = store.pool.Exec(ctx, `DELETE FROM enrollment_tokens WHERE token_hash = $1`, tokenHash)
+	})
+	now := time.Now().UTC()
+	if _, err := store.CreateEnrollmentToken(testAssetEnrollmentTokenParams(tokenHash, intendedAssetID, now.Add(time.Hour))); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
+		AssetID: wrongAssetID, Hostname: wrongAssetID, EnrollmentTokenHash: tokenHash,
+		AgentTokenHash: wrongAgentHash, AgentTokenExpiresAt: now.Add(time.Hour),
+	})
+	if !errors.Is(err, ErrEnrollmentTokenScopeMismatch) {
+		t.Fatalf("wrong asset error=%v", err)
+	}
+	var wrongAssetCount, wrongAgentCount, useCount int
+	if err := store.pool.QueryRow(ctx, `SELECT COUNT(*) FROM assets WHERE id = $1`, wrongAssetID).Scan(&wrongAssetCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.pool.QueryRow(ctx, `SELECT COUNT(*) FROM agent_tokens WHERE token_hash = $1`, wrongAgentHash).Scan(&wrongAgentCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.pool.QueryRow(ctx, `SELECT use_count FROM enrollment_tokens WHERE token_hash = $1`, tokenHash).Scan(&useCount); err != nil {
+		t.Fatal(err)
+	}
+	if wrongAssetCount != 0 || wrongAgentCount != 0 || useCount != 0 {
+		t.Fatalf("rejected scope mutated state: assets=%d bearers=%d uses=%d", wrongAssetCount, wrongAgentCount, useCount)
+	}
+
+	result, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
+		AssetID: intendedAssetID, Hostname: intendedAssetID, EnrollmentTokenHash: tokenHash,
+		AgentTokenHash: rightAgentHash, AgentTokenExpiresAt: now.Add(time.Hour),
+	})
+	if err != nil || result.Asset.ID != intendedAssetID {
+		t.Fatalf("intended asset enrollment result=%+v err=%v", result, err)
 	}
 }
 
@@ -178,7 +221,7 @@ func TestPostgresDecommissionSerializesAuthenticatedHeartbeat(t *testing.T) {
 		_, _ = store.pool.Exec(ctx, `DELETE FROM enrollment_tokens WHERE token_hash = $1`, enrollmentHash)
 	})
 	now := time.Now().UTC()
-	_, _ = store.CreateEnrollmentToken(enrollmentHash, "race", now.Add(time.Hour), 1)
+	_, _ = store.CreateEnrollmentToken(testEnrollmentTokenParams(enrollmentHash, "race", now.Add(time.Hour), 1))
 	result, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
 		AssetID: assetID, Hostname: assetID, EnrollmentTokenHash: enrollmentHash,
 		AgentTokenHash: agentHash, AgentTokenExpiresAt: now.Add(time.Hour),
@@ -652,7 +695,7 @@ func TestPostgresCrossHubTokenIDRevalidationObservesRevocation(t *testing.T) {
 		_, _ = hubA.pool.Exec(ctx, `DELETE FROM assets WHERE id = $1`, assetID)
 		_, _ = hubA.pool.Exec(ctx, `DELETE FROM enrollment_tokens WHERE token_hash = $1`, enrollmentHash)
 	})
-	if _, err := hubA.CreateEnrollmentToken(enrollmentHash, "cross-hub", time.Now().UTC().Add(time.Hour), 1); err != nil {
+	if _, err := hubA.CreateEnrollmentToken(testEnrollmentTokenParams(enrollmentHash, "cross-hub", time.Now().UTC().Add(time.Hour), 1)); err != nil {
 		t.Fatal(err)
 	}
 	result, err := hubA.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
@@ -732,10 +775,10 @@ func TestPostgresRecoveryRejectsEnrollmentTokenIssuedBeforeLatestRotation(t *tes
 		_, _ = store.pool.Exec(ctx, `DELETE FROM enrollment_tokens WHERE token_hash = ANY($1)`, []string{initialHash, staleHash, freshHash})
 	})
 	now := time.Now().UTC()
-	if _, err := store.CreateEnrollmentToken(initialHash, "initial", now.Add(time.Hour), 1); err != nil {
+	if _, err := store.CreateEnrollmentToken(testEnrollmentTokenParams(initialHash, "initial", now.Add(time.Hour), 1)); err != nil {
 		t.Fatal(err)
 	}
-	stale, err := store.CreateEnrollmentToken(staleHash, "stale", now.Add(time.Hour), 1)
+	stale, err := store.CreateEnrollmentToken(testEnrollmentTokenParams(staleHash, "stale", now.Add(time.Hour), 1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -762,7 +805,7 @@ func TestPostgresRecoveryRejectsEnrollmentTokenIssuedBeforeLatestRotation(t *tes
 	if err := store.ValidateActiveAgentTokenID(ctx, first.AgentToken.ID, assetID); err != nil {
 		t.Fatalf("old token invalidated: %v", err)
 	}
-	if _, err := store.CreateEnrollmentToken(freshHash, "fresh", now.Add(time.Hour), 1); err != nil {
+	if _, err := store.CreateEnrollmentToken(testEnrollmentTokenParams(freshHash, "fresh", now.Add(time.Hour), 1)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
@@ -802,7 +845,7 @@ func TestPostgresFleetCapacityPersistsAcrossTokenRevocationUntilDecommission(t *
 		t.Skip("test database is already at the absolute fleet ceiling")
 	}
 	capacityLimit := baseline + 1
-	if _, err := store.CreateEnrollmentToken(firstEnrollmentHash, "first", now.Add(time.Hour), 1); err != nil {
+	if _, err := store.CreateEnrollmentToken(testEnrollmentTokenParams(firstEnrollmentHash, "first", now.Add(time.Hour), 1)); err != nil {
 		t.Fatal(err)
 	}
 	first, err := store.CommitAgentEnrollment(ctx, AgentEnrollmentCommitRequest{
@@ -815,7 +858,7 @@ func TestPostgresFleetCapacityPersistsAcrossTokenRevocationUntilDecommission(t *
 	if err := store.RevokeAgentToken(first.AgentToken.ID); err != nil {
 		t.Fatal(err)
 	}
-	secondEnrollment, err := store.CreateEnrollmentToken(secondEnrollmentHash, "second", now.Add(time.Hour), 1)
+	secondEnrollment, err := store.CreateEnrollmentToken(testEnrollmentTokenParams(secondEnrollmentHash, "second", now.Add(time.Hour), 1))
 	if err != nil {
 		t.Fatal(err)
 	}

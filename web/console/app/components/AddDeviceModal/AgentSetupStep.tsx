@@ -263,6 +263,7 @@ export function AgentSetupStep({
     defaultLinuxInstallOptions,
   );
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
+  const [expectedHostname, setExpectedHostname] = useState("");
   const {
     hubURL,
     wsURL,
@@ -329,21 +330,28 @@ export function AgentSetupStep({
     }
   }, [status]);
 
-  // Auto-generate a token on mount
   useEffect(() => {
     mountedRef.current = true;
-    void generateToken("add-device-wizard", 24, 1).then((tokenID) => {
-      currentTokenIDRef.current = tokenID;
-      if (!mountedRef.current) {
-        discardUntouchedToken(tokenID);
-      }
-    });
     return () => {
       mountedRef.current = false;
       discardUntouchedToken(currentTokenIDRef.current);
       clearNewToken();
     };
-  }, [clearNewToken, discardUntouchedToken, generateToken]);
+  }, [clearNewToken, discardUntouchedToken]);
+
+  const createScopedToken = useCallback(() => {
+    const hostname = expectedHostname.trim();
+    if (!hostname) return;
+    void generateToken("add-device-wizard", 24, 1, {
+      scope: "asset",
+      assetID: hostname,
+    }).then((tokenID) => {
+      currentTokenIDRef.current = tokenID;
+      if (!mountedRef.current) {
+        discardUntouchedToken(tokenID);
+      }
+    });
+  }, [discardUntouchedToken, expectedHostname, generateToken]);
 
   useEffect(() => {
     currentTokenIDRef.current = newTokenID;
@@ -432,6 +440,30 @@ export function AgentSetupStep({
           ))}
         </div>
       </div>
+
+      {!newRawToken && !generating ? (
+        <div className="space-y-2 rounded-lg border border-[var(--line)] bg-[var(--surface)] p-3">
+          <label className="flex flex-col gap-1 text-xs font-medium text-[var(--muted)]">
+            Expected hostname
+            <Input
+              aria-label="Expected hostname"
+              placeholder="example: server-01"
+              value={expectedHostname}
+              onChange={(event) => setExpectedHostname(event.target.value)}
+            />
+          </label>
+          <p className="text-xs text-[var(--muted)]">
+            This makes the one-time token work only for this device name.
+          </p>
+          <Button
+            variant="primary"
+            disabled={!expectedHostname.trim()}
+            onClick={createScopedToken}
+          >
+            Create one-time token
+          </Button>
+        </div>
+      ) : null}
 
       {generating ? (
         <div className="flex items-center gap-2 py-4 text-sm text-[var(--muted)]">

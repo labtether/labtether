@@ -273,6 +273,10 @@ export type EnrollmentToken = {
   use_count: number;
   created_at: string;
   revoked_at?: string;
+  scope: "asset" | "group" | "unplaced" | "unrestricted" | "legacy_revoked";
+  asset_id?: string;
+  allowed_group_id?: string;
+  created_by?: string;
 };
 
 export type AgentTokenSummary = {

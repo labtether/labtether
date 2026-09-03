@@ -26,6 +26,8 @@ This guide provides version-specific upgrade notes. Always follow the general up
 - **Agent auth default:** shared owner-token authentication for agent WebSockets and legacy HTTP heartbeats is now disabled. Temporarily set `LABTETHER_ALLOW_LEGACY_SHARED_AGENT_AUTH=true` only while migrating an old agent to a per-agent credential.
 - **Enrollment controls:** one-use tokens are the default; token-use, durable-fleet, live-socket, inbound-rate, and credential-revalidation ceilings are configurable with the variables documented in `OPERATIONS.md` and `.env.example`.
 - **Database migration:** v93 (`durable_agent_identity_state`) backfills a durable credential-rotation marker for existing agent assets. The marker prevents pre-issued enrollment tokens from being replayed after a later credential rotation and provides durable fleet accounting. The migration is transactional and requires no planned downtime.
+- **Database migration:** v98 (`scoped_enrollment_tokens`) disables every older enrollment token because those rows do not contain the intended device or group. Create replacement tokens after the upgrade. New tokens are bound to one device, one group, unplaced devices, or an explicitly confirmed unrestricted scope.
+- **Rollback warning:** do not roll back only the Hub binary after v98. Older code does not understand the new token claims. Restore the pre-upgrade database backup and older Hub together, or revoke every active scoped token before starting older code.
 
 ### v2026.1
 
