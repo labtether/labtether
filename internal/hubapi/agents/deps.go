@@ -50,7 +50,8 @@ type Deps struct {
 	AgentSettingsState sync.Map // map[assetID]AgentSettingsRuntimeState
 
 	// Pending agent commands (shared with cmd/labtether).
-	PendingAgentCmds *sync.Map // map[jobID]shared.PendingAgentCommand
+	PendingAgentCmds   *sync.Map // map[jobID]shared.PendingAgentCommand
+	activeAgentUpdates sync.Map  // map[jobID]*activeAgentUpdate; includes automatic self-updates
 
 	// Pending typed Docker endpoint probes. The expected connection and asset
 	// are retained with each request so an authenticated peer cannot satisfy a

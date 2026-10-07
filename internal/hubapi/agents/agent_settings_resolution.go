@@ -387,11 +387,13 @@ func (d *Deps) SendUpdateRequest(conn *agentmgr.AgentConn) {
 	if err != nil {
 		return
 	}
+	finishProgress := d.trackAgentUpdate(jobID, conn.AssetID, 30*time.Minute)
 	if err := conn.Send(agentmgr.Message{
 		Type: agentmgr.MsgUpdateRequest,
 		ID:   jobID,
 		Data: data,
 	}); err != nil {
+		finishProgress()
 		log.Printf("agentws: failed to push update request to %s: %v", conn.AssetID, err)
 	} else {
 		log.Printf("agentws: pushed self-update request %s to %s", jobID, conn.AssetID)

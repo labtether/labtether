@@ -5,9 +5,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func writeAgentCacheManifest(t *testing.T, dir, generatedAt, hubVersion string) {
@@ -200,5 +203,123 @@ func TestAgentCache_OpenVerifiedBinaryStreamsTheVerifiedDescriptorAfterPathSwap(
 	}
 	if string(served) != string(trusted) {
 		t.Fatalf("verified descriptor served %q, want trusted artifact", served)
+	}
+}
+
+func TestAgentCache_VerifiedBinaryContentKeepsVerifiedBytes(t *testing.T) {
+	runtimeDir := t.TempDir()
+	name := "labtether-agent-linux-amd64"
+	trusted := []byte("trusted-release-binary")
+	path := filepath.Join(runtimeDir, name)
+	if err := os.WriteFile(path, trusted, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cache := &AgentCache{RuntimeDir: runtimeDir, BakedInDir: t.TempDir()}
+	digest := sha256Hex(trusted)
+	got, _, err := cache.VerifiedBinaryContent(name, digest, int64(len(trusted)))
+	if err != nil || string(got) != string(trusted) {
+		t.Fatalf("first verified content = %q, %v", got, err)
+	}
+	if err := os.WriteFile(filepath.Join(runtimeDir, "replacement"), []byte("untrusted bytes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(filepath.Join(runtimeDir, "replacement"), path); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err = cache.VerifiedBinaryContent(name, digest, int64(len(trusted)))
+	if err != nil || string(got) != string(trusted) {
+		t.Fatalf("cached verified bytes changed after path swap: %q, %v", got, err)
+	}
+
+	cache.SetManifest(&AgentManifest{}) // a refresh invalidates both verdicts
+	if _, _, err := cache.VerifiedBinaryContent(name, digest, int64(len(trusted))); err == nil {
+		t.Fatal("unverified replacement was accepted after refresh")
+	}
+	if err := os.WriteFile(path, trusted, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err = cache.VerifiedBinaryContent(name, digest, int64(len(trusted)))
+	if err != nil || string(got) != string(trusted) {
+		t.Fatalf("replacement with valid content did not clear failed verdict: %q, %v", got, err)
+	}
+}
+
+func TestAgentCache_VerifiedBinaryContentAcceptsReleaseSizeAbove64MiB(t *testing.T) {
+	runtimeDir := t.TempDir()
+	name := "labtether-agent-linux-amd64"
+	data := make([]byte, (64<<20)+1)
+	if err := os.WriteFile(filepath.Join(runtimeDir, name), data, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cache := &AgentCache{RuntimeDir: runtimeDir, BakedInDir: t.TempDir()}
+	got, _, err := cache.VerifiedBinaryContent(name, sha256Hex(data), int64(len(data)))
+	if err != nil || len(got) != len(data) {
+		t.Fatalf("valid release size was rejected: bytes=%d, err=%v", len(got), err)
+	}
+}
+
+func TestAgentCache_VerifiedBinaryContentRechecksPreservedTimeRepair(t *testing.T) {
+	runtimeDir := t.TempDir()
+	name := "labtether-agent-linux-amd64"
+	path := filepath.Join(runtimeDir, name)
+	trusted := []byte("trusted")
+	if err := os.WriteFile(path, []byte("invalid"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	original, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cache := &AgentCache{RuntimeDir: runtimeDir, BakedInDir: t.TempDir()}
+	if _, _, err := cache.VerifiedBinaryContent(name, sha256Hex(trusted), int64(len(trusted))); err == nil {
+		t.Fatal("invalid bytes were accepted")
+	}
+	time.Sleep(10 * time.Millisecond) // make the metadata change observable on CI filesystems
+	if err := os.WriteFile(path, trusted, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(path, original.ModTime(), original.ModTime()); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := cache.VerifiedBinaryContent(name, sha256Hex(trusted), int64(len(trusted)))
+	if err != nil || string(got) != string(trusted) {
+		t.Fatalf("repaired binary was not served: %q, %v", got, err)
+	}
+}
+
+func TestHandleAgentBinaryRangeUsesVerifiedSnapshot(t *testing.T) {
+	runtimeDir := t.TempDir()
+	name := "labtether-agent-linux-amd64"
+	trusted := []byte("trusted-release-binary")
+	path := filepath.Join(runtimeDir, name)
+	if err := os.WriteFile(path, trusted, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cache := &AgentCache{RuntimeDir: runtimeDir, BakedInDir: t.TempDir()}
+	cache.SetManifest(&AgentManifest{Agents: map[string]AgentEntry{
+		"labtether-agent": {Binaries: map[string]BinaryEntry{
+			"linux-amd64": {Name: name, SHA256: sha256Hex(trusted), SizeBytes: int64(len(trusted))},
+		}},
+	}})
+	deps := &Deps{AgentCache: cache}
+	for _, tc := range []struct {
+		rangeHeader string
+		want        string
+	}{
+		{"bytes=0-0", "t"},
+		{"bytes=1-1", "r"},
+	} {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/agent/binary?arch=amd64", nil)
+		req.Header.Set("Range", tc.rangeHeader)
+		response := httptest.NewRecorder()
+		deps.HandleAgentBinary(response, req)
+		if response.Code != http.StatusPartialContent || response.Body.String() != tc.want {
+			t.Fatalf("range %s = %d %q, want 206 %q", tc.rangeHeader, response.Code, response.Body.String(), tc.want)
+		}
+		if tc.rangeHeader == "bytes=0-0" {
+			if err := os.Remove(path); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 }

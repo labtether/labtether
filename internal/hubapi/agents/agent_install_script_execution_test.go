@@ -95,6 +95,39 @@ func TestInstallScriptExecutesInstallFlow(t *testing.T) {
 	}
 }
 
+func TestInstallScriptForceUpdateUsesPrivateLog(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		exitCode string
+	}{
+		{name: "success", exitCode: "0"},
+		{name: "failure", exitCode: "1"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root, env := newAgentScriptHarness(t, strings.Repeat("a", 64))
+			env = append(env, "LABTETHER_TEST_FORCE_UPDATE_EXIT="+tt.exitCode)
+			script := rewriteAgentScriptForHarness(GenerateInstallScript("https://hub.example.com", "wss://hub.example.com/ws/agent"), root)
+			if strings.Contains(script, "/tmp/labtether-force-update.log") {
+				t.Fatal("installer contains the predictable shared log path")
+			}
+			output, err := runGeneratedShellScript(t, script, env, "--force-update", "--skip-vnc-prereqs")
+			if err != nil {
+				t.Fatalf("force-update install failed: %v\n%s", err, output)
+			}
+			if !strings.Contains(mustReadFile(t, filepath.Join(root, "logs/agent-binary.log")), "update self --force") {
+				t.Fatal("force update was not run")
+			}
+			if tt.exitCode != "0" && !strings.Contains(output, "test update output") {
+				t.Fatalf("failed update output was hidden: %s", output)
+			}
+			matches, err := filepath.Glob(filepath.Join(root, "etc/labtether/.force-update.*"))
+			if err != nil || len(matches) != 0 {
+				t.Fatalf("force-update log was not cleaned up: %v, %v", matches, err)
+			}
+		})
+	}
+}
+
 func TestBootstrapScriptExecutesPinnedInstallFlow(t *testing.T) {
 	expectedFingerprint := strings.Repeat("b", 64)
 	root, env := newAgentScriptHarness(t, expectedFingerprint)
@@ -558,6 +591,10 @@ if [[ -n "${out}" ]]; then
 #!/bin/bash
 set -euo pipefail
 printf '%s\n' "$*" >> "${LABTETHER_TEST_LOG_DIR}/agent-binary.log"
+if [[ "${1:-}" == "update" && "${2:-}" == "self" ]]; then
+  printf 'test update output\n'
+  exit "${LABTETHER_TEST_FORCE_UPDATE_EXIT:-0}"
+fi
 exit 0
 BIN
       chmod 755 "${out}"

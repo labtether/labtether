@@ -30,7 +30,9 @@ else
 fi
 
 if [[ "${FORCE_UPDATE}" -eq 1 ]]; then
-  FORCE_UPDATE_LOG="/tmp/labtether-force-update.log"
+  FORCE_UPDATE_LOG="$(mktemp "${CONFIG_DIR}/.force-update.XXXXXX")"
+  trap 'rm -f -- "${FORCE_UPDATE_LOG}"' EXIT
+  chmod 600 "${FORCE_UPDATE_LOG}"
   info "Force update requested: running self-update check..."
   if "${BINARY_DEST}" update self --force >"${FORCE_UPDATE_LOG}" 2>&1; then
     success "Self-update completed"
@@ -41,7 +43,8 @@ if [[ "${FORCE_UPDATE}" -eq 1 ]]; then
     warn "Self-update failed"
     info "Output: $(cat "${FORCE_UPDATE_LOG}" 2>/dev/null || true)"
   fi
-  rm -f "${FORCE_UPDATE_LOG}"
+  rm -f -- "${FORCE_UPDATE_LOG}"
+  trap - EXIT
 fi
 
 HOSTNAME_VALUE="$(hostname 2>/dev/null || true)"
