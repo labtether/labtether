@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a new vulnerability privately
+    url: https://github.com/labtether/labtether/security/advisories/new
+    about: Send new or undisclosed vulnerabilities to the maintainers privately.
+  - name: Public closed CVE records
+    url: https://github.com/labtether/labtether/issues?q=is%3Aissue%20is%3Aclosed%20label%3Acve
+    about: See verified CVE fixes, source changes, and closure evidence.

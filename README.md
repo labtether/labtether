@@ -13,7 +13,7 @@
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/Be6Fa9hv)
 [![Demo](https://img.shields.io/badge/Demo-Try%20It-FF0080?style=flat-square)](https://demo.labtether.com)
 
-[Website](https://labtether.com) &middot; [Docs](https://labtether.com/docs) &middot; [Wiki](https://labtether.com/docs/wiki) &middot; [Discord](https://discord.gg/Be6Fa9hv) &middot; [Demo](https://demo.labtether.com) &middot; [Changelog](CHANGELOG.md)
+[Website](https://labtether.com) &middot; [Docs](https://labtether.com/docs) &middot; [Wiki](https://labtether.com/docs/wiki) &middot; [Discord](https://discord.gg/Be6Fa9hv) &middot; [Demo](https://demo.labtether.com) &middot; [Changelog](CHANGELOG.md) &middot; [Security](SECURITY.md) &middot; [Closed CVEs](https://github.com/labtether/labtether/issues?q=is%3Aissue%20is%3Aclosed%20label%3Acve)
 
 </div>
 
@@ -332,7 +332,7 @@ Connect what you already run: Proxmox VE, TrueNAS, Docker, Portainer, Home Assis
 - **User Guide and Wiki** -- [labtether.com/docs](https://labtether.com/docs)
 - **Changelog** -- [CHANGELOG.md](CHANGELOG.md)
 - **Contributing** -- [CONTRIBUTING.md](CONTRIBUTING.md)
-- **Security** -- [SECURITY.md](SECURITY.md)
+- **Security** -- [Reporting policy](SECURITY.md) and [public closed CVE records](https://github.com/labtether/labtether/issues?q=is%3Aissue%20is%3Aclosed%20label%3Acve)
 - **License** -- [Apache 2.0](LICENSE)
 
 ---
