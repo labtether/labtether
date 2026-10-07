@@ -16,6 +16,13 @@ body:
       description: Give the assigned CVE ID and public advisory link, if one exists. Leave blank for a fix with no assigned CVE.
       placeholder: CVE-YYYY-NNNN and a public advisory URL
   - type: textarea
+    id: summary
+    attributes:
+      label: Executive summary and background
+      description: Explain what the component does, what should happen, and what fails. Credit the original advisory or researchers for upstream issues.
+    validations:
+      required: true
+  - type: textarea
     id: component
     attributes:
       label: Affected component and versions
@@ -23,10 +30,24 @@ body:
     validations:
       required: true
   - type: textarea
+    id: details
+    attributes:
+      label: Vulnerability details and exploitability
+      description: Explain the root cause, attacker-controlled input, required access and configuration, and narrowest supported impact. State whether the path is reachable in LabTether or remains unproved.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Proof of concept or validation limits
+      description: Link a real, already public reproducer when available. Say what was inspected or run, what was observed, and which exploit checks were not performed. Do not invent a reproducer or output.
+    validations:
+      required: true
+  - type: textarea
     id: fix
     attributes:
       label: Fix and public evidence
-      description: Link the merged pull request or commit and show the patched dependency version or source change. State any work still needed.
+      description: Link the proposed or merged pull request or commit and show the patched dependency version or source change. State any work still needed.
     validations:
       required: true
   - type: textarea

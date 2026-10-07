@@ -39,11 +39,15 @@ Each public record must include:
 
 1. The published CVE or advisory, when one exists, and the affected component.
 2. The affected dependency or source version and the verified patched version or fix commit.
-3. A merged pull request or commit and public source links showing the fix.
+3. The proposed or merged pull request or commit and public source links showing the fix. Say clearly when a fix is still awaiting review or merge.
 4. The checks actually performed, with public CI links when available.
 5. The release or deployment status. A source fix on `main` does not establish that a tagged release, container image, or installed deployment contains it.
 
-Close an issue as **completed** only after its specific fix has been verified. Keep unresolved work open; dismissing an alert does not prove remediation. If a record is added after the fix, say that it is retrospective and give the real fix date. Dependency presence alone does not establish that LabTether was exploitable or that a deployment was compromised.
+Write reports in a security research format: executive summary, background, vulnerability details, exploitability analysis, proof of concept or validation limits, remediation, and summary. Explain the root cause, attacker prerequisites, affected versions, and LabTether's actual use of the component. Separate upstream claims, inspected source, and observed test results. Credit the original researchers and link their advisory; do not claim original discovery for an upstream dependency issue.
+
+Include a proof of concept only when it exists, and say whether it was actually run. Package audits, builds, and ordinary tests do not reproduce an exploit. Give the checks that support the fix and the remaining limits.
+
+Close an issue as **completed** only after its specific fix has been verified on `main`. Keep unresolved work open; dismissing an alert does not prove remediation. If a record is added after the fix, say that it is retrospective and give the real fix date. Dependency presence alone does not establish that LabTether was exploitable or that a deployment was compromised.
 
 For a LabTether-specific vulnerability, maintainers may publish a GitHub Security Advisory and request a CVE when appropriate. Existing upstream CVEs keep their original identifiers and attribution.
 
