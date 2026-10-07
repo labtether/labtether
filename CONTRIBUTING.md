@@ -8,7 +8,7 @@ Contributions to LabTether are welcome. This guide covers the practical workflow
 2. Follow the diagnostic checklist in [SUPPORT.md](SUPPORT.md).
 3. Open a GitHub Issue with version, deployment path, reproduction steps, and relevant logs (secrets redacted).
 
-For security vulnerabilities, do **not** open a public issue. Follow [SECURITY.md](SECURITY.md).
+For new, undisclosed security vulnerabilities, use the private channel in [SECURITY.md](SECURITY.md). Already published CVEs and verified security fixes may use the public security record form described there.
 
 ## Suggesting Features
 
@@ -119,7 +119,7 @@ If your change does not require docs updates, note the rationale in the PR descr
 
 ## Security Issues
 
-Do not open a public issue for security vulnerabilities. Follow the private reporting process in [SECURITY.md](SECURITY.md).
+Report new, undisclosed vulnerabilities privately through [SECURITY.md](SECURITY.md). For an already published CVE or a verified fix, use the public security record form and include the fix and validation evidence. Close the issue as completed only after verifying its specific fix; state whether the fix is on `main`, in a published release, or deployed.
 
 ## License
 

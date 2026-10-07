@@ -1,0 +1,54 @@
+name: Public CVE or security fix record
+description: Track an already published CVE or record a verified security fix.
+title: "[Security] "
+labels: [security]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a new or undisclosed vulnerability, [report it privately](https://github.com/labtether/labtether/security/advisories/new).
+        This public form is for published CVEs and verified security fixes. Do not include secrets, private infrastructure details, or unpublished exploit details.
+        Read the [security record policy](https://github.com/labtether/labtether/blob/main/SECURITY.md#public-cve-and-security-fix-records) and check for an existing record first.
+  - type: input
+    id: advisory
+    attributes:
+      label: Published CVE or advisory
+      description: Give the assigned CVE ID and public advisory link, if one exists. Leave blank for a fix with no assigned CVE.
+      placeholder: CVE-YYYY-NNNN and a public advisory URL
+  - type: textarea
+    id: component
+    attributes:
+      label: Affected component and versions
+      description: Name the LabTether component, dependency or source revision, affected version, and build or runtime scope. Link public source evidence.
+    validations:
+      required: true
+  - type: textarea
+    id: fix
+    attributes:
+      label: Fix and public evidence
+      description: Link the merged pull request or commit and show the patched dependency version or source change. State any work still needed.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation
+      description: State what was actually checked. Link public CI results or regression checks. Do not claim tests or exploit reproduction that did not run.
+    validations:
+      required: true
+  - type: textarea
+    id: release
+    attributes:
+      label: Release status and dates
+      description: State whether the fix is on main, in a verified published release, or deployed. If retrospective, give the actual fix date and say this record was added later.
+    validations:
+      required: true
+  - type: checkboxes
+    id: public_record
+    attributes:
+      label: Public record checks
+      options:
+        - label: This is an already disclosed issue or a verified fix, and this report contains no secrets or unpublished vulnerability details.
+          required: true
+        - label: I checked for an existing issue for the same CVE or fix.
+          required: true
