@@ -6,6 +6,7 @@ import (
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/assets"
 	pbsconnector "github.com/labtether/labtether/internal/connectors/pbs"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
 	"net/http"
@@ -380,11 +381,15 @@ func (d *Deps) LoadPBSAssetDetails(ctx context.Context, asset assets.Asset, runt
 		response.Datastore = &summary
 		warnings = append(warnings, summaryWarnings...)
 
-		tasks, taskErr := runtime.Client.ListNodeTasks(ctx, node, 60)
-		if taskErr != nil {
-			warnings = append(warnings, pbsWarning("task listing unavailable", taskErr))
-		} else {
-			response.Tasks = FilterAndSortPBSTasks(tasks, store, 40)
+		// Node-wide tasks have no trustworthy datastore scope. A fuzzy worker ID
+		// match can include a sibling store, so omit them for restricted API keys.
+		if !shared.HasAssetRestriction(ctx) {
+			tasks, taskErr := runtime.Client.ListNodeTasks(ctx, node, 60)
+			if taskErr != nil {
+				warnings = append(warnings, pbsWarning("task listing unavailable", taskErr))
+			} else {
+				response.Tasks = FilterAndSortPBSTasks(tasks, store, 40)
+			}
 		}
 		response.Warnings = DedupeNonEmptyWarnings(warnings)
 		return response, nil
