@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +26,34 @@ type AgentCache struct {
 	manifest        *AgentManifest
 	lastRefresh     time.Time
 	refreshCooldown time.Duration // default 5 * time.Minute
+
+	binaryMu      sync.Mutex
+	verifiedBytes map[binaryCacheKey]verifiedBinaryBytes
+	failedLookups map[binaryCacheKey]failedBinaryLookup
+	verifiedTotal int64
+}
+
+const (
+	// Keep the public download limit aligned with the signed release verifier.
+	maxVerifiedAgentBinaryBytes = 100 << 20
+	// The release manifest currently has three downloadable Go agent variants.
+	maxVerifiedAgentCacheBytes = 3 * maxVerifiedAgentBinaryBytes
+)
+
+type binaryCacheKey struct {
+	name   string
+	sha256 string
+	size   int64
+}
+
+type verifiedBinaryBytes struct {
+	data    []byte
+	modTime time.Time
+}
+
+type failedBinaryLookup struct {
+	runtime os.FileInfo
+	baked   os.FileInfo
 }
 
 // ResolveBinaryPath returns the absolute path to the named binary. It checks
@@ -64,6 +93,9 @@ func (c *AgentCache) OpenVerifiedBinary(binaryName, expectedSHA256 string, expec
 	if _, err := hex.DecodeString(expectedSHA256); err != nil {
 		return nil, nil, fmt.Errorf("agent binary %q has invalid manifest sha256", binaryName)
 	}
+	if expectedSize > maxVerifiedAgentBinaryBytes {
+		return nil, nil, fmt.Errorf("agent binary %q exceeds the distribution size limit", binaryName)
+	}
 
 	for _, dir := range []string{c.RuntimeDir, c.BakedInDir} {
 		path := filepath.Join(dir, binaryName)
@@ -89,7 +121,7 @@ func openBinaryMatchingManifest(path, expectedSHA256 string, expectedSize int64)
 		_ = file.Close()
 		return nil, nil, false, err
 	}
-	if !info.Mode().IsRegular() || (expectedSize > 0 && info.Size() != expectedSize) {
+	if !info.Mode().IsRegular() || info.Size() > maxVerifiedAgentBinaryBytes || (expectedSize > 0 && info.Size() != expectedSize) {
 		return file, info, false, nil
 	}
 	hasher := sha256.New()
@@ -105,6 +137,90 @@ func openBinaryMatchingManifest(path, expectedSHA256 string, expectedSize int64)
 		return nil, nil, false, err
 	}
 	return file, info, true, nil
+}
+
+// VerifiedBinaryContent keeps immutable, digest-verified bytes for public
+// downloads. Each request gets its own reader, so Range requests never repeat
+// a full-file hash and a later writable-cache path swap cannot change served
+// bytes. Cold verification is serialized to bound concurrent disk work.
+func (c *AgentCache) VerifiedBinaryContent(binaryName, expectedSHA256 string, expectedSize int64) ([]byte, time.Time, error) {
+	key := binaryCacheKey{name: binaryName, sha256: strings.ToLower(strings.TrimSpace(expectedSHA256)), size: expectedSize}
+	if strings.Contains(binaryName, "/") || strings.Contains(binaryName, "\\") || strings.Contains(binaryName, "..") ||
+		len(key.sha256) != sha256.Size*2 || expectedSize > maxVerifiedAgentBinaryBytes {
+		return nil, time.Time{}, fmt.Errorf("invalid agent binary manifest entry")
+	}
+	if _, err := hex.DecodeString(key.sha256); err != nil {
+		return nil, time.Time{}, fmt.Errorf("invalid agent binary manifest digest")
+	}
+	c.binaryMu.Lock()
+	defer c.binaryMu.Unlock()
+
+	if cached, ok := c.verifiedBytes[key]; ok {
+		return cached.data, cached.modTime, nil
+	}
+	if failed, ok := c.failedLookups[key]; ok &&
+		sameBinaryFile(failed.runtime, statBinaryFile(filepath.Join(c.RuntimeDir, binaryName))) &&
+		sameBinaryFile(failed.baked, statBinaryFile(filepath.Join(c.BakedInDir, binaryName))) {
+		return nil, time.Time{}, fmt.Errorf("agent binary %q does not match the active manifest", binaryName)
+	}
+
+	runtimePath := filepath.Join(c.RuntimeDir, binaryName)
+	bakedPath := filepath.Join(c.BakedInDir, binaryName)
+	runtimeBefore := statBinaryFile(runtimePath)
+	bakedBefore := statBinaryFile(bakedPath)
+	file, info, err := c.OpenVerifiedBinary(binaryName, expectedSHA256, expectedSize)
+	if err != nil {
+		runtimeAfter := statBinaryFile(runtimePath)
+		bakedAfter := statBinaryFile(bakedPath)
+		if sameBinaryFile(runtimeBefore, runtimeAfter) && sameBinaryFile(bakedBefore, bakedAfter) {
+			if c.failedLookups == nil {
+				c.failedLookups = make(map[binaryCacheKey]failedBinaryLookup)
+			}
+			c.failedLookups[key] = failedBinaryLookup{runtime: runtimeAfter, baked: bakedAfter}
+		}
+		return nil, time.Time{}, err
+	}
+	defer func() { _ = file.Close() }()
+
+	// Recheck the exact bytes retained in memory, including an in-place write
+	// that races the first descriptor hash. Never serve from the mutable path.
+	data, err := io.ReadAll(io.LimitReader(file, maxVerifiedAgentBinaryBytes+1))
+	digest := sha256.Sum256(data)
+	if err != nil || int64(len(data)) != info.Size() || len(data) > maxVerifiedAgentBinaryBytes ||
+		hex.EncodeToString(digest[:]) != key.sha256 {
+		return nil, time.Time{}, fmt.Errorf("agent binary %q changed during verification", binaryName)
+	}
+	if c.verifiedBytes == nil || c.verifiedTotal+int64(len(data)) > maxVerifiedAgentCacheBytes {
+		c.verifiedBytes = make(map[binaryCacheKey]verifiedBinaryBytes)
+		c.verifiedTotal = 0
+	}
+	delete(c.failedLookups, key)
+	c.verifiedBytes[key] = verifiedBinaryBytes{data: data, modTime: info.ModTime()}
+	c.verifiedTotal += int64(len(data))
+	return data, info.ModTime(), nil
+}
+
+func statBinaryFile(path string) os.FileInfo {
+	info, _ := os.Stat(path)
+	return info
+}
+
+func sameBinaryFile(a, b os.FileInfo) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	// The platform's stat record includes change time. A repair that preserves
+	// size and modification time must still invalidate a failed verdict.
+	return os.SameFile(a, b) && a.Size() == b.Size() && a.ModTime().Equal(b.ModTime()) &&
+		reflect.DeepEqual(a.Sys(), b.Sys())
+}
+
+func (c *AgentCache) clearVerifiedBinaryContent() {
+	c.binaryMu.Lock()
+	defer c.binaryMu.Unlock()
+	c.verifiedBytes = nil
+	c.failedLookups = nil
+	c.verifiedTotal = 0
 }
 
 // Manifest returns the currently loaded AgentManifest. May be nil if no
@@ -138,6 +254,7 @@ func (c *AgentCache) LoadManifest() error {
 	default:
 		return fmt.Errorf("load agent manifest: runtime: %v; baked-in: %w", runtimeErr, bakedErr)
 	}
+	c.clearVerifiedBinaryContent()
 	return nil
 }
 
@@ -164,6 +281,7 @@ func (c *AgentCache) SetManifest(m *AgentManifest) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.manifest = m
+	c.clearVerifiedBinaryContent()
 }
 
 // TryRefresh records a refresh attempt and returns true if enough time has

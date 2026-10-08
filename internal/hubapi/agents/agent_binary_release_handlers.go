@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -47,16 +48,15 @@ func (d *Deps) HandleAgentBinary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	f, info, err := d.AgentCache.OpenVerifiedBinary(bin.Name, bin.SHA256, bin.SizeBytes)
+	content, modTime, err := d.AgentCache.VerifiedBinaryContent(bin.Name, bin.SHA256, bin.SizeBytes)
 	if err != nil {
 		http.Error(w, "agent binary not found", http.StatusNotFound)
 		return
 	}
-	defer func() { _ = f.Close() }()
 
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, bin.Name))
-	http.ServeContent(w, r, bin.Name, info.ModTime(), f)
+	http.ServeContent(w, r, bin.Name, modTime, bytes.NewReader(content))
 }
 
 // HandleAgentReleaseLatest returns metadata for the latest available agent binary.

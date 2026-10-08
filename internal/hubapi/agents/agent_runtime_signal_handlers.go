@@ -279,12 +279,15 @@ func (d *Deps) ProcessAgentLogBatch(conn *agentmgr.AgentConn, msg agentmgr.Messa
 	}
 }
 
-func (d *Deps) ProcessAgentUpdateProgress(_ *agentmgr.AgentConn, msg agentmgr.Message) {
+func (d *Deps) ProcessAgentUpdateProgress(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 	var data agentmgr.UpdateProgressData
 	if err := json.Unmarshal(msg.Data, &data); err != nil {
 		return
 	}
-	log.Printf("agentws: update progress job=%s stage=%s: %s", data.JobID, data.Stage, data.Message)
+	if !d.acceptsAgentUpdate(conn, data.JobID) {
+		return
+	}
+	securityruntime.Logf("agentws: update progress job=%s stage=%s: %s", data.JobID, data.Stage, data.Message)
 }
 
 func (d *Deps) ProcessAgentUpdateResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
@@ -292,6 +295,7 @@ func (d *Deps) ProcessAgentUpdateResult(conn *agentmgr.AgentConn, msg agentmgr.M
 	if err := json.Unmarshal(msg.Data, &data); err != nil {
 		return
 	}
+	d.finishAgentUpdate(conn, data.JobID)
 
 	output := strings.TrimSpace(data.Output)
 	if strings.TrimSpace(data.Error) != "" {

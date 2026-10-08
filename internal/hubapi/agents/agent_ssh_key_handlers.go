@@ -56,7 +56,7 @@ func (d *Deps) ProcessAgentSSHKeyInstalled(conn *agentmgr.AgentConn, msg agentmg
 		return
 	}
 
-	log.Printf("agentws: SSH key installed on %s (user=%s, host=%s)", conn.AssetID, data.Username, data.Hostname)
+	securityruntime.Logf("agentws: SSH key installed on %s (user=%s, host=%s)", conn.AssetID, data.Username, data.Hostname)
 
 	identity := d.currentHubIdentity()
 	if d.CredentialStore == nil || identity == nil {

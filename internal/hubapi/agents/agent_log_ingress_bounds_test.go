@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -62,6 +63,85 @@ func TestProcessAgentLogRejectionSanitizesAgentControlledIdentity(t *testing.T) 
 	}
 	if !strings.Contains(got, `trusted\nforged-prefix`) {
 		t.Fatalf("sanitized agent identity missing: %q", got)
+	}
+}
+
+func TestAgentStatusLogsEscapeUntrustedLines(t *testing.T) {
+	var output bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&output)
+	t.Cleanup(func() { log.SetOutput(previous) })
+
+	deps := &Deps{}
+	progressConn := &agentmgr.AgentConn{AssetID: "progress-agent"}
+	defer deps.trackAgentUpdate("job\nforged-job", progressConn.AssetID, time.Minute)()
+	progress, err := json.Marshal(agentmgr.UpdateProgressData{
+		JobID: "job\nforged-job", Stage: "download\rforged-stage", Message: "ready\nforged-message",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deps.ProcessAgentUpdateProgress(progressConn, agentmgr.Message{Type: agentmgr.MsgUpdateProgress, Data: progress})
+
+	installed, err := json.Marshal(agentmgr.SSHKeyInstalledData{
+		Username: "user\nforged-user", Hostname: "host\rforged-host",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deps.ProcessAgentSSHKeyInstalled(&agentmgr.AgentConn{AssetID: "agent\nforged-agent"}, agentmgr.Message{Type: agentmgr.MsgSSHKeyInstalled, Data: installed})
+
+	got := output.String()
+	if strings.Count(got, "\n") != 2 || strings.Contains(got, "\r") {
+		t.Fatalf("untrusted status created extra log lines: %q", got)
+	}
+	for _, escaped := range []string{`job\nforged-job`, `download\rforged-stage`, `ready\nforged-message`, `agent\nforged-agent`, `user\nforged-user`, `host\rforged-host`} {
+		if !strings.Contains(got, escaped) {
+			t.Fatalf("sanitized field %q missing from log: %q", escaped, got)
+		}
+	}
+}
+
+func TestProcessAgentUpdateProgressRequiresMatchingLiveRequest(t *testing.T) {
+	var output bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&output)
+	t.Cleanup(func() { log.SetOutput(previous) })
+
+	deps := &Deps{PendingAgentCmds: &sync.Map{}}
+	owner := &agentmgr.AgentConn{AssetID: "owner"}
+	other := &agentmgr.AgentConn{AssetID: "other"}
+	progress := func(jobID string) agentmgr.Message {
+		t.Helper()
+		data, err := json.Marshal(agentmgr.UpdateProgressData{JobID: jobID, Stage: "download", Message: "halfway"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return agentmgr.Message{Type: agentmgr.MsgUpdateProgress, Data: data}
+	}
+
+	deps.ProcessAgentUpdateProgress(owner, progress("unknown"))
+	finishManual := deps.trackAgentUpdate("manual-update", owner.AssetID, time.Minute)
+	deps.ProcessAgentUpdateProgress(other, progress("manual-update"))
+	deps.ProcessAgentUpdateProgress(owner, progress("manual-update"))
+	finishManual()
+	deps.ProcessAgentUpdateProgress(owner, progress("manual-update"))
+
+	deps.trackAgentUpdate("expired-update", owner.AssetID, -time.Second)
+	deps.ProcessAgentUpdateProgress(owner, progress("expired-update"))
+
+	deps.trackAgentUpdate("automatic-update", owner.AssetID, time.Minute)
+	deps.ProcessAgentUpdateProgress(owner, progress("automatic-update"))
+	resultData, err := json.Marshal(agentmgr.UpdateResultData{JobID: "automatic-update"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deps.ProcessAgentUpdateResult(owner, agentmgr.Message{Type: agentmgr.MsgUpdateResult, Data: resultData})
+	deps.ProcessAgentUpdateProgress(owner, progress("automatic-update"))
+
+	got := output.String()
+	if strings.Count(got, "update progress") != 2 || strings.Contains(got, "unknown") || strings.Contains(got, "expired-update") {
+		t.Fatalf("unexpected update progress logs: %q", got)
 	}
 }
 

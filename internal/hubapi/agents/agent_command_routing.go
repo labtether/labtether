@@ -177,6 +177,8 @@ func (d *Deps) ExecuteUpdateViaAgent(
 		ExpectedAssetID: target,
 	})
 	defer d.PendingAgentCmds.Delete(jobID)
+	finishProgress := d.trackAgentUpdate(jobID, target, timeout+15*time.Second)
+	defer finishProgress()
 
 	if err := conn.Send(agentmgr.Message{
 		Type: agentmgr.MsgUpdateRequest,
