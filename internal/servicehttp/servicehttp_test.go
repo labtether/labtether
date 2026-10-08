@@ -135,6 +135,62 @@ func TestRedirectHandler_RejectsUnconfiguredRequestHost(t *testing.T) {
 	}
 }
 
+func TestRedirectHandler_UsesTrustedIPHosts(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		host string
+		want string
+	}{
+		{name: "IPv6 loopback bind", host: "::1", want: "https://[::1]:8443/path?q=1"},
+		{name: "IPv6 external URL hostname", host: "2001:db8::1", want: "https://[2001:db8::1]:8443/path?q=1"},
+		{name: "bracketed IPv6", host: "[2001:db8::1]", want: "https://[2001:db8::1]:8443/path?q=1"},
+		{name: "bracketed loopback", host: "[::1]", want: "https://[::1]:8443/path?q=1"},
+		{name: "IPv4", host: "127.0.0.1", want: "https://127.0.0.1:8443/path?q=1"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := RedirectToHTTPSForHost(8443, tt.host)
+			req := httptest.NewRequest(http.MethodGet, "http://attacker.example/path?q=1", nil)
+			req.Host = "attacker.example:8080"
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != http.StatusMovedPermanently {
+				t.Fatalf("status = %d, want %d", rec.Code, http.StatusMovedPermanently)
+			}
+			if got := rec.Header().Get("Location"); got != tt.want {
+				t.Fatalf("Location = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRedirectHandler_RejectsHostPortsAndURLParts(t *testing.T) {
+	for _, host := range []string{
+		"[::1]:9443",
+		"[2001:db8::1]:9443",
+		"127.0.0.1:9443",
+		"hub.example:9443",
+		"user@hub.example",
+		"hub.example/path",
+		"hub.example?query=1",
+		"hub.example#fragment",
+		"hub.example\\path",
+		"hub.example\r\nLocation: https://attacker.example",
+	} {
+		t.Run(host, func(t *testing.T) {
+			handler := RedirectToHTTPSForHost(8443, host)
+			req := httptest.NewRequest(http.MethodGet, "http://attacker.example/path", nil)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != http.StatusMisdirectedRequest {
+				t.Fatalf("status = %d, want %d", rec.Code, http.StatusMisdirectedRequest)
+			}
+			if got := rec.Header().Get("Location"); got != "" {
+				t.Fatalf("Location = %q, want empty", got)
+			}
+		})
+	}
+}
+
 func TestRedirectHandlerWithTLSInfoPassthrough_DesktopStreamUpgradeRequiresTLS(t *testing.T) {
 	wsHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTeapot)

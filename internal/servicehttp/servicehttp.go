@@ -411,6 +411,11 @@ func normalizeRedirectHost(raw string) string {
 	if host == "" || strings.ContainsAny(host, "\r\n/\\?#@") {
 		return ""
 	}
+	// URL.Hostname and loopback bind addresses supply IPv6 without brackets.
+	// Parse those as IP addresses before a URL parser mistakes them for ports.
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.String()
+	}
 	parsed, err := url.Parse("https://" + host)
 	if err != nil || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Port() != "" || parsed.Hostname() == "" {
 		return ""
