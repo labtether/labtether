@@ -26,7 +26,6 @@ export function useFilesWorkspace() {
   // -------------------------------------------------------------------------
 
   const {
-    assets,
     target,
     setTarget,
     connectedAgentIds,

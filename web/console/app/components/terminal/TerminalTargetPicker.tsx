@@ -171,9 +171,7 @@ export function TerminalTargetPicker({
       const focusTimer = window.setTimeout(() => searchInputRef.current?.focus(), 0);
       return () => window.clearTimeout(focusTimer);
     }
-    if (!open) {
-      setQuery("");
-    }
+    setQuery("");
   }, [open, selectedKind]);
 
   const rememberRecentTarget = useCallback((asset: Asset) => {
