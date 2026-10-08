@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"time"
-
 	"github.com/labtether/labtether/internal/actions"
 	"github.com/labtether/labtether/internal/alerts"
 	"github.com/labtether/labtether/internal/apikeys"
@@ -21,16 +19,14 @@ import (
 	"github.com/labtether/labtether/internal/groups"
 	"github.com/labtether/labtether/internal/hubcollector"
 	"github.com/labtether/labtether/internal/incidents"
-	"github.com/labtether/labtether/internal/logs"
 	"github.com/labtether/labtether/internal/notifications"
 	"github.com/labtether/labtether/internal/retention"
 	"github.com/labtether/labtether/internal/savedactions"
 	"github.com/labtether/labtether/internal/schedules"
 	"github.com/labtether/labtether/internal/synthetic"
-	"github.com/labtether/labtether/internal/telemetry"
-	"github.com/labtether/labtether/internal/terminal"
 	"github.com/labtether/labtether/internal/updates"
 	"github.com/labtether/labtether/internal/webhooks"
+	"time"
 )
 
 // ErrNotFound is returned when a requested resource does not exist.
@@ -54,61 +50,6 @@ type ReliabilityRecord struct {
 	Factors     map[string]any `json:"factors,omitempty"`
 	WindowHours int            `json:"window_hours"`
 	ComputedAt  time.Time      `json:"computed_at"`
-}
-
-// TerminalStore provides persistence for terminal sessions and commands.
-type TerminalStore interface {
-	CreateSession(req terminal.CreateSessionRequest) (terminal.Session, error)
-	GetSession(id string) (terminal.Session, bool, error)
-	UpdateSession(session terminal.Session) error
-	ListSessions() ([]terminal.Session, error)
-	DeleteTerminalSession(id string) error
-	AddCommand(sessionID string, req terminal.CreateCommandRequest, target, mode string) (terminal.Command, error)
-	UpdateCommandResult(sessionID, commandID, status, output string) error
-	GetCommand(commandID string) (terminal.Command, bool, error)
-	DeleteCommand(commandID string) error
-	ListCommands(sessionID string) ([]terminal.Command, error)
-	ListRecentCommands(limit int) ([]terminal.Command, error)
-}
-
-// TerminalPersistentSessionStore provides persistence for durable terminal
-// workspaces that can be reattached across client disconnects.
-type TerminalPersistentSessionStore interface {
-	CreateOrUpdatePersistentSession(req terminal.CreatePersistentSessionRequest) (terminal.PersistentSession, error)
-	GetPersistentSession(id string) (terminal.PersistentSession, bool, error)
-	ListPersistentSessions() ([]terminal.PersistentSession, error)
-	UpdatePersistentSession(id string, req terminal.UpdatePersistentSessionRequest) (terminal.PersistentSession, error)
-	MarkPersistentSessionAttached(id string, attachedAt time.Time) (terminal.PersistentSession, error)
-	MarkPersistentSessionDetached(id string, detachedAt time.Time) (terminal.PersistentSession, error)
-	DeletePersistentSession(id string) error
-	MarkPersistentSessionArchived(id string, archivedAt time.Time) (terminal.PersistentSession, error)
-	ListDetachedOlderThan(threshold time.Time) ([]terminal.PersistentSession, error)
-	ListAttachedSessions() ([]terminal.PersistentSession, error)
-	MarkAllAttachedAsDetached() error
-}
-
-// TerminalPersistentSessionActorStore is an optional optimization interface
-// for loading persistent terminal sessions for a single actor without scanning
-// the full session inventory first.
-type TerminalPersistentSessionActorStore interface {
-	ListPersistentSessionsByActor(actorID string) ([]terminal.PersistentSession, error)
-}
-
-// TerminalBookmarkStore provides persistence for saved terminal connection bookmarks.
-type TerminalBookmarkStore interface {
-	CreateBookmark(req terminal.CreateBookmarkRequest) (terminal.Bookmark, error)
-	GetBookmark(id string) (terminal.Bookmark, bool, error)
-	ListBookmarks(actorID string) ([]terminal.Bookmark, error)
-	UpdateBookmark(id string, req terminal.UpdateBookmarkRequest) (terminal.Bookmark, error)
-	DeleteBookmark(id string) error
-	TouchBookmarkLastUsed(id string, at time.Time) error
-}
-
-// TerminalScrollbackStore provides persistence for terminal session scrollback buffers.
-type TerminalScrollbackStore interface {
-	UpsertScrollback(persistentSessionID string, buffer []byte, bufferSize int, totalLines int) error
-	GetScrollback(persistentSessionID string) ([]byte, error)
-	DeleteScrollback(persistentSessionID string) error
 }
 
 // AuditStore provides persistence for audit events.
@@ -141,161 +82,6 @@ type GroupStore interface {
 	GetGroupTree() ([]groups.TreeNode, error)
 	DeleteGroup(id string) error
 	IsAncestor(candidateAncestorID, descendantID string) (bool, error)
-}
-
-// TelemetryStore provides canonical metrics persistence and query paths.
-type TelemetryStore interface {
-	AppendSamples(ctx context.Context, samples []telemetry.MetricSample) error
-	Snapshot(assetID string, at time.Time) (telemetry.Snapshot, error)
-	Series(assetID string, start, end time.Time, step time.Duration) ([]telemetry.Series, error)
-}
-
-// TelemetrySnapshotBatchStore is an optional optimization interface for
-// loading latest metric snapshots for many assets in a single store call.
-type TelemetrySnapshotBatchStore interface {
-	SnapshotMany(assetIDs []string, at time.Time) (map[string]telemetry.Snapshot, error)
-}
-
-// TelemetryDynamicStore is an optional interface for stores that can return
-// dynamic (all-metric) snapshots. Callers that type-assert to this interface
-// receive a full map of every metric for an asset, not just the 6 canonical ones.
-type TelemetryDynamicStore interface {
-	DynamicSnapshotForAsset(assetID string, at time.Time) (telemetry.DynamicSnapshot, error)
-	DynamicSnapshotMany(assetIDs []string, at time.Time) (map[string]telemetry.DynamicSnapshot, error)
-}
-
-// TelemetryLabeledSnapshotStore is the cancellation-aware, cardinality-bounded
-// Prometheus path. It preserves the latest sample for every distinct
-// (asset, raw metric, labels) series rather than collapsing labeled sub-series
-// into a single value per raw metric.
-type TelemetryLabeledSnapshotStore interface {
-	LatestLabeledMetricSnapshots(ctx context.Context, assetIDs []string, at time.Time, maxSeries int) (map[string][]telemetry.MetricSample, error)
-}
-
-// TelemetryHubMetricStore exposes persisted non-asset hub gauges. These
-// samples never appear in AssetStore and are merged only into observability
-// outputs such as the Prometheus scrape.
-type TelemetryHubMetricStore interface {
-	HubMetricSnapshots(ctx context.Context, at time.Time, maxSeries int) (map[string][]telemetry.MetricSample, error)
-}
-
-// AlertRuleMetricSnapshot is the latest evaluation timing for one active rule.
-type AlertRuleMetricSnapshot struct {
-	RuleID     string
-	RuleName   string
-	DurationMS int
-}
-
-// AlertMetricsSnapshot combines an exact aggregate rule count with a bounded
-// list of per-rule timing series.
-type AlertMetricsSnapshot struct {
-	ActiveRuleCount     int64
-	FiringInstanceCount int64
-	RuleEvaluations     []AlertRuleMetricSnapshot
-}
-
-// AlertMetricsSnapshotStore avoids a capped list plus one evaluation query per
-// rule in the Prometheus bridge.
-type AlertMetricsSnapshotStore interface {
-	AlertMetricsSnapshot(ctx context.Context, maxRuleSeries int) (AlertMetricsSnapshot, error)
-}
-
-// ReliabilityMetricSnapshot is the latest materialized reliability score for
-// one group, including the stable identity labels required by Prometheus.
-type ReliabilityMetricSnapshot struct {
-	GroupID   string
-	GroupName string
-	Score     int
-}
-
-// ReliabilityMetricSnapshotStore loads latest-per-group reliability values in
-// one deterministic, cancellation-aware, cardinality-bounded operation.
-type ReliabilityMetricSnapshotStore interface {
-	LatestReliabilityMetricSnapshots(ctx context.Context, at time.Time, maxGroups int) ([]ReliabilityMetricSnapshot, error)
-}
-
-// TelemetryAlertBatchStore is an optional optimization interface for alert
-// evaluation paths that only need one metric or simple sample presence checks.
-type TelemetryAlertBatchStore interface {
-	MetricSeriesBatch(assetIDs []string, metric string, start, end time.Time, step time.Duration) (map[string]telemetry.Series, error)
-	AssetsWithSamples(assetIDs []string, start, end time.Time) (map[string]bool, error)
-}
-
-// ErrTelemetryQueryLimitExceeded means a caller-visible telemetry query would
-// require more raw rows than its explicit memory/work budget permits.
-var ErrTelemetryQueryLimitExceeded = errors.New("telemetry query row limit exceeded")
-
-// ErrHubMetricSnapshotLimitExceeded means the persisted hub-scope cardinality
-// exceeded the explicit scrape work budget.
-var ErrHubMetricSnapshotLimitExceeded = errors.New("hub metric snapshot series limit exceeded")
-
-// ErrAlertMetricSnapshotLimitExceeded means a caller requested more per-rule
-// alert series than the bounded observability snapshot permits.
-var ErrAlertMetricSnapshotLimitExceeded = errors.New("alert metric snapshot series limit exceeded")
-
-// ErrReliabilityMetricSnapshotLimitExceeded means a caller requested more
-// group reliability series than the bounded observability snapshot permits.
-var ErrReliabilityMetricSnapshotLimitExceeded = errors.New("reliability metric snapshot series limit exceeded")
-
-var (
-	ErrTelemetrySnapshotAssetLimitExceeded  = errors.New("telemetry snapshot asset limit exceeded")
-	ErrTelemetrySnapshotRowLimitExceeded    = errors.New("telemetry snapshot raw row limit exceeded")
-	ErrTelemetrySnapshotSeriesLimitExceeded = errors.New("telemetry snapshot series limit exceeded")
-)
-
-var (
-	ErrMetricSampleBatchLimitExceeded = errors.New("metric sample batch count limit exceeded")
-	ErrMetricSampleBatchBytesExceeded = errors.New("metric sample batch byte limit exceeded")
-)
-
-// TelemetryQueryBatchStore is the cancellation-aware, work-bounded batch path
-// used by interactive/API queries. Background alert evaluation intentionally
-// retains the narrower TelemetryAlertBatchStore contract above.
-type TelemetryQueryBatchStore interface {
-	MetricSeriesBatchContext(ctx context.Context, assetIDs []string, metric string, start, end time.Time, step time.Duration, maxRawPoints int) (map[string]telemetry.Series, error)
-}
-
-// LogStore provides normalized log/event persistence and query paths.
-type LogStore interface {
-	AppendEvent(event logs.Event) error
-	QueryEvents(req logs.QueryRequest) ([]logs.Event, error)
-	ListSources(limit int) ([]logs.SourceSummary, error)
-	SaveView(actorID string, req logs.SavedViewRequest) (logs.SavedView, error)
-	ListViews(actorID string, limit int) ([]logs.SavedView, error)
-	GetView(actorID, id string) (logs.SavedView, bool, error)
-	UpdateView(actorID, id string, req logs.SavedViewRequest) (logs.SavedView, error)
-	DeleteView(actorID, id string) error
-}
-
-// LogBatchAppendStore is an optional optimization interface for appending
-// many log events in one store call.
-type LogBatchAppendStore interface {
-	AppendEvents(events []logs.Event) error
-}
-
-// LogSourceSummaryStore is an optional optimization interface for exact source
-// aggregations over a filtered log window without materializing raw events.
-type LogSourceSummaryStore interface {
-	QuerySourceSummaries(req logs.SourceSummaryRequest) ([]logs.SourceSummary, error)
-}
-
-// LogGroupSeverityCountStore is an optional optimization interface for exact
-// per-group severity aggregations over a filtered log window without
-// materializing raw log events.
-type LogGroupSeverityCountStore interface {
-	QueryGroupSeverityCounts(req logs.GroupSeverityCountRequest) ([]logs.GroupSeverityCount, error)
-}
-
-// DeadLetterLogStore is an optional optimization interface for dead-letter
-// list/analytics query paths that do not require full log event payloads.
-type DeadLetterLogStore interface {
-	QueryDeadLetterEvents(from, to time.Time, limit int) ([]logs.DeadLetterEvent, error)
-}
-
-// DeadLetterLogCountStore is an optional optimization interface for obtaining
-// exact dead-letter totals within a time range without fetching event payloads.
-type DeadLetterLogCountStore interface {
-	CountDeadLetterEvents(from, to time.Time) (int, error)
 }
 
 // ActionStore provides persistence for typed action runs.
@@ -695,106 +481,6 @@ type ReliabilityHistoryStore interface {
 type SettingsStore interface {
 	GetSystemSetting(ctx context.Context, key string) (json.RawMessage, bool, error)
 	PutSystemSetting(ctx context.Context, key string, value json.RawMessage) error
-}
-
-// FileConnection represents a saved remote file system connection (SFTP, FTP, SMB, WebDAV).
-type FileConnection struct {
-	ID           string         `json:"id"`
-	ActorID      string         `json:"-"`
-	Name         string         `json:"name"`
-	Protocol     string         `json:"protocol"`
-	Host         string         `json:"host"`
-	Port         *int           `json:"port,omitempty"`
-	InitialPath  string         `json:"initial_path"`
-	CredentialID *string        `json:"credential_id,omitempty"`
-	ExtraConfig  map[string]any `json:"extra_config,omitempty"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
-}
-
-// RemoteBookmark is a saved remote desktop connection to an external host.
-type RemoteBookmark struct {
-	ID                string    `json:"id"`
-	Label             string    `json:"label"`
-	Protocol          string    `json:"protocol"`
-	Host              string    `json:"host"`
-	Port              int       `json:"port"`
-	CredentialID      *string   `json:"credential_id,omitempty"`
-	HasCredentials    bool      `json:"has_credentials"`
-	SPICESecurityMode string    `json:"spice_security_mode,omitempty"`
-	SPICECAPEM        string    `json:"spice_ca_pem,omitempty"`
-	AllowInsecureVNC  bool      `json:"allow_insecure_vnc,omitempty"`
-	CreatedAt         time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
-}
-
-// FileTransfer represents a file transfer job between two endpoints.
-type FileTransfer struct {
-	ID               string     `json:"id"`
-	ActorID          string     `json:"-"`
-	SourceType       string     `json:"source_type"`
-	SourceID         string     `json:"source_id"`
-	SourcePath       string     `json:"source_path"`
-	DestType         string     `json:"dest_type"`
-	DestID           string     `json:"dest_id"`
-	DestPath         string     `json:"dest_path"`
-	FileName         string     `json:"file_name"`
-	FileSize         *int64     `json:"file_size,omitempty"`
-	BytesTransferred int64      `json:"bytes_transferred"`
-	Status           string     `json:"status"`
-	Error            *string    `json:"error,omitempty"`
-	StartedAt        *time.Time `json:"started_at,omitempty"`
-	CompletedAt      *time.Time `json:"completed_at,omitempty"`
-}
-
-// File-transfer list bounds cap both response size and OFFSET scan work.
-const (
-	FileTransferListDefaultLimit = 50
-	FileTransferListMaxLimit     = 100
-	FileTransferListMaxOffset    = 10_000
-)
-
-var (
-	ErrFileConnectionChanged = errors.New("file connection changed during host key verification")
-	ErrSFTPHostKeyMismatch   = errors.New("sftp host key mismatch")
-)
-
-// FileConnectionStore provides persistence for remote file connection profiles.
-type FileConnectionStore interface {
-	ListFileConnections(ctx context.Context) ([]FileConnection, error)
-	GetFileConnection(ctx context.Context, id string) (*FileConnection, error)
-	CreateFileConnection(ctx context.Context, fc *FileConnection) error
-	UpdateFileConnection(ctx context.Context, fc *FileConnection) error
-	PinSFTPHostKey(ctx context.Context, connectionID, expectedHost string, expectedPort int, presentedKey string) error
-	DeleteFileConnection(ctx context.Context, id string) error
-}
-
-// FileConnectionCredentialStore applies a connection edit and its linked
-// credential edit in one transaction. The boolean selects profile creation
-// for legacy connections that do not have a credential profile yet.
-type FileConnectionCredentialStore interface {
-	UpdateFileConnectionWithCredential(ctx context.Context, fc *FileConnection, profile credentials.Profile, createProfile bool) (credentials.Profile, error)
-}
-
-// RemoteBookmarkStore provides persistence for saved remote desktop bookmarks.
-type RemoteBookmarkStore interface {
-	ListRemoteBookmarks(ctx context.Context) ([]RemoteBookmark, error)
-	GetRemoteBookmark(ctx context.Context, id string) (*RemoteBookmark, error)
-	CreateRemoteBookmark(ctx context.Context, bm *RemoteBookmark) error
-	UpdateRemoteBookmark(ctx context.Context, bm RemoteBookmark) error
-	DeleteRemoteBookmark(ctx context.Context, id string) error
-}
-
-// FileTransferStore provides persistence for file transfer jobs.
-type FileTransferStore interface {
-	GetFileTransfer(ctx context.Context, id string) (*FileTransfer, error)
-	CreateFileTransfer(ctx context.Context, ft *FileTransfer) error
-	UpdateFileTransfer(ctx context.Context, ft *FileTransfer) error
-	// ListFileTransfers returns only records owned by actorID. The result is
-	// ordered newest-first by the sortable transfer ID, and total is computed
-	// after applying the optional exact status filter but before pagination.
-	ListFileTransfers(ctx context.Context, actorID, status string, limit, offset int) ([]FileTransfer, int, error)
-	ListActiveFileTransfers(ctx context.Context) ([]FileTransfer, error)
 }
 
 // ScheduleStore provides persistence for scheduled tasks.

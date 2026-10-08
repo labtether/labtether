@@ -70,9 +70,7 @@ data/install/
 # Backups
 backups/
 
-# Claude / AI tooling
-CLAUDE.md
-AGENTS.md
+# Local AI tool state (shared AGENTS.md and CLAUDE.md are versioned)
 .claude/
 .mcp.json
 .context/

@@ -18,6 +18,20 @@ import (
 	"github.com/labtether/labtether/internal/terminal"
 )
 
+const agentHeartbeatTelemetryStoreTimeout = 5 * time.Second
+
+func (s *apiServer) appendAgentHeartbeatTelemetry(assetID string, samples []telemetry.MetricSample, source string) {
+	if len(samples) == 0 || s.telemetryStore == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), agentHeartbeatTelemetryStoreTimeout)
+	defer cancel()
+	if err := s.telemetryStore.AppendSamples(ctx, samples); err != nil {
+		securityruntime.Logf("agentws: failed to append %s heartbeat samples for %s: %v", source, assetID, err)
+	}
+}
+
 // buildAgentsDeps constructs the agents.Deps from the apiServer's fields.
 func (s *apiServer) buildAgentsDeps() *agentspkg.Deps {
 	enrollmentTransactions, _ := s.enrollmentStore.(persistence.AgentEnrollmentTransactionStore)
@@ -84,11 +98,11 @@ func (s *apiServer) buildAgentsDeps() *agentspkg.Deps {
 				return nil, err
 			}
 			s.persistCanonicalHeartbeat(assetEntry, req)
-			if samples := telemetry.SamplesFromHeartbeatMetadata(assetEntry.ID, assetEntry.LastSeenAt, req.Metadata); len(samples) > 0 && s.telemetryStore != nil {
-				if err := s.telemetryStore.AppendSamples(context.Background(), samples); err != nil {
-					securityruntime.Logf("agentws: failed to append authenticated heartbeat samples for %s: %v", assetEntry.ID, err)
-				}
-			}
+			s.appendAgentHeartbeatTelemetry(
+				assetEntry.ID,
+				telemetry.SamplesFromHeartbeatMetadata(assetEntry.ID, assetEntry.LastSeenAt, req.Metadata),
+				"authenticated",
+			)
 			return &assetEntry, nil
 		},
 		ProcessExistingOwnerAgentHeartbeat: func(req assets.HeartbeatRequest) (*assets.Asset, error) {
@@ -102,11 +116,11 @@ func (s *apiServer) buildAgentsDeps() *agentspkg.Deps {
 				return nil, err
 			}
 			s.persistCanonicalHeartbeat(assetEntry, req)
-			if samples := telemetry.SamplesFromHeartbeatMetadata(assetEntry.ID, assetEntry.LastSeenAt, req.Metadata); len(samples) > 0 && s.telemetryStore != nil {
-				if err := s.telemetryStore.AppendSamples(context.Background(), samples); err != nil {
-					securityruntime.Logf("agentws: failed to append owner heartbeat samples for %s: %v", assetEntry.ID, err)
-				}
-			}
+			s.appendAgentHeartbeatTelemetry(
+				assetEntry.ID,
+				telemetry.SamplesFromHeartbeatMetadata(assetEntry.ID, assetEntry.LastSeenAt, req.Metadata),
+				"owner",
+			)
 			return &assetEntry, nil
 		},
 		AutoProvisionDockerCollectorIfNeeded: func(agentAssetID string, connectors []agentmgr.ConnectorInfo) {

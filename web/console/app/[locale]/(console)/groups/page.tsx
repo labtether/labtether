@@ -1,35 +1,38 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
+import { apiMoveGroup,apiRenameGroup,computeGroupDepth } from './groupOperations';
+
+
 import {
-  ChevronsDownUp,
-  ChevronsUpDown,
-  FolderTree,
-  MapPin,
-  Plus,
-  Settings2,
-  TriangleAlert,
+ChevronsDownUp,
+ChevronsUpDown,
+FolderTree,
+MapPin,
+Plus,
+Settings2,
+TriangleAlert,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useCallback,useEffect,useMemo,useState } from "react";
+import { GroupParentSelect } from "../../../components/GroupParentSelect";
 import { JumpChainEditor } from "../../../components/JumpChainEditor";
 import { PageHeader } from "../../../components/PageHeader";
-import { Card } from "../../../components/ui/Card";
 import { Button } from "../../../components/ui/Button";
-import { Input } from "../../../components/ui/Input";
+import { Card } from "../../../components/ui/Card";
 import { EmptyState } from "../../../components/ui/EmptyState";
-import { GroupParentSelect } from "../../../components/GroupParentSelect";
-import { useFastStatus, useSlowStatus, useStatusControls } from "../../../contexts/StatusContext";
-import type { Group, HopConfig } from "../../../console/models";
-import { GroupTreeNode } from "./GroupTreeNode";
-import { useGroupTree } from "./useGroupTree";
+import { Input } from "../../../components/ui/Input";
+import type { Group,HopConfig } from "../../../console/models";
+import { useFastStatus,useSlowStatus,useStatusControls } from "../../../contexts/StatusContext";
 import { GroupCreateModal } from "./GroupCreateModal";
 import { GroupDeleteModal } from "./GroupDeleteModal";
+import { GroupTreeNode } from "./GroupTreeNode";
 import {
-  parseGroupMutationError,
-  useGroupMutationActions,
-  type CreateGroupInput,
-  type UpdateGroupInput,
+parseGroupMutationError,
+useGroupMutationActions,
+type CreateGroupInput,
+type UpdateGroupInput,
 } from "./useGroupMutationActions";
+import { useGroupTree } from "./useGroupTree";
 
 // ── Drag type (root drop zone) ──
 
@@ -38,64 +41,6 @@ const DRAG_TYPE_GROUP = "application/x-labtether-group";
 // ── Nesting depth helpers ──
 
 const NESTING_DEPTH_WARN = 5;
-
-function computeGroupDepth(groups: Group[], groupId: string): number {
-  const byId = new Map(groups.map((g) => [g.id, g]));
-  let depth = 0;
-  let current = byId.get(groupId);
-  while (current?.parent_group_id) {
-    depth++;
-    current = byId.get(current.parent_group_id);
-    if (depth > 20) break; // guard against cycles
-  }
-  return depth;
-}
-
-// ── API helpers ──
-
-async function apiMoveGroup(
-  groupID: string,
-  parentGroupID: string | null,
-): Promise<void> {
-  const response = await fetch(
-    `/api/groups/${encodeURIComponent(groupID)}/move`,
-    {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ parent_group_id: parentGroupID ?? "" }),
-    },
-  );
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as
-      | { error?: string }
-      | null;
-    throw new Error(
-      payload?.error ?? `Failed to move group (${response.status})`,
-    );
-  }
-}
-
-async function apiRenameGroup(
-  groupID: string,
-  name: string,
-): Promise<void> {
-  const response = await fetch(
-    `/api/groups/${encodeURIComponent(groupID)}`,
-    {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    },
-  );
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as
-      | { error?: string }
-      | null;
-    throw new Error(
-      payload?.error ?? `Failed to rename group (${response.status})`,
-    );
-  }
-}
 
 // ── Page component ──
 

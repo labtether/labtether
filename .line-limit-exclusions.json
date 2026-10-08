@@ -1,0 +1,14 @@
+[
+  {
+    "path": "scripts/demo-seed.sql",
+    "kind": "generated",
+    "reason": "Demo dataset emitted by the Python seed generator.",
+    "source": "scripts/generate-demo-seed.py"
+  },
+  {
+    "path": "web/console/next-env.d.ts",
+    "kind": "generated",
+    "reason": "Next.js emits route and image type references.",
+    "source": "web/console/package.json: next build"
+  }
+]

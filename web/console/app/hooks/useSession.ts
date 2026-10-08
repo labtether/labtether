@@ -3,95 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useFastStatus, useStatusSettings } from "../contexts/StatusContext";
 import { useConnectedAgents } from "./useConnectedAgents";
-import { buildBrowserWsUrl } from "../lib/ws";
-import { persistentSessionIDFromPayload } from "./persistentSessionPayload";
-
-export type SessionType = "terminal" | "desktop";
-export type DesktopProtocol = "vnc" | "rdp" | "spice" | "webrtc";
-
-export interface SpiceTicket {
-  wsUrl: string;
-  password: string;
-  type?: string;
-  ca?: string;
-  proxy?: string;
-}
-
-export type SessionConnectionState =
-  | "idle"
-  | "connecting"
-  | "authenticating" // desktop only
-  | "connected"
-  | "error";
-
-export type SessionConnectionPhase =
-  | "idle"
-  | "creating-session"
-  | "requesting-ticket"
-  | "opening-stream"
-  | "starting-shell"
-  | "reconnecting"
-  | "connected"
-  | "error";
-
-export interface SessionConnectionProgress {
-  phase: SessionConnectionPhase;
-  message: string;
-  phaseElapsedMs: number;
-  totalElapsedMs: number;
-}
-
-export interface SessionStreamStatus {
-  type?: string;
-  stage?: string;
-  message?: string;
-  attempt?: number;
-  attempts?: number;
-  elapsed_ms?: number;
-  hop_index?: number;
-  hop_count?: number;
-  hop_host?: string;
-}
-
-export interface QuickConnectParams {
-  host: string;
-  port?: number;
-  username: string;
-  auth_method: "password" | "private_key";
-  password?: string;
-  private_key?: string;
-  passphrase?: string;
-  strict_host_key?: boolean;
-}
-
-export interface UseSessionOptions {
-  type: SessionType;
-  /** When set, skips the device picker and always targets this asset. */
-  fixedTarget?: string;
-  /** Enables auto-reconnect for terminal sessions on abnormal disconnects. */
-  autoReconnect?: boolean;
-  /** When set, creates an ephemeral quick-connect session instead of an asset-based one. */
-  quickConnectParams?: QuickConnectParams;
-}
-
-export interface TerminalConnectOptions {
-  terminalShell?: string;
-  protocol?: DesktopProtocol;
-  display?: string;
-  record?: boolean;
-  directTarget?: {
-    host: string;
-    port: number;
-    username?: string;
-    password?: string;
-    allow_insecure_vnc?: boolean;
-    ignore_certificate?: boolean;
-    allow_legacy_security?: boolean;
-    certificate_fingerprints?: string;
-    spice_security_mode?: "tls" | "cleartext";
-    spice_ca_pem?: string;
-  };
-}
+import { useSessionProgress } from "./session/useSessionProgress";
+import { createSession, requestSpiceTicket, requestStreamTicket } from "./session/sessionRequests";
+import type { DesktopProtocol, SpiceTicket, SessionConnectionState, SessionStreamStatus, UseSessionOptions, TerminalConnectOptions } from "./session/sessionTypes";
+export type * from "./session/sessionTypes";
 
 function isNonRetryableDisconnectReason(reason: string): boolean {
   const normalized = reason.trim().toLowerCase();
@@ -127,19 +42,14 @@ export function useSession({
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [reconnectExhausted, setReconnectExhausted] = useState(false);
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
-  const [connectionPhase, setConnectionPhase] =
-    useState<SessionConnectionPhase>("idle");
-  const [connectionMessage, setConnectionMessage] = useState("Idle");
-  const [progressNowMs, setProgressNowMs] = useState(() => Date.now());
   const maxReconnectAttempts = 5;
+  const { setProgress, updateProgressMessage, connectionProgress } = useSessionProgress();
 
   const sessionRef = useRef<{ id: string; target: string } | null>(null);
   const connectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptRef = useRef(0);
   const manualDisconnectRef = useRef(false);
-  const connectStartedAtRef = useRef<number | null>(null);
-  const phaseStartedAtRef = useRef<number | null>(null);
   const lastDesktopOptionsRef = useRef<{
     protocol: DesktopProtocol;
     display: string;
@@ -178,32 +88,6 @@ export function useSession({
     },
     [type],
   );
-
-  const setProgress = useCallback(
-    (phase: SessionConnectionPhase, message: string) => {
-      const now = Date.now();
-      if (phase === "idle") {
-        connectStartedAtRef.current = null;
-        phaseStartedAtRef.current = null;
-      } else {
-        if (connectStartedAtRef.current == null) {
-          connectStartedAtRef.current = now;
-        }
-        phaseStartedAtRef.current = now;
-      }
-      setConnectionPhase(phase);
-      setConnectionMessage(message);
-      setProgressNowMs(now);
-    },
-    [],
-  );
-
-  const updateProgressMessage = useCallback((message: string) => {
-    const trimmed = message.trim();
-    if (!trimmed) return;
-    setConnectionMessage(trimmed);
-    setProgressNowMs(Date.now());
-  }, []);
 
   const setTarget = useCallback(
     (value: string) => {
@@ -268,127 +152,10 @@ export function useSession({
 
       let sessionId = "";
       try {
-        if (type === "terminal") {
-          // Reuse terminal session for same target
-          if (
-            sessionRef.current &&
-            sessionRef.current.target === connectTarget
-          ) {
-            sessionId = sessionRef.current.id;
-          } else if (quickConnectParams) {
-            // Quick Connect: ephemeral session with inline SSH credentials
-            const sessionRes = await fetch("/api/terminal/quick-session", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(quickConnectParams),
-            });
-            const sessionPayload = (await sessionRes.json()) as {
-              error?: string;
-              session?: { id: string };
-              sessionId?: string;
-            };
-            if (!sessionRes.ok) {
-              throw new Error(
-                sessionPayload.error ||
-                  `Failed to create quick session (${sessionRes.status})`,
-              );
-            }
-            sessionId =
-              sessionPayload.session?.id || sessionPayload.sessionId || "";
-            if (!sessionId) throw new Error("No session ID returned");
-          } else {
-            // Use persistent sessions so tmux sessions survive disconnect/reconnect.
-            // Step 1: Ensure a persistent session exists for this actor+target.
-            const ensureRes = await fetch("/api/terminal/persistent-sessions", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ target: connectTarget }),
-            });
-            let persistentId = "";
-            if (ensureRes.ok) {
-              persistentId = persistentSessionIDFromPayload(
-                await ensureRes.json().catch(() => null),
-              );
-            }
-
-            if (persistentId) {
-              // Step 2: Attach to the persistent session (reuses tmux).
-              const attachRes = await fetch(
-                `/api/terminal/persistent-sessions/${encodeURIComponent(persistentId)}/attach`,
-                {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({}),
-                },
-              );
-              const attachPayload = (await attachRes.json()) as {
-                error?: string;
-                session?: { id?: string; persistent_session_id?: string };
-              } | null;
-              if (!attachRes.ok) {
-                throw new Error(
-                  attachPayload?.error ||
-                    `Failed to attach session (${attachRes.status})`,
-                );
-              }
-              sessionId = attachPayload?.session?.id || "";
-              if (!sessionId) throw new Error("No session ID returned from attach");
-            } else {
-              // Fallback: create a plain ephemeral session if persistent flow fails.
-              const sessionRes = await fetch("/api/terminal/session", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  target: connectTarget,
-                  actorId: defaultActorID,
-                  mode: "interactive",
-                }),
-              });
-              const sessionPayload = (await sessionRes.json()) as {
-                error?: string;
-                session?: { id: string };
-                sessionId?: string;
-              };
-              if (!sessionRes.ok) {
-                throw new Error(
-                  sessionPayload.error ||
-                    `Failed to create session (${sessionRes.status})`,
-                );
-              }
-              sessionId =
-                sessionPayload.session?.id || sessionPayload.sessionId || "";
-              if (!sessionId) throw new Error("No session ID returned");
-            }
-          }
-        } else {
-          // Desktop: always create new session
-          const sessionRes = await fetch("/api/desktop/session", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              target: connectTarget,
-              quality,
-              protocol,
-              display,
-              record,
-              direct_target: directTarget,
-            }),
-          });
-          const sessionPayload = (await sessionRes.json()) as {
-            error?: string;
-            session?: { id: string };
-            sessionId?: string;
-          };
-          if (!sessionRes.ok) {
-            throw new Error(
-              sessionPayload.error ||
-                `Failed to create session (${sessionRes.status})`,
-            );
-          }
-          sessionId =
-            sessionPayload.session?.id || sessionPayload.sessionId || "";
-          if (!sessionId) throw new Error("No session ID returned");
-        }
+        sessionId = await createSession({
+          type, connectTarget, existingSession: sessionRef.current, quickConnectParams,
+          defaultActorID, quality, protocol, display, record, directTarget,
+        });
 
         if (!isLatestAttempt()) {
           terminateDesktopSession(sessionId);
@@ -399,48 +166,12 @@ export function useSession({
 
         if (type === "desktop" && protocol === "spice") {
           setProgress("requesting-ticket", "Requesting SPICE ticket...");
-          const spiceRes = await fetch("/api/desktop/spice-ticket", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sessionId }),
-          });
-          const spicePayload = (await spiceRes.json()) as {
-            error?: string;
-            wsUrl?: string;
-            streamPath?: string;
-            secure?: boolean;
-            password?: string;
-            type?: string;
-            ca?: string;
-            proxy?: string;
-          };
-          if (!spiceRes.ok || typeof spicePayload.password !== "string") {
-            throw new Error(
-              spicePayload.error ||
-                `Failed to get SPICE ticket (${spiceRes.status})`,
-            );
-          }
+          const ticket = await requestSpiceTicket(sessionId);
           if (!isLatestAttempt()) {
             terminateDesktopSession(sessionId);
             return;
           }
-          const resolvedSpiceWsUrl =
-            spicePayload.wsUrl ||
-            (spicePayload.streamPath
-              ? buildBrowserWsUrl(spicePayload.streamPath, {
-                  secure: spicePayload.secure,
-                })
-              : undefined);
-          if (!resolvedSpiceWsUrl) {
-            throw new Error("SPICE ticket response missing stream endpoint");
-          }
-          setSpiceTicket({
-            wsUrl: resolvedSpiceWsUrl,
-            password: spicePayload.password,
-            type: spicePayload.type,
-            ca: spicePayload.ca,
-            proxy: spicePayload.proxy,
-          });
+          setSpiceTicket(ticket);
           setConnectionState("connected");
           setProgress("connected", "Connected");
           return;
@@ -453,64 +184,14 @@ export function useSession({
             ? "Requesting terminal stream ticket..."
             : "Requesting desktop stream ticket...",
         );
-        const ticketEndpoint =
-          type === "terminal"
-            ? "/api/terminal/stream-ticket"
-            : "/api/desktop/stream-ticket";
-        const ticketBody: { sessionId: string; terminalShell?: string } = {
-          sessionId,
-        };
-        if (terminalShell) {
-          ticketBody.terminalShell = terminalShell;
-        }
-        const ticketRes = await fetch(ticketEndpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(ticketBody),
-        });
-        const ticketPayload = (await ticketRes.json()) as {
-          error?: string;
-          wsUrl?: string;
-          streamPath?: string;
-          audioWsUrl?: string;
-          audioStreamPath?: string;
-          secure?: boolean;
-          vncPassword?: string;
-        };
-        if (
-          !ticketRes.ok ||
-          (!ticketPayload.wsUrl && !ticketPayload.streamPath)
-        ) {
-          throw new Error(
-            ticketPayload.error ||
-              `Failed to get stream ticket (${ticketRes.status})`,
-          );
-        }
-
+        const ticket = await requestStreamTicket({ type, sessionId, terminalShell });
         if (!isLatestAttempt()) {
           terminateDesktopSession(sessionId);
           return;
         }
-        const builtWsUrl =
-          ticketPayload.wsUrl ||
-          buildBrowserWsUrl(ticketPayload.streamPath!, {
-            secure: ticketPayload.secure,
-          });
-        const builtAudioWsUrl =
-          ticketPayload.audioWsUrl ||
-          (ticketPayload.audioStreamPath
-            ? buildBrowserWsUrl(ticketPayload.audioStreamPath, {
-                secure: ticketPayload.secure,
-              })
-            : null);
-        setVncPassword(
-          typeof ticketPayload.vncPassword === "string" &&
-            ticketPayload.vncPassword.length > 0
-            ? ticketPayload.vncPassword
-            : null,
-        );
-        setWsUrl(builtWsUrl);
-        setAudioWsUrl(builtAudioWsUrl);
+        setVncPassword(ticket.vncPassword);
+        setWsUrl(ticket.wsUrl);
+        setAudioWsUrl(ticket.audioWsUrl);
         setConnectionState(
           type === "desktop" ? "authenticating" : "connecting",
         );
@@ -773,35 +454,6 @@ export function useSession({
     },
     [setProgress, terminateDesktopSession],
   );
-
-  useEffect(() => {
-    if (
-      connectionPhase === "idle" ||
-      connectionPhase === "connected" ||
-      connectionPhase === "error"
-    ) {
-      return undefined;
-    }
-    const timer = window.setInterval(() => {
-      setProgressNowMs(Date.now());
-    }, 200);
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [connectionPhase]);
-
-  const connectionProgress: SessionConnectionProgress = {
-    phase: connectionPhase,
-    message: connectionMessage,
-    phaseElapsedMs: Math.max(
-      0,
-      progressNowMs - (phaseStartedAtRef.current ?? progressNowMs),
-    ),
-    totalElapsedMs: Math.max(
-      0,
-      progressNowMs - (connectStartedAtRef.current ?? progressNowMs),
-    ),
-  };
 
   useEffect(() => {
     return () => {

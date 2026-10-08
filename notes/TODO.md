@@ -1,6 +1,43 @@
 # TODO
 
-## Now
+## Current work — 2026-10-08
+
+- [x] Reconcile all ten workspace repos onto current `origin/main` while
+  preserving old branches and each dirty checkout under
+  `refs/labtether/recovery/20261008` (the CLI was clean).
+- [x] Refine shared Astra/Opus 5.5 instructions in `AGENTS.md`, with relative
+  `CLAUDE.md` symlinks, and make the guides versioned in each repo.
+- [x] Add unconditional CI enforcement of 500 code lines per handwritten file,
+  including tests, scripts and executable build/CI configuration. Only declared
+  generated/vendor files are excluded; existing files have no exemption.
+- [x] Refactor oversized Hub Go files; the full suite passes in 89 packages.
+- [x] Refactor `StatusContext` and `useWebServices` by responsibility and keep
+  their focused tests green.
+- [x] Finish remote-console extractions; pass the whole-workspace size gate,
+  production console build and final affected browser run (89/89). One sparse
+  topology case failed in the first run; targeted repeats passed without code
+  or assertion changes. Keep that intermittent result visible in review.
+- [ ] Complete independent review and exact-commit CI for the stabilization
+  branches before merging them.
+- [ ] Obtain independent review and merge security
+  [PR #201](https://github.com/labtether/labtether/pull/201). Its patch is applied
+  locally for combined checks; local application does not close the PR.
+- [ ] Freeze accepted source commits and align embedded Go-agent pins before
+  constructing any release candidate.
+- [ ] Resume release signing only after Michael lifts the owner pause; then
+  complete signed/notarized, physical-device, external-host, installer and
+  public-download checks against the exact candidate.
+
+Local source checks are not release acceptance. The official release remains
+NO-GO. The workspace plan at
+`../docs/superpowers/plans/2026-07-24-priority-1-official-release-execution.md`
+keeps the release boundary and historical evidence separate.
+
+## Historical backlog — April 2026 and earlier
+
+These entries retain the original record. Open deployment/community tasks need
+a fresh state check before execution; old check marks are dated evidence.
+
 - [ ] **Launch prep — remaining manual steps (2026-04-15)**
   - [ ] Redeploy demo instance with new image (has keepalive goroutine for live metrics)
     - SSH to demo host
