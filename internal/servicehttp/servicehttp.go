@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"runtime"
 	"strconv"
@@ -47,6 +48,7 @@ type Config struct {
 	DBPool           DBPinger     // optional: if set, /healthz pings the DB
 	RedirectHTTPPort string       // if set, start an HTTP redirect listener on this port
 	HTTPSPort        int          // the HTTPS port to redirect to
+	RedirectHost     string       // explicit host for HTTP→HTTPS redirects; never taken from a request
 	ReadinessCheck   func() error // optional: returns nil if ready, error if not
 	// GetCertificate is an optional TLS callback for dynamic certificate serving.
 	// When set alongside TLSCertFile/TLSKeyFile, it is assigned to
@@ -251,7 +253,7 @@ func Run(ctx context.Context, cfg Config) error {
 	// plaintext port exposes one-time tickets and terminal/desktop contents.
 	redirectShutdownResult := make(chan error, 1)
 	if useTLS && cfg.RedirectHTTPPort != "" {
-		redirectHandler := RedirectToHTTPSWithTLSInfoPassthrough(cfg.HTTPSPort, mux)
+		redirectHandler := RedirectToHTTPSWithTLSInfoPassthroughForHost(cfg.HTTPSPort, cfg.RedirectHost, mux)
 		redirectServer := &http.Server{
 			Addr:              net.JoinHostPort(cfg.BindAddress, cfg.RedirectHTTPPort),
 			Handler:           redirectHandler,
@@ -363,12 +365,21 @@ func SecurityHeaders(next http.Handler) http.Handler {
 	})
 }
 
-// RedirectToHTTPS returns a handler that 301-redirects all requests to HTTPS.
+// RedirectToHTTPS returns a handler that 301-redirects only when an explicit
+// redirect host is supplied. It never trusts the request Host header.
 // The /healthz endpoint is an exception: it returns 200 OK with JSON status
 // so that Docker healthchecks (which can't follow redirects) still work.
 // Security headers (X-Frame-Options, X-Content-Type-Options) are included on
 // all responses, including redirects, to prevent clickjacking via HTTP.
 func RedirectToHTTPS(httpsPort int) http.Handler {
+	return RedirectToHTTPSForHost(httpsPort, "")
+}
+
+// RedirectToHTTPSForHost returns a handler that redirects to the configured
+// host. The host must come from trusted application configuration, not from a
+// request header, to prevent host-header open redirects.
+func RedirectToHTTPSForHost(httpsPort int, redirectHost string) http.Handler {
+	host := normalizeRedirectHost(redirectHost)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Set security headers on all redirect responses to prevent clickjacking.
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -384,15 +395,39 @@ func RedirectToHTTPS(httpsPort int) http.Handler {
 			return
 		}
 
-		host := r.Host
-		// Strip existing port from Host header.
-		if h, _, err := net.SplitHostPort(host); err == nil {
-			host = h
+		if host == "" {
+			http.Error(w, "HTTPS redirect host is not configured", http.StatusMisdirectedRequest)
+			return
 		}
 
-		target := fmt.Sprintf("https://%s:%d%s", host, httpsPort, r.URL.RequestURI())
-		http.Redirect(w, r, target, http.StatusMovedPermanently)
+		target := fmt.Sprintf("https://%s%s", net.JoinHostPort(host, strconv.Itoa(httpsPort)), r.URL.RequestURI())
+		w.Header().Set("Location", target)
+		w.WriteHeader(http.StatusMovedPermanently)
 	})
+}
+
+func normalizeRedirectHost(raw string) string {
+	host := strings.TrimSpace(raw)
+	if host == "" || strings.ContainsAny(host, "\r\n/\\?#@") {
+		return ""
+	}
+	// URL.Hostname and loopback bind addresses supply IPv6 without brackets.
+	// Parse those as IP addresses before a URL parser mistakes them for ports.
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.String()
+	}
+	parsed, err := url.Parse("https://" + host)
+	if err != nil || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Port() != "" || parsed.Hostname() == "" {
+		return ""
+	}
+	hostname := parsed.Hostname()
+	if ip := net.ParseIP(hostname); ip != nil {
+		return ip.String()
+	}
+	if parsed.Host != host {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSuffix(hostname, "."))
 }
 
 // RedirectToHTTPSWithTLSInfoPassthrough redirects every application request,
@@ -401,7 +436,13 @@ func RedirectToHTTPS(httpsPort int) http.Handler {
 // probe the backend's active TLS source over plain HTTP before it knows
 // which cert to trust.
 func RedirectToHTTPSWithTLSInfoPassthrough(httpsPort int, tlsInfoHandler http.Handler) http.Handler {
-	redirectHandler := RedirectToHTTPS(httpsPort)
+	return RedirectToHTTPSWithTLSInfoPassthroughForHost(httpsPort, "", tlsInfoHandler)
+}
+
+// RedirectToHTTPSWithTLSInfoPassthroughForHost is the configured-host form of
+// RedirectToHTTPSWithTLSInfoPassthrough.
+func RedirectToHTTPSWithTLSInfoPassthroughForHost(httpsPort int, redirectHost string, tlsInfoHandler http.Handler) http.Handler {
+	redirectHandler := RedirectToHTTPSForHost(httpsPort, redirectHost)
 	if tlsInfoHandler == nil {
 		return redirectHandler
 	}
@@ -420,6 +461,12 @@ func RedirectToHTTPSWithTLSInfoPassthrough(httpsPort int, tlsInfoHandler http.Ha
 // bypass behavior was removed; all upgrades are redirected to TLS.
 func RedirectToHTTPSWithWebSocketBypass(httpsPort int, tlsInfoHandler http.Handler) http.Handler {
 	return RedirectToHTTPSWithTLSInfoPassthrough(httpsPort, tlsInfoHandler)
+}
+
+// RedirectToHTTPSWithWebSocketBypassForHost is the configured-host form of
+// RedirectToHTTPSWithWebSocketBypass.
+func RedirectToHTTPSWithWebSocketBypassForHost(httpsPort int, redirectHost string, tlsInfoHandler http.Handler) http.Handler {
+	return RedirectToHTTPSWithTLSInfoPassthroughForHost(httpsPort, redirectHost, tlsInfoHandler)
 }
 
 // WriteJSON writes a JSON response payload.

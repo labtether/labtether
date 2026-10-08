@@ -11,6 +11,19 @@ permissions:
   contents: read
 
 jobs:
+  line-limit:
+    name: Handwritten code / 500-line limit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check line-limit gate behavior
+        run: python3 -m unittest scripts/ci/test_line_limit.py
+      - name: Enforce full-repository line limit
+        run: python3 scripts/ci/check-line-limit.py
+
   qa-select:
     name: Select risk-based QA contracts
     runs-on: ubuntu-latest
@@ -49,9 +62,17 @@ jobs:
           "${selector[@]}"
 
   go-checks:
+    needs: [line-limit]
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Require source-size gate
+        shell: bash
+        env:
+          LINE_LIMIT_RESULT: ${{ needs.line-limit.result }}
+        run: |
+          test "${LINE_LIMIT_RESULT}" = success
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -63,13 +84,7 @@ jobs:
           go-version: "1.26"
 
       - name: Check formatting
-        run: |
-          UNFORMATTED="$(find . -name '*.go' -not -path './vendor/*' -print0 | xargs -0 gofmt -l)"
-          if [ -n "$UNFORMATTED" ]; then
-            echo "Go files need formatting:"
-            echo "$UNFORMATTED"
-            exit 1
-          fi
+        run: bash scripts/ci/check-go-format.sh
 
       - name: Go vet
         run: go vet ./...
@@ -318,92 +333,7 @@ jobs:
         run: make perf-gate
 
       - name: Run reduced apples harness + thresholds
-        run: |
-          set -euo pipefail
-          ARTIFACT_ROOT="/tmp/labtether-perf-artifacts"
-          RUN_ROOT="${ARTIFACT_ROOT}/runs"
-          PG_CONTAINER="labtether-perf-pg"
-          BACKEND_PID=""
-          mkdir -p "${ARTIFACT_ROOT}" "${RUN_ROOT}"
-
-          cleanup() {
-            if [[ -n "${BACKEND_PID}" ]] && kill -0 "${BACKEND_PID}" >/dev/null 2>&1; then
-              kill "${BACKEND_PID}" || true
-              wait "${BACKEND_PID}" || true
-            fi
-            docker rm -f "${PG_CONTAINER}" >/dev/null 2>&1 || true
-          }
-          trap cleanup EXIT
-
-          docker rm -f "${PG_CONTAINER}" >/dev/null 2>&1 || true
-          docker run -d --name "${PG_CONTAINER}" \
-            -e POSTGRES_USER=labtether \
-            -e POSTGRES_PASSWORD=labtether \
-            -e POSTGRES_DB=labtether \
-            -p 5432:5432 \
-            postgres:18-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15 \
-            -c shared_preload_libraries=pg_stat_statements \
-            -c pg_stat_statements.track=all >/dev/null
-
-          for ((attempt = 0; attempt < 60; attempt++)); do
-            if docker exec "${PG_CONTAINER}" psql -U labtether -d labtether -tAc "SELECT 1" >/dev/null 2>&1; then
-              break
-            fi
-            sleep 1
-          done
-          docker exec "${PG_CONTAINER}" psql -U labtether -d labtether -tAc "SELECT 1" >/dev/null
-          docker exec "${PG_CONTAINER}" psql -U labtether -d labtether -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;" >/dev/null
-
-          go build -o build/labtether ./cmd/labtether
-          ./build/labtether > "${ARTIFACT_ROOT}/backend.log" 2>&1 &
-          BACKEND_PID=$!
-          echo "${BACKEND_PID}" > "${ARTIFACT_ROOT}/backend.pid"
-
-          for ((attempt = 0; attempt < 60; attempt++)); do
-            if curl -fsS --max-time 2 "http://localhost:8080/healthz" >/dev/null 2>&1; then
-              break
-            fi
-            sleep 1
-          done
-          curl -fsS --max-time 2 "http://localhost:8080/healthz" >/dev/null
-
-          # Seed at least one asset so aggregate telemetry paths execute and
-          # pg_stat_statements captures the lateral SnapshotMany query shape.
-          curl -fsS -X POST "http://localhost:8080/assets/heartbeat" \
-            -H "Authorization: Bearer ${LABTETHER_API_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d '{"asset_id":"perf-ci-asset-01","type":"host","name":"Perf CI Asset 01","source":"perf-ci","status":"online","platform":"linux","metadata":{"cpu_percent":"12.5","memory_percent":"44.1"}}' >/dev/null
-
-          ./scripts/perf/backend-hotspot-apples.sh \
-            --label ci-hotspot \
-            --api-base "http://localhost:8080" \
-            --aggregate-calls 240 \
-            --live-calls 480 \
-            --concurrency 16 \
-            --cpu-seconds 5 \
-            --skip-pprof \
-            --output-root "${RUN_ROOT}" \
-            --no-auto-compare
-
-          # backend-hotspot-apples.sh appends mktemp's random suffix to the
-          # requested label (for example, ci-hotspot.ABC123).
-          RUN_DIR="$(find "${RUN_ROOT}" -mindepth 1 -maxdepth 1 -type d -name '*-ci-hotspot.*' -print -quit)"
-          test -n "${RUN_DIR}"
-          echo "RUN_DIR=${RUN_DIR}" >> "${GITHUB_ENV}"
-
-          ./scripts/perf/backend-hotspot-thresholds.sh \
-            --summary "${RUN_DIR}/summary.json" \
-            --write-report "${RUN_DIR}/threshold-report.json"
-
-          ./scripts/perf/backend-hotspot-explain.sh \
-            --scenario projected-group \
-            --dsn "${DATABASE_URL}" \
-            --output "${RUN_DIR}/explain-projected-group.json"
-
-          ./scripts/perf/backend-hotspot-explain.sh \
-            --scenario sources-windowed \
-            --dsn "${DATABASE_URL}" \
-            --output "${RUN_DIR}/explain-sources-windowed.json"
+        run: bash scripts/perf/ci-hotspot.sh
 
       - name: Upload backend perf artifacts
         if: always()
@@ -576,7 +506,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: labtether/labtether-agent
-          ref: ab663ef9d7e3a60b2adde2b945d7387a75e2aac1
+          # The root-cause release gate verifies that this exact installed
+          # stack child matches the coordinated Go agent release source.
+          ref: cc64499481c415dbccfa5909e635d57bcfe3e579
           persist-credentials: false
           path: labtether-agent
 
@@ -618,81 +550,17 @@ jobs:
         run: mkdir -p ./agent-dist && touch ./agent-dist/.keep
 
       - name: Prepare environment
-        run: |
-          set -Eeuo pipefail
-          install -m 600 .env.example .env
-          ci_token="$(openssl rand -hex 32)"
-          echo "::add-mask::${ci_token}"
-          {
-            printf 'POSTGRES_USER=labtether\n'
-            printf 'POSTGRES_DB=labtether\n'
-            printf 'POSTGRES_PASSWORD=ci-smoke-pw\n'
-            printf 'LABTETHER_OWNER_TOKEN=%s\n' "${ci_token}"
-            printf 'LABTETHER_API_TOKEN=%s\n' "${ci_token}"
-            printf 'LABTETHER_ADMIN_PASSWORD=ci-admin-pw\n'
-            printf 'LABTETHER_ENCRYPTION_KEY=%s\n' "$(openssl rand -base64 32)"
-            printf 'LABTETHER_ALLOW_LEGACY_SHARED_AGENT_AUTH=false\n'
-          } >> .env
-          printf 'LABTETHER_API_TOKEN=%s\n' "${ci_token}" >> "${GITHUB_ENV}"
+        run: bash scripts/ci/prepare-smoke-environment.sh
 
       - name: Validate opt-in QA agent profile rendering
-        run: |
-          set -Eeuo pipefail
-          if env -u COMPOSE_PROFILES docker compose config --services | grep -Fxq qa-agent; then
-            echo "qa-agent must not be part of the default Compose service set" >&2
-            exit 1
-          fi
-          COMPOSE_PROFILES=ci-agent docker compose config --quiet
-          COMPOSE_PROFILES=ci-agent docker compose config --services | grep -Fxq qa-agent
-          COMPOSE_PROFILES=ci-agent docker compose config --format json |
-            jq -e '
-              .services["qa-agent"].environment.LABTETHER_API_TOKEN == "" and
-              .services["qa-agent"].environment.LABTETHER_ENROLLMENT_TOKEN_FILE == "/run/labtether-enrollment/enrollment-token" and
-              .services.labtether.environment.LABTETHER_ALLOW_LEGACY_SHARED_AGENT_AUTH == "false"
-            ' >/dev/null
+        run: bash scripts/ci/check-smoke-compose-profile.sh
 
       - name: Smoke test
         # Downstream steps intentionally reuse this isolated runner's stack.
         run: ./scripts/smoke-test.sh --reuse-compose-stack --keep
 
       - name: Stage one-use agent enrollment
-        run: |
-          set -Eeuo pipefail
-          # shellcheck source=/dev/null
-          source ./scripts/lib/script-common.sh
-          trap labtether_cleanup_curl_security EXIT INT TERM HUP
-          mkdir -p "${RUNNER_TEMP}/labtether-ca"
-          docker compose cp labtether:/ca/ca.crt "${RUNNER_TEMP}/labtether-ca/ca.crt"
-          export LABTETHER_CA_FILE="${RUNNER_TEMP}/labtether-ca/ca.crt"
-          labtether_prepare_curl_auth "${LABTETHER_API_TOKEN}"
-          labtether_clear_token_environment
-          enrollment_url=https://localhost:8443/settings/enrollment
-          labtether_build_curl_request_args "${enrollment_url}" 1 1
-          printf '%s\n' '{"label":"labtether-ci-agent","ttl_hours":1,"max_uses":1,"scope":"asset","asset_id":"labtether-ci-agent"}' |
-            labtether_curl "${LABTETHER_CURL_REQUEST_ARGS[@]}" \
-              --silent --show-error --fail-with-body \
-              --request POST \
-              --header 'Content-Type: application/json' \
-              --data-binary @- \
-              "${enrollment_url}" |
-            jq -er 'select(.token.max_uses == 1 and (.token.id | type == "string" and length > 0)) | .raw_token | select(type == "string" and length > 0)' |
-            COMPOSE_PROFILES=ci-agent docker compose run --rm --no-deps -T \
-              --user 0:0 \
-              --cap-add CHOWN \
-              --entrypoint /bin/sh \
-              qa-agent \
-              -c '
-                set -eu
-                directory=/run/labtether-enrollment
-                token_file="${directory}/enrollment-token"
-                test ! -e "${token_file}"
-                chmod 0700 "${directory}"
-                umask 077
-                cat > "${token_file}"
-                test -s "${token_file}"
-                chmod 0600 "${token_file}"
-                chown 1001:1001 "${token_file}" "${directory}"
-              '
+        run: bash scripts/ci/stage-smoke-agent-enrollment.sh
 
       - name: Verify real agent is connected over authenticated WSS
         run: |

@@ -2,33 +2,22 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
-	"io/fs"
-	"log"
-	"net/http"
-	"net/url"
-	"os"
-	"path/filepath"
-	"strconv"
-	"strings"
-	"time"
-
-	"golang.org/x/crypto/hkdf"
-
 	"github.com/labtether/labtether/internal/auth"
 	"github.com/labtether/labtether/internal/certmgr"
 	"github.com/labtether/labtether/internal/demo"
 	authpkg "github.com/labtether/labtether/internal/hubapi/auth"
-	"github.com/labtether/labtether/internal/installstate"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/secrets"
 	"github.com/labtether/labtether/internal/servicehttp"
+	"log"
+	"net/http"
+	"net/url"
+	"os"
+	"strconv"
+	"strings"
+	"time"
 )
 
 type oidcClientSecretMigrator interface {
@@ -351,6 +340,17 @@ func runHub(ctx context.Context) error {
 			log.Printf("labtether warning: ignoring invalid or insecure LABTETHER_EXTERNAL_URL=%q", srv.externalURL)
 		}
 	}
+	redirectHost := ""
+	if externalURL, ok := srv.sanitizedExternalHubURL(); ok {
+		if parsed, parseErr := url.Parse(externalURL); parseErr == nil {
+			redirectHost = parsed.Hostname()
+		}
+	}
+	if redirectHost == "" && isLoopbackHubBindAddress(bindAddress) {
+		// Direct development runs are loopback-only, so the bind address is a
+		// safe fallback when no public external URL was configured.
+		redirectHost = bindAddress
+	}
 
 	// Advertise the hub via mDNS/Bonjour so that iOS companion apps can
 	// discover it automatically on the local network.
@@ -428,6 +428,7 @@ func runHub(ctx context.Context) error {
 		TLSKeyFile:       tlsKeyFile,
 		RedirectHTTPPort: redirectPort,
 		HTTPSPort:        httpsPortInt,
+		RedirectHost:     redirectHost,
 		ExtraHandlers:    handlers,
 		DBPool:           pgStore.Pool(),
 		ReadinessCheck: func() error {
@@ -455,444 +456,4 @@ func runHub(ctx context.Context) error {
 		return newStartupFailure(startupFailureServerRuntime, runErr)
 	}
 	return nil
-}
-
-const hubRuntimeShutdownTimeout = 30 * time.Second
-
-type hubRuntimeLeaseReleaser interface {
-	Release(context.Context) error
-}
-
-type hubPostgresCloser interface {
-	Close()
-}
-
-// releaseHubRuntimeLease releases the single-active fence only after every
-// tracked runtime worker has stopped. If the bounded drain times out, keeping
-// the lease until process exit prevents a replacement hub from starting while
-// runaway work from this runtime can still touch shared state.
-func releaseHubRuntimeLease(runtimeDrained bool, runtimeLease hubRuntimeLeaseReleaser) {
-	if runtimeLease == nil {
-		return
-	}
-	if !runtimeDrained {
-		log.Printf("labtether warning: runtime drain incomplete; keeping live runtime lease until process exit")
-		return
-	}
-	releaseCtx, stopRelease := context.WithTimeout(context.Background(), 3*time.Second)
-	defer stopRelease()
-	if err := runtimeLease.Release(releaseCtx); err != nil && !errors.Is(err, persistence.ErrHubRuntimeLeaseLost) {
-		log.Printf("labtether warning: live runtime lease release failed")
-	}
-}
-
-// closeHubPostgresStore closes the pool only after every tracked runtime worker
-// has stopped using it. pgxpool.Close waits for checked-out connections, so
-// calling it after a timed-out drain both exposes workers to a closed pool and
-// defeats the shutdown bound. Process exit safely closes the pool in that
-// exceptional path while the runtime lease remains held until the same exit.
-func closeHubPostgresStore(runtimeDrained bool, pgStore hubPostgresCloser) {
-	if pgStore == nil {
-		return
-	}
-	if !runtimeDrained {
-		log.Printf("labtether warning: runtime drain incomplete; keeping postgres pool available until process exit")
-		return
-	}
-	pgStore.Close()
-}
-
-// finalizeHubRuntimeDrain combines the HTTP and managed-worker drain results.
-// Once HTTP reports an incomplete drain, waiting for other workers cannot make
-// the process safe to hand over: cancel all remaining admissions and return
-// immediately so main terminates the process while the lease and pool remain
-// fenced until that exit.
-func finalizeHubRuntimeDrain(
-	srv *apiServer,
-	stopRuntime context.CancelFunc,
-	timeout time.Duration,
-	httpConnectionsDrained bool,
-) bool {
-	if !httpConnectionsDrained {
-		beginHubRuntimeShutdown(srv, stopRuntime)
-		log.Printf("labtether warning: HTTP drain incomplete; forcing process termination with runtime resources fenced")
-		return false
-	}
-	return shutdownHubRuntime(srv, stopRuntime, timeout)
-}
-
-func beginHubRuntimeShutdown(srv *apiServer, stopRuntime context.CancelFunc) <-chan struct{} {
-	var collectorsDone <-chan struct{}
-	if srv != nil && srv.collectorsDeps != nil {
-		collectorsDone = srv.collectorsDeps.BeginCollectorShutdown()
-	} else {
-		idle := make(chan struct{})
-		close(idle)
-		collectorsDone = idle
-	}
-	if stopRuntime != nil {
-		stopRuntime()
-	}
-	return collectorsDone
-}
-
-// shutdownHubRuntime closes collector admission before canceling the runtime,
-// then waits for both managed background loops and already-active collector
-// executions. PostgreSQL and the runtime lease are deferred outside this
-// function, so they stay available until this bounded drain completes.
-func shutdownHubRuntime(srv *apiServer, stopRuntime context.CancelFunc, timeout time.Duration) bool {
-	if timeout <= 0 {
-		timeout = hubRuntimeShutdownTimeout
-	}
-
-	collectorsDone := beginHubRuntimeShutdown(srv, stopRuntime)
-
-	backgroundDone := make(chan struct{})
-	go func() {
-		if srv != nil {
-			srv.backgroundWG.Wait()
-		}
-		close(backgroundDone)
-	}()
-
-	deadline := time.NewTimer(timeout)
-	defer deadline.Stop()
-	for backgroundDone != nil || collectorsDone != nil {
-		select {
-		case <-backgroundDone:
-			backgroundDone = nil
-		case <-collectorsDone:
-			collectorsDone = nil
-		case <-deadline.C:
-			log.Printf("labtether warning: runtime shutdown drain timed out after %s", timeout)
-			return false
-		}
-	}
-	return true
-}
-
-// builtInCertificateSANHosts returns the externally advertised HTTPS hostname
-// or IP so the built-in server certificate is valid for the exact URL shown to
-// users and agents. Invalid and non-HTTPS external URLs are never trusted as
-// certificate inputs.
-func builtInCertificateSANHosts(rawExternalURL string) []string {
-	sanitized, ok := sanitizeExternalBaseURL(strings.TrimSpace(rawExternalURL))
-	if !ok {
-		return nil
-	}
-	parsed, err := url.Parse(sanitized)
-	if err != nil || !strings.EqualFold(parsed.Scheme, "https") {
-		return nil
-	}
-	host := strings.TrimSpace(parsed.Hostname())
-	if host == "" {
-		return nil
-	}
-	return []string{host}
-}
-
-func shouldUseTailscaleCertificate(tailscaleDomain string, externalHosts []string) bool {
-	if len(externalHosts) == 0 {
-		return true
-	}
-	return strings.EqualFold(strings.TrimSuffix(strings.TrimSpace(tailscaleDomain), "."), externalHosts[0])
-}
-
-type runtimeInstallSecrets struct {
-	OwnerToken    string
-	APIToken      string // #nosec G117 -- Runtime install secret, not a hardcoded credential.
-	EncryptionKey string
-}
-
-func resolveRuntimeInstallSecrets(store *installstate.Store) (runtimeInstallSecrets, error) {
-	var resolved runtimeInstallSecrets
-	if store == nil {
-		return resolved, errors.New("install state store is required")
-	}
-
-	meta, persisted, exists, err := store.Load()
-	if err != nil {
-		return resolved, err
-	}
-
-	envOwnerToken := strings.TrimSpace(os.Getenv("LABTETHER_OWNER_TOKEN"))
-	envAPIToken := strings.TrimSpace(os.Getenv("LABTETHER_API_TOKEN"))
-	envEncryptionKey := strings.TrimSpace(os.Getenv("LABTETHER_ENCRYPTION_KEY"))
-	envPostgresPassword := strings.TrimSpace(os.Getenv("POSTGRES_PASSWORD"))
-
-	resolved.OwnerToken = strings.TrimSpace(persisted.OwnerToken)
-	if isWellKnownPlaceholder(resolved.OwnerToken) {
-		log.Printf("labtether: WARNING: persisted owner token matches a well-known dev placeholder — regenerating")
-		resolved.OwnerToken = ""
-	}
-	if envOwnerToken != "" {
-		resolved.OwnerToken = envOwnerToken
-	}
-	if resolved.OwnerToken == "" {
-		token, err := generateHexToken(32)
-		if err != nil {
-			return runtimeInstallSecrets{}, fmt.Errorf("generate owner token: %w", err)
-		}
-		resolved.OwnerToken = token
-	}
-
-	resolved.APIToken = strings.TrimSpace(persisted.APIToken)
-	if isWellKnownPlaceholder(resolved.APIToken) {
-		log.Printf("labtether: WARNING: persisted API token matches a well-known dev placeholder — regenerating")
-		resolved.APIToken = ""
-	}
-	if envAPIToken != "" {
-		resolved.APIToken = envAPIToken
-	}
-	if resolved.APIToken == "" {
-		token, err := generateHexToken(32)
-		if err != nil {
-			return runtimeInstallSecrets{}, fmt.Errorf("generate api token: %w", err)
-		}
-		resolved.APIToken = token
-	}
-
-	resolved.EncryptionKey = strings.TrimSpace(persisted.EncryptionKey)
-	if isWellKnownPlaceholderKey(resolved.EncryptionKey) {
-		log.Printf("labtether: WARNING: persisted encryption key matches a well-known dev placeholder — regenerating")
-		resolved.EncryptionKey = ""
-	}
-	if envEncryptionKey != "" {
-		resolved.EncryptionKey = envEncryptionKey
-	}
-	if resolved.EncryptionKey == "" {
-		key, err := generateBase64Key(32)
-		if err != nil {
-			return runtimeInstallSecrets{}, fmt.Errorf("generate encryption key: %w", err)
-		}
-		resolved.EncryptionKey = key
-	}
-
-	if _, err := loadSecretsManager(resolved.EncryptionKey); err != nil {
-		return runtimeInstallSecrets{}, fmt.Errorf("validate encryption key: %w", err)
-	}
-
-	now := time.Now().UTC()
-	if meta.CreatedAt.IsZero() {
-		meta.CreatedAt = now
-	}
-	meta.UpdatedAt = now
-
-	nextSecrets := installstate.Secrets{
-		OwnerToken:       resolved.OwnerToken,
-		APIToken:         resolved.APIToken,
-		EncryptionKey:    resolved.EncryptionKey,
-		PostgresPassword: strings.TrimSpace(persisted.PostgresPassword),
-	}
-	if envPostgresPassword != "" {
-		nextSecrets.PostgresPassword = envPostgresPassword
-	}
-	if !exists || persisted != nextSecrets || meta.SchemaVersion != 1 {
-		if err := store.Save(meta, nextSecrets); err != nil {
-			return runtimeInstallSecrets{}, err
-		}
-		if exists {
-			log.Printf("labtether: install state secrets refreshed in %s", store.Root())
-		} else {
-			log.Printf("labtether: install state initialized in %s", store.Root())
-		}
-	}
-	if err := writeRuntimeAPITokenFile(resolved.APIToken); err != nil {
-		return runtimeInstallSecrets{}, err
-	}
-
-	return resolved, nil
-}
-
-func writeRuntimeAPITokenFile(token string) error {
-	path := strings.TrimSpace(os.Getenv("LABTETHER_API_TOKEN_FILE"))
-	if path == "" {
-		return nil
-	}
-	token = strings.TrimSpace(token)
-	if token == "" {
-		return errors.New("runtime api token is empty")
-	}
-	path = filepath.Clean(path)
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil { // #nosec G703 -- Directory is derived from the fixed runtime token file path.
-		return fmt.Errorf("create runtime api token directory: %w", err)
-	}
-	dirInfo, err := os.Lstat(dir)
-	if err != nil {
-		return fmt.Errorf("inspect runtime api token directory: %w", err)
-	}
-	if !dirInfo.IsDir() || dirInfo.Mode()&os.ModeSymlink != 0 {
-		return errors.New("runtime api token directory must be a real directory")
-	}
-
-	root, err := os.OpenRoot(dir)
-	if err != nil {
-		return fmt.Errorf("open runtime api token directory: %w", err)
-	}
-	defer func() { _ = root.Close() }()
-
-	name := filepath.Base(path)
-	if name == "." || name == string(filepath.Separator) || name == "" {
-		return errors.New("runtime api token file path is invalid")
-	}
-	if info, statErr := root.Lstat(name); statErr == nil {
-		if !info.Mode().IsRegular() && info.Mode()&os.ModeSymlink == 0 {
-			return errors.New("runtime api token destination must be a regular file or symlink")
-		}
-	} else if !errors.Is(statErr, os.ErrNotExist) {
-		return fmt.Errorf("inspect runtime api token destination: %w", statErr)
-	}
-
-	randomSuffix := make([]byte, 16)
-	if _, err := rand.Read(randomSuffix); err != nil {
-		return fmt.Errorf("generate runtime api token temp name: %w", err)
-	}
-	tmpName := "." + name + "." + hex.EncodeToString(randomSuffix) + ".tmp"
-	tmp, err := root.OpenFile(tmpName, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return fmt.Errorf("create runtime api token temp file: %w", err)
-	}
-	removeTemp := true
-	defer func() {
-		if removeTemp {
-			_ = root.Remove(tmpName)
-		}
-	}()
-	if _, err := io.WriteString(tmp, token); err != nil {
-		_ = tmp.Close()
-		return fmt.Errorf("write runtime api token temp file: %w", err)
-	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		return fmt.Errorf("sync runtime api token temp file: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("close runtime api token temp file: %w", err)
-	}
-	if err := root.Rename(tmpName, name); err != nil {
-		return fmt.Errorf("install runtime api token file: %w", err)
-	}
-	removeTemp = false
-	return nil
-}
-
-func generateHexToken(numBytes int) (string, error) {
-	raw := make([]byte, numBytes)
-	if _, err := rand.Read(raw); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(raw), nil
-}
-
-func generateBase64Key(numBytes int) (string, error) {
-	raw := make([]byte, numBytes)
-	if _, err := rand.Read(raw); err != nil {
-		return "", err
-	}
-	return base64.StdEncoding.EncodeToString(raw), nil
-}
-
-// deriveTOTPKey returns a stable 32-byte AES-256 key for encrypting TOTP secrets.
-//
-// Key derivation priority:
-//  1. LABTETHER_TOTP_KEY env var — base64-decoded directly (must be 32 bytes).
-//  2. LABTETHER_ENCRYPTION_KEY env var — derive via HKDF-SHA256 with info "labtether-totp-v1".
-//  3. Random ephemeral key — logs a warning because 2FA secrets will not survive restart.
-func deriveTOTPKey(runtimeEncryptionKey string) ([]byte, error) {
-	// Option 1: explicit TOTP key override.
-	if raw := strings.TrimSpace(os.Getenv("LABTETHER_TOTP_KEY")); raw != "" {
-		key, err := base64.StdEncoding.DecodeString(raw)
-		if err != nil {
-			return nil, fmt.Errorf("LABTETHER_TOTP_KEY is not valid base64: %w", err)
-		}
-		if len(key) != 32 {
-			return nil, fmt.Errorf("LABTETHER_TOTP_KEY must decode to exactly 32 bytes (got %d)", len(key))
-		}
-		return key, nil
-	}
-
-	// Option 2: derive from the main encryption key via HKDF.
-	if raw := strings.TrimSpace(runtimeEncryptionKey); raw != "" {
-		master, err := base64.StdEncoding.DecodeString(raw)
-		if err != nil {
-			return nil, fmt.Errorf("runtime encryption key is not valid base64: %w", err)
-		}
-		r := hkdf.New(sha256.New, master, nil, []byte("labtether-totp-v1"))
-		key := make([]byte, 32)
-		if _, err := io.ReadFull(r, key); err != nil {
-			return nil, fmt.Errorf("hkdf derive TOTP key: %w", err)
-		}
-		return key, nil
-	}
-
-	// Option 3: ephemeral random key — 2FA will break on restart.
-	log.Printf("labtether WARNING: TOTP encryption key is ephemeral; 2FA secrets will not survive restart. Set LABTETHER_ENCRYPTION_KEY or LABTETHER_TOTP_KEY for persistence.")
-	key := make([]byte, 32)
-	if _, err := rand.Read(key); err != nil {
-		return nil, fmt.Errorf("rand.Read TOTP key: %w", err)
-	}
-	return key, nil
-}
-
-// wellKnownPlaceholderTokens are dev/example tokens that must never be used in
-// real deployments. If persisted state contains one of these, the bootstrap
-// regenerates a cryptographically random replacement.
-var wellKnownPlaceholderTokens = map[string]bool{
-	"labtether-owner-local-token": true,
-}
-
-// wellKnownPlaceholderKeys are dev/example encryption keys (base64) that must
-// never be used in real deployments.
-var wellKnownPlaceholderKeys = map[string]bool{
-	"MDEyMzQ1Njc4OUFCQ0RFRjAxMjM0NTY3ODlBQkNERUY=": true,
-}
-
-func isWellKnownPlaceholder(token string) bool {
-	return token != "" && wellKnownPlaceholderTokens[token]
-}
-
-func isWellKnownPlaceholderKey(key string) bool {
-	return key != "" && wellKnownPlaceholderKeys[key]
-}
-
-// shareCACert copies the public CA cert into a share directory for sidecar
-// services (agent/console) when available. In non-container local dev runs,
-// the default path is often absent; skip quietly in that case.
-func shareCACert(caCertPEM []byte, defaultShareDir string) {
-	shareDir, explicit := os.LookupEnv("LABTETHER_CA_SHARE_DIR")
-	if explicit {
-		shareDir = strings.TrimSpace(shareDir)
-		if shareDir == "" {
-			log.Printf("labtether: warning: LABTETHER_CA_SHARE_DIR is empty; skipping CA share copy")
-			return
-		}
-	} else {
-		shareDir = strings.TrimSpace(defaultShareDir)
-		if shareDir == "" {
-			return
-		}
-		info, err := os.Stat(shareDir)
-		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				return
-			}
-			log.Printf("labtether: warning: could not stat CA share dir %s: %v", shareDir, err)
-			return
-		}
-		if !info.IsDir() {
-			log.Printf("labtether: warning: CA share path %s is not a directory; skipping", shareDir)
-			return
-		}
-	}
-
-	if err := os.MkdirAll(shareDir, 0750); err != nil {
-		log.Printf("labtether: warning: could not create CA share dir %s: %v", shareDir, err)
-		return
-	}
-
-	caPath := filepath.Join(shareDir, "ca.crt")
-	if err := os.WriteFile(caPath, caCertPEM, 0644); err != nil { // #nosec G306 -- CA certificate is public trust material and intended to be readable by sidecars.
-		log.Printf("labtether: warning: could not write CA to %s: %v", caPath, err)
-	}
 }

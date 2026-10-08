@@ -22,9 +22,10 @@ import (
 )
 
 const (
-	heartbeatRateLimitBucket = "assets.heartbeat"
-	heartbeatRateLimitCount  = 600
-	heartbeatRateLimitWindow = time.Minute
+	heartbeatRateLimitBucket       = "assets.heartbeat"
+	heartbeatRateLimitCount        = 600
+	heartbeatRateLimitWindow       = time.Minute
+	heartbeatTelemetryStoreTimeout = 5 * time.Second
 )
 
 // HandleRecordAssetHeartbeat handles POST /assets/{id}/heartbeat.
@@ -191,11 +192,21 @@ func (d *Deps) processCommittedHeartbeatSideEffects(assetEntry assets.Asset, req
 	}
 	samples := telemetry.SamplesFromHeartbeatMetadata(assetEntry.ID, assetEntry.LastSeenAt, req.Metadata)
 	if len(samples) > 0 && d.TelemetryStore != nil {
-		if err := d.TelemetryStore.AppendSamples(context.Background(), samples); err != nil {
+		if err := appendHeartbeatTelemetrySamples(d.TelemetryStore, samples, heartbeatTelemetryStoreTimeout); err != nil {
 			log.Printf("api warning: failed to append telemetry samples for %s: %v", assetEntry.ID, err)
 		}
 	}
 
+}
+
+func appendHeartbeatTelemetrySamples(
+	store persistence.TelemetryStore,
+	samples []telemetry.MetricSample,
+	timeout time.Duration,
+) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return store.AppendSamples(ctx, samples)
 }
 
 // Validation length constants for heartbeat fields. These mirror the constants

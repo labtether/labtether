@@ -1,0 +1,255 @@
+/* ── Theme system via CSS custom properties ── */
+:root,
+body[data-theme="oled"] {
+  color-scheme: dark;
+  --bg: #0a0a0c;
+  --panel: #0f0f12;
+  --panel-border: rgba(255,255,255,0.07);
+  --panel-glass: #121218;
+  --text: rgba(255, 255, 255, 0.85);
+  --text-secondary: rgba(255, 255, 255, 0.5);
+  --line: rgba(255, 255, 255, 0.08);
+  --muted: rgba(255, 255, 255, 0.4);
+  --surface: rgba(255, 255, 255, 0.04);
+  --hover: rgba(255, 255, 255, 0.06);
+
+  /* Accent — Neon Rose (default) */
+  --accent: #ff0080;
+  --accent-contrast: #ffffff;
+  --accent-glow: rgba(255,0,128,0.15);
+  --accent-subtle: rgba(255,0,128,0.08);
+  --accent-text: rgba(255,0,128,0.9);
+  --accent-secondary: #ff40a0;
+  --accent-rgb: 255,0,128;
+
+  /* Status colors */
+  --ok: #00e68a;
+  --warn: #f0b429;
+  --bad: #ff3355;
+
+  /* Status glow */
+  --ok-glow: rgba(0,230,138,0.15);
+  --warn-glow: rgba(240,180,41,0.15);
+  --bad-glow: rgba(255,51,85,0.18);
+
+  /* Shadow scale */
+  --shadow-xs: 0 1px 3px rgba(0,0,0,0.5);
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.3);
+  --shadow-panel: inset 0 1px 0 rgba(255,255,255,0.04);
+
+  /* Animation */
+  --dur-instant: 80ms;
+  --dur-fast: 120ms;
+  --dur-normal: 200ms;
+  --dur-slow: 300ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  --control-fg: var(--text);
+  --control-fg-muted: var(--muted);
+  --control-fg-active: var(--accent-contrast);
+  --control-bg-active: var(--accent);
+  --control-bg-hover: var(--hover);
+  --control-border: var(--line);
+  --control-focus-ring: var(--muted);
+  --control-input-bg: transparent;
+  --control-input-border: var(--line);
+  --control-input-border-focus: var(--muted);
+
+  /* Blur scale */
+  --blur-sm: 8px;
+  --blur-md: 16px;
+  --blur-lg: 40px;
+
+  /* Validation states */
+  --border-error: var(--bad);
+  --bg-error: rgba(248,113,113,0.08);
+  --border-success: var(--ok);
+  --bg-success: rgba(52,211,153,0.08);
+  --text-disabled: rgba(255,255,255,0.25);
+
+  /* Additional easing */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-in: cubic-bezier(0.55, 0, 1, 0.45);
+}
+
+body[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0e0e10;
+  --panel: #141418;
+  --panel-border: rgba(255,255,255,0.09);
+  --panel-glass: #18181d;
+  --text: rgba(255, 255, 255, 0.80);
+  --text-secondary: rgba(255, 255, 255, 0.5);
+  --line: rgba(255, 255, 255, 0.10);
+  --muted: rgba(255, 255, 255, 0.45);
+  --surface: rgba(255, 255, 255, 0.05);
+  --hover: rgba(255, 255, 255, 0.07);
+
+  /* Accent — Neon Rose (default) */
+  --accent: #ff0080;
+  --accent-contrast: #ffffff;
+  --accent-glow: rgba(255,0,128,0.15);
+  --accent-subtle: rgba(255,0,128,0.08);
+  --accent-text: rgba(255,0,128,0.9);
+  --accent-secondary: #ff40a0;
+  --accent-rgb: 255,0,128;
+
+  /* Status colors */
+  --ok: #00e68a;
+  --warn: #f0b429;
+  --bad: #ff3355;
+
+  /* Status glow */
+  --ok-glow: rgba(0,230,138,0.15);
+  --warn-glow: rgba(240,180,41,0.15);
+  --bad-glow: rgba(255,51,85,0.18);
+
+  /* Shadow scale */
+  --shadow-xs: 0 1px 3px rgba(0,0,0,0.5);
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.3);
+  --shadow-panel: inset 0 1px 0 rgba(255,255,255,0.04);
+
+  /* Animation */
+  --dur-instant: 80ms;
+  --dur-fast: 120ms;
+  --dur-normal: 200ms;
+  --dur-slow: 300ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  --control-fg: var(--text);
+  --control-fg-muted: var(--muted);
+  --control-fg-active: var(--accent-contrast);
+  --control-bg-active: var(--accent);
+  --control-bg-hover: var(--hover);
+  --control-border: var(--line);
+  --control-focus-ring: var(--muted);
+  --control-input-bg: transparent;
+  --control-input-border: var(--line);
+  --control-input-border-focus: var(--muted);
+
+  /* Blur scale */
+  --blur-sm: 8px;
+  --blur-md: 16px;
+  --blur-lg: 40px;
+
+  /* Validation states */
+  --border-error: var(--bad);
+  --bg-error: rgba(248,113,113,0.08);
+  --border-success: var(--ok);
+  --bg-success: rgba(52,211,153,0.08);
+  --text-disabled: rgba(255,255,255,0.25);
+
+  /* Additional easing */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-in: cubic-bezier(0.55, 0, 1, 0.45);
+}
+
+body[data-theme="light"] {
+  color-scheme: light;
+  --bg: #fafafa;
+  --panel: #ffffff;
+  --panel-border: rgba(17,17,17,0.08);
+  --panel-glass: #ffffff;
+  --text: rgba(17, 17, 17, 0.85);
+  --text-secondary: rgba(17, 17, 17, 0.5);
+  --line: rgba(17, 17, 17, 0.10);
+  --muted: rgba(17, 17, 17, 0.40);
+  --surface: rgba(17, 17, 17, 0.04);
+  --hover: rgba(17, 17, 17, 0.06);
+
+  /* Accent — Neon Rose (default) */
+  --accent: #cc0066;
+  --accent-contrast: #ffffff;
+  --accent-glow: rgba(204,0,102,0.12);
+  --accent-subtle: rgba(204,0,102,0.06);
+  --accent-text: rgba(204,0,102,0.9);
+  --accent-secondary: #ff0080;
+  --accent-rgb: 204,0,102;
+
+  /* Status colors */
+  --ok: #16a34a;
+  --warn: #ca8a04;
+  --bad: #dc2626;
+
+  /* Status glow */
+  --ok-glow: rgba(22,163,74,0.10);
+  --warn-glow: rgba(202,138,4,0.10);
+  --bad-glow: rgba(220,38,38,0.12);
+
+  /* Shadow scale */
+  --shadow-xs: 0 1px 3px rgba(0,0,0,0.08);
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+  --shadow-panel: inset 0 1px 0 rgba(255,255,255,0.8);
+
+  /* Animation */
+  --dur-instant: 80ms;
+  --dur-fast: 120ms;
+  --dur-normal: 200ms;
+  --dur-slow: 300ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  --control-fg: var(--text);
+  --control-fg-muted: var(--muted);
+  --control-fg-active: var(--accent-contrast);
+  --control-bg-active: var(--accent);
+  --control-bg-hover: var(--hover);
+  --control-border: var(--line);
+  --control-focus-ring: var(--muted);
+  --control-input-bg: transparent;
+  --control-input-border: var(--line);
+  --control-input-border-focus: var(--muted);
+
+  /* Blur scale */
+  --blur-sm: 8px;
+  --blur-md: 16px;
+  --blur-lg: 40px;
+
+  /* Validation states */
+  --border-error: var(--bad);
+  --bg-error: rgba(220,38,38,0.06);
+  --border-success: var(--ok);
+  --bg-success: rgba(22,163,74,0.06);
+  --text-disabled: rgba(17,17,17,0.25);
+
+  /* Additional easing */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-in: cubic-bezier(0.55, 0, 1, 0.45);
+}
+
+/* ── Accent variant: Deep Signal ── */
+body[data-accent="deep-signal"],
+body[data-accent="deep-signal"][data-theme="oled"] {
+  --accent: #5b8eff;
+  --accent-contrast: #ffffff;
+  --accent-glow: rgba(91,142,255,0.15);
+  --accent-subtle: rgba(91,142,255,0.08);
+  --accent-text: rgba(91,142,255,0.9);
+  --accent-secondary: #7ba3ff;
+  --accent-rgb: 91,142,255;
+}
+
+body[data-accent="deep-signal"][data-theme="dark"] {
+  --accent: #5b8eff;
+  --accent-contrast: #ffffff;
+  --accent-glow: rgba(91,142,255,0.15);
+  --accent-subtle: rgba(91,142,255,0.08);
+  --accent-text: rgba(91,142,255,0.9);
+  --accent-secondary: #7ba3ff;
+  --accent-rgb: 91,142,255;
+}
+
+body[data-accent="deep-signal"][data-theme="light"] {
+  --accent: #3a6edf;
+  --accent-contrast: #ffffff;
+  --accent-glow: rgba(58,110,223,0.12);
+  --accent-subtle: rgba(58,110,223,0.06);
+  --accent-text: rgba(58,110,223,0.9);
+  --accent-secondary: #5b8eff;
+  --accent-rgb: 58,110,223;
+}

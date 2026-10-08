@@ -1,19 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, type ChangeEvent } from "react";
-import { Pencil, Plus, X } from "lucide-react";
-import { IconPicker } from "./IconPicker";
-import {
-  describeServiceIconSelection,
-  isCustomServiceIconSource,
-  ServiceIcon,
-} from "./ServiceIcon";
-import type {
-  ServiceCustomIcon,
-  WebServiceAltURL,
-  WebService,
-  WebServiceOverrideInput,
-} from "../hooks/useWebServices";
+import { X } from "lucide-react";
+import { describeServiceIconSelection, isCustomServiceIconSource, ServiceIcon } from "./ServiceIcon";
+import type { ServiceCustomIcon, WebServiceAltURL, WebService, WebServiceOverrideInput } from "../hooks/useWebServices";
+import { CUSTOM_ICON_UPLOAD_TYPES, MAX_CUSTOM_ICON_UPLOAD_BYTES, formatByteSize, readFileAsDataURL, normalizeCustomIconName } from "./serviceIconUpload";
+import { ServiceIconEditor } from "./ServiceIconEditor";
+import { TagsEditor } from "./ServiceTagsEditor";
 
 const CATEGORIES = [
   "Media",
@@ -30,16 +23,6 @@ const CATEGORIES = [
   "Productivity",
   "Other",
 ];
-
-const MAX_CUSTOM_ICON_UPLOAD_BYTES = 512 * 1024;
-const CUSTOM_ICON_UPLOAD_TYPES = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "image/gif",
-  "image/svg+xml",
-]);
-const CUSTOM_ICON_ACCEPT = Array.from(CUSTOM_ICON_UPLOAD_TYPES).join(",");
 
 interface ServiceEditModalProps {
   service: WebService;
@@ -378,120 +361,24 @@ export function ServiceEditModal({
             </select>
           </div>
 
-          {/* Icon */}
-          <div>
-            <label className="block text-xs font-medium text-[var(--muted)] mb-1">
-              Icon {iconSelectionLabel && <span className="text-[var(--text)]">— {iconSelectionLabel}</span>}
-            </label>
-            {customIcons.length > 0 && (
-              <div className="mb-2">
-                <p className="mb-1 text-xs text-[var(--muted)]">Custom Library</p>
-                <div className="grid grid-cols-8 gap-1 max-h-[120px] overflow-y-auto p-1 border border-[var(--line)] rounded">
-                  {customIcons.map((icon) => (
-                    <div key={icon.id} className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setIconKey(icon.data_url)}
-                        title={icon.name}
-                        disabled={
-                          saving
-                          || removingURL !== null
-                          || uploadingIcon
-                          || deletingCustomIconID !== null
-                          || renamingCustomIconID !== null
-                        }
-                        className={`w-9 h-9 rounded flex items-center justify-center transition-colors duration-[var(--dur-fast)] cursor-pointer ${
-                          iconKey === icon.data_url
-                            ? "bg-[var(--accent)]/20 border border-[var(--accent)]"
-                            : "hover:bg-[var(--hover)] border border-transparent"
-                        } disabled:opacity-60 disabled:cursor-not-allowed`}
-                      >
-                        <ServiceIcon iconKey={icon.data_url} size={20} />
-                      </button>
-                      {onDeleteCustomIcon && (
-                        <button
-                          type="button"
-                          onClick={() => void handleDeleteCustomIcon(icon)}
-                          disabled={
-                            saving
-                            || removingURL !== null
-                            || uploadingIcon
-                            || deletingCustomIconID !== null
-                            || renamingCustomIconID !== null
-                          }
-                          className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[var(--panel)] border border-[var(--line)] text-[10px] text-[var(--muted)] hover:text-[var(--bad)] transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                          title={`Delete ${icon.name}`}
-                          aria-label={`Delete ${icon.name}`}
-                        >
-                          {deletingCustomIconID === icon.id ? "…" : "×"}
-                        </button>
-                      )}
-                      {onRenameCustomIcon && (
-                        <button
-                          type="button"
-                          onClick={() => void handleRenameCustomIcon(icon)}
-                          disabled={
-                            saving
-                            || removingURL !== null
-                            || uploadingIcon
-                            || deletingCustomIconID !== null
-                            || renamingCustomIconID !== null
-                          }
-                          className="absolute -top-1 -left-1 w-4 h-4 rounded-full bg-[var(--panel)] border border-[var(--line)] text-[10px] text-[var(--muted)] hover:text-[var(--text)] transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center"
-                          title={`Rename ${icon.name}`}
-                          aria-label={`Rename ${icon.name}`}
-                        >
-                          {renamingCustomIconID === icon.id ? "…" : <Pencil size={9} />}
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            <IconPicker
-              selectedIcon={iconKey}
-              onSelect={setIconKey}
-              icons={icons}
-            />
-            <div className="mt-2 flex items-center gap-2">
-              <label className="h-7 px-3 rounded border border-[var(--line)] text-xs font-medium text-[var(--text)] hover:bg-[var(--hover)] transition-colors cursor-pointer inline-flex items-center">
-                {uploadingIcon ? "Uploading..." : "Upload icon"}
-                <input
-                  type="file"
-                  accept={CUSTOM_ICON_ACCEPT}
-                  onChange={(event) => void handleUploadIcon(event)}
-                  className="hidden"
-                  disabled={
-                    saving
-                    || removingURL !== null
-                    || uploadingIcon
-                    || deletingCustomIconID !== null
-                    || renamingCustomIconID !== null
-                  }
-                />
-              </label>
-              {hasCustomIconSource && (
-                <button
-                  type="button"
-                  onClick={() => setIconKey("")}
-                  disabled={
-                    saving
-                    || removingURL !== null
-                    || uploadingIcon
-                    || deletingCustomIconID !== null
-                    || renamingCustomIconID !== null
-                  }
-                  className="h-7 px-3 rounded text-xs font-medium text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--hover)] transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  Clear custom
-                </button>
-              )}
-            </div>
-            <p className="mt-1 text-xs text-[var(--muted)]">
-              PNG, JPEG, WEBP, GIF, or SVG up to {formatByteSize(MAX_CUSTOM_ICON_UPLOAD_BYTES)}.
-            </p>
-          </div>
+          <ServiceIconEditor
+            icons={icons}
+            customIcons={customIcons}
+            iconKey={iconKey}
+            setIconKey={setIconKey}
+            iconSelectionLabel={iconSelectionLabel}
+            hasCustomIconSource={hasCustomIconSource}
+            saving={saving}
+            removingURL={removingURL}
+            uploadingIcon={uploadingIcon}
+            deletingCustomIconID={deletingCustomIconID}
+            renamingCustomIconID={renamingCustomIconID}
+            onDeleteCustomIcon={onDeleteCustomIcon}
+            onRenameCustomIcon={onRenameCustomIcon}
+            handleDeleteCustomIcon={handleDeleteCustomIcon}
+            handleRenameCustomIcon={handleRenameCustomIcon}
+            handleUploadIcon={handleUploadIcon}
+          />
 
           {/* Hidden toggle */}
           <div className="flex items-center justify-between">
@@ -632,105 +519,4 @@ export function ServiceEditModal({
       </div>
     </div>
   );
-}
-
-function TagsEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const tags = value
-    .split(",")
-    .map((t) => t.trim())
-    .filter(Boolean);
-  const [draft, setDraft] = useState("");
-
-  function addTag() {
-    const trimmed = draft.trim().toLowerCase();
-    if (!trimmed) return;
-    if (tags.includes(trimmed)) {
-      setDraft("");
-      return;
-    }
-    onChange([...tags, trimmed].join(", "));
-    setDraft("");
-  }
-
-  function removeTag(tag: string) {
-    onChange(tags.filter((t) => t !== tag).join(", "));
-  }
-
-  return (
-    <div>
-      {tags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-2">
-          {tags.map((tag) => (
-            <span
-              key={tag}
-              className="inline-flex items-center gap-1 h-5 px-2 rounded-full bg-[var(--accent)]/15 border border-[var(--accent)]/25 text-[10px] font-medium text-[var(--accent)]"
-            >
-              {tag}
-              <button
-                type="button"
-                onClick={() => removeTag(tag)}
-                className="hover:text-[var(--bad)] transition-colors cursor-pointer"
-              >
-                <X size={10} />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-      <div className="flex items-center gap-1.5">
-        <input
-          type="text"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              addTag();
-            }
-          }}
-          placeholder="Add tag..."
-          className="flex-1 h-7 px-2.5 rounded border border-[var(--line)] bg-[var(--surface)] text-[12px] text-[var(--text)] focus:outline-none focus:border-[var(--accent)]"
-        />
-        <button
-          type="button"
-          onClick={addTag}
-          className="h-7 w-7 rounded border border-[var(--line)] hover:bg-[var(--hover)] transition-colors cursor-pointer inline-flex items-center justify-center"
-        >
-          <Plus size={12} className="text-[var(--muted)]" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function readFileAsDataURL(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result !== "string") {
-        reject(new Error("invalid file"));
-        return;
-      }
-      resolve(reader.result);
-    };
-    reader.onerror = () => reject(reader.error ?? new Error("file read failed"));
-    reader.readAsDataURL(file);
-  });
-}
-
-function normalizeCustomIconName(filename: string): string {
-  const trimmed = filename.trim();
-  if (!trimmed) {
-    return "Custom Icon";
-  }
-  const withoutExtension = trimmed.replace(/\.[^.]+$/, "");
-  const normalized = withoutExtension.replace(/[_-]+/g, " ").trim();
-  return normalized || "Custom Icon";
-}
-
-function formatByteSize(size: number): string {
-  if (size >= 1024 * 1024) {
-    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-  }
-  return `${Math.round(size / 1024)} KB`;
 }

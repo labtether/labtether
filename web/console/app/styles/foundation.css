@@ -1,0 +1,164 @@
+/* ── Custom select chevron ── */
+.select-chevron {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.4)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 16px;
+}
+body[data-theme="light"] .select-chevron {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(17,17,17,0.4)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+.select-chevron option {
+  background: var(--panel);
+  color: var(--text);
+}
+
+/* ── xterm.js terminal container ── */
+.xtermContainer {
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Design tokens (Tailwind v4 @theme) ── */
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-sora), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --color-ok: #00e68a;
+  --color-warn: #f0b429;
+  --color-bad: #ff3355;
+}
+
+/* ── Base layer (Tailwind utilities override these) ── */
+@layer base {
+  /* Text rendering */
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 4rem;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+  }
+
+  /* Accent-colored text selection */
+  ::selection {
+    background: var(--accent-glow);
+    color: var(--text);
+  }
+
+  /* Heading hierarchy */
+  h1 {
+    font-family: var(--font-heading);
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.3;
+    text-wrap: balance;
+  }
+  h2 {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.4;
+    text-wrap: pretty;
+  }
+  h3 {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.4;
+    text-wrap: pretty;
+  }
+  h4 {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+
+  /* Tabular numbers on monospace by default */
+  .font-mono, code, pre, kbd, samp {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ── Custom scrollbar ── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface) transparent;
+}
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--surface);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--line);
+}
+/* Hide scrollbar until hover on containers */
+.scrollbar-autohide {
+  scrollbar-width: none;
+}
+.scrollbar-autohide::-webkit-scrollbar { width: 0; }
+.scrollbar-autohide:hover { scrollbar-width: thin; }
+.scrollbar-autohide:hover::-webkit-scrollbar { width: 6px; }
+
+/* ── Scroll shadow indicators ── */
+.scroll-shadow {
+  --_shadow-color: var(--bg);
+  mask-image:
+    linear-gradient(to bottom, transparent, black 12px, black calc(100% - 12px), transparent);
+  -webkit-mask-image:
+    linear-gradient(to bottom, transparent, black 12px, black calc(100% - 12px), transparent);
+}
+
+/* ── Guard hover effects for touch devices ── */
+@media (hover: none) {
+  .hover-lift:hover { transform: none; box-shadow: none; }
+  .press-effect:active { transform: none; }
+}
+
+/* ── Subtle noise texture for dark surfaces ── */
+.noise-texture::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.025;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+  z-index: 0;
+  border-radius: inherit;
+}
+
+/* ── Glass morphism depth presets ── */
+.glass-bg {
+  backdrop-filter: blur(4px) saturate(1.2);
+  -webkit-backdrop-filter: blur(4px) saturate(1.2);
+}
+.glass-mid {
+  backdrop-filter: blur(var(--blur-sm)) saturate(1.35);
+  -webkit-backdrop-filter: blur(var(--blur-sm)) saturate(1.35);
+}
+.glass-fg {
+  backdrop-filter: blur(var(--blur-md)) saturate(1.5);
+  -webkit-backdrop-filter: blur(var(--blur-md)) saturate(1.5);
+}
+
+/* ── Page transition ── */
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-page-enter {
+  animation: page-enter var(--dur-normal) var(--ease-out) both;
+}

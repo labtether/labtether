@@ -27,6 +27,9 @@ const (
 	maxAgentLogStreamPayloadBytes = 512 << 10
 	maxAgentLogBatchPayloadBytes  = 10 << 20
 	maxAgentHeartbeatPayloadBytes = 512 << 10
+	// Telemetry has a fixed, numeric schema and needs only a small JSON envelope.
+	maxAgentTelemetryPayloadBytes = 64 << 10
+	agentTelemetryStoreTimeout    = 5 * time.Second
 )
 
 func (d *Deps) ProcessAgentHeartbeat(conn *agentmgr.AgentConn, msg agentmgr.Message) {
@@ -166,6 +169,11 @@ func (d *Deps) ProcessAgentHeartbeat(conn *agentmgr.AgentConn, msg agentmgr.Mess
 }
 
 func (d *Deps) ProcessAgentTelemetry(conn *agentmgr.AgentConn, msg agentmgr.Message) {
+	if len(msg.Data) > maxAgentTelemetryPayloadBytes {
+		securityruntime.Logf("agentws: rejected oversized telemetry from %s (%d bytes)", conn.AssetID, len(msg.Data))
+		return
+	}
+
 	var data agentmgr.TelemetryData
 	if err := json.Unmarshal(msg.Data, &data); err != nil {
 		log.Printf("agentws: invalid telemetry data from %s: %v", conn.AssetID, err)
@@ -184,7 +192,9 @@ func (d *Deps) ProcessAgentTelemetry(conn *agentmgr.AgentConn, msg agentmgr.Mess
 	)
 
 	if len(samples) > 0 {
-		if err := d.TelemetryStore.AppendSamples(context.Background(), samples); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), agentTelemetryStoreTimeout)
+		defer cancel()
+		if err := d.TelemetryStore.AppendSamples(ctx, samples); err != nil {
 			log.Printf("agentws: telemetry store append failed for %s: %v", conn.AssetID, err)
 		}
 	}
