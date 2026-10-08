@@ -71,7 +71,7 @@ RUN set -eux; \
 # Runtime dependencies
 RUN apk add --no-cache \
     bash=5.3.9-r1 \
-    ca-certificates=20260611-r0 \
+    ca-certificates=20260909-r0 \
     nodejs=24.17.0-r0 \
     postgresql18=18.4-r0 \
     postgresql18-contrib=18.4-r0 && \
