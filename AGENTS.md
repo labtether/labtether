@@ -35,9 +35,19 @@ Use current manifests, preserve unrelated dirty work, and reply in short plain w
   lines). Only genuine generated/vendor code is exempt. No legacy exceptions,
   minifying, numbered chunks or moving code into data; split by responsibility.
 - Run `python3 scripts/ci/check-line-limit.py` here. Existing violations remain
-  open until it passes. Use focused tests and required CI; broaden for shared
-  behavior or unresolved failures. Builds do not prove live behavior; backup or
+  open until it passes. Builds do not prove live behavior; backup or
   verification does not prove restore. Report what actually passed.
+- Add or keep a test only for a named real fault or important user promise.
+  Test the real owner with the smallest useful check. Skip getter-only,
+  duplicate, implementation-mirror and test-count padding. Broaden only for
+  changed shared behavior or a concrete unresolved risk. Docs-only work needs
+  path, link, diff and line-limit checks, not code tests or builds unless a
+  required branch gate needs them.
+- Before starting or rerunning remote CI, name the changed behavior and needed
+  proof. Keep one job per distinct risk; avoid duplicate runs for the same
+  commit. Cancel superseded runs, use path filters and realistic timeouts. Use
+  paid platform runners or broad matrices only for relevant behavior. Preserve
+  required security, release, signing and live checks that protect user promises.
 
 ## Work and checks
 
