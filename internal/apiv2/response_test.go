@@ -113,15 +113,8 @@ func TestWrapV1Handler_WrapsErrorResponse(t *testing.T) {
 }
 
 func TestWrapV1Handler_PassThroughAlreadyV2(t *testing.T) {
-	reqID := NewRequestID()
 	v1 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		payload, _ := json.Marshal(map[string]any{
-			"request_id": reqID,
-			"data":       "already v2",
-		})
-		_, _ = w.Write(payload)
+		WriteJSON(w, http.StatusOK, "already v2")
 	})
 	wrapped := WrapV1Handler(v1)
 
@@ -129,13 +122,114 @@ func TestWrapV1Handler_PassThroughAlreadyV2(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	wrapped(rec, req)
 
-	body := rec.Body.String()
-	// The original request_id must be preserved (no double-wrapping).
-	if !strings.Contains(body, reqID) {
-		t.Errorf("pass-through response should retain original request_id %q", reqID)
+	var response struct {
+		RequestID string `json:"request_id"`
+		Data      string `json:"data"`
 	}
-	if strings.Count(body, `"request_id"`) != 1 {
-		t.Error("response should have exactly one request_id (no double-wrapping)")
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.RequestID == "" || response.Data != "already v2" {
+		t.Fatalf("v2 response was double wrapped: %s", rec.Body.String())
+	}
+}
+
+func TestWrapV1Handler_PassThroughAlreadyV2List(t *testing.T) {
+	wrapped := WrapV1Handler(func(w http.ResponseWriter, _ *http.Request) {
+		WriteList(w, http.StatusOK, []string{"one"}, 1, 1, 10)
+	})
+	rec := httptest.NewRecorder()
+	wrapped(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	var response struct {
+		RequestID string   `json:"request_id"`
+		Data      []string `json:"data"`
+		Meta      struct {
+			Total int `json:"total"`
+		} `json:"meta"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.RequestID == "" || len(response.Data) != 1 || response.Data[0] != "one" || response.Meta.Total != 1 {
+		t.Fatalf("v2 list was double wrapped: %s", rec.Body.String())
+	}
+}
+
+func TestWrapV1Handler_WrapsAgentReplyWithRequestID(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		payload string
+		field   string
+	}{
+		{"processes", `{"request_id":"agent-1","processes":[]}`, "processes"},
+		{"files", `{"request_id":"agent-2","entries":[]}`, "entries"},
+		{"packages", `{"request_id":"agent-3","packages":[]}`, "packages"},
+		{"protocol data", `{"request_id":"agent-4","data":"payload"}`, "data"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			wrapped := WrapV1Handler(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tc.payload))
+			})
+			rec := httptest.NewRecorder()
+			wrapped(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+			var response struct {
+				RequestID string                     `json:"request_id"`
+				Data      map[string]json.RawMessage `json:"data"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if strings.HasPrefix(response.RequestID, "agent-") {
+				t.Fatal("agent correlation ID was mistaken for v2 envelope ID")
+			}
+			if _, ok := response.Data[tc.field]; !ok {
+				t.Fatalf("agent %s reply was not wrapped under data", tc.name)
+			}
+		})
+	}
+}
+
+func TestWrapV1Handler_WrapsAgentErrorWithRequestID(t *testing.T) {
+	wrapped := WrapV1Handler(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"request_id":"agent-5","error":"file denied"}`))
+	})
+	rec := httptest.NewRecorder()
+	wrapped(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	var response struct {
+		RequestID string `json:"request_id"`
+		Error     string `json:"error"`
+		Message   string `json:"message"`
+		Status    int    `json:"status"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.RequestID == "agent-5" || response.Error != "file denied" ||
+		response.Message != "file denied" || response.Status != http.StatusBadRequest {
+		t.Fatalf("unexpected v2 error envelope: %+v", response)
+	}
+}
+
+func TestWrapV1Handler_PassThroughAlreadyV2Error(t *testing.T) {
+	wrapped := WrapV1Handler(func(w http.ResponseWriter, _ *http.Request) {
+		WriteError(w, http.StatusNotFound, "missing", "not found")
+	})
+	rec := httptest.NewRecorder()
+	wrapped(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	var response struct {
+		RequestID string          `json:"request_id"`
+		Data      json.RawMessage `json:"data"`
+		Error     string          `json:"error"`
+		Status    int             `json:"status"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.RequestID == "" || response.Data != nil || response.Error != "missing" || response.Status != http.StatusNotFound {
+		t.Fatalf("v2 error was double wrapped: %s", rec.Body.String())
 	}
 }
 
