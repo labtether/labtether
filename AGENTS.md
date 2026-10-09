@@ -43,11 +43,13 @@ Use current manifests, preserve unrelated dirty work, and reply in short plain w
   changed shared behavior or a concrete unresolved risk. Docs-only work needs
   path, link, diff and line-limit checks, not code tests or builds unless a
   required branch gate needs them.
-- Before starting or rerunning remote CI, name the changed behavior and needed
-  proof. Keep one job per distinct risk; avoid duplicate runs for the same
-  commit. Cancel superseded runs, use path filters and realistic timeouts. Use
-  paid platform runners or broad matrices only for relevant behavior. Preserve
-  required security, release, signing and live checks that protect user promises.
+- Before starting or rerunning remote CI, check the remaining minutes and
+  spend cap, then name the changed behavior and needed proof. Add or keep an
+  automatic CI job only for a named real fault or user promise that a smaller
+  existing check cannot cover. Remove duplicate or unneeded jobs and triggers.
+  Cancel superseded runs, use path filters and realistic timeouts. Use paid
+  platform runners or broad matrices only for relevant behavior. Preserve
+  required security, release, signing and live proof that protects user promises.
 
 ## Work and checks
 
