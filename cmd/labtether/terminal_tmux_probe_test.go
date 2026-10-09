@@ -56,10 +56,9 @@ func TestStartAgentTmuxProbeAsyncResetsPendingOnSendFailure(t *testing.T) {
 	if !srv.startAgentTmuxProbeAsync(conn) {
 		t.Fatal("expected probe dispatch to be accepted")
 	}
-	if got := conn.Meta("terminal.tmux.probe_pending"); got != "true" {
-		t.Fatalf("expected probe pending flag true immediately, got %q", got)
-	}
 
+	// The failed send may finish before this goroutine reads the pending flag.
+	// Only the final reset is guaranteed for an asynchronous probe.
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		if conn.Meta("terminal.tmux.probe_pending") == "false" {

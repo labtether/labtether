@@ -68,13 +68,17 @@ RUN set -eux; \
     tar -C / -Jxpf /tmp/s6-overlay-arch.tar.xz; \
     rm /tmp/s6-overlay-arch.tar.xz
 
-# Runtime dependencies
+# Alpine's stable branch keeps these package families compatible while its
+# repositories replace old patch releases with security updates. Exact apk
+# patch pins make a clean rebuild fail once the old packages are retired.
 RUN apk add --no-cache \
-    bash=5.3.9-r1 \
-    ca-certificates=20260909-r0 \
-    nodejs=24.17.0-r0 \
-    postgresql18=18.4-r0 \
-    postgresql18-contrib=18.4-r0 && \
+    bash \
+    ca-certificates \
+    nodejs \
+    postgresql18 \
+    postgresql18-contrib && \
+    node -e "if (process.versions.node.split('.')[0] !== '24') process.exit(1)" && \
+    psql --version | grep -Fq 'PostgreSQL) 18.' && \
     adduser -D -u 65532 labtether
 
 # ── Copy artefacts from build stages ─────────────────────────
