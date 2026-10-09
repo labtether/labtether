@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-if env -u COMPOSE_PROFILES docker compose config --services | grep -Fxq qa-agent; then
+default_services="$(env -u COMPOSE_PROFILES docker compose config --services)"
+if grep -Fxq qa-agent <<<"${default_services}"; then
   echo "qa-agent must not be part of the default Compose service set" >&2
   exit 1
 fi
 COMPOSE_PROFILES=ci-agent docker compose config --quiet
-COMPOSE_PROFILES=ci-agent docker compose config --services | grep -Fxq qa-agent
+profile_services="$(COMPOSE_PROFILES=ci-agent docker compose config --services)"
+grep -Fxq qa-agent <<<"${profile_services}"
 COMPOSE_PROFILES=ci-agent docker compose config --format json |
   jq -e '
     .services["qa-agent"].environment.LABTETHER_API_TOKEN == "" and
