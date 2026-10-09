@@ -122,6 +122,9 @@ func (d *Deps) handleProcessList(w http.ResponseWriter, r *http.Request, assetID
 			servicehttp.WriteError(w, http.StatusBadRequest, listed.Error)
 			return
 		}
+		if listed.Processes == nil {
+			listed.Processes = []agentmgr.ProcessInfo{}
+		}
 		servicehttp.WriteJSON(w, http.StatusOK, listed)
 	case <-time.After(processRequestTimeout):
 		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")

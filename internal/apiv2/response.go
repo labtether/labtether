@@ -12,6 +12,7 @@ import (
 )
 
 func WriteJSON(w http.ResponseWriter, status int, data any) {
+	markV2Envelope(w)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	resp := map[string]any{
@@ -24,6 +25,7 @@ func WriteJSON(w http.ResponseWriter, status int, data any) {
 }
 
 func WriteList(w http.ResponseWriter, status int, data any, total, page, perPage int) {
+	markV2Envelope(w)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	resp := map[string]any{
@@ -44,6 +46,7 @@ func WriteList(w http.ResponseWriter, status int, data any, total, page, perPage
 // For 5xx responses, the original message is logged server-side and a generic
 // message is returned to the client to avoid leaking internal details.
 func WriteError(w http.ResponseWriter, status int, errorCode, message string) {
+	markV2Envelope(w)
 	if status >= 500 {
 		log.Printf("[error-sanitized] %d %s: %s", status, errorCode, message)
 		message = "An internal error occurred."
@@ -73,13 +76,14 @@ func NewRequestID() string {
 // tails, WebSocket upgrades). Those should use native v2 handlers or pass
 // through directly.
 //
-// If the captured response is already a v2 envelope (has a "request_id" key),
-// it is passed through unchanged. Non-JSON responses are also passed through
-// unchanged.
+// Responses written by this package's v2 writers pass through unchanged.
+// Agent protocol responses can have request_id, data, or error fields, so
+// their JSON shape cannot identify a v2 envelope. Non-JSON responses pass
+// through unchanged.
 func WrapV1Handler(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Capture the v1 response.
-		rec := httptest.NewRecorder()
+		rec := &v2EnvelopeRecorder{ResponseRecorder: httptest.NewRecorder()}
 		next(rec, r)
 
 		result := rec.Result()
@@ -93,19 +97,16 @@ func WrapV1Handler(next http.HandlerFunc) http.HandlerFunc {
 			w.Header()[k] = v
 		}
 
+		if rec.isV2Envelope {
+			w.WriteHeader(rec.Code)
+			_, _ = w.Write(body)
+			return
+		}
+
 		// Only attempt to wrap JSON responses.
 		if strings.HasPrefix(rec.Header().Get("Content-Type"), "application/json") {
 			var data any
 			if err := json.Unmarshal(body, &data); err == nil {
-				// Pass through responses that are already v2-shaped.
-				if m, ok := data.(map[string]any); ok {
-					if _, hasReqID := m["request_id"]; hasReqID {
-						w.WriteHeader(rec.Code)
-						_, _ = w.Write(body)
-						return
-					}
-				}
-
 				// Wrap error responses.
 				if rec.Code >= 400 {
 					errCode := "error"
@@ -133,5 +134,16 @@ func WrapV1Handler(next http.HandlerFunc) http.HandlerFunc {
 		// Non-JSON or unparseable — pass through as-is.
 		w.WriteHeader(rec.Code)
 		_, _ = w.Write(body)
+	}
+}
+
+type v2EnvelopeRecorder struct {
+	*httptest.ResponseRecorder
+	isV2Envelope bool
+}
+
+func markV2Envelope(w http.ResponseWriter) {
+	if recorder, ok := w.(*v2EnvelopeRecorder); ok {
+		recorder.isV2Envelope = true
 	}
 }
