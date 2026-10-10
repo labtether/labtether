@@ -236,8 +236,10 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Check backup and restore shell syntax
-        run: bash -n scripts/db-backup.sh scripts/db-restore.sh
+      - name: Check database backup and restore contracts
+        run: |
+          bash -n scripts/db-backup.sh scripts/db-restore.sh
+          bash scripts/ci/test-db-client.sh
 
       - name: Script unit tests
         run: node --test scripts/lib/http-redirect.test.js
