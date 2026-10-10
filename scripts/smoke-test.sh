@@ -118,6 +118,8 @@ done
 
 PASS_COUNT=0
 FAIL_COUNT=0
+# shellcheck disable=SC2034 # Consumed by sourced smoke helpers.
+SKIP_COUNT=0
 
 SMOKE_RUN_TOKEN="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
 if [[ -z "$SMOKE_RUN_TOKEN" ]]; then
@@ -480,9 +482,11 @@ if [[ "$SKIP_COMPOSE" == "1" ]] && ! labtether_value_is_true "$ALLOW_MUTATIONS";
   run_request body status GET "$API_BASE/settings/retention"
   assert_equal "GET /settings/retention" "200" "$status"
   if [[ "$FAIL_COUNT" -gt 0 ]]; then
+    smoke_print_summary
     log "RESULT: FAILED"
     exit 1
   fi
+  smoke_print_summary
   log "RESULT: PASSED (read-only mode)"
   exit 0
 fi
@@ -509,11 +513,7 @@ smoke_check_relationships
 source "${PROJECT_ROOT}/scripts/smoke/automation.sh"
 smoke_check_automation
 
-log "\nSmoke test summary"
-TOTAL_COUNT=$((PASS_COUNT + FAIL_COUNT))
-printf '  Passed: %s\n' "$PASS_COUNT"
-printf '  Failed: %s\n' "$FAIL_COUNT"
-printf '  Total : %s\n' "$TOTAL_COUNT"
+smoke_print_summary
 
 if [[ "$FAIL_COUNT" -gt 0 ]]; then
   log "RESULT: FAILED"

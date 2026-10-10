@@ -19,6 +19,7 @@ const (
 )
 
 var validNetworkActions = map[string]bool{
+	"snapshot": true,
 	"apply":    true,
 	"rollback": true,
 }
@@ -110,7 +111,7 @@ func (d *Deps) handleNetworkList(w http.ResponseWriter, r *http.Request, assetID
 
 func (d *Deps) handleNetworkAction(w http.ResponseWriter, r *http.Request, assetID, action string) {
 	if !validNetworkActions[action] {
-		servicehttp.WriteError(w, http.StatusBadRequest, "invalid action: must be apply or rollback")
+		servicehttp.WriteError(w, http.StatusBadRequest, "invalid action: must be snapshot, apply, or rollback")
 		return
 	}
 	if !d.enforceAssetActionGuard(w, assetID) {

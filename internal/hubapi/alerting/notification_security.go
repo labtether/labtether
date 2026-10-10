@@ -83,8 +83,8 @@ func (d *Deps) updateSecureNotificationChannel(id string, req notifications.Upda
 	return redactNotificationChannel(updated), nil
 }
 
-func (d *Deps) listNotificationChannelsForAPI(limit int) ([]notifications.Channel, error) {
-	channels, err := d.NotificationStore.ListNotificationChannels(limit)
+func (d *Deps) listNotificationChannelsForAPI(limit, offset int) ([]notifications.Channel, error) {
+	channels, err := d.NotificationStore.ListNotificationChannels(limit, offset)
 	if err != nil {
 		return nil, err
 	}

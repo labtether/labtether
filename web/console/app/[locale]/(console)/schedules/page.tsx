@@ -8,7 +8,8 @@ import { Card } from "../../../components/ui/Card";
 import { Button } from "../../../components/ui/Button";
 import { Input } from "../../../components/ui/Input";
 import { EmptyState } from "../../../components/ui/EmptyState";
-import { apiFetch, apiMutate } from "../../../lib/api";
+import { apiMutate } from "../../../lib/api";
+import { fetchAllSchedules } from "../../../lib/schedules";
 
 // ── Types ──
 
@@ -24,15 +25,6 @@ interface Schedule {
   next_run_at?: string;
   last_run_status?: string;
   last_error?: string;
-}
-
-interface SchedulesResponse {
-  data: Schedule[];
-  meta?: {
-    total?: number;
-    page?: number;
-    per_page?: number;
-  };
 }
 
 // ── Modal ──
@@ -265,12 +257,7 @@ export default function SchedulesPage() {
   const fetchSchedules = useCallback(async () => {
     setFetchError("");
     try {
-      const { response, data } = await apiFetch<SchedulesResponse>("/api/v2/schedules");
-      if (!response.ok) {
-        setFetchError("Failed to load schedules.");
-        return;
-      }
-      setSchedules(data?.data ?? []);
+      setSchedules((await fetchAllSchedules<Schedule>()).data);
     } catch {
       setFetchError("Failed to load schedules.");
     } finally {

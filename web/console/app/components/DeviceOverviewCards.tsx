@@ -177,7 +177,7 @@ export function StorageCard({ asset, diskPercent, onOpenDetails }: { asset: Asse
         const gb = b / (1024 * 1024 * 1024);
         return gb >= 1 ? `${gb.toFixed(gb >= 100 ? 0 : 1)} GB` : `${(b / (1024 * 1024)).toFixed(0)} MB`;
       };
-      capacityLabel = Number.isFinite(avail) && avail > 0
+      capacityLabel = /^(?:0|[1-9]\d*)$/.test(availRaw) && Number.isFinite(avail)
         ? `${fmt(avail)} free of ${fmt(total)}`
         : fmt(total);
     }

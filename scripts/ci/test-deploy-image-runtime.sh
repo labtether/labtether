@@ -5,7 +5,7 @@ umask 077
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SOURCE_COMPOSE="${PROJECT_ROOT}/deploy/compose/docker-compose.deploy.yml"
-POSTGRES_IMAGE="postgres:18-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15"
+POSTGRES_IMAGE="postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
 LABTETHER_IMAGE="${1:-}"
 
 if [[ -z "${LABTETHER_IMAGE}" ]]; then

@@ -7,7 +7,7 @@
 **Cross-platform homelab control plane with AI-powered operations.**
 
 [![CI](https://github.com/labtether/labtether/actions/workflows/ci.yml/badge.svg)](https://github.com/labtether/labtether/actions/workflows/ci.yml)
-[![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
+[![Go](https://img.shields.io/badge/Go-1.27.2+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square)](LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/Be6Fa9hv)
@@ -305,14 +305,15 @@ Connect what you already run: Proxmox VE, TrueNAS, Docker, Portainer, Home Assis
 | | Platform | Description |
 |:---|:---------|:------------|
 | **[Linux Agent](https://github.com/labtether/labtether-agent)** | Linux | Telemetry, remote access, and actions for Linux machines. |
+| **[macOS Agent](https://github.com/labtether/labtether-mac)** | macOS 13+ | Menu bar app with status, enrollment, and notifications. |
+| **[Windows Go Agent](https://github.com/labtether/labtether-agent)** | Windows | Published endpoint binaries with partial feature support. |
 | **[CLI](https://github.com/labtether/labtether-cli)** | Cross-platform | Manage your hub from the terminal. |
 
 ### Coming soon
 
 | | Platform | Description |
 |:---|:---------|:------------|
-| **[Windows Agent](https://github.com/labtether/labtether-win)** | Windows 10+ | Native system tray app with service management and auto-updates. |
-| **[macOS Agent](https://github.com/labtether/labtether-mac)** | macOS 13+ | Menu bar app with status, enrollment, and notifications. |
+| **[Windows tray app](https://github.com/labtether/labtether-win)** | Windows 10+ | Native system tray wrapper is planned; use the Windows Go agent today. |
 | **FreeBSD Agent** | FreeBSD 13+ | Planned; source/runtime hooks exist, but no public release artifact is published. |
 | **iOS & iPad Companion** | iPhone / iPad | Mobile fleet monitoring, push notifications, and live activities. One-time purchase, no subscriptions. |
 

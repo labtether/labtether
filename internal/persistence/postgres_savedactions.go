@@ -85,7 +85,7 @@ func (s *PostgresStore) ListSavedActions(ctx context.Context, actorID string, li
 		`SELECT id, name, description, steps, created_by, created_at
 		 FROM saved_actions
 		 WHERE created_by = $1
-		 ORDER BY created_at DESC
+		 ORDER BY created_at DESC, id DESC
 		 LIMIT $2 OFFSET $3`,
 		actorID,
 		limit,

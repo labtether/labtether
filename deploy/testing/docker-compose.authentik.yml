@@ -1,4 +1,5 @@
 # Ephemeral Authentik stack for testing OIDC integration.
+# Authentik 2026.8 stores its task queue in PostgreSQL; Redis is not needed.
 # Usage: docker compose -f deploy/testing/docker-compose.authentik.yml up -d
 # Teardown: docker compose -f deploy/testing/docker-compose.authentik.yml down -v
 #
@@ -7,7 +8,7 @@
 
 services:
   authentik-postgres:
-    image: postgres:18-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
+    image: postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
     environment:
       POSTGRES_DB: authentik
       POSTGRES_USER: authentik
@@ -21,23 +22,14 @@ services:
       retries: 5
       start_period: 10s
 
-  authentik-redis:
-    image: redis:7-alpine@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
   authentik-server:
-    image: ghcr.io/goauthentik/server:2024.12@sha256:717323d68507fb76dd79f8958f42ce57f8ae0c10a55a7807efa1cfec5752b77c
+    image: ghcr.io/goauthentik/server:2026.8.3@sha256:ab9b4e8cc4ab3f8d1198d2db6aeea66bafea1963b3f2843589e0d163f97d9849
     command: server
     environment:
       AUTHENTIK_SECRET_KEY: testing-only-secret-key-not-for-production
       AUTHENTIK_BOOTSTRAP_PASSWORD: testing-only-password
       AUTHENTIK_BOOTSTRAP_EMAIL: admin@localhost
       AUTHENTIK_BOOTSTRAP_TOKEN: labtether-test-bootstrap-token
-      AUTHENTIK_REDIS__HOST: authentik-redis
       AUTHENTIK_POSTGRESQL__HOST: authentik-postgres
       AUTHENTIK_POSTGRESQL__USER: authentik
       AUTHENTIK_POSTGRESQL__NAME: authentik
@@ -47,24 +39,19 @@ services:
     depends_on:
       authentik-postgres:
         condition: service_healthy
-      authentik-redis:
-        condition: service_healthy
 
   authentik-worker:
-    image: ghcr.io/goauthentik/server:2024.12@sha256:717323d68507fb76dd79f8958f42ce57f8ae0c10a55a7807efa1cfec5752b77c
+    image: ghcr.io/goauthentik/server:2026.8.3@sha256:ab9b4e8cc4ab3f8d1198d2db6aeea66bafea1963b3f2843589e0d163f97d9849
     command: worker
     environment:
       AUTHENTIK_SECRET_KEY: testing-only-secret-key-not-for-production
       AUTHENTIK_BOOTSTRAP_TOKEN: labtether-test-bootstrap-token
-      AUTHENTIK_REDIS__HOST: authentik-redis
       AUTHENTIK_POSTGRESQL__HOST: authentik-postgres
       AUTHENTIK_POSTGRESQL__USER: authentik
       AUTHENTIK_POSTGRESQL__NAME: authentik
       AUTHENTIK_POSTGRESQL__PASSWORD: authentik-test-db
     depends_on:
       authentik-postgres:
-        condition: service_healthy
-      authentik-redis:
         condition: service_healthy
 
 volumes:

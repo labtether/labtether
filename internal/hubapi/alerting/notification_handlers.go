@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -58,7 +59,12 @@ func (d *Deps) HandleNotificationChannels(w http.ResponseWriter, r *http.Request
 
 	switch r.Method {
 	case http.MethodGet:
-		channels, err := d.listNotificationChannelsForAPI(parseLimit(r, 50))
+		limit, offset, paginationErr := parseNotificationChannelPage(r)
+		if paginationErr != nil {
+			servicehttp.WriteError(w, http.StatusBadRequest, paginationErr.Error())
+			return
+		}
+		channels, err := d.listNotificationChannelsForAPI(limit, offset)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list notification channels")
 			return
@@ -103,6 +109,30 @@ func (d *Deps) HandleNotificationChannels(w http.ResponseWriter, r *http.Request
 	default:
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+func parseNotificationChannelPage(r *http.Request) (limit, offset int, err error) {
+	limit = 50
+	query := r.URL.Query()
+	if values, present := query["limit"]; present {
+		if len(values) != 1 {
+			return 0, 0, fmt.Errorf("limit must be between 1 and 500")
+		}
+		limit, err = strconv.Atoi(values[0])
+		if err != nil || limit < 1 || limit > 500 {
+			return 0, 0, fmt.Errorf("limit must be between 1 and 500")
+		}
+	}
+	if values, present := query["offset"]; present {
+		if len(values) != 1 {
+			return 0, 0, fmt.Errorf("offset must be a non-negative integer")
+		}
+		offset, err = strconv.Atoi(values[0])
+		if err != nil || offset < 0 {
+			return 0, 0, fmt.Errorf("offset must be a non-negative integer")
+		}
+	}
+	return limit, offset, nil
 }
 
 func (d *Deps) RouteNotificationChannelActions(w http.ResponseWriter, r *http.Request) {

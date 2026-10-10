@@ -68,6 +68,18 @@ assert_not_equal() {
   fi
 }
 
+smoke_skip() {
+  SKIP_COUNT=$((SKIP_COUNT + 1))
+  printf '  [SKIP] %s\n' "$1"
+}
+
+smoke_print_summary() {
+  local total=$((PASS_COUNT + FAIL_COUNT + SKIP_COUNT))
+  log "Smoke test summary"
+  printf '  Passed : %s\n  Failed : %s\n  Skipped: %s\n  Total  : %s\n' \
+    "$PASS_COUNT" "$FAIL_COUNT" "$SKIP_COUNT" "$total"
+}
+
 contains() {
   local needle=$1
   local haystack=$2
@@ -121,8 +133,9 @@ run_request() {
   local url=$4
   local payload=${5:-}
   local with_auth=${6:-1}
+  local request_timeout=${7:-${TIMEOUT_SECONDS:-120}}
 
-  local -a args=("-sS" "--connect-timeout" "${SMOKE_CONNECT_TIMEOUT_SECONDS:-5}" "--max-time" "${TIMEOUT_SECONDS:-120}" "-w" $'\n%{http_code}' -X "$method" "$url")
+  local -a args=("-sS" "--connect-timeout" "${SMOKE_CONNECT_TIMEOUT_SECONDS:-5}" "--max-time" "$request_timeout" "-w" $'\n%{http_code}' -X "$method" "$url")
   if ! labtether_build_curl_request_args "$url" "$with_auth"; then
     printf -v "$__body_var" '%s' ''
     printf -v "$__status_var" '%s' '000'

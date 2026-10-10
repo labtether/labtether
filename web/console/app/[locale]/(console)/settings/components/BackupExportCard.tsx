@@ -6,14 +6,65 @@ import { Card } from "../../../../components/ui/Card";
 import { Button } from "../../../../components/ui/Button";
 import { apiFetch } from "../../../../lib/api";
 import { downloadJSON } from "../../../../lib/export";
+import { fetchAllSchedules } from "../../../../lib/schedules";
 
 type SavedActionListResponse = {
-  data?: unknown[];
+  data?: Array<{ id: string }>;
   meta?: {
     total?: number;
+    page?: number;
     per_page?: number;
   };
 };
+
+const CONFIG_PAGE_SIZE = 100;
+const MAX_CONFIG_PAGES = 100;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isCompleteAssetList(value: unknown): boolean {
+  if (!isRecord(value) || !Array.isArray(value.data) || !isRecord(value.meta)) return false;
+  const { total, page, per_page: perPage } = value.meta;
+  return typeof total === "number" && Number.isSafeInteger(total)
+    && total === value.data.length && page === 1 && perPage === total;
+}
+
+async function fetchAllOffsetRows(path: string, key: "rules" | "channels") {
+  const items: Array<{ id: string }> = [];
+  const seenIDs = new Set<string>();
+  let firstPayload: Record<string, unknown> | null = null;
+
+  for (let page = 0; page < MAX_CONFIG_PAGES; page++) {
+    const offset = page * CONFIG_PAGE_SIZE;
+    const { response, data } = await apiFetch<Record<string, unknown>>(
+      `${path}?limit=${CONFIG_PAGE_SIZE}&offset=${offset}`,
+    );
+    if (!response.ok) {
+      throw new Error(`Failed to load ${path} (offset ${offset}, HTTP ${response.status}).`);
+    }
+
+    const pageItems = data?.[key];
+    if (!Array.isArray(pageItems) || pageItems.length > CONFIG_PAGE_SIZE) {
+      throw new Error(`Incomplete ${path} response (offset ${offset}).`);
+    }
+    for (const item of pageItems) {
+      if (!item || typeof item.id !== "string" || !item.id.trim() || seenIDs.has(item.id)) {
+        throw new Error(`Incomplete ${path} response (offset ${offset}).`);
+      }
+      seenIDs.add(item.id);
+      items.push(item);
+    }
+
+    firstPayload ??= data;
+    if (pageItems.length < CONFIG_PAGE_SIZE) {
+      return { ...firstPayload, [key]: items };
+    }
+  }
+
+  throw new Error(`${path} exceeds the supported export page limit.`);
+}
 
 export function BackupExportCard() {
   const t = useTranslations("settings");
@@ -22,30 +73,47 @@ export function BackupExportCard() {
   const [error, setError] = useState<string | null>(null);
 
   async function fetchAllSavedActions() {
-    const pageSize = 100;
-    let offset = 0;
-    const items: unknown[] = [];
+    const items: Array<{ id: string }> = [];
+    const seenIDs = new Set<string>();
+    let expectedTotal: number | null = null;
 
-    while (true) {
-      const result = await apiFetch<SavedActionListResponse>(`/api/v2/actions?limit=${pageSize}&offset=${offset}`);
-      if (!result.response.ok) {
-        return result;
+    for (let page = 1; page <= MAX_CONFIG_PAGES; page++) {
+      const offset = (page - 1) * CONFIG_PAGE_SIZE;
+      const { response, data } = await apiFetch<SavedActionListResponse>(
+        `/api/v2/actions?limit=${CONFIG_PAGE_SIZE}&offset=${offset}`,
+      );
+      if (!response.ok) {
+        throw new Error(`Failed to load saved actions (offset ${offset}, HTTP ${response.status}).`);
       }
 
-      const pageItems = Array.isArray(result.data?.data) ? result.data.data : [];
+      const total = data?.meta?.total;
+      const pageItems = data?.data;
+      if (
+        !Array.isArray(pageItems)
+        || typeof total !== "number"
+        || !Number.isSafeInteger(total)
+        || total < 0
+        || total > MAX_CONFIG_PAGES * CONFIG_PAGE_SIZE
+        || data?.meta?.page !== page
+        || data?.meta?.per_page !== CONFIG_PAGE_SIZE
+        || (expectedTotal !== null && total !== expectedTotal)
+        || pageItems.length !== Math.min(CONFIG_PAGE_SIZE, total - items.length)
+      ) {
+        throw new Error(`Incomplete saved actions response (offset ${offset}).`);
+      }
+      for (const item of pageItems) {
+        if (!item || typeof item.id !== "string" || !item.id.trim() || seenIDs.has(item.id)) {
+          throw new Error(`Incomplete saved actions response (offset ${offset}).`);
+        }
+        seenIDs.add(item.id);
+      }
+
+      expectedTotal = total;
       items.push(...pageItems);
-
-      const total = typeof result.data?.meta?.total === "number" ? result.data.meta.total : items.length;
-      const perPage = typeof result.data?.meta?.per_page === "number" ? result.data.meta.per_page : pageSize;
-      if (pageItems.length === 0 || items.length >= total || pageItems.length < perPage) {
-        return {
-          response: result.response,
-          data: items,
-        };
-      }
-
-      offset += perPage;
+      if (items.length === total) return items;
     }
+
+    throw new Error("Saved actions exceed the supported export page limit.");
   }
 
   async function handleExport() {
@@ -66,23 +134,28 @@ export function BackupExportCard() {
         apiFetch("/api/v2/assets"),
         apiFetch("/api/groups"),
         apiFetch("/api/v2/webhooks"),
-        apiFetch("/api/v2/schedules"),
+        fetchAllSchedules(),
         fetchAllSavedActions(),
-        apiFetch("/api/alerts/rules"),
-        apiFetch("/api/notifications/channels"),
+        fetchAllOffsetRows("/api/alerts/rules", "rules"),
+        fetchAllOffsetRows("/api/notifications/channels", "channels"),
       ]);
 
       const failedEndpoints: string[] = [];
       if (!assetsResult.response.ok) failedEndpoints.push("/api/v2/assets");
       if (!groupsResult.response.ok) failedEndpoints.push("/api/groups");
       if (!webhooksResult.response.ok) failedEndpoints.push("/api/v2/webhooks");
-      if (!schedulesResult.response.ok) failedEndpoints.push("/api/v2/schedules");
-      if (!savedActionsResult.response.ok) failedEndpoints.push("/api/v2/actions");
-      if (!alertRulesResult.response.ok) failedEndpoints.push("/api/alerts/rules");
-      if (!notifChannelsResult.response.ok) failedEndpoints.push("/api/notifications/channels");
 
       if (failedEndpoints.length > 0) {
         throw new Error(`${t("backup.exportError")}: ${failedEndpoints.join(", ")}`);
+      }
+      if (
+        !isCompleteAssetList(assetsResult.data)
+        || !isRecord(groupsResult.data)
+        || !Array.isArray(groupsResult.data.groups)
+        || !isRecord(webhooksResult.data)
+        || !Array.isArray(webhooksResult.data.data)
+      ) {
+        throw new Error("Incomplete inventory or webhook response.");
       }
 
       const config = {
@@ -90,10 +163,10 @@ export function BackupExportCard() {
         assets: assetsResult.data,
         groups: groupsResult.data,
         webhooks: webhooksResult.data,
-        schedules: schedulesResult.data,
-        actions: savedActionsResult.data,
-        alert_rules: alertRulesResult.data,
-        notification_channels: notifChannelsResult.data,
+        schedules: schedulesResult,
+        actions: savedActionsResult,
+        alert_rules: alertRulesResult,
+        notification_channels: notifChannelsResult,
       };
 
       downloadJSON(config, `labtether-config-${new Date().toISOString().slice(0, 10)}.json`);

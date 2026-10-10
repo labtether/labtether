@@ -36,7 +36,7 @@ type DeviceOverviewGridProps = {
   nodeNetworkActionMessage: string | null;
   nodeNetworkActionError: string | null;
   onNodeNetworkAction: (
-    action: "apply" | "rollback",
+    action: "snapshot" | "apply" | "rollback",
     options?: { method?: string; verifyTarget?: string; connection?: string },
   ) => void;
   nodeHasAgent: boolean;
@@ -284,7 +284,7 @@ export function DeviceOverviewGrid(props: DeviceOverviewGridProps) {
             {nodeSupportsNetworkActions ? (
               <div className="flex flex-col gap-1.5 pt-2 border-t border-[var(--line)]">
                 <span className="text-[10px] text-[var(--muted)]">{nodeNetworkControlsLabel}</span>
-                <div className="grid grid-cols-1 md:grid-cols-[10rem_1fr_1fr_auto_auto] gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-[10rem_1fr_1fr_auto_auto_auto] gap-2">
                   <Select
                     value={networkMethod}
                     onChange={(event) => setNetworkMethod(event.target.value)}
@@ -304,6 +304,15 @@ export function DeviceOverviewGrid(props: DeviceOverviewGridProps) {
                     onChange={(event) => setNetworkVerifyTarget(event.target.value)}
                     placeholder="Verify target (optional, e.g. 1.1.1.1)"
                   />
+                  {nodeNetworkMethodOptions.some((option) => option.value === "netplan") && networkMethod !== "nmcli" ? (
+                    <Button
+                      size="sm"
+                      disabled={nodeNetworkActionRunning}
+                      onClick={() => onNodeNetworkAction("snapshot", { method: "netplan" })}
+                    >
+                      Save Snapshot
+                    </Button>
+                  ) : null}
                   <Button
                     size="sm"
                     disabled={nodeNetworkActionRunning}
@@ -324,7 +333,7 @@ export function DeviceOverviewGrid(props: DeviceOverviewGridProps) {
                     variant="danger"
                     disabled={nodeNetworkActionRunning}
                     onClick={() => {
-                      if (confirm("Rollback to the previous network snapshot?")) {
+                      if (confirm("Restore the saved network snapshot?")) {
                         onNodeNetworkAction("rollback", {
                           method: networkMethod,
                           connection: networkConnection,

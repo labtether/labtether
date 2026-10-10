@@ -164,6 +164,9 @@ func (m *MemoryAlertStore) ListAlertRules(filter AlertRuleFilter) ([]alerts.Rule
 	}
 
 	sort.Slice(out, func(i, j int) bool {
+		if out[i].UpdatedAt.Equal(out[j].UpdatedAt) {
+			return out[i].ID > out[j].ID
+		}
 		return out[i].UpdatedAt.After(out[j].UpdatedAt)
 	})
 	if filter.Offset > 0 {

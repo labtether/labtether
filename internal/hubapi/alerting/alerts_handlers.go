@@ -27,30 +27,28 @@ func (d *Deps) HandleAlertRules(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		rules, err := d.AlertStore.ListAlertRules(persistence.AlertRuleFilter{
+		filter := persistence.AlertRuleFilter{
 			Limit:    parseLimit(r, 50),
 			Offset:   parseOffset(r),
 			Status:   r.URL.Query().Get("status"),
 			Kind:     r.URL.Query().Get("kind"),
 			Severity: r.URL.Query().Get("severity"),
-		})
-		if err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list alert rules")
-			return
 		}
+		var rules []alerts.Rule
+		var err error
 		if shared.HasAssetRestriction(r.Context()) {
 			groupAccess, authErr := d.accessibleGroupIDs(r.Context())
 			if authErr != nil {
 				writeAssetScopeForbidden(w, "unable to prove alert rule asset scope")
 				return
 			}
-			filtered := make([]alerts.Rule, 0, len(rules))
-			for _, rule := range rules {
-				if alertRuleAllowed(r.Context(), rule, groupAccess) {
-					filtered = append(filtered, rule)
-				}
-			}
-			rules = filtered
+			rules, err = d.listAccessibleAlertRules(r.Context(), filter, groupAccess)
+		} else {
+			rules, err = d.AlertStore.ListAlertRules(filter)
+		}
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list alert rules")
+			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"rules": rules})
 	case http.MethodPost:

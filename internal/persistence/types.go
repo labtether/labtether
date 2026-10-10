@@ -292,7 +292,7 @@ type AlertInstanceStore interface {
 type NotificationStore interface {
 	CreateNotificationChannel(req notifications.CreateChannelRequest) (notifications.Channel, error)
 	GetNotificationChannel(id string) (notifications.Channel, bool, error)
-	ListNotificationChannels(limit int) ([]notifications.Channel, error)
+	ListNotificationChannels(limit, offset int) ([]notifications.Channel, error)
 	UpdateNotificationChannel(id string, req notifications.UpdateChannelRequest) (notifications.Channel, error)
 	DeleteNotificationChannel(id string) error
 	CreateAlertRoute(req notifications.CreateRouteRequest) (notifications.Route, error)

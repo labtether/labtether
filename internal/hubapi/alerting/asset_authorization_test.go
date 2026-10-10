@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -120,6 +122,187 @@ func TestRestrictedAlertRuleAndInstanceCollectionsDoNotLeakSecretTargets(t *test
 	d.HandleAlertRuleActions(secretRec, restrictedAlertRequest(http.MethodGet, "/alerts/rules/"+secretRule.ID, nil, "asset-a"))
 	if secretRec.Code != http.StatusForbidden {
 		t.Fatalf("secret rule: expected 403, got %d body=%s", secretRec.Code, secretRec.Body.String())
+	}
+}
+
+type pagedAlertRuleStore struct {
+	persistence.AlertStore
+	rules []alerts.Rule
+}
+
+func (s pagedAlertRuleStore) ListAlertRules(filter persistence.AlertRuleFilter) ([]alerts.Rule, error) {
+	if filter.Offset >= len(s.rules) {
+		return []alerts.Rule{}, nil
+	}
+	end := filter.Offset + filter.Limit
+	if end > len(s.rules) {
+		end = len(s.rules)
+	}
+	return s.rules[filter.Offset:end], nil
+}
+
+func TestRestrictedAlertRulePagingCountsOnlyVisibleRules(t *testing.T) {
+	d := newTestAlertingDeps(t)
+	rules := make([]alerts.Rule, 0, 502)
+	for i := range 500 {
+		rules = append(rules, alerts.Rule{
+			ID:      fmt.Sprintf("hidden-%03d", i),
+			Targets: []alerts.RuleTarget{{AssetID: "asset-b"}},
+		})
+	}
+	for _, id := range []string{"visible-1", "visible-2"} {
+		rules = append(rules, alerts.Rule{
+			ID: id, Targets: []alerts.RuleTarget{{AssetID: "asset-a"}},
+		})
+	}
+	d.AlertStore = pagedAlertRuleStore{rules: rules}
+
+	for offset, want := range []string{"visible-1", "visible-2", ""} {
+		rec := httptest.NewRecorder()
+		path := fmt.Sprintf("/alerts/rules?limit=1&offset=%d", offset)
+		d.HandleAlertRules(rec, restrictedAlertRequest(http.MethodGet, path, nil, "asset-a"))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("offset %d: expected 200, got %d body=%s", offset, rec.Code, rec.Body.String())
+		}
+		var response struct {
+			Rules []alerts.Rule `json:"rules"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		if want == "" && len(response.Rules) == 0 {
+			continue
+		}
+		if len(response.Rules) != 1 || response.Rules[0].ID != want {
+			t.Fatalf("offset %d: got rules %#v, want %q", offset, response.Rules, want)
+		}
+	}
+}
+
+type pagedAlertInstanceStore struct {
+	persistence.AlertInstanceStore
+	instances []alerts.AlertInstance
+	failAt    int
+}
+
+func (s pagedAlertInstanceStore) ListAlertInstances(filter persistence.AlertInstanceFilter) ([]alerts.AlertInstance, error) {
+	if s.failAt > 0 && filter.Offset >= s.failAt {
+		return nil, errors.New("store page unavailable")
+	}
+	if filter.Offset >= len(s.instances) {
+		return []alerts.AlertInstance{}, nil
+	}
+	end := min(filter.Offset+filter.Limit, len(s.instances))
+	return s.instances[filter.Offset:end], nil
+}
+
+func TestRestrictedAlertInstancePagingCountsOnlyVisibleInstances(t *testing.T) {
+	d := newTestAlertingDeps(t)
+	hiddenRule, err := d.AlertStore.CreateAlertRule(alerts.CreateRuleRequest{
+		Name: "hidden", Targets: []alerts.RuleTargetInput{{AssetID: "asset-b"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	visibleRule, err := d.AlertStore.CreateAlertRule(alerts.CreateRuleRequest{
+		Name: "visible", Targets: []alerts.RuleTargetInput{{AssetID: "asset-a"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	instances := make([]alerts.AlertInstance, 0, 502)
+	for i := range 500 {
+		instances = append(instances, alerts.AlertInstance{ID: fmt.Sprintf("hidden-%03d", i), RuleID: hiddenRule.ID})
+	}
+	for _, id := range []string{"visible-1", "visible-2"} {
+		instances = append(instances, alerts.AlertInstance{ID: id, RuleID: visibleRule.ID})
+	}
+	d.AlertInstanceStore = pagedAlertInstanceStore{instances: instances}
+	for offset, want := range []string{"visible-1", "visible-2", ""} {
+		rec := httptest.NewRecorder()
+		path := fmt.Sprintf("/alerts/instances?limit=1&offset=%d", offset)
+		d.HandleAlertInstances(rec, restrictedAlertRequest(http.MethodGet, path, nil, "asset-a"))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("offset %d: expected 200, got %d body=%s", offset, rec.Code, rec.Body.String())
+		}
+		var response struct {
+			Instances []alerts.AlertInstance `json:"instances"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		if want == "" && len(response.Instances) == 0 {
+			continue
+		}
+		if len(response.Instances) != 1 || response.Instances[0].ID != want {
+			t.Fatalf("offset %d: got instances %#v, want %q", offset, response.Instances, want)
+		}
+	}
+	d.AlertInstanceStore = pagedAlertInstanceStore{instances: instances, failAt: 500}
+	rec := httptest.NewRecorder()
+	d.HandleAlertInstances(rec, restrictedAlertRequest(http.MethodGet, "/alerts/instances?limit=1", nil, "asset-a"))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("failed later page: expected 500, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+type pagedIncidentStore struct {
+	persistence.IncidentStore
+	incidents []incidents.Incident
+	failAt    int
+}
+
+func (s pagedIncidentStore) ListIncidents(filter persistence.IncidentFilter) ([]incidents.Incident, error) {
+	if s.failAt > 0 && filter.Offset >= s.failAt {
+		return nil, errors.New("store page unavailable")
+	}
+	if filter.Offset >= len(s.incidents) {
+		return []incidents.Incident{}, nil
+	}
+	end := min(filter.Offset+filter.Limit, len(s.incidents))
+	return s.incidents[filter.Offset:end], nil
+}
+
+func (s pagedIncidentStore) ListIncidentAlertLinks(string, int) ([]incidents.AlertLink, error) {
+	return []incidents.AlertLink{}, nil
+}
+
+func TestRestrictedIncidentPagingCountsOnlyVisibleIncidents(t *testing.T) {
+	d := newTestAlertingDeps(t)
+	d.DependencyStore = &authorizationDependencyStore{incidentAssets: map[string][]incidents.IncidentAsset{}}
+	listed := make([]incidents.Incident, 0, 502)
+	for i := range 500 {
+		listed = append(listed, incidents.Incident{ID: fmt.Sprintf("hidden-%03d", i), PrimaryAssetID: "asset-b"})
+	}
+	for _, id := range []string{"visible-1", "visible-2"} {
+		listed = append(listed, incidents.Incident{ID: id, PrimaryAssetID: "asset-a"})
+	}
+	d.IncidentStore = pagedIncidentStore{IncidentStore: d.IncidentStore, incidents: listed}
+	for offset, want := range []string{"visible-1", "visible-2", ""} {
+		rec := httptest.NewRecorder()
+		path := fmt.Sprintf("/incidents?limit=1&offset=%d", offset)
+		d.HandleIncidents(rec, restrictedAlertRequest(http.MethodGet, path, nil, "asset-a"))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("offset %d: expected 200, got %d body=%s", offset, rec.Code, rec.Body.String())
+		}
+		var response struct {
+			Incidents []incidents.Incident `json:"incidents"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		if want == "" && len(response.Incidents) == 0 {
+			continue
+		}
+		if len(response.Incidents) != 1 || response.Incidents[0].ID != want {
+			t.Fatalf("offset %d: got incidents %#v, want %q", offset, response.Incidents, want)
+		}
+	}
+	d.IncidentStore = pagedIncidentStore{IncidentStore: d.IncidentStore, incidents: listed, failAt: 500}
+	rec := httptest.NewRecorder()
+	d.HandleIncidents(rec, restrictedAlertRequest(http.MethodGet, "/incidents?limit=1", nil, "asset-a"))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("failed later page: expected 500, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

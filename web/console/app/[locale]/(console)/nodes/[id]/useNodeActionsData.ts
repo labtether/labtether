@@ -83,7 +83,7 @@ export function useNodeActionsData({ activeTab, nodeId }: UseNodeActionsDataArgs
   }, [nodeId]);
 
   const runNodeNetworkAction = useCallback(async (
-    action: "apply" | "rollback",
+    action: "snapshot" | "apply" | "rollback",
     options?: { method?: string; verifyTarget?: string; connection?: string },
   ) => {
     if (!nodeId) {
@@ -122,7 +122,7 @@ export function useNodeActionsData({ activeTab, nodeId }: UseNodeActionsDataArgs
       }
 
       const lines: string[] = [];
-      lines.push(action === "apply" ? "Network apply completed." : "Network rollback completed.");
+      lines.push(action === "snapshot" ? "Network snapshot saved. Edit the Netplan files, then apply." : action === "apply" ? "Network apply completed." : "Network rollback completed.");
       if (payload.rollback_reference) {
         lines.push(`Rollback snapshot: ${payload.rollback_reference}`);
       }

@@ -97,7 +97,7 @@ export function useNodeCapabilities({
     ? "Auto method uses networksetup and can target a specific network service."
     : networkActionBackend === "nmcli"
       ? "Auto method uses nmcli."
-      : "Auto method prefers netplan, then falls back to nmcli.";
+      : "For Netplan, save a snapshot before editing /etc/netplan. Then apply. Rollback restores those saved files. Auto prefers Netplan, then NMCLI.";
 
   return {
     isLinuxAgentNode,

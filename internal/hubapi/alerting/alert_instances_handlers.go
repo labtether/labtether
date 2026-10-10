@@ -40,35 +40,28 @@ func (d *Deps) HandleAlertInstances(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	instances, err := d.AlertInstanceStore.ListAlertInstances(persistence.AlertInstanceFilter{
+	filter := persistence.AlertInstanceFilter{
 		Limit:    parseLimit(r, 50),
 		Offset:   parseOffset(r),
 		RuleID:   r.URL.Query().Get("rule_id"),
 		Status:   r.URL.Query().Get("status"),
 		Severity: r.URL.Query().Get("severity"),
-	})
-	if err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list alert instances")
-		return
 	}
+	var instances []alerts.AlertInstance
+	var err error
 	if shared.HasAssetRestriction(r.Context()) {
 		groupAccess, authErr := d.accessibleGroupIDs(r.Context())
 		if authErr != nil {
 			writeAssetScopeForbidden(w, "unable to prove alert instance asset scope")
 			return
 		}
-		filtered := make([]alerts.AlertInstance, 0, len(instances))
-		for _, instance := range instances {
-			allowed, checkErr := d.alertInstanceAllowed(r.Context(), instance, groupAccess)
-			if checkErr != nil {
-				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to authorize alert instances")
-				return
-			}
-			if allowed {
-				filtered = append(filtered, instance)
-			}
-		}
-		instances = filtered
+		instances, err = d.listAccessibleAlertInstances(r.Context(), filter, groupAccess)
+	} else {
+		instances, err = d.AlertInstanceStore.ListAlertInstances(filter)
+	}
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list alert instances")
+		return
 	}
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"instances": instances})
 }

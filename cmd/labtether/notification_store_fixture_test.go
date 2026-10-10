@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"github.com/labtether/labtether/internal/notifications"
+	"sort"
 	"strings"
 	"time"
 )
@@ -60,12 +61,21 @@ func (s *notificationStoreStub) GetNotificationChannel(id string) (notifications
 	return ch, ok, nil
 }
 
-func (s *notificationStoreStub) ListNotificationChannels(_ int) ([]notifications.Channel, error) {
+func (s *notificationStoreStub) ListNotificationChannels(limit, offset int) ([]notifications.Channel, error) {
 	out := make([]notifications.Channel, 0, len(s.channels))
 	for _, ch := range s.channels {
 		out = append(out, ch)
 	}
-	return out, nil
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].UpdatedAt.Equal(out[j].UpdatedAt) {
+			return out[i].ID > out[j].ID
+		}
+		return out[i].UpdatedAt.After(out[j].UpdatedAt)
+	})
+	if offset >= len(out) {
+		return []notifications.Channel{}, nil
+	}
+	return out[offset:min(offset+limit, len(out))], nil
 }
 
 func (s *notificationStoreStub) UpdateNotificationChannel(id string, req notifications.UpdateChannelRequest) (notifications.Channel, error) {

@@ -401,6 +401,74 @@ fi
 
 assert_file_contains "${PROJECT_ROOT}/scripts/setup-authentik-test.sh" 'labtether-authentik-oidc.env.XXXXXX' "Authentik credentials use an unpredictable macOS-compatible temp file"
 
+# A queued terminal command is not a successful remote execution.
+# shellcheck source=/dev/null
+source "${PROJECT_ROOT}/scripts/smoke/sessions.sh"
+smoke_command_fixture() (
+  PASS_COUNT=0 FAIL_COUNT=0 SKIP_COUNT=0
+  # shellcheck disable=SC2034 # Used by the sourced terminal helper.
+  API_BASE="https://fixture.invalid"
+  local fixture=$1 expected=$2
+  # shellcheck disable=SC2329 # Called by the sourced terminal helper.
+  run_request() {
+    printf -v "$1" '%s' "$fixture"
+    printf -v "$2" '%s' '200'
+  }
+  if smoke_wait_for_terminal_command session-1 command-1 >/dev/null; then
+    [[ "$expected" == pass && "$PASS_COUNT" == 1 && "$FAIL_COUNT" == 0 ]]
+  else
+    [[ "$expected" == fail && "$PASS_COUNT" == 0 && "$FAIL_COUNT" == 1 ]]
+  fi
+)
+for fixture_case in \
+  'pass|succeeded|Linux qa 6.0' \
+  'fail|succeeded|   ' \
+  'fail|failed|command failed' \
+  'fail|timed_out|timed out'; do
+  IFS='|' read -r expected command_state command_output <<< "$fixture_case"
+  fixture=$(jq -cn --arg state "$command_state" --arg output "$command_output" \
+    '{commands:[{id:"command-1",status:$state,output:$output}]}')
+  if smoke_command_fixture "$fixture" "$expected"; then
+    pass "terminal result fixture ${command_state} (${expected})"
+  else
+    fail "terminal result fixture ${command_state} (${expected})"
+  fi
+done
+if (
+  # shellcheck disable=SC2034 # API_BASE is read by the sourced terminal helper.
+  PASS_COUNT=0 FAIL_COUNT=0 SKIP_COUNT=0 API_BASE=https://fixture.invalid
+  requests=0
+  # shellcheck disable=SC2329 # Called by the sourced terminal helper.
+  run_request() {
+    requests=$((requests + 1))
+    if [[ "$requests" == 1 ]]; then
+      printf -v "$1" '%s' '{"commands":[{"id":"command-1","status":"queued"}]}'
+    else
+      printf -v "$1" '%s' '{"commands":[{"id":"command-1","status":"succeeded","output":"Linux qa"}]}'
+    fi
+    printf -v "$2" '%s' '200'
+  }
+  # shellcheck disable=SC2329 # Called by the sourced terminal helper.
+  sleep() { :; }
+  smoke_wait_for_terminal_command session-1 command-1 >/dev/null &&
+    [[ "$requests" == 2 && "$PASS_COUNT" == 1 && "$FAIL_COUNT" == 0 ]]
+); then
+  pass "terminal result waits past queued status"
+else
+  fail "terminal result waits past queued status"
+fi
+if (PASS_COUNT=0; FAIL_COUNT=0; SKIP_COUNT=0; smoke_skip 'fixture not run' >/dev/null; [[ "$PASS_COUNT" == 0 && "$FAIL_COUNT" == 0 && "$SKIP_COUNT" == 1 ]]); then
+  pass "smoke skips do not count as passes"
+else
+  fail "smoke skips do not count as passes"
+fi
+
+if bash "${PROJECT_ROOT}/scripts/ci/test-smoke-audit.sh"; then
+  pass "scoped smoke audit fixtures"
+else
+  fail "scoped smoke audit fixtures"
+fi
+
 labtether_cleanup_curl_security
 if [[ ! -e "$auth_config" ]]; then
   pass "curl auth config is removed during cleanup"

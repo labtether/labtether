@@ -37,7 +37,8 @@ export function buildDrilldownContent(
     ? load1 / logicalThreads
     : null;
   const rootCapacity = formatBytes(readMeta(asset, "disk_root_total_bytes")) || "n/a";
-  const rootFree = formatBytes(readMeta(asset, "disk_root_available_bytes")) || "n/a";
+  const rootFreeRaw = readMeta(asset, "disk_root_available_bytes");
+  const rootFree = rootFreeRaw === "0" ? "0 MiB" : formatBytes(rootFreeRaw) || "n/a";
   const backup = backupFreshness(asset);
   const networkHealth = networkStatus(asset, metrics);
   const primaryIP = readMeta(asset, "ip") || readMeta(asset, "ip_address") || "n/a";

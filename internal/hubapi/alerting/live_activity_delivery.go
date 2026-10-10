@@ -373,7 +373,7 @@ func (d *Deps) liveActivityChannels() (map[string]map[string]any, liveActivityAP
 	if !ok {
 		return nil, nil
 	}
-	listed, err := d.NotificationStore.ListNotificationChannels(notificationRouteScanLimit)
+	listed, err := d.NotificationStore.ListNotificationChannels(notificationRouteScanLimit, 0)
 	if err != nil {
 		return nil, nil
 	}

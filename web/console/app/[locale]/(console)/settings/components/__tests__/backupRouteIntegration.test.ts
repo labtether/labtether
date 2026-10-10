@@ -12,8 +12,8 @@ describe("backup export production routes", () => {
 
     expect(source).toContain('apiFetch("/api/v2/assets")');
     expect(source).toContain("/api/v2/actions?limit=");
-    expect(source).toContain('apiFetch("/api/alerts/rules")');
-    expect(source).toContain('apiFetch("/api/notifications/channels")');
+    expect(source).toContain('fetchAllOffsetRows("/api/alerts/rules"');
+    expect(source).toContain('fetchAllOffsetRows("/api/notifications/channels"');
     expect(source).not.toContain('apiFetch("/alerts/rules")');
     expect(source).not.toContain('apiFetch("/notifications/channels")');
   });

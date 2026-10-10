@@ -89,7 +89,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.26.9"
+          go-version: "1.27.2"
 
       - name: Check formatting
         if: needs.qa-select.outputs.go_checks != 'false'
@@ -123,8 +123,8 @@ jobs:
         env:
           GOBIN: ${{ runner.temp }}/quality-bin
         run: |
-          go install github.com/securego/gosec/v2/cmd/gosec@v2.25.0
-          go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
 
       - name: Scan Go dependencies for reachable vulnerabilities
         if: needs.qa-select.outputs.go_checks != 'false'
@@ -169,14 +169,14 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.26.9"
+          go-version: "1.27.2"
 
       - name: Run reduced apples harness + thresholds
         run: bash scripts/perf/ci-hotspot.sh
 
       - name: Upload backend perf artifacts
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: backend-hotspot-perf-artifacts
           path: /tmp/labtether-perf-artifacts
@@ -198,14 +198,14 @@ jobs:
           persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "24"
+          node-version: "26.11.1"
           cache: "npm"
           cache-dependency-path: web/console/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install --global npm@12.2.0 && npm ci
 
       - name: Dependency audit
         run: npm audit --audit-level=high
@@ -232,9 +232,9 @@ jobs:
           persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "24"
+          node-version: "26.11.1"
 
       - name: Check database backup and restore contracts
         run: |
@@ -274,14 +274,14 @@ jobs:
           persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "24"
+          node-version: "26.11.1"
           cache: "npm"
           cache-dependency-path: web/console/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install --global npm@12.2.0 && npm ci
 
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
@@ -291,7 +291,7 @@ jobs:
 
       - name: Upload HTTPS E2E Playwright artifacts
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: web-e2e-https-playwright
           path: |
@@ -315,14 +315,14 @@ jobs:
           persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "24"
+          node-version: "26.11.1"
           cache: "npm"
           cache-dependency-path: web/console/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install --global npm@12.2.0 && npm ci
 
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
@@ -332,7 +332,7 @@ jobs:
 
       - name: Upload HTTPS visual Playwright artifacts
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: web-visual-https-playwright
           path: |
@@ -358,14 +358,14 @@ jobs:
           repository: labtether/labtether-agent
           # The root-cause release gate verifies that this exact installed
           # stack child matches the coordinated Go agent release source.
-          ref: 8805c74b2425b038768b626bf6c8fcd2b196e74b
+          ref: b3051070bb93a9ef6fb4f6acd20b2d37c9ba9eb0
           persist-credentials: false
           path: labtether-agent
 
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.26.9"
+          go-version: "1.27.2"
 
       - name: Build agent image locally
         run: |

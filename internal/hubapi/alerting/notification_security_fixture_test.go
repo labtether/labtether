@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/labtether/labtether/internal/notifications"
 	"reflect"
+	"sort"
 	"sync"
 	"time"
 )
@@ -50,14 +51,23 @@ func (s *notificationSecurityStore) GetNotificationChannel(id string) (notificat
 	return cloneNotificationSecurityChannel(channel), ok, nil
 }
 
-func (s *notificationSecurityStore) ListNotificationChannels(_ int) ([]notifications.Channel, error) {
+func (s *notificationSecurityStore) ListNotificationChannels(limit, offset int) ([]notifications.Channel, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	channels := make([]notifications.Channel, 0, len(s.channels))
 	for _, channel := range s.channels {
 		channels = append(channels, cloneNotificationSecurityChannel(channel))
 	}
-	return channels, nil
+	sort.Slice(channels, func(i, j int) bool {
+		if channels[i].UpdatedAt.Equal(channels[j].UpdatedAt) {
+			return channels[i].ID > channels[j].ID
+		}
+		return channels[i].UpdatedAt.After(channels[j].UpdatedAt)
+	})
+	if offset >= len(channels) {
+		return []notifications.Channel{}, nil
+	}
+	return channels[offset:min(offset+limit, len(channels))], nil
 }
 
 func (s *notificationSecurityStore) UpdateNotificationChannel(id string, req notifications.UpdateChannelRequest) (notifications.Channel, error) {

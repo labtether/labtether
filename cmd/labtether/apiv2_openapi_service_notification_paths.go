@@ -32,7 +32,9 @@ const v2OpenAPIServiceNotificationPaths = `    "/api/v2/web-services": {
 	},
 
     "/api/v2/notifications/channels": {
-	  "get":  { "summary": "List notification channels", "description": "Scope: notifications:read.", "operationId": "listNotificationChannels", "tags": ["notifications"], "responses": { "200": { "description": "Channel list" } } },
+	  "get":  { "summary": "List notification channels", "description": "Scope: notifications:read. Results are newest-first, with ID as the tie-breaker.", "operationId": "listNotificationChannels", "tags": ["notifications"],
+	    "parameters": [{ "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 500, "default": 50 } }, { "name": "offset", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 0, "default": 0 } }],
+	    "responses": { "200": { "description": "Channel page" }, "400": { "description": "Invalid pagination" } } },
 	  "post": { "summary": "Create notification channel", "description": "Scope: notifications:write.", "operationId": "createNotificationChannel", "tags": ["notifications"], "responses": { "201": { "description": "Created" } } }
     },
     "/api/v2/notifications/history": {
