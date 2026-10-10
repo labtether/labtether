@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+set +x
+set +a
+umask 077
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ENV_FILE:-${PROJECT_ROOT}/.env}"
@@ -61,6 +64,7 @@ if ! command -v psql >/dev/null 2>&1; then
   echo "psql is required for restore" >&2
   exit 1
 fi
+require_command python3 || exit 1
 
 if [[ "${BACKUP_FILE}" == *.gz ]]; then
   if ! command -v gzip >/dev/null 2>&1; then
@@ -93,9 +97,9 @@ fi
 
 echo "Restoring..."
 if [[ "${BACKUP_FILE}" == *.gz ]]; then
-  gzip -dc "${BACKUP_FILE}" | PGDATABASE="$database_url" psql --no-psqlrc --set=ON_ERROR_STOP=on
+  gzip -dc "${BACKUP_FILE}" | python3 "${PROJECT_ROOT}/scripts/lib/db-client.py" psql --no-password --no-psqlrc --set=ON_ERROR_STOP=on 3<<<"$database_url"
 else
-  PGDATABASE="$database_url" psql --no-psqlrc --set=ON_ERROR_STOP=on < "${BACKUP_FILE}"
+  python3 "${PROJECT_ROOT}/scripts/lib/db-client.py" psql --no-password --no-psqlrc --set=ON_ERROR_STOP=on 3<<<"$database_url" < "${BACKUP_FILE}"
 fi
 unset database_url
 

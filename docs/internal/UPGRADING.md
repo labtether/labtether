@@ -13,6 +13,11 @@ This guide covers the upgrade procedure for LabTether hub deployments, including
    ```
 
    Backups are stored in `backups/` with 7-day retention by default.
+   The backup and restore scripts require Python 3 and PostgreSQL client tools
+   with their shared `libpq` library. They parse `DATABASE_URL` with libpq and
+   use temporary private service/password files, so credentials stay out of
+   client arguments and environment variables. Use explicit connection values
+   in the URL; nested `service` parameters are not supported.
 
 2. **Note the current version:**
 
