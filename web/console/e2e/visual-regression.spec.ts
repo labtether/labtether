@@ -334,7 +334,10 @@ async function installConsoleApiMocks(page: Page, unmocked: Set<string>) {
     }
 
     if (pathname === "/api/notifications/channels") {
-      await fulfillJSON(route, { channels: [] });
+      await fulfillJSON(route, {
+        channels: [],
+        capabilities: { smtp_insecure_transport_allowed: false },
+      });
       return;
     }
 

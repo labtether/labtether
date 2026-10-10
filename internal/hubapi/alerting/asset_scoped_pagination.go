@@ -19,7 +19,7 @@ func (d *Deps) listAccessibleAlertInstances(ctx context.Context, filter persiste
 	if limit > batchSize {
 		limit = batchSize
 	}
-	page := make([]alerts.AlertInstance, 0, limit)
+	page := make([]alerts.AlertInstance, 0)
 	storeFilter := filter
 	storeFilter.Limit = batchSize
 	visible := 0
@@ -64,7 +64,7 @@ func (d *Deps) listAccessibleIncidents(ctx context.Context, filter persistence.I
 	if limit > batchSize {
 		limit = batchSize
 	}
-	page := make([]incidents.Incident, 0, limit)
+	page := make([]incidents.Incident, 0)
 	storeFilter := filter
 	storeFilter.Limit = batchSize
 	visible := 0

@@ -18,7 +18,7 @@ func (d *Deps) listAccessibleAlertRules(ctx context.Context, filter persistence.
 	if limit > batchSize {
 		limit = batchSize
 	}
-	page := make([]alerts.Rule, 0, limit)
+	page := make([]alerts.Rule, 0)
 	storeFilter := filter
 	storeFilter.Limit = batchSize
 	visible := 0
