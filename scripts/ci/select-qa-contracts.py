@@ -25,8 +25,9 @@ def _changed_paths(args: argparse.Namespace) -> list[str]:
                 "git",
                 "diff",
                 "--name-only",
+                "--no-renames",
                 "-z",
-                "--diff-filter=ACMRTUXB",
+                "--diff-filter=ACDMRTUXB",
                 args.base,
                 args.head,
             ],
@@ -116,13 +117,49 @@ def select(manifest: dict, paths: list[str], full: bool) -> tuple[list[str], dic
     return selected, reasons
 
 
-def _write_outputs(path: Path, contract_ids: list[str], selected: set[str]) -> None:
+def select_ci_scopes(paths: list[str], full: bool) -> dict[str, bool]:
+    """Keep unrelated language suites out of a change; unknown inputs run both."""
+    scopes = dict.fromkeys(("go_checks", "web_checks", "perf_gate"), full)
+    for path in paths:
+        name = Path(path).name
+        if name in {"AGENTS.md", "CLAUDE.md", "LICENSE", "NOTICE"} or (
+            Path(path).suffix in {".md", ".rst"}
+            and ("/" not in path or path.startswith(("docs/", "notes/")))
+        ):
+            continue
+        if path.startswith("web/console/"):
+            scopes["web_checks"] = True
+        elif path.endswith(".go") or path in {"go.mod", "go.sum"}:
+            scopes["go_checks"] = True
+            if _matches(path, [
+                "go.mod", "go.sum", "internal/persistence/**",
+                "internal/telemetry/**", "internal/logs/**",
+                "internal/hubapi/statusagg/**", "internal/hubapi/logspkg/**",
+                "internal/hubapi/resources/**",
+                "cmd/labtether/*status*", "cmd/labtether/*metric*",
+                "cmd/labtether/*telemetry*", "cmd/labtether/*log*",
+                "cmd/labtether/resources_bridge.go", "cmd/labtether/http_handlers.go",
+                "cmd/labtether/server_types.go", "cmd/labtether/model_types.go",
+            ]):
+                scopes["perf_gate"] = True
+        elif path.startswith("scripts/perf/"):
+            scopes["go_checks"] = scopes["perf_gate"] = True
+        else:
+            # Build, deployment, selector, and unknown inputs can affect both.
+            scopes = dict.fromkeys(scopes, True)
+    return scopes
+
+
+def _write_outputs(path: Path, contract_ids: list[str], selected: set[str],
+                   scopes: dict[str, bool]) -> None:
     with path.open("a", encoding="utf-8") as handle:
         for contract_id in sorted(contract_ids):
             output_name = contract_id.replace("-", "_")
             value = "true" if contract_id in selected else "false"
             handle.write(f"{output_name}={value}\n")
         handle.write(f"selected_json={json.dumps(sorted(selected), separators=(',', ':'))}\n")
+        for name, enabled in scopes.items():
+            handle.write(f"{name}={str(enabled).lower()}\n")
 
 
 def main() -> int:
@@ -145,7 +182,9 @@ def main() -> int:
         return 2
 
     selected_set = set(selected)
+    scopes = select_ci_scopes(paths, args.full)
     print("QA contracts: " + (", ".join(selected) if selected else "none"))
+    print("CI scopes: " + (", ".join(name for name, enabled in scopes.items() if enabled) or "source and docs only"))
     for contract_id in selected:
         print(f"- {contract_id}: {'; '.join(reasons[contract_id])}")
 
@@ -153,7 +192,8 @@ def main() -> int:
     if output_path is None and os.environ.get("GITHUB_OUTPUT"):
         output_path = Path(os.environ["GITHUB_OUTPUT"])
     if output_path is not None:
-        _write_outputs(output_path, list(manifest["contracts"]), selected_set)
+        _write_outputs(output_path, list(manifest["contracts"]), selected_set,
+                       scopes)
 
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         summary_path = Path(os.environ["GITHUB_STEP_SUMMARY"])

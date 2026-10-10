@@ -391,69 +391,12 @@ assert_file_excludes "${PROJECT_ROOT}/scripts/db-restore.sh" 'echo "Target datab
 # shellcheck disable=SC2016 # This is the literal legacy pg_dump invocation being searched for.
 assert_file_excludes "${PROJECT_ROOT}/scripts/db-backup.sh" 'pg_dump "$DB_URL"' "database backup keeps credential-bearing URLs out of process arguments"
 
-db_capture_dir="${tmp_dir}/database-capture"
-mkdir -p "$db_capture_dir"
-cat >"${fake_bin}/pg_dump" <<'FAKE_PG_DUMP'
-#!/usr/bin/env bash
-set -Eeuo pipefail
-: "${DB_CAPTURE_DIR:?}"
-printf '%s\n' "$@" >"${DB_CAPTURE_DIR}/pg-dump-argv"
-env >"${DB_CAPTURE_DIR}/pg-dump-environment"
-printf '%s\n' '-- safe test backup'
-FAKE_PG_DUMP
-cat >"${fake_bin}/psql" <<'FAKE_PSQL'
-#!/usr/bin/env bash
-set -Eeuo pipefail
-: "${DB_CAPTURE_DIR:?}"
-printf '%s\n' "$@" >"${DB_CAPTURE_DIR}/psql-argv"
-env >"${DB_CAPTURE_DIR}/psql-environment"
-cat >"${DB_CAPTURE_DIR}/psql-stdin"
-FAKE_PSQL
-chmod 700 "${fake_bin}/pg_dump" "${fake_bin}/psql"
-export DB_CAPTURE_DIR="$db_capture_dir"
-database_process_secret='postgres://labtether:database-process-secret-39@localhost:5432/labtether?sslmode=disable'
-backup_output=""
-if backup_output=$(DATABASE_URL="$database_process_secret" BACKUP_DIR="${tmp_dir}/backups" KEEP_DAYS=36500 ENV_FILE="${tmp_dir}/missing.env" \
-  "${PROJECT_ROOT}/scripts/db-backup.sh" 2>&1); then
-  pass "database backup completes with a stubbed pg_dump"
+# This focused check resolves the generated service with actual libpq rather
+# than treating a captured PGDATABASE string as proof of URI handling.
+if bash "${PROJECT_ROOT}/scripts/ci/test-db-client.sh"; then
+  pass "database clients resolve URI credentials through private libpq files"
 else
-  fail "database backup completes with a stubbed pg_dump"
-  printf '  backup diagnostic: %s\n' "${backup_output//$database_process_secret/<redacted>}" >&2
-fi
-assert_file_excludes "${db_capture_dir}/pg-dump-argv" "$database_process_secret" "database URL is absent from pg_dump argv"
-assert_file_contains "${db_capture_dir}/pg-dump-environment" "PGDATABASE=${database_process_secret}" "database URL reaches pg_dump only through its environment"
-if [[ "$backup_output" == *"$database_process_secret"* ]]; then
-  fail "database backup output does not reveal the database URL"
-else
-  pass "database backup output does not reveal the database URL"
-fi
-backup_file=""
-if [[ -d "${tmp_dir}/backups" ]]; then
-  backup_file=$(find "${tmp_dir}/backups" -type f -name 'labtether_*.sql.gz' -print -quit)
-fi
-if [[ -n "$backup_file" && "$(file_mode "$backup_file")" == "600" && "$(gzip -dc "$backup_file")" == '-- safe test backup' ]]; then
-  pass "database backups are private compressed files"
-else
-  fail "database backups are private compressed files"
-fi
-
-restore_fixture="${tmp_dir}/restore.sql"
-printf '%s\n' 'SELECT 1;' >"$restore_fixture"
-restore_output=""
-if restore_output=$(DATABASE_URL="$database_process_secret" ENV_FILE="${tmp_dir}/missing.env" \
-  "${PROJECT_ROOT}/scripts/db-restore.sh" --yes "$restore_fixture" 2>&1); then
-  pass "database restore completes with a stubbed psql"
-else
-  fail "database restore completes with a stubbed psql"
-fi
-assert_file_excludes "${db_capture_dir}/psql-argv" "$database_process_secret" "database URL is absent from psql argv"
-assert_file_contains "${db_capture_dir}/psql-environment" "PGDATABASE=${database_process_secret}" "database URL reaches psql only through its environment"
-assert_file_contains "${db_capture_dir}/psql-argv" '--no-psqlrc' "database restore ignores user psql startup commands"
-assert_file_contains "${db_capture_dir}/psql-stdin" 'SELECT 1;' "database restore streams the selected backup to psql"
-if [[ "$restore_output" == *"$database_process_secret"* ]]; then
-  fail "database restore output does not reveal the database URL"
-else
-  pass "database restore output does not reveal the database URL"
+  fail "database clients resolve URI credentials through private libpq files"
 fi
 
 assert_file_contains "${PROJECT_ROOT}/scripts/setup-authentik-test.sh" 'labtether-authentik-oidc.env.XXXXXX' "Authentik credentials use an unpredictable macOS-compatible temp file"

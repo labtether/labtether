@@ -59,6 +59,26 @@ class QAContractSelectorTests(unittest.TestCase):
         selected, _ = SELECTOR.select(MANIFEST, ["docs/operator-guide.md"], False)
         self.assertEqual(selected, [])
 
+    def test_ci_scopes_skip_only_unrelated_suites(self):
+        cases = [
+            (["README.md", "docs/guide.md"], (False, False, False)),
+            (["internal/auth/login.go"], (True, False, False)),
+            (["internal/persistence/telemetry.go"], (True, False, True)),
+            (["internal/hubapi/statusagg/collectors.go"], (True, False, True)),
+            (["internal/hubapi/logspkg/handlers.go"], (True, False, True)),
+            (["internal/hubapi/resources/metrics_handlers.go"], (True, False, True)),
+            (["web/console/app/api/login/route.ts"], (False, True, False)),
+            (["web/console/package-lock.json"], (False, True, False)),
+            (["scripts/perf/ci-hotspot.sh"], (True, False, True)),
+            (["scripts/new-build-input.sh"], (True, True, True)),
+        ]
+        for paths, expected in cases:
+            with self.subTest(paths=paths):
+                self.assertEqual(
+                    tuple(SELECTOR.select_ci_scopes(paths, False).values()), expected
+                )
+        self.assertTrue(all(SELECTOR.select_ci_scopes([], True).values()))
+
     def test_unmapped_high_risk_path_fails_closed(self):
         manifest = {
             "schema_version": 1,

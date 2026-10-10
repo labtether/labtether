@@ -12,7 +12,7 @@ KEEP_DAYS="${KEEP_DAYS:-7}"
 # shellcheck source=/dev/null
 source "${PROJECT_ROOT}/scripts/lib/script-common.sh"
 
-for command_name in cut date du find gzip mktemp pg_dump tr wc; do
+for command_name in cut date du find gzip mktemp pg_dump python3 tr wc; do
   require_command "$command_name" || exit 1
 done
 if [[ ! "$KEEP_DAYS" =~ ^[0-9]+$ ]] || ((KEEP_DAYS > 36500)); then
@@ -41,7 +41,7 @@ cleanup_partial() {
 trap cleanup_partial EXIT INT TERM HUP
 
 log_info "Backing up database to ${backup_path}..."
-PGDATABASE="$database_url" pg_dump --no-password | gzip >"$temporary_backup"
+python3 "${PROJECT_ROOT}/scripts/lib/db-client.py" pg_dump --no-password 3<<<"$database_url" | gzip >"$temporary_backup"
 chmod 600 "$temporary_backup"
 mv "$temporary_backup" "$backup_path"
 temporary_backup=""

@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || (github.event_name == 'push' && github.ref_type == 'branch' && github.ref) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref_type == 'branch') }}
+
 jobs:
   line-limit:
     name: Handwritten code / 500-line limit
@@ -24,10 +28,13 @@ jobs:
         run: python3 scripts/ci/check-line-limit.py
 
   qa-select:
-    name: Select risk-based QA contracts
+    name: Select checks by changed paths
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
+      go_checks: ${{ steps.select.outputs.go_checks }}
+      web_checks: ${{ steps.select.outputs.web_checks }}
+      perf_gate: ${{ steps.select.outputs.perf_gate }}
       connector_system: ${{ steps.select.outputs.connector_system }}
       hub_behavior: ${{ steps.select.outputs.hub_behavior }}
       hub_installed_system: ${{ steps.select.outputs.hub_installed_system }}
@@ -61,17 +68,19 @@ jobs:
           "${selector[@]}"
 
   go-checks:
-    needs: [line-limit]
-    if: always()
+    needs: [line-limit, qa-select]
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - name: Require source-size gate
         shell: bash
         env:
           LINE_LIMIT_RESULT: ${{ needs.line-limit.result }}
+          QA_SELECT_RESULT: ${{ needs.qa-select.result }}
         run: |
           test "${LINE_LIMIT_RESULT}" = success
+          test "${QA_SELECT_RESULT}" = success
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -83,28 +92,46 @@ jobs:
           go-version: "1.26.9"
 
       - name: Check formatting
+        if: needs.qa-select.outputs.go_checks != 'false'
         run: bash scripts/ci/check-go-format.sh
 
       - name: Go vet
+        if: needs.qa-select.outputs.go_checks != 'false'
         run: go vet ./...
 
       - name: Go test
-        run: go test ./...
+        if: needs.qa-select.outputs.go_checks != 'false'
+        env:
+          RACE_CHECK: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+        run: |
+          if [[ "${RACE_CHECK}" == true ]]; then
+            go test -race ./...
+          else
+            go test ./...
+          fi
 
       - name: Install pinned source-quality tools
         env:
           GOBIN: ${{ runner.temp }}/quality-bin
         run: |
-          go install github.com/securego/gosec/v2/cmd/gosec@v2.25.0
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
           go install github.com/zricethezav/gitleaks/v8@v8.30.1
-          go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
           echo "${GOBIN}" >> "${GITHUB_PATH}"
 
+      - name: Install Go security tools
+        if: needs.qa-select.outputs.go_checks != 'false'
+        env:
+          GOBIN: ${{ runner.temp }}/quality-bin
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.25.0
+          go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
+
       - name: Scan Go dependencies for reachable vulnerabilities
+        if: needs.qa-select.outputs.go_checks != 'false'
         run: govulncheck ./...
 
       - name: Strict gosec gate
+        if: needs.qa-select.outputs.go_checks != 'false'
         run: make security-gosec
 
       - name: Lint GitHub Actions workflows
@@ -113,198 +140,12 @@ jobs:
       - name: Scan current source for secrets
         run: gitleaks dir . --no-banner --redact --timeout 300
 
-  hub-behavior-contract:
-    name: Contract / Hub high-risk behavior
-    needs: qa-select
-    if: needs.qa-select.outputs.hub_behavior == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: "1.26.9"
-
-      - name: Run authorization, restore, schedule, and runtime contracts
-        run: |
-          go test \
-            ./cmd/labtether \
-            ./internal/apikeys \
-            ./internal/auth \
-            ./internal/connectors/pbs \
-            ./internal/hubapi/pbs \
-            ./internal/hubapi/schedulespkg \
-            ./internal/schedules \
-            ./internal/securityruntime
-
-  connector-system-contract:
-    name: Contract / PBS and Proxmox connectors
-    needs: qa-select
-    if: needs.qa-select.outputs.connector_system == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: "1.26.9"
-
-      - name: Run PBS and Proxmox handler and authorization contracts
-        run: |
-          go test \
-            ./internal/connectors/pbs \
-            ./internal/connectors/proxmox \
-            ./internal/hubapi/pbs \
-            ./internal/hubapi/proxmox
-          go test ./cmd/labtether -run 'PBS|Proxmox'
-
-      - name: Setup Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "24"
-          cache: "npm"
-          cache-dependency-path: web/console/package-lock.json
-
-      - name: Install console dependencies
-        working-directory: web/console
-        run: npm ci
-
-      - name: Run PBS and Proxmox console contracts
-        working-directory: web/console
-        run: |
-          npx vitest run \
-            'app/[locale]/(console)/nodes/[id]/pbs/__tests__/pbsUserQA.test.tsx' \
-            'app/api/pbs/assets/[assetId]/__tests__/mutationRoutes.test.ts' \
-            'app/api/settings/proxmox/__tests__/route.test.ts' \
-            'app/api/settings/proxmox/[collectorId]/__tests__/route.test.ts'
-
-  restore-roundtrip-contract:
-    name: Contract / Restore and backup paths
-    needs: qa-select
-    if: needs.qa-select.outputs.restore_roundtrip == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: "1.26.9"
-
-      - name: Run PBS snapshot, backup, and restore-path contracts
-        run: |
-          go test ./internal/connectors/pbs ./internal/hubapi/pbs
-          go test ./cmd/labtether -run 'PBS|Backup|Restore|Snapshot'
-          bash -n scripts/db-backup.sh scripts/db-restore.sh
-
-  schedule-platform-contract:
-    name: Contract / Schedule platform behavior
-    needs: qa-select
-    if: needs.qa-select.outputs.schedule_platform == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: "1.26.9"
-
-      - name: Run schedule API, persistence, and worker contracts
-        run: |
-          go test \
-            ./internal/hubapi/schedulespkg \
-            ./internal/hubapi/worker \
-            ./internal/persistence \
-            ./internal/schedules
-          go test ./cmd/labtether -run 'Schedule'
-
-  hub-transport-contract:
-    name: Contract / Hub transport and enrollment
-    needs: qa-select
-    if: needs.qa-select.outputs.hub_transport == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: "1.26.9"
-
-      - name: Run Hub agent, enrollment, TLS/WSS, and MCP contracts
-        run: |
-          go test \
-            ./cmd/labtether \
-            ./internal/agentidentity \
-            ./internal/agentmgr \
-            ./internal/certmgr \
-            ./internal/enrollment \
-            ./internal/mcpserver \
-            ./internal/servicehttp
-
-      - name: Setup Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "24"
-          cache: "npm"
-          cache-dependency-path: web/console/package-lock.json
-
-      - name: Install console dependencies
-        working-directory: web/console
-        run: npm ci
-
-      - name: Run console transport proxy contracts
-        working-directory: web/console
-        run: |
-          npx vitest run \
-            lib/__tests__/proxyMatcher.test.ts \
-            scripts/__tests__/runtime-proxy.test.mjs
-          npm run build
-          npm run test:runtime-proxy:standalone
-
-  go-race:
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: "1.26.9"
-
-      - name: Go race test
-        run: go test -race ./...
-
+  # All Go contracts run once in go-checks (with the race detector on PRs).
+  # All console contracts run once in web-checks. Installed-stack behavior
+  # still has its own real runtime check below.
   perf-gate:
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    needs: qa-select
+    if: needs.qa-select.outputs.perf_gate != 'false' && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -330,9 +171,6 @@ jobs:
         with:
           go-version: "1.26.9"
 
-      - name: Backend hotspot perf gate
-        run: make perf-gate
-
       - name: Run reduced apples harness + thresholds
         run: bash scripts/perf/ci-hotspot.sh
 
@@ -346,6 +184,8 @@ jobs:
           retention-days: 1
 
   web-checks:
+    needs: qa-select
+    if: needs.qa-select.outputs.web_checks != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -396,6 +236,9 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Check backup and restore shell syntax
+        run: bash -n scripts/db-backup.sh scripts/db-restore.sh
+
       - name: Script unit tests
         run: node --test scripts/lib/http-redirect.test.js
 
@@ -415,7 +258,8 @@ jobs:
   # the HTTP-only failures first.
 
   web-e2e-https:
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    needs: qa-select
+    if: needs.qa-select.outputs.web_checks != 'false' && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     defaults:
@@ -455,7 +299,8 @@ jobs:
           retention-days: 1
 
   web-visual-https:
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    needs: qa-select
+    if: needs.qa-select.outputs.web_checks != 'false' && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
