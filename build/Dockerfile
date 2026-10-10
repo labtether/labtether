@@ -6,7 +6,7 @@
 # ──────────────────────────────────────────────────────────────
 
 # ── Stage 1: Go builder ──────────────────────────────────────
-FROM golang:1.26.9-alpine@sha256:cdfd4fe2da6b225d8b40c6b7a105736e548e83ff56d5d8f9394446eeb5eb84e0 AS go-builder
+FROM golang:1.27.2-alpine3.24@sha256:85dc1069ac644ea3c527b177303a406eb3358192816cd7f9e5848eb658851673 AS go-builder
 
 ARG APP_VERSION=dev
 ARG TARGETOS
@@ -25,7 +25,10 @@ RUN CGO_ENABLED=0 \
       -o /out/labtether ./cmd/labtether
 
 # ── Stage 2: Node dependency install ─────────────────────────
-FROM node:26-alpine@sha256:e88a35be04478413b7c71c455cd9865de9b9360e1f43456be5951032d7ac1a66 AS node-deps
+FROM node:26.11.1-alpine3.24@sha256:143494b1da2945f061539253adc65e4f1569ddf07da2d384c022c791a9d90a4a AS node-toolchain
+RUN npm install --global npm@12.2.0
+
+FROM node-toolchain AS node-deps
 
 WORKDIR /app
 COPY web/console/package.json web/console/package-lock.json web/console/.npmrc ./
@@ -33,7 +36,7 @@ COPY web/console/scripts/ ./scripts/
 RUN npm ci
 
 # ── Stage 3: Next.js build ───────────────────────────────────
-FROM node:26-alpine@sha256:e88a35be04478413b7c71c455cd9865de9b9360e1f43456be5951032d7ac1a66 AS node-builder
+FROM node-toolchain AS node-builder
 
 WORKDIR /app
 COPY --from=node-deps /app/node_modules ./node_modules
@@ -43,14 +46,14 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 # ── Stage 4: Runtime ─────────────────────────────────────────
-FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+FROM node:26.11.1-alpine3.24@sha256:143494b1da2945f061539253adc65e4f1569ddf07da2d384c022c791a9d90a4a
 SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 
-ARG S6_OVERLAY_VERSION=3.2.0.2
+ARG S6_OVERLAY_VERSION=3.2.3.2
 ARG TARGETARCH
-ARG S6_OVERLAY_NOARCH_SHA256=6dbcde158a3e78b9bb141d7bcb5ccb421e563523babbe2c64470e76f4fd02dae
-ARG S6_OVERLAY_X86_64_SHA256=59289456ab1761e277bd456a95e737c06b03ede99158beb24f12b165a904f478
-ARG S6_OVERLAY_AARCH64_SHA256=8b22a2eaca4bf0b27a43d36e65c89d2701738f628d1abd0cea5569619f66f785
+ARG S6_OVERLAY_NOARCH_SHA256=5379750ed30a84bbd2e2dd74847ba6b5bd29cd0b2e3ea2ec58049b57eb2eda12
+ARG S6_OVERLAY_X86_64_SHA256=e6befcc96a437a3831386ecfc51808c5d3e939dc5fe3c02ae9284599e8aa2408
+ARG S6_OVERLAY_AARCH64_SHA256=b17f17a82e7a515c682a91edaf2ffdabb73f891981b6c1fd712115693a2f8b4c
 
 # Install s6-overlay (arch-aware)
 RUN set -eux; \
@@ -74,12 +77,13 @@ RUN set -eux; \
 RUN apk add --no-cache \
     bash \
     ca-certificates \
-    nodejs \
     postgresql18 \
     postgresql18-contrib && \
-    node -e "if (process.versions.node.split('.')[0] !== '24') process.exit(1)" && \
+    node -e "if (process.versions.node !== '26.11.1') process.exit(1)" && \
     psql --version | grep -Fq 'PostgreSQL) 18.' && \
-    adduser -D -u 65532 labtether
+    adduser -D -u 65532 labtether && \
+    rm -rf /usr/local/lib/node_modules/npm /opt/yarn-v* && \
+    rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/yarn /usr/local/bin/yarnpkg
 
 # ── Copy artefacts from build stages ─────────────────────────
 

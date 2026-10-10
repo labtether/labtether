@@ -137,7 +137,7 @@ smoke_check_inventory() {
   fi
   action_payload=$(jq -cn --arg target "$smoke_action_target" '{type:"command",actor_id:"owner",target:$target,command:"uptime"}')
   run_request body status POST "$API_BASE/actions/execute" "$action_payload"
-  assert_equal "POST /actions/execute" "202" "$status"
+  assert_equal "POST /actions/execute queued" "202" "$status"
   action_run_id=$(extract_json_string "id" "$body")
   if [[ -z "$action_run_id" ]]; then
     action_run_id=$(extract_json_string "run_id" "$body")
@@ -147,6 +147,7 @@ smoke_check_inventory() {
   fi
   if [[ -n "$action_run_id" ]]; then
     smoke_register_cleanup DELETE "/actions/runs/${action_run_id}" "action run ${action_run_id}"
+    smoke_skip "action completion (API enqueue only)"
   else
     FAIL_COUNT=$((FAIL_COUNT + 1))
     printf '  [FAIL] could not parse action run id for cleanup\n'
@@ -294,8 +295,7 @@ smoke_check_inventory() {
       printf '  [FAIL] runtime setting restoration failed\n'
     fi
   else
-    PASS_COUNT=$((PASS_COUNT + 1))
-    printf '  [PASS] runtime setting mutation skipped (safe default)\n'
+    smoke_skip "runtime setting mutation (safe default)"
   fi
 
   body=""
@@ -320,7 +320,6 @@ smoke_check_inventory() {
       printf '  [FAIL] retention settings restoration failed\n'
     fi
   else
-    PASS_COUNT=$((PASS_COUNT + 1))
-    printf '  [PASS] retention mutation skipped (safe default)\n'
+    smoke_skip "retention mutation (safe default)"
   fi
 }

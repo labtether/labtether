@@ -39,6 +39,7 @@ func TestAssetMutationHandlersHonorMaintenanceBlockActions(t *testing.T) {
 		{name: "service action", method: http.MethodPost, path: "/services/asset-1/restart", run: func(w http.ResponseWriter, r *http.Request) { deps.handleServiceAction(w, r, "asset-1", "restart") }},
 		{name: "process kill", method: http.MethodPost, path: "/processes/asset-1/kill", run: func(w http.ResponseWriter, r *http.Request) { deps.handleProcessKill(w, r, "asset-1") }},
 		{name: "network apply", method: http.MethodPost, path: "/network/asset-1/apply", run: func(w http.ResponseWriter, r *http.Request) { deps.handleNetworkAction(w, r, "asset-1", "apply") }},
+		{name: "network snapshot", method: http.MethodPost, path: "/network/asset-1/snapshot", run: func(w http.ResponseWriter, r *http.Request) { deps.handleNetworkAction(w, r, "asset-1", "snapshot") }},
 		{name: "package install", method: http.MethodPost, path: "/packages/asset-1/install", run: func(w http.ResponseWriter, r *http.Request) { deps.handlePackageAction(w, r, "asset-1", "install") }},
 		{name: "file upload", method: http.MethodPost, path: "/files/asset-1/upload", run: func(w http.ResponseWriter, r *http.Request) { deps.HandleFileUpload(w, r, "asset-1") }},
 		{name: "file mkdir", method: http.MethodPost, path: "/files/asset-1/mkdir", run: func(w http.ResponseWriter, r *http.Request) { deps.HandleFileMkdir(w, r, "asset-1") }},

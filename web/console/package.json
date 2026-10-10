@@ -19,28 +19,26 @@
     "postinstall": "sh scripts/patch-novnc.sh"
   },
   "allowScripts": {
-    "@parcel/watcher@2.5.6": true,
-    "@swc/core@1.15.47": true,
-    "fsevents@2.3.2": true,
-    "fsevents@2.3.3": true,
-    "sharp@0.35.5": true
+    "@parcel/watcher@2.6.0": true,
+    "@swc/core@1.16.13": true,
+    "fsevents@2.3.3": true
   },
   "overrides": {
     "brace-expansion": "^5.0.12",
-    "flatted": "^3.4.2",
-    "picomatch": "^4.0.4",
-    "postcss": "^8.5.25",
+    "flatted": "^3.4.4",
+    "picomatch": "^4.0.7",
+    "postcss": "^8.5.29",
     "sharp": "0.35.5",
-    "undici": "7.29.1",
-    "vite": "^8.0.5"
+    "undici": "8.11.2",
+    "vite": "^8.3.4"
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.1.1",
     "@novnc/novnc": "^1.7.0",
-    "@radix-ui/react-dialog": "^1.1.23",
-    "@radix-ui/react-dropdown-menu": "^2.1.24",
-    "@radix-ui/react-popover": "^1.1.23",
-    "@radix-ui/react-tooltip": "^1.2.16",
+    "@radix-ui/react-dialog": "^1.2.0",
+    "@radix-ui/react-dropdown-menu": "^2.1.25",
+    "@radix-ui/react-popover": "^1.2.0",
+    "@radix-ui/react-tooltip": "^1.3.0",
     "@spice-project/spice-html5": "^0.2.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@xterm/addon-fit": "^0.11.0",
@@ -48,31 +46,36 @@
     "@xterm/addon-unicode11": "^0.9.0",
     "@xterm/addon-web-links": "^0.12.0",
     "@xterm/xterm": "^6.0.0",
-    "@xyflow/react": "^12.11.5",
+    "@xyflow/react": "^12.12.0",
     "cmdk": "^1.1.1",
     "guacamole-common-js": "^1.5.0",
-    "lucide-react": "^1.34.0",
-    "next": "^16.3.6",
-    "next-intl": "^4.13.7",
+    "lucide-react": "^1.54.0",
+    "next": "^16.4.0",
+    "next-intl": "^4.14.9",
     "qrcode": "^1.5.4",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "react-resizable-panels": "^4.12.3",
-    "tailwindcss": "^4.2.1"
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-resizable-panels": "^4.14.3",
+    "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.1",
+    "@playwright/test": "^1.64.0",
     "@types/dagre": "^0.7.54",
-    "@types/node": "^25.9.1",
+    "@types/node": "^26.6.4",
     "@types/qrcode": "^1.5.6",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.5",
-    "@typescript-eslint/parser": "^8.68.0",
-    "@vitejs/plugin-react": "^6.1.0",
-    "eslint": "^10.9.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@typescript-eslint/parser": "^8.71.1",
+    "@vitejs/plugin-react": "^6.1.2",
+    "eslint": "^10.12.0",
     "eslint-plugin-react-hooks": "^7.1.1",
-    "jsdom": "^29.1.1",
+    "jsdom": "^30.1.2",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.3"
+  },
+  "packageManager": "npm@12.2.0",
+  "engines": {
+    "node": ">=26.11.1 <27",
+    "npm": ">=12.2.0 <13"
   }
 }

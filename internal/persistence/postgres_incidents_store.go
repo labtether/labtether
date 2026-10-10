@@ -187,7 +187,7 @@ func (s *PostgresStore) ListIncidents(filter IncidentFilter) ([]incidents.Incide
 	if len(where) > 0 {
 		sql += " WHERE " + strings.Join(where, " AND ")
 	}
-	sql += fmt.Sprintf(" ORDER BY updated_at DESC LIMIT $%d", next)
+	sql += fmt.Sprintf(" ORDER BY updated_at DESC, id DESC LIMIT $%d", next)
 	args = append(args, limit)
 	next++
 	if filter.Offset > 0 {

@@ -1,6 +1,103 @@
 #!/usr/bin/env bash
 # Sessions API smoke contracts; invoked after main safety/cleanup setup.
 
+smoke_wait_for_terminal_command() {
+  local session_id=$1 command_id=$2
+  local deadline=$((SECONDS + 30))
+  local response_body="" response_status="" command_json="" command_status="" command_output=""
+
+  while (( SECONDS < deadline )); do
+    response_body=""
+    response_status=""
+    if ! run_request response_body response_status GET "$API_BASE/terminal/sessions/${session_id}/commands" "" 1 3; then
+      FAIL_COUNT=$((FAIL_COUNT + 1))
+      printf '  [FAIL] terminal command result request failed\n'
+      return 1
+    fi
+    if [[ "$response_status" != "200" ]] || ! command_json=$(jq -ce --arg id "$command_id" '.commands[]? | select(.id == $id)' <<<"$response_body"); then
+      FAIL_COUNT=$((FAIL_COUNT + 1))
+      printf '  [FAIL] terminal command result missing or invalid (HTTP %s)\n' "$response_status"
+      return 1
+    fi
+    command_status=$(jq -r '.status // empty' <<<"$command_json")
+    case "$command_status" in
+      succeeded)
+        command_output=$(jq -r '.output // empty' <<<"$command_json")
+        if [[ "$command_output" =~ [^[:space:]] ]]; then
+          PASS_COUNT=$((PASS_COUNT + 1))
+          printf '  [PASS] terminal uname command completed with output\n'
+          return 0
+        fi
+        FAIL_COUNT=$((FAIL_COUNT + 1))
+        printf '  [FAIL] terminal uname command succeeded without output\n'
+        return 1
+        ;;
+      queued|running) sleep 1 ;;
+      failed|timed_out|timeout|cancelled|canceled|error)
+        FAIL_COUNT=$((FAIL_COUNT + 1))
+        printf '  [FAIL] terminal uname command ended with status %s\n' "$command_status"
+        return 1
+        ;;
+      *)
+        FAIL_COUNT=$((FAIL_COUNT + 1))
+        printf '  [FAIL] terminal uname command has unknown status %s\n' "$command_status"
+        return 1
+        ;;
+    esac
+  done
+  FAIL_COUNT=$((FAIL_COUNT + 1))
+  printf '  [FAIL] terminal uname command did not finish within 30 seconds\n'
+  return 1
+}
+
+smoke_check_queued_command_audit() {
+  local session_id=$1 command_id=$2 since=$3
+  local page_size=200 max_pages=10 deadline=$((SECONDS + 30))
+  local offset=0 page=0 response_body="" response_status="" count="" oldest=""
+
+  while (( page < max_pages && SECONDS < deadline )); do
+    response_body=""
+    response_status=""
+    if ! run_request response_body response_status GET "$API_BASE/audit/events?limit=${page_size}&offset=${offset}" "" 1 3; then
+      FAIL_COUNT=$((FAIL_COUNT + 1))
+      printf '  [FAIL] audit event request failed\n'
+      return 1
+    fi
+    if [[ "$response_status" != "200" ]] || ! jq -e '.events | type == "array"' <<<"$response_body" >/dev/null; then
+      FAIL_COUNT=$((FAIL_COUNT + 1))
+      printf '  [FAIL] audit event response invalid (HTTP %s)\n' "$response_status"
+      return 1
+    fi
+    if jq -e --arg session "$session_id" --arg command "$command_id" \
+      '.events | any(.[]; .type == "terminal.command.queued" and .session_id == $session and .command_id == $command)' \
+      <<<"$response_body" >/dev/null; then
+      PASS_COUNT=$((PASS_COUNT + 1))
+      printf '  [PASS] audit contains this terminal command queued event\n'
+      return 0
+    fi
+
+    count=$(jq -r '.events | length' <<<"$response_body")
+    if (( count < page_size )); then
+      break
+    fi
+    oldest=$(jq -r '.events[-1].timestamp // "" | if type == "string" then .[0:19] else "" end' <<<"$response_body")
+    if [[ ! "$oldest" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}$ ]]; then
+      FAIL_COUNT=$((FAIL_COUNT + 1))
+      printf '  [FAIL] audit event timestamp missing or invalid\n'
+      return 1
+    fi
+    if [[ "$oldest" < "$since" ]]; then
+      break
+    fi
+    page=$((page + 1))
+    offset=$((offset + page_size))
+  done
+
+  FAIL_COUNT=$((FAIL_COUNT + 1))
+  printf '  [FAIL] queued audit event for this command not found within the bounded request window\n'
+  return 1
+}
+
 smoke_check_sessions() {
   # 1) health (public)
   body=""
@@ -42,16 +139,22 @@ smoke_check_sessions() {
     body=""
     status=""
     run_request body status POST "$API_BASE/terminal/sessions/${session_id}/commands" '{"actor_id":"owner","command":"uname -a"}'
-    assert_equal "POST /terminal/sessions/{id}/commands" "202" "$status"
+    assert_equal "POST /terminal/sessions/{id}/commands queued" "202" "$status"
     smoke_print_verbose_json "command response" "$body"
 
     command_id=$(extract_json_string "id" "$body")
+    command_audit_since=$(jq -r '.command.created_at // "" | if type == "string" then .[0:19] else "" end' <<<"$body" 2>/dev/null) || command_audit_since=""
     if [[ -z "$command_id" ]]; then
       FAIL_COUNT=$((FAIL_COUNT + 1))
       printf '  [FAIL] could not parse command id\n'
     else
       PASS_COUNT=$((PASS_COUNT + 1))
       printf '  [PASS] command id parsed %s\n' "$command_id"
+      if labtether_value_is_true "$ALLOW_REMOTE_EXEC"; then
+        smoke_wait_for_terminal_command "$session_id" "$command_id" || true
+      else
+        smoke_skip "terminal command completion (safe default uses an unroutable fixture)"
+      fi
     fi
 
     # 5) list commands for session (auth)
@@ -80,17 +183,14 @@ smoke_check_sessions() {
       printf '  [FAIL] recent commands does not include session id\n'
     fi
 
-    # 7) audit events
-    body=""
-    status=""
-    run_request body status GET "$API_BASE/audit/events?limit=20"
-    assert_equal "GET /audit/events" "200" "$status"
-    if [[ -n "$body" && "$body" == *"terminal.command.queued"* ]]; then
-      PASS_COUNT=$((PASS_COUNT + 1))
-      printf '  [PASS] audit contains queued event\n'
-    else
-      FAIL_COUNT=$((FAIL_COUNT + 1))
-      printf '  [FAIL] audit did not include terminal.command.queued\n'
+    # 7) audit event for this command, across bounded newest-first pages
+    if [[ -n "$command_id" ]]; then
+      if [[ "$command_audit_since" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}$ ]]; then
+        smoke_check_queued_command_audit "$session_id" "$command_id" "$command_audit_since" || true
+      else
+        FAIL_COUNT=$((FAIL_COUNT + 1))
+        printf '  [FAIL] terminal command response missing creation timestamp for audit check\n'
+      fi
     fi
 
     # 8) worker stats
@@ -124,8 +224,7 @@ smoke_check_sessions() {
     run_request body status GET "$AGENT_BASE/healthz" "" 0
     assert_equal "GET /agent/healthz" "200" "$status"
   elif [[ "$SKIP_COMPOSE" == "0" ]]; then
-    PASS_COUNT=$((PASS_COUNT + 1))
-    printf '  [PASS] GET /agent/healthz skipped (agent not reachable during startup)\n'
+    smoke_skip "GET /agent/healthz (agent not reachable during startup)"
   else
     if check_http_status "$AGENT_BASE/healthz" 200 2; then
       body=""
@@ -133,8 +232,7 @@ smoke_check_sessions() {
       run_request body status GET "$AGENT_BASE/healthz" "" 0
       assert_equal "GET /agent/healthz" "200" "$status"
     else
-      PASS_COUNT=$((PASS_COUNT + 1))
-      printf '  [PASS] GET /agent/healthz skipped (non-compose mode; agent service not running)\n'
+      smoke_skip "GET /agent/healthz (non-compose mode; agent service not running)"
     fi
   fi
 }

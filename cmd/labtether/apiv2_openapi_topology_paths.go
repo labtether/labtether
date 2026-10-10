@@ -2,7 +2,7 @@ package main
 
 // v2OpenAPITopologyPaths documents this domain of the v2 API.
 const v2OpenAPITopologyPaths = `    "/api/v2/discovery/run": {
-      "post": { "summary": "Trigger a network discovery scan", "description": "Scope: discovery:write.", "operationId": "runDiscovery", "tags": ["discovery"], "responses": { "200": { "description": "Scan initiated" } } }
+      "post": { "summary": "Analyze known assets for relationship links", "description": "Runs synchronously on already known assets; may create links or suggestions, and does not scan the network. Scope: discovery:write.", "operationId": "runDiscovery", "tags": ["discovery"], "responses": { "200": { "description": "Relationship analysis completed" } } }
     },
     "/api/v2/discovery/proposals": {
       "get": { "summary": "List discovery proposals", "description": "Unaccepted assets found by discovery. Scope: discovery:read.", "operationId": "listDiscoveryProposals", "tags": ["discovery"], "responses": { "200": { "description": "Proposal list" } } }

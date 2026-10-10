@@ -80,18 +80,21 @@ func (s *PostgresStore) GetNotificationChannel(id string) (notifications.Channel
 	return ch, true, nil
 }
 
-func (s *PostgresStore) ListNotificationChannels(limit int) ([]notifications.Channel, error) {
+func (s *PostgresStore) ListNotificationChannels(limit, offset int) ([]notifications.Channel, error) {
 	if limit <= 0 {
 		limit = 50
 	}
 	if limit > 500 {
 		limit = 500
 	}
+	if offset < 0 {
+		return nil, errors.New("notification channel offset must be non-negative")
+	}
 
 	rows, err := s.pool.Query(context.Background(),
 		`SELECT id, name, type, config, enabled, created_at, updated_at
-		 FROM notification_channels ORDER BY updated_at DESC LIMIT $1`,
-		limit,
+		 FROM notification_channels ORDER BY updated_at DESC, id DESC LIMIT $1 OFFSET $2`,
+		limit, offset,
 	)
 	if err != nil {
 		return nil, err

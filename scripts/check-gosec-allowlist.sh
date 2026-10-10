@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ALLOWLIST_FILE="${ROOT_DIR}/security/gosec_allowlist.tsv"
-GOSEC_VERSION="${GOSEC_VERSION:-v2.25.0}"
+GOSEC_VERSION="${GOSEC_VERSION:-v2.29.0}"
 
 if [[ ! -f "${ALLOWLIST_FILE}" ]]; then
   echo "missing allowlist: ${ALLOWLIST_FILE}" >&2

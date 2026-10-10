@@ -285,7 +285,7 @@ func TestNotificationChannelCreateFailsClosedWithoutSecretManager(t *testing.T) 
 	if recorder.Code != http.StatusServiceUnavailable {
 		t.Fatalf("create without secret manager status = %d, want %d", recorder.Code, http.StatusServiceUnavailable)
 	}
-	channels, err := store.ListNotificationChannels(10)
+	channels, err := store.ListNotificationChannels(10, 0)
 	if err != nil {
 		t.Fatalf("list channels after rejected create: %v", err)
 	}

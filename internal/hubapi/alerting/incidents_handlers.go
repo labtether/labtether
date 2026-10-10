@@ -51,7 +51,7 @@ func (d *Deps) HandleIncidents(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		listed, err := d.IncidentStore.ListIncidents(persistence.IncidentFilter{
+		filter := persistence.IncidentFilter{
 			Limit:    parseLimit(r, 50),
 			Offset:   parseOffset(r),
 			Status:   r.URL.Query().Get("status"),
@@ -59,29 +59,22 @@ func (d *Deps) HandleIncidents(w http.ResponseWriter, r *http.Request) {
 			GroupID:  groupID,
 			Assignee: r.URL.Query().Get("assignee"),
 			Source:   r.URL.Query().Get("source"),
-		})
-		if err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list incidents")
-			return
 		}
+		var listed []incidents.Incident
+		var err error
 		if shared.HasAssetRestriction(r.Context()) {
 			groupAccess, authErr := d.accessibleGroupIDs(r.Context())
 			if authErr != nil {
 				writeAssetScopeForbidden(w, "unable to prove incident asset scope")
 				return
 			}
-			filtered := make([]incidents.Incident, 0, len(listed))
-			for _, incident := range listed {
-				allowed, checkErr := d.incidentAllowed(r.Context(), incident, groupAccess)
-				if checkErr != nil {
-					servicehttp.WriteError(w, http.StatusInternalServerError, "failed to authorize incidents")
-					return
-				}
-				if allowed {
-					filtered = append(filtered, incident)
-				}
-			}
-			listed = filtered
+			listed, err = d.listAccessibleIncidents(r.Context(), filter, groupAccess)
+		} else {
+			listed, err = d.IncidentStore.ListIncidents(filter)
+		}
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list incidents")
+			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"incidents": listed})
 	case http.MethodPost:

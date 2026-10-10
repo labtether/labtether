@@ -87,7 +87,7 @@ func (d *Deps) dispatchIncidentNotificationSync(payload map[string]any) {
 		return
 	}
 
-	channels, err := d.NotificationStore.ListNotificationChannels(notificationRouteScanLimit)
+	channels, err := d.NotificationStore.ListNotificationChannels(notificationRouteScanLimit, 0)
 	if err != nil {
 		log.Printf("notifications: failed to list APNs channels for incident delivery: %v", err)
 		return

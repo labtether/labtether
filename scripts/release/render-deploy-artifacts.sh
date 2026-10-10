@@ -9,7 +9,7 @@ OUTPUT_DIR="${PROJECT_ROOT}/dist/release-artifacts"
 VERSION=""
 REPOSITORY=""
 IMAGE_DIGEST=""
-POSTGRES_IMAGE="postgres:18-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15"
+POSTGRES_IMAGE="postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
 GUACD_IMAGE="guacamole/guacd:1.6.0@sha256:8974eaa9ba32f713daf311e7cc8cd7e4cdfba1edea39eed75524e78ef4b08f4f"
 
 # shellcheck source=/dev/null

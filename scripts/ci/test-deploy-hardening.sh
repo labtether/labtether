@@ -6,12 +6,11 @@ umask 077
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SOURCE_COMPOSE="${PROJECT_ROOT}/deploy/compose/docker-compose.deploy.yml"
 RELEASE_TEMPLATE="${PROJECT_ROOT}/deploy/release/docker-compose.deploy.yml.tmpl"
-POSTGRES_IMAGE="postgres:18-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15"
+POSTGRES_IMAGE="postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
 LABTETHER_IMAGE="ghcr.io/labtether/labtether:v0.0.0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 GUACD_IMAGE="guacamole/guacd:1.6.0@sha256:8974eaa9ba32f713daf311e7cc8cd7e4cdfba1edea39eed75524e78ef4b08f4f"
-REDIS_IMAGE="redis:7-alpine@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99"
-AUTHENTIK_IMAGE="ghcr.io/goauthentik/server:2024.12@sha256:717323d68507fb76dd79f8958f42ce57f8ae0c10a55a7807efa1cfec5752b77c"
-DEX_IMAGE="ghcr.io/dexidp/dex:v2.41.1@sha256:bc7cfce7c17f52864e2bb2a4dc1d2f86a41e3019f6d42e81d92a301fad0c8a1d"
+AUTHENTIK_IMAGE="ghcr.io/goauthentik/server:2026.8.3@sha256:ab9b4e8cc4ab3f8d1198d2db6aeea66bafea1963b3f2843589e0d163f97d9849"
+DEX_IMAGE="ghcr.io/dexidp/dex:v2.46.0@sha256:933fcd3f523338c847b88ef84a7145fb2fcb7b9917f08418612afeaaa2001777"
 
 for command_name in cmp diff docker env grep mktemp node python3 sed; do
   command -v "$command_name" >/dev/null 2>&1 || {
@@ -67,7 +66,7 @@ fi
 LABTETHER_IMAGE="${LABTETHER_IMAGE}" \
   "${PROJECT_ROOT}/scripts/demo-up.sh" --check >/dev/null
 
-export POSTGRES_IMAGE LABTETHER_IMAGE GUACD_IMAGE REDIS_IMAGE AUTHENTIK_IMAGE DEX_IMAGE
+export POSTGRES_IMAGE LABTETHER_IMAGE GUACD_IMAGE AUTHENTIK_IMAGE DEX_IMAGE
 env -u GUACD_IMAGE docker compose \
   --env-file /dev/null \
   --profile ci-agent \
@@ -137,7 +136,6 @@ expected = {
     ("demo", "labtether-bootstrap"): os.environ["LABTETHER_IMAGE"],
     ("demo", "demo-seed"): os.environ["POSTGRES_IMAGE"],
     ("authentik", "authentik-postgres"): os.environ["POSTGRES_IMAGE"],
-    ("authentik", "authentik-redis"): os.environ["REDIS_IMAGE"],
     ("authentik", "authentik-server"): os.environ["AUTHENTIK_IMAGE"],
     ("authentik", "authentik-worker"): os.environ["AUTHENTIK_IMAGE"],
     ("dex", "dex"): os.environ["DEX_IMAGE"],

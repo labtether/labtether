@@ -20,10 +20,16 @@ Use GitHub Discussions for feature ideas and design conversations. If Discussion
 
 | Tool | Version |
 |---|---|
-| Go | 1.26+ |
-| Node.js | LTS (for the Next.js console) |
+| Go | 1.27.2 |
+| Node.js | 26.11.1 (for the Next.js console) |
+| npm | 12.2.0 |
 | Docker + Compose | Recent stable |
 | PostgreSQL | Managed via Docker Compose (no separate install needed) |
+
+The console stays on TypeScript 6.0.3 until `@typescript-eslint/parser` supports
+TypeScript 7. Its current stable peer range is `<6.1.0`; do not bypass that
+check with `--force` or `--legacy-peer-deps`. Build and runtime images use the
+same Node version.
 
 ### First-Time Setup
 

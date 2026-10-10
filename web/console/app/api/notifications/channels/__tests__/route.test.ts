@@ -73,4 +73,16 @@ describe("notification channels proxy", () => {
     expect(response.headers.get("cache-control")).toContain("no-store");
     expect(await response.json()).toEqual({ error: "notification backend unavailable" });
   });
+
+  it("forwards an export page and keeps channel capabilities", async () => {
+    const page = { channels: [{ id: "channel-101" }], capabilities: { smtp_insecure_transport_allowed: false } };
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(page), { status: 200 }));
+
+    const response = await GET(new Request("https://console.example.com/api/notifications/channels?limit=100&offset=100"));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(page);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://api.example.com/notifications/channels?limit=100&offset=100");
+    expect(fetchMock.mock.calls[0]?.[1]?.headers).toEqual({ Cookie: "labtether_session=test" });
+  });
 });

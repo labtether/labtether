@@ -21,7 +21,7 @@ docker run -d --name "${PG_CONTAINER}" \
   -e POSTGRES_PASSWORD=labtether \
   -e POSTGRES_DB=labtether \
   -p 5432:5432 \
-  postgres:18-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15 \
+  postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873 \
   -c shared_preload_libraries=pg_stat_statements \
   -c pg_stat_statements.track=all >/dev/null
 

@@ -24,7 +24,7 @@ func TestNotificationChannelAPIRejectsInvalidCreateWithoutPersistence(t *testing
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("invalid create status = %d, want %d: %s", response.Code, http.StatusBadRequest, response.Body.String())
 	}
-	channels, err := store.ListNotificationChannels(10)
+	channels, err := store.ListNotificationChannels(10, 0)
 	if err != nil {
 		t.Fatalf("list channels: %v", err)
 	}

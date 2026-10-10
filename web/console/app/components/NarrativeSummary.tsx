@@ -70,12 +70,29 @@ function buildSentences(status: NarrativeStatus): Sentence[] {
     const tier = getVisibilityTier(a);
     return (tier === "workload" || tier === "resource") && !isAssetHealthy(a);
   });
+  const highDisk = telemetryOverview.filter(
+    (t) => t.metrics.disk_used_percent != null && t.metrics.disk_used_percent >= 85
+  );
+  const highTemp = telemetryOverview.filter(
+    (t) => t.metrics.temperature_celsius != null && t.metrics.temperature_celsius >= 80
+  );
+  const downEndpoints = endpoints.filter((e) => !e.ok);
+  const poorGroups = groupReliability.filter(
+    (sr) => sr.grade === "D" || sr.grade === "F"
+  );
 
   const allHealthy =
+    onlineDevices.length === deviceAssets.length &&
     offlineDevices.length === 0 &&
     staleDevices.length === 0 &&
     problemWorkloads.length === 0 &&
-    summary.deadLetterCount === 0;
+    summary.deadLetterCount === 0 &&
+    summary.servicesUp >= summary.servicesTotal &&
+    !summary.retentionError?.trim() &&
+    highDisk.length === 0 &&
+    highTemp.length === 0 &&
+    downEndpoints.length === 0 &&
+    poorGroups.length === 0;
 
   // --- Overall health headline ---
   if (allHealthy && deviceAssets.length > 0) {
@@ -100,17 +117,15 @@ function buildSentences(status: NarrativeStatus): Sentence[] {
     });
   } else {
     // Mixed state
-    if (onlineDevices.length > 0) {
-      sentences.push({
-        key: "online-count",
-        node: (
-          <span>
-            {phrase(`${onlineDevices.length}`, "ok")}{" "}
-            of {deviceAssets.length} {plural(deviceAssets.length, "device")} online.
-          </span>
-        ),
-      });
-    }
+    sentences.push({
+      key: "online-count",
+      node: (
+        <span>
+          {phrase(`${onlineDevices.length}`, "ok")}{" "}
+          of {deviceAssets.length} {plural(deviceAssets.length, "device")} online.
+        </span>
+      ),
+    });
   }
 
   // --- Offline devices ---
@@ -160,9 +175,6 @@ function buildSentences(status: NarrativeStatus): Sentence[] {
   }
 
   // --- High disk usage warnings ---
-  const highDisk = telemetryOverview.filter(
-    (t) => t.metrics.disk_used_percent != null && t.metrics.disk_used_percent >= 85
-  );
   if (highDisk.length > 0) {
     for (const entry of highDisk.slice(0, 2)) {
       const pct = Math.round(entry.metrics.disk_used_percent!);
@@ -181,9 +193,6 @@ function buildSentences(status: NarrativeStatus): Sentence[] {
   }
 
   // --- High temperature warnings ---
-  const highTemp = telemetryOverview.filter(
-    (t) => t.metrics.temperature_celsius != null && t.metrics.temperature_celsius >= 80
-  );
   if (highTemp.length > 0) {
     for (const entry of highTemp.slice(0, 2)) {
       const temp = Math.round(entry.metrics.temperature_celsius!);
@@ -201,7 +210,6 @@ function buildSentences(status: NarrativeStatus): Sentence[] {
   }
 
   // --- Service endpoints down ---
-  const downEndpoints = endpoints.filter((e) => !e.ok);
   if (downEndpoints.length > 0) {
     const names = downEndpoints.slice(0, 3).map((e) => e.name);
     sentences.push({
@@ -213,6 +221,24 @@ function buildSentences(status: NarrativeStatus): Sentence[] {
           {phrase("down", "bad")}.
         </span>
       ),
+    });
+  }
+
+  if (summary.servicesUp < summary.servicesTotal) {
+    sentences.push({
+      key: "services-down",
+      node: (
+        <span>
+          {phrase(`${summary.servicesUp} of ${summary.servicesTotal} services`, "warn")} online.
+        </span>
+      ),
+    });
+  }
+
+  if (summary.retentionError?.trim()) {
+    sentences.push({
+      key: "retention-error",
+      node: <span>Retention cleanup {phrase("needs attention", "warn")}.</span>,
     });
   }
 
@@ -230,9 +256,6 @@ function buildSentences(status: NarrativeStatus): Sentence[] {
   }
 
   // --- Group reliability ---
-  const poorGroups = groupReliability.filter(
-    (sr) => sr.grade === "D" || sr.grade === "F"
-  );
   if (poorGroups.length > 0) {
     for (const sr of poorGroups.slice(0, 2)) {
       sentences.push({
