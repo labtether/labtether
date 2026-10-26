@@ -1,0 +1,61 @@
+name: Image build
+
+# The release workflow is the only other place these images are built, and it
+# runs after a tag is pushed. Build them (without pushing) whenever their
+# inputs change, so a broken base image, apk pin or lockfile is caught before
+# a release tag instead of during it.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - build/Dockerfile
+      - web/console/Dockerfile
+      - web/console/package.json
+      - web/console/package-lock.json
+      - go.mod
+      - go.sum
+      - .github/workflows/image-build.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ${{ matrix.image }} image
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: all-in-one
+            file: build/Dockerfile
+            context: .
+          - image: console
+            file: web/console/Dockerfile
+            context: web/console
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The release fills agent-dist from the published agent release. A build
+      # check only needs the directory to exist.
+      - name: Stub agent-dist
+        run: mkdir -p agent-dist && touch agent-dist/.build-check
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build without pushing
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          push: false
+          platforms: linux/amd64
+          build-args: |
+            APP_VERSION=build-check
