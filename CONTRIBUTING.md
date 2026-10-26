@@ -21,7 +21,7 @@ Use GitHub Discussions for feature ideas and design conversations. If Discussion
 | Tool | Version |
 |---|---|
 | Go | 1.27.2 |
-| Node.js | 26.11.1 (for the Next.js console) |
+| Node.js | 26.12.1 (for the Next.js console) |
 | npm | 12.2.0 |
 | Docker + Compose | Recent stable |
 | PostgreSQL | Managed via Docker Compose (no separate install needed) |

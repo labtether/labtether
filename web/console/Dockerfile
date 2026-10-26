@@ -1,5 +1,5 @@
-FROM node:26.11.1-alpine3.24@sha256:143494b1da2945f061539253adc65e4f1569ddf07da2d384c022c791a9d90a4a AS node-toolchain
-RUN npm install --global npm@12.2.0
+FROM node:26.12.1-alpine3.24@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS node-toolchain
+RUN npm install --global npm@12.2.1
 
 FROM node-toolchain AS deps
 WORKDIR /app
@@ -13,7 +13,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
 
-FROM node:26.11.1-alpine3.24@sha256:143494b1da2945f061539253adc65e4f1569ddf07da2d384c022c791a9d90a4a AS runner
+FROM node:26.12.1-alpine3.24@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000

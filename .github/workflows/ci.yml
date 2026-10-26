@@ -125,7 +125,7 @@ jobs:
           GOBIN: ${{ runner.temp }}/quality-bin
         run: |
           go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
-          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
 
       - name: Scan Go dependencies for reachable vulnerabilities
         if: needs.qa-select.outputs.go_checks != 'false'
@@ -201,12 +201,12 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.11.1"
+          node-version: "26.12.1"
           cache: "npm"
           cache-dependency-path: web/console/package-lock.json
 
       - name: Install dependencies
-        run: npm install --global npm@12.2.0 && npm ci
+        run: npm install --global npm@12.2.1 && npm ci
 
       - name: Dependency audit
         run: npm audit --audit-level=high
@@ -243,7 +243,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.11.1"
+          node-version: "26.12.1"
 
       - name: Unit tests (no install)
         run: node --test
@@ -260,7 +260,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.11.1"
+          node-version: "26.12.1"
 
       - name: Check database backup and restore contracts
         run: |
@@ -302,12 +302,12 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.11.1"
+          node-version: "26.12.1"
           cache: "npm"
           cache-dependency-path: web/console/package-lock.json
 
       - name: Install dependencies
-        run: npm install --global npm@12.2.0 && npm ci
+        run: npm install --global npm@12.2.1 && npm ci
 
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
@@ -343,12 +343,12 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.11.1"
+          node-version: "26.12.1"
           cache: "npm"
           cache-dependency-path: web/console/package-lock.json
 
       - name: Install dependencies
-        run: npm install --global npm@12.2.0 && npm ci
+        run: npm install --global npm@12.2.1 && npm ci
 
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium

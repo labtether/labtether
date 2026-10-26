@@ -25,8 +25,8 @@ RUN CGO_ENABLED=0 \
       -o /out/labtether ./cmd/labtether
 
 # ── Stage 2: Node dependency install ─────────────────────────
-FROM node:26.11.1-alpine3.24@sha256:143494b1da2945f061539253adc65e4f1569ddf07da2d384c022c791a9d90a4a AS node-toolchain
-RUN npm install --global npm@12.2.0
+FROM node:26.12.1-alpine3.24@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS node-toolchain
+RUN npm install --global npm@12.2.1
 
 FROM node-toolchain AS node-deps
 
@@ -46,7 +46,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 # ── Stage 4: Runtime ─────────────────────────────────────────
-FROM node:26.11.1-alpine3.24@sha256:143494b1da2945f061539253adc65e4f1569ddf07da2d384c022c791a9d90a4a
+FROM node:26.12.1-alpine3.24@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797
 SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 
 ARG S6_OVERLAY_VERSION=3.2.3.2
@@ -79,7 +79,7 @@ RUN apk add --no-cache \
     ca-certificates \
     postgresql18 \
     postgresql18-contrib && \
-    node -e "if (process.versions.node !== '26.11.1') process.exit(1)" && \
+    node -e "if (process.versions.node !== '26.12.1') process.exit(1)" && \
     psql --version | grep -Fq 'PostgreSQL) 18.' && \
     adduser -D -u 65532 labtether && \
     rm -rf /usr/local/lib/node_modules/npm /opt/yarn-v* && \
