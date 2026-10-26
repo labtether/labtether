@@ -3,6 +3,7 @@ package operations
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net"
 	neturl "net/url"
@@ -182,9 +183,19 @@ func ExecuteLocalCommandContext(parent context.Context, job terminal.CommandJob,
 	cmd.WaitDelay = time.Second
 	err = cmd.Run()
 	if ctx.Err() != nil {
-		return output.String(), fmt.Errorf("command interrupted; outcome unknown: %w", ctx.Err())
+		return output.String(), stoppedCommandError("command", parent, ctx, cfg.Timeout)
 	}
 	return output.String(), err
+}
+
+// stoppedCommandError names the command's own time limit when that is what
+// stopped it, so operators see a timeout rather than a generic interruption.
+// A cancelled caller (shutdown, request cancel) leaves the outcome unknown.
+func stoppedCommandError(kind string, parent, ctx context.Context, timeout time.Duration) error {
+	if parent.Err() == nil && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return fmt.Errorf("%s timed out after %s; outcome unknown", kind, timeout)
+	}
+	return fmt.Errorf("%s interrupted; outcome unknown: %w", kind, ctx.Err())
 }
 
 // ExecuteSSHCommand runs a command on a remote host via SSH.
@@ -255,13 +266,13 @@ func ExecuteSSHCommandContext(parent context.Context, job terminal.CommandJob, c
 	select {
 	case result := <-resultCh:
 		if ctx.Err() != nil {
-			return output.String(), fmt.Errorf("ssh command interrupted; outcome unknown: %w", ctx.Err())
+			return output.String(), stoppedCommandError("ssh command", parent, ctx, cfg.Timeout)
 		}
 		return output.String(), result.err
 	case <-ctx.Done():
 		_ = session.Close()
 		_ = client.Close()
-		return output.String(), fmt.Errorf("ssh command interrupted; outcome unknown: %w", ctx.Err())
+		return output.String(), stoppedCommandError("ssh command", parent, ctx, cfg.Timeout)
 	}
 }
 
