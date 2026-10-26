@@ -53,6 +53,11 @@ func (a *APNsAdapter) SendLiveActivity(
 	config map[string]any,
 	push LiveActivityPush,
 ) error {
+	// Branch before normalization: relay registration ids are case-sensitive
+	// and must never pass through the hex token lowercasing below.
+	if APNsUsesRelay(config) {
+		return a.sendLiveActivityViaRelay(ctx, push)
+	}
 	authKeyPath, _ := config["auth_key_path"].(string)
 	keyID, _ := config["key_id"].(string)
 	teamID, _ := config["team_id"].(string)
@@ -75,11 +80,8 @@ func (a *APNsAdapter) SendLiveActivity(
 	if !validLiveActivityPushToken(push.DeviceToken) {
 		return fmt.Errorf("apns liveactivity: invalid device token")
 	}
-	if push.ActivityID == "" {
-		return fmt.Errorf("apns liveactivity: activity id is required")
-	}
-	if push.Event != "update" && push.Event != "end" {
-		return fmt.Errorf("apns liveactivity: event must be update or end")
+	if err := validateLiveActivityPushEvent(push); err != nil {
+		return err
 	}
 
 	jwt, err := a.authorizationJWT(authKeyPath, keyID, teamID)
@@ -103,11 +105,7 @@ func (a *APNsAdapter) SendLiveActivity(
 	req.Header.Set("authorization", "bearer "+jwt)
 	req.Header.Set("apns-topic", configuredBundleID+liveActivityTopicSuffix)
 	req.Header.Set("apns-push-type", "liveactivity")
-	priority := push.Priority
-	if priority != 5 && priority != 10 {
-		priority = 10
-	}
-	req.Header.Set("apns-priority", strconv.Itoa(priority))
+	req.Header.Set("apns-priority", strconv.Itoa(liveActivityPriority(push.Priority)))
 	req.Header.Set("apns-collapse-id", boundedHeaderValue(push.ActivityID, 64))
 	if !push.ExpiresAt.IsZero() {
 		req.Header.Set("apns-expiration", strconv.FormatInt(push.ExpiresAt.Unix(), 10))
@@ -123,6 +121,23 @@ func (a *APNsAdapter) SendLiveActivity(
 	}
 	responseBody, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 	return newAPNsResponseError(resp.StatusCode, responseBody)
+}
+
+func validateLiveActivityPushEvent(push LiveActivityPush) error {
+	if push.ActivityID == "" {
+		return fmt.Errorf("apns liveactivity: activity id is required")
+	}
+	if push.Event != "update" && push.Event != "end" {
+		return fmt.Errorf("apns liveactivity: event must be update or end")
+	}
+	return nil
+}
+
+func liveActivityPriority(priority int) int {
+	if priority != 5 && priority != 10 {
+		return 10
+	}
+	return priority
 }
 
 // IsPermanentAPNsTokenRejection reports whether APNs has proven that a token

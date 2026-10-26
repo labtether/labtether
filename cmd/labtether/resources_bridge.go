@@ -80,6 +80,7 @@ func (s *apiServer) buildResourcesDeps() *respkg.Deps {
 				s.broadcaster.Broadcast(eventType, data)
 			}
 		},
+		OnRelayPushDeviceRegistered: s.ensureDefaultRelayPushRoute,
 
 		ManualDeviceDB: func() respkg.ManualDeviceExecer {
 			if s.db != nil {

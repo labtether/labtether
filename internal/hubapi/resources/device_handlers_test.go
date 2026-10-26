@@ -252,3 +252,42 @@ func TestHandleDeviceRegisterSupportsCanonicalDelete(t *testing.T) {
 		t.Fatalf("unexpected deletes: %+v", store.deleted)
 	}
 }
+
+// Risk: a relay id stored with changed case, or a raw token stored as relay,
+// breaks every push to that phone; the default relay channel must be offered
+// only for relay registrations.
+func TestHandleDeviceRegisterStoresRelayIDUnchangedAndTriggersDefaultRoute(t *testing.T) {
+	const relayID = "MixedCaseRelayRegistration_0123456789-abcde"
+	store := &pushDeviceStoreStub{}
+	deps := newPushDeviceHandlerDeps(store)
+	hookCalls := 0
+	deps.OnRelayPushDeviceRegistered = func(context.Context) { hookCalls++ }
+	register := func(body string) int {
+		rec := httptest.NewRecorder()
+		deps.HandleDeviceRegister(rec, httptest.NewRequest(http.MethodPost, "/api/v1/devices/register", strings.NewReader(body)))
+		return rec.Code
+	}
+
+	if code := register(`{"device_id":"phone-1","relay_registration_id":" ` + relayID + ` ","environment":"production"}`); code != http.StatusOK {
+		t.Fatalf("relay registration status = %d", code)
+	}
+	got := store.upserted[0]
+	if got.PushToken != relayID || got.PushTransport != "relay" || got.BundleID != "com.labtether.mobile" {
+		t.Fatalf("relay registration stored as token-equal=%t transport=%q bundle=%q", got.PushToken == relayID, got.PushTransport, got.BundleID)
+	}
+	if code := register(`{"device_id":"phone-2","push_token":"raw-token"}`); code != http.StatusOK || store.upserted[1].PushTransport != "direct" {
+		t.Fatalf("raw token registration status=%d transport=%q", code, store.upserted[1].PushTransport)
+	}
+	if hookCalls != 1 {
+		t.Fatalf("default relay route hook calls = %d, want 1 (relay only)", hookCalls)
+	}
+	for _, body := range []string{
+		`{"device_id":"phone-3","push_token":"raw-token","relay_registration_id":"` + relayID + `"}`,
+		`{"device_id":"phone-3","relay_registration_id":"too-short"}`,
+		`{"device_id":"phone-3","relay_registration_id":"` + relayID + `","bundle_id":"com.example.selfbuilt"}`,
+	} {
+		if code := register(body); code != http.StatusBadRequest {
+			t.Fatalf("invalid relay registration accepted with status %d: %s", code, body)
+		}
+	}
+}

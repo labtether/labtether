@@ -117,9 +117,18 @@ type NotificationSecretsManager interface {
 }
 
 // PushDeviceStore is the narrow persistence contract needed for APNs fanout.
+// DeletePushDeviceByToken only removes rows of the given transport ("direct"
+// or "relay"), so one transport's cleanup never deletes the other's rows.
 type PushDeviceStore interface {
 	GetAllPushTokens(ctx context.Context) ([]persistence.PushDevice, error)
-	DeletePushDeviceByToken(ctx context.Context, pushToken, bundleID, environment string) error
+	DeletePushDeviceByToken(ctx context.Context, pushToken, bundleID, environment, transport string) error
+}
+
+// NotificationBootstrapStore records one-time automatic notification setup,
+// such as the default push relay channel, across Hub processes.
+type NotificationBootstrapStore interface {
+	ClaimNotificationBootstrap(ctx context.Context, name string) (bool, error)
+	ReleaseNotificationBootstrap(ctx context.Context, name string) error
 }
 
 // LiveActivityStore persists encrypted, expiring ActivityKit delivery tokens

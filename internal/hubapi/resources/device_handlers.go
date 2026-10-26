@@ -1,6 +1,7 @@
 package resources
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -8,14 +9,19 @@ import (
 	_ "time/tzdata"
 	"unicode"
 
+	"github.com/labtether/labtether/internal/notifications"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
+// RegisterDeviceRequest carries exactly one push credential: push_token (a
+// raw APNs token, for Hubs with their own APNs key) or relay_registration_id
+// (from the LabTether push relay; a case-sensitive bearer secret).
 type RegisterDeviceRequest struct {
 	DeviceID               string `json:"device_id"`
 	Platform               string `json:"platform"`
 	PushToken              string `json:"push_token"`
+	RelayRegistrationID    string `json:"relay_registration_id"`
 	BundleID               string `json:"bundle_id"`
 	Environment            string `json:"environment"`
 	TimeZone               string `json:"time_zone"`
@@ -68,11 +74,16 @@ func (d *Deps) HandleDeviceRegister(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusBadRequest, errMessage)
 			return
 		}
+		pushToken, transport := req.PushToken, notifications.APNsTransportDirect
+		if req.RelayRegistrationID != "" {
+			pushToken, transport = req.RelayRegistrationID, notifications.APNsTransportRelay
+		}
 		err := d.DB.UpsertPushDevice(r.Context(), persistence.PushDevice{
 			UserID:                 userID,
 			DeviceID:               req.DeviceID,
 			Platform:               req.Platform,
-			PushToken:              req.PushToken,
+			PushToken:              pushToken,
+			PushTransport:          transport,
 			BundleID:               req.BundleID,
 			Environment:            req.Environment,
 			TimeZone:               req.TimeZone,
@@ -94,7 +105,14 @@ func (d *Deps) HandleDeviceRegister(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to register device")
 			return
 		}
-		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"registered": true, "device_id": req.DeviceID})
+		if transport == notifications.APNsTransportRelay {
+			d.relayPushDeviceRegistered()
+		}
+		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
+			"registered":     true,
+			"device_id":      req.DeviceID,
+			"push_transport": transport,
+		})
 
 	case http.MethodDelete:
 		if d.EnforceRateLimit != nil && !d.EnforceRateLimit(w, r, "push_devices.deregister", 60, time.Minute) {
@@ -160,19 +178,34 @@ func normalizeAndValidateDeviceRegistration(req *RegisterDeviceRequest) string {
 	req.DeviceID = strings.TrimSpace(req.DeviceID)
 	req.Platform = strings.ToLower(strings.TrimSpace(req.Platform))
 	req.PushToken = strings.TrimSpace(req.PushToken)
+	// Relay ids are case-sensitive bearer secrets: trim, never change case.
+	req.RelayRegistrationID = strings.TrimSpace(req.RelayRegistrationID)
 	req.BundleID = strings.TrimSpace(req.BundleID)
 	req.Environment = strings.ToLower(strings.TrimSpace(req.Environment))
 	req.TimeZone = strings.TrimSpace(req.TimeZone)
 	req.PushCategory = strings.ToLower(strings.TrimSpace(req.PushCategory))
 	req.MinimumSeverity = normalizePushSeverity(req.MinimumSeverity)
 
-	if req.DeviceID == "" || req.PushToken == "" {
-		return "device_id and push_token are required"
+	if req.PushToken != "" && req.RelayRegistrationID != "" {
+		return "send either push_token or relay_registration_id, not both"
+	}
+	if req.DeviceID == "" || (req.PushToken == "" && req.RelayRegistrationID == "") {
+		return "device_id and push_token (or relay_registration_id) are required"
 	}
 	if !isBoundedPrintable(req.DeviceID, 128) {
 		return "device_id must be at most 128 characters and contain no control characters"
 	}
-	if !isBoundedPrintable(req.PushToken, 512) {
+	if req.RelayRegistrationID != "" {
+		if !notifications.ValidRelayRegistrationID(req.RelayRegistrationID) {
+			return "relay_registration_id must be a 43-character push relay registration id"
+		}
+		if req.BundleID == "" {
+			req.BundleID = notifications.OfficialAppBundleID
+		}
+		if req.BundleID != notifications.OfficialAppBundleID {
+			return "relay registrations are only accepted for " + notifications.OfficialAppBundleID
+		}
+	} else if !isBoundedPrintable(req.PushToken, 512) {
 		return "push_token must be at most 512 characters and contain no control characters"
 	}
 	if !isBoundedPrintable(req.BundleID, 255) {
@@ -213,6 +246,18 @@ func normalizeAndValidateDeviceRegistration(req *RegisterDeviceRequest) string {
 		return "digest_window_seconds must be between 30 and 86400"
 	}
 	return ""
+}
+
+// relayPushDeviceRegistered lets the Hub create its default relay channel
+// and route the first time a relay device registers. It runs detached from
+// the request, so a client disconnect cannot stop it halfway.
+func (d *Deps) relayPushDeviceRegistered() {
+	if d.OnRelayPushDeviceRegistered == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	d.OnRelayPushDeviceRegistered(ctx)
 }
 
 func isBoundedPrintable(value string, maxRunes int) bool {

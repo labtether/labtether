@@ -105,8 +105,11 @@ func liveActivityTokenHashMatches(token, expectedHash string) bool {
 	return len(actual) == len(expectedHash) && subtle.ConstantTimeCompare([]byte(actual), []byte(expectedHash)) == 1
 }
 
-func liveActivityChannelKey(bundleID, environment string) string {
-	return strings.TrimSpace(bundleID) + "\x00" + strings.ToLower(strings.TrimSpace(environment))
+// liveActivityChannelKey includes the transport so a relay registration is
+// only ever sent through a relay channel and a raw token only directly.
+func liveActivityChannelKey(transport, bundleID, environment string) string {
+	return notifications.NormalizeAPNsTransport(transport) + "\x00" +
+		strings.TrimSpace(bundleID) + "\x00" + strings.ToLower(strings.TrimSpace(environment))
 }
 
 func incidentLiveActivityContentChanged(previous, current incidents.Incident) bool {

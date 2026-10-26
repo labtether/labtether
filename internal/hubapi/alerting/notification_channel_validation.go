@@ -3,6 +3,7 @@ package alerting
 import (
 	"errors"
 	"fmt"
+	"github.com/labtether/labtether/internal/notifications"
 	"github.com/labtether/labtether/internal/securityruntime"
 	"net/mail"
 	"net/url"
@@ -118,6 +119,14 @@ func validateEmailNotificationConfig(config map[string]any) error {
 }
 
 func validateAPNsNotificationConfig(config map[string]any) error {
+	if err := validateAPNsTransport(config); err != nil {
+		return err
+	}
+	// No operator key (or transport "relay") means the LabTether push relay.
+	// A partial key set stays a direct channel and fails the checks below.
+	if notifications.APNsUsesRelay(config) {
+		return validateAPNsRelayConfig(config)
+	}
 	for _, key := range []string{"auth_key_path", "key_id", "team_id", "bundle_id"} {
 		if configString(config, key) == "" {
 			return fmt.Errorf("%s is required", key)

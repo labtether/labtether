@@ -5,6 +5,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"github.com/labtether/labtether/internal/notifications"
 )
 
 const MaxPushDevicesPerUser = 32
@@ -13,11 +15,14 @@ var ErrPushDeviceRegistrationLimit = errors.New("push device registration limit 
 
 // PushDevice represents a registered push notification device.
 type PushDevice struct {
-	ID                     string    `json:"id"`
-	UserID                 string    `json:"user_id"`
-	DeviceID               string    `json:"device_id"`
-	Platform               string    `json:"platform"`
-	PushToken              string    `json:"push_token"`
+	ID        string `json:"id"`
+	UserID    string `json:"user_id"`
+	DeviceID  string `json:"device_id"`
+	Platform  string `json:"platform"`
+	PushToken string `json:"push_token"`
+	// PushTransport is "direct" for a raw APNs token or "relay" when PushToken
+	// holds a LabTether push relay registration id (case-sensitive).
+	PushTransport          string    `json:"push_transport"`
 	BundleID               string    `json:"bundle_id"`
 	Environment            string    `json:"environment"`
 	TimeZone               string    `json:"time_zone"`
@@ -42,6 +47,7 @@ func (s *PostgresStore) UpsertPushDevice(ctx context.Context, d PushDevice) erro
 	if d.UserID == "" {
 		return errors.New("push device user id is required")
 	}
+	d.PushTransport = notifications.NormalizeAPNsTransport(d.PushTransport)
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -100,16 +106,17 @@ func (s *PostgresStore) UpsertPushDevice(ctx context.Context, d PushDevice) erro
 			notify_critical_alerts, notify_node_offline, notify_service_down,
 			push_category, minimum_severity, quiet_hours_enabled,
 			quiet_hours_start_minutes, quiet_hours_end_minutes,
-			digest_window_seconds, updated_at
+			digest_window_seconds, push_transport, updated_at
 		)
 		VALUES (
 			gen_random_uuid()::TEXT, $1, $2, $3, $4, $5, $6, $7,
-			$8, $9, $10, $11, $12, $13, $14, $15, $16, NOW()
+			$8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW()
 		)
 		ON CONFLICT (user_id, device_id)
 		DO UPDATE SET
 			platform = EXCLUDED.platform,
 			push_token = EXCLUDED.push_token,
+			push_transport = EXCLUDED.push_transport,
 			bundle_id = EXCLUDED.bundle_id,
 			environment = EXCLUDED.environment,
 			time_zone = EXCLUDED.time_zone,
@@ -140,6 +147,7 @@ func (s *PostgresStore) UpsertPushDevice(ctx context.Context, d PushDevice) erro
 		d.QuietHoursStartMinutes,
 		d.QuietHoursEndMinutes,
 		d.DigestWindowSeconds,
+		d.PushTransport,
 	); err != nil {
 		return err
 	}
@@ -148,14 +156,17 @@ func (s *PostgresStore) UpsertPushDevice(ctx context.Context, d PushDevice) erro
 
 // DeletePushDeviceByToken removes permanently rejected APNs registrations.
 // Empty legacy routing fields are matched as fallbacks because older clients
-// registered before topic/environment metadata became mandatory.
-func (s *PostgresStore) DeletePushDeviceByToken(ctx context.Context, pushToken, bundleID, environment string) error {
+// registered before topic/environment metadata became mandatory. The
+// transport must match, so cleanup after a direct APNs rejection can never
+// delete a relay registration (or the reverse).
+func (s *PostgresStore) DeletePushDeviceByToken(ctx context.Context, pushToken, bundleID, environment, transport string) error {
 	_, err := s.pool.Exec(ctx, `
 		DELETE FROM push_devices
 		 WHERE push_token = $1
 		   AND (bundle_id = $2 OR bundle_id = '')
 		   AND (environment = $3 OR environment = '')
-	`, pushToken, bundleID, environment)
+		   AND push_transport = $4
+	`, pushToken, bundleID, environment, notifications.NormalizeAPNsTransport(transport))
 	return err
 }
 
@@ -209,7 +220,7 @@ const pushDeviceSelectSQL = `SELECT
 	notify_critical_alerts, notify_node_offline, notify_service_down,
 	push_category, minimum_severity, quiet_hours_enabled,
 	quiet_hours_start_minutes, quiet_hours_end_minutes, digest_window_seconds,
-	created_at, updated_at
+	push_transport, created_at, updated_at
 FROM push_devices`
 
 type pushDeviceScanner interface {
@@ -235,6 +246,7 @@ func scanPushDevice(row pushDeviceScanner, d *PushDevice) error {
 		&d.QuietHoursStartMinutes,
 		&d.QuietHoursEndMinutes,
 		&d.DigestWindowSeconds,
+		&d.PushTransport,
 		&d.CreatedAt,
 		&d.UpdatedAt,
 	)
