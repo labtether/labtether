@@ -96,7 +96,12 @@ func NewPostgresStore(ctx context.Context, databaseURL string) (*PostgresStore, 
 		logEventsWatermarkFetchedAt:       time.Unix(0, 0).UTC(),
 		logEventsWatermarkRefreshInterval: defaultLogEventsWatermarkRefreshInterval,
 	}
-	if err := store.ensureSchema(ctx); err != nil {
+	// Migrations get their own generous overall deadline: index builds and
+	// backfills on large upgrade databases legitimately outlast request budgets.
+	migrationCtx, cancelMigration := context.WithTimeout(ctx, SchemaMigrationTimeout())
+	err = store.ensureSchema(migrationCtx)
+	cancelMigration()
+	if err != nil {
 		pool.Close()
 		return nil, newSchemaMigrationError(err)
 	}
@@ -105,13 +110,17 @@ func NewPostgresStore(ctx context.Context, databaseURL string) (*PostgresStore, 
 }
 
 func dbStatementTimeout() time.Duration {
-	raw := strings.TrimSpace(os.Getenv("LABTETHER_DB_STATEMENT_TIMEOUT"))
+	return envDurationOrDefault("LABTETHER_DB_STATEMENT_TIMEOUT", defaultDBStatementTimeout)
+}
+
+func envDurationOrDefault(key string, fallback time.Duration) time.Duration {
+	raw := strings.TrimSpace(os.Getenv(key))
 	if raw == "" {
-		return defaultDBStatementTimeout
+		return fallback
 	}
 	parsed, err := time.ParseDuration(raw)
 	if err != nil || parsed <= 0 {
-		return defaultDBStatementTimeout
+		return fallback
 	}
 	return parsed
 }
@@ -281,21 +290,8 @@ func applyOrVerifySchemaMigration(ctx context.Context, conn *pgxpool.Conn, migra
 	}
 	defer tx.Rollback(ctx)
 
-	for _, stmt := range migration.Statements {
-		if _, err := tx.Exec(ctx, stmt); err != nil {
-			return err
-		}
-	}
-
-	if _, err := tx.Exec(ctx,
-		`INSERT INTO schema_migrations (version, name, applied_at, checksum) VALUES ($1, $2, $3, $4)`,
-		migration.Version,
-		migration.Name,
-		time.Now().UTC(),
-		schemaMigrationChecksum(migration),
-	); err != nil {
+	if err := applySchemaMigrationInTx(ctx, tx, migration, time.Now().UTC()); err != nil {
 		return err
 	}
-
 	return tx.Commit(ctx)
 }
