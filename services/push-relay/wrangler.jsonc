@@ -5,8 +5,8 @@
   "main": "src/index.js",
   // Michael's Cloudflare account ("Michaels Account").
   "account_id": "25c357768b0fd4b877d6f008dc50e63b",
-  // Not newer than the workerd bundled with the pinned wrangler 4.113.0.
-  "compatibility_date": "2026-07-15",
+  // Not newer than the workerd (1.20261019.1) bundled with the pinned wrangler 4.151.2.
+  "compatibility_date": "2026-10-19",
   "workers_dev": true,
 
   // Custom domain. labtether.com is a zone on this account (it serves the
