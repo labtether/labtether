@@ -29,7 +29,7 @@
     "picomatch": "^4.0.7",
     "postcss": "^8.5.29",
     "sharp": "0.35.5",
-    "undici": "8.11.2",
+    "undici": "8.12.2",
     "vite": "^8.3.4"
   },
   "dependencies": {
