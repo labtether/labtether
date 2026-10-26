@@ -20,8 +20,19 @@ import (
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
-// RecordingsDir is the default directory for session recordings.
-const RecordingsDir = "data/recordings"
+// LegacyRecordingsDir is where releases before 1.7.0 wrote recordings,
+// relative to the process working directory rather than the data directory.
+const LegacyRecordingsDir = "data/recordings"
+
+// RecordingsDirForDataDir returns the recordings directory inside the Hub data
+// directory (LABTETHER_DATA_DIR), so recordings live on the persistent volume.
+func RecordingsDirForDataDir(dataDir string) string {
+	dataDir = strings.TrimSpace(dataDir)
+	if dataDir == "" {
+		dataDir = "data"
+	}
+	return filepath.Join(dataDir, "recordings")
+}
 
 // ActiveRecording tracks an in-progress desktop session recording.
 type ActiveRecording struct {
@@ -88,11 +99,16 @@ func (d *Deps) HandleRecordings(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// HandleRecordingActions handles POST /recordings/{sessionID}.
+// HandleRecordingActions handles POST /recordings/{sessionID} (stop) and
+// GET /recordings/{recordingID}/download.
 func (d *Deps) HandleRecordingActions(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/recordings/")
 	if path == r.URL.Path || strings.TrimSpace(path) == "" {
 		servicehttp.WriteError(w, http.StatusNotFound, "not found")
+		return
+	}
+	if recordingID, ok := strings.CutSuffix(path, "/download"); ok {
+		d.handleRecordingDownload(w, r, recordingID)
 		return
 	}
 	sessionID := strings.TrimSpace(path)
@@ -328,11 +344,13 @@ func RecordingResponsePayload(entry RecordingMetadata) map[string]any {
 		"status":      entry.Status,
 		"created_at":  entry.CreatedAt,
 		"stopped_at":  entry.StoppedAt,
+		// Hub-relative path of the attachment download for this recording.
+		"download_url": RecordingDownloadPath(entry.ID),
 	}
 }
 
 // DefaultStartRecording creates a new recording. Used as a default for Deps.StartRecording.
-func DefaultStartRecording(dbPool *pgxpool.Pool, sessionID, assetID, actorID, protocol string) (*ActiveRecording, error) {
+func DefaultStartRecording(dbPool *pgxpool.Pool, recordingsDir, sessionID, assetID, actorID, protocol string) (*ActiveRecording, error) {
 	if dbPool == nil {
 		return nil, fmt.Errorf("database unavailable")
 	}
@@ -346,12 +364,15 @@ func DefaultStartRecording(dbPool *pgxpool.Pool, sessionID, assetID, actorID, pr
 		protocol = "vnc"
 	}
 
-	if err := ensurePrivateRecordingDir(RecordingsDir); err != nil {
+	if strings.TrimSpace(recordingsDir) == "" {
+		recordingsDir = LegacyRecordingsDir
+	}
+	if err := ensurePrivateRecordingDir(recordingsDir); err != nil {
 		return nil, fmt.Errorf("create recordings dir: %w", err)
 	}
 	recordingID := idgen.New("rec")
 	filename := fmt.Sprintf("%s_%s.bin", recordingID, time.Now().UTC().Format("20060102T150405"))
-	filePath := filepath.Join(RecordingsDir, filename)
+	filePath := filepath.Join(recordingsDir, filename)
 	file, err := openPrivateRecordingFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("create recording file: %w", err)

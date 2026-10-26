@@ -22,7 +22,8 @@ func (s *apiServer) buildDesktopDeps() *desktoppkg.Deps {
 		AssetStore:      s.assetStore,
 		CredentialStore: s.credentialStore,
 
-		DBPool: dbPoolOrNil(s.db),
+		DBPool:        dbPoolOrNil(s.db),
+		RecordingsDir: s.recordingsDir(),
 
 		AgentMgr:       s.agentMgr,
 		SecretsManager: s.secretsManager,
@@ -310,7 +311,12 @@ func (s *apiServer) startRecording(sessionID, assetID, actorID, protocol string)
 	if s.db == nil {
 		return nil, nil
 	}
-	return desktoppkg.DefaultStartRecording(s.db.Pool(), sessionID, assetID, actorID, protocol)
+	return desktoppkg.DefaultStartRecording(s.db.Pool(), s.recordingsDir(), sessionID, assetID, actorID, protocol)
+}
+
+// recordingsDir keeps recordings on the persistent data volume.
+func (s *apiServer) recordingsDir() string {
+	return desktoppkg.RecordingsDirForDataDir(s.dataDir)
 }
 
 func (s *apiServer) stopRecording(rec *desktoppkg.ActiveRecording) {

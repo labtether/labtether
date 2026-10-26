@@ -109,6 +109,11 @@ type Deps struct {
 	// Recording callbacks — injected to avoid pulling the full recording subsystem.
 	StartRecording func(sessionID, assetID, actorID, protocol string) (*ActiveRecording, error)
 	StopRecording  func(rec *ActiveRecording)
+	// RecordingsDir is the directory recordings are written to and served
+	// from (LABTETHER_DATA_DIR/recordings).
+	RecordingsDir string
+	// LookupRecording loads one recording's metadata; nil uses DBPool.
+	LookupRecording func(ctx context.Context, recordingID string) (RecordingMetadata, bool, error)
 }
 
 // RegisterRoutes registers all desktop-related HTTP routes on the given handler map.
