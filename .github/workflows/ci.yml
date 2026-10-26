@@ -384,7 +384,7 @@ jobs:
           repository: labtether/labtether-agent
           # The root-cause release gate verifies that this exact installed
           # stack child matches the coordinated Go agent release source.
-          ref: 638cdcc4f7364d06d730b4d0fd05b5781e0a3be4
+          ref: 1a7f59596a0a5e05c7a19ac290b617f19fc28dbf
           persist-credentials: false
           path: labtether-agent
 
