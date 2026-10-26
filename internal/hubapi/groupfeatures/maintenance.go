@@ -266,6 +266,11 @@ func (d *Deps) EvaluateGuardrailsContext(ctx context.Context, groupID string, at
 	if err := ctx.Err(); err != nil {
 		return GroupMaintenanceGuardrails{}, err
 	}
+	if d.GroupMaintenanceStore == nil {
+		// No maintenance store configured means no windows, as GroupGuardrails
+		// reports. A store without the bounded lookup still fails closed.
+		return GroupMaintenanceGuardrails{}, nil
+	}
 	store, ok := d.GroupMaintenanceStore.(interface {
 		ListGroupMaintenanceWindowsContext(context.Context, string, *time.Time, int) ([]groupmaintenance.MaintenanceWindow, error)
 	})
