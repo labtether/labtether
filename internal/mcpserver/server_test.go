@@ -56,6 +56,7 @@ func newTestDeps() *Deps {
 		AuthorizeMutation: func(context.Context, string, string) error {
 			return nil
 		},
+		AuthorizeHostDataRead: func(context.Context) error { return nil },
 		EvaluateCommandPolicy: func(context.Context, string, string) policy.CheckResponse {
 			return policy.CheckResponse{Allowed: true, Mode: "structured"}
 		},

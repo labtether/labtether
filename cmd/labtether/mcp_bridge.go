@@ -34,6 +34,7 @@ func (s *apiServer) buildMCPServer() *server.MCPServer {
 		AuthorizeMutation:     s.mcpAuthorizeMutation(),
 		EvaluateCommandPolicy: s.evaluateStructuredCommandPolicy,
 		AuditMutation:         s.mcpAuditMutation(),
+		AuthorizeHostDataRead: mcpAuthorizeHostDataRead,
 
 		ListServices:   s.mcpListServices(),
 		RestartService: s.mcpRestartService(),

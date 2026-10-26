@@ -95,6 +95,9 @@ func (d *Deps) handleFilesList(ctx context.Context, req mcp.CallToolRequest) (*m
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
+	if err := d.hostDataReadCheck(ctx); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	return d.typedAgentRead(ctx, "files:read", assetID, func(ctx context.Context, assetID string) (any, error) {
 		if d.ListFiles == nil {
 			return nil, errMCPDependencyUnavailable
@@ -112,6 +115,9 @@ func (d *Deps) handleFilesRead(ctx context.Context, req mcp.CallToolRequest) (*m
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
+	if err := d.hostDataReadCheck(ctx); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	return d.typedAgentRead(ctx, "files:read", assetID, func(ctx context.Context, assetID string) (any, error) {
 		if d.ReadFile == nil {
 			return nil, errMCPDependencyUnavailable
@@ -125,6 +131,9 @@ func (d *Deps) handleFilesRead(ctx context.Context, req mcp.CallToolRequest) (*m
 func (d *Deps) handleSystemProcesses(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	assetID, err := requireAssetID(req)
 	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	if err := d.hostDataReadCheck(ctx); err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 	return d.typedAgentRead(ctx, "processes:read", assetID, d.ListProcesses)

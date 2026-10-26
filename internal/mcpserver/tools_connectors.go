@@ -38,6 +38,9 @@ func (d *Deps) handleDockerContainerLogs(ctx context.Context, req mcp.CallToolRe
 	if err := d.scopeCheck(ctx, "docker:read"); err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
+	if err := d.hostDataReadCheck(ctx); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	assetID, err := requireAssetID(req)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
