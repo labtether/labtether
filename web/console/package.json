@@ -50,7 +50,7 @@
     "cmdk": "^1.1.1",
     "guacamole-common-js": "^1.5.0",
     "lucide-react": "^1.54.0",
-    "next": "^16.4.0",
+    "next": "^16.4.1",
     "next-intl": "^4.14.9",
     "qrcode": "^1.5.4",
     "react": "^19.3.0",
