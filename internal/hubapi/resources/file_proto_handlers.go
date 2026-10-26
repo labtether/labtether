@@ -19,6 +19,10 @@ import (
 
 func writeFileProtocolError(w http.ResponseWriter, status int, clientMessage string, err error) {
 	securityruntime.Logf("file protocol: %s: %v", clientMessage, err)
+	if errors.Is(err, errLegacyPlainWebDAV) {
+		servicehttp.WriteError(w, http.StatusConflict, legacyPlainWebDAVNotice)
+		return
+	}
 	servicehttp.WriteError(w, status, clientMessage)
 }
 
