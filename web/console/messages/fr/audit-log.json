@@ -1,0 +1,18 @@
+{
+  "title": "Journal d'audit",
+  "subtitle": "Activité du système et historique des événements",
+  "exportCSV": "Exporter en CSV",
+  "timestamp": "Heure",
+  "type": "Type d'événement",
+  "actor": "Acteur",
+  "target": "Cible",
+  "decision": "Décision",
+  "details": "Détails",
+  "noEvents": "Aucun événement d'audit",
+  "noEventsDesc": "L'activité du système apparaîtra ici à mesure que des actions seront effectuées.",
+  "allow": "Autorisé",
+  "deny": "Refusé",
+  "filterByType": "Filtrer par type",
+  "allTypes": "Tous les types",
+  "search": "Rechercher des événements..."
+}

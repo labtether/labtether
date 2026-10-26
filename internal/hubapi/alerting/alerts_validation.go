@@ -57,20 +57,42 @@ func ValidateCreateAlertRuleRequest(req alerts.CreateRuleRequest) error {
 	if req.Status != "" && alerts.NormalizeRuleStatus(req.Status) == "" {
 		return errors.New("status must be active or paused")
 	}
-	if err := validateStoredDurationSeconds("cooldown_seconds", req.CooldownSeconds); err != nil {
-		return err
+	if req.CooldownSeconds != nil {
+		if err := validateStoredDurationSeconds("cooldown_seconds", *req.CooldownSeconds); err != nil {
+			return err
+		}
 	}
-	if err := validateStoredDurationSeconds("reopen_after_seconds", req.ReopenAfterSeconds); err != nil {
-		return err
+	if req.ReopenAfterSeconds != nil {
+		if err := validateStoredDurationSeconds("reopen_after_seconds", *req.ReopenAfterSeconds); err != nil {
+			return err
+		}
 	}
-	if err := validateStoredDurationSeconds("evaluation_interval_seconds", req.EvaluationIntervalSeconds); err != nil {
-		return err
+	if req.EvaluationIntervalSeconds != nil {
+		if err := validateStoredDurationSeconds("evaluation_interval_seconds", *req.EvaluationIntervalSeconds); err != nil {
+			return err
+		}
 	}
-	if err := validateStoredDurationSeconds("window_seconds", req.WindowSeconds); err != nil {
-		return err
+	if req.WindowSeconds != nil {
+		if err := validateStoredDurationSeconds("window_seconds", *req.WindowSeconds); err != nil {
+			return err
+		}
 	}
 	if len(req.Condition) == 0 {
 		return errors.New("condition is required")
+	}
+	if alerts.NormalizeRuleKind(req.Kind) == alerts.RuleKindMetricThreshold {
+		if _, err := metricThresholdValue(req.Condition); err != nil {
+			return err
+		}
+	}
+	if alerts.NormalizeRuleKind(req.Kind) == alerts.RuleKindSyntheticCheck {
+		if _, err := syntheticFailureCount(req.Condition); err != nil {
+			return err
+		}
+	}
+	durations, _ := alerts.ResolveCreateRuleDurations(req)
+	if _, _, err := alertStalenessCondition(alerts.Rule{Kind: alerts.NormalizeRuleKind(req.Kind), Condition: req.Condition, WindowSeconds: durations.Window}); err != nil {
+		return err
 	}
 	if len(req.Targets) > MaxAlertTargetCount {
 		return errors.New("too many alert rule targets")
@@ -115,6 +137,21 @@ func NormalizeUpdateAlertRuleRequest(req *alerts.UpdateRuleRequest) {
 }
 
 func ValidateUpdateAlertRuleRequest(existing alerts.Rule, req alerts.UpdateRuleRequest) error {
+	if req.Condition != nil && existing.Kind == alerts.RuleKindSyntheticCheck {
+		if _, err := syntheticFailureCount(*req.Condition); err != nil {
+			return err
+		}
+	}
+	if req.Condition != nil {
+		if _, _, err := alertStalenessCondition(alerts.Rule{Kind: existing.Kind, Condition: *req.Condition, WindowSeconds: existing.WindowSeconds}); err != nil {
+			return err
+		}
+	}
+	if req.Condition != nil && existing.Kind == alerts.RuleKindMetricThreshold {
+		if _, err := metricThresholdValue(*req.Condition); err != nil {
+			return err
+		}
+	}
 	if req.Name != nil {
 		if *req.Name == "" {
 			return errors.New("name cannot be empty")

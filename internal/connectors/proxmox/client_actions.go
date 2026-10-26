@@ -266,13 +266,16 @@ func (c *Client) TriggerBackup(ctx context.Context, node, vmid, storage, mode st
 	), values)
 }
 
-func (c *Client) CloneVM(ctx context.Context, node, vmid, newName string, newID int) (string, error) {
+func (c *Client) CloneVM(ctx context.Context, node, vmid, newName string, newID int, targetNode string) (string, error) {
 	values := neturl.Values{}
 	values.Set("newid", strconv.Itoa(newID))
 	if newName = strings.TrimSpace(newName); newName != "" {
 		values.Set("name", newName)
 	}
 	values.Set("full", "1")
+	if targetNode = strings.TrimSpace(targetNode); targetNode != "" {
+		values.Set("target", targetNode)
+	}
 	return c.postTask(ctx, fmt.Sprintf(
 		"/api2/json/nodes/%s/qemu/%s/clone",
 		neturl.PathEscape(node),
@@ -280,13 +283,16 @@ func (c *Client) CloneVM(ctx context.Context, node, vmid, newName string, newID 
 	), values)
 }
 
-func (c *Client) CloneCT(ctx context.Context, node, vmid, newName string, newID int) (string, error) {
+func (c *Client) CloneCT(ctx context.Context, node, vmid, newName string, newID int, targetNode string) (string, error) {
 	values := neturl.Values{}
 	values.Set("newid", strconv.Itoa(newID))
 	if newName = strings.TrimSpace(newName); newName != "" {
 		values.Set("hostname", newName)
 	}
 	values.Set("full", "1")
+	if targetNode = strings.TrimSpace(targetNode); targetNode != "" {
+		values.Set("target", targetNode)
+	}
 	return c.postTask(ctx, fmt.Sprintf(
 		"/api2/json/nodes/%s/lxc/%s/clone",
 		neturl.PathEscape(node),

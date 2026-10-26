@@ -63,7 +63,7 @@ func TestAssetRestrictedContextDeniesEveryDirectAssetToolBeforeDispatch(t *testi
 	deps.GetScopes = func(context.Context) []string { return []string{"*"} }
 	deps.GetAllowedAssets = func(context.Context) []string { return []string{"srv1"} }
 	var dispatches atomic.Int32
-	deps.ExecuteViaAgent = func(terminal.CommandJob) terminal.CommandResult {
+	deps.ExecuteViaAgent = func(context.Context, terminal.CommandJob) terminal.CommandResult {
 		dispatches.Add(1)
 		return terminal.CommandResult{Status: "succeeded"}
 	}
@@ -156,7 +156,10 @@ func TestEveryAdvertisedMutationInvokesPolicyBeforeDispatch(t *testing.T) {
 				policyCalls.Add(1)
 				return errors.New("MCP mutations require operator role")
 			}
-			deps.ExecuteViaAgent = func(terminal.CommandJob) terminal.CommandResult { dispatches.Add(1); return terminal.CommandResult{} }
+			deps.ExecuteViaAgent = func(context.Context, terminal.CommandJob) terminal.CommandResult {
+				dispatches.Add(1)
+				return terminal.CommandResult{}
+			}
 			deps.ExecutePowerAction = func(context.Context, string, string) (string, error) { dispatches.Add(1); return "", nil }
 			deps.RestartService = func(context.Context, string, string) (any, error) { dispatches.Add(1); return nil, nil }
 			deps.RestartDockerContainer = func(context.Context, string) error { dispatches.Add(1); return nil }
@@ -182,7 +185,7 @@ func TestEveryAdvertisedMutationInvokesPolicyBeforeDispatch(t *testing.T) {
 
 func TestExecFailureIsReportedAsMCPErrorAndAudited(t *testing.T) {
 	deps := newTestDeps()
-	deps.ExecuteViaAgent = func(terminal.CommandJob) terminal.CommandResult {
+	deps.ExecuteViaAgent = func(context.Context, terminal.CommandJob) terminal.CommandResult {
 		return terminal.CommandResult{Status: "failed", Output: "permission denied"}
 	}
 	var decision, reason string
@@ -209,7 +212,7 @@ func TestExecMutationDenialPreventsDispatchAndAudits(t *testing.T) {
 	deps.AuthorizeMutation = func(context.Context, string, string) error {
 		return errors.New("actions are blocked by active maintenance windows")
 	}
-	deps.ExecuteViaAgent = func(job terminal.CommandJob) terminal.CommandResult {
+	deps.ExecuteViaAgent = func(_ context.Context, job terminal.CommandJob) terminal.CommandResult {
 		t.Fatalf("denied command dispatched: %#v", job)
 		return terminal.CommandResult{}
 	}
@@ -237,7 +240,7 @@ func TestExecMultiAllFailedIsReportedAsMCPError(t *testing.T) {
 	deps.AuthorizeMutation = func(context.Context, string, string) error {
 		return errors.New("MCP mutation rate limit exceeded")
 	}
-	deps.ExecuteViaAgent = func(job terminal.CommandJob) terminal.CommandResult {
+	deps.ExecuteViaAgent = func(_ context.Context, job terminal.CommandJob) terminal.CommandResult {
 		t.Fatalf("denied batch command dispatched: %#v", job)
 		return terminal.CommandResult{}
 	}
@@ -273,7 +276,7 @@ func TestMutationPolicyFailsClosedWhenMissing(t *testing.T) {
 func TestFilesReadPassesPathOnlyToTypedDependency(t *testing.T) {
 	deps := newTestDeps()
 	deps.GetScopes = func(context.Context) []string { return []string{"files:read"} }
-	deps.ExecuteViaAgent = func(job terminal.CommandJob) terminal.CommandResult {
+	deps.ExecuteViaAgent = func(_ context.Context, job terminal.CommandJob) terminal.CommandResult {
 		t.Fatalf("file path reached command executor: %q", job.Command)
 		return terminal.CommandResult{}
 	}

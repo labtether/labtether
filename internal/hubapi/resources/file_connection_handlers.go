@@ -96,10 +96,7 @@ func (d *Deps) handleListFileConnections(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	connections = d.filterFileConnectionsForActor(r, connections)
-	for i := range connections {
-		connections[i].ExtraConfig = sanitizeLegacyFileConnectionExtraConfig(connections[i].Protocol, connections[i].ExtraConfig)
-	}
-	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"connections": connections})
+	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"connections": fileConnectionViews(connections)})
 }
 
 // --- Create ---

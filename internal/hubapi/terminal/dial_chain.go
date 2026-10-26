@@ -25,12 +25,24 @@ type HopProgressFn func(hopIndex, hopCount int, hopHost string)
 //
 // If hops is empty, it dials the target directly (equivalent to a regular ssh.Dial).
 // Returns the final SSH client and a slice of all intermediate clients (for cleanup).
-// Callers must close intermediate clients in reverse order when done.
+// Callers must close the root intermediate first when tearing down the chain.
 func DialSSHChain(
 	hops []terminal.ResolvedHop,
 	target terminal.ResolvedHop,
 	onHopConnected HopProgressFn,
 	sleepFn func(time.Duration),
+) (*ssh.Client, []*ssh.Client, error) {
+	return DialSSHChainContext(context.Background(), hops, target, onHopConnected, sleepFn)
+}
+
+// DialSSHChainContext binds every in-flight hop and handshake to its browser
+// request. Returned clients belong to the caller after this function returns.
+func DialSSHChainContext(
+	ctx context.Context,
+	hops []terminal.ResolvedHop,
+	target terminal.ResolvedHop,
+	onHopConnected HopProgressFn,
+	_ func(time.Duration),
 ) (*ssh.Client, []*ssh.Client, error) {
 	if target.ClientConfig == nil {
 		return nil, nil, errors.New("target ssh client config is required")
@@ -41,7 +53,7 @@ func DialSSHChain(
 
 	if len(hops) == 0 {
 		// Direct dial — no intermediate hops.
-		client, err := dialDirectSSH(target.Addr, target.ClientConfig, hopDialTimeout)
+		client, err := dialDirectSSH(ctx, target.Addr, target.ClientConfig, hopDialTimeout)
 		if err != nil {
 			return nil, nil, fmt.Errorf("direct ssh dial to %s failed: %w", target.Addr, err)
 		}
@@ -50,23 +62,21 @@ func DialSSHChain(
 
 	intermediates := make([]*ssh.Client, 0, len(hops))
 
-	// closeAll closes all intermediate clients in reverse order.
-	closeAll := func() {
-		for i := len(intermediates) - 1; i >= 0; i-- {
-			_ = intermediates[i].Close()
-		}
-	}
+	closeAll := func() { CloseIntermediateClients(intermediates) }
 
 	// Dial the first hop directly.
 	first := hops[0]
 	if first.ClientConfig == nil {
 		return nil, nil, fmt.Errorf("hop 0 (%s) has nil client config", first.Addr)
 	}
-	firstClient, err := dialDirectSSH(first.Addr, first.ClientConfig, hopDialTimeout)
+	firstClient, err := dialDirectSSH(ctx, first.Addr, first.ClientConfig, hopDialTimeout)
 	if err != nil {
 		return nil, nil, fmt.Errorf("ssh dial to hop 0 (%s) failed: %w", first.Addr, err)
 	}
 	intermediates = append(intermediates, firstClient)
+	// Closing the TCP-backed root also unblocks every tunneled hop and dial.
+	stopFirst := context.AfterFunc(ctx, func() { _ = firstClient.Close() })
+	defer stopFirst()
 	log.Printf("terminal-ssh-chain: hop 0/%d connected to %s", len(hops), first.Addr) // #nosec G706 -- Hop addresses come from resolved operator config, not raw browser input.
 	if onHopConnected != nil {
 		onHopConnected(0, len(hops), first.Addr)
@@ -81,20 +91,21 @@ func DialSSHChain(
 		}
 		prevClient := intermediates[i-1]
 
-		netConn, err := dialWithTimeout(prevClient, hop.Addr, hopDialTimeout)
+		netConn, err := dialWithTimeout(ctx, prevClient, hop.Addr, hopDialTimeout)
 		if err != nil {
 			closeAll()
 			return nil, nil, fmt.Errorf("tunnel dial to hop %d (%s) failed: %w", i, hop.Addr, err)
 		}
 
-		sshConn, chans, reqs, err := ssh.NewClientConn(netConn, hop.Addr, hop.ClientConfig)
+		handshakeCtx, cancelHandshake := context.WithTimeout(ctx, hopDialTimeout)
+		client, err := handshakeSSHThroughChain(handshakeCtx, netConn, hop.Addr, hop.ClientConfig, firstClient)
+		cancelHandshake()
 		if err != nil {
-			_ = netConn.Close()
 			closeAll()
+			_ = netConn.Close()
 			return nil, nil, fmt.Errorf("ssh handshake to hop %d (%s) failed: %w", i, hop.Addr, err)
 		}
 
-		client := ssh.NewClient(sshConn, chans, reqs)
 		intermediates = append(intermediates, client)
 		log.Printf("terminal-ssh-chain: hop %d/%d connected to %s", i, len(hops), hop.Addr) // #nosec G706 -- Hop addresses come from resolved operator config, not raw browser input.
 		if onHopConnected != nil {
@@ -104,24 +115,40 @@ func DialSSHChain(
 
 	// Dial the target through the last hop.
 	lastClient := intermediates[len(intermediates)-1]
-	targetConn, err := dialWithTimeout(lastClient, target.Addr, hopDialTimeout)
+	targetConn, err := dialWithTimeout(ctx, lastClient, target.Addr, hopDialTimeout)
 	if err != nil {
 		closeAll()
 		return nil, nil, fmt.Errorf("tunnel dial to target (%s) through chain failed: %w", target.Addr, err)
 	}
 
-	sshConn, chans, reqs, err := ssh.NewClientConn(targetConn, target.Addr, target.ClientConfig)
+	handshakeCtx, cancelHandshake := context.WithTimeout(ctx, hopDialTimeout)
+	finalClient, err := handshakeSSHThroughChain(handshakeCtx, targetConn, target.Addr, target.ClientConfig, firstClient)
+	cancelHandshake()
 	if err != nil {
-		_ = targetConn.Close()
 		closeAll()
+		_ = targetConn.Close()
 		return nil, nil, fmt.Errorf("ssh handshake to target (%s) failed: %w", target.Addr, err)
 	}
 
-	finalClient := ssh.NewClient(sshConn, chans, reqs)
 	return finalClient, intermediates, nil
 }
 
-func dialDirectSSH(address string, config *ssh.ClientConfig, timeout time.Duration) (*ssh.Client, error) {
+// A tunnel's Close sends a channel-close packet; it cannot force a stalled
+// jump host to acknowledge it. Cancel the owned TCP-backed root too, so local
+// handshake reads and writes unblock without any response from that host.
+func handshakeSSHThroughChain(ctx context.Context, conn net.Conn, address string, config *ssh.ClientConfig, root *ssh.Client) (*ssh.Client, error) {
+	stopRootClose := context.AfterFunc(ctx, func() { _ = root.Close() })
+	client, err := securityruntime.HandshakeSSHContext(ctx, conn, address, config)
+	if !stopRootClose() {
+		if client != nil {
+			_ = client.Close()
+		}
+		return nil, ctx.Err()
+	}
+	return client, err
+}
+
+func dialDirectSSH(parent context.Context, address string, config *ssh.ClientConfig, timeout time.Duration) (*ssh.Client, error) {
 	host, portRaw, err := net.SplitHostPort(address)
 	if err != nil {
 		return nil, err
@@ -130,34 +157,23 @@ func dialDirectSSH(address string, config *ssh.ClientConfig, timeout time.Durati
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 	return securityruntime.DialOutboundSSHContext(ctx, host, port, config, timeout)
 }
 
-func dialWithTimeout(client *ssh.Client, addr string, timeout time.Duration) (net.Conn, error) {
-	type dialResult struct {
-		conn net.Conn
-		err  error
-	}
-	ch := make(chan dialResult, 1)
-	go func() {
-		conn, err := client.Dial("tcp", addr)
-		ch <- dialResult{conn, err}
-	}()
-	select {
-	case res := <-ch:
-		return res.conn, res.err
-	case <-time.After(timeout):
-		return nil, fmt.Errorf("dial to %s timed out after %s", addr, timeout)
-	}
+func dialWithTimeout(parent context.Context, client *ssh.Client, addr string, timeout time.Duration) (net.Conn, error) {
+	ctx, cancel := context.WithTimeout(parent, timeout)
+	defer cancel()
+	return client.DialContext(ctx, "tcp", addr)
 }
 
-// CloseIntermediateClients closes all intermediate SSH clients in reverse order.
+// CloseIntermediateClients tears down an owned chain from its TCP-backed root.
+// Closing a tunneled client first can wait forever on a stalled outer transport.
 func CloseIntermediateClients(clients []*ssh.Client) {
-	for i := len(clients) - 1; i >= 0; i-- {
-		if clients[i] != nil {
-			_ = clients[i].Close()
+	for _, client := range clients {
+		if client != nil {
+			_ = client.Close()
 		}
 	}
 }

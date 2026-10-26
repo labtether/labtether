@@ -170,7 +170,11 @@ func (d *Deps) HandleDockerHostActions(w http.ResponseWriter, r *http.Request) {
 		if targetID == "" {
 			targetID = hostID
 		}
-		result, err := d.ExecuteDockerAction(r.Context(), actionID, connectorsdk.ActionRequest{
+		actionCtx, allowed := d.authorizeDockerHostActionTarget(w, r, host, actionID, targetID)
+		if !allowed {
+			return
+		}
+		result, err := d.ExecuteDockerAction(actionCtx, actionID, connectorsdk.ActionRequest{
 			TargetID: targetID,
 			Params:   body.Params,
 		})
@@ -359,6 +363,9 @@ func (d *Deps) HandleDockerContainerActions(w http.ResponseWriter, r *http.Reque
 		if !strings.EqualFold(strings.TrimSpace(containerAssetID), strings.TrimSpace(host.AgentID)) && !d.enforceAssetActionGuard(w, host.AgentID) {
 			return
 		}
+		if !d.enforceAssetActionGuard(w, "docker-host-"+NormalizeDockerHostLookupID(host.AgentID)) {
+			return
+		}
 		var body struct {
 			Action string            `json:"action"`
 			Params map[string]string `json:"params,omitempty"`
@@ -376,7 +383,7 @@ func (d *Deps) HandleDockerContainerActions(w http.ResponseWriter, r *http.Reque
 			TargetID: containerAssetID,
 			Params:   body.Params,
 		}
-		result, err := d.ExecuteDockerAction(r.Context(), actionID, req)
+		result, err := d.ExecuteDockerAction(docker.WithActionHost(r.Context(), host.AgentID), actionID, req)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusBadGateway, "action execution failed: "+d.SanitizeUpstreamError(err.Error()))
 			return
@@ -453,7 +460,11 @@ func (d *Deps) HandleDockerStackActions(w http.ResponseWriter, r *http.Request) 
 			TargetID: stackAssetID,
 			Params:   body.Params,
 		}
-		result, err := d.ExecuteDockerAction(r.Context(), actionID, req)
+		actionCtx, allowed := d.authorizeDockerStackActionTarget(w, r, actionID, stackAssetID)
+		if !allowed {
+			return
+		}
+		result, err := d.ExecuteDockerAction(actionCtx, actionID, req)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusBadGateway, "action execution failed: "+d.SanitizeUpstreamError(err.Error()))
 			return

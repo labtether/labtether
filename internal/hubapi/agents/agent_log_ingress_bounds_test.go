@@ -74,7 +74,7 @@ func TestAgentStatusLogsEscapeUntrustedLines(t *testing.T) {
 
 	deps := &Deps{}
 	progressConn := &agentmgr.AgentConn{AssetID: "progress-agent"}
-	defer deps.trackAgentUpdate("job\nforged-job", progressConn.AssetID, time.Minute)()
+	defer deps.trackAgentUpdate("job\nforged-job", progressConn, time.Minute)()
 	progress, err := json.Marshal(agentmgr.UpdateProgressData{
 		JobID: "job\nforged-job", Stage: "download\rforged-stage", Message: "ready\nforged-message",
 	})
@@ -121,16 +121,16 @@ func TestProcessAgentUpdateProgressRequiresMatchingLiveRequest(t *testing.T) {
 	}
 
 	deps.ProcessAgentUpdateProgress(owner, progress("unknown"))
-	finishManual := deps.trackAgentUpdate("manual-update", owner.AssetID, time.Minute)
+	finishManual := deps.trackAgentUpdate("manual-update", owner, time.Minute)
 	deps.ProcessAgentUpdateProgress(other, progress("manual-update"))
 	deps.ProcessAgentUpdateProgress(owner, progress("manual-update"))
 	finishManual()
 	deps.ProcessAgentUpdateProgress(owner, progress("manual-update"))
 
-	deps.trackAgentUpdate("expired-update", owner.AssetID, -time.Second)
+	deps.trackAgentUpdate("expired-update", owner, -time.Second)
 	deps.ProcessAgentUpdateProgress(owner, progress("expired-update"))
 
-	deps.trackAgentUpdate("automatic-update", owner.AssetID, time.Minute)
+	deps.trackAgentUpdate("automatic-update", owner, time.Minute)
 	deps.ProcessAgentUpdateProgress(owner, progress("automatic-update"))
 	resultData, err := json.Marshal(agentmgr.UpdateResultData{JobID: "automatic-update"})
 	if err != nil {

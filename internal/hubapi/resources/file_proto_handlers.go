@@ -6,10 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path"
-	"strings"
 
 	"github.com/labtether/labtether/internal/fileproto"
 	"github.com/labtether/labtether/internal/persistence"
@@ -19,6 +19,10 @@ import (
 
 func writeFileProtocolError(w http.ResponseWriter, status int, clientMessage string, err error) {
 	securityruntime.Logf("file protocol: %s: %v", clientMessage, err)
+	if errors.Is(err, errLegacyPlainWebDAV) {
+		servicehttp.WriteError(w, http.StatusConflict, legacyPlainWebDAVNotice)
+		return
+	}
 	servicehttp.WriteError(w, status, clientMessage)
 }
 
@@ -145,7 +149,7 @@ func (d *Deps) handleFileConnectionList(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	dirPath := strings.TrimSpace(r.URL.Query().Get("path"))
+	dirPath := r.URL.Query().Get("path")
 	showHidden := r.URL.Query().Get("show_hidden") == "true"
 
 	fs, fc, ok := d.getPooledFS(w, r, connID)
@@ -198,7 +202,7 @@ func (d *Deps) handleFileConnectionDownload(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	filePath := strings.TrimSpace(r.URL.Query().Get("path"))
+	filePath := r.URL.Query().Get("path")
 	if filePath == "" {
 		servicehttp.WriteError(w, http.StatusBadRequest, "path is required")
 		return
@@ -226,7 +230,7 @@ func (d *Deps) handleFileConnectionDownload(w http.ResponseWriter, r *http.Reque
 	}
 
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filename}))
 	if size >= 0 {
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", size))
 	}
@@ -248,7 +252,7 @@ func (d *Deps) handleFileConnectionUpload(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	filePath := strings.TrimSpace(r.URL.Query().Get("path"))
+	filePath := r.URL.Query().Get("path")
 	if filePath == "" {
 		servicehttp.WriteError(w, http.StatusBadRequest, "path is required")
 		return
@@ -298,7 +302,7 @@ func (d *Deps) handleFileConnectionMkdir(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	dirPath := strings.TrimSpace(r.URL.Query().Get("path"))
+	dirPath := r.URL.Query().Get("path")
 	if dirPath == "" {
 		servicehttp.WriteError(w, http.StatusBadRequest, "path is required")
 		return
@@ -328,7 +332,7 @@ func (d *Deps) handleFileConnectionDeleteOp(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	filePath := strings.TrimSpace(r.URL.Query().Get("path"))
+	filePath := r.URL.Query().Get("path")
 	if filePath == "" {
 		servicehttp.WriteError(w, http.StatusBadRequest, "path is required")
 		return
@@ -367,8 +371,6 @@ func (d *Deps) handleFileConnectionRename(w http.ResponseWriter, r *http.Request
 	if err := d.DecodeJSONBody(w, r, &req); err != nil {
 		return
 	}
-	req.OldPath = strings.TrimSpace(req.OldPath)
-	req.NewPath = strings.TrimSpace(req.NewPath)
 
 	if req.OldPath == "" || req.NewPath == "" {
 		servicehttp.WriteError(w, http.StatusBadRequest, "old_path and new_path are required")
@@ -409,8 +411,6 @@ func (d *Deps) handleFileConnectionCopy(w http.ResponseWriter, r *http.Request, 
 	if err := d.DecodeJSONBody(w, r, &req); err != nil {
 		return
 	}
-	req.SrcPath = strings.TrimSpace(req.SrcPath)
-	req.DstPath = strings.TrimSpace(req.DstPath)
 
 	if req.SrcPath == "" || req.DstPath == "" {
 		servicehttp.WriteError(w, http.StatusBadRequest, "src_path and dst_path are required")

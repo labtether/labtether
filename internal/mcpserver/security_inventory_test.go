@@ -90,7 +90,7 @@ func TestAssetRestrictedAuthorizationPlanCoversEveryAdvertisedSurface(t *testing
 func TestEveryAdvertisedMCPToolExecutesWithConfiguredDependencies(t *testing.T) {
 	deps := newTestDeps()
 	deps.GetScopes = func(context.Context) []string { return nil }
-	deps.ExecuteViaAgent = func(job terminal.CommandJob) terminal.CommandResult {
+	deps.ExecuteViaAgent = func(_ context.Context, job terminal.CommandJob) terminal.CommandResult {
 		return terminal.CommandResult{Status: "succeeded", Output: job.Target + ":ok"}
 	}
 	deps.ExecutePowerAction = func(_ context.Context, assetID, action string) (string, error) {

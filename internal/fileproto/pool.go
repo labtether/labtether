@@ -319,6 +319,11 @@ func (p *Pool) generationLocked(connectionID string) uint64 {
 }
 
 func connectionConfigsEqual(a, b ConnectionConfig) bool {
+	// These callbacks enforce saved-config validity and persist trust learned
+	// during Connect; their closure identity is not a transport setting. Get
+	// still calls the current ValidateCurrent before it reuses any session.
+	a.ValidateCurrent, b.ValidateCurrent = nil, nil
+	a.PersistHostKey, b.PersistHostKey = nil, nil
 	return reflect.DeepEqual(a, b)
 }
 

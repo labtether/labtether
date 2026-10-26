@@ -119,22 +119,30 @@ func TestBootstrapAdminUserSkipsAutoCreateInProductionWithoutPassword(t *testing
 	}
 }
 
-func TestBootstrapAdminUserCreatesDevDefaultPasswordWhenMissing(t *testing.T) {
-	t.Setenv("LABTETHER_ENV", "development")
-	t.Setenv("LABTETHER_ADMIN_PASSWORD", "")
+// Development used to create "admin" with a random password nobody could see,
+// locking the first user out of the dev compose stack. Without a configured
+// password every environment must leave the first user to browser setup.
+func TestBootstrapAdminUserUsesBrowserSetupInDevelopmentWithoutPassword(t *testing.T) {
+	for _, env := range []string{"", "development"} {
+		t.Run("env="+env, func(t *testing.T) {
+			t.Setenv("LABTETHER_ENV", env)
+			t.Setenv("LABTETHER_ADMIN_PASSWORD", "")
+			t.Setenv("LABTETHER_SETUP_TOKEN", "")
+			t.Setenv("LABTETHER_SETUP_TOKEN_FILE", "")
+			dataDir := t.TempDir()
+			t.Setenv("LABTETHER_DATA_DIR", dataDir)
 
-	store := &fakeAdminBootstrapStore{}
-	if err := bootstrapAdminUser(store); err != nil {
-		t.Fatalf("bootstrapAdminUser returned error: %v", err)
-	}
-	if store.createCount != 1 {
-		t.Fatalf("expected one created user, got %d", store.createCount)
-	}
-	if store.createUser != defaultBootstrapAdminUsername {
-		t.Fatalf("expected created username %s, got %s", defaultBootstrapAdminUsername, store.createUser)
-	}
-	if auth.CheckPassword("password", store.createHash) {
-		t.Fatalf("expected generated password, but hash matches weak default")
+			store := &fakeAdminBootstrapStore{}
+			if err := bootstrapAdminUser(store); err != nil {
+				t.Fatalf("bootstrapAdminUser returned error: %v", err)
+			}
+			if store.createCount != 0 || store.bootstrapCount != 0 {
+				t.Fatalf("created an admin with an unshown password: create=%d bootstrap=%d", store.createCount, store.bootstrapCount)
+			}
+			if _, err := os.Stat(filepath.Join(dataDir, "install", "setup-token")); err != nil {
+				t.Fatalf("expected local first-run setup token: %v", err)
+			}
+		})
 	}
 }
 
@@ -204,6 +212,7 @@ func TestBootstrapAdminUserDoesNotResetExistingDevAdminPassword(t *testing.T) {
 func TestBootstrapAdminUserDoesNotPrintGeneratedPasswordBannerToStderr(t *testing.T) {
 	t.Setenv("LABTETHER_ENV", "development")
 	t.Setenv("LABTETHER_ADMIN_PASSWORD", "")
+	t.Setenv("LABTETHER_DATA_DIR", t.TempDir())
 
 	store := &fakeAdminBootstrapStore{}
 	stderrReader, stderrWriter, err := os.Pipe()

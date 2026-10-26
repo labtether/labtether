@@ -72,14 +72,45 @@ describe("status refresh lifecycle", () => {
     expect(full).toHaveBeenCalledTimes(1);
 
     await changeVisibility("hidden");
+    expect(FakeSocket.instances[0].close).toHaveBeenCalledTimes(1);
     await act(async () => { await vi.advanceTimersByTimeAsync(120_000); });
     expect(live).toHaveBeenCalledTimes(2);
     expect(full).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
     await changeVisibility("visible");
+    expect(FakeSocket.instances).toHaveLength(2);
     expect(live).toHaveBeenCalledTimes(3);
     expect(full).toHaveBeenCalledTimes(2);
     await act(async () => { await vi.advanceTimersByTimeAsync(120_000); });
     expect(full).toHaveBeenCalledTimes(3);
+  });
+
+  it("ignores late close events from the hidden subscription after a quick return", async () => {
+    await render();
+    const old = FakeSocket.instances[0];
+    old.close.mockImplementation(() => {});
+    await changeVisibility("hidden");
+    await changeVisibility("visible");
+    expect(FakeSocket.instances).toHaveLength(2);
+    await act(async () => { old.onclose?.(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(FakeSocket.instances[1].close).not.toHaveBeenCalled();
+  });
+
+  it("aborts hidden URL lookups and opens only the fresh subscription on return", async () => {
+    let finish!: (value: Response) => void;
+    fetchMock.mockReturnValueOnce(new Promise<Response>((resolve) => { finish = resolve; }));
+    await render();
+    const signal = fetchMock.mock.calls[0][1].signal as AbortSignal;
+    await changeVisibility("hidden");
+    expect(signal.aborted).toBe(true);
+    await changeVisibility("visible");
+    expect(FakeSocket.instances).toHaveLength(1);
+    await act(async () => { finish(new Response(JSON.stringify({ wsUrl: "wss://old.example.test/events" }))); });
+    expect(FakeSocket.instances).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("debounces push events using the latest group without reconnecting the socket", async () => {

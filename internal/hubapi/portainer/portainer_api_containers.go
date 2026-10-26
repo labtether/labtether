@@ -44,7 +44,7 @@ func (d *Deps) HandlePortainerContainers(ctx context.Context, w http.ResponseWri
 		if shared.HasAssetRestriction(r.Context()) {
 			filtered := make([]portainerconnector.Container, 0, len(containers))
 			for _, container := range containers {
-				allowed, authErr := d.portainerResourceAllowed(r.Context(), strconv.Itoa(epID), "container_id", container.ID)
+				allowed, authErr := d.portainerResourceAllowed(r.Context(), runtime.CollectorID, strconv.Itoa(epID), "container_id", container.ID)
 				if authErr == nil && allowed {
 					filtered = append(filtered, container)
 				}
@@ -62,11 +62,12 @@ func (d *Deps) HandlePortainerContainers(ctx context.Context, w http.ResponseWri
 		return
 	}
 
-	if len(subParts) < 2 {
+	if len(subParts) != 2 {
 		servicehttp.WriteError(w, http.StatusNotFound, "unknown container action")
 		return
 	}
-	if !d.requirePortainerResourceAccess(w, r, strconv.Itoa(epID), "container_id", containerID) {
+	if (subParts[1] == "logs" || subParts[1] == "inspect") &&
+		!d.requirePortainerResourceAccess(w, r, runtime.CollectorID, strconv.Itoa(epID), "container_id", containerID) {
 		return
 	}
 
@@ -112,6 +113,10 @@ func (d *Deps) HandlePortainerContainers(ctx context.Context, w http.ResponseWri
 		if !d.RequireAdminAuth(w, r) {
 			return
 		}
+		containerID, ok := d.preparePortainerContainerMutation(ctx, w, r, asset, runtime, epID, containerID)
+		if !ok {
+			return
+		}
 		if err := runtime.Client.ContainerAction(ctx, epID, containerID, subAction); err != nil {
 			servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
 			return
@@ -127,6 +132,10 @@ func (d *Deps) HandlePortainerContainers(ctx context.Context, w http.ResponseWri
 			return
 		}
 		force := r.URL.Query().Get("force") == "true"
+		containerID, ok := d.preparePortainerContainerMutation(ctx, w, r, asset, runtime, epID, containerID)
+		if !ok {
+			return
+		}
 		if err := runtime.Client.RemoveContainer(ctx, epID, containerID, force); err != nil {
 			servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
 			return

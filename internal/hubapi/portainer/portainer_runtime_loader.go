@@ -19,14 +19,9 @@ func (d *Deps) LoadPortainerRuntime(collectorID string) (*PortainerRuntime, erro
 		return nil, fmt.Errorf("credential store unavailable")
 	}
 
-	collectors, err := d.HubCollectorStore.ListHubCollectors(200, true)
+	selected, err := shared.ResolveEnabledHubCollector(d.HubCollectorStore, hubcollector.CollectorTypePortainer, collectorID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list hub collectors: %w", err)
-	}
-
-	selected := SelectCollectorForPortainerRuntime(collectors, collectorID)
-	if selected == nil {
-		return nil, fmt.Errorf("no active portainer collector configured")
+		return nil, err
 	}
 
 	baseURL := shared.CollectorConfigString(selected.Config, "base_url")

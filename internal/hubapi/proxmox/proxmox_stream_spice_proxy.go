@@ -1,6 +1,7 @@
 package proxmox
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"log"
@@ -185,6 +186,8 @@ func (d *Deps) HandleDesktopSPICEStream(w http.ResponseWriter, r *http.Request, 
 	}
 	_ = spiceConn.SetDeadline(time.Time{})
 	defer spiceConn.Close()
+	stopCancel := context.AfterFunc(r.Context(), func() { _ = spiceConn.Close() })
+	defer stopCancel()
 
 	wsConn, err := shared.UpgradeWebSocket(d.TerminalWebSocketUpgrader, w, r, nil)
 	if err != nil {

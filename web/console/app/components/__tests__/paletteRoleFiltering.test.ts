@@ -35,13 +35,14 @@ describe("palette role filtering", () => {
       .search("")
       .map((item) => item.label);
 
+    // The Hub refuses host file browsing to viewers, so Files is operator-only.
     expect(viewerLabels).toEqual([
       "QA host: Details",
-      "QA host: Files",
       "QA host: Logs",
     ]);
     expect(operatorLabels).toContain("QA host: Terminal");
     expect(operatorLabels).toContain("QA host: Desktop");
+    expect(operatorLabels).toContain("QA host: Files");
   });
 
   it("disables every terminal shortcut provider for a viewer", () => {

@@ -12,12 +12,14 @@ import (
 )
 
 func (s *PostgresStore) AppendEvent(event logs.Event) error {
+	ctx, cancel := agentLifecycleStoreContext()
+	defer cancel()
 	normalized, fieldsPayload, _, err := normalizeLogEventForInsert(event)
 	if err != nil {
 		return err
 	}
 
-	result, err := s.pool.Exec(context.Background(),
+	result, err := s.pool.Exec(ctx,
 		`INSERT INTO log_events (id, asset_id, source, level, message, fields, timestamp)
 			 VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
 			 ON CONFLICT (id) DO NOTHING`,
@@ -39,6 +41,8 @@ func (s *PostgresStore) AppendEvent(event logs.Event) error {
 }
 
 func (s *PostgresStore) AppendEvents(events []logs.Event) error {
+	ctx, cancel := agentLifecycleStoreContext()
+	defer cancel()
 	if len(events) == 0 {
 		return nil
 	}
@@ -91,7 +95,7 @@ func (s *PostgresStore) AppendEvents(events []logs.Event) error {
 	}
 	query.WriteString(` ON CONFLICT (id) DO NOTHING`)
 
-	result, err := s.pool.Exec(context.Background(), query.String(), args...)
+	result, err := s.pool.Exec(ctx, query.String(), args...)
 	if err != nil {
 		return err
 	}
@@ -132,6 +136,13 @@ func normalizeLogEventForInsert(event logs.Event) (logs.Event, string, int, erro
 }
 
 func (s *PostgresStore) QueryEvents(req logs.QueryRequest) ([]logs.Event, error) {
+	return s.QueryEventsContext(context.Background(), req)
+}
+
+func (s *PostgresStore) QueryEventsContext(ctx context.Context, req logs.QueryRequest) ([]logs.Event, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	limit := req.Limit
 	if limit <= 0 {
 		limit = 200
@@ -225,7 +236,7 @@ func (s *PostgresStore) QueryEvents(req logs.QueryRequest) ([]logs.Event, error)
 	sql += fmt.Sprintf(" ORDER BY timestamp DESC LIMIT $%d", next)
 	args = append(args, limit)
 
-	rows, err := s.pool.Query(context.Background(), sql, args...)
+	rows, err := s.pool.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}

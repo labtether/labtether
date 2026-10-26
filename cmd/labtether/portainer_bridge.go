@@ -15,7 +15,8 @@ func (s *apiServer) buildPortainerDeps() *portainerpkg.Deps {
 		CredentialStore:   s.credentialStore,
 		SecretsManager:    s.secretsManager,
 
-		RequireAdminAuth: s.requireAdminAuth,
+		RequireAdminAuth:        s.requireAdminAuth,
+		EvaluateAssetGuardrails: s.ensureGroupFeaturesDeps().EvaluateAssetGuardrails,
 
 		WrapAuth:  s.withAuth,
 		WrapAdmin: s.withAdminAuth,
@@ -49,6 +50,7 @@ func (s *apiServer) ensurePortainerDeps() *portainerpkg.Deps {
 	d.CredentialStore = s.credentialStore
 	d.SecretsManager = s.secretsManager
 	d.RequireAdminAuth = s.requireAdminAuth
+	d.EvaluateAssetGuardrails = s.ensureGroupFeaturesDeps().EvaluateAssetGuardrails
 	return d
 }
 

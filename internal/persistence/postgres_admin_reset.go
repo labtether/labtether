@@ -10,7 +10,7 @@ func postgresAdminResetTables() []string {
 	return []string{
 		"notification_history", "incident_alert_links", "incident_events", "incident_assets", "incidents",
 		"alert_evaluations", "alert_instances", "alert_silences", "alert_rule_targets", "alert_routes", "alert_rules",
-		"notification_channels",
+		"notification_channels", "notification_bootstrap_markers",
 		"synthetic_check_results", "synthetic_checks",
 		"hub_collectors",
 		"canonical_reconciliation_results", "canonical_ingest_checkpoints", "canonical_template_bindings",

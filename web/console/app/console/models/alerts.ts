@@ -89,9 +89,11 @@ export type Incident = {
 export type IncidentEvent = {
   id: string;
   incident_id: string;
-  kind: string;
-  title: string;
-  detail?: string;
-  source?: string;
+  event_type: string;
+  source_ref: string;
+  summary: string;
+  severity?: string;
+  metadata?: Record<string, unknown>;
+  occurred_at: string;
   created_at: string;
 };

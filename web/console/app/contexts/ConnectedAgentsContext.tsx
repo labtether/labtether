@@ -22,6 +22,14 @@ function setsEqual(left: Set<string>, right: Set<string>): boolean {
   return true;
 }
 
+function tmuxStatusEqual(left: Map<string, boolean>, right: Map<string, boolean>): boolean {
+  if (left.size !== right.size) return false;
+  for (const [id, enabled] of left) {
+    if (right.get(id) !== enabled) return false;
+  }
+  return true;
+}
+
 export function ConnectedAgentsProvider({ children }: { children: ReactNode }) {
   const [connectedAgentIds, setConnectedAgentIds] = useState<Set<string>>(new Set());
   const [agentTmuxStatus, setAgentTmuxStatus] = useState<Map<string, boolean>>(new Map());
@@ -55,7 +63,7 @@ export function ConnectedAgentsProvider({ children }: { children: ReactNode }) {
         for (const info of data.assetsInfo) {
           tmuxMap.set(info.id, info.has_tmux);
         }
-        setAgentTmuxStatus(tmuxMap);
+        setAgentTmuxStatus((current) => (tmuxStatusEqual(current, tmuxMap) ? current : tmuxMap));
       }
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
@@ -85,8 +93,10 @@ export function ConnectedAgentsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    void refreshConnected();
-    startInterval();
+    if (document.visibilityState !== "hidden") {
+      void refreshConnected();
+      startInterval();
+    }
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {

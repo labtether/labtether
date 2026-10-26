@@ -212,6 +212,9 @@ func (d *Deps) executeEntityAction(w http.ResponseWriter, r *http.Request, asset
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if !d.enforceEntityMutation(r.Context(), w, asset, runtime) {
+		return
+	}
 	result, err := runtime.Connector.ExecuteAction(r.Context(), actionID, connectorsdk.ActionRequest{
 		TargetID: entityID,
 		Params:   params,
@@ -221,12 +224,12 @@ func (d *Deps) executeEntityAction(w http.ResponseWriter, r *http.Request, asset
 		servicehttp.WriteError(w, http.StatusBadGateway, "Home Assistant action execution failed")
 		return
 	}
-	status := http.StatusOK
 	if strings.EqualFold(result.Status, "failed") {
-		status = http.StatusBadRequest
-		result.Message = shared.SanitizeUpstreamError(result.Message)
+		apiv2.WriteError(w, http.StatusBadRequest, "homeassistant_action_failed",
+			shared.SanitizeUpstreamError(result.Message))
+		return
 	}
-	servicehttp.WriteJSON(w, status, map[string]any{
+	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"asset_id":     asset.ID,
 		"entity_id":    entityID,
 		"collector_id": runtime.CollectorID,
@@ -239,7 +242,15 @@ func resolveEntityAction(asset assets.Asset, req entityActionRequest) (string, m
 	service := strings.ToLower(strings.TrimSpace(req.Service))
 	params := make(map[string]string, len(req.Params)+1)
 	for key, value := range req.Params {
-		params[strings.TrimSpace(key)] = strings.TrimSpace(value)
+		key = strings.TrimSpace(key)
+		// Home Assistant unions these selectors with entity_id. This dedicated
+		// route guards one entity, so it cannot accept additional target sets.
+		switch key {
+		case "area_id", "device_id", "floor_id", "label_id":
+			return "", nil, serviceError("additional Home Assistant target selectors are not allowed on an entity action")
+		}
+		// The connector always overwrites entity_id with the loaded entity.
+		params[key] = strings.TrimSpace(value)
 	}
 	if action == "" && service != "" {
 		action = "service.call"

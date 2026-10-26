@@ -29,7 +29,7 @@ func (c *Connector) Discover(ctx context.Context) ([]connectorsdk.Asset, error) 
 				continue
 			}
 			assets = append(assets, connectorsdk.Asset{
-				ID:     "proxmox-node-" + normalizeID(node),
+				ID:     NodeAssetID(node),
 				Type:   "hypervisor-node",
 				Name:   node,
 				Source: c.ID(),

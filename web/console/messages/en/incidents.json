@@ -12,5 +12,18 @@
     "placeholder": "Type a note...",
     "emptyHint": "Add investigation notes, root cause analysis, and mitigation steps.",
     "add": "Add Note"
+  },
+  "timeline": {
+    "title": "What Happened",
+    "refresh": "Refresh",
+    "empty": "No events have been recorded for this incident.",
+    "loading": "Loading timeline…",
+    "error": "Could not load the timeline. Try again.",
+    "retry": "Retry",
+    "loadOlder": "Load older"
+  },
+  "detail": {
+    "error": "Could not load this incident. Try again.",
+    "retry": "Retry"
   }
 }

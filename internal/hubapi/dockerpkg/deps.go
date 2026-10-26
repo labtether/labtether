@@ -13,6 +13,7 @@ import (
 	"github.com/labtether/labtether/internal/connectors/docker"
 	"github.com/labtether/labtether/internal/connectorsdk"
 	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
+	"github.com/labtether/labtether/internal/terminal"
 )
 
 // Deps holds all dependencies required by the docker handler package.
@@ -27,6 +28,8 @@ type Deps struct {
 
 	// Docker exec bridges (shared with cmd/labtether for WS handler dispatch).
 	DockerExecBridges *sync.Map
+	dockerExecOwners  sync.Map
+	dockerExecOwnerMu sync.Mutex
 
 	// WebSocket upgrader for exec streams.
 	TerminalWebSocketUpgrader websocket.Upgrader
@@ -35,12 +38,13 @@ type Deps struct {
 	WrapAuth func(http.HandlerFunc) http.HandlerFunc
 
 	// Cross-cutting methods injected from cmd/labtether.
-	DecodeJSONBody             func(w http.ResponseWriter, r *http.Request, dst any) error
-	SanitizeUpstreamError      func(msg string) string
-	ParseTerminalSize          func(colsRaw, rowsRaw string) (int, int)
-	IsControlMessage           func(payload []byte) bool
-	StartBrowserWSKeepalive    func(wsConn *websocket.Conn, writeMu *sync.Mutex, streamLabel string) func()
-	TouchBrowserWSReadDeadline func(wsConn *websocket.Conn) error
+	DecodeJSONBody                func(w http.ResponseWriter, r *http.Request, dst any) error
+	SanitizeUpstreamError         func(msg string) string
+	ParseTerminalSize             func(colsRaw, rowsRaw string) (int, int)
+	IsControlMessage              func(payload []byte) bool
+	StartBrowserWSKeepalive       func(wsConn *websocket.Conn, writeMu *sync.Mutex, streamLabel string) func()
+	TouchBrowserWSReadDeadline    func(wsConn *websocket.Conn) error
+	ClaimPersistentTerminalStream func(terminal.Session, *websocket.Conn) (func(), func())
 
 	// Broadcaster callback for event dispatch.
 	Broadcast func(eventType string, data json.RawMessage)
@@ -61,6 +65,13 @@ type DockerExecBridge struct {
 	OutputCh        chan []byte
 	ClosedCh        chan struct{}
 	ExpectedAgentID string
+	AgentConn       *agentmgr.AgentConn
+	SessionID       string
+	WireSessionID   string
+	ReadyCh         chan struct{}
+	readyOnce       sync.Once
+	lifecycleMu     sync.Mutex
+	started         bool
 	reasonMu        sync.Mutex
 	reason          string
 	closeMu         sync.Once
@@ -71,6 +82,13 @@ func (b *DockerExecBridge) Close(reason string) {
 	if b == nil {
 		return
 	}
+	b.lifecycleMu.Lock()
+	defer b.lifecycleMu.Unlock()
+	b.closeWithReason(reason)
+}
+
+// Caller holds lifecycleMu.
+func (b *DockerExecBridge) closeWithReason(reason string) {
 	trimmed := strings.TrimSpace(reason)
 	if trimmed != "" {
 		b.reasonMu.Lock()
@@ -102,6 +120,8 @@ func (b *DockerExecBridge) TrySendOutput(payload []byte) {
 	if b == nil {
 		return
 	}
+	b.lifecycleMu.Lock()
+	defer b.lifecycleMu.Unlock()
 	select {
 	case <-b.ClosedCh:
 		return
@@ -111,7 +131,22 @@ func (b *DockerExecBridge) TrySendOutput(payload []byte) {
 	select {
 	case b.OutputCh <- payload:
 	default:
+		// Terminal output is an ordered byte stream. Dropping a chunk can
+		// corrupt UTF-8 or an escape sequence and silently change its meaning.
+		if len(payload) != 0 {
+			b.closeWithReason("container terminal output buffer overflow")
+		}
 	}
+	if b.ReadyCh != nil {
+		b.readyOnce.Do(func() { close(b.ReadyCh) })
+	}
+}
+
+// MatchesConnection binds live streams to the exact socket that started them.
+// Legacy in-process bridge users have no wire ID or connection binding.
+func (b *DockerExecBridge) MatchesConnection(conn *agentmgr.AgentConn) bool {
+	return conn != nil && b.MatchesAgent(conn.AssetID) &&
+		(b.AgentConn == conn || (b.AgentConn == nil && b.WireSessionID == ""))
 }
 
 // MatchesAgent returns true if the bridge is associated with the given asset ID.

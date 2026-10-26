@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useRemoteViewTabsState } from "./useRemoteViewTabsState";
 import RemoteViewTabBar from "./RemoteViewTabBar";
 import NewTabPage from "./NewTabPage";
@@ -8,7 +9,8 @@ import RemoteViewSession from "./RemoteViewSession";
 import { defaultPort } from "./types";
 import type { RemoteViewProtocol, RemoteViewConnectionState } from "./types";
 import { useAuth } from "../../../contexts/AuthContext";
-import { hasWriteRole } from "../../../lib/roles";
+import { canAccessHostData } from "../../../lib/roles";
+import { OperatorAccessRequired } from "../../../components/OperatorAccessRequired";
 import {
   getBookmarkCredentials,
   createBookmark,
@@ -19,14 +21,10 @@ import {
 
 export default function RemoteViewPage() {
   const { user } = useAuth();
+  const tNav = useTranslations("nav");
 
-  if (!hasWriteRole(user?.role)) {
-    return (
-      <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-glass)] p-6">
-        <h1 className="text-base font-medium text-[var(--text)]">Remote View</h1>
-        <p className="mt-2 text-sm text-[var(--muted)]">Operator access is required to start remote desktop sessions.</p>
-      </div>
-    );
+  if (!canAccessHostData(user?.role)) {
+    return <OperatorAccessRequired title={tNav("remoteView")} feature="remoteView" />;
   }
 
   return <RemoteViewPageContent />;

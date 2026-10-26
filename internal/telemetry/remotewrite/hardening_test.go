@@ -71,6 +71,10 @@ func (c *notifyingCursor) SaveRemoteWriteCursor(_ context.Context, _ string, cur
 	return nil
 }
 
+func (c *notifyingCursor) RejectRemoteWritePage(context.Context, string, RejectedPage) error {
+	return context.Canceled // The catch-up receiver never rejects a page.
+}
+
 func TestSerializeWriteRequestRejectsInvalidIdentityDuplicateAndOversize(t *testing.T) {
 	now := time.Now().UnixMilli()
 	if _, err := SerializeWriteRequest([]SampleWithLabels{{Labels: map[string]string{"__name__": "9invalid"}, Value: 1, Timestamp: now}}); err == nil {

@@ -18,7 +18,8 @@ func (s *apiServer) buildPBSDeps() *pbspkg.Deps {
 		CredentialStore:   s.credentialStore,
 		SecretsManager:    s.secretsManager,
 
-		RequireAdminAuth: s.requireAdminAuth,
+		RequireAdminAuth:            s.requireAdminAuth,
+		EvaluateConnectorGuardrails: s.connectorMaintenanceEvaluator(),
 
 		WrapAuth:  s.withAuth,
 		WrapAdmin: s.withAdminAuth,

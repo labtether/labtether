@@ -56,6 +56,11 @@ func NewWithConfig(cfg Config) *Connector {
 	return &Connector{client: client}
 }
 
+// NewWithClient uses the exact runtime selected by the Hub action owner.
+func NewWithClient(client *Client) *Connector {
+	return &Connector{client: client}
+}
+
 func (c *Connector) ID() string {
 	return "pbs"
 }

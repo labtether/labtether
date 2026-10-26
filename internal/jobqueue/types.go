@@ -1,6 +1,7 @@
 package jobqueue
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -80,4 +81,4 @@ func ValidateStatus(status JobStatus) error {
 }
 
 // HandlerFunc processes a claimed job. Return nil on success, error to fail/retry.
-type HandlerFunc func(ctx interface{ Deadline() (time.Time, bool) }, job *Job) error
+type HandlerFunc func(ctx context.Context, job *Job) error

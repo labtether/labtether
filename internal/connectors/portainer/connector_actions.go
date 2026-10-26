@@ -72,6 +72,9 @@ func (c *Connector) Actions() []connectorsdk.ActionDescriptor {
 			Description:    "Start a stopped stack.",
 			RequiresTarget: true,
 			SupportsDryRun: true,
+			Parameters: []connectorsdk.ActionParameter{
+				{Key: "endpoint_id", Label: "Endpoint ID", Required: true, Description: "Portainer endpoint owning this stack (derived for stored assets)"},
+			},
 		},
 		{
 			ID:             "stack.stop",
@@ -79,6 +82,9 @@ func (c *Connector) Actions() []connectorsdk.ActionDescriptor {
 			Description:    "Stop a running stack.",
 			RequiresTarget: true,
 			SupportsDryRun: true,
+			Parameters: []connectorsdk.ActionParameter{
+				{Key: "endpoint_id", Label: "Endpoint ID", Required: true, Description: "Portainer endpoint owning this stack (derived for stored assets)"},
+			},
 		},
 		{
 			ID:             "stack.remove",
@@ -86,6 +92,9 @@ func (c *Connector) Actions() []connectorsdk.ActionDescriptor {
 			Description:    "Remove a stack.",
 			RequiresTarget: true,
 			SupportsDryRun: true,
+			Parameters: []connectorsdk.ActionParameter{
+				{Key: "endpoint_id", Label: "Endpoint ID", Required: true, Description: "Portainer endpoint owning this stack (derived for stored assets)"},
+			},
 		},
 		{
 			ID:             "stack.redeploy",
@@ -94,6 +103,7 @@ func (c *Connector) Actions() []connectorsdk.ActionDescriptor {
 			RequiresTarget: true,
 			SupportsDryRun: true,
 			Parameters: []connectorsdk.ActionParameter{
+				{Key: "endpoint_id", Label: "Endpoint ID", Required: true, Description: "Portainer endpoint owning this stack (derived for stored assets)"},
 				{Key: "pull_image", Label: "Pull Image", Required: false, Description: "Pull latest images before redeploying (default true)"},
 			},
 		},

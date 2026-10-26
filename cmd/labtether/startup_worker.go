@@ -34,6 +34,7 @@ func initializeWorkerSubsystem(ctx context.Context, srv *apiServer, pgStore *per
 	// Postgres job queue (replaces NATS for job dispatch).
 	pollInterval := envOrDefaultDuration("JOB_POLL_INTERVAL", 500*time.Millisecond)
 	jq := jobqueue.New(pgStore.Pool(), pollInterval, uint64ToIntClamp(maxDeliveries))
+	jq.SetDeadLetterFinalizer(pgStore.FinalizeDeadJobInTransaction)
 	srv.jobQueue = jq
 	go refreshWorkerRuntimeSettingsDirect(ctx, pgStore, workerState, func(state *workerRuntimeState) {
 		if state == nil || jq == nil {

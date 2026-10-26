@@ -2,6 +2,7 @@
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from "react";
 import type { Client, Keyboard, Mouse } from "guacamole-common-js";
+import { readGuacamoleClipboard, writeGuacamoleClipboard } from "./guacamole/clipboard";
 
 type GuacModule = typeof import("guacamole-common-js");
 
@@ -26,6 +27,8 @@ const GuacamoleViewer = forwardRef<GuacamoleViewerHandle, GuacamoleViewerProps>(
   const clientRef = useRef<Client | null>(null);
   const keyboardRef = useRef<Keyboard | null>(null);
   const guacModuleRef = useRef<GuacModule | null>(null);
+  const releasePointerRef = useRef<(() => void) | null>(null);
+  const heldKeysRef = useRef(new Set<number>());
   const manualDisconnectRef = useRef(false);
   const disconnectedRef = useRef(false);
   const onConnectRef = useRef(onConnect);
@@ -44,8 +47,33 @@ const GuacamoleViewer = forwardRef<GuacamoleViewerHandle, GuacamoleViewerProps>(
     onDisconnectRef.current?.(detail);
   }, []);
 
+  const sendKey = useCallback((keysym: number, down: boolean) => {
+    if (!clientRef.current) return;
+    if (down) heldKeysRef.current.add(keysym);
+    else heldKeysRef.current.delete(keysym);
+    clientRef.current.sendKeyEvent(down ? 1 : 0, keysym);
+  }, []);
+
+  const releaseInput = useCallback(() => {
+    keyboardRef.current?.reset();
+    for (const keysym of heldKeysRef.current) sendKey(keysym, false);
+    heldKeysRef.current.clear();
+    releasePointerRef.current?.();
+  }, [sendKey]);
+
+  useEffect(() => {
+    const onVisibility = () => { if (document.visibilityState !== "visible") releaseInput(); };
+    window.addEventListener("blur", releaseInput);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("blur", releaseInput);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [releaseInput]);
+
   useImperativeHandle(ref, () => ({
     disconnect: () => {
+      releaseInput();
       manualDisconnectRef.current = true;
       if (clientRef.current) {
         clientRef.current.disconnect();
@@ -61,13 +89,11 @@ const GuacamoleViewer = forwardRef<GuacamoleViewerHandle, GuacamoleViewerProps>(
       client.sendKeyEvent(0, 0xffe9);
       client.sendKeyEvent(0, 0xffe3);
     },
-    sendKey: (keysym: number, down: boolean) => {
-      clientRef.current?.sendKeyEvent(down ? 1 : 0, keysym);
-    },
+    sendKey,
     focus: () => {
       containerRef.current?.focus();
     },
-  }), []);
+  }), [releaseInput, sendKey]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -89,7 +115,7 @@ const GuacamoleViewer = forwardRef<GuacamoleViewerHandle, GuacamoleViewerProps>(
           if (!client) {
             return true;
           }
-          client.sendKeyEvent(1, keysym);
+          sendKey(keysym, true);
           return false;
         };
         keyboard.onkeyup = (keysym: number) => {
@@ -97,7 +123,7 @@ const GuacamoleViewer = forwardRef<GuacamoleViewerHandle, GuacamoleViewerProps>(
           if (!client) {
             return;
           }
-          client.sendKeyEvent(0, keysym);
+          sendKey(keysym, false);
         };
         keyboardRef.current = keyboard;
       })
@@ -118,7 +144,7 @@ const GuacamoleViewer = forwardRef<GuacamoleViewerHandle, GuacamoleViewerProps>(
         keyboardRef.current = null;
       }
     };
-  }, []);
+  }, [sendKey]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -133,6 +159,11 @@ const GuacamoleViewer = forwardRef<GuacamoleViewerHandle, GuacamoleViewerProps>(
     let client: Client | null = null;
     let displayEl: HTMLElement | null = null;
     let mouse: Mouse | null = null;
+    let touchscreen: Mouse.Touchscreen | null = null;
+    let pointerEnabled = true;
+    let releasingPointer = false;
+    const beginPointerInput = () => { pointerEnabled = true; container.focus(); };
+    const clipboardReaders = new Set<() => void>();
     let pasteHandler: ((event: ClipboardEvent) => void) | null = null;
 
     const isContainerFocused = () => {
@@ -162,29 +193,47 @@ const GuacamoleViewer = forwardRef<GuacamoleViewerHandle, GuacamoleViewerProps>(
 
       mouse = new Guacamole.Mouse(displayEl);
       const sendMouseState = (state: Mouse.State) => {
-        if (state?.left || state?.middle || state?.right) {
+        if (stopped || !pointerEnabled || clientRef.current !== client) return;
+        if (!releasingPointer && (state?.left || state?.middle || state?.right)) {
           container.focus();
         }
-        client?.sendMouseState(state);
+        client?.sendMouseState(state, true);
       };
       mouse.onmousedown = sendMouseState;
       mouse.onmouseup = sendMouseState;
       mouse.onmousemove = sendMouseState;
+      touchscreen = new Guacamole.Mouse.Touchscreen(displayEl);
+      touchscreen.onmousedown = sendMouseState;
+      touchscreen.onmouseup = sendMouseState;
+      touchscreen.onmousemove = sendMouseState;
+      displayEl.addEventListener("mousedown", beginPointerInput, true);
+      displayEl.addEventListener("touchstart", beginPointerInput, true);
+      displayEl.addEventListener("touchcancel", releaseInput, true);
+      releasePointerRef.current = () => {
+        releasingPointer = true;
+        // Guacamole 1.5 has no touchcancel handler and reset() leaves its private
+        // gesture timers alive. An empty touchend takes its end_gesture() path.
+        const cancelledTouch = new Event("touchend");
+        Object.defineProperties(cancelledTouch, {
+          touches: { value: [] }, changedTouches: { value: [] },
+        });
+        displayEl?.dispatchEvent(cancelledTouch);
+        mouse?.reset();
+        touchscreen?.reset();
+        releasingPointer = false;
+        pointerEnabled = false;
+      };
 
       pasteHandler = (event: ClipboardEvent) => {
-        if (!isContainerFocused()) {
+        if (stopped || clientRef.current !== client || !isContainerFocused()) {
           return;
         }
         const text = event.clipboardData?.getData("text");
-        if (!text) {
-          return;
-        }
+        if (text === undefined || !event.clipboardData?.types.includes("text/plain")) return;
         event.preventDefault();
         try {
           const stream = client!.createClipboardStream("text/plain");
-          const writer = new Guacamole.StringWriter(stream);
-          writer.sendText(text);
-          writer.sendEnd();
+          writeGuacamoleClipboard(stream, text);
         } catch {
           // ignore
         }
@@ -192,31 +241,26 @@ const GuacamoleViewer = forwardRef<GuacamoleViewerHandle, GuacamoleViewerProps>(
       container.addEventListener("paste", pasteHandler);
 
       client.onclipboard = (stream: InstanceType<GuacModule["InputStream"]>, mimetype: string) => {
-        if (mimetype !== "text/plain") {
+        if (stopped || !/^text\/plain(?:;|$)/i.test(mimetype)) {
+          stream.sendAck("Unsupported clipboard type", 0x0100);
           return;
         }
         try {
-          const reader = new Guacamole.StringReader(stream);
-          let text = "";
-          reader.ontext = (chunk: string) => {
-            text += chunk;
-          };
-          reader.onend = () => {
-            if (!text || !isContainerFocused()) {
-              return;
-            }
-            if (navigator.clipboard?.writeText) {
-              navigator.clipboard.writeText(text).catch(() => {
-                // ignore clipboard permission failures
-              });
-            }
-          };
+          const stopReading = readGuacamoleClipboard(stream, (text) => {
+            clipboardReaders.delete(stopReading);
+            if (stopped || clientRef.current !== client || !isContainerFocused()) return;
+            navigator.clipboard?.writeText(text).catch(() => {
+              // Clipboard permission still belongs to the browser.
+            });
+          });
+          clipboardReaders.add(stopReading);
         } catch {
           // ignore
         }
       };
 
       client.onstatechange = (state: number) => {
+        if (stopped || clientRef.current !== client) return;
         // 3 = CONNECTED, 5 = DISCONNECTED
         if (state === 3) onConnectRef.current?.();
         if (state === 5) {
@@ -227,6 +271,7 @@ const GuacamoleViewer = forwardRef<GuacamoleViewerHandle, GuacamoleViewerProps>(
       };
 
       client.onerror = () => {
+        if (stopped || clientRef.current !== client) return;
         emitDisconnect({ clean: false, reason: "guacamole error" });
       };
 
@@ -246,13 +291,17 @@ const GuacamoleViewer = forwardRef<GuacamoleViewerHandle, GuacamoleViewerProps>(
           initClient(Guacamole);
         })
         .catch(() => {
+          if (stopped) return;
           emitDisconnect({ clean: false, reason: "failed to load guacamole viewer" });
         });
     }
 
     return () => {
+      releaseInput();
       stopped = true;
-      keyboardRef.current?.reset?.();
+      releasePointerRef.current = null;
+      clipboardReaders.forEach((stopReading) => stopReading());
+      clipboardReaders.clear();
       if (pasteHandler) {
         container.removeEventListener("paste", pasteHandler);
         pasteHandler = null;
@@ -261,6 +310,11 @@ const GuacamoleViewer = forwardRef<GuacamoleViewerHandle, GuacamoleViewerProps>(
         mouse.onmousedown = null;
         mouse.onmouseup = null;
         mouse.onmousemove = null;
+      }
+      if (touchscreen) {
+        touchscreen.onmousedown = null;
+        touchscreen.onmouseup = null;
+        touchscreen.onmousemove = null;
       }
       if (client) {
         client.onclipboard = null;
@@ -273,13 +327,16 @@ const GuacamoleViewer = forwardRef<GuacamoleViewerHandle, GuacamoleViewerProps>(
         // ignore
       }
       if (displayEl && displayEl.parentNode === container) {
+        displayEl.removeEventListener("mousedown", beginPointerInput, true);
+        displayEl.removeEventListener("touchstart", beginPointerInput, true);
+        displayEl.removeEventListener("touchcancel", releaseInput, true);
         container.removeChild(displayEl);
       }
       clientRef.current = null;
       tunnel = null;
       mouse = null;
     };
-  }, [emitDisconnect, wsUrl]);
+  }, [emitDisconnect, releaseInput, wsUrl]);
 
   return (
     <div
@@ -287,6 +344,7 @@ const GuacamoleViewer = forwardRef<GuacamoleViewerHandle, GuacamoleViewerProps>(
       className="vncContainer vncConnected"
       tabIndex={0}
       onMouseDown={() => containerRef.current?.focus()}
+      onBlur={releaseInput}
     />
   );
 });

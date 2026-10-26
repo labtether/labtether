@@ -1,0 +1,53 @@
+{
+  // LabTether push relay. Deploy steps and the API are in README.md.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "labtether-push-relay",
+  "main": "src/index.js",
+  // Michael's Cloudflare account ("Michaels Account").
+  "account_id": "25c357768b0fd4b877d6f008dc50e63b",
+  // Not newer than the workerd bundled with the pinned wrangler 4.113.0.
+  "compatibility_date": "2026-07-15",
+  "workers_dev": true,
+
+  // Custom domain. labtether.com is a zone on this account (it serves the
+  // website Worker), so `wrangler deploy` creates the DNS record and the
+  // certificate. Hubs default to https://push.labtether.com. workers_dev stays
+  // on for DEBUG iOS builds and for checks before the domain is live.
+  "routes": [{ "pattern": "push.labtether.com", "custom_domain": true }],
+
+  // Registration store. Before the first deploy run
+  //   npx wrangler kv namespace create REGISTRATIONS
+  // and paste the printed id here. The placeholder makes deploy fail on purpose.
+  "kv_namespaces": [
+    { "binding": "REGISTRATIONS", "id": "REPLACE_WITH_KV_NAMESPACE_ID" }
+  ],
+
+  // Workers rate limiting. Counters are per Cloudflare location and
+  // approximate. namespace_id only has to be unique within the account.
+  "ratelimits": [
+    // Per registration (keyed by the SHA-256 of its id).
+    { "name": "PUSH_LIMIT", "namespace_id": "4801", "simple": { "limit": 60, "period": 60 } },
+    // Per client IP (IPv6 grouped by /64) for register and delete.
+    { "name": "REGISTER_LIMIT", "namespace_id": "4802", "simple": { "limit": 20, "period": 60 } },
+    // Per client IP (IPv6 grouped by /64) for pushes. Checked before the KV
+    // lookup, so probing random registration ids is bounded per caller.
+    { "name": "PUSH_IP_LIMIT", "namespace_id": "4803", "simple": { "limit": 300, "period": 60 } }
+  ],
+
+  "vars": {
+    "APNS_TOPIC": "com.labtether.mobile",
+    // 10-character Apple Team ID and APNs Key ID. Fill in before deploying;
+    // pushes answer 503 not_configured while either is empty.
+    "APNS_TEAM_ID": "",
+    "APNS_KEY_ID": ""
+  },
+  // Secret, never in this file or the repo. Michael uploads the .p8 himself:
+  //   npx wrangler secret put APNS_PRIVATE_KEY < AuthKey_XXXXXXXXXX.p8
+
+  "observability": {
+    "enabled": true,
+    // Invocation logs record request URLs, and DELETE /v1/registrations/:id
+    // carries a registration id. Keep them off; the code logs no secrets.
+    "logs": { "invocation_logs": false }
+  }
+}

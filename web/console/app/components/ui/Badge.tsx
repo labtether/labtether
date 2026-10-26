@@ -26,7 +26,7 @@ function getGlowStyle(status: string): React.CSSProperties {
 
 /** Critical-severity statuses that get a pulse animation on the dot. */
 const criticalStatuses = new Set(["critical", "firing", "offline", "bad", "failed"]);
-/** Healthy statuses that get a gentle pulse to indicate liveliness. */
+/** Healthy statuses get a short entrance pulse, then keep their status color. */
 const aliveStatuses = new Set(["online", "ok", "healthy", "running", "active"]);
 
 function isCritical(status: string): boolean {
@@ -45,9 +45,9 @@ export function Badge({ status, size = "md", dot = false, className = "" }: Badg
 
   const glowStyle = getGlowStyle(status);
   const pulseStyle: React.CSSProperties = isCritical(status)
-    ? { ...glowStyle, animation: "status-glow 1.5s ease-in-out infinite" }
+    ? { ...glowStyle, animation: "status-glow 1.5s ease-in-out 3" }
     : isAlive(status)
-      ? { ...glowStyle, animation: "pulse-dot 2.5s ease-in-out infinite" }
+      ? { ...glowStyle, animation: "pulse-dot 2.5s ease-in-out 2" }
       : glowStyle;
 
   if (dot) {

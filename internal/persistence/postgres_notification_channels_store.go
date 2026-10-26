@@ -45,6 +45,10 @@ func (s *PostgresStore) CreateNotificationChannel(req notifications.CreateChanne
 // only when the row still contains the value that was read. This prevents a
 // lazy plaintext migration from overwriting a concurrent operator update.
 func (s *PostgresStore) CompareAndSwapNotificationChannelConfig(id string, expected, replacement map[string]any) (bool, error) {
+	return s.CompareAndSwapNotificationChannelConfigContext(context.Background(), id, expected, replacement)
+}
+
+func (s *PostgresStore) CompareAndSwapNotificationChannelConfigContext(ctx context.Context, id string, expected, replacement map[string]any) (bool, error) {
 	expectedPayload, err := marshalAnyMap(expected)
 	if err != nil {
 		return false, err
@@ -53,7 +57,7 @@ func (s *PostgresStore) CompareAndSwapNotificationChannelConfig(id string, expec
 	if err != nil {
 		return false, err
 	}
-	tag, err := s.pool.Exec(context.Background(),
+	tag, err := s.pool.Exec(ctx,
 		`UPDATE notification_channels
 		 SET config = $3::jsonb, updated_at = $4
 		 WHERE id = $1 AND config = $2::jsonb`,
@@ -66,7 +70,11 @@ func (s *PostgresStore) CompareAndSwapNotificationChannelConfig(id string, expec
 }
 
 func (s *PostgresStore) GetNotificationChannel(id string) (notifications.Channel, bool, error) {
-	ch, err := scanNotificationChannel(s.pool.QueryRow(context.Background(),
+	return s.GetNotificationChannelContext(context.Background(), id)
+}
+
+func (s *PostgresStore) GetNotificationChannelContext(ctx context.Context, id string) (notifications.Channel, bool, error) {
+	ch, err := scanNotificationChannel(s.pool.QueryRow(ctx,
 		`SELECT id, name, type, config, enabled, created_at, updated_at
 		 FROM notification_channels WHERE id = $1`,
 		strings.TrimSpace(id),

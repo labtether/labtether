@@ -228,8 +228,8 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   return resp.json();
 }
 
-export async function fetchDockerHosts(): Promise<DockerHostSummary[]> {
-  const data = await fetchJSON<{ hosts: DockerHostSummary[] }>("/api/docker/hosts");
+export async function fetchDockerHosts(signal?: AbortSignal): Promise<DockerHostSummary[]> {
+  const data = await fetchJSON<{ hosts: DockerHostSummary[] }>("/api/docker/hosts", { signal });
   return Array.isArray(data.hosts) ? data.hosts.map(normalizeDockerHostSummary) : [];
 }
 
@@ -238,9 +238,9 @@ export async function fetchDockerHostDetail(hostId: string): Promise<DockerHostD
   return normalizeDockerHostDetail(data.host);
 }
 
-export async function fetchDockerContainers(hostId: string): Promise<DockerContainer[]> {
+export async function fetchDockerContainers(hostId: string, signal?: AbortSignal): Promise<DockerContainer[]> {
   const data = await fetchJSON<{ containers: DockerContainer[] }>(
-    `/api/docker/hosts/${encodeURIComponent(hostId)}/containers`
+    `/api/docker/hosts/${encodeURIComponent(hostId)}/containers`, { signal }
   );
   return Array.isArray(data.containers) ? data.containers.map(normalizeDockerContainer) : [];
 }
@@ -252,9 +252,9 @@ export async function fetchDockerImages(hostId: string): Promise<DockerImage[]> 
   return Array.isArray(data.images) ? data.images.map(normalizeDockerImage) : [];
 }
 
-export async function fetchDockerStacks(hostId: string): Promise<DockerStack[]> {
+export async function fetchDockerStacks(hostId: string, signal?: AbortSignal): Promise<DockerStack[]> {
   const data = await fetchJSON<{ stacks: DockerStack[] }>(
-    `/api/docker/hosts/${encodeURIComponent(hostId)}/stacks`
+    `/api/docker/hosts/${encodeURIComponent(hostId)}/stacks`, { signal }
   );
   return Array.isArray(data.stacks) ? data.stacks.map(normalizeDockerStack) : [];
 }
@@ -273,14 +273,15 @@ export async function fetchDockerContainerStats(containerId: string): Promise<Re
 
 export async function fetchDockerContainerLogs(
   containerId: string,
-  options?: { tail?: number; timestamps?: boolean }
+  options?: { tail?: number; timestamps?: boolean },
+  signal?: AbortSignal
 ): Promise<string> {
   const params = new URLSearchParams();
   if (options?.tail != null) params.set("tail", String(options.tail));
   if (options?.timestamps != null) params.set("timestamps", options.timestamps ? "true" : "false");
   const query = params.toString();
   const data = await fetchJSON<{ logs?: string }>(
-    `/api/docker/containers/${encodeURIComponent(containerId)}/logs${query ? `?${query}` : ""}`
+    `/api/docker/containers/${encodeURIComponent(containerId)}/logs${query ? `?${query}` : ""}`, { signal }
   );
   return data.logs ?? "";
 }
@@ -357,9 +358,9 @@ interface PortainerEndpointSummary {
 }
 
 /** Fetch all Portainer endpoints as DockerHostSummary-compatible objects. */
-export async function fetchPortainerEndpoints(): Promise<DockerHostSummary[]> {
+export async function fetchPortainerEndpoints(signal?: AbortSignal): Promise<DockerHostSummary[]> {
   try {
-    const res = await fetch("/api/portainer/endpoints", { cache: "no-store" });
+    const res = await fetch("/api/portainer/endpoints", { cache: "no-store", signal });
     if (!res.ok) return [];
     const json = await res.json();
     const endpoints: PortainerEndpointSummary[] = json?.endpoints ?? [];
@@ -400,10 +401,10 @@ function formatPortainerPorts(ports?: PortainerRawContainer["Ports"]): string {
 }
 
 /** Fetch containers from a Portainer endpoint and normalize to DockerContainer shape. */
-export async function fetchPortainerContainers(assetId: string): Promise<DockerContainer[]> {
+export async function fetchPortainerContainers(assetId: string, signal?: AbortSignal): Promise<DockerContainer[]> {
   try {
     const res = await fetch(`/api/portainer/assets/${encodeURIComponent(assetId)}/containers`, {
-      cache: "no-store",
+      cache: "no-store", signal,
     });
     if (!res.ok) return [];
     const json = await res.json();

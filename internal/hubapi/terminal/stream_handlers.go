@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -43,10 +44,46 @@ func (d *Deps) HandleSessionStream(w http.ResponseWriter, r *http.Request, sessi
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	if d.SessionStreams != nil {
+		if persistentID := strings.TrimSpace(session.PersistentSessionID); persistentID != "" {
+			wrapped, request, cleanup, err := d.SessionStreams.Open(w, r, persistentStreamKey(persistentID), func() (bool, error) {
+				return d.persistentSessionExists(persistentID)
+			})
+			if err != nil {
+				if errors.Is(err, terminal.ErrSessionNotFound) {
+					servicehttp.WriteError(w, http.StatusNotFound, "persistent session not found")
+				} else {
+					servicehttp.WriteError(w, http.StatusInternalServerError, "failed to open persistent session")
+				}
+				return
+			}
+			defer cleanup()
+			w, r = wrapped, request
+		}
+		wrapped, request, cleanup, err := d.SessionStreams.Open(w, r, session.ID, func() (bool, error) {
+			_, present, err := d.TerminalStore.GetSession(session.ID)
+			return present, err
+		})
+		if err != nil {
+			if errors.Is(err, terminal.ErrSessionNotFound) {
+				servicehttp.WriteError(w, http.StatusNotFound, "session not found")
+			} else {
+				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to open terminal session")
+			}
+			return
+		}
+		defer cleanup()
+		w, r = wrapped, request
+	}
 	if !d.enforceAssetActionGuard(w, session.Target) {
 		return
 	}
-	defer d.MarkPersistentTerminalStreamDetached(session)
+	streamOwnsPersistentLifecycle := false
+	defer func() {
+		if !streamOwnsPersistentLifecycle {
+			d.MarkPersistentTerminalStreamDetached(session)
+		}
+	}()
 	traceID := shared.BrowserStreamTraceID(r)
 	traceLog := shared.StreamTraceLogValue(traceID)
 
@@ -66,12 +103,14 @@ func (d *Deps) HandleSessionStream(w http.ResponseWriter, r *http.Request, sessi
 
 	// Priority 0: Docker container terminal via docker exec bridge.
 	if agentID, containerID, ok := d.ResolveDockerExecSessionTarget(session.Target); ok {
+		streamOwnsPersistentLifecycle = true
 		d.HandleDockerExecTerminalStream(w, r, session, agentID, containerID)
 		return
 	}
 
 	// Priority 1: Route through connected agent (zero config, automatic).
 	if d.AgentMgr != nil && d.AgentMgr.IsConnected(session.Target) {
+		streamOwnsPersistentLifecycle = true
 		d.HandleAgentTerminalStream(w, r, session)
 		return
 	}
@@ -129,25 +168,6 @@ func (d *Deps) HandleSessionStream(w http.ResponseWriter, r *http.Request, sessi
 	}
 
 	// Priority 4: SSH direct connection.
+	streamOwnsPersistentLifecycle = true
 	d.HandleSSHTerminalStream(w, r, session)
-}
-
-func (d *Deps) MarkPersistentTerminalStreamDetached(session terminal.Session) {
-	if d.TerminalPersistentStore == nil {
-		return
-	}
-	persistentSessionID := strings.TrimSpace(session.PersistentSessionID)
-	if persistentSessionID == "" {
-		return
-	}
-
-	// Flush in-memory ring buffer to Postgres before marking detached.
-	if d.TerminalInMemStore != nil && d.TerminalScrollbackStore != nil {
-		ringBuf := d.TerminalInMemStore.GetOrCreateScrollbackBuffer(persistentSessionID)
-		if snap := ringBuf.Snapshot(); len(snap) > 0 {
-			_ = d.TerminalScrollbackStore.UpsertScrollback(persistentSessionID, snap, ringBuf.ByteSize(), ringBuf.Lines())
-		}
-	}
-
-	_, _ = d.TerminalPersistentStore.MarkPersistentSessionDetached(persistentSessionID, time.Now().UTC())
 }

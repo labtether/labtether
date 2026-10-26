@@ -69,8 +69,11 @@ stored credentials and the DB-backed OIDC client secret unreadable.
 
 5. **Update the key.**
    - Edit `.env` and set `LABTETHER_ENCRYPTION_KEY` to the new value.
-   - Also delete or update the persisted install-state file
-     (`data/install/secrets.json`) so the hub does not restore the old key.
+   - Since 1.7.0 the Hub refuses to start when `LABTETHER_ENCRYPTION_KEY`
+     differs from the key stored in `data/install/secrets.json`, because data
+     encrypted with the stored key would become unreadable. After re-encrypting
+     (step 4), start once with `LABTETHER_ENCRYPTION_KEY_REPLACE=true` so the
+     new key replaces the stored one, then remove that variable.
 
 6. **Restart the hub.**
    ```bash

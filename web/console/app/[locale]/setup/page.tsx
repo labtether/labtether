@@ -287,7 +287,7 @@ export default function SetupPage() {
             style={{
               background:
                 "conic-gradient(from 0deg, transparent 0%, var(--accent) 10%, transparent 20%, transparent 50%, var(--accent-secondary) 60%, transparent 70%)",
-              animation: "border-rotate 8s linear infinite",
+              animation: "border-rotate 6s linear 1",
               opacity: 0.4,
             }}
           />

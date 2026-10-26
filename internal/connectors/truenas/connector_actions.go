@@ -225,15 +225,17 @@ func (c *Connector) ExecuteAction(ctx context.Context, actionID string, req conn
 			return connectorsdk.ActionResult{
 				Status:  "succeeded",
 				Message: "dry-run: pool scrub would be started",
-				Output:  fmt.Sprintf("would run pool.scrub.run on pool %q", poolName),
+				Output:  fmt.Sprintf("would request pool.scrub.scrub START on pool %q", poolName),
 			}, nil
 		}
-		if err := c.client.Call(ctx, "pool.scrub.run", []any{poolName}, nil); err != nil {
+		jobID, err := c.client.StartPoolScrub(ctx, poolName)
+		if err != nil {
 			return connectorsdk.ActionResult{Status: "failed", Message: err.Error()}, nil
 		}
 		return connectorsdk.ActionResult{
-			Status:  "succeeded",
-			Message: fmt.Sprintf("scrub started on pool %q", poolName),
+			Status:   "succeeded",
+			Message:  fmt.Sprintf("scrub request accepted for pool %q (provider job %d)", poolName, jobID),
+			Metadata: map[string]string{"provider_job_id": strconv.FormatInt(jobID, 10), "submission_status": "accepted"},
 		}, nil
 
 	case "snapshot.create":
@@ -250,7 +252,7 @@ func (c *Connector) ExecuteAction(ctx context.Context, actionID string, req conn
 			}, nil
 		}
 		payload := []any{map[string]any{"dataset": dataset, "name": snapName}}
-		if err := c.client.Call(ctx, "zfs.snapshot.create", payload, nil); err != nil {
+		if err := c.client.CallMutation(ctx, "zfs.snapshot.create", payload, nil); err != nil {
 			return connectorsdk.ActionResult{Status: "failed", Message: err.Error()}, nil
 		}
 		return connectorsdk.ActionResult{
@@ -270,7 +272,7 @@ func (c *Connector) ExecuteAction(ctx context.Context, actionID string, req conn
 				Output:  fmt.Sprintf("would delete snapshot %q", snapshotID),
 			}, nil
 		}
-		if err := c.client.Call(ctx, "zfs.snapshot.delete", []any{snapshotID}, nil); err != nil {
+		if err := c.client.CallMutation(ctx, "zfs.snapshot.delete", []any{snapshotID}, nil); err != nil {
 			return connectorsdk.ActionResult{Status: "failed", Message: err.Error()}, nil
 		}
 		return connectorsdk.ActionResult{
@@ -290,7 +292,7 @@ func (c *Connector) ExecuteAction(ctx context.Context, actionID string, req conn
 				Output:  fmt.Sprintf("would roll back to snapshot %q", snapshotID),
 			}, nil
 		}
-		if err := c.client.Call(ctx, "zfs.snapshot.rollback", []any{snapshotID}, nil); err != nil {
+		if err := c.client.CallMutation(ctx, "zfs.snapshot.rollback", []any{snapshotID}, nil); err != nil {
 			return connectorsdk.ActionResult{Status: "failed", Message: err.Error()}, nil
 		}
 		return connectorsdk.ActionResult{
@@ -310,7 +312,7 @@ func (c *Connector) ExecuteAction(ctx context.Context, actionID string, req conn
 				Output:  fmt.Sprintf("would restart service %q", serviceName),
 			}, nil
 		}
-		if err := c.client.Call(ctx, "service.restart", []any{serviceName}, nil); err != nil {
+		if err := c.client.CallMutation(ctx, "service.restart", []any{serviceName}, nil); err != nil {
 			return connectorsdk.ActionResult{Status: "failed", Message: err.Error()}, nil
 		}
 		return connectorsdk.ActionResult{
@@ -339,7 +341,7 @@ func (c *Connector) ExecuteAction(ctx context.Context, actionID string, req conn
 			}, nil
 		}
 		payload := []any{[]any{map[string]any{"identifier": disk, "type": testType}}}
-		if err := c.client.Call(ctx, "smart.test.manual_test", payload, nil); err != nil {
+		if err := c.client.CallMutation(ctx, "smart.test.manual_test", payload, nil); err != nil {
 			return connectorsdk.ActionResult{Status: "failed", Message: err.Error()}, nil
 		}
 		return connectorsdk.ActionResult{
@@ -363,7 +365,7 @@ func (c *Connector) ExecuteAction(ctx context.Context, actionID string, req conn
 				Output:  fmt.Sprintf("would start VM id=%d", vmID),
 			}, nil
 		}
-		if err := c.client.Call(ctx, "vm.start", []any{vmID}, nil); err != nil {
+		if err := c.client.CallMutation(ctx, "vm.start", []any{vmID}, nil); err != nil {
 			return connectorsdk.ActionResult{Status: "failed", Message: err.Error()}, nil
 		}
 		return connectorsdk.ActionResult{
@@ -387,7 +389,7 @@ func (c *Connector) ExecuteAction(ctx context.Context, actionID string, req conn
 				Output:  fmt.Sprintf("would stop VM id=%d", vmID),
 			}, nil
 		}
-		if err := c.client.Call(ctx, "vm.stop", []any{vmID}, nil); err != nil {
+		if err := c.client.CallMutation(ctx, "vm.stop", []any{vmID}, nil); err != nil {
 			return connectorsdk.ActionResult{Status: "failed", Message: err.Error()}, nil
 		}
 		return connectorsdk.ActionResult{
@@ -403,7 +405,7 @@ func (c *Connector) ExecuteAction(ctx context.Context, actionID string, req conn
 				Output:  "would call system.reboot",
 			}, nil
 		}
-		if err := c.client.Call(ctx, "system.reboot", nil, nil); err != nil {
+		if err := c.client.CallMutation(ctx, "system.reboot", nil, nil); err != nil {
 			return connectorsdk.ActionResult{Status: "failed", Message: err.Error()}, nil
 		}
 		return connectorsdk.ActionResult{
@@ -419,7 +421,7 @@ func (c *Connector) ExecuteAction(ctx context.Context, actionID string, req conn
 		if req.DryRun {
 			return connectorsdk.ActionResult{Status: "succeeded", Message: "dry-run: service would be started", Output: fmt.Sprintf("would start service %q", serviceName)}, nil
 		}
-		if err := c.client.Call(ctx, "service.start", []any{serviceName}, nil); err != nil {
+		if err := c.client.CallMutation(ctx, "service.start", []any{serviceName}, nil); err != nil {
 			return connectorsdk.ActionResult{Status: "failed", Message: err.Error()}, nil
 		}
 		return connectorsdk.ActionResult{Status: "succeeded", Message: fmt.Sprintf("service %q started", serviceName)}, nil
@@ -432,7 +434,7 @@ func (c *Connector) ExecuteAction(ctx context.Context, actionID string, req conn
 		if req.DryRun {
 			return connectorsdk.ActionResult{Status: "succeeded", Message: "dry-run: service would be stopped", Output: fmt.Sprintf("would stop service %q", serviceName)}, nil
 		}
-		if err := c.client.Call(ctx, "service.stop", []any{serviceName}, nil); err != nil {
+		if err := c.client.CallMutation(ctx, "service.stop", []any{serviceName}, nil); err != nil {
 			return connectorsdk.ActionResult{Status: "failed", Message: err.Error()}, nil
 		}
 		return connectorsdk.ActionResult{Status: "succeeded", Message: fmt.Sprintf("service %q stopped", serviceName)}, nil
@@ -446,7 +448,7 @@ func (c *Connector) ExecuteAction(ctx context.Context, actionID string, req conn
 		if req.DryRun {
 			return connectorsdk.ActionResult{Status: "succeeded", Message: fmt.Sprintf("dry-run: app would be %sed", verb), Output: fmt.Sprintf("would %s app %q", verb, appName)}, nil
 		}
-		if err := c.client.Call(ctx, "app."+verb, []any{appName}, nil); err != nil {
+		if err := c.client.CallMutation(ctx, "app."+verb, []any{appName}, nil); err != nil {
 			return connectorsdk.ActionResult{Status: "failed", Message: err.Error()}, nil
 		}
 		return connectorsdk.ActionResult{Status: "succeeded", Message: fmt.Sprintf("app %q %sed", appName, verb)}, nil

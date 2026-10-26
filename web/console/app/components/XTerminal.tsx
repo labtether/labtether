@@ -180,14 +180,18 @@ const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XTerminal
       return writeClipboardText(term.getSelection());
     },
     async pasteFromClipboard() {
+      const socket = socketRef.current;
+      const term = termRef.current;
+      if (!term || !socket || socket.readyState !== WebSocket.OPEN) return { ok: false, reason: "disconnected" };
       const clipboardRead = await readClipboardText();
       if (!clipboardRead.ok) return clipboardRead;
       const text = clipboardRead.text;
       if (!text) return { ok: false, reason: "empty" };
-      const socket = socketRef.current;
-      if (!socket || socket.readyState !== WebSocket.OPEN) return { ok: false, reason: "disconnected" };
-      socket.send(text);
-      onDataCaptureRef.current?.(text);
+      if (socketRef.current !== socket || termRef.current !== term || socket.readyState !== WebSocket.OPEN) {
+        return { ok: false, reason: "disconnected" };
+      }
+      // Let xterm normalize newlines and preserve the shell's bracketed-paste mode.
+      term.paste(text);
       return { ok: true };
     },
     selectAll() {

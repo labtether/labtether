@@ -144,7 +144,7 @@ func TestLogPatternAlertUsesSingleTargetedLogQuery(t *testing.T) {
 	}
 }
 
-func TestMaybeAutoCreateIncidentUsesDirectExistenceCheck(t *testing.T) {
+func TestMaybeAutoCreateIncidentUsesAtomicStore(t *testing.T) {
 	sut := newTestAPIServer(t)
 
 	incidentCounter := &countingIncidentStore{IncidentStore: sut.incidentStore}
@@ -184,8 +184,8 @@ func TestMaybeAutoCreateIncidentUsesDirectExistenceCheck(t *testing.T) {
 	if len(autoIncidents) != 1 {
 		t.Fatalf("expected duplicate auto incident creation to be skipped, incidents=%d", len(autoIncidents))
 	}
-	if incidentCounter.hasAutoIncidentCalls != 1 {
-		t.Fatalf("expected direct existence helper to be used once, got %d", incidentCounter.hasAutoIncidentCalls)
+	if incidentCounter.createAutoIncidentCalls != 1 || incidentCounter.hasAutoIncidentCalls != 0 {
+		t.Fatalf("expected one atomic create and no separate lookup, got %d/%d", incidentCounter.createAutoIncidentCalls, incidentCounter.hasAutoIncidentCalls)
 	}
 	if incidentCounter.listIncidentAlertLinksCalls != 0 {
 		t.Fatalf("expected no per-incident link scans, got %d", incidentCounter.listIncidentAlertLinksCalls)

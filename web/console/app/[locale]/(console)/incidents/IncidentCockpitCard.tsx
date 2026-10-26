@@ -1,14 +1,14 @@
 import { Card } from "../../../components/ui/Card";
-import type { Incident, IncidentEvent } from "../../../console/models";
+import type { Incident } from "../../../console/models";
 import { formatMetadataLabel } from "../../../console/formatters";
-import { IncidentTimeline } from "./IncidentTimeline";
+import { IncidentTimeline, type IncidentTimelineProps } from "./IncidentTimeline";
 
 type IncidentCockpitCardProps = {
   incident: Incident;
-  events: IncidentEvent[];
+  timeline: IncidentTimelineProps;
 };
 
-export function IncidentCockpitCard({ incident, events }: IncidentCockpitCardProps) {
+export function IncidentCockpitCard({ incident, timeline }: IncidentCockpitCardProps) {
   return (
     <Card className="mb-4">
       <h2>{incident.title}</h2>
@@ -28,7 +28,7 @@ export function IncidentCockpitCard({ incident, events }: IncidentCockpitCardPro
           </div>
         </div>
 
-        <IncidentTimeline events={events} />
+        <IncidentTimeline {...timeline} />
       </div>
     </Card>
   );

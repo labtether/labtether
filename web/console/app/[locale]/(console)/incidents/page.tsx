@@ -41,7 +41,7 @@ export default function IncidentsPage() {
     handleLessonsLearnedChange,
   } = useIncidentPostmortemEditor({ updateIncident });
 
-  const { incident: selectedIncident, events, loading: detailLoading, replaceIncident } = useIncidentDetail(
+  const { incident: selectedIncident, timeline, loading: detailLoading, error: detailError, retryDetail, replaceIncident } = useIncidentDetail(
     view === "detail" ? selectedId : null
   );
 
@@ -82,7 +82,7 @@ export default function IncidentsPage() {
         />
       ) : null}
 
-      {view === "detail" && (selectedIncident || detailLoading) ? (
+      {view === "detail" && (selectedIncident || detailLoading || detailError) ? (
         <>
           <Card className="flex items-center justify-between mb-4">
             <Button variant="ghost" onClick={handleBack}>
@@ -120,9 +120,14 @@ export default function IncidentsPage() {
                 <SkeletonRow />
               </div>
             </Card>
+          ) : detailError ? (
+            <Card className="mb-4">
+              <p role="alert" className="text-sm text-[var(--bad)] mb-2">{t('detail.error')}</p>
+              <Button onClick={retryDetail}>{t('detail.retry')}</Button>
+            </Card>
           ) : selectedIncident ? (
             <>
-              <IncidentCockpitCard incident={selectedIncident} events={events} />
+              <IncidentCockpitCard incident={selectedIncident} timeline={timeline} />
 
               <Card className="mb-4">
                 <h2>{t('notes.title')}</h2>

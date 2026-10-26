@@ -14,6 +14,13 @@ import (
 )
 
 func (s *PostgresStore) CreateAlertInstance(req alerts.CreateInstanceRequest) (alerts.AlertInstance, error) {
+	return s.CreateAlertInstanceContext(context.Background(), req)
+}
+
+func (s *PostgresStore) CreateAlertInstanceContext(ctx context.Context, req alerts.CreateInstanceRequest) (alerts.AlertInstance, error) {
+	if err := ctx.Err(); err != nil {
+		return alerts.AlertInstance{}, err
+	}
 	now := time.Now().UTC()
 	severity := alerts.NormalizeSeverity(req.Severity)
 	if severity == "" {
@@ -33,7 +40,7 @@ func (s *PostgresStore) CreateAlertInstance(req alerts.CreateInstanceRequest) (a
 		return alerts.AlertInstance{}, err
 	}
 
-	return scanAlertInstance(s.pool.QueryRow(context.Background(),
+	return scanAlertInstance(s.pool.QueryRow(ctx,
 		`INSERT INTO alert_instances (
 			id, rule_id, fingerprint, status, severity,
 			labels, annotations, started_at, last_fired_at,
@@ -43,7 +50,7 @@ func (s *PostgresStore) CreateAlertInstance(req alerts.CreateInstanceRequest) (a
 		RETURNING
 			id, rule_id, fingerprint, status, severity,
 			labels, annotations, started_at, resolved_at, last_fired_at,
-			suppressed_by, created_at, updated_at`,
+			suppressed_by, created_at, updated_at, first_fired_at, firing_scope`,
 		idgen.New("ainst"),
 		strings.TrimSpace(req.RuleID),
 		fingerprint,
@@ -59,7 +66,7 @@ func (s *PostgresStore) GetAlertInstance(id string) (alerts.AlertInstance, bool,
 	inst, err := scanAlertInstance(s.pool.QueryRow(context.Background(),
 		`SELECT id, rule_id, fingerprint, status, severity,
 			labels, annotations, started_at, resolved_at, last_fired_at,
-			suppressed_by, created_at, updated_at
+			suppressed_by, created_at, updated_at, first_fired_at, firing_scope
 		 FROM alert_instances WHERE id = $1`,
 		strings.TrimSpace(id),
 	))
@@ -73,10 +80,17 @@ func (s *PostgresStore) GetAlertInstance(id string) (alerts.AlertInstance, bool,
 }
 
 func (s *PostgresStore) GetActiveInstanceByFingerprint(ruleID, fingerprint string) (alerts.AlertInstance, bool, error) {
-	inst, err := scanAlertInstance(s.pool.QueryRow(context.Background(),
+	return s.GetActiveInstanceByFingerprintContext(context.Background(), ruleID, fingerprint)
+}
+
+func (s *PostgresStore) GetActiveInstanceByFingerprintContext(ctx context.Context, ruleID, fingerprint string) (alerts.AlertInstance, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return alerts.AlertInstance{}, false, err
+	}
+	inst, err := scanAlertInstance(s.pool.QueryRow(ctx,
 		`SELECT id, rule_id, fingerprint, status, severity,
 			labels, annotations, started_at, resolved_at, last_fired_at,
-			suppressed_by, created_at, updated_at
+			suppressed_by, created_at, updated_at, first_fired_at, firing_scope
 		 FROM alert_instances
 		 WHERE rule_id = $1 AND fingerprint = $2 AND status IN ('pending', 'firing', 'acknowledged')`,
 		strings.TrimSpace(ruleID),
@@ -92,6 +106,13 @@ func (s *PostgresStore) GetActiveInstanceByFingerprint(ruleID, fingerprint strin
 }
 
 func (s *PostgresStore) ListAlertInstances(filter AlertInstanceFilter) ([]alerts.AlertInstance, error) {
+	return s.ListAlertInstancesContext(context.Background(), filter)
+}
+
+func (s *PostgresStore) ListAlertInstancesContext(ctx context.Context, filter AlertInstanceFilter) ([]alerts.AlertInstance, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	limit := filter.Limit
 	if limit <= 0 {
 		limit = 50
@@ -122,7 +143,7 @@ func (s *PostgresStore) ListAlertInstances(filter AlertInstanceFilter) ([]alerts
 
 	sql := `SELECT id, rule_id, fingerprint, status, severity,
 			labels, annotations, started_at, resolved_at, last_fired_at,
-			suppressed_by, created_at, updated_at
+			suppressed_by, created_at, updated_at, first_fired_at, firing_scope
 		FROM alert_instances`
 	if len(where) > 0 {
 		sql += " WHERE " + strings.Join(where, " AND ")
@@ -135,7 +156,7 @@ func (s *PostgresStore) ListAlertInstances(filter AlertInstanceFilter) ([]alerts
 		sql += fmt.Sprintf(" OFFSET $%d", next)
 	}
 
-	rows, err := s.pool.Query(context.Background(), sql, args...)
+	rows, err := s.pool.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -153,45 +174,70 @@ func (s *PostgresStore) ListAlertInstances(filter AlertInstanceFilter) ([]alerts
 }
 
 func (s *PostgresStore) UpdateAlertInstanceStatus(id, status string) (alerts.AlertInstance, error) {
+	return s.UpdateAlertInstanceStatusContext(context.Background(), id, status)
+}
+
+func (s *PostgresStore) UpdateAlertInstanceStatusContext(ctx context.Context, id, status string) (alerts.AlertInstance, error) {
+	if err := ctx.Err(); err != nil {
+		return alerts.AlertInstance{}, err
+	}
 	id = strings.TrimSpace(id)
 	status = alerts.NormalizeInstanceStatus(status)
 	if status == "" {
 		return alerts.AlertInstance{}, errors.New("invalid alert instance status")
 	}
 
-	existing, ok, err := s.GetAlertInstance(id)
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return alerts.AlertInstance{}, err
 	}
-	if !ok {
-		return alerts.AlertInstance{}, errors.New("alert instance not found")
+	defer tx.Rollback(ctx)
+	existing, err := scanAlertInstance(tx.QueryRow(ctx,
+		`SELECT id, rule_id, fingerprint, status, severity,
+		 labels, annotations, started_at, resolved_at, last_fired_at,
+		 suppressed_by, created_at, updated_at, first_fired_at, firing_scope
+		 FROM alert_instances WHERE id=$1 FOR UPDATE`, id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return alerts.AlertInstance{}, errors.New("alert instance not found")
+		}
+		return alerts.AlertInstance{}, err
 	}
 	if !alerts.CanTransitionInstanceStatus(existing.Status, status) {
 		return alerts.AlertInstance{}, fmt.Errorf("cannot transition alert instance from %s to %s", existing.Status, status)
 	}
-
-	now := time.Now().UTC()
-	var resolvedAt any = nil
-	if status == alerts.InstanceStatusResolved {
-		resolvedAt = now
-	} else if existing.ResolvedAt != nil {
-		resolvedAt = existing.ResolvedAt.UTC()
+	if existing.Status == status {
+		return existing, nil
 	}
-
-	return scanAlertInstance(s.pool.QueryRow(context.Background(),
-		`UPDATE alert_instances
-		 SET status = $2, resolved_at = $3, updated_at = $4
-		 WHERE id = $1
+	now := time.Now().UTC()
+	updated, err := scanAlertInstance(tx.QueryRow(ctx,
+		`UPDATE alert_instances SET status=$2, updated_at=$3,
+		 resolved_at=CASE WHEN $2='resolved' THEN COALESCE(resolved_at,$3) ELSE resolved_at END,
+		 first_fired_at=CASE WHEN status='pending' AND $2='firing' THEN COALESCE(first_fired_at,$3) ELSE first_fired_at END,
+		 last_fired_at=CASE WHEN status='pending' AND $2='firing' THEN $3 ELSE last_fired_at END
+		 WHERE id=$1
 		 RETURNING id, rule_id, fingerprint, status, severity,
-			labels, annotations, started_at, resolved_at, last_fired_at,
-			suppressed_by, created_at, updated_at`,
-		id, status, resolvedAt, now,
-	))
+		 labels, annotations, started_at, resolved_at, last_fired_at,
+		 suppressed_by, created_at, updated_at, first_fired_at, firing_scope`, id, status, now))
+	if err != nil {
+		return alerts.AlertInstance{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return alerts.AlertInstance{}, err
+	}
+	return updated, nil
 }
 
 func (s *PostgresStore) UpdateAlertInstanceLastFired(id string) error {
+	return s.UpdateAlertInstanceLastFiredContext(context.Background(), id)
+}
+
+func (s *PostgresStore) UpdateAlertInstanceLastFiredContext(ctx context.Context, id string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	now := time.Now().UTC()
-	_, err := s.pool.Exec(context.Background(),
+	_, err := s.pool.Exec(ctx,
 		`UPDATE alert_instances SET last_fired_at = $2, updated_at = $2 WHERE id = $1`,
 		strings.TrimSpace(id), now,
 	)
@@ -239,6 +285,13 @@ func (s *PostgresStore) CreateAlertSilence(req alerts.CreateSilenceRequest) (ale
 }
 
 func (s *PostgresStore) ListAlertSilences(limit int, activeOnly bool) ([]alerts.AlertSilence, error) {
+	return s.ListAlertSilencesContext(context.Background(), limit, activeOnly)
+}
+
+func (s *PostgresStore) ListAlertSilencesContext(ctx context.Context, limit int, activeOnly bool) ([]alerts.AlertSilence, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if limit <= 0 {
 		limit = 50
 	}
@@ -257,7 +310,7 @@ func (s *PostgresStore) ListAlertSilences(limit int, activeOnly bool) ([]alerts.
 	}
 	args = append(args, limit)
 
-	rows, err := s.pool.Query(context.Background(), sql, args...)
+	rows, err := s.pool.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}

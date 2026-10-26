@@ -104,8 +104,8 @@ func TestWriteTrueNASResolveErrorDefaultBranch(t *testing.T) {
 	assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
 }
 
-func TestResolveTrueNASAssetRuntimeFallbackAndError(t *testing.T) {
-	t.Run("preferred collector fallback to first active", func(t *testing.T) {
+func TestResolveTrueNASAssetRuntimeHonorsCollectorOwner(t *testing.T) {
+	t.Run("missing owner cannot select another active NAS", func(t *testing.T) {
 		server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
 			if method == "system.info" {
 				return map[string]any{"hostname": "OmegaNAS"}, nil
@@ -142,16 +142,23 @@ func TestResolveTrueNASAssetRuntimeFallbackAndError(t *testing.T) {
 			t.Fatalf("failed to seed truenas asset: %v", err)
 		}
 
-		asset, runtime, err := sut.resolveTrueNASAssetRuntime("truenas-host-omeganas")
-		if err != nil {
-			t.Fatalf("resolveTrueNASAssetRuntime() error = %v", err)
+		// The other NAS is usable, so an error must come from preserving the
+		// asset's explicit owner rather than from an unconfigured fixture.
+		if runtime, err := sut.loadTrueNASRuntime("collector-truenas-1"); err != nil || runtime == nil {
+			t.Fatalf("other NAS fixture is unavailable: %v", err)
 		}
-		if asset.ID != "truenas-host-omeganas" {
-			t.Fatalf("asset id = %q", asset.ID)
-		}
-		if runtime == nil || runtime.CollectorID != "collector-truenas-1" {
-			t.Fatalf("expected fallback runtime collector-truenas-1, got %+v", runtime)
-		}
+		t.Run("API reads", func(t *testing.T) {
+			asset, runtime, err := sut.resolveTrueNASAssetRuntime("truenas-host-omeganas")
+			if err == nil || runtime != nil || asset.ID != "" {
+				t.Fatal("missing owner resolved an API read against another NAS")
+			}
+		})
+		t.Run("shell sessions", func(t *testing.T) {
+			target, resolved, err := sut.resolveTrueNASSessionTarget("truenas-host-omeganas")
+			if err == nil || resolved || target.BaseURL != "" || target.APIKey != "" {
+				t.Fatal("missing owner resolved a shell against another NAS")
+			}
+		})
 	})
 
 	t.Run("runtime load error is wrapped", func(t *testing.T) {

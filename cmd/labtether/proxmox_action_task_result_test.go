@@ -13,19 +13,6 @@ import (
 func TestExecuteProxmoxActionDryRunAndNoUPID(t *testing.T) {
 	sut := newTestAPIServer(t)
 
-	dryRun, err := sut.executeProxmoxAction(context.Background(), "vm.start", "pve01/101", map[string]string{
-		"collector_id": "collector-proxmox-1",
-	}, true)
-	if err != nil {
-		t.Fatalf("dry-run executeProxmoxAction failed: %v", err)
-	}
-	if dryRun.Status != "succeeded" || !strings.Contains(dryRun.Output, "would execute vm.start on pve01/101") {
-		t.Fatalf("unexpected dry-run result: %+v", dryRun)
-	}
-	if dryRun.Metadata["collector_id"] != "collector-proxmox-1" {
-		t.Fatalf("expected dry-run collector id passthrough, got %q", dryRun.Metadata["collector_id"])
-	}
-
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPut && r.URL.Path == "/api2/json/nodes/pve01/qemu/101/resize" {
 			_, _ = w.Write([]byte(`{"data":null}`))
@@ -50,6 +37,20 @@ func TestExecuteProxmoxActionDryRunAndNoUPID(t *testing.T) {
 				},
 			},
 		},
+	}
+
+	// Dry runs still verify the named collector exists before validating.
+	dryRun, err := sut.executeProxmoxAction(context.Background(), "vm.start", "pve01/101", map[string]string{
+		"collector_id": "collector-proxmox-1",
+	}, true)
+	if err != nil {
+		t.Fatalf("dry-run executeProxmoxAction failed: %v", err)
+	}
+	if dryRun.Status != "succeeded" || !strings.Contains(dryRun.Output, "would execute vm.start on pve01/101") {
+		t.Fatalf("unexpected dry-run result: %+v", dryRun)
+	}
+	if dryRun.Metadata["collector_id"] != "collector-proxmox-1" {
+		t.Fatalf("expected dry-run collector id passthrough, got %q", dryRun.Metadata["collector_id"])
 	}
 
 	result, err := sut.executeProxmoxAction(context.Background(), "vm.disk_resize", "pve01/101", map[string]string{

@@ -1,6 +1,6 @@
 module github.com/labtether/labtether
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/cloudsoda/go-smb2 v0.0.0-20260918041005-0c5d69b69701
@@ -10,7 +10,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/jlaffaye/ftp v0.2.4
-	github.com/labtether/protocol v1.6.5
+	github.com/labtether/protocol v1.7.0
 	github.com/mark3labs/mcp-go v1.2.1
 	github.com/pkg/sftp v1.13.11
 	github.com/pquerna/otp v1.5.0

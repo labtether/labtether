@@ -12,6 +12,8 @@ import (
 	"github.com/labtether/labtether/internal/actions"
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/audit"
+	"github.com/labtether/labtether/internal/connectorsdk"
+	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/idgen"
 	"github.com/labtether/labtether/internal/jobqueue"
@@ -150,6 +152,15 @@ func (d *Deps) HandleActionExecute(w http.ResponseWriter, r *http.Request) {
 	case actions.RunTypeConnectorAction:
 		if req.ConnectorID == "" || req.ActionID == "" {
 			servicehttp.WriteError(w, http.StatusBadRequest, "connector actions require connector_id and action_id")
+			return
+		}
+		if !d.authorizeConnectorAction(w, r, &req) {
+			return
+		}
+		if !d.bindConnectorActionCollector(r.Context(), w, &req) {
+			return
+		}
+		if !maintenanceguard.EnforceConnectorAction(w, req.ConnectorID, req.ActionID, connectorsdk.ActionRequest{TargetID: req.Target, Params: req.Params, DryRun: req.DryRun}, d.EvaluateConnectorGuardrails) {
 			return
 		}
 		if target == "" {

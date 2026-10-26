@@ -208,6 +208,8 @@ func (d *Deps) HandleDirectSPICEStream(w http.ResponseWriter, r *http.Request, s
 		return
 	}
 	defer spiceConn.Close()
+	stopCancel := context.AfterFunc(r.Context(), func() { _ = spiceConn.Close() })
+	defer stopCancel()
 
 	wsConn, err := shared.UpgradeWebSocket(d.TerminalWebSocketUpgrader, w, r, nil)
 	if err != nil {

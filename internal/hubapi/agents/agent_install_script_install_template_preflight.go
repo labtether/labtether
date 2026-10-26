@@ -155,7 +155,7 @@ install_vnc_prereqs() {
   if command -v apt-get &>/dev/null; then
     DEBIAN_FRONTEND=noninteractive apt-get update -y
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
-      x11vnc xvfb xterm xdotool \
+      x11vnc xvfb xterm xdotool x11-xserver-utils \
       gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
       gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav \
       gstreamer1.0-x
@@ -163,38 +163,38 @@ install_vnc_prereqs() {
   fi
   if command -v dnf &>/dev/null; then
     dnf install -y \
-      x11vnc xorg-x11-server-Xvfb xterm xdotool \
+      x11vnc xorg-x11-server-Xvfb xterm xdotool /usr/bin/xmodmap \
       gstreamer1 gstreamer1-plugins-base gstreamer1-plugins-good \
       gstreamer1-plugins-bad-free gstreamer1-plugins-ugly-free gstreamer1-libav
     return 0
   fi
   if command -v yum &>/dev/null; then
     yum install -y \
-      x11vnc xorg-x11-server-Xvfb xterm xdotool \
+      x11vnc xorg-x11-server-Xvfb xterm xdotool /usr/bin/xmodmap \
       gstreamer1 gstreamer1-plugins-base gstreamer1-plugins-good
     return 0
   fi
   if command -v pacman &>/dev/null; then
     pacman -Sy --noconfirm \
-      x11vnc xorg-server-xvfb xterm xdotool \
+      x11vnc xorg-server-xvfb xterm xdotool xorg-xmodmap \
       gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav
     return 0
   fi
   if command -v zypper &>/dev/null; then
     zypper --non-interactive install \
-      x11vnc xorg-x11-server-Xvfb xterm xdotool \
+      x11vnc xorg-x11-server-Xvfb xterm xdotool xmodmap \
       gstreamer gstreamer-plugins-base gstreamer-plugins-good \
       gstreamer-plugins-bad gstreamer-plugins-ugly gstreamer-plugins-libav
     return 0
   fi
   if command -v apk &>/dev/null; then
     apk add --no-cache \
-      x11vnc xvfb xterm xdotool \
+      x11vnc xvfb xterm xdotool xmodmap \
       gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav
     return 0
   fi
   error "No supported package manager detected for automatic desktop prerequisite installation."
-  info "Install manually: x11vnc + Xvfb + xterm + xdotool + GStreamer, then reconnect desktop from LabTether."
+  info "Install manually: x11vnc + Xvfb + xterm + xdotool + xmodmap + GStreamer, then reconnect desktop from LabTether."
   return 1
 }
 

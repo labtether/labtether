@@ -235,76 +235,36 @@ func (s *apiServer) handleAgentWebSocket(w http.ResponseWriter, r *http.Request)
 	if agentVersion != "" {
 		conn.SetMeta("agent_version", agentVersion)
 	}
-	s.agentMgr.Register(conn)
 	if err := conn.ValidateCredential(); err != nil {
-		s.agentMgr.UnregisterIfMatch(assetID, conn)
-		_ = wsConn.Close()
+		conn.Close()
 		return
 	}
 
-	// Track presence in DB.
+	// Publish presence inside the same lifecycle transition as replacement.
 	sessionID := generateRequestID()
 	conn.SetMeta("presence.session_id", sessionID)
-	now := time.Now().UTC()
-	if s.presenceStore != nil {
-		_ = s.presenceStore.UpsertPresence(persistence.AgentPresence{
-			AssetID:         assetID,
-			Transport:       "agent",
-			ConnectedAt:     now,
-			LastHeartbeatAt: now,
-			SessionID:       sessionID,
-		})
-		_ = s.presenceStore.UpdateAssetTransportType(assetID, "agent")
-	}
+	s.agentMgr.RegisterWithLifecycle(conn, func(owner *agentmgr.AgentConn) {
+		s.cleanupAgentConnectionState(owner.AssetID, owner.Meta("presence.session_id"))
+	}, func() {
+		now := time.Now().UTC()
+		if s.presenceStore != nil {
+			_ = s.presenceStore.UpsertPresence(persistence.AgentPresence{
+				AssetID: assetID, Transport: "agent", ConnectedAt: now,
+				LastHeartbeatAt: now, SessionID: sessionID,
+			})
+			_ = s.presenceStore.UpdateAssetTransportType(assetID, "agent")
+		}
+		if s.broadcaster != nil {
+			s.broadcaster.Broadcast("agent.connected", map[string]any{"asset_id": assetID})
+		}
+	})
 
-	if s.broadcaster != nil {
-		s.broadcaster.Broadcast("agent.connected", map[string]any{"asset_id": assetID})
-	}
+	defer s.finishAgentWebSocketConnection(conn, sessionID)
 
 	// Proactively probe tmux availability so the result is cached before
 	// any terminal session is started. Without this, the first terminal
 	// connect always misses the probe (async race).
 	s.ensureTerminalDeps().StartAgentTmuxProbeAsync(conn)
-
-	defer func() {
-		removed := true
-		if s.agentMgr != nil {
-			removed = s.agentMgr.UnregisterIfMatch(assetID, conn)
-		}
-		if !removed {
-			// A newer connection for the same asset is active; do not run global
-			// disconnect cleanup for this stale connection.
-			return
-		}
-		if s.agentMgr != nil && s.agentMgr.IsConnected(assetID) {
-			// Asset reconnected after we unregistered this socket; skip global
-			// disconnect side effects for the previous connection.
-			return
-		}
-
-		if s.broadcaster != nil {
-			s.broadcaster.Broadcast("agent.disconnected", map[string]any{"asset_id": assetID})
-		}
-		s.closeWebRTCBridgesForAsset(assetID)
-		s.closeDockerExecBridgesForAsset(assetID)
-		s.closeDesktopBridgesForAsset(assetID)
-		s.closeTerminalBridgesForAsset(assetID)
-		if s.presenceStore != nil {
-			deleted, err := s.presenceStore.DeletePresenceForSession(assetID, sessionID)
-			if err != nil {
-				securityruntime.Logf("agentws: presence delete failed for %s session=%s: %v", assetID, sessionID, err)
-			}
-			if deleted {
-				_ = s.presenceStore.UpdateAssetTransportType(assetID, "offline")
-			}
-		}
-		if s.dockerCoordinator != nil {
-			s.dockerCoordinator.RemoveHost(assetID)
-		}
-		if s.webServiceCoordinator != nil {
-			s.webServiceCoordinator.MarkHostDisconnected(assetID)
-		}
-	}()
 
 	// Send hub SSH public key for auto-provisioning.
 	if s.currentHubSSHIdentity() != nil {
@@ -390,7 +350,11 @@ func (s *apiServer) handleAgentWebSocket(w http.ResponseWriter, r *http.Request)
 		}
 		msg.Type = messageType
 		conn.TouchLastMessage()
-		s.dispatchAgentWebSocketMessage(router, assetID, conn, msg)
+		if !s.agentMgr.DispatchIfCurrent(conn, func() {
+			s.dispatchAgentWebSocketMessage(router, assetID, conn, msg)
+		}) {
+			return
+		}
 	}
 }
 

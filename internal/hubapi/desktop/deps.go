@@ -11,6 +11,7 @@ import (
 
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/policy"
 	"github.com/labtether/labtether/internal/protocols"
@@ -27,6 +28,8 @@ type PolicyStateProvider interface {
 // Store interfaces are embedded directly; cross-cutting concerns that live
 // in other cmd/labtether subsystems are injected as function fields.
 type Deps struct {
+	SessionStreams *shared.SessionStreamRegistry
+
 	// Store interfaces
 	TerminalStore   persistence.TerminalStore
 	AssetStore      persistence.AssetStore
@@ -50,6 +53,11 @@ type Deps struct {
 	ClipboardBridges         *sync.Map
 	DisplayBridges           *sync.Map
 	DesktopDiagnosticWaiters *sync.Map
+
+	// Wire maps above route only a concrete stream. Public IDs select its current owner.
+	streamOwnerMu sync.Mutex
+	desktopOwners sync.Map
+	audioStreams  sync.Map
 
 	// Desktop session options state (protected by mutexes).
 	DesktopSessionMu   *sync.RWMutex
@@ -101,6 +109,11 @@ type Deps struct {
 	// Recording callbacks — injected to avoid pulling the full recording subsystem.
 	StartRecording func(sessionID, assetID, actorID, protocol string) (*ActiveRecording, error)
 	StopRecording  func(rec *ActiveRecording)
+	// RecordingsDir is the directory recordings are written to and served
+	// from (LABTETHER_DATA_DIR/recordings).
+	RecordingsDir string
+	// LookupRecording loads one recording's metadata; nil uses DBPool.
+	LookupRecording func(ctx context.Context, recordingID string) (RecordingMetadata, bool, error)
 }
 
 // RegisterRoutes registers all desktop-related HTTP routes on the given handler map.

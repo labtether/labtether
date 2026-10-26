@@ -12,5 +12,18 @@
     "placeholder": "Notiz eingeben...",
     "emptyHint": "Fügen Sie Untersuchungsnotizen, Ursachenanalysen und Gegenmaßnahmen hinzu.",
     "add": "Notiz hinzufügen"
+  },
+  "timeline": {
+    "title": "Was passiert ist",
+    "refresh": "Aktualisieren",
+    "empty": "Für diesen Vorfall wurden noch keine Ereignisse erfasst.",
+    "loading": "Zeitverlauf wird geladen…",
+    "error": "Der Zeitverlauf konnte nicht geladen werden. Bitte erneut versuchen.",
+    "retry": "Erneut versuchen",
+    "loadOlder": "Ältere laden"
+  },
+  "detail": {
+    "error": "Dieser Vorfall konnte nicht geladen werden. Bitte erneut versuchen.",
+    "retry": "Erneut versuchen"
   }
 }

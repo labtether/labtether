@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"context"
 	"sort"
 	"strings"
 	"sync"
@@ -45,40 +46,12 @@ func (m *MemoryAlertStore) CreateAlertRule(req alerts.CreateRuleRequest) (alerts
 		scope = alerts.TargetScopeGlobal
 	}
 
-	cooldownSeconds := req.CooldownSeconds
-	if cooldownSeconds < 0 {
-		cooldownSeconds = 0
+	durations, err := alerts.ResolveCreateRuleDurations(req)
+	if err != nil {
+		return alerts.Rule{}, err
 	}
-	if cooldownSeconds == 0 {
-		cooldownSeconds = alerts.DefaultCooldownSeconds
-	}
-	if cooldownSeconds > alerts.MaxDurationSeconds {
-		return alerts.Rule{}, alerts.ErrInvalidDurationSeconds
-	}
-	reopenAfterSeconds := req.ReopenAfterSeconds
-	if reopenAfterSeconds < 0 {
-		reopenAfterSeconds = 0
-	}
-	if reopenAfterSeconds == 0 {
-		reopenAfterSeconds = alerts.DefaultReopenAfterSeconds
-	}
-	if reopenAfterSeconds > alerts.MaxDurationSeconds {
-		return alerts.Rule{}, alerts.ErrInvalidDurationSeconds
-	}
-	evaluationIntervalSeconds := req.EvaluationIntervalSeconds
-	if evaluationIntervalSeconds <= 0 {
-		evaluationIntervalSeconds = alerts.DefaultEvaluationIntervalSeconds
-	}
-	if evaluationIntervalSeconds > alerts.MaxDurationSeconds {
-		return alerts.Rule{}, alerts.ErrInvalidDurationSeconds
-	}
-	windowSeconds := req.WindowSeconds
-	if windowSeconds <= 0 {
-		windowSeconds = alerts.DefaultWindowSeconds
-	}
-	if windowSeconds > alerts.MaxDurationSeconds {
-		return alerts.Rule{}, alerts.ErrInvalidDurationSeconds
-	}
+	cooldownSeconds, reopenAfterSeconds := durations.Cooldown, durations.Reopen
+	evaluationIntervalSeconds, windowSeconds := durations.Interval, durations.Window
 
 	createdBy := strings.TrimSpace(req.CreatedBy)
 	if createdBy == "" {
@@ -125,7 +98,16 @@ func (m *MemoryAlertStore) CreateAlertRule(req alerts.CreateRuleRequest) (alerts
 }
 
 func (m *MemoryAlertStore) GetAlertRule(id string) (alerts.Rule, bool, error) {
-	m.mu.RLock()
+	return m.GetAlertRuleContext(context.Background(), id)
+}
+
+func (m *MemoryAlertStore) GetAlertRuleContext(ctx context.Context, id string) (alerts.Rule, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return alerts.Rule{}, false, err
+	}
+	if err := lockAlertEvaluation(ctx, &m.mu, true); err != nil {
+		return alerts.Rule{}, false, err
+	}
 	rule, ok := m.rules[id]
 	m.mu.RUnlock()
 	if !ok {
@@ -290,7 +272,16 @@ func (m *MemoryAlertStore) DeleteAlertRule(id string) error {
 }
 
 func (m *MemoryAlertStore) RecordAlertEvaluation(ruleID string, evaluation alerts.Evaluation) (alerts.Evaluation, error) {
-	m.mu.Lock()
+	return m.RecordAlertEvaluationContext(context.Background(), ruleID, evaluation)
+}
+
+func (m *MemoryAlertStore) RecordAlertEvaluationContext(ctx context.Context, ruleID string, evaluation alerts.Evaluation) (alerts.Evaluation, error) {
+	if err := ctx.Err(); err != nil {
+		return alerts.Evaluation{}, err
+	}
+	if err := lockAlertEvaluation(ctx, &m.mu, false); err != nil {
+		return alerts.Evaluation{}, err
+	}
 	defer m.mu.Unlock()
 
 	ruleID = strings.TrimSpace(ruleID)
@@ -389,6 +380,10 @@ func cloneAlertRule(input alerts.Rule) alerts.Rule {
 				CreatedAt: target.CreatedAt,
 			})
 		}
+	}
+	if input.LastAutoAttemptAt != nil {
+		value := input.LastAutoAttemptAt.UTC()
+		out.LastAutoAttemptAt = &value
 	}
 	if input.LastEvaluatedAt != nil {
 		value := input.LastEvaluatedAt.UTC()

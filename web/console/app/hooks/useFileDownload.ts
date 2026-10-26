@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { downloadFileResponse } from "../[locale]/(console)/files/fileOpsClient";
 import { triggerBlobDownload } from "../[locale]/(console)/files/fileWorkspaceUtils";
 
@@ -20,18 +20,28 @@ export function useFileDownload(nodeId: string) {
   });
   const abortRef = useRef<AbortController | null>(null);
 
+  useEffect(() => {
+    setState({ downloading: false, progress: -1, filename: null, error: null });
+    return () => {
+      abortRef.current?.abort();
+      abortRef.current = null;
+    };
+  }, [nodeId]);
+
   const downloadFile = useCallback(
     async (remotePath: string) => {
       if (!nodeId || !remotePath.trim()) return;
 
       const filename =
-        remotePath.split("/").pop() || remotePath.split("\\").pop() || "download";
+        remotePath.split(/[\\/]/).pop() || "download";
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
       setState({ downloading: true, progress: -1, filename, error: null });
 
       try {
-        abortRef.current = new AbortController();
         const res = await downloadFileResponse(nodeId, remotePath, {
-          signal: abortRef.current.signal,
+          signal: controller.signal,
         });
 
         if (!res.ok) {
@@ -49,6 +59,7 @@ export function useFileDownload(nodeId: string) {
         if (!reader) {
           // Fallback: no streaming support
           const blob = await res.blob();
+          controller.signal.throwIfAborted();
           triggerBlobDownload(blob, filename);
           setState({ downloading: false, progress: 100, filename, error: null });
           return;
@@ -61,6 +72,7 @@ export function useFileDownload(nodeId: string) {
           if (done) break;
           chunks.push(value);
           loaded += value.length;
+          controller.signal.throwIfAborted();
           if (total > 0) {
             setState((prev) => ({
               ...prev,
@@ -69,16 +81,14 @@ export function useFileDownload(nodeId: string) {
           }
         }
 
-        const blobParts = chunks.map((chunk) => {
-          const copied = new Uint8Array(chunk.byteLength);
-          copied.set(chunk);
-          return copied;
-        });
+        controller.signal.throwIfAborted();
+        const blobParts = chunks.map((chunk) => chunk.slice());
         const blob = new Blob(blobParts);
         triggerBlobDownload(blob, filename);
 
         setState({ downloading: false, progress: 100, filename, error: null });
       } catch (err) {
+        if (abortRef.current !== controller) return;
         if ((err as Error).name === "AbortError") {
           setState({ downloading: false, progress: -1, filename: null, error: null });
         } else {
@@ -90,7 +100,7 @@ export function useFileDownload(nodeId: string) {
           });
         }
       } finally {
-        abortRef.current = null;
+        if (abortRef.current === controller) abortRef.current = null;
       }
     },
     [nodeId],

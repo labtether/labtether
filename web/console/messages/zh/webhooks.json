@@ -1,0 +1,23 @@
+{
+  "title": "Webhook",
+  "subtitle": "管理用于事件通知的 Webhook 集成",
+  "createWebhook": "创建 Webhook",
+  "editWebhook": "编辑 Webhook",
+  "name": "名称",
+  "url": "URL",
+  "events": "事件",
+  "enabled": "已启用",
+  "lastTriggered": "上次触发",
+  "never": "从未",
+  "noWebhooks": "尚未配置 Webhook",
+  "noWebhooksDesc": "创建 Webhook 以通过 HTTP POST 接收事件通知。",
+  "deleteConfirm": "您确定要删除此 Webhook 吗？",
+  "namePlaceholder": "我的 Webhook",
+  "urlPlaceholder": "https://example.com/webhook",
+  "secretPlaceholder": "用于 HMAC 验证的共享密钥（可选）",
+  "secret": "密钥",
+  "save": "保存",
+  "cancel": "取消",
+  "delete": "删除",
+  "eventTypes": "事件类型"
+}

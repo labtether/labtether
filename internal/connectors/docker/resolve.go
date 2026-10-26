@@ -1,8 +1,12 @@
 package docker
 
 import (
+	"encoding/hex"
 	"fmt"
+	"slices"
 	"strings"
+
+	"github.com/labtether/labtether/internal/connectorsdk"
 )
 
 // resolveContainerTarget parses a container asset ID to find the owning agent and full container ID.
@@ -36,49 +40,87 @@ func (c *Coordinator) resolveContainerTarget(assetID string) (agentID, container
 				ctShort = ctShort[:12]
 			}
 			if ctShort == shortCT {
-				return aID, ct.ID, nil
+				if agentID != "" && (agentID != aID || containerID != ct.ID) {
+					return "", "", fmt.Errorf("ambiguous container asset ID: %s", assetID)
+				}
+				agentID, containerID = aID, ct.ID
 			}
 		}
 	}
 
+	if agentID != "" {
+		return agentID, containerID, nil
+	}
 	return "", "", fmt.Errorf("container not found for asset ID: %s", assetID)
 }
 
-// resolveStackTarget parses a stack asset ID to find the owning agent, stack name, and config directory.
-//
-// Asset ID format: docker-stack-{normalizedAgentID}-{normalizedStackName}
-func (c *Coordinator) resolveStackTarget(assetID string) (agentID, stackName, configDir string, err error) {
+// ErrComposeUpgradeRequired is safe to show at all Compose admission boundaries.
+var ErrComposeUpgradeRequired = connectorsdk.ErrComposeUpgradeRequired
+
+// resolveStackTarget retains native paths as opaque agent-OS strings. The old
+// ConfigFile field is display-only and never reconstructs a mutation target.
+func (c *Coordinator) resolveStackTarget(assetID string) (ActionTarget, error) {
 	if !strings.HasPrefix(assetID, "docker-stack-") {
-		return "", "", "", fmt.Errorf("invalid stack asset ID: %s", assetID)
+		return ActionTarget{}, fmt.Errorf("invalid stack asset ID: %s", assetID)
 	}
 	rest := strings.TrimPrefix(assetID, "docker-stack-")
-
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-
+	var target ActionTarget
+	var selected ComposeStackState
+	var selectedHost *DockerHost
 	for aID, host := range c.hosts {
-		normalizedAgent := normalizeID(aID)
-		prefix := normalizedAgent + "-"
+		prefix := normalizeID(aID) + "-"
 		if !strings.HasPrefix(rest, prefix) {
 			continue
 		}
 		stackPart := strings.TrimPrefix(rest, prefix)
 		for _, stack := range host.ComposeStacks {
-			if normalizeID(stack.Name) == stackPart {
-				dir := ""
-				if stack.ConfigFile != "" {
-					// Extract the directory portion of the config file path.
-					idx := strings.LastIndex(stack.ConfigFile, "/")
-					if idx >= 0 {
-						dir = stack.ConfigFile[:idx]
-					}
-				}
-				return aID, stack.Name, dir, nil
+			if normalizeID(stack.Name) != stackPart {
+				continue
 			}
+			if target.AgentID != "" && (target.AgentID != aID || target.StackName != stack.Name || target.ConfigDir != stack.ConfigDir || !slices.Equal(target.ConfigFiles, stack.ConfigFiles) || selected.SelectionError != stack.SelectionError) {
+				return ActionTarget{}, fmt.Errorf("ambiguous stack asset ID: %s", assetID)
+			}
+			target = ActionTarget{AgentID: aID, AssetID: assetID, HostAssetID: "docker-host-" + normalizeID(aID), StackName: stack.Name, ConfigDir: stack.ConfigDir, ConfigFiles: slices.Clone(stack.ConfigFiles)}
+			selected, selectedHost = stack, host
 		}
 	}
+	if target.AgentID == "" {
+		return ActionTarget{}, fmt.Errorf("stack not found for asset ID: %s", assetID)
+	}
+	endpoint, err := composeEndpoint(selectedHost)
+	if err != nil {
+		return ActionTarget{}, err
+	}
+	target.EndpointID = endpoint
+	if selected.SelectionError != "" || target.StackName == "" || target.ConfigDir == "" || len(target.ConfigFiles) == 0 {
+		return ActionTarget{}, fmt.Errorf("Compose selection is unavailable or inconsistent; refresh agent discovery before retrying")
+	}
+	for _, file := range target.ConfigFiles {
+		if file == "" {
+			return ActionTarget{}, fmt.Errorf("Compose selection contains an empty config file; refresh agent discovery before retrying")
+		}
+	}
+	return target, nil
+}
 
-	return "", "", "", fmt.Errorf("stack not found for asset ID: %s", assetID)
+func (c *Coordinator) resolveComposeEndpoint(agentID string) (string, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return composeEndpoint(c.hosts[agentID])
+}
+
+func composeEndpoint(host *DockerHost) (string, error) {
+	if host == nil || host.ComposeActionVersion != 2 {
+		return "", ErrComposeUpgradeRequired
+	}
+	id := host.ComposeEndpointID
+	decoded, err := hex.DecodeString(id)
+	if err != nil || len(decoded) != 32 || id != strings.ToLower(id) {
+		return "", fmt.Errorf("Compose endpoint identity is unavailable; refresh agent discovery before retrying")
+	}
+	return id, nil
 }
 
 // resolveHostTarget resolves a host-style target into an owning agent ID.
@@ -113,16 +155,16 @@ func (c *Coordinator) resolveHostTarget(target string) (agentID string, err erro
 		}
 		for aID := range c.hosts {
 			if normalizeID(aID) == candidate {
-				return aID, nil
+				if agentID != "" && agentID != aID {
+					return "", fmt.Errorf("ambiguous docker host target: %s", target)
+				}
+				agentID = aID
 			}
 		}
 	}
 
-	// Final fallback: exact normalized raw target match.
-	for aID := range c.hosts {
-		if normalizeID(aID) == normalized {
-			return aID, nil
-		}
+	if agentID != "" {
+		return agentID, nil
 	}
 
 	return "", fmt.Errorf("host not found for target: %s", target)

@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import { usePollingTask } from "../../../../hooks/usePollingTask";
 import { Card } from "../../../../components/ui/Card";
 import { Button } from "../../../../components/ui/Button";
 import { fetchDockerContainerLogs } from "../../../../../lib/docker";
@@ -14,23 +15,20 @@ export function DockerLogsTab({ containerId }: Props) {
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const loadTask = useCallback(async (signal: AbortSignal) => {
     try {
-      const data = await fetchDockerContainerLogs(containerId, { tail });
+      const data = await fetchDockerContainerLogs(containerId, { tail }, signal);
+      if (signal.aborted) return;
       setLogs(data);
       setError(null);
     } catch (err) {
+      if (signal.aborted) return;
       setError(err instanceof Error ? err.message : "failed to load logs");
     }
-    finally { setLoading(false); }
+    finally { if (!signal.aborted) setLoading(false); }
   }, [containerId, tail]);
 
-  useEffect(() => {
-    void load();
-    if (!autoRefresh) return;
-    const interval = setInterval(() => void load(), 5_000);
-    return () => clearInterval(interval);
-  }, [load, autoRefresh]);
+  const load = usePollingTask(loadTask, autoRefresh ? 5_000 : 0);
 
   return (
     <Card className="mb-4">

@@ -76,7 +76,15 @@ type Deps struct {
 	Broadcast func(eventType string, data map[string]any)
 
 	// EvaluateGuardrails resolves active maintenance constraints for a group.
-	EvaluateGuardrails func(groupID string, at time.Time) (groupfeatures.GroupMaintenanceGuardrails, error)
+	EvaluateGuardrails        func(groupID string, at time.Time) (groupfeatures.GroupMaintenanceGuardrails, error)
+	EvaluateGuardrailsContext func(context.Context, string, time.Time) (groupfeatures.GroupMaintenanceGuardrails, error)
+	pushDigestClock           func() time.Time
+
+	// Worker cursors are local to this runtime and never hold full history pages.
+	alertRuleEvaluationMu     sync.Mutex
+	alertRuleEvaluationCursor persistence.AlertRuleEvaluationCursor
+	incidentCorrelationMu     sync.Mutex
+	incidentCorrelationWork   incidentCorrelationWork
 
 	// Agent manager for push notifications.
 	AgentMgr *agentmgr.AgentManager
@@ -85,6 +93,9 @@ type Deps struct {
 	InferCapabilityIDsFromAssetMetadata func(entry assets.Asset) []string
 	CapabilityIDsFromSet                func(set model.CapabilitySet) []string
 	MergeCapabilityIDs                  func(values ...[]string) []string
+
+	// ResolveSyntheticServiceAsset returns only an exact, unambiguous service owner.
+	ResolveSyntheticServiceAsset func(context.Context, string) (assets.Asset, bool, error)
 
 	// Web service template constants (injected so alerting templates can reference them).
 	WebServiceHealthLogSource      string
@@ -106,9 +117,18 @@ type NotificationSecretsManager interface {
 }
 
 // PushDeviceStore is the narrow persistence contract needed for APNs fanout.
+// DeletePushDeviceByToken only removes rows of the given transport ("direct"
+// or "relay"), so one transport's cleanup never deletes the other's rows.
 type PushDeviceStore interface {
 	GetAllPushTokens(ctx context.Context) ([]persistence.PushDevice, error)
-	DeletePushDeviceByToken(ctx context.Context, pushToken, bundleID, environment string) error
+	DeletePushDeviceByToken(ctx context.Context, pushToken, bundleID, environment, transport string) error
+}
+
+// NotificationBootstrapStore records one-time automatic notification setup,
+// such as the default push relay channel, across Hub processes.
+type NotificationBootstrapStore interface {
+	ClaimNotificationBootstrap(ctx context.Context, name string) (bool, error)
+	ReleaseNotificationBootstrap(ctx context.Context, name string) error
 }
 
 // LiveActivityStore persists encrypted, expiring ActivityKit delivery tokens

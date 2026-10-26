@@ -1,0 +1,8 @@
+SPDX-License-Identifier: Apache-2.0
+
+The LabTether push relay is part of the LabTether hub monorepo
+(https://github.com/labtether/labtether) and is licensed under the
+Apache License, Version 2.0, the same license as the hub.
+
+The full license text is in the LICENSE file at the root of the hub
+repository and at https://www.apache.org/licenses/LICENSE-2.0

@@ -24,7 +24,8 @@ func (s *apiServer) buildTruenasDeps() *truenaspkg.Deps {
 
 		TruenasSubs: make(map[string]truenaspkg.TruenasSubscriptionHandle, 8),
 
-		RequireAdminAuth: s.requireAdminAuth,
+		RequireAdminAuth:            s.requireAdminAuth,
+		EvaluateConnectorGuardrails: s.connectorMaintenanceEvaluator(),
 
 		WrapAuth:  s.withAuth,
 		WrapAdmin: s.withAdminAuth,
@@ -112,6 +113,7 @@ func (s *apiServer) ensureTruenasDeps() *truenaspkg.Deps {
 	d.SecretsManager = s.secretsManager
 	d.LogStore = s.logStore
 	d.RequireAdminAuth = s.requireAdminAuth
+	d.EvaluateConnectorGuardrails = s.connectorMaintenanceEvaluator()
 	return d
 }
 

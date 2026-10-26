@@ -178,6 +178,10 @@ func TestHandlePBSTaskHandlersUpstreamErrorsAndLogLimits(t *testing.T) {
 
 	t.Run("stop upstream failure", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodGet && r.URL.Path == "/api2/json/nodes/node-a/tasks/"+upid+"/status" {
+				_, _ = w.Write([]byte(`{"data":{"upid":"` + upid + `","type":"verify","id":"backup"}}`))
+				return
+			}
 			if r.Method == http.MethodDelete && r.URL.Path == "/api2/json/nodes/node-a/tasks/"+upid {
 				http.Error(w, `{"errors":"stop failed"}`, http.StatusBadGateway)
 				return

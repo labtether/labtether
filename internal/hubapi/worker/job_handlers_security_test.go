@@ -72,6 +72,7 @@ func TestTerminalCommandCredentialsResolvedOnlyAfterQueueClaim(t *testing.T) {
 			}
 		},
 	}
+	bindHandlerTestExecution(deps)
 	var processed atomic.Uint64
 	handler := deps.HandleTerminalCommandJob(&processed)
 	if err := handler(context.Background(), &jobqueue.Job{Payload: payload}); err != nil {
@@ -113,6 +114,7 @@ func TestTerminalCompletionAuditAndLogsExcludeRawOutput(t *testing.T) {
 			return terminal.CommandResult{JobID: job.JobID, SessionID: job.SessionID, CommandID: job.CommandID, Status: "succeeded", Output: secretOutput, CompletedAt: time.Now().UTC()}
 		},
 	}
+	bindHandlerTestExecution(deps)
 	var processed atomic.Uint64
 	if err := deps.HandleTerminalCommandJob(&processed)(context.Background(), &jobqueue.Job{Payload: jobPayload}); err != nil {
 		t.Fatal(err)
@@ -167,6 +169,7 @@ func TestActionCompletionAuditAndLogsExcludeRawOutputAndError(t *testing.T) {
 			}
 		},
 	}
+	bindHandlerTestExecution(deps)
 	var processed atomic.Uint64
 	if err := deps.HandleActionRunJob(&processed)(context.Background(), &jobqueue.Job{Payload: jobPayload}); err != nil {
 		t.Fatal(err)
@@ -231,6 +234,7 @@ func TestUpdateCompletionPublishesAdvertisedWebhookEvent(t *testing.T) {
 			}
 		},
 	}
+	bindHandlerTestExecution(deps)
 	var processed atomic.Uint64
 	if err := deps.HandleUpdateRunJob(&processed)(context.Background(), &jobqueue.Job{Payload: payload}); err != nil {
 		t.Fatalf("handle update job: %v", err)

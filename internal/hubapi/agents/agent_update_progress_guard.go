@@ -7,14 +7,14 @@ import (
 )
 
 type activeAgentUpdate struct {
-	assetID   string
+	conn      *agentmgr.AgentConn
 	expiresAt time.Time
 }
 
 // trackAgentUpdate binds progress to a Hub-issued request. Both operator and
 // automatic updates use this registry; the shared pending-command map only
 // covers operator requests and also contains non-update commands.
-func (d *Deps) trackAgentUpdate(jobID, assetID string, ttl time.Duration) func() {
+func (d *Deps) trackAgentUpdate(jobID string, conn *agentmgr.AgentConn, ttl time.Duration) func() {
 	now := time.Now()
 	d.activeAgentUpdates.Range(func(key, value any) bool {
 		entry := value.(*activeAgentUpdate)
@@ -23,7 +23,7 @@ func (d *Deps) trackAgentUpdate(jobID, assetID string, ttl time.Duration) func()
 		}
 		return true
 	})
-	entry := &activeAgentUpdate{assetID: assetID, expiresAt: now.Add(ttl)}
+	entry := &activeAgentUpdate{conn: conn, expiresAt: now.Add(ttl)}
 	d.activeAgentUpdates.Store(jobID, entry)
 	return func() { d.activeAgentUpdates.CompareAndDelete(jobID, entry) }
 }
@@ -41,7 +41,7 @@ func (d *Deps) acceptsAgentUpdate(conn *agentmgr.AgentConn, jobID string) bool {
 		d.activeAgentUpdates.CompareAndDelete(jobID, entry)
 		return false
 	}
-	return entry.assetID == conn.AssetID
+	return entry.conn == conn
 }
 
 func (d *Deps) finishAgentUpdate(conn *agentmgr.AgentConn, jobID string) {
@@ -49,7 +49,7 @@ func (d *Deps) finishAgentUpdate(conn *agentmgr.AgentConn, jobID string) {
 		return
 	}
 	raw, ok := d.activeAgentUpdates.Load(jobID)
-	if ok && raw.(*activeAgentUpdate).assetID == conn.AssetID {
+	if ok && raw.(*activeAgentUpdate).conn == conn {
 		d.activeAgentUpdates.CompareAndDelete(jobID, raw)
 	}
 }

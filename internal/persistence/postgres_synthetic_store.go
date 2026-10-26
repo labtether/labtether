@@ -132,7 +132,14 @@ func (s *PostgresStore) CreateSyntheticCheck(req synthetic.CreateCheckRequest) (
 }
 
 func (s *PostgresStore) GetSyntheticCheck(id string) (synthetic.Check, bool, error) {
-	check, err := scanSyntheticCheck(s.pool.QueryRow(context.Background(),
+	return s.GetSyntheticCheckContext(context.Background(), id)
+}
+
+func (s *PostgresStore) GetSyntheticCheckContext(ctx context.Context, id string) (synthetic.Check, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return synthetic.Check{}, false, err
+	}
+	check, err := scanSyntheticCheck(s.pool.QueryRow(ctx,
 		fmt.Sprintf(`SELECT %s FROM synthetic_checks WHERE id = $1`, syntheticCheckColumns),
 		strings.TrimSpace(id),
 	))
@@ -337,6 +344,13 @@ func (s *PostgresStore) RecordSyntheticResult(checkID string, result synthetic.R
 }
 
 func (s *PostgresStore) ListSyntheticResults(checkID string, limit int) ([]synthetic.Result, error) {
+	return s.ListSyntheticResultsContext(context.Background(), checkID, limit)
+}
+
+func (s *PostgresStore) ListSyntheticResultsContext(ctx context.Context, checkID string, limit int) ([]synthetic.Result, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if limit <= 0 {
 		limit = 50
 	}
@@ -344,7 +358,7 @@ func (s *PostgresStore) ListSyntheticResults(checkID string, limit int) ([]synth
 		limit = 500
 	}
 
-	rows, err := s.pool.Query(context.Background(),
+	rows, err := s.pool.Query(ctx,
 		fmt.Sprintf(`SELECT %s FROM synthetic_check_results
 		 WHERE check_id = $1 ORDER BY checked_at DESC LIMIT $2`, syntheticResultColumns),
 		strings.TrimSpace(checkID),

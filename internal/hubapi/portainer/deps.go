@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/gorilla/websocket"
+	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/secrets"
 )
@@ -22,7 +23,8 @@ type Deps struct {
 	PortainerCache   map[string]*CachedPortainerRuntime
 
 	// Auth middleware injected from cmd/labtether.
-	RequireAdminAuth func(w http.ResponseWriter, r *http.Request) bool
+	RequireAdminAuth        func(w http.ResponseWriter, r *http.Request) bool
+	EvaluateAssetGuardrails maintenanceguard.EvaluateAssetFunc
 
 	// WrapAuth / WrapAdmin for route registration.
 	WrapAuth  func(http.HandlerFunc) http.HandlerFunc

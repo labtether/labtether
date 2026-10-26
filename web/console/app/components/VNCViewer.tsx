@@ -116,12 +116,14 @@ const VNCViewer = forwardRef<VNCViewerHandle, VNCViewerProps>(function VNCViewer
   const onCredentialsRequiredRef = useRef(onCredentialsRequired);
   const qualityRef = useRef(quality);
   const scalingModeRef = useRef(scalingMode);
+  const viewOnlyRef = useRef(viewOnly);
   onConnectRef.current = onConnect;
   onDisconnectRef.current = onDisconnect;
   onErrorRef.current = onError;
   onCredentialsRequiredRef.current = onCredentialsRequired;
   qualityRef.current = quality;
   scalingModeRef.current = scalingMode;
+  viewOnlyRef.current = viewOnly;
 
   const disconnectRfb = (target: RFB | null) => {
     if (!target || rfbDisconnectedRef.current) {
@@ -211,6 +213,9 @@ const VNCViewer = forwardRef<VNCViewerHandle, VNCViewerProps>(function VNCViewer
           wsProtocols: ["binary"],
         });
         rfbDisconnectedRef.current = false;
+        rfbRef.current = rfb;
+        const isCurrent = () => !cancelled && rfbRef.current === rfb;
+        rfb.viewOnly = viewOnlyRef.current ?? false;
 
         const mode = scalingModeRef.current ?? "fit";
         rfb.scaleViewport = mode !== "native";
@@ -233,29 +238,34 @@ const VNCViewer = forwardRef<VNCViewerHandle, VNCViewerProps>(function VNCViewer
         }
 
         rfb.addEventListener("connect", () => {
+          if (!isCurrent()) return;
           setConnected(true);
           onConnectRef.current?.();
         });
 
         rfb.addEventListener("disconnect", (e: RFBDisconnectEvent) => {
+          if (!isCurrent()) return;
           rfbDisconnectedRef.current = true;
           setConnected(false);
           onDisconnectRef.current?.({ clean: e.detail.clean, reason: e.detail.reason });
         });
 
         rfb.addEventListener("securityfailure", (e: RFBSecurityFailureEvent) => {
+          if (!isCurrent()) return;
           onErrorRef.current?.(`VNC security failure: ${e.detail.status} - ${e.detail.reason}`);
         });
 
         rfb.addEventListener("credentialsrequired", (e: RFBCredentialsRequiredEvent) => {
+          if (!isCurrent()) return;
           const types: string[] = e.detail?.types ?? ["password"];
           onCredentialsRequiredRef.current?.({ types });
         });
 
         // Clipboard: remote → local
         rfb.addEventListener("clipboard", (e: RFBClipboardEvent) => {
+          if (!isCurrent() || !container.contains(document.activeElement)) return;
           const text = e.detail?.text;
-          if (text && navigator.clipboard?.writeText) {
+          if (typeof text === "string" && navigator.clipboard?.writeText) {
             navigator.clipboard.writeText(text).catch(() => {
               // Browser denied clipboard access — ignore silently.
             });
@@ -273,7 +283,6 @@ const VNCViewer = forwardRef<VNCViewerHandle, VNCViewerProps>(function VNCViewer
         pasteHandlerRef.current = handlePaste;
         container.addEventListener("paste", handlePaste);
 
-        rfbRef.current = rfb;
         if (cancelled) {
           disconnectRfb(rfb);
           rfb = null;

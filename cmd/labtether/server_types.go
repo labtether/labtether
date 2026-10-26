@@ -158,6 +158,7 @@ type apiServer struct {
 	collectorsDeps                *collectorspkg.Deps
 	agentsDepsOnce                sync.Once
 	agentsDeps                    *agentspkg.Deps
+	sessionStreams                sharedpkg.SessionStreamRegistry
 	terminalDepsOnce              sync.Once
 	terminalDeps                  *terminalpkg.Deps
 	ephemeralSSHConfigs           *terminalpkg.EphemeralSSHConfigStore
@@ -197,6 +198,7 @@ type apiServer struct {
 	webhookCache                  []webhooks.Webhook
 	webhookCacheLoaded            bool
 	webhookCacheDirty             bool
+	webhookCacheGeneration        uint64
 	logsDepsOnce                  sync.Once
 	logsDeps                      *logspkg.Deps
 	homeassistantDepsOnce         sync.Once

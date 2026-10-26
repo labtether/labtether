@@ -59,6 +59,19 @@ func DefaultSettings() Settings {
 	}
 }
 
+// MinAuditWindow is the shortest audit retention the Hub accepts. The audit
+// trail records who changed what; letting a retention change prune it to
+// hours would let an operator erase the record of their own actions.
+const MinAuditWindow = 30 * 24 * time.Hour
+
+// Validate rejects requested settings that would weaken the audit trail.
+func Validate(settings Settings) error {
+	if settings.AuditWindow > 0 && settings.AuditWindow < MinAuditWindow {
+		return fmt.Errorf("audit_window must be at least %s", FormatDuration(MinAuditWindow))
+	}
+	return nil
+}
+
 func Normalize(settings Settings) Settings {
 	defaults := DefaultSettings()
 
@@ -70,6 +83,9 @@ func Normalize(settings Settings) Settings {
 	}
 	if settings.AuditWindow <= 0 {
 		settings.AuditWindow = defaults.AuditWindow
+	} else if settings.AuditWindow < MinAuditWindow {
+		// Stored values from before the floor existed must not keep pruning.
+		settings.AuditWindow = MinAuditWindow
 	}
 	if settings.TerminalWindow <= 0 {
 		settings.TerminalWindow = defaults.TerminalWindow

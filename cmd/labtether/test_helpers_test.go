@@ -144,7 +144,7 @@ func newTestAPIServer(t *testing.T) *apiServer {
 		policyState:             newPolicyRuntimeState(policy.DefaultEvaluatorConfig()),
 		connectorRegistry:       connectorsdk.NewRegistry(),
 		notificationDispatcher: NotificationDispatcher{
-			Adapters:    defaultNotificationAdapters(),
+			Adapters:    defaultNotificationAdapters(""),
 			DispatchSem: make(chan struct{}, 32),
 		},
 		collectorDispatchSem: make(chan struct{}, 4),

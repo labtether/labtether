@@ -162,7 +162,7 @@ LabTether ships a built-in **MCP server** with 23+ tools. Connect Claude, OpenCl
 - Run commands across your fleet, restart services, read logs
 - Query container stats, manage Docker stacks, check connector health
 - Browse files, acknowledge alerts, reboot or wake machines
-- Explore topology, list schedules, trigger webhooks
+- Explore topology, list schedules and webhook subscriptions
 
 > *"Restart the nginx container on prod-web-01"* -- your AI agent does it through LabTether's MCP endpoint.
 
@@ -220,7 +220,7 @@ Visualize your infrastructure, dependencies, and network relationships. Blast ra
 
 ### Automation
 
-Save and execute actions across devices. Webhooks and scheduled jobs for hands-free operations. Cron-like scheduling with group-aware execution.
+Save and execute actions across devices. Run scheduled jobs for hands-free operations, with cron-like scheduling and group-aware execution. Outbound webhook subscriptions send Hub events to other services through a bounded, best-effort live stream.
 
 ### Integrations
 

@@ -77,6 +77,9 @@ func resolveRuntimeInstallSecrets(store *installstate.Store) (runtimeInstallSecr
 		resolved.EncryptionKey = ""
 	}
 	if envEncryptionKey != "" {
+		if err := checkEncryptionKeyChange(resolved.EncryptionKey, envEncryptionKey, store.Root()); err != nil {
+			return runtimeInstallSecrets{}, err
+		}
 		resolved.EncryptionKey = envEncryptionKey
 	}
 	if resolved.EncryptionKey == "" {

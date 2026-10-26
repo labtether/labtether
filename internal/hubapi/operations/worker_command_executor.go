@@ -3,6 +3,7 @@ package operations
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net"
 	neturl "net/url"
@@ -86,8 +87,12 @@ type SSHTarget struct {
 
 // ExecuteCommand runs a terminal command using the configured executor mode.
 func ExecuteCommand(job terminal.CommandJob) terminal.CommandResult {
+	return ExecuteCommandContext(context.Background(), job)
+}
+
+func ExecuteCommandContext(ctx context.Context, job terminal.CommandJob) terminal.CommandResult {
 	cfg := LoadCommandExecutorConfig()
-	status, output := ExecuteConfiguredCommand(job, cfg)
+	status, output := ExecuteConfiguredCommandContext(ctx, job, cfg)
 
 	return terminal.CommandResult{
 		JobID:       job.JobID,
@@ -117,17 +122,24 @@ func LoadCommandExecutorConfig() CommandExecutorConfig {
 
 // ExecuteConfiguredCommand runs a terminal command using the given config.
 func ExecuteConfiguredCommand(job terminal.CommandJob, cfg CommandExecutorConfig) (string, string) {
+	return ExecuteConfiguredCommandContext(context.Background(), job, cfg)
+}
+
+func ExecuteConfiguredCommandContext(ctx context.Context, job terminal.CommandJob, cfg CommandExecutorConfig) (string, string) {
+	if err := ctx.Err(); err != nil {
+		return "failed", "command canceled before dispatch; no changes applied"
+	}
 	switch cfg.Mode {
 	case ExecutorModeSimulated:
 		return ExecuteSimulatedCommand(job)
 	case ExecutorModeSSH:
-		output, err := ExecuteSSHCommand(job, cfg)
+		output, err := ExecuteSSHCommandContext(ctx, job, cfg)
 		if err != nil {
 			return "failed", OutputForError(output, err)
 		}
 		return "succeeded", output
 	case ExecutorModeLocal:
-		output, err := ExecuteLocalCommand(job, cfg)
+		output, err := ExecuteLocalCommandContext(ctx, job, cfg)
 		if err != nil {
 			return "failed", OutputForError(output, err)
 		}
@@ -150,7 +162,11 @@ func ExecuteSimulatedCommand(job terminal.CommandJob) (string, string) {
 
 // ExecuteLocalCommand runs a validated argv directly without invoking a shell.
 func ExecuteLocalCommand(job terminal.CommandJob, cfg CommandExecutorConfig) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
+	return ExecuteLocalCommandContext(context.Background(), job, cfg)
+}
+
+func ExecuteLocalCommandContext(parent context.Context, job terminal.CommandJob, cfg CommandExecutorConfig) (string, error) {
+	ctx, cancel := context.WithTimeout(parent, cfg.Timeout)
 	defer cancel()
 
 	argv, err := securityruntime.ParseValidatedShellCommand(job.Command)
@@ -164,15 +180,35 @@ func ExecuteLocalCommand(job terminal.CommandJob, cfg CommandExecutorConfig) (st
 	output := newCappedOutputWriter(cfg.MaxOutputBytes)
 	cmd.Stdout = output
 	cmd.Stderr = output
+	cmd.WaitDelay = time.Second
 	err = cmd.Run()
-	if ctx.Err() == context.DeadlineExceeded {
-		return output.String(), fmt.Errorf("command timed out after %s", cfg.Timeout)
+	if ctx.Err() != nil {
+		return output.String(), stoppedCommandError("command", parent, ctx, cfg.Timeout)
 	}
 	return output.String(), err
 }
 
+// stoppedCommandError names the command's own time limit when that is what
+// stopped it, so operators see a timeout rather than a generic interruption.
+// A cancelled caller (shutdown, request cancel) leaves the outcome unknown.
+func stoppedCommandError(kind string, parent, ctx context.Context, timeout time.Duration) error {
+	if parent.Err() == nil && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return fmt.Errorf("%s timed out after %s; outcome unknown", kind, timeout)
+	}
+	return fmt.Errorf("%s interrupted; outcome unknown: %w", kind, ctx.Err())
+}
+
 // ExecuteSSHCommand runs a command on a remote host via SSH.
 func ExecuteSSHCommand(job terminal.CommandJob, cfg CommandExecutorConfig) (string, error) {
+	return ExecuteSSHCommandContext(context.Background(), job, cfg)
+}
+
+func ExecuteSSHCommandContext(parent context.Context, job terminal.CommandJob, cfg CommandExecutorConfig) (string, error) {
+	ctx, cancel := context.WithTimeout(parent, cfg.Timeout)
+	defer cancel()
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	argv, err := securityruntime.ParseValidatedShellCommand(job.Command)
 	if err != nil {
 		return "", err
@@ -200,19 +236,23 @@ func ExecuteSSHCommand(job terminal.CommandJob, cfg CommandExecutorConfig) (stri
 		Timeout:         cfg.Timeout,
 	}
 
-	dialCtx, dialCancel := context.WithTimeout(context.Background(), cfg.Timeout)
-	defer dialCancel()
-	client, err := securityruntime.DialOutboundSSHContext(dialCtx, sshConfig.Host, sshConfig.Port, clientConfig, cfg.Timeout)
+	client, err := securityruntime.DialOutboundSSHContext(ctx, sshConfig.Host, sshConfig.Port, clientConfig, cfg.Timeout)
 	if err != nil {
 		return "", fmt.Errorf("ssh dial failed: %w", err)
 	}
 	defer client.Close()
+	// Own only this command's connection, including a blocked channel open.
+	stopClose := context.AfterFunc(ctx, func() { _ = client.Close() })
+	defer stopClose()
 
 	session, err := client.NewSession()
 	if err != nil {
 		return "", fmt.Errorf("ssh session failed: %w", err)
 	}
 	defer session.Close()
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 
 	output := newCappedOutputWriter(cfg.MaxOutputBytes)
 	session.Stdout = output
@@ -223,16 +263,16 @@ func ExecuteSSHCommand(job terminal.CommandJob, cfg CommandExecutorConfig) (stri
 		resultCh <- runResult{err: session.Run(remoteCommand)}
 	}()
 
-	timer := time.NewTimer(cfg.Timeout)
-	defer timer.Stop()
-
 	select {
 	case result := <-resultCh:
+		if ctx.Err() != nil {
+			return output.String(), stoppedCommandError("ssh command", parent, ctx, cfg.Timeout)
+		}
 		return output.String(), result.err
-	case <-timer.C:
+	case <-ctx.Done():
 		_ = session.Close()
 		_ = client.Close()
-		return output.String(), fmt.Errorf("ssh command timed out after %s", cfg.Timeout)
+		return output.String(), stoppedCommandError("ssh command", parent, ctx, cfg.Timeout)
 	}
 }
 

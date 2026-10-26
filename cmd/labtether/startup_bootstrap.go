@@ -8,6 +8,7 @@ import (
 	"github.com/labtether/labtether/internal/certmgr"
 	"github.com/labtether/labtether/internal/demo"
 	authpkg "github.com/labtether/labtether/internal/hubapi/auth"
+	resourcespkg "github.com/labtether/labtether/internal/hubapi/resources"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/secrets"
 	"github.com/labtether/labtether/internal/servicehttp"
@@ -82,6 +83,9 @@ func runHub(ctx context.Context) error {
 
 	dataDir := envOrDefault("LABTETHER_DATA_DIR", "data")
 	runtimeSecrets, err := resolveRuntimeInstallSecrets(newInstallStateStore(dataDir))
+	if errors.Is(err, errEncryptionKeyMismatch) {
+		return newStartupFailure(startupFailureEncryptionConfig, err)
+	}
 	if err != nil {
 		return newStartupFailure(startupFailureInstallState, err)
 	}
@@ -138,6 +142,13 @@ func runHub(ctx context.Context) error {
 	srv := newAPIServer(pgStore, secretsManager, policyState, registry, authValidator, oidcRef, newInstallStateStore(dataDir))
 	srv.dataDir = dataDir
 	srv.demoMode = demoMode
+	// This process now owns the Hub runtime, so no transfer from a previous
+	// process can still be running; do not leave them "in progress" forever.
+	if marked, err := resourcespkg.FailInterruptedFileTransfers(ctx, pgStore); err != nil {
+		log.Printf("labtether: warning: could not mark interrupted file transfers as failed: %v", err)
+	} else if marked > 0 {
+		log.Printf("labtether: marked %d interrupted file transfer(s) as failed", marked)
+	}
 
 	if demoMode {
 		srv.demoRateLimiter = newDemoSessionRateLimiter(10, time.Minute)

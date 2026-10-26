@@ -16,6 +16,9 @@ import (
 // --- helpers ---
 
 func (d *Deps) buildConnectionConfig(fc *persistence.FileConnection) (fileproto.ConnectionConfig, error) {
+	if legacyPlainWebDAV(fc) {
+		return fileproto.ConnectionConfig{}, errLegacyPlainWebDAV
+	}
 	normalizedExtra, err := NormalizeFileConnectionExtraConfig(fc.Protocol, fc.ExtraConfig)
 	if err != nil {
 		return fileproto.ConnectionConfig{}, err

@@ -1,0 +1,23 @@
+{
+  "title": "Webhooks",
+  "subtitle": "Gérer les intégrations webhook pour les notifications d'événements",
+  "createWebhook": "Créer un webhook",
+  "editWebhook": "Modifier le webhook",
+  "name": "Nom",
+  "url": "URL",
+  "events": "Événements",
+  "enabled": "Activé",
+  "lastTriggered": "Dernier déclenchement",
+  "never": "Jamais",
+  "noWebhooks": "Aucun webhook configuré",
+  "noWebhooksDesc": "Créez un webhook pour recevoir des notifications d'événements via HTTP POST.",
+  "deleteConfirm": "Êtes-vous sûr de vouloir supprimer ce webhook\u00a0?",
+  "namePlaceholder": "Mon webhook",
+  "urlPlaceholder": "https://example.com/webhook",
+  "secretPlaceholder": "Secret partagé facultatif pour la vérification HMAC",
+  "secret": "Secret",
+  "save": "Enregistrer",
+  "cancel": "Annuler",
+  "delete": "Supprimer",
+  "eventTypes": "Types d'événements"
+}

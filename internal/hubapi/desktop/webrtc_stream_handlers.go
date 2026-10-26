@@ -21,6 +21,12 @@ import (
 type WebRTCSignalingBridge struct {
 	BrowserWS       *websocket.Conn
 	ExpectedAgentID string
+	SessionID       string
+	WireSessionID   string
+	AgentConn       *agentmgr.AgentConn
+	lifecycleMu     sync.Mutex
+	started         bool
+	stopSent        bool
 	mu              sync.Mutex
 	ClosedCh        chan struct{}
 	closeOnce       sync.Once
@@ -48,6 +54,14 @@ func (b *WebRTCSignalingBridge) SendToBrowser(data []byte) error {
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	select {
+	case <-b.ClosedCh:
+		return fmt.Errorf("webrtc stream closed")
+	default:
+	}
+	if err := b.BrowserWS.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		return err
+	}
 	return b.BrowserWS.WriteMessage(websocket.TextMessage, data)
 }
 
@@ -55,10 +69,11 @@ func (b *WebRTCSignalingBridge) Close() {
 	if b == nil {
 		return
 	}
+	b.lifecycleMu.Lock()
+	defer b.lifecycleMu.Unlock()
 	b.closeOnce.Do(func() {
 		close(b.ClosedCh)
-		b.mu.Lock()
-		defer b.mu.Unlock()
+		// Close may run concurrently with a blocked writer and must unblock it.
 		if b.BrowserWS != nil {
 			_ = b.BrowserWS.Close()
 		}
@@ -110,19 +125,22 @@ func (d *Deps) HandleWebRTCStream(w http.ResponseWriter, r *http.Request, sessio
 	bridge := &WebRTCSignalingBridge{
 		BrowserWS:       browserWS,
 		ExpectedAgentID: agentConn.AssetID,
+		SessionID:       session.ID,
+		WireSessionID:   "webrtc-stream:" + shared.GenerateRequestID(),
+		AgentConn:       agentConn,
 		ClosedCh:        make(chan struct{}),
 	}
-	d.WebRTCBridges.Store(session.ID, bridge)
-	defer func() {
-		d.WebRTCBridges.Delete(session.ID)
-		bridge.Close()
-	}()
+	if !d.publishWebRTCStream(r.Context(), bridge) {
+		SafeWriteClose(browserWS, websocket.CloseTryAgainLater, "agent disconnected while opening desktop")
+		return
+	}
+	defer d.finalizeWebRTCStream(bridge)
 
 	width, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("width")))
 	height, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("height")))
 	fps, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("fps")))
 	startData, _ := json.Marshal(agentmgr.WebRTCSessionData{
-		SessionID:    session.ID,
+		SessionID:    bridge.WireSessionID,
 		Display:      strings.TrimSpace(r.URL.Query().Get("display")),
 		Quality:      strings.TrimSpace(r.URL.Query().Get("quality")),
 		Width:        width,
@@ -130,11 +148,17 @@ func (d *Deps) HandleWebRTCStream(w http.ResponseWriter, r *http.Request, sessio
 		FPS:          fps,
 		AudioEnabled: strings.TrimSpace(r.URL.Query().Get("audio")) != "false",
 	})
-	if err := agentConn.Send(agentmgr.Message{
-		Type: agentmgr.MsgWebRTCStart,
-		ID:   session.ID,
-		Data: startData,
-	}); err != nil {
+	var startErr error
+	if !shared.RunIfSessionStreamOpen(r.Context(), func() {
+		startErr = bridge.start(agentmgr.Message{
+			Type: agentmgr.MsgWebRTCStart,
+			ID:   bridge.WireSessionID,
+			Data: startData,
+		})
+	}) {
+		return
+	}
+	if err := startErr; err != nil {
 		log.Printf("webrtc: failed to send start for session=%s: %v", session.ID, err)
 		return
 	}
@@ -144,6 +168,12 @@ func (d *Deps) HandleWebRTCStream(w http.ResponseWriter, r *http.Request, sessio
 		_, msgBytes, readErr := browserWS.ReadMessage()
 		if readErr != nil {
 			break
+		}
+
+		select {
+		case <-bridge.ClosedCh:
+			return
+		default:
 		}
 
 		var sigMsg struct {
@@ -168,29 +198,29 @@ func (d *Deps) HandleWebRTCStream(w http.ResponseWriter, r *http.Request, sessio
 				continue
 			}
 			data, _ := json.Marshal(agentmgr.WebRTCSDPData{
-				SessionID: session.ID,
+				SessionID: bridge.WireSessionID,
 				Type:      "offer",
 				SDP:       payload.SDP,
 			})
-			_ = agentConn.Send(agentmgr.Message{Type: agentmgr.MsgWebRTCOffer, ID: session.ID, Data: data})
+			_ = agentConn.Send(agentmgr.Message{Type: agentmgr.MsgWebRTCOffer, ID: bridge.WireSessionID, Data: data})
 
 		case "ice":
 			var payload agentmgr.WebRTCICEData
 			if err := json.Unmarshal(sigMsg.Data, &payload); err != nil {
 				continue
 			}
-			payload.SessionID = session.ID
+			payload.SessionID = bridge.WireSessionID
 			data, _ := json.Marshal(payload)
-			_ = agentConn.Send(agentmgr.Message{Type: agentmgr.MsgWebRTCICE, ID: session.ID, Data: data})
+			_ = agentConn.Send(agentmgr.Message{Type: agentmgr.MsgWebRTCICE, ID: bridge.WireSessionID, Data: data})
 
 		case "input":
 			var payload agentmgr.WebRTCInputData
 			if err := json.Unmarshal(sigMsg.Data, &payload); err != nil {
 				continue
 			}
-			payload.SessionID = session.ID
+			payload.SessionID = bridge.WireSessionID
 			data, _ := json.Marshal(payload)
-			_ = agentConn.Send(agentmgr.Message{Type: agentmgr.MsgWebRTCInput, ID: session.ID, Data: data})
+			_ = agentConn.Send(agentmgr.Message{Type: agentmgr.MsgWebRTCInput, ID: bridge.WireSessionID, Data: data})
 
 		case "stop":
 			explicitStop = true
@@ -199,7 +229,7 @@ func (d *Deps) HandleWebRTCStream(w http.ResponseWriter, r *http.Request, sessio
 	}
 
 stop:
-	SendWebRTCStop(agentConn, session.ID)
+	bridge.stop()
 	if explicitStop {
 		// Keep the signaling socket alive briefly so the agent's stopped
 		// acknowledgement can be relayed to the browser. Closing immediately
@@ -247,8 +277,11 @@ func (d *Deps) ProcessAgentWebRTCStarted(conn *agentmgr.AgentConn, msg agentmgr.
 	if !ok {
 		return
 	}
-	if conn != nil && !bridge.MatchesAgent(conn.AssetID) {
+	if !bridge.AcceptsAgentMessage(conn, started.SessionID) {
 		return
+	}
+	if bridge.SessionID != "" {
+		started.SessionID = bridge.SessionID
 	}
 	payload, _ := json.Marshal(map[string]any{"type": "ready", "data": started})
 	_ = bridge.SendToBrowser(payload)
@@ -268,8 +301,11 @@ func (d *Deps) ProcessAgentWebRTCAnswer(conn *agentmgr.AgentConn, msg agentmgr.M
 	if !ok {
 		return
 	}
-	if conn != nil && !bridge.MatchesAgent(conn.AssetID) {
+	if !bridge.AcceptsAgentMessage(conn, answer.SessionID) {
 		return
+	}
+	if bridge.SessionID != "" {
+		answer.SessionID = bridge.SessionID
 	}
 	payload, _ := json.Marshal(map[string]any{"type": "answer", "data": answer})
 	_ = bridge.SendToBrowser(payload)
@@ -289,8 +325,11 @@ func (d *Deps) ProcessAgentWebRTCICE(conn *agentmgr.AgentConn, msg agentmgr.Mess
 	if !ok {
 		return
 	}
-	if conn != nil && !bridge.MatchesAgent(conn.AssetID) {
+	if !bridge.AcceptsAgentMessage(conn, ice.SessionID) {
 		return
+	}
+	if bridge.SessionID != "" {
+		ice.SessionID = bridge.SessionID
 	}
 	payload, _ := json.Marshal(map[string]any{"type": "ice", "data": ice})
 	_ = bridge.SendToBrowser(payload)
@@ -310,12 +349,24 @@ func (d *Deps) ProcessAgentWebRTCStopped(conn *agentmgr.AgentConn, msg agentmgr.
 	if !ok {
 		return
 	}
-	if conn != nil && !bridge.MatchesAgent(conn.AssetID) {
+	if !bridge.AcceptsAgentMessage(conn, stopped.SessionID) {
 		return
+	}
+	if bridge.SessionID != "" {
+		stopped.SessionID = bridge.SessionID
 	}
 	payload, _ := json.Marshal(map[string]any{"type": "stopped", "data": stopped})
 	if err := bridge.SendToBrowser(payload); err != nil {
 		log.Printf("webrtc: failed to relay stopped for session=%s: %v", stopped.SessionID, err)
 	}
 	bridge.Close()
+}
+
+func (b *WebRTCSignalingBridge) MatchesConnection(conn *agentmgr.AgentConn) bool {
+	return b != nil && conn != nil && b.MatchesAgent(conn.AssetID) && (b.AgentConn == nil || b.AgentConn == conn)
+}
+
+// AcceptsAgentMessage binds replies to the stream's wire ID and socket owner.
+func (b *WebRTCSignalingBridge) AcceptsAgentMessage(conn *agentmgr.AgentConn, wireID string) bool {
+	return b.MatchesConnection(conn) && (b.WireSessionID == "" || b.WireSessionID == wireID)
 }

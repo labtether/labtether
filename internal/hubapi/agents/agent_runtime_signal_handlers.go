@@ -32,7 +32,22 @@ const (
 	agentTelemetryStoreTimeout    = 5 * time.Second
 )
 
+// ProcessAgentHeartbeat serves callers outside the manager's message lifecycle.
 func (d *Deps) ProcessAgentHeartbeat(conn *agentmgr.AgentConn, msg agentmgr.Message) {
+	d.ProcessAgentHeartbeatInLifecycle(conn, msg)
+	select {
+	case <-conn.Done():
+		if d.AgentMgr != nil {
+			d.AgentMgr.UnregisterIfMatch(conn.AssetID, conn)
+		}
+	default:
+	}
+}
+
+// ProcessAgentHeartbeatInLifecycle closes an invalid owner but leaves manager
+// cleanup to DispatchIfCurrent after the handler returns. It must not reenter
+// the asset lifecycle while processing an inbound message.
+func (d *Deps) ProcessAgentHeartbeatInLifecycle(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 	if len(msg.Data) > maxAgentHeartbeatPayloadBytes {
 		securityruntime.Logf("agentws: rejected oversized heartbeat from %s (%d bytes)", conn.AssetID, len(msg.Data))
 		return
@@ -115,11 +130,7 @@ func (d *Deps) ProcessAgentHeartbeat(conn *agentmgr.AgentConn, msg agentmgr.Mess
 	if heartbeatErr != nil {
 		log.Printf("agentws: heartbeat processing failed for %s: %v", conn.AssetID, heartbeatErr)
 		if strings.TrimSpace(conn.Meta("auth.mode")) != "" {
-			if d.AgentMgr != nil {
-				d.AgentMgr.UnregisterIfMatch(conn.AssetID, conn)
-			} else {
-				conn.Close()
-			}
+			conn.Close()
 		}
 		return
 	}

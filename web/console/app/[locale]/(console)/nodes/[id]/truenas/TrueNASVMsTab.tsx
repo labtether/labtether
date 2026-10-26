@@ -103,8 +103,9 @@ export function TrueNASVMsTab({ assetId }: Props) {
             </thead>
             <tbody className="divide-y divide-[var(--line)]">
               {vms.map((vm) => {
-                const isRunning =
-                  (vm.status ?? "").toUpperCase() === "RUNNING";
+                const state = vm.status?.trim().toUpperCase();
+                const isRunning = state === "RUNNING";
+                const isStopped = state === "STOPPED";
                 return (
                   <tr key={String(vm.id)}>
                     <td className="py-2 font-medium text-[var(--text)]">{vm.name}</td>
@@ -126,7 +127,7 @@ export function TrueNASVMsTab({ assetId }: Props) {
                         <Button
                           size="sm"
                           variant="ghost"
-                          disabled={!!actionInFlight || isRunning}
+                          disabled={!!actionInFlight || !isStopped}
                           loading={actionInFlight === `start-${vm.id}`}
                           onClick={() => { void doAction(vm.id, "start"); }}
                         >

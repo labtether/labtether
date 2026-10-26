@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link } from "../../../../../i18n/navigation";
+import { usePollingTask } from "../../../../hooks/usePollingTask";
 import { Card } from "../../../../components/ui/Card";
 import { Badge } from "../../../../components/ui/Badge";
 import type { DockerContainer, DockerStack } from "../../../../../lib/docker";
@@ -33,28 +34,26 @@ export function DockerStackContainersTab({ hostId, stackName }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const loadTask = useCallback(async (signal: AbortSignal) => {
     try {
       const [stacks, hostContainers] = await Promise.all([
-        fetchDockerStacks(hostId),
-        fetchDockerContainers(hostId),
+        fetchDockerStacks(hostId, signal),
+        fetchDockerContainers(hostId, signal),
       ]);
+      if (signal.aborted) return;
       const matchedStack = stacks.find((entry) => entry.name.toLowerCase() === stackName.toLowerCase()) ?? null;
       setStack(matchedStack);
       setContainers(hostContainers);
       setError(null);
     } catch (err) {
+      if (signal.aborted) return;
       setError(err instanceof Error ? err.message : "failed to load stack containers");
     } finally {
-      setLoading(false);
+      if (!signal.aborted) setLoading(false);
     }
   }, [hostId, stackName]);
 
-  useEffect(() => {
-    void load();
-    const timer = setInterval(() => void load(), 10_000);
-    return () => clearInterval(timer);
-  }, [load]);
+  usePollingTask(loadTask, 10_000);
 
   const stackContainers = useMemo(() => {
     if (!stack) return [];

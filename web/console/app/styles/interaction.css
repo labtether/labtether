@@ -57,7 +57,7 @@ button:active:not(:disabled) {
 .animate-slide-up { animation: slide-up 0.2s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .animate-slide-in-right { animation: slide-in-right 0.2s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .animate-scale-in { animation: scale-in 0.15s cubic-bezier(0.16, 1, 0.3, 1) both; }
-.animate-pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+.animate-pulse-dot { animation: pulse-dot 2s ease-in-out 3; }
 
 /* Staggered list children */
 .stagger-children > * { animation: slide-up 0.2s cubic-bezier(0.16, 1, 0.3, 1) both; }
@@ -153,6 +153,10 @@ button:active:not(:disabled) {
   50% { background-position: 100% 50%; }
   100% { background-position: 0% 50%; }
 }
+
+/* Structural topology links keep their color and dash pattern after entrance.
+   The library's default is an endless dash loop, even when data is unchanged. */
+html .react-flow__edge.animated path { animation-iteration-count: 3; }
 
 /* Connection line dash flow */
 @keyframes dash-flow {

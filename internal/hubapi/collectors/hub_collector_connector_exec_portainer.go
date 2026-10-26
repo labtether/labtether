@@ -50,10 +50,7 @@ func (d *Deps) ExecutePortainerCollector(ctx context.Context, collector hubcolle
 		return
 	}
 
-	skipVerify := true
-	if value, has := collector.Config["skip_verify"]; has {
-		skipVerify = strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", value))) == "true"
-	}
+	skipVerify := portainerCollectorSkipVerify(collector.Config)
 
 	portainerConfig := portainer.Config{
 		BaseURL:    baseURL,
@@ -248,4 +245,11 @@ func (d *Deps) ExecutePortainerCollector(ctx context.Context, collector hubcolle
 
 func portainerStackInventoryKey(endpointID, stackName string) string {
 	return strings.ToLower(strings.TrimSpace(endpointID)) + "|" + strings.ToLower(strings.TrimSpace(stackName))
+}
+
+// portainerCollectorSkipVerify verifies TLS unless the operator explicitly
+// opted out, matching the Portainer runtime loader and test-connection path.
+func portainerCollectorSkipVerify(config map[string]any) bool {
+	skipVerify, has := collectorConfigBool(config, "skip_verify")
+	return has && skipVerify
 }

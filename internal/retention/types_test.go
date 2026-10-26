@@ -41,3 +41,27 @@ func TestParseDurationKeepsValidDayWeekAndNativeDurations(t *testing.T) {
 		})
 	}
 }
+
+// The audit trail must not be prunable to hours; that would let an operator
+// erase the record of their own actions.
+func TestAuditWindowHasEnforcedFloor(t *testing.T) {
+	short := DefaultSettings()
+	short.AuditWindow = time.Hour
+	if err := Validate(short); err == nil {
+		t.Fatal("Validate accepted a one-hour audit window")
+	}
+	atFloor := DefaultSettings()
+	atFloor.AuditWindow = MinAuditWindow
+	if err := Validate(atFloor); err != nil {
+		t.Fatalf("Validate rejected the minimum audit window: %v", err)
+	}
+	// Values stored before the floor existed are raised, so pruning honours it.
+	if got := Normalize(short).AuditWindow; got != MinAuditWindow {
+		t.Fatalf("Normalize audit window = %s, want %s", got, MinAuditWindow)
+	}
+	for _, preset := range Presets() {
+		if err := Validate(preset.Settings); err != nil {
+			t.Fatalf("preset %s violates the audit floor: %v", preset.ID, err)
+		}
+	}
+}

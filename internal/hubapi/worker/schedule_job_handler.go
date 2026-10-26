@@ -14,8 +14,8 @@ import (
 
 	"github.com/labtether/labtether/internal/actions"
 	"github.com/labtether/labtether/internal/audit"
-	"github.com/labtether/labtether/internal/idgen"
 	"github.com/labtether/labtether/internal/jobqueue"
+	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/policy"
 	"github.com/labtether/labtether/internal/schedules"
 )
@@ -24,6 +24,7 @@ const (
 	maxResolvedScheduleTargets  = 500
 	scheduleExecutionWorkers    = 4
 	scheduleExecutionTimeout    = 5 * time.Minute
+	scheduleLookupTimeout       = 5 * time.Second
 	scheduleTargetTimeoutSecond = 30
 )
 
@@ -43,7 +44,7 @@ func (e *scheduleDefinitionError) Error() string { return e.message }
 // can be destructive; queue retries are reserved for failures before target
 // execution begins.
 func (d *Deps) HandleScheduleRunJob(processed *atomic.Uint64) jobqueue.HandlerFunc {
-	return func(handlerContext interface{ Deadline() (time.Time, bool) }, queueJob *jobqueue.Job) error {
+	return func(baseContext context.Context, queueJob *jobqueue.Job) error {
 		var execution schedules.ExecutionJob
 		if err := json.Unmarshal(queueJob.Payload, &execution); err != nil {
 			return fmt.Errorf("decode schedule execution job: %w", err)
@@ -58,70 +59,33 @@ func (d *Deps) HandleScheduleRunJob(processed *atomic.Uint64) jobqueue.HandlerFu
 			return fmt.Errorf("schedule execution stores are unavailable")
 		}
 
-		baseContext := context.Background()
-		if typed, ok := handlerContext.(context.Context); ok {
-			baseContext = typed
+		// Read-only preparation must not consume the durable dispatch marker. A
+		// transient lookup failure can then use the queue's bounded retry budget.
+		targets, resolveErr := d.resolveScheduleExecutionTargets(baseContext, execution)
+		var definitionErr *scheduleDefinitionError
+		if resolveErr != nil && !errors.As(resolveErr, &definitionErr) {
+			return fmt.Errorf("resolve schedule targets: %w", resolveErr)
 		}
-		current, found, err := d.ScheduleStore.GetScheduledTask(baseContext, execution.ScheduleID)
+		if err := baseContext.Err(); err != nil {
+			return err
+		}
+		// This remains the authoritative claim/definition fence, including when
+		// preparation found an invalid target. Finish requires a running owner.
+		began, err := d.beginExecution(baseContext, queueJob)
 		if err != nil {
-			return fmt.Errorf("load current schedule: %w", err)
+			return err
 		}
-		if !found || !current.Enabled {
-			if err := d.completeScheduleExecution(execution, "skipped", "schedule was disabled or deleted before execution"); err != nil {
+		if !began {
+			processed.Add(1)
+			return nil
+		}
+		if definitionErr != nil {
+			if err := d.completeScheduleExecution(baseContext, queueJob, execution, "failed", definitionErr.Error()); err != nil {
 				return err
 			}
 			processed.Add(1)
 			return nil
 		}
-		if current.LastRunJobID != execution.JobID {
-			// The definition was disabled/re-enabled or a later occurrence replaced
-			// this job. Never execute a stale command snapshot.
-			processed.Add(1)
-			return nil
-		}
-		switch current.LastRunStatus {
-		case actions.StatusSucceeded, actions.StatusFailed, "partial", "blocked", "skipped", "cancelled":
-			// The handler finished but queue completion was interrupted. Acknowledge
-			// the redelivery without replaying an arbitrary command.
-			processed.Add(1)
-			return nil
-		case "running":
-			if queueJob.Attempts > 1 {
-				if err := d.completeScheduleExecution(execution, actions.StatusFailed, "previous execution attempt was interrupted; commands were not replayed"); err != nil {
-					return err
-				}
-				processed.Add(1)
-				return nil
-			}
-			return fmt.Errorf("schedule occurrence is already running")
-		case "queued":
-		default:
-			return fmt.Errorf("schedule occurrence has invalid state %q", current.LastRunStatus)
-		}
-
-		targets, err := d.resolveScheduleExecutionTargets(execution)
-		if err != nil {
-			var definitionErr *scheduleDefinitionError
-			if errors.As(err, &definitionErr) {
-				if completeErr := d.completeScheduleExecution(execution, "failed", definitionErr.Error()); completeErr != nil {
-					return completeErr
-				}
-				processed.Add(1)
-				return nil
-			}
-			return fmt.Errorf("resolve schedule targets: %w", err)
-		}
-		began, err := d.ScheduleExecutionStore.BeginScheduledTaskExecution(baseContext, execution.ScheduleID, execution.JobID)
-		if err != nil {
-			return fmt.Errorf("begin schedule execution: %w", err)
-		}
-		if !began {
-			// State changed after the read (most commonly an operator disabled the
-			// schedule). The CAS is the authority; do not dispatch.
-			processed.Add(1)
-			return nil
-		}
-
 		runContext, cancel := context.WithTimeout(baseContext, scheduleExecutionTimeout)
 		defer cancel()
 		results := make([]scheduleTargetResult, len(targets))
@@ -139,10 +103,10 @@ func (d *Deps) HandleScheduleRunJob(processed *atomic.Uint64) jobqueue.HandlerFu
 				defer wg.Done()
 				for index := range work {
 					if runContext.Err() != nil {
-						results[index] = scheduleTargetResult{status: "failed", reason: "schedule execution deadline exceeded"}
+						results[index] = scheduleTargetResult{status: "failed", reason: "schedule cancelled; unstarted target was not dispatched"}
 						continue
 					}
-					results[index] = d.executeScheduleTarget(runContext, execution, targets[index])
+					results[index] = d.executeScheduleTarget(runContext, queueJob, execution, targets[index])
 				}
 			}()
 		}
@@ -176,7 +140,11 @@ func (d *Deps) HandleScheduleRunJob(processed *atomic.Uint64) jobqueue.HandlerFu
 			errorMessage = fmt.Sprintf("all %d target commands failed", len(results))
 		}
 
-		if err := d.completeScheduleExecution(execution, status, errorMessage); err != nil {
+		if runContext.Err() != nil {
+			status = actions.StatusFailed
+			errorMessage = "schedule cancelled; outcome unknown for commands already dispatched"
+		}
+		if err := d.completeScheduleExecution(baseContext, queueJob, execution, status, errorMessage); err != nil {
 			return err
 		}
 		d.appendScheduleAudit(execution, status, len(results), succeeded, failed, blocked)
@@ -192,7 +160,7 @@ func (d *Deps) HandleScheduleRunJob(processed *atomic.Uint64) jobqueue.HandlerFu
 	}
 }
 
-func (d *Deps) executeScheduleTarget(ctx context.Context, execution schedules.ExecutionJob, target string) scheduleTargetResult {
+func (d *Deps) executeScheduleTarget(ctx context.Context, queueJob *jobqueue.Job, execution schedules.ExecutionJob, target string) scheduleTargetResult {
 	if d.AuthorizeScheduleTarget == nil {
 		return scheduleTargetResult{status: actions.StatusFailed, reason: "schedule authorization is unavailable"}
 	}
@@ -212,10 +180,12 @@ func (d *Deps) executeScheduleTarget(ctx context.Context, execution schedules.Ex
 	if !check.Allowed {
 		return scheduleTargetResult{status: actions.StatusFailed, reason: "command denied by current policy"}
 	}
-	if d.EvaluateAssetGuardrails == nil {
+	if d.EvaluateAssetGuardrailsContext == nil {
 		return scheduleTargetResult{status: actions.StatusFailed, reason: "maintenance guardrails are unavailable"}
 	}
-	guardrails, err := d.EvaluateAssetGuardrails(target, time.Now().UTC())
+	lookupContext, cancel := context.WithTimeout(ctx, scheduleLookupTimeout)
+	guardrails, err := d.EvaluateAssetGuardrailsContext(lookupContext, target, time.Now().UTC())
+	cancel()
 	if err != nil {
 		return scheduleTargetResult{status: actions.StatusFailed, reason: "maintenance guardrail evaluation failed"}
 	}
@@ -223,46 +193,25 @@ func (d *Deps) executeScheduleTarget(ctx context.Context, execution schedules.Ex
 		return scheduleTargetResult{status: "blocked", reason: "blocked by active maintenance window"}
 	}
 
-	run, err := d.ActionStore.CreateActionRun(actions.ExecuteRequest{
-		ActorID: execution.ActorID,
-		Type:    actions.RunTypeCommand,
-		Target:  target,
-		Command: execution.Command,
-		Params: map[string]string{
-			"schedule_id":     execution.ScheduleID,
-			"schedule_job_id": execution.JobID,
-			"scheduled_for":   execution.ScheduledFor.UTC().Format(time.RFC3339Nano),
-		},
-	})
+	actionJob, err := d.JobExecutionStore.StartScheduledAction(ctx, queueJob, target)
 	if err != nil {
-		return scheduleTargetResult{status: actions.StatusFailed, reason: "failed to create action run"}
-	}
-	actionJob := actions.Job{
-		JobID:       idgen.New("schedact"),
-		RunID:       run.ID,
-		Type:        actions.RunTypeCommand,
-		ActorID:     execution.ActorID,
-		Target:      target,
-		Command:     execution.Command,
-		Params:      run.Params,
-		TimeoutSec:  scheduleTargetTimeoutSecond,
-		RequestedAt: time.Now().UTC(),
+		return scheduleTargetResult{status: actions.StatusFailed, reason: "failed to claim scheduled child"}
 	}
 
 	var result actions.Result
-	if d.AgentMgr == nil || d.ExecuteViaAgent == nil || !d.AgentMgr.IsConnected(target) {
+	if d.AgentMgr == nil || d.ExecuteViaAgentContext == nil || !d.AgentMgr.IsConnected(target) {
 		result = actions.Result{
 			JobID:       actionJob.JobID,
-			RunID:       run.ID,
+			RunID:       actionJob.RunID,
 			Status:      actions.StatusFailed,
 			Error:       "agent not connected",
 			Steps:       []actions.StepResult{{Name: "execute_command", Status: actions.StatusFailed, Error: "agent not connected"}},
 			CompletedAt: time.Now().UTC(),
 		}
 	} else {
-		result = d.ExecuteCommandAction(actionJob)
+		result = d.ExecuteCommandActionContext(ctx, actionJob)
 	}
-	if err := d.ActionStore.ApplyActionResult(result); err != nil {
+	if err := d.JobExecutionStore.FinishScheduledAction(ctx, queueJob, actionJob, result); err != nil {
 		log.Printf("schedule runner: failed to persist action result for %s: %v", target, err)
 		return scheduleTargetResult{status: actions.StatusFailed, reason: "failed to persist action result"}
 	}
@@ -272,24 +221,37 @@ func (d *Deps) executeScheduleTarget(ctx context.Context, execution schedules.Ex
 	return scheduleTargetResult{status: actions.StatusSucceeded}
 }
 
-func (d *Deps) resolveScheduleExecutionTargets(execution schedules.ExecutionJob) ([]string, error) {
-	if d.AssetStore == nil || d.GroupStore == nil {
-		return nil, fmt.Errorf("asset or group store unavailable")
+func (d *Deps) resolveScheduleExecutionTargets(parent context.Context, execution schedules.ExecutionJob) ([]string, error) {
+	ctx, cancel := context.WithTimeout(parent, scheduleLookupTimeout)
+	defer cancel()
+	assetStore, assetsOK := d.AssetStore.(persistence.AlertAssetContextStore)
+	groupStore, groupsOK := d.GroupStore.(persistence.AlertGroupContextStore)
+	if !assetsOK || !groupsOK {
+		return nil, fmt.Errorf("bounded asset or group inventory unavailable")
 	}
-	assetList, err := d.AssetStore.ListAssets()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	assetList, err := assetStore.ListAssetsContext(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list schedule assets: %w", err)
 	}
-	groupList, err := d.GroupStore.ListGroups()
+	groupList, err := groupStore.ListGroupsContext(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list schedule groups: %w", err)
 	}
 	assetsByID := make(map[string]struct{}, len(assetList))
 	for _, asset := range assetList {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		assetsByID[strings.TrimSpace(asset.ID)] = struct{}{}
 	}
 	groupParents := make(map[string]string, len(groupList))
 	for _, group := range groupList {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		groupParents[strings.TrimSpace(group.ID)] = strings.TrimSpace(group.ParentGroupID)
 	}
 
@@ -300,6 +262,9 @@ func (d *Deps) resolveScheduleExecutionTargets(execution schedules.ExecutionJob)
 		selectors = append(selectors, execution.GroupID)
 	}
 	for _, selector := range selectors {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		selector = strings.TrimSpace(selector)
 		if selector == "" {
 			continue
@@ -323,6 +288,9 @@ func (d *Deps) resolveScheduleExecutionTargets(execution schedules.ExecutionJob)
 		resolved[assetID] = struct{}{}
 	}
 	for _, asset := range assetList {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		groupID := strings.TrimSpace(asset.GroupID)
 		if groupID == "" || !groupIsSelected(groupID, selectedGroups, groupParents) {
 			continue
@@ -340,6 +308,9 @@ func (d *Deps) resolveScheduleExecutionTargets(execution schedules.ExecutionJob)
 		targets = append(targets, target)
 	}
 	sort.Strings(targets)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	return targets, nil
 }
 
@@ -358,19 +329,10 @@ func groupIsSelected(groupID string, selected map[string]struct{}, parents map[s
 	return false
 }
 
-func (d *Deps) completeScheduleExecution(execution schedules.ExecutionJob, status, errorMessage string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := d.ScheduleExecutionStore.CompleteScheduledTaskExecution(
-		ctx,
-		execution.ScheduleID,
-		execution.JobID,
-		status,
-		errorMessage,
-		time.Now().UTC(),
-	); err != nil {
-		// Returning an error retries only durable finalization. A redelivery sees
-		// the running occurrence and explicitly refuses to replay any command.
+func (d *Deps) completeScheduleExecution(ctx context.Context, job *jobqueue.Job, execution schedules.ExecutionJob, status, errorMessage string) error {
+	if err := d.JobExecutionStore.FinishJobExecution(ctx, job, persistence.JobExecutionResult{
+		Schedule: &persistence.ScheduleExecutionResult{Status: status, Error: errorMessage},
+	}); err != nil {
 		return fmt.Errorf("persist schedule completion: %w", err)
 	}
 	return nil

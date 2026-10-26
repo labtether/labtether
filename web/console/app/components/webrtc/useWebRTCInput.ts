@@ -2,157 +2,135 @@
 
 import { useCallback, useEffect, useRef, type RefObject } from "react";
 import type { normalizeDisplayLayout } from "./webrtcMediaLayout";
+import { remotePointerCoordinates } from "./webrtcPointerCoordinates";
 
 type WebRTCInputOptions = {
   dcRef: RefObject<RTCDataChannel | null>;
   connected: boolean;
+  scalingMode: "fit" | "fill" | "native";
   stitchedLayout: ReturnType<typeof normalizeDisplayLayout>;
   stitchedStageRef: RefObject<HTMLDivElement | null>;
   videoRef: RefObject<HTMLVideoElement | null>;
 };
 
-export function useWebRTCInput({ dcRef, connected, stitchedLayout, stitchedStageRef, videoRef }: WebRTCInputOptions) {
-  const pressedKeysRef = useRef(
-    new Map<string, { keyCode: number; code: string; key: string }>(),
-  );
+export function useWebRTCInput({ dcRef, connected, scalingMode, stitchedLayout, stitchedStageRef, videoRef }: WebRTCInputOptions) {
+  const pressedKeysRef = useRef(new Map<string, { keyCode: number; code: string; key: string }>());
+  const pressedButtonsRef = useRef(new Set<number>());
+  const activePointerRef = useRef<number | null>(null);
   const sendInput = useCallback((payload: Record<string, unknown>) => {
     const dc = dcRef.current;
-    if (!dc || dc.readyState !== "open") {
-      return;
-    }
-    dc.send(JSON.stringify(payload));
+    if (!dc || dc.readyState !== "open") return;
+    try { dc.send(JSON.stringify(payload)); } catch { /* A closing channel cannot accept input. */ }
   }, [dcRef]);
 
-  const releasePressedKeys = useCallback(() => {
-    if (pressedKeysRef.current.size === 0) {
-      return;
+  const updatePointerButtons = useCallback((buttons: number) => {
+    for (const [button, mask] of [[0, 1], [1, 4], [2, 2]]) {
+      const down = (buttons & mask) !== 0;
+      if (down === pressedButtonsRef.current.has(button)) continue;
+      if (down) pressedButtonsRef.current.add(button);
+      else pressedButtonsRef.current.delete(button);
+      sendInput({ type: down ? "mousedown" : "mouseup", button });
     }
-    for (const payload of pressedKeysRef.current.values()) {
-      sendInput({
-        type: "keyup",
-        keyCode: payload.keyCode,
-        code: payload.code,
-        key: payload.key,
-      });
-    }
-    pressedKeysRef.current.clear();
   }, [sendInput]);
 
-  const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      const keyID =
-        event.code.trim() || `keyCode:${event.keyCode}:${event.key}`;
-      if (event.repeat && pressedKeysRef.current.has(keyID)) {
-        return;
-      }
-      const payload = {
-        type: "keydown",
-        keyCode: event.keyCode,
-        code: event.code,
-        key: event.key,
-      };
-      pressedKeysRef.current.set(keyID, {
-        keyCode: event.keyCode,
-        code: event.code,
-        key: event.key,
-      });
-      sendInput(payload);
-    },
-    [sendInput],
-  );
+  const releasePointer = useCallback(() => {
+    for (const button of pressedButtonsRef.current) sendInput({ type: "mouseup", button });
+    pressedButtonsRef.current.clear();
+    activePointerRef.current = null;
+  }, [sendInput]);
 
-  const handleKeyUp = useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      const keyID =
-        event.code.trim() || `keyCode:${event.keyCode}:${event.key}`;
-      pressedKeysRef.current.delete(keyID);
-      sendInput({
-        type: "keyup",
-        keyCode: event.keyCode,
-        code: event.code,
-        key: event.key,
-      });
-    },
-    [sendInput],
-  );
+  const releasePressedInputs = useCallback(() => {
+    for (const payload of pressedKeysRef.current.values()) sendInput({ type: "keyup", ...payload });
+    pressedKeysRef.current.clear();
+    releasePointer();
+  }, [releasePointer, sendInput]);
+
+  const handleKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const keyID = event.code.trim() || `keyCode:${event.keyCode}:${event.key}`;
+    if (event.repeat && pressedKeysRef.current.has(keyID)) return;
+    const payload = { keyCode: event.keyCode, code: event.code, key: event.key };
+    pressedKeysRef.current.set(keyID, payload);
+    sendInput({ type: "keydown", ...payload });
+  }, [sendInput]);
+
+  const handleKeyUp = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    pressedKeysRef.current.delete(event.code.trim() || `keyCode:${event.keyCode}:${event.key}`);
+    sendInput({ type: "keyup", keyCode: event.keyCode, code: event.code, key: event.key });
+  }, [sendInput]);
 
   useEffect(() => {
-    const handleWindowBlur = () => {
-      releasePressedKeys();
-    };
     const handleVisibilityChange = () => {
-      if (document.visibilityState !== "visible") {
-        releasePressedKeys();
-      }
+      if (document.visibilityState !== "visible") releasePressedInputs();
     };
-    window.addEventListener("blur", handleWindowBlur);
+    window.addEventListener("blur", releasePressedInputs);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
-      window.removeEventListener("blur", handleWindowBlur);
+      window.removeEventListener("blur", releasePressedInputs);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      releasePressedInputs();
     };
-  }, [releasePressedKeys]);
+  }, [releasePressedInputs]);
 
   useEffect(() => {
     if (!connected) {
       pressedKeysRef.current.clear();
+      pressedButtonsRef.current.clear();
+      activePointerRef.current = null;
     }
   }, [connected]);
 
-  const handleMouseMove = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
-      const rect =
-        stitchedLayout?.totalWidth && stitchedLayout?.totalHeight
-          ? stitchedStageRef.current?.getBoundingClientRect()
-          : videoRef.current?.getBoundingClientRect();
-      if (!rect) {
-        return;
-      }
-      const xRatio = Math.max(
-        0,
-        Math.min(1, (event.clientX - rect.left) / Math.max(rect.width, 1)),
-      );
-      const yRatio = Math.max(
-        0,
-        Math.min(1, (event.clientY - rect.top) / Math.max(rect.height, 1)),
-      );
-      sendInput({
-        type: "mousemove",
-        x: Math.round(
-          xRatio * (stitchedLayout?.totalWidth ?? rect.width),
-        ),
-        y: Math.round(
-          yRatio * (stitchedLayout?.totalHeight ?? rect.height),
-        ),
-      });
-    },
-    [sendInput, stitchedLayout, stitchedStageRef, videoRef],
-  );
+  const movePointer = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const video = videoRef.current;
+    const rect = stitchedLayout ? stitchedStageRef.current?.getBoundingClientRect() : video?.getBoundingClientRect();
+    if (!rect) return;
+    const coordinates = remotePointerCoordinates(event.clientX, event.clientY, rect,
+      video?.videoWidth ?? 0,
+      video?.videoHeight ?? 0,
+      stitchedLayout ? "stretch" : scalingMode);
+    if (coordinates) sendInput({ type: "mousemove", ...coordinates });
+  }, [scalingMode, sendInput, stitchedLayout, stitchedStageRef, videoRef]);
 
-  const handleMouseDown = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
-      sendInput({ type: "mousedown", button: event.button });
-    },
-    [sendInput],
-  );
+  const handlePointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!event.isPrimary || (activePointerRef.current !== null && activePointerRef.current !== event.pointerId)) return;
+    event.preventDefault();
+    movePointer(event);
+    // Mouse button chords arrive as pointermove, not another pointerdown/up.
+    updatePointerButtons(event.buttons);
+  }, [movePointer, updatePointerButtons]);
 
-  const handleMouseUp = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
-      sendInput({ type: "mouseup", button: event.button });
-    },
-    [sendInput],
-  );
+  const handlePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!event.isPrimary || (activePointerRef.current !== null && activePointerRef.current !== event.pointerId)) return;
+    event.preventDefault();
+    event.currentTarget.focus();
+    activePointerRef.current = event.pointerId;
+    try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* Pointer may have ended. */ }
+    // A touch tap has no preceding mousemove. Place the cursor before pressing.
+    movePointer(event);
+    updatePointerButtons(event.buttons);
+  }, [movePointer, updatePointerButtons]);
 
-  const handleWheel = useCallback(
-    (event: React.WheelEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      sendInput({ type: "scroll", deltaY: Math.round(event.deltaY) });
-    },
-    [sendInput],
-  );
+  const handlePointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (activePointerRef.current !== event.pointerId) return;
+    event.preventDefault();
+    movePointer(event);
+    updatePointerButtons(event.buttons);
+    if (event.buttons === 0) {
+      releasePointer();
+      try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* Already released. */ }
+    }
+  }, [movePointer, releasePointer, updatePointerButtons]);
 
-  return { releasePressedKeys, handleKeyDown, handleKeyUp, handleMouseMove,
-    handleMouseDown, handleMouseUp, handleWheel };
+  const handlePointerCancel = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (activePointerRef.current === event.pointerId) releasePointer();
+  }, [releasePointer]);
+
+  const handleWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    sendInput({ type: "scroll", deltaY: Math.round(event.deltaY) });
+  }, [sendInput]);
+
+  return { releasePressedInputs, handleKeyDown, handleKeyUp, handlePointerMove,
+    handlePointerDown, handlePointerUp, handlePointerCancel, handleWheel };
 }

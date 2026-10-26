@@ -97,7 +97,7 @@ export function useStatusRefresh(selectedGroupFilter: string, pollIntervalMs: nu
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     let backoff = 2000;
-    let connecting = false;
+    let lookupController: AbortController | null = null;
     let closed = false;
 
     function scheduleReconnect() {
@@ -109,8 +109,8 @@ export function useStatusRefresh(selectedGroupFilter: string, pollIntervalMs: nu
       }, backoff);
     }
 
-    async function resolveWsUrl(): Promise<string | null> {
-      const res = await fetch("/api/ws/events", { cache: "no-store" });
+    async function resolveWsUrl(signal: AbortSignal): Promise<string | null> {
+      const res = await fetch("/api/ws/events", { cache: "no-store", signal });
       if (!res.ok) return null;
       const data = (await res.json()) as { wsUrl?: string; streamPath?: string; secure?: boolean };
       if (data.wsUrl) return data.wsUrl;
@@ -118,18 +118,19 @@ export function useStatusRefresh(selectedGroupFilter: string, pollIntervalMs: nu
     }
 
     async function connect() {
-      if (closed || !visible || connecting || socket !== null) return;
-      connecting = true;
+      if (closed || !visible || lookupController !== null || socket !== null) return;
+      const controller = new AbortController();
+      lookupController = controller;
       try {
-        const wsUrl = await resolveWsUrl();
-        if (closed || !visible) return;
+        const wsUrl = await resolveWsUrl(controller.signal);
+        if (closed || !visible || controller.signal.aborted) return;
         if (!wsUrl) {
           scheduleReconnect();
           return;
         }
         const ws = new WebSocket(wsUrl);
         socket = ws;
-        ws.onopen = () => { backoff = 2000; };
+        ws.onopen = () => { if (socket === ws) backoff = 2000; };
         ws.onmessage = (event) => {
           if (closed || !visible || socket !== ws) return;
           try {
@@ -147,15 +148,16 @@ export function useStatusRefresh(selectedGroupFilter: string, pollIntervalMs: nu
           } catch { /* Ignore malformed events. */ }
         };
         ws.onclose = () => {
-          if (socket === ws) socket = null;
+          if (socket !== ws) return;
+          socket = null;
           scheduleReconnect();
         };
         ws.onerror = () => { ws.close(); };
       } catch {
         // Polling remains available while the event endpoint is down.
-        scheduleReconnect();
+        if (!controller.signal.aborted) scheduleReconnect();
       } finally {
-        connecting = false;
+        if (lookupController === controller) lookupController = null;
       }
     }
 
@@ -168,6 +170,13 @@ export function useStatusRefresh(selectedGroupFilter: string, pollIntervalMs: nu
         if (debounceTimer !== null) clearTimeout(debounceTimer);
         reconnectTimer = null;
         debounceTimer = null;
+        lookupController?.abort();
+        lookupController = null;
+        // Hidden views ignore push events. Close their subscription so the hub
+        // can stop serializing and sending those unused events as well.
+        const previousSocket = socket;
+        socket = null;
+        previousSocket?.close();
       }
     }
     document.addEventListener("visibilitychange", onVisibilityChange);
@@ -178,6 +187,7 @@ export function useStatusRefresh(selectedGroupFilter: string, pollIntervalMs: nu
       document.removeEventListener("visibilitychange", onVisibilityChange);
       if (reconnectTimer !== null) clearTimeout(reconnectTimer);
       if (debounceTimer !== null) clearTimeout(debounceTimer);
+      lookupController?.abort();
       socket?.close();
     };
   }, [fetchLiveStatus]);

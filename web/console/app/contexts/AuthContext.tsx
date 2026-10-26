@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "../../i18n/navigation";
 
 type User = {
@@ -25,6 +25,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
+  const sessionGeneration = useRef(0);
+  const logoutStarted = useRef(false);
 
   const retryBootstrap = useCallback(() => {
     setBootstrapError(null);
@@ -34,6 +36,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    // The counter ref (not a DOM node) is bumped again on cleanup so any
+    // in-flight bootstrap or refresh from this run is ignored.
+    const generations = sessionGeneration;
+    const generation = ++generations.current;
+    const isCurrent = () => !cancelled && !logoutStarted.current
+      && generation === generations.current;
     let retryTimer: number | null = null;
     const redirectToLogin = () => {
       const currentPath = window.location.pathname;
@@ -66,11 +74,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     async function checkAuth() {
       const markTransientUnavailable = () => {
+        if (!isCurrent()) return;
         setBootstrapError("LabTether can’t reach the backend right now. It may still be starting or restarting. We’ll keep retrying automatically.");
-        if (!cancelled) {
+        if (isCurrent()) {
           const backoffMs = Math.min(3000 * Math.pow(2, bootstrapAttempt), 60000);
           retryTimer = window.setTimeout(() => {
-            if (!cancelled) {
+            if (isCurrent()) {
               setBootstrapAttempt((attempt) => attempt + 1);
             }
           }, backoffMs);
@@ -79,12 +88,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       try {
         const response = await fetch("/api/auth/me", { cache: "no-store" });
-        if (cancelled) {
+        if (!isCurrent()) {
           return;
         }
 
         if (response.ok) {
           const data = await response.json();
+          if (!isCurrent()) return;
           setBootstrapError(null);
           setBootstrapAttempt(0);
           setUser(data.user ?? null);
@@ -94,7 +104,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (response.status === 401 || response.status === 403) {
           setBootstrapError(null);
           setUser(null);
-          if (await setupRequired()) {
+          const needsSetup = await setupRequired();
+          if (!isCurrent()) return;
+          if (needsSetup) {
             redirectToSetup();
           } else {
             redirectToLogin();
@@ -104,11 +116,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         markTransientUnavailable();
       } catch {
-        if (!cancelled) {
+        if (isCurrent()) {
           markTransientUnavailable();
         }
       } finally {
-        if (!cancelled) {
+        if (isCurrent()) {
           setLoading(false);
         }
       }
@@ -117,6 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void checkAuth();
     return () => {
       cancelled = true;
+      ++generations.current;
       if (retryTimer) {
         window.clearTimeout(retryTimer);
       }
@@ -124,10 +137,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [bootstrapAttempt, router]);
 
   const refreshUser = useCallback(async () => {
+    if (logoutStarted.current) return;
+    const generation = sessionGeneration.current;
     try {
       const response = await fetch("/api/auth/me", { cache: "no-store" });
       if (response.ok) {
         const data = await response.json();
+        if (logoutStarted.current || generation !== sessionGeneration.current) return;
         setUser(data.user ?? null);
       }
     } catch {
@@ -136,12 +152,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    // Invalidate pending reads before waiting for the logout request.
+    logoutStarted.current = true;
+    ++sessionGeneration.current;
+    setUser(null);
+    setBootstrapError(null);
+    setLoading(false);
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } catch {
       // Ignore errors
     }
-    setUser(null);
     router.push("/login");
   }, [router]);
 

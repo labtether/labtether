@@ -1,5 +1,7 @@
 "use client";
 
+import { trimChars } from "../../lib/trimChars";
+
 export type RoutePerfName = "dashboard" | "logs" | "devices" | "services" | "topology";
 type RoutePerfStatus = "ok" | "error" | "aborted";
 
@@ -136,7 +138,7 @@ function normalizeThrottleWindow(value: number | undefined): number {
 function normalizeMetadataKey(key: string): string {
   const trimmed = key.trim().toLowerCase();
   if (!trimmed) return "";
-  const normalized = trimmed.replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
+  const normalized = trimChars(trimmed.replace(/[^a-z0-9_]+/g, "_"), "_");
   return normalized.slice(0, 48);
 }
 

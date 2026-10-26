@@ -47,6 +47,9 @@ func (d *Deps) HandlePBSVerifyJobs(ctx context.Context, w http.ResponseWriter, r
 				writePBSError(w, http.StatusBadRequest, "invalid form body", parseErr)
 				return
 			}
+			if !d.enforceJobMutation(ctx, w, runtime, "verify", "", r.PostForm) {
+				return
+			}
 			if createErr := runtime.Client.CreateVerifyJob(ctx, r.PostForm); createErr != nil {
 				writePBSError(w, http.StatusBadGateway, "failed to create verify job", createErr)
 				return
@@ -73,6 +76,9 @@ func (d *Deps) HandlePBSVerifyJobs(ctx context.Context, w http.ResponseWriter, r
 		if !d.RequireAdminAuth(w, r) {
 			return
 		}
+		if !d.enforceJobMutation(ctx, w, runtime, "verify", jobID, nil) {
+			return
+		}
 		upid, runErr := runtime.Client.RunVerifyJob(ctx, jobID)
 		if runErr != nil {
 			writePBSError(w, http.StatusBadGateway, "failed to run verify job", runErr)
@@ -92,6 +98,9 @@ func (d *Deps) HandlePBSVerifyJobs(ctx context.Context, w http.ResponseWriter, r
 			writePBSError(w, http.StatusBadRequest, "invalid form body", parseErr)
 			return
 		}
+		if !d.enforceJobMutation(ctx, w, runtime, "verify", jobID, r.PostForm) {
+			return
+		}
 		if updateErr := runtime.Client.UpdateVerifyJob(ctx, jobID, r.PostForm); updateErr != nil {
 			writePBSError(w, http.StatusBadGateway, "failed to update verify job", updateErr)
 			return
@@ -99,6 +108,9 @@ func (d *Deps) HandlePBSVerifyJobs(ctx context.Context, w http.ResponseWriter, r
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 	case http.MethodDelete:
 		if !d.RequireAdminAuth(w, r) {
+			return
+		}
+		if !d.enforceJobMutation(ctx, w, runtime, "verify", jobID, nil) {
 			return
 		}
 		if deleteErr := runtime.Client.DeleteVerifyJob(ctx, jobID); deleteErr != nil {
@@ -147,6 +159,9 @@ func (d *Deps) HandlePBSPruneJobs(ctx context.Context, w http.ResponseWriter, r 
 				writePBSError(w, http.StatusBadRequest, "invalid form body", parseErr)
 				return
 			}
+			if !d.enforceJobMutation(ctx, w, runtime, "prune", "", r.PostForm) {
+				return
+			}
 			if createErr := runtime.Client.CreatePruneJob(ctx, r.PostForm); createErr != nil {
 				writePBSError(w, http.StatusBadGateway, "failed to create prune job", createErr)
 				return
@@ -173,6 +188,9 @@ func (d *Deps) HandlePBSPruneJobs(ctx context.Context, w http.ResponseWriter, r 
 		switch subAction {
 		case "run":
 			if !d.RequireAdminAuth(w, r) {
+				return
+			}
+			if !d.enforceJobMutation(ctx, w, runtime, "prune", jobID, nil) {
 				return
 			}
 			upid, runErr := runtime.Client.RunPruneJob(ctx, jobID)
@@ -231,6 +249,9 @@ func (d *Deps) HandlePBSPruneJobs(ctx context.Context, w http.ResponseWriter, r 
 			writePBSError(w, http.StatusBadRequest, "invalid form body", parseErr)
 			return
 		}
+		if !d.enforceJobMutation(ctx, w, runtime, "prune", jobID, r.PostForm) {
+			return
+		}
 		if updateErr := runtime.Client.UpdatePruneJob(ctx, jobID, r.PostForm); updateErr != nil {
 			writePBSError(w, http.StatusBadGateway, "failed to update prune job", updateErr)
 			return
@@ -238,6 +259,9 @@ func (d *Deps) HandlePBSPruneJobs(ctx context.Context, w http.ResponseWriter, r 
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 	case http.MethodDelete:
 		if !d.RequireAdminAuth(w, r) {
+			return
+		}
+		if !d.enforceJobMutation(ctx, w, runtime, "prune", jobID, nil) {
 			return
 		}
 		if deleteErr := runtime.Client.DeletePruneJob(ctx, jobID); deleteErr != nil {
@@ -292,6 +316,9 @@ func (d *Deps) HandlePBSSyncJobs(ctx context.Context, w http.ResponseWriter, r *
 				writePBSError(w, http.StatusBadRequest, "invalid form body", parseErr)
 				return
 			}
+			if !d.enforceJobMutation(ctx, w, runtime, "sync", "", r.PostForm) {
+				return
+			}
 			if createErr := runtime.Client.CreateSyncJob(ctx, r.PostForm); createErr != nil {
 				writePBSError(w, http.StatusBadGateway, "failed to create sync job", createErr)
 				return
@@ -317,6 +344,9 @@ func (d *Deps) HandlePBSSyncJobs(ctx context.Context, w http.ResponseWriter, r *
 		if !d.RequireAdminAuth(w, r) {
 			return
 		}
+		if !d.enforceJobMutation(ctx, w, runtime, "sync", jobID, nil) {
+			return
+		}
 		upid, runErr := runtime.Client.RunSyncJob(ctx, jobID)
 		if runErr != nil {
 			writePBSError(w, http.StatusBadGateway, "failed to run sync job", runErr)
@@ -335,6 +365,9 @@ func (d *Deps) HandlePBSSyncJobs(ctx context.Context, w http.ResponseWriter, r *
 			writePBSError(w, http.StatusBadRequest, "invalid form body", parseErr)
 			return
 		}
+		if !d.enforceJobMutation(ctx, w, runtime, "sync", jobID, r.PostForm) {
+			return
+		}
 		if updateErr := runtime.Client.UpdateSyncJob(ctx, jobID, r.PostForm); updateErr != nil {
 			writePBSError(w, http.StatusBadGateway, "failed to update sync job", updateErr)
 			return
@@ -342,6 +375,9 @@ func (d *Deps) HandlePBSSyncJobs(ctx context.Context, w http.ResponseWriter, r *
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 	case http.MethodDelete:
 		if !d.RequireAdminAuth(w, r) {
+			return
+		}
+		if !d.enforceJobMutation(ctx, w, runtime, "sync", jobID, nil) {
 			return
 		}
 		if deleteErr := runtime.Client.DeleteSyncJob(ctx, jobID); deleteErr != nil {

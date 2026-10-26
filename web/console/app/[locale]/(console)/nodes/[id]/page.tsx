@@ -24,6 +24,10 @@ import { HierarchyBreadcrumb } from "./HierarchyBreadcrumb";
 import { GroupPathBreadcrumb } from "./GroupPathBreadcrumb";
 import { FacetTabs } from "./FacetTabs";
 import { ContainsSummary } from "./ContainsSummary";
+import { useAuth } from "../../../../contexts/AuthContext";
+import { canAccessHostData, hasWriteRole, isNodePanelAllowed } from "../../../../lib/roles";
+import { OperatorAccessRequired } from "../../../../components/OperatorAccessRequired";
+import { useTranslations } from "next-intl";
 
 export default function NodeDetailPage() {
   const params = useParams();
@@ -33,6 +37,11 @@ export default function NodeDetailPage() {
   const slowStatus = useSlowStatus();
   const { fetchStatus } = useStatusControls();
   const groupLabelByID = useGroupLabelByID();
+  const { user } = useAuth();
+  const tAccess = useTranslations("common.operatorAccess");
+  const canWrite = hasWriteRole(user?.role);
+  // Host journal queries are host data; viewers keep stored log history only.
+  const hostDataAllowed = canAccessHostData(user?.role);
 
   const { connectedAgentIds } = useConnectedAgents();
   const nodeHasAgent = connectedAgentIds.has(nodeId);
@@ -172,11 +181,14 @@ export default function NodeDetailPage() {
     proxmoxCollectorHint: asset?.metadata?.collector_id?.trim() ?? "",
   });
 
+  const journalAllowed = supportsLogQuery && hostDataAllowed;
   useEffect(() => {
-    if (!supportsLogQuery && logMode === "journal") {
+    if (!journalAllowed && logMode === "journal") {
       setLogMode("stored");
     }
-  }, [logMode, setLogMode, supportsLogQuery]);
+  }, [journalAllowed, logMode, setLogMode]);
+  const visiblePanels = panels.filter((panel) => isNodePanelAllowed(panel.id, user?.role, { isDockerContainer }));
+  const activePanelBlocked = activePanel !== null && !isNodePanelAllowed(activePanel, user?.role, { isDockerContainer });
 
   const canRunProxmoxQuickActions = isProxmoxAsset && (effectiveKind === "qemu" || effectiveKind === "lxc");
   const renderAsset: Asset = asset ?? {
@@ -221,7 +233,7 @@ export default function NodeDetailPage() {
     setLogLevelFilter,
     logMode,
     setLogMode,
-    supportsLogQuery,
+    supportsLogQuery: journalAllowed,
     logQueryModeLabel,
     logWindow,
     setLogWindow,
@@ -290,7 +302,7 @@ export default function NodeDetailPage() {
         agentConnected={nodeHasAgent}
         activePanel={activePanel}
         onBack={() => router.push(`/nodes/${encodeURIComponent(nodeId)}`)}
-        onQuickAction={nodeHasAgent ? (command) => void runNodeQuickAction(command, command) : undefined}
+        onQuickAction={nodeHasAgent && canWrite ? (command) => void runNodeQuickAction(command, command) : undefined}
         onEdit={() => setShowEditModal(true)}
         onDelete={openDeleteConfirm}
         onAddConnection={() => router.push(`/nodes/${encodeURIComponent(nodeId)}?panel=connect&adding=true`)}
@@ -313,7 +325,7 @@ export default function NodeDetailPage() {
               />
             ) : (
               <DeviceCapabilityGrid
-                panels={panels}
+                panels={visiblePanels}
                 context={panelContext}
                 onOpenPanel={openPanel}
               />
@@ -329,7 +341,9 @@ export default function NodeDetailPage() {
         )}
 
         {/* Panel content */}
-        {renderNodeDetailPanel(panelRenderContext)}
+        {activePanelBlocked
+          ? <OperatorAccessRequired title={tAccess("title")} feature="hostData" />
+          : renderNodeDetailPanel(panelRenderContext)}
       </div>
 
       <NodeDeleteConfirmModal

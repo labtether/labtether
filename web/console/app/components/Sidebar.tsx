@@ -16,18 +16,11 @@ const SIDEBAR_NAV_STYLE: CSSProperties = {
   backdropFilter: 'blur(16px) saturate(1.4)',
   WebkitBackdropFilter: 'blur(16px) saturate(1.4)',
 };
-const BRAND_GLOW_STYLE: CSSProperties = {
-  background: 'var(--accent-glow)',
-  filter: 'blur(8px)',
-  animation: 'glow-breathe 4s ease-in-out infinite',
-  willChange: 'opacity',
-  contain: 'strict',
-};
 const BRAND_ICON_STYLE: CSSProperties = { boxShadow: '0 0 12px var(--accent-glow)' };
 const ACTIVE_NAV_GLOW_STYLE: CSSProperties = { background: 'radial-gradient(circle, var(--accent-glow), transparent 70%)' };
 const STATUS_DOT_STYLE: CSSProperties = {
   boxShadow: '0 0 4px var(--ok-glow), 0 0 12px var(--ok-glow)',
-  animation: 'status-glow 3s ease-in-out infinite',
+  animation: 'status-glow 3s ease-in-out 1',
 };
 
 export const Sidebar = memo(function Sidebar() {
@@ -105,7 +98,7 @@ export const Sidebar = memo(function Sidebar() {
         >
           <Monitor className="w-3.5 h-3.5" />
           <span className="truncate">{activeSession.nodeName}</span>
-          <span className="ml-auto h-2 w-2 rounded-full bg-[var(--ok)] animate-pulse" />
+          <span className="ml-auto h-2 w-2 rounded-full bg-[var(--ok)] animate-pulse-dot" />
         </Link>
       )}
 

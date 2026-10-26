@@ -344,7 +344,7 @@ func TestConnectorExecuteTaskActionMappings(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		upid, err := connector.executeTaskAction(context.Background(), tc.actionID, "pve01", tc.vmid, tc.params)
+		upid, err := connector.client.ExecuteTaskAction(context.Background(), tc.actionID, "pve01", tc.vmid, tc.params)
 		if err != nil {
 			t.Fatalf("executeTaskAction(%s) failed: %v", tc.actionID, err)
 		}
@@ -356,16 +356,16 @@ func TestConnectorExecuteTaskActionMappings(t *testing.T) {
 		}
 	}
 
-	if _, err := connector.executeTaskAction(context.Background(), "vm.migrate", "pve01", "100", nil); err == nil {
+	if _, err := connector.client.ExecuteTaskAction(context.Background(), "vm.migrate", "pve01", "100", nil); err == nil {
 		t.Fatalf("expected vm.migrate without target_node to fail")
 	}
-	if _, err := connector.executeTaskAction(context.Background(), "vm.clone", "pve01", "100", map[string]string{"new_id": "not-a-number"}); err == nil {
+	if _, err := connector.client.ExecuteTaskAction(context.Background(), "vm.clone", "pve01", "100", map[string]string{"new_id": "not-a-number"}); err == nil {
 		t.Fatalf("expected vm.clone with non-numeric new_id to fail")
 	}
-	if _, err := connector.executeTaskAction(context.Background(), "vm.disk_resize", "pve01", "100", map[string]string{"disk": "scsi0"}); err == nil {
+	if _, err := connector.client.ExecuteTaskAction(context.Background(), "vm.disk_resize", "pve01", "100", map[string]string{"disk": "scsi0"}); err == nil {
 		t.Fatalf("expected vm.disk_resize without size to fail")
 	}
-	if _, err := connector.executeTaskAction(context.Background(), "unknown.action", "pve01", "100", nil); err == nil {
+	if _, err := connector.client.ExecuteTaskAction(context.Background(), "unknown.action", "pve01", "100", nil); err == nil {
 		t.Fatalf("expected unsupported action to fail")
 	}
 }

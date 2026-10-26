@@ -1,6 +1,7 @@
 package alerting
 
 import (
+	"context"
 	"log"
 	"strings"
 	"time"
@@ -64,4 +65,45 @@ func notificationPayloadGroupIDs(payload map[string]any) map[string]struct{} {
 		}
 	}
 	return out
+}
+
+func (d *Deps) isAlertMaintenanceSuppressedContext(ctx context.Context, rule alerts.Rule) bool {
+	if ctx.Err() != nil {
+		return true
+	}
+	if d.EvaluateGuardrailsContext == nil && d.EvaluateGuardrails == nil {
+		return false
+	}
+	targets, err := d.resolveRuleTargetAssetsContext(ctx, rule, nil, nil, true)
+	if err != nil {
+		return true
+	}
+	groups := map[string]struct{}{}
+	for _, target := range rule.Targets {
+		if target.GroupID != "" {
+			groups[target.GroupID] = struct{}{}
+		}
+	}
+	for _, target := range targets {
+		if target.GroupID != "" {
+			groups[target.GroupID] = struct{}{}
+		}
+	}
+	if len(groups) == 0 {
+		return false
+	}
+	if d.EvaluateGuardrailsContext == nil {
+		return true
+	}
+	now := time.Now().UTC()
+	for group := range groups {
+		if ctx.Err() != nil {
+			return true
+		}
+		guard, err := d.EvaluateGuardrailsContext(ctx, group, now)
+		if err != nil || guard.SuppressAlerts {
+			return true
+		}
+	}
+	return false
 }

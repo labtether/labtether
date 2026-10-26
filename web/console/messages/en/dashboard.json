@@ -31,5 +31,44 @@
     "cpu": "Top CPU",
     "memory": "Top Memory",
     "disk": "Top Disk"
+  },
+  "firstRun": {
+    "title": "First-Run Checklist",
+    "complete": "complete",
+    "progress": "{completed}/{total}",
+    "dismiss": "Dismiss",
+    "summaryComplete": "Great start. Core workflows are validated.",
+    "summaryPending": "Finish this once to lock in a reliable setup.",
+    "items": {
+      "hub": {
+        "label": "Hub healthy",
+        "description": "Dashboard can load status without startup errors."
+      },
+      "device": {
+        "label": "First device connected",
+        "description": "Add one node with agent install flow."
+      },
+      "connector": {
+        "label": "First connector configured",
+        "description": "Save one connector and run first sync."
+      },
+      "terminal": {
+        "label": "Terminal workflow validated",
+        "description": "Run at least one command session."
+      },
+      "logs": {
+        "label": "Observability verified",
+        "description": "Confirm recent logs are visible."
+      }
+    },
+    "addDevice": "+ Add Device",
+    "openConnectorSettings": "Open Connector Settings",
+    "openTerminal": "Open Terminal",
+    "openLogs": "Open Logs",
+    "nextStepsTitle": "Core workflows validated. Here's what to explore next:",
+    "setupNotifications": "Set up alert notifications",
+    "connectMcp": "Connect the MCP gateway",
+    "community": "Community",
+    "starGithub": "Star us on GitHub"
   }
 }

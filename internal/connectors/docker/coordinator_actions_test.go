@@ -118,13 +118,13 @@ func TestCoordinatorExecuteActionStackDeployUsesHostTarget(t *testing.T) {
 
 	coord := NewCoordinator(mock)
 	coord.HandleDiscovery("agent-01", makeDiscoveryMsg(agentmgr.DockerDiscoveryData{
-		HostID: "agent-01",
+		HostID: "agent-01", ComposeActionVersion: 2, ComposeEndpointID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}))
 
 	go func() {
 		msg := <-sent
-		if msg.Type != agentmgr.MsgDockerComposeAction {
-			t.Errorf("expected docker.compose.action, got %s", msg.Type)
+		if msg.Type != agentmgr.MsgDockerComposeActionV2 {
+			t.Errorf("expected docker.compose.action.v2, got %s", msg.Type)
 		}
 		var req agentmgr.DockerComposeActionData
 		if err := json.Unmarshal(msg.Data, &req); err != nil {
@@ -275,7 +275,7 @@ func TestCoordinatorComposeResultRequiresExpectedAgentAndMatchingEnvelope(t *tes
 	}}
 
 	coord = NewCoordinator(mock)
-	coord.HandleDiscovery("agent-01", makeDiscoveryMsg(agentmgr.DockerDiscoveryData{HostID: "agent-01"}))
+	coord.HandleDiscovery("agent-01", makeDiscoveryMsg(agentmgr.DockerDiscoveryData{HostID: "agent-01", ComposeActionVersion: 2, ComposeEndpointID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}))
 
 	result, err := coord.ExecuteAction(context.Background(), "stack.deploy", connectorsdk.ActionRequest{
 		TargetID: "agent-01",
@@ -295,7 +295,7 @@ func TestCoordinatorComposeResultRequiresExpectedAgentAndMatchingEnvelope(t *tes
 func TestCoordinatorExecuteActionStackDeployMissingStackName(t *testing.T) {
 	coord := NewCoordinator(&mockAgentCommander{})
 	coord.HandleDiscovery("agent-01", makeDiscoveryMsg(agentmgr.DockerDiscoveryData{
-		HostID: "agent-01",
+		HostID: "agent-01", ComposeActionVersion: 2, ComposeEndpointID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}))
 
 	result, err := coord.ExecuteAction(context.Background(), "stack.deploy", connectorsdk.ActionRequest{

@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestRemoveRecordingFiles_RemovesExistingAndMissingAsSuccess(t *testing.T) {
+func TestRemoveRecordingFile_RemovesExistingAndMissingAsSuccess(t *testing.T) {
 	dir := t.TempDir()
 	existing := filepath.Join(dir, "recording.bin")
 	if err := os.WriteFile(existing, []byte("data"), 0o600); err != nil {
@@ -14,12 +14,10 @@ func TestRemoveRecordingFiles_RemovesExistingAndMissingAsSuccess(t *testing.T) {
 	}
 	missing := filepath.Join(dir, "missing.bin")
 
-	removed, failed := removeRecordingFiles([]string{existing, missing, ""})
-	if failed != 0 {
-		t.Fatalf("expected no failures, got %d", failed)
-	}
-	if removed != 2 {
-		t.Fatalf("expected 2 removals (existing + missing), got %d", removed)
+	for _, path := range []string{existing, missing} {
+		if err := removeRecordingFile(path); err != nil {
+			t.Fatalf("remove recording: %v", err)
+		}
 	}
 	if _, err := os.Stat(existing); !os.IsNotExist(err) {
 		t.Fatalf("expected existing file to be removed, stat err=%v", err)

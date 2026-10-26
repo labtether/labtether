@@ -2,11 +2,41 @@ package collectors
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/labtether/labtether/internal/assetid"
+	"github.com/labtether/labtether/internal/connectorsdk"
+	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
 	"github.com/labtether/labtether/internal/hubcollector"
+	"github.com/labtether/labtether/internal/modelmap"
+	"github.com/labtether/labtether/internal/servicehttp"
 )
+
+// prepareConnectorAction applies the same stored-asset maintenance owner as
+// other mutation routes. Raw provider references and global actions may have no
+// canonical asset/group; this does not infer one or change their legacy routing.
+func (d *Deps) prepareConnectorAction(w http.ResponseWriter, connectorID, actionID string, req *connectorsdk.ActionRequest) bool {
+	if !maintenanceguard.EnforceAssetAction(w, req.TargetID, d.EvaluateAssetGuardrails) {
+		return false
+	}
+	if !maintenanceguard.EnforceConnectorAction(w, connectorID, actionID, *req, d.EvaluateConnectorGuardrails) {
+		return false
+	}
+	if connectorID != "truenas" || (actionID != "vm.start" && actionID != "vm.stop") ||
+		req.Params["vm_id"] != "" || req.TargetID == "" || d.AssetStore == nil {
+		return true
+	}
+	asset, found, err := d.AssetStore.GetAsset(req.TargetID)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to resolve action target")
+		return false
+	}
+	if found {
+		req.Params, _ = modelmap.TrueNASVMActionParams(actionID, asset, req.Params)
+	}
+	return true
+}
 
 // ValidateSingletonConnectorActionRoute prevents the legacy singleton
 // connector registry from executing against an arbitrary runtime when several

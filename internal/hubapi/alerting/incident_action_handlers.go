@@ -301,29 +301,7 @@ func (d *Deps) HandleIncidentActions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(parts) == 2 && parts[1] == "timeline" {
-		if r.Method != http.MethodGet {
-			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
-			return
-		}
-		if d.IncidentEventStore == nil {
-			servicehttp.WriteError(w, http.StatusServiceUnavailable, "incident event store unavailable")
-			return
-		}
-
-		if _, ok, err := d.IncidentStore.GetIncident(incidentID); err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load incident")
-			return
-		} else if !ok {
-			servicehttp.WriteError(w, http.StatusNotFound, "incident not found")
-			return
-		}
-
-		events, err := d.IncidentEventStore.ListIncidentEvents(incidentID, parseLimit(r, 50))
-		if err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list incident events")
-			return
-		}
-		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"events": events})
+		d.handleIncidentTimeline(w, r, incidentID)
 		return
 	}
 

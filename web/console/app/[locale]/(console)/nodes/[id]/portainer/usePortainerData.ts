@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
+import { usePollingTask } from "../../../../../hooks/usePollingTask";
 
 export type PortainerOverviewData = {
   server_version?: string;
@@ -33,8 +34,8 @@ export type PortainerDataResponse<T> = {
   warnings?: string[];
 };
 
-export async function portainerFetch<T>(path: string): Promise<T> {
-  const response = await fetch(path, { cache: "no-store" });
+export async function portainerFetch<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(path, { cache: "no-store", signal });
   const json = (await response.json().catch(() => null)) as PortainerDataResponse<T> | { error?: string } | null;
   if (!response.ok) {
     const err = (json as { error?: string } | null)?.error ?? `request failed (${response.status})`;
@@ -71,30 +72,22 @@ export function usePortainerOverview(assetId: string): OverviewState & { refresh
     loading: false,
     error: null,
   });
-  const seqRef = useRef(0);
-  const latestRef = useRef(0);
 
-  const fetch_ = useCallback(async () => {
-    const id = ++seqRef.current;
-    latestRef.current = id;
+  const fetchTask = useCallback(async (signal: AbortSignal) => {
     setState((prev) => ({ ...prev, loading: true, error: null }));
     try {
       const data = await portainerFetch<PortainerOverviewData>(
-        `/api/portainer/assets/${encodeURIComponent(assetId)}/overview`,
+        `/api/portainer/assets/${encodeURIComponent(assetId)}/overview`, signal,
       );
-      if (latestRef.current !== id) return;
+      if (signal.aborted) return;
       setState({ data, loading: false, error: null });
     } catch (err) {
-      if (latestRef.current !== id) return;
+      if (signal.aborted) return;
       setState({ data: null, loading: false, error: err instanceof Error ? err.message : "failed to load overview" });
     }
   }, [assetId]);
 
-  useEffect(() => {
-    void fetch_();
-    const interval = setInterval(() => { void fetch_(); }, 30_000);
-    return () => clearInterval(interval);
-  }, [fetch_]);
+  const refresh = usePollingTask(fetchTask, 30_000);
 
-  return { ...state, refresh: () => { void fetch_(); } };
+  return { ...state, refresh };
 }

@@ -8,7 +8,8 @@ import (
 )
 
 func (s *PostgresStore) UpsertPresence(p AgentPresence) error {
-	ctx := context.Background()
+	ctx, cancel := agentLifecycleStoreContext()
+	defer cancel()
 	metaJSON, _ := json.Marshal(p.Metadata)
 	if metaJSON == nil {
 		metaJSON = []byte("{}")
@@ -33,7 +34,8 @@ func (s *PostgresStore) UpdateHeartbeat(assetID string, at time.Time) error {
 }
 
 func (s *PostgresStore) UpdateHeartbeatForSession(assetID, sessionID string, at time.Time) (bool, error) {
-	ctx := context.Background()
+	ctx, cancel := agentLifecycleStoreContext()
+	defer cancel()
 	if sessionID == "" {
 		tag, err := s.pool.Exec(ctx,
 			`UPDATE agent_presence SET last_heartbeat_at = $2 WHERE asset_id = $1`,
@@ -54,7 +56,8 @@ func (s *PostgresStore) UpdatePresenceMetadata(assetID string, metadata map[stri
 }
 
 func (s *PostgresStore) UpdatePresenceMetadataForSession(assetID, sessionID string, metadata map[string]any) (bool, error) {
-	ctx := context.Background()
+	ctx, cancel := agentLifecycleStoreContext()
+	defer cancel()
 	metaJSON, _ := json.Marshal(metadata)
 	if metaJSON == nil {
 		metaJSON = []byte("{}")
@@ -79,7 +82,8 @@ func (s *PostgresStore) DeletePresence(assetID string) error {
 }
 
 func (s *PostgresStore) DeletePresenceForSession(assetID, sessionID string) (bool, error) {
-	ctx := context.Background()
+	ctx, cancel := agentLifecycleStoreContext()
+	defer cancel()
 	if sessionID == "" {
 		tag, err := s.pool.Exec(ctx,
 			`DELETE FROM agent_presence WHERE asset_id = $1`,
@@ -150,7 +154,8 @@ func (s *PostgresStore) GetStalePresence(olderThan time.Time) ([]AgentPresence, 
 }
 
 func (s *PostgresStore) UpdateAssetTransportType(assetID, transportType string) error {
-	ctx := context.Background()
+	ctx, cancel := agentLifecycleStoreContext()
+	defer cancel()
 	_, err := s.pool.Exec(ctx,
 		`UPDATE assets SET transport_type = $2 WHERE id = $1`,
 		assetID, transportType,

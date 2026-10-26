@@ -75,10 +75,10 @@ type CreateRuleRequest struct {
 	Kind                      string            `json:"kind"`
 	Severity                  string            `json:"severity"`
 	TargetScope               string            `json:"target_scope"`
-	CooldownSeconds           int               `json:"cooldown_seconds,omitempty"`
-	ReopenAfterSeconds        int               `json:"reopen_after_seconds,omitempty"`
-	EvaluationIntervalSeconds int               `json:"evaluation_interval_seconds,omitempty"`
-	WindowSeconds             int               `json:"window_seconds,omitempty"`
+	CooldownSeconds           *int              `json:"cooldown_seconds,omitempty"`
+	ReopenAfterSeconds        *int              `json:"reopen_after_seconds,omitempty"`
+	EvaluationIntervalSeconds *int              `json:"evaluation_interval_seconds,omitempty"`
+	WindowSeconds             *int              `json:"window_seconds,omitempty"`
 	Condition                 map[string]any    `json:"condition"`
 	Labels                    map[string]string `json:"labels,omitempty"`
 	Metadata                  map[string]string `json:"metadata,omitempty"`
@@ -121,6 +121,7 @@ type Rule struct {
 	CreatedAt                 time.Time         `json:"created_at"`
 	UpdatedAt                 time.Time         `json:"updated_at"`
 	LastEvaluatedAt           *time.Time        `json:"last_evaluated_at,omitempty"`
+	LastAutoAttemptAt         *time.Time        `json:"last_auto_attempt_at,omitempty"`
 }
 
 type Evaluation struct {
@@ -246,6 +247,8 @@ type AlertInstance struct {
 	Labels       map[string]string `json:"labels,omitempty"`
 	Annotations  map[string]string `json:"annotations,omitempty"`
 	StartedAt    time.Time         `json:"started_at"`
+	FiringScope  *FiringScope      `json:"firing_scope,omitempty"`
+	FirstFiredAt *time.Time        `json:"first_fired_at,omitempty"`
 	ResolvedAt   *time.Time        `json:"resolved_at,omitempty"`
 	LastFiredAt  time.Time         `json:"last_fired_at"`
 	SuppressedBy string            `json:"suppressed_by,omitempty"`

@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { usePollingTask } from "../../../hooks/usePollingTask";
 import { Boxes } from "lucide-react";
 import { PageHeader } from "../../../components/PageHeader";
 import { Card } from "../../../components/ui/Card";
@@ -61,25 +62,27 @@ export default function ContainersPage() {
     [loading, hostData, addToast, router],
   );
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal: AbortSignal) => {
     try {
       const [dockerHosts, portainerEndpoints] = await Promise.all([
-        fetchDockerHosts(),
-        fetchPortainerEndpoints(),
+        fetchDockerHosts(signal),
+        fetchPortainerEndpoints(signal),
       ]);
 
+      if (signal.aborted) return;
       const taggedDockerHosts = dockerHosts.map((h) => ({ ...h, source: "docker" as const }));
       const allHosts = [...taggedDockerHosts, ...portainerEndpoints];
 
       const results = await Promise.allSettled(
         allHosts.map(async (host) => {
           const containers = host.source === "portainer"
-            ? await fetchPortainerContainers(host.agent_id)
-            : await fetchDockerContainers(host.agent_id);
+            ? await fetchPortainerContainers(host.agent_id, signal)
+            : await fetchDockerContainers(host.agent_id, signal);
           return { host, containers };
         })
       );
 
+      if (signal.aborted) return;
       const loaded: HostData[] = [];
       for (const result of results) {
         if (result.status === "fulfilled") {
@@ -89,17 +92,14 @@ export default function ContainersPage() {
       setHostData(loaded);
       setError(null);
     } catch (err) {
+      if (signal.aborted) return;
       setError(err instanceof Error ? err.message : "Failed to load container fleet data");
     } finally {
-      setLoading(false);
+      if (!signal.aborted) setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    void load();
-    const interval = setInterval(() => void load(), 15_000);
-    return () => clearInterval(interval);
-  }, [load]);
+  usePollingTask(load, 15_000);
 
   // Derived stacks for filter dropdown
   const allStacks = useMemo(() => {

@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -96,21 +97,29 @@ func (d *Deps) HandleHubLocalTerminalStream(w http.ResponseWriter, r *http.Reque
 		rows = hubLocalTerminalDefaultRows
 	}
 
-	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{
-		Cols: uint16(cols),
-		Rows: uint16(rows),
-	})
+	var ptmx *os.File
+	if !shared.RunIfSessionStreamOpen(r.Context(), func() {
+		ptmx, err = pty.StartWithSize(cmd, &pty.Winsize{
+			Cols: uint16(cols),
+			Rows: uint16(rows),
+		})
+	}) {
+		return
+	}
 	if err != nil {
 		log.Printf("terminal-local: stream_setup_failed reason=pty_start_failed %s err=%v", logContext, err) // #nosec G706 -- Log fields are bounded session/runtime identifiers and local PTY startup errors.
 		_ = WriteTerminalError(wsConn, "pty_start_failed", fmt.Sprintf("Failed to start local PTY shell: %v", err))
 		return
 	}
-	defer func() {
+	closeShell := func() {
 		_ = ptmx.Close()
 		if cmd.Process != nil {
 			_ = cmd.Process.Kill()
 		}
-	}()
+	}
+	defer closeShell()
+	stopCancellation := context.AfterFunc(r.Context(), closeShell)
+	defer stopCancellation()
 
 	log.Printf("terminal-local: stream_connected %s shell=%s cols=%d rows=%d", logContext, shellBinary, cols, rows) // #nosec G706 -- Log context and shell path are bounded local runtime values.
 	_ = WriteTerminalReady(wsConn, "Local hub diagnostics shell connected", time.Since(connectStart).Milliseconds())

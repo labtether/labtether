@@ -13,13 +13,18 @@
   "containers": "容器",
   "terminal": "终端",
   "files": "文件",
+  "remoteView": "远程查看",
   "logs": "日志",
   "alerts": "告警",
   "actions": "操作",
+  "webhooks": "Webhook",
+  "schedules": "定时任务",
   "groups": "分组",
   "health": "健康",
   "users": "用户",
   "security": "安全",
+  "auditLog": "审计日志",
+  "apiDocs": "API 文档",
   "settings": "设置",
   "commandPalette": {
     "placeholder": "搜索命令..."

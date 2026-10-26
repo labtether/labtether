@@ -56,6 +56,7 @@ func newTestDeps() *Deps {
 		AuthorizeMutation: func(context.Context, string, string) error {
 			return nil
 		},
+		AuthorizeHostDataRead: func(context.Context) error { return nil },
 		EvaluateCommandPolicy: func(context.Context, string, string) policy.CheckResponse {
 			return policy.CheckResponse{Allowed: true, Mode: "structured"}
 		},
@@ -225,7 +226,7 @@ func TestHandleAssetReboot_ScopeDenied(t *testing.T) {
 func TestHandleAssetPowerUsesTypedExecutorNeverRawCommand(t *testing.T) {
 	deps := newTestDeps()
 	deps.GetScopes = func(context.Context) []string { return []string{"assets:power"} }
-	deps.ExecuteViaAgent = func(job terminal.CommandJob) terminal.CommandResult {
+	deps.ExecuteViaAgent = func(_ context.Context, job terminal.CommandJob) terminal.CommandResult {
 		t.Fatalf("raw command executor must not be used for power action: %q", job.Command)
 		return terminal.CommandResult{}
 	}
@@ -282,7 +283,7 @@ func TestHandleSystemDisks_NoAgent(t *testing.T) {
 func TestHandleServicesRestartRejectsShellMetacharacters(t *testing.T) {
 	deps := newTestDeps()
 	deps.GetScopes = func(ctx context.Context) []string { return []string{"services:write"} }
-	deps.ExecuteViaAgent = func(job terminal.CommandJob) terminal.CommandResult {
+	deps.ExecuteViaAgent = func(_ context.Context, job terminal.CommandJob) terminal.CommandResult {
 		t.Fatalf("ExecuteViaAgent should not be called for invalid service names; got %q", job.Command)
 		return terminal.CommandResult{}
 	}
@@ -301,7 +302,7 @@ func TestHandleServicesRestartRejectsShellMetacharacters(t *testing.T) {
 func TestHandleDockerContainerToolsRejectShellMetacharacters(t *testing.T) {
 	deps := newTestDeps()
 	deps.GetScopes = func(ctx context.Context) []string { return []string{"docker:read"} }
-	deps.ExecuteViaAgent = func(job terminal.CommandJob) terminal.CommandResult {
+	deps.ExecuteViaAgent = func(_ context.Context, job terminal.CommandJob) terminal.CommandResult {
 		t.Fatalf("ExecuteViaAgent should not be called for invalid container IDs; got %q", job.Command)
 		return terminal.CommandResult{}
 	}
@@ -331,7 +332,7 @@ func TestHandleDockerContainerToolsRejectShellMetacharacters(t *testing.T) {
 func TestHandleDockerContainerLogsUsesTypedDependency(t *testing.T) {
 	deps := newTestDeps()
 	deps.GetScopes = func(ctx context.Context) []string { return []string{"docker:read"} }
-	deps.ExecuteViaAgent = func(job terminal.CommandJob) terminal.CommandResult {
+	deps.ExecuteViaAgent = func(_ context.Context, job terminal.CommandJob) terminal.CommandResult {
 		t.Fatalf("raw command executor must not be used for Docker logs: %q", job.Command)
 		return terminal.CommandResult{}
 	}

@@ -4,7 +4,13 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/labtether/labtether/internal/agentmgr"
 )
+
+// desktopOutputQueueWait bounds how long agent dispatch waits for a slow browser.
+const desktopOutputQueueWait = time.Second
 
 // DesktopAudioOutbound holds an audio message to send to the browser.
 type DesktopAudioOutbound struct {
@@ -19,6 +25,11 @@ type DesktopBridge struct {
 	ClosedCh        chan struct{}
 	ExpectedAgentID string
 	SessionID       string
+	WireSessionID   string
+	AgentConn       *agentmgr.AgentConn
+	lifecycleMu     sync.Mutex
+	started         bool
+	finalizeOnce    sync.Once
 	Target          string
 	TraceID         string
 	recordingOpMu   sync.Mutex
@@ -35,6 +46,8 @@ func (b *DesktopBridge) Close() {
 	if b == nil {
 		return
 	}
+	b.lifecycleMu.Lock()
+	defer b.lifecycleMu.Unlock()
 	b.closeMu.Do(func() {
 		close(b.ClosedCh)
 	})
@@ -76,7 +89,19 @@ func (b *DesktopBridge) TrySendOutput(payload []byte) {
 	defer func() { _ = recover() }()
 	select {
 	case b.OutputCh <- payload:
+		return
+	default:
+	}
+	// A blocked browser must not hold the agent's dispatch lifecycle forever.
+	// Only a full queue allocates a timer; normal frame delivery stays cheap.
+	timer := time.NewTimer(desktopOutputQueueWait)
+	defer timer.Stop()
+	select {
+	case b.OutputCh <- payload:
 	case <-b.ClosedCh:
+	case <-timer.C:
+		b.SetReason("browser backpressure")
+		b.Close()
 	}
 }
 
@@ -94,6 +119,9 @@ func (b *DesktopBridge) TrySendAudio(messageType int, payload []byte) {
 	case b.AudioCh <- DesktopAudioOutbound{MessageType: messageType, Payload: payload}:
 	case <-b.ClosedCh:
 	default:
+		// Losing an Ogg page corrupts the stream. End this attachment visibly.
+		b.SetReason("audio browser backpressure")
+		b.Close()
 	}
 }
 
@@ -157,6 +185,11 @@ func (b *DesktopBridge) StartRecordingLocked(startFn func() (*ActiveRecording, e
 	}
 	b.recordingOpMu.Lock()
 	defer b.recordingOpMu.Unlock()
+	select {
+	case <-b.ClosedCh:
+		return nil, false, errors.New("desktop stream is closed")
+	default:
+	}
 	if rec := b.CurrentRecording(); rec != nil {
 		return rec, true, nil
 	}
@@ -189,4 +222,13 @@ func (b *DesktopBridge) MatchesAgent(assetID string) bool {
 		return false
 	}
 	return strings.EqualFold(strings.TrimSpace(b.ExpectedAgentID), strings.TrimSpace(assetID))
+}
+
+func (b *DesktopBridge) MatchesConnection(conn *agentmgr.AgentConn) bool {
+	return b != nil && conn != nil && b.MatchesAgent(conn.AssetID) && (b.AgentConn == nil || b.AgentConn == conn)
+}
+
+// AcceptsAgentMessage binds replies to the stream's wire ID and socket owner.
+func (b *DesktopBridge) AcceptsAgentMessage(conn *agentmgr.AgentConn, wireID string) bool {
+	return b.MatchesConnection(conn) && (b.WireSessionID == "" || b.WireSessionID == wireID)
 }

@@ -220,6 +220,23 @@ func isTrustedForwardedHostSource(r *http.Request) bool {
 	return false
 }
 
+// trustedRequestClientIP returns the caller address for per-client limits. A
+// forwarded address is used only when the direct peer is a trusted proxy
+// (loopback, LABTETHER_TRUST_PROXY_CIDRS or LABTETHER_TRUST_PROXY_HOSTS), and
+// then only the entry that proxy appended (the right-most X-Forwarded-For
+// value); anything a client wrote further left is spoofable.
+func trustedRequestClientIP(r *http.Request) string {
+	direct := requestClientKey(r)
+	if r == nil || !isTrustedForwardedHostSource(r) {
+		return direct
+	}
+	entries := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
+	if ip := net.ParseIP(strings.TrimSpace(entries[len(entries)-1])); ip != nil {
+		return ip.String()
+	}
+	return direct
+}
+
 func isLoopbackRequestSource(r *http.Request) bool {
 	clientHost := requestClientKey(r)
 	if clientHost == "" {

@@ -44,6 +44,9 @@ func (d *Deps) HandlePBSDatastoreGC(ctx context.Context, w http.ResponseWriter, 
 		if !d.RequireAdminAuth(w, r) {
 			return
 		}
+		if !d.enforceMutation(w, runtime, store) {
+			return
+		}
 		upid, gcErr := runtime.Client.StartGC(ctx, store)
 		if gcErr != nil {
 			writePBSError(w, http.StatusBadGateway, "failed to start gc", gcErr)
@@ -82,6 +85,9 @@ func (d *Deps) HandlePBSDatastoreVerify(ctx context.Context, w http.ResponseWrit
 		return
 	}
 
+	if !d.enforceMutation(w, runtime, store) {
+		return
+	}
 	upid, verifyErr := runtime.Client.StartVerify(ctx, store)
 	if verifyErr != nil {
 		writePBSError(w, http.StatusBadGateway, "failed to start verification", verifyErr)

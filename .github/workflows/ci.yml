@@ -35,6 +35,7 @@ jobs:
       go_checks: ${{ steps.select.outputs.go_checks }}
       web_checks: ${{ steps.select.outputs.web_checks }}
       perf_gate: ${{ steps.select.outputs.perf_gate }}
+      push_relay: ${{ steps.select.outputs.push_relay }}
       connector_system: ${{ steps.select.outputs.connector_system }}
       hub_behavior: ${{ steps.select.outputs.hub_behavior }}
       hub_installed_system: ${{ steps.select.outputs.hub_installed_system }}
@@ -89,7 +90,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.27.2"
+          go-version: "1.27.3"
 
       - name: Check formatting
         if: needs.qa-select.outputs.go_checks != 'false'
@@ -169,7 +170,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.27.2"
+          go-version: "1.27.3"
 
       - name: Run reduced apples harness + thresholds
         run: bash scripts/perf/ci-hotspot.sh
@@ -221,6 +222,31 @@ jobs:
 
       - name: Standalone runtime WebSocket proxy regression
         run: npm run test:runtime-proxy:standalone
+
+  # The iOS push relay Worker (services/push-relay) has no dependencies and
+  # its own node --test suite; run it only when the relay changes.
+  push-relay-checks:
+    name: Push relay Worker tests
+    needs: qa-select
+    if: needs.qa-select.outputs.push_relay == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: services/push-relay
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26.11.1"
+
+      - name: Unit tests (no install)
+        run: node --test
 
   docs-checks:
     runs-on: ubuntu-latest
@@ -358,14 +384,14 @@ jobs:
           repository: labtether/labtether-agent
           # The root-cause release gate verifies that this exact installed
           # stack child matches the coordinated Go agent release source.
-          ref: b3051070bb93a9ef6fb4f6acd20b2d37c9ba9eb0
+          ref: 638cdcc4f7364d06d730b4d0fd05b5781e0a3be4
           persist-credentials: false
           path: labtether-agent
 
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.27.2"
+          go-version: "1.27.3"
 
       - name: Build agent image locally
         run: |

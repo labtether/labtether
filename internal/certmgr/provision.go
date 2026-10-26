@@ -43,7 +43,7 @@ type CertReloader struct {
 
 // newCertReloader builds a CertReloader from an already-provisioned server cert.
 func newCertReloader(ca *KeyPair, certsDir string, serverCertPath, serverKeyPath string, additionalHosts []string) (*CertReloader, error) {
-	tlsCert, err := tls.LoadX509KeyPair(serverCertPath, serverKeyPath)
+	tlsCert, err := loadServedCertificate(ca, serverCertPath, serverKeyPath)
 	if err != nil {
 		return nil, fmt.Errorf("certmgr: load TLS key pair for reloader: %w", err)
 	}
@@ -51,8 +51,24 @@ func newCertReloader(ca *KeyPair, certsDir string, serverCertPath, serverKeyPath
 		ca:              ca,
 		certsDir:        certsDir,
 		additionalHosts: normalizeAdditionalHosts(additionalHosts),
-		cert:            &tlsCert,
+		cert:            tlsCert,
 	}, nil
+}
+
+// loadServedCertificate loads the server leaf and appends the Hub CA, so TLS
+// clients receive the full chain. The CA key is loaded from disk and reused
+// across leaf renewals (each renewal makes a new leaf key), so clients that
+// pin the presented CA on first use, such as the iOS app, keep trusting the
+// Hub after every renewal instead of reporting a changed certificate.
+func loadServedCertificate(ca *KeyPair, certPath, keyPath string) (*tls.Certificate, error) {
+	tlsCert, err := tls.LoadX509KeyPair(certPath, keyPath)
+	if err != nil {
+		return nil, err
+	}
+	if ca != nil && len(ca.CertDER) > 0 {
+		tlsCert.Certificate = append(tlsCert.Certificate, ca.CertDER)
+	}
+	return &tlsCert, nil
 }
 
 // GetCertificate implements the tls.Config.GetCertificate callback.
@@ -133,14 +149,14 @@ func (r *CertReloader) renewNow() error {
 	}
 
 	// Load the new cert as a tls.Certificate.
-	tlsCert, err := tls.LoadX509KeyPair(serverCertPath, serverKeyPath)
+	tlsCert, err := loadServedCertificate(r.ca, serverCertPath, serverKeyPath)
 	if err != nil {
 		return fmt.Errorf("load renewed TLS key pair: %w", err)
 	}
 
 	// Atomically swap in the new cert.
 	r.mu.Lock()
-	r.cert = &tlsCert
+	r.cert = tlsCert
 	r.mu.Unlock()
 
 	log.Printf("certmgr: renewed server cert, new expiry: %s", serverKP.Cert.NotAfter.Format(time.RFC3339))

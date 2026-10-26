@@ -1,6 +1,7 @@
 package truenas
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -53,10 +54,6 @@ func (d *Deps) ResolveTrueNASSessionTarget(assetID string) (TruenasShellTarget, 
 
 	preferredCollectorID := strings.TrimSpace(asset.Metadata["collector_id"])
 	runtime, runtimeErr := d.LoadTrueNASRuntime(preferredCollectorID)
-	if runtimeErr != nil && preferredCollectorID != "" {
-		// Asset metadata may be stale after collector recreation; fall back to first active collector.
-		runtime, runtimeErr = d.LoadTrueNASRuntime("")
-	}
 	if runtimeErr != nil {
 		return TruenasShellTarget{}, false, runtimeErr
 	}
@@ -132,6 +129,12 @@ func (d *Deps) TryTrueNASTerminalStream(w http.ResponseWriter, r *http.Request, 
 	}
 	shared.LimitUpstreamTerminalMessages(nasWS)
 	defer nasWS.Close()
+	stopCancel := context.AfterFunc(ctx, func() { _ = nasWS.Close(); _ = browserWS.Close() })
+	defer stopCancel()
+
+	// Bound auth even if the peer never replies or reads the token.
+	_ = nasWS.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	_ = nasWS.SetReadDeadline(time.Now().Add(10 * time.Second))
 
 	// Step 4: Send auth message with token and options.
 	authMsg := map[string]any{"token": authToken}
@@ -156,6 +159,8 @@ func (d *Deps) TryTrueNASTerminalStream(w http.ResponseWriter, r *http.Request, 
 		}
 	}
 
+	_ = nasWS.SetReadDeadline(time.Time{})
+
 	securityruntime.Logf("terminal-truenas: shell connected for session %s (asset=%s)", session.ID, session.Target)
 
 	// Step 6: Bidirectional proxy.
@@ -169,6 +174,8 @@ func (d *Deps) TryTrueNASTerminalStream(w http.ResponseWriter, r *http.Request, 
 	// Browser -> TrueNAS
 	go func() {
 		defer wg.Done()
+		defer nasWS.Close()
+		defer browserWS.Close()
 		for {
 			msgType, data, err := browserWS.ReadMessage()
 			if err != nil {
@@ -176,6 +183,7 @@ func (d *Deps) TryTrueNASTerminalStream(w http.ResponseWriter, r *http.Request, 
 				return
 			}
 			_ = d.TouchBrowserWebSocketReadDeadline(browserWS)
+			_ = nasWS.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if err := TruenasTerminalWriteToNAS(nasWS, msgType, data); err != nil {
 				return
 			}
@@ -185,6 +193,8 @@ func (d *Deps) TryTrueNASTerminalStream(w http.ResponseWriter, r *http.Request, 
 	// TrueNAS -> Browser
 	go func() {
 		defer wg.Done()
+		defer nasWS.Close()
+		defer browserWS.Close()
 		for {
 			msgType, data, err := nasWS.ReadMessage()
 			if err != nil {
@@ -192,6 +202,7 @@ func (d *Deps) TryTrueNASTerminalStream(w http.ResponseWriter, r *http.Request, 
 				return
 			}
 			browserWriteMu.Lock()
+			_ = browserWS.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			err = TruenasTerminalWriteToBrowser(browserWS, msgType, data)
 			browserWriteMu.Unlock()
 			if err != nil {

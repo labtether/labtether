@@ -10,11 +10,13 @@ import (
 )
 
 func (s *PostgresStore) SaveAssetTerminalConfig(cfg credentials.AssetTerminalConfig) (credentials.AssetTerminalConfig, error) {
+	ctx, cancel := agentLifecycleStoreContext()
+	defer cancel()
 	if cfg.Port <= 0 {
 		cfg.Port = 22
 	}
 	now := time.Now().UTC()
-	saved, err := scanAssetTerminalConfig(s.pool.QueryRow(context.Background(),
+	saved, err := scanAssetTerminalConfig(s.pool.QueryRow(ctx,
 		`INSERT INTO asset_terminal_configs (
 			asset_id,
 			host,
@@ -51,7 +53,9 @@ func (s *PostgresStore) SaveAssetTerminalConfig(cfg credentials.AssetTerminalCon
 }
 
 func (s *PostgresStore) GetAssetTerminalConfig(assetID string) (credentials.AssetTerminalConfig, bool, error) {
-	cfg, err := scanAssetTerminalConfig(s.pool.QueryRow(context.Background(),
+	ctx, cancel := agentLifecycleStoreContext()
+	defer cancel()
+	cfg, err := scanAssetTerminalConfig(s.pool.QueryRow(ctx,
 		`SELECT asset_id, host, port, username, strict_host_key, host_key, credential_profile_id, updated_at
 		 FROM asset_terminal_configs
 		 WHERE asset_id = $1`,

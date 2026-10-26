@@ -56,11 +56,12 @@ func (d *Deps) ResolvePBSAssetRuntime(assetID string) (assets.Asset, *PBSRuntime
 
 	preferredCollectorID := strings.TrimSpace(asset.Metadata["collector_id"])
 	runtime, loadErr := d.LoadPBSRuntime(preferredCollectorID)
-	if loadErr != nil && preferredCollectorID != "" {
-		runtime, loadErr = d.LoadPBSRuntime("")
-	}
 	if loadErr != nil {
 		return assets.Asset{}, nil, fmt.Errorf("failed to load pbs runtime: %w", loadErr)
+	}
+	// The namespace is an owner even if legacy metadata has lost its collector ID.
+	if scope, scoped := assetid.CollectorScopeFromAssetID(asset.ID); scoped && scope != assetid.CollectorScope(runtime.CollectorID) {
+		return assets.Asset{}, nil, fmt.Errorf("pbs asset collector does not match runtime")
 	}
 	return asset, runtime, nil
 }

@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"context"
 	"github.com/labtether/labtether/internal/logs"
 	"strconv"
 	"strings"
@@ -67,6 +68,13 @@ func (m *MemoryLogStore) appendEventLocked(event logs.Event) {
 }
 
 func (m *MemoryLogStore) QueryEvents(req logs.QueryRequest) ([]logs.Event, error) {
+	return m.QueryEventsContext(context.Background(), req)
+}
+
+func (m *MemoryLogStore) QueryEventsContext(ctx context.Context, req logs.QueryRequest) ([]logs.Event, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if req.Limit <= 0 {
 		req.Limit = 200
 	}
@@ -90,16 +98,24 @@ func (m *MemoryLogStore) QueryEvents(req logs.QueryRequest) ([]logs.Event, error
 	if len(groupAssetIDs) > 0 {
 		groupAssetSet = make(map[string]struct{}, len(groupAssetIDs))
 		for _, candidate := range groupAssetIDs {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			groupAssetSet[candidate] = struct{}{}
 		}
 	}
 	fieldKeys := normalizeLogFieldKeys(req.FieldKeys)
 
-	m.mu.RLock()
+	if err := lockAlertEvaluation(ctx, &m.mu, true); err != nil {
+		return nil, err
+	}
 	defer m.mu.RUnlock()
 
 	out := make([]logs.Event, 0)
 	for i := len(m.events) - 1; i >= 0; i-- {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		event := m.events[i]
 		if event.Timestamp.Before(req.From) || event.Timestamp.After(req.To) {
 			continue

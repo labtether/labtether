@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
+import { usePollingTask } from "../../../hooks/usePollingTask";
 import { useTranslations } from "next-intl";
 import { Bell, RefreshCw } from "lucide-react";
 import { Button } from "../../../components/ui/Button";
@@ -89,14 +90,13 @@ export function AlertDeliveryLogTab() {
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const fetchHistory = useCallback(async (isManual = false) => {
-    if (isManual) setRefreshing(true);
+  const fetchHistoryTask = useCallback(async (signal: AbortSignal, manual: boolean) => {
+    if (manual) setRefreshing(true);
     try {
       const { response, data } = await apiFetch<HistoryPayload>(
-        "/api/notifications/history?limit=200",
+        "/api/notifications/history?limit=200", { signal },
       );
+      if (signal.aborted) return;
       if (!response.ok) {
         const errPayload = data as { error?: string } | null;
         setError(errPayload?.error ?? `Failed to load notification history (${response.status})`);
@@ -105,20 +105,17 @@ export function AlertDeliveryLogTab() {
       setError(null);
       setRecords(data?.history ?? []);
     } catch (err) {
+      if (signal.aborted) return;
       setError(err instanceof Error ? err.message : "Failed to load notification history");
     } finally {
-      setLoading(false);
-      if (isManual) setRefreshing(false);
+      if (!signal.aborted) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, []);
 
-  useEffect(() => {
-    void fetchHistory();
-    intervalRef.current = setInterval(() => { void fetchHistory(); }, AUTO_REFRESH_MS);
-    return () => {
-      if (intervalRef.current !== null) clearInterval(intervalRef.current);
-    };
-  }, [fetchHistory]);
+  const fetchHistory = usePollingTask(fetchHistoryTask, AUTO_REFRESH_MS);
 
   const filtered =
     statusFilter === "all"
@@ -143,7 +140,7 @@ export function AlertDeliveryLogTab() {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => { void fetchHistory(true); }}
+          onClick={() => { void fetchHistory(); }}
           disabled={refreshing}
         >
           <RefreshCw size={13} className={refreshing ? "animate-spin" : ""} />

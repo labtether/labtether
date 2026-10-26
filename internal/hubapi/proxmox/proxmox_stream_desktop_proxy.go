@@ -1,6 +1,7 @@
 package proxmox
 
 import (
+	"context"
 	"fmt"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
@@ -45,7 +46,7 @@ func (d *Deps) HandleProxmoxDesktopStream(w http.ResponseWriter, r *http.Request
 	}
 	securityruntime.Logf("desktop-proxmox: VNC ticket acquired port=%d user=%s password=%v", ticket.Port.Int(), ticket.User, ticket.Password != "")
 
-	proxmoxConn, err := DialProxmoxProxySocket(runtime, target.Node, target.Kind, target.VMID, ticket)
+	proxmoxConn, err := DialProxmoxProxySocketContext(r.Context(), runtime, target.Node, target.Kind, target.VMID, ticket)
 	if err != nil {
 		securityruntime.Logf("desktop-proxmox: failed to dial proxmox websocket: %v", err)
 		servicehttp.WriteError(w, http.StatusBadGateway, "failed to connect proxmox websocket: "+shared.SanitizeUpstreamError(err.Error()))
@@ -53,6 +54,9 @@ func (d *Deps) HandleProxmoxDesktopStream(w http.ResponseWriter, r *http.Request
 	}
 	shared.LimitUpstreamDesktopMessages(proxmoxConn)
 	defer proxmoxConn.Close()
+	stopCancel := context.AfterFunc(r.Context(), func() { _ = proxmoxConn.Close() })
+	defer stopCancel()
+	_ = proxmoxConn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	securityruntime.Logf("desktop-proxmox: proxmox websocket connected")
 
 	// Handle VNC RFB auth on the server side so the browser sees a clean
@@ -73,6 +77,7 @@ func (d *Deps) HandleProxmoxDesktopStream(w http.ResponseWriter, r *http.Request
 	}
 	shared.LimitBrowserInteractiveMessages(wsConn)
 	defer wsConn.Close()
+	_ = wsConn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 
 	// Send a "no auth required" RFB handshake to the browser.
 	if err := SendBrowserVNCNoAuth(wsConn, rfbVersion); err != nil {
@@ -266,6 +271,8 @@ func VNCReverseBits(b byte) byte {
 // connection. Write deadlines are applied on every write to prevent blocking
 // indefinitely on a slow or unresponsive peer.
 func BridgeWebSocketPair(browserConn, upstreamConn *websocket.Conn) {
+	defer browserConn.Close()
+	defer upstreamConn.Close()
 	done := make(chan struct{})
 	var browserWriteMu sync.Mutex
 	stopKeepalive := shared.StartBrowserWebSocketKeepalive(browserConn, &browserWriteMu, "desktop-proxmox-bridge")
@@ -273,6 +280,8 @@ func BridgeWebSocketPair(browserConn, upstreamConn *websocket.Conn) {
 
 	go func() {
 		defer close(done)
+		defer browserConn.Close()
+		defer upstreamConn.Close()
 		for {
 			// Rolling read deadline: detect half-open upstream connections.
 			_ = upstreamConn.SetReadDeadline(time.Now().Add(90 * time.Second))

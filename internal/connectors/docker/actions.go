@@ -95,6 +95,9 @@ func (c *Coordinator) Actions() []connectorsdk.ActionDescriptor {
 
 // ExecuteAction routes a Docker action to the correct agent via WebSocket.
 func (c *Coordinator) ExecuteAction(ctx context.Context, actionID string, req connectorsdk.ActionRequest) (connectorsdk.ActionResult, error) {
+	if req.DryRun {
+		return connectorsdk.ActionResult{Status: "failed", Message: "dry-run is not supported for Docker actions; no changes applied"}, nil
+	}
 	if c.agentMgr == nil {
 		return connectorsdk.ActionResult{Status: "failed", Message: "agent manager not configured"}, nil
 	}
@@ -113,13 +116,15 @@ func (c *Coordinator) executeContainerAction(ctx context.Context, actionID strin
 		containerID string
 		err         error
 	)
-	switch actionID {
-	case "container.create", "image.pull", "image.remove":
+	if isHostAction(actionID) {
 		agentID, err = c.resolveHostTarget(req.TargetID)
-	default:
+	} else {
 		agentID, containerID, err = c.resolveContainerTarget(req.TargetID)
 	}
 	if err != nil {
+		return connectorsdk.ActionResult{Status: "failed", Message: err.Error()}, nil
+	}
+	if err := checkActionTarget(ctx, actionID, agentID, containerID, "", "", nil, ""); err != nil {
 		return connectorsdk.ActionResult{Status: "failed", Message: err.Error()}, nil
 	}
 
@@ -182,26 +187,43 @@ func (c *Coordinator) executeContainerAction(ctx context.Context, actionID strin
 // executeStackAction handles docker-compose stack lifecycle actions.
 func (c *Coordinator) executeStackAction(ctx context.Context, actionID string, req connectorsdk.ActionRequest) (connectorsdk.ActionResult, error) {
 	var (
-		agentID   string
-		stackName string
-		configDir string
-		err       error
+		agentID     string
+		stackName   string
+		configDir   string
+		configFiles []string
+		endpointID  string
+		err         error
 	)
 	if actionID == "stack.deploy" {
 		agentID, err = c.resolveHostTarget(req.TargetID)
 		if err != nil {
 			return connectorsdk.ActionResult{Status: "failed", Message: err.Error()}, nil
 		}
-		stackName = strings.TrimSpace(req.Params["stack_name"])
-		if stackName == "" {
+		stackName = req.Params["stack_name"]
+		if strings.TrimSpace(stackName) == "" {
 			return connectorsdk.ActionResult{Status: "failed", Message: "stack_name is required"}, nil
 		}
-		configDir = strings.TrimSpace(req.Params["config_dir"])
+		configDir = req.Params["config_dir"]
 	} else {
-		agentID, stackName, configDir, err = c.resolveStackTarget(req.TargetID)
+		var target ActionTarget
+		target, err = c.resolveStackTarget(req.TargetID)
+		agentID, stackName, configDir, configFiles = target.AgentID, target.StackName, target.ConfigDir, target.ConfigFiles
+		endpointID = target.EndpointID
 		if err != nil {
 			return connectorsdk.ActionResult{Status: "failed", Message: err.Error()}, nil
 		}
+	}
+
+	currentEndpoint, err := c.resolveComposeEndpoint(agentID)
+	if err != nil {
+		return connectorsdk.ActionResult{Status: "failed", Message: err.Error()}, nil
+	}
+	if endpointID != "" && endpointID != currentEndpoint {
+		return connectorsdk.ActionResult{Status: "failed", Message: "Compose endpoint changed during dispatch; resubmit the action"}, nil
+	}
+	endpointID = currentEndpoint
+	if err := checkActionTarget(ctx, actionID, agentID, "", stackName, configDir, configFiles, endpointID); err != nil {
+		return connectorsdk.ActionResult{Status: "failed", Message: err.Error()}, nil
 	}
 
 	// Map stack.xxx to compose action name.
@@ -228,6 +250,8 @@ func (c *Coordinator) executeStackAction(ctx context.Context, actionID string, r
 		StackName:   stackName,
 		Action:      composeAction,
 		ConfigDir:   configDir,
+		ConfigFiles: configFiles,
+		EndpointID:  endpointID,
 		ComposeYAML: req.Params["compose_yaml"],
 	}
 	data, err := json.Marshal(composeData)
@@ -250,7 +274,7 @@ func (c *Coordinator) executeStackAction(ctx context.Context, actionID string, r
 	}()
 
 	if err := c.agentMgr.SendToAgent(agentID, agentmgr.Message{
-		Type: agentmgr.MsgDockerComposeAction,
+		Type: agentmgr.MsgDockerComposeActionV2,
 		ID:   requestID,
 		Data: data,
 	}); err != nil {

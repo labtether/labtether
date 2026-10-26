@@ -84,9 +84,9 @@ func (d *Deps) RetryPendingNotifications(ctx context.Context) {
 		}
 
 		payload := d.payloadForRetry(rec)
-		if d.maintenanceSuppressesGroupIDs(notificationPayloadGroupIDs(payload)) {
+		if d.notificationRetrySuppressed(rec, payload) {
 			// Leave the retry due without consuming an attempt. It will resume as
-			// soon as the active maintenance window ends.
+			// soon as suppression ends and its scope can be checked completely.
 			continue
 		}
 		if isIncidentNotificationPayload(payload) && notifications.NormalizeChannelType(channel.Type) != notifications.ChannelTypeAPNs {

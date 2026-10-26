@@ -13,12 +13,13 @@ import (
 )
 
 func (s *PostgresStore) UpsertAssetHeartbeat(req assets.HeartbeatRequest) (assets.Asset, error) {
-	ctx := context.Background()
+	ctx, cancel := agentLifecycleStoreContext()
+	defer cancel()
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return assets.Asset{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer rollbackAgentLifecycleTransaction(tx)
 
 	if err := lockAgentIdentityAsset(ctx, tx, req.AssetID); err != nil {
 		return assets.Asset{}, err
@@ -150,7 +151,14 @@ func upsertAssetHeartbeatTx(ctx context.Context, tx pgx.Tx, req assets.Heartbeat
 }
 
 func (s *PostgresStore) ListAssets() ([]assets.Asset, error) {
-	return s.listAssets(context.Background(),
+	return s.ListAssetsContext(context.Background())
+}
+
+func (s *PostgresStore) ListAssetsContext(ctx context.Context) ([]assets.Asset, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return s.listAssets(ctx,
 		`SELECT id, type, name, source, group_id, status, platform, metadata, tags, created_at, updated_at, last_seen_at, host, transport_type
 		 FROM assets
 		 ORDER BY last_seen_at DESC`,
@@ -259,7 +267,14 @@ func (s *PostgresStore) UpdateAsset(id string, req assets.UpdateRequest) (assets
 }
 
 func (s *PostgresStore) GetAsset(id string) (assets.Asset, bool, error) {
-	asset, err := scanAsset(s.pool.QueryRow(context.Background(),
+	return s.GetAssetContext(context.Background(), id)
+}
+
+func (s *PostgresStore) GetAssetContext(ctx context.Context, id string) (assets.Asset, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return assets.Asset{}, false, err
+	}
+	asset, err := scanAsset(s.pool.QueryRow(ctx,
 		`SELECT id, type, name, source, group_id, status, platform, metadata, tags, created_at, updated_at, last_seen_at, host, transport_type
 		 FROM assets WHERE id = $1`,
 		id,

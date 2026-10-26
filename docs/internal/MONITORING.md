@@ -235,10 +235,53 @@ are retried with progressively smaller pages, while full accepted pages catch
 up at a bounded faster cadence instead of waiting for the steady-state
 interval. It pages the asset and hub telemetry tables by their independent
 insertion IDs, not timestamps, so delayed or equal-time samples are not skipped
-at a batch boundary. Both cursors advance only after a 2xx receiver response and
-a successful durable cursor update. If that final update fails, the page is
-retried with at-least-once semantics and may be duplicated rather than silently
-lost.
+at a batch boundary. Accepted pages advance both cursors only after a 2xx
+receiver response and a successful durable cursor update. If that final update
+fails, the page is retried with at-least-once semantics and may be duplicated.
+
+Permanent HTTP 4xx responses, except 429, take a separate path. After the
+existing 413 page-size reduction is exhausted, the hub retains the exact sent
+snappy/protobuf request in `prometheus_remote_write_rejections` and advances its
+cursor in the same PostgreSQL transaction. This prevents a late or conflicting
+sample rejected with HTTP 400 from blocking all later pages. The disposition is
+**rejected; partial acceptance unknown**, not delivered: a receiver may accept
+some samples before returning 400. Receiver response bodies are not interpreted
+or retained. HTTP 429, 5xx and transport failures continue to back off without
+consuming the page.
+
+Rejection storage is capped globally at 64 pages and 64 MiB of request payload
+(plus database overhead), with the existing 4 MiB per-request cap. Nothing is
+automatically evicted or replayed. If storage is full or persistence fails, the
+cursor stays put and an explicit error is logged. The running worker retains at
+most one bounded rejected request and retries its database disposition without
+resending it. An exact already-committed disposition is recognized after a lost
+commit reply. A process crash before durable disposition can still cause an
+at-least-once HTTP retry; this is not exactly-once delivery.
+
+HTTP 401/403 pages follow the same rejected/partial-unknown path. Fix credentials
+promptly: repeated authorization failures fill rejection storage and then block
+export. Correcting credentials does not automatically replay stored rejections.
+Original telemetry remains subject to its normal retention policy; the retained
+request survives that retention until explicit operator recovery. It includes
+metric labels, so treat exported payloads as private diagnostic data.
+
+Operators with database access can inspect bounded rejection metadata without
+printing payloads or endpoint credentials:
+
+```sql
+SELECT id, endpoint_fingerprint, previous_asset_id, previous_hub_id,
+       next_asset_id, next_hub_id, status_code, sample_count,
+       octet_length(payload) AS payload_bytes, rejected_at
+FROM prometheus_remote_write_rejections ORDER BY id;
+```
+
+Before removing a specific rejection, preserve its exact payload and metadata
+in protected storage and decide how to recover it at the receiver. Replaying a
+partly accepted request can duplicate samples or be rejected again. Remove only
+the reviewed row IDs after that decision; do not reset the replay cursor or
+bulk-delete unresolved rejections to clear an alert. There is no automatic
+recovery API in this change. Logs report status and sample count, never payload,
+receiver text, URL or credentials.
 
 The cursor survives hub restarts. Rotating only the password retains it;
 changing the receiver URL or tenant username resets it by a SHA-256 destination

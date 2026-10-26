@@ -151,6 +151,10 @@ type Deps struct {
 
 	// Broadcast publishes a bounded operator event after a successful mutation.
 	Broadcast func(eventType string, data map[string]any)
+
+	// OnRelayPushDeviceRegistered runs after an iOS device registers a push
+	// relay id, so the Hub can create its default relay channel and route.
+	OnRelayPushDeviceRegistered func(ctx context.Context)
 }
 
 // PushDeviceStore is a minimal interface for push device registration.

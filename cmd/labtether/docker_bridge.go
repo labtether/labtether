@@ -20,6 +20,9 @@ func (s *apiServer) buildDockerDeps() *dockerpkg.Deps {
 		DockerCoordinator: s.dockerCoordinator,
 		AgentMgr:          s.agentMgr,
 		DockerExecBridges: &s.dockerExecBridges,
+		ClaimPersistentTerminalStream: func(session terminal.Session, conn *websocket.Conn) (func(), func()) {
+			return s.ensureTerminalDeps().ClaimPersistentTerminalStream(session, conn)
+		},
 
 		TerminalWebSocketUpgrader: terminalWebSocketUpgrader,
 
@@ -150,6 +153,10 @@ func (s *apiServer) processAgentDockerExecClosed(conn *agentmgr.AgentConn, msg a
 
 func (s *apiServer) closeDockerExecBridgesForAsset(assetID string) {
 	s.ensureDockerDeps().CloseDockerExecBridgesForAsset(assetID)
+}
+
+func (s *apiServer) closeDockerExecBridgesForConnection(conn *agentmgr.AgentConn) {
+	s.ensureDockerDeps().CloseDockerExecBridgesForConnection(conn)
 }
 
 // Type aliases for types used in cmd/labtether/ test files.

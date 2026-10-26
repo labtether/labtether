@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/labtether/labtether/internal/idgen"
 	"github.com/labtether/labtether/internal/notifications"
+	"github.com/labtether/labtether/internal/persistence"
 	"strconv"
 	"strings"
 )
@@ -23,6 +24,7 @@ type notificationConfigCASStore interface {
 func (d *Deps) createSecureNotificationChannel(req notifications.CreateChannelRequest) (notifications.Channel, error) {
 	channelID := idgen.New("nch")
 	channelType := notifications.NormalizeChannelType(req.Type)
+	req.Config = normalizeAPNsChannelConfig(channelType, req.Config)
 	if err := ValidateNotificationChannelConfig(channelType, req.Config); err != nil {
 		return notifications.Channel{}, invalidNotificationChannel(err)
 	}
@@ -56,7 +58,7 @@ func (d *Deps) updateSecureNotificationChannel(id string, req notifications.Upda
 			return notifications.Channel{}, decryptErr
 		}
 		if req.Config != nil {
-			merged := mergePreservedNotificationSecrets(raw.Type, plainConfig, *req.Config)
+			merged := normalizeAPNsChannelConfig(raw.Type, mergePreservedNotificationSecrets(raw.Type, plainConfig, *req.Config))
 			if validationErr := ValidateNotificationChannelConfig(raw.Type, merged); validationErr != nil {
 				return notifications.Channel{}, invalidNotificationChannel(validationErr)
 			}
@@ -118,11 +120,18 @@ func (d *Deps) getNotificationChannelForAPI(id string) (notifications.Channel, b
 }
 
 func (d *Deps) getNotificationChannelForRuntime(id string) (notifications.Channel, bool, error) {
-	channel, ok, err := d.NotificationStore.GetNotificationChannel(id)
+	return d.getNotificationChannelForRuntimeFrom(d.NotificationStore, id)
+}
+
+// getNotificationChannelForRuntimeFrom loads, decrypts and (if needed)
+// migrates a channel through store, so callers can bind the store calls to a
+// context without copying Deps (which holds locks).
+func (d *Deps) getNotificationChannelForRuntimeFrom(store persistence.NotificationStore, id string) (notifications.Channel, bool, error) {
+	channel, ok, err := store.GetNotificationChannel(id)
 	if err != nil || !ok {
 		return notifications.Channel{}, ok, err
 	}
-	plain, err := d.notificationChannelForRuntime(channel)
+	plain, err := d.notificationChannelForRuntimeFrom(store, channel)
 	if err != nil {
 		return notifications.Channel{}, false, err
 	}
@@ -130,6 +139,10 @@ func (d *Deps) getNotificationChannelForRuntime(id string) (notifications.Channe
 }
 
 func (d *Deps) notificationChannelForRuntime(raw notifications.Channel) (notifications.Channel, error) {
+	return d.notificationChannelForRuntimeFrom(d.NotificationStore, raw)
+}
+
+func (d *Deps) notificationChannelForRuntimeFrom(store persistence.NotificationStore, raw notifications.Channel) (notifications.Channel, error) {
 	plainConfig, legacyPlaintext, err := d.decryptNotificationConfig(raw.ID, raw.Type, raw.Config)
 	if err != nil {
 		return notifications.Channel{}, err
@@ -139,7 +152,7 @@ func (d *Deps) notificationChannelForRuntime(raw notifications.Channel) (notific
 		if encryptErr != nil {
 			return notifications.Channel{}, encryptErr
 		}
-		if migrator, ok := d.NotificationStore.(notificationConfigCASStore); ok {
+		if migrator, ok := store.(notificationConfigCASStore); ok {
 			swapped, migrateErr := migrator.CompareAndSwapNotificationChannelConfig(raw.ID, raw.Config, replacement)
 			if migrateErr != nil {
 				return notifications.Channel{}, fmt.Errorf("migrate notification channel config: %w", migrateErr)
@@ -147,7 +160,7 @@ func (d *Deps) notificationChannelForRuntime(raw notifications.Channel) (notific
 			if !swapped {
 				// A concurrent edit won the race. Never dispatch the stale config that
 				// lost the compare-and-swap; reload and use the row that is current now.
-				latest, ok, loadErr := d.NotificationStore.GetNotificationChannel(raw.ID)
+				latest, ok, loadErr := store.GetNotificationChannel(raw.ID)
 				if loadErr != nil {
 					return notifications.Channel{}, fmt.Errorf("reload notification channel after migration race: %w", loadErr)
 				}
@@ -164,7 +177,7 @@ func (d *Deps) notificationChannelForRuntime(raw notifications.Channel) (notific
 		} else {
 			// Non-Postgres stores are used by tests and reduced runtimes. Production
 			// uses the compare-and-swap path above.
-			if _, migrateErr := d.NotificationStore.UpdateNotificationChannel(raw.ID, notifications.UpdateChannelRequest{Config: &replacement}); migrateErr != nil {
+			if _, migrateErr := store.UpdateNotificationChannel(raw.ID, notifications.UpdateChannelRequest{Config: &replacement}); migrateErr != nil {
 				return notifications.Channel{}, fmt.Errorf("migrate notification channel config: %w", migrateErr)
 			}
 		}

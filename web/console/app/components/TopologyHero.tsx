@@ -65,7 +65,7 @@ function TopologyHeroNode({ data }: NodeProps<Node<HeroNodeData>>) {
             stroke={sc.ring}
             strokeWidth={0.5}
             opacity={0.3}
-            style={{ animation: "glow-breathe 3s ease-in-out infinite" }}
+            style={{ animation: "glow-breathe 3s ease-in-out 1" }}
           />
         )}
         {/* Center dot */}
@@ -202,7 +202,7 @@ export function TopologyHero() {
       style={{
         background: "linear-gradient(135deg, rgba(var(--accent-rgb),0.2), rgba(var(--accent-rgb),0.03) 30%, transparent 50%, rgba(var(--accent-rgb),0.03) 70%, rgba(var(--accent-rgb),0.15))",
         backgroundSize: "200% 200%",
-        animation: "border-travel 8s ease infinite",
+        animation: "border-travel 6s ease 1",
       }}
     >
     <div

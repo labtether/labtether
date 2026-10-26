@@ -172,7 +172,14 @@ func (d *Deps) HandleSessionActions(w http.ResponseWriter, r *http.Request) {
 		case http.MethodGet:
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"session": session})
 		case http.MethodDelete:
-			if err := d.TerminalStore.DeleteTerminalSession(session.ID); err != nil {
+			remove := func() error { return d.TerminalStore.DeleteTerminalSession(session.ID) }
+			var deleteErr error
+			if d.SessionStreams != nil {
+				deleteErr = d.SessionStreams.Delete(session.ID, remove)
+			} else {
+				deleteErr = remove()
+			}
+			if err := deleteErr; err != nil {
 				if errors.Is(err, terminal.ErrSessionNotFound) {
 					servicehttp.WriteError(w, http.StatusNotFound, "session not found")
 					return

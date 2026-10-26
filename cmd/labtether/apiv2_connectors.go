@@ -109,6 +109,7 @@ func (s *apiServer) handleV2TrueNASAssets(w http.ResponseWriter, r *http.Request
 		return
 	}
 	r.URL.Path = strings.Replace(r.URL.Path, "/api/v2/", "/", 1)
+	r.URL.RawPath = strings.Replace(r.URL.RawPath, "/api/v2/", "/", 1)
 	apiv2.WrapV1Handler(s.handleTrueNASAssets)(w, r)
 }
 

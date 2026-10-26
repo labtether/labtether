@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link } from "../../../../../i18n/navigation";
+import { usePollingTask } from "../../../../hooks/usePollingTask";
 import { Card } from "../../../../components/ui/Card";
 import { Badge } from "../../../../components/ui/Badge";
 import { Button } from "../../../../components/ui/Button";
@@ -31,23 +32,21 @@ export function DockerStacksTab({ hostId }: Props) {
   const [actionInFlight, setActionInFlight] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const loadTask = useCallback(async (signal: AbortSignal) => {
     try {
-      const data = await fetchDockerStacks(hostId);
+      const data = await fetchDockerStacks(hostId, signal);
+      if (signal.aborted) return;
       setStacks(data);
       setActionError(null);
     } catch (err) {
+      if (signal.aborted) return;
       setActionError(err instanceof Error ? err.message : "failed to load stacks");
     } finally {
-      setLoading(false);
+      if (!signal.aborted) setLoading(false);
     }
   }, [hostId]);
 
-  useEffect(() => {
-    void load();
-    const interval = setInterval(() => void load(), 15_000);
-    return () => clearInterval(interval);
-  }, [load]);
+  const load = usePollingTask(loadTask, 15_000);
 
   const runAction = async (targetStackID: string, action: string) => {
     setActionInFlight(targetStackID);

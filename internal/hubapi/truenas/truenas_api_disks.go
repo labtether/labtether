@@ -92,9 +92,12 @@ func (d *Deps) HandleTrueNASDisks(ctx context.Context, w http.ResponseWriter, r 
 		if testType == "" {
 			testType = "SHORT"
 		}
+		if !d.enforceMutation(w, asset, runtime, "smart.test", map[string]string{"disk": diskName}) {
+			return
+		}
 		params := []any{[]any{map[string]any{"identifier": diskName, "type": testType}}}
-		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, "smart.test.manual_test", params, nil); err != nil {
-			writeTrueNASError(w, http.StatusBadGateway, "failed to start SMART test", err)
+		if err := runtime.Client.CallMutation(ctx, "smart.test.manual_test", params, nil); err != nil {
+			writeTrueNASMutationError(w, http.StatusBadGateway, "failed to start SMART test", err)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, TrueNASDiskSMARTTestResponse{

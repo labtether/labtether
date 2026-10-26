@@ -25,6 +25,12 @@ func normalizeID(value string) string {
 	return trimmed
 }
 
+// NodeAssetID is the native inventory identity emitted by Proxmox discovery.
+// Collector scoping is applied separately by the collector ingestion owner.
+func NodeAssetID(node string) string {
+	return "proxmox-node-" + normalizeID(node)
+}
+
 func formatFloat(value float64) string {
 	return strconv.FormatFloat(value, 'f', -1, 64)
 }

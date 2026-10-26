@@ -92,7 +92,8 @@ func GenerateBootstrapScript(hubURL, expectedCAFingerprint string) string {
 // hubURL is the HTTP base URL of the hub (e.g. "http://192.168.1.10:8080").
 // wsURL  is the WebSocket agent URL  (e.g. "ws://192.168.1.10:8080/ws/agent").
 func GenerateInstallScript(hubURL, wsURL string) string {
-	return fmt.Sprintf(agentInstallScriptTemplate(), hubURL, wsURL, shellSingleQuote(hubURL), shellSingleQuote(wsURL))
+	return fmt.Sprintf(agentInstallScriptTemplate(), hubURL, wsURL, shellSingleQuote(hubURL), shellSingleQuote(wsURL),
+		shellSingleQuote(AgentReleasePublicKey()))
 }
 
 func shellSingleQuote(value string) string {

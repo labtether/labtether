@@ -158,6 +158,9 @@ func (d *Deps) HandleAuthUserActions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	challenges := d.authChallenges()
+	unlock := challenges.LockUser(id)
+	defer unlock()
 	user, ok, err := d.AuthStore.GetUserByID(id)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load user")
@@ -203,6 +206,7 @@ func (d *Deps) HandleAuthUserActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to hash password")
 			return
 		}
+		challenges.RevokeForUser(user.ID)
 		if err := d.AuthStore.DeleteSessionsByUserID(user.ID); err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to revoke active sessions")
 			return
@@ -228,6 +232,9 @@ func (d *Deps) handleDeleteUser(w http.ResponseWriter, r *http.Request, id strin
 		return
 	}
 
+	challenges := d.authChallenges()
+	unlock := challenges.LockUser(id)
+	defer unlock()
 	user, ok, err := d.AuthStore.GetUserByID(id)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to look up user")
@@ -242,6 +249,7 @@ func (d *Deps) handleDeleteUser(w http.ResponseWriter, r *http.Request, id strin
 		return
 	}
 
+	challenges.RevokeForUser(id)
 	if delErr := d.AuthStore.DeleteSessionsByUserID(id); delErr != nil {
 		log.Printf("auth: delete-user: failed to revoke sessions for user %s: %v", id, delErr) // #nosec G706 -- User IDs are store-generated identifiers and the error is local runtime state.
 	}
@@ -282,6 +290,10 @@ func (d *Deps) handleUserSessions(w http.ResponseWriter, r *http.Request, userID
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"sessions": out, "count": len(out)})
 
 	case http.MethodDelete:
+		challenges := d.authChallenges()
+		unlock := challenges.LockUser(userID)
+		defer unlock()
+		challenges.RevokeForUser(userID)
 		if err := d.AuthStore.DeleteSessionsByUserID(userID); err != nil {
 			log.Printf("auth: revoke-sessions: failed to delete sessions for user %s: %v", userID, err) // #nosec G706 -- User IDs are store-generated identifiers and the error is local runtime state.
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to revoke sessions")

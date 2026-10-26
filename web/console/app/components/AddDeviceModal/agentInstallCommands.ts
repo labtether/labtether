@@ -1,6 +1,7 @@
 "use client";
 
 import { type HubConnectionCandidate } from "../../hooks/useEnrollment";
+import { trimTrailingSlashes } from "../../../lib/trimChars";
 
 export type Platform = "linux" | "macos" | "windows";
 
@@ -39,7 +40,7 @@ export function powershellQuote(value: string): string {
 }
 
 export function normalizeHubURL(raw: string): string {
-  return raw.trim().replace(/\/+$/, "");
+  return trimTrailingSlashes(raw.trim());
 }
 
 export function pinnedCAFingerprint(
@@ -56,7 +57,7 @@ export function pinnedCAFingerprint(
   try {
     const base = new URL(hubURL);
     const bootstrap = new URL(candidate.bootstrap_url);
-    const expectedPath = `${base.pathname.replace(/\/+$/, "")}/api/v1/agent/bootstrap.sh`;
+    const expectedPath = `${trimTrailingSlashes(base.pathname)}/api/v1/agent/bootstrap.sh`;
     const fingerprint =
       bootstrap.searchParams.get("ca_fingerprint_sha256") ?? "";
     if (

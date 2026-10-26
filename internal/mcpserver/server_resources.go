@@ -25,6 +25,14 @@ func (d *Deps) scopeCheck(ctx context.Context, scope string) error {
 	return nil
 }
 
+// hostDataReadCheck applies the Hub's role floor for reading host contents.
+func (d *Deps) hostDataReadCheck(ctx context.Context) error {
+	if d == nil || d.AuthorizeHostDataRead == nil {
+		return errors.New("MCP host data authorization is unavailable")
+	}
+	return d.AuthorizeHostDataRead(ctx)
+}
+
 func (d *Deps) assetCheck(ctx context.Context, assetID string) error {
 	if d == nil || d.GetAllowedAssets == nil {
 		return errors.New("MCP asset authorization context is unavailable")

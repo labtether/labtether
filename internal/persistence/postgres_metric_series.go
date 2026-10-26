@@ -120,12 +120,19 @@ func (s *PostgresStore) SeriesMetric(assetID, metric string, start, end time.Tim
 }
 
 func (s *PostgresStore) HasTelemetrySamples(assetIDs []string, start, end time.Time) (map[string]bool, error) {
+	return s.HasTelemetrySamplesContext(context.Background(), assetIDs, start, end)
+}
+
+func (s *PostgresStore) HasTelemetrySamplesContext(ctx context.Context, assetIDs []string, start, end time.Time) (map[string]bool, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	cleanIDs := normalizeLogAssetIDs(assetIDs)
 	out := make(map[string]bool, len(cleanIDs))
 	if len(cleanIDs) == 0 {
 		return out, nil
 	}
-	rows, err := s.pool.Query(context.Background(),
+	rows, err := s.pool.Query(ctx,
 		`SELECT DISTINCT asset_id
 		 FROM metric_samples
 		 WHERE asset_id = ANY($1::text[])

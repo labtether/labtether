@@ -142,6 +142,9 @@ func (d *Deps) HandlePBSTaskStop(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 
+	if !d.enforceTaskStop(ctx, w, runtime, node, upid) {
+		return
+	}
 	if err := runtime.Client.StopTask(ctx, node, upid); err != nil {
 		writePBSError(w, http.StatusBadGateway, "failed to stop pbs task", err)
 		return

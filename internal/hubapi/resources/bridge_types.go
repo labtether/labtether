@@ -103,6 +103,7 @@ type NetworkBridge struct {
 
 // PackageBridge holds the channel for a pending package request.
 type PackageBridge struct {
+	ExpectedConn    *agentmgr.AgentConn
 	Ch              chan agentmgr.Message
 	ExpectedAssetID string
 }

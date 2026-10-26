@@ -52,7 +52,9 @@ func (c *Coordinator) HandleDiscoveryDelta(agentID string, msg agentmgr.Message)
 
 func dockerHostFromDiscovery(agentID string, data agentmgr.DockerDiscoveryData, existingStats map[string]ContainerStats) *DockerHost {
 	host := &DockerHost{
-		AgentID: agentID,
+		AgentID:              agentID,
+		ComposeActionVersion: data.ComposeActionVersion,
+		ComposeEndpointID:    data.ComposeEndpointID,
 		Engine: EngineInfo{
 			Version:    data.Engine.Version,
 			APIVersion: data.Engine.APIVersion,
@@ -113,6 +115,9 @@ func applyDiscoveryDelta(host *DockerHost, data agentmgr.DockerDiscoveryDeltaDat
 	if host == nil {
 		return
 	}
+	// Every delta carries the current capability; an old agent must clear it.
+	host.ComposeActionVersion = data.ComposeActionVersion
+	host.ComposeEndpointID = data.ComposeEndpointID
 	if data.Engine != nil {
 		host.Engine = EngineInfo{
 			Version:    data.Engine.Version,
@@ -243,10 +248,13 @@ func convertContainerInfo(ct agentmgr.DockerContainerInfo) ContainerState {
 
 func convertComposeStack(stack agentmgr.DockerComposeStack) ComposeStackState {
 	return ComposeStackState{
-		Name:         stack.Name,
-		Status:       stack.Status,
-		ConfigFile:   stack.ConfigFile,
-		ContainerIDs: append([]string(nil), stack.Containers...),
+		Name:           stack.Name,
+		Status:         stack.Status,
+		ConfigFile:     stack.ConfigFile,
+		ConfigDir:      stack.ConfigDir,
+		ConfigFiles:    append([]string(nil), stack.ConfigFiles...),
+		SelectionError: stack.SelectionError,
+		ContainerIDs:   append([]string(nil), stack.Containers...),
 	}
 }
 

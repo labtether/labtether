@@ -114,8 +114,7 @@ var (
 )
 
 // TelemetryQueryBatchStore is the cancellation-aware, work-bounded batch path
-// used by interactive/API queries. Background alert evaluation intentionally
-// retains the narrower TelemetryAlertBatchStore contract above.
+// used by interactive/API queries and background alert evaluation.
 type TelemetryQueryBatchStore interface {
 	MetricSeriesBatchContext(ctx context.Context, assetIDs []string, metric string, start, end time.Time, step time.Duration, maxRawPoints int) (map[string]telemetry.Series, error)
 }

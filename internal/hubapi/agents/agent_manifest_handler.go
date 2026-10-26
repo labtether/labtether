@@ -35,9 +35,20 @@ func (d *Deps) HandleAgentCacheRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// This endpoint re-reads agent-manifest.json from the runtime cache and
+	// the image; it does not download anything. Say so, and report what was
+	// loaded, rather than claiming a remote refresh.
 	m := d.AgentCache.Manifest()
+	versions := make(map[string]string, len(m.Agents))
+	for name, entry := range m.Agents {
+		versions[name] = entry.Version
+	}
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
-		"status":  "refreshed",
-		"version": m.GoAgentVersion(),
+		"status":       "reloaded",
+		"source":       "disk",
+		"message":      "agent manifest reloaded from disk; no remote download was performed",
+		"generated_at": m.GeneratedAt,
+		"version":      m.GoAgentVersion(),
+		"versions":     versions,
 	})
 }

@@ -55,12 +55,6 @@ func (d *Deps) dispatchAlertNotificationsSync(rule alerts.Rule, instanceID, stat
 	if strings.TrimSpace(instanceID) == "" {
 		return
 	}
-	// Re-check at actual delivery time so an asynchronous send accepted just
-	// before a maintenance window cannot leak through after suppression begins.
-	if d.isAlertMaintenanceSuppressed(rule) {
-		return
-	}
-
 	routes, err := d.NotificationStore.ListAlertRoutes(notificationRouteScanLimit)
 	if err != nil {
 		log.Printf("notifications: failed to list alert routes: %v", err)
@@ -129,6 +123,11 @@ func (d *Deps) dispatchAlertNotificationsSync(rule alerts.Rule, instanceID, stat
 				continue
 			}
 
+			// A previous channel can block while a new silence or maintenance
+			// window starts. Check again at each send, not just dispatch entry.
+			if d.isAlertMaintenanceSuppressed(rule) || d.isAlertSilencedAtDelivery(rule) {
+				return
+			}
 			sendCtx, cancel := context.WithTimeout(context.Background(), notificationDispatchTimeout)
 			sendErr := d.sendNotification(sendCtx, channel, payload)
 			cancel()

@@ -430,9 +430,9 @@ func TestHandleDockerStackActionNoAgent(t *testing.T) {
 	// With agentMgr=nil, ExecuteAction returns a failed result.
 	coord := docker.NewCoordinator(nil)
 	coord.HandleDiscovery("agent-01", makeDockerDiscovery(agentmgr.DockerDiscoveryData{
-		HostID: "agent-01",
+		HostID: "agent-01", ComposeActionVersion: 2, ComposeEndpointID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		ComposeStacks: []agentmgr.DockerComposeStack{
-			{Name: "webstack", Status: "running(1)", ConfigFile: "/opt/stacks/web/docker-compose.yml", Containers: []string{}},
+			{Name: "webstack", Status: "running(1)", ConfigFile: "/opt/stacks/web/docker-compose.yml", ConfigDir: "/opt/stacks/web", ConfigFiles: []string{"/opt/stacks/web/docker-compose.yml"}, Containers: []string{}},
 		},
 	}))
 

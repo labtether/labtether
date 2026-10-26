@@ -61,7 +61,7 @@ func (c *Connector) Discover(ctx context.Context) ([]connectorsdk.Asset, error) 
 		}
 
 		assets = append(assets, connectorsdk.Asset{
-			ID:       "truenas-storage-pool-" + normalizeID(poolName),
+			ID:       ResourceAssetID("storage-pool", poolName),
 			Type:     "storage-pool",
 			Name:     poolName,
 			Source:   c.ID(),
@@ -80,17 +80,18 @@ func (c *Connector) Discover(ctx context.Context) ([]connectorsdk.Asset, error) 
 				continue
 			}
 			assets = append(assets, connectorsdk.Asset{
-				ID:     "truenas-dataset-" + normalizeID(name),
+				ID:     ResourceAssetID("dataset", name),
 				Type:   "dataset",
 				Name:   name,
 				Source: c.ID(),
 				Metadata: map[string]string{
-					"mountpoint":  strings.TrimSpace(anyToString(nestedValue(ds, "mountpoint"))),
-					"used":        formatFloat(anyToFloat(nestedValue(ds, "used"))),
-					"available":   formatFloat(anyToFloat(nestedValue(ds, "available"))),
-					"quota":       formatFloat(anyToFloat(nestedValue(ds, "quota"))),
-					"readonly":    anyToString(nestedValue(ds, "readonly")),
-					"compression": strings.TrimSpace(anyToString(nestedValue(ds, "compression"))),
+					"dataset_name": name,
+					"mountpoint":   strings.TrimSpace(anyToString(nestedValue(ds, "mountpoint"))),
+					"used":         formatFloat(anyToFloat(nestedValue(ds, "used"))),
+					"available":    formatFloat(anyToFloat(nestedValue(ds, "available"))),
+					"quota":        formatFloat(anyToFloat(nestedValue(ds, "quota"))),
+					"readonly":     anyToString(nestedValue(ds, "readonly")),
+					"compression":  strings.TrimSpace(anyToString(nestedValue(ds, "compression"))),
 				},
 			})
 		}
@@ -124,7 +125,7 @@ func (c *Connector) Discover(ctx context.Context) ([]connectorsdk.Asset, error) 
 				}
 			}
 			assets = append(assets, connectorsdk.Asset{
-				ID:       "truenas-disk-" + normalizeID(name),
+				ID:       ResourceAssetID("disk", name),
 				Type:     "disk",
 				Name:     name,
 				Source:   c.ID(),
@@ -208,14 +209,15 @@ func (c *Connector) Discover(ctx context.Context) ([]connectorsdk.Asset, error) 
 				continue
 			}
 			assets = append(assets, connectorsdk.Asset{
-				ID:     "truenas-share-smb-" + normalizeID(name),
+				ID:     ResourceAssetID("share-smb", name),
 				Type:   "share-smb",
 				Name:   name,
 				Source: c.ID(),
 				Metadata: map[string]string{
-					"path":    strings.TrimSpace(anyToString(share["path"])),
-					"enabled": anyToString(share["enabled"]),
-					"comment": strings.TrimSpace(anyToString(share["comment"])),
+					"share_id": strings.TrimSpace(anyToString(share["id"])),
+					"path":     strings.TrimSpace(anyToString(share["path"])),
+					"enabled":  anyToString(share["enabled"]),
+					"comment":  strings.TrimSpace(anyToString(share["comment"])),
 				},
 			})
 		}
@@ -240,13 +242,14 @@ func (c *Connector) Discover(ctx context.Context) ([]connectorsdk.Asset, error) 
 				continue
 			}
 			assets = append(assets, connectorsdk.Asset{
-				ID:     "truenas-share-nfs-" + normalizeID(name),
+				ID:     ResourceAssetID("share-nfs", name),
 				Type:   "share-nfs",
 				Name:   name,
 				Source: c.ID(),
 				Metadata: map[string]string{
-					"path":    path,
-					"enabled": anyToString(share["enabled"]),
+					"share_id": id,
+					"path":     path,
+					"enabled":  anyToString(share["enabled"]),
 				},
 			})
 		}
@@ -265,7 +268,7 @@ func (c *Connector) Discover(ctx context.Context) ([]connectorsdk.Asset, error) 
 			state := strings.TrimSpace(anyToString(svc["state"]))
 			enabled := anyToString(svc["enable"])
 			assets = append(assets, connectorsdk.Asset{
-				ID:     "truenas-service-" + normalizeID(name),
+				ID:     ResourceAssetID("service", name),
 				Type:   "service",
 				Name:   name,
 				Source: c.ID(),
@@ -335,7 +338,7 @@ func (c *Connector) Discover(ctx context.Context) ([]connectorsdk.Asset, error) 
 				continue
 			}
 			assets = append(assets, connectorsdk.Asset{
-				ID:     "truenas-app-" + normalizeID(name),
+				ID:     ResourceAssetID("app", name),
 				Type:   "app",
 				Name:   name,
 				Source: c.ID(),

@@ -14,6 +14,9 @@ fi
 if ! command -v xdotool &>/dev/null; then
   MISSING_VNC_PREREQS+=("xdotool")
 fi
+if ! command -v xmodmap &>/dev/null; then
+  MISSING_VNC_PREREQS+=("xmodmap")
+fi
 if ! command -v gst-launch-1.0 &>/dev/null; then
   MISSING_VNC_PREREQS+=("gst-launch-1.0")
 fi
@@ -26,7 +29,7 @@ if [[ "${#MISSING_VNC_PREREQS[@]}" -gt 0 ]]; then
   VNC_PREREQS_STATUS="missing"
   if [[ "${VNC_PREREQS_MODE}" == "ask" ]]; then
     if [[ -r /dev/tty && -w /dev/tty ]]; then
-      printf "  ${YELLOW}${SYM_WARN}${RESET} Install desktop prerequisites now (x11vnc + Xvfb + xterm + xdotool + GStreamer)? [Y/n]: " > /dev/tty
+      printf "  ${YELLOW}${SYM_WARN}${RESET} Install desktop prerequisites now (x11vnc + Xvfb + xterm + xdotool + xmodmap + GStreamer)? [Y/n]: " > /dev/tty
       read -r vnc_prompt_reply < /dev/tty || vnc_prompt_reply=""
       vnc_prompt_reply="$(echo "${vnc_prompt_reply}" | tr '[:upper:]' '[:lower:]')"
       if [[ -z "${vnc_prompt_reply}" || "${vnc_prompt_reply}" == "y" || "${vnc_prompt_reply}" == "yes" ]]; then
@@ -44,7 +47,7 @@ if [[ "${#MISSING_VNC_PREREQS[@]}" -gt 0 ]]; then
   if [[ "${VNC_PREREQS_MODE}" == "install" ]]; then
     VNC_LOG="$(mktemp)"
     install_vnc_prereqs >"${VNC_LOG}" 2>&1 &
-    spin $! "Installing desktop prerequisites (x11vnc + Xvfb + xterm + xdotool + GStreamer)..."
+    spin $! "Installing desktop prerequisites (x11vnc + Xvfb + xterm + xdotool + xmodmap + GStreamer)..."
     if wait $!; then
       success "Desktop prerequisites installed"
       VNC_PREREQS_STATUS="installed"
@@ -56,11 +59,11 @@ if [[ "${#MISSING_VNC_PREREQS[@]}" -gt 0 ]]; then
     rm -f "${VNC_LOG}"
   else
     info "Skipping desktop prerequisite installation."
-    info "Remote desktop features may be unavailable until x11vnc/Xvfb/xdotool/GStreamer are installed."
+    info "Remote desktop features may be unavailable until x11vnc/Xvfb/xdotool/xmodmap/GStreamer are installed."
     VNC_PREREQS_STATUS="missing_skipped"
   fi
 else
-  success "Desktop prerequisites available (x11vnc + Xvfb + xterm + xdotool + GStreamer)"
+  success "Desktop prerequisites available (x11vnc + Xvfb + xterm + xdotool + xmodmap + GStreamer)"
   VNC_PREREQS_STATUS="available"
 fi
 
@@ -175,6 +178,7 @@ LABTETHER_DOCKER_SOCKET="${DOCKER_ENDPOINT}"
 LABTETHER_DOCKER_DISCOVERY_INTERVAL=${DOCKER_DISCOVERY_INTERVAL}
 LABTETHER_FILES_ROOT_MODE=${FILES_ROOT_MODE}
 LABTETHER_AUTO_UPDATE=${AUTO_UPDATE}
+LABTETHER_AUTO_UPDATE_TRUSTED_PUBLIC_KEY=${AUTO_UPDATE_TRUSTED_PUBLIC_KEY}
 LABTETHER_LOW_POWER_MODE=${LOW_POWER_MODE}
 LABTETHER_LOG_STREAM_ENABLED=${LOG_STREAM_ENABLED}
 LABTETHER_TLS_SKIP_VERIFY=${TLS_SKIP_VERIFY}

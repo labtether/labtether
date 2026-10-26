@@ -212,23 +212,15 @@ func BootstrapAdminUser(store AdminBootstrapStore) error {
 	}
 
 	password := configuredPassword
-	generated := false
-
 	if password == "" {
-		if isProd {
-			if _, err := configuredBootstrapSetupToken(); err != nil {
-				return fmt.Errorf("prepare first-run setup token: %w", err)
-			}
-			securityruntime.Logf("labtether auth: no bootstrap admin password configured; first-run setup token is available locally at %s", bootstrapSetupTokenLocation())
-			return nil
+		// Every environment uses the browser setup flow. Development used to
+		// create the admin with a random password that was never shown,
+		// locking the first user out of the dev compose stack.
+		if _, err := configuredBootstrapSetupToken(); err != nil {
+			return fmt.Errorf("prepare first-run setup token: %w", err)
 		}
-		// Generate a strong random password when none is configured.
-		b := make([]byte, 24)
-		if _, err := rand.Read(b); err != nil {
-			return fmt.Errorf("generate random admin password: %w", err)
-		}
-		password = base64.RawURLEncoding.EncodeToString(b)
-		generated = true
+		securityruntime.Logf("labtether auth: no bootstrap admin password configured; open the console /setup page and enter the one-time setup token stored at %s (inside the Hub container for Docker installs)", bootstrapSetupTokenLocation())
+		return nil
 	}
 
 	// Block weak passwords in production.
@@ -249,9 +241,7 @@ func BootstrapAdminUser(store AdminBootstrapStore) error {
 		return nil
 	}
 
-	if generated {
-		securityruntime.Logf("labtether auth: created bootstrap admin user %q (id=%s) with a generated password that was intentionally not logged; set LABTETHER_ADMIN_USERNAME/LABTETHER_ADMIN_PASSWORD to control this", user.Username, user.ID)
-	} else if isProd {
+	if isProd {
 		securityruntime.Logf("labtether auth: created bootstrap admin user %q (id=%s) from LABTETHER_ADMIN_USERNAME/LABTETHER_ADMIN_PASSWORD", user.Username, user.ID)
 	} else {
 		securityruntime.Logf("labtether auth: created bootstrap admin user %q (id=%s) with an explicitly configured dev password", user.Username, user.ID)

@@ -387,7 +387,7 @@ func (d *Deps) SendUpdateRequest(conn *agentmgr.AgentConn) {
 	if err != nil {
 		return
 	}
-	finishProgress := d.trackAgentUpdate(jobID, conn.AssetID, 30*time.Minute)
+	finishProgress := d.trackAgentUpdate(jobID, conn, 30*time.Minute)
 	if err := conn.Send(agentmgr.Message{
 		Type: agentmgr.MsgUpdateRequest,
 		ID:   jobID,

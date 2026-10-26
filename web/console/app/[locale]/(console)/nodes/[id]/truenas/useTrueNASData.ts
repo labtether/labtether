@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePollingTask } from "../../../../../hooks/usePollingTask";
+import { normalizeTrueNASListRows, normalizeTrueNASOverview } from "./normalizeTrueNASResponse";
 
 // ---------------------------------------------------------------------------
 // Generic fetch helpers
@@ -12,8 +14,8 @@ export type TrueNASDataResponse<T> = {
   warnings?: string[];
 };
 
-export async function truenasFetch<T>(path: string): Promise<T> {
-  const response = await fetch(path, { cache: "no-store" });
+export async function truenasFetch<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(path, { cache: "no-store", signal });
   const json = (await response.json().catch(() => null)) as
     | TrueNASDataResponse<T>
     | { error?: string }
@@ -26,7 +28,7 @@ export async function truenasFetch<T>(path: string): Promise<T> {
   }
   // Support both wrapped `{ data: ... }` and raw responses
   const wrapped = json as TrueNASDataResponse<T> | null;
-  if (wrapped && "data" in wrapped) {
+  if (wrapped && typeof wrapped === "object" && "data" in wrapped) {
     return wrapped.data;
   }
   return json as T;
@@ -61,7 +63,8 @@ export type TrueNASOverviewAlert = {
 
 export type TrueNASOverviewService = {
   name: string;
-  running: boolean;
+  state?: string;
+  running?: boolean;
   enabled: boolean;
 };
 
@@ -93,21 +96,18 @@ export function useTrueNASOverview(
     loading: false,
     error: null,
   });
-  const seqRef = useRef(0);
-  const latestRef = useRef(0);
 
-  const fetch_ = useCallback(async () => {
-    const id = ++seqRef.current;
-    latestRef.current = id;
+  const fetchTask = useCallback(async (signal: AbortSignal) => {
     setState((prev) => ({ ...prev, loading: true, error: null }));
     try {
-      const data = await truenasFetch<TrueNASOverviewData>(
-        `/api/truenas/assets/${encodeURIComponent(assetId)}/overview`,
+      const payload = await truenasFetch<unknown>(
+        `/api/truenas/assets/${encodeURIComponent(assetId)}/overview`, signal,
       );
-      if (latestRef.current !== id) return;
+      if (signal.aborted) return;
+      const data = normalizeTrueNASOverview(payload);
       setState({ data, loading: false, error: null });
     } catch (err) {
-      if (latestRef.current !== id) return;
+      if (signal.aborted) return;
       setState({
         data: null,
         loading: false,
@@ -116,20 +116,41 @@ export function useTrueNASOverview(
     }
   }, [assetId]);
 
-  useEffect(() => {
-    void fetch_();
-    const interval = setInterval(() => {
-      void fetch_();
-    }, 30_000);
-    return () => clearInterval(interval);
-  }, [fetch_]);
+  const refresh = usePollingTask(fetchTask, 30_000);
 
-  return { ...state, refresh: () => { void fetch_(); } };
+  return { ...state, refresh };
 }
 
 // ---------------------------------------------------------------------------
 // Generic list hook factory
 // ---------------------------------------------------------------------------
+
+// The dedicated Hub endpoints return named collections, not a generic data key.
+const trueNASListKeys = {
+  pools: "pools",
+  datasets: "datasets",
+  snapshots: "snapshots",
+  replication: "replications",
+  vms: "vms",
+  services: "services",
+  disks: "disks",
+  "shares/smb": "smb",
+  "shares/nfs": "nfs",
+} as const;
+
+export type TrueNASListEndpoint = keyof typeof trueNASListKeys;
+
+function decodeTrueNASList<T>(payload: unknown, endpoint: TrueNASListEndpoint): T[] {
+  if (Array.isArray(payload)) return payload as T[];
+  const key = trueNASListKeys[endpoint];
+  const items = payload && typeof payload === "object"
+    ? (payload as Record<string, unknown>)[key]
+    : undefined;
+  if (!Array.isArray(items)) {
+    throw new Error(`invalid ${endpoint} response: expected ${key} list`);
+  }
+  return items as T[];
+}
 
 type ListState<T> = {
   data: T[];
@@ -139,7 +160,7 @@ type ListState<T> = {
 
 export function useTrueNASList<T>(
   assetId: string,
-  endpoint: string,
+  endpoint: TrueNASListEndpoint,
 ): ListState<T> & { refresh: () => void } {
   const [state, setState] = useState<ListState<T>>({
     data: [],
@@ -154,11 +175,12 @@ export function useTrueNASList<T>(
     latestRef.current = id;
     setState((prev) => ({ ...prev, loading: true, error: null }));
     try {
-      const data = await truenasFetch<T[]>(
+      const payload = await truenasFetch<unknown>(
         `/api/truenas/assets/${encodeURIComponent(assetId)}/${endpoint}`,
       );
+      const data = normalizeTrueNASListRows(endpoint, decodeTrueNASList<unknown>(payload, endpoint), payload) as T[];
       if (latestRef.current !== id) return;
-      setState({ data: data ?? [], loading: false, error: null });
+      setState({ data, loading: false, error: null });
     } catch (err) {
       if (latestRef.current !== id) return;
       setState({

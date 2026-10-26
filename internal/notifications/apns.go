@@ -17,7 +17,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 )
 
 const (
@@ -57,6 +56,8 @@ func SetAPNsInvalidDeviceTokenHandler(config map[string]any, handler APNsInvalid
 //   - bundle_id:     app bundle identifier (e.g. "com.labtether.mobile")
 //   - production:    bool — true for production APNs endpoint, false for sandbox
 //   - device_tokens: []string — populated by dispatch code from push_devices table
+//   - transport:     "direct" (operator key) or "relay"; absent means relay
+//     when auth_key_path, key_id and team_id are all blank
 //
 // Payload keys consumed:
 //   - title: alert title string
@@ -64,6 +65,10 @@ func SetAPNsInvalidDeviceTokenHandler(config map[string]any, handler APNsInvalid
 //   - alert_id: optional alert identifier for collapse grouping
 //   - severity, status, summary, event, rule_id: optional routing metadata forwarded to iOS
 type APNsAdapter struct {
+	// Relay delivers channels without an operator key through the LabTether
+	// push relay. Nil disables relay mode (LABTETHER_PUSH_RELAY_URL=off).
+	Relay *APNsRelayClient
+
 	mu        sync.Mutex
 	authKey   *ecdsa.PrivateKey
 	keyPath   string // tracks which file was loaded
@@ -126,6 +131,11 @@ func APNsFailedDeliveryIndices(err error) ([]int, bool) {
 func (a *APNsAdapter) Type() string { return ChannelTypeAPNs }
 
 func (a *APNsAdapter) Send(ctx context.Context, config map[string]any, payload map[string]any) error {
+	// A channel without an operator key delivers through the LabTether push
+	// relay; its device tokens are relay registration ids, not APNs tokens.
+	if APNsUsesRelay(config) {
+		return a.sendViaRelay(ctx, config, payload)
+	}
 	// Extract and validate required config fields.
 	authKeyPath, _ := config["auth_key_path"].(string)
 	keyID, _ := config["key_id"].(string)
@@ -162,11 +172,23 @@ func (a *APNsAdapter) Send(ctx context.Context, config map[string]any, payload m
 	if production {
 		endpoint = apnsProductionEndpoint
 	}
+	return deliverAPNsBatch(ctx, config, tokens, func(ctx context.Context, token string) error {
+		return a.sendToDevice(ctx, endpoint, token, bundleID, jwt, apnsPayload, payload)
+	})
+}
 
-	// Send to each device token through a fixed worker pool. APNs supports HTTP/2
-	// multiplexing, while a goroutine-per-token fanout lets an oversized device
-	// registry amplify one alert into unbounded runnable goroutines even when a
-	// semaphore bounds the requests actually in flight.
+// deliverAPNsBatch sends to each token through a fixed worker pool. APNs
+// supports HTTP/2 multiplexing, while a goroutine-per-token fanout lets an
+// oversized device registry amplify one alert into unbounded runnable
+// goroutines even when a semaphore bounds the requests actually in flight.
+// Direct and relay delivery share the permanent-rejection cleanup handler and
+// the positional batch error used for targeted retries.
+func deliverAPNsBatch(
+	ctx context.Context,
+	config map[string]any,
+	tokens []string,
+	deliver func(context.Context, string) error,
+) error {
 	deliveryErrors := make([]error, len(tokens))
 	workerCount := apnsMaxConcurrentDeliveries
 	if len(tokens) < workerCount {
@@ -180,7 +202,7 @@ func (a *APNsAdapter) Send(ctx context.Context, config map[string]any, payload m
 			defer deliveries.Done()
 			for index := range jobs {
 				token := tokens[index]
-				sendErr := a.sendToDevice(ctx, endpoint, token, bundleID, jwt, apnsPayload, payload)
+				sendErr := deliver(ctx, token)
 				if sendErr == nil {
 					continue
 				}
@@ -238,18 +260,14 @@ func (a *APNsAdapter) sendToDevice(ctx context.Context, endpoint, token, bundleI
 	req.Header.Set("authorization", "bearer "+jwt)
 	req.Header.Set("apns-topic", bundleID)
 	req.Header.Set("apns-push-type", "alert")
-	priority := int64(10)
-	if configuredPriority := payloadPositiveInt(payload, "apns_priority"); configuredPriority == 5 || configuredPriority == 10 {
-		priority = configuredPriority
-	}
-	req.Header.Set("apns-priority", strconv.FormatInt(priority, 10))
+	req.Header.Set("apns-priority", apnsPriorityHeader(apnsAlertPriority(payload)))
 	if expiration := payloadUnixTime(payload, "apns_expiration_unix"); expiration > 0 {
 		req.Header.Set("apns-expiration", strconv.FormatInt(expiration, 10))
 	}
 
 	// Callers may supply a privacy-safe collapse identifier when no alert or
 	// incident identifier belongs in the payload (for example a digest).
-	if collapseID := firstNonBlank(payloadString(payload, "collapse_id"), payloadString(payload, "alert_id"), payloadString(payload, "incident_id")); collapseID != "" {
+	if collapseID := apnsAlertCollapseID(payload); collapseID != "" {
 		req.Header.Set("apns-collapse-id", boundedHeaderValue(collapseID, 64))
 	}
 
@@ -428,199 +446,4 @@ func (a *APNsAdapter) ensureJWTLocked(keyID, teamID string) (string, error) {
 	a.jwtKeyID = keyID
 	a.jwtTeamID = teamID
 	return token, nil
-}
-
-// buildAPNsPayload constructs the APNs JSON payload from the notification payload.
-func buildAPNsPayload(payload map[string]any) ([]byte, error) {
-	title := boundedUTF8(payloadString(payload, "title"), 160)
-	text := boundedUTF8(payloadString(payload, "text"), 1_024)
-	if title == "" {
-		title = "LabTether Alert"
-	}
-
-	aps := map[string]any{
-		"alert": map[string]any{
-			"title": title,
-			"body":  text,
-		},
-		"sound": "default",
-	}
-
-	alertID := firstNonBlank(
-		payloadString(payload, "alert_id"),
-		payloadString(payload, "alert_instance_id"),
-	)
-	apns := map[string]any{"aps": aps, "title": title}
-	if alertID != "" {
-		apns["alert_id"] = boundedUTF8(alertID, 256)
-	}
-
-	category := payloadString(payload, "apns_category")
-	if category != "" {
-		aps["category"] = boundedUTF8(category, 128)
-	}
-
-	for key, maxBytes := range map[string]int{
-		"incident_id": 256,
-		"deep_link":   512,
-		"runbook_id":  256,
-		"severity":    64,
-		"status":      64,
-		"summary":     1_024,
-		"event":       128,
-		"rule_id":     256,
-	} {
-		if value := payloadString(payload, key); value != "" {
-			apns[key] = boundedUTF8(value, maxBytes)
-		}
-	}
-	if digestCount := payloadPositiveInt(payload, "digest_count"); digestCount > 0 {
-		// Keep the count as a number so the iOS client can render a localised
-		// digest summary without parsing user-visible text.
-		apns["digest_count"] = digestCount
-	}
-
-	encoded, err := json.Marshal(apns)
-	if err != nil {
-		return nil, err
-	}
-	if len(encoded) > 4*1024 {
-		return nil, fmt.Errorf("payload exceeds APNs 4 KB limit")
-	}
-	return encoded, nil
-}
-
-func payloadPositiveInt(payload map[string]any, key string) int64 {
-	if payload == nil {
-		return 0
-	}
-	var value int64
-	switch typed := payload[key].(type) {
-	case int:
-		value = int64(typed)
-	case int32:
-		value = int64(typed)
-	case int64:
-		value = typed
-	case float64:
-		if typed <= 0 || typed > 10_000 {
-			if typed > 10_000 {
-				return 10_000
-			}
-			return 0
-		}
-		value = int64(typed)
-	case json.Number:
-		parsed, err := typed.Int64()
-		if err != nil {
-			return 0
-		}
-		value = parsed
-	default:
-		return 0
-	}
-	if value <= 0 {
-		return 0
-	}
-	if value > 10_000 {
-		return 10_000
-	}
-	return value
-}
-
-func payloadUnixTime(payload map[string]any, key string) int64 {
-	if payload == nil {
-		return 0
-	}
-	var value int64
-	switch typed := payload[key].(type) {
-	case int:
-		value = int64(typed)
-	case int64:
-		value = typed
-	case json.Number:
-		parsed, err := typed.Int64()
-		if err != nil {
-			return 0
-		}
-		value = parsed
-	default:
-		return 0
-	}
-	// 9999-12-31T23:59:59Z is a conservative upper bound for a Unix
-	// timestamp accepted as an APNs expiry.
-	if value <= 0 || value > 253_402_300_799 {
-		return 0
-	}
-	return value
-}
-
-func boundedHeaderValue(value string, maxBytes int) string {
-	value = strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7f {
-			return -1
-		}
-		return r
-	}, strings.TrimSpace(value))
-	return boundedUTF8(value, maxBytes)
-}
-
-func boundedUTF8(value string, maxBytes int) string {
-	value = strings.TrimSpace(value)
-	if len(value) <= maxBytes {
-		return value
-	}
-	for len(value) > maxBytes {
-		_, size := utf8.DecodeLastRuneInString(value)
-		if size <= 0 {
-			return ""
-		}
-		value = value[:len(value)-size]
-	}
-	return value
-}
-
-func payloadString(payload map[string]any, key string) string {
-	if payload == nil {
-		return ""
-	}
-	value, _ := payload[key].(string)
-	return strings.TrimSpace(value)
-}
-
-func firstNonBlank(values ...string) string {
-	for _, value := range values {
-		trimmed := strings.TrimSpace(value)
-		if trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
-}
-
-// extractDeviceTokens reads device tokens from the config map.
-// Supports both []string and []any (as JSON-decoded arrays typically arrive as []any).
-func extractDeviceTokens(config map[string]any) []string {
-	if tokens, ok := config["device_tokens"].([]string); ok {
-		return tokens
-	}
-	raw, ok := config["device_tokens"].([]any)
-	if !ok {
-		return nil
-	}
-	tokens := make([]string, 0, len(raw))
-	for _, v := range raw {
-		if s, ok := v.(string); ok && s != "" {
-			tokens = append(tokens, s)
-		}
-	}
-	return tokens
-}
-
-// truncateToken returns the first 8 characters of a device token for safe logging.
-func truncateToken(token string) string {
-	if len(token) > 8 {
-		return token[:8]
-	}
-	return token
 }

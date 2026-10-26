@@ -1,8 +1,11 @@
 package alerting
 
 import (
+	"context"
+	"fmt"
 	"github.com/labtether/labtether/internal/alerts"
 	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/persistence"
 	"regexp"
 	"strings"
 )
@@ -32,56 +35,92 @@ func (d *Deps) ResolveRuleTargetAssets(rule alerts.Rule, prefetchedAssets []asse
 	return d.resolveRuleTargetAssetsWithCapabilities(rule, prefetchedAssets, nil, allowGlobalFallback)
 }
 
-func (d *Deps) resolveRuleTargetAssetsWithCapabilities(
+func (d *Deps) resolveRuleTargetAssetsWithCapabilities(rule alerts.Rule, prefetchedAssets []assets.Asset, prefetchedCapabilities map[string][]string, allowGlobalFallback bool) ([]assets.Asset, error) {
+	return d.resolveRuleTargetAssetsContext(context.Background(), rule, prefetchedAssets, prefetchedCapabilities, allowGlobalFallback)
+}
+
+func alertTargetsNeedInventory(rule alerts.Rule, allowGlobalFallback bool) bool {
+	if len(rule.Targets) == 0 && allowGlobalFallback && alerts.NormalizeTargetScope(rule.TargetScope) == alerts.TargetScopeGlobal {
+		return true
+	}
+	for _, target := range rule.Targets {
+		if strings.TrimSpace(target.GroupID) != "" || len(target.Selector) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (d *Deps) resolveRuleTargetAssetsContext(
+	ctx context.Context,
 	rule alerts.Rule,
 	prefetchedAssets []assets.Asset,
 	prefetchedCapabilities map[string][]string,
 	allowGlobalFallback bool,
 ) ([]assets.Asset, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if d.AssetStore == nil {
 		return nil, nil
+	}
+	store, ok := d.AssetStore.(persistence.AlertAssetContextStore)
+	if !ok {
+		return nil, fmt.Errorf("context-aware alert asset lookup unavailable")
 	}
 
 	normalizedScope := alerts.NormalizeTargetScope(rule.TargetScope)
 	targets := rule.Targets
 
-	needsAllAssets := len(targets) == 0 && allowGlobalFallback && normalizedScope == alerts.TargetScopeGlobal
+	needsAllAssets := alertTargetsNeedInventory(rule, allowGlobalFallback)
+	var explicitAssetIndexes map[string]int
 	for _, target := range targets {
-		if strings.TrimSpace(target.GroupID) != "" || len(target.Selector) > 0 {
-			needsAllAssets = true
-			break
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if id := strings.TrimSpace(target.AssetID); id != "" {
+			if explicitAssetIndexes == nil {
+				explicitAssetIndexes = make(map[string]int)
+			}
+			explicitAssetIndexes[id] = -1
 		}
 	}
 
 	var allAssets []assets.Asset
-	var allAssetsByID map[string]assets.Asset
 	var allAssetsLoaded bool
 	loadAllAssets := func() error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if allAssetsLoaded {
 			return nil
 		}
 		if prefetchedAssets != nil {
-			allAssets = append([]assets.Asset(nil), prefetchedAssets...)
+			// Target matching only reads this snapshot; the result is built separately.
+			allAssets = prefetchedAssets
 		} else {
-			loaded, err := d.AssetStore.ListAssets()
+			loaded, err := store.ListAssetsContext(ctx)
 			if err != nil {
 				return err
 			}
 			allAssets = loaded
 		}
-		allAssetsByID = make(map[string]assets.Asset, len(allAssets))
-		for _, entry := range allAssets {
-			id := strings.TrimSpace(entry.ID)
-			if id == "" {
-				continue
+		if len(explicitAssetIndexes) > 0 {
+			for index, entry := range allAssets {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+				id := strings.TrimSpace(entry.ID)
+				if _, requested := explicitAssetIndexes[id]; requested {
+					explicitAssetIndexes[id] = index // Preserve the last matching snapshot row.
+				}
 			}
-			allAssetsByID[id] = entry
 		}
 		allAssetsLoaded = true
 		return nil
 	}
 
-	if needsAllAssets {
+	if needsAllAssets || prefetchedAssets != nil {
 		if err := loadAllAssets(); err != nil {
 			return nil, err
 		}
@@ -102,6 +141,9 @@ func (d *Deps) resolveRuleTargetAssetsWithCapabilities(
 				return nil, err
 			}
 			for _, entry := range allAssets {
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
 				addAsset(entry)
 			}
 		}
@@ -109,14 +151,15 @@ func (d *Deps) resolveRuleTargetAssetsWithCapabilities(
 	}
 
 	for _, target := range targets {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if assetID := strings.TrimSpace(target.AssetID); assetID != "" {
-			if allAssetsByID != nil {
-				if entry, ok := allAssetsByID[assetID]; ok {
-					addAsset(entry)
-					continue
-				}
+			if index, found := explicitAssetIndexes[assetID]; found && index >= 0 {
+				addAsset(allAssets[index])
+				continue
 			}
-			entry, ok, err := d.AssetStore.GetAsset(assetID)
+			entry, ok, err := store.GetAssetContext(ctx, assetID)
 			if err != nil {
 				return nil, err
 			}
@@ -131,6 +174,9 @@ func (d *Deps) resolveRuleTargetAssetsWithCapabilities(
 				return nil, err
 			}
 			for _, entry := range allAssets {
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
 				if strings.EqualFold(strings.TrimSpace(entry.GroupID), groupID) {
 					addAsset(entry)
 				}
@@ -142,9 +188,24 @@ func (d *Deps) resolveRuleTargetAssetsWithCapabilities(
 			if err := loadAllAssets(); err != nil {
 				return nil, err
 			}
-			for _, entry := range allAssets {
-				if d.assetMatchesRuleSelectorWithCapabilities(entry, target.Selector, prefetchedCapabilities) {
-					addAsset(entry)
+			for start := 0; start < len(allAssets); start += persistence.AlertCapabilityBatchSize {
+				end := min(start+persistence.AlertCapabilityBatchSize, len(allAssets))
+				batch := allAssets[start:end]
+				capabilities := prefetchedCapabilities
+				if selectorNeedsAlertCapabilities(target.Selector) {
+					var err error
+					capabilities, err = d.alertCapabilityBatchContext(ctx, batch, prefetchedCapabilities)
+					if err != nil {
+						return nil, err
+					}
+				}
+				for _, entry := range batch {
+					if err := ctx.Err(); err != nil {
+						return nil, err
+					}
+					if d.assetMatchesRuleSelectorWithCapabilities(entry, target.Selector, capabilities) {
+						addAsset(entry)
+					}
 				}
 			}
 		}
@@ -330,4 +391,14 @@ func (d *Deps) assetCapabilitySetWithPrefetch(
 		out[normalized] = struct{}{}
 	}
 	return out
+}
+
+func selectorNeedsAlertCapabilities(selector map[string]any) bool {
+	for key := range selector {
+		switch strings.ToLower(strings.TrimSpace(key)) {
+		case "capability", "capabilities_any", "capabilities_all":
+			return true
+		}
+	}
+	return false
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/labtether/labtether/internal/alerts"
 	"github.com/labtether/labtether/internal/incidents"
 )
@@ -39,10 +40,15 @@ func scanAlertRule(row alertRuleScanner) (alerts.Rule, error) {
 		&rule.CreatedAt,
 		&rule.UpdatedAt,
 		&lastEvaluatedAt,
+		&rule.LastAutoAttemptAt,
 	); err != nil {
 		return alerts.Rule{}, err
 	}
 
+	if rule.LastAutoAttemptAt != nil {
+		value := rule.LastAutoAttemptAt.UTC()
+		rule.LastAutoAttemptAt = &value
+	}
 	rule.Condition = unmarshalAnyMap(condition)
 	rule.Labels = unmarshalStringMap(labels)
 	rule.Metadata = unmarshalStringMap(metadata)
@@ -107,12 +113,18 @@ func (s *PostgresStore) listAlertRuleTargetsCtx(ctx context.Context, ruleID stri
 // listAlertRuleTargetsBatch fetches targets for multiple rule IDs in a single query
 // and returns a map from rule ID to its targets. Used by ListAlertRules to avoid N+1.
 func (s *PostgresStore) listAlertRuleTargetsBatch(ctx context.Context, ruleIDs []string) (map[string][]alerts.RuleTarget, error) {
+	return listAlertRuleTargetsBatchFrom(ctx, s.pool, ruleIDs)
+}
+
+func listAlertRuleTargetsBatchFrom(ctx context.Context, queryer interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+}, ruleIDs []string) (map[string][]alerts.RuleTarget, error) {
 	result := make(map[string][]alerts.RuleTarget, len(ruleIDs))
 	if len(ruleIDs) == 0 {
 		return result, nil
 	}
 
-	rows, err := s.pool.Query(ctx,
+	rows, err := queryer.Query(ctx,
 		`SELECT id, rule_id, asset_id, group_id, selector, created_at
 		 FROM alert_rule_targets
 		 WHERE rule_id = ANY($1::text[])

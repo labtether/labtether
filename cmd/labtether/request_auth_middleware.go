@@ -33,6 +33,9 @@ func (s *apiServer) withAuthMethodPolicy(next http.HandlerFunc, methodPolicy fun
 			servicehttp.WriteError(w, http.StatusForbidden, "forbidden")
 		}
 		if ticketedReq, ok := s.consumeStreamTicketAuth(r); ok {
+			if rejectHostDataForRole(w, ticketedReq, userRoleFromContext(ticketedReq.Context())) {
+				return
+			}
 			next(w, ticketedReq)
 			return
 		}
@@ -51,6 +54,9 @@ func (s *apiServer) withAuthMethodPolicy(next http.HandlerFunc, methodPolicy fun
 		} else if ok {
 			if methodPolicy == nil || !methodPolicy(role, r.Method) {
 				authzError()
+				return
+			}
+			if rejectHostDataForRole(w, r, role) {
 				return
 			}
 			next(w, authenticated)
@@ -100,6 +106,9 @@ func (s *apiServer) withAuthMethodPolicy(next http.HandlerFunc, methodPolicy fun
 			}
 			if methodPolicy == nil || !methodPolicy(role, r.Method) {
 				authzError()
+				return
+			}
+			if rejectHostDataForRole(w, r, role) {
 				return
 			}
 			// Per-key-per-IP rate limiting.

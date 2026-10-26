@@ -18,7 +18,7 @@ type Deps struct {
 	AgentMgr interface {
 		IsConnected(assetID string) bool
 	}
-	ExecuteViaAgent func(job terminal.CommandJob) terminal.CommandResult
+	ExecuteViaAgent func(ctx context.Context, job terminal.CommandJob) terminal.CommandResult
 	// ExecutePowerAction uses the dedicated typed agent power protocol. It must
 	// never be implemented through ExecuteViaAgent/raw shell.
 	ExecutePowerAction func(ctx context.Context, assetID, action string) (string, error)
@@ -34,6 +34,11 @@ type Deps struct {
 	EvaluateCommandPolicy func(ctx context.Context, assetID, command string) policy.CheckResponse
 	// AuditMutation records redacted, principal-attributed mutation outcomes.
 	AuditMutation func(ctx context.Context, tool, target, decision, reason string, details map[string]any)
+	// AuthorizeHostDataRead gates tools that read data from inside a host
+	// (files, process command lines, container logs). Viewers are read-only
+	// observers and must not reach host contents. These tools fail closed when
+	// it is nil.
+	AuthorizeHostDataRead func(ctx context.Context) error
 
 	// Typed agent operations. These deliberately avoid ExecuteViaAgent because
 	// the endpoint command policy rejects shell expressions and because each

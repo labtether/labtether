@@ -13,13 +13,18 @@
   "containers": "Contenedores",
   "terminal": "Terminal",
   "files": "Archivos",
+  "remoteView": "Vista remota",
   "logs": "Registros",
   "alerts": "Alertas",
   "actions": "Acciones",
+  "webhooks": "Webhooks",
+  "schedules": "Programaciones",
   "groups": "Grupos",
   "health": "Salud",
   "users": "Usuarios",
   "security": "Seguridad",
+  "auditLog": "Registro de auditoría",
+  "apiDocs": "Documentación de API",
   "settings": "Configuración",
   "commandPalette": {
     "placeholder": "Buscar comandos..."

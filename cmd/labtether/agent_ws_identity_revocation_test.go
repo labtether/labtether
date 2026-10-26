@@ -355,10 +355,14 @@ func TestHandleAgentWebSocketReconnectDoesNotEmitStaleDisconnect(t *testing.T) {
 		t.Fatalf("expected first browser event agent.connected, got %q", got)
 	}
 
+	// Replacement retires the old socket inside the asset lifecycle before the
+	// new one is published, so its disconnect can only precede the reconnect.
 	second := dialAgent()
 	defer second.Close()
-	if got := readBrowserEventType(t, eventClientConn, 2*time.Second); got != "agent.connected" {
-		t.Fatalf("expected second browser event agent.connected, got %q", got)
+	for _, want := range []string{"agent.disconnected", "agent.connected"} {
+		if got := readBrowserEventType(t, eventClientConn, 2*time.Second); got != want {
+			t.Fatalf("expected replacement browser event %s, got %q", want, got)
+		}
 	}
 
 	deadline := time.Now().Add(2 * time.Second)

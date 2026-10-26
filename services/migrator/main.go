@@ -10,7 +10,10 @@ import (
 )
 
 func main() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Large upgrades can spend minutes building indexes; the store applies
+	// LABTETHER_DB_MIGRATION_TIMEOUT to the migration run itself, and this
+	// outer deadline only adds headroom for connecting.
+	ctx, cancel := context.WithTimeout(context.Background(), persistence.SchemaMigrationTimeout()+time.Minute)
 	defer cancel()
 
 	log.Println("labtether migrator: applying pending schema migrations")

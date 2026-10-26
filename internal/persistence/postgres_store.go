@@ -15,6 +15,9 @@ type PostgresStore struct {
 	logEventsWatermark                time.Time
 	logEventsWatermarkFetchedAt       time.Time
 	logEventsWatermarkRefreshInterval time.Duration
+
+	recordingPruneMu    sync.Mutex
+	recordingPruneAfter *recordingPruneCursor
 }
 
 // Pool returns the underlying connection pool for use by subsystems

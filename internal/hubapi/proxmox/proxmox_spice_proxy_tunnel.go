@@ -61,6 +61,8 @@ func dialProxmoxSPICEProxyTunnel(ctx context.Context, rawProxy, ticketHost strin
 	if err != nil {
 		return nil, err
 	}
+	stopCancel := context.AfterFunc(ctx, func() { _ = proxyConn.Close() })
+	defer stopCancel()
 	closeWithError := func(err error) (net.Conn, error) {
 		_ = proxyConn.Close()
 		return nil, err

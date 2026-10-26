@@ -5,6 +5,12 @@ export class RequestBodyTooLargeError extends Error {
   }
 }
 
+/** Auth bodies share the Hub's 1 MiB JSON limit, including chunked requests. */
+export async function readBoundedJSON(request: Request): Promise<unknown> {
+  const body = await readBoundedRequestBody(request, 1 << 20);
+  return JSON.parse(new TextDecoder().decode(body)) as unknown;
+}
+
 /**
  * Read a request body without ever retaining more than maxBytes. The
  * Content-Length check is only a fast rejection; the streaming byte counter is

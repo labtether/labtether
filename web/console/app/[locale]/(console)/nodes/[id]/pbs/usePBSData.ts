@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { usePollingTask } from "../../../../../hooks/usePollingTask";
 import { sanitizeErrorMessage } from "../../../../../lib/sanitizeErrorMessage";
 import {
   normalizePBSAssetDetailsResponse,
@@ -71,8 +72,6 @@ export function usePBSDetails(
     error: null,
   });
 
-  const seqRef = useRef(0);
-  const latestRef = useRef(0);
   const onManualRefreshSettledRef = useRef(onManualRefreshSettled);
 
   useEffect(() => {
@@ -88,25 +87,20 @@ export function usePBSDetails(
     }
   }, []);
 
-  const fetchDetails = useCallback(async (notifyStatus = false) => {
-    const id = ++seqRef.current;
-    latestRef.current = id;
+  const fetchDetails = useCallback(async (signal: AbortSignal, manual: boolean) => {
     setState((prev) => ({ ...prev, loading: true, error: null }));
     try {
       const response = await fetch(`/api/pbs/assets/${encodeURIComponent(assetId)}/details`, {
-        cache: "no-store",
+        cache: "no-store", signal,
       });
       const payload = normalizePBSAssetDetailsResponse(await response.json().catch(() => null));
       if (!response.ok) {
         throw new Error(payload.error || `failed to load pbs details (${response.status})`);
       }
-      if (latestRef.current !== id) return;
+      if (signal.aborted) return;
       setState({ details: payload, loading: false, error: null });
-      if (notifyStatus) {
-        notifyManualRefreshSettled();
-      }
     } catch (err) {
-      if (latestRef.current !== id) return;
+      if (signal.aborted) return;
       setState((previous) => ({
         // Keep the last successful inventory visible while clearly labeling
         // the refresh failure. A first-load failure still has no cached data.
@@ -116,17 +110,11 @@ export function usePBSDetails(
           err instanceof Error ? err.message : "failed to load pbs details",
         ),
       }));
-      if (notifyStatus) {
-        notifyManualRefreshSettled();
-      }
     }
+    if (manual && !signal.aborted) notifyManualRefreshSettled();
   }, [assetId, notifyManualRefreshSettled]);
 
-  useEffect(() => {
-    void fetchDetails();
-    const interval = setInterval(() => void fetchDetails(), 30_000);
-    return () => clearInterval(interval);
-  }, [fetchDetails]);
+  const refresh = usePollingTask(fetchDetails, 30_000);
 
-  return { ...state, refresh: () => { void fetchDetails(true); } };
+  return { ...state, refresh };
 }

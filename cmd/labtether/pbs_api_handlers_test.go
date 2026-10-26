@@ -118,7 +118,7 @@ func TestHandlePBSAssetDetailsAndTaskRoutes(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/api2/json/nodes/localhost/tasks":
 			_, _ = w.Write([]byte(fmt.Sprintf(`{"data":[{"upid":"%s","node":"localhost","worker_type":"verify","worker_id":"backup","status":"running","starttime":1700000000}]}`, upid)))
 		case r.Method == http.MethodGet && r.URL.Path == "/api2/json/nodes/localhost/tasks/"+upid+"/status":
-			_, _ = w.Write([]byte(fmt.Sprintf(`{"data":{"upid":"%s","node":"localhost","status":"running","exitstatus":""}}`, upid)))
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"data":{"upid":"%s","node":"localhost","type":"verify","id":"backup","status":"running","exitstatus":""}}`, upid)))
 		case r.Method == http.MethodGet && r.URL.Path == "/api2/json/nodes/localhost/tasks/"+upid+"/log":
 			_, _ = w.Write([]byte(`{"data":[{"n":1,"t":"task started"},{"n":2,"t":"task running"}]}`))
 		case r.Method == http.MethodDelete && r.URL.Path == "/api2/json/nodes/localhost/tasks/"+upid:

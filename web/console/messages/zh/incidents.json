@@ -12,5 +12,18 @@
     "placeholder": "输入备注...",
     "emptyHint": "添加调查备注、根因分析和缓解步骤。",
     "add": "添加备注"
+  },
+  "timeline": {
+    "title": "事件经过",
+    "refresh": "刷新",
+    "empty": "此事件尚无记录。",
+    "loading": "正在加载时间线…",
+    "error": "无法加载时间线，请重试。",
+    "retry": "重试",
+    "loadOlder": "加载更早的记录"
+  },
+  "detail": {
+    "error": "无法加载此事件，请重试。",
+    "retry": "重试"
   }
 }

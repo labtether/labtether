@@ -38,8 +38,9 @@ func TestAPNsPartialRetryNarrowsDurableTargetsAfterEveryAttempt(t *testing.T) {
 	}
 	historyStore.seed(channel)
 	deps := &Deps{
-		NotificationStore: historyStore,
-		PushDeviceStore:   pushStore,
+		NotificationStore:  historyStore,
+		AlertInstanceStore: persistence.NewMemoryAlertInstanceStore(),
+		PushDeviceStore:    pushStore,
 		NotificationAdapters: map[string]notifications.Adapter{
 			notifications.ChannelTypeAPNs: adapter,
 		},
@@ -49,6 +50,8 @@ func TestAPNsPartialRetryNarrowsDurableTargetsAfterEveryAttempt(t *testing.T) {
 		"alert_id": "alert-partial",
 		"severity": "high",
 		"title":    "Partial delivery",
+		"rule_id":  "partial-rule",
+		"labels":   map[string]string{},
 	}
 
 	initialErr := deps.sendNotification(context.Background(), channel, payload)
@@ -155,13 +158,15 @@ func TestAPNsPartialRetryStopsAtPersistedMaximumWithoutReplayingSuccesses(t *tes
 	}
 	historyStore.seed(channel)
 	deps := &Deps{
-		NotificationStore: historyStore,
-		PushDeviceStore:   pushStore,
+		NotificationStore:  historyStore,
+		AlertInstanceStore: persistence.NewMemoryAlertInstanceStore(),
+		PushDeviceStore:    pushStore,
 		NotificationAdapters: map[string]notifications.Adapter{
 			notifications.ChannelTypeAPNs: adapter,
 		},
 	}
-	payload := map[string]any{"event": "alert.firing", "alert_id": "bounded", "severity": "high"}
+	payload := map[string]any{"event": "alert.firing", "alert_id": "bounded", "severity": "high",
+		"rule_id": "bounded-rule", "labels": map[string]string{}}
 	initialErr := deps.sendNotification(context.Background(), channel, payload)
 	retryPayload, targeted := payloadWithAPNsRetryTargets(payload, initialErr)
 	if initialErr == nil || !targeted {

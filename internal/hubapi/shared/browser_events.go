@@ -19,7 +19,8 @@ import (
 // BrowserClient wraps a WebSocket connection with a per-connection write mutex
 // to prevent concurrent writes which corrupt frames and can panic.
 type BrowserClient struct {
-	conn     *websocket.Conn
+	conn *websocket.Conn
+	// Outgoing frames are immutable and may be shared with other clients.
 	Outgoing chan []byte
 	closeMu  sync.Mutex
 	closed   bool
@@ -101,6 +102,16 @@ func (eb *EventBroadcaster) Broadcast(eventType string, data any) {
 	if eb.onEvent != nil {
 		eb.onEvent(eventType, data, now)
 	}
+	eb.mu.RLock()
+	clients := make([]*BrowserClient, 0, len(eb.clients))
+	for client := range eb.clients {
+		clients = append(clients, client)
+	}
+	eb.mu.RUnlock()
+	if len(clients) == 0 {
+		return
+	}
+
 	msg, err := json.Marshal(map[string]any{
 		"type": eventType,
 		"data": data,
@@ -110,13 +121,6 @@ func (eb *EventBroadcaster) Broadcast(eventType string, data any) {
 		log.Printf("browser events: marshal error: %v", err)
 		return
 	}
-
-	eb.mu.RLock()
-	clients := make([]*BrowserClient, 0, len(eb.clients))
-	for client := range eb.clients {
-		clients = append(clients, client)
-	}
-	eb.mu.RUnlock()
 
 	for _, client := range clients {
 		queued := client.enqueue(msg)
@@ -143,7 +147,7 @@ func (c *BrowserClient) enqueue(msg []byte) bool {
 		return false
 	}
 	select {
-	case c.Outgoing <- append([]byte(nil), msg...):
+	case c.Outgoing <- msg:
 		return true
 	default:
 		return false

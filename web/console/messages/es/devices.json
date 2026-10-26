@@ -12,26 +12,26 @@
     "action": "Agregar su primer dispositivo"
   },
   "hierarchy": {
-    "nestAsChild": "Nest as child",
-    "mergeAsDevice": "Merge as same device",
-    "viewInTopology": "View full tree in Topology",
-    "setParent": "Set parent...",
-    "addChild": "Add child",
-    "detachFromParent": "Detach from parent",
-    "addFacet": "Add facet (merge asset)"
+    "nestAsChild": "Anidar como hijo",
+    "mergeAsDevice": "Fusionar como el mismo dispositivo",
+    "viewInTopology": "Ver el árbol completo en Topología",
+    "setParent": "Establecer padre...",
+    "addChild": "Agregar hijo",
+    "detachFromParent": "Separar del padre",
+    "addFacet": "Agregar faceta (fusionar activo)"
   },
   "composites": {
-    "primary": "Primary",
-    "facet": "Facet",
-    "sourceView": "Source: {source}"
+    "primary": "Principal",
+    "facet": "Faceta",
+    "sourceView": "Origen: {source}"
   },
   "proposals": {
-    "title": "Suggested Relationships",
-    "mergeComposite": "Merge",
-    "linkParentChild": "Link",
-    "dismiss": "Dismiss",
-    "matchSignals": "Match signals",
-    "confidence": "Confidence: {value}%",
-    "newSuggestions": "{count} suggested relationships"
+    "title": "Relaciones sugeridas",
+    "mergeComposite": "Fusionar",
+    "linkParentChild": "Vincular",
+    "dismiss": "Descartar",
+    "matchSignals": "Señales de coincidencia",
+    "confidence": "Confianza: {value}%",
+    "newSuggestions": "{count} relaciones sugeridas"
   }
 }

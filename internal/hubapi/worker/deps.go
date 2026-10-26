@@ -2,9 +2,11 @@ package worker
 
 import (
 	"context"
+	"time"
 
 	"github.com/labtether/labtether/internal/actions"
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/hubapi/groupfeatures"
 	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/policy"
@@ -17,6 +19,7 @@ import (
 // in other cmd/labtether subsystems are injected as function fields.
 type Deps struct {
 	// Store interfaces.
+	JobExecutionStore      persistence.JobExecutionStore
 	TerminalStore          persistence.TerminalStore
 	ActionStore            persistence.ActionStore
 	UpdateStore            persistence.UpdateStore
@@ -30,6 +33,11 @@ type Deps struct {
 
 	// Agent manager for connectivity checks and command routing.
 	AgentMgr *agentmgr.AgentManager
+
+	ExecuteViaAgentContext        func(context.Context, terminal.CommandJob) terminal.CommandResult
+	ExecuteTerminalCommandContext func(context.Context, terminal.CommandJob) terminal.CommandResult
+	ExecuteActionInProcessContext func(context.Context, actions.Job) actions.Result
+	ExecuteUpdateScopeContext     func(context.Context, updates.Job, string, string) updates.RunResultEntry
 
 	// ExecuteViaAgent routes a command job through a connected agent WebSocket.
 	// Injected from agents_bridge to avoid circular imports.
@@ -54,6 +62,10 @@ type Deps struct {
 	// EvaluateAssetGuardrails re-checks maintenance at execution time so work
 	// queued before a window started cannot run through block_actions.
 	EvaluateAssetGuardrails maintenanceguard.EvaluateAssetFunc
+
+	// Scheduled work requires parent-cancellable guardrail reads, without a
+	// legacy callback fallback. Other callers retain their existing seam.
+	EvaluateAssetGuardrailsContext func(context.Context, string, time.Time) (groupfeatures.GroupMaintenanceGuardrails, error)
 
 	// AuthorizeScheduleTarget revalidates the creator and target scope when a
 	// durable schedule occurrence reaches a worker.

@@ -156,8 +156,9 @@ func TestHandleDesktopStreamRejectsWaylandVNCFallbackWhenWebRTCUnavailable(t *te
 func TestProcessAgentDesktopClosedStoresReasonAndSignalsBridge(t *testing.T) {
 	var srv apiServer
 	bridge := &desktopBridge{
-		OutputCh: make(chan []byte, 1),
-		ClosedCh: make(chan struct{}),
+		OutputCh:        make(chan []byte, 1),
+		ExpectedAgentID: "node-1",
+		ClosedCh:        make(chan struct{}),
 	}
 	srv.desktopBridges.Store("sess-1", bridge)
 
@@ -169,7 +170,7 @@ func TestProcessAgentDesktopClosedStoresReasonAndSignalsBridge(t *testing.T) {
 		t.Fatalf("marshal close payload: %v", err)
 	}
 
-	srv.processAgentDesktopClosed(nil, agentmgr.Message{Data: payload})
+	srv.processAgentDesktopClosed(&agentmgr.AgentConn{AssetID: "node-1"}, agentmgr.Message{Data: payload})
 
 	if got := bridge.CloseReason(); got != "failed to start VNC: x11vnc not found" {
 		t.Fatalf("unexpected close reason %q", got)
@@ -382,8 +383,8 @@ func TestHandleAgentDesktopStreamClosesBeforeReadyWhenAgentCloses(t *testing.T) 
 	if err := json.Unmarshal(startMsg.Data, &start); err != nil {
 		t.Fatalf("decode desktop.start payload: %v", err)
 	}
-	if start.SessionID != session.ID {
-		t.Fatalf("session_id=%q, want %q", start.SessionID, session.ID)
+	if start.SessionID == "" || start.SessionID == session.ID || startMsg.ID != start.SessionID {
+		t.Fatalf("expected a separate desktop wire ID, got %+v", start)
 	}
 	if start.Quality != "high" {
 		t.Fatalf("quality=%q, want high", start.Quality)
@@ -393,7 +394,7 @@ func TestHandleAgentDesktopStreamClosesBeforeReadyWhenAgentCloses(t *testing.T) 
 	}
 
 	closedPayload, err := json.Marshal(agentmgr.DesktopCloseData{
-		SessionID: session.ID,
+		SessionID: start.SessionID,
 		Reason:    "failed to start VNC",
 	})
 	if err != nil {
@@ -423,13 +424,13 @@ func TestHandleAgentDesktopStreamClosesBeforeReadyWhenAgentCloses(t *testing.T) 
 	if err := json.Unmarshal(closeMsg.Data, &closeReq); err != nil {
 		t.Fatalf("decode desktop.close payload: %v", err)
 	}
-	if closeReq.SessionID != session.ID {
-		t.Fatalf("cleanup session_id=%q, want %q", closeReq.SessionID, session.ID)
+	if closeReq.SessionID != start.SessionID {
+		t.Fatalf("cleanup session_id=%q, want %q", closeReq.SessionID, start.SessionID)
 	}
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if _, ok := sut.desktopBridges.Load(session.ID); !ok {
+		if _, ok := sut.desktopBridges.Load(start.SessionID); !ok {
 			return
 		}
 		time.Sleep(20 * time.Millisecond)

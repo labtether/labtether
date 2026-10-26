@@ -24,7 +24,7 @@ func TestConnectorExecuteActionDispatchMatrix(t *testing.T) {
 			name:       "pool scrub",
 			actionID:   "pool.scrub",
 			req:        connectorsdk.ActionRequest{Params: map[string]string{"pool_name": "mainpool"}},
-			wantMethod: "pool.scrub.run", wantStatus: "succeeded", expectCalled: true,
+			wantMethod: "pool.scrub.scrub", wantStatus: "succeeded", expectCalled: true,
 		},
 		{
 			name:       "snapshot create",
@@ -118,6 +118,10 @@ func TestConnectorExecuteActionDispatchMatrix(t *testing.T) {
 			srv := mockTrueNASServer(t, func(conn *websocket.Conn, call rpcCall) {
 				calls++
 				gotMethod = call.Method
+				if call.Method == "pool.scrub.scrub" {
+					_ = writeRPCResult(conn, call.ID, 777)
+					return
+				}
 				_ = writeRPCResult(conn, call.ID, map[string]any{"ok": true})
 			})
 			defer srv.Close()
@@ -258,7 +262,7 @@ func TestConnectorExecuteActionValidationAndFallbacks(t *testing.T) {
 			actionID:   "pool.scrub",
 			req:        connectorsdk.ActionRequest{DryRun: true, TargetID: "tank"},
 			wantStatus: "succeeded",
-			wantSubstr: "would run pool.scrub.run on pool \"tank\"",
+			wantSubstr: "would request pool.scrub.scrub START on pool \"tank\"",
 		},
 	}
 
@@ -292,7 +296,7 @@ func TestConnectorExecuteActionRPCFailurePaths(t *testing.T) {
 	}
 
 	cases := []testCase{
-		{name: "pool scrub rpc failure", actionID: "pool.scrub", req: connectorsdk.ActionRequest{Params: map[string]string{"pool_name": "tank"}}, wantMethod: "pool.scrub.run"},
+		{name: "pool scrub rpc failure", actionID: "pool.scrub", req: connectorsdk.ActionRequest{Params: map[string]string{"pool_name": "tank"}}, wantMethod: "pool.scrub.scrub"},
 		{name: "snapshot create rpc failure", actionID: "snapshot.create", req: connectorsdk.ActionRequest{Params: map[string]string{"dataset": "tank/data", "name": "snap1"}}, wantMethod: "zfs.snapshot.create"},
 		{name: "snapshot delete rpc failure", actionID: "snapshot.delete", req: connectorsdk.ActionRequest{Params: map[string]string{"snapshot_id": "tank/data@snap1"}}, wantMethod: "zfs.snapshot.delete"},
 		{name: "snapshot rollback rpc failure", actionID: "snapshot.rollback", req: connectorsdk.ActionRequest{Params: map[string]string{"snapshot_id": "tank/data@snap1"}}, wantMethod: "zfs.snapshot.rollback"},

@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import type { Incident, IncidentEvent } from "../console/models";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { Incident } from "../console/models";
 import { extractIncident, upsertIncident } from "../lib/incidents";
 import { ensureArray, ensureRecord } from "../lib/responseGuards";
+import { useIncidentTimeline } from "./useIncidentTimeline";
 
 export function useIncidents() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
@@ -77,55 +78,50 @@ export function useIncidents() {
   };
 }
 
+type IncidentDetailState = { id: string | null; incident: Incident | null; loading: boolean; error: boolean };
+
+function emptyDetail(id: string | null): IncidentDetailState {
+  return { id, incident: null, loading: Boolean(id), error: false };
+}
+
 export function useIncidentDetail(id: string | null) {
-  const [incident, setIncident] = useState<Incident | null>(null);
-  const [events, setEvents] = useState<IncidentEvent[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [state, setState] = useState<IncidentDetailState>(() => emptyDetail(id));
+  const active = useRef<AbortController | null>(null);
+  const timeline = useIncidentTimeline(id);
 
-  useEffect(() => {
-    if (!id) {
-      setIncident(null);
-      setEvents([]);
-      return;
-    }
-
+  const loadDetail = useCallback(async () => {
+    if (!id) return;
+    active.current?.abort();
     const controller = new AbortController();
-    const load = async () => {
-      setLoading(true);
-      try {
-        const [incRes, eventsRes] = await Promise.all([
-          fetch(`/api/incidents/${encodeURIComponent(id)}`, { cache: "no-store", signal: controller.signal }),
-          fetch(`/api/incidents/${encodeURIComponent(id)}/events`, { cache: "no-store", signal: controller.signal }),
-        ]);
-
-        if (incRes.ok) {
-          const nextIncident = extractIncident(await incRes.json().catch(() => null));
-          setIncident(nextIncident);
-        } else {
-          setIncident(null);
-        }
-        if (eventsRes.ok) {
-          const data = (await eventsRes.json().catch(() => null)) as unknown;
-          const payload = ensureRecord(data);
-          setEvents(Array.isArray(data) ? data as IncidentEvent[] : ensureArray<IncidentEvent>(payload?.events));
-        } else {
-          setEvents([]);
-        }
-      } catch (err) {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        /* swallow other errors */
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
-    };
-
-    void load();
-    return () => { controller.abort(); };
+    active.current = controller;
+    const isCurrent = () => active.current === controller && !controller.signal.aborted;
+    setState(emptyDetail(id));
+    try {
+      const response = await fetch(`/api/incidents/${encodeURIComponent(id)}`, { cache: "no-store", signal: controller.signal });
+      if (!response.ok) throw new Error("Incident unavailable");
+      const incident = extractIncident(await response.json());
+      if (!incident || incident.id !== id) throw new Error("Invalid incident detail");
+      if (isCurrent()) setState({ id, incident, loading: false, error: false });
+    } catch {
+      if (isCurrent()) setState({ id, incident: null, loading: false, error: true });
+    } finally {
+      if (isCurrent()) active.current = null;
+    }
   }, [id]);
 
+  useEffect(() => {
+    if (id) void loadDetail();
+    else setState(emptyDetail(null));
+    return () => { active.current?.abort(); active.current = null; };
+  }, [id, loadDetail]);
+
   const replaceIncident = useCallback((nextIncident: Incident) => {
-    setIncident(nextIncident);
+    setState((current) => current.id === nextIncident.id ? { ...current, incident: nextIncident } : current);
   }, []);
 
-  return { incident, events, loading, replaceIncident };
+  const visible = state.id === id ? state : emptyDetail(id);
+  return {
+    incident: visible.incident, events: timeline.events, loading: visible.loading, error: visible.error,
+    retryDetail: () => { if (!active.current) void loadDetail(); }, replaceIncident, timeline,
+  };
 }

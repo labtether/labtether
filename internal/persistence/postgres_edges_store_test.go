@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/edges"
 )
@@ -28,6 +29,29 @@ func newTestPostgresStore(t *testing.T) *PostgresStore {
 	}
 	t.Cleanup(func() { store.Close() })
 	return store
+}
+
+// pgx destroys canceled connections asynchronously. Its destructor can wait
+// 15 seconds for CleanupDone; allow one second of scheduling margin, always
+// within the caller's existing deadline. This never excuses a retained lease.
+func requirePostgresPoolReleased(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	releaseCtx, cancel := context.WithTimeout(ctx, 16*time.Second)
+	defer cancel()
+	tick := time.NewTicker(5 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		if err := releaseCtx.Err(); err != nil {
+			t.Fatalf("pool did not release canceled connections: acquired=%d: %v", pool.Stat().AcquiredConns(), err)
+		}
+		if pool.Stat().AcquiredConns() == 0 {
+			return
+		}
+		select {
+		case <-releaseCtx.Done():
+		case <-tick.C:
+		}
+	}
 }
 
 // createTestAsset upserts a minimal asset and registers a cleanup deletion.

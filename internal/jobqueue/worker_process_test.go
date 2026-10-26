@@ -5,7 +5,6 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"time"
 )
 
 type stubProcessQueue struct {
@@ -148,7 +147,7 @@ func TestProcessOneWithQueueHandlerFailureDeadLettersOnFinalAttempt(t *testing.T
 	}
 
 	handlerErr := errors.New("handler exploded")
-	w.Register(KindActionRun, func(interface{ Deadline() (time.Time, bool) }, *Job) error {
+	w.Register(KindActionRun, func(context.Context, *Job) error {
 		return handlerErr
 	})
 
@@ -188,7 +187,7 @@ func TestProcessOneWithQueueHandlerPanicIsRecoveredAndFailed(t *testing.T) {
 		},
 	}
 
-	w.Register(KindTerminalCommand, func(interface{ Deadline() (time.Time, bool) }, *Job) error {
+	w.Register(KindTerminalCommand, func(context.Context, *Job) error {
 		panic("boom")
 	})
 

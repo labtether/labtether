@@ -31,5 +31,44 @@
     "cpu": "Top CPU",
     "memory": "Top Mémoire",
     "disk": "Top Disque"
+  },
+  "firstRun": {
+    "title": "Liste de démarrage",
+    "complete": "terminée",
+    "progress": "{completed}/{total}",
+    "dismiss": "Masquer",
+    "summaryComplete": "Bon début. Les flux de travail essentiels sont validés.",
+    "summaryPending": "Terminez ces étapes une fois pour garantir une configuration fiable.",
+    "items": {
+      "hub": {
+        "label": "Hub opérationnel",
+        "description": "Le tableau de bord charge l'état sans erreur de démarrage."
+      },
+      "device": {
+        "label": "Premier appareil connecté",
+        "description": "Ajoutez un nœud via l'installation de l'agent."
+      },
+      "connector": {
+        "label": "Premier connecteur configuré",
+        "description": "Enregistrez un connecteur et lancez la première synchronisation."
+      },
+      "terminal": {
+        "label": "Flux terminal validé",
+        "description": "Exécutez au moins une session de commandes."
+      },
+      "logs": {
+        "label": "Observabilité vérifiée",
+        "description": "Vérifiez que les journaux récents sont visibles."
+      }
+    },
+    "addDevice": "+ Ajouter un appareil",
+    "openConnectorSettings": "Ouvrir les paramètres des connecteurs",
+    "openTerminal": "Ouvrir le terminal",
+    "openLogs": "Ouvrir les journaux",
+    "nextStepsTitle": "Flux essentiels validés. Voici ce que vous pouvez explorer ensuite\u00a0:",
+    "setupNotifications": "Configurer les notifications d'alerte",
+    "connectMcp": "Connecter la passerelle MCP",
+    "community": "Communauté",
+    "starGithub": "Ajoutez une étoile sur GitHub"
   }
 }

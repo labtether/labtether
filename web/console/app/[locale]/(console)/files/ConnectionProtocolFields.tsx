@@ -1,6 +1,7 @@
 "use client";
 
 import { Input, Select } from "../../../components/ui/Input";
+import { useTranslations } from "next-intl";
 
 type ConnectionProtocolFieldsProps = {
   protocol: string;
@@ -25,6 +26,8 @@ type ConnectionProtocolFieldsProps = {
   setAllowCleartextFTP: (value: boolean) => void;
   webdavTLS: boolean;
   setWebdavTLS: (value: boolean) => void;
+  allowCleartextWebDAV: boolean;
+  setAllowCleartextWebDAV: (value: boolean) => void;
 };
 
 export function ConnectionProtocolFields({
@@ -50,7 +53,10 @@ export function ConnectionProtocolFields({
   setAllowCleartextFTP,
   webdavTLS,
   setWebdavTLS,
+  allowCleartextWebDAV,
+  setAllowCleartextWebDAV,
 }: ConnectionProtocolFieldsProps) {
+  const t = useTranslations("files");
   return (
     <>
         {/* --- SFTP-specific fields --- */}
@@ -228,12 +234,28 @@ export function ConnectionProtocolFields({
                 <input
                   type="checkbox"
                   checked={webdavTLS}
-                  onChange={(e) => setWebdavTLS(e.target.checked)}
+                  onChange={(e) => {
+                    setWebdavTLS(e.target.checked);
+                    if (e.target.checked) setAllowCleartextWebDAV(false);
+                  }}
                   className="accent-[var(--accent)]"
                 />
                 Use HTTPS
               </label>
             </div>
+            {!webdavTLS && (
+              <div className="md:col-span-2 rounded-lg border border-[var(--bad)]/30 bg-[var(--bad-glow)] px-3 py-2">
+                <label className="flex items-start gap-2 text-xs text-[var(--bad)] cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={allowCleartextWebDAV}
+                    onChange={(e) => setAllowCleartextWebDAV(e.target.checked)}
+                    className="mt-0.5 accent-[var(--bad)]"
+                  />
+                  <span>{t("webdavCleartextWarning")}</span>
+                </label>
+              </div>
+            )}
           </>
         )}
     </>

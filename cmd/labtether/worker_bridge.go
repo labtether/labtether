@@ -19,13 +19,23 @@ import (
 // buildWorkerDeps constructs the worker.Deps from the apiServer's fields.
 func (s *apiServer) buildWorkerDeps() *workerpkg.Deps {
 	return &workerpkg.Deps{
-		TerminalStore: s.terminalStore,
-		ActionStore:   s.actionStore,
-		UpdateStore:   s.updateStore,
-		AuditStore:    s.auditStore,
-		LogStore:      s.logStore,
-		PresenceStore: s.presenceStore,
-		ScheduleStore: s.scheduleStore,
+		JobExecutionStore: func() persistence.JobExecutionStore {
+			store, _ := s.actionStore.(persistence.JobExecutionStore)
+			return store
+		}(),
+		ExecuteViaAgentContext: func(ctx context.Context, job terminal.CommandJob) terminal.CommandResult {
+			return s.ensureAgentsDeps().ExecuteViaAgentContext(ctx, job)
+		},
+		ExecuteTerminalCommandContext: opspkg.ExecuteCommandContext,
+		ExecuteActionInProcessContext: s.executeActionInProcessContext,
+		ExecuteUpdateScopeContext:     s.executeUpdateScopeContext,
+		TerminalStore:                 s.terminalStore,
+		ActionStore:                   s.actionStore,
+		UpdateStore:                   s.updateStore,
+		AuditStore:                    s.auditStore,
+		LogStore:                      s.logStore,
+		PresenceStore:                 s.presenceStore,
+		ScheduleStore:                 s.scheduleStore,
 		ScheduleExecutionStore: func() persistence.ScheduleExecutionStore {
 			store, _ := s.scheduleStore.(persistence.ScheduleExecutionStore)
 			return store
@@ -68,7 +78,8 @@ func (s *apiServer) buildWorkerDeps() *workerpkg.Deps {
 		ExecuteUpdateScope: func(job updates.Job, target, scope string) updates.RunResultEntry {
 			return s.executeUpdateScope(job, target, scope)
 		},
-		EvaluateAssetGuardrails: s.ensureGroupFeaturesDeps().EvaluateAssetGuardrails,
+		EvaluateAssetGuardrails:        s.ensureGroupFeaturesDeps().EvaluateAssetGuardrails,
+		EvaluateAssetGuardrailsContext: s.ensureGroupFeaturesDeps().EvaluateAssetGuardrailsContext,
 		AuthorizeScheduleTarget: func(ctx context.Context, actorID, assetID string) error {
 			return s.ensureSchedulesDeps().AuthorizeExecutionTarget(ctx, actorID, assetID)
 		},
@@ -120,4 +131,8 @@ func (s *apiServer) recordDeadLetter(ctx context.Context, job *jobqueue.Job, job
 
 func (s *apiServer) runPresenceCleanup(ctx context.Context) {
 	s.ensureWorkerDeps().RunPresenceCleanup(ctx)
+}
+
+func (s *apiServer) executeCommandActionContext(ctx context.Context, job actions.Job) actions.Result {
+	return s.ensureWorkerDeps().ExecuteCommandActionContext(ctx, job)
 }

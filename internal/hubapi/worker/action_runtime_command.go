@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -14,6 +15,17 @@ import (
 // If a connected agent is available for the target, the command is routed
 // through the agent WebSocket. A disconnected target fails closed.
 func (d *Deps) ExecuteCommandAction(job actions.Job) actions.Result {
+	legacy := *d
+	if legacy.ExecuteViaAgentContext == nil && d.ExecuteViaAgent != nil {
+		legacy.ExecuteViaAgentContext = func(_ context.Context, j terminal.CommandJob) terminal.CommandResult { return d.ExecuteViaAgent(j) }
+	}
+	return legacy.ExecuteCommandActionContext(context.Background(), job)
+}
+
+func (d *Deps) ExecuteCommandActionContext(ctx context.Context, job actions.Job) actions.Result {
+	if ctx.Err() != nil {
+		return commandActionPolicyFailure(job, "execution cancelled before command dispatch")
+	}
 	target := strings.TrimSpace(job.Target)
 	command := strings.TrimSpace(job.Command)
 	if target == "" || command == "" {
@@ -27,7 +39,7 @@ func (d *Deps) ExecuteCommandAction(job actions.Job) actions.Result {
 		}
 	}
 
-	if d.AgentMgr == nil || !d.AgentMgr.IsConnected(target) || d.ExecuteViaAgent == nil {
+	if d.AgentMgr == nil || !d.AgentMgr.IsConnected(target) || d.ExecuteViaAgentContext == nil {
 		return actions.Result{
 			JobID:       job.JobID,
 			RunID:       job.RunID,
@@ -51,7 +63,7 @@ func (d *Deps) ExecuteCommandAction(job actions.Job) actions.Result {
 		return commandActionPolicyFailure(job, "command denied by current policy")
 	}
 
-	cmdResult := d.ExecuteViaAgent(terminal.CommandJob{
+	cmdResult := d.ExecuteViaAgentContext(ctx, terminal.CommandJob{
 		JobID:       job.JobID,
 		SessionID:   job.RunID,
 		CommandID:   fmt.Sprintf("action-%s", job.RunID),

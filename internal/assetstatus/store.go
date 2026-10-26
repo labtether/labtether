@@ -5,6 +5,8 @@
 package assetstatus
 
 import (
+	"context"
+	"fmt"
 	"strings"
 
 	"github.com/labtether/labtether/internal/assets"
@@ -46,6 +48,25 @@ func (s *Store) ListAssets() ([]assets.Asset, error) {
 	return s.resolveAll(assetList), nil
 }
 
+// ListAssetsContext preserves the real context-aware inventory and status view.
+func (s *Store) ListAssetsContext(ctx context.Context) ([]assets.Asset, error) {
+	store, ok := s.AssetStore.(persistence.AlertAssetContextStore)
+	if !ok {
+		return nil, fmt.Errorf("context-aware asset inventory unavailable")
+	}
+	rows, err := store.ListAssetsContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range rows {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		rows[i] = s.resolve(rows[i])
+	}
+	return rows, nil
+}
+
 // ListAssetsByGroup preserves the optional group-store optimization while
 // applying the same runtime status view used by ListAssets.
 func (s *Store) ListAssetsByGroup(groupID string) ([]assets.Asset, error) {
@@ -80,6 +101,23 @@ func (s *Store) GetAsset(id string) (assets.Asset, bool, error) {
 	return s.resolve(assetEntry), true, nil
 }
 
+// GetAssetContext keeps cancellation through the optional exact-read owner.
+// Missing capability is unknown; it must not use the legacy background read.
+func (s *Store) GetAssetContext(ctx context.Context, id string) (assets.Asset, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return assets.Asset{}, false, err
+	}
+	store, ok := s.AssetStore.(persistence.AssetContextStore)
+	if !ok {
+		return assets.Asset{}, false, fmt.Errorf("context-aware exact asset lookup unavailable")
+	}
+	entry, found, err := store.GetAssetContext(ctx, id)
+	if err != nil || !found {
+		return entry, found, err
+	}
+	return s.resolve(entry), true, nil
+}
+
 func (s *Store) resolveAll(assetList []assets.Asset) []assets.Asset {
 	resolved := make([]assets.Asset, len(assetList))
 	for i, assetEntry := range assetList {
@@ -97,4 +135,18 @@ func (s *Store) resolve(assetEntry assets.Asset) assets.Asset {
 	}
 	assetEntry.Status = "offline"
 	return assetEntry
+}
+
+// FindTrueNASActionAssets preserves the bounded provider-identity lookup through
+// the production status decorator. Do not fall back to an unbounded inventory scan.
+func (s *Store) FindTrueNASActionAssets(collectorID, assetType, vmID string) ([]assets.Asset, error) {
+	lookup, ok := s.AssetStore.(persistence.TrueNASActionAssetStore)
+	if !ok {
+		return nil, fmt.Errorf("TrueNAS provider identity lookup unavailable")
+	}
+	list, err := lookup.FindTrueNASActionAssets(collectorID, assetType, vmID)
+	if err != nil {
+		return nil, err
+	}
+	return s.resolveAll(list), nil
 }

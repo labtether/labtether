@@ -134,3 +134,51 @@ func TestSanitizeLegacyFTPDoesNotApproveCleartext(t *testing.T) {
 		t.Fatalf("legacy plain FTP was not reset to the secure default: %#v", config)
 	}
 }
+
+func TestNormalizeWebDAVRequiresExplicitCleartextOptIn(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "false")
+	secure, err := NormalizeFileConnectionExtraConfig("webdav", nil)
+	if err != nil || secure["webdav_tls"] != true {
+		t.Fatalf("WebDAV did not default to verified HTTPS: %#v, %v", secure, err)
+	}
+	for _, config := range []map[string]any{
+		{"webdav_tls": false},
+		{"webdav_tls": false, "webdav_allow_cleartext": true},
+		{"webdav_tls": true, "webdav_allow_cleartext": true},
+		{"webdav_allow_cleartext": "true"},
+	} {
+		if _, err := NormalizeFileConnectionExtraConfig("webdav", config); err == nil {
+			t.Fatalf("unsafe WebDAV config accepted: %#v", config)
+		}
+	}
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
+	if _, err := NormalizeFileConnectionExtraConfig("webdav", map[string]any{"webdav_tls": false}); err == nil {
+		t.Fatal("global opt-in alone enabled plain WebDAV")
+	}
+	plain, err := NormalizeFileConnectionExtraConfig("webdav", map[string]any{
+		"webdav_tls": false, "webdav_allow_cleartext": true,
+	})
+	if err != nil || plain["webdav_tls"] != false || plain["webdav_allow_cleartext"] != true {
+		t.Fatalf("double-gated WebDAV config rejected: %#v, %v", plain, err)
+	}
+}
+
+func TestSanitizeLegacyWebDAVDoesNotApproveCleartext(t *testing.T) {
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "false")
+	config := sanitizeLegacyFileConnectionExtraConfig("webdav", map[string]any{
+		"webdav_tls": false, "webdav_base_path": "/dav", "password": "test-secret",
+	})
+	if config["webdav_tls"] != true || config["webdav_base_path"] != "/dav" {
+		t.Fatalf("legacy config lost path or retained insecure TLS: %#v", config)
+	}
+	if _, present := config["password"]; present {
+		t.Fatal("legacy password escaped sanitation")
+	}
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
+	config = sanitizeLegacyFileConnectionExtraConfig("webdav", map[string]any{
+		"webdav_tls": false, "webdav_allow_cleartext": true, "password": "test-secret",
+	})
+	if config["webdav_tls"] != false || config["webdav_allow_cleartext"] != true {
+		t.Fatalf("approved cleartext options were lost: %#v", config)
+	}
+}

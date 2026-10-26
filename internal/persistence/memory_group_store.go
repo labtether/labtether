@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"context"
 	"sort"
 	"strings"
 	"sync"
@@ -68,11 +69,20 @@ func (m *MemoryGroupStore) GetGroup(id string) (groups.Group, bool, error) {
 }
 
 func (m *MemoryGroupStore) ListGroups() ([]groups.Group, error) {
-	m.mu.RLock()
+	return m.ListGroupsContext(context.Background())
+}
+
+func (m *MemoryGroupStore) ListGroupsContext(ctx context.Context) ([]groups.Group, error) {
+	if err := lockAlertEvaluation(ctx, &m.mu, true); err != nil {
+		return nil, err
+	}
 	defer m.mu.RUnlock()
 
 	out := make([]groups.Group, 0, len(m.groups))
 	for _, g := range m.groups {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		out = append(out, cloneGroup(g))
 	}
 
@@ -83,6 +93,9 @@ func (m *MemoryGroupStore) ListGroups() ([]groups.Group, error) {
 		return out[i].Name < out[j].Name
 	})
 
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
