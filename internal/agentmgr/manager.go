@@ -183,10 +183,16 @@ func (m *AgentManager) ConnectedAssetsInfo() []ConnectedAssetInfo {
 	if m == nil {
 		return nil
 	}
+	// Snapshot under the manager lock, then read per-connection state without
+	// it: the manager lock must never be held while waiting on a connection.
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-	out := make([]ConnectedAssetInfo, 0, len(m.conns))
+	snapshot := make(map[string]*AgentConn, len(m.conns))
 	for id, conn := range m.conns {
+		snapshot[id] = conn
+	}
+	m.mu.RUnlock()
+	out := make([]ConnectedAssetInfo, 0, len(snapshot))
+	for id, conn := range snapshot {
 		hasTmux := strings.TrimSpace(conn.Meta("terminal.tmux.has")) == "true"
 		out = append(out, ConnectedAssetInfo{
 			ID:       id,

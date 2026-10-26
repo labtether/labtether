@@ -60,8 +60,8 @@ func TestSendContextCanceledAtOwnershipGateDoesNotWrite(t *testing.T) {
 			var release func()
 			var once sync.Once
 			if gate == "mutex" {
-				conn.mu.Lock()
-				release = func() { once.Do(conn.mu.Unlock) }
+				conn.writeMu.Lock()
+				release = func() { once.Do(conn.writeMu.Unlock) }
 			} else {
 				started := make(chan struct{})
 				unblock := make(chan struct{})

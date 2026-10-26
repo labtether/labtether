@@ -9,11 +9,11 @@ func TestAgentConnCloseInterruptsBlockedWriter(t *testing.T) {
 	conn, cleanup := newTestConn(t, "blocked-writer", "linux")
 	defer cleanup()
 	done := conn.Done()
-	conn.mu.Lock()
+	conn.writeMu.Lock()
 	released := false
 	defer func() {
 		if !released {
-			conn.mu.Unlock()
+			conn.writeMu.Unlock()
 		}
 	}()
 	closed := make(chan struct{})
@@ -28,7 +28,7 @@ func TestAgentConnCloseInterruptsBlockedWriter(t *testing.T) {
 	default:
 		t.Fatal("disconnect waiters were not released")
 	}
-	conn.mu.Unlock()
+	conn.writeMu.Unlock()
 	released = true
 	conn.Close()
 	if err := conn.Send(Message{Type: MsgConfigUpdate}); err != ErrAgentCredentialRejected {
