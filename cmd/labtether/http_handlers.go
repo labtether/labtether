@@ -147,7 +147,7 @@ func (s *apiServer) buildHTTPHandlers(
 		"/api/v2/agents":                 s.withAuth(s.handleV2Agents),
 		"/api/v2/agents/":                s.withAuth(s.handleV2AgentActions),
 		"/api/v2/agents/pending":         s.withAuth(s.handleV2AgentsPending),
-		"/api/v2/agents/pending/approve": s.withAuth(s.handleV2AgentsPendingApprove),
+		"/api/v2/agents/pending/approve": s.withAdminAuth(s.handleV2AgentsPendingApprove),
 		"/api/v2/agents/pending/reject":  s.withAuth(s.handleV2AgentsPendingReject),
 		// Hub
 		"/api/v2/hub/status":    s.withAuth(s.handleV2HubStatus),
@@ -314,7 +314,7 @@ func (s *apiServer) buildHTTPHandlers(
 		"/agents/presence":                     s.withAuth(requireScope("agents:read", s.handleAgentPresence)),
 		"/api/v1/agents/":                      s.withAuth(requireReadWriteScopes("agents:read", "agents:write", requireAssetFromPath("/api/v1/agents/", s.handleAgentSettingsRoutes))),
 		"/api/v1/agents/pending":               s.withAuth(requireScope("agents:read", s.handleListPendingAgents)),
-		"/api/v1/agents/approve":               s.withAuth(requireScope("agents:write", s.handleApproveAgent)),
+		"/api/v1/agents/approve":               s.withAdminAuth(requireScope("agents:write", s.handleApproveAgent)),
 		"/api/v1/agents/reject":                s.withAuth(requireScope("agents:write", s.handleRejectAgent)),
 		"/dependencies":                        s.withAuth(s.handleDependencies),
 		"/dependencies/":                       s.withAuth(s.handleDependencyActions),
