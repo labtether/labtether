@@ -32,6 +32,9 @@ func (d *Deps) HandlePBSSnapshotVerify(ctx context.Context, w http.ResponseWrite
 		return
 	}
 
+	if !d.enforceMutation(w, runtime, store) {
+		return
+	}
 	upid, verifyErr := runtime.Client.StartVerify(ctx, store)
 	if verifyErr != nil {
 		writePBSError(w, http.StatusBadGateway, "failed to start verify", verifyErr)
@@ -77,6 +80,9 @@ func (d *Deps) HandlePBSSnapshotForget(ctx context.Context, w http.ResponseWrite
 		return
 	}
 
+	if !d.enforceMutation(w, runtime, store) {
+		return
+	}
 	if forgetErr := runtime.Client.ForgetSnapshot(ctx, store, backupType, backupID, backupTime); forgetErr != nil {
 		writePBSError(w, http.StatusBadGateway, "failed to forget snapshot", forgetErr)
 		return
@@ -111,6 +117,9 @@ func (d *Deps) HandlePBSGroupForget(ctx context.Context, w http.ResponseWriter, 
 		return
 	}
 
+	if !d.enforceMutation(w, runtime, store) {
+		return
+	}
 	if forgetErr := runtime.Client.ForgetGroup(ctx, store, backupType, backupID); forgetErr != nil {
 		writePBSError(w, http.StatusBadGateway, "failed to forget group", forgetErr)
 		return

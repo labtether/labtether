@@ -13,6 +13,21 @@ import (
 )
 
 func (s *PostgresStore) CreateIncident(req incidents.CreateIncidentRequest) (incidents.Incident, error) {
+	return s.CreateIncidentContext(context.Background(), req)
+}
+
+func (s *PostgresStore) CreateIncidentContext(ctx context.Context, req incidents.CreateIncidentRequest) (incidents.Incident, error) {
+	return createIncidentContext(ctx, s.pool, req)
+}
+
+type incidentQueryRower interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+func createIncidentContext(ctx context.Context, query incidentQueryRower, req incidents.CreateIncidentRequest) (incidents.Incident, error) {
+	if err := ctx.Err(); err != nil {
+		return incidents.Incident{}, err
+	}
 	now := time.Now().UTC()
 	source := incidents.NormalizeSource(req.Source)
 	if source == "" {
@@ -32,7 +47,7 @@ func (s *PostgresStore) CreateIncident(req incidents.CreateIncidentRequest) (inc
 		return incidents.Incident{}, err
 	}
 
-	return scanIncident(s.pool.QueryRow(context.Background(),
+	return scanIncident(query.QueryRow(ctx,
 		`INSERT INTO incidents (
 			id,
 			title,

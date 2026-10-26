@@ -39,8 +39,12 @@ var latestSupportedProtocolVersion = [3]int{1, 5, 0}
 
 // Connect establishes a TCP connection to guacd.
 func Connect(host string, port int) (*Client, error) {
+	return ConnectContext(context.Background(), host, port)
+}
+
+func ConnectContext(ctx context.Context, host string, port int) (*Client, error) {
 	address := net.JoinHostPort(host, strconv.Itoa(port))
-	conn, err := securityruntime.DialOutboundTCPContext(context.Background(), host, port, 10*time.Second)
+	conn, err := securityruntime.DialOutboundTCPContext(ctx, host, port, 10*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("connect to guacd %s failed: %w", address, err)
 	}

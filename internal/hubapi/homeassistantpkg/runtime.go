@@ -26,46 +26,40 @@ func (d *Deps) loadRuntimeForAsset(asset assets.Asset, requestedCollectorID stri
 		return nil, fmt.Errorf("home assistant credential store unavailable")
 	}
 
-	collectors, err := d.HubCollectorStore.ListHubCollectors(200, true)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list home assistant collectors: %w", err)
-	}
 	collectorID := strings.TrimSpace(requestedCollectorID)
-	if metadataCollectorID := strings.TrimSpace(asset.Metadata["collector_id"]); metadataCollectorID != "" {
-		if collectorID != "" && collectorID != metadataCollectorID {
+	metadataOwner := strings.TrimSpace(asset.Metadata["collector_id"])
+	if metadataOwner != "" {
+		if collectorID != "" && collectorID != metadataOwner {
 			return nil, fmt.Errorf("collector_id does not own the selected entity")
 		}
-		collectorID = metadataCollectorID
+		collectorID = metadataOwner
 	}
-	if collectorID == "" {
-		if scope, scoped := assetid.CollectorScopeFromAssetID(asset.ID); scoped {
-			for _, candidate := range collectors {
-				if candidate.CollectorType == hubcollector.CollectorTypeHomeAssistant && assetid.CollectorScope(candidate.ID) == scope {
-					collectorID = candidate.ID
-					break
-				}
-			}
+	selected, err := shared.ResolveEnabledHubCollector(d.HubCollectorStore, hubcollector.CollectorTypeHomeAssistant, collectorID)
+	if err != nil {
+		return nil, err
+	}
+	if scope, scoped := assetid.CollectorScopeFromAssetID(asset.ID); scoped {
+		if scope != assetid.CollectorScope(selected.ID) {
+			return nil, fmt.Errorf("home assistant entity namespace conflicts with collector")
+		}
+	} else if metadataOwner == "" && collectorID != "" {
+		// A request parameter cannot assign a genuinely unowned legacy entity
+		// to an arbitrary provider when more than one is enabled.
+		unique, err := shared.ResolveEnabledHubCollector(d.HubCollectorStore, hubcollector.CollectorTypeHomeAssistant, "")
+		if err != nil || unique.ID != selected.ID {
+			return nil, fmt.Errorf("home assistant legacy entity ownership is ambiguous")
 		}
 	}
 
-	var selected *hubcollector.Collector
-	for i := range collectors {
-		candidate := collectors[i]
-		if hubcollector.NormalizeCollectorType(candidate.CollectorType) != hubcollector.CollectorTypeHomeAssistant {
-			continue
-		}
-		if collectorID != "" && candidate.ID != collectorID {
-			continue
-		}
-		if selected != nil && collectorID == "" {
-			return nil, fmt.Errorf("multiple active home assistant collectors are configured; collector-aware entity identity is required")
-		}
-		selected = &candidate
-	}
-	if selected == nil {
-		return nil, fmt.Errorf("no active home assistant collector configured for entity")
-	}
+	return d.loadRuntimeForCollector(selected)
+}
 
+// Callers resolve and validate the persisted collector before constructing its
+// private client. Targetless actions use the same credential owner as entities.
+func (d *Deps) loadRuntimeForCollector(selected *hubcollector.Collector) (*runtime, error) {
+	if selected == nil || d.CredentialStore == nil || d.SecretsManager == nil {
+		return nil, fmt.Errorf("home assistant credential store unavailable")
+	}
 	baseURL := shared.CollectorConfigString(selected.Config, "base_url")
 	credentialID := shared.CollectorConfigString(selected.Config, "credential_id")
 	if baseURL == "" || credentialID == "" {

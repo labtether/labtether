@@ -58,7 +58,7 @@ func TestNormalizePushDigestEnqueueBoundsAndFailsClosedOnLargeMaintenanceScope(t
 	}
 	event, err := normalizePushDigestEnqueue(PushDigestEnqueue{
 		DeviceID: "device", ChannelID: "channel",
-		DedupeKey: strings.Repeat("a", 64), Severity: "warning",
+		RuleID: "digest-rule", Labels: map[string]string{}, DedupeKey: strings.Repeat("a", 64), Severity: "warning",
 		GroupIDs: groups, MaintenanceScopeComplete: true, WindowSeconds: 1,
 	})
 	if err != nil {

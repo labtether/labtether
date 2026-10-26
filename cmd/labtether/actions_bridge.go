@@ -15,18 +15,24 @@ import (
 // is no risk of using an under-populated cached instance.
 func (s *apiServer) buildActionsDeps() *actionspkg.Deps {
 	gfd := s.ensureGroupFeaturesDeps()
-	return &actionspkg.Deps{
+	deps := &actionspkg.Deps{
 		// Saved-action fields (v2 API).
 		SavedActionStore: s.savedActionStore,
 		AuditStore:       s.auditStore,
 		ExecOnAsset:      s.execOnAssetForActions,
 
 		// Action-execution fields (v1 endpoints).
-		ActionStore: s.actionStore,
-		AssetStore:  s.assetStore,
-		GroupStore:  s.groupStore,
-		JobQueue:    s.jobQueue,
-		LogStore:    s.logStore,
+		ActionStore:                 s.actionStore,
+		AssetStore:                  s.assetStore,
+		GroupStore:                  s.groupStore,
+		LogStore:                    s.logStore,
+		ConnectorRegistry:           s.connectorRegistry,
+		EvaluateConnectorGuardrails: s.connectorMaintenanceEvaluator(),
+		ConfiguredConnectorActions:  s.configuredConnectorActions(),
+		ResolveProxmoxActionCollector: func(actionID, target string, params map[string]string) (string, error) {
+			_, _, id, err := s.ensureProxmoxDeps().ResolveProxmoxActionDestination(actionID, target, params)
+			return id, err
+		},
 
 		// Injected function fields for cross-cutting concerns.
 		EvaluateGuardrails:      gfd.EvaluateGuardrails,
@@ -41,6 +47,10 @@ func (s *apiServer) buildActionsDeps() *actionspkg.Deps {
 			s.appendAuditEventBestEffort(event, logMessage)
 		},
 	}
+	if s.jobQueue != nil {
+		deps.JobQueue = s.jobQueue
+	}
+	return deps
 }
 
 // ensureActionsDeps returns the actions deps, creating and caching on first call.

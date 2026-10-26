@@ -9,17 +9,21 @@ import (
 
 // AgentManager tracks active WebSocket connections from agents.
 type AgentManager struct {
-	mu              sync.RWMutex
-	conns           map[string]*AgentConn
-	admissions      int
-	admissionsByKey map[string]int
+	lifecycleMu        sync.Mutex
+	lifecycles         map[string]*assetLifecycle
+	mu                 sync.RWMutex
+	conns              map[string]*AgentConn
+	disconnectCleanups map[string]func(*AgentConn)
+	admissions         int
+	admissionsByKey    map[string]int
 }
 
 // NewManager creates an empty AgentManager.
 func NewManager() *AgentManager {
 	return &AgentManager{
-		conns:           make(map[string]*AgentConn),
-		admissionsByKey: make(map[string]int),
+		conns:              make(map[string]*AgentConn),
+		disconnectCleanups: make(map[string]func(*AgentConn)),
+		admissionsByKey:    make(map[string]int),
 	}
 }
 
@@ -82,19 +86,34 @@ func (m *AgentManager) AdmissionCount() int {
 	return m.admissions
 }
 
-// Register adds an agent connection. If an existing connection for the same
-// asset ID exists, it is closed and replaced.
+// Register adds an agent connection, closing any previous socket for its asset.
 func (m *AgentManager) Register(conn *AgentConn) {
+	m.RegisterWithLifecycle(conn, nil, nil)
+}
+
+// RegisterWithLifecycle publishes a connection and retains its cleanup until
+// any unregister or replacement. Both callbacks run in the asset lifecycle
+// transition. They may use manager reads, but must not recursively register or
+// unregister this same asset. No manager-wide lock is held during callbacks.
+func (m *AgentManager) RegisterWithLifecycle(conn *AgentConn, cleanup func(*AgentConn), publish func()) {
 	if m == nil || conn == nil {
 		return
 	}
-	m.mu.Lock()
-	if old, ok := m.conns[conn.AssetID]; ok {
-		old.Close()
+	release := m.lockAssetLifecycle(conn.AssetID)
+	defer release()
+	if current, ok := m.Get(conn.AssetID); ok && current == conn {
+		return
+	}
+	if m.unregisterInLifecycle(conn.AssetID, nil) {
 		log.Printf("agentmgr: replaced existing connection for %s", conn.AssetID)
 	}
+	m.mu.Lock()
 	m.conns[conn.AssetID] = conn
+	m.disconnectCleanups[conn.AssetID] = cleanup
 	m.mu.Unlock()
+	if publish != nil {
+		publish()
+	}
 	log.Printf("agentmgr: agent connected: %s (platform=%s)", conn.AssetID, conn.Platform)
 }
 
@@ -104,25 +123,16 @@ func (m *AgentManager) Unregister(assetID string) {
 }
 
 // UnregisterIfMatch removes the connection for the given asset ID only when
-// the active connection matches expectedConn (or expectedConn is nil).
+// the active connection matches expectedConn (or expectedConn is nil). Its
+// registered cleanup completes before a replacement can be published.
 // It returns true when a connection was removed.
 func (m *AgentManager) UnregisterIfMatch(assetID string, expectedConn *AgentConn) bool {
 	if m == nil {
 		return false
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if conn, ok := m.conns[assetID]; ok {
-		if expectedConn != nil && conn != expectedConn {
-			return false
-		}
-		conn.Close()
-		delete(m.conns, assetID)
-		log.Printf("agentmgr: agent disconnected: %s", assetID)
-		return true
-	}
-	return false
+	release := m.lockAssetLifecycle(assetID)
+	defer release()
+	return m.unregisterInLifecycle(assetID, expectedConn)
 }
 
 // Get returns the connection for the given asset ID, if any.

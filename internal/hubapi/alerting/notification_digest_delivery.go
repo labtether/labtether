@@ -13,16 +13,13 @@ import (
 
 	"github.com/labtether/labtether/internal/notifications"
 	"github.com/labtether/labtether/internal/persistence"
-	"github.com/labtether/labtether/internal/securityruntime"
 )
 
 const (
 	pushDigestClaimLimit  = 50
 	pushDigestWorkerLimit = 8
-	// A claim leases pushDigestClaimLimit devices at once, while only
-	// pushDigestWorkerLimit can send concurrently. Seven worst-case 15-second
-	// APNs waves fit inside this lease, preventing another hub from reclaiming a
-	// queued device before its local worker starts.
+	// The fixed pool can queue claims. Each claim carries its persisted lease;
+	// policy reads and delivery must fit that lease, never an estimated wave count.
 	pushDigestLeaseDuration    = 2 * time.Minute
 	pushDigestDeferredInterval = 5 * time.Minute
 	pushDigestMaxRetries       = 5
@@ -34,8 +31,7 @@ const (
 type pushDigestStore interface {
 	EnqueuePushDigestEvents(context.Context, []persistence.PushDigestEnqueue) (persistence.PushDigestEnqueueResult, error)
 	ClaimDuePushDigests(context.Context, time.Time, time.Duration, int) ([]persistence.PushDigestClaim, error)
-	CompletePushDigestClaim(context.Context, string, int64, []string, time.Time) (bool, error)
-	ReleasePushDigestClaim(context.Context, string, int64, time.Time, bool) (bool, error)
+	SettlePushDigestClaim(context.Context, string, int64, persistence.PushDigestSettlement, time.Time) (bool, error)
 }
 
 func (d *Deps) durablePushDigestStore() pushDigestStore {
@@ -61,7 +57,9 @@ func shouldQueuePushDigest(channelID string, store pushDigestStore, payload map[
 func buildPushDigestEnqueue(device persistence.PushDevice, channelID string, payload map[string]any, now time.Time) (persistence.PushDigestEnqueue, bool) {
 	deviceID := strings.TrimSpace(device.ID)
 	alertID := firstNonBlank(payloadString(payload, "alert_id"), payloadString(payload, "alert_instance_id"))
-	if deviceID == "" || strings.TrimSpace(channelID) == "" || alertID == "" {
+	labels, labelsKnown := notificationAlertLabels(payload["labels"])
+	ruleID := payloadString(payload, "rule_id")
+	if deviceID == "" || strings.TrimSpace(channelID) == "" || alertID == "" || !labelsKnown || !persistence.ValidPushDigestIdentity(ruleID, labels) {
 		return persistence.PushDigestEnqueue{}, false
 	}
 	severity := normalizedDigestSeverity(payloadString(payload, "severity"))
@@ -90,7 +88,8 @@ func buildPushDigestEnqueue(device persistence.PushDevice, channelID string, pay
 		windowSeconds = 86_400
 	}
 	return persistence.PushDigestEnqueue{
-		DeviceID:                 deviceID,
+		DeviceID: deviceID,
+		RuleID:   ruleID, Labels: labels,
 		ChannelID:                strings.TrimSpace(channelID),
 		DedupeKey:                hex.EncodeToString(digest[:]),
 		Severity:                 severity,
@@ -122,7 +121,7 @@ func (d *Deps) ProcessDuePushDigests(ctx context.Context) {
 	if store == nil || d.NotificationStore == nil {
 		return
 	}
-	now := time.Now().UTC()
+	now := d.pushDigestNow()
 	claims, err := store.ClaimDuePushDigests(ctx, now, pushDigestLeaseDuration, pushDigestClaimLimit)
 	if err != nil {
 		log.Printf("notifications: failed to claim due push digests: %v", err)
@@ -161,93 +160,88 @@ func (d *Deps) ProcessDuePushDigests(ctx context.Context) {
 }
 
 func (d *Deps) processPushDigestClaim(ctx context.Context, store pushDigestStore, claim persistence.PushDigestClaim) {
-	eventIDs := pushDigestEventIDs(claim.Events)
-	if len(eventIDs) == 0 {
-		_, _ = store.ReleasePushDigestClaim(ctx, claim.Device.ID, claim.DeliveryGeneration, time.Now().UTC().Add(pushDigestDeferredInterval), false)
+	now := d.pushDigestNow()
+	if ctx.Err() != nil || !claim.LeaseExpiresAt.After(now) {
 		return
 	}
-	now := time.Now().UTC()
-	complete := func() {
-		if _, err := store.CompletePushDigestClaim(ctx, claim.Device.ID, claim.DeliveryGeneration, eventIDs, time.Now().UTC()); err != nil {
-			log.Printf("notifications: failed to complete push digest claim for device %s: %v", safePushDeviceReference(claim.Device.ID), err)
-		}
-	}
-	deferWithoutRetry := func(next time.Time) {
-		if _, err := store.ReleasePushDigestClaim(ctx, claim.Device.ID, claim.DeliveryGeneration, next, false); err != nil {
-			log.Printf("notifications: failed to defer push digest claim for device %s: %v", safePushDeviceReference(claim.Device.ID), err)
-		}
-	}
-
-	if !isApplePushPlatform(claim.Device.Platform) || strings.TrimSpace(claim.Device.PushToken) == "" {
-		complete()
-		return
-	}
-	if !claim.ExpiresAt.After(now) {
-		complete()
+	ctx, cancelClaim := context.WithDeadline(ctx, claim.LeaseExpiresAt)
+	defer cancelClaim()
+	allIDs := pushDigestEventIDs(claim.Events)
+	outcome := persistence.PushDigestSettlement{DeferredUntil: now.Add(pushDigestDeferredInterval)}
+	finish := func() { d.settlePushDigest(ctx, store, claim, outcome) }
+	if !isApplePushPlatform(claim.Device.Platform) || strings.TrimSpace(claim.Device.PushToken) == "" || !claim.ExpiresAt.After(now) {
+		outcome.Discarded = allIDs
+		finish()
 		return
 	}
 	if claim.Device.QuietHoursEnabled {
-		timeZone := strings.TrimSpace(claim.Device.TimeZone)
-		if _, err := time.LoadLocation(timeZone); timeZone == "" || err != nil {
-			// A corrupt/legacy local clock must not violate an explicitly enabled
-			// quiet-hours preference. Defer safely until registration is repaired.
-			deferWithoutRetry(now.Add(pushDigestDeferredInterval))
+		zone := strings.TrimSpace(claim.Device.TimeZone)
+		if _, err := time.LoadLocation(zone); zone == "" || err != nil {
+			outcome.Deferred = allIDs
+			finish()
 			return
 		}
 		if pushDeviceIsInQuietHours(claim.Device, now) {
-			deferWithoutRetry(nextPushQuietHoursEnd(claim.Device, now))
+			outcome.Deferred = allIDs
+			outcome.DeferredUntil = nextPushQuietHoursEnd(claim.Device, now)
+			finish()
 			return
 		}
 	}
-
-	groupIDs := make(map[string]struct{})
-	for _, event := range claim.Events {
-		if !event.MaintenanceScopeComplete {
-			// The event exceeded the bounded maintenance scope snapshot. Drop it
-			// rather than risk leaking an alert through a newly-active window.
-			continue
-		}
-		for _, groupID := range event.GroupIDs {
-			if groupID = strings.TrimSpace(groupID); groupID != "" {
-				groupIDs[groupID] = struct{}{}
-			}
-		}
-	}
-	if d.maintenanceSuppressesGroupIDs(groupIDs) {
-		deferWithoutRetry(now.Add(pushDigestDeferredInterval))
+	// Too little remaining time is a deferral, never a failed APNs attempt.
+	if !d.digestCanSend(ctx, claim, now) {
+		outcome.Deferred = allIDs
+		finish()
 		return
 	}
-
-	eligible := make([]persistence.PushDigestEvent, 0, len(claim.Events))
-	for _, event := range claim.Events {
-		if pushDeviceAllowsDigestEvent(claim.Device, event) {
-			eligible = append(eligible, event)
-		}
-	}
-	if len(eligible) == 0 {
-		complete()
+	channelCtx, cancelChannel := context.WithTimeout(ctx, pushDigestPolicyBudget)
+	channel, ok, channelErr := d.getNotificationChannelForRuntimeContext(channelCtx, claim.ChannelID)
+	cancelChannel()
+	if channelErr != nil {
+		outcome.Deferred = allIDs
+		outcome.DeferredUntil = d.pushDigestNow().Add(pushDigestDeferredInterval)
+		finish()
 		return
 	}
-
-	channel, ok, err := d.getNotificationChannelForRuntime(claim.ChannelID)
-	if err != nil {
-		d.retryPushDigestClaim(ctx, store, claim, eventIDs, err)
-		return
-	}
-	if !ok || !channel.Enabled || notifications.NormalizeChannelType(channel.Type) != notifications.ChannelTypeAPNs {
-		complete()
+	if !d.digestCanSend(ctx, claim, d.pushDigestNow()) {
+		outcome.Deferred = allIDs
+		outcome.DeferredUntil = d.pushDigestNow().Add(pushDigestDeferredInterval)
+		finish()
 		return
 	}
 	adapter := d.NotificationAdapters[notifications.ChannelTypeAPNs]
-	if adapter == nil {
-		d.retryPushDigestClaim(ctx, store, claim, eventIDs, fmt.Errorf("APNs adapter unavailable"))
+	// Resolve channel credentials before the final per-entry policy read, so a
+	// slow store cannot leave a stale silence decision immediately before Send.
+	policyCtx, cancelPolicy := context.WithTimeout(ctx, pushDigestPolicyBudget)
+	eligible, snapshotAt := d.selectPushDigestEvents(policyCtx, claim, &outcome)
+	policyErr := policyCtx.Err()
+	cancelPolicy()
+	if policyErr != nil || !d.digestCanSend(ctx, claim, snapshotAt) {
+		outcome.Deferred = append(outcome.Deferred, pushDigestEventIDs(eligible)...)
+		outcome.DeferredUntil = d.pushDigestNow().Add(pushDigestDeferredInterval)
+		finish()
+		return
+	}
+	if len(eligible) == 0 {
+		finish()
 		return
 	}
 
+	if !ok || !channel.Enabled || notifications.NormalizeChannelType(channel.Type) != notifications.ChannelTypeAPNs {
+		outcome.Discarded = append(outcome.Discarded, pushDigestEventIDs(eligible)...)
+		finish()
+		return
+	}
+	if adapter == nil {
+		outcome.Deferred = append(outcome.Deferred, pushDigestEventIDs(eligible)...)
+		finish()
+		return
+	}
 	bundleID := firstNonBlank(claim.Device.BundleID, configString(channel.Config, "bundle_id"))
 	allowedBundleIDs := allowedAPNsBundleIDs(channel.Config, configString(channel.Config, "bundle_id"))
 	if _, allowed := allowedBundleIDs[bundleID]; bundleID == "" || !allowed {
-		complete()
+		outcome.Discarded = append(outcome.Discarded, pushDigestEventIDs(eligible)...)
+		finish()
 		return
 	}
 	environment := strings.ToLower(strings.TrimSpace(claim.Device.Environment))
@@ -263,21 +257,29 @@ func (d *Deps) processPushDigestClaim(ctx context.Context, store pushDigestStore
 	config["bundle_id"] = bundleID
 	config["production"] = environment == "production"
 	config["device_tokens"] = []string{strings.TrimSpace(claim.Device.PushToken)}
+	sendCtx, cancel := context.WithTimeout(ctx, notificationDispatchTimeout)
+	defer cancel()
 	notifications.SetAPNsInvalidDeviceTokenHandler(config, notifications.APNsInvalidDeviceTokenHandler(func(token string) error {
-		cleanupCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		cleanupCtx, cancel := context.WithTimeout(sendCtx, 3*time.Second)
 		defer cancel()
 		return d.PushDeviceStore.DeletePushDeviceByToken(cleanupCtx, token, bundleID, environment)
 	}))
 
 	payload := buildPushDigestPayload(eligible, claim)
-	sendCtx, cancel := context.WithTimeout(ctx, notificationDispatchTimeout)
+	if !d.digestCanSend(ctx, claim, snapshotAt) {
+		outcome.Deferred = append(outcome.Deferred, pushDigestEventIDs(eligible)...)
+		outcome.DeferredUntil = d.pushDigestNow().Add(pushDigestDeferredInterval)
+		finish()
+		return
+	}
 	sendErr := adapter.Send(sendCtx, config, payload)
 	cancel()
 	if sendErr != nil {
-		d.retryPushDigestClaim(ctx, store, claim, eventIDs, sendErr)
-		return
+		d.failPushDigestEvents(&outcome, eligible, claim)
+	} else {
+		outcome.Sent = pushDigestEventIDs(eligible)
 	}
-	complete()
+	finish()
 }
 
 func pushDeviceAllowsDigestEvent(device persistence.PushDevice, event persistence.PushDigestEvent) bool {
@@ -317,14 +319,11 @@ func buildPushDigestPayload(events []persistence.PushDigestEvent, claim persiste
 	if count != 1 {
 		noun = "alert updates are"
 	}
-	firstEventID := "empty"
-	if len(claim.Events) > 0 && strings.TrimSpace(claim.Events[0].ID) != "" {
-		firstEventID = strings.TrimSpace(claim.Events[0].ID)
-	}
-	// A reclaimed lease keeps the same collapse identifier for the same oldest
-	// event snapshot, so APNs can replace an ambiguous late duplicate. A later
-	// digest starts with a new event ID and therefore gets a new identifier.
-	digestIdentity := sha256.Sum256([]byte(strings.TrimSpace(claim.Device.ID) + "\x00" + firstEventID))
+	ids := pushDigestEventIDs(events)
+	sort.Strings(ids)
+	// Retries of the same sent subset collapse together; deferred entries do
+	// not choose the identity and a different subset receives a different ID.
+	digestIdentity := sha256.Sum256([]byte(strings.TrimSpace(claim.Device.ID) + "\x00" + strings.Join(ids, "\x00")))
 	return map[string]any{
 		"event":                "alert.digest",
 		"title":                "LabTether alert digest",
@@ -335,27 +334,6 @@ func buildPushDigestPayload(events []persistence.PushDigestEvent, claim persiste
 		"collapse_id":          fmt.Sprintf("digest-%s", hex.EncodeToString(digestIdentity[:12])),
 		"apns_priority":        5,
 		"apns_expiration_unix": claim.ExpiresAt.UTC().Unix(),
-	}
-}
-
-func (d *Deps) retryPushDigestClaim(ctx context.Context, store pushDigestStore, claim persistence.PushDigestClaim, eventIDs []string, deliveryErr error) {
-	safeError := notifications.SanitizeDeliveryErrorMessage(deliveryErr.Error())
-	for _, secret := range []string{claim.Device.PushToken, claim.Device.DeviceID, claim.Device.ID} {
-		if secret != "" {
-			safeError = strings.ReplaceAll(safeError, secret, "[redacted]")
-		}
-	}
-	nextRetryCount := claim.RetryCount + 1
-	nextAttempt := time.Now().UTC().Add(notifications.RetryBackoff(claim.RetryCount))
-	if nextRetryCount >= pushDigestMaxRetries || !nextAttempt.Before(claim.ExpiresAt) {
-		if _, err := store.CompletePushDigestClaim(ctx, claim.Device.ID, claim.DeliveryGeneration, eventIDs, time.Now().UTC()); err != nil {
-			log.Printf("notifications: failed to expire push digest claim for device %s: %v", safePushDeviceReference(claim.Device.ID), err)
-		}
-		securityruntime.Logf("notifications: push digest delivery exhausted after %d attempts: %s", nextRetryCount, safeError)
-		return
-	}
-	if _, err := store.ReleasePushDigestClaim(ctx, claim.Device.ID, claim.DeliveryGeneration, nextAttempt, true); err != nil {
-		log.Printf("notifications: failed to schedule push digest retry for device %s: %v", safePushDeviceReference(claim.Device.ID), err)
 	}
 }
 

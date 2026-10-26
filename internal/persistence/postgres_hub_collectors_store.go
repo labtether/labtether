@@ -63,6 +63,8 @@ const hubCollectorColumns = `id, asset_id, collector_type, config, enabled, inte
 // --- store methods ---
 
 func (s *PostgresStore) CreateHubCollector(req hubcollector.CreateCollectorRequest) (hubcollector.Collector, error) {
+	ctx, cancel := agentLifecycleStoreContext()
+	defer cancel()
 	now := time.Now().UTC()
 
 	collectorType := hubcollector.NormalizeCollectorType(req.CollectorType)
@@ -84,7 +86,7 @@ func (s *PostgresStore) CreateHubCollector(req hubcollector.CreateCollectorReque
 		return hubcollector.Collector{}, err
 	}
 
-	c, err := scanHubCollector(s.pool.QueryRow(context.Background(),
+	c, err := scanHubCollector(s.pool.QueryRow(ctx,
 		fmt.Sprintf(`INSERT INTO hub_collectors (%s)
 		 VALUES ($1, $2, $3, $4::jsonb, $5, $6, NULL, '', '', $7, $7)
 		 RETURNING %s`, hubCollectorColumns, hubCollectorColumns),
@@ -107,7 +109,9 @@ func (s *PostgresStore) CreateHubCollector(req hubcollector.CreateCollectorReque
 }
 
 func (s *PostgresStore) GetHubCollector(id string) (hubcollector.Collector, bool, error) {
-	c, err := scanHubCollector(s.pool.QueryRow(context.Background(),
+	ctx, cancel := agentLifecycleStoreContext()
+	defer cancel()
+	c, err := scanHubCollector(s.pool.QueryRow(ctx,
 		fmt.Sprintf(`SELECT %s FROM hub_collectors WHERE id = $1`, hubCollectorColumns),
 		strings.TrimSpace(id),
 	))
@@ -121,6 +125,8 @@ func (s *PostgresStore) GetHubCollector(id string) (hubcollector.Collector, bool
 }
 
 func (s *PostgresStore) ListHubCollectors(limit int, enabledOnly bool) ([]hubcollector.Collector, error) {
+	ctx, cancel := agentLifecycleStoreContext()
+	defer cancel()
 	if limit <= 0 {
 		limit = 50
 	}
@@ -140,7 +146,7 @@ func (s *PostgresStore) ListHubCollectors(limit int, enabledOnly bool) ([]hubcol
 	query += fmt.Sprintf(" ORDER BY updated_at DESC LIMIT $%d", next)
 	args = append(args, limit)
 
-	rows, err := s.pool.Query(context.Background(), query, args...)
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +219,9 @@ func (s *PostgresStore) DeleteHubCollector(id string) error {
 }
 
 func (s *PostgresStore) UpdateHubCollectorStatus(id, status, lastError string, collectedAt time.Time) error {
-	tag, err := s.pool.Exec(context.Background(),
+	ctx, cancel := agentLifecycleStoreContext()
+	defer cancel()
+	tag, err := s.pool.Exec(ctx,
 		`UPDATE hub_collectors
 		 SET last_status = $2, last_error = $3, last_collected_at = $4, updated_at = $5
 		 WHERE id = $1`,

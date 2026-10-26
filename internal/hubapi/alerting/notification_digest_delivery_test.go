@@ -20,6 +20,7 @@ type durableDigestPushStoreStub struct {
 	enqueueResult  persistence.PushDigestEnqueueResult
 	enqueueErr     error
 	claims         []persistence.PushDigestClaim
+	settlements    []persistence.PushDigestSettlement
 	completed      [][]string
 	released       []digestReleaseCall
 	deleted        [][3]string
@@ -53,27 +54,30 @@ func (s *durableDigestPushStoreStub) EnqueuePushDigestEvents(_ context.Context, 
 	return s.enqueueResult, s.enqueueErr
 }
 
-func (s *durableDigestPushStoreStub) ClaimDuePushDigests(context.Context, time.Time, time.Duration, int) ([]persistence.PushDigestClaim, error) {
+func (s *durableDigestPushStoreStub) ClaimDuePushDigests(_ context.Context, now time.Time, lease time.Duration, _ int) ([]persistence.PushDigestClaim, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	claims := append([]persistence.PushDigestClaim(nil), s.claims...)
 	s.claims = nil
+	for i := range claims {
+		if claims[i].LeaseExpiresAt.IsZero() {
+			claims[i].LeaseExpiresAt = now.Add(lease)
+		}
+	}
 	return claims, nil
 }
 
-func (s *durableDigestPushStoreStub) CompletePushDigestClaim(_ context.Context, _ string, _ int64, eventIDs []string, _ time.Time) (bool, error) {
+func (s *durableDigestPushStoreStub) SettlePushDigestClaim(_ context.Context, deviceID string, generation int64, outcome persistence.PushDigestSettlement, _ time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.completed = append(s.completed, append([]string(nil), eventIDs...))
-	return true, nil
-}
-
-func (s *durableDigestPushStoreStub) ReleasePushDigestClaim(_ context.Context, deviceID string, generation int64, nextAttempt time.Time, incrementRetry bool) (bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.released = append(s.released, digestReleaseCall{
-		deviceID: deviceID, generation: generation, nextAttempt: nextAttempt, incrementRetry: incrementRetry,
-	})
+	s.settlements = append(s.settlements, outcome)
+	retired := append(append([]string(nil), outcome.Sent...), outcome.Discarded...)
+	if len(retired) > 0 {
+		s.completed = append(s.completed, retired)
+	}
+	if len(outcome.Deferred) > 0 || len(outcome.RetryAt) > 0 {
+		s.released = append(s.released, digestReleaseCall{deviceID: deviceID, generation: generation, nextAttempt: outcome.DeferredUntil, incrementRetry: len(outcome.RetryAt) > 0})
+	}
 	return true, nil
 }
 
@@ -112,7 +116,7 @@ func TestAPNsNonUrgentAlertQueuesDurableDigestAndHighRemainsImmediate(t *testing
 
 	warning := map[string]any{
 		"event": "alert.firing", "alert_id": "alert-warning", "state": "firing",
-		"rule_id": "rule-1", "severity": "warning", "group_ids": []string{"group-a"},
+		"rule_id": "rule-1", "labels": map[string]string{}, "severity": "warning", "group_ids": []string{"group-a"},
 		"title": "private alert title", "text": "private alert detail",
 	}
 	if err := deps.sendNotification(context.Background(), digestChannel(), warning); err != nil {
@@ -134,7 +138,7 @@ func TestAPNsNonUrgentAlertQueuesDurableDigestAndHighRemainsImmediate(t *testing
 
 	high := map[string]any{
 		"event": "alert.firing", "alert_id": "alert-high", "state": "firing",
-		"rule_id": "rule-2", "severity": "high", "title": "High alert", "text": "Immediate",
+		"rule_id": "rule-2", "labels": map[string]string{}, "severity": "high", "title": "High alert", "text": "Immediate",
 	}
 	if err := deps.sendNotification(context.Background(), digestChannel(), high); err != nil {
 		t.Fatalf("send high alert: %v", err)
@@ -166,7 +170,7 @@ func TestAPNsNonUrgentAlertQueuesDuringQuietHours(t *testing.T) {
 		},
 	}
 	payload := map[string]any{
-		"event": "alert.firing", "alert_id": "alert-quiet", "state": "firing",
+		"event": "alert.firing", "alert_id": "alert-quiet", "labels": map[string]string{}, "state": "firing",
 		"rule_id": "rule-quiet", "severity": "warning", "title": "private", "text": "private",
 	}
 
@@ -205,7 +209,7 @@ func TestAPNsFullDigestQueueReturnsTargetedRetryWithoutImmediateLeak(t *testing.
 		},
 	}
 	payload := map[string]any{
-		"event": "alert.firing", "alert_id": "alert-cap", "state": "firing",
+		"event": "alert.firing", "alert_id": "alert-cap", "rule_id": "rule-cap", "labels": map[string]string{}, "state": "firing",
 		"severity": "warning", "title": "warning", "text": "detail",
 	}
 	err := deps.sendNotification(context.Background(), digestChannel(), payload)
@@ -232,16 +236,17 @@ func TestProcessDuePushDigestSendsOnePrivacySafePerDeviceSummary(t *testing.T) {
 		Device: device, ChannelID: digestChannel().ID, WindowSeconds: 180,
 		DeliveryGeneration: 4, ExpiresAt: time.Now().Add(time.Hour),
 		Events: []persistence.PushDigestEvent{
-			{ID: "event-1", Severity: "warning", GroupIDs: []string{"group-a"}, MaintenanceScopeComplete: true},
-			{ID: "event-2", Severity: "info", GroupIDs: []string{"group-b"}, MaintenanceScopeComplete: true},
+			{ID: "event-1", RuleID: "rule-1", Labels: map[string]string{}, Severity: "warning", GroupIDs: []string{"group-a"}, MaintenanceScopeComplete: true},
+			{ID: "event-2", RuleID: "rule-2", Labels: map[string]string{}, Severity: "info", GroupIDs: []string{"group-b"}, MaintenanceScopeComplete: true},
 		},
 	}}}
 	channelStore := newNotificationSecurityStore()
 	channelStore.seed(digestChannel())
 	adapter := &apnsFanoutAdapterStub{}
 	deps := &Deps{
-		NotificationStore: channelStore,
-		PushDeviceStore:   store,
+		AlertInstanceStore: newTestAlertingDeps(t).AlertInstanceStore, NotificationStore: channelStore,
+		PushDeviceStore:           store,
+		EvaluateGuardrailsContext: digestAllowGuardrails,
 		NotificationAdapters: map[string]notifications.Adapter{
 			notifications.ChannelTypeAPNs: adapter,
 		},
@@ -280,7 +285,7 @@ func TestProcessDuePushDigestRechecksPreferencesQuietHoursAndMaintenance(t *test
 			Device: device, ChannelID: digestChannel().ID, DeliveryGeneration: 1,
 			ExpiresAt: time.Now().Add(time.Hour),
 			Events: []persistence.PushDigestEvent{{
-				ID: "event-1", Severity: "warning", GroupIDs: []string{"group-a"}, MaintenanceScopeComplete: true,
+				ID: "event-1", RuleID: "rule-1", Labels: map[string]string{}, Severity: "warning", GroupIDs: []string{"group-a"}, MaintenanceScopeComplete: true,
 			}},
 		}
 	}
@@ -289,7 +294,7 @@ func TestProcessDuePushDigestRechecksPreferencesQuietHoursAndMaintenance(t *test
 		device := digestEnabledDevice()
 		device.PushCategory = "critical_only"
 		store := &durableDigestPushStoreStub{claims: []persistence.PushDigestClaim{baseClaim(device)}}
-		deps := &Deps{NotificationStore: newNotificationSecurityStore(), PushDeviceStore: store}
+		deps := &Deps{AlertInstanceStore: newTestAlertingDeps(t).AlertInstanceStore, NotificationStore: newNotificationSecurityStore(), PushDeviceStore: store}
 		deps.ProcessDuePushDigests(context.Background())
 		if len(store.completed) != 1 || len(store.released) != 0 {
 			t.Fatalf("preference recheck complete=%+v release=%+v", store.completed, store.released)
@@ -302,7 +307,7 @@ func TestProcessDuePushDigestRechecksPreferencesQuietHoursAndMaintenance(t *test
 		device.QuietHoursStartMinutes = 0
 		device.QuietHoursEndMinutes = 1439
 		store := &durableDigestPushStoreStub{claims: []persistence.PushDigestClaim{baseClaim(device)}}
-		deps := &Deps{NotificationStore: newNotificationSecurityStore(), PushDeviceStore: store}
+		deps := &Deps{AlertInstanceStore: newTestAlertingDeps(t).AlertInstanceStore, NotificationStore: newNotificationSecurityStore(), PushDeviceStore: store}
 		deps.ProcessDuePushDigests(context.Background())
 		if len(store.released) != 1 || store.released[0].incrementRetry || len(store.completed) != 0 {
 			t.Fatalf("quiet recheck complete=%+v release=%+v", store.completed, store.released)
@@ -314,7 +319,7 @@ func TestProcessDuePushDigestRechecksPreferencesQuietHoursAndMaintenance(t *test
 		device.QuietHoursEnabled = true
 		device.TimeZone = ""
 		store := &durableDigestPushStoreStub{claims: []persistence.PushDigestClaim{baseClaim(device)}}
-		deps := &Deps{NotificationStore: newNotificationSecurityStore(), PushDeviceStore: store}
+		deps := &Deps{AlertInstanceStore: newTestAlertingDeps(t).AlertInstanceStore, NotificationStore: newNotificationSecurityStore(), PushDeviceStore: store}
 		deps.ProcessDuePushDigests(context.Background())
 		if len(store.released) != 1 || store.released[0].incrementRetry || len(store.completed) != 0 {
 			t.Fatalf("invalid timezone recheck complete=%+v release=%+v", store.completed, store.released)
@@ -325,8 +330,8 @@ func TestProcessDuePushDigestRechecksPreferencesQuietHoursAndMaintenance(t *test
 		device := digestEnabledDevice()
 		store := &durableDigestPushStoreStub{claims: []persistence.PushDigestClaim{baseClaim(device)}}
 		deps := &Deps{
-			NotificationStore: newNotificationSecurityStore(), PushDeviceStore: store,
-			EvaluateGuardrails: func(groupID string, _ time.Time) (groupfeatures.GroupMaintenanceGuardrails, error) {
+			AlertInstanceStore: newTestAlertingDeps(t).AlertInstanceStore, NotificationStore: newNotificationSecurityStore(), PushDeviceStore: store,
+			EvaluateGuardrailsContext: func(_ context.Context, groupID string, _ time.Time) (groupfeatures.GroupMaintenanceGuardrails, error) {
 				if groupID != "group-a" {
 					return groupfeatures.GroupMaintenanceGuardrails{}, errors.New("unexpected group")
 				}
@@ -345,14 +350,14 @@ func TestProcessDuePushDigestRetriesBoundedlyOnAPNsFailure(t *testing.T) {
 	claim := persistence.PushDigestClaim{
 		Device: device, ChannelID: digestChannel().ID, DeliveryGeneration: 7,
 		RetryCount: 1, ExpiresAt: time.Now().Add(time.Hour),
-		Events: []persistence.PushDigestEvent{{ID: "event-1", Severity: "warning", MaintenanceScopeComplete: true}},
+		Events: []persistence.PushDigestEvent{{ID: "event-1", RuleID: "rule-1", Labels: map[string]string{}, Severity: "warning", MaintenanceScopeComplete: true}},
 	}
 	store := &durableDigestPushStoreStub{claims: []persistence.PushDigestClaim{claim}}
 	channelStore := newNotificationSecurityStore()
 	channelStore.seed(digestChannel())
 	adapter := &apnsFanoutAdapterStub{groupFailures: map[string]int{"com.labtether.mobile/production": 1}}
 	deps := &Deps{
-		NotificationStore: channelStore, PushDeviceStore: store,
+		AlertInstanceStore: newTestAlertingDeps(t).AlertInstanceStore, NotificationStore: channelStore, PushDeviceStore: store,
 		NotificationAdapters: map[string]notifications.Adapter{notifications.ChannelTypeAPNs: adapter},
 	}
 	deps.ProcessDuePushDigests(context.Background())

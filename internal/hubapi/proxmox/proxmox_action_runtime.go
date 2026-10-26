@@ -2,14 +2,18 @@ package proxmox
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"strconv"
+	"maps"
 	"strings"
 	"time"
 
 	"github.com/labtether/labtether/internal/actions"
 	"github.com/labtether/labtether/internal/assetid"
+	proxmoxconnector "github.com/labtether/labtether/internal/connectors/proxmox"
 	"github.com/labtether/labtether/internal/connectorsdk"
+	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
+	"github.com/labtether/labtether/internal/hubapi/operations"
 	"github.com/labtether/labtether/internal/hubcollector"
 )
 
@@ -26,17 +30,42 @@ type ProxmoxActionExecution struct {
 }
 
 func (d *Deps) ExecuteActionInProcess(job actions.Job) actions.Result {
+	return d.executeActionInProcess(context.Background(), job, true)
+}
+
+func (d *Deps) ExecuteActionInProcessContext(ctx context.Context, job actions.Job) actions.Result {
+	return d.executeActionInProcess(ctx, job, false)
+}
+
+func (d *Deps) executeActionInProcess(ctx context.Context, job actions.Job, legacy bool) actions.Result {
+	if ctx.Err() != nil {
+		return failedConnectorActionResult(job, "action canceled before dispatch; no changes applied")
+	}
 	runType := actions.NormalizeRunType(job.Type)
 	if runType == actions.RunTypeCommand {
-		return d.ExecuteCommandAction(job)
+		if d.ExecuteCommandActionContext != nil {
+			return d.ExecuteCommandActionContext(ctx, job)
+		}
+		if legacy && d.ExecuteCommandAction != nil {
+			return d.ExecuteCommandAction(job)
+		}
+		return failedConnectorActionResult(job, "context-aware command executor unavailable; no changes applied")
 	}
 	if runType == actions.RunTypeConnectorAction && strings.EqualFold(strings.TrimSpace(job.ConnectorID), "proxmox") {
+		// A raw provider reference has no durable asset owner to recover for
+		// jobs queued before collector binding was stored.
+		if strings.Contains(job.Target, "/") && strings.TrimSpace(job.Params["collector_id"]) == "" {
+			return failedConnectorActionResult(job, "Proxmox action has no saved collector binding; resubmit the action")
+		}
 		// 6-minute timeout: allows 30s invoke + 5m10s task wait + margin.
-		actionCtx, actionCancel := context.WithTimeout(context.Background(), 6*time.Minute)
+		actionCtx, actionCancel := context.WithTimeout(ctx, 6*time.Minute)
 		defer actionCancel()
 		execResult, err := d.ExecuteProxmoxAction(actionCtx, job.ActionID, job.Target, job.Params, job.DryRun)
 		if err != nil {
 			msg := ProxmoxActionErrorMessage(err)
+			if actionCtx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				msg = "action interrupted; outcome unknown: " + msg
+			}
 			return actions.Result{
 				JobID:       job.JobID,
 				RunID:       job.RunID,
@@ -65,12 +94,55 @@ func (d *Deps) ExecuteActionInProcess(job actions.Job) actions.Result {
 		}
 	}
 	if runType == actions.RunTypeConnectorAction {
+		if configured, ok := d.ConfiguredConnectorActions[strings.ToLower(strings.TrimSpace(job.ConnectorID))]; ok {
+			bindingParam := configured.BindingParam
+			if bindingParam == "" {
+				bindingParam = "collector_id"
+			}
+			if configured.Execute == nil || strings.TrimSpace(job.Params[bindingParam]) == "" {
+				return failedConnectorActionResult(job, "connector action has no saved runtime binding; resubmit the action")
+			}
+			actionCtx := ctx
+			if !configured.UseCallerTimeout {
+				var cancel context.CancelFunc
+				actionCtx, cancel = context.WithTimeout(ctx, time.Minute)
+				defer cancel()
+			}
+			if actionCtx.Err() != nil {
+				return failedConnectorActionResult(job, "action canceled before dispatch; no changes applied")
+			}
+			// Execute consumes the saved resource and checks its current maintenance
+			// owners. Rebinding here could silently change a queued action's target.
+			result, err := configured.Execute(actionCtx, job.ActionID, connectorsdk.ActionRequest{TargetID: job.Target, Params: job.Params, DryRun: job.DryRun})
+			if actionCtx.Err() != nil {
+				err = actionCtx.Err()
+			}
+			var blocked *maintenanceguard.BlockedActionError
+			if errors.As(err, &blocked) {
+				return failedConnectorActionResult(job, blocked.Error())
+			}
+			return operations.ConnectorExecutionResult(job, result, err)
+		}
+	}
+	if runType == actions.RunTypeConnectorAction {
+		if err := maintenanceguard.CheckConnectorExecution(job.ConnectorID, job.ActionID, connectorsdk.ActionRequest{TargetID: job.Target, Params: job.Params, DryRun: job.DryRun}, d.EvaluateConnectorGuardrails); err != nil {
+			return failedConnectorActionResult(job, err.Error())
+		}
 		if err := d.validateGenericConnectorActionRoute(job); err != nil {
 			return failedConnectorActionResult(job, err.Error())
 		}
 	}
 
-	return d.ExecuteActionInProcessFn(job, d.ConnectorRegistry)
+	if ctx.Err() != nil {
+		return failedConnectorActionResult(job, "action canceled before dispatch; no changes applied")
+	}
+	if d.ExecuteActionInProcessContextFn != nil {
+		return d.ExecuteActionInProcessContextFn(ctx, job, d.ConnectorRegistry)
+	}
+	if legacy && d.ExecuteActionInProcessFn != nil {
+		return d.ExecuteActionInProcessFn(job, d.ConnectorRegistry)
+	}
+	return operations.ExecuteActionInProcessContext(ctx, job, d.ConnectorRegistry)
 }
 
 func (d *Deps) validateGenericConnectorActionRoute(job actions.Job) error {
@@ -197,16 +269,24 @@ func (d *Deps) ExecuteProxmoxActionDirect(ctx context.Context, actionID string, 
 }
 
 func (d *Deps) ExecuteProxmoxAction(ctx context.Context, actionID, target string, params map[string]string, dryRun bool) (ProxmoxActionExecution, error) {
-	actionID = strings.TrimSpace(actionID)
-	node, vmid, collectorID, err := d.ResolveProxmoxActionTarget(actionID, target)
+	if err := ctx.Err(); err != nil {
+		return ProxmoxActionExecution{}, err
+	}
+	actionID = resolveProxmoxActionID(actionID, target)
+	if err := proxmoxconnector.ValidateTaskAction(actionID, params); err != nil {
+		return ProxmoxActionExecution{}, err
+	}
+	node, vmid, collectorID, err := d.ResolveProxmoxActionDestination(actionID, target, params)
 	if err != nil {
 		return ProxmoxActionExecution{}, err
 	}
-	if strings.TrimSpace(collectorID) == "" {
-		collectorID = strings.TrimSpace(params["collector_id"])
+	// Bind the dispatch check to the exact destination already resolved above.
+	checkedParams := maps.Clone(params)
+	if checkedParams == nil {
+		checkedParams = make(map[string]string)
 	}
-	collectorID, err = d.resolveProxmoxActionCollectorID(collectorID)
-	if err != nil {
+	checkedParams["collector_id"] = collectorID
+	if err := maintenanceguard.CheckConnectorExecution("proxmox", actionID, connectorsdk.ActionRequest{TargetID: node + "/" + vmid, Params: checkedParams, DryRun: dryRun}, d.EvaluateConnectorGuardrails); err != nil {
 		return ProxmoxActionExecution{}, err
 	}
 	invokeParams := StripInternalProxmoxActionParams(params)
@@ -266,7 +346,7 @@ func (d *Deps) ExecuteProxmoxAction(ctx context.Context, actionID, target string
 	if err != nil {
 		return ProxmoxActionExecution{
 			Status:   "failed",
-			Message:  err.Error(),
+			Message:  "task status unavailable; outcome unknown: " + err.Error(),
 			Output:   fmt.Sprintf("%s on %s (upid=%s)", actionID, targetLabel, upid),
 			Metadata: metadata,
 		}, nil
@@ -306,198 +386,9 @@ func StripInternalProxmoxActionParams(params map[string]string) map[string]strin
 	return filtered
 }
 
-func (d *Deps) resolveProxmoxActionCollectorID(collectorID string) (string, error) {
-	collectorID = strings.TrimSpace(collectorID)
-	if collectorID != "" {
-		return collectorID, nil
-	}
-	if d.HubCollectorStore == nil {
-		return "", nil
-	}
-
-	collectors, err := d.HubCollectorStore.ListHubCollectors(200, true)
-	if err != nil {
-		return "", fmt.Errorf("failed to list hub collectors: %w", err)
-	}
-
-	proxmoxCollectorID := ""
-	proxmoxCollectorCount := 0
-	for _, collector := range collectors {
-		if collector.CollectorType != hubcollector.CollectorTypeProxmox {
-			continue
-		}
-		proxmoxCollectorCount++
-		if proxmoxCollectorID == "" {
-			proxmoxCollectorID = strings.TrimSpace(collector.ID)
-		}
-		if proxmoxCollectorCount > 1 {
-			return "", fmt.Errorf("collector_id is required when multiple proxmox collectors are configured")
-		}
-	}
-
-	return proxmoxCollectorID, nil
-}
-
-func (d *Deps) ResolveProxmoxActionTarget(actionID, target string) (node, vmid, collectorID string, err error) {
-	actionID = strings.TrimSpace(actionID)
-	target = strings.TrimSpace(target)
-	if target == "" {
-		return "", "", "", fmt.Errorf("target is required")
-	}
-
-	if strings.Contains(target, "/") {
-		parts := strings.SplitN(target, "/", 2)
-		node = strings.TrimSpace(parts[0])
-		vmid = strings.TrimSpace(parts[1])
-		if node == "" || vmid == "" {
-			return "", "", "", fmt.Errorf("target must be node/vmid")
-		}
-		return node, vmid, "", nil
-	}
-
-	expectedKind := ""
-	switch {
-	case strings.HasPrefix(actionID, "vm."):
-		expectedKind = "qemu"
-	case strings.HasPrefix(actionID, "ct."):
-		expectedKind = "lxc"
-	default:
-		return "", "", "", fmt.Errorf("unsupported proxmox action prefix: %s", actionID)
-	}
-
-	resolved, ok, resolveErr := d.ResolveProxmoxSessionTarget(target)
-	if resolveErr != nil {
-		return "", "", "", resolveErr
-	}
-	if !ok {
-		return "", "", "", fmt.Errorf("target %s is not a proxmox asset", target)
-	}
-	if err := ValidateResolvedProxmoxActionTarget(resolved, expectedKind, actionID); err != nil {
-		return "", "", "", err
-	}
-	return strings.TrimSpace(resolved.Node), strings.TrimSpace(resolved.VMID), strings.TrimSpace(resolved.CollectorID), nil
-}
-
-func ValidateResolvedProxmoxActionTarget(resolved ProxmoxSessionTarget, expectedKind, actionID string) error {
-	if strings.ToLower(strings.TrimSpace(resolved.Kind)) != expectedKind {
-		return fmt.Errorf("target kind %s does not match action %s", resolved.Kind, actionID)
-	}
-	if strings.TrimSpace(resolved.Node) == "" || strings.TrimSpace(resolved.VMID) == "" {
-		return fmt.Errorf("proxmox asset target is incomplete")
-	}
-	return nil
-}
-
 func InvokeProxmoxAction(ctx context.Context, runtime *ProxmoxRuntime, actionID, node, vmid string, params map[string]string) (string, error) {
 	if runtime == nil || runtime.client == nil {
 		return "", fmt.Errorf("proxmox runtime unavailable")
 	}
-
-	switch actionID {
-	case "vm.start":
-		return runtime.client.StartVM(ctx, node, vmid)
-	case "vm.stop":
-		return runtime.client.StopVM(ctx, node, vmid)
-	case "vm.shutdown":
-		return runtime.client.ShutdownVM(ctx, node, vmid)
-	case "vm.reboot":
-		return runtime.client.RebootVM(ctx, node, vmid)
-	case "vm.snapshot":
-		name := strings.TrimSpace(params["snapshot_name"])
-		if name == "" {
-			name = fmt.Sprintf("labtether-%d", time.Now().UTC().Unix())
-		}
-		return runtime.client.SnapshotVM(ctx, node, vmid, name)
-	case "vm.migrate":
-		targetNode := strings.TrimSpace(params["target_node"])
-		if targetNode == "" {
-			return "", fmt.Errorf("target_node is required")
-		}
-		return runtime.client.MigrateVM(ctx, node, vmid, targetNode)
-	case "ct.start":
-		return runtime.client.StartCT(ctx, node, vmid)
-	case "ct.stop":
-		return runtime.client.StopCT(ctx, node, vmid)
-	case "ct.shutdown":
-		return runtime.client.ShutdownCT(ctx, node, vmid)
-	case "ct.reboot":
-		return runtime.client.RebootCT(ctx, node, vmid)
-	case "ct.snapshot":
-		name := strings.TrimSpace(params["snapshot_name"])
-		if name == "" {
-			name = fmt.Sprintf("labtether-%d", time.Now().UTC().Unix())
-		}
-		return runtime.client.SnapshotCT(ctx, node, vmid, name)
-	// Phase 2: Extended lifecycle
-	case "vm.suspend":
-		return runtime.client.SuspendVM(ctx, node, vmid)
-	case "vm.resume":
-		return runtime.client.ResumeVM(ctx, node, vmid)
-	case "vm.force_stop":
-		return runtime.client.StopVM(ctx, node, vmid)
-	case "ct.force_stop":
-		return runtime.client.StopCT(ctx, node, vmid)
-	case "vm.snapshot.delete":
-		snapName := strings.TrimSpace(params["snapshot_name"])
-		if snapName == "" {
-			return "", fmt.Errorf("snapshot_name is required")
-		}
-		return runtime.client.DeleteQemuSnapshot(ctx, node, vmid, snapName)
-	case "vm.snapshot.rollback":
-		snapName := strings.TrimSpace(params["snapshot_name"])
-		if snapName == "" {
-			return "", fmt.Errorf("snapshot_name is required")
-		}
-		return runtime.client.RollbackQemuSnapshot(ctx, node, vmid, snapName)
-	case "ct.snapshot.delete":
-		snapName := strings.TrimSpace(params["snapshot_name"])
-		if snapName == "" {
-			return "", fmt.Errorf("snapshot_name is required")
-		}
-		return runtime.client.DeleteLXCSnapshot(ctx, node, vmid, snapName)
-	case "ct.snapshot.rollback":
-		snapName := strings.TrimSpace(params["snapshot_name"])
-		if snapName == "" {
-			return "", fmt.Errorf("snapshot_name is required")
-		}
-		return runtime.client.RollbackLXCSnapshot(ctx, node, vmid, snapName)
-	case "ct.migrate":
-		targetNode := strings.TrimSpace(params["target_node"])
-		if targetNode == "" {
-			return "", fmt.Errorf("target_node is required")
-		}
-		return runtime.client.MigrateCT(ctx, node, vmid, targetNode)
-	// Phase 4: Extended features
-	case "vm.backup", "ct.backup":
-		return runtime.client.TriggerBackup(ctx, node, vmid, params["storage"], params["mode"])
-	case "vm.clone":
-		newIDStr := strings.TrimSpace(params["new_id"])
-		if newIDStr == "" {
-			return "", fmt.Errorf("new_id is required")
-		}
-		newID, parseErr := strconv.Atoi(newIDStr)
-		if parseErr != nil {
-			return "", fmt.Errorf("new_id must be numeric")
-		}
-		return runtime.client.CloneVM(ctx, node, vmid, params["new_name"], newID)
-	case "ct.clone":
-		newIDStr := strings.TrimSpace(params["new_id"])
-		if newIDStr == "" {
-			return "", fmt.Errorf("new_id is required")
-		}
-		newID, parseErr := strconv.Atoi(newIDStr)
-		if parseErr != nil {
-			return "", fmt.Errorf("new_id must be numeric")
-		}
-		return runtime.client.CloneCT(ctx, node, vmid, params["new_name"], newID)
-	case "vm.disk_resize":
-		disk := strings.TrimSpace(params["disk"])
-		size := strings.TrimSpace(params["size"])
-		if disk == "" || size == "" {
-			return "", fmt.Errorf("disk and size are required")
-		}
-		return "", runtime.client.ResizeVMDisk(ctx, node, vmid, disk, size)
-	default:
-		return "", fmt.Errorf("unsupported proxmox action: %s", actionID)
-	}
+	return runtime.client.ExecuteTaskAction(ctx, actionID, node, vmid, params)
 }

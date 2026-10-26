@@ -6,6 +6,7 @@ import (
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -88,12 +89,23 @@ type TrueNASFilesystemEntry struct {
 }
 
 func (d *Deps) HandleTrueNASAssets(w http.ResponseWriter, r *http.Request) {
-	pathValue := strings.TrimPrefix(r.URL.Path, "/truenas/assets/")
-	if pathValue == r.URL.Path || pathValue == "" {
+	escapedPath := r.URL.EscapedPath()
+	pathValue := strings.TrimPrefix(escapedPath, "/truenas/assets/")
+	if pathValue == escapedPath || pathValue == "" {
 		servicehttp.WriteError(w, http.StatusNotFound, "truenas asset path not found")
 		return
 	}
+	// Split escaped segments before decoding so dataset/snapshot slashes stay
+	// inside their provider ID rather than changing the route or target.
 	parts := strings.Split(pathValue, "/")
+	for i, part := range parts {
+		decoded, err := url.PathUnescape(part)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusBadRequest, "invalid truenas path")
+			return
+		}
+		parts[i] = decoded
+	}
 	assetID := strings.TrimSpace(parts[0])
 	if assetID == "" {
 		servicehttp.WriteError(w, http.StatusNotFound, "truenas asset path not found")

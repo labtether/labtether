@@ -1,7 +1,6 @@
 package persistence
 
 import (
-	"context"
 	"errors"
 	"strings"
 	"time"
@@ -10,8 +9,10 @@ import (
 )
 
 func (s *PostgresStore) UpsertScrollback(persistentSessionID string, buffer []byte, bufferSize int, totalLines int) error {
+	ctx, cancel := terminalStoreContext()
+	defer cancel()
 	now := time.Now().UTC()
-	_, err := s.pool.Exec(context.Background(),
+	_, err := s.pool.Exec(ctx,
 		`INSERT INTO terminal_session_scrollback (persistent_session_id, buffer, buffer_size, total_lines, updated_at)
 		 VALUES ($1, $2, $3, $4, $5)
 		 ON CONFLICT (persistent_session_id) DO UPDATE
@@ -29,8 +30,10 @@ func (s *PostgresStore) UpsertScrollback(persistentSessionID string, buffer []by
 }
 
 func (s *PostgresStore) GetScrollback(persistentSessionID string) ([]byte, error) {
+	ctx, cancel := terminalStoreContext()
+	defer cancel()
 	var buffer []byte
-	err := s.pool.QueryRow(context.Background(),
+	err := s.pool.QueryRow(ctx,
 		`SELECT buffer FROM terminal_session_scrollback WHERE persistent_session_id = $1`,
 		strings.TrimSpace(persistentSessionID),
 	).Scan(&buffer)
@@ -44,7 +47,9 @@ func (s *PostgresStore) GetScrollback(persistentSessionID string) ([]byte, error
 }
 
 func (s *PostgresStore) DeleteScrollback(persistentSessionID string) error {
-	_, err := s.pool.Exec(context.Background(),
+	ctx, cancel := terminalStoreContext()
+	defer cancel()
+	_, err := s.pool.Exec(ctx,
 		`DELETE FROM terminal_session_scrollback WHERE persistent_session_id = $1`,
 		strings.TrimSpace(persistentSessionID),
 	)

@@ -38,12 +38,19 @@ func (d *Deps) HandleLogin2FA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Consume the challenge token atomically. If the TOTP code turns out to be
-	// wrong, the token is already spent and the user must re-login. This
-	// prevents TOCTOU races where two concurrent requests both pass Validate
-	// before either calls Consume.
-	userID, ok := d.ChallengeStore.Consume(req.ChallengeToken)
+	challenges := d.authChallenges()
+	userID, ok := challenges.Validate(req.ChallengeToken)
 	if !ok {
+		servicehttp.WriteError(w, http.StatusUnauthorized, "invalid or expired challenge")
+		return
+	}
+	unlock := challenges.LockUser(userID)
+	defer unlock()
+	// Validate only selected the lock. Consume again under it, and retain the
+	// lock through session creation so a concurrent revocation cannot finish
+	// between consumption and a late session insert. Wrong codes still spend it.
+	consumedUserID, ok := challenges.Consume(req.ChallengeToken)
+	if !ok || consumedUserID != userID {
 		servicehttp.WriteError(w, http.StatusUnauthorized, "invalid or expired challenge")
 		return
 	}
@@ -113,6 +120,9 @@ func (d *Deps) Handle2FASetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := d.UserIDFromContext(r.Context())
+	challenges := d.authChallenges()
+	unlock := challenges.LockUser(userID)
+	defer unlock()
 	user, ok, err := d.AuthStore.GetUserByID(userID)
 	if err != nil || !ok {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load user")
@@ -170,6 +180,9 @@ func (d *Deps) Handle2FAVerify(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := d.UserIDFromContext(r.Context())
+	challenges := d.authChallenges()
+	unlock := challenges.LockUser(userID)
+	defer unlock()
 	user, ok, err := d.AuthStore.GetUserByID(userID)
 	if err != nil || !ok {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load user")
@@ -207,6 +220,7 @@ func (d *Deps) Handle2FAVerify(w http.ResponseWriter, r *http.Request) {
 	}
 	codesJSON, _ := json.Marshal(hashedCodes)
 
+	challenges.RevokeForUser(userID)
 	retainedCurrent, err := revokeOtherUserSessions(d.AuthStore, userID, r)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to revoke active sessions")
@@ -250,6 +264,9 @@ func (d *Deps) Handle2FADisable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := d.UserIDFromContext(r.Context())
+	challenges := d.authChallenges()
+	unlock := challenges.LockUser(userID)
+	defer unlock()
 	user, ok, err := d.AuthStore.GetUserByID(userID)
 	if err != nil || !ok {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load user")
@@ -271,6 +288,7 @@ func (d *Deps) Handle2FADisable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	challenges.RevokeForUser(userID)
 	retainedCurrent, err := revokeOtherUserSessions(d.AuthStore, userID, r)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to revoke active sessions")
@@ -310,6 +328,9 @@ func (d *Deps) Handle2FARecoveryCodes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := d.UserIDFromContext(r.Context())
+	challenges := d.authChallenges()
+	unlock := challenges.LockUser(userID)
+	defer unlock()
 	user, ok, err := d.AuthStore.GetUserByID(userID)
 	if err != nil || !ok {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load user")
@@ -343,6 +364,7 @@ func (d *Deps) Handle2FARecoveryCodes(w http.ResponseWriter, r *http.Request) {
 	}
 	codesJSON, _ := json.Marshal(hashedCodes)
 
+	challenges.RevokeForUser(userID)
 	retainedCurrent, err := revokeOtherUserSessions(d.AuthStore, userID, r)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to revoke active sessions")

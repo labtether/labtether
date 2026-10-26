@@ -125,6 +125,12 @@ func (d *Deps) HandleConnectorActions(w http.ResponseWriter, r *http.Request) {
 		}
 
 		resolvedActionID := modelmap.ResolveActionID(parts[2], req.TargetID, connector.Actions())
+		if d.handleConfiguredConnectorAction(w, r, resolvedConnectorID, resolvedActionID, req) {
+			return
+		}
+		if !d.prepareConnectorAction(w, resolvedConnectorID, resolvedActionID, &req) {
+			return
+		}
 
 		if resolvedConnectorID == "proxmox" {
 			result, err := d.ExecuteProxmoxActionDirect(r.Context(), resolvedActionID, req)
@@ -221,11 +227,17 @@ func (d *Deps) HandlePortainerConnectorActions(w http.ResponseWriter, r *http.Re
 			return
 		}
 
+		resolvedActionID := modelmap.ResolveActionID(parts[2], req.TargetID, connector.Actions())
+		if d.handleConfiguredConnectorAction(w, r, "portainer", resolvedActionID, req) {
+			return
+		}
 		if err := d.ValidateSingletonConnectorActionRoute("portainer", req.TargetID); err != nil {
 			servicehttp.WriteError(w, http.StatusConflict, err.Error())
 			return
 		}
-		resolvedActionID := modelmap.ResolveActionID(parts[2], req.TargetID, connector.Actions())
+		if !d.prepareConnectorAction(w, "portainer", resolvedActionID, &req) {
+			return
+		}
 		result, err := connector.ExecuteAction(r.Context(), resolvedActionID, req)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusBadGateway, "action execution failed")

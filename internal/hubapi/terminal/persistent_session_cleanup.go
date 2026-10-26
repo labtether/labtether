@@ -138,13 +138,17 @@ func (d *Deps) KillPersistentTerminalTmuxViaAgent(target, tmuxSessionName string
 	}
 
 	resultCh := make(chan agentmgr.CommandResultData, 1)
-	d.PendingAgentCmds.Store(jobID, shared.PendingAgentCommand{
+	pending := &shared.PendingAgentCommand{
+		ExpectedConn:      conn,
 		ResultCh:          resultCh,
 		ExpectedAssetID:   target,
 		ExpectedSessionID: sessionID,
 		ExpectedCommandID: commandID,
-	})
-	defer d.PendingAgentCmds.Delete(jobID)
+	}
+	if _, loaded := d.PendingAgentCmds.LoadOrStore(jobID, pending); loaded {
+		return errors.New("agent request already in progress")
+	}
+	defer d.PendingAgentCmds.CompareAndDelete(jobID, pending)
 
 	if err := conn.Send(agentmgr.Message{
 		Type: agentmgr.MsgTerminalTmuxKill,
@@ -168,6 +172,8 @@ func (d *Deps) KillPersistentTerminalTmuxViaAgent(target, tmuxSessionName string
 			Output:      data.Output,
 			CompletedAt: time.Now().UTC(),
 		}
+	case <-conn.Done():
+		return errors.New("agent disconnected before tmux cleanup result; outcome unknown")
 	case <-timer.C:
 		result = terminal.CommandResult{
 			JobID:       jobID,

@@ -33,6 +33,10 @@ func NewProxmoxTLSConfig(skipVerify bool, caPEM string) (*tls.Config, error) {
 }
 
 func DialProxmoxProxySocket(runtime *ProxmoxRuntime, node, kind, vmid string, ticket proxmox.ProxyTicket) (*websocket.Conn, error) {
+	return DialProxmoxProxySocketContext(context.Background(), runtime, node, kind, vmid, ticket)
+}
+
+func DialProxmoxProxySocketContext(ctx context.Context, runtime *ProxmoxRuntime, node, kind, vmid string, ticket proxmox.ProxyTicket) (*websocket.Conn, error) {
 	if runtime == nil || runtime.client == nil {
 		return nil, fmt.Errorf("proxmox runtime unavailable")
 	}
@@ -57,7 +61,7 @@ func DialProxmoxProxySocket(runtime *ProxmoxRuntime, node, kind, vmid string, ti
 	headers := http.Header{}
 	if runtime.authMode == proxmox.AuthModePassword {
 		// Password mode: use session ticket cookie for WebSocket auth.
-		sessionTicket, _, err := runtime.client.GetTicket(context.Background())
+		sessionTicket, _, err := runtime.client.GetTicket(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("acquire session ticket for websocket: %w", err)
 		}
@@ -74,7 +78,7 @@ func DialProxmoxProxySocket(runtime *ProxmoxRuntime, node, kind, vmid string, ti
 		logHost = "unknown"
 	}
 	securityruntime.Logf("desktop-proxmox: dialing websocket host=%s (kind=%s, vmid=%s)", logHost, kind, vmid)
-	conn, httpResp, err := dialer.Dial(wsURL, headers)
+	conn, httpResp, err := dialer.DialContext(ctx, wsURL, headers)
 	if err != nil {
 		detail := err.Error()
 		if httpResp != nil {

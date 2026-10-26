@@ -9,6 +9,8 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/labtether/labtether/internal/actions"
 	"github.com/labtether/labtether/internal/connectorsdk"
+	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/secrets"
 )
@@ -30,13 +32,15 @@ type DesktopSPICEProxyTarget struct {
 // Store interfaces are embedded directly; cross-cutting concerns that live
 // in other cmd/labtether subsystems are injected as function fields.
 type Deps struct {
+	ConfiguredConnectorActions map[string]shared.ConfiguredConnectorAction
 	// Store interfaces
-	AssetStore        persistence.AssetStore
-	HubCollectorStore persistence.HubCollectorStore
-	CredentialStore   persistence.CredentialStore
-	SecretsManager    *secrets.Manager
-	TelemetryStore    persistence.TelemetryStore
-	ConnectorRegistry *connectorsdk.Registry
+	AssetStore                  persistence.AssetStore
+	HubCollectorStore           persistence.HubCollectorStore
+	CredentialStore             persistence.CredentialStore
+	SecretsManager              *secrets.Manager
+	TelemetryStore              persistence.TelemetryStore
+	ConnectorRegistry           *connectorsdk.Registry
+	EvaluateConnectorGuardrails maintenanceguard.EvaluateConnectorFunc
 
 	// Proxmox client cache (owned by this package after extraction).
 	ProxmoxCacheMu sync.RWMutex
@@ -54,8 +58,10 @@ type Deps struct {
 	TakeDesktopSPICEProxyTarget func(sessionID string) (DesktopSPICEProxyTarget, bool)
 
 	// Command execution (for action runtime).
-	ExecuteCommandAction     func(job actions.Job) actions.Result
-	ExecuteActionInProcessFn func(job actions.Job, registry *connectorsdk.Registry) actions.Result
+	ExecuteCommandAction            func(job actions.Job) actions.Result
+	ExecuteActionInProcessFn        func(job actions.Job, registry *connectorsdk.Registry) actions.Result
+	ExecuteCommandActionContext     func(context.Context, actions.Job) actions.Result
+	ExecuteActionInProcessContextFn func(context.Context, actions.Job, *connectorsdk.Registry) actions.Result
 
 	// Terminal/desktop stream infrastructure injected from cmd/labtether.
 	TerminalWebSocketUpgrader *websocket.Upgrader

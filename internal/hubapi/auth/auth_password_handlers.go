@@ -55,6 +55,9 @@ func (d *Deps) HandleChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	challenges := d.authChallenges()
+	unlock := challenges.LockUser(userID)
+	defer unlock()
 	user, ok, err := d.AuthStore.GetUserByID(userID)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to look up user")
@@ -82,6 +85,7 @@ func (d *Deps) HandleChangePassword(w http.ResponseWriter, r *http.Request) {
 	// Revoke every other session before changing the credential. A revocation
 	// failure must not leave a newly changed password alongside sessions that
 	// the operator was told had been signed out.
+	challenges.RevokeForUser(userID)
 	retainedCurrent, revokeErr := revokeOtherUserSessions(d.AuthStore, userID, r)
 	if revokeErr != nil {
 		log.Printf("auth: password-change: failed to revoke other sessions for user %s: %v", userID, revokeErr) // #nosec G706 -- User IDs are store-generated identifiers.

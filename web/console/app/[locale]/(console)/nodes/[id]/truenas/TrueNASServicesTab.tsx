@@ -8,15 +8,16 @@ import { truenasAction, useTrueNASList } from "./useTrueNASData";
 
 export type TrueNASService = {
   name: string;
-  running: boolean;
+  state?: string;
+  running?: boolean;
   enabled: boolean;
   uptime?: string;
 };
 
 const PRIORITY_SERVICES = new Set(["smb", "nfs", "ssh", "iscsi"]);
 
-function runningBadge(running: boolean): "ok" | "bad" {
-  return running ? "ok" : "bad";
+function runningBadge(running: boolean | undefined): "ok" | "bad" | "pending" {
+  return running === undefined ? "pending" : running ? "ok" : "bad";
 }
 
 type Props = {
@@ -100,7 +101,7 @@ export function TrueNASServicesTab({ assetId }: Props) {
                   <td className="py-2">
                     <div className="flex items-center gap-2">
                       <Badge status={runningBadge(svc.running)} size="sm" dot />
-                      <span className="text-[var(--muted)]">{svc.running ? "Running" : "Stopped"}</span>
+                      <span className="text-[var(--muted)]">{svc.running === undefined ? svc.state : svc.running ? "Running" : "Stopped"}</span>
                     </div>
                   </td>
                   <td className="py-2">
@@ -115,7 +116,7 @@ export function TrueNASServicesTab({ assetId }: Props) {
                       <Button
                         size="sm"
                         variant="ghost"
-                        disabled={!!actionInFlight || svc.running}
+                        disabled={!!actionInFlight || svc.running !== false}
                         loading={actionInFlight === `start-${svc.name}`}
                         onClick={() => { void doAction(svc.name, "start"); }}
                       >
@@ -124,7 +125,7 @@ export function TrueNASServicesTab({ assetId }: Props) {
                       <Button
                         size="sm"
                         variant="ghost"
-                        disabled={!!actionInFlight || !svc.running}
+                        disabled={!!actionInFlight || svc.running !== true}
                         loading={actionInFlight === `stop-${svc.name}`}
                         onClick={() => { void doAction(svc.name, "stop"); }}
                       >

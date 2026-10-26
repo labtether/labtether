@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"context"
 	"strings"
 	"sync"
 	"time"
@@ -49,8 +50,18 @@ func (m *MemoryWebServiceStore) PromoteManualServicesToStandalone(hostAssetID st
 }
 
 func (m *MemoryWebServiceStore) GetManualWebService(id string) (WebServiceManual, bool, error) {
+	return m.GetManualWebServiceContext(context.Background(), id)
+}
+
+func (m *MemoryWebServiceStore) GetManualWebServiceContext(ctx context.Context, id string) (WebServiceManual, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return WebServiceManual{}, false, err
+	}
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+	if err := ctx.Err(); err != nil {
+		return WebServiceManual{}, false, err
+	}
 
 	svc, ok := m.manuals[strings.TrimSpace(id)]
 	if !ok {

@@ -73,7 +73,11 @@ func (d *Deps) HandleDesktopAudioStream(w http.ResponseWriter, r *http.Request, 
 	shared.LimitBrowserControlMessages(wsConn)
 	defer wsConn.Close()
 
-	audio := d.registerDesktopAudioStream(bridge)
+	// Session deletion shares these gates, so it cannot miss a pending attachment.
+	var audio *DesktopBridge
+	if !shared.RunIfSessionStreamOpen(r.Context(), func() { audio = d.registerDesktopAudioStream(bridge) }) {
+		return
+	}
 	defer d.finalizeDesktopAudioStream(audio)
 	select {
 	case <-bridge.ClosedCh:
@@ -81,7 +85,13 @@ func (d *Deps) HandleDesktopAudioStream(w http.ResponseWriter, r *http.Request, 
 	default:
 	}
 	payload, _ := json.Marshal(agentmgr.DesktopAudioStartData{SessionID: audio.WireSessionID, Bitrate: desktopAudioDefaultBitrate})
-	if err := audio.start(agentmgr.Message{Type: agentmgr.MsgDesktopAudioStart, ID: audio.WireSessionID, Data: payload}); err != nil {
+	var startErr error
+	if !shared.RunIfSessionStreamOpen(r.Context(), func() {
+		startErr = audio.start(agentmgr.Message{Type: agentmgr.MsgDesktopAudioStart, ID: audio.WireSessionID, Data: payload})
+	}) {
+		return
+	}
+	if startErr != nil {
 		SafeWriteClose(wsConn, websocket.CloseTryAgainLater, "failed to start desktop audio")
 		return
 	}
@@ -93,12 +103,22 @@ func (d *Deps) HandleDesktopAudioStream(w http.ResponseWriter, r *http.Request, 
 	done := make(chan struct{})
 	defer close(done)
 	go func() {
+		reason := ""
 		select {
 		case <-bridge.ClosedCh:
+			reason = bridge.CloseReason()
 			audio.Close()
-			_ = wsConn.Close()
+		case <-audio.ClosedCh:
+			// A full audio queue ends only this attachment, visibly.
+			reason = audio.CloseReason()
 		case <-done:
+			return
 		}
+		writeMu.Lock()
+		SafeWriteClose(wsConn, websocket.CloseNormalClosure, reason)
+		writeMu.Unlock()
+		_ = wsConn.SetReadDeadline(time.Now())
+		_ = wsConn.Close()
 	}()
 
 	go d.BridgeDesktopAudioOutput(wsConn, audio.AudioCh, audio.ClosedCh, &writeMu)

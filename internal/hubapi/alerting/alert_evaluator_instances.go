@@ -1,6 +1,7 @@
 package alerting
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -9,7 +10,6 @@ import (
 
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/alerts"
-	"github.com/labtether/labtether/internal/incidents"
 	"github.com/labtether/labtether/internal/persistence"
 )
 
@@ -18,40 +18,51 @@ type alertSuppressionPrefetch struct {
 	activeSilences []alerts.AlertSilence
 }
 
-type autoIncidentAlertLinkChecker interface {
-	HasAutoIncidentForAlertInstance(alertInstanceID string) (bool, error)
-}
-
-func (d *Deps) newAlertSuppressionPrefetch() *alertSuppressionPrefetch {
+func (d *Deps) newAlertSuppressionPrefetch(ctx context.Context) (*alertSuppressionPrefetch, error) {
 	if d.AlertInstanceStore == nil {
-		return nil
+		return nil, nil
 	}
-
-	prefetch := &alertSuppressionPrefetch{
-		now:            time.Now().UTC(),
-		activeSilences: nil,
+	store, ok := d.AlertInstanceStore.(persistence.AlertInstanceContextStore)
+	if !ok {
+		return nil, fmt.Errorf("context-aware alert suppression unavailable")
 	}
-
-	if d.AlertInstanceStore != nil {
-		silences, err := d.AlertInstanceStore.ListAlertSilences(500, true)
-		if err != nil {
-			log.Printf("alert evaluator: failed to prefetch alert silences: %v", err)
-		} else {
-			prefetch.activeSilences = silences
-		}
+	silences, err := store.ListAlertSilencesContext(ctx, 500, true)
+	if err != nil {
+		return nil, err
 	}
-
-	return prefetch
+	// A full page cannot prove that an unseen matching silence is absent.
+	if len(silences) >= 500 {
+		return nil, fmt.Errorf("alert silence inventory incomplete")
+	}
+	return &alertSuppressionPrefetch{now: time.Now().UTC(), activeSilences: silences}, nil
 }
 
 func (d *Deps) fireOrRefireAlert(rule alerts.Rule, suppressionPrefetch *alertSuppressionPrefetch) {
-	if d.AlertInstanceStore == nil {
+	d.fireOrRefireAlertAt(context.Background(), rule, suppressionPrefetch, time.Now().UTC())
+}
+
+func (d *Deps) fireOrRefireAlertAt(ctx context.Context, rule alerts.Rule, suppressionPrefetch *alertSuppressionPrefetch, at time.Time) {
+	d.fireOrRefireAlertWithScopeAt(ctx, rule, suppressionPrefetch, at, alerts.FiringScope{Version: 1})
+}
+
+func (d *Deps) fireOrRefireAlertWithScopeAt(ctx context.Context, rule alerts.Rule, suppressionPrefetch *alertSuppressionPrefetch, at time.Time, scope alerts.FiringScope) {
+	if d.AlertInstanceStore == nil || ctx.Err() != nil {
+		return
+	}
+	store, capable := d.AlertInstanceStore.(persistence.AlertInstanceContextStore)
+	if !capable {
+		log.Printf("alert evaluator: context-aware instances unavailable")
 		return
 	}
 	fingerprint := alerts.GenerateFingerprint(rule.ID, rule.Labels)
 
 	createAndDispatchFiringInstance := func() {
-		inst, err := d.AlertInstanceStore.CreateAlertInstance(alerts.CreateInstanceRequest{
+		firingStore, ok := d.AlertInstanceStore.(persistence.AlertInstanceFiringStore)
+		if !ok {
+			log.Printf("alert evaluator: atomic firing scope store unavailable")
+			return
+		}
+		inst, err := store.CreateAlertInstanceContext(ctx, alerts.CreateInstanceRequest{
 			RuleID:      rule.ID,
 			Fingerprint: fingerprint,
 			Severity:    rule.Severity,
@@ -62,19 +73,22 @@ func (d *Deps) fireOrRefireAlert(rule alerts.Rule, suppressionPrefetch *alertSup
 			return
 		}
 		// Transition to firing.
-		if _, err := d.AlertInstanceStore.UpdateAlertInstanceStatus(inst.ID, alerts.InstanceStatusFiring); err != nil {
+		if _, err := firingStore.FireAlertInstance(ctx, inst.ID, scope); err != nil {
 			log.Printf("alert evaluator: failed to transition instance to firing: %v", err)
 			return
 		}
 
+		if ctx.Err() != nil {
+			return
+		}
 		d.broadcastEvent("alert.fired", map[string]any{"rule_id": rule.ID, "severity": string(rule.Severity)})
 		d.dispatchAlertNotificationsAsync(rule, inst.ID, "firing")
 
 		// Push alert notification to connected agents (best-effort).
-		d.pushAlertNotifyToAgents(rule, inst.ID, "firing")
+		d.pushAlertNotifyToAgents(ctx, rule, inst.ID, "firing")
 	}
 
-	existing, ok, err := d.AlertInstanceStore.GetActiveInstanceByFingerprint(rule.ID, fingerprint)
+	existing, ok, err := store.GetActiveInstanceByFingerprintContext(ctx, rule.ID, fingerprint)
 	if err != nil {
 		log.Printf("alert evaluator: failed to check fingerprint: %v", err)
 		return
@@ -85,11 +99,14 @@ func (d *Deps) fireOrRefireAlert(rule alerts.Rule, suppressionPrefetch *alertSup
 		// has lifted, promote by resolving the placeholder and creating a fresh
 		// firing instance so incident timing starts from actual firing time.
 		if existing.Status == alerts.InstanceStatusPending {
-			if d.isAlertSuppressed(rule, suppressionPrefetch) {
-				_ = d.AlertInstanceStore.UpdateAlertInstanceLastFired(existing.ID)
+			if d.isAlertSuppressedContext(ctx, rule, suppressionPrefetch) {
+				_ = store.UpdateAlertInstanceLastFiredContext(ctx, existing.ID)
 				return
 			}
-			if _, err := d.AlertInstanceStore.UpdateAlertInstanceStatus(existing.ID, alerts.InstanceStatusResolved); err != nil {
+			if !d.alertFingerprintMayFire(ctx, rule, fingerprint, at) {
+				return
+			}
+			if _, err := store.UpdateAlertInstanceStatusContext(ctx, existing.ID, alerts.InstanceStatusResolved); err != nil {
 				log.Printf("alert evaluator: failed to resolve pending suppressed instance %s: %v", existing.ID, err)
 				return
 			}
@@ -98,14 +115,16 @@ func (d *Deps) fireOrRefireAlert(rule alerts.Rule, suppressionPrefetch *alertSup
 		}
 
 		// Refire: update last_fired_at.
-		_ = d.AlertInstanceStore.UpdateAlertInstanceLastFired(existing.ID)
-		d.MaybeAutoCreateIncident(rule, existing)
+		if err := store.UpdateAlertInstanceLastFiredContext(ctx, existing.ID); err != nil {
+			return
+		}
+		d.maybeAutoCreateIncidentContext(ctx, rule, existing)
 		return
 	}
 
 	// Check suppression: active silences
-	if d.isAlertSuppressed(rule, suppressionPrefetch) {
-		_, _ = d.AlertInstanceStore.CreateAlertInstance(alerts.CreateInstanceRequest{
+	if d.isAlertSuppressedContext(ctx, rule, suppressionPrefetch) {
+		_, _ = store.CreateAlertInstanceContext(ctx, alerts.CreateInstanceRequest{
 			RuleID:      rule.ID,
 			Fingerprint: fingerprint,
 			Severity:    rule.Severity,
@@ -114,91 +133,29 @@ func (d *Deps) fireOrRefireAlert(rule alerts.Rule, suppressionPrefetch *alertSup
 		return
 	}
 
-	createAndDispatchFiringInstance()
+	if d.alertFingerprintMayFire(ctx, rule, fingerprint, at) {
+		createAndDispatchFiringInstance()
+	}
 }
 
-func (d *Deps) MaybeAutoCreateIncident(rule alerts.Rule, instance alerts.AlertInstance) {
-	if d.IncidentStore == nil {
-		return
+func (d *Deps) isAlertSuppressedContext(ctx context.Context, rule alerts.Rule, prefetch *alertSuppressionPrefetch) bool {
+	if ctx.Err() != nil {
+		return true
 	}
-
-	// Only auto-create for critical severity
-	if rule.Severity != alerts.SeverityCritical {
-		return
-	}
-
-	// Only if firing for > 5 minutes
-	if time.Since(instance.StartedAt) < 5*time.Minute {
-		return
-	}
-
-	if checker, ok := d.IncidentStore.(autoIncidentAlertLinkChecker); ok {
-		exists, err := checker.HasAutoIncidentForAlertInstance(instance.ID)
-		if err != nil {
-			log.Printf("alert evaluator: failed to check auto incident link existence: %v", err)
-			return
-		}
-		if exists {
-			return
-		}
-	} else {
-		// Fallback for older store implementations.
-		autoIncidents, err := d.IncidentStore.ListIncidents(persistence.IncidentFilter{
-			Limit:  100,
-			Source: incidents.SourceAlertAuto,
-		})
-		if err != nil {
-			log.Printf("alert evaluator: failed to list auto incidents: %v", err)
-			return
-		}
-		for _, inc := range autoIncidents {
-			links, err := d.IncidentStore.ListIncidentAlertLinks(inc.ID, 50)
-			if err != nil {
-				continue
-			}
-			for _, link := range links {
-				if link.AlertInstanceID == instance.ID {
-					return // Already linked
-				}
-			}
-		}
-	}
-
-	// Create incident
-	inc, err := d.IncidentStore.CreateIncident(incidents.CreateIncidentRequest{
-		Title:    fmt.Sprintf("Auto: %s", rule.Name),
-		Severity: incidents.SeverityCritical,
-		Source:   incidents.SourceAlertAuto,
-		Summary:  fmt.Sprintf("Auto-created from critical alert rule %q firing for >5 minutes", rule.Name),
-	})
-	if err != nil {
-		log.Printf("alert evaluator: failed to auto-create incident: %v", err)
-		return
-	}
-
-	// Link alert to incident
-	if _, err := d.IncidentStore.LinkIncidentAlert(inc.ID, incidents.LinkAlertRequest{
-		AlertInstanceID: instance.ID,
-		LinkType:        incidents.LinkTypeTrigger,
-	}); err != nil {
-		log.Printf("alert evaluator: failed to link alert to incident: %v", err)
-	}
-
-	d.dispatchIncidentNotificationAsync(inc, "incident.created")
-	log.Printf("alert evaluator: auto-created incident %s from critical alert %s", inc.ID, rule.Name)
-}
-
-func (d *Deps) isAlertSuppressed(rule alerts.Rule, prefetch *alertSuppressionPrefetch) bool {
-	if d.isAlertMaintenanceSuppressed(rule) {
+	if d.isAlertMaintenanceSuppressedContext(ctx, rule) {
 		return true
 	}
 	var silences []alerts.AlertSilence
 	if prefetch != nil {
 		silences = prefetch.activeSilences
 	} else {
-		loaded, err := d.AlertInstanceStore.ListAlertSilences(100, true)
-		if err != nil {
-			return false
+		store, ok := d.AlertInstanceStore.(persistence.AlertInstanceContextStore)
+		if !ok {
+			return true
+		}
+		loaded, err := store.ListAlertSilencesContext(ctx, 500, true)
+		if err != nil || len(loaded) >= 500 {
+			return true
 		}
 		silences = loaded
 	}
@@ -225,45 +182,74 @@ func matchesSilence(rule alerts.Rule, silence alerts.AlertSilence) bool {
 }
 
 func (d *Deps) resolveStaleInstances(rule alerts.Rule, suppressionPrefetch *alertSuppressionPrefetch) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	d.resolveStaleInstancesContext(ctx, rule, suppressionPrefetch)
+}
+
+func (d *Deps) resolveStaleInstancesContext(ctx context.Context, rule alerts.Rule, suppressionPrefetch *alertSuppressionPrefetch) {
 	if d.AlertInstanceStore == nil {
 		return
 	}
-	suppressed := d.isAlertSuppressed(rule, suppressionPrefetch)
-	instances, err := d.AlertInstanceStore.ListAlertInstances(persistence.AlertInstanceFilter{
-		RuleID: rule.ID,
-		Status: alerts.InstanceStatusFiring,
-		Limit:  100,
-	})
-	if err != nil {
+	store, ok := d.AlertInstanceStore.(persistence.AlertInstanceContextStore)
+	if !ok || ctx.Err() != nil {
 		return
 	}
-	for _, inst := range instances {
-		_, _ = d.AlertInstanceStore.UpdateAlertInstanceStatus(inst.ID, alerts.InstanceStatusResolved)
-		if suppressed {
+	suppressed := d.isAlertSuppressedContext(ctx, rule, suppressionPrefetch)
+	// Keep each status batch bounded. Resolved history must not consume the
+	// active-instance limit, and acknowledged/pending rows must also clear.
+	for _, status := range []string{alerts.InstanceStatusPending, alerts.InstanceStatusFiring, alerts.InstanceStatusAcknowledged} {
+		instances, err := store.ListAlertInstancesContext(ctx, persistence.AlertInstanceFilter{
+			RuleID: rule.ID,
+			Status: status,
+			Limit:  100,
+		})
+		if err != nil {
+			log.Printf("alert evaluator: failed to list %s instances for rule %s: %v", status, rule.ID, err)
 			continue
 		}
-		d.broadcastEvent("alert.resolved", map[string]any{"rule_id": rule.ID, "instance_id": inst.ID})
-		d.dispatchAlertNotificationsAsync(rule, inst.ID, "resolved")
+		for _, inst := range instances {
+			if ctx.Err() != nil {
+				return
+			}
+			if _, err := store.UpdateAlertInstanceStatusContext(ctx, inst.ID, alerts.InstanceStatusResolved); err != nil {
+				log.Printf("alert evaluator: failed to resolve instance %s: %v", inst.ID, err)
+				continue
+			}
+			// A suppressed placeholder has never fired, so it has no recovery
+			// notification. Acknowledgement does not suppress genuine recovery.
+			if ctx.Err() != nil {
+				return
+			}
+			if suppressed || inst.Status == alerts.InstanceStatusPending {
+				continue
+			}
+			d.broadcastEvent("alert.resolved", map[string]any{"rule_id": rule.ID, "instance_id": inst.ID})
+			d.dispatchAlertNotificationsAsync(rule, inst.ID, "resolved")
 
-		// Push resolved notification to connected agents (best-effort)
-		d.pushAlertNotifyToAgents(rule, inst.ID, "resolved")
+			// Push resolved notification to connected agents (best-effort).
+			d.pushAlertNotifyToAgents(ctx, rule, inst.ID, "resolved")
+		}
 	}
 }
 
 // pushAlertNotifyToAgents sends an alert.notify message to connected agents
 // for each asset targeted by the rule. This is best-effort; send errors are ignored.
-func (d *Deps) pushAlertNotifyToAgents(rule alerts.Rule, instanceID string, state string) {
+func (d *Deps) pushAlertNotifyToAgents(ctx context.Context, rule alerts.Rule, instanceID string, state string) {
 	if d.AgentMgr == nil {
 		return
 	}
 
-	targetAssets, err := d.ResolveRuleTargetAssets(rule, nil, true)
+	targetAssets, err := d.resolveRuleTargetAssetsContext(ctx, rule, nil, nil, true)
 	if err != nil {
 		log.Printf("alert evaluator: failed to resolve agent notification targets: %v", err)
 		return
 	}
 
 	for _, targetAsset := range targetAssets {
+		if ctx.Err() != nil {
+			return
+		}
 		assetID := strings.TrimSpace(targetAsset.ID)
 		if !d.AgentMgr.IsConnected(assetID) {
 			continue
@@ -280,6 +266,6 @@ func (d *Deps) pushAlertNotifyToAgents(rule alerts.Rule, instanceID string, stat
 			State:     state,
 			Timestamp: time.Now().UTC().Format(time.RFC3339),
 		})
-		_ = conn.Send(agentmgr.Message{Type: agentmgr.MsgAlertNotify, Data: notifyData})
+		_ = conn.SendContext(ctx, agentmgr.Message{Type: agentmgr.MsgAlertNotify, Data: notifyData})
 	}
 }

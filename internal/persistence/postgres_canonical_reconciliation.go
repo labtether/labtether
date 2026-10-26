@@ -11,6 +11,8 @@ import (
 )
 
 func (s *PostgresStore) UpsertIngestCheckpoint(checkpoint model.IngestCheckpoint) (model.IngestCheckpoint, error) {
+	ctx, cancel := agentLifecycleStoreContext()
+	defer cancel()
 	providerID := strings.TrimSpace(checkpoint.ProviderInstanceID)
 	stream := strings.ToLower(strings.TrimSpace(checkpoint.Stream))
 	if providerID == "" || stream == "" {
@@ -22,7 +24,7 @@ func (s *PostgresStore) UpsertIngestCheckpoint(checkpoint model.IngestCheckpoint
 	}
 
 	stored, err := scanIngestCheckpoint(s.pool.QueryRow(
-		context.Background(),
+		ctx,
 		`INSERT INTO canonical_ingest_checkpoints (
 			provider_instance_id, stream, cursor, synced_at
 		)

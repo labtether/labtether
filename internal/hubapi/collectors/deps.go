@@ -13,6 +13,8 @@ import (
 	"github.com/labtether/labtether/internal/connectors/truenas"
 	"github.com/labtether/labtether/internal/connectors/webservice"
 	"github.com/labtether/labtether/internal/connectorsdk"
+	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/secrets"
 
@@ -23,6 +25,7 @@ import (
 // Store interfaces are embedded directly; cross-cutting concerns that live
 // in other cmd/labtether subsystems are injected as function fields.
 type Deps struct {
+	ConfiguredConnectorActions map[string]shared.ConfiguredConnectorAction
 	// Store interfaces
 	AssetStore        persistence.AssetStore
 	HubCollectorStore persistence.HubCollectorStore
@@ -71,6 +74,8 @@ type Deps struct {
 	PersistCanonicalConnectorSnapshot func(connectorID, collectorID, displayName, parentAssetID string, connector connectorsdk.Connector, assets []connectorsdk.Asset)
 	DetectLinkSuggestions             func() error
 	ExecuteProxmoxActionDirect        func(ctx context.Context, actionID string, req connectorsdk.ActionRequest) (connectorsdk.ActionResult, error)
+	EvaluateAssetGuardrails           maintenanceguard.EvaluateAssetFunc
+	EvaluateConnectorGuardrails       maintenanceguard.EvaluateConnectorFunc
 	// Connector runtime loaders injected from cmd/labtether.
 	LoadProxmoxRuntime              func(collectorID string) (*proxmox.Client, error)
 	LoadTrueNASRuntime              func(collectorID string) (*truenas.Client, error)

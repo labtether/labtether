@@ -143,7 +143,11 @@ func (d *Deps) HandleAgentDesktopStream(w http.ResponseWriter, r *http.Request, 
 		TraceID:         traceID,
 	}
 
-	d.registerDesktopStream(bridgeState)
+	if !d.publishDesktopStream(r.Context(), bridgeState) {
+		log.Printf("desktop-agent: stream_setup_failed reason=agent_disconnected_before_publish %s", logContext) // #nosec G706 -- Log context is composed from bounded session/runtime identifiers.
+		SafeWriteClose(wsConn, websocket.CloseTryAgainLater, "agent disconnected while opening desktop")
+		return
+	}
 	startSent := false
 	endReason := "unknown"
 	var endErr error
@@ -191,11 +195,18 @@ func (d *Deps) HandleAgentDesktopStream(w http.ResponseWriter, r *http.Request, 
 		Display:     display,
 		VNCPassword: opts.VNCPassword,
 	})
-	if err := bridgeState.start(agentmgr.Message{
-		Type: agentmgr.MsgDesktopStart,
-		ID:   bridgeState.WireSessionID,
-		Data: startData,
-	}); err != nil {
+	var startErr error
+	if !shared.RunIfSessionStreamOpen(r.Context(), func() {
+		startErr = bridgeState.start(agentmgr.Message{
+			Type: agentmgr.MsgDesktopStart,
+			ID:   bridgeState.WireSessionID,
+			Data: startData,
+		})
+	}) {
+		endReason = "session_request_cancelled"
+		return
+	}
+	if err := startErr; err != nil {
 		endReason = "agent_start_send_failed"
 		endErr = err
 		log.Printf("desktop-agent: stream_setup_failed reason=agent_start_send_failed %s err=%v", logContext, err) // #nosec G706 -- Log fields are bounded session/runtime identifiers and local bridge errors.
@@ -221,6 +232,9 @@ func (d *Deps) HandleAgentDesktopStream(w http.ResponseWriter, r *http.Request, 
 
 	// Wait for desktop.started with timeout.
 	select {
+	case <-r.Context().Done():
+		endReason = "session_request_cancelled"
+		return
 	case <-closedCh:
 		reason := strings.TrimSpace(bridgeState.CloseReason())
 		if reason == "" {
@@ -429,7 +443,7 @@ func (d *Deps) ProcessAgentDesktopStarted(conn *agentmgr.AgentConn, msg agentmgr
 		if !ok || b == nil {
 			return
 		}
-		if !b.MatchesConnection(conn) {
+		if !b.AcceptsAgentMessage(conn, data.SessionID) {
 			return
 		}
 		log.Printf("desktop-agent: agent_reported_started session=%s target=%s trace=%s", b.SessionID, b.Target, d.StreamTraceLogValue(b.TraceID))
@@ -458,7 +472,7 @@ func (d *Deps) ProcessAgentDesktopData(conn *agentmgr.AgentConn, msg agentmgr.Me
 		if !ok || b == nil {
 			return
 		}
-		if !b.MatchesConnection(conn) {
+		if !b.AcceptsAgentMessage(conn, payload.SessionID) {
 			return
 		}
 		b.TrySendOutput(decoded)
@@ -477,7 +491,7 @@ func (d *Deps) ProcessAgentDesktopClosed(conn *agentmgr.AgentConn, msg agentmgr.
 		if !ok || b == nil {
 			return
 		}
-		if !b.MatchesConnection(conn) {
+		if !b.AcceptsAgentMessage(conn, data.SessionID) {
 			return
 		}
 		reason := strings.TrimSpace(data.Reason)

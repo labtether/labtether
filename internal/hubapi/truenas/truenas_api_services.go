@@ -98,9 +98,12 @@ func (d *Deps) HandleTrueNASServices(ctx context.Context, w http.ResponseWriter,
 		if !d.RequireAdminAuth(w, r) {
 			return
 		}
+		if !d.enforceMutation(w, asset, runtime, "service."+serviceAction, map[string]string{"service": serviceName}) {
+			return
+		}
 		method := "service." + serviceAction
-		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, method, []any{serviceName}, nil); err != nil {
-			writeTrueNASError(w, http.StatusBadGateway, "failed to perform service action", err)
+		if err := runtime.Client.CallMutation(ctx, method, []any{serviceName}, nil); err != nil {
+			writeTrueNASMutationError(w, http.StatusBadGateway, "failed to perform service action", err)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, TrueNASServiceActionResponse{
@@ -147,8 +150,11 @@ func (d *Deps) HandleTrueNASServices(ctx context.Context, w http.ResponseWriter,
 			servicehttp.WriteError(w, http.StatusNotFound, "service not found: "+serviceName)
 			return
 		}
-		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, "service.update", []any{serviceID, map[string]any{"enable": body.Enable}}, nil); err != nil {
-			writeTrueNASError(w, http.StatusBadGateway, "failed to update service", err)
+		if !d.enforceMutation(w, asset, runtime, "service.update", map[string]string{"service": serviceName}) {
+			return
+		}
+		if err := runtime.Client.CallMutation(ctx, "service.update", []any{serviceID, map[string]any{"enable": body.Enable}}, nil); err != nil {
+			writeTrueNASMutationError(w, http.StatusBadGateway, "failed to update service", err)
 			return
 		}
 		action := "enabled"

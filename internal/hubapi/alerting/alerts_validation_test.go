@@ -8,12 +8,13 @@ import (
 )
 
 func TestValidateCreateAlertRuleRequestRejectsOutOfRangeDurations(t *testing.T) {
+	window := alerts.MaxDurationSeconds + 1
 	req := alerts.CreateRuleRequest{
 		Name:          "CPU",
 		Kind:          alerts.RuleKindMetricThreshold,
 		Severity:      alerts.SeverityHigh,
 		TargetScope:   alerts.TargetScopeGlobal,
-		WindowSeconds: alerts.MaxDurationSeconds + 1,
+		WindowSeconds: &window,
 		Condition:     map[string]any{"metric": "cpu", "operator": ">", "threshold": 90},
 	}
 

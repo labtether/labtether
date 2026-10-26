@@ -40,6 +40,9 @@ func (d *Deps) HandlePBSRemotes(ctx context.Context, w http.ResponseWriter, r *h
 			writePBSError(w, http.StatusBadRequest, "invalid form body", parseErr)
 			return
 		}
+		if !d.enforceMutation(w, runtime) {
+			return
+		}
 		if createErr := runtime.Client.CreateRemote(ctx, r.PostForm); createErr != nil {
 			writePBSError(w, http.StatusBadGateway, "failed to create remote", createErr)
 			return
@@ -84,6 +87,9 @@ func (d *Deps) HandlePBSTrafficControl(ctx context.Context, w http.ResponseWrite
 				writePBSError(w, http.StatusBadRequest, "invalid form body", parseErr)
 				return
 			}
+			if !d.enforceMutation(w, runtime) {
+				return
+			}
 			if createErr := runtime.Client.CreateTrafficControl(ctx, r.PostForm); createErr != nil {
 				writePBSError(w, http.StatusBadGateway, "failed to create traffic control rule", createErr)
 				return
@@ -110,6 +116,9 @@ func (d *Deps) HandlePBSTrafficControl(ctx context.Context, w http.ResponseWrite
 			writePBSError(w, http.StatusBadRequest, "invalid form body", parseErr)
 			return
 		}
+		if !d.enforceMutation(w, runtime) {
+			return
+		}
 		if updateErr := runtime.Client.UpdateTrafficControl(ctx, ruleName, r.PostForm); updateErr != nil {
 			writePBSError(w, http.StatusBadGateway, "failed to update traffic control rule", updateErr)
 			return
@@ -117,6 +126,9 @@ func (d *Deps) HandlePBSTrafficControl(ctx context.Context, w http.ResponseWrite
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 	case http.MethodDelete:
 		if !d.RequireAdminAuth(w, r) {
+			return
+		}
+		if !d.enforceMutation(w, runtime) {
 			return
 		}
 		if deleteErr := runtime.Client.DeleteTrafficControl(ctx, ruleName); deleteErr != nil {
@@ -205,6 +217,9 @@ func (d *Deps) setPBSDatastoreMaintenanceMode(ctx context.Context, w http.Respon
 		return
 	}
 
+	if !d.enforceMutation(w, runtime, store) {
+		return
+	}
 	if maintenanceErr := runtime.Client.SetDatastoreMaintenanceMode(ctx, store, mode); maintenanceErr != nil {
 		writePBSError(w, http.StatusBadGateway, "failed to set maintenance mode", maintenanceErr)
 		return

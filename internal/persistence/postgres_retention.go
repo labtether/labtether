@@ -5,8 +5,6 @@ import (
 	"errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/labtether/labtether/internal/retention"
-	"log"
-	"os"
 	"strings"
 	"time"
 )
@@ -169,8 +167,7 @@ func (s *PostgresStore) PruneExpiredData(now time.Time, settings retention.Setti
 		return retention.PruneResult{}, err
 	}
 
-	// Alert silences and recordings still need a transaction for
-	// the multi-step logic (schema introspection + delete, RETURNING paths).
+	// Alert silences need a transaction for schema introspection and deletion.
 	tx, err := s.pool.Begin(context.Background())
 	if err != nil {
 		return retention.PruneResult{}, err
@@ -180,62 +177,14 @@ func (s *PostgresStore) PruneExpiredData(now time.Time, settings retention.Setti
 	if result.AlertSilencesDeleted, err = pruneExpiredAlertSilences(tx, now.Add(-settings.AlertSilencesWindow)); err != nil {
 		return retention.PruneResult{}, err
 	}
-	recordingsCutoff := now.Add(-settings.RecordingsWindow)
-	var recordingPaths []string
-	if result.RecordingsDeleted, recordingPaths, err = pruneExpiredRecordings(tx, recordingsCutoff); err != nil {
-		return retention.PruneResult{}, err
-	}
-
 	if err := tx.Commit(context.Background()); err != nil {
 		return retention.PruneResult{}, err
 	}
 	if result.LogsDeleted > 0 {
 		s.invalidateLogEventsWatermarkCache()
 	}
-	if removed, failed := removeRecordingFiles(recordingPaths); failed > 0 {
-		log.Printf("retention: recordings cleanup completed with errors: removed=%d failed=%d", removed, failed)
-	}
-	return result, nil
-}
-
-func pruneExpiredRecordings(tx pgx.Tx, cutoff time.Time) (int64, []string, error) {
-	rows, err := tx.Query(context.Background(),
-		`DELETE FROM session_recordings
-		 WHERE status <> 'recording'
-		   AND COALESCE(stopped_at, created_at) < $1
-		 RETURNING file_path`,
-		cutoff,
-	)
-	if err != nil {
-		return 0, nil, err
-	}
-	defer rows.Close()
-
-	var deleted int64
-	paths := make([]string, 0, 16)
-	seen := make(map[string]struct{}, 16)
-
-	for rows.Next() {
-		var filePath string
-		if err := rows.Scan(&filePath); err != nil {
-			return 0, nil, err
-		}
-		deleted++
-		trimmed := strings.TrimSpace(filePath)
-		if trimmed == "" {
-			continue
-		}
-		if _, ok := seen[trimmed]; ok {
-			continue
-		}
-		seen[trimmed] = struct{}{}
-		paths = append(paths, trimmed)
-	}
-	if rows.Err() != nil {
-		return 0, nil, rows.Err()
-	}
-
-	return deleted, paths, nil
+	result.RecordingsDeleted, err = s.pruneExpiredRecordings(now.Add(-settings.RecordingsWindow))
+	return result, err
 }
 
 func pruneExpiredAlertSilences(tx pgx.Tx, cutoff time.Time) (int64, error) {
@@ -299,21 +248,4 @@ func alertSilencePruneColumn(columns []string) string {
 		return "ends_at"
 	}
 	return ""
-}
-
-func removeRecordingFiles(paths []string) (removed int64, failed int64) {
-	for _, filePath := range paths {
-		trimmed := strings.TrimSpace(filePath)
-		if trimmed == "" {
-			continue
-		}
-		err := os.Remove(trimmed)
-		if err == nil || errors.Is(err, os.ErrNotExist) {
-			removed++
-			continue
-		}
-		failed++
-		log.Printf("retention: failed to remove recording file %q: %v", trimmed, err)
-	}
-	return removed, failed
 }

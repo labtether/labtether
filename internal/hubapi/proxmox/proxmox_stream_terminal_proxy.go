@@ -36,13 +36,16 @@ func (d *Deps) TryProxmoxTerminalStream(w http.ResponseWriter, r *http.Request, 
 	// The vncwebsocket URL must match the path where the termproxy ticket
 	// was issued. For QEMU VMs this is /nodes/{node}/qemu/{vmid}/vncwebsocket,
 	// for LXC /nodes/{node}/lxc/{vmid}/vncwebsocket, for nodes /nodes/{node}/vncwebsocket.
-	proxmoxConn, err := DialProxmoxProxySocket(runtime, target.Node, target.Kind, target.VMID, ticket)
+	proxmoxConn, err := DialProxmoxProxySocketContext(r.Context(), runtime, target.Node, target.Kind, target.VMID, ticket)
 	if err != nil {
 		securityruntime.Logf("terminal-proxmox: failed to dial websocket: %v", err)
 		return fmt.Errorf("dial websocket: %w", err)
 	}
 	shared.LimitUpstreamTerminalMessages(proxmoxConn)
 	defer proxmoxConn.Close()
+	stopCancel := context.AfterFunc(r.Context(), func() { _ = proxmoxConn.Close() })
+	defer stopCancel()
+	_ = proxmoxConn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	securityruntime.Logf("terminal-proxmox: websocket connected")
 
 	// Proxmox termproxy protocol: send "user:ticket\n" as first message.
@@ -80,6 +83,7 @@ func (d *Deps) TryProxmoxTerminalStream(w http.ResponseWriter, r *http.Request, 
 	}
 	shared.LimitBrowserInteractiveMessages(wsConn)
 	defer wsConn.Close()
+	_ = wsConn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 
 	// Forward any data that came after the "OK" (e.g. initial prompt).
 	if len(authResp) > 2 {
@@ -104,6 +108,15 @@ func (d *Deps) OpenProxmoxTerminalTicket(ctx context.Context, runtime *ProxmoxRu
 	}
 }
 func BridgeProxmoxTerminal(browserConn, proxmoxConn *websocket.Conn) {
+	defer browserConn.Close()
+	defer proxmoxConn.Close()
+	var upstreamWriteMu sync.Mutex
+	writeUpstream := func(payload []byte) error {
+		upstreamWriteMu.Lock()
+		defer upstreamWriteMu.Unlock()
+		_ = proxmoxConn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+		return proxmoxCallWriteMessage(proxmoxConn, websocket.BinaryMessage, payload)
+	}
 	done := make(chan struct{})
 	var browserWriteMu sync.Mutex
 	stopKeepalive := shared.StartBrowserWebSocketKeepalive(browserConn, &browserWriteMu, "terminal-proxmox-bridge")
@@ -112,6 +125,8 @@ func BridgeProxmoxTerminal(browserConn, proxmoxConn *websocket.Conn) {
 	// Proxmox → Browser: forward raw terminal output directly.
 	go func() {
 		defer close(done)
+		defer browserConn.Close()
+		defer proxmoxConn.Close()
 		for {
 			// Rolling read deadline: if Proxmox sends nothing for 90s,
 			// the connection is likely half-open; close to free goroutines.
@@ -121,6 +136,7 @@ func BridgeProxmoxTerminal(browserConn, proxmoxConn *websocket.Conn) {
 				return
 			}
 			browserWriteMu.Lock()
+			_ = browserConn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			err = proxmoxCallWriteMessage(browserConn, msgType, payload)
 			browserWriteMu.Unlock()
 			if err != nil {
@@ -134,6 +150,8 @@ func BridgeProxmoxTerminal(browserConn, proxmoxConn *websocket.Conn) {
 	go func() {
 		ticker := time.NewTicker(proxmoxCurrentKeepaliveInterval())
 		defer ticker.Stop()
+		defer browserConn.Close()
+		defer proxmoxConn.Close()
 		for {
 			select {
 			case <-done:
@@ -141,7 +159,7 @@ func BridgeProxmoxTerminal(browserConn, proxmoxConn *websocket.Conn) {
 			case <-pingDone:
 				return
 			case <-ticker.C:
-				if err := proxmoxCallWriteMessage(proxmoxConn, websocket.BinaryMessage, []byte("2")); err != nil {
+				if err := writeUpstream([]byte("2")); err != nil {
 					return
 				}
 			}
@@ -170,7 +188,7 @@ func BridgeProxmoxTerminal(browserConn, proxmoxConn *websocket.Conn) {
 		if proxmoxMsg == nil {
 			continue
 		}
-		if err := proxmoxCallWriteMessage(proxmoxConn, websocket.BinaryMessage, proxmoxMsg); err != nil {
+		if err := writeUpstream(proxmoxMsg); err != nil {
 			return
 		}
 	}

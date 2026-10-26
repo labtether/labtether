@@ -11,6 +11,7 @@ import (
 
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/policy"
 	"github.com/labtether/labtether/internal/protocols"
@@ -27,6 +28,8 @@ type PolicyStateProvider interface {
 // Store interfaces are embedded directly; cross-cutting concerns that live
 // in other cmd/labtether subsystems are injected as function fields.
 type Deps struct {
+	SessionStreams *shared.SessionStreamRegistry
+
 	// Store interfaces
 	TerminalStore   persistence.TerminalStore
 	AssetStore      persistence.AssetStore

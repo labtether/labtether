@@ -31,40 +31,12 @@ func (s *PostgresStore) CreateAlertRule(req alerts.CreateRuleRequest) (alerts.Ru
 		targetScope = alerts.TargetScopeGlobal
 	}
 
-	cooldownSeconds := req.CooldownSeconds
-	if cooldownSeconds < 0 {
-		cooldownSeconds = 0
+	durations, err := alerts.ResolveCreateRuleDurations(req)
+	if err != nil {
+		return alerts.Rule{}, err
 	}
-	if cooldownSeconds == 0 {
-		cooldownSeconds = alerts.DefaultCooldownSeconds
-	}
-	if cooldownSeconds > alerts.MaxDurationSeconds {
-		return alerts.Rule{}, alerts.ErrInvalidDurationSeconds
-	}
-	reopenAfterSeconds := req.ReopenAfterSeconds
-	if reopenAfterSeconds < 0 {
-		reopenAfterSeconds = 0
-	}
-	if reopenAfterSeconds == 0 {
-		reopenAfterSeconds = alerts.DefaultReopenAfterSeconds
-	}
-	if reopenAfterSeconds > alerts.MaxDurationSeconds {
-		return alerts.Rule{}, alerts.ErrInvalidDurationSeconds
-	}
-	evaluationIntervalSeconds := req.EvaluationIntervalSeconds
-	if evaluationIntervalSeconds <= 0 {
-		evaluationIntervalSeconds = alerts.DefaultEvaluationIntervalSeconds
-	}
-	if evaluationIntervalSeconds > alerts.MaxDurationSeconds {
-		return alerts.Rule{}, alerts.ErrInvalidDurationSeconds
-	}
-	windowSeconds := req.WindowSeconds
-	if windowSeconds <= 0 {
-		windowSeconds = alerts.DefaultWindowSeconds
-	}
-	if windowSeconds > alerts.MaxDurationSeconds {
-		return alerts.Rule{}, alerts.ErrInvalidDurationSeconds
-	}
+	cooldownSeconds, reopenAfterSeconds := durations.Cooldown, durations.Reopen
+	evaluationIntervalSeconds, windowSeconds := durations.Interval, durations.Window
 
 	conditionPayload, err := marshalAnyMap(req.Condition)
 	if err != nil {
@@ -174,7 +146,14 @@ func (s *PostgresStore) CreateAlertRule(req alerts.CreateRuleRequest) (alerts.Ru
 }
 
 func (s *PostgresStore) GetAlertRule(id string) (alerts.Rule, bool, error) {
-	rule, err := scanAlertRule(s.pool.QueryRow(context.Background(),
+	return s.GetAlertRuleContext(context.Background(), id)
+}
+
+func (s *PostgresStore) GetAlertRuleContext(ctx context.Context, id string) (alerts.Rule, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return alerts.Rule{}, false, err
+	}
+	rule, err := scanAlertRule(s.pool.QueryRow(ctx,
 		`SELECT
 			id,
 			name,
@@ -193,7 +172,8 @@ func (s *PostgresStore) GetAlertRule(id string) (alerts.Rule, bool, error) {
 			created_by,
 			created_at,
 			updated_at,
-			last_evaluated_at
+			last_evaluated_at,
+			last_auto_attempt_at
 		 FROM alert_rules
 		 WHERE id = $1`,
 		strings.TrimSpace(id),
@@ -205,7 +185,7 @@ func (s *PostgresStore) GetAlertRule(id string) (alerts.Rule, bool, error) {
 		return alerts.Rule{}, false, err
 	}
 
-	targets, err := s.listAlertRuleTargets(rule.ID)
+	targets, err := s.listAlertRuleTargetsCtx(ctx, rule.ID)
 	if err != nil {
 		return alerts.Rule{}, false, err
 	}
@@ -262,7 +242,8 @@ func (s *PostgresStore) ListAlertRules(filter AlertRuleFilter) ([]alerts.Rule, e
 		created_by,
 		created_at,
 		updated_at,
-		last_evaluated_at
+		last_evaluated_at,
+		last_auto_attempt_at
 	FROM alert_rules`
 	if len(where) > 0 {
 		sql += " WHERE " + strings.Join(where, " AND ")

@@ -26,8 +26,8 @@ func (c Cursor) notBehind(previous Cursor) bool {
 	return c.AssetSampleID >= previous.AssetSampleID && c.HubSampleID >= previous.HubSampleID
 }
 
-// Batch is one bounded replay page plus the cursor that becomes durable only
-// after the receiver accepts the page.
+// Batch is one bounded replay page plus its next insertion cursor. Progress
+// requires either accepted delivery or a durable rejected-page disposition.
 type Batch struct {
 	Samples []SampleWithLabels
 	Next    Cursor
@@ -45,6 +45,7 @@ type SampleSource interface {
 type CursorStore interface {
 	LoadRemoteWriteCursor(ctx context.Context, endpointFingerprint string) (Cursor, error)
 	SaveRemoteWriteCursor(ctx context.Context, endpointFingerprint string, cursor Cursor, advancedAt time.Time) error
+	RejectRemoteWritePage(ctx context.Context, endpointFingerprint string, page RejectedPage) error
 }
 
 // Worker is the background push loop that periodically drains new samples
@@ -53,10 +54,11 @@ type CursorStore interface {
 // Call Run with a cancellable context to start the loop; cancel the context to
 // stop it gracefully.
 type Worker struct {
-	config      Config
-	source      SampleSource
-	cursor      CursorStore
-	fingerprint string
+	config           Config
+	source           SampleSource
+	cursor           CursorStore
+	fingerprint      string
+	pendingRejection *pendingRejectedPage
 }
 
 // NewWorker validates all dependencies before any background work starts.
@@ -139,8 +141,11 @@ func (w *Worker) pushBatch(ctx context.Context) error {
 
 // pushPage fetches one replay page, adaptively reduces it when either the
 // local body cap or receiver rejects its size, and advances the cursor only
-// after the accepted subset is durable.
+// after the accepted subset or rejected-page disposition is durable.
 func (w *Worker) pushPage(ctx context.Context) (bool, error) {
+	if w.pendingRejection != nil {
+		return w.persistRejectedPage(ctx)
+	}
 	current, err := w.cursor.LoadRemoteWriteCursor(ctx, w.fingerprint)
 	if err != nil {
 		return false, fmt.Errorf("remotewrite: load replay cursor: %w", err)
@@ -155,7 +160,8 @@ func (w *Worker) pushPage(ctx context.Context) (bool, error) {
 		if loadErr != nil {
 			return false, fmt.Errorf("remotewrite: load replay page: %w", loadErr)
 		}
-		if len(batch.Samples) > pageLimit || !batch.Next.valid() || !batch.Next.notBehind(current) {
+		if len(batch.Samples) > pageLimit || !batch.Next.valid() || !batch.Next.notBehind(current) ||
+			(len(batch.Samples) > 0 && !batch.Next.advances(current)) {
 			return false, fmt.Errorf("remotewrite: invalid replay page")
 		}
 		if len(batch.Samples) == 0 && !batch.Next.advances(current) {
@@ -176,6 +182,14 @@ func (w *Worker) pushPage(ctx context.Context) (bool, error) {
 				if errors.As(pushErr, &statusErr) && statusErr.statusCode == 413 && pageLimit > 1 {
 					pageLimit = max(1, pageLimit/2)
 					continue
+				}
+				if errors.As(pushErr, &statusErr) && permanentReceiverStatus(statusErr.statusCode) {
+					w.pendingRejection = &pendingRejectedPage{page: RejectedPage{
+						Previous: current, Next: batch.Next, StatusCode: statusErr.statusCode,
+						SampleCount: len(batch.Samples), Payload: body,
+						RejectedAt: time.Now().UTC().Truncate(time.Microsecond),
+					}, more: batch.More}
+					return w.persistRejectedPage(ctx)
 				}
 				return false, pushErr
 			}

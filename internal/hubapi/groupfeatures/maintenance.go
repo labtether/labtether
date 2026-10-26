@@ -1,7 +1,9 @@
 package groupfeatures
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -259,13 +261,37 @@ func (d *Deps) EvaluateAssetGuardrails(assetID string, at time.Time) (GroupMaint
 	return d.GroupGuardrails(groupID, at)
 }
 
+// EvaluateGuardrailsContext uses cancellable persistence at bounded send boundaries.
+func (d *Deps) EvaluateGuardrailsContext(ctx context.Context, groupID string, at time.Time) (GroupMaintenanceGuardrails, error) {
+	if err := ctx.Err(); err != nil {
+		return GroupMaintenanceGuardrails{}, err
+	}
+	store, ok := d.GroupMaintenanceStore.(interface {
+		ListGroupMaintenanceWindowsContext(context.Context, string, *time.Time, int) ([]groupmaintenance.MaintenanceWindow, error)
+	})
+	if !ok {
+		return GroupMaintenanceGuardrails{}, fmt.Errorf("bounded maintenance lookup unavailable")
+	}
+	return groupGuardrailsWithLookup(groupID, at, func(id string, when *time.Time, limit int) ([]groupmaintenance.MaintenanceWindow, error) {
+		windows, err := store.ListGroupMaintenanceWindowsContext(ctx, id, when, limit)
+		if err == nil && len(windows) >= limit {
+			err = fmt.Errorf("maintenance lookup incomplete")
+		}
+		return windows, err
+	})
+}
+
 // GroupGuardrails returns the active maintenance guardrails for a group at the given time.
 func (d *Deps) GroupGuardrails(groupID string, at time.Time) (GroupMaintenanceGuardrails, error) {
-	groupID = strings.TrimSpace(groupID)
-	if groupID == "" {
+	if d.GroupMaintenanceStore == nil {
 		return GroupMaintenanceGuardrails{}, nil
 	}
-	if d.GroupMaintenanceStore == nil {
+	return groupGuardrailsWithLookup(groupID, at, d.GroupMaintenanceStore.ListGroupMaintenanceWindows)
+}
+
+func groupGuardrailsWithLookup(groupID string, at time.Time, lookup func(string, *time.Time, int) ([]groupmaintenance.MaintenanceWindow, error)) (GroupMaintenanceGuardrails, error) {
+	groupID = strings.TrimSpace(groupID)
+	if groupID == "" {
 		return GroupMaintenanceGuardrails{}, nil
 	}
 	if at.IsZero() {
@@ -274,7 +300,7 @@ func (d *Deps) GroupGuardrails(groupID string, at time.Time) (GroupMaintenanceGu
 		at = at.UTC()
 	}
 
-	windows, err := d.GroupMaintenanceStore.ListGroupMaintenanceWindows(groupID, &at, 50)
+	windows, err := lookup(groupID, &at, 50)
 	if err != nil {
 		return GroupMaintenanceGuardrails{}, err
 	}

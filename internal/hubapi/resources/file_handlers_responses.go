@@ -3,15 +3,42 @@ package resources
 import (
 	"encoding/json"
 	"errors"
+	"net/http"
 	"strings"
 	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/securityruntime"
+	"github.com/labtether/labtether/internal/servicehttp"
 )
 
 var errFileResponseBackpressured = errors.New("file response bridge backpressure exceeded")
+var errFileAgentDisconnected = errors.New("agent disconnected")
+
+func writeFileBridgeClosedError(w http.ResponseWriter, bridge *FileBridge) {
+	message := "agent response stream closed"
+	if errors.Is(bridge.Err(), errFileAgentDisconnected) {
+		message = errFileAgentDisconnected.Error()
+	}
+	servicehttp.WriteError(w, http.StatusBadGateway, message)
+}
+
+// FailAgentFileOperations runs inside the agent's disconnect transition,
+// before a replacement connection can accept new requests for this asset.
+func (d *Deps) FailAgentFileOperations(assetID string) {
+	if d.FileBridges == nil {
+		return
+	}
+	d.FileBridges.Range(func(key, raw any) bool {
+		bridge, ok := raw.(*FileBridge)
+		if ok && bridge != nil && bridge.ExpectedAssetID == assetID {
+			bridge.Fail(errFileAgentDisconnected)
+			d.FileBridges.CompareAndDelete(key, bridge)
+		}
+		return true
+	})
+}
 
 func (d *Deps) ProcessAgentFileListed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 	var data agentmgr.FileListedData

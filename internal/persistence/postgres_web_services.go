@@ -13,7 +13,8 @@ import (
 )
 
 func (s *PostgresStore) ListManualWebServices(hostAssetID string) ([]WebServiceManual, error) {
-	ctx := context.Background()
+	ctx, cancel := agentLifecycleStoreContext()
+	defer cancel()
 	host := strings.TrimSpace(hostAssetID)
 
 	query := `SELECT id, host_asset_id, name, category, url, icon_key, metadata, created_at, updated_at
@@ -60,7 +61,13 @@ func (s *PostgresStore) ListManualWebServices(hostAssetID string) ([]WebServiceM
 }
 
 func (s *PostgresStore) GetManualWebService(id string) (WebServiceManual, bool, error) {
-	ctx := context.Background()
+	return s.GetManualWebServiceContext(context.Background(), id)
+}
+
+func (s *PostgresStore) GetManualWebServiceContext(ctx context.Context, id string) (WebServiceManual, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return WebServiceManual{}, false, err
+	}
 	key := strings.TrimSpace(id)
 	if key == "" {
 		return WebServiceManual{}, false, nil
@@ -181,7 +188,8 @@ func (s *PostgresStore) PromoteManualServicesToStandalone(hostAssetID string) er
 }
 
 func (s *PostgresStore) ListWebServiceOverrides(hostAssetID string) ([]WebServiceOverride, error) {
-	ctx := context.Background()
+	ctx, cancel := agentLifecycleStoreContext()
+	defer cancel()
 	host := strings.TrimSpace(hostAssetID)
 
 	query := `SELECT host_asset_id, service_id, name_override, category_override, url_override, icon_key_override, tags_override, hidden, updated_at

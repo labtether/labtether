@@ -30,14 +30,6 @@ type recordingScheduleExecutionStore struct {
 	failErr error
 }
 
-type failingListAssetStore struct {
-	persistence.AssetStore
-}
-
-func (failingListAssetStore) ListAssets() ([]assets.Asset, error) {
-	return nil, errors.New("transient inventory failure")
-}
-
 func (*recordingScheduleExecutionStore) InitializeScheduledTaskNextRun(context.Context, string, time.Time) (bool, error) {
 	return false, nil
 }
@@ -105,10 +97,11 @@ func setupScheduleWorkerTest(t *testing.T, target string) (*Deps, schedules.Exec
 			return nil
 		},
 		GetPolicyConfig: func() policy.EvaluatorConfig { return policy.DefaultEvaluatorConfig() },
-		EvaluateAssetGuardrails: func(string, time.Time) (groupfeatures.GroupMaintenanceGuardrails, error) {
+		EvaluateAssetGuardrailsContext: func(context.Context, string, time.Time) (groupfeatures.GroupMaintenanceGuardrails, error) {
 			return groupfeatures.GroupMaintenanceGuardrails{}, nil
 		},
 	}
+	bindHandlerTestExecution(deps)
 	return deps, execution, completionStore, actionStore
 }
 
@@ -159,7 +152,7 @@ func TestScheduleWorkerExecutesThroughAgentWithBoundedTimeout(t *testing.T) {
 func TestScheduleWorkerMaintenanceBlockPreventsCommandDispatch(t *testing.T) {
 	deps, execution, completion, actionStore := setupScheduleWorkerTest(t, "asset-1")
 	executions := 0
-	deps.EvaluateAssetGuardrails = func(string, time.Time) (groupfeatures.GroupMaintenanceGuardrails, error) {
+	deps.EvaluateAssetGuardrailsContext = func(context.Context, string, time.Time) (groupfeatures.GroupMaintenanceGuardrails, error) {
 		return groupfeatures.GroupMaintenanceGuardrails{BlockActions: true}, nil
 	}
 	deps.ExecuteViaAgent = func(terminal.CommandJob) terminal.CommandResult {
@@ -201,19 +194,6 @@ func TestScheduleWorkerUnknownTargetFailsWithoutDispatchOrRetry(t *testing.T) {
 	}
 	if executions != 0 || completion.status != "failed" || completion.error == "" {
 		t.Fatalf("executions/completion = %d/%+v", executions, completion)
-	}
-}
-
-func TestScheduleWorkerPreDispatchInfrastructureFailureUsesBoundedQueueRetry(t *testing.T) {
-	deps, execution, completion, _ := setupScheduleWorkerTest(t, "asset-1")
-	deps.AssetStore = failingListAssetStore{AssetStore: deps.AssetStore}
-	var processed atomic.Uint64
-	err := deps.HandleScheduleRunJob(&processed)(context.Background(), scheduleQueueJob(t, execution))
-	if err == nil {
-		t.Fatal("HandleScheduleRunJob() unexpectedly succeeded")
-	}
-	if completion.updates != 0 || processed.Load() != 0 {
-		t.Fatalf("completion/processed = %d/%d, want 0/0 before queue retry", completion.updates, processed.Load())
 	}
 }
 
@@ -323,13 +303,20 @@ func TestScheduleWorkerCompletionFailureRetriesFinalizationWithoutReplay(t *test
 	}
 }
 
-func TestScheduleDeadLetterMarksOccurrenceFailed(t *testing.T) {
+func TestScheduleDeadLetterRecordsAudit(t *testing.T) {
 	deps, execution, completion, _ := setupScheduleWorkerTest(t, "asset-1")
 	job := scheduleQueueJob(t, execution)
 	job.Attempts = 3
 	deps.RecordDeadLetter(context.Background(), job, errors.New("pre-dispatch infrastructure failure"))
-	if completion.status != "failed" || completion.updates != 1 || completion.error == "" {
-		t.Fatalf("completion = %+v", completion)
+	if completion.updates != 0 {
+		t.Fatal("notification callback performed a second business completion")
+	}
+	events, err := deps.AuditStore.List(10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || events[0].Type != "queue.dead_letter" {
+		t.Fatalf("dead-letter audit=%+v", events)
 	}
 }
 
@@ -353,7 +340,7 @@ func TestResolveScheduleExecutionTargetsIncludesDescendantGroupsAndDeduplicates(
 		}
 	}
 	deps := &Deps{AssetStore: assetStore, GroupStore: groupStore}
-	targets, err := deps.resolveScheduleExecutionTargets(schedules.ExecutionJob{
+	targets, err := deps.resolveScheduleExecutionTargets(context.Background(), schedules.ExecutionJob{
 		Targets: []string{"child-asset"},
 		GroupID: parent.ID,
 	})

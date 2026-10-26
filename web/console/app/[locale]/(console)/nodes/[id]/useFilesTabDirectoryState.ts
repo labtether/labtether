@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import { listFiles, type FileEntry } from "../../files/fileOpsClient";
 import { joinPath, parentPath } from "../../files/fileWorkspaceUtils";
 
@@ -12,9 +12,15 @@ type UseFilesTabDirectoryStateArgs = {
 export function useFilesTabDirectoryState({ nodeId, setError }: UseFilesTabDirectoryStateArgs) {
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [currentPath, setCurrentPath] = useState("~");
-  const [pathInput, setPathInput] = useState("~");
+  const [pathInput, setPathInputState] = useState("~");
   const [loading, setLoading] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
+
+  const pathInputEditSeqRef = useRef(0);
+  const setPathInput = useCallback((value: SetStateAction<string>) => {
+    pathInputEditSeqRef.current += 1;
+    setPathInputState(value);
+  }, []);
 
   const showHiddenRef = useRef(showHidden);
   const currentPathRef = useRef(currentPath);
@@ -40,6 +46,7 @@ export function useFilesTabDirectoryState({ nodeId, setError }: UseFilesTabDirec
 
   const listDir = useCallback(async (path: string) => {
     const requestID = ++listRequestSeqRef.current;
+    const inputEditSeq = pathInputEditSeqRef.current;
     latestListRequestRef.current = requestID;
     setLoading(true);
     setError(null);
@@ -57,7 +64,9 @@ export function useFilesTabDirectoryState({ nodeId, setError }: UseFilesTabDirec
       const resolvedPath = payload.path?.trim() || path;
       setEntries(payload.entries);
       setCurrentPath(resolvedPath);
-      setPathInput(resolvedPath);
+      if (pathInputEditSeqRef.current === inputEditSeq) {
+        setPathInputState(resolvedPath);
+      }
     } catch (err) {
       if (latestListRequestRef.current !== requestID) {
         return;

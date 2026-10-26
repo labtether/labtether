@@ -76,7 +76,7 @@ func (d *Deps) handleExec(ctx context.Context, req mcp.CallToolRequest) (*mcp.Ca
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	cmdResult := d.ExecuteViaAgent(terminal.CommandJob{
+	cmdResult := d.ExecuteViaAgent(ctx, terminal.CommandJob{
 		JobID:       idgen.New("mcp"),
 		SessionID:   idgen.New("mcps"),
 		CommandID:   idgen.New("mcpc"),
@@ -232,7 +232,7 @@ func (d *Deps) handleExecMulti(ctx context.Context, req mcp.CallToolRequest) (*m
 					d.auditMutation(ctx, "exec_multi", t, "denied", reason, map[string]any{"command_bytes": len([]byte(command))})
 					continue
 				}
-				cmdResult := d.ExecuteViaAgent(terminal.CommandJob{
+				cmdResult := d.ExecuteViaAgent(ctx, terminal.CommandJob{
 					JobID:       idgen.New("mcp"),
 					SessionID:   idgen.New("mcps"),
 					CommandID:   idgen.New("mcpc"),

@@ -10,9 +10,16 @@ import (
 )
 
 func (s *PostgresStore) LinkIncidentAlert(incidentID string, req incidents.LinkAlertRequest) (incidents.AlertLink, error) {
+	return s.LinkIncidentAlertContext(context.Background(), incidentID, req)
+}
+
+func (s *PostgresStore) LinkIncidentAlertContext(ctx context.Context, incidentID string, req incidents.LinkAlertRequest) (incidents.AlertLink, error) {
+	if err := ctx.Err(); err != nil {
+		return incidents.AlertLink{}, err
+	}
 	incidentID = strings.TrimSpace(incidentID)
 	var incidentExists bool
-	if err := s.pool.QueryRow(context.Background(),
+	if err := s.pool.QueryRow(ctx,
 		`SELECT EXISTS (SELECT 1 FROM incidents WHERE id = $1)`,
 		incidentID,
 	).Scan(&incidentExists); err != nil {
@@ -35,7 +42,7 @@ func (s *PostgresStore) LinkIncidentAlert(incidentID string, req incidents.LinkA
 
 	if alertRuleID != "" {
 		var conflict bool
-		if err := s.pool.QueryRow(context.Background(),
+		if err := s.pool.QueryRow(ctx,
 			`SELECT EXISTS (
 				SELECT 1
 				FROM incident_alert_links
@@ -53,7 +60,7 @@ func (s *PostgresStore) LinkIncidentAlert(incidentID string, req incidents.LinkA
 	}
 	if alertInstanceID != "" {
 		var conflict bool
-		if err := s.pool.QueryRow(context.Background(),
+		if err := s.pool.QueryRow(ctx,
 			`SELECT EXISTS (
 				SELECT 1
 				FROM incident_alert_links
@@ -76,7 +83,7 @@ func (s *PostgresStore) LinkIncidentAlert(incidentID string, req incidents.LinkA
 	}
 	now := time.Now().UTC()
 
-	return scanIncidentAlertLink(s.pool.QueryRow(context.Background(),
+	return scanIncidentAlertLink(s.pool.QueryRow(ctx,
 		`INSERT INTO incident_alert_links (
 			id,
 			incident_id,
@@ -180,6 +187,13 @@ func (s *PostgresStore) UnlinkIncidentAlert(incidentID, linkID string) error {
 }
 
 func (s *PostgresStore) HasAutoIncidentForAlertInstance(alertInstanceID string) (bool, error) {
+	return s.HasAutoIncidentForAlertInstanceContext(context.Background(), alertInstanceID)
+}
+
+func (s *PostgresStore) HasAutoIncidentForAlertInstanceContext(ctx context.Context, alertInstanceID string) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
 	alertInstanceID = strings.TrimSpace(alertInstanceID)
 	if alertInstanceID == "" {
 		return false, nil
@@ -187,7 +201,7 @@ func (s *PostgresStore) HasAutoIncidentForAlertInstance(alertInstanceID string) 
 
 	var exists bool
 	err := s.pool.QueryRow(
-		context.Background(),
+		ctx,
 		`SELECT EXISTS (
 			SELECT 1
 			FROM incident_alert_links links

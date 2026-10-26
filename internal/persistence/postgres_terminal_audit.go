@@ -15,6 +15,8 @@ import (
 )
 
 func (s *PostgresStore) CreateSession(req terminal.CreateSessionRequest) (terminal.Session, error) {
+	ctx, cancel := terminalStoreContext()
+	defer cancel()
 	now := time.Now().UTC()
 	mode := req.Mode
 	if mode == "" {
@@ -33,7 +35,7 @@ func (s *PostgresStore) CreateSession(req terminal.CreateSessionRequest) (termin
 		LastActionAt:        now,
 	}
 
-	_, err := s.pool.Exec(context.Background(),
+	_, err := s.pool.Exec(ctx,
 		`INSERT INTO terminal_sessions (id, actor_id, target, mode, status, persistent_session_id, tmux_session_name, created_at, last_action_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 		session.ID, session.ActorID, session.Target, session.Mode, session.Status, session.PersistentSessionID, session.TmuxSessionName, session.CreatedAt, session.LastActionAt,
@@ -46,7 +48,9 @@ func (s *PostgresStore) CreateSession(req terminal.CreateSessionRequest) (termin
 }
 
 func (s *PostgresStore) GetSession(id string) (terminal.Session, bool, error) {
-	row := s.pool.QueryRow(context.Background(),
+	ctx, cancel := terminalStoreContext()
+	defer cancel()
+	row := s.pool.QueryRow(ctx,
 		`SELECT id, actor_id, target, mode, status, persistent_session_id, tmux_session_name, created_at, last_action_at
 		 FROM terminal_sessions WHERE id = $1`,
 		id,
@@ -74,7 +78,9 @@ func (s *PostgresStore) GetSession(id string) (terminal.Session, bool, error) {
 }
 
 func (s *PostgresStore) ListSessions() ([]terminal.Session, error) {
-	rows, err := s.pool.Query(context.Background(),
+	ctx, cancel := terminalStoreContext()
+	defer cancel()
+	rows, err := s.pool.Query(ctx,
 		`SELECT id, actor_id, target, mode, status, persistent_session_id, tmux_session_name, created_at, last_action_at
 		 FROM terminal_sessions ORDER BY created_at DESC`,
 	)
@@ -119,17 +125,19 @@ func (s *PostgresStore) UpdateSession(session terminal.Session) error {
 }
 
 func (s *PostgresStore) DeleteTerminalSession(id string) error {
-	tx, err := s.pool.Begin(context.Background())
+	ctx, cancel := terminalStoreContext()
+	defer cancel()
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(context.Background())
+	defer rollbackTerminalTransaction(tx)
 
-	if _, err := tx.Exec(context.Background(), `DELETE FROM terminal_commands WHERE session_id = $1`, id); err != nil {
+	if _, err := tx.Exec(ctx, `DELETE FROM terminal_commands WHERE session_id = $1`, id); err != nil {
 		return err
 	}
 
-	result, err := tx.Exec(context.Background(), `DELETE FROM terminal_sessions WHERE id = $1`, id)
+	result, err := tx.Exec(ctx, `DELETE FROM terminal_sessions WHERE id = $1`, id)
 	if err != nil {
 		return err
 	}
@@ -137,7 +145,7 @@ func (s *PostgresStore) DeleteTerminalSession(id string) error {
 		return terminal.ErrSessionNotFound
 	}
 
-	return tx.Commit(context.Background())
+	return tx.Commit(ctx)
 }
 
 func (s *PostgresStore) AddCommand(sessionID string, req terminal.CreateCommandRequest, target, mode string) (terminal.Command, error) {
@@ -361,6 +369,8 @@ func (s *PostgresStore) ListRecentCommands(limit int) ([]terminal.Command, error
 }
 
 func (s *PostgresStore) Append(event audit.Event) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	if event.ID == "" {
 		event.ID = idgen.New("audit")
 	}
@@ -377,7 +387,7 @@ func (s *PostgresStore) Append(event audit.Event) error {
 		details = payload
 	}
 
-	_, err := s.pool.Exec(context.Background(),
+	_, err := s.pool.Exec(ctx,
 		`INSERT INTO audit_events (id, type, actor_id, target, session_id, command_id, decision, reason, details, timestamp)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10)
 		 ON CONFLICT (id) DO NOTHING`,

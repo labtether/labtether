@@ -12,7 +12,7 @@ func (s *apiServer) buildWSRouter() shared.WSRouter {
 	router := make(shared.WSRouter, 64)
 
 	router[agentmgr.MsgHeartbeat] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		s.processAgentHeartbeat(conn, msg)
+		s.ensureAgentsDeps().ProcessAgentHeartbeatInLifecycle(conn, msg)
 	}
 	router[agentmgr.MsgTelemetry] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 		s.processAgentTelemetry(conn, msg)

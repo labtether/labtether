@@ -1,6 +1,12 @@
 package connectorsdk
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+// ErrComposeUpgradeRequired carries fixed public guidance, never provider error text.
+var ErrComposeUpgradeRequired = errors.New("Compose actions require an upgraded agent with exact project/file selection support")
 
 type Connector interface {
 	ID() string

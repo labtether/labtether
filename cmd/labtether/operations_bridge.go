@@ -261,16 +261,22 @@ func (s *apiServer) ensureOperationsDeps() *opspkg.ExecDeps {
 // buildUpdateExecutorDeps constructs the UpdateExecutorDeps from apiServer fields.
 func (s *apiServer) buildUpdateExecutorDeps() *opspkg.UpdateExecutorDeps {
 	return &opspkg.UpdateExecutorDeps{
-		AgentMgr:                        s.agentMgr,
-		AssetStore:                      s.assetStore,
-		ExecuteUpdateViaAgent:           s.executeUpdateViaAgent,
-		PreviewOSPackageUpdatesViaAgent: s.ensureResourcesDeps().PreviewOSPackageUpdatesViaAgent,
+		AgentMgr:                               s.agentMgr,
+		AssetStore:                             s.assetStore,
+		ExecuteUpdateViaAgent:                  s.executeUpdateViaAgent,
+		PreviewOSPackageUpdatesViaAgent:        s.ensureResourcesDeps().PreviewOSPackageUpdatesViaAgent,
+		ExecuteUpdateViaAgentContext:           s.ensureAgentsDeps().ExecuteUpdateViaAgentContext,
+		PreviewOSPackageUpdatesViaAgentContext: s.ensureResourcesDeps().PreviewOSPackageUpdatesViaAgentContext,
 	}
 }
 
 // executeUpdateScope delegates update scope execution to operations.UpdateExecutorDeps.
 func (s *apiServer) executeUpdateScope(job updates.Job, target, scope string) updates.RunResultEntry {
 	return s.buildUpdateExecutorDeps().ExecuteUpdateScope(job, target, scope)
+}
+
+func (s *apiServer) executeUpdateScopeContext(ctx context.Context, job updates.Job, target, scope string) updates.RunResultEntry {
+	return s.buildUpdateExecutorDeps().ExecuteUpdateScopeContext(ctx, job, target, scope)
 }
 
 // summarizeUpdateOutput is a thin alias for test/agent bridge compatibility.

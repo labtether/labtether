@@ -50,6 +50,10 @@ func (d *Deps) HandleFileMkdir(w http.ResponseWriter, r *http.Request, assetID s
 	}
 
 	select {
+	case <-r.Context().Done():
+		return
+	case <-bridge.Done:
+		writeFileBridgeClosedError(w, bridge)
 	case msg := <-bridge.Ch:
 		var result agentmgr.FileResultData
 		if err := json.Unmarshal(msg.Data, &result); err != nil {
@@ -108,6 +112,10 @@ func (d *Deps) HandleFileDelete(w http.ResponseWriter, r *http.Request, assetID 
 	}
 
 	select {
+	case <-r.Context().Done():
+		return
+	case <-bridge.Done:
+		writeFileBridgeClosedError(w, bridge)
 	case msg := <-bridge.Ch:
 		var result agentmgr.FileResultData
 		if err := json.Unmarshal(msg.Data, &result); err != nil {
@@ -168,6 +176,10 @@ func (d *Deps) HandleFileRename(w http.ResponseWriter, r *http.Request, assetID 
 	}
 
 	select {
+	case <-r.Context().Done():
+		return
+	case <-bridge.Done:
+		writeFileBridgeClosedError(w, bridge)
 	case msg := <-bridge.Ch:
 		var result agentmgr.FileResultData
 		if err := json.Unmarshal(msg.Data, &result); err != nil {
@@ -228,6 +240,10 @@ func (d *Deps) HandleFileCopy(w http.ResponseWriter, r *http.Request, assetID st
 	}
 
 	select {
+	case <-r.Context().Done():
+		return
+	case <-bridge.Done:
+		writeFileBridgeClosedError(w, bridge)
 	case msg := <-bridge.Ch:
 		var result agentmgr.FileResultData
 		if err := json.Unmarshal(msg.Data, &result); err != nil {

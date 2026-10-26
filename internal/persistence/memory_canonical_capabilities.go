@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"context"
 	"github.com/labtether/labtether/internal/model"
 	"sort"
 	"strings"
@@ -34,9 +35,18 @@ func (m *MemoryCanonicalModelStore) UpsertCapabilitySet(set model.CapabilitySet)
 }
 
 func (m *MemoryCanonicalModelStore) GetCapabilitySet(subjectType, subjectID string) (model.CapabilitySet, bool, error) {
+	return m.GetCapabilitySetContext(context.Background(), subjectType, subjectID)
+}
+
+func (m *MemoryCanonicalModelStore) GetCapabilitySetContext(ctx context.Context, subjectType, subjectID string) (model.CapabilitySet, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return model.CapabilitySet{}, false, err
+	}
 	key := capabilitySetKey(subjectType, subjectID)
 
-	m.mu.RLock()
+	if err := lockAlertEvaluation(ctx, &m.mu, true); err != nil {
+		return model.CapabilitySet{}, false, err
+	}
 	defer m.mu.RUnlock()
 
 	set, ok := m.capabilitySets[key]
@@ -102,6 +112,13 @@ func (m *MemoryCanonicalModelStore) ReplaceCapabilitySets(providerInstanceID str
 }
 
 func (m *MemoryCanonicalModelStore) ListCapabilitySets(limit int) ([]model.CapabilitySet, error) {
+	return m.ListCapabilitySetsContext(context.Background(), limit)
+}
+
+func (m *MemoryCanonicalModelStore) ListCapabilitySetsContext(ctx context.Context, limit int) ([]model.CapabilitySet, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if limit <= 0 {
 		limit = 500
 	}
@@ -109,11 +126,16 @@ func (m *MemoryCanonicalModelStore) ListCapabilitySets(limit int) ([]model.Capab
 		limit = 5000
 	}
 
-	m.mu.RLock()
+	if err := lockAlertEvaluation(ctx, &m.mu, true); err != nil {
+		return nil, err
+	}
 	defer m.mu.RUnlock()
 
 	out := make([]model.CapabilitySet, 0, len(m.capabilitySets))
 	for _, set := range m.capabilitySets {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		out = append(out, cloneCapabilitySet(set))
 	}
 	sort.Slice(out, func(i, j int) bool {

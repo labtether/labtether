@@ -238,7 +238,12 @@ func (d *Deps) HandleAlertRuleActions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		rule, ok, err := d.AlertStore.GetAlertRule(ruleID)
+		store, capable := d.AlertStore.(persistence.AlertEvaluationContextStore)
+		if !capable {
+			servicehttp.WriteError(w, http.StatusServiceUnavailable, "context-aware alert history unavailable")
+			return
+		}
+		rule, ok, err := store.GetAlertRuleContext(r.Context(), ruleID)
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load alert rule")
 			return
@@ -259,11 +264,10 @@ func (d *Deps) HandleAlertRuleActions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		evaluatedAt := time.Now().UTC()
-		if req.At != nil {
-			evaluatedAt = req.At.UTC()
-		}
-
+		// Conditions read current stores; a caller timestamp must not label
+		// today's result as a historical or future evaluation.
+		started := time.Now()
+		evaluatedAt := started.UTC()
 		status := alerts.EvaluationStatusOK
 		candidateCount := len(rule.Targets)
 		triggeredCount := 0
@@ -272,20 +276,31 @@ func (d *Deps) HandleAlertRuleActions(w http.ResponseWriter, r *http.Request) {
 			"rule_status":     rule.Status,
 			"candidate_count": candidateCount,
 		}
+		if req.At != nil {
+			details["requested_at"] = req.At.UTC()
+		}
+		errMsg := ""
 		if rule.Status == alerts.RuleStatusPaused {
 			status = alerts.EvaluationStatusSuppressed
 			details["reason"] = "rule paused"
-		} else if candidateCount > 0 {
-			status = alerts.EvaluationStatusTriggered
-			triggeredCount = 1
+		} else {
+			triggered, evalErr := d.evaluateRuleCondition(r.Context(), rule, nil)
+			if evalErr != nil {
+				status = alerts.EvaluationStatusError
+				errMsg = evalErr.Error()
+			} else if triggered {
+				status = alerts.EvaluationStatusTriggered
+				triggeredCount = 1
+			}
 		}
 
-		evaluation, err := d.AlertStore.RecordAlertEvaluation(rule.ID, alerts.Evaluation{
+		evaluation, err := d.recordAlertEvaluationContext(r.Context(), rule.ID, alerts.Evaluation{
 			Status:         status,
 			EvaluatedAt:    evaluatedAt,
-			DurationMS:     1,
+			DurationMS:     int(time.Since(started).Milliseconds()),
 			CandidateCount: candidateCount,
 			TriggeredCount: triggeredCount,
+			Error:          errMsg,
 			Details:        details,
 		})
 		if err != nil {

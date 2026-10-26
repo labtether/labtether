@@ -56,9 +56,12 @@ func (d *Deps) HandleTrueNASDatasets(ctx context.Context, w http.ResponseWriter,
 				writeTrueNASError(w, http.StatusBadRequest, "invalid request body", err)
 				return
 			}
+			if !d.enforceMutation(w, asset, runtime, "dataset.create", map[string]string{"dataset": shared.CollectorAnyString(params["name"])}) {
+				return
+			}
 			var created map[string]any
-			if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, "pool.dataset.create", []any{params}, &created); err != nil {
-				writeTrueNASError(w, http.StatusBadGateway, "failed to create dataset", err)
+			if err := runtime.Client.CallMutation(ctx, "pool.dataset.create", []any{params}, &created); err != nil {
+				writeTrueNASMutationError(w, http.StatusBadGateway, "failed to create dataset", err)
 				return
 			}
 			d.InvalidateTrueNASCaches(asset.ID, runtime.CollectorID)
@@ -74,7 +77,11 @@ func (d *Deps) HandleTrueNASDatasets(ctx context.Context, w http.ResponseWriter,
 		return
 	}
 
-	// subParts[0] is the dataset ID (may contain URL-encoded slashes but passed as-is here).
+	// The router decodes one provider ID after splitting escaped segments.
+	if len(subParts) != 1 {
+		servicehttp.WriteError(w, http.StatusBadRequest, "dataset id must be one encoded path segment")
+		return
+	}
 	datasetID := strings.TrimSpace(subParts[0])
 	if datasetID == "" {
 		servicehttp.WriteError(w, http.StatusBadRequest, "dataset id is required")
@@ -91,9 +98,12 @@ func (d *Deps) HandleTrueNASDatasets(ctx context.Context, w http.ResponseWriter,
 			writeTrueNASError(w, http.StatusBadRequest, "invalid request body", err)
 			return
 		}
+		if !d.enforceMutation(w, asset, runtime, "dataset.update", map[string]string{"dataset": datasetID}) {
+			return
+		}
 		var updated map[string]any
-		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, "pool.dataset.update", []any{datasetID, params}, &updated); err != nil {
-			writeTrueNASError(w, http.StatusBadGateway, "failed to update dataset", err)
+		if err := runtime.Client.CallMutation(ctx, "pool.dataset.update", []any{datasetID, params}, &updated); err != nil {
+			writeTrueNASMutationError(w, http.StatusBadGateway, "failed to update dataset", err)
 			return
 		}
 		d.InvalidateTrueNASCaches(asset.ID, runtime.CollectorID)
@@ -107,8 +117,11 @@ func (d *Deps) HandleTrueNASDatasets(ctx context.Context, w http.ResponseWriter,
 		if !d.RequireAdminAuth(w, r) {
 			return
 		}
-		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, "pool.dataset.delete", []any{datasetID}, nil); err != nil {
-			writeTrueNASError(w, http.StatusBadGateway, "failed to delete dataset", err)
+		if !d.enforceMutation(w, asset, runtime, "dataset.delete", map[string]string{"dataset": datasetID}) {
+			return
+		}
+		if err := runtime.Client.CallMutation(ctx, "pool.dataset.delete", []any{datasetID}, nil); err != nil {
+			writeTrueNASMutationError(w, http.StatusBadGateway, "failed to delete dataset", err)
 			return
 		}
 		d.InvalidateTrueNASCaches(asset.ID, runtime.CollectorID)

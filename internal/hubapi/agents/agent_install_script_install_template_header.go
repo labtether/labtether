@@ -324,7 +324,7 @@ Options:
   --vnc-prereqs <ask|install|skip>
       Manage desktop prerequisite installation on Linux (default: ask).
   --install-vnc-prereqs
-      Install desktop prerequisites (x11vnc + Xvfb + xterm + xdotool + GStreamer) without prompting.
+      Install desktop prerequisites (x11vnc + Xvfb + xterm + xdotool + xmodmap + GStreamer) without prompting.
   --auto-install-vnc
       Alias for --install-vnc-prereqs.
   --skip-vnc-prereqs

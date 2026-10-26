@@ -54,9 +54,6 @@ func (d *Deps) ResolveTrueNASAssetRuntime(assetID string) (assets.Asset, *Truena
 
 	preferredCollectorID := strings.TrimSpace(asset.Metadata["collector_id"])
 	runtime, loadErr := d.LoadTrueNASRuntime(preferredCollectorID)
-	if loadErr != nil && preferredCollectorID != "" {
-		runtime, loadErr = d.LoadTrueNASRuntime("")
-	}
 	if loadErr != nil {
 		return assets.Asset{}, nil, fmt.Errorf("failed to load truenas runtime: %w", loadErr)
 	}

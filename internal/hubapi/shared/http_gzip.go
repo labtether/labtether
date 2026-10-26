@@ -21,9 +21,17 @@ type GzipResponseWriter struct {
 	Gz *gzip.Writer
 }
 
+// WriteHeader removes any length set by the handler after middleware entry.
+// The original body length cannot frame the compressed response.
+func (w *GzipResponseWriter) WriteHeader(code int) {
+	w.Header().Del("Content-Length")
+	w.ResponseWriter.WriteHeader(code)
+}
+
 // Write compresses p through the gzip writer instead of writing directly to
 // the underlying transport.
 func (w *GzipResponseWriter) Write(p []byte) (int, error) {
+	w.Header().Del("Content-Length")
 	return w.Gz.Write(p)
 }
 
@@ -31,6 +39,7 @@ func (w *GzipResponseWriter) Write(p []byte) (int, error) {
 // underlying http.ResponseWriter if it implements http.Flusher. This is
 // essential for SSE endpoints that send chunked updates.
 func (w *GzipResponseWriter) Flush() {
+	w.Header().Del("Content-Length")
 	// Best-effort: ignore errors from the gzip flush since they will surface
 	// on the next Write or Close anyway.
 	_ = w.Gz.Flush()
@@ -83,7 +92,11 @@ func GzipMiddleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		defer gz.Close()
+		defer func() {
+			// Close can commit an empty response even when the handler never wrote.
+			w.Header().Del("Content-Length")
+			_ = gz.Close()
+		}()
 
 		// Advertise the encoding and invalidate any pre-computed content length
 		// because the compressed size will differ from the original.

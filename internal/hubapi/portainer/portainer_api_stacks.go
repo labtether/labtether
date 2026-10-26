@@ -61,7 +61,7 @@ func (d *Deps) HandlePortainerStacks(ctx context.Context, w http.ResponseWriter,
 		if shared.HasAssetRestriction(r.Context()) {
 			filtered := make([]portainerconnector.Stack, 0, len(endpointStacks))
 			for _, stack := range endpointStacks {
-				allowed, authErr := d.portainerResourceAllowed(r.Context(), strconv.Itoa(epID), "stack_id", strconv.Itoa(stack.ID))
+				allowed, authErr := d.portainerResourceAllowed(r.Context(), runtime.CollectorID, strconv.Itoa(epID), "stack_id", strconv.Itoa(stack.ID))
 				if authErr == nil && allowed {
 					filtered = append(filtered, stack)
 				}
@@ -84,7 +84,7 @@ func (d *Deps) HandlePortainerStacks(ctx context.Context, w http.ResponseWriter,
 		return
 	}
 
-	if len(subParts) < 2 {
+	if len(subParts) != 2 {
 		servicehttp.WriteError(w, http.StatusNotFound, "unknown stack action")
 		return
 	}
@@ -99,7 +99,7 @@ func (d *Deps) HandlePortainerStacks(ctx context.Context, w http.ResponseWriter,
 		servicehttp.WriteError(w, http.StatusNotFound, "stack not found in this endpoint")
 		return
 	}
-	if !d.requirePortainerResourceAccess(w, r, strconv.Itoa(epID), "stack_id", stackIDStr) {
+	if !d.requirePortainerResourceAccess(w, r, runtime.CollectorID, strconv.Itoa(epID), "stack_id", strconv.Itoa(stackID)) {
 		return
 	}
 
@@ -129,6 +129,9 @@ func (d *Deps) HandlePortainerStacks(ctx context.Context, w http.ResponseWriter,
 				servicehttp.WriteError(w, http.StatusBadRequest, "invalid request body")
 				return
 			}
+			if !d.enforcePortainerMutation(ctx, w, asset, runtime, epID, "stack_id", strconv.Itoa(stackID)) {
+				return
+			}
 			if err := runtime.Client.UpdateStackCompose(ctx, stackID, epID, req.Content); err != nil {
 				servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
 				return
@@ -144,6 +147,9 @@ func (d *Deps) HandlePortainerStacks(ctx context.Context, w http.ResponseWriter,
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
+		if !d.enforcePortainerMutation(ctx, w, asset, runtime, epID, "stack_id", strconv.Itoa(stackID)) {
+			return
+		}
 		if err := runtime.Client.StartStack(ctx, stackID, epID); err != nil {
 			servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
 			return
@@ -153,6 +159,9 @@ func (d *Deps) HandlePortainerStacks(ctx context.Context, w http.ResponseWriter,
 	case "stop":
 		if r.Method != http.MethodPost {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		if !d.enforcePortainerMutation(ctx, w, asset, runtime, epID, "stack_id", strconv.Itoa(stackID)) {
 			return
 		}
 		if err := runtime.Client.StopStack(ctx, stackID, epID); err != nil {
@@ -167,6 +176,9 @@ func (d *Deps) HandlePortainerStacks(ctx context.Context, w http.ResponseWriter,
 			return
 		}
 		pullImage := r.URL.Query().Get("pull") == "true"
+		if !d.enforcePortainerMutation(ctx, w, asset, runtime, epID, "stack_id", strconv.Itoa(stackID)) {
+			return
+		}
 		if err := runtime.Client.RedeployStack(ctx, stackID, epID, pullImage); err != nil {
 			servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
 			return
@@ -176,6 +188,9 @@ func (d *Deps) HandlePortainerStacks(ctx context.Context, w http.ResponseWriter,
 	case "remove":
 		if r.Method != http.MethodPost {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		if !d.enforcePortainerMutation(ctx, w, asset, runtime, epID, "stack_id", strconv.Itoa(stackID)) {
 			return
 		}
 		if err := runtime.Client.RemoveStack(ctx, stackID, epID); err != nil {

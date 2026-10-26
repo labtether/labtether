@@ -2,11 +2,13 @@ package proxmox
 
 import (
 	"context"
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/connectorsdk"
+	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
@@ -90,6 +92,17 @@ func (d *Deps) proxmoxHAMigrate(w http.ResponseWriter, r *http.Request, ctx cont
 	kind := strings.ToLower(strings.TrimSpace(target.Kind))
 	if kind != "qemu" && kind != "lxc" {
 		servicehttp.WriteError(w, http.StatusBadRequest, "migrate only supported for qemu and lxc assets")
+		return
+	}
+	actionID := "vm.migrate"
+	if kind == "lxc" {
+		actionID = "ct.migrate"
+	}
+	// Check the same captured provider targets that this handler will mutate.
+	if !maintenanceguard.EnforceConnectorAction(w, "proxmox", actionID, connectorsdk.ActionRequest{
+		TargetID: target.Node + "/" + target.VMID,
+		Params:   map[string]string{"collector_id": runtime.collectorID, "target_node": req.TargetNode},
+	}, d.EvaluateConnectorGuardrails) {
 		return
 	}
 

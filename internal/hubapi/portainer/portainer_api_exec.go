@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -50,6 +49,9 @@ func (d *Deps) HandlePortainerContainerExec(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	if !apiv2.RequireAssetAccess(w, r, assetID) {
+		return
+	}
 	asset, runtime, err := d.ResolvePortainerAssetRuntime(assetID)
 	if err != nil {
 		writePortainerResolveError(w, err)
@@ -61,13 +63,15 @@ func (d *Deps) HandlePortainerContainerExec(w http.ResponseWriter, r *http.Reque
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if !d.requirePortainerResourceAccess(w, r, strconv.Itoa(epID), "container_id", containerID) {
-		return
-	}
 
 	shell := portainerExecShellFromQuery(r.URL.Query().Get("shell"))
 
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	containerID, ok := d.preparePortainerContainerMutation(ctx, w, r, asset, runtime, epID, containerID)
+	if !ok {
+		return
+	}
 	execID, err := runtime.Client.CreateExec(ctx, epID, containerID, shell)
 	cancel()
 	if err != nil {

@@ -59,7 +59,6 @@ func (d *Deps) HandleDockerExecTerminalStream(
 		SessionID:       session.ID,
 		WireSessionID:   "docker-exec-stream:" + shared.GenerateRequestID(),
 	}
-	d.registerDockerExecStream(bridgeState)
 	var outputDone chan struct{}
 	defer func() {
 		bridgeState.Close("")
@@ -69,10 +68,12 @@ func (d *Deps) HandleDockerExecTerminalStream(
 		}
 		d.finalizeDockerExecStream(bridgeState)
 	}()
-	if current, ok := d.AgentMgr.Get(agentID); !ok || current != agentConn {
+	detachPersistent, published := d.publishDockerExecStream(r.Context(), bridgeState, session, wsConn)
+	if !published {
 		writeDockerExecError(wsConn, "container host agent disconnected")
 		return
 	}
+	defer detachPersistent()
 
 	cols, rows := d.ParseTerminalSize(r.URL.Query().Get("cols"), r.URL.Query().Get("rows"))
 	startData, _ := json.Marshal(agentmgr.DockerExecStartData{
@@ -83,11 +84,17 @@ func (d *Deps) HandleDockerExecTerminalStream(
 		Cols:        cols,
 		Rows:        rows,
 	})
-	if err := d.startDockerExecStream(bridgeState, agentmgr.Message{
-		Type: agentmgr.MsgDockerExecStart,
-		ID:   bridgeState.WireSessionID,
-		Data: startData,
-	}); err != nil {
+	var startErr error
+	if !shared.RunIfSessionStreamOpen(r.Context(), func() {
+		startErr = d.startDockerExecStream(bridgeState, agentmgr.Message{
+			Type: agentmgr.MsgDockerExecStart,
+			ID:   bridgeState.WireSessionID,
+			Data: startData,
+		})
+	}) {
+		return
+	}
+	if startErr != nil {
 		writeDockerExecError(wsConn, "failed to start container terminal")
 		return
 	}
@@ -95,6 +102,8 @@ func (d *Deps) HandleDockerExecTerminalStream(
 	timer := time.NewTimer(10 * time.Second)
 	defer timer.Stop()
 	select {
+	case <-r.Context().Done():
+		return
 	case <-bridgeState.ClosedCh:
 		// A fast shell can queue its last bytes and exit before this select.
 		// Only startup failures without output need an error message.

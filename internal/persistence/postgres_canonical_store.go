@@ -10,6 +10,8 @@ import (
 )
 
 func (s *PostgresStore) UpsertProviderInstance(instance model.ProviderInstance) (model.ProviderInstance, error) {
+	ctx, cancel := agentLifecycleStoreContext()
+	defer cancel()
 	id := strings.TrimSpace(instance.ID)
 	if id == "" {
 		return model.ProviderInstance{}, ErrNotFound
@@ -26,7 +28,7 @@ func (s *PostgresStore) UpsertProviderInstance(instance model.ProviderInstance) 
 	}
 
 	provider, err := scanProviderInstance(s.pool.QueryRow(
-		context.Background(),
+		ctx,
 		`INSERT INTO provider_instances (
 			id, kind, provider, display_name, version, status, scope, config_ref,
 			metadata, last_seen_at, created_at, updated_at
@@ -118,19 +120,21 @@ func (s *PostgresStore) ListProviderInstances(limit int) ([]model.ProviderInstan
 }
 
 func (s *PostgresStore) ReplaceResourceExternalRefs(resourceID string, refs []model.ExternalRef) error {
+	ctx, cancel := agentLifecycleStoreContext()
+	defer cancel()
 	resourceID = strings.TrimSpace(resourceID)
 	if resourceID == "" {
 		return ErrNotFound
 	}
 
-	tx, err := s.pool.Begin(context.Background())
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(context.Background())
+	defer rollbackAgentLifecycleTransaction(tx)
 
 	if _, err := tx.Exec(
-		context.Background(),
+		ctx,
 		`DELETE FROM resource_external_refs WHERE resource_id = $1`,
 		resourceID,
 	); err != nil {
@@ -145,7 +149,7 @@ func (s *PostgresStore) ReplaceResourceExternalRefs(resourceID string, refs []mo
 			continue
 		}
 		if _, err := tx.Exec(
-			context.Background(),
+			ctx,
 			`INSERT INTO resource_external_refs (
 				resource_id, provider_instance_id, external_id, external_type,
 				external_parent_id, raw_locator, created_at, updated_at
@@ -168,7 +172,7 @@ func (s *PostgresStore) ReplaceResourceExternalRefs(resourceID string, refs []mo
 		}
 	}
 
-	return tx.Commit(context.Background())
+	return tx.Commit(ctx)
 }
 
 func (s *PostgresStore) ListResourceExternalRefs(resourceID string) ([]model.ExternalRef, error) {

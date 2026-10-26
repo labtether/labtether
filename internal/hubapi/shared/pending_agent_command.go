@@ -12,6 +12,7 @@ import (
 // AcceptsResult.
 type PendingAgentCommand struct {
 	ResultCh          chan agentmgr.CommandResultData
+	ExpectedConn      *agentmgr.AgentConn
 	ExpectedAssetID   string
 	ExpectedSessionID string
 	ExpectedCommandID string
@@ -20,7 +21,7 @@ type PendingAgentCommand struct {
 // AcceptsResult returns true when a received command result matches the
 // expectations stored in this pending command entry.
 func (p PendingAgentCommand) AcceptsResult(conn *agentmgr.AgentConn, result *agentmgr.CommandResultData) bool {
-	if result == nil {
+	if result == nil || (p.ExpectedConn != nil && p.ExpectedConn != conn) {
 		return false
 	}
 	if strings.TrimSpace(result.JobID) == "" {

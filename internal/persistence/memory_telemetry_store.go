@@ -362,71 +362,34 @@ func (m *MemoryTelemetryStore) SeriesMetric(assetID, metric string, start, end t
 }
 
 func (m *MemoryTelemetryStore) MetricSeriesBatch(assetIDs []string, metric string, start, end time.Time, step time.Duration) (map[string]telemetry.Series, error) {
-	// Deduplicate IDs.
-	seen := make(map[string]struct{}, len(assetIDs))
-	clean := make([]string, 0, len(assetIDs))
-	for _, rawID := range assetIDs {
-		id := strings.TrimSpace(rawID)
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		seen[id] = struct{}{}
-		clean = append(clean, id)
-	}
-
-	// Hold a single RLock for the entire batch to get a consistent view and
-	// avoid N separate lock acquisitions (one per SeriesMetric call).
-	m.mu.RLock()
-	snapshots := make(map[string][]telemetry.MetricSample, len(clean))
-	for _, id := range clean {
-		snapshots[id] = append([]telemetry.MetricSample(nil), m.samples[id]...)
-	}
-	m.mu.RUnlock()
-
-	definition, _ := telemetryCanonicalMetricDefinition(metric)
-	out := make(map[string]telemetry.Series, len(clean))
-	for _, id := range clean {
-		samples := snapshots[id]
-		points := make([]telemetry.Point, 0, 64)
-		for _, sample := range samples {
-			if sample.Metric != metric {
-				continue
-			}
-			if sample.CollectedAt.Before(start) || sample.CollectedAt.After(end) {
-				continue
-			}
-			points = append(points, telemetry.Point{
-				TS:    sample.CollectedAt.Unix(),
-				Value: sample.Value,
-			})
-		}
-		sort.Slice(points, func(i, j int) bool {
-			return points[i].TS < points[j].TS
-		})
-		points = telemetry.BucketAveragePoints(points, step)
-		out[id] = telemetry.Series{
-			Metric:  metric,
-			Unit:    definition.Unit,
-			Points:  points,
-			Current: telemetry.LastPointValue(points),
-		}
-	}
-	return out, nil
+	return m.metricSeriesBatchContext(context.Background(), assetIDs, metric, start, end, step, 0)
 }
 
 func (m *MemoryTelemetryStore) HasTelemetrySamples(assetIDs []string, start, end time.Time) (map[string]bool, error) {
+	return m.HasTelemetrySamplesContext(context.Background(), assetIDs, start, end)
+}
+
+func (m *MemoryTelemetryStore) HasTelemetrySamplesContext(ctx context.Context, assetIDs []string, start, end time.Time) (map[string]bool, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	out := make(map[string]bool, len(assetIDs))
-	m.mu.RLock()
+	if err := lockAlertEvaluation(ctx, &m.mu, true); err != nil {
+		return nil, err
+	}
 	defer m.mu.RUnlock()
 	for _, assetID := range assetIDs {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		assetID = strings.TrimSpace(assetID)
 		if assetID == "" {
 			continue
 		}
 		for _, sample := range m.samples[assetID] {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			if sample.CollectedAt.Before(start) || sample.CollectedAt.After(end) {
 				continue
 			}

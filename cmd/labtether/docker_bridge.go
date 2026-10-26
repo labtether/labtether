@@ -20,6 +20,9 @@ func (s *apiServer) buildDockerDeps() *dockerpkg.Deps {
 		DockerCoordinator: s.dockerCoordinator,
 		AgentMgr:          s.agentMgr,
 		DockerExecBridges: &s.dockerExecBridges,
+		ClaimPersistentTerminalStream: func(session terminal.Session, conn *websocket.Conn) (func(), func()) {
+			return s.ensureTerminalDeps().ClaimPersistentTerminalStream(session, conn)
+		},
 
 		TerminalWebSocketUpgrader: terminalWebSocketUpgrader,
 

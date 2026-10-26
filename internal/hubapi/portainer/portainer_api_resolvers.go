@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/labtether/labtether/internal/assetid"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
@@ -56,11 +57,12 @@ func (d *Deps) ResolvePortainerAssetRuntime(assetID string) (assets.Asset, *Port
 
 	preferredCollectorID := strings.TrimSpace(asset.Metadata["collector_id"])
 	runtime, loadErr := d.LoadPortainerRuntime(preferredCollectorID)
-	if loadErr != nil && preferredCollectorID != "" {
-		runtime, loadErr = d.LoadPortainerRuntime("")
-	}
 	if loadErr != nil {
 		return assets.Asset{}, nil, fmt.Errorf("failed to load portainer runtime: %w", loadErr)
+	}
+	// The namespace is an owner even if legacy metadata has lost its collector ID.
+	if scope, scoped := assetid.CollectorScopeFromAssetID(asset.ID); scoped && scope != assetid.CollectorScope(runtime.CollectorID) {
+		return assets.Asset{}, nil, fmt.Errorf("portainer asset collector does not match runtime")
 	}
 	return asset, runtime, nil
 }

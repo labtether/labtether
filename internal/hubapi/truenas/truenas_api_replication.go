@@ -23,6 +23,8 @@ type TrueNASReplicationActionResponse struct {
 	ReplicationID int      `json:"replication_id"`
 	Action        string   `json:"action"`
 	Message       string   `json:"message"`
+	Status        string   `json:"status"`
+	JobID         int64    `json:"job_id"`
 	Warnings      []string `json:"warnings,omitempty"`
 	FetchedAt     string   `json:"fetched_at"`
 }
@@ -57,12 +59,12 @@ func (d *Deps) HandleTrueNASReplication(ctx context.Context, w http.ResponseWrit
 		return
 	}
 	replID, err := strconv.Atoi(idStr)
-	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadRequest, "replication id must be an integer")
+	if err != nil || replID <= 0 {
+		servicehttp.WriteError(w, http.StatusBadRequest, "replication id must be a positive integer")
 		return
 	}
 
-	if len(subParts) < 2 {
+	if len(subParts) != 2 {
 		servicehttp.WriteError(w, http.StatusNotFound, "unknown replication action")
 		return
 	}
@@ -77,15 +79,21 @@ func (d *Deps) HandleTrueNASReplication(ctx context.Context, w http.ResponseWrit
 		if !d.RequireAdminAuth(w, r) {
 			return
 		}
-		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, "replication.run", []any{replID}, nil); err != nil {
-			writeTrueNASError(w, http.StatusBadGateway, "failed to run replication task", err)
+		if !d.enforceReplicationMutation(ctx, w, asset, runtime, replID) {
+			return
+		}
+		jobID, err := runtime.Client.CallJob(ctx, "replication.run", []any{replID})
+		if err != nil {
+			writeTrueNASMutationError(w, http.StatusBadGateway, "failed to run replication task", err)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, TrueNASReplicationActionResponse{
 			AssetID:       strings.TrimSpace(asset.ID),
 			ReplicationID: replID,
 			Action:        "run",
-			Message:       "replication task " + idStr + " started",
+			Message:       "replication task " + idStr + " request accepted",
+			Status:        "accepted",
+			JobID:         jobID,
 			FetchedAt:     time.Now().UTC().Format(time.RFC3339),
 		})
 	default:

@@ -22,7 +22,8 @@ import (
 
 type haCollectorStore struct {
 	collectors []hubcollector.Collector
-	listErr    error
+	getErr     error
+	getCalls   int
 }
 
 func (s *haCollectorStore) CreateHubCollector(req hubcollector.CreateCollectorRequest) (hubcollector.Collector, error) {
@@ -31,6 +32,10 @@ func (s *haCollectorStore) CreateHubCollector(req hubcollector.CreateCollectorRe
 	return collector, nil
 }
 func (s *haCollectorStore) GetHubCollector(id string) (hubcollector.Collector, bool, error) {
+	s.getCalls++
+	if s.getErr != nil {
+		return hubcollector.Collector{}, false, s.getErr
+	}
 	for _, collector := range s.collectors {
 		if collector.ID == id {
 			return collector, true, nil
@@ -39,9 +44,6 @@ func (s *haCollectorStore) GetHubCollector(id string) (hubcollector.Collector, b
 	return hubcollector.Collector{}, false, nil
 }
 func (s *haCollectorStore) ListHubCollectors(_ int, enabledOnly bool) ([]hubcollector.Collector, error) {
-	if s.listErr != nil {
-		return nil, s.listErr
-	}
 	result := make([]hubcollector.Collector, 0, len(s.collectors))
 	for _, collector := range s.collectors {
 		if !enabledOnly || collector.Enabled {
@@ -264,11 +266,15 @@ func TestHomeAssistantEntityMutationsRequireAdmin(t *testing.T) {
 
 func TestHomeAssistantRuntimeResolutionErrorsDoNotLeakInternals(t *testing.T) {
 	fixture := newHARuntimeFixture(t)
-	fixture.deps.HubCollectorStore = &haCollectorStore{listErr: errors.New("postgres://secret@internal-db:5432/labtether")}
+	store := &haCollectorStore{getErr: errors.New("postgres://secret@internal-db:5432/labtether")}
+	fixture.deps.HubCollectorStore = store
 	path := "/api/v2/homeassistant/entities/" + fixture.lightAssetID
 	req := scopedRequest(http.MethodPost, path, `{"action":"toggle"}`, []string{"homeassistant:write"})
 	rec := httptest.NewRecorder()
 	fixture.deps.HandleV2HAEntityActions(rec, req)
+	if store.getCalls != 1 {
+		t.Fatalf("expected the injected exact collector lookup error, calls=%d", store.getCalls)
+	}
 	if rec.Code != http.StatusConflict || strings.Contains(rec.Body.String(), "secret") || strings.Contains(rec.Body.String(), "internal-db") {
 		t.Fatalf("runtime resolution leaked internals: status=%d body=%s", rec.Code, rec.Body.String())
 	}

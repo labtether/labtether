@@ -2,25 +2,30 @@ package alerting
 
 import (
 	"context"
+	"fmt"
+	"github.com/labtether/labtether/internal/persistence"
 	"log"
-	"strings"
 	"time"
 
 	"github.com/labtether/labtether/internal/alerts"
 	"github.com/labtether/labtether/internal/assets"
-	"github.com/labtether/labtether/internal/persistence"
 )
 
 type AlertEvaluationPrefetch struct {
 	Assets               []assets.Asset
 	CapabilityIDsByAsset map[string][]string
-	FiringRuleIDs        map[string]struct{}
+	FiringInstances      []alerts.AlertInstance
 	Suppression          *alertSuppressionPrefetch
+	assetSnapshot        *alertAssetSnapshot
 }
 
 func (d *Deps) RunAlertEvaluator(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
+	d.runAlertEvaluator(ctx, ticker.C)
+}
+
+func (d *Deps) runAlertEvaluator(ctx context.Context, ticks <-chan time.Time) {
 	log.Printf("alert evaluator started (interval=30s)")
 
 	for {
@@ -28,57 +33,18 @@ func (d *Deps) RunAlertEvaluator(ctx context.Context) {
 		case <-ctx.Done():
 			log.Printf("alert evaluator stopped")
 			return
-		case <-ticker.C:
+		case <-ticks:
 			d.evaluateAlertRules(ctx)
 		}
 	}
 }
 
 func (d *Deps) evaluateAlertRules(ctx context.Context) {
-	if d.AlertStore == nil || d.AlertInstanceStore == nil {
-		return
-	}
+	d.evaluateAlertRulesWithClock(ctx, time.Now)
+}
 
-	rules, err := d.AlertStore.ListAlertRules(persistence.AlertRuleFilter{
-		Limit:  500,
-		Status: alerts.RuleStatusActive,
-	})
-	if err != nil {
-		log.Printf("alert evaluator: failed to list rules: %v", err)
-		return
-	}
-
-	prefetch := AlertEvaluationPrefetch{
-		Assets:               nil,
-		CapabilityIDsByAsset: map[string][]string{},
-		FiringRuleIDs:        nil,
-	}
-
-	if d.AssetStore != nil {
-		prefetch.Assets, err = d.AssetStore.ListAssets()
-		if err != nil {
-			log.Printf("alert evaluator: failed to prefetch assets: %v", err)
-			prefetch.Assets = nil
-		}
-	}
-
-	if d.CanonicalStore != nil && len(prefetch.Assets) > 0 {
-		prefetch.CapabilityIDsByAsset = d.prefetchAlertCapabilityIDsByAsset(prefetch.Assets)
-	}
-
-	if hasCompositeAlertRules(rules) {
-		prefetch.FiringRuleIDs = d.prefetchFiringRuleIDs(5000)
-	}
-	prefetch.Suppression = d.newAlertSuppressionPrefetch()
-
-	for _, rule := range rules {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-		d.EvaluateSingleRule(ctx, rule, &prefetch)
-	}
+func (d *Deps) evaluateAlertRulesWithClock(ctx context.Context, now func() time.Time) {
+	d.evaluateAlertRuleSlice(ctx, now)
 }
 
 func hasCompositeAlertRules(rules []alerts.Rule) bool {
@@ -90,111 +56,62 @@ func hasCompositeAlertRules(rules []alerts.Rule) bool {
 	return false
 }
 
-func (d *Deps) prefetchAlertCapabilityIDsByAsset(prefetchedAssets []assets.Asset) map[string][]string {
-	out := make(map[string][]string, len(prefetchedAssets))
-	if d.CanonicalStore == nil || len(prefetchedAssets) == 0 {
-		return out
-	}
-
-	assetIDs := make(map[string]struct{}, len(prefetchedAssets))
-	for _, assetEntry := range prefetchedAssets {
-		assetID := strings.TrimSpace(assetEntry.ID)
-		if assetID == "" {
-			continue
-		}
-		assetIDs[assetID] = struct{}{}
-	}
-	if len(assetIDs) == 0 {
-		return out
-	}
-
-	limit := len(assetIDs) + 256
-	if limit < 500 {
-		limit = 500
-	}
-	if limit > 5000 {
-		limit = 5000
-	}
-
-	capabilitySets, err := d.CanonicalStore.ListCapabilitySets(limit)
-	if err != nil {
-		log.Printf("alert evaluator: failed to prefetch capability sets: %v", err)
-		return out
-	}
-
-	for _, capabilitySet := range capabilitySets {
-		if !strings.EqualFold(strings.TrimSpace(capabilitySet.SubjectType), "resource") {
-			continue
-		}
-		subjectID := strings.TrimSpace(capabilitySet.SubjectID)
-		if _, ok := assetIDs[subjectID]; !ok {
-			continue
-		}
-		out[subjectID] = d.capabilityIDsFromSet(capabilitySet)
-	}
-	return out
+// evaluateRuleCondition reads the same condition for background evaluation and
+// manual previews. It never records history, changes instances or sends notices.
+func (d *Deps) evaluateRuleCondition(ctx context.Context, rule alerts.Rule, prefetch *AlertEvaluationPrefetch) (bool, error) {
+	outcome, err := d.evaluateRuleOutcome(ctx, rule, prefetch)
+	return outcome.Triggered, err
 }
 
-func (d *Deps) prefetchFiringRuleIDs(limit int) map[string]struct{} {
-	if d.AlertInstanceStore == nil {
-		return nil
+func (d *Deps) evaluateRuleOutcome(ctx context.Context, rule alerts.Rule, prefetch *AlertEvaluationPrefetch) (alertConditionOutcome, error) {
+	if err := ctx.Err(); err != nil {
+		return alertConditionOutcome{}, err
 	}
-	if limit <= 0 {
-		limit = 1000
-	}
-
-	instances, err := d.AlertInstanceStore.ListAlertInstances(persistence.AlertInstanceFilter{
-		Status: alerts.InstanceStatusFiring,
-		Limit:  limit,
-	})
-	if err != nil {
-		log.Printf("alert evaluator: failed to prefetch firing instances: %v", err)
-		return nil
-	}
-
-	firingRuleIDs := make(map[string]struct{}, len(instances))
-	for _, instance := range instances {
-		ruleID := strings.TrimSpace(instance.RuleID)
-		if ruleID == "" {
-			continue
-		}
-		firingRuleIDs[ruleID] = struct{}{}
-	}
-	return firingRuleIDs
-}
-
-func (d *Deps) EvaluateSingleRule(ctx context.Context, rule alerts.Rule, prefetch *AlertEvaluationPrefetch) {
-	start := time.Now()
-	triggered := false
-	candidateCount := len(rule.Targets)
-	var evalErr error
-
 	var prefetchedAssets []assets.Asset
 	var prefetchedCapabilities map[string][]string
-	var prefetchedFiringRuleIDs map[string]struct{}
-	var prefetchedSuppression *alertSuppressionPrefetch
+	var prefetchedFiringInstances []alerts.AlertInstance
 	if prefetch != nil {
-		prefetchedAssets = prefetch.Assets
+		var err error
+		prefetchedAssets, err = d.prefetchedRuleAssets(ctx, rule, prefetch)
+		if err != nil {
+			return alertConditionOutcome{}, err
+		}
 		prefetchedCapabilities = prefetch.CapabilityIDsByAsset
-		prefetchedFiringRuleIDs = prefetch.FiringRuleIDs
-		prefetchedSuppression = prefetch.Suppression
+		prefetchedFiringInstances = prefetch.FiringInstances
 	}
 
 	switch rule.Kind {
 	case alerts.RuleKindHeartbeatStale:
-		triggered, evalErr = d.EvaluateHeartbeatStaleWithPrefetch(rule, prefetchedAssets, prefetchedCapabilities)
+		return d.evaluateHeartbeatStaleOutcome(ctx, rule, prefetchedAssets, prefetchedCapabilities)
 	case alerts.RuleKindMetricThreshold:
-		triggered, evalErr = d.EvaluateMetricThresholdWithPrefetch(rule, prefetchedAssets, prefetchedCapabilities)
+		return d.evaluateMetricThresholdOutcome(ctx, rule, prefetchedAssets, prefetchedCapabilities)
 	case alerts.RuleKindMetricDeadman:
-		triggered, evalErr = d.EvaluateMetricDeadmanWithPrefetch(rule, prefetchedAssets, prefetchedCapabilities)
+		return d.evaluateMetricDeadmanOutcome(ctx, rule, prefetchedAssets, prefetchedCapabilities)
 	case alerts.RuleKindLogPattern:
-		triggered, evalErr = d.EvaluateLogPatternWithPrefetch(rule, prefetchedAssets, prefetchedCapabilities)
+		return d.evaluateLogPatternOutcome(ctx, rule, prefetchedAssets, prefetchedCapabilities)
 	case alerts.RuleKindSyntheticCheck:
-		triggered, evalErr = d.evaluateSyntheticCheck(ctx, rule)
+		return d.evaluateSyntheticOutcome(ctx, rule)
 	case alerts.RuleKindComposite:
-		triggered, evalErr = d.evaluateCompositeWithPrefetchedFiring(rule, prefetchedFiringRuleIDs)
+		return d.evaluateCompositeOutcome(ctx, rule, prefetchedFiringInstances)
 	default:
-		triggered = false
+		return newAlertConditionOutcome(), nil
+	}
+}
+
+func (d *Deps) EvaluateSingleRule(ctx context.Context, rule alerts.Rule, prefetch *AlertEvaluationPrefetch) {
+	d.evaluateSingleRuleAt(ctx, rule, prefetch, time.Now().UTC())
+}
+
+func (d *Deps) evaluateSingleRuleAt(ctx context.Context, rule alerts.Rule, prefetch *AlertEvaluationPrefetch, at time.Time) {
+	start := time.Now()
+	outcome, evalErr := d.evaluateRuleOutcome(ctx, rule, prefetch)
+	if ctx.Err() != nil {
+		return
+	}
+	candidateCount := len(rule.Targets)
+	var prefetchedSuppression *alertSuppressionPrefetch
+	if prefetch != nil {
+		prefetchedSuppression = prefetch.Suppression
 	}
 
 	status := alerts.EvaluationStatusOK
@@ -203,15 +120,15 @@ func (d *Deps) EvaluateSingleRule(ctx context.Context, rule alerts.Rule, prefetc
 	if evalErr != nil {
 		status = alerts.EvaluationStatusError
 		errMsg = evalErr.Error()
-	} else if triggered {
+	} else if outcome.Triggered {
 		status = alerts.EvaluationStatusTriggered
 		triggeredCount = 1
-		d.fireOrRefireAlert(rule, prefetchedSuppression)
+		d.fireOrRefireAlertWithScopeAt(ctx, rule, prefetchedSuppression, at, outcome.Scope)
 	} else {
-		d.resolveStaleInstances(rule, prefetchedSuppression)
+		d.resolveStaleInstancesContext(ctx, rule, prefetchedSuppression)
 	}
 
-	_, _ = d.AlertStore.RecordAlertEvaluation(rule.ID, alerts.Evaluation{
+	_, err := d.recordAlertEvaluationContext(ctx, rule.ID, alerts.Evaluation{
 		Status:         status,
 		EvaluatedAt:    time.Now().UTC(),
 		DurationMS:     int(time.Since(start).Milliseconds()),
@@ -219,89 +136,18 @@ func (d *Deps) EvaluateSingleRule(ctx context.Context, rule alerts.Rule, prefetc
 		TriggeredCount: triggeredCount,
 		Error:          errMsg,
 	})
+	if err != nil && ctx.Err() == nil {
+		log.Printf("alert evaluator: failed to record evaluation: %v", err)
+	}
 }
 
-// evaluateCompositeWithPrefetchedFiring evaluates a composite alert rule by checking
-// whether its referenced sub-rules currently have firing alert instances.
-//
-// The rule's Condition map must contain:
-//   - "rule_ids": []interface{} of sub-rule ID strings to evaluate.
-//   - "operator": "and" (default) | "or" — how to combine sub-rule results.
-//
-// "and" requires ALL sub-rules to have at least one firing instance.
-// "or"  requires ANY sub-rule to have at least one firing instance.
-// Sub-rule IDs that yield a store error are skipped (treated as not firing).
-func (d *Deps) evaluateCompositeWithPrefetchedFiring(
-	rule alerts.Rule,
-	firingRuleIDs map[string]struct{},
-) (bool, error) {
-	raw, ok := rule.Condition["rule_ids"]
+func (d *Deps) recordAlertEvaluationContext(ctx context.Context, ruleID string, evaluation alerts.Evaluation) (alerts.Evaluation, error) {
+	if err := ctx.Err(); err != nil {
+		return alerts.Evaluation{}, err
+	}
+	store, ok := d.AlertStore.(persistence.AlertEvaluationContextStore)
 	if !ok {
-		return false, nil
+		return alerts.Evaluation{}, fmt.Errorf("context-aware alert history unavailable")
 	}
-	rawSlice, ok := raw.([]interface{})
-	if !ok || len(rawSlice) == 0 {
-		return false, nil
-	}
-
-	subRuleIDs := make([]string, 0, len(rawSlice))
-	for _, v := range rawSlice {
-		id, ok := v.(string)
-		if !ok || id == "" {
-			continue
-		}
-		subRuleIDs = append(subRuleIDs, id)
-	}
-	if len(subRuleIDs) == 0 {
-		return false, nil
-	}
-
-	operator := "and"
-	if opRaw, ok := rule.Condition["operator"]; ok {
-		if opStr, ok := opRaw.(string); ok && opStr == "or" {
-			operator = "or"
-		}
-	}
-
-	for _, subRuleID := range subRuleIDs {
-		hasFiring, err := d.compositeSubRuleHasFiring(subRuleID, firingRuleIDs)
-		if err != nil {
-			log.Printf("alert evaluator: composite rule %s: failed to query sub-rule %s: %v", rule.ID, subRuleID, err)
-			if operator == "and" {
-				return false, nil
-			}
-			continue
-		}
-
-		if operator == "or" && hasFiring {
-			return true, nil
-		}
-		if operator == "and" && !hasFiring {
-			return false, nil
-		}
-	}
-
-	return operator == "and", nil
-}
-
-func (d *Deps) compositeSubRuleHasFiring(subRuleID string, firingRuleIDs map[string]struct{}) (bool, error) {
-	subRuleID = strings.TrimSpace(subRuleID)
-	if subRuleID == "" {
-		return false, nil
-	}
-
-	if firingRuleIDs != nil {
-		_, ok := firingRuleIDs[subRuleID]
-		return ok, nil
-	}
-
-	instances, err := d.AlertInstanceStore.ListAlertInstances(persistence.AlertInstanceFilter{
-		RuleID: subRuleID,
-		Status: alerts.InstanceStatusFiring,
-		Limit:  1,
-	})
-	if err != nil {
-		return false, err
-	}
-	return len(instances) > 0, nil
+	return store.RecordAlertEvaluationContext(ctx, ruleID, evaluation)
 }

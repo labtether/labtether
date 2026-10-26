@@ -55,13 +55,15 @@ func (d *Deps) HandleGuacdDesktopStream(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	target.Host = resolvedHost
-	client, err := guacamole.Connect(guacdHost, guacdPort)
+	client, err := guacamole.ConnectContext(r.Context(), guacdHost, guacdPort)
 	if err != nil {
 		log.Printf("rdp: guacd connect failed: %v", err)
 		servicehttp.WriteError(w, http.StatusBadGateway, "guacd unavailable")
 		return
 	}
 	defer client.Close()
+	stopCancel := context.AfterFunc(r.Context(), func() { _ = client.Close() })
+	defer stopCancel()
 	if err := client.SetDeadline(time.Now().Add(15 * time.Second)); err != nil {
 		servicehttp.WriteError(w, http.StatusBadGateway, "guacd unavailable")
 		return

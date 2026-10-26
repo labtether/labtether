@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"context"
 	"errors"
 	"sort"
 	"strings"
@@ -25,6 +26,23 @@ func NewMemoryIncidentStore() *MemoryIncidentStore {
 }
 
 func (m *MemoryIncidentStore) CreateIncident(req incidents.CreateIncidentRequest) (incidents.Incident, error) {
+	return m.CreateIncidentContext(context.Background(), req)
+}
+
+func (m *MemoryIncidentStore) CreateIncidentContext(ctx context.Context, req incidents.CreateIncidentRequest) (incidents.Incident, error) {
+	if err := ctx.Err(); err != nil {
+		return incidents.Incident{}, err
+	}
+	incident := newMemoryIncident(req)
+	if err := lockAlertEvaluation(ctx, &m.mu, false); err != nil {
+		return incidents.Incident{}, err
+	}
+	m.incidents[incident.ID] = cloneIncident(incident)
+	m.mu.Unlock()
+	return cloneIncident(incident), nil
+}
+
+func newMemoryIncident(req incidents.CreateIncidentRequest) incidents.Incident {
 	now := time.Now().UTC()
 	createdBy := strings.TrimSpace(req.CreatedBy)
 	if createdBy == "" {
@@ -40,7 +58,7 @@ func (m *MemoryIncidentStore) CreateIncident(req incidents.CreateIncidentRequest
 		severity = incidents.SeverityMedium
 	}
 
-	incident := incidents.Incident{
+	return incidents.Incident{
 		ID:             idgen.New("inc"),
 		Title:          strings.TrimSpace(req.Title),
 		Summary:        strings.TrimSpace(req.Summary),
@@ -57,10 +75,6 @@ func (m *MemoryIncidentStore) CreateIncident(req incidents.CreateIncidentRequest
 		UpdatedAt:      now,
 	}
 
-	m.mu.Lock()
-	m.incidents[incident.ID] = cloneIncident(incident)
-	m.mu.Unlock()
-	return cloneIncident(incident), nil
 }
 
 func (m *MemoryIncidentStore) GetIncident(id string) (incidents.Incident, bool, error) {
@@ -220,10 +234,19 @@ func (m *MemoryIncidentStore) DeleteIncident(id string) error {
 }
 
 func (m *MemoryIncidentStore) LinkIncidentAlert(incidentID string, req incidents.LinkAlertRequest) (incidents.AlertLink, error) {
+	return m.LinkIncidentAlertContext(context.Background(), incidentID, req)
+}
+
+func (m *MemoryIncidentStore) LinkIncidentAlertContext(ctx context.Context, incidentID string, req incidents.LinkAlertRequest) (incidents.AlertLink, error) {
+	if err := ctx.Err(); err != nil {
+		return incidents.AlertLink{}, err
+	}
 	now := time.Now().UTC()
 	incidentID = strings.TrimSpace(incidentID)
 
-	m.mu.Lock()
+	if err := lockAlertEvaluation(ctx, &m.mu, false); err != nil {
+		return incidents.AlertLink{}, err
+	}
 	defer m.mu.Unlock()
 
 	if _, ok := m.incidents[incidentID]; !ok {
@@ -244,6 +267,9 @@ func (m *MemoryIncidentStore) LinkIncidentAlert(incidentID string, req incidents
 
 	existing := m.links[incidentID]
 	for _, link := range existing {
+		if err := ctx.Err(); err != nil {
+			return incidents.AlertLink{}, err
+		}
 		if alertRuleID != "" && link.AlertRuleID == alertRuleID {
 			return incidents.AlertLink{}, incidents.ErrIncidentAlertLinkConflict
 		}
@@ -320,20 +346,35 @@ func (m *MemoryIncidentStore) UnlinkIncidentAlert(incidentID, linkID string) err
 }
 
 func (m *MemoryIncidentStore) HasAutoIncidentForAlertInstance(alertInstanceID string) (bool, error) {
+	return m.HasAutoIncidentForAlertInstanceContext(context.Background(), alertInstanceID)
+}
+
+func (m *MemoryIncidentStore) HasAutoIncidentForAlertInstanceContext(ctx context.Context, alertInstanceID string) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
 	alertInstanceID = strings.TrimSpace(alertInstanceID)
 	if alertInstanceID == "" {
 		return false, nil
 	}
 
-	m.mu.RLock()
+	if err := lockAlertEvaluation(ctx, &m.mu, true); err != nil {
+		return false, err
+	}
 	defer m.mu.RUnlock()
 
 	for incidentID, links := range m.links {
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
 		incident, ok := m.incidents[incidentID]
 		if !ok || incident.Source != incidents.SourceAlertAuto {
 			continue
 		}
 		for _, link := range links {
+			if err := ctx.Err(); err != nil {
+				return false, err
+			}
 			if strings.TrimSpace(link.AlertInstanceID) == alertInstanceID {
 				return true, nil
 			}

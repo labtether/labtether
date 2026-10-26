@@ -46,7 +46,7 @@ func (d *Deps) HandlePortainerOverview(ctx context.Context, w http.ResponseWrite
 		}, nil)
 		return
 	}
-	if !d.requirePortainerEndpointAccess(w, r, strconv.Itoa(endpointID)) {
+	if !d.requirePortainerEndpointAccess(w, r, runtime.CollectorID, strconv.Itoa(endpointID)) {
 		return
 	}
 

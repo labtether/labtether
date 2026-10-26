@@ -32,6 +32,18 @@ func DialSSHChain(
 	onHopConnected HopProgressFn,
 	sleepFn func(time.Duration),
 ) (*ssh.Client, []*ssh.Client, error) {
+	return DialSSHChainContext(context.Background(), hops, target, onHopConnected, sleepFn)
+}
+
+// DialSSHChainContext binds every in-flight hop and handshake to its browser
+// request. Returned clients belong to the caller after this function returns.
+func DialSSHChainContext(
+	ctx context.Context,
+	hops []terminal.ResolvedHop,
+	target terminal.ResolvedHop,
+	onHopConnected HopProgressFn,
+	_ func(time.Duration),
+) (*ssh.Client, []*ssh.Client, error) {
 	if target.ClientConfig == nil {
 		return nil, nil, errors.New("target ssh client config is required")
 	}
@@ -41,7 +53,7 @@ func DialSSHChain(
 
 	if len(hops) == 0 {
 		// Direct dial — no intermediate hops.
-		client, err := dialDirectSSH(target.Addr, target.ClientConfig, hopDialTimeout)
+		client, err := dialDirectSSH(ctx, target.Addr, target.ClientConfig, hopDialTimeout)
 		if err != nil {
 			return nil, nil, fmt.Errorf("direct ssh dial to %s failed: %w", target.Addr, err)
 		}
@@ -57,11 +69,14 @@ func DialSSHChain(
 	if first.ClientConfig == nil {
 		return nil, nil, fmt.Errorf("hop 0 (%s) has nil client config", first.Addr)
 	}
-	firstClient, err := dialDirectSSH(first.Addr, first.ClientConfig, hopDialTimeout)
+	firstClient, err := dialDirectSSH(ctx, first.Addr, first.ClientConfig, hopDialTimeout)
 	if err != nil {
 		return nil, nil, fmt.Errorf("ssh dial to hop 0 (%s) failed: %w", first.Addr, err)
 	}
 	intermediates = append(intermediates, firstClient)
+	// Closing the TCP-backed root also unblocks every tunneled hop and dial.
+	stopFirst := context.AfterFunc(ctx, func() { _ = firstClient.Close() })
+	defer stopFirst()
 	log.Printf("terminal-ssh-chain: hop 0/%d connected to %s", len(hops), first.Addr) // #nosec G706 -- Hop addresses come from resolved operator config, not raw browser input.
 	if onHopConnected != nil {
 		onHopConnected(0, len(hops), first.Addr)
@@ -76,13 +91,13 @@ func DialSSHChain(
 		}
 		prevClient := intermediates[i-1]
 
-		netConn, err := dialWithTimeout(prevClient, hop.Addr, hopDialTimeout)
+		netConn, err := dialWithTimeout(ctx, prevClient, hop.Addr, hopDialTimeout)
 		if err != nil {
 			closeAll()
 			return nil, nil, fmt.Errorf("tunnel dial to hop %d (%s) failed: %w", i, hop.Addr, err)
 		}
 
-		handshakeCtx, cancelHandshake := context.WithTimeout(context.Background(), hopDialTimeout)
+		handshakeCtx, cancelHandshake := context.WithTimeout(ctx, hopDialTimeout)
 		client, err := handshakeSSHThroughChain(handshakeCtx, netConn, hop.Addr, hop.ClientConfig, firstClient)
 		cancelHandshake()
 		if err != nil {
@@ -100,13 +115,13 @@ func DialSSHChain(
 
 	// Dial the target through the last hop.
 	lastClient := intermediates[len(intermediates)-1]
-	targetConn, err := dialWithTimeout(lastClient, target.Addr, hopDialTimeout)
+	targetConn, err := dialWithTimeout(ctx, lastClient, target.Addr, hopDialTimeout)
 	if err != nil {
 		closeAll()
 		return nil, nil, fmt.Errorf("tunnel dial to target (%s) through chain failed: %w", target.Addr, err)
 	}
 
-	handshakeCtx, cancelHandshake := context.WithTimeout(context.Background(), hopDialTimeout)
+	handshakeCtx, cancelHandshake := context.WithTimeout(ctx, hopDialTimeout)
 	finalClient, err := handshakeSSHThroughChain(handshakeCtx, targetConn, target.Addr, target.ClientConfig, firstClient)
 	cancelHandshake()
 	if err != nil {
@@ -133,7 +148,7 @@ func handshakeSSHThroughChain(ctx context.Context, conn net.Conn, address string
 	return client, err
 }
 
-func dialDirectSSH(address string, config *ssh.ClientConfig, timeout time.Duration) (*ssh.Client, error) {
+func dialDirectSSH(parent context.Context, address string, config *ssh.ClientConfig, timeout time.Duration) (*ssh.Client, error) {
 	host, portRaw, err := net.SplitHostPort(address)
 	if err != nil {
 		return nil, err
@@ -142,13 +157,13 @@ func dialDirectSSH(address string, config *ssh.ClientConfig, timeout time.Durati
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 	return securityruntime.DialOutboundSSHContext(ctx, host, port, config, timeout)
 }
 
-func dialWithTimeout(client *ssh.Client, addr string, timeout time.Duration) (net.Conn, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+func dialWithTimeout(parent context.Context, client *ssh.Client, addr string, timeout time.Duration) (net.Conn, error) {
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 	return client.DialContext(ctx, "tcp", addr)
 }

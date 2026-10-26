@@ -118,7 +118,7 @@ func TestResolvePBSAssetBranches(t *testing.T) {
 	})
 }
 
-func TestResolvePBSAssetRuntimeFallbackAndErrors(t *testing.T) {
+func TestResolvePBSAssetRuntimeHonorsCollectorOwner(t *testing.T) {
 	t.Run("preferred collector resolves directly", func(t *testing.T) {
 		sut := newTestAPIServer(t)
 		createPBSCredentialProfile(t, sut, "cred-pbs-resolve-1", "root@pam!token-1", "secret-1", "https://pbs.local:8007")
@@ -163,7 +163,7 @@ func TestResolvePBSAssetRuntimeFallbackAndErrors(t *testing.T) {
 		}
 	})
 
-	t.Run("preferred collector fallback to first active", func(t *testing.T) {
+	t.Run("missing preferred collector cannot fall back to another owner", func(t *testing.T) {
 		sut := newTestAPIServer(t)
 		createPBSCredentialProfile(t, sut, "cred-pbs-resolve-2", "root@pam!token-2", "secret-2", "https://pbs.local:8007")
 		sut.hubCollectorStore = &errorHubCollectorStore{
@@ -195,12 +195,11 @@ func TestResolvePBSAssetRuntimeFallbackAndErrors(t *testing.T) {
 			t.Fatalf("seed pbs asset: %v", err)
 		}
 
-		_, runtime, err := sut.resolvePBSAssetRuntime("pbs-server-2")
-		if err != nil {
-			t.Fatalf("resolvePBSAssetRuntime() error = %v", err)
+		if _, err := sut.loadPBSRuntime("collector-pbs-2"); err != nil {
+			t.Fatalf("replacement collector must be usable: %v", err)
 		}
-		if runtime == nil || runtime.CollectorID != "collector-pbs-2" {
-			t.Fatalf("expected fallback runtime collector-pbs-2, got %+v", runtime)
+		if _, runtime, err := sut.resolvePBSAssetRuntime("pbs-server-2"); err == nil || runtime != nil {
+			t.Fatalf("missing owner must not resolve a replacement: runtime=%v err=%v", runtime, err)
 		}
 	})
 

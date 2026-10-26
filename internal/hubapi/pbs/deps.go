@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/secrets"
 )
@@ -19,7 +20,8 @@ type Deps struct {
 	PBSCacheMu sync.RWMutex
 	PBSCache   map[string]*CachedPBSRuntime
 
-	RequireAdminAuth func(w http.ResponseWriter, r *http.Request) bool
+	RequireAdminAuth            func(w http.ResponseWriter, r *http.Request) bool
+	EvaluateConnectorGuardrails maintenanceguard.EvaluateConnectorFunc
 
 	WrapAuth  func(http.HandlerFunc) http.HandlerFunc
 	WrapAdmin func(http.HandlerFunc) http.HandlerFunc

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/labtether/labtether/internal/alerts"
 	"github.com/labtether/labtether/internal/assets"
@@ -11,6 +12,7 @@ import (
 	"github.com/labtether/labtether/internal/incidents"
 	"github.com/labtether/labtether/internal/model"
 	"github.com/labtether/labtether/internal/notifications"
+	"github.com/labtether/labtether/internal/persistence"
 )
 
 type liveActivityDispatchJob struct {
@@ -82,7 +84,8 @@ func (s *apiServer) buildAlertingDeps() *alertingpkg.Deps {
 				s.broadcaster.Broadcast(eventType, data)
 			}
 		},
-		EvaluateGuardrails: s.ensureGroupFeaturesDeps().EvaluateGuardrails,
+		EvaluateGuardrails:        s.ensureGroupFeaturesDeps().EvaluateGuardrails,
+		EvaluateGuardrailsContext: s.ensureGroupFeaturesDeps().EvaluateGuardrailsContext,
 
 		AgentMgr: s.agentMgr,
 
@@ -96,6 +99,7 @@ func (s *apiServer) buildAlertingDeps() *alertingpkg.Deps {
 			return mergeCapabilityIDs(values...)
 		},
 
+		ResolveSyntheticServiceAsset:   s.resolveSyntheticServiceAsset,
 		WebServiceHealthLogSource:      webServiceHealthLogSource,
 		WebServiceStatusTransitionKind: webServiceStatusTransitionKind,
 		WebServiceUptimeDropKind:       webServiceUptimeDropKind,
@@ -104,6 +108,33 @@ func (s *apiServer) buildAlertingDeps() *alertingpkg.Deps {
 		WrapAuth:  s.withAuth,
 		WrapAdmin: s.withAdminAuth,
 	}
+}
+
+func (s *apiServer) resolveSyntheticServiceAsset(ctx context.Context, serviceID string) (assets.Asset, bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := ctx.Err(); err != nil {
+		return assets.Asset{}, false, err
+	}
+	if s.webServiceCoordinator == nil || s.assetStore == nil {
+		return assets.Asset{}, false, nil
+	}
+	store, ok := s.assetStore.(persistence.AssetContextStore)
+	if !ok {
+		return assets.Asset{}, false, nil
+	}
+	ownerID, found, err := s.webServiceCoordinator.ResolveServiceHost(ctx, serviceID)
+	if err != nil || !found {
+		return assets.Asset{}, false, err
+	}
+	entry, found, err := store.GetAssetContext(ctx, ownerID)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return assets.Asset{}, false, ctxErr
+	}
+	if err != nil || !found || entry.ID != ownerID {
+		return assets.Asset{}, false, err
+	}
+	return entry, true, nil
 }
 
 // ensureAlertingDeps returns the alerting deps. When pre-initialized (production),

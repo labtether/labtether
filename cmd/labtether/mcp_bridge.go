@@ -24,8 +24,8 @@ func (s *apiServer) buildMCPServer() *server.MCPServer {
 	deps := &mcpserver.Deps{
 		AssetStore: s.assetStore,
 		AgentMgr:   s.agentMgr,
-		ExecuteViaAgent: func(job terminal.CommandJob) terminal.CommandResult {
-			return s.executeViaAgent(job)
+		ExecuteViaAgent: func(ctx context.Context, job terminal.CommandJob) terminal.CommandResult {
+			return s.ensureAgentsDeps().ExecuteViaAgentContext(ctx, job)
 		},
 		ExecutePowerAction:    s.mcpExecutePowerAction(),
 		GetScopes:             func(ctx context.Context) []string { return scopesFromContext(ctx) },

@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
@@ -43,13 +44,15 @@ func (d *Deps) HandleTelnetStream(w http.ResponseWriter, r *http.Request, sessio
 	traceLog := shared.StreamTraceLogValue(traceID)
 	logContext := fmt.Sprintf("session=%s target=%s:%d trace=%s", session.ID, host, port, traceLog)
 
-	tcpConn, err := securityruntime.DialOutboundTCPTimeout(host, port, telnetDialTimeout)
+	tcpConn, err := securityruntime.DialOutboundTCPContext(r.Context(), host, port, telnetDialTimeout)
 	if err != nil {
 		log.Printf("terminal-telnet: connect_failed %s err=%v", logContext, err) // #nosec G706 -- Log fields are bounded session/runtime identifiers and local dial errors.
 		http.Error(w, "telnet connection failed", http.StatusBadGateway)
 		return
 	}
 	defer tcpConn.Close()
+	stopCancellation := context.AfterFunc(r.Context(), func() { _ = tcpConn.Close() })
+	defer stopCancellation()
 
 	wsConn, err := shared.UpgradeWebSocket(&d.TerminalWebSocketUpgrader, w, r, nil)
 	if err != nil {

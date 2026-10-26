@@ -12,6 +12,13 @@ import (
 )
 
 func (s *PostgresStore) RecordAlertEvaluation(ruleID string, evaluation alerts.Evaluation) (alerts.Evaluation, error) {
+	return s.RecordAlertEvaluationContext(context.Background(), ruleID, evaluation)
+}
+
+func (s *PostgresStore) RecordAlertEvaluationContext(ctx context.Context, ruleID string, evaluation alerts.Evaluation) (alerts.Evaluation, error) {
+	if err := ctx.Err(); err != nil {
+		return alerts.Evaluation{}, err
+	}
 	ruleID = strings.TrimSpace(ruleID)
 
 	evaluatedAt := evaluation.EvaluatedAt.UTC()
@@ -42,13 +49,13 @@ func (s *PostgresStore) RecordAlertEvaluation(ruleID string, evaluation alerts.E
 		return alerts.Evaluation{}, err
 	}
 
-	tx, err := s.pool.Begin(context.Background())
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return alerts.Evaluation{}, err
 	}
-	defer tx.Rollback(context.Background())
+	defer tx.Rollback(ctx)
 
-	if _, err := tx.Exec(context.Background(),
+	if _, err := tx.Exec(ctx,
 		`INSERT INTO alert_evaluations (
 			id,
 			rule_id,
@@ -78,7 +85,7 @@ func (s *PostgresStore) RecordAlertEvaluation(ruleID string, evaluation alerts.E
 		return alerts.Evaluation{}, err
 	}
 
-	if _, err := tx.Exec(context.Background(),
+	if _, err := tx.Exec(ctx,
 		`UPDATE alert_rules
 		 SET last_evaluated_at = $2
 		 WHERE id = $1`,
@@ -92,7 +99,7 @@ func (s *PostgresStore) RecordAlertEvaluation(ruleID string, evaluation alerts.E
 		return alerts.Evaluation{}, err
 	}
 
-	if err := tx.Commit(context.Background()); err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		return alerts.Evaluation{}, err
 	}
 

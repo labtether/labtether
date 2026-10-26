@@ -49,6 +49,10 @@ func (s *runtimeRemoteWriteStore) SaveRemoteWriteCursor(_ context.Context, finge
 	return nil
 }
 
+func (s *runtimeRemoteWriteStore) RejectRemoteWritePage(context.Context, string, remotewrite.RejectedPage) error {
+	return context.Canceled // Runtime switching fixtures use accepting receivers.
+}
+
 func TestPrometheusRemoteWriteRuntimeAppliesEnableEndpointChangeAndDisable(t *testing.T) {
 	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
 	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")

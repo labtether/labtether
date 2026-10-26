@@ -1,6 +1,7 @@
 package operations
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -24,6 +25,8 @@ const (
 // ExecDeps so that callers needing only update execution do not depend on
 // the full exec surface.
 type UpdateExecutorDeps struct {
+	ExecuteUpdateViaAgentContext           func(context.Context, string, string, string, []string, time.Duration, bool) agentmgr.CommandResultData
+	PreviewOSPackageUpdatesViaAgentContext func(context.Context, string, string, time.Duration) agentmgr.CommandResultData
 	// AgentMgr checks agent connectivity and is used to gate execution.
 	AgentMgr *agentmgr.AgentManager
 
@@ -42,6 +45,22 @@ type UpdateExecutorDeps struct {
 
 // ExecuteUpdateScope dispatches a single update scope for a target asset.
 func (d *UpdateExecutorDeps) ExecuteUpdateScope(job updates.Job, target, scope string) updates.RunResultEntry {
+	// Old callers have no cancellation contract; only they may use old hooks.
+	compatible := *d
+	if compatible.ExecuteUpdateViaAgentContext == nil && d.ExecuteUpdateViaAgent != nil {
+		compatible.ExecuteUpdateViaAgentContext = func(_ context.Context, id, target, mode string, packages []string, timeout time.Duration, force bool) agentmgr.CommandResultData {
+			return d.ExecuteUpdateViaAgent(id, target, mode, packages, timeout, force)
+		}
+	}
+	if compatible.PreviewOSPackageUpdatesViaAgentContext == nil && d.PreviewOSPackageUpdatesViaAgent != nil {
+		compatible.PreviewOSPackageUpdatesViaAgentContext = func(_ context.Context, id, target string, timeout time.Duration) agentmgr.CommandResultData {
+			return d.PreviewOSPackageUpdatesViaAgent(id, target, timeout)
+		}
+	}
+	return compatible.ExecuteUpdateScopeContext(context.Background(), job, target, scope)
+}
+
+func (d *UpdateExecutorDeps) ExecuteUpdateScopeContext(ctx context.Context, job updates.Job, target, scope string) updates.RunResultEntry {
 	entry := updates.RunResultEntry{
 		Target: target,
 		Scope:  scope,
@@ -51,18 +70,22 @@ func (d *UpdateExecutorDeps) ExecuteUpdateScope(job updates.Job, target, scope s
 	normalizedScope := strings.ToLower(strings.TrimSpace(scope))
 	switch normalizedScope {
 	case updates.ScopeOSPackages:
-		return d.executeOSPackageUpdateScope(job, target, scope)
+		return d.executeOSPackageUpdateScope(ctx, job, target, scope)
 	default:
 		entry.Summary = fmt.Sprintf("update scope %q is not supported; no changes applied to %s", normalizedScope, target)
 		return entry
 	}
 }
 
-func (d *UpdateExecutorDeps) executeOSPackageUpdateScope(job updates.Job, target, scope string) updates.RunResultEntry {
+func (d *UpdateExecutorDeps) executeOSPackageUpdateScope(ctx context.Context, job updates.Job, target, scope string) updates.RunResultEntry {
 	entry := updates.RunResultEntry{
 		Target: target,
 		Scope:  scope,
 		Status: updates.StatusFailed,
+	}
+	if ctx.Err() != nil {
+		entry.Summary = "update canceled before dispatch; no changes applied"
+		return entry
 	}
 
 	if strings.TrimSpace(target) == "" {
@@ -92,14 +115,18 @@ func (d *UpdateExecutorDeps) executeOSPackageUpdateScope(job updates.Job, target
 		entry.Summary = "agent not connected"
 		return entry
 	}
+	if ctx.Err() != nil {
+		entry.Summary = "update canceled before dispatch; no changes applied"
+		return entry
+	}
 
 	if job.DryRun {
-		if d.PreviewOSPackageUpdatesViaAgent == nil {
+		if d.PreviewOSPackageUpdatesViaAgentContext == nil {
 			entry.Summary = "package update preview unavailable; no changes applied"
 			return entry
 		}
 		requestID := idgen.New("updpreview")
-		result := d.PreviewOSPackageUpdatesViaAgent(requestID, target, DefaultUpdatePreviewTimeout)
+		result := d.PreviewOSPackageUpdatesViaAgentContext(ctx, requestID, target, DefaultUpdatePreviewTimeout)
 		entry.Summary = SummarizeUpdateOutput(result.Output)
 		if updates.NormalizeStatus(result.Status) != updates.StatusSucceeded {
 			entry.Status = updates.StatusFailed
@@ -117,12 +144,16 @@ func (d *UpdateExecutorDeps) executeOSPackageUpdateScope(job updates.Job, target
 		return entry
 	}
 
-	if d.ExecuteUpdateViaAgent == nil {
+	if d.ExecuteUpdateViaAgentContext == nil {
 		entry.Summary = "package update executor unavailable; no changes applied"
 		return entry
 	}
 	requestID := idgen.New("updreq")
-	result := d.ExecuteUpdateViaAgent(requestID, target, updates.ScopeOSPackages, nil, DefaultUpdateAgentTimeout, false)
+	result := d.ExecuteUpdateViaAgentContext(ctx, requestID, target, updates.ScopeOSPackages, nil, DefaultUpdateAgentTimeout, false)
+	if ctx.Err() != nil {
+		entry.Summary = "package update interrupted; outcome unknown"
+		return entry
+	}
 	status := updates.NormalizeStatus(result.Status)
 	if status == "" {
 		status = updates.StatusFailed

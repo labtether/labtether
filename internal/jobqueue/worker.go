@@ -143,12 +143,17 @@ func (w *Worker) processOneWithQueue(ctx context.Context, q processQueue) bool {
 		return true
 	}
 
-	handlerCtx, cancel := context.WithCancel(ctx)
-	stopHeartbeat := w.startClaimHeartbeat(handlerCtx, q, job)
+	handlerCtx, cancel := context.WithCancelCause(ctx)
+	stopHeartbeat := w.startClaimHeartbeat(handlerCtx, q, job, cancel)
 	err = w.invokeHandler(handler, handlerCtx, job)
-	cancel()
+	cancel(nil)
 	if stopHeartbeat != nil {
 		stopHeartbeat()
+	}
+	// The business result and queue completion committed together. A renewal
+	// racing that commit may report lost ownership; the commit remains final.
+	if job.Status == StatusCompleted || errors.Is(context.Cause(handlerCtx), ErrClaimLost) {
+		return true
 	}
 	if err != nil {
 		log.Printf("jobqueue worker: job %s (%s) failed: %v", job.ID, job.Kind, err)
@@ -194,7 +199,7 @@ func (w *Worker) invokeDeadLetterCB(cb DeadLetterCallback, ctx context.Context, 
 	cb(ctx, job, jobErr)
 }
 
-func (w *Worker) startClaimHeartbeat(ctx context.Context, q processQueue, job *Job) func() {
+func (w *Worker) startClaimHeartbeat(ctx context.Context, q processQueue, job *Job, cancelOwner context.CancelCauseFunc) func() {
 	if job == nil || job.ID == "" || job.LockToken == "" {
 		return nil
 	}
@@ -206,7 +211,8 @@ func (w *Worker) startClaimHeartbeat(ctx context.Context, q processQueue, job *J
 		return nil
 	}
 
-	ticker := time.NewTicker(renewable.leaseHeartbeatInterval())
+	interval := renewable.leaseHeartbeatInterval()
+	ticker := time.NewTicker(interval)
 	done := make(chan struct{})
 	go func() {
 		defer ticker.Stop()
@@ -216,11 +222,20 @@ func (w *Worker) startClaimHeartbeat(ctx context.Context, q processQueue, job *J
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				if err := renewable.RenewClaim(ctx, job.ID, job.LockToken); err != nil {
-					if !errors.Is(err, ErrClaimLost) && ctx.Err() == nil {
-						log.Printf("jobqueue worker: failed to renew claim for job %s: %v", job.ID, err)
-					}
+				// Leave time for another renewal before stale recovery. A failed
+				// connection or pool wait must not disable heartbeats permanently.
+				renewCtx, cancel := context.WithTimeout(ctx, interval)
+				err := renewable.RenewClaim(renewCtx, job.ID, job.LockToken)
+				cancel()
+				if errors.Is(err, ErrClaimLost) {
+					cancelOwner(ErrClaimLost)
 					return
+				}
+				if ctx.Err() != nil {
+					return
+				}
+				if err != nil {
+					log.Printf("jobqueue worker: failed to renew claim for job %s: %v", job.ID, err)
 				}
 			}
 		}

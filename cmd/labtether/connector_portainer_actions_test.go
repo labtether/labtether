@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/labtether/labtether/internal/connectors/portainer"
 	"github.com/labtether/labtether/internal/connectorsdk"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -214,6 +215,21 @@ func TestHandleConnectorActionsPortainerHealth(t *testing.T) {
 
 func TestHandleConnectorActionsPortainerActionsAndExecute(t *testing.T) {
 	allowInsecureTransportForConnectorTests(t)
+	// These cases cover HTTP response mapping only. The configured runtime
+	// fixtures separately prove provider binding with real HTTP clients.
+	setExecute := func(t *testing.T, sut *apiServer, execute func(context.Context, string, connectorsdk.ActionRequest) (connectorsdk.ActionResult, error)) {
+		t.Helper()
+		sut.connectorRegistry.Register(&mockPortainerConnector{executeFn: func(context.Context, string, connectorsdk.ActionRequest) (connectorsdk.ActionResult, error) {
+			t.Fatal("configured action fell back to the startup catalog")
+			return connectorsdk.ActionResult{}, nil
+		}})
+		sut.ensureCollectorsDeps().ConfiguredConnectorActions["portainer"] = shared.ConfiguredConnectorAction{
+			Bind: func(_ context.Context, _ string, req connectorsdk.ActionRequest) (connectorsdk.ActionRequest, error) {
+				return req, nil
+			},
+			Execute: execute,
+		}
+	}
 	t.Run("actions list method not allowed", func(t *testing.T) {
 		sut := newTestAPIServer(t)
 		sut.connectorRegistry.Register(&mockPortainerConnector{})
@@ -286,10 +302,8 @@ func TestHandleConnectorActionsPortainerActionsAndExecute(t *testing.T) {
 
 	t.Run("execute error", func(t *testing.T) {
 		sut := newTestAPIServer(t)
-		sut.connectorRegistry.Register(&mockPortainerConnector{
-			executeFn: func(context.Context, string, connectorsdk.ActionRequest) (connectorsdk.ActionResult, error) {
-				return connectorsdk.ActionResult{}, errors.New("execute boom")
-			},
+		setExecute(t, sut, func(context.Context, string, connectorsdk.ActionRequest) (connectorsdk.ActionResult, error) {
+			return connectorsdk.ActionResult{}, errors.New("execute boom")
 		})
 
 		req := httptest.NewRequest(http.MethodPost, "/connectors/portainer/actions/container.restart/execute", strings.NewReader(`{}`))
@@ -307,12 +321,10 @@ func TestHandleConnectorActionsPortainerActionsAndExecute(t *testing.T) {
 		var gotReq connectorsdk.ActionRequest
 
 		sut := newTestAPIServer(t)
-		sut.connectorRegistry.Register(&mockPortainerConnector{
-			executeFn: func(_ context.Context, actionID string, req connectorsdk.ActionRequest) (connectorsdk.ActionResult, error) {
-				gotActionID = actionID
-				gotReq = req
-				return connectorsdk.ActionResult{Status: "ok", Message: "done"}, nil
-			},
+		setExecute(t, sut, func(_ context.Context, actionID string, req connectorsdk.ActionRequest) (connectorsdk.ActionResult, error) {
+			gotActionID = actionID
+			gotReq = req
+			return connectorsdk.ActionResult{Status: "ok", Message: "done"}, nil
 		})
 
 		req := httptest.NewRequest(http.MethodPost, "/connectors/portainer/actions/container.restart/execute", nil)
@@ -332,10 +344,8 @@ func TestHandleConnectorActionsPortainerActionsAndExecute(t *testing.T) {
 
 	t.Run("execute failed status maps to bad request", func(t *testing.T) {
 		sut := newTestAPIServer(t)
-		sut.connectorRegistry.Register(&mockPortainerConnector{
-			executeFn: func(context.Context, string, connectorsdk.ActionRequest) (connectorsdk.ActionResult, error) {
-				return connectorsdk.ActionResult{Status: "failed", Message: "bad target"}, nil
-			},
+		setExecute(t, sut, func(context.Context, string, connectorsdk.ActionRequest) (connectorsdk.ActionResult, error) {
+			return connectorsdk.ActionResult{Status: "failed", Message: "bad target"}, nil
 		})
 
 		req := httptest.NewRequest(http.MethodPost, "/connectors/portainer/actions/container.restart/execute", strings.NewReader(`{"target_id":"container-1"}`))

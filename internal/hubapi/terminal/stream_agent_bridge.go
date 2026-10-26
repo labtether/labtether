@@ -69,6 +69,7 @@ func (d *Deps) HandleAgentTerminalStream(w http.ResponseWriter, r *http.Request,
 	var flushCancel context.CancelFunc
 	var flushDone chan struct{}
 	startSent := false
+	published := false
 	endReason := "unknown"
 	var endErr error
 	defer func() {
@@ -86,12 +87,18 @@ func (d *Deps) HandleAgentTerminalStream(w http.ResponseWriter, r *http.Request,
 			flushCancel()
 			<-flushDone
 		}
+		if published {
+			d.detachPersistentTerminalStream(session, wsConn)
+		}
 	}()
 
-	d.registerAgentTerminalStream(bridgeState, persistentSessionID, wsConn)
-	if persistentSessionID != "" {
-		defer d.ActivePersistentConns.CompareAndDelete(persistentSessionID, wsConn)
+	if !d.publishAgentTerminalStream(r.Context(), bridgeState, persistentSessionID, wsConn) {
+		endReason = "agent_disconnected_before_publish"
+		bridgeState.CloseWithReason("agent_disconnected")
+		_ = WriteTerminalError(wsConn, "agent_disconnected", "Agent disconnected while opening terminal")
+		return
 	}
+	published = true
 	_ = WriteTerminalStatus(wsConn, "agent_connecting", "Connecting to agent terminal...", 0, 0, 0)
 	cols, rows := ParseTerminalSize(r.URL.Query().Get("cols"), r.URL.Query().Get("rows"))
 	probeResult := d.ProbeAgentTmux(agentConn)
@@ -144,11 +151,18 @@ func (d *Deps) HandleAgentTerminalStream(w http.ResponseWriter, r *http.Request,
 	default:
 	}
 	startData, _ := json.Marshal(startReq)
-	if err := d.startAgentTerminalStream(bridgeState, persistentSessionID, wsConn, agentmgr.Message{
-		Type: agentmgr.MsgTerminalStart,
-		ID:   wireSessionID,
-		Data: startData,
-	}); err != nil {
+	var startErr error
+	if !shared.RunIfSessionStreamOpen(r.Context(), func() {
+		startErr = d.startAgentTerminalStream(bridgeState, persistentSessionID, wsConn, agentmgr.Message{
+			Type: agentmgr.MsgTerminalStart,
+			ID:   wireSessionID,
+			Data: startData,
+		})
+	}) {
+		endReason = "session_request_cancelled"
+		return
+	}
+	if err := startErr; err != nil {
 		endReason = "agent_start_send_failed"
 		endErr = err
 		log.Printf("terminal-agent: stream_setup_failed reason=agent_start_send_failed %s err=%v", logContext, err) // #nosec G706 -- Log fields are bounded session/runtime identifiers and local bridge errors.
@@ -165,6 +179,9 @@ func (d *Deps) HandleAgentTerminalStream(w http.ResponseWriter, r *http.Request,
 	timer := time.NewTimer(10 * time.Second)
 	defer timer.Stop()
 	select {
+	case <-r.Context().Done():
+		endReason = "session_request_cancelled"
+		return
 	case <-closedCh:
 		select {
 		case firstOutput = <-outputCh:

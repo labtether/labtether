@@ -2,6 +2,7 @@ package operations
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -15,10 +16,15 @@ import (
 
 // UpdateScopeExecutor is a function type for executing update scopes.
 type UpdateScopeExecutor func(job updates.Job, target, scope string) updates.RunResultEntry
+type UpdateScopeExecutorContext func(ctx context.Context, job updates.Job, target, scope string) updates.RunResultEntry
 
 // ExecuteActionInProcess replaces the old HTTP-based executeAction with direct
 // in-process connector registry calls for connector actions.
 func ExecuteActionInProcess(job actions.Job, registry *connectorsdk.Registry) actions.Result {
+	return ExecuteActionInProcessContext(context.Background(), job, registry)
+}
+
+func ExecuteActionInProcessContext(ctx context.Context, job actions.Job, registry *connectorsdk.Registry) actions.Result {
 	switch actions.NormalizeRunType(job.Type) {
 	case actions.RunTypeCommand:
 		status := actions.StatusFailed
@@ -32,7 +38,7 @@ func ExecuteActionInProcess(job actions.Job, registry *connectorsdk.Registry) ac
 			CompletedAt: time.Now().UTC(),
 		}
 	case actions.RunTypeConnectorAction:
-		return ExecuteConnectorActionDirect(job, registry)
+		return ExecuteConnectorActionDirectContext(ctx, job, registry)
 	default:
 		return actions.Result{
 			JobID:       job.JobID,
@@ -48,6 +54,10 @@ func ExecuteActionInProcess(job actions.Job, registry *connectorsdk.Registry) ac
 // ExecuteConnectorActionDirect calls the connector registry directly instead of
 // making an HTTP request to the connector-runtime service.
 func ExecuteConnectorActionDirect(job actions.Job, registry *connectorsdk.Registry) actions.Result {
+	return ExecuteConnectorActionDirectContext(context.Background(), job, registry)
+}
+
+func ExecuteConnectorActionDirectContext(ctx context.Context, job actions.Job, registry *connectorsdk.Registry) actions.Result {
 	if registry == nil {
 		return actions.Result{
 			JobID:       job.JobID,
@@ -78,14 +88,31 @@ func ExecuteConnectorActionDirect(job actions.Job, registry *connectorsdk.Regist
 	}
 
 	resolvedActionID := modelmap.ResolveActionID(job.ActionID, job.Target, connector.Actions())
-	result, err := connector.ExecuteAction(context.Background(), resolvedActionID, req)
+	if err := ctx.Err(); err != nil {
+		return ConnectorExecutionResult(job, connectorsdk.ActionResult{}, fmt.Errorf("action canceled before dispatch; no changes applied"))
+	}
+	result, err := connector.ExecuteAction(ctx, resolvedActionID, req)
+	if ctx.Err() != nil {
+		err = ctx.Err()
+	}
+	return ConnectorExecutionResult(job, result, err)
+}
+
+// ConnectorExecutionResult maps a configured provider response to the worker result.
+func ConnectorExecutionResult(job actions.Job, result connectorsdk.ActionResult, err error) actions.Result {
 	if err != nil {
+		message := "action execution failed"
+		stepError := err.Error()
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			message = "action interrupted; outcome unknown"
+			stepError = message + ": " + stepError
+		}
 		return actions.Result{
 			JobID:       job.JobID,
 			RunID:       job.RunID,
 			Status:      actions.StatusFailed,
-			Error:       "action execution failed",
-			Steps:       []actions.StepResult{{Name: "connector_execute", Status: actions.StatusFailed, Error: err.Error()}},
+			Error:       message,
+			Steps:       []actions.StepResult{{Name: "connector_execute", Status: actions.StatusFailed, Error: stepError}},
 			CompletedAt: time.Now().UTC(),
 		}
 	}
@@ -123,6 +150,16 @@ func ExecuteUpdate(job updates.Job) updates.Result {
 // ExecuteUpdateWithExecutor runs an update job, delegating to the given executor
 // for each target/scope pair, or simulating if executor is nil.
 func ExecuteUpdateWithExecutor(job updates.Job, executor UpdateScopeExecutor) updates.Result {
+	var run UpdateScopeExecutorContext
+	if executor != nil {
+		run = func(_ context.Context, job updates.Job, target, scope string) updates.RunResultEntry {
+			return executor(job, target, scope)
+		}
+	}
+	return ExecuteUpdateWithExecutorContext(context.Background(), job, run)
+}
+
+func ExecuteUpdateWithExecutorContext(ctx context.Context, job updates.Job, executor UpdateScopeExecutorContext) updates.Result {
 	completedAt := time.Now().UTC()
 	results := make([]updates.RunResultEntry, 0, len(job.Plan.Targets)*len(job.Plan.Scopes))
 	failures := 0
@@ -138,6 +175,9 @@ func ExecuteUpdateWithExecutor(job updates.Job, executor UpdateScopeExecutor) up
 
 	for _, target := range targets {
 		for _, scope := range scopes {
+			if ctx.Err() != nil {
+				return interruptedUpdateResult(job, results)
+			}
 			var entry updates.RunResultEntry
 			normalizedScopes, scopeErr := updates.NormalizeExecutableScopes([]string{scope})
 			if scopeErr != nil {
@@ -149,7 +189,7 @@ func ExecuteUpdateWithExecutor(job updates.Job, executor UpdateScopeExecutor) up
 				}
 			} else if executor != nil {
 				scope = normalizedScopes[0]
-				entry = executor(job, target, scope)
+				entry = executor(ctx, job, target, scope)
 				if strings.TrimSpace(entry.Target) == "" {
 					entry.Target = target
 				}
@@ -178,6 +218,9 @@ func ExecuteUpdateWithExecutor(job updates.Job, executor UpdateScopeExecutor) up
 			}
 
 			results = append(results, entry)
+			if ctx.Err() != nil {
+				return interruptedUpdateResult(job, results)
+			}
 		}
 	}
 
@@ -199,6 +242,12 @@ func ExecuteUpdateWithExecutor(job updates.Job, executor UpdateScopeExecutor) up
 		Results:     results,
 		CompletedAt: completedAt,
 	}
+}
+
+func interruptedUpdateResult(job updates.Job, results []updates.RunResultEntry) updates.Result {
+	message := "update interrupted; outcome unknown; remaining tasks were not started"
+	return updates.Result{JobID: job.JobID, RunID: job.RunID, Status: updates.StatusFailed,
+		Summary: message, Error: message, Results: results, CompletedAt: time.Now().UTC()}
 }
 
 // HeartbeatLoop logs a periodic heartbeat.

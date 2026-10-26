@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sort"
@@ -28,6 +29,13 @@ func NewMemoryAlertInstanceStore() *MemoryAlertInstanceStore {
 }
 
 func (m *MemoryAlertInstanceStore) CreateAlertInstance(req alerts.CreateInstanceRequest) (alerts.AlertInstance, error) {
+	return m.CreateAlertInstanceContext(context.Background(), req)
+}
+
+func (m *MemoryAlertInstanceStore) CreateAlertInstanceContext(ctx context.Context, req alerts.CreateInstanceRequest) (alerts.AlertInstance, error) {
+	if err := ctx.Err(); err != nil {
+		return alerts.AlertInstance{}, err
+	}
 	now := time.Now().UTC()
 	severity := alerts.NormalizeSeverity(req.Severity)
 	if severity == "" {
@@ -52,7 +60,9 @@ func (m *MemoryAlertInstanceStore) CreateAlertInstance(req alerts.CreateInstance
 		UpdatedAt:   now,
 	}
 
-	m.mu.Lock()
+	if err := lockAlertEvaluation(ctx, &m.mu, false); err != nil {
+		return alerts.AlertInstance{}, err
+	}
 	m.instances[inst.ID] = cloneAlertInstance(inst)
 	m.mu.Unlock()
 	return cloneAlertInstance(inst), nil
@@ -69,13 +79,25 @@ func (m *MemoryAlertInstanceStore) GetAlertInstance(id string) (alerts.AlertInst
 }
 
 func (m *MemoryAlertInstanceStore) GetActiveInstanceByFingerprint(ruleID, fingerprint string) (alerts.AlertInstance, bool, error) {
+	return m.GetActiveInstanceByFingerprintContext(context.Background(), ruleID, fingerprint)
+}
+
+func (m *MemoryAlertInstanceStore) GetActiveInstanceByFingerprintContext(ctx context.Context, ruleID, fingerprint string) (alerts.AlertInstance, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return alerts.AlertInstance{}, false, err
+	}
 	ruleID = strings.TrimSpace(ruleID)
 	fingerprint = strings.TrimSpace(fingerprint)
 
-	m.mu.RLock()
+	if err := lockAlertEvaluation(ctx, &m.mu, true); err != nil {
+		return alerts.AlertInstance{}, false, err
+	}
 	defer m.mu.RUnlock()
 
 	for _, inst := range m.instances {
+		if err := ctx.Err(); err != nil {
+			return alerts.AlertInstance{}, false, err
+		}
 		if inst.RuleID != ruleID || inst.Fingerprint != fingerprint {
 			continue
 		}
@@ -89,6 +111,13 @@ func (m *MemoryAlertInstanceStore) GetActiveInstanceByFingerprint(ruleID, finger
 }
 
 func (m *MemoryAlertInstanceStore) ListAlertInstances(filter AlertInstanceFilter) ([]alerts.AlertInstance, error) {
+	return m.ListAlertInstancesContext(context.Background(), filter)
+}
+
+func (m *MemoryAlertInstanceStore) ListAlertInstancesContext(ctx context.Context, filter AlertInstanceFilter) ([]alerts.AlertInstance, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	limit := filter.Limit
 	if limit <= 0 {
 		limit = 50
@@ -101,11 +130,16 @@ func (m *MemoryAlertInstanceStore) ListAlertInstances(filter AlertInstanceFilter
 	severity := alerts.NormalizeSeverity(filter.Severity)
 	ruleID := strings.TrimSpace(filter.RuleID)
 
-	m.mu.RLock()
+	if err := lockAlertEvaluation(ctx, &m.mu, true); err != nil {
+		return nil, err
+	}
 	defer m.mu.RUnlock()
 
 	out := make([]alerts.AlertInstance, 0, len(m.instances))
 	for _, inst := range m.instances {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if ruleID != "" && inst.RuleID != ruleID {
 			continue
 		}
@@ -137,13 +171,22 @@ func (m *MemoryAlertInstanceStore) ListAlertInstances(filter AlertInstanceFilter
 }
 
 func (m *MemoryAlertInstanceStore) UpdateAlertInstanceStatus(id, status string) (alerts.AlertInstance, error) {
+	return m.UpdateAlertInstanceStatusContext(context.Background(), id, status)
+}
+
+func (m *MemoryAlertInstanceStore) UpdateAlertInstanceStatusContext(ctx context.Context, id, status string) (alerts.AlertInstance, error) {
+	if err := ctx.Err(); err != nil {
+		return alerts.AlertInstance{}, err
+	}
 	id = strings.TrimSpace(id)
 	status = alerts.NormalizeInstanceStatus(status)
 	if status == "" {
 		return alerts.AlertInstance{}, errors.New("invalid alert instance status")
 	}
 
-	m.mu.Lock()
+	if err := lockAlertEvaluation(ctx, &m.mu, false); err != nil {
+		return alerts.AlertInstance{}, err
+	}
 	defer m.mu.Unlock()
 
 	inst, ok := m.instances[id]
@@ -154,10 +197,17 @@ func (m *MemoryAlertInstanceStore) UpdateAlertInstanceStatus(id, status string) 
 		return alerts.AlertInstance{}, fmt.Errorf("cannot transition alert instance from %s to %s", inst.Status, status)
 	}
 
+	if inst.Status == status {
+		return cloneAlertInstance(inst), nil
+	}
 	now := time.Now().UTC()
+	if inst.Status == alerts.InstanceStatusPending && status == alerts.InstanceStatusFiring && inst.FirstFiredAt == nil {
+		inst.FirstFiredAt = &now
+		inst.LastFiredAt = now
+	}
 	inst.Status = status
 	inst.UpdatedAt = now
-	if status == alerts.InstanceStatusResolved {
+	if status == alerts.InstanceStatusResolved && inst.ResolvedAt == nil {
 		inst.ResolvedAt = &now
 	}
 
@@ -166,10 +216,19 @@ func (m *MemoryAlertInstanceStore) UpdateAlertInstanceStatus(id, status string) 
 }
 
 func (m *MemoryAlertInstanceStore) UpdateAlertInstanceLastFired(id string) error {
+	return m.UpdateAlertInstanceLastFiredContext(context.Background(), id)
+}
+
+func (m *MemoryAlertInstanceStore) UpdateAlertInstanceLastFiredContext(ctx context.Context, id string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	id = strings.TrimSpace(id)
 	now := time.Now().UTC()
 
-	m.mu.Lock()
+	if err := lockAlertEvaluation(ctx, &m.mu, false); err != nil {
+		return err
+	}
 	defer m.mu.Unlock()
 
 	inst, ok := m.instances[id]
@@ -219,6 +278,13 @@ func (m *MemoryAlertInstanceStore) CreateAlertSilence(req alerts.CreateSilenceRe
 }
 
 func (m *MemoryAlertInstanceStore) ListAlertSilences(limit int, activeOnly bool) ([]alerts.AlertSilence, error) {
+	return m.ListAlertSilencesContext(context.Background(), limit, activeOnly)
+}
+
+func (m *MemoryAlertInstanceStore) ListAlertSilencesContext(ctx context.Context, limit int, activeOnly bool) ([]alerts.AlertSilence, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if limit <= 0 {
 		limit = 50
 	}
@@ -228,11 +294,19 @@ func (m *MemoryAlertInstanceStore) ListAlertSilences(limit int, activeOnly bool)
 
 	now := time.Now().UTC()
 
-	m.mu.RLock()
+	if err := lockAlertEvaluation(ctx, &m.mu, true); err != nil {
+		return nil, err
+	}
 	defer m.mu.RUnlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	out := make([]alerts.AlertSilence, 0, len(m.silences))
 	for _, silence := range m.silences {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if activeOnly {
 			if silence.StartsAt.After(now) || silence.EndsAt.Before(now) {
 				continue
@@ -247,7 +321,7 @@ func (m *MemoryAlertInstanceStore) ListAlertSilences(limit int, activeOnly bool)
 	if len(out) > limit {
 		out = out[:limit]
 	}
-	return out, nil
+	return out, ctx.Err()
 }
 
 func (m *MemoryAlertInstanceStore) GetAlertSilence(id string) (alerts.AlertSilence, bool, error) {
@@ -289,8 +363,13 @@ func (m *MemoryAlertInstanceStore) BackdateStartedAt(id string, startedAt time.T
 
 func cloneAlertInstance(input alerts.AlertInstance) alerts.AlertInstance {
 	out := input
+	out.FiringScope = alerts.CloneFiringScope(input.FiringScope)
 	out.Labels = cloneMetadata(input.Labels)
 	out.Annotations = cloneMetadata(input.Annotations)
+	if input.FirstFiredAt != nil {
+		value := input.FirstFiredAt.UTC()
+		out.FirstFiredAt = &value
+	}
 	if input.ResolvedAt != nil {
 		value := input.ResolvedAt.UTC()
 		out.ResolvedAt = &value

@@ -53,6 +53,7 @@ func (d *Deps) sendAPNsNotification(
 	queueDigest := shouldQueuePushDigest(channel.ID, digestStore, payload)
 	digestEnqueues := make([]persistence.PushDigestEnqueue, 0)
 	digestRetryTargets := make(map[string]apnsRetryTarget)
+	var invalidDigestTargets []apnsRetryTarget
 	for _, device := range devices {
 		if !isApplePushPlatform(device.Platform) || strings.TrimSpace(device.PushToken) == "" {
 			continue
@@ -90,6 +91,9 @@ func (d *Deps) sendAPNsNotification(
 				digestRetryTargets[enqueue.DeviceID] = retryTarget
 				continue
 			}
+			// Never turn an invalid digest identity into an immediate push.
+			invalidDigestTargets = append(invalidDigestTargets, retryTarget)
+			continue
 		}
 		key := environment + "\x00" + bundleID
 		group := groupsByKey[key]
@@ -126,6 +130,13 @@ func (d *Deps) sendAPNsNotification(
 	}
 
 	fanoutErr := &apnsFanoutError{totalGroups: len(groups)}
+	if len(invalidDigestTargets) > 0 {
+		fanoutErr.totalGroups++
+		fanoutErr.failedGroups++
+		fanoutErr.totalTargets += len(invalidDigestTargets)
+		fanoutErr.failures = append(fanoutErr.failures, invalidDigestTargets...)
+		fanoutErr.details = append(fanoutErr.details, "durable digest queue: invalid alert identity")
+	}
 	if len(digestEnqueues) > 0 {
 		fanoutErr.totalGroups++
 		fanoutErr.totalTargets += len(digestEnqueues)

@@ -83,6 +83,7 @@ type countingIncidentStore struct {
 	persistence.IncidentStore
 	listIncidentAlertLinksCalls int
 	hasAutoIncidentCalls        int
+	createAutoIncidentCalls     int
 }
 
 func (c *countingIncidentStore) ListIncidentAlertLinks(incidentID string, limit int) ([]incidents.AlertLink, error) {

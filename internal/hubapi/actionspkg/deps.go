@@ -1,16 +1,25 @@
 package actionspkg
 
 import (
+	"context"
 	"net/http"
 	"time"
 
 	"github.com/labtether/labtether/internal/actions"
 	"github.com/labtether/labtether/internal/audit"
+	"github.com/labtether/labtether/internal/connectorsdk"
 	groupfeatures "github.com/labtether/labtether/internal/hubapi/groupfeatures"
+	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/jobqueue"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/policy"
 )
+
+// ActionQueue is the enqueue boundary used by the HTTP action owner.
+type ActionQueue interface {
+	Enqueue(context.Context, jobqueue.JobKind, []byte) (string, error)
+}
 
 // ExecResult holds the result of executing a command on a single asset.
 // It mirrors the fields of v2ExecResult in cmd/labtether without creating
@@ -26,6 +35,8 @@ type ExecResult struct {
 
 // Deps holds the dependencies for saved-action handlers and action-execution handlers.
 type Deps struct {
+	ResolveProxmoxActionCollector func(actionID, target string, params map[string]string) (string, error)
+	ConfiguredConnectorActions    map[string]shared.ConfiguredConnectorAction
 	// SavedActionStore is the store for API v2 saved actions.
 	SavedActionStore persistence.SavedActionStore
 	// AuditStore is used for saved-action and action-execution audit events.
@@ -36,11 +47,13 @@ type Deps struct {
 	ExecOnAsset func(r *http.Request, assetID, command string, timeoutSec int) ExecResult
 
 	// Stores required by the v1 action-execution handlers.
-	ActionStore persistence.ActionStore
-	AssetStore  persistence.AssetStore
-	GroupStore  persistence.GroupStore
-	JobQueue    *jobqueue.Queue
-	LogStore    persistence.LogStore
+	ActionStore                 persistence.ActionStore
+	AssetStore                  persistence.AssetStore
+	GroupStore                  persistence.GroupStore
+	JobQueue                    ActionQueue
+	LogStore                    persistence.LogStore
+	ConnectorRegistry           *connectorsdk.Registry
+	EvaluateConnectorGuardrails maintenanceguard.EvaluateConnectorFunc
 
 	// EvaluateGuardrails checks maintenance-window constraints for a group.
 	// Injected as s.ensureGroupFeaturesDeps().EvaluateGuardrails.

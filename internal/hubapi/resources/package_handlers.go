@@ -1,6 +1,7 @@
 package resources
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -25,6 +26,8 @@ var validPackageActions = map[string]bool{
 }
 
 const packageUpdatePreviewSummaryMaxBytes = 220
+
+type packagePreviewLogicalKey string
 
 // packageBridge holds the channel for a pending package list request.
 
@@ -149,6 +152,14 @@ func (d *Deps) handlePackageList(w http.ResponseWriter, r *http.Request, assetID
 // Agents predating the inventory discriminator fail closed because
 // validatePackageListedResponse requires them to echo "upgradable".
 func (d *Deps) PreviewOSPackageUpdatesViaAgent(requestID, assetID string, timeout time.Duration) agentmgr.CommandResultData {
+	return d.previewOSPackageUpdatesViaAgent(context.Background(), requestID, assetID, timeout, false)
+}
+
+func (d *Deps) PreviewOSPackageUpdatesViaAgentContext(ctx context.Context, requestID, assetID string, timeout time.Duration) agentmgr.CommandResultData {
+	return d.previewOSPackageUpdatesViaAgent(ctx, requestID, assetID, timeout, true)
+}
+
+func (d *Deps) previewOSPackageUpdatesViaAgent(ctx context.Context, requestID, assetID string, timeout time.Duration, privateAttempt bool) agentmgr.CommandResultData {
 	requestID = strings.TrimSpace(requestID)
 	assetID = strings.TrimSpace(assetID)
 	failed := func(message string) agentmgr.CommandResultData {
@@ -159,6 +170,13 @@ func (d *Deps) PreviewOSPackageUpdatesViaAgent(requestID, assetID string, timeou
 		}
 	}
 
+	if err := ctx.Err(); err != nil {
+		return failed("package update preview canceled before dispatch; no changes applied: " + err.Error())
+	}
+	wireID := requestID
+	if privateAttempt {
+		wireID = "preview_" + generateRequestID()
+	}
 	if requestID == "" || len(requestID) > maxPackageRequestIDBytes {
 		return failed("package update preview request id is invalid; no changes applied")
 	}
@@ -180,24 +198,30 @@ func (d *Deps) PreviewOSPackageUpdatesViaAgent(requestID, assetID string, timeou
 	}
 
 	bridge := &PackageBridge{
+		ExpectedConn:    agentConn,
 		Ch:              make(chan agentmgr.Message, 1),
 		ExpectedAssetID: assetID,
 	}
-	if _, loaded := d.PackageBridges.LoadOrStore(requestID, bridge); loaded {
+	logicalKey := packagePreviewLogicalKey(requestID)
+	if _, loaded := d.PackageBridges.LoadOrStore(logicalKey, bridge); loaded {
 		return failed("package update preview request id is already in use; no changes applied")
 	}
-	defer d.PackageBridges.Delete(requestID)
+	defer d.PackageBridges.CompareAndDelete(logicalKey, bridge)
+	if _, loaded := d.PackageBridges.LoadOrStore(wireID, bridge); loaded {
+		return failed("package update preview request id is already in use; no changes applied")
+	}
+	defer d.PackageBridges.CompareAndDelete(wireID, bridge)
 
 	data, err := json.Marshal(packageListRequestWire{
-		RequestID: requestID,
+		RequestID: wireID,
 		Inventory: packageInventoryUpgradable,
 	})
 	if err != nil {
 		return failed("failed to encode package update preview request; no changes applied")
 	}
-	if err := agentConn.Send(agentmgr.Message{
+	if err := agentConn.SendContext(ctx, agentmgr.Message{
 		Type: agentmgr.MsgPackageList,
-		ID:   requestID,
+		ID:   wireID,
 		Data: data,
 	}); err != nil {
 		return failed("failed to send package update preview request to agent; no changes applied")
@@ -207,11 +231,14 @@ func (d *Deps) PreviewOSPackageUpdatesViaAgent(requestID, assetID string, timeou
 	defer timer.Stop()
 	select {
 	case msg := <-bridge.Ch:
+		if err := ctx.Err(); err != nil {
+			return failed("package update preview canceled; no changes applied: " + err.Error())
+		}
 		var listed packageListedResponseWire
 		if err := json.Unmarshal(msg.Data, &listed); err != nil {
 			return failed("invalid package update preview response; no changes applied")
 		}
-		if err := validatePackageListedResponse(listed, requestID, packageInventoryUpgradable); err != nil {
+		if err := validatePackageListedResponse(listed, wireID, packageInventoryUpgradable); err != nil {
 			return failed("package update preview failed; no changes applied: " + err.Error())
 		}
 		if strings.TrimSpace(listed.Error) != "" {
@@ -222,6 +249,10 @@ func (d *Deps) PreviewOSPackageUpdatesViaAgent(requestID, assetID string, timeou
 			Status: "succeeded",
 			Output: summarizeOSPackageUpdatePreview(assetID, listed.Packages),
 		}
+	case <-ctx.Done():
+		return failed("package update preview canceled; no changes applied: " + ctx.Err().Error())
+	case <-agentConn.Done():
+		return failed("agent disconnected during package update preview; no changes applied")
 	case <-timer.C:
 		return failed("agent did not respond to package update preview in time; no changes applied")
 	}
@@ -357,6 +388,9 @@ func (d *Deps) ProcessAgentPackageListed(conn *agentmgr.AgentConn, msg agentmgr.
 		if !ok || bridge == nil {
 			return
 		}
+		if bridge.ExpectedConn != nil && bridge.ExpectedConn != conn {
+			return
+		}
 		if conn == nil || (strings.TrimSpace(bridge.ExpectedAssetID) != "" && !strings.EqualFold(strings.TrimSpace(bridge.ExpectedAssetID), strings.TrimSpace(conn.AssetID))) {
 			return
 		}
@@ -383,6 +417,9 @@ func (d *Deps) ProcessAgentPackageResult(conn *agentmgr.AgentConn, msg agentmgr.
 	if raw, ok := d.PackageBridges.Load(requestID); ok {
 		bridge, ok := raw.(*PackageBridge)
 		if !ok || bridge == nil {
+			return
+		}
+		if bridge.ExpectedConn != nil && bridge.ExpectedConn != conn {
 			return
 		}
 		if conn == nil || (strings.TrimSpace(bridge.ExpectedAssetID) != "" && !strings.EqualFold(strings.TrimSpace(bridge.ExpectedAssetID), strings.TrimSpace(conn.AssetID))) {

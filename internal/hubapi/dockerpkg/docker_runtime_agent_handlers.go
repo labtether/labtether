@@ -49,25 +49,19 @@ func (d *Deps) ProcessAgentDockerActionResult(conn *agentmgr.AgentConn, msg agen
 // ProcessAgentDockerExecStartedMessage handles docker.exec.started messages from agents.
 func (d *Deps) ProcessAgentDockerExecStartedMessage(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 	d.ProcessAgentDockerExecStarted(conn, msg)
-	if d.Broadcast != nil {
-		d.Broadcast(msg.Type, msg.Data)
-	}
+	d.broadcastDockerExecMessage(conn, msg)
 }
 
 // ProcessAgentDockerExecDataMessage handles docker.exec.data messages from agents.
 func (d *Deps) ProcessAgentDockerExecDataMessage(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 	d.ProcessAgentDockerExecData(conn, msg)
-	if d.Broadcast != nil {
-		d.Broadcast(msg.Type, msg.Data)
-	}
+	d.broadcastDockerExecMessage(conn, msg)
 }
 
 // ProcessAgentDockerExecClosedMessage handles docker.exec.closed messages from agents.
 func (d *Deps) ProcessAgentDockerExecClosedMessage(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 	d.ProcessAgentDockerExecClosed(conn, msg)
-	if d.Broadcast != nil {
-		d.Broadcast(msg.Type, msg.Data)
-	}
+	d.broadcastDockerExecMessage(conn, msg)
 }
 
 // ProcessAgentDockerLogsStreamMessage handles docker.logs.stream messages from agents.

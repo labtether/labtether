@@ -50,6 +50,17 @@ func (d *Deps) HandleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to look up user")
 		return
 	}
+	if ok {
+		unlock := d.authChallenges().LockUser(user.ID)
+		defer unlock()
+		// The username lookup may have raced a password reset or revocation.
+		// Read the credential again inside the same boundary as session creation.
+		user, ok, err = d.AuthStore.GetUserByID(user.ID)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to look up user")
+			return
+		}
+	}
 	localUser := ok && strings.EqualFold(strings.TrimSpace(user.AuthProvider), "local")
 	passwordOK := false
 	if localUser {
@@ -64,7 +75,7 @@ func (d *Deps) HandleAuthLogin(w http.ResponseWriter, r *http.Request) {
 
 	// Check if user has 2FA enabled
 	if user.TOTPSecret != "" && user.TOTPVerifiedAt != nil {
-		challengeToken := d.ChallengeStore.Create(user.ID)
+		challengeToken := d.authChallenges().Create(user.ID)
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 			"requires_2fa":    true,
 			"challenge_token": challengeToken,
@@ -122,6 +133,9 @@ func (d *Deps) HandleDeleteOwnAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	challenges := d.authChallenges()
+	unlock := challenges.LockUser(userID)
+	defer unlock()
 	user, ok, err := d.AuthStore.GetUserByID(userID)
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to look up account")
@@ -136,6 +150,7 @@ func (d *Deps) HandleDeleteOwnAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	challenges.RevokeForUser(userID)
 	if delErr := d.AuthStore.DeleteSessionsByUserID(userID); delErr != nil {
 		log.Printf("auth: delete-account: failed to revoke sessions for user %s: %v", userID, delErr) // #nosec G706 -- User IDs are store-generated identifiers.
 	}

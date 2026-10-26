@@ -74,3 +74,26 @@ func schemaMigrationHubSyntheticMetricScope() schemaMigration {
 		},
 	}
 }
+
+func schemaMigrationRemoteWriteRejectedPages() schemaMigration {
+	return schemaMigration{
+		Version: 102,
+		Name:    "prometheus_remote_write_rejected_pages",
+		Statements: []string{
+			`CREATE TABLE IF NOT EXISTS prometheus_remote_write_rejections (
+				id BIGSERIAL PRIMARY KEY,
+				endpoint_fingerprint TEXT NOT NULL CHECK (endpoint_fingerprint ~ '^[0-9a-f]{64}$'),
+				previous_asset_id BIGINT NOT NULL CHECK (previous_asset_id >= 0),
+				previous_hub_id BIGINT NOT NULL CHECK (previous_hub_id >= 0),
+				next_asset_id BIGINT NOT NULL CHECK (next_asset_id >= previous_asset_id),
+				next_hub_id BIGINT NOT NULL CHECK (next_hub_id >= previous_hub_id),
+				status_code INTEGER NOT NULL CHECK (status_code BETWEEN 400 AND 499 AND status_code <> 429),
+				sample_count INTEGER NOT NULL CHECK (sample_count BETWEEN 1 AND 500),
+				payload BYTEA NOT NULL CHECK (octet_length(payload) BETWEEN 1 AND 4194304),
+				rejected_at TIMESTAMPTZ NOT NULL,
+				CHECK (next_asset_id > previous_asset_id OR next_hub_id > previous_hub_id),
+				UNIQUE (endpoint_fingerprint,previous_asset_id,previous_hub_id,next_asset_id,next_hub_id,rejected_at)
+			)`,
+		},
+	}
+}

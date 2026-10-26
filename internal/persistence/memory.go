@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"context"
 	"sort"
 	"strings"
 	"sync"
@@ -283,11 +284,23 @@ func (m *MemoryAssetStore) upsertAssetHeartbeatLocked(req assets.HeartbeatReques
 }
 
 func (m *MemoryAssetStore) ListAssets() ([]assets.Asset, error) {
-	m.mu.RLock()
+	return m.ListAssetsContext(context.Background())
+}
+
+func (m *MemoryAssetStore) ListAssetsContext(ctx context.Context) ([]assets.Asset, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := lockAlertEvaluation(ctx, &m.mu, true); err != nil {
+		return nil, err
+	}
 	defer m.mu.RUnlock()
 
 	out := make([]assets.Asset, 0, len(m.assets))
 	for _, asset := range m.assets {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		asset = applyAssetCanonical(asset)
 		asset.Tags = cloneStringSlice(asset.Tags)
 		asset.Metadata = cloneMetadata(asset.Metadata)
@@ -371,8 +384,20 @@ func (m *MemoryAssetStore) BackdateLastSeenAt(assetID string, lastSeenAt time.Ti
 }
 
 func (m *MemoryAssetStore) GetAsset(id string) (assets.Asset, bool, error) {
-	m.mu.RLock()
+	return m.GetAssetContext(context.Background(), id)
+}
+
+func (m *MemoryAssetStore) GetAssetContext(ctx context.Context, id string) (assets.Asset, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return assets.Asset{}, false, err
+	}
+	if err := lockAlertEvaluation(ctx, &m.mu, true); err != nil {
+		return assets.Asset{}, false, err
+	}
 	defer m.mu.RUnlock()
+	if err := ctx.Err(); err != nil {
+		return assets.Asset{}, false, err
+	}
 
 	asset, ok := m.assets[id]
 	if !ok {

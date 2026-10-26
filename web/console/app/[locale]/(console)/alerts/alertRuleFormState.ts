@@ -82,7 +82,7 @@ export function formStateFromTemplate(template: AlertRuleTemplate): RuleFormStat
     evaluationIntervalSeconds: template.evaluation_interval_seconds,
     metric: stringFromUnknown(condition.metric),
     operator: stringFromUnknown(condition.operator, ">"),
-    thresholdValue: numberFromUnknown(condition.value, 0),
+    thresholdValue: numberFromUnknown(condition.value, numberFromUnknown(condition.threshold, 0)),
     aggregate: stringFromUnknown(condition.aggregate, "avg"),
     maxSilenceSeconds: numberFromUnknown(condition.max_silence_seconds, defaultRuleFormState.maxSilenceSeconds),
     maxStaleSeconds: numberFromUnknown(condition.max_stale_seconds, defaultRuleFormState.maxStaleSeconds),

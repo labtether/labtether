@@ -76,7 +76,8 @@ func (s *PostgresStore) UpdateAlertRule(id string, req alerts.UpdateRuleRequest)
 			created_by,
 			created_at,
 			updated_at,
-			last_evaluated_at
+			last_evaluated_at,
+			last_auto_attempt_at
 		 FROM alert_rules
 		 WHERE id = $1
 		 FOR UPDATE`,

@@ -1,6 +1,8 @@
 package persistence
 
 import (
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/labtether/labtether/internal/alerts"
@@ -17,6 +19,7 @@ func scanAlertInstance(row alertInstanceScanner) (alerts.AlertInstance, error) {
 	var annotations []byte
 	var resolvedAt *time.Time
 	var suppressedBy *string
+	var firingScope []byte
 	if err := row.Scan(
 		&inst.ID,
 		&inst.RuleID,
@@ -31,8 +34,25 @@ func scanAlertInstance(row alertInstanceScanner) (alerts.AlertInstance, error) {
 		&suppressedBy,
 		&inst.CreatedAt,
 		&inst.UpdatedAt,
+		&inst.FirstFiredAt,
+		&firingScope,
 	); err != nil {
 		return alerts.AlertInstance{}, err
+	}
+	if len(firingScope) > 0 {
+		var scope alerts.FiringScope
+		if err := json.Unmarshal(firingScope, &scope); err != nil {
+			return alerts.AlertInstance{}, fmt.Errorf("invalid stored firing scope: %w", err)
+		}
+		normalized, err := alerts.NormalizeFiringScope(scope)
+		if err != nil {
+			return alerts.AlertInstance{}, err
+		}
+		inst.FiringScope = &normalized
+	}
+	if inst.FirstFiredAt != nil {
+		value := inst.FirstFiredAt.UTC()
+		inst.FirstFiredAt = &value
 	}
 	inst.Labels = unmarshalStringMap(labels)
 	inst.Annotations = unmarshalStringMap(annotations)

@@ -58,8 +58,9 @@ export function TrueNASOverviewTab({ assetId }: Props) {
   const usagePct = totalBytes > 0 ? Math.round((usedBytes / totalBytes) * 100) : 0;
 
   const services = data.services ?? [];
-  const runningServices = services.filter((s) => s.running);
-  const stoppedServices = services.filter((s) => !s.running);
+  const runningServices = services.filter((s) => s.running === true);
+  const stoppedServices = services.filter((s) => s.running === false);
+  const otherServices = services.filter((s) => s.running === undefined);
   const autoStartStopped = stoppedServices.filter((s) => s.enabled);
 
   const alerts = data.alerts ?? [];
@@ -123,6 +124,9 @@ export function TrueNASOverviewTab({ assetId }: Props) {
           <div className="flex items-center gap-4 text-sm mb-3">
             <span className="text-[var(--ok)]">{runningServices.length} running</span>
             <span className="text-[var(--muted)]">{stoppedServices.length} stopped</span>
+            {otherServices.length > 0 ? (
+              <span className="text-[var(--muted)]">{otherServices.length} other states</span>
+            ) : null}
           </div>
           {autoStartStopped.length > 0 ? (
             <div className="rounded-md bg-[var(--warn-surface,var(--surface))] border border-[var(--warn)] p-3 mb-3">

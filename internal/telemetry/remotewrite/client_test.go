@@ -296,6 +296,10 @@ func (m *mockCursor) SaveRemoteWriteCursor(_ context.Context, _ string, cursor C
 	return nil
 }
 
+func (m *mockCursor) RejectRemoteWritePage(context.Context, string, RejectedPage) error {
+	return context.Canceled // These fixtures exercise accepted delivery only.
+}
+
 func TestWorkerPushesBatch(t *testing.T) {
 	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
 	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")

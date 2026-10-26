@@ -1,6 +1,7 @@
 package desktop
 
 import (
+	"context"
 	"log"
 	"net"
 	"net/http"
@@ -281,13 +282,15 @@ func (d *Deps) handleDirectVNCProxyWithConfig(w http.ResponseWriter, r *http.Req
 		// #nosec G102,G704 -- Host and resolved IPs are validated by DialManualDeviceTCPTimeout; this branch is an explicit manual-device policy.
 		vncConn, dialErr = protocols.DialManualDeviceTCPTimeout(r.Context(), host, port, 10*time.Second)
 	} else {
-		vncConn, dialErr = securityruntime.DialOutboundTCPTimeout(host, port, 10*time.Second)
+		vncConn, dialErr = securityruntime.DialOutboundTCPContext(r.Context(), host, port, 10*time.Second)
 	}
 	if dialErr != nil {
 		servicehttp.WriteError(w, http.StatusBadGateway, "failed to connect to VNC: "+d.SanitizeUpstreamError(dialErr.Error()))
 		return
 	}
 	defer vncConn.Close()
+	stopCancel := context.AfterFunc(r.Context(), func() { _ = vncConn.Close() })
+	defer stopCancel()
 
 	wsConn, err := shared.UpgradeWebSocket(d.TerminalWebSocketUpgrader, w, r, nil)
 	if err != nil {

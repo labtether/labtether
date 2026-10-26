@@ -9,6 +9,7 @@ import (
 	"github.com/labtether/labtether/internal/actions"
 	proxmoxconnector "github.com/labtether/labtether/internal/connectors/proxmox"
 	"github.com/labtether/labtether/internal/connectorsdk"
+	opspkg "github.com/labtether/labtether/internal/hubapi/operations"
 	proxmoxpkg "github.com/labtether/labtether/internal/hubapi/proxmox"
 	"github.com/labtether/labtether/internal/terminal"
 )
@@ -16,12 +17,14 @@ import (
 // buildProxmoxDeps constructs the proxmox.Deps from the apiServer's fields.
 func (s *apiServer) buildProxmoxDeps() *proxmoxpkg.Deps {
 	return &proxmoxpkg.Deps{
-		AssetStore:        s.assetStore,
-		HubCollectorStore: s.hubCollectorStore,
-		CredentialStore:   s.credentialStore,
-		SecretsManager:    s.secretsManager,
-		TelemetryStore:    s.telemetryStore,
-		ConnectorRegistry: s.connectorRegistry,
+		AssetStore:                  s.assetStore,
+		HubCollectorStore:           s.hubCollectorStore,
+		CredentialStore:             s.credentialStore,
+		SecretsManager:              s.secretsManager,
+		TelemetryStore:              s.telemetryStore,
+		ConnectorRegistry:           s.connectorRegistry,
+		EvaluateConnectorGuardrails: s.connectorMaintenanceEvaluator(),
+		ConfiguredConnectorActions:  s.configuredConnectorActions(),
 
 		RequireAdminAuth:  s.requireAdminAuth,
 		EnforceRateLimit:  s.enforceRateLimit,
@@ -53,7 +56,9 @@ func (s *apiServer) buildProxmoxDeps() *proxmoxpkg.Deps {
 			}, ok
 		},
 
-		ExecuteCommandAction: s.executeCommandAction,
+		ExecuteCommandAction:            s.executeCommandAction,
+		ExecuteCommandActionContext:     s.executeCommandActionContext,
+		ExecuteActionInProcessContextFn: opspkg.ExecuteActionInProcessContext,
 		ExecuteActionInProcessFn: func(job actions.Job, registry *connectorsdk.Registry) actions.Result {
 			return executeActionInProcess(job, registry)
 		},
@@ -140,6 +145,10 @@ func (s *apiServer) tryProxmoxTerminalStream(w http.ResponseWriter, r *http.Requ
 
 func (s *apiServer) executeActionInProcess(job actions.Job) actions.Result {
 	return s.ensureProxmoxDeps().ExecuteActionInProcess(job)
+}
+
+func (s *apiServer) executeActionInProcessContext(ctx context.Context, job actions.Job) actions.Result {
+	return s.ensureProxmoxDeps().ExecuteActionInProcessContext(ctx, job)
 }
 
 func (s *apiServer) executeProxmoxAction(ctx context.Context, actionID, target string, params map[string]string, dryRun bool) (proxmoxActionExecution, error) {

@@ -7,6 +7,17 @@ import (
 	"github.com/labtether/labtether/internal/persistence"
 )
 
+// authChallenges also gives directly constructed handler dependencies the same
+// per-user login/revocation owner as the server's injected challenge store.
+func (d *Deps) authChallenges() *coreauth.ChallengeStore {
+	d.challengeOnce.Do(func() {
+		if d.ChallengeStore == nil {
+			d.ChallengeStore = coreauth.NewChallengeStore()
+		}
+	})
+	return d.ChallengeStore
+}
+
 // revokeOtherUserSessions revokes every session for userID except the exact
 // cookie session authenticating the request. The returned boolean reports
 // whether that current session was found and retained. Package-level callers

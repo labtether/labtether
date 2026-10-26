@@ -82,6 +82,7 @@ func (s *apiServer) invalidateWebhookCache() {
 	}
 	s.webhookCacheMu.Lock()
 	s.webhookCacheDirty = true
+	s.webhookCacheGeneration++
 	s.webhookCacheMu.Unlock()
 }
 
@@ -171,6 +172,7 @@ func (s *apiServer) listDispatchWebhooks(ctx context.Context) ([]webhooks.Webhoo
 		s.webhookCacheMu.RUnlock()
 		return cached, nil
 	}
+	generation := s.webhookCacheGeneration
 	s.webhookCacheMu.RUnlock()
 
 	hooks, err := s.webhookStore.ListWebhooks(ctx)
@@ -182,10 +184,15 @@ func (s *apiServer) listDispatchWebhooks(ctx context.Context) ([]webhooks.Webhoo
 	}
 
 	s.webhookCacheMu.Lock()
+	defer s.webhookCacheMu.Unlock()
+	if s.webhookCacheGeneration != generation {
+		// A completed mutation invalidated this read. Do not publish or dispatch
+		// its old subscriptions; the next best-effort event can load fresh rows.
+		return nil, errors.New("webhook subscriptions changed while loading")
+	}
 	s.webhookCache = append([]webhooks.Webhook(nil), hooks...)
 	s.webhookCacheLoaded = true
 	s.webhookCacheDirty = false
-	s.webhookCacheMu.Unlock()
 	return hooks, nil
 }
 

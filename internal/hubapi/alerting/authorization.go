@@ -10,6 +10,7 @@ import (
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/incidents"
+	"github.com/labtether/labtether/internal/persistence"
 )
 
 func writeAssetScopeForbidden(w http.ResponseWriter, message string) {
@@ -31,12 +32,20 @@ func (d *Deps) accessibleGroupIDs(ctx context.Context) (map[string]struct{}, err
 	if d.GroupStore == nil || d.AssetStore == nil {
 		return nil, fmt.Errorf("asset authorization stores unavailable")
 	}
-	groupList, err := d.GroupStore.ListGroups()
+	groupStore, groupCapable := d.GroupStore.(persistence.AlertGroupContextStore)
+	assetStore, assetCapable := d.AssetStore.(persistence.AlertAssetContextStore)
+	if !groupCapable || !assetCapable {
+		return nil, fmt.Errorf("context-aware asset authorization stores unavailable")
+	}
+	groupList, err := groupStore.ListGroupsContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	assetList, err := d.AssetStore.ListAssets()
+	assetList, err := assetStore.ListAssetsContext(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	return shared.AccessibleGroupIDs(ctx, groupList, assetList), nil

@@ -3,6 +3,7 @@ package truenas
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,21 +35,33 @@ func (d *Deps) HandleTrueNASShares(ctx context.Context, w http.ResponseWriter, r
 	// PUT  /truenas/assets/{id}/shares/{smb|nfs}/{shareID} → update share
 	// DELETE /truenas/assets/{id}/shares/{smb|nfs}/{shareID} → delete share
 
-	if len(subParts) == 0 {
+	if len(subParts) == 0 || (len(subParts) == 1 && r.Method == http.MethodGet) {
+		shareType := ""
+		if len(subParts) == 1 {
+			shareType = strings.ToLower(strings.TrimSpace(subParts[0]))
+			if shareType != "smb" && shareType != "nfs" {
+				servicehttp.WriteError(w, http.StatusBadRequest, "share type must be smb or nfs")
+				return
+			}
+		}
 		if r.Method != http.MethodGet {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		warnings := make([]string, 0, 2)
 		smbShares := make([]map[string]any, 0, 16)
-		if err := CallTrueNASQueryWithRetries(ctx, runtime.Client, "sharing.smb.query", &smbShares); err != nil {
-			warnings = AppendTrueNASWarning(warnings, trueNASWarning("SMB shares unavailable", err))
-			smbShares = nil
+		if shareType == "" || shareType == "smb" {
+			if err := CallTrueNASQueryWithRetries(ctx, runtime.Client, "sharing.smb.query", &smbShares); err != nil {
+				warnings = AppendTrueNASWarning(warnings, trueNASWarning("SMB shares unavailable", err))
+				smbShares = nil
+			}
 		}
 		nfsShares := make([]map[string]any, 0, 16)
-		if err := CallTrueNASQueryWithRetries(ctx, runtime.Client, "sharing.nfs.query", &nfsShares); err != nil {
-			warnings = AppendTrueNASWarning(warnings, trueNASWarning("NFS shares unavailable", err))
-			nfsShares = nil
+		if shareType == "" || shareType == "nfs" {
+			if err := CallTrueNASQueryWithRetries(ctx, runtime.Client, "sharing.nfs.query", &nfsShares); err != nil {
+				warnings = AppendTrueNASWarning(warnings, trueNASWarning("NFS shares unavailable", err))
+				nfsShares = nil
+			}
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, TrueNASSharesResponse{
 			AssetID:   strings.TrimSpace(asset.ID),
@@ -83,9 +96,12 @@ func (d *Deps) HandleTrueNASShares(ctx context.Context, w http.ResponseWriter, r
 			servicehttp.WriteError(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
+		if !d.enforceShareMutation(ctx, w, asset, runtime, shareType, "share.create", 0, params) {
+			return
+		}
 		var created map[string]any
-		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, createMethod, []any{params}, &created); err != nil {
-			writeTrueNASError(w, http.StatusBadGateway, "failed to create share", err)
+		if err := runtime.Client.CallMutation(ctx, createMethod, []any{params}, &created); err != nil {
+			writeTrueNASMutationError(w, http.StatusBadGateway, "failed to create share", err)
 			return
 		}
 		d.InvalidateTrueNASCaches(asset.ID, runtime.CollectorID)
@@ -99,9 +115,9 @@ func (d *Deps) HandleTrueNASShares(ctx context.Context, w http.ResponseWriter, r
 		return
 	}
 
-	shareID := strings.TrimSpace(subParts[1])
-	if shareID == "" {
-		servicehttp.WriteError(w, http.StatusBadRequest, "share id is required")
+	shareID, err := strconv.Atoi(strings.TrimSpace(subParts[1]))
+	if len(subParts) != 2 || err != nil || shareID <= 0 {
+		servicehttp.WriteError(w, http.StatusBadRequest, "share id must be a positive integer")
 		return
 	}
 
@@ -115,9 +131,12 @@ func (d *Deps) HandleTrueNASShares(ctx context.Context, w http.ResponseWriter, r
 			servicehttp.WriteError(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
+		if !d.enforceShareMutation(ctx, w, asset, runtime, shareType, "share.update", shareID, params) {
+			return
+		}
 		var updated map[string]any
-		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, updateMethod, []any{shareID, params}, &updated); err != nil {
-			writeTrueNASError(w, http.StatusBadGateway, "failed to update share", err)
+		if err := runtime.Client.CallMutation(ctx, updateMethod, []any{shareID, params}, &updated); err != nil {
+			writeTrueNASMutationError(w, http.StatusBadGateway, "failed to update share", err)
 			return
 		}
 		d.InvalidateTrueNASCaches(asset.ID, runtime.CollectorID)
@@ -132,8 +151,11 @@ func (d *Deps) HandleTrueNASShares(ctx context.Context, w http.ResponseWriter, r
 		if !d.RequireAdminAuth(w, r) {
 			return
 		}
-		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, deleteMethod, []any{shareID}, nil); err != nil {
-			writeTrueNASError(w, http.StatusBadGateway, "failed to delete share", err)
+		if !d.enforceShareMutation(ctx, w, asset, runtime, shareType, "share.delete", shareID, nil) {
+			return
+		}
+		if err := runtime.Client.CallMutation(ctx, deleteMethod, []any{shareID}, nil); err != nil {
+			writeTrueNASMutationError(w, http.StatusBadGateway, "failed to delete share", err)
 			return
 		}
 		d.InvalidateTrueNASCaches(asset.ID, runtime.CollectorID)

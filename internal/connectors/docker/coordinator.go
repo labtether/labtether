@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -143,16 +144,20 @@ func (c *Coordinator) Discover(ctx context.Context) ([]connectorsdk.Asset, error
 		// Compose stack assets.
 		for _, stack := range host.ComposeStacks {
 			stackID := fmt.Sprintf("docker-stack-%s-%s", normalizeID(agentID), normalizeID(stack.Name))
+			files, _ := json.Marshal(stack.ConfigFiles)
 			assets = append(assets, connectorsdk.Asset{
 				ID:     stackID,
 				Type:   "compose-stack",
 				Name:   stack.Name,
 				Source: "docker",
 				Metadata: map[string]string{
-					"agent_id":    agentID,
-					"status":      stack.Status,
-					"config_file": stack.ConfigFile,
-					"containers":  fmt.Sprintf("%d", len(stack.ContainerIDs)),
+					"agent_id":                agentID,
+					"status":                  stack.Status,
+					"config_file":             stack.ConfigFile,
+					"config_dir":              stack.ConfigDir,
+					"config_files":            string(files),
+					"compose_selection_error": stack.SelectionError,
+					"containers":              fmt.Sprintf("%d", len(stack.ContainerIDs)),
 				},
 			})
 		}
@@ -278,6 +283,7 @@ func copyDockerHost(src *DockerHost) DockerHost {
 	dst.Volumes = append([]VolumeState(nil), src.Volumes...)
 	dst.ComposeStacks = append([]ComposeStackState(nil), src.ComposeStacks...)
 	for i := range dst.ComposeStacks {
+		dst.ComposeStacks[i].ConfigFiles = append([]string(nil), src.ComposeStacks[i].ConfigFiles...)
 		dst.ComposeStacks[i].ContainerIDs = append([]string(nil), dst.ComposeStacks[i].ContainerIDs...)
 	}
 	dst.Stats = make(map[string]ContainerStats, len(src.Stats))

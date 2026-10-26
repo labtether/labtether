@@ -58,7 +58,16 @@ func (m *MemorySyntheticStore) CreateSyntheticCheck(req synthetic.CreateCheckReq
 }
 
 func (m *MemorySyntheticStore) GetSyntheticCheck(id string) (synthetic.Check, bool, error) {
-	m.mu.RLock()
+	return m.GetSyntheticCheckContext(context.Background(), id)
+}
+
+func (m *MemorySyntheticStore) GetSyntheticCheckContext(ctx context.Context, id string) (synthetic.Check, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return synthetic.Check{}, false, err
+	}
+	if err := lockAlertEvaluation(ctx, &m.mu, true); err != nil {
+		return synthetic.Check{}, false, err
+	}
 	defer m.mu.RUnlock()
 	check, ok := m.checks[id]
 	return check, ok, nil
@@ -191,7 +200,16 @@ func (m *MemorySyntheticStore) RecordSyntheticResult(checkID string, result synt
 }
 
 func (m *MemorySyntheticStore) ListSyntheticResults(checkID string, limit int) ([]synthetic.Result, error) {
-	m.mu.RLock()
+	return m.ListSyntheticResultsContext(context.Background(), checkID, limit)
+}
+
+func (m *MemorySyntheticStore) ListSyntheticResultsContext(ctx context.Context, checkID string, limit int) ([]synthetic.Result, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := lockAlertEvaluation(ctx, &m.mu, true); err != nil {
+		return nil, err
+	}
 	defer m.mu.RUnlock()
 
 	results := m.results[checkID]

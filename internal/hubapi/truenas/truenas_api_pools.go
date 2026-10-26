@@ -22,6 +22,8 @@ type TrueNASPoolActionResponse struct {
 	PoolName  string   `json:"pool_name"`
 	Action    string   `json:"action"`
 	Message   string   `json:"message"`
+	Status    string   `json:"status"`
+	JobID     int64    `json:"job_id"`
 	Warnings  []string `json:"warnings,omitempty"`
 	FetchedAt string   `json:"fetched_at"`
 }
@@ -70,8 +72,12 @@ func (d *Deps) HandleTrueNASPools(ctx context.Context, w http.ResponseWriter, r 
 		if !d.RequireAdminAuth(w, r) {
 			return
 		}
-		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, "pool.scrub.run", []any{poolName}, nil); err != nil {
-			writeTrueNASError(w, http.StatusBadGateway, "failed to start pool scrub", err)
+		if !d.enforceMutation(w, asset, runtime, "pool.scrub", map[string]string{"pool_name": poolName}) {
+			return
+		}
+		jobID, err := runtime.Client.StartPoolScrub(ctx, poolName)
+		if err != nil {
+			writeTrueNASMutationError(w, http.StatusBadGateway, "failed to start pool scrub", err)
 			return
 		}
 		d.InvalidateTrueNASCaches(asset.ID, runtime.CollectorID)
@@ -79,7 +85,9 @@ func (d *Deps) HandleTrueNASPools(ctx context.Context, w http.ResponseWriter, r 
 			AssetID:   strings.TrimSpace(asset.ID),
 			PoolName:  poolName,
 			Action:    "scrub",
-			Message:   "scrub started on pool " + poolName,
+			Message:   "scrub request accepted for pool " + poolName,
+			Status:    "accepted",
+			JobID:     jobID,
 			FetchedAt: time.Now().UTC().Format(time.RFC3339),
 		})
 	default:

@@ -19,17 +19,9 @@ func (d *Deps) LoadPBSRuntime(collectorID string) (*PBSRuntime, error) {
 		return nil, fmt.Errorf("credential store unavailable")
 	}
 
-	collectors, err := d.HubCollectorStore.ListHubCollectors(200, true)
+	selected, err := shared.ResolveEnabledHubCollector(d.HubCollectorStore, hubcollector.CollectorTypePBS, collectorID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list hub collectors: %w", err)
-	}
-	if strings.TrimSpace(collectorID) == "" && hasMultipleActivePBSCollectors(collectors) {
-		return nil, fmt.Errorf("collector_id is required when multiple active pbs collectors are configured")
-	}
-
-	selected := SelectCollectorForPBSRuntime(collectors, collectorID)
-	if selected == nil {
-		return nil, fmt.Errorf("no active pbs collector configured")
+		return nil, err
 	}
 
 	baseURL := shared.CollectorConfigString(selected.Config, "base_url")
@@ -148,18 +140,4 @@ func SelectCollectorForPBSRuntime(collectors []hubcollector.Collector, collector
 	}
 
 	return nil
-}
-
-func hasMultipleActivePBSCollectors(collectors []hubcollector.Collector) bool {
-	count := 0
-	for _, current := range collectors {
-		if current.CollectorType != hubcollector.CollectorTypePBS {
-			continue
-		}
-		count++
-		if count > 1 {
-			return true
-		}
-	}
-	return false
 }

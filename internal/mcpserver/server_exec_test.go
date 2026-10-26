@@ -42,7 +42,7 @@ func TestHandleExec_AssetOffline(t *testing.T) {
 func TestHandleExecRejectsCommandDeniedByPolicy(t *testing.T) {
 	deps := newTestDeps()
 	dispatched := false
-	deps.ExecuteViaAgent = func(terminal.CommandJob) terminal.CommandResult {
+	deps.ExecuteViaAgent = func(context.Context, terminal.CommandJob) terminal.CommandResult {
 		dispatched = true
 		return terminal.CommandResult{Status: "succeeded"}
 	}
@@ -67,7 +67,7 @@ func TestHandleExecRejectsCommandDeniedByPolicy(t *testing.T) {
 func TestHandleExecMultiRejectsCommandDeniedByPolicy(t *testing.T) {
 	deps := newTestDeps()
 	dispatched := false
-	deps.ExecuteViaAgent = func(terminal.CommandJob) terminal.CommandResult {
+	deps.ExecuteViaAgent = func(context.Context, terminal.CommandJob) terminal.CommandResult {
 		dispatched = true
 		return terminal.CommandResult{Status: "succeeded"}
 	}
@@ -92,7 +92,7 @@ func TestHandleExecMultiRejectsCommandDeniedByPolicy(t *testing.T) {
 func TestHandleExecPassesTimeoutToAgentCommand(t *testing.T) {
 	deps := newTestDeps()
 	var captured terminal.CommandJob
-	deps.ExecuteViaAgent = func(job terminal.CommandJob) terminal.CommandResult {
+	deps.ExecuteViaAgent = func(_ context.Context, job terminal.CommandJob) terminal.CommandResult {
 		captured = job
 		return terminal.CommandResult{Status: "succeeded", Output: "ok"}
 	}
@@ -124,7 +124,7 @@ func TestHandleExecNormalizesTimeoutBounds(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			deps := newTestDeps()
 			var captured terminal.CommandJob
-			deps.ExecuteViaAgent = func(job terminal.CommandJob) terminal.CommandResult {
+			deps.ExecuteViaAgent = func(_ context.Context, job terminal.CommandJob) terminal.CommandResult {
 				captured = job
 				return terminal.CommandResult{Status: "succeeded", Output: "ok"}
 			}
@@ -149,7 +149,7 @@ func TestHandleExecMultiPassesClampedTimeoutToAgentCommands(t *testing.T) {
 	deps := newTestDeps()
 	deps.AgentMgr = &mockAgentMgr{connected: map[string]bool{"srv1": true, "srv2": true}}
 	captured := make(chan terminal.CommandJob, 2)
-	deps.ExecuteViaAgent = func(job terminal.CommandJob) terminal.CommandResult {
+	deps.ExecuteViaAgent = func(_ context.Context, job terminal.CommandJob) terminal.CommandResult {
 		captured <- job
 		return terminal.CommandResult{Status: "succeeded", Output: "ok"}
 	}
@@ -181,7 +181,7 @@ func TestHandleExecMultiPassesClampedTimeoutToAgentCommands(t *testing.T) {
 func TestHandleExecMultiDeduplicatesTargets(t *testing.T) {
 	deps := newTestDeps()
 	var calls atomic.Int64
-	deps.ExecuteViaAgent = func(job terminal.CommandJob) terminal.CommandResult {
+	deps.ExecuteViaAgent = func(_ context.Context, job terminal.CommandJob) terminal.CommandResult {
 		calls.Add(1)
 		return terminal.CommandResult{Status: "succeeded", Output: job.Target}
 	}
@@ -201,7 +201,7 @@ func TestHandleExecMultiDeduplicatesTargets(t *testing.T) {
 
 func TestHandleExecMultiRejectsExcessTargetsBeforeDispatch(t *testing.T) {
 	deps := newTestDeps()
-	deps.ExecuteViaAgent = func(job terminal.CommandJob) terminal.CommandResult {
+	deps.ExecuteViaAgent = func(_ context.Context, job terminal.CommandJob) terminal.CommandResult {
 		t.Fatalf("ExecuteViaAgent called for oversized request: %#v", job)
 		return terminal.CommandResult{}
 	}
@@ -236,7 +236,7 @@ func TestHandleExecMultiCapsConcurrency(t *testing.T) {
 	var dispatched atomic.Int64
 	started := make(chan struct{}, maxExecMultiConcurrency)
 	release := make(chan struct{})
-	deps.ExecuteViaAgent = func(job terminal.CommandJob) terminal.CommandResult {
+	deps.ExecuteViaAgent = func(_ context.Context, job terminal.CommandJob) terminal.CommandResult {
 		active := current.Add(1)
 		for {
 			observed := maximum.Load()

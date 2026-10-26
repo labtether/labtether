@@ -63,6 +63,8 @@ func (d *Deps) HandleFileList(w http.ResponseWriter, r *http.Request, assetID st
 	select {
 	case <-r.Context().Done():
 		return
+	case <-bridge.Done:
+		writeFileBridgeClosedError(w, bridge)
 	case msg := <-bridge.Ch:
 		var listed agentmgr.FileListedData
 		if err := json.Unmarshal(msg.Data, &listed); err != nil {
@@ -95,6 +97,9 @@ func (d *Deps) HandleFileDownloadWithTimeout(w http.ResponseWriter, r *http.Requ
 func (d *Deps) HandleFileDownloadWithLimit(w http.ResponseWriter, r *http.Request, assetID string, timeout time.Duration, maxDownloadBytes int64) {
 	if r.Method != http.MethodGet {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if r.Context().Err() != nil {
 		return
 	}
 
@@ -143,6 +148,10 @@ func (d *Deps) HandleFileDownloadWithLimit(w http.ResponseWriter, r *http.Reques
 			servicehttp.WriteError(w, http.StatusBadGateway, err.Error())
 			return
 		}
+		if errors.Is(err, errFileAgentDisconnected) {
+			writeFileBridgeClosedError(w, bridge)
+			return
+		}
 		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
 		return
 	}
@@ -182,10 +191,10 @@ func (d *Deps) HandleFileDownloadWithLimit(w http.ResponseWriter, r *http.Reques
 	}()
 
 	written, err := spoolFileDownloadChunks(r.Context(), spool, bridge, filePath, timeout, firstChunk, firstPayload, maxDownloadBytes)
+	if r.Context().Err() != nil {
+		return
+	}
 	if err != nil {
-		if r.Context().Err() != nil {
-			return
-		}
 		writeFileDownloadError(w, err)
 		return
 	}
@@ -243,6 +252,9 @@ func DecodeFileDownloadChunk(chunk agentmgr.FileDataPayload) ([]byte, error) {
 var errFileDownloadAgentFailed = errors.New("agent reported a file download failure")
 
 func spoolFileDownloadChunks(ctx context.Context, dst io.Writer, bridge *FileBridge, filePath string, timeout time.Duration, firstChunk agentmgr.FileDataPayload, firstPayload []byte, maxBytes int64) (int64, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
 	var written int64
 	if err := writeFileDownloadChunk(dst, firstPayload, firstChunk.Offset, &written, maxBytes); err != nil {
 		return written, err
@@ -303,6 +315,8 @@ func writeFileDownloadError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, errFileDownloadTimedOut):
 		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
+	case errors.Is(err, errFileAgentDisconnected):
+		servicehttp.WriteError(w, http.StatusBadGateway, "agent disconnected")
 	case errors.Is(err, errFileDownloadBackpressured):
 		servicehttp.WriteError(w, http.StatusBadGateway, "agent response stream exceeded backpressure limit")
 	case errors.Is(err, errFileDownloadAgentFailed):
@@ -320,6 +334,9 @@ func writeFileDownloadError(w http.ResponseWriter, err error) {
 func (d *Deps) HandleFileUpload(w http.ResponseWriter, r *http.Request, assetID string) {
 	if r.Method != http.MethodPost {
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if r.Context().Err() != nil {
 		return
 	}
 	if !d.enforceAssetActionGuard(w, assetID) {
@@ -388,6 +405,8 @@ func (d *Deps) HandleFileUpload(w http.ResponseWriter, r *http.Request, assetID 
 	select {
 	case <-r.Context().Done():
 		return
+	case <-bridge.Done:
+		writeFileBridgeClosedError(w, bridge)
 	case msg := <-bridge.Ch:
 		var result agentmgr.FileWrittenData
 		if err := json.Unmarshal(msg.Data, &result); err != nil {
@@ -399,7 +418,7 @@ func (d *Deps) HandleFileUpload(w http.ResponseWriter, r *http.Request, assetID 
 			return
 		}
 		if result.BytesWritten != sent {
-			servicehttp.WriteError(w, http.StatusBadGateway, "agent file write byte count mismatch")
+			servicehttp.WriteError(w, http.StatusBadGateway, "agent upload byte count mismatch")
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, result)

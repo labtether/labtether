@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { backendAuthHeadersWithCookie, resolvedBackendBaseURLs } from "../../../../../../../../lib/backend";
+import { readBoundedRequestBody, RequestBodyTooLargeError } from "../../../../../../../../lib/boundedBody";
 import { isMutationRequestOriginAllowed } from "../../../../../../../../lib/proxyAuth";
 
 export const dynamic = "force-dynamic";
@@ -29,12 +30,24 @@ export async function POST(request: Request, { params }: Params) {
   const assetID = encodeURIComponent(assetId ?? "");
   const snapID = encodeURIComponent(snapshotId ?? "");
   const act = encodeURIComponent(action);
+  let body: ArrayBuffer | undefined;
+  if (action === "clone") {
+    try {
+      body = await readBoundedRequestBody(request, 1024 * 1024);
+    } catch (error) {
+      if (error instanceof RequestBodyTooLargeError) {
+        return NextResponse.json({ error: "request body too large" }, { status: 413 });
+      }
+      return NextResponse.json({ error: "invalid request body" }, { status: 400 });
+    }
+  }
   try {
     const response = await fetch(
       `${base.api}/truenas/assets/${assetID}/snapshots/${snapID}/${act}`,
       {
         method: "POST",
-        headers: authHeaders,
+        headers: body === undefined ? authHeaders : { ...authHeaders, "Content-Type": "application/json" },
+        body,
       },
     );
     const payload = await safeJSON(response);

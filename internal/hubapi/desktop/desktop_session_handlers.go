@@ -19,13 +19,28 @@ import (
 )
 
 func (d *Deps) TerminateDesktopSession(session terminal.Session) error {
+	// Remove the record inside the session gate: pending upgrades and starts
+	// are rejected, live request contexts end, and hijacked sockets close.
+	remove := func() error {
+		err := d.TerminalStore.DeleteTerminalSession(session.ID)
+		if errors.Is(err, terminal.ErrSessionNotFound) {
+			return nil
+		}
+		return err
+	}
+	var deleteErr error
+	if d.SessionStreams != nil {
+		deleteErr = d.SessionStreams.Delete(session.ID, remove)
+	} else {
+		deleteErr = remove()
+	}
+	if deleteErr != nil {
+		return deleteErr
+	}
 	d.closeDesktopSessionStreams(session.ID)
 
 	d.ClearDesktopSessionOptions(session.ID)
 	d.ClearDesktopSPICEProxyTarget(session.ID)
-	if err := d.TerminalStore.DeleteTerminalSession(session.ID); err != nil && !errors.Is(err, terminal.ErrSessionNotFound) {
-		return err
-	}
 	return nil
 }
 
@@ -306,6 +321,22 @@ func (d *Deps) HandleDesktopSessionActions(w http.ResponseWriter, r *http.Reques
 	}
 
 	action := strings.TrimSpace(parts[1])
+	if (action == "stream" || action == "audio") && d.SessionStreams != nil {
+		wrapped, request, cleanup, err := d.SessionStreams.Open(w, r, session.ID, func() (bool, error) {
+			_, present, err := d.TerminalStore.GetSession(session.ID)
+			return present, err
+		})
+		if err != nil {
+			if errors.Is(err, terminal.ErrSessionNotFound) {
+				servicehttp.WriteError(w, http.StatusNotFound, "session not found")
+			} else {
+				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to open desktop session")
+			}
+			return
+		}
+		defer cleanup()
+		w, r = wrapped, request
+	}
 	switch action {
 	case "stream-ticket":
 		if !opts.Direct && !d.requireCredentialUseForTarget(w, r, session.Target) {

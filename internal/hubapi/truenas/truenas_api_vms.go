@@ -87,13 +87,16 @@ func (d *Deps) HandleTrueNASVMs(ctx context.Context, w http.ResponseWriter, r *h
 		if !d.RequireAdminAuth(w, r) {
 			return
 		}
+		if !d.enforceMutation(w, asset, runtime, "vm."+vmAction, map[string]string{"vm_id": strconv.Itoa(vmID)}) {
+			return
+		}
 		method := "vm." + vmAction
-		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, method, []any{vmID}, nil); err != nil {
+		if err := runtime.Client.CallMutation(ctx, method, []any{vmID}, nil); err != nil {
 			if tnconnector.IsMethodNotFound(err) {
 				servicehttp.WriteError(w, http.StatusNotImplemented, "VM management is not supported on TrueNAS CORE")
 				return
 			}
-			writeTrueNASError(w, http.StatusBadGateway, "failed to perform VM action", err)
+			writeTrueNASMutationError(w, http.StatusBadGateway, "failed to perform VM action", err)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, TrueNASVMActionResponse{

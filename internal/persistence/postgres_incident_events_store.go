@@ -20,6 +20,7 @@ func scanIncidentEvent(row incidentEventScanner) (incidents.IncidentEvent, error
 	e := incidents.IncidentEvent{}
 	var severity *string
 	var metadata []byte
+	var createdAt *time.Time
 	if err := row.Scan(
 		&e.ID,
 		&e.IncidentID,
@@ -29,7 +30,7 @@ func scanIncidentEvent(row incidentEventScanner) (incidents.IncidentEvent, error
 		&severity,
 		&metadata,
 		&e.OccurredAt,
-		&e.CreatedAt,
+		&createdAt,
 	); err != nil {
 		return incidents.IncidentEvent{}, err
 	}
@@ -38,7 +39,11 @@ func scanIncidentEvent(row incidentEventScanner) (incidents.IncidentEvent, error
 	}
 	e.Metadata = unmarshalAnyMap(metadata)
 	e.OccurredAt = e.OccurredAt.UTC()
-	e.CreatedAt = e.CreatedAt.UTC()
+	// The original schema permits NULL. Preserve unknown creation as zero;
+	// the actual event time remains the authoritative timeline timestamp.
+	if createdAt != nil {
+		e.CreatedAt = createdAt.UTC()
+	}
 	return e, nil
 }
 
@@ -49,6 +54,15 @@ const incidentEventColumns = `id, incident_id, event_type, source_ref, summary, 
 // --- store methods ---
 
 func (s *PostgresStore) UpsertIncidentEvent(req incidents.CreateIncidentEventRequest) (incidents.IncidentEvent, error) {
+	return s.UpsertIncidentEventContext(context.Background(), req)
+}
+
+func (s *PostgresStore) UpsertIncidentEventContext(ctx context.Context, req incidents.CreateIncidentEventRequest) (incidents.IncidentEvent, error) {
+	ctx, cancel, err := correlationContext(ctx)
+	if err != nil {
+		return incidents.IncidentEvent{}, err
+	}
+	defer cancel()
 	now := time.Now().UTC()
 
 	occurredAt := req.OccurredAt
@@ -66,7 +80,7 @@ func (s *PostgresStore) UpsertIncidentEvent(req incidents.CreateIncidentEventReq
 		return incidents.IncidentEvent{}, err
 	}
 
-	return scanIncidentEvent(s.pool.QueryRow(context.Background(),
+	return scanIncidentEvent(s.pool.QueryRow(ctx,
 		fmt.Sprintf(`INSERT INTO incident_events (%s)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)
 		 ON CONFLICT (incident_id, source_ref) DO UPDATE

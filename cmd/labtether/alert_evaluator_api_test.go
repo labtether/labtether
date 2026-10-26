@@ -38,7 +38,7 @@ func TestAlertLogPatternRule(t *testing.T) {
 		Kind:          alerts.RuleKindLogPattern,
 		Severity:      alerts.SeverityHigh,
 		TargetScope:   alerts.TargetScopeAsset,
-		WindowSeconds: 300,
+		WindowSeconds: alertTestDuration(300),
 		Condition:     map[string]any{"pattern": "ERROR|FATAL", "min_occurrences": float64(2)},
 		Labels:        map[string]string{"env": "prod"},
 		Targets:       []alerts.RuleTargetInput{{AssetID: "logpat-node-1"}},
@@ -85,7 +85,7 @@ func TestAlertLogPatternBelowThreshold(t *testing.T) {
 		Kind:          alerts.RuleKindLogPattern,
 		Severity:      alerts.SeverityMedium,
 		TargetScope:   alerts.TargetScopeAsset,
-		WindowSeconds: 300,
+		WindowSeconds: alertTestDuration(300),
 		Condition:     map[string]any{"pattern": "ERROR", "min_occurrences": float64(5)},
 		Labels:        map[string]string{"env": "test"},
 		Targets:       []alerts.RuleTargetInput{{AssetID: "loglow-node-1"}},
@@ -158,7 +158,7 @@ func TestAlertLogPatternGlobalSourceFieldFilters(t *testing.T) {
 		Kind:          alerts.RuleKindLogPattern,
 		Severity:      alerts.SeverityHigh,
 		TargetScope:   alerts.TargetScopeGlobal,
-		WindowSeconds: 300,
+		WindowSeconds: alertTestDuration(300),
 		Condition: map[string]any{
 			"pattern":         "mobile client telemetry metric",
 			"source":          "mobile_client_telemetry",
@@ -206,7 +206,7 @@ func TestAlertHeartbeatStaleRule(t *testing.T) {
 		Kind:          alerts.RuleKindHeartbeatStale,
 		Severity:      alerts.SeverityHigh,
 		TargetScope:   alerts.TargetScopeGlobal,
-		WindowSeconds: 300,
+		WindowSeconds: alertTestDuration(300),
 		Condition:     map[string]any{},
 		Labels:        map[string]string{"env": "prod"},
 	})
@@ -241,7 +241,7 @@ func TestAlertHeartbeatStaleNotFiring(t *testing.T) {
 		Kind:          alerts.RuleKindHeartbeatStale,
 		Severity:      alerts.SeverityMedium,
 		TargetScope:   alerts.TargetScopeGlobal,
-		WindowSeconds: 300,
+		WindowSeconds: alertTestDuration(300),
 		Condition:     map[string]any{},
 		Labels:        map[string]string{"env": "prod"},
 	})
@@ -276,7 +276,7 @@ func TestAlertMetricDeadmanRule(t *testing.T) {
 		Kind:          alerts.RuleKindMetricDeadman,
 		Severity:      alerts.SeverityCritical,
 		TargetScope:   alerts.TargetScopeAsset,
-		WindowSeconds: 300,
+		WindowSeconds: alertTestDuration(300),
 		Condition:     map[string]any{},
 		Labels:        map[string]string{"env": "prod"},
 		Targets:       []alerts.RuleTargetInput{{AssetID: "deadman-node-1"}},
@@ -312,7 +312,7 @@ func TestAlertMetricDeadmanNotFiring(t *testing.T) {
 		Kind:          alerts.RuleKindMetricDeadman,
 		Severity:      alerts.SeverityMedium,
 		TargetScope:   alerts.TargetScopeAsset,
-		WindowSeconds: 300,
+		WindowSeconds: alertTestDuration(300),
 		Condition:     map[string]any{},
 		Labels:        map[string]string{"env": "prod"},
 		Targets:       []alerts.RuleTargetInput{{AssetID: "deadok-node-1"}},
@@ -457,3 +457,5 @@ func TestAlertSyntheticCheckNotFiring(t *testing.T) {
 		t.Fatalf("expected 0 firing instances (success breaks chain), got %d", len(instances))
 	}
 }
+
+func alertTestDuration(value int) *int { return &value }

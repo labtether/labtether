@@ -1,6 +1,7 @@
 package agentmgr
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -26,6 +27,9 @@ type AgentConn struct {
 	credentialLease     time.Duration
 	credentialValidTill time.Time
 	rejected            atomic.Bool
+	doneOnce            sync.Once
+	closeOnce           sync.Once
+	done                chan struct{}
 }
 
 // NewAgentConn creates an AgentConn wrapping the given WebSocket connection.
@@ -48,8 +52,22 @@ var ErrAgentCredentialRejected = errors.New("agent connection credential rejecte
 
 // Send writes a message to the agent, protected by a mutex with a write deadline.
 func (c *AgentConn) Send(msg Message) error {
+	return c.SendContext(context.Background(), msg)
+}
+
+// SendContext rejects canceled requests at each pre-write ownership gate.
+// It cannot interrupt a current mutex/credential holder. Once a frame begins,
+// the existing transport timeout owns it; cancellation does not close or alter
+// the deadline of this shared socket, and delivery may remain unknown.
+func (c *AgentConn) SendContext(ctx context.Context, msg Message) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if c.rejected.Load() {
 		return ErrAgentCredentialRejected
 	}
@@ -58,6 +76,9 @@ func (c *AgentConn) Send(msg Message) error {
 	}
 	if c.rejected.Load() {
 		return ErrAgentCredentialRejected
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	if err := c.conn.SetWriteDeadline(time.Now().Add(AgentWriteDeadline)); err != nil {
 		return err
@@ -112,15 +133,25 @@ func (c *AgentConn) WriteClose(msg []byte) error {
 	return c.conn.WriteControl(websocket.CloseMessage, msg, time.Now().Add(5*time.Second))
 }
 
-// Close closes the underlying WebSocket connection.
+// Done closes as soon as this connection is retired. It is safe on a zero-value
+// AgentConn so in-process owners and tests share the same lifecycle contract.
+func (c *AgentConn) Done() <-chan struct{} {
+	c.doneOnce.Do(func() { c.done = make(chan struct{}) })
+	return c.done
+}
+
+// Close retires this connection and interrupts its underlying socket. Gorilla
+// permits Close concurrently with every other method; taking the write mutex
+// here would delay disconnect waiters behind a stalled write or credential read.
 func (c *AgentConn) Close() {
-	// Reject queued writes before waiting for an in-progress frame to release
-	// the socket mutex. One frame already inside WriteJSON may complete; writers
-	// queued behind it cannot drain after revocation/unregistration.
 	c.rejected.Store(true)
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	_ = c.conn.Close()
+	c.closeOnce.Do(func() {
+		c.Done()
+		close(c.done)
+		if c.conn != nil {
+			_ = c.conn.Close()
+		}
+	})
 }
 
 // TouchLastMessage updates the last message timestamp.

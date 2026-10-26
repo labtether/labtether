@@ -20,22 +20,25 @@ import (
 // buildCollectorsDeps constructs the collectors.Deps from the apiServer's fields.
 func (s *apiServer) buildCollectorsDeps() *collectorspkg.Deps {
 	return &collectorspkg.Deps{
-		AssetStore:        s.assetStore,
-		HubCollectorStore: s.hubCollectorStore,
-		CredentialStore:   s.credentialStore,
-		SecretsManager:    s.secretsManager,
-		TelemetryStore:    s.telemetryStore,
-		LogStore:          s.logStore,
-		DependencyStore:   s.dependencyStore,
-		ConnectorRegistry: s.connectorRegistry,
-		RuntimeStore:      s.runtimeStore,
-		DB:                s.db,
+		AssetStore:                  s.assetStore,
+		HubCollectorStore:           s.hubCollectorStore,
+		CredentialStore:             s.credentialStore,
+		SecretsManager:              s.secretsManager,
+		TelemetryStore:              s.telemetryStore,
+		LogStore:                    s.logStore,
+		DependencyStore:             s.dependencyStore,
+		ConnectorRegistry:           s.connectorRegistry,
+		EvaluateConnectorGuardrails: s.connectorMaintenanceEvaluator(),
+		ConfiguredConnectorActions:  s.configuredConnectorActions(),
+		RuntimeStore:                s.runtimeStore,
+		DB:                          s.db,
 
 		AgentMgr:              s.agentMgr,
 		WebServiceCoordinator: s.webServiceCoordinator,
 		CollectorDispatchSem:  s.collectorDispatchSem,
 
-		EnforceRateLimit: s.enforceRateLimit,
+		EnforceRateLimit:        s.enforceRateLimit,
+		EvaluateAssetGuardrails: s.ensureGroupFeaturesDeps().EvaluateAssetGuardrails,
 
 		ProcessHeartbeatRequest: func(req assets.HeartbeatRequest) (*assets.Asset, error) {
 			return s.processHeartbeatRequest(req)

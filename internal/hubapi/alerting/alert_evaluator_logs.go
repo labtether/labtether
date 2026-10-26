@@ -1,14 +1,17 @@
 package alerting
 
 import (
+	"context"
 	"fmt"
-	"github.com/labtether/labtether/internal/alerts"
-	"github.com/labtether/labtether/internal/assets"
-	"github.com/labtether/labtether/internal/logs"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/labtether/labtether/internal/alerts"
+	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/logs"
+	"github.com/labtether/labtether/internal/persistence"
 )
 
 var (
@@ -39,15 +42,24 @@ func cachedAlertRegexp(pattern string) (*regexp.Regexp, error) {
 	return re, nil
 }
 
-func (d *Deps) EvaluateLogPatternWithPrefetch(
+func (d *Deps) evaluateLogPatternOutcome(
+	ctx context.Context,
 	rule alerts.Rule,
 	prefetchedAssets []assets.Asset,
 	prefetchedCapabilities map[string][]string,
-) (bool, error) {
+) (alertConditionOutcome, error) {
+	outcome := newAlertConditionOutcome()
 	if d.LogStore == nil {
-		return false, nil
+		if err := ctx.Err(); err != nil {
+			return alertConditionOutcome{}, err
+		}
+		return outcome.result()
 	}
 
+	store, ok := d.LogStore.(persistence.AlertLogContextStore)
+	if !ok {
+		return outcome, fmt.Errorf("context-aware alert log query unavailable")
+	}
 	windowSec := rule.WindowSeconds
 	if windowSec <= 0 {
 		windowSec = alerts.DefaultWindowSeconds
@@ -57,12 +69,15 @@ func (d *Deps) EvaluateLogPatternWithPrefetch(
 
 	pattern, _ := rule.Condition["pattern"].(string)
 	if pattern == "" {
-		return false, nil
+		if err := ctx.Err(); err != nil {
+			return alertConditionOutcome{}, err
+		}
+		return outcome.result()
 	}
 
 	re, err := cachedAlertRegexp(pattern)
 	if err != nil {
-		return false, fmt.Errorf("invalid log pattern: %w", err)
+		return alertConditionOutcome{}, fmt.Errorf("invalid log pattern: %w", err)
 	}
 
 	minOccurrences := 1
@@ -92,22 +107,9 @@ func (d *Deps) EvaluateLogPatternWithPrefetch(
 		return true
 	}
 
-	matchesWindowEvents := func(events []logs.Event) bool {
-		matchCount := 0
-		for _, event := range events {
-			if matchesEvent(event) {
-				matchCount++
-				if matchCount >= minOccurrences {
-					return true
-				}
-			}
-		}
-		return false
-	}
-
 	normalizedScope := alerts.NormalizeTargetScope(rule.TargetScope)
 	if normalizedScope == alerts.TargetScopeGlobal && len(rule.Targets) == 0 {
-		events, err := d.LogStore.QueryEvents(logs.QueryRequest{
+		events, err := store.QueryEventsContext(ctx, logs.QueryRequest{
 			From:          windowStart,
 			To:            now,
 			Source:        sourceFilter,
@@ -116,14 +118,56 @@ func (d *Deps) EvaluateLogPatternWithPrefetch(
 			ExcludeFields: !requiresFields,
 		})
 		if err != nil {
-			return false, fmt.Errorf("global log query: %w", err)
+			return alertConditionOutcome{}, fmt.Errorf("global log query: %w", err)
 		}
-		return matchesWindowEvents(events), nil
+		matchCount := 0
+		matchedAssets := map[string]bool{}
+		for _, event := range events {
+			if err := ctx.Err(); err != nil {
+				return alertConditionOutcome{}, err
+			}
+			if matchesEvent(event) {
+				matchCount++
+				if event.AssetID != "" {
+					matchedAssets[event.AssetID] = true
+				}
+			}
+		}
+		if matchCount >= minOccurrences {
+			outcome.Triggered = true
+			// One shared budget covers all optional group reads, not one budget
+			// per matching row. Missing groups never erase exact log asset IDs.
+			groupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			byID := make(map[string]assets.Asset, len(prefetchedAssets))
+			for _, asset := range prefetchedAssets {
+				byID[asset.ID] = asset
+			}
+			lookup, canRead := d.AssetStore.(persistence.AssetContextStore)
+			for assetID := range matchedAssets {
+				asset := assets.Asset{ID: assetID}
+				if prefetchedAssets != nil {
+					if known, ok := byID[assetID]; ok {
+						asset = known
+					}
+				} else if canRead && groupCtx.Err() == nil {
+					loaded, found, loadErr := lookup.GetAssetContext(groupCtx, assetID)
+					if loadErr == nil && found && loaded.ID == assetID && groupCtx.Err() == nil {
+						asset = loaded
+					}
+				}
+				outcome.witnessAsset(asset)
+			}
+		}
+		if err := ctx.Err(); err != nil {
+			return alertConditionOutcome{}, err
+		}
+		return outcome.result()
 	}
 
-	targetAssets, err := d.resolveRuleTargetAssetsWithCapabilities(rule, prefetchedAssets, prefetchedCapabilities, true)
+	targetAssets, err := d.resolveRuleTargetAssetsContext(ctx, rule, prefetchedAssets, prefetchedCapabilities, true)
 	if err != nil {
-		return false, err
+		return alertConditionOutcome{}, err
 	}
 	assetIDs := uniqueAlertAssetIDs(targetAssets)
 	limit := 500 * len(assetIDs)
@@ -133,7 +177,7 @@ func (d *Deps) EvaluateLogPatternWithPrefetch(
 	if limit > 5000 {
 		limit = 5000
 	}
-	events, err := d.LogStore.QueryEvents(logs.QueryRequest{
+	events, err := store.QueryEventsContext(ctx, logs.QueryRequest{
 		GroupAssetIDs: assetIDs,
 		From:          windowStart,
 		To:            now,
@@ -143,10 +187,13 @@ func (d *Deps) EvaluateLogPatternWithPrefetch(
 		ExcludeFields: !requiresFields,
 	})
 	if err != nil {
-		return false, fmt.Errorf("log query for targeted assets: %w", err)
+		return alertConditionOutcome{}, fmt.Errorf("log query for targeted assets: %w", err)
 	}
 	matchCounts := make(map[string]int, len(assetIDs))
 	for _, event := range events {
+		if err := ctx.Err(); err != nil {
+			return alertConditionOutcome{}, err
+		}
 		assetID := strings.TrimSpace(event.AssetID)
 		if assetID == "" {
 			continue
@@ -155,9 +202,22 @@ func (d *Deps) EvaluateLogPatternWithPrefetch(
 			continue
 		}
 		matchCounts[assetID]++
-		if matchCounts[assetID] >= minOccurrences {
-			return true, nil
+
+	}
+	for _, asset := range targetAssets {
+		if matchCounts[asset.ID] >= minOccurrences {
+			outcome.witnessAsset(asset)
 		}
 	}
-	return false, nil
+	if err := ctx.Err(); err != nil {
+		return alertConditionOutcome{}, err
+	}
+	return outcome.result()
+}
+
+func (d *Deps) EvaluateLogPatternWithPrefetch(rule alerts.Rule, prefetchedAssets []assets.Asset, prefetchedCapabilities map[string][]string) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	outcome, err := d.evaluateLogPatternOutcome(ctx, rule, prefetchedAssets, prefetchedCapabilities)
+	return outcome.Triggered, err
 }

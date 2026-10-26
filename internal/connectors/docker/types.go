@@ -66,21 +66,26 @@ type VolumeState struct {
 
 // ComposeStackState is the hub-side representation of a Compose stack.
 type ComposeStackState struct {
-	Name         string   `json:"name"`
-	Status       string   `json:"status"`
-	ConfigFile   string   `json:"config_file,omitempty"`
-	ContainerIDs []string `json:"container_ids"`
+	Name           string   `json:"name"`
+	Status         string   `json:"status"`
+	ConfigFile     string   `json:"config_file,omitempty"` // Legacy directory projection only.
+	ConfigDir      string   `json:"config_dir,omitempty"`
+	ConfigFiles    []string `json:"config_files,omitempty"`
+	SelectionError string   `json:"selection_error,omitempty"`
+	ContainerIDs   []string `json:"container_ids"`
 }
 
 // DockerHost aggregates all Docker state for a single agent host.
 type DockerHost struct {
-	AgentID       string                    `json:"agent_id"`
-	Engine        EngineInfo                `json:"engine"`
-	Containers    []ContainerState          `json:"containers"`
-	Images        []ImageState              `json:"images"`
-	Networks      []NetworkState            `json:"networks"`
-	Volumes       []VolumeState             `json:"volumes"`
-	ComposeStacks []ComposeStackState       `json:"compose_stacks"`
-	Stats         map[string]ContainerStats `json:"stats,omitempty"`
-	LastSeen      time.Time                 `json:"last_seen"`
+	AgentID              string                    `json:"agent_id"`
+	ComposeEndpointID    string                    `json:"compose_endpoint_id,omitempty"`
+	ComposeActionVersion int                       `json:"compose_action_version,omitempty"`
+	Engine               EngineInfo                `json:"engine"`
+	Containers           []ContainerState          `json:"containers"`
+	Images               []ImageState              `json:"images"`
+	Networks             []NetworkState            `json:"networks"`
+	Volumes              []VolumeState             `json:"volumes"`
+	ComposeStacks        []ComposeStackState       `json:"compose_stacks"`
+	Stats                map[string]ContainerStats `json:"stats,omitempty"`
+	LastSeen             time.Time                 `json:"last_seen"`
 }

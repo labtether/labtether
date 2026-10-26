@@ -17,10 +17,44 @@ type challenge struct {
 type ChallengeStore struct {
 	mu         sync.Mutex
 	challenges map[string]challenge
+	users      map[string]*userAuthenticationLock
+}
+
+type userAuthenticationLock struct {
+	mu   sync.Mutex
+	refs int
 }
 
 func NewChallengeStore() *ChallengeStore {
 	return &ChallengeStore{challenges: make(map[string]challenge)}
+}
+
+// LockUser orders local password/challenge login against credential changes and
+// session revocation. Hold it from the fresh credential read through challenge
+// issuance or session creation, or through the revocation and credential write.
+// This lock, like the challenges it protects, belongs to this Hub process only.
+func (s *ChallengeStore) LockUser(userID string) func() {
+	s.mu.Lock()
+	if s.users == nil {
+		s.users = make(map[string]*userAuthenticationLock)
+	}
+	entry := s.users[userID]
+	if entry == nil {
+		entry = &userAuthenticationLock{}
+		s.users[userID] = entry
+	}
+	entry.refs++
+	s.mu.Unlock()
+	entry.mu.Lock()
+	return func() {
+		entry.mu.Unlock()
+		s.mu.Lock()
+		entry.refs--
+		if entry.refs == 0 {
+			delete(s.users, userID)
+		}
+		s.mu.Unlock()
+	}
 }
 
 func (s *ChallengeStore) Create(userID string) string {

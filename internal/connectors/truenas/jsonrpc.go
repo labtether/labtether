@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -140,8 +141,8 @@ func IsMethodNotFound(err error) bool {
 	if err == nil {
 		return false
 	}
-	e, ok := err.(*RPCError)
-	return ok && e.Code == -32601
+	var e *RPCError
+	return errors.As(err, &e) && e.Code == -32601
 }
 
 // IsMethodCallError reports whether err is an RPCError with code -32001
@@ -151,8 +152,8 @@ func IsMethodCallError(err error) bool {
 	if err == nil {
 		return false
 	}
-	e, ok := err.(*RPCError)
-	return ok && e.Code == -32001
+	var e *RPCError
+	return errors.As(err, &e) && e.Code == -32001
 }
 
 // Call performs a single JSON-RPC 2.0 method call against TrueNAS.
@@ -187,6 +188,11 @@ func (c *Client) Call(ctx context.Context, method string, params []any, dest any
 		if setErr := conn.SetReadDeadline(deadline); setErr != nil {
 			return fmt.Errorf("truenas ws set read deadline: %w", setErr)
 		}
+	}
+
+	// A canceled owner must not advance from dial or authentication to a write.
+	if err := callCtx.Err(); err != nil {
+		return fmt.Errorf("truenas ws canceled before authentication: %w", err)
 	}
 
 	// Step 1: authenticate.
@@ -228,6 +234,9 @@ func (c *Client) Call(ctx context.Context, method string, params []any, dest any
 		ID:      callID,
 		Method:  method,
 		Params:  normalizeParams(params),
+	}
+	if err := callCtx.Err(); err != nil {
+		return fmt.Errorf("truenas ws method not dispatched: %w", err)
 	}
 	if err := conn.WriteJSON(callReq); err != nil {
 		return fmt.Errorf("truenas ws call send (%s): %w", method, err)

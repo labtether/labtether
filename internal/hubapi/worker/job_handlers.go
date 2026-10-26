@@ -14,7 +14,7 @@ import (
 	opspkg "github.com/labtether/labtether/internal/hubapi/operations"
 	"github.com/labtether/labtether/internal/jobqueue"
 	"github.com/labtether/labtether/internal/logs"
-	"github.com/labtether/labtether/internal/schedules"
+	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/terminal"
 	"github.com/labtether/labtether/internal/updates"
 )
@@ -22,12 +22,16 @@ import (
 // HandleTerminalCommandJob returns a handler that executes terminal commands
 // and writes results directly to stores.
 func (d *Deps) HandleTerminalCommandJob(processed *atomic.Uint64) jobqueue.HandlerFunc {
-	return func(ctx interface{ Deadline() (time.Time, bool) }, job *jobqueue.Job) error {
+	return func(ctx context.Context, job *jobqueue.Job) error {
 		var cmdJob terminal.CommandJob
 		if err := json.Unmarshal(job.Payload, &cmdJob); err != nil {
 			return fmt.Errorf("decode terminal command job: %w", err)
 		}
 
+		began, err := d.beginExecution(ctx, job)
+		if err != nil || !began {
+			return err
+		}
 		processed.Add(1)
 
 		// Route via WebSocket if agent is connected; otherwise fall through to SSH/simulated/local.
@@ -51,8 +55,8 @@ func (d *Deps) HandleTerminalCommandJob(processed *atomic.Uint64) jobqueue.Handl
 				Output:      "blocked by active maintenance window",
 				CompletedAt: time.Now().UTC(),
 			}
-		} else if d.AgentMgr != nil && d.AgentMgr.IsConnected(cmdJob.Target) && d.ExecuteViaAgent != nil {
-			result = d.ExecuteViaAgent(cmdJob)
+		} else if d.AgentMgr != nil && d.AgentMgr.IsConnected(cmdJob.Target) && d.ExecuteViaAgentContext != nil {
+			result = d.ExecuteViaAgentContext(ctx, cmdJob)
 		} else {
 			if d.PrepareTerminalCommand != nil {
 				if err := d.PrepareTerminalCommand(&cmdJob); err != nil {
@@ -67,15 +71,15 @@ func (d *Deps) HandleTerminalCommandJob(processed *atomic.Uint64) jobqueue.Handl
 				}
 			}
 			if result.Status == "" {
-				if d.ExecuteTerminalCommand != nil {
-					result = d.ExecuteTerminalCommand(cmdJob)
+				if d.ExecuteTerminalCommandContext != nil {
+					result = d.ExecuteTerminalCommandContext(ctx, cmdJob)
 				} else {
-					result = opspkg.ExecuteCommand(cmdJob)
+					result = opspkg.ExecuteCommandContext(ctx, cmdJob)
 				}
 			}
 		}
 
-		if err := d.TerminalStore.UpdateCommandResult(result.SessionID, result.CommandID, result.Status, result.Output); err != nil {
+		if err := d.JobExecutionStore.FinishJobExecution(ctx, job, persistence.JobExecutionResult{Terminal: &result}); err != nil {
 			return fmt.Errorf("update command result: %w", err)
 		}
 
@@ -137,12 +141,16 @@ func (d *Deps) HandleTerminalCommandJob(processed *atomic.Uint64) jobqueue.Handl
 // HandleActionRunJob returns a handler that executes action runs
 // and writes results directly to stores.
 func (d *Deps) HandleActionRunJob(processed *atomic.Uint64) jobqueue.HandlerFunc {
-	return func(ctx interface{ Deadline() (time.Time, bool) }, job *jobqueue.Job) error {
+	return func(ctx context.Context, job *jobqueue.Job) error {
 		var actionJob actions.Job
 		if err := json.Unmarshal(job.Payload, &actionJob); err != nil {
 			return fmt.Errorf("decode action job: %w", err)
 		}
 
+		began, err := d.beginExecution(ctx, job)
+		if err != nil || !began {
+			return err
+		}
 		processed.Add(1)
 		var result actions.Result
 		maintenanceBlocked, maintenanceErr := d.assetActionBlocked(actionJob.Target)
@@ -164,10 +172,10 @@ func (d *Deps) HandleActionRunJob(processed *atomic.Uint64) jobqueue.HandlerFunc
 				CompletedAt: time.Now().UTC(),
 			}
 		default:
-			result = d.ExecuteActionInProcess(actionJob)
+			result = d.ExecuteActionInProcessContext(ctx, actionJob)
 		}
 
-		if err := d.ActionStore.ApplyActionResult(result); err != nil {
+		if err := d.JobExecutionStore.FinishJobExecution(ctx, job, persistence.JobExecutionResult{Action: &result}); err != nil {
 			return fmt.Errorf("apply action result: %w", err)
 		}
 
@@ -234,16 +242,20 @@ func (d *Deps) HandleActionRunJob(processed *atomic.Uint64) jobqueue.HandlerFunc
 // HandleUpdateRunJob returns a handler that executes update runs
 // and writes results directly to stores.
 func (d *Deps) HandleUpdateRunJob(processed *atomic.Uint64) jobqueue.HandlerFunc {
-	return func(ctx interface{ Deadline() (time.Time, bool) }, job *jobqueue.Job) error {
+	return func(ctx context.Context, job *jobqueue.Job) error {
 		var updateJob updates.Job
 		if err := json.Unmarshal(job.Payload, &updateJob); err != nil {
 			return fmt.Errorf("decode update job: %w", err)
 		}
 
+		began, err := d.beginExecution(ctx, job)
+		if err != nil || !began {
+			return err
+		}
 		processed.Add(1)
-		result := opspkg.ExecuteUpdateWithExecutor(updateJob, d.ExecuteUpdateScope)
+		result := opspkg.ExecuteUpdateWithExecutorContext(ctx, updateJob, d.ExecuteUpdateScopeContext)
 
-		if err := d.UpdateStore.ApplyUpdateResult(result); err != nil {
+		if err := d.JobExecutionStore.FinishJobExecution(ctx, job, persistence.JobExecutionResult{Update: &result}); err != nil {
 			return fmt.Errorf("apply update result: %w", err)
 		}
 
@@ -378,21 +390,6 @@ func (d *Deps) RecordDeadLetter(ctx context.Context, job *jobqueue.Job, jobErr e
 		}
 	}
 
-	if job.Kind == jobqueue.KindScheduleRun && d.ScheduleExecutionStore != nil {
-		var execution schedules.ExecutionJob
-		if err := json.Unmarshal(job.Payload, &execution); err == nil && execution.ScheduleID != "" && execution.JobID != "" {
-			if err := d.ScheduleExecutionStore.CompleteScheduledTaskExecution(
-				ctx,
-				execution.ScheduleID,
-				execution.JobID,
-				actions.StatusFailed,
-				"schedule execution exhausted its bounded queue retries",
-				time.Now().UTC(),
-			); err != nil {
-				log.Printf("labtether worker: failed to mark dead-lettered schedule execution: %v", err)
-			}
-		}
-	}
 }
 
 // mapLevel delegates to the injected MapCommandLevel function if set,

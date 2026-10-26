@@ -46,6 +46,9 @@ func (d *Deps) FinalizeAgentTerminalSession(
 	owned := d.TerminalBridges.CompareAndDelete(wireSessionID, bridgeState)
 	if bridgeState != nil {
 		d.ActiveAgentStreams.CompareAndDelete(sessionID, bridgeState)
+		if bridgeState.AgentConn != nil {
+			agentConn = bridgeState.AgentConn
+		}
 		bridgeState.Close()
 	}
 	if startSent && owned {
@@ -194,6 +197,11 @@ func (b *TerminalBridge) MatchesAgent(assetID string) bool {
 	return expected == strings.TrimSpace(assetID)
 }
 
+// AcceptsAgentMessage binds replies to the stream's wire ID and socket owner.
+func (b *TerminalBridge) AcceptsAgentMessage(conn *agentmgr.AgentConn, wireID string) bool {
+	return b.MatchesConnection(conn) && (b.WireSessionID == "" || b.WireSessionID == wireID)
+}
+
 // ProcessAgentTerminalStarted handles terminal.started from agent.
 func (d *Deps) ProcessAgentTerminalStarted(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 	var data agentmgr.TerminalStartedData
@@ -203,7 +211,7 @@ func (d *Deps) ProcessAgentTerminalStarted(conn *agentmgr.AgentConn, msg agentmg
 
 	if bridge, ok := d.TerminalBridges.Load(data.SessionID); ok {
 		if b, ok := bridge.(*TerminalBridge); ok {
-			if !b.MatchesConnection(conn) {
+			if !b.AcceptsAgentMessage(conn, data.SessionID) {
 				return
 			}
 			b.OutputMu.Lock()
@@ -239,7 +247,7 @@ func (d *Deps) ProcessAgentTerminalData(conn *agentmgr.AgentConn, msg agentmgr.M
 
 	if bridge, ok := d.TerminalBridges.Load(payload.SessionID); ok {
 		if b, ok := bridge.(*TerminalBridge); ok {
-			if !b.MatchesConnection(conn) {
+			if !b.AcceptsAgentMessage(conn, payload.SessionID) {
 				return
 			}
 			b.TrySendOutput(decoded)
@@ -256,7 +264,7 @@ func (d *Deps) ProcessAgentTerminalClosed(conn *agentmgr.AgentConn, msg agentmgr
 
 	if bridge, ok := d.TerminalBridges.Load(data.SessionID); ok {
 		if b, ok := bridge.(*TerminalBridge); ok {
-			if !b.MatchesConnection(conn) {
+			if !b.AcceptsAgentMessage(conn, data.SessionID) {
 				return
 			}
 			reason := strings.TrimSpace(data.Reason)

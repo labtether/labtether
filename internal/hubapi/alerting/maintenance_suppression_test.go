@@ -1,6 +1,7 @@
 package alerting
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -20,7 +21,9 @@ func TestMaintenanceSuppressesTargetedAlertAsPending(t *testing.T) {
 	instanceStore := persistence.NewMemoryAlertInstanceStore()
 	deps := &Deps{
 		AlertInstanceStore: instanceStore,
-		EvaluateGuardrails: suppressingGuardrails,
+		EvaluateGuardrailsContext: func(_ context.Context, group string, at time.Time) (groupfeatures.GroupMaintenanceGuardrails, error) {
+			return suppressingGuardrails(group, at)
+		},
 	}
 	rule := alerts.Rule{
 		ID:       "rule-1",
@@ -44,7 +47,7 @@ func TestMaintenanceSuppressionLiftingPromotesFreshFiringInstance(t *testing.T) 
 	suppressed := true
 	deps := &Deps{
 		AlertInstanceStore: instanceStore,
-		EvaluateGuardrails: func(groupID string, _ time.Time) (groupfeatures.GroupMaintenanceGuardrails, error) {
+		EvaluateGuardrailsContext: func(_ context.Context, groupID string, _ time.Time) (groupfeatures.GroupMaintenanceGuardrails, error) {
 			return groupfeatures.GroupMaintenanceGuardrails{GroupID: groupID, SuppressAlerts: suppressed}, nil
 		},
 	}
@@ -97,7 +100,9 @@ func TestMaintenanceSuppressesResolvedBroadcastDelivery(t *testing.T) {
 	broadcasts := 0
 	deps := &Deps{
 		AlertInstanceStore: instanceStore,
-		EvaluateGuardrails: suppressingGuardrails,
+		EvaluateGuardrailsContext: func(_ context.Context, group string, at time.Time) (groupfeatures.GroupMaintenanceGuardrails, error) {
+			return suppressingGuardrails(group, at)
+		},
 		Broadcast: func(string, map[string]any) {
 			broadcasts++
 		},

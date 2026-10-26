@@ -14,10 +14,11 @@ import (
 
 // Queue provides Postgres-backed job queue operations.
 type Queue struct {
-	pool         *pgxpool.Pool
-	pollInterval time.Duration
-	maxAttempts  atomic.Int64
-	staleClaimAt time.Duration
+	pool               *pgxpool.Pool
+	pollInterval       time.Duration
+	maxAttempts        atomic.Int64
+	staleClaimAt       time.Duration
+	finalizeDeadLetter DeadLetterFinalizer
 }
 
 // New creates a Queue backed by the given connection pool.
@@ -154,58 +155,6 @@ func (q *Queue) Claim(ctx context.Context) (*Job, error) {
 	return job, nil
 }
 
-// RecoverStaleClaims requeues or dead-letters jobs that have been in the
-// processing state past the stale-claim threshold. It is called periodically
-// by the Worker rather than on every Claim to reduce per-Claim DB overhead.
-func (q *Queue) RecoverStaleClaims(ctx context.Context, now time.Time) ([]*Job, error) {
-	if q == nil || q.pool == nil || q.staleClaimAt <= 0 {
-		return nil, nil
-	}
-	cutoff := now.Add(-q.staleClaimAt)
-	rows, err := q.pool.Query(ctx,
-		`UPDATE job_queue
-		 SET status = CASE WHEN attempts >= max_attempts THEN $1 ELSE $2 END,
-		     locked_at = NULL,
-		     lock_token = NULL,
-		     updated_at = $4::timestamptz,
-		     available_at = CASE
-		       WHEN attempts >= max_attempts THEN available_at
-		       ELSE $4::timestamptz + make_interval(secs => LEAST(30, CAST(power(2, GREATEST(attempts - 1, 0)) AS int)))
-		     END,
-		     completed_at = CASE WHEN attempts >= max_attempts THEN $4::timestamptz ELSE NULL END,
-		     error = CASE
-		       WHEN attempts >= max_attempts AND COALESCE(NULLIF(error, ''), '') = '' THEN 'job claim timed out after max attempts'
-		       WHEN attempts < max_attempts AND COALESCE(NULLIF(error, ''), '') = '' THEN 'job claim timed out; retrying'
-		       ELSE error
-		     END
-		 WHERE status = $3
-		   AND locked_at IS NOT NULL
-		   AND locked_at < $5::timestamptz
-		 RETURNING id, kind, status, payload, attempts, max_attempts, error, created_at, updated_at, available_at, locked_at, completed_at, lock_token`,
-		string(StatusDeadLettered),
-		string(StatusQueued),
-		string(StatusProcessing),
-		now,
-		cutoff,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	deadLettered := make([]*Job, 0)
-	for rows.Next() {
-		job, scanErr := scanJob(rows)
-		if scanErr != nil {
-			return nil, scanErr
-		}
-		if job.Status == StatusDeadLettered {
-			deadLettered = append(deadLettered, job)
-		}
-	}
-	return deadLettered, rows.Err()
-}
-
 // Complete marks a job as completed.
 func (q *Queue) Complete(ctx context.Context, jobID, lockToken string) error {
 	now := time.Now().UTC()
@@ -214,35 +163,6 @@ func (q *Queue) Complete(ctx context.Context, jobID, lockToken string) error {
 		 SET status = $1, completed_at = $2, updated_at = $2, locked_at = NULL, lock_token = NULL
 		 WHERE id = $3 AND status = $4 AND lock_token = $5`,
 		string(StatusCompleted), now, jobID, string(StatusProcessing), lockToken,
-	)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return ErrClaimLost
-	}
-	return nil
-}
-
-// Fail marks a job as failed or dead-lettered if max attempts reached.
-// Uses a single atomic UPDATE to avoid race conditions between read and write.
-func (q *Queue) Fail(ctx context.Context, jobID, lockToken string, errMsg string) error {
-	now := time.Now().UTC()
-
-	tag, err := q.pool.Exec(ctx,
-		`UPDATE job_queue SET
-				status = CASE WHEN attempts >= max_attempts THEN $1 ELSE $2 END,
-				error = $3,
-				updated_at = $4,
-				available_at = CASE
-					WHEN attempts >= max_attempts THEN available_at
-					ELSE $4 + make_interval(secs => LEAST(30, CAST(power(2, GREATEST(attempts - 1, 0)) AS int)))
-				END,
-				locked_at = NULL,
-				lock_token = NULL,
-				completed_at = CASE WHEN attempts >= max_attempts THEN $4 ELSE completed_at END
-			 WHERE id = $5 AND status = $6 AND lock_token = $7`,
-		string(StatusDeadLettered), string(StatusQueued), errMsg, now, jobID, string(StatusProcessing), lockToken,
 	)
 	if err != nil {
 		return err

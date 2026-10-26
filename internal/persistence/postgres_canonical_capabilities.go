@@ -10,6 +10,8 @@ import (
 )
 
 func (s *PostgresStore) UpsertCapabilitySet(set model.CapabilitySet) (model.CapabilitySet, error) {
+	ctx, cancel := agentLifecycleStoreContext()
+	defer cancel()
 	now := time.Now().UTC()
 	subjectType := strings.TrimSpace(strings.ToLower(set.SubjectType))
 	subjectID := strings.TrimSpace(set.SubjectID)
@@ -30,7 +32,7 @@ func (s *PostgresStore) UpsertCapabilitySet(set model.CapabilitySet) (model.Capa
 	}
 
 	stored, _, err := scanCapabilitySet(s.pool.QueryRow(
-		context.Background(),
+		ctx,
 		`INSERT INTO canonical_capability_sets (
 			subject_type, subject_id, provider_instance_id, capabilities, updated_at
 		)
@@ -53,8 +55,17 @@ func (s *PostgresStore) UpsertCapabilitySet(set model.CapabilitySet) (model.Capa
 }
 
 func (s *PostgresStore) GetCapabilitySet(subjectType, subjectID string) (model.CapabilitySet, bool, error) {
+	ctx, cancel := agentLifecycleStoreContext()
+	defer cancel()
+	return s.GetCapabilitySetContext(ctx, subjectType, subjectID)
+}
+
+func (s *PostgresStore) GetCapabilitySetContext(ctx context.Context, subjectType, subjectID string) (model.CapabilitySet, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return model.CapabilitySet{}, false, err
+	}
 	set, _, err := scanCapabilitySet(s.pool.QueryRow(
-		context.Background(),
+		ctx,
 		`SELECT subject_type, subject_id, provider_instance_id, capabilities, updated_at
 		 FROM canonical_capability_sets
 		 WHERE subject_type = $1 AND subject_id = $2`,
@@ -137,6 +148,13 @@ func (s *PostgresStore) ReplaceCapabilitySets(providerInstanceID string, sets []
 }
 
 func (s *PostgresStore) ListCapabilitySets(limit int) ([]model.CapabilitySet, error) {
+	return s.ListCapabilitySetsContext(context.Background(), limit)
+}
+
+func (s *PostgresStore) ListCapabilitySetsContext(ctx context.Context, limit int) ([]model.CapabilitySet, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if limit <= 0 {
 		limit = 500
 	}
@@ -145,7 +163,7 @@ func (s *PostgresStore) ListCapabilitySets(limit int) ([]model.CapabilitySet, er
 	}
 
 	rows, err := s.pool.Query(
-		context.Background(),
+		ctx,
 		`SELECT subject_type, subject_id, provider_instance_id, capabilities, updated_at
 		 FROM canonical_capability_sets
 		 ORDER BY updated_at DESC
@@ -172,6 +190,8 @@ func (s *PostgresStore) ListCapabilitySets(limit int) ([]model.CapabilitySet, er
 }
 
 func (s *PostgresStore) UpsertTemplateBinding(binding model.TemplateBinding) (model.TemplateBinding, error) {
+	ctx, cancel := agentLifecycleStoreContext()
+	defer cancel()
 	resourceID := strings.TrimSpace(binding.ResourceID)
 	if resourceID == "" {
 		return model.TemplateBinding{}, ErrNotFound
@@ -191,7 +211,7 @@ func (s *PostgresStore) UpsertTemplateBinding(binding model.TemplateBinding) (mo
 	}
 
 	stored, err := scanTemplateBinding(s.pool.QueryRow(
-		context.Background(),
+		ctx,
 		`INSERT INTO canonical_template_bindings (
 			resource_id, template_id, tabs, operations, updated_at
 		)

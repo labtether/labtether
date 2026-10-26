@@ -130,7 +130,10 @@ func (d *Deps) HandleWebRTCStream(w http.ResponseWriter, r *http.Request, sessio
 		AgentConn:       agentConn,
 		ClosedCh:        make(chan struct{}),
 	}
-	d.registerWebRTCStream(bridge)
+	if !d.publishWebRTCStream(r.Context(), bridge) {
+		SafeWriteClose(browserWS, websocket.CloseTryAgainLater, "agent disconnected while opening desktop")
+		return
+	}
 	defer d.finalizeWebRTCStream(bridge)
 
 	width, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("width")))
@@ -145,11 +148,17 @@ func (d *Deps) HandleWebRTCStream(w http.ResponseWriter, r *http.Request, sessio
 		FPS:          fps,
 		AudioEnabled: strings.TrimSpace(r.URL.Query().Get("audio")) != "false",
 	})
-	if err := bridge.start(agentmgr.Message{
-		Type: agentmgr.MsgWebRTCStart,
-		ID:   bridge.WireSessionID,
-		Data: startData,
-	}); err != nil {
+	var startErr error
+	if !shared.RunIfSessionStreamOpen(r.Context(), func() {
+		startErr = bridge.start(agentmgr.Message{
+			Type: agentmgr.MsgWebRTCStart,
+			ID:   bridge.WireSessionID,
+			Data: startData,
+		})
+	}) {
+		return
+	}
+	if err := startErr; err != nil {
 		log.Printf("webrtc: failed to send start for session=%s: %v", session.ID, err)
 		return
 	}
@@ -268,7 +277,7 @@ func (d *Deps) ProcessAgentWebRTCStarted(conn *agentmgr.AgentConn, msg agentmgr.
 	if !ok {
 		return
 	}
-	if !bridge.MatchesConnection(conn) {
+	if !bridge.AcceptsAgentMessage(conn, started.SessionID) {
 		return
 	}
 	if bridge.SessionID != "" {
@@ -292,7 +301,7 @@ func (d *Deps) ProcessAgentWebRTCAnswer(conn *agentmgr.AgentConn, msg agentmgr.M
 	if !ok {
 		return
 	}
-	if !bridge.MatchesConnection(conn) {
+	if !bridge.AcceptsAgentMessage(conn, answer.SessionID) {
 		return
 	}
 	if bridge.SessionID != "" {
@@ -316,7 +325,7 @@ func (d *Deps) ProcessAgentWebRTCICE(conn *agentmgr.AgentConn, msg agentmgr.Mess
 	if !ok {
 		return
 	}
-	if !bridge.MatchesConnection(conn) {
+	if !bridge.AcceptsAgentMessage(conn, ice.SessionID) {
 		return
 	}
 	if bridge.SessionID != "" {
@@ -340,7 +349,7 @@ func (d *Deps) ProcessAgentWebRTCStopped(conn *agentmgr.AgentConn, msg agentmgr.
 	if !ok {
 		return
 	}
-	if !bridge.MatchesConnection(conn) {
+	if !bridge.AcceptsAgentMessage(conn, stopped.SessionID) {
 		return
 	}
 	if bridge.SessionID != "" {
@@ -355,4 +364,9 @@ func (d *Deps) ProcessAgentWebRTCStopped(conn *agentmgr.AgentConn, msg agentmgr.
 
 func (b *WebRTCSignalingBridge) MatchesConnection(conn *agentmgr.AgentConn) bool {
 	return b != nil && conn != nil && b.MatchesAgent(conn.AssetID) && (b.AgentConn == nil || b.AgentConn == conn)
+}
+
+// AcceptsAgentMessage binds replies to the stream's wire ID and socket owner.
+func (b *WebRTCSignalingBridge) AcceptsAgentMessage(conn *agentmgr.AgentConn, wireID string) bool {
+	return b.MatchesConnection(conn) && (b.WireSessionID == "" || b.WireSessionID == wireID)
 }

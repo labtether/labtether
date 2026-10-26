@@ -100,7 +100,10 @@ func (s *PostgresStore) GetGroupMaintenanceWindow(groupID, windowID string) (gro
 }
 
 func (s *PostgresStore) ListGroupMaintenanceWindows(groupID string, activeAt *time.Time, limit int) ([]groupmaintenance.MaintenanceWindow, error) {
-	ctx := context.Background()
+	return s.ListGroupMaintenanceWindowsContext(context.Background(), groupID, activeAt, limit)
+}
+
+func (s *PostgresStore) ListGroupMaintenanceWindowsContext(ctx context.Context, groupID string, activeAt *time.Time, limit int) ([]groupmaintenance.MaintenanceWindow, error) {
 	groupID = strings.TrimSpace(groupID)
 	if exists, err := s.groupExists(ctx, groupID); err != nil {
 		return nil, err

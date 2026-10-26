@@ -112,5 +112,9 @@ func postgresSchemaMigrations() []schemaMigration {
 		schemaMigrationScrubCollectorUrlUserinfo(),
 		schemaMigrationRemoteBookmarkSpiceTransportSecurity(),
 		schemaMigrationRemoteBookmarkVncTransportSecurity(),
+		schemaMigrationRemoteWriteRejectedPages(),
+		schemaMigrationPushDigestSuppressionIdentity(),
+		schemaMigrationAlertEvaluationTiming(),
+		schemaMigrationAlertFiringScope(),
 	}
 }

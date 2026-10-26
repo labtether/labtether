@@ -12,5 +12,18 @@
     "placeholder": "Saisir une note...",
     "emptyHint": "Ajoutez des notes d'investigation, l'analyse des causes et les mesures de mitigation.",
     "add": "Ajouter une note"
+  },
+  "timeline": {
+    "title": "Ce qui s’est passé",
+    "refresh": "Actualiser",
+    "empty": "Aucun événement n’a été enregistré pour cet incident.",
+    "loading": "Chargement de la chronologie…",
+    "error": "Impossible de charger la chronologie. Réessayez.",
+    "retry": "Réessayer",
+    "loadOlder": "Charger les événements précédents"
+  },
+  "detail": {
+    "error": "Impossible de charger cet incident. Réessayez.",
+    "retry": "Réessayer"
   }
 }

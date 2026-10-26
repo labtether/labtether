@@ -18,7 +18,7 @@ type Deps struct {
 	AgentMgr interface {
 		IsConnected(assetID string) bool
 	}
-	ExecuteViaAgent func(job terminal.CommandJob) terminal.CommandResult
+	ExecuteViaAgent func(ctx context.Context, job terminal.CommandJob) terminal.CommandResult
 	// ExecutePowerAction uses the dedicated typed agent power protocol. It must
 	// never be implemented through ExecuteViaAgent/raw shell.
 	ExecutePowerAction func(ctx context.Context, assetID, action string) (string, error)

@@ -144,7 +144,7 @@ func RegisterRoutes(handlers map[string]http.HandlerFunc, d *Deps) {
 // agent messages into the shared router.
 func RegisterWSHandlers(router map[string]func(*agentmgr.AgentConn, agentmgr.Message), d *Deps) {
 	router[agentmgr.MsgHeartbeat] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-		d.ProcessAgentHeartbeat(conn, msg)
+		d.ProcessAgentHeartbeatInLifecycle(conn, msg)
 	}
 	router[agentmgr.MsgTelemetry] = func(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 		d.ProcessAgentTelemetry(conn, msg)

@@ -67,10 +67,13 @@ func (d *Deps) HandleTrueNASSnapshots(ctx context.Context, w http.ResponseWriter
 				servicehttp.WriteError(w, http.StatusBadRequest, "dataset and name are required")
 				return
 			}
+			if !d.enforceMutation(w, asset, runtime, "snapshot.create", map[string]string{"dataset": body.Dataset}) {
+				return
+			}
 			var created map[string]any
 			params := []any{map[string]any{"dataset": body.Dataset, "name": body.Name}}
-			if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, "zfs.snapshot.create", params, &created); err != nil {
-				writeTrueNASError(w, http.StatusBadGateway, "failed to create snapshot", err)
+			if err := runtime.Client.CallMutation(ctx, "zfs.snapshot.create", params, &created); err != nil {
+				writeTrueNASMutationError(w, http.StatusBadGateway, "failed to create snapshot", err)
 				return
 			}
 			d.InvalidateTrueNASCaches(asset.ID, runtime.CollectorID)
@@ -101,8 +104,11 @@ func (d *Deps) HandleTrueNASSnapshots(ctx context.Context, w http.ResponseWriter
 		if !d.RequireAdminAuth(w, r) {
 			return
 		}
-		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, "zfs.snapshot.delete", []any{snapshotID}, nil); err != nil {
-			writeTrueNASError(w, http.StatusBadGateway, "failed to delete snapshot", err)
+		if !d.enforceMutation(w, asset, runtime, "snapshot.delete", map[string]string{"snapshot_id": snapshotID}) {
+			return
+		}
+		if err := runtime.Client.CallMutation(ctx, "zfs.snapshot.delete", []any{snapshotID}, nil); err != nil {
+			writeTrueNASMutationError(w, http.StatusBadGateway, "failed to delete snapshot", err)
 			return
 		}
 		d.InvalidateTrueNASCaches(asset.ID, runtime.CollectorID)
@@ -125,8 +131,11 @@ func (d *Deps) HandleTrueNASSnapshots(ctx context.Context, w http.ResponseWriter
 		if !d.RequireAdminAuth(w, r) {
 			return
 		}
-		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, "zfs.snapshot.rollback", []any{snapshotID}, nil); err != nil {
-			writeTrueNASError(w, http.StatusBadGateway, "failed to rollback snapshot", err)
+		if !d.enforceMutation(w, asset, runtime, "snapshot.rollback", map[string]string{"snapshot_id": snapshotID}) {
+			return
+		}
+		if err := runtime.Client.CallMutation(ctx, "zfs.snapshot.rollback", []any{snapshotID}, nil); err != nil {
+			writeTrueNASMutationError(w, http.StatusBadGateway, "failed to rollback snapshot", err)
 			return
 		}
 		d.InvalidateTrueNASCaches(asset.ID, runtime.CollectorID)
@@ -156,9 +165,12 @@ func (d *Deps) HandleTrueNASSnapshots(ctx context.Context, w http.ResponseWriter
 			servicehttp.WriteError(w, http.StatusBadRequest, "dataset_dst is required")
 			return
 		}
+		if !d.enforceMutation(w, asset, runtime, "snapshot.clone", map[string]string{"snapshot_id": snapshotID, "dataset_dst": body.DatasetDst}) {
+			return
+		}
 		params := []any{map[string]any{"snapshot": snapshotID, "dataset_dst": body.DatasetDst}}
-		if err := CallTrueNASMethodWithRetries(ctx, runtime.Client, "zfs.snapshot.clone", params, nil); err != nil {
-			writeTrueNASError(w, http.StatusBadGateway, "failed to clone snapshot", err)
+		if err := runtime.Client.CallMutation(ctx, "zfs.snapshot.clone", params, nil); err != nil {
+			writeTrueNASMutationError(w, http.StatusBadGateway, "failed to clone snapshot", err)
 			return
 		}
 		d.InvalidateTrueNASCaches(asset.ID, runtime.CollectorID)

@@ -352,7 +352,7 @@ func TestClientCloneAndResize(t *testing.T) {
 		t.Fatalf("NewClient failed: %v", err)
 	}
 
-	upid, err := client.CloneVM(context.Background(), "pve01", "100", "clone-test", 999)
+	upid, err := client.CloneVM(context.Background(), "pve01", "100", "clone-test", 999, "")
 	if err != nil {
 		t.Fatalf("CloneVM failed: %v", err)
 	}
@@ -360,7 +360,7 @@ func TestClientCloneAndResize(t *testing.T) {
 		t.Fatalf("unexpected upid: %s", upid)
 	}
 
-	upid, err = client.CloneCT(context.Background(), "pve01", "200", "clone-ct-test", 998)
+	upid, err = client.CloneCT(context.Background(), "pve01", "200", "clone-ct-test", 998, "")
 	if err != nil {
 		t.Fatalf("CloneCT failed: %v", err)
 	}

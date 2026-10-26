@@ -312,6 +312,7 @@ func TestInstallScriptDesktopPrereqsInstallIncludesGStreamerAndInputTools(t *tes
 		"xvfb",
 		"xterm",
 		"xdotool",
+		"x11-xserver-utils",
 		"gstreamer1.0-tools",
 		"gstreamer1.0-plugins-base",
 		"gstreamer1.0-plugins-good",

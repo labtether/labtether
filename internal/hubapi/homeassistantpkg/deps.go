@@ -3,6 +3,7 @@ package homeassistantpkg
 import (
 	"net/http"
 
+	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/secrets"
 )
@@ -16,5 +17,6 @@ type Deps struct {
 	CredentialStore   persistence.CredentialStore
 	SecretsManager    *secrets.Manager
 
-	RequireAdminAuth func(http.ResponseWriter, *http.Request) bool
+	RequireAdminAuth        func(http.ResponseWriter, *http.Request) bool
+	EvaluateAssetGuardrails maintenanceguard.EvaluateAssetFunc
 }

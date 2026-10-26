@@ -17,6 +17,7 @@ import (
 // buildDesktopDeps constructs the desktop.Deps from the apiServer's fields.
 func (s *apiServer) buildDesktopDeps() *desktoppkg.Deps {
 	return &desktoppkg.Deps{
+		SessionStreams:  &s.sessionStreams,
 		TerminalStore:   s.terminalStore,
 		AssetStore:      s.assetStore,
 		CredentialStore: s.credentialStore,

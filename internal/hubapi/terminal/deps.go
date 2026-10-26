@@ -13,6 +13,7 @@ import (
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/credentials"
 	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/jobqueue"
 	"github.com/labtether/labtether/internal/logs"
 	"github.com/labtether/labtether/internal/persistence"
@@ -26,6 +27,8 @@ import (
 // Store interfaces are embedded directly; cross-cutting concerns that live
 // in other cmd/labtether subsystems are injected as function fields.
 type Deps struct {
+	SessionStreams *shared.SessionStreamRegistry
+
 	// Store interfaces
 	TerminalStore           persistence.TerminalStore
 	TerminalPersistentStore persistence.TerminalPersistentSessionStore
@@ -68,6 +71,7 @@ type Deps struct {
 	// Used to evict a previous connection when the same persistent session
 	// is attached from a new browser tab or device.
 	ActivePersistentConns sync.Map
+	persistentStreamMu    sync.Mutex
 
 	// WebSocket upgrader for terminal streams.
 	TerminalWebSocketUpgrader websocket.Upgrader

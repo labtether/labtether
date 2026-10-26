@@ -13,6 +13,7 @@ import (
 	"github.com/labtether/labtether/internal/connectors/docker"
 	"github.com/labtether/labtether/internal/connectorsdk"
 	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
+	"github.com/labtether/labtether/internal/terminal"
 )
 
 // Deps holds all dependencies required by the docker handler package.
@@ -37,12 +38,13 @@ type Deps struct {
 	WrapAuth func(http.HandlerFunc) http.HandlerFunc
 
 	// Cross-cutting methods injected from cmd/labtether.
-	DecodeJSONBody             func(w http.ResponseWriter, r *http.Request, dst any) error
-	SanitizeUpstreamError      func(msg string) string
-	ParseTerminalSize          func(colsRaw, rowsRaw string) (int, int)
-	IsControlMessage           func(payload []byte) bool
-	StartBrowserWSKeepalive    func(wsConn *websocket.Conn, writeMu *sync.Mutex, streamLabel string) func()
-	TouchBrowserWSReadDeadline func(wsConn *websocket.Conn) error
+	DecodeJSONBody                func(w http.ResponseWriter, r *http.Request, dst any) error
+	SanitizeUpstreamError         func(msg string) string
+	ParseTerminalSize             func(colsRaw, rowsRaw string) (int, int)
+	IsControlMessage              func(payload []byte) bool
+	StartBrowserWSKeepalive       func(wsConn *websocket.Conn, writeMu *sync.Mutex, streamLabel string) func()
+	TouchBrowserWSReadDeadline    func(wsConn *websocket.Conn) error
+	ClaimPersistentTerminalStream func(terminal.Session, *websocket.Conn) (func(), func())
 
 	// Broadcaster callback for event dispatch.
 	Broadcast func(eventType string, data json.RawMessage)
@@ -129,6 +131,8 @@ func (b *DockerExecBridge) TrySendOutput(payload []byte) {
 	select {
 	case b.OutputCh <- payload:
 	default:
+		// Terminal output is an ordered byte stream. Dropping a chunk can
+		// corrupt UTF-8 or an escape sequence and silently change its meaning.
 		if len(payload) != 0 {
 			b.closeWithReason("container terminal output buffer overflow")
 		}

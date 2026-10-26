@@ -1,7 +1,6 @@
 package terminal
 
 import (
-	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -234,7 +233,7 @@ func (d *Deps) updatePersistentSession(w http.ResponseWriter, r *http.Request, p
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"persistent_session": updated})
 }
 
-func (d *Deps) attachPersistentSession(w http.ResponseWriter, r *http.Request, persistent terminal.PersistentSession) {
+func (d *Deps) attachPersistentSessionUnchecked(w http.ResponseWriter, r *http.Request, persistent terminal.PersistentSession) {
 	if !d.enforceAssetActionGuard(w, persistent.Target) {
 		return
 	}
@@ -302,53 +301,4 @@ func (d *Deps) requireConnectedAgentTmux(w http.ResponseWriter, target string) b
 		return false
 	}
 	return true
-}
-
-func (d *Deps) detachPersistentSession(w http.ResponseWriter, persistent terminal.PersistentSession) {
-	detached, err := d.TerminalPersistentStore.MarkPersistentSessionDetached(persistent.ID, time.Now().UTC())
-	if err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to detach persistent session")
-		return
-	}
-	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"persistent_session": detached})
-}
-
-func (d *Deps) deletePersistentSession(w http.ResponseWriter, persistent terminal.PersistentSession) {
-	if !d.enforceAssetActionGuard(w, persistent.Target) {
-		return
-	}
-	sessions, err := d.TerminalStore.ListSessions()
-	if err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load attached terminal sessions")
-		return
-	}
-	attachedSessions := make([]terminal.Session, 0, 1)
-	for _, session := range sessions {
-		if strings.TrimSpace(session.PersistentSessionID) == persistent.ID {
-			attachedSessions = append(attachedSessions, session)
-		}
-	}
-	if err := d.ClosePersistentTerminalAttachments(persistent, attachedSessions); err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, err.Error())
-		return
-	}
-	if err := d.TerminatePersistentTerminalRuntime(persistent); err != nil {
-		status := http.StatusBadGateway
-		if errors.Is(err, ErrPersistentTerminalCleanupUnavailable) {
-			status = http.StatusConflict
-		}
-		servicehttp.WriteError(w, status, err.Error())
-		return
-	}
-	for _, session := range attachedSessions {
-		if err := d.TerminalStore.DeleteTerminalSession(session.ID); err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to remove attached terminal sessions")
-			return
-		}
-	}
-	if err := d.TerminalPersistentStore.DeletePersistentSession(persistent.ID); err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete persistent session")
-		return
-	}
-	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "persistent_session_id": persistent.ID})
 }

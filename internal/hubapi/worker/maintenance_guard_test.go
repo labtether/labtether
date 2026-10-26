@@ -58,6 +58,7 @@ func TestTerminalWorkerRechecksMaintenanceBeforeExecution(t *testing.T) {
 			return terminal.CommandResult{Status: "succeeded", CompletedAt: time.Now().UTC()}
 		},
 	}
+	bindHandlerTestExecution(deps)
 	var processed atomic.Uint64
 	err = deps.HandleTerminalCommandJob(&processed)(context.Background(), &jobqueue.Job{Payload: payload})
 	if err != nil {
@@ -116,6 +117,7 @@ func TestActionWorkerRechecksMaintenanceBeforeExecution(t *testing.T) {
 			return actions.Result{Status: actions.StatusSucceeded, CompletedAt: time.Now().UTC()}
 		},
 	}
+	bindHandlerTestExecution(deps)
 	var processed atomic.Uint64
 	err = deps.HandleActionRunJob(&processed)(context.Background(), &jobqueue.Job{Payload: payload})
 	if err != nil {

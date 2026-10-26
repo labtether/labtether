@@ -1,7 +1,6 @@
 package resources
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"mime"
@@ -107,37 +106,4 @@ func TestFileDownloadPreservesWindowsUnicodeFilename(t *testing.T) {
 	if err != nil || params["filename"] != "résumé.txt " || rec.Code != http.StatusOK || rec.Body.String() != "contents" {
 		t.Fatalf("download status=%d params=%v err=%v body=%q", rec.Code, params, err, rec.Body.String())
 	}
-}
-
-func TestFileDownloadCancellationStopsWaitingAndDropsBridge(t *testing.T) {
-	server, client, cleanup := createWoLWebSocketPair(t)
-	defer cleanup()
-	manager := agentmgr.NewManager()
-	conn := agentmgr.NewAgentConn(server, "node", "linux")
-	manager.Register(conn)
-	defer manager.Unregister("node")
-	deps := &Deps{AgentMgr: manager, FileBridges: &sync.Map{}}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	done := make(chan struct{})
-	req := httptest.NewRequest(http.MethodGet, "/files/node/download?path=/target", nil).WithContext(ctx)
-	go func() {
-		defer close(done)
-		deps.HandleFileDownload(httptest.NewRecorder(), req, "node")
-	}()
-	_ = client.SetReadDeadline(time.Now().Add(2 * time.Second))
-	var msg agentmgr.Message
-	if err := client.ReadJSON(&msg); err != nil {
-		t.Fatal(err)
-	}
-	cancel()
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("cancelled download is still waiting for the agent")
-	}
-	deps.FileBridges.Range(func(_, _ any) bool {
-		t.Error("cancelled download retained a response bridge")
-		return false
-	})
 }

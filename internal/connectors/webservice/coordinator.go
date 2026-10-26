@@ -73,6 +73,10 @@ func NewCoordinator(store ...persistence.WebServiceStore) *Coordinator {
 // HandleReport processes a webservice.report message from an agent.
 // Each report fully replaces the previous service list for that host.
 func (c *Coordinator) HandleReport(agentID string, msg agentmgr.Message) {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
+		return
+	}
 	var data agentmgr.WebServiceReportData
 	if err := json.Unmarshal(msg.Data, &data); err != nil {
 		log.Printf("webservice-coordinator: invalid report from %s: %v", agentID, err)
@@ -81,12 +85,13 @@ func (c *Coordinator) HandleReport(agentID string, msg agentmgr.Message) {
 
 	enrichServicesFromRegistry(data.Services)
 
-	reportHostID := normalizeServiceHostID(data.HostAssetID, agentID)
 	now := c.now()
 	services := make([]agentmgr.DiscoveredWebService, 0, len(data.Services))
 	for _, raw := range data.Services {
 		svc := cloneDiscoveredService(raw)
-		svc.HostAssetID = normalizeServiceHostID(svc.HostAssetID, reportHostID)
+		// The caller supplies the authenticated socket owner. Payload host IDs
+		// must not select another asset's access scope or health-history key.
+		svc.HostAssetID = agentID
 		services = append(services, svc)
 	}
 
@@ -283,14 +288,4 @@ func (c *Coordinator) now() time.Time {
 		return time.Now()
 	}
 	return c.nowFn()
-}
-
-func normalizeServiceHostID(candidates ...string) string {
-	for _, candidate := range candidates {
-		trimmed := strings.TrimSpace(candidate)
-		if trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
 }

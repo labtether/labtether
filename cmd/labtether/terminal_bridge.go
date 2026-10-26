@@ -43,6 +43,7 @@ func (s *apiServer) buildTerminalDeps() *terminalpkg.Deps {
 		s.ephemeralSSHConfigs = terminalpkg.NewEphemeralSSHConfigStore(0)
 	}
 	d := &terminalpkg.Deps{
+		SessionStreams:          &s.sessionStreams,
 		TerminalStore:           s.terminalStore,
 		TerminalPersistentStore: s.terminalPersistentStore,
 		TerminalBookmarkStore:   s.terminalBookmarkStore,

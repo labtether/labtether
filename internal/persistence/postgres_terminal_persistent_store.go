@@ -160,7 +160,13 @@ func (s *PostgresStore) MarkAllAttachedAsDetached() error {
 }
 
 func (s *PostgresStore) GetPersistentSession(id string) (terminal.PersistentSession, bool, error) {
-	row := s.pool.QueryRow(context.Background(),
+	ctx, cancel := terminalStoreContext()
+	defer cancel()
+	return s.getPersistentSession(ctx, id)
+}
+
+func (s *PostgresStore) getPersistentSession(ctx context.Context, id string) (terminal.PersistentSession, bool, error) {
+	row := s.pool.QueryRow(ctx,
 		`SELECT id, actor_id, target, title, status, tmux_session_name, created_at, updated_at,
 		        last_attached_at, last_detached_at, bookmark_id, archived_at, archive_after_days, pinned
 		 FROM terminal_persistent_sessions WHERE id = $1`,
@@ -264,7 +270,9 @@ func (s *PostgresStore) UpdatePersistentSession(id string, req terminal.UpdatePe
 }
 
 func (s *PostgresStore) MarkPersistentSessionAttached(id string, attachedAt time.Time) (terminal.PersistentSession, error) {
-	_, err := s.pool.Exec(context.Background(),
+	ctx, cancel := terminalStoreContext()
+	defer cancel()
+	_, err := s.pool.Exec(ctx,
 		`UPDATE terminal_persistent_sessions
 		 SET status = 'attached', last_attached_at = $2, updated_at = $2
 		 WHERE id = $1`,
@@ -273,7 +281,7 @@ func (s *PostgresStore) MarkPersistentSessionAttached(id string, attachedAt time
 	if err != nil {
 		return terminal.PersistentSession{}, err
 	}
-	persistent, ok, err := s.GetPersistentSession(id)
+	persistent, ok, err := s.getPersistentSession(ctx, id)
 	if err != nil {
 		return terminal.PersistentSession{}, err
 	}
@@ -284,7 +292,9 @@ func (s *PostgresStore) MarkPersistentSessionAttached(id string, attachedAt time
 }
 
 func (s *PostgresStore) MarkPersistentSessionDetached(id string, detachedAt time.Time) (terminal.PersistentSession, error) {
-	_, err := s.pool.Exec(context.Background(),
+	ctx, cancel := terminalStoreContext()
+	defer cancel()
+	_, err := s.pool.Exec(ctx,
 		`UPDATE terminal_persistent_sessions
 		 SET status = 'detached', last_detached_at = $2, updated_at = $2
 		 WHERE id = $1`,
@@ -293,7 +303,7 @@ func (s *PostgresStore) MarkPersistentSessionDetached(id string, detachedAt time
 	if err != nil {
 		return terminal.PersistentSession{}, err
 	}
-	persistent, ok, err := s.GetPersistentSession(id)
+	persistent, ok, err := s.getPersistentSession(ctx, id)
 	if err != nil {
 		return terminal.PersistentSession{}, err
 	}
@@ -304,7 +314,9 @@ func (s *PostgresStore) MarkPersistentSessionDetached(id string, detachedAt time
 }
 
 func (s *PostgresStore) DeletePersistentSession(id string) error {
-	result, err := s.pool.Exec(context.Background(), `DELETE FROM terminal_persistent_sessions WHERE id = $1`, id)
+	ctx, cancel := terminalStoreContext()
+	defer cancel()
+	result, err := s.pool.Exec(ctx, `DELETE FROM terminal_persistent_sessions WHERE id = $1`, id)
 	if err != nil {
 		return err
 	}

@@ -183,7 +183,11 @@ func (s *PostgresStore) GetGroup(id string) (groups.Group, bool, error) {
 }
 
 func (s *PostgresStore) ListGroups() ([]groups.Group, error) {
-	rows, err := s.pool.Query(context.Background(),
+	return s.ListGroupsContext(context.Background())
+}
+
+func (s *PostgresStore) ListGroupsContext(ctx context.Context) ([]groups.Group, error) {
+	rows, err := s.pool.Query(ctx,
 		`SELECT `+groupColumns+` FROM groups ORDER BY sort_order, name`,
 	)
 	if err != nil {

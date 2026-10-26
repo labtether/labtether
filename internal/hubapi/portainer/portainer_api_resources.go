@@ -25,7 +25,7 @@ func (d *Deps) HandlePortainerImages(ctx context.Context, w http.ResponseWriter,
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if !d.requirePortainerEndpointAccess(w, r, strconv.Itoa(epID)) {
+	if !d.requirePortainerEndpointAccess(w, r, runtime.CollectorID, strconv.Itoa(epID)) {
 		return
 	}
 
@@ -71,6 +71,9 @@ func (d *Deps) HandlePortainerImages(ctx context.Context, w http.ResponseWriter,
 			servicehttp.WriteError(w, http.StatusBadRequest, "image name required")
 			return
 		}
+		if !d.enforcePortainerMutation(ctx, w, asset, runtime, epID, "", "") {
+			return
+		}
 		if err := runtime.Client.PullImage(ctx, epID, req.Image); err != nil {
 			servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
 			return
@@ -89,6 +92,9 @@ func (d *Deps) HandlePortainerImages(ctx context.Context, w http.ResponseWriter,
 		imageID := subAction
 		if imageID == "" {
 			servicehttp.WriteError(w, http.StatusBadRequest, "image id required")
+			return
+		}
+		if !d.enforcePortainerMutation(ctx, w, asset, runtime, epID, "", "") {
 			return
 		}
 		if err := runtime.Client.RemoveImage(ctx, epID, imageID); err != nil {
@@ -112,7 +118,7 @@ func (d *Deps) HandlePortainerVolumes(ctx context.Context, w http.ResponseWriter
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if !d.requirePortainerEndpointAccess(w, r, strconv.Itoa(epID)) {
+	if !d.requirePortainerEndpointAccess(w, r, runtime.CollectorID, strconv.Itoa(epID)) {
 		return
 	}
 
@@ -146,6 +152,9 @@ func (d *Deps) HandlePortainerVolumes(ctx context.Context, w http.ResponseWriter
 			if req.Driver == "" {
 				req.Driver = "local"
 			}
+			if !d.enforcePortainerMutation(ctx, w, asset, runtime, epID, "", "") {
+				return
+			}
 			result, err := runtime.Client.CreateVolume(ctx, epID, req.Name, req.Driver)
 			if err != nil {
 				servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
@@ -172,6 +181,9 @@ func (d *Deps) HandlePortainerVolumes(ctx context.Context, w http.ResponseWriter
 		servicehttp.WriteError(w, http.StatusBadRequest, "volume name required")
 		return
 	}
+	if !d.enforcePortainerMutation(ctx, w, asset, runtime, epID, "", "") {
+		return
+	}
 	if err := runtime.Client.RemoveVolume(ctx, epID, volumeName); err != nil {
 		servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
 		return
@@ -192,7 +204,7 @@ func (d *Deps) HandlePortainerNetworks(ctx context.Context, w http.ResponseWrite
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if !d.requirePortainerEndpointAccess(w, r, strconv.Itoa(epID)) {
+	if !d.requirePortainerEndpointAccess(w, r, runtime.CollectorID, strconv.Itoa(epID)) {
 		return
 	}
 
@@ -228,6 +240,9 @@ func (d *Deps) HandlePortainerNetworks(ctx context.Context, w http.ResponseWrite
 			if req.Driver == "" {
 				req.Driver = "bridge"
 			}
+			if !d.enforcePortainerMutation(ctx, w, asset, runtime, epID, "", "") {
+				return
+			}
 			result, err := runtime.Client.CreateNetwork(ctx, epID, req.Name, req.Driver, req.Subnet, req.Gateway)
 			if err != nil {
 				servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
@@ -252,6 +267,9 @@ func (d *Deps) HandlePortainerNetworks(ctx context.Context, w http.ResponseWrite
 	}
 	if networkID == "" {
 		servicehttp.WriteError(w, http.StatusBadRequest, "network id required")
+		return
+	}
+	if !d.enforcePortainerMutation(ctx, w, asset, runtime, epID, "", "") {
 		return
 	}
 	if err := runtime.Client.RemoveNetwork(ctx, epID, networkID); err != nil {

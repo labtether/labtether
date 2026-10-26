@@ -57,6 +57,7 @@ type Deps struct {
 	// 2FA challenge store + TOTP encryption key.
 	ChallengeStore    *auth.ChallengeStore
 	TOTPEncryptionKey []byte
+	challengeOnce     sync.Once
 
 	// OIDC state management (owned by this package after extraction).
 	OIDCStateMu sync.Mutex

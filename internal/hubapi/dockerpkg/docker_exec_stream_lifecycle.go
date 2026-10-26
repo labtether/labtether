@@ -1,13 +1,43 @@
 package dockerpkg
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"strings"
 
+	"github.com/gorilla/websocket"
+
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/hubapi/shared"
+	"github.com/labtether/labtether/internal/terminal"
 )
+
+// publishDockerExecStream registers the stream inside the logical-session
+// gate and the agent lifecycle, so DELETE or an agent replacement cannot miss
+// it. A browser that captured a replaced agent cannot claim the session.
+// Persistent activation can block, so it runs after the agent gate.
+func (d *Deps) publishDockerExecStream(ctx context.Context, bridge *DockerExecBridge, session terminal.Session, wsConn *websocket.Conn) (func(), bool) {
+	published := false
+	activate, detach := func() {}, func() {}
+	open := shared.RunIfSessionStreamOpen(ctx, func() {
+		published = d.AgentMgr.DispatchIfCurrent(bridge.AgentConn, func() {
+			d.registerDockerExecStream(bridge)
+			if d.ClaimPersistentTerminalStream != nil {
+				activate, detach = d.ClaimPersistentTerminalStream(session, wsConn)
+			}
+		})
+		if published {
+			activate()
+		}
+	})
+	if !open || !published {
+		bridge.Close("container host agent disconnected")
+		return func() {}, false
+	}
+	return detach, true
+}
 
 // Wire dispatch and public ownership are separate: an old handler may unwind
 // after its successor starts, but cannot delete or stop that successor.
@@ -101,7 +131,7 @@ func (d *Deps) ProcessAgentDockerExecStarted(conn *agentmgr.AgentConn, msg agent
 	}
 	if bridge, ok := d.DockerExecBridges.Load(data.SessionID); ok {
 		if b, ok := bridge.(*DockerExecBridge); ok {
-			if !b.MatchesConnection(conn) {
+			if !b.acceptsAgentMessage(conn, data.SessionID) {
 				return
 			}
 			b.TrySendOutput(nil)
@@ -121,7 +151,7 @@ func (d *Deps) ProcessAgentDockerExecData(conn *agentmgr.AgentConn, msg agentmgr
 	}
 	if bridge, ok := d.DockerExecBridges.Load(payload.SessionID); ok {
 		if b, ok := bridge.(*DockerExecBridge); ok {
-			if !b.MatchesConnection(conn) {
+			if !b.acceptsAgentMessage(conn, payload.SessionID) {
 				return
 			}
 			b.TrySendOutput(decoded)
@@ -137,7 +167,7 @@ func (d *Deps) ProcessAgentDockerExecClosed(conn *agentmgr.AgentConn, msg agentm
 	}
 	if bridge, ok := d.DockerExecBridges.Load(data.SessionID); ok {
 		if b, ok := bridge.(*DockerExecBridge); ok {
-			if !b.MatchesConnection(conn) {
+			if !b.acceptsAgentMessage(conn, data.SessionID) {
 				return
 			}
 			b.Close(data.Reason)
@@ -161,4 +191,45 @@ func (d *Deps) CloseDockerExecBridgesForAsset(assetID string) {
 		}
 		return true
 	})
+}
+
+// acceptsAgentMessage binds replies to the stream's wire ID and socket owner.
+func (b *DockerExecBridge) acceptsAgentMessage(conn *agentmgr.AgentConn, wireID string) bool {
+	return b != nil && b.MatchesConnection(conn) && (b.WireSessionID == "" || b.WireSessionID == wireID)
+}
+
+// Browser event consumers use the logical Hub session ID. The wire ID belongs
+// only to this socket instance and must not replace that public correlation ID.
+func (d *Deps) broadcastDockerExecMessage(conn *agentmgr.AgentConn, msg agentmgr.Message) {
+	if d.Broadcast == nil || d.DockerExecBridges == nil {
+		return
+	}
+	var payload map[string]json.RawMessage
+	if json.Unmarshal(msg.Data, &payload) != nil {
+		return
+	}
+	var wireID string
+	if json.Unmarshal(payload["session_id"], &wireID) != nil {
+		return
+	}
+	raw, ok := d.DockerExecBridges.Load(wireID)
+	bridge, valid := raw.(*DockerExecBridge)
+	if !ok || !valid || !bridge.acceptsAgentMessage(conn, wireID) {
+		return
+	}
+	// Serialize public event publication with logical-owner replacement.
+	d.dockerExecOwnerMu.Lock()
+	defer d.dockerExecOwnerMu.Unlock()
+	if bridge.SessionID != "" {
+		// Superseded streams can still finish their private teardown. They cannot
+		// send public lifecycle events that appear to belong to the replacement.
+		if current, exists := d.dockerExecOwners.Load(bridge.SessionID); !exists || current != bridge {
+			return
+		}
+		payload["session_id"], _ = json.Marshal(bridge.SessionID)
+	}
+	data, err := json.Marshal(payload)
+	if err == nil {
+		d.Broadcast(msg.Type, data)
+	}
 }

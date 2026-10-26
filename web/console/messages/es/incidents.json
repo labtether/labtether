@@ -12,5 +12,18 @@
     "placeholder": "Escribir una nota...",
     "emptyHint": "Agregue notas de investigación, análisis de causa raíz y pasos de mitigación.",
     "add": "Agregar nota"
+  },
+  "timeline": {
+    "title": "Qué sucedió",
+    "refresh": "Actualizar",
+    "empty": "No se han registrado eventos para este incidente.",
+    "loading": "Cargando cronología…",
+    "error": "No se pudo cargar la cronología. Inténtelo de nuevo.",
+    "retry": "Reintentar",
+    "loadOlder": "Cargar anteriores"
+  },
+  "detail": {
+    "error": "No se pudo cargar este incidente. Inténtelo de nuevo.",
+    "retry": "Reintentar"
   }
 }

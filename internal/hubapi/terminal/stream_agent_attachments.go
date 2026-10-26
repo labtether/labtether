@@ -1,26 +1,47 @@
 package terminal
 
 import (
+	"context"
 	"errors"
 	"strings"
-	"time"
 
 	"github.com/gorilla/websocket"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
+// publishAgentTerminalStream registers the stream inside the logical-session
+// gate and the agent lifecycle, so neither DELETE nor an agent replacement can
+// miss it. Persistence and closing the previous browser happen after the
+// agent gate, because both can block.
+func (d *Deps) publishAgentTerminalStream(ctx context.Context, bridge *TerminalBridge, persistentID string, wsConn *websocket.Conn) bool {
+	published := false
+	var previous *websocket.Conn
+	open := shared.RunIfSessionStreamOpen(ctx, func() {
+		published = d.AgentMgr.DispatchIfCurrent(bridge.AgentConn, func() {
+			previous = d.registerAgentTerminalStream(bridge, persistentID, wsConn)
+		})
+		if published && persistentID != "" {
+			d.markPersistentTerminalStreamAttached(persistentID, wsConn)
+		}
+	})
+	closePersistentBrowser(previous)
+	return open && published
+}
+
 // Register both owners together so concurrent reconnects cannot publish the
 // public bridge in one order and the persistent browser socket in another.
-func (d *Deps) registerAgentTerminalStream(bridge *TerminalBridge, persistentID string, wsConn *websocket.Conn) {
+// It returns the replaced persistent browser for the caller to close.
+func (d *Deps) registerAgentTerminalStream(bridge *TerminalBridge, persistentID string, wsConn *websocket.Conn) *websocket.Conn {
 	d.agentStreamMu.Lock()
 	if d.AgentMgr != nil {
 		current, connected := d.AgentMgr.Get(bridge.ExpectedAgentID)
 		if !connected || current != bridge.AgentConn {
 			d.agentStreamMu.Unlock()
 			bridge.CloseWithReason("agent_disconnected")
-			return
+			return nil
 		}
 	}
 	if persistentID != "" {
@@ -38,12 +59,10 @@ func (d *Deps) registerAgentTerminalStream(bridge *TerminalBridge, persistentID 
 		previousSocket, _ = d.ActivePersistentConns.Swap(persistentID, wsConn)
 	}
 	d.agentStreamMu.Unlock()
-	if previousConn, ok := previousSocket.(*websocket.Conn); ok {
-		_ = previousConn.WriteControl(websocket.CloseMessage,
-			websocket.FormatCloseMessage(websocket.CloseNormalClosure, "session attached elsewhere"),
-			time.Now().Add(2*time.Second))
-		_ = previousConn.Close()
+	if previousConn, ok := previousSocket.(*websocket.Conn); ok && previousConn != wsConn {
+		return previousConn
 	}
+	return nil
 }
 
 // The caller owns agentStreamMu. Close old writers before publishing an agent

@@ -1,10 +1,39 @@
 package desktop
 
 import (
+	"context"
 	"errors"
 
 	"github.com/labtether/labtether/internal/agentmgr"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 )
+
+// publishDesktopStream registers inside the logical-session gate and the agent
+// lifecycle, so DELETE or an agent replacement cannot miss the new stream.
+func (d *Deps) publishDesktopStream(ctx context.Context, bridge *DesktopBridge) bool {
+	return d.publishDesktopOwner(ctx, bridge.AgentConn, func() { d.registerDesktopStream(bridge) }, bridge.Close)
+}
+
+func (d *Deps) publishWebRTCStream(ctx context.Context, bridge *WebRTCSignalingBridge) bool {
+	return d.publishDesktopOwner(ctx, bridge.AgentConn, func() { d.registerWebRTCStream(bridge) }, bridge.Close)
+}
+
+func (d *Deps) publishDesktopOwner(ctx context.Context, conn *agentmgr.AgentConn, register func(), closeStream func()) bool {
+	published := false
+	open := shared.RunIfSessionStreamOpen(ctx, func() {
+		if d.AgentMgr == nil {
+			register()
+			published = true
+			return
+		}
+		published = d.AgentMgr.DispatchIfCurrent(conn, register)
+	})
+	if !open || !published {
+		closeStream()
+		return false
+	}
+	return true
+}
 
 // Registration pairs public ownership with wire dispatch. Replaced streams can
 // unwind later, but cannot delete, stop, or receive frames for their successor.

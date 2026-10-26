@@ -351,7 +351,6 @@ func TestHandleDesktopSessionActionsDeleteCleansUpSessionState(t *testing.T) {
 	})
 	desktopBridge := &desktopBridge{
 		OutputCh:  make(chan []byte, 1),
-		AudioCh:   make(chan desktopAudioOutbound, 1),
 		ClosedCh:  make(chan struct{}),
 		SessionID: created.ID,
 		Target:    "desktop-node-cleanup",

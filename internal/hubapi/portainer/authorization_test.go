@@ -44,9 +44,9 @@ func TestPortainerExecRequiresConnectorWriteScope(t *testing.T) {
 func TestRestrictedPortainerChildResourcesAreIndependentlyAuthorized(t *testing.T) {
 	store := persistence.NewMemoryAssetStore()
 	for _, req := range []assets.HeartbeatRequest{
-		{AssetID: "host-a", Type: "container-host", Name: "host", Source: "portainer", Metadata: map[string]string{"endpoint_id": "1"}},
-		{AssetID: "container-a", Type: "container", Name: "allowed", Source: "portainer", Metadata: map[string]string{"endpoint_id": "1", "container_id": "container-id-a"}},
-		{AssetID: "container-b", Type: "container", Name: "secret", Source: "portainer", Metadata: map[string]string{"endpoint_id": "1", "container_id": "container-id-b"}},
+		{AssetID: "host-a", Type: "container-host", Name: "host", Source: "portainer", Metadata: map[string]string{"collector_id": "collector-a", "endpoint_id": "1"}},
+		{AssetID: "container-a", Type: "container", Name: "allowed", Source: "portainer", Metadata: map[string]string{"collector_id": "collector-a", "endpoint_id": "1", "container_id": "container-id-a"}},
+		{AssetID: "container-b", Type: "container", Name: "secret", Source: "portainer", Metadata: map[string]string{"collector_id": "collector-a", "endpoint_id": "1", "container_id": "container-id-b"}},
 	} {
 		if _, err := store.UpsertAssetHeartbeat(req); err != nil {
 			t.Fatal(err)
@@ -55,13 +55,13 @@ func TestRestrictedPortainerChildResourcesAreIndependentlyAuthorized(t *testing.
 	d := &Deps{AssetStore: store}
 	ctx := apiv2.ContextWithAllowedAssets(context.Background(), []string{"host-a", "container-a"})
 
-	if allowed, err := d.portainerResourceAllowed(ctx, "1", "container_id", "container-id-a"); err != nil || !allowed {
+	if allowed, err := d.portainerResourceAllowed(ctx, "collector-a", "1", "container_id", "container-id-a"); err != nil || !allowed {
 		t.Fatalf("expected allowed child resource: allowed=%v err=%v", allowed, err)
 	}
-	if allowed, err := d.portainerResourceAllowed(ctx, "1", "container_id", "container-id-b"); err != nil || allowed {
+	if allowed, err := d.portainerResourceAllowed(ctx, "collector-a", "1", "container_id", "container-id-b"); err != nil || allowed {
 		t.Fatalf("expected secret child resource to be denied: allowed=%v err=%v", allowed, err)
 	}
-	if allowed, err := d.portainerEndpointAllowed(ctx, "1"); err != nil || allowed {
+	if allowed, err := d.portainerEndpointAllowed(ctx, "collector-a", "1"); err != nil || allowed {
 		t.Fatalf("expected mixed endpoint-wide operations to be denied: allowed=%v err=%v", allowed, err)
 	}
 }

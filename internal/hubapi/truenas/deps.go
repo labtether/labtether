@@ -8,6 +8,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	tnconnector "github.com/labtether/labtether/internal/connectors/truenas"
+	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
 	"github.com/labtether/labtether/internal/hubcollector"
 	"github.com/labtether/labtether/internal/logs"
 	"github.com/labtether/labtether/internal/persistence"
@@ -39,7 +40,8 @@ type Deps struct {
 	TruenasSubs  map[string]TruenasSubscriptionHandle
 
 	// Auth middleware injected from cmd/labtether.
-	RequireAdminAuth func(w http.ResponseWriter, r *http.Request) bool
+	RequireAdminAuth            func(w http.ResponseWriter, r *http.Request) bool
+	EvaluateConnectorGuardrails maintenanceguard.EvaluateConnectorFunc
 
 	// WrapAuth / WrapAdmin for route registration.
 	WrapAuth  func(http.HandlerFunc) http.HandlerFunc
