@@ -220,13 +220,24 @@ func secureOutboundHTTPClientWithAddressPolicy(base *http.Client, scheme string,
 }
 
 func secureOutboundRoundTripper(base http.RoundTripper, scheme string, addressPolicy *OutboundAddressPolicy) http.RoundTripper {
-	var transport *http.Transport
-	if t, ok := base.(*http.Transport); ok && t != nil {
-		transport = t.Clone()
-	} else if base == nil {
-		transport = http.DefaultTransport.(*http.Transport).Clone()
-	} else {
+	var baseTransport *http.Transport
+	if t, ok := base.(*http.Transport); ok {
+		baseTransport = t
+	} else if base != nil {
 		return outboundValidatingRoundTripper{base: base}
+	}
+	return outboundValidatingRoundTripper{base: cachedSecureOutboundTransport(baseTransport, scheme, addressPolicy)}
+}
+
+// newSecureOutboundTransport derives a transport whose dialer re-reads the
+// outbound policy and validates every resolved address immediately before
+// connecting. Proxies and custom TLS dialers are removed so nothing bypasses it.
+func newSecureOutboundTransport(base *http.Transport, scheme string, addressPolicy *OutboundAddressPolicy) *http.Transport {
+	var transport *http.Transport
+	if base != nil {
+		transport = base.Clone()
+	} else {
+		transport = http.DefaultTransport.(*http.Transport).Clone()
 	}
 	transport.Proxy = nil
 	transport.DialTLSContext = nil
@@ -241,7 +252,7 @@ func secureOutboundRoundTripper(base http.RoundTripper, scheme string, addressPo
 		}
 		return dialOutboundValidated(ctx, network, address, allowLoopback, allowPrivate, allowLinkLocal, addressPolicy != nil)
 	}
-	return outboundValidatingRoundTripper{base: transport}
+	return transport
 }
 
 type outboundValidatingRoundTripper struct {
