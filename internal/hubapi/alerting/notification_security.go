@@ -23,6 +23,7 @@ type notificationConfigCASStore interface {
 func (d *Deps) createSecureNotificationChannel(req notifications.CreateChannelRequest) (notifications.Channel, error) {
 	channelID := idgen.New("nch")
 	channelType := notifications.NormalizeChannelType(req.Type)
+	req.Config = normalizeAPNsChannelConfig(channelType, req.Config)
 	if err := ValidateNotificationChannelConfig(channelType, req.Config); err != nil {
 		return notifications.Channel{}, invalidNotificationChannel(err)
 	}
@@ -56,7 +57,7 @@ func (d *Deps) updateSecureNotificationChannel(id string, req notifications.Upda
 			return notifications.Channel{}, decryptErr
 		}
 		if req.Config != nil {
-			merged := mergePreservedNotificationSecrets(raw.Type, plainConfig, *req.Config)
+			merged := normalizeAPNsChannelConfig(raw.Type, mergePreservedNotificationSecrets(raw.Type, plainConfig, *req.Config))
 			if validationErr := ValidateNotificationChannelConfig(raw.Type, merged); validationErr != nil {
 				return notifications.Channel{}, invalidNotificationChannel(validationErr)
 			}

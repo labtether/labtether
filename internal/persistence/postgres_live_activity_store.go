@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/labtether/labtether/internal/notifications"
 )
 
 const (
@@ -22,15 +23,18 @@ var ErrLiveActivityRegistrationLimit = errors.New("live activity registration li
 // activity. TokenCiphertext is encrypted before it reaches persistence; the
 // hash supports ownership-safe deduplication without exposing the APNs token.
 type LiveActivityPushToken struct {
-	ID                             string
-	UserID                         string
-	DeviceID                       string
-	ActivityID                     string
-	IncidentID                     string
-	TokenCiphertext                string
-	TokenHash                      string
-	BundleID                       string
-	Environment                    string
+	ID              string
+	UserID          string
+	DeviceID        string
+	ActivityID      string
+	IncidentID      string
+	TokenCiphertext string
+	TokenHash       string
+	BundleID        string
+	Environment     string
+	// Transport is "direct" (ActivityKit hex token) or "relay" (LabTether push
+	// relay registration id). The encrypted value is never case-normalized.
+	Transport                      string
 	ShowFullDetails                bool
 	RetryCount                     int
 	DeliveryGeneration             int64
@@ -91,9 +95,9 @@ func (s *PostgresStore) UpsertLiveActivityPushToken(ctx context.Context, token L
 			id, user_id, device_id, activity_id, incident_id,
 			token_ciphertext, token_hash, bundle_id, environment,
 			show_full_details, retry_count, next_retry_at, pending_state_ciphertext, expires_at,
-			created_at, updated_at
+			push_transport, created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0, NULL, '', $11, NOW(), NOW())
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0, NULL, '', $11, $12, NOW(), NOW())
 	`,
 		token.ID,
 		token.UserID,
@@ -106,6 +110,7 @@ func (s *PostgresStore) UpsertLiveActivityPushToken(ctx context.Context, token L
 		token.Environment,
 		token.ShowFullDetails,
 		token.ExpiresAt,
+		notifications.NormalizeAPNsTransport(token.Transport),
 	)
 	if err != nil {
 		return err
@@ -343,7 +348,7 @@ const liveActivityPushTokenSelectSQL = `SELECT
 	token_ciphertext, token_hash, bundle_id, environment,
 	show_full_details, retry_count, delivery_generation, next_retry_at, pending_state_ciphertext,
 	last_delivered_incident_updated_at, expires_at,
-	created_at, updated_at
+	push_transport, created_at, updated_at
 FROM live_activity_push_tokens`
 
 type liveActivityPushTokenRows interface {
@@ -373,6 +378,7 @@ func scanLiveActivityPushTokens(rows liveActivityPushTokenRows) ([]LiveActivityP
 			&token.PendingStateCiphertext,
 			&token.LastDeliveredIncidentUpdatedAt,
 			&token.ExpiresAt,
+			&token.Transport,
 			&token.CreatedAt,
 			&token.UpdatedAt,
 		); err != nil {

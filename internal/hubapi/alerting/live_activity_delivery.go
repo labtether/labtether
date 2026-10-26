@@ -283,7 +283,7 @@ func (d *Deps) deliverLiveActivityRegistration(
 	registration.RetryCount = retryCount
 	registration.PendingStateCiphertext = pendingState
 
-	channelConfig := channels[liveActivityChannelKey(registration.BundleID, registration.Environment)]
+	channelConfig := channels[liveActivityChannelKey(registration.Transport, registration.BundleID, registration.Environment)]
 	if sender == nil || channelConfig == nil {
 		d.scheduleLiveActivityRetry(registration, now)
 		return
@@ -292,7 +292,7 @@ func (d *Deps) deliverLiveActivityRegistration(
 		registration.TokenCiphertext,
 		liveActivityTokenAAD(registration.ID),
 	)
-	if err != nil || !notifications.ValidLiveActivityPushToken(plaintext) || !liveActivityTokenHashMatches(plaintext, registration.TokenHash) {
+	if err != nil || !validLiveActivityCredential(registration.Transport, plaintext) || !liveActivityTokenHashMatches(plaintext, registration.TokenHash) {
 		// Corrupt, swapped, or undecryptable credentials fail closed and are
 		// removed rather than producing a token oracle through repeated sends.
 		storeCtx, cancel := liveActivityStoreWriteContext()
@@ -387,6 +387,18 @@ func (d *Deps) liveActivityChannels() (map[string]map[string]any, liveActivityAP
 		if loadErr != nil || !found || !channel.Enabled || notifications.NormalizeChannelType(channel.Type) != notifications.ChannelTypeAPNs {
 			continue
 		}
+		if apnsChannelUsesRelay(channel.Config) {
+			// The relay picks the APNs host from each registration's own
+			// environment, so one relay channel serves both.
+			routing := apnsRoutingForChannel(channel.Config)
+			for _, environment := range []string{"sandbox", "production"} {
+				key := liveActivityChannelKey(notifications.APNsTransportRelay, notifications.OfficialAppBundleID, environment)
+				if _, alreadySelected := result[key]; !alreadySelected {
+					result[key] = routing.deliveryConfig(channel.Config)
+				}
+			}
+			continue
+		}
 		bundleID, _ := channel.Config["bundle_id"].(string)
 		authKeyPath, _ := channel.Config["auth_key_path"].(string)
 		keyID, _ := channel.Config["key_id"].(string)
@@ -399,10 +411,19 @@ func (d *Deps) liveActivityChannels() (map[string]map[string]any, liveActivityAP
 		if production, _ := channel.Config["production"].(bool); production {
 			environment = "production"
 		}
-		key := liveActivityChannelKey(bundleID, environment)
+		key := liveActivityChannelKey(notifications.APNsTransportDirect, bundleID, environment)
 		if _, alreadySelected := result[key]; !alreadySelected {
-			result[key] = cloneAnyMap(channel.Config)
+			result[key] = apnsRoutingForChannel(channel.Config).deliveryConfig(channel.Config)
 		}
 	}
 	return result, sender
+}
+
+// validLiveActivityCredential checks the decrypted value against its
+// transport: a hex ActivityKit token or a case-sensitive relay id.
+func validLiveActivityCredential(transport, credential string) bool {
+	if notifications.NormalizeAPNsTransport(transport) == notifications.APNsTransportRelay {
+		return notifications.ValidRelayRegistrationID(credential)
+	}
+	return notifications.ValidLiveActivityPushToken(credential)
 }

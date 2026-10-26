@@ -15,14 +15,17 @@ type apnsFanoutStoreStub struct {
 	devices []persistence.PushDevice
 	err     error
 	deleted [][3]string
+	// deletedTransports is parallel to deleted.
+	deletedTransports []string
 }
 
 func (s *apnsFanoutStoreStub) GetAllPushTokens(context.Context) ([]persistence.PushDevice, error) {
 	return append([]persistence.PushDevice(nil), s.devices...), s.err
 }
 
-func (s *apnsFanoutStoreStub) DeletePushDeviceByToken(_ context.Context, token, bundleID, environment string) error {
+func (s *apnsFanoutStoreStub) DeletePushDeviceByToken(_ context.Context, token, bundleID, environment, transport string) error {
 	s.deleted = append(s.deleted, [3]string{token, bundleID, environment})
+	s.deletedTransports = append(s.deletedTransports, transport)
 	return nil
 }
 

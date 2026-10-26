@@ -48,7 +48,7 @@ func (s *incidentPushDeviceStoreStub) GetAllPushTokens(context.Context) ([]persi
 	return append([]persistence.PushDevice(nil), s.devices...), nil
 }
 
-func (s *incidentPushDeviceStoreStub) DeletePushDeviceByToken(context.Context, string, string, string) error {
+func (s *incidentPushDeviceStoreStub) DeletePushDeviceByToken(context.Context, string, string, string, string) error {
 	return nil
 }
 

@@ -18,12 +18,23 @@ import (
 
 const liveActivityRegistrationLifetime = 12 * time.Hour
 
+// registerLiveActivityRequest carries exactly one credential: push_token (a
+// hex ActivityKit token, for Hubs with their own APNs key) or
+// relay_registration_id (from the LabTether push relay, case-sensitive).
 type registerLiveActivityRequest struct {
-	DeviceID        string `json:"device_id"`
-	PushToken       string `json:"push_token"`
-	BundleID        string `json:"bundle_id"`
-	Environment     string `json:"environment"`
-	ShowFullDetails bool   `json:"show_full_details"`
+	DeviceID            string `json:"device_id"`
+	PushToken           string `json:"push_token"`
+	RelayRegistrationID string `json:"relay_registration_id"`
+	BundleID            string `json:"bundle_id"`
+	Environment         string `json:"environment"`
+	ShowFullDetails     bool   `json:"show_full_details"`
+}
+
+func (r registerLiveActivityRequest) credential() (value, transport string) {
+	if r.RelayRegistrationID != "" {
+		return r.RelayRegistrationID, notifications.APNsTransportRelay
+	}
+	return r.PushToken, notifications.APNsTransportDirect
 }
 
 // HandleIncidentLiveActivityTokens owns the authenticated registration
@@ -130,15 +141,16 @@ func (d *Deps) HandleIncidentLiveActivityTokens(w http.ResponseWriter, r *http.R
 		}
 
 		recordID := idgen.New("lat")
+		credential, transport := request.credential()
 		ciphertext, encryptErr := d.NotificationSecrets.EncryptString(
-			request.PushToken,
+			credential,
 			liveActivityTokenAAD(recordID),
 		)
 		if encryptErr != nil {
 			servicehttp.WriteError(w, http.StatusServiceUnavailable, "live activity token encryption unavailable")
 			return
 		}
-		hash := sha256.Sum256([]byte(request.PushToken))
+		hash := sha256.Sum256([]byte(credential))
 		expiresAt := time.Now().UTC().Add(liveActivityRegistrationLifetime)
 		if err := d.LiveActivityStore.UpsertLiveActivityPushToken(r.Context(), persistence.LiveActivityPushToken{
 			ID:              recordID,
@@ -150,6 +162,7 @@ func (d *Deps) HandleIncidentLiveActivityTokens(w http.ResponseWriter, r *http.R
 			TokenHash:       hex.EncodeToString(hash[:]),
 			BundleID:        request.BundleID,
 			Environment:     request.Environment,
+			Transport:       transport,
 			ShowFullDetails: request.ShowFullDetails,
 			ExpiresAt:       expiresAt,
 		}); errors.Is(err, persistence.ErrLiveActivityRegistrationLimit) {
@@ -172,6 +185,7 @@ func (d *Deps) HandleIncidentLiveActivityTokens(w http.ResponseWriter, r *http.R
 			"activity_id":     activityID,
 			"incident_id":     incidentID,
 			"expires_at":      expiresAt,
+			"push_transport":  transport,
 		})
 
 	default:
@@ -196,7 +210,12 @@ func parseLiveActivityTokenPath(path string) (incidentID, activityID string, ok 
 func normalizeLiveActivityRegistration(request *registerLiveActivityRequest) {
 	request.DeviceID = strings.TrimSpace(request.DeviceID)
 	request.PushToken = strings.ToLower(strings.TrimSpace(request.PushToken))
+	// Relay ids are case-sensitive bearer secrets: trim, never change case.
+	request.RelayRegistrationID = strings.TrimSpace(request.RelayRegistrationID)
 	request.BundleID = strings.TrimSpace(request.BundleID)
+	if request.RelayRegistrationID != "" && request.BundleID == "" {
+		request.BundleID = notifications.OfficialAppBundleID
+	}
 	request.Environment = strings.ToLower(strings.TrimSpace(request.Environment))
 }
 
@@ -204,7 +223,17 @@ func validateLiveActivityRegistration(request registerLiveActivityRequest) strin
 	if !boundedLiveActivityIdentifier(request.DeviceID, 128) {
 		return "device_id is required and must be valid"
 	}
-	if !notifications.ValidLiveActivityPushToken(request.PushToken) {
+	switch {
+	case request.PushToken != "" && request.RelayRegistrationID != "":
+		return "send either push_token or relay_registration_id, not both"
+	case request.RelayRegistrationID != "":
+		if !notifications.ValidRelayRegistrationID(request.RelayRegistrationID) {
+			return "relay_registration_id must be a 43-character push relay registration id"
+		}
+		if request.BundleID != notifications.OfficialAppBundleID {
+			return "relay registrations are only accepted for " + notifications.OfficialAppBundleID
+		}
+	case !notifications.ValidLiveActivityPushToken(request.PushToken):
 		return "push_token must be a bounded hexadecimal ActivityKit token"
 	}
 	if !validLiveActivityBundleID(request.BundleID) {

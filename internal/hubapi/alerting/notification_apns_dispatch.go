@@ -33,8 +33,7 @@ func (d *Deps) sendAPNsNotification(
 		return fmt.Errorf("load registered APNs devices: %w", err)
 	}
 
-	defaultBundleID := configString(baseConfig, "bundle_id")
-	allowedBundleIDs := allowedAPNsBundleIDs(baseConfig, defaultBundleID)
+	routing := apnsRoutingForChannel(baseConfig)
 	defaultEnvironment := "sandbox"
 	if production, _ := baseConfig["production"].(bool); production {
 		defaultEnvironment = "production"
@@ -58,6 +57,12 @@ func (d *Deps) sendAPNsNotification(
 		if !isApplePushPlatform(device.Platform) || strings.TrimSpace(device.PushToken) == "" {
 			continue
 		}
+		// Checked before the digest branch: a digest queued for the wrong
+		// transport would later send a relay id to Apple or a raw token to the
+		// relay, and the rejection cleanup would delete a valid registration.
+		if !routing.accepts(device) {
+			continue
+		}
 		// Quiet hours defer a durable digest; they must not discard the event
 		// before it reaches the queue. All other current preferences are still
 		// enforced at enqueue time and are rechecked again before APNs delivery.
@@ -69,8 +74,8 @@ func (d *Deps) sendAPNsNotification(
 			continue
 		}
 
-		bundleID := firstNonBlank(device.BundleID, defaultBundleID)
-		if _, allowed := allowedBundleIDs[bundleID]; bundleID == "" || !allowed {
+		bundleID := routing.bundleFor(device)
+		if bundleID == "" {
 			continue
 		}
 		environment := strings.ToLower(strings.TrimSpace(device.Environment))
@@ -164,7 +169,7 @@ func (d *Deps) sendAPNsNotification(
 	}
 	for _, group := range groups {
 		fanoutErr.totalTargets += len(group.targets)
-		config := cloneAnyMap(baseConfig)
+		config := routing.deliveryConfig(baseConfig)
 		config["bundle_id"] = group.bundleID
 		config["production"] = group.environment == "production"
 		config["device_tokens"] = group.tokens()
@@ -178,6 +183,7 @@ func (d *Deps) sendAPNsNotification(
 					token,
 					group.bundleID,
 					group.environment,
+					routing.transport,
 				)
 			}),
 		)

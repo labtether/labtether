@@ -237,9 +237,12 @@ func (d *Deps) processPushDigestClaim(ctx context.Context, store pushDigestStore
 		finish()
 		return
 	}
-	bundleID := firstNonBlank(claim.Device.BundleID, configString(channel.Config, "bundle_id"))
-	allowedBundleIDs := allowedAPNsBundleIDs(channel.Config, configString(channel.Config, "bundle_id"))
-	if _, allowed := allowedBundleIDs[bundleID]; bundleID == "" || !allowed {
+	// A device whose transport no longer matches the claim's channel (for
+	// example after re-registering through the relay) completes the claim
+	// instead of sending a credential the channel cannot deliver.
+	routing := apnsRoutingForChannel(channel.Config)
+	bundleID := routing.bundleFor(claim.Device)
+	if bundleID == "" || !routing.accepts(claim.Device) {
 		outcome.Discarded = append(outcome.Discarded, pushDigestEventIDs(eligible)...)
 		finish()
 		return
@@ -253,7 +256,7 @@ func (d *Deps) processPushDigestClaim(ctx context.Context, store pushDigestStore
 		}
 	}
 
-	config := cloneAnyMap(channel.Config)
+	config := routing.deliveryConfig(channel.Config)
 	config["bundle_id"] = bundleID
 	config["production"] = environment == "production"
 	config["device_tokens"] = []string{strings.TrimSpace(claim.Device.PushToken)}
@@ -262,7 +265,7 @@ func (d *Deps) processPushDigestClaim(ctx context.Context, store pushDigestStore
 	notifications.SetAPNsInvalidDeviceTokenHandler(config, notifications.APNsInvalidDeviceTokenHandler(func(token string) error {
 		cleanupCtx, cancel := context.WithTimeout(sendCtx, 3*time.Second)
 		defer cancel()
-		return d.PushDeviceStore.DeletePushDeviceByToken(cleanupCtx, token, bundleID, environment)
+		return d.PushDeviceStore.DeletePushDeviceByToken(cleanupCtx, token, bundleID, environment, routing.transport)
 	}))
 
 	payload := buildPushDigestPayload(eligible, claim)

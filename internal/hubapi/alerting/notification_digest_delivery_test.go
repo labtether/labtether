@@ -39,7 +39,7 @@ func (s *durableDigestPushStoreStub) GetAllPushTokens(context.Context) ([]persis
 	return append([]persistence.PushDevice(nil), s.devices...), nil
 }
 
-func (s *durableDigestPushStoreStub) DeletePushDeviceByToken(_ context.Context, token, bundleID, environment string) error {
+func (s *durableDigestPushStoreStub) DeletePushDeviceByToken(_ context.Context, token, bundleID, environment, _ string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.deleted = append(s.deleted, [3]string{token, bundleID, environment})

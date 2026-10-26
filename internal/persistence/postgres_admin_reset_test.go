@@ -4,8 +4,8 @@ import "testing"
 
 func TestPostgresAdminResetTableCountAndHubMetricsStayInSync(t *testing.T) {
 	tables := postgresAdminResetTables()
-	if len(tables) != 53 {
-		t.Fatalf("admin reset table count = %d, want 53", len(tables))
+	if len(tables) != 54 {
+		t.Fatalf("admin reset table count = %d, want 54", len(tables))
 	}
 	seen := make(map[string]struct{}, len(tables))
 	for _, table := range tables {

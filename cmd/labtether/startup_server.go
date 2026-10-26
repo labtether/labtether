@@ -54,12 +54,14 @@ func buildConnectorRegistry() *connectorsdk.Registry {
 	return registry
 }
 
-func defaultNotificationAdapters() map[string]notifications.Adapter {
+// defaultNotificationAdapters builds the channel adapters. An empty relayURL
+// disables the LabTether push relay for APNs channels without an operator key.
+func defaultNotificationAdapters(relayURL string) map[string]notifications.Adapter {
 	return map[string]notifications.Adapter{
 		notifications.ChannelTypeWebhook: &notifications.WebhookAdapter{},
 		notifications.ChannelTypeEmail:   &notifications.EmailAdapter{},
 		notifications.ChannelTypeSlack:   &notifications.SlackAdapter{},
-		notifications.ChannelTypeAPNs:    &notifications.APNsAdapter{},
+		notifications.ChannelTypeAPNs:    &notifications.APNsAdapter{Relay: notifications.NewAPNsRelayClient(relayURL)},
 		notifications.ChannelTypeNtfy:    &notifications.NtfyAdapter{},
 		notifications.ChannelTypeGotify:  &notifications.GotifyAdapter{},
 	}
@@ -124,7 +126,7 @@ func newAPIServer(
 		allowLegacySharedAgentAuth: envOrDefaultBool("LABTETHER_ALLOW_LEGACY_SHARED_AGENT_AUTH", false),
 		broadcaster:                newEventBroadcaster(),
 		notificationDispatcher: NotificationDispatcher{
-			Adapters:    defaultNotificationAdapters(),
+			Adapters:    defaultNotificationAdapters(pushRelayURLFromEnv()),
 			DispatchSem: make(chan struct{}, 32),
 		},
 		collectorDispatchSem: make(chan struct{}, 8),
