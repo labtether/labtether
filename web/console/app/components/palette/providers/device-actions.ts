@@ -42,6 +42,7 @@ const DEVICE_ACTIONS: ActionDef[] = [
     icon: FolderOpen,
     hrefSuffix: "/files",
     description: "Browse device files",
+    writeRequired: true,
   },
   {
     key: "logs",

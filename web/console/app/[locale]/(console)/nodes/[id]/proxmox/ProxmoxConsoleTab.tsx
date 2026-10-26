@@ -2,6 +2,8 @@
 
 import { Card } from "../../../../../components/ui/Card";
 import { Link } from "../../../../../../i18n/navigation";
+import { useAuth } from "../../../../../contexts/AuthContext";
+import { canAccessHostData } from "../../../../../lib/roles";
 
 type Props = {
   assetId: string;
@@ -19,7 +21,11 @@ export function ProxmoxConsoleTab({
   const isVM = effectiveKind === "qemu";
   const isCT = effectiveKind === "lxc";
 
-  const consoleURL = assetId ? `/nodes/${encodeURIComponent(assetId)}?panel=desktop` : null;
+  const { user } = useAuth();
+  // The console opens a desktop session, which the Hub keeps for operators.
+  const consoleURL = assetId && canAccessHostData(user?.role)
+    ? `/nodes/${encodeURIComponent(assetId)}?panel=desktop`
+    : null;
 
   const consoleType = isVM ? "QEMU VNC" : isCT ? "LXC Console" : "Console";
 

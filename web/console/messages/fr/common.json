@@ -41,5 +41,13 @@
   "demoBanner": {
     "message": "Vous explorez une instance de démonstration avec des données d'exemple.",
     "install": "Installer LabTether"
+  },
+  "operatorAccess": {
+    "title": "Accès opérateur requis",
+    "terminal": "Un accès opérateur est requis pour démarrer des sessions de terminal.",
+    "remoteView": "Un accès opérateur est requis pour démarrer des sessions de bureau à distance.",
+    "files": "Un accès opérateur est requis pour parcourir ou télécharger des fichiers sur les hôtes gérés.",
+    "recordings": "Un accès opérateur est requis pour consulter et télécharger les enregistrements de session.",
+    "hostData": "Un accès opérateur est requis pour cette vue. Les lecteurs voient l'inventaire et l'état, mais pas les sessions ni les données internes d'un hôte."
   }
 }

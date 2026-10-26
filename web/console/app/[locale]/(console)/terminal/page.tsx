@@ -21,7 +21,8 @@ import TerminalWorkspaceHeader from "../../../components/terminal/TerminalWorksp
 import type { XTerminalHandle } from "../../../components/XTerminal";
 import type { WorkspacePane, PanelSizes } from "../../../hooks/useWorkspaceTabs";
 import { useAuth } from "../../../contexts/AuthContext";
-import { hasWriteRole } from "../../../lib/roles";
+import { canAccessHostData } from "../../../lib/roles";
+import { OperatorAccessRequired } from "../../../components/OperatorAccessRequired";
 
 const ScrollbackViewer = dynamic(
   () => import("../../../components/terminal/ScrollbackViewer"),
@@ -54,14 +55,10 @@ function paneRefKey(tabId: string, paneIndex: number): string {
 
 export default function TerminalWorkspacePage() {
   const { user } = useAuth();
+  const tNav = useTranslations("nav");
 
-  if (!hasWriteRole(user?.role)) {
-    return (
-      <div className="rounded-xl border border-[var(--line)] bg-[var(--panel-glass)] p-6">
-        <h1 className="text-base font-medium text-[var(--text)]">Terminal</h1>
-        <p className="mt-2 text-sm text-[var(--muted)]">Operator access is required to start terminal sessions.</p>
-      </div>
-    );
+  if (!canAccessHostData(user?.role)) {
+    return <OperatorAccessRequired title={tNav("terminal")} feature="terminal" />;
   }
 
   return <TerminalWorkspacePageContent />;

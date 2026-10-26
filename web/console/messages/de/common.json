@@ -41,5 +41,13 @@
   "demoBanner": {
     "message": "Sie erkunden eine Demo-Instanz mit Beispieldaten.",
     "install": "LabTether installieren"
+  },
+  "operatorAccess": {
+    "title": "Operator-Zugriff erforderlich",
+    "terminal": "Zum Starten von Terminalsitzungen ist Operator-Zugriff erforderlich.",
+    "remoteView": "Zum Starten von Remote-Desktop-Sitzungen ist Operator-Zugriff erforderlich.",
+    "files": "Zum Durchsuchen oder Herunterladen von Dateien auf verwalteten Hosts ist Operator-Zugriff erforderlich.",
+    "recordings": "Zum Anzeigen und Herunterladen von Sitzungsaufzeichnungen ist Operator-Zugriff erforderlich.",
+    "hostData": "Für diese Ansicht ist Operator-Zugriff erforderlich. Betrachter sehen Inventar und Status, aber keine Sitzungen oder Daten aus dem Inneren eines Hosts."
   }
 }
