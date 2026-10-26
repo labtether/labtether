@@ -39,6 +39,8 @@ DOCKER_DISCOVERY_INTERVAL="30"
 DOCKER_WIZARD=0
 FILES_ROOT_MODE="home"
 AUTO_UPDATE="true"
+# Agents refuse unsigned self-updates; this is the Hub's release-signing key.
+AUTO_UPDATE_TRUSTED_PUBLIC_KEY=%[5]s
 FORCE_UPDATE=0
 ENROLLMENT_TOKEN=""
 ENROLLMENT_TOKEN_SOURCE_FILE=""
