@@ -16,7 +16,9 @@ func TestUpdatePlanDryRunRequestsValidatedAgentPackagePreview(t *testing.T) {
 	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-preview", "linux"))
+	// Replies are bound to the exact socket the request was sent on.
+	agentConn := agentmgr.NewAgentConn(serverConn, "node-preview", "linux")
+	sut.agentMgr.Register(agentConn)
 	defer sut.agentMgr.Unregister("node-preview")
 
 	done := make(chan struct{})
@@ -64,7 +66,7 @@ func TestUpdatePlanDryRunRequestsValidatedAgentPackagePreview(t *testing.T) {
 			t.Errorf("encode package preview response: %v", err)
 			return
 		}
-		sut.processAgentPackageListed(&agentmgr.AgentConn{AssetID: "node-preview"}, agentmgr.Message{
+		sut.processAgentPackageListed(agentConn, agentmgr.Message{
 			Type: agentmgr.MsgPackageListed,
 			ID:   request.RequestID,
 			Data: data,
@@ -89,7 +91,9 @@ func TestUpdatePlanDryRunRejectsLegacyInstalledInventoryResponse(t *testing.T) {
 	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-legacy", "linux"))
+	// Replies are bound to the exact socket the request was sent on.
+	agentConn := agentmgr.NewAgentConn(serverConn, "node-legacy", "linux")
+	sut.agentMgr.Register(agentConn)
 	defer sut.agentMgr.Unregister("node-legacy")
 
 	done := make(chan struct{})
@@ -120,7 +124,7 @@ func TestUpdatePlanDryRunRejectsLegacyInstalledInventoryResponse(t *testing.T) {
 			t.Errorf("encode legacy response: %v", err)
 			return
 		}
-		sut.processAgentPackageListed(&agentmgr.AgentConn{AssetID: "node-legacy"}, agentmgr.Message{
+		sut.processAgentPackageListed(agentConn, agentmgr.Message{
 			Type: agentmgr.MsgPackageListed,
 			ID:   request.RequestID,
 			Data: data,

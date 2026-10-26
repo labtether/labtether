@@ -114,7 +114,9 @@ func TestCapabilitiesAndActions(t *testing.T) {
 			}
 		case "stack.redeploy":
 			hasStackRedeploy = true
-			if len(action.Parameters) != 1 || action.Parameters[0].Key != "pull_image" {
+			// endpoint_id is required so a stack redeploy names its owning endpoint.
+			if len(action.Parameters) != 2 || action.Parameters[0].Key != "endpoint_id" ||
+				!action.Parameters[0].Required || action.Parameters[1].Key != "pull_image" {
 				t.Fatalf("unexpected stack.redeploy params: %+v", action.Parameters)
 			}
 		}

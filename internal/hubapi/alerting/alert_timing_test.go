@@ -197,7 +197,9 @@ func TestAlertTimingHoldoffUsesOnlyGenuineFires(t *testing.T) {
 
 	placeholderStore := persistence.NewMemoryAlertInstanceStore()
 	suppressed := true
-	d = &Deps{AlertInstanceStore: placeholderStore, EvaluateGuardrails: func(id string, _ time.Time) (groupfeatures.GroupMaintenanceGuardrails, error) {
+	// Maintenance suppression is evaluated through the context-aware owner;
+	// without it, a group-targeted rule fails closed and stays suppressed.
+	d = &Deps{AlertInstanceStore: placeholderStore, EvaluateGuardrailsContext: func(_ context.Context, id string, _ time.Time) (groupfeatures.GroupMaintenanceGuardrails, error) {
 		return groupfeatures.GroupMaintenanceGuardrails{GroupID: id, SuppressAlerts: suppressed}, nil
 	}}
 	rule.Targets = []alerts.RuleTarget{{GroupID: "task-group"}}

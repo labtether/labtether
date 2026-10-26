@@ -96,7 +96,9 @@ func TestSyntheticServiceScopeUsesUniqueCurrentOwner(t *testing.T) {
 				cancel()
 			}
 			entry, found, err := sut.buildAlertingDeps().ResolveSyntheticServiceAsset(ctx, tc.serviceID)
-			if (err != nil) != (tc.storeError || tc.cancelled || tc.legacyOnly) {
+			// The status decorator reports a missing exact-read capability as
+			// unknown (an error); the evaluator then attaches no witness.
+			if (err != nil) != (tc.storeError || tc.cancelled || tc.legacyOnly || tc.assetLegacy) {
 				t.Fatalf("unexpected lookup error: %v", err)
 			}
 			if found != (tc.wantID != "") || entry.ID != tc.wantID {

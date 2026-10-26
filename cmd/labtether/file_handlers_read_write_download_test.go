@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
+	"mime"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -191,8 +192,10 @@ func TestHandleFileDownloadStreamsSuccessUnchanged(t *testing.T) {
 	if got := rec.Header().Get("Content-Type"); got != "application/octet-stream" {
 		t.Fatalf("content type=%q, want application/octet-stream", got)
 	}
-	if got := rec.Header().Get("Content-Disposition"); !strings.Contains(got, `filename="hello.txt"`) {
-		t.Fatalf("content disposition=%q, want filename=hello.txt", got)
+	// mime.FormatMediaType quotes the filename only when it needs quoting.
+	got := rec.Header().Get("Content-Disposition")
+	if disposition, params, err := mime.ParseMediaType(got); err != nil || disposition != "attachment" || params["filename"] != "hello.txt" {
+		t.Fatalf("content disposition=%q, want attachment with filename hello.txt", got)
 	}
 }
 
