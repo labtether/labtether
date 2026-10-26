@@ -2,9 +2,11 @@
 
 import { Link } from "../../../i18n/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { ArrowRight, CheckCircle2, ChevronDown, ChevronRight, Circle } from "lucide-react";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
+import { COMMUNITY_URL, GITHUB_REPO_URL, MCP_GATEWAY_DOCS_URL } from "../../lib/externalLinks";
 
 const DISMISS_KEY = "labtether.dashboard.firstRun.dismissed";
 const COLLAPSE_KEY = "labtether.dashboard.firstRun.collapsed";
@@ -21,10 +23,10 @@ type DashboardFirstRunChecklistCardProps = {
   onAddDevice: () => void;
 };
 
+type ChecklistItemId = "hub" | "device" | "connector" | "terminal" | "logs";
+
 type ChecklistItem = {
-  id: string;
-  label: string;
-  description: string;
+  id: ChecklistItemId;
   done: boolean;
 };
 
@@ -39,6 +41,7 @@ export function DashboardFirstRunChecklistCard({
   canAdmin,
   onAddDevice,
 }: DashboardFirstRunChecklistCardProps) {
+  const t = useTranslations("dashboard.firstRun");
   const [dismissed, setDismissed] = useState(false);
   const [collapsed, setCollapsed] = useState(true);
 
@@ -53,36 +56,11 @@ export function DashboardFirstRunChecklistCard({
   const items = useMemo<ChecklistItem[]>(() => {
     const hubHealthy = !loading && !hasError;
     return [
-      {
-        id: "hub",
-        label: "Hub healthy",
-        description: "Dashboard can load status without startup errors.",
-        done: hubHealthy,
-      },
-      {
-        id: "device",
-        label: "First device connected",
-        description: "Add one node with agent install flow.",
-        done: deviceCount > 0,
-      },
-      {
-        id: "connector",
-        label: "First connector configured",
-        description: "Save one connector and run first sync.",
-        done: connectorCount > 0,
-      },
-      {
-        id: "terminal",
-        label: "Terminal workflow validated",
-        description: "Run at least one command session.",
-        done: recentCommandCount > 0,
-      },
-      {
-        id: "logs",
-        label: "Observability verified",
-        description: "Confirm recent logs are visible.",
-        done: recentLogCount > 0,
-      },
+      { id: "hub", done: hubHealthy },
+      { id: "device", done: deviceCount > 0 },
+      { id: "connector", done: connectorCount > 0 },
+      { id: "terminal", done: recentCommandCount > 0 },
+      { id: "logs", done: recentLogCount > 0 },
     ];
   }, [loading, hasError, deviceCount, connectorCount, recentCommandCount, recentLogCount]);
 
@@ -117,9 +95,9 @@ export function DashboardFirstRunChecklistCard({
           ) : (
             <ChevronDown size={14} className="text-[var(--muted)] group-hover:text-[var(--text)] transition-colors" />
           )}
-          <h2 className="text-sm font-medium text-[var(--text)]">First-Run Checklist</h2>
+          <h2 className="text-sm font-medium text-[var(--text)]">{t("title")}</h2>
           <span className="text-xs text-[var(--muted)] ml-1">
-            {allComplete ? "complete" : `${completed}/${items.length}`}
+            {allComplete ? t("complete") : t("progress", { completed, total: items.length })}
           </span>
         </button>
         <button
@@ -127,16 +105,14 @@ export function DashboardFirstRunChecklistCard({
           onClick={dismiss}
           className="text-xs text-[var(--muted)] transition-colors hover:text-[var(--text)]"
         >
-          Dismiss
+          {t("dismiss")}
         </button>
       </div>
 
       {!collapsed && (
         <>
           <p className="mt-1 text-xs text-[var(--muted)]">
-            {allComplete
-              ? "Great start. Core workflows are validated."
-              : "Finish this once to lock in a reliable setup."}
+            {allComplete ? t("summaryComplete") : t("summaryPending")}
           </p>
 
           <div className="mt-3 space-y-2">
@@ -150,8 +126,8 @@ export function DashboardFirstRunChecklistCard({
                   )}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-medium text-[var(--text)]">{item.label}</p>
-                  <p className="text-[11px] text-[var(--muted)]">{item.description}</p>
+                  <p className="text-xs font-medium text-[var(--text)]">{t(`items.${item.id}.label`)}</p>
+                  <p className="text-[11px] text-[var(--muted)]">{t(`items.${item.id}.description`)}</p>
                 </div>
               </div>
             ))}
@@ -161,27 +137,27 @@ export function DashboardFirstRunChecklistCard({
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {canWrite ? (
                 <Button size="sm" variant="primary" onClick={onAddDevice}>
-                  + Add Device
+                  {t("addDevice")}
                 </Button>
               ) : null}
               {canAdmin ? (
                 <Link href="/settings" className="text-xs text-[var(--accent)] hover:underline inline-flex items-center gap-1">
-                  Open Connector Settings <ArrowRight size={12} />
+                  {t("openConnectorSettings")} <ArrowRight size={12} />
                 </Link>
               ) : null}
               {canWrite ? (
                 <Link href="/terminal" className="text-xs text-[var(--accent)] hover:underline inline-flex items-center gap-1">
-                  Open Terminal <ArrowRight size={12} />
+                  {t("openTerminal")} <ArrowRight size={12} />
                 </Link>
               ) : null}
               <Link href="/logs" className="text-xs text-[var(--accent)] hover:underline inline-flex items-center gap-1">
-                Open Logs <ArrowRight size={12} />
+                {t("openLogs")} <ArrowRight size={12} />
               </Link>
             </div>
           ) : (
             <div className="mt-4">
               <p className="text-xs font-medium text-[var(--text)]">
-                Core workflows validated. Here&apos;s what to explore next:
+                {t("nextStepsTitle")}
               </p>
               <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {canAdmin ? (
@@ -189,32 +165,32 @@ export function DashboardFirstRunChecklistCard({
                     href="/settings"
                     className="block rounded-lg px-3 py-2 bg-[var(--panel-glass)] border border-[var(--panel-border)] text-xs text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors"
                   >
-                    Set up alert notifications
+                    {t("setupNotifications")}
                   </Link>
                 ) : null}
                 <a
-                  href="https://labtether.com/docs/guides/mcp-gateway"
+                  href={MCP_GATEWAY_DOCS_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="block rounded-lg px-3 py-2 bg-[var(--panel-glass)] border border-[var(--panel-border)] text-xs text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors"
                 >
-                  Connect the MCP gateway
+                  {t("connectMcp")}
                 </a>
                 <a
-                  href="https://discord.gg/Be6Fa9hv"
+                  href={COMMUNITY_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="block rounded-lg px-3 py-2 bg-[var(--panel-glass)] border border-[var(--panel-border)] text-xs text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors"
                 >
-                  Join the community
+                  {t("community")}
                 </a>
                 <a
-                  href="https://github.com/labtether/labtether"
+                  href={GITHUB_REPO_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="block rounded-lg px-3 py-2 bg-[var(--panel-glass)] border border-[var(--panel-border)] text-xs text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors"
                 >
-                  Star us on GitHub
+                  {t("starGithub")}
                 </a>
               </div>
             </div>
