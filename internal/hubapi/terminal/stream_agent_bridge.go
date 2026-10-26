@@ -109,8 +109,11 @@ func (d *Deps) HandleAgentTerminalStream(w http.ResponseWriter, r *http.Request,
 			if stored, loadErr := d.TerminalScrollbackStore.GetScrollback(persistentSessionID); loadErr == nil {
 				bridgeState.Scrollback.SeedIfEmpty(stored)
 			}
-			var flushCtx context.Context
-			flushCtx, flushCancel = context.WithCancel(context.Background())
+			// The deferred finalizer above cancels and drains this loop on every
+			// return path, after FinalizeAgentTerminalSession so the last output
+			// still reaches the store. Hand the cancel func to it explicitly.
+			flushCtx, cancelFlush := context.WithCancel(context.Background())
+			flushCancel = cancelFlush
 			flushDone = make(chan struct{})
 			go func() {
 				defer close(flushDone)
