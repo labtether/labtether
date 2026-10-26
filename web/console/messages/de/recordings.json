@@ -7,6 +7,10 @@
     "duration": "Dauer",
     "size": "Größe",
     "status": "Status",
-    "date": "Datum"
-  }
+    "date": "Datum",
+    "actions": "Aktionen"
+  },
+  "download": "Herunterladen",
+  "downloadLabel": "Aufzeichnung für {asset} herunterladen",
+  "inProgress": "Läuft"
 }

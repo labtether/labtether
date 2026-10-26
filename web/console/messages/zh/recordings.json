@@ -7,6 +7,10 @@
     "duration": "时长",
     "size": "大小",
     "status": "状态",
-    "date": "日期"
-  }
+    "date": "日期",
+    "actions": "操作"
+  },
+  "download": "下载",
+  "downloadLabel": "下载 {asset} 的录制",
+  "inProgress": "录制中"
 }

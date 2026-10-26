@@ -2,8 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
+import { Download } from "lucide-react";
 
 import { Card } from "../../../components/ui/Card";
+import { useAuth } from "../../../contexts/AuthContext";
+import { hasWriteRole } from "../../../lib/roles";
 
 interface Recording {
   id: string;
@@ -18,6 +21,9 @@ interface Recording {
 
 export default function RecordingsPage() {
   const t = useTranslations('recordings');
+  const { user } = useAuth();
+  // The Hub only serves recording files to operators and above.
+  const canDownload = hasWriteRole(user?.role);
   const [recordings, setRecordings] = useState<Recording[]>([]);
 
   useEffect(() => {
@@ -47,7 +53,10 @@ export default function RecordingsPage() {
                   <th className="py-2 pr-4">{t('columns.duration')}</th>
                   <th className="py-2 pr-4">{t('columns.size')}</th>
                   <th className="py-2 pr-4">{t('columns.status')}</th>
-                  <th className="py-2">{t('columns.date')}</th>
+                  <th className="py-2 pr-4">{t('columns.date')}</th>
+                  {canDownload ? (
+                    <th className="py-2"><span className="sr-only">{t('columns.actions')}</span></th>
+                  ) : null}
                 </tr>
               </thead>
               <tbody>
@@ -58,7 +67,24 @@ export default function RecordingsPage() {
                     <td className="py-2 pr-4 text-[var(--text)]">{Math.round(recording.duration_ms / 1000)}s</td>
                     <td className="py-2 pr-4 text-[var(--text)]">{Math.round(recording.file_size / 1024)} KB</td>
                     <td className="py-2 pr-4 text-[var(--text)]">{recording.status}</td>
-                    <td className="py-2 text-[var(--text)]">{new Date(recording.created_at).toLocaleString()}</td>
+                    <td className="py-2 pr-4 text-[var(--text)]">{new Date(recording.created_at).toLocaleString()}</td>
+                    {canDownload ? (
+                      <td className="py-2 text-right">
+                        {recording.status === "recording" ? (
+                          <span className="text-xs text-[var(--muted)]">{t('inProgress')}</span>
+                        ) : (
+                          <a
+                            href={`/api/recordings/${encodeURIComponent(recording.id)}/download`}
+                            download
+                            aria-label={t('downloadLabel', { asset: recording.asset_id })}
+                            className="inline-flex items-center gap-1 text-xs text-[var(--accent)] hover:underline"
+                          >
+                            <Download size={12} aria-hidden="true" />
+                            {t('download')}
+                          </a>
+                        )}
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
