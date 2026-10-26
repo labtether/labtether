@@ -132,5 +132,8 @@ func resolveRetentionSettings(store persistence.RetentionStore, req shared.Reten
 		next.RecordingsWindow = value
 	}
 
+	if err := retention.Validate(next); err != nil {
+		return retention.Settings{}, err
+	}
 	return retention.Normalize(next), nil
 }

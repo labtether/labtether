@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/labtether/labtether/internal/apiv2"
+	"github.com/labtether/labtether/internal/auth"
+	"github.com/labtether/labtether/internal/servicehttp"
 )
 
 func requireScope(required string, next http.HandlerFunc) http.HandlerFunc {
@@ -75,4 +77,16 @@ func routeAssetID(prefix, path string) string {
 
 func guardV1AssetRoute(prefix, readScope, writeScope string, next http.HandlerFunc) http.HandlerFunc {
 	return requireReadWriteScopes(readScope, writeScope, requireAssetFromPath(prefix, next))
+}
+
+// requireAdminForMutation keeps reads at the route's normal role floor but
+// reserves changes for admin and owner principals.
+func requireAdminForMutation(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if apiv2.IsMutatingMethod(r.Method) && !auth.HasAdminPrivileges(userRoleFromContext(r.Context())) {
+			servicehttp.WriteError(w, http.StatusForbidden, "forbidden")
+			return
+		}
+		next(w, r)
+	}
 }

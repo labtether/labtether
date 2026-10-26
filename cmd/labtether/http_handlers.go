@@ -261,7 +261,7 @@ func (s *apiServer) buildHTTPHandlers(
 		"/incidents":                           s.withAuth(requireReadWriteScopes("alerts:read", "alerts:write", s.handleIncidents)),
 		"/incidents/":                          s.withAuth(requireReadWriteScopes("alerts:read", "alerts:write", s.handleIncidentActions)),
 		"/live-activities/incidents/":          s.withAuth(requireScope("alerts:read", s.handleIncidentLiveActivityTokens)),
-		"/settings/retention":                  s.withAuth(requireReadWriteScopes("settings:read", "settings:write", s.handleRetentionSettings)),
+		"/settings/retention":                  s.withAuth(requireAdminForMutation(requireReadWriteScopes("settings:read", "settings:write", s.handleRetentionSettings))),
 		"/settings/oidc":                       s.withAdminAuth(requireReadWriteScopes("settings:read", "settings:write", guardAssetRestrictedGlobalAPI("OIDC settings", s.handleOIDCSettings))),
 		"/settings/oidc/apply":                 s.withAdminAuth(requireScope("settings:write", guardAssetRestrictedGlobalAPI("OIDC settings", s.handleOIDCSettingsApply))),
 		"/settings/managed-database":           s.withAdminAuth(requireReadWriteScopes("settings:read", "settings:write", guardAssetRestrictedGlobalAPI("managed database settings", s.handleManagedDatabaseSettings))),
