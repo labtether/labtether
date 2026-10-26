@@ -82,6 +82,9 @@ func runHub(ctx context.Context) error {
 
 	dataDir := envOrDefault("LABTETHER_DATA_DIR", "data")
 	runtimeSecrets, err := resolveRuntimeInstallSecrets(newInstallStateStore(dataDir))
+	if errors.Is(err, errEncryptionKeyMismatch) {
+		return newStartupFailure(startupFailureEncryptionConfig, err)
+	}
 	if err != nil {
 		return newStartupFailure(startupFailureInstallState, err)
 	}

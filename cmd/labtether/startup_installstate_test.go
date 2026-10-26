@@ -89,7 +89,10 @@ func TestResolveRuntimeInstallSecretsMigratesLegacyEnvSecrets(t *testing.T) {
 
 func TestResolveRuntimeInstallSecretsAllowsEnvOverridesAndPersistsThem(t *testing.T) {
 	persistedEncryptionKey := installStateTestEncryptionKey(0x41)
+	// A different key is refused unless explicitly confirmed; see
+	// startup_encryption_key_guard_test.go.
 	overrideEncryptionKey := installStateTestEncryptionKey(0x42)
+	t.Setenv(encryptionKeyReplaceEnv, "true")
 	store := installstate.New(filepath.Join(t.TempDir(), "install"))
 	if err := store.Save(installstate.Metadata{}, installstate.Secrets{
 		OwnerToken:       "persisted-owner-token",
