@@ -1,3 +1,5 @@
+import { trimTrailingSlashes } from "../../../lib/trimChars";
+
 export type CollectorWithBaseURL = {
   collector_type: string;
   config?: Record<string, unknown>;
@@ -64,10 +66,10 @@ export function normalizeBaseURL(value: string): string {
     const protocol = parsed.protocol.toLowerCase();
     const hostname = parsed.hostname.toLowerCase();
     const port = parsed.port ? `:${parsed.port}` : "";
-    const pathname = parsed.pathname.replace(/\/+$/g, "");
+    const pathname = trimTrailingSlashes(parsed.pathname);
     return `${protocol}//${hostname}${port}${pathname}`;
   } catch {
-    return trimmed.replace(/\/+$/g, "");
+    return trimTrailingSlashes(trimmed);
   }
 }
 

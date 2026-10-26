@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolvedBackendBaseURLs } from "./backend";
 import { readBoundedRequestBody, RequestBodyTooLargeError } from "./boundedBody";
+import { trimTrailingSlashes } from "./trimChars";
 
 function publicRequestHost(request: NextRequest): string {
   return request.headers.get("host")?.trim() || request.nextUrl.host;
@@ -50,7 +51,7 @@ export function validatePublicContentLength(raw: string | null): ContentLengthCh
 
 export async function proxyPublicHubRequest(request: NextRequest, upstreamPath: string): Promise<NextResponse> {
   const base = await resolvedBackendBaseURLs();
-  const upstreamURL = new URL(upstreamPath, `${base.api.replace(/\/+$/, "")}/`);
+  const upstreamURL = new URL(upstreamPath, `${trimTrailingSlashes(base.api)}/`);
   upstreamURL.search = request.nextUrl.search;
 
   const headers = new Headers();

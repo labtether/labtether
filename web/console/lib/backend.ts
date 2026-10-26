@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { hasServiceModeAuthHeader, isTrustedServiceProxyPath } from "./proxyAuth";
+import { trimTrailingChars } from "./trimChars";
 
 export function envOrDefault(key: string, fallback: string): string {
   const value = process.env[key];
@@ -31,11 +32,13 @@ const overrideURLSchemes = new Set(["http:", "https:"]);
 const controlCharsPattern = /[\u0000-\u001f\u007f]+/g;
 
 function normalizeHost(hostname: string): string {
-  return hostname
-    .trim()
-    .toLowerCase()
-    .replace(/^\[|\]$/g, "")
-    .replace(/\.+$/, "");
+  return trimTrailingChars(
+    hostname
+      .trim()
+      .toLowerCase()
+      .replace(/^\[|\]$/g, ""),
+    ".",
+  );
 }
 
 function isLoopbackHost(hostname: string): boolean {

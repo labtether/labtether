@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { clampInterval, numberValue } from "../shared";
+import { clampInterval, normalizeBaseURL, numberValue } from "../shared";
 
 describe("settings API numeric helpers", () => {
   it("accepts plain integer strings and finite numbers", () => {
@@ -18,5 +18,13 @@ describe("settings API numeric helpers", () => {
   it("still clamps accepted interval values to the supported range", () => {
     expect(clampInterval(numberValue("5", 60))).toBe(15);
     expect(clampInterval(numberValue("7200", 60))).toBe(3600);
+  });
+});
+
+describe("normalizeBaseURL", () => {
+  it("drops trailing slashes from URLs and from unparseable input", () => {
+    expect(normalizeBaseURL(" HTTPS://PVE.Example.com:8006/api2/json/// ")).toBe("https://pve.example.com:8006/api2/json");
+    expect(normalizeBaseURL("not a url///")).toBe("not a url");
+    expect(normalizeBaseURL(`${"/".repeat(100_000)}x`)).toBe(`${"/".repeat(100_000)}x`);
   });
 });
