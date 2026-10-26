@@ -6,11 +6,11 @@ umask 077
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SOURCE_COMPOSE="${PROJECT_ROOT}/deploy/compose/docker-compose.deploy.yml"
 RELEASE_TEMPLATE="${PROJECT_ROOT}/deploy/release/docker-compose.deploy.yml.tmpl"
-POSTGRES_IMAGE="postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+POSTGRES_IMAGE="postgres:18-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5"
 LABTETHER_IMAGE="ghcr.io/labtether/labtether:v0.0.0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 GUACD_IMAGE="guacamole/guacd:1.6.0@sha256:8974eaa9ba32f713daf311e7cc8cd7e4cdfba1edea39eed75524e78ef4b08f4f"
-AUTHENTIK_IMAGE="ghcr.io/goauthentik/server:2026.8.3@sha256:ab9b4e8cc4ab3f8d1198d2db6aeea66bafea1963b3f2843589e0d163f97d9849"
-DEX_IMAGE="ghcr.io/dexidp/dex:v2.46.0@sha256:933fcd3f523338c847b88ef84a7145fb2fcb7b9917f08418612afeaaa2001777"
+AUTHENTIK_IMAGE="ghcr.io/goauthentik/server:2026.8.5@sha256:602227a86455d6772e3d16b7d852713c4f864f40df5df894abd1285bb53979a5"
+DEX_IMAGE="ghcr.io/dexidp/dex:v2.46.1@sha256:65b72ca0f4b0bf6d4ada84ec21da8851782563404ac7b8f926923d27ceced9ab"
 
 for command_name in cmp diff docker env grep mktemp node python3 sed; do
   command -v "$command_name" >/dev/null 2>&1 || {
