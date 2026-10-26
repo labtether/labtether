@@ -4,7 +4,9 @@
 import { handleRequest } from "../src/index.js";
 import { resetApnsCaches } from "../src/apns.js";
 
-export const TOKEN = "3f1c9a0b7d2e4f6a8c0e1d3b5a7f9c2e4b6d8f0a1c3e5b7d9f1a3c5e7b9d0f2a";
+// A made-up 64-hex-digit APNs device token. Built from a short repeat so
+// secret scanners do not mistake the fixture for a real credential.
+export const TOKEN = "3f1c9a0b".repeat(8);
 export const ORIGIN = "https://push.example.test";
 // 2026-10-26T00:00:00Z
 export const NOW_MS = Date.UTC(2026, 9, 26);
