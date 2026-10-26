@@ -1,106 +1,110 @@
 # AGENTS.md — Hub Repo
 
-This is the hub monorepo for LabTether. It contains the hub API server, web console, DB migrator, and all shared Go packages.
+Hub monorepo: API server, web console, DB migrator and shared Go packages.
 
-## Shared rules
+## Read first
 
-For Astra and Opus 5.5: edit `AGENTS.md`; keep `CLAUDE.md -> AGENTS.md`.
-Read `../AGENTS.md` once if available, or from a worktree use
-`/Users/michael/Development/LabTether/AGENTS.md`. Read only task-relevant docs.
-Finish scoped work with focused checks; make routine reversible choices yourself.
-Use current manifests, preserve unrelated dirty work, and reply in short plain words.
+Codex (GPT-6 Astra) and Claude Code (Opus 5.5) both load this file. Edit
+`AGENTS.md` only; `CLAUDE.md` is a relative symlink to it.
 
-- Reuse this repo; do not clone or copy it. Worktrees belong under
-  `/Users/michael/.codex/worktrees/LabTether/`; temp files in task `work/` or
-  `mktemp -d`. Create no repos, worktrees, caches or temp folders directly in
-  `/Users/michael` or `/Users/michael/Development`. Clean only your own temp files.
-- One broad build/suite at a time; require 100 GB free for heavy builds. Reuse
-  caches. Removing user files, dirty work, repos, branches or worktrees needs
-  an exact preview and explicit approval. Preview generated-cache cleanup.
-- VM 102 / `UntrustedVM` is excluded and untouched: no enumeration, queries,
-  inspection, backup, operations or QA evidence.
-- Signing material stays local outside repos: never expose, list, copy, stage or
-  upload it. Release signing/notarization needs explicit authorization; preserve owner
-  signing pauses. Read workspace release rules; publish only verified distributables.
-- Prefer scoped disposable credentials or an existing session; never rotate the
-  owner password if either is available. Before temporary auth changes, install
-  restore/cleanup traps, save the exact state without logging secrets, then
-  verify restoration of its hash/timestamp and session baseline.
-- In `zsh`, use `rc` or `exit_code`, never reserved `status`.
+This file covers routine work in this repo. The workspace guide,
+`../AGENTS.md` (from a worktree:
+`$HOME/Development/LabTether/AGENTS.md`), has the full rules, lab
+machines and release stages. Read it before release, signing, QA, lab or
+cross-repo work. If the two disagree, the workspace guide wins; fix the stale
+line here.
 
-## File size and checks
+## How to work
 
-- Hard limit: 500 code lines per handwritten source/test/script or executable
-  CI/build/config file, using pinned `cloc 2.10` (excludes blanks/comment-only
-  lines). Only genuine generated/vendor code is exempt. No legacy exceptions,
-  minifying, numbered chunks or moving code into data; split by responsibility.
-- Run `python3 scripts/ci/check-line-limit.py` here. Existing violations remain
-  open until it passes. Builds do not prove live behavior; backup or
-  verification does not prove restore. Report what actually passed.
-- Add or keep a test only for a named real fault or important user promise.
-  Test the real owner with the smallest useful check. Skip getter-only,
-  duplicate, implementation-mirror and test-count padding. Broaden only for
-  changed shared behavior or a concrete unresolved risk. Docs-only work needs
-  path, link, diff and line-limit checks, not code tests or builds unless a
-  required branch gate needs them.
+- Carry the task to a checked result. Make routine, reversible choices
+  yourself. Stop to ask only for a decision that is the owner's or a boundary
+  below, and keep doing independent work while you wait.
+- Check the branch and dirty files before editing; leave unrelated work alone.
+  Reuse this checkout. Worktrees go under
+  `$HOME/.codex/worktrees/LabTether/`; throwaway files go in the
+  task's `work/` folder or `mktemp -d`, never directly in `$HOME` or
+  `$HOME/Development`. Clean up only what you created.
+- Run one broad build or suite at a time and reuse existing caches.
+- Reply in short, plain words: what changed, whether it worked, what is next.
+- User-facing text follows the workspace "No AI Slop" rules: keep normal
+  homelab words (node, VM, pool, snapshot, uptime), cut hype, filler and
+  internal engineering words, and never show raw IDs or bare status codes.
+
+## Boundaries
+
+- Run VMs, Docker stacks, simulator QA, installed-agent tests and long suites
+  on the lab test machines named in the workspace guide, never on the
+  development laptop. One test file, lint or one compile is fine locally.
+- Machines the workspace guide marks as no-touch are out of scope: do not
+  query, operate on or cite them.
+- Signing material stays in its local-only folder outside every repository.
+  Never list, copy, print, stage or upload any of it. Signing and notarization
+  need the owner's go-ahead for each release.
+- Removing repos, branches, worktrees, user files or dirty work needs an exact
+  preview and the owner's approval.
+- Prefer a scoped disposable token or an existing session to changing auth.
+  Before any temporary auth change, set restore traps and confirm the original
+  state afterwards. Never rotate the owner password when a safer route exists.
+- In `zsh`, `status` is reserved; name exit codes `rc` or `exit_code`.
+- Keep personal details out of files, test data and commit messages: real
+  names, home folders, lab host names, home IP addresses, personal emails and
+  tailnet names. Use neutral examples such as `/Users/demo`, `nas01` and
+  `user@example.com`. `python3 scripts/ci/check-private-info.py` and CI block
+  them; the workspace git hooks also block the exact private values.
+
+## Checks
+
+- Hard limit: 500 code lines per handwritten file (source, tests, scripts,
+  executable CI/build/config), counted by pinned `cloc 2.10`. Run
+  `python3 scripts/ci/check-line-limit.py` here. Split by responsibility; do
+  not minify, number chunks or move code into data. Existing violations stay
+  open until the checker passes.
+- Add or keep a test only when it catches a real fault or guards a user
+  promise, and name that risk. Skip getter-only, duplicate and
+  implementation-mirror tests. Docs-only edits need path, link, diff and
+  line-limit checks, not builds.
 - Before starting or rerunning remote CI, check the remaining minutes and
-  spend cap, then name the changed behavior and needed proof. Add or keep an
-  automatic CI job only for a named real fault or user promise that a smaller
-  existing check cannot cover. Remove duplicate or unneeded jobs and triggers.
-  Cancel superseded runs, use path filters and realistic timeouts. Use paid
-  platform runners or broad matrices only for relevant behavior. Preserve
-  required security, release, signing and live proof that protects user promises.
+  spend cap and name what the run proves. Do not rerun for another green.
+- Report what actually passed. A build does not prove runtime behavior, a mock
+  does not prove a live result, and a backup is not a restore.
 
-## Work and checks
+## This repo
 
-- API/runtime wiring: `cmd/labtether/`; reusable behavior: `internal/`, including
-  `internal/hubapi/`; migrations: `services/migrator/`.
-- Console: `web/console/`. Keep operator-facing text in the existing i18n
-  system and preserve authentication, API, and realtime event contracts.
-- Run Go tests for the changed package, for example
-  `go test ./internal/hubapi/agents`. For console work, run the affected Vitest
-  test from `web/console/` with `npm test -- <test-file>` and use
-  `npm run lint:types` for TypeScript changes.
-- Use `Makefile` and the applicable CI workflow for broader required checks.
-  Live integration, backup, restore, and remote-access scripts need a known
-  allowed target. A successful backup or verification is not a restore proof.
-- Read `docs/internal/` for relevant architecture, and `notes/TODO.md` for
-  planning. Recheck dated QA/release notes against the current branch and
-  runtime before claiming readiness.
-- Keep Hub and Go-agent protocol pins aligned. Release Hub only after the
-  workspace prerequisite stage and exact-version public-asset checks pass.
+- API and runtime wiring: `cmd/labtether/`. Reusable behavior: `internal/`,
+  including `internal/hubapi/`. Migrations: `services/migrator/`.
+- Console: `web/console/`. Keep user-facing text in the existing i18n system
+  and keep the authentication, API and realtime event contracts intact.
+- Go: test the changed package, for example `go test ./internal/hubapi/agents`.
+- Console: from `web/console/`, run the affected Vitest file with
+  `npm test -- <test-file>`, and `npm run lint:types` for TypeScript changes.
+- Broader required checks live in `Makefile` and the matching CI workflow.
+  Live integration, backup, restore and remote-access scripts need a known,
+  allowed lab target.
+- Architecture: `docs/internal/`. Planning: `notes/TODO.md`. Dated QA and
+  release notes go stale; recheck them against the current branch and runtime
+  before claiming readiness.
+- Keep Hub's `github.com/labtether/protocol` pin equal to the Go agent's. Hub
+  releases only after the workspace prerequisite stage and its exact-version
+  public-asset checks pass.
 
-## Workspace Navigation
+## Agent distribution
 
-This repo (`hub/`) is part of the LabTether multi-repo workspace at `../`. See `../AGENTS.md` for the full workspace map.
+Agent binaries are not stored in this repo. CI downloads them from GitHub
+Releases and bakes them into the image.
 
-| Sibling | Path | Description |
-|---------|------|-------------|
-| Public website | `../website/` | Marketing site, docs, pricing (labtether/labtether-website) |
-| Go agent | `../labtether-agent/` | Cross-platform endpoint agent (labtether/labtether-agent) |
-| Protocol | `../protocol/` | Shared wire protocol types (labtether/protocol) |
-| macOS agent | `../mac-agent/` | Native Swift agent (labtether/labtether-mac) |
-| Windows agent | `../win-agent/` | Native .NET agent (labtether/labtether-win) |
-| iOS app | `../ios/` | iOS mobile app (labtether/labtether-ios) |
-| CLI | `../labtether-cli/` | Cobra-based CLI tool |
-| Home Assistant | `../labtether-homeassistant/` | HA custom component and add-on |
+- No `build-agent-*` Makefile targets; agents build in their own repos.
+- `agent-manifest.json` tracks versions and checksums.
+- `AgentCache` looks in `/data/agents/` (runtime cache), then
+  `/opt/labtether/agents/` (baked into the image).
+- Endpoints: `GET /api/v1/agent/binary`, `GET /api/v1/agent/releases/latest`,
+  `GET /api/v1/agent/manifest`, and admin-only `POST /api/v1/agent/cache/refresh`.
+- Settings: `LABTETHER_AGENT_DIR` (default `/opt/labtether/agents`) and
+  `LABTETHER_AGENT_CACHE_DIR` (default `/data/agents`). There is no runtime
+  GitHub refresh; `LABTETHER_AGENT_MANIFEST_REFRESH` was removed in 1.7.0.
 
-## Agent Distribution
+## Sibling repos
 
-Agent binaries are NOT stored in this repo. They are downloaded from GitHub Releases at build time and cached at runtime.
-
-### Key Points
-- No `build-agent-*` Makefile targets — agents are built in their own repos
-- Version tracking uses `agent-manifest.json` (not `LABTETHER_AGENT_RELEASE_VERSION` env var)
-- `AgentCache` resolves binaries: `/data/agents/` (runtime cache) → `/opt/labtether/agents/` (baked-in fallback)
-
-### API Endpoints
-- `GET /api/v1/agent/binary` — serves cached Go agent binary
-- `GET /api/v1/agent/releases/latest` — returns version/checksum from manifest
-- `GET /api/v1/agent/manifest` — returns full agent manifest (all agents)
-- `POST /api/v1/agent/cache/refresh` — admin-only, reloads manifest from disk
-
-### Environment Variables
-- `LABTETHER_AGENT_DIR` — baked-in binary directory (default: `/opt/labtether/agents`)
-- `LABTETHER_AGENT_CACHE_DIR` — runtime cache directory (default: `/data/agents`)
-- There is no runtime GitHub refresh; `LABTETHER_AGENT_MANIFEST_REFRESH` was never read and was removed in 1.7.0
+All live under `../`: `website/`, `labtether-agent/` (Go agent), `protocol/`,
+`mac-agent/`, `win-agent/`, `ios/`, `labtether-cli/`,
+`labtether-homeassistant/` and `labtether-linux/`. The workspace guide has the
+full map.

@@ -164,22 +164,22 @@ func newTestAPIServerWithEdgeStore(t *testing.T) (*apiServer, *mockEdgeStore) {
 func TestDetectLinkSuggestionsHostnameMatch(t *testing.T) {
 	sut, store := newTestAPIServerWithEdgeStore(t)
 
-	// Proxmox VM named "omeganas" and TrueNAS host named "omeganas" from different sources.
+	// Proxmox VM named "vaultnas" and TrueNAS host named "vaultnas" from different sources.
 	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID:  "proxmox-vm-101",
 		Type:     "vm",
-		Name:     "omeganas",
+		Name:     "vaultnas",
 		Source:   "proxmox",
 		Metadata: map[string]string{"vmid": "101"},
 	}); err != nil {
 		t.Fatalf("upsert proxmox vm: %v", err)
 	}
 	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
-		AssetID:  "truenas-host-omeganas",
+		AssetID:  "truenas-host-vaultnas",
 		Type:     "nas",
-		Name:     "omeganas",
+		Name:     "vaultnas",
 		Source:   "truenas",
-		Metadata: map[string]string{"hostname": "omeganas"},
+		Metadata: map[string]string{"hostname": "vaultnas"},
 	}); err != nil {
 		t.Fatalf("upsert truenas host: %v", err)
 	}
@@ -196,8 +196,8 @@ func TestDetectLinkSuggestionsHostnameMatch(t *testing.T) {
 	// At least one edge must involve both assets.
 	found := false
 	for _, e := range all {
-		if (e.SourceAssetID == "proxmox-vm-101" && e.TargetAssetID == "truenas-host-omeganas") ||
-			(e.SourceAssetID == "truenas-host-omeganas" && e.TargetAssetID == "proxmox-vm-101") {
+		if (e.SourceAssetID == "proxmox-vm-101" && e.TargetAssetID == "truenas-host-vaultnas") ||
+			(e.SourceAssetID == "truenas-host-vaultnas" && e.TargetAssetID == "proxmox-vm-101") {
 			found = true
 			// Hostname match → confidence 0.90 → origin auto.
 			if e.Confidence < 0.60 {
@@ -206,7 +206,7 @@ func TestDetectLinkSuggestionsHostnameMatch(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("no edge found between proxmox-vm-101 and truenas-host-omeganas")
+		t.Fatalf("no edge found between proxmox-vm-101 and truenas-host-vaultnas")
 	}
 }
 

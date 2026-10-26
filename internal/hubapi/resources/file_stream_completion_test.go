@@ -68,7 +68,7 @@ func TestFileUploadRequiresExactAgentByteCount(t *testing.T) {
 }
 
 func TestFileDownloadPreservesWindowsUnicodeFilename(t *testing.T) {
-	path := `C:\Users\Michael\Desktop\résumé.txt `
+	path := `C:\Users\demo\Desktop\résumé.txt `
 	server, client, cleanup := createWoLWebSocketPair(t)
 	defer cleanup()
 	manager := agentmgr.NewManager()

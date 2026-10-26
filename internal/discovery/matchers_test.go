@@ -9,7 +9,7 @@ import (
 func TestParentHintMatcher(t *testing.T) {
 	allAssets := []AssetData{
 		{ID: "asset-pve-1", Name: "proxmox1", Source: "proxmox", Type: "node"},
-		{ID: "asset-vm-1", Name: "OmegaNAS VM", Source: "proxmox", Type: "vm"},
+		{ID: "asset-vm-1", Name: "VaultNAS VM", Source: "proxmox", Type: "vm"},
 	}
 	signals := []AssetSignals{
 		{
@@ -154,8 +154,8 @@ func TestIPMatcher_NoDuplicateCandidates(t *testing.T) {
 
 func TestHostnameMatcher_ExactMatch(t *testing.T) {
 	signals := []AssetSignals{
-		{AssetID: "a1", Source: "proxmox", Hostnames: []string{"omeganas"}},
-		{AssetID: "a2", Source: "truenas", Hostnames: []string{"omeganas"}},
+		{AssetID: "a1", Source: "proxmox", Hostnames: []string{"vaultnas"}},
+		{AssetID: "a2", Source: "truenas", Hostnames: []string{"vaultnas"}},
 	}
 	m := &HostnameMatcher{}
 	candidates := m.Match(signals)
@@ -174,8 +174,8 @@ func TestHostnameMatcher_ExactMatch(t *testing.T) {
 
 func TestHostnameMatcher_SameSource_NoMatch(t *testing.T) {
 	signals := []AssetSignals{
-		{AssetID: "a1", Source: "proxmox", Hostnames: []string{"omeganas"}},
-		{AssetID: "a2", Source: "proxmox", Hostnames: []string{"omeganas"}},
+		{AssetID: "a1", Source: "proxmox", Hostnames: []string{"vaultnas"}},
+		{AssetID: "a2", Source: "proxmox", Hostnames: []string{"vaultnas"}},
 	}
 	m := &HostnameMatcher{}
 	candidates := m.Match(signals)
@@ -186,8 +186,8 @@ func TestHostnameMatcher_SameSource_NoMatch(t *testing.T) {
 
 func TestHostnameMatcher_CaseInsensitive(t *testing.T) {
 	signals := []AssetSignals{
-		{AssetID: "a1", Source: "proxmox", Hostnames: []string{"OmegaNAS"}},
-		{AssetID: "a2", Source: "truenas", Hostnames: []string{"omeganas"}},
+		{AssetID: "a1", Source: "proxmox", Hostnames: []string{"VaultNAS"}},
+		{AssetID: "a2", Source: "truenas", Hostnames: []string{"vaultnas"}},
 	}
 	m := &HostnameMatcher{}
 	candidates := m.Match(signals)
@@ -203,12 +203,12 @@ func TestNameTokenMatcher_SharedToken(t *testing.T) {
 		{
 			AssetID:    "a1",
 			Source:     "proxmox",
-			NameTokens: []string{"omeganas"},
+			NameTokens: []string{"vaultnas"},
 		},
 		{
 			AssetID:    "a2",
 			Source:     "truenas",
-			NameTokens: []string{"omeganas"},
+			NameTokens: []string{"vaultnas"},
 		},
 	}
 	m := &NameTokenMatcher{}
@@ -231,12 +231,12 @@ func TestNameTokenMatcher_MultipleSharedTokens(t *testing.T) {
 		{
 			AssetID:    "a1",
 			Source:     "proxmox",
-			NameTokens: []string{"omeganas", "backup", "storage"},
+			NameTokens: []string{"vaultnas", "backup", "storage"},
 		},
 		{
 			AssetID:    "a2",
 			Source:     "truenas",
-			NameTokens: []string{"omeganas", "backup", "storage"},
+			NameTokens: []string{"vaultnas", "backup", "storage"},
 		},
 	}
 	m := &NameTokenMatcher{}
@@ -252,8 +252,8 @@ func TestNameTokenMatcher_MultipleSharedTokens(t *testing.T) {
 
 func TestNameTokenMatcher_SameSource_NoMatch(t *testing.T) {
 	signals := []AssetSignals{
-		{AssetID: "a1", Source: "proxmox", NameTokens: []string{"omeganas"}},
-		{AssetID: "a2", Source: "proxmox", NameTokens: []string{"omeganas"}},
+		{AssetID: "a1", Source: "proxmox", NameTokens: []string{"vaultnas"}},
+		{AssetID: "a2", Source: "proxmox", NameTokens: []string{"vaultnas"}},
 	}
 	m := &NameTokenMatcher{}
 	candidates := m.Match(signals)

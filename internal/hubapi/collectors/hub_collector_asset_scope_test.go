@@ -53,9 +53,9 @@ func TestProcessScopedCollectorHeartbeatKeepsRepeatedNativeIDsDistinct(t *testin
 	}{
 		{name: "two Proxmox collectors reuse VMID", nativeID: "proxmox-vm-101", collectors: []string{"collector-proxmox-delta", "collector-proxmox-gamma"}},
 		{name: "four Portainers reuse endpoint 2", nativeID: "portainer-endpoint-2", collectors: []string{"collector-portainer-delta", "collector-portainer-zeta", "collector-portainer-omega", "collector-portainer-tau"}},
-		{name: "two PBS systems reuse datastore name", nativeID: "pbs-datastore-backup", collectors: []string{"collector-pbs-simba", "collector-pbs-mccann"}},
+		{name: "two PBS systems reuse datastore name", nativeID: "pbs-datastore-backup", collectors: []string{"collector-pbs-alpha", "collector-pbs-harbor"}},
 		{name: "two TrueNAS systems reuse MainPool", nativeID: "truenas-storage-pool-mainpool", collectors: []string{"collector-truenas-omega", "collector-truenas-tau"}},
-		{name: "two Home Assistant systems reuse entity ID", nativeID: "ha-entity-sun-sun", collectors: []string{"collector-ha-simba", "collector-ha-mccann"}},
+		{name: "two Home Assistant systems reuse entity ID", nativeID: "ha-entity-sun-sun", collectors: []string{"collector-ha-alpha", "collector-ha-harbor"}},
 	}
 
 	for _, tc := range cases {

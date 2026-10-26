@@ -50,9 +50,9 @@ func TestHandleStartAgentTransferEnforcesAssetAllowlistBeforeConnectivity(t *tes
 
 func TestRemoteFileBaseSupportsAgentPlatforms(t *testing.T) {
 	for input, want := range map[string]string{
-		"/var/log/system.log":                 "system.log",
-		`C:\Users\Michael\Desktop\report.txt`: "report.txt",
-		"~/notes.txt":                         "notes.txt",
+		"/var/log/system.log":              "system.log",
+		`C:\Users\demo\Desktop\report.txt`: "report.txt",
+		"~/notes.txt":                      "notes.txt",
 	} {
 		if got := remoteFileBase(input); got != want {
 			t.Fatalf("remoteFileBase(%q)=%q want %q", input, got, want)

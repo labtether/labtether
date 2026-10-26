@@ -15,7 +15,7 @@ func TestConnectorDiscoverHappyPath(t *testing.T) {
 		switch call.Method {
 		case "system.info":
 			_ = writeRPCResult(conn, call.ID, map[string]any{
-				"hostname": "OmegaNAS",
+				"hostname": "VaultNAS",
 				"version":  "25.04.0",
 				"model":    "Mini",
 				"cores":    8,
@@ -114,7 +114,7 @@ func TestConnectorDiscoverPoolQueryFailureIsFatal(t *testing.T) {
 	srv := mockTrueNASServer(t, func(conn *websocket.Conn, call rpcCall) {
 		switch call.Method {
 		case "system.info":
-			_ = writeRPCResult(conn, call.ID, map[string]any{"hostname": "OmegaNAS"})
+			_ = writeRPCResult(conn, call.ID, map[string]any{"hostname": "VaultNAS"})
 		case "pool.query":
 			_ = writeRPCError(conn, call.ID, -32000, "permission denied")
 		default:
@@ -168,7 +168,7 @@ func TestConnectorConfiguredMetadataAndHealth(t *testing.T) {
 			return
 		}
 		_ = writeRPCResult(conn, call.ID, map[string]any{
-			"hostname": "OmegaNAS",
+			"hostname": "VaultNAS",
 			"version":  "25.04.0",
 		})
 	})
@@ -227,8 +227,8 @@ func TestConnectorTestConnectionFailureAndMessageVariants(t *testing.T) {
 	}{
 		{
 			name:    "hostname only",
-			payload: map[string]any{"hostname": "OmegaNAS"},
-			wantMsg: "connected to OmegaNAS",
+			payload: map[string]any{"hostname": "VaultNAS"},
+			wantMsg: "connected to VaultNAS",
 		},
 		{
 			name:    "version only",

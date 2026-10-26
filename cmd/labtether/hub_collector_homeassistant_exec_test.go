@@ -29,7 +29,7 @@ func TestExecuteTwoHomeAssistantCollectorsKeepRepeatedEntityIDDistinct(t *testin
 	store := newRecordingHubCollectorStore()
 	sut.hubCollectorStore = store
 
-	collectorIDs := []string{"collector-ha-simba", "collector-ha-mccann"}
+	collectorIDs := []string{"collector-ha-alpha", "collector-ha-harbor"}
 	for index, collectorID := range collectorIDs {
 		credentialID := "cred-ha-scope-" + string(rune('a'+index))
 		createHomeAssistantCredentialProfile(t, sut, credentialID, "ha-token", server.URL)

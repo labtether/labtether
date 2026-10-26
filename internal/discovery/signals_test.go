@@ -5,7 +5,7 @@ import "testing"
 func TestExtractSignals(t *testing.T) {
 	asset := AssetData{
 		ID:     "vm-1",
-		Name:   "OmegaNAS VM",
+		Name:   "VaultNAS VM",
 		Source: "proxmox",
 		Type:   "vm",
 		Host:   "10.0.1.50",
@@ -23,7 +23,7 @@ func TestExtractSignals(t *testing.T) {
 	}
 	found := false
 	for _, tok := range signals.NameTokens {
-		if tok == "omeganas" {
+		if tok == "vaultnas" {
 			found = true
 		}
 		if tok == "vm" {
@@ -31,7 +31,7 @@ func TestExtractSignals(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("expected token 'omeganas'")
+		t.Error("expected token 'vaultnas'")
 	}
 	if signals.ParentHints["node"] != "proxmox1" {
 		t.Errorf("expected parent hint node=proxmox1, got %v", signals.ParentHints)
@@ -39,7 +39,7 @@ func TestExtractSignals(t *testing.T) {
 }
 
 func TestFilterGenericTokens(t *testing.T) {
-	tokens := filterGenericTokens([]string{"omeganas", "vm", "host", "server", "nas01"})
+	tokens := filterGenericTokens([]string{"vaultnas", "vm", "host", "server", "nas01"})
 	if len(tokens) != 2 {
 		t.Errorf("expected 2 tokens, got %d: %v", len(tokens), tokens)
 	}

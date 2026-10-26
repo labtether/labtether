@@ -84,7 +84,7 @@ a fresh continuous soak on the final published signed candidate.
 
 Observed live on 2026-07-15 at approximately 22:18 AEST:
 
-| Check | Simba PBS | McCanns PBS |
+| Check | Alpha PBS | Harbors PBS |
 |---|---|---|
 | PBS version | 4.2.2 | 4.2.2 |
 | PBS services | active | active |
@@ -95,10 +95,10 @@ Observed live on 2026-07-15 at approximately 22:18 AEST:
 
 Current execution evidence:
 
-- McCanns Wednesday verifier started at 03:00, covered eight groups, retained zeta/theta snapshots with zero errors, and finished `TASK OK`.
-- Simba zeta pull ran from 06:00 to about 08:43, transferred two groups with three snapshots each, 102.059 GiB / 54,731 chunks at about 10.652 MiB/s, and finished `TASK OK`.
-- Simba theta pull ran from 09:00 to about 10:53, transferred the latest three snapshots, 70.199 GiB / 39,054 chunks at about 10.581 MiB/s, and finished `TASK OK`.
-- The six expected targeted groups were present: McCanns `offsite-delta` VM 100/101 and `offsite-gamma` VM 100; Simba `offsite-zeta` VM 100/101 and `offsite-theta` VM 100.
+- Harbors Wednesday verifier started at 03:00, covered eight groups, retained zeta/theta snapshots with zero errors, and finished `TASK OK`.
+- Alpha zeta pull ran from 06:00 to about 08:43, transferred two groups with three snapshots each, 102.059 GiB / 54,731 chunks at about 10.652 MiB/s, and finished `TASK OK`.
+- Alpha theta pull ran from 09:00 to about 10:53, transferred the latest three snapshots, 70.199 GiB / 39,054 chunks at about 10.581 MiB/s, and finished `TASK OK`.
+- The six expected targeted groups were present: Harbors `offsite-delta` VM 100/101 and `offsite-gamma` VM 100; Alpha `offsite-zeta` VM 100/101 and `offsite-theta` VM 100.
 - No PBS task was active at the time of inspection.
 
 This proved only that the replication and verification jobs were configured and
@@ -393,11 +393,11 @@ Checkpoint result: **FAIL / blocker for the exact-r27 24-hour installed soak**.
 The checkpoint was run at `2026-07-21T15:53:18Z`, after the scheduled
 `2026-07-16T16:15:00Z` r27 observation start. The installed Docker runtime was
 not running: `docker context show` selected `colima`, `docker ps` failed because
-`/Users/michael/.colima/default/docker.sock` was absent, the default-context
+`/Users/demo/.colima/default/docker.sock` was absent, the default-context
 `docker ps` also failed at `/var/run/docker.sock`, and `colima status`
 reported `colima is not running`.
 
-Strict endpoint checks did not reach the installed hub: `https://192.168.0.118:28443/version`
+Strict endpoint checks did not reach the installed hub: `https://192.168.8.118:28443/version`
 and `/healthz` both timed out, and the local console port `http://localhost:3000`
 refused connection. The Colima host-agent log shows the VM entered
 `VirtualMachineStateError` at `2026-07-16T21:49:29+10:00` and socket forwarding
@@ -430,12 +430,12 @@ remains unproven**.
 This follow-up checkpoint was run at `2026-07-22T02:21:48Z`. The current Docker
 context was `default`, but `/var/run/docker.sock` was absent and `docker ps`
 could not connect. The Colima Docker socket
-`/Users/michael/.colima/default/docker.sock` was also absent, `colima status`
+`/Users/demo/.colima/default/docker.sock` was also absent, `colima status`
 reported `colima is not running`, and no `Docker`, `colima`, `lima`, `qemu`, or
 `vz` process was visible to `pgrep` at the checkpoint.
 
 Strict endpoint checks again did not reach the installed hub:
-`https://192.168.0.118:28443/version` and `/healthz` timed out with HTTP `000`,
+`https://192.168.8.118:28443/version` and `/healthz` timed out with HTTP `000`,
 and `http://localhost:3000` refused connection. The Colima logs show the VM had
 been started and stopped earlier on `2026-07-22` (`10:31:18+09:00` to
 `10:41:27+09:00`, then `10:42:39+09:00` to `10:44:58+09:00`), with LabTether
@@ -550,14 +550,14 @@ superseded residual from the original r27 checkpoint notes.
 
 ## Historical recovery observation — 2026-07-16 (classification superseded)
 
-Michael subsequently authorized the separate recovery gate. One real offsite
+The owner subsequently authorized the separate recovery gate. One real offsite
 recovery unit was selected and exercised end to end without querying or acting
-on VM 102: McCann PBS namespace `offsite-delta`, VM 100 (`ContainerVM`), snapshot
+on VM 102: Harbor PBS namespace `offsite-delta`, VM 100 (`DockerHost1`), snapshot
 `2026-07-13T11:00:00Z` / backup time `1783940400`.
 
 Destination-local verification passed before restore:
 
-- McCann PBS 4.2.2 had no active verification, sync, reader, backup, prune, or
+- Harbor PBS 4.2.2 had no active verification, sync, reader, backup, prune, or
   restore task when the run started.
 - A targeted low-thread verifier ran from `2026-07-16T18:40:09+10:00` to
   `18:43:37+10:00` with `--ignore-verified false`, `--read-threads 1`, and
@@ -566,10 +566,10 @@ Destination-local verification passed before restore:
   `drive-scsi0.img.fidx`, verified 100,460.00 MiB in 207.57 seconds, reported
   zero errors, and ended `TASK OK`.
 - The exact destination snapshot's verification metadata changed from the
-  inherited Simba source verifier to McCann-local task
+  inherited Alpha source verifier to Harbor-local task
   `UPID:pbs:0007D960:7C3A3EF3:000000BF:6A5898E9:verify_snapshot:PBS\x2dStorage\x3ans-offsite\x2ddelta-vm-100-6A54C530:root@pam:`.
 
-The isolated restore then passed on `zetaserver`:
+The isolated restore then passed on `westserver`:
 
 - A temporary PVE storage entry, `LTQA-PBS-Recovery`, exposed only namespace
   `offsite-delta`. It reused a mode-0600 copy of zeta's existing PBS credential
@@ -578,7 +578,7 @@ The isolated restore then passed on `zetaserver`:
 - The verified snapshot restored to stopped disposable VMID `9900` and exact
   disk `local-zfs:vm-9900-disk-0` from `18:45:27` to `18:52:39+10:00`.
   The 137,438,953,472-byte image completed in 372.44 seconds at 351.93 MB/s.
-- Before first boot, the clone was renamed `LTQA-Recovery-ContainerVM`, changed
+- Before first boot, the clone was renamed `LTQA-Recovery-DockerHost1`, changed
   to `onboot=0`, capped at four cores / 16 GiB, and protected from accidental
   deletion. Its only PVE NIC (`net0`) was removed while stopped; config readback
   proved no `net*` device remained. The restored guest therefore had no
@@ -600,7 +600,7 @@ Cleanup also passed:
 - Its PVE config, local-zfs inventory, ZFS volume, temporary storage entry, and
   copied credential file were all absent on the `18:58:23+10:00` reconciliation.
 - Zeta's production `PBS-Storage` entry still selected namespace `zeta`; its
-  22:00 all-VM backup job was unchanged; both zeta and McCann PBS had no active
+  22:00 all-VM backup job was unchanged; both zeta and Harbor PBS had no active
   tasks; and the source snapshot remained present with the new local verifier
   metadata.
 
@@ -614,7 +614,7 @@ advance it.
 ## Canonical recovery boundary — 2026-07-22
 
 The authoritative state is
-`/Users/michael/Development/homelab/evidence/recovery/last-proven-recoverable.json`:
+`/Users/demo/Development/homelab/evidence/recovery/last-proven-recoverable.json`:
 
 | Recovery unit | Canonical state | Evidence boundary |
 |---|---|---|
@@ -626,26 +626,26 @@ The authoritative state is
 | Gamma VM 100 | `never_proven`; null | Destination verification, isolated restore, workload checks, and cleanup remain open |
 
 Detailed passing proof is in
-`/Users/michael/Development/homelab/evidence/recovery/2026-07-22-delta-isolation-and-zeta-vm-recovery-proofs.md`
+`/Users/demo/Development/homelab/evidence/recovery/2026-07-22-delta-isolation-and-zeta-vm-recovery-proofs.md`
 and
-`/Users/michael/Development/homelab/evidence/recovery/2026-07-22-theta-ha-vm-100-recovery-proof.md`.
+`/Users/demo/Development/homelab/evidence/recovery/2026-07-22-theta-ha-vm-100-recovery-proof.md`.
 No further restore was started near the scheduled backup window. The prohibited
 target remained untouched and is not recovery evidence.
 
 The broader connector/service credential audit counted 13 credentials. On
-`2026-07-22`, Michael authorized execution and two create-first OmegaNAS
+`2026-07-22`, the owner authorized execution and two create-first VaultNAS
 attempts were made. Both stopped before old-key revocation when the immediate
 post-restart MCP proof did not complete; both transactions restored the two
 mode-`0600` local copies, restarted only the TrueNAS bridge, and deleted the
 uncommitted replacement. The restored old path and both TrueNAS health calls
-subsequently passed. TauNAS was not attempted, and the other 11 external-
+subsequently passed. ArkNAS was not attempted, and the other 11 external-
 authority blockers remain unchanged. Therefore **0 of 13 credentials are
 rotated**; the exact attempt and rollback evidence is in the
 [credential-rotation audit](./2026-07-16-credential-rotation-audit.md).
 
 ## Backup-job correction and canonical-record handoff
 
-Michael explicitly authorized the bounded config-only correction on
+The owner explicitly authorized the bounded config-only correction on
 `2026-07-22`. Exact job-only pre-readback for
 `backup-5cbf16f7-7a25` showed `all=1`, no exclusion, `enabled=1`, schedule
 `21:00`, storage `PBS-Storage`, and mode `snapshot`. The first mutation attempt
@@ -666,7 +666,7 @@ remains separate and is not inferred from this prohibition.
 
 The obsolete proposed JSON handoff was removed because the canonical
 tracker now already contains separate per-VM objects and is authoritative:
-`/Users/michael/Development/homelab/evidence/recovery/last-proven-recoverable.json`.
+`/Users/demo/Development/homelab/evidence/recovery/last-proven-recoverable.json`.
 Do not recreate the former Delta VM 100 PASS object from this historical note.
 Delta VMs 100 and 101 must both retain `status: "never_proven"` and
 `last_proven_recoverable: null` until their own current contract-compliant

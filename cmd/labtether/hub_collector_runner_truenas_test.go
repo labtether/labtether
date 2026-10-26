@@ -260,14 +260,14 @@ func TestCollectorEndpointIdentity(t *testing.T) {
 	}{
 		{
 			name:     "https hostname",
-			raw:      "https://omeganas.local:9443",
-			wantHost: "omeganas.local",
+			raw:      "https://vaultnas.local:9443",
+			wantHost: "vaultnas.local",
 			wantIP:   "",
 		},
 		{
 			name:     "hostname without scheme",
-			raw:      "omeganas.local:9000",
-			wantHost: "omeganas.local",
+			raw:      "vaultnas.local:9000",
+			wantHost: "vaultnas.local",
 			wantIP:   "",
 		},
 		{
@@ -304,18 +304,18 @@ func TestBestRunsOnIdentityTargetPrefersIP(t *testing.T) {
 	source := assets.Asset{
 		ID:      "portainer-endpoint-1",
 		Type:    "container-host",
-		Name:    "portainer-omeganas",
+		Name:    "portainer-vaultnas",
 		Source:  "portainer",
 		GroupID: "home",
 		Metadata: map[string]string{
-			"endpoint_host": "omeganas.local",
+			"endpoint_host": "vaultnas.local",
 			"endpoint_ip":   "10.0.0.25",
 		},
 	}
 	targetA := assets.Asset{
-		ID:      "truenas-host-omeganas",
+		ID:      "truenas-host-vaultnas",
 		Type:    "nas",
-		Name:    "OmegaNAS",
+		Name:    "VaultNAS",
 		Source:  "truenas",
 		GroupID: "home",
 		Metadata: map[string]string{
@@ -325,7 +325,7 @@ func TestBestRunsOnIdentityTargetPrefersIP(t *testing.T) {
 	targetB := assets.Asset{
 		ID:      "truenas-host-backup",
 		Type:    "nas",
-		Name:    "BackupNAS",
+		Name:    "BackupBox",
 		Source:  "truenas",
 		GroupID: "home",
 		Metadata: map[string]string{
@@ -353,23 +353,23 @@ func TestBestRunsOnIdentityTargetPrefersIP(t *testing.T) {
 
 func TestBestRunsOnIdentityTargetAmbiguousHostname(t *testing.T) {
 	source := assets.Asset{
-		ID:      "truenas-host-omeganas",
+		ID:      "truenas-host-vaultnas",
 		Type:    "nas",
-		Name:    "OmegaNAS",
+		Name:    "VaultNAS",
 		Source:  "truenas",
 		GroupID: "home",
 	}
 	targetA := assets.Asset{
 		ID:      "proxmox-vm-100",
 		Type:    "vm",
-		Name:    "OmegaNAS",
+		Name:    "VaultNAS",
 		Source:  "proxmox",
 		GroupID: "home",
 	}
 	targetB := assets.Asset{
 		ID:      "proxmox-vm-101",
 		Type:    "vm",
-		Name:    "omeganas",
+		Name:    "vaultnas",
 		Source:  "proxmox",
 		GroupID: "home",
 	}

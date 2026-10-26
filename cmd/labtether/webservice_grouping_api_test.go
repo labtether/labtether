@@ -25,7 +25,7 @@ func TestHandleWebServicesAppliesAliasGroupingRules(t *testing.T) {
 		Mode:                webServiceURLGroupingModeBalanced,
 		DryRun:              false,
 		ConfidenceThreshold: 85,
-		AliasRules:          parseWebServiceAliasRules("*.*.simbaslabs.com => *.simbaslabs.com"),
+		AliasRules:          parseWebServiceAliasRules("*.*.example.com => *.example.com"),
 	})
 
 	report := agentmgr.WebServiceReportData{
@@ -36,7 +36,7 @@ func TestHandleWebServicesAppliesAliasGroupingRules(t *testing.T) {
 				ServiceKey:  "grafana",
 				Name:        "Grafana",
 				Category:    "Monitoring",
-				URL:         "https://xyz.tail.simbaslabs.com",
+				URL:         "https://xyz.tail.example.com",
 				Status:      "up",
 				Source:      "proxy",
 				HostAssetID: "host-1",
@@ -49,7 +49,7 @@ func TestHandleWebServicesAppliesAliasGroupingRules(t *testing.T) {
 				ServiceKey:  "grafana",
 				Name:        "Grafana",
 				Category:    "Monitoring",
-				URL:         "https://xyz.simbaslabs.com",
+				URL:         "https://xyz.example.com",
 				Status:      "up",
 				Source:      "proxy",
 				HostAssetID: "host-1",
@@ -87,12 +87,12 @@ func TestHandleWebServicesAppliesAliasGroupingRules(t *testing.T) {
 	primary := strings.TrimSpace(grouped.URL)
 
 	switch primary {
-	case "https://xyz.tail.simbaslabs.com":
-		if !containsCSVValue(altURLs, "https://xyz.simbaslabs.com") {
+	case "https://xyz.tail.example.com":
+		if !containsCSVValue(altURLs, "https://xyz.example.com") {
 			t.Fatalf("expected alt_urls to include canonical alias, got %q", altURLs)
 		}
-	case "https://xyz.simbaslabs.com":
-		if !containsCSVValue(altURLs, "https://xyz.tail.simbaslabs.com") {
+	case "https://xyz.example.com":
+		if !containsCSVValue(altURLs, "https://xyz.tail.example.com") {
 			t.Fatalf("expected alt_urls to include middle-label alias, got %q", altURLs)
 		}
 	default:
@@ -107,7 +107,7 @@ func TestHandleWebServicesGroupingDryRunSkipsGrouping(t *testing.T) {
 		Mode:                webServiceURLGroupingModeBalanced,
 		DryRun:              true,
 		ConfidenceThreshold: 85,
-		AliasRules:          parseWebServiceAliasRules("*.*.simbaslabs.com => *.simbaslabs.com"),
+		AliasRules:          parseWebServiceAliasRules("*.*.example.com => *.example.com"),
 	})
 
 	report := agentmgr.WebServiceReportData{
@@ -118,7 +118,7 @@ func TestHandleWebServicesGroupingDryRunSkipsGrouping(t *testing.T) {
 				ServiceKey:  "grafana",
 				Name:        "Grafana",
 				Category:    "Monitoring",
-				URL:         "https://xyz.tail.simbaslabs.com",
+				URL:         "https://xyz.tail.example.com",
 				Status:      "up",
 				Source:      "proxy",
 				HostAssetID: "host-1",
@@ -128,7 +128,7 @@ func TestHandleWebServicesGroupingDryRunSkipsGrouping(t *testing.T) {
 				ServiceKey:  "grafana",
 				Name:        "Grafana",
 				Category:    "Monitoring",
-				URL:         "https://xyz.simbaslabs.com",
+				URL:         "https://xyz.example.com",
 				Status:      "up",
 				Source:      "proxy",
 				HostAssetID: "host-1",
@@ -163,8 +163,8 @@ func TestHandleWebServicesNeverGroupRuleSkipsAliasGrouping(t *testing.T) {
 		Mode:                webServiceURLGroupingModeBalanced,
 		DryRun:              false,
 		ConfidenceThreshold: 85,
-		AliasRules:          parseWebServiceAliasRules("*.*.simbaslabs.com => *.simbaslabs.com"),
-		NeverGroupRules:     parseWebServicePairRules("https://xyz.tail.simbaslabs.com => https://xyz.simbaslabs.com"),
+		AliasRules:          parseWebServiceAliasRules("*.*.example.com => *.example.com"),
+		NeverGroupRules:     parseWebServicePairRules("https://xyz.tail.example.com => https://xyz.example.com"),
 	})
 
 	report := agentmgr.WebServiceReportData{
@@ -175,7 +175,7 @@ func TestHandleWebServicesNeverGroupRuleSkipsAliasGrouping(t *testing.T) {
 				ServiceKey:  "grafana",
 				Name:        "Grafana",
 				Category:    "Monitoring",
-				URL:         "https://xyz.tail.simbaslabs.com",
+				URL:         "https://xyz.tail.example.com",
 				Status:      "up",
 				Source:      "proxy",
 				HostAssetID: "host-1",
@@ -185,7 +185,7 @@ func TestHandleWebServicesNeverGroupRuleSkipsAliasGrouping(t *testing.T) {
 				ServiceKey:  "grafana",
 				Name:        "Grafana",
 				Category:    "Monitoring",
-				URL:         "https://xyz.simbaslabs.com",
+				URL:         "https://xyz.example.com",
 				Status:      "up",
 				Source:      "proxy",
 				HostAssetID: "host-1",
@@ -276,7 +276,7 @@ func TestHandleWebServicesGroupingThresholdBlocksAliasGrouping(t *testing.T) {
 		Mode:                webServiceURLGroupingModeBalanced,
 		DryRun:              false,
 		ConfidenceThreshold: 96,
-		AliasRules:          parseWebServiceAliasRules("*.*.simbaslabs.com => *.simbaslabs.com"),
+		AliasRules:          parseWebServiceAliasRules("*.*.example.com => *.example.com"),
 	})
 
 	report := agentmgr.WebServiceReportData{
@@ -287,7 +287,7 @@ func TestHandleWebServicesGroupingThresholdBlocksAliasGrouping(t *testing.T) {
 				ServiceKey:  "grafana",
 				Name:        "Grafana",
 				Category:    "Monitoring",
-				URL:         "https://xyz.tail.simbaslabs.com",
+				URL:         "https://xyz.tail.example.com",
 				Status:      "up",
 				Source:      "proxy",
 				HostAssetID: "host-1",
@@ -297,7 +297,7 @@ func TestHandleWebServicesGroupingThresholdBlocksAliasGrouping(t *testing.T) {
 				ServiceKey:  "grafana",
 				Name:        "Grafana",
 				Category:    "Monitoring",
-				URL:         "https://xyz.simbaslabs.com",
+				URL:         "https://xyz.example.com",
 				Status:      "up",
 				Source:      "proxy",
 				HostAssetID: "host-1",

@@ -20,7 +20,7 @@ func TestSameSubnetLocalIPForHostPrefersMatchingLANInterface(t *testing.T) {
 		if host != "pve.local" {
 			t.Fatalf("unexpected host lookup: %s", host)
 		}
-		return []net.IPAddr{{IP: net.ParseIP("192.168.0.32")}}, nil
+		return []net.IPAddr{{IP: net.ParseIP("192.168.8.32")}}, nil
 	}
 	listNetInterfaces = func() ([]net.Interface, error) {
 		return []net.Interface{
@@ -32,7 +32,7 @@ func TestSameSubnetLocalIPForHostPrefersMatchingLANInterface(t *testing.T) {
 		switch iface.Name {
 		case "en0":
 			return []net.Addr{
-				&net.IPNet{IP: net.ParseIP("192.168.0.118"), Mask: net.CIDRMask(24, 32)},
+				&net.IPNet{IP: net.ParseIP("192.168.8.118"), Mask: net.CIDRMask(24, 32)},
 			}, nil
 		case "utun6":
 			return []net.Addr{
@@ -44,7 +44,7 @@ func TestSameSubnetLocalIPForHostPrefersMatchingLANInterface(t *testing.T) {
 	}
 
 	got := sameSubnetLocalIPForHost(context.Background(), "pve.local")
-	if got == nil || got.String() != "192.168.0.118" {
+	if got == nil || got.String() != "192.168.8.118" {
 		t.Fatalf("expected en0 address, got %v", got)
 	}
 }
@@ -64,7 +64,7 @@ func TestSameSubnetLocalIPForHostSkipsPublicTargets(t *testing.T) {
 	}
 	interfaceAddrs = func(_ net.Interface) ([]net.Addr, error) {
 		return []net.Addr{
-			&net.IPNet{IP: net.ParseIP("192.168.0.118"), Mask: net.CIDRMask(24, 32)},
+			&net.IPNet{IP: net.ParseIP("192.168.8.118"), Mask: net.CIDRMask(24, 32)},
 		}, nil
 	}
 
@@ -92,7 +92,7 @@ func TestSameSubnetLocalIPForHostReturnsNilWithoutSameSubnetMatch(t *testing.T) 
 		}, nil
 	}
 
-	if got := sameSubnetLocalIPForHost(context.Background(), "192.168.0.32"); got != nil {
+	if got := sameSubnetLocalIPForHost(context.Background(), "192.168.8.32"); got != nil {
 		t.Fatalf("expected nil when no same-subnet interface exists, got %v", got)
 	}
 }

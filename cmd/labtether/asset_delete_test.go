@@ -149,9 +149,9 @@ func TestDeleteAsset_ConnectedAgentReturnsConflict(t *testing.T) {
 	sut.agentMgr = agentmgr.NewManager()
 
 	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
-		AssetID: "containervm-deltaserver",
+		AssetID: "dockerhost1-northserver",
 		Type:    "host",
-		Name:    "containervm-deltaserver",
+		Name:    "dockerhost1-northserver",
 		Source:  "agent",
 	}); err != nil {
 		t.Fatalf("failed to create connected agent asset: %v", err)
@@ -159,9 +159,9 @@ func TestDeleteAsset_ConnectedAgentReturnsConflict(t *testing.T) {
 
 	serverConn, cleanup := createTestWSPair(t)
 	t.Cleanup(cleanup)
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "containervm-deltaserver", "linux"))
+	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "dockerhost1-northserver", "linux"))
 
-	req := httptest.NewRequest(http.MethodDelete, "/assets/containervm-deltaserver", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/assets/dockerhost1-northserver", nil)
 	rec := httptest.NewRecorder()
 	sut.handleAssetActions(rec, req)
 
@@ -171,7 +171,7 @@ func TestDeleteAsset_ConnectedAgentReturnsConflict(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "must be stopped or uninstalled before deletion") {
 		t.Fatalf("unexpected body: %s", rec.Body.String())
 	}
-	if _, ok, _ := sut.assetStore.GetAsset("containervm-deltaserver"); !ok {
+	if _, ok, _ := sut.assetStore.GetAsset("dockerhost1-northserver"); !ok {
 		t.Fatalf("expected connected agent asset to remain after conflict")
 	}
 }
@@ -185,9 +185,9 @@ func TestDeleteAsset_ConnectedAgentSendsSSHKeyRemoveBeforeConflict(t *testing.T)
 	}
 
 	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
-		AssetID: "containervm-deltaserver",
+		AssetID: "dockerhost1-northserver",
 		Type:    "host",
-		Name:    "containervm-deltaserver",
+		Name:    "dockerhost1-northserver",
 		Source:  "agent",
 	}); err != nil {
 		t.Fatalf("failed to create connected agent asset: %v", err)
@@ -196,8 +196,8 @@ func TestDeleteAsset_ConnectedAgentSendsSSHKeyRemoveBeforeConflict(t *testing.T)
 	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
 	defer cleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "containervm-deltaserver", "linux"))
-	defer sut.agentMgr.Unregister("containervm-deltaserver")
+	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "dockerhost1-northserver", "linux"))
+	defer sut.agentMgr.Unregister("dockerhost1-northserver")
 
 	done := make(chan struct{})
 	go func() {
@@ -224,7 +224,7 @@ func TestDeleteAsset_ConnectedAgentSendsSSHKeyRemoveBeforeConflict(t *testing.T)
 		}
 	}()
 
-	req := httptest.NewRequest(http.MethodDelete, "/assets/containervm-deltaserver", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/assets/dockerhost1-northserver", nil)
 	rec := httptest.NewRecorder()
 	sut.handleAssetActions(rec, req)
 
@@ -233,7 +233,7 @@ func TestDeleteAsset_ConnectedAgentSendsSSHKeyRemoveBeforeConflict(t *testing.T)
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("expected 409, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if _, ok, _ := sut.assetStore.GetAsset("containervm-deltaserver"); !ok {
+	if _, ok, _ := sut.assetStore.GetAsset("dockerhost1-northserver"); !ok {
 		t.Fatalf("expected connected agent asset to remain after conflict")
 	}
 }
@@ -335,9 +335,9 @@ func TestDeleteAsset_NonAgentDeleteCascadesAttachedDockerAssetsAndWebServices(t 
 
 	// Parent asset is not agent-sourced (for example connector-discovered VM).
 	_, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
-		AssetID: "containervm-deltaserver",
+		AssetID: "dockerhost1-northserver",
 		Type:    "vm",
-		Name:    "containervm-deltaserver",
+		Name:    "dockerhost1-northserver",
 		Source:  "proxmox",
 	})
 	if err != nil {
@@ -346,21 +346,21 @@ func TestDeleteAsset_NonAgentDeleteCascadesAttachedDockerAssetsAndWebServices(t 
 
 	attached := []assets.HeartbeatRequest{
 		{
-			AssetID: "docker-stack-containervm-deltaserver-scrypted",
+			AssetID: "docker-stack-dockerhost1-northserver-scrypted",
 			Type:    "compose-stack",
 			Name:    "scrypted",
 			Source:  "docker",
 			Metadata: map[string]string{
-				"agent_id": "containervm-deltaserver",
+				"agent_id": "dockerhost1-northserver",
 			},
 		},
 		{
-			AssetID: "docker-ct-containervm-deltaserver-abc123def456",
+			AssetID: "docker-ct-dockerhost1-northserver-abc123def456",
 			Type:    "docker-container",
 			Name:    "go2rtc",
 			Source:  "docker",
 			Metadata: map[string]string{
-				"agent_id": "containervm-deltaserver",
+				"agent_id": "dockerhost1-northserver",
 			},
 		},
 	}
@@ -372,25 +372,25 @@ func TestDeleteAsset_NonAgentDeleteCascadesAttachedDockerAssetsAndWebServices(t 
 
 	// Seed web service cache for the same host to verify immediate removal.
 	raw, _ := json.Marshal(agentmgr.WebServiceReportData{
-		HostAssetID: "containervm-deltaserver",
+		HostAssetID: "dockerhost1-northserver",
 		Services: []agentmgr.DiscoveredWebService{
 			{
 				ID:          "svc-scrypted",
 				Name:        "scrypted",
-				HostAssetID: "containervm-deltaserver",
+				HostAssetID: "dockerhost1-northserver",
 				Status:      "up",
 			},
 		},
 	})
-	sut.webServiceCoordinator.HandleReport("containervm-deltaserver", agentmgr.Message{
+	sut.webServiceCoordinator.HandleReport("dockerhost1-northserver", agentmgr.Message{
 		Type: agentmgr.MsgWebServiceReport,
 		Data: raw,
 	})
-	if got := len(sut.webServiceCoordinator.ListByHost("containervm-deltaserver")); got != 1 {
+	if got := len(sut.webServiceCoordinator.ListByHost("dockerhost1-northserver")); got != 1 {
 		t.Fatalf("expected 1 cached web service before delete, got %d", got)
 	}
 
-	req := httptest.NewRequest(http.MethodDelete, "/assets/containervm-deltaserver", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/assets/dockerhost1-northserver", nil)
 	rec := httptest.NewRecorder()
 	sut.handleAssetActions(rec, req)
 
@@ -399,16 +399,16 @@ func TestDeleteAsset_NonAgentDeleteCascadesAttachedDockerAssetsAndWebServices(t 
 	}
 
 	for _, id := range []string{
-		"containervm-deltaserver",
-		"docker-stack-containervm-deltaserver-scrypted",
-		"docker-ct-containervm-deltaserver-abc123def456",
+		"dockerhost1-northserver",
+		"docker-stack-dockerhost1-northserver-scrypted",
+		"docker-ct-dockerhost1-northserver-abc123def456",
 	} {
 		if _, ok, _ := sut.assetStore.GetAsset(id); ok {
 			t.Fatalf("expected %s to be deleted", id)
 		}
 	}
 
-	if got := len(sut.webServiceCoordinator.ListByHost("containervm-deltaserver")); got != 0 {
+	if got := len(sut.webServiceCoordinator.ListByHost("dockerhost1-northserver")); got != 0 {
 		t.Fatalf("expected cached web services for deleted host to be removed immediately, got %d", got)
 	}
 }
@@ -423,7 +423,7 @@ func TestDeleteAsset_RemovesAutoDockerCollectorsForDeletedParent(t *testing.T) {
 				CollectorType: hubcollector.CollectorTypeDocker,
 				Enabled:       true,
 				Config: map[string]any{
-					"agent_asset_id": "containervm-delta",
+					"agent_asset_id": "dockerhost1-delta",
 					"provision_mode": "auto",
 				},
 			},
@@ -432,9 +432,9 @@ func TestDeleteAsset_RemovesAutoDockerCollectorsForDeletedParent(t *testing.T) {
 	sut.hubCollectorStore = hcStore
 
 	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
-		AssetID: "containervm-delta",
+		AssetID: "dockerhost1-delta",
 		Type:    "vm",
-		Name:    "containervm-delta",
+		Name:    "dockerhost1-delta",
 		Source:  "proxmox",
 	}); err != nil {
 		t.Fatalf("failed to seed parent asset: %v", err)
@@ -448,7 +448,7 @@ func TestDeleteAsset_RemovesAutoDockerCollectorsForDeletedParent(t *testing.T) {
 		t.Fatalf("failed to seed docker collector asset: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodDelete, "/assets/containervm-delta", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/assets/dockerhost1-delta", nil)
 	rec := httptest.NewRecorder()
 	sut.handleAssetActions(rec, req)
 

@@ -132,8 +132,8 @@ func TestHandleTrueNASCapabilitiesKeepsProbeErrorsConservative(t *testing.T) {
 	})
 
 	asset := assets.Asset{
-		ID:       "truenas-host-omeganas",
-		Name:     "omeganas",
+		ID:       "truenas-host-vaultnas",
+		Name:     "vaultnas",
 		Source:   "truenas",
 		Type:     "nas",
 		Metadata: map[string]string{"collector_id": "collector-truenas-capabilities"},
@@ -143,7 +143,7 @@ func TestHandleTrueNASCapabilitiesKeepsProbeErrorsConservative(t *testing.T) {
 		t.Fatalf("loadTrueNASRuntime failed: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-omeganas/capabilities", nil)
+	req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-vaultnas/capabilities", nil)
 	rec := httptest.NewRecorder()
 	sut.handleTrueNASCapabilities(req.Context(), rec, asset, runtime)
 

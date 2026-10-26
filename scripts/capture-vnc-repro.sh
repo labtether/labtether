@@ -48,7 +48,7 @@ Typical workflow:
   4. Attach the generated report when triaging.
 
 Options:
-  --target <asset-id>         Required asset ID (for example Michael-MBP.local)
+  --target <asset-id>         Required asset ID (for example dev-mac.local)
   --banner-line <text>        Add one debug-banner line (repeatable)
   --banner-file <path>        Read debug-banner lines from a text file
   --trace <lt_trace>          Explicit stream trace ID; auto-detected from banner when present
@@ -476,7 +476,7 @@ backend_filtered="$(filter_backend_events "$backend_pane")"
 frontend_filtered="$(filter_frontend_events "$frontend_pane")"
 banner_text="$(banner_blob)"
 macos_logs=""
-if [[ "$asset_platform" == "darwin" || "$TARGET" == "Michael-MBP.local" ]]; then
+if [[ "$asset_platform" == "darwin" || "$TARGET" == "dev-mac.local" ]]; then
   macos_logs="$(capture_macos_logs)"
 fi
 

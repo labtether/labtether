@@ -162,7 +162,7 @@ func TestEngine_RunDiscovery(t *testing.T) {
 		},
 		{
 			ID:     "vm-1",
-			Name:   "OmegaNAS VM",
+			Name:   "VaultNAS VM",
 			Source: "proxmox",
 			Type:   "vm",
 			Host:   "10.0.5.50",
@@ -172,7 +172,7 @@ func TestEngine_RunDiscovery(t *testing.T) {
 		},
 		{
 			ID:     "truenas-1",
-			Name:   "OmegaNAS",
+			Name:   "VaultNAS",
 			Source: "truenas",
 			Type:   "truenas",
 			Host:   "10.0.5.50", // same IP as vm-1
@@ -215,7 +215,7 @@ func TestEngine_RunDiscovery(t *testing.T) {
 	}
 
 	// The IP match between vm-1 and truenas-1 yields confidence 0.95; combined
-	// with NameTokenMatcher ("omeganas" token) the aggregate should exceed 0.95.
+	// with NameTokenMatcher ("vaultnas" token) the aggregate should exceed 0.95.
 	// At minimum, the pair should have been captured (created or suggested).
 	if created+suggested == 0 {
 		t.Error("expected at least one edge created or suggested, got none")
@@ -257,7 +257,7 @@ func TestEngine_SkipsExistingEdges(t *testing.T) {
 		},
 		{
 			ID:     "vm-1",
-			Name:   "OmegaNAS VM",
+			Name:   "VaultNAS VM",
 			Source: "proxmox",
 			Type:   "vm",
 			Host:   "10.0.5.50",

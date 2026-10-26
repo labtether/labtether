@@ -199,9 +199,9 @@ func TestBestRunsOnIdentityTargetWithPriorityPrefersTrueNAS(t *testing.T) {
 		},
 	}
 	trueNASTarget := assets.Asset{
-		ID:     "truenas-host-omeganas",
+		ID:     "truenas-host-vaultnas",
 		Type:   "nas",
-		Name:   "omeganas",
+		Name:   "vaultnas",
 		Source: "truenas",
 		Metadata: map[string]string{
 			"ip": "10.0.0.25",
@@ -246,9 +246,9 @@ func TestAutoLinkDockerHostsToInfraRemovesReverseAutoEdge(t *testing.T) {
 			},
 		},
 		{
-			AssetID: "truenas-host-omeganas",
+			AssetID: "truenas-host-vaultnas",
 			Type:    "nas",
-			Name:    "omeganas",
+			Name:    "vaultnas",
 			Source:  "truenas",
 			Metadata: map[string]string{
 				"collector_endpoint_ip": "10.0.0.25",
@@ -271,7 +271,7 @@ func TestAutoLinkDockerHostsToInfraRemovesReverseAutoEdge(t *testing.T) {
 	}
 
 	if _, err := deps.CreateAssetDependency(dependencies.CreateDependencyRequest{
-		SourceAssetID:    "truenas-host-omeganas",
+		SourceAssetID:    "truenas-host-vaultnas",
 		TargetAssetID:    "docker-host-1",
 		RelationshipType: dependencies.RelationshipRunsOn,
 		Direction:        dependencies.DirectionDownstream,
@@ -297,13 +297,13 @@ func TestAutoLinkDockerHostsToInfraRemovesReverseAutoEdge(t *testing.T) {
 		if dep.RelationshipType != dependencies.RelationshipRunsOn {
 			continue
 		}
-		if dep.SourceAssetID == "truenas-host-omeganas" && dep.TargetAssetID == "docker-host-1" {
+		if dep.SourceAssetID == "truenas-host-vaultnas" && dep.TargetAssetID == "docker-host-1" {
 			t.Fatalf("reverse auto runs_on edge still present after relink")
 		}
 		if dep.SourceAssetID == "docker-host-1" {
 			foundForward = true
-			if dep.TargetAssetID != "truenas-host-omeganas" {
-				t.Fatalf("docker runs_on target = %q, want truenas-host-omeganas", dep.TargetAssetID)
+			if dep.TargetAssetID != "truenas-host-vaultnas" {
+				t.Fatalf("docker runs_on target = %q, want truenas-host-vaultnas", dep.TargetAssetID)
 			}
 			if dep.Metadata["binding"] != "auto" {
 				t.Fatalf("expected auto binding metadata, got %q", dep.Metadata["binding"])
@@ -324,11 +324,11 @@ func TestAutoLinkDockerHostsToAgentHost(t *testing.T) {
 	deps := newStubDependencyStore()
 	sut.dependencyStore = deps
 
-	// Create an agent host (like containervm-deltaserver reported by agent).
+	// Create an agent host (like dockerhost1-northserver reported by agent).
 	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
-		AssetID: "containervm-deltaserver",
+		AssetID: "dockerhost1-northserver",
 		Type:    "host",
-		Name:    "containervm-deltaserver",
+		Name:    "dockerhost1-northserver",
 		Source:  "agent",
 	}); err != nil {
 		t.Fatalf("failed to upsert agent host: %v", err)
@@ -336,12 +336,12 @@ func TestAutoLinkDockerHostsToAgentHost(t *testing.T) {
 
 	// Create a Docker container-host (auto-discovered, agent_id links to the agent).
 	if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
-		AssetID: "docker-host-containervm-deltaserver",
+		AssetID: "docker-host-dockerhost1-northserver",
 		Type:    "container-host",
-		Name:    "docker-containervm-deltaserver",
+		Name:    "docker-dockerhost1-northserver",
 		Source:  "docker",
 		Metadata: map[string]string{
-			"agent_id": "containervm-deltaserver",
+			"agent_id": "dockerhost1-northserver",
 		},
 	}); err != nil {
 		t.Fatalf("failed to upsert docker host: %v", err)
@@ -351,15 +351,15 @@ func TestAutoLinkDockerHostsToAgentHost(t *testing.T) {
 		t.Fatalf("autoLinkDockerHostsToInfra() error = %v", err)
 	}
 
-	current, err := deps.ListAssetDependencies("docker-host-containervm-deltaserver", 50)
+	current, err := deps.ListAssetDependencies("docker-host-dockerhost1-northserver", 50)
 	if err != nil {
 		t.Fatalf("ListAssetDependencies() error = %v", err)
 	}
 
 	foundLink := false
 	for _, dep := range current {
-		if dep.SourceAssetID == "docker-host-containervm-deltaserver" &&
-			dep.TargetAssetID == "containervm-deltaserver" &&
+		if dep.SourceAssetID == "docker-host-dockerhost1-northserver" &&
+			dep.TargetAssetID == "dockerhost1-northserver" &&
 			dep.RelationshipType == dependencies.RelationshipRunsOn {
 			foundLink = true
 			if dep.Metadata["binding"] != "auto" {
