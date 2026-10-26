@@ -34,6 +34,7 @@ func (s *apiServer) buildAuthDeps() *authpkg.Deps {
 		EnforceRateLimit:           s.enforceRateLimit,
 		EnforceRateLimitGlobal:     s.enforceRateLimitGlobal,
 		ValidateOwnerTokenRequest:  s.validateOwnerTokenRequest,
+		ClientIP:                   trustedRequestClientIP,
 		UserIDFromContext:          principalActorID,
 		UserRoleFromContext:        userRoleFromContext,
 

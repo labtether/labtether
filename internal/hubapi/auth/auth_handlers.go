@@ -13,6 +13,20 @@ import (
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
+const (
+	loginPerClientLimit = 30
+	loginGlobalLimit    = 120
+)
+
+func (d *Deps) loginClientIP(r *http.Request) string {
+	if d.ClientIP != nil {
+		if ip := strings.TrimSpace(d.ClientIP(r)); ip != "" {
+			return ip
+		}
+	}
+	return shared.RequestClientKey(r)
+}
+
 // HandleAuthLogin handles POST /auth/login.
 func (d *Deps) HandleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -23,7 +37,13 @@ func (d *Deps) HandleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "authentication unavailable")
 		return
 	}
-	if d.EnforceRateLimitGlobal != nil && !d.EnforceRateLimitGlobal(w, "auth.login.global", 120, time.Minute) {
+	// Per-client first: a single client that hits its own ceiling is rejected
+	// before it consumes the shared global budget, so it cannot lock everyone
+	// else out of logging in.
+	if d.EnforceRateLimitGlobal != nil && !d.EnforceRateLimitGlobal(w, "auth.login.client:"+d.loginClientIP(r), loginPerClientLimit, time.Minute) {
+		return
+	}
+	if d.EnforceRateLimitGlobal != nil && !d.EnforceRateLimitGlobal(w, "auth.login.global", loginGlobalLimit, time.Minute) {
 		return
 	}
 

@@ -67,6 +67,9 @@ type Deps struct {
 	EnforceRateLimit          func(w http.ResponseWriter, r *http.Request, bucket string, limit int, window time.Duration) bool
 	EnforceRateLimitGlobal    func(w http.ResponseWriter, bucket string, limit int, window time.Duration) bool
 	ValidateOwnerTokenRequest func(r *http.Request) bool
+	// ClientIP returns the caller's address for rate limiting, honouring the
+	// Hub's trusted-proxy settings. Nil falls back to the direct peer address.
+	ClientIP func(r *http.Request) string
 
 	// Context extractors injected from cmd/labtether.
 	UserIDFromContext   func(ctx context.Context) string
