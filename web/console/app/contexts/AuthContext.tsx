@@ -36,9 +36,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    const generation = ++sessionGeneration.current;
+    // The counter ref (not a DOM node) is bumped again on cleanup so any
+    // in-flight bootstrap or refresh from this run is ignored.
+    const generations = sessionGeneration;
+    const generation = ++generations.current;
     const isCurrent = () => !cancelled && !logoutStarted.current
-      && generation === sessionGeneration.current;
+      && generation === generations.current;
     let retryTimer: number | null = null;
     const redirectToLogin = () => {
       const currentPath = window.location.pathname;
@@ -126,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void checkAuth();
     return () => {
       cancelled = true;
-      ++sessionGeneration.current;
+      ++generations.current;
       if (retryTimer) {
         window.clearTimeout(retryTimer);
       }
