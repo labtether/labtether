@@ -239,6 +239,11 @@ func newSecureOutboundTransport(base *http.Transport, scheme string, addressPoli
 	} else {
 		transport = http.DefaultTransport.(*http.Transport).Clone()
 	}
+	if addressPolicy != nil {
+		// The transport is cached and shared; keep its own copy of the policy.
+		policy := *addressPolicy
+		addressPolicy = &policy
+	}
 	transport.Proxy = nil
 	transport.DialTLSContext = nil
 	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
