@@ -110,7 +110,7 @@ Michael runs these steps; they need his Cloudflare login and Apple key.
   `wrangler.jsonc`). It already serves the labtether.com website Worker, so
   the `labtether.com` zone is on this account.
 - Use a machine with Node 22 or newer (the lab Mac mini, not the MacBook Pro
-  while it is short of memory). The `wrangler@4.113.0` dev dependency is
+  while it is short of memory). The `wrangler@4.151.2` dev dependency is
   pinned; nothing else is installed.
 
 1. Install and log in:
