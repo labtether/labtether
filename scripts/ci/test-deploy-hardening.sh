@@ -309,5 +309,13 @@ fi
   fi
 )
 grep -F '"guacd": "guacamole/guacd:1.6.0@sha256:' "${tmp_dir}/rendered/deploy-manifest.json" >/dev/null
+# Release assets must not start with a dot (GitHub renames them), and the
+# website installer requires SHA256SUMS to list exactly these three files.
+grep -F '"env_example": "deploy.env.example"' "${tmp_dir}/rendered/deploy-manifest.json" >/dev/null
+listed_assets="$(awk '{print $2}' "${tmp_dir}/rendered/SHA256SUMS" | sed 's/^\*//' | LC_ALL=C sort | tr '\n' ' ')"
+if [[ "${listed_assets}" != "deploy-manifest.json deploy.env.example docker-compose.deploy.yml " ]]; then
+  printf 'FAIL: SHA256SUMS lists unexpected release assets: %s\n' "${listed_assets}" >&2
+  exit 1
+fi
 
 printf 'PASS: deploy hardening contract\n'

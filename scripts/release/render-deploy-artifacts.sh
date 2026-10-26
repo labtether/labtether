@@ -114,7 +114,9 @@ if [[ ! -f "${template_path}" ]]; then
 fi
 
 compose_output="${OUTPUT_DIR}/docker-compose.deploy.yml"
-env_output="${OUTPUT_DIR}/.env.deploy.example"
+# GitHub release assets cannot start with a dot (".env.deploy.example" was
+# published as "default.env.deploy.example"), so the asset is deploy.env.example.
+env_output="${OUTPUT_DIR}/deploy.env.example"
 manifest_output="${OUTPUT_DIR}/deploy-manifest.json"
 checksums_output="${OUTPUT_DIR}/SHA256SUMS"
 
@@ -126,7 +128,7 @@ for destination in "$compose_output" "$env_output" "$manifest_output" "$checksum
 done
 
 compose_tmp=$(mktemp "${OUTPUT_DIR}/.docker-compose.deploy.yml.tmp.XXXXXX")
-env_tmp=$(mktemp "${OUTPUT_DIR}/.env.deploy.example.tmp.XXXXXX")
+env_tmp=$(mktemp "${OUTPUT_DIR}/.deploy.env.example.tmp.XXXXXX")
 manifest_tmp=$(mktemp "${OUTPUT_DIR}/.deploy-manifest.json.tmp.XXXXXX")
 checksums_tmp=$(mktemp "${OUTPUT_DIR}/.SHA256SUMS.tmp.XXXXXX")
 cleanup() {
@@ -186,7 +188,7 @@ cat > "${manifest_tmp}" <<EOF
   "repository": "${REPOSITORY}",
   "artifacts": {
     "docker_compose_deploy": "docker-compose.deploy.yml",
-    "env_example": ".env.deploy.example"
+    "env_example": "deploy.env.example"
   },
   "images": {
     "labtether": "${labtether_image}",
@@ -213,9 +215,9 @@ manifest_tmp=""
 (
   cd "${OUTPUT_DIR}"
   if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum docker-compose.deploy.yml .env.deploy.example deploy-manifest.json > "$checksums_tmp"
+    sha256sum docker-compose.deploy.yml deploy.env.example deploy-manifest.json > "$checksums_tmp"
   else
-    shasum -a 256 docker-compose.deploy.yml .env.deploy.example deploy-manifest.json > "$checksums_tmp"
+    shasum -a 256 docker-compose.deploy.yml deploy.env.example deploy-manifest.json > "$checksums_tmp"
   fi
 )
 chmod 0644 "$checksums_tmp"

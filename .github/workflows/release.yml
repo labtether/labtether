@@ -91,7 +91,7 @@ jobs:
         with:
           subject-path: |
             ${{ runner.temp }}/release-artifacts/docker-compose.deploy.yml
-            ${{ runner.temp }}/release-artifacts/.env.deploy.example
+            ${{ runner.temp }}/release-artifacts/deploy.env.example
             ${{ runner.temp }}/release-artifacts/deploy-manifest.json
             ${{ runner.temp }}/release-artifacts/SHA256SUMS
 
@@ -100,6 +100,6 @@ jobs:
         with:
           files: |
             ${{ runner.temp }}/release-artifacts/docker-compose.deploy.yml
-            ${{ runner.temp }}/release-artifacts/.env.deploy.example
+            ${{ runner.temp }}/release-artifacts/deploy.env.example
             ${{ runner.temp }}/release-artifacts/deploy-manifest.json
             ${{ runner.temp }}/release-artifacts/SHA256SUMS
