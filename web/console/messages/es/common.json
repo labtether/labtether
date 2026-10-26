@@ -37,5 +37,17 @@
     "sectionTitle": "Algo salió mal en {section}",
     "sectionDescription": "Esta sección encontró un error. Las demás secciones no se ven afectadas.",
     "tryAgain": "Reintentar"
+  },
+  "demoBanner": {
+    "message": "Está explorando una instancia de demostración con datos de ejemplo.",
+    "install": "Instalar LabTether"
+  },
+  "operatorAccess": {
+    "title": "Se requiere acceso de operador",
+    "terminal": "Se requiere acceso de operador para iniciar sesiones de terminal.",
+    "remoteView": "Se requiere acceso de operador para iniciar sesiones de escritorio remoto.",
+    "files": "Se requiere acceso de operador para explorar o descargar archivos en los hosts administrados.",
+    "recordings": "Se requiere acceso de operador para ver y descargar grabaciones de sesiones.",
+    "hostData": "Se requiere acceso de operador para esta vista. Los observadores pueden ver el inventario y el estado, pero no las sesiones ni los datos del interior de un host."
   }
 }

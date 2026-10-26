@@ -80,7 +80,12 @@ test("terminal pane context menu paste sends clipboard text to stream", async ({
   await expect(page.getByRole("button", { name: "Find", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Clear Scrollback", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Paste", exact: true }).click();
-  await expect.poll(async () => (await commandSendEvents(page, pasteCommand)).length).toBeGreaterThanOrEqual(1);
+  // Paste goes through xterm's paste(), which sends LF as CR (the Enter key)
+  // and adds bracketed-paste markers only when the shell enables them; the
+  // mock shell never does, so one CR-terminated frame is expected.
+  const pastedFrame = "uname -a\r";
+  await expect.poll(async () => (await commandSendEvents(page, pastedFrame)).length).toBeGreaterThanOrEqual(1);
+  expect(await commandSendEvents(page, pasteCommand)).toHaveLength(0);
 });
 
 test("terminal clipboard shortcuts use the focused pane websocket path", async ({ page }) => {

@@ -1,6 +1,7 @@
 "use client";
 
 import type { RuntimeSettingEntry } from "../../../../console/models";
+import { trimTrailingChars } from "../../../../../lib/trimChars";
 
 // ---------------------------------------------------------------------------
 // Shared types & helpers
@@ -51,11 +52,11 @@ export function appendRuleLine(existing: string, nextRule: string): string {
 }
 
 export function normalizeBaseDomain(value: string): string {
-  return value
+  const withoutWildcard = value
     .trim()
     .toLowerCase()
-    .replace(/^\*?\./, "")
-    .replace(/\.+$/, "");
+    .replace(/^\*?\./, "");
+  return trimTrailingChars(withoutWildcard, ".");
 }
 
 // ---------------------------------------------------------------------------

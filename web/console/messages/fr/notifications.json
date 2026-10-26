@@ -1,0 +1,89 @@
+{
+  "heading": "// Notifications",
+  "addChannel": "+ Ajouter un canal",
+  "empty": "Aucun canal de notification configuré. Ajoutez-en un pour recevoir des alertes.",
+  "enabled": "Activé",
+  "disabled": "Désactivé",
+  "edit": "Modifier",
+  "test": "Envoyer un test",
+  "testSent": "Test envoyé",
+  "testFailed": "Échec du test",
+  "delete": "Supprimer",
+  "typeSelect": {
+    "heading": "Sélectionnez un type de canal",
+    "slack": {
+      "name": "Slack",
+      "description": "Envoyer des alertes vers un canal Slack via un webhook entrant"
+    },
+    "email": {
+      "name": "E-mail",
+      "description": "Envoyer des alertes par SMTP à un ou plusieurs destinataires"
+    },
+    "webhook": {
+      "name": "Webhook",
+      "description": "Envoyer les charges utiles d'alerte en POST vers n'importe quel point de terminaison HTTP"
+    },
+    "ntfy": {
+      "name": "ntfy",
+      "description": "Notifications push via ntfy.sh ou un serveur ntfy auto-hébergé"
+    },
+    "gotify": {
+      "name": "Gotify",
+      "description": "Notifications push via un serveur Gotify auto-hébergé"
+    }
+  },
+  "form": {
+    "name": "Nom du canal",
+    "webhookUrl": "URL du webhook",
+    "smtpHost": "Hôte SMTP",
+    "smtpPort": "Port SMTP",
+    "smtpTLSMode": "Sécurité du transport",
+    "smtpTLSStartTLS": "STARTTLS (recommandé)",
+    "smtpTLSImplicit": "TLS implicite (généralement port 465)",
+    "smtpTLSInsecure": "Sans TLS (dangereux)",
+    "smtpTLSInsecureBlocked": "Sans TLS (bloqué par la politique du backend)",
+    "smtpUser": "Utilisateur SMTP (facultatif)",
+    "smtpPass": "Mot de passe SMTP (requis avec un nom d'utilisateur)",
+    "from": "Adresse d'expédition",
+    "recipients": "Destinataires (adresses e-mail séparées par des virgules)",
+    "smtpInsecureWarning": "Les messages et les métadonnées de connexion transiteront sur le réseau sans TLS. Les identifiants ne sont pas autorisés dans ce mode.",
+    "smtpInsecureAcknowledgement": "Saisissez {phrase} pour accepter le risque",
+    "smtpInsecurePolicyWarning": "Ce canal demande un SMTP non sécurisé, mais la politique du backend le bloque actuellement. Choisissez un mode TLS avant d'enregistrer.",
+    "url": "URL",
+    "serverUrl": "URL du serveur",
+    "topic": "Sujet",
+    "username": "Nom d'utilisateur (facultatif)",
+    "password": "Mot de passe (facultatif)",
+    "token": "Jeton (facultatif)",
+    "priority": "Priorité (facultative)",
+    "appToken": "Jeton d'application",
+    "keepSecret": "Laisser vide pour conserver la valeur actuelle"
+  },
+  "save": "Enregistrer",
+  "cancel": "Annuler",
+  "back": "Retour",
+  "deleteDialog": {
+    "title": "Supprimer le canal",
+    "body": "Le canal {name} sera supprimé définitivement. Cette action est irréversible.",
+    "confirm": "Supprimer le canal"
+  },
+  "errors": {
+    "nameRequired": "Le nom du canal est requis.",
+    "webhookUrlRequired": "L'URL du webhook est requise.",
+    "smtpHostRequired": "L'hôte SMTP est requis.",
+    "smtpPortRequired": "Le port SMTP est requis.",
+    "smtpPortInvalid": "Le port SMTP doit être un nombre entier compris entre 1 et 65535.",
+    "smtpUserRequired": "L'utilisateur SMTP est requis.",
+    "smtpPassRequired": "Le mot de passe SMTP est requis lorsqu'un nom d'utilisateur est configuré.",
+    "fromRequired": "L'adresse d'expédition est requise.",
+    "recipientsRequired": "Au moins une adresse e-mail de destinataire est requise.",
+    "recipientsInvalid": "Les destinataires doivent être de simples adresses e-mail séparées par des virgules ou des points-virgules.",
+    "smtpInsecurePolicyBlocked": "La politique du backend n'autorise pas le SMTP non sécurisé.",
+    "smtpInsecureCredentialsForbidden": "Retirez le nom d'utilisateur et le mot de passe SMTP avant d'utiliser le SMTP non sécurisé.",
+    "smtpInsecureAckRequired": "Saisissez exactement INSECURE SMTP pour accepter le risque.",
+    "urlRequired": "L'URL est requise.",
+    "serverUrlRequired": "L'URL du serveur est requise.",
+    "topicRequired": "Le sujet est requis.",
+    "appTokenRequired": "Le jeton d'application est requis."
+  }
+}

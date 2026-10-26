@@ -1,4 +1,5 @@
 import type { Asset } from "../../../../console/models";
+import { trimTrailingChars } from "../../../../../lib/trimChars";
 
 export type IdentitySnapshot = {
   ips: string[];
@@ -288,7 +289,7 @@ function normalizeHost(raw: string): string {
       value = value.split(":")[0] ?? value;
     }
   }
-  value = value.replace(/\.+$/, "");
+  value = trimTrailingChars(value, ".");
   if (!/^[a-z0-9.-]+$/.test(value)) {
     return "";
   }

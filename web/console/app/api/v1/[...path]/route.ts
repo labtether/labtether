@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { proxyPublicHubRequest } from "../../../../lib/publicHubProxy";
+import { trimChars } from "../../../../lib/trimChars";
 
 const allowedPublicHubPaths = new Set<string>([
   "enroll",
@@ -13,7 +14,7 @@ const allowedPublicHubPaths = new Set<string>([
 ]);
 
 function normalizedHubPath(path: string[]): string {
-  return path.join("/").replace(/^\/+/, "").replace(/\/+$/, "");
+  return trimChars(path.join("/"), "/");
 }
 
 async function handle(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }): Promise<NextResponse> {

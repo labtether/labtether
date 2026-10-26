@@ -7,6 +7,7 @@ import { Card } from "../../../components/ui/Card";
 import { Select } from "../../../components/ui/Input";
 import type { WorkspaceClipboardMode } from "./useFileWorkspaceState";
 import type { FileSource } from "./useFileTabsState";
+import { trimTrailingSlashes } from "../../../../lib/trimChars";
 import {
   Eye,
   EyeOff,
@@ -99,7 +100,7 @@ export function FilesToolbarCard({
     const trimmed = rootPath.trim();
     if (trimmed === "" || trimmed === "~") return "/";
     if (trimmed.length > 1 && trimmed.endsWith("/")) {
-      return trimmed.replace(/\/+$/, "");
+      return trimTrailingSlashes(trimmed);
     }
     return trimmed;
   }, [rootPath]);

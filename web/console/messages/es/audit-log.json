@@ -1,0 +1,18 @@
+{
+  "title": "Registro de auditoría",
+  "subtitle": "Actividad del sistema e historial de eventos",
+  "exportCSV": "Exportar CSV",
+  "timestamp": "Hora",
+  "type": "Tipo de evento",
+  "actor": "Actor",
+  "target": "Objetivo",
+  "decision": "Decisión",
+  "details": "Detalles",
+  "noEvents": "No hay eventos de auditoría",
+  "noEventsDesc": "La actividad del sistema aparecerá aquí a medida que se realicen acciones.",
+  "allow": "Permitir",
+  "deny": "Denegar",
+  "filterByType": "Filtrar por tipo",
+  "allTypes": "Todos los tipos",
+  "search": "Buscar eventos..."
+}

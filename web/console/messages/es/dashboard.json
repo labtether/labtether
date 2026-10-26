@@ -31,5 +31,44 @@
     "cpu": "Top CPU",
     "memory": "Top Memoria",
     "disk": "Top Disco"
+  },
+  "firstRun": {
+    "title": "Lista de verificación inicial",
+    "complete": "completada",
+    "progress": "{completed}/{total}",
+    "dismiss": "Descartar",
+    "summaryComplete": "Buen comienzo. Los flujos de trabajo principales están validados.",
+    "summaryPending": "Complete estos pasos una vez para asegurar una configuración fiable.",
+    "items": {
+      "hub": {
+        "label": "Hub en buen estado",
+        "description": "El panel puede cargar el estado sin errores de inicio."
+      },
+      "device": {
+        "label": "Primer dispositivo conectado",
+        "description": "Agregue un nodo mediante la instalación del agente."
+      },
+      "connector": {
+        "label": "Primer conector configurado",
+        "description": "Guarde un conector y ejecute la primera sincronización."
+      },
+      "terminal": {
+        "label": "Flujo de terminal validado",
+        "description": "Ejecute al menos una sesión de comandos."
+      },
+      "logs": {
+        "label": "Observabilidad verificada",
+        "description": "Confirme que los registros recientes son visibles."
+      }
+    },
+    "addDevice": "+ Agregar dispositivo",
+    "openConnectorSettings": "Abrir configuración de conectores",
+    "openTerminal": "Abrir terminal",
+    "openLogs": "Abrir registros",
+    "nextStepsTitle": "Flujos principales validados. Esto es lo que puede explorar a continuación:",
+    "setupNotifications": "Configurar notificaciones de alertas",
+    "connectMcp": "Conectar el gateway MCP",
+    "community": "Comunidad",
+    "starGithub": "Denos una estrella en GitHub"
   }
 }

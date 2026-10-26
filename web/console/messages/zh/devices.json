@@ -12,26 +12,26 @@
     "action": "添加您的第一个设备"
   },
   "hierarchy": {
-    "nestAsChild": "Nest as child",
-    "mergeAsDevice": "Merge as same device",
-    "viewInTopology": "View full tree in Topology",
-    "setParent": "Set parent...",
-    "addChild": "Add child",
-    "detachFromParent": "Detach from parent",
-    "addFacet": "Add facet (merge asset)"
+    "nestAsChild": "嵌套为子项",
+    "mergeAsDevice": "合并为同一设备",
+    "viewInTopology": "在拓扑中查看完整树",
+    "setParent": "设置父项...",
+    "addChild": "添加子项",
+    "detachFromParent": "从父项分离",
+    "addFacet": "添加分面（合并设备）"
   },
   "composites": {
-    "primary": "Primary",
-    "facet": "Facet",
-    "sourceView": "Source: {source}"
+    "primary": "主项",
+    "facet": "分面",
+    "sourceView": "来源：{source}"
   },
   "proposals": {
-    "title": "Suggested Relationships",
-    "mergeComposite": "Merge",
-    "linkParentChild": "Link",
-    "dismiss": "Dismiss",
-    "matchSignals": "Match signals",
-    "confidence": "Confidence: {value}%",
-    "newSuggestions": "{count} suggested relationships"
+    "title": "建议的关系",
+    "mergeComposite": "合并",
+    "linkParentChild": "关联",
+    "dismiss": "忽略",
+    "matchSignals": "匹配信号",
+    "confidence": "置信度：{value}%",
+    "newSuggestions": "{count} 个建议的关系"
   }
 }

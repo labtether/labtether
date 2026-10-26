@@ -1,0 +1,89 @@
+{
+  "heading": "// 通知",
+  "addChannel": "+ 添加渠道",
+  "empty": "尚未配置通知渠道。添加一个渠道以接收告警。",
+  "enabled": "已启用",
+  "disabled": "已禁用",
+  "edit": "编辑",
+  "test": "发送测试",
+  "testSent": "测试已发送",
+  "testFailed": "测试失败",
+  "delete": "删除",
+  "typeSelect": {
+    "heading": "选择渠道类型",
+    "slack": {
+      "name": "Slack",
+      "description": "通过传入 Webhook 将告警发送到 Slack 频道"
+    },
+    "email": {
+      "name": "电子邮件",
+      "description": "通过 SMTP 将告警发送给一个或多个收件人"
+    },
+    "webhook": {
+      "name": "Webhook",
+      "description": "以 POST 方式将告警载荷发送到任意 HTTP 端点"
+    },
+    "ntfy": {
+      "name": "ntfy",
+      "description": "通过 ntfy.sh 或自托管的 ntfy 服务器推送通知"
+    },
+    "gotify": {
+      "name": "Gotify",
+      "description": "通过自托管的 Gotify 服务器推送通知"
+    }
+  },
+  "form": {
+    "name": "渠道名称",
+    "webhookUrl": "Webhook URL",
+    "smtpHost": "SMTP 主机",
+    "smtpPort": "SMTP 端口",
+    "smtpTLSMode": "传输安全",
+    "smtpTLSStartTLS": "STARTTLS（推荐）",
+    "smtpTLSImplicit": "隐式 TLS（通常为端口 465）",
+    "smtpTLSInsecure": "无 TLS（危险）",
+    "smtpTLSInsecureBlocked": "无 TLS（已被后端策略阻止）",
+    "smtpUser": "SMTP 用户（可选）",
+    "smtpPass": "SMTP 密码（填写用户名时必填）",
+    "from": "发件人地址",
+    "recipients": "收件人（以逗号分隔的电子邮件地址）",
+    "smtpInsecureWarning": "消息和连接元数据将在没有 TLS 保护的情况下通过网络传输。此模式下不允许使用凭据。",
+    "smtpInsecureAcknowledgement": "输入 {phrase} 以确认此风险",
+    "smtpInsecurePolicyWarning": "此渠道请求使用不安全的 SMTP，但后端策略当前禁止这样做。请在保存前选择一种 TLS 模式。",
+    "url": "URL",
+    "serverUrl": "服务器 URL",
+    "topic": "主题",
+    "username": "用户名（可选）",
+    "password": "密码（可选）",
+    "token": "令牌（可选）",
+    "priority": "优先级（可选）",
+    "appToken": "应用令牌",
+    "keepSecret": "留空以保留当前值"
+  },
+  "save": "保存",
+  "cancel": "取消",
+  "back": "返回",
+  "deleteDialog": {
+    "title": "删除渠道",
+    "body": "这将永久移除渠道 {name}。此操作无法撤销。",
+    "confirm": "删除渠道"
+  },
+  "errors": {
+    "nameRequired": "渠道名称为必填项。",
+    "webhookUrlRequired": "Webhook URL 为必填项。",
+    "smtpHostRequired": "SMTP 主机为必填项。",
+    "smtpPortRequired": "SMTP 端口为必填项。",
+    "smtpPortInvalid": "SMTP 端口必须是 1 到 65535 之间的整数。",
+    "smtpUserRequired": "SMTP 用户为必填项。",
+    "smtpPassRequired": "配置了用户名时，SMTP 密码为必填项。",
+    "fromRequired": "发件人地址为必填项。",
+    "recipientsRequired": "至少需要一个收件人电子邮件地址。",
+    "recipientsInvalid": "收件人必须是以逗号或分号分隔的纯电子邮件地址。",
+    "smtpInsecurePolicyBlocked": "后端策略不允许使用不安全的 SMTP。",
+    "smtpInsecureCredentialsForbidden": "使用不安全的 SMTP 前，请移除 SMTP 用户名和密码。",
+    "smtpInsecureAckRequired": "请准确输入 INSECURE SMTP 以确认此风险。",
+    "urlRequired": "URL 为必填项。",
+    "serverUrlRequired": "服务器 URL 为必填项。",
+    "topicRequired": "主题为必填项。",
+    "appTokenRequired": "应用令牌为必填项。"
+  }
+}

@@ -12,26 +12,26 @@
     "action": "Ajouter votre premier appareil"
   },
   "hierarchy": {
-    "nestAsChild": "Nest as child",
-    "mergeAsDevice": "Merge as same device",
-    "viewInTopology": "View full tree in Topology",
-    "setParent": "Set parent...",
-    "addChild": "Add child",
-    "detachFromParent": "Detach from parent",
-    "addFacet": "Add facet (merge asset)"
+    "nestAsChild": "Imbriquer comme enfant",
+    "mergeAsDevice": "Fusionner comme même appareil",
+    "viewInTopology": "Voir l'arborescence complète dans Topologie",
+    "setParent": "Définir le parent...",
+    "addChild": "Ajouter un enfant",
+    "detachFromParent": "Détacher du parent",
+    "addFacet": "Ajouter une facette (fusionner l'appareil)"
   },
   "composites": {
-    "primary": "Primary",
-    "facet": "Facet",
-    "sourceView": "Source: {source}"
+    "primary": "Principal",
+    "facet": "Facette",
+    "sourceView": "Source\u00a0: {source}"
   },
   "proposals": {
-    "title": "Suggested Relationships",
-    "mergeComposite": "Merge",
-    "linkParentChild": "Link",
-    "dismiss": "Dismiss",
-    "matchSignals": "Match signals",
-    "confidence": "Confidence: {value}%",
-    "newSuggestions": "{count} suggested relationships"
+    "title": "Relations suggérées",
+    "mergeComposite": "Fusionner",
+    "linkParentChild": "Lier",
+    "dismiss": "Ignorer",
+    "matchSignals": "Signaux de correspondance",
+    "confidence": "Confiance\u00a0: {value}%",
+    "newSuggestions": "{count} relations suggérées"
   }
 }

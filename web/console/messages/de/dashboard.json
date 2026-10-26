@@ -31,5 +31,44 @@
     "cpu": "Top CPU",
     "memory": "Top Speicher",
     "disk": "Top Festplatte"
+  },
+  "firstRun": {
+    "title": "Checkliste für den Einstieg",
+    "complete": "abgeschlossen",
+    "progress": "{completed}/{total}",
+    "dismiss": "Ausblenden",
+    "summaryComplete": "Guter Start. Die zentralen Abläufe sind geprüft.",
+    "summaryPending": "Schließen Sie diese Schritte einmal ab, um eine zuverlässige Einrichtung sicherzustellen.",
+    "items": {
+      "hub": {
+        "label": "Hub funktionsfähig",
+        "description": "Das Dashboard kann den Status ohne Startfehler laden."
+      },
+      "device": {
+        "label": "Erstes Gerät verbunden",
+        "description": "Fügen Sie einen Knoten über die Agenten-Installation hinzu."
+      },
+      "connector": {
+        "label": "Erster Connector konfiguriert",
+        "description": "Speichern Sie einen Connector und führen Sie die erste Synchronisierung aus."
+      },
+      "terminal": {
+        "label": "Terminal-Ablauf geprüft",
+        "description": "Führen Sie mindestens eine Befehlssitzung aus."
+      },
+      "logs": {
+        "label": "Beobachtbarkeit bestätigt",
+        "description": "Prüfen Sie, ob aktuelle Protokolle sichtbar sind."
+      }
+    },
+    "addDevice": "+ Gerät hinzufügen",
+    "openConnectorSettings": "Connector-Einstellungen öffnen",
+    "openTerminal": "Terminal öffnen",
+    "openLogs": "Protokolle öffnen",
+    "nextStepsTitle": "Zentrale Abläufe geprüft. Als Nächstes können Sie Folgendes erkunden:",
+    "setupNotifications": "Alarm-Benachrichtigungen einrichten",
+    "connectMcp": "MCP-Gateway verbinden",
+    "community": "Community",
+    "starGithub": "Auf GitHub mit einem Stern markieren"
   }
 }

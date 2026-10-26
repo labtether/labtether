@@ -54,7 +54,7 @@ export const navGroups: NavGroup[] = [
     category: "Operations",
     categoryKey: "categories.operations",
     items: [
-      { href: "/files", label: "Files", translationKey: "files", icon: FolderOpen },
+      { href: "/files", label: "Files", translationKey: "files", icon: FolderOpen, minimumRole: "write" },
       { href: "/remote-view", label: "Remote View", translationKey: "remoteView", icon: Monitor, minimumRole: "write" },
       { href: "/logs", label: "Logs", translationKey: "logs", icon: FileText },
       { href: "/alerts", label: "Alerts", translationKey: "alerts", icon: Bell },

@@ -1,3 +1,5 @@
+import { trimTrailingSlashes } from "../../../../lib/trimChars";
+
 type ParentPathOptions = {
   fallbackRoot?: "~" | "/";
 };
@@ -6,7 +8,7 @@ export function normalizePath(path: string): string {
   const trimmed = path.trim();
   if (trimmed === "") return "~";
   if (trimmed.length > 1 && trimmed.endsWith("/")) {
-    return trimmed.replace(/\/+$/, "");
+    return trimTrailingSlashes(trimmed);
   }
   return trimmed;
 }

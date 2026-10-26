@@ -6,6 +6,8 @@ import { Badge } from "../../../../components/ui/Badge";
 import { Card } from "../../../../components/ui/Card";
 import { SubTabBar } from "../../../../components/ui/SubTabBar";
 import { useFastStatus } from "../../../../contexts/StatusContext";
+import { useAuth } from "../../../../contexts/AuthContext";
+import { canAccessHostData } from "../../../../lib/roles";
 import { formatAge } from "../../../../console/formatters";
 import type { Asset } from "../../../../console/models";
 import { childParentKey, hostParentKey } from "../../../../console/taxonomy";
@@ -89,7 +91,9 @@ type HostTabId = (typeof ALL_HOST_TABS)[number]["id"];
 function PortainerHostPanel({ asset }: { asset: Asset }) {
   const [activeTab, setActiveTab] = useState<HostTabId>("overview");
   const { data: caps } = usePortainerCapabilities(asset.id);
-  const canExec = caps?.can_exec === true;
+  const { user } = useAuth();
+  // Container shells are interactive sessions, which the Hub keeps for operators.
+  const canExec = caps?.can_exec === true && canAccessHostData(user?.role);
 
   // Filter tabs by capabilities response. Fall back to all host tabs while
   // the capabilities endpoint is loading so there is no layout shift.

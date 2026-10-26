@@ -31,5 +31,44 @@
     "cpu": "Top CPU",
     "memory": "Top 内存",
     "disk": "Top 磁盘"
+  },
+  "firstRun": {
+    "title": "首次运行清单",
+    "complete": "已完成",
+    "progress": "{completed}/{total}",
+    "dismiss": "关闭",
+    "summaryComplete": "良好的开端。核心工作流已验证。",
+    "summaryPending": "完成以下步骤一次，确保设置稳定可靠。",
+    "items": {
+      "hub": {
+        "label": "Hub 运行正常",
+        "description": "仪表盘可以无启动错误地加载状态。"
+      },
+      "device": {
+        "label": "已连接第一台设备",
+        "description": "通过代理安装流程添加一个节点。"
+      },
+      "connector": {
+        "label": "已配置第一个连接器",
+        "description": "保存一个连接器并运行首次同步。"
+      },
+      "terminal": {
+        "label": "终端工作流已验证",
+        "description": "至少运行一次命令会话。"
+      },
+      "logs": {
+        "label": "可观测性已确认",
+        "description": "确认可以看到最近的日志。"
+      }
+    },
+    "addDevice": "+ 添加设备",
+    "openConnectorSettings": "打开连接器设置",
+    "openTerminal": "打开终端",
+    "openLogs": "打开日志",
+    "nextStepsTitle": "核心工作流已验证。接下来可以探索：",
+    "setupNotifications": "设置告警通知",
+    "connectMcp": "连接 MCP 网关",
+    "community": "社区",
+    "starGithub": "在 GitHub 上为我们加星"
   }
 }

@@ -37,5 +37,17 @@
     "sectionTitle": "Something went wrong in {section}",
     "sectionDescription": "This section encountered an error. Other sections are unaffected.",
     "tryAgain": "Try again"
+  },
+  "demoBanner": {
+    "message": "You're exploring a demo instance with sample data.",
+    "install": "Install LabTether"
+  },
+  "operatorAccess": {
+    "title": "Operator access required",
+    "terminal": "Operator access is required to start terminal sessions.",
+    "remoteView": "Operator access is required to start remote desktop sessions.",
+    "files": "Operator access is required to browse or download files on managed hosts.",
+    "recordings": "Operator access is required to view and download session recordings.",
+    "hostData": "Operator access is required for this view. Viewers can see inventory and status, but not sessions or data from inside a host."
   }
 }

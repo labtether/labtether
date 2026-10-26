@@ -1,0 +1,89 @@
+{
+  "heading": "// Benachrichtigungen",
+  "addChannel": "+ Kanal hinzufügen",
+  "empty": "Keine Benachrichtigungskanäle konfiguriert. Fügen Sie einen hinzu, um Alarme zu erhalten.",
+  "enabled": "Aktiviert",
+  "disabled": "Deaktiviert",
+  "edit": "Bearbeiten",
+  "test": "Test senden",
+  "testSent": "Test gesendet",
+  "testFailed": "Test fehlgeschlagen",
+  "delete": "Löschen",
+  "typeSelect": {
+    "heading": "Kanaltyp auswählen",
+    "slack": {
+      "name": "Slack",
+      "description": "Alarme über einen eingehenden Webhook an einen Slack-Kanal senden"
+    },
+    "email": {
+      "name": "E-Mail",
+      "description": "Alarme per SMTP an einen oder mehrere Empfänger senden"
+    },
+    "webhook": {
+      "name": "Webhook",
+      "description": "Alarm-Payloads per POST an einen beliebigen HTTP-Endpunkt senden"
+    },
+    "ntfy": {
+      "name": "ntfy",
+      "description": "Push-Benachrichtigungen über ntfy.sh oder einen selbst gehosteten ntfy-Server"
+    },
+    "gotify": {
+      "name": "Gotify",
+      "description": "Push-Benachrichtigungen über einen selbst gehosteten Gotify-Server"
+    }
+  },
+  "form": {
+    "name": "Kanalname",
+    "webhookUrl": "Webhook-URL",
+    "smtpHost": "SMTP-Host",
+    "smtpPort": "SMTP-Port",
+    "smtpTLSMode": "Transportsicherheit",
+    "smtpTLSStartTLS": "STARTTLS (empfohlen)",
+    "smtpTLSImplicit": "Implizites TLS (meist Port 465)",
+    "smtpTLSInsecure": "Kein TLS (gefährlich)",
+    "smtpTLSInsecureBlocked": "Kein TLS (durch Backend-Richtlinie blockiert)",
+    "smtpUser": "SMTP-Benutzer (optional)",
+    "smtpPass": "SMTP-Passwort (bei Benutzername erforderlich)",
+    "from": "Absenderadresse",
+    "recipients": "Empfänger (kommagetrennte E-Mail-Adressen)",
+    "smtpInsecureWarning": "Nachrichten und Verbindungsmetadaten werden ohne TLS über das Netzwerk übertragen. Anmeldedaten sind in diesem Modus nicht erlaubt.",
+    "smtpInsecureAcknowledgement": "Geben Sie {phrase} ein, um das Risiko zu bestätigen",
+    "smtpInsecurePolicyWarning": "Dieser Kanal fordert unsicheres SMTP an, die Backend-Richtlinie blockiert dies jedoch derzeit. Wählen Sie vor dem Speichern einen TLS-Modus.",
+    "url": "URL",
+    "serverUrl": "Server-URL",
+    "topic": "Thema",
+    "username": "Benutzername (optional)",
+    "password": "Passwort (optional)",
+    "token": "Token (optional)",
+    "priority": "Priorität (optional)",
+    "appToken": "App-Token",
+    "keepSecret": "Leer lassen, um den aktuellen Wert beizubehalten"
+  },
+  "save": "Speichern",
+  "cancel": "Abbrechen",
+  "back": "Zurück",
+  "deleteDialog": {
+    "title": "Kanal löschen",
+    "body": "Dadurch wird der Kanal {name} dauerhaft entfernt. Diese Aktion kann nicht rückgängig gemacht werden.",
+    "confirm": "Kanal löschen"
+  },
+  "errors": {
+    "nameRequired": "Kanalname ist erforderlich.",
+    "webhookUrlRequired": "Webhook-URL ist erforderlich.",
+    "smtpHostRequired": "SMTP-Host ist erforderlich.",
+    "smtpPortRequired": "SMTP-Port ist erforderlich.",
+    "smtpPortInvalid": "Der SMTP-Port muss eine ganze Zahl zwischen 1 und 65535 sein.",
+    "smtpUserRequired": "SMTP-Benutzer ist erforderlich.",
+    "smtpPassRequired": "Ein SMTP-Passwort ist erforderlich, wenn ein Benutzername konfiguriert ist.",
+    "fromRequired": "Absenderadresse ist erforderlich.",
+    "recipientsRequired": "Mindestens eine Empfänger-E-Mail-Adresse ist erforderlich.",
+    "recipientsInvalid": "Empfänger müssen einfache E-Mail-Adressen sein, getrennt durch Kommas oder Semikolons.",
+    "smtpInsecurePolicyBlocked": "Die Backend-Richtlinie erlaubt kein unsicheres SMTP.",
+    "smtpInsecureCredentialsForbidden": "Entfernen Sie SMTP-Benutzername und -Passwort, bevor Sie unsicheres SMTP verwenden.",
+    "smtpInsecureAckRequired": "Geben Sie genau INSECURE SMTP ein, um das Risiko zu bestätigen.",
+    "urlRequired": "URL ist erforderlich.",
+    "serverUrlRequired": "Server-URL ist erforderlich.",
+    "topicRequired": "Thema ist erforderlich.",
+    "appTokenRequired": "App-Token ist erforderlich."
+  }
+}

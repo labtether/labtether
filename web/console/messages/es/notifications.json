@@ -1,0 +1,89 @@
+{
+  "heading": "// Notificaciones",
+  "addChannel": "+ Agregar canal",
+  "empty": "No hay canales de notificación configurados. Agregue uno para recibir alertas.",
+  "enabled": "Habilitado",
+  "disabled": "Deshabilitado",
+  "edit": "Editar",
+  "test": "Enviar prueba",
+  "testSent": "Prueba enviada",
+  "testFailed": "La prueba falló",
+  "delete": "Eliminar",
+  "typeSelect": {
+    "heading": "Seleccione un tipo de canal",
+    "slack": {
+      "name": "Slack",
+      "description": "Enviar alertas a un canal de Slack mediante un webhook entrante"
+    },
+    "email": {
+      "name": "Correo electrónico",
+      "description": "Enviar alertas por SMTP a uno o más destinatarios"
+    },
+    "webhook": {
+      "name": "Webhook",
+      "description": "Enviar cargas útiles de alertas por POST a cualquier endpoint HTTP"
+    },
+    "ntfy": {
+      "name": "ntfy",
+      "description": "Notificaciones push mediante ntfy.sh o un servidor ntfy autoalojado"
+    },
+    "gotify": {
+      "name": "Gotify",
+      "description": "Notificaciones push mediante un servidor Gotify autoalojado"
+    }
+  },
+  "form": {
+    "name": "Nombre del canal",
+    "webhookUrl": "URL del webhook",
+    "smtpHost": "Host SMTP",
+    "smtpPort": "Puerto SMTP",
+    "smtpTLSMode": "Seguridad del transporte",
+    "smtpTLSStartTLS": "STARTTLS (recomendado)",
+    "smtpTLSImplicit": "TLS implícito (normalmente el puerto 465)",
+    "smtpTLSInsecure": "Sin TLS (peligroso)",
+    "smtpTLSInsecureBlocked": "Sin TLS (bloqueado por la política del backend)",
+    "smtpUser": "Usuario SMTP (opcional)",
+    "smtpPass": "Contraseña SMTP (obligatoria si hay nombre de usuario)",
+    "from": "Dirección del remitente",
+    "recipients": "Destinatarios (direcciones de correo separadas por comas)",
+    "smtpInsecureWarning": "Los mensajes y los metadatos de conexión atravesarán la red sin TLS. No se permiten credenciales en este modo.",
+    "smtpInsecureAcknowledgement": "Escriba {phrase} para aceptar el riesgo",
+    "smtpInsecurePolicyWarning": "Este canal solicita SMTP inseguro, pero la política del backend lo bloquea actualmente. Elija un modo TLS antes de guardar.",
+    "url": "URL",
+    "serverUrl": "URL del servidor",
+    "topic": "Tema",
+    "username": "Nombre de usuario (opcional)",
+    "password": "Contraseña (opcional)",
+    "token": "Token (opcional)",
+    "priority": "Prioridad (opcional)",
+    "appToken": "Token de aplicación",
+    "keepSecret": "Déjelo en blanco para conservar el valor actual"
+  },
+  "save": "Guardar",
+  "cancel": "Cancelar",
+  "back": "Volver",
+  "deleteDialog": {
+    "title": "Eliminar canal",
+    "body": "Esto eliminará permanentemente el canal {name}. Esta acción no se puede deshacer.",
+    "confirm": "Eliminar canal"
+  },
+  "errors": {
+    "nameRequired": "El nombre del canal es obligatorio.",
+    "webhookUrlRequired": "La URL del webhook es obligatoria.",
+    "smtpHostRequired": "El host SMTP es obligatorio.",
+    "smtpPortRequired": "El puerto SMTP es obligatorio.",
+    "smtpPortInvalid": "El puerto SMTP debe ser un número entero entre 1 y 65535.",
+    "smtpUserRequired": "El usuario SMTP es obligatorio.",
+    "smtpPassRequired": "La contraseña SMTP es obligatoria cuando se configura un nombre de usuario.",
+    "fromRequired": "La dirección del remitente es obligatoria.",
+    "recipientsRequired": "Se requiere al menos una dirección de correo de destinatario.",
+    "recipientsInvalid": "Los destinatarios deben ser direcciones de correo simples separadas por comas o punto y coma.",
+    "smtpInsecurePolicyBlocked": "La política del backend no permite SMTP inseguro.",
+    "smtpInsecureCredentialsForbidden": "Quite el nombre de usuario y la contraseña SMTP antes de usar SMTP inseguro.",
+    "smtpInsecureAckRequired": "Escriba INSECURE SMTP exactamente para aceptar el riesgo.",
+    "urlRequired": "La URL es obligatoria.",
+    "serverUrlRequired": "La URL del servidor es obligatoria.",
+    "topicRequired": "El tema es obligatorio.",
+    "appTokenRequired": "El token de aplicación es obligatorio."
+  }
+}

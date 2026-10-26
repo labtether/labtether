@@ -1,0 +1,18 @@
+{
+  "title": "Centre de notifications",
+  "subtitle": "Historique de livraison des notifications d'alerte",
+  "status": "Statut",
+  "channel": "Canal",
+  "alert": "Alerte",
+  "sentAt": "Envoyée le",
+  "error": "Erreur",
+  "retries": "Tentatives",
+  "noNotifications": "Aucune notification pour le moment",
+  "noNotificationsDesc": "Les livraisons de notifications apparaîtront ici lorsque des alertes se déclencheront.",
+  "all": "Toutes",
+  "sent": "Envoyées",
+  "failed": "Échouées",
+  "pending": "En attente",
+  "filterByStatus": "Filtrer par statut",
+  "refresh": "Actualiser"
+}
