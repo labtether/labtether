@@ -34,7 +34,7 @@ export function URLGroupingCard() {
 
   const [expanded, setExpanded] = useState(true);
   const [draft, setDraft] = useState<GroupingDraft>(defaultGroupingDraft);
-  const [presetDomain, setPresetDomain] = useState("simbaslabs.com");
+  const [presetDomain, setPresetDomain] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,7 +107,7 @@ export function URLGroupingCard() {
     }
   }, [draft, t]);
 
-  const previewDomain = normalizeBaseDomain(presetDomain) || "simbaslabs.com";
+  const previewDomain = normalizeBaseDomain(presetDomain) || "example.com";
 
   const addMiddleLabelPreset = useCallback(() => {
     const domain = normalizeBaseDomain(presetDomain);

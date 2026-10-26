@@ -47,7 +47,7 @@ export function useServiceMutationActions({
     const name = (window.prompt("Service name", "Manual Service") ?? "").trim();
     if (!name) return;
 
-    const url = (window.prompt("Service URL (http/https)", "http://localhost:8080") ?? "").trim();
+    const url = (window.prompt("Service URL (http/https)", "https://") ?? "").trim();
     if (!url) return;
 
     const category = (window.prompt("Category", "Other") ?? "").trim() || "Other";
