@@ -37,5 +37,9 @@
     "sectionTitle": "Something went wrong in {section}",
     "sectionDescription": "This section encountered an error. Other sections are unaffected.",
     "tryAgain": "Try again"
+  },
+  "demoBanner": {
+    "message": "You're exploring a demo instance with sample data.",
+    "install": "Install LabTether"
   }
 }

@@ -37,5 +37,9 @@
     "sectionTitle": "Etwas ist in {section} schiefgelaufen",
     "sectionDescription": "In diesem Bereich ist ein Fehler aufgetreten. Andere Bereiche sind nicht betroffen.",
     "tryAgain": "Erneut versuchen"
+  },
+  "demoBanner": {
+    "message": "Sie erkunden eine Demo-Instanz mit Beispieldaten.",
+    "install": "LabTether installieren"
   }
 }

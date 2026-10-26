@@ -37,5 +37,9 @@
     "sectionTitle": "{section}出了点问题",
     "sectionDescription": "此部分遇到错误，其他部分不受影响。",
     "tryAgain": "重试"
+  },
+  "demoBanner": {
+    "message": "您正在浏览一个包含示例数据的演示实例。",
+    "install": "安装 LabTether"
   }
 }
