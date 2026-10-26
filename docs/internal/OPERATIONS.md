@@ -577,3 +577,37 @@ man-in-the-middle risk by setting
 `LABTETHER_ALLOW_INSECURE_SSH_HOST_KEYS=true` together with the per-connection
 non-strict setting. Remove the process-wide override immediately after the
 recovery operation.
+
+# iOS push relay
+
+Self-hosted Hubs reach the official iOS app (`com.labtether.mobile`) through
+the LabTether push relay, a Cloudflare Worker that holds LabTether's APNs key
+(`services/push-relay/`). The Hub never holds Apple's key and never sees an
+APNs token in relay mode: the app registers its token with the relay and gives
+the Hub only an opaque `relay_registration_id`.
+
+- `LABTETHER_PUSH_RELAY_URL` defaults to `https://push.labtether.com`. Set it
+  to `off` (or, outside Compose, to an empty value) to disable relay delivery.
+  Only `https` URLs without credentials, a query or a fragment are accepted.
+  The call goes through the outbound security runtime; with
+  `LABTETHER_OUTBOUND_ALLOWLIST_MODE=true`, add `push.labtether.com` to
+  `LABTETHER_OUTBOUND_ALLOWED_HOSTS`.
+- An APNs channel with `"transport": "relay"` (or with no `auth_key_path`,
+  `key_id` and `team_id`) delivers through the relay. Operators with their own
+  app build and key keep `"transport": "direct"` with the key fields. A relay
+  channel sends only to relay registrations and a direct channel only to raw
+  tokens; the Hub stores `push_transport` on each registration for this.
+- The first time an iOS device registers a relay id, and no route targets an
+  APNs channel yet, the Hub creates the channel `LabTether iOS app` and the
+  route `LabTether iOS app: all alerts`. Per-device preferences still filter
+  delivery. This happens once per Hub (marker `apns_relay_default_v1` in
+  `notification_bootstrap_markers`); edits and deletions are kept. An admin
+  data reset clears the marker together with channels and routes.
+- When the relay answers `410 unregistered` or `404 unknown_registration`, the
+  Hub deletes that one relay registration. Other relay errors are retried.
+- Privacy: alert titles, bodies and Live Activity state pass through the relay
+  to Apple. The relay does not store or log them; it stores only the APNs token
+  under a hash of the registration id. See `PRIVACY.md`.
+
+The app-facing request shapes are in
+[`services/push-relay/IOS-CONTRACT.md`](../../services/push-relay/IOS-CONTRACT.md).

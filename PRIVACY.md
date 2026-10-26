@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Effective date: March 9, 2026
+Effective date: October 26, 2026
 
 LabTether is designed first as self-hosted software. In the default deployment model,
 the hub, database, agents, and connected infrastructure run under the control of the
@@ -92,10 +92,34 @@ If you enable notifications on iOS:
 
 - the app requests push-notification permission from Apple
 - the device registers with Apple Push Notification service (APNs)
-- the app forwards the device token and notification-routing preferences to your configured LabTether hub
+- the official app registers its APNs token with the LabTether push relay and
+  forwards only the relay registration ID, together with notification-routing
+  preferences, to your configured LabTether hub
+- a self-built app used with a hub that has its own Apple key forwards the APNs
+  device token to the hub directly instead
 
 Those preferences can include severity threshold, quiet hours, digest timing, and
 category or toggle selections needed for delivery behavior.
+
+### LabTether push relay
+
+Apple only accepts pushes for the official app from LabTether's key, so a
+self-hosted hub sends alerts and Live Activity updates for the official app
+through the LabTether push relay (`https://push.labtether.com` by default), a
+small service run by LabTether on Cloudflare Workers.
+
+- Notification text (alert titles and bodies, incident summaries shown in Live
+  Activities) passes through the relay on its way to Apple. The relay does not
+  store or log it.
+- The relay stores the APNs token for each registration, keyed by a hash of the
+  registration ID, with its kind, environment and timestamps. It does not store
+  the registration ID itself. Alert registrations expire after 400 days without
+  a successful push, Live Activity registrations after 24 hours.
+- The relay does not know which hub, user or alert a push belongs to beyond
+  what the notification text itself contains. Rate limits are kept per client
+  IP address and per hashed registration ID.
+- Operators can turn the relay off with `LABTETHER_PUSH_RELAY_URL=off`; iOS
+  pushes then require their own Apple key and app build.
 
 If you enable Live Activities, LabTether may show incident or remote-session status on
 the lock screen or Dynamic Island. The current default is redacted detail mode rather
@@ -118,6 +142,8 @@ Depending on how you deploy LabTether, data may also be processed by services yo
 to use alongside the product, including:
 
 - Apple services such as APNs and iOS/macOS system frameworks
+- the LabTether push relay on Cloudflare Workers, which forwards iOS
+  notifications for the official app to APNs (see section 6)
 - your identity provider when optional OIDC sign-in is enabled
 - your connected infrastructure platforms and APIs
 - your own reverse proxy, certificate, DNS, VPN, or remote-access stack
@@ -137,7 +163,8 @@ On iOS sign-out, the app clears:
 - hub cookies and URL cache artifacts
 - the mobile offline API response cache
 - persisted offline queues and related audit state for supported mobile workflows
-- push registration for the active hub/device association
+- push registration for the active hub/device association, including the
+  relay registration, so the relay stops delivering to that device
 
 The hub URL is retained for faster re-login unless the operator explicitly changes or
 clears the saved hub configuration.

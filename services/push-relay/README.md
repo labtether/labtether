@@ -16,6 +16,10 @@ notifications and Live Activity updates to the official iOS app
 Plain JavaScript ES modules with JSDoc types, no build step, no runtime
 dependencies. APNs is reached with plain `fetch` over HTTP/2.
 
+The calls the iOS app makes (relay and Hub) are in `IOS-CONTRACT.md`; the Hub
+side is described in the Hub's `docs/internal/OPERATIONS.md` ("iOS push
+relay").
+
 ## API v1
 
 All bodies are JSON. Requests with a body must send
@@ -99,43 +103,71 @@ The relay deletes a registration when APNs answers `410`, or `400` with
 
 ## Deploy
 
-Run from this folder on a machine with Node 22 or newer. The
-`wrangler@4.113.0` dev dependency is pinned; `npm install` it there first.
+Michael runs these steps; they need his Cloudflare login and Apple key.
 
-1. Create the KV namespace and paste the printed id into `wrangler.jsonc`
-   (`kv_namespaces[0].id`):
+- Cloudflare account: "Michaels Account"
+  (`25c357768b0fd4b877d6f008dc50e63b`, pinned as `account_id` in
+  `wrangler.jsonc`). It already serves the labtether.com website Worker, so
+  the `labtether.com` zone is on this account.
+- Use a machine with Node 22 or newer (the lab Mac mini, not the MacBook Pro
+  while it is short of memory). The `wrangler@4.113.0` dev dependency is
+  pinned; nothing else is installed.
+
+1. Install and log in:
+
+   ```sh
+   cd services/push-relay
+   npm install
+   npx wrangler login
+   npx wrangler whoami   # must list account 25c357768b0fd4b877d6f008dc50e63b
+   ```
+
+2. Create the KV namespace and paste the printed `id` into `wrangler.jsonc`
+   (`kv_namespaces[0].id`, replacing `REPLACE_WITH_KV_NAMESPACE_ID`):
 
    ```sh
    npx wrangler kv namespace create REGISTRATIONS
    ```
 
-2. Set `APNS_TEAM_ID` and `APNS_KEY_ID` in `wrangler.jsonc` `vars` (the
-   10-character Apple Team ID and the APNs auth key ID). `APNS_TOPIC` stays
-   `com.labtether.mobile`.
+3. Set `APNS_TEAM_ID` and `APNS_KEY_ID` in `wrangler.jsonc` `vars`: the
+   10-character Apple Team ID and the 10-character Key ID of the APNs auth
+   key. They identify the key but are not secret. `APNS_TOPIC` stays
+   `com.labtether.mobile`. Commit these two values and the KV id.
 
-3. Upload the APNs `.p8` key as a secret. Michael does this himself; the key
-   never goes into this folder, the repo or chat. Pipe the file so its line
-   breaks survive:
-
-   ```sh
-   npx wrangler secret put APNS_PRIVATE_KEY < /path/to/AuthKey_XXXXXXXXXX.p8
-   ```
-
-4. Deploy and check health:
+4. Deploy. This also creates the `push.labtether.com` custom domain (DNS
+   record and certificate) from the `routes` entry. Pushes answer
+   `503 not_configured` until step 5 is done; registrations already work.
 
    ```sh
    npm run deploy
-   curl https://labtether-push-relay.<subdomain>.workers.dev/v1/health
    ```
 
-5. Custom domain: once `labtether.com` is a zone on the same Cloudflare
-   account, uncomment the `routes` entry for `push.labtether.com` in
-   `wrangler.jsonc` and deploy again. Hubs default to
-   `https://push.labtether.com`, so this must be live before Hubs ship relay
-   mode.
+5. Upload the APNs `.p8` key as a secret. Michael does this himself; the key
+   never goes into this folder (`*.p8` is git-ignored here), the repo, a
+   shell history line or chat. Redirect the file so its line breaks survive:
 
-Until `APNS_TEAM_ID`, `APNS_KEY_ID` and `APNS_PRIVATE_KEY` are all set and
-valid, registrations work and pushes answer `503 not_configured`.
+   ```sh
+   npx wrangler secret put APNS_PRIVATE_KEY < /path/to/AuthKey_KEYID.p8
+   ```
+
+6. Check the deployment:
+
+   ```sh
+   curl -s https://push.labtether.com/v1/health          # {"ok":true}
+   npx wrangler secret list                               # APNS_PRIVATE_KEY listed
+   ```
+
+   Then let a development build of the app register and send one test alert
+   from a Hub on the lab VM. A `503 not_configured` answer means a variable or
+   the secret is missing or the key does not parse.
+
+Rotating the key: create a new APNs key at Apple, update `APNS_KEY_ID`, deploy,
+then repeat step 5. Registrations survive a key rotation.
+
+Leave `observability.logs.invocation_logs` off: invocation logs record request
+URLs, and `DELETE /v1/registrations/:id` carries a registration id. The rate
+limit `namespace_id` values (4801 to 4803) only need to be unique within the
+account.
 
 ## Privacy
 

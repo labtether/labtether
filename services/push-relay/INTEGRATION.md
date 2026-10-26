@@ -1,5 +1,15 @@
 # Integrating the push relay with the Hub and the iOS app
 
+> Status 2026-10-26: Hub part (section 1) implemented on branch
+> `claude/release-push-relay-20261026`, except the console form (1.5): the
+> console still has no "relay / own key" choice. Differences from this plan:
+> routing reads an explicit `transport` (stored relay channels always carry
+> `"transport": "relay"`), `DeletePushDeviceByToken` also matches the
+> transport, the default channel (risk 1) is created once per Hub through a
+> `notification_bootstrap_markers` row (migration 106), and the relay now
+> rate-limits `POST /v1/push` per client IP. The iOS contract is in
+> `IOS-CONTRACT.md`.
+
 Plan for wiring `services/push-relay/` (this folder) into the Hub and the iOS
 app. Paths and function names come from `origin/main` of `hub` (569336b) and
 `ios` (f1390a7). Every function named below also exists on the

@@ -9,10 +9,11 @@
   "compatibility_date": "2026-07-15",
   "workers_dev": true,
 
-  // Custom domain. Uncomment once labtether.com is a zone on this account;
-  // `wrangler deploy` then creates the DNS record and certificate for it.
-  // Keep workers_dev true until the Hub default URL has been switched over.
-  // "routes": [{ "pattern": "push.labtether.com", "custom_domain": true }],
+  // Custom domain. labtether.com is a zone on this account (it serves the
+  // website Worker), so `wrangler deploy` creates the DNS record and the
+  // certificate. Hubs default to https://push.labtether.com. workers_dev stays
+  // on for DEBUG iOS builds and for checks before the domain is live.
+  "routes": [{ "pattern": "push.labtether.com", "custom_domain": true }],
 
   // Registration store. Before the first deploy run
   //   npx wrangler kv namespace create REGISTRATIONS
