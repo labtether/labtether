@@ -114,3 +114,6 @@ dump.rdb
 *.dmp
 core
 core.*
+
+# Task scratch folders (workspace rule: throwaway files live in work/)
+work/
