@@ -8,6 +8,7 @@ import { Card } from "../../../components/ui/Card";
 import { Input } from "../../../components/ui/Input";
 import { useFileConnections } from "./useFileConnections";
 import { ConnectionForm } from "./ConnectionForm";
+import { TransportNotice } from "./TransportNotice";
 import type { FileConnection } from "./fileConnectionsClient";
 
 // ---------------------------------------------------------------------------
@@ -336,6 +337,7 @@ export function NewTabPage({ onOpenAgent, onOpenConnection, onNewConnection }: N
                       <span className="text-[10px] text-[var(--muted)] truncate font-mono">
                         {conn.host}{conn.port ? `:${conn.port}` : ""}
                       </span>
+                      <TransportNotice connection={conn} className="text-[10px] leading-snug mt-0.5" />
                     </div>
                     <span
                       className={`text-[10px] font-medium uppercase px-1.5 py-0.5 rounded border shrink-0 ${

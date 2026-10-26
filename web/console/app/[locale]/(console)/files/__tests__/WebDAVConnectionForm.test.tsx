@@ -26,8 +26,8 @@ afterEach(async () => {
   container.remove();
 });
 
-async function mount(extra_config: Record<string, unknown>) {
-  const connection = { id: "webdav-test", name: "Documents", host: "files.example.test", port: 8443, protocol: "webdav", extra_config } as FileConnection;
+async function mount(extra_config: Record<string, unknown>, transport_notice?: string) {
+  const connection = { id: "webdav-test", name: "Documents", host: "files.example.test", port: 8443, protocol: "webdav", extra_config, transport_notice } as FileConnection;
   await act(async () => root.render(
     <NextIntlClientProvider locale="en" messages={{ files: messages }}>
       <ConnectionForm protocol="webdav" existingConnection={connection} onConnect={() => {}} onCancel={() => {}} />
@@ -60,6 +60,13 @@ describe("WebDAV transport choices", () => {
     expect(updateFileConnection).toHaveBeenCalledWith("webdav-test", expect.objectContaining({
       extra_config: { webdav_tls: false, webdav_allow_cleartext: true },
     }));
+  });
+
+  it("explains why a legacy plain-HTTP connection stopped opening", async () => {
+    await mount({});
+    expect(container.textContent).not.toContain(messages.webdavTransportNotice);
+    await mount({}, "plain HTTP is no longer allowed by default");
+    expect(container.querySelector('[role="note"]')?.textContent).toBe(messages.webdavTransportNotice);
   });
 
   it("clears a saved HTTP acknowledgement when HTTPS is enabled", async () => {

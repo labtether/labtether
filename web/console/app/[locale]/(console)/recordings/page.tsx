@@ -18,6 +18,17 @@ interface Recording {
   duration_ms: number;
   status: string;
   created_at: string;
+  // Hub-relative attachment path, e.g. /recordings/{id}/download.
+  download_url?: string;
+}
+
+const HUB_DOWNLOAD_PATH = /^\/recordings\/[^/?#]+\/download$/;
+
+// The browser reaches Hub routes through the console's /api proxy, which adds
+// the operator's credentials. Only a Hub path of the expected shape is linked.
+function recordingDownloadHref(recording: Recording): string | null {
+  const path = recording.download_url?.trim() ?? "";
+  return HUB_DOWNLOAD_PATH.test(path) ? `/api${path}` : null;
 }
 
 export default function RecordingsPage() {
@@ -66,7 +77,9 @@ function RecordingsList() {
                 </tr>
               </thead>
               <tbody>
-                {recordings.map((recording) => (
+                {recordings.map((recording) => {
+                  const downloadHref = recordingDownloadHref(recording);
+                  return (
                   <tr key={recording.id} className="border-b border-[var(--line)]/40">
                     <td className="py-2 pr-4 text-[var(--text)]">{recording.asset_id}</td>
                     <td className="py-2 pr-4 text-[var(--text)] uppercase">{recording.protocol}</td>
@@ -77,9 +90,9 @@ function RecordingsList() {
                     <td className="py-2 text-right">
                       {recording.status === "recording" ? (
                         <span className="text-xs text-[var(--muted)]">{t('inProgress')}</span>
-                      ) : (
+                      ) : downloadHref && (
                         <a
-                          href={`/api/recordings/${encodeURIComponent(recording.id)}/download`}
+                          href={downloadHref}
                           download
                           aria-label={t('downloadLabel', { asset: recording.asset_id })}
                           className="inline-flex items-center gap-1 text-xs text-[var(--accent)] hover:underline"
@@ -90,7 +103,8 @@ function RecordingsList() {
                       )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

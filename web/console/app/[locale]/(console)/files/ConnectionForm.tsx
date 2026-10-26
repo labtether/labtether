@@ -1,6 +1,7 @@
 "use client";
 
 import { ConnectionProtocolFields } from "./ConnectionProtocolFields";
+import { TransportNotice } from "./TransportNotice";
 
 import { useCallback, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -296,6 +297,8 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
           </Button>
         )}
       </div>
+
+      <TransportNotice connection={existingConnection} className="text-xs" />
 
       {/* Form grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
