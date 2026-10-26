@@ -103,4 +103,4 @@ Agent binaries are NOT stored in this repo. They are downloaded from GitHub Rele
 ### Environment Variables
 - `LABTETHER_AGENT_DIR` — baked-in binary directory (default: `/opt/labtether/agents`)
 - `LABTETHER_AGENT_CACHE_DIR` — runtime cache directory (default: `/data/agents`)
-- `LABTETHER_AGENT_MANIFEST_REFRESH` — enable runtime refresh from GitHub
+- There is no runtime GitHub refresh; `LABTETHER_AGENT_MANIFEST_REFRESH` was never read and was removed in 1.7.0

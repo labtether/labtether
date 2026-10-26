@@ -304,8 +304,11 @@ func TestAgentDistributionE2E(t *testing.T) {
 		if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
 			t.Fatal(err)
 		}
-		if result["status"] != "refreshed" {
-			t.Errorf("status = %q", result["status"])
+		if result["status"] != "reloaded" || result["source"] != "disk" {
+			t.Errorf("status = %q source = %q, want reloaded from disk", result["status"], result["source"])
+		}
+		if versions, ok := result["versions"].(map[string]any); !ok || versions["labtether-agent"] != "v2026.2" {
+			t.Errorf("versions = %v, want labtether-agent v2026.2", result["versions"])
 		}
 
 		// Verify cache now serves new version
