@@ -40,9 +40,8 @@ func (d *Deps) getNotificationChannelForRuntimeContext(ctx context.Context, id s
 	if !ok {
 		return notifications.Channel{}, false, fmt.Errorf("bounded channel lookup unavailable")
 	}
-	bound := *d
-	bound.NotificationStore = notificationContextStore{NotificationStore: d.NotificationStore, bounded: store, ctx: ctx}
-	channel, found, err := bound.getNotificationChannelForRuntime(id)
+	bound := notificationContextStore{NotificationStore: d.NotificationStore, bounded: store, ctx: ctx}
+	channel, found, err := d.getNotificationChannelForRuntimeFrom(bound, id)
 	if err == nil {
 		err = ctx.Err()
 	}
