@@ -96,7 +96,7 @@ func TestAutoProvisionDockerCollectorIfNeededCreatesCollector(t *testing.T) {
 	sut.hubCollectorStore = store
 	sut.connectorRegistry = nil // Skip immediate collector run in this unit test.
 
-	sut.autoProvisionDockerCollectorIfNeeded("containervm-deltaserver", []agentmgr.ConnectorInfo{
+	sut.autoProvisionDockerCollectorIfNeeded("dockerhost1-northserver", []agentmgr.ConnectorInfo{
 		{Type: "docker", Endpoint: "unix:///var/run/docker.sock", Reachable: false},
 	})
 
@@ -104,10 +104,10 @@ func TestAutoProvisionDockerCollectorIfNeededCreatesCollector(t *testing.T) {
 		t.Fatalf("expected exactly one collector create call, got %d", len(store.createCalls))
 	}
 	createReq := store.createCalls[0]
-	if createReq.AssetID != "docker-cluster-containervm-deltaserver" {
-		t.Fatalf("collector asset_id = %q, want docker-cluster-containervm-deltaserver", createReq.AssetID)
+	if createReq.AssetID != "docker-cluster-dockerhost1-northserver" {
+		t.Fatalf("collector asset_id = %q, want docker-cluster-dockerhost1-northserver", createReq.AssetID)
 	}
-	if createReq.AssetID == "containervm-deltaserver" {
+	if createReq.AssetID == "dockerhost1-northserver" {
 		t.Fatalf("collector asset_id should not collide with agent asset id")
 	}
 	if createReq.CollectorType != hubcollector.CollectorTypeDocker {
@@ -120,7 +120,7 @@ func TestAutoProvisionDockerCollectorIfNeededCreatesCollector(t *testing.T) {
 		t.Fatalf("interval_seconds = %d, want %d", createReq.IntervalSeconds, autoDockerCollectorIntervalSeconds)
 	}
 
-	clusterAsset, ok, err := sut.assetStore.GetAsset("docker-cluster-containervm-deltaserver")
+	clusterAsset, ok, err := sut.assetStore.GetAsset("docker-cluster-dockerhost1-northserver")
 	if err != nil {
 		t.Fatalf("failed to read auto-provisioned cluster asset: %v", err)
 	}

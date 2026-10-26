@@ -373,13 +373,13 @@ func TestLinkLocalRequiresSeparateExplicitOptIn(t *testing.T) {
 
 func TestValidateOutboundURLAllowsPrivateHTTPSByDefault(t *testing.T) {
 	withMockLookupIPAddrs(t, func(_ context.Context, host string) ([]net.IPAddr, error) {
-		if host == "homeassistant.simbaslabs.com" {
+		if host == "homeassistant.example.com" {
 			return []net.IPAddr{{IP: net.ParseIP("192.168.1.25")}}, nil
 		}
 		return nil, errors.New("unexpected host")
 	})
 
-	if _, err := ValidateOutboundURL("https://homeassistant.simbaslabs.com"); err != nil {
+	if _, err := ValidateOutboundURL("https://homeassistant.example.com"); err != nil {
 		t.Fatalf("expected private https host to be allowed by default, got %v", err)
 	}
 }
@@ -387,13 +387,13 @@ func TestValidateOutboundURLAllowsPrivateHTTPSByDefault(t *testing.T) {
 func TestValidateOutboundURLRejectsPrivateHTTPSWhenExplicitlyDisabled(t *testing.T) {
 	t.Setenv(envOutboundAllowPrivate, "false")
 	withMockLookupIPAddrs(t, func(_ context.Context, host string) ([]net.IPAddr, error) {
-		if host == "homeassistant.simbaslabs.com" {
+		if host == "homeassistant.example.com" {
 			return []net.IPAddr{{IP: net.ParseIP("192.168.1.25")}}, nil
 		}
 		return nil, errors.New("unexpected host")
 	})
 
-	if _, err := ValidateOutboundURL("https://homeassistant.simbaslabs.com"); err == nil {
+	if _, err := ValidateOutboundURL("https://homeassistant.example.com"); err == nil {
 		t.Fatal("expected explicit allow_private=false to reject private https host")
 	} else if !strings.Contains(err.Error(), "private") {
 		t.Fatalf("expected private-host error, got %v", err)
@@ -406,13 +406,13 @@ func TestValidateOutboundURLRuntimeOverrideCanDisablePrivateHTTPS(t *testing.T) 
 		SetRuntimeEnvOverrides(nil)
 	})
 	withMockLookupIPAddrs(t, func(_ context.Context, host string) ([]net.IPAddr, error) {
-		if host == "proxmox-deltaserver.simbaslabs.com" {
-			return []net.IPAddr{{IP: net.ParseIP("192.168.0.33")}}, nil
+		if host == "proxmox-northserver.example.com" {
+			return []net.IPAddr{{IP: net.ParseIP("192.168.8.33")}}, nil
 		}
 		return nil, errors.New("unexpected host")
 	})
 
-	if _, err := ValidateOutboundURL("https://proxmox-deltaserver.simbaslabs.com"); err == nil {
+	if _, err := ValidateOutboundURL("https://proxmox-northserver.example.com"); err == nil {
 		t.Fatal("expected runtime override to reject private https host")
 	} else if !strings.Contains(err.Error(), "private") {
 		t.Fatalf("expected private-host error, got %v", err)

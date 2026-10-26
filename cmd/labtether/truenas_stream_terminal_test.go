@@ -259,7 +259,7 @@ func TestResolveTrueNASSessionTargetAdditionalBranches(t *testing.T) {
 		_, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 			AssetID: "truenas-host-stale",
 			Type:    "nas",
-			Name:    "omeganas",
+			Name:    "vaultnas",
 			Source:  "truenas",
 			Status:  "online",
 			Metadata: map[string]string{

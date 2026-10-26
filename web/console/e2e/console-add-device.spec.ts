@@ -620,9 +620,9 @@ test("add device truenas flow tests and saves connector settings", async ({ page
   const saveButton = page.getByRole("button", { name: "Save, Sync & Close", exact: true });
   await expect(saveButton).toBeDisabled();
 
-  await page.getByPlaceholder("https://truenas.local").fill("https://omeganas.local:9443/");
+  await page.getByPlaceholder("https://truenas.local").fill("https://vaultnas.local:9443/");
   await page.getByPlaceholder("Required").fill("tn-api-key");
-  await page.getByPlaceholder("Homelab TrueNAS").fill("OmegaNAS");
+  await page.getByPlaceholder("Homelab TrueNAS").fill("VaultNAS");
 
   await expect(saveButton).toBeEnabled();
   await testButton.click();
@@ -635,16 +635,16 @@ test("add device truenas flow tests and saves connector settings", async ({ page
 
   expect(lastTestPayload).not.toBeNull();
   expect(lastTestPayload).toMatchObject({
-    base_url: "https://omeganas.local:9443/",
+    base_url: "https://vaultnas.local:9443/",
     api_key: "tn-api-key",
     skip_verify: true
   });
 
   expect(lastSavePayload).not.toBeNull();
   expect(lastSavePayload).toMatchObject({
-    base_url: "https://omeganas.local:9443/",
+    base_url: "https://vaultnas.local:9443/",
     api_key: "tn-api-key",
-    display_name: "OmegaNAS",
+    display_name: "VaultNAS",
     skip_verify: true
   });
 });

@@ -91,7 +91,7 @@ Update the call site in `TopologyCanvasInner` (the `useMemo` at ~line 275) to pa
 
 Run the dev server (`cd web/console && npm run dev`), navigate to `/topology`, and confirm:
 - Far fewer cards visible (expect ~7-15 instead of ~98)
-- Host cards like OmegaNAS, DeltaServer, ContainerVM, Portainer still visible
+- Host cards like VaultNAS, NorthServer, DockerHost1, Portainer still visible
 - Individual datasets, containers, shares, disks NOT visible as top-level cards
 - Zone header badges show accurate counts (not inflated by hidden children)
 - Expanding a host card (click chevron) still shows its children in the ContainmentCard layers
@@ -348,11 +348,11 @@ In `seed_test.go`, add a test:
 ```go
 func TestAutoSeedHostBasedZones(t *testing.T) {
     // Create test assets:
-    //   - 1 NAS host (type=nas, source=truenas, label=OmegaNAS) with 5 child datasets
-    //   - 1 hypervisor (type=hypervisor-node, source=proxmox, label=DeltaServer) with 2 VMs
+    //   - 1 NAS host (type=nas, source=truenas, label=VaultNAS) with 5 child datasets
+    //   - 1 hypervisor (type=hypervisor-node, source=proxmox, label=NorthServer) with 2 VMs
     //   - 3 orphan services (no parent host)
     // Run Seed()
-    // Assert: 2 zones created (labeled "OmegaNAS", "DeltaServer"), not source-based
+    // Assert: 2 zones created (labeled "VaultNAS", "NorthServer"), not source-based
     // Assert: only the 2 host assets + 3 orphans are zone members (not datasets or VMs)
     // Assert: zone colors differ (not all "blue")
 }
@@ -408,8 +408,8 @@ Expected: All pass
 git add internal/topology/seed.go internal/topology/seed_test.go
 git commit -m "fix(topology): auto-seed creates host-based zones instead of source-based
 
-Zones are now named after infrastructure hosts (e.g., 'OmegaNAS',
-'DeltaServer') instead of data sources ('truenas', 'proxmox').
+Zones are now named after infrastructure hosts (e.g., 'VaultNAS',
+'NorthServer') instead of data sources ('truenas', 'proxmox').
 Child assets are excluded from zone membership — they appear inside
 their parent's ContainmentCard. Zone colors cycle through the palette.
 

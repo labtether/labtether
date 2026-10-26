@@ -53,7 +53,7 @@ func TestIngestTrueNASAlertLogsBranches(t *testing.T) {
 					"formatted": "Pool degraded",
 					"level":     "WARN",
 					"datetime":  now.Add(-5 * time.Minute).Format(time.RFC3339),
-					"hostname":  "OmegaNAS",
+					"hostname":  "VaultNAS",
 					"klass":     "PoolStatus",
 					"source":    "middlewared",
 				},
@@ -202,7 +202,7 @@ func TestIngestTrueNASAlertLogsHostnameAssetOverride(t *testing.T) {
 		return []map[string]any{{
 			"uuid":      "alert-host-override",
 			"formatted": "Host override",
-			"hostname":  "OmegaNAS",
+			"hostname":  "VaultNAS",
 			"datetime":  "2026-02-23T03:00:00Z",
 		}}, nil
 	})
@@ -223,7 +223,7 @@ func TestIngestTrueNASAlertLogsHostnameAssetOverride(t *testing.T) {
 	if err != nil {
 		t.Fatalf("QueryEvents() error = %v", err)
 	}
-	if len(events) == 0 || events[0].AssetID != "truenas-host-omeganas" {
+	if len(events) == 0 || events[0].AssetID != "truenas-host-vaultnas" {
 		t.Fatalf("expected hostname-based asset override, got %#v", events)
 	}
 }

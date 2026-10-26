@@ -26,6 +26,8 @@ jobs:
         run: python3 -m unittest scripts/ci/test_line_limit.py
       - name: Enforce full-repository line limit
         run: python3 scripts/ci/check-line-limit.py
+      - name: Block personal details
+        run: python3 scripts/ci/check-private-info.py
 
   qa-select:
     name: Select checks by changed paths

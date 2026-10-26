@@ -22,19 +22,19 @@ func TestTrueNASAutoLinkWrappers(t *testing.T) {
 			},
 		},
 		{
-			AssetID: "truenas-host-omeganas",
+			AssetID: "truenas-host-vaultnas",
 			Type:    "nas",
-			Name:    "OmegaNAS",
+			Name:    "VaultNAS",
 			Source:  "truenas",
 			Metadata: map[string]string{
 				"collector_endpoint_ip": "10.0.0.25",
-				"hostname":              "omeganas",
+				"hostname":              "vaultnas",
 			},
 		},
 		{
 			AssetID: "proxmox-vm-101",
 			Type:    "vm",
-			Name:    "OmegaNAS",
+			Name:    "VaultNAS",
 			Source:  "proxmox",
 			Metadata: map[string]string{
 				"node_ip": "10.0.0.25",
@@ -60,7 +60,7 @@ func TestTrueNASAutoLinkWrappers(t *testing.T) {
 	}
 	foundPortainerLink := false
 	for _, dep := range portainerDeps {
-		if dep.SourceAssetID == "portainer-host-1" && dep.TargetAssetID == "truenas-host-omeganas" {
+		if dep.SourceAssetID == "portainer-host-1" && dep.TargetAssetID == "truenas-host-vaultnas" {
 			foundPortainerLink = true
 			break
 		}
@@ -69,13 +69,13 @@ func TestTrueNASAutoLinkWrappers(t *testing.T) {
 		t.Fatalf("expected portainer -> truenas runs_on link")
 	}
 
-	truenasDeps, err := deps.ListAssetDependencies("truenas-host-omeganas", 20)
+	truenasDeps, err := deps.ListAssetDependencies("truenas-host-vaultnas", 20)
 	if err != nil {
 		t.Fatalf("ListAssetDependencies(truenas) error = %v", err)
 	}
 	foundTrueNASLink := false
 	for _, dep := range truenasDeps {
-		if dep.SourceAssetID == "truenas-host-omeganas" && dep.TargetAssetID == "proxmox-vm-101" {
+		if dep.SourceAssetID == "truenas-host-vaultnas" && dep.TargetAssetID == "proxmox-vm-101" {
 			foundTrueNASLink = true
 			break
 		}

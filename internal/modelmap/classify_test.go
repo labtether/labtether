@@ -144,8 +144,8 @@ func TestCanonicalizeConnectorAssetStoresRawTypeWhenKindAliased(t *testing.T) {
 	asset := CanonicalizeConnectorAsset("truenas", connectorsdk.Asset{
 		ID:       "truenas-host-omega",
 		Type:     "nas",
-		Name:     "OmegaNAS",
-		Metadata: map[string]string{"hostname": "OmegaNAS"},
+		Name:     "VaultNAS",
+		Metadata: map[string]string{"hostname": "VaultNAS"},
 	})
 
 	if asset.Kind != "storage-controller" {

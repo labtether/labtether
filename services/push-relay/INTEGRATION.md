@@ -318,7 +318,7 @@ because the id is a bearer secret.
    `GET /v1/health`.
 2. Land Hub support, then iOS support with the old-Hub fallback.
 3. Functional QA on the lab machines, never on the MacBook: Hub stack on VM104
-   (`LinuxDevelopmentVM`), app on the Mac mini simulator or a real iPhone.
+   (`LinuxBuildServerVM`), app on the Mac mini simulator or a real iPhone.
    Check: alert push arrives; digest push arrives; Live Activity update and
    end arrive; logout makes the next Hub push get `404` and the Hub drops the
    row; deleting the app then pushing gets `410` and the Hub drops the row;

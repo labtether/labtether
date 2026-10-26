@@ -187,11 +187,11 @@ func seedTrueNASAsset(t *testing.T, sut *apiServer, assetID, collectorID string)
 	_, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
 		AssetID: assetID,
 		Type:    "nas",
-		Name:    "omeganas",
+		Name:    "vaultnas",
 		Source:  "truenas",
 		Status:  "online",
 		Metadata: map[string]string{
-			"hostname":     "omeganas",
+			"hostname":     "vaultnas",
 			"collector_id": collectorID,
 		},
 	})
@@ -252,9 +252,9 @@ func TestHandleTrueNASAssetSMARTSuccess(t *testing.T) {
 			"skip_verify":   true,
 		},
 	})
-	seedTrueNASAsset(t, sut, "truenas-host-omeganas", "collector-truenas-1")
+	seedTrueNASAsset(t, sut, "truenas-host-vaultnas", "collector-truenas-1")
 
-	req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-omeganas/smart", nil)
+	req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-vaultnas/smart", nil)
 	rec := httptest.NewRecorder()
 	sut.handleTrueNASAssets(rec, req)
 
@@ -314,9 +314,9 @@ func TestHandleTrueNASAssetSMARTUsesCollectorMetadata(t *testing.T) {
 			Config:        map[string]any{"base_url": collectorTwo.URL, "credential_id": "cred-truenas-2", "skip_verify": true},
 		},
 	)
-	seedTrueNASAsset(t, sut, "truenas-host-omeganas", "collector-truenas-2")
+	seedTrueNASAsset(t, sut, "truenas-host-vaultnas", "collector-truenas-2")
 
-	req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-omeganas/smart", nil)
+	req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-vaultnas/smart", nil)
 	rec := httptest.NewRecorder()
 	sut.handleTrueNASAssets(rec, req)
 
@@ -361,9 +361,9 @@ func TestHandleTrueNASAssetFilesystemSuccess(t *testing.T) {
 			"skip_verify":   true,
 		},
 	})
-	seedTrueNASAsset(t, sut, "truenas-host-omeganas", "collector-truenas-1")
+	seedTrueNASAsset(t, sut, "truenas-host-vaultnas", "collector-truenas-1")
 
-	req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-omeganas/filesystem?path=/mnt", nil)
+	req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-vaultnas/filesystem?path=/mnt", nil)
 	rec := httptest.NewRecorder()
 	sut.handleTrueNASAssets(rec, req)
 
@@ -380,12 +380,12 @@ func TestHandleTrueNASAssetFilesystemSuccess(t *testing.T) {
 
 func TestHandleTrueNASAssetEventsFiltersByAsset(t *testing.T) {
 	sut := newTestAPIServer(t)
-	seedTrueNASAsset(t, sut, "truenas-host-omeganas", "collector-truenas-1")
+	seedTrueNASAsset(t, sut, "truenas-host-vaultnas", "collector-truenas-1")
 
 	now := time.Now().UTC()
 	_ = sut.logStore.AppendEvent(logs.Event{
 		ID:        "event-1",
-		AssetID:   "truenas-host-omeganas",
+		AssetID:   "truenas-host-vaultnas",
 		Source:    "truenas",
 		Level:     "info",
 		Message:   "pool healthy",
@@ -393,7 +393,7 @@ func TestHandleTrueNASAssetEventsFiltersByAsset(t *testing.T) {
 	})
 	_ = sut.logStore.AppendEvent(logs.Event{
 		ID:        "event-2",
-		AssetID:   "truenas-host-omeganas",
+		AssetID:   "truenas-host-vaultnas",
 		Source:    "docker",
 		Level:     "info",
 		Message:   "not truenas",
@@ -408,7 +408,7 @@ func TestHandleTrueNASAssetEventsFiltersByAsset(t *testing.T) {
 		Timestamp: now,
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-omeganas/events?limit=50&window=6h", nil)
+	req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-vaultnas/events?limit=50&window=6h", nil)
 	rec := httptest.NewRecorder()
 	sut.handleTrueNASAssets(rec, req)
 

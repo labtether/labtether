@@ -18,16 +18,16 @@ run and the full Go race suite.
 ## Exact image and deployment
 
 - Clean source archive:
-  `/Users/michael/Development/LabTether/.qa-builds/hub-d7b84b7895d7`
+  `/Users/demo/Development/LabTether/.qa-builds/hub-d7b84b7895d7`
 - Image: `labtether-installed-qa:20260722-r28`
 - Image ID: `sha256:2b8f4e6d47abe82863c3c69e42c2982689ca1664973b65bf0d0a99d27b74de5a`
 - OCI revision: `d7b84b7895d7e68eaca2ae5290fc38cb6e2f960d`
 - OCI version and live `/version`: `20260722-r28`
 - Trivy: zero HIGH/CRITICAL vulnerabilities and zero image secrets. The
   private JSON result is
-  `/Users/michael/Development/LabTether/.qa-evidence/trivy-labtether-installed-qa-20260722-r28.json`.
+  `/Users/demo/Development/LabTether/.qa-evidence/trivy-labtether-installed-qa-20260722-r28.json`.
 - Pre-replacement PostgreSQL custom-format dump:
-  `/Users/michael/Development/LabTether/.qa-evidence/labtetherqar17-pre-r28-d7b84b7895d7.dump`,
+  `/Users/demo/Development/LabTether/.qa-evidence/labtetherqar17-pre-r28-d7b84b7895d7.dump`,
   3,885,640 bytes,
   SHA-256 `748c7e9bea4560af3a7c90600fcee890ba5aea1d823073aad4312de345c2c091`;
   `pg_restore --list` passed.
@@ -151,7 +151,7 @@ Eleven samples from `2026-07-22T11:02:49Z` through
 restart-zero/OOM-free state, authenticated agent presence, Hub-to-DinD
 roundtrip, host-socket isolation, and zero drain/lease/pool/runtime-ownership/
 panic/fatal signatures. Evidence is in
-`/Users/michael/Development/LabTether/.qa-evidence/r28-installed/stability-watch.jsonl`.
+`/Users/demo/Development/LabTether/.qa-evidence/r28-installed/stability-watch.jsonl`.
 
 ## Cleanup
 
