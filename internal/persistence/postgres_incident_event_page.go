@@ -40,7 +40,10 @@ func (s *PostgresStore) ListIncidentEventPage(ctx context.Context, incidentID st
 		return IncidentEventPage{}, err
 	}
 	defer rows.Close()
-	page := IncidentEventPage{Events: make([]incidents.IncidentEvent, 0, limit)}
+	// limit is clamped above, but the initial capacity comes from the constant
+	// default rather than the request so the allocation never depends on
+	// caller input; larger pages grow by append up to the clamped limit.
+	page := IncidentEventPage{Events: make([]incidents.IncidentEvent, 0, IncidentEventPageDefault)}
 	for rows.Next() {
 		if err := ctx.Err(); err != nil {
 			return IncidentEventPage{}, err
