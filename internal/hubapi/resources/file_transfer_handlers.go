@@ -258,7 +258,7 @@ func (d *Deps) handleStartFileTransfer(w http.ResponseWriter, r *http.Request) {
 	}
 	go func() {
 		defer releaseAdmission()
-		d.runFileTransfer(transferCtx, cancelTransfer, ft.ID, req)
+		d.runFileTransferSafely(transferCtx, cancelTransfer, ft.ID, req)
 	}() // #nosec G118 -- File transfers intentionally outlive the initiating HTTP request and use an explicit cancel handle plus bounded admission.
 
 	servicehttp.WriteJSON(w, http.StatusAccepted, map[string]any{"transfer": ft})
