@@ -14,7 +14,7 @@ func TestExecuteTrueNASCollectorLogsSummary(t *testing.T) {
 	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
 		switch method {
 		case "system.info":
-			return map[string]any{"hostname": "OmegaNAS"}, nil
+			return map[string]any{"hostname": "VaultNAS"}, nil
 		case "pool.query":
 			return []map[string]any{{"id": 1, "name": "mainpool", "status": "ONLINE", "size": 100, "allocated": 10, "free": 90}}, nil
 		case "alert.list":
@@ -73,7 +73,7 @@ func TestExecuteTrueNASCollectorSuccessStatusAndCompletionLog(t *testing.T) {
 	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
 		switch method {
 		case "system.info":
-			return map[string]any{"hostname": "OmegaNAS", "version": "25.04.0"}, nil
+			return map[string]any{"hostname": "VaultNAS", "version": "25.04.0"}, nil
 		case "pool.query":
 			return []map[string]any{{"id": 1, "name": "mainpool", "status": "ONLINE", "size": 100, "allocated": 10, "free": 90}}, nil
 		case "alert.list":
@@ -134,7 +134,7 @@ func TestExecuteTrueNASCollectorDiscoveryAndAlertCountsInSummaryLog(t *testing.T
 	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
 		switch method {
 		case "system.info":
-			return map[string]any{"hostname": "OmegaNAS"}, nil
+			return map[string]any{"hostname": "VaultNAS"}, nil
 		case "pool.query":
 			return []map[string]any{{"id": 1, "name": "mainpool", "status": "ONLINE", "size": 100, "allocated": 10, "free": 90}}, nil
 		case "alert.list":
@@ -191,7 +191,7 @@ func TestExecuteTrueNASCollectorSummaryLogIncludesAlertCountZero(t *testing.T) {
 	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
 		switch method {
 		case "system.info":
-			return map[string]any{"hostname": "OmegaNAS"}, nil
+			return map[string]any{"hostname": "VaultNAS"}, nil
 		case "pool.query":
 			return []map[string]any{{"id": 1, "name": "mainpool", "status": "ONLINE", "size": 100, "allocated": 10, "free": 90}}, nil
 		case "alert.list":
@@ -247,7 +247,7 @@ func TestExecuteTrueNASCollectorSummaryLogIncludesNonZeroAlertCount(t *testing.T
 	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
 		switch method {
 		case "system.info":
-			return map[string]any{"hostname": "OmegaNAS"}, nil
+			return map[string]any{"hostname": "VaultNAS"}, nil
 		case "pool.query":
 			return []map[string]any{{"id": 1, "name": "mainpool", "status": "ONLINE", "size": 100, "allocated": 10, "free": 90}}, nil
 		case "alert.list":

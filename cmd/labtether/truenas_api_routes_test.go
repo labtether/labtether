@@ -70,9 +70,9 @@ func TestTrueNASAPIHandlersFinalCoverageBranches(t *testing.T) {
 				"credential_id": "cred-truenas-smart-warning",
 			},
 		})
-		seedTrueNASAsset(t, sut, "truenas-host-omeganas-warning", "collector-truenas-smart-warning")
+		seedTrueNASAsset(t, sut, "truenas-host-vaultnas-warning", "collector-truenas-smart-warning")
 
-		req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-omeganas-warning/smart", nil)
+		req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-vaultnas-warning/smart", nil)
 		rec := httptest.NewRecorder()
 		sut.handleTrueNASAssets(rec, req)
 		if rec.Code != http.StatusOK {
@@ -112,9 +112,9 @@ func TestTrueNASAPIHandlersFinalCoverageBranches(t *testing.T) {
 				"credential_id": "cred-truenas-smart-fallback",
 			},
 		})
-		seedTrueNASAsset(t, sut, "truenas-host-omeganas-fallback", "collector-truenas-smart-fallback")
+		seedTrueNASAsset(t, sut, "truenas-host-vaultnas-fallback", "collector-truenas-smart-fallback")
 
-		req = httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-omeganas-fallback/smart", nil)
+		req = httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-vaultnas-fallback/smart", nil)
 		rec = httptest.NewRecorder()
 		sut.handleTrueNASAssets(rec, req)
 		if rec.Code != http.StatusOK {

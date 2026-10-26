@@ -59,7 +59,7 @@ func TestExecuteTrueNASCollectorNoAssetsAndSuccess(t *testing.T) {
 		server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
 			switch method {
 			case "system.info":
-				return map[string]any{"hostname": "OmegaNAS", "version": "25.04.0"}, nil
+				return map[string]any{"hostname": "VaultNAS", "version": "25.04.0"}, nil
 			case "pool.query":
 				return []map[string]any{
 					{"id": 1, "name": "mainpool", "status": "ONLINE", "healthy": true, "size": 1000, "allocated": 250, "free": 750},

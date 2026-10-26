@@ -70,7 +70,7 @@ func TestExecuteTrueNASCollectorAssetMetadataEndpointIdentity(t *testing.T) {
 	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
 		switch method {
 		case "system.info":
-			return map[string]any{"hostname": "OmegaNAS"}, nil
+			return map[string]any{"hostname": "VaultNAS"}, nil
 		case "pool.query":
 			return []map[string]any{{"id": 1, "name": "mainpool", "status": "ONLINE", "size": 100, "allocated": 10, "free": 90}}, nil
 		case "alert.list":
@@ -115,7 +115,7 @@ func TestExecuteTrueNASCollectorHandlesEndpointIdentityMetadata(t *testing.T) {
 	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
 		switch method {
 		case "system.info":
-			return map[string]any{"hostname": "OmegaNAS"}, nil
+			return map[string]any{"hostname": "VaultNAS"}, nil
 		case "pool.query":
 			return []map[string]any{{"id": 1, "name": "mainpool", "status": "ONLINE", "size": 100, "allocated": 10, "free": 90}}, nil
 		case "alert.list":
@@ -160,7 +160,7 @@ func TestExecuteTrueNASCollectorClusterHeartbeatMetadata(t *testing.T) {
 	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
 		switch method {
 		case "system.info":
-			return map[string]any{"hostname": "OmegaNAS"}, nil
+			return map[string]any{"hostname": "VaultNAS"}, nil
 		case "pool.query":
 			return []map[string]any{{"id": 1, "name": "mainpool", "status": "ONLINE", "size": 100, "allocated": 10, "free": 90}}, nil
 		case "alert.list":
@@ -205,7 +205,7 @@ func TestExecuteTrueNASCollectorRefreshesCollectorAssetIDHeartbeat(t *testing.T)
 	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
 		switch method {
 		case "system.info":
-			return map[string]any{"hostname": "OmegaNAS"}, nil
+			return map[string]any{"hostname": "VaultNAS"}, nil
 		case "pool.query":
 			return []map[string]any{{"id": 1, "name": "mainpool", "status": "ONLINE", "size": 100, "allocated": 10, "free": 90}}, nil
 		case "alert.list":
@@ -249,7 +249,7 @@ func TestExecuteTrueNASCollectorClusterAssetOptionalWhenAssetIDEmpty(t *testing.
 	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
 		switch method {
 		case "system.info":
-			return map[string]any{"hostname": "OmegaNAS"}, nil
+			return map[string]any{"hostname": "VaultNAS"}, nil
 		case "pool.query":
 			return []map[string]any{{"id": 1, "name": "mainpool", "status": "ONLINE", "size": 100, "allocated": 10, "free": 90}}, nil
 		case "alert.list":
@@ -290,7 +290,7 @@ func TestExecuteTrueNASCollectorUsesAssetHeartbeatStatusNormalization(t *testing
 	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
 		switch method {
 		case "system.info":
-			return map[string]any{"hostname": "OmegaNAS"}, nil
+			return map[string]any{"hostname": "VaultNAS"}, nil
 		case "pool.query":
 			return []map[string]any{{"id": 1, "name": "faultedpool", "status": "FAULTED", "size": 100, "allocated": 90, "free": 10}}, nil
 		case "alert.list":

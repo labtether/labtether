@@ -103,9 +103,9 @@ The relay deletes a registration when APNs answers `410`, or `400` with
 
 ## Deploy
 
-Michael runs these steps; they need his Cloudflare login and Apple key.
+The owner runs these steps; they need the owner's Cloudflare login and Apple key.
 
-- Cloudflare account: "Michaels Account"
+- Cloudflare account: "Owners Account"
   (`25c357768b0fd4b877d6f008dc50e63b`, pinned as `account_id` in
   `wrangler.jsonc`). It already serves the labtether.com website Worker, so
   the `labtether.com` zone is on this account.
@@ -142,7 +142,7 @@ Michael runs these steps; they need his Cloudflare login and Apple key.
    npm run deploy
    ```
 
-5. Upload the APNs `.p8` key as a secret. Michael does this himself; the key
+5. Upload the APNs `.p8` key as a secret. The owner does this personally; the key
    never goes into this folder (`*.p8` is git-ignored here), the repo, a
    shell history line or chat. Redirect the file so its line breaks survive:
 

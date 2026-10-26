@@ -117,19 +117,19 @@ test.describe("topology tree relationships", () => {
       page,
       [
         {
-          id: "docker-host-containervm-deltaserver",
-          name: "docker-containervm-deltaserver",
+          id: "docker-host-dockerhost1-northserver",
+          name: "docker-dockerhost1-northserver",
           type: "container-host",
           source: "docker",
           status: "online",
           platform: "linux",
           last_seen_at: BASE_TS,
           metadata: {
-            agent_id: "containervm-deltaserver",
+            agent_id: "dockerhost1-northserver",
           },
         },
         {
-          id: "docker-ct-containervm-deltaserver-abc123def456",
+          id: "docker-ct-dockerhost1-northserver-abc123def456",
           name: "App Container",
           type: "docker-container",
           source: "docker",
@@ -148,7 +148,7 @@ test.describe("topology tree relationships", () => {
     await switchToTreeView(page);
     await expect(page.getByText("No zones or assets.", { exact: true })).toHaveCount(0);
 
-    await page.getByText("docker-containervm-deltaserver", { exact: true }).first().click();
+    await page.getByText("docker-dockerhost1-northserver", { exact: true }).first().click();
 
     const inspectorPanel = page
       .locator("div")

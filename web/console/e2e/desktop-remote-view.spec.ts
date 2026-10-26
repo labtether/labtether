@@ -41,7 +41,7 @@ test("desktop Proxmox QEMU defaults to VNC while still offering SPICE", async ({
     vncStreamTicketStatus: 500,
     assetOverrides: {
       id: "proxmox-vm-100",
-      name: "ContainerVM",
+      name: "DockerHost1",
       type: "vm",
       source: "proxmox",
       platform: "",

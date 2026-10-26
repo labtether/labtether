@@ -142,7 +142,7 @@ func TestExecuteTrueNASCollectorRemainingErrorBranches(t *testing.T) {
 	server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
 		switch method {
 		case "system.info":
-			return map[string]any{"hostname": "OmegaNAS", "version": "25.04.0"}, nil
+			return map[string]any{"hostname": "VaultNAS", "version": "25.04.0"}, nil
 		case "pool.query":
 			return []map[string]any{
 				{"id": 1, "name": "mainpool", "status": "ONLINE", "healthy": true, "size": 1000, "allocated": 200, "free": 800},
@@ -173,7 +173,7 @@ func TestExecuteTrueNASCollectorRemainingErrorBranches(t *testing.T) {
 	assetStoreWithErrors := &truenasCollectorAssetStoreWithErrors{
 		AssetStore: sut.assetStore,
 		failUpsert: map[string]error{
-			"truenas-host-omeganas":              errors.New("forced asset upsert failure"),
+			"truenas-host-vaultnas":              errors.New("forced asset upsert failure"),
 			"truenas-cluster-remaining-branches": errors.New("forced cluster upsert failure"),
 		},
 		listErr: errors.New("forced list assets failure"),

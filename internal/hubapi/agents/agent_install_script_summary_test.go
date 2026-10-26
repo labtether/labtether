@@ -94,7 +94,7 @@ func TestInstallScriptSummaryWrapsLongValues(t *testing.T) {
 	root, env := newAgentScriptHarness(t, strings.Repeat("9", 64))
 
 	longFingerprint := "LT-WJHN-I4WG-VI7N-6TM6-A636-J6ZP-EAPV-WWXV-VLNW-GKZR-TU4M-JTCB-PX3A"
-	longHostname := "containervm-deltaserver-with-a-very-long-hostname-for-summary-wrap-tests"
+	longHostname := "dockerhost1-northserver-with-a-very-long-hostname-for-summary-wrap-tests"
 
 	writeExecutable(t, filepath.Join(root, "bin", "hostname"), "#!/bin/bash\nset -euo pipefail\nprintf '%s\\n' \""+longHostname+"\"\n")
 	writeExecutable(t, filepath.Join(root, "bin", "systemctl"), `#!/bin/bash

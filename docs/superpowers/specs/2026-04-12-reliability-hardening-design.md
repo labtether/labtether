@@ -80,7 +80,7 @@ Return 200 if postgres is reachable. Return 503 if postgres ping fails. The extr
 
 ## Files Changed
 
-### Hub (`/Users/michael/Development/LabTether/hub`)
+### Hub (`/Users/demo/Development/LabTether/hub`)
 - `internal/servicehttp/recover.go` — NEW: RecoverMiddleware + safeGo helper
 - `internal/servicehttp/servicehttp.go` — Deeper /healthz, apply RecoverMiddleware
 - `cmd/labtether/startup_bootstrap.go` — Wire RecoverMiddleware into handler chain
@@ -91,7 +91,7 @@ Return 200 if postgres is reachable. Return 503 if postgres ping fails. The extr
 - `internal/persistence/retry.go` — NEW: retryDB helper
 - `cmd/labtether/startup_worker.go` — Use retryDB for job queue polls
 
-### Agent (`/Users/michael/Development/LabTether/labtether-agent`)
+### Agent (`/Users/demo/Development/LabTether/labtether-agent`)
 - `internal/agentcore/safego.go` — NEW: safeGo + recover helpers
 - `internal/agentcore/command_handler.go` — Panic recovery in handlers, WaitGroup for drain
 - `internal/agentcore/ws_transport.go` — Panic recovery in pingLoop/reconnectLoop
