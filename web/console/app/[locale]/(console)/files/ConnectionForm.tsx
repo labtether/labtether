@@ -3,6 +3,7 @@
 import { ConnectionProtocolFields } from "./ConnectionProtocolFields";
 
 import { useCallback, useState } from "react";
+import { useTranslations } from "next-intl";
 import { ArrowLeft, CheckCircle2, XCircle, Loader2, Trash2 } from "lucide-react";
 import { Button } from "../../../components/ui/Button";
 import { Input } from "../../../components/ui/Input";
@@ -59,6 +60,7 @@ export function ftpTLSFromExtraConfig(extra: Record<string, unknown>): boolean {
 // ---------------------------------------------------------------------------
 
 export function ConnectionForm({ protocol, existingConnection, onConnect, onCancel, onDeleted }: ConnectionFormProps) {
+  const t = useTranslations("files");
   const isEdit = !!existingConnection;
   const extra = existingConnection?.extra_config ?? {};
 
@@ -86,6 +88,7 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
 
   // WebDAV-specific (fall back to old scheme key)
   const [webdavTLS, setWebdavTLS] = useState((extra.webdav_tls as boolean) ?? (extra.scheme === "https" || extra.scheme === undefined));
+  const [allowCleartextWebDAV, setAllowCleartextWebDAV] = useState(extra.webdav_allow_cleartext === true);
 
   // Form state
   const [saving, setSaving] = useState(false);
@@ -113,6 +116,7 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
     }
     if (protocol === "webdav") {
       extraCfg.webdav_tls = webdavTLS;
+      if (!webdavTLS) extraCfg.webdav_allow_cleartext = allowCleartextWebDAV;
     }
 
     const trustedHostKey = trustedSFTPHostKeyForRequest(
@@ -148,7 +152,7 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
   }, [
     protocol, name, host, port, initialPath, username, password,
     authMethod, privateKey, passphrase, domain, shareName, passiveMode, useTLS, webdavTLS,
-    allowCleartextFTP, existingConnection, testedSFTPHostKey,
+    allowCleartextFTP, allowCleartextWebDAV, existingConnection, testedSFTPHostKey,
   ]);
 
   // ---------------------------------------------------------------------------
@@ -162,12 +166,15 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
     if (protocol === "ftp" && !useTLS && !allowCleartextFTP) {
       return "Confirm the cleartext FTP warning or use FTPS.";
     }
+    if (protocol === "webdav" && !webdavTLS && !allowCleartextWebDAV) {
+      return t("webdavCleartextRequired");
+    }
     if (requireSecret) {
       const secret = protocol === "sftp" && authMethod === "private_key" ? privateKey : password;
       if (!secret.trim()) return "Credentials are required.";
     }
     return null;
-  }, [name, host, protocol, shareName, authMethod, privateKey, password, useTLS, allowCleartextFTP]);
+  }, [name, host, protocol, shareName, authMethod, privateKey, password, useTLS, allowCleartextFTP, webdavTLS, allowCleartextWebDAV, t]);
 
   // ---------------------------------------------------------------------------
   // Handlers
@@ -376,6 +383,8 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
           setAllowCleartextFTP={setAllowCleartextFTP}
           webdavTLS={webdavTLS}
           setWebdavTLS={setWebdavTLS}
+          allowCleartextWebDAV={allowCleartextWebDAV}
+          setAllowCleartextWebDAV={setAllowCleartextWebDAV}
         />
       </div>
 

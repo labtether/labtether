@@ -256,7 +256,7 @@ export function GroupHeader({
         {counts.offline > 0 ? (
           <span className="inline-flex items-center gap-1 text-[10px] text-[var(--bad)] font-mono tabular-nums">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--bad)]"
-              style={{ animation: "status-glow 1.5s ease-in-out infinite" }}
+              style={{ animation: "status-glow 1.5s ease-in-out 3" }}
             />
             {counts.offline}
           </span>

@@ -61,17 +61,30 @@ func (d *Deps) FinalizeAgentDesktopSession(
 	startSent bool,
 	closeFn func(*agentmgr.AgentConn, string),
 ) {
-	d.DesktopBridges.Delete(sessionID)
-	if bridgeState != nil {
-		bridgeState.StopRecordingLocked(d.StopRecording)
-		bridgeState.Close()
+	if bridgeState == nil {
+		return
 	}
-	if startSent {
-		if closeFn == nil {
-			closeFn = SendDesktopClose
+	bridgeState.Close()
+	bridgeState.finalizeOnce.Do(func() {
+		wireID := bridgeState.WireSessionID
+		if wireID == "" {
+			wireID = sessionID
 		}
-		closeFn(agentConn, sessionID)
-	}
+		d.DesktopBridges.CompareAndDelete(wireID, bridgeState)
+		d.desktopOwners.CompareAndDelete(sessionID, bridgeState)
+		bridgeState.StopRecordingLocked(d.StopRecording)
+		bridgeState.lifecycleMu.Lock()
+		defer bridgeState.lifecycleMu.Unlock()
+		if startSent || bridgeState.started {
+			if closeFn == nil {
+				closeFn = SendDesktopClose
+			}
+			if bridgeState.AgentConn != nil {
+				agentConn = bridgeState.AgentConn
+			}
+			closeFn(agentConn, wireID)
+		}
+	})
 }
 
 // CloseDesktopBridgesForAsset closes all desktop bridges matching the given asset.
@@ -113,17 +126,7 @@ func (d *Deps) HandleAgentDesktopStream(w http.ResponseWriter, r *http.Request, 
 	defer wsConn.Close()
 	connectStart := time.Now()
 
-	opts := d.GetDesktopSessionOptions(session.ID)
-	quality := strings.TrimSpace(r.URL.Query().Get("quality"))
-	if quality == "" {
-		quality = opts.Quality
-	}
-	display := strings.TrimSpace(r.URL.Query().Get("display"))
-	if display == "" {
-		display = opts.Display
-	}
-	protocol := d.ResolveDesktopProtocol(session, r)
-	logContext := fmt.Sprintf("session=%s target=%s trace=%s protocol=%s", session.ID, session.Target, traceLog, d.StreamTraceLogValue(protocol))
+	logContext := fmt.Sprintf("session=%s target=%s trace=%s", session.ID, session.Target, traceLog)
 
 	// Set up output channel for this desktop session.
 	outputCh := make(chan []byte, 1024)
@@ -132,20 +135,15 @@ func (d *Deps) HandleAgentDesktopStream(w http.ResponseWriter, r *http.Request, 
 		OutputCh:        outputCh,
 		AudioCh:         make(chan DesktopAudioOutbound, 256),
 		ClosedCh:        closedCh,
-		ExpectedAgentID: session.Target,
+		ExpectedAgentID: agentConn.AssetID,
 		SessionID:       session.ID,
+		WireSessionID:   "desktop-stream:" + shared.GenerateRequestID(),
+		AgentConn:       agentConn,
 		Target:          session.Target,
 		TraceID:         traceID,
 	}
-	if opts.Record || strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("record")), "1") {
-		recording, err := d.StartRecording(session.ID, session.Target, session.ActorID, protocol)
-		if err != nil {
-			log.Printf("recording: failed to start for session=%s: %v", session.ID, err)
-		} else {
-			bridgeState.SetRecording(recording)
-		}
-	}
-	d.DesktopBridges.Store(session.ID, bridgeState)
+
+	d.registerDesktopStream(bridgeState)
 	startSent := false
 	endReason := "unknown"
 	var endErr error
@@ -165,16 +163,37 @@ func (d *Deps) HandleAgentDesktopStream(w http.ResponseWriter, r *http.Request, 
 		d.FinalizeAgentDesktopSession(session.ID, bridgeState, agentConn, startSent, nil)
 	}()
 
+	opts := d.GetDesktopSessionOptions(session.ID)
+	quality := strings.TrimSpace(r.URL.Query().Get("quality"))
+	if quality == "" {
+		quality = opts.Quality
+	}
+	display := strings.TrimSpace(r.URL.Query().Get("display"))
+	if display == "" {
+		display = opts.Display
+	}
+	protocol := d.ResolveDesktopProtocol(session, r)
+	logContext = fmt.Sprintf("session=%s target=%s trace=%s protocol=%s", session.ID, session.Target, traceLog, d.StreamTraceLogValue(protocol))
+
+	if opts.Record || strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("record")), "1") {
+		_, _, err := bridgeState.StartRecordingLocked(func() (*ActiveRecording, error) {
+			return d.StartRecording(session.ID, session.Target, session.ActorID, protocol)
+		})
+		if err != nil {
+			log.Printf("recording: failed to start for session=%s: %v", session.ID, err)
+		}
+	}
+
 	// Send desktop.start to agent.
 	startData, _ := json.Marshal(agentmgr.DesktopStartData{
-		SessionID:   session.ID,
+		SessionID:   bridgeState.WireSessionID,
 		Quality:     quality,
 		Display:     display,
 		VNCPassword: opts.VNCPassword,
 	})
-	if err := agentConn.Send(agentmgr.Message{
+	if err := bridgeState.start(agentmgr.Message{
 		Type: agentmgr.MsgDesktopStart,
-		ID:   session.ID,
+		ID:   bridgeState.WireSessionID,
 		Data: startData,
 	}); err != nil {
 		endReason = "agent_start_send_failed"
@@ -195,6 +214,7 @@ func (d *Deps) HandleAgentDesktopStream(w http.ResponseWriter, r *http.Request, 
 			"reason": fallbackReason,
 		})
 		writeMu.Lock()
+		_ = wsConn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 		_ = wsConn.WriteMessage(websocket.TextMessage, notice)
 		writeMu.Unlock()
 	}
@@ -223,11 +243,12 @@ func (d *Deps) HandleAgentDesktopStream(w http.ResponseWriter, r *http.Request, 
 			defer stopKeepalive()
 			go func() {
 				writeMu.Lock()
+				_ = wsConn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 				_ = wsConn.WriteMessage(websocket.BinaryMessage, data)
 				writeMu.Unlock()
 				d.BridgeDesktopOutput(wsConn, outputCh, closedCh, &writeMu, bridgeState, logContext)
 			}()
-			endReason, endErr = d.BridgeDesktopInput(wsConn, agentConn, session.ID, closedCh, bridgeState)
+			endReason, endErr = d.BridgeDesktopInput(wsConn, agentConn, bridgeState.WireSessionID, closedCh, bridgeState)
 			return
 		}
 		// nil = started confirmation, continue normally.
@@ -243,7 +264,7 @@ func (d *Deps) HandleAgentDesktopStream(w http.ResponseWriter, r *http.Request, 
 	go d.BridgeDesktopOutput(wsConn, outputCh, closedCh, &writeMu, bridgeState, logContext)
 
 	// Bridge: browser input → agent
-	endReason, endErr = d.BridgeDesktopInput(wsConn, agentConn, session.ID, closedCh, bridgeState)
+	endReason, endErr = d.BridgeDesktopInput(wsConn, agentConn, bridgeState.WireSessionID, closedCh, bridgeState)
 
 	if reason := bridgeState.CloseReason(); reason != "" {
 		if endReason == "unknown" {
@@ -374,6 +395,11 @@ func (d *Deps) BridgeDesktopInput(wsConn *websocket.Conn, agentConn *agentmgr.Ag
 			continue
 		}
 
+		select {
+		case <-closedCh:
+			return "agent_stream_closed", nil
+		default:
+		}
 		// Send VNC input to agent as base64-encoded data.
 		encoded := base64.StdEncoding.EncodeToString(payload)
 		inputData, _ := json.Marshal(agentmgr.DesktopDataPayload{
@@ -403,11 +429,7 @@ func (d *Deps) ProcessAgentDesktopStarted(conn *agentmgr.AgentConn, msg agentmgr
 		if !ok || b == nil {
 			return
 		}
-		assetID := ""
-		if conn != nil {
-			assetID = conn.AssetID
-		}
-		if !b.MatchesAgent(assetID) {
+		if !b.MatchesConnection(conn) {
 			return
 		}
 		log.Printf("desktop-agent: agent_reported_started session=%s target=%s trace=%s", b.SessionID, b.Target, d.StreamTraceLogValue(b.TraceID))
@@ -436,11 +458,7 @@ func (d *Deps) ProcessAgentDesktopData(conn *agentmgr.AgentConn, msg agentmgr.Me
 		if !ok || b == nil {
 			return
 		}
-		assetID := ""
-		if conn != nil {
-			assetID = conn.AssetID
-		}
-		if !b.MatchesAgent(assetID) {
+		if !b.MatchesConnection(conn) {
 			return
 		}
 		b.TrySendOutput(decoded)
@@ -459,11 +477,7 @@ func (d *Deps) ProcessAgentDesktopClosed(conn *agentmgr.AgentConn, msg agentmgr.
 		if !ok || b == nil {
 			return
 		}
-		assetID := ""
-		if conn != nil {
-			assetID = conn.AssetID
-		}
-		if !b.MatchesAgent(assetID) {
+		if !b.MatchesConnection(conn) {
 			return
 		}
 		reason := strings.TrimSpace(data.Reason)

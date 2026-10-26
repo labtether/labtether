@@ -35,7 +35,7 @@ func NormalizeFileConnectionExtraConfig(protocol string, config map[string]any) 
 				return nil, errors.New("host_key must contain exactly one valid SSH public key")
 			}
 			normalized[key] = hostKey
-		case "ftp:ftp_tls", "ftp:ftp_passive", "ftp:ftp_allow_cleartext", "webdav:webdav_tls":
+		case "ftp:ftp_tls", "ftp:ftp_passive", "ftp:ftp_allow_cleartext", "webdav:webdav_tls", "webdav:webdav_allow_cleartext":
 			flag, ok := value.(bool)
 			if !ok {
 				return nil, fmt.Errorf("%s must be a boolean", key)
@@ -89,6 +89,21 @@ func NormalizeFileConnectionExtraConfig(protocol string, config map[string]any) 
 			return nil, errors.New("plain FTP requires ftp_allow_cleartext=true and LABTETHER_ALLOW_INSECURE_TRANSPORT=true")
 		}
 	}
+	if protocol == "webdav" {
+		useTLS := true
+		if configured, ok := normalized["webdav_tls"].(bool); ok {
+			useTLS = configured
+		} else {
+			normalized["webdav_tls"] = true
+		}
+		allowCleartext, _ := normalized["webdav_allow_cleartext"].(bool)
+		if useTLS && allowCleartext {
+			return nil, errors.New("webdav_allow_cleartext cannot be enabled when webdav_tls is true")
+		}
+		if !useTLS && (!allowCleartext || !securityruntime.InsecureTransportAllowed()) {
+			return nil, errors.New("plain WebDAV requires webdav_allow_cleartext=true and LABTETHER_ALLOW_INSECURE_TRANSPORT=true")
+		}
+	}
 	return normalized, nil
 }
 
@@ -105,9 +120,14 @@ func sanitizeLegacyFileConnectionExtraConfig(protocol string, config map[string]
 	if normalized, err := NormalizeFileConnectionExtraConfig(protocol, config); err == nil {
 		return normalized
 	}
-	if strings.EqualFold(strings.TrimSpace(protocol), "ftp") {
+	protocol = strings.ToLower(strings.TrimSpace(protocol))
+	if protocol == "ftp" || protocol == "webdav" {
+		keys := []string{"ftp_tls", "ftp_passive", "ftp_allow_cleartext"}
+		if protocol == "webdav" {
+			keys = []string{"webdav_tls", "webdav_allow_cleartext", "webdav_tls_skip_verify", "webdav_base_path"}
+		}
 		known := map[string]any{}
-		for _, key := range []string{"ftp_tls", "ftp_passive", "ftp_allow_cleartext"} {
+		for _, key := range keys {
 			if value, ok := config[key]; ok {
 				known[key] = value
 			}
@@ -122,8 +142,8 @@ func sanitizeLegacyFileConnectionExtraConfig(protocol string, config map[string]
 			out[key] = normalized[key]
 		}
 	}
-	if strings.EqualFold(strings.TrimSpace(protocol), "ftp") {
-		out["ftp_tls"] = true
+	if protocol == "ftp" || protocol == "webdav" {
+		out[protocol+"_tls"] = true
 	}
 	return out
 }

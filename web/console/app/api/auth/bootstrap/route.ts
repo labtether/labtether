@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { readBoundedJSON, RequestBodyTooLargeError } from "../../../../lib/boundedBody";
 import { resolvedBackendBaseURLs, upstreamErrorPayload } from "../../../../lib/backend";
 import { isMutationRequestOriginAllowed } from "../../../../lib/proxyAuth";
 
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
 
   const base = await resolvedBackendBaseURLs();
   try {
-    const raw = await request.json();
+    const raw = await readBoundedJSON(request);
     const body = parseBootstrapRequest(raw);
     if (!body) {
       return NextResponse.json({ error: "setup token, username, and password are required" }, { status: 400 });
@@ -48,7 +49,13 @@ export async function POST(request: Request) {
     }
 
     return res;
-  } catch {
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return NextResponse.json({ error: "request body too large" }, { status: 413 });
+    }
+    if (error instanceof SyntaxError) {
+      return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
+    }
     return NextResponse.json({ error: "setup endpoint unavailable" }, { status: 502 });
   }
 }

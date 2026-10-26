@@ -4,5 +4,7 @@
   "empty": {
     "title": "文件浏览器",
     "description": "选择一个已连接代理的设备来浏览和传输文件。"
-  }
+  },
+  "webdavCleartextWarning": "允许 WebDAV 使用未加密的 HTTP。网络上的其他人可能读取或更改密码和文件。Hub 也必须允许不安全的传输。",
+  "webdavCleartextRequired": "请确认未加密 HTTP 的警告，或使用 HTTPS。"
 }

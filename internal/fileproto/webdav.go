@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"path"
-	"strings"
 	"sync"
 	"time"
 
@@ -36,29 +35,9 @@ func (c *WebDAVClient) Connect(ctx context.Context, cfg ConnectionConfig) error 
 	}
 	c.config = cfg
 
-	port := cfg.Port
-	if port == 0 {
-		port = DefaultPort("webdav")
-	}
-
-	// Determine scheme: HTTPS for port 443 or when explicitly configured.
-	scheme := "http"
-	if port == 443 {
-		scheme = "https"
-	}
-	if useTLS, ok := cfg.ExtraConfig["webdav_tls"].(bool); ok && useTLS {
-		scheme = "https"
-	}
-
-	baseURL := fmt.Sprintf("%s://%s:%d", scheme, cfg.Host, port)
-
-	// Append optional base path (e.g., /remote.php/dav/files/user).
-	if basePath, ok := cfg.ExtraConfig["webdav_base_path"].(string); ok && basePath != "" {
-		basePath = strings.TrimRight(basePath, "/")
-		if !strings.HasPrefix(basePath, "/") {
-			basePath = "/" + basePath
-		}
-		baseURL += basePath
+	baseURL, skipVerify, err := webDAVEndpoint(cfg)
+	if err != nil {
+		return fmt.Errorf("webdav configuration: %w", err)
 	}
 
 	auth := gowebdav.NewAutoAuth(cfg.Username, cfg.Secret)
@@ -82,10 +61,20 @@ func (c *WebDAVClient) Connect(ctx context.Context, cfg ConnectionConfig) error 
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 
 	// Skip TLS verification if explicitly requested (self-signed certs).
-	if skipVerify, ok := cfg.ExtraConfig["webdav_tls_skip_verify"].(bool); ok && skipVerify {
+	if skipVerify {
 		transport.TLSClientConfig.InsecureSkipVerify = true // #nosec G402 -- Explicit operator opt-in for self-signed WebDAV endpoints.
 	}
-	boundedTransport := &boundedWebDAVTransport{base: transport}
+	policyTransport, err := newWebDAVPolicyTransport(baseURL, skipVerify, transport)
+	if err != nil {
+		return fmt.Errorf("webdav transport: %w", err)
+	}
+	connected := false
+	defer func() {
+		if !connected {
+			transport.CloseIdleConnections()
+		}
+	}()
+	boundedTransport := &boundedWebDAVTransport{base: policyTransport}
 	client.SetTransport(boundedTransport)
 	connectCtx, cancelConnect := context.WithTimeout(opCtx, connectTimeout)
 	defer cancelConnect()
@@ -109,8 +98,9 @@ func (c *WebDAVClient) Connect(ctx context.Context, cfg ConnectionConfig) error 
 
 	c.client = client
 	c.baseURL = baseURL
-	c.transport = transport
+	c.transport = policyTransport
 	c.auth = auth
+	connected = true
 	return nil
 }
 
@@ -447,7 +437,7 @@ func (c *WebDAVClient) removePartial(filePath string) {
 
 // Close releases idle HTTP connections retained by the shared transport.
 func (c *WebDAVClient) Close() error {
-	if transport, ok := c.transport.(*http.Transport); ok {
+	if transport, ok := c.transport.(interface{ CloseIdleConnections() }); ok {
 		transport.CloseIdleConnections()
 	}
 	return nil

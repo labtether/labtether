@@ -8,7 +8,7 @@ declare module "guacamole-common-js" {
     connect(data?: string): void;
     disconnect(): void;
     sendKeyEvent(pressed: 0 | 1, keysym: number): void;
-    sendMouseState(state: Mouse.State): void;
+    sendMouseState(state: Mouse.State, applyDisplayScale?: boolean): void;
     getDisplay(): Display;
     createClipboardStream(mimetype: string): OutputStream;
     onclipboard: ((stream: InputStream, mimetype: string) => void) | null;
@@ -36,9 +36,11 @@ declare module "guacamole-common-js" {
     onmousedown: ((state: Mouse.State) => void) | null;
     onmouseup: ((state: Mouse.State) => void) | null;
     onmousemove: ((state: Mouse.State) => void) | null;
+    reset(): void;
   }
 
   export namespace Mouse {
+    class Touchscreen extends Mouse {}
     interface State {
       x: number;
       y: number;
@@ -68,6 +70,7 @@ declare module "guacamole-common-js" {
   }
 
   export class InputStream {
+    sendAck(message: string, code: number): void;
     onblob: ((data: string) => void) | null;
     onend: (() => void) | null;
   }

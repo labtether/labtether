@@ -271,6 +271,9 @@ func (s *apiServer) handleAgentWebSocket(w http.ResponseWriter, r *http.Request)
 		if s.agentMgr != nil {
 			removed = s.agentMgr.UnregisterIfMatch(assetID, conn)
 		}
+		s.ensureDesktopDeps().CloseDesktopStreamsForConnection(conn)
+		s.ensureTerminalDeps().CloseTerminalBridgesForConnection(conn)
+		s.ensureDockerDeps().CloseDockerExecBridgesForConnection(conn)
 		if !removed {
 			// A newer connection for the same asset is active; do not run global
 			// disconnect cleanup for this stale connection.
@@ -285,10 +288,6 @@ func (s *apiServer) handleAgentWebSocket(w http.ResponseWriter, r *http.Request)
 		if s.broadcaster != nil {
 			s.broadcaster.Broadcast("agent.disconnected", map[string]any{"asset_id": assetID})
 		}
-		s.closeWebRTCBridgesForAsset(assetID)
-		s.closeDockerExecBridgesForAsset(assetID)
-		s.closeDesktopBridgesForAsset(assetID)
-		s.closeTerminalBridgesForAsset(assetID)
 		if s.presenceStore != nil {
 			deleted, err := s.presenceStore.DeletePresenceForSession(assetID, sessionID)
 			if err != nil {

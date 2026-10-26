@@ -50,103 +50,87 @@ func (d *Deps) HandleDockerExecTerminalStream(
 	shared.LimitBrowserInteractiveMessages(wsConn)
 	defer wsConn.Close()
 
-	cols, rows := d.ParseTerminalSize(r.URL.Query().Get("cols"), r.URL.Query().Get("rows"))
-	command := DockerExecCommandFromQuery(r.URL.Query().Get("shell"))
-
-	outputCh := make(chan []byte, 256)
-	closedCh := make(chan struct{})
 	bridgeState := &DockerExecBridge{
-		OutputCh:        outputCh,
-		ClosedCh:        closedCh,
-		ExpectedAgentID: agentID,
+		OutputCh:        make(chan []byte, 256),
+		ClosedCh:        make(chan struct{}),
+		ReadyCh:         make(chan struct{}),
+		ExpectedAgentID: agentConn.AssetID,
+		AgentConn:       agentConn,
+		SessionID:       session.ID,
+		WireSessionID:   "docker-exec-stream:" + shared.GenerateRequestID(),
 	}
-	d.DockerExecBridges.Store(session.ID, bridgeState)
+	d.registerDockerExecStream(bridgeState)
+	var outputDone chan struct{}
 	defer func() {
-		d.DockerExecBridges.Delete(session.ID)
 		bridgeState.Close("")
+		_ = wsConn.Close()
+		if outputDone != nil {
+			<-outputDone
+		}
+		d.finalizeDockerExecStream(bridgeState)
 	}()
+	if current, ok := d.AgentMgr.Get(agentID); !ok || current != agentConn {
+		writeDockerExecError(wsConn, "container host agent disconnected")
+		return
+	}
 
+	cols, rows := d.ParseTerminalSize(r.URL.Query().Get("cols"), r.URL.Query().Get("rows"))
 	startData, _ := json.Marshal(agentmgr.DockerExecStartData{
-		SessionID:   session.ID,
+		SessionID:   bridgeState.WireSessionID,
 		ContainerID: containerID,
-		Command:     command,
+		Command:     DockerExecCommandFromQuery(r.URL.Query().Get("shell")),
 		TTY:         true,
 		Cols:        cols,
 		Rows:        rows,
 	})
-	if err := agentConn.Send(agentmgr.Message{
+	if err := d.startDockerExecStream(bridgeState, agentmgr.Message{
 		Type: agentmgr.MsgDockerExecStart,
-		ID:   session.ID,
+		ID:   bridgeState.WireSessionID,
 		Data: startData,
 	}); err != nil {
-		_ = wsConn.WriteJSON(map[string]any{"type": "error", "message": "failed to start container terminal"})
+		writeDockerExecError(wsConn, "failed to start container terminal")
 		return
 	}
-	defer func() {
-		closeData, _ := json.Marshal(agentmgr.DockerExecCloseData{SessionID: session.ID})
-		_ = agentConn.Send(agentmgr.Message{
-			Type: agentmgr.MsgDockerExecClose,
-			ID:   session.ID,
-			Data: closeData,
-		})
-	}()
-	var writeMu sync.Mutex
 
+	timer := time.NewTimer(10 * time.Second)
+	defer timer.Stop()
 	select {
-	case <-closedCh:
-		closeReason := bridgeState.ReasonOr("container terminal session closed unexpectedly")
-		_ = wsConn.WriteJSON(map[string]any{"type": "error", "message": closeReason})
-		return
-	case <-time.After(10 * time.Second):
-		_ = wsConn.WriteJSON(map[string]any{"type": "error", "message": "container terminal start timed out"})
-		return
-	case data := <-outputCh:
-		if data != nil {
-			stopKeepalive := d.StartBrowserWSKeepalive(wsConn, &writeMu, "terminal-docker-exec:"+session.ID)
-			defer stopKeepalive()
-			go func() {
-				writeMu.Lock()
-				_ = wsConn.WriteMessage(websocket.BinaryMessage, data)
-				writeMu.Unlock()
-				d.bridgeDockerExecOutput(wsConn, outputCh, closedCh, &writeMu)
-			}()
-			d.bridgeDockerExecInput(wsConn, agentConn, session.ID, closedCh)
-			return
+	case <-bridgeState.ClosedCh:
+		// A fast shell can queue its last bytes and exit before this select.
+		// Only startup failures without output need an error message.
+		select {
+		case <-bridgeState.ReadyCh:
+		default:
+			writeDockerExecError(wsConn, bridgeState.ReasonOr("container terminal session closed unexpectedly"))
 		}
+	case <-timer.C:
+		writeDockerExecError(wsConn, "container terminal start timed out")
+		return
+	case <-bridgeState.ReadyCh:
 	}
 
+	var writeMu sync.Mutex
 	stopKeepalive := d.StartBrowserWSKeepalive(wsConn, &writeMu, "terminal-docker-exec:"+session.ID)
 	defer stopKeepalive()
-	go d.bridgeDockerExecOutput(wsConn, outputCh, closedCh, &writeMu)
-	d.bridgeDockerExecInput(wsConn, agentConn, session.ID, closedCh)
+	outputDone = make(chan struct{})
+	go func() {
+		defer close(outputDone)
+		d.bridgeDockerExecOutput(wsConn, bridgeState, &writeMu)
+	}()
+	d.bridgeDockerExecInput(wsConn, agentConn, bridgeState.WireSessionID, bridgeState.ClosedCh)
+	// The output loop owns browser closure on agent exit and drains final data
+	// before releasing the blocked input read. If closure preceded that read,
+	// wait here as well instead of racing the handler's deferred socket close.
+	select {
+	case <-bridgeState.ClosedCh:
+		<-outputDone
+	default:
+	}
 }
 
-func (d *Deps) bridgeDockerExecOutput(
-	wsConn *websocket.Conn,
-	outputCh <-chan []byte,
-	closedCh <-chan struct{},
-	writeMu *sync.Mutex,
-) {
-	for {
-		select {
-		case data, ok := <-outputCh:
-			if !ok {
-				return
-			}
-			if data == nil {
-				continue
-			}
-			writeMu.Lock()
-			_ = wsConn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-			err := wsConn.WriteMessage(websocket.BinaryMessage, data)
-			writeMu.Unlock()
-			if err != nil {
-				return
-			}
-		case <-closedCh:
-			return
-		}
-	}
+func writeDockerExecError(wsConn *websocket.Conn, message string) {
+	_ = wsConn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	_ = wsConn.WriteJSON(map[string]any{"type": "error", "message": message})
 }
 
 func (d *Deps) bridgeDockerExecInput(
@@ -165,6 +149,11 @@ func (d *Deps) bridgeDockerExecInput(
 		messageType, payload, err := wsConn.ReadMessage()
 		if err != nil {
 			return
+		}
+		select {
+		case <-closedCh:
+			return
+		default:
 		}
 		_ = d.TouchBrowserWSReadDeadline(wsConn)
 		if messageType != websocket.TextMessage && messageType != websocket.BinaryMessage {
@@ -206,76 +195,6 @@ func (d *Deps) bridgeDockerExecInput(
 			Data: inputData,
 		})
 	}
-}
-
-// ProcessAgentDockerExecStarted handles the docker.exec.started agent message.
-func (d *Deps) ProcessAgentDockerExecStarted(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.DockerExecStartedData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
-		return
-	}
-	if bridge, ok := d.DockerExecBridges.Load(data.SessionID); ok {
-		if b, ok := bridge.(*DockerExecBridge); ok {
-			if conn == nil || !b.MatchesAgent(conn.AssetID) {
-				return
-			}
-			b.TrySendOutput(nil)
-		}
-	}
-}
-
-// ProcessAgentDockerExecData handles the docker.exec.data agent message.
-func (d *Deps) ProcessAgentDockerExecData(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var payload agentmgr.DockerExecDataPayload
-	if err := json.Unmarshal(msg.Data, &payload); err != nil {
-		return
-	}
-	decoded, err := base64.StdEncoding.DecodeString(payload.Data)
-	if err != nil || len(decoded) == 0 {
-		return
-	}
-	if bridge, ok := d.DockerExecBridges.Load(payload.SessionID); ok {
-		if b, ok := bridge.(*DockerExecBridge); ok {
-			if conn == nil || !b.MatchesAgent(conn.AssetID) {
-				return
-			}
-			b.TrySendOutput(decoded)
-		}
-	}
-}
-
-// ProcessAgentDockerExecClosed handles the docker.exec.closed agent message.
-func (d *Deps) ProcessAgentDockerExecClosed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
-	var data agentmgr.DockerExecCloseData
-	if err := json.Unmarshal(msg.Data, &data); err != nil {
-		return
-	}
-	if bridge, ok := d.DockerExecBridges.Load(data.SessionID); ok {
-		if b, ok := bridge.(*DockerExecBridge); ok {
-			if conn == nil || !b.MatchesAgent(conn.AssetID) {
-				return
-			}
-			b.Close(data.Reason)
-		}
-	}
-}
-
-// CloseDockerExecBridgesForAsset closes all docker exec bridges for the given asset.
-func (d *Deps) CloseDockerExecBridgesForAsset(assetID string) {
-	trimmedAssetID := strings.TrimSpace(assetID)
-	if trimmedAssetID == "" {
-		return
-	}
-	d.DockerExecBridges.Range(func(_ any, value any) bool {
-		bridge, ok := value.(*DockerExecBridge)
-		if !ok {
-			return true
-		}
-		if bridge.MatchesAgent(trimmedAssetID) {
-			bridge.Close("container host agent disconnected")
-		}
-		return true
-	})
 }
 
 // DockerExecCommandFromQuery parses the shell parameter for docker exec.

@@ -1,11 +1,13 @@
 package resources
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"strings"
@@ -27,7 +29,7 @@ func (d *Deps) HandleFileList(w http.ResponseWriter, r *http.Request, assetID st
 		return
 	}
 
-	dirPath := strings.TrimSpace(r.URL.Query().Get("path"))
+	dirPath := r.URL.Query().Get("path")
 	showHidden := r.URL.Query().Get("show_hidden") == "true"
 
 	agentConn, ok := d.AgentMgr.Get(assetID)
@@ -59,6 +61,8 @@ func (d *Deps) HandleFileList(w http.ResponseWriter, r *http.Request, assetID st
 	}
 
 	select {
+	case <-r.Context().Done():
+		return
 	case msg := <-bridge.Ch:
 		var listed agentmgr.FileListedData
 		if err := json.Unmarshal(msg.Data, &listed); err != nil {
@@ -94,7 +98,7 @@ func (d *Deps) HandleFileDownloadWithLimit(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	filePath := strings.TrimSpace(r.URL.Query().Get("path"))
+	filePath := r.URL.Query().Get("path")
 	if filePath == "" {
 		servicehttp.WriteError(w, http.StatusBadRequest, "path is required")
 		return
@@ -126,8 +130,11 @@ func (d *Deps) HandleFileDownloadWithLimit(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	firstChunk, err := receiveFileDownloadChunk(bridge, timeout)
+	firstChunk, err := receiveFileDownloadChunk(r.Context(), bridge, timeout)
 	if err != nil {
+		if r.Context().Err() != nil {
+			return
+		}
 		if errors.Is(err, errFileDownloadTimedOut) {
 			servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
 			return
@@ -158,11 +165,7 @@ func (d *Deps) HandleFileDownloadWithLimit(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	parts := strings.Split(filePath, "/")
-	filename := parts[len(parts)-1]
-	if filename == "" {
-		filename = "download"
-	}
+	filename := remoteFileBase(filePath)
 
 	spool, err := os.CreateTemp("", "labtether-download-*")
 	if err != nil {
@@ -178,8 +181,11 @@ func (d *Deps) HandleFileDownloadWithLimit(w http.ResponseWriter, r *http.Reques
 		}
 	}()
 
-	written, err := spoolFileDownloadChunks(spool, bridge, filePath, timeout, firstChunk, firstPayload, maxDownloadBytes)
+	written, err := spoolFileDownloadChunks(r.Context(), spool, bridge, filePath, timeout, firstChunk, firstPayload, maxDownloadBytes)
 	if err != nil {
+		if r.Context().Err() != nil {
+			return
+		}
 		writeFileDownloadError(w, err)
 		return
 	}
@@ -189,7 +195,7 @@ func (d *Deps) HandleFileDownloadWithLimit(w http.ResponseWriter, r *http.Reques
 	}
 
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filename}))
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", written))
 	w.WriteHeader(http.StatusOK)
 
@@ -198,11 +204,16 @@ func (d *Deps) HandleFileDownloadWithLimit(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-func receiveFileDownloadChunk(bridge *FileBridge, timeout time.Duration) (agentmgr.FileDataPayload, error) {
+func receiveFileDownloadChunk(ctx context.Context, bridge *FileBridge, timeout time.Duration) (agentmgr.FileDataPayload, error) {
+	if err := ctx.Err(); err != nil {
+		return agentmgr.FileDataPayload{}, err
+	}
 	if timeout <= 0 {
 		timeout = fileRequestTimeout
 	}
 	select {
+	case <-ctx.Done():
+		return agentmgr.FileDataPayload{}, ctx.Err()
 	case msg := <-bridge.Ch:
 		var chunk agentmgr.FileDataPayload
 		if err := json.Unmarshal(msg.Data, &chunk); err != nil {
@@ -231,7 +242,7 @@ func DecodeFileDownloadChunk(chunk agentmgr.FileDataPayload) ([]byte, error) {
 
 var errFileDownloadAgentFailed = errors.New("agent reported a file download failure")
 
-func spoolFileDownloadChunks(dst io.Writer, bridge *FileBridge, filePath string, timeout time.Duration, firstChunk agentmgr.FileDataPayload, firstPayload []byte, maxBytes int64) (int64, error) {
+func spoolFileDownloadChunks(ctx context.Context, dst io.Writer, bridge *FileBridge, filePath string, timeout time.Duration, firstChunk agentmgr.FileDataPayload, firstPayload []byte, maxBytes int64) (int64, error) {
 	var written int64
 	if err := writeFileDownloadChunk(dst, firstPayload, firstChunk.Offset, &written, maxBytes); err != nil {
 		return written, err
@@ -240,7 +251,7 @@ func spoolFileDownloadChunks(dst io.Writer, bridge *FileBridge, filePath string,
 		return written, nil
 	}
 	for {
-		chunk, err := receiveFileDownloadChunk(bridge, timeout)
+		chunk, err := receiveFileDownloadChunk(ctx, bridge, timeout)
 		if err != nil {
 			if errors.Is(err, errFileDownloadTimedOut) {
 				securityruntime.Logf("file: download timed out for %s", filePath)
@@ -315,7 +326,7 @@ func (d *Deps) HandleFileUpload(w http.ResponseWriter, r *http.Request, assetID 
 		return
 	}
 
-	filePath := strings.TrimSpace(r.URL.Query().Get("path"))
+	filePath := r.URL.Query().Get("path")
 	if filePath == "" {
 		servicehttp.WriteError(w, http.StatusBadRequest, "path is required")
 		return
@@ -342,7 +353,10 @@ func (d *Deps) HandleFileUpload(w http.ResponseWriter, r *http.Request, assetID 
 	defer bridge.Close()
 	defer d.FileBridges.Delete(requestID)
 
-	if _, err := RelayFileUploadChunks(r.Body, requestID, filePath, fileChunkSizeHub, func(payload agentmgr.FileWriteData) error {
+	sent, err := RelayFileUploadChunks(r.Body, requestID, filePath, fileChunkSizeHub, func(payload agentmgr.FileWriteData) error {
+		if err := r.Context().Err(); err != nil {
+			return err
+		}
 		select {
 		case msg := <-bridge.Ch:
 			var result agentmgr.FileWrittenData
@@ -361,13 +375,19 @@ func (d *Deps) HandleFileUpload(w http.ResponseWriter, r *http.Request, assetID 
 			ID:   requestID,
 			Data: data,
 		})
-	}); err != nil {
+	})
+	if err != nil {
+		if r.Context().Err() != nil {
+			return
+		}
 		writeFileUploadRelayError(w, filePath, err)
 		return
 	}
 
 	// Wait for write confirmation.
 	select {
+	case <-r.Context().Done():
+		return
 	case msg := <-bridge.Ch:
 		var result agentmgr.FileWrittenData
 		if err := json.Unmarshal(msg.Data, &result); err != nil {
@@ -376,6 +396,10 @@ func (d *Deps) HandleFileUpload(w http.ResponseWriter, r *http.Request, assetID 
 		}
 		if result.Error != "" {
 			servicehttp.WriteError(w, http.StatusBadRequest, result.Error)
+			return
+		}
+		if result.BytesWritten != sent {
+			servicehttp.WriteError(w, http.StatusBadGateway, "agent file write byte count mismatch")
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, result)

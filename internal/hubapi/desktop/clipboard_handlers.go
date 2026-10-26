@@ -106,6 +106,8 @@ func (d *Deps) handleClipboardGet(w http.ResponseWriter, r *http.Request, assetI
 	}
 
 	select {
+	case <-r.Context().Done():
+		return
 	case msg := <-bridge.Ch:
 		var payload agentmgr.ClipboardDataPayload
 		if err := json.Unmarshal(msg.Data, &payload); err != nil {
@@ -160,6 +162,8 @@ func (d *Deps) handleClipboardSet(w http.ResponseWriter, r *http.Request, assetI
 	}
 
 	select {
+	case <-r.Context().Done():
+		return
 	case msg := <-bridge.Ch:
 		var ack agentmgr.ClipboardSetAckData
 		if err := json.Unmarshal(msg.Data, &ack); err != nil {

@@ -162,11 +162,9 @@ func (d *Deps) handleStartFileTransfer(w http.ResponseWriter, r *http.Request) {
 	req.SourceType = strings.TrimSpace(req.SourceType)
 	req.SourceType = strings.ToLower(req.SourceType)
 	req.SourceID = strings.TrimSpace(req.SourceID)
-	req.SourcePath = strings.TrimSpace(req.SourcePath)
 	req.DestType = strings.TrimSpace(req.DestType)
 	req.DestType = strings.ToLower(req.DestType)
 	req.DestID = strings.TrimSpace(req.DestID)
-	req.DestPath = strings.TrimSpace(req.DestPath)
 
 	if err := validateTransferRequest(req); err != nil {
 		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
@@ -347,7 +345,7 @@ func (d *Deps) handleCancelFileTransfer(w http.ResponseWriter, r *http.Request, 
 }
 
 func remoteFileBase(value string) string {
-	normalized := strings.TrimRight(strings.ReplaceAll(strings.TrimSpace(value), `\`, "/"), "/")
+	normalized := strings.TrimRight(strings.ReplaceAll(value, `\`, "/"), "/")
 	if normalized == "" {
 		return "transfer"
 	}

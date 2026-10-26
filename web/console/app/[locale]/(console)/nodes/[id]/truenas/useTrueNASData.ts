@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePollingTask } from "../../../../../hooks/usePollingTask";
 
 // ---------------------------------------------------------------------------
 // Generic fetch helpers
@@ -12,8 +13,8 @@ export type TrueNASDataResponse<T> = {
   warnings?: string[];
 };
 
-export async function truenasFetch<T>(path: string): Promise<T> {
-  const response = await fetch(path, { cache: "no-store" });
+export async function truenasFetch<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(path, { cache: "no-store", signal });
   const json = (await response.json().catch(() => null)) as
     | TrueNASDataResponse<T>
     | { error?: string }
@@ -93,21 +94,17 @@ export function useTrueNASOverview(
     loading: false,
     error: null,
   });
-  const seqRef = useRef(0);
-  const latestRef = useRef(0);
 
-  const fetch_ = useCallback(async () => {
-    const id = ++seqRef.current;
-    latestRef.current = id;
+  const fetchTask = useCallback(async (signal: AbortSignal) => {
     setState((prev) => ({ ...prev, loading: true, error: null }));
     try {
       const data = await truenasFetch<TrueNASOverviewData>(
-        `/api/truenas/assets/${encodeURIComponent(assetId)}/overview`,
+        `/api/truenas/assets/${encodeURIComponent(assetId)}/overview`, signal,
       );
-      if (latestRef.current !== id) return;
+      if (signal.aborted) return;
       setState({ data, loading: false, error: null });
     } catch (err) {
-      if (latestRef.current !== id) return;
+      if (signal.aborted) return;
       setState({
         data: null,
         loading: false,
@@ -116,15 +113,9 @@ export function useTrueNASOverview(
     }
   }, [assetId]);
 
-  useEffect(() => {
-    void fetch_();
-    const interval = setInterval(() => {
-      void fetch_();
-    }, 30_000);
-    return () => clearInterval(interval);
-  }, [fetch_]);
+  const refresh = usePollingTask(fetchTask, 30_000);
 
-  return { ...state, refresh: () => { void fetch_(); } };
+  return { ...state, refresh };
 }
 
 // ---------------------------------------------------------------------------

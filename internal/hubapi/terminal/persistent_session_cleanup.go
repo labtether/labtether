@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"strings"
 	"time"
 
@@ -84,6 +85,15 @@ func (d *Deps) ClosePersistentTerminalAttachments(persistent terminal.Persistent
 		return errors.New("persistent session id is required for attachment cleanup")
 	}
 
+	for _, session := range sessions {
+		if strings.TrimSpace(session.PersistentSessionID) != persistentID {
+			continue
+		}
+		if err := d.closeAgentTerminalAttachments(session); err != nil {
+			return fmt.Errorf("failed to close attached agent terminal session: %w", err)
+		}
+	}
+
 	if active, loaded := d.ActivePersistentConns.LoadAndDelete(persistentID); loaded {
 		wsConn, ok := active.(*websocket.Conn)
 		if !ok {
@@ -94,30 +104,11 @@ func (d *Deps) ClosePersistentTerminalAttachments(persistent terminal.Persistent
 			websocket.FormatCloseMessage(websocket.CloseNormalClosure, "persistent session deleted"),
 			time.Now().Add(2*time.Second),
 		)
-		if err := wsConn.Close(); err != nil {
+		if err := wsConn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 			return fmt.Errorf("failed to close attached persistent terminal connection: %w", err)
 		}
 	}
 
-	for _, session := range sessions {
-		if strings.TrimSpace(session.PersistentSessionID) != persistentID {
-			continue
-		}
-		if d.AgentMgr != nil {
-			if agentConn, ok := d.AgentMgr.Get(strings.TrimSpace(session.Target)); ok {
-				if err := SendTerminalCloseWithError(agentConn, session.ID); err != nil {
-					return fmt.Errorf("failed to close attached agent terminal session: %w", err)
-				}
-			}
-		}
-		if d.TerminalBridges != nil {
-			if value, ok := d.TerminalBridges.Load(session.ID); ok {
-				if bridge, ok := value.(*TerminalBridge); ok {
-					bridge.CloseWithReason("persistent_session_deleted")
-				}
-			}
-		}
-	}
 	return nil
 }
 

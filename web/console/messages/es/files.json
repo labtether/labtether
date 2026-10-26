@@ -4,5 +4,7 @@
   "empty": {
     "title": "Explorador de archivos",
     "description": "Seleccione un dispositivo con un agente conectado para explorar y transferir archivos."
-  }
+  },
+  "webdavCleartextWarning": "Permitir HTTP sin cifrar para WebDAV. Las personas en la red pueden leer o modificar contraseñas y archivos. El Hub también debe permitir el transporte inseguro.",
+  "webdavCleartextRequired": "Confirme la advertencia de HTTP sin cifrar o use HTTPS."
 }

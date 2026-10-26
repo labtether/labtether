@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useDocumentVisibility } from "../../../hooks/useDocumentVisibility";
 import { useTranslations } from "next-intl";
 import { Download, ScrollText } from "lucide-react";
 import { PageHeader } from "../../../components/PageHeader";
@@ -145,6 +146,7 @@ export default function AuditLogPage() {
   const t = useTranslations("audit-log");
   const slowStatus = useSlowStatus();
   const { fetchStatus } = useStatusControls();
+  const isVisible = useDocumentVisibility();
 
   const allEvents = useMemo(
     () => (slowStatus?.recentAudit ?? []) as AuditEventWithDetails[],
@@ -186,11 +188,12 @@ export default function AuditLogPage() {
 
   // ── Auto-refresh every 30 s ──
   useEffect(() => {
+    if (!isVisible) return;
     const id = setInterval(() => {
       void fetchStatus();
     }, AUTO_REFRESH_MS);
     return () => clearInterval(id);
-  }, [fetchStatus]);
+  }, [fetchStatus, isVisible]);
 
   // ── CSV export ──
   const handleExport = useCallback(() => {

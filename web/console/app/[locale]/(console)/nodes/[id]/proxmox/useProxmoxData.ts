@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePollingTask } from "../../../../../hooks/usePollingTask";
 
 // ---------------------------------------------------------------------------
 // Generic fetch helpers
 // ---------------------------------------------------------------------------
 
-export async function proxmoxFetch<T>(path: string): Promise<T> {
-  const response = await fetch(path, { cache: "no-store" });
+export async function proxmoxFetch<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(path, { cache: "no-store", signal });
   const json = (await response.json().catch(() => null)) as
     | { data?: T; error?: string }
     | null;
@@ -61,20 +62,16 @@ export function useProxmoxFetch<T>(
     loading: false,
     error: null,
   });
-  const seqRef = useRef(0);
-  const latestRef = useRef(0);
 
-  const fetch_ = useCallback(async () => {
+  const fetchTask = useCallback(async (signal: AbortSignal) => {
     if (!path) return;
-    const id = ++seqRef.current;
-    latestRef.current = id;
     setState((prev) => ({ ...prev, loading: true, error: null }));
     try {
-      const data = await proxmoxFetch<T>(path);
-      if (latestRef.current !== id) return;
+      const data = await proxmoxFetch<T>(path, signal);
+      if (signal.aborted) return;
       setState({ data, loading: false, error: null });
     } catch (err) {
-      if (latestRef.current !== id) return;
+      if (signal.aborted) return;
       setState({
         data: null,
         loading: false,
@@ -83,15 +80,9 @@ export function useProxmoxFetch<T>(
     }
   }, [path]);
 
-  useEffect(() => {
-    void fetch_();
-    if (pollMs && pollMs > 0) {
-      const interval = setInterval(() => { void fetch_(); }, pollMs);
-      return () => clearInterval(interval);
-    }
-  }, [fetch_, pollMs]);
+  const refresh = usePollingTask(fetchTask, pollMs ?? 0, path !== null);
 
-  return { ...state, refresh: () => { void fetch_(); } };
+  return { ...state, refresh };
 }
 
 // ---------------------------------------------------------------------------

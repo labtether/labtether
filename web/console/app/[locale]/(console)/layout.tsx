@@ -27,13 +27,9 @@ import { useCallback, useEffect, useMemo, useRef, type CSSProperties, type Point
 
 const GLOW_ORB_1_STYLE: CSSProperties = {
   background: 'radial-gradient(circle, rgba(var(--accent-rgb),0.06) 0%, transparent 70%)',
-  animation: 'float-glow 20s ease-in-out infinite',
-  willChange: 'transform',
 };
 const GLOW_ORB_2_STYLE: CSSProperties = {
   background: 'radial-gradient(circle, rgba(var(--accent-rgb),0.04) 0%, transparent 70%)',
-  animation: 'float-glow 25s ease-in-out infinite reverse',
-  willChange: 'transform',
 };
 const DOT_GRID_STYLE: CSSProperties = {
   backgroundImage: 'radial-gradient(circle, rgba(var(--accent-rgb),0.08) 1px, transparent 1px)',

@@ -4,5 +4,7 @@
   "empty": {
     "title": "Datei-Browser",
     "description": "Wählen Sie ein Gerät mit verbundenem Agenten aus, um Dateien zu durchsuchen und zu übertragen."
-  }
+  },
+  "webdavCleartextWarning": "Unverschlüsseltes HTTP für WebDAV erlauben. Personen im Netzwerk können Passwörter und Dateien lesen oder ändern. Der Hub muss unsichere Verbindungen ebenfalls erlauben.",
+  "webdavCleartextRequired": "Bestätigen Sie die Warnung zu unverschlüsseltem HTTP oder verwenden Sie HTTPS."
 }

@@ -74,7 +74,12 @@ const WebRTCViewer = forwardRef<WebRTCViewerHandle, WebRTCViewerProps>(
       requestClipboardText, writeClipboardText, uploadFile,
     } = useWebRTCDataChannels();
 
+    const { releasePressedInputs, handleKeyDown, handleKeyUp, handlePointerMove,
+      handlePointerDown, handlePointerUp, handlePointerCancel, handleWheel,
+    } = useWebRTCInput({ dcRef, connected, scalingMode, stitchedLayout, stitchedStageRef, videoRef });
+
     const closePeer = useCallback((reason: string, clean = false) => {
+      releasePressedInputs();
       candidateTimerRefs.current.forEach((timer) => clearTimeout(timer));
       candidateTimerRefs.current = [];
       const hadConnection = Boolean(
@@ -106,7 +111,7 @@ const WebRTCViewer = forwardRef<WebRTCViewerHandle, WebRTCViewerProps>(
       if (hadConnection) {
         onDisconnectRef.current?.({ clean, reason });
       }
-    }, [closeDataChannels, hasDataChannels]);
+    }, [closeDataChannels, hasDataChannels, releasePressedInputs]);
 
     useImperativeHandle(
       ref,
@@ -401,10 +406,6 @@ const WebRTCViewer = forwardRef<WebRTCViewerHandle, WebRTCViewerProps>(
       };
     }, [closePeer]);
 
-    const { releasePressedKeys, handleKeyDown, handleKeyUp, handleMouseMove,
-      handleMouseDown, handleMouseUp, handleWheel,
-    } = useWebRTCInput({ dcRef, connected, stitchedLayout, stitchedStageRef, videoRef });
-
     const nativeScaling = scalingMode === "native";
 
     return (
@@ -415,12 +416,15 @@ const WebRTCViewer = forwardRef<WebRTCViewerHandle, WebRTCViewerProps>(
         data-webrtc-audio-tracks={streamTrackCounts.audio}
         tabIndex={0}
         onClick={() => containerRef.current?.focus()}
-        onBlur={releasePressedKeys}
+        onBlur={releasePressedInputs}
         onKeyDown={handleKeyDown}
         onKeyUp={handleKeyUp}
-        onMouseMove={handleMouseMove}
-        onMouseDown={handleMouseDown}
-        onMouseUp={handleMouseUp}
+        onPointerMove={handlePointerMove}
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
+        onLostPointerCapture={handlePointerCancel}
+        style={{ touchAction: "none" }}
         onWheel={handleWheel}
         onContextMenu={(event) => event.preventDefault()}
       >

@@ -75,6 +75,18 @@ func StartSSHInteractiveSessionWithTimeout(
 	if sshClient == nil {
 		return nil, nil, nil, nil, errors.New("ssh client is required")
 	}
+	return startSSHInteractiveSessionWithCleanup(sshClient, cols, rows, startCommand, timeout, sshClient.Close)
+}
+
+// The stream passes its whole-chain closer; the public direct-client wrapper
+// retains its existing API and closes only the client it was given.
+func startSSHInteractiveSessionWithCleanup(
+	sshClient *ssh.Client,
+	cols, rows int,
+	startCommand string,
+	timeout time.Duration,
+	closeClients func() error,
+) (*ssh.Session, io.WriteCloser, io.Reader, io.Reader, error) {
 
 	type sessionInitResult struct {
 		session *ssh.Session
@@ -151,9 +163,7 @@ func StartSSHInteractiveSessionWithTimeout(
 	case result := <-resultCh:
 		return result.session, result.stdin, result.stdout, result.stderr, result.err
 	case <-time.After(timeout):
-		if sshClient != nil {
-			_ = sshClient.Close()
-		}
+		_ = closeClients()
 		go func() {
 			if r := <-resultCh; r.session != nil {
 				_ = r.session.Close()

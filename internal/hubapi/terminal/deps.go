@@ -55,6 +55,11 @@ type Deps struct {
 	// Terminal bridges map (shared with cmd/labtether for WS handler dispatch).
 	TerminalBridges *sync.Map
 
+	// ActiveAgentStreams owns the latest browser stream for each public session.
+	// TerminalBridges routes agent frames by the separate, per-stream wire ID.
+	ActiveAgentStreams sync.Map
+	agentStreamMu      sync.Mutex
+
 	// Pending agent commands (shared with cmd/labtether).
 	PendingAgentCmds *sync.Map
 

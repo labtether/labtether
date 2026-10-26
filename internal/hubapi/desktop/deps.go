@@ -51,6 +51,11 @@ type Deps struct {
 	DisplayBridges           *sync.Map
 	DesktopDiagnosticWaiters *sync.Map
 
+	// Wire maps above route only a concrete stream. Public IDs select its current owner.
+	streamOwnerMu sync.Mutex
+	desktopOwners sync.Map
+	audioStreams  sync.Map
+
 	// Desktop session options state (protected by mutexes).
 	DesktopSessionMu   *sync.RWMutex
 	DesktopSessionOpts *map[string]DesktopSessionOptions

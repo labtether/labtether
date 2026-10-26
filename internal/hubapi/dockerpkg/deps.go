@@ -27,6 +27,8 @@ type Deps struct {
 
 	// Docker exec bridges (shared with cmd/labtether for WS handler dispatch).
 	DockerExecBridges *sync.Map
+	dockerExecOwners  sync.Map
+	dockerExecOwnerMu sync.Mutex
 
 	// WebSocket upgrader for exec streams.
 	TerminalWebSocketUpgrader websocket.Upgrader
@@ -61,6 +63,13 @@ type DockerExecBridge struct {
 	OutputCh        chan []byte
 	ClosedCh        chan struct{}
 	ExpectedAgentID string
+	AgentConn       *agentmgr.AgentConn
+	SessionID       string
+	WireSessionID   string
+	ReadyCh         chan struct{}
+	readyOnce       sync.Once
+	lifecycleMu     sync.Mutex
+	started         bool
 	reasonMu        sync.Mutex
 	reason          string
 	closeMu         sync.Once
@@ -71,6 +80,13 @@ func (b *DockerExecBridge) Close(reason string) {
 	if b == nil {
 		return
 	}
+	b.lifecycleMu.Lock()
+	defer b.lifecycleMu.Unlock()
+	b.closeWithReason(reason)
+}
+
+// Caller holds lifecycleMu.
+func (b *DockerExecBridge) closeWithReason(reason string) {
 	trimmed := strings.TrimSpace(reason)
 	if trimmed != "" {
 		b.reasonMu.Lock()
@@ -102,6 +118,8 @@ func (b *DockerExecBridge) TrySendOutput(payload []byte) {
 	if b == nil {
 		return
 	}
+	b.lifecycleMu.Lock()
+	defer b.lifecycleMu.Unlock()
 	select {
 	case <-b.ClosedCh:
 		return
@@ -111,7 +129,20 @@ func (b *DockerExecBridge) TrySendOutput(payload []byte) {
 	select {
 	case b.OutputCh <- payload:
 	default:
+		if len(payload) != 0 {
+			b.closeWithReason("container terminal output buffer overflow")
+		}
 	}
+	if b.ReadyCh != nil {
+		b.readyOnce.Do(func() { close(b.ReadyCh) })
+	}
+}
+
+// MatchesConnection binds live streams to the exact socket that started them.
+// Legacy in-process bridge users have no wire ID or connection binding.
+func (b *DockerExecBridge) MatchesConnection(conn *agentmgr.AgentConn) bool {
+	return conn != nil && b.MatchesAgent(conn.AssetID) &&
+		(b.AgentConn == conn || (b.AgentConn == nil && b.WireSessionID == ""))
 }
 
 // MatchesAgent returns true if the bridge is associated with the given asset ID.

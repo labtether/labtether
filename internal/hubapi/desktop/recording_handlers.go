@@ -213,7 +213,7 @@ func (d *Deps) startRecordingRequest(w http.ResponseWriter, r *http.Request) {
 	if !d.authorizeRecordingSessionAccess(w, r, sessionID) {
 		return
 	}
-	rawBridge, ok := d.DesktopBridges.Load(sessionID)
+	rawBridge, ok := d.loadDesktopOwner(sessionID)
 	if !ok {
 		servicehttp.WriteError(w, http.StatusNotFound, "desktop session bridge not found")
 		return
@@ -413,7 +413,7 @@ func ensurePrivateRecordingDir(dir string) error {
 
 // StopRecordingBySession stops the recording for a given session.
 func (d *Deps) StopRecordingBySession(sessionID string) bool {
-	rawBridge, ok := d.DesktopBridges.Load(strings.TrimSpace(sessionID))
+	rawBridge, ok := d.loadDesktopOwner(strings.TrimSpace(sessionID))
 	if !ok {
 		return false
 	}

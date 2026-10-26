@@ -45,11 +45,11 @@ func BuildSSHHostKeyCallback(strict bool, expected string) (ssh.HostKeyCallback,
 	}
 	return func(_ string, _ net.Addr, key ssh.PublicKey) error {
 		fingerprint := strings.TrimSpace(ssh.FingerprintSHA256(key))
-		if strings.EqualFold(fingerprint, expected) {
+		if fingerprint == expected {
 			return nil
 		}
 		encoded := base64.StdEncoding.EncodeToString(key.Marshal())
-		if strings.EqualFold(encoded, expected) {
+		if encoded == expected {
 			return nil
 		}
 		return fmt.Errorf("host key mismatch")

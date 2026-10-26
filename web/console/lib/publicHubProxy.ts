@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolvedBackendBaseURLs } from "./backend";
+import { readBoundedRequestBody, RequestBodyTooLargeError } from "./boundedBody";
 
 function publicRequestHost(request: NextRequest): string {
   return request.headers.get("host")?.trim() || request.nextUrl.host;
@@ -91,12 +92,14 @@ export async function proxyPublicHubRequest(request: NextRequest, upstreamPath: 
     if (!contentLengthCheck.ok) {
       return new NextResponse(contentLengthCheck.message, { status: contentLengthCheck.status });
     }
-    const body = await request.arrayBuffer();
-    if (body.byteLength > MAX_PUBLIC_BODY_BYTES) {
-      return new NextResponse("request body too large", { status: 413 });
-    }
-    if (body.byteLength > 0) {
-      init.body = body;
+    try {
+      const body = await readBoundedRequestBody(request, MAX_PUBLIC_BODY_BYTES);
+      if (body.byteLength > 0) init.body = body;
+    } catch (error) {
+      if (error instanceof RequestBodyTooLargeError) {
+        return new NextResponse("request body too large", { status: 413 });
+      }
+      throw error;
     }
   }
 

@@ -54,49 +54,34 @@ func (w *Worker) OnDeadLetter(cb DeadLetterCallback) {
 // Run starts the poll loop. It blocks until ctx is cancelled.
 // Uses LISTEN/NOTIFY for low-latency wake-up with poll interval as fallback.
 func (w *Worker) Run(ctx context.Context) {
+	staleRecovery := time.NewTicker(30 * time.Second)
+	go w.runStaleRecoveryLoop(ctx, staleRecovery)
+
+	if err := w.runNotified(ctx); err != nil && ctx.Err() == nil {
+		log.Printf("jobqueue worker: notifications unavailable, falling back to poll-only: %v", err)
+		w.runPollOnly(ctx)
+	}
+}
+
+func (w *Worker) runNotified(ctx context.Context) error {
 	// Acquire a dedicated connection for LISTEN.
 	conn, err := w.queue.pool.Acquire(ctx)
 	if err != nil {
-		log.Printf("jobqueue worker: failed to acquire listen connection: %v", err)
-		w.runPollOnly(ctx)
-		return
+		return err
 	}
 	defer conn.Release()
 
 	_, err = conn.Exec(ctx, "LISTEN new_job")
 	if err != nil {
-		log.Printf("jobqueue worker: LISTEN failed, falling back to poll-only: %v", err)
-		w.runPollOnly(ctx)
-		return
+		return err
 	}
 
 	log.Printf("jobqueue worker: started (poll=%s, listen=new_job)", w.queue.pollInterval)
 
-	// Periodic stale-claim recovery (moved from per-Claim to reduce DB load).
-	staleRecovery := time.NewTicker(30 * time.Second)
-	go w.runStaleRecoveryLoop(ctx, staleRecovery)
-
-	for {
-		// Process all available jobs before waiting.
-		for {
-			if ctx.Err() != nil {
-				return
-			}
-			if !w.processOne(ctx) {
-				break
-			}
-		}
-
-		// Wait for NOTIFY or poll timeout.
-		waitCtx, cancel := context.WithTimeout(ctx, w.queue.pollInterval)
-		_, _ = conn.Conn().WaitForNotification(waitCtx)
-		cancel()
-
-		if ctx.Err() != nil {
-			log.Printf("jobqueue worker: stopped")
-			return
-		}
-	}
+	return runNotificationLoop(ctx, w.queue.pollInterval, w.processOne, func(waitCtx context.Context) error {
+		_, err := conn.Conn().WaitForNotification(waitCtx)
+		return err
+	})
 }
 
 // runPollOnly is the fallback when LISTEN is unavailable.
@@ -104,10 +89,6 @@ func (w *Worker) runPollOnly(ctx context.Context) {
 	log.Printf("jobqueue worker: running in poll-only mode (interval=%s)", w.queue.pollInterval)
 	ticker := time.NewTicker(w.queue.pollInterval)
 	defer ticker.Stop()
-
-	// Periodic stale-claim recovery (moved from per-Claim to reduce DB load).
-	staleRecovery := time.NewTicker(30 * time.Second)
-	go w.runStaleRecoveryLoop(ctx, staleRecovery)
 
 	for {
 		select {

@@ -53,7 +53,7 @@ export function Card({
           background:
             "linear-gradient(135deg, rgba(var(--accent-rgb),0.2), rgba(var(--accent-rgb),0.03) 40%, rgba(var(--accent-rgb),0.15) 60%, rgba(var(--accent-rgb),0.03))",
           backgroundSize: "200% 200%",
-          animation: "border-travel 8s ease infinite",
+          animation: "border-travel 6s ease 1",
         }}
       >
         {inner}

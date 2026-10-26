@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { usePollingTask } from "../../../../../hooks/usePollingTask";
 import { Badge } from "../../../../../components/ui/Badge";
 import { Button } from "../../../../../components/ui/Button";
 import { Card } from "../../../../../components/ui/Card";
@@ -42,35 +43,28 @@ export function TrueNASDisksTab({ assetId }: Props) {
   const [smart, setSmart] = useState<TrueNASSmartResponse | null>(null);
   const [smartLoading, setSmartLoading] = useState(false);
   const [smartError, setSmartError] = useState<string | null>(null);
-  const smartInFlightRef = useRef(false);
 
-  const fetchSmart = useCallback(async () => {
-    if (smartInFlightRef.current) return;
-    smartInFlightRef.current = true;
+  const fetchSmartTask = useCallback(async (signal: AbortSignal) => {
     setSmartLoading(true);
     setSmartError(null);
     try {
       const res = await fetch(
         `/api/truenas/assets/${encodeURIComponent(assetId)}/smart`,
-        { cache: "no-store" },
+        { cache: "no-store", signal },
       );
       const payload = normalizeTrueNASSmartResponse(await res.json().catch(() => null));
       if (!res.ok) throw new Error(payload.error ?? `failed to load disk health (${res.status})`);
-      setSmart(payload);
+      if (!signal.aborted) setSmart(payload);
     } catch (err) {
+      if (signal.aborted) return;
       setSmartError(err instanceof Error ? err.message : "failed to load disk health");
       setSmart(null);
     } finally {
-      smartInFlightRef.current = false;
-      setSmartLoading(false);
+      if (!signal.aborted) setSmartLoading(false);
     }
   }, [assetId]);
 
-  useEffect(() => {
-    void fetchSmart();
-    const interval = setInterval(() => { void fetchSmart(); }, 60_000);
-    return () => clearInterval(interval);
-  }, [fetchSmart]);
+  const fetchSmart = usePollingTask(fetchSmartTask, 60_000);
 
   const [actionInFlight, setActionInFlight] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);

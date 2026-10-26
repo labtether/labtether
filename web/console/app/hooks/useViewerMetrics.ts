@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useDocumentVisibility } from "./useDocumentVisibility";
 
 import type { ViewerMetrics } from "../types/viewer";
 
@@ -36,6 +37,7 @@ const NULL_METRICS: ViewerMetrics = {
  */
 export function useViewerMetrics(options: UseViewerMetricsOptions): ViewerMetrics {
   const { protocol, connected, vncContainerRef, peerConnection } = options;
+  const isVisible = useDocumentVisibility();
 
   const [metrics, setMetrics] = useState<ViewerMetrics>({
     ...NULL_METRICS,
@@ -51,7 +53,7 @@ export function useViewerMetrics(options: UseViewerMetricsOptions): ViewerMetric
 
   // VNC metrics: rAF-based FPS counter + canvas dimension polling.
   useEffect(() => {
-    if (protocol !== "vnc" || !connected) {
+    if (protocol !== "vnc" || !connected || !isVisible) {
       return;
     }
 
@@ -77,28 +79,28 @@ export function useViewerMetrics(options: UseViewerMetricsOptions): ViewerMetric
         }
       }
 
-      setMetrics({
+      setMetrics((previous) => preserveEqualMetrics(previous, {
         fps,
         latencyMs: null,
         bitrateKbps: null,
         codec: "RFB",
         resolution,
         transport: "VNC",
-      });
+      }));
     }, 1000);
 
     return () => {
       cancelAnimationFrame(animFrameId);
       window.clearInterval(intervalId);
     };
-  }, [protocol, connected, vncContainerRef]);
+  }, [protocol, connected, vncContainerRef, isVisible]);
 
   // WebRTC metrics: getStats() polling.
   const lastBytesRef = useRef(0);
   const lastAtRef = useRef(0);
 
   useEffect(() => {
-    if (protocol !== "webrtc" || !connected || !peerConnection) {
+    if (protocol !== "webrtc" || !connected || !peerConnection || !isVisible) {
       return;
     }
 
@@ -107,14 +109,17 @@ export function useViewerMetrics(options: UseViewerMetricsOptions): ViewerMetric
     lastAtRef.current = 0;
 
     let cancelled = false;
+    let inFlight = false;
 
     const collect = async () => {
-      if (cancelled || !peerConnection) {
+      if (cancelled || inFlight || !peerConnection) {
         return;
       }
 
+      inFlight = true;
       try {
         const reports = await peerConnection.getStats();
+        if (cancelled) return;
 
         let fps: number | null = null;
         let latencyMs: number | null = null;
@@ -190,9 +195,13 @@ export function useViewerMetrics(options: UseViewerMetricsOptions): ViewerMetric
           }
         }
 
-        setMetrics({ fps, latencyMs, bitrateKbps, codec, resolution, transport: "WebRTC" });
+        setMetrics((previous) => preserveEqualMetrics(previous, {
+          fps, latencyMs, bitrateKbps, codec, resolution, transport: "WebRTC",
+        }));
       } catch {
         // Transient stats errors are non-fatal; keep the last known values.
+      } finally {
+        inFlight = false;
       }
     };
 
@@ -205,7 +214,7 @@ export function useViewerMetrics(options: UseViewerMetricsOptions): ViewerMetric
       cancelled = true;
       window.clearInterval(timerId);
     };
-  }, [protocol, connected, peerConnection]);
+  }, [protocol, connected, peerConnection, isVisible]);
 
   return metrics;
 }
@@ -213,6 +222,13 @@ export function useViewerMetrics(options: UseViewerMetricsOptions): ViewerMetric
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function preserveEqualMetrics(previous: ViewerMetrics, next: ViewerMetrics): ViewerMetrics {
+  return previous.fps === next.fps && previous.latencyMs === next.latencyMs
+    && previous.bitrateKbps === next.bitrateKbps && previous.codec === next.codec
+    && previous.resolution === next.resolution && previous.transport === next.transport
+    ? previous : next;
+}
 
 function deriveTransport(protocol: UseViewerMetricsOptions["protocol"]): string {
   switch (protocol) {

@@ -132,7 +132,8 @@ func TestHandleWebRTCStreamForwardsBrowserSignalsAndSendsStop(t *testing.T) {
 	agentServerConn, agentClientConn, agentCleanup := createWSPairForNetworkTest(t)
 	defer agentCleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(agentServerConn, "node-1", "linux"))
+	agentConn := agentmgr.NewAgentConn(agentServerConn, "node-1", "linux")
+	sut.agentMgr.Register(agentConn)
 	defer sut.agentMgr.Unregister("node-1")
 
 	session := terminal.Session{ID: "sess-webrtc", Target: "node-1"}
@@ -156,7 +157,7 @@ func TestHandleWebRTCStreamForwardsBrowserSignalsAndSendsStop(t *testing.T) {
 	if err := json.Unmarshal(startMsg.Data, &start); err != nil {
 		t.Fatalf("decode start payload: %v", err)
 	}
-	if start.SessionID != session.ID || start.Display != ":1" {
+	if start.SessionID == "" || start.SessionID == session.ID || startMsg.ID != start.SessionID || start.Display != ":1" {
 		t.Fatalf("unexpected start payload %+v", start)
 	}
 	if start.Quality != "high" {
@@ -186,7 +187,7 @@ func TestHandleWebRTCStreamForwardsBrowserSignalsAndSendsStop(t *testing.T) {
 	if err := json.Unmarshal(offerMsg.Data, &offer); err != nil {
 		t.Fatalf("decode offer payload: %v", err)
 	}
-	if offer.SessionID != session.ID || offer.Type != "offer" || offer.SDP != "v=0" {
+	if offer.SessionID != start.SessionID || offer.Type != "offer" || offer.SDP != "v=0" {
 		t.Fatalf("unexpected offer payload %+v", offer)
 	}
 
@@ -208,7 +209,7 @@ func TestHandleWebRTCStreamForwardsBrowserSignalsAndSendsStop(t *testing.T) {
 	if err := json.Unmarshal(iceMsg.Data, &ice); err != nil {
 		t.Fatalf("decode ice payload: %v", err)
 	}
-	if ice.SessionID != session.ID || ice.Candidate == "" || ice.SDPMid != "0" {
+	if ice.SessionID != start.SessionID || ice.Candidate == "" || ice.SDPMid != "0" {
 		t.Fatalf("unexpected ice payload %+v", ice)
 	}
 	if ice.SDPMLineIndex == nil || *ice.SDPMLineIndex != 0 {
@@ -233,7 +234,7 @@ func TestHandleWebRTCStreamForwardsBrowserSignalsAndSendsStop(t *testing.T) {
 	if err := json.Unmarshal(inputMsg.Data, &input); err != nil {
 		t.Fatalf("decode input payload: %v", err)
 	}
-	if input.SessionID != session.ID || input.Type != "mousemove" || input.X != 44 || input.Y != 55 {
+	if input.SessionID != start.SessionID || input.Type != "mousemove" || input.X != 44 || input.Y != 55 {
 		t.Fatalf("unexpected input payload %+v", input)
 	}
 
@@ -248,20 +249,20 @@ func TestHandleWebRTCStreamForwardsBrowserSignalsAndSendsStop(t *testing.T) {
 	if err := json.Unmarshal(stopMsg.Data, &stopped); err != nil {
 		t.Fatalf("decode stop payload: %v", err)
 	}
-	if stopped.SessionID != session.ID {
+	if stopped.SessionID != start.SessionID {
 		t.Fatalf("unexpected stop payload %+v", stopped)
 	}
-	stoppedAck, err := json.Marshal(agentmgr.WebRTCStoppedData{SessionID: session.ID, Reason: "user requested"})
+	stoppedAck, err := json.Marshal(agentmgr.WebRTCStoppedData{SessionID: start.SessionID, Reason: "user requested"})
 	if err != nil {
 		t.Fatalf("marshal stopped acknowledgement: %v", err)
 	}
-	sut.processAgentWebRTCStopped(&agentmgr.AgentConn{AssetID: "node-1"}, agentmgr.Message{Data: stoppedAck})
+	sut.processAgentWebRTCStopped(agentConn, agentmgr.Message{Data: stoppedAck})
 	browserStopped := readWebRTCBrowserMessage(t, browserConn)
 	if browserStopped.Type != "stopped" {
 		t.Fatalf("browser message type=%q, want stopped", browserStopped.Type)
 	}
 
-	waitForWebRTCBridgeRemoval(t, sut, session.ID)
+	waitForWebRTCBridgeRemoval(t, sut, start.SessionID)
 }
 
 func TestHandleWebRTCStreamIgnoresMalformedAndUnknownBrowserSignals(t *testing.T) {
@@ -271,7 +272,8 @@ func TestHandleWebRTCStreamIgnoresMalformedAndUnknownBrowserSignals(t *testing.T
 	agentServerConn, agentClientConn, agentCleanup := createWSPairForNetworkTest(t)
 	defer agentCleanup()
 
-	sut.agentMgr.Register(agentmgr.NewAgentConn(agentServerConn, "node-1", "linux"))
+	agentConn := agentmgr.NewAgentConn(agentServerConn, "node-1", "linux")
+	sut.agentMgr.Register(agentConn)
 	defer sut.agentMgr.Unregister("node-1")
 
 	session := terminal.Session{ID: "sess-webrtc-ignore", Target: "node-1"}
@@ -287,7 +289,11 @@ func TestHandleWebRTCStreamIgnoresMalformedAndUnknownBrowserSignals(t *testing.T
 	}
 	defer browserConn.Close()
 
-	_ = readWebRTCAgentMessage(t, agentClientConn) // start
+	startMsg := readWebRTCAgentMessage(t, agentClientConn)
+	var start agentmgr.WebRTCSessionData
+	if err := json.Unmarshal(startMsg.Data, &start); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := browserConn.WriteMessage(websocket.TextMessage, []byte("{")); err != nil {
 		t.Fatalf("write malformed signal: %v", err)
@@ -307,12 +313,12 @@ func TestHandleWebRTCStreamIgnoresMalformedAndUnknownBrowserSignals(t *testing.T
 	// Give the handler time to consume stop, then inject the agent acknowledgement
 	// directly through the same production handler.
 	time.Sleep(50 * time.Millisecond)
-	stoppedAck, err := json.Marshal(agentmgr.WebRTCStoppedData{SessionID: session.ID})
+	stoppedAck, err := json.Marshal(agentmgr.WebRTCStoppedData{SessionID: start.SessionID})
 	if err != nil {
 		t.Fatalf("marshal stopped acknowledgement: %v", err)
 	}
-	sut.processAgentWebRTCStopped(&agentmgr.AgentConn{AssetID: "node-1"}, agentmgr.Message{Data: stoppedAck})
-	waitForWebRTCBridgeRemoval(t, sut, session.ID)
+	sut.processAgentWebRTCStopped(agentConn, agentmgr.Message{Data: stoppedAck})
+	waitForWebRTCBridgeRemoval(t, sut, start.SessionID)
 }
 
 func TestProcessAgentWebRTCHandlersRelayToBrowserAndCloseOnStopped(t *testing.T) {

@@ -4,5 +4,7 @@
   "empty": {
     "title": "File Browser",
     "description": "Select a device with a connected agent to browse and transfer files."
-  }
+  },
+  "webdavCleartextWarning": "Allow plain HTTP for WebDAV. People on the network may read or change passwords and files. The Hub must also allow insecure transport.",
+  "webdavCleartextRequired": "Confirm the plain HTTP warning or use HTTPS."
 }

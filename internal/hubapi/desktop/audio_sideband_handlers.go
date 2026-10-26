@@ -18,21 +18,6 @@ import (
 
 const desktopAudioDefaultBitrate = 128000
 
-func sendDesktopAudioStart(agentConn *agentmgr.AgentConn, sessionID string) error {
-	if agentConn == nil || strings.TrimSpace(sessionID) == "" {
-		return nil
-	}
-	payload, _ := json.Marshal(agentmgr.DesktopAudioStartData{
-		SessionID: sessionID,
-		Bitrate:   desktopAudioDefaultBitrate,
-	})
-	return agentConn.Send(agentmgr.Message{
-		Type: agentmgr.MsgDesktopAudioStart,
-		ID:   sessionID,
-		Data: payload,
-	})
-}
-
 func sendDesktopAudioStop(agentConn *agentmgr.AgentConn, sessionID string) {
 	if agentConn == nil || strings.TrimSpace(sessionID) == "" {
 		return
@@ -61,7 +46,7 @@ func (d *Deps) HandleDesktopAudioStream(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	rawBridge, ok := d.DesktopBridges.Load(session.ID)
+	rawBridge, ok := d.loadDesktopOwner(session.ID)
 	if !ok {
 		servicehttp.WriteError(w, http.StatusConflict, "desktop stream is not active")
 		return
@@ -71,7 +56,7 @@ func (d *Deps) HandleDesktopAudioStream(w http.ResponseWriter, r *http.Request, 
 		servicehttp.WriteError(w, http.StatusConflict, "desktop stream bridge unavailable")
 		return
 	}
-	if !bridge.MatchesAgent(session.Target) {
+	if !bridge.MatchesConnection(agentConn) {
 		servicehttp.WriteError(w, http.StatusConflict, "desktop stream agent mismatch")
 		return
 	}
@@ -88,11 +73,18 @@ func (d *Deps) HandleDesktopAudioStream(w http.ResponseWriter, r *http.Request, 
 	shared.LimitBrowserControlMessages(wsConn)
 	defer wsConn.Close()
 
-	if err := sendDesktopAudioStart(agentConn, session.ID); err != nil {
+	audio := d.registerDesktopAudioStream(bridge)
+	defer d.finalizeDesktopAudioStream(audio)
+	select {
+	case <-bridge.ClosedCh:
+		return
+	default:
+	}
+	payload, _ := json.Marshal(agentmgr.DesktopAudioStartData{SessionID: audio.WireSessionID, Bitrate: desktopAudioDefaultBitrate})
+	if err := audio.start(agentmgr.Message{Type: agentmgr.MsgDesktopAudioStart, ID: audio.WireSessionID, Data: payload}); err != nil {
 		SafeWriteClose(wsConn, websocket.CloseTryAgainLater, "failed to start desktop audio")
 		return
 	}
-	defer sendDesktopAudioStop(agentConn, session.ID)
 
 	var writeMu sync.Mutex
 	stopKeepalive := d.StartBrowserWSKeepalive(wsConn, &writeMu, "desktop-audio:"+session.ID)
@@ -103,16 +95,13 @@ func (d *Deps) HandleDesktopAudioStream(w http.ResponseWriter, r *http.Request, 
 	go func() {
 		select {
 		case <-bridge.ClosedCh:
-			writeMu.Lock()
-			SafeWriteClose(wsConn, websocket.CloseNormalClosure, bridge.CloseReason())
-			writeMu.Unlock()
-			_ = wsConn.SetReadDeadline(time.Now())
+			audio.Close()
 			_ = wsConn.Close()
 		case <-done:
 		}
 	}()
 
-	go d.BridgeDesktopAudioOutput(wsConn, bridge.AudioCh, bridge.ClosedCh, &writeMu)
+	go d.BridgeDesktopAudioOutput(wsConn, audio.AudioCh, audio.ClosedCh, &writeMu)
 
 	for {
 		_, _, err := wsConn.ReadMessage()
@@ -141,6 +130,7 @@ func (d *Deps) BridgeDesktopAudioOutput(
 			err := wsConn.WriteMessage(outbound.MessageType, outbound.Payload)
 			writeMu.Unlock()
 			if err != nil {
+				_ = wsConn.Close()
 				return
 			}
 		case <-closedCh:
@@ -161,16 +151,12 @@ func (d *Deps) ProcessAgentDesktopAudioData(conn *agentmgr.AgentConn, msg agentm
 		return
 	}
 
-	if raw, ok := d.DesktopBridges.Load(payload.SessionID); ok {
+	if raw, ok := d.loadDesktopAudioStream(payload.SessionID); ok {
 		bridge, ok := raw.(*DesktopBridge)
 		if !ok || bridge == nil {
 			return
 		}
-		assetID := ""
-		if conn != nil {
-			assetID = conn.AssetID
-		}
-		if !bridge.MatchesAgent(assetID) {
+		if !bridge.MatchesConnection(conn) {
 			return
 		}
 		bridge.TrySendAudio(websocket.BinaryMessage, decoded)
@@ -184,18 +170,18 @@ func (d *Deps) ProcessAgentDesktopAudioState(conn *agentmgr.AgentConn, msg agent
 		return
 	}
 
-	if raw, ok := d.DesktopBridges.Load(payload.SessionID); ok {
+	if raw, ok := d.loadDesktopAudioStream(payload.SessionID); ok {
 		bridge, ok := raw.(*DesktopBridge)
 		if !ok || bridge == nil {
 			return
 		}
-		assetID := ""
-		if conn != nil {
-			assetID = conn.AssetID
-		}
-		if !bridge.MatchesAgent(assetID) {
+		if !bridge.MatchesConnection(conn) {
 			return
 		}
-		bridge.TrySendAudio(websocket.TextMessage, msg.Data)
+		if bridge.SessionID != "" {
+			payload.SessionID = bridge.SessionID
+		}
+		publicPayload, _ := json.Marshal(payload)
+		bridge.TrySendAudio(websocket.TextMessage, publicPayload)
 	}
 }

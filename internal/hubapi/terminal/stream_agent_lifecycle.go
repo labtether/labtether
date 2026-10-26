@@ -39,15 +39,20 @@ func (d *Deps) FinalizeAgentTerminalSession(
 	startSent bool,
 	closeFn func(*agentmgr.AgentConn, string),
 ) {
-	d.TerminalBridges.Delete(sessionID)
+	wireSessionID := sessionID
+	if bridgeState != nil && bridgeState.WireSessionID != "" {
+		wireSessionID = bridgeState.WireSessionID
+	}
+	owned := d.TerminalBridges.CompareAndDelete(wireSessionID, bridgeState)
 	if bridgeState != nil {
+		d.ActiveAgentStreams.CompareAndDelete(sessionID, bridgeState)
 		bridgeState.Close()
 	}
-	if startSent {
+	if startSent && owned {
 		if closeFn == nil {
 			closeFn = SendTerminalClose
 		}
-		closeFn(agentConn, sessionID)
+		closeFn(agentConn, wireSessionID)
 	}
 }
 
@@ -69,21 +74,40 @@ func (d *Deps) CloseTerminalBridgesForAsset(assetID string) {
 	})
 }
 
+// A replaced agent socket must only close the PTYs it started, even when a
+// new socket for the same asset registers while the old read loop exits.
+func (d *Deps) CloseTerminalBridgesForConnection(conn *agentmgr.AgentConn) {
+	if conn == nil {
+		return
+	}
+	d.TerminalBridges.Range(func(_ any, value any) bool {
+		if bridge, ok := value.(*TerminalBridge); ok && bridge.AgentConn == conn {
+			bridge.CloseWithReason("agent_disconnected")
+		}
+		return true
+	})
+}
+
 const maxTerminalInputReadBytes = 256 * 1024
 
 // TerminalBridge holds the channels for a terminal session bridged through an agent.
 type TerminalBridge struct {
-	OutputCh        chan []byte
-	ClosedCh        chan struct{}
-	ExpectedAgentID string
-	CloseMu         sync.Once
-	CloseReasonMu   sync.RWMutex
-	CloseReasonVal  string
-	SessionID       string
-	Target          string
-	TraceID         string
-	RequireTmux     bool
-	Scrollback      *terminal.RingBuffer
+	OutputCh            chan []byte
+	ClosedCh            chan struct{}
+	ExpectedAgentID     string
+	AgentConn           *agentmgr.AgentConn
+	PersistentSessionID string
+	CloseMu             sync.Once
+	OutputMu            sync.Mutex
+	CloseReasonMu       sync.RWMutex
+	CloseReasonVal      string
+	SessionID           string
+	WireSessionID       string
+	Target              string
+	TraceID             string
+	RequireTmux         bool
+	Scrollback          *terminal.RingBuffer
+	outputDone          chan struct{}
 }
 
 func (b *TerminalBridge) Close() {
@@ -94,6 +118,13 @@ func (b *TerminalBridge) CloseWithReason(reason string) {
 	if b == nil {
 		return
 	}
+	b.OutputMu.Lock()
+	defer b.OutputMu.Unlock()
+	b.closeWithReason(reason)
+}
+
+// Caller holds OutputMu so closure fences both output and startup effects.
+func (b *TerminalBridge) closeWithReason(reason string) {
 	trimmedReason := strings.TrimSpace(reason)
 	if trimmedReason != "" {
 		b.CloseReasonMu.Lock()
@@ -120,19 +151,35 @@ func (b *TerminalBridge) CloseReasonOr(fallback string) string {
 	return strings.TrimSpace(fallback)
 }
 
+func (b *TerminalBridge) MatchesConnection(conn *agentmgr.AgentConn) bool {
+	return conn != nil && b.MatchesAgent(conn.AssetID) && (b.AgentConn == nil || b.AgentConn == conn)
+}
+
 func (b *TerminalBridge) TrySendOutput(payload []byte) {
 	if b == nil {
 		return
 	}
+	b.OutputMu.Lock()
+	defer b.OutputMu.Unlock()
+	b.trySendOutput(payload)
+}
+
+func (b *TerminalBridge) trySendOutput(payload []byte) {
 	select {
 	case <-b.ClosedCh:
 		return
 	default:
 	}
+	if len(payload) != 0 && b.Scrollback != nil {
+		b.Scrollback.Write(payload)
+	}
 	defer func() { _ = recover() }()
 	select {
 	case b.OutputCh <- payload:
 	default:
+		if len(payload) != 0 {
+			b.closeWithReason("output_overflow")
+		}
 	}
 }
 
@@ -156,17 +203,24 @@ func (d *Deps) ProcessAgentTerminalStarted(conn *agentmgr.AgentConn, msg agentmg
 
 	if bridge, ok := d.TerminalBridges.Load(data.SessionID); ok {
 		if b, ok := bridge.(*TerminalBridge); ok {
-			if conn == nil || !b.MatchesAgent(conn.AssetID) {
+			if !b.MatchesConnection(conn) {
 				return
+			}
+			b.OutputMu.Lock()
+			defer b.OutputMu.Unlock()
+			select {
+			case <-b.ClosedCh:
+				return
+			default:
 			}
 			log.Printf("terminal-agent: agent_reported_started session=%s target=%s trace=%s tmux_attached=%t", b.SessionID, b.Target, shared.StreamTraceLogValue(b.TraceID), data.TmuxAttached)
 			if b.RequireTmux && !data.TmuxAttached {
 				conn.SetMeta("terminal.tmux.has", "false")
 				conn.SetMeta("terminal.tmux.path", "")
-				b.CloseWithReason("tmux_unavailable")
+				b.closeWithReason("tmux_unavailable")
 				return
 			}
-			b.TrySendOutput(nil) // nil = started marker
+			b.trySendOutput(nil) // nil = started marker
 		}
 	}
 }
@@ -185,11 +239,8 @@ func (d *Deps) ProcessAgentTerminalData(conn *agentmgr.AgentConn, msg agentmgr.M
 
 	if bridge, ok := d.TerminalBridges.Load(payload.SessionID); ok {
 		if b, ok := bridge.(*TerminalBridge); ok {
-			if conn == nil || !b.MatchesAgent(conn.AssetID) {
+			if !b.MatchesConnection(conn) {
 				return
-			}
-			if b.Scrollback != nil {
-				b.Scrollback.Write(decoded)
 			}
 			b.TrySendOutput(decoded)
 		}
@@ -205,7 +256,7 @@ func (d *Deps) ProcessAgentTerminalClosed(conn *agentmgr.AgentConn, msg agentmgr
 
 	if bridge, ok := d.TerminalBridges.Load(data.SessionID); ok {
 		if b, ok := bridge.(*TerminalBridge); ok {
-			if conn == nil || !b.MatchesAgent(conn.AssetID) {
+			if !b.MatchesConnection(conn) {
 				return
 			}
 			reason := strings.TrimSpace(data.Reason)

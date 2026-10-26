@@ -4,5 +4,7 @@
   "empty": {
     "title": "Explorateur de fichiers",
     "description": "Sélectionnez un appareil avec un agent connecté pour parcourir et transférer des fichiers."
-  }
+  },
+  "webdavCleartextWarning": "Autoriser HTTP non chiffré pour WebDAV. Des personnes sur le réseau peuvent lire ou modifier les mots de passe et les fichiers. Le Hub doit aussi autoriser le transport non sécurisé.",
+  "webdavCleartextRequired": "Confirmez l’avertissement HTTP non chiffré ou utilisez HTTPS."
 }

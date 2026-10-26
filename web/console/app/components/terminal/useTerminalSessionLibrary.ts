@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePollingTask } from "../../hooks/usePollingTask";
 import type { PersistentSession, Bookmark, BookmarkFormData, ContextMenuState, ContextMenuOption, SessionsPanelProps } from "./terminalSessionTypes";
 
 async function safeJSON(response: Response): Promise<unknown> {
@@ -29,57 +30,38 @@ export function useTerminalSessionLibrary({
   const panelRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const renameInputRef = useRef<HTMLInputElement | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const renameSubmittedRef = useRef(false);
 
   // -----------------------------------------------------------------------
   // Data fetching
   // -----------------------------------------------------------------------
 
-  const fetchData = useCallback(async () => {
+  const fetchDataTask = useCallback(async (signal: AbortSignal) => {
     try {
       const [sessionsRes, bookmarksRes] = await Promise.all([
-        fetch("/api/terminal/persistent-sessions"),
-        fetch("/api/terminal/bookmarks"),
+        fetch("/api/terminal/persistent-sessions", { signal }),
+        fetch("/api/terminal/bookmarks", { signal }),
       ]);
 
       if (sessionsRes.ok) {
         const data = (await safeJSON(sessionsRes)) as {
           persistent_sessions?: PersistentSession[];
         } | null;
-        setSessions(data?.persistent_sessions ?? []);
+        if (!signal.aborted) setSessions(data?.persistent_sessions ?? []);
       }
 
       if (bookmarksRes.ok) {
         const data = (await safeJSON(bookmarksRes)) as {
           bookmarks?: Bookmark[];
         } | null;
-        setBookmarks(data?.bookmarks ?? []);
+        if (!signal.aborted) setBookmarks(data?.bookmarks ?? []);
       }
     } catch {
       // Silently ignore fetch failures — data stays stale.
     }
   }, []);
 
-  useEffect(() => {
-    if (!isOpen) {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-      return;
-    }
-
-    fetchData();
-    pollRef.current = setInterval(fetchData, 10_000);
-
-    return () => {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-    };
-  }, [isOpen, fetchData]);
+  const fetchData = usePollingTask(fetchDataTask, 10_000, isOpen);
 
   // Focus search input on open.
   useEffect(() => {

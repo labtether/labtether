@@ -3,7 +3,6 @@ package desktop
 import (
 	"errors"
 	"fmt"
-	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/policy"
@@ -20,29 +19,7 @@ import (
 )
 
 func (d *Deps) TerminateDesktopSession(session terminal.Session) error {
-	if rawBridge, ok := d.DesktopBridges.Load(session.ID); ok {
-		if bridgeState, ok := rawBridge.(*DesktopBridge); ok {
-			var agentConn *agentmgr.AgentConn
-			if d.AgentMgr != nil {
-				agentConn, _ = d.AgentMgr.Get(session.Target)
-			}
-			d.FinalizeAgentDesktopSession(session.ID, bridgeState, agentConn, true, nil)
-		} else {
-			d.DesktopBridges.Delete(session.ID)
-		}
-	}
-
-	if rawBridge, ok := d.WebRTCBridges.Load(session.ID); ok {
-		if bridge, ok := rawBridge.(*WebRTCSignalingBridge); ok {
-			bridge.Close()
-			if d.AgentMgr != nil {
-				if agentConn, ok := d.AgentMgr.Get(session.Target); ok {
-					SendWebRTCStop(agentConn, session.ID)
-				}
-			}
-		}
-		d.WebRTCBridges.Delete(session.ID)
-	}
+	d.closeDesktopSessionStreams(session.ID)
 
 	d.ClearDesktopSessionOptions(session.ID)
 	d.ClearDesktopSPICEProxyTarget(session.ID)

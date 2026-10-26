@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface ClipboardSyncState {
   syncing: boolean;
@@ -11,94 +11,81 @@ interface ClipboardSyncState {
 interface UseClipboardSyncOptions {
   nodeId: string;
   enabled: boolean;
+  sessionKey?: string | null;
   readRemoteText?: () => Promise<string>;
   writeRemoteText?: (text: string) => Promise<void>;
 }
 
-export function useClipboardSync({
-  nodeId,
-  enabled,
-  readRemoteText,
-  writeRemoteText,
-}: UseClipboardSyncOptions) {
-  const [state, setState] = useState<ClipboardSyncState>({
-    syncing: false,
-    lastSync: "idle",
-    error: null,
-  });
+const idleState: ClipboardSyncState = { syncing: false, lastSync: "idle", error: null };
+
+export function useClipboardSync({ nodeId, enabled, sessionKey, readRemoteText, writeRemoteText }: UseClipboardSyncOptions) {
+  const [state, setState] = useState<ClipboardSyncState>(idleState);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Read remote clipboard → write to local
-  const pullFromRemote = useCallback(async () => {
-    if (!enabled || !nodeId) return;
-    setState((s) => ({ ...s, syncing: true, error: null }));
+  useEffect(() => {
+    setState(idleState);
+    return () => {
+      abortRef.current?.abort();
+      abortRef.current = null;
+    };
+  }, [nodeId, enabled, sessionKey]);
+
+  const runSync = useCallback(async (direction: "pull" | "push") => {
+    if (!enabled || !nodeId || abortRef.current) return;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const assertActive = () => controller.signal.throwIfAborted();
+    setState({ syncing: true, lastSync: "idle", error: null });
+
+    const remoteRequest = async (action: "get" | "set", text?: string) => {
+      const res = await fetch(`/api/v1/nodes/${encodeURIComponent(nodeId)}/clipboard/${action}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ format: "text", ...(action === "set" ? { text } : {}) }),
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      return typeof data.text === "string" ? data.text : "";
+    };
+
     try {
-      let text = "";
-      if (readRemoteText) {
-        text = await readRemoteText();
-      } else {
-        abortRef.current = new AbortController();
-        const res = await fetch(`/api/v1/nodes/${nodeId}/clipboard/get`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ format: "text" }),
-          signal: abortRef.current.signal,
+      if (direction === "pull") {
+        const textPromise = (readRemoteText ? readRemoteText() : remoteRequest("get")).then((text) => {
+          assertActive();
+          return text;
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        if (data.error) throw new Error(data.error);
-        text = data.text ?? "";
+        // Safari requires clipboard.write during the click, before the remote read finishes.
+        if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+          const blobPromise = textPromise.then((text) => new Blob([text], { type: "text/plain" }));
+          // The browser can reject permission before it consumes the promised item.
+          void blobPromise.catch(() => {});
+          await navigator.clipboard.write([new ClipboardItem({ "text/plain": blobPromise })]);
+        } else {
+          const text = await textPromise;
+          assertActive();
+          await navigator.clipboard.writeText(text);
+        }
+      } else {
+        const text = await navigator.clipboard.readText();
+        assertActive();
+        if (writeRemoteText) await writeRemoteText(text);
+        else await remoteRequest("set", text);
       }
-      if (text) {
-        await navigator.clipboard.writeText(text);
-      }
+      assertActive();
       setState({ syncing: false, lastSync: "success", error: null });
     } catch (err) {
-      if ((err as Error).name !== "AbortError") {
-        setState({
-          syncing: false,
-          lastSync: "error",
-          error: (err as Error).message,
-        });
+      if (!controller.signal.aborted) {
+        setState({ syncing: false, lastSync: "error", error: (err as Error).message });
       }
+    } finally {
+      controller.abort();
+      if (abortRef.current === controller) abortRef.current = null;
     }
-  }, [enabled, nodeId, readRemoteText]);
+  }, [enabled, nodeId, readRemoteText, writeRemoteText]);
 
-  // Read local clipboard → write to remote
-  const pushToRemote = useCallback(async () => {
-    if (!enabled || !nodeId) return;
-    setState((s) => ({ ...s, syncing: true, error: null }));
-    try {
-      const text = await navigator.clipboard.readText();
-      if (!text) {
-        setState({ syncing: false, lastSync: "success", error: null });
-        return;
-      }
-      if (writeRemoteText) {
-        await writeRemoteText(text);
-      } else {
-        abortRef.current = new AbortController();
-        const res = await fetch(`/api/v1/nodes/${nodeId}/clipboard/set`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ format: "text", text }),
-          signal: abortRef.current.signal,
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        if (data.error) throw new Error(data.error);
-      }
-      setState({ syncing: false, lastSync: "success", error: null });
-    } catch (err) {
-      if ((err as Error).name !== "AbortError") {
-        setState({
-          syncing: false,
-          lastSync: "error",
-          error: (err as Error).message,
-        });
-      }
-    }
-  }, [enabled, nodeId, writeRemoteText]);
-
+  const pullFromRemote = useCallback(() => runSync("pull"), [runSync]);
+  const pushToRemote = useCallback(() => runSync("push"), [runSync]);
   return { ...state, pullFromRemote, pushToRemote };
 }

@@ -3,12 +3,27 @@ package terminal
 import (
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
 
 const TerminalStreamWriteDeadline = 10 * time.Second
+
+// Each data frame needs its own deadline: the ready/status frame's deadline
+// would otherwise expire while an interactive shell is idle.
+func writeTerminalOutput(conn *websocket.Conn, mu *sync.Mutex, payload []byte) error {
+	if len(payload) == 0 {
+		return nil
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if err := conn.SetWriteDeadline(time.Now().Add(TerminalStreamWriteDeadline)); err != nil {
+		return err
+	}
+	return conn.WriteMessage(websocket.BinaryMessage, payload)
+}
 
 type TerminalStreamEvent struct {
 	Marker   string `json:"lt_event,omitempty"`

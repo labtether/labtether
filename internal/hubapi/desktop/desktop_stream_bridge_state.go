@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"sync"
+
+	"github.com/labtether/labtether/internal/agentmgr"
 )
 
 // DesktopAudioOutbound holds an audio message to send to the browser.
@@ -19,6 +21,11 @@ type DesktopBridge struct {
 	ClosedCh        chan struct{}
 	ExpectedAgentID string
 	SessionID       string
+	WireSessionID   string
+	AgentConn       *agentmgr.AgentConn
+	lifecycleMu     sync.Mutex
+	started         bool
+	finalizeOnce    sync.Once
 	Target          string
 	TraceID         string
 	recordingOpMu   sync.Mutex
@@ -35,6 +42,8 @@ func (b *DesktopBridge) Close() {
 	if b == nil {
 		return
 	}
+	b.lifecycleMu.Lock()
+	defer b.lifecycleMu.Unlock()
 	b.closeMu.Do(func() {
 		close(b.ClosedCh)
 	})
@@ -157,6 +166,11 @@ func (b *DesktopBridge) StartRecordingLocked(startFn func() (*ActiveRecording, e
 	}
 	b.recordingOpMu.Lock()
 	defer b.recordingOpMu.Unlock()
+	select {
+	case <-b.ClosedCh:
+		return nil, false, errors.New("desktop stream is closed")
+	default:
+	}
 	if rec := b.CurrentRecording(); rec != nil {
 		return rec, true, nil
 	}
@@ -189,4 +203,8 @@ func (b *DesktopBridge) MatchesAgent(assetID string) bool {
 		return false
 	}
 	return strings.EqualFold(strings.TrimSpace(b.ExpectedAgentID), strings.TrimSpace(assetID))
+}
+
+func (b *DesktopBridge) MatchesConnection(conn *agentmgr.AgentConn) bool {
+	return b != nil && conn != nil && b.MatchesAgent(conn.AssetID) && (b.AgentConn == nil || b.AgentConn == conn)
 }

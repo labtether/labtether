@@ -375,7 +375,7 @@ export const NarrativeSummary = memo(function NarrativeSummary({ status, loading
           className="w-0.5 h-3.5 rounded-sm shrink-0 self-center"
           style={{
             background: "var(--accent)",
-            animation: "cursor-blink 1s step-end infinite",
+            animation: "cursor-blink 1s step-end 3",
             opacity: 0.6,
           }}
         />

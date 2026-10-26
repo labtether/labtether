@@ -22,11 +22,9 @@ package remotewrite
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"sort"
 	"strings"
@@ -83,36 +81,27 @@ func SerializeWriteRequest(samples []SampleWithLabels) ([]byte, error) {
 		return nil, fmt.Errorf("remotewrite: sample count exceeds limit")
 	}
 
-	// Group samples by their sorted label set.
-	type tsKey struct {
-		// We use a canonical string representation as the map key.
-		key string
-	}
-	type tsEntry struct {
-		labels  [][2]string // sorted label pairs
-		samples []SampleWithLabels
-	}
-
-	order := make([]string, 0)
-	groups := make(map[string]*tsEntry)
-
-	for _, s := range samples {
-		if err := validateSample(s); err != nil {
+	// Sort each label set once, retaining those pairs for wire encoding.
+	order := make([]*writeSeries, 0)
+	groups := make(map[string]*writeSeries)
+	for _, sample := range samples {
+		if err := validateSample(sample); err != nil {
 			return nil, err
 		}
-		key := labelFingerprint(s.Labels)
-		if _, exists := groups[key]; !exists {
-			order = append(order, key)
-			sorted := sortedLabels(s.Labels)
-			groups[key] = &tsEntry{labels: sorted}
+		labels := sortedLabels(sample.Labels)
+		key := sortedLabelFingerprint(labels)
+		entry := groups[key]
+		if entry == nil {
+			entry = &writeSeries{labels: labels}
+			groups[key] = entry
+			order = append(order, entry)
 		}
-		groups[key].samples = append(groups[key].samples, s)
+		entry.samples = append(entry.samples, sample)
 	}
 
-	// Encode as WriteRequest protobuf.
-	var buf bytes.Buffer
-	for _, key := range order {
-		entry := groups[key]
+	// Reserve one wire buffer instead of allocating for every nested message.
+	totalSize := 0
+	for _, entry := range order {
 		sort.SliceStable(entry.samples, func(i, j int) bool {
 			return entry.samples[i].Timestamp < entry.samples[j].Timestamp
 		})
@@ -121,13 +110,17 @@ func SerializeWriteRequest(samples []SampleWithLabels) ([]byte, error) {
 				return nil, fmt.Errorf("remotewrite: duplicate timestamp for one series")
 			}
 		}
-		tsBytes := encodeTimeSeries(entry.labels, entry.samples)
-		// WriteRequest.timeseries = field 1, type LEN
-		buf.Write(protowire.AppendTag(nil, 1, protowire.BytesType))
-		buf.Write(protowire.AppendBytes(nil, tsBytes))
+		entry.size = timeSeriesSize(entry.labels, entry.samples)
+		totalSize += 1 + protowire.SizeBytes(entry.size)
+	}
+	buf := make([]byte, 0, totalSize)
+	for _, entry := range order {
+		buf = protowire.AppendTag(buf, 1, protowire.BytesType)
+		buf = protowire.AppendVarint(buf, uint64(entry.size))
+		buf = appendTimeSeries(buf, entry.labels, entry.samples)
 	}
 
-	compressed := snappy.Encode(nil, buf.Bytes())
+	compressed := snappy.Encode(nil, buf)
 	if len(compressed) > MaxRequestBodyBytes {
 		return nil, errRequestBodyTooLarge
 	}
@@ -252,90 +245,4 @@ func Push(ctx context.Context, url string, body []byte, username, password strin
 // TimeFromMillis converts a Unix millisecond timestamp to a time.Time.
 func TimeFromMillis(ms int64) time.Time {
 	return time.UnixMilli(ms)
-}
-
-// ---- protobuf encoding helpers ----
-
-// encodeTimeSeries encodes a single TimeSeries message.
-//
-//	TimeSeries { labels: repeated Label = 1; samples: repeated Sample = 2 }
-func encodeTimeSeries(labels [][2]string, samples []SampleWithLabels) []byte {
-	var buf bytes.Buffer
-
-	for _, lp := range labels {
-		lb := encodeLabel(lp[0], lp[1])
-		buf.Write(protowire.AppendTag(nil, 1, protowire.BytesType))
-		buf.Write(protowire.AppendBytes(nil, lb))
-	}
-
-	for _, s := range samples {
-		sb := encodeSample(s.Value, s.Timestamp)
-		buf.Write(protowire.AppendTag(nil, 2, protowire.BytesType))
-		buf.Write(protowire.AppendBytes(nil, sb))
-	}
-
-	return buf.Bytes()
-}
-
-// encodeLabel encodes a Label message.
-//
-//	Label { name: string = 1; value: string = 2 }
-func encodeLabel(name, value string) []byte {
-	var buf []byte
-	buf = protowire.AppendTag(buf, 1, protowire.BytesType)
-	buf = protowire.AppendString(buf, name)
-	buf = protowire.AppendTag(buf, 2, protowire.BytesType)
-	buf = protowire.AppendString(buf, value)
-	return buf
-}
-
-// encodeSample encodes a Sample message.
-//
-//	Sample { value: double = 1; timestamp: int64 = 2 }
-func encodeSample(value float64, timestampMs int64) []byte {
-	var buf []byte
-	buf = protowire.AppendTag(buf, 1, protowire.Fixed64Type)
-	buf = protowire.AppendFixed64(buf, math.Float64bits(value))
-	buf = protowire.AppendTag(buf, 2, protowire.VarintType)
-	if timestampMs < 0 {
-		timestampMs = 0
-	}
-	buf = protowire.AppendVarint(buf, uint64(timestampMs))
-	return buf
-}
-
-// sortedLabels returns label pairs in lexicographic order by name.
-// __name__ is sorted to the front per Prometheus convention.
-func sortedLabels(labels map[string]string) [][2]string {
-	pairs := make([][2]string, 0, len(labels))
-	for k, v := range labels {
-		pairs = append(pairs, [2]string{k, v})
-	}
-	sort.Slice(pairs, func(i, j int) bool {
-		// __name__ sorts first.
-		if pairs[i][0] == "__name__" {
-			return true
-		}
-		if pairs[j][0] == "__name__" {
-			return false
-		}
-		return pairs[i][0] < pairs[j][0]
-	})
-	return pairs
-}
-
-// labelFingerprint produces a stable string key for a label set.
-func labelFingerprint(labels map[string]string) string {
-	pairs := sortedLabels(labels)
-	var buf bytes.Buffer
-	var size [4]byte
-	for _, p := range pairs {
-		binary.BigEndian.PutUint32(size[:], uint32(len(p[0]))) // #nosec G115 -- validateSample caps label names at 128 bytes.
-		buf.Write(size[:])
-		buf.WriteString(p[0])
-		binary.BigEndian.PutUint32(size[:], uint32(len(p[1]))) // #nosec G115 -- validateSample caps label values at 1024 bytes.
-		buf.Write(size[:])
-		buf.WriteString(p[1])
-	}
-	return buf.String()
 }

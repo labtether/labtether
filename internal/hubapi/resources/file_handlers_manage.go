@@ -3,7 +3,6 @@ package resources
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
@@ -19,7 +18,7 @@ func (d *Deps) HandleFileMkdir(w http.ResponseWriter, r *http.Request, assetID s
 		return
 	}
 
-	dirPath := strings.TrimSpace(r.URL.Query().Get("path"))
+	dirPath := r.URL.Query().Get("path")
 	if dirPath == "" {
 		servicehttp.WriteError(w, http.StatusBadRequest, "path is required")
 		return
@@ -77,7 +76,7 @@ func (d *Deps) HandleFileDelete(w http.ResponseWriter, r *http.Request, assetID 
 		return
 	}
 
-	filePath := strings.TrimSpace(r.URL.Query().Get("path"))
+	filePath := r.URL.Query().Get("path")
 	if filePath == "" {
 		servicehttp.WriteError(w, http.StatusBadRequest, "path is required")
 		return
@@ -135,8 +134,8 @@ func (d *Deps) HandleFileRename(w http.ResponseWriter, r *http.Request, assetID 
 		return
 	}
 
-	oldPath := strings.TrimSpace(r.URL.Query().Get("old_path"))
-	newPath := strings.TrimSpace(r.URL.Query().Get("new_path"))
+	oldPath := r.URL.Query().Get("old_path")
+	newPath := r.URL.Query().Get("new_path")
 	if oldPath == "" || newPath == "" {
 		servicehttp.WriteError(w, http.StatusBadRequest, "old_path and new_path are required")
 		return
@@ -195,8 +194,8 @@ func (d *Deps) HandleFileCopy(w http.ResponseWriter, r *http.Request, assetID st
 		return
 	}
 
-	srcPath := strings.TrimSpace(r.URL.Query().Get("src_path"))
-	dstPath := strings.TrimSpace(r.URL.Query().Get("dst_path"))
+	srcPath := r.URL.Query().Get("src_path")
+	dstPath := r.URL.Query().Get("dst_path")
 	if srcPath == "" || dstPath == "" {
 		servicehttp.WriteError(w, http.StatusBadRequest, "src_path and dst_path are required")
 		return

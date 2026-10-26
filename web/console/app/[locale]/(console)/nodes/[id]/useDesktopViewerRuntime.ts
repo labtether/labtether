@@ -21,6 +21,7 @@ import { buildWebRTCMetrics, deriveNetworkQuality } from "./desktopTabMetrics";
 import type { DesktopProtocol } from "./desktopTabPreferences";
 
 type DesktopRuntimeSessionLike = {
+  wsUrl?: string | null;
   audioWsUrl?: string | null;
   connectedAgentIds: Set<string>;
   connectionState: string;
@@ -85,6 +86,7 @@ export function useDesktopViewerRuntime({
 
   const clipboard = useClipboardSync({
     nodeId,
+    sessionKey: `${protocol}:${session.wsUrl ?? ""}`,
     enabled: targetHasAgent && session.connectionState === "connected",
     readRemoteText:
       protocol === "webrtc"

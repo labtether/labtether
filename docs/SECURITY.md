@@ -1,6 +1,8 @@
 # LabTether security architecture and improvement plan
 
-Last reviewed: 2026-09-03
+Policy updated: 2026-10-09
+
+Historical audit baseline: 2026-09-03
 
 This document defines the security rules that every LabTether repository must
 keep, records the current audit baseline, and gives the order for closing the
@@ -51,7 +53,10 @@ These rules are release blockers:
 7. File paths stay inside their allowed roots, including after symlink and archive
    extraction.
 8. Secrets are never committed, logged, returned in errors, or included in build
-   artifacts. Stored secrets are encrypted and can be rotated.
+   artifacts. Credential profiles are encrypted in the database. Installation
+   bootstrap secrets are local files protected by owner-only directory/file
+   permissions; they are not encrypted at rest by that file store. Protect the
+   data volume and its backups, and preserve supported rotation paths.
 9. Updates and installers verify version, platform, digest, and signature before
    execution.
 10. Backups are encrypted, restorable, access-controlled, and exclude forbidden
@@ -60,7 +65,11 @@ These rules are release blockers:
     service must not silently grant access.
 12. Logs record who did what to which asset, but never record the secret used.
 
-## Current baseline
+## Historical baseline (2026-09-03)
+
+The observations below describe that dated pass, not current open findings or
+current repository settings. Recheck live source, CI and repository rules before
+using them as release evidence.
 
 The 2026-09-03 pass used clean worktrees at each repository's current default
 branch. It included GitHub advisory review, CodeQL and secret-scanning status,
@@ -170,16 +179,21 @@ Target: in parallel with the trust-boundary work.
 - Keep only clearly fake fixtures; mark them with narrow scanner allowlist rules.
 - Enable secret scanning and push protection for every repository that supports
   them, including macOS and protocol.
-- Protect each default branch with at least one approval, required current CI,
-  dismissal of stale approvals, conversation resolution, and no force pushes.
+- Keep required CI, conversation resolution and no force pushes on protected
+  default branches. The owner-approved solo workflow requires zero external
+  approvals; authors may merge after checks pass. This does not create a GitHub
+  self-approval or permit bypassing required checks. Private repositories whose
+  plan does not support branch rules still require the same checks before merge.
 - Add `CODEOWNERS` for authentication, authorization, protocol, update, release,
   and deployment paths.
 - Pin third-party GitHub Actions to reviewed commit SHAs and schedule dependency
   update review.
 - Enable private vulnerability reporting where supported.
 
-Exit gate: a test push of a safe fake secret is blocked, default branches reject
-an unreviewed change, and repository settings are recorded as evidence.
+Exit gate: secret protection is verified with a safe fixture where supported,
+required checks block failing changes, and repository settings are recorded as
+evidence. Source review remains part of engineering even without an external
+approval requirement.
 
 ### P2: release and supply-chain proof
 
@@ -231,16 +245,19 @@ messages, and the large native-agent views and clients.
   functions and typed capabilities.
 - Record dependency direction so UI, transport, policy, and persistence do not
   call through each other.
-- Add file-size and complexity reporting as information first; make it blocking
-  only after the worst files have been reduced.
+- Enforce the hard 500 code-line limit on every handwritten code file, including
+  tests, scripts and executable CI/build/config code. Use pinned `cloc 2.10`;
+  exclude only genuine generated or vendored code. No legacy exemptions. Run
+  `python3 scripts/ci/check-line-limit.py` in each changed repository.
 
 Exit gate: privileged changes can be reviewed without reading unrelated UI,
 transport, or persistence logic.
 
 ## Proof matrix
 
-Every security change should run the smallest relevant checks plus these release
-gates:
+Every security change runs the smallest relevant checks and required CI. The
+following matrix lists the additional evidence needed for a release; a source
+change does not authorize native signing, publication or production operations:
 
 | Repository | Required proof |
 |---|---|

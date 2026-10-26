@@ -51,50 +51,36 @@ func TestWebDAVConnectBuildURL(t *testing.T) {
 			wantScheme:  "https",
 		},
 		{
-			name:        "port_80_uses_http",
+			name:        "port_80_uses_https",
 			port:        80,
 			extraConfig: map[string]any{},
-			wantScheme:  "http",
+			wantScheme:  "https",
 		},
 		{
-			name:        "webdav_tls_true_overrides_http",
+			name:        "webdav_tls_true_on_custom_port",
 			port:        8080,
 			extraConfig: map[string]any{"webdav_tls": true},
 			wantScheme:  "https",
 		},
 		{
-			name:        "webdav_tls_false_keeps_http",
+			name:        "explicitly_allowed_plaintext",
 			port:        8080,
-			extraConfig: map[string]any{"webdav_tls": false},
+			extraConfig: map[string]any{"webdav_tls": false, "webdav_allow_cleartext": true},
 			wantScheme:  "http",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := &WebDAVClient{}
-			cfg := ConnectionConfig{
-				Protocol:    "webdav",
-				Host:        "192.0.2.1", // TEST-NET, will fail to connect
-				Port:        tt.port,
-				Username:    "user",
-				Secret:      "pass",
-				ExtraConfig: tt.extraConfig,
+			t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
+			endpoint, _, err := webDAVEndpoint(ConnectionConfig{
+				Protocol: "webdav", Host: "192.0.2.1", Port: tt.port, ExtraConfig: tt.extraConfig,
+			})
+			if err != nil {
+				t.Fatal(err)
 			}
-
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-			defer cancel()
-
-			// We expect a connection error, not a config error.
-			// This validates URL construction without needing a server.
-			err := client.Connect(ctx, cfg)
-			if err == nil {
-				client.Close()
-				t.Fatal("expected connection error to unreachable host")
-			}
-			// The error message should contain the expected scheme.
-			if !contains(err.Error(), tt.wantScheme+"://") {
-				t.Errorf("expected scheme %s in error, got: %v", tt.wantScheme, err)
+			if !strings.HasPrefix(endpoint, tt.wantScheme+"://") {
+				t.Errorf("expected scheme %s, got %s", tt.wantScheme, endpoint)
 			}
 		})
 	}
@@ -187,7 +173,7 @@ func (f webDAVRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error
 func webDAVTestClient(transport http.RoundTripper) *WebDAVClient {
 	return &WebDAVClient{
 		config:    ConnectionConfig{Username: "user", Secret: "pass"},
-		baseURL:   "http://webdav.test",
+		baseURL:   "https://webdav.test",
 		transport: transport,
 	}
 }
@@ -324,9 +310,10 @@ func webdavConnect(t *testing.T) *WebDAVClient {
 	if basePath := os.Getenv("WEBDAV_TEST_BASE_PATH"); basePath != "" {
 		extra["webdav_base_path"] = basePath
 	}
-	if p != 443 {
-		// Non-443 ports default to HTTP; integration test servers are typically
-		// plain HTTP.
+	if os.Getenv("WEBDAV_TEST_ALLOW_CLEARTEXT") == "true" {
+		extra["webdav_tls"] = false
+		extra["webdav_allow_cleartext"] = true
+		t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
 	}
 
 	client := &WebDAVClient{}

@@ -152,6 +152,10 @@ func (s *apiServer) closeDockerExecBridgesForAsset(assetID string) {
 	s.ensureDockerDeps().CloseDockerExecBridgesForAsset(assetID)
 }
 
+func (s *apiServer) closeDockerExecBridgesForConnection(conn *agentmgr.AgentConn) {
+	s.ensureDockerDeps().CloseDockerExecBridgesForConnection(conn)
+}
+
 // Type aliases for types used in cmd/labtether/ test files.
 type dockerExecBridge = dockerpkg.DockerExecBridge
 
