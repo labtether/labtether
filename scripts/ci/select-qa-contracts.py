@@ -119,15 +119,18 @@ def select(manifest: dict, paths: list[str], full: bool) -> tuple[list[str], dic
 
 def select_ci_scopes(paths: list[str], full: bool) -> dict[str, bool]:
     """Keep unrelated language suites out of a change; unknown inputs run both."""
-    scopes = dict.fromkeys(("go_checks", "web_checks", "perf_gate"), full)
+    scopes = dict.fromkeys(("go_checks", "web_checks", "perf_gate", "push_relay"), full)
     for path in paths:
         name = Path(path).name
         if name in {"AGENTS.md", "CLAUDE.md", "LICENSE", "NOTICE"} or (
             Path(path).suffix in {".md", ".rst"}
-            and ("/" not in path or path.startswith(("docs/", "notes/")))
+            and ("/" not in path or path.startswith(("docs/", "notes/", "services/push-relay/")))
         ):
             continue
-        if path.startswith("web/console/"):
+        if path.startswith("services/push-relay/"):
+            # The relay Worker is self-contained JavaScript with its own tests.
+            scopes["push_relay"] = True
+        elif path.startswith("web/console/"):
             scopes["web_checks"] = True
         elif path.endswith(".go") or path in {"go.mod", "go.sum"}:
             scopes["go_checks"] = True
@@ -145,7 +148,7 @@ def select_ci_scopes(paths: list[str], full: bool) -> dict[str, bool]:
         elif path.startswith("scripts/perf/"):
             scopes["go_checks"] = scopes["perf_gate"] = True
         else:
-            # Build, deployment, selector, and unknown inputs can affect both.
+            # Build, deployment, selector, and unknown inputs can affect any suite.
             scopes = dict.fromkeys(scopes, True)
     return scopes
 

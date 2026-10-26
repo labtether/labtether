@@ -61,16 +61,18 @@ class QAContractSelectorTests(unittest.TestCase):
 
     def test_ci_scopes_skip_only_unrelated_suites(self):
         cases = [
-            (["README.md", "docs/guide.md"], (False, False, False)),
-            (["internal/auth/login.go"], (True, False, False)),
-            (["internal/persistence/telemetry.go"], (True, False, True)),
-            (["internal/hubapi/statusagg/collectors.go"], (True, False, True)),
-            (["internal/hubapi/logspkg/handlers.go"], (True, False, True)),
-            (["internal/hubapi/resources/metrics_handlers.go"], (True, False, True)),
-            (["web/console/app/api/login/route.ts"], (False, True, False)),
-            (["web/console/package-lock.json"], (False, True, False)),
-            (["scripts/perf/ci-hotspot.sh"], (True, False, True)),
-            (["scripts/new-build-input.sh"], (True, True, True)),
+            (["README.md", "docs/guide.md"], (False, False, False, False)),
+            (["internal/auth/login.go"], (True, False, False, False)),
+            (["internal/persistence/telemetry.go"], (True, False, True, False)),
+            (["internal/hubapi/statusagg/collectors.go"], (True, False, True, False)),
+            (["internal/hubapi/logspkg/handlers.go"], (True, False, True, False)),
+            (["internal/hubapi/resources/metrics_handlers.go"], (True, False, True, False)),
+            (["web/console/app/api/login/route.ts"], (False, True, False, False)),
+            (["web/console/package-lock.json"], (False, True, False, False)),
+            (["scripts/perf/ci-hotspot.sh"], (True, False, True, False)),
+            (["scripts/new-build-input.sh"], (True, True, True, True)),
+            (["services/push-relay/src/index.js"], (False, False, False, True)),
+            (["services/push-relay/README.md"], (False, False, False, False)),
         ]
         for paths, expected in cases:
             with self.subTest(paths=paths):
