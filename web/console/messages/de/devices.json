@@ -12,26 +12,26 @@
     "action": "Erstes Gerät hinzufügen"
   },
   "hierarchy": {
-    "nestAsChild": "Nest as child",
-    "mergeAsDevice": "Merge as same device",
-    "viewInTopology": "View full tree in Topology",
-    "setParent": "Set parent...",
-    "addChild": "Add child",
-    "detachFromParent": "Detach from parent",
-    "addFacet": "Add facet (merge asset)"
+    "nestAsChild": "Als untergeordnetes Gerät einordnen",
+    "mergeAsDevice": "Als dasselbe Gerät zusammenführen",
+    "viewInTopology": "Vollständigen Baum in der Topologie anzeigen",
+    "setParent": "Übergeordnetes Gerät festlegen...",
+    "addChild": "Untergeordnetes Gerät hinzufügen",
+    "detachFromParent": "Vom übergeordneten Gerät lösen",
+    "addFacet": "Facette hinzufügen (Gerät zusammenführen)"
   },
   "composites": {
-    "primary": "Primary",
-    "facet": "Facet",
-    "sourceView": "Source: {source}"
+    "primary": "Primär",
+    "facet": "Facette",
+    "sourceView": "Quelle: {source}"
   },
   "proposals": {
-    "title": "Suggested Relationships",
-    "mergeComposite": "Merge",
-    "linkParentChild": "Link",
-    "dismiss": "Dismiss",
-    "matchSignals": "Match signals",
-    "confidence": "Confidence: {value}%",
-    "newSuggestions": "{count} suggested relationships"
+    "title": "Vorgeschlagene Beziehungen",
+    "mergeComposite": "Zusammenführen",
+    "linkParentChild": "Verknüpfen",
+    "dismiss": "Verwerfen",
+    "matchSignals": "Übereinstimmungsmerkmale",
+    "confidence": "Konfidenz: {value}%",
+    "newSuggestions": "{count} vorgeschlagene Beziehungen"
   }
 }

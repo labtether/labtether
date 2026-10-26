@@ -1,0 +1,18 @@
+{
+  "title": "Benachrichtigungszentrale",
+  "subtitle": "Zustellverlauf für Alarmbenachrichtigungen",
+  "status": "Status",
+  "channel": "Kanal",
+  "alert": "Alarm",
+  "sentAt": "Gesendet am",
+  "error": "Fehler",
+  "retries": "Wiederholungen",
+  "noNotifications": "Noch keine Benachrichtigungen",
+  "noNotificationsDesc": "Benachrichtigungszustellungen werden hier angezeigt, sobald Alarme ausgelöst werden.",
+  "all": "Alle",
+  "sent": "Gesendet",
+  "failed": "Fehlgeschlagen",
+  "pending": "Ausstehend",
+  "filterByStatus": "Nach Status filtern",
+  "refresh": "Aktualisieren"
+}

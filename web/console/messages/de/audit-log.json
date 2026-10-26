@@ -1,0 +1,18 @@
+{
+  "title": "Audit-Protokoll",
+  "subtitle": "Systemaktivität und Ereignisverlauf",
+  "exportCSV": "CSV exportieren",
+  "timestamp": "Zeit",
+  "type": "Ereignistyp",
+  "actor": "Akteur",
+  "target": "Ziel",
+  "decision": "Entscheidung",
+  "details": "Details",
+  "noEvents": "Keine Audit-Ereignisse",
+  "noEventsDesc": "Systemaktivitäten werden hier angezeigt, sobald Aktionen ausgeführt werden.",
+  "allow": "Erlauben",
+  "deny": "Verweigern",
+  "filterByType": "Nach Typ filtern",
+  "allTypes": "Alle Typen",
+  "search": "Ereignisse suchen..."
+}

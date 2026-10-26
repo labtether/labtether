@@ -1,0 +1,18 @@
+{
+  "title": "通知中心",
+  "subtitle": "告警通知的投递历史",
+  "status": "状态",
+  "channel": "渠道",
+  "alert": "告警",
+  "sentAt": "发送时间",
+  "error": "错误",
+  "retries": "重试次数",
+  "noNotifications": "还没有通知",
+  "noNotificationsDesc": "告警触发后，通知投递记录将显示在此处。",
+  "all": "全部",
+  "sent": "已发送",
+  "failed": "失败",
+  "pending": "待处理",
+  "filterByStatus": "按状态筛选",
+  "refresh": "刷新"
+}

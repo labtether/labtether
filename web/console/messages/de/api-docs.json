@@ -1,0 +1,12 @@
+{
+  "title": "API-Dokumentation",
+  "subtitle": "Interaktive Referenz für die LabTether REST API v2",
+  "search": "Endpunkte suchen...",
+  "noResults": "Keine Endpunkte entsprechen Ihrer Suche",
+  "parameters": "Parameter",
+  "requestBody": "Anfrage-Body",
+  "responses": "Antworten",
+  "authentication": "Sofern nicht anders angegeben, erfordern alle Endpunkte einen Bearer-API-Schlüssel oder ein Sitzungscookie.",
+  "loading": "API-Spezifikation wird geladen...",
+  "loadError": "API-Spezifikation konnte nicht geladen werden"
+}

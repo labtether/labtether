@@ -1,0 +1,18 @@
+{
+  "title": "审计日志",
+  "subtitle": "系统活动和事件历史",
+  "exportCSV": "导出 CSV",
+  "timestamp": "时间",
+  "type": "事件类型",
+  "actor": "操作者",
+  "target": "目标",
+  "decision": "判定",
+  "details": "详情",
+  "noEvents": "没有审计事件",
+  "noEventsDesc": "执行操作后，系统活动将显示在此处。",
+  "allow": "允许",
+  "deny": "拒绝",
+  "filterByType": "按类型筛选",
+  "allTypes": "所有类型",
+  "search": "搜索事件..."
+}
