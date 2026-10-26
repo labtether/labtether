@@ -1,0 +1,19 @@
+{
+  "name": "@labtether/push-relay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "APNs push relay that lets self-hosted LabTether Hubs reach the official iOS app.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "4.113.0"
+  }
+}

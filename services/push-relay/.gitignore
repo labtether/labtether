@@ -1,0 +1,5 @@
+# Wrangler local state and local secrets; never commit them.
+.wrangler/
+.dev.vars
+.dev.vars.*
+*.p8
