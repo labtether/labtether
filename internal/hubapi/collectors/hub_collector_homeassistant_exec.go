@@ -84,9 +84,6 @@ func (d *Deps) executeHomeAssistantCollector(ctx context.Context, collector hubc
 	upsertFailures := 0
 	snapshotAssets := make([]connectorsdk.Asset, 0)
 	for _, discoveredAsset := range discovered {
-		if strings.HasPrefix(discoveredAsset.ID, "ha-entity-sensor-labtemp") || strings.HasPrefix(discoveredAsset.ID, "ha-entity-switch-rack-fan") {
-			continue
-		}
 		eligibleAssets++
 		metadata := make(map[string]string)
 		for key, value := range discoveredAsset.Metadata {

@@ -208,6 +208,9 @@ func secureOutboundHTTPClientWithAddressPolicy(base *http.Client, scheme string,
 		if _, err := ValidateOutboundURL(req.URL.String()); err != nil {
 			return err
 		}
+		if err := limitCrossHostRedirect(req, via); err != nil {
+			return err
+		}
 		if priorRedirect != nil {
 			return priorRedirect(req, via)
 		}
