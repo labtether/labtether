@@ -73,6 +73,18 @@ func requestRequiresOperatorRole(path string) bool {
 			return true
 		}
 	}
+	// TrueNAS directory listings and the Proxmox node syslog read data from
+	// inside the managed host, like /files/ and /logs/journal/.
+	for _, prefix := range []string{"/truenas/assets/", "/api/v2/truenas/assets/"} {
+		if rest := pathSegmentsAfter(path, prefix); len(rest) >= 2 && rest[1] == "filesystem" {
+			return true
+		}
+	}
+	for _, prefix := range []string{"/proxmox/nodes/", "/api/v2/proxmox/nodes/"} {
+		if rest := pathSegmentsAfter(path, prefix); len(rest) >= 2 && rest[1] == "syslog" {
+			return true
+		}
+	}
 	return false
 }
 
@@ -92,7 +104,9 @@ func pathSegmentsAfter(path, prefix string) []string {
 // rejectHostDataForRole writes 403 and returns true when role may not use a
 // host-data or interactive-session route.
 func rejectHostDataForRole(w http.ResponseWriter, r *http.Request, role string) bool {
-	if r == nil || r.URL == nil || !requestRequiresOperatorRole(r.URL.Path) {
+	// The TrueNAS handler splits the escaped path, so an encoded slash in the
+	// asset segment must not move "filesystem" out of the checked position.
+	if r == nil || r.URL == nil || (!requestRequiresOperatorRole(r.URL.Path) && !requestRequiresOperatorRole(r.URL.EscapedPath())) {
 		return false
 	}
 	if auth.HasWritePrivileges(role) {
