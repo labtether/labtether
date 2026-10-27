@@ -188,7 +188,7 @@ Browser-based shell sessions with snippets, bookmarks, and persistent sessions. 
 
 ### Remote Desktop
 
-VNC and SPICE desktop access directly from the browser. Session recordings for audit and compliance.
+VNC and SPICE desktop access directly from the browser. Sessions can be recorded and the raw recording downloaded; there is no built-in player yet.
 
 ### File Manager
 

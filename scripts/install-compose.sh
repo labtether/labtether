@@ -204,5 +204,5 @@ The split-Postgres password is generated automatically into the bootstrap volume
 and can be revealed later in Settings by an admin.
 
 If your browser warns about the self-signed cert, install the generated CA:
-https://localhost:8443/api/v1/tls/ca.crt
+https://localhost:8443/api/v1/ca.crt
 EOF
