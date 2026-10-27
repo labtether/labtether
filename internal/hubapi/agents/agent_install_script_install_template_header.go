@@ -48,8 +48,9 @@ AUTO_UPDATE="true"
 # Agents refuse unsigned self-updates; this is the Hub's release-signing key.
 AUTO_UPDATE_TRUSTED_PUBLIC_KEY=%[5]s
 FORCE_UPDATE=0
-# The Hub adds its key to root's authorized_keys while the agent is connected,
-# always as one line: key type, key data, then the comment labtether-hub.
+# When the Hub SSH key is on for this device, the Hub adds its key to root's
+# authorized_keys as one line: key type, key data, then the comment
+# labtether-hub.
 ROOT_AUTHORIZED_KEYS="/root/.ssh/authorized_keys"
 HUB_SSH_KEY_LINE='^[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+labtether-hub$'
 ENROLLMENT_TOKEN=""

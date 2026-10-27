@@ -266,10 +266,9 @@ func (s *apiServer) handleAgentWebSocket(w http.ResponseWriter, r *http.Request)
 	// connect always misses the probe (async race).
 	s.ensureTerminalDeps().StartAgentTmuxProbeAsync(conn)
 
-	// Send hub SSH public key for auto-provisioning.
-	if s.currentHubSSHIdentity() != nil {
-		s.sendSSHKeyInstall(conn)
-	}
+	// Install the Hub SSH key only where an admin turned it on, and finish a
+	// key removal that waited for this agent to connect.
+	s.syncHubSSHKeyOnConnect(conn)
 
 	// Push current runtime config to the agent.
 	s.sendConfigUpdate(conn)

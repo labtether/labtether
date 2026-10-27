@@ -143,6 +143,7 @@ func (s *apiServer) buildAgentsDeps() *agentspkg.Deps {
 		SaveAssetTerminalConfig: func(cfg credentials.AssetTerminalConfig) (credentials.AssetTerminalConfig, error) {
 			return s.credentialStore.SaveAssetTerminalConfig(cfg)
 		},
+		HubSSHKeyEnabled: s.hubSSHKeyEnabled,
 	}
 	if deps.RuntimeStore != nil {
 		if overrides, err := deps.RuntimeStore.ListRuntimeSettingOverrides(); err == nil {
@@ -217,6 +218,8 @@ func (s *apiServer) processAgentDockerEndpointTestResult(conn *agentmgr.AgentCon
 	s.ensureAgentsDeps().ProcessAgentDockerEndpointTestResult(conn, msg)
 }
 
+// sendSSHKeyInstall sends the Hub key without checking the device's Hub SSH
+// key setting. Agent connects use syncHubSSHKeyOnConnect, which does.
 func (s *apiServer) sendSSHKeyInstall(conn *agentmgr.AgentConn) {
 	s.hubIdentityOperationMu.Lock()
 	defer s.hubIdentityOperationMu.Unlock()

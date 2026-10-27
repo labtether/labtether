@@ -97,6 +97,7 @@ type apiServer struct {
 	edgeStore                     edges.Store
 	topologyStore                 topology.Store
 	linkSuggestionStore           persistence.LinkSuggestionStore
+	hubSSHKeyStore                persistence.HubSSHKeyStore
 	secretsManager                *secrets.Manager
 	policyState                   *policyRuntimeState
 	connectorRegistry             *connectorsdk.Registry

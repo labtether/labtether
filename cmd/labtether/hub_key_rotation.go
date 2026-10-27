@@ -134,12 +134,21 @@ func sendHubSSHKeyMessage(conn *agentmgr.AgentConn, messageType, publicKey strin
 	return nil
 }
 
+// stageHubSSHKey sends the new key to every connected agent whose device has
+// the Hub SSH key turned on. Devices with it off never receive a key, so they
+// are not counted either.
 func (s *apiServer) stageHubSSHKey(publicKey string) (connectedAssets, stagedAssets []string, failures int) {
 	if s.agentMgr == nil {
 		return nil, nil, 0
 	}
-	connectedAssets = s.agentMgr.ConnectedAssets()
-	sort.Strings(connectedAssets)
+	connected := s.agentMgr.ConnectedAssets()
+	sort.Strings(connected)
+	connectedAssets = make([]string, 0, len(connected))
+	for _, assetID := range connected {
+		if s.hubSSHKeyEnabled(assetID) {
+			connectedAssets = append(connectedAssets, assetID)
+		}
+	}
 	stagedAssets = make([]string, 0, len(connectedAssets))
 	for _, assetID := range connectedAssets {
 		conn, ok := s.agentMgr.Get(assetID)

@@ -128,6 +128,8 @@ func (s *apiServer) routeV2AssetSubPath(w http.ResponseWriter, r *http.Request, 
 		s.handleV2AssetReboot(w, r, assetID)
 	case subPath == "shutdown":
 		s.handleV2AssetShutdown(w, r, assetID)
+	case subPath == "hub-ssh-key":
+		s.handleV2AssetHubSSHKey(w, r, assetID)
 	default:
 		apiv2.WriteError(w, http.StatusNotFound, "not_found", "unknown sub-path: "+subPath)
 	}

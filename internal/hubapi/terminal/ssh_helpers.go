@@ -105,6 +105,10 @@ func (d *Deps) resolveProtocolConfigSSH(pc *protocols.ProtocolConfig, assetID st
 	if !ok {
 		return nil, fmt.Errorf("credential profile %s not found", pc.CredentialProfileID)
 	}
+	if strings.TrimSpace(profile.Kind) == credentials.KindHubSSHIdentity &&
+		(d.HubSSHKeyEnabled == nil || !d.HubSSHKeyEnabled(assetID)) {
+		return nil, shared.ErrHubSSHKeyOff
+	}
 
 	if strings.TrimSpace(resolved.User) == "" {
 		resolved.User = strings.TrimSpace(profile.Username)

@@ -131,6 +131,8 @@ func (s *apiServer) buildResourcesDeps() *respkg.Deps {
 		HandleCreateProtocolConfig:       s.handleCreateProtocolConfig,
 		HandleUpdateProtocolConfig:       s.handleUpdateProtocolConfig,
 		HandleDeleteProtocolConfig:       s.handleDeleteProtocolConfig,
+		HandleHubSSHKey:                  s.handleAssetHubSSHKey,
+		HubSSHKeyEnabled:                 s.hubSSHKeyEnabled,
 	}
 }
 

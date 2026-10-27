@@ -180,6 +180,7 @@ func TestSSHHubKeyRotationStagesBeforePersistAndRemovesOldKeyAfterward(t *testin
 	defer cleanup()
 	server.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-ssh-rotation", "linux"))
 	defer server.agentMgr.Unregister("node-ssh-rotation")
+	enableTestHubSSHKey(t, server, "node-ssh-rotation")
 
 	response := httptest.NewRecorder()
 	request := newHubSSHKeyRotationRequest(t, "user-admin-1", `{"key_type":"ed25519","reason":"LTQA-245","confirm":"ROTATE"}`)
@@ -237,6 +238,7 @@ func TestSSHHubKeyRotationPersistenceFailureKeepsOldIdentity(t *testing.T) {
 	defer cleanup()
 	server.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-ssh-persist-failure", "linux"))
 	defer server.agentMgr.Unregister("node-ssh-persist-failure")
+	enableTestHubSSHKey(t, server, "node-ssh-persist-failure")
 
 	response := httptest.NewRecorder()
 	request := newHubSSHKeyRotationRequest(t, "user-admin-2", `{"reason":"failure ordering","confirm":"ROTATE"}`)

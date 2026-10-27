@@ -96,6 +96,10 @@ type Deps struct {
 	// Credential store method helpers.
 	GetAssetTerminalConfig  func(assetID string) (credentials.AssetTerminalConfig, bool, error)
 	SaveAssetTerminalConfig func(cfg credentials.AssetTerminalConfig) (credentials.AssetTerminalConfig, error)
+
+	// HubSSHKeyEnabled reports whether an admin turned on the Hub SSH key for
+	// a device. When nil, the key is treated as off.
+	HubSSHKeyEnabled func(assetID string) bool
 }
 
 // broadcastEvent calls the Broadcast function if non-nil.

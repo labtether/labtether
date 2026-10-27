@@ -33,6 +33,10 @@ func (d *Deps) HandlePushHubKey(w http.ResponseWriter, r *http.Request, assetID 
 	if !apiv2.RequireAssetAccess(w, r, assetID) {
 		return
 	}
+	if !d.hubSSHKeyEnabled(assetID) {
+		servicehttp.WriteError(w, http.StatusConflict, shared.HubSSHKeyOffMessage)
+		return
+	}
 
 	pc, err := d.DB.GetProtocolConfig(r.Context(), assetID, protocols.ProtocolSSH)
 	if err != nil {
