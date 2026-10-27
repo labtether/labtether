@@ -24,17 +24,30 @@ func clearEncryptionKeyEnv(t *testing.T) {
 }
 
 // A database kept or restored without its data volume used to start with a
-// newly generated key, silently leaving every saved secret unreadable.
+// newly generated key, silently leaving every saved secret unreadable. A stored
+// well-known example key is replaced the same way, so it must refuse too.
 func TestMissingEncryptionKeyWithEncryptedDataRefusesStart(t *testing.T) {
-	clearEncryptionKeyEnv(t)
-	store := installstate.New(filepath.Join(t.TempDir(), "install"))
-
-	err := checkEncryptionKeyPresentForData(context.Background(), store, fakeEncryptedSecretsState{Credentials: true})
-	if !errors.Is(err, errEncryptionKeyMissing) {
-		t.Fatalf("checkEncryptionKeyPresentForData() error = %v, want missing key", err)
+	placeholder := ""
+	for key := range wellKnownPlaceholderKeys {
+		placeholder = key
 	}
-	if _, _, exists, loadErr := store.Load(); loadErr != nil || exists {
-		t.Fatalf("refused start wrote install state (exists=%v, err=%v)", exists, loadErr)
+	for name, storedKey := range map[string]string{"no key": "", "example key": placeholder} {
+		t.Run(name, func(t *testing.T) {
+			clearEncryptionKeyEnv(t)
+			store := installstate.New(filepath.Join(t.TempDir(), "install"))
+			if storedKey != "" {
+				store = saveInstallStateWithKey(t, storedKey)
+			}
+
+			err := checkEncryptionKeyPresentForData(context.Background(), store, fakeEncryptedSecretsState{Credentials: true})
+			if !errors.Is(err, errEncryptionKeyMissing) {
+				t.Fatalf("checkEncryptionKeyPresentForData() error = %v, want missing key", err)
+			}
+			_, persisted, exists, loadErr := store.Load()
+			if loadErr != nil || exists != (storedKey != "") || persisted.EncryptionKey != storedKey {
+				t.Fatalf("refused start changed install state (exists=%v, err=%v)", exists, loadErr)
+			}
+		})
 	}
 }
 
