@@ -67,6 +67,14 @@ type AssetStore interface {
 	DeleteAsset(id string) error
 }
 
+// AssetSeenStore is an optional bulk refresh of last_seen_at for assets whose
+// content has not changed. A collector with thousands of unchanged rows uses
+// it instead of a full heartbeat write per row. It returns how many of the ids
+// exist.
+type AssetSeenStore interface {
+	TouchAssetsSeen(ids []string, at time.Time) (int64, error)
+}
+
 // GroupAssetStore is an optional optimization interface for loading the assets
 // attached to a single group without scanning the full inventory.
 type GroupAssetStore interface {

@@ -116,7 +116,7 @@ func (c *Connector) Discover(ctx context.Context) ([]connectorsdk.Asset, error) 
 		metadata := map[string]string{
 			"entity_id": entityID,
 			"domain":    domain,
-			"state":     strings.TrimSpace(anyToString(state["state"])),
+			"state":     entityState(state["state"], attributes),
 		}
 		setMetadataValue(metadata, "last_changed", state["last_changed"])
 		setMetadataValue(metadata, "last_updated", state["last_updated"])

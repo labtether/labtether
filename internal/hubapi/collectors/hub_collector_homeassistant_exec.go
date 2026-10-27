@@ -11,6 +11,7 @@ import (
 	"github.com/labtether/labtether/internal/connectors/homeassistant"
 	"github.com/labtether/labtether/internal/connectorsdk"
 	"github.com/labtether/labtether/internal/hubcollector"
+	"github.com/labtether/labtether/internal/persistence"
 )
 
 func (d *Deps) executeHomeAssistantCollector(ctx context.Context, collector hubcollector.Collector) {
@@ -83,6 +84,26 @@ func (d *Deps) executeHomeAssistantCollector(ctx context.Context, collector hubc
 	ingested := 0
 	upsertFailures := 0
 	snapshotAssets := make([]connectorsdk.Asset, 0)
+	now := time.Now().UTC()
+	run := homeAssistantWrites.begin(collector.ID, now)
+	type entityWrite struct {
+		req         assets.HeartbeatRequest
+		kind        string
+		fingerprint string
+	}
+	writeEntity := func(entity entityWrite) {
+		if _, err := d.ProcessScopedCollectorHeartbeat(collector.ID, entity.req); err != nil {
+			log.Printf("hub collector homeassistant: failed to upsert %s: %v", entity.req.AssetID, err)
+			upsertFailures++
+			return
+		}
+		run.current[entity.req.AssetID] = entity.fingerprint
+		run.changed = true
+		snapshotAssets = append(snapshotAssets, ConnectorSnapshotAssetFromHeartbeat(entity.req, entity.kind))
+		ingested++
+	}
+	seenStore, canTouch := d.AssetStore.(persistence.AssetSeenStore)
+	var unchanged []entityWrite
 	for _, discoveredAsset := range discovered {
 		eligibleAssets++
 		metadata := make(map[string]string)
@@ -109,14 +130,35 @@ func (d *Deps) executeHomeAssistantCollector(ctx context.Context, collector hubc
 			Metadata: metadata,
 		}
 		req = ScopedCollectorHeartbeatRequest(collector.ID, req)
-		if _, err := d.ProcessScopedCollectorHeartbeat(collector.ID, req); err != nil {
-			log.Printf("hub collector homeassistant: failed to upsert %s: %v", discoveredAsset.ID, err)
-			upsertFailures++
+		fingerprint, same := run.unchanged(req)
+		entity := entityWrite{req: req, kind: discoveredAsset.Kind, fingerprint: fingerprint}
+		if same && canTouch {
+			unchanged = append(unchanged, entity)
 			continue
 		}
-		snapshotAssets = append(snapshotAssets, ConnectorSnapshotAssetFromHeartbeat(req, discoveredAsset.Kind))
-		ingested++
+		writeEntity(entity)
 	}
+	if len(unchanged) > 0 {
+		ids := make([]string, 0, len(unchanged))
+		for _, entity := range unchanged {
+			ids = append(ids, entity.req.AssetID)
+		}
+		touched, err := seenStore.TouchAssetsSeen(ids, now)
+		if err != nil || touched != int64(len(ids)) {
+			// A row went missing or the bulk refresh failed: write each in full.
+			log.Printf("hub collector homeassistant: bulk refresh covered %d of %d entities (err=%v); writing them in full", touched, len(ids), err)
+			for _, entity := range unchanged {
+				writeEntity(entity)
+			}
+		} else {
+			for _, entity := range unchanged {
+				run.current[entity.req.AssetID] = entity.fingerprint
+				snapshotAssets = append(snapshotAssets, ConnectorSnapshotAssetFromHeartbeat(entity.req, entity.kind))
+				ingested++
+			}
+		}
+	}
+	homeAssistantWrites.finish(collector.ID, run, now)
 
 	clusterName := strings.TrimSpace(CollectorConfigString(collector.Config, "display_name"))
 	if clusterName == "" && haConfig.LocationName != "" {
@@ -165,7 +207,9 @@ func (d *Deps) executeHomeAssistantCollector(ctx context.Context, collector hubc
 		snapshotAssets = append(snapshotAssets, clusterAsset)
 	}
 
-	d.PersistCanonicalConnectorSnapshot("home-assistant", collector.ID, connector.DisplayName(), "", connector, snapshotAssets)
+	if run.changed {
+		d.PersistCanonicalConnectorSnapshot("home-assistant", collector.ID, connector.DisplayName(), "", connector, snapshotAssets)
+	}
 
 	if eligibleAssets == 0 {
 		lifecycle.Partial("no assets discovered from Home Assistant")
