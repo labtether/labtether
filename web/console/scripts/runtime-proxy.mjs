@@ -346,7 +346,11 @@ export function createIngressKeyServer(key) {
       response.end("Not Found");
       return;
     }
-    response.writeHead(200, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" });
+    response.writeHead(200, {
+      "content-type": "text/plain; charset=utf-8",
+      "content-length": Buffer.byteLength(key),
+      "cache-control": "no-store",
+    });
     response.end(key);
   });
 }

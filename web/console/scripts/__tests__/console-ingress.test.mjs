@@ -106,7 +106,7 @@ describe("ingress key server", () => {
     const done = (text) => text.includes("\r\n\r\n") && /\r\n\r\n.+/s.test(text);
     const ok = await rawExchange(port, "GET /ingress-key HTTP/1.1\r\nHost: web-console\r\nConnection: close\r\n\r\n", done);
     expect(ok).toContain("200");
-    expect(ok.endsWith("d".repeat(64))).toBe(true);
+    expect(ok).toContain(`\r\n\r\n${"d".repeat(64)}`);
     const missing = await rawExchange(port, "GET /other HTTP/1.1\r\nHost: web-console\r\nConnection: close\r\n\r\n", done);
     expect(missing).toContain("404");
   });
