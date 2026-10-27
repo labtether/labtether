@@ -188,29 +188,41 @@ if ! "${compose[@]}" run --rm --no-deps --no-TTY --entrypoint /bin/sh labtether-
   exit 1
 fi
 
-# Start the default stack from the deploy file. Compose starts web-console only
-# after the Hub health check passes, and console-ingress only after
-# web-console's. The console must then answer through the published port with
-# a reply it fetched from the Hub over the verified internal TLS route.
-if ! "${compose[@]}" up --detach >/dev/null; then
-  printf 'FAIL: the deploy stack did not start\n' >&2
+# Start the default stack from the deploy file. The Hub is started first and
+# polled here, so a Hub that never turns healthy fails within this script's
+# own time limit rather than the health check's start window. Compose then
+# starts web-console only after the Hub check passes, and console-ingress only
+# after web-console's. The console must answer through the published port
+# with a reply it fetched from the Hub over the verified internal TLS route.
+wait_healthy() {
+  local service_name="" health="" container_id=""
+  for service_name in "$@"; do
+    health=""
+    until [[ "$health" == healthy ]]; do
+      if (( SECONDS >= deadline )); then
+        printf 'FAIL: %s is not healthy (%s)\n' "$service_name" "${health:-not running}" >&2
+        dump_logs
+        exit 1
+      fi
+      sleep 3
+      container_id="$("${compose[@]}" ps -q "$service_name")"
+      health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$container_id" 2>/dev/null || true)"
+    done
+  done
+}
+deadline=$((SECONDS + 240))
+if ! "${compose[@]}" up --detach labtether >/dev/null; then
+  printf 'FAIL: the Hub did not start\n' >&2
   dump_logs
   exit 1
 fi
-deadline=$((SECONDS + 180))
-for service_name in labtether web-console console-ingress; do
-  health=""
-  until [[ "$health" == healthy ]]; do
-    if (( SECONDS >= deadline )); then
-      printf 'FAIL: %s is not healthy (%s)\n' "$service_name" "${health:-not running}" >&2
-      dump_logs
-      exit 1
-    fi
-    sleep 3
-    container_id="$("${compose[@]}" ps -q "$service_name")"
-    health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$container_id" 2>/dev/null || true)"
-  done
-done
+wait_healthy labtether
+if ! "${compose[@]}" up --detach >/dev/null; then
+  printf 'FAIL: the console did not start\n' >&2
+  dump_logs
+  exit 1
+fi
+wait_healthy web-console console-ingress
 console_url="http://127.0.0.1:3000"
 setup_status=""
 for _ in 1 2 3 4 5 6 7 8 9 10; do
