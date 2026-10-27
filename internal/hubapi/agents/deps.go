@@ -93,6 +93,10 @@ type Deps struct {
 	PrincipalActorID                     func(context.Context) string
 	AppendAuditEventBestEffort           func(event audit.Event, logMessage string)
 
+	// DiscoverClientIP returns the /api/v1/discover caller's address, or ""
+	// when a proxy relayed the request without a trusted client address.
+	DiscoverClientIP func(r *http.Request) string
+
 	// Credential store method helpers.
 	GetAssetTerminalConfig  func(assetID string) (credentials.AssetTerminalConfig, bool, error)
 	SaveAssetTerminalConfig func(cfg credentials.AssetTerminalConfig) (credentials.AssetTerminalConfig, error)

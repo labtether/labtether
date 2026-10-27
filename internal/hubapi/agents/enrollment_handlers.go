@@ -180,7 +180,7 @@ func (d *Deps) HandleDiscover(w http.ResponseWriter, r *http.Request) {
 	candidates := connection.Candidates
 	// The other addresses (LAN IPs, tailnet names) help callers already on the
 	// LAN or tailnet. A caller from a public address gets none of them.
-	if !discoverCallerIsLocal(r) {
+	if !d.discoverCallerIsLocal(r) {
 		candidates = []shared.HubConnectionCandidate{}
 	}
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
@@ -197,10 +197,15 @@ func (d *Deps) HandleDiscover(w http.ResponseWriter, r *http.Request) {
 // tailnetPrefix is the shared address range Tailscale assigns to devices.
 var tailnetPrefix = netip.MustParsePrefix("100.64.0.0/10")
 
-// discoverCallerIsLocal reports whether the direct peer is on a loopback,
-// private, link-local or tailnet address.
-func discoverCallerIsLocal(r *http.Request) bool {
-	addr, err := netip.ParseAddr(strings.Trim(shared.RequestClientKey(r), "[]"))
+// discoverCallerIsLocal reports whether the caller is on a loopback, private,
+// link-local or tailnet address. DiscoverClientIP names the caller behind a
+// trusted proxy and returns "" when a proxied caller is unknown.
+func (d *Deps) discoverCallerIsLocal(r *http.Request) bool {
+	client := shared.RequestClientKey(r)
+	if d.DiscoverClientIP != nil {
+		client = d.DiscoverClientIP(r)
+	}
+	addr, err := netip.ParseAddr(strings.Trim(client, "[]"))
 	if err != nil {
 		return false
 	}

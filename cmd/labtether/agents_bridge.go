@@ -129,6 +129,7 @@ func (s *apiServer) buildAgentsDeps() *agentspkg.Deps {
 		ResolveHubURL: func(r *http.Request) string {
 			return s.resolveHubURL(r)
 		},
+		DiscoverClientIP: discoverClientIP,
 		ResolveHubConnectionSelection: func(r *http.Request) shared.HubConnectionSelection {
 			return shared.HubConnectionSelection(s.resolveHubConnectionSelection(r))
 		},
