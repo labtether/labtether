@@ -53,6 +53,9 @@ type Deps struct {
 	FileConnectionStore persistence.FileConnectionStore
 	FileTransferStore   persistence.FileTransferStore
 	ActiveTransfers     *sync.Map // transfer ID → context.CancelFunc
+	// SpoolDir is a disk-backed directory for staging transfers and copies.
+	// Empty falls back to the system temp directory.
+	SpoolDir string
 
 	// Remote desktop bookmark store.
 	RemoteBookmarkStore RemoteBookmarkStoreInterface

@@ -108,6 +108,7 @@ func (d *Deps) HandleFileDownloadWithLimit(w http.ResponseWriter, r *http.Reques
 		servicehttp.WriteError(w, http.StatusBadRequest, "path is required")
 		return
 	}
+	deadline := newFileStreamDeadline(w)
 
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {
@@ -176,7 +177,9 @@ func (d *Deps) HandleFileDownloadWithLimit(w http.ResponseWriter, r *http.Reques
 
 	filename := remoteFileBase(filePath)
 
-	spool, err := os.CreateTemp("", "labtether-download-*")
+	// The agent protocol has no flow control, so the whole file is staged
+	// before sending; a slow browser must not stall the agent's stream.
+	spool, err := d.createFileSpool("download-*")
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to prepare download")
 		return
@@ -190,7 +193,7 @@ func (d *Deps) HandleFileDownloadWithLimit(w http.ResponseWriter, r *http.Reques
 		}
 	}()
 
-	written, err := spoolFileDownloadChunks(r.Context(), spool, bridge, filePath, timeout, firstChunk, firstPayload, maxDownloadBytes)
+	written, err := spoolFileDownloadChunks(r.Context(), progressWriter{Writer: spool, deadline: deadline}, bridge, filePath, timeout, firstChunk, firstPayload, maxDownloadBytes)
 	if r.Context().Err() != nil {
 		return
 	}
@@ -208,7 +211,7 @@ func (d *Deps) HandleFileDownloadWithLimit(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", written))
 	w.WriteHeader(http.StatusOK)
 
-	if _, err := io.Copy(w, spool); err != nil {
+	if _, err := io.Copy(progressWriter{Writer: w, deadline: deadline}, spool); err != nil {
 		securityruntime.Logf("file: failed to write download response for %s: %v", filePath, err)
 	}
 }
@@ -355,7 +358,7 @@ func (d *Deps) HandleFileUpload(w http.ResponseWriter, r *http.Request, assetID 
 		servicehttp.WriteError(w, http.StatusRequestEntityTooLarge, "file exceeds 512 MB limit")
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
+	r.Body = progressBody{ReadCloser: http.MaxBytesReader(w, r.Body, maxUploadBytes), deadline: newFileStreamDeadline(w)}
 
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {
