@@ -82,6 +82,9 @@ func runHub(ctx context.Context) error {
 	ctx = leaseCtx
 
 	dataDir := envOrDefault("LABTETHER_DATA_DIR", "data")
+	if err := checkEncryptionKeyPresentForData(ctx, newInstallStateStore(dataDir), pgStore); err != nil {
+		return newStartupFailure(startupFailureEncryptionConfig, err)
+	}
 	runtimeSecrets, err := resolveRuntimeInstallSecrets(newInstallStateStore(dataDir))
 	if errors.Is(err, errEncryptionKeyMismatch) {
 		return newStartupFailure(startupFailureEncryptionConfig, err)
@@ -333,7 +336,7 @@ func runHub(ctx context.Context) error {
 				if srv.tlsState.CertSwitcher == nil {
 					srv.tlsState.CertSwitcher = &hubCertificateSwitcher{}
 				}
-				srv.tlsState.CertSwitcher.SetProvider(overrideProvider.GetCertificate)
+				srv.tlsState.CertSwitcher.SetProvider(srv.tlsState.UploadedCertificateProvider(overrideProvider.GetCertificate))
 				log.Printf("labtether: TLS UI override loaded — serving HTTPS on :%s", port)
 			}
 		}

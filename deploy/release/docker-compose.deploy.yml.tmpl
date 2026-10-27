@@ -307,7 +307,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
-      start_period: 15s
+      # The Hub migrates the database before it listens, and Compose starts the
+      # console only after this check passes, never later. Allow as long as a
+      # migration may run (LABTETHER_DB_MIGRATION_TIMEOUT, default 30m) so a
+      # slow first start after an upgrade does not leave the console stopped.
+      # start_interval probes every 5s meanwhile, so a normal start is seen at
+      # once.
+      start_period: 30m
+      start_interval: 5s
 
   web-console:
     image: __LABTETHER_IMAGE__
