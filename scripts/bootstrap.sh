@@ -230,5 +230,5 @@ LabTether bootstrap complete.
 - Admin password source: LABTETHER_ADMIN_PASSWORD in the private ${ENV_FILE} file
 
 If the browser warns about a self-signed cert, install the hub CA:
-https://localhost:8443/api/v1/tls/ca.crt
+https://localhost:8443/api/v1/ca.crt
 EOF

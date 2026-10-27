@@ -13,6 +13,8 @@ BUILD_LOCAL=0
 
 # shellcheck source=/dev/null
 source "${PROJECT_ROOT}/scripts/lib/script-common.sh"
+# shellcheck source=/dev/null
+source "${PROJECT_ROOT}/scripts/lib/postgres-volume.sh"
 
 usage() {
   cat <<'USAGE'
@@ -167,6 +169,8 @@ else
   docker compose "${compose_args[@]}" pull
 fi
 
+labtether_move_legacy_postgres_volume "${compose_args[@]}"
+
 log_info "Starting deploy stack..."
 docker compose "${compose_args[@]}" up -d
 
@@ -204,5 +208,5 @@ The split-Postgres password is generated automatically into the bootstrap volume
 and can be revealed later in Settings by an admin.
 
 If your browser warns about the self-signed cert, install the generated CA:
-https://localhost:8443/api/v1/tls/ca.crt
+https://localhost:8443/api/v1/ca.crt
 EOF
