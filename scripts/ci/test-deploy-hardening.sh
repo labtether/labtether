@@ -183,6 +183,15 @@ if ! cmp -s "${tmp_dir}/normalized-source.yml" "$RELEASE_TEMPLATE"; then
   exit 1
 fi
 
+# The deploy file starts Node by absolute path, which depends on the runtime
+# base image: the official node image uses /usr/local/bin/node, while Alpine's
+# nodejs package used /usr/bin/node.
+runtime_base="$(awk '/^FROM /{base=$2} END{print base}' "${PROJECT_ROOT}/build/Dockerfile")"
+if [[ "$runtime_base" != node:* ]]; then
+  printf 'FAIL: build/Dockerfile runtime stage left the official node image; recheck the Node path in the deploy file\n' >&2
+  exit 1
+fi
+
 docker compose --profile remote-desktop -f "$SOURCE_COMPOSE" config --quiet
 docker compose --profile remote-desktop -f "$SOURCE_COMPOSE" config --format json >"${tmp_dir}/source-config.json"
 python3 - "${tmp_dir}/source-config.json" <<'PY'
@@ -248,10 +257,14 @@ if services["console-ingress"].get("command") != [
     "-i",
     "HOME=/tmp",
     "LABTETHER_CONSOLE_INGRESS_MAX_CONNECTIONS=512",
-    "/usr/bin/node",
+    "/usr/local/bin/node",
     "/app/console/scripts/console-ingress.mjs",
 ]:
     raise SystemExit("console-ingress: clean-environment fixed-target command changed")
+# The official Node base image installs Node at /usr/local/bin/node. A missing
+# path leaves the Hub unhealthy, so web-console and console-ingress never start.
+if services["labtether"].get("healthcheck", {}).get("test", [])[:2] != ["CMD", "/usr/local/bin/node"]:
+    raise SystemExit("labtether: healthcheck must run the image's /usr/local/bin/node")
 if set(services["guacd"].get("networks", {})) != {"desktop-plane", "egress"}:
     raise SystemExit("guacd: target egress or desktop isolation is missing")
 if set(services["labtether"].get("networks", {})) != {"data-plane", "console-plane", "desktop-plane", "egress"}:
