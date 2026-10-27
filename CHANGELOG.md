@@ -29,6 +29,16 @@ configuration step.
   `LABTETHER_POSTGRES_LEGACY_VOLUME=<that volume>`. To start empty on purpose,
   set `LABTETHER_POSTGRES_NEW_DATABASE=true` in `.env.deploy` once. Before
   upgrading, back up the unnamed volume, not `postgres-data`.
+- **Old enrollment tokens stop working.** Migration v98 disables every
+  enrollment token created before 1.7.0, because those tokens name no device
+  or group. Agents that are already enrolled keep their own credentials and
+  stay connected. Create a new token for any agent you have not installed yet.
+  Do not roll back only the Hub after v98; restore the pre-upgrade database
+  backup together with the older Hub.
+- **Agents can no longer connect with the shared owner token.** Agent
+  WebSockets and legacy HTTP heartbeats that authenticate with the Hub's
+  owner token are refused. Set `LABTETHER_ALLOW_LEGACY_SHARED_AGENT_AUTH=true`
+  only while you move such an agent to its own enrollment.
 - **Viewers are now read-only for host contents.** A `viewer` (session or API
   key, whatever its scopes) can no longer download or list host files, open
   terminal, desktop, Docker-exec or Portainer-exec streams or their tickets,
