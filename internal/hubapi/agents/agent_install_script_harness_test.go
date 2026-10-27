@@ -66,6 +66,7 @@ if [[ -n "${out}" ]]; then
 set -euo pipefail
 printf '%s\n' "$*" >> "${LABTETHER_TEST_LOG_DIR}/agent-binary.log"
 if [[ "${1:-}" == "update" && "${2:-}" == "self" ]]; then
+  printf 'update signing key: %s\n' "${LABTETHER_AUTO_UPDATE_TRUSTED_PUBLIC_KEY:-missing}" >> "${LABTETHER_TEST_LOG_DIR}/agent-binary.log"
   printf 'test update output\n'
   exit "${LABTETHER_TEST_FORCE_UPDATE_EXIT:-0}"
 fi
@@ -184,6 +185,7 @@ func rewriteAgentScriptForHarness(script, root string) string {
 		"/etc/pki/ca-trust/source/anchors", filepath.Join(root, "etc/pki/ca-trust/source/anchors"),
 		"/usr/local/bin", filepath.Join(root, "usr/local/bin"),
 		"/etc/labtether", filepath.Join(root, "etc/labtether"),
+		"/root/.ssh/authorized_keys", filepath.Join(root, "root/.ssh/authorized_keys"),
 	)
 	return replacer.Replace(script)
 }

@@ -113,8 +113,14 @@ func TestInstallScriptForceUpdateUsesPrivateLog(t *testing.T) {
 			if err != nil {
 				t.Fatalf("force-update install failed: %v\n%s", err, output)
 			}
-			if !strings.Contains(mustReadFile(t, filepath.Join(root, "logs/agent-binary.log")), "update self --force") {
+			binaryLog := mustReadFile(t, filepath.Join(root, "logs/agent-binary.log"))
+			if !strings.Contains(binaryLog, "update self --force") {
 				t.Fatal("force update was not run")
+			}
+			// Without the service environment the agent has no signing key and
+			// refuses every update.
+			if !strings.Contains(binaryLog, "update signing key: "+AgentReleasePublicKey()) {
+				t.Fatalf("force update ran without the release signing key:\n%s", binaryLog)
 			}
 			if tt.exitCode != "0" && !strings.Contains(output, "test update output") {
 				t.Fatalf("failed update output was hidden: %s", output)

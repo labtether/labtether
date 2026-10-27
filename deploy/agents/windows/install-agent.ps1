@@ -6,7 +6,10 @@ param(
     [string]$ConfigDir        = "C:\ProgramData\LabTether",
     [string]$SourceDir        = "build",
     [string]$HubURL           = "",
+    # Prefer -EnrollmentTokenFile: a token passed with -EnrollmentToken is
+    # visible in the PowerShell command line and history.
     [string]$EnrollmentToken  = "",
+    [string]$EnrollmentTokenFile = "",
     [switch]$Uninstall
 )
 
@@ -100,24 +103,57 @@ sc.exe description $ServiceName "LabTether Agent: endpoint monitoring, operation
 sc.exe failure $ServiceName reset= 86400 actions= restart/60000/restart/60000/restart/60000 | Out-Null
 Write-Host "Recovery policy configured (restart x3, 60s delay, 24h reset)."
 
+# --- Enrollment token ---
+# The service's registry Environment value is readable by every local user,
+# so the token goes in a file only SYSTEM and Administrators can read.
+if ($EnrollmentToken -ne "" -and $EnrollmentTokenFile -ne "") {
+    throw "Use only one of -EnrollmentToken or -EnrollmentTokenFile."
+}
+if ($EnrollmentTokenFile -ne "") {
+    $EnrollmentToken = ([string](Get-Content -LiteralPath $EnrollmentTokenFile -TotalCount 1 -ErrorAction Stop)).Trim()
+    if ($EnrollmentToken -eq "") {
+        throw "Enrollment token file is empty: $EnrollmentTokenFile"
+    }
+}
+$tokenPath = Join-Path $ConfigDir "enrollment-token"
+if ($EnrollmentToken -ne "") {
+    # Restrict the file before the token is written into it.
+    New-Item -ItemType File -Path $tokenPath -Force | Out-Null
+    $tokenAcl = New-Object System.Security.AccessControl.FileSecurity
+    $tokenAcl.SetAccessRuleProtection($true, $false)
+    foreach ($principal in @("SYSTEM", "Administrators")) {
+        $tokenAcl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+            $principal, "FullControl", "Allow"
+        )))
+    }
+    Set-Acl -LiteralPath $tokenPath -AclObject $tokenAcl
+    Set-Content -LiteralPath $tokenPath -Value $EnrollmentToken -NoNewline -Encoding ASCII
+    Write-Host "Enrollment token saved to: $tokenPath"
+}
+
 # --- Environment variables via registry ---
 $envVars = @{}
 if ($HubURL -ne "") {
     $envVars["LABTETHER_WS_URL"] = $HubURL
 }
 if ($EnrollmentToken -ne "") {
-    $envVars["LABTETHER_ENROLLMENT_TOKEN"] = $EnrollmentToken
+    $envVars["LABTETHER_ENROLLMENT_TOKEN_FILE"] = $tokenPath
 }
 
-if ($envVars.Count -gt 0) {
+# Always rewrite the value so a token an older version of this script stored
+# in the registry is removed.
+$existing_env = (Get-ItemProperty -Path $regPath -Name "Environment" -ErrorAction SilentlyContinue).Environment
+$hadPlainToken = [bool]($existing_env | Where-Object { $_ -match "^LABTETHER_ENROLLMENT_TOKEN=" })
+if ($envVars.Count -gt 0 -or $hadPlainToken) {
     # Registry key may not exist yet if service was just created; wait briefly
     Start-Sleep -Seconds 1
     $existing_env = (Get-ItemProperty -Path $regPath -Name "Environment" -ErrorAction SilentlyContinue).Environment
     $envList = if ($existing_env) { [System.Collections.Generic.List[string]]$existing_env } else { [System.Collections.Generic.List[string]]@() }
+    $envList = [System.Collections.Generic.List[string]]@($envList | Where-Object { $_ -notmatch "^LABTETHER_ENROLLMENT_TOKEN=" })
 
     foreach ($key in $envVars.Keys) {
         # Remove old entry for this key if present
-        $envList = [System.Collections.Generic.List[string]]($envList | Where-Object { $_ -notmatch "^${key}=" })
+        $envList = [System.Collections.Generic.List[string]]@($envList | Where-Object { $_ -notmatch "^${key}=" })
         $envList.Add("${key}=$($envVars[$key])")
     }
 

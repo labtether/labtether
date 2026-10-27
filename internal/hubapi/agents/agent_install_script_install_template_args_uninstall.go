@@ -198,6 +198,7 @@ if [[ "${UNINSTALL}" -eq 1 ]]; then
   rm -f "${SERVICE_FILE}"
   systemctl daemon-reload
   success "Service stopped and disabled"
+  remove_hub_ssh_keys
   rm -f "${BINARY_DEST}"
   success "Binary removed"
   rm -f "${ENV_FILE}"

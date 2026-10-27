@@ -184,8 +184,27 @@ LABTETHER_LOG_STREAM_ENABLED=${LOG_STREAM_ENABLED}
 LABTETHER_TLS_SKIP_VERIFY=${TLS_SKIP_VERIFY}
 LABTETHER_TLS_CA_FILE=${TLS_CA_FILE}
 EOF
+# The agent upgrades ws:// to wss:// and refuses plain HTTP to private or
+# loopback addresses unless told otherwise. Opt in for the Hub URL this
+# script was served with, or the agent never connects.
+case "${WS_URL}" in
+  ws://*)
+    printf '%%s\n' "LABTETHER_ALLOW_INSECURE_TRANSPORT=true" "LABTETHER_OUTBOUND_ALLOW_PRIVATE=true" >> "${ENV_FILE}"
+    ;;
+esac
+case "${WS_URL}" in
+  *://localhost|*://localhost[/:]*|*://127.[0-9]*|*://\[::1\]*)
+    printf '%%s\n' "LABTETHER_OUTBOUND_ALLOW_LOOPBACK=true" >> "${ENV_FILE}"
+    ;;
+esac
 chmod 600 "${ENV_FILE}"
 success "Environment ${SYM_ARROW} ${ENV_FILE}"
+
+if [[ -n "${HUB_SSH_PUBLIC_KEY}" ]]; then
+  # Saved so uninstall can remove exactly this key from authorized_keys.
+  printf '%%s\n' "${HUB_SSH_PUBLIC_KEY}" > "${HUB_SSH_KEY_FILE}"
+  chmod 644 "${HUB_SSH_KEY_FILE}"
+fi
 
 LABTETHER_WRAPPER_INSTALLED=0
 INSTALL_LABTETHER_WRAPPER=1
@@ -214,6 +233,8 @@ TOKEN_FILE="${CONFIG_DIR}/agent-token"
 DEVICE_KEY_FILE="${CONFIG_DIR}/device-key"
 DEVICE_PUBLIC_KEY_FILE="${CONFIG_DIR}/device-key.pub"
 FINGERPRINT_FILE="${CONFIG_DIR}/device-fingerprint"
+HUB_SSH_KEY_FILE="${CONFIG_DIR}/hub-ssh-key.pub"
+ROOT_AUTHORIZED_KEYS="/root/.ssh/authorized_keys"
 
 print_usage() {
   cat <<'USAGE'
@@ -233,6 +254,21 @@ require_root() {
   fi
 }
 
+# Remove exactly the Hub SSH key saved at install time from authorized_keys.
+remove_hub_ssh_key() {
+  local key="" tmp_file
+  if [[ -f "${HUB_SSH_KEY_FILE}" && ! -L "${HUB_SSH_KEY_FILE}" ]]; then
+    key="$(head -n 1 "${HUB_SSH_KEY_FILE}")"
+  fi
+  [[ -n "${key}" && -f "${ROOT_AUTHORIZED_KEYS}" && ! -L "${ROOT_AUTHORIZED_KEYS}" ]] || return 0
+  grep -qxF -- "${key}" "${ROOT_AUTHORIZED_KEYS}" || return 0
+  tmp_file="$(mktemp "${ROOT_AUTHORIZED_KEYS}.XXXXXX")"
+  grep -vxF -- "${key}" "${ROOT_AUTHORIZED_KEYS}" > "${tmp_file}" || true
+  chmod 600 "${tmp_file}"
+  mv -f "${tmp_file}" "${ROOT_AUTHORIZED_KEYS}"
+  echo "labtether: Hub SSH key removed from ${ROOT_AUTHORIZED_KEYS}."
+}
+
 run_uninstall() {
   local purge="${1:-0}"
 
@@ -240,6 +276,7 @@ run_uninstall() {
   systemctl disable "${SERVICE_NAME}" 2>/dev/null || true
   rm -f "${SERVICE_FILE}"
   systemctl daemon-reload
+  remove_hub_ssh_key
 
   rm -f "${BINARY_DEST}"
   rm -f "${ENV_FILE}"
@@ -334,8 +371,9 @@ Restart=on-failure
 RestartSec=5s
 NoNewPrivileges=true
 # Package actions, OS updates, and agent self-update need to write system paths.
+# Files, terminal sessions and the Hub SSH key write to /root and /home, so home
+# directories stay writable.
 ProtectSystem=off
-ProtectHome=read-only
 PrivateTmp=true
 
 [Install]

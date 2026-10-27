@@ -42,6 +42,10 @@ AUTO_UPDATE="true"
 # Agents refuse unsigned self-updates; this is the Hub's release-signing key.
 AUTO_UPDATE_TRUSTED_PUBLIC_KEY=%[5]s
 FORCE_UPDATE=0
+# The Hub adds this key to root's authorized_keys while the agent is connected.
+HUB_SSH_PUBLIC_KEY=%[6]s
+HUB_SSH_KEY_FILE="${CONFIG_DIR}/hub-ssh-key.pub"
+ROOT_AUTHORIZED_KEYS="/root/.ssh/authorized_keys"
 ENROLLMENT_TOKEN=""
 ENROLLMENT_TOKEN_SOURCE_FILE=""
 LOW_POWER_MODE="${LABTETHER_LOW_POWER_MODE:-false}"
@@ -338,6 +342,27 @@ Options:
   -h, --help
       Show this help.
 USAGE
+}
+
+# Remove exactly the given key line from root's authorized_keys.
+remove_authorized_key() {
+  local key="$1" keys_file="${ROOT_AUTHORIZED_KEYS}" tmp_file
+  [[ -n "${key}" && -f "${keys_file}" && ! -L "${keys_file}" ]] || return 0
+  grep -qxF -- "${key}" "${keys_file}" || return 0
+  tmp_file="$(mktemp "${keys_file}.XXXXXX")"
+  grep -vxF -- "${key}" "${keys_file}" > "${tmp_file}" || true
+  chmod 600 "${tmp_file}"
+  mv -f "${tmp_file}" "${keys_file}"
+  success "Hub SSH key removed from ${keys_file}"
+}
+
+# The Hub's SSH key outlives the agent unless it is removed here. Remove the
+# Hub's current key and the key saved at install time.
+remove_hub_ssh_keys() {
+  remove_authorized_key "${HUB_SSH_PUBLIC_KEY}"
+  if [[ -f "${HUB_SSH_KEY_FILE}" && ! -L "${HUB_SSH_KEY_FILE}" ]]; then
+    remove_authorized_key "$(head -n 1 "${HUB_SSH_KEY_FILE}")"
+  fi
 }
 
 `
