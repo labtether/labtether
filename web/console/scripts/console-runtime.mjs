@@ -70,7 +70,8 @@ async function refreshIngressKeyServer() {
 }
 
 // The ingress starts after this container is healthy, so keep looking for it.
-await refreshIngressKeyServer();
+// A slow name lookup must not delay the console start.
+void refreshIngressKeyServer();
 const ingressRefreshTimer = setInterval(() => {
   void refreshIngressKeyServer();
 }, 10_000);
