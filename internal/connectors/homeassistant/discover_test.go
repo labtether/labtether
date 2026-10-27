@@ -16,7 +16,7 @@ import (
 func TestConnectorDiscoverReturnsAllEntitiesWithoutCredentials(t *testing.T) {
 	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
 
-	const cameraToken = "a1b2c3d4e5f6"
+	const cameraToken = "zzzzzzzzzzzz" // low-entropy fake, not a real token
 	states := []map[string]any{{
 		"entity_id": "camera.front_door",
 		"state":     "idle",
