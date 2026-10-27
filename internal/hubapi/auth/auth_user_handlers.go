@@ -189,6 +189,10 @@ func (d *Deps) HandleAuthUserActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update user role")
 			return
 		}
+		// Streams opened with the old rights must not outlive a demotion.
+		if (auth.HasWritePrivileges(user.Role) && !auth.HasWritePrivileges(role)) || (auth.HasAdminPrivileges(user.Role) && !auth.HasAdminPrivileges(role)) {
+			d.revokeStreams(shared.StreamActorKey(user.ID))
+		}
 		user.Role = role
 	}
 	if req.Password != nil {
@@ -215,6 +219,7 @@ func (d *Deps) HandleAuthUserActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update password")
 			return
 		}
+		d.revokeStreams(shared.StreamActorKey(user.ID))
 		if user.ID == d.UserIDFromContext(r.Context()) {
 			auth.ClearSessionCookie(w)
 		}
@@ -258,6 +263,7 @@ func (d *Deps) handleDeleteUser(w http.ResponseWriter, r *http.Request, id strin
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete user")
 		return
 	}
+	d.revokeStreams(shared.StreamActorKey(id))
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -299,6 +305,7 @@ func (d *Deps) handleUserSessions(w http.ResponseWriter, r *http.Request, userID
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to revoke sessions")
 			return
 		}
+		d.revokeStreams(shared.StreamActorKey(userID))
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"revoked": true})
 
 	default:

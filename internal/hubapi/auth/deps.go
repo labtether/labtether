@@ -71,6 +71,11 @@ type Deps struct {
 	// Hub's trusted-proxy settings. Nil falls back to the direct peer address.
 	ClientIP func(r *http.Request) string
 
+	// RevokeStreams closes open terminal, remote view, container shell and
+	// event streams opened with the given credentials (see
+	// shared.StreamPrincipalKeys). Nil skips it.
+	RevokeStreams func(keys ...string)
+
 	// Context extractors injected from cmd/labtether.
 	UserIDFromContext   func(ctx context.Context) string
 	UserRoleFromContext func(ctx context.Context) string

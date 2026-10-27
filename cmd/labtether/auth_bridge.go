@@ -37,6 +37,7 @@ func (s *apiServer) buildAuthDeps() *authpkg.Deps {
 		ClientIP:                   trustedRequestClientIP,
 		UserIDFromContext:          principalActorID,
 		UserRoleFromContext:        userRoleFromContext,
+		RevokeStreams:              s.revokeStreamPrincipals,
 
 		WrapAuth:        s.withAuth,
 		WrapSelfService: s.withSelfServiceAuth,

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -19,6 +20,13 @@ func newEventBroadcaster() *EventBroadcaster {
 
 // consumeEventTicket validates and consumes a one-time ticket for browser events.
 func (s *apiServer) consumeEventTicket(ticket string) bool {
+	_, ok := s.consumeEventTicketPrincipals(ticket)
+	return ok
+}
+
+// consumeEventTicketPrincipals consumes a browser events ticket and returns the
+// credentials it was issued to, so the socket can be closed when they end.
+func (s *apiServer) consumeEventTicketPrincipals(ticket string) ([]string, bool) {
 	now := time.Now().UTC()
 
 	s.streamTicketStore.Mu.Lock()
@@ -26,22 +34,26 @@ func (s *apiServer) consumeEventTicket(ticket string) bool {
 
 	entry, ok := s.streamTicketStore.Tickets[ticket]
 	if !ok {
-		return false
+		return nil, false
 	}
 	if entry.ExpiresAt.Before(now) {
 		delete(s.streamTicketStore.Tickets, ticket)
-		return false
+		return nil, false
 	}
 	if entry.SessionID != "__browser_events__" {
-		return false
+		return nil, false
 	}
 	if entry.APIKeyID != "" && len(entry.AllowedAssets) > 0 {
 		delete(s.streamTicketStore.Tickets, ticket)
-		return false
+		return nil, false
 	}
 
 	delete(s.streamTicketStore.Tickets, ticket)
-	return true
+	ctx := contextWithPrincipal(context.Background(), entry.ActorID, entry.Role)
+	if entry.AuthSessionID != "" {
+		ctx = shared.ContextWithAuthSessionID(ctx, entry.AuthSessionID)
+	}
+	return shared.StreamPrincipalKeys(ctx), true
 }
 
 // handleEventTicket issues a one-time ticket for WebSocket event streaming.
@@ -58,8 +70,19 @@ func (s *apiServer) handleBrowserEvents(w http.ResponseWriter, r *http.Request) 
 // buildBrowserEventsDeps constructs the BrowserEventsDeps from apiServer fields.
 func (s *apiServer) buildBrowserEventsDeps() *shared.BrowserEventsDeps {
 	return &shared.BrowserEventsDeps{
-		ConsumeEventTicket: s.consumeEventTicket,
-		IssueStreamTicket:  s.issueStreamTicket,
+		ConsumeEventTicket:           s.consumeEventTicket,
+		ConsumeEventTicketPrincipals: s.consumeEventTicketPrincipals,
+		SessionPrincipals: func(hashedToken string) ([]string, bool, error) {
+			if s.authStore == nil {
+				return nil, false, nil
+			}
+			session, ok, err := s.authStore.ValidateSession(hashedToken)
+			if err != nil || !ok {
+				return nil, ok, err
+			}
+			return []string{shared.StreamActorKey(session.UserID), shared.StreamSessionKey(session.ID)}, true, nil
+		},
+		IssueStreamTicket: s.issueStreamTicket,
 		ValidateSession: func(hashedToken string) (bool, error) {
 			if s.authStore == nil {
 				return false, nil
@@ -81,4 +104,16 @@ func (s *apiServer) ensureBrowserEventsDeps() *shared.BrowserEventsDeps {
 		s.browserEventsDeps = s.buildBrowserEventsDeps()
 	})
 	return s.browserEventsDeps
+}
+
+// revokeStreamPrincipals closes terminal, remote view, container shell and
+// event streams opened with any of the given credentials.
+func (s *apiServer) revokeStreamPrincipals(keys ...string) {
+	if s == nil || len(keys) == 0 {
+		return
+	}
+	s.sessionStreams.RevokePrincipals(keys...)
+	if s.broadcaster != nil {
+		s.broadcaster.DisconnectPrincipals(keys...)
+	}
 }
