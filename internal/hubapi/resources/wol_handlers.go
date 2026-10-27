@@ -106,7 +106,7 @@ func (d *Deps) HandleWakeOnLAN(w http.ResponseWriter, r *http.Request, assetID s
 				"method":         "direct",
 				"relay_attempts": relayAttempts,
 			})
-			servicehttp.WriteError(w, http.StatusConflict, "no online agent can send the wake packet, and the hub's own broadcast stays inside its container network; keep another agent online on this device's network (in the same group, if it has one), or set LABTETHER_WOL_HUB_BROADCAST=true if the hub uses host networking")
+			servicehttp.WriteError(w, http.StatusConflict, "no online agent can send the wake packet, and the hub's own broadcast stays inside its container network; keep another agent online on this device's network (in the same group, if it has one), or, if the hub container uses macvlan networking, set LABTETHER_WOL_HUB_BROADCAST=true in its environment")
 			return
 		}
 		securityruntime.Logf("wol: direct send failed asset=%s reason=udp_broadcast_unavailable", assetEntry.ID)

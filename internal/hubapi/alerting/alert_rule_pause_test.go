@@ -1,6 +1,7 @@
 package alerting
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,8 +10,8 @@ import (
 	"github.com/labtether/labtether/internal/alerts"
 )
 
-// The evaluator skips paused rules, so pausing a rule must close the alerts it
-// has open; otherwise they stay firing for good.
+// The evaluator skips paused rules, so pausing a rule must close every alert it
+// has open, beyond the first page; otherwise they stay firing for good.
 func TestPausingAlertRuleResolvesItsOpenAlerts(t *testing.T) {
 	deps := newTestAlertingDeps(t)
 	rule, err := deps.AlertStore.CreateAlertRule(alerts.CreateRuleRequest{
@@ -21,14 +22,19 @@ func TestPausingAlertRuleResolvesItsOpenAlerts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	instance, err := deps.AlertInstanceStore.CreateAlertInstance(alerts.CreateInstanceRequest{
-		RuleID: rule.ID, Fingerprint: alerts.GenerateFingerprint(rule.ID, rule.Labels), Severity: rule.Severity,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := deps.AlertInstanceStore.UpdateAlertInstanceStatus(instance.ID, alerts.InstanceStatusFiring); err != nil {
-		t.Fatal(err)
+	// More than one page of open alerts: each resolve pass handles 100.
+	ids := make([]string, 0, 150)
+	for i := 0; i < 150; i++ {
+		instance, err := deps.AlertInstanceStore.CreateAlertInstance(alerts.CreateInstanceRequest{
+			RuleID: rule.ID, Fingerprint: fmt.Sprintf("disk-%d", i), Severity: rule.Severity,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := deps.AlertInstanceStore.UpdateAlertInstanceStatus(instance.ID, alerts.InstanceStatusFiring); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, instance.ID)
 	}
 
 	rec := httptest.NewRecorder()
@@ -36,11 +42,13 @@ func TestPausingAlertRuleResolvesItsOpenAlerts(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("pause status=%d: %s", rec.Code, rec.Body.String())
 	}
-	stored, ok, err := deps.AlertInstanceStore.GetAlertInstance(instance.ID)
-	if err != nil || !ok {
-		t.Fatalf("load instance: ok=%v err=%v", ok, err)
-	}
-	if stored.Status != alerts.InstanceStatusResolved || stored.ResolvedAt == nil {
-		t.Fatalf("alert after pause: status=%s resolved_at=%v", stored.Status, stored.ResolvedAt)
+	for _, id := range ids {
+		stored, ok, err := deps.AlertInstanceStore.GetAlertInstance(id)
+		if err != nil || !ok {
+			t.Fatalf("load instance: ok=%v err=%v", ok, err)
+		}
+		if stored.Status != alerts.InstanceStatusResolved || stored.ResolvedAt == nil {
+			t.Fatalf("alert %s after pause: status=%s resolved_at=%v", id, stored.Status, stored.ResolvedAt)
+		}
 	}
 }

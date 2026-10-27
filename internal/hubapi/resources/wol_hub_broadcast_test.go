@@ -1,6 +1,7 @@
 package resources
 
 import (
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -8,24 +9,38 @@ import (
 	"testing"
 )
 
-// Without a relay agent, a Hub in a container must not report a wake packet
-// as sent: its broadcast never leaves the container network.
+// Without a relay agent, a Hub in a bridged container must not report a wake
+// packet as sent: its broadcast never leaves the container network. With host
+// networking the broadcast does reach the LAN and must keep working.
 func TestWakeOnLANFromContainerWithoutRelayIsReportedAsFailed(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), ".dockerenv")
 	if err := os.WriteFile(marker, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	originalMarkers := containerMarkerFiles
-	t.Cleanup(func() { containerMarkerFiles = originalMarkers })
+	originalMarkers, originalInterfaces := containerMarkerFiles, listHubInterfaces
+	t.Cleanup(func() { containerMarkerFiles, listHubInterfaces = originalMarkers, originalInterfaces })
 	t.Setenv("LABTETHER_WOL_HUB_BROADCAST", "")
+	interfaces := []string{"lo", "eth0"}
+	listHubInterfaces = func() ([]net.Interface, error) {
+		out := make([]net.Interface, 0, len(interfaces))
+		for _, name := range interfaces {
+			out = append(out, net.Interface{Name: name})
+		}
+		return out, nil
+	}
 
 	containerMarkerFiles = []string{marker}
 	if hubBroadcastReachesNetwork() {
-		t.Fatal("hub in a container reported that its broadcast reaches the network")
+		t.Fatal("hub in a bridged container reported that its broadcast reaches the network")
 	}
+	interfaces = []string{"lo", "enp3s0", "docker0"}
+	if !hubBroadcastReachesNetwork() {
+		t.Fatal("hub container with host networking reported a contained broadcast")
+	}
+	interfaces = []string{"lo", "eth0"}
 	t.Setenv("LABTETHER_WOL_HUB_BROADCAST", "true")
 	if !hubBroadcastReachesNetwork() {
-		t.Fatal("explicit host-networking override ignored")
+		t.Fatal("explicit macvlan override ignored")
 	}
 	t.Setenv("LABTETHER_WOL_HUB_BROADCAST", "")
 	containerMarkerFiles = []string{filepath.Join(t.TempDir(), "missing")}
