@@ -50,6 +50,11 @@ var hostDataRouteCases = []struct{ route, path string }{
 	{"/portainer/assets/", "/portainer/assets/pt-1/containers/abc/inspect"},
 	{"/portainer/assets/", "/portainer/assets/pt-1/stacks/3/compose"},
 	{"/api/v2/portainer/assets/", "/api/v2/portainer/assets/pt-1/containers/abc/logs"},
+	{"/truenas/assets/", "/truenas/assets/nas-1/filesystem?path=/"},
+	{"/truenas/assets/", "/truenas/assets/nas%2F1/filesystem?path=/"},
+	{"/api/v2/truenas/assets/", "/api/v2/truenas/assets/nas-1/filesystem?path=/mnt"},
+	{"/proxmox/nodes/", "/proxmox/nodes/pve1/syslog"},
+	{"/api/v2/proxmox/nodes/", "/api/v2/proxmox/nodes/pve1/syslog"},
 }
 
 func createRoleSessionToken(t *testing.T, sut *apiServer, username, role string) string {
@@ -135,6 +140,7 @@ func TestViewerKeepsInventoryAndStatusReads(t *testing.T) {
 		"/services/srv1", "/packages/srv1", "/disks/srv1", "/network/srv1", "/logs/query",
 		"/api/v1/docker/containers/ct-1/stats", "/portainer/assets/pt-1/containers",
 		"/api/v1/nodes/srv1/displays", "/alerts/instances", "/auth/users",
+		"/truenas/assets/nas-1/pools", "/proxmox/nodes/pve1/network",
 	} {
 		called := false
 		handler := sut.withAuth(func(w http.ResponseWriter, _ *http.Request) {
