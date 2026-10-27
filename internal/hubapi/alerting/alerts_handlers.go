@@ -200,6 +200,11 @@ func (d *Deps) HandleAlertRuleActions(w http.ResponseWriter, r *http.Request) {
 				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update alert rule")
 				return
 			}
+			if updated.Status == alerts.RuleStatusPaused && existingRule.Status != alerts.RuleStatusPaused {
+				// The evaluator skips paused rules, so nothing else would ever
+				// close the alerts this rule still has open.
+				d.resolveStaleInstances(updated, nil)
+			}
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"rule": updated})
 		case http.MethodDelete:
 			rule, ok, err := d.AlertStore.GetAlertRule(ruleID)

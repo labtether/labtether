@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/audit"
@@ -17,8 +18,6 @@ import (
 	"strings"
 	"time"
 )
-
-var SendWakeOnLAN = wol.Send
 
 const (
 	wakeRateLimitBucket = "assets.wake"
@@ -101,6 +100,15 @@ func (d *Deps) HandleWakeOnLAN(w http.ResponseWriter, r *http.Request, assetID s
 	// Fallback to hub-side broadcast.
 	broadcastAddr := "255.255.255.255:9"
 	if err := SendWakeOnLAN(mac, broadcastAddr); err != nil {
+		if errors.Is(err, errHubBroadcastContained) {
+			securityruntime.Logf("wol: no relay agent for asset=%s and the hub broadcast cannot leave its container", assetEntry.ID)
+			d.appendWakeRequestAudit(r.Context(), "asset.wake.outcome", assetEntry.ID, "failed", "no_relay_available", map[string]any{
+				"method":         "direct",
+				"relay_attempts": relayAttempts,
+			})
+			servicehttp.WriteError(w, http.StatusConflict, "no online agent can send the wake packet, and the hub's own broadcast stays inside its container network; keep another agent online on this device's network (in the same group, if it has one), or set LABTETHER_WOL_HUB_BROADCAST=true if the hub uses host networking")
+			return
+		}
 		securityruntime.Logf("wol: direct send failed asset=%s reason=udp_broadcast_unavailable", assetEntry.ID)
 		d.appendWakeRequestAudit(r.Context(), "asset.wake.outcome", assetEntry.ID, "failed", "direct_send_failed", map[string]any{
 			"method":         "direct",
