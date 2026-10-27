@@ -408,6 +408,7 @@ func (d *Deps) HandleOIDCSettingsPut(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to save oidc settings")
 		return
 	}
+	d.auditIdentityChange(r, "settings.oidc.updated", "oidc", map[string]any{"enabled": enabled, "issuer_url": updated.IssuerURL, "default_role": updated.DefaultRole, "auto_provision": autoProvision})
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"enabled":                  enabled,
@@ -481,6 +482,7 @@ func (d *Deps) HandleOIDCSettingsApply(w http.ResponseWriter, r *http.Request) {
 	}
 
 	d.OIDCRef.Swap(provider, autoProvision)
+	d.auditIdentityChange(r, "settings.oidc.applied", "oidc", map[string]any{"enabled": provider != nil, "auto_provision": autoProvision})
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"applied":        true,

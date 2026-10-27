@@ -3,6 +3,7 @@ package persistence
 import (
 	"context"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -103,7 +104,7 @@ func (m *memoryScheduleStore) ListScheduledTasksForEvaluation(
 	return result, nil
 }
 
-func (m *memoryScheduleStore) UpdateScheduledTask(_ context.Context, id string, name *string, cronExpr *string, command *string, targets *[]string, groupID *string, enabled *bool, nextRun schedules.NextRunUpdate) error {
+func (m *memoryScheduleStore) UpdateScheduledTask(_ context.Context, id string, name *string, cronExpr *string, command *string, targets *[]string, groupID *string, enabled *bool, nextRun schedules.NextRunUpdate, editedBy string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	t, ok := m.tasks[id]
@@ -134,6 +135,15 @@ func (m *memoryScheduleStore) UpdateScheduledTask(_ context.Context, id string, 
 	}
 	if nextRun.Set {
 		t.NextRunAt = nextRun.Value
+	}
+	changed := name != nil || cronExpr != nil || command != nil || targets != nil || groupID != nil || enabled != nil || nextRun.Set
+	if editedBy = strings.TrimSpace(editedBy); changed && editedBy != "" && editedBy != t.CreatedBy {
+		m.principalCounts[t.CreatedBy]--
+		if m.principalCounts[t.CreatedBy] <= 0 {
+			delete(m.principalCounts, t.CreatedBy)
+		}
+		m.principalCounts[editedBy]++
+		t.CreatedBy = editedBy
 	}
 	m.tasks[id] = t
 	return nil

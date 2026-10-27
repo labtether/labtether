@@ -3,6 +3,7 @@ package auth
 import (
 	"fmt"
 	"github.com/labtether/labtether/internal/apiv2"
+	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/credentials"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/idgen"
@@ -92,6 +93,11 @@ func (d *Deps) HandleRetrieveDesktopCredentials(w http.ResponseWriter, r *http.R
 	if !apiv2.RequireScope(w, r, "credentials:use") {
 		return
 	}
+	// Each call returns a saved password in clear text, so bound how fast one
+	// caller can pull them.
+	if d.EnforceRateLimit != nil && !d.EnforceRateLimit(w, r, "desktop.credentials.retrieve", 30, time.Minute) {
+		return
+	}
 	if d.CredentialStore == nil || d.SecretsManager == nil {
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "credential store unavailable")
 		return
@@ -142,6 +148,14 @@ func (d *Deps) HandleRetrieveDesktopCredentials(w http.ResponseWriter, r *http.R
 	}
 
 	_ = d.CredentialStore.MarkCredentialProfileUsed(profile.ID, time.Now().UTC())
+	if d.AppendAuditEventBestEffort != nil {
+		event := audit.NewEvent("credential.desktop.retrieved")
+		event.ActorID = d.actorIDFromContext(r.Context())
+		event.Target = assetID
+		event.Decision = "allowed"
+		event.Details = map[string]any{"credential_profile_id": profile.ID}
+		d.AppendAuditEventBestEffort(event, "api warning: failed to append desktop credential retrieval audit event")
+	}
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"username": profile.Username,

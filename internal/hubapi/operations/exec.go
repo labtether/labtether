@@ -362,6 +362,21 @@ func (d *ExecDeps) HandleExecMulti(w http.ResponseWriter, r *http.Request) {
 		} else {
 			succeeded++
 		}
+		// Policy refusals are audited where they happen. Every other target
+		// got the command, so it needs the same record a single exec writes.
+		if d.AppendAuditEventBestEffort != nil && res.Error != "policy_denied" && res.Error != "policy_unavailable" {
+			details := map[string]any{"command_bytes": len([]byte(req.Command)), "exit_code": res.ExitCode, "fanout": len(filteredTargets)}
+			if res.Error != "" {
+				details["error"] = res.Error
+			}
+			d.AppendAuditEventBestEffort(audit.Event{
+				Type:      "api.exec",
+				ActorID:   d.PrincipalActorID(r.Context()),
+				Target:    target,
+				Details:   details,
+				Timestamp: time.Now().UTC(),
+			}, "v2 multi exec on "+target)
+		}
 	}
 
 	apiv2.WriteJSON(w, http.StatusOK, map[string]any{

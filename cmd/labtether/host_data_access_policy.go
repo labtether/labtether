@@ -35,6 +35,7 @@ var hostDataRoutePrefixes = []string{
 	"/cron/",         // scheduled commands can carry secrets
 	"/users/",        // host operating-system accounts
 	"/logs/journal/", // on-demand host journal reads
+	"/actions/runs",  // stored command text and root output
 }
 
 // requestRequiresOperatorRole reports whether the request path reads host data
