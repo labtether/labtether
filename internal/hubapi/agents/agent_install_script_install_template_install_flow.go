@@ -173,10 +173,6 @@ cat > "${ENV_FILE}" <<EOF
 LABTETHER_WS_URL=${WS_URL}
 LABTETHER_ENROLLMENT_TOKEN_FILE=${ENROLLMENT_TOKEN_FILE}
 LABTETHER_TOKEN_FILE=${TOKEN_FILE}
-LABTETHER_DOCKER_ENABLED=${DOCKER_ENABLED}
-LABTETHER_DOCKER_SOCKET="${DOCKER_ENDPOINT}"
-LABTETHER_DOCKER_DISCOVERY_INTERVAL=${DOCKER_DISCOVERY_INTERVAL}
-LABTETHER_FILES_ROOT_MODE=${FILES_ROOT_MODE}
 LABTETHER_AUTO_UPDATE=${AUTO_UPDATE}
 LABTETHER_AUTO_UPDATE_TRUSTED_PUBLIC_KEY=${AUTO_UPDATE_TRUSTED_PUBLIC_KEY}
 LABTETHER_LOW_POWER_MODE=${LOW_POWER_MODE}
@@ -184,6 +180,21 @@ LABTETHER_LOG_STREAM_ENABLED=${LOG_STREAM_ENABLED}
 LABTETHER_TLS_SKIP_VERIFY=${TLS_SKIP_VERIFY}
 LABTETHER_TLS_CA_FILE=${TLS_CA_FILE}
 EOF
+# Write Hub-managed settings only when chosen here. The agent keeps settings
+# set in agent.env and ignores Hub changes to them; settings left out use the
+# agent's default (the same values as this script's) and stay Hub-managed.
+if [[ "${DOCKER_ENABLED_SET}" -eq 1 ]]; then
+  printf 'LABTETHER_DOCKER_ENABLED=%%s\n' "${DOCKER_ENABLED}" >> "${ENV_FILE}"
+fi
+if [[ "${DOCKER_ENDPOINT_SET}" -eq 1 ]]; then
+  printf 'LABTETHER_DOCKER_SOCKET="%%s"\n' "${DOCKER_ENDPOINT}" >> "${ENV_FILE}"
+fi
+if [[ "${DOCKER_DISCOVERY_INTERVAL_SET}" -eq 1 ]]; then
+  printf 'LABTETHER_DOCKER_DISCOVERY_INTERVAL=%%s\n' "${DOCKER_DISCOVERY_INTERVAL}" >> "${ENV_FILE}"
+fi
+if [[ "${FILES_ROOT_MODE_SET}" -eq 1 ]]; then
+  printf 'LABTETHER_FILES_ROOT_MODE=%%s\n' "${FILES_ROOT_MODE}" >> "${ENV_FILE}"
+fi
 # The agent upgrades ws:// to wss:// and refuses plain HTTP to private or
 # loopback addresses unless told otherwise. Opt in for the Hub URL this
 # script was served with, or the agent never connects.

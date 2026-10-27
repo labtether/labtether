@@ -22,6 +22,7 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       DOCKER_ENABLED="$2"
+      DOCKER_ENABLED_SET=1
       shift 2
       ;;
     --docker-endpoint)
@@ -31,6 +32,7 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       DOCKER_ENDPOINT="$2"
+      DOCKER_ENDPOINT_SET=1
       shift 2
       ;;
     --docker-discovery-interval)
@@ -40,6 +42,7 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       DOCKER_DISCOVERY_INTERVAL="$2"
+      DOCKER_DISCOVERY_INTERVAL_SET=1
       shift 2
       ;;
     --docker-wizard)
@@ -53,6 +56,7 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       FILES_ROOT_MODE="$(echo "$2" | tr '[:upper:]' '[:lower:]')"
+      FILES_ROOT_MODE_SET=1
       shift 2
       ;;
     --auto-update)

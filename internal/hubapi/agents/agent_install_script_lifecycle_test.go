@@ -43,8 +43,9 @@ func TestBootstrapScriptKeepsHubCAOutOfSystemTrust(t *testing.T) {
 
 // The agent upgrades ws:// to wss:// and blocks loopback unless opted in, so
 // without these lines an agent installed from a plain-HTTP or localhost Hub
-// URL never connects.
-func TestInstallScriptPlainHTTPLoopbackHubOptsIn(t *testing.T) {
+// URL never connects. The agent also keeps any setting written to agent.env
+// and ignores the Hub for it, so settings not chosen here must stay out.
+func TestInstallScriptDefaultInstallForPlainHTTPLoopbackHub(t *testing.T) {
 	root, env := newAgentScriptHarness(t, strings.Repeat("a", 64))
 	script := rewriteAgentScriptForHarness(GenerateInstallScript("http://localhost:8080", "ws://localhost:8080/ws/agent"), root)
 	if output, err := runGeneratedShellScript(t, script, env, "--skip-vnc-prereqs"); err != nil {
@@ -59,6 +60,16 @@ func TestInstallScriptPlainHTTPLoopbackHubOptsIn(t *testing.T) {
 	} {
 		if !strings.Contains(envFile, want) {
 			t.Fatalf("expected env file to contain %q, got:\n%s", want, envFile)
+		}
+	}
+	for _, unchosen := range []string{
+		"LABTETHER_DOCKER_ENABLED=",
+		"LABTETHER_DOCKER_SOCKET=",
+		"LABTETHER_DOCKER_DISCOVERY_INTERVAL=",
+		"LABTETHER_FILES_ROOT_MODE=",
+	} {
+		if strings.Contains(envFile, unchosen) {
+			t.Fatalf("env file sets %q though no flag chose it:\n%s", unchosen, envFile)
 		}
 	}
 }

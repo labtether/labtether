@@ -38,6 +38,12 @@ DOCKER_ENDPOINT="/var/run/docker.sock"
 DOCKER_DISCOVERY_INTERVAL="30"
 DOCKER_WIZARD=0
 FILES_ROOT_MODE="home"
+# Set to 1 when the operator chose the setting here. Only chosen settings are
+# written to agent.env: the agent keeps those and ignores Hub changes to them.
+DOCKER_ENABLED_SET=0
+DOCKER_ENDPOINT_SET=0
+DOCKER_DISCOVERY_INTERVAL_SET=0
+FILES_ROOT_MODE_SET=0
 AUTO_UPDATE="true"
 # Agents refuse unsigned self-updates; this is the Hub's release-signing key.
 AUTO_UPDATE_TRUSTED_PUBLIC_KEY=%[5]s
