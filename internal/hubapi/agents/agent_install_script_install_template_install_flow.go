@@ -211,12 +211,6 @@ esac
 chmod 600 "${ENV_FILE}"
 success "Environment ${SYM_ARROW} ${ENV_FILE}"
 
-if [[ -n "${HUB_SSH_PUBLIC_KEY}" ]]; then
-  # Saved so uninstall can remove exactly this key from authorized_keys.
-  printf '%%s\n' "${HUB_SSH_PUBLIC_KEY}" > "${HUB_SSH_KEY_FILE}"
-  chmod 644 "${HUB_SSH_KEY_FILE}"
-fi
-
 LABTETHER_WRAPPER_INSTALLED=0
 INSTALL_LABTETHER_WRAPPER=1
 if [[ -e "${LABTETHER_CLI_DEST}" ]]; then
@@ -244,8 +238,8 @@ TOKEN_FILE="${CONFIG_DIR}/agent-token"
 DEVICE_KEY_FILE="${CONFIG_DIR}/device-key"
 DEVICE_PUBLIC_KEY_FILE="${CONFIG_DIR}/device-key.pub"
 FINGERPRINT_FILE="${CONFIG_DIR}/device-fingerprint"
-HUB_SSH_KEY_FILE="${CONFIG_DIR}/hub-ssh-key.pub"
 ROOT_AUTHORIZED_KEYS="/root/.ssh/authorized_keys"
+HUB_SSH_KEY_LINE='^[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+labtether-hub$'
 
 print_usage() {
   cat <<'USAGE'
@@ -265,19 +259,23 @@ require_root() {
   fi
 }
 
-# Remove exactly the Hub SSH key saved at install time from authorized_keys.
+# Remove every Hub SSH key line (comment labtether-hub) from authorized_keys,
+# old and current, and no other key. A failure is reported, not fatal.
 remove_hub_ssh_key() {
-  local key="" tmp_file
-  if [[ -f "${HUB_SSH_KEY_FILE}" && ! -L "${HUB_SSH_KEY_FILE}" ]]; then
-    key="$(head -n 1 "${HUB_SSH_KEY_FILE}")"
+  local keys_file="${ROOT_AUTHORIZED_KEYS}" tmp_file rc=0
+  [[ -f "${keys_file}" && ! -L "${keys_file}" ]] || return 0
+  grep -Eq "${HUB_SSH_KEY_LINE}" "${keys_file}" || return 0
+  if ! tmp_file="$(mktemp "${keys_file}.XXXXXX" 2>/dev/null)"; then
+    echo "labtether: could not update ${keys_file}; remove the lines ending in labtether-hub by hand." >&2
+    return 0
   fi
-  [[ -n "${key}" && -f "${ROOT_AUTHORIZED_KEYS}" && ! -L "${ROOT_AUTHORIZED_KEYS}" ]] || return 0
-  grep -qxF -- "${key}" "${ROOT_AUTHORIZED_KEYS}" || return 0
-  tmp_file="$(mktemp "${ROOT_AUTHORIZED_KEYS}.XXXXXX")"
-  grep -vxF -- "${key}" "${ROOT_AUTHORIZED_KEYS}" > "${tmp_file}" || true
-  chmod 600 "${tmp_file}"
-  mv -f "${tmp_file}" "${ROOT_AUTHORIZED_KEYS}"
-  echo "labtether: Hub SSH key removed from ${ROOT_AUTHORIZED_KEYS}."
+  grep -Ev "${HUB_SSH_KEY_LINE}" "${keys_file}" > "${tmp_file}" || rc=$?
+  if (( rc > 1 )) || ! chmod 600 "${tmp_file}" || ! mv -f "${tmp_file}" "${keys_file}"; then
+    rm -f "${tmp_file}"
+    echo "labtether: could not update ${keys_file}; remove the lines ending in labtether-hub by hand." >&2
+    return 0
+  fi
+  echo "labtether: Hub SSH keys removed from ${keys_file}."
 }
 
 run_uninstall() {

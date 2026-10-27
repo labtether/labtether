@@ -243,14 +243,19 @@ func TestSendSSHKeyInstallAndRemoveEmitHubKey(t *testing.T) {
 		return payload.PublicKey
 	}
 
+	// Uninstall finds every Hub key by its comment, so the installed line must
+	// carry it; removal must also clear the plain line older Hubs installed.
+	const marked = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHUB labtether-hub"
 	sut.sendSSHKeyInstall(conn)
-	if got := readPayload(agentmgr.MsgSSHKeyInstall); got != sut.hubIdentity.PublicKey {
-		t.Fatalf("install public key=%q, want %q", got, sut.hubIdentity.PublicKey)
+	if got := readPayload(agentmgr.MsgSSHKeyInstall); got != marked {
+		t.Fatalf("install public key=%q, want %q", got, marked)
 	}
 
 	sut.sendSSHKeyRemove(conn)
-	if got := readPayload(agentmgr.MsgSSHKeyRemove); got != sut.hubIdentity.PublicKey {
-		t.Fatalf("remove public key=%q, want %q", got, sut.hubIdentity.PublicKey)
+	for _, want := range []string{sut.hubIdentity.PublicKey, marked} {
+		if got := readPayload(agentmgr.MsgSSHKeyRemove); got != want {
+			t.Fatalf("remove public key=%q, want %q", got, want)
+		}
 	}
 }
 

@@ -93,6 +93,10 @@ func readHubSSHKeyMessage(t *testing.T, conn *websocket.Conn, wantType string) s
 	if err := json.Unmarshal(message.Data, &payload); err != nil {
 		t.Fatalf("decode %s payload: %v", wantType, err)
 	}
+	// Compare key type and data only; installed lines carry the Hub comment.
+	if fields := strings.Fields(payload.PublicKey); len(fields) >= 2 {
+		return fields[0] + " " + fields[1]
+	}
 	return payload.PublicKey
 }
 

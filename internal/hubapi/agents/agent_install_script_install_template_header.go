@@ -48,10 +48,10 @@ AUTO_UPDATE="true"
 # Agents refuse unsigned self-updates; this is the Hub's release-signing key.
 AUTO_UPDATE_TRUSTED_PUBLIC_KEY=%[5]s
 FORCE_UPDATE=0
-# The Hub adds this key to root's authorized_keys while the agent is connected.
-HUB_SSH_PUBLIC_KEY=%[6]s
-HUB_SSH_KEY_FILE="${CONFIG_DIR}/hub-ssh-key.pub"
+# The Hub adds its key to root's authorized_keys while the agent is connected,
+# always as one line: key type, key data, then the comment labtether-hub.
 ROOT_AUTHORIZED_KEYS="/root/.ssh/authorized_keys"
+HUB_SSH_KEY_LINE='^[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+labtether-hub$'
 ENROLLMENT_TOKEN=""
 ENROLLMENT_TOKEN_SOURCE_FILE=""
 LOW_POWER_MODE="${LABTETHER_LOW_POWER_MODE:-false}"
@@ -350,25 +350,25 @@ Options:
 USAGE
 }
 
-# Remove exactly the given key line from root's authorized_keys.
-remove_authorized_key() {
-  local key="$1" keys_file="${ROOT_AUTHORIZED_KEYS}" tmp_file
-  [[ -n "${key}" && -f "${keys_file}" && ! -L "${keys_file}" ]] || return 0
-  grep -qxF -- "${key}" "${keys_file}" || return 0
-  tmp_file="$(mktemp "${keys_file}.XXXXXX")"
-  grep -vxF -- "${key}" "${keys_file}" > "${tmp_file}" || true
-  chmod 600 "${tmp_file}"
-  mv -f "${tmp_file}" "${keys_file}"
-  success "Hub SSH key removed from ${keys_file}"
-}
-
-# The Hub's SSH key outlives the agent unless it is removed here. Remove the
-# Hub's current key and the key saved at install time.
+# The Hub's SSH key outlives the agent unless it is removed here. The Hub
+# installs its key with the comment labtether-hub, so this removes every Hub
+# key, including keys from before a Hub key rotation, and no other key. A
+# failure is reported and uninstall carries on.
 remove_hub_ssh_keys() {
-  remove_authorized_key "${HUB_SSH_PUBLIC_KEY}"
-  if [[ -f "${HUB_SSH_KEY_FILE}" && ! -L "${HUB_SSH_KEY_FILE}" ]]; then
-    remove_authorized_key "$(head -n 1 "${HUB_SSH_KEY_FILE}")"
+  local keys_file="${ROOT_AUTHORIZED_KEYS}" tmp_file rc=0
+  [[ -f "${keys_file}" && ! -L "${keys_file}" ]] || return 0
+  grep -Eq "${HUB_SSH_KEY_LINE}" "${keys_file}" || return 0
+  if ! tmp_file="$(mktemp "${keys_file}.XXXXXX" 2>/dev/null)"; then
+    warn "Could not update ${keys_file}. Remove the lines ending in labtether-hub by hand."
+    return 0
   fi
+  grep -Ev "${HUB_SSH_KEY_LINE}" "${keys_file}" > "${tmp_file}" || rc=$?
+  if (( rc > 1 )) || ! chmod 600 "${tmp_file}" || ! mv -f "${tmp_file}" "${keys_file}"; then
+    rm -f "${tmp_file}"
+    warn "Could not update ${keys_file}. Remove the lines ending in labtether-hub by hand."
+    return 0
+  fi
+  success "Hub SSH keys removed from ${keys_file}"
 }
 
 `

@@ -37,6 +37,11 @@ if (-not (Test-Path $sourceBinary)) {
     throw "Binary not found: $sourceBinary"
 }
 
+# Well-known SIDs: account names such as "Administrators" differ on localized
+# Windows and would not resolve.
+$systemSid = New-Object System.Security.Principal.SecurityIdentifier("S-1-5-18")
+$adminsSid = New-Object System.Security.Principal.SecurityIdentifier("S-1-5-32-544")
+
 # --- Config directory with restricted ACLs ---
 if (-not (Test-Path $ConfigDir)) {
     Write-Host "Creating config directory: $ConfigDir"
@@ -46,10 +51,10 @@ if (-not (Test-Path $ConfigDir)) {
     $acl.SetAccessRuleProtection($true, $false)   # disable inheritance, remove inherited rules
 
     $systemRule = New-Object System.Security.AccessControl.FileSystemAccessRule(
-        "SYSTEM", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
+        $systemSid, "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
     )
     $adminRule = New-Object System.Security.AccessControl.FileSystemAccessRule(
-        "Administrators", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
+        $adminsSid, "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
     )
 
     $acl.AddAccessRule($systemRule)
@@ -121,7 +126,7 @@ if ($EnrollmentToken -ne "") {
     New-Item -ItemType File -Path $tokenPath -Force | Out-Null
     $tokenAcl = New-Object System.Security.AccessControl.FileSecurity
     $tokenAcl.SetAccessRuleProtection($true, $false)
-    foreach ($principal in @("SYSTEM", "Administrators")) {
+    foreach ($principal in @($systemSid, $adminsSid)) {
         $tokenAcl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
             $principal, "FullControl", "Allow"
         )))

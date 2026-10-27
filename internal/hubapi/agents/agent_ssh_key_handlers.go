@@ -7,6 +7,7 @@ import (
 
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/credentials"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/securityruntime"
 )
 
@@ -14,14 +15,15 @@ func (d *Deps) ProcessAgentSSHKeyRemoved(conn *agentmgr.AgentConn, _ agentmgr.Me
 	securityruntime.Logf("agentws: SSH key removed on %s", conn.AssetID)
 }
 
-// sendSSHKeyInstall sends the hub SSH public key to a newly connected agent.
+// sendSSHKeyInstall sends the hub SSH public key to a newly connected agent,
+// with the comment uninstall uses to find every Hub key.
 func (d *Deps) SendSSHKeyInstall(conn *agentmgr.AgentConn) {
 	identity := d.currentHubIdentity()
 	if identity == nil {
 		return
 	}
 	data, _ := json.Marshal(agentmgr.SSHKeyInstallData{
-		PublicKey: identity.PublicKey,
+		PublicKey: shared.HubAuthorizedKeyLine(identity.PublicKey),
 	})
 	if err := conn.Send(agentmgr.Message{
 		Type: agentmgr.MsgSSHKeyInstall,
@@ -31,20 +33,22 @@ func (d *Deps) SendSSHKeyInstall(conn *agentmgr.AgentConn) {
 	}
 }
 
-// sendSSHKeyRemove sends a request to the agent to remove the hub's SSH public key.
+// sendSSHKeyRemove asks the agent to remove the hub's SSH public key, both the
+// plain line older Hubs installed and the commented line.
 func (d *Deps) SendSSHKeyRemove(conn *agentmgr.AgentConn) {
 	identity := d.currentHubIdentity()
 	if identity == nil {
 		return
 	}
-	data, _ := json.Marshal(agentmgr.SSHKeyRemoveData{
-		PublicKey: identity.PublicKey,
-	})
-	if err := conn.Send(agentmgr.Message{
-		Type: agentmgr.MsgSSHKeyRemove,
-		Data: data,
-	}); err != nil {
-		log.Printf("agentws: failed to send ssh_key.remove to %s: %v", conn.AssetID, err)
+	for _, line := range shared.HubAuthorizedKeyRemovals(identity.PublicKey) {
+		data, _ := json.Marshal(agentmgr.SSHKeyRemoveData{PublicKey: line})
+		if err := conn.Send(agentmgr.Message{
+			Type: agentmgr.MsgSSHKeyRemove,
+			Data: data,
+		}); err != nil {
+			log.Printf("agentws: failed to send ssh_key.remove to %s: %v", conn.AssetID, err)
+			return
+		}
 	}
 }
 

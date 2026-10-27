@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"strings"
 
-	"golang.org/x/crypto/ssh"
-
 	"github.com/labtether/labtether/internal/hubapi/shared"
 )
 
@@ -23,11 +21,7 @@ func (d *Deps) HandleAgentInstallScript(w http.ResponseWriter, r *http.Request) 
 	hubURL := d.ResolveHubURL(r)
 	wsURL := strings.TrimRight(shared.HTTPURLToWS(hubURL), "/") + "/ws/agent"
 
-	hubSSHPublicKey := ""
-	if identity := d.currentHubIdentity(); identity != nil {
-		hubSSHPublicKey = identity.PublicKey
-	}
-	script := GenerateInstallScriptWithHubSSHKey(hubURL, wsURL, hubSSHPublicKey)
+	script := GenerateInstallScript(hubURL, wsURL)
 	w.Header().Set("Content-Type", "text/x-shellscript")
 	w.WriteHeader(http.StatusOK)
 	// #nosec G705 -- script is plain text shell output, not HTML rendering.
@@ -98,28 +92,8 @@ func GenerateBootstrapScript(hubURL, expectedCAFingerprint string) string {
 // hubURL is the HTTP base URL of the hub (e.g. "http://192.168.1.10:8080").
 // wsURL  is the WebSocket agent URL  (e.g. "ws://192.168.1.10:8080/ws/agent").
 func GenerateInstallScript(hubURL, wsURL string) string {
-	return GenerateInstallScriptWithHubSSHKey(hubURL, wsURL, "")
-}
-
-// GenerateInstallScriptWithHubSSHKey also embeds the Hub's SSH public key so
-// uninstall can remove exactly the authorized_keys line the agent added for
-// it. A key that is not one valid authorized_keys entry is left out.
-func GenerateInstallScriptWithHubSSHKey(hubURL, wsURL, hubSSHPublicKey string) string {
 	return fmt.Sprintf(agentInstallScriptTemplate(), hubURL, wsURL, shellSingleQuote(hubURL), shellSingleQuote(wsURL),
-		shellSingleQuote(AgentReleasePublicKey()), shellSingleQuote(authorizedKeyLine(hubSSHPublicKey)))
-}
-
-// authorizedKeyLine returns the line the agent writes for this key: the
-// trimmed key, accepted only as a single authorized_keys entry.
-func authorizedKeyLine(publicKey string) string {
-	line := strings.TrimSpace(publicKey)
-	if line == "" || strings.ContainsAny(line, "\r\n") {
-		return ""
-	}
-	if _, _, _, rest, err := ssh.ParseAuthorizedKey([]byte(line)); err != nil || len(strings.TrimSpace(string(rest))) != 0 {
-		return ""
-	}
-	return line
+		shellSingleQuote(AgentReleasePublicKey()))
 }
 
 func shellSingleQuote(value string) string {
