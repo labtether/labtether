@@ -168,7 +168,9 @@ if container.get("Config", {}).get("User") != "0:0":
     raise SystemExit("bootstrap: runtime UID/GID changed")
 if host_config.get("CapDrop") != ["ALL"]:
     raise SystemExit(f"bootstrap: runtime capability drop changed: {host_config.get('CapDrop')}")
-if set(host_config.get("CapAdd") or []) != {"CAP_CHOWN", "CAP_DAC_OVERRIDE", "CAP_FOWNER"}:
+# Docker 26 reports added capabilities without the CAP_ prefix; newer Docker keeps it.
+cap_add = {cap[4:] if cap.startswith("CAP_") else cap for cap in host_config.get("CapAdd") or []}
+if cap_add != {"CHOWN", "DAC_OVERRIDE", "FOWNER"}:
     raise SystemExit(f"bootstrap: runtime capability allowlist changed: {host_config.get('CapAdd')}")
 PY
 
