@@ -43,7 +43,8 @@ configuration step.
   key, whatever its scopes) can no longer download or list host files, open
   terminal, desktop, Docker-exec or Portainer-exec streams or their tickets,
   read session recordings, process lists, cron entries, host users, host
-  journal or container logs, the remote clipboard, or use the MCP tools
+  journal, Proxmox node syslog, TrueNAS directory listings or container logs,
+  the remote clipboard, or use the MCP tools
   `files_list`, `files_read`, `system_processes` and `docker_container_logs`.
   These now return `403 operator role required`. Inventory, status, alerts
   and the central log view stay readable. Give such users the `operator` role.
