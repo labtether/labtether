@@ -108,22 +108,46 @@ function boundConnect(target, onConnect, onFailure) {
     onConnect(upstream);
   });
   upstream.once("timeout", () => upstream.destroy());
-  upstream.once("error", onFailure);
+  upstream.on("error", onFailure);
   return upstream;
 }
 
+function rejectBadRequest(response) {
+  if (response.headersSent) {
+    response.destroy();
+    return;
+  }
+  response.writeHead(400, { "content-type": "text/plain; charset=utf-8", connection: "close" });
+  response.end("Bad Request");
+}
+
 function proxyRequest(request, response, target, ingressKey) {
-  const upstream = httpRequest({
-    method: request.method,
-    path: request.url,
-    headers: forwardedRequestHeaders(request.rawHeaders, peerAddress(request.socket), ingressKey(), false),
-    createConnection: (_options, callback) => boundConnect(target, (socket) => callback(null, socket), callback),
-  }, (upstreamResponse) => {
-    response.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.statusMessage, responseHeaders(upstreamResponse.rawHeaders));
-    upstreamResponse.once("error", () => response.destroy());
-    upstreamResponse.pipe(response);
-  });
-  upstream.once("error", () => {
+  let upstream;
+  try {
+    // Node's server accepts some request targets (such as a tab) that
+    // http.request refuses with a synchronous throw. Answer those with 400.
+    upstream = httpRequest({
+      method: request.method,
+      path: request.url,
+      headers: forwardedRequestHeaders(request.rawHeaders, peerAddress(request.socket), ingressKey(), false),
+      createConnection: (_options, callback) => boundConnect(target, (socket) => callback(null, socket), callback),
+    }, (upstreamResponse) => {
+      upstreamResponse.on("error", () => response.destroy());
+      try {
+        response.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.statusMessage, responseHeaders(upstreamResponse.rawHeaders));
+      } catch {
+        upstreamResponse.destroy();
+        response.destroy();
+        return;
+      }
+      upstreamResponse.pipe(response);
+    });
+  } catch {
+    request.resume();
+    rejectBadRequest(response);
+    return;
+  }
+  upstream.on("error", () => {
     if (!response.headersSent) {
       response.writeHead(502, { "content-type": "text/plain; charset=utf-8", connection: "close" });
       response.end("Bad Gateway");
@@ -141,6 +165,12 @@ function proxyUpgrade(request, downstream, head, target, ingressKey) {
   const fail = () => {
     if (!downstream.destroyed) downstream.destroy();
   };
+  // A request target or header value with a control character must not reach
+  // the raw upgrade request written below.
+  if (/[\u0000-\u0020\u007f]/.test(request.url ?? "")) {
+    downstream.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
+    return;
+  }
   const upstream = boundConnect(target, (socket) => {
     const headers = forwardedRequestHeaders(request.rawHeaders, peerAddress(downstream), ingressKey(), true);
     let block = `${request.method} ${request.url} HTTP/${request.httpVersion}\r\n`;
@@ -150,9 +180,21 @@ function proxyUpgrade(request, downstream, head, target, ingressKey) {
     downstream.pipe(socket);
     socket.pipe(downstream);
   }, fail);
-  downstream.once("error", () => upstream.destroy());
+  downstream.on("error", () => upstream.destroy());
   downstream.once("close", () => upstream.destroy());
   upstream.once("close", fail);
+}
+
+// Every handler runs inside this guard: one malformed request must not stop
+// the ingress for everyone.
+function guarded(handler, onFailure) {
+  return (...args) => {
+    try {
+      handler(...args);
+    } catch {
+      onFailure(...args);
+    }
+  };
 }
 
 export function createConsoleIngress(
@@ -161,9 +203,10 @@ export function createConsoleIngress(
   ingressKey = () => "",
 ) {
   const downstreamSockets = new Set();
-  const server = createServer({ maxHeaderSize: 16 * 1024 }, (request, response) => {
-    proxyRequest(request, response, target, ingressKey);
-  });
+  const server = createServer({ maxHeaderSize: 16 * 1024 }, guarded(
+    (request, response) => proxyRequest(request, response, target, ingressKey),
+    (_request, response) => rejectBadRequest(response),
+  ));
   // Console file uploads can take longer than Node's default request window.
   server.requestTimeout = 0;
   server.maxConnections = maxConnections;
@@ -173,7 +216,10 @@ export function createConsoleIngress(
     socket.setKeepAlive(true, 30_000);
     socket.once("close", () => downstreamSockets.delete(socket));
   });
-  server.on("upgrade", (request, socket, head) => proxyUpgrade(request, socket, head, target, ingressKey));
+  server.on("upgrade", guarded(
+    (request, socket, head) => proxyUpgrade(request, socket, head, target, ingressKey),
+    (_request, socket) => socket.destroy(),
+  ));
   server.on("clientError", (_error, socket) => {
     if (socket.writable) socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
     else socket.destroy();
@@ -191,22 +237,32 @@ export function startIngressKeyRefresh(target = { host: TARGET_HOST, port: INGRE
     timer.unref();
   };
   const refresh = () => {
-    const request = httpRequest({ host: target.host, port: target.port, path: "/ingress-key", timeout: CONNECT_TIMEOUT_MS }, (response) => {
-      let body = "";
-      response.setEncoding("utf8");
-      response.on("data", (chunk) => {
-        if (body.length < 256) body += chunk;
+    let settled = false;
+    const finish = (key) => {
+      if (settled) return;
+      settled = true;
+      if (key) current = key;
+      schedule(key ? KEY_REFRESH_MS : KEY_RETRY_MS);
+    };
+    try {
+      const request = httpRequest({ host: target.host, port: target.port, path: "/ingress-key", timeout: CONNECT_TIMEOUT_MS }, (response) => {
+        let body = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => {
+          if (body.length < 256) body += chunk;
+        });
+        response.on("error", () => finish(""));
+        response.once("end", () => {
+          const key = body.trim();
+          finish(response.statusCode === 200 && /^[0-9a-f]{32,128}$/.test(key) ? key : "");
+        });
       });
-      response.once("end", () => {
-        const key = body.trim();
-        const valid = response.statusCode === 200 && /^[0-9a-f]{32,128}$/.test(key);
-        if (valid) current = key;
-        schedule(valid ? KEY_REFRESH_MS : KEY_RETRY_MS);
-      });
-    });
-    request.once("timeout", () => request.destroy());
-    request.once("error", () => schedule(KEY_RETRY_MS));
-    request.end();
+      request.once("timeout", () => request.destroy());
+      request.on("error", () => finish(""));
+      request.end();
+    } catch {
+      finish("");
+    }
   };
   refresh();
   return { current: () => current, stop: () => timer && clearTimeout(timer) };
@@ -238,6 +294,12 @@ if (isMainModule()) {
   };
 
   for (const signal of ["SIGINT", "SIGTERM"]) process.once(signal, shutdown);
+  // Last resort: a stray error on one connection must not take the console
+  // down for every user. Log only a code, never request data.
+  process.on("uncaughtException", (error) => {
+    const code = typeof error?.code === "string" && /^[A-Z0-9_]+$/.test(error.code) ? error.code : "UNEXPECTED";
+    console.error(`console-ingress: request failed (${code})`);
+  });
   server.once("error", (error) => {
     const code = typeof error?.code === "string" && /^[A-Z0-9_]+$/.test(error.code)
       ? error.code

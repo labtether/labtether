@@ -237,26 +237,20 @@ func trustedRequestClientIP(r *http.Request) string {
 	return direct
 }
 
-// browserRequestIsSecure reports whether the browser reached LabTether over
-// HTTPS. Behind a trusted proxy (such as the bundled console) that proxy's
-// forwarded protocol decides; otherwise the Hub's own TLS does.
+// browserRequestIsSecure decides the session cookie's Secure flag. It drops
+// Secure only when a trusted proxy (such as the bundled console) states that
+// the browser used plain HTTP. An unknown, missing or untrusted protocol keeps
+// Secure, because a TLS front end that does not forward the protocol must not
+// downgrade the cookie.
 func browserRequestIsSecure(r *http.Request) bool {
-	if r == nil {
+	if r == nil || !isTrustedForwardedHostSource(r) {
 		return true
 	}
-	if isTrustedForwardedHostSource(r) {
-		proto := firstForwardedValue(r.Header.Get("X-Forwarded-Proto"))
-		if proto == "" {
-			proto = forwardedHeaderProto(r.Header.Get("Forwarded"))
-		}
-		switch strings.ToLower(strings.TrimSpace(proto)) {
-		case "https":
-			return true
-		case "http":
-			return false
-		}
+	proto := firstForwardedValue(r.Header.Get("X-Forwarded-Proto"))
+	if proto == "" {
+		proto = forwardedHeaderProto(r.Header.Get("Forwarded"))
 	}
-	return r.TLS != nil
+	return !strings.EqualFold(strings.TrimSpace(proto), "http")
 }
 
 func isLoopbackRequestSource(r *http.Request) bool {

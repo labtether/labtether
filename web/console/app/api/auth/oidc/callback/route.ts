@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
-import { resolvedBackendBaseURLs, shouldUseSecureWebSocket } from "../../../../../lib/backend";
 import { hubClientForwardingHeaders } from "../../../../../lib/clientIdentity";
+import { NextResponse } from "next/server";
+import { resolvedBackendBaseURLs } from "../../../../../lib/backend";
 import { safeLocalRedirectPath } from "../../../../../lib/safeRedirect";
 import { markResponseNoStore } from "../../../../../lib/noStoreResponse";
 
@@ -23,7 +23,7 @@ export async function GET(request: Request) {
   try {
     const response = await fetch(`${base.api}/auth/oidc/callback`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...hubClientForwardingHeaders(request, shouldUseSecureWebSocket(request)) },
+      headers: { "Content-Type": "application/json", ...hubClientForwardingHeaders(request) },
       body: JSON.stringify({ code, state, redirect_uri: redirectURI }),
       cache: "no-store",
     });

@@ -52,12 +52,29 @@ export function loginRateLimitKey(username: string, headers: Headers): string {
 }
 
 /**
- * Headers that tell the Hub which client and protocol the browser used. The
- * Hub trusts them only from this console, so per-client limits and the session
- * cookie's Secure flag follow the real browser connection.
+ * Reports plain HTTP only from trusted signals: the request came through the
+ * bundled ingress (proven by its key, and the ingress serves plain HTTP), the
+ * operator has not put another proxy in front of it, and the page that sent
+ * the request was itself loaded over http. Anything else, including a request
+ * with no Origin, counts as HTTPS so the session cookie stays Secure.
  */
-export function hubClientForwardingHeaders(request: Request, secure: boolean): Record<string, string> {
-  const headers: Record<string, string> = { "X-Forwarded-Proto": secure ? "https" : "http" };
+export function browserUsedPlainHTTP(headers: Headers): boolean {
+  if (bundledIngressHops(headers) !== 1 || trustedProxyHopCount() !== 0) return false;
+  try {
+    return new URL(headers.get("origin")?.trim() ?? "").protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Headers that tell the Hub which client the browser was and, only when it is
+ * certain, that the browser used plain HTTP. The Hub trusts them only from
+ * this console and keeps the session cookie Secure unless told "http".
+ */
+export function hubClientForwardingHeaders(request: Request): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (browserUsedPlainHTTP(request.headers)) headers["X-Forwarded-Proto"] = "http";
   const client = trustedClientIdentity(request.headers);
   if (isIP(client) !== 0) headers["X-Forwarded-For"] = client;
   return headers;

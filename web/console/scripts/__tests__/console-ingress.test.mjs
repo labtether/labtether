@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import { connect } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import { createConsoleIngress, forwardedRequestHeaders, parseMaxConnections } from "../console-ingress.mjs";
-import { createIngressKeyServer } from "../runtime-proxy.mjs";
+import { createIngressKeyServer, ipv4InSubnet } from "../runtime-proxy.mjs";
 
 const openServers = [];
 
@@ -89,6 +89,20 @@ describe("console ingress forwarding", () => {
     expect(observed["x-labtether-ingress-key"]).toBeUndefined();
   });
 
+  // A request target that Node's server accepts but http.request refuses
+  // (such as a tab) must get 400, not stop the ingress for everyone.
+  it("answers a malformed request target with 400 and keeps serving", async () => {
+    const upstream = createServer((_request, response) => response.end("ok"));
+    const upstreamPort = await listen(upstream);
+    const { server } = createConsoleIngress(8, { host: "127.0.0.1", port: upstreamPort }, () => "");
+    const ingressPort = await listen(server);
+
+    const bad = await rawExchange(ingressPort, "GET /a\tb HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n", (text) => text.includes("\r\n\r\n"));
+    expect(bad).toContain("400");
+    const good = await rawExchange(ingressPort, "GET /ok HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n", (text) => text.includes("ok"));
+    expect(good).toContain("200");
+  });
+
   it("does not vouch for a request without a peer address", () => {
     const headers = forwardedRequestHeaders(["Host", "console", "X-Forwarded-For", "198.51.100.1"], "", "c".repeat(64), false);
     expect(headers).not.toContain("X-Labtether-Ingress-Key");
@@ -100,14 +114,30 @@ describe("console ingress forwarding", () => {
   });
 });
 
+// Anyone who learns the key can forge client addresses, so only the ingress
+// itself may read it.
 describe("ingress key server", () => {
-  it("serves the key only at its fixed path", async () => {
-    const port = await listen(createIngressKeyServer("d".repeat(64)));
-    const done = (text) => text.includes("\r\n\r\n") && /\r\n\r\n.+/s.test(text);
-    const ok = await rawExchange(port, "GET /ingress-key HTTP/1.1\r\nHost: web-console\r\nConnection: close\r\n\r\n", done);
+  const done = (text) => text.includes("\r\n\r\n") && /\r\n\r\n.+/s.test(text);
+  const keyRequest = "GET /ingress-key HTTP/1.1\r\nHost: web-console\r\nConnection: close\r\n\r\n";
+
+  it("serves the key only to the ingress address, at its fixed path", async () => {
+    const port = await listen(createIngressKeyServer("d".repeat(64), (peer) => peer === "127.0.0.1"));
+    const ok = await rawExchange(port, keyRequest, done);
     expect(ok).toContain("200");
     expect(ok).toContain(`\r\n\r\n${"d".repeat(64)}`);
     const missing = await rawExchange(port, "GET /other HTTP/1.1\r\nHost: web-console\r\nConnection: close\r\n\r\n", done);
     expect(missing).toContain("404");
+  });
+
+  it("refuses every other address", async () => {
+    const port = await listen(createIngressKeyServer("d".repeat(64), () => false));
+    const refused = await rawExchange(port, keyRequest, done);
+    expect(refused).toContain("403");
+    expect(refused).not.toContain("d".repeat(64));
+  });
+
+  it("matches the interface subnet that faces the ingress", () => {
+    expect(ipv4InSubnet("172.20.0.5", "172.20.0.3", "255.255.0.0")).toBe(true);
+    expect(ipv4InSubnet("192.168.1.9", "172.20.0.3", "255.255.0.0")).toBe(false);
   });
 });

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { readBoundedJSON, RequestBodyTooLargeError } from "../../../../../lib/boundedBody";
-import { resolvedBackendBaseURLs, shouldUseSecureWebSocket, upstreamErrorPayload } from "../../../../../lib/backend";
+import { resolvedBackendBaseURLs, upstreamErrorPayload } from "../../../../../lib/backend";
 import { isMutationRequestOriginAllowed } from "../../../../../lib/proxyAuth";
 import { checkRateLimit } from "../../../../../lib/rateLimit";
 import { hubClientForwardingHeaders, trustedClientIdentity } from "../../../../../lib/clientIdentity";
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
     const base = await resolvedBackendBaseURLs();
     const response = await fetch(`${base.api}/auth/login/2fa`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...hubClientForwardingHeaders(request, shouldUseSecureWebSocket(request)) },
+      headers: { "Content-Type": "application/json", ...hubClientForwardingHeaders(request) },
       body: JSON.stringify(body),
       cache: "no-store",
     });

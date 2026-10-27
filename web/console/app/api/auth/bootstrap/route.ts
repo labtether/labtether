@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { readBoundedJSON, RequestBodyTooLargeError } from "../../../../lib/boundedBody";
-import { resolvedBackendBaseURLs, shouldUseSecureWebSocket, upstreamErrorPayload } from "../../../../lib/backend";
+import { resolvedBackendBaseURLs, upstreamErrorPayload } from "../../../../lib/backend";
 import { hubClientForwardingHeaders } from "../../../../lib/clientIdentity";
 import { isMutationRequestOriginAllowed } from "../../../../lib/proxyAuth";
 
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
       headers: {
         "Content-Type": "application/json",
         "X-Labtether-Setup-Token": body.setupToken,
-        ...hubClientForwardingHeaders(request, shouldUseSecureWebSocket(request)),
+        ...hubClientForwardingHeaders(request),
       },
       body: JSON.stringify({ username: body.username, password: body.password }),
       cache: "no-store",
