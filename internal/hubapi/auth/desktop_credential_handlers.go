@@ -94,8 +94,9 @@ func (d *Deps) HandleRetrieveDesktopCredentials(w http.ResponseWriter, r *http.R
 		return
 	}
 	// Each call returns a saved password in clear text, so bound how fast one
-	// caller can pull them.
-	if d.EnforceRateLimit != nil && !d.EnforceRateLimit(w, r, "desktop.credentials.retrieve", 30, time.Minute) {
+	// user or API key can pull them. The limit is keyed by the signed-in
+	// identity, not the address: behind the console every user shares one.
+	if d.EnforceRateLimitGlobal != nil && !d.EnforceRateLimitGlobal(w, "desktop.credentials.retrieve:"+d.actorIDFromContext(r.Context()), 30, time.Minute) {
 		return
 	}
 	if d.CredentialStore == nil || d.SecretsManager == nil {
