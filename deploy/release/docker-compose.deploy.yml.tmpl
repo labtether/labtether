@@ -296,7 +296,7 @@ services:
       # skipped only for this container-local probe of the auto-generated cert.
       test:
         - CMD
-        - /usr/bin/node
+        - /usr/local/bin/node
         - -e
         - >-
           const secure=process.env.LABTETHER_TLS_MODE!=='disabled';
@@ -383,7 +383,7 @@ services:
       - -i
       - HOME=/tmp
       - LABTETHER_CONSOLE_INGRESS_MAX_CONNECTIONS=${LABTETHER_CONSOLE_INGRESS_MAX_CONNECTIONS:-512}
-      - /usr/bin/node
+      - /usr/local/bin/node
       - /app/console/scripts/console-ingress.mjs
     restart: unless-stopped
     logging: *default-logging
