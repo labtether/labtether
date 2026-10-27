@@ -235,6 +235,8 @@ func (s *apiServer) handleAgentWebSocket(w http.ResponseWriter, r *http.Request)
 	if agentVersion != "" {
 		conn.SetMeta("agent_version", agentVersion)
 	}
+	// The address the Hub saw, unlike anything the agent reports about itself.
+	conn.SetMeta("remote_ip", shared.RequestClientKey(r))
 	if err := conn.ValidateCredential(); err != nil {
 		conn.Close()
 		return

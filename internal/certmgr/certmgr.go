@@ -54,9 +54,14 @@ func GenerateCA() (*KeyPair, error) {
 			CommonName:   "LabTether CA",
 			Organization: []string{"LabTether"},
 		},
-		NotBefore:             now.Add(-5 * time.Minute), // backdate for clock skew
-		NotAfter:              now.Add(10 * 365 * 24 * time.Hour),
-		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		NotBefore: now.Add(-5 * time.Minute), // backdate for clock skew
+		NotAfter:  now.Add(10 * 365 * 24 * time.Hour),
+		KeyUsage:  x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		// The CA only signs Hub server certificates. Limiting it to server
+		// authentication keeps a leaked key from signing code or mail
+		// certificates. Name constraints are left out because the Hub's
+		// names and addresses change (LAN, Tailscale, external URL).
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
 		IsCA:                  true,
 		MaxPathLen:            0,

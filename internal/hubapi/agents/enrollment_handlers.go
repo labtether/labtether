@@ -133,12 +133,7 @@ func (d *Deps) HandleEnroll(w http.ResponseWriter, r *http.Request) {
 	}
 	d.disconnectRevokedAgentConnection(assetID, commitResult.RevokedAgentTokenIDs)
 
-	// Reuse the same public connection resolver as discovery/install flows so
-	// auto-enrolled agents stay on the best reachable origin (for example the
-	// active Tailscale HTTPS endpoint) instead of collapsing back to localhost.
-	connection := d.ResolveHubConnectionSelection(r)
-	hubAPIURL := connection.HubURL
-	hubWSURL := connection.WSURL
+	hubAPIURL, hubWSURL := enrollmentHubURLs(d.ResolveHubConnectionSelection(r))
 
 	servicehttp.WriteJSON(w, http.StatusOK, enrollment.EnrollResponse{
 		AgentToken: rawToken,
@@ -148,6 +143,23 @@ func (d *Deps) HandleEnroll(w http.ResponseWriter, r *http.Request) {
 		HubAPIURL:  hubAPIURL,
 		CACertPEM:  string(d.CACertPEM),
 	})
+}
+
+// enrollmentHubURLs picks the Hub URLs an enrolling agent switches to. The
+// agent adopts them at once, so prefer the operator's configured external URL,
+// then the origin the agent just reached. A detected address such as Tailscale
+// HTTPS may not be reachable from the agent's network.
+func enrollmentHubURLs(selection shared.HubConnectionSelection) (string, string) {
+	for _, kind := range []string{"external", "request"} {
+		for _, candidate := range selection.Candidates {
+			if candidate.Kind == kind {
+				return candidate.HubURL, candidate.WSURL
+			}
+		}
+	}
+	// No separate request candidate: the request origin matched the first
+	// candidate (Tailscale HTTPS), or the request host was unusable.
+	return selection.HubURL, selection.WSURL
 }
 
 func (d *Deps) disconnectRevokedAgentConnection(assetID string, revokedTokenIDs []string) {
