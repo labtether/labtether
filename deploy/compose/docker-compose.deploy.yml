@@ -77,6 +77,31 @@ services:
         chmod 0755 /bootstrap/postgres
         chown 65532:65532 /bootstrap/auth
         chmod 0700 /bootstrap/auth
+        # LabTether v1.4.0 mounted postgres-data at /var/lib/postgresql/data,
+        # but PostgreSQL 18 keeps its cluster in /var/lib/postgresql/18/docker,
+        # so those databases live in an unnamed Docker volume. Refuse to let
+        # PostgreSQL create an empty cluster for a Hub that already has one.
+        # The installer and scripts/upgrade-compose.sh copy it over first.
+        postgres_marker=/postgres-root/.labtether-postgres-volume
+        if [ -s /postgres-root/PG_VERSION ]; then
+          echo "bootstrap: postgres-data holds a PostgreSQL $$(cat /postgres-root/PG_VERSION) database from before PostgreSQL 18; restore a backup into a new install instead" >&2
+          exit 1
+        fi
+        postgres_cluster_found=false
+        for postgres_version_file in /postgres-root/*/docker/PG_VERSION; do
+          if [ -s "$$postgres_version_file" ]; then
+            postgres_cluster_found=true
+          fi
+        done
+        if [ "$$postgres_cluster_found" = false ] && [ ! -e "$$postgres_marker" ]; then
+          if { [ -e /bootstrap/postgres/password ] || [ -L /bootstrap/postgres/password ]; } && [ "$$LABTETHER_POSTGRES_NEW_DATABASE" != true ]; then
+            echo "bootstrap: this Hub already exists, but its database is not in the postgres-data volume." >&2
+            echo "bootstrap: LabTether v1.4.0 kept it in an unnamed Docker volume. Stopping before PostgreSQL creates an empty database." >&2
+            echo "bootstrap: upgrade with the LabTether installer or scripts/upgrade-compose.sh, which move it. To start with an empty database, set LABTETHER_POSTGRES_NEW_DATABASE=true in .env.deploy once." >&2
+            exit 1
+          fi
+          : > "$$postgres_marker"
+        fi
         if [ ! -e /bootstrap/postgres/password ] && [ ! -L /bootstrap/postgres/password ]; then
           create_secret_file /bootstrap/postgres/password 0:0 0444
         fi
@@ -85,9 +110,12 @@ services:
           create_secret_file /bootstrap/auth/setup-token 65532:65532 0400
         fi
         validate_secret_file /bootstrap/auth/setup-token 65532:65532 400
+    environment:
+      LABTETHER_POSTGRES_NEW_DATABASE: ${LABTETHER_POSTGRES_NEW_DATABASE:-false}
     volumes:
       - labtether-bootstrap:/bootstrap
       - labtether-auth-bootstrap:/bootstrap/auth
+      - postgres-data:/postgres-root
     deploy:
       resources:
         limits:
