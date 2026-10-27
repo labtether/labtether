@@ -245,8 +245,22 @@ run_uninstall() {
   rm -f "${ENV_FILE}"
 
   if [[ "${purge}" -eq 1 ]]; then
+    # Drop the bootstrap's system-trust copy of the hub CA while it still
+    # matches the agent's CA, then this helper itself.
+    local anchor removed=0
+    for anchor in "/usr/local/share/ca-certificates/labtether-ca.crt" "/etc/pki/ca-trust/source/anchors/labtether-ca.crt"; do
+      if [[ -f "${anchor}" && ! -L "${anchor}" ]] && cmp -s "${anchor}" "${CONFIG_DIR}/ca.crt"; then
+        rm -f "${anchor}"
+        removed=1
+      fi
+    done
+    if [[ "${removed}" -eq 1 ]]; then
+      if command -v update-ca-certificates >/dev/null 2>&1; then update-ca-certificates >/dev/null; fi
+      if command -v update-ca-trust >/dev/null 2>&1; then update-ca-trust extract; fi
+    fi
     rm -f "${TOKEN_FILE}" "${DEVICE_KEY_FILE}" "${DEVICE_PUBLIC_KEY_FILE}" "${FINGERPRINT_FILE}"
     rm -rf "${CONFIG_DIR}"
+    rm -f "/usr/local/bin/labtether"
     echo "labtether: agent uninstalled and purged."
   else
     echo "labtether: agent uninstalled."
