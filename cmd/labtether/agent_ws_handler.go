@@ -235,8 +235,9 @@ func (s *apiServer) handleAgentWebSocket(w http.ResponseWriter, r *http.Request)
 	if agentVersion != "" {
 		conn.SetMeta("agent_version", agentVersion)
 	}
-	// The address the Hub saw, unlike anything the agent reports about itself.
-	conn.SetMeta("remote_ip", shared.RequestClientKey(r))
+	// Where the Hub's SSH fallback may connect: an address the Hub observed,
+	// never one the agent reports about itself.
+	conn.SetMeta("ssh_source_ip", agentSSHSourceAddress(r))
 	if err := conn.ValidateCredential(); err != nil {
 		conn.Close()
 		return

@@ -75,7 +75,7 @@ func (d *Deps) ProcessAgentSSHKeyInstalled(conn *agentmgr.AgentConn, msg agentmg
 	// SSH to the address this connection came from. The agent's own hostname
 	// report must not choose where the Hub's key is used.
 	host := ""
-	if ip := net.ParseIP(strings.TrimSpace(conn.Meta("remote_ip"))); ip != nil && !ip.IsLoopback() && !ip.IsUnspecified() {
+	if ip := net.ParseIP(strings.TrimSpace(conn.Meta("ssh_source_ip"))); ip != nil && !ip.IsLoopback() && !ip.IsUnspecified() {
 		host = ip.String()
 	}
 	if host == "" {
