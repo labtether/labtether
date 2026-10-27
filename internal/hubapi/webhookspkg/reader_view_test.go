@@ -1,6 +1,7 @@
 package webhookspkg
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -32,13 +33,33 @@ func TestWebhookURLPathIsHiddenFromViewers(t *testing.T) {
 	}
 }
 
-// Delivery refuses plain HTTP unless the Hub allows insecure transport, so
-// saving such a URL would create a webhook that silently never fires.
-func TestWebhookCreateRejectsHTTPWhenDeliveryWouldRefuseIt(t *testing.T) {
+// Delivery refuses plain HTTP unless the Hub allows insecure transport, so a
+// new http:// URL is rejected. A webhook saved with one earlier must stay
+// editable so it can be renamed, turned off or moved to https://.
+func TestWebhookHTTPURLRejectedForNewURLsButStoredOnesStayEditable(t *testing.T) {
 	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "false")
+	d := newDeps()
+	const stored = "http://nas01.example.com/hook"
 	w := httptest.NewRecorder()
-	newDeps().HandleV2WebhookCreate(w, newReq(http.MethodPost, "/api/v2/webhooks", map[string]any{"name": "plain", "url": "http://nas01.example.com/hook"}, nil))
+	d.HandleV2WebhookCreate(w, newReq(http.MethodPost, "/api/v2/webhooks", map[string]any{"name": "plain", "url": stored}, nil))
 	if w.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400: %s", w.Code, w.Body.String())
+		t.Fatalf("create status = %d, want 400: %s", w.Code, w.Body.String())
+	}
+	if err := d.WebhookStore.CreateWebhook(context.Background(), webhooks.Webhook{ID: "wh_old", Name: "old", URL: stored, Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		url  string
+		want int
+	}{
+		{stored, http.StatusOK},
+		{"http://nas02.example.com/hook", http.StatusBadRequest},
+		{"https://nas01.example.com/hook", http.StatusOK},
+	} {
+		w := httptest.NewRecorder()
+		d.HandleV2WebhookUpdate(w, newReq(http.MethodPatch, "/api/v2/webhooks/wh_old", map[string]any{"name": "renamed", "url": tc.url}, nil), "wh_old")
+		if w.Code != tc.want {
+			t.Fatalf("update to %s: status = %d, want %d: %s", tc.url, w.Code, tc.want, w.Body.String())
+		}
 	}
 }
