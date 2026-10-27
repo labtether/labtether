@@ -260,3 +260,28 @@ func TestOIDCSigningKeyRedirectCannotCrossOrigins(t *testing.T) {
 		t.Fatalf("redirect target received %d requests, want 0", got)
 	}
 }
+
+// A shared IdP often has a group literally named "admin" for another app. Its
+// members must not become LabTether admins unless that group is configured.
+func TestOIDCResolveRoleIgnoresLiteralGroupNames(t *testing.T) {
+	p := &OIDCProvider{settings: OIDCSettings{
+		RoleClaim:          "labtether_role",
+		DefaultRole:        RoleViewer,
+		AdminRoleValues:    []string{"lab-admins"},
+		OperatorRoleValues: []string{"lab-ops"},
+	}}
+	for _, tc := range []struct {
+		name   string
+		claims map[string]any
+		want   string
+	}{
+		{"literal admin group", map[string]any{"groups": []any{"admin", "owner"}}, RoleViewer},
+		{"configured admin group", map[string]any{"groups": []any{"admin", "lab-admins"}}, RoleAdmin},
+		{"highest match wins", map[string]any{"groups": []any{"lab-ops", "lab-admins"}}, RoleAdmin},
+		{"dedicated role claim", map[string]any{"labtether_role": "operator"}, RoleOperator},
+	} {
+		if got := p.resolveRole(tc.claims); got != tc.want {
+			t.Errorf("%s: role = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}

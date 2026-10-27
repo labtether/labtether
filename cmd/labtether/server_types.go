@@ -102,6 +102,7 @@ type apiServer struct {
 	connectorRegistry             *connectorsdk.Registry
 	jobQueue                      *jobqueue.Queue
 	authValidator                 *auth.TokenValidator
+	consoleServiceValidator       *auth.TokenValidator
 	oidcRef                       *authpkg.OIDCProviderRef
 	agentMgr                      *agentmgr.AgentManager
 	allowLegacySharedAgentAuth    bool

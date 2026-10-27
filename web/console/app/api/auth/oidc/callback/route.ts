@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { resolvedBackendBaseURLs } from "../../../../../lib/backend";
+import { resolvedBackendBaseURLs, shouldUseSecureWebSocket } from "../../../../../lib/backend";
 import { safeLocalRedirectPath } from "../../../../../lib/safeRedirect";
 import { markResponseNoStore } from "../../../../../lib/noStoreResponse";
+import { clearOIDCStateCookie, oidcStateMatches, readOIDCStateCookie } from "../../../../../lib/oidcStateCookie";
 
 export const dynamic = "force-dynamic";
 
@@ -11,9 +12,18 @@ export async function GET(request: Request) {
   const origin = `${requestURL.protocol}//${host}`;
   const code = requestURL.searchParams.get("code")?.trim() ?? "";
   const state = requestURL.searchParams.get("state")?.trim() ?? "";
+  const secure = shouldUseSecureWebSocket(request);
+  const finish = (response: NextResponse) => {
+    clearOIDCStateCookie(response, secure);
+    return markResponseNoStore(response);
+  };
 
   if (!code || !state) {
-    return markResponseNoStore(NextResponse.redirect(new URL("/login?error=Missing%20OIDC%20callback%20parameters", origin)));
+    return finish(NextResponse.redirect(new URL("/login?error=sso_expired", origin)));
+  }
+  // Only the browser that started this sign-in may finish it.
+  if (!oidcStateMatches(readOIDCStateCookie(request), state)) {
+    return finish(NextResponse.redirect(new URL("/login?error=sso_expired", origin)));
   }
 
   const base = await resolvedBackendBaseURLs();
@@ -27,21 +37,32 @@ export async function GET(request: Request) {
       cache: "no-store",
     });
 
-    const payload = await safeJSON(response) as { next?: string; error?: string } | null;
+    const payload = await safeJSON(response) as { next?: string } | null;
     if (!response.ok) {
-      return markResponseNoStore(NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(payload?.error ?? "SSO login failed")}`, origin)));
+      return finish(NextResponse.redirect(new URL(`/login?error=${callbackErrorCode(response.status)}`, origin)));
     }
 
     const nextPath = safeLocalRedirectPath(payload?.next);
-    const redirect = markResponseNoStore(NextResponse.redirect(new URL(nextPath, origin)));
-    const setCookie = response.headers.get("set-cookie");
-    if (setCookie) {
-      redirect.headers.set("set-cookie", setCookie);
+    const redirect = NextResponse.redirect(new URL(nextPath, origin));
+    // Clear the state cookie before adding the session cookie: setting a
+    // cookie through NextResponse rewrites every Set-Cookie header it did not
+    // add itself.
+    clearOIDCStateCookie(redirect, secure);
+    for (const cookie of response.headers.getSetCookie()) {
+      redirect.headers.append("set-cookie", cookie);
     }
-    return redirect;
+    return markResponseNoStore(redirect);
   } catch {
-    return markResponseNoStore(NextResponse.redirect(new URL("/login?error=SSO%20login%20failed", origin)));
+    return finish(NextResponse.redirect(new URL("/login?error=sso_failed", origin)));
   }
+}
+
+// The login page shows a fixed message for each code. It never shows text
+// taken from the URL.
+function callbackErrorCode(status: number): string {
+  if (status === 400) return "sso_expired";
+  if (status === 409) return "sso_setup_required";
+  return "sso_failed";
 }
 
 async function safeJSON(response: Response): Promise<unknown | null> {

@@ -208,6 +208,25 @@ func (d *Deps) HandleAuthMe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// API keys are not user rows. Report the key's own role so clients do not
+	// show controls the key cannot use.
+	if keyID, isKey := strings.CutPrefix(userID, "apikey:"); isKey {
+		name := "API key"
+		if d.APIKeyStore != nil {
+			if key, found, err := d.APIKeyStore.GetAPIKey(r.Context(), keyID); err == nil && found && strings.TrimSpace(key.Name) != "" {
+				name = key.Name
+			}
+		}
+		role := auth.RoleViewer
+		if d.UserRoleFromContext != nil {
+			role = auth.NormalizeRole(d.UserRoleFromContext(r.Context()))
+		}
+		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
+			"user": map[string]string{"id": userID, "username": name, "role": role},
+		})
+		return
+	}
+
 	// Fallback for bearer token auth (userID="owner") or missing store
 	username := DefaultBootstrapAdminUsername
 	if configured, err := ConfiguredBootstrapAdminUsername(); err == nil {

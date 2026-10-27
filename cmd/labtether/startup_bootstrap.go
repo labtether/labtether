@@ -142,6 +142,7 @@ func runHub(ctx context.Context) error {
 	srv := newAPIServer(pgStore, secretsManager, policyState, registry, authValidator, oidcRef, newInstallStateStore(dataDir))
 	srv.dataDir = dataDir
 	srv.demoMode = demoMode
+	srv.consoleServiceValidator = auth.NewTokenValidator(consoleServiceToken(runtimeSecrets.APIToken))
 	// This process now owns the Hub runtime, so no transfer from a previous
 	// process can still be running; do not leave them "in progress" forever.
 	if marked, err := resourcespkg.FailInterruptedFileTransfers(ctx, pgStore); err != nil {

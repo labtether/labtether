@@ -51,6 +51,7 @@ func TestDiscoverEndpoint(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/discover", nil)
 	req.Host = "localhost:8080"
+	req.RemoteAddr = "192.168.1.20:50000"
 	rec := httptest.NewRecorder()
 	sut.handleDiscover(rec, req)
 
@@ -82,6 +83,20 @@ func TestDiscoverEndpoint(t *testing.T) {
 	}
 	if len(resp.HubCandidates) == 0 {
 		t.Fatalf("expected discover response to include hub_candidates")
+	}
+
+	// A caller from a public address must not learn LAN IPs or tailnet names.
+	publicReq := httptest.NewRequest(http.MethodGet, "/api/v1/discover", nil)
+	publicReq.Host = "localhost:8080"
+	publicReq.RemoteAddr = "203.0.113.7:50000"
+	publicRec := httptest.NewRecorder()
+	sut.handleDiscover(publicRec, publicReq)
+	var publicResp discoverResponse
+	if err := json.Unmarshal(publicRec.Body.Bytes(), &publicResp); err != nil {
+		t.Fatalf("failed to decode public discover response: %v", err)
+	}
+	if publicRec.Code != http.StatusOK || len(publicResp.HubCandidates) != 0 {
+		t.Fatalf("public caller got status=%d candidates=%v, want 200 and none", publicRec.Code, publicResp.HubCandidates)
 	}
 }
 
@@ -164,6 +179,7 @@ func TestDiscoverEndpoint_PrefersExactRequestOriginOverDiscoveredCandidates(t *t
 	sut := newTestAPIServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/discover", nil)
 	req.Host = "localhost:8080"
+	req.RemoteAddr = "192.168.1.20:50000"
 	rec := httptest.NewRecorder()
 	sut.handleDiscover(rec, req)
 

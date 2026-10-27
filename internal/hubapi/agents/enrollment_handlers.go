@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
@@ -176,6 +177,12 @@ func (d *Deps) HandleDiscover(w http.ResponseWriter, r *http.Request) {
 	}
 
 	connection := d.ResolveHubConnectionSelection(r)
+	candidates := connection.Candidates
+	// The other addresses (LAN IPs, tailnet names) help callers already on the
+	// LAN or tailnet. A caller from a public address gets none of them.
+	if !discoverCallerIsLocal(r) {
+		candidates = []shared.HubConnectionCandidate{}
+	}
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"hub":            "labtether",
 		"api_url":        connection.HubURL,
@@ -183,8 +190,22 @@ func (d *Deps) HandleDiscover(w http.ResponseWriter, r *http.Request) {
 		"enroll_url":     strings.TrimRight(connection.HubURL, "/") + "/api/v1/enroll",
 		"hub_url":        connection.HubURL,
 		"hub_ws_url":     connection.WSURL,
-		"hub_candidates": connection.Candidates,
+		"hub_candidates": candidates,
 	})
+}
+
+// tailnetPrefix is the shared address range Tailscale assigns to devices.
+var tailnetPrefix = netip.MustParsePrefix("100.64.0.0/10")
+
+// discoverCallerIsLocal reports whether the direct peer is on a loopback,
+// private, link-local or tailnet address.
+func discoverCallerIsLocal(r *http.Request) bool {
+	addr, err := netip.ParseAddr(strings.Trim(shared.RequestClientKey(r), "[]"))
+	if err != nil {
+		return false
+	}
+	addr = addr.Unmap()
+	return addr.IsLoopback() || addr.IsPrivate() || addr.IsLinkLocalUnicast() || tailnetPrefix.Contains(addr)
 }
 
 // handleEnrollmentTokens handles GET/POST /settings/enrollment (admin-auth).
