@@ -138,7 +138,7 @@ func TestHandleTrueNASConnectorTestSuccessAndFailure(t *testing.T) {
 	t.Run("success with credential fallback", func(t *testing.T) {
 		server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
 			if method == "system.info" {
-				return map[string]any{"hostname": "OmegaNAS", "version": "25.04.0"}, nil
+				return map[string]any{"hostname": "VaultNAS", "version": "25.04.0"}, nil
 			}
 			return nil, &trueNASRPCError{Code: -32601, Message: "Method not found"}
 		})
@@ -154,7 +154,7 @@ func TestHandleTrueNASConnectorTestSuccessAndFailure(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
 		}
-		if !strings.Contains(rec.Body.String(), `"status":"ok"`) || !strings.Contains(rec.Body.String(), "connected to OmegaNAS") {
+		if !strings.Contains(rec.Body.String(), `"status":"ok"`) || !strings.Contains(rec.Body.String(), "connected to VaultNAS") {
 			t.Fatalf("unexpected success payload: %s", rec.Body.String())
 		}
 	})

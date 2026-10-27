@@ -12,9 +12,9 @@ import (
 func TestTrueNASAPIHandlersAdditionalBranchCoverage(t *testing.T) {
 	t.Run("events path clamps limit and handles query error", func(t *testing.T) {
 		sut := newTestAPIServer(t)
-		seedTrueNASAsset(t, sut, "truenas-host-omeganas", "collector-truenas-1")
+		seedTrueNASAsset(t, sut, "truenas-host-vaultnas", "collector-truenas-1")
 
-		req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-omeganas/events?limit=9999", nil)
+		req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-vaultnas/events?limit=9999", nil)
 		rec := httptest.NewRecorder()
 		sut.handleTrueNASAssets(rec, req)
 		if rec.Code != http.StatusOK {
@@ -25,7 +25,7 @@ func TestTrueNASAPIHandlersAdditionalBranchCoverage(t *testing.T) {
 			LogStore: sut.logStore,
 			err:      errors.New("query failed"),
 		}
-		req = httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-omeganas/events", nil)
+		req = httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-vaultnas/events", nil)
 		rec = httptest.NewRecorder()
 		sut.handleTrueNASAssets(rec, req)
 		if rec.Code != http.StatusBadGateway {
@@ -70,9 +70,9 @@ func TestTrueNASAPIHandlersAdditionalBranchCoverage(t *testing.T) {
 				"credential_id": "cred-truenas-smart-branches",
 			},
 		})
-		seedTrueNASAsset(t, sut, "truenas-host-omeganas", "collector-truenas-smart-branches")
+		seedTrueNASAsset(t, sut, "truenas-host-vaultnas", "collector-truenas-smart-branches")
 
-		req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-omeganas/smart", nil)
+		req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-vaultnas/smart", nil)
 		rec := httptest.NewRecorder()
 		sut.handleTrueNASAssets(rec, req)
 		if rec.Code != http.StatusOK {
@@ -108,9 +108,9 @@ func TestTrueNASAPIHandlersAdditionalBranchCoverage(t *testing.T) {
 				"credential_id": "cred-truenas-smart-error",
 			},
 		})
-		seedTrueNASAsset(t, sut, "truenas-host-omeganas", "collector-truenas-smart-error")
+		seedTrueNASAsset(t, sut, "truenas-host-vaultnas", "collector-truenas-smart-error")
 
-		req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-omeganas/smart", nil)
+		req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-vaultnas/smart", nil)
 		rec := httptest.NewRecorder()
 		sut.handleTrueNASAssets(rec, req)
 		if rec.Code != http.StatusBadGateway {
@@ -145,9 +145,9 @@ func TestTrueNASAPIHandlersAdditionalBranchCoverage(t *testing.T) {
 				"credential_id": "cred-truenas-fs-branches",
 			},
 		})
-		seedTrueNASAsset(t, sut, "truenas-host-omeganas", "collector-truenas-fs-branches")
+		seedTrueNASAsset(t, sut, "truenas-host-vaultnas", "collector-truenas-fs-branches")
 
-		req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-omeganas/filesystem?path=.&limit=2", nil)
+		req := httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-vaultnas/filesystem?path=.&limit=2", nil)
 		rec := httptest.NewRecorder()
 		sut.handleTrueNASAssets(rec, req)
 		if rec.Code != http.StatusOK {

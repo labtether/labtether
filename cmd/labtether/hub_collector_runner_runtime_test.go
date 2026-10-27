@@ -409,7 +409,7 @@ func TestWithCanonicalResourceMetadataCrossSourceAliases(t *testing.T) {
 			source:    "truenas",
 			assetType: "nas",
 			metadata: map[string]string{
-				"hostname": "OmegaNAS",
+				"hostname": "VaultNAS",
 			},
 			wantKind:     "storage-controller",
 			wantClass:    "storage",

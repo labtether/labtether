@@ -8,20 +8,20 @@ test("nodes page renders canonical kind labels when available", async ({ page })
   const assets = [
     {
       id: "truenas-host-omega",
-      name: "OmegaNAS",
+      name: "VaultNAS",
       type: "nas",
       source: "truenas",
       status: "online",
       platform: "other",
       last_seen_at: now,
       metadata: {
-        hostname: "OmegaNAS"
+        hostname: "VaultNAS"
       },
       resource_class: "storage",
       resource_kind: "storage-controller",
       attributes: {
         source: "truenas",
-        hostname: "OmegaNAS"
+        hostname: "VaultNAS"
       }
     }
   ];
@@ -100,7 +100,7 @@ test("nodes page renders canonical kind labels when available", async ({ page })
 
   const row = page
     .locator("[role='link']")
-    .filter({ has: page.getByText("OmegaNAS", { exact: true }) })
+    .filter({ has: page.getByText("VaultNAS", { exact: true }) })
     .first();
   await expect(row).toContainText("Storage Controller");
 });

@@ -26,6 +26,8 @@ jobs:
         run: python3 -m unittest scripts/ci/test_line_limit.py
       - name: Enforce full-repository line limit
         run: python3 scripts/ci/check-line-limit.py
+      - name: Block personal details
+        run: python3 scripts/ci/check-private-info.py
 
   qa-select:
     name: Select checks by changed paths
@@ -384,7 +386,7 @@ jobs:
           repository: labtether/labtether-agent
           # The root-cause release gate verifies that this exact installed
           # stack child matches the coordinated Go agent release source.
-          ref: 0c3d4ffd7b2b1286ea7dafa0fbb202c989cdd986
+          ref: 7c40421cae98cb455a8f9016141f542d8dfe4829
           persist-credentials: false
           path: labtether-agent
 

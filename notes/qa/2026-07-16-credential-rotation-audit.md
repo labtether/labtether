@@ -20,9 +20,9 @@ profiles, not a guessed subset.
 | Provider | Credential count | Identities / endpoints | Current local owner |
 |---|---:|---|---|
 | Proxmox VE | 4 | Dedicated `mcp@pve!mcp` tokens for Delta, Gamma, Theta and Zeta | Four mode-`0600` files under `~/.config/proxmox-mcp/` |
-| TrueNAS | 2 | API keys for OmegaNAS and TauNAS | `~/.config/mcpm/servers.json`; both values also occur in `servers.json.bak-portainer` |
-| Portainer | 5 | API keys for OmegaNAS, TauNAS, ContainerVM-ZetaServer, ContainerVM-DeltaServer and BackupNAS | `~/.config/mcpm/servers.json`; the OmegaNAS value also occurs in `servers.json.bak-portainer` |
-| Home Assistant MCP | 2 | Secret-path capability URLs for Simba and McCann Home Assistant | `~/.config/mcpm/servers.json`, `servers.json.bak-portainer`, and `backups/servers.json` |
+| TrueNAS | 2 | API keys for VaultNAS and ArkNAS | `~/.config/mcpm/servers.json`; both values also occur in `servers.json.bak-portainer` |
+| Portainer | 5 | API keys for VaultNAS, ArkNAS, DockerHost1-WestServer, DockerHost1-NorthServer and BackupBox | `~/.config/mcpm/servers.json`; the VaultNAS value also occurs in `servers.json.bak-portainer` |
+| Home Assistant MCP | 2 | Secret-path capability URLs for Alpha and Harbor Home Assistant | `~/.config/mcpm/servers.json`, `servers.json.bak-portainer`, and `backups/servers.json` |
 
 Total conservative connector rotation set: **13 credentials**.
 
@@ -64,11 +64,11 @@ References:
 - <https://api.truenas.com/v25.10/api_methods_api_key.delete.html>
 
 The initial blocker was resolved by read-only upstream metadata on
-`2026-07-22`: OmegaNAS used unrevoked key ID `5`, TauNAS used unrevoked key ID
+`2026-07-22`: VaultNAS used unrevoked key ID `5`, ArkNAS used unrevoked key ID
 `6`, both were owned by `root`, and both principals had `FULL_ADMIN`. The
 collection advertised creation and each key item advertised deletion. Both
-were therefore execution-ready, but the attempted OmegaNAS campaign below was
-safely rolled back and TauNAS was not attempted.
+were therefore execution-ready, but the attempted VaultNAS campaign below was
+safely rolled back and ArkNAS was not attempted.
 
 ### Portainer
 
@@ -84,8 +84,8 @@ References:
 - <https://api-docs.portainer.io/?edition=ce&version=2.39.0>
 
 Read-only metadata on `2026-07-22` identified the current owners and token IDs:
-OmegaNAS `michael` / `5`, TauNAS `michael` / `2`, ContainerVM-ZetaServer
-`michael` / `3`, ContainerVM-DeltaServer `michael` / `4`, and BackupNAS `admin`
+VaultNAS `demo` / `5`, ArkNAS `demo` / `2`, DockerHost1-WestServer
+`demo` / `3`, DockerHost1-NorthServer `demo` / `4`, and BackupBox `admin`
 / `1`. Each principal was role `1` (administrator), and each current API key
 could pass `systemStatus` and list its token metadata. The five owning-user
 password re-authentications are still unavailable and must not be guessed or
@@ -115,9 +115,9 @@ The safe rotation is therefore **the owning MCP's `app_quit`, followed by a new
 
 Source boundary:
 
-- `/Users/michael/Development/MomentBackup/docs/ui-automation-mcp.md:34`
-- `/Users/michael/Development/MomentBackup/app/scripts/automation/momentbackup-ui-mcp.mjs:208`
-- `/Users/michael/Development/MomentBackup/app/scripts/automation/momentbackup-ui-mcp.mjs:249`
+- `/Users/demo/Development/MomentBackup/docs/ui-automation-mcp.md:34`
+- `/Users/demo/Development/MomentBackup/app/scripts/automation/momentbackup-ui-mcp.mjs:208`
+- `/Users/demo/Development/MomentBackup/app/scripts/automation/momentbackup-ui-mcp.mjs:249`
 
 The normal `MomentBackup` LaunchAgent has no automation-token or automation-port
 environment keys. Current ownership of any separately launched automation child
@@ -173,9 +173,9 @@ to the still-valid old credential and restart only that bridge.
 
 ## Authorized TrueNAS execution checkpoint — 2026-07-22
 
-Michael authorized the listed rotations. Execution began with OmegaNAS only,
-under the retain-update-restart-prove-revoke-prove contract. TauNAS was not to
-start unless OmegaNAS completed through old-key rejection and replacement
+The owner authorized the listed rotations. Execution began with VaultNAS only,
+under the retain-update-restart-prove-revoke-prove contract. ArkNAS was not to
+start unless VaultNAS completed through old-key rejection and replacement
 re-proof.
 
 Before mutation, all four MCPM LaunchAgents were running on loopback ports
@@ -185,7 +185,7 @@ calls returned `OK`. The two current TrueNAS values agreed between
 `servers.json` and `servers.json.bak-portainer`, and both files were mode
 `0600`.
 
-Two OmegaNAS attempts failed closed before old-key revocation:
+Two VaultNAS attempts failed closed before old-key revocation:
 
 1. The first replacement was created and passed direct authenticated reads.
    Both protected configuration copies were atomically updated, and only
@@ -195,8 +195,8 @@ Two OmegaNAS attempts failed closed before old-key revocation:
 2. A single instrumented retry repeated the create-first sequence. Replacement
    ID `7` passed direct authentication, both protected copies retained mode
    `0600`, and canonicalized collateral hashes proved no non-target entry
-   changed. After the bridge restart, OmegaNAS progressed through its readiness
-   path, but the peer TauNAS `system_health` call failed during bridge warm-up.
+   changed. After the bridge restart, VaultNAS progressed through its readiness
+   path, but the peer ArkNAS `system_health` call failed during bridge warm-up.
    Shell `errexit` handling exited before the intended bounded backoff could
    retry that transient stage. The fail-closed transaction again restored both
    old copies, restarted only the TrueNAS bridge, and deleted replacement ID
@@ -204,18 +204,18 @@ Two OmegaNAS attempts failed closed before old-key revocation:
 
 Final restored-state proof after the second attempt:
 
-- OmegaNAS still uses unrevoked upstream key ID `5`; the configured key passed a
+- VaultNAS still uses unrevoked upstream key ID `5`; the configured key passed a
   direct API read with HTTP `200`. Replacement ID `7` and every replacement
   name from the two attempts were absent upstream.
 - `servers.json` and `servers.json.bak-portainer` contain the same restored
-  OmegaNAS value, both remain mode `0600`, and no rotation temporary file
+  VaultNAS value, both remain mode `0600`, and no rotation temporary file
   remains.
 - `sh.mcpm.truenas` was running as PID `39924` with exactly one listener on
   `127.0.0.1:6278` at the checkpoint. MCP initialization, tool discovery, and
-  `system_health` returned `OK` for both OmegaNAS and TauNAS after rollback.
+  `system_health` returned `OK` for both VaultNAS and ArkNAS after rollback.
 - The historical `~/Library/Logs/mcpm-truenas.log` path remained absent. No raw
   credential was written to this evidence.
-- TauNAS key ID `6` was not replaced, updated, or revoked. The other 11
+- ArkNAS key ID `6` was not replaced, updated, or revoked. The other 11
   credentials were not mutated. VM 102 was not queried, enumerated, or touched,
   and Docker/Colima were not started.
 
@@ -236,8 +236,8 @@ does not change, but upstream rotation remains mandatory.
 
 Log-retention remediation remains effective. Credential rotation is **not
 complete: 0 of 13 connector credentials are rotated**. The two authorized
-OmegaNAS attempts preserved the old key and returned to the proven pre-change
-state; TauNAS remains execution-ready but unattempted pending a corrected
+VaultNAS attempts preserved the old key and returned to the proven pre-change
+state; ArkNAS remains execution-ready but unattempted pending a corrected
 bridge-readiness harness and fresh execution decision.
 
 The other 11 credentials retain their external-authority blockers: four

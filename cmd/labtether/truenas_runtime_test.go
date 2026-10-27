@@ -347,12 +347,12 @@ func TestTrueNASSubscriptionWorkerHelpers(t *testing.T) {
 
 func TestTrueNASSubscriptionFieldHelpers(t *testing.T) {
 	normalized := normalizeTrueNASSubscriptionFields(map[string]any{
-		" hostname ": " OmegaNAS ",
+		" hostname ": " VaultNAS ",
 		"":           "ignored",
 		"empty":      "",
 		"id":         123,
 	})
-	if normalized["hostname"] != "OmegaNAS" {
+	if normalized["hostname"] != "VaultNAS" {
 		t.Fatalf("normalized hostname = %q", normalized["hostname"])
 	}
 	if normalized["id"] != "123" {
@@ -373,7 +373,7 @@ func TestTrueNASSubscriptionFieldHelpers(t *testing.T) {
 		t.Fatalf("expected no copied fields yet")
 	}
 	copySubscriptionField(target, normalized, "hostname")
-	if target["hostname"] != "OmegaNAS" {
+	if target["hostname"] != "VaultNAS" {
 		t.Fatalf("expected copied hostname, got %#v", target)
 	}
 

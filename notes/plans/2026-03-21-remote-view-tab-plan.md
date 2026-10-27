@@ -1227,7 +1227,7 @@ In `internal/persistence/postgres_schema_migrations.go`, append to the migration
 
 - [ ] **Step 3: Verify Go compiles**
 
-Run: `cd /Users/michael/Development/LabTether/hub && go vet ./internal/persistence/...`
+Run: `cd /Users/demo/Development/LabTether/hub && go vet ./internal/persistence/...`
 Expected: No errors
 
 - [ ] **Step 4: Commit**
@@ -1383,7 +1383,7 @@ func (s *PostgresStore) DeleteRemoteBookmark(ctx context.Context, id string) err
 
 - [ ] **Step 3: Verify Go compiles**
 
-Run: `cd /Users/michael/Development/LabTether/hub && go vet ./internal/persistence/...`
+Run: `cd /Users/demo/Development/LabTether/hub && go vet ./internal/persistence/...`
 Expected: No errors
 
 - [ ] **Step 4: Commit**
@@ -1627,7 +1627,7 @@ In `cmd/labtether/http_handlers.go`, find where the file-connections route is re
 
 - [ ] **Step 4: Verify Go compiles**
 
-Run: `cd /Users/michael/Development/LabTether/hub && go vet ./...`
+Run: `cd /Users/demo/Development/LabTether/hub && go vet ./...`
 Expected: No errors
 
 - [ ] **Step 5: Commit**
@@ -1690,7 +1690,7 @@ Expected: Clean compile, no errors in remote-view/ files
 
 - [ ] **Step 2: Go vet**
 
-Run: `cd /Users/michael/Development/LabTether/hub && go vet ./...`
+Run: `cd /Users/demo/Development/LabTether/hub && go vet ./...`
 Expected: Clean
 
 - [ ] **Step 3: Verify navigation works**

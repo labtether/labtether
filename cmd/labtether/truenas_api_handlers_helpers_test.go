@@ -85,8 +85,8 @@ func TestHandleTrueNASAssetsAdditionalErrors(t *testing.T) {
 	assertErrorBodyContains(t, rec.Body.Bytes(), errAssetNotTrueNAS.Error())
 
 	sut.logStore = nil
-	seedTrueNASAsset(t, sut, "truenas-host-omeganas", "collector-truenas-1")
-	req = httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-omeganas/events", nil)
+	seedTrueNASAsset(t, sut, "truenas-host-vaultnas", "collector-truenas-1")
+	req = httptest.NewRequest(http.MethodGet, "/truenas/assets/truenas-host-vaultnas/events", nil)
 	rec = httptest.NewRecorder()
 	sut.handleTrueNASAssets(rec, req)
 	if rec.Code != http.StatusServiceUnavailable {
@@ -108,7 +108,7 @@ func TestResolveTrueNASAssetRuntimeHonorsCollectorOwner(t *testing.T) {
 	t.Run("missing owner cannot select another active NAS", func(t *testing.T) {
 		server := newTrueNASRPCServer(t, func(method string, params []any) (any, *trueNASRPCError) {
 			if method == "system.info" {
-				return map[string]any{"hostname": "OmegaNAS"}, nil
+				return map[string]any{"hostname": "VaultNAS"}, nil
 			}
 			return []map[string]any{}, nil
 		})
@@ -129,9 +129,9 @@ func TestResolveTrueNASAssetRuntimeHonorsCollectorOwner(t *testing.T) {
 		})
 
 		_, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
-			AssetID: "truenas-host-omeganas",
+			AssetID: "truenas-host-vaultnas",
 			Type:    "nas",
-			Name:    "omeganas",
+			Name:    "vaultnas",
 			Source:  "truenas",
 			Status:  "online",
 			Metadata: map[string]string{
@@ -148,13 +148,13 @@ func TestResolveTrueNASAssetRuntimeHonorsCollectorOwner(t *testing.T) {
 			t.Fatalf("other NAS fixture is unavailable: %v", err)
 		}
 		t.Run("API reads", func(t *testing.T) {
-			asset, runtime, err := sut.resolveTrueNASAssetRuntime("truenas-host-omeganas")
+			asset, runtime, err := sut.resolveTrueNASAssetRuntime("truenas-host-vaultnas")
 			if err == nil || runtime != nil || asset.ID != "" {
 				t.Fatal("missing owner resolved an API read against another NAS")
 			}
 		})
 		t.Run("shell sessions", func(t *testing.T) {
-			target, resolved, err := sut.resolveTrueNASSessionTarget("truenas-host-omeganas")
+			target, resolved, err := sut.resolveTrueNASSessionTarget("truenas-host-vaultnas")
 			if err == nil || resolved || target.BaseURL != "" || target.APIKey != "" {
 				t.Fatal("missing owner resolved a shell against another NAS")
 			}
@@ -163,8 +163,8 @@ func TestResolveTrueNASAssetRuntimeHonorsCollectorOwner(t *testing.T) {
 
 	t.Run("runtime load error is wrapped", func(t *testing.T) {
 		sut := newTestAPIServer(t)
-		seedTrueNASAsset(t, sut, "truenas-host-omeganas", "collector-missing")
-		if _, _, err := sut.resolveTrueNASAssetRuntime("truenas-host-omeganas"); err == nil || !strings.Contains(err.Error(), "failed to load truenas runtime") {
+		seedTrueNASAsset(t, sut, "truenas-host-vaultnas", "collector-missing")
+		if _, _, err := sut.resolveTrueNASAssetRuntime("truenas-host-vaultnas"); err == nil || !strings.Contains(err.Error(), "failed to load truenas runtime") {
 			t.Fatalf("expected wrapped runtime load error, got %v", err)
 		}
 	})

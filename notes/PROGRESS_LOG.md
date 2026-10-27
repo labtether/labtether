@@ -354,7 +354,7 @@ All tests pass: `go vet ./... && go test ./cmd/labtether/... ./internal/hubapi/.
 
 ### 2026-03-17 — AI Agent Gateway: Plan 6 — labtether-cli
 
-- New Go repo at `/Users/michael/Development/LabTether/labtether-cli/`
+- New Go repo at `/Users/demo/Development/LabTether/labtether-cli/`
 - API client (`internal/client/`) wrapping the v2 REST API with auth, JSON envelope, error handling
 - Config management: `~/.config/labtether/config.json`, env vars (`LABTETHER_HOST`, `LABTETHER_API_KEY`), CLI flags
 - 9 top-level commands: `config`, `whoami`, `assets`, `exec`, `services`, `ps`, `files`, `docker`
@@ -781,7 +781,7 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - no `docs/ADR.md` change was needed because this work fixes X11 auth propagation inside the existing Linux remote-view architecture rather than introducing a new architecture or product contract.
 
 ## 2026-03-14 (Linux remote view live redeploy + final WebRTC fixes)
-- Built fresh Linux agent binaries with `make build-agent-linux`, forced a live self-update on `containervm-deltaserver`, and re-ran real browser checks against `https://michaelmacbook-pro.taildaf69.ts.net/nodes/containervm-deltaserver?panel=desktop`.
+- Built fresh Linux agent binaries with `make build-agent-linux`, forced a live self-update on `dockerhost1-northserver`, and re-ran real browser checks against `https://hub-dev.example.ts.net/nodes/dockerhost1-northserver?panel=desktop`.
 - Live sequence after the Xauthority fix exposed two additional blockers:
   - **Linux agent VP8 pipeline bug**: `buildGStreamerVideoPipeline(...)` always appended `config-interval=-1`, which is valid for `rtph264pay` but invalid for `rtpvp8pay`. On the live host the agent preferred VP8, so signaling completed but `gst-launch-1.0` exited immediately with `no property "config-interval" in element "rtpvp8pay"`.
   - **Console viewer stream merge bug**: the browser `WebRTCViewer` replaced `srcObject` with whichever incoming stream arrived last. When the browser received separate video and audio track events, the later audio-only stream could overwrite the earlier video stream and leave the session "connected" but visually blank.
@@ -858,7 +858,7 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - `go test ./cmd/labtether/ ./internal/servicehttp/` — all pass (15 tests across both packages)
   - `bash -n scripts/dev-frontend-bg.sh` — syntax valid
   - `openssl s_client` confirms Next.js serves Let's Encrypt cert for `*.ts.net` hostname on :3000
-  - `curl -fsS -o /dev/null -w '%{http_code}' https://michaelmacbook-pro.taildaf69.ts.net:3000` — 200
+  - `curl -fsS -o /dev/null -w '%{http_code}' https://hub-dev.example.ts.net:3000` — 200
 - ADR: ADR-072
 
 ## 2026-03-13 (agent tls planning follow-up)
@@ -905,12 +905,12 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - `Setup -> Remote Access -> Open LabTether` now redirects to the detected `https://<host>.<tailnet>.ts.net` URL once Tailscale HTTPS is healthy
   - fixed a duplicate Postgres migration version collision (`53`) that blocked clean startup on fresh databases
 - Live verification:
-  - reset the real host-backed `labtether` Postgres schema, removed local `data/`, restarted the hub in production first-run mode, created a fresh owner account through `/setup`, enabled managed Tailscale Serve, confirmed `tailscale serve status` proxied `/` to `http://127.0.0.1:3000`, verified `https://michaelmacbook-pro.taildaf69.ts.net` served the Next.js console, and completed sign-in on that HTTPS origin as the new owner account
+  - reset the real host-backed `labtether` Postgres schema, removed local `data/`, restarted the hub in production first-run mode, created a fresh owner account through `/setup`, enabled managed Tailscale Serve, confirmed `tailscale serve status` proxied `/` to `http://127.0.0.1:3000`, verified `https://hub-dev.example.ts.net` served the Next.js console, and completed sign-in on that HTTPS origin as the new owner account
 - Validation:
   - `go test ./cmd/labtether -run 'TestHandleTailscaleServeStatus' -count=1`
   - `go test ./internal/persistence -run 'Test(PostgresSchemaMigrationsHaveUniqueVersions|NormalizedSchemaMigrations)' -count=1`
   - `cd web/console && npm run -s tsc -- --noEmit`
-  - live browser automation against `http://localhost:3000/setup`, `https://localhost:8443`, and `https://michaelmacbook-pro.taildaf69.ts.net`
+  - live browser automation against `http://localhost:3000/setup`, `https://localhost:8443`, and `https://hub-dev.example.ts.net`
 
 ## 2026-03-13 (tailscale frontend-origin agent bootstrap fix)
 - Fixed the public agent bootstrap gap on the Tailscale HTTPS origin after reproducing `curl https://<host>.<tailnet>.ts.net/install.sh` returning a Next.js 404.
@@ -1594,7 +1594,7 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - hub can now reach all LAN devices (Proxmox, Home Assistant, etc.) when started via `make dev-backend-bg` on macOS
   - no workflow change for non-macOS developers
 - Validation:
-  - connector test to Proxmox at 192.168.0.32:8006 returns HTTP 401 (authentication failure) instead of "no route to host", confirming TCP/TLS/HTTP connectivity works
+  - connector test to Proxmox at 192.168.8.32:8006 returns HTTP 401 (authentication failure) instead of "no route to host", confirming TCP/TLS/HTTP connectivity works
   - `go vet ./...` — passed
 - Docs/wiki/ADR rationale:
   - updated `docs/wiki/troubleshooting/quick-diagnostics.md` because this is an operator-facing macOS development workflow issue
@@ -2612,30 +2612,30 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - no docs, wiki, or ADR change required because this was a developer helper-script correctness fix with no workflow or architecture change
 
 ## 2026-03-09 (linux agent rollout follow-up: docker socket + TLS noise verification)
-- Closed the remaining Linux-agent rollout follow-ups by rebuilding the published Linux binaries, redeploying the live host through the supported self-update path, and re-running the discovery/TLS-noise verification loop against `containervm-deltaserver`.
+- Closed the remaining Linux-agent rollout follow-ups by rebuilding the published Linux binaries, redeploying the live host through the supported self-update path, and re-running the discovery/TLS-noise verification loop against `dockerhost1-northserver`.
 - Updated:
   - `notes/PROGRESS_LOG.md`
   - `notes/TODO.md`
 - Result:
   - the hub now serves a fresh Linux amd64 agent release `sha256:b408ba26e3a3`
-  - `POST /api/v1/agents/containervm-deltaserver/settings/update-agent` succeeded with `updated agent binary to sha256:b408ba26e3a3`
+  - `POST /api/v1/agents/dockerhost1-northserver/settings/update-agent` succeeded with `updated agent binary to sha256:b408ba26e3a3`
   - the live Linux agent reconnected cleanly on fresh websocket sessions (`ztg4ma6wpihxpceqmDRDjQ -> JnfAKlvSOr8xlixYfLrxsg`, then `zhYeZBOIyESDhY2Ir9aHSw` after the local backend restart window)
   - post-rollout presence still reports the expected local connectors as reachable on the host (`docker` via `unix:///var/run/docker.sock`, `truenas` via `https://127.0.0.1:443`)
-  - `POST /api/v1/services/web/sync` accepted the host-targeted rediscovery request, and the refreshed `discovery_stats` row for `containervm-deltaserver` now shows `total_services=129` with `docker=7`, `proxy=112`, and `scan=10`
+  - `POST /api/v1/services/web/sync` accepted the host-targeted rediscovery request, and the refreshed `discovery_stats` row for `dockerhost1-northserver` now shows `total_services=129` with `docker=7`, `proxy=112`, and `scan=10`
   - a focused backend log sweep after redeploy found no `TLS handshake error` or `bad certificate` lines during the verification window
 - Validation:
   - `make build-agent-linux`
     - passed
   - `GET /api/v1/agent/releases/latest?os=linux&arch=amd64`
     - passed (`version=sha256:b408ba26e3a3`)
-  - `POST /api/v1/agents/containervm-deltaserver/settings/update-agent`
+  - `POST /api/v1/agents/dockerhost1-northserver/settings/update-agent`
     - passed (`status=succeeded`)
   - `GET /agents/presence`
     - passed (live Linux agent reconnected with reachable `docker` and `truenas` connectors)
   - `POST /api/v1/services/web/sync`
-    - passed (`queued=1`, `sent_to=["containervm-deltaserver"]`)
+    - passed (`queued=1`, `sent_to=["dockerhost1-northserver"]`)
   - `GET /api/v1/services/web`
-    - passed (`containervm-deltaserver` discovery row refreshed; `129` total services)
+    - passed (`dockerhost1-northserver` discovery row refreshed; `129` total services)
   - `tmux capture-pane -p -t labtether-backend -S -240 -J | rg 'TLS handshake error|bad certificate|EOF'`
     - passed for the TLS-noise check (`TLS handshake error` / `bad certificate` had no matches; only expected non-TLS agent reconnect churn from the self-update cycle)
 - Docs/wiki/ADR rationale:
@@ -2980,7 +2980,7 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - `notes/PROGRESS_LOG.md`
   - `notes/TODO.md`
 - Result:
-  - live Docker churn proof on `containervm-deltaserver` now has concrete evidence:
+  - live Docker churn proof on `dockerhost1-northserver` now has concrete evidence:
     - `container.create` for disposable BusyBox container `lt-audit-wave2b-20260309` expanded host inventory from `11 -> 12` containers and hub Docker assets from `23 -> 24`
     - `container.remove` contracted host inventory back to `11`, and the patched collector later pruned the stale persisted asset so the hub Docker slice returned to `23`
   - completed a detached CA-pinned bootstrap/reinstall on the live host through `systemd-run`, with:
@@ -2999,10 +2999,10 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - `make dev-backend-bg-restart`
     - passed
   - live evidence:
-    - `POST /api/v1/docker/hosts/docker-host-containervm-deltaserver/action` with `image.pull`, `container.create`, and `container.remove`
-    - `GET /api/v1/docker/hosts/docker-host-containervm-deltaserver`
+    - `POST /api/v1/docker/hosts/docker-host-dockerhost1-northserver/action` with `image.pull`, `container.create`, and `container.remove`
+    - `GET /api/v1/docker/hosts/docker-host-dockerhost1-northserver`
     - `GET /assets?limit=300`
-    - detached `systemd-run` execution of the CA-pinned bootstrap installer on `containervm-deltaserver`
+    - detached `systemd-run` execution of the CA-pinned bootstrap installer on `dockerhost1-northserver`
     - `GET /agents/presence`
     - `journalctl -u lt-wave2-reinstall-20260309 --no-pager -n 200`
     - `journalctl -u labtether-agent --no-pager -n 80`
@@ -3113,10 +3113,10 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - `notes/TODO.md`
     - closed the WoL finding, recorded the fresh live proof, and narrowed the remaining manual-validation backlog to the still-blocked isolated-host installer slice plus explicit Docker-churn proof
 - Live evidence captured:
-  - restarted the backend and observed `containervm-deltaserver` reconnect on a fresh websocket session (`0qXeSWywhwTPQaNeKi15TA -> 16PrmP4x6MQNgB-wzTJ6PQ`)
-  - confirmed Docker-backed inventory for `containervm-deltaserver` still reported `22` assets after reconnect
-  - queued `POST /api/v1/services/web/sync` successfully for `containervm-deltaserver`
-  - reseeded a disposable offline WoL target and replayed five `POST /assets/wol-audit-target-20260309/wake` requests; backend logs showed every relay via `containervm-deltaserver` after the deterministic ordering fix
+  - restarted the backend and observed `dockerhost1-northserver` reconnect on a fresh websocket session (`0qXeSWywhwTPQaNeKi15TA -> 16PrmP4x6MQNgB-wzTJ6PQ`)
+  - confirmed Docker-backed inventory for `dockerhost1-northserver` still reported `22` assets after reconnect
+  - queued `POST /api/v1/services/web/sync` successfully for `dockerhost1-northserver`
+  - reseeded a disposable offline WoL target and replayed five `POST /assets/wol-audit-target-20260309/wake` requests; backend logs showed every relay via `dockerhost1-northserver` after the deterministic ordering fix
 - Validation:
   - `go test ./cmd/labtether -run 'TestHandleWakeOnLAN' -count=1`
     - passed
@@ -3127,47 +3127,47 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - `make dev-backend-bg-restart`
     - passed
   - `GET /agents/presence`
-    - passed (`containervm-deltaserver` session changed to `16PrmP4x6MQNgB-wzTJ6PQ`)
+    - passed (`dockerhost1-northserver` session changed to `16PrmP4x6MQNgB-wzTJ6PQ`)
   - `GET /assets?limit=400`
-    - passed (`22` Docker-backed assets still linked to `containervm-deltaserver`)
+    - passed (`22` Docker-backed assets still linked to `dockerhost1-northserver`)
   - `POST /api/v1/services/web/sync`
-    - passed (`queued=1`, `sent_to=["containervm-deltaserver"]`)
+    - passed (`queued=1`, `sent_to=["dockerhost1-northserver"]`)
   - `POST /assets/wol-audit-target-20260309/wake` (`5` requests)
   - `tmux capture-pane -p -t labtether-backend -S -250 -J | rg 'wol-audit-target-20260309|agent-assisted packet relayed|confirmed packet send'`
-    - passed (all five relays via `containervm-deltaserver`)
+    - passed (all five relays via `dockerhost1-northserver`)
 - Docs/wiki/ADR rationale:
   - updated `docs/` and `docs/wiki/` because relay selection behavior is operator-visible
   - no `docs/ADR.md` change required because this is a deterministic selection fix and audit-evidence refresh, not a new architectural decision
 
 ## 2026-03-09 (linux agent audit live-host manual validation wave 1)
-- Ran the first queued live-host/manual verification pass against the local hub plus the live Linux agent `containervm-deltaserver`, turning the highest-value audit placeholders into concrete runtime evidence.
+- Ran the first queued live-host/manual verification pass against the local hub plus the live Linux agent `dockerhost1-northserver`, turning the highest-value audit placeholders into concrete runtime evidence.
 - Updated:
   - `notes/LINUX_AGENT_AUDIT_FINDINGS.md`
   - `notes/LINUX_AGENT_AUDIT_TRACEABILITY_MATRIX.md`
   - `notes/PROGRESS_LOG.md`
   - `notes/TODO.md`
 - Live evidence captured:
-  - rebuilt Linux agent binaries and forced `/api/v1/agents/containervm-deltaserver/settings/update-agent`, then confirmed the Linux agent reconnected on a fresh websocket session
-  - queried `GET /disks/containervm-deltaserver`, `GET /cron/containervm-deltaserver`, and `GET /users/containervm-deltaserver` to verify live disk, timer, and user-session truth on the Debian host
-  - wrote a sentinel terminal config to `/assets/containervm-deltaserver/terminal/config`, restarted the backend, and confirmed the config survived reconnect unchanged before restoring it to `null`
-  - seeded a disposable offline WoL target with a valid MAC and proved the real agent-assisted wake path via backend logs, including successful relays from `containervm-deltaserver`
+  - rebuilt Linux agent binaries and forced `/api/v1/agents/dockerhost1-northserver/settings/update-agent`, then confirmed the Linux agent reconnected on a fresh websocket session
+  - queried `GET /disks/dockerhost1-northserver`, `GET /cron/dockerhost1-northserver`, and `GET /users/dockerhost1-northserver` to verify live disk, timer, and user-session truth on the Debian host
+  - wrote a sentinel terminal config to `/assets/dockerhost1-northserver/terminal/config`, restarted the backend, and confirmed the config survived reconnect unchanged before restoring it to `null`
+  - seeded a disposable offline WoL target with a valid MAC and proved the real agent-assisted wake path via backend logs, including successful relays from `dockerhost1-northserver`
 - New finding:
-  - reopened `LT-LAGT-30` as `LAGT-2026-03-09-09` because repeated identical wake requests alternated between `containervm-deltaserver` and `Michael-MBP.local`; the hub currently chooses the first sendable relay from unsorted `AgentManager.ConnectedAssets()` map iteration
+  - reopened `LT-LAGT-30` as `LAGT-2026-03-09-09` because repeated identical wake requests alternated between `dockerhost1-northserver` and `dev-mac.local`; the hub currently chooses the first sendable relay from unsorted `AgentManager.ConnectedAssets()` map iteration
 - Validation:
   - `make build-agent-linux`
     - passed
-  - forced agent update via `POST /api/v1/agents/containervm-deltaserver/settings/update-agent`
+  - forced agent update via `POST /api/v1/agents/dockerhost1-northserver/settings/update-agent`
     - passed (`status=succeeded`)
-  - `GET /disks/containervm-deltaserver`
+  - `GET /disks/dockerhost1-northserver`
     - passed (`22` mounts; `/dev/sda1` on `/`)
-  - `GET /cron/containervm-deltaserver`
+  - `GET /cron/dockerhost1-northserver`
     - passed (`19` entries; sample `man-db.timer`)
-  - `GET /users/containervm-deltaserver`
-    - passed (`1` session; `michael` on `seat0`)
-  - `PUT /assets/containervm-deltaserver/terminal/config`
+  - `GET /users/dockerhost1-northserver`
+    - passed (`1` session; `demo` on `seat0`)
+  - `PUT /assets/dockerhost1-northserver/terminal/config`
   - `make dev-backend-bg-restart`
   - `GET /agents/presence`
-  - `DELETE /assets/containervm-deltaserver/terminal/config`
+  - `DELETE /assets/dockerhost1-northserver/terminal/config`
     - passed (session changed from `KTjJvGYC1TGXt_nkvw--Iw` to `0qXeSWywhwTPQaNeKi15TA`; sentinel config preserved; cleanup restored `terminal_config: null`)
   - `POST /assets/heartbeat`
   - `POST /assets/wol-audit-target-20260309/wake`
@@ -3443,7 +3443,7 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - `notes/PROGRESS_LOG.md`
   - `notes/TODO.md`
 - Live runtime finding that drove the change:
-  - deleting `containervm-deltaserver` revoked its old agent token, but the still-running agent auto-enrolled again and minted a new token because the host still had a valid enrollment path
+  - deleting `dockerhost1-northserver` revoked its old agent token, but the still-running agent auto-enrolled again and minted a new token because the host still had a valid enrollment path
   - that made the delete endpoint look successful even though the asset and Docker children reappeared minutes later
 - Validation:
   - `go test ./cmd/labtether -run 'TestDeleteAsset' -count=1`
@@ -3626,7 +3626,7 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - `go test ./internal/agentcore -run 'TestBuildLinuxPackageActionCommands|TestBuildDarwinPackageActionArgs|TestBuildGStreamer|TestUnsupportedPlatformWebRTCReason' -count=1`
     - passed
 - Live runtime findings that drove the change:
-  - interactive repair attempts on `containervm-deltaserver` failed with `read-only file system` while writing `gst-inspect-1.0`, `libxdo3`, and `xdotool`
+  - interactive repair attempts on `dockerhost1-northserver` failed with `read-only file system` while writing `gst-inspect-1.0`, `libxdo3`, and `xdotool`
   - that host was still running an older service unit with `ProtectSystem=full`, so the agent could not repair package state or complete self-update/package operations from inside the sandbox
 - Operator consequence:
   - new installs and refreshed installs will ship the corrected service unit
@@ -3731,9 +3731,9 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
 - Validation:
   - `go test ./internal/agentcore -run 'TestBuildLinuxPackageActionCommands|TestBuildDarwinPackageActionArgs|TestBuildGStreamer|TestUnsupportedPlatformWebRTCReason' -count=1`
     - passed
-- Live runtime findings on `containervm-deltaserver`:
-  - retrying `/packages/containervm-deltaserver/install` still returns `apt` exit `100`, even after the package-backend refresh fix
-  - `/packages/containervm-deltaserver` shows the host already has most of the needed stack installed:
+- Live runtime findings on `dockerhost1-northserver`:
+  - retrying `/packages/dockerhost1-northserver/install` still returns `apt` exit `100`, even after the package-backend refresh fix
+  - `/packages/dockerhost1-northserver` shows the host already has most of the needed stack installed:
     - `x11vnc`, `xvfb`, `gstreamer1.0-plugins-base`, `gstreamer1.0-plugins-good`, `gstreamer1.0-plugins-bad`, `gstreamer1.0-plugins-ugly`, `gstreamer1.0-libav`, and `gstreamer1.0-x`
   - but two critical packages are in a broken state instead of fully installed:
     - `gstreamer1.0-tools`: `half-installed`
@@ -4163,12 +4163,12 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - `bash -n scripts/desktop-smoke-test.sh`
     - passed
   - live runtime verification:
-    - `LABTETHER_DESKTOP_SMOKE_TARGET=containervm-deltaserver LABTETHER_DESKTOP_SMOKE_EXPECT_AGENT_VNC=1 ./scripts/desktop-smoke-test.sh --verbose`
+    - `LABTETHER_DESKTOP_SMOKE_TARGET=dockerhost1-northserver LABTETHER_DESKTOP_SMOKE_EXPECT_AGENT_VNC=1 ./scripts/desktop-smoke-test.sh --verbose`
       - passed
-    - `LABTETHER_DESKTOP_SMOKE_TARGET=containervm-deltaserver LABTETHER_DESKTOP_SMOKE_EXPECT_AGENT_VNC=1 LABTETHER_DESKTOP_SMOKE_PROBE_AUDIO=1 ./scripts/desktop-smoke-test.sh --verbose`
+    - `LABTETHER_DESKTOP_SMOKE_TARGET=dockerhost1-northserver LABTETHER_DESKTOP_SMOKE_EXPECT_AGENT_VNC=1 LABTETHER_DESKTOP_SMOKE_PROBE_AUDIO=1 ./scripts/desktop-smoke-test.sh --verbose`
       - passed
     - runtime notes:
-      - the harness now auto-detects local HTTP-to-HTTPS redirect mode, probes websocket upgrades with bearer auth against the direct hub endpoint, and successfully validated VNC video + audio sideband cleanup on `containervm-deltaserver`
+      - the harness now auto-detects local HTTP-to-HTTPS redirect mode, probes websocket upgrades with bearer auth against the direct hub endpoint, and successfully validated VNC video + audio sideband cleanup on `dockerhost1-northserver`
 - Docs/wiki/ADR rationale:
   - updated `docs/` and `docs/wiki/` because this adds a new operator/runtime validation workflow
   - no `docs/ADR.md` change required because this is an operational cleanup path and smoke harness, not an architecture decision
@@ -4221,50 +4221,50 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
       - passed
     - `go test ./cmd/labtether -run 'TestProcessAgentHeartbeatStoresWebRTCUnavailabilityReason|TestProcessAgentWebRTCCapabilitiesStoresUnavailableReason|TestProcessAgentHeartbeatIgnoresPayloadAssetID' -count=1`
       - passed
-  - `LABTETHER_DESKTOP_SMOKE_TARGET=containervm-deltaserver LABTETHER_DESKTOP_SMOKE_EXPECT_AGENT_VNC=1 ./scripts/desktop-smoke-test.sh --verbose`
+  - `LABTETHER_DESKTOP_SMOKE_TARGET=dockerhost1-northserver LABTETHER_DESKTOP_SMOKE_EXPECT_AGENT_VNC=1 ./scripts/desktop-smoke-test.sh --verbose`
     - passed
-  - `LABTETHER_DESKTOP_SMOKE_TARGET=Michael-MBP.local ./scripts/desktop-smoke-test.sh --verbose`
+  - `LABTETHER_DESKTOP_SMOKE_TARGET=dev-mac.local ./scripts/desktop-smoke-test.sh --verbose`
     - failed at preflight as intended with `asset ... is agent-sourced but not currently in /agents/connected`
   - after relaunching `build/LabTether Agent.app`:
-    - `LABTETHER_DESKTOP_SMOKE_TARGET=Michael-MBP.local LABTETHER_DESKTOP_SMOKE_EXPECT_AGENT_VNC=1 ./scripts/desktop-smoke-test.sh --verbose`
+    - `LABTETHER_DESKTOP_SMOKE_TARGET=dev-mac.local LABTETHER_DESKTOP_SMOKE_EXPECT_AGENT_VNC=1 ./scripts/desktop-smoke-test.sh --verbose`
       - passed
-    - `LABTETHER_DESKTOP_SMOKE_TARGET=Michael-MBP.local LABTETHER_DESKTOP_SMOKE_EXPECT_AGENT_VNC=1 LABTETHER_DESKTOP_SMOKE_PROBE_AUDIO=1 ./scripts/desktop-smoke-test.sh --verbose`
+    - `LABTETHER_DESKTOP_SMOKE_TARGET=dev-mac.local LABTETHER_DESKTOP_SMOKE_EXPECT_AGENT_VNC=1 LABTETHER_DESKTOP_SMOKE_PROBE_AUDIO=1 ./scripts/desktop-smoke-test.sh --verbose`
       - passed
   - corrected WebRTC verification behavior:
     - the harness now refuses `LABTETHER_DESKTOP_SMOKE_PROTOCOL=webrtc` when the target does not currently advertise `webrtc_available=true`
-    - `LABTETHER_DESKTOP_SMOKE_TARGET=containervm-deltaserver LABTETHER_DESKTOP_SMOKE_PROTOCOL=webrtc ./scripts/desktop-smoke-test.sh --verbose`
+    - `LABTETHER_DESKTOP_SMOKE_TARGET=dockerhost1-northserver LABTETHER_DESKTOP_SMOKE_PROTOCOL=webrtc ./scripts/desktop-smoke-test.sh --verbose`
       - fails at preflight as intended because `webrtc_available=false`
-    - `LABTETHER_DESKTOP_SMOKE_TARGET=Michael-MBP.local LABTETHER_DESKTOP_SMOKE_PROTOCOL=webrtc ./scripts/desktop-smoke-test.sh --verbose`
+    - `LABTETHER_DESKTOP_SMOKE_TARGET=dev-mac.local LABTETHER_DESKTOP_SMOKE_PROTOCOL=webrtc ./scripts/desktop-smoke-test.sh --verbose`
       - fails at preflight as intended because `webrtc_available=false`
 - Runtime note:
-  - `Michael-MBP.local` is still present in asset inventory as `status=online`, but it is not in `/agents/connected`; the new preflight makes that mismatch explicit before any desktop session or stream probe is attempted
-  - relaunching the local macOS menu bar app restored `Michael-MBP.local` to `/agents/connected`, and the same cross-platform smoke workflow then passed for VNC video, audio sideband, and session cleanup
+  - `dev-mac.local` is still present in asset inventory as `status=online`, but it is not in `/agents/connected`; the new preflight makes that mismatch explicit before any desktop session or stream probe is attempted
+  - relaunching the local macOS menu bar app restored `dev-mac.local` to `/agents/connected`, and the same cross-platform smoke workflow then passed for VNC video, audio sideband, and session cleanup
   - current `--list-targets` output in this environment shows two live agent-backed desktop candidates:
-    - `Michael-MBP.local`
-    - `containervm-deltaserver`
+    - `dev-mac.local`
+    - `dockerhost1-northserver`
   - both currently advertise `webrtc_available=false`, so the environment does not have real live WebRTC coverage yet even though a raw `protocol=webrtc` request would otherwise fall back to VNC at stream time
-  - after rebuilding the local mac menu bar app with `make mac-agent` and relaunching it from the rebuilt bundle executable, `Michael-MBP.local` now publishes:
+  - after rebuilding the local mac menu bar app with `make mac-agent` and relaunching it from the rebuilt bundle executable, `dev-mac.local` now publishes:
     - `webrtc_available=false`
     - `webrtc_unavailable_reason=unsupported_platform:darwin`
   - corresponding live preflight evidence:
-    - `LABTETHER_DESKTOP_SMOKE_TARGET=Michael-MBP.local LABTETHER_DESKTOP_SMOKE_PROTOCOL=webrtc ./scripts/desktop-smoke-test.sh --verbose`
+    - `LABTETHER_DESKTOP_SMOKE_TARGET=dev-mac.local LABTETHER_DESKTOP_SMOKE_PROTOCOL=webrtc ./scripts/desktop-smoke-test.sh --verbose`
       - fails at preflight with `reason=unsupported_platform:darwin`
-  - after building fresh Linux agent binaries with `make build-agent-linux` and triggering the supported self-update flow via `POST /api/v1/agents/containervm-deltaserver/settings/update-agent`, `containervm-deltaserver` now republishes:
+  - after building fresh Linux agent binaries with `make build-agent-linux` and triggering the supported self-update flow via `POST /api/v1/agents/dockerhost1-northserver/settings/update-agent`, `dockerhost1-northserver` now republishes:
     - `webrtc_available=false`
     - `webrtc_unavailable_reason=gst_launch_not_found`
   - corresponding live Linux verification:
     - `./scripts/desktop-smoke-test.sh --list-targets`
-      - now shows `containervm-deltaserver` with `WEBRTC REASON gst_launch_not_found`
-    - `LABTETHER_DESKTOP_SMOKE_TARGET=containervm-deltaserver LABTETHER_DESKTOP_SMOKE_PROTOCOL=webrtc ./scripts/desktop-smoke-test.sh --verbose`
+      - now shows `dockerhost1-northserver` with `WEBRTC REASON gst_launch_not_found`
+    - `LABTETHER_DESKTOP_SMOKE_TARGET=dockerhost1-northserver LABTETHER_DESKTOP_SMOKE_PROTOCOL=webrtc ./scripts/desktop-smoke-test.sh --verbose`
       - fails at preflight with `reason=gst_launch_not_found`
-    - remote terminal inspection against `containervm-deltaserver` confirmed:
+    - remote terminal inspection against `dockerhost1-northserver` confirmed:
       - `systemctl status labtether-agent --no-pager` shows the refreshed service restarted cleanly and reconnected to `wss://100.100.216.70:8443/ws/agent`
       - `ls /usr/bin/gst-launch-1.0`
         - fails with `No such file or directory`
       - `ls /usr/bin/gst-inspect-1.0`
         - fails with `No such file or directory`
-  - this narrows the live Linux WebRTC blocker from "stale agent metadata" to a concrete host dependency gap: GStreamer CLI tools are not installed on `containervm-deltaserver`
-  - `containervm-deltaserver` currently reports reachable local `docker,truenas` connectors via `/agents/presence`, but only the `docker` hub collector is actually configured
+  - this narrows the live Linux WebRTC blocker from "stale agent metadata" to a concrete host dependency gap: GStreamer CLI tools are not installed on `dockerhost1-northserver`
+  - `dockerhost1-northserver` currently reports reachable local `docker,truenas` connectors via `/agents/presence`, but only the `docker` hub collector is actually configured
   - `--list-targets` also now prints configured hub collectors, which makes the current blocker explicit here:
     - only the `docker` collector is configured
     - there are no connector-backed desktop targets in `/assets` yet, so non-agent desktop smoke remains blocked on environment setup rather than script/runtime correctness
@@ -6087,7 +6087,7 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - `LABTETHER_ADMIN_PASSWORD=test LABTETHER_OWNER_TOKEN=test LABTETHER_ENCRYPTION_KEY=test POSTGRES_PASSWORD=test docker compose config` (validated pinned guacd digest interpolation).
   - `go test ./internal/notifications -count=1` -> pass.
   - `go test ./cmd/labtether -run 'Test(HandleHubRoot|StatusAggregate|HandleSessionStreamRejectsHubLocalWhenDisabled|HandleSessionStreamRejectsHubLocalForNonOwner|ValidateCreateChannelRequestAcceptsNtfyAndGotify|HandleNotificationChannelActionsRejectsExtraPathSegments|DispatchAlertNotifications_SendsWebhookAndEmail|DispatchAlertNotifications_RecordsFailureWhenAdapterSendFails)' -count=1` -> pass.
-  - `docker build -f build/go-service.Dockerfile --build-arg SERVICE_DIR=cmd/labtether .` could not be executed in this environment because Docker daemon/socket was unavailable (`/Users/michael/.colima/default/docker.sock` missing).
+  - `docker build -f build/go-service.Dockerfile --build-arg SERVICE_DIR=cmd/labtether .` could not be executed in this environment because Docker daemon/socket was unavailable (`/Users/demo/.colima/default/docker.sock` missing).
 - ADR rationale:
   - no architecture-boundary change; additive backend/deploy hardening and diagnostics capability expansion.
 
@@ -6943,7 +6943,7 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - `bash -n integrations/homeassistant/addon/labtether/run.sh` -> pass.
   - `bash -n scripts/release/package-ha-addon-repo.sh` -> pass.
   - `cd web/console && npm run -s test:e2e -- e2e/settings-user-access.spec.ts --project=chromium` -> pass.
-  - `make package-ha-addon-repo VERSION=0.1.0-test IMAGE_PREFIX=ghcr.io/ryuzaki-ryuga/labtether-homeassistant-addon` -> pass.
+  - `make package-ha-addon-repo VERSION=0.1.0-test IMAGE_PREFIX=ghcr.io/labtether/labtether-homeassistant-addon` -> pass.
 - Follow-up hardening:
   - added `web/console/e2e/settings-user-access.spec.ts` to smoke-test owner create/update and viewer read-only user-access flows.
   - attempted Actions dispatch for `.github/workflows/homeassistant-addon-release.yml`; GitHub returned `404 workflow not found on default branch` until this workflow file is committed/pushed.
@@ -7817,7 +7817,7 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - `go test ./cmd/labtether -run 'Test(HandleFrontendPerfTelemetry|LogsQuery|LogsQueryIncludeFieldsFalseOmitsFields|LogsQuerySiteFilterIncludeFieldsFalseStillFiltersByFieldSiteID|StatusLoadDeadLettersUsesSingleQuery|HandleDeadLettersUsesSingleQuery)$'` -> pass.
   - `cd web/console && npm run -s tsc -- --noEmit` -> pass.
 - Profiling evidence:
-  - post-change capture at `/Users/michael/Documents/Projects/Vibe Coding/LabTether/tmp/perf/runs/20260304-223516-backend-post3`.
+  - post-change capture at `/Users/demo/Documents/Projects/Vibe Coding/LabTether/tmp/perf/runs/20260304-223516-backend-post3`.
   - `QueryEvents` remains the dominant alloc-space hotspot; dead-letter field decode and aggregate-path JSON encode work still contribute significantly.
 - Docs/wiki/ADR updates shipped in same workstream:
   - `docs/API.md`,
@@ -7876,7 +7876,7 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - `cd web/console && npm run -s tsc -- --noEmit` -> pass.
   - targeted hotspot tests on `cmd/labtether` -> pass.
 - Profiling evidence:
-  - post-change capture at `/Users/michael/Documents/Projects/Vibe Coding/LabTether/tmp/perf/runs/20260304-221735-backend-post2`.
+  - post-change capture at `/Users/demo/Documents/Projects/Vibe Coding/LabTether/tmp/perf/runs/20260304-221735-backend-post2`.
   - directional signal: aggregate ETag and dead-letter fan-out improved structurally; `PostgresStore.QueryEvents` remains the next dominant backend hotspot class.
 - Docs/wiki/ADR updates shipped in same workstream:
   - `docs/OPERATIONS.md`,
@@ -7910,7 +7910,7 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - `go test ./cmd/labtether -run 'TestStatusAggregate(SkipsFingerprintPrecomputeWithoutConditionalRequest|ConditionalRequestUsesPrecomputeAfterCacheWarmup|CanonicalPayloadCacheReusesCanonicalQueries|CanonicalPayloadCacheInvalidatesOnAssetSetChange)$'` -> pass.
   - `cd web/console && npm run -s tsc -- --noEmit` -> pass.
   - post-change profile capture artifacts:
-    - `/Users/michael/Documents/Projects/Vibe Coding/LabTether/tmp/perf/runs/20260304-220509-backend-post`
+    - `/Users/demo/Documents/Projects/Vibe Coding/LabTether/tmp/perf/runs/20260304-220509-backend-post`
   - directional profile signal:
     - `statusWebServiceSummary` and coordinator `ListAll`/merge contribution dropped as a share of sampled CPU in the captured run, while aggregate/log-query work remains the dominant next hotspot class.
 - Docs/wiki/ADR updates shipped in same workstream:
@@ -8553,10 +8553,10 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
 - ADR rationale: no `docs/ADR.md` update required. These are behavior and robustness refinements within existing topology/dashboard frontend architecture and existing API contracts.
 
 ## 2026-03-02 (Topology dashboard Docker host/container link recovery for incomplete metadata)
-- Investigated dashboard/topology graph issue where Docker container-host assets (for example `docker-containervm-deltaserver`) were not linking to their containers/stacks, leaving workloads orphaned and lines misleading.
+- Investigated dashboard/topology graph issue where Docker container-host assets (for example `docker-dockerhost1-northserver`) were not linking to their containers/stacks, leaving workloads orphaned and lines misleading.
 - Root cause:
   - frontend topology parent-key matching for Docker relied primarily on `metadata.agent_id`.
-  - older/incomplete Docker child rows without `metadata.agent_id` fell back to a generic `docker` key, which does not match per-host parent keys like `containervm-deltaserver`.
+  - older/incomplete Docker child rows without `metadata.agent_id` fell back to a generic `docker` key, which does not match per-host parent keys like `dockerhost1-northserver`.
 - Fix in `web/console/app/console/taxonomy.ts`:
   - added Docker key normalization helper for stable matching.
   - added Docker parent-key fallback derivation from asset ID/name conventions (`docker-host-*`, `docker-ct-*`, `docker-stack-*`, `docker-*`) when metadata is missing.
@@ -9964,7 +9964,7 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - `/api/v1/services/web` reported `20` services with `0` proxy-enriched entries (`metadata.proxy_provider` absent on all services).
   - `web_service_overrides` had `0` rows, so persisted URL overrides were not the active blocker.
   - Docker inventory showed Traefik present but without `8080` host mapping (`80/443` only), which prevented current `DetectAndConnect` from finding Traefik API.
-  - Verified Traefik API was still reachable via routed dashboard host (`https://dashboard.tail.simbaslabs.com/api/http/routers` returned `200`), confirming route data existed but was discoverable through host-rule routing, not `localhost:8080`.
+  - Verified Traefik API was still reachable via routed dashboard host (`https://dashboard.tail.example.com/api/http/routers` returned `200`), confirming route data existed but was discoverable through host-rule routing, not `localhost:8080`.
 - Implemented code fix in `internal/agentcore/proxy_traefik.go`:
   - `DetectAndConnect` now falls back to inferring Traefik API base URL from Traefik container labels when `:8080` is not exposed.
   - New fallback path detects `api@internal` router labels, extracts host from Traefik `Host(...)` rule, and derives `http` vs `https` from entrypoint/TLS hints.
@@ -10122,7 +10122,7 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
 ## 2026-02-28 (Terminal connect latency root-cause fix: blocking tmux probe removed)
 - Investigated slow terminal connect behavior after stream-stability fixes.
 - Root cause confirmed from live backend logs:
-  - repeated `terminal: tmux probe timed out for containervm-deltaserver` immediately before each `agent session started`,
+  - repeated `terminal: tmux probe timed out for dockerhost1-northserver` immediately before each `agent session started`,
   - connect path was synchronously waiting on `probeAgentTmux(...)` timeout before starting shell.
 - Fix implemented in `cmd/labtether/terminal_stream_handlers.go`:
   - changed tmux probe flow from blocking wait to cached, non-blocking async probe,
@@ -10825,8 +10825,8 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - `cd web/console && npm run -s tsc -- --noEmit` passed.
   - authenticated console proxy verification:
     - `GET /api/docker/hosts` -> 200 with 1 host.
-    - `GET /api/docker/hosts/containervm-deltaserver/containers` -> 200 with 11 containers.
-    - `GET /api/docker/hosts/docker-containervm-deltaserver/containers` -> 200 with 11 containers (legacy alias path).
+    - `GET /api/docker/hosts/dockerhost1-northserver/containers` -> 200 with 11 containers.
+    - `GET /api/docker/hosts/docker-dockerhost1-northserver/containers` -> 200 with 11 containers (legacy alias path).
   - frontend dev logs show Docker API proxy routes returning 200 after fix.
 
 ## 2026-02-27 (topology containers categorized as services)
@@ -10856,9 +10856,9 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - added short min-gap throttling to avoid excessive run spam.
 - Fixed Docker host API compatibility for legacy node route IDs:
   - `GET /api/v1/docker/hosts/{id}[/containers|/images|/stacks]` now accepts:
-    - normalized host id (`containervm-deltaserver`),
-    - canonical asset alias (`docker-host-containervm-deltaserver`),
-    - legacy alias (`docker-containervm-deltaserver`).
+    - normalized host id (`dockerhost1-northserver`),
+    - canonical asset alias (`docker-host-dockerhost1-northserver`),
+    - legacy alias (`docker-dockerhost1-northserver`).
   - this unblocks container tab rendering for older/stale node routes in the web UI.
 - Hardened Docker host ID derivation in node detail frontend:
   - `web/console/app/(console)/nodes/[id]/page.tsx` now prefers `asset.metadata.agent_id` (normalized) for docker-host API calls before falling back to asset-id parsing.
@@ -11245,9 +11245,9 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
 - Root-caused and fixed a console-side race where the global Files page could stay empty after the selected target later became connected.
   - behavior before fix: auto-list only ran when `target` changed; if `target` was selected while disconnected and agent presence flipped to connected afterward, no list request was triggered.
   - confirmed backend/agent path was healthy via live calls:
-    - `GET /agents/connected` returned `Michael-MBP.local`,
+    - `GET /agents/connected` returned `dev-mac.local`,
     - `GET /status/aggregate` included the same asset ID,
-    - `GET /files/Michael-MBP.local/list?path=~` returned entries.
+    - `GET /files/dev-mac.local/list?path=~` returned entries.
 - Updated `web/console/app/(console)/files/page.tsx`:
   - auto-list effect now reacts to `targetHasAgent` transition and triggers `listDir(target, "~")` when the selected target becomes connected.
 - Updated `web/console/app/hooks/useFiles.ts`:
@@ -11274,8 +11274,8 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - `processAgentProcessListed(...)` now supports response bridge correlation fallback to envelope `msg.ID` when payload `request_id` is missing.
   - added process fallback parsing/sorting helpers (`collectProcessListViaCommand`, `parseProcessCommandOutput`) with CPU/memory sort support and limit enforcement.
 - Runtime verification:
-  - `GET /processes/Michael-MBP.local?sort=cpu&limit=5` -> `200`
-  - `GET /processes/Michael-MBP.local?sort=memory&limit=5` -> `200`
+  - `GET /processes/dev-mac.local?sort=cpu&limit=5` -> `200`
+  - `GET /processes/dev-mac.local?sort=memory&limit=5` -> `200`
 - Validation completed:
   - `go test ./cmd/labtether`
 
@@ -12558,7 +12558,7 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
 - Updated node detail breadcrumb rendering in `web/console/app/(console)/nodes/[id]/page.tsx` to show infrastructure parent host context for child assets:
   - now renders `Devices / <host> / <asset>` when the selected asset is a VM/container/storage child linked to an infra host.
   - parent host segment is clickable and routes directly to the host detail page.
-- This makes Proxmox VM/CT pages explicitly show ownership (for example `Devices / deltaserver / ContainerVM`) instead of only `Devices / ContainerVM`.
+- This makes Proxmox VM/CT pages explicitly show ownership (for example `Devices / northserver / DockerHost1`) instead of only `Devices / DockerHost1`.
 - Validation completed: `cd web/console && npx tsc --noEmit`.
 
 ## 2026-02-23 (Storage Operations Phase 3 wiring)
@@ -12584,7 +12584,7 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
 ## 2026-02-23 (Topology hostname fallback auto-link)
 - Extended topology auto-link logic in `web/console/app/(console)/nodes/[id]/ClusterTopologySection.tsx` with strict unique hostname fallback when IP/MAC/UUID overlap is unavailable.
 - Preserved ambiguity protection: hostname fallback auto-links only when there is a single best hostname match.
-- Covers VM-appliance topology cases where the same endpoint appears as a Proxmox guest and an API-managed host (for example, OmegaNAS).
+- Covers VM-appliance topology cases where the same endpoint appears as a Proxmox guest and an API-managed host (for example, VaultNAS).
 
 ## 2026-02-23 (UI control reliability foundation)
 - Added a shared `SegmentedTabs` primitive (`web/console/app/components/ui/SegmentedTabs.tsx`) and migrated tab/pill toggles across:
@@ -13434,7 +13434,7 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
 - **Fixed Makefile agent binary path**: Updated `mac-agent-binary` target from `./agents/node-agent` (deleted) to `./agents/labtether-agent`.
 - **Cleaned up Docker orphans**: Removed stale `node-agent-1` container that was blocking port 8090 for the renamed `labtether-agent` service.
 - **End-to-end terminal verification**: Wrote and ran Go WebSocket test scripts that:
-  - Created terminal sessions for both `Michael-MBP.local` and `lab-host-01`.
+  - Created terminal sessions for both `dev-mac.local` and `lab-host-01`.
   - Connected via WebSocket with stream tickets.
   - Sent commands (`echo hello-from-test`, `hostname`) and verified output.
   - Both agents respond correctly via agent PTY route (no SSH needed).
@@ -16658,7 +16658,7 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - Validation:
     - `go test ./internal/agentcore -count=1` passed.
     - `go test ./internal/connectors/webservice -count=1` passed.
-    - live validation (`/api/v1/services/web`): `:3000` and `:8443` now both classify as `LabTether` (`service_key=labtether`) on `Michael-MBP.local`.
+    - live validation (`/api/v1/services/web`): `:3000` and `:8443` now both classify as `LabTether` (`service_key=labtether`) on `dev-mac.local`.
     - live validation (`/api/v1/services/web` vs `include_hidden=true`): default list now shows `LabTether Console`; hidden list additionally contains `LabTether API` with `metadata.hidden=true`.
   - Docs/wiki:
     - no `docs/` or `docs/wiki/` edits required (discovery behavior correction only; no operator workflow/config/API changes).
@@ -17993,7 +17993,7 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
 
 - [2026-03-06] Agent TLS handshake spam reduction during web-service discovery probes.
   - Scope:
-    - identified backend TLS spam source as local macOS agent discovery traffic (`192.168.0.118`) rather than iOS client traffic.
+    - identified backend TLS spam source as local macOS agent discovery traffic (`192.168.8.118`) rather than iOS client traffic.
     - changed web-service discovery probe request selection to prefer the insecure probe client for HTTPS discovery/fingerprinting calls, with safe fallback behavior preserved.
     - retained scheme fallback behavior only for non-responsive probes to avoid mixed-scheme churn.
     - added regression coverage to ensure HTTPS discovery probes use the insecure client first in both health and body/fingerprint request paths.
@@ -18357,7 +18357,7 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - `bash -n scripts/capture-vnc-repro.sh`
   - `./scripts/capture-vnc-repro.sh --help`
   - targeted iOS tests covering the desktop stream URL builder.
-  - live baseline capture against `Michael-MBP.local` now produces a top-of-report summary that surfaces the key `desktop-agent: stream_connected`, `desktop-agent: stream_ended reason=browser_ws_closed_code_1006`, and matching macOS `:5900` / `screensharingd` clues without scanning the raw sections first.
+  - live baseline capture against `dev-mac.local` now produces a top-of-report summary that surfaces the key `desktop-agent: stream_connected`, `desktop-agent: stream_ended reason=browser_ws_closed_code_1006`, and matching macOS `:5900` / `screensharingd` clues without scanning the raw sections first.
 ### Console Playwright Self-Signed HTTPS Harness (2026-03-09)
 - Added a dedicated self-signed HTTPS Playwright mode for the console so browser coverage can run against `https://127.0.0.1` with an invalid local certificate instead of only plain HTTP.
 - Updated:
@@ -18410,11 +18410,11 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - added a tri-state Advanced Settings entry, `security.outbound_allow_private`, with `auto`, `true`, and `false` modes.
   - the hub now refreshes that runtime override into `internal/securityruntime` so outbound connector validation changes take effect without editing `.env`.
   - `auto` preserves the current homelab-friendly default for secure `https://` / `wss://` private targets, while `false` restores the strict deny-private posture.
-  - verified the restarted live hub no longer rejects `https://proxmox-deltaserver.simbaslabs.com` as a private host; the request now advances to the real network dial stage instead.
+  - verified the restarted live hub no longer rejects `https://proxmox-northserver.example.com` as a private host; the request now advances to the real network dial stage instead.
 - Validation:
   - `go test ./internal/securityruntime ./internal/runtimesettings ./cmd/labtether -run 'Test(RuntimeSettingsGetUpdateAndReset|BuildSecurityRuntimeEnvOverrides)' -count=1`
   - live backend restart via `make dev-backend-stop` and `make dev-backend-bg`
-  - live probe: `POST https://localhost:8443/connectors/proxmox/test` with `base_url=https://proxmox-deltaserver.simbaslabs.com` now returns a network dial error instead of `outbound private host ... is not allowed`
+  - live probe: `POST https://localhost:8443/connectors/proxmox/test` with `base_url=https://proxmox-northserver.example.com` now returns a network dial error instead of `outbound private host ... is not allowed`
 ### Portainer Add-Flow Discoverability Fix (2026-03-09)
 - Fixed the Portainer add flow so a successful test now proves the credential can list Portainer environments/endpoints instead of only reaching the version endpoint.
 - Updated:
@@ -18520,7 +18520,7 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - `go test ./cmd/labtether -run 'Test(ExecuteCollector.*|RunPendingCollectors.*|HandlePBSConnectorTest.*|ExecuteTrueNASCollector.*)' -count=1`
   - `cd web/console && npm run -s tsc -- --noEmit`
 ### Development Repo Relocation And Backend Compile Recovery (2026-03-11)
-- Moved the LabTether working tree out of `~/Documents` into `/Users/michael/Development/LabTether` to stop dev/build churn from living under CloudDocs-managed storage.
+- Moved the LabTether working tree out of `~/Documents` into `/Users/demo/Development/LabTether` to stop dev/build churn from living under CloudDocs-managed storage.
 - Restored backend compilation for the partially landed site/failover feature slice by:
   - adding missing persistence contracts for reliability history, sites, site profiles, and failover pairs
   - restoring backward-compatible `asset.site_id` reads from `GroupID` for stale site feature call sites
@@ -18929,8 +18929,8 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - `make build-agent-linux`
   - `cd web/console && npm run -s tsc -- --noEmit`
   - live websocket handshakes returned `101 Switching Protocols` for both:
-    - `https://michaelmacbook-pro.taildaf69.ts.net/terminal/sessions/.../stream`
-    - `https://michaelmacbook-pro.taildaf69.ts.net/desktop/sessions/.../stream`
+    - `https://hub-dev.example.ts.net/terminal/sessions/.../stream`
+    - `https://hub-dev.example.ts.net/desktop/sessions/.../stream`
 
 ### TLS Management And Public-Trust Agent Bootstrap (2026-03-13)
 - Implemented the first shipped slice of both March 13 TLS plans on `main`.
@@ -18955,13 +18955,13 @@ Second pass extracted 14 more handler files into internal/hubapi/resources:
   - `cd web/console && npm run -s tsc -- --noEmit`
 
 ### Real X11 Display Auth Discovery For Linux WebRTC (2026-03-14)
-- Fixed the remaining live Linux WebRTC black-screen gap on `containervm-deltaserver`.
+- Fixed the remaining live Linux WebRTC black-screen gap on `dockerhost1-northserver`.
   - Root cause: the host had a real LightDM/Xorg session on `:0`, but generic X11 clients launched by the agent (`xrandr`, `gst-launch-1.0`, `xdotool`) were still missing the real display's auth cookie while `x11vnc` kept working via its own `-auth guess` logic.
   - Added real-display X11 auth discovery from Xorg/Xwayland `-auth` process arguments plus LightDM/GDM fallback paths in `internal/agentcore/x11_auth.go`.
   - `buildX11ClientEnv(...)` now auto-injects discovered `XAUTHORITY` for real displays, `startLinuxVNCServer(...)` passes it into the primary `x11vnc` launch, and Linux display enumeration now runs `xrandr --listmonitors` with the same resolved auth context.
 - Live validation:
-  - `curl -sk -b /tmp/labtether-backend-cookies.txt https://127.0.0.1:8443/api/v1/nodes/containervm-deltaserver/displays` now returns the real monitor list instead of `exit status 1`.
-  - rebuilt with `make build-agent-linux`, forced self-update on `containervm-deltaserver`, and re-tested live WebRTC against `https://michaelmacbook-pro.taildaf69.ts.net/nodes/containervm-deltaserver?panel=desktop`.
+  - `curl -sk -b /tmp/labtether-backend-cookies.txt https://127.0.0.1:8443/api/v1/nodes/dockerhost1-northserver/displays` now returns the real monitor list instead of `exit status 1`.
+  - rebuilt with `make build-agent-linux`, forced self-update on `dockerhost1-northserver`, and re-tested live WebRTC against `https://hub-dev.example.ts.net/nodes/dockerhost1-northserver?panel=desktop`.
   - browser verification after redeploy showed `data-webrtc-video-tracks="1"`, `data-webrtc-audio-tracks="1"`, `readyState=4`, `1920x1080`, and advancing `currentTime` on the real `:0` desktop.
 - Validation:
   - `go test ./internal/agentcore -run 'Test(BuildX11ClientEnvIncludesDisplayAndXauthority|BuildX11ClientEnvOmitsXauthorityWhenUnavailable|BuildX11ClientEnvDiscoversRealDisplayXauthority|StartLinuxVNCServerUsesExistingDisplayWhenAvailable|DiscoverDisplayXAuthorityFromProc|IsDisplayAvailableUsesActiveUserSession|AppendDetectedActiveDisplaysAddsSessionBackedDisplay|BuildGStreamerVideoPipeline|BuildGStreamerAudioPipeline|ResolveWebRTCDisplay|WebRTCManagerHandleWebRTCStart|WebRTCManagerHandleWebRTCStop|WebRTCManagerHandleWebRTCInput|DecodeWebRTCInputEvent|ICECandidateSendDelay)'`
@@ -19062,7 +19062,7 @@ Coverage now exercised in `web/console/e2e/desktop-remote-view.spec.ts`:
 
 ### Live Desktop Clipboard/File Verification + Linux Upload Home Fix (2026-03-14)
 
-- Finished the real-host desktop feature sweep on `containervm-deltaserver` and fixed the last live failures affecting clipboard/file workflows.
+- Finished the real-host desktop feature sweep on `dockerhost1-northserver` and fixed the last live failures affecting clipboard/file workflows.
   - `web/console/app/api/v1/nodes/[assetId]/clipboard/[action]/route.ts`
     - added an authenticated Next proxy for `/api/v1/nodes/<asset>/clipboard/{get,set}` so the public console origin can reach the hub clipboard bridge instead of returning `404`.
   - `internal/agentcore/clipboard_linux.go`
@@ -19075,7 +19075,7 @@ Coverage now exercised in `web/console/e2e/desktop-remote-view.spec.ts`:
   - `web/console/app/components/RemoteViewerShell.tsx`
   - `web/console/e2e/desktop-remote-view.spec.ts`
     - moved desktop drag-drop default target to `~/Downloads`, kept WebRTC uploads on the `file-transfer` data channel, and made VNC drag-drop use the existing files API fallback instead of incorrectly trying to call the WebRTC uploader.
-- Live validation on `https://michaelmacbook-pro.taildaf69.ts.net/nodes/containervm-deltaserver?panel=desktop` after agent self-update:
+- Live validation on `https://hub-dev.example.ts.net/nodes/dockerhost1-northserver?panel=desktop` after agent self-update:
   - WebRTC clipboard push/pull: pass
   - WebRTC drag-drop upload to `~/Downloads`: pass
   - VNC clipboard push/pull: pass
@@ -19085,12 +19085,12 @@ Coverage now exercised in `web/console/e2e/desktop-remote-view.spec.ts`:
   - `go vet ./internal/agentcore`
   - `cd web/console && npm run -s tsc -- --noEmit`
   - `cd web/console && PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 PLAYWRIGHT_USE_EXISTING_SERVER=1 npx playwright test e2e/desktop-remote-view.spec.ts --grep 'desktop (VNC drag-and-drop upload falls back to the files API|VNC toolbar supports clipboard sync through the agent API|WebRTC drag-and-drop upload sends file transfer chunks)'`
-  - live agent rebuild + self-update: `make build-agent-linux`, then `POST /api/agents/containervm-deltaserver/settings/update-agent {"force":true}`
+  - live agent rebuild + self-update: `make build-agent-linux`, then `POST /api/agents/dockerhost1-northserver/settings/update-agent {"force":true}`
 
 ### Live Linux Black-Screen Fix For WebRTC + VNC (2026-03-14)
 
-- Root-caused the shared black-screen regression on `containervm-deltaserver` to the real X11 session being alive but blanked/locked under LightDM/XFCE while the agent still defaulted X11 attach paths without explicitly waking the display.
-  - host evidence showed a real XFCE session for `michael` on `:0`, a LightDM greeter on `:1`, `light-locker` running in the user session, healthy WebRTC signaling, and both WebRTC/VNC rendering a live but all-black framebuffer.
+- Root-caused the shared black-screen regression on `dockerhost1-northserver` to the real X11 session being alive but blanked/locked under LightDM/XFCE while the agent still defaulted X11 attach paths without explicitly waking the display.
+  - host evidence showed a real XFCE session for `demo` on `:0`, a LightDM greeter on `:1`, `light-locker` running in the user session, healthy WebRTC signaling, and both WebRTC/VNC rendering a live but all-black framebuffer.
 - Fixed the Linux agent X11 attach path:
   - `internal/agentcore/x11_display.go`
     - added `preferredX11Display()` so desktop features prefer the detected logged-in X11 session before falling back to scanned displays / `:0`
@@ -19112,7 +19112,7 @@ Coverage now exercised in `web/console/e2e/desktop-remote-view.spec.ts`:
   - updated `internal/securityruntime/command_test.go`
 - Rebuilt + redeployed:
   - `make build-agent-linux`
-  - `POST /api/v1/agents/containervm-deltaserver/settings/update-agent {"force":true}`
+  - `POST /api/v1/agents/dockerhost1-northserver/settings/update-agent {"force":true}`
   - live update result: `forced update applied to sha256:c1285b067be6`
 - Live verification after redeploy:
   - WebRTC now renders the real LightDM login screen instead of a black frame.
@@ -19121,7 +19121,7 @@ Coverage now exercised in `web/console/e2e/desktop-remote-view.spec.ts`:
 - Validation:
   - `go test ./internal/agentcore`
   - `go test ./internal/securityruntime`
-  - live browser checks against `https://michaelmacbook-pro.taildaf69.ts.net/nodes/containervm-deltaserver?panel=desktop`
+  - live browser checks against `https://hub-dev.example.ts.net/nodes/dockerhost1-northserver?panel=desktop`
 
 ### Live WebRTC Keyboard Stability Fix On Linux (2026-03-14)
 
@@ -19142,7 +19142,7 @@ Coverage now exercised in `web/console/e2e/desktop-remote-view.spec.ts`:
       - added focused coverage for DOM-code preference and keysym fallback
 - Rebuilt + redeployed:
   - `make build-agent-linux`
-  - `POST /api/v1/agents/containervm-deltaserver/settings/update-agent {"force":true}`
+  - `POST /api/v1/agents/dockerhost1-northserver/settings/update-agent {"force":true}`
   - live update result: `forced update applied to sha256:3464585b301f`
 - Live verification:
   - WebRTC typing into the live Linux desktop now behaves normally again.
@@ -19150,7 +19150,7 @@ Coverage now exercised in `web/console/e2e/desktop-remote-view.spec.ts`:
 - Validation:
   - `go test ./internal/agentcore -run 'Test(DecodeWebRTCInputEventAcceptsFallbackPayload|X11KeyArgumentPrefersDOMCodeMapping|X11KeyArgumentFallsBackToKeysymCode|WebRTCManagerHandleWebRTCInput|WebRTCManagerHandleWebRTCStartSetsManagedDisplayX11Env)'`
   - `cd web/console && npm run -s tsc -- --noEmit`
-  - live browser verification against `https://michaelmacbook-pro.taildaf69.ts.net/nodes/containervm-deltaserver?panel=desktop`
+  - live browser verification against `https://hub-dev.example.ts.net/nodes/dockerhost1-northserver?panel=desktop`
 
 ### WebRTC Quality Badge Stabilization For Static Screens (2026-03-14)
 
@@ -19165,7 +19165,7 @@ Coverage now exercised in `web/console/e2e/desktop-remote-view.spec.ts`:
   - `docs/wiki/remote-desktop/webrtc.md`
 - Validation:
   - `cd web/console && npm run -s tsc -- --noEmit`
-  - live browser stats inspection against the active `containervm-deltaserver` WebRTC session confirmed the original oscillation came from bitrate-only classification, not FPS/loss instability
+  - live browser stats inspection against the active `dockerhost1-northserver` WebRTC session confirmed the original oscillation came from bitrate-only classification, not FPS/loss instability
 
 ### Desktop Native-Scaling And WebRTC Quality Parity Fixes (2026-03-14)
 
@@ -19223,7 +19223,7 @@ Coverage now exercised in `web/console/e2e/desktop-remote-view.spec.ts`:
 - Investigated operator feedback that Linux WebRTC still felt markedly laggier than VNC even after black-screen, keyboard, quality-selector, and Tailscale Serve fixes.
 - Root cause:
   - software-only Linux hosts advertising `VideoEncoders=["vp8","x264"]` were still selecting `vp8enc` because the runtime priority order preferred VP8 ahead of software `x264`
-  - that meant real-desktop WebRTC on machines like `containervm-deltaserver` was screen-capturing with `ximagesrc` and then software-encoding VP8 instead of using `x264enc tune=zerolatency speed-preset=ultrafast`
+  - that meant real-desktop WebRTC on machines like `dockerhost1-northserver` was screen-capturing with `ximagesrc` and then software-encoding VP8 instead of using `x264enc tune=zerolatency speed-preset=ultrafast`
   - for interactive desktop control, that software VP8 path was materially worse than the existing x264 path and could make WebRTC feel laggy/horrible even when the node itself was healthy
 - Fixed:
   - `internal/agentcore/webrtc_detect.go`

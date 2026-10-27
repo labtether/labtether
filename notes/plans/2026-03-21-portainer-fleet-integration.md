@@ -140,7 +140,7 @@ Find the exact location by reading the dispatcher function. The path parsing typ
 
 - [ ] **Step 3: Verify Go compiles**
 
-Run: `cd /Users/michael/Development/LabTether/hub && go vet ./internal/hubapi/portainer/...`
+Run: `cd /Users/demo/Development/LabTether/hub && go vet ./internal/hubapi/portainer/...`
 Expected: No errors
 
 - [ ] **Step 4: Commit**

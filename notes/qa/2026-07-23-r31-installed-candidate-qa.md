@@ -63,7 +63,7 @@ Non-loopback HTTP remains copyable but shows the exact Home Assistant
   runtime version and OCI labels.
 - Trivy found zero HIGH/CRITICAL vulnerabilities and zero image secrets. The
   JSON evidence is
-  `/Users/michael/Development/LabTether/.qa-evidence/trivy-labtether-installed-qa-20260723-r31.json`,
+  `/Users/demo/Development/LabTether/.qa-evidence/trivy-labtether-installed-qa-20260723-r31.json`,
   SHA-256 `c0f548bb6be48f8e1d68e6a85b354b2e1ad9755801e5c2b36330d6150f484a72`.
 - The exact deploy-hardening contract passed locally on the merged worktree.
   The first post-merge GitHub CI attempt was cancelled after its runner hung in

@@ -169,7 +169,7 @@ func TestTrueNASSubscriptionEventIngestionAndMessages(t *testing.T) {
 		Collection:  "alert.list",
 		MessageType: "removed",
 		Fields: map[string]any{
-			"hostname":  "OmegaNAS",
+			"hostname":  "VaultNAS",
 			"uuid":      "alert-uuid-1",
 			"formatted": "Pool degraded",
 			"level":     "info",
@@ -192,8 +192,8 @@ func TestTrueNASSubscriptionEventIngestionAndMessages(t *testing.T) {
 		t.Fatalf("expected subscription log event")
 	}
 	first := events[0]
-	if first.AssetID != "truenas-host-omeganas" {
-		t.Fatalf("asset id = %q, want truenas-host-omeganas", first.AssetID)
+	if first.AssetID != "truenas-host-vaultnas" {
+		t.Fatalf("asset id = %q, want truenas-host-vaultnas", first.AssetID)
 	}
 	if first.Level != "warn" {
 		t.Fatalf("level = %q, want warn", first.Level)
@@ -201,7 +201,7 @@ func TestTrueNASSubscriptionEventIngestionAndMessages(t *testing.T) {
 	if !strings.Contains(first.Message, "Pool degraded") {
 		t.Fatalf("message = %q, want pool degraded content", first.Message)
 	}
-	if first.Fields["hostname"] != "OmegaNAS" || first.Fields["uuid"] != "alert-uuid-1" {
+	if first.Fields["hostname"] != "VaultNAS" || first.Fields["uuid"] != "alert-uuid-1" {
 		t.Fatalf("expected propagated fields, got %#v", first.Fields)
 	}
 
@@ -285,7 +285,7 @@ func TestRunTrueNASSubscriptionWorkerAdditionalBranches(t *testing.T) {
 				"msg":        "added",
 				"id":         "evt-1",
 				"fields": map[string]any{
-					"hostname":  "OmegaNAS",
+					"hostname":  "VaultNAS",
 					"formatted": "Pool warning",
 					"level":     "info",
 					"datetime":  "2026-02-23T00:00:00Z",

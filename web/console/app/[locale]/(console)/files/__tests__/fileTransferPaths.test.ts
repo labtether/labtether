@@ -6,7 +6,7 @@ describe("joinTransferDestinationPath", () => {
     ["/", "/var/log/system.log", "/system.log"],
     ["/backup", "/var/log/system.log", "/backup/system.log"],
     ["~/backup/", "~/notes.txt", "~/backup/notes.txt"],
-    ["C:\\Backup", "C:\\Users\\Michael\\report.txt", "C:\\Backup\\report.txt"],
+    ["C:\\Backup", "C:\\Users\\demo\\report.txt", "C:\\Backup\\report.txt"],
     ["C:\\", "C:\\source.bin", "C:\\source.bin"],
   ])("joins %s and %s", (directory, sourcePath, expected) => {
     expect(joinTransferDestinationPath(directory, sourcePath)).toBe(expected);

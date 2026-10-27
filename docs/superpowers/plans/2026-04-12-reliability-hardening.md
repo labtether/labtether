@@ -24,7 +24,7 @@
 - [ ] safeGo accepts a sync.WaitGroup and increments/decrements it
 - [ ] Tests verify panic recovery and restart behavior
 
-**Verify:** `cd /Users/michael/Development/LabTether/hub && go test ./internal/servicehttp/ -run TestRecover -v`
+**Verify:** `cd /Users/demo/Development/LabTether/hub && go test ./internal/servicehttp/ -run TestRecover -v`
 
 **Steps:**
 
@@ -143,7 +143,7 @@ func TestSafeGo_WaitGroupTracking(t *testing.T) {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/michael/Development/LabTether/hub && go test ./internal/servicehttp/ -run TestRecover -v 2>&1; go test ./internal/servicehttp/ -run TestSafeGo -v 2>&1`
+Run: `cd /Users/demo/Development/LabTether/hub && go test ./internal/servicehttp/ -run TestRecover -v 2>&1; go test ./internal/servicehttp/ -run TestSafeGo -v 2>&1`
 Expected: Compilation errors — RecoverMiddleware and SafeGo not defined
 
 - [ ] **Step 3: Implement RecoverMiddleware and SafeGo**
@@ -212,13 +212,13 @@ func SafeGo(ctx context.Context, wg *sync.WaitGroup, name string, fn func(ctx co
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/michael/Development/LabTether/hub && go test ./internal/servicehttp/ -run "TestRecover|TestSafeGo" -v`
+Run: `cd /Users/demo/Development/LabTether/hub && go test ./internal/servicehttp/ -run "TestRecover|TestSafeGo" -v`
 Expected: All 4 tests PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/michael/Development/LabTether/hub && git add internal/servicehttp/recover.go internal/servicehttp/recover_test.go && git commit -m "feat: add RecoverMiddleware and SafeGo panic recovery helpers
+cd /Users/demo/Development/LabTether/hub && git add internal/servicehttp/recover.go internal/servicehttp/recover_test.go && git commit -m "feat: add RecoverMiddleware and SafeGo panic recovery helpers
 
 Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 ```
@@ -243,7 +243,7 @@ Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 - [ ] API key touch uses a bounded channel (100) drained by a single goroutine
 - [ ] Hub compiles and existing tests pass
 
-**Verify:** `cd /Users/michael/Development/LabTether/hub && go build ./cmd/labtether/ && go test ./cmd/labtether/ -count=1 -timeout 120s 2>&1 | tail -5`
+**Verify:** `cd /Users/demo/Development/LabTether/hub && go build ./cmd/labtether/ && go test ./cmd/labtether/ -count=1 -timeout 120s 2>&1 | tail -5`
 
 **Steps:**
 
@@ -372,13 +372,13 @@ default:
 
 - [ ] **Step 5: Build and run tests**
 
-Run: `cd /Users/michael/Development/LabTether/hub && go build ./cmd/labtether/ && go test ./cmd/labtether/ -count=1 -timeout 120s 2>&1 | tail -5`
+Run: `cd /Users/demo/Development/LabTether/hub && go build ./cmd/labtether/ && go test ./cmd/labtether/ -count=1 -timeout 120s 2>&1 | tail -5`
 Expected: Build succeeds, tests pass
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/michael/Development/LabTether/hub && git add -A && git commit -m "feat: wire panic recovery into hub HTTP, WebSocket, and background loops
+cd /Users/demo/Development/LabTether/hub && git add -A && git commit -m "feat: wire panic recovery into hub HTTP, WebSocket, and background loops
 
 Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 ```
@@ -400,7 +400,7 @@ Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 - [ ] retryDB respects context cancellation
 - [ ] Tests verify retry behavior and backoff timing
 
-**Verify:** `cd /Users/michael/Development/LabTether/hub && go test ./internal/persistence/ -run TestRetryDB -v`
+**Verify:** `cd /Users/demo/Development/LabTether/hub && go test ./internal/persistence/ -run TestRetryDB -v`
 
 **Steps:**
 
@@ -534,13 +534,13 @@ config.HealthCheckPeriod = 30 * time.Second
 
 - [ ] **Step 4: Run tests**
 
-Run: `cd /Users/michael/Development/LabTether/hub && go test ./internal/persistence/ -run TestRetryDB -v`
+Run: `cd /Users/demo/Development/LabTether/hub && go test ./internal/persistence/ -run TestRetryDB -v`
 Expected: All 4 tests PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/michael/Development/LabTether/hub && git add internal/persistence/retry.go internal/persistence/retry_test.go internal/persistence/postgres_schema.go && git commit -m "feat: add DB connection health checks and retryDB helper
+cd /Users/demo/Development/LabTether/hub && git add internal/persistence/retry.go internal/persistence/retry_test.go internal/persistence/postgres_schema.go && git commit -m "feat: add DB connection health checks and retryDB helper
 
 Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 ```
@@ -559,7 +559,7 @@ Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 - [ ] Returns 200 when postgres is reachable, 503 when not
 - [ ] goroutines field reflects runtime.NumGoroutine()
 
-**Verify:** `cd /Users/michael/Development/LabTether/hub && go build ./cmd/labtether/`
+**Verify:** `cd /Users/demo/Development/LabTether/hub && go build ./cmd/labtether/`
 
 **Steps:**
 
@@ -595,13 +595,13 @@ Add `"runtime"` to imports.
 
 - [ ] **Step 2: Build and verify**
 
-Run: `cd /Users/michael/Development/LabTether/hub && go build ./cmd/labtether/`
+Run: `cd /Users/demo/Development/LabTether/hub && go build ./cmd/labtether/`
 Expected: Build succeeds
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/michael/Development/LabTether/hub && git add internal/servicehttp/servicehttp.go && git commit -m "feat: deepen /healthz to report postgres status and goroutine count
+cd /Users/demo/Development/LabTether/hub && git add internal/servicehttp/servicehttp.go && git commit -m "feat: deepen /healthz to report postgres status and goroutine count
 
 Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 ```
@@ -627,7 +627,7 @@ Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 - [ ] WaitGroup tracks handler goroutines; receiveLoop waits on disconnect
 - [ ] All handlers go through semaphore (not just "heavy" ones)
 
-**Verify:** `cd /Users/michael/Development/LabTether/labtether-agent && go test ./internal/agentcore/ -run TestSafeGo -v`
+**Verify:** `cd /Users/demo/Development/LabTether/labtether-agent && go test ./internal/agentcore/ -run TestSafeGo -v`
 
 **Steps:**
 
@@ -734,13 +734,13 @@ Wrap each loop body the same way. The loops already have for/select patterns —
 
 - [ ] **Step 5: Build and test**
 
-Run: `cd /Users/michael/Development/LabTether/labtether-agent && go build ./... && go test ./internal/agentcore/ -run TestSafeGo -v`
+Run: `cd /Users/demo/Development/LabTether/labtether-agent && go build ./... && go test ./internal/agentcore/ -run TestSafeGo -v`
 Expected: Build succeeds, tests pass
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/michael/Development/LabTether/labtether-agent && git add -A && git commit -m "feat: add panic recovery to all agent goroutine entry points
+cd /Users/demo/Development/LabTether/labtether-agent && git add -A && git commit -m "feat: add panic recovery to all agent goroutine entry points
 
 Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 ```
@@ -760,7 +760,7 @@ Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 - [ ] Docker exec sessions use context.WithTimeout (5 minutes) instead of context.WithCancel
 - [ ] No zombie processes after command timeout
 
-**Verify:** `cd /Users/michael/Development/LabTether/labtether-agent && go build ./...`
+**Verify:** `cd /Users/demo/Development/LabTether/labtether-agent && go build ./...`
 
 **Steps:**
 
@@ -829,13 +829,13 @@ The existing `cancel` is stored on the session and called on cleanup, so the res
 
 - [ ] **Step 3: Build**
 
-Run: `cd /Users/michael/Development/LabTether/labtether-agent && go build ./...`
+Run: `cd /Users/demo/Development/LabTether/labtether-agent && go build ./...`
 Expected: Build succeeds
 
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /Users/michael/Development/LabTether/labtether-agent && git add -A && git commit -m "feat: force-kill timed-out commands and add Docker exec timeout
+cd /Users/demo/Development/LabTether/labtether-agent && git add -A && git commit -m "feat: force-kill timed-out commands and add Docker exec timeout
 
 Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 ```
@@ -858,7 +858,7 @@ Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 - [ ] Goroutine count exceeding 500 with >50% growth logs a warning
 - [ ] Tests verify stuck detection and goroutine leak warning
 
-**Verify:** `cd /Users/michael/Development/LabTether/labtether-agent && go test ./internal/agentcore/ -run TestWatchdog -v`
+**Verify:** `cd /Users/demo/Development/LabTether/labtether-agent && go test ./internal/agentcore/ -run TestWatchdog -v`
 
 **Steps:**
 
@@ -1043,13 +1043,13 @@ go RunWatchdog(ctx, WatchdogConfig{
 
 - [ ] **Step 5: Test**
 
-Run: `cd /Users/michael/Development/LabTether/labtether-agent && go test ./internal/agentcore/ -run TestWatchdog -v`
+Run: `cd /Users/demo/Development/LabTether/labtether-agent && go test ./internal/agentcore/ -run TestWatchdog -v`
 Expected: Both tests PASS
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/michael/Development/LabTether/labtether-agent && git add -A && git commit -m "feat: add watchdog for stuck heartbeat and goroutine leak detection
+cd /Users/demo/Development/LabTether/labtether-agent && git add -A && git commit -m "feat: add watchdog for stuck heartbeat and goroutine leak detection
 
 Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 ```
