@@ -82,20 +82,26 @@ func (d *Deps) PushAgentSettingsApply(assetID string, values map[string]string) 
 	})
 }
 
+// SendAgentSettingsApply runs on every agent connect. Agents save pushed values
+// over their install-time settings, so only operator-set values are sent and
+// nothing is sent when there are none.
 func (d *Deps) SendAgentSettingsApply(conn *agentmgr.AgentConn) {
 	if conn == nil {
 		return
 	}
-	effective, err := d.CollectEffectiveAgentSettingValues(conn.AssetID)
+	configured, err := d.CollectConfiguredAgentSettingValues(conn.AssetID)
 	if err != nil {
 		return
 	}
-	for key := range effective {
+	for key := range configured {
 		if def, ok := agentsettings.AgentSettingDefinitionByKey(key); ok && def.LocalOnly {
-			delete(effective, key)
+			delete(configured, key)
 		}
 	}
-	d.PushAgentSettingsApply(conn.AssetID, effective)
+	if len(configured) == 0 {
+		return
+	}
+	d.PushAgentSettingsApply(conn.AssetID, configured)
 }
 
 func (d *Deps) ProcessAgentSettingsApplied(conn *agentmgr.AgentConn, msg agentmgr.Message) {

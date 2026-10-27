@@ -320,7 +320,7 @@ func (m *MemoryEnrollmentStore) DecommissionAgentAsset(ctx context.Context, asse
 	return nil
 }
 
-func (m *MemoryEnrollmentStore) CommitAuthenticatedAgentHeartbeat(ctx context.Context, agentTokenID string, req assets.HeartbeatRequest) (assets.Asset, error) {
+func (m *MemoryEnrollmentStore) CommitAuthenticatedAgentHeartbeat(ctx context.Context, agentTokenID string, tokenTTL time.Duration, req assets.HeartbeatRequest) (assets.Asset, error) {
 	if err := ctx.Err(); err != nil {
 		return assets.Asset{}, err
 	}
@@ -347,6 +347,9 @@ func (m *MemoryEnrollmentStore) CommitAuthenticatedAgentHeartbeat(ctx context.Co
 	}
 	lastUsedAt := now
 	token.LastUsedAt = &lastUsedAt
+	if renewed := now.Add(tokenTTL); tokenTTL > 0 && renewed.After(token.ExpiresAt) {
+		token.ExpiresAt = renewed
+	}
 	m.agentTokens[token.ID] = token
 	req.AllowAgentIdentityTOFU = true
 	req.Source = "agent"

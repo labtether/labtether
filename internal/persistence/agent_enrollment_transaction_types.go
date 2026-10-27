@@ -75,6 +75,9 @@ type AgentEnrollmentTransactionStore interface {
 	DecommissionAgentAsset(ctx context.Context, assetID string) error
 	IsAgentIdentityRetired(ctx context.Context, assetID string) (bool, error)
 	ValidateActiveAgentTokenID(ctx context.Context, agentTokenID, assetID string) error
-	CommitAuthenticatedAgentHeartbeat(ctx context.Context, agentTokenID string, req assets.HeartbeatRequest) (assets.Asset, error)
+	// CommitAuthenticatedAgentHeartbeat records a heartbeat for the token's
+	// asset. When tokenTTL is positive it also moves the still-active token's
+	// expiry to at least now+tokenTTL; it never shortens it.
+	CommitAuthenticatedAgentHeartbeat(ctx context.Context, agentTokenID string, tokenTTL time.Duration, req assets.HeartbeatRequest) (assets.Asset, error)
 	CommitExistingOwnerAgentHeartbeat(ctx context.Context, req assets.HeartbeatRequest) (assets.Asset, error)
 }

@@ -39,7 +39,7 @@ func TestPostgresDecommissionSerializesAuthenticatedHeartbeat(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		<-start
-		_, err := store.CommitAuthenticatedAgentHeartbeat(ctx, result.AgentToken.ID, assets.HeartbeatRequest{
+		_, err := store.CommitAuthenticatedAgentHeartbeat(ctx, result.AgentToken.ID, 0, assets.HeartbeatRequest{
 			AssetID: assetID, Type: "node", Name: assetID, Source: "agent", Status: "online",
 		})
 		heartbeatErr <- err

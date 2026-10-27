@@ -25,7 +25,7 @@ func TestPostgresAuthenticatedHeartbeatRejectsOrphanActiveToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.CommitAuthenticatedAgentHeartbeat(ctx, token.ID, assets.HeartbeatRequest{
+	if _, err := store.CommitAuthenticatedAgentHeartbeat(ctx, token.ID, 0, assets.HeartbeatRequest{
 		AssetID: assetID, Type: "node", Name: assetID, Source: "agent",
 	}); !errors.Is(err, ErrAgentCredentialInactive) {
 		t.Fatalf("PG orphan heartbeat error=%v", err)
@@ -63,7 +63,7 @@ func TestPostgresUnverifiedHeartbeatAnchorCannotAuthorizeRecovery(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	anchored, err := store.CommitAuthenticatedAgentHeartbeat(ctx, first.AgentToken.ID, assets.HeartbeatRequest{
+	anchored, err := store.CommitAuthenticatedAgentHeartbeat(ctx, first.AgentToken.ID, 0, assets.HeartbeatRequest{
 		AssetID: assetID, Type: "node", Name: assetID, Source: "agent",
 		Metadata: map[string]string{
 			assets.MetadataKeyAgentDeviceFingerprint:  "LT-PG-BEARER-TOFU",
@@ -121,7 +121,7 @@ func TestPostgresAgentHeartbeatsPreserveOperatorGroup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := store.CommitAuthenticatedAgentHeartbeat(ctx, token.ID, assets.HeartbeatRequest{
+	got, err := store.CommitAuthenticatedAgentHeartbeat(ctx, token.ID, 0, assets.HeartbeatRequest{
 		AssetID: assetID, Type: "node", Name: assetID, Source: "manual", GroupID: "attacker-group",
 	})
 	if err != nil || got.GroupID != group.ID {
