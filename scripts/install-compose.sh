@@ -13,6 +13,8 @@ BUILD_LOCAL=0
 
 # shellcheck source=/dev/null
 source "${PROJECT_ROOT}/scripts/lib/script-common.sh"
+# shellcheck source=/dev/null
+source "${PROJECT_ROOT}/scripts/lib/postgres-volume.sh"
 
 usage() {
   cat <<'USAGE'
@@ -166,6 +168,8 @@ else
   log_info "Pulling release images..."
   docker compose "${compose_args[@]}" pull
 fi
+
+labtether_move_legacy_postgres_volume "${compose_args[@]}"
 
 log_info "Starting deploy stack..."
 docker compose "${compose_args[@]}" up -d

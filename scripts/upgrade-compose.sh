@@ -11,6 +11,8 @@ ENABLE_REMOTE_DESKTOP=0
 
 # shellcheck source=/dev/null
 source "${PROJECT_ROOT}/scripts/lib/script-common.sh"
+# shellcheck source=/dev/null
+source "${PROJECT_ROOT}/scripts/lib/postgres-volume.sh"
 
 usage() {
   cat <<'USAGE'
@@ -104,6 +106,8 @@ cd "${PROJECT_ROOT}"
 
 log_info "Pulling LabTether ${VERSION} images..."
 docker compose "${compose_args[@]}" pull
+
+labtether_move_legacy_postgres_volume "${compose_args[@]}"
 
 log_info "Recreating deploy stack..."
 docker compose "${compose_args[@]}" up -d
