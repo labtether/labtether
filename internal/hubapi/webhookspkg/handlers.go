@@ -13,6 +13,7 @@ import (
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/idgen"
 	"github.com/labtether/labtether/internal/persistence"
+	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/webhooks"
 )
 
@@ -167,6 +168,9 @@ func (d *Deps) HandleV2WebhookList(w http.ResponseWriter, r *http.Request) {
 	if list == nil {
 		list = []webhooks.Webhook{}
 	}
+	for i := range list {
+		list[i] = WebhookForReader(r.Context(), list[i])
+	}
 	apiv2.WriteJSON(w, http.StatusOK, list)
 }
 
@@ -185,7 +189,7 @@ func (d *Deps) HandleV2WebhookGet(w http.ResponseWriter, r *http.Request, id str
 		apiv2.WriteError(w, http.StatusNotFound, "not_found", "webhook not found")
 		return
 	}
-	apiv2.WriteJSON(w, http.StatusOK, wh)
+	apiv2.WriteJSON(w, http.StatusOK, WebhookForReader(r.Context(), wh))
 }
 
 // HandleV2WebhookUpdate applies a partial update to an existing webhook.
@@ -341,6 +345,11 @@ func validateWebhookURL(raw string) error {
 	}
 	if parsedURL.Fragment != "" {
 		return errors.New("url fragments are not supported")
+	}
+	if parsedURL.Scheme == "http" && !securityruntime.InsecureTransportAllowed() {
+		// Delivery refuses plain HTTP under this setting, so saving the URL
+		// would only create a webhook that silently never fires.
+		return errors.New("url must use https; http:// needs LABTETHER_ALLOW_INSECURE_TRANSPORT=true on the Hub")
 	}
 	return nil
 }
