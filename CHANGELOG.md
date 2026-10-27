@@ -29,6 +29,14 @@ configuration step.
   `LABTETHER_POSTGRES_LEGACY_VOLUME=<that volume>`. To start empty on purpose,
   set `LABTETHER_POSTGRES_NEW_DATABASE=true` in `.env.deploy` once. Before
   upgrading, back up the unnamed volume, not `postgres-data`.
+- **The Hub no longer runs as root.** v1.4.0 ran it as root, so the files it
+  wrote (including `/data/install/secrets.json`, `state.json` and the TLS keys
+  in `/data/certs`) are owned by root with mode 0600. 1.7.0 runs the Hub as
+  `65532:65532`. On every start, the `labtether-bootstrap` job gives
+  root-owned files in the Hub's data, CA, service-token and agent-cache
+  volumes to that user. It does not follow symlinks or leave the volume.
+  Nothing else changes, and v1.4.0 can still read the files if you restore
+  it.
 - **Old enrollment tokens stop working.** Migration v98 disables every
   enrollment token created before 1.7.0, because those tokens name no device
   or group. Agents that are already enrolled keep their own credentials and
@@ -91,6 +99,10 @@ configuration step.
   `deploy.env.example` (GitHub renamed `.env.deploy.example` to
   `default.env.deploy.example`). `SHA256SUMS` lists `deploy-manifest.json`,
   `deploy.env.example` and `docker-compose.deploy.yml`.
+- **Image tags:** a release tags `ghcr.io/labtether/labtether:<version>` only
+  after the pushed image has started the full deploy stack, console included.
+  `:latest` and the GitHub latest release move only for the highest `vX.Y.Z`
+  tag, so a patch for an older line no longer takes them over.
 - **Login limits:** each client gets 30 login attempts per minute before the
   shared 120-per-minute budget. Behind your own reverse proxy, set
   `LABTETHER_TRUST_PROXY_CIDRS` or `LABTETHER_TRUST_PROXY_HOSTS` so the

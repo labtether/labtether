@@ -111,12 +111,32 @@ services:
           create_secret_file /bootstrap/auth/setup-token 65532:65532 0400
         fi
         validate_secret_file /bootstrap/auth/setup-token 65532:65532 400
+        # LabTether v1.4.0 ran the Hub as root, so the files it wrote to these
+        # volumes are owned by root (secrets.json and state.json with mode
+        # 0600). The Hub now runs as 65532:65532 and cannot read them. Hand
+        # only root-owned entries to the Hub user. find does not follow
+        # symlinks, chown -h changes a link itself, and -xdev keeps the walk on
+        # each volume's own filesystem.
+        for hub_volume in /hub-volumes/data /hub-volumes/ca /hub-volumes/service-auth /hub-volumes/agent-cache; do
+          if [ -L "$$hub_volume" ] || [ ! -d "$$hub_volume" ]; then
+            echo "bootstrap: refusing unsafe Hub volume: $$hub_volume" >&2
+            exit 1
+          fi
+          if [ -n "$$(find "$$hub_volume" -xdev -mindepth 1 -user 0 -print | head -n 1)" ]; then
+            echo "bootstrap: giving root-owned files in $${hub_volume#/hub-volumes/} to the Hub user (written by LabTether v1.4.0 or older)"
+          fi
+          find "$$hub_volume" -xdev -user 0 -exec chown -h 65532:65532 {} +
+        done
     environment:
       LABTETHER_POSTGRES_NEW_DATABASE: ${LABTETHER_POSTGRES_NEW_DATABASE:-false}
     volumes:
       - labtether-bootstrap:/bootstrap
       - labtether-auth-bootstrap:/bootstrap/auth
       - postgres-data:/postgres-root
+      - labtether-data:/hub-volumes/data
+      - labtether-ca:/hub-volumes/ca
+      - labtether-service-auth:/hub-volumes/service-auth
+      - labtether-agent-cache:/hub-volumes/agent-cache
     deploy:
       resources:
         limits:

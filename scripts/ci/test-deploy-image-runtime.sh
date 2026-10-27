@@ -16,7 +16,7 @@ if [[ "$LABTETHER_IMAGE" == -* || "$LABTETHER_IMAGE" =~ [[:space:]] ]]; then
   printf 'FAIL: invalid image reference\n' >&2
   exit 2
 fi
-for command_name in docker grep mktemp python3 sed; do
+for command_name in curl docker grep mktemp python3 sed; do
   command -v "$command_name" >/dev/null 2>&1 || {
     printf 'FAIL: required command not found: %s\n' "$command_name" >&2
     exit 1
@@ -27,6 +27,10 @@ tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/labtether-image-mount-contract.XXXXXX")"
 project_name="labtether-mount-contract-$PPID-$$"
 preflight_container="${project_name}-preflight"
 compose=(docker compose --project-name "$project_name" --env-file /dev/null -f "$SOURCE_COMPOSE")
+dump_logs() {
+  "${compose[@]}" logs --no-color --tail 80 \
+    labtether-bootstrap labtether web-console console-ingress >&2 2>&1 || true
+}
 cleanup() {
   local container_id="" volume_name=""
   docker rm -f "$preflight_container" >/dev/null 2>&1 || true
@@ -73,6 +77,20 @@ fi
 docker rm "$preflight_container" >/dev/null
 
 export LABTETHER_IMAGE POSTGRES_IMAGE
+# Upgrade from LabTether v1.4.0: that Hub ran as root and left root-owned files
+# (secrets.json and state.json with mode 0600) in the volumes the Hub now uses
+# as 65532:65532. Seed that shape, plus a symlink to a root-owned secret outside
+# those volumes, so the bootstrap must hand the files over without following it.
+"${compose[@]}" run --rm --no-deps --no-TTY --entrypoint /bin/sh labtether-bootstrap -ec '
+  umask 077
+  mkdir /hub-volumes/data/install /hub-volumes/agent-cache/linux-amd64
+  printf "{\"schema_version\":1}\n" >/hub-volumes/data/install/state.json
+  printf "{}\n" >/hub-volumes/data/install/secrets.json
+  ln -s /bootstrap/postgres/password /hub-volumes/data/install/password-link
+  printf "stale\n" >/hub-volumes/ca/ca.crt
+  chmod 0644 /hub-volumes/ca/ca.crt
+  printf "stale\n" >/hub-volumes/service-auth/api-token
+' >/dev/null
 # Run the no-network bootstrap in its isolated project to prove the LabTether
 # image contains the narrowly required secret-generation tools. The completed
 # container is then inspected below before the disposable project is removed.
@@ -110,6 +128,11 @@ if container.get("Image") != expected_id:
 expected_mounts = {
     "/bootstrap": f"{project_name}_labtether-bootstrap",
     "/bootstrap/auth": f"{project_name}_labtether-auth-bootstrap",
+    "/postgres-root": f"{project_name}_postgres-data",
+    "/hub-volumes/data": f"{project_name}_labtether-data",
+    "/hub-volumes/ca": f"{project_name}_labtether-ca",
+    "/hub-volumes/service-auth": f"{project_name}_labtether-service-auth",
+    "/hub-volumes/agent-cache": f"{project_name}_labtether-agent-cache",
 }
 mounts = container.get("Mounts", [])
 actual_destinations = {mount.get("Destination") for mount in mounts}
@@ -149,10 +172,64 @@ if set(host_config.get("CapAdd") or []) != {"CAP_CHOWN", "CAP_DAC_OVERRIDE", "CA
     raise SystemExit(f"bootstrap: runtime capability allowlist changed: {host_config.get('CapAdd')}")
 PY
 
-# `docker compose create` intentionally materializes the remaining dependencies
-# without starting them. This exercises Docker's real image/Compose mount merge
-# while keeping every dependency container in the non-running created state.
-"${compose[@]}" create web-console console-ingress
+# The bootstrap must have left no root-owned entry in the Hub volumes and must
+# not have followed the symlink to the root-owned database password.
+# shellcheck disable=SC2016 # Expanded by the container shell.
+if ! "${compose[@]}" run --rm --no-deps --no-TTY --entrypoint /bin/sh labtether-bootstrap -ec '
+  left="$(find /hub-volumes/data /hub-volumes/ca /hub-volumes/service-auth /hub-volumes/agent-cache -xdev -user 0)"
+  if [ -n "$left" ]; then
+    printf "root-owned entries remain:\n%s\n" "$left" >&2
+    exit 1
+  fi
+  test "$(stat -c %u:%g /hub-volumes/data/install/secrets.json)" = 65532:65532
+  test "$(stat -c %u:%g /bootstrap/postgres/password)" = 0:0
+'; then
+  printf 'FAIL: bootstrap did not safely hand root-owned Hub files to the Hub user\n' >&2
+  exit 1
+fi
+
+# Start the default stack from the deploy file. Compose starts web-console only
+# after the Hub health check passes, and console-ingress only after
+# web-console's. The console must then answer through the published port with
+# a reply it fetched from the Hub over the verified internal TLS route.
+if ! "${compose[@]}" up --detach >/dev/null; then
+  printf 'FAIL: the deploy stack did not start\n' >&2
+  dump_logs
+  exit 1
+fi
+deadline=$((SECONDS + 180))
+for service_name in labtether web-console console-ingress; do
+  health=""
+  until [[ "$health" == healthy ]]; do
+    if (( SECONDS >= deadline )); then
+      printf 'FAIL: %s is not healthy (%s)\n' "$service_name" "${health:-not running}" >&2
+      dump_logs
+      exit 1
+    fi
+    sleep 3
+    container_id="$("${compose[@]}" ps -q "$service_name")"
+    health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$container_id" 2>/dev/null || true)"
+  done
+done
+console_url="http://127.0.0.1:3000"
+setup_status=""
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  setup_status="$(curl --fail --silent --max-time 10 "${console_url}/api/auth/bootstrap/status")" && break
+  setup_status=""
+  sleep 3
+done
+if ! python3 -c 'import json, sys; sys.exit(not isinstance(json.loads(sys.argv[1]).get("setup_required"), bool))' "$setup_status" 2>/dev/null; then
+  printf 'FAIL: the console did not return setup status from the Hub\n' >&2
+  dump_logs
+  exit 1
+fi
+login_code="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 20 --location --max-redirs 3 "${console_url}/login" || true)"
+if [[ "$login_code" != 200 ]]; then
+  printf 'FAIL: the console login page returned HTTP %s\n' "${login_code:-nothing}" >&2
+  dump_logs
+  exit 1
+fi
+
 for service_name in web-console console-ingress; do
   container_id="$("${compose[@]}" ps -aq "$service_name")"
   if [[ -z "$container_id" ]]; then
@@ -182,4 +259,4 @@ if "/data" in (container.get("HostConfig", {}).get("Tmpfs") or {}):
 PY
 done
 
-printf 'PASS: deploy image runtime mount contract\n'
+printf 'PASS: deploy image runtime contract, v1.4.0 file ownership and console start\n'
