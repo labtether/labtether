@@ -66,8 +66,8 @@ func (d *Deps) ProcessAgentDockerExecClosedMessage(conn *agentmgr.AgentConn, msg
 }
 
 // ProcessAgentDockerLogsStreamMessage drops docker.logs.stream messages. The
-// Hub never starts this stream, and container logs are operator-only host
-// data, so they must not reach every event subscriber and webhook.
+// Hub never starts these streams (container logs use request/response), so
+// any that arrive are unsolicited and are not passed to browsers or webhooks.
 func (d *Deps) ProcessAgentDockerLogsStreamMessage(_ *agentmgr.AgentConn, _ agentmgr.Message) {}
 
 // ProcessAgentDockerComposeResult handles docker.compose.result messages from agents.
