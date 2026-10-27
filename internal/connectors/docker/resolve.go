@@ -54,6 +54,38 @@ func (c *Coordinator) resolveContainerTarget(assetID string) (agentID, container
 	return "", "", fmt.Errorf("container not found for asset ID: %s", assetID)
 }
 
+// ContainerAssetIDForDockerID maps a raw Docker container ID, as host container
+// lists return it, to its container asset ID. It accepts the full ID or a prefix
+// of at least 12 hex characters and requires exactly one matching container.
+func (c *Coordinator) ContainerAssetIDForDockerID(dockerID string) (string, bool) {
+	id := strings.ToLower(strings.TrimSpace(dockerID))
+	if len(id) < 12 || len(id) > 64 || strings.Trim(id, "0123456789abcdef") != "" {
+		return "", false
+	}
+
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	match := ""
+	for agentID, host := range c.hosts {
+		for _, ct := range host.Containers {
+			if !strings.HasPrefix(strings.ToLower(ct.ID), id) {
+				continue
+			}
+			short := ct.ID
+			if len(short) > 12 {
+				short = short[:12]
+			}
+			assetID := "docker-ct-" + normalizeID(agentID) + "-" + short
+			if match != "" && match != assetID {
+				return "", false
+			}
+			match = assetID
+		}
+	}
+	return match, match != ""
+}
+
 // ErrComposeUpgradeRequired is safe to show at all Compose admission boundaries.
 var ErrComposeUpgradeRequired = connectorsdk.ErrComposeUpgradeRequired
 
