@@ -189,10 +189,7 @@ func (d *Deps) HandleAuthUserActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update user role")
 			return
 		}
-		// Streams opened with the old rights must not outlive a demotion.
-		if (auth.HasWritePrivileges(user.Role) && !auth.HasWritePrivileges(role)) || (auth.HasAdminPrivileges(user.Role) && !auth.HasAdminPrivileges(role)) {
-			d.revokeStreams(shared.StreamActorKey(user.ID))
-		}
+		d.revokeUserStreamsIfDemoted(r.Context(), user.ID, user.Role, role)
 		user.Role = role
 	}
 	if req.Password != nil {
@@ -263,7 +260,7 @@ func (d *Deps) handleDeleteUser(w http.ResponseWriter, r *http.Request, id strin
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete user")
 		return
 	}
-	d.revokeStreams(shared.StreamActorKey(id))
+	d.revokeUserStreams(r.Context(), id)
 
 	w.WriteHeader(http.StatusNoContent)
 }

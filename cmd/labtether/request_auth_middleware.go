@@ -37,6 +37,11 @@ func (s *apiServer) withAuthMethodPolicy(next http.HandlerFunc, methodPolicy fun
 			if rejectHostDataForRole(w, ticketedReq, userRoleFromContext(ticketedReq.Context())) {
 				return
 			}
+			// The ticket may predate a logout, deletion, demotion or key removal.
+			if !s.streamTicketRequestActive(ticketedReq.Context()) {
+				servicehttp.WriteError(w, http.StatusUnauthorized, "unauthorized")
+				return
+			}
 			next(w, ticketedReq)
 			return
 		}

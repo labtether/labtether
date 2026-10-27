@@ -27,13 +27,6 @@ func (d *Deps) loginClientIP(r *http.Request) string {
 	return shared.RequestClientKey(r)
 }
 
-// revokeStreams ends live streams that belong to credentials that just ended.
-func (d *Deps) revokeStreams(keys ...string) {
-	if d != nil && d.RevokeStreams != nil {
-		d.RevokeStreams(keys...)
-	}
-}
-
 // HandleAuthLogin handles POST /auth/login.
 func (d *Deps) HandleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -187,7 +180,7 @@ func (d *Deps) HandleDeleteOwnAccount(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete account")
 		return
 	}
-	d.revokeStreams(shared.StreamActorKey(userID))
+	d.revokeUserStreams(r.Context(), userID)
 
 	auth.ClearSessionCookie(w)
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"ok": true})

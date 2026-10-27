@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -265,17 +264,18 @@ func TestWithAuthNativeStreamOriginRequiresValidOneTimeTicket(t *testing.T) {
 
 func TestWithAuthNativeStreamOriginAcceptsValidOneTimeTicket(t *testing.T) {
 	sut := newTestAPIServer(t)
-	ctx := contextWithPrincipal(context.Background(), "native-stream-user", auth.RoleOperator)
+	ctx := signedInStreamContext(t, sut, "native-stream-user", auth.RoleOperator)
 	ticket, _, err := sut.issueStreamTicket(ctx, "session-1")
 	if err != nil {
 		t.Fatalf("issue stream ticket: %v", err)
 	}
+	wantActor := userIDFromContext(ctx)
 
 	called := false
 	handler := sut.withAuth(func(w http.ResponseWriter, r *http.Request) {
 		called = true
-		if got := userIDFromContext(r.Context()); got != "native-stream-user" {
-			t.Fatalf("principal = %q, want native-stream-user", got)
+		if got := userIDFromContext(r.Context()); got != wantActor {
+			t.Fatalf("principal = %q, want %q", got, wantActor)
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})

@@ -30,28 +30,24 @@ func (s *apiServer) consumeEventTicketPrincipals(ticket string) ([]string, bool)
 	now := time.Now().UTC()
 
 	s.streamTicketStore.Mu.Lock()
-	defer s.streamTicketStore.Mu.Unlock()
-
 	entry, ok := s.streamTicketStore.Tickets[ticket]
-	if !ok {
+	if !ok || entry.SessionID != "__browser_events__" {
+		s.streamTicketStore.Mu.Unlock()
 		return nil, false
 	}
-	if entry.ExpiresAt.Before(now) {
-		delete(s.streamTicketStore.Tickets, ticket)
-		return nil, false
-	}
-	if entry.SessionID != "__browser_events__" {
-		return nil, false
-	}
-	if entry.APIKeyID != "" && len(entry.AllowedAssets) > 0 {
-		delete(s.streamTicketStore.Tickets, ticket)
-		return nil, false
-	}
-
 	delete(s.streamTicketStore.Tickets, ticket)
+	s.streamTicketStore.Mu.Unlock()
+
+	if entry.ExpiresAt.Before(now) || (entry.APIKeyID != "" && len(entry.AllowedAssets) > 0) {
+		return nil, false
+	}
 	ctx := contextWithPrincipal(context.Background(), entry.ActorID, entry.Role)
 	if entry.AuthSessionID != "" {
 		ctx = shared.ContextWithAuthSessionID(ctx, entry.AuthSessionID)
+	}
+	// The ticket may predate a logout, deletion, demotion or key removal.
+	if !s.streamTicketPrincipalActive(ctx, entry.ActorID, entry.Role, entry.APIKeyID, entry.AuthSessionID) {
+		return nil, false
 	}
 	return shared.StreamPrincipalKeys(ctx), true
 }
@@ -112,6 +108,7 @@ func (s *apiServer) revokeStreamPrincipals(keys ...string) {
 	if s == nil || len(keys) == 0 {
 		return
 	}
+	s.dropStreamTickets(keys...)
 	s.sessionStreams.RevokePrincipals(keys...)
 	if s.broadcaster != nil {
 		s.broadcaster.DisconnectPrincipals(keys...)
