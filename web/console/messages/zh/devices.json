@@ -33,5 +33,18 @@
     "matchSignals": "匹配信号",
     "confidence": "置信度：{value}%",
     "newSuggestions": "{count} 个建议的关系"
+  },
+  "hubSshKey": {
+    "title": "Hub SSH 密钥",
+    "description": "允许 Hub 以 root 身份通过 SSH 登录此设备。",
+    "on": "已开启",
+    "off": "已关闭",
+    "loading": "加载中...",
+    "removalPending": "代理下次连接时，Hub 会移除其密钥。",
+    "removalSent": "Hub 已请求代理移除其密钥。",
+    "noAgent": "此设备没有代理。请在设备上从 authorized_keys 中移除 Hub 密钥。",
+    "adminOnly": "只有管理员或所有者可以更改此设置。",
+    "loadError": "无法加载 Hub SSH 密钥设置。",
+    "saveError": "无法更改 Hub SSH 密钥设置。"
   }
 }

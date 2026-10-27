@@ -9,6 +9,7 @@ import { DesktopTab } from "./DesktopTab";
 import { DisksTab } from "./DisksTab";
 import { FilesTab } from "./FilesTab";
 import { HomeAssistantTab } from "./HomeAssistantTab";
+import { HubSSHKeyCard } from "./HubSSHKeyCard";
 import { InterfacesTab } from "./InterfacesTab";
 import { NodeActionsTabCard } from "./NodeActionsTabCard";
 import { NodeLogsTabCard } from "./NodeLogsTabCard";
@@ -154,7 +155,12 @@ const PANEL_RENDERERS: Record<RegisteredPanelID, PanelRenderer> = {
   stats: renderDockerStatsPanel,
   inspect: renderDockerInspectPanel,
   containers: renderDockerStackContainersPanel,
-  connect: (context) => <ConnectPanel nodeId={context.nodeId} />,
+  connect: (context) => (
+    <>
+      <ConnectPanel nodeId={context.nodeId} />
+      <HubSSHKeyCard nodeId={context.nodeId} isAgentDevice={context.asset.source === "agent"} />
+    </>
+  ),
 };
 
 function isRegisteredPanelID(panel: string): panel is RegisteredPanelID {
