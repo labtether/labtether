@@ -25,6 +25,7 @@ import { useWebServices, type WebService } from "../../../../hooks/useWebService
 import { ProtocolForm } from "./ProtocolForm";
 import { ConnectionTypePicker } from "./ConnectionTypePicker";
 import { WebServiceForm } from "./WebServiceForm";
+import { safeHttpURL } from "../../../../../lib/safeExternalURL";
 
 const PROTOCOL_ICONS: Record<ProtocolType, LucideIcon> = {
   ssh: Terminal,
@@ -115,7 +116,8 @@ export function ConnectPanel({ nodeId }: ConnectPanelProps) {
   };
 
   const handleConnectWebService = (url: string) => {
-    window.open(url, "_blank", "noopener,noreferrer");
+    const href = safeHttpURL(url);
+    if (href) window.open(href, "_blank", "noopener,noreferrer");
   };
 
   const handleProtocolAdd = async (data: Partial<ProtocolConfig>) => {

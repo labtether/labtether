@@ -9,6 +9,7 @@ import { EmptyState } from "../../../../components/ui/EmptyState";
 import { useWebServices, type WebService } from "../../../../hooks/useWebServices";
 import { useStatus } from "../../../../contexts/StatusContext";
 import type { Asset } from "../../../../console/models";
+import { safeHttpURL } from "../../../../../lib/safeExternalURL";
 
 const SERVICE_CATEGORIES = [
   "Media",
@@ -476,7 +477,7 @@ export default function ManualServicesTab({ prefilledAssetId }: ManualServicesTa
                   </td>
                   <td className="px-3 py-2 text-[var(--muted)] max-w-[200px] truncate">
                     <a
-                      href={service.url}
+                      href={safeHttpURL(service.url)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="hover:text-[var(--accent)] transition-colors"
