@@ -98,6 +98,7 @@ services:
             echo "bootstrap: this Hub already exists, but its database is not in the postgres-data volume." >&2
             echo "bootstrap: LabTether v1.4.0 kept it in an unnamed Docker volume. Stopping before PostgreSQL creates an empty database." >&2
             echo "bootstrap: upgrade with the LabTether installer or scripts/upgrade-compose.sh, which move it. To start with an empty database, set LABTETHER_POSTGRES_NEW_DATABASE=true in .env.deploy once." >&2
+            echo "bootstrap: if docker compose up already replaced the old postgres container, re-run the upgrade with LABTETHER_POSTGRES_LEGACY_VOLUME set to the old volume (docker volume ls --filter dangling=true)." >&2
             exit 1
           fi
           : > "$$postgres_marker"
