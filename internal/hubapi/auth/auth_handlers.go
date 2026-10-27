@@ -27,6 +27,13 @@ func (d *Deps) loginClientIP(r *http.Request) string {
 	return shared.RequestClientKey(r)
 }
 
+func (d *Deps) requestIsSecure(r *http.Request) bool {
+	if d == nil || d.RequestIsSecure == nil {
+		return true
+	}
+	return d.RequestIsSecure(r)
+}
+
 // HandleAuthLogin handles POST /auth/login.
 func (d *Deps) HandleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {

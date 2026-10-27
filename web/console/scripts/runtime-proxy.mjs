@@ -5,6 +5,10 @@ import { checkServerIdentity } from "node:tls";
 
 export const RUNTIME_PROXY_HOST = "127.0.0.1";
 export const RUNTIME_PROXY_PORT = 3011;
+// The bundled console ingress fetches the per-boot ingress key from this port.
+// It is not published; only containers on the console network can reach it.
+export const INGRESS_KEY_PORT = 3001;
+const INGRESS_KEY_HEADER = "x-labtether-ingress-key";
 
 const MAX_REQUEST_TARGET_BYTES = 16 * 1024;
 const UPSTREAM_HANDSHAKE_TIMEOUT_MS = 10_000;
@@ -204,6 +208,7 @@ function buildUpstreamHeaders(incomingHeaders, target, forwarding, isWebSocket) 
       || lowerName === "host"
       || lowerName === "forwarded"
       || lowerName.startsWith("x-forwarded-")
+      || lowerName === INGRESS_KEY_HEADER
       || blockedHeaders.has(lowerName)
     ) {
       continue;
@@ -330,6 +335,20 @@ function proxyWebSocketUpgrade(request, socket, head, target, parsedTarget, forw
     if (!upgraded) upstream.destroy();
   });
   upstream.end();
+}
+
+// Serves the ingress key to the bundled console ingress, which sends it with
+// every request so the console can trust the client address it appended.
+export function createIngressKeyServer(key) {
+  return createHttpServer({ maxHeaderSize: 8 * 1024 }, (request, response) => {
+    if (request.method !== "GET" || request.url !== "/ingress-key") {
+      response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+      response.end("Not Found");
+      return;
+    }
+    response.writeHead(200, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" });
+    response.end(key);
+  });
 }
 
 export function createRuntimeProxyServer(target) {

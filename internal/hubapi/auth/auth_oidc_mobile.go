@@ -173,7 +173,7 @@ func (d *Deps) HandleAuthOIDCMobileCallback(w http.ResponseWriter, r *http.Reque
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create session")
 		return
 	}
-	auth.SetSessionCookie(w, raw, auth.SessionDuration)
+	auth.SetSessionCookie(w, raw, auth.SessionDuration, d.requestIsSecure(r))
 	d.appendOIDCAudit("native_mobile", "allow", "", user, session, created)
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{

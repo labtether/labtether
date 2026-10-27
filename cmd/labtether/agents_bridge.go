@@ -78,7 +78,7 @@ func (s *apiServer) buildAgentsDeps() *agentspkg.Deps {
 
 		AgentWebSocketUpgrader: agentWebSocketUpgrader,
 
-		EnforceRateLimit:           s.enforceRateLimit,
+		EnforceRateLimit:           s.enforceClientRateLimit,
 		WrapAuth:                   s.withAuth,
 		WrapAdmin:                  s.withAdminAuth,
 		PrincipalActorID:           principalActorID,

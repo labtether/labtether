@@ -151,7 +151,7 @@ func (s *apiServer) handleDemoSession(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create session")
 		return
 	}
-	auth.SetSessionCookie(w, raw, auth.SessionDuration)
+	auth.SetSessionCookie(w, raw, auth.SessionDuration, browserRequestIsSecure(r))
 
 	// Redirect to the requested path, defaulting to "/".
 	next := sanitizeNextPath(r.URL.Query().Get("redirect"))

@@ -94,7 +94,7 @@ func (d *Deps) CompleteLogin(w http.ResponseWriter, r *http.Request, user auth.U
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create session")
 		return
 	}
-	auth.SetSessionCookie(w, raw, auth.SessionDuration)
+	auth.SetSessionCookie(w, raw, auth.SessionDuration, d.requestIsSecure(r))
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"user":       auth.UserInfo{ID: user.ID, Username: user.Username, Role: auth.NormalizeRole(user.Role)},
 		"session_id": session.ID,

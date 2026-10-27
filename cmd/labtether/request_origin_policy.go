@@ -237,6 +237,28 @@ func trustedRequestClientIP(r *http.Request) string {
 	return direct
 }
 
+// browserRequestIsSecure reports whether the browser reached LabTether over
+// HTTPS. Behind a trusted proxy (such as the bundled console) that proxy's
+// forwarded protocol decides; otherwise the Hub's own TLS does.
+func browserRequestIsSecure(r *http.Request) bool {
+	if r == nil {
+		return true
+	}
+	if isTrustedForwardedHostSource(r) {
+		proto := firstForwardedValue(r.Header.Get("X-Forwarded-Proto"))
+		if proto == "" {
+			proto = forwardedHeaderProto(r.Header.Get("Forwarded"))
+		}
+		switch strings.ToLower(strings.TrimSpace(proto)) {
+		case "https":
+			return true
+		case "http":
+			return false
+		}
+	}
+	return r.TLS != nil
+}
+
 func isLoopbackRequestSource(r *http.Request) bool {
 	clientHost := requestClientKey(r)
 	if clientHost == "" {
