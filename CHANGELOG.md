@@ -15,6 +15,20 @@ User-visible changes since v1.4.0. Hub and agents use wire protocol v1.7.0.
 Read these before upgrading; several change who can do what or need a
 configuration step.
 
+- **Upgrade Docker installs with the installer or `scripts/upgrade-compose.sh`,
+  not a bare `docker compose up`.** v1.4.0 mounted `postgres-data` at
+  `/var/lib/postgresql/data`, but PostgreSQL 18 keeps its database in
+  `/var/lib/postgresql/18/docker`, so v1.4.0 databases live in the postgres
+  container's unnamed volume and `postgres-data` is empty. Both upgrade paths
+  stop the stack and copy that database into `postgres-data` once; the old
+  volume is left as a backup. If the database is missing from `postgres-data`,
+  the `labtether-bootstrap` job now stops the stack instead of letting
+  PostgreSQL create an empty database. If you already ran `docker compose up`
+  with the new files, find the old volume with
+  `docker volume ls --filter dangling=true` and re-run the upgrade with
+  `LABTETHER_POSTGRES_LEGACY_VOLUME=<that volume>`. To start empty on purpose,
+  set `LABTETHER_POSTGRES_NEW_DATABASE=true` in `.env.deploy` once. Before
+  upgrading, back up the unnamed volume, not `postgres-data`.
 - **Old enrollment tokens stop working.** Migration v98 disables every
   enrollment token created before 1.7.0, because those tokens name no device
   or group. Agents that are already enrolled keep their own credentials and
