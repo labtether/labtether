@@ -30,7 +30,7 @@ func TestMemoryDecommissionWinsAgainstAuthenticatedHeartbeat(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		<-start
-		_, err := store.CommitAuthenticatedAgentHeartbeat(ctx, result.AgentToken.ID, assets.HeartbeatRequest{
+		_, err := store.CommitAuthenticatedAgentHeartbeat(ctx, result.AgentToken.ID, 0, assets.HeartbeatRequest{
 			AssetID: "node-race", Type: "node", Name: "node-race", Source: "agent", Status: "online",
 		})
 		heartbeatErr <- err

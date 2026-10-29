@@ -93,7 +93,7 @@ func (s *apiServer) buildAgentsDeps() *agentspkg.Deps {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			assetEntry, err := enrollmentTransactions.CommitAuthenticatedAgentHeartbeat(ctx, agentTokenID, req)
+			assetEntry, err := enrollmentTransactions.CommitAuthenticatedAgentHeartbeat(ctx, agentTokenID, shared.AgentTokenTTL(), req)
 			if err != nil {
 				return nil, err
 			}

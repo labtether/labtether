@@ -198,8 +198,11 @@ func (b *DockerExecBridge) acceptsAgentMessage(conn *agentmgr.AgentConn, wireID 
 	return b != nil && b.MatchesConnection(conn) && (b.WireSessionID == "" || b.WireSessionID == wireID)
 }
 
-// Browser event consumers use the logical Hub session ID. The wire ID belongs
-// only to this socket instance and must not replace that public correlation ID.
+// broadcastDockerExecMessage publishes exec lifecycle events (started, closed)
+// with only the logical Hub session ID. The wire ID belongs only to this socket
+// instance and must not replace that public correlation ID. Other agent fields,
+// such as the close reason, are left out because every event subscriber and
+// webhook receives this event.
 func (d *Deps) broadcastDockerExecMessage(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 	if d.Broadcast == nil || d.DockerExecBridges == nil {
 		return
@@ -220,15 +223,16 @@ func (d *Deps) broadcastDockerExecMessage(conn *agentmgr.AgentConn, msg agentmgr
 	// Serialize public event publication with logical-owner replacement.
 	d.dockerExecOwnerMu.Lock()
 	defer d.dockerExecOwnerMu.Unlock()
+	publicID := wireID
 	if bridge.SessionID != "" {
 		// Superseded streams can still finish their private teardown. They cannot
 		// send public lifecycle events that appear to belong to the replacement.
 		if current, exists := d.dockerExecOwners.Load(bridge.SessionID); !exists || current != bridge {
 			return
 		}
-		payload["session_id"], _ = json.Marshal(bridge.SessionID)
+		publicID = bridge.SessionID
 	}
-	data, err := json.Marshal(payload)
+	data, err := json.Marshal(map[string]string{"session_id": publicID})
 	if err == nil {
 		d.Broadcast(msg.Type, data)
 	}

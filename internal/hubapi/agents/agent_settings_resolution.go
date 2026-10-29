@@ -97,11 +97,28 @@ func NormalizeAgentSettingValues(values map[string]string, forHubApply bool) (ma
 	return out, nil
 }
 
+// CollectEffectiveAgentSettingValues returns built-in defaults overlaid with
+// the values an operator set on the Hub. Use it for display, not for pushes.
 func (d *Deps) CollectEffectiveAgentSettingValues(assetID string) (map[string]string, error) {
-	definitions := agentsettings.AgentSettingDefinitions()
 	effective := agentsettings.DefaultAgentSettingValues()
+	configured, err := d.CollectConfiguredAgentSettingValues(assetID)
+	if err != nil {
+		return nil, err
+	}
+	for key, value := range configured {
+		effective[key] = value
+	}
+	return effective, nil
+}
+
+// CollectConfiguredAgentSettingValues returns only the values an operator set
+// on the Hub, as a global default or for this asset. Built-in defaults are left
+// out so a push never replaces what the agent was installed with.
+func (d *Deps) CollectConfiguredAgentSettingValues(assetID string) (map[string]string, error) {
+	definitions := agentsettings.AgentSettingDefinitions()
+	configured := map[string]string{}
 	if d.RuntimeStore == nil {
-		return effective, nil
+		return configured, nil
 	}
 
 	overrides, err := d.RuntimeStore.ListRuntimeSettingOverrides()
@@ -119,7 +136,7 @@ func (d *Deps) CollectEffectiveAgentSettingValues(assetID string) (map[string]st
 					return nil, decodeErr
 				}
 				if normalized, err := agentsettings.NormalizeAgentSettingValue(definition.Key, decoded); err == nil {
-					effective[definition.Key] = normalized
+					configured[definition.Key] = normalized
 				}
 			}
 		}
@@ -130,11 +147,11 @@ func (d *Deps) CollectEffectiveAgentSettingValues(assetID string) (map[string]st
 				return nil, decodeErr
 			}
 			if normalized, err := agentsettings.NormalizeAgentSettingValue(definition.Key, decoded); err == nil {
-				effective[definition.Key] = normalized
+				configured[definition.Key] = normalized
 			}
 		}
 	}
-	return effective, nil
+	return configured, nil
 }
 
 func (d *Deps) BuildAgentSettingsPayload(assetID string) (AgentSettingsPayload, error) {
@@ -275,7 +292,9 @@ func (d *Deps) BuildAgentSettingsPayload(assetID string) (AgentSettingsPayload, 
 			stateValue = strings.TrimSpace(raw)
 			stateValueKnown = true
 		}
-		drift := stateValueKnown && stateValue != effectiveValue
+		// Only values the Hub set are pushed, so a setting left at its default
+		// can differ on the agent (an install-time choice) without drift.
+		drift := stateValueKnown && source != "default" && stateValue != effectiveValue
 		configured := definition.Sensitive && effectiveValue != ""
 		if definition.Sensitive {
 			effectiveValue = ""
