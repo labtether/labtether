@@ -1,0 +1,46 @@
+name: Close stale pull requests
+
+# A pull request with no activity for 14 days gets the "stale" label and a
+# warning comment. After 7 more quiet days it is closed and its branch deleted.
+# Any push or comment resets the clock. Pull requests labeled "keep" are skipped.
+
+on:
+  schedule:
+    - cron: "23 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  stale:
+    name: Close stale pull requests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write # the action keeps its progress in the Actions cache
+      contents: write # delete the branch of a closed pull request
+      issues: write # labels and comments on pull requests use the issues API
+      pull-requests: write
+    steps:
+      - uses: actions/stale@4391f3da665fdf50b6810c1a66712fb9ba21aa93 # v11.0.0
+        with:
+          days-before-issue-stale: -1
+          days-before-issue-close: -1
+          days-before-pr-stale: 14
+          days-before-pr-close: 7
+          stale-pr-label: stale
+          exempt-pr-labels: keep
+          delete-branch: true
+          stale-pr-message: >-
+            No activity for 14 days. This pull request will be closed and its
+            branch deleted in 7 days. Push a change, leave a comment or add
+            the `keep` label to keep it open.
+          close-pr-message: >-
+            Closed after 21 days with no activity, and its branch was deleted.
+            Use "Restore branch" on this page and reopen it if you still need
+            it.

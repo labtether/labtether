@@ -53,9 +53,10 @@ func (d *Deps) ProcessAgentDockerExecStartedMessage(conn *agentmgr.AgentConn, ms
 }
 
 // ProcessAgentDockerExecDataMessage handles docker.exec.data messages from agents.
+// Shell output goes only to the stream that owns it. It is never broadcast:
+// the event socket and webhooks reach users who may not open container shells.
 func (d *Deps) ProcessAgentDockerExecDataMessage(conn *agentmgr.AgentConn, msg agentmgr.Message) {
 	d.ProcessAgentDockerExecData(conn, msg)
-	d.broadcastDockerExecMessage(conn, msg)
 }
 
 // ProcessAgentDockerExecClosedMessage handles docker.exec.closed messages from agents.
@@ -64,13 +65,10 @@ func (d *Deps) ProcessAgentDockerExecClosedMessage(conn *agentmgr.AgentConn, msg
 	d.broadcastDockerExecMessage(conn, msg)
 }
 
-// ProcessAgentDockerLogsStreamMessage handles docker.logs.stream messages from agents.
-func (d *Deps) ProcessAgentDockerLogsStreamMessage(_ *agentmgr.AgentConn, msg agentmgr.Message) {
-	// Forward log stream to the browser via broadcaster.
-	if d.Broadcast != nil {
-		d.Broadcast(msg.Type, msg.Data)
-	}
-}
+// ProcessAgentDockerLogsStreamMessage drops docker.logs.stream messages. The
+// Hub never starts these streams (container logs use request/response), so
+// any that arrive are unsolicited and are not passed to browsers or webhooks.
+func (d *Deps) ProcessAgentDockerLogsStreamMessage(_ *agentmgr.AgentConn, _ agentmgr.Message) {}
 
 // ProcessAgentDockerComposeResult handles docker.compose.result messages from agents.
 func (d *Deps) ProcessAgentDockerComposeResult(conn *agentmgr.AgentConn, msg agentmgr.Message) {
