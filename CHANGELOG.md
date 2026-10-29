@@ -28,7 +28,10 @@ configuration step.
   `docker volume ls --filter dangling=true` and re-run the upgrade with
   `LABTETHER_POSTGRES_LEGACY_VOLUME=<that volume>`. To start empty on purpose,
   set `LABTETHER_POSTGRES_NEW_DATABASE=true` in `.env.deploy` once. Before
-  upgrading, back up the unnamed volume, not `postgres-data`.
+  upgrading, back up the unnamed volume, not `postgres-data`. Do not run
+  `docker compose pull` on v1.4.0 first: `postgres:18-alpine` images built
+  since 21 October 2026 refuse v1.4.0's mount at `/var/lib/postgresql/data`,
+  so PostgreSQL does not start.
 - **The Hub no longer runs as root.** v1.4.0 ran it as root, so the files it
   wrote (including `/data/install/secrets.json`, `state.json` and the TLS keys
   in `/data/certs`) are owned by root with mode 0600. 1.7.0 runs the Hub as
