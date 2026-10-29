@@ -16,7 +16,7 @@ func TestMemoryAuthenticatedHeartbeatRejectsOrphanActiveToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.CommitAuthenticatedAgentHeartbeat(context.Background(), token.ID, assets.HeartbeatRequest{
+	if _, err := store.CommitAuthenticatedAgentHeartbeat(context.Background(), token.ID, 0, assets.HeartbeatRequest{
 		AssetID: "missing-asset", Type: "node", Name: "missing-asset", Source: "agent",
 	}); !errors.Is(err, ErrAgentCredentialInactive) {
 		t.Fatalf("orphan active token heartbeat error=%v", err)
@@ -41,7 +41,7 @@ func TestMemoryAgentHeartbeatsPreserveOperatorGroup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := store.CommitAuthenticatedAgentHeartbeat(context.Background(), token.ID, assets.HeartbeatRequest{
+	got, err := store.CommitAuthenticatedAgentHeartbeat(context.Background(), token.ID, 0, assets.HeartbeatRequest{
 		AssetID: "group-bound-agent", Type: "node", Name: "group-bound-agent", Source: "manual", GroupID: "attacker-group",
 	})
 	if err != nil || got.GroupID != "trusted-group" {
@@ -82,7 +82,7 @@ func TestMemoryIdentityTOFURequiresBoundAgentBearer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	anchored, err := store.CommitAuthenticatedAgentHeartbeat(context.Background(), result.AgentToken.ID, assets.HeartbeatRequest{
+	anchored, err := store.CommitAuthenticatedAgentHeartbeat(context.Background(), result.AgentToken.ID, 0, assets.HeartbeatRequest{
 		AssetID: "bearer-anchor", Type: "node", Name: "bearer-anchor", Source: "manual",
 		Metadata: map[string]string{
 			assets.MetadataKeyAgentDeviceFingerprint:  "LT-BEARER-TOFU",

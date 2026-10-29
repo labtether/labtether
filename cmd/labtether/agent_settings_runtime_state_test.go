@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -152,8 +153,8 @@ func TestAgentSettingsPatchAndResetExcludeLocalOnlyValuesFromApply(t *testing.T)
 	if patchRec.Code != http.StatusOK {
 		t.Fatalf("patch status=%d body=%s", patchRec.Code, patchRec.Body.String())
 	}
-	if got := readApply().Values[agentsettings.SettingKeyCollectIntervalSec]; got != "11" {
-		t.Fatalf("patched collect interval=%q, want 11", got)
+	if got := readApply().Values; !reflect.DeepEqual(got, map[string]string{agentsettings.SettingKeyCollectIntervalSec: "11"}) {
+		t.Fatalf("patch pushed %v, want only the patched collect interval", got)
 	}
 
 	resetReq := httptest.NewRequest(
@@ -166,8 +167,42 @@ func TestAgentSettingsPatchAndResetExcludeLocalOnlyValuesFromApply(t *testing.T)
 	if resetRec.Code != http.StatusOK {
 		t.Fatalf("reset status=%d body=%s", resetRec.Code, resetRec.Body.String())
 	}
-	if got := readApply().Values[agentsettings.SettingKeyCollectIntervalSec]; got != "10" {
-		t.Fatalf("reset collect interval=%q, want default 10", got)
+	if got := readApply().Values; !reflect.DeepEqual(got, map[string]string{agentsettings.SettingKeyCollectIntervalSec: "10"}) {
+		t.Fatalf("reset pushed %v, want only the reset collect interval at its default", got)
+	}
+}
+
+// Agents save pushed values over their install-time settings, so the push on
+// every connect must carry only operator-set values, never built-in defaults.
+func TestAgentSettingsConnectPushSendsOnlyOperatorSetValues(t *testing.T) {
+	sut := newTestAPIServer(t)
+	sut.agentMgr = agentmgr.NewManager()
+	if _, err := sut.runtimeStore.SaveRuntimeSettingOverrides(map[string]string{
+		"agent_heartbeat_interval_sec": "45",
+	}); err != nil {
+		t.Fatalf("save global agent default: %v", err)
+	}
+
+	serverConn, clientConn, cleanup := createWSPairForNetworkTest(t)
+	defer cleanup()
+	conn := agentmgr.NewAgentConn(serverConn, "node-connect-push", "linux")
+	sut.agentMgr.Register(conn)
+	defer sut.agentMgr.Unregister("node-connect-push")
+
+	sut.sendAgentSettingsApply(conn)
+
+	_ = clientConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	var outbound agentmgr.Message
+	if err := clientConn.ReadJSON(&outbound); err != nil {
+		t.Fatalf("read connect settings apply: %v", err)
+	}
+	var payload agentmgr.AgentSettingsApplyData
+	if err := json.Unmarshal(outbound.Data, &payload); err != nil {
+		t.Fatalf("decode settings apply: %v", err)
+	}
+	want := map[string]string{agentsettings.SettingKeyHeartbeatIntervalSec: "45"}
+	if !reflect.DeepEqual(payload.Values, want) {
+		t.Fatalf("connect push values=%v, want %v", payload.Values, want)
 	}
 }
 
