@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/credentials"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/persistence"
@@ -37,7 +38,9 @@ func TestResolveSessionSSHConfigUsesSavedHubKeyLogin(t *testing.T) {
 		t.Fatal(err)
 	}
 	keyOn := true
+	assetStore := persistence.NewMemoryAssetStore()
 	d := &Deps{
+		AssetStore:             assetStore,
 		CredentialStore:        store,
 		SecretsManager:         manager,
 		GetAssetTerminalConfig: store.GetAssetTerminalConfig,
@@ -66,11 +69,23 @@ func TestResolveSessionSSHConfigUsesSavedHubKeyLogin(t *testing.T) {
 		t.Fatalf("machine account as SSH user: err=%v, want the missing-user message", err)
 	}
 
-	// An older agent sent no host key: say what to do instead of failing on
-	// strict host-key checking later.
+	// No host key: say what the Hub knows instead of failing on strict
+	// host-key checking later. Only an agent too old to report the key is
+	// told to update; a current agent was wrongly told to.
 	save("operator", "")
-	if _, err := d.ResolveSessionSSHConfig(session); !errors.Is(err, errSavedSSHHostKeyMissing) {
-		t.Fatalf("no host key: err=%v, want the missing host key message", err)
+	for version, wantUpdate := range map[string]bool{"v1.6.4": true, "v1.7.1": false, "dev": false} {
+		if _, err := assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{
+			AssetID: "srv1", Type: "host", Name: "srv1", Source: "agent", Metadata: map[string]string{"agent_version": version},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		_, err := d.ResolveSessionSSHConfig(session)
+		if !errors.Is(err, errSavedSSHHostKeyMissing) {
+			t.Fatalf("agent %s, no host key: err=%v, want the missing host key message", version, err)
+		}
+		if gotUpdate := strings.Contains(err.Error(), "Update the agent"); gotUpdate != wantUpdate {
+			t.Fatalf("agent %s: message %q, want update advice=%v", version, err.Error(), wantUpdate)
+		}
 	}
 
 	save("operator", hostKey)

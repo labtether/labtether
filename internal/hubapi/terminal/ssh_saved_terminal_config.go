@@ -17,13 +17,10 @@ const savedSSHUserMissingMessage = "This device has no SSH user. Open its Connec
 
 var errSavedSSHUserMissing = errors.New(savedSSHUserMissingMessage)
 
-// savedSSHHostKeyMissingMessage is shown when the saved login has no host key
-// and the Hub has no known_hosts file, so it cannot verify the device. A
-// current agent sends the device's host key each time it reconnects with the
-// Hub SSH key on.
-const savedSSHHostKeyMissingMessage = "The Hub has no SSH host key for this device, so it cannot verify it. Update the LabTether agent on the device; it sends the host key when it reconnects."
-
-var errSavedSSHHostKeyMissing = errors.New(savedSSHHostKeyMissingMessage)
+// errSavedSSHHostKeyMissing marks a saved login with no host key while the
+// Hub has no known_hosts file, so it cannot verify the device. The text shown
+// comes from savedSSHHostKeyMissingError.
+var errSavedSSHHostKeyMissing = errors.New("saved ssh login has no host key")
 
 // resolveSavedTerminalSSH uses the device's saved SSH login, which the Hub
 // stores when an agent installs the Hub SSH key. It returns nil, nil when no
@@ -62,7 +59,7 @@ func (d *Deps) resolveSavedTerminalSSH(assetID string) (*terminal.SSHConfig, err
 	}
 	if resolved.HostKey == "" && (resolved.StrictHostKey || !shared.InsecureSSHHostKeysAllowed()) &&
 		len(shared.DiscoverKnownHostsFiles()) == 0 {
-		return nil, errSavedSSHHostKeyMissing
+		return nil, d.savedSSHHostKeyMissingError(assetID, resolved.Host)
 	}
 	return resolved, nil
 }
