@@ -31,10 +31,11 @@ func (s *apiServer) buildAuthDeps() *authpkg.Deps {
 		APIKeyStore:     s.apiKeyStore,
 
 		AppendAuditEventBestEffort: s.appendAuditEventBestEffort,
-		EnforceRateLimit:           s.enforceRateLimit,
+		EnforceRateLimit:           s.enforceClientRateLimit,
 		EnforceRateLimitGlobal:     s.enforceRateLimitGlobal,
 		ValidateOwnerTokenRequest:  s.validateOwnerTokenRequest,
 		ClientIP:                   trustedRequestClientIP,
+		RequestIsSecure:            browserRequestIsSecure,
 		UserIDFromContext:          principalActorID,
 		UserRoleFromContext:        userRoleFromContext,
 

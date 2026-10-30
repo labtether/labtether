@@ -261,6 +261,22 @@ func discoverClientIP(r *http.Request) string {
 	return requestClientKey(r)
 }
 
+// browserRequestIsSecure decides the session cookie's Secure flag. It drops
+// Secure only when a trusted proxy (such as the bundled console) states that
+// the browser used plain HTTP. An unknown, missing or untrusted protocol keeps
+// Secure, because a TLS front end that does not forward the protocol must not
+// downgrade the cookie.
+func browserRequestIsSecure(r *http.Request) bool {
+	if r == nil || !isTrustedForwardedHostSource(r) {
+		return true
+	}
+	proto := firstForwardedValue(r.Header.Get("X-Forwarded-Proto"))
+	if proto == "" {
+		proto = forwardedHeaderProto(r.Header.Get("Forwarded"))
+	}
+	return !strings.EqualFold(strings.TrimSpace(proto), "http")
+}
+
 func isLoopbackRequestSource(r *http.Request) bool {
 	clientHost := requestClientKey(r)
 	if clientHost == "" {

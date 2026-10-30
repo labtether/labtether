@@ -31,18 +31,24 @@ func HashToken(raw string) string {
 	return base64.RawURLEncoding.EncodeToString(hash[:])
 }
 
-func SetSessionCookie(w http.ResponseWriter, token string, maxAge time.Duration) {
+// SetSessionCookie sets the session cookie. secure must be true whenever the
+// browser reached LabTether over HTTPS. Browsers refuse a Secure cookie set
+// over plain HTTP from anywhere but localhost, so plain-HTTP sign-in from
+// another machine needs secure=false.
+func SetSessionCookie(w http.ResponseWriter, token string, maxAge time.Duration, secure bool) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     SessionCookieName,
 		Value:    token,
 		Path:     "/",
 		MaxAge:   int(maxAge.Seconds()),
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	})
 }
 
+// ClearSessionCookie expires the session cookie. It carries no secret and
+// omits Secure, so it can clear a cookie set over either HTTP or HTTPS.
 func ClearSessionCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     SessionCookieName,
@@ -50,7 +56,6 @@ func ClearSessionCookie(w http.ResponseWriter) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
 	})
 }

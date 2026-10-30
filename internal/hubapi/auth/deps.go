@@ -70,6 +70,9 @@ type Deps struct {
 	// ClientIP returns the caller's address for rate limiting, honouring the
 	// Hub's trusted-proxy settings. Nil falls back to the direct peer address.
 	ClientIP func(r *http.Request) string
+	// RequestIsSecure reports whether the browser reached LabTether over
+	// HTTPS, honouring a trusted proxy's forwarded protocol. Nil means secure.
+	RequestIsSecure func(r *http.Request) bool
 
 	// Context extractors injected from cmd/labtether.
 	UserIDFromContext   func(ctx context.Context) string
