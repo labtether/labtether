@@ -3,6 +3,7 @@ import { ExternalLink, Info, Pencil, GripVertical, X } from "lucide-react";
 import { ServiceIcon } from "../../../components/ServiceIcon";
 import type { WebService } from "../../../hooks/useWebServices";
 import { ServiceHealthDetails } from "./ServiceHealthDetails";
+import { safeHttpURL } from "../../../../lib/safeExternalURL";
 import {
   compatConnectorLabel,
   extractDomain,
@@ -186,7 +187,7 @@ export const ServiceCard = memo(function ServiceCard({
 
       {/* Card content */}
       <a
-        href={service.url}
+        href={safeHttpURL(service.url)}
         target="_blank"
         rel="noopener noreferrer"
         className="block"
