@@ -52,6 +52,7 @@ type RunStep struct {
 	Status    string    `json:"status"`
 	Output    string    `json:"output,omitempty"`
 	Error     string    `json:"error,omitempty"`
+	ExitCode  *int      `json:"exit_code,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -76,6 +77,8 @@ type StepResult struct {
 	Status string `json:"status"`
 	Output string `json:"output,omitempty"`
 	Error  string `json:"error,omitempty"`
+	// ExitCode is nil when the exit status is unknown; Status decides success.
+	ExitCode *int `json:"exit_code,omitempty"`
 }
 
 type Result struct {

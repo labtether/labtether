@@ -22,6 +22,8 @@ export type SavedAction = {
 export type SavedActionRunStep = {
   name: string;
   target: string;
+  status?: string;
+  /** Present only when the device reported the real exit status. */
   exit_code?: number;
   output?: string;
   duration_ms?: number;
@@ -91,6 +93,7 @@ function savedActionRunStep(value: unknown): SavedActionRunStep | null {
   return {
     name,
     target,
+    ...(typeof item.status === "string" ? { status: item.status } : {}),
     ...(typeof item.exit_code === "number" ? { exit_code: item.exit_code } : {}),
     ...(typeof item.output === "string" ? { output: item.output } : {}),
     ...(typeof item.duration_ms === "number" ? { duration_ms: item.duration_ms } : {}),

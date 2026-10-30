@@ -372,10 +372,13 @@ func (d *Deps) V2RunSavedAction(w http.ResponseWriter, r *http.Request, id strin
 			entry["error"] = result.Error
 			entry["message"] = result.Message
 		} else {
-			if result.ExitCode != 0 {
+			if result.Status != "succeeded" {
 				failedSteps++
 			}
-			entry["exit_code"] = result.ExitCode
+			entry["status"] = result.Status
+			if result.ExitCode != nil {
+				entry["exit_code"] = *result.ExitCode
+			}
 			entry["output"] = result.Stdout
 			entry["duration_ms"] = result.DurationMs
 		}

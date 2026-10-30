@@ -232,14 +232,15 @@ func (s *PostgresStore) ApplyActionResult(result actions.Result) error {
 			stepStatus = actions.StatusFailed
 		}
 		if _, err := tx.Exec(context.Background(),
-			`INSERT INTO action_run_steps (id, run_id, name, status, output, error, created_at, updated_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $7)`,
+			`INSERT INTO action_run_steps (id, run_id, name, status, output, error, exit_code, created_at, updated_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)`,
 			idgen.New("actstep"),
 			result.RunID,
 			strings.TrimSpace(step.Name),
 			stepStatus,
 			strings.TrimSpace(step.Output),
 			strings.TrimSpace(step.Error),
+			step.ExitCode,
 			completedAt,
 		); err != nil {
 			return err

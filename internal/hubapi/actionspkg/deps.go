@@ -26,7 +26,8 @@ type ActionQueue interface {
 // a circular import.
 type ExecResult struct {
 	AssetID    string `json:"asset_id"`
-	ExitCode   int    `json:"exit_code"`
+	Status     string `json:"status,omitempty"`
+	ExitCode   *int   `json:"exit_code,omitempty"` // nil when unknown, never 0 then
 	Stdout     string `json:"stdout"`
 	DurationMs int64  `json:"duration_ms"`
 	Error      string `json:"error,omitempty"`

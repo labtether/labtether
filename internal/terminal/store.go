@@ -275,7 +275,9 @@ func (s *Store) AddCommand(sessionID string, req CreateCommandRequest, target, m
 	return cmd, nil
 }
 
-func (s *Store) UpdateCommandResult(sessionID, commandID, status, output string) error {
+// UpdateCommandResult records a final result. exitCode is nil when the exit
+// status is unknown.
+func (s *Store) UpdateCommandResult(sessionID, commandID, status, output string, exitCode *int) error {
 	now := time.Now().UTC()
 
 	s.mu.Lock()
@@ -290,6 +292,7 @@ func (s *Store) UpdateCommandResult(sessionID, commandID, status, output string)
 		if list[idx].ID == commandID {
 			list[idx].Status = status
 			list[idx].Output = output
+			list[idx].ExitCode = cloneExitCode(exitCode)
 			list[idx].UpdatedAt = now
 			s.commands[sessionID] = list
 			return nil
@@ -345,4 +348,12 @@ func (s *Store) ListCommands(sessionID string) ([]Command, error) {
 	out := make([]Command, len(list))
 	copy(out, list)
 	return out, nil
+}
+
+func cloneExitCode(code *int) *int {
+	if code == nil {
+		return nil
+	}
+	value := *code
+	return &value
 }

@@ -37,7 +37,7 @@ func (o jobBusiness) writeResult(ctx context.Context, tx pgx.Tx, result JobExecu
 		if !finalJobStatus(r.Status) {
 			return errors.New("terminal result is not final")
 		}
-		_, err := tx.Exec(ctx, `UPDATE terminal_commands SET status=$2,output=$3,updated_at=NOW() WHERE id=$1`, p.CommandID, r.Status, r.Output)
+		_, err := tx.Exec(ctx, `UPDATE terminal_commands SET status=$2,output=$3,exit_code=$4,updated_at=NOW() WHERE id=$1`, p.CommandID, r.Status, r.Output, r.ExitCode)
 		// Do not lock the session after its child: session deletion locks in the
 		// opposite order. last_action_at was already recorded at command creation.
 		return err
@@ -107,8 +107,8 @@ func writeActionJobResult(ctx context.Context, tx pgx.Tx, r actions.Result) erro
 		if status == "" {
 			status = actions.StatusFailed
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO action_run_steps(id,run_id,name,status,output,error,created_at,updated_at)
-   VALUES($1,$2,$3,$4,$5,$6,$7,$7)`, idgen.New("actstep"), r.RunID, strings.TrimSpace(step.Name), status, strings.TrimSpace(step.Output), strings.TrimSpace(step.Error), completed); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO action_run_steps(id,run_id,name,status,output,error,exit_code,created_at,updated_at)
+   VALUES($1,$2,$3,$4,$5,$6,$7,$8,$8)`, idgen.New("actstep"), r.RunID, strings.TrimSpace(step.Name), status, strings.TrimSpace(step.Output), strings.TrimSpace(step.Error), step.ExitCode, completed); err != nil {
 			return err
 		}
 	}

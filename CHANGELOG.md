@@ -271,6 +271,13 @@ configuration step.
   you change them.
 - `deploy/agents/windows/install-agent.ps1` sets the release-signing key, so
   agents it installs can self-update.
+- Command results keep the device's real exit code instead of a made-up 0
+  or 1. A command that exits 2 reports 2 in the v2 exec API (single and
+  fleet), bulk service actions, MCP exec and saved action results, and is
+  stored with terminal commands and action run steps (migration 108). When
+  the code is unknown (an older agent, a timeout, a command that never ran)
+  the API leaves `exit_code` out and `status` says `succeeded` or `failed`;
+  the console shows Succeeded or Failed. The code itself needs agent 1.7.1.
 
 ### Changed
 

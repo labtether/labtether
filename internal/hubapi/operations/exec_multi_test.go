@@ -80,16 +80,23 @@ func TestHandleExecMultiAuditsEveryTarget(t *testing.T) {
 	}
 }
 
-func TestHandleExecMultiCountsNonzeroExitAsFailure(t *testing.T) {
-	deps := newExecMultiTestDeps(t, []string{"good", "bad"}, func(job terminal.CommandJob) terminal.CommandResult {
-		if job.Target == "bad" {
-			return terminal.CommandResult{Status: "failed", Output: "command exited unsuccessfully"}
+// The Hub used to report every failure as exit_code 1 and every success as
+// 0. The agent's real exit code must come back unchanged, and a failure with
+// no known exit code (a timeout) must leave exit_code out, never send 0, and
+// still count as a failure.
+func TestHandleExecMultiReturnsRealExitCodes(t *testing.T) {
+	deps := newExecMultiTestDeps(t, []string{"good", "bad", "slow"}, func(job terminal.CommandJob) terminal.CommandResult {
+		switch job.Target {
+		case "bad":
+			return terminal.CommandResult{Status: "failed", Output: "missing: no such file", ExitCode: new(2)}
+		case "slow":
+			return terminal.CommandResult{Status: "failed", Output: "command timed out"}
 		}
-		return terminal.CommandResult{Status: "succeeded", Output: "ok"}
+		return terminal.CommandResult{Status: "succeeded", Output: "ok", ExitCode: new(0)}
 	})
 
 	recorder := handleExecMultiTestRequest(t, deps, ExecMultiRequest{
-		Targets: []string{"good", "bad"},
+		Targets: []string{"good", "bad", "slow"},
 		Command: "fixture",
 	})
 	if recorder.Code != http.StatusOK {
@@ -98,18 +105,25 @@ func TestHandleExecMultiCountsNonzeroExitAsFailure(t *testing.T) {
 
 	var envelope struct {
 		Data struct {
-			Results map[string]ExecResult `json:"results"`
-			Summary map[string]int        `json:"summary"`
+			Results map[string]map[string]any `json:"results"`
+			Summary map[string]int            `json:"summary"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if envelope.Data.Results["bad"].ExitCode == 0 {
-		t.Fatalf("failed command result = %#v, want nonzero exit", envelope.Data.Results["bad"])
+	results := envelope.Data.Results
+	if results["good"]["exit_code"] != float64(0) || results["good"]["status"] != "succeeded" {
+		t.Fatalf("good result = %#v, want exit 0", results["good"])
 	}
-	if envelope.Data.Summary["total"] != 2 || envelope.Data.Summary["succeeded"] != 1 || envelope.Data.Summary["failed"] != 1 {
-		t.Fatalf("summary = %#v, want one success and one failure", envelope.Data.Summary)
+	if results["bad"]["exit_code"] != float64(2) || results["bad"]["status"] != "failed" {
+		t.Fatalf("bad result = %#v, want exit 2", results["bad"])
+	}
+	if _, present := results["slow"]["exit_code"]; present || results["slow"]["status"] != "failed" {
+		t.Fatalf("timed-out result = %#v, want failed with no exit_code", results["slow"])
+	}
+	if envelope.Data.Summary["total"] != 3 || envelope.Data.Summary["succeeded"] != 1 || envelope.Data.Summary["failed"] != 2 {
+		t.Fatalf("summary = %#v, want one success and two failures", envelope.Data.Summary)
 	}
 }
 

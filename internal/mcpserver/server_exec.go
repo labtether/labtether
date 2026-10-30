@@ -89,34 +89,27 @@ func (d *Deps) handleExec(ctx context.Context, req mcp.CallToolRequest) (*mcp.Ca
 	})
 
 	succeeded := strings.EqualFold(strings.TrimSpace(cmdResult.Status), "succeeded")
-	exitCode := 0
-	if !succeeded {
-		exitCode = 1
-	}
 	// Reserve enough room for worst-case JSON escaping plus response metadata.
 	output, truncated := truncateUTF8(strings.TrimSpace(cmdResult.Output), maxMCPJSONBytes/8)
 
-	result := map[string]any{
-		"asset_id":  assetID,
-		"exit_code": exitCode,
-		"output":    output,
+	decision := "succeeded"
+	reason := ""
+	if !succeeded {
+		decision = "failed"
+		reason = "command_failed"
 	}
+	result := withExitCode(map[string]any{
+		"asset_id": assetID,
+		"status":   decision,
+		"output":   output,
+	}, cmdResult.ExitCode)
 	if truncated {
 		result["output_truncated"] = true
 	}
-	decision := "succeeded"
-	if !succeeded {
-		decision = "failed"
-	}
-	reason := ""
-	if !succeeded {
-		reason = "command_failed"
-	}
-	d.auditMutation(ctx, "exec", assetID, decision, reason, map[string]any{
+	d.auditMutation(ctx, "exec", assetID, decision, reason, withExitCode(map[string]any{
 		"command_bytes": len([]byte(command)),
-		"exit_code":     exitCode,
 		"truncated":     truncated,
-	})
+	}, cmdResult.ExitCode))
 	data, encodeErr := marshalBoundedJSON(result, true)
 	if encodeErr != nil {
 		return mcp.NewToolResultError(encodeErr.Error()), nil
@@ -243,32 +236,25 @@ func (d *Deps) handleExecMulti(ctx context.Context, req mcp.CallToolRequest) (*m
 					TimeoutSec:  timeout,
 					RequestedAt: time.Now().UTC(),
 				})
-				exitCode := 0
+				decision := "succeeded"
+				reason := ""
 				if !strings.EqualFold(strings.TrimSpace(cmdResult.Status), "succeeded") {
-					exitCode = 1
+					decision = "failed"
+					reason = "command_failed"
 				}
 				output, truncated := truncateUTF8(strings.TrimSpace(cmdResult.Output), perTargetOutputLimit)
-				value := map[string]any{
-					"exit_code": exitCode,
-					"output":    output,
-				}
+				value := withExitCode(map[string]any{
+					"status": decision,
+					"output": output,
+				}, cmdResult.ExitCode)
 				if truncated {
 					value["output_truncated"] = true
 				}
 				resultSlots[index].value = value
-				decision := "succeeded"
-				if exitCode != 0 {
-					decision = "failed"
-				}
-				reason := ""
-				if exitCode != 0 {
-					reason = "command_failed"
-				}
-				d.auditMutation(ctx, "exec_multi", t, decision, reason, map[string]any{
+				d.auditMutation(ctx, "exec_multi", t, decision, reason, withExitCode(map[string]any{
 					"command_bytes": len([]byte(command)),
-					"exit_code":     exitCode,
 					"truncated":     truncated,
-				})
+				}, cmdResult.ExitCode))
 			}
 		}()
 	}
@@ -287,7 +273,7 @@ func (d *Deps) handleExecMulti(ctx context.Context, req mcp.CallToolRequest) (*m
 	for _, result := range resultSlots {
 		results[result.target] = result.value
 		if value, ok := result.value.(map[string]any); ok {
-			if exitCode, ok := value["exit_code"].(int); ok && exitCode == 0 {
+			if status, ok := value["status"].(string); ok && status == "succeeded" {
 				succeededCount++
 			}
 		}
@@ -300,4 +286,13 @@ func (d *Deps) handleExecMulti(ctx context.Context, req mcp.CallToolRequest) (*m
 		return mcp.NewToolResultError(string(data)), nil
 	}
 	return mcp.NewToolResultText(string(data)), nil
+}
+
+// withExitCode adds a known exit code. An unknown one (older agent, timeout,
+// command that never ran) is left out rather than reported as 0 or 1.
+func withExitCode(fields map[string]any, exitCode *int) map[string]any {
+	if exitCode != nil {
+		fields["exit_code"] = *exitCode
+	}
+	return fields
 }
