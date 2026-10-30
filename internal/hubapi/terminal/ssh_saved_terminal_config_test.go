@@ -17,6 +17,9 @@ import (
 // saved when the agent installed the Hub key. It was never read, so the
 // session ended with "no SSH credentials configured".
 func TestResolveSessionSSHConfigUsesSavedHubKeyLogin(t *testing.T) {
+	t.Setenv(shared.EnvSSHKnownHostsPath, "")
+	t.Setenv(shared.EnvAllowInsecureSSHHostKeys, "")
+	const hostKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC8k2qDwE65vXWA6WUMUU7UiqzXUiFDX7xWszP1A0C/W"
 	manager, err := secrets.NewManagerFromEncodedKey(base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32))))
 	if err != nil {
 		t.Fatal(err)
@@ -40,16 +43,16 @@ func TestResolveSessionSSHConfigUsesSavedHubKeyLogin(t *testing.T) {
 		GetAssetTerminalConfig: store.GetAssetTerminalConfig,
 		HubSSHKeyEnabled:       func(string) bool { return keyOn },
 	}
-	save := func(user string) {
+	save := func(user, key string) {
 		if _, err := store.SaveAssetTerminalConfig(credentials.AssetTerminalConfig{
-			AssetID: "srv1", Host: "192.0.2.10", Port: 22, Username: user, StrictHostKey: true, CredentialProfileID: profile.ID,
+			AssetID: "srv1", Host: "192.0.2.10", Port: 22, Username: user, StrictHostKey: true, HostKey: key, CredentialProfileID: profile.ID,
 		}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	session := terminalmodel.Session{ID: "sess1", Target: "srv1"}
 
-	save("operator")
+	save("operator", hostKey)
 	resolved, err := d.ResolveSessionSSHConfig(session)
 	if err != nil || resolved == nil {
 		t.Fatalf("saved login not used: %v", err)
@@ -58,12 +61,19 @@ func TestResolveSessionSSHConfigUsesSavedHubKeyLogin(t *testing.T) {
 		t.Fatalf("resolved = %+v", resolved)
 	}
 
-	save(`WORKGROUP\HOST$`)
+	save(`WORKGROUP\HOST$`, hostKey)
 	if _, err := d.ResolveSessionSSHConfig(session); !errors.Is(err, errSavedSSHUserMissing) {
 		t.Fatalf("machine account as SSH user: err=%v, want the missing-user message", err)
 	}
 
-	save("operator")
+	// An older agent sent no host key: say what to do instead of failing on
+	// strict host-key checking later.
+	save("operator", "")
+	if _, err := d.ResolveSessionSSHConfig(session); !errors.Is(err, errSavedSSHHostKeyMissing) {
+		t.Fatalf("no host key: err=%v, want the missing host key message", err)
+	}
+
+	save("operator", hostKey)
 	keyOn = false
 	if _, err := d.ResolveSessionSSHConfig(session); !errors.Is(err, shared.ErrHubSSHKeyOff) {
 		t.Fatalf("Hub key off: err=%v", err)

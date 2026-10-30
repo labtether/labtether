@@ -10,7 +10,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/jlaffaye/ftp v0.2.4
-	github.com/labtether/protocol v1.7.1-0.20261030033816-62cfa991897e
+	github.com/labtether/protocol v1.7.1-0.20261030062343-0402cc74543c
 	github.com/mark3labs/mcp-go v1.3.0
 	github.com/pkg/sftp v1.13.11
 	github.com/pquerna/otp v1.5.0

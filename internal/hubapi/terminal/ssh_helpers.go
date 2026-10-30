@@ -231,10 +231,11 @@ func (d *Deps) CreateSSHClientConfig(resolved *terminal.SSHConfig, timeout time.
 		return nil, err
 	}
 	return &ssh.ClientConfig{
-		User:            strings.TrimSpace(resolved.User),
-		Auth:            authMethods,
-		HostKeyCallback: hostKeyCallback,
-		Timeout:         timeout,
+		User:              strings.TrimSpace(resolved.User),
+		Auth:              authMethods,
+		HostKeyCallback:   hostKeyCallback,
+		HostKeyAlgorithms: pinnedHostKeyAlgorithms(resolved),
+		Timeout:           timeout,
 	}, nil
 }
 

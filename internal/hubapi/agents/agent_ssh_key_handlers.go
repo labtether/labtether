@@ -82,19 +82,24 @@ func (d *Deps) ProcessAgentSSHKeyInstalled(conn *agentmgr.AgentConn, msg agentmg
 		return
 	}
 
-	if _, ok, err := d.CredentialStore.GetAssetTerminalConfig(conn.AssetID); err != nil {
-		log.Printf("agentws: failed to load terminal config for %s: %v", conn.AssetID, err)
-		return
-	} else if ok {
-		return
-	}
-
 	// SSH to the address this connection came from. The agent's own hostname
 	// report must not choose where the Hub's key is used.
 	host := ""
 	if ip := net.ParseIP(strings.TrimSpace(conn.Meta("ssh_source_ip"))); ip != nil && !ip.IsLoopback() && !ip.IsUnspecified() {
 		host = ip.String()
 	}
+	// The device's own SSH host key, read by the authenticated agent, so the
+	// Hub can verify the device without trusting the first key it sees.
+	hostKey := pinnedHostKeyFromAgent(data.HostKeys)
+
+	if existing, ok, err := d.CredentialStore.GetAssetTerminalConfig(conn.AssetID); err != nil {
+		log.Printf("agentws: failed to load terminal config for %s: %v", conn.AssetID, err)
+		return
+	} else if ok {
+		d.pinHostKeyOnSavedLogin(existing, identity.ProfileID, host, hostKey)
+		return
+	}
+
 	if host == "" {
 		securityruntime.Logf("agentws: no usable source address for %s; SSH fallback needs a manual terminal config", conn.AssetID)
 		return
@@ -109,6 +114,7 @@ func (d *Deps) ProcessAgentSSHKeyInstalled(conn *agentmgr.AgentConn, msg agentmg
 		Port:                22,
 		Username:            shared.SSHLoginUser(data.Username),
 		StrictHostKey:       true,
+		HostKey:             hostKey,
 		CredentialProfileID: identity.ProfileID,
 		UpdatedAt:           time.Now().UTC(),
 	}
@@ -124,4 +130,21 @@ func (d *Deps) removeHubSSHKeyAfterInstall(conn *agentmgr.AgentConn) {
 		return
 	}
 	_ = d.SendSSHKeyRemove(conn)
+}
+
+// pinHostKeyOnSavedLogin adds the agent's host key to a login the Hub saved
+// earlier without one (from an agent too old to send it). It changes only
+// the Hub's own login for the same address, and never replaces a host key
+// that is already set, by a person or an earlier reply.
+func (d *Deps) pinHostKeyOnSavedLogin(existing credentials.AssetTerminalConfig, hubProfileID, host, hostKey string) {
+	if hostKey == "" || host == "" || strings.TrimSpace(existing.HostKey) != "" ||
+		strings.TrimSpace(existing.CredentialProfileID) != strings.TrimSpace(hubProfileID) ||
+		strings.TrimSpace(existing.Host) != host {
+		return
+	}
+	existing.HostKey = hostKey
+	existing.UpdatedAt = time.Now().UTC()
+	if _, err := d.CredentialStore.SaveAssetTerminalConfig(existing); err != nil {
+		log.Printf("agentws: failed to save SSH host key for %s: %v", existing.AssetID, err)
+	}
 }
