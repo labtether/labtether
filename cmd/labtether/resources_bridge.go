@@ -110,7 +110,7 @@ func (s *apiServer) buildResourcesDeps() *respkg.Deps {
 				return
 			}
 			if conn, ok := s.agentMgr.Get(assetID); ok {
-				s.sendSSHKeyRemove(conn)
+				_ = s.sendSSHKeyRemove(conn)
 			}
 		},
 		PersistCanonicalHeartbeatFn: func(assetEntry assets.Asset, req assets.HeartbeatRequest) {

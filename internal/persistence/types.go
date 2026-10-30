@@ -416,6 +416,7 @@ type EnrollmentStore interface {
 	CreateAgentToken(assetID, tokenHash, enrolledVia string, expiresAt time.Time) (enrollment.AgentToken, error)
 	RotateAgentToken(assetID, tokenHash, enrolledVia string, expiresAt time.Time) (enrollment.AgentToken, error)
 	ValidateAgentToken(tokenHash string) (enrollment.AgentToken, bool, error)
+	GetAgentToken(id string) (enrollment.AgentToken, bool, error)
 	TouchAgentTokenLastUsed(id string) error
 	RevokeAgentToken(id string) error
 	RevokeAgentTokensByAsset(assetID string) error

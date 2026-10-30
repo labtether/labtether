@@ -104,6 +104,13 @@ type Deps struct {
 	// HubSSHKeyEnabled reports whether an admin turned on the Hub SSH key for
 	// a device. When nil, the key is treated as off.
 	HubSSHKeyEnabled func(assetID string) bool
+	// HubSSHKeyMayBeInstalled reports whether the Hub SSH key may be in a
+	// device's authorized_keys: the setting is on or a removal is pending.
+	// When nil, the key is assumed to be there.
+	HubSSHKeyMayBeInstalled func(assetID string) bool
+	// SendHubSSHKeyRemoval sends the Hub SSH key removal under the Hub's
+	// identity lock. When nil, SendSSHKeyRemove is used.
+	SendHubSSHKeyRemoval func(conn *agentmgr.AgentConn) error
 }
 
 // broadcastEvent calls the Broadcast function if non-nil.

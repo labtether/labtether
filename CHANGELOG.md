@@ -262,6 +262,11 @@ configuration step.
   than 1.7.1 refuse them with their own allowlist.
 - A device delete refused because its agent is connected no longer removes the
   Hub SSH key from that device first.
+- Disabling an agent credential (`DELETE /settings/agent-tokens/{id}`) first
+  asks the connected agent to remove the Hub SSH key, then revokes it. When
+  the agent cannot be reached, the response (`hub_ssh_key: "not_removed"`),
+  the Connect Agents card and the `agent.token.revoked` audit event say the
+  key is still on the device.
 - The Linux installer's final check asks the agent on the port its service
   uses, not always 8090.
 - SSO sign-in works on a plain-HTTP console.

@@ -144,7 +144,9 @@ func (s *apiServer) buildAgentsDeps() *agentspkg.Deps {
 		SaveAssetTerminalConfig: func(cfg credentials.AssetTerminalConfig) (credentials.AssetTerminalConfig, error) {
 			return s.credentialStore.SaveAssetTerminalConfig(cfg)
 		},
-		HubSSHKeyEnabled: s.hubSSHKeyEnabled,
+		HubSSHKeyEnabled:        s.hubSSHKeyEnabled,
+		HubSSHKeyMayBeInstalled: s.hubSSHKeyMayBeInstalled,
+		SendHubSSHKeyRemoval:    s.sendSSHKeyRemove,
 	}
 	if deps.RuntimeStore != nil {
 		if overrides, err := deps.RuntimeStore.ListRuntimeSettingOverrides(); err == nil {
@@ -227,10 +229,10 @@ func (s *apiServer) sendSSHKeyInstall(conn *agentmgr.AgentConn) {
 	s.ensureAgentsDeps().SendSSHKeyInstall(conn)
 }
 
-func (s *apiServer) sendSSHKeyRemove(conn *agentmgr.AgentConn) {
+func (s *apiServer) sendSSHKeyRemove(conn *agentmgr.AgentConn) error {
 	s.hubIdentityOperationMu.Lock()
 	defer s.hubIdentityOperationMu.Unlock()
-	s.ensureAgentsDeps().SendSSHKeyRemove(conn)
+	return s.ensureAgentsDeps().SendSSHKeyRemove(conn)
 }
 
 func (s *apiServer) sendConfigUpdate(conn *agentmgr.AgentConn) {

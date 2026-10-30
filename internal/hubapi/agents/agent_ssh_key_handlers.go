@@ -35,12 +35,13 @@ func (d *Deps) SendSSHKeyInstall(conn *agentmgr.AgentConn) {
 	}
 }
 
-// sendSSHKeyRemove asks the agent to remove the hub's SSH public key, both the
-// plain line older Hubs installed and the commented line.
-func (d *Deps) SendSSHKeyRemove(conn *agentmgr.AgentConn) {
+// SendSSHKeyRemove asks the agent to remove the hub's SSH public key, both the
+// plain line older Hubs installed and the commented line. It returns an error
+// when a message could not be sent; with no Hub SSH key it sends nothing.
+func (d *Deps) SendSSHKeyRemove(conn *agentmgr.AgentConn) error {
 	identity := d.currentHubIdentity()
 	if identity == nil {
-		return
+		return nil
 	}
 	for _, line := range shared.HubAuthorizedKeyRemovals(identity.PublicKey) {
 		data, _ := json.Marshal(agentmgr.SSHKeyRemoveData{PublicKey: line})
@@ -49,9 +50,10 @@ func (d *Deps) SendSSHKeyRemove(conn *agentmgr.AgentConn) {
 			Data: data,
 		}); err != nil {
 			log.Printf("agentws: failed to send ssh_key.remove to %s: %v", conn.AssetID, err)
-			return
+			return err
 		}
 	}
+	return nil
 }
 
 // processAgentSSHKeyInstalled handles the confirmation that the agent installed the hub's SSH key.

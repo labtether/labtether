@@ -44,6 +44,7 @@
     "uses": "已使用 {used}{max} 次",
     "expires": "过期：{age}",
     "disable": "禁用",
+    "hubSSHKeyNotRemoved": "Hub SSH 密钥仍留在 {device} 上：无法连接到其代理。请在该设备的 authorized_keys 中删除 labtether-hub 行，或运行 labtether-agent ssh-key remove。",
     "connectedAgents": "代理凭据",
     "lastSeen": "上次认证：{age}",
     "added": "添加于：{age}",

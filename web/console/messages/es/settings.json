@@ -44,6 +44,7 @@
     "uses": "{used}{max} usos",
     "expires": "Vence {age}",
     "disable": "Deshabilitar",
+    "hubSSHKeyNotRemoved": "La clave SSH del Hub sigue en {device}: no se pudo contactar con su agente. Quite allí la línea labtether-hub de authorized_keys o ejecute labtether-agent ssh-key remove.",
     "connectedAgents": "Credenciales de agentes",
     "lastSeen": "Última autenticación {age}",
     "added": "Agregado {age}",

@@ -43,6 +43,14 @@ func (s *apiServer) hubSSHKeyEnabled(assetID string) bool {
 	return ok && setting.Enabled
 }
 
+// hubSSHKeyMayBeInstalled reports whether the Hub SSH key may be in the
+// device's authorized_keys: the setting is on, a removal is pending, or the
+// setting cannot be read.
+func (s *apiServer) hubSSHKeyMayBeInstalled(assetID string) bool {
+	setting, ok := s.loadHubSSHKeySetting(assetID)
+	return !ok || setting.Enabled || setting.RemovalPending
+}
+
 func (s *apiServer) connectedAgent(assetID string) (*agentmgr.AgentConn, bool) {
 	if s.agentMgr == nil {
 		return nil, false
