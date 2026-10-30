@@ -173,10 +173,6 @@ cat > "${ENV_FILE}" <<EOF
 LABTETHER_WS_URL=${WS_URL}
 LABTETHER_ENROLLMENT_TOKEN_FILE=${ENROLLMENT_TOKEN_FILE}
 LABTETHER_TOKEN_FILE=${TOKEN_FILE}
-LABTETHER_DOCKER_ENABLED=${DOCKER_ENABLED}
-LABTETHER_DOCKER_SOCKET="${DOCKER_ENDPOINT}"
-LABTETHER_DOCKER_DISCOVERY_INTERVAL=${DOCKER_DISCOVERY_INTERVAL}
-LABTETHER_FILES_ROOT_MODE=${FILES_ROOT_MODE}
 LABTETHER_AUTO_UPDATE=${AUTO_UPDATE}
 LABTETHER_AUTO_UPDATE_TRUSTED_PUBLIC_KEY=${AUTO_UPDATE_TRUSTED_PUBLIC_KEY}
 LABTETHER_LOW_POWER_MODE=${LOW_POWER_MODE}
@@ -184,6 +180,34 @@ LABTETHER_LOG_STREAM_ENABLED=${LOG_STREAM_ENABLED}
 LABTETHER_TLS_SKIP_VERIFY=${TLS_SKIP_VERIFY}
 LABTETHER_TLS_CA_FILE=${TLS_CA_FILE}
 EOF
+# Write Hub-managed settings only when chosen here. The agent keeps settings
+# set in agent.env and ignores Hub changes to them; settings left out use the
+# agent's default (the same values as this script's) and stay Hub-managed.
+if [[ "${DOCKER_ENABLED_SET}" -eq 1 ]]; then
+  printf 'LABTETHER_DOCKER_ENABLED=%%s\n' "${DOCKER_ENABLED}" >> "${ENV_FILE}"
+fi
+if [[ "${DOCKER_ENDPOINT_SET}" -eq 1 ]]; then
+  printf 'LABTETHER_DOCKER_SOCKET="%%s"\n' "${DOCKER_ENDPOINT}" >> "${ENV_FILE}"
+fi
+if [[ "${DOCKER_DISCOVERY_INTERVAL_SET}" -eq 1 ]]; then
+  printf 'LABTETHER_DOCKER_DISCOVERY_INTERVAL=%%s\n' "${DOCKER_DISCOVERY_INTERVAL}" >> "${ENV_FILE}"
+fi
+if [[ "${FILES_ROOT_MODE_SET}" -eq 1 ]]; then
+  printf 'LABTETHER_FILES_ROOT_MODE=%%s\n' "${FILES_ROOT_MODE}" >> "${ENV_FILE}"
+fi
+# The agent upgrades ws:// to wss:// and refuses plain HTTP to private or
+# loopback addresses unless told otherwise. Opt in for the Hub URL this
+# script was served with, or the agent never connects.
+case "${WS_URL}" in
+  ws://*)
+    printf '%%s\n' "LABTETHER_ALLOW_INSECURE_TRANSPORT=true" "LABTETHER_OUTBOUND_ALLOW_PRIVATE=true" >> "${ENV_FILE}"
+    ;;
+esac
+case "${WS_URL}" in
+  *://localhost|*://localhost[/:]*|*://127.[0-9]*|*://\[::1\]*)
+    printf '%%s\n' "LABTETHER_OUTBOUND_ALLOW_LOOPBACK=true" >> "${ENV_FILE}"
+    ;;
+esac
 chmod 600 "${ENV_FILE}"
 success "Environment ${SYM_ARROW} ${ENV_FILE}"
 
@@ -214,6 +238,8 @@ TOKEN_FILE="${CONFIG_DIR}/agent-token"
 DEVICE_KEY_FILE="${CONFIG_DIR}/device-key"
 DEVICE_PUBLIC_KEY_FILE="${CONFIG_DIR}/device-key.pub"
 FINGERPRINT_FILE="${CONFIG_DIR}/device-fingerprint"
+ROOT_AUTHORIZED_KEYS="/root/.ssh/authorized_keys"
+HUB_SSH_KEY_LINE='^[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+labtether-hub$'
 
 print_usage() {
   cat <<'USAGE'
@@ -233,6 +259,25 @@ require_root() {
   fi
 }
 
+# Remove every Hub SSH key line (comment labtether-hub) from authorized_keys,
+# old and current, and no other key. A failure is reported, not fatal.
+remove_hub_ssh_key() {
+  local keys_file="${ROOT_AUTHORIZED_KEYS}" tmp_file rc=0
+  [[ -f "${keys_file}" && ! -L "${keys_file}" ]] || return 0
+  grep -Eq "${HUB_SSH_KEY_LINE}" "${keys_file}" || return 0
+  if ! tmp_file="$(mktemp "${keys_file}.XXXXXX" 2>/dev/null)"; then
+    echo "labtether: could not update ${keys_file}; remove the lines ending in labtether-hub by hand." >&2
+    return 0
+  fi
+  grep -Ev "${HUB_SSH_KEY_LINE}" "${keys_file}" > "${tmp_file}" || rc=$?
+  if (( rc > 1 )) || ! chmod 600 "${tmp_file}" || ! mv -f "${tmp_file}" "${keys_file}"; then
+    rm -f "${tmp_file}"
+    echo "labtether: could not update ${keys_file}; remove the lines ending in labtether-hub by hand." >&2
+    return 0
+  fi
+  echo "labtether: Hub SSH keys removed from ${keys_file}."
+}
+
 run_uninstall() {
   local purge="${1:-0}"
 
@@ -240,6 +285,7 @@ run_uninstall() {
   systemctl disable "${SERVICE_NAME}" 2>/dev/null || true
   rm -f "${SERVICE_FILE}"
   systemctl daemon-reload
+  remove_hub_ssh_key
 
   rm -f "${BINARY_DEST}"
   rm -f "${ENV_FILE}"
@@ -348,8 +394,9 @@ Restart=on-failure
 RestartSec=5s
 NoNewPrivileges=true
 # Package actions, OS updates, and agent self-update need to write system paths.
+# Files, terminal sessions and the Hub SSH key write to /root and /home, so home
+# directories stay writable.
 ProtectSystem=off
-ProtectHome=read-only
 PrivateTmp=true
 
 [Install]

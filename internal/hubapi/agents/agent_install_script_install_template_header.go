@@ -38,10 +38,20 @@ DOCKER_ENDPOINT="/var/run/docker.sock"
 DOCKER_DISCOVERY_INTERVAL="30"
 DOCKER_WIZARD=0
 FILES_ROOT_MODE="home"
+# Set to 1 when the operator chose the setting here. Only chosen settings are
+# written to agent.env: the agent keeps those and ignores Hub changes to them.
+DOCKER_ENABLED_SET=0
+DOCKER_ENDPOINT_SET=0
+DOCKER_DISCOVERY_INTERVAL_SET=0
+FILES_ROOT_MODE_SET=0
 AUTO_UPDATE="true"
 # Agents refuse unsigned self-updates; this is the Hub's release-signing key.
 AUTO_UPDATE_TRUSTED_PUBLIC_KEY=%[5]s
 FORCE_UPDATE=0
+# The Hub adds its key to root's authorized_keys while the agent is connected,
+# always as one line: key type, key data, then the comment labtether-hub.
+ROOT_AUTHORIZED_KEYS="/root/.ssh/authorized_keys"
+HUB_SSH_KEY_LINE='^[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+labtether-hub$'
 ENROLLMENT_TOKEN=""
 ENROLLMENT_TOKEN_SOURCE_FILE=""
 LOW_POWER_MODE="${LABTETHER_LOW_POWER_MODE:-false}"
@@ -338,6 +348,27 @@ Options:
   -h, --help
       Show this help.
 USAGE
+}
+
+# The Hub's SSH key outlives the agent unless it is removed here. The Hub
+# installs its key with the comment labtether-hub, so this removes every Hub
+# key, including keys from before a Hub key rotation, and no other key. A
+# failure is reported and uninstall carries on.
+remove_hub_ssh_keys() {
+  local keys_file="${ROOT_AUTHORIZED_KEYS}" tmp_file rc=0
+  [[ -f "${keys_file}" && ! -L "${keys_file}" ]] || return 0
+  grep -Eq "${HUB_SSH_KEY_LINE}" "${keys_file}" || return 0
+  if ! tmp_file="$(mktemp "${keys_file}.XXXXXX" 2>/dev/null)"; then
+    warn "Could not update ${keys_file}. Remove the lines ending in labtether-hub by hand."
+    return 0
+  fi
+  grep -Ev "${HUB_SSH_KEY_LINE}" "${keys_file}" > "${tmp_file}" || rc=$?
+  if (( rc > 1 )) || ! chmod 600 "${tmp_file}" || ! mv -f "${tmp_file}" "${keys_file}"; then
+    rm -f "${tmp_file}"
+    warn "Could not update ${keys_file}. Remove the lines ending in labtether-hub by hand."
+    return 0
+  fi
+  success "Hub SSH keys removed from ${keys_file}"
 }
 
 `

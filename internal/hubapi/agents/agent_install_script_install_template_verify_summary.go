@@ -34,7 +34,18 @@ if [[ "${FORCE_UPDATE}" -eq 1 ]]; then
   trap 'rm -f -- "${FORCE_UPDATE_LOG}"' EXIT
   chmod 600 "${FORCE_UPDATE_LOG}"
   info "Force update requested: running self-update check..."
-  if "${BINARY_DEST}" update self --force >"${FORCE_UPDATE_LOG}" 2>&1; then
+  # Use the service's environment so the update sees the same Hub URL, TLS
+  # settings and release-signing key. Lines are read as KEY=VALUE, not run.
+  FORCE_UPDATE_ENV=()
+  while IFS= read -r env_line || [[ -n "${env_line}" ]]; do
+    [[ "${env_line}" =~ ^(LABTETHER_[A-Z0-9_]+)=(.*)$ ]] || continue
+    env_value="${BASH_REMATCH[2]}"
+    if [[ ${#env_value} -ge 2 && "${env_value}" == \"*\" ]]; then
+      env_value="${env_value:1:${#env_value}-2}"
+    fi
+    FORCE_UPDATE_ENV+=("${BASH_REMATCH[1]}=${env_value}")
+  done < "${ENV_FILE}"
+  if env "${FORCE_UPDATE_ENV[@]}" "${BINARY_DEST}" update self --force >"${FORCE_UPDATE_LOG}" 2>&1; then
     success "Self-update completed"
     if systemctl is-active --quiet "${SERVICE_NAME}" 2>/dev/null; then
       systemctl restart "${SERVICE_NAME}" || true
