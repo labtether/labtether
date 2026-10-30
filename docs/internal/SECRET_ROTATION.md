@@ -73,7 +73,8 @@ stored credentials and the DB-backed OIDC client secret unreadable.
      differs from the key stored in `data/install/secrets.json`, because data
      encrypted with the stored key would become unreadable. After re-encrypting
      (step 4), start once with `LABTETHER_ENCRYPTION_KEY_REPLACE=true` so the
-     new key replaces the stored one, then remove that variable.
+     new key replaces the stored one, then remove that variable. That start
+     also rewrites the key check in `system_settings` (see below).
 
 6. **Restart the hub.**
    ```bash
@@ -87,6 +88,17 @@ stored credentials and the DB-backed OIDC client secret unreadable.
      connector sync).
    - Confirm 2FA/TOTP still works (the TOTP key is derived from the encryption
      key via HKDF unless `LABTETHER_TOTP_KEY` is set independently).
+
+### Restoring a database onto another Hub
+
+Since 1.7.0 the database keeps a key check: a fixed value encrypted with the
+Hub's key, stored as `system_settings.key = 'encryption_key_check'` with the
+key's ID. A Hub whose key cannot read it refuses to start and logs both key
+IDs. A key ID is the first 12 characters of
+`printf '%s' "$KEY" | base64 -d | sha256sum`. Set `LABTETHER_ENCRYPTION_KEY`
+to the `encryption_key` from the `secrets.json` saved with that database, or
+start once with `LABTETHER_ENCRYPTION_KEY_REPLACE=true` to discard the old
+secrets.
 
 ### OIDC storage upgrade and rollback
 

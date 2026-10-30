@@ -108,6 +108,12 @@ func runHub(ctx context.Context) error {
 	if secretsManager == nil {
 		log.Printf("labtether warning: runtime encryption key not set; credential encryption endpoints are disabled")
 	}
+	if err := checkEncryptionKeyMatchesData(ctx, pgStore, secretsManager, runtimeSecrets.EncryptionKey); err != nil {
+		if errors.Is(err, errEncryptionKeyWrongForData) {
+			return newStartupFailure(startupFailureEncryptionConfig, err)
+		}
+		return newDatabaseStartupFailure(err)
+	}
 	if err := migrateOIDCClientSecretAtStartup(ctx, pgStore, secretsManager); err != nil {
 		return err
 	}
