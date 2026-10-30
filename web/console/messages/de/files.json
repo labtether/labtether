@@ -7,5 +7,5 @@
   },
   "webdavCleartextWarning": "Unverschlüsseltes HTTP für WebDAV erlauben. Personen im Netzwerk können Passwörter und Dateien lesen oder ändern. Der Hub muss unsichere Verbindungen ebenfalls erlauben.",
   "webdavCleartextRequired": "Bestätigen Sie die Warnung zu unverschlüsseltem HTTP oder verwenden Sie HTTPS.",
-  "webdavTransportNotice": "Diese Verbindung verwendet unverschlüsseltes HTTP, das LabTether 1.7.0 standardmäßig blockiert. Bearbeiten Sie sie, um HTTPS zu verwenden, oder erlauben Sie unverschlüsseltes HTTP für die Verbindung und setzen Sie LABTETHER_ALLOW_INSECURE_TRANSPORT=true auf dem Hub."
+  "webdavTransportNotice": "Diese Verbindung verwendet unverschlüsseltes HTTP, das LabTether 1.7.1 standardmäßig blockiert. Bearbeiten Sie sie, um HTTPS zu verwenden, oder erlauben Sie unverschlüsseltes HTTP für die Verbindung und setzen Sie LABTETHER_ALLOW_INSECURE_TRANSPORT=true auf dem Hub."
 }

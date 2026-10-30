@@ -7,5 +7,5 @@
   },
   "webdavCleartextWarning": "Autoriser HTTP non chiffré pour WebDAV. Des personnes sur le réseau peuvent lire ou modifier les mots de passe et les fichiers. Le Hub doit aussi autoriser le transport non sécurisé.",
   "webdavCleartextRequired": "Confirmez l’avertissement HTTP non chiffré ou utilisez HTTPS.",
-  "webdavTransportNotice": "Cette connexion utilise HTTP non chiffré, que LabTether 1.7.0 bloque par défaut. Modifiez-la pour utiliser HTTPS, ou autorisez HTTP non chiffré sur la connexion et définissez LABTETHER_ALLOW_INSECURE_TRANSPORT=true sur le Hub."
+  "webdavTransportNotice": "Cette connexion utilise HTTP non chiffré, que LabTether 1.7.1 bloque par défaut. Modifiez-la pour utiliser HTTPS, ou autorisez HTTP non chiffré sur la connexion et définissez LABTETHER_ALLOW_INSECURE_TRANSPORT=true sur le Hub."
 }

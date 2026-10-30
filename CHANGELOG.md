@@ -6,9 +6,10 @@ This changelog starts at the public-release preparation baseline on 2026-03-09.
 The project does not yet publish a long tagged release history, so this file begins
 with the current release contract and will grow forward from here.
 
-## [1.7.0] - unreleased
+## [1.7.1] - unreleased
 
-User-visible changes since v1.4.0. Hub and agents use wire protocol v1.7.0.
+User-visible changes since v1.4.0. Hub v1.7.0 was never released, so v1.7.1 is
+the upgrade from v1.4.0. Hub and agents use wire protocol v1.7.1.
 
 ### Upgrade notes
 
@@ -34,14 +35,14 @@ configuration step.
   so PostgreSQL does not start.
 - **The Hub no longer runs as root.** v1.4.0 ran it as root, so the files it
   wrote (including `/data/install/secrets.json`, `state.json` and the TLS keys
-  in `/data/certs`) are owned by root with mode 0600. 1.7.0 runs the Hub as
+  in `/data/certs`) are owned by root with mode 0600. 1.7.1 runs the Hub as
   `65532:65532`. On every start, the `labtether-bootstrap` job gives
   root-owned files in the Hub's data, CA, service-token and agent-cache
   volumes to that user. It does not follow symlinks or leave the volume.
   Nothing else changes, and v1.4.0 can still read the files if you restore
   it.
 - **Old enrollment tokens stop working.** Migration v98 disables every
-  enrollment token created before 1.7.0, because those tokens name no device
+  enrollment token created before 1.7.1, because those tokens name no device
   or group. Agents that are already enrolled keep their own credentials and
   stay connected. Create a new token for any agent you have not installed yet.
   Do not roll back only the Hub after v98; restore the pre-upgrade database
@@ -250,8 +251,8 @@ configuration step.
   system trust store and the `labtether` helper.
 - The Hub's default command allowlist includes read-only Windows commands:
   `whoami`, `hostname`, `ipconfig`, `ipconfig /all`, `systeminfo`,
-  `tasklist`, `cmd /c ver` and `powershell -Command Get-Date`. Tagged v1.7.0
-  agents still refuse them with their own allowlist.
+  `tasklist`, `cmd /c ver` and `powershell -Command Get-Date`. Agents older
+  than 1.7.1 refuse them with their own allowlist.
 - A device delete refused because its agent is connected no longer removes the
   Hub SSH key from that device first.
 - The Linux installer's final check asks the agent on the port its service

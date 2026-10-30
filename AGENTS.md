@@ -100,7 +100,7 @@ Releases and bakes them into the image.
   `GET /api/v1/agent/manifest`, and admin-only `POST /api/v1/agent/cache/refresh`.
 - Settings: `LABTETHER_AGENT_DIR` (default `/opt/labtether/agents`) and
   `LABTETHER_AGENT_CACHE_DIR` (default `/data/agents`). There is no runtime
-  GitHub refresh; `LABTETHER_AGENT_MANIFEST_REFRESH` was removed in 1.7.0.
+  GitHub refresh; `LABTETHER_AGENT_MANIFEST_REFRESH` was removed in 1.7.1.
 
 ## Sibling repos
 

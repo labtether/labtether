@@ -7,5 +7,5 @@
   },
   "webdavCleartextWarning": "Permitir HTTP sin cifrar para WebDAV. Las personas en la red pueden leer o modificar contraseñas y archivos. El Hub también debe permitir el transporte inseguro.",
   "webdavCleartextRequired": "Confirme la advertencia de HTTP sin cifrar o use HTTPS.",
-  "webdavTransportNotice": "Esta conexión usa HTTP sin cifrar, que LabTether 1.7.0 bloquea de forma predeterminada. Edítela para usar HTTPS, o permita HTTP sin cifrar en la conexión y establezca LABTETHER_ALLOW_INSECURE_TRANSPORT=true en el Hub."
+  "webdavTransportNotice": "Esta conexión usa HTTP sin cifrar, que LabTether 1.7.1 bloquea de forma predeterminada. Edítela para usar HTTPS, o permita HTTP sin cifrar en la conexión y establezca LABTETHER_ALLOW_INSECURE_TRANSPORT=true en el Hub."
 }

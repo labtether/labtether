@@ -85,7 +85,7 @@ func (d *Deps) recordingsDir() string {
 }
 
 // openRecordingFile opens a stored recording by base name only, inside the
-// recordings directory (or the pre-1.7.0 legacy directory). The stored path is
+// recordings directory (or the pre-1.7.1 legacy directory). The stored path is
 // never joined as-is, so a tampered row cannot reach files elsewhere, and
 // symlinks are refused.
 func (d *Deps) openRecordingFile(storedPath string) (*os.File, os.FileInfo, error) {

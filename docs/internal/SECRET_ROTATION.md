@@ -69,7 +69,7 @@ stored credentials and the DB-backed OIDC client secret unreadable.
 
 5. **Update the key.**
    - Edit `.env` and set `LABTETHER_ENCRYPTION_KEY` to the new value.
-   - Since 1.7.0 the Hub refuses to start when `LABTETHER_ENCRYPTION_KEY`
+   - Since 1.7.1 the Hub refuses to start when `LABTETHER_ENCRYPTION_KEY`
      differs from the key stored in `data/install/secrets.json`, because data
      encrypted with the stored key would become unreadable. After re-encrypting
      (step 4), start once with `LABTETHER_ENCRYPTION_KEY_REPLACE=true` so the
@@ -91,7 +91,7 @@ stored credentials and the DB-backed OIDC client secret unreadable.
 
 ### Restoring a database onto another Hub
 
-Since 1.7.0 the database keeps a key check: a fixed value encrypted with the
+Since 1.7.1 the database keeps a key check: a fixed value encrypted with the
 Hub's key, stored as `system_settings.key = 'encryption_key_check'` with the
 key's ID. A Hub whose key cannot read it refuses to start and logs both key
 IDs. A key ID is the first 12 characters of
@@ -123,7 +123,7 @@ it in `$LABTETHER_DATA_DIR/install/secrets.json`, next to the encryption key.
 
 **Never delete `secrets.json` to rotate a token.** It also holds the
 encryption key. Without that key, saved credentials, webhook secrets and 2FA
-enrolments cannot be read, and since 1.7.0 a Hub whose database holds them
+enrolments cannot be read, and since 1.7.1 a Hub whose database holds them
 refuses to start rather than make a new key.
 
 ### Procedure: token set in the environment
