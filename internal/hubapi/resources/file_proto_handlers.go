@@ -207,6 +207,7 @@ func (d *Deps) handleFileConnectionDownload(w http.ResponseWriter, r *http.Reque
 		servicehttp.WriteError(w, http.StatusBadRequest, "path is required")
 		return
 	}
+	deadline := newFileStreamDeadline(w)
 
 	fs, _, ok := d.getPooledFS(w, r, connID)
 	if !ok {
@@ -236,11 +237,14 @@ func (d *Deps) handleFileConnectionDownload(w http.ResponseWriter, r *http.Reque
 	}
 	w.WriteHeader(http.StatusOK)
 
-	if _, err := io.Copy(w, reader); err != nil {
-		// Headers already sent, cannot write an error response.
-		// The client will see a truncated body.
+	if _, err := io.Copy(progressWriter{Writer: w, deadline: deadline}, reader); err != nil {
+		if r.Context().Err() != nil {
+			return
+		}
 		securityruntime.Logf("file protocol: download stream failed: %v", err)
-		return
+		// Headers are already sent. Abort the connection so the client reports
+		// a failed download instead of keeping a truncated file.
+		panic(http.ErrAbortHandler)
 	}
 }
 
@@ -263,7 +267,7 @@ func (d *Deps) handleFileConnectionUpload(w http.ResponseWriter, r *http.Request
 		servicehttp.WriteError(w, http.StatusRequestEntityTooLarge, "file exceeds 512 MB limit")
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, fileproto.MaxTransferBytes)
+	r.Body = progressBody{ReadCloser: http.MaxBytesReader(w, r.Body, fileproto.MaxTransferBytes), deadline: newFileStreamDeadline(w)}
 
 	fs, _, ok := d.getPooledFS(w, r, connID)
 	if !ok {
@@ -465,7 +469,7 @@ func (d *Deps) copyViaReadWrite(ctx context.Context, fs fileproto.RemoteFS, srcP
 		return fileproto.ErrTransferTooLarge
 	}
 
-	tmp, err := os.CreateTemp("", "labtether-file-copy-*")
+	tmp, err := d.createFileSpool("file-copy-*")
 	if err != nil {
 		return fmt.Errorf("stage source: %w", err)
 	}
