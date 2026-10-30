@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/audit"
-	"github.com/labtether/labtether/internal/idgen"
 	"github.com/labtether/labtether/internal/protocols"
 	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
@@ -116,8 +115,8 @@ func (d *Deps) HandleCreateProtocolConfig(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// PostgreSQL assigns the UUID id; SaveProtocolConfig writes it back.
 	pc := protocols.ProtocolConfig{
-		ID:                  idgen.New("proto"),
 		AssetID:             assetID,
 		Protocol:            req.Protocol,
 		Host:                req.Host,
