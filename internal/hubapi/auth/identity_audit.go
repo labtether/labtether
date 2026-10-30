@@ -35,5 +35,16 @@ func (d *Deps) callerMayManageUser(r *http.Request, target auth.User) bool {
 	if !auth.HasAdminPrivileges(target.Role) {
 		return true
 	}
+	return d.callerIsOwner(r)
+}
+
+// callerMayGrantRole reports whether the caller may give role to an account
+// that does not hold it yet. Only the owner may make an admin; admins manage
+// operators and viewers.
+func (d *Deps) callerMayGrantRole(r *http.Request, role string) bool {
+	return !auth.HasAdminPrivileges(role) || d.callerIsOwner(r)
+}
+
+func (d *Deps) callerIsOwner(r *http.Request) bool {
 	return d.UserRoleFromContext != nil && auth.NormalizeRole(d.UserRoleFromContext(r.Context())) == auth.RoleOwner
 }

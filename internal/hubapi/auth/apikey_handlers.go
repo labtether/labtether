@@ -256,6 +256,9 @@ func (d *Deps) handleAPIKeyUpdate(w http.ResponseWriter, r *http.Request, id str
 		apiv2.WriteError(w, http.StatusBadRequest, "validation", "api key role cannot be changed")
 		return
 	}
+	if !d.requireAPIKeyManagement(w, r, id) {
+		return
+	}
 
 	if req.Name != nil {
 		trimmed := strings.TrimSpace(*req.Name)
@@ -319,6 +322,9 @@ func (d *Deps) handleAPIKeyDelete(w http.ResponseWriter, r *http.Request, id str
 		apiv2.WriteError(w, http.StatusInternalServerError, "not_configured", "api keys not configured")
 		return
 	}
+	if !d.requireAPIKeyManagement(w, r, id) {
+		return
+	}
 	if err := d.APIKeyStore.DeleteAPIKey(r.Context(), id); err != nil {
 		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to delete key")
 		return
@@ -335,6 +341,26 @@ func (d *Deps) handleAPIKeyDelete(w http.ResponseWriter, r *http.Request, id str
 
 	d.revokeStreams(shared.StreamActorKey("apikey:" + id))
 	apiv2.WriteJSON(w, http.StatusOK, map[string]any{"status": "deleted"})
+}
+
+// requireAPIKeyManagement refuses to change or delete an admin-role key that
+// another user made unless the caller is the owner. Such a key is an admin
+// credential, and only the owner manages other admins. A missing key is left
+// to the caller's own not-found handling.
+func (d *Deps) requireAPIKeyManagement(w http.ResponseWriter, r *http.Request, id string) bool {
+	key, found, err := d.APIKeyStore.GetAPIKey(r.Context(), id)
+	if err != nil {
+		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to get key")
+		return false
+	}
+	if !found || !internalauth.HasAdminPrivileges(key.Role) || d.callerIsOwner(r) {
+		return true
+	}
+	if creator := strings.TrimSpace(key.CreatedBy); creator != "" && creator == d.actorIDFromContext(r.Context()) {
+		return true
+	}
+	apiv2.WriteError(w, http.StatusForbidden, "forbidden", "only the owner can change another user's admin API key")
+	return false
 }
 
 // actorIDFromContext extracts the actor ID from the context using the injected

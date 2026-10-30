@@ -306,6 +306,12 @@ func (d *Deps) HandleOIDCSettingsPut(w http.ResponseWriter, r *http.Request) {
 	if rejectAPIKeyIdentityMutation(w, r) {
 		return
 	}
+	// The issuer, role claim, default role and group lists decide who signs
+	// in as an admin, so only the owner may change them.
+	if !d.callerIsOwner(r) {
+		servicehttp.WriteError(w, http.StatusForbidden, "only the owner can change SSO settings")
+		return
+	}
 
 	var req oidcSettingsPutRequest
 	if err := shared.DecodeJSONBody(w, r, &req); err != nil {

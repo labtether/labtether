@@ -81,6 +81,10 @@ func (d *Deps) HandleAuthUsers(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusBadRequest, "owner role is reserved")
 			return
 		}
+		if !d.callerMayGrantRole(r, req.Role) {
+			servicehttp.WriteError(w, http.StatusForbidden, "only the owner can create an admin account")
+			return
+		}
 		if _, exists, err := d.AuthStore.GetUserByUsername(req.Username); err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to validate username")
 			return
@@ -188,6 +192,10 @@ func (d *Deps) HandleAuthUserActions(w http.ResponseWriter, r *http.Request) {
 		}
 		if role == auth.RoleOwner {
 			servicehttp.WriteError(w, http.StatusBadRequest, "owner role is reserved")
+			return
+		}
+		if !auth.HasAdminPrivileges(user.Role) && !d.callerMayGrantRole(r, role) {
+			servicehttp.WriteError(w, http.StatusForbidden, "only the owner can make a user an admin")
 			return
 		}
 		if err := d.AuthStore.UpdateUserRole(user.ID, role); err != nil {

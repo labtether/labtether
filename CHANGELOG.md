@@ -113,8 +113,13 @@ configuration step.
 - **Console token file:** `/run/labtether/api-token` now holds a token only
   the console can use, not the API token. Scripts that sent it as an owner
   credential get `403`; give them an API key.
-- **Admin accounts:** only the owner can change, sign out or delete an admin.
-  An edited schedule runs with the editor's rights. Action run history
+- **Admin accounts:** only the owner can create an admin, make a user an
+  admin, or change, sign out or delete an admin. Only the owner can save SSO
+  settings, because the issuer, role claim, default role and group lists
+  decide who signs in as an admin, and only the owner can change or delete an
+  admin-role API key another user made. Admins keep managing operators and
+  viewers, and their own keys. An edited schedule runs with the editor's
+  rights. Action run history
   (`/actions/runs`) needs `operator` and shows a key only its allowed devices.
 - **Webhooks:** a new or changed `http://` webhook URL is refused unless
   `LABTETHER_ALLOW_INSECURE_TRANSPORT=true`. Viewers see only the scheme and
@@ -193,6 +198,8 @@ configuration step.
   matching and bounded SSH handshakes; WebDAV TLS policy.
 - Encryption-key replacement guard, 30-day audit floor, admin-only agent
   approval and retention changes, per-client login limiting.
+- An admin can no longer create or promote another admin, directly or
+  through SSO settings; only the owner can.
 - Connector actions check maintenance windows and authorization at admission
   and at dispatch; agent-reported services bind to the authenticated
   connection's asset; asset-restricted keys no longer see PBS task details.
