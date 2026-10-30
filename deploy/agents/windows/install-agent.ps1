@@ -10,6 +10,9 @@ param(
     # visible in the PowerShell command line and history.
     [string]$EnrollmentToken  = "",
     [string]$EnrollmentTokenFile = "",
+    # Agents refuse unsigned self-updates. This is the key that signs official
+    # agent releases, a copy of scripts/release/agent-release-public-key.b64.
+    [string]$UpdatePublicKey  = "jM9Mqx0db6S+w6FMKDnIX2jvVp7N554+6galqPvsq88=",
     [switch]$Uninstall
 )
 
@@ -143,6 +146,9 @@ if ($HubURL -ne "") {
 }
 if ($EnrollmentToken -ne "") {
     $envVars["LABTETHER_ENROLLMENT_TOKEN_FILE"] = $tokenPath
+}
+if ($UpdatePublicKey -ne "") {
+    $envVars["LABTETHER_AUTO_UPDATE_TRUSTED_PUBLIC_KEY"] = $UpdatePublicKey
 }
 
 # Always rewrite the value so a token an older version of this script stored

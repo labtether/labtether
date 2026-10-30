@@ -40,4 +40,13 @@ func TestEmbeddedReleaseKeyMatchesReleaseScripts(t *testing.T) {
 	if got, want := AgentReleasePublicKey(), strings.TrimSpace(string(raw)); got != want {
 		t.Fatalf("embedded agent release key %q differs from scripts/release copy %q", got, want)
 	}
+	// The Windows service helper sets the same key, or its agents refuse
+	// every self-update.
+	windowsScript, err := os.ReadFile(filepath.Join("..", "..", "..", "deploy", "agents", "windows", "install-agent.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(windowsScript), `$UpdatePublicKey  = "`+AgentReleasePublicKey()+`"`) {
+		t.Fatal("deploy/agents/windows/install-agent.ps1 does not default to the agent release key")
+	}
 }
