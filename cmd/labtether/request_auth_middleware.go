@@ -104,6 +104,17 @@ func (s *apiServer) withAuthMethodPolicy(next http.HandlerFunc, methodPolicy fun
 				servicehttp.WriteError(w, http.StatusUnauthorized, "invalid api key")
 				return
 			}
+			role, creatorOK, err := s.apiKeyCreatorCappedRole(key, role)
+			if err != nil {
+				securityruntime.Logf("api key authentication could not check creator for key %s: %v", key.ID, err)
+				servicehttp.WriteError(w, http.StatusServiceUnavailable, "api key lookup failed")
+				return
+			}
+			if !creatorOK {
+				securityruntime.Logf("api key authentication rejected key %s: its creator no longer exists", key.ID)
+				servicehttp.WriteError(w, http.StatusUnauthorized, "invalid api key")
+				return
+			}
 			if methodPolicy == nil || !methodPolicy(role, r.Method) {
 				authzError()
 				return
@@ -134,6 +145,19 @@ func (s *apiServer) withAuthMethodPolicy(next http.HandlerFunc, methodPolicy fun
 			ctx = contextWithScopes(ctx, key.Scopes)
 			ctx = contextWithAllowedAssets(ctx, key.AllowedAssets)
 			ctx = contextWithAPIKeyID(ctx, key.ID)
+			next(w, r.WithContext(ctx))
+			return
+		}
+
+		// The bundled console's service token may only read the runtime
+		// routing settings. It is never an owner credential.
+		if s.consoleServiceValidator != nil && s.consoleServiceValidator.ValidateRequest(r) {
+			if r.Method != http.MethodGet || r.URL.Path != "/settings/runtime" {
+				authzError()
+				return
+			}
+			ctx := contextWithPrincipal(r.Context(), "console-service", auth.RoleAdmin)
+			ctx = contextWithScopes(ctx, []string{"settings:read"})
 			next(w, r.WithContext(ctx))
 			return
 		}
@@ -220,6 +244,28 @@ func (s *apiServer) withAdminAuth(next http.HandlerFunc) http.HandlerFunc {
 		}
 		next(w, r)
 	})
+}
+
+// apiKeyCreatorCappedRole limits a key to its creator's current role. A key
+// made by a user who was later deleted stops working, and a demoted creator's
+// keys lose what the creator lost. Keys made with the bootstrap owner token,
+// and older keys with no recorded creator, keep their own role.
+func (s *apiServer) apiKeyCreatorCappedRole(key apikeys.APIKey, role string) (string, bool, error) {
+	creator := strings.TrimSpace(key.CreatedBy)
+	if creator == "" || creator == "owner" || creator == "system" {
+		return role, true, nil
+	}
+	if s.authStore == nil {
+		return "", false, errors.New("authentication store is unavailable")
+	}
+	user, found, err := s.authStore.GetUserByID(creator)
+	if err != nil {
+		return "", false, fmt.Errorf("load api key creator: %w", err)
+	}
+	if !found {
+		return "", false, nil
+	}
+	return auth.LowerRole(role, user.Role), true, nil
 }
 
 func methodAllowedForRole(role, method string) bool {

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { resolvedBackendBaseURLs } from "../../../../../lib/backend";
+import { resolvedBackendBaseURLs, shouldUseSecureWebSocket } from "../../../../../lib/backend";
 import { safeLocalRedirectPath } from "../../../../../lib/safeRedirect";
 import { markResponseNoStore } from "../../../../../lib/noStoreResponse";
+import { oidcStateFromAuthURL, setOIDCStateCookie } from "../../../../../lib/oidcStateCookie";
 
 export const dynamic = "force-dynamic";
 
@@ -21,14 +22,20 @@ export async function GET(request: Request) {
       cache: "no-store",
     });
 
-    const payload = await safeJSON(response) as { auth_url?: string; error?: string } | null;
+    const payload = await safeJSON(response) as { auth_url?: string } | null;
     if (!response.ok || !payload?.auth_url) {
-      return markResponseNoStore(NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(payload?.error ?? "SSO unavailable")}`, requestURL)));
+      return markResponseNoStore(NextResponse.redirect(new URL("/login?error=sso_unavailable", requestURL)));
     }
 
-    return markResponseNoStore(NextResponse.redirect(payload.auth_url));
+    const state = oidcStateFromAuthURL(payload.auth_url);
+    if (!state) {
+      return markResponseNoStore(NextResponse.redirect(new URL("/login?error=sso_unavailable", requestURL)));
+    }
+    const redirect = markResponseNoStore(NextResponse.redirect(payload.auth_url));
+    setOIDCStateCookie(redirect, state, shouldUseSecureWebSocket(request));
+    return redirect;
   } catch {
-    return markResponseNoStore(NextResponse.redirect(new URL("/login?error=SSO%20unavailable", requestURL)));
+    return markResponseNoStore(NextResponse.redirect(new URL("/login?error=sso_unavailable", requestURL)));
   }
 }
 

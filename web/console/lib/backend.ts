@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { hasServiceModeAuthHeader, isTrustedServiceProxyPath } from "./proxyAuth";
@@ -244,6 +245,12 @@ function serviceTokenFilePath(): string {
   return envOrDefault("LABTETHER_API_TOKEN_FILE", "/run/labtether/api-token");
 }
 
+// Must match consoleServiceToken in cmd/labtether/startup_install_secrets.go.
+function consoleServiceToken(apiToken: string): string {
+  if (!apiToken) return "";
+  return createHmac("sha256", apiToken).update("labtether console service token v1").digest("hex");
+}
+
 function readServiceToken(): string {
   const now = Date.now();
   if (now < _serviceTokenCacheExpiry) {
@@ -259,7 +266,9 @@ function readServiceToken(): string {
         "utf8",
       );
       const parsed = JSON.parse(raw) as PersistedInstallSecrets;
-      _cachedServiceToken = parsed.api_token?.trim() || "";
+      // Use the same narrow token the Hub writes to the token file, never the
+      // owner-equivalent API token itself.
+      _cachedServiceToken = consoleServiceToken(parsed.api_token?.trim() || "");
     } catch {
       _cachedServiceToken = "";
     }

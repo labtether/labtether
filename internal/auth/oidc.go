@@ -404,6 +404,10 @@ func PKCECodeChallengeS256(codeVerifier string) (string, error) {
 
 func (p *OIDCProvider) resolveRole(claims map[string]any) string {
 	values := claimValues(claims[p.settings.RoleClaim])
+	// Literal role names count only in a dedicated LabTether role claim. Group
+	// names are shared with other apps, so a group that happens to be called
+	// "admin" must match a configured value to grant anything.
+	literalNames := len(values) > 0 && !strings.EqualFold(p.settings.RoleClaim, "groups")
 	if len(values) == 0 {
 		values = claimValues(claims["groups"])
 	}
@@ -413,25 +417,46 @@ func (p *OIDCProvider) resolveRole(claims map[string]any) string {
 
 	adminSet := normalizeRoleSet(p.settings.AdminRoleValues)
 	operatorSet := normalizeRoleSet(p.settings.OperatorRoleValues)
+	best := ""
+	// The highest matching role wins, so the result does not depend on the
+	// order in which the IdP lists claim values.
 	for _, value := range values {
 		normalized := strings.ToLower(strings.TrimSpace(value))
-		if normalized == "" {
-			continue
+		role := ""
+		switch {
+		case normalized == "":
+		case adminSet[normalized]:
+			role = RoleAdmin
+		case operatorSet[normalized]:
+			role = RoleOperator
+		case literalNames && (normalized == RoleOwner || normalized == RoleAdmin):
+			role = RoleAdmin
+		case literalNames && normalized == RoleOperator:
+			role = RoleOperator
+		case literalNames && normalized == RoleViewer:
+			role = RoleViewer
 		}
-		if normalized == RoleOwner {
-			return RoleAdmin
-		}
-		if normalized == RoleAdmin || adminSet[normalized] {
-			return RoleAdmin
-		}
-		if normalized == RoleOperator || operatorSet[normalized] {
-			return RoleOperator
-		}
-		if normalized == RoleViewer {
-			return RoleViewer
+		if oidcRoleRank(role) > oidcRoleRank(best) {
+			best = role
 		}
 	}
-	return p.settings.DefaultRole
+	if best == "" {
+		return p.settings.DefaultRole
+	}
+	return best
+}
+
+func oidcRoleRank(role string) int {
+	switch role {
+	case RoleAdmin:
+		return 3
+	case RoleOperator:
+		return 2
+	case RoleViewer:
+		return 1
+	default:
+		return 0
+	}
 }
 
 func normalizeRoleSet(raw []string) map[string]bool {

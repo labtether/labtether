@@ -9,6 +9,8 @@ import { Input } from "../../components/ui/Input";
 import { safeLocalRedirectPath } from "../../../lib/safeRedirect";
 
 const LOCALE_PREFIXES = ["/en", "/de", "/fr", "/es", "/zh"];
+// Codes the SSO routes put in ?error=. Anything else shows the generic one.
+const SSO_ERROR_CODES = ["sso_unavailable", "sso_expired", "sso_setup_required", "sso_failed"] as const;
 
 function safeNextPath(value: string | null): string {
   const safePath = safeLocalRedirectPath(value);
@@ -45,11 +47,14 @@ export default function LoginPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setNextPath(safeNextPath(params.get("next")));
+    // Show only fixed messages. Text from the URL is never shown, so a crafted
+    // link cannot put its own words on the real sign-in page.
     const errorParam = params.get("error");
     if (errorParam) {
-      setError(errorParam);
+      const code = (SSO_ERROR_CODES as readonly string[]).includes(errorParam) ? errorParam : "sso_failed";
+      setError(t(`login.ssoErrors.${code}`));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     let cancelled = false;
