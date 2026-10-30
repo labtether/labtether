@@ -410,6 +410,15 @@ func (d *Deps) HandleActionRuns(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list action runs")
 		return
 	}
+	if shared.HasAssetRestriction(r.Context()) {
+		allowed := make([]actions.Run, 0, len(runs))
+		for _, run := range runs {
+			if shared.AllAssetsAllowed(r.Context(), run.Target) {
+				allowed = append(allowed, run)
+			}
+		}
+		runs = allowed
+	}
 
 	groupID := shared.GroupIDQueryParam(r)
 	if groupID != "" {
@@ -464,17 +473,22 @@ func (d *Deps) HandleActionRunActions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	runID := strings.TrimSpace(path)
+	if r.Method != http.MethodGet && r.Method != http.MethodDelete {
+		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	run, ok, err := d.ActionStore.GetActionRun(runID)
+	if err != nil {
+		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load action run")
+		return
+	}
+	// A key limited to some assets must not read or delete runs on others.
+	if !ok || !shared.AllAssetsAllowed(r.Context(), run.Target) {
+		servicehttp.WriteError(w, http.StatusNotFound, "action run not found")
+		return
+	}
 	switch r.Method {
 	case http.MethodGet:
-		run, ok, err := d.ActionStore.GetActionRun(runID)
-		if err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load action run")
-			return
-		}
-		if !ok {
-			servicehttp.WriteError(w, http.StatusNotFound, "action run not found")
-			return
-		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"run": run})
 	case http.MethodDelete:
 		if err := d.ActionStore.DeleteActionRun(runID); err != nil {
@@ -486,7 +500,5 @@ func (d *Deps) HandleActionRunActions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "run_id": runID})
-	default:
-		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }

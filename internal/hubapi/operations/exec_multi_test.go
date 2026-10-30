@@ -58,6 +58,28 @@ func TestHandleExecMultiNormalizesAndDeduplicatesTargets(t *testing.T) {
 	}
 }
 
+// A fleet-wide root command must leave the same per-host audit record that a
+// single-host exec leaves.
+func TestHandleExecMultiAuditsEveryTarget(t *testing.T) {
+	deps := newExecMultiTestDeps(t, []string{"srv1", "srv2"}, func(terminal.CommandJob) terminal.CommandResult {
+		return terminal.CommandResult{Status: "succeeded", Output: "ok"}
+	})
+	var mu sync.Mutex
+	audited := map[string]string{}
+	deps.AppendAuditEventBestEffort = func(event AuditEvent, _ string) {
+		mu.Lock()
+		audited[event.Target] = event.Type + " " + event.ActorID
+		mu.Unlock()
+	}
+	recorder := handleExecMultiTestRequest(t, deps, ExecMultiRequest{Targets: []string{"srv1", "srv2"}, Command: "uptime"})
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
+	}
+	if len(audited) != 2 || audited["srv1"] != "api.exec tester" || audited["srv2"] != "api.exec tester" {
+		t.Fatalf("audit events = %#v, want api.exec by tester for srv1 and srv2", audited)
+	}
+}
+
 func TestHandleExecMultiCountsNonzeroExitAsFailure(t *testing.T) {
 	deps := newExecMultiTestDeps(t, []string{"good", "bad"}, func(job terminal.CommandJob) terminal.CommandResult {
 		if job.Target == "bad" {

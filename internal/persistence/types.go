@@ -488,7 +488,7 @@ type ScheduleStore interface {
 	CreateScheduledTask(ctx context.Context, task schedules.ScheduledTask) error
 	GetScheduledTask(ctx context.Context, id string) (schedules.ScheduledTask, bool, error)
 	ListScheduledTasks(ctx context.Context, limit, offset int) ([]schedules.ScheduledTask, int, error)
-	UpdateScheduledTask(ctx context.Context, id string, name *string, cronExpr *string, command *string, targets *[]string, groupID *string, enabled *bool, nextRun schedules.NextRunUpdate) error
+	UpdateScheduledTask(ctx context.Context, id string, name *string, cronExpr *string, command *string, targets *[]string, groupID *string, enabled *bool, nextRun schedules.NextRunUpdate, editedBy string) error
 	DeleteScheduledTask(ctx context.Context, id string) error
 }
 

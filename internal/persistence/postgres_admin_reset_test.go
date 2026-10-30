@@ -4,8 +4,8 @@ import "testing"
 
 func TestPostgresAdminResetTableCountAndHubMetricsStayInSync(t *testing.T) {
 	tables := postgresAdminResetTables()
-	if len(tables) != 54 {
-		t.Fatalf("admin reset table count = %d, want 54", len(tables))
+	if len(tables) != 53 {
+		t.Fatalf("admin reset table count = %d, want 53", len(tables))
 	}
 	seen := make(map[string]struct{}, len(tables))
 	for _, table := range tables {
@@ -16,5 +16,9 @@ func TestPostgresAdminResetTableCountAndHubMetricsStayInSync(t *testing.T) {
 	}
 	if _, ok := seen["hub_metric_samples"]; !ok {
 		t.Fatal("admin reset omits hub_metric_samples")
+	}
+	// The audit trail must survive a reset so an admin cannot erase it.
+	if _, ok := seen["audit_events"]; ok {
+		t.Fatal("admin reset truncates audit_events")
 	}
 }

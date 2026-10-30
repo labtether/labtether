@@ -230,6 +230,7 @@ func (d *Deps) Handle2FAVerify(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to confirm 2FA")
 		return
 	}
+	d.auditIdentityChange(r, "auth.2fa.enabled", userID, nil)
 	if !retainedCurrent {
 		auth.ClearSessionCookie(w)
 	}
@@ -298,6 +299,7 @@ func (d *Deps) Handle2FADisable(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to disable 2FA")
 		return
 	}
+	d.auditIdentityChange(r, "auth.2fa.disabled", userID, nil)
 	if !retainedCurrent {
 		auth.ClearSessionCookie(w)
 	}

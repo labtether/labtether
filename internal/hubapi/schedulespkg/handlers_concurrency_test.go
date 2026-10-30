@@ -49,6 +49,7 @@ func (s *interleavingScheduleStore) UpdateScheduledTask(
 	groupID *string,
 	enabled *bool,
 	nextRun schedules.NextRunUpdate,
+	_ string,
 ) error {
 	// The production claim transaction wins this interleaving first.
 	claimedNext := s.claimedNext.UTC()

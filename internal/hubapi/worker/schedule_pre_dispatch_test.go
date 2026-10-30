@@ -175,7 +175,7 @@ func TestScheduleWorkerPreDispatchInfrastructureFailureUsesBoundedQueueRetry(t *
 			d.AssetStore = scheduleAssetReads{MemoryAssetStore: d.AssetStore.(*persistence.MemoryAssetStore), list: func(ctx context.Context) error {
 				if change == "disabled" {
 					enabled := false
-					if err := d.ScheduleStore.UpdateScheduledTask(ctx, execution.ScheduleID, nil, nil, nil, nil, nil, &enabled, schedules.NextRunUpdate{}); err != nil {
+					if err := d.ScheduleStore.UpdateScheduledTask(ctx, execution.ScheduleID, nil, nil, nil, nil, nil, &enabled, schedules.NextRunUpdate{}, ""); err != nil {
 						return err
 					}
 				} else {
