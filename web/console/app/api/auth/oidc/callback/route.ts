@@ -1,9 +1,14 @@
-import { hubClientForwardingHeaders } from "../../../../../lib/clientIdentity";
+import { browserUsedPlainHTTP, hubClientForwardingHeaders } from "../../../../../lib/clientIdentity";
 import { NextResponse } from "next/server";
 import { resolvedBackendBaseURLs, shouldUseSecureWebSocket } from "../../../../../lib/backend";
 import { safeLocalRedirectPath } from "../../../../../lib/safeRedirect";
 import { markResponseNoStore } from "../../../../../lib/noStoreResponse";
-import { clearOIDCStateCookie, oidcStateMatches, readOIDCStateCookie } from "../../../../../lib/oidcStateCookie";
+import {
+  clearOIDCStateCookie,
+  oidcCallbackPageProtocol,
+  oidcStateMatches,
+  readOIDCStateCookie,
+} from "../../../../../lib/oidcStateCookie";
 
 export const dynamic = "force-dynamic";
 
@@ -30,10 +35,14 @@ export async function GET(request: Request) {
   const base = await resolvedBackendBaseURLs();
   const redirectURI = `${origin}/api/auth/oidc/callback`;
 
+  // Same rule as password sign-in: the Hub drops Secure from the session
+  // cookie only when the browser is known to be on plain HTTP.
+  const plainHTTP = browserUsedPlainHTTP(request.headers, oidcCallbackPageProtocol(request));
+
   try {
     const response = await fetch(`${base.api}/auth/oidc/callback`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...hubClientForwardingHeaders(request) },
+      headers: { "Content-Type": "application/json", ...hubClientForwardingHeaders(request, plainHTTP) },
       body: JSON.stringify({ code, state, redirect_uri: redirectURI }),
       cache: "no-store",
     });

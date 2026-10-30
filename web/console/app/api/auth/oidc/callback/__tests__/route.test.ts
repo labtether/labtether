@@ -23,11 +23,12 @@ describe("OIDC callback browser binding", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
     vi.clearAllMocks();
   });
 
-  function callback(cookie?: string) {
-    const headers: Record<string, string> = { host: "console.example.com" };
+  function callback(cookie?: string, extra: Record<string, string> = {}) {
+    const headers: Record<string, string> = { host: "console.example.com", ...extra };
     if (cookie) headers.cookie = cookie;
     return GET(new Request("https://console.example.com/api/auth/oidc/callback?code=c1&state=s1", { headers }));
   }
@@ -47,5 +48,25 @@ describe("OIDC callback browser binding", () => {
     const cookies = response.headers.getSetCookie();
     expect(cookies.some((value) => value.startsWith("labtether_session=abc"))).toBe(true);
     expect(cookies.some((value) => value.startsWith("labtether_oidc_state=;"))).toBe(true);
+  });
+
+  // A Secure session cookie set over plain HTTP is dropped by the browser, so
+  // SSO sign-in failed there. The callback has no Origin; the Secure probe
+  // cookie from the start route is kept by the browser only on HTTPS.
+  it("tells the Hub about plain HTTP only when the browser dropped the Secure probe", async () => {
+    const key = "a".repeat(64);
+    vi.stubEnv("LABTETHER_INGRESS_KEY", key);
+    const keyed = { "x-labtether-ingress-key": key };
+    const forwardedProto = () => {
+      const init = fetchMock.mock.calls.at(-1)?.[1] as RequestInit;
+      return (init.headers as Record<string, string>)["X-Forwarded-Proto"];
+    };
+
+    await callback("labtether_oidc_state=s1", keyed);
+    expect(forwardedProto()).toBe("http");
+    await callback("labtether_oidc_state=s1; labtether_oidc_tls=1", keyed);
+    expect(forwardedProto()).toBeUndefined();
+    await callback("labtether_oidc_state=s1");
+    expect(forwardedProto()).toBeUndefined();
   });
 });

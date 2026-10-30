@@ -58,12 +58,16 @@ export function loginRateLimitKey(username: string, headers: Headers): string {
  * the request was itself loaded over http. Anything else, including a request
  * with no Origin, counts as HTTPS so the session cookie stays Secure.
  */
-export function browserUsedPlainHTTP(headers: Headers): boolean {
+export function browserUsedPlainHTTP(headers: Headers, pageProtocol = originProtocol(headers)): boolean {
   if (bundledIngressHops(headers) !== 1 || trustedProxyHopCount() !== 0) return false;
+  return pageProtocol === "http:";
+}
+
+function originProtocol(headers: Headers): string {
   try {
-    return new URL(headers.get("origin")?.trim() ?? "").protocol === "http:";
+    return new URL(headers.get("origin")?.trim() ?? "").protocol;
   } catch {
-    return false;
+    return "";
   }
 }
 
@@ -72,9 +76,12 @@ export function browserUsedPlainHTTP(headers: Headers): boolean {
  * certain, that the browser used plain HTTP. The Hub trusts them only from
  * this console and keeps the session cookie Secure unless told "http".
  */
-export function hubClientForwardingHeaders(request: Request): Record<string, string> {
+export function hubClientForwardingHeaders(
+  request: Request,
+  plainHTTP = browserUsedPlainHTTP(request.headers),
+): Record<string, string> {
   const headers: Record<string, string> = {};
-  if (browserUsedPlainHTTP(request.headers)) headers["X-Forwarded-Proto"] = "http";
+  if (plainHTTP) headers["X-Forwarded-Proto"] = "http";
   const client = trustedClientIdentity(request.headers);
   if (isIP(client) !== 0) headers["X-Forwarded-For"] = client;
   return headers;
