@@ -44,6 +44,15 @@ func TestMatchesRuleUsesTokenBoundaries(t *testing.T) {
 	}
 }
 
+// Extra arguments to an interpreter run as code, so a custom interpreter rule
+// without "=" must still match the whole command.
+func TestMatchesRuleKeepsInterpreterRulesExact(t *testing.T) {
+	argv, _ := ParseArgv(`powershell -Command Get-Date "Remove-Item x"`)
+	if MatchesRule(argv, "powershell -Command Get-Date") {
+		t.Fatal("interpreter rule matched extra arguments")
+	}
+}
+
 func TestQuoteArgvNeutralizesRemoteShellSyntax(t *testing.T) {
 	got := QuoteArgv([]string{"grep", "a'; id; echo 'b", "file name"})
 	want := `'grep' 'a'"'"'; id; echo '"'"'b' 'file name'`

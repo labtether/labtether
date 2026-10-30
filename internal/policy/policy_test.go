@@ -57,3 +57,31 @@ func TestEvaluateAllowlistRequiresTokenBoundariesAndRejectsShellOperators(t *tes
 		t.Fatalf("expected exact allowlist rule with arguments to pass: %s", res.Reason)
 	}
 }
+
+// The default allowlist must let Windows devices run their read-only commands
+// without opening the interpreters or the setting-changing forms of them.
+func TestDefaultAllowlistCoversWindowsReadOnlyCommands(t *testing.T) {
+	cfg := DefaultEvaluatorConfig()
+	cfg.AllowlistMode = true
+	check := func(command string) CheckResponse {
+		return Evaluate(CheckRequest{Mode: "structured", Action: "command_execute", Command: command}, cfg)
+	}
+	for _, command := range []string{
+		"whoami", "whoami /all", "hostname", "ipconfig", "ipconfig /all",
+		"systeminfo", "tasklist", "tasklist /svc", "cmd /c ver", "powershell -Command Get-Date",
+	} {
+		if res := check(command); !res.Allowed {
+			t.Errorf("expected %q to be allowed: %s", command, res.Reason)
+		}
+	}
+	for _, command := range []string{
+		"ipconfig /release", "ipconfig /all /release", "hostname newname",
+		"cmd", "cmd /c", "cmd /c ver \"& del x\"", "cmd /c dir",
+		"powershell", "powershell -Command", "powershell -Command Get-Date \"; Remove-Item x\"",
+		"pwsh -Command Get-Date",
+	} {
+		if res := check(command); res.Allowed {
+			t.Errorf("expected %q to be refused", command)
+		}
+	}
+}
