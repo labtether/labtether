@@ -26,6 +26,10 @@ services:
       LABTETHER_OUTBOUND_ALLOW_PRIVATE: ${LABTETHER_OUTBOUND_ALLOW_PRIVATE:-true}
       LABTETHER_OUTBOUND_ALLOW_LOOPBACK: ${LABTETHER_OUTBOUND_ALLOW_LOOPBACK:-false}
       LABTETHER_OUTBOUND_ALLOW_LINK_LOCAL: ${LABTETHER_OUTBOUND_ALLOW_LINK_LOCAL:-false}
+      # Wake-on-LAN without an agent relay: the Hub's own broadcast only
+      # reaches the LAN with host networking (detected) or macvlan networking.
+      # Set true for macvlan; false turns the Hub broadcast off.
+      LABTETHER_WOL_HUB_BROADCAST: ${LABTETHER_WOL_HUB_BROADCAST:-}
       SSL_CERT_FILE: /ca/ca.crt
       LABTETHER_DATA_DIR: /data
       LABTETHER_OWNER_TOKEN: ${LABTETHER_OWNER_TOKEN:-}

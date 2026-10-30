@@ -187,14 +187,17 @@ func (d *Deps) resolveStaleInstances(rule alerts.Rule, suppressionPrefetch *aler
 	d.resolveStaleInstancesContext(ctx, rule, suppressionPrefetch)
 }
 
-func (d *Deps) resolveStaleInstancesContext(ctx context.Context, rule alerts.Rule, suppressionPrefetch *alertSuppressionPrefetch) {
+// resolveStaleInstancesContext resolves up to 100 open instances per status
+// and reports how many it resolved.
+func (d *Deps) resolveStaleInstancesContext(ctx context.Context, rule alerts.Rule, suppressionPrefetch *alertSuppressionPrefetch) int {
 	if d.AlertInstanceStore == nil {
-		return
+		return 0
 	}
 	store, ok := d.AlertInstanceStore.(persistence.AlertInstanceContextStore)
 	if !ok || ctx.Err() != nil {
-		return
+		return 0
 	}
+	resolved := 0
 	suppressed := d.isAlertSuppressedContext(ctx, rule, suppressionPrefetch)
 	// Keep each status batch bounded. Resolved history must not consume the
 	// active-instance limit, and acknowledged/pending rows must also clear.
@@ -210,16 +213,17 @@ func (d *Deps) resolveStaleInstancesContext(ctx context.Context, rule alerts.Rul
 		}
 		for _, inst := range instances {
 			if ctx.Err() != nil {
-				return
+				return resolved
 			}
 			if _, err := store.UpdateAlertInstanceStatusContext(ctx, inst.ID, alerts.InstanceStatusResolved); err != nil {
 				log.Printf("alert evaluator: failed to resolve instance %s: %v", inst.ID, err)
 				continue
 			}
+			resolved++
 			// A suppressed placeholder has never fired, so it has no recovery
 			// notification. Acknowledgement does not suppress genuine recovery.
 			if ctx.Err() != nil {
-				return
+				return resolved
 			}
 			if suppressed || inst.Status == alerts.InstanceStatusPending {
 				continue
@@ -231,6 +235,7 @@ func (d *Deps) resolveStaleInstancesContext(ctx context.Context, rule alerts.Rul
 			d.pushAlertNotifyToAgents(ctx, rule, inst.ID, "resolved")
 		}
 	}
+	return resolved
 }
 
 // pushAlertNotifyToAgents sends an alert.notify message to connected agents
