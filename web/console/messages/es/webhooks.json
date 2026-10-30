@@ -19,5 +19,6 @@
   "save": "Guardar",
   "cancel": "Cancelar",
   "delete": "Eliminar",
-  "eventTypes": "Tipos de eventos"
+  "eventTypes": "Tipos de eventos",
+  "httpUrlNotice": "El Hub solo envía webhooks a direcciones http:// si LABTETHER_ALLOW_INSECURE_TRANSPORT=true está configurado. Cambie la URL a https:// o desactive este webhook."
 }
