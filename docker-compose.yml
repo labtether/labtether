@@ -16,6 +16,8 @@ services:
       LABTETHER_API_TOKEN_FILE: /run/labtether/api-token
       LABTETHER_API_BASE_URL: https://labtether:8443
       LABTETHER_EXTERNAL_URL: ${LABTETHER_EXTERNAL_URL:-}
+      # Browser address of the console; single sign-on returns here.
+      LABTETHER_CONSOLE_URL: ${LABTETHER_CONSOLE_URL:-}
       LABTETHER_CORS_ALLOWED_ORIGINS: ${LABTETHER_CORS_ALLOWED_ORIGINS:-}
       # Trust only the bundled console service when it forwards browser origins.
       LABTETHER_TRUST_PROXY_HOSTS: ${LABTETHER_TRUST_PROXY_HOSTS:-web-console}

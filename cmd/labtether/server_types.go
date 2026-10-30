@@ -217,6 +217,7 @@ type apiServer struct {
 	activeTransfers               sync.Map
 	agentCache                    *agentspkg.AgentCache
 	externalURL                   string
+	consoleURL                    string
 	dataDir                       string
 	demoMode                      bool
 	demoRateLimiter               *demoSessionRateLimiter

@@ -23,9 +23,10 @@ export async function GET(request: Request) {
       cache: "no-store",
     });
 
-    const payload = await safeJSON(response) as { auth_url?: string } | null;
+    const payload = await safeJSON(response) as { auth_url?: string; error?: string } | null;
     if (!response.ok || !payload?.auth_url) {
-      return markResponseNoStore(NextResponse.redirect(new URL("/login?error=sso_unavailable", requestURL)));
+      const code = hubRefusedCallbackAddress(response.status, payload?.error) ? "sso_address_refused" : "sso_unavailable";
+      return markResponseNoStore(NextResponse.redirect(new URL(`/login?error=${code}`, requestURL)));
     }
 
     const state = oidcStateFromAuthURL(payload.auth_url);
@@ -38,6 +39,12 @@ export async function GET(request: Request) {
   } catch {
     return markResponseNoStore(NextResponse.redirect(new URL("/login?error=sso_unavailable", requestURL)));
   }
+}
+
+// The Hub accepts only its own, LABTETHER_EXTERNAL_URL and LABTETHER_CONSOLE_URL
+// addresses for the sign-in callback. The login page says how to add this one.
+function hubRefusedCallbackAddress(status: number, error: string | undefined): boolean {
+  return status === 400 && (error ?? "").startsWith("redirect_uri origin");
 }
 
 async function safeJSON(response: Response): Promise<unknown | null> {

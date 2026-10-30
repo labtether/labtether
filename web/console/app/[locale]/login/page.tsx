@@ -10,7 +10,13 @@ import { safeLocalRedirectPath } from "../../../lib/safeRedirect";
 
 const LOCALE_PREFIXES = ["/en", "/de", "/fr", "/es", "/zh"];
 // Codes the SSO routes put in ?error=. Anything else shows the generic one.
-const SSO_ERROR_CODES = ["sso_unavailable", "sso_expired", "sso_setup_required", "sso_failed"] as const;
+const SSO_ERROR_CODES = [
+  "sso_unavailable",
+  "sso_address_refused",
+  "sso_expired",
+  "sso_setup_required",
+  "sso_failed",
+] as const;
 
 function safeNextPath(value: string | null): string {
   const safePath = safeLocalRedirectPath(value);
@@ -52,7 +58,7 @@ export default function LoginPage() {
     const errorParam = params.get("error");
     if (errorParam) {
       const code = (SSO_ERROR_CODES as readonly string[]).includes(errorParam) ? errorParam : "sso_failed";
-      setError(t(`login.ssoErrors.${code}`));
+      setError(t(`login.ssoErrors.${code}`, { address: window.location.origin }));
     }
   }, [t]);
 

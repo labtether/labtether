@@ -145,6 +145,7 @@ func newAPIServer(
 			return cache
 		}(),
 		externalURL:            strings.TrimRight(strings.TrimSpace(envOrDefault("LABTETHER_EXTERNAL_URL", "")), "/"),
+		consoleURL:             strings.TrimRight(strings.TrimSpace(envOrDefault("LABTETHER_CONSOLE_URL", "")), "/"),
 		pendingAgents:          newPendingAgents(),
 		challengeStore:         auth.NewChallengeStore(),
 		installStateStore:      installStateStore,
