@@ -26,9 +26,41 @@ line here.
   `$HOME/Development`. Clean up only what you created.
 - Run one broad build or suite at a time and reuse existing caches.
 - Reply in short, plain words: what changed, whether it worked, what is next.
-- User-facing text follows the workspace "No AI Slop" rules: keep normal
-  homelab words (node, VM, pool, snapshot, uptime), cut hype, filler and
-  internal engineering words, and never show raw IDs or bare status codes.
+- User-facing text follows "No AI slop" below.
+
+## No AI slop (owner rule)
+
+Applies to every word a person reads: UI, CLI output, log and error messages,
+docs, README, release notes, store listings, mockups and demo data. These are
+the workspace "No AI Slop" rules in `../AGENTS.md`; keep the two in sync.
+
+- Keep normal homelab words: device, node, host, hub, agent, VM, LXC,
+  container, stack, pool, dataset, snapshot, backup, restore, SSH, console,
+  VNC, RDP, uptime, latency, logs, alerts, webhooks, cron. Keep page names.
+- State facts LabTether knows. No guesses ("probably", "likely", "should be")
+  and no advice paragraphs. Put the fix in a button or a command.
+- Do not explain or restate the screen: no subtitle that repeats the list's
+  counts, no "Here you can…", no "You get an email for each".
+- Labels are a verb or a noun ("Start VM", "Snooze"), not a sentence. Status
+  is a word plus a time: "Offline since 21:12", "Recovered at 14:05".
+- Cut hype: seamless, effortless, powerful, robust, blazing fast, magic,
+  supercharge, unleash, elevate, next-level, game-changer, best-in-class,
+  single pane of glass, mission control, peace of mind, "at a glance".
+- Cut filler: simply, just, "That's it.", "No more X", "Say goodbye to X",
+  "everything you need", "takes care of the rest".
+- Cut structure tells: "X, Y, Z — tagline", "Not just X. It's Y.", questions
+  as headings, em dashes used as commas, stacked adjectives, lists of three
+  by habit.
+- Cut internal words from user text: canonical, operator, lane, bucket,
+  projection, entitlements, reconciliation, mutation, orchestration,
+  provenance, dogfood, "source of truth", handoff, surfaces, preflight. Show
+  no job or request IDs, raw event codes, bare status codes or API routes.
+- No made-up numbers, fake testimonials or lorem ipsum. Demo data uses
+  made-up host names, never the owner's real machines.
+- Visuals: no icon in a coloured box as decoration, no rainbow charts, no
+  decorative blobs, gradient washes or emoji icons. Text meets WCAG AA 4.5:1.
+
+Read user-facing text once against this list before you ship it.
 
 ## Boundaries
 
