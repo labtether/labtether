@@ -117,6 +117,7 @@ func newAPIServer(
 		edgeStore:                  pgStore,
 		topologyStore:              topology.NewPostgresStore(pgStore.Pool()),
 		linkSuggestionStore:        pgStore,
+		hubSSHKeyStore:             pgStore,
 		secretsManager:             secretsManager,
 		policyState:                policyState,
 		connectorRegistry:          registry,

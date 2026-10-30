@@ -33,5 +33,18 @@
     "matchSignals": "Señales de coincidencia",
     "confidence": "Confianza: {value}%",
     "newSuggestions": "{count} relaciones sugeridas"
+  },
+  "hubSshKey": {
+    "title": "Clave SSH del Hub",
+    "description": "Permite que el Hub inicie sesión en este dispositivo por SSH como root.",
+    "on": "Activada",
+    "off": "Desactivada",
+    "loading": "Cargando...",
+    "removalPending": "El Hub quitará su clave cuando el agente vuelva a conectarse.",
+    "removalSent": "El Hub pidió al agente que quite su clave.",
+    "noAgent": "Este dispositivo no tiene agente. Quite la clave del Hub de authorized_keys en el dispositivo.",
+    "adminOnly": "Solo un administrador o el propietario puede cambiar esto.",
+    "loadError": "No se pudo cargar el ajuste de la clave SSH del Hub.",
+    "saveError": "No se pudo cambiar el ajuste de la clave SSH del Hub."
   }
 }

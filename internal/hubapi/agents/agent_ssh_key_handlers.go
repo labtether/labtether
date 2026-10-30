@@ -68,6 +68,11 @@ func (d *Deps) ProcessAgentSSHKeyInstalled(conn *agentmgr.AgentConn, msg agentmg
 	if d.CredentialStore == nil || identity == nil {
 		return
 	}
+	// A device with the Hub SSH key off gets no SSH login config, even when
+	// its agent reports a key the Hub never sent.
+	if d.HubSSHKeyEnabled == nil || !d.HubSSHKeyEnabled(conn.AssetID) {
+		return
+	}
 
 	if _, ok, err := d.CredentialStore.GetAssetTerminalConfig(conn.AssetID); err != nil {
 		log.Printf("agentws: failed to load terminal config for %s: %v", conn.AssetID, err)

@@ -265,6 +265,7 @@ func TestSendSSHKeyInstallAndRemoveEmitHubKey(t *testing.T) {
 func TestProcessAgentSSHKeyInstalledSavesTerminalConfigWhenMissing(t *testing.T) {
 	sut := newTestAPIServer(t)
 	sut.hubIdentity = &hubSSHIdentity{ProfileID: "cred-hub"}
+	enableTestHubSSHKey(t, sut, "node-ssh")
 
 	msg := marshalAgentMessage(t, agentmgr.SSHKeyInstalledData{
 		Username: "labuser",

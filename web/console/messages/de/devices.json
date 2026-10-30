@@ -33,5 +33,18 @@
     "matchSignals": "Übereinstimmungsmerkmale",
     "confidence": "Konfidenz: {value}%",
     "newSuggestions": "{count} vorgeschlagene Beziehungen"
+  },
+  "hubSshKey": {
+    "title": "Hub-SSH-Schlüssel",
+    "description": "Erlaubt dem Hub, sich per SSH als root an diesem Gerät anzumelden.",
+    "on": "An",
+    "off": "Aus",
+    "loading": "Wird geladen...",
+    "removalPending": "Der Hub entfernt seinen Schlüssel, sobald sich der Agent wieder verbindet.",
+    "removalSent": "Der Hub hat den Agenten angewiesen, seinen Schlüssel zu entfernen.",
+    "noAgent": "Dieses Gerät hat keinen Agenten. Entfernen Sie den Hub-Schlüssel auf dem Gerät aus authorized_keys.",
+    "adminOnly": "Nur ein Administrator oder Eigentümer kann dies ändern.",
+    "loadError": "Die Einstellung für den Hub-SSH-Schlüssel konnte nicht geladen werden.",
+    "saveError": "Die Einstellung für den Hub-SSH-Schlüssel konnte nicht geändert werden."
   }
 }
