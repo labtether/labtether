@@ -176,7 +176,9 @@ func TestDeleteAsset_ConnectedAgentReturnsConflict(t *testing.T) {
 	}
 }
 
-func TestDeleteAsset_ConnectedAgentSendsSSHKeyRemoveBeforeConflict(t *testing.T) {
+// A delete refused because the agent is connected must change nothing: the
+// agent must not be told to remove the Hub SSH key either.
+func TestDeleteAsset_ConnectedAgentConflictSendsNothing(t *testing.T) {
 	sut := newTestAPIServer(t)
 	sut.agentMgr = agentmgr.NewManager()
 	sut.hubIdentity = &hubSSHIdentity{
@@ -199,42 +201,20 @@ func TestDeleteAsset_ConnectedAgentSendsSSHKeyRemoveBeforeConflict(t *testing.T)
 	sut.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "dockerhost1-northserver", "linux"))
 	defer sut.agentMgr.Unregister("dockerhost1-northserver")
 
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		clientConn.SetReadDeadline(time.Now().Add(2 * time.Second))
-
-		var outbound agentmgr.Message
-		if err := clientConn.ReadJSON(&outbound); err != nil {
-			t.Errorf("read outbound: %v", err)
-			return
-		}
-		if outbound.Type != agentmgr.MsgSSHKeyRemove {
-			t.Errorf("outbound type=%q, want %q", outbound.Type, agentmgr.MsgSSHKeyRemove)
-			return
-		}
-
-		var payload agentmgr.SSHKeyRemoveData
-		if err := json.Unmarshal(outbound.Data, &payload); err != nil {
-			t.Errorf("decode ssh remove payload: %v", err)
-			return
-		}
-		if payload.PublicKey != sut.hubIdentity.PublicKey {
-			t.Errorf("public_key=%q, want %q", payload.PublicKey, sut.hubIdentity.PublicKey)
-		}
-	}()
-
 	req := httptest.NewRequest(http.MethodDelete, "/assets/dockerhost1-northserver", nil)
 	rec := httptest.NewRecorder()
 	sut.handleAssetActions(rec, req)
-
-	<-done
 
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("expected 409, got %d: %s", rec.Code, rec.Body.String())
 	}
 	if _, ok, _ := sut.assetStore.GetAsset("dockerhost1-northserver"); !ok {
 		t.Fatalf("expected connected agent asset to remain after conflict")
+	}
+	_ = clientConn.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
+	var outbound agentmgr.Message
+	if err := clientConn.ReadJSON(&outbound); err == nil {
+		t.Fatalf("refused delete sent %q to the agent", outbound.Type)
 	}
 }
 
