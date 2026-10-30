@@ -92,7 +92,7 @@ INSTALL
   exit 0
 fi
 
-if [[ "${url}" == "http://localhost:8090/agent/status" ]]; then
+if [[ "${url}" == "http://localhost:${LABTETHER_TEST_AGENT_PORT:-8090}/agent/status" ]]; then
   printf '{"status":"ok"}\n'
   exit 0
 fi
@@ -110,6 +110,9 @@ set -euo pipefail
 printf '%s\n' "$*" >> "${LABTETHER_TEST_LOG_DIR}/systemctl.log"
 if [[ "${1:-}" == "is-active" ]]; then
   exit 1
+fi
+if [[ "${1:-}" == "show" ]]; then
+  printf '%s\n' "${LABTETHER_TEST_SERVICE_ENV:-}"
 fi
 exit 0
 `)

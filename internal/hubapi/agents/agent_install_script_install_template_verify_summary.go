@@ -4,6 +4,10 @@ func agentInstallScriptTemplateVerifyAndSummary() string {
 	return `# ── Verify ─────────────────────────────────────────────────────────────────
 step 6 "Verifying"
 
+# Ask the agent on the port its service runs with: a unit or drop-in can set
+# AGENT_PORT; the agent's default is 8090.
+SERVICE_AGENT_PORT="$(systemctl show --property=Environment --value "${SERVICE_NAME}" 2>/dev/null | tr ' ' '\n' | sed -n 's/^AGENT_PORT=\([0-9]\{1,5\}\)$/\1/p' | tail -n 1 || true)"
+AGENT_PORT="${SERVICE_AGENT_PORT:-${AGENT_PORT}}"
 STATUS_URL="http://localhost:${AGENT_PORT}/agent/status"
 AGENT_OK=0
 (

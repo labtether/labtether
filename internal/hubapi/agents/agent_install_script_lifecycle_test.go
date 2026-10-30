@@ -95,6 +95,21 @@ func TestInstallScriptDefaultInstallForPlainHTTPLoopbackHub(t *testing.T) {
 	}
 }
 
+// A drop-in can move the agent off port 8090. The final check must ask the
+// port the service runs with, or a working install reports a failure.
+func TestInstallScriptVerifiesAgentOnServicePort(t *testing.T) {
+	root, env := newAgentScriptHarness(t, strings.Repeat("a", 64))
+	env = append(env, "LABTETHER_TEST_SERVICE_ENV=LANG=C AGENT_PORT=18091", "LABTETHER_TEST_AGENT_PORT=18091")
+	script := rewriteAgentScriptForHarness(GenerateInstallScript("https://hub.example.com", "wss://hub.example.com/ws/agent"), root)
+	output, err := runGeneratedShellScript(t, script, env, "--skip-vnc-prereqs")
+	if err != nil {
+		t.Fatalf("run install script: %v\n%s", err, output)
+	}
+	if !strings.Contains(output, "Agent is running") {
+		t.Fatalf("expected the agent on port 18091 to be found, got:\n%s", output)
+	}
+}
+
 // The Hub's SSH key gives root access. Uninstall must remove every key line
 // the Hub added, including one from before a Hub key rotation, through both
 // the installer and the CLI helper, and leave every other key alone.
