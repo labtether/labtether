@@ -217,6 +217,19 @@ remove_hub_ca_trust() {
   success "Hub CA removed from the system trust store"
 }
 
+# Self-update keeps the replaced binary (.previous) and its rollback state
+# (.update-state) next to the agent binary. An update that was cut off can
+# also leave a staged download or a temporary file there.
+remove_agent_update_files() {
+  local leftover
+  rm -f "${BINARY_DEST}.previous" "${BINARY_DEST}.update-state"
+  for leftover in "${BINARY_DEST%%/*}/.${BINARY_DEST##*/}.update-"* "${BINARY_DEST%%/*}/.labtether-tmp-"*; do
+    if [[ -f "${leftover}" && ! -L "${leftover}" ]]; then
+      rm -f "${leftover}"
+    fi
+  done
+}
+
 # ── Uninstall ──────────────────────────────────────────────────────────────
 if [[ "${UNINSTALL}" -eq 1 ]]; then
   info "Stopping service..."
@@ -227,6 +240,7 @@ if [[ "${UNINSTALL}" -eq 1 ]]; then
   success "Service stopped and disabled"
   remove_hub_ssh_keys
   rm -f "${BINARY_DEST}"
+  remove_agent_update_files
   success "Binary removed"
   rm -f "${ENV_FILE}"
   success "Configuration removed"

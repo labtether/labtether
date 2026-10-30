@@ -272,6 +272,9 @@ func seedInstalledAgentState(t *testing.T, root string) {
 		filepath.Join(root, "etc/labtether/device-fingerprint"):           "sha256:fingerprint\n",
 		filepath.Join(root, "etc/systemd/system/labtether-agent.service"): "[Unit]\nDescription=LabTether Agent\n",
 	}
+	for path, contents := range agentSelfUpdateFiles(root) {
+		files[path] = contents
+	}
 	for path, contents := range files {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
@@ -283,5 +286,16 @@ func seedInstalledAgentState(t *testing.T, root string) {
 		if err := os.WriteFile(path, []byte(contents), mode); err != nil {
 			t.Fatalf("write %s: %v", path, err)
 		}
+	}
+}
+
+// agentSelfUpdateFiles are what the agent's self-update leaves next to its
+// binary: the kept previous binary, the rollback state and a staged download.
+func agentSelfUpdateFiles(root string) map[string]string {
+	dir := filepath.Join(root, "usr/local/bin")
+	return map[string]string{
+		filepath.Join(dir, "labtether-agent.previous"):           "#!/bin/bash\nexit 0\n",
+		filepath.Join(dir, "labtether-agent.update-state"):       `{"pending_version":"v1.7.1","starts":1}`,
+		filepath.Join(dir, ".labtether-agent.update-1700000000"): "staged",
 	}
 }

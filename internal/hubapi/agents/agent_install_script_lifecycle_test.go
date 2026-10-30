@@ -155,12 +155,22 @@ func TestUninstallRemovesOnlyHubSSHKeys(t *testing.T) {
 			t.Fatalf("install: %v\n%s", err, output)
 		}
 		keys := seedKeys(t, root)
+		for path, contents := range agentSelfUpdateFiles(root) {
+			if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
 		helper := mustReadFile(t, filepath.Join(root, "usr/local/bin/labtether"))
 		if output, err := runGeneratedShellScript(t, helper, env, "agent", "uninstall"); err != nil {
 			t.Fatalf("helper uninstall: %v\n%s", err, output)
 		}
 		if got := mustReadFile(t, keys); got != userKeysOnly {
 			t.Fatalf("authorized_keys after helper uninstall:\n%s", got)
+		}
+		for path := range agentSelfUpdateFiles(root) {
+			if _, err := os.Stat(path); !os.IsNotExist(err) {
+				t.Fatalf("expected %s to be removed by the helper, err=%v", path, err)
+			}
 		}
 	})
 

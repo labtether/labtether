@@ -288,6 +288,12 @@ run_uninstall() {
   remove_hub_ssh_key
 
   rm -f "${BINARY_DEST}"
+  # Self-update rollback files and any staged update next to the binary.
+  rm -f "${BINARY_DEST}.previous" "${BINARY_DEST}.update-state"
+  local leftover
+  for leftover in "${BINARY_DEST%%/*}/.${BINARY_DEST##*/}.update-"* "${BINARY_DEST%%/*}/.labtether-tmp-"*; do
+    if [[ -f "${leftover}" && ! -L "${leftover}" ]]; then rm -f "${leftover}"; fi
+  done
   rm -f "${ENV_FILE}"
 
   if [[ "${purge}" -eq 1 ]]; then

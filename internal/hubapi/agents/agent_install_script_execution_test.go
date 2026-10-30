@@ -353,6 +353,12 @@ func TestInstallScriptUninstallAndPurgeLifecycle(t *testing.T) {
 				t.Fatalf("expected %s to be removed after uninstall, err=%v", path, err)
 			}
 		}
+		// A stale rollback record would act on the next install's binary.
+		for path := range agentSelfUpdateFiles(root) {
+			if _, err := os.Stat(path); !os.IsNotExist(err) {
+				t.Fatalf("expected %s to be removed after uninstall, err=%v", path, err)
+			}
+		}
 
 		for _, path := range []string{
 			filepath.Join(root, "etc/labtether/agent-token"),
@@ -401,6 +407,11 @@ func TestInstallScriptUninstallAndPurgeLifecycle(t *testing.T) {
 			filepath.Join(root, "usr/local/share/ca-certificates/labtether-ca.crt"),
 			filepath.Join(root, "usr/local/bin/labtether"),
 		} {
+			if _, err := os.Stat(path); !os.IsNotExist(err) {
+				t.Fatalf("expected %s to be removed after purge, err=%v", path, err)
+			}
+		}
+		for path := range agentSelfUpdateFiles(root) {
 			if _, err := os.Stat(path); !os.IsNotExist(err) {
 				t.Fatalf("expected %s to be removed after purge, err=%v", path, err)
 			}
