@@ -115,7 +115,7 @@ func (d *Deps) handleTLSSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 
 	restartRequired := false
 	if d.TLSState != nil && d.TLSState.Enabled && d.TLSState.CertSwitcher != nil {
-		d.TLSState.CertSwitcher.SetProvider(provider.GetCertificate)
+		d.TLSState.CertSwitcher.SetProvider(d.TLSState.UploadedCertificateProvider(provider.GetCertificate))
 		d.TLSState.Mode = "external"
 		d.TLSState.Source = opspkg.TLSSourceUIUploaded
 		d.TLSState.CertFile = certPath

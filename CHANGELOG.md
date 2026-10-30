@@ -63,6 +63,12 @@ configuration step.
   `/api/v2/agents/pending/approve`) and changing retention settings now need
   `admin` or `owner`. Audit retention cannot go below 30 days; stored shorter
   values are raised to 30 days.
+- **A Hub with no encryption key will not start over encrypted data.** If
+  the database holds saved credentials, webhook secrets or 2FA enrolments but
+  `secrets.json` has no key and `LABTETHER_ENCRYPTION_KEY` is not set, the Hub
+  refuses to start (`encryption_configuration`) instead of making a new key
+  that cannot read them. Restore `secrets.json` from the same backup as the
+  database. `scripts/db-backup.sh` covers the database only and now says so.
 - **`LABTETHER_ENCRYPTION_KEY` must match the stored key.** If it differs from
   the key in `$LABTETHER_DATA_DIR/install/secrets.json`, the Hub refuses to
   start (`encryption_configuration`) instead of silently making saved
@@ -98,6 +104,14 @@ configuration step.
 - **Removed `LABTETHER_AGENT_MANIFEST_REFRESH`**; no code read it.
   `POST /api/v1/agent/cache/refresh` now answers `status: "reloaded"`,
   `source: "disk"` and the loaded agent versions.
+- **Slow first start after an upgrade:** the deploy Compose file now gives
+  the Hub up to 30 minutes (the default migration time limit) to become
+  healthy before Compose gives up on it, and checks every 5 seconds meanwhile.
+  Before, a migration longer than about 45 seconds left the console stopped.
+- **Uploaded TLS certificates:** the Hub keeps serving its built-in
+  certificate for names the uploaded one does not cover, such as the
+  `labtether` name the bundled console uses. Before, uploading a certificate
+  cut the console off from the Hub.
 - **Release asset renamed:** the deploy env template is published as
   `deploy.env.example` (GitHub renamed `.env.deploy.example` to
   `default.env.deploy.example`). `SHA256SUMS` lists `deploy-manifest.json`,

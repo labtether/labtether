@@ -29,6 +29,10 @@ services:
     environment:
       - NEXT_PUBLIC_DEMO_MODE=true
       - LABTETHER_DEMO_MODE=true
+
+  # web-console sits only on the internal console network, so a port published
+  # there is not reachable. Publish port 80 through the no-secret ingress.
+  console-ingress:
     ports:
       - "0.0.0.0:80:3000"
 
@@ -50,6 +54,9 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-labtether}
       POSTGRES_USER: ${POSTGRES_USER:-labtether}
+    # PostgreSQL is reachable only on the internal data network.
+    networks:
+      - data-plane
     volumes:
       - labtether-bootstrap:/bootstrap:ro
       - ../../scripts/demo-seed.sql:/seed/demo-seed.sql:ro

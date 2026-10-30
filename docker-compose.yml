@@ -8,6 +8,8 @@ services:
       args:
         SERVICE_DIR: cmd/labtether
     hostname: labtether
+    # Settings > Restart exits the Hub and relies on the restart policy.
+    restart: unless-stopped
     environment:
       # Change via .env or POSTGRES_PASSWORD=secret docker compose up
       DATABASE_URL: postgres://labtether:${POSTGRES_PASSWORD:-labtether}@postgres:5432/labtether?sslmode=disable
@@ -60,6 +62,7 @@ services:
 
   postgres:
     image: postgres:18-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-labtether}
       POSTGRES_DB: ${POSTGRES_DB:-labtether}
@@ -78,6 +81,12 @@ services:
   web-console:
     build:
       context: ./web/console
+    restart: unless-stopped
+    # The Hub (65532) writes the service token file with mode 0600. Run the
+    # console as the same user so it can read it, with a private Next.js cache.
+    user: "65532:65532"
+    tmpfs:
+      - /app/.next/cache:rw,noexec,nosuid,nodev,uid=65532,gid=65532,mode=0700
     environment:
       HOSTNAME: 0.0.0.0
       # The built-in certificate includes the labtether service hostname. The
