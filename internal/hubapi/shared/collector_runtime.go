@@ -1,12 +1,17 @@
 package shared
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/labtether/labtether/internal/hubcollector"
 	"github.com/labtether/labtether/internal/persistence"
 )
+
+// ErrCollectorNotActive marks a request for a connector that was removed or
+// turned off. It is not an upstream failure.
+var ErrCollectorNotActive = errors.New("collector not active")
 
 // ResolveEnabledHubCollector never substitutes a collector for a saved owner.
 // Legacy unowned callers require a complete, type-filtered uniqueness check.
@@ -26,7 +31,7 @@ func ResolveEnabledHubCollector(store persistence.HubCollectorStore, collectorTy
 			return nil, fmt.Errorf("failed to load hub collector: %w", err)
 		}
 		if !found || collector.ID != collectorID {
-			return nil, fmt.Errorf("no active %s collector configured", collectorType)
+			return nil, fmt.Errorf("%w: no active %s collector configured", ErrCollectorNotActive, collectorType)
 		}
 		selected = collector
 	} else {
@@ -39,7 +44,7 @@ func ResolveEnabledHubCollector(store persistence.HubCollectorStore, collectorTy
 			return nil, fmt.Errorf("failed to list hub collectors: %w", err)
 		}
 		if len(collectors) == 0 {
-			return nil, fmt.Errorf("no active %s collector configured", collectorType)
+			return nil, fmt.Errorf("%w: no active %s collector configured", ErrCollectorNotActive, collectorType)
 		}
 		if len(collectors) != 1 {
 			return nil, fmt.Errorf("collector_id is required when multiple active %s collectors are configured", collectorType)
@@ -47,7 +52,7 @@ func ResolveEnabledHubCollector(store persistence.HubCollectorStore, collectorTy
 		selected = collectors[0]
 	}
 	if strings.TrimSpace(selected.ID) == "" || !selected.Enabled || hubcollector.NormalizeCollectorType(selected.CollectorType) != collectorType {
-		return nil, fmt.Errorf("no active %s collector configured", collectorType)
+		return nil, fmt.Errorf("%w: no active %s collector configured", ErrCollectorNotActive, collectorType)
 	}
 	return &selected, nil
 }
