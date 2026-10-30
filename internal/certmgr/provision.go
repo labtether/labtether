@@ -117,7 +117,7 @@ func (r *CertReloader) maybeRenew() error {
 		}
 	}
 
-	if !NeedsRenewal(leaf, renewalWindow) {
+	if !NeedsRenewal(leaf, renewalWindow) && serverCertCoversRequiredHosts(leaf, r.additionalHosts) {
 		return nil
 	}
 
@@ -235,8 +235,8 @@ func Provision(certsDir string, additionalHosts ...string) (*ProvisionResult, er
 			log.Printf("certmgr: existing server cert is corrupt, regenerating: %v", err)
 		} else if NeedsRenewal(serverKP.Cert, renewalWindow) {
 			log.Printf("certmgr: server cert expiring within 30 days, regenerating")
-		} else if !certificateCoversHosts(serverKP.Cert, additionalHosts) {
-			log.Printf("certmgr: existing server cert is missing configured external host SANs, regenerating")
+		} else if !serverCertCoversRequiredHosts(serverKP.Cert, additionalHosts) {
+			log.Printf("certmgr: existing server cert does not name this host or the configured external hosts, regenerating with the same CA")
 		} else {
 			log.Printf("certmgr: loaded existing server cert from %s", certsDir)
 			needNewServerCert = false
@@ -304,6 +304,35 @@ func collectServerSANs(additionalHosts []string) (dnsNames []string, ipStrings [
 		}
 	}
 	return dnsNames, ipStrings
+}
+
+// serverCertCoversRequiredHosts reports whether a stored server cert names
+// this machine's current host name and every configured external host. A Hub
+// upgraded from a compose file without "hostname:" keeps a cert for an old
+// random container ID, while the console verifies the "labtether" name.
+// Interface IPs are not required: they change between container restarts.
+func serverCertCoversRequiredHosts(cert *x509.Certificate, additionalHosts []string) bool {
+	return certificateCoversHosts(cert, additionalHosts) && certificateNamesLocalHost(cert)
+}
+
+// certificateNamesLocalHost compares DNS SANs directly, the same list
+// CollectLocalSANs fills, so a host name that hostname verification rejects
+// cannot cause a new cert on every start.
+func certificateNamesLocalHost(cert *x509.Certificate) bool {
+	hostname, err := localHostname()
+	hostname = strings.TrimSuffix(strings.TrimSpace(hostname), ".")
+	if err != nil || hostname == "" {
+		return true
+	}
+	if cert == nil {
+		return false
+	}
+	for _, name := range cert.DNSNames {
+		if strings.EqualFold(strings.TrimSuffix(name, "."), hostname) {
+			return true
+		}
+	}
+	return false
 }
 
 func certificateCoversHosts(cert *x509.Certificate, hosts []string) bool {
