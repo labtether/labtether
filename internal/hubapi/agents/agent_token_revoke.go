@@ -22,7 +22,7 @@ const (
 	HubSSHKeyNotRemoved = "not_removed"
 )
 
-const agentTokenRevokedAuditType = "agent.token.revoked"
+const agentTokenRevokedAuditType = "agent.token.revoked" // #nosec G101 -- An audit event type name, not a credential.
 
 // HandleAgentTokenActions handles DELETE /settings/agent-tokens/{id} (admin-auth).
 //
