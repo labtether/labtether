@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/gorilla/websocket"
+	"github.com/labtether/labtether/internal/audit"
 )
 
 func TestAuditMiddlewarePreservesWebSocketHijacker(t *testing.T) {
@@ -44,5 +45,29 @@ func TestAuditMiddlewarePreservesWebSocketHijacker(t *testing.T) {
 	}
 	if messageType != websocket.TextMessage || string(payload) != "ready" {
 		t.Fatalf("unexpected websocket message type=%d payload=%q", messageType, payload)
+	}
+}
+
+// Requests through the console must record the user's address, not the
+// console's; a client that is not a trusted proxy cannot choose its address.
+func TestAuditMiddlewareRecordsForwardedClientOnlyFromTrustedPeer(t *testing.T) {
+	sut := newTestAPIServer(t)
+	sut.auditEventCh = make(chan audit.Event, 2)
+	handler := sut.auditMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	record := func(peer string) map[string]any {
+		req := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
+		req.RemoteAddr = peer + ":40000"
+		req.Header.Set("X-Forwarded-For", "198.51.100.7")
+		handler.ServeHTTP(httptest.NewRecorder(), req)
+		return (<-sut.auditEventCh).Details
+	}
+
+	if got := record("127.0.0.1"); got["client_ip"] != "198.51.100.7" || got["peer_ip"] != "127.0.0.1" {
+		t.Fatalf("trusted proxy request recorded client=%v peer=%v", got["client_ip"], got["peer_ip"])
+	}
+	if got := record("192.0.2.44"); got["client_ip"] != "192.0.2.44" || got["peer_ip"] != "192.0.2.44" {
+		t.Fatalf("untrusted peer chose its recorded address: client=%v peer=%v", got["client_ip"], got["peer_ip"])
 	}
 }

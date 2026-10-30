@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { hubClientForwardingHeaders } from "./clientIdentity";
 import { hasServiceModeAuthHeader, isTrustedServiceProxyPath } from "./proxyAuth";
 import { trimTrailingChars } from "./trimChars";
 
@@ -345,6 +346,12 @@ export function backendAuthHeadersWithCookie(request: Request): Record<string, s
   if (allowServiceAuth && tokenHeader) {
     headers["X-Labtether-Token"] = tokenHeader;
   }
+
+  // The Hub's audit log records this as the client. Only an address a trusted
+  // hop added is sent. plainHTTP is false so no X-Forwarded-Proto goes out:
+  // that header decides the session cookie's Secure flag and stays on the
+  // sign-in routes.
+  Object.assign(headers, hubClientForwardingHeaders(request, false));
 
   return headers;
 }
