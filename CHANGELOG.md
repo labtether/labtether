@@ -75,6 +75,52 @@ configuration step.
   credentials unreadable. Unset the variable or set it to the stored value.
   To deliberately discard data encrypted with the old key, start once with
   `LABTETHER_ENCRYPTION_KEY_REPLACE=true`.
+- **A restored database needs the key it was written with.** The database
+  now keeps a check value encrypted with the Hub's key. If the Hub's key
+  cannot read it, for example after restoring a database onto a Hub with its
+  own `secrets.json`, the Hub refuses to start (`encryption_configuration`)
+  and logs the ID of the key the database needs and of its own key. The first
+  start after the upgrade writes the check, so a mismatch that already exists
+  is not caught. `LABTETHER_ENCRYPTION_KEY_REPLACE=true` discards the old
+  secrets and rewrites the check.
+- **The Hub SSH key is set per device.** Devices that exist at the upgrade
+  keep the Hub's root SSH key; devices added later start without it. Admins
+  turn it on or off on the device's Connect panel
+  (`/assets/{id}/hub-ssh-key`). Turning it off removes the key through the
+  agent. Uninstall and purge remove every `labtether-hub` key line.
+- **Linux agent installer:** `install.sh` no longer adds the Hub CA to the
+  system trust store; purge removes a matching copy left by older installers,
+  and the `labtether` helper. The systemd unit no longer sets
+  `ProtectHome=read-only`, so Files, terminal writes and the Hub SSH key work
+  in `/root` and `/home`. Plain-HTTP and `localhost` Hub URLs get the agent
+  settings they need to connect. Docker and file-scope settings go into
+  `agent.env` only when you pass their flag, so the Hub manages them
+  otherwise.
+- **SSO roles:** a group named `admin` or `owner` no longer grants that role
+  by its name. List admin groups in the OIDC admin role values, or send a
+  `labtether_role` claim. Users who relied on the name drop to the default
+  role at their next sign-in.
+- **API keys follow their creator:** a key's role is capped at its creator's
+  current role, and keys whose creator was deleted stop working. Keys made
+  with the owner token keep their role.
+- **Console token file:** `/run/labtether/api-token` now holds a token only
+  the console can use, not the API token. Scripts that sent it as an owner
+  credential get `403`; give them an API key.
+- **Admin accounts:** only the owner can change, sign out or delete an admin.
+  An edited schedule runs with the editor's rights. Action run history
+  (`/actions/runs`) needs `operator` and shows a key only its allowed devices.
+- **Webhooks:** a new or changed `http://` webhook URL is refused unless
+  `LABTETHER_ALLOW_INSECURE_TRANSPORT=true`. Viewers see only the scheme and
+  host of webhook URLs.
+- **Wake-on-LAN from a container:** with no online agent on the device's
+  network, a Hub in a bridged container returns `409` instead of reporting a
+  packet that never left the container. On macvlan networking, set
+  `LABTETHER_WOL_HUB_BROADCAST=true`.
+- **Command allowlist rules:** a rule that starts with `=` must match the
+  whole command. Rules for `cmd`, `powershell`, `pwsh`, `sh`, `bash` and other
+  command interpreters always need a whole-command match, because extra
+  arguments to them run as code. Check custom `COMMAND_ALLOWLIST_PREFIXES`
+  lists.
 - **First admin in development:** without `LABTETHER_ADMIN_PASSWORD`, no admin
   is created with an unseen random password any more. Open `/setup` and enter
   the one-time token from `$LABTETHER_DATA_DIR/install/setup-token` (the log
@@ -123,7 +169,10 @@ configuration step.
 - **Login limits:** each client gets 30 login attempts per minute before the
   shared 120-per-minute budget. Behind your own reverse proxy, set
   `LABTETHER_TRUST_PROXY_CIDRS` or `LABTETHER_TRUST_PROXY_HOSTS` so the
-  forwarded client address is used.
+  forwarded client address is used. Through the deploy Compose console each
+  browser has its own limit. The all-in-one image has no console ingress, so
+  console sign-ins there share one limit unless `LABTETHER_TRUST_PROXY_HOPS`
+  names your proxy.
 - **Agent auto-update:** `install.sh` now writes the Hub's release-signing key
   (`LABTETHER_AUTO_UPDATE_TRUSTED_PUBLIC_KEY`) to `/etc/labtether/agent.env`.
   Agents installed earlier need the installer re-run (or that line added)
@@ -142,6 +191,24 @@ configuration step.
   connection's asset; asset-restricted keys no longer see PBS task details.
 - API key scope boundaries on legacy routes, secure session cookies, console
   auth request body limits, hardened agent binary downloads.
+- Terminal, remote view, container shell and event streams close when the
+  sign-in session, user, role or API key behind them ends. Stream tickets are
+  checked again when used.
+- SSO sign-in finishes only in the browser that started it, and the login
+  page shows only its own error messages.
+- Container shell output and agent log streams are no longer sent to every
+  console and webhook. Docker events name the agent that sent them.
+- An agent can no longer pick the Hub address it moves to after enrolling, or
+  the host the Hub's SSH key is used on. New Hub CAs sign server certificates
+  only.
+- Home Assistant attributes holding tokens or passwords are not stored.
+  Redirects to another host drop connector API key headers.
+- Unauthenticated discover lists Hub addresses only to local and tailnet
+  callers.
+- The console opens only `http` and `https` service links.
+- Audit events name who changed users, passwords, 2FA and OIDC settings, who
+  ran an admin reset or a multi-host command, and who read a saved desktop
+  password. Admin reset keeps the audit log.
 
 ### Added
 
@@ -170,11 +237,47 @@ configuration step.
 - v2 agent response envelopes, bundled console event proxy trust, database URI
   handling, IPv6 redirect targets and Home Assistant quick-config origin.
 - Clean image builds after Alpine package updates.
+- Fresh installs from the deploy Compose file start the console: the Hub
+  health check and console ingress run Node from `/usr/local/bin`.
+- Agents stay enrolled past the token lifetime; each heartbeat extends the
+  agent's token.
+- Install-time agent settings such as `--docker-enabled true` are no longer
+  replaced by Hub defaults when the agent connects, and the device's agent
+  settings show the value the agent runs with.
+- Container IDs from `labtether-cli docker ps` work for container logs,
+  stats, start, stop and restart.
+- `install.sh --purge` and `labtether agent purge` remove the Hub CA from the
+  system trust store and the `labtether` helper.
+- The Hub's default command allowlist includes read-only Windows commands:
+  `whoami`, `hostname`, `ipconfig`, `ipconfig /all`, `systeminfo`,
+  `tasklist`, `cmd /c ver` and `powershell -Command Get-Date`. Tagged v1.7.0
+  agents still refuse them with their own allowlist.
+- A device delete refused because its agent is connected no longer removes the
+  Hub SSH key from that device first.
+- The Linux installer's final check asks the agent on the port its service
+  uses, not always 8090.
+- SSO sign-in works on a plain-HTTP console.
+- MCP reports the Hub's version instead of `1.0.0`.
+- File uploads and downloads time out only when they stall. Staging files go
+  to the data volume (`/data/spool`), not memory-backed `/tmp`.
+- Agent file downloads start while the file is still arriving, so a download
+  that takes more than 5 minutes no longer fails through the console.
+- Home Assistant shows every entity, not the first 40.
+- Each webhook has its own delivery queue, so one slow endpoint no longer
+  delays or drops events for the others.
+- Retention prunes in batches and carries on past a slow table. Pausing an
+  alert rule resolves its open alerts.
+- The Add Device Linux command passes Docker and file-scope flags only when
+  you change them.
+- `deploy/agents/windows/install-agent.ps1` sets the release-signing key, so
+  agents it installs can self-update.
 
 ### Changed
 
 - Bounded browser event delivery, remote-write serialization, job-queue
   notification batching and passive console polling reduce Hub load.
+- Agent file downloads have no `Content-Length`. A download that fails after
+  it started ends with a network error instead of a JSON error.
 
 ## [Unreleased]
 
