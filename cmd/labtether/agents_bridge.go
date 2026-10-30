@@ -147,6 +147,7 @@ func (s *apiServer) buildAgentsDeps() *agentspkg.Deps {
 		HubSSHKeyEnabled:        s.hubSSHKeyEnabled,
 		HubSSHKeyMayBeInstalled: s.hubSSHKeyMayBeInstalled,
 		SendHubSSHKeyRemoval:    s.sendSSHKeyRemove,
+		RemoveHubSSHKeyIfOff:    s.removeHubSSHKeyIfOff,
 	}
 	if deps.RuntimeStore != nil {
 		if overrides, err := deps.RuntimeStore.ListRuntimeSettingOverrides(); err == nil {

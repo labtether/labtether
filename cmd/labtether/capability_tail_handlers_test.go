@@ -266,6 +266,7 @@ func TestProcessAgentSSHKeyInstalledSavesTerminalConfigWhenMissing(t *testing.T)
 	sut := newTestAPIServer(t)
 	sut.hubIdentity = &hubSSHIdentity{ProfileID: "cred-hub"}
 	enableTestHubSSHKey(t, sut, "node-ssh")
+	enableTestHubSSHKey(t, sut, "node-ssh-loopback")
 
 	msg := marshalAgentMessage(t, agentmgr.SSHKeyInstalledData{
 		Username: "labuser",
@@ -297,6 +298,7 @@ func TestProcessAgentSSHKeyInstalledSavesTerminalConfigWhenMissing(t *testing.T)
 func TestProcessAgentSSHKeyInstalledPreservesExistingTerminalConfig(t *testing.T) {
 	sut := newTestAPIServer(t)
 	sut.hubIdentity = &hubSSHIdentity{ProfileID: "cred-hub"}
+	enableTestHubSSHKey(t, sut, "node-ssh")
 
 	existing, err := sut.credentialStore.SaveAssetTerminalConfig(credentials.AssetTerminalConfig{
 		AssetID:             "node-ssh",

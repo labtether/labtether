@@ -67,12 +67,18 @@ func (d *Deps) ProcessAgentSSHKeyInstalled(conn *agentmgr.AgentConn, msg agentmg
 	securityruntime.Logf("agentws: SSH key installed on %s (user=%s, host=%s)", conn.AssetID, data.Username, data.Hostname)
 
 	identity := d.currentHubIdentity()
-	if d.CredentialStore == nil || identity == nil {
+	if identity == nil {
 		return
 	}
 	// A device with the Hub SSH key off gets no SSH login config, even when
-	// its agent reports a key the Hub never sent.
+	// its agent reports a key the Hub never sent. The reply can arrive after
+	// the key was turned off (an install sent on reconnect), so the key may
+	// be on the device now: ask the agent to remove it again.
 	if d.HubSSHKeyEnabled == nil || !d.HubSSHKeyEnabled(conn.AssetID) {
+		d.removeHubSSHKeyAfterInstall(conn)
+		return
+	}
+	if d.CredentialStore == nil {
 		return
 	}
 
@@ -110,4 +116,12 @@ func (d *Deps) ProcessAgentSSHKeyInstalled(conn *agentmgr.AgentConn, msg agentmg
 	if _, err := d.CredentialStore.SaveAssetTerminalConfig(cfg); err != nil {
 		log.Printf("agentws: failed to save terminal config for %s: %v", conn.AssetID, err)
 	}
+}
+
+func (d *Deps) removeHubSSHKeyAfterInstall(conn *agentmgr.AgentConn) {
+	if d.RemoveHubSSHKeyIfOff != nil {
+		d.RemoveHubSSHKeyIfOff(conn)
+		return
+	}
+	_ = d.SendSSHKeyRemove(conn)
 }

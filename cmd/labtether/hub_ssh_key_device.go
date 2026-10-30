@@ -82,6 +82,38 @@ func (s *apiServer) syncHubSSHKeyOnConnect(conn *agentmgr.AgentConn) {
 	}
 }
 
+// removeHubSSHKeyIfOff answers an "installed" reply from a device whose Hub
+// SSH key is off, for example an install sent on reconnect that the agent
+// finished after an admin turned the key off. Under the identity lock it
+// checks the setting again, so a key turned back on meanwhile is kept. A
+// removal that cannot be sent is kept as pending for the next connect.
+func (s *apiServer) removeHubSSHKeyIfOff(conn *agentmgr.AgentConn) {
+	if conn == nil {
+		return
+	}
+	s.hubIdentityOperationMu.Lock()
+	defer s.hubIdentityOperationMu.Unlock()
+	identity := s.currentHubSSHIdentity()
+	setting, ok := s.loadHubSSHKeySetting(conn.AssetID)
+	if identity == nil || (ok && setting.Enabled) {
+		return
+	}
+	if err := sendHubSSHKeyMessage(conn, agentmgr.MsgSSHKeyRemove, identity.PublicKey); err != nil {
+		log.Printf("hub-ssh-key: failed to send key removal to %s: %v", conn.AssetID, err) // #nosec G706 -- Asset IDs are Hub records; no key material is logged.
+		if ok {
+			if _, err := s.hubSSHKeyStore.SetHubSSHKeySetting(conn.AssetID, false, true); err != nil {
+				log.Printf("hub-ssh-key: failed to keep pending removal for %s: %v", conn.AssetID, err) // #nosec G706 -- Asset IDs are Hub records; no key material is logged.
+			}
+		}
+		return
+	}
+	if ok && setting.RemovalPending {
+		if err := s.hubSSHKeyStore.ClearHubSSHKeyRemovalPending(conn.AssetID); err != nil {
+			log.Printf("hub-ssh-key: failed to clear pending removal for %s: %v", conn.AssetID, err) // #nosec G706 -- Asset IDs are Hub records; no key material is logged.
+		}
+	}
+}
+
 // sendHubSSHKeyRemoval asks the agent to remove the plain and commented Hub
 // key lines, then clears the pending removal. Callers hold
 // hubIdentityOperationMu.

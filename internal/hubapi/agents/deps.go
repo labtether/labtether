@@ -111,6 +111,10 @@ type Deps struct {
 	// SendHubSSHKeyRemoval sends the Hub SSH key removal under the Hub's
 	// identity lock. When nil, SendSSHKeyRemove is used.
 	SendHubSSHKeyRemoval func(conn *agentmgr.AgentConn) error
+	// RemoveHubSSHKeyIfOff answers an "installed" reply from a device whose
+	// Hub SSH key is off by sending a removal under the Hub's identity lock.
+	// When nil, SendSSHKeyRemove is used.
+	RemoveHubSSHKeyIfOff func(conn *agentmgr.AgentConn)
 }
 
 // broadcastEvent calls the Broadcast function if non-nil.

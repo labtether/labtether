@@ -92,6 +92,12 @@ func TestHubSSHKeyStartsOffAndOnlyAnAdminTurnsItOn(t *testing.T) {
 	if _, ok, _ := server.credentialStore.GetAssetTerminalConfig("node-new"); ok {
 		t.Fatal("an unsolicited ssh_key.installed created an SSH login config for a device with the key off")
 	}
+	// The agent says the key is there while it is off, so the Hub removes it.
+	for _, want := range []string{strings.TrimSpace(identity.PublicKey), shared.HubAuthorizedKeyLine(identity.PublicKey)} {
+		if got := readRawHubSSHKeyPayload(t, agent, agentmgr.MsgSSHKeyRemove); got != want {
+			t.Fatalf("removal after unsolicited install=%q, want %q", got, want)
+		}
+	}
 
 	handlers := server.buildHTTPHandlers(nil, nil, nil)
 	path := "/assets/node-new/hub-ssh-key"
