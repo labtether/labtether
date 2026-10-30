@@ -13,6 +13,10 @@ import (
 // turned off. It is not an upstream failure.
 var ErrCollectorNotActive = errors.New("collector not active")
 
+// ErrCollectorWrongType marks a device whose saved owner is a connector of
+// another kind, for example a Docker connector named on a Portainer device.
+var ErrCollectorWrongType = errors.New("collector is another kind")
+
 // ResolveEnabledHubCollector never substitutes a collector for a saved owner.
 // Legacy unowned callers require a complete, type-filtered uniqueness check.
 func ResolveEnabledHubCollector(store persistence.HubCollectorStore, collectorType, collectorID string) (*hubcollector.Collector, error) {
@@ -51,8 +55,11 @@ func ResolveEnabledHubCollector(store persistence.HubCollectorStore, collectorTy
 		}
 		selected = collectors[0]
 	}
-	if strings.TrimSpace(selected.ID) == "" || !selected.Enabled || hubcollector.NormalizeCollectorType(selected.CollectorType) != collectorType {
+	if strings.TrimSpace(selected.ID) == "" || !selected.Enabled {
 		return nil, fmt.Errorf("%w: no active %s collector configured", ErrCollectorNotActive, collectorType)
+	}
+	if hubcollector.NormalizeCollectorType(selected.CollectorType) != collectorType {
+		return nil, fmt.Errorf("%w: no active %s collector configured", ErrCollectorWrongType, collectorType)
 	}
 	return &selected, nil
 }

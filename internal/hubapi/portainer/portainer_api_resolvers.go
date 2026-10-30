@@ -24,6 +24,8 @@ func writePortainerResolveError(w http.ResponseWriter, err error) {
 	case errors.Is(err, shared.ErrCollectorNotActive):
 		// A removed or turned-off connection, not a Portainer failure.
 		servicehttp.WriteError(w, http.StatusNotFound, "This device's Portainer connection was removed or turned off.")
+	case errors.Is(err, shared.ErrCollectorWrongType):
+		servicehttp.WriteError(w, http.StatusConflict, "This device is linked to a connection that is not a Portainer connection.")
 	default:
 		servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
 	}
