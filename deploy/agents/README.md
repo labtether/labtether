@@ -4,7 +4,7 @@ These templates install the LabTether Agent as an OS-native service.
 
 - `systemd/labtether-agent.service`: Linux service unit.
 - `launchd/com.labtether.agent.plist`: macOS LaunchDaemon template (headless; for GUI use the menu bar app instead).
-- `windows/install-agent.ps1`: Windows service install/update helper (headless; for GUI use the system tray app instead). Pass the enrollment token with `-EnrollmentTokenFile <path>`; the helper stores it in a file only SYSTEM and Administrators can read. It sets the release-signing key (`-UpdatePublicKey`) so the agent can verify self-updates.
+- `windows/install-agent.ps1`: Windows service install/update helper (headless; for GUI use the system tray app instead). Pass the enrollment token with `-EnrollmentTokenFile <path>`; the helper stores it in a file only SYSTEM and Administrators can read. It sets the release-signing key (`-UpdatePublicKey`) so the agent can verify self-updates. To trust the Hub's own CA, pass `-CAFingerprintSha256 <fingerprint>` with a `wss://` or `https://` `-HubURL`; the fingerprint is under Settings > TLS in the console.
 - `freebsd/labtether_agent`: FreeBSD `rc.d` script template.
 
 All templates expect:

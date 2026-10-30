@@ -13,6 +13,10 @@ param(
     # Agents refuse unsigned self-updates. This is the key that signs official
     # agent releases, a copy of scripts/release/agent-release-public-key.b64.
     [string]$UpdatePublicKey  = "jM9Mqx0db6S+w6FMKDnIX2jvVp7N554+6galqPvsq88=",
+    # Trust the Hub's own CA without turning off verification, like the Linux
+    # installer's ca_fingerprint_sha256. Copy the SHA-256 fingerprint from
+    # Settings > TLS in the console. Needs -HubURL (wss:// or https://).
+    [string]$CAFingerprintSha256 = "",
     [switch]$Uninstall
 )
 
@@ -64,6 +68,57 @@ if (-not (Test-Path $ConfigDir)) {
     $acl.AddAccessRule($adminRule)
     Set-Acl -Path $ConfigDir -AclObject $acl
     Write-Host "Config directory created with restricted ACLs."
+}
+
+# --- Hub CA pin ---
+# The CA is downloaded without verification and kept only when its SHA-256
+# (of the DER certificate) matches -CAFingerprintSha256.
+$caPath = Join-Path $ConfigDir "ca.crt"
+if ($CAFingerprintSha256 -ne "") {
+    $expectedFingerprint = ($CAFingerprintSha256 -replace "[:\s]", "").ToLowerInvariant()
+    if ($expectedFingerprint -notmatch '^[0-9a-f]{64}$') {
+        throw "-CAFingerprintSha256 must be 64 hex characters."
+    }
+    $hubUri = $null
+    if (-not [Uri]::TryCreate($HubURL, [UriKind]::Absolute, [ref]$hubUri) -or $hubUri.Scheme -notin @("wss", "https")) {
+        throw "-CAFingerprintSha256 needs -HubURL starting with wss:// or https://."
+    }
+    $caURL = "https://$($hubUri.Authority)/api/v1/ca.crt"
+    if ($PSVersionTable.PSVersion.Major -ge 6) {
+        $caContent = (Invoke-WebRequest -Uri $caURL -SkipCertificateCheck -UseBasicParsing).Content
+    } else {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+        $caRequest = [Net.HttpWebRequest]::Create($caURL)
+        $caRequest.ServerCertificateValidationCallback = { $true }
+        $caResponse = $caRequest.GetResponse()
+        try {
+            $caContent = (New-Object IO.StreamReader($caResponse.GetResponseStream())).ReadToEnd()
+        } finally {
+            $caResponse.Close()
+        }
+    }
+    if ($caContent -is [byte[]]) {
+        $caContent = [Text.Encoding]::ASCII.GetString($caContent)
+    }
+    $pem = [regex]::Match([string]$caContent, '-----BEGIN CERTIFICATE-----([A-Za-z0-9+/=\s]+)-----END CERTIFICATE-----')
+    if (-not $pem.Success) {
+        throw "No CA certificate was returned by $caURL."
+    }
+    $caDer = [Convert]::FromBase64String(($pem.Groups[1].Value -replace '\s', ''))
+    $sha256 = [Security.Cryptography.SHA256]::Create()
+    try {
+        $actualFingerprint = -join ($sha256.ComputeHash($caDer) | ForEach-Object { $_.ToString("x2") })
+    } finally {
+        $sha256.Dispose()
+    }
+    if ($actualFingerprint -ne $expectedFingerprint) {
+        throw "Hub CA fingerprint mismatch: refusing to trust the certificate from $caURL."
+    }
+    # Save exactly the verified certificate. The config folder is readable only
+    # by SYSTEM and Administrators.
+    $caText = "-----BEGIN CERTIFICATE-----`n" + [Convert]::ToBase64String($caDer, [Base64FormattingOptions]::InsertLineBreaks) + "`n-----END CERTIFICATE-----`n"
+    Set-Content -LiteralPath $caPath -Value $caText -NoNewline -Encoding ASCII
+    Write-Host "Hub CA saved to: $caPath"
 }
 
 # --- Install directory ---
@@ -149,6 +204,9 @@ if ($EnrollmentToken -ne "") {
 }
 if ($UpdatePublicKey -ne "") {
     $envVars["LABTETHER_AUTO_UPDATE_TRUSTED_PUBLIC_KEY"] = $UpdatePublicKey
+}
+if ($CAFingerprintSha256 -ne "") {
+    $envVars["LABTETHER_TLS_CA_FILE"] = $caPath
 }
 
 # Always rewrite the value so a token an older version of this script stored
