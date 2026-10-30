@@ -118,8 +118,9 @@ configuration step.
   settings, because the issuer, role claim, default role and group lists
   decide who signs in as an admin, and only the owner can change or delete an
   admin-role API key another user made. Admins keep managing operators and
-  viewers, and their own keys. An edited schedule runs with the editor's
-  rights. Action run history
+  viewers, and their own keys. The console no longer offers admins these
+  controls and shows them the SSO settings read-only. An edited schedule runs
+  with the editor's rights. Action run history
   (`/actions/runs`) needs `operator` and shows a key only its allowed devices.
 - **Webhooks:** a new or changed `http://` webhook URL is refused unless
   `LABTETHER_ALLOW_INSECURE_TRANSPORT=true`. Viewers see only the scheme and

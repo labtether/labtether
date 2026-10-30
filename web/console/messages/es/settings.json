@@ -78,6 +78,7 @@
     "operatorRoleValues": "Valores del rol Operador (separados por comas)",
     "autoProvision": "Aprovisionar automáticamente a los usuarios nuevos en su primer inicio de sesión",
     "save": "Guardar",
+    "ownerOnly": "Solo el propietario puede cambiar la configuración de SSO.",
     "apply": "Aplicar"
   },
   "dangerZone": {

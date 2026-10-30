@@ -78,6 +78,7 @@
     "operatorRoleValues": "Werte für die Operatorrolle (kommagetrennt)",
     "autoProvision": "Neue Benutzer bei der ersten Anmeldung automatisch anlegen",
     "save": "Speichern",
+    "ownerOnly": "Nur der Eigentümer kann die SSO-Einstellungen ändern.",
     "apply": "Anwenden"
   },
   "dangerZone": {

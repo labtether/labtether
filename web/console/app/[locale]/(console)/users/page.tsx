@@ -15,7 +15,7 @@ import { ResetPasswordDialog } from "./ResetPasswordDialog";
 import { DeleteUserDialog } from "./DeleteUserDialog";
 import { useToast } from "../../../contexts/ToastContext";
 import { AccountSecurityCard } from "../settings/components/AccountSecurityCard";
-import { hasAdminRole } from "../../../lib/roles";
+import { canManageUserAccount, hasAdminRole } from "../../../lib/roles";
 
 type Dialog =
   | { type: "create" }
@@ -87,6 +87,7 @@ export default function UsersPage() {
             users={sortedUsers}
             loading={loading}
             currentUserId={currentUser?.id ?? ""}
+            canManage={(user) => canManageUserAccount(currentUser, user)}
             onEditRole={(user) => setDialog({ type: "editRole", user })}
             onResetPassword={(user) => setDialog({ type: "resetPassword", user })}
             onRevokeSessions={(user) => { void handleRevokeSessions(user); }}
@@ -95,12 +96,14 @@ export default function UsersPage() {
 
           <CreateUserDialog
             open={dialog?.type === "create"}
+            callerRole={currentUser?.role}
             onClose={() => setDialog(null)}
             onConfirm={handleCreate}
           />
 
           <EditRoleDialog
             user={dialog?.type === "editRole" ? dialog.user : null}
+            callerRole={currentUser?.role}
             onClose={() => setDialog(null)}
             onConfirm={handleEditRole}
           />

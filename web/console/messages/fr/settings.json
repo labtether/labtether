@@ -78,6 +78,7 @@
     "operatorRoleValues": "Valeurs du rôle opérateur (séparées par des virgules)",
     "autoProvision": "Provisionner automatiquement les nouveaux utilisateurs à leur première connexion",
     "save": "Enregistrer",
+    "ownerOnly": "Seul le propriétaire peut modifier les paramètres SSO.",
     "apply": "Appliquer"
   },
   "dangerZone": {

@@ -78,6 +78,7 @@
     "operatorRoleValues": "操作员角色值（以逗号分隔）",
     "autoProvision": "首次登录时自动创建新用户",
     "save": "保存",
+    "ownerOnly": "只有所有者可以更改 SSO 设置。",
     "apply": "应用"
   },
   "dangerZone": {

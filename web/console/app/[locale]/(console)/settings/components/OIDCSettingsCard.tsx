@@ -8,17 +8,19 @@ import { useOIDCSettings } from "../../../../hooks/useOIDCSettings";
 
 type OIDCSettingsCardProps = {
   canManageUsers: boolean;
+  // Only the owner may save SSO settings; the Hub refuses everyone else.
+  canEdit: boolean;
 };
 
-export function OIDCSettingsCard({ canManageUsers }: OIDCSettingsCardProps) {
+export function OIDCSettingsCard({ canManageUsers, canEdit }: OIDCSettingsCardProps) {
   if (!canManageUsers) {
     return null;
   }
 
-  return <OIDCSettingsCardInner />;
+  return <OIDCSettingsCardInner canEdit={canEdit} />;
 }
 
-function OIDCSettingsCardInner() {
+function OIDCSettingsCardInner({ canEdit }: { canEdit: boolean }) {
   const t = useTranslations("settings");
   const {
     enabled,
@@ -74,178 +76,183 @@ function OIDCSettingsCardInner() {
         </span>
       </div>
 
-      <div className="mt-4 flex items-center gap-3">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={enabled}
-            onChange={(event) => setEnabled(event.target.checked)}
-            disabled={loading || isEnv("enabled")}
-            className="h-4 w-4 rounded border-[var(--line)] accent-[var(--accent)]"
-          />
-          <span className="text-sm text-[var(--text)]">{t("oidc.enableOIDC")}</span>
-          {isEnv("enabled") ? <EnvBadge /> : null}
-        </label>
-      </div>
-
-      {enabled ? (
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <label className="text-xs text-[var(--muted)] flex flex-col gap-1.5">
-            <span className="flex items-center gap-1.5">
-              {t("oidc.issuerURL")}
-              {isEnv("issuer_url") ? <EnvBadge /> : null}
-            </span>
-            <Input
-              value={issuerURL}
-              onChange={(event) => setIssuerURL(event.target.value)}
-              placeholder="https://accounts.example.com"
-              disabled={loading || isEnv("issuer_url")}
+      <fieldset disabled={!canEdit} className="m-0 min-w-0 border-0 p-0">
+        <div className="mt-4 flex items-center gap-3">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={(event) => setEnabled(event.target.checked)}
+              disabled={loading || isEnv("enabled")}
+              className="h-4 w-4 rounded border-[var(--line)] accent-[var(--accent)]"
             />
+            <span className="text-sm text-[var(--text)]">{t("oidc.enableOIDC")}</span>
+            {isEnv("enabled") ? <EnvBadge /> : null}
           </label>
-
-          <label className="text-xs text-[var(--muted)] flex flex-col gap-1.5">
-            <span className="flex items-center gap-1.5">
-              {t("oidc.clientID")}
-              {isEnv("client_id") ? <EnvBadge /> : null}
-            </span>
-            <Input
-              value={clientID}
-              onChange={(event) => setClientID(event.target.value)}
-              placeholder="my-client-id"
-              disabled={loading || isEnv("client_id")}
-            />
-          </label>
-
-          <div className="text-xs text-[var(--muted)] flex flex-col gap-1.5">
-            <label htmlFor="oidc-client-secret" className="flex items-center gap-1.5">
-              {t("oidc.clientSecret")}
-              {isEnv("client_secret") ? <EnvBadge /> : null}
-            </label>
-            <Input
-              id="oidc-client-secret"
-              type="password"
-              value={clientSecret}
-              onChange={(event) => setClientSecret(event.target.value)}
-              placeholder={t("oidc.clientSecretPlaceholder")}
-              disabled={loading || isEnv("client_secret")}
-            />
-            {!isEnv("client_secret") && clientSecretConfigured && !clearClientSecret ? (
-              <span className="flex items-center justify-between gap-2 text-[var(--muted)]">
-                {t("oidc.clientSecretConfigured")}
-                <Button type="button" size="sm" variant="secondary" onClick={removeClientSecret}>
-                  {t("oidc.removeClientSecret")}
-                </Button>
-              </span>
-            ) : null}
-            {clearClientSecret ? (
-              <span className="text-[var(--bad)]">{t("oidc.clientSecretWillBeRemoved")}</span>
-            ) : null}
-          </div>
-
-          <label className="text-xs text-[var(--muted)] flex flex-col gap-1.5">
-            <span className="flex items-center gap-1.5">
-              {t("oidc.displayName")}
-              {isEnv("display_name") ? <EnvBadge /> : null}
-            </span>
-            <Input
-              value={displayName}
-              onChange={(event) => setDisplayName(event.target.value)}
-              placeholder={t("oidc.displayNamePlaceholder")}
-              disabled={loading || isEnv("display_name")}
-            />
-          </label>
-
-          <label className="text-xs text-[var(--muted)] flex flex-col gap-1.5">
-            <span className="flex items-center gap-1.5">
-              {t("oidc.scopes")}
-              {isEnv("scopes") ? <EnvBadge /> : null}
-            </span>
-            <Input
-              value={scopes}
-              onChange={(event) => setScopes(event.target.value)}
-              placeholder="openid,profile,email"
-              disabled={loading || isEnv("scopes")}
-            />
-          </label>
-
-          <label className="text-xs text-[var(--muted)] flex flex-col gap-1.5">
-            <span className="flex items-center gap-1.5">
-              {t("oidc.roleClaim")}
-              {isEnv("role_claim") ? <EnvBadge /> : null}
-            </span>
-            <Input
-              value={roleClaim}
-              onChange={(event) => setRoleClaim(event.target.value)}
-              placeholder="groups"
-              disabled={loading || isEnv("role_claim")}
-            />
-          </label>
-
-          <label className="text-xs text-[var(--muted)] flex flex-col gap-1.5">
-            <span className="flex items-center gap-1.5">
-              {t("oidc.defaultRole")}
-              {isEnv("default_role") ? <EnvBadge /> : null}
-            </span>
-            <Select
-              value={defaultRole}
-              onChange={(event) => setDefaultRole(event.target.value)}
-              disabled={loading || isEnv("default_role")}
-            >
-              <option value="viewer">{t("oidc.roleViewer")}</option>
-              <option value="operator">{t("oidc.roleOperator")}</option>
-              <option value="admin">{t("oidc.roleAdmin")}</option>
-            </Select>
-          </label>
-
-          <label className="text-xs text-[var(--muted)] flex flex-col gap-1.5">
-            <span className="flex items-center gap-1.5">
-              {t("oidc.adminRoleValues")}
-              {isEnv("admin_role_values") ? <EnvBadge /> : null}
-            </span>
-            <Input
-              value={adminRoleValues}
-              onChange={(event) => setAdminRoleValues(event.target.value)}
-              placeholder="labtether-admin"
-              disabled={loading || isEnv("admin_role_values")}
-            />
-          </label>
-
-          <label className="text-xs text-[var(--muted)] flex flex-col gap-1.5">
-            <span className="flex items-center gap-1.5">
-              {t("oidc.operatorRoleValues")}
-              {isEnv("operator_role_values") ? <EnvBadge /> : null}
-            </span>
-            <Input
-              value={operatorRoleValues}
-              onChange={(event) => setOperatorRoleValues(event.target.value)}
-              placeholder="labtether-operator"
-              disabled={loading || isEnv("operator_role_values")}
-            />
-          </label>
-
-          <div className="flex items-center gap-3 md:col-span-2">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={autoProvision}
-                onChange={(event) => setAutoProvision(event.target.checked)}
-                disabled={loading || isEnv("auto_provision")}
-                className="h-4 w-4 rounded border-[var(--line)] accent-[var(--accent)]"
-              />
-              <span className="text-sm text-[var(--text)]">{t("oidc.autoProvision")}</span>
-              {isEnv("auto_provision") ? <EnvBadge /> : null}
-            </label>
-          </div>
         </div>
-      ) : null}
 
+        {enabled ? (
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <label className="text-xs text-[var(--muted)] flex flex-col gap-1.5">
+              <span className="flex items-center gap-1.5">
+                {t("oidc.issuerURL")}
+                {isEnv("issuer_url") ? <EnvBadge /> : null}
+              </span>
+              <Input
+                value={issuerURL}
+                onChange={(event) => setIssuerURL(event.target.value)}
+                placeholder="https://accounts.example.com"
+                disabled={loading || isEnv("issuer_url")}
+              />
+            </label>
+
+            <label className="text-xs text-[var(--muted)] flex flex-col gap-1.5">
+              <span className="flex items-center gap-1.5">
+                {t("oidc.clientID")}
+                {isEnv("client_id") ? <EnvBadge /> : null}
+              </span>
+              <Input
+                value={clientID}
+                onChange={(event) => setClientID(event.target.value)}
+                placeholder="my-client-id"
+                disabled={loading || isEnv("client_id")}
+              />
+            </label>
+
+            <div className="text-xs text-[var(--muted)] flex flex-col gap-1.5">
+              <label htmlFor="oidc-client-secret" className="flex items-center gap-1.5">
+                {t("oidc.clientSecret")}
+                {isEnv("client_secret") ? <EnvBadge /> : null}
+              </label>
+              <Input
+                id="oidc-client-secret"
+                type="password"
+                value={clientSecret}
+                onChange={(event) => setClientSecret(event.target.value)}
+                placeholder={t("oidc.clientSecretPlaceholder")}
+                disabled={loading || isEnv("client_secret")}
+              />
+              {!isEnv("client_secret") && clientSecretConfigured && !clearClientSecret ? (
+                <span className="flex items-center justify-between gap-2 text-[var(--muted)]">
+                  {t("oidc.clientSecretConfigured")}
+                  <Button type="button" size="sm" variant="secondary" onClick={removeClientSecret}>
+                    {t("oidc.removeClientSecret")}
+                  </Button>
+                </span>
+              ) : null}
+              {clearClientSecret ? (
+                <span className="text-[var(--bad)]">{t("oidc.clientSecretWillBeRemoved")}</span>
+              ) : null}
+            </div>
+
+            <label className="text-xs text-[var(--muted)] flex flex-col gap-1.5">
+              <span className="flex items-center gap-1.5">
+                {t("oidc.displayName")}
+                {isEnv("display_name") ? <EnvBadge /> : null}
+              </span>
+              <Input
+                value={displayName}
+                onChange={(event) => setDisplayName(event.target.value)}
+                placeholder={t("oidc.displayNamePlaceholder")}
+                disabled={loading || isEnv("display_name")}
+              />
+            </label>
+
+            <label className="text-xs text-[var(--muted)] flex flex-col gap-1.5">
+              <span className="flex items-center gap-1.5">
+                {t("oidc.scopes")}
+                {isEnv("scopes") ? <EnvBadge /> : null}
+              </span>
+              <Input
+                value={scopes}
+                onChange={(event) => setScopes(event.target.value)}
+                placeholder="openid,profile,email"
+                disabled={loading || isEnv("scopes")}
+              />
+            </label>
+
+            <label className="text-xs text-[var(--muted)] flex flex-col gap-1.5">
+              <span className="flex items-center gap-1.5">
+                {t("oidc.roleClaim")}
+                {isEnv("role_claim") ? <EnvBadge /> : null}
+              </span>
+              <Input
+                value={roleClaim}
+                onChange={(event) => setRoleClaim(event.target.value)}
+                placeholder="groups"
+                disabled={loading || isEnv("role_claim")}
+              />
+            </label>
+
+            <label className="text-xs text-[var(--muted)] flex flex-col gap-1.5">
+              <span className="flex items-center gap-1.5">
+                {t("oidc.defaultRole")}
+                {isEnv("default_role") ? <EnvBadge /> : null}
+              </span>
+              <Select
+                value={defaultRole}
+                onChange={(event) => setDefaultRole(event.target.value)}
+                disabled={loading || isEnv("default_role")}
+              >
+                <option value="viewer">{t("oidc.roleViewer")}</option>
+                <option value="operator">{t("oidc.roleOperator")}</option>
+                <option value="admin">{t("oidc.roleAdmin")}</option>
+              </Select>
+            </label>
+
+            <label className="text-xs text-[var(--muted)] flex flex-col gap-1.5">
+              <span className="flex items-center gap-1.5">
+                {t("oidc.adminRoleValues")}
+                {isEnv("admin_role_values") ? <EnvBadge /> : null}
+              </span>
+              <Input
+                value={adminRoleValues}
+                onChange={(event) => setAdminRoleValues(event.target.value)}
+                placeholder="labtether-admin"
+                disabled={loading || isEnv("admin_role_values")}
+              />
+            </label>
+
+            <label className="text-xs text-[var(--muted)] flex flex-col gap-1.5">
+              <span className="flex items-center gap-1.5">
+                {t("oidc.operatorRoleValues")}
+                {isEnv("operator_role_values") ? <EnvBadge /> : null}
+              </span>
+              <Input
+                value={operatorRoleValues}
+                onChange={(event) => setOperatorRoleValues(event.target.value)}
+                placeholder="labtether-operator"
+                disabled={loading || isEnv("operator_role_values")}
+              />
+            </label>
+
+            <div className="flex items-center gap-3 md:col-span-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoProvision}
+                  onChange={(event) => setAutoProvision(event.target.checked)}
+                  disabled={loading || isEnv("auto_provision")}
+                  className="h-4 w-4 rounded border-[var(--line)] accent-[var(--accent)]"
+                />
+                <span className="text-sm text-[var(--text)]">{t("oidc.autoProvision")}</span>
+                {isEnv("auto_provision") ? <EnvBadge /> : null}
+              </label>
+            </div>
+          </div>
+        ) : null}
+      </fieldset>
+
+      {canEdit ? null : <p className="mt-3 text-sm text-[var(--text)]">{t("oidc.ownerOnly")}</p>}
       {error ? <p className="mt-3 text-sm text-[var(--bad)]">{error}</p> : null}
       {message ? <p className="mt-3 text-sm text-[var(--muted)]">{message}</p> : null}
 
       <div className="mt-4 flex items-center gap-2">
-        <Button variant="primary" loading={saving} disabled={loading || applying} onClick={() => void save()}>
-          {t("oidc.save")}
-        </Button>
+        {canEdit ? (
+          <Button variant="primary" loading={saving} disabled={loading || applying} onClick={() => void save()}>
+            {t("oidc.save")}
+          </Button>
+        ) : null}
         <Button variant="secondary" loading={applying} disabled={loading || saving} onClick={() => void apply()}>
           {t("oidc.apply")}
         </Button>
