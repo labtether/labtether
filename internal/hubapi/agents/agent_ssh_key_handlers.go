@@ -94,12 +94,14 @@ func (d *Deps) ProcessAgentSSHKeyInstalled(conn *agentmgr.AgentConn, msg agentmg
 		return
 	}
 
-	// Auto-create AssetTerminalConfig so SSH sessions use the hub key.
+	// Auto-create AssetTerminalConfig so SSH sessions use the hub key. A
+	// machine or system account is not an SSH user; the terminal then asks
+	// for one.
 	cfg := credentials.AssetTerminalConfig{
 		AssetID:             conn.AssetID,
 		Host:                host,
 		Port:                22,
-		Username:            data.Username,
+		Username:            shared.SSHLoginUser(data.Username),
 		StrictHostKey:       true,
 		CredentialProfileID: identity.ProfileID,
 		UpdatedAt:           time.Now().UTC(),

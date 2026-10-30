@@ -28,7 +28,8 @@ const jumpChainHopDialTimeout = 6 * time.Second
 //  1. Inline SSH config (Quick Connect sessions)
 //  2. Ephemeral process-local Quick Connect config by session ID
 //  3. asset_protocol_configs row for SSH
-//  4. Environment variable fallback
+//  4. Saved SSH login (stored when an agent installs the Hub SSH key)
+//  5. Environment variable fallback
 func (d *Deps) ResolveSessionSSHConfig(session terminal.Session) (*terminal.SSHConfig, error) {
 	if session.InlineSSHConfig != nil {
 		return session.InlineSSHConfig, nil
@@ -47,6 +48,9 @@ func (d *Deps) ResolveSessionSSHConfig(session terminal.Session) (*terminal.SSHC
 		if pc != nil {
 			return d.resolveProtocolConfigSSH(pc, session.Target)
 		}
+	}
+	if saved, err := d.resolveSavedTerminalSSH(session.Target); err != nil || saved != nil {
+		return saved, err
 	}
 
 	return resolveEnvSSHConfig(session.Target)
