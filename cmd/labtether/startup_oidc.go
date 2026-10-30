@@ -16,6 +16,7 @@ func loadOIDCProviderFromEnv(ctx context.Context) (*auth.OIDCProvider, bool, err
 		return nil, false, nil
 	}
 
+	// No IdP group grants admin unless LABTETHER_OIDC_ADMIN_ROLES names it.
 	settings := auth.OIDCSettings{
 		Enabled:            true,
 		IssuerURL:          issuerURL,
@@ -25,7 +26,7 @@ func loadOIDCProviderFromEnv(ctx context.Context) (*auth.OIDCProvider, bool, err
 		RoleClaim:          strings.TrimSpace(envOrDefault("LABTETHER_OIDC_ROLE_CLAIM", "labtether_role")),
 		DisplayName:        strings.TrimSpace(envOrDefault("LABTETHER_OIDC_DISPLAY_NAME", "Single Sign-On")),
 		DefaultRole:        strings.TrimSpace(envOrDefault("LABTETHER_OIDC_DEFAULT_ROLE", auth.RoleViewer)),
-		AdminRoleValues:    parseCSVTokens(envOrDefault("LABTETHER_OIDC_ADMIN_ROLES", "admin")),
+		AdminRoleValues:    parseCSVTokens(envOrDefault("LABTETHER_OIDC_ADMIN_ROLES", "")),
 		OperatorRoleValues: parseCSVTokens(envOrDefault("LABTETHER_OIDC_OPERATOR_ROLES", "operator")),
 		AllowedEndpointOrigins: parseCSVTokens(
 			envOrDefault("LABTETHER_OIDC_ALLOWED_ENDPOINT_ORIGINS", ""),

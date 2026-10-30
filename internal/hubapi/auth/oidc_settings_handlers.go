@@ -230,8 +230,9 @@ func mergeOIDCSettings(db oidcDBSettings, dbClientSecret string, dbClientSecretC
 		DefaultRole:  resolve("default_role", "LABTETHER_OIDC_DEFAULT_ROLE", db.DefaultRole, auth.RoleViewer),
 		Scopes: resolveSlice("scopes", "LABTETHER_OIDC_SCOPES", db.Scopes,
 			[]string{"openid", "profile", "email"}),
+		// No IdP group grants admin unless an admin group list is configured.
 		AdminRoleValues: resolveSlice("admin_role_values", "LABTETHER_OIDC_ADMIN_ROLES",
-			db.AdminRoleValues, []string{"admin"}),
+			db.AdminRoleValues, nil),
 		OperatorRoleValues: resolveSlice("operator_role_values", "LABTETHER_OIDC_OPERATOR_ROLES",
 			db.OperatorRoleValues, []string{"operator"}),
 		AllowedEndpointOrigins: csvSplit(os.Getenv("LABTETHER_OIDC_ALLOWED_ENDPOINT_ORIGINS")),

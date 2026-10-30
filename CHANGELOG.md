@@ -97,10 +97,16 @@ configuration step.
   settings they need to connect. Docker and file-scope settings go into
   `agent.env` only when you pass their flag, so the Hub manages them
   otherwise.
-- **SSO roles:** a group named `admin` or `owner` no longer grants that role
-  by its name. List admin groups in the OIDC admin role values, or send a
-  `labtether_role` claim. Users who relied on the name drop to the default
-  role at their next sign-in.
+- **SSO roles: no IdP group grants admin by default.** The admin group list
+  (`LABTETHER_OIDC_ADMIN_ROLES`, or Admin Role Values under Security → OIDC /
+  SSO) used to default to `admin`, so members of any IdP group named `admin`
+  became LabTether admins. It is now empty, and a group named `admin` or
+  `owner` grants nothing by its name. Before upgrading, put the names of the
+  groups that should grant admin in that list, or send a `labtether_role`
+  claim; otherwise those users drop to the default role at their next
+  sign-in. Saving the SSO settings in the console before 1.7.1 stored the
+  prefilled `admin` in the list; remove it if that group should not grant
+  admin.
 - **API keys follow their creator:** a key's role is capped at its creator's
   current role, and keys whose creator was deleted stop working. Keys made
   with the owner token keep their role.
@@ -196,7 +202,8 @@ configuration step.
   sign-in session, user, role or API key behind them ends. Stream tickets are
   checked again when used.
 - SSO sign-in finishes only in the browser that started it, and the login
-  page shows only its own error messages.
+  page shows only its own error messages. No IdP group grants admin unless
+  it is in the admin group list, which is now empty by default.
 - Container shell output and agent log streams are no longer sent to every
   console and webhook. Docker events name the agent that sent them.
 - An agent can no longer pick the Hub address it moves to after enrolling, or
