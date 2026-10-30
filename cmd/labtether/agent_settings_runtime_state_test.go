@@ -339,6 +339,31 @@ func TestBuildAgentSettingsPayloadMarksDriftWhenAgentReportsEmptyValue(t *testin
 	}
 }
 
+// A setting the Hub never set must show what the agent runs with, such as
+// docker_enabled=true from the installer, not the Hub's "auto" default.
+func TestBuildAgentSettingsPayloadShowsAgentValueForHubUnsetSetting(t *testing.T) {
+	sut := newTestAPIServer(t)
+	sut.setAgentSettingsRuntimeState("node-installed", agentSettingsRuntimeState{
+		Status: "reported",
+		Values: map[string]string{agentsettings.SettingKeyDockerEnabled: "true"},
+	})
+	payload, err := sut.buildAgentSettingsPayload("node-installed")
+	if err != nil {
+		t.Fatalf("build payload: %v", err)
+	}
+	for _, setting := range payload.Settings {
+		if setting.Key != agentsettings.SettingKeyDockerEnabled {
+			continue
+		}
+		if setting.EffectiveValue != "true" || setting.Source != "agent" || setting.Drift {
+			t.Fatalf("docker_enabled effective=%q source=%q drift=%v, want true/agent/false",
+				setting.EffectiveValue, setting.Source, setting.Drift)
+		}
+		return
+	}
+	t.Fatalf("expected %s setting in payload", agentsettings.SettingKeyDockerEnabled)
+}
+
 func TestHandleAgentSettingsHistoryPreservesApplyFailureAfterStateReport(t *testing.T) {
 	sut := newTestAPIServer(t)
 	appliedAt := time.Date(2026, 3, 8, 10, 0, 0, 0, time.UTC)

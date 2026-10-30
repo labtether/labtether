@@ -295,6 +295,14 @@ func (d *Deps) BuildAgentSettingsPayload(assetID string) (AgentSettingsPayload, 
 		// Only values the Hub set are pushed, so a setting left at its default
 		// can differ on the agent (an install-time choice) without drift.
 		drift := stateValueKnown && source != "default" && stateValue != effectiveValue
+		// A setting the Hub never set runs with what the agent reports, for
+		// example docker_enabled=true from the installer, not the Hub default.
+		if source == "default" && stateValueKnown && !definition.Sensitive {
+			if reported, err := agentsettings.NormalizeAgentSettingValue(definition.Key, stateValue); err == nil && reported != effectiveValue {
+				effectiveValue = reported
+				source = "agent"
+			}
+		}
 		configured := definition.Sensitive && effectiveValue != ""
 		if definition.Sensitive {
 			effectiveValue = ""
