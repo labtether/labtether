@@ -308,6 +308,9 @@ func (d *Deps) handleAPIKeyUpdate(w http.ResponseWriter, r *http.Request, id str
 		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to update key")
 		return
 	}
+	// Open streams keep the scopes they were opened with; end them so the
+	// key's new limits apply.
+	d.revokeStreams(shared.StreamActorKey("apikey:" + id))
 	apiv2.WriteJSON(w, http.StatusOK, map[string]any{"status": "updated"})
 }
 
@@ -330,6 +333,7 @@ func (d *Deps) handleAPIKeyDelete(w http.ResponseWriter, r *http.Request, id str
 		}, "api key deleted: "+id)
 	}
 
+	d.revokeStreams(shared.StreamActorKey("apikey:" + id))
 	apiv2.WriteJSON(w, http.StatusOK, map[string]any{"status": "deleted"})
 }
 

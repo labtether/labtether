@@ -195,6 +195,7 @@ func (d *Deps) HandleAuthUserActions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		d.auditIdentityChange(r, "auth.user.role_changed", user.ID, map[string]any{"from": auth.NormalizeRole(user.Role), "to": role})
+		d.revokeUserStreamsIfDemoted(r.Context(), user.ID, user.Role, role)
 		user.Role = role
 	}
 	if req.Password != nil {
@@ -222,6 +223,7 @@ func (d *Deps) HandleAuthUserActions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		d.auditIdentityChange(r, "auth.user.password_reset", user.ID, nil)
+		d.revokeStreams(shared.StreamActorKey(user.ID))
 		if user.ID == d.UserIDFromContext(r.Context()) {
 			auth.ClearSessionCookie(w)
 		}
@@ -270,6 +272,7 @@ func (d *Deps) handleDeleteUser(w http.ResponseWriter, r *http.Request, id strin
 		return
 	}
 	d.auditIdentityChange(r, "auth.user.deleted", id, map[string]any{"username": user.Username, "role": auth.NormalizeRole(user.Role)})
+	d.revokeUserStreams(r.Context(), id)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -321,6 +324,7 @@ func (d *Deps) handleUserSessions(w http.ResponseWriter, r *http.Request, userID
 			return
 		}
 		d.auditIdentityChange(r, "auth.user.sessions_revoked", userID, nil)
+		d.revokeStreams(shared.StreamActorKey(userID))
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"revoked": true})
 
 	default:

@@ -269,6 +269,7 @@ type streamTicket struct {
 	Scopes        []string
 	AllowedAssets []string
 	APIKeyID      string
+	AuthSessionID string // sign-in session the ticket was issued through
 	ExpiresAt     time.Time
 }
 

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/labtether/labtether/internal/auth"
@@ -24,6 +25,7 @@ func (d *Deps) ResolveOIDCUser(identity auth.OIDCIdentity) (auth.User, bool, err
 	if ok {
 		if desiredRole != auth.NormalizeRole(user.Role) && auth.NormalizeRole(user.Role) != auth.RoleOwner {
 			if updateErr := d.AuthStore.UpdateUserRole(user.ID, desiredRole); updateErr == nil {
+				d.revokeUserStreamsIfDemoted(context.Background(), user.ID, user.Role, desiredRole)
 				user.Role = desiredRole
 			}
 		}

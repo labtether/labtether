@@ -74,6 +74,11 @@ type Deps struct {
 	// HTTPS, honouring a trusted proxy's forwarded protocol. Nil means secure.
 	RequestIsSecure func(r *http.Request) bool
 
+	// RevokeStreams closes open terminal, remote view, container shell and
+	// event streams opened with the given credentials (see
+	// shared.StreamPrincipalKeys). Nil skips it.
+	RevokeStreams func(keys ...string)
+
 	// Context extractors injected from cmd/labtether.
 	UserIDFromContext   func(ctx context.Context) string
 	UserRoleFromContext func(ctx context.Context) string

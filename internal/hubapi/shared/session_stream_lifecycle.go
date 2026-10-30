@@ -14,8 +14,9 @@ import (
 // session. Deleting its record and rejecting new stream work share one gate.
 // Entries live only while requests or registry operations retain them.
 type SessionStreamRegistry struct {
-	mu      sync.Mutex
-	entries map[string]*sessionStreamEntry
+	mu         sync.Mutex
+	entries    map[string]*sessionStreamEntry
+	principals map[string]map[*sessionStreamRequest]struct{} // protected by mu
 }
 
 type sessionStreamEntry struct {
@@ -25,11 +26,12 @@ type sessionStreamEntry struct {
 }
 
 type sessionStreamRequest struct {
-	parent *sessionStreamRequest
-	entry  *sessionStreamEntry
-	cancel context.CancelFunc
-	closed bool // protected by entry.mu
-	conn   net.Conn
+	parent     *sessionStreamRequest
+	entry      *sessionStreamEntry
+	cancel     context.CancelFunc
+	closed     bool // protected by entry.mu
+	conn       net.Conn
+	principals []string // credentials behind the stream; see RevokePrincipals
 }
 
 type sessionStreamContextKey struct{}
@@ -76,8 +78,10 @@ func (r *SessionStreamRegistry) Open(w http.ResponseWriter, request *http.Reques
 	}
 	ctx, cancel := context.WithCancel(request.Context())
 	parent, _ := request.Context().Value(sessionStreamContextKey{}).(*sessionStreamRequest)
-	owner := &sessionStreamRequest{entry: entry, cancel: cancel, parent: parent}
+	owner := &sessionStreamRequest{entry: entry, cancel: cancel, parent: parent, principals: StreamPrincipalKeys(request.Context())}
 	entry.requests[owner] = struct{}{}
+	// Index while the entry is held so a revocation cannot miss this stream.
+	r.indexPrincipals(owner)
 	entry.mu.Unlock()
 	ctx = context.WithValue(ctx, sessionStreamContextKey{}, owner)
 	var once sync.Once
@@ -88,6 +92,7 @@ func (r *SessionStreamRegistry) Open(w http.ResponseWriter, request *http.Reques
 			owner.closed = true
 			conn := owner.conn
 			entry.mu.Unlock()
+			r.unindexPrincipals(owner)
 			cancel()
 			if conn != nil {
 				_ = conn.Close()

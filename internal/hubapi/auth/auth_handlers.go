@@ -134,6 +134,7 @@ func (d *Deps) HandleAuthLogout(w http.ResponseWriter, r *http.Request) {
 			if delErr := d.AuthStore.DeleteSession(session.ID); delErr != nil {
 				log.Printf("auth: logout: failed to delete session %s: %v", session.ID, delErr) // #nosec G706 -- Session IDs are store-generated identifiers.
 			}
+			d.revokeStreams(shared.StreamSessionKey(session.ID))
 		}
 	}
 
@@ -186,6 +187,7 @@ func (d *Deps) HandleDeleteOwnAccount(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete account")
 		return
 	}
+	d.revokeUserStreams(r.Context(), userID)
 
 	auth.ClearSessionCookie(w)
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"ok": true})

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/labtether/labtether/internal/apikeys"
 	"github.com/labtether/labtether/internal/auth"
+	sharedpkg "github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
 	"net/http"
@@ -34,6 +35,11 @@ func (s *apiServer) withAuthMethodPolicy(next http.HandlerFunc, methodPolicy fun
 		}
 		if ticketedReq, ok := s.consumeStreamTicketAuth(r); ok {
 			if rejectHostDataForRole(w, ticketedReq, userRoleFromContext(ticketedReq.Context())) {
+				return
+			}
+			// The ticket may predate a logout, deletion, demotion or key removal.
+			if !s.streamTicketRequestActive(ticketedReq.Context()) {
+				servicehttp.WriteError(w, http.StatusUnauthorized, "unauthorized")
 				return
 			}
 			next(w, ticketedReq)
@@ -233,6 +239,8 @@ func (s *apiServer) authenticatedSessionRequest(r *http.Request) (*http.Request,
 	}
 	role := auth.NormalizeRole(user.Role)
 	ctx := contextWithPrincipal(r.Context(), session.UserID, role)
+	// Streams opened with this request close when this sign-in ends.
+	ctx = sharedpkg.ContextWithAuthSessionID(ctx, session.ID)
 	return r.WithContext(ctx), role, true, nil
 }
 
@@ -364,6 +372,9 @@ func (s *apiServer) consumeStreamTicketAuth(r *http.Request) (*http.Request, boo
 	if entry.APIKeyID != "" {
 		ctx = contextWithAPIKeyID(ctx, entry.APIKeyID)
 	}
+	if entry.AuthSessionID != "" {
+		ctx = sharedpkg.ContextWithAuthSessionID(ctx, entry.AuthSessionID)
+	}
 	return r.WithContext(ctx), true
 }
 
@@ -404,6 +415,7 @@ func (s *apiServer) issueStreamTicket(ctx context.Context, sessionID string) (st
 		Scopes:        append([]string(nil), scopesFromContext(ctx)...),
 		AllowedAssets: append([]string(nil), allowedAssetsFromContext(ctx)...),
 		APIKeyID:      apiKeyIDFromContext(ctx),
+		AuthSessionID: sharedpkg.AuthSessionIDFromContext(ctx),
 		ExpiresAt:     expiresAt,
 	}
 	return ticket, expiresAt, nil
