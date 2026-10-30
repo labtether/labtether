@@ -32,60 +32,7 @@ const (
 	defaultAgentWSCredentialLease = 2 * time.Second
 	minAgentWSCredentialLease     = 250 * time.Millisecond
 	maxAgentWSCredentialLease     = 5 * time.Second
-
-	defaultAgentWSMessagesPerSecond = 256
-	defaultAgentWSMessageBurst      = 512
-	hardAgentWSMessagesPerSecond    = 8192
-	hardAgentWSMessageBurst         = 16384
-	defaultAgentWSBytesPerSecond    = 16 << 20
-	defaultAgentWSByteBurst         = 64 << 20
-	hardAgentWSBytesPerSecond       = 256 << 20
-	hardAgentWSByteBurst            = 1 << 30
 )
-
-type agentWSInboundBudget struct {
-	messagesPerSecond float64
-	messageBurst      float64
-	bytesPerSecond    float64
-	byteBurst         float64
-	messageTokens     float64
-	byteTokens        float64
-	lastRefill        time.Time
-}
-
-func newAgentWSInboundBudget() *agentWSInboundBudget {
-	messagesPerSecond := boundedAgentWSEnvInt("LABTETHER_AGENT_WS_MESSAGES_PER_SECOND", defaultAgentWSMessagesPerSecond, hardAgentWSMessagesPerSecond)
-	messageBurst := boundedAgentWSEnvInt("LABTETHER_AGENT_WS_MESSAGE_BURST", defaultAgentWSMessageBurst, hardAgentWSMessageBurst)
-	bytesPerSecond := boundedAgentWSEnvInt("LABTETHER_AGENT_WS_BYTES_PER_SECOND", defaultAgentWSBytesPerSecond, hardAgentWSBytesPerSecond)
-	byteBurst := boundedAgentWSEnvInt("LABTETHER_AGENT_WS_BYTE_BURST", defaultAgentWSByteBurst, hardAgentWSByteBurst)
-	return &agentWSInboundBudget{
-		messagesPerSecond: float64(messagesPerSecond),
-		messageBurst:      float64(messageBurst),
-		bytesPerSecond:    float64(bytesPerSecond),
-		byteBurst:         float64(byteBurst),
-		messageTokens:     float64(messageBurst),
-		byteTokens:        float64(byteBurst),
-		lastRefill:        time.Now(),
-	}
-}
-
-func (b *agentWSInboundBudget) allow(frameBytes int, now time.Time) bool {
-	if b == nil || frameBytes < 0 {
-		return false
-	}
-	elapsed := now.Sub(b.lastRefill).Seconds()
-	if elapsed > 0 {
-		b.messageTokens = min(b.messageBurst, b.messageTokens+elapsed*b.messagesPerSecond)
-		b.byteTokens = min(b.byteBurst, b.byteTokens+elapsed*b.bytesPerSecond)
-		b.lastRefill = now
-	}
-	if b.messageTokens < 1 || b.byteTokens < float64(frameBytes) {
-		return false
-	}
-	b.messageTokens--
-	b.byteTokens -= float64(frameBytes)
-	return true
-}
 
 func boundedAgentWSEnvInt(key string, fallback, hardMax int) int {
 	return enrollment.BoundedLimit(envOrDefaultInt(key, fallback), fallback, hardMax)
@@ -323,9 +270,15 @@ func (s *apiServer) handleAgentWebSocket(w http.ResponseWriter, r *http.Request)
 			}
 			return
 		}
-		if !inboundBudget.allow(len(payload), time.Now()) {
-			securityruntime.Logf("agentws: inbound budget exceeded for %s", assetID)
+		// Over the rate, pause reading so TCP backpressure slows the agent.
+		// Only a frame the budget can never pay for closes the socket.
+		wait, fits := inboundBudget.reserve(len(payload), time.Now())
+		if !fits {
+			securityruntime.Logf("agentws: %d-byte frame from %s exceeds the inbound budget", len(payload), assetID)
 			_ = conn.WriteClose(websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "inbound rate limit exceeded"))
+			return
+		}
+		if !waitAgentWSInboundBudget(conn.Done(), wait) {
 			return
 		}
 
