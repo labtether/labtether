@@ -3,6 +3,8 @@ package agents
 import (
 	"encoding/json"
 	"log"
+	"net"
+	"strings"
 	"time"
 
 	"github.com/labtether/labtether/internal/agentmgr"
@@ -74,10 +76,15 @@ func (d *Deps) ProcessAgentSSHKeyInstalled(conn *agentmgr.AgentConn, msg agentmg
 		return
 	}
 
-	// Determine the host to use for SSH connections.
-	host := data.Hostname
+	// SSH to the address this connection came from. The agent's own hostname
+	// report must not choose where the Hub's key is used.
+	host := ""
+	if ip := net.ParseIP(strings.TrimSpace(conn.Meta("ssh_source_ip"))); ip != nil && !ip.IsLoopback() && !ip.IsUnspecified() {
+		host = ip.String()
+	}
 	if host == "" {
-		host = conn.AssetID
+		securityruntime.Logf("agentws: no usable source address for %s; SSH fallback needs a manual terminal config", conn.AssetID)
+		return
 	}
 
 	// Auto-create AssetTerminalConfig so SSH sessions use the hub key.

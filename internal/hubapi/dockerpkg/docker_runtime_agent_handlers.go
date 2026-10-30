@@ -1,6 +1,10 @@
 package dockerpkg
 
-import "github.com/labtether/labtether/internal/agentmgr"
+import (
+	"encoding/json"
+
+	"github.com/labtether/labtether/internal/agentmgr"
+)
 
 // ProcessAgentDockerDiscovery handles docker.discovery messages from agents.
 func (d *Deps) ProcessAgentDockerDiscovery(conn *agentmgr.AgentConn, msg agentmgr.Message) {
@@ -34,9 +38,27 @@ func (d *Deps) ProcessAgentDockerEvents(conn *agentmgr.AgentConn, msg agentmgr.M
 	if d.DockerCoordinator != nil {
 		d.DockerCoordinator.HandleEvent(conn.AssetID, msg)
 		if d.Broadcast != nil {
-			d.Broadcast("docker.event", msg.Data)
+			if event, ok := attributedDockerEvent(conn.AssetID, msg.Data); ok {
+				d.Broadcast("docker.event", event)
+			}
 		}
 	}
+}
+
+// attributedDockerEvent re-encodes an agent's Docker event as the known
+// fields only, with host_id set to the sending agent, so an agent cannot pass
+// arbitrary JSON or speak for another host.
+func attributedDockerEvent(assetID string, raw json.RawMessage) (json.RawMessage, bool) {
+	var event agentmgr.DockerEventData
+	if err := json.Unmarshal(raw, &event); err != nil {
+		return nil, false
+	}
+	event.HostID = assetID
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		return nil, false
+	}
+	return encoded, true
 }
 
 // ProcessAgentDockerActionResult handles docker.action.result messages from agents.
