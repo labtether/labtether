@@ -142,11 +142,10 @@ func runHub(ctx context.Context) error {
 		}
 	}
 
-	oidcProvider, oidcAutoProvision, err := loadOIDCProviderFromEnv(ctx)
-	if err != nil {
-		log.Printf("labtether auth: warning: oidc initialization failed: %v (starting with oidc disabled)", err)
-	}
-	oidcRef := authpkg.NewOIDCProviderRef(oidcProvider, oidcAutoProvision)
+	// Single sign-on uses the settings saved in the console, with
+	// LABTETHER_OIDC_* environment values taking precedence, as applying does.
+	oidcRef := authpkg.NewOIDCProviderRef(nil, false)
+	(&authpkg.Deps{OIDCRef: oidcRef, SettingsStore: pgStore, SecretsManager: secretsManager}).ActivateOIDCAtStart(ctx)
 
 	srv := newAPIServer(pgStore, secretsManager, policyState, registry, authValidator, oidcRef, newInstallStateStore(dataDir))
 	srv.dataDir = dataDir

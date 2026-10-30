@@ -191,7 +191,7 @@ func mergeOIDCSettings(db oidcDBSettings, dbClientSecret string, dbClientSecretC
 	resolveSlice := func(field, envKey string, dbSlice []string, def []string) []string {
 		if ev := strings.TrimSpace(os.Getenv(envKey)); ev != "" {
 			sources[field] = "env"
-			return csvSplit(ev)
+			return splitOIDCEnvList(ev)
 		}
 		if len(dbSlice) > 0 {
 			sources[field] = "db"
@@ -235,7 +235,7 @@ func mergeOIDCSettings(db oidcDBSettings, dbClientSecret string, dbClientSecretC
 			db.AdminRoleValues, nil),
 		OperatorRoleValues: resolveSlice("operator_role_values", "LABTETHER_OIDC_OPERATOR_ROLES",
 			db.OperatorRoleValues, []string{"operator"}),
-		AllowedEndpointOrigins: csvSplit(os.Getenv("LABTETHER_OIDC_ALLOWED_ENDPOINT_ORIGINS")),
+		AllowedEndpointOrigins: splitOIDCEnvList(os.Getenv("LABTETHER_OIDC_ALLOWED_ENDPOINT_ORIGINS")),
 		AllowPrivateEndpoints:  envOrDefaultBool("LABTETHER_OIDC_ALLOW_PRIVATE", false),
 		AllowLoopbackEndpoints: envOrDefaultBool("LABTETHER_OIDC_ALLOW_LOOPBACK", false),
 	}
@@ -448,43 +448,21 @@ func (d *Deps) HandleOIDCSettingsApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db, err := d.loadOIDCDBSettings(r.Context())
-	if err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load oidc settings")
-		return
-	}
-
-	dbSecretConfigured := storedOIDCClientSecretConfigured(db)
-	merged, _ := mergeOIDCSettings(db, "", dbSecretConfigured)
-	if merged.Enabled && strings.TrimSpace(os.Getenv("LABTETHER_OIDC_CLIENT_SECRET")) == "" && dbSecretConfigured {
-		dbClientSecret, decryptErr := d.decryptOIDCClientSecret(db)
-		if decryptErr != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load oidc client secret")
-			return
-		}
-		merged, _ = mergeOIDCSettings(db, dbClientSecret, true)
-	}
-
-	// Compute auto_provision effective value.
-	autoProvision := envOrDefaultBool("LABTETHER_OIDC_AUTO_PROVISION",
-		func() bool {
-			if db.AutoProvision != nil {
-				return *db.AutoProvision
-			}
-			return true
-		}(),
-	)
-
-	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), oidcProviderLoadTimeout)
 	defer cancel()
 
-	provider, err := auth.NewOIDCProvider(ctx, merged)
+	provider, autoProvision, err := d.LoadEffectiveOIDCProvider(ctx)
 	if err != nil {
-		if errors.Is(err, auth.ErrOIDCInvalidConfiguration) {
+		switch {
+		case errors.Is(err, errOIDCSettingsUnavailable):
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load oidc settings")
+		case errors.Is(err, errOIDCClientSecretUnavailable):
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load oidc client secret")
+		case errors.Is(err, auth.ErrOIDCInvalidConfiguration):
 			servicehttp.WriteError(w, http.StatusBadRequest, "invalid oidc configuration")
-			return
+		default:
+			servicehttp.WriteError(w, http.StatusBadGateway, "oidc provider is unavailable")
 		}
-		servicehttp.WriteError(w, http.StatusBadGateway, "oidc provider is unavailable")
 		return
 	}
 
