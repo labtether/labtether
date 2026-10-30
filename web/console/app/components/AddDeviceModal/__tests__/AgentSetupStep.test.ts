@@ -24,6 +24,31 @@ const options: LinuxInstallOptions = {
 };
 
 describe("agent setup commands", () => {
+  // Install-time settings are fixed on the agent, so default values must not
+  // be passed or the Hub could never change them on that device.
+  it("passes Docker and file-scope flags only when changed from the default", () => {
+    const defaultCommand = linuxInstallerCommand("https://hub.example.com", options);
+    for (const flag of ["--docker-enabled", "--files-root-mode", "--docker-endpoint", "--docker-discovery-interval"]) {
+      expect(defaultCommand).not.toContain(flag);
+    }
+
+    const changed = linuxInstallerCommand("https://hub.example.com", {
+      ...options,
+      dockerEnabled: "true",
+      dockerEndpoint: "/run/user/1000/docker.sock",
+      dockerDiscoveryIntervalSec: "60",
+      filesRootMode: "full",
+    });
+    expect(changed).toContain("--docker-enabled true");
+    expect(changed).toContain("--files-root-mode full");
+    expect(changed).toContain("--docker-endpoint '/run/user/1000/docker.sock'");
+    expect(changed).toContain("--docker-discovery-interval 60");
+
+    const dockerOff = linuxInstallerCommand("https://hub.example.com", { ...options, dockerEnabled: "false", dockerEndpoint: "/tmp/x.sock" });
+    expect(dockerOff).toContain("--docker-enabled false");
+    expect(dockerOff).not.toContain("--docker-endpoint");
+  });
+
   it("prompts into a private token file instead of putting a token in argv", () => {
     const command = linuxInstallerCommand("https://hub.example.com", options);
 
