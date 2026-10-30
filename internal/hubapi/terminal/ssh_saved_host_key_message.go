@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/labtether/labtether/internal/hubapi/shared"
+	"github.com/labtether/labtether/internal/terminal"
 )
 
 // firstAgentVersionWithSSHHostKeys is the first Go agent release that reports
@@ -15,19 +18,31 @@ type savedSSHHostKeyMissingError struct{ text string }
 func (e savedSSHHostKeyMissingError) Error() string { return e.text }
 func (e savedSSHHostKeyMissingError) Unwrap() error { return errSavedSSHHostKeyMissing }
 
-// savedSSHHostKeyMissingError states what the Hub knows about why the saved
-// login has no host key: an agent version that cannot report it, or otherwise
-// that the key is unknown and where to set it.
-func (d *Deps) savedSSHHostKeyMissingError(assetID, host string) error {
+// sshHostKeyMissingError states what the Hub knows about why it has no host
+// key for an SSH login: an agent version that cannot report it, or otherwise
+// that the key is unknown and where to set it. fromConnectEntry is true for an
+// SSH entry saved in the Connect panel, false for the saved Hub key login.
+func (d *Deps) sshHostKeyMissingError(assetID, host string, fromConnectEntry bool) error {
 	if version := d.assetAgentVersion(assetID); version != "" && agentVersionBefore(version, firstAgentVersionWithSSHHostKeys) {
 		return savedSSHHostKeyMissingError{text: fmt.Sprintf(
 			"The agent on this device is version %s, which does not report the device's SSH host key, so the Hub cannot verify the device. "+
 				"Update the agent to 1.7.1 or later; the Hub takes the key when the agent reconnects.", version)}
 	}
+	setIt := "To set it yourself, add SSH in the device's Connect panel with the address and host key."
+	if fromConnectEntry {
+		setIt = "To set it yourself, enter it in the Host key field of the device's SSH entry in its Connect panel."
+	}
 	return savedSSHHostKeyMissingError{text: fmt.Sprintf(
 		"The Hub does not know this device's SSH host key for %s, so it cannot verify the device. "+
-			"It takes the key from the agent only when the agent connects from that address. "+
-			"To set it yourself, add SSH in the device's Connect panel with the address and host key.", host)}
+			"It takes the key from the agent only when the agent connects from that address. %s", host, setIt)}
+}
+
+// sshHostKeyNeeded reports whether a login with no host key would fail
+// strict host-key checking: checking is on and no known_hosts file exists.
+func sshHostKeyNeeded(cfg *terminal.SSHConfig) bool {
+	return cfg != nil && strings.TrimSpace(cfg.HostKey) == "" &&
+		(cfg.StrictHostKey || !shared.InsecureSSHHostKeysAllowed()) &&
+		len(shared.DiscoverKnownHostsFiles()) == 0
 }
 
 func (d *Deps) assetAgentVersion(assetID string) string {

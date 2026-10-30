@@ -57,9 +57,8 @@ func (d *Deps) resolveSavedTerminalSSH(assetID string) (*terminal.SSHConfig, err
 	if err != nil {
 		return nil, err
 	}
-	if resolved.HostKey == "" && (resolved.StrictHostKey || !shared.InsecureSSHHostKeysAllowed()) &&
-		len(shared.DiscoverKnownHostsFiles()) == 0 {
-		return nil, d.savedSSHHostKeyMissingError(assetID, resolved.Host)
+	if sshHostKeyNeeded(resolved) {
+		return nil, d.sshHostKeyMissingError(assetID, resolved.Host, false)
 	}
 	return resolved, nil
 }

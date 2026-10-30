@@ -91,6 +91,11 @@ func (d *Deps) resolveProtocolConfigSSH(pc *protocols.ProtocolConfig, assetID st
 			resolved.HostKey = strings.TrimSpace(sshCfg.HostKey)
 		}
 	}
+	// A host key typed into the entry wins; otherwise use the one the agent
+	// reported for the same address.
+	if resolved.HostKey == "" {
+		resolved.HostKey = d.agentPinnedHostKey(assetID, host, port)
+	}
 
 	if pc.CredentialProfileID == "" {
 		if strings.TrimSpace(resolved.User) == "" {
@@ -145,6 +150,9 @@ func (d *Deps) resolveProtocolConfigSSH(pc *protocols.ProtocolConfig, assetID st
 
 	if strings.TrimSpace(resolved.User) == "" {
 		return nil, errors.New("ssh username is required")
+	}
+	if sshHostKeyNeeded(resolved) {
+		return nil, d.sshHostKeyMissingError(assetID, host, true)
 	}
 	return resolved, nil
 }
