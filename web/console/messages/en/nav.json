@@ -1,6 +1,6 @@
 {
   "brand": "LabTether",
-  "brandSub": "control plane",
+  "brandSub": "homelab hub",
   "categories": {
     "overview": "overview",
     "operations": "operations",
