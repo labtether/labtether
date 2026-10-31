@@ -11,6 +11,8 @@ import (
 
 // Deps holds dependencies injected from the hub.
 type Deps struct {
+	// Version is the Hub version reported to MCP clients.
+	Version    string
 	AssetStore interface {
 		ListAssets() ([]assets.Asset, error)
 		GetAsset(id string) (assets.Asset, bool, error)
@@ -81,7 +83,7 @@ type Deps struct {
 func NewServer(deps *Deps) *server.MCPServer {
 	s := server.NewMCPServer(
 		"LabTether",
-		"1.0.0",
+		deps.Version,
 		server.WithToolCapabilities(true),
 		server.WithResourceCapabilities(true, false),
 	)

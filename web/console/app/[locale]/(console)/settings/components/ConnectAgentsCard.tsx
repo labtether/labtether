@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { Copy, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { EnrollmentToken, AgentTokenSummary } from "../../../../console/models";
-import type { EnrollmentTokenScopeRequest, HubConnectionCandidate } from "../../../../hooks/useEnrollment";
+import type { AgentTokenRevokeResult, EnrollmentTokenScopeRequest, HubConnectionCandidate } from "../../../../hooks/useEnrollment";
 import { formatAge } from "../../../../console/formatters";
 import { Card } from "../../../../components/ui/Card";
 import { Badge } from "../../../../components/ui/Badge";
@@ -27,7 +27,7 @@ type ConnectAgentsCardProps = {
   generating: boolean;
   generateToken: (label: string, ttlHours: number, maxUses: number, scope: EnrollmentTokenScopeRequest) => Promise<unknown> | void;
   revokeEnrollmentToken: (id: string) => Promise<void> | void;
-  revokeAgentToken: (id: string) => Promise<void> | void;
+  revokeAgentToken: (id: string) => Promise<AgentTokenRevokeResult | null>;
   cleanupDeadTokens: () => Promise<{ enrollment_deleted: number; agent_deleted: number } | null>;
   clearNewToken: () => void;
   tokenLabel: string;
@@ -69,6 +69,7 @@ export function ConnectAgentsCard({
   const t = useTranslations("settings");
   const [cleaning, setCleaning] = useState(false);
   const [cleanupResult, setCleanupResult] = useState("");
+  const [revokeNotice, setRevokeNotice] = useState("");
   const [tokenScope, setTokenScope] = useState<EnrollmentTokenScopeRequest["scope"]>("asset");
   const [tokenAssetID, setTokenAssetID] = useState("");
   const [tokenGroupID, setTokenGroupID] = useState("");
@@ -104,6 +105,14 @@ export function ConnectAgentsCard({
       const total = result.enrollment_deleted + result.agent_deleted;
       setCleanupResult(t("agents.clearDeadTokens", { count: total }));
       setTimeout(() => setCleanupResult(""), 3000);
+    }
+  };
+
+  const handleRevokeAgent = async (tok: AgentTokenSummary) => {
+    setRevokeNotice("");
+    const result = await revokeAgentToken(tok.id);
+    if (result?.hubSSHKey === "not_removed") {
+      setRevokeNotice(t("agents.hubSSHKeyNotRemoved", { device: tok.asset_id }));
     }
   };
 
@@ -363,7 +372,7 @@ export LABTETHER_WS_URL="${wsURL}"
                       </span>
                     ) : null}
                     {tok.status === "active" ? (
-                      <Button variant="ghost" size="sm" onClick={() => void revokeAgentToken(tok.id)}>{t("agents.disable")}</Button>
+                      <Button variant="ghost" size="sm" onClick={() => void handleRevokeAgent(tok)}>{t("agents.disable")}</Button>
                     ) : null}
                   </li>
                 );
@@ -371,6 +380,7 @@ export LABTETHER_WS_URL="${wsURL}"
             </ul>
           </div>
         ) : null}
+        {revokeNotice ? <p className="text-xs text-[var(--bad)]">{revokeNotice}</p> : null}
 
         {totalDead > 0 ? (
           <div className="flex items-center gap-3 pt-2 border-t border-[var(--line)]">

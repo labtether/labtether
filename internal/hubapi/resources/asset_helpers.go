@@ -21,3 +21,13 @@ func isConnectedAgentAsset(assetEntry assets.Asset, mgr *agentmgr.AgentManager) 
 	}
 	return mgr.IsConnected(strings.TrimSpace(assetEntry.ID))
 }
+
+// assetDetailPayload is the single-device response: the asset, plus whether
+// the Hub SSH key is on for it.
+func (d *Deps) assetDetailPayload(assetEntry assets.Asset) map[string]any {
+	payload := map[string]any{"asset": assetEntry}
+	if d.HubSSHKeyEnabled != nil {
+		payload["hub_ssh_key_enabled"] = d.HubSSHKeyEnabled(assetEntry.ID)
+	}
+	return payload
+}

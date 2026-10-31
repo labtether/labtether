@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
@@ -133,12 +134,7 @@ func (d *Deps) HandleEnroll(w http.ResponseWriter, r *http.Request) {
 	}
 	d.disconnectRevokedAgentConnection(assetID, commitResult.RevokedAgentTokenIDs)
 
-	// Reuse the same public connection resolver as discovery/install flows so
-	// auto-enrolled agents stay on the best reachable origin (for example the
-	// active Tailscale HTTPS endpoint) instead of collapsing back to localhost.
-	connection := d.ResolveHubConnectionSelection(r)
-	hubAPIURL := connection.HubURL
-	hubWSURL := connection.WSURL
+	hubAPIURL, hubWSURL := enrollmentHubURLs(d.ResolveHubConnectionSelection(r))
 
 	servicehttp.WriteJSON(w, http.StatusOK, enrollment.EnrollResponse{
 		AgentToken: rawToken,
@@ -148,6 +144,23 @@ func (d *Deps) HandleEnroll(w http.ResponseWriter, r *http.Request) {
 		HubAPIURL:  hubAPIURL,
 		CACertPEM:  string(d.CACertPEM),
 	})
+}
+
+// enrollmentHubURLs picks the Hub URLs an enrolling agent switches to. The
+// agent adopts them at once, so prefer the operator's configured external URL,
+// then the origin the agent just reached. A detected address such as Tailscale
+// HTTPS may not be reachable from the agent's network.
+func enrollmentHubURLs(selection shared.HubConnectionSelection) (string, string) {
+	for _, kind := range []string{"external", "request"} {
+		for _, candidate := range selection.Candidates {
+			if candidate.Kind == kind {
+				return candidate.HubURL, candidate.WSURL
+			}
+		}
+	}
+	// No separate request candidate: the request origin matched the first
+	// candidate (Tailscale HTTPS), or the request host was unusable.
+	return selection.HubURL, selection.WSURL
 }
 
 func (d *Deps) disconnectRevokedAgentConnection(assetID string, revokedTokenIDs []string) {
@@ -176,6 +189,12 @@ func (d *Deps) HandleDiscover(w http.ResponseWriter, r *http.Request) {
 	}
 
 	connection := d.ResolveHubConnectionSelection(r)
+	candidates := connection.Candidates
+	// The other addresses (LAN IPs, tailnet names) help callers already on the
+	// LAN or tailnet. A caller from a public address gets none of them.
+	if !d.discoverCallerIsLocal(r) {
+		candidates = []shared.HubConnectionCandidate{}
+	}
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"hub":            "labtether",
 		"api_url":        connection.HubURL,
@@ -183,8 +202,27 @@ func (d *Deps) HandleDiscover(w http.ResponseWriter, r *http.Request) {
 		"enroll_url":     strings.TrimRight(connection.HubURL, "/") + "/api/v1/enroll",
 		"hub_url":        connection.HubURL,
 		"hub_ws_url":     connection.WSURL,
-		"hub_candidates": connection.Candidates,
+		"hub_candidates": candidates,
 	})
+}
+
+// tailnetPrefix is the shared address range Tailscale assigns to devices.
+var tailnetPrefix = netip.MustParsePrefix("100.64.0.0/10")
+
+// discoverCallerIsLocal reports whether the caller is on a loopback, private,
+// link-local or tailnet address. DiscoverClientIP names the caller behind a
+// trusted proxy and returns "" when a proxied caller is unknown.
+func (d *Deps) discoverCallerIsLocal(r *http.Request) bool {
+	client := shared.RequestClientKey(r)
+	if d.DiscoverClientIP != nil {
+		client = d.DiscoverClientIP(r)
+	}
+	addr, err := netip.ParseAddr(strings.Trim(client, "[]"))
+	if err != nil {
+		return false
+	}
+	addr = addr.Unmap()
+	return addr.IsLoopback() || addr.IsPrivate() || addr.IsLinkLocalUnicast() || tailnetPrefix.Contains(addr)
 }
 
 // handleEnrollmentTokens handles GET/POST /settings/enrollment (admin-auth).
@@ -459,46 +497,4 @@ func (d *Deps) HandleTokenCleanup(w http.ResponseWriter, r *http.Request) {
 		"enrollment_deleted": enrollDeleted,
 		"agent_deleted":      agentDeleted,
 	})
-}
-
-// handleAgentTokenActions handles DELETE /settings/agent-tokens/{id} (admin-auth).
-func (d *Deps) HandleAgentTokenActions(w http.ResponseWriter, r *http.Request) {
-	if d.EnrollmentStore == nil {
-		servicehttp.WriteError(w, http.StatusServiceUnavailable, "enrollment not available")
-		return
-	}
-
-	id := strings.TrimPrefix(r.URL.Path, "/settings/agent-tokens/")
-	id = strings.TrimSpace(id)
-	if id == "" {
-		servicehttp.WriteError(w, http.StatusBadRequest, "token id required")
-		return
-	}
-
-	if r.Method != http.MethodDelete {
-		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
-	if err := d.EnrollmentStore.RevokeAgentToken(id); err != nil {
-		if errors.Is(err, persistence.ErrNotFound) {
-			servicehttp.WriteError(w, http.StatusNotFound, "agent token not found")
-			return
-		}
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to revoke agent token")
-		return
-	}
-	// Drop a matching local socket immediately. Other hub replicas enforce the
-	// same revocation before their next inbound message, ping, or outbound send
-	// through the connection credential validator.
-	if d.AgentMgr != nil {
-		for _, assetID := range d.AgentMgr.ConnectedAssets() {
-			conn, ok := d.AgentMgr.Get(assetID)
-			if !ok || strings.TrimSpace(conn.Meta("auth.agent_token_id")) != id {
-				continue
-			}
-			d.AgentMgr.UnregisterIfMatch(assetID, conn)
-		}
-	}
-	servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
 }

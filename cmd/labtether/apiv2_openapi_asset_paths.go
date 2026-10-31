@@ -6,7 +6,7 @@ const v2OpenAPIAssetPaths = `    "/api/v2/assets": {
       "post": { "summary": "Create asset", "description": "Scope: assets:write.", "operationId": "createAsset", "tags": ["assets"], "responses": { "201": { "description": "Created" } } }
     },
     "/api/v2/assets/{id}": {
-      "get":    { "summary": "Get asset",    "description": "Scope: assets:read.",  "operationId": "getAsset",    "tags": ["assets"], "responses": { "200": { "description": "Asset" } } },
+      "get":    { "summary": "Get asset",    "description": "Scope: assets:read. The response also carries agent_connected and hub_ssh_key_enabled.",  "operationId": "getAsset",    "tags": ["assets"], "responses": { "200": { "description": "Asset" } } },
       "put":    { "summary": "Update asset", "description": "Scope: assets:write.", "operationId": "updateAsset", "tags": ["assets"], "responses": { "200": { "description": "Updated" } } },
 	  "patch":  { "summary": "Partially update asset", "description": "Scope: assets:write.", "operationId": "patchAsset", "tags": ["assets"], "responses": { "200": { "description": "Updated" } } },
       "delete": { "summary": "Delete asset", "description": "Scope: assets:write.", "operationId": "deleteAsset", "tags": ["assets"], "responses": { "200": { "description": "Deleted" } } },
@@ -14,6 +14,11 @@ const v2OpenAPIAssetPaths = `    "/api/v2/assets": {
     },
     "/api/v2/assets/{id}/exec": {
       "post": { "summary": "Execute a command on one asset", "description": "Scope: assets:exec. The asset must be allowed by the authenticated principal and have a connected agent.", "operationId": "execAsset", "tags": ["exec"], "responses": { "200": { "description": "Command result" }, "409": { "description": "Asset agent is offline" } } },
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
+    },
+    "/api/v2/assets/{id}/hub-ssh-key": {
+      "get": { "summary": "Get the Hub SSH key setting", "description": "Scope: assets:read. When on, the Hub adds its SSH key to the device through the agent and may log in over SSH as root. Devices added after this setting existed start with it off.", "operationId": "getAssetHubSSHKey", "tags": ["assets"], "responses": { "200": { "description": "Setting with enabled, removal_pending and agent_connected" } } },
+      "put": { "summary": "Turn the Hub SSH key on or off", "description": "Scope: hub:admin, and the caller must be an admin or owner. Body: enabled (boolean). Turning it off asks a connected agent to remove the key now, or when the agent next connects. Each change writes an audit event.", "operationId": "setAssetHubSSHKey", "tags": ["assets"], "responses": { "200": { "description": "Updated setting" }, "400": { "description": "enabled is missing" }, "403": { "description": "Caller is not an admin or owner, or lacks the scope" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/files": {

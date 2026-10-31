@@ -44,6 +44,7 @@
     "uses": "{used}{max} Verwendungen",
     "expires": "Läuft ab {age}",
     "disable": "Deaktivieren",
+    "hubSSHKeyNotRemoved": "Hub-SSH-Schlüssel auf {device} verblieben: Der Agent war nicht erreichbar. Entfernen Sie dort die Zeile labtether-hub aus authorized_keys oder führen Sie labtether-agent ssh-key remove aus.",
     "connectedAgents": "Agenten-Anmeldedaten",
     "lastSeen": "Zuletzt authentifiziert {age}",
     "added": "Hinzugefügt {age}",
@@ -77,6 +78,7 @@
     "operatorRoleValues": "Werte für die Operatorrolle (kommagetrennt)",
     "autoProvision": "Neue Benutzer bei der ersten Anmeldung automatisch anlegen",
     "save": "Speichern",
+    "ownerOnly": "Nur der Eigentümer kann die SSO-Einstellungen ändern.",
     "apply": "Anwenden"
   },
   "dangerZone": {

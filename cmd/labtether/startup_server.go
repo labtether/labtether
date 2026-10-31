@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"log"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -117,6 +116,7 @@ func newAPIServer(
 		edgeStore:                  pgStore,
 		topologyStore:              topology.NewPostgresStore(pgStore.Pool()),
 		linkSuggestionStore:        pgStore,
+		hubSSHKeyStore:             pgStore,
 		secretsManager:             secretsManager,
 		policyState:                policyState,
 		connectorRegistry:          registry,
@@ -145,6 +145,7 @@ func newAPIServer(
 			return cache
 		}(),
 		externalURL:            strings.TrimRight(strings.TrimSpace(envOrDefault("LABTETHER_EXTERNAL_URL", "")), "/"),
+		consoleURL:             strings.TrimRight(strings.TrimSpace(envOrDefault("LABTETHER_CONSOLE_URL", "")), "/"),
 		pendingAgents:          newPendingAgents(),
 		challengeStore:         auth.NewChallengeStore(),
 		installStateStore:      installStateStore,
@@ -168,14 +169,7 @@ func newAPIServer(
 // Errors are non-fatal: mDNS is a best-effort discovery mechanism and the
 // hub operates normally without it.
 func startMDNSAdvertiser(ctx context.Context, port int) {
-	advertisedVersion := strings.TrimSpace(os.Getenv("APP_VERSION"))
-	if advertisedVersion == "" {
-		advertisedVersion = strings.TrimSpace(version)
-	}
-	if advertisedVersion == "" {
-		advertisedVersion = "dev"
-	}
-	advertiser, err := discovery.NewMDNSAdvertiser(port, advertisedVersion)
+	advertiser, err := discovery.NewMDNSAdvertiser(port, hubVersion())
 	if err != nil {
 		log.Printf("labtether: mDNS advertiser init failed (discovery disabled): %v", err)
 		return

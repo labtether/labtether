@@ -237,6 +237,46 @@ func trustedRequestClientIP(r *http.Request) string {
 	return direct
 }
 
+// discoverClientIP returns the caller of /api/v1/discover. Behind a trusted
+// proxy (such as the bundled console) only the address that proxy forwarded
+// counts. A proxied request without one, or a request from an untrusted peer
+// that carries forwarding headers (another reverse proxy or a tunnel), has no
+// known caller and gets "", so it is never treated as a LAN caller.
+func discoverClientIP(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	if isTrustedForwardedHostSource(r) {
+		entries := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
+		if ip := net.ParseIP(strings.TrimSpace(entries[len(entries)-1])); ip != nil {
+			return ip.String()
+		}
+		return ""
+	}
+	for _, name := range []string{"X-Forwarded-For", "Forwarded", "X-Real-IP", "CF-Connecting-IP", "True-Client-IP"} {
+		if strings.TrimSpace(r.Header.Get(name)) != "" {
+			return ""
+		}
+	}
+	return requestClientKey(r)
+}
+
+// browserRequestIsSecure decides the session cookie's Secure flag. It drops
+// Secure only when a trusted proxy (such as the bundled console) states that
+// the browser used plain HTTP. An unknown, missing or untrusted protocol keeps
+// Secure, because a TLS front end that does not forward the protocol must not
+// downgrade the cookie.
+func browserRequestIsSecure(r *http.Request) bool {
+	if r == nil || !isTrustedForwardedHostSource(r) {
+		return true
+	}
+	proto := firstForwardedValue(r.Header.Get("X-Forwarded-Proto"))
+	if proto == "" {
+		proto = forwardedHeaderProto(r.Header.Get("Forwarded"))
+	}
+	return !strings.EqualFold(strings.TrimSpace(proto), "http")
+}
+
 func isLoopbackRequestSource(r *http.Request) bool {
 	clientHost := requestClientKey(r)
 	if clientHost == "" {

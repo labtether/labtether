@@ -3,7 +3,7 @@ import { readBoundedJSON, RequestBodyTooLargeError } from "../../../../../lib/bo
 import { resolvedBackendBaseURLs, upstreamErrorPayload } from "../../../../../lib/backend";
 import { isMutationRequestOriginAllowed } from "../../../../../lib/proxyAuth";
 import { checkRateLimit } from "../../../../../lib/rateLimit";
-import { trustedClientIdentity } from "../../../../../lib/clientIdentity";
+import { hubClientForwardingHeaders, trustedClientIdentity } from "../../../../../lib/clientIdentity";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
     const base = await resolvedBackendBaseURLs();
     const response = await fetch(`${base.api}/auth/login/2fa`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...hubClientForwardingHeaders(request) },
       body: JSON.stringify(body),
       cache: "no-store",
     });

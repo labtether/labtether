@@ -76,7 +76,7 @@ Set-StrictMode -Version Latest
 # ---------------------------------------------------------------------------
 # Resolve paths relative to repo root (this script lives two levels deep:
 #   deploy/agents/windows/wix/build-msi.ps1
-#   ↑ wix/  ↑ windows/  ↑ agents/  ↑ deploy/  ↑ repo root
+#   parents: wix/, windows/, agents/, deploy/, then the repo root
 # ---------------------------------------------------------------------------
 $ScriptDir = $PSScriptRoot                                        # .../wix/
 $RepoRoot  = (Resolve-Path (Join-Path $ScriptDir "..\..\..\..")).Path
@@ -165,7 +165,7 @@ $extResult = Invoke-Wix @("extension", "add", "WixToolset.Util.wixext", "--globa
 if ($extResult -ne 0) {
     # Non-fatal: extension may already be installed; WiX will error at
     # compile time if it truly cannot be found.
-    Write-Warning "WiX extension add exited $extResult — may already be installed."
+    Write-Warning "WiX extension add exited $extResult; it may already be installed."
 }
 
 # ---------------------------------------------------------------------------
@@ -237,5 +237,5 @@ Write-Host ""
 Write-Host "Deploy example (silent install with properties):"
 Write-Host "  msiexec /i `"$OutputMsi`" /qn HUB_URL=wss://hub.example.com ENROLLMENT_TOKEN=<token>"
 Write-Host ""
-Write-Host "Deploy example (silent install, no enrollment — configure later via registry):"
+Write-Host "Deploy example (silent install, no enrollment; configure later via registry):"
 Write-Host "  msiexec /i `"$OutputMsi`" /qn"

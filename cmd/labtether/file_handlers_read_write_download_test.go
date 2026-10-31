@@ -199,7 +199,9 @@ func TestHandleFileDownloadStreamsSuccessUnchanged(t *testing.T) {
 	}
 }
 
-func TestHandleFileDownloadReturnsExplicitFailureOnMidStreamAgentError(t *testing.T) {
+// Downloads stream as they arrive, so an agent error after the first chunk
+// must abort the response rather than end it as if the file were complete.
+func TestHandleFileDownloadAbortsOnMidStreamAgentError(t *testing.T) {
 	sut := newTestAPIServer(t)
 	sut.agentMgr = agentmgr.NewManager()
 
@@ -251,7 +253,11 @@ func TestHandleFileDownloadReturnsExplicitFailureOnMidStreamAgentError(t *testin
 
 	req := httptest.NewRequest(http.MethodGet, "/files/node-download-midstream/download?path=%2Ftmp%2Fbroken.txt", nil)
 	rec := httptest.NewRecorder()
-	sut.handleFileDownloadWithTimeout(rec, req, "node-download-midstream", 2*time.Second)
+	aborted := func() (aborted bool) {
+		defer func() { aborted = recover() == http.ErrAbortHandler }()
+		sut.handleFileDownloadWithTimeout(rec, req, "node-download-midstream", 2*time.Second)
+		return false
+	}()
 
 	select {
 	case <-done:
@@ -259,14 +265,8 @@ func TestHandleFileDownloadReturnsExplicitFailureOnMidStreamAgentError(t *testin
 		t.Fatal("timed out waiting for agent bridge")
 	}
 
-	if rec.Code != http.StatusBadGateway {
-		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
-	}
-	if strings.Contains(rec.Body.String(), "partial") {
-		t.Fatalf("expected no partial payload to be returned, got %q", rec.Body.String())
-	}
-	if !strings.Contains(rec.Body.String(), "An internal error occurred.") {
-		t.Fatalf("expected sanitized midstream error in body, got %q", rec.Body.String())
+	if !aborted {
+		t.Fatalf("mid-stream agent error ended the download cleanly: status=%d body=%q", rec.Code, rec.Body.String())
 	}
 }
 

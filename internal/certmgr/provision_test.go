@@ -311,3 +311,45 @@ func TestCertReloader_Run_CancelsCleanly(t *testing.T) {
 		t.Fatal("Run() did not return after context cancellation")
 	}
 }
+
+// Upgrading from a compose file without "hostname:" left a server cert for an
+// old random container ID. The console verifies "labtether" and failed with
+// 502. The cert must be replaced, and the CA kept so pinned agents still trust it.
+func TestProvision_ReplacesCertForOtherHostnameKeepingCA(t *testing.T) {
+	certsDir := filepath.Join(t.TempDir(), "certs")
+	original := localHostname
+	t.Cleanup(func() { localHostname = original })
+	localHostname = func() (string, error) { return "3f2a9c1d7b6e", nil }
+
+	before, err := Provision(certsDir)
+	if err != nil {
+		t.Fatalf("Provision() for the old host name error: %v", err)
+	}
+
+	localHostname = func() (string, error) { return "labtether", nil }
+	after, err := Provision(certsDir)
+	if err != nil {
+		t.Fatalf("Provision() for the new host name error: %v", err)
+	}
+	if !bytes.Equal(before.CACertPEM, after.CACertPEM) {
+		t.Fatal("the CA changed; agents that pin it would stop trusting the Hub")
+	}
+	served, err := after.Reloader.GetCertificate(&tls.ClientHelloInfo{})
+	if err != nil {
+		t.Fatalf("GetCertificate() error: %v", err)
+	}
+	leaf, err := parseCertLeaf(served)
+	if err != nil {
+		t.Fatalf("parseCertLeaf() error: %v", err)
+	}
+	if err := leaf.VerifyHostname("labtether"); err != nil {
+		t.Fatalf("served cert does not name the current host: %v", err)
+	}
+	ca, err := LoadKeyPair(after.CACertPath, filepath.Join(certsDir, "ca.key"))
+	if err != nil {
+		t.Fatalf("LoadKeyPair(CA) error: %v", err)
+	}
+	if err := leaf.CheckSignatureFrom(ca.Cert); err != nil {
+		t.Fatalf("new server cert is not signed by the kept CA: %v", err)
+	}
+}

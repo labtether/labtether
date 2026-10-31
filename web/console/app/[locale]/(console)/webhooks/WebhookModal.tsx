@@ -129,6 +129,9 @@ export function WebhookModal({
               type="url"
               maxLength={MAX_WEBHOOK_URL_LENGTH}
             />
+            {url.trim().toLowerCase().startsWith("http://") ? (
+              <span className="block text-xs text-[var(--text)]">{t("httpUrlNotice")}</span>
+            ) : null}
           </label>
 
           {/* Secret */}

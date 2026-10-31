@@ -4,6 +4,10 @@ func agentInstallScriptTemplateVerifyAndSummary() string {
 	return `# ── Verify ─────────────────────────────────────────────────────────────────
 step 6 "Verifying"
 
+# Ask the agent on the port its service runs with: a unit or drop-in can set
+# AGENT_PORT; the agent's default is 8090.
+SERVICE_AGENT_PORT="$(systemctl show --property=Environment --value "${SERVICE_NAME}" 2>/dev/null | tr ' ' '\n' | sed -n 's/^AGENT_PORT=\([0-9]\{1,5\}\)$/\1/p' | tail -n 1 || true)"
+AGENT_PORT="${SERVICE_AGENT_PORT:-${AGENT_PORT}}"
 STATUS_URL="http://localhost:${AGENT_PORT}/agent/status"
 AGENT_OK=0
 (
@@ -34,7 +38,18 @@ if [[ "${FORCE_UPDATE}" -eq 1 ]]; then
   trap 'rm -f -- "${FORCE_UPDATE_LOG}"' EXIT
   chmod 600 "${FORCE_UPDATE_LOG}"
   info "Force update requested: running self-update check..."
-  if "${BINARY_DEST}" update self --force >"${FORCE_UPDATE_LOG}" 2>&1; then
+  # Use the service's environment so the update sees the same Hub URL, TLS
+  # settings and release-signing key. Lines are read as KEY=VALUE, not run.
+  FORCE_UPDATE_ENV=()
+  while IFS= read -r env_line || [[ -n "${env_line}" ]]; do
+    [[ "${env_line}" =~ ^(LABTETHER_[A-Z0-9_]+)=(.*)$ ]] || continue
+    env_value="${BASH_REMATCH[2]}"
+    if [[ ${#env_value} -ge 2 && "${env_value}" == \"*\" ]]; then
+      env_value="${env_value:1:${#env_value}-2}"
+    fi
+    FORCE_UPDATE_ENV+=("${BASH_REMATCH[1]}=${env_value}")
+  done < "${ENV_FILE}"
+  if env "${FORCE_UPDATE_ENV[@]}" "${BINARY_DEST}" update self --force >"${FORCE_UPDATE_LOG}" 2>&1; then
     success "Self-update completed"
     if systemctl is-active --quiet "${SERVICE_NAME}" 2>/dev/null; then
       systemctl restart "${SERVICE_NAME}" || true

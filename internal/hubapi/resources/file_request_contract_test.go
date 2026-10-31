@@ -141,7 +141,9 @@ func TestFileDownloadCancellationReleasesWaitAndSpool(t *testing.T) {
 			if err != nil || len(entries) != 0 {
 				t.Fatalf("download spool remained: entries=%v err=%v", entries, err)
 			}
-			if rec.Body.Len() != 0 {
+			// Once the first chunk arrived the download has started streaming,
+			// so only a request cancelled before it must have no response.
+			if !started && rec.Body.Len() != 0 {
 				t.Fatalf("cancelled request wrote a response: %s", rec.Body.String())
 			}
 		})

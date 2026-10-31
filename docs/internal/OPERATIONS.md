@@ -92,10 +92,15 @@ Live WebSockets have independent admission and traffic limits:
 - `LABTETHER_AGENT_WS_BYTES_PER_SECOND` / `LABTETHER_AGENT_WS_BYTE_BURST` default to 16 MiB/s / 64 MiB.
 - `LABTETHER_AGENT_WS_CREDENTIAL_LEASE` defaults to `2s` and is clamped to `250ms` through `5s`. Local revocation closes the matching socket immediately; the lease bounds cross-replica database revalidation delay.
 
-The byte burst must remain at least as large as the largest legitimate agent
-frame. LabTether currently permits a bounded 32 MiB frame for file and desktop
-stream data. Rate-limit closures use WebSocket policy-violation status; source
-admission returns HTTP `429`, while global capacity returns HTTP `503`.
+An agent that sends faster than these rates is slowed, not disconnected: the
+Hub pauses reading that socket until the budget refills, and TCP backpressure
+slows the agent. One pause is at most 10 s, so pongs are still read before the
+60 s read deadline. A single frame larger than the byte burst, or one that
+needs a longer pause at the configured byte rate, closes the socket with
+WebSocket policy-violation status. The byte burst must remain at least as large
+as the largest legitimate agent frame; LabTether permits a bounded 32 MiB frame
+for file and desktop stream data. Source admission returns HTTP `429`, while
+global capacity returns HTTP `503`.
 
 ## Console ingress isolation
 

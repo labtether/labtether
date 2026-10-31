@@ -67,6 +67,14 @@ type AssetStore interface {
 	DeleteAsset(id string) error
 }
 
+// AssetSeenStore is an optional bulk refresh of last_seen_at for assets whose
+// content has not changed. A collector with thousands of unchanged rows uses
+// it instead of a full heartbeat write per row. It returns how many of the ids
+// exist.
+type AssetSeenStore interface {
+	TouchAssetsSeen(ids []string, at time.Time) (int64, error)
+}
+
 // GroupAssetStore is an optional optimization interface for loading the assets
 // attached to a single group without scanning the full inventory.
 type GroupAssetStore interface {
@@ -408,6 +416,7 @@ type EnrollmentStore interface {
 	CreateAgentToken(assetID, tokenHash, enrolledVia string, expiresAt time.Time) (enrollment.AgentToken, error)
 	RotateAgentToken(assetID, tokenHash, enrolledVia string, expiresAt time.Time) (enrollment.AgentToken, error)
 	ValidateAgentToken(tokenHash string) (enrollment.AgentToken, bool, error)
+	GetAgentToken(id string) (enrollment.AgentToken, bool, error)
 	TouchAgentTokenLastUsed(id string) error
 	RevokeAgentToken(id string) error
 	RevokeAgentTokensByAsset(assetID string) error
@@ -488,7 +497,7 @@ type ScheduleStore interface {
 	CreateScheduledTask(ctx context.Context, task schedules.ScheduledTask) error
 	GetScheduledTask(ctx context.Context, id string) (schedules.ScheduledTask, bool, error)
 	ListScheduledTasks(ctx context.Context, limit, offset int) ([]schedules.ScheduledTask, int, error)
-	UpdateScheduledTask(ctx context.Context, id string, name *string, cronExpr *string, command *string, targets *[]string, groupID *string, enabled *bool, nextRun schedules.NextRunUpdate) error
+	UpdateScheduledTask(ctx context.Context, id string, name *string, cronExpr *string, command *string, targets *[]string, groupID *string, enabled *bool, nextRun schedules.NextRunUpdate, editedBy string) error
 	DeleteScheduledTask(ctx context.Context, id string) error
 }
 

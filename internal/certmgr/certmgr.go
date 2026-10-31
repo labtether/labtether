@@ -54,9 +54,14 @@ func GenerateCA() (*KeyPair, error) {
 			CommonName:   "LabTether CA",
 			Organization: []string{"LabTether"},
 		},
-		NotBefore:             now.Add(-5 * time.Minute), // backdate for clock skew
-		NotAfter:              now.Add(10 * 365 * 24 * time.Hour),
-		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		NotBefore: now.Add(-5 * time.Minute), // backdate for clock skew
+		NotAfter:  now.Add(10 * 365 * 24 * time.Hour),
+		KeyUsage:  x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		// The CA only signs Hub server certificates. Limiting it to server
+		// authentication keeps a leaked key from signing code or mail
+		// certificates. Name constraints are left out because the Hub's
+		// names and addresses change (LAN, Tailscale, external URL).
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
 		IsCA:                  true,
 		MaxPathLen:            0,
@@ -215,6 +220,9 @@ func CertPEM(cert *x509.Certificate) []byte {
 	})
 }
 
+// localHostname is os.Hostname; tests replace it to simulate a renamed host.
+var localHostname = os.Hostname
+
 // CollectLocalSANs gathers DNS names and IP addresses suitable for use as
 // Subject Alternative Names on a certificate for the local machine. It always
 // includes localhost, 127.0.0.1, and ::1, plus the machine's hostname,
@@ -224,7 +232,7 @@ func CollectLocalSANs() (dnsNames []string, ips []string) {
 	ips = []string{"127.0.0.1", "::1"}
 
 	// Add hostname
-	if hostname, err := os.Hostname(); err == nil && hostname != "" {
+	if hostname, err := localHostname(); err == nil && hostname != "" {
 		dnsNames = append(dnsNames, hostname)
 		dnsNames = append(dnsNames, hostname+".local")
 	}

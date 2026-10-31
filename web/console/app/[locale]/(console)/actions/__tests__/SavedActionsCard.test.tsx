@@ -103,8 +103,10 @@ describe("SavedActionsCard", () => {
         return envelope({
           action_id: "act-1",
           steps: [
-            { name: "Check Alpha", target: "node-a", exit_code: 0, output: "alpha ok", duration_ms: 12 },
+            { name: "Check Alpha", target: "node-a", status: "succeeded", exit_code: 0, output: "alpha ok", duration_ms: 12 },
             { name: "Check Beta", target: "node-b", error: "exec_failed", message: "beta failed" },
+            { name: "Check Gamma", target: "node-a", status: "failed", exit_code: 2, output: "gamma missing" },
+            { name: "Check Delta", target: "node-b", status: "failed", output: "command timed out" },
           ],
         });
       }
@@ -177,6 +179,10 @@ describe("SavedActionsCard", () => {
     expect(detailDialog.textContent).toContain("alpha ok");
     expect(detailDialog.textContent).toContain("beta failed");
     expect(detailDialog.textContent).toContain("exitCode 0");
+    // A real exit code shows as is; an unknown one is never shown as 0 or 1.
+    expect(detailDialog.textContent).toContain("exitCode 2");
+    expect(detailDialog.textContent).not.toContain("exitCode 1");
+    expect(document.body.textContent).toContain("messages.runFinishedWithFailures Fleet health check 3");
 
     await act(async () => {
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));

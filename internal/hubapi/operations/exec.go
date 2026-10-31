@@ -52,10 +52,14 @@ type ExecMultiRequest struct {
 	Timeout int      `json:"timeout,omitempty"`
 }
 
-// ExecResult is the per-asset execution result returned to callers.
+// ExecResult is the per-asset execution result returned to callers. Status
+// decides success. ExitCode is the command's real exit status, including 0,
+// and is absent when unknown (an older agent, a timeout, a command that never
+// ran); it is never reported as 0 then.
 type ExecResult struct {
 	AssetID    string `json:"asset_id"`
-	ExitCode   int    `json:"exit_code"`
+	Status     string `json:"status,omitempty"`
+	ExitCode   *int   `json:"exit_code,omitempty"`
 	Stdout     string `json:"stdout"`
 	DurationMs int64  `json:"duration_ms"`
 	Error      string `json:"error,omitempty"`
@@ -144,9 +148,18 @@ func (d *ExecDeps) HandleAssetExec(w http.ResponseWriter, r *http.Request, asset
 		Type:      "api.exec",
 		ActorID:   d.PrincipalActorID(r.Context()),
 		Target:    assetID,
-		Details:   map[string]any{"command_bytes": len([]byte(req.Command)), "exit_code": result.ExitCode},
+		Details:   addExitCodeDetail(map[string]any{"command_bytes": len([]byte(req.Command)), "status": result.Status}, result.ExitCode),
 		Timestamp: time.Now().UTC(),
 	}, "v2 exec on "+assetID)
+}
+
+// addExitCodeDetail records a known exit code; an unknown one is left out
+// rather than written as 0.
+func addExitCodeDetail(details map[string]any, exitCode *int) map[string]any {
+	if exitCode != nil {
+		details["exit_code"] = *exitCode
+	}
+	return details
 }
 
 func (d *ExecDeps) execPublicCommand(r *http.Request, assetID, command string, timeoutSec int) ExecResult {
@@ -232,17 +245,22 @@ func (d *ExecDeps) ExecOnAsset(r *http.Request, assetID, command string, timeout
 	})
 	elapsed := time.Since(start)
 
-	exitCode := 0
-	if !strings.EqualFold(strings.TrimSpace(cmdResult.Status), "succeeded") {
-		exitCode = 1
+	status := "failed"
+	if strings.EqualFold(strings.TrimSpace(cmdResult.Status), "succeeded") {
+		status = "succeeded"
 	}
-
 	return ExecResult{
 		AssetID:    assetID,
-		ExitCode:   exitCode,
+		Status:     status,
+		ExitCode:   cmdResult.ExitCode,
 		Stdout:     strings.TrimSpace(cmdResult.Output),
 		DurationMs: elapsed.Milliseconds(),
 	}
+}
+
+// Failed reports whether the command did not run or did not succeed.
+func (r ExecResult) Failed() bool {
+	return r.Error != "" || r.Status != "succeeded"
 }
 
 // HandleExecMulti handles POST /api/v2/exec (multi-asset fan-out).
@@ -357,10 +375,26 @@ func (d *ExecDeps) HandleExecMulti(w http.ResponseWriter, r *http.Request) {
 	for index, target := range filteredTargets {
 		res := orderedResults[index]
 		results[target] = res
-		if res.Error != "" || res.ExitCode != 0 {
+		if res.Failed() {
 			failed++
 		} else {
 			succeeded++
+		}
+		// Policy refusals are audited where they happen. Every other target
+		// got the command, so it needs the same record a single exec writes.
+		if d.AppendAuditEventBestEffort != nil && res.Error != "policy_denied" && res.Error != "policy_unavailable" {
+			details := map[string]any{"command_bytes": len([]byte(req.Command)), "fanout": len(filteredTargets)}
+			addExitCodeDetail(details, res.ExitCode)
+			if res.Error != "" {
+				details["error"] = res.Error
+			}
+			d.AppendAuditEventBestEffort(audit.Event{
+				Type:      "api.exec",
+				ActorID:   d.PrincipalActorID(r.Context()),
+				Target:    target,
+				Details:   details,
+				Timestamp: time.Now().UTC(),
+			}, "v2 multi exec on "+target)
 		}
 	}
 

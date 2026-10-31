@@ -316,6 +316,24 @@ func (s *PostgresStore) ValidateAgentToken(tokenHash string) (enrollment.AgentTo
 	return tok, true, nil
 }
 
+func (s *PostgresStore) GetAgentToken(id string) (enrollment.AgentToken, bool, error) {
+	var tok enrollment.AgentToken
+	var lastUsedAt, revokedAt *time.Time
+	err := s.pool.QueryRow(context.Background(),
+		`SELECT id, asset_id, status, enrolled_via, expires_at, last_used_at, created_at, revoked_at
+		 FROM agent_tokens WHERE id = $1`, id,
+	).Scan(&tok.ID, &tok.AssetID, &tok.Status, &tok.EnrolledVia, &tok.ExpiresAt, &lastUsedAt, &tok.CreatedAt, &revokedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return enrollment.AgentToken{}, false, nil
+		}
+		return enrollment.AgentToken{}, false, err
+	}
+	tok.LastUsedAt = lastUsedAt
+	tok.RevokedAt = revokedAt
+	return tok, true, nil
+}
+
 func (s *PostgresStore) TouchAgentTokenLastUsed(id string) error {
 	_, err := s.pool.Exec(context.Background(),
 		`UPDATE agent_tokens SET last_used_at = clock_timestamp() WHERE id = $1`, id,

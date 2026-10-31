@@ -94,7 +94,7 @@ func (c *Connector) Discover(ctx context.Context) ([]connectorsdk.Asset, error) 
 		return nil, fmt.Errorf("failed to decode home assistant states: %w", err)
 	}
 
-	assets := make([]connectorsdk.Asset, 0, 24)
+	assets := make([]connectorsdk.Asset, 0, len(states))
 	for _, state := range states {
 		entityID := strings.TrimSpace(anyToString(state["entity_id"]))
 		if entityID == "" {
@@ -116,7 +116,7 @@ func (c *Connector) Discover(ctx context.Context) ([]connectorsdk.Asset, error) 
 		metadata := map[string]string{
 			"entity_id": entityID,
 			"domain":    domain,
-			"state":     strings.TrimSpace(anyToString(state["state"])),
+			"state":     entityState(state["state"], attributes),
 		}
 		setMetadataValue(metadata, "last_changed", state["last_changed"])
 		setMetadataValue(metadata, "last_updated", state["last_updated"])
@@ -124,7 +124,7 @@ func (c *Connector) Discover(ctx context.Context) ([]connectorsdk.Asset, error) 
 			if _, exists := metadata[key]; exists {
 				continue
 			}
-			setMetadataValue(metadata, key, value)
+			setEntityAttribute(metadata, key, value)
 		}
 
 		assets = append(assets, connectorsdk.Asset{
@@ -134,10 +134,6 @@ func (c *Connector) Discover(ctx context.Context) ([]connectorsdk.Asset, error) 
 			Source:   c.ID(),
 			Metadata: metadata,
 		})
-
-		if len(assets) >= 40 {
-			break
-		}
 	}
 
 	return assets, nil

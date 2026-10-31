@@ -81,6 +81,10 @@ func (d *Deps) HandleAuthUsers(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusBadRequest, "owner role is reserved")
 			return
 		}
+		if !d.callerMayGrantRole(r, req.Role) {
+			servicehttp.WriteError(w, http.StatusForbidden, "only the owner can create an admin account")
+			return
+		}
 		if _, exists, err := d.AuthStore.GetUserByUsername(req.Username); err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to validate username")
 			return
@@ -98,6 +102,7 @@ func (d *Deps) HandleAuthUsers(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create user")
 			return
 		}
+		d.auditIdentityChange(r, "auth.user.created", created.ID, map[string]any{"username": created.Username, "role": auth.NormalizeRole(created.Role)})
 		servicehttp.WriteJSON(w, http.StatusCreated, map[string]any{
 			"user": auth.UserInfo{ID: created.ID, Username: created.Username, Role: auth.NormalizeRole(created.Role)},
 		})
@@ -170,6 +175,10 @@ func (d *Deps) HandleAuthUserActions(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusNotFound, "user not found")
 		return
 	}
+	if !d.callerMayManageUser(r, user) {
+		servicehttp.WriteError(w, http.StatusForbidden, "only the owner can change another admin account")
+		return
+	}
 
 	if req.Role != nil {
 		role := strings.ToLower(strings.TrimSpace(*req.Role))
@@ -185,10 +194,16 @@ func (d *Deps) HandleAuthUserActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusBadRequest, "owner role is reserved")
 			return
 		}
+		if !auth.HasAdminPrivileges(user.Role) && !d.callerMayGrantRole(r, role) {
+			servicehttp.WriteError(w, http.StatusForbidden, "only the owner can make a user an admin")
+			return
+		}
 		if err := d.AuthStore.UpdateUserRole(user.ID, role); err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update user role")
 			return
 		}
+		d.auditIdentityChange(r, "auth.user.role_changed", user.ID, map[string]any{"from": auth.NormalizeRole(user.Role), "to": role})
+		d.revokeUserStreamsIfDemoted(r.Context(), user.ID, user.Role, role)
 		user.Role = role
 	}
 	if req.Password != nil {
@@ -215,6 +230,8 @@ func (d *Deps) HandleAuthUserActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update password")
 			return
 		}
+		d.auditIdentityChange(r, "auth.user.password_reset", user.ID, nil)
+		d.revokeStreams(shared.StreamActorKey(user.ID))
 		if user.ID == d.UserIDFromContext(r.Context()) {
 			auth.ClearSessionCookie(w)
 		}
@@ -248,6 +265,10 @@ func (d *Deps) handleDeleteUser(w http.ResponseWriter, r *http.Request, id strin
 		servicehttp.WriteError(w, http.StatusForbidden, "cannot delete the owner account")
 		return
 	}
+	if !d.callerMayManageUser(r, user) {
+		servicehttp.WriteError(w, http.StatusForbidden, "only the owner can delete an admin account")
+		return
+	}
 
 	challenges.RevokeForUser(id)
 	if delErr := d.AuthStore.DeleteSessionsByUserID(id); delErr != nil {
@@ -258,6 +279,8 @@ func (d *Deps) handleDeleteUser(w http.ResponseWriter, r *http.Request, id strin
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete user")
 		return
 	}
+	d.auditIdentityChange(r, "auth.user.deleted", id, map[string]any{"username": user.Username, "role": auth.NormalizeRole(user.Role)})
+	d.revokeUserStreams(r.Context(), id)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -293,12 +316,23 @@ func (d *Deps) handleUserSessions(w http.ResponseWriter, r *http.Request, userID
 		challenges := d.authChallenges()
 		unlock := challenges.LockUser(userID)
 		defer unlock()
+		target, found, err := d.AuthStore.GetUserByID(userID)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to look up user")
+			return
+		}
+		if found && !d.callerMayManageUser(r, target) {
+			servicehttp.WriteError(w, http.StatusForbidden, "only the owner can sign out an admin account")
+			return
+		}
 		challenges.RevokeForUser(userID)
 		if err := d.AuthStore.DeleteSessionsByUserID(userID); err != nil {
 			log.Printf("auth: revoke-sessions: failed to delete sessions for user %s: %v", userID, err) // #nosec G706 -- User IDs are store-generated identifiers and the error is local runtime state.
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to revoke sessions")
 			return
 		}
+		d.auditIdentityChange(r, "auth.user.sessions_revoked", userID, nil)
+		d.revokeStreams(shared.StreamActorKey(userID))
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"revoked": true})
 
 	default:

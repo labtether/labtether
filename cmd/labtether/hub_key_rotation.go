@@ -105,32 +105,50 @@ func (s *apiServer) validatePersistedHubSSHIdentity(identity *hubSSHIdentity) er
 	return nil
 }
 
+// sendHubSSHKeyMessage installs the commented Hub key line, or removes both
+// the plain line older Hubs installed and the commented line.
 func sendHubSSHKeyMessage(conn *agentmgr.AgentConn, messageType, publicKey string) error {
 	if conn == nil {
 		return fmt.Errorf("agent connection unavailable")
 	}
-	var payload any
+	var payloads []any
 	switch messageType {
 	case agentmgr.MsgSSHKeyInstall:
-		payload = agentmgr.SSHKeyInstallData{PublicKey: publicKey}
+		payloads = append(payloads, agentmgr.SSHKeyInstallData{PublicKey: shared.HubAuthorizedKeyLine(publicKey)})
 	case agentmgr.MsgSSHKeyRemove:
-		payload = agentmgr.SSHKeyRemoveData{PublicKey: publicKey}
+		for _, line := range shared.HubAuthorizedKeyRemovals(publicKey) {
+			payloads = append(payloads, agentmgr.SSHKeyRemoveData{PublicKey: line})
+		}
 	default:
 		return fmt.Errorf("unsupported SSH key message type")
 	}
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to encode SSH key message: %w", err)
+	for _, payload := range payloads {
+		data, err := json.Marshal(payload)
+		if err != nil {
+			return fmt.Errorf("failed to encode SSH key message: %w", err)
+		}
+		if err := conn.Send(agentmgr.Message{Type: messageType, Data: data}); err != nil {
+			return err
+		}
 	}
-	return conn.Send(agentmgr.Message{Type: messageType, Data: data})
+	return nil
 }
 
+// stageHubSSHKey sends the new key to every connected agent whose device has
+// the Hub SSH key turned on. Devices with it off never receive a key, so they
+// are not counted either.
 func (s *apiServer) stageHubSSHKey(publicKey string) (connectedAssets, stagedAssets []string, failures int) {
 	if s.agentMgr == nil {
 		return nil, nil, 0
 	}
-	connectedAssets = s.agentMgr.ConnectedAssets()
-	sort.Strings(connectedAssets)
+	connected := s.agentMgr.ConnectedAssets()
+	sort.Strings(connected)
+	connectedAssets = make([]string, 0, len(connected))
+	for _, assetID := range connected {
+		if s.hubSSHKeyEnabled(assetID) {
+			connectedAssets = append(connectedAssets, assetID)
+		}
+	}
 	stagedAssets = make([]string, 0, len(connectedAssets))
 	for _, assetID := range connectedAssets {
 		conn, ok := s.agentMgr.Get(assetID)

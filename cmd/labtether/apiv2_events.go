@@ -11,7 +11,7 @@ func (s *apiServer) handleV2EventStream(w http.ResponseWriter, r *http.Request) 
 		apiv2.WriteScopeForbidden(w, "events:subscribe")
 		return
 	}
-	// Delegate to the existing browser events WebSocket handler.
-	// The existing handler handles WebSocket upgrade and event broadcasting.
-	s.handleBrowserEvents(w, r)
+	// withAuth already accepted this caller (session, API key or owner token),
+	// so stream without asking for a second credential.
+	s.ensureBrowserEventsDeps().ServeAuthenticatedBrowserEvents(w, r)
 }

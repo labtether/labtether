@@ -33,5 +33,18 @@
     "matchSignals": "Match signals",
     "confidence": "Confidence: {value}%",
     "newSuggestions": "{count} suggested relationships"
+  },
+  "hubSshKey": {
+    "title": "Hub SSH key",
+    "description": "Lets the Hub log in to this device over SSH as root.",
+    "on": "On",
+    "off": "Off",
+    "loading": "Loading...",
+    "removalPending": "The Hub removes its key when the agent next connects.",
+    "removalSent": "The Hub asked the agent to remove its key.",
+    "noAgent": "This device has no agent. Remove the Hub key from authorized_keys on the device.",
+    "adminOnly": "Only an admin or owner can change this.",
+    "loadError": "Could not load the Hub SSH key setting.",
+    "saveError": "Could not change the Hub SSH key setting."
   }
 }

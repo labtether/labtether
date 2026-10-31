@@ -119,10 +119,10 @@ func (s *apiServer) auditMiddleware(next http.Handler) http.Handler {
 		// Note: actor ID is not available at middleware level because auth middleware
 		// creates a new request context. Per-handler audit events (appendAuditEventBestEffort)
 		// capture the authenticated actor. This middleware log uses client IP for correlation.
-		clientIP := requestClientKey(r)
+		clientIP, peerIP := auditRequestAddresses(r)
 
-		securityruntime.Logf("audit: %s %s %d %dms ip=%s",
-			r.Method, path, sw.statusCode, duration.Milliseconds(), clientIP)
+		securityruntime.Logf("audit: %s %s %d %dms ip=%s peer=%s",
+			r.Method, path, sw.statusCode, duration.Milliseconds(), clientIP, peerIP)
 
 		// Best-effort append to the audit store -- never fail the request.
 		if s.auditStore != nil {
@@ -138,6 +138,7 @@ func (s *apiServer) auditMiddleware(next http.Handler) http.Handler {
 					"status":      sw.statusCode,
 					"duration_ms": duration.Milliseconds(),
 					"client_ip":   clientIP,
+					"peer_ip":     peerIP,
 				},
 			}
 			select {
@@ -149,4 +150,17 @@ func (s *apiServer) auditMiddleware(next http.Handler) http.Handler {
 			}
 		}
 	})
+}
+
+// auditRequestAddresses returns the client to record and the direct peer.
+// Through the console (or another trusted proxy) the client is the address
+// that proxy appended to X-Forwarded-For; otherwise it is the peer. Rate
+// limits keep their own keys. Requests without the header skip the trusted
+// proxy check and its name lookup.
+func auditRequestAddresses(r *http.Request) (client, peer string) {
+	peer = requestClientKey(r)
+	if strings.TrimSpace(r.Header.Get("X-Forwarded-For")) == "" {
+		return peer, peer
+	}
+	return trustedRequestClientIP(r), peer
 }

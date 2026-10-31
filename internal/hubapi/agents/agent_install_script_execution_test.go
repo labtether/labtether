@@ -113,8 +113,14 @@ func TestInstallScriptForceUpdateUsesPrivateLog(t *testing.T) {
 			if err != nil {
 				t.Fatalf("force-update install failed: %v\n%s", err, output)
 			}
-			if !strings.Contains(mustReadFile(t, filepath.Join(root, "logs/agent-binary.log")), "update self --force") {
+			binaryLog := mustReadFile(t, filepath.Join(root, "logs/agent-binary.log"))
+			if !strings.Contains(binaryLog, "update self --force") {
 				t.Fatal("force update was not run")
+			}
+			// Without the service environment the agent has no signing key and
+			// refuses every update.
+			if !strings.Contains(binaryLog, "update signing key: "+AgentReleasePublicKey()) {
+				t.Fatalf("force update ran without the release signing key:\n%s", binaryLog)
 			}
 			if tt.exitCode != "0" && !strings.Contains(output, "test update output") {
 				t.Fatalf("failed update output was hidden: %s", output)
@@ -347,6 +353,12 @@ func TestInstallScriptUninstallAndPurgeLifecycle(t *testing.T) {
 				t.Fatalf("expected %s to be removed after uninstall, err=%v", path, err)
 			}
 		}
+		// A stale rollback record would act on the next install's binary.
+		for path := range agentSelfUpdateFiles(root) {
+			if _, err := os.Stat(path); !os.IsNotExist(err) {
+				t.Fatalf("expected %s to be removed after uninstall, err=%v", path, err)
+			}
+		}
 
 		for _, path := range []string{
 			filepath.Join(root, "etc/labtether/agent-token"),
@@ -395,6 +407,11 @@ func TestInstallScriptUninstallAndPurgeLifecycle(t *testing.T) {
 			filepath.Join(root, "usr/local/share/ca-certificates/labtether-ca.crt"),
 			filepath.Join(root, "usr/local/bin/labtether"),
 		} {
+			if _, err := os.Stat(path); !os.IsNotExist(err) {
+				t.Fatalf("expected %s to be removed after purge, err=%v", path, err)
+			}
+		}
+		for path := range agentSelfUpdateFiles(root) {
 			if _, err := os.Stat(path); !os.IsNotExist(err) {
 				t.Fatalf("expected %s to be removed after purge, err=%v", path, err)
 			}

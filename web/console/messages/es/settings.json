@@ -44,6 +44,7 @@
     "uses": "{used}{max} usos",
     "expires": "Vence {age}",
     "disable": "Deshabilitar",
+    "hubSSHKeyNotRemoved": "La clave SSH del Hub sigue en {device}: no se pudo contactar con su agente. Quite allí la línea labtether-hub de authorized_keys o ejecute labtether-agent ssh-key remove.",
     "connectedAgents": "Credenciales de agentes",
     "lastSeen": "Última autenticación {age}",
     "added": "Agregado {age}",
@@ -77,6 +78,7 @@
     "operatorRoleValues": "Valores del rol Operador (separados por comas)",
     "autoProvision": "Aprovisionar automáticamente a los usuarios nuevos en su primer inicio de sesión",
     "save": "Guardar",
+    "ownerOnly": "Solo el propietario puede cambiar la configuración de SSO.",
     "apply": "Aplicar"
   },
   "dangerZone": {

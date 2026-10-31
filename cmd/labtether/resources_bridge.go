@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -45,6 +46,7 @@ func (s *apiServer) buildResourcesDeps() *respkg.Deps {
 		FileConnectionStore: s.db,
 		FileTransferStore:   fileTransferStore,
 		ActiveTransfers:     &s.activeTransfers,
+		SpoolDir:            fileSpoolDir(s.dataDir),
 		RemoteBookmarkStore: s.db,
 
 		FileBridges:    &s.fileBridges,
@@ -108,7 +110,7 @@ func (s *apiServer) buildResourcesDeps() *respkg.Deps {
 				return
 			}
 			if conn, ok := s.agentMgr.Get(assetID); ok {
-				s.sendSSHKeyRemove(conn)
+				_ = s.sendSSHKeyRemove(conn)
 			}
 		},
 		PersistCanonicalHeartbeatFn: func(assetEntry assets.Asset, req assets.HeartbeatRequest) {
@@ -131,7 +133,18 @@ func (s *apiServer) buildResourcesDeps() *respkg.Deps {
 		HandleCreateProtocolConfig:       s.handleCreateProtocolConfig,
 		HandleUpdateProtocolConfig:       s.handleUpdateProtocolConfig,
 		HandleDeleteProtocolConfig:       s.handleDeleteProtocolConfig,
+		HandleHubSSHKey:                  s.handleAssetHubSSHKey,
+		HubSSHKeyEnabled:                 s.hubSSHKeyEnabled,
 	}
+}
+
+// fileSpoolDir keeps transfer staging on the data volume. An unset data
+// directory, as in tests, keeps the system temp directory.
+func fileSpoolDir(dataDir string) string {
+	if strings.TrimSpace(dataDir) == "" {
+		return ""
+	}
+	return filepath.Join(dataDir, "spool")
 }
 
 // ensureResourcesDeps returns a resources.Deps built from the current apiServer

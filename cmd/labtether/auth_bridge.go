@@ -31,12 +31,14 @@ func (s *apiServer) buildAuthDeps() *authpkg.Deps {
 		APIKeyStore:     s.apiKeyStore,
 
 		AppendAuditEventBestEffort: s.appendAuditEventBestEffort,
-		EnforceRateLimit:           s.enforceRateLimit,
+		EnforceRateLimit:           s.enforceClientRateLimit,
 		EnforceRateLimitGlobal:     s.enforceRateLimitGlobal,
 		ValidateOwnerTokenRequest:  s.validateOwnerTokenRequest,
 		ClientIP:                   trustedRequestClientIP,
+		RequestIsSecure:            browserRequestIsSecure,
 		UserIDFromContext:          principalActorID,
 		UserRoleFromContext:        userRoleFromContext,
+		RevokeStreams:              s.revokeStreamPrincipals,
 
 		WrapAuth:        s.withAuth,
 		WrapSelfService: s.withSelfServiceAuth,
@@ -162,9 +164,14 @@ func (s *apiServer) validateOIDCRedirectURI(r *http.Request, raw string) (string
 			allowedOrigins = append(allowedOrigins, originValue)
 		}
 	}
-	if external, ok := sanitizeExternalBaseURL(strings.TrimSpace(s.externalURL)); ok {
-		if externalOrigin, parseOK := parseNetworkOrigin(external); parseOK {
-			allowedOrigins = append(allowedOrigins, externalOrigin)
+	// Operator-configured addresses: the Hub's external URL and the browser
+	// address of the console (LABTETHER_CONSOLE_URL, often plain http on a LAN).
+	// Request headers never add to this part of the list.
+	for _, configured := range []string{s.externalURL, s.consoleURL} {
+		if base, ok := sanitizeExternalBaseURL(strings.TrimSpace(configured)); ok {
+			if configuredOrigin, parseOK := parseNetworkOrigin(base); parseOK {
+				allowedOrigins = append(allowedOrigins, configuredOrigin)
+			}
 		}
 	}
 	redirectOrigin, ok := parseNetworkOrigin(parsed.Scheme + "://" + parsed.Host)

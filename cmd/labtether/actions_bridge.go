@@ -72,6 +72,7 @@ func (s *apiServer) execOnAssetForActions(r *http.Request, assetID, command stri
 	res := s.v2ExecOnAsset(r, assetID, command, timeoutSec)
 	return actionspkg.ExecResult{
 		AssetID:    res.AssetID,
+		Status:     res.Status,
 		ExitCode:   res.ExitCode,
 		Stdout:     res.Stdout,
 		DurationMs: res.DurationMs,

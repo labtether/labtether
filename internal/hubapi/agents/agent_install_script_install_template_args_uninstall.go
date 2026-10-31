@@ -22,6 +22,7 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       DOCKER_ENABLED="$2"
+      DOCKER_ENABLED_SET=1
       shift 2
       ;;
     --docker-endpoint)
@@ -31,6 +32,7 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       DOCKER_ENDPOINT="$2"
+      DOCKER_ENDPOINT_SET=1
       shift 2
       ;;
     --docker-discovery-interval)
@@ -40,6 +42,7 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       DOCKER_DISCOVERY_INTERVAL="$2"
+      DOCKER_DISCOVERY_INTERVAL_SET=1
       shift 2
       ;;
     --docker-wizard)
@@ -53,6 +56,7 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       FILES_ROOT_MODE="$(echo "$2" | tr '[:upper:]' '[:lower:]')"
+      FILES_ROOT_MODE_SET=1
       shift 2
       ;;
     --auto-update)
@@ -213,6 +217,19 @@ remove_hub_ca_trust() {
   success "Hub CA removed from the system trust store"
 }
 
+# Self-update keeps the replaced binary (.previous) and its rollback state
+# (.update-state) next to the agent binary. An update that was cut off can
+# also leave a staged download or a temporary file there.
+remove_agent_update_files() {
+  local leftover
+  rm -f "${BINARY_DEST}.previous" "${BINARY_DEST}.update-state"
+  for leftover in "${BINARY_DEST%%/*}/.${BINARY_DEST##*/}.update-"* "${BINARY_DEST%%/*}/.labtether-tmp-"*; do
+    if [[ -f "${leftover}" && ! -L "${leftover}" ]]; then
+      rm -f "${leftover}"
+    fi
+  done
+}
+
 # ── Uninstall ──────────────────────────────────────────────────────────────
 if [[ "${UNINSTALL}" -eq 1 ]]; then
   info "Stopping service..."
@@ -221,7 +238,9 @@ if [[ "${UNINSTALL}" -eq 1 ]]; then
   rm -f "${SERVICE_FILE}"
   systemctl daemon-reload
   success "Service stopped and disabled"
+  remove_hub_ssh_keys
   rm -f "${BINARY_DEST}"
+  remove_agent_update_files
   success "Binary removed"
   rm -f "${ENV_FILE}"
   success "Configuration removed"

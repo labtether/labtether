@@ -59,6 +59,7 @@
     "running": "Exécution...",
     "results": "Résultats de l'exécution",
     "failed": "Échec",
+    "succeeded": "Réussi",
     "exitCode": "Sortie {code}",
     "noOutput": "Commande terminée sans sortie.",
     "deleteTitle": "Supprimer l'action enregistrée",

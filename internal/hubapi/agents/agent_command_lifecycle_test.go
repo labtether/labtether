@@ -2,6 +2,7 @@ package agents
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -82,24 +83,34 @@ func TestAgentRequestLifecycle(t *testing.T) {
 	}
 }
 
+// Older agents may omit optional correlation fields and the exit code. The
+// owning connection still supplies a valid result, the pending request fills
+// the correlation fields, and an absent exit code stays unknown, never 0.
+// A newer agent's exit code 2 reaches the caller as 2, not as a bare failure.
 func TestAgentRequestAcceptsResultFromOwningConnection(t *testing.T) {
-	manager, conn, peer := newDockerEndpointTestAgentConn(t, "result-node", "linux")
-	deps := &Deps{AgentMgr: manager, PendingAgentCmds: &sync.Map{}}
-	results := make(chan terminal.CommandResult, 1)
-	go func() {
-		results <- deps.ExecuteViaAgent(terminal.CommandJob{JobID: "job", Target: conn.AssetID, SessionID: "session", CommandID: "command", Command: "true"})
-	}()
-	readAgentLifecycleRequest(t, peer)
-	// Older agents may omit optional correlation fields. The owning connection
-	// still supplies a valid result and the pending request fills those fields.
-	deps.DeliverPendingAgentResult(conn, agentmgr.CommandResultData{JobID: "job", Status: "succeeded", Output: "done"})
-	select {
-	case result := <-results:
-		if result.Status != "succeeded" || result.SessionID != "session" || result.CommandID != "command" || result.Output != "done" {
-			t.Fatalf("result: %+v", result)
+	for _, reply := range []agentmgr.CommandResultData{
+		{JobID: "job", Status: "succeeded", Output: "done"},
+		{JobID: "job", Status: "failed", Output: "done", ExitCode: new(2)},
+	} {
+		manager, conn, peer := newDockerEndpointTestAgentConn(t, "result-node", "linux")
+		deps := &Deps{AgentMgr: manager, PendingAgentCmds: &sync.Map{}}
+		results := make(chan terminal.CommandResult, 1)
+		go func() {
+			results <- deps.ExecuteViaAgent(terminal.CommandJob{JobID: "job", Target: conn.AssetID, SessionID: "session", CommandID: "command", Command: "true"})
+		}()
+		readAgentLifecycleRequest(t, peer)
+		deps.DeliverPendingAgentResult(conn, reply)
+		select {
+		case result := <-results:
+			if result.Status != reply.Status || result.SessionID != "session" || result.CommandID != "command" || result.Output != "done" {
+				t.Fatalf("result: %+v", result)
+			}
+			if got, want := exitCodeText(result.ExitCode), exitCodeText(reply.ExitCode); got != want {
+				t.Fatalf("exit code %s, want %s", got, want)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("matching result did not finish request")
 		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("matching result did not finish request")
 	}
 }
 
@@ -115,4 +126,11 @@ func readAgentLifecycleRequest(t *testing.T, peer *websocket.Conn) {
 	if msg.ID != "job" || (msg.Type != agentmgr.MsgCommandRequest && msg.Type != agentmgr.MsgUpdateRequest) {
 		t.Fatalf("unexpected request: %+v", msg)
 	}
+}
+
+func exitCodeText(code *int) string {
+	if code == nil {
+		return "unknown"
+	}
+	return strconv.Itoa(*code)
 }

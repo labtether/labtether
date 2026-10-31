@@ -133,6 +133,7 @@ func (s *apiServer) buildTerminalDeps() *terminalpkg.Deps {
 			}
 			return s.credentialStore.SaveAssetTerminalConfig(cfg)
 		},
+		HubSSHKeyEnabled: s.hubSSHKeyEnabled,
 
 		TerminalInMemStore:  s.terminalInMemStore,
 		EphemeralSSHConfigs: s.ephemeralSSHConfigs,

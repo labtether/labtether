@@ -86,9 +86,10 @@ func (d *Deps) ExecuteCommandActionContext(ctx context.Context, job actions.Job)
 	}
 
 	step := actions.StepResult{
-		Name:   "execute_command",
-		Status: status,
-		Output: strings.TrimSpace(cmdResult.Output),
+		Name:     "execute_command",
+		Status:   status,
+		Output:   strings.TrimSpace(cmdResult.Output),
+		ExitCode: cmdResult.ExitCode,
 	}
 	if status == actions.StatusFailed {
 		step.Error = errMessage

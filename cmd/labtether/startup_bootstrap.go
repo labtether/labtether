@@ -82,6 +82,9 @@ func runHub(ctx context.Context) error {
 	ctx = leaseCtx
 
 	dataDir := envOrDefault("LABTETHER_DATA_DIR", "data")
+	if err := checkEncryptionKeyPresentForData(ctx, newInstallStateStore(dataDir), pgStore); err != nil {
+		return newStartupFailure(startupFailureEncryptionConfig, err)
+	}
 	runtimeSecrets, err := resolveRuntimeInstallSecrets(newInstallStateStore(dataDir))
 	if errors.Is(err, errEncryptionKeyMismatch) {
 		return newStartupFailure(startupFailureEncryptionConfig, err)
@@ -104,6 +107,12 @@ func runHub(ctx context.Context) error {
 	}
 	if secretsManager == nil {
 		log.Printf("labtether warning: runtime encryption key not set; credential encryption endpoints are disabled")
+	}
+	if err := checkEncryptionKeyMatchesData(ctx, pgStore, secretsManager, runtimeSecrets.EncryptionKey); err != nil {
+		if errors.Is(err, errEncryptionKeyWrongForData) {
+			return newStartupFailure(startupFailureEncryptionConfig, err)
+		}
+		return newDatabaseStartupFailure(err)
 	}
 	if err := migrateOIDCClientSecretAtStartup(ctx, pgStore, secretsManager); err != nil {
 		return err
@@ -133,15 +142,15 @@ func runHub(ctx context.Context) error {
 		}
 	}
 
-	oidcProvider, oidcAutoProvision, err := loadOIDCProviderFromEnv(ctx)
-	if err != nil {
-		log.Printf("labtether auth: warning: oidc initialization failed: %v (starting with oidc disabled)", err)
-	}
-	oidcRef := authpkg.NewOIDCProviderRef(oidcProvider, oidcAutoProvision)
+	// Single sign-on uses the settings saved in the console, with
+	// LABTETHER_OIDC_* environment values taking precedence, as applying does.
+	oidcRef := authpkg.NewOIDCProviderRef(nil, false)
+	(&authpkg.Deps{OIDCRef: oidcRef, SettingsStore: pgStore, SecretsManager: secretsManager}).ActivateOIDCAtStart(ctx)
 
 	srv := newAPIServer(pgStore, secretsManager, policyState, registry, authValidator, oidcRef, newInstallStateStore(dataDir))
 	srv.dataDir = dataDir
 	srv.demoMode = demoMode
+	srv.consoleServiceValidator = auth.NewTokenValidator(consoleServiceToken(runtimeSecrets.APIToken))
 	// This process now owns the Hub runtime, so no transfer from a previous
 	// process can still be running; do not leave them "in progress" forever.
 	if marked, err := resourcespkg.FailInterruptedFileTransfers(ctx, pgStore); err != nil {
@@ -333,7 +342,7 @@ func runHub(ctx context.Context) error {
 				if srv.tlsState.CertSwitcher == nil {
 					srv.tlsState.CertSwitcher = &hubCertificateSwitcher{}
 				}
-				srv.tlsState.CertSwitcher.SetProvider(overrideProvider.GetCertificate)
+				srv.tlsState.CertSwitcher.SetProvider(srv.tlsState.UploadedCertificateProvider(overrideProvider.GetCertificate))
 				log.Printf("labtether: TLS UI override loaded — serving HTTPS on :%s", port)
 			}
 		}

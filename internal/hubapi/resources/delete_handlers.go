@@ -43,10 +43,9 @@ func (d *Deps) HandleDeleteAsset(w http.ResponseWriter, assetEntry assets.Asset)
 func (d *Deps) DeleteAsset(ctx context.Context, assetEntry assets.Asset) error {
 	assetID := strings.TrimSpace(assetEntry.ID)
 
+	// A refused delete must change nothing, so this check comes before any
+	// message to the agent.
 	if isConnectedAgentAsset(assetEntry, d.AgentMgr) {
-		if d.SendSSHKeyRemoveToAsset != nil {
-			d.SendSSHKeyRemoveToAsset(assetID)
-		}
 		return ErrConnectedAgentDeletion
 	}
 

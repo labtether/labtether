@@ -78,7 +78,7 @@ func (s *apiServer) buildAgentsDeps() *agentspkg.Deps {
 
 		AgentWebSocketUpgrader: agentWebSocketUpgrader,
 
-		EnforceRateLimit:           s.enforceRateLimit,
+		EnforceRateLimit:           s.enforceClientRateLimit,
 		WrapAuth:                   s.withAuth,
 		WrapAdmin:                  s.withAdminAuth,
 		PrincipalActorID:           principalActorID,
@@ -129,6 +129,7 @@ func (s *apiServer) buildAgentsDeps() *agentspkg.Deps {
 		ResolveHubURL: func(r *http.Request) string {
 			return s.resolveHubURL(r)
 		},
+		DiscoverClientIP: discoverClientIP,
 		ResolveHubConnectionSelection: func(r *http.Request) shared.HubConnectionSelection {
 			return shared.HubConnectionSelection(s.resolveHubConnectionSelection(r))
 		},
@@ -143,6 +144,10 @@ func (s *apiServer) buildAgentsDeps() *agentspkg.Deps {
 		SaveAssetTerminalConfig: func(cfg credentials.AssetTerminalConfig) (credentials.AssetTerminalConfig, error) {
 			return s.credentialStore.SaveAssetTerminalConfig(cfg)
 		},
+		HubSSHKeyEnabled:        s.hubSSHKeyEnabled,
+		HubSSHKeyMayBeInstalled: s.hubSSHKeyMayBeInstalled,
+		SendHubSSHKeyRemoval:    s.sendSSHKeyRemove,
+		RemoveHubSSHKeyIfOff:    s.removeHubSSHKeyIfOff,
 	}
 	if deps.RuntimeStore != nil {
 		if overrides, err := deps.RuntimeStore.ListRuntimeSettingOverrides(); err == nil {
@@ -217,16 +222,18 @@ func (s *apiServer) processAgentDockerEndpointTestResult(conn *agentmgr.AgentCon
 	s.ensureAgentsDeps().ProcessAgentDockerEndpointTestResult(conn, msg)
 }
 
+// sendSSHKeyInstall sends the Hub key without checking the device's Hub SSH
+// key setting. Agent connects use syncHubSSHKeyOnConnect, which does.
 func (s *apiServer) sendSSHKeyInstall(conn *agentmgr.AgentConn) {
 	s.hubIdentityOperationMu.Lock()
 	defer s.hubIdentityOperationMu.Unlock()
 	s.ensureAgentsDeps().SendSSHKeyInstall(conn)
 }
 
-func (s *apiServer) sendSSHKeyRemove(conn *agentmgr.AgentConn) {
+func (s *apiServer) sendSSHKeyRemove(conn *agentmgr.AgentConn) error {
 	s.hubIdentityOperationMu.Lock()
 	defer s.hubIdentityOperationMu.Unlock()
-	s.ensureAgentsDeps().SendSSHKeyRemove(conn)
+	return s.ensureAgentsDeps().SendSSHKeyRemove(conn)
 }
 
 func (s *apiServer) sendConfigUpdate(conn *agentmgr.AgentConn) {

@@ -9,23 +9,27 @@ if [[ "${DOCKER_WIZARD}" -eq 1 ]]; then
     read -r -p "Docker mode [auto|true|false] (${DOCKER_ENABLED}): " docker_mode_input
     if [[ -n "${docker_mode_input}" ]]; then
       DOCKER_ENABLED="$(echo "${docker_mode_input}" | tr '[:upper:]' '[:lower:]')"
+      DOCKER_ENABLED_SET=1
     fi
 
     if [[ "${DOCKER_ENABLED}" != "false" ]]; then
       read -r -p "Docker endpoint (${DOCKER_ENDPOINT}): " docker_endpoint_input
       if [[ -n "${docker_endpoint_input}" ]]; then
         DOCKER_ENDPOINT="${docker_endpoint_input}"
+        DOCKER_ENDPOINT_SET=1
       fi
 
       read -r -p "Docker discovery interval seconds (${DOCKER_DISCOVERY_INTERVAL}): " docker_interval_input
       if [[ -n "${docker_interval_input}" ]]; then
         DOCKER_DISCOVERY_INTERVAL="${docker_interval_input}"
+        DOCKER_DISCOVERY_INTERVAL_SET=1
       fi
     fi
 
     read -r -p "File access scope [home|full] (${FILES_ROOT_MODE}): " files_root_input
     if [[ -n "${files_root_input}" ]]; then
       FILES_ROOT_MODE="$(echo "${files_root_input}" | tr '[:upper:]' '[:lower:]')"
+      FILES_ROOT_MODE_SET=1
     fi
   else
     warn "--docker-wizard requested without TTY; using provided/default Docker settings."

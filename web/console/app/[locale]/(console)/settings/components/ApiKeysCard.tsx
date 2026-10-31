@@ -9,6 +9,7 @@ import { useAuth } from "../../../../contexts/AuthContext";
 import { useFastStatus } from "../../../../contexts/StatusContext";
 import { useApiKeys } from "../../../../hooks/useApiKeys";
 import type { ApiKeyInfo, CreateKeyRequest, CreatedKeyResponse, UpdateKeyRequest } from "../../../../hooks/useApiKeys";
+import { canManageApiKey } from "../../../../lib/roles";
 import { sanitizeErrorMessage } from "../../../../lib/sanitizeErrorMessage";
 import { type AssetOption, ALL_SCOPES, ScopeSelector, AssetSelector } from "./ApiKeyAccessSelectors";
 import { expiryToIso } from "./apiKeyPresentation";
@@ -249,6 +250,7 @@ export function ApiKeysCard() {
                 key={k.id}
                 keyInfo={k}
                 assetNameByID={assetNameByID}
+                canManage={canManageApiKey(user, k)}
                 onEdit={() => setDialog({ type: "edit", keyInfo: k })}
                 onRevoke={() => setDialog({ type: "revoke", keyInfo: k })}
               />

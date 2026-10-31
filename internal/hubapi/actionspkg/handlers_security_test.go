@@ -113,7 +113,7 @@ func TestSavedActionVisibilityAndExecutionAreAllOrNothing(t *testing.T) {
 		GetPolicyConfig:  policy.DefaultEvaluatorConfig,
 		ExecOnAsset: func(*http.Request, string, string, int) ExecResult {
 			execCalls++
-			return ExecResult{ExitCode: 0, Stdout: "ok"}
+			return ExecResult{Status: "succeeded", ExitCode: new(0), Stdout: "ok"}
 		},
 	}
 
@@ -186,7 +186,7 @@ func TestSavedActionRechecksPolicyBeforeEveryDispatch(t *testing.T) {
 		ExecOnAsset: func(_ *http.Request, _ string, command string, _ int) ExecResult {
 			dispatched = append(dispatched, command)
 			currentPolicy.StructuredEnabled = false
-			return ExecResult{ExitCode: 0, Stdout: "ok"}
+			return ExecResult{Status: "succeeded", ExitCode: new(0), Stdout: "ok"}
 		},
 	}
 

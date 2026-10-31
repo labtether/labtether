@@ -66,6 +66,7 @@ if [[ -n "${out}" ]]; then
 set -euo pipefail
 printf '%s\n' "$*" >> "${LABTETHER_TEST_LOG_DIR}/agent-binary.log"
 if [[ "${1:-}" == "update" && "${2:-}" == "self" ]]; then
+  printf 'update signing key: %s\n' "${LABTETHER_AUTO_UPDATE_TRUSTED_PUBLIC_KEY:-missing}" >> "${LABTETHER_TEST_LOG_DIR}/agent-binary.log"
   printf 'test update output\n'
   exit "${LABTETHER_TEST_FORCE_UPDATE_EXIT:-0}"
 fi
@@ -91,7 +92,7 @@ INSTALL
   exit 0
 fi
 
-if [[ "${url}" == "http://localhost:8090/agent/status" ]]; then
+if [[ "${url}" == "http://localhost:${LABTETHER_TEST_AGENT_PORT:-8090}/agent/status" ]]; then
   printf '{"status":"ok"}\n'
   exit 0
 fi
@@ -109,6 +110,9 @@ set -euo pipefail
 printf '%s\n' "$*" >> "${LABTETHER_TEST_LOG_DIR}/systemctl.log"
 if [[ "${1:-}" == "is-active" ]]; then
   exit 1
+fi
+if [[ "${1:-}" == "show" ]]; then
+  printf '%s\n' "${LABTETHER_TEST_SERVICE_ENV:-}"
 fi
 exit 0
 `)
@@ -184,6 +188,7 @@ func rewriteAgentScriptForHarness(script, root string) string {
 		"/etc/pki/ca-trust/source/anchors", filepath.Join(root, "etc/pki/ca-trust/source/anchors"),
 		"/usr/local/bin", filepath.Join(root, "usr/local/bin"),
 		"/etc/labtether", filepath.Join(root, "etc/labtether"),
+		"/root/.ssh/authorized_keys", filepath.Join(root, "root/.ssh/authorized_keys"),
 	)
 	return replacer.Replace(script)
 }
@@ -267,6 +272,9 @@ func seedInstalledAgentState(t *testing.T, root string) {
 		filepath.Join(root, "etc/labtether/device-fingerprint"):           "sha256:fingerprint\n",
 		filepath.Join(root, "etc/systemd/system/labtether-agent.service"): "[Unit]\nDescription=LabTether Agent\n",
 	}
+	for path, contents := range agentSelfUpdateFiles(root) {
+		files[path] = contents
+	}
 	for path, contents := range files {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
@@ -278,5 +286,16 @@ func seedInstalledAgentState(t *testing.T, root string) {
 		if err := os.WriteFile(path, []byte(contents), mode); err != nil {
 			t.Fatalf("write %s: %v", path, err)
 		}
+	}
+}
+
+// agentSelfUpdateFiles are what the agent's self-update leaves next to its
+// binary: the kept previous binary, the rollback state and a staged download.
+func agentSelfUpdateFiles(root string) map[string]string {
+	dir := filepath.Join(root, "usr/local/bin")
+	return map[string]string{
+		filepath.Join(dir, "labtether-agent.previous"):           "#!/bin/bash\nexit 0\n",
+		filepath.Join(dir, "labtether-agent.update-state"):       `{"pending_version":"v1.7.1","starts":1}`,
+		filepath.Join(dir, ".labtether-agent.update-1700000000"): "staged",
 	}
 }

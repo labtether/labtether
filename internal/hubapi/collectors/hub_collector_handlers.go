@@ -2,6 +2,7 @@ package collectors
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -204,7 +205,13 @@ func (d *Deps) HandleHubCollectorActions(w http.ResponseWriter, r *http.Request)
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete hub collector")
 			return
 		}
-		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"status": "deleted"})
+		removed, err := d.deleteCollectorAssets(collectorID)
+		if err != nil {
+			log.Printf("hub collector %s: removed, but its devices could not all be removed: %v", collectorID, err)
+			servicehttp.WriteError(w, http.StatusInternalServerError, "connector removed, but some of its devices remain; remove them from Devices")
+			return
+		}
+		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"status": "deleted", "assets_removed": removed})
 	default:
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}

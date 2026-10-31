@@ -5,25 +5,24 @@ import { Button } from "../../../components/ui/Button";
 import { Card } from "../../../components/ui/Card";
 import { Select } from "../../../components/ui/Input";
 import type { HubUser } from "../../../hooks/useHubUsers";
+import { assignableUserRoles } from "../../../lib/roles";
 
 type EditRoleDialogProps = {
   user: HubUser | null;
+  callerRole?: string;
   onClose: () => void;
   onConfirm: (user: HubUser, role: string) => Promise<void>;
 };
 
-const roleOptions = [
-  { value: "admin", label: "Admin" },
-  { value: "operator", label: "Operator" },
-  { value: "viewer", label: "Viewer" },
-];
+const roleLabels: Record<string, string> = { admin: "Admin", operator: "Operator", viewer: "Viewer" };
 
-export function EditRoleDialog({ user, onClose, onConfirm }: EditRoleDialogProps) {
+export function EditRoleDialog({ user, callerRole, onClose, onConfirm }: EditRoleDialogProps) {
   const [role, setRole] = useState(user?.role === "owner" ? "admin" : (user?.role ?? "viewer"));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
   if (!user) return null;
+  const roleOptions = assignableUserRoles(callerRole, user.role).map((value) => ({ value, label: roleLabels[value] }));
 
   const handleConfirm = async () => {
     setSaving(true);

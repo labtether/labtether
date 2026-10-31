@@ -77,6 +77,10 @@ func (d *Deps) HandleTestProtocolConnection(w http.ResponseWriter, r *http.Reque
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load credential profile")
 			return
 		}
+		if ok && profile.Kind == credentials.KindHubSSHIdentity && !d.hubSSHKeyEnabled(assetID) {
+			servicehttp.WriteError(w, http.StatusConflict, shared.HubSSHKeyOffMessage)
+			return
+		}
 		if ok {
 			secret, decErr := d.SecretsManager.DecryptString(profile.SecretCiphertext, profile.ID)
 			if decErr != nil {

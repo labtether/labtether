@@ -43,6 +43,9 @@ func putOIDCSettings(t *testing.T, deps *Deps, body string) *httptest.ResponseRe
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPut, "/settings/oidc", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
+	if deps.UserRoleFromContext == nil {
+		deps.UserRoleFromContext = func(context.Context) string { return "owner" }
+	}
 	deps.HandleOIDCSettingsPut(rec, req)
 	return rec
 }

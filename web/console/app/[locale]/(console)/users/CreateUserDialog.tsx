@@ -4,22 +4,20 @@ import { useState } from "react";
 import { Button } from "../../../components/ui/Button";
 import { Card } from "../../../components/ui/Card";
 import { Input, Select } from "../../../components/ui/Input";
+import { assignableUserRoles } from "../../../lib/roles";
 
 type CreateUserDialogProps = {
   open: boolean;
+  callerRole?: string;
   onClose: () => void;
   onConfirm: (payload: { username: string; password: string; role: string }) => Promise<void>;
 };
 
-const roleOptions = [
-  { value: "admin", label: "Admin" },
-  { value: "operator", label: "Operator" },
-  { value: "viewer", label: "Viewer" },
-];
+const roleLabels: Record<string, string> = { admin: "Admin", operator: "Operator", viewer: "Viewer" };
 
 const USERNAME_RE = /^[a-zA-Z0-9\-._]+$/;
 
-export function CreateUserDialog({ open, onClose, onConfirm }: CreateUserDialogProps) {
+export function CreateUserDialog({ open, callerRole, onClose, onConfirm }: CreateUserDialogProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -28,6 +26,7 @@ export function CreateUserDialog({ open, onClose, onConfirm }: CreateUserDialogP
   const [creating, setCreating] = useState(false);
 
   if (!open) return null;
+  const roleOptions = assignableUserRoles(callerRole).map((value) => ({ value, label: roleLabels[value] }));
 
 	const handleConfirm = async () => {
 		const u = username.trim().toLowerCase();

@@ -3,6 +3,7 @@ package persistence
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/labtether/labtether/internal/retention"
 	"strings"
@@ -83,6 +84,15 @@ func (s *PostgresStore) SaveRetentionSettings(settings retention.Settings) (rete
 	return normalized, nil
 }
 
+// retentionDeleteBatchSize keeps every DELETE far inside the 30 s statement
+// timeout, even on a table with millions of expired rows. One unbounded DELETE
+// per table could time out on every cycle and leave retention stuck for good.
+const retentionDeleteBatchSize = 5000
+
+// retentionMaxBatchesPerTable caps one cycle's work on a single table so the
+// other tables still get their turn. The next cycle carries on from there.
+const retentionMaxBatchesPerTable = 200
+
 // pruneExecDirect executes a single DELETE as an independent auto-committed statement,
 // avoiding long-lived transactions that block concurrent reads.
 func (s *PostgresStore) pruneExecDirect(query string, args ...any) (int64, error) {
@@ -91,6 +101,23 @@ func (s *PostgresStore) pruneExecDirect(query string, args ...any) (int64, error
 		return 0, err
 	}
 	return tag.RowsAffected(), nil
+}
+
+// pruneInBatches runs a DELETE that takes the cutoff as $1 and a row limit as
+// $2 until it removes fewer rows than the limit or reaches the per-cycle cap.
+func (s *PostgresStore) pruneInBatches(query string, cutoff time.Time) (int64, error) {
+	var total int64
+	for batch := 0; batch < retentionMaxBatchesPerTable; batch++ {
+		deleted, err := s.pruneExecDirect(query, cutoff, retentionDeleteBatchSize)
+		total += deleted
+		if err != nil {
+			return total, err
+		}
+		if deleted < int64(retentionDeleteBatchSize) {
+			break
+		}
+	}
+	return total, nil
 }
 
 func (s *PostgresStore) PruneExpiredData(now time.Time, settings retention.Settings) (retention.PruneResult, error) {
@@ -102,89 +129,86 @@ func (s *PostgresStore) PruneExpiredData(now time.Time, settings retention.Setti
 	}
 
 	result := retention.PruneResult{RanAt: now}
-	var err error
-
-	// Each DELETE runs as an independent statement — no transactional consistency
-	// needed between tables, and this avoids holding a long transaction that
-	// blocks concurrent readers across 12 hot tables.
-	if result.LogsDeleted, err = s.pruneExecDirect(
-		`DELETE FROM log_events WHERE timestamp < $1`,
-		now.Add(-settings.LogsWindow)); err != nil {
-		return retention.PruneResult{}, err
+	var failures []error
+	// Each table is pruned on its own, so a failure on one table no longer
+	// stops the others. Every batch is an independent statement; there is no
+	// long transaction blocking concurrent readers.
+	prune := func(table string, count *int64, query string, cutoff time.Time) {
+		deleted, err := s.pruneInBatches(query, cutoff)
+		*count += deleted
+		if err != nil {
+			failures = append(failures, fmt.Errorf("prune %s: %w", table, err))
+		}
 	}
-	if result.MetricsDeleted, err = s.pruneExecDirect(
-		`DELETE FROM metric_samples WHERE collected_at < $1`,
-		now.Add(-settings.MetricsWindow)); err != nil {
-		return retention.PruneResult{}, err
-	}
-	hubMetricsDeleted, err := s.pruneExecDirect(
-		`DELETE FROM hub_metric_samples WHERE collected_at < $1`,
+	prune("log_events", &result.LogsDeleted,
+		`DELETE FROM log_events WHERE id IN (SELECT id FROM log_events WHERE timestamp < $1 LIMIT $2)`,
+		now.Add(-settings.LogsWindow))
+	prune("metric_samples", &result.MetricsDeleted,
+		`DELETE FROM metric_samples WHERE id IN (SELECT id FROM metric_samples WHERE collected_at < $1 LIMIT $2)`,
 		now.Add(-settings.MetricsWindow))
-	if err != nil {
-		return retention.PruneResult{}, err
-	}
-	result.MetricsDeleted += hubMetricsDeleted
-	if result.AuditDeleted, err = s.pruneExecDirect(
-		`DELETE FROM audit_events WHERE timestamp < $1`,
-		now.Add(-settings.AuditWindow)); err != nil {
-		return retention.PruneResult{}, err
-	}
-	if result.TerminalCommandsDeleted, err = s.pruneExecDirect(
-		`DELETE FROM terminal_commands WHERE updated_at < $1`,
-		now.Add(-settings.TerminalWindow)); err != nil {
-		return retention.PruneResult{}, err
-	}
-	if result.TerminalSessionsDeleted, err = s.pruneExecDirect(
-		`DELETE FROM terminal_sessions
-		 WHERE last_action_at < $1
-		   AND NOT EXISTS (SELECT 1 FROM terminal_commands WHERE terminal_commands.session_id = terminal_sessions.id)`,
-		now.Add(-settings.TerminalWindow)); err != nil {
-		return retention.PruneResult{}, err
-	}
-	if result.ActionRunsDeleted, err = s.pruneExecDirect(
-		`DELETE FROM action_runs WHERE updated_at < $1`,
-		now.Add(-settings.ActionRunsWindow)); err != nil {
-		return retention.PruneResult{}, err
-	}
-	if result.UpdateRunsDeleted, err = s.pruneExecDirect(
-		`DELETE FROM update_runs WHERE updated_at < $1`,
-		now.Add(-settings.UpdateRunsWindow)); err != nil {
-		return retention.PruneResult{}, err
-	}
-	if result.AlertInstancesDeleted, err = s.pruneExecDirect(
-		`DELETE FROM alert_instances WHERE status = 'resolved' AND resolved_at < $1`,
-		now.Add(-settings.AlertInstancesWindow)); err != nil {
-		return retention.PruneResult{}, err
-	}
-	if result.AlertEvaluationsDeleted, err = s.pruneExecDirect(
-		`DELETE FROM alert_evaluations WHERE evaluated_at < $1`,
-		now.Add(-settings.AlertEvaluationsWindow)); err != nil {
-		return retention.PruneResult{}, err
-	}
-	if result.NotificationHistoryDeleted, err = s.pruneExecDirect(
-		`DELETE FROM notification_history WHERE created_at < $1`,
-		now.Add(-settings.NotificationHistoryWindow)); err != nil {
-		return retention.PruneResult{}, err
-	}
+	prune("hub_metric_samples", &result.MetricsDeleted,
+		`DELETE FROM hub_metric_samples WHERE id IN (SELECT id FROM hub_metric_samples WHERE collected_at < $1 LIMIT $2)`,
+		now.Add(-settings.MetricsWindow))
+	prune("audit_events", &result.AuditDeleted,
+		`DELETE FROM audit_events WHERE id IN (SELECT id FROM audit_events WHERE timestamp < $1 LIMIT $2)`,
+		now.Add(-settings.AuditWindow))
+	prune("terminal_commands", &result.TerminalCommandsDeleted,
+		`DELETE FROM terminal_commands WHERE id IN (SELECT id FROM terminal_commands WHERE updated_at < $1 LIMIT $2)`,
+		now.Add(-settings.TerminalWindow))
+	prune("terminal_sessions", &result.TerminalSessionsDeleted,
+		`DELETE FROM terminal_sessions WHERE id IN (
+		   SELECT id FROM terminal_sessions
+		   WHERE last_action_at < $1
+		     AND NOT EXISTS (SELECT 1 FROM terminal_commands WHERE terminal_commands.session_id = terminal_sessions.id)
+		   LIMIT $2)`,
+		now.Add(-settings.TerminalWindow))
+	prune("action_runs", &result.ActionRunsDeleted,
+		`DELETE FROM action_runs WHERE id IN (SELECT id FROM action_runs WHERE updated_at < $1 LIMIT $2)`,
+		now.Add(-settings.ActionRunsWindow))
+	prune("update_runs", &result.UpdateRunsDeleted,
+		`DELETE FROM update_runs WHERE id IN (SELECT id FROM update_runs WHERE updated_at < $1 LIMIT $2)`,
+		now.Add(-settings.UpdateRunsWindow))
+	prune("alert_instances", &result.AlertInstancesDeleted,
+		`DELETE FROM alert_instances WHERE id IN (SELECT id FROM alert_instances WHERE status = 'resolved' AND resolved_at < $1 LIMIT $2)`,
+		now.Add(-settings.AlertInstancesWindow))
+	prune("alert_evaluations", &result.AlertEvaluationsDeleted,
+		`DELETE FROM alert_evaluations WHERE id IN (SELECT id FROM alert_evaluations WHERE evaluated_at < $1 LIMIT $2)`,
+		now.Add(-settings.AlertEvaluationsWindow))
+	prune("notification_history", &result.NotificationHistoryDeleted,
+		`DELETE FROM notification_history WHERE id IN (SELECT id FROM notification_history WHERE created_at < $1 LIMIT $2)`,
+		now.Add(-settings.NotificationHistoryWindow))
 
-	// Alert silences need a transaction for schema introspection and deletion.
-	tx, err := s.pool.Begin(context.Background())
-	if err != nil {
-		return retention.PruneResult{}, err
-	}
-	defer tx.Rollback(context.Background())
-
-	if result.AlertSilencesDeleted, err = pruneExpiredAlertSilences(tx, now.Add(-settings.AlertSilencesWindow)); err != nil {
-		return retention.PruneResult{}, err
-	}
-	if err := tx.Commit(context.Background()); err != nil {
-		return retention.PruneResult{}, err
+	if deleted, err := s.pruneAlertSilences(now.Add(-settings.AlertSilencesWindow)); err != nil {
+		failures = append(failures, fmt.Errorf("prune alert_silences: %w", err))
+	} else {
+		result.AlertSilencesDeleted = deleted
 	}
 	if result.LogsDeleted > 0 {
 		s.invalidateLogEventsWatermarkCache()
 	}
-	result.RecordingsDeleted, err = s.pruneExpiredRecordings(now.Add(-settings.RecordingsWindow))
-	return result, err
+	recordingsDeleted, err := s.pruneExpiredRecordings(now.Add(-settings.RecordingsWindow))
+	result.RecordingsDeleted = recordingsDeleted
+	if err != nil {
+		failures = append(failures, fmt.Errorf("prune recordings: %w", err))
+	}
+	return result, errors.Join(failures...)
+}
+
+// pruneAlertSilences needs a transaction for schema introspection and deletion.
+func (s *PostgresStore) pruneAlertSilences(cutoff time.Time) (int64, error) {
+	tx, err := s.pool.Begin(context.Background())
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	deleted, err := pruneExpiredAlertSilences(tx, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(context.Background()); err != nil {
+		return 0, err
+	}
+	return deleted, nil
 }
 
 func pruneExpiredAlertSilences(tx pgx.Tx, cutoff time.Time) (int64, error) {

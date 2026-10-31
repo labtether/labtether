@@ -84,12 +84,32 @@ install -d -m 0755 /etc/labtether
 install -m 0644 "${TMP_CA}" "${CA_DEST}"
 echo "Saved CA certificate to ${CA_DEST}"
 
-if command -v update-ca-certificates >/dev/null 2>&1; then
-  install -m 0644 "${TMP_CA}" /usr/local/share/ca-certificates/labtether-ca.crt
-  update-ca-certificates
-elif command -v update-ca-trust >/dev/null 2>&1; then
-  install -m 0644 "${TMP_CA}" /etc/pki/ca-trust/source/anchors/labtether-ca.crt
-  update-ca-trust extract
+# The agent and installer trust ${CA_DEST} directly, so the hub CA is not
+# added to the system trust store. Remove a copy an older bootstrap added,
+# including one from before a hub CA reset: our file name holding a LabTether
+# CA certificate. Anything else at that path is kept.
+is_labtether_ca() {
+  openssl x509 -in "$1" -noout -subject 2>/dev/null | grep -q "LabTether CA" &&
+    openssl x509 -in "$1" -noout -text 2>/dev/null | grep -q "CA:TRUE"
+}
+SYSTEM_CA_REMOVED=0
+for anchor in /usr/local/share/ca-certificates/labtether-ca.crt /etc/pki/ca-trust/source/anchors/labtether-ca.crt; do
+  [[ -f "${anchor}" && ! -L "${anchor}" ]] || continue
+  if cmp -s "${anchor}" "${CA_DEST}" || is_labtether_ca "${anchor}"; then
+    rm -f "${anchor}"
+    SYSTEM_CA_REMOVED=1
+  else
+    echo "Kept ${anchor}: it is not a LabTether CA certificate." >&2
+  fi
+done
+if [[ "${SYSTEM_CA_REMOVED}" -eq 1 ]]; then
+  if command -v update-ca-certificates >/dev/null 2>&1; then
+    update-ca-certificates >/dev/null
+  fi
+  if command -v update-ca-trust >/dev/null 2>&1; then
+    update-ca-trust extract
+  fi
+  echo "Removed the hub CA from the system trust store"
 fi
 
 echo "Downloading trusted installer..."

@@ -23,7 +23,6 @@ func postgresAdminResetTables() []string {
 		"log_events", "saved_log_views",
 		"metric_samples", "hub_metric_samples", "asset_heartbeats", "asset_terminal_configs", "asset_desktop_configs",
 		"credential_profiles",
-		"audit_events",
 		"job_queue",
 		"enrollment_tokens", "agent_tokens", "agent_presence",
 		"web_services_manual", "web_service_overrides", "web_service_alt_urls",
@@ -47,6 +46,8 @@ func (s *PostgresStore) ResetAllData() (AdminResetResult, error) {
 	// Truncate all data tables in one statement. CASCADE handles FK dependencies.
 	// Preserved tables: users, sessions, schema_migrations, retention_settings, runtime_settings
 	// Also preserved (user preferences): terminal_preferences, terminal_snippets, push_devices
+	// audit_events is preserved too: a reset must not erase who did what. The
+	// retention floor prunes old audit rows instead.
 	tables := postgresAdminResetTables()
 	stmt := "TRUNCATE " + strings.Join(tables, ", ") + " CASCADE"
 

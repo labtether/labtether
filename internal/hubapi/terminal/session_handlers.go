@@ -369,20 +369,20 @@ func (d *Deps) createCommand(w http.ResponseWriter, r *http.Request, session ter
 	}
 
 	if d.JobQueue == nil {
-		_ = d.TerminalStore.UpdateCommandResult(session.ID, cmd.ID, "failed", "queue unavailable")
+		_ = d.TerminalStore.UpdateCommandResult(session.ID, cmd.ID, "failed", "queue unavailable", nil)
 		servicehttp.WriteError(w, http.StatusServiceUnavailable, "command queue unavailable")
 		return
 	}
 
 	payload, err := marshalTerminalCommandJob(job)
 	if err != nil {
-		_ = d.TerminalStore.UpdateCommandResult(session.ID, cmd.ID, "failed", "failed to marshal command job")
+		_ = d.TerminalStore.UpdateCommandResult(session.ID, cmd.ID, "failed", "failed to marshal command job", nil)
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to serialize command")
 		return
 	}
 
 	if _, err := d.JobQueue.Enqueue(r.Context(), jobqueue.KindTerminalCommand, payload); err != nil {
-		_ = d.TerminalStore.UpdateCommandResult(session.ID, cmd.ID, "failed", "failed to enqueue command")
+		_ = d.TerminalStore.UpdateCommandResult(session.ID, cmd.ID, "failed", "failed to enqueue command", nil)
 		servicehttp.WriteError(w, http.StatusBadGateway, "failed to enqueue command")
 		return
 	}

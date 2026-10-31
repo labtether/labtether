@@ -15,18 +15,23 @@ services:
     environment:
       LABTETHER_DEMO_MODE: "true"
       LABTETHER_DEMO_CONFIRM: "yes-this-is-a-demo-instance"
-      LABTETHER_TLS_MODE: "off"
+      LABTETHER_TLS_MODE: "disabled"
       # Unset admin credentials so only the demo viewer user is created.
       LABTETHER_ADMIN_USERNAME: ""
       LABTETHER_ADMIN_PASSWORD: ""
-    ports:
+    # Replace the loopback binding instead of adding a second one on 8080.
+    ports: !override
       - "0.0.0.0:8080:8080"
 
   web-console:
     environment:
       NEXT_PUBLIC_DEMO_MODE: "true"
       LABTETHER_DEMO_MODE: "true"
-    ports:
+
+  # web-console sits only on the internal console network. The no-secret
+  # ingress publishes the console instead.
+  console-ingress:
+    ports: !override
       - "0.0.0.0:3000:3000"
 
   demo-seed:
@@ -47,6 +52,10 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-labtether}
       POSTGRES_USER: ${POSTGRES_USER:-labtether}
+    # PostgreSQL is reachable only on the internal data network.
+    networks:
+      - data-plane
     volumes:
       - labtether-bootstrap:/bootstrap:ro
-      - ./scripts/demo-seed.sql:/seed/demo-seed.sql:ro
+      # Paths resolve from the first Compose file's folder, deploy/compose.
+      - ../../scripts/demo-seed.sql:/seed/demo-seed.sql:ro

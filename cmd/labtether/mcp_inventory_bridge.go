@@ -8,6 +8,7 @@ import (
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/connectorsdk"
 	"github.com/labtether/labtether/internal/hubapi/shared"
+	"github.com/labtether/labtether/internal/hubapi/webhookspkg"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/schedules"
 	"log"
@@ -273,7 +274,7 @@ func (s *apiServer) mcpListWebhooks() func(ctx context.Context) ([]map[string]an
 		}
 		out := make([]map[string]any, 0, len(whs))
 		for _, wh := range whs {
-			b, err := json.Marshal(wh)
+			b, err := json.Marshal(webhookspkg.WebhookForReader(ctx, wh))
 			if err != nil {
 				log.Printf("mcp: mcpListWebhooks: marshal skip: %v", err)
 				continue
