@@ -2,11 +2,10 @@
 
 All notable changes to LabTether are documented in this file.
 
-This changelog starts at the public-release preparation baseline on 2026-03-09.
-The project does not yet publish a long tagged release history, so this file begins
-with the current release contract and will grow forward from here.
+This changelog starts on 2026-03-09, when work on the first public release
+began. Hub v1.2.0 was the first public release.
 
-## [1.7.1] - unreleased
+## [1.7.1] - 2026-10-31
 
 User-visible changes since v1.4.0. Hub v1.7.0 was never released, so v1.7.1 is
 the upgrade from v1.4.0. Hub and agents use wire protocol v1.7.1.
@@ -307,31 +306,61 @@ configuration step.
 - Agent file downloads have no `Content-Length`. A download that fails after
   it started ends with a network error instead of a JSON error.
 
-## [Unreleased]
+## [1.4.0] - 2026-04-17
+
+No Hub code changes since 1.3.0. This build bundles `labtether-agent` v1.4.0.
+
+## [1.3.0] - 2026-04-17
 
 ### Security
-- Admin users can no longer reset the Owner account's password via `PATCH /auth/users/{id}`; the handler rejects password-change requests targeting the owner unless the caller is the owner themselves.
-- `POST /auth/me/password` (self-service password change, current-password verified) and `DELETE /auth/account` (self-delete, owner-exempt) are now registered on the HTTP mux; the handlers existed but the routes were not wired, causing the web console's account settings to 404.
-- Agent release manifest now plumbs an optional per-binary `signature` field end-to-end. `agent-manifest.json` and `GET /api/v1/agent/releases/latest` both carry the signature when the upstream agent release includes one, so agents configured with `LABTETHER_AUTO_UPDATE_TRUSTED_PUBLIC_KEY` can verify updates without contacting GitHub directly.
+
+- An admin can no longer reset the owner's password with
+  `PATCH /auth/users/{id}`. Only the owner can change it.
+- `agent-manifest.json` and `GET /api/v1/agent/releases/latest` include each
+  agent binary's signature when the agent release has one. Agents with
+  `LABTETHER_AUTO_UPDATE_TRUSTED_PUBLIC_KEY` set can check an update without
+  contacting GitHub.
+
+### Fixed
+
+- Changing your own password (`POST /auth/me/password`) and deleting your own
+  account (`DELETE /auth/account`, not available to the owner) work again. The
+  routes were missing, so account settings in the console failed.
+
+## [1.2.2] - 2026-04-16
+
+### Fixed
+
+- Signing in no longer redirects to a doubled language path such as `/en/en`,
+  which showed a missing page.
+- Demo: the sign-in page shows the demo credentials instead of a broken
+  automatic redirect, and signing in works in the read-only demo.
+- Demo: the demo compose file seeds 18 nodes, 7 days of metrics, incidents,
+  logs and a topology layout.
+
+## [1.2.1] - 2026-04-16
+
+No Hub code changes. The release build gets more time for the multi-arch image.
+
+## [1.2.0] - 2026-04-16
+
+First public release.
 
 ### Added
 
-- Repository license published as Apache-2.0.
-- Role-based local auth with `owner`, `admin`, `operator`, and `viewer` roles.
-- Optional OIDC SSO with role mapping and auto-provisioning.
-- Current supported connector surface for Proxmox VE, Proxmox Backup Server, TrueNAS, Docker, Portainer, and Home Assistant.
-- Native companion surfaces for the iOS console app and macOS menu bar agent.
-- Operator wiki coverage for install, upgrade, workflows, troubleshooting, release readiness, and physical-device validation.
-- Public release-support docs: `KNOWN_ISSUES.md`, `SUPPORT.md`, `PRIVACY.md`, and the repo security-reporting policy.
-
-### Changed
-
-- Canonical docs now define a single public release contract across the root README, product docs, PRD, security docs, connector docs, and release-readiness checklist.
-- Release readiness now explicitly requires public-facing release artifacts such as changelog/release notes, known issues, support guidance, and a security reporting path.
-- Restored credential-profile compatibility for Proxmox username/password onboarding so the console can save `proxmox_password` credentials again.
+- Apache-2.0 license.
+- Local sign-in with `owner`, `admin`, `operator` and `viewer` roles.
+- Optional single sign-on (OIDC) with role mapping and automatic account
+  creation.
+- Connectors for Proxmox VE, Proxmox Backup Server, TrueNAS, Docker, Portainer
+  and Home Assistant.
+- Hub support for the macOS menu bar app.
+- Docs for install, upgrade, troubleshooting and day-to-day use.
+- `KNOWN_ISSUES.md`, `SUPPORT.md`, `PRIVACY.md`, and `SECURITY.md` for
+  reporting security issues privately.
 
 ### Notes
 
-- The Home Assistant custom integration is in current release scope.
-- The Home Assistant add-on runtime remains experimental.
-- UniFi and TP-Link connectors remain planned roadmap work rather than current public-release scope.
+- The Home Assistant integration is supported. The Home Assistant add-on was
+  experimental in this release.
+- UniFi and TP-Link connectors are planned and not part of this release.
