@@ -50,8 +50,9 @@ for (const viewport of VIEWPORTS) {
         `route ${route.path} overflow offenders: ${JSON.stringify(overflowOffenders)}`,
       ).toBeLessThanOrEqual(4);
 
-      const mobileToggle = page.getByRole("button", { name: "Toggle navigation", exact: true });
-      if (viewport.width < 768) {
+      // The sidebar folds into a drawer at 900 px and under; the top bar's menu button opens it.
+      const mobileToggle = page.getByRole("button", { name: "Open navigation", exact: true });
+      if (viewport.width <= 900) {
         await expect(mobileToggle).toBeVisible();
       } else {
         await expect(mobileToggle).toBeHidden();

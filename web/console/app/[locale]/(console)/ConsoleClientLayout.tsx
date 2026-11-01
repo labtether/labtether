@@ -20,33 +20,12 @@ import { createSnippetsProvider } from "../../components/palette/providers/snipp
 import { DemoBanner } from "../../components/DemoBanner";
 import { Sidebar } from "../../components/Sidebar";
 import { CommandPalette } from "../../components/CommandPalette";
-import { MobileNavToggle, MobileNavOverlay, useMobileNav } from "../../components/MobileNav";
+import { MobileNavOverlay, useMobileNav } from "../../components/MobileNav";
+import { TopBar } from "../../components/shell/TopBar";
+import { SectionTabs } from "../../components/shell/SectionTabs";
 import { usePresenceToasts } from "../../hooks/usePresenceToasts";
 import { hasWriteRole } from "../../lib/roles";
-import { useCallback, useEffect, useMemo, useRef, type CSSProperties, type PointerEvent } from "react";
-
-const GLOW_ORB_1_STYLE: CSSProperties = {
-  background: 'radial-gradient(circle, rgba(var(--accent-rgb),0.06) 0%, transparent 70%)',
-};
-const GLOW_ORB_2_STYLE: CSSProperties = {
-  background: 'radial-gradient(circle, rgba(var(--accent-rgb),0.04) 0%, transparent 70%)',
-};
-const DOT_GRID_STYLE: CSSProperties = {
-  backgroundImage: 'radial-gradient(circle, rgba(var(--accent-rgb),0.08) 1px, transparent 1px)',
-  backgroundSize: '24px 24px',
-  maskImage: 'radial-gradient(ellipse 60% 50% at 50% 50%, black 30%, transparent 100%)',
-  WebkitMaskImage: 'radial-gradient(ellipse 60% 50% at 50% 50%, black 30%, transparent 100%)',
-};
-const CURSOR_GLOW_STYLE: CSSProperties = {
-  left: 0,
-  top: 0,
-  width: 300,
-  height: 300,
-  borderRadius: '50%',
-  background: 'radial-gradient(circle, rgba(var(--accent-rgb),0.04) 0%, transparent 70%)',
-  transform: 'translate3d(-9999px, -9999px, 0)',
-  transition: 'transform 120ms ease-out',
-};
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 function BuiltInPaletteProviders() {
   const router = useRouter();
@@ -114,59 +93,16 @@ function BuiltInPaletteProviders() {
 function ConsoleShell({ children }: { children: React.ReactNode }) {
   const { open, toggle, close } = useMobileNav();
   usePresenceToasts();
-  const cursorGlowRef = useRef<HTMLDivElement | null>(null);
-  const cursorFrameRef = useRef<number | null>(null);
-  const pendingCursorRef = useRef<{ x: number; y: number } | null>(null);
 
-  const flushCursorGlow = useCallback(() => {
-    cursorFrameRef.current = null;
-    const glow = cursorGlowRef.current;
-    const cursor = pendingCursorRef.current;
-    if (!glow || !cursor) {
-      return;
-    }
-    glow.style.transform = `translate3d(${cursor.x - 150}px, ${cursor.y - 150}px, 0)`;
-  }, []);
-
-  const handlePointerMove = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    pendingCursorRef.current = { x: event.clientX, y: event.clientY };
-    if (cursorFrameRef.current != null) {
-      return;
-    }
-    cursorFrameRef.current = window.requestAnimationFrame(flushCursorGlow);
-  }, [flushCursorGlow]);
-
-  useEffect(() => {
-    return () => {
-      if (cursorFrameRef.current != null) {
-        window.cancelAnimationFrame(cursorFrameRef.current);
-      }
-    };
-  }, []);
-
+  // 2.0 shell: the floating sidebar, then the top bar and the page column on the plain canvas.
   return (
-    <div className="flex min-h-screen bg-[var(--bg)] text-[var(--text)] relative" onPointerMove={handlePointerMove}>
-      {/* Subtle noise texture for surface depth */}
-      <div className="noise-texture fixed inset-0 pointer-events-none z-0" aria-hidden="true" />
+    <div className="lt-shell">
       <Sidebar />
-      <MobileNavToggle open={open} onToggle={toggle} />
       <MobileNavOverlay open={open} onClose={close} />
-      {/* Ambient glow layer */}
-      <div className="fixed inset-0 pointer-events-none z-0" aria-hidden="true">
-        <div className="absolute -top-[20%] -left-[10%] w-[60%] h-[60%] rounded-full" style={GLOW_ORB_1_STYLE} />
-        <div className="absolute -bottom-[20%] -right-[10%] w-[50%] h-[50%] rounded-full" style={GLOW_ORB_2_STYLE} />
-      </div>
-      <main className="relative z-10 w-full md:ml-52 md:w-[calc(100%-13rem)] p-6 lg:p-8">
-        {/* Dot grid */}
-        <div className="fixed inset-0 pointer-events-none z-0" aria-hidden="true" style={DOT_GRID_STYLE} />
-        {/* Cursor glow */}
-        <div
-          ref={cursorGlowRef}
-          className="fixed pointer-events-none z-0 will-change-transform"
-          aria-hidden="true"
-          style={CURSOR_GLOW_STYLE}
-        />
-        <div className="mx-auto w-full max-w-5xl">
+      <main className="lt-content">
+        <TopBar navOpen={open} onToggleNav={toggle} />
+        <div className="lt-page">
+          <SectionTabs />
           {children}
         </div>
       </main>

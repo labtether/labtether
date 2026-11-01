@@ -7,21 +7,22 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   children: ReactNode;
 };
 
+// 2.0 controls: a raised surface with a hairline edge; rose only for the page's main button; no glow.
 const variantStyles: Record<string, string> = {
   primary:
-    "bg-[var(--accent)] text-[var(--accent-contrast)] shadow-[0_0_20px_var(--accent-glow),inset_0_1px_0_rgba(255,255,255,0.15)] hover:shadow-[0_0_30px_var(--accent-glow),0_0_60px_var(--accent-glow),inset_0_1px_0_rgba(255,255,255,0.15)]",
+    "bg-[var(--accent)] text-[var(--accent-contrast)] hover:bg-[var(--accent-hover)]",
   secondary:
-    "bg-transparent border border-[var(--control-border)] text-[var(--control-fg)] hover:bg-[var(--control-bg-hover)] hover:border-[var(--text-secondary)]",
+    "bg-[var(--ctl-bg)] text-[var(--text)] shadow-[var(--ctl-elev)] hover:shadow-[var(--ctl-elev-hover)]",
   ghost:
-    "bg-transparent text-[var(--control-fg)] hover:bg-[var(--hover)]",
+    "bg-transparent text-[var(--text-2)] hover:bg-[var(--hover)] hover:text-[var(--text)]",
   danger:
-    "bg-transparent border border-[var(--bad)]/30 text-[var(--bad)] hover:bg-[var(--bad-glow)] hover:shadow-[0_0_12px_var(--bad-glow)]",
+    "bg-[var(--ctl-bg)] text-[var(--bad-text)] shadow-[var(--ctl-elev)] hover:bg-[var(--bad-glow)]",
 };
 
 const sizeStyles: Record<string, string> = {
-  sm: "px-2.5 py-1 text-xs",
-  md: "px-3.5 py-1.5 text-sm",
-  lg: "px-5 py-2 text-sm",
+  sm: "h-[var(--ctl-sm)] px-2.5 text-[13px]",
+  md: "h-[var(--ctl)] px-3 text-[13px]",
+  lg: "h-9 px-4 text-sm",
 };
 
 export function Button({
@@ -35,7 +36,7 @@ export function Button({
 }: ButtonProps) {
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-[color,background-color,border-color,box-shadow,opacity] duration-[var(--dur-fast)] disabled:opacity-40 disabled:pointer-events-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--control-focus-ring)] ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-[var(--r-3)] whitespace-nowrap font-medium transition-[color,background-color,border-color,box-shadow,opacity] duration-[var(--dur-fast)] disabled:opacity-40 disabled:pointer-events-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--control-focus-ring)] ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
       disabled={disabled || loading}
       {...rest}
     >
