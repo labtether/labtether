@@ -21,7 +21,6 @@
 /* Menus (on the shell's .lt-menu) */
 .tm-menu { max-height: min(70vh, 440px); overflow-y: auto; }
 .tm-menu-h { padding: 6px 10px 4px; font-size: var(--fs-micro); line-height: var(--lh-micro); font-weight: 500; color: var(--text-3); }
-.lt-menu-item .tm-sub-chev { margin-left: auto; }
 .lt-menu-item .tm-tick { display: flex; margin-left: 8px; }
 .lt-menu-item[data-disabled] { opacity: 0.5; cursor: default; }
 .tm-mi { width: 100%; text-align: left; color: var(--text); }

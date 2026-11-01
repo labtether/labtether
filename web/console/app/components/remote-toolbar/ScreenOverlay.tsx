@@ -65,7 +65,8 @@ export function ScreenOverlay({
   }
 
   if (connectionState === "error" || connectionState === "idle") {
-    const failed = connectionState === "error";
+    // A session that ended for a reason (a refused login, a closed stream) is idle with an error: say why.
+    const failed = connectionState === "error" || !!error;
     const word = failed ? error || t("failed") : t(start === "connect" ? "notConnected" : "disconnected");
     return (
       <div className="rv-over" role={failed ? "alert" : undefined}>
