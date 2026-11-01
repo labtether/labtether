@@ -7,7 +7,7 @@ async function responseError(response: Response, fallback: string): Promise<Erro
   const payload = await response.json().catch(() => null) as { error?: unknown } | null;
   const message = typeof payload?.error === "string" && payload.error.trim()
     ? payload.error.trim()
-    : `${fallback} (HTTP ${response.status})`;
+    : fallback;
   return new Error(message);
 }
 
@@ -183,8 +183,7 @@ export function useAlerts() {
         signal: controller.signal,
       });
       if (!res.ok) {
-        const body = await res.text();
-        throw new Error(body || `HTTP ${res.status}`);
+        throw await responseError(res, "failed to create silence");
       }
       await fetchAll();
     } catch (err) {
@@ -209,8 +208,7 @@ export function useAlerts() {
         signal: controller.signal,
       });
       if (!res.ok) {
-        const body = await res.text();
-        throw new Error(body || `HTTP ${res.status}`);
+        throw await responseError(res, "failed to end silence");
       }
       await fetchAll();
     } catch (err) {

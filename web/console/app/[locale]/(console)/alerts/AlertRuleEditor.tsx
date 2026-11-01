@@ -1,279 +1,153 @@
 "use client";
 
-import { type Dispatch, type SetStateAction, type FormEvent } from "react";
+import { useTranslations } from "next-intl";
+import { useMemo, useRef, useState, type FormEvent } from "react";
 import { Button } from "../../../components/ui/Button";
-import { Input, Select } from "../../../components/ui/Input";
-import type { AlertRuleTemplate, Asset, Group } from "../../../console/models";
-import type { RuleKind, RuleSeverity, TargetType } from "./alertsPageTypes";
-import { ruleKindOptions, ruleSeverityOptions, targetTypeOptions } from "./alertsPageTypes";
-import { type RuleFormState } from "./alertRuleFormState";
+import type { AlertRule, AlertRuleTemplate, Asset, Group } from "../../../console/models";
+import { AlertRuleKindFields } from "./AlertRuleKindFields";
+import { LabelRows } from "./LabelRows";
+import { Field, invalid, numberValue, shownNumber } from "./ruleFields";
+import { formStateFromTemplate, ruleFormErrors, rulePayload, type RuleFormErrors, type RuleFormState } from "./alertRuleFormState";
+import { RULE_KINDS, SEVERITIES, TARGET_TYPES, type RuleKind, type RuleSeverity, type TargetType } from "./alertsPageTypes";
 
-export type AlertRuleEditorProps = {
-  ruleForm: RuleFormState;
-  setRuleForm: Dispatch<SetStateAction<RuleFormState>>;
-  setField: <K extends keyof RuleFormState>(field: K, value: RuleFormState[K]) => void;
-  selectedPreset: AlertRuleTemplate | null;
-  targetOptions: Asset[] | Group[];
+type Props = {
+  initial: RuleFormState;
+  templates: AlertRuleTemplate[];
+  rules: AlertRule[];
   assets: Asset[];
   groups: Group[];
-  groupLabelByID: Map<string, string>;
-  ruleError: string | null;
-  ruleSubmitting: boolean;
-  handleCreateRule: (event: FormEvent) => Promise<void>;
-  resetRuleForm: () => void;
-  setShowRuleForm: (show: boolean) => void;
+  onCancel: () => void;
+  onSubmit: (payload: Record<string, unknown>, name: string) => Promise<void>;
 };
 
-export function AlertRuleEditor({
-  ruleForm,
-  setRuleForm,
-  setField,
-  selectedPreset,
-  targetOptions,
-  assets,
-  groups,
-  groupLabelByID,
-  ruleError,
-  ruleSubmitting,
-  handleCreateRule,
-  resetRuleForm,
-  setShowRuleForm,
-}: AlertRuleEditorProps) {
+/**
+ * The inline editor for a new rule (alerts-rule-form in the mockup): where to start, name, kind, severity, what it
+ * applies to, the kind's own fields, timing and a description. Errors show after the first Add.
+ */
+export function AlertRuleEditor({ initial, templates, rules, assets, groups, onCancel, onSubmit }: Props) {
+  const t = useTranslations("alerts.editor");
+  const tKind = useTranslations("alerts.kinds");
+  const tSev = useTranslations("alerts.severity");
+  const [form, setForm] = useState<RuleFormState>(initial);
+  const [presetId, setPresetId] = useState("");
+  const [tried, setTried] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  const sortedTemplates = useMemo(() => [...templates].sort((a, b) =>
+    Number(b.metadata?.category === "starter") - Number(a.metadata?.category === "starter") || a.name.localeCompare(b.name)), [templates]);
+  const preset = sortedTemplates.find((tpl) => tpl.id === presetId) ?? null;
+  const ruleIds = new Set(rules.map((r) => r.id));
+  const clean: RuleFormState = { ...form, subRuleIds: form.subRuleIds.filter((id) => ruleIds.has(id)) };
+  const errors: RuleFormErrors = tried ? ruleFormErrors(clean, rules.map((r) => r.name)) : {};
+  const msg = (key?: string) => (key ? t(`errors.${key}`) : undefined);
+  const set = <K extends keyof RuleFormState>(key: K, value: RuleFormState[K]) => setForm((f) => ({ ...f, [key]: value }));
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setFailure(null);
+    if (Object.keys(ruleFormErrors(clean, rules.map((r) => r.name))).length > 0) {
+      setTried(true);
+      requestAnimationFrame(() => formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus());
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await onSubmit(rulePayload(clean), clean.name.trim());
+    } catch (err) {
+      setFailure(err instanceof Error && err.message ? err.message : t("errors.save"));
+      setSubmitting(false);
+    }
+  }
+
+  const timing: Array<[keyof RuleFormState & ("windowSeconds" | "evaluationIntervalSeconds" | "cooldownSeconds" | "reopenAfterSeconds"), keyof RuleFormErrors, string]> = [
+    ["windowSeconds", "window", "window"],
+    ["evaluationIntervalSeconds", "interval", "interval"],
+    ["cooldownSeconds", "cooldown", "cooldown"],
+    ["reopenAfterSeconds", "reopen", "reopen"],
+  ];
+
   return (
-    <form className="space-y-4 border-t border-[var(--line)] py-4" onSubmit={(event) => void handleCreateRule(event)}>
-      {selectedPreset ? (
-        <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-xs text-[var(--muted)]">
-          Building from template: <span className="font-medium text-[var(--text)]">{selectedPreset.name}</span>
-        </div>
-      ) : null}
+    <form ref={formRef} className="al-well al-ed" aria-label={t("title")} onSubmit={(e) => void submit(e)} noValidate>
+      <div className="al-grid">
+        {sortedTemplates.length > 0 ? (
+          <Field id="rf-from" label={t("from")} wide>
+            <select
+              id="rf-from"
+              className="al-in"
+              value={presetId}
+              onChange={(e) => {
+                const next = sortedTemplates.find((tpl) => tpl.id === e.target.value);
+                setPresetId(e.target.value);
+                if (next) setForm(formStateFromTemplate(next));
+              }}
+            >
+              <option value="">{t("blank")}</option>
+              {sortedTemplates.map((tpl) => <option key={tpl.id} value={tpl.id}>{tpl.name}</option>)}
+            </select>
+            {preset?.description ? <p className="al-hint">{preset.description}</p> : null}
+          </Field>
+        ) : null}
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-          Name
-          <Input
-            value={ruleForm.name}
-            onChange={(event) => setField("name", event.target.value)}
-            placeholder="e.g. High CPU Alert"
-            required
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-          Description
-          <Input
-            value={ruleForm.description}
-            onChange={(event) => setField("description", event.target.value)}
-            placeholder="Optional operator context"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-          Kind
-          <Select value={ruleForm.kind} onChange={(event) => setField("kind", event.target.value as RuleKind)}>
-            {ruleKindOptions.map((option) => (
-              <option key={option.id} value={option.id}>{option.label}</option>
-            ))}
-          </Select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-          Severity
-          <Select value={ruleForm.severity} onChange={(event) => setField("severity", event.target.value as RuleSeverity)}>
-            {ruleSeverityOptions.map((option) => (
-              <option key={option.id} value={option.id}>{option.label}</option>
-            ))}
-          </Select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-          Target Type
-          <Select value={ruleForm.targetType} onChange={(event) => {
-            const nextType = event.target.value as TargetType;
-            setRuleForm((current) => ({
-              ...current,
-              targetType: nextType,
-              targetId: "",
-            }));
-          }}>
-            {targetTypeOptions.map((option) => (
-              <option key={option.id} value={option.id}>{option.label}</option>
-            ))}
-          </Select>
-        </label>
-        {ruleForm.targetType !== "global" ? (
-          <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-            {ruleForm.targetType === "asset" ? "Target Asset" : "Target Group"}
-            {targetOptions.length > 0 ? (
-              <Select value={ruleForm.targetId} onChange={(event) => setField("targetId", event.target.value)}>
-                <option value="">{ruleForm.targetType === "asset" ? "Select an asset" : "Select a group"}</option>
-                {ruleForm.targetType === "asset"
-                  ? assets.map((asset) => (
-                    <option key={asset.id} value={asset.id}>
-                      {asset.name}{asset.group_id ? ` - ${groupLabelByID.get(asset.group_id) ?? asset.group_id}` : ""}
-                    </option>
-                  ))
-                  : groups.map((group) => (
-                    <option key={group.id} value={group.id}>
-                      {group.name}
-                    </option>
-                  ))}
-              </Select>
+        <Field id="rf-name" label={t("name")} error={msg(errors.name)}>
+          <input id="rf-name" className="al-in" value={form.name} onChange={(e) => set("name", e.target.value)} placeholder={t("namePlaceholder")} autoComplete="off" autoFocus {...invalid("rf-name", errors.name)} />
+        </Field>
+        <Field id="rf-kind" label={t("kind")}>
+          <select id="rf-kind" className="al-in" value={form.kind} onChange={(e) => set("kind", e.target.value as RuleKind)}>
+            {RULE_KINDS.map((k) => <option key={k} value={k}>{tKind(k)}</option>)}
+          </select>
+        </Field>
+        <Field id="rf-sev" label={t("severity")}>
+          <select id="rf-sev" className="al-in" value={form.severity} onChange={(e) => set("severity", e.target.value as RuleSeverity)}>
+            {SEVERITIES.map((s) => <option key={s} value={s}>{tSev(s)}</option>)}
+          </select>
+        </Field>
+        <Field id="rf-scope" label={t("appliesTo")}>
+          <select id="rf-scope" className="al-in" value={form.targetType} onChange={(e) => setForm((f) => ({ ...f, targetType: e.target.value as TargetType, targetId: "" }))}>
+            {TARGET_TYPES.map((k) => <option key={k} value={k}>{t(`targets.${k}`)}</option>)}
+          </select>
+        </Field>
+        {form.targetType !== "global" ? (
+          <Field id="rf-target" label={form.targetType === "asset" ? t("device") : t("group")} error={msg(errors.target)} wide>
+            {(form.targetType === "asset" ? assets.length : groups.length) > 0 ? (
+              <select id="rf-target" className="al-in" value={form.targetId} onChange={(e) => set("targetId", e.target.value)} {...invalid("rf-target", errors.target)}>
+                <option value="">{form.targetType === "asset" ? t("pickDevice") : t("pickGroup")}</option>
+                {form.targetType === "asset"
+                  ? assets.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)
+                  : groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </select>
             ) : (
-              <Input
-                value={ruleForm.targetId}
-                onChange={(event) => setField("targetId", event.target.value)}
-                placeholder={ruleForm.targetType === "asset" ? "Asset ID" : "Group ID"}
-              />
+              <input id="rf-target" className="al-in al-mono" value={form.targetId} onChange={(e) => set("targetId", e.target.value)} autoComplete="off" spellCheck={false} {...invalid("rf-target", errors.target)} />
             )}
-          </label>
+          </Field>
         ) : null}
+
+        <AlertRuleKindFields form={form} set={set} errors={errors} rules={rules} />
+
+        <div className="al-wide al-timing-grid" role="group" aria-label={t("timing")}>
+          {timing.map(([key, errKey, label]) => (
+            <Field key={key} id={`rf-${errKey}`} label={t(label)} error={msg(errors[errKey])}>
+              <span className="al-when">
+                <input id={`rf-${errKey}`} type="number" inputMode="numeric" className="al-in al-num" value={shownNumber(form[key])} onChange={(e) => set(key, numberValue(e.target.value))} {...invalid(`rf-${errKey}`, errors[errKey])} />
+                <span className="al-unit">{t("seconds")}</span>
+              </span>
+            </Field>
+          ))}
+        </div>
+
+        <LabelRows legend={t("labels")} rows={form.labels} onRows={(rows) => set("labels", rows)} hint={t("labelsHint")} />
+
+        <Field id="rf-desc" label={t("description")} wide>
+          <input id="rf-desc" className="al-in" value={form.description} onChange={(e) => set("description", e.target.value)} autoComplete="off" />
+        </Field>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-4">
-        <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-          Eval Window (seconds)
-          <Input
-            type="number"
-            min={1}
-            value={ruleForm.windowSeconds}
-            onChange={(event) => setField("windowSeconds", Number(event.target.value))}
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-          Eval Interval (seconds)
-          <Input
-            type="number"
-            min={1}
-            value={ruleForm.evaluationIntervalSeconds}
-            onChange={(event) => setField("evaluationIntervalSeconds", Number(event.target.value))}
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-          Cooldown (seconds)
-          <Input
-            type="number"
-            min={0}
-            value={ruleForm.cooldownSeconds}
-            onChange={(event) => setField("cooldownSeconds", Number(event.target.value))}
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-          Reopen After (seconds)
-          <Input
-            type="number"
-            min={0}
-            value={ruleForm.reopenAfterSeconds}
-            onChange={(event) => setField("reopenAfterSeconds", Number(event.target.value))}
-          />
-        </label>
-      </div>
-
-      <div className="space-y-3 rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-4">
-        {ruleForm.kind === "metric_threshold" ? (
-          <div className="grid gap-3 md:grid-cols-4">
-            <label className="flex flex-col gap-1 text-xs text-[var(--muted)] md:col-span-2">
-              Metric
-              <Input value={ruleForm.metric} onChange={(event) => setField("metric", event.target.value)} placeholder="e.g. cpu_used_percent" />
-            </label>
-            <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-              Operator
-              <Select value={ruleForm.operator} onChange={(event) => setField("operator", event.target.value)}>
-                <option value=">">&gt;</option>
-                <option value="<">&lt;</option>
-                <option value=">=">&gt;=</option>
-                <option value="<=">&lt;=</option>
-                <option value="==">==</option>
-              </Select>
-            </label>
-            <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-              Threshold
-              <Input type="number" value={ruleForm.thresholdValue} onChange={(event) => setField("thresholdValue", Number(event.target.value))} />
-            </label>
-            <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-              Aggregate
-              <Select value={ruleForm.aggregate} onChange={(event) => setField("aggregate", event.target.value)}>
-                <option value="avg">avg</option>
-                <option value="max">max</option>
-                <option value="min">min</option>
-                <option value="last">last</option>
-              </Select>
-            </label>
-          </div>
-        ) : null}
-
-        {ruleForm.kind === "metric_deadman" ? (
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-              Metric
-              <Input value={ruleForm.metric} onChange={(event) => setField("metric", event.target.value)} placeholder="e.g. cpu_used_percent" />
-            </label>
-            <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-              Max Silence (seconds)
-              <Input type="number" min={1} value={ruleForm.maxSilenceSeconds} onChange={(event) => setField("maxSilenceSeconds", Number(event.target.value))} />
-            </label>
-          </div>
-        ) : null}
-
-        {ruleForm.kind === "heartbeat_stale" ? (
-          <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-            Max Stale (seconds)
-            <Input type="number" min={1} value={ruleForm.maxStaleSeconds} onChange={(event) => setField("maxStaleSeconds", Number(event.target.value))} />
-          </label>
-        ) : null}
-
-        {ruleForm.kind === "log_pattern" ? (
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-              Pattern
-              <Input value={ruleForm.pattern} onChange={(event) => setField("pattern", event.target.value)} placeholder="e.g. ERROR|FATAL|panic" />
-            </label>
-            <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-              Min Occurrences
-              <Input type="number" min={1} value={ruleForm.minOccurrences} onChange={(event) => setField("minOccurrences", Number(event.target.value))} />
-            </label>
-          </div>
-        ) : null}
-
-        {ruleForm.kind === "synthetic_check" ? (
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-              Check ID
-              <Input value={ruleForm.checkId} onChange={(event) => setField("checkId", event.target.value)} placeholder="Synthetic check ID" />
-            </label>
-            <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-              Consecutive Failures
-              <Input type="number" min={1} value={ruleForm.consecutiveFailures} onChange={(event) => setField("consecutiveFailures", Number(event.target.value))} />
-            </label>
-          </div>
-        ) : null}
-
-        {ruleForm.kind === "composite" ? (
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-              Sub-Rule IDs
-              <Input value={ruleForm.subRuleIds} onChange={(event) => setField("subRuleIds", event.target.value)} placeholder="rule-id-1, rule-id-2" />
-            </label>
-            <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-              Combine With
-              <Select value={ruleForm.compositeOperator} onChange={(event) => setField("compositeOperator", event.target.value as "and" | "or")}>
-                <option value="and">All rules firing</option>
-                <option value="or">Any rule firing</option>
-              </Select>
-            </label>
-          </div>
-        ) : null}
-      </div>
-
-      {ruleError ? <p className="text-xs text-[var(--bad)]">{ruleError}</p> : null}
-      <div className="flex items-center gap-3 pt-2">
-        <Button type="submit" variant="primary" disabled={ruleSubmitting}>
-          {ruleSubmitting ? "Creating..." : "Create Rule"}
-        </Button>
-        <Button
-          type="button"
-          onClick={() => {
-            resetRuleForm();
-            setShowRuleForm(false);
-          }}
-        >
-          Cancel
-        </Button>
+      {failure ? <p className="al-hint bad" role="alert">{failure}</p> : null}
+      <div className="al-ed-acts">
+        <span className="al-sp" />
+        <Button type="button" variant="ghost" onClick={onCancel}>{t("cancel")}</Button>
+        <Button type="submit" variant="primary" disabled={submitting}>{submitting ? t("adding") : t("add")}</Button>
       </div>
     </form>
   );

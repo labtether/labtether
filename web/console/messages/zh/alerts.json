@@ -1,13 +1,290 @@
 {
   "title": "告警",
-  "subtitle": {
-    "label": "您的告警收件箱{activeInfo}、规则和静音控制",
-    "active": " · {count} 个活跃"
-  },
+  "newRule": "新建规则",
   "tabs": {
-    "inbox": "收件箱",
+    "label": "告警视图",
+    "alerts": "告警",
+    "issues": "事件",
     "rules": "规则",
-    "silences": "已静音",
-    "delivery": "投递日志"
+    "silences": "静默",
+    "delivery": "发送记录"
+  },
+  "severity": {
+    "critical": "严重",
+    "high": "高",
+    "medium": "中",
+    "low": "低"
+  },
+  "state": {
+    "firing": "触发中",
+    "acknowledged": "已确认",
+    "pending": "待定",
+    "resolved": "已解决"
+  },
+  "duration": {
+    "h": "{n} 小时",
+    "min": "{n} 分钟",
+    "s": "{n} 秒"
+  },
+  "errors": {
+    "action": "无法更改该告警"
+  },
+  "inbox": {
+    "loading": "正在加载告警",
+    "list": "告警",
+    "unnamed": "告警",
+    "filter": "筛选",
+    "filterAll": "全部",
+    "filterSeverity": "严重程度",
+    "filterState": "状态",
+    "allSeverities": "全部严重程度",
+    "allStates": "全部状态",
+    "sort": "排序",
+    "sortBy": {
+      "severity": "最严重的在前",
+      "severityAsc": "最轻的在前",
+      "newest": "最新的在前",
+      "oldest": "最早的在前"
+    },
+    "clear": "清除筛选",
+    "shown": "{shown} / {total} 条告警",
+    "groups": {
+      "silenced": "已静默",
+      "resolved": "已解决"
+    },
+    "noOpen": "没有未处理的告警",
+    "empty": "没有告警",
+    "emptyFiltered": "没有符合此筛选的告警",
+    "showAllResolved": "显示全部 {count} 条已解决",
+    "row": {
+      "resolvedAt": "{time} 已解决",
+      "silencedUntil": "静默至 {time}",
+      "acknowledgedAt": "已确认 · {time}",
+      "pending": "待定",
+      "pendingWith": "待定 · {text}",
+      "sevWith": "{severity} · {text}"
+    }
+  },
+  "detail": {
+    "unnamed": "告警",
+    "since": "自 {time} 起",
+    "resolvedAt": "{time} 已解决",
+    "acknowledgedAt": "已确认 · {time}",
+    "pending": "待定",
+    "silencedUntil": "静默至 {time}",
+    "acknowledge": "确认",
+    "resolve": "解决",
+    "silence": "静默",
+    "silenceNoLabels": "此告警的规则没有可匹配的标签",
+    "silenceFor": {
+      "1h": "1 小时",
+      "4h": "4 小时",
+      "12h": "12 小时",
+      "24h": "24 小时"
+    },
+    "silenced": "静默至 {time}",
+    "endSilence": "结束静默",
+    "silenceEnded": "静默已结束",
+    "more": "更多操作",
+    "openRule": "打开规则",
+    "openDevice": "打开设备",
+    "openIssue": "打开事件",
+    "openIssues": "打开事件",
+    "device": "设备",
+    "deviceState": {
+      "offline": "离线",
+      "unresponsive": "无响应"
+    },
+    "rule": "规则",
+    "issue": "事件",
+    "started": "开始时间",
+    "lastFired": "最近触发",
+    "labels": "标签",
+    "annotations": "注释",
+    "timeline": {
+      "title": "时间线",
+      "opened": "告警开启",
+      "fired": "再次触发",
+      "acknowledged": "已确认",
+      "resolved": "已解决",
+      "sent": "已发送到 {channel}",
+      "failed": "未能发送到 {channel}",
+      "pending": "正在发送到 {channel}",
+      "unknownChannel": "未知渠道"
+    }
+  },
+  "kinds": {
+    "metric_threshold": "指标阈值",
+    "metric_deadman": "指标停止上报",
+    "heartbeat_stale": "心跳缺失",
+    "log_pattern": "日志行匹配",
+    "composite": "组合规则",
+    "synthetic_check": "服务检查失败"
+  },
+  "labelRows": {
+    "label": "标签",
+    "value": "值",
+    "add": "添加标签",
+    "remove": "移除标签"
+  },
+  "rules": {
+    "loading": "正在加载规则",
+    "empty": "还没有告警规则",
+    "emptyFiltered": "没有符合此筛选的规则",
+    "listLabel": "告警规则",
+    "showLabel": "显示规则",
+    "show": {
+      "all": "全部",
+      "on": "已开启",
+      "off": "已关闭"
+    },
+    "shown": "{shown} / {total} 条规则",
+    "clear": "清除筛选",
+    "cols": {
+      "name": "规则",
+      "severity": "严重程度",
+      "scope": "适用于",
+      "state": "状态"
+    },
+    "on": "开启",
+    "off": "关闭",
+    "everything": "所有设备",
+    "scope": {
+      "global": "所有设备",
+      "group": "分组",
+      "asset": "设备"
+    },
+    "summary": {
+      "metric": "{aggregate} {metric} {op} {value}",
+      "deadman": "{metric} 已 {time} 无数据",
+      "heartbeat": "{time} 没有心跳",
+      "log": "“{pattern}” ×{count}",
+      "check": "{count, plural, other {连续失败 # 次}}",
+      "composite": "{join, select, or {{count, plural, other {# 条规则中任意一条}}} other {{count, plural, other {全部 # 条规则}}}}"
+    },
+    "facts": {
+      "kind": "类型",
+      "condition": "条件",
+      "appliesTo": "适用于",
+      "window": "时间窗口",
+      "interval": "检查间隔",
+      "cooldown": "冷却时间",
+      "reopen": "重新开启间隔",
+      "lastChecked": "最近检查",
+      "never": "尚未检查",
+      "openAlerts": "未处理告警",
+      "description": "描述",
+      "labels": "标签"
+    },
+    "copy": "复制为新规则",
+    "deleteAsk": "删除…",
+    "deleteTitle": "删除规则“{name}”？",
+    "deleteBody": "{count, plural, =0 {它还没有产生告警。} other {它的 # 条告警也会被删除。}}",
+    "delete": "删除",
+    "deleted": "已删除“{name}”",
+    "deleteFailed": "无法删除该规则",
+    "added": "已添加“{name}”"
+  },
+  "editor": {
+    "title": "新建规则",
+    "from": "起点",
+    "blank": "空白规则",
+    "name": "名称",
+    "namePlaceholder": "CPU 高于 90%",
+    "kind": "类型",
+    "severity": "严重程度",
+    "appliesTo": "适用于",
+    "targets": {
+      "global": "所有设备",
+      "group": "一个分组",
+      "asset": "一台设备"
+    },
+    "device": "设备",
+    "group": "分组",
+    "pickDevice": "选择设备",
+    "pickGroup": "选择分组",
+    "metric": "指标",
+    "when": "条件",
+    "aggregate": "聚合方式",
+    "aggregates": {
+      "avg": "平均值",
+      "max": "最大值",
+      "min": "最小值",
+      "last": "最新值"
+    },
+    "operator": "比较",
+    "threshold": "阈值",
+    "silentFor": "无数据时长",
+    "missedFor": "缺失时长",
+    "pattern": "匹配模式",
+    "count": "次数",
+    "timesInWindow": "次（时间窗口内）",
+    "check": "检查",
+    "failures": "失败次数",
+    "inARow": "次（连续）",
+    "join": "触发条件",
+    "joins": {
+      "and": "全部触发",
+      "or": "任意一条触发"
+    },
+    "rules": "规则",
+    "noOtherRules": "请先添加另一条规则",
+    "timing": "时间设置",
+    "window": "时间窗口",
+    "interval": "检查间隔",
+    "cooldown": "冷却时间",
+    "reopen": "重新开启间隔",
+    "seconds": "秒",
+    "labels": "标签",
+    "labelsHint": "静默按这些标签匹配。",
+    "description": "描述",
+    "cancel": "取消",
+    "add": "添加规则",
+    "adding": "正在添加…",
+    "errors": {
+      "name": "请输入名称",
+      "nameTaken": "已存在同名规则",
+      "target": "请选择适用对象",
+      "whole": "请输入大于 0 的整数",
+      "wholeZero": "请输入 0 或更大的整数",
+      "metric": "请输入指标名称",
+      "number": "请输入数字",
+      "pattern": "请输入要匹配的文本",
+      "check": "请输入检查",
+      "rules": "请选择一条或多条规则",
+      "save": "无法添加该规则"
+    }
+  },
+  "silences": {
+    "listLabel": "静默",
+    "add": "静默告警",
+    "matchers": "要匹配的标签",
+    "matchHint": "每个标签都必须与告警规则上的某个标签相同。",
+    "duration": "时长",
+    "durations": {
+      "1h": "1 小时",
+      "4h": "4 小时",
+      "12h": "12 小时",
+      "24h": "24 小时"
+    },
+    "reason": "原因",
+    "reasonPlaceholder": "维护",
+    "cancel": "取消",
+    "save": "静默",
+    "saving": "正在保存…",
+    "created": "已添加静默",
+    "unnamed": "静默",
+    "until": "至 {time}",
+    "endedAt": "已于 {time} 结束",
+    "end": "结束",
+    "remove": "移除",
+    "ended": "已结束",
+    "empty": "没有静默",
+    "noneActive": "没有生效的静默",
+    "errors": {
+      "matchers": "请至少输入一个标签",
+      "save": "无法添加静默",
+      "delete": "无法移除静默"
+    }
   }
 }

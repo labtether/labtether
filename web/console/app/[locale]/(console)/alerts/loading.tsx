@@ -1,10 +1,4 @@
-import { SkeletonRow, SkeletonTable } from "../../../components/ui/Skeleton";
-
+/** While the Alerts page loads: an empty sheet where the list will be (no shimmer). */
 export default function Loading() {
-  return (
-    <div className="animate-fade-in p-4 space-y-4">
-      <SkeletonRow />
-      <SkeletonTable rows={6} cols={4} />
-    </div>
-  );
+  return <div className="al-sheet al-empty" aria-busy="true" style={{ minHeight: 200 }} />;
 }

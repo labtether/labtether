@@ -1,13 +1,290 @@
 {
   "title": "Alertes",
-  "subtitle": {
-    "label": "Votre boîte de réception d'alertes{activeInfo}, règles et mises en sourdine",
-    "active": " · {count} active(s)"
-  },
+  "newRule": "Nouvelle règle",
   "tabs": {
-    "inbox": "Boîte de réception",
+    "label": "Vues des alertes",
+    "alerts": "Alertes",
+    "issues": "Incidents",
     "rules": "Règles",
-    "silences": "En sourdine",
-    "delivery": "Journal de livraison"
+    "silences": "Silences",
+    "delivery": "Journal d'envoi"
+  },
+  "severity": {
+    "critical": "Critique",
+    "high": "Haute",
+    "medium": "Moyenne",
+    "low": "Basse"
+  },
+  "state": {
+    "firing": "Déclenchée",
+    "acknowledged": "Prise en compte",
+    "pending": "En attente",
+    "resolved": "Résolue"
+  },
+  "duration": {
+    "h": "{n}\u00a0h",
+    "min": "{n}\u00a0min",
+    "s": "{n}\u00a0s"
+  },
+  "errors": {
+    "action": "Impossible de modifier l'alerte"
+  },
+  "inbox": {
+    "loading": "Chargement des alertes",
+    "list": "Alertes",
+    "unnamed": "Alerte",
+    "filter": "Filtre",
+    "filterAll": "Toutes",
+    "filterSeverity": "Gravité",
+    "filterState": "État",
+    "allSeverities": "Toutes les gravités",
+    "allStates": "Tous les états",
+    "sort": "Ordre",
+    "sortBy": {
+      "severity": "Les plus graves d'abord",
+      "severityAsc": "Les moins graves d'abord",
+      "newest": "Les plus récentes d'abord",
+      "oldest": "Les plus anciennes d'abord"
+    },
+    "clear": "Effacer le filtre",
+    "shown": "{shown} sur {total} alertes",
+    "groups": {
+      "silenced": "En silence",
+      "resolved": "Résolues"
+    },
+    "noOpen": "Aucune alerte ouverte",
+    "empty": "Aucune alerte",
+    "emptyFiltered": "Aucune alerte ne correspond à ce filtre",
+    "showAllResolved": "Voir les {count} résolues",
+    "row": {
+      "resolvedAt": "Résolue à {time}",
+      "silencedUntil": "En silence jusqu'à {time}",
+      "acknowledgedAt": "Prise en compte · {time}",
+      "pending": "En attente",
+      "pendingWith": "En attente · {text}",
+      "sevWith": "{severity} · {text}"
+    }
+  },
+  "detail": {
+    "unnamed": "Alerte",
+    "since": "Depuis {time}",
+    "resolvedAt": "Résolue à {time}",
+    "acknowledgedAt": "Prise en compte · {time}",
+    "pending": "En attente",
+    "silencedUntil": "En silence jusqu'à {time}",
+    "acknowledge": "Prendre en compte",
+    "resolve": "Résoudre",
+    "silence": "Mettre en silence",
+    "silenceNoLabels": "La règle de cette alerte n'a aucun label à faire correspondre",
+    "silenceFor": {
+      "1h": "Pendant 1\u00a0heure",
+      "4h": "Pendant 4\u00a0heures",
+      "12h": "Pendant 12\u00a0heures",
+      "24h": "Pendant 24\u00a0heures"
+    },
+    "silenced": "En silence jusqu'à {time}",
+    "endSilence": "Terminer le silence",
+    "silenceEnded": "Silence terminé",
+    "more": "Plus d'actions",
+    "openRule": "Ouvrir la règle",
+    "openDevice": "Ouvrir l'appareil",
+    "openIssue": "Ouvrir l'incident",
+    "openIssues": "Ouvrir les incidents",
+    "device": "Appareil",
+    "deviceState": {
+      "offline": "Hors ligne",
+      "unresponsive": "Ne répond pas"
+    },
+    "rule": "Règle",
+    "issue": "Incident",
+    "started": "Début",
+    "lastFired": "Dernier déclenchement",
+    "labels": "Labels",
+    "annotations": "Annotations",
+    "timeline": {
+      "title": "Chronologie",
+      "opened": "Alerte ouverte",
+      "fired": "Déclenchée à nouveau",
+      "acknowledged": "Prise en compte",
+      "resolved": "Résolue",
+      "sent": "Envoyée à {channel}",
+      "failed": "Échec de l'envoi à {channel}",
+      "pending": "Envoi à {channel} en cours",
+      "unknownChannel": "un canal inconnu"
+    }
+  },
+  "kinds": {
+    "metric_threshold": "Seuil de métrique",
+    "metric_deadman": "La métrique ne remonte plus",
+    "heartbeat_stale": "Heartbeat manqué",
+    "log_pattern": "Ligne de log correspondante",
+    "composite": "Règles combinées",
+    "synthetic_check": "Échec du contrôle de service"
+  },
+  "labelRows": {
+    "label": "Label",
+    "value": "Valeur",
+    "add": "Ajouter un label",
+    "remove": "Retirer le label"
+  },
+  "rules": {
+    "loading": "Chargement des règles",
+    "empty": "Aucune règle d'alerte pour l'instant",
+    "emptyFiltered": "Aucune règle ne correspond à ce filtre",
+    "listLabel": "Règles d'alerte",
+    "showLabel": "Afficher les règles",
+    "show": {
+      "all": "Toutes",
+      "on": "Actives",
+      "off": "Inactives"
+    },
+    "shown": "{shown} sur {total} règles",
+    "clear": "Effacer le filtre",
+    "cols": {
+      "name": "Règle",
+      "severity": "Gravité",
+      "scope": "S'applique à",
+      "state": "État"
+    },
+    "on": "Active",
+    "off": "Inactive",
+    "everything": "Tous les appareils",
+    "scope": {
+      "global": "Tous les appareils",
+      "group": "Groupe",
+      "asset": "Appareil"
+    },
+    "summary": {
+      "metric": "{aggregate} {metric} {op} {value}",
+      "deadman": "{metric} muette depuis {time}",
+      "heartbeat": "Aucun heartbeat depuis {time}",
+      "log": "«\u00a0{pattern}\u00a0» ×{count}",
+      "check": "{count, plural, one {Échoue une fois} other {Échoue # fois de suite}}",
+      "composite": "{join, select, or {Une de {count, plural, one {# règle} other {# règles}}} other {Toutes de {count, plural, one {# règle} other {# règles}}}}"
+    },
+    "facts": {
+      "kind": "Type",
+      "condition": "Condition",
+      "appliesTo": "S'applique à",
+      "window": "Fenêtre",
+      "interval": "Vérifiée toutes les",
+      "cooldown": "Temps de repos",
+      "reopen": "Rouvrir après",
+      "lastChecked": "Dernière vérification",
+      "never": "Pas encore",
+      "openAlerts": "Alertes ouvertes",
+      "description": "Description",
+      "labels": "Labels"
+    },
+    "copy": "Copier dans une nouvelle règle",
+    "deleteAsk": "Supprimer…",
+    "deleteTitle": "Supprimer la règle «\u00a0{name}\u00a0»\u00a0?",
+    "deleteBody": "{count, plural, =0 {Elle n'a déclenché aucune alerte.} one {Son alerte est supprimée aussi.} other {Ses # alertes sont supprimées aussi.}}",
+    "delete": "Supprimer",
+    "deleted": "«\u00a0{name}\u00a0» supprimée",
+    "deleteFailed": "Impossible de supprimer la règle",
+    "added": "«\u00a0{name}\u00a0» ajoutée"
+  },
+  "editor": {
+    "title": "Nouvelle règle",
+    "from": "Partir de",
+    "blank": "Règle vide",
+    "name": "Nom",
+    "namePlaceholder": "CPU au-dessus de 90\u00a0%",
+    "kind": "Type",
+    "severity": "Gravité",
+    "appliesTo": "S'applique à",
+    "targets": {
+      "global": "Tous les appareils",
+      "group": "Un groupe",
+      "asset": "Un appareil"
+    },
+    "device": "Appareil",
+    "group": "Groupe",
+    "pickDevice": "Choisir un appareil",
+    "pickGroup": "Choisir un groupe",
+    "metric": "Métrique",
+    "when": "Quand",
+    "aggregate": "Agrégation",
+    "aggregates": {
+      "avg": "Moyenne",
+      "max": "Maximum",
+      "min": "Minimum",
+      "last": "Dernière valeur"
+    },
+    "operator": "Comparaison",
+    "threshold": "Seuil",
+    "silentFor": "Muette depuis",
+    "missedFor": "Manqué depuis",
+    "pattern": "Motif",
+    "count": "Nombre",
+    "timesInWindow": "fois dans la fenêtre",
+    "check": "Contrôle",
+    "failures": "Échecs",
+    "inARow": "de suite",
+    "join": "Se déclenche quand",
+    "joins": {
+      "and": "Toutes se déclenchent",
+      "or": "L'une se déclenche"
+    },
+    "rules": "Règles",
+    "noOtherRules": "Ajoutez d'abord une autre règle",
+    "timing": "Délais",
+    "window": "Fenêtre",
+    "interval": "Vérifier toutes les",
+    "cooldown": "Temps de repos",
+    "reopen": "Rouvrir après",
+    "seconds": "secondes",
+    "labels": "Labels",
+    "labelsHint": "Les silences se comparent à ces labels.",
+    "description": "Description",
+    "cancel": "Annuler",
+    "add": "Ajouter la règle",
+    "adding": "Ajout…",
+    "errors": {
+      "name": "Saisissez un nom",
+      "nameTaken": "Une règle porte déjà ce nom",
+      "target": "Choisissez à quoi elle s'applique",
+      "whole": "Saisissez un nombre entier supérieur à 0",
+      "wholeZero": "Saisissez un nombre entier, 0 ou plus",
+      "metric": "Saisissez un nom de métrique",
+      "number": "Saisissez un nombre",
+      "pattern": "Saisissez le texte à rechercher",
+      "check": "Saisissez le contrôle",
+      "rules": "Choisissez une ou plusieurs règles",
+      "save": "Impossible d'ajouter la règle"
+    }
+  },
+  "silences": {
+    "listLabel": "Silences",
+    "add": "Mettre des alertes en silence",
+    "matchers": "Labels à faire correspondre",
+    "matchHint": "Chaque label doit être égal à un label de la règle de l'alerte.",
+    "duration": "Durée",
+    "durations": {
+      "1h": "1\u00a0heure",
+      "4h": "4\u00a0heures",
+      "12h": "12\u00a0heures",
+      "24h": "24\u00a0heures"
+    },
+    "reason": "Motif",
+    "reasonPlaceholder": "Maintenance",
+    "cancel": "Annuler",
+    "save": "Mettre en silence",
+    "saving": "Enregistrement…",
+    "created": "Silence ajouté",
+    "unnamed": "Silence",
+    "until": "Jusqu'à {time}",
+    "endedAt": "Terminé {time}",
+    "end": "Terminer",
+    "remove": "Retirer",
+    "ended": "Terminés",
+    "empty": "Aucun silence",
+    "noneActive": "Aucun silence actif",
+    "errors": {
+      "matchers": "Saisissez au moins un label",
+      "save": "Impossible d'ajouter le silence",
+      "delete": "Impossible de retirer le silence"
+    }
   }
 }

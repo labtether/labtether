@@ -1,13 +1,290 @@
 {
   "title": "Alerts",
-  "subtitle": {
-    "label": "Your alert inbox{activeInfo}, rules, mutes, and delivery history",
-    "active": " · {count} active"
-  },
+  "newRule": "New rule",
   "tabs": {
-    "inbox": "Inbox",
+    "label": "Alert views",
+    "alerts": "Alerts",
+    "issues": "Issues",
     "rules": "Rules",
-    "silences": "Muted",
-    "delivery": "Delivery Log"
+    "silences": "Silences",
+    "delivery": "Delivery log"
+  },
+  "severity": {
+    "critical": "Critical",
+    "high": "High",
+    "medium": "Medium",
+    "low": "Low"
+  },
+  "state": {
+    "firing": "Firing",
+    "acknowledged": "Acknowledged",
+    "pending": "Pending",
+    "resolved": "Resolved"
+  },
+  "duration": {
+    "h": "{n} h",
+    "min": "{n} min",
+    "s": "{n} s"
+  },
+  "errors": {
+    "action": "Could not change the alert"
+  },
+  "inbox": {
+    "loading": "Loading alerts",
+    "list": "Alerts",
+    "unnamed": "Alert",
+    "filter": "Filter",
+    "filterAll": "All",
+    "filterSeverity": "Severity",
+    "filterState": "State",
+    "allSeverities": "All severities",
+    "allStates": "All states",
+    "sort": "Order",
+    "sortBy": {
+      "severity": "Most severe first",
+      "severityAsc": "Least severe first",
+      "newest": "Newest first",
+      "oldest": "Oldest first"
+    },
+    "clear": "Clear filter",
+    "shown": "{shown} of {total} alerts",
+    "groups": {
+      "silenced": "Silenced",
+      "resolved": "Resolved"
+    },
+    "noOpen": "No open alerts",
+    "empty": "No alerts",
+    "emptyFiltered": "No alerts match this filter",
+    "showAllResolved": "Show all {count} resolved",
+    "row": {
+      "resolvedAt": "Resolved at {time}",
+      "silencedUntil": "Silenced until {time}",
+      "acknowledgedAt": "Acknowledged · {time}",
+      "pending": "Pending",
+      "pendingWith": "Pending · {text}",
+      "sevWith": "{severity} · {text}"
+    }
+  },
+  "detail": {
+    "unnamed": "Alert",
+    "since": "Since {time}",
+    "resolvedAt": "Resolved at {time}",
+    "acknowledgedAt": "Acknowledged · {time}",
+    "pending": "Pending",
+    "silencedUntil": "Silenced until {time}",
+    "acknowledge": "Acknowledge",
+    "resolve": "Resolve",
+    "silence": "Silence",
+    "silenceNoLabels": "This alert's rule has no labels to match",
+    "silenceFor": {
+      "1h": "For 1 hour",
+      "4h": "For 4 hours",
+      "12h": "For 12 hours",
+      "24h": "For 24 hours"
+    },
+    "silenced": "Silenced until {time}",
+    "endSilence": "End silence",
+    "silenceEnded": "Silence ended",
+    "more": "More actions",
+    "openRule": "Open rule",
+    "openDevice": "Open device",
+    "openIssue": "Open issue",
+    "openIssues": "Open issues",
+    "device": "Device",
+    "deviceState": {
+      "offline": "Offline",
+      "unresponsive": "Not responding"
+    },
+    "rule": "Rule",
+    "issue": "Issue",
+    "started": "Started",
+    "lastFired": "Last fired",
+    "labels": "Labels",
+    "annotations": "Annotations",
+    "timeline": {
+      "title": "Timeline",
+      "opened": "Alert opened",
+      "fired": "Fired again",
+      "acknowledged": "Acknowledged",
+      "resolved": "Resolved",
+      "sent": "Sent to {channel}",
+      "failed": "Could not send to {channel}",
+      "pending": "Sending to {channel}",
+      "unknownChannel": "an unknown channel"
+    }
+  },
+  "kinds": {
+    "metric_threshold": "Metric threshold",
+    "metric_deadman": "Metric stops reporting",
+    "heartbeat_stale": "Heartbeat missed",
+    "log_pattern": "Log line matches",
+    "composite": "Combined rules",
+    "synthetic_check": "Service check fails"
+  },
+  "labelRows": {
+    "label": "Label",
+    "value": "Value",
+    "add": "Add label",
+    "remove": "Remove label"
+  },
+  "rules": {
+    "loading": "Loading rules",
+    "empty": "No alert rules yet",
+    "emptyFiltered": "No rules match this filter",
+    "listLabel": "Alert rules",
+    "showLabel": "Show rules",
+    "show": {
+      "all": "All",
+      "on": "On",
+      "off": "Off"
+    },
+    "shown": "{shown} of {total} rules",
+    "clear": "Clear filter",
+    "cols": {
+      "name": "Rule",
+      "severity": "Severity",
+      "scope": "Applies to",
+      "state": "State"
+    },
+    "on": "On",
+    "off": "Off",
+    "everything": "All devices",
+    "scope": {
+      "global": "All devices",
+      "group": "Group",
+      "asset": "Device"
+    },
+    "summary": {
+      "metric": "{aggregate} {metric} {op} {value}",
+      "deadman": "{metric} silent for {time}",
+      "heartbeat": "No heartbeat for {time}",
+      "log": "“{pattern}” ×{count}",
+      "check": "{count, plural, one {Fails once} other {Fails # times in a row}}",
+      "composite": "{join, select, or {Any of {count, plural, one {# rule} other {# rules}}} other {All of {count, plural, one {# rule} other {# rules}}}}"
+    },
+    "facts": {
+      "kind": "Kind",
+      "condition": "Condition",
+      "appliesTo": "Applies to",
+      "window": "Window",
+      "interval": "Checked every",
+      "cooldown": "Cooldown",
+      "reopen": "Reopen after",
+      "lastChecked": "Last checked",
+      "never": "Not yet",
+      "openAlerts": "Open alerts",
+      "description": "Description",
+      "labels": "Labels"
+    },
+    "copy": "Copy to new rule",
+    "deleteAsk": "Delete…",
+    "deleteTitle": "Delete rule “{name}”?",
+    "deleteBody": "{count, plural, =0 {It has raised no alerts.} one {Its # alert is deleted too.} other {Its # alerts are deleted too.}}",
+    "delete": "Delete",
+    "deleted": "Deleted “{name}”",
+    "deleteFailed": "Could not delete the rule",
+    "added": "Added “{name}”"
+  },
+  "editor": {
+    "title": "New rule",
+    "from": "Start from",
+    "blank": "Blank rule",
+    "name": "Name",
+    "namePlaceholder": "CPU above 90%",
+    "kind": "Kind",
+    "severity": "Severity",
+    "appliesTo": "Applies to",
+    "targets": {
+      "global": "All devices",
+      "group": "A group",
+      "asset": "A device"
+    },
+    "device": "Device",
+    "group": "Group",
+    "pickDevice": "Choose a device",
+    "pickGroup": "Choose a group",
+    "metric": "Metric",
+    "when": "When",
+    "aggregate": "Aggregate",
+    "aggregates": {
+      "avg": "Average",
+      "max": "Highest",
+      "min": "Lowest",
+      "last": "Latest"
+    },
+    "operator": "Comparison",
+    "threshold": "Threshold",
+    "silentFor": "Silent for",
+    "missedFor": "Missed for",
+    "pattern": "Pattern",
+    "count": "Count",
+    "timesInWindow": "times in the window",
+    "check": "Check",
+    "failures": "Failures",
+    "inARow": "in a row",
+    "join": "Fires when",
+    "joins": {
+      "and": "All of them fire",
+      "or": "Any of them fires"
+    },
+    "rules": "Rules",
+    "noOtherRules": "Add another rule first",
+    "timing": "Timing",
+    "window": "Window",
+    "interval": "Check every",
+    "cooldown": "Cooldown",
+    "reopen": "Reopen after",
+    "seconds": "seconds",
+    "labels": "Labels",
+    "labelsHint": "Silences match these labels.",
+    "description": "Description",
+    "cancel": "Cancel",
+    "add": "Add rule",
+    "adding": "Adding…",
+    "errors": {
+      "name": "Enter a name",
+      "nameTaken": "A rule with this name exists",
+      "target": "Choose what it applies to",
+      "whole": "Enter a whole number above 0",
+      "wholeZero": "Enter a whole number, 0 or more",
+      "metric": "Enter a metric name",
+      "number": "Enter a number",
+      "pattern": "Enter the text to match",
+      "check": "Enter the check",
+      "rules": "Pick one or more rules",
+      "save": "Could not add the rule"
+    }
+  },
+  "silences": {
+    "listLabel": "Silences",
+    "add": "Silence alerts",
+    "matchers": "Labels to match",
+    "matchHint": "Each label must equal one on the alert's rule.",
+    "duration": "For",
+    "durations": {
+      "1h": "1 hour",
+      "4h": "4 hours",
+      "12h": "12 hours",
+      "24h": "24 hours"
+    },
+    "reason": "Reason",
+    "reasonPlaceholder": "Maintenance",
+    "cancel": "Cancel",
+    "save": "Silence",
+    "saving": "Saving…",
+    "created": "Silence added",
+    "unnamed": "Silence",
+    "until": "Until {time}",
+    "endedAt": "Ended {time}",
+    "end": "End",
+    "remove": "Remove",
+    "ended": "Ended",
+    "empty": "No silences",
+    "noneActive": "No active silences",
+    "errors": {
+      "matchers": "Enter at least one label",
+      "save": "Could not add the silence",
+      "delete": "Could not remove the silence"
+    }
   }
 }
