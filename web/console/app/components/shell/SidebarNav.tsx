@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { Link, usePathname } from "../../../i18n/navigation";
 import { useAuth } from "../../contexts/AuthContext";
 import { useDesktopSession } from "../../contexts/DesktopSessionContext";
-import { isActiveHref, navMain, navTools, sectionFor, sectionTabs, settingsSection, type NavItem } from "../../lib/navigation";
+import { isActiveHref, navMain, navPath, navTools, sectionFor, sectionTabs, settingsSection, type NavItem } from "../../lib/navigation";
 import { meetsMinimumRole } from "../../lib/roles";
 import { AccountMenu } from "./AccountMenu";
 
@@ -24,7 +24,7 @@ export function SidebarNav({ onNavigate, close }: { onNavigate?: () => void; clo
   const settingsTabs = sectionTabs(settingsSection, user?.role);
 
   const link = (item: NavItem, href = item.href) => {
-    const current = section ? section.href === item.href : isActiveHref(pathname, item.href);
+    const current = section ? section.href === item.href : isActiveHref(navPath(pathname), item.href);
     return (
       <Link key={item.href} href={href} onClick={onNavigate} aria-current={current ? "page" : undefined}>
         <item.icon aria-hidden="true" strokeWidth={1.75} />

@@ -39,6 +39,9 @@ const namespaces = [
   'notification-center',
   'audit-log',
   'api-docs',
+  'updates',
+  'sites',
+  'containers',
 ] as const;
 
 export default getRequestConfig(async ({ requestLocale }) => {

@@ -63,7 +63,7 @@
 .lt-ph-sub { margin-top: 4px; font-size: var(--fs-body); line-height: var(--lh-body); color: var(--text-2); }
 
 /* A sidebar entry's pages as a tab row (the device page's tabs look). */
-.lt-tabs { display: flex; gap: 24px; margin-bottom: 24px; box-shadow: inset 0 -1px 0 var(--divider); overflow-x: auto; scrollbar-width: none; }
+.lt-tabs { display: flex; gap: 24px; margin-bottom: 16px; box-shadow: inset 0 -1px 0 var(--divider); overflow-x: auto; scrollbar-width: none; }
 .lt-tabs::-webkit-scrollbar { display: none; }
 .lt-tabs a { position: relative; display: flex; align-items: center; flex: none; height: 36px; padding: 0 0 2px; font-weight: 500; color: var(--text-3); white-space: nowrap; transition: color var(--dur-fast) var(--ease-out); }
 .lt-tabs a:hover, .lt-tabs a[aria-current="page"] { color: var(--text); }
@@ -94,3 +94,6 @@
 @media (prefers-reduced-motion: reduce) {
   .lt-nav a, .lt-acct, .lt-search, .lt-icon-btn, .lt-tabs a { transition: none; }
 }
+
+/* A section's tab row sits close under its title (Automations, Settings). */
+.lt-ph:has(+ .lt-tabs) { margin-bottom: 16px; }

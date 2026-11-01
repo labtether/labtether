@@ -6,7 +6,7 @@ const VISUAL_ROUTES = [
   { id: "settings", path: "/settings", heading: "Settings" },
   { id: "alerts", path: "/alerts", heading: "Alerts" },
   { id: "logs", path: "/logs", heading: "Logs" },
-  { id: "health", path: "/reliability", heading: "Health" },
+  { id: "health", path: "/reliability", heading: "Settings" },
   { id: "devices", path: "/nodes", heading: "Devices" },
 ] as const;
 

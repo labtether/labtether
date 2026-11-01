@@ -370,16 +370,3 @@ export async function assignDeviceToGroup(page: Page, assetID: string, groupID: 
 
   expect(response.ok, response.body || `failed to assign ${assetID} to ${groupID} (${response.status})`).toBeTruthy();
 }
-
-export async function switchToTreeView(page: Page) {
-  await expect(page.getByText("Loading topology canvas...", { exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Switch to tree view", exact: true }).click();
-  const unsortedButton = page
-    .locator("main")
-    .getByRole("button")
-    .filter({ hasText: /^[▶▼]\s*▪\s*Unsorted\b/ })
-    .first();
-  if (await unsortedButton.isVisible({ timeout: 5000 }).catch(() => false)) {
-    await unsortedButton.click();
-  }
-}

@@ -37,7 +37,7 @@ export function formatTimestamp(iso: string): string {
   if (Number.isNaN(value.getTime())) {
     return "n/a";
   }
-  return value.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return value.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
 }
 
 export function formatMetric(value?: number, unit?: string): string {

@@ -43,7 +43,7 @@ export function attentionItems(params: {
   const fromAlerts: AttentionItem[] = open.map((a) => ({
     key: `alert:${a.id}`,
     tone: alertTone(a.severity),
-    href: "/alerts",
+    href: `/alerts?alert=${encodeURIComponent(a.id)}`,
     at: a.started_at,
     title: { text: a.labels?.rule_name ?? ruleNames.get(a.rule_id) ?? a.rule_id },
     sub: a.annotations?.summary ? { text: a.annotations.summary } : null,

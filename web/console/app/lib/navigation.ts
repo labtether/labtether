@@ -1,6 +1,8 @@
 import {
   Bell,
+  BellRing,
   Boxes,
+  Cpu,
   FileText,
   FolderOpen,
   GitBranch,
@@ -79,11 +81,13 @@ export const navSections: NavSection[] = [
     icon: Settings,
     tabs: [
       { href: "/settings", label: "General", translationKey: "general", icon: Settings, minimumRole: "admin" },
+      { href: "/settings/notifications", label: "Notifications", translationKey: "notifications", icon: BellRing, minimumRole: "admin" },
       { href: "/users", label: "Users", translationKey: "users", icon: UserCog },
       { href: "/groups", label: "Groups", translationKey: "groups", icon: MapPin },
       { href: "/security", label: "Security", translationKey: "security", icon: Lock, minimumRole: "admin" },
+      { href: "/settings/agents", label: "Agents", translationKey: "agents", icon: Cpu, minimumRole: "admin" },
       { href: "/reliability", label: "Health", translationKey: "health", icon: Shield },
-      { href: "/audit-log", label: "Audit Log", translationKey: "auditLog", icon: ScrollText },
+      { href: "/audit-log", label: "Audit log", translationKey: "auditLog", icon: ScrollText },
     ],
   },
 ];
@@ -103,9 +107,19 @@ export const navGroups: NavGroup[] = [
 export const isActiveHref = (pathname: string, href: string) =>
   href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
 
+/** Pages that live under another entry, as in the 2.0 mockup: Issues in Alerts, Updates in Devices, Recordings in the Audit log. */
+const LIVES_UNDER: Array<[string, string]> = [["/incidents", "/alerts"], ["/updates", "/nodes"], ["/recordings", "/audit-log"]];
+
+/** The path whose sidebar entry and tab a page shows as current. */
+export const navPath = (pathname: string) => LIVES_UNDER.find(([page]) => isActiveHref(pathname, page))?.[1] ?? pathname;
+
 /** The section whose pages include this path, if any. */
 export const sectionFor = (pathname: string) =>
-  navSections.find((s) => s.tabs.some((t) => isActiveHref(pathname, t.href)));
+  navSections.find((s) => s.tabs.some((t) => isActiveHref(navPath(pathname), t.href)));
+
+/** The one tab a path belongs to: the longest matching href, so /settings/agents is Agents, not General. */
+export const currentTabHref = (pathname: string, tabs: NavItem[]) =>
+  tabs.filter((t) => isActiveHref(navPath(pathname), t.href)).sort((a, b) => b.href.length - a.href.length)[0]?.href;
 
 /** The tabs this role may open; the first is where the sidebar entry leads. */
 export function sectionTabs(section: NavSection, role?: string): NavItem[] {

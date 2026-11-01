@@ -12,7 +12,7 @@ const ROUTES = [
   { path: "/logs", heading: "Logs" },
   { path: "/alerts", heading: "Alerts" },
   { path: "/settings", heading: "Settings" },
-  { path: "/reliability", heading: "Health" },
+  { path: "/reliability", heading: "Settings" },
 ] as const;
 
 for (const viewport of VIEWPORTS) {
@@ -68,7 +68,7 @@ for (const viewport of VIEWPORTS) {
     await page.goto("/nodes");
     await expect(page.getByRole("heading", { name: "Devices", level: 1, exact: true })).toBeVisible();
 
-    await page.getByRole("button", { name: "Add Device", exact: true }).click();
+    await page.getByRole("button", { name: "Add device", exact: true }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
 

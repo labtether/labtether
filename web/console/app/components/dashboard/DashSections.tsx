@@ -21,7 +21,7 @@ export function DashSection({ id, title, more, children }: { id: string; title: 
 
 const clock = (iso: string) => {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 };
 
 /** Two-line rows: the problem in a status tone, then its facts. The whole row opens the alert or the device. */

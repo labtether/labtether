@@ -83,7 +83,7 @@ test("nodes/logs soak keeps latency stable with bounded heap growth", async ({ p
       await expect(page.getByRole("link", { name: "soak-node-1799", exact: true })).toBeVisible({ timeout: 3000 });
     } else {
       await expect(page.getByRole("heading", { name: "Logs", level: 1, exact: true })).toBeVisible();
-      await page.getByPlaceholder("Search message text (error, timeout, zfs...)").fill("soak-event-7999");
+      await page.getByPlaceholder("Filter by device, source or message").fill("soak-event-7999");
       await expect(page.getByText("soak-event-7999")).toBeVisible({ timeout: 3000 });
     }
     navDurations.push(Date.now() - started);

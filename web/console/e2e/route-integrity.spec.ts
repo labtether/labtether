@@ -11,15 +11,15 @@ const MOBILE_VIEWPORT = { width: 390, height: 844 } as const;
 const CORE_ROUTES: Array<{ path: string; heading: string }> = [
   { path: "/", heading: "Dashboard" },
   { path: "/nodes", heading: "Devices" },
-  { path: "/topology", heading: "Topology" },
+  { path: "/topology", heading: "Map" },
   { path: "/services", heading: "Services" },
   { path: "/terminal", heading: "Terminal" },
   { path: "/files", heading: "Files" },
   { path: "/logs", heading: "Logs" },
   { path: "/alerts", heading: "Alerts" },
-  { path: "/actions", heading: "Actions" },
-  { path: "/groups", heading: "Groups" },
-  { path: "/reliability", heading: "Health" },
+  { path: "/actions", heading: "Automations" },
+  { path: "/groups", heading: "Settings" },
+  { path: "/reliability", heading: "Settings" },
   { path: "/settings", heading: "Settings" },
 ];
 
