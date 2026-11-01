@@ -146,8 +146,6 @@
       "scope": "S'applique à",
       "state": "État"
     },
-    "on": "Active",
-    "off": "Inactive",
     "everything": "Tous les appareils",
     "scope": {
       "global": "Tous les appareils",
@@ -176,17 +174,21 @@
       "description": "Description",
       "labels": "Labels"
     },
-    "copy": "Copier dans une nouvelle règle",
+    "switch": "{name} active",
+    "switchFailed": "{state, select, on {Impossible d'activer «\u00a0{name}\u00a0»} other {Impossible de désactiver «\u00a0{name}\u00a0»}}",
+    "edit": "Modifier",
     "deleteAsk": "Supprimer…",
     "deleteTitle": "Supprimer la règle «\u00a0{name}\u00a0»\u00a0?",
     "deleteBody": "{count, plural, =0 {Elle n'a déclenché aucune alerte.} one {Son alerte est supprimée aussi.} other {Ses # alertes sont supprimées aussi.}}",
     "delete": "Supprimer",
     "deleted": "«\u00a0{name}\u00a0» supprimée",
     "deleteFailed": "Impossible de supprimer la règle",
-    "added": "«\u00a0{name}\u00a0» ajoutée"
+    "added": "«\u00a0{name}\u00a0» ajoutée",
+    "saved": "«\u00a0{name}\u00a0» enregistrée"
   },
   "editor": {
     "title": "Nouvelle règle",
+    "editTitle": "Modifier «\u00a0{name}\u00a0»",
     "from": "Partir de",
     "blank": "Règle vide",
     "name": "Nom",
@@ -241,6 +243,8 @@
     "cancel": "Annuler",
     "add": "Ajouter la règle",
     "adding": "Ajout…",
+    "save": "Enregistrer",
+    "saving": "Enregistrement…",
     "errors": {
       "name": "Saisissez un nom",
       "nameTaken": "Une règle porte déjà ce nom",
@@ -252,7 +256,8 @@
       "pattern": "Saisissez le texte à rechercher",
       "check": "Saisissez le contrôle",
       "rules": "Choisissez une ou plusieurs règles",
-      "save": "Impossible d'ajouter la règle"
+      "save": "Impossible d'ajouter la règle",
+      "update": "Impossible d'enregistrer la règle"
     }
   },
   "silences": {

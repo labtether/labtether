@@ -94,7 +94,7 @@ export default function AlertsPage() {
         title={t("title")}
         className="al-ph"
         action={(
-          <Button variant={newRuleMain ? "primary" : "secondary"} onClick={() => openRules({ kind: "new", seq: Date.now(), from: null })}>
+          <Button variant={newRuleMain ? "primary" : "secondary"} onClick={() => openRules({ kind: "new", seq: Date.now() })}>
             <Plus aria-hidden="true" size={14} strokeWidth={2} />
             {t("newRule")}
           </Button>
@@ -126,6 +126,7 @@ export default function AlertsPage() {
           open={ruleOpen}
           onOpen={setRuleOpen}
           createRule={data.createRule}
+          updateRule={data.updateRule}
           deleteRule={data.deleteRule}
         />
       ) : null}

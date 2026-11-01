@@ -146,8 +146,6 @@
       "scope": "Applies to",
       "state": "State"
     },
-    "on": "On",
-    "off": "Off",
     "everything": "All devices",
     "scope": {
       "global": "All devices",
@@ -176,17 +174,21 @@
       "description": "Description",
       "labels": "Labels"
     },
-    "copy": "Copy to new rule",
+    "switch": "{name} on",
+    "switchFailed": "{state, select, on {Could not turn on “{name}”} other {Could not turn off “{name}”}}",
+    "edit": "Edit",
     "deleteAsk": "Delete…",
     "deleteTitle": "Delete rule “{name}”?",
     "deleteBody": "{count, plural, =0 {It has raised no alerts.} one {Its # alert is deleted too.} other {Its # alerts are deleted too.}}",
     "delete": "Delete",
     "deleted": "Deleted “{name}”",
     "deleteFailed": "Could not delete the rule",
-    "added": "Added “{name}”"
+    "added": "Added “{name}”",
+    "saved": "Saved “{name}”"
   },
   "editor": {
     "title": "New rule",
+    "editTitle": "Edit “{name}”",
     "from": "Start from",
     "blank": "Blank rule",
     "name": "Name",
@@ -241,6 +243,8 @@
     "cancel": "Cancel",
     "add": "Add rule",
     "adding": "Adding…",
+    "save": "Save",
+    "saving": "Saving…",
     "errors": {
       "name": "Enter a name",
       "nameTaken": "A rule with this name exists",
@@ -252,7 +256,8 @@
       "pattern": "Enter the text to match",
       "check": "Enter the check",
       "rules": "Pick one or more rules",
-      "save": "Could not add the rule"
+      "save": "Could not add the rule",
+      "update": "Could not save the rule"
     }
   },
   "silences": {

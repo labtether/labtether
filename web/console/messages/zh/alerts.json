@@ -146,8 +146,6 @@
       "scope": "适用于",
       "state": "状态"
     },
-    "on": "开启",
-    "off": "关闭",
     "everything": "所有设备",
     "scope": {
       "global": "所有设备",
@@ -176,17 +174,21 @@
       "description": "描述",
       "labels": "标签"
     },
-    "copy": "复制为新规则",
+    "switch": "“{name}”开启",
+    "switchFailed": "{state, select, on {无法开启“{name}”} other {无法关闭“{name}”}}",
+    "edit": "编辑",
     "deleteAsk": "删除…",
     "deleteTitle": "删除规则“{name}”？",
     "deleteBody": "{count, plural, =0 {它还没有产生告警。} other {它的 # 条告警也会被删除。}}",
     "delete": "删除",
     "deleted": "已删除“{name}”",
     "deleteFailed": "无法删除该规则",
-    "added": "已添加“{name}”"
+    "added": "已添加“{name}”",
+    "saved": "已保存“{name}”"
   },
   "editor": {
     "title": "新建规则",
+    "editTitle": "编辑“{name}”",
     "from": "起点",
     "blank": "空白规则",
     "name": "名称",
@@ -241,6 +243,8 @@
     "cancel": "取消",
     "add": "添加规则",
     "adding": "正在添加…",
+    "save": "保存",
+    "saving": "正在保存…",
     "errors": {
       "name": "请输入名称",
       "nameTaken": "已存在同名规则",
@@ -252,7 +256,8 @@
       "pattern": "请输入要匹配的文本",
       "check": "请输入检查",
       "rules": "请选择一条或多条规则",
-      "save": "无法添加该规则"
+      "save": "无法添加该规则",
+      "update": "无法保存该规则"
     }
   },
   "silences": {
