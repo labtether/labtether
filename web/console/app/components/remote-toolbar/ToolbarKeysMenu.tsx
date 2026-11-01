@@ -47,7 +47,7 @@ export function ToolbarKeysMenu(props: KeysMenuProps) {
         <ToolCheck
           checked={props.keyboardGrabState === "active"}
           onChange={props.onKeyboardGrabToggle!}
-          hint={props.keyboardGrabState === "active" ? t("releaseKeys") : undefined}
+          hint={props.keyboardGrabState === "active" ? t("releaseCombo") : undefined}
         >
           {t("captureKeyboard")}
         </ToolCheck>

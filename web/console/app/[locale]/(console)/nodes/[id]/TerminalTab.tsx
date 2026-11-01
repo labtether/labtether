@@ -172,7 +172,7 @@ export function TerminalTab({ nodeId }: { nodeId: string }) {
                 ) : null}
               </span>
             ) : null}
-            <Menu.Root modal={false}>
+            <Menu.Root>
               <Menu.Trigger className="tm-icon" aria-label={t("more")} title={t("more")}>
                 <MoreHorizontal aria-hidden="true" />
               </Menu.Trigger>

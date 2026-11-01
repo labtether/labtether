@@ -77,6 +77,19 @@ export type TerminalStreamStatusEvent = {
   elapsed_ms?: number;
 };
 
+/**
+ * A terminal that opens or connects takes the keyboard, unless the person is busy elsewhere: typing in a field, or
+ * in an open menu or dialog. (A connecting pane used to close the menu a person had just opened.)
+ */
+function focusUnlessBusy(term: { focus: () => void }, container: HTMLElement | null) {
+  const active = document.activeElement;
+  if (active instanceof HTMLElement && active !== document.body && !container?.contains(active)) {
+    if (active.matches("input, textarea, select, [contenteditable='true']")) return;
+    if (active.closest("[role='menu'], [role='dialog'], [role='listbox']")) return;
+  }
+  term.focus();
+}
+
 /** Without a theme from the caller, the 2.0 terminal colours. */
 const defaultTheme: ITheme = labtetherTerminalTheme("dark");
 
@@ -287,7 +300,7 @@ const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XTerminal
 
       term.open(containerRef.current);
       fitAddon.fit();
-      term.focus();
+      focusUnlessBusy(term, containerRef.current);
 
       termRef.current = term;
       fitAddonRef.current = fitAddon;
@@ -334,7 +347,7 @@ const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XTerminal
       socket.onopen = () => {
         if (cancelled) return;
         onConnectedRef.current?.();
-        term.focus();
+        focusUnlessBusy(term, containerRef.current);
 
         // Send initial terminal size
         const dims = fitAddonRef.current?.proposeDimensions();

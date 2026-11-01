@@ -131,7 +131,12 @@ test.describe("map", () => {
     for (const name of ["Proxmox Cluster", "Docker Runtime", "TrueNAS Core"]) await expect(node(page, name)).toBeVisible();
     await expect(guestRow(page, "Kubernetes VM")).toBeVisible();
     await expect(connection(await open(page, "Docker Runtime"), "API Container")).toContainText("Hosts");
-    await expect(connection(await open(page, "TrueNAS Core"), "Media Dataset")).toBeVisible();
+    // The hub reports two relationships for this pair (the stored contains edge and the one the collector ID
+    // implies); each is its own row, listed once.
+    const media = connection(await open(page, "TrueNAS Core"), "Media Dataset");
+    await expect(media).toHaveCount(2);
+    await expect(media.filter({ hasText: "Hosts" })).toHaveCount(1);
+    await expect(media.filter({ hasText: "Runs" })).toHaveCount(1);
 
     await page.getByRole("button", { name: "Map actions" }).click();
     await page.getByRole("menuitem", { name: "Zones", exact: true }).click();

@@ -176,6 +176,11 @@ async function installConsoleApiMocks(page: Page, unmocked: Set<string>) {
       return;
     }
 
+    if (pathname === "/api/settings/managed-database") {
+      await fulfillJSON(route, { enabled: false, host: "", port: 5432, username: "", password: "", database: "" });
+      return;
+    }
+
     if (pathname === "/api/settings/enrollment") {
       await fulfillJSON(route, { tokens: [], hub_url: "http://127.0.0.1:8080", ws_url: "ws://127.0.0.1:8080/ws/agent" });
       return;

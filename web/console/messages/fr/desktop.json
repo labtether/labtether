@@ -85,7 +85,7 @@
     "clipboardFailed": "Échec de la synchronisation du presse-papiers",
     "sendKeys": "Envoyer des touches",
     "captureKeyboard": "Capturer le clavier",
-    "releaseKeys": "Ctrl+Alt+Maj le libère",
+    "releaseCombo": "Ctrl+Alt+Maj le libère",
     "captureMouse": "Capturer la souris",
     "touchKeyboard": "Clavier à l’écran",
     "clipboard": "Presse-papiers",

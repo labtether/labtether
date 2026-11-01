@@ -85,7 +85,7 @@
     "clipboardFailed": "剪贴板同步失败",
     "sendKeys": "发送按键",
     "captureKeyboard": "捕获键盘",
-    "releaseKeys": "Ctrl+Alt+Shift 释放",
+    "releaseCombo": "Ctrl+Alt+Shift 释放",
     "captureMouse": "捕获鼠标",
     "touchKeyboard": "屏幕键盘",
     "clipboard": "剪贴板",

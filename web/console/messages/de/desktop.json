@@ -85,7 +85,7 @@
     "clipboardFailed": "Abgleich der Zwischenablage fehlgeschlagen",
     "sendKeys": "Tasten senden",
     "captureKeyboard": "Tastatur erfassen",
-    "releaseKeys": "Strg+Alt+Umschalt gibt frei",
+    "releaseCombo": "Strg+Alt+Umschalt gibt frei",
     "captureMouse": "Maus erfassen",
     "touchKeyboard": "Bildschirmtastatur",
     "clipboard": "Zwischenablage",

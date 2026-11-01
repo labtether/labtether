@@ -66,6 +66,7 @@ test("terminal multipane layout switching updates pane count and persists", asyn
   await expect(sessionPanes).toHaveCount(1);
   await expect(emptyPanes).toHaveCount(0);
 
+  // The menu is opened while the pane's shell is still connecting: the shell must not take the focus and close it.
   await page.getByRole("button", { name: "More terminal actions" }).click();
   await page.getByRole("menuitem", { name: "Split" }).click();
   await page.getByRole("menuitemradio", { name: "Grid" }).click();

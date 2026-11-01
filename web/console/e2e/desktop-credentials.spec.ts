@@ -28,8 +28,8 @@ test("desktop VNC credentials prompt supports retry after auth failure", async (
   await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect(page.getByText("Username and password", { exact: true })).toBeVisible();
-  await page.getByLabel("Username").fill("operator");
-  await page.getByLabel("Password").fill("wrong-password");
+  await page.getByLabel("Username", { exact: true }).fill("operator");
+  await page.getByLabel("Password", { exact: true }).fill("wrong-password");
   await page.getByRole("button", { name: "Sign in" }).click();
 
   await expect(page.getByText("Username and password", { exact: true })).toHaveCount(0);
@@ -60,8 +60,8 @@ test("desktop VNC credentials prompt supports retry after auth failure", async (
 
   await page.getByRole("button", { name: "Try again" }).click({ force: true });
   await expect(page.getByText("Username and password", { exact: true })).toBeVisible();
-  await page.getByLabel("Username").fill("operator");
-  await page.getByLabel("Password").fill("correct-password");
+  await page.getByLabel("Username", { exact: true }).fill("operator");
+  await page.getByLabel("Password", { exact: true }).fill("correct-password");
   await page.getByRole("button", { name: "Sign in" }).click();
 
   await expect.poll(() => sessionRequests.length).toBe(2);
@@ -234,7 +234,7 @@ test("desktop VNC stored password falls back to the visible prompt after one fai
       },
     ]);
 
-  await page.getByLabel("Password").fill("manual-secret");
+  await page.getByLabel("Password", { exact: true }).fill("manual-secret");
   await page.getByRole("button", { name: "Sign in" }).click();
 
   await expect(page.getByText("VNC password", { exact: true })).toHaveCount(0);

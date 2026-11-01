@@ -85,7 +85,7 @@
     "clipboardFailed": "Falló la sincronización del portapapeles",
     "sendKeys": "Enviar teclas",
     "captureKeyboard": "Capturar teclado",
-    "releaseKeys": "Ctrl+Alt+Mayús lo libera",
+    "releaseCombo": "Ctrl+Alt+Mayús lo libera",
     "captureMouse": "Capturar ratón",
     "touchKeyboard": "Teclado en pantalla",
     "clipboard": "Portapapeles",

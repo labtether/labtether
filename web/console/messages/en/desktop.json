@@ -85,7 +85,7 @@
     "clipboardFailed": "Clipboard sync failed",
     "sendKeys": "Send keys",
     "captureKeyboard": "Capture keyboard",
-    "releaseKeys": "Ctrl+Alt+Shift releases",
+    "releaseCombo": "Ctrl+Alt+Shift releases",
     "captureMouse": "Capture mouse",
     "touchKeyboard": "On-screen keyboard",
     "clipboard": "Clipboard",

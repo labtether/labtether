@@ -37,7 +37,7 @@ export default function TerminalMoreMenu(props: TerminalMoreMenuProps) {
   const t = useTranslations("terminal.more");
   const { hasShell, layout, paneCount, snippets } = props;
   return (
-    <Menu.Root modal={false}>
+    <Menu.Root>
       <Menu.Trigger className="tm-icon tm-more-btn" aria-label={t("label")} title={t("label")}>
         <MoreHorizontal aria-hidden="true" />
       </Menu.Trigger>

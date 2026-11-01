@@ -92,15 +92,16 @@ test("terminal broadcast mirrors snippet input across panes", async ({ page }) =
   await page.goto("/terminal");
   await expect(page.getByRole("region", { name: "Session on alpha-host" })).toBeVisible();
 
+  // Both panes' shells are open (each socket sent its size) before the menu is used.
   await expect.poll(async () => {
     return page.evaluate(() => {
       const win = window as unknown as {
-        __terminalWsEvents?: Array<{ data: string }>;
+        __terminalWsEvents?: Array<{ url: string; data: string }>;
       };
       const events = win.__terminalWsEvents ?? [];
-      return events.filter((event) => event.data.includes('"type":"resize"')).length;
+      return new Set(events.filter((event) => event.data.includes('"type":"resize"')).map((event) => event.url)).size;
     });
-  }).toBeGreaterThanOrEqual(2);
+  }).toBe(2);
 
   await insertSnippet();
   await expect.poll(async () => (await commandSendEvents(page, broadcastCommand)).length).toBe(1);

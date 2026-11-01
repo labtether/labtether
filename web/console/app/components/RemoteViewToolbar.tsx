@@ -24,21 +24,22 @@ export function RemoteViewToolbar(props: RemoteViewToolbarProps) {
   const { layout = "overlay", connectionState } = props;
   const overlay = layout === "overlay";
   const transfer = useToolbarTransferState(props.clipboardLastSync);
-  const [openMenus, setOpenMenus] = useState(0);
+  // Which of the toolbar's menus are open (by name), so one closing twice or unmounting open cannot leave it stuck.
+  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
   const [position, setPosition] = useState<"top" | "bottom">("top");
   const [autoHide, setAutoHide] = useState(true);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const { visible, reveal } = useToolbarAutoHide({
     enabled: overlay && autoHide && connectionState === "connected",
-    busy: openMenus > 0,
+    busy: Object.values(openMenus).some(Boolean),
     position,
     toolbarRef,
   });
 
   if (connectionState !== "connected") return null;
 
-  const onOpenChange = (open: boolean) => {
-    setOpenMenus((n) => Math.max(0, n + (open ? 1 : -1)));
+  const menu = (name: string) => (open: boolean) => {
+    setOpenMenus((prev) => ({ ...prev, [name]: open }));
     if (open) reveal();
   };
 
@@ -52,9 +53,9 @@ export function RemoteViewToolbar(props: RemoteViewToolbarProps) {
     >
       <ToolbarStatus {...props} clipboardFlash={transfer.clipboardFlash} pill={overlay} />
       <i className="rv-sep" aria-hidden="true" />
-      <ToolbarKeysMenu {...props} onOpenChange={onOpenChange} />
-      <ToolbarClipboard {...props} transfer={transfer} onOpenChange={onOpenChange} />
-      <ToolbarFiles {...props} transfer={transfer} onOpenChange={onOpenChange} />
+      <ToolbarKeysMenu {...props} onOpenChange={menu("keys")} />
+      <ToolbarClipboard {...props} transfer={transfer} onOpenChange={menu("clipboard")} />
+      <ToolbarFiles {...props} transfer={transfer} onOpenChange={menu("files")} />
       {props.onScreenshot ? (
         <ToolButton label={t("screenshot")} onClick={props.onScreenshot}>
           <ImageIcon aria-hidden="true" />
@@ -65,7 +66,7 @@ export function RemoteViewToolbar(props: RemoteViewToolbarProps) {
       </ToolButton>
       <ToolbarMoreMenu
         {...props}
-        onOpenChange={onOpenChange}
+        onOpenChange={menu("more")}
         overlay={overlay}
         autoHide={autoHide}
         onAutoHideToggle={() => {
