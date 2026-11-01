@@ -1,302 +1,159 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useDocumentVisibility } from "../../../hooks/useDocumentVisibility";
-import { useTranslations } from "next-intl";
-import { Download, ScrollText } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { PageHeader } from "../../../components/PageHeader";
-import { Card } from "../../../components/ui/Card";
 import { Button } from "../../../components/ui/Button";
-import { Input } from "../../../components/ui/Input";
-import { EmptyState } from "../../../components/ui/EmptyState";
+import { useAuth } from "../../../contexts/AuthContext";
 import { useSlowStatus, useStatusControls } from "../../../contexts/StatusContext";
+import { useToast } from "../../../contexts/ToastContext";
+import { useDocumentVisibility } from "../../../hooks/useDocumentVisibility";
+import { useHubUsers } from "../../../hooks/useHubUsers";
 import { downloadCSV } from "../../../lib/export";
-import type { AuditEvent } from "../../../console/models";
-
-// ── Helpers ──
-
-function formatTimestamp(ts: string): string {
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    }).format(new Date(ts));
-  } catch {
-    return ts;
-  }
-}
-
-function truncate(str: string | undefined, max: number): string {
-  if (!str) return "—";
-  return str.length > max ? `${str.slice(0, max)}…` : str;
-}
-
-// ── Sub-components ──
-
-function DecisionBadge({ decision, allow, deny }: { decision?: string; allow: string; deny: string }) {
-  if (!decision) return <span className="text-[var(--muted)] text-xs">—</span>;
-  const lower = decision.toLowerCase();
-  if (lower === "allow") {
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-[var(--ok-glow)] text-[var(--ok)]">
-        {allow}
-      </span>
-    );
-  }
-  if (lower === "deny") {
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-[var(--bad-glow)] text-[var(--bad)]">
-        {deny}
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-[var(--surface)] text-[var(--muted)] border border-[var(--line)]">
-      {decision}
-    </span>
-  );
-}
-
-function TypeBadge({ type }: { type: string }) {
-  return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-[var(--surface)] text-[var(--muted)] border border-[var(--line)] font-mono">
-      {type}
-    </span>
-  );
-}
-
-// ── Row with expandable details ──
-
-type AuditEventWithDetails = AuditEvent & {
-  actor_id?: string;
-  details?: Record<string, unknown>;
-  reason?: string;
-};
-
-function AuditRow({
-  event,
-  allow,
-  deny,
-  detailsLabel,
-}: {
-  event: AuditEventWithDetails;
-  allow: string;
-  deny: string;
-  detailsLabel: string;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const hasDetails = event.details != null || event.reason;
-
-  return (
-    <>
-      <tr
-        className={`border-b border-[var(--line)] transition-colors ${hasDetails ? "cursor-pointer hover:bg-[var(--hover)]" : ""}`}
-        style={{ transitionDuration: "var(--dur-instant)" }}
-        onClick={hasDetails ? () => setExpanded((v) => !v) : undefined}
-      >
-        <td className="px-3 py-2 text-xs text-[var(--muted)] font-mono whitespace-nowrap">
-          {formatTimestamp(event.timestamp)}
-        </td>
-        <td className="px-3 py-2">
-          <TypeBadge type={event.type} />
-        </td>
-        <td className="px-3 py-2 text-xs text-[var(--text)] font-mono">
-          {truncate(event.actor_id, 24)}
-        </td>
-        <td className="px-3 py-2 text-xs text-[var(--muted)]">
-          {truncate(event.target, 32)}
-        </td>
-        <td className="px-3 py-2">
-          <DecisionBadge decision={event.decision} allow={allow} deny={deny} />
-        </td>
-        <td className="px-3 py-2 text-xs text-[var(--muted)]">
-          {hasDetails ? (
-            <span className="text-[var(--accent)] hover:underline">
-              {expanded ? "▲" : "▼"} {detailsLabel}
-            </span>
-          ) : "—"}
-        </td>
-      </tr>
-      {expanded && hasDetails ? (
-        <tr className="border-b border-[var(--line)] bg-[var(--surface)]">
-          <td colSpan={6} className="px-4 py-3">
-            <pre className="text-[10px] font-mono text-[var(--text)] whitespace-pre-wrap break-all overflow-x-auto max-h-64 overflow-y-auto">
-              {JSON.stringify(
-                { reason: event.reason ?? undefined, ...event.details },
-                null,
-                2,
-              )}
-            </pre>
-          </td>
-        </tr>
-      ) : null}
-    </>
-  );
-}
-
-// ── Page ──
+import { hasAdminRole } from "../../../lib/roles";
+import { ChipGroup, EmptyLine, FilterField, PickMenu } from "../logs/LogControls";
+import { AuditRow, type AuditText } from "./AuditRow";
+import { AuditViews } from "./AuditViews";
+import { actionKey, auditRows, auditTime, humanizeType, outcome, peopleByActivity, type AuditEntry, type AuditSort } from "./auditModel";
 
 const AUTO_REFRESH_MS = 30_000;
 
+/** Audit log: who did what and when, newest first. Refused attempts read "Denied". Export CSV; Recordings beside it. */
 export default function AuditLogPage() {
   const t = useTranslations("audit-log");
-  const slowStatus = useSlowStatus();
+  const locale = useLocale();
+  const { user } = useAuth();
+  const { addToast } = useToast();
+  const slow = useSlowStatus();
   const { fetchStatus } = useStatusControls();
-  const isVisible = useDocumentVisibility();
+  const visible = useDocumentVisibility();
+  const { users } = useHubUsers(hasAdminRole(user?.role));
+  const [query, setQuery] = useState("");
+  const [who, setWho] = useState("all");
+  const [type, setType] = useState("all");
+  const [sort, setSort] = useState<AuditSort>("time:desc");
+  const [openId, setOpenId] = useState("");
 
-  const allEvents = useMemo(
-    () => (slowStatus?.recentAudit ?? []) as AuditEventWithDetails[],
-    [slowStatus?.recentAudit],
+  const entries = useMemo(() => (slow?.recentAudit ?? []) as AuditEntry[], [slow?.recentAudit]);
+
+  useEffect(() => {
+    if (!visible) return;
+    const id = window.setInterval(() => void fetchStatus(), AUTO_REFRESH_MS);
+    return () => window.clearInterval(id);
+  }, [fetchStatus, visible]);
+
+  const usernames = useMemo(() => new Map(users.map((u) => [u.id, u.username])), [users]);
+  const nameOf = useCallback(
+    (id: string) => (id === "system" ? t("hub") : usernames.get(id) ?? id),
+    [t, usernames],
+  );
+  const text = useMemo<AuditText>(() => {
+    const now = new Date();
+    return {
+      time: (e) => auditTime(e.timestamp, now, locale),
+      who: (e) => nameOf(e.actor_id ?? "") || t("unknown"),
+      action: (e) => (actionKey(e.type) ? t(`actions.${actionKey(e.type)}`) : humanizeType(e.type)),
+    };
+  }, [locale, nameOf, t]);
+  const searchText = useCallback(
+    (e: AuditEntry) => {
+      const result = outcome(e.decision);
+      return [text.time(e), text.who(e), text.action(e), e.target ?? "", e.type, result ? t(`outcome.${result}`) : ""].join(" ");
+    },
+    [t, text],
   );
 
-  // ── Collect unique event types for filter dropdown ──
-  const eventTypes = useMemo(() => {
-    const types = new Set<string>();
-    for (const e of allEvents) types.add(e.type);
-    return Array.from(types).sort();
-  }, [allEvents]);
+  const people = useMemo(() => peopleByActivity(entries, (id) => text.who({ actor_id: id } as AuditEntry)), [entries, text]);
+  const types = useMemo(
+    () => [...new Set(entries.map((e) => e.type))].map((v) => ({ value: v, label: text.action({ type: v } as AuditEntry) })).sort((a, b) => a.label.localeCompare(b.label)),
+    [entries, text],
+  );
+  const person = people.includes(who) ? who : "all";
+  const kind = types.some((o) => o.value === type) ? type : "all";
+  const rows = useMemo(
+    () => auditRows(entries, { query, who: person, type: kind, sort, nameOf: (id) => text.who({ actor_id: id } as AuditEntry), textOf: searchText }),
+    [entries, kind, person, query, searchText, sort, text],
+  );
 
-  // ── Filter state ──
-  const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
-
-  // ── Filtered events ──
-  const filtered = useMemo(() => {
-    let result = allEvents;
-    if (typeFilter) {
-      result = result.filter((e) => e.type === typeFilter);
-    }
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      result = result.filter(
-        (e) =>
-          e.type.toLowerCase().includes(q) ||
-          (e.actor_id ?? "").toLowerCase().includes(q) ||
-          (e.target ?? "").toLowerCase().includes(q) ||
-          (e.decision ?? "").toLowerCase().includes(q),
-      );
-    }
-    // Most recent first
-    return [...result].sort(
-      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+  const exportCSV = () => {
+    downloadCSV(
+      rows.map((e) => ({
+        timestamp: e.timestamp,
+        person: text.who(e),
+        action: text.action(e),
+        target: e.target ?? "",
+        result: e.decision ?? "",
+        type: e.type,
+        actor_id: e.actor_id ?? "",
+        reason: e.reason ?? "",
+        details: e.details ? JSON.stringify(e.details) : "",
+      })),
+      `labtether-audit-${new Date().toISOString().slice(0, 10)}.csv`,
     );
-  }, [allEvents, search, typeFilter]);
-
-  // ── Auto-refresh every 30 s ──
-  useEffect(() => {
-    if (!isVisible) return;
-    const id = setInterval(() => {
-      void fetchStatus();
-    }, AUTO_REFRESH_MS);
-    return () => clearInterval(id);
-  }, [fetchStatus, isVisible]);
-
-  // ── CSV export ──
-  const handleExport = useCallback(() => {
-    const rows = filtered.map((e) => ({
-      timestamp: e.timestamp,
-      type: e.type,
-      actor_id: e.actor_id ?? "",
-      target: e.target ?? "",
-      decision: e.decision ?? "",
-      details: e.details ? JSON.stringify(e.details) : "",
-      reason: (e as AuditEventWithDetails).reason ?? "",
-    }));
-    downloadCSV(rows, `audit-log-${new Date().toISOString().slice(0, 10)}.csv`);
-  }, [filtered]);
+  };
+  const copy = (line: string) => {
+    const fail = () => addToast("error", t("copyFailed"));
+    try {
+      void navigator.clipboard.writeText(line).then(() => addToast("success", t("copied")), fail);
+    } catch {
+      fail();
+    }
+  };
+  const sortBy = (key: "time" | "who") =>
+    setSort((cur) => (cur.startsWith(key) ? (cur.endsWith("desc") ? `${key}:asc` : `${key}:desc`) : key === "time" ? "time:desc" : "who:asc") as AuditSort);
+  const sortHead = (key: "time" | "who", label: string) => {
+    const on = sort.startsWith(key);
+    const Arrow = sort.endsWith("asc") ? ChevronUp : ChevronDown;
+    return (
+      <button type="button" className={`lg-sort${on ? " on" : ""}`} onClick={() => sortBy(key)}>
+        {label}
+        {on ? <Arrow aria-hidden="true" strokeWidth={2} /> : null}
+      </button>
+    );
+  };
+  const filtered = rows.length < entries.length;
 
   return (
     <>
       <PageHeader
         title={t("title")}
-        subtitle={t("subtitle")}
-        action={(
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleExport}
-            disabled={filtered.length === 0}
-          >
-            <Download size={14} />
-            {t("exportCSV")}
-          </Button>
-        )}
+        action={<Button onClick={exportCSV} disabled={rows.length === 0}>{t("exportCSV")}</Button>}
       />
-
-      <Card variant="flush">
-        {/* Toolbar */}
-        <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-[var(--line)]">
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t("search")}
-            className="max-w-[260px] h-7 text-xs"
-          />
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            className="h-7 rounded-md border border-[var(--line)] bg-[var(--surface)] text-xs text-[var(--text)] px-2 focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
-          >
-            <option value="">{t("allTypes")}</option>
-            {eventTypes.map((type) => (
-              <option key={type} value={type}>{type}</option>
+      <AuditViews current="log" />
+      {entries.length === 0 ? (
+        <EmptyLine line={t("empty")} />
+      ) : (
+        <>
+          <div className="lg-tools wide">
+            <FilterField value={query} onChange={setQuery} placeholder={t("filter")} />
+            {people.length > 1 ? (
+              <ChipGroup label={t("cols.person")} value={person} options={[{ value: "all", label: t("all") }, ...people.map((p) => ({ value: p, label: p }))]} onChange={setWho} />
+            ) : null}
+            {types.length > 1 ? (
+              <PickMenu label={t("cols.action")} value={kind} options={[{ value: "all", label: t("allActions") }, ...types]} onChange={setType} />
+            ) : null}
+          </div>
+          <div className="lg-box lg-au-box">
+            <div className="lg-au lg-au-cols">
+              {sortHead("time", t("cols.time"))}
+              {sortHead("who", t("cols.person"))}
+              <span>{t("cols.action")}</span>
+              <span />
+            </div>
+            {rows.map((e) => (
+              <AuditRow key={e.id} entry={e} text={text} open={openId === e.id} onToggle={() => setOpenId(openId === e.id ? "" : e.id)} onCopy={copy} />
             ))}
-          </select>
-        </div>
-
-        {/* Table or empty state */}
-        {filtered.length === 0 ? (
-          <div className="p-4">
-            <EmptyState
-              icon={ScrollText}
-              title={t("noEvents")}
-              description={t("noEventsDesc")}
-            />
+            {rows.length === 0 ? <p className="lg-none">{query.trim() ? t("noMatch", { query: query.trim() }) : t("noneFiltered")}</p> : null}
+            {filtered ? (
+              <div className="lg-foot">
+                <span>{t("shown", { count: rows.length, total: entries.length })}</span>
+                <button type="button" onClick={() => { setQuery(""); setWho("all"); setType("all"); }}>{t("clearFilter")}</button>
+              </div>
+            ) : null}
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-[var(--line)]">
-                  <th className="px-3 py-2 text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wide whitespace-nowrap">
-                    {t("timestamp")}
-                  </th>
-                  <th className="px-3 py-2 text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wide">
-                    {t("type")}
-                  </th>
-                  <th className="px-3 py-2 text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wide">
-                    {t("actor")}
-                  </th>
-                  <th className="px-3 py-2 text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wide">
-                    {t("target")}
-                  </th>
-                  <th className="px-3 py-2 text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wide">
-                    {t("decision")}
-                  </th>
-                  <th className="px-3 py-2 text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wide">
-                    {t("details")}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((event) => (
-                  <AuditRow
-                    key={event.id}
-                    event={event}
-                    allow={t("allow")}
-                    deny={t("deny")}
-                    detailsLabel={t("details")}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
+        </>
+      )}
     </>
   );
 }

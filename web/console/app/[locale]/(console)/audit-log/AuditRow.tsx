@@ -1,0 +1,81 @@
+"use client";
+
+import * as Menu from "@radix-ui/react-dropdown-menu";
+import { Copy, MoreHorizontal, PanelTopOpen } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { detailRows, outcome, type AuditEntry } from "./auditModel";
+
+export type AuditText = {
+  time: (e: AuditEntry) => string;
+  who: (e: AuditEntry) => string;
+  action: (e: AuditEntry) => string;
+};
+
+/** Time, person and what they did; a refused attempt leads with "Denied". Opens to its reason and details. */
+export function AuditRow({
+  entry,
+  text,
+  open,
+  onToggle,
+  onCopy,
+}: {
+  entry: AuditEntry;
+  text: AuditText;
+  open: boolean;
+  onToggle: () => void;
+  onCopy: (line: string) => void;
+}) {
+  const t = useTranslations("audit-log");
+  const result = outcome(entry.decision);
+  const details = detailRows(entry);
+  const time = text.time(entry);
+  const who = text.who(entry);
+  const action = text.action(entry);
+  const line = [time, who, result ? `${t(`outcome.${result}`)}:` : "", action, entry.target ?? ""].filter(Boolean).join(" ");
+  const what = (
+    <>
+      {result ? <span className={`lg-au-res ${result}`}>{t(`outcome.${result}`)}</span> : null}
+      <span className="lg-au-act">{action}</span>
+      {entry.target ? <span className="lg-au-tg">{entry.target}</span> : null}
+    </>
+  );
+  return (
+    <div className={`lg-au-g${open ? " open" : ""}`}>
+      <div className="lg-au lg-au-r" data-row={entry.id}>
+        <time className="lg-t" dateTime={entry.timestamp}>{time}</time>
+        <span className="lg-au-who">{who}</span>
+        {details.length > 0 ? (
+          <button type="button" className="lg-au-what lg-au-btn" aria-expanded={open} onClick={onToggle}>{what}</button>
+        ) : (
+          <span className="lg-au-what">{what}</span>
+        )}
+        <Menu.Root>
+          <Menu.Trigger className="lg-more" aria-label={t("rowActions")}>
+            <MoreHorizontal aria-hidden="true" />
+          </Menu.Trigger>
+          <Menu.Portal>
+            <Menu.Content className="lt-menu" align="end" sideOffset={4}>
+              <Menu.Item className="lt-menu-item" onSelect={() => onCopy(line)}>
+                <Copy aria-hidden="true" />
+                {t("copyLine")}
+              </Menu.Item>
+              {details.length > 0 ? (
+                <Menu.Item className="lt-menu-item" onSelect={onToggle}>
+                  <PanelTopOpen aria-hidden="true" />
+                  {open ? t("hideDetails") : t("showDetails")}
+                </Menu.Item>
+              ) : null}
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu.Root>
+      </div>
+      {open && details.length > 0 ? (
+        <dl className="lg-fields lg-au-d">
+          {details.map(([k, v]) => (
+            <div key={k}><dt>{k === "reason" ? t("reason") : k}</dt><dd>{v}</dd></div>
+          ))}
+        </dl>
+      ) : null}
+    </div>
+  );
+}

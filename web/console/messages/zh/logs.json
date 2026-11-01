@@ -1,23 +1,60 @@
 {
   "title": "日志",
-  "subtitle": "搜索和过滤设备的日志输出",
-  "filters": {
-    "source": "来源",
+  "filter": "按设备、来源或消息筛选",
+  "device": {
+    "all": "所有设备"
+  },
+  "level": {
+    "all": "所有级别",
+    "error": "错误",
+    "warn": "警告",
+    "info": "信息",
+    "debug": "调试"
+  },
+  "levelWord": {
+    "error": "错误",
+    "warn": "警告",
+    "debug": "调试"
+  },
+  "range": {
+    "label": "时间范围",
+    "15m": "最近 15 分钟",
+    "1h": "最近 1 小时",
+    "6h": "最近 6 小时",
+    "24h": "最近 24 小时"
+  },
+  "source": {
+    "all": "所有来源",
+    "allWithHeartbeats": "所有来源和心跳",
+    "heartbeats": "包含心跳"
+  },
+  "live": "实时",
+  "cols": {
+    "time": "时间",
     "level": "级别",
-    "events": "事件",
-    "range": "范围",
-    "search": "搜索",
-    "allSources": "所有来源",
-    "operational": "运维",
-    "all": "全部"
+    "device": "设备",
+    "source": "来源",
+    "message": "消息"
   },
-  "search": {
-    "placeholder": "搜索消息文本 (error, timeout, zfs...)"
-  },
-  "empty": {
-    "title": "还没有日志事件",
-    "description": "设备开始上报后，事件将显示在此处。请确保至少有一个设备已连接。",
-    "viewDevices": "查看设备"
-  },
-  "noMatch": "没有日志事件与当前筛选条件匹配。"
+  "selectLine": "选择来自 {device} 的 {time} 行",
+  "selectAll": "选择所有行",
+  "selected": "已选 {count} 行",
+  "copyLines": "{count, plural, other {复制 # 行}}",
+  "copiedLines": "{count, plural, other {已复制 # 行}}",
+  "copyLine": "复制此行",
+  "copiedLine": "已复制此行",
+  "copyFailed": "浏览器阻止了复制",
+  "openDevice": "打开 {device}",
+  "fields": "字段",
+  "clearFilter": "清除筛选",
+  "clearSelection": "清除",
+  "lines": "{count, plural, other {# 行}}",
+  "empty": "还没有日志",
+  "noMatch": "没有与“{query}”匹配的日志",
+  "noneFiltered": "这些筛选条件下没有日志",
+  "addDevice": "添加设备",
+  "loadFailed": "日志未能加载",
+  "retry": "重试",
+  "loading": "正在加载日志",
+  "noneInRange": "此时间范围内没有日志"
 }

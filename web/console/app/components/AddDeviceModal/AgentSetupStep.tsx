@@ -173,11 +173,9 @@ export function AgentSetupStep({
   if (deviceDetected) {
     return (
       <div className="flex flex-col items-center gap-4 py-8">
-        <div className="w-10 h-10 rounded-full bg-[var(--ok-glow)] flex items-center justify-center">
-          <Check size={20} className="text-[var(--ok)]" />
-        </div>
-        <p className="text-sm font-medium text-[var(--text)]">
-          Device connected successfully
+        <p className="flex items-center gap-2 text-sm font-medium text-[var(--text)]" role="status">
+          <Check size={16} className="text-[var(--ok)]" aria-hidden="true" />
+          Device connected
         </p>
         <Button variant="primary" onClick={onClose}>
           Done
@@ -200,8 +198,8 @@ export function AgentSetupStep({
               onClick={() => setPlatform(p.id)}
               className={`px-3 py-1.5 text-xs rounded-lg border transition-colors duration-150 ${
                 platform === p.id
-                  ? "border-[var(--accent)] text-[var(--accent)] bg-[var(--accent)]/10"
-                  : "border-[var(--line)] text-[var(--muted)] hover:bg-[var(--hover)]"
+                  ? "border-transparent text-[var(--text)] bg-[var(--sel)]"
+                  : "border-[var(--line)] text-[var(--text-2)] hover:bg-[var(--hover)]"
               }`}
             >
               {p.label}

@@ -345,9 +345,7 @@ export function HomeAssistantSetupStep({ onBack, onClose, onAdded, compatPrefill
       <div className="space-y-2 rounded-lg border border-[var(--line)] bg-[var(--surface)] p-3">
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm font-medium text-[var(--text)]">Custom Integration</p>
-          <span className="rounded-full bg-[var(--ok-glow)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--ok)]">
-            Available
-          </span>
+          <span className="text-xs text-[var(--text-2)]">Available</span>
         </div>
         <p className="text-xs text-[var(--muted)]">
           Add the `labtether` custom integration in Home Assistant, then configure it with your LabTether hub URL and owner token.
@@ -358,9 +356,7 @@ export function HomeAssistantSetupStep({ onBack, onClose, onAdded, compatPrefill
       <div className="space-y-2 rounded-lg border border-[var(--line)] bg-[var(--surface)] p-3">
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm font-medium text-[var(--text)]">Home Assistant Add-on</p>
-          <span className="rounded-full bg-[var(--warn-glow)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--warn)]">
-            Scaffold
-          </span>
+          <span className="text-xs text-[var(--text-2)]">Scaffold</span>
         </div>
         <p className="text-xs text-[var(--muted)]">
           The install guide includes scaffold status and the eventual add-on install steps once repository publishing is available.

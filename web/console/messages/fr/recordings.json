@@ -1,16 +1,22 @@
 {
-  "title": "Enregistrements de sessions",
-  "empty": "Aucun enregistrement pour le moment.",
+  "title": "Enregistrements",
+  "filter": "Filtrer par appareil",
+  "all": "Tous",
   "columns": {
-    "asset": "Ressource",
+    "device": "Appareil",
     "protocol": "Protocole",
     "duration": "Durée",
     "size": "Taille",
-    "status": "Statut",
-    "date": "Date",
-    "actions": "Actions"
+    "date": "Quand"
   },
+  "kind": "Vue à distance · {protocol}",
   "download": "Télécharger",
-  "downloadLabel": "Télécharger l'enregistrement de {asset}",
-  "inProgress": "En cours"
+  "downloadLabel": "Télécharger l’enregistrement de {asset}",
+  "inProgress": "En cours",
+  "empty": "Aucun enregistrement pour l’instant",
+  "loadFailed": "Les enregistrements ne se sont pas chargés",
+  "loading": "Chargement des enregistrements",
+  "noMatch": "Aucun enregistrement ne correspond à « {query} »",
+  "shown": "{count} sur {total}",
+  "clearFilter": "Effacer le filtre"
 }

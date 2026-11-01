@@ -1,23 +1,60 @@
 {
   "title": "Logs",
-  "subtitle": "Search and filter log output from your devices",
-  "filters": {
-    "source": "Source",
+  "filter": "Filter by device, source or message",
+  "device": {
+    "all": "All devices"
+  },
+  "level": {
+    "all": "All levels",
+    "error": "Errors",
+    "warn": "Warnings",
+    "info": "Info",
+    "debug": "Debug"
+  },
+  "levelWord": {
+    "error": "error",
+    "warn": "warn",
+    "debug": "debug"
+  },
+  "range": {
+    "label": "Time range",
+    "15m": "Last 15 minutes",
+    "1h": "Last hour",
+    "6h": "Last 6 hours",
+    "24h": "Last 24 hours"
+  },
+  "source": {
+    "all": "All sources",
+    "allWithHeartbeats": "All sources and heartbeats",
+    "heartbeats": "Include heartbeats"
+  },
+  "live": "Live",
+  "cols": {
+    "time": "Time",
     "level": "Level",
-    "events": "Events",
-    "range": "Range",
-    "search": "Search",
-    "allSources": "All Sources",
-    "operational": "Operational",
-    "all": "All"
+    "device": "Device",
+    "source": "Source",
+    "message": "Message"
   },
-  "search": {
-    "placeholder": "Search message text (error, timeout, zfs...)"
-  },
-  "empty": {
-    "title": "No log events yet",
-    "description": "Events will appear here once devices start reporting. Check that at least one device is connected.",
-    "viewDevices": "View Devices"
-  },
-  "noMatch": "No log events match your current filters."
+  "selectLine": "Select line {time} from {device}",
+  "selectAll": "Select all lines",
+  "selected": "{count} selected",
+  "copyLines": "{count, plural, one {Copy # line} other {Copy # lines}}",
+  "copiedLines": "{count, plural, one {Copied # line} other {Copied # lines}}",
+  "copyLine": "Copy line",
+  "copiedLine": "Copied the line",
+  "copyFailed": "The browser blocked copying",
+  "openDevice": "Open {device}",
+  "fields": "Fields",
+  "clearFilter": "Clear filter",
+  "clearSelection": "Clear",
+  "lines": "{count, plural, one {# line} other {# lines}}",
+  "empty": "No log lines yet",
+  "noMatch": "No log lines match “{query}”",
+  "noneFiltered": "No log lines for these filters",
+  "addDevice": "Add device",
+  "loadFailed": "Logs did not load",
+  "retry": "Try again",
+  "loading": "Loading log lines",
+  "noneInRange": "No log lines in this time range"
 }

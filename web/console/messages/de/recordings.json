@@ -1,16 +1,22 @@
 {
-  "title": "Sitzungsaufzeichnungen",
-  "empty": "Noch keine Aufzeichnungen.",
+  "title": "Aufzeichnungen",
+  "filter": "Nach Gerät filtern",
+  "all": "Alle",
   "columns": {
-    "asset": "Asset",
+    "device": "Gerät",
     "protocol": "Protokoll",
     "duration": "Dauer",
     "size": "Größe",
-    "status": "Status",
-    "date": "Datum",
-    "actions": "Aktionen"
+    "date": "Wann"
   },
+  "kind": "Fernansicht · {protocol}",
   "download": "Herunterladen",
-  "downloadLabel": "Aufzeichnung für {asset} herunterladen",
-  "inProgress": "Läuft"
+  "downloadLabel": "Aufzeichnung von {asset} herunterladen",
+  "inProgress": "Läuft",
+  "empty": "Noch keine Aufzeichnungen",
+  "loadFailed": "Aufzeichnungen wurden nicht geladen",
+  "loading": "Aufzeichnungen werden geladen",
+  "noMatch": "Keine Aufzeichnungen passen zu „{query}“",
+  "shown": "{count} von {total}",
+  "clearFilter": "Filter zurücksetzen"
 }

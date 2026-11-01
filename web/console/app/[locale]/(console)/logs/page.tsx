@@ -1,135 +1,195 @@
 "use client";
 
-import { Link } from "../../../../i18n/navigation";
-import { useTranslations } from "next-intl";
-import { FileText } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
+import { Copy, Plus } from "lucide-react";
 import { PageHeader } from "../../../components/PageHeader";
-import { Card } from "../../../components/ui/Card";
-import { Badge } from "../../../components/ui/Badge";
-import { EmptyState } from "../../../components/ui/EmptyState";
-import { Input } from "../../../components/ui/Input";
-import { Select } from "../../../components/ui/Input";
-import { SegmentedTabs } from "../../../components/ui/SegmentedTabs";
-import { SkeletonRow } from "../../../components/ui/Skeleton";
+import { Button } from "../../../components/ui/Button";
+import { AddDeviceModal } from "../../../components/AddDeviceModal";
+import { useAuth } from "../../../contexts/AuthContext";
+import { useFastStatus } from "../../../contexts/StatusContext";
+import { useToast } from "../../../contexts/ToastContext";
 import { useLogs } from "../../../hooks/useLogs";
-import { formatTimestamp } from "../../../console/formatters";
-import { logLevels } from "../../../console/models";
-import type { LogLevel } from "../../../console/models";
-import { friendlySourceLabel } from "../../../console/taxonomy";
+import { hasWriteRole } from "../../../lib/roles";
+import type { LogEvent } from "../../../console/models";
+import { EmptyLine, RowCheck } from "./LogControls";
+import { LogLine, OpenLogLine, type LineCtx } from "./LogLine";
+import { LogsToolbar } from "./LogsToolbar";
+import { contextLines, lineText, logTime, newestFirst, selectedText } from "./logsModel";
 
+/** Logs: one stream from every device, newest first. Filter, Device, Level, Range and Source; Live polls again. */
 export default function LogsPage() {
-  const t = useTranslations('logs');
-  const {
-    logSources,
-    recentLogs,
-    logWindow,
-    setLogWindow,
-    telemetryWindows,
-    selectedLogSource,
-    setSelectedLogSource,
-    logLevel,
-    setLogLevel,
-    includeHeartbeats,
-    setIncludeHeartbeats,
-    logQuery,
-    setLogQuery,
-    logEvents,
-    logsLoading,
-    logsError
-  } = useLogs();
+  const t = useTranslations("logs");
+  const locale = useLocale();
+  const { user } = useAuth();
+  const { addToast } = useToast();
+  const fast = useFastStatus();
+  const logs = useLogs();
+  const [openId, setOpenId] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [addOpen, setAddOpen] = useState(false);
 
+  const assets = useMemo(() => fast?.assets ?? [], [fast?.assets]);
+  const names = useMemo(() => new Map(assets.map((a) => [a.id, a.name || a.id])), [assets]);
+  const devices = useMemo(
+    () => assets.map((a) => ({ value: a.id, label: a.name || a.id })).sort((a, b) => a.label.localeCompare(b.label)),
+    [assets],
+  );
+
+  // A failed query falls back to the lines the status already carries, with the error above them.
+  const shown = useMemo(
+    () => newestFirst(logs.logsError && logs.logEvents.length === 0 ? logs.recentLogs : logs.logEvents),
+    [logs.logEvents, logs.logsError, logs.recentLogs],
+  );
+  const ctx = useMemo<LineCtx>(() => {
+    const now = new Date();
+    return {
+      timeOf: (event: LogEvent) => logTime(event.timestamp, now, locale),
+      deviceOf: (event: LogEvent) => (event.asset_id ? names.get(event.asset_id) ?? event.asset_id : ""),
+    };
+  }, [locale, names]);
+  const textOf = useCallback((event: LogEvent) => lineText(event, ctx.timeOf(event), ctx.deviceOf(event)), [ctx]);
+
+  const copy = useCallback(
+    (text: string, done: string) => {
+      const fail = () => addToast("error", t("copyFailed"));
+      try {
+        void navigator.clipboard.writeText(text).then(() => addToast("success", done), fail);
+      } catch {
+        fail();
+      }
+    },
+    [addToast, t],
+  );
+
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const picked = shown.filter((e) => selected.has(e.id)).length;
+  const allPicked = shown.length > 0 && picked === shown.length;
+
+  const filtered =
+    logs.logQuery.trim() !== "" || logs.selectedAsset !== "all" || logs.logLevel !== "all" || logs.selectedLogSource !== "all";
+  const clearFilter = () => {
+    logs.setLogQuery("");
+    logs.setSelectedAsset("all");
+    logs.setLogLevel("all");
+    logs.setSelectedLogSource("all");
+  };
+
+  // "Nothing here yet" only when the hub has no lines from any source; otherwise the toolbar stays to widen the range.
+  const firstRun =
+    logs.logsLoaded && !logs.logsLoading && !logs.logsError && shown.length === 0 && !filtered &&
+    logs.recentLogs.length === 0 && logs.logSources.length === 0;
+  if (firstRun) {
+    return (
+      <>
+        <PageHeader title={t("title")} />
+        <EmptyLine line={t("empty")}>
+          {assets.length === 0 && hasWriteRole(user?.role) ? (
+            <Button variant="primary" onClick={() => setAddOpen(true)}>
+              <Plus size={14} aria-hidden="true" />
+              {t("addDevice")}
+            </Button>
+          ) : null}
+        </EmptyLine>
+        <AddDeviceModal open={addOpen} onClose={() => setAddOpen(false)} />
+      </>
+    );
+  }
+
+  const emptyText = logs.logQuery.trim()
+    ? t("noMatch", { query: logs.logQuery.trim() })
+    : filtered ? t("noneFiltered") : t("noneInRange");
   return (
     <>
-      <PageHeader title={t('title')} subtitle={t('subtitle')} />
-      <Card>
-        <div className="flex flex-wrap items-end gap-4 mb-4">
-          <div className="flex flex-col gap-1">
-            <span className="text-xs font-mono uppercase tracking-wider text-[var(--muted)]">{t('filters.source')}</span>
-            <Select
-              value={selectedLogSource}
-              onChange={(event) => setSelectedLogSource(event.target.value)}
-            >
-              <option value="all">{t('filters.allSources')}</option>
-              {logSources.map((source) => (
-                <option key={source.source} value={source.source}>
-                  {friendlySourceLabel(source.source)} ({source.count})
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-xs font-mono uppercase tracking-wider text-[var(--muted)]">{t('filters.level')}</span>
-            <Select value={logLevel} onChange={(event) => setLogLevel(event.target.value as LogLevel)}>
-              {logLevels.map((level) => (
-                <option key={level} value={level}>
-                  {level.toUpperCase()}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-xs font-mono uppercase tracking-wider text-[var(--muted)]">{t('filters.events')}</span>
-            <SegmentedTabs
-              value={includeHeartbeats ? "all" : "operational"}
-              options={[
-                { id: "operational", label: t('filters.operational') },
-                { id: "all", label: t('filters.all') }
-              ]}
-              onChange={(value) => setIncludeHeartbeats(value === "all")}
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-xs font-mono uppercase tracking-wider text-[var(--muted)]">{t('filters.range')}</span>
-            <SegmentedTabs
-              value={logWindow}
-              options={telemetryWindows.map((windowValue) => ({ id: windowValue, label: windowValue }))}
-              onChange={setLogWindow}
-            />
-          </div>
-          <div className="flex flex-col gap-1 flex-1">
-            <span className="text-xs font-mono uppercase tracking-wider text-[var(--muted)]">{t('filters.search')}</span>
-            <Input
-              value={logQuery}
-              onChange={(event) => setLogQuery(event.target.value)}
-              placeholder={t('search.placeholder')}
-            />
-          </div>
+      <PageHeader title={t("title")} />
+      <LogsToolbar
+        query={logs.logQuery}
+        onQuery={logs.setLogQuery}
+        devices={devices}
+        device={logs.selectedAsset}
+        onDevice={logs.setSelectedAsset}
+        level={logs.logLevel}
+        onLevel={logs.setLogLevel}
+        windows={logs.telemetryWindows}
+        window={logs.logWindow}
+        onWindow={logs.setLogWindow}
+        sources={logs.logSources}
+        source={logs.selectedLogSource}
+        onSource={logs.setSelectedLogSource}
+        heartbeats={logs.includeHeartbeats}
+        onHeartbeats={logs.setIncludeHeartbeats}
+        live={logs.live}
+        onLive={logs.setLive}
+      />
+      {logs.logsError ? (
+        <div className="lg-err" role="alert">
+          <span>{t("loadFailed")}</span>
+          <Button size="sm" variant="ghost" onClick={logs.reload}>{t("retry")}</Button>
         </div>
-
-        <ul className="divide-y divide-[var(--line)]">
-          {(logEvents.length > 0 ? logEvents : recentLogs).slice(0, 80).map((event) => (
-            <li key={event.id} className="flex items-center gap-3 py-2">
-              <span className="text-xs font-mono uppercase tracking-wider text-[var(--muted)]">{formatTimestamp(event.timestamp)}</span>
-              <span className="text-sm font-medium text-[var(--text)]">{event.source}</span>
-              <Badge
-                status={event.level === "error" ? "bad" : event.level === "warn" ? "pending" : "ok"}
-                size="sm"
-                dot
-              />
-              <span className="text-xs text-[var(--text)] truncate flex-1">{event.message}</span>
-            </li>
-          ))}
-        </ul>
-        {logsLoading ? (
-          <div className="mt-3 space-y-1">
-            <SkeletonRow />
-            <SkeletonRow />
-            <SkeletonRow />
+      ) : null}
+      {picked > 0 ? (
+        <div className="lg-bulk" role="toolbar" aria-label={t("selected", { count: picked })}>
+          <span className="lg-bulk-n">{t("selected", { count: picked })}</span>
+          <Button size="sm" onClick={() => copy(selectedText(shown, selected, textOf), t("copiedLines", { count: picked }))}>
+            <Copy size={14} aria-hidden="true" />
+            {t("copyLines", { count: picked })}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>{t("clearSelection")}</Button>
+        </div>
+      ) : null}
+      <div className={`lg-box${picked > 0 ? " picking" : ""}`} aria-busy={logs.logsLoading}>
+        {shown.length > 0 ? (
+          <div className="lg-ln lg-cols">
+            <RowCheck
+              checked={allPicked}
+              mixed={picked > 0 && !allPicked}
+              label={t("selectAll")}
+              onChange={() => setSelected(allPicked ? new Set() : new Set(shown.map((e) => e.id)))}
+            />
+            <span>{t("cols.time")}</span>
+            <span>{t("cols.level")}</span>
+            <span>{t("cols.device")}</span>
+            <span>{t("cols.source")}</span>
+            <span>{t("cols.message")}</span>
           </div>
         ) : null}
-        {logsError ? <p className="text-xs text-[var(--bad)]">{logsError}</p> : null}
-        {logEvents.length === 0 && recentLogs.length > 0 && !logsLoading && !logsError ? (
-          <p className="text-xs text-[var(--muted)] mt-3">{t('noMatch')}</p>
+        <div className="lg-rows">
+          {shown.map((event) => {
+            if (event.id !== openId) {
+              return (
+                <LogLine key={event.id} event={event} ctx={ctx} open={false} selected={selected.has(event.id)} onOpen={() => setOpenId(event.id)} onSelect={() => toggle(event.id)} />
+              );
+            }
+            const { newer, older } = contextLines(shown, event);
+            return (
+              <OpenLogLine
+                key={event.id}
+                event={event}
+                ctx={ctx}
+                newer={newer}
+                older={older}
+                selected={selected.has(event.id)}
+                onClose={() => setOpenId("")}
+                onSelect={() => toggle(event.id)}
+                onCopy={() => copy(textOf(event), t("copiedLine"))}
+              />
+            );
+          })}
+          {shown.length === 0 ? <p className="lg-none">{logs.logsLoading ? t("loading") : emptyText}</p> : null}
+        </div>
+        {filtered ? (
+          <div className="lg-foot">
+            <span>{t("lines", { count: shown.length })}</span>
+            <button type="button" onClick={clearFilter}>{t("clearFilter")}</button>
+          </div>
         ) : null}
-        {logEvents.length === 0 && recentLogs.length === 0 && !logsLoading ? (
-          <EmptyState
-            icon={FileText}
-            title={t('empty.title')}
-            description={t('empty.description')}
-            action={<Link href="/nodes" className="text-xs text-[var(--accent)] hover:underline">{t('empty.viewDevices')}</Link>}
-          />
-        ) : null}
-      </Card>
+      </div>
     </>
   );
 }

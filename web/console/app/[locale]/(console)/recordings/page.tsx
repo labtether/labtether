@@ -1,115 +1,138 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useTranslations } from "next-intl";
-import { Download } from "lucide-react";
-
-import { Card } from "../../../components/ui/Card";
-import { useAuth } from "../../../contexts/AuthContext";
-import { canAccessHostData } from "../../../lib/roles";
+import { useEffect, useMemo, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
+import { ChevronDown, ChevronUp, Download } from "lucide-react";
+import { Link } from "../../../../i18n/navigation";
+import { PageHeader } from "../../../components/PageHeader";
 import { OperatorAccessRequired } from "../../../components/OperatorAccessRequired";
-
-interface Recording {
-  id: string;
-  session_id: string;
-  asset_id: string;
-  protocol: string;
-  file_size: number;
-  duration_ms: number;
-  status: string;
-  created_at: string;
-  // Hub-relative attachment path, e.g. /recordings/{id}/download.
-  download_url?: string;
-}
-
-const HUB_DOWNLOAD_PATH = /^\/recordings\/[^/?#]+\/download$/;
-
-// The browser reaches Hub routes through the console's /api proxy, which adds
-// the operator's credentials. Only a Hub path of the expected shape is linked.
-function recordingDownloadHref(recording: Recording): string | null {
-  const path = recording.download_url?.trim() ?? "";
-  return HUB_DOWNLOAD_PATH.test(path) ? `/api${path}` : null;
-}
+import { useAuth } from "../../../contexts/AuthContext";
+import { useFastStatus } from "../../../contexts/StatusContext";
+import { canAccessHostData } from "../../../lib/roles";
+import { auditTime } from "../audit-log/auditModel";
+import { AuditViews } from "../audit-log/AuditViews";
+import { ChipGroup, EmptyLine, FilterField } from "../logs/LogControls";
+import { durationText, recordingDownloadHref, recordingRows, sizeText, type Recording, type RecordingSort } from "./recordingsModel";
 
 export default function RecordingsPage() {
-  const t = useTranslations('recordings');
+  const t = useTranslations("recordings");
   const { user } = useAuth();
   // The Hub serves recordings (list and files) to operators and above only.
   if (!canAccessHostData(user?.role)) {
-    return <OperatorAccessRequired title={t('title')} feature="recordings" />;
+    return <OperatorAccessRequired title={t("title")} feature="recordings" />;
   }
   return <RecordingsList />;
 }
 
+/** Recordings: the Audit log's second view. Remote View sessions the hub recorded, newest first, each with Download. */
 function RecordingsList() {
-  const t = useTranslations('recordings');
-  const [recordings, setRecordings] = useState<Recording[]>([]);
+  const t = useTranslations("recordings");
+  const ta = useTranslations("audit-log");
+  const locale = useLocale();
+  const fast = useFastStatus();
+  const [recordings, setRecordings] = useState<Recording[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [query, setQuery] = useState("");
+  const [protocol, setProtocol] = useState("all");
+  const [sort, setSort] = useState<RecordingSort>("when:desc");
 
   useEffect(() => {
-    fetch("/api/recordings", { cache: "no-store" })
+    const controller = new AbortController();
+    fetch("/api/recordings", { cache: "no-store", signal: controller.signal })
       .then((response) => response.json())
       .then((payload: { recordings?: Recording[] }) => {
         setRecordings(Array.isArray(payload.recordings) ? payload.recordings : []);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setFailed(true);
         setRecordings([]);
       });
+    return () => controller.abort();
   }, []);
 
+  const names = useMemo(() => new Map((fast?.assets ?? []).map((a) => [a.id, a.name || a.id])), [fast?.assets]);
+  const nameOf = (id: string) => names.get(id) ?? id;
+  const list = useMemo(() => recordings ?? [], [recordings]);
+  const protocols = useMemo(() => [...new Set(list.map((r) => r.protocol.toLowerCase()).filter(Boolean))].sort(), [list]);
+  const chip = protocols.includes(protocol) ? protocol : "all";
+  const rows = recordingRows(list, { query, protocol: chip, sort, nameOf });
+  const now = new Date();
+
+  const head = (key: "dev" | "dur" | "size" | "when", label: string, right = false) => {
+    const on = sort.startsWith(`${key}:`);
+    const Arrow = sort.endsWith("asc") ? ChevronUp : ChevronDown;
+    const next = (on ? (sort.endsWith("desc") ? `${key}:asc` : `${key}:desc`) : key === "dev" ? "dev:asc" : `${key}:desc`) as RecordingSort;
+    return (
+      <button type="button" className={`lg-sort${on ? " on" : ""}${right ? " r" : ""}`} onClick={() => setSort(next)}>
+        {label}
+        {on ? <Arrow aria-hidden="true" strokeWidth={2} /> : null}
+      </button>
+    );
+  };
+
   return (
-    <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-[var(--text)]">{t('title')}</h2>
-      <Card>
-        {recordings.length === 0 ? (
-          <p className="text-sm text-[var(--muted)]">{t('empty')}</p>
-        ) : (
-          <div className="overflow-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-[var(--muted)] border-b border-[var(--line)]">
-                  <th className="py-2 pr-4">{t('columns.asset')}</th>
-                  <th className="py-2 pr-4">{t('columns.protocol')}</th>
-                  <th className="py-2 pr-4">{t('columns.duration')}</th>
-                  <th className="py-2 pr-4">{t('columns.size')}</th>
-                  <th className="py-2 pr-4">{t('columns.status')}</th>
-                  <th className="py-2 pr-4">{t('columns.date')}</th>
-                  <th className="py-2"><span className="sr-only">{t('columns.actions')}</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {recordings.map((recording) => {
-                  const downloadHref = recordingDownloadHref(recording);
-                  return (
-                  <tr key={recording.id} className="border-b border-[var(--line)]/40">
-                    <td className="py-2 pr-4 text-[var(--text)]">{recording.asset_id}</td>
-                    <td className="py-2 pr-4 text-[var(--text)] uppercase">{recording.protocol}</td>
-                    <td className="py-2 pr-4 text-[var(--text)]">{Math.round(recording.duration_ms / 1000)}s</td>
-                    <td className="py-2 pr-4 text-[var(--text)]">{Math.round(recording.file_size / 1024)} KB</td>
-                    <td className="py-2 pr-4 text-[var(--text)]">{recording.status}</td>
-                    <td className="py-2 pr-4 text-[var(--text)]">{new Date(recording.created_at).toLocaleString()}</td>
-                    <td className="py-2 text-right">
-                      {recording.status === "recording" ? (
-                        <span className="text-xs text-[var(--muted)]">{t('inProgress')}</span>
-                      ) : downloadHref && (
-                        <a
-                          href={downloadHref}
-                          download
-                          aria-label={t('downloadLabel', { asset: recording.asset_id })}
-                          className="inline-flex items-center gap-1 text-xs text-[var(--accent)] hover:underline"
-                        >
-                          <Download size={12} aria-hidden="true" />
-                          {t('download')}
-                        </a>
-                      )}
-                    </td>
-                  </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+    <>
+      <PageHeader title={ta("title")} />
+      <AuditViews current="recordings" />
+      {recordings !== null && list.length === 0 ? (
+        <EmptyLine line={failed ? t("loadFailed") : t("empty")} />
+      ) : (
+        <>
+          <div className="lg-tools wide">
+            <FilterField value={query} onChange={setQuery} placeholder={t("filter")} />
+            {protocols.length > 1 ? (
+              <ChipGroup
+                label={t("columns.protocol")}
+                value={chip}
+                options={[{ value: "all", label: t("all") }, ...protocols.map((p) => ({ value: p, label: p.toUpperCase() }))]}
+                onChange={setProtocol}
+              />
+            ) : null}
           </div>
-        )}
-      </Card>
-    </div>
+          <div className="lg-box">
+            <div className="lg-rc lg-rc-cols">
+              {head("dev", t("columns.device"))}
+              {head("dur", t("columns.duration"), true)}
+              {head("size", t("columns.size"), true)}
+              {head("when", t("columns.date"), true)}
+              <span />
+            </div>
+            {rows.map((r) => {
+              const href = recordingDownloadHref(r);
+              const name = nameOf(r.asset_id);
+              const live = r.status === "recording";
+              return (
+                <div key={r.id} className="lg-rc lg-rc-r">
+                  <div className="lg-rc-nm">
+                    <Link href={`/nodes/${encodeURIComponent(r.asset_id)}`} className="lg-rc-dev">{name}</Link>
+                    <span className="lg-rc-sub">{t("kind", { protocol: r.protocol.toUpperCase() })}</span>
+                  </div>
+                  <span className="lg-rc-n">{live ? "" : durationText(r.duration_ms, locale)}</span>
+                  <span className="lg-rc-n">{sizeText(r.file_size, locale)}</span>
+                  <time className="lg-rc-n" dateTime={r.created_at}>{auditTime(r.created_at, now, locale)}</time>
+                  {live ? (
+                    <span className="lg-rc-live"><i className="lg-on" aria-hidden="true" />{t("inProgress")}</span>
+                  ) : href ? (
+                    <a href={href} download className="lg-btn quiet lg-rc-dl" aria-label={t("downloadLabel", { asset: name })}>
+                      <Download aria-hidden="true" strokeWidth={1.75} />
+                      <span>{t("download")}</span>
+                    </a>
+                  ) : <span />}
+                </div>
+              );
+            })}
+            {recordings === null ? <p className="lg-none">{t("loading")}</p> : null}
+            {recordings !== null && rows.length === 0 ? <p className="lg-none">{t("noMatch", { query: query.trim() })}</p> : null}
+            {rows.length < list.length ? (
+              <div className="lg-foot">
+                <span>{t("shown", { count: rows.length, total: list.length })}</span>
+                <button type="button" onClick={() => { setQuery(""); setProtocol("all"); }}>{t("clearFilter")}</button>
+              </div>
+            ) : null}
+          </div>
+        </>
+      )}
+    </>
   );
 }

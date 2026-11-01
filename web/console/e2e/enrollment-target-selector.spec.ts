@@ -61,10 +61,10 @@ test("enrollment connection target persists and add-device installer command fol
     },
   });
 
-  await page.goto("/security");
-  await expect(page.getByRole("heading", { name: "Security", level: 1, exact: true })).toBeVisible();
+  await page.goto("/settings/agents");
+  await expect(page.getByRole("heading", { name: "Settings", level: 1, exact: true })).toBeVisible();
 
-  const settingsTargetSelect = page.getByLabel("Connection target");
+  const settingsTargetSelect = page.getByLabel("Connect through");
   await expect(settingsTargetSelect).toHaveValue(DEFAULT_HUB_URL);
   await settingsTargetSelect.selectOption(LAN_HUB_URL);
 
@@ -72,21 +72,22 @@ test("enrollment connection target persists and add-device installer command fol
   await expect(page.getByText(LAN_HUB_URL, { exact: true })).toBeVisible();
   await expect(page.getByText(LAN_WS_URL, { exact: true })).toBeVisible();
 
+  await page.getByRole("button", { name: "Create token", exact: true }).click();
   await page.getByLabel("Expected hostname").fill("settings-node");
-  await page.getByRole("button", { name: "Create Token", exact: true }).click();
-  await expect(page.getByText("Your enrollment token is ready — copy it now:", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(page.getByText("New enrollment token", { exact: true })).toBeVisible();
   expect(tokenRequests[0]).toMatchObject({ scope: "asset", asset_id: "settings-node", max_uses: 1 });
-  await page.getByText("Copy/paste setup", { exact: true }).click();
+  await page.getByText("Setup commands", { exact: true }).click();
   await expect(page.locator("pre").filter({ hasText: LAN_WS_URL }).first()).toBeVisible();
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Security", level: 1, exact: true })).toBeVisible();
-  await expect(page.getByLabel("Connection target")).toHaveValue(LAN_HUB_URL);
+  await expect(page.getByRole("heading", { name: "Settings", level: 1, exact: true })).toBeVisible();
+  await expect(page.getByLabel("Connect through")).toHaveValue(LAN_HUB_URL);
 
   await page.goto("/nodes");
   await expect(page.getByRole("heading", { name: "Devices", level: 1, exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Add Device", exact: true }).click();
-  await page.getByRole("button", { name: /^Agent/i }).first().click();
+  await page.getByRole("button", { name: "Add device", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /^Agent/ }).click();
 
   await expect(page.getByText("Install Agent", { exact: true })).toBeVisible();
   await page.getByLabel("Expected hostname").fill("wizard-node");

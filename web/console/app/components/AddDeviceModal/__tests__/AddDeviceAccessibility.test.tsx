@@ -1,6 +1,8 @@
-import { act, useState } from "react";
+import { act, useState, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import auth from "../../../../messages/en/auth.json";
 
 vi.mock("../AgentSetupStep", () => ({ AgentSetupStep: () => null }));
 vi.mock("../ProxmoxSetupStep", () => ({ ProxmoxSetupStep: () => null }));
@@ -12,6 +14,10 @@ vi.mock("../HomeAssistantSetupStep", () => ({ HomeAssistantSetupStep: () => null
 vi.mock("../ManualDeviceSetupStep", () => ({ ManualDeviceSetupStep: () => null }));
 
 import { AddDeviceModal } from "../index";
+
+const withIntl = (node: ReactNode) => (
+  <NextIntlClientProvider locale="en" messages={{ auth }}>{node}</NextIntlClientProvider>
+);
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -37,7 +43,7 @@ afterEach(async () => {
 describe("AddDeviceModal accessibility", () => {
   it("announces the product task and exposes a named close control", async () => {
     await act(async () => {
-      root.render(<AddDeviceModal open onClose={vi.fn()} />);
+      root.render(withIntl(<AddDeviceModal open onClose={vi.fn()} />));
     });
 
     const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]');
@@ -47,9 +53,9 @@ describe("AddDeviceModal accessibility", () => {
     const descriptionID = dialog?.getAttribute("aria-describedby");
     expect(titleID).toBeTruthy();
     expect(descriptionID).toBeTruthy();
-    expect(document.getElementById(titleID ?? "")?.textContent).toBe("Add Device");
-    expect(document.getElementById(descriptionID ?? "")?.textContent).toContain("Choose a connection source");
-    expect(document.body.querySelector('button[aria-label="Close Add Device dialog"]')).not.toBeNull();
+    expect(document.getElementById(titleID ?? "")?.textContent).toBe("Add a device");
+    expect(document.getElementById(descriptionID ?? "")?.textContent).toContain("Choose how this device connects");
+    expect(document.body.querySelector('button[aria-label="Close"]')).not.toBeNull();
   });
 
   it("returns focus to the external opener when the dialog closes", async () => {
@@ -63,7 +69,7 @@ describe("AddDeviceModal accessibility", () => {
       );
     }
 
-    await act(async () => root.render(<Harness />));
+    await act(async () => root.render(withIntl(<Harness />)));
     const opener = container.querySelector<HTMLButtonElement>("button");
     expect(opener).not.toBeNull();
 
@@ -71,7 +77,7 @@ describe("AddDeviceModal accessibility", () => {
       opener?.focus();
       opener?.click();
     });
-    const close = document.body.querySelector<HTMLButtonElement>('button[aria-label="Close Add Device dialog"]');
+    const close = document.body.querySelector<HTMLButtonElement>('button[aria-label="Close"]');
     expect(close).not.toBeNull();
 
     await act(async () => close?.click());

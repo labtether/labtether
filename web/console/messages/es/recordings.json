@@ -1,16 +1,22 @@
 {
-  "title": "Grabaciones de sesión",
-  "empty": "Aún no hay grabaciones.",
+  "title": "Grabaciones",
+  "filter": "Filtrar por dispositivo",
+  "all": "Todas",
   "columns": {
-    "asset": "Recurso",
+    "device": "Dispositivo",
     "protocol": "Protocolo",
     "duration": "Duración",
     "size": "Tamaño",
-    "status": "Estado",
-    "date": "Fecha",
-    "actions": "Acciones"
+    "date": "Cuándo"
   },
+  "kind": "Vista remota · {protocol}",
   "download": "Descargar",
-  "downloadLabel": "Descargar grabación de {asset}",
-  "inProgress": "En curso"
+  "downloadLabel": "Descargar la grabación de {asset}",
+  "inProgress": "Grabando",
+  "empty": "Aún no hay grabaciones",
+  "loadFailed": "Las grabaciones no se cargaron",
+  "loading": "Cargando grabaciones",
+  "noMatch": "Ninguna grabación coincide con «{query}»",
+  "shown": "{count} de {total}",
+  "clearFilter": "Quitar filtro"
 }

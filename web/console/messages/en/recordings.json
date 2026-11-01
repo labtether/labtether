@@ -1,16 +1,22 @@
 {
-  "title": "Session Recordings",
-  "empty": "No recordings yet.",
+  "title": "Recordings",
+  "filter": "Filter by device",
+  "all": "All",
   "columns": {
-    "asset": "Asset",
+    "device": "Device",
     "protocol": "Protocol",
     "duration": "Duration",
     "size": "Size",
-    "status": "Status",
-    "date": "Date",
-    "actions": "Actions"
+    "date": "When"
   },
+  "kind": "Remote View · {protocol}",
   "download": "Download",
   "downloadLabel": "Download recording for {asset}",
-  "inProgress": "In progress"
+  "inProgress": "Recording",
+  "empty": "No recordings yet",
+  "loadFailed": "Recordings did not load",
+  "loading": "Loading recordings",
+  "noMatch": "No recordings match “{query}”",
+  "shown": "{count} of {total}",
+  "clearFilter": "Clear filter"
 }

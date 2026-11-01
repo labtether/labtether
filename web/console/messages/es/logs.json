@@ -1,23 +1,60 @@
 {
   "title": "Registros",
-  "subtitle": "Buscar y filtrar la salida de registros de sus dispositivos",
-  "filters": {
-    "source": "Fuente",
+  "filter": "Filtrar por dispositivo, origen o mensaje",
+  "device": {
+    "all": "Todos los dispositivos"
+  },
+  "level": {
+    "all": "Todos los niveles",
+    "error": "Errores",
+    "warn": "Advertencias",
+    "info": "Info",
+    "debug": "Depuración"
+  },
+  "levelWord": {
+    "error": "error",
+    "warn": "aviso",
+    "debug": "debug"
+  },
+  "range": {
+    "label": "Periodo",
+    "15m": "Últimos 15 minutos",
+    "1h": "Última hora",
+    "6h": "Últimas 6 horas",
+    "24h": "Últimas 24 horas"
+  },
+  "source": {
+    "all": "Todos los orígenes",
+    "allWithHeartbeats": "Todos los orígenes y heartbeats",
+    "heartbeats": "Incluir heartbeats"
+  },
+  "live": "En vivo",
+  "cols": {
+    "time": "Hora",
     "level": "Nivel",
-    "events": "Eventos",
-    "range": "Rango",
-    "search": "Buscar",
-    "allSources": "Todas las fuentes",
-    "operational": "Operacional",
-    "all": "Todos"
+    "device": "Dispositivo",
+    "source": "Origen",
+    "message": "Mensaje"
   },
-  "search": {
-    "placeholder": "Buscar en texto de mensaje (error, timeout, zfs...)"
-  },
-  "empty": {
-    "title": "Aún no hay eventos de registro",
-    "description": "Los eventos aparecerán aquí cuando los dispositivos comiencen a reportar. Verifique que al menos un dispositivo esté conectado.",
-    "viewDevices": "Ver dispositivos"
-  },
-  "noMatch": "Ningún evento de registro coincide con sus filtros actuales."
+  "selectLine": "Seleccionar la línea {time} de {device}",
+  "selectAll": "Seleccionar todas las líneas",
+  "selected": "{count} seleccionadas",
+  "copyLines": "{count, plural, one {Copiar # línea} other {Copiar # líneas}}",
+  "copiedLines": "{count, plural, one {# línea copiada} other {# líneas copiadas}}",
+  "copyLine": "Copiar línea",
+  "copiedLine": "Línea copiada",
+  "copyFailed": "El navegador bloqueó la copia",
+  "openDevice": "Abrir {device}",
+  "fields": "Campos",
+  "clearFilter": "Quitar filtro",
+  "clearSelection": "Quitar",
+  "lines": "{count, plural, one {# línea} other {# líneas}}",
+  "empty": "Aún no hay líneas de registro",
+  "noMatch": "Ninguna línea coincide con «{query}»",
+  "noneFiltered": "No hay líneas con estos filtros",
+  "addDevice": "Añadir dispositivo",
+  "loadFailed": "Los registros no se cargaron",
+  "retry": "Reintentar",
+  "loading": "Cargando líneas de registro",
+  "noneInRange": "No hay líneas en este periodo"
 }

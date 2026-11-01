@@ -3,15 +3,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "../../../i18n/navigation";
 import { useTranslations } from "next-intl";
-import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
-import { Input } from "../../components/ui/Input";
 import { useTailscaleServeStatus } from "../../hooks/useTailscaleServeStatus";
 import { runtimeSettingKeys } from "../../console/models";
 import { safeLocalRedirectPath } from "../../../lib/safeRedirect";
 import { buildLocalSetupDestination, buildRemoteAccessURL } from "./setupNavigation";
 import { SetupRemoteAccessStep } from "./SetupRemoteAccessStep";
+import { SignInField, SignInShell } from "../login/SignInShell";
 
+// How the compose install prints the one-time setup token (the installer prints the same line when it finishes).
+const SETUP_TOKEN_COMMAND = "docker compose --env-file .env.deploy -f docker-compose.deploy.yml exec -T labtether sh -c 'cat /bootstrap/auth/setup-token'";
+
+/** First-run setup: the one-time setup token and the owner account, then remote access. */
 export default function SetupPage() {
   const router = useRouter();
   const t = useTranslations("auth");
@@ -230,7 +233,7 @@ export default function SetupPage() {
         error?: string;
       } | null;
       if (!response.ok) {
-        throw new Error(payload?.error || `HTTP ${response.status}`);
+        throw new Error(payload?.error || t("remoteAccess.managedError"));
       }
       setManagedActionMessage(
         action === "apply"
@@ -249,167 +252,100 @@ export default function SetupPage() {
 
   if (!ready) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[var(--bg)]">
-        <p className="text-sm text-[var(--muted)]">{t("setup.preparing")}</p>
-      </div>
+      <main className="si">
+        <p className="si-col si-wait" role="status">{t("setup.preparing")}</p>
+      </main>
+    );
+  }
+
+  if (step === "remote-access") {
+    return (
+      <SignInShell title={t("remoteAccess.title")} step={t("setup.step", { step: 2, total: 2 })} wide>
+        <SetupRemoteAccessStep
+          tailscaleStatus={tailscaleStatus}
+          tailscaleLoading={tailscaleLoading}
+          tailscaleError={tailscaleError}
+          refreshTailscaleStatus={refreshTailscaleStatus}
+          copied={copied}
+          copyToClipboard={copyToClipboard}
+          managedActionLoading={managedActionLoading}
+          managedActionMessage={managedActionMessage}
+          managedActionError={managedActionError}
+          runManagedTailscaleAction={runManagedTailscaleAction}
+          continueToConsole={continueToConsole}
+        />
+      </SignInShell>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--bg)] relative overflow-hidden">
-      <div
-        className="absolute w-[400px] h-[400px] rounded-full pointer-events-none opacity-20 blur-[120px]"
-        style={{ background: "var(--accent)", top: "-10%", right: "-5%" }}
-      />
-      <div
-        className="absolute w-[300px] h-[300px] rounded-full pointer-events-none opacity-10 blur-[100px]"
-        style={{
-          background: "var(--accent-secondary)",
-          bottom: "-10%",
-          left: "-5%",
-        }}
-      />
-      <div
-        className="absolute inset-0 pointer-events-none opacity-[0.03]"
-        style={{
-          backgroundImage:
-            "radial-gradient(circle, var(--text) 1px, transparent 1px)",
-          backgroundSize: "24px 24px",
-        }}
-      />
-
-      <div
-        className={`relative w-full z-10 ${step === "remote-access" ? "max-w-4xl px-4" : "max-w-sm"}`}
-      >
-        <div className="absolute -inset-px rounded-xl overflow-hidden pointer-events-none">
-          <div
-            className="absolute inset-0"
-            style={{
-              background:
-                "conic-gradient(from 0deg, transparent 0%, var(--accent) 10%, transparent 20%, transparent 50%, var(--accent-secondary) 60%, transparent 70%)",
-              animation: "border-rotate 6s linear 1",
-              opacity: 0.4,
-            }}
-          />
-        </div>
-
-        <Card className="relative space-y-6">
-          <div
-            className="absolute top-0 left-[10%] right-[10%] h-px pointer-events-none"
-            style={{
-              background:
-                "linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 40%, white), transparent)",
-            }}
-          />
-
-          <div className="flex flex-col items-center gap-3">
-            <img src="/logo.svg" alt="LabTether" width={56} height={56} />
-            <div className="text-center">
-              <h1 className="text-xl font-medium text-[var(--text)] font-[family-name:var(--font-heading)]">
-                {step === "account"
-                  ? t("setup.title")
-                  : t("remoteAccess.title")}
-              </h1>
-              <p className="mt-0.5 text-[10px] font-mono uppercase tracking-[0.15em] text-[var(--muted)]">
-                {step === "account"
-                  ? t("setup.subtitle")
-                  : t("remoteAccess.subtitle")}
-              </p>
-            </div>
-          </div>
-
-          {step === "account" ? (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {error ? (
-                <div
-                  role="alert"
-                  className="rounded-lg bg-[var(--bad-glow)] px-3 py-2 text-sm text-[var(--bad)]"
-                >
-                  {error}
-                </div>
-              ) : null}
-
-              <label className="flex flex-col gap-1.5 text-xs text-[var(--muted)]">
-                {t("setup.setupToken")}
-                <Input
-                  type="password"
-                  value={setupToken}
-                  onChange={(e) => setSetupToken(e.target.value)}
-                  autoFocus
-                  autoComplete="off"
-                  placeholder={t("setup.setupTokenPlaceholder")}
-                  required
-                  maxLength={512}
-                />
-                <span className="text-[11px] leading-relaxed">
-                  {t("setup.setupTokenHelp")}
-                </span>
-              </label>
-
-              <label className="flex flex-col gap-1.5 text-xs text-[var(--muted)]">
-                {t("setup.username")}
-                <Input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  autoComplete="username"
-                  placeholder="owner"
-                  required
-                />
-              </label>
-
-              <label className="flex flex-col gap-1.5 text-xs text-[var(--muted)]">
-                {t("setup.password")}
-                <Input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="new-password"
-                  placeholder={t("setup.passwordPlaceholder")}
-                  required
-                />
-              </label>
-
-              <label className="flex flex-col gap-1.5 text-xs text-[var(--muted)]">
-                {t("setup.confirmPassword")}
-                <Input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  autoComplete="new-password"
-                  placeholder={t("setup.confirmPasswordPlaceholder")}
-                  required
-                />
-              </label>
-
-              <Button
-                type="submit"
-                variant="primary"
-                className="w-full"
-                disabled={
-                  loading || passwordMismatch || setupToken.trim() === ""
-                }
-              >
-                {loading ? t("setup.submitting") : t("setup.submit")}
-              </Button>
-            </form>
-          ) : (
-            <SetupRemoteAccessStep
-              tailscaleStatus={tailscaleStatus}
-              tailscaleLoading={tailscaleLoading}
-              tailscaleError={tailscaleError}
-              refreshTailscaleStatus={refreshTailscaleStatus}
-              copied={copied}
-              copyToClipboard={copyToClipboard}
-              managedActionLoading={managedActionLoading}
-              managedActionMessage={managedActionMessage}
-              managedActionError={managedActionError}
-              runManagedTailscaleAction={runManagedTailscaleAction}
-              continueToConsole={continueToConsole}
-            />
+    <SignInShell title={t("setup.title")} step={t("setup.step", { step: 1, total: 2 })} wide>
+      <form onSubmit={handleSubmit} className="si-form" aria-label={t("setup.formLabel")}>
+        {error ? <p className="si-err" role="alert">{error}</p> : null}
+        <SignInField
+          id="su-token"
+          label={t("setup.setupToken")}
+          className="si-mono"
+          type="password"
+          value={setupToken}
+          onChange={(e) => setSetupToken(e.target.value)}
+          autoFocus
+          autoComplete="off"
+          spellCheck={false}
+          required
+          maxLength={512}
+          hint={(
+            <>
+              <span>{t("setup.tokenWhere")}</span>
+              <span className="si-cmd">
+                <code>{SETUP_TOKEN_COMMAND}</code>
+                <Button type="button" variant="ghost" size="sm" onClick={() => copyToClipboard(SETUP_TOKEN_COMMAND, "token-command")}>
+                  {copied === "token-command" ? t("copied") : t("copy")}
+                </Button>
+              </span>
+            </>
           )}
-        </Card>
-      </div>
-    </div>
+        />
+        <SignInField
+          id="su-user"
+          label={t("setup.username")}
+          type="text"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          autoComplete="username"
+          autoCapitalize="off"
+          spellCheck={false}
+          required
+        />
+        <SignInField
+          id="su-pass"
+          label={t("setup.password")}
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="new-password"
+          required
+        />
+        <SignInField
+          id="su-pass2"
+          label={t("setup.confirmPassword")}
+          type="password"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          autoComplete="new-password"
+          error={passwordMismatch ? t("setup.passwordMismatch") : undefined}
+          required
+        />
+        <Button
+          type="submit"
+          variant="primary"
+         
+          className="si-go"
+          disabled={loading || passwordMismatch || setupToken.trim() === ""}
+        >
+          {loading ? t("setup.submitting") : t("setup.submit")}
+        </Button>
+      </form>
+    </SignInShell>
   );
 }
