@@ -1,491 +1,275 @@
 "use client";
 
-import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { PageHeader } from "../../../components/PageHeader";
 import { RoutePerfBoundary } from "../../../components/RoutePerfBoundary";
+import { ServiceEditModal } from "../../../components/ServiceEditModal";
+import { ServiceBulkEditModal } from "../../../components/ServiceBulkEditModal";
+import { ConfirmDialog } from "../../../components/ui/ConfirmDialog";
 import { useWebServices, type WebService } from "../../../hooks/useWebServices";
 import { useStatusAssetNameMap } from "../../../contexts/StatusContext";
 import { useToast } from "../../../contexts/ToastContext";
-import { ServiceEditModal } from "../../../components/ServiceEditModal";
-import { ServiceBulkEditModal } from "../../../components/ServiceBulkEditModal";
-import { ServicesGroupedGrid } from "./ServicesGroupedGrid";
-import { ServicesDiscoveryOverviewCard } from "./ServicesDiscoveryOverviewCard";
-import { ServicesFiltersBar } from "./ServicesFiltersBar";
+import { reportRoutePerfMetric } from "../../../hooks/useRoutePerfTelemetry";
+import { ServiceAddForm } from "./ServiceAddForm";
+import { ServiceList } from "./ServiceList";
+import type { ServiceRowActions } from "./ServiceRow";
+import { ServicesBulkBar, ServicesEmpty, ServicesSkeleton } from "./ServicesStates";
 import { ServicesHeaderActions } from "./ServicesHeaderActions";
-import { ServicesModeBanners } from "./ServicesModeBanners";
-import { ServicesResultStates } from "./ServicesResultStates";
-import { buildDiscoveryOverview } from "./servicesDiscoveryHelpers";
-import { useDerivedServiceCollections } from "./useDerivedServiceCollections";
+import { ServicesToolbar } from "./ServicesToolbar";
+import { serviceLayoutKey } from "./servicesLayoutHelpers";
+import { isHidden, serviceAddress, type Notify } from "./servicesListModel";
+import { useServiceList } from "./useServiceList";
 import { useServiceEditModalActions } from "./useServiceEditModalActions";
 import { usePullImagesAction } from "./usePullImagesAction";
 import { useServiceBulkEditAction } from "./useServiceBulkEditAction";
+import { useServiceDetailsCache } from "./useServiceDetailsCache";
 import { useServiceIconLibrary } from "./useServiceIconLibrary";
 import { useServiceLayoutOrchestration } from "./useServiceLayoutOrchestration";
 import { useServiceMutationActions } from "./useServiceMutationActions";
 import { useServiceSelectionState } from "./useServiceSelectionState";
-import { reportRoutePerfMetric } from "../../../hooks/useRoutePerfTelemetry";
-import type { ServiceHealthFilter, ServiceSortMode } from "./servicesPageHelpers";
+import { useServicesView } from "./useServicesView";
+import { useGroupingSuggestionToasts } from "./useGroupingSuggestionToasts";
 
 export default function ServicesPage() {
-  const t = useTranslations('services');
+  const t = useTranslations("services");
   const { addToast } = useToast();
+  const notify = useCallback<Notify>((type, message) => addToast(type, message), [addToast]);
   const assetNameMap = useStatusAssetNameMap();
-  const [categoryFilter, setCategoryFilter] = useState<string>("All");
-  const [hostFilter, setHostFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [sourceFilter, setSourceFilter] = useState<string>("all");
-  const [healthFilter, setHealthFilter] = useState<ServiceHealthFilter>("all");
-  const [sortMode, setSortMode] = useState<ServiceSortMode>("default");
-  const [showHidden, setShowHidden] = useState(false);
-  const [expandedService, setExpandedService] = useState<string | null>(null);
-  const [editingService, setEditingService] = useState<WebService | null>(null);
-  const [bulkEditOpen, setBulkEditOpen] = useState(false);
-  const {
-    services,
-    discoveryStats,
-    suggestions,
-    loading,
-    syncing,
-    error,
-    refresh,
-    sync,
-    createManualService,
-    updateManualService,
-    deleteManualService,
-    saveServiceOverride,
-    listServiceOverrides,
-    listCustomServiceIcons,
-    createCustomServiceIcon,
-    deleteCustomServiceIcon,
-    renameCustomServiceIcon,
-    loadServiceDetails,
-  } = useWebServices({ includeHidden: showHidden, detailLevel: "compact" });
-  const [serviceDetailsByID, setServiceDetailsByID] = useState<Map<string, WebService>>(() => new Map());
+  const web = useWebServices({ includeHidden: true, detailLevel: "compact" });
+  const { services, loading, syncing, error, refresh, sync } = web;
+  const view = useServicesView();
+  const icons = useServiceIconLibrary(web);
+  const layout = useServiceLayoutOrchestration({ services });
+  const details = useServiceDetailsCache(services, web.loadServiceDetails);
+  const list = useServiceList({ services, view, assetNameMap, arranging: layout.layoutMode, arranged: layout.layoutOrderByCategory });
+  const selection = useServiceSelectionState(list.visible);
+  const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<WebService | null>(null);
+  const [bulkTargets, setBulkTargets] = useState<WebService[] | null>(null);
+  const [removing, setRemoving] = useState<WebService | null>(null);
+  const [askPull, setAskPull] = useState(false);
 
-  const {
-    iconIndex,
-    customIcons,
-    createCustomIcon,
-    deleteCustomIcon,
-    renameCustomIcon,
-  } = useServiceIconLibrary({
-    listCustomServiceIcons,
-    createCustomServiceIcon,
-    deleteCustomServiceIcon,
-    renameCustomServiceIcon,
-  });
+  useGroupingSuggestionToasts(web.suggestions, refresh);
+  const mutations = useServiceMutationActions({ ...web, refresh, notify });
+  const { toggleHidden } = mutations;
+  const bulk = useServiceBulkEditAction({ ...web, refresh, notify });
+  const unhidden = useMemo(() => services.filter((s) => !isHidden(s)), [services]);
+  const pull = usePullImagesAction({ services: unhidden, hostFilter: view.filters.host, assetNameMap, refresh, notify });
+  const editActions = useServiceEditModalActions({ editingService: editing, saveServiceOverride: web.saveServiceOverride, refresh });
+  const picked = useMemo(() => list.visible.filter((s) => selection.selected.has(serviceLayoutKey(s))), [list.visible, selection.selected]);
 
-  const {
-    layoutMode,
-    setLayoutMode,
-    layoutOrderByCategory,
-    draggingServiceKey,
-    dragOverServiceKey,
-    clearDragState,
-    handleCardDragStart,
-    handleCardDragOver,
-    handleCardDrop,
-    resetLayoutOrder,
-  } = useServiceLayoutOrchestration({ services });
-
-  const {
-    selectionMode,
-    selectedServiceKeys,
-    reconcileSelectionWithFiltered,
-    clearSelection,
-    disableSelectionMode,
-    handleToggleSelectionMode,
-    handleToggleServiceSelection,
-    handleSelectAllFiltered,
-  } = useServiceSelectionState({
-    layoutMode,
-    setLayoutMode,
-    clearDragState,
-  });
-
-  const {
-    hosts,
-    activeCategories,
-    filtered,
-    grouped,
-    selectedFilteredCount,
-    bulkEditTargets,
-    deriveDurationMs,
-  } = useDerivedServiceCollections({
-    services,
-    assetNameMap,
-    categoryFilter,
-    hostFilter,
-    statusFilter,
-    sourceFilter,
-    healthFilter,
-    sortMode,
-    showHidden,
-    selectionMode,
-    selectedServiceKeys,
-    layoutOrderByCategory,
-  });
-
-  const { pullPlan, pullingImages, handlePullImages } = usePullImagesAction({
-    services,
-    hostFilter,
-    assetNameMap,
-    refresh,
-  });
-
-  useEffect(() => {
-    setServiceDetailsByID((current) => {
-      if (current.size === 0) {
-        return current;
-      }
-      const next = new Map<string, WebService>();
-      let changed = false;
-      for (const service of services) {
-        const detailed = current.get(service.id);
-        if (detailed) {
-          next.set(service.id, detailed);
-        } else if (current.has(service.id)) {
-          changed = true;
-        }
-      }
-      if (next.size !== current.size) {
-        changed = true;
-      }
-      return changed ? next : current;
-    });
-  }, [services]);
-
-  useEffect(() => {
-    reconcileSelectionWithFiltered(filtered);
-  }, [filtered, reconcileSelectionWithFiltered]);
-
-  const shownSuggestionIds = useRef<Set<string>>(new Set());
-
-  useEffect(() => {
-    if (!suggestions || suggestions.length === 0) return;
-
-    for (const suggestion of suggestions) {
-      if (shownSuggestionIds.current.has(suggestion.id)) continue;
-      shownSuggestionIds.current.add(suggestion.id);
-
-      addToast(
-        "info",
-        `Is "${suggestion.suggested_url}" an alternative URL for ${suggestion.base_service_name}?`,
-        15000,
-        {
-          label: t('suggestions.accept'),
-          onClick: async () => {
-            try {
-              await fetch(`/api/services/web/grouping-suggestions/${encodeURIComponent(suggestion.id)}/accept`, { method: "POST" });
-              refresh();
-            } catch {
-              // Silently handle errors; next poll will reconcile state.
-            }
-          },
-        },
-        {
-          label: t('suggestions.deny'),
-          onClick: async () => {
-            try {
-              await fetch(`/api/services/web/grouping-suggestions/${encodeURIComponent(suggestion.id)}/deny`, { method: "POST" });
-              refresh();
-            } catch {
-              // Silently handle errors; next poll will reconcile state.
-            }
-          },
-        }
-      );
-    }
-  }, [t, suggestions, addToast, refresh]);
-
-  const totalCount = services.length;
-  const upCount = useMemo(
-    () => services.filter((service) => service.status === "up" && service.metadata?.hidden !== "true").length,
-    [services]
-  );
-  const discoveryOverview = useMemo(
-    () => buildDiscoveryOverview(discoveryStats, assetNameMap),
-    [discoveryStats, assetNameMap]
-  );
-  const { bulkSaving, handleApplyBulkEdits } = useServiceBulkEditAction({
-    bulkEditTargets,
-    selectionMode,
-    clearSelection,
-    listServiceOverrides,
-    saveServiceOverride,
-    refresh,
-  });
-
-  const handleToggleArrangeMode = useCallback(() => {
-    setLayoutMode((current) => !current);
-    disableSelectionMode();
-    setExpandedService(null);
-  }, [disableSelectionMode, setLayoutMode]);
-
-  const handleSelectAllFilteredClick = useCallback(() => {
-    handleSelectAllFiltered(filtered);
-  }, [filtered, handleSelectAllFiltered]);
-
-  const handleRefreshServices = useCallback(async () => {
-    const targetHost = hostFilter !== "all" ? hostFilter : undefined;
+  const refreshAll = useCallback(async () => {
     try {
-      await sync(targetHost);
+      await sync(view.filters.host !== "all" ? view.filters.host : undefined);
     } catch {
-      // Error state is already surfaced by the hook.
+      // The hook keeps the error; the list shows it.
     }
     await refresh();
-  }, [hostFilter, refresh, sync]);
+  }, [refresh, sync, view.filters.host]);
 
-  const groupedWithDetails = useMemo(
-    () => grouped.map(([category, categoryServices]) => [
-      category,
-      categoryServices.map((service) => serviceDetailsByID.get(service.id) ?? service),
-    ] as [string, WebService[]]),
-    [grouped, serviceDetailsByID]
-  );
+  const { toggleDetails, withDetails } = details;
+  const { handleCardDragStart, handleCardDragOver, handleCardDrop, clearDragState } = layout;
+  const rowActions = useMemo<ServiceRowActions>(() => ({
+    onSelect: selection.toggle,
+    onToggleDetails: toggleDetails,
+    onEdit: (service) => setEditing(withDetails(service)),
+    onToggleHidden: (service) => void toggleHidden(service),
+    onRemove: setRemoving,
+    onCopy: (service) => {
+      void navigator.clipboard?.writeText(service.url).then(
+        () => notify("success", t("toasts.copied", { address: serviceAddress(service.url) })),
+        () => notify("error", t("toasts.copyFailed")),
+      );
+    },
+    onDragStart: handleCardDragStart,
+    onDragOver: handleCardDragOver,
+    onDrop: handleCardDrop,
+    onDragEnd: clearDragState,
+  }), [clearDragState, handleCardDragOver, handleCardDragStart, handleCardDrop, notify, selection.toggle, t, toggleDetails, toggleHidden, withDetails]);
 
   useEffect(() => {
     reportRoutePerfMetric({
       route: "services",
       metric: "compute.derived_services",
-      durationMs: deriveDurationMs,
-      sampleSize: filtered.length,
+      durationMs: list.deriveDurationMs,
+      sampleSize: list.visible.length,
       metadata: {
-        categories: activeCategories.length,
-        grouped_sections: grouped.length,
-        host_filtered: hostFilter !== "all",
-        status_filtered: statusFilter !== "all",
-        source_filtered: sourceFilter !== "all",
-        health_filtered: healthFilter !== "all",
-        hidden_shown: showHidden,
-        selection_mode: selectionMode,
+        categories: list.categories.length,
+        grouped_sections: list.groups.length,
+        host_filtered: view.filters.host !== "all",
+        status_filtered: view.filters.status !== "all",
+        source_filtered: view.filters.source !== "all",
+        health_filtered: view.filters.health !== "all",
+        hidden_shown: view.filters.show === "hidden",
+        selection_mode: selection.selected.size > 0,
       },
     });
-  }, [
-    activeCategories.length,
-    deriveDurationMs,
-    filtered.length,
-    grouped.length,
-    healthFilter,
-    hostFilter,
-    selectionMode,
-    showHidden,
-    sourceFilter,
-    statusFilter,
-  ]);
+  }, [list, selection.selected.size, view.filters]);
 
-  useEffect(() => {
-    const startedAt = typeof performance !== "undefined" ? performance.now() : Date.now();
-    const scheduleAfterPaint = typeof window.requestAnimationFrame === "function"
-      ? window.requestAnimationFrame.bind(window)
-      : (callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 0);
-    scheduleAfterPaint(() => {
-      reportRoutePerfMetric({
-        route: "services",
-        metric: "render.services_page",
-        durationMs: (typeof performance !== "undefined" ? performance.now() : Date.now()) - startedAt,
-        sampleSize: filtered.length,
-        metadata: {
-          grouped_sections: grouped.length,
-          host_filtered: hostFilter !== "all",
-          hidden_shown: showHidden,
-        },
-      });
-    });
-  }, [filtered.length, grouped.length, hostFilter, showHidden]);
+  const toggleArrange = useCallback(() => {
+    layout.setLayoutMode((on) => !on);
+    selection.clear();
+    details.setOpenID(null);
+  }, [details, layout, selection]);
 
-  const {
-    handleAddManualService,
-    handleRename,
-    handleToggleHidden,
-    handleDeleteManual,
-  } = useServiceMutationActions({
-    hostFilter,
-    hosts,
-    refresh,
-    createManualService,
-    updateManualService,
-    deleteManualService,
-    saveServiceOverride,
-    listServiceOverrides,
-  });
-
-  const handleLoadServiceDetails = useCallback(async (service: WebService) => {
-    const cached = serviceDetailsByID.get(service.id);
-    if (cached) {
-      return cached;
-    }
-    const detailed = await loadServiceDetails(service.id, service.host_asset_id);
-    if (!detailed) {
-      return null;
-    }
-    startTransition(() => {
-      setServiceDetailsByID((current) => {
-        const next = new Map(current);
-        next.set(detailed.id, detailed);
-        return next;
-      });
-    });
-    return detailed;
-  }, [loadServiceDetails, serviceDetailsByID]);
-
-  const handleToggleExpand = useCallback((service: WebService) => {
-    setExpandedService((current) => (current === service.id ? null : service.id));
-    void handleLoadServiceDetails(service).catch(() => {
-      // Leave the compact row visible; the next expand can retry detail loading.
-    });
-  }, [handleLoadServiceDetails]);
-
-  const handleOpenEditService = useCallback((service: WebService) => {
-    setEditingService(serviceDetailsByID.get(service.id) ?? service);
-  }, [serviceDetailsByID]);
-
-  const {
-    handleSaveEditModal,
-    handleResetEditModal,
-    handleAddAltURLEditModal,
-    handleRemoveAltURLEditModal,
-  } = useServiceEditModalActions({
-    editingService,
-    saveServiceOverride,
-    refresh,
-  });
+  const hostLabel = view.filters.host === "all" ? t("pull.allDevices") : (assetNameMap.get(view.filters.host) ?? view.filters.host);
+  const showList = services.length > 0 || (!loading && error);
 
   return (
     <RoutePerfBoundary
       route="services"
-      sampleSize={filtered.length}
-      metadata={{
-        total_services: totalCount,
-        filtered_services: filtered.length,
-        grouped_sections: grouped.length,
-        hosts: hosts.size,
-        suggestions: suggestions.length,
-        selection_mode: selectionMode,
-      }}
+      sampleSize={list.visible.length}
+      metadata={{ total_services: services.length, filtered_services: list.visible.length, grouped_sections: list.groups.length, hosts: list.hosts.length, suggestions: web.suggestions.length, selection_mode: selection.selected.size > 0 }}
     >
-      <>
       <PageHeader
-        title={t('title')}
-        subtitle={
-          totalCount > 0
-            ? t('subtitle.count', { upCount, totalCount })
-            : t('subtitle.default')
-        }
+        title={t("title")}
         action={
           <ServicesHeaderActions
-            selectionMode={selectionMode}
-            layoutMode={layoutMode}
-            bulkEditTargetCount={bulkEditTargets.length}
-            bulkSaving={bulkSaving}
+            adding={adding}
+            arranging={layout.layoutMode}
+            editCount={list.visible.length}
+            bulkSaving={bulk.bulkSaving}
             syncing={syncing}
-            pullingImages={pullingImages}
-            pullPlanItemCount={pullPlan.items.length}
-            onAddManual={handleAddManualService}
-            onToggleSelectionMode={handleToggleSelectionMode}
-            onOpenBulkEdit={() => setBulkEditOpen(true)}
-            onToggleArrange={handleToggleArrangeMode}
-            onRefresh={handleRefreshServices}
-            onPullImages={handlePullImages}
+            pullingImages={pull.pullingImages}
+            pullCount={pull.pullPlan.items.length}
+            onAdd={() => setAdding((on) => !on)}
+            onEditShown={() => setBulkTargets(list.visible)}
+            onToggleArrange={toggleArrange}
+            onRefresh={refreshAll}
+            onPullImages={() => setAskPull(true)}
           />
         }
       />
 
-      <div className="flex-1 flex flex-col gap-4 p-4 md:p-6 overflow-y-auto">
-        <ServicesFiltersBar
-          totalCount={totalCount}
-          activeCategories={activeCategories}
-          categoryFilter={categoryFilter}
-          onCategoryFilterChange={setCategoryFilter}
-          hosts={hosts}
-          hostFilter={hostFilter}
-          onHostFilterChange={setHostFilter}
-          sourceFilter={sourceFilter}
-          onSourceFilterChange={setSourceFilter}
-          healthFilter={healthFilter}
-          onHealthFilterChange={(value) => setHealthFilter(value as ServiceHealthFilter)}
-          sortMode={sortMode}
-          onSortModeChange={(value) => setSortMode(value as ServiceSortMode)}
-          showHidden={showHidden}
-          onShowHiddenChange={setShowHidden}
-          statusFilter={statusFilter}
-          onStatusFilterChange={setStatusFilter}
+      {adding && (
+        <ServiceAddForm
+          devices={list.devices}
+          defaultDevice={view.filters.host !== "all" ? view.filters.host : ""}
+          onAdd={mutations.addManual}
+          onClose={() => setAdding(false)}
         />
+      )}
 
-        <ServicesModeBanners
-          layoutMode={layoutMode}
-          totalCount={totalCount}
-          selectionMode={selectionMode}
-          selectedFilteredCount={selectedFilteredCount}
-          filteredCount={filtered.length}
-          onResetLayoutOrder={resetLayoutOrder}
-          onSelectAllFiltered={handleSelectAllFilteredClick}
-          onClearSelection={clearSelection}
+      {layout.layoutMode ? (
+        <div className="sv-arr" role="status">
+          <b>{t("arrange.title")}</b>
+          <span>{t("arrange.hint")}</span>
+          <span className="lt-sp" />
+          <button type="button" className="sv-chip" onClick={layout.resetLayoutOrder}>{t("arrange.reset")}</button>
+          <button type="button" className="sv-chip" onClick={toggleArrange}>{t("arrange.done")}</button>
+        </div>
+      ) : services.length > 0 ? (
+        <ServicesToolbar
+          filters={view.filters}
+          onFilters={view.patchFilters}
+          counts={list.counts}
+          categories={list.categories}
+          hosts={list.hosts}
+          sort={view.sort}
+          onSortKey={view.setSortKey}
+          grouping={view.grouping}
+          onGrouping={view.setGrouping}
         />
+      ) : null}
 
-        <ServicesDiscoveryOverviewCard discoveryOverview={discoveryOverview} />
+      {error && (
+        <div className="sv-error" role="alert">
+          <span>{services.length > 0 ? t("list.updateFailed") : t("list.loadFailed")}</span>
+          <button type="button" className="sv-chip" onClick={() => void refresh()}>{t("list.retry")}</button>
+        </div>
+      )}
 
-        <ServicesResultStates
-          loading={loading}
-          servicesCount={services.length}
-          error={error}
-          filteredCount={filtered.length}
+      {loading && services.length === 0 ? (
+        <ServicesSkeleton />
+      ) : !showList ? (
+        <ServicesEmpty adding={adding} onAdd={() => setAdding(true)} />
+      ) : (
+        <ServiceList
+          groups={list.groups}
+          grouping={list.grouping}
+          hostNames={assetNameMap}
+          shown={list.visible.length}
+          total={view.filters.show === "hidden" ? list.counts.hidden : list.counts.all}
+          filtering={list.filtering}
+          emptyText={list.emptyText}
+          sort={view.sort}
+          onSort={view.sortBy}
+          selected={selection.selected}
+          onSelectAll={selection.setAll}
+          openID={details.openID}
+          withDetails={details.withDetails}
+          arranging={layout.layoutMode}
+          dragKey={layout.draggingServiceKey}
+          dragOverKey={layout.dragOverServiceKey}
+          onClearFilters={view.clearFilters}
+          actions={rowActions}
         />
+      )}
 
-        {/* Service groups */}
-        <ServicesGroupedGrid
-          grouped={groupedWithDetails}
-          assetNameMap={assetNameMap}
-          expandedService={expandedService}
-          layoutMode={layoutMode}
-          selectionMode={selectionMode}
-          selectedServiceKeys={selectedServiceKeys}
-          draggingServiceKey={draggingServiceKey}
-          dragOverServiceKey={dragOverServiceKey}
-          onToggleExpand={handleToggleExpand}
-          onToggleSelect={handleToggleServiceSelection}
-          onEdit={handleOpenEditService}
-          onRename={handleRename}
-          onToggleHidden={handleToggleHidden}
-          onDeleteManual={handleDeleteManual}
-          onDragStart={handleCardDragStart}
-          onDragOver={handleCardDragOver}
-          onDrop={handleCardDrop}
-          onDragEnd={clearDragState}
-          onFilterHost={setHostFilter}
-        />
-      </div>
+      <ServicesBulkBar
+        picked={picked}
+        busy={bulk.bulkSaving}
+        onEdit={() => setBulkTargets(picked)}
+        onHide={(hidden) => void bulk.applyBulkEdits(picked, { iconMode: "no_change", hidden }).then(selection.clear)}
+        onClear={selection.clear}
+      />
 
-      {editingService && (
+      {editing && (
         <ServiceEditModal
-          service={editingService}
-          icons={iconIndex}
-          customIcons={customIcons}
-          onSave={handleSaveEditModal}
-          onReset={handleResetEditModal}
-          onAddAltURL={handleAddAltURLEditModal}
-          onRemoveAltURL={handleRemoveAltURLEditModal}
-          onCreateCustomIcon={createCustomIcon}
-          onDeleteCustomIcon={deleteCustomIcon}
-          onRenameCustomIcon={renameCustomIcon}
-          onClose={() => setEditingService(null)}
+          service={editing}
+          icons={icons.iconIndex}
+          customIcons={icons.customIcons}
+          onSave={editActions.handleSaveEditModal}
+          onReset={editActions.handleResetEditModal}
+          onAddAltURL={editActions.handleAddAltURLEditModal}
+          onRemoveAltURL={editActions.handleRemoveAltURLEditModal}
+          onCreateCustomIcon={icons.createCustomIcon}
+          onDeleteCustomIcon={icons.deleteCustomIcon}
+          onRenameCustomIcon={icons.renameCustomIcon}
+          onClose={() => setEditing(null)}
         />
       )}
 
-      {bulkEditOpen && (
+      {bulkTargets && (
         <ServiceBulkEditModal
-          open={bulkEditOpen}
-          affectedCount={bulkEditTargets.length}
-          icons={iconIndex}
-          customIcons={customIcons}
-          busy={bulkSaving}
-          onApply={handleApplyBulkEdits}
-          onClose={() => setBulkEditOpen(false)}
+          open
+          affectedCount={bulkTargets.length}
+          icons={icons.iconIndex}
+          customIcons={icons.customIcons}
+          busy={bulk.bulkSaving}
+          onApply={async (changes) => {
+            await bulk.applyBulkEdits(bulkTargets, changes);
+            selection.clear();
+          }}
+          onClose={() => setBulkTargets(null)}
         />
       )}
 
-</>
+      <ConfirmDialog
+        open={removing !== null}
+        onClose={() => setRemoving(null)}
+        onConfirm={() => {
+          if (removing) void mutations.removeManual(removing);
+          setRemoving(null);
+        }}
+        title={t("remove.title", { name: removing?.name ?? "" })}
+        message={t("remove.body", { address: removing ? serviceAddress(removing.url) : "" })}
+        confirmLabel={t("remove.confirm")}
+        danger
+      />
+
+      <ConfirmDialog
+        open={askPull}
+        onClose={() => setAskPull(false)}
+        onConfirm={() => {
+          setAskPull(false);
+          void pull.pullImages();
+        }}
+        title={t("pull.title", { count: pull.pullPlan.items.length })}
+        message={t("pull.body", { scope: hostLabel })}
+        confirmLabel={t("pull.confirm")}
+      />
     </RoutePerfBoundary>
   );
 }

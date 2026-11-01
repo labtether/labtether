@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useCallback } from "react";
 import type {
   ManualWebServiceInput,
@@ -7,131 +8,65 @@ import type {
   WebServiceOverride,
   WebServiceOverrideInput,
 } from "../../../hooks/useWebServices";
+import { isHidden, readableError, type Notify } from "./servicesListModel";
 
 interface UseServiceMutationActionsArgs {
-  hostFilter: string;
-  hosts: Map<string, string>;
   refresh: () => Promise<void>;
+  notify: Notify;
   createManualService: (input: ManualWebServiceInput) => Promise<void>;
-  updateManualService: (id: string, patch: Partial<ManualWebServiceInput>) => Promise<void>;
   deleteManualService: (id: string) => Promise<void>;
   saveServiceOverride: (input: WebServiceOverrideInput) => Promise<void>;
   listServiceOverrides: (hostAssetID?: string) => Promise<WebServiceOverride[]>;
 }
 
+/** Add a service by hand, hide or show one, and remove one that was added by hand. Results go to toasts. */
 export function useServiceMutationActions({
-  hostFilter,
-  hosts,
   refresh,
+  notify,
   createManualService,
-  updateManualService,
   deleteManualService,
   saveServiceOverride,
   listServiceOverrides,
 }: UseServiceMutationActionsArgs) {
-  const findExistingOverride = useCallback(async (service: WebService): Promise<WebServiceOverride | null> => {
-    const overrides = await listServiceOverrides(service.host_asset_id);
-    return (
-      overrides.find(
-        (override) =>
-          override.host_asset_id === service.host_asset_id && override.service_id === service.id
-      ) ?? null
-    );
-  }, [listServiceOverrides]);
+  const t = useTranslations("services.toasts");
 
-  const handleAddManualService = useCallback(async () => {
-    const defaultHost = hostFilter !== "all" ? hostFilter : Array.from(hosts.keys())[0] ?? "";
-    const hostAssetID = (window.prompt("Host asset ID", defaultHost) ?? "").trim();
-    if (!hostAssetID) return;
+  const addManual = useCallback(async (input: ManualWebServiceInput) => {
+    await createManualService(input);
+    notify("success", t("added", { name: input.name }));
+    await refresh();
+  }, [createManualService, notify, refresh, t]);
 
-    const name = (window.prompt("Service name", "Manual Service") ?? "").trim();
-    if (!name) return;
-
-    const url = (window.prompt("Service URL (http/https)", "https://") ?? "").trim();
-    if (!url) return;
-
-    const category = (window.prompt("Category", "Other") ?? "").trim() || "Other";
-
+  const toggleHidden = useCallback(async (service: WebService) => {
+    const hide = !isHidden(service);
     try {
-      await createManualService({
-        host_asset_id: hostAssetID,
-        name,
-        url,
-        category,
-      });
-      await refresh();
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Failed to create manual service");
-    }
-  }, [createManualService, hostFilter, hosts, refresh]);
-
-  const handleRename = useCallback(async (service: WebService) => {
-    const name = (window.prompt("Display name", service.name) ?? "").trim();
-    if (!name) return;
-    const category = (window.prompt("Category", service.category || "Other") ?? "").trim() || "Other";
-
-    try {
-      if (service.source === "manual") {
-        await updateManualService(service.id, {
-          name,
-          category,
-        });
-      } else {
-        const existingOverride = await findExistingOverride(service);
-        await saveServiceOverride({
-          host_asset_id: service.host_asset_id,
-          service_id: service.id,
-          name_override: name,
-          category_override: category,
-          hidden: service.metadata?.hidden === "true",
-          url_override: existingOverride?.url_override,
-          icon_key_override: existingOverride?.icon_key_override,
-        });
-      }
-      await refresh();
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Failed to update service");
-    }
-  }, [findExistingOverride, refresh, saveServiceOverride, updateManualService]);
-
-  const handleToggleHidden = useCallback(async (service: WebService) => {
-    try {
-      const existingOverride = await findExistingOverride(service);
+      const overrides = await listServiceOverrides(service.host_asset_id);
+      const existing = overrides.find((o) => o.host_asset_id === service.host_asset_id && o.service_id === service.id);
       await saveServiceOverride({
         host_asset_id: service.host_asset_id,
         service_id: service.id,
-        name_override: existingOverride?.name_override,
-        category_override: existingOverride?.category_override,
-        url_override: existingOverride?.url_override,
-        icon_key_override: existingOverride?.icon_key_override,
-        hidden: service.metadata?.hidden !== "true",
+        name_override: existing?.name_override,
+        category_override: existing?.category_override,
+        url_override: existing?.url_override,
+        icon_key_override: existing?.icon_key_override,
+        tags_override: existing?.tags_override,
+        hidden: hide,
       });
+      notify("success", hide ? t("hidden", { name: service.name }) : t("shown", { name: service.name }));
       await refresh();
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Failed to update visibility");
+      notify("error", readableError(err, t("saveFailed", { name: service.name })));
     }
-  }, [findExistingOverride, refresh, saveServiceOverride]);
+  }, [listServiceOverrides, notify, refresh, saveServiceOverride, t]);
 
-  const handleDeleteManual = useCallback(async (service: WebService) => {
-    if (service.source !== "manual") {
-      return;
-    }
-    const confirmed = window.confirm(`Delete manual service "${service.name}"?`);
-    if (!confirmed) {
-      return;
-    }
+  const removeManual = useCallback(async (service: WebService) => {
     try {
       await deleteManualService(service.id);
+      notify("success", t("removed", { name: service.name }));
       await refresh();
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Failed to delete manual service");
+      notify("error", readableError(err, t("removeFailed", { name: service.name })));
     }
-  }, [deleteManualService, refresh]);
+  }, [deleteManualService, notify, refresh, t]);
 
-  return {
-    handleAddManualService,
-    handleRename,
-    handleToggleHidden,
-    handleDeleteManual,
-  };
+  return { addManual, toggleHidden, removeManual };
 }

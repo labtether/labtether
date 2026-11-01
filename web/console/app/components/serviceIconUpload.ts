@@ -44,3 +44,9 @@ export function formatByteSize(size: number): string {
   }
   return `${Math.round(size / 1024)} KB`;
 }
+
+/** The hub's error text for the service dialogs, or the fallback when it is empty or only a status code ("HTTP 500"). */
+export function readableServiceError(err: unknown, fallback: string): string {
+  const message = err instanceof Error ? err.message.trim() : "";
+  return !message || /^(HTTP\s*)?\d{3}$/i.test(message) || /\(HTTP \d{3}\)$/.test(message) ? fallback : message;
+}

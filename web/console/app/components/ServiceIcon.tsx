@@ -14,6 +14,8 @@ const iconKeyPattern = /^[a-z0-9][a-z0-9._-]{0,120}$/i;
 const controlOrWhitespacePattern = /[\u0000-\u001f\u007f\s]/;
 const maxDataURLLength = 256_000;
 const maxURLLength = 2_048;
+// Marks drawn in black: services.css lightens them in the dark themes so they stay visible.
+const monoIconKeys = new Set(["vaultwarden", "frigate", "ollama", "portainer", "minio", "scrutiny", "mosquitto", "github", "apple", "notion"]);
 
 function isSafeRelativeIconPath(value: string): boolean {
   if (!value.startsWith("/") || value.startsWith("//")) {
@@ -105,14 +107,14 @@ export function ServiceIcon({ iconKey, size = 32, className = "" }: ServiceIconP
   }, [iconKey]);
 
   if (!resolved || failed) {
-    return <Globe size={size} className={`text-[var(--muted)] ${className}`} />;
+    return <Globe size={size} strokeWidth={1.75} className={`text-[var(--text-3)] ${className}`} aria-hidden="true" />;
   }
 
   if (resolved.custom) {
     return (
       <img
         src={resolved.src}
-        alt="custom icon"
+        alt=""
         width={size}
         height={size}
         className={className}
@@ -127,10 +129,10 @@ export function ServiceIcon({ iconKey, size = 32, className = "" }: ServiceIconP
   return (
     <img
       src={resolved.src}
-      alt={iconKey}
+      alt=""
       width={size}
       height={size}
-      className={className}
+      className={`${monoIconKeys.has(iconKey.trim().toLowerCase()) ? "sv-mono " : ""}${className}`}
       onError={() => setFailed(true)}
       loading="lazy"
       decoding="async"

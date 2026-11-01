@@ -1,28 +1,58 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, type ChangeEvent } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
-import { describeServiceIconSelection, isCustomServiceIconSource, ServiceIcon } from "./ServiceIcon";
+import { useTranslations } from "next-intl";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Button } from "./ui/Button";
+import { describeServiceIconSelection, ServiceIcon } from "./ServiceIcon";
 import type { ServiceCustomIcon, WebServiceAltURL, WebService, WebServiceOverrideInput } from "../hooks/useWebServices";
-import { CUSTOM_ICON_UPLOAD_TYPES, MAX_CUSTOM_ICON_UPLOAD_BYTES, formatByteSize, readFileAsDataURL, normalizeCustomIconName } from "./serviceIconUpload";
-import { ServiceIconEditor } from "./ServiceIconEditor";
+import { ServiceIconEditor, useCustomIconActions } from "./ServiceIconEditor";
 import { TagsEditor } from "./ServiceTagsEditor";
+import { readableServiceError } from "./serviceIconUpload";
 
-const CATEGORIES = [
-  "Media",
-  "Downloads",
-  "Gaming",
-  "Networking",
-  "Monitoring",
-  "Home Automation",
-  "Management",
-  "Development",
-  "Storage",
-  "Databases",
-  "Security",
-  "Productivity",
-  "Other",
+export const SERVICE_CATEGORIES = [
+  "Media", "Downloads", "Gaming", "Networking", "Monitoring", "Home Automation", "Management",
+  "Development", "Storage", "Databases", "Security", "Productivity", "Other",
 ];
+
+/** The 2.0 dialog frame the service dialogs share: scrim, a raised sheet, the title and a close button. */
+export function ServiceDialogFrame({ title, busy = false, wide = false, onClose, children, footer }: {
+  title: string;
+  busy?: boolean;
+  wide?: boolean;
+  onClose: () => void;
+  children: ReactNode;
+  footer: ReactNode;
+}) {
+  const t = useTranslations("services.edit");
+  return (
+    <Dialog.Root open onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="sv-scrim" />
+        <Dialog.Content
+          className={`sv-dlg${wide ? " wide" : ""}`}
+          aria-describedby={undefined}
+          onOpenAutoFocus={(event) => {
+            // Start in the first field, not on the close button.
+            const field = (event.currentTarget as HTMLElement).querySelector<HTMLElement>(".sv-dlg-b input, .sv-dlg-b select");
+            if (field) {
+              event.preventDefault();
+              field.focus();
+            }
+          }}
+        >
+          <div className="sv-dlg-h">
+            <Dialog.Title>{title}</Dialog.Title>
+            <Dialog.Close className="sv-more sv-x" aria-label={t("close")} disabled={busy}><X aria-hidden="true" strokeWidth={2} /></Dialog.Close>
+          </div>
+          <div className="sv-dlg-b">{children}</div>
+          <div className="sv-dlg-f">{footer}</div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
 
 interface ServiceEditModalProps {
   service: WebService;
@@ -38,485 +68,198 @@ interface ServiceEditModalProps {
   onClose: () => void;
 }
 
+/**
+ * Edit what LabTether found for a service: name, URL, category, icon, tags, other addresses and whether it shows in
+ * Services. Reset to detected drops every change.
+ */
 export function ServiceEditModal({
-  service,
-  icons,
-  customIcons = [],
-  onSave,
-  onReset,
-  onCreateCustomIcon,
-  onDeleteCustomIcon,
-  onRenameCustomIcon,
-  onAddAltURL,
-  onRemoveAltURL,
-  onClose,
+  service, icons, customIcons = [], onSave, onReset, onCreateCustomIcon, onDeleteCustomIcon, onRenameCustomIcon, onAddAltURL, onRemoveAltURL, onClose,
 }: ServiceEditModalProps) {
+  const t = useTranslations("services.edit");
   const [name, setName] = useState(service.name);
   const [category, setCategory] = useState(service.category || "Other");
   const [iconKey, setIconKey] = useState(service.icon_key || "");
   const [hidden, setHidden] = useState(service.metadata?.hidden === "true");
-  const [urlOverride, setUrlOverride] = useState(service.url);
-  const [tagsInput, setTagsInput] = useState(service.metadata?.user_tags ?? "");
+  const [url, setURL] = useState(service.url);
+  const [tags, setTags] = useState(service.metadata?.user_tags ?? "");
+  const [picking, setPicking] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [removingURL, setRemovingURL] = useState<string | null>(null);
-  const [newAltURL, setNewAltURL] = useState("");
-  const [altURLs, setAltURLs] = useState<WebServiceAltURL[]>(service.alt_urls ?? []);
-  const [uploadingIcon, setUploadingIcon] = useState(false);
-  const [deletingCustomIconID, setDeletingCustomIconID] = useState<string | null>(null);
-  const [renamingCustomIconID, setRenamingCustomIconID] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const iconSelectionLabel = useMemo(() => describeServiceIconSelection(iconKey), [iconKey]);
-  const hasCustomIconSource = useMemo(() => isCustomServiceIconSource(iconKey), [iconKey]);
+  const report = useCallback((err: string | null, msg: string | null = null) => { setError(err); setMessage(msg); }, []);
+  const iconActions = useCustomIconActions({ iconKey, setIconKey, report, onCreateCustomIcon, onDeleteCustomIcon, onRenameCustomIcon });
+  const busy = saving || iconActions.busy;
+  const iconLabel = useMemo(() => describeServiceIconSelection(iconKey), [iconKey]);
 
-  useEffect(() => {
-    setName(service.name);
-    setCategory(service.category || "Other");
-    setIconKey(service.icon_key || "");
-    setHidden(service.metadata?.hidden === "true");
-    setUrlOverride(service.url);
-    setTagsInput(service.metadata?.user_tags ?? "");
-    setRemovingURL(null);
-    setNewAltURL("");
-    setAltURLs(service.alt_urls ?? []);
-    setUploadingIcon(false);
-    setDeletingCustomIconID(null);
-    setRenamingCustomIconID(null);
-    setError(null);
-    setMessage(null);
-  }, [service]);
-
-  const reloadAltURLs = useCallback(async () => {
-    const response = await fetch(`/api/services/web/alt-urls?web_service_id=${encodeURIComponent(service.url)}`, {
-      cache: "no-store",
-    });
-    const payload = await response.json().catch(() => null) as { alt_urls?: WebServiceAltURL[]; error?: string } | null;
-    if (!response.ok) {
-      throw new Error(payload?.error ?? `Failed to load alt URLs (HTTP ${response.status})`);
-    }
-    setAltURLs(Array.isArray(payload?.alt_urls) ? payload.alt_urls : []);
-  }, [service.url]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void reloadAltURLs().catch((err) => {
-      if (cancelled) {
-        return;
-      }
-      setError(err instanceof Error ? err.message : "Failed to load alternative URLs");
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadAltURLs]);
-
-  const handleSave = useCallback(async () => {
+  const save = async () => {
+    if (!name.trim()) { report(t("nameMissing")); return; }
     setSaving(true);
-    setError(null);
-    setMessage(null);
+    report(null);
     try {
       await onSave({
         host_asset_id: service.host_asset_id,
         service_id: service.id,
-        name_override: name !== service.name ? name : undefined,
+        name_override: name !== service.name ? name.trim() : undefined,
         category_override: category !== service.category ? category : undefined,
-        url_override: urlOverride !== service.url ? urlOverride : undefined,
+        url_override: url !== service.url ? url.trim() : undefined,
         icon_key_override: iconKey !== service.icon_key ? iconKey : undefined,
-        tags_override: tagsInput.trim() || undefined,
+        tags_override: tags.trim() || undefined,
         hidden,
       });
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save");
+      report(readableServiceError(err, t("saveFailed")));
     } finally {
       setSaving(false);
     }
-  }, [service, name, category, urlOverride, iconKey, tagsInput, hidden, onSave, onClose]);
+  };
 
-  const handleReset = useCallback(async () => {
+  const reset = async () => {
     setSaving(true);
-    setError(null);
-    setMessage(null);
+    report(null);
     try {
       await onReset();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to reset");
+      report(readableServiceError(err, t("resetFailed")));
     } finally {
       setSaving(false);
     }
-  }, [onReset, onClose]);
-
-  const handleAddAltURL = useCallback(async () => {
-    if (!onAddAltURL || !newAltURL.trim()) return;
-    setError(null);
-    setMessage(null);
-    try {
-      await onAddAltURL(service.url, newAltURL.trim());
-      await reloadAltURLs();
-      setNewAltURL("");
-      setMessage("Alternative URL added.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add URL");
-    }
-  }, [newAltURL, onAddAltURL, reloadAltURLs, service.url]);
-
-  const handleRemoveAltURL = useCallback(async (altURLID: string) => {
-    if (!onRemoveAltURL) return;
-    setRemovingURL(altURLID);
-    setError(null);
-    setMessage(null);
-    try {
-      await onRemoveAltURL(altURLID);
-      await reloadAltURLs();
-      setMessage("Alternative URL removed.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to remove URL");
-    } finally {
-      setRemovingURL(null);
-    }
-  }, [onRemoveAltURL, reloadAltURLs]);
-
-  // Close on Escape
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
-
-  const handleUploadIcon = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.currentTarget.files?.[0];
-    event.currentTarget.value = "";
-    if (!file) {
-      return;
-    }
-
-    const type = file.type.toLowerCase().trim();
-    if (!CUSTOM_ICON_UPLOAD_TYPES.has(type)) {
-      setError("Icon must be PNG, JPEG, WEBP, GIF, or SVG.");
-      setMessage(null);
-      return;
-    }
-    if (file.size > MAX_CUSTOM_ICON_UPLOAD_BYTES) {
-      setError(`Icon is too large. Maximum size is ${formatByteSize(MAX_CUSTOM_ICON_UPLOAD_BYTES)}.`);
-      setMessage(null);
-      return;
-    }
-
-    setError(null);
-    setMessage(null);
-    setUploadingIcon(true);
-    try {
-      const uploaded = await readFileAsDataURL(file);
-      if (!isCustomServiceIconSource(uploaded)) {
-        throw new Error("invalid icon data");
-      }
-      if (onCreateCustomIcon) {
-        const created = await onCreateCustomIcon({
-          name: normalizeCustomIconName(file.name),
-          data_url: uploaded,
-        });
-        setIconKey(created.data_url);
-        setMessage(`Uploaded "${created.name}" to icon library.`);
-      } else {
-        setIconKey(uploaded);
-        setMessage(`Uploaded custom icon: ${file.name}`);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to read icon file.");
-      setMessage(null);
-    } finally {
-      setUploadingIcon(false);
-    }
-  }, [onCreateCustomIcon]);
-
-  const handleDeleteCustomIcon = useCallback(async (icon: ServiceCustomIcon) => {
-    if (!onDeleteCustomIcon) {
-      return;
-    }
-    const confirmed = window.confirm(`Delete custom icon "${icon.name}" from library?`);
-    if (!confirmed) {
-      return;
-    }
-
-    setDeletingCustomIconID(icon.id);
-    setError(null);
-    setMessage(null);
-    try {
-      await onDeleteCustomIcon(icon.id);
-      if (iconKey === icon.data_url) {
-        setIconKey("");
-      }
-      setMessage(`Deleted "${icon.name}" from icon library.`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete icon");
-    } finally {
-      setDeletingCustomIconID(null);
-    }
-  }, [iconKey, onDeleteCustomIcon]);
-
-  const handleRenameCustomIcon = useCallback(async (icon: ServiceCustomIcon) => {
-    if (!onRenameCustomIcon) {
-      return;
-    }
-    const proposed = (window.prompt("Icon name", icon.name) ?? "").trim();
-    if (!proposed || proposed === icon.name) {
-      return;
-    }
-
-    setRenamingCustomIconID(icon.id);
-    setError(null);
-    setMessage(null);
-    try {
-      const renamed = await onRenameCustomIcon(icon.id, proposed);
-      setMessage(`Renamed icon to "${renamed.name}".`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to rename icon");
-    } finally {
-      setRenamingCustomIconID(null);
-    }
-  }, [onRenameCustomIcon]);
+  };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+    <ServiceDialogFrame
+      title={t("title", { name: service.name })}
+      busy={busy}
+      wide
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="ghost" onClick={() => void reset()} disabled={busy}>{t("reset")}</Button>
+          <span className="lt-sp" />
+          <Button variant="ghost" onClick={onClose} disabled={busy}>{t("cancel")}</Button>
+          <Button variant="primary" onClick={() => void save()} disabled={busy}>{saving ? t("saving") : t("save")}</Button>
+        </>
+      }
     >
-      <div
-        className="bg-[var(--panel-glass)] border border-[var(--panel-border)] rounded-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto"
-        style={{
-          backdropFilter: "blur(var(--blur-md))",
-          WebkitBackdropFilter: "blur(var(--blur-md))",
-          boxShadow: "var(--shadow-panel)",
-        }}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-[var(--line)]">
-          <div className="flex items-center gap-2.5">
-            <ServiceIcon iconKey={iconKey || service.icon_key} size={24} />
-            <h2 className="text-[15px] font-semibold text-[var(--text)]">
-              Edit Service
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1 rounded hover:bg-[var(--hover)] transition-colors cursor-pointer"
-          >
-            <X size={16} className="text-[var(--muted)]" />
-          </button>
+      <div className="sv-ed-g">
+        <div className="sv-field">
+          <label htmlFor="sv-ed-name">{t("name")}</label>
+          <input id="sv-ed-name" className="sv-input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
         </div>
-
-        {/* Body */}
-        <div className="p-4 space-y-4">
-          {/* Name */}
-          <div>
-            <label className="block text-xs font-medium text-[var(--muted)] mb-1">
-              Display Name
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full h-8 px-3 rounded border border-[var(--line)] bg-[var(--surface)] text-[13px] text-[var(--text)] focus:outline-none focus:border-[var(--accent)]"
-            />
-          </div>
-
-          {/* URL Override */}
-          <div>
-            <label className="block text-xs font-medium text-[var(--muted)] mb-1">
-              URL
-            </label>
-            <input
-              type="text"
-              value={urlOverride}
-              onChange={(e) => setUrlOverride(e.target.value)}
-              placeholder="https://..."
-              className="w-full h-8 px-3 rounded border border-[var(--line)] bg-[var(--surface)] text-[13px] text-[var(--text)] focus:outline-none focus:border-[var(--accent)] font-mono"
-            />
-            <p className="mt-0.5 text-[10px] text-[var(--muted)]">
-              Override the discovered URL for this service.
-            </p>
-          </div>
-
-          {/* Category */}
-          <div>
-            <label className="block text-xs font-medium text-[var(--muted)] mb-1">
-              Category
-            </label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="w-full h-8 px-3 rounded border border-[var(--line)] bg-[var(--surface)] text-[13px] text-[var(--text)] focus:outline-none focus:border-[var(--accent)] cursor-pointer"
-            >
-              {CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <ServiceIconEditor
-            icons={icons}
-            customIcons={customIcons}
-            iconKey={iconKey}
-            setIconKey={setIconKey}
-            iconSelectionLabel={iconSelectionLabel}
-            hasCustomIconSource={hasCustomIconSource}
-            saving={saving}
-            removingURL={removingURL}
-            uploadingIcon={uploadingIcon}
-            deletingCustomIconID={deletingCustomIconID}
-            renamingCustomIconID={renamingCustomIconID}
-            onDeleteCustomIcon={onDeleteCustomIcon}
-            onRenameCustomIcon={onRenameCustomIcon}
-            handleDeleteCustomIcon={handleDeleteCustomIcon}
-            handleRenameCustomIcon={handleRenameCustomIcon}
-            handleUploadIcon={handleUploadIcon}
-          />
-
-          {/* Hidden toggle */}
-          <div className="flex items-center justify-between">
-            <label className="text-[13px] text-[var(--text)]">
-              Hidden
-            </label>
-            <button
-              type="button"
-              onClick={() => setHidden(!hidden)}
-              disabled={removingURL !== null || uploadingIcon || deletingCustomIconID !== null || renamingCustomIconID !== null}
-              className={`w-9 h-5 rounded-full transition-colors cursor-pointer ${
-                hidden ? "bg-[var(--accent)]" : "bg-[var(--surface)] border border-[var(--line)]"
-              } disabled:opacity-60 disabled:cursor-not-allowed`}
-            >
-              <div
-                className={`w-3.5 h-3.5 rounded-full bg-white transition-transform ${
-                  hidden ? "translate-x-[18px]" : "translate-x-[3px]"
-                }`}
-              />
-            </button>
-          </div>
-
-          {/* Tags */}
-          <div>
-            <label className="block text-xs font-medium text-[var(--muted)] mb-1">
-              Tags
-            </label>
-            <TagsEditor value={tagsInput} onChange={setTagsInput} />
-          </div>
-
-          {(altURLs.length > 0 || onAddAltURL) && (
-            <div className="space-y-2">
-              <label className="block text-xs font-medium text-[var(--muted)]">
-                Alternative URLs
-              </label>
-              {altURLs.length > 0 && (
-                <div className="space-y-1.5">
-                  {altURLs.map((alt) => (
-                    <div
-                      key={alt.id}
-                      className="flex items-center gap-2 group"
-                    >
-                      <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded font-mono ${
-                        alt.source === "manual" ? "bg-[var(--accent)]/15 text-[var(--accent)]" :
-                        alt.source === "suggestion_accepted" ? "bg-[var(--good)]/15 text-[var(--good)]" :
-                        "bg-[var(--surface)] text-[var(--muted)]"
-                      }`}>
-                        {alt.source === "suggestion_accepted" ? "accepted" : alt.source}
-                      </span>
-                      <span className="text-[12px] text-[var(--text)] truncate flex-1" title={alt.url}>
-                        {alt.url}
-                      </span>
-                      {onRemoveAltURL && (
-                        <button
-                          type="button"
-                          onClick={() => void handleRemoveAltURL(alt.id)}
-                          disabled={saving || removingURL !== null || uploadingIcon || deletingCustomIconID !== null || renamingCustomIconID !== null}
-                          className="shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[var(--hover)] text-[var(--muted)] hover:text-[var(--bad)] transition-[color,background-color,opacity] cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                          title="Remove alternative URL"
-                          aria-label={`Remove alternative URL ${alt.url}`}
-                        >
-                          {removingURL === alt.id ? (
-                            <span className="block w-3 h-3 rounded-full border border-[var(--muted)] border-t-transparent animate-spin" />
-                          ) : (
-                            <X size={12} />
-                          )}
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {onAddAltURL && (
-                <div className="flex gap-2 mt-1">
-                  <input
-                    type="text"
-                    placeholder="Add alternative URL..."
-                    value={newAltURL}
-                    onChange={(e) => setNewAltURL(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        void handleAddAltURL();
-                      }
-                    }}
-                    className="flex-1 h-7 px-2.5 rounded border border-[var(--line)] bg-[var(--surface)] text-[12px] text-[var(--text)] placeholder-[var(--muted)] focus:outline-none focus:border-[var(--accent)] font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void handleAddAltURL()}
-                    disabled={!newAltURL.trim() || saving || removingURL !== null}
-                    className="h-7 px-3 rounded border border-[var(--line)] text-xs font-medium text-[var(--text)] hover:bg-[var(--hover)] transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    Add
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {error && (
-            <p className="text-[12px] text-[var(--bad)]">{error}</p>
-          )}
-          {message && (
-            <p className="text-[12px] text-[var(--muted)]">{message}</p>
-          )}
+        <div className="sv-field">
+          <label htmlFor="sv-ed-url">{t("url")}</label>
+          <input id="sv-ed-url" className="sv-input mono" value={url} onChange={(e) => setURL(e.target.value)} placeholder="https://" autoComplete="off" />
         </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between p-4 border-t border-[var(--line)]">
-          <button
-            type="button"
-            onClick={handleReset}
-            disabled={saving || removingURL !== null || uploadingIcon || deletingCustomIconID !== null || renamingCustomIconID !== null}
-            className="h-7 px-3 rounded text-xs font-medium text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--hover)] transition-colors cursor-pointer disabled:opacity-50"
-          >
-            Reset to Auto
+        <div className="sv-field">
+          <label htmlFor="sv-ed-cat">{t("category")}</label>
+          <select id="sv-ed-cat" className="sv-input" value={category} onChange={(e) => setCategory(e.target.value)}>
+            {SERVICE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div className="sv-field">
+          <span className="sv-lbl">{t("icon")}</span>
+          <button type="button" className="sv-input sv-icbtn" onClick={() => setPicking((on) => !on)} aria-expanded={picking}>
+            <ServiceIcon iconKey={iconKey || service.icon_key} size={16} />
+            <span>{iconLabel || t("iconFound")}</span>
+            <span className="sv-hint">{picking ? t("iconDone") : t("iconChange")}</span>
           </button>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={saving || removingURL !== null || uploadingIcon || deletingCustomIconID !== null || renamingCustomIconID !== null}
-              className="h-7 px-3 rounded border border-[var(--line)] text-xs font-medium text-[var(--text)] hover:bg-[var(--hover)] transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving || removingURL !== null || uploadingIcon || deletingCustomIconID !== null || renamingCustomIconID !== null}
-              className="h-7 px-4 rounded bg-[var(--accent)] text-[var(--accent-contrast)] text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
-            >
-              {saving ? "Saving..." : "Save"}
-            </button>
-          </div>
         </div>
       </div>
+      {picking && (
+        <ServiceIconEditor icons={icons} customIcons={customIcons} iconKey={iconKey} setIconKey={setIconKey} disabled={busy} actions={iconActions} />
+      )}
+      <div className="sv-field">
+        <span className="sv-lbl">{t("tags")}</span>
+        <TagsEditor value={tags} onChange={setTags} />
+      </div>
+      <AltURLs service={service} busy={busy} report={report} onAdd={onAddAltURL} onRemove={onRemoveAltURL} />
+      <label className="sv-check">
+        <button type="button" role="switch" aria-checked={hidden} className="sv-switch" onClick={() => setHidden((on) => !on)} disabled={busy}><i /></button>
+        {t("hide")}
+      </label>
+      {error && <p className="sv-err" role="alert">{error}</p>}
+      {message && <p className="sv-hint" role="status">{message}</p>}
+    </ServiceDialogFrame>
+  );
+}
+
+/** Other addresses of the service: the list from the hub, remove one, add one. */
+function AltURLs({ service, busy, report, onAdd, onRemove }: {
+  service: WebService;
+  busy: boolean;
+  report: (err: string | null, msg?: string | null) => void;
+  onAdd?: (webServiceID: string, url: string) => Promise<void>;
+  onRemove?: (altURLID: string) => Promise<void>;
+}) {
+  const t = useTranslations("services.edit");
+  const [list, setList] = useState<WebServiceAltURL[]>(service.alt_urls ?? []);
+  const [draft, setDraft] = useState("");
+  const [working, setWorking] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
+    const response = await fetch(`/api/services/web/alt-urls?web_service_id=${encodeURIComponent(service.url)}`, { cache: "no-store" });
+    const payload = await response.json().catch(() => null) as { alt_urls?: WebServiceAltURL[]; error?: string } | null;
+    if (!response.ok) throw new Error(payload?.error?.trim() || t("altLoadFailed"));
+    setList(Array.isArray(payload?.alt_urls) ? payload.alt_urls : []);
+  }, [service.url, t]);
+
+  useEffect(() => {
+    let live = true;
+    void reload().catch((err) => { if (live) report(readableServiceError(err, t("altLoadFailed"))); });
+    return () => { live = false; };
+  }, [reload, report, t]);
+
+  const run = async (key: string, work: () => Promise<void>, done: string) => {
+    setWorking(key);
+    report(null);
+    try {
+      await work();
+      await reload();
+      report(null, done);
+      return true;
+    } catch (err) {
+      report(readableServiceError(err, t("altFailed")));
+      return false;
+    } finally {
+      setWorking(null);
+    }
+  };
+  const add = async () => {
+    const value = draft.trim();
+    if (!onAdd || !value) return;
+    if (await run("add", () => onAdd(service.url, value), t("altAdded"))) setDraft("");
+  };
+
+  if (!onAdd && list.length === 0) return null;
+  return (
+    <div className="sv-field">
+      <span className="sv-lbl">{t("altUrls")}</span>
+      {list.length > 0 && (
+        <ul className="sv-alts">
+          {list.map((alt) => (
+            <li key={alt.id}>
+              <span className="mono">{alt.url}</span>
+              <span className="sv-hint">{t(`altSource.${alt.source === "suggestion_accepted" ? "accepted" : alt.source === "manual" ? "manual" : "found"}`)}</span>
+              {onRemove && (
+                <button type="button" className="sv-more sv-x" disabled={busy || working !== null} aria-label={t("altRemove", { url: alt.url })}
+                  onClick={() => void run(alt.id, () => onRemove(alt.id), t("altRemoved"))}>
+                  <X aria-hidden="true" strokeWidth={2} />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {onAdd && (
+        <div className="sv-row-in">
+          <input className="sv-input mono" value={draft} placeholder="https://" aria-label={t("altAdd")} onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && draft.trim()) { e.preventDefault(); void add(); } }} />
+          <Button onClick={() => void add()} disabled={!draft.trim() || busy || working !== null}>
+            {t("add")}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

@@ -231,7 +231,7 @@ export default function OverridesTab() {
         <select
           value={hostFilter}
           onChange={(e) => setHostFilter(e.target.value)}
-          className="rounded-lg border border-[var(--control-border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--control-focus-ring)]"
+          className="sv-input sv-auto"
         >
           <option value="">{t("config.overrides.host")}: --</option>
           {hostOptions.map((id) => (
@@ -247,7 +247,7 @@ export default function OverridesTab() {
           onChange={(e) =>
             setFieldFilter(e.target.value as OverrideFieldKey | "")
           }
-          className="rounded-lg border border-[var(--control-border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--control-focus-ring)]"
+          className="sv-input sv-auto"
         >
           <option value="">
             {t("config.overrides.overriddenFields")}: --
@@ -286,31 +286,31 @@ export default function OverridesTab() {
           description={t("config.overrides.emptyState")}
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-[var(--line)]">
+        <div className="sv-tbl">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-[var(--line)] bg-[var(--surface)]">
-                <th className="w-8 px-3 py-2">
+              <tr className="sv-tbl-h">
+                <th className="sv-tbl-c">
                   <input
                     type="checkbox"
                     checked={allSelected}
                     onChange={toggleAll}
-                    className="accent-[var(--accent)] cursor-pointer"
+                    className="sv-cbx vis"
                   />
                 </th>
-                <th className="text-left px-3 py-2 text-xs font-semibold text-[var(--muted)]">
+                <th>
                   {t("config.overrides.serviceName")}
                 </th>
-                <th className="text-left px-3 py-2 text-xs font-semibold text-[var(--muted)]">
+                <th>
                   {t("config.overrides.host")}
                 </th>
-                <th className="text-left px-3 py-2 text-xs font-semibold text-[var(--muted)]">
+                <th>
                   {t("config.overrides.overriddenFields")}
                 </th>
-                <th className="text-left px-3 py-2 text-xs font-semibold text-[var(--muted)]">
+                <th>
                   {t("config.overrides.lastUpdated")}
                 </th>
-                <th className="text-right px-3 py-2 text-xs font-semibold text-[var(--muted)]">
+                <th className="sv-r">
                   {t("config.overrides.actions")}
                 </th>
               </tr>
@@ -322,14 +322,14 @@ export default function OverridesTab() {
                 return (
                   <tr
                     key={key}
-                    className="border-b border-[var(--line)] last:border-b-0 hover:bg-[var(--hover)] transition-colors"
+                    className="sv-tbl-r"
                   >
                     <td className="px-3 py-2">
                       <input
                         type="checkbox"
                         checked={selected.has(key)}
                         onChange={() => toggleOne(override)}
-                        className="accent-[var(--accent)] cursor-pointer"
+                        className="sv-cbx vis"
                       />
                     </td>
                     <td className="px-3 py-2 text-[var(--text)] font-medium">
@@ -343,7 +343,7 @@ export default function OverridesTab() {
                         {fields.map((field) => (
                           <span
                             key={field}
-                            className="inline-flex items-center rounded-full bg-[var(--accent)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--accent)]"
+                            className="sv-tag"
                           >
                             {t(`config.overrides.fields.${field}`)}
                           </span>

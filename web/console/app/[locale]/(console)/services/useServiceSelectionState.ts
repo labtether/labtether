@@ -1,91 +1,36 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import type { Dispatch, SetStateAction } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { WebService } from "../../../hooks/useWebServices";
-import { serviceLayoutKey } from "./servicesPageHelpers";
+import { serviceLayoutKey } from "./servicesLayoutHelpers";
 
-interface UseServiceSelectionStateArgs {
-  layoutMode: boolean;
-  setLayoutMode: Dispatch<SetStateAction<boolean>>;
-  clearDragState: () => void;
-}
+/** Picked rows, by layout key. Picks of services the list no longer shows are dropped. */
+export function useServiceSelectionState(visible: WebService[]) {
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
 
-export function useServiceSelectionState({
-  layoutMode,
-  setLayoutMode,
-  clearDragState,
-}: UseServiceSelectionStateArgs) {
-  const [selectionMode, setSelectionMode] = useState(false);
-  const [selectedServiceKeys, setSelectedServiceKeys] = useState<Set<string>>(new Set());
-
-  const reconcileSelectionWithFiltered = useCallback((filtered: WebService[]) => {
-    setSelectedServiceKeys((current) => {
-      if (current.size === 0) {
-        return current;
-      }
-      const allowed = new Set(filtered.map((service) => serviceLayoutKey(service)));
-      const next = new Set<string>();
-      for (const key of current) {
-        if (allowed.has(key)) {
-          next.add(key);
-        }
-      }
-      if (next.size === current.size) {
-        return current;
-      }
-      return next;
+  useEffect(() => {
+    setSelected((current) => {
+      if (current.size === 0) return current;
+      const allowed = new Set(visible.map(serviceLayoutKey));
+      const next = new Set([...current].filter((key) => allowed.has(key)));
+      return next.size === current.size ? current : next;
     });
-  }, []);
+  }, [visible]);
 
-  const clearSelection = useCallback(() => {
-    setSelectedServiceKeys(new Set());
-  }, []);
-
-  const disableSelectionMode = useCallback(() => {
-    setSelectionMode(false);
-    clearSelection();
-  }, [clearSelection]);
-
-  const handleToggleSelectionMode = useCallback(() => {
-    setSelectionMode((current) => {
-      const next = !current;
-      if (!next) {
-        clearSelection();
-      } else if (layoutMode) {
-        setLayoutMode(false);
-        clearDragState();
-      }
-      return next;
-    });
-  }, [clearDragState, clearSelection, layoutMode, setLayoutMode]);
-
-  const handleToggleServiceSelection = useCallback((service: WebService) => {
+  const toggle = useCallback((service: WebService) => {
     const key = serviceLayoutKey(service);
-    setSelectedServiceKeys((current) => {
+    setSelected((current) => {
       const next = new Set(current);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
+      if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
   }, []);
 
-  const handleSelectAllFiltered = useCallback((filtered: WebService[]) => {
-    setSelectedServiceKeys(new Set(filtered.map((service) => serviceLayoutKey(service))));
-  }, []);
+  const setAll = useCallback((on: boolean) => {
+    setSelected(on ? new Set(visible.map(serviceLayoutKey)) : new Set());
+  }, [visible]);
 
-  return {
-    selectionMode,
-    setSelectionMode,
-    selectedServiceKeys,
-    reconcileSelectionWithFiltered,
-    clearSelection,
-    disableSelectionMode,
-    handleToggleSelectionMode,
-    handleToggleServiceSelection,
-    handleSelectAllFiltered,
-  };
+  const clear = useCallback(() => setSelected(new Set()), []);
+
+  return { selected, toggle, setAll, clear };
 }

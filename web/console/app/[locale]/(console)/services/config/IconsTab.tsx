@@ -157,7 +157,7 @@ export default function IconsTab() {
           onChange={handleFileChange}
         />
         {uploadError && (
-          <span className="text-xs text-[var(--bad)]">{uploadError}</span>
+          <span className="sv-err">{uploadError}</span>
         )}
       </div>
 
@@ -178,10 +178,10 @@ export default function IconsTab() {
             return (
               <div
                 key={icon.id}
-                className="flex flex-col gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 transition-colors hover:border-[var(--accent)]/40"
+                className="sv-ictl"
               >
                 {/* Thumbnail */}
-                <div className="flex items-center justify-center h-16 rounded-lg bg-[var(--bg)] overflow-hidden">
+                <div className="sv-ictl-img">
                   <img
                     src={icon.data_url}
                     alt={icon.name}
@@ -208,7 +208,7 @@ export default function IconsTab() {
                       type="button"
                       onClick={() => void confirmRename(icon.id)}
                       disabled={renameLoading || !renameValue.trim()}
-                      className="shrink-0 rounded px-1 py-0.5 text-[10px] font-semibold text-[var(--accent)] hover:bg-[var(--hover)] disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+                      className="shrink-0 rounded px-1 py-0.5 text-[10px] font-semibold text-[var(--text)] hover:bg-[var(--hover)] disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
                     >
                       OK
                     </button>
@@ -223,7 +223,7 @@ export default function IconsTab() {
                   </div>
                 ) : (
                   <p
-                    className="truncate text-xs font-medium text-[var(--text)] cursor-pointer hover:text-[var(--accent)] transition-colors"
+                    className="truncate text-xs font-medium text-[var(--text)] cursor-pointer hover:underline"
                     title={icon.name}
                     onClick={() => startRename(icon)}
                   >
@@ -235,7 +235,7 @@ export default function IconsTab() {
                 <span
                   className={`text-[10px] font-medium ${
                     count > 0
-                      ? "text-[var(--accent)]"
+                      ? "text-[var(--text-2)]"
                       : "text-[var(--muted)]"
                   }`}
                 >

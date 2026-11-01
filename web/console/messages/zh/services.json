@@ -1,36 +1,327 @@
 {
   "title": "服务",
-  "subtitle": {
-    "default": "在您的家庭实验室中发现的 Web 服务",
-    "count": "{upCount}/{totalCount} 个服务在线"
+  "actions": {
+    "refresh": "刷新",
+    "add": "添加服务",
+    "more": "更多操作",
+    "editShown": "{count, plural, other {编辑显示的 # 个服务…}}",
+    "pulling": "正在拉取镜像…",
+    "pullImages": "{count, plural, other {拉取 # 个镜像…}}",
+    "noImages": "没有可拉取的镜像",
+    "arrange": "排列",
+    "doneArranging": "完成排列",
+    "settings": "服务设置",
+    "discovery": "发现"
+  },
+  "arrange": {
+    "title": "正在排列",
+    "hint": "拖动一行，在其类别内移动。",
+    "reset": "重置顺序",
+    "done": "完成"
+  },
+  "toolbar": {
+    "filter": "按名称、设备或地址筛选",
+    "show": "显示",
+    "shows": {
+      "all": "全部",
+      "down": "宕机",
+      "hidden": "已隐藏"
+    },
+    "filters": "筛选",
+    "category": "类别",
+    "anyCategory": "任意类别",
+    "device": "设备",
+    "anyDevice": "任意设备",
+    "source": "发现方式",
+    "anySource": "任意",
+    "sources": {
+      "docker": "Docker",
+      "proxy": "反向代理",
+      "scan": "端口扫描",
+      "manual": "手动添加"
+    },
+    "status": "状态",
+    "anyStatus": "任意状态",
+    "statuses": {
+      "up": "在线",
+      "down": "宕机",
+      "unknown": "未知"
+    },
+    "health": "稳定性",
+    "anyHealth": "任意",
+    "healths": {
+      "unstable": "可用率低于 95%",
+      "changed_recently": "最近 2 小时内有变化"
+    },
+    "sort": "排序",
+    "sorts": {
+      "name": "名称",
+      "latency": "延迟",
+      "most_unstable": "最不稳定的在前",
+      "uptime_high": "可用率最高的在前",
+      "recently_changed": "最近变化的在前"
+    },
+    "clear": "清除筛选",
+    "group": "分组",
+    "groupings": {
+      "none": "无",
+      "category": "类别",
+      "host": "设备"
+    }
+  },
+  "list": {
+    "label": "服务",
+    "selectAll": "全选显示的服务",
+    "columns": {
+      "service": "服务",
+      "latency": "延迟"
+    },
+    "noDevice": "无设备",
+    "shownOf": "{shown} / {total}",
+    "clearFilter": "清除筛选",
+    "downSince": "自 {time} 起宕机",
+    "down": "宕机",
+    "unknown": "状态未知",
+    "hidden": "已隐藏",
+    "rowLabel": "{host} 上的 {name}",
+    "select": "选择 {name}",
+    "actionsFor": "{name} 的操作",
+    "open": "打开",
+    "copyAddress": "复制地址",
+    "goTo": "前往 {host}",
+    "details": "详情",
+    "hideDetails": "隐藏详情",
+    "edit": "编辑…",
+    "hide": "在服务中隐藏",
+    "unhide": "在服务中显示",
+    "remove": "移除…",
+    "noMatch": "没有与“{query}”匹配的服务",
+    "noHidden": "没有已隐藏的服务",
+    "noneDown": "没有宕机的服务",
+    "noneFiltered": "没有符合筛选条件的服务",
+    "loading": "正在加载服务",
+    "emptyTitle": "还没有服务",
+    "emptyBody": "代理在设备上发现 Web 应用后，服务会出现在这里。",
+    "emptyAdd": "添加服务",
+    "updateFailed": "无法更新服务。",
+    "loadFailed": "无法加载服务。",
+    "retry": "重试"
+  },
+  "details": {
+    "label": "{name} 的检查",
+    "downTimes": "{count, plural, other {最近检查中宕机 # 次}}",
+    "upAll": "最近每次检查均在线",
+    "noAnswer": "无响应",
+    "window": "最近 {window}",
+    "uptime": "可用率 {pct}%",
+    "avg": "平均 {ms}",
+    "peak": "峰值 {ms}",
+    "outages": "中断",
+    "none": "无",
+    "lastCheck": "上次检查",
+    "lastChange": "上次变化",
+    "recentChecks": "最近检查",
+    "status": {
+      "up": "在线",
+      "down": "宕机",
+      "unk": "未知"
+    },
+    "url": "URL",
+    "device": "设备",
+    "source": "发现方式",
+    "sources": {
+      "docker": "Docker",
+      "proxy": "反向代理",
+      "scan": "端口扫描",
+      "manual": "手动添加",
+      "other": "其他"
+    },
+    "lan": "局域网扫描",
+    "scanned": "扫描地址",
+    "container": "容器",
+    "image": "镜像",
+    "unit": "单元",
+    "router": "路由",
+    "backend": "后端",
+    "direct": "直连 URL",
+    "altUrls": "其他地址",
+    "compat": "兼容 API",
+    "authHint": "登录方式",
+    "profile": "检测配置",
+    "evidence": "检测依据",
+    "downFor": "已宕机 {duration}",
+    "minutes": "{count, plural, other {# 分钟}}",
+    "hours": "{count, plural, other {# 小时}}"
+  },
+  "add": {
+    "label": "添加服务",
+    "name": "名称",
+    "url": "URL",
+    "device": "设备",
+    "noDevice": "无",
+    "category": "类别",
+    "nameMissing": "请输入名称",
+    "urlMissing": "请输入 URL",
+    "urlInvalid": "请输入类似 https://主机:端口 的 URL",
+    "failed": "无法添加该服务。",
+    "cancel": "取消",
+    "submit": "添加"
+  },
+  "bulk": {
+    "label": "已选服务",
+    "selected": "已选 <b>{count}</b> 个",
+    "edit": "编辑…",
+    "hide": "隐藏",
+    "show": "显示",
+    "clear": "取消选择"
+  },
+  "bulkEdit": {
+    "title": "{count, plural, other {编辑 # 个服务}}",
+    "category": "类别",
+    "visibility": "在服务中",
+    "noChange": "不变",
+    "hide": "隐藏",
+    "show": "显示",
+    "icon": "图标",
+    "iconModes": {
+      "no_change": "不变",
+      "set": "设置",
+      "clear": "使用发现的图标"
+    },
+    "noIcon": "未选择图标",
+    "pickIcon": "请选择一个图标。",
+    "nothing": "请选择一项更改。",
+    "failed": "无法保存更改。",
+    "cancel": "取消",
+    "applying": "正在保存…",
+    "apply": "{count, plural, other {保存 # 个服务}}"
+  },
+  "edit": {
+    "close": "关闭",
+    "title": "编辑 {name}",
+    "name": "名称",
+    "url": "URL",
+    "category": "类别",
+    "icon": "图标",
+    "iconFound": "自动发现",
+    "iconChange": "更改",
+    "iconDone": "完成",
+    "tags": "标签",
+    "tagAdd": "添加标签",
+    "tagRemove": "移除标签 {tag}",
+    "altUrls": "其他地址",
+    "altAdd": "添加地址",
+    "add": "添加",
+    "altRemove": "移除 {url}",
+    "altAdded": "已添加地址。",
+    "altRemoved": "已移除地址。",
+    "altSource": {
+      "accepted": "已接受",
+      "manual": "手动添加",
+      "found": "已发现"
+    },
+    "altLoadFailed": "无法加载其他地址。",
+    "altFailed": "无法保存该地址。",
+    "altAddFailed": "无法添加该地址。",
+    "altRemoveFailed": "无法移除该地址。",
+    "hide": "在服务中隐藏",
+    "reset": "重置为检测值",
+    "resetFailed": "无法重置该服务。",
+    "nameMissing": "请输入名称",
+    "saveFailed": "无法保存更改。",
+    "cancel": "取消",
+    "save": "保存",
+    "saving": "正在保存…"
+  },
+  "icons": {
+    "library": "已上传",
+    "upload": "上传图标",
+    "uploading": "正在上传…",
+    "limits": "PNG、JPEG、WEBP、GIF 或 SVG，最大 {max}",
+    "badType": "请使用 PNG、JPEG、WEBP、GIF 或 SVG 文件。",
+    "tooLarge": "图标超过 {max}。",
+    "unreadable": "无法读取该文件。",
+    "uploaded": "已上传 {name}。",
+    "deleteAsk": "从已上传图标中删除 {name}？",
+    "deleted": "已删除 {name}。",
+    "deleteFailed": "无法删除该图标。",
+    "renameAsk": "图标名称",
+    "renamed": "已重命名为 {name}。",
+    "renameFailed": "无法重命名该图标。",
+    "rename": "重命名 {name}",
+    "delete": "删除 {name}",
+    "clearCustom": "使用发现的图标",
+    "search": "搜索图标",
+    "more": "显示 {total} 个中的 {shown} 个",
+    "noMatch": "没有与“{query}”匹配的图标"
+  },
+  "toasts": {
+    "added": "已添加 {name}",
+    "hidden": "已在服务中隐藏 {name}",
+    "shown": "{name} 已重新在服务中显示",
+    "saveFailed": "无法保存 {name}。",
+    "removed": "已移除 {name}",
+    "removeFailed": "无法移除 {name}。",
+    "copied": "已复制 {address}",
+    "copyFailed": "无法复制该地址。",
+    "notSaved": "未保存",
+    "bulkPartial": "已保存 {total} 个中的 {saved} 个。{first}",
+    "bulkSaved": "{count, plural, other {已保存 # 个服务}}",
+    "bulkFailed": "无法保存更改。",
+    "pullFailedOne": "拉取失败",
+    "pullPartial": "已拉取 {total} 个镜像中的 {pulled} 个。{first}",
+    "pulled": "{count, plural, other {已拉取 # 个镜像}}"
+  },
+  "remove": {
+    "title": "移除 {name}？",
+    "body": "LabTether 将停止检查 {address}。",
+    "confirm": "移除"
+  },
+  "pull": {
+    "title": "{count, plural, other {拉取 # 个镜像？}}",
+    "body": "为 {scope} 上的每个 Docker 服务拉取最新镜像。运行中的容器在重新创建前继续使用原镜像。",
+    "confirm": "拉取",
+    "allDevices": "所有设备"
   },
   "suggestions": {
+    "ask": "{url} 是否是 {name} 的另一个地址？",
     "accept": "接受",
     "deny": "拒绝"
   },
+  "discovery": {
+    "title": "最近周期",
+    "label": "服务发现",
+    "defaults": "发现默认设置",
+    "devices": "{count, plural, other {# 台设备上报}}",
+    "perCycle": "每周期 {count} 个服务",
+    "cycleTime": "每周期 {ms} ms",
+    "lastCycle": "上个周期 {time}",
+    "source": "来源",
+    "enabled": "运行于",
+    "found": "发现",
+    "time": "耗时",
+    "sources": {
+      "docker": "Docker",
+      "proxy": "反向代理 API",
+      "local_scan": "本地端口扫描",
+      "lan_scan": "局域网扫描"
+    },
+    "enabledOn": "{total} 台设备中的 {on} 台",
+    "device": "设备",
+    "lastReport": "上次上报",
+    "services": "服务",
+    "loading": "正在加载",
+    "noneTitle": "还没有发现报告",
+    "noneBody": "每个代理在完成发现周期后上报。"
+  },
   "config": {
-    "title": "服务配置",
-    "backToServices": "返回服务",
+    "title": "服务设置",
     "tabs": {
       "manual": "手动服务",
       "overrides": "覆盖设置",
       "grouping": "分组与合并",
-      "icons": "图标"
-    },
-    "header": {
-      "edit": "编辑",
-      "addManualService": "添加手动服务",
-      "doneSelect": "完成选择",
-      "selectServices": "选择服务",
-      "bulkEdit": "批量编辑 ({count})",
-      "doneArranging": "完成排列",
-      "arrangeServices": "排列服务",
-      "syncing": "同步中...",
-      "refresh": "刷新",
-      "pulling": "拉取中...",
-      "pullImages": "拉取镜像 ({count})",
-      "pullImagesTitle": "拉取 {count} 个唯一镜像",
-      "noImagesAvailable": "没有可拉取的 Docker 服务镜像"
+      "icons": "图标",
+      "discovery": "发现"
     },
     "overrides": {
       "serviceName": "服务名称",
@@ -121,7 +412,7 @@
       "urlInvalid": "URL 必须以 http:// 或 https:// 开头",
       "categoryRequired": "类别为必填项",
       "hostPlaceholder": "选择资产（可选）",
-      "emptyState": "没有手动服务。点击\"添加服务\"创建一个。",
+      "emptyState": "还没有手动服务。",
       "form": {
         "name": "名称 *",
         "namePlaceholder": "我的服务",
@@ -158,6 +449,7 @@
       "fileTooLarge": "文件超过 512KB 限制",
       "uploadFailed": "上传失败",
       "emptyState": "没有自定义图标。上传图标以在您的服务中使用。"
-    }
+    },
+    "crumb": "路径"
   }
 }
