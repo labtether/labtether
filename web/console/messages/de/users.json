@@ -1,6 +1,80 @@
 {
   "title": "Benutzer",
-  "subtitle": "Lokale Benutzerkonten und Rollen verwalten",
   "addUser": "Benutzer hinzufügen",
-  "userManagement": "Benutzerverwaltung"
+  "roles": {
+    "owner": "Eigentümer",
+    "admin": "Administrator",
+    "operator": "Operator",
+    "viewer": "Betrachter"
+  },
+  "list": {
+    "user": "Benutzer",
+    "role": "Rolle",
+    "twoFactor": "2FA",
+    "on": "An",
+    "off": "Aus",
+    "local": "Lokales Konto",
+    "sso": "Single Sign-On",
+    "youAnd": "Du · {kind}",
+    "empty": "Keine Benutzer",
+    "loadFailed": "Benutzer wurden nicht geladen.",
+    "actions": "Aktionen",
+    "actionsFor": "Aktionen für {name}"
+  },
+  "menu": {
+    "role": "Rolle ändern…",
+    "password": "Passwort zurücksetzen…",
+    "signOut": "Überall abmelden…",
+    "remove": "Entfernen…"
+  },
+  "fields": {
+    "username": "Benutzername",
+    "role": "Rolle",
+    "password": "Passwort",
+    "newPassword": "Neues Passwort",
+    "repeatPassword": "Passwort wiederholen"
+  },
+  "add": {
+    "title": "Benutzer hinzufügen",
+    "submit": "Benutzer hinzufügen"
+  },
+  "role": {
+    "title": "Rolle von {name} ändern",
+    "submit": "Speichern"
+  },
+  "password": {
+    "title": "Passwort von {name} zurücksetzen",
+    "submit": "Passwort zurücksetzen"
+  },
+  "signOut": {
+    "title": "{name} überall abmelden?",
+    "titleYou": "Überall abmelden?",
+    "body": "Alle Sitzungen von {name} enden. {name} kann sich wieder anmelden.",
+    "bodyYou": "Alle deine Sitzungen enden, auch diese.",
+    "submit": "Abmelden"
+  },
+  "remove": {
+    "title": "{name} entfernen?",
+    "body": "{name} kann sich nicht mehr anmelden. Alle Sitzungen enden.",
+    "submit": "Entfernen"
+  },
+  "errors": {
+    "nameEmpty": "Benutzernamen eingeben",
+    "nameChars": "Buchstaben, Ziffern, Punkte, Bindestriche oder Unterstriche verwenden",
+    "nameLong": "Höchstens 32 Zeichen verwenden",
+    "passShort": "Mindestens 8 Zeichen verwenden",
+    "passMismatch": "Die Passwörter stimmen nicht überein",
+    "addFailed": "Der Benutzer wurde nicht hinzugefügt.",
+    "roleFailed": "Die Rolle wurde nicht geändert.",
+    "passwordFailed": "Das Passwort wurde nicht zurückgesetzt.",
+    "signOutFailed": "Die Sitzungen wurden nicht beendet.",
+    "removeFailed": "Der Benutzer wurde nicht entfernt."
+  },
+  "toast": {
+    "added": "{name} hinzugefügt",
+    "role": "{name} ist jetzt {role}",
+    "password": "Passwort von {name} zurückgesetzt",
+    "signedOut": "{name} überall abgemeldet",
+    "removed": "{name} entfernt"
+  }
 }

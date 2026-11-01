@@ -1,31 +1,68 @@
 {
   "title": "Gruppen",
-  "subtitle": "Gruppen verwalten, die für Geräte, Topologie, Alarme und Zuverlässigkeit verwendet werden",
-  "manage": "Verwalten",
-  "done": "Fertig",
   "newGroup": "Neue Gruppe",
-  "expandAll": "Alle aufklappen",
-  "collapseAll": "Alle zuklappen",
-  "empty": {
-    "title": "Noch keine Gruppen",
-    "description": "Erstellen Sie Ihre erste Gruppe, um Geräte zu organisieren.",
-    "action": "Gruppe erstellen"
+  "list": {
+    "group": "Gruppe",
+    "devices": "Geräte",
+    "namesMore": "{names} +{count}",
+    "noDevices": "Keine eigenen Geräte",
+    "through": "Über {hosts}",
+    "ungrouped": "In keiner Gruppe",
+    "fold": "{name} einklappen",
+    "unfold": "{name} ausklappen",
+    "actions": "Aktionen",
+    "actionsFor": "Aktionen für {name}",
+    "more": "Mehr",
+    "expandAll": "Alle ausklappen",
+    "collapseAll": "Alle einklappen",
+    "empty": "Keine Gruppen"
   },
-  "dropToRoot": "Hier ablegen, um auf die oberste Ebene zu verschieben",
-  "editModal": {
-    "title": "Gruppe bearbeiten",
+  "menu": {
+    "edit": "Bearbeiten…",
+    "child": "Neue Gruppe darin…",
+    "delete": "Löschen…"
+  },
+  "form": {
     "name": "Name",
-    "parentGroup": "Übergeordnete Gruppe",
-    "jumpChain": "Netzwerkzugang — Jump-Kette",
-    "saving": "Wird gespeichert..."
+    "slug": "Slug",
+    "inside": "In",
+    "none": "Keine",
+    "topLevel": "Oberste Ebene",
+    "deep": "Gruppen, die mehr als {levels} Ebenen tief liegen, verlangsamen das Dashboard."
   },
   "create": {
-    "nameSlugRequired": "Name und Slug sind erforderlich."
+    "title": "Neue Gruppe",
+    "submit": "Gruppe erstellen"
   },
   "edit": {
-    "nameRequired": "Name ist erforderlich."
+    "title": "{name} bearbeiten",
+    "submit": "Speichern"
   },
   "delete": {
-    "confirmHint": "Geben Sie den Gruppennamen genau ein, um zu bestätigen."
+    "title": "{name} löschen?",
+    "submit": "Gruppe löschen",
+    "devices": "{count, plural, one {# Gerät ist} other {# Geräte sind}} danach in keiner Gruppe.",
+    "noDevices": "Sie enthält keine Geräte.",
+    "childrenInto": "{names} {count, plural, one {wandert} other {wandern}} nach {parent}.",
+    "childrenTop": "{names} {count, plural, one {wandert} other {wandern}} auf die oberste Ebene."
+  },
+  "jump": {
+    "title": "Erreichen über",
+    "direct": "Direkt",
+    "host": "Host {n}",
+    "port": "Port {n}",
+    "username": "Benutzername {n}",
+    "usernameHint": "Benutzername",
+    "login": "SSH-Login {n}",
+    "noLogin": "Kein gespeicherter Login",
+    "remove": "Hop {n} entfernen",
+    "add": "Hop hinzufügen"
+  },
+  "errors": {
+    "nameEmpty": "Namen eingeben",
+    "slugEmpty": "Slug eingeben",
+    "createFailed": "Die Gruppe wurde nicht erstellt.",
+    "saveFailed": "Die Gruppe wurde nicht gespeichert.",
+    "deleteFailed": "Die Gruppe wurde nicht gelöscht."
   }
 }

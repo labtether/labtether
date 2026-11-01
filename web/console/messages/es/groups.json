@@ -1,31 +1,68 @@
 {
   "title": "Grupos",
-  "subtitle": "Administrar grupos usados en dispositivos, topología, alertas y confiabilidad",
-  "manage": "Administrar",
-  "done": "Listo",
   "newGroup": "Nuevo grupo",
-  "expandAll": "Expandir todo",
-  "collapseAll": "Contraer todo",
-  "empty": {
-    "title": "Aún no hay grupos",
-    "description": "Cree su primer grupo para organizar dispositivos.",
-    "action": "Crear grupo"
+  "list": {
+    "group": "Grupo",
+    "devices": "Dispositivos",
+    "namesMore": "{names} +{count}",
+    "noDevices": "Sin dispositivos propios",
+    "through": "A través de {hosts}",
+    "ungrouped": "Sin grupo",
+    "fold": "Contraer {name}",
+    "unfold": "Expandir {name}",
+    "actions": "Acciones",
+    "actionsFor": "Acciones para {name}",
+    "more": "Más",
+    "expandAll": "Expandir todo",
+    "collapseAll": "Contraer todo",
+    "empty": "No hay grupos"
   },
-  "dropToRoot": "Soltar aquí para mover al nivel superior",
-  "editModal": {
-    "title": "Editar grupo",
+  "menu": {
+    "edit": "Editar…",
+    "child": "Nuevo grupo dentro…",
+    "delete": "Eliminar…"
+  },
+  "form": {
     "name": "Nombre",
-    "parentGroup": "Grupo padre",
-    "jumpChain": "Acceso de red — Cadena de salto",
-    "saving": "Guardando..."
+    "slug": "Slug",
+    "inside": "Dentro de",
+    "none": "Ninguno",
+    "topLevel": "Nivel superior",
+    "deep": "Los grupos con más de {levels} niveles de profundidad ralentizan el panel."
   },
   "create": {
-    "nameSlugRequired": "El nombre y el slug son obligatorios."
+    "title": "Nuevo grupo",
+    "submit": "Crear grupo"
   },
   "edit": {
-    "nameRequired": "El nombre es obligatorio."
+    "title": "Editar {name}",
+    "submit": "Guardar"
   },
   "delete": {
-    "confirmHint": "Escriba el nombre del grupo exactamente para confirmar."
+    "title": "¿Eliminar {name}?",
+    "submit": "Eliminar grupo",
+    "devices": "{count, plural, one {# dispositivo queda} other {# dispositivos quedan}} sin grupo.",
+    "noDevices": "No contiene dispositivos.",
+    "childrenInto": "{names} {count, plural, one {pasa} other {pasan}} a {parent}.",
+    "childrenTop": "{names} {count, plural, one {pasa} other {pasan}} al nivel superior."
+  },
+  "jump": {
+    "title": "Acceder a través de",
+    "direct": "Directo",
+    "host": "Host {n}",
+    "port": "Puerto {n}",
+    "username": "Usuario {n}",
+    "usernameHint": "Usuario",
+    "login": "Inicio de sesión SSH {n}",
+    "noLogin": "Sin inicio de sesión guardado",
+    "remove": "Quitar salto {n}",
+    "add": "Agregar salto"
+  },
+  "errors": {
+    "nameEmpty": "Escribe un nombre",
+    "slugEmpty": "Escribe un slug",
+    "createFailed": "El grupo no se creó.",
+    "saveFailed": "El grupo no se guardó.",
+    "deleteFailed": "El grupo no se eliminó."
   }
 }

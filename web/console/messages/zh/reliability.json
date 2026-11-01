@@ -1,57 +1,133 @@
 {
   "title": "健康",
-  "subtitle": "可用性评分、失败任务、事件历史和维护窗口",
-  "tabs": {
-    "scores": "评分",
-    "timeline": "事件",
-    "maintenance": "停机维护",
-    "map": "地图"
-  },
-  "scores": {
-    "locationHealth": "// 位置健康状况",
-    "failedJobs": "// 失败任务",
-    "commonErrors": "// 常见错误",
-    "failedJobsTrend": "// 失败任务趋势",
-    "dataCleanup": "// 数据清理",
-    "healthEmpty": {
-      "title": "还没有健康数据",
-      "description": "当分组有已连接的设备后，健康评分将会显示。"
+  "hub": {
+    "title": "Hub",
+    "checked": "检查于 {time}",
+    "names": {
+      "hub": "Hub",
+      "api": "API",
+      "nodeAgent": "节点代理",
+      "jobs": "后台任务",
+      "cleanup": "数据清理"
     },
-    "noFailedJobs": "没有失败的任务。",
-    "noRecurringErrors": "没有重复出现的错误。",
-    "noTrendData": "没有趋势数据。",
-    "retentionHealthy": "数据保留循环健康。"
+    "words": {
+      "running": "运行中",
+      "up": "正常",
+      "down": "不可达",
+      "notSet": "没有地址",
+      "failedCount": "{window} 内失败 {count} 个",
+      "noFailures": "没有失败",
+      "failed": "失败",
+      "ok": "正常"
+    },
+    "version": "版本 {version}",
+    "since": "自 {time}",
+    "lastAt": "最近一次 {time}",
+    "latency": "{ms} 毫秒"
   },
-  "timeline": {
-    "heading": "// 事件历史",
-    "group": "分组",
-    "range": "范围",
-    "errors": "错误",
-    "warnings": "警告",
-    "failedActions": "失败操作",
-    "failedUpdates": "失败更新",
-    "unresponsive": "无响应",
-    "offline": "离线",
-    "noEvents": "该时间范围内没有事件。",
-    "showMore": "显示更多",
-    "showLess": "收起"
+  "downtime": {
+    "title": "停机维护",
+    "schedule": "安排维护",
+    "partial": "部分分组的维护窗口未能加载。",
+    "effects": {
+      "mutes": "静音告警",
+      "pausesActions": "暂停操作",
+      "pausesUpdates": "暂停更新",
+      "none": "不暂停任何内容"
+    },
+    "state": {
+      "activeUntil": "至 {time}",
+      "ended": "已于 {time} 结束"
+    },
+    "actionsFor": "{name} 维护的操作",
+    "endNow": "立即结束…",
+    "delete": "删除…",
+    "loading": "正在加载维护窗口",
+    "empty": "没有安排维护"
   },
-  "maintenance": {
-    "heading": "// 维护窗口",
+  "schedule": {
+    "title": "安排维护",
+    "submit": "安排",
+    "defaultName": "补丁窗口",
     "group": "分组",
     "name": "名称",
-    "start": "开始",
-    "end": "结束",
-    "muteAlerts": "静音告警",
+    "starts": "开始",
+    "ends": "结束",
+    "effects": "维护期间",
+    "mute": "静音告警",
     "pauseActions": "暂停操作",
     "pauseUpdates": "暂停更新",
-    "submit": "安排维护窗口",
-    "saving": "正在保存...",
-    "empty": "没有已安排的维护窗口。"
+    "errors": {
+      "name": "请输入名称",
+      "times": "请输入开始和结束时间",
+      "order": "结束时间须晚于开始时间",
+      "failed": "维护未安排。"
+    }
   },
-  "map": {
-    "heading": "// 位置地图",
-    "noCoordinates": "无坐标",
-    "noLocationData": "地图没有位置数据。"
+  "end": {
+    "title": "删除 {name} 的维护？",
+    "titleActive": "立即结束 {name} 的维护？",
+    "bodyActive": "告警、操作和更新将照常运行。",
+    "submit": "删除",
+    "submitActive": "立即结束",
+    "failed": "维护未结束。"
+  },
+  "groups": {
+    "title": "分组",
+    "online": "{total} 台中 {online} 台在线",
+    "offline": "{count} 台离线",
+    "stale": "{count} 台无响应",
+    "score": "{score} · {grade}",
+    "words": {
+      "good": "良好",
+      "fair": "一般",
+      "poor": "较差",
+      "downtime": "维护中"
+    },
+    "empty": "没有包含设备的分组"
+  },
+  "events": {
+    "title": "事件",
+    "group": "分组",
+    "range": "时间范围",
+    "ranges": {
+      "1h": "1 小时",
+      "6h": "6 小时",
+      "24h": "24 小时"
+    },
+    "impact": {
+      "errors": "{count, plural, other {# 个错误}}",
+      "warnings": "{count, plural, other {# 个警告}}",
+      "failedActions": "{count, plural, other {# 个操作失败}}",
+      "failedUpdates": "{count, plural, other {# 个更新失败}}",
+      "stale": "{count} 台无响应",
+      "offline": "{count} 台离线"
+    },
+    "quiet": "此时间范围内没有错误、警告或失败",
+    "severity": {
+      "error": "错误",
+      "warning": "警告",
+      "info": "信息"
+    },
+    "failed": "事件未能加载。",
+    "empty": "此时间范围内没有事件",
+    "loading": "正在加载事件",
+    "noGroups": "没有分组",
+    "showAll": "显示全部 {count} 条",
+    "showLess": "收起"
+  },
+  "jobs": {
+    "title": "失败的任务",
+    "rate": "每小时 {hour} 个 · 每天 {day} 个",
+    "worker": "Worker",
+    "none": "没有失败的任务",
+    "common": "常见错误",
+    "times": "{count, plural, other {# 次}}",
+    "byHour": "按小时：",
+    "hourCount": "{time} {count} 个"
+  },
+  "toast": {
+    "scheduled": "已为 {name} 安排维护",
+    "ended": "已结束 {name} 的维护"
   }
 }

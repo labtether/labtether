@@ -2,6 +2,9 @@
 
 import type { Group } from "../../../console/models";
 
+/** From this depth on (0 = top level), the forms note that deep nesting slows the dashboard. */
+export const NESTING_DEPTH_WARN = 5;
+
 export function computeGroupDepth(groups: Group[], groupId: string): number {
   const byId = new Map(groups.map((g) => [g.id, g]));
   let depth = 0;
@@ -32,28 +35,6 @@ export async function apiMoveGroup(
       | null;
     throw new Error(
       payload?.error ?? `Failed to move group (${response.status})`,
-    );
-  }
-}
-
-export async function apiRenameGroup(
-  groupID: string,
-  name: string,
-): Promise<void> {
-  const response = await fetch(
-    `/api/groups/${encodeURIComponent(groupID)}`,
-    {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    },
-  );
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as
-      | { error?: string }
-      | null;
-    throw new Error(
-      payload?.error ?? `Failed to rename group (${response.status})`,
     );
   }
 }

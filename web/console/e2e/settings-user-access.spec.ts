@@ -5,7 +5,7 @@ import { installConsoleApiMocks, type MockRouteContext } from "./helpers/console
 type UserRole = "owner" | "admin" | "operator" | "viewer";
 type MockUser = { id: string; username: string; role: UserRole };
 
-test("owner can create and update users from Settings user access card", async ({ page }) => {
+test("owner adds a user and changes their role from the Users list", async ({ page }) => {
   const users: MockUser[] = [{ id: "owner", username: "admin", role: "owner" }];
   let nextID = 1;
   let createdUsername = "";
@@ -54,32 +54,31 @@ test("owner can create and update users from Settings user access card", async (
   });
 
   await page.goto("/users", { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("heading", { name: "Users", level: 1, exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Add User", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Settings", level: 1, exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Add user", exact: true }).click();
 
-  await page.getByLabel("Username").fill("ops-viewer");
-  await page.getByLabel("Password", { exact: true }).fill("TempPass123!");
-  await page.getByLabel("Confirm Password").fill("TempPass123!");
-  await page.getByLabel("Role").selectOption("viewer");
-  await page.getByRole("button", { name: "Create User", exact: true }).click();
+  const addDialog = page.getByRole("dialog");
+  await addDialog.getByLabel("Username").fill("ops-viewer");
+  await addDialog.getByLabel("Password", { exact: true }).fill("TempPass123!");
+  await addDialog.getByLabel("Repeat password").fill("TempPass123!");
+  await addDialog.getByLabel("Role").selectOption("viewer");
+  await addDialog.getByRole("button", { name: "Add user", exact: true }).click();
 
-  await expect(page.getByText("ops-viewer", { exact: true })).toBeVisible();
+  const userRow = page.getByRole("row").filter({ hasText: "ops-viewer" });
+  await expect(userRow).toBeVisible();
   expect(createdUsername).toBe("ops-viewer");
 
-  const userRow = page
-    .locator("li")
-    .filter({ has: page.getByText("ops-viewer", { exact: true }) })
-    .first();
-  await userRow.getByRole("button", { name: "User actions", exact: true }).click();
-  await page.getByRole("button", { name: "Edit Role", exact: true }).click();
-  await page.getByLabel("Role").selectOption("operator");
-  await page.getByRole("button", { name: "Update Role", exact: true }).click();
+  await userRow.getByRole("button", { name: "Actions for ops-viewer", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Change role…" }).click();
+  const roleDialog = page.getByRole("dialog");
+  await roleDialog.getByLabel("Role").selectOption("operator");
+  await roleDialog.getByRole("button", { name: "Save", exact: true }).click();
 
-  await expect(userRow.getByText("operator", { exact: true })).toBeVisible();
+  await expect(userRow.getByText("Operator", { exact: true })).toBeVisible();
   expect(users.find((entry) => entry.username === "ops-viewer")?.role).toBe("operator");
 });
 
-test("viewer sees read-only user access messaging", async ({ page }) => {
+test("viewer sees only their own account controls", async ({ page }) => {
   await installConsoleApiMocks(page, {
     authUser: { id: "viewer-1", username: "readonly", role: "viewer" },
     customRoute: async ({ pathname, method, fulfillJSON }) => {
@@ -92,9 +91,11 @@ test("viewer sees read-only user access messaging", async ({ page }) => {
   });
 
   await page.goto("/users", { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("heading", { name: "Users", level: 1, exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Account Security", level: 2, exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Add User", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Settings", level: 1, exact: true })).toBeVisible();
+  // A viewer gets no user list, but keeps their own password and two-factor controls.
+  await expect(page.getByRole("button", { name: "Add user", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("table", { name: "Users" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /password/i }).first()).toBeVisible();
 });
 
 function normalizeRole(value: unknown): UserRole {

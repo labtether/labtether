@@ -1,6 +1,80 @@
 {
   "title": "Utilisateurs",
-  "subtitle": "Gérer les comptes utilisateurs locaux et les rôles",
   "addUser": "Ajouter un utilisateur",
-  "userManagement": "Gestion des utilisateurs"
+  "roles": {
+    "owner": "Propriétaire",
+    "admin": "Administrateur",
+    "operator": "Opérateur",
+    "viewer": "Lecteur"
+  },
+  "list": {
+    "user": "Utilisateur",
+    "role": "Rôle",
+    "twoFactor": "2FA",
+    "on": "Activée",
+    "off": "Désactivée",
+    "local": "Compte local",
+    "sso": "Authentification unique",
+    "youAnd": "Vous · {kind}",
+    "empty": "Aucun utilisateur",
+    "loadFailed": "Les utilisateurs n’ont pas été chargés.",
+    "actions": "Actions",
+    "actionsFor": "Actions pour {name}"
+  },
+  "menu": {
+    "role": "Changer le rôle…",
+    "password": "Réinitialiser le mot de passe…",
+    "signOut": "Déconnecter partout…",
+    "remove": "Retirer…"
+  },
+  "fields": {
+    "username": "Nom d’utilisateur",
+    "role": "Rôle",
+    "password": "Mot de passe",
+    "newPassword": "Nouveau mot de passe",
+    "repeatPassword": "Répéter le mot de passe"
+  },
+  "add": {
+    "title": "Ajouter un utilisateur",
+    "submit": "Ajouter l’utilisateur"
+  },
+  "role": {
+    "title": "Changer le rôle de {name}",
+    "submit": "Enregistrer"
+  },
+  "password": {
+    "title": "Réinitialiser le mot de passe de {name}",
+    "submit": "Réinitialiser"
+  },
+  "signOut": {
+    "title": "Déconnecter {name} partout\u00a0?",
+    "titleYou": "Se déconnecter partout\u00a0?",
+    "body": "Toutes les sessions de {name} se terminent. {name} peut se reconnecter.",
+    "bodyYou": "Toutes vos sessions se terminent, celle-ci aussi.",
+    "submit": "Déconnecter"
+  },
+  "remove": {
+    "title": "Retirer {name}\u00a0?",
+    "body": "{name} ne peut plus se connecter. Ses sessions se terminent.",
+    "submit": "Retirer"
+  },
+  "errors": {
+    "nameEmpty": "Saisissez un nom d’utilisateur",
+    "nameChars": "Utilisez des lettres, chiffres, points, tirets ou tirets bas",
+    "nameLong": "Utilisez 32 caractères au plus",
+    "passShort": "Utilisez au moins 8 caractères",
+    "passMismatch": "Les mots de passe ne correspondent pas",
+    "addFailed": "L’utilisateur n’a pas été ajouté.",
+    "roleFailed": "Le rôle n’a pas changé.",
+    "passwordFailed": "Le mot de passe n’a pas été réinitialisé.",
+    "signOutFailed": "Les sessions ne se sont pas terminées.",
+    "removeFailed": "L’utilisateur n’a pas été retiré."
+  },
+  "toast": {
+    "added": "{name} ajouté",
+    "role": "{name} est maintenant {role}",
+    "password": "Mot de passe de {name} réinitialisé",
+    "signedOut": "{name} déconnecté partout",
+    "removed": "{name} retiré"
+  }
 }

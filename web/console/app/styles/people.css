@@ -1,0 +1,153 @@
+/* ── 2.0 people: Settings › Users, Groups and Health ──
+   Plain rows in one sheet under a column header: the name, a grey second line, a status dot plus a word and a time,
+   and a ⋯ menu that shows on hover. Columns follow the list's own width (container queries), so the layout holds in
+   a narrow window once the sidebar has folded away. Dialog bodies share the field and button rows below. */
+
+/* Sub-sections */
+.pp-sec { margin-top: var(--gap-section); }
+.pp-sec:first-of-type, .lt-ph + .pp-sec { margin-top: 0; }
+.pp-sh { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; min-height: 28px; margin-bottom: 10px; }
+.pp-sh h2 { font-size: var(--fs-body); line-height: 20px; font-weight: 600; color: var(--text); }
+.pp-sh-r { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.pp-meta { font-size: var(--fs-meta); color: var(--text-3); font-variant-numeric: tabular-nums; }
+.pp-sub { margin: 20px 0 8px; font-size: var(--fs-meta); font-weight: 600; color: var(--text-2); }
+.pp-line { margin: 0 0 10px; font-size: var(--fs-meta); line-height: var(--lh-meta); color: var(--text-2); }
+.pp-trend { margin-top: 10px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.pp-own { margin-top: var(--gap-section); }
+.pp-head-acts { display: flex; align-items: center; gap: 8px; }
+
+/* The list */
+.pp-list { container: pp / inline-size; padding: 4px; border-radius: var(--r-4); background: var(--panel); box-shadow: var(--elev-1); }
+.pp-cols, .pp-row { display: grid; align-items: center; column-gap: 12px; padding: 0 12px; }
+.pp-cols { min-height: 36px; margin: -4px -4px 4px; padding-inline: 16px; box-shadow: inset 0 -1px 0 var(--divider); font-size: var(--fs-micro); line-height: var(--lh-micro); font-weight: 500; color: var(--text-3); }
+.pp-row { position: relative; min-height: 36px; padding-top: 4px; padding-bottom: 4px; border-radius: var(--r-2); transition: background-color var(--dur-fast) var(--ease-out); }
+.pp-row:hover { background: var(--hover); transition-duration: 0s; }
+.pp-row.sel { background: var(--sel); }
+.pp-row.pp-dim .pp-nm { font-weight: 400; color: var(--text-2); }
+.pp-empty { padding: 32px 12px; text-align: center; color: var(--text-3); }
+/* Hanging lead: names line up 28 px in, and the status dot or fold arrow sits in the slot to their left. */
+.pp-hang > .pp-row { padding-left: 28px; }
+.pp-hang > .pp-cols { padding-left: 32px; }
+.pp-lead { position: absolute; left: 6px; top: 50%; translate: 0 -50%; display: grid; place-items: center; width: 16px; height: 20px; }
+.pp-when { font-size: var(--fs-meta); color: var(--text); white-space: nowrap; }
+.pp-foot { display: flex; justify-content: center; padding: 6px 12px 4px; }
+
+.pp-in { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+.pp-nm { flex: none; max-width: 60%; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pp-wrap { max-width: none; white-space: normal; overflow-wrap: anywhere; }
+.pp-grey { min-width: 0; font-size: var(--fs-meta); color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pp-c { font-size: var(--fs-meta); color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pp-off { color: var(--text-3); }
+.pp-r { justify-self: end; text-align: right; }
+.pp-num { font-variant-numeric: tabular-nums; }
+.pp-end { display: flex; justify-content: flex-end; }
+
+/* Sortable column heads */
+.pp-sort { display: inline-flex; align-items: center; gap: 2px; margin: 0 -4px; padding: 2px 4px; border-radius: var(--r-1); color: inherit; font: inherit; cursor: pointer; }
+.pp-sort:hover, .pp-sort.on { color: var(--text); }
+.pp-sort svg { width: 12px; height: 12px; }
+
+/* Status: a dot and a word */
+.pp-st { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-meta); font-weight: 500; color: var(--text); white-space: nowrap; }
+.pp-st.bad { color: var(--bad-text); }
+.pp-st.warn { color: var(--warn-text); }
+.pp-st.none { font-weight: 400; color: var(--text-2); }
+.pp-dot { display: block; width: 8px; height: 8px; flex: none; border-radius: 50%; }
+.pp-dot.ok { background: var(--ok); }
+.pp-dot.warn { background: var(--warn); }
+.pp-dot.bad { background: var(--bad); }
+.pp-dot.busy { background: var(--text-3); animation: pp-pulse 1.4s ease-in-out infinite; }
+@keyframes pp-pulse { 50% { opacity: 0.35; } }
+
+/* ⋯ and small text buttons */
+.pp-more { display: grid; place-items: center; width: 28px; height: 28px; flex: none; border-radius: var(--r-2); color: var(--text-2); cursor: pointer; opacity: 0; transition: opacity var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out); }
+.pp-more svg { width: 16px; height: 16px; }
+.pp-more:hover, .pp-more[data-state="open"] { background: var(--hover); color: var(--text); }
+.pp-more:focus-visible { outline: 2px solid var(--control-focus-ring); outline-offset: 1px; }
+.pp-more:disabled { opacity: 0.4; cursor: default; }
+.pp-row:hover .pp-more, .pp-row:focus-within .pp-more, .pp-more[data-state="open"], .pp-more.pp-shown { opacity: 1; }
+.pp-ctl { width: var(--ctl); height: var(--ctl); border-radius: var(--r-3); background: var(--ctl-bg); box-shadow: var(--ctl-elev); }
+.pp-ctl:hover { box-shadow: var(--ctl-elev-hover); }
+@media (hover: none) { .pp-more { opacity: 1; } }
+.pp-danger { color: var(--bad-text); }
+.pp-link { margin-left: 8px; font-weight: 500; color: var(--text); text-decoration: underline; text-decoration-color: var(--text-3); text-underline-offset: 3px; cursor: pointer; }
+.pp-err { font-size: var(--fs-meta); line-height: var(--lh-meta); color: var(--bad-text); }
+.pp-load { margin-bottom: 12px; }
+.pp-pick { padding: 0; text-align: left; cursor: pointer; }
+.pp-pick:hover { text-decoration: underline; text-decoration-color: var(--text-3); text-underline-offset: 3px; }
+
+/* Range control and the small select in a section head */
+.pp-seg { display: inline-flex; gap: 2px; height: var(--ctl-sm); padding: 2px; border-radius: var(--r-3); background: var(--ctl-bg); box-shadow: var(--ctl-elev); }
+.pp-seg button { min-width: 36px; padding: 0 8px; border-radius: var(--r-2); font-size: var(--fs-meta); font-weight: 500; color: var(--text-2); cursor: pointer; }
+.pp-seg button:hover { color: var(--text); }
+.pp-seg button[aria-pressed="true"] { background: var(--sel); color: var(--text); }
+.pp-sel { height: var(--ctl-sm); max-width: 220px; padding-top: 0; padding-bottom: 0; font-size: var(--fs-meta); }
+
+/* Users: name · role · 2FA · ⋯ */
+.pp-u { grid-template-columns: minmax(0, 1fr) 104px 28px; }
+.pp-u.tfa { grid-template-columns: minmax(0, 1fr) 104px 56px 28px; }
+
+/* Groups: indented name · device count · ⋯ */
+.pp-gr { grid-template-columns: minmax(0, 1fr) 72px 28px; }
+.pp-gn { display: flex; align-items: center; min-width: 0; padding-left: calc(var(--d, 0) * 24px); }
+.pp-fold { position: absolute; left: calc(4px + var(--d, 0) * 24px); top: 50%; translate: 0 -50%; display: grid; place-items: center; width: 20px; height: 20px; border-radius: var(--r-1); color: var(--text-3); cursor: pointer; }
+.pp-fold:hover { color: var(--text); background: var(--hover); }
+.pp-fold svg { width: 14px; height: 14px; transition: transform var(--dur-normal) var(--ease-out); }
+.pp-fold.open svg { transform: rotate(90deg); }
+
+/* Health lists */
+.pp-hc { grid-template-columns: minmax(0, 1fr) minmax(88px, auto) 120px; }
+.pp-dt { grid-template-columns: minmax(0, 1fr) auto 28px; }
+.pp-gh { grid-template-columns: minmax(0, 1fr) minmax(96px, auto) 72px; cursor: pointer; }
+.pp-ev { grid-template-columns: 88px minmax(0, 1fr) auto; }
+.pp-fj { grid-template-columns: minmax(0, 1fr) auto; }
+
+@container pp (max-width: 560px) {
+  .pp-in { flex-direction: column; align-items: flex-start; gap: 0; }
+  .pp-nm { max-width: 100%; }
+  .pp-grey { max-width: 100%; }
+  .pp-row { min-height: 48px; }
+  .pp-hc { grid-template-columns: minmax(0, 1fr) auto; }
+  .pp-hc > :nth-child(3) { display: none; }
+  .pp-gr { grid-template-columns: minmax(0, 1fr) 40px 28px; }
+  .pp-gn { padding-left: calc(var(--d, 0) * 16px); }
+  .pp-fold { left: calc(4px + var(--d, 0) * 16px); }
+  .pp-fold, .pp-lead { top: 4px; translate: none; }
+  .pp-gh { grid-template-columns: minmax(0, 1fr) auto; }
+  .pp-gh > :nth-child(3) { display: none; }
+  .pp-ev { grid-template-columns: 64px minmax(0, 1fr) auto; }
+  .pp-u { grid-template-columns: minmax(0, 1fr) 80px 28px; }
+  .pp-u.tfa { grid-template-columns: minmax(0, 1fr) 80px 40px 28px; }
+}
+
+/* Dialog bodies */
+.pp-dlg { display: grid; gap: 16px; max-height: calc(100vh - 7rem); padding: 16px 20px 20px; overflow-y: auto; container: ppd / inline-size; }
+.pp-acts { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
+.pp-say { font-size: var(--fs-body); line-height: var(--lh-body); color: var(--text-2); }
+.pp-note { font-size: var(--fs-meta); line-height: var(--lh-meta); color: var(--warn-text); }
+.pp-grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; align-items: start; }
+.pp-field { display: grid; gap: 6px; min-width: 0; }
+.pp-field > label { font-size: var(--fs-meta); line-height: var(--lh-meta); font-weight: 500; color: var(--text-2); }
+.pp-checks { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 0; padding: 0; border: 0; }
+.pp-check { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-body); color: var(--text); cursor: pointer; }
+.pp-check input { width: 16px; height: 16px; accent-color: var(--text); }
+@media (min-width: 768px) { .pp-wide { max-width: 40rem !important; } }
+
+/* Reach through: jump host rows */
+.pp-hops { display: grid; gap: 8px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.pp-hops > legend { margin-bottom: 8px; font-size: var(--fs-meta); font-weight: 500; color: var(--text-2); }
+.pp-hop-list { display: grid; gap: 6px; }
+.pp-hop { display: grid; grid-template-columns: 16px minmax(0, 1.4fr) 72px minmax(0, 1fr) minmax(0, 1.2fr) 28px; gap: 8px; align-items: center; }
+.pp-hop-n { font-size: var(--fs-meta); color: var(--text-3); text-align: right; }
+
+@container ppd (max-width: 520px) {
+  .pp-grid2 { grid-template-columns: minmax(0, 1fr); }
+  .pp-hop { grid-template-columns: 16px minmax(0, 1fr) 72px 28px; }
+  .pp-hop > :nth-child(4) { grid-column: 2 / span 1; }
+  .pp-hop > :nth-child(5) { grid-column: 3 / span 2; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pp-row, .pp-more, .pp-fold svg { transition: none; }
+  .pp-dot.busy { animation: none; }
+}
