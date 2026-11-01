@@ -26,6 +26,25 @@
   "auditLog": "Audit Log",
   "apiDocs": "API Docs",
   "settings": "Settings",
+  "map": "Map",
+  "automations": "Automations",
+  "general": "General",
+  "search": "Search",
+  "primaryNav": "Primary navigation",
+  "openNav": "Open navigation",
+  "closeNav": "Close navigation",
+  "navMenu": "Navigation menu",
+  "account": "Account",
+  "lightTheme": "Light theme",
+  "darkTheme": "Dark theme",
+  "language": "Language",
+  "signOut": "Sign out",
+  "roles": {
+    "owner": "Owner",
+    "admin": "Admin",
+    "operator": "Operator",
+    "viewer": "Viewer"
+  },
   "commandPalette": {
     "placeholder": "Search commands..."
   }

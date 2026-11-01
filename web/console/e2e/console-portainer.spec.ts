@@ -230,7 +230,7 @@ test("portainer node detail shows endpoint-scoped inventory and workload details
   });
 
   await page.goto("/nodes", { waitUntil: "domcontentloaded" });
-  await page.locator("[role='link']").filter({ hasText: "Lab Portainer" }).first().click();
+  await page.getByRole("link", { name: "Lab Portainer", exact: true }).click();
   await expect(page).toHaveURL(/(?:\/[a-z]{2})?\/nodes\/portainer-endpoint-1$/);
   await expect(page.getByRole("button", { name: /^Docker$/i })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Portainer/i }).first()).toBeVisible();

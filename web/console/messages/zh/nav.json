@@ -26,6 +26,25 @@
   "auditLog": "审计日志",
   "apiDocs": "API 文档",
   "settings": "设置",
+  "map": "地图",
+  "automations": "自动化",
+  "general": "常规",
+  "search": "搜索",
+  "primaryNav": "主导航",
+  "openNav": "打开导航",
+  "closeNav": "关闭导航",
+  "navMenu": "导航菜单",
+  "account": "账户",
+  "lightTheme": "浅色主题",
+  "darkTheme": "深色主题",
+  "language": "语言",
+  "signOut": "退出登录",
+  "roles": {
+    "owner": "所有者",
+    "admin": "管理员",
+    "operator": "操作员",
+    "viewer": "查看者"
+  },
   "commandPalette": {
     "placeholder": "搜索命令..."
   }

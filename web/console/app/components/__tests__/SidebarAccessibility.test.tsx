@@ -9,11 +9,18 @@ vi.mock("../../../i18n/navigation", () => ({
   usePathname: () => "/nodes",
 }));
 
-vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
-vi.mock("../../contexts/StatusContext", () => ({ useServiceStatusLabel: () => "0/0 services online" }));
+vi.mock("next-intl", () => ({
+  useTranslations: () => (key: string) =>
+    ({ primaryNav: "Primary navigation", openNav: "Open navigation", closeNav: "Close navigation" })[key] ?? key,
+}));
 vi.mock("../../contexts/DesktopSessionContext", () => ({ useDesktopSession: () => ({ activeSession: null }) }));
-vi.mock("../../contexts/AuthContext", () => ({ useAuth: () => ({ user: { role: "owner" } }) }));
-vi.mock("../LanguagePicker", () => ({ LanguagePicker: () => null }));
+vi.mock("../../contexts/ThemeContext", () => ({ useTheme: () => ({ theme: "light", setTheme: () => {} }) }));
+vi.mock("../LanguagePicker", () => ({
+  localeLabels: { en: "English" },
+  supportedLocales: ["en"],
+  useSwitchLocale: () => ({ locale: "en", switchTo: () => {} }),
+}));
+vi.mock("../../contexts/AuthContext", () => ({ useAuth: () => ({ user: { username: "demo", role: "owner" } }) }));
 
 import { Sidebar } from "../Sidebar";
 

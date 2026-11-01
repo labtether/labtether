@@ -79,8 +79,8 @@ test("nodes/logs soak keeps latency stable with bounded heap growth", async ({ p
     await page.goto(isNodes ? "/nodes" : "/logs");
     if (isNodes) {
       await expect(page.getByRole("heading", { name: "Devices", level: 1, exact: true })).toBeVisible();
-      await page.getByPlaceholder("Search devices...").fill("soak-node-1799");
-      await expect(page.locator("[role='link']").filter({ hasText: "soak-node-1799" }).first()).toBeVisible({ timeout: 3000 });
+      await page.getByPlaceholder("Filter by name, IP, OS or tag").fill("soak-node-1799");
+      await expect(page.getByRole("link", { name: "soak-node-1799", exact: true })).toBeVisible({ timeout: 3000 });
     } else {
       await expect(page.getByRole("heading", { name: "Logs", level: 1, exact: true })).toBeVisible();
       await page.getByPlaceholder("Search message text (error, timeout, zfs...)").fill("soak-event-7999");

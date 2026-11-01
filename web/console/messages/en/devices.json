@@ -46,5 +46,44 @@
     "adminOnly": "Only an admin or owner can change this.",
     "loadError": "Could not load the Hub SSH key setting.",
     "saveError": "Could not change the Hub SSH key setting."
+  },
+  "list": {
+    "filter": "Filter by name, IP, OS or tag",
+    "groupBy": "Group",
+    "more": "More actions",
+    "arrangeGroups": "Arrange groups",
+    "backToList": "Back to the list",
+    "noMatch": "No devices match",
+    "columns": {
+      "device": "Device",
+      "address": "Address",
+      "cpu": "CPU",
+      "memory": "Memory",
+      "disk": "Disk"
+    },
+    "sections": {
+      "servers": "Servers",
+      "storage": "Storage",
+      "computers": "Computers",
+      "vms": "VMs",
+      "other": "Other",
+      "attention": "Needs attention",
+      "online": "Online",
+      "noGroup": "No group"
+    },
+    "groupings": {
+      "type": "Type",
+      "status": "Status",
+      "group": "Group",
+      "none": "None"
+    },
+    "guests": "{count, plural, one {# guest} other {# guests}}",
+    "containers": "{count, plural, one {# container} other {# containers}}",
+    "vm": "VM {vmid}",
+    "vmOn": "VM {vmid} on {host}",
+    "on": "on {host}",
+    "offline": "Offline · last seen {age}",
+    "notResponding": "Not responding · last seen {age}",
+    "noCheckIn": "No check-in yet"
   }
 }

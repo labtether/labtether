@@ -2,7 +2,8 @@
 
 import { useDeferredValue, useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
-import { Plus, Search, Server } from "lucide-react";
+import * as Menu from "@radix-ui/react-dropdown-menu";
+import { MoreHorizontal, Plus, Search, Server } from "lucide-react";
 import { PageHeader } from "../../../components/PageHeader";
 import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
@@ -23,6 +24,12 @@ import { useEdges } from "../../../hooks/useEdges";
 import { useProposals } from "../../../hooks/useProposals";
 import { reportRoutePerfMetric } from "../../../hooks/useRoutePerfTelemetry";
 import type { CompositeResolvedAsset } from "../../../console/models";
+import { buildDeviceCards } from "./deviceCards";
+import { buildSections, GROUPINGS, needsAttention, type Grouping } from "./deviceListModel";
+import { DeviceList } from "./DeviceList";
+import { DeviceListToolbar } from "./DeviceListToolbar";
+
+const GROUPING_KEY = "labtether.devices.grouping";
 
 export default function NodesPage() {
   const t = useTranslations('devices');
@@ -36,6 +43,21 @@ export default function NodesPage() {
   const [createGroupParent, setCreateGroupParent] = useState<string | undefined>();
   const [showLinkReview, setShowLinkReview] = useState(false);
   const [resolvedAssets, setResolvedAssets] = useState<CompositeResolvedAsset[]>([]);
+  // 2.0 list: one list cut by type (or status, group, none). The group tree with drag and drop stays behind
+  // ⋯ › Arrange groups until Settings › Groups is rebuilt.
+  const [arranging, setArranging] = useState(false);
+  const [problemsOnly, setProblemsOnly] = useState(false);
+  const [grouping, setGroupingState] = useState<Grouping>("type");
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(GROUPING_KEY) as Grouping | null;
+      if (stored && GROUPINGS.includes(stored)) setGroupingState(stored);
+    } catch { /* private window: keep the default */ }
+  }, []);
+  const setGrouping = useCallback((value: Grouping) => {
+    setGroupingState(value);
+    try { window.localStorage.setItem(GROUPING_KEY, value); } catch { /* not kept */ }
+  }, []);
 
   const management = useHierarchyManagement(fetchStatus);
   const { suggestions } = useLinkSuggestions();
@@ -140,6 +162,16 @@ export default function NodesPage() {
 
   const hasAssets = (status?.assets ?? []).length > 0;
 
+  const cards = useMemo(
+    () => [...buildDeviceCards(status?.assets ?? [], status?.telemetryOverview ?? []).cardsByGroupID.values()].flat(),
+    [status?.assets, status?.telemetryOverview],
+  );
+  const sections = useMemo(
+    () => buildSections({ cards, grouping, groups: slowStatus?.groups ?? [], query: queryTerm, problemsOnly }),
+    [cards, grouping, slowStatus?.groups, queryTerm, problemsOnly],
+  );
+  const anyProblems = useMemo(() => cards.some(needsAttention), [cards]);
+
   return (
     <RoutePerfBoundary
       route="devices"
@@ -154,16 +186,27 @@ export default function NodesPage() {
       <>
       <PageHeader
         title={t('title')}
-        subtitle={t('subtitle')}
         action={
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => setShowAddDevice(true)}
-          >
-            <Plus size={14} />
-            {t('addDevice')}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="primary" onClick={() => setShowAddDevice(true)}>
+              <Plus size={14} />
+              {t('addDevice')}
+            </Button>
+            {hasAssets && (
+              <Menu.Root>
+                <Menu.Trigger className="lt-icon-btn" aria-label={t('list.more')}>
+                  <MoreHorizontal aria-hidden="true" strokeWidth={2} />
+                </Menu.Trigger>
+                <Menu.Portal>
+                  <Menu.Content className="lt-menu" align="end" sideOffset={6}>
+                    <Menu.Item className="lt-menu-item" onSelect={() => setArranging(!arranging)}>
+                      {t(arranging ? 'list.backToList' : 'list.arrangeGroups')}
+                    </Menu.Item>
+                  </Menu.Content>
+                </Menu.Portal>
+              </Menu.Root>
+            )}
+          </div>
         }
       />
 
@@ -199,7 +242,23 @@ export default function NodesPage() {
         />
       )}
 
-      {hasAssets ? (
+      {hasAssets && !arranging ? (
+        <>
+          <DeviceListToolbar
+            query={query}
+            onQuery={(value) => {
+              queryInteractionStartedAtRef.current = performance.now();
+              setQuery(value);
+            }}
+            problemsOnly={problemsOnly}
+            onProblemsOnly={setProblemsOnly}
+            showProblemsChip={anyProblems}
+            grouping={grouping}
+            onGrouping={setGrouping}
+          />
+          <DeviceList sections={sections} emptyText={t('list.noMatch')} />
+        </>
+      ) : hasAssets ? (
         <div className="space-y-4">
           {/* Search + manage toolbar */}
           <div className="flex items-center justify-between gap-4">

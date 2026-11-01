@@ -26,6 +26,25 @@
   "auditLog": "Audit-Protokoll",
   "apiDocs": "API-Dokumentation",
   "settings": "Einstellungen",
+  "map": "Karte",
+  "automations": "Automatisierungen",
+  "general": "Allgemein",
+  "search": "Suchen",
+  "primaryNav": "Hauptnavigation",
+  "openNav": "Navigation öffnen",
+  "closeNav": "Navigation schließen",
+  "navMenu": "Navigationsmenü",
+  "account": "Konto",
+  "lightTheme": "Helles Design",
+  "darkTheme": "Dunkles Design",
+  "language": "Sprache",
+  "signOut": "Abmelden",
+  "roles": {
+    "owner": "Eigentümer",
+    "admin": "Administrator",
+    "operator": "Operator",
+    "viewer": "Betrachter"
+  },
   "commandPalette": {
     "placeholder": "Befehle suchen..."
   }

@@ -26,6 +26,25 @@
   "auditLog": "Registro de auditoría",
   "apiDocs": "Documentación de API",
   "settings": "Configuración",
+  "map": "Mapa",
+  "automations": "Automatizaciones",
+  "general": "General",
+  "search": "Buscar",
+  "primaryNav": "Navegación principal",
+  "openNav": "Abrir navegación",
+  "closeNav": "Cerrar navegación",
+  "navMenu": "Menú de navegación",
+  "account": "Cuenta",
+  "lightTheme": "Tema claro",
+  "darkTheme": "Tema oscuro",
+  "language": "Idioma",
+  "signOut": "Cerrar sesión",
+  "roles": {
+    "owner": "Propietario",
+    "admin": "Administrador",
+    "operator": "Operador",
+    "viewer": "Observador"
+  },
   "commandPalette": {
     "placeholder": "Buscar comandos..."
   }
