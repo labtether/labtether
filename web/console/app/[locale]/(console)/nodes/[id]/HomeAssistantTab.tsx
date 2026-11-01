@@ -1,13 +1,10 @@
 "use client";
 
-import { Link } from "../../../../../i18n/navigation";
-import { useCallback, useMemo, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
+import { ExternalLink, RefreshCw } from "lucide-react";
 
-import { startCollectorRun, waitForCollectorRun } from "../../../../components/AddDeviceModal/collectorSync";
 import { Button } from "../../../../components/ui/Button";
-import { Card } from "../../../../components/ui/Card";
-import { formatAge, formatMetadataLabel, formatMetadataValue } from "../../../../console/formatters";
 import type { Asset } from "../../../../console/models";
 import {
   childParentKey,
@@ -15,471 +12,241 @@ import {
   isHomeAssistantEntityAsset,
   isHomeAssistantHubAsset,
 } from "../../../../console/taxonomy";
-import { useFastStatus, useStatusControls } from "../../../../contexts/StatusContext";
-import { sanitizeErrorMessage } from "../../../../lib/sanitizeErrorMessage";
+import { useFastStatus } from "../../../../contexts/StatusContext";
+import { Link } from "../../../../../i18n/navigation";
+import { DiFilter, DiPick } from "./proxmox/DiControls";
+import { DiCols, DiEmpty, DiFoot, DiKV, DiList, DiMain, DiNote, DiPage, DiRow, DiSection, DiSheet, DiTime } from "./proxmox/DiList";
+import { whenText } from "./proxmox/diFormat";
+import {
+  metadataValue, otherMetadata, stateText, UNAVAILABLE_STATES, useHomeAssistantSync, type SyncFeedback,
+} from "./proxmox/useHomeAssistantSync";
 
 type HomeAssistantTabProps = {
   asset: Asset;
 };
 
-type MetadataEntry = {
-  key: string;
-  label: string;
-  value: string;
-};
-
-const ENTITY_PRIMARY_METADATA_KEYS = new Set([
-  "entity_id",
-  "domain",
-  "state",
-  "friendly_name",
-  "original_name",
-  "unit_of_measurement",
-  "device_class",
-  "state_class",
-  "entity_category",
-  "supported_features",
-  "assumed_state",
-  "icon",
-  "last_changed",
-  "last_updated",
-  "collector_id",
-  "collector_base_url",
-  "connector_type",
+const ENTITY_KEYS = new Set([
+  "entity_id", "domain", "state", "friendly_name", "original_name", "unit_of_measurement", "device_class", "state_class",
+  "entity_category", "supported_features", "assumed_state", "icon", "last_changed", "last_updated", "collector_id",
+  "collector_base_url", "connector_type",
 ]);
+const HUB_KEYS = new Set(["collector_id", "collector_base_url", "base_url", "connector_type", "discovered"]);
+const PREVIEW = 25;
 
-const HUB_PRIMARY_METADATA_KEYS = new Set([
-  "collector_id",
-  "collector_base_url",
-  "base_url",
-  "connector_type",
-  "discovered",
-]);
-
-const UNAVAILABLE_STATES = new Set(["unknown", "unavailable", "offline"]);
-const HOME_ASSISTANT_UNREACHABLE_MESSAGE =
-  "Unable to reach Home Assistant. Check that it is online and that the connector Base URL and network path are correct, then try again.";
-
-type RefreshFeedback = {
-  kind: "error" | "warning" | "success";
-  message: string;
-};
-
-function homeAssistantRefreshErrorMessage(rawMessage: string): string {
-  const sanitized = sanitizeErrorMessage(rawMessage, HOME_ASSISTANT_UNREACHABLE_MESSAGE);
-  const normalized = sanitized.toLowerCase();
-  if (
-    normalized.includes("connection refused")
-    || normalized.includes("no route to host")
-    || normalized.includes("network is unreachable")
-    || normalized.includes("deadline exceeded")
-    || normalized.includes("timed out")
-    || normalized.includes("timeout")
-    || normalized.includes("failed to fetch")
-    || /home assistant api returned 5\d\d/.test(normalized)
-  ) {
-    return HOME_ASSISTANT_UNREACHABLE_MESSAGE;
-  }
-  return `Home Assistant refresh failed: ${sanitized}`;
+function Feedback({ feedback }: { feedback: SyncFeedback | null }) {
+  if (!feedback) return null;
+  return <DiNote tone={feedback.kind === "error" ? "bad" : feedback.kind === "warning" ? "warn" : ""}>{feedback.message}</DiNote>;
 }
 
-function useHomeAssistantManualRefresh(asset: Asset) {
-  const { fetchStatus } = useStatusControls();
-  const [refreshing, setRefreshing] = useState(false);
-  const [feedback, setFeedback] = useState<RefreshFeedback | null>(null);
-  const collectorID = asset.metadata?.collector_id?.trim() ?? "";
-
-  const refresh = useCallback(async () => {
-    if (!collectorID) {
-      setFeedback({
-        kind: "error",
-        message: "This Home Assistant asset is missing its collector link. Open connector settings and repair the Home Assistant collector before retrying.",
-      });
-      return;
-    }
-
-    setRefreshing(true);
-    setFeedback(null);
-    try {
-      const startedAtMs = await startCollectorRun(collectorID);
-      const result = await waitForCollectorRun(collectorID, startedAtMs);
-      await fetchStatus();
-
-      if (!result.ok) {
-        setFeedback({
-          kind: "error",
-          message: `${homeAssistantRefreshErrorMessage(result.error ?? "")} Showing data from the last successful sync.`,
-        });
-        return;
-      }
-
-      if (result.warning) {
-        const warning = sanitizeErrorMessage(result.warning, "The collector completed with warnings.");
-        setFeedback({
-          kind: "warning",
-          message: `Home Assistant refresh completed with warnings: ${warning} Some displayed entity data may be from the last successful sync.`,
-        });
-        return;
-      }
-
-      setFeedback({ kind: "success", message: "Home Assistant data refreshed from the connector." });
-    } catch (error) {
-      await fetchStatus();
-      setFeedback({
-        kind: "error",
-        message: `${homeAssistantRefreshErrorMessage(error instanceof Error ? error.message : "")} Showing data from the last successful sync.`,
-      });
-    } finally {
-      setRefreshing(false);
-    }
-  }, [collectorID, fetchStatus]);
-
-  return { feedback, refresh, refreshing };
-}
-
-function RefreshFeedbackBanner({ feedback }: { feedback: RefreshFeedback | null }) {
-  if (!feedback) {
-    return null;
-  }
-  const color = feedback.kind === "error"
-    ? "var(--bad)"
-    : feedback.kind === "warning"
-      ? "var(--warn)"
-      : "var(--good)";
+function SyncButton({ syncing, onSync }: { syncing: boolean; onSync: () => void }) {
+  const t = useTranslations("devices-proxmox.ha");
   return (
-    <div
-      role={feedback.kind === "error" ? "alert" : "status"}
-      className="mb-4 rounded-lg border px-3 py-2 text-sm text-[var(--text)]"
-      style={{ borderColor: color }}
-    >
-      {feedback.message}
-    </div>
+    <Button size="sm" disabled={syncing} onClick={onSync}>
+      <RefreshCw size={14} className={syncing ? "animate-spin" : undefined} aria-hidden="true" />
+      {syncing ? t("syncing") : t("syncNow")}
+    </Button>
   );
 }
 
-function metadataValue(metadata: Record<string, string> | undefined, key: string): string | null {
-  const raw = metadata?.[key];
-  if (typeof raw !== "string") {
-    return null;
-  }
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    return null;
-  }
-  return formatMetadataValue(key, trimmed);
+/** When the entity last changed state (or was last seen), newest first in the list. */
+function changedAt(entity: Asset): number {
+  const ms = new Date(entity.metadata?.last_changed || entity.last_seen_at).getTime();
+  return Number.isFinite(ms) ? ms : 0;
 }
 
-function buildMetadataEntries(
-  metadata: Record<string, string> | undefined,
-  excludedKeys: Set<string>,
-): MetadataEntry[] {
-  if (!metadata) {
-    return [];
-  }
-
-  return Object.entries(metadata)
-    .filter(([key, value]) => value.trim() !== "" && !excludedKeys.has(key))
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, value]) => ({
-      key,
-      label: formatMetadataLabel(key),
-      value: formatMetadataValue(key, value),
-    }));
+function isUnavailable(entity: Asset): boolean {
+  const state = entity.metadata?.state?.trim().toLowerCase();
+  return state ? UNAVAILABLE_STATES.has(state) : true;
 }
 
-function stateDisplay(metadata: Record<string, string> | undefined): string {
-  const state = metadataValue(metadata, "state");
-  if (!state) {
-    return "Unknown";
-  }
-  const unit = metadataValue(metadata, "unit_of_measurement");
-  return unit ? `${state} ${unit}` : state;
-}
-
-function summaryRow(label: string, value: string | null) {
-  if (!value) {
-    return null;
-  }
-  return { label, value };
-}
-
-function MetadataListCard({ title, entries }: { title: string; entries: MetadataEntry[] }) {
-  if (entries.length === 0) {
-    return null;
-  }
-
-  return (
-    <Card className="mb-4">
-      <h2 className="mb-3 text-sm font-medium text-[var(--text)]">{title}</h2>
-      <dl className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        {entries.map((entry) => (
-          <div key={entry.key} className="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
-            <dt className="text-xs uppercase tracking-wide text-[var(--muted)]">{entry.label}</dt>
-            <dd className="mt-1 text-sm text-[var(--text)] break-words">{entry.value}</dd>
-          </div>
-        ))}
-      </dl>
-    </Card>
-  );
-}
-
+/** A Home Assistant instance: its connection, a searchable entity list with a domain menu, and the rest of its details. */
 function HomeAssistantHubTab({ asset }: { asset: Asset }) {
+  const t = useTranslations("devices-proxmox.ha");
+  const kit = useTranslations("devices-proxmox.kit");
+  const locale = useLocale();
   const status = useFastStatus();
-  const { feedback, refresh, refreshing } = useHomeAssistantManualRefresh(asset);
+  const { feedback, sync, syncing } = useHomeAssistantSync(asset);
+  const [query, setQuery] = useState("");
+  const [domain, setDomain] = useState("all");
+  const [showAll, setShowAll] = useState(false);
   const hubKey = useMemo(() => hostParentKey(asset), [asset]);
-  const childEntities = useMemo(() => {
-    const assets = status?.assets ?? [];
-    return assets
-      .filter((candidate) => (
-        candidate.id !== asset.id
-        && candidate.source === "homeassistant"
-        && isHomeAssistantEntityAsset(candidate)
-        && childParentKey(candidate) === hubKey
-      ))
-      .sort((left, right) => {
-        const leftDomain = (left.metadata?.domain ?? "").localeCompare(right.metadata?.domain ?? "");
-        if (leftDomain !== 0) {
-          return leftDomain;
-        }
-        return left.name.localeCompare(right.name);
-      });
-  }, [asset.id, hubKey, status?.assets]);
 
-  const domainCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const entity of childEntities) {
-      const domain = entity.metadata?.domain?.trim() || "other";
-      counts.set(domain, (counts.get(domain) ?? 0) + 1);
-    }
-    return [...counts.entries()].sort((left, right) => {
-      if (right[1] !== left[1]) {
-        return right[1] - left[1];
-      }
-      return left[0].localeCompare(right[0]);
-    });
-  }, [childEntities]);
+  const entities = useMemo(() => (status?.assets ?? [])
+    .filter((candidate) => candidate.id !== asset.id
+      && candidate.source === "homeassistant"
+      && isHomeAssistantEntityAsset(candidate)
+      && childParentKey(candidate) === hubKey)
+    .sort((left, right) => changedAt(right) - changedAt(left) || left.name.localeCompare(right.name)),
+  [asset.id, hubKey, status?.assets]);
 
-  const unavailableEntityCount = useMemo(() => {
-    return childEntities.filter((entity) => {
-      const state = entity.metadata?.state?.trim().toLowerCase();
-      return state ? UNAVAILABLE_STATES.has(state) : true;
-    }).length;
-  }, [childEntities]);
-
-  const connectorRows = [
-    summaryRow("Base URL", metadataValue(asset.metadata, "collector_base_url") ?? metadataValue(asset.metadata, "base_url")),
-    summaryRow("Collector ID", metadataValue(asset.metadata, "collector_id")),
-    summaryRow("Connector Type", metadataValue(asset.metadata, "connector_type")),
-    summaryRow("Last Seen", formatAge(asset.last_seen_at)),
-  ].filter((row): row is { label: string; value: string } => row !== null);
-
-  const syncRows = [
-    { label: "Entities", value: String(childEntities.length) },
-    { label: "Domains", value: String(domainCounts.length) },
-    { label: "Unavailable", value: String(unavailableEntityCount) },
-    summaryRow("Collector Snapshot", metadataValue(asset.metadata, "discovered")),
-  ].filter((row): row is { label: string; value: string } => row !== null);
-
-  const additionalMetadata = buildMetadataEntries(asset.metadata, HUB_PRIMARY_METADATA_KEYS);
+  const domains = useMemo(() => Array.from(new Set(entities.map((entity) => entity.metadata?.domain?.trim() || "other"))).sort(), [entities]);
+  const unavailable = entities.filter(isUnavailable).length;
+  const scope = domain === "all" || domain === "unavailable" || domains.includes(domain) ? domain : "all";
+  const needle = query.trim().toLowerCase();
+  const hits = entities.filter((entity) => {
+    if (scope === "unavailable" && !isUnavailable(entity)) return false;
+    if (scope !== "all" && scope !== "unavailable" && (entity.metadata?.domain?.trim() || "other") !== scope) return false;
+    if (!needle) return true;
+    return [entity.name, entity.metadata?.entity_id, entity.metadata?.state].some((value) => value?.toLowerCase().includes(needle));
+  });
+  const shown = showAll ? hits : hits.slice(0, PREVIEW);
+  const filtered = needle !== "" || scope !== "all";
+  const baseURL = metadataValue(asset.metadata, "collector_base_url") ?? metadataValue(asset.metadata, "base_url");
+  const safeURL = baseURL && /^https?:\/\//i.test(baseURL) ? baseURL : null;
 
   return (
-    <div className="space-y-4">
-      <Card className="mb-4">
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-medium text-[var(--text)]">Home Assistant Hub</h2>
-            <p className="mt-1 text-sm text-[var(--muted)]">
-              Connector summary for this Home Assistant instance and the entities currently attached to it.
-            </p>
-          </div>
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={refreshing}
-            onClick={() => { void refresh(); }}
-          >
-            <RefreshCw size={14} className={refreshing ? "animate-spin" : undefined} />
-            {refreshing ? "Refreshing..." : "Refresh"}
-          </Button>
+    <DiPage className="di-ha">
+      <DiSection
+        id="ha-connection"
+        title={t("connection")}
+        right={
+          <>
+            <SyncButton syncing={syncing} onSync={() => { void sync(); }} />
+            {safeURL ? (
+              <a className="di-btn" href={safeURL} target="_blank" rel="noopener noreferrer">
+                <ExternalLink aria-hidden="true" />
+                {t("open")}
+              </a>
+            ) : null}
+          </>
+        }
+      >
+        <Feedback feedback={feedback} />
+        <DiSheet kind="tight" className="di-ha-kv">
+          <DiKV
+            items={[
+              [t("baseUrl"), baseURL ? baseURL.replace(/^https?:\/\//i, "").replace(/\/$/, "") : null],
+              [t("lastSeen"), whenText(asset.last_seen_at, locale) || null],
+              [t("entities"), t("entitiesValue", { count: entities.length, domains: domains.length })],
+              [t("unavailable"), unavailable > 0 ? <span key="u" className="di-warn">{unavailable}</span> : "0"],
+            ]}
+          />
+        </DiSheet>
+      </DiSection>
+
+      <DiSection id="ha-entities" title={t("entitiesTitle")}>
+        <div className="di-tools">
+          <DiFilter value={query} onChange={(value) => { setQuery(value); setShowAll(false); }} placeholder={t("filter")} />
+          <span className="sp" />
+          <DiPick
+            label={t("domainLabel")}
+            options={[
+              { id: "all", label: t("allDomains") },
+              ...(unavailable > 0 ? [{ id: "unavailable", label: t("unavailable") }] : []),
+              ...domains.map((id) => ({ id, label: id })),
+            ]}
+            value={scope}
+            onChange={(next) => { setDomain(next); setShowAll(false); }}
+          />
         </div>
+        <DiList cols="minmax(0, 1.6fr) minmax(96px, 0.7fr) 88px" colsS="minmax(0, 1fr) auto" label={t("entitiesTitle")}>
+          <DiCols>
+            <span>{t("entity")}</span>
+            <span>{t("state")}</span>
+            <span className="r di-s">{t("lastChanged")}</span>
+          </DiCols>
+          {shown.length === 0 ? (
+            <DiEmpty title={entities.length === 0 ? t("noEntities") : t("noMatch")} line={entities.length === 0 ? t("noEntitiesLine") : undefined} />
+          ) : null}
+          {shown.map((entity) => {
+            const state = stateText(entity.metadata);
+            return (
+              <DiRow key={entity.id}>
+                <DiMain name={entity.name} href={`/nodes/${entity.id}`} grey={<span className="di-mono">{entity.metadata?.entity_id ?? entity.id}</span>} />
+                <span className={`di-ha-state${isUnavailable(entity) ? " di-warn" : ""}`}>{state ?? t("unknown")}</span>
+                <DiTime className="di-s">{whenText(entity.metadata?.last_changed || entity.last_seen_at, locale)}</DiTime>
+              </DiRow>
+            );
+          })}
+          {hits.length > PREVIEW || filtered ? (
+            <DiFoot
+              left={kit("shown", { shown: shown.length, total: filtered ? entities.length : hits.length })}
+              right={
+                <span className="di-acts">
+                  {hits.length > PREVIEW ? (
+                    <button type="button" onClick={() => setShowAll((value) => !value)}>{showAll ? kit("showFewer") : kit("showAll")}</button>
+                  ) : null}
+                  {filtered ? (
+                    <button type="button" onClick={() => { setQuery(""); setDomain("all"); setShowAll(false); }}>{kit("clearFilter")}</button>
+                  ) : null}
+                </span>
+              }
+            />
+          ) : null}
+        </DiList>
+      </DiSection>
 
-        <RefreshFeedbackBanner feedback={feedback} />
-
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {syncRows.map((row) => (
-            <div key={row.label} className="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-3">
-              <p className="text-xs uppercase tracking-wide text-[var(--muted)]">{row.label}</p>
-              <p className="mt-2 text-lg font-semibold text-[var(--text)]">{row.value}</p>
-            </div>
-          ))}
-        </div>
-
-        {connectorRows.length > 0 ? (
-          <dl className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-            {connectorRows.map((row) => (
-              <div key={row.label} className="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2.5">
-                <dt className="text-xs uppercase tracking-wide text-[var(--muted)]">{row.label}</dt>
-                <dd className="mt-1 text-sm text-[var(--text)] break-words">{row.value}</dd>
-              </div>
-            ))}
-          </dl>
-        ) : null}
-      </Card>
-
-      <Card className="mb-4">
-        <h2 className="mb-3 text-sm font-medium text-[var(--text)]">Domain Breakdown</h2>
-        {domainCounts.length === 0 ? (
-          <p className="text-sm text-[var(--muted)]">No synced Home Assistant entities are attached to this hub yet.</p>
-        ) : (
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {domainCounts.map(([domain, count]) => (
-              <div key={domain} className="flex items-center justify-between rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
-                <span className="text-sm font-medium text-[var(--text)]">{domain}</span>
-                <span className="text-xs text-[var(--muted)]">{count} {count === 1 ? "entity" : "entities"}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-
-      <Card className="mb-4">
-        <h2 className="mb-3 text-sm font-medium text-[var(--text)]">Entity Preview</h2>
-        {childEntities.length === 0 ? (
-          <p className="text-sm text-[var(--muted)]">Run or wait for a Home Assistant sync to populate entity details here.</p>
-        ) : (
-          <ul className="divide-y divide-[var(--line)]">
-            {childEntities.slice(0, 8).map((entity) => (
-              <li key={entity.id} className="flex items-center justify-between gap-3 py-2.5">
-                <div className="min-w-0">
-                  <Link href={`/nodes/${entity.id}`} className="text-sm font-medium text-[var(--accent)] hover:underline">
-                    {entity.name}
-                  </Link>
-                  <p className="mt-0.5 text-xs text-[var(--muted)]">
-                    {(entity.metadata?.entity_id ?? entity.id)} · {(entity.metadata?.domain ?? "entity")}
-                  </p>
-                </div>
-                <div className="shrink-0 text-right">
-                  <p className="text-sm text-[var(--text)]">{stateDisplay(entity.metadata)}</p>
-                  <p className="mt-0.5 text-xs text-[var(--muted)]">{formatAge(entity.last_seen_at)}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-
-      <MetadataListCard title="Additional Hub Metadata" entries={additionalMetadata} />
-    </div>
+      <MoreDetails metadata={asset.metadata} shown={HUB_KEYS} />
+    </DiPage>
   );
 }
 
+function MoreDetails({ metadata, shown }: { metadata: Record<string, string> | undefined; shown: Set<string> }) {
+  const t = useTranslations("devices-proxmox.ha");
+  const rows = otherMetadata(metadata, shown);
+  if (rows.length === 0) return null;
+  return (
+    <DiSection title={t("moreDetails")}>
+      <DiSheet kind="tight">
+        <DiKV columns={2} items={rows} />
+      </DiSheet>
+    </DiSection>
+  );
+}
+
+/** One Home Assistant entity: its state, the instance it comes from and its attributes. */
 function HomeAssistantEntityTab({ asset }: { asset: Asset }) {
+  const t = useTranslations("devices-proxmox.ha");
+  const locale = useLocale();
   const status = useFastStatus();
-  const { feedback, refresh, refreshing } = useHomeAssistantManualRefresh(asset);
-
+  const { feedback, sync, syncing } = useHomeAssistantSync(asset);
   const parentHub = useMemo(() => {
-    const assets = status?.assets ?? [];
     const parentKey = childParentKey(asset);
-    if (!parentKey) {
-      return null;
-    }
-    return assets.find((candidate) => (
-      candidate.source === "homeassistant"
+    if (!parentKey) return null;
+    return (status?.assets ?? []).find((candidate) => candidate.source === "homeassistant"
       && isHomeAssistantHubAsset(candidate)
-      && hostParentKey(candidate) === parentKey
-    )) ?? null;
+      && hostParentKey(candidate) === parentKey) ?? null;
   }, [asset, status?.assets]);
-
-  const summaryRows = [
-    summaryRow("Entity ID", metadataValue(asset.metadata, "entity_id")),
-    summaryRow("Domain", metadataValue(asset.metadata, "domain")),
-    summaryRow("Device Class", metadataValue(asset.metadata, "device_class")),
-    summaryRow("State Class", metadataValue(asset.metadata, "state_class")),
-    summaryRow("Entity Category", metadataValue(asset.metadata, "entity_category")),
-    summaryRow("Supported Features", metadataValue(asset.metadata, "supported_features")),
-    summaryRow("Assumed State", metadataValue(asset.metadata, "assumed_state")),
-    summaryRow("Last Changed", metadataValue(asset.metadata, "last_changed")),
-    summaryRow("Last Updated", metadataValue(asset.metadata, "last_updated")),
-    summaryRow("Collector ID", metadataValue(asset.metadata, "collector_id")),
-  ].filter((row): row is { label: string; value: string } => row !== null);
-
-  const additionalMetadata = buildMetadataEntries(asset.metadata, ENTITY_PRIMARY_METADATA_KEYS);
+  const time = (key: string) => whenText(asset.metadata?.[key], locale) || metadataValue(asset.metadata, key);
 
   return (
-    <div className="space-y-4">
-      <Card className="mb-4">
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-medium text-[var(--text)]">Home Assistant Entity</h2>
-            <p className="mt-1 text-sm text-[var(--muted)]">
-              Current Home Assistant state and synced entity metadata for this asset.
-            </p>
-          </div>
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={refreshing}
-            onClick={() => { void refresh(); }}
-          >
-            <RefreshCw size={14} className={refreshing ? "animate-spin" : undefined} />
-            {refreshing ? "Refreshing..." : "Refresh"}
-          </Button>
-        </div>
-
-        <RefreshFeedbackBanner feedback={feedback} />
-
-        <div className="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-4 py-4">
-          <p className="text-xs uppercase tracking-wide text-[var(--muted)]">Current State</p>
-          <p className="mt-2 text-2xl font-semibold text-[var(--text)]">{stateDisplay(asset.metadata)}</p>
-          <p className="mt-1 text-xs text-[var(--muted)]">Last seen {formatAge(asset.last_seen_at)}</p>
-        </div>
-
-        {parentHub ? (
-          <div className="mt-4 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2.5">
-            <p className="text-xs uppercase tracking-wide text-[var(--muted)]">Source Hub</p>
-            <Link href={`/nodes/${parentHub.id}`} className="mt-1 inline-block text-sm font-medium text-[var(--accent)] hover:underline">
-              {parentHub.name}
-            </Link>
-            <p className="mt-0.5 text-xs text-[var(--muted)]">
-              {metadataValue(parentHub.metadata, "collector_base_url") ?? metadataValue(parentHub.metadata, "base_url") ?? "Home Assistant"}
-            </p>
-          </div>
-        ) : null}
-
-        {summaryRows.length > 0 ? (
-          <dl className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-            {summaryRows.map((row) => (
-              <div key={row.label} className="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2.5">
-                <dt className="text-xs uppercase tracking-wide text-[var(--muted)]">{row.label}</dt>
-                <dd className="mt-1 text-sm text-[var(--text)] break-words">{row.value}</dd>
-              </div>
-            ))}
-          </dl>
-        ) : null}
-      </Card>
-
-      <MetadataListCard title="Additional Entity Metadata" entries={additionalMetadata} />
-    </div>
+    <DiPage className="di-ha">
+      <DiSection id="ha-state" title={t("stateTitle")} right={<SyncButton syncing={syncing} onSync={() => { void sync(); }} />}>
+        <Feedback feedback={feedback} />
+        <DiSheet kind="tight">
+          <DiKV
+            columns={2}
+            items={[
+              [t("currentState"), <b key="s" className="di-ha-now">{stateText(asset.metadata) ?? t("unknown")}</b>],
+              [t("lastSeen"), whenText(asset.last_seen_at, locale) || null],
+              [t("instance"), parentHub ? <Link key="h" href={`/nodes/${parentHub.id}`} className="di-ha-link">{parentHub.name}</Link> : null],
+              [t("entityId"), metadataValue(asset.metadata, "entity_id") ? <span key="e" className="di-mono">{metadataValue(asset.metadata, "entity_id")}</span> : null],
+              [t("domain"), metadataValue(asset.metadata, "domain")],
+              [t("deviceClass"), metadataValue(asset.metadata, "device_class")],
+              [t("stateClass"), metadataValue(asset.metadata, "state_class")],
+              [t("category"), metadataValue(asset.metadata, "entity_category")],
+              [t("features"), metadataValue(asset.metadata, "supported_features")],
+              [t("assumedState"), metadataValue(asset.metadata, "assumed_state")],
+              [t("lastChanged"), time("last_changed")],
+              [t("lastUpdated"), time("last_updated")],
+            ]}
+          />
+        </DiSheet>
+      </DiSection>
+      <MoreDetails metadata={asset.metadata} shown={ENTITY_KEYS} />
+    </DiPage>
   );
 }
 
 export function HomeAssistantTab({ asset }: HomeAssistantTabProps) {
-  if (isHomeAssistantHubAsset(asset)) {
-    return <HomeAssistantHubTab asset={asset} />;
-  }
-
-  if (isHomeAssistantEntityAsset(asset)) {
-    return <HomeAssistantEntityTab asset={asset} />;
-  }
-
+  const t = useTranslations("devices-proxmox.ha");
+  if (isHomeAssistantHubAsset(asset)) return <HomeAssistantHubTab asset={asset} />;
+  if (isHomeAssistantEntityAsset(asset)) return <HomeAssistantEntityTab asset={asset} />;
   return (
-    <Card className="mb-4">
-      <div className="flex flex-col items-center justify-center gap-2 py-12">
-        <p className="text-sm font-medium text-[var(--text)]">No Home Assistant details yet</p>
-        <p className="max-w-sm text-center text-xs text-[var(--muted)]">
-          This asset is not currently recognized as a Home Assistant hub or entity.
-        </p>
-      </div>
-    </Card>
+    <DiPage>
+      <DiSheet>
+        <DiEmpty title={t("notRecognized")} />
+      </DiSheet>
+    </DiPage>
   );
 }

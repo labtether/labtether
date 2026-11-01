@@ -4,15 +4,14 @@ import { type MouseEvent } from "react";
 import {
   Background,
   Controls,
-  MiniMap,
   ReactFlow,
   type Edge,
   type Node,
 } from "@xyflow/react";
-import { Select } from "../../../../components/ui/Input";
+import { useTranslations } from "next-intl";
 import type { Asset } from "../../../../console/models";
 import { friendlyTypeLabel } from "../../../../console/taxonomy";
-import { sourceBadgeLabel } from "./clusterTopologyUtils";
+import { ClusterGuestLinkEditor } from "./ClusterTopologyListView";
 import type { ClusterTopologyNodeData } from "./clusterTopologyFlowModel";
 import type { AssetDependency } from "./clusterTopologyTypes";
 
@@ -66,19 +65,16 @@ export function ClusterTopologyGraphView({
   onOpenGuest,
   onOpenLinkedHost,
 }: ClusterTopologyGraphViewProps) {
+  const t = useTranslations("devices-proxmox.topology");
+  const linking = loadingGuestLinks || autoLinkingGuestID != null;
   return (
-    <div className="space-y-2">
-      <div className="grid grid-cols-3 gap-2 text-[10px] uppercase tracking-wide text-[var(--muted)]">
-        <span>Proxmox Nodes</span>
-        <span>Guests</span>
-        <span>API Hosts</span>
+    <>
+      <div className="di-ct-lanes" aria-hidden="true">
+        <span>{t("lanes.nodes")}</span>
+        <span>{t("lanes.guests")}</span>
+        <span>{t("lanes.hosts")}</span>
       </div>
-      <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
-        <span className="rounded bg-[var(--accent-subtle)] px-1.5 py-0.5 text-[var(--accent-text)]">manual edge</span>
-        <span className="rounded bg-[var(--ok-glow)] px-1.5 py-0.5 text-[var(--ok)]">auto edge</span>
-        <span className="rounded bg-[var(--bad-glow)] px-1.5 py-0.5 text-[var(--bad)]">missing target edge</span>
-      </div>
-      <div className="h-[560px] rounded-lg border border-[var(--line)] bg-[var(--surface)]/35">
+      <div className="di-sheet flush di-ct-graph">
         <ReactFlow
           nodes={flowModel.nodes}
           edges={flowModel.edges}
@@ -94,109 +90,47 @@ export function ClusterTopologyGraphView({
           nodesConnectable={false}
           proOptions={{ hideAttribution: true }}
         >
-          <MiniMap
-            position="bottom-left"
-            pannable
-            zoomable
-            className="rounded-md border border-[var(--line)]"
-          />
           <Controls showInteractive={false} position="bottom-right" />
-          <Background color="rgba(255, 255, 255, 0.08)" gap={22} size={1} />
+          <Background color="rgba(128, 128, 128, 0.22)" gap={22} size={1} />
         </ReactFlow>
       </div>
       {selectedGraphGuest ? (
-        <div className="rounded-lg border border-[var(--line)] bg-[var(--surface)]/55 p-3 space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-xs text-[var(--muted)]">Graph mapping editor</p>
-              <p className="text-sm font-medium text-[var(--text)] truncate">{selectedGraphGuest.name}</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-1">
-              <span className="rounded bg-[var(--hover)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">
-                {friendlyTypeLabel(selectedGraphGuest.type)}
-              </span>
-              {selectedGraphGuestMapping ? (
-                <span className="rounded bg-[var(--accent-subtle)] px-1.5 py-0.5 text-[10px] text-[var(--accent-text)]">
-                  {selectedGraphGuestMapping.metadata?.binding === "auto" ? "auto link" : "manual link"}
-                </span>
-              ) : (
-                <span className="rounded bg-[var(--warn-glow)] px-1.5 py-0.5 text-[10px] text-[var(--warn)]">
-                  not linked
-                </span>
-              )}
-            </div>
+        <div className="di-sheet pad di-ct-editor">
+          <div className="di-main">
+            <span className="di-nm">{selectedGraphGuest.name}</span>
+            <span className="di-grey">
+              {[
+                friendlyTypeLabel(selectedGraphGuest.type),
+                selectedGraphGuestMapping
+                  ? (selectedGraphGuestMapping.metadata?.binding === "auto" ? t("autoLinked") : t("manualLinked"))
+                  : t("notLinked"),
+              ].join(" · ")}
+            </span>
           </div>
-
-          <div className="space-y-1.5">
-            <Select
-              value={selectedGraphDraftTargetID}
-              disabled={apiHosts.length === 0 || selectedGraphSaving}
-              onChange={(event) => { onSelectedGraphDraftChange(event.target.value); }}
-              className="h-8 w-full min-w-0 px-2.5 py-1 text-xs"
-            >
-              <option value="">
-                {apiHosts.length > 0 ? "Select API host..." : "No API hosts"}
-              </option>
-              {apiHosts.map((host) => (
-                <option key={host.id} value={host.id}>
-                  {host.name} ({sourceBadgeLabel(host.source)})
-                </option>
-              ))}
-            </Select>
-
-            <div className="flex flex-wrap items-center gap-1.5">
-              <button
-                type="button"
-                disabled={selectedGraphSaving || !selectedGraphCanSaveMapping}
-                onClick={onSaveSelectedGuest}
-                className="h-7 px-2.5 rounded border border-[var(--line)] text-[10px] font-medium text-[var(--text)] hover:bg-[var(--hover)] disabled:opacity-40 disabled:pointer-events-none"
-              >
-                {selectedGraphSaving ? "Saving..." : selectedGraphGuestMapping ? "Update link" : "Link"}
-              </button>
-              {selectedGraphGuestMapping ? (
-                <button
-                  type="button"
-                  disabled={selectedGraphSaving}
-                  onClick={onClearSelectedGuest}
-                  className="h-7 px-2.5 rounded border border-[var(--line)] text-[10px] font-medium text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--hover)] disabled:opacity-40 disabled:pointer-events-none"
-                >
-                  Clear
-                </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={onOpenGuest}
-                className="h-7 px-2.5 rounded border border-[var(--line)] text-[10px] font-medium text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--hover)]"
-              >
-                Open guest
-              </button>
-              {selectedGraphLinkedHost ? (
-                <button
-                  type="button"
-                  onClick={onOpenLinkedHost}
-                  className="h-7 px-2.5 rounded border border-[var(--line)] text-[10px] font-medium text-[var(--accent-text)] hover:bg-[var(--accent-subtle)]"
-                >
-                  Open linked host
-                </button>
-              ) : null}
-              {selectedGraphShowNameSuggestion ? (
-                <span className="text-[10px] text-[var(--muted)]">name match</span>
-              ) : null}
-            </div>
-          </div>
-
-          {selectedGraphError ? (
-            <p className="text-[10px] text-[var(--bad)]">{selectedGraphError}</p>
-          ) : null}
+          <ClusterGuestLinkEditor
+            apiHosts={apiHosts}
+            draftTargetID={selectedGraphDraftTargetID}
+            saving={selectedGraphSaving}
+            canSave={selectedGraphCanSaveMapping}
+            linked={!!selectedGraphGuestMapping}
+            nameMatch={selectedGraphShowNameSuggestion}
+            error={selectedGraphError}
+            onDraftChange={onSelectedGraphDraftChange}
+            onSave={onSaveSelectedGuest}
+            onClear={onClearSelectedGuest}
+            extra={
+              <>
+                <button type="button" className="di-btn sm" onClick={onOpenGuest}>{t("openGuest")}</button>
+                {selectedGraphLinkedHost ? (
+                  <button type="button" className="di-btn sm" onClick={onOpenLinkedHost}>{t("openHost")}</button>
+                ) : null}
+              </>
+            }
+          />
         </div>
       ) : (
-        <p className="text-[10px] text-[var(--muted)]">
-          Click a guest node or mapping edge to edit links here. Click API host nodes to open details. Double-click a guest node to open details.
-        </p>
+        <p className="di-note">{linking ? t("linking") : t("editorHint")}</p>
       )}
-      {(loadingGuestLinks || autoLinkingGuestID != null) && !selectedGraphGuest ? (
-        <p className="text-[10px] text-[var(--muted)]">syncing links...</p>
-      ) : null}
-    </div>
+    </>
   );
 }

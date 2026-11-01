@@ -186,30 +186,6 @@ export function pbsTaskStatusBadge(status?: string): "ok" | "pending" | "bad" {
   return "ok";
 }
 
-export function formatRelativeEpoch(epochSeconds: number): string {
-  if (!Number.isFinite(epochSeconds) || epochSeconds <= 0) return "n/a";
-  return formatRelativeTime(new Date(epochSeconds * 1000).toISOString());
-}
-
-export function formatRelativeTime(raw: string): string {
-  const timestamp = new Date(raw).getTime();
-  if (!Number.isFinite(timestamp)) return "n/a";
-  const diffMs = Date.now() - timestamp;
-  if (diffMs < 60_000) return `${Math.max(1, Math.floor(diffMs / 1000))}s ago`;
-  if (diffMs < 3_600_000) return `${Math.floor(diffMs / 60_000)}m ago`;
-  if (diffMs < 86_400_000) return `${Math.floor(diffMs / 3_600_000)}h ago`;
-  return `${Math.floor(diffMs / 86_400_000)}d ago`;
-}
-
-export function formatBytes(bytes?: number): string {
-  if (typeof bytes !== "number" || !Number.isFinite(bytes) || bytes < 0) return "n/a";
-  if (bytes < 1) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
-  const index = Math.min(units.length - 1, Math.max(0, Math.floor(Math.log(bytes) / Math.log(1024))));
-  const value = bytes / Math.pow(1024, index);
-  return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
-}
-
 // ---------------------------------------------------------------------------
 // Groups
 // ---------------------------------------------------------------------------
@@ -373,12 +349,5 @@ export function backupStaleness(lastBackupEpoch?: number): "ok" | "warn" | "bad"
   const hoursAgo = (Date.now() - lastBackupEpoch * 1000) / 3_600_000;
   if (hoursAgo > 72) return "bad";
   if (hoursAgo > 24) return "warn";
-  return "ok";
-}
-
-export function usageThreshold(percent?: number): "ok" | "warn" | "bad" {
-  if (typeof percent !== "number") return "ok";
-  if (percent >= 95) return "bad";
-  if (percent >= 80) return "warn";
   return "ok";
 }

@@ -9,8 +9,9 @@ import type { Asset } from "../../../../console/models";
 import { friendlyTypeLabel } from "../../../../console/taxonomy";
 import {
   flowEdgeBadge,
-  guestStatusColor,
+  guestStatusTone,
   sourceBadgeLabel,
+  type ClusterFlowWords,
 } from "./clusterTopologyUtils";
 import type {
   ClusterPlacement,
@@ -22,19 +23,17 @@ export type ClusterTopologyNodeData = {
   assetID?: string;
 };
 
+/** A tile's edge: only a problem draws one; everything else is the plain tile. */
 function statusStroke(status?: string): string {
   const normalized = (status ?? "").trim().toLowerCase();
-  if (normalized === "running" || normalized === "online" || normalized === "active") {
-    return "var(--ok)";
-  }
-  if (normalized === "error" || normalized === "failed") {
+  if (normalized === "error" || normalized === "failed" || normalized === "offline") {
     return "var(--bad)";
   }
-  if (normalized === "stopped" || normalized === "offline" || normalized === "paused") {
-    return "rgba(148, 163, 184, 0.65)";
-  }
-  return "rgba(255, 255, 255, 0.28)";
+  return "transparent";
 }
+
+const SELECTED_RING = "0 0 0 1.5px var(--text-3), var(--elev-tile)";
+const PLACEMENT_STROKE = "color-mix(in srgb, var(--text-3) 45%, transparent)";
 
 export function materializeClusterTopologyFlowElements(params: {
   baseNodeStyle: CSSProperties;
@@ -59,6 +58,7 @@ export function materializeClusterTopologyFlowElements(params: {
   apiYByID: Map<string, number>;
   missingYByID: Map<string, number>;
   shiftedY: (value: number) => number;
+  words: ClusterFlowWords;
 }): {
   nodes: Node<ClusterTopologyNodeData>[];
   edges: Edge[];
@@ -82,6 +82,7 @@ export function materializeClusterTopologyFlowElements(params: {
     apiYByID,
     missingYByID,
     shiftedY,
+    words,
   } = params;
 
   const flowNodes: Node<ClusterTopologyNodeData>[] = [];
@@ -98,18 +99,13 @@ export function materializeClusterTopologyFlowElements(params: {
       targetPosition: Position.Left,
       data: {
         label: (
-          <div className="space-y-1 text-left">
-            <div className="flex items-center gap-1.5">
-              <span className={`inline-block h-2 w-2 rounded-full ${cluster.nodeOnline ? "bg-[var(--ok)]" : "bg-[var(--bad)]"}`} />
-              <span className="text-xs font-semibold">{cluster.nodeName}</span>
-              {cluster.nodeLocal ? (
-                <span className="rounded bg-[var(--hover)] px-1 py-0.5 text-[10px] text-[var(--muted)]">local</span>
-              ) : null}
-            </div>
-            <p className="text-[10px] text-[var(--muted)]">{cluster.nodeIP}</p>
-            <p className="text-[10px] text-[var(--muted)]">
-              {cluster.guestCount} guest{cluster.guestCount !== 1 ? "s" : ""}
-            </p>
+          <div className="di-ct-tile">
+            <span className="di-ct-nm">
+              {cluster.nodeOnline ? null : <span className="di-dot bad" aria-hidden="true" />}
+              {cluster.nodeName}
+            </span>
+            <span className="di-ct-sub">{[cluster.nodeLocal ? words.local : "", cluster.nodeIP].filter(Boolean).join(" · ")}</span>
+            <span className="di-ct-sub">{words.guests(cluster.guestCount)}</span>
           </div>
         ),
         assetID: cluster.nodeAssetID,
@@ -133,33 +129,24 @@ export function materializeClusterTopologyFlowElements(params: {
       targetPosition: Position.Left,
       data: {
         label: (
-          <div className="space-y-1 text-left">
-            <p className="text-xs font-semibold">{guest.guest.name}</p>
-            <div className="flex flex-wrap items-center gap-1">
-              <span className="rounded bg-[var(--hover)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">
-                {friendlyTypeLabel(guest.guest.type)}
-              </span>
-              {guest.guestStatus ? (
-                <span className={`text-[10px] ${guestStatusColor(guest.guestStatus)}`}>{guest.guestStatus}</span>
-              ) : null}
-              {guest.isAuto ? (
-                <span className="rounded bg-[var(--ok-glow)] px-1.5 py-0.5 text-[10px] text-[var(--ok)]">auto</span>
-              ) : null}
-            </div>
-            {guest.linkedHostName ? (
-              <p className="text-[10px] text-[var(--accent-text)]">linked to {guest.linkedHostName}</p>
-            ) : null}
+          <div className="di-ct-tile">
+            <span className="di-ct-nm">
+              {guestStatusTone(guest.guestStatus) === "bad" ? <span className="di-dot bad" aria-hidden="true" /> : null}
+              {guest.guest.name}
+            </span>
+            <span className="di-ct-sub">
+              {[friendlyTypeLabel(guest.guest.type), guest.guestStatus && guestStatusTone(guest.guestStatus) !== "" ? guest.guestStatus : "", guest.isAuto ? words.auto : ""].filter(Boolean).join(" · ")}
+            </span>
+            {guest.linkedHostName ? <span className="di-ct-sub">{words.linkedTo(guest.linkedHostName)}</span> : null}
           </div>
         ),
         assetID: guest.guest.id,
       },
       style: {
         ...baseNodeStyle,
-        borderColor: guest.guestSelected ? "rgba(250, 204, 21, 0.9)" : statusStroke(guest.guestStatus),
+        borderColor: statusStroke(guest.guestStatus),
         width: guestNodeWidth,
-        boxShadow: guest.guestSelected
-          ? "0 0 0 2px rgba(250, 204, 21, 0.4), 0 10px 24px rgba(0, 0, 0, 0.28)"
-          : baseNodeStyle.boxShadow,
+        boxShadow: guest.guestSelected ? SELECTED_RING : baseNodeStyle.boxShadow,
       },
     });
   }
@@ -177,25 +164,15 @@ export function materializeClusterTopologyFlowElements(params: {
       targetPosition: Position.Left,
       data: {
         label: (
-          <div className="space-y-1 text-left">
-            <p className="text-xs font-semibold">{host.name}</p>
-            <div className="flex flex-wrap items-center gap-1">
-              <span className="rounded bg-[var(--accent-subtle)] px-1.5 py-0.5 text-[10px] text-[var(--accent-text)]">
-                {sourceBadgeLabel(host.source)}
-              </span>
-              {linkedCount > 0 ? (
-                <span className="rounded bg-[var(--hover)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">
-                  {linkedCount} link{linkedCount !== 1 ? "s" : ""}
-                </span>
-              ) : null}
-            </div>
+          <div className="di-ct-tile">
+            <span className="di-ct-nm">{host.name}</span>
+            <span className="di-ct-sub">{[sourceBadgeLabel(host.source), linkedCount > 0 ? words.links(linkedCount) : ""].filter(Boolean).join(" · ")}</span>
           </div>
         ),
         assetID: host.id,
       },
       style: {
         ...baseNodeStyle,
-        borderColor: "rgba(14, 165, 233, 0.5)",
         width: apiNodeWidth,
       },
     });
@@ -213,9 +190,9 @@ export function materializeClusterTopologyFlowElements(params: {
       targetPosition: Position.Left,
       data: {
         label: (
-          <div className="space-y-1 text-left">
-            <p className="text-xs font-semibold text-[var(--bad)]">Missing target</p>
-            <p className="text-[10px] text-[var(--muted)] break-all">{targetID}</p>
+          <div className="di-ct-tile">
+            <span className="di-ct-nm di-bad">{words.missingTarget}</span>
+            <span className="di-ct-sub di-ct-wrap">{targetID}</span>
           </div>
         ),
       },
@@ -235,10 +212,8 @@ export function materializeClusterTopologyFlowElements(params: {
       target: guest.guestNodeID,
       type: "smoothstep",
       style: {
-        stroke: guest.guestSelected
-          ? "rgba(250, 204, 21, 0.78)"
-          : (guest.nodeOnline ? "var(--ok-glow)" : "var(--bad-glow)"),
-        strokeWidth: guest.guestSelected ? 2.6 : 1.5,
+        stroke: guest.guestSelected ? "var(--text-2)" : PLACEMENT_STROKE,
+        strokeWidth: guest.guestSelected ? 2 : 1.25,
       },
     });
 
@@ -251,23 +226,23 @@ export function materializeClusterTopologyFlowElements(params: {
       if (!hostNodeID) {
         continue;
       }
-      const edgeColor = guest.isAuto ? "rgba(16, 185, 129, 0.8)" : "rgba(14, 165, 233, 0.85)";
+      const edgeColor = "var(--chart)";
       flowEdges.push({
         id: `edge-runs-on:${guest.guest.id}:${guest.linkedHostID}`,
         source: guest.guestNodeID,
         target: hostNodeID,
         type: "smoothstep",
-        animated: guest.isAuto,
         label: flowEdgeBadge(
-          guest.isAuto ? "auto" : "manual",
-          `${guest.isAuto ? "Auto" : "Manual"} link: ${guest.guest.name} -> ${guest.linkedHostName ?? "host"}`,
-          guest.isAuto ? "success" : "info",
+          guest.isAuto ? words.auto : words.manual,
+          guest.isAuto
+            ? words.autoLink(guest.guest.name, guest.linkedHostName ?? "")
+            : words.manualLink(guest.guest.name, guest.linkedHostName ?? ""),
         ),
         labelShowBg: false,
         style: {
           stroke: edgeColor,
-          strokeWidth: guest.guestSelected ? 3 : 2,
-          strokeDasharray: guest.isAuto ? "7 4" : undefined,
+          strokeWidth: guest.guestSelected ? 2.5 : 1.5,
+          strokeDasharray: guest.isAuto ? "6 4" : undefined,
         },
         markerEnd: { type: MarkerType.ArrowClosed, color: edgeColor },
       });
@@ -283,15 +258,11 @@ export function materializeClusterTopologyFlowElements(params: {
       source: guest.guestNodeID,
       target: missingNodeID,
       type: "smoothstep",
-      label: flowEdgeBadge(
-        "missing",
-        `Missing target asset: ${guest.mapping.target_asset_id}`,
-        "danger",
-      ),
+      label: flowEdgeBadge(words.missing, words.missingLink(guest.mapping.target_asset_id)),
       labelShowBg: false,
       style: {
-        stroke: guest.guestSelected ? "var(--warn)" : "var(--bad)",
-        strokeWidth: guest.guestSelected ? 3 : 2,
+        stroke: "var(--bad)",
+        strokeWidth: guest.guestSelected ? 2.5 : 1.5,
         strokeDasharray: "6 4",
       },
       markerEnd: { type: MarkerType.ArrowClosed, color: "var(--bad)" },

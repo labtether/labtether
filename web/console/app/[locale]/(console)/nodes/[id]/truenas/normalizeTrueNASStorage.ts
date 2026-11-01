@@ -1,6 +1,4 @@
-import type { TrueNASDataset } from "./TrueNASDatasetsTab";
-import type { TrueNASPool, TrueNASVdev } from "./TrueNASPoolsTab";
-import type { TrueNASSnapshot } from "./TrueNASSnapshotsTab";
+import type { TrueNASDataset, TrueNASPool, TrueNASSnapshot, TrueNASVdev } from "./truenasTypes";
 import { bool, identifier, number, record, requireRecord, requireText, text, timestamp, type Row } from "./responseValues";
 
 function vdevs(value: unknown, depth = 0): TrueNASVdev[] {

@@ -1,61 +1,65 @@
 "use client";
 
-import { useState } from "react";
+// The Proxmox Backup Server tab of a device page: Backups (datastores, coverage, server details), Snapshots, Jobs
+// (verification, prune, garbage collection, sync) and Tasks, with traffic control and certificates under More.
 
-import { SubTabBar } from "../../../../components/ui/SubTabBar";
-import { PBSBackupGroupsTab } from "./pbs/PBSBackupGroupsTab";
-import { PBSCertificatesTab } from "./pbs/PBSCertificatesTab";
-import { PBSDatastoresTab } from "./pbs/PBSDatastoresTab";
-import { PBSGCTab } from "./pbs/PBSGCTab";
-import { PBSOverviewTab } from "./pbs/PBSOverviewTab";
-import { PBSPruneJobsTab } from "./pbs/PBSPruneJobsTab";
-import { PBSSnapshotsTab } from "./pbs/PBSSnapshotsTab";
-import { PBSSyncJobsTab } from "./pbs/PBSSyncJobsTab";
-import { PBSTasksTab } from "./pbs/PBSTasksTab";
-import { PBSTrafficControlTab } from "./pbs/PBSTrafficControlTab";
-import { PBSVerificationTab } from "./pbs/PBSVerificationTab";
+import { useState } from "react";
+import { useTranslations } from "next-intl";
+
+import { Button } from "../../../../components/ui/Button";
+import { useStatusControls } from "../../../../contexts/StatusContext";
+import { DiSeg, type DiOption } from "./proxmox/DiControls";
+import { DiEmpty, DiNote, DiPage, DiSheet } from "./proxmox/DiList";
+import { PBSBackupsView } from "./pbs/PBSBackupsView";
+import { PBSCertificatesView } from "./pbs/PBSCertificatesView";
+import { PBSJobsView } from "./pbs/PBSJobsView";
+import { PBSSnapshotsView } from "./pbs/PBSSnapshotsView";
+import { PBSTasksView } from "./pbs/PBSTasksView";
+import { PBSTrafficView } from "./pbs/PBSTrafficView";
+import { usePBSDetails } from "./pbs/usePBSData";
 
 type Props = {
   assetId: string;
 };
 
-const ALL_PBS_TABS = [
-  { id: "overview", label: "Overview" },
-  { id: "datastores", label: "Datastores" },
-  { id: "groups", label: "Backup Groups" },
-  { id: "snapshots", label: "Snapshots" },
-  { id: "verification", label: "Verification" },
-  { id: "gc", label: "Garbage Collection" },
-  { id: "prune-jobs", label: "Prune Jobs" },
-  { id: "sync-jobs", label: "Sync Jobs" },
-  { id: "tasks", label: "Tasks" },
-  { id: "traffic", label: "Traffic Control" },
-  { id: "certificates", label: "Certificates" },
-] as const;
-
-type PBSTabId = (typeof ALL_PBS_TABS)[number]["id"];
+type PBSView = "backups" | "snapshots" | "jobs" | "tasks" | "traffic" | "certificates";
+const VIEWS: PBSView[] = ["backups", "snapshots", "jobs", "tasks", "traffic", "certificates"];
 
 export function PBSTab({ assetId }: Props) {
-  const [activeTab, setActiveTab] = useState<PBSTabId>("overview");
+  const t = useTranslations("devices-proxmox.pbs");
+  const tk = useTranslations("devices-proxmox.kit");
+  const { fetchStatus } = useStatusControls();
+  const { details, loading, error, refresh } = usePBSDetails(assetId, fetchStatus);
+  const [view, setView] = useState<PBSView>("backups");
+  const options: DiOption<PBSView>[] = VIEWS.map((id) => ({ id, label: t(`view.${id}`) }));
+  const needsDetails = view === "backups" || view === "snapshots" || view === "tasks";
 
   return (
-    <div className="space-y-0">
-      <SubTabBar
-        tabs={ALL_PBS_TABS as unknown as Array<{ id: string; label: string }>}
-        activeTab={activeTab}
-        onTabChange={(id) => setActiveTab(id as PBSTabId)}
-      />
-      {activeTab === "overview" && <PBSOverviewTab assetId={assetId} />}
-      {activeTab === "datastores" && <PBSDatastoresTab assetId={assetId} />}
-      {activeTab === "groups" && <PBSBackupGroupsTab assetId={assetId} />}
-      {activeTab === "snapshots" && <PBSSnapshotsTab assetId={assetId} />}
-      {activeTab === "verification" && <PBSVerificationTab assetId={assetId} />}
-      {activeTab === "gc" && <PBSGCTab assetId={assetId} />}
-      {activeTab === "prune-jobs" && <PBSPruneJobsTab assetId={assetId} />}
-      {activeTab === "sync-jobs" && <PBSSyncJobsTab assetId={assetId} />}
-      {activeTab === "tasks" && <PBSTasksTab assetId={assetId} />}
-      {activeTab === "traffic" && <PBSTrafficControlTab assetId={assetId} />}
-      {activeTab === "certificates" && <PBSCertificatesTab assetId={assetId} />}
-    </div>
+    <DiPage>
+      <div className="di-seg-row">
+        <DiSeg options={options} value={view} onChange={setView} label={tk("views")} inline={4} />
+      </div>
+
+      {error ? (
+        <DiNote tone="bad" action={<Button size="sm" variant="ghost" onClick={refresh} disabled={loading}>{tk("retry")}</Button>}>
+          {error}
+        </DiNote>
+      ) : null}
+
+      {needsDetails && !details ? (
+        <DiSheet>
+          <DiEmpty title={loading || !error ? t("loading") : t("unreachable")} />
+        </DiSheet>
+      ) : null}
+
+      {view === "backups" && details ? (
+        <PBSBackupsView assetId={assetId} details={details} loading={loading} onRefresh={refresh} />
+      ) : null}
+      {view === "snapshots" && details ? <PBSSnapshotsView assetId={assetId} details={details} /> : null}
+      {view === "jobs" ? <PBSJobsView assetId={assetId} details={details} onRefreshDetails={refresh} /> : null}
+      {view === "tasks" && details ? <PBSTasksView details={details} onRefreshDetails={refresh} /> : null}
+      {view === "traffic" ? <PBSTrafficView assetId={assetId} /> : null}
+      {view === "certificates" ? <PBSCertificatesView assetId={assetId} /> : null}
+    </DiPage>
   );
 }

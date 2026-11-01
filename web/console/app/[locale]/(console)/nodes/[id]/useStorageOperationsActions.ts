@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { useTranslations } from "next-intl";
 
 type RunProxmoxAction = (
   actionID: string,
@@ -21,6 +22,7 @@ export function useStorageOperationsActions({
   proxmoxCollectorID,
   storageNode,
 }: UseStorageOperationsActionsArgs) {
+  const t = useTranslations("devices-proxmox.pools");
   const [expandedTaskRef, setExpandedTaskRef] = useState<string | null>(null);
   const [taskLogLoadingRef, setTaskLogLoadingRef] = useState<string | null>(null);
   const [taskLogs, setTaskLogs] = useState<Record<string, string>>({});
@@ -56,22 +58,23 @@ export function useStorageOperationsActions({
       );
       const payload = (await res.json().catch(() => null)) as { log?: string; error?: string } | null;
       if (!res.ok) {
-        throw new Error(payload?.error || `failed to load task log (${res.status})`);
+        throw new Error(payload?.error || "");
       }
       setTaskLogs((prev) => ({
         ...prev,
-        [ref]: payload?.log?.trim() ? payload.log : "No task log output returned.",
+        [ref]: payload?.log?.trim() ? payload.log : t("noLog"),
       }));
     } catch (err) {
-      setTaskLogError(err instanceof Error ? err.message : "failed to load task log");
+      const reason = err instanceof Error ? err.message.trim() : "";
+      setTaskLogError(reason ? t("logFailedWith", { reason }) : t("logFailed"));
       setTaskLogs((prev) => ({
         ...prev,
-        [ref]: "Failed to load task log.",
+        [ref]: t("logFailed"),
       }));
     } finally {
       setTaskLogLoadingRef((prev) => (prev === ref ? null : prev));
     }
-  }, [expandedTaskRef, taskLogs, proxmoxCollectorID]);
+  }, [expandedTaskRef, taskLogs, proxmoxCollectorID, t]);
 
   const runPoolBackup = useCallback(async (
     poolName: string,
@@ -80,7 +83,7 @@ export function useStorageOperationsActions({
   ) => {
     if (!onRunProxmoxAction) return;
     if (storageNode.trim() === "") {
-      setLocalActionError("Proxmox node metadata is unavailable for this storage host.");
+      setLocalActionError(t("noNode"));
       return;
     }
 
@@ -95,9 +98,10 @@ export function useStorageOperationsActions({
       }));
       void fetchInsights();
     } catch (err) {
-      setLocalActionError(err instanceof Error ? err.message : "failed to queue backup action");
+      const reason = err instanceof Error ? err.message.trim() : "";
+      setLocalActionError(reason ? t("backupFailedWith", { reason }) : t("backupFailed"));
     }
-  }, [fetchInsights, onRunProxmoxAction, storageNode]);
+  }, [fetchInsights, onRunProxmoxAction, storageNode, t]);
 
   return {
     expandedTaskRef,

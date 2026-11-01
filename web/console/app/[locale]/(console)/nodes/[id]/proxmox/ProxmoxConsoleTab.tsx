@@ -1,9 +1,10 @@
 "use client";
 
-import { Card } from "../../../../../components/ui/Card";
+import { useTranslations } from "next-intl";
 import { Link } from "../../../../../../i18n/navigation";
 import { useAuth } from "../../../../../contexts/AuthContext";
 import { canAccessHostData } from "../../../../../lib/roles";
+import { DiEmpty, DiKV, DiSheet } from "./DiList";
 
 type Props = {
   assetId: string;
@@ -12,60 +13,32 @@ type Props = {
   effectiveKind: string;
 };
 
-export function ProxmoxConsoleTab({
-  assetId,
-  proxmoxNode,
-  proxmoxVMID,
-  effectiveKind,
-}: Props) {
-  const isVM = effectiveKind === "qemu";
-  const isCT = effectiveKind === "lxc";
-
+/** The guest's console: what kind it is and a button that opens it through the hub's desktop session. */
+export function ProxmoxConsoleTab({ assetId, proxmoxNode, proxmoxVMID, effectiveKind }: Props) {
+  const t = useTranslations("devices-proxmox.pve.console");
   const { user } = useAuth();
-  // The console opens a desktop session, which the Hub keeps for operators.
+  // The console opens a desktop session, which the hub keeps for operators.
   const consoleURL = assetId && canAccessHostData(user?.role)
     ? `/nodes/${encodeURIComponent(assetId)}?panel=desktop`
     : null;
+  const type = effectiveKind === "qemu" ? t("vnc") : effectiveKind === "lxc" ? t("lxc") : t("generic");
 
-  const consoleType = isVM ? "QEMU VNC" : isCT ? "LXC Console" : "Console";
+  if (!proxmoxNode || !proxmoxVMID) {
+    return (
+      <DiSheet>
+        <DiEmpty title={t("unavailable")} line={t("needsIds")} />
+      </DiSheet>
+    );
+  }
 
   return (
-    <Card>
-      <h2 className="mb-3 text-sm font-medium text-[var(--text)]">Console</h2>
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3 py-2">
-          <div>
-            <p className="text-sm font-medium text-[var(--text)]">Console Type</p>
-            <p className="text-xs text-[var(--muted)]">{consoleType}</p>
-          </div>
-          <span className="rounded-lg border border-[var(--line)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">
-            {effectiveKind}
-          </span>
+    <DiSheet kind="tight" className="di-pve-console">
+      <DiKV items={[[t("type"), type], [t("node"), proxmoxNode], [t("vmid"), proxmoxVMID]]} />
+      {consoleURL ? (
+        <div className="di-acts di-pve-console-acts">
+          <Link href={consoleURL} className="di-btn">{t("open")}</Link>
         </div>
-        {proxmoxNode && proxmoxVMID ? (
-          <div className="flex items-center justify-between gap-3 py-2">
-            <div>
-              <p className="text-xs text-[var(--muted)]">Node: <code>{proxmoxNode}</code></p>
-              <p className="text-xs text-[var(--muted)]">VMID: <code>{proxmoxVMID}</code></p>
-            </div>
-            {consoleURL ? (
-              <Link
-                href={consoleURL}
-                className="rounded border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text)] hover:bg-[var(--hover)] transition-colors"
-              >
-                Open Secure Console
-              </Link>
-            ) : null}
-          </div>
-        ) : (
-          <p className="text-xs text-[var(--muted)]">
-            Node and VMID are required to open a console.
-          </p>
-        )}
-        <p className="text-[10px] text-[var(--muted)]">
-          Console access uses LabTether&apos;s authenticated desktop-session bridge so generated Proxmox tickets stay server-side.
-        </p>
-      </div>
-    </Card>
+      ) : null}
+    </DiSheet>
   );
 }

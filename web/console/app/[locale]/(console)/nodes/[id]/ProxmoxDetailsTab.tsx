@@ -1,14 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "../../../../components/ui/Button";
-import { Card } from "../../../../components/ui/Card";
-import { SubTabBar } from "../../../../components/ui/SubTabBar";
 import type {
   ClusterStatusEntry,
   NetworkInterface,
   ProxmoxDetails,
 } from "./nodeDetailTypes";
+import { DiSeg } from "./proxmox/DiControls";
+import { DiEmpty, DiNote, DiPage, DiSheet } from "./proxmox/DiList";
 import { ProxmoxBackupTab } from "./proxmox/ProxmoxBackupTab";
 import { ProxmoxCephTab } from "./proxmox/ProxmoxCephTab";
 import { ProxmoxCertificatesTab } from "./proxmox/ProxmoxCertificatesTab";
@@ -25,6 +26,7 @@ import { ProxmoxSnapshotsTab } from "./proxmox/ProxmoxSnapshotsTab";
 import { ProxmoxStorageTab } from "./proxmox/ProxmoxStorageTab";
 import { ProxmoxTasksTab } from "./proxmox/ProxmoxTasksTab";
 import { ProxmoxUpdatesTab } from "./proxmox/ProxmoxUpdatesTab";
+import { proxmoxViewsFor, type ProxmoxView } from "./proxmox/proxmoxViews";
 
 type ProxmoxDetailsTabProps = {
   proxmoxDetails: ProxmoxDetails | null;
@@ -41,28 +43,10 @@ type ProxmoxDetailsTabProps = {
   nodeId: string;
   onRetry: () => void;
   onRunProxmoxQuickAction: (actionID: string, params?: Record<string, string>) => void;
+  /** The result of the last snapshot action, when the page passes it. */
+  proxmoxActionMessage?: string | null;
+  proxmoxActionError?: string | null;
 };
-
-const ALL_PROXMOX_TABS = [
-  { id: "overview", label: "Overview" },
-  { id: "snapshots", label: "Snapshots" },
-  { id: "tasks", label: "Tasks" },
-  { id: "firewall", label: "Firewall" },
-  { id: "backup", label: "Backup" },
-  { id: "storage", label: "Storage" },
-  { id: "network", label: "Network" },
-  { id: "ha", label: "HA" },
-  { id: "ceph", label: "Ceph" },
-  { id: "console", label: "Console" },
-  { id: "replication", label: "Replication" },
-  { id: "cluster", label: "Cluster" },
-  { id: "metrics", label: "Metrics" },
-  { id: "logs", label: "Logs" },
-  { id: "updates", label: "Updates" },
-  { id: "certificates", label: "Certificates" },
-] as const;
-
-type ProxmoxTabId = (typeof ALL_PROXMOX_TABS)[number]["id"];
 
 export function ProxmoxDetailsTab({
   proxmoxDetails,
@@ -79,88 +63,60 @@ export function ProxmoxDetailsTab({
   nodeId,
   onRetry,
   onRunProxmoxQuickAction,
+  proxmoxActionMessage = null,
+  proxmoxActionError = null,
 }: ProxmoxDetailsTabProps) {
-  const [activeTab, setActiveTab] = useState<ProxmoxTabId>("overview");
-
-  // Derived flags from existing proxmoxDetails (used as fallback when
-  // shaping visible tabs).
-  const hasCephFromData = !!(
-    proxmoxDetails?.ceph_status?.health?.status ||
-    (proxmoxDetails?.ceph_osds && proxmoxDetails.ceph_osds.length > 0)
-  );
-  const hasHAFromData = !!(
-    proxmoxDetails?.ha?.match ||
-    (proxmoxDetails?.ha?.resources && proxmoxDetails.ha.resources.length > 0)
-  );
-  const isVMorCT = effectiveKind === "qemu" || effectiveKind === "lxc";
-  const isNode = effectiveKind === "node";
-
-  const visibleTabs = useMemo(() => {
-    const hasCeph = hasCephFromData;
-    const hasHA = hasHAFromData;
-    return ALL_PROXMOX_TABS.filter((tab) => {
-      if (tab.id === "ceph" && !hasCeph) return false;
-      if (tab.id === "console" && !isVMorCT) return false;
-      if (tab.id === "ha" && !hasHA) return false;
-      if (tab.id === "cluster" && !isNode) return false;
-      return true;
-    });
-  }, [hasCephFromData, hasHAFromData, isVMorCT, isNode]);
-
-  // If the active tab got hidden, fall back to overview.
-  const effectiveTab: ProxmoxTabId =
-    visibleTabs.some((t) => t.id === activeTab) ? activeTab : "overview";
-
-  if (proxmoxLoading && !proxmoxDetails) {
-    return (
-      <Card className="mb-4">
-        <p className="text-sm text-[var(--muted)]">Loading Proxmox details...</p>
-      </Card>
-    );
-  }
-
-  if (proxmoxError && !proxmoxDetails) {
-    return (
-      <Card className="mb-4">
-        <div className="flex flex-col items-center justify-center gap-3 py-8">
-          <p className="text-xs text-[var(--bad)]">{proxmoxError}</p>
-          <Button size="sm" onClick={onRetry}>Retry</Button>
-        </div>
-      </Card>
-    );
-  }
+  const t = useTranslations("devices-proxmox.pve");
+  const [chosen, setChosen] = useState<ProxmoxView>("overview");
+  const views = useMemo(() => proxmoxViewsFor(effectiveKind, proxmoxDetails), [effectiveKind, proxmoxDetails]);
+  const view: ProxmoxView = views.includes(chosen) ? chosen : "overview";
 
   if (!proxmoxDetails) {
     return (
-      <Card className="mb-4">
-        <div className="flex flex-col items-center justify-center gap-2 py-12">
-          <p className="text-sm font-medium text-[var(--text)]">No Proxmox details yet</p>
-          <p className="max-w-sm text-center text-xs text-[var(--muted)]">
-            Select this tab again after the asset is discovered by the Proxmox collector.
-          </p>
-        </div>
-      </Card>
+      <DiPage>
+        <DiSheet>
+          {proxmoxLoading ? (
+            <DiEmpty title={t("loading")} />
+          ) : proxmoxError ? (
+            <DiEmpty
+              title={t("loadFailed")}
+              line={proxmoxError}
+              action={<Button size="sm" onClick={onRetry}>{t("retry")}</Button>}
+            />
+          ) : (
+            <DiEmpty title={t("noDetails")} line={t("noDetailsLine")} />
+          )}
+        </DiSheet>
+      </DiPage>
     );
   }
 
-  return (
-    <div className="space-y-0">
-      <SubTabBar
-        tabs={visibleTabs as unknown as Array<{ id: string; label: string }>}
-        activeTab={effectiveTab}
-        onTabChange={(id) => { setActiveTab(id as ProxmoxTabId); }}
-      />
+  const node = proxmoxNode || proxmoxDetails.node || "";
 
-      {effectiveTab === "overview" && (
+  return (
+    <DiPage className="di-pve">
+      <div className="di-seg-row">
+        <DiSeg
+          label={t("viewsLabel")}
+          options={views.map((id) => ({ id, label: t(`views.${id}`) }))}
+          value={view}
+          onChange={setChosen}
+        />
+      </div>
+
+      {view === "snapshots" && (proxmoxActionError || proxmoxActionMessage) ? (
+        <DiNote tone={proxmoxActionError ? "bad" : ""}>{proxmoxActionError ?? proxmoxActionMessage}</DiNote>
+      ) : null}
+
+      {view === "overview" ? (
         <ProxmoxOverviewTab
           proxmoxDetails={proxmoxDetails}
           proxmoxNode={proxmoxNode}
           proxmoxVMID={proxmoxVMID}
           effectiveKind={effectiveKind}
         />
-      )}
-
-      {effectiveTab === "snapshots" && (
+      ) : null}
+      {view === "snapshots" ? (
         <ProxmoxSnapshotsTab
           proxmoxDetails={proxmoxDetails}
           effectiveKind={effectiveKind}
@@ -168,91 +124,25 @@ export function ProxmoxDetailsTab({
           proxmoxActionRunning={proxmoxActionRunning}
           onRunProxmoxQuickAction={onRunProxmoxQuickAction}
         />
-      )}
-
-      {effectiveTab === "tasks" && (
-        <ProxmoxTasksTab
-          tasks={proxmoxDetails.tasks ?? []}
-          proxmoxCollectorID={proxmoxCollectorID}
-          onRetry={onRetry}
-        />
-      )}
-
-      {effectiveTab === "firewall" && (
-        <ProxmoxFirewallTab proxmoxDetails={proxmoxDetails} />
-      )}
-
-      {effectiveTab === "backup" && (
-        <ProxmoxBackupTab proxmoxDetails={proxmoxDetails} />
-      )}
-
-      {effectiveTab === "storage" && (
-        <ProxmoxStorageTab
-          proxmoxDetails={proxmoxDetails}
-          clusterStatus={clusterStatus}
-          networkInterfaces={networkInterfaces}
-        />
-      )}
-
-      {effectiveTab === "network" && (
-        <ProxmoxNetworkTab networkInterfaces={networkInterfaces} />
-      )}
-
-      {effectiveTab === "ha" && hasHAFromData && (
-        <ProxmoxHATab proxmoxDetails={proxmoxDetails} />
-      )}
-
-      {effectiveTab === "ceph" && hasCephFromData && (
-        <ProxmoxCephTab proxmoxDetails={proxmoxDetails} />
-      )}
-
-      {effectiveTab === "console" && isVMorCT && (
-        <ProxmoxConsoleTab
-          assetId={nodeId}
-          proxmoxNode={proxmoxNode}
-          proxmoxVMID={proxmoxVMID}
-          effectiveKind={effectiveKind}
-        />
-      )}
-
-      {effectiveTab === "replication" && (
-        <ProxmoxReplicationTab
-          proxmoxNode={proxmoxNode}
-          proxmoxCollectorID={proxmoxCollectorID}
-        />
-      )}
-
-      {effectiveTab === "cluster" && isNode && (
-        <ProxmoxClusterTab clusterStatus={clusterStatus} />
-      )}
-
-      {effectiveTab === "metrics" && (
-        <ProxmoxMetricsTab
-          assetId={nodeId}
-          proxmoxCollectorID={proxmoxCollectorID}
-        />
-      )}
-
-      {effectiveTab === "logs" && (
-        <ProxmoxLogsTab
-          proxmoxNode={proxmoxNode}
-          proxmoxCollectorID={proxmoxCollectorID}
-        />
-      )}
-
-      {effectiveTab === "updates" && (
-        <ProxmoxUpdatesTab
-          proxmoxNode={proxmoxNode}
-          proxmoxCollectorID={proxmoxCollectorID}
-        />
-      )}
-
-      {effectiveTab === "certificates" && (
-        <ProxmoxCertificatesTab
-          proxmoxNode={proxmoxNode}
-          proxmoxCollectorID={proxmoxCollectorID}
-        />
-      )}
-    </div>
+      ) : null}
+      {view === "tasks" ? (
+        <ProxmoxTasksTab tasks={proxmoxDetails.tasks ?? []} proxmoxCollectorID={proxmoxCollectorID} onRetry={onRetry} />
+      ) : null}
+      {view === "backup" ? <ProxmoxBackupTab proxmoxDetails={proxmoxDetails} /> : null}
+      {view === "storage" ? <ProxmoxStorageTab proxmoxDetails={proxmoxDetails} /> : null}
+      {view === "network" ? <ProxmoxNetworkTab networkInterfaces={networkInterfaces} /> : null}
+      {view === "firewall" ? <ProxmoxFirewallTab proxmoxDetails={proxmoxDetails} /> : null}
+      {view === "ha" ? <ProxmoxHATab proxmoxDetails={proxmoxDetails} /> : null}
+      {view === "ceph" ? <ProxmoxCephTab proxmoxDetails={proxmoxDetails} /> : null}
+      {view === "console" ? (
+        <ProxmoxConsoleTab assetId={nodeId} proxmoxNode={node} proxmoxVMID={proxmoxVMID} effectiveKind={effectiveKind} />
+      ) : null}
+      {view === "replication" ? <ProxmoxReplicationTab proxmoxNode={node} proxmoxCollectorID={proxmoxCollectorID} /> : null}
+      {view === "cluster" ? <ProxmoxClusterTab clusterStatus={clusterStatus} /> : null}
+      {view === "metrics" ? <ProxmoxMetricsTab assetId={nodeId} proxmoxCollectorID={proxmoxCollectorID} /> : null}
+      {view === "logs" ? <ProxmoxLogsTab proxmoxNode={node} proxmoxCollectorID={proxmoxCollectorID} /> : null}
+      {view === "updates" ? <ProxmoxUpdatesTab proxmoxNode={node} proxmoxCollectorID={proxmoxCollectorID} /> : null}
+      {view === "certificates" ? <ProxmoxCertificatesTab proxmoxNode={node} proxmoxCollectorID={proxmoxCollectorID} /> : null}
+    </DiPage>
   );
 }

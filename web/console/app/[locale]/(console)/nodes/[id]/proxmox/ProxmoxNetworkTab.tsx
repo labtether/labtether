@@ -1,63 +1,46 @@
 "use client";
 
-import { Badge } from "../../../../../components/ui/Badge";
-import { Card } from "../../../../../components/ui/Card";
+import { useTranslations } from "next-intl";
 import type { NetworkInterface } from "../nodeDetailTypes";
+import { DiCols, DiDots, DiEmpty, DiList, DiMain, DiRow } from "./DiList";
 
 type Props = {
   networkInterfaces: NetworkInterface[];
 };
 
+/** The node's network interfaces as Proxmox configures them: type, address, gateway, bridge ports and method. */
 export function ProxmoxNetworkTab({ networkInterfaces }: Props) {
+  const t = useTranslations("devices-proxmox.pve.network");
+  const list = [...networkInterfaces].sort((left, right) => (left.iface ?? "").localeCompare(right.iface ?? ""));
+
   return (
-    <Card>
-      <h2 className="mb-3 text-sm font-medium text-[var(--text)]">
-        Network Interfaces{networkInterfaces.length > 0 ? ` (${networkInterfaces.length})` : ""}
-      </h2>
-      {networkInterfaces.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-[var(--line)]">
-                <th className="px-2 py-1 text-left font-medium text-[var(--muted)]">Interface</th>
-                <th className="px-2 py-1 text-left font-medium text-[var(--muted)]">Type</th>
-                <th className="px-2 py-1 text-left font-medium text-[var(--muted)]">Address / CIDR</th>
-                <th className="px-2 py-1 text-left font-medium text-[var(--muted)]">Gateway</th>
-                <th className="px-2 py-1 text-left font-medium text-[var(--muted)]">Bridge Ports</th>
-                <th className="px-2 py-1 text-left font-medium text-[var(--muted)]">Method</th>
-                <th className="px-2 py-1 text-left font-medium text-[var(--muted)]">Active</th>
-                <th className="px-2 py-1 text-left font-medium text-[var(--muted)]">Autostart</th>
-              </tr>
-            </thead>
-            <tbody>
-              {networkInterfaces.map((iface, idx) => (
-                <tr key={`${iface.iface ?? "iface"}-${idx}`} className="border-b border-[var(--line)] border-opacity-30">
-                  <td className="px-2 py-1 font-medium text-[var(--text)]">{iface.iface || "-"}</td>
-                  <td className="px-2 py-1 text-[var(--muted)]">{iface.type || "-"}</td>
-                  <td className="px-2 py-1 font-mono text-[10px] text-[var(--muted)]">
-                    {iface.cidr || iface.address || "-"}
-                  </td>
-                  <td className="px-2 py-1 font-mono text-[10px] text-[var(--muted)]">
-                    {iface.gateway || "-"}
-                  </td>
-                  <td className="px-2 py-1 text-[var(--muted)]">{iface.bridge_ports || "-"}</td>
-                  <td className="px-2 py-1 text-[var(--muted)]">{iface.method || "-"}</td>
-                  <td className="px-2 py-1">
-                    <Badge status={iface.active === 1 ? "ok" : "bad"} size="sm" />
-                  </td>
-                  <td className="px-2 py-1">
-                    <span className={iface.autostart === 1 ? "text-[var(--ok)]" : "text-[var(--muted)]"}>
-                      {iface.autostart === 1 ? "Yes" : "No"}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <p className="text-xs text-[var(--muted)]">No network interfaces returned.</p>
-      )}
-    </Card>
+    <DiList cols="minmax(0, 1fr) minmax(120px, 200px) 80px" colsS="minmax(0, 1fr) auto" label={t("label")}>
+      <DiCols>
+        <span>{t("interface")}</span>
+        <span className="di-s">{t("address")}</span>
+        <span className="r">{t("state")}</span>
+      </DiCols>
+      {list.length === 0 ? <DiEmpty title={t("none")} /> : null}
+      {list.map((iface, index) => (
+        <DiRow key={`${iface.iface ?? "iface"}-${index}`}>
+          <DiMain
+            name={iface.iface || "—"}
+            grey={
+              <DiDots
+                parts={[
+                  iface.type || null,
+                  iface.bridge_ports ? t("ports", { ports: iface.bridge_ports }) : null,
+                  iface.gateway ? t("gateway", { gateway: iface.gateway }) : null,
+                  iface.method || null,
+                  iface.autostart === 1 ? t("autostart") : null,
+                ]}
+              />
+            }
+          />
+          <span className="di-num di-s">{iface.cidr || iface.address || "—"}</span>
+          <span className={`di-num${iface.active === 1 ? "" : " none"}`}>{iface.active === 1 ? t("active") : t("inactive")}</span>
+        </DiRow>
+      ))}
+    </DiList>
   );
 }

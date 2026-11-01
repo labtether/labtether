@@ -1,287 +1,103 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { Badge } from "../../../../../components/ui/Badge";
-import { Button } from "../../../../../components/ui/Button";
-import { Card } from "../../../../../components/ui/Card";
+// SMB and NFS shares in one list: the path, then the kind and its name, comment, networks and hosts in grey; a switch
+// turns a share on or off. Delete sits behind ⋯ and asks first.
+
+import { useTranslations } from "next-intl";
+import { DiCols, DiDots, DiList, DiMain, DiNote, DiRow } from "../proxmox/DiList";
+import { DiRowMenu, useDiConfirm } from "../proxmox/DiControls";
+import { failureText } from "./truenasModel";
+import { TnFailure, TnListState, TnSwitch } from "./TrueNASParts";
+import type { TrueNASNFSShare, TrueNASSMBShare } from "./truenasTypes";
+import { useTrueNASAction } from "./useTrueNASAction";
 import { truenasAction, useTrueNASList } from "./useTrueNASData";
 
-export type TrueNASSMBShare = {
-  id: string | number;
-  name: string;
-  path: string;
-  enabled: boolean;
-  comment?: string;
-};
+export type { TrueNASNFSShare, TrueNASSMBShare } from "./truenasTypes";
 
-export type TrueNASNFSShare = {
-  id: string | number;
-  path: string;
-  enabled: boolean;
-  networks?: string[];
-  hosts?: string[];
-};
+type Kind = "smb" | "nfs";
+type ShareRow = { kind: Kind; id: string | number; path: string; enabled: boolean; grey: Array<string | undefined> };
 
-type Props = {
-  assetId: string;
-};
+export function TrueNASSharesTab({ assetId }: { assetId: string }) {
+  const t = useTranslations("devices-truenas.shares");
+  const k = useTranslations("devices-proxmox.kit");
+  const smb = useTrueNASList<TrueNASSMBShare>(assetId, "shares/smb");
+  const nfs = useTrueNASList<TrueNASNFSShare>(assetId, "shares/nfs");
+  const action = useTrueNASAction();
+  const { ask, dialog } = useDiConfirm();
 
-function enabledBadge(enabled: boolean): "ok" | "bad" {
-  return enabled ? "ok" : "bad";
-}
+  const kindWord = (kind: Kind) => (kind === "smb" ? t("smb") : t("nfs"));
+  const path = (row: ShareRow) => `/api/truenas/assets/${encodeURIComponent(assetId)}/shares/${row.kind}/${encodeURIComponent(String(row.id))}`;
+  const refreshKind = (kind: Kind) => (kind === "smb" ? smb.refresh() : nfs.refresh());
 
-export function TrueNASSharesTab({ assetId }: Props) {
-  const {
-    data: smbShares,
-    loading: smbLoading,
-    error: smbError,
-    refresh: refreshSmb,
-  } = useTrueNASList<TrueNASSMBShare>(assetId, "shares/smb");
-  const {
-    data: nfsShares,
-    loading: nfsLoading,
-    error: nfsError,
-    refresh: refreshNfs,
-  } = useTrueNASList<TrueNASNFSShare>(assetId, "shares/nfs");
+  const rows: ShareRow[] = [
+    ...smb.data.map((share): ShareRow => ({
+      kind: "smb", id: share.id, path: share.path, enabled: share.enabled, grey: [t("smb"), share.name, share.comment],
+    })),
+    ...nfs.data.map((share): ShareRow => ({
+      kind: "nfs", id: share.id, path: share.path, enabled: share.enabled,
+      grey: [
+        t("nfs"),
+        share.networks?.length ? t("networks", { list: share.networks.join(", ") }) : undefined,
+        share.hosts?.length ? t("hosts", { list: share.hosts.join(", ") }) : undefined,
+      ],
+    })),
+  ];
 
-  const [actionInFlight, setActionInFlight] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const actionSeq = useRef(0);
+  const toggle = (row: ShareRow) => {
+    void action.run(`toggle:${row.path}`, () => truenasAction(path(row), "PUT", { enabled: !row.enabled }), () => refreshKind(row.kind));
+  };
 
-  const doToggle = useCallback(
-    async (type: "smb" | "nfs", id: string | number, enabled: boolean) => {
-      const seq = ++actionSeq.current;
-      setActionError(null);
-      setActionInFlight(`toggle-${type}-${id}`);
-      try {
-        await truenasAction(
-          `/api/truenas/assets/${encodeURIComponent(assetId)}/shares/${type}/${encodeURIComponent(String(id))}`,
-          "PUT",
-          { enabled: !enabled },
-        );
-        if (actionSeq.current === seq) {
-          type === "smb" ? refreshSmb() : refreshNfs();
-        }
-      } catch (err) {
-        if (actionSeq.current === seq) {
-          setActionError(err instanceof Error ? err.message : "toggle failed");
-        }
-      } finally {
-        if (actionSeq.current === seq) setActionInFlight(null);
-      }
-    },
-    [assetId, refreshSmb, refreshNfs],
-  );
+  const remove = (row: ShareRow) => ask({
+    title: t("deleteTitle", { kind: kindWord(row.kind), path: row.path }),
+    message: t("deleteBody"),
+    confirmLabel: t("deleteConfirm"),
+    onConfirm: () => action.run(`delete:${row.path}`, () => truenasAction(path(row), "DELETE"), () => refreshKind(row.kind)),
+  });
 
-  const doDelete = useCallback(
-    async (type: "smb" | "nfs", id: string | number) => {
-      const seq = ++actionSeq.current;
-      setActionError(null);
-      setActionInFlight(`delete-${type}-${id}`);
-      setConfirmDelete(null);
-      try {
-        await truenasAction(
-          `/api/truenas/assets/${encodeURIComponent(assetId)}/shares/${type}/${encodeURIComponent(String(id))}`,
-          "DELETE",
-        );
-        if (actionSeq.current === seq) {
-          type === "smb" ? refreshSmb() : refreshNfs();
-        }
-      } catch (err) {
-        if (actionSeq.current === seq) {
-          setActionError(err instanceof Error ? err.message : "delete failed");
-        }
-      } finally {
-        if (actionSeq.current === seq) setActionInFlight(null);
-      }
-    },
-    [assetId, refreshSmb, refreshNfs],
-  );
-
-  const loading = smbLoading || nfsLoading;
+  const failure = action.error
+    ? t(action.error.key.startsWith("toggle:") ? "toggleFailed" : "deleteFailed", {
+        path: action.error.key.split(":").slice(1).join(":"),
+        reason: failureText(action.error.message, t("noReason")),
+      })
+    : null;
+  const listError = rows.length === 0 ? (smb.error ?? nfs.error) : null;
 
   return (
-    <div className="space-y-4">
-      {actionError ? (
-        <div className="rounded-md border border-[var(--bad)] px-3 py-2">
-          <p className="text-xs text-[var(--bad)]">{actionError}</p>
-        </div>
-      ) : null}
-
-      <Card>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-medium text-[var(--text)]">SMB Shares</h2>
-          <Button size="sm" variant="ghost" onClick={refreshSmb} disabled={smbLoading}>
-            {smbLoading ? "Refreshing…" : "Refresh"}
-          </Button>
-        </div>
-        {smbError ? (
-          <p className="text-xs text-[var(--bad)]">{smbError}</p>
-        ) : smbShares.length === 0 ? (
-          <p className="text-sm text-[var(--muted)]">No SMB shares found.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-[var(--line)]">
-                  <th className="py-2 text-left font-medium text-[var(--muted)]">Name</th>
-                  <th className="py-2 text-left font-medium text-[var(--muted)]">Path</th>
-                  <th className="py-2 text-left font-medium text-[var(--muted)]">Enabled</th>
-                  <th className="py-2 text-left font-medium text-[var(--muted)]">Comment</th>
-                  <th className="py-2 text-right font-medium text-[var(--muted)]">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--line)]">
-                {smbShares.map((share) => (
-                  <tr key={String(share.id)}>
-                    <td className="py-2 font-medium text-[var(--text)]">{share.name}</td>
-                    <td className="py-2 text-[var(--muted)] max-w-[180px] truncate">{share.path}</td>
-                    <td className="py-2">
-                      <div className="flex items-center gap-2">
-                        <Badge status={enabledBadge(share.enabled)} size="sm" dot />
-                        <span className="text-[var(--muted)]">{share.enabled ? "Yes" : "No"}</span>
-                      </div>
-                    </td>
-                    <td className="py-2 text-[var(--muted)]">{share.comment || "--"}</td>
-                    <td className="py-2 text-right">
-                      {confirmDelete === `smb-${share.id}` ? (
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            loading={actionInFlight === `delete-smb-${share.id}`}
-                            onClick={() => { void doDelete("smb", share.id); }}
-                          >
-                            Confirm
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setConfirmDelete(null)}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={!!actionInFlight}
-                            loading={actionInFlight === `toggle-smb-${share.id}`}
-                            onClick={() => { void doToggle("smb", share.id, share.enabled); }}
-                          >
-                            {share.enabled ? "Disable" : "Enable"}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={!!actionInFlight}
-                            onClick={() => setConfirmDelete(`smb-${share.id}`)}
-                          >
-                            Delete
-                          </Button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-
-      <Card>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-medium text-[var(--text)]">NFS Shares</h2>
-          <Button size="sm" variant="ghost" onClick={refreshNfs} disabled={nfsLoading}>
-            {nfsLoading ? "Refreshing…" : "Refresh"}
-          </Button>
-        </div>
-        {nfsError ? (
-          <p className="text-xs text-[var(--bad)]">{nfsError}</p>
-        ) : nfsShares.length === 0 ? (
-          <p className="text-sm text-[var(--muted)]">No NFS shares found.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-[var(--line)]">
-                  <th className="py-2 text-left font-medium text-[var(--muted)]">Path</th>
-                  <th className="py-2 text-left font-medium text-[var(--muted)]">Enabled</th>
-                  <th className="py-2 text-left font-medium text-[var(--muted)]">Networks</th>
-                  <th className="py-2 text-left font-medium text-[var(--muted)]">Hosts</th>
-                  <th className="py-2 text-right font-medium text-[var(--muted)]">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--line)]">
-                {nfsShares.map((share) => (
-                  <tr key={String(share.id)}>
-                    <td className="py-2 font-medium text-[var(--text)] max-w-[180px] truncate">
-                      {share.path}
-                    </td>
-                    <td className="py-2">
-                      <div className="flex items-center gap-2">
-                        <Badge status={enabledBadge(share.enabled)} size="sm" dot />
-                        <span className="text-[var(--muted)]">{share.enabled ? "Yes" : "No"}</span>
-                      </div>
-                    </td>
-                    <td className="py-2 text-[var(--muted)]">
-                      {share.networks?.join(", ") || "--"}
-                    </td>
-                    <td className="py-2 text-[var(--muted)]">
-                      {share.hosts?.join(", ") || "--"}
-                    </td>
-                    <td className="py-2 text-right">
-                      {confirmDelete === `nfs-${share.id}` ? (
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            loading={actionInFlight === `delete-nfs-${share.id}`}
-                            onClick={() => { void doDelete("nfs", share.id); }}
-                          >
-                            Confirm
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setConfirmDelete(null)}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={!!actionInFlight}
-                            loading={actionInFlight === `toggle-nfs-${share.id}`}
-                            onClick={() => { void doToggle("nfs", share.id, share.enabled); }}
-                          >
-                            {share.enabled ? "Disable" : "Enable"}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={!!actionInFlight}
-                            onClick={() => setConfirmDelete(`nfs-${share.id}`)}
-                          >
-                            Delete
-                          </Button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-    </div>
+    <>
+      {rows.length > 0 && smb.error ? <DiNote tone="bad">{t("smbFailed", { reason: failureText(smb.error, t("noReason")) })}</DiNote> : null}
+      {rows.length > 0 && nfs.error ? <DiNote tone="bad">{t("nfsFailed", { reason: failureText(nfs.error, t("noReason")) })}</DiNote> : null}
+      <TnFailure message={failure} />
+      <DiList label={t("label")} cols="minmax(0, 1fr) 40px 28px" colsS="minmax(0, 1fr) 40px 28px">
+        <DiCols>
+          <span>{t("colPath")}</span>
+          <span>{t("colOn")}</span>
+          <span />
+        </DiCols>
+        <TnListState
+          loading={smb.loading || nfs.loading}
+          error={listError}
+          count={rows.length}
+          empty={t("empty")}
+          onRetry={() => { smb.refresh(); nfs.refresh(); }}
+          failed={(reason) => t("loadFailed", { reason })}
+        />
+        {rows.map((row) => (
+          <DiRow key={`${row.kind}-${row.id}`}>
+            <DiMain name={row.path} mono grey={<DiDots parts={row.grey} />} />
+            <TnSwitch
+              on={row.enabled}
+              label={t("switch", { kind: kindWord(row.kind), path: row.path })}
+              disabled={action.busy !== null}
+              onToggle={() => toggle(row)}
+            />
+            <DiRowMenu
+              label={k("actionsFor", { name: row.path })}
+              items={[{ label: t("delete"), danger: true, disabled: action.busy !== null, onSelect: () => remove(row) }]}
+            />
+          </DiRow>
+        ))}
+      </DiList>
+      {dialog}
+    </>
   );
 }

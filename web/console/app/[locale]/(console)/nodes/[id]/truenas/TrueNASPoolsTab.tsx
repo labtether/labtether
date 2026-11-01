@@ -1,216 +1,131 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { Badge } from "../../../../../components/ui/Badge";
+// The pools of a TrueNAS device, one line each: name, layout and scrub as grey text (the health word replaces them
+// when the pool is not ONLINE), a one-hue meter, the percent and "used of total", and Scrub now. A click on the line
+// opens its layout (vdevs and disks), free space and fragmentation.
+
+import { useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { Button } from "../../../../../components/ui/Button";
-import { Card } from "../../../../../components/ui/Card";
-import { formatBytes, formatRelativeTime } from "../truenasTabModel";
+import { DiDot, DiDots, DiKV, DiList, DiMain, DiRow, DiUsage } from "../proxmox/DiList";
+import { percentOf, sizeText, whenText } from "../proxmox/diFormat";
+import { failureText, healthTone, poolLayout, sortPools } from "./truenasModel";
+import { TnFailure, TnListState, useHealthWord } from "./TrueNASParts";
+import type { TrueNASPool, TrueNASVdev } from "./truenasTypes";
+import { useTrueNASAction } from "./useTrueNASAction";
 import { truenasAction, useTrueNASList } from "./useTrueNASData";
 
-export type TrueNASVdev = {
-  name: string;
-  type: string;
-  status: string;
-  children?: TrueNASVdev[];
-};
-
-export type TrueNASPool = {
-  id: string | number;
-  name: string;
-  status: string;
-  size?: number;
-  allocated?: number;
-  free?: number;
-  fragmentation?: number;
-  last_scrub?: string;
-  topology?: TrueNASVdev[];
-};
-
-function poolStatusBadge(status: string): "ok" | "pending" | "bad" {
-  const s = status.toUpperCase();
-  if (s === "ONLINE") return "ok";
-  if (s === "DEGRADED") return "pending";
-  return "bad";
-}
+export type { TrueNASPool, TrueNASVdev } from "./truenasTypes";
 
 function VdevTree({ vdevs, depth = 0 }: { vdevs: TrueNASVdev[]; depth?: number }) {
+  const word = useHealthWord();
   return (
-    <ul className="space-y-0.5">
-      {vdevs.map((v, idx) => (
-        <li key={idx} style={{ paddingLeft: `${depth * 16}px` }}>
-          <div className="flex items-center gap-2 text-xs py-0.5">
-            <Badge status={poolStatusBadge(v.status)} size="sm" dot />
-            <span className="text-[var(--text)]">{v.name}</span>
-            <span className="text-[var(--muted)]">{v.type}</span>
-          </div>
-          {v.children && v.children.length > 0 ? (
-            <VdevTree vdevs={v.children} depth={depth + 1} />
-          ) : null}
-        </li>
-      ))}
+    <ul className="di-tn-vdevs">
+      {vdevs.map((vdev, index) => {
+        const tone = healthTone(vdev.status);
+        return (
+          <li key={`${vdev.name}-${index}`}>
+            <span className="di-tn-vdev" style={{ paddingLeft: depth * 16 }}>
+              {tone ? <DiDot tone={tone} /> : null}
+              <span className="di-mono">{vdev.name}</span>
+              <span className="di-grey">{vdev.type}{tone ? ` · ${word(vdev.status)}` : ""}</span>
+            </span>
+            {vdev.children && vdev.children.length > 0 ? <VdevTree vdevs={vdev.children} depth={depth + 1} /> : null}
+          </li>
+        );
+      })}
     </ul>
   );
 }
 
-type Props = {
-  assetId: string;
-};
-
-export function TrueNASPoolsTab({ assetId }: Props) {
-  const { data: pools, loading, error, refresh } = useTrueNASList<TrueNASPool>(assetId, "pools");
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [actionInFlight, setActionInFlight] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const actionSeq = useRef(0);
-
-  const sorted = [...(Array.isArray(pools) ? pools : [])].sort((a, b) => {
-    const priority = (s: string) => {
-      const u = s.toUpperCase();
-      if (u === "FAULTED") return 0;
-      if (u === "DEGRADED") return 1;
-      return 2;
-    };
-    return priority(a.status) - priority(b.status);
-  });
-
-  const toggleExpand = useCallback((name: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) {
-        next.delete(name);
-      } else {
-        next.add(name);
-      }
-      return next;
-    });
-  }, []);
-
-  const doScrub = useCallback(
-    async (poolName: string) => {
-      const id = ++actionSeq.current;
-      setActionError(null);
-      setActionInFlight(`scrub-${poolName}`);
-      try {
-        await truenasAction(
-          `/api/truenas/assets/${encodeURIComponent(assetId)}/pools/${encodeURIComponent(poolName)}/scrub`,
-          "POST",
-        );
-        if (actionSeq.current === id) {
-          refresh();
-        }
-      } catch (err) {
-        if (actionSeq.current === id) {
-          setActionError(err instanceof Error ? err.message : "scrub failed");
-        }
-      } finally {
-        if (actionSeq.current === id) {
-          setActionInFlight(null);
-        }
-      }
-    },
-    [assetId, refresh],
+function PoolDetails({ pool }: { pool: TrueNASPool }) {
+  const t = useTranslations("devices-truenas.pools");
+  return (
+    <div className="di-tn-pool-x">
+      <DiKV
+        columns={2}
+        items={[
+          [t("free"), sizeText(pool.free)],
+          [t("fragmentation"), pool.fragmentation != null ? `${pool.fragmentation}%` : ""],
+        ]}
+      />
+      {pool.topology && pool.topology.length > 0 ? <VdevTree vdevs={pool.topology} /> : null}
+    </div>
   );
+}
 
-  if (loading && pools.length === 0) {
-    return <Card><p className="text-sm text-[var(--muted)]">Loading pools…</p></Card>;
-  }
+/** The pool lines, from a pools list the caller fetched. */
+export function TrueNASPoolLines({ assetId, pools, loading, error, onRefresh }: {
+  assetId: string;
+  pools: TrueNASPool[];
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+}) {
+  const t = useTranslations("devices-truenas.pools");
+  const locale = useLocale();
+  const word = useHealthWord();
+  const [open, setOpen] = useState<string | null>(null);
+  const action = useTrueNASAction();
 
-  if (error && pools.length === 0) {
-    return <Card><p className="text-sm text-[var(--bad)]">{error}</p></Card>;
-  }
+  const layoutText = (pool: TrueNASPool) => {
+    const layout = poolLayout(pool.topology);
+    if (!layout) return "";
+    const kind = layout.kind === "STRIPE" ? t("stripe") : layout.kind === "MIRROR" ? t("mirror") : layout.kind;
+    const shape = layout.groups > 1 ? t("groups", { groups: layout.groups, kind }) : kind;
+    return `${shape} · ${t("disks", { count: layout.disks })}`;
+  };
+
+  const scrub = (pool: TrueNASPool) => {
+    void action.run(pool.name, () => truenasAction(
+      `/api/truenas/assets/${encodeURIComponent(assetId)}/pools/${encodeURIComponent(pool.name)}/scrub`,
+      "POST",
+    ), onRefresh);
+  };
 
   return (
-    <Card>
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-medium text-[var(--text)]">Storage Pools</h2>
-        <Button size="sm" variant="ghost" onClick={refresh} disabled={loading}>
-          {loading ? "Refreshing…" : "Refresh"}
-        </Button>
-      </div>
-      {actionError ? <p className="mb-3 text-xs text-[var(--bad)]">{actionError}</p> : null}
-      {sorted.length === 0 ? (
-        <p className="text-sm text-[var(--muted)]">No pools found.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-[var(--line)]">
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Name</th>
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Status</th>
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Size</th>
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Used</th>
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Free</th>
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Frag %</th>
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Last Scrub</th>
-                <th className="py-2 text-right font-medium text-[var(--muted)]">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--line)]">
-              {sorted.map((pool) => {
-                const key = pool.name;
-                const isExpanded = expanded.has(key);
-                const hasTopology = (pool.topology?.length ?? 0) > 0;
-                return (
-                  <>
-                    <tr key={key}>
-                      <td className="py-2 font-medium text-[var(--text)]">
-                        {hasTopology ? (
-                          <button
-                            className="text-[var(--accent)] hover:underline mr-1"
-                            onClick={() => toggleExpand(key)}
-                          >
-                            {isExpanded ? "▾" : "▸"}
-                          </button>
-                        ) : null}
-                        {pool.name}
-                      </td>
-                      <td className="py-2">
-                        <div className="flex items-center gap-2">
-                          <Badge status={poolStatusBadge(pool.status)} size="sm" />
-                          <span className="text-[var(--muted)]">{pool.status}</span>
-                        </div>
-                      </td>
-                      <td className="py-2 text-[var(--muted)]">
-                        {pool.size != null ? formatBytes(pool.size) : "--"}
-                      </td>
-                      <td className="py-2 text-[var(--muted)]">
-                        {pool.allocated != null ? formatBytes(pool.allocated) : "--"}
-                      </td>
-                      <td className="py-2 text-[var(--muted)]">
-                        {pool.free != null ? formatBytes(pool.free) : "--"}
-                      </td>
-                      <td className="py-2 text-[var(--muted)]">
-                        {pool.fragmentation != null ? `${pool.fragmentation}%` : "--"}
-                      </td>
-                      <td className="py-2 text-[var(--muted)]">
-                        {pool.last_scrub ? formatRelativeTime(pool.last_scrub) : "--"}
-                      </td>
-                      <td className="py-2 text-right">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={!!actionInFlight}
-                          loading={actionInFlight === `scrub-${pool.name}`}
-                          onClick={() => { void doScrub(pool.name); }}
-                        >
-                          Scrub
-                        </Button>
-                      </td>
-                    </tr>
-                    {isExpanded && hasTopology ? (
-                      <tr key={`${key}-topology`}>
-                        <td colSpan={8} className="py-2 px-4 bg-[var(--surface)]">
-                          <VdevTree vdevs={pool.topology!} />
-                        </td>
-                      </tr>
-                    ) : null}
-                  </>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Card>
+    <>
+      <TnFailure message={action.error ? t("scrubFailed", { pool: action.error.key, reason: failureText(action.error.message, t("noReason")) }) : null} />
+      <DiList
+        className="di-tn-pools"
+        label={t("label")}
+        cols="minmax(0, 1fr) minmax(48px, 160px) 44px 112px auto"
+        colsM="minmax(0, 1fr) 44px 112px auto"
+        colsS="minmax(0, 1fr) 44px auto"
+      >
+        <TnListState loading={loading} error={error} count={pools.length} empty={t("empty")} onRetry={onRefresh} failed={(reason) => t("loadFailed", { reason })} />
+        {sortPools(pools).map((pool) => {
+          const tone = healthTone(pool.status);
+          const scrubbed = pool.last_scrub ? t("lastScrub", { when: whenText(pool.last_scrub, locale) }) : t("neverScrubbed");
+          const expanded = open === pool.name;
+          return (
+            <DiRow
+              key={pool.name}
+              selected={expanded}
+              onOpen={() => setOpen(expanded ? null : pool.name)}
+              after={expanded ? <PoolDetails pool={pool} /> : null}
+            >
+              <DiMain
+                name={pool.name}
+                grey={<DiDots parts={[layoutText(pool), scrubbed]} />}
+                problem={tone ? { tone: tone === "warn" ? "warn" : "bad", text: word(pool.status) } : null}
+              />
+              <DiUsage pct={percentOf(pool.allocated, pool.size)} used={pool.allocated} total={pool.size} />
+              <span className="di-acts">
+                <Button size="sm" variant="ghost" disabled={action.busy !== null} loading={action.busy === pool.name} onClick={() => scrub(pool)}>
+                  {t("scrub")}
+                </Button>
+              </span>
+            </DiRow>
+          );
+        })}
+      </DiList>
+    </>
   );
+}
+
+/** The pools on their own, fetching them (the tab passes its own list to TrueNASPoolLines instead). */
+export function TrueNASPoolsTab({ assetId }: { assetId: string }) {
+  const { data, loading, error, refresh } = useTrueNASList<TrueNASPool>(assetId, "pools");
+  return <TrueNASPoolLines assetId={assetId} pools={data} loading={loading} error={error} onRefresh={refresh} />;
 }

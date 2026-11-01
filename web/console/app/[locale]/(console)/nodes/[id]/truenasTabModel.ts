@@ -45,23 +45,6 @@ export type TrueNASEventsResponse = {
   error?: string;
 };
 
-export type TrueNASFilesystemEntry = {
-  name: string;
-  path: string;
-  type: string;
-  size_bytes?: number;
-  modified_at?: string;
-  is_directory: boolean;
-  is_symbolic?: boolean;
-};
-
-export type TrueNASFilesystemResponse = {
-  path?: string;
-  parent_path?: string;
-  entries?: TrueNASFilesystemEntry[];
-  error?: string;
-};
-
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -150,60 +133,4 @@ export function normalizeTrueNASEventsResponse(value: unknown): TrueNASEventsRes
     fetched_at: asString(raw.fetched_at),
     error: asString(raw.error),
   };
-}
-
-export function normalizeTrueNASFilesystemResponse(value: unknown): TrueNASFilesystemResponse {
-  const raw = asRecord(value) ?? {};
-  return {
-    path: asString(raw.path),
-    parent_path: asString(raw.parent_path),
-    entries: Array.isArray(raw.entries)
-      ? raw.entries.map((entry) => {
-          const file = asRecord(entry) ?? {};
-          return {
-            name: asString(file.name) ?? "",
-            path: asString(file.path) ?? "",
-            type: asString(file.type) ?? "",
-            size_bytes: asNumber(file.size_bytes),
-            modified_at: asString(file.modified_at),
-            is_directory: typeof file.is_directory === "boolean" ? file.is_directory : false,
-            is_symbolic: typeof file.is_symbolic === "boolean" ? file.is_symbolic : undefined,
-          };
-        })
-      : [],
-    error: asString(raw.error),
-  };
-}
-
-export function diskStatusBadge(status: string): "ok" | "pending" | "bad" {
-  const normalized = status.toLowerCase();
-  if (normalized === "critical") return "bad";
-  if (normalized === "warning") return "pending";
-  return "ok";
-}
-
-export function eventLevelBadge(level: string): "ok" | "pending" | "bad" {
-  const normalized = level.toLowerCase();
-  if (normalized.includes("error") || normalized.includes("crit")) return "bad";
-  if (normalized.includes("warn")) return "pending";
-  return "ok";
-}
-
-export function formatRelativeTime(raw: string): string {
-  const timestamp = new Date(raw).getTime();
-  if (!Number.isFinite(timestamp)) return "n/a";
-  const diffMs = Date.now() - timestamp;
-  if (diffMs < 60_000) return `${Math.max(1, Math.floor(diffMs / 1000))}s ago`;
-  if (diffMs < 3_600_000) return `${Math.floor(diffMs / 60_000)}m ago`;
-  if (diffMs < 86_400_000) return `${Math.floor(diffMs / 3_600_000)}h ago`;
-  return `${Math.floor(diffMs / 86_400_000)}d ago`;
-}
-
-export function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes < 0) return "-";
-  if (bytes < 1) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
-  const index = Math.min(units.length - 1, Math.max(0, Math.floor(Math.log(bytes) / Math.log(1024))));
-  const value = bytes / Math.pow(1024, index);
-  return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
 }

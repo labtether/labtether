@@ -3,6 +3,7 @@ export type ProxmoxTaskLike = {
   exitstatus?: string;
 };
 
+/** A Proxmox config value as plain text: arrays joined, objects as "key: value" pairs. */
 export function formatProxmoxValue(value: unknown): string {
   if (value === null || value === undefined) return "";
   if (typeof value === "string") return value;
@@ -25,24 +26,18 @@ export function formatProxmoxValue(value: unknown): string {
   return String(value);
 }
 
-export function formatProxmoxEpoch(value?: number): string {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
-    return "n/a";
-  }
-  return new Date(value * 1000).toLocaleString();
-}
-
-export function taskStatusBadge(task: ProxmoxTaskLike): "ok" | "pending" | "bad" {
+/** A Proxmox task's state: running, finished OK, or failed (an error status or any exit status other than OK). */
+export function proxmoxTaskState(task: ProxmoxTaskLike): "running" | "ok" | "failed" {
   const status = (task.status ?? "").toLowerCase();
   const exitStatus = (task.exitstatus ?? "").toLowerCase();
-  if (status === "running") {
-    return "pending";
-  }
-  if (exitStatus !== "" && exitStatus !== "ok") {
-    return "bad";
-  }
-  if (status === "error") {
-    return "bad";
-  }
+  if (status === "running") return "running";
+  if (exitStatus !== "" && exitStatus !== "ok") return "failed";
+  if (status === "error") return "failed";
   return "ok";
+}
+
+/** The address of a Proxmox API path with the collector added when there is one. */
+export function withCollector(path: string, collectorID: string): string {
+  if (!collectorID) return path;
+  return `${path}${path.includes("?") ? "&" : "?"}collector_id=${encodeURIComponent(collectorID)}`;
 }

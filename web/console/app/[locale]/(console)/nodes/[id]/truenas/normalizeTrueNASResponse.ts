@@ -1,7 +1,4 @@
-import type { TrueNASDisk } from "./TrueNASDisksTab";
-import type { TrueNASReplicationTask } from "./TrueNASReplicationTab";
-import type { TrueNASService } from "./TrueNASServicesTab";
-import type { TrueNASVM } from "./TrueNASVMsTab";
+import type { TrueNASDisk, TrueNASReplicationTask, TrueNASService, TrueNASVM } from "./truenasTypes";
 import type { TrueNASListEndpoint, TrueNASOverviewData } from "./useTrueNASData";
 import { normalizeDataset, normalizePool, normalizeSnapshot } from "./normalizeTrueNASStorage";
 import { bool, identifier, number, record, requireBool, requireRecord, requireText, strings, text, timestamp, type Row } from "./responseValues";

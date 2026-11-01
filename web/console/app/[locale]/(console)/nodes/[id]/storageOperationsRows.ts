@@ -12,7 +12,7 @@ import {
   riskStateFromScore,
   storageKey,
 } from "./storageOperationsUtils";
-import type { ProxmoxZFSPool, StorageInsightsResponse, StorageRow } from "./storageOperationsTypes";
+import type { ProxmoxZFSPool, StorageInsightsResponse, StorageReasonKey, StorageRow } from "./storageOperationsTypes";
 
 const TELEMETRY_STALE_MS = 3 * 60_000;
 
@@ -76,21 +76,21 @@ export function buildFallbackRows(
     const isHealthy = isHealthyHealth(health);
 
     let riskScore = 0;
-    let reason = "Healthy baseline.";
+    let reasonKey: StorageReasonKey = "healthy";
     if (!isHealthy) {
       riskScore += 70;
-      reason = `Pool health is ${health}.`;
+      reasonKey = "health";
     }
     if (usedPercent != null && usedPercent >= 90) {
       riskScore += 35;
-      if (isHealthy) reason = "Capacity is above 90%.";
+      if (isHealthy) reasonKey = "over90";
     } else if (usedPercent != null && usedPercent >= 80) {
       riskScore += 20;
-      if (isHealthy) reason = "Capacity is above 80%.";
+      if (isHealthy) reasonKey = "over80";
     }
     if (stale) {
       riskScore += 20;
-      if (isHealthy && usedPercent == null) reason = "Telemetry is stale.";
+      if (isHealthy && usedPercent == null) reasonKey = "stale";
     }
     if (usedPercent == null) {
       riskScore += 5;
@@ -123,7 +123,8 @@ export function buildFallbackRows(
       scrubOverdue: false,
       riskScore,
       riskState: riskStateFromScore(riskScore),
-      reason,
+      reason: "",
+      reasonKey,
     });
   }
 
@@ -139,21 +140,21 @@ export function buildFallbackRows(
       : null;
 
     let riskScore = 0;
-    let reason = "Healthy baseline.";
+    let reasonKey: StorageReasonKey = "healthy";
     if (!isHealthyHealth(health)) {
       riskScore += 70;
-      reason = `Pool health is ${health}.`;
+      reasonKey = "health";
     }
     if (usedPercent != null && usedPercent >= 90) {
       riskScore += 35;
-      if (isHealthyHealth(health)) reason = "Capacity is above 90%.";
+      if (isHealthyHealth(health)) reasonKey = "over90";
     } else if (usedPercent != null && usedPercent >= 80) {
       riskScore += 20;
-      if (isHealthyHealth(health)) reason = "Capacity is above 80%.";
+      if (isHealthyHealth(health)) reasonKey = "over80";
     }
     if (proxmoxStaleInfo.stale) {
       riskScore += 20;
-      if (usedPercent == null) reason = "Telemetry is stale.";
+      if (usedPercent == null) reasonKey = "stale";
     }
     if (usedPercent == null) {
       riskScore += 5;
@@ -184,7 +185,8 @@ export function buildFallbackRows(
       scrubOverdue: false,
       riskScore,
       riskState: riskStateFromScore(riskScore),
-      reason,
+      reason: "",
+      reasonKey,
     });
   }
 
@@ -204,7 +206,7 @@ export function buildInsightRows(insights: StorageInsightsResponse | null): Stor
   return pools.map((pool, idx) => {
     const riskScore = Number.isFinite(pool.risk_score) ? Number(pool.risk_score) : 0;
     const riskState = normalizeRiskState(pool.risk_state, riskScore);
-    const reason = pool.reasons?.find((entry) => entry.trim() !== "") ?? "No immediate storage risk detected.";
+    const reason = pool.reasons?.find((entry) => entry.trim() !== "") ?? "";
     const confidence = confidenceLabel(pool.forecast?.confidence ?? "low");
 
     return {
@@ -233,6 +235,7 @@ export function buildInsightRows(insights: StorageInsightsResponse | null): Stor
       riskScore,
       riskState,
       reason,
+      reasonKey: reason ? undefined : "healthy",
     };
   });
 }

@@ -111,8 +111,13 @@ export type StorageRow = {
   scrubOverdue: boolean;
   riskScore: number;
   riskState: RiskState;
+  /** The hub's own words for the risk (insight rows), or empty when reasonKey says it. */
   reason: string;
+  /** Why the pool is at risk, for rows built in the console from Proxmox data. */
+  reasonKey?: StorageReasonKey;
 };
+
+export type StorageReasonKey = "healthy" | "health" | "over90" | "over80" | "stale";
 
 export type Recommendation = {
   key: string;
