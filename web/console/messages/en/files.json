@@ -1,11 +1,177 @@
 {
   "title": "Files",
-  "subtitle": "Browse and transfer files on your devices",
-  "empty": {
-    "title": "File Browser",
-    "description": "Select a device with a connected agent to browse and transfer files."
-  },
   "webdavCleartextWarning": "Allow plain HTTP for WebDAV. People on the network may read or change passwords and files. The Hub must also allow insecure transport.",
   "webdavCleartextRequired": "Confirm the plain HTTP warning or use HTTPS.",
-  "webdavTransportNotice": "This connection uses plain HTTP, which LabTether 1.7.1 blocks by default. Edit it to use HTTPS, or allow plain HTTP on the connection and set LABTETHER_ALLOW_INSECURE_TRANSPORT=true on the Hub."
+  "webdavTransportNotice": "This connection uses plain HTTP, which LabTether 1.7.1 blocks by default. Edit it to use HTTPS, or allow plain HTTP on the connection and set LABTETHER_ALLOW_INSECURE_TRANSPORT=true on the Hub.",
+  "tabs": {
+    "label": "File tabs",
+    "newTab": "New tab",
+    "new": "New tab",
+    "close": "Close {name}"
+  },
+  "picker": {
+    "connectTo": "Connect to…",
+    "devices": "Devices",
+    "connections": "Saved connections",
+    "newConnection": "New connection",
+    "notAvailable": "Not available",
+    "offline": "Offline",
+    "noAgent": "No agent",
+    "noDevices": "No device has a connected agent",
+    "noDeviceMatch": "No device matches “{query}”",
+    "noConnections": "No saved connections",
+    "noConnectionMatch": "No connection matches “{query}”",
+    "loading": "Loading",
+    "guestVm": "VM {id} on {host}",
+    "guestLxc": "LXC {id} on {host}",
+    "edit": "Edit…",
+    "test": "Test",
+    "testing": "Testing",
+    "answers": "Answers · {ms} ms",
+    "noAnswer": "No answer",
+    "deleteTitle": "Delete {name}?",
+    "deleteBody": "The saved connection is removed. Files on {host} stay.",
+    "delete": "Delete"
+  },
+  "bar": {
+    "back": "Back",
+    "up": "Up one folder",
+    "path": "Path",
+    "typePath": "Type a path",
+    "places": "Places",
+    "home": "Home",
+    "root": "Root",
+    "search": "Search this folder",
+    "view": "View",
+    "list": "List",
+    "grid": "Grid",
+    "more": "More",
+    "upload": "Upload",
+    "newFolder": "New folder…",
+    "showHidden": "Show hidden files",
+    "hideHidden": "Hide hidden files",
+    "refresh": "Refresh",
+    "openSplit": "Open second pane",
+    "closeSplit": "Close second pane",
+    "thisTab": "{name} (this tab)"
+  },
+  "clip": {
+    "copy": "{count, plural, one {# item} other {# items}} to paste",
+    "cut": "{count, plural, one {# item} other {# items}} to move",
+    "paste": "Paste here",
+    "clear": "Clear clipboard"
+  },
+  "list": {
+    "label": "Files in {path}",
+    "name": "Name",
+    "size": "Size",
+    "modified": "Modified",
+    "permissions": "Permissions",
+    "selectAll": "Select all",
+    "select": "Select {name}",
+    "empty": "Empty folder",
+    "noMatch": "No match for “{query}”",
+    "drop": "Drop files here to upload",
+    "dropCopy": "Drop here to copy",
+    "rename": "New name"
+  },
+  "menu": {
+    "label": "Files context menu",
+    "actionsFor": "Actions for {name}",
+    "open": "Open",
+    "download": "Download",
+    "downloadMany": "Download {count} items",
+    "rename": "Rename",
+    "copy": "Copy",
+    "copyMany": "Copy {count} items",
+    "cut": "Cut",
+    "cutMany": "Cut {count} items",
+    "paste": "Paste",
+    "pasteInto": "Paste into {name}",
+    "copyPath": "Copy path",
+    "delete": "Delete…",
+    "deleteMany": "Delete {count} items…",
+    "newFolder": "New folder…",
+    "uploadHere": "Upload here",
+    "refresh": "Refresh"
+  },
+  "status": {
+    "count": "{count, plural, one {# item} other {# items}}",
+    "filtered": "{shown} of {count, plural, one {# item} other {# items}}",
+    "picked": "{count} selected",
+    "pickedSize": "{count} selected ({size})",
+    "download": "Download",
+    "delete": "Delete…",
+    "clear": "Clear"
+  },
+  "dialog": {
+    "deleteOne": "Delete {name}?",
+    "deleteOneBody": "It is removed from {where}. This can't be undone.",
+    "deleteMany": "Delete {count} items?",
+    "deleteManyBody": "Removed from {where}: {names}. This can't be undone.",
+    "delete": "Delete",
+    "uploadTitle": "Upload {count} files ({size})?",
+    "uploadBody": "They go to {where}.",
+    "upload": "Upload",
+    "newFolder": "New folder",
+    "create": "Create",
+    "name": "Name",
+    "badName": "A name can't contain / or \\",
+    "cancel": "Cancel",
+    "where": "{path} on {source}"
+  },
+  "viewer": {
+    "lines": "{count, plural, one {# line} other {# lines}}",
+    "download": "Download",
+    "close": "Close",
+    "contents": "Contents of {name}",
+    "more": "{count} more lines. Download the file to read them."
+  },
+  "xfer": {
+    "title": "Transfers",
+    "running": "{count} running",
+    "done": "Done",
+    "clear": "Clear finished",
+    "cancel": "Cancel",
+    "cancelOne": "Cancel {name}",
+    "toBrowser": "To this browser",
+    "uploadRun": "Uploading {name}",
+    "uploadDone": "Uploaded {name}",
+    "uploadFailed": "Upload of {name} failed",
+    "downloadRun": "Downloading {name}",
+    "downloadDone": "Downloaded {name}",
+    "downloadFailed": "Download of {name} failed",
+    "copyRun": "Copying {name}",
+    "copyDone": "Copied {name}",
+    "copyFailed": "Copy of {name} failed",
+    "progress": "{done} of {total} · {pct}%",
+    "starting": "Starting",
+    "failed": "Failed"
+  },
+  "split": {
+    "pick": "Show another source",
+    "copyTo": "Copy to {name}"
+  },
+  "state": {
+    "noAgent": "{name} · Agent not connected"
+  },
+  "errors": {
+    "crossMove": "Cut items move only within one device or connection. Copy them instead."
+  },
+  "device": {
+    "readOnly": "Read-only",
+    "allowChanges": "Allow changes…",
+    "stopChanges": "Back to read-only",
+    "allowTitle": "Allow changes on this device?",
+    "allowBody": "Upload, new folder, paste, rename, move and delete stay on until you leave this page. Deleted files can't be restored.",
+    "allow": "Allow changes"
+  },
+  "drop": {
+    "dropTo": "Drop files to upload to {path}",
+    "queue": "File {index} of {total}",
+    "progress": "{pct}% · {done} of {total}",
+    "progressSpeed": "{pct}% · {done} of {total} · {speed}/s",
+    "done": "{total} · Done",
+    "failed": "Upload failed"
+  }
 }

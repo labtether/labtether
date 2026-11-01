@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { useTranslations } from "next-intl";
 
 interface FileDropOverlayProps {
   assetId: string;
@@ -38,6 +39,7 @@ export default function FileDropOverlay({
   targetDir = "~",
   uploadFile: customUploadFile,
 }: FileDropOverlayProps) {
+  const t = useTranslations("files.drop");
   const [dragging, setDragging] = useState(false);
   const [upload, setUpload] = useState<UploadState | null>(null);
   const [queueInfo, setQueueInfo] = useState<{
@@ -216,7 +218,6 @@ export default function FileDropOverlay({
   return (
     <div
       className="relative h-full w-full"
-      title={disabled ? "File transfer requires LabTether agent" : undefined}
       onDragEnter={onDragEnter}
       onDragLeave={onDragLeave}
       onDragOver={onDragOver}
@@ -224,57 +225,31 @@ export default function FileDropOverlay({
     >
       {children}
       {dragging && (
-        <div className="fileDropZone">
-          <span>Drop files to upload to {targetDir}</span>
+        <div className="fx-rdrop">
+          <span>{t("dropTo", { path: targetDir })}</span>
         </div>
       )}
       {upload && (
-        <div className="fileProgressOverlay">
+        <div className="fx-rprog" role="status">
           {queueInfo && (
-            <span style={{ opacity: 0.55, fontSize: "0.75rem" }}>
-              File {queueInfo.index} of {queueInfo.total}
-            </span>
+            <span className="fx-rprog-q">{t("queue", { index: queueInfo.index, total: queueInfo.total })}</span>
           )}
-          <span>{upload.name}</span>
+          <span className="fx-rprog-n">{upload.name}</span>
           {upload.status === "uploading" && (
-            <span style={{ opacity: 0.7, fontSize: "0.8rem" }}>
-              {pct}% &nbsp;&middot;&nbsp; {formatBytes(upload.loaded)} /{" "}
-              {formatBytes(upload.total)}
-              {speedBytesPerSec > 0 && (
-                <>
-                  {" "}
-                  &nbsp;&middot;&nbsp;{" "}
-                  {formatBytes(Math.round(speedBytesPerSec))}/s
-                </>
-              )}
+            <span className="fx-rprog-d">
+              {speedBytesPerSec > 0
+                ? t("progressSpeed", { pct, done: formatBytes(upload.loaded), total: formatBytes(upload.total), speed: formatBytes(Math.round(speedBytesPerSec)) })
+                : t("progress", { pct, done: formatBytes(upload.loaded), total: formatBytes(upload.total) })}
             </span>
           )}
           {upload.status === "done" && (
-            <span style={{ opacity: 0.7, fontSize: "0.8rem" }}>
-              {formatBytes(upload.total)} &nbsp;&middot;&nbsp; Done
-            </span>
+            <span className="fx-rprog-d">{t("done", { total: formatBytes(upload.total) })}</span>
           )}
           {upload.status === "error" && (
-            <span
-              style={{ opacity: 0.7, fontSize: "0.8rem", color: "var(--bad)" }}
-            >
-              Upload failed
-            </span>
+            <span className="fx-rprog-d bad">{t("failed")}</span>
           )}
-          <div className="fileProgressBar">
-            <div
-              className="fileProgressFill"
-              style={{
-                width: upload.status === "uploading" ? `${pct}%` : "100%",
-                backgroundColor:
-                  upload.status === "error"
-                    ? "var(--bad)"
-                    : upload.status === "done"
-                      ? "var(--ok)"
-                      : "var(--accent)",
-                opacity: upload.status === "uploading" ? 0.65 : 1,
-              }}
-            />
+          <div className="fx-meter">
+            <i className={upload.status === "error" ? "bad" : upload.status === "done" ? "ok" : undefined} style={{ width: upload.status === "uploading" ? `${pct}%` : "100%" }} />
           </div>
         </div>
       )}

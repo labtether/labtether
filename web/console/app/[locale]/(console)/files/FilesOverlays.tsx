@@ -1,133 +1,148 @@
 "use client";
 
-import { AlertTriangle, Download, X, FileText } from "lucide-react";
+import { Download } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useState } from "react";
 import { Button } from "../../../components/ui/Button";
-import { Card } from "../../../components/ui/Card";
+import { ConfirmDialog } from "../../../components/ui/ConfirmDialog";
+import { Modal } from "../../../components/ui/Modal";
+import { formatSize } from "./fileWorkspaceUtils";
 
-type DeleteConfirmOverlayProps = {
-  name: string | null;
+// Dialogs of the file views: Delete… (one or several items), New folder, Upload of several dropped files, and the
+// text viewer for small text files (numbered lines, Download).
+
+const BAD_NAME = /[/\\\0]/;
+const MAX_LINES = 2000;
+
+export function DeleteConfirmDialog({ names, where, onCancel, onConfirm, busy }: {
+  names: string[] | null;
+  where: string;
   onCancel: () => void;
   onConfirm: () => void;
-};
-
-export function DeleteConfirmOverlay({ name, onCancel, onConfirm }: DeleteConfirmOverlayProps) {
-  if (!name) return null;
-
+  busy?: boolean;
+}) {
+  const t = useTranslations("files.dialog");
+  const count = names?.length ?? 0;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onCancel}>
-      <div onClick={(event) => event.stopPropagation()}>
-        <Card className="w-full max-w-md mx-4 space-y-4">
-          <div className="flex items-start gap-3">
-            <div className="p-2 rounded-lg bg-[var(--bad-glow)]">
-              <AlertTriangle className="w-5 h-5 text-[var(--bad)]" strokeWidth={1.5} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-semibold text-[var(--text)] mb-1">Delete &ldquo;{name}&rdquo;?</h3>
-              <p className="text-sm text-[var(--muted)] leading-relaxed">This action cannot be undone. The file or directory will be permanently removed from the device.</p>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 pt-1">
-            <Button size="sm" onClick={onCancel}>Cancel</Button>
-            <Button size="sm" variant="danger" onClick={onConfirm}>Delete</Button>
-          </div>
-        </Card>
-      </div>
-    </div>
+    <ConfirmDialog
+      open={count > 0}
+      onClose={onCancel}
+      onConfirm={onConfirm}
+      title={count === 1 ? t("deleteOne", { name: names?.[0] ?? "" }) : t("deleteMany", { count })}
+      message={count === 1 ? t("deleteOneBody", { where }) : t("deleteManyBody", { count, where, names: (names ?? []).slice(0, 8).join(", ") })}
+      confirmLabel={t("delete")}
+      danger
+      loading={busy}
+    />
   );
 }
 
-type BatchDeleteConfirmOverlayProps = {
+export function UploadConfirmDialog({ files, where, onCancel, onConfirm }: {
+  files: File[] | null;
+  where: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const t = useTranslations("files.dialog");
+  const count = files?.length ?? 0;
+  const bytes = (files ?? []).reduce((sum, f) => sum + f.size, 0);
+  return (
+    <ConfirmDialog
+      open={count > 0}
+      onClose={onCancel}
+      onConfirm={onConfirm}
+      title={t("uploadTitle", { count, size: formatSize(bytes) })}
+      message={t("uploadBody", { where })}
+      confirmLabel={t("upload")}
+    />
+  );
+}
+
+/** Asks for a name; a name with / is refused. Used for New folder and for Rename on a device's Files tab. */
+export function NameDialog({ open, title, initial = "", confirmLabel, busy, onCancel, onSubmit }: {
   open: boolean;
-  selectionCount: number;
+  title: string;
+  initial?: string;
+  confirmLabel: string;
+  busy?: boolean;
   onCancel: () => void;
-  onConfirm: () => void;
-};
-
-export function BatchDeleteConfirmOverlay({
-  open,
-  selectionCount,
-  onCancel,
-  onConfirm,
-}: BatchDeleteConfirmOverlayProps) {
-  if (!open) return null;
-
+  onSubmit: (name: string) => void;
+}) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onCancel}>
-      <div onClick={(event) => event.stopPropagation()}>
-        <Card className="w-full max-w-md mx-4 space-y-4">
-          <div className="flex items-start gap-3">
-            <div className="p-2 rounded-lg bg-[var(--bad-glow)]">
-              <AlertTriangle className="w-5 h-5 text-[var(--bad)]" strokeWidth={1.5} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-semibold text-[var(--text)] mb-1">
-                Delete {selectionCount} item{selectionCount !== 1 ? "s" : ""}?
-              </h3>
-              <p className="text-sm text-[var(--muted)] leading-relaxed">This action cannot be undone. The selected files and directories will be permanently removed.</p>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 pt-1">
-            <Button size="sm" onClick={onCancel}>Cancel</Button>
-            <Button size="sm" variant="danger" onClick={onConfirm}>
-              Delete {selectionCount} item{selectionCount !== 1 ? "s" : ""}
-            </Button>
-          </div>
-        </Card>
-      </div>
-    </div>
+    <Modal open={open} onClose={onCancel} title={title} className="max-w-sm">
+      {open ? <NameForm initial={initial} confirmLabel={confirmLabel} busy={busy} onCancel={onCancel} onSubmit={onSubmit} /> : null}
+    </Modal>
   );
 }
 
-type PreviewContent = {
-  name: string;
-  content: string;
-};
-
-type TextPreviewOverlayProps = {
-  previewContent: PreviewContent | null;
-  currentPath: string;
-  onClose: () => void;
-  onDownload: (fullPath: string) => void;
-};
-
-export function TextPreviewOverlay({
-  previewContent,
-  currentPath,
-  onClose,
-  onDownload,
-}: TextPreviewOverlayProps) {
-  if (!previewContent) return null;
-
+function NameForm({ initial, confirmLabel, busy, onCancel, onSubmit }: {
+  initial: string;
+  confirmLabel: string;
+  busy?: boolean;
+  onCancel: () => void;
+  onSubmit: (name: string) => void;
+}) {
+  const t = useTranslations("files.dialog");
+  const [value, setValue] = useState(initial);
+  const name = value.trim();
+  const bad = BAD_NAME.test(name);
+  const ok = name !== "" && !bad && name !== initial;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-3xl mx-4" onClick={(event) => event.stopPropagation()}>
-        <Card variant="flush" className="max-h-[80vh] flex flex-col">
-          <div className="flex items-center gap-3 p-4 border-b border-[var(--line)]">
-            <FileText className="w-4 h-4 text-[var(--muted)] flex-shrink-0" strokeWidth={1.5} />
-            <span className="flex-1 font-medium text-sm truncate text-[var(--text)]">{previewContent.name}</span>
-            <div className="flex items-center gap-1.5">
-              <Button
-                size="sm"
-                onClick={() => {
-                  const fullPath = currentPath === "/" ? `/${previewContent.name}` : `${currentPath}/${previewContent.name}`;
-                  onDownload(fullPath);
-                }}
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Download</span>
-              </Button>
-              <button
-                className="p-1.5 rounded-md text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--hover)] transition-colors cursor-pointer bg-transparent border-none"
-                onClick={onClose}
-                title="Close"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-          <pre className="flex-1 overflow-auto p-4 text-xs font-mono text-[var(--text)] whitespace-pre-wrap leading-relaxed">{previewContent.content}</pre>
-        </Card>
+    <form
+      className="fx-dlg"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (ok) onSubmit(name);
+      }}
+    >
+      <label className="fx-field">
+        <span>{t("name")}</span>
+        <input
+          className="fx-input"
+          value={value}
+          autoFocus
+          spellCheck={false}
+          autoComplete="off"
+          aria-invalid={bad || undefined}
+          onChange={(e) => setValue(e.target.value)}
+        />
+      </label>
+      {bad ? <p className="fx-field-err" role="alert">{t("badName")}</p> : null}
+      <div className="fx-dlg-acts">
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={busy}>{t("cancel")}</Button>
+        <Button type="submit" variant="primary" size="sm" disabled={!ok} loading={busy}>{confirmLabel}</Button>
       </div>
-    </div>
+    </form>
+  );
+}
+
+export function TextPreviewOverlay({ previewContent, onClose, onDownload }: {
+  previewContent: { name: string; content: string } | null;
+  onClose: () => void;
+  onDownload: () => void;
+}) {
+  const t = useTranslations("files.viewer");
+  const lines = previewContent ? previewContent.content.replace(/\n$/, "").split("\n") : [];
+  const shown = lines.slice(0, MAX_LINES);
+  return (
+    <Modal open={previewContent !== null} onClose={onClose} title={previewContent?.name ?? ""} className="fx-viewer md:max-w-3xl">
+      <div className="fx-view">
+        <div className="fx-view-h">
+          <span className="fx-c3 fx-num">{t("lines", { count: lines.length })}</span>
+          <span className="fx-sp" />
+          <Button size="sm" onClick={onDownload}>
+            <Download aria-hidden="true" width={14} height={14} strokeWidth={2} />
+            {t("download")}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onClose}>{t("close")}</Button>
+        </div>
+        <pre className="fx-pre" tabIndex={0} aria-label={t("contents", { name: previewContent?.name ?? "" })}>
+          {shown.map((l, i) => (
+            <span key={i} className="fx-pre-l"><span className="fx-ln" aria-hidden="true">{i + 1}</span>{l}{"\n"}</span>
+          ))}
+        </pre>
+        {lines.length > MAX_LINES ? <p className="fx-c3 fx-view-more">{t("more", { count: lines.length - MAX_LINES })}</p> : null}
+      </div>
+    </Modal>
   );
 }

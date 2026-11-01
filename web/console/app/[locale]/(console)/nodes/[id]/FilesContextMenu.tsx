@@ -1,196 +1,77 @@
 "use client";
 
-import React from "react";
+import { useCallback } from "react";
+import { useTranslations } from "next-intl";
 import type { FileEntry } from "../../files/fileOpsClient";
+import { joinPath } from "../../files/fileWorkspaceUtils";
+import { menuActions } from "../../files/filesListModel";
+import { PointMenu, toMenuItems, useMenuLabels, type MenuItemSpec } from "../../files/FileMenus";
 import type { WorkspaceClipboard, WorkspaceContextMenuState } from "../../files/useFileWorkspaceState";
 
-type FilesContextMenuProps = {
-  contextMenu: WorkspaceContextMenuState<FileEntry> | null;
-  writeEnabled: boolean;
-  clipboard: WorkspaceClipboard | null;
-  onClose: () => void;
-  onOpenEntry: (entry: FileEntry) => void;
-  onDownloadEntry: (entry: FileEntry) => void;
-  onCopyNames: (names: string[]) => void;
-  onCutNames: (names: string[]) => void;
-  onPasteTo: (targetDirPath: string) => void;
-  onRenameEntry: (entry: FileEntry) => void;
-  onDeleteEntry: (entry: FileEntry) => void;
-  onUploadHere: (targetDirPath: string) => void;
-  onRefresh: () => void;
+// The item menu of a device's Files tab (row ⋯ and right-click). Changes show only after "Allow changes".
+
+export type FilesTabMenuHandlers = {
+  open: (entry: FileEntry) => void;
+  download: (entries: FileEntry[]) => void;
+  rename: (entry: FileEntry) => void;
+  copyNames: (names: string[]) => void;
+  cutNames: (names: string[]) => void;
+  pasteTo: (dirPath: string) => void;
+  remove: (entries: FileEntry[]) => void;
+  newFolder: () => void;
+  uploadHere: (dirPath: string) => void;
+  refresh: () => void;
 };
 
-function menuItemStyle(enabled: boolean, danger = false): React.CSSProperties {
-  return {
-    width: "100%",
-    textAlign: "left",
-    fontSize: "12px",
-    borderRadius: "6px",
-    border: "none",
-    padding: "8px 10px",
-    background: "transparent",
-    color: enabled ? (danger ? "var(--bad)" : "var(--text)") : "var(--muted)",
-    cursor: enabled ? "pointer" : "not-allowed",
-    opacity: enabled ? 1 : 0.6,
-  };
+/** menuFor(entry or null, the names it acts on, the folder a paste or upload goes to). */
+export function useFilesTabMenu({ entries, currentPath, writeEnabled, clipboard, h }: {
+  entries: FileEntry[];
+  currentPath: string;
+  writeEnabled: boolean;
+  clipboard: WorkspaceClipboard | null;
+  h: FilesTabMenuHandlers;
+}) {
+  const label = useMenuLabels();
+  return useCallback((entry: FileEntry | null, names: string[], dirPath: string): MenuItemSpec[] => {
+    const picked = entries.filter((e) => names.includes(e.name));
+    const slots = menuActions({
+      entry,
+      count: names.length,
+      hasFiles: picked.some((e) => !e.is_dir),
+      canPaste: Boolean(clipboard?.items.length),
+      canWrite: writeEnabled,
+    });
+    return toMenuItems(slots, {
+      open: entry ? () => h.open(entry) : undefined,
+      download: () => h.download(picked),
+      rename: entry ? () => h.rename(entry) : undefined,
+      copy: () => h.copyNames(names),
+      cut: () => h.cutNames(names),
+      paste: () => h.pasteTo(dirPath),
+      copyPath: entry ? () => void navigator.clipboard?.writeText(joinPath(currentPath, entry.name)) : undefined,
+      delete: () => h.remove(picked),
+      newFolder: h.newFolder,
+      uploadHere: () => h.uploadHere(dirPath),
+      refresh: h.refresh,
+    }, (a) => label(a, { count: names.length, name: entry?.name ?? "", dir: Boolean(entry?.is_dir) }));
+  }, [clipboard, currentPath, entries, h, label, writeEnabled]);
 }
 
-export function FilesContextMenu({
-  contextMenu,
-  writeEnabled,
-  clipboard,
-  onClose,
-  onOpenEntry,
-  onDownloadEntry,
-  onCopyNames,
-  onCutNames,
-  onPasteTo,
-  onRenameEntry,
-  onDeleteEntry,
-  onUploadHere,
-  onRefresh,
-}: FilesContextMenuProps) {
-  if (!contextMenu) {
-    return null;
-  }
-
+export function FilesContextMenu({ contextMenu, menuFor, onClose }: {
+  contextMenu: WorkspaceContextMenuState<FileEntry> | null;
+  menuFor: (entry: FileEntry | null, names: string[], dirPath: string) => MenuItemSpec[];
+  onClose: () => void;
+}) {
+  const t = useTranslations("files.menu");
+  const items = contextMenu
+    ? menuFor(contextMenu.entry, contextMenu.entry ? contextMenu.names : [], contextMenu.targetDirPath)
+    : [];
   return (
-    <div
-      style={{
-        position: "absolute",
-        inset: 0,
-        zIndex: 50,
-      }}
-      onClick={onClose}
-      onContextMenu={(event) => {
-        event.preventDefault();
-        onClose();
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          top: contextMenu.y,
-          left: contextMenu.x,
-          minWidth: "220px",
-          background: "var(--panel)",
-          border: "1px solid var(--line)",
-          borderRadius: "8px",
-          boxShadow: "0 16px 32px rgba(0, 0, 0, 0.25)",
-          padding: "6px",
-        }}
-        onClick={(event) => event.stopPropagation()}
-      >
-        {contextMenu.entry ? (
-          <button
-            type="button"
-            style={menuItemStyle(true)}
-            onClick={() => {
-              const entry = contextMenu.entry;
-              if (!entry) return;
-              if (entry.is_dir) {
-                onOpenEntry(entry);
-              } else {
-                onDownloadEntry(entry);
-              }
-              onClose();
-            }}
-          >
-            {contextMenu.entry.is_dir ? "Open" : "Download"}
-          </button>
-        ) : null}
-
-        {contextMenu.names.length > 0 ? (
-          <button
-            type="button"
-            style={menuItemStyle(true)}
-            onClick={() => {
-              onCopyNames(contextMenu.names);
-              onClose();
-            }}
-          >
-            Copy
-          </button>
-        ) : null}
-
-        {contextMenu.names.length > 0 ? (
-          <button
-            type="button"
-            style={menuItemStyle(true)}
-            onClick={() => {
-              onCutNames(contextMenu.names);
-              onClose();
-            }}
-          >
-            Cut
-          </button>
-        ) : null}
-
-        <button
-          type="button"
-          style={menuItemStyle(writeEnabled && Boolean(clipboard))}
-          disabled={!writeEnabled || !clipboard}
-          onClick={() => {
-            onPasteTo(contextMenu.targetDirPath);
-            onClose();
-          }}
-        >
-          Paste
-        </button>
-
-        {contextMenu.entry ? (
-          <button
-            type="button"
-            style={menuItemStyle(writeEnabled)}
-            disabled={!writeEnabled}
-            onClick={() => {
-              if (!contextMenu.entry) return;
-              onRenameEntry(contextMenu.entry);
-              onClose();
-            }}
-          >
-            Rename
-          </button>
-        ) : null}
-
-        {contextMenu.entry ? (
-          <button
-            type="button"
-            style={menuItemStyle(writeEnabled, true)}
-            disabled={!writeEnabled}
-            onClick={() => {
-              if (!contextMenu.entry) return;
-              onDeleteEntry(contextMenu.entry);
-              onClose();
-            }}
-          >
-            Delete
-          </button>
-        ) : null}
-
-        <button
-          type="button"
-          style={menuItemStyle(writeEnabled)}
-          disabled={!writeEnabled}
-          onClick={() => {
-            onUploadHere(contextMenu.targetDirPath);
-            onClose();
-          }}
-        >
-          Upload Here
-        </button>
-
-        <button
-          type="button"
-          style={menuItemStyle(true)}
-          onClick={() => {
-            onRefresh();
-            onClose();
-          }}
-        >
-          Refresh
-        </button>
-      </div>
-    </div>
+    <PointMenu
+      at={contextMenu ? { x: contextMenu.x, y: contextMenu.y } : null}
+      label={t("label")}
+      items={items}
+      onClose={onClose}
+    />
   );
 }

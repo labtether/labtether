@@ -1,11 +1,177 @@
 {
   "title": "文件",
-  "subtitle": "浏览和传输设备上的文件",
-  "empty": {
-    "title": "文件浏览器",
-    "description": "选择一个已连接代理的设备来浏览和传输文件。"
-  },
   "webdavCleartextWarning": "允许 WebDAV 使用未加密的 HTTP。网络上的其他人可能读取或更改密码和文件。Hub 也必须允许不安全的传输。",
   "webdavCleartextRequired": "请确认未加密 HTTP 的警告，或使用 HTTPS。",
-  "webdavTransportNotice": "此连接使用未加密的 HTTP，LabTether 1.7.1 默认会阻止它。请编辑连接以使用 HTTPS，或在连接上允许未加密的 HTTP，并在 Hub 上设置 LABTETHER_ALLOW_INSECURE_TRANSPORT=true。"
+  "webdavTransportNotice": "此连接使用未加密的 HTTP，LabTether 1.7.1 默认会阻止它。请编辑连接以使用 HTTPS，或在连接上允许未加密的 HTTP，并在 Hub 上设置 LABTETHER_ALLOW_INSECURE_TRANSPORT=true。",
+  "tabs": {
+    "label": "文件标签页",
+    "newTab": "新标签页",
+    "new": "新标签页",
+    "close": "关闭 {name}"
+  },
+  "picker": {
+    "connectTo": "连接到…",
+    "devices": "设备",
+    "connections": "已保存的连接",
+    "newConnection": "新建连接",
+    "notAvailable": "不可用",
+    "offline": "离线",
+    "noAgent": "无代理",
+    "noDevices": "没有设备连接了代理",
+    "noDeviceMatch": "没有与“{query}”匹配的设备",
+    "noConnections": "没有已保存的连接",
+    "noConnectionMatch": "没有与“{query}”匹配的连接",
+    "loading": "正在加载",
+    "guestVm": "{host} 上的 VM {id}",
+    "guestLxc": "{host} 上的 LXC {id}",
+    "edit": "编辑…",
+    "test": "测试",
+    "testing": "正在测试",
+    "answers": "有响应 · {ms} 毫秒",
+    "noAnswer": "无响应",
+    "deleteTitle": "删除 {name}？",
+    "deleteBody": "将删除已保存的连接。{host} 上的文件保留。",
+    "delete": "删除"
+  },
+  "bar": {
+    "back": "后退",
+    "up": "上一级文件夹",
+    "path": "路径",
+    "typePath": "输入路径",
+    "places": "位置",
+    "home": "主目录",
+    "root": "根目录",
+    "search": "在此文件夹中搜索",
+    "view": "视图",
+    "list": "列表",
+    "grid": "网格",
+    "more": "更多",
+    "upload": "上传",
+    "newFolder": "新建文件夹…",
+    "showHidden": "显示隐藏文件",
+    "hideHidden": "不显示隐藏文件",
+    "refresh": "刷新",
+    "openSplit": "打开第二个窗格",
+    "closeSplit": "关闭第二个窗格",
+    "thisTab": "{name}（此标签页）"
+  },
+  "clip": {
+    "copy": "{count, plural, other {# 项}}待粘贴",
+    "cut": "{count, plural, other {# 项}}待移动",
+    "paste": "粘贴到此处",
+    "clear": "清空剪贴板"
+  },
+  "list": {
+    "label": "{path} 中的文件",
+    "name": "名称",
+    "size": "大小",
+    "modified": "修改时间",
+    "permissions": "权限",
+    "selectAll": "全选",
+    "select": "选择 {name}",
+    "empty": "空文件夹",
+    "noMatch": "没有与“{query}”匹配的项",
+    "drop": "将文件拖放到此处以上传",
+    "dropCopy": "拖放到此处以复制",
+    "rename": "新名称"
+  },
+  "menu": {
+    "label": "文件上下文菜单",
+    "actionsFor": "{name} 的操作",
+    "open": "打开",
+    "download": "下载",
+    "downloadMany": "下载 {count} 项",
+    "rename": "重命名",
+    "copy": "复制",
+    "copyMany": "复制 {count} 项",
+    "cut": "剪切",
+    "cutMany": "剪切 {count} 项",
+    "paste": "粘贴",
+    "pasteInto": "粘贴到 {name}",
+    "copyPath": "复制路径",
+    "delete": "删除…",
+    "deleteMany": "删除 {count} 项…",
+    "newFolder": "新建文件夹…",
+    "uploadHere": "上传到此处",
+    "refresh": "刷新"
+  },
+  "status": {
+    "count": "{count, plural, other {# 项}}",
+    "filtered": "{shown} / {count, plural, other {# 项}}",
+    "picked": "已选择 {count} 项",
+    "pickedSize": "已选择 {count} 项（{size}）",
+    "download": "下载",
+    "delete": "删除…",
+    "clear": "取消选择"
+  },
+  "dialog": {
+    "deleteOne": "删除 {name}？",
+    "deleteOneBody": "将从 {where} 中删除。此操作无法撤销。",
+    "deleteMany": "删除 {count} 项？",
+    "deleteManyBody": "将从 {where} 中删除：{names}。此操作无法撤销。",
+    "delete": "删除",
+    "uploadTitle": "上传 {count} 个文件（{size}）？",
+    "uploadBody": "目标：{where}。",
+    "upload": "上传",
+    "newFolder": "新建文件夹",
+    "create": "创建",
+    "name": "名称",
+    "badName": "名称不能包含 / 或 \\",
+    "cancel": "取消",
+    "where": "{source} 上的 {path}"
+  },
+  "viewer": {
+    "lines": "{count, plural, other {# 行}}",
+    "download": "下载",
+    "close": "关闭",
+    "contents": "{name} 的内容",
+    "more": "还有 {count} 行。请下载文件查看。"
+  },
+  "xfer": {
+    "title": "传输",
+    "running": "{count} 个进行中",
+    "done": "已完成",
+    "clear": "清除已完成",
+    "cancel": "取消",
+    "cancelOne": "取消 {name}",
+    "toBrowser": "到此浏览器",
+    "uploadRun": "正在上传 {name}",
+    "uploadDone": "已上传 {name}",
+    "uploadFailed": "{name} 上传失败",
+    "downloadRun": "正在下载 {name}",
+    "downloadDone": "已下载 {name}",
+    "downloadFailed": "{name} 下载失败",
+    "copyRun": "正在复制 {name}",
+    "copyDone": "已复制 {name}",
+    "copyFailed": "{name} 复制失败",
+    "progress": "{done} / {total} · {pct}%",
+    "starting": "正在开始",
+    "failed": "失败"
+  },
+  "split": {
+    "pick": "显示其他来源",
+    "copyTo": "复制到 {name}"
+  },
+  "state": {
+    "noAgent": "{name} · 代理未连接"
+  },
+  "errors": {
+    "crossMove": "剪切的项只能在同一设备或连接内移动。请改为复制。"
+  },
+  "device": {
+    "readOnly": "只读",
+    "allowChanges": "允许更改…",
+    "stopChanges": "恢复只读",
+    "allowTitle": "允许在此设备上进行更改？",
+    "allowBody": "上传、新建文件夹、粘贴、重命名、移动和删除在你离开此页面前保持开启。已删除的文件无法恢复。",
+    "allow": "允许更改"
+  },
+  "drop": {
+    "dropTo": "拖放文件以上传到 {path}",
+    "queue": "第 {index} 个，共 {total} 个文件",
+    "progress": "{pct}% · {done} / {total}",
+    "progressSpeed": "{pct}% · {done} / {total} · {speed}/s",
+    "done": "{total} · 已完成",
+    "failed": "上传失败"
+  }
 }

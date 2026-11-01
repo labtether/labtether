@@ -1,515 +1,215 @@
 "use client";
 
-import { FolderOpen } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useMemo, type ReactNode } from "react";
 import { PageHeader } from "../../../components/PageHeader";
-import { Card } from "../../../components/ui/Card";
-import { EmptyState } from "../../../components/ui/EmptyState";
+import { FileListView } from "./FileListView";
+import { PointMenu } from "./FileMenus";
 import { FileTabBar } from "./FileTabBar";
-import { FilesBrowserCard } from "./FilesBrowserCard";
-import { FilesContextMenu } from "./FilesContextMenu";
-import {
-BatchDeleteConfirmOverlay,
-DeleteConfirmOverlay,
-TextPreviewOverlay,
-} from "./FilesOverlays";
-import { FilesStatusPanels } from "./FilesStatusPanels";
-import { FilesToolbarCard } from "./FilesToolbarCard";
+import { DeleteConfirmDialog, NameDialog, TextPreviewOverlay, UploadConfirmDialog } from "./FilesOverlays";
+import { FilesStatusLine } from "./FilesStatusLine";
+import { FilesMoreMenu, FilesToolbar, type SplitChoice } from "./FilesToolbar";
+import { pickedBytes } from "./filesListModel";
 import { NewTabPage } from "./NewTabPage";
 import { SplitView } from "./SplitView";
 import { TransferProgressBar } from "./TransferProgressBar";
-import { joinPath } from "./fileWorkspaceUtils";
+import { useFileSources } from "./useFileSources";
 import { useFilesWorkspace } from "./useFilesWorkspace";
 
-// The operator-only file workspace. page.tsx gates it by role.
+// The Files page: tabs on devices and saved connections. A new tab shows the source picker; a browsing tab shows the
+// toolbar, the folder and a one-line status; the second pane, the transfers and the dialogs show only when used.
+// page.tsx limits it to roles that may read host data.
 export function FilesWorkspace() {
-  const t = useTranslations("files");
-  const {
-    tabs,
-    isNewTab,
-    handleOpenAgent,
-    handleOpenConnection,
-    handleNewConnection,
-    isAgentTab,
-    inSplitMode,
-    workspaceMenuHostRef,
-    activeSource,
-    activeTab,
-    showHidden,
-    clipboardCount,
-    clipboard,
-    selectionCount,
-    currentPath,
-    rootPath,
-    handleShowHiddenChange,
-    setConfirmBatchDelete,
-    handleDownloadSelected,
-    handleToolbarUpload,
-    setShowMkdir,
-    handleToolbarRefresh,
-    navigateToPath,
-    navigateUp,
-    clearSelection,
-    viewMode,
-    setViewMode,
-    fileInputRef,
-    handleFileInput,
-    showMkdir,
-    mkdirName,
-    setMkdirName,
-    handleCreateDir,
-    uploadProgress,
-    cancelUpload,
-    downloadProgress,
-    cancelDownload,
-    error,
-    target,
-    targetHasAgent,
-    entries,
-    loading,
-    dragOver,
-    sortField,
-    sortDir,
-    selectedEntries,
-    allSelected,
-    renamingEntry,
-    renameValue,
-    renameInputRef,
-    toggleSort,
-    toggleSelectAll,
-    toggleSelected,
-    handleEntryClick,
-    handleEntryDoubleClick,
-    handleDownloadEntry,
-    startRename,
-    setRenameValue,
-    commitRename,
-    setRenamingEntry,
-    setConfirmDelete,
-    handleBackgroundContextMenu,
-    handleEntryContextMenu,
-    setDragOver,
-    handleDrop,
-    contextMenu,
-    canPaste,
-    closeContextMenu,
-    handleContextOpen,
-    handleContextDownload,
-    setClipboardFromNames,
-    pasteClipboardToDir,
-    handleContextDelete,
-    handleContextUploadHere,
-    isConnectionTab,
-    connBrowser,
-    connMappedEntries,
-    connFileInputRef,
-    connClipboard,
-    transfers,
-    isBrowsingTab,
-    confirmDelete,
-    handleDeleteConfirm,
-    confirmBatchDelete,
-    handleBatchDeleteConfirm,
-    previewContent,
-    closePreview,
-    downloadFile,
-  } = useFilesWorkspace();
+  const w = useFilesWorkspace();
+  const { t, tabs, src, ws, transfers } = w;
+  const sources = useFileSources();
+  const tab = tabs.activeTab;
+  const browsing = tab !== null && tab.type !== "new";
+  const label = tab?.label ?? "";
 
+  const unavailable = useMemo(
+    () => new Set(tabs.tabs.filter((x) => x.type === "agent" && x.sourceId && !sources.connectedAgentIds.has(x.sourceId)).map((x) => x.id)),
+    [tabs.tabs, sources.connectedAgentIds],
+  );
 
-  // -------------------------------------------------------------------------
-  // Render
-  // -------------------------------------------------------------------------
+  const splitChoices: SplitChoice[] = [
+    ...sources.ready.map((a) => ({
+      key: `a:${a.id}`,
+      label: tab?.sourceId === a.id ? t("bar.thisTab", { name: a.name }) : a.name,
+      onSelect: () => tabs.setSplit({ type: "agent", sourceId: a.id, protocol: "agent", label: a.name }),
+    })),
+    ...sources.connections.map((c) => ({
+      key: `c:${c.id}`,
+      label: tab?.sourceId === c.id ? t("bar.thisTab", { name: c.name }) : c.name,
+      onSelect: () => tabs.setSplit({ type: "connection", sourceId: c.id, protocol: c.protocol, label: c.name }),
+    })),
+  ];
+
+  const openAgent = (id: string, name: string) => tabs.openInTab({ type: "agent", sourceId: id, label: name, protocol: "agent" });
+  const openConn = (id: string, name: string, protocol: string) => tabs.openInTab({ type: "connection", sourceId: id, label: name, protocol });
+
+  const places = src.source?.type === "agent"
+    ? [{ label: t("bar.home"), path: "~" }, { label: t("bar.root"), path: "/" }]
+    : [{ label: t("bar.root"), path: "/" }];
+  const picked = ws.selectedEntries;
+  const where = t("dialog.where", { path: src.currentPath, source: label });
+
+  const browser = (
+    <>
+      <FilesToolbar
+        path={src.currentPath}
+        places={places}
+        busy={src.loading}
+        canUp={src.canUp}
+        onUp={src.goUp}
+        canBack={w.history.canBack}
+        onBack={w.history.back}
+        onGo={src.goTo}
+        query={w.query}
+        onQuery={w.setQuery}
+        clipboard={w.clipboard.value}
+        canPaste={w.clipboard.canPaste}
+        onPaste={w.clipboard.paste}
+        onClearClipboard={w.clipboard.clear}
+        view={w.view}
+        onView={w.setView}
+        showHidden={src.showHidden}
+        onShowHidden={src.setShowHidden}
+        onNewFolder={w.newFolder.show}
+        onRefresh={src.refresh}
+        onUpload={() => w.upload.pick(src.currentPath)}
+        split={{ open: false, choices: splitChoices, onClose: () => tabs.setSplit(null) }}
+      />
+      {src.error ? <p className="fx-err" role="alert">{src.error}</p> : null}
+      <div className="fx-sheet">
+        <FileListView
+          entries={w.visible}
+          view={w.view}
+          label={t("list.label", { path: src.currentPath })}
+          loading={src.loading}
+          emptyText={w.query ? t("list.noMatch", { query: w.query }) : t("list.empty")}
+          picked={picked}
+          sort={{ field: src.sortField, dir: src.sortDir, onSort: src.toggleSort }}
+          rename={w.rename}
+          dropText={w.dragOver ? t("list.drop") : null}
+          onSelectAll={() => ws.toggleSelectAll(w.order)}
+          drop={w.drop}
+          handlers={{
+            onPick: (name, mods) => ws.pickClick(name, w.order, mods),
+            onToggle: ws.toggleSelected,
+            onOpen: src.openFile,
+            onContextMenu: w.onContextMenu,
+            onKeyAction: (action, entry) => (action === "rename" ? w.startRename(entry.name) : w.del.ask(w.targetsFor(entry))),
+            menuItems: w.rowMenu,
+            menuLabel: (name) => t("menu.actionsFor", { name }),
+            selectLabel: (name) => t("list.select", { name }),
+            renameLabel: t("list.rename"),
+          }}
+        />
+        <FilesStatusLine
+          shown={w.visible.length}
+          total={src.entries.length}
+          searching={w.query.trim() !== ""}
+          picked={picked.size}
+          pickedBytes={pickedBytes(src.entries, picked)}
+          onDownload={src.entries.some((e) => picked.has(e.name) && !e.is_dir) ? () => src.download(Array.from(picked)) : undefined}
+          onDelete={() => w.del.ask(Array.from(picked))}
+          onClear={ws.clearSelection}
+        />
+      </div>
+      <input
+        ref={w.upload.inputRef}
+        type="file"
+        multiple
+        hidden
+        onChange={(e) => {
+          w.upload.onInput(Array.from(e.target.files ?? []));
+          e.target.value = "";
+        }}
+      />
+    </>
+  );
+
+  let body: ReactNode;
+  if (!browsing) {
+    body = <NewTabPage sources={sources} onOpenAgent={openAgent} onOpenConnection={openConn} />;
+  } else if (tabs.splitMode && src.source && tabs.splitSource && tab?.split) {
+    body = (
+      <>
+        <div className="fx-bar">
+          <span className="fx-sp" />
+          <FilesMoreMenu split={{ open: true, choices: splitChoices, onClose: () => tabs.setSplit(null) }} />
+        </div>
+        <SplitView
+          leftSource={src.source}
+          leftLabel={label}
+          rightSource={tabs.splitSource}
+          rightLabel={tab.split.label}
+          onTransfer={(files, from, to, dir) => void transfers.startTransfer(files, from, to, dir)}
+          choices={splitChoices}
+          onClose={() => tabs.setSplit(null)}
+        />
+      </>
+    );
+  } else if (src.waiting) {
+    body = (
+      <div className="fx-state">
+        <p><span className="fx-dot bad" aria-hidden="true" />{t("state.noAgent", { name: label })}</p>
+      </div>
+    );
+  } else {
+    body = browser;
+  }
 
   return (
-    <div className="flex flex-col h-full">
-      <PageHeader
-        title={t('title')}
-        subtitle={t('subtitle')}
-      />
+    <div className="fx-page">
+      {browsing ? (
+        <h1 className="fx-crumb">
+          <span className="fx-crumb-root">{t("title")}</span>
+          <span className="fx-crumb-sep" aria-hidden="true">/</span>
+          <span>{label}</span>
+        </h1>
+      ) : (
+        <PageHeader title={t("title")} />
+      )}
+      {tabs.tabs.length ? (
+        <FileTabBar
+          tabs={tabs.tabs}
+          activeTabId={tabs.activeTabId}
+          onAddTab={() => tabs.addTab({ type: "new" })}
+          onRemoveTab={tabs.removeTab}
+          onSetActiveTab={tabs.setActiveTab}
+          unavailable={unavailable}
+        />
+      ) : null}
+      {body}
 
-      {/* Tab bar */}
-      <FileTabBar
-        tabs={tabs.tabs}
-        activeTabId={tabs.activeTabId}
-        splitMode={tabs.splitMode}
-        onAddTab={() => tabs.addTab({ type: "new", label: "New Tab" })}
-        onRemoveTab={tabs.removeTab}
-        onSetActiveTab={tabs.setActiveTab}
-        onToggleSplit={tabs.toggleSplit}
-      />
-
-      {/* Content area */}
-      <div className="flex-1 overflow-hidden flex flex-col">
-        {/* ---- New Tab Page ---- */}
-        {isNewTab && (
-          <NewTabPage
-            onOpenAgent={handleOpenAgent}
-            onOpenConnection={handleOpenConnection}
-            onNewConnection={handleNewConnection}
-          />
-        )}
-
-        {/* ---- Agent file browser (non-split) ---- */}
-        {isAgentTab && !inSplitMode && (
-          <div
-            ref={workspaceMenuHostRef}
-            className="relative flex-1 flex flex-col gap-3 p-4 md:p-6 overflow-y-auto"
-          >
-            <FilesToolbarCard
-              source={activeSource}
-              sourceLabel={activeTab?.label}
-              sourceProtocol={activeTab?.protocol}
-              showHidden={showHidden}
-              clipboardCount={clipboardCount}
-              clipboardMode={clipboard?.mode ?? null}
-              selectionCount={selectionCount}
-              currentPath={currentPath}
-              rootPath={rootPath}
-              onShowHiddenChange={handleShowHiddenChange}
-              onDeleteSelected={() => setConfirmBatchDelete(true)}
-              onDownloadSelected={handleDownloadSelected}
-              onUpload={handleToolbarUpload}
-              onNewFolder={() => setShowMkdir(true)}
-              onRefresh={handleToolbarRefresh}
-              onNavigateToPath={navigateToPath}
-              onNavigateUp={navigateUp}
-              onClearSelection={clearSelection}
-              viewMode={viewMode}
-              onViewModeChange={setViewMode}
-            />
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              style={{ display: "none" }}
-              onChange={handleFileInput}
-            />
-            <FilesStatusPanels
-              showMkdir={showMkdir}
-              mkdirName={mkdirName}
-              onMkdirNameChange={setMkdirName}
-              onCreateDir={handleCreateDir}
-              onCancelMkdir={() => {
-                setShowMkdir(false);
-                setMkdirName("");
-              }}
-              uploadProgress={uploadProgress}
-              onCancelUpload={cancelUpload}
-              downloadProgress={downloadProgress}
-              onCancelDownload={cancelDownload}
-              error={error}
-              showNoAgentWarning={Boolean(target && !targetHasAgent)}
-            />
-
-            {/* File browser */}
-            {target && targetHasAgent && (
-              <FilesBrowserCard
-                viewMode={viewMode}
-                entries={entries}
-                loading={loading}
-                dragOver={dragOver}
-                sortField={sortField}
-                sortDir={sortDir}
-                selectedEntries={selectedEntries}
-                allSelected={allSelected}
-                renamingEntry={renamingEntry}
-                renameValue={renameValue}
-                renameInputRef={renameInputRef}
-                onToggleSort={toggleSort}
-                onToggleSelectAll={() => toggleSelectAll(entries.map((entry) => entry.name))}
-                onToggleSelected={toggleSelected}
-                onEntryClick={handleEntryClick}
-                onEntryDoubleClick={handleEntryDoubleClick}
-                onDownloadEntry={handleDownloadEntry}
-                onStartRename={startRename}
-                onRenameValueChange={setRenameValue}
-                onCommitRename={commitRename}
-                onCancelRename={() => { setRenamingEntry(null); }}
-                onDeleteEntry={setConfirmDelete}
-                onBackgroundContextMenu={handleBackgroundContextMenu}
-                onEntryContextMenu={handleEntryContextMenu}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  setDragOver(true);
-                }}
-                onDragLeave={() => { setDragOver(false); }}
-                onDrop={handleDrop}
-              />
-            )}
-
-            {/* Loading / waiting for agent */}
-            {target && !targetHasAgent && !error && (
-              <Card>
-                <EmptyState
-                  icon={FolderOpen}
-                  title="Waiting for agent"
-                  description="The agent on this device is not connected."
-                />
-              </Card>
-            )}
-
-            {contextMenu && target && targetHasAgent && (
-              <FilesContextMenu
-                contextMenu={contextMenu}
-                canPaste={canPaste}
-                onClose={closeContextMenu}
-                onOpenEntry={handleContextOpen}
-                onDownloadEntry={handleContextDownload}
-                onCopyNames={(names) => setClipboardFromNames("copy", names)}
-                onCutNames={(names) => setClipboardFromNames("cut", names)}
-                onPasteToDir={(targetDirPath) => {
-                  void pasteClipboardToDir(targetDirPath);
-                }}
-                onRenameEntry={(entry) => startRename(entry.name)}
-                onDeleteNames={handleContextDelete}
-                onUploadHere={handleContextUploadHere}
-                onRefresh={handleToolbarRefresh}
-              />
-            )}
-          </div>
-        )}
-
-        {/* ---- Connection file browser (non-split) ---- */}
-        {isConnectionTab && !inSplitMode && activeSource && (
-          <div
-            ref={workspaceMenuHostRef}
-            className="relative flex-1 flex flex-col gap-3 p-4 md:p-6 overflow-y-auto"
-          >
-            <FilesToolbarCard
-              source={activeSource}
-              sourceLabel={activeTab?.label}
-              sourceProtocol={activeTab?.protocol}
-              showHidden={connBrowser.showHidden}
-              clipboardCount={clipboardCount}
-              clipboardMode={clipboard?.mode ?? null}
-              selectionCount={selectionCount}
-              currentPath={connBrowser.currentPath}
-              rootPath={connBrowser.rootPath}
-              onShowHiddenChange={connBrowser.setShowHidden}
-              onDeleteSelected={() => setConfirmBatchDelete(true)}
-              onDownloadSelected={() => {
-                for (const name of selectedEntries) {
-                  const entry = connMappedEntries.find((e) => e.name === name);
-                  if (entry && !entry.is_dir) {
-                    connBrowser.downloadFile(joinPath(connBrowser.currentPath, name));
-                  }
-                }
-              }}
-              onUpload={() => {
-                connFileInputRef.current?.click();
-              }}
-              onNewFolder={() => setShowMkdir(true)}
-              onRefresh={connBrowser.refresh}
-              onNavigateToPath={connBrowser.navigateToPath}
-              onNavigateUp={connBrowser.navigateUp}
-              onClearSelection={clearSelection}
-              viewMode={viewMode}
-              onViewModeChange={setViewMode}
-            />
-            <input
-              ref={connFileInputRef}
-              type="file"
-              multiple
-              style={{ display: "none" }}
-              onChange={(e) => {
-                const files = Array.from(e.target.files ?? []);
-                for (const file of files) {
-                  void connBrowser.uploadFile(
-                    joinPath(connBrowser.currentPath, file.name),
-                    file,
-                  );
-                }
-                e.target.value = "";
-              }}
-            />
-            <FilesStatusPanels
-              showMkdir={showMkdir}
-              mkdirName={mkdirName}
-              onMkdirNameChange={setMkdirName}
-              onCreateDir={() => {
-                const name = mkdirName.trim();
-                if (name) {
-                  void connBrowser.createDir(name);
-                  setMkdirName("");
-                  setShowMkdir(false);
-                }
-              }}
-              onCancelMkdir={() => {
-                setShowMkdir(false);
-                setMkdirName("");
-              }}
-              uploadProgress={uploadProgress}
-              onCancelUpload={cancelUpload}
-              downloadProgress={downloadProgress}
-              onCancelDownload={cancelDownload}
-              error={connBrowser.error}
-              showNoAgentWarning={false}
-            />
-
-            {/* File browser */}
-            <FilesBrowserCard
-              viewMode={viewMode}
-              entries={connMappedEntries}
-              loading={connBrowser.loading}
-              dragOver={dragOver}
-              sortField={connBrowser.sortField}
-              sortDir={connBrowser.sortDir}
-              selectedEntries={selectedEntries}
-              allSelected={connMappedEntries.length > 0 && selectionCount === connMappedEntries.length}
-              renamingEntry={renamingEntry}
-              renameValue={renameValue}
-              renameInputRef={renameInputRef}
-              onToggleSort={connBrowser.toggleSort}
-              onToggleSelectAll={() => toggleSelectAll(connMappedEntries.map((e) => e.name))}
-              onToggleSelected={toggleSelected}
-              onEntryClick={(entry) => {
-                if (renamingEntry) return;
-                if (entry.is_dir) {
-                  connBrowser.navigate(entry.name);
-                } else {
-                  connBrowser.downloadFile(joinPath(connBrowser.currentPath, entry.name));
-                }
-              }}
-              onEntryDoubleClick={(name) => {
-                const entry = connMappedEntries.find((e) => e.name === name);
-                if (entry?.is_dir) connBrowser.navigate(entry.name);
-              }}
-              onDownloadEntry={(entry) => {
-                connBrowser.downloadFile(joinPath(connBrowser.currentPath, entry.name));
-              }}
-              onStartRename={startRename}
-              onRenameValueChange={setRenameValue}
-              onCommitRename={() => {
-                if (!renamingEntry || !renameValue.trim() || renameValue.trim() === renamingEntry) {
-                  setRenamingEntry(null);
-                  return;
-                }
-                void connBrowser.renameEntry(
-                  joinPath(connBrowser.currentPath, renamingEntry),
-                  joinPath(connBrowser.currentPath, renameValue.trim()),
-                );
-                setRenamingEntry(null);
-              }}
-              onCancelRename={() => { setRenamingEntry(null); }}
-              onDeleteEntry={setConfirmDelete}
-              onBackgroundContextMenu={handleBackgroundContextMenu}
-              onEntryContextMenu={handleEntryContextMenu}
-              onDragOver={(event) => {
-                event.preventDefault();
-                setDragOver(true);
-              }}
-              onDragLeave={() => { setDragOver(false); }}
-              onDrop={(event) => {
-                event.preventDefault();
-                setDragOver(false);
-                const files = Array.from(event.dataTransfer?.files ?? []);
-                if (files.length > 0 && activeSource) {
-                  for (const file of files) {
-                    void connBrowser.uploadFile(
-                      joinPath(connBrowser.currentPath, file.name),
-                      file,
-                    );
-                  }
-                }
-              }}
-            />
-
-            {contextMenu && (
-              <FilesContextMenu
-                contextMenu={contextMenu}
-                canPaste={connClipboard.canPaste}
-                onClose={closeContextMenu}
-                onOpenEntry={(entry) => {
-                  if (entry.is_dir) {
-                    connBrowser.navigate(entry.name);
-                  } else {
-                    connBrowser.downloadFile(joinPath(connBrowser.currentPath, entry.name));
-                  }
-                }}
-                onDownloadEntry={(entry) => {
-                  connBrowser.downloadFile(joinPath(connBrowser.currentPath, entry.name));
-                }}
-                onCopyNames={(names) => connClipboard.setCopy(names)}
-                onCutNames={(names) => connClipboard.setCut(names)}
-                onPasteToDir={(targetDirPath) => {
-                  void connClipboard.paste(targetDirPath);
-                }}
-                onRenameEntry={(entry) => startRename(entry.name)}
-                onDeleteNames={(names) => {
-                  if (names.length === 1) {
-                    setConfirmDelete(names[0]);
-                  } else {
-                    for (const name of names) toggleSelected(name);
-                    setConfirmBatchDelete(true);
-                  }
-                }}
-                onUploadHere={() => {
-                  fileInputRef.current?.click();
-                }}
-                onRefresh={connBrowser.refresh}
-              />
-            )}
-          </div>
-        )}
-
-        {/* ---- Split view ---- */}
-        {inSplitMode && activeSource && (
-          <div className="flex-1 flex flex-col p-4 md:p-6 overflow-hidden">
-            <SplitView
-              leftSource={activeSource}
-              leftProtocol={activeTab?.protocol}
-              rightSource={tabs.splitSource}
-              onTransfer={(files, src, dst, dstPath) =>
-                transfers.startTransfer(files, src, dst, dstPath)
-              }
-              onSelectRightSource={() => {
-                // Add a new tab to pick the split target
-                tabs.addTab({ type: "new", label: "Pick split target" });
-              }}
-              onSetSplitTarget={tabs.setSplitTarget}
-            />
-          </div>
-        )}
-
-        {/* ---- Idle state: no tabs with content ---- */}
-        {!isNewTab && !isBrowsingTab && (
-          <div className="flex-1 flex items-center justify-center p-4">
-            <Card>
-              <EmptyState
-                icon={FolderOpen}
-                title={t('empty.title')}
-                description={t('empty.description')}
-              />
-            </Card>
-          </div>
-        )}
-      </div>
-
-      {/* Transfer progress bar */}
       <TransferProgressBar
         transfers={transfers.transfers}
         onCancel={transfers.cancelTransfer}
         onClearCompleted={transfers.clearCompleted}
+        upload={src.uploadProgress}
+        onCancelUpload={src.cancelUpload}
+        download={src.downloadProgress}
+        onCancelDownload={src.cancelDownload}
       />
 
-      {/* Overlays */}
-      <DeleteConfirmOverlay
-        name={confirmDelete}
-        onCancel={() => { setConfirmDelete(null); }}
-        onConfirm={handleDeleteConfirm}
+      <PointMenu
+        at={ws.contextMenu ? { x: ws.contextMenu.x, y: ws.contextMenu.y } : null}
+        label={t("menu.label")}
+        items={w.contextItems}
+        onClose={ws.closeContextMenu}
       />
-      <BatchDeleteConfirmOverlay
-        open={confirmBatchDelete}
-        selectionCount={selectionCount}
-        onCancel={() => { setConfirmBatchDelete(false); }}
-        onConfirm={handleBatchDeleteConfirm}
-      />
+      <DeleteConfirmDialog names={w.del.names} where={where} onCancel={w.del.cancel} onConfirm={w.del.confirm} />
+      <UploadConfirmDialog files={w.upload.pending?.files ?? null} where={t("dialog.where", { path: w.upload.pending?.dir ?? "", source: label })} onCancel={w.upload.cancel} onConfirm={w.upload.confirm} />
+      <NameDialog open={w.newFolder.open} title={t("dialog.newFolder")} confirmLabel={t("dialog.create")} onCancel={w.newFolder.cancel} onSubmit={w.newFolder.create} />
       <TextPreviewOverlay
-        previewContent={previewContent}
-        currentPath={currentPath}
-        onClose={closePreview}
-        onDownload={downloadFile}
+        previewContent={src.preview}
+        onClose={src.closePreview}
+        onDownload={() => {
+          if (src.preview) src.download([src.preview.name]);
+        }}
       />
     </div>
   );
 }
+

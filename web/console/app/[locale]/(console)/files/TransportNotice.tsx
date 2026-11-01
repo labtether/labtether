@@ -11,7 +11,7 @@ export function TransportNotice({ connection, className = "" }: { connection?: F
   const t = useTranslations("files");
   if (!connection?.transport_notice?.trim()) return null;
   return (
-    <p role="note" className={`flex items-start gap-1.5 text-[var(--warn)] ${className}`}>
+    <p role="note" className={`flex items-start gap-1.5 text-[var(--warn-text)] ${className}`}>
       <AlertTriangle className="w-3.5 h-3.5 mt-px shrink-0" aria-hidden="true" />
       <span>{t("webdavTransportNotice")}</span>
     </p>
