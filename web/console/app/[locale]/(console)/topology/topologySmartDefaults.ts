@@ -3,7 +3,7 @@ import type { RelationshipType } from "./topologyCanvasTypes";
 // Asset type categories for smart defaults
 const CONTAINER_TYPES = new Set(["container", "docker-container", "lxc", "pod"]);
 const VM_TYPES = new Set(["vm", "virtual-machine"]);
-const HOST_TYPES = new Set(["host", "server", "hypervisor", "container-host"]);
+const HOST_TYPES = new Set(["host", "server", "hypervisor", "hypervisor-node", "node", "nas", "storage-controller", "container-host"]);
 const STORAGE_TYPES = new Set(["nas", "storage", "datastore", "pool", "dataset"]);
 const DB_TYPES = new Set(["database", "db"]);
 const NETWORK_TYPES = new Set(["switch", "router", "firewall", "ap", "access-point"]);

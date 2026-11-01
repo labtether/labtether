@@ -1,4 +1,176 @@
 {
-  "title": "Topologie",
-  "loading": "Chargement de la vue topologique..."
+  "title": "Carte",
+  "loading": "Chargement de la carte",
+  "more": "Actions de la carte",
+  "canvas": "Carte du réseau",
+  "keys": "Les flèches passent d’un appareil à l’autre, Entrée ouvre les détails, Échap ferme, f ajuste à la largeur, plus et moins zooment.",
+  "lone": "Non connectés",
+  "other": "Autres",
+  "empty": "Aucun appareil pour l’instant",
+  "emptyLink": "Ajouter un appareil",
+  "copied": "{text} copié",
+  "mini": "{count, plural, one {Carte du réseau de # appareil} other {Carte du réseau de # appareils}}",
+  "menu": {
+    "find": "Trouver un appareil",
+    "editLayout": "Modifier la disposition",
+    "doneEditing": "Terminé",
+    "showList": "Afficher en liste",
+    "showMap": "Afficher en carte",
+    "zones": "Zones",
+    "newZone": "Nouvelle zone",
+    "unsorted": "Appareils non classés",
+    "reset": "Réinitialiser la carte…"
+  },
+  "reset": {
+    "title": "Réinitialiser la carte ?",
+    "body": "Les zones, les placements, les connexions que vous avez tracées et les appareils masqués sont effacés, puis recréés à partir des appareils que le hub connaît maintenant.",
+    "confirm": "Réinitialiser"
+  },
+  "view": {
+    "label": "Afficher la carte en",
+    "list": "Liste",
+    "map": "Carte",
+    "listLabel": "Carte en liste"
+  },
+  "zoom": {
+    "label": "Zoom",
+    "in": "Zoom avant",
+    "out": "Zoom arrière",
+    "fit": "Ajuster",
+    "fitTip": "Ajuster à la largeur (f)"
+  },
+  "find": {
+    "label": "Trouver un appareil",
+    "placeholder": "Nom, adresse ou étiquette",
+    "close": "Fermer la recherche",
+    "none": "Aucun appareil ne correspond"
+  },
+  "fold": {
+    "more": "+{count} de plus",
+    "less": "Afficher moins"
+  },
+  "status": {
+    "online": "En ligne",
+    "offline": "Hors ligne",
+    "notResponding": "Ne répond pas",
+    "noCheckIn": "Aucun signal",
+    "offlineSince": "Hors ligne depuis {time}",
+    "notRespondingSince": "Ne répond pas depuis {time}",
+    "noCheckInYet": "Aucun signal pour l’instant"
+  },
+  "node": {
+    "actions": "Actions pour {name}",
+    "moveTo": "Déplacer vers {zone}",
+    "removeFrom": "Retirer de {zone}",
+    "open": "Ouvrir la page de l’appareil",
+    "copy": "Copier l’adresse"
+  },
+  "inspector": {
+    "close": "Fermer les détails",
+    "closeTip": "Fermer (Échap)",
+    "open": "Ouvrir la page de l’appareil",
+    "terminal": "Terminal",
+    "address": "Adresse",
+    "copy": "Copier",
+    "os": "OS",
+    "type": "Type",
+    "source": "Source",
+    "runsOn": "Tourne sur",
+    "vmOn": "VM {vmid} sur",
+    "zone": "Zone",
+    "noZone": "Aucune zone",
+    "changeZone": "Zone {zone}, modifier",
+    "uptime": "Disponibilité",
+    "contents": "Contient",
+    "cpu": "CPU · 24 h",
+    "cpuNow": "{value} % maintenant",
+    "cpuLabel": "CPU sur les dernières 24 heures, {value} % maintenant"
+  },
+  "contents": {
+    "vms": "{count, plural, one {# VM} other {# VM}}",
+    "containers": "{count, plural, one {# conteneur} other {# conteneurs}}",
+    "services": "{count, plural, one {# service} other {# services}}",
+    "stacks": "{count, plural, one {# stack} other {# stacks}}",
+    "pools": "{count, plural, one {# pool} other {# pools}}",
+    "datasets": "{count, plural, one {# dataset} other {# datasets}}",
+    "other": "{count} autres"
+  },
+  "conn": {
+    "title": "Connexions",
+    "none": "Aucune connexion",
+    "connectTo": "Connecter à…",
+    "device": "Appareil",
+    "relationship": "Relation",
+    "cancel": "Annuler",
+    "connect": "Connecter",
+    "remove": "Retirer la connexion vers {name}",
+    "removeShort": "Retirer",
+    "removed": "Connexion {a} → {b} retirée",
+    "undo": "Annuler",
+    "change": "{rel} {name}, modifier la relation",
+    "label": "Libellé",
+    "editLabel": "Modifier le libellé",
+    "discovered": "Trouvée par le hub"
+  },
+  "rel": {
+    "connected_to": "Connecté à",
+    "depends_on": "Dépend de",
+    "runs_on": "Tourne sur",
+    "hosted_on": "Hébergé sur",
+    "provides_to": "Fournit à",
+    "peer_of": "Pair de",
+    "contains": "Contient"
+  },
+  "inv": {
+    "connected_to": "Connecté à",
+    "depends_on": "Requis par",
+    "runs_on": "Exécute",
+    "hosted_on": "Héberge",
+    "provides_to": "Utilise",
+    "peer_of": "Pair de",
+    "contains": "Dans"
+  },
+  "zones": {
+    "title": "Zones",
+    "close": "Fermer les zones",
+    "none": "Aucune zone",
+    "new": "Nouvelle zone",
+    "newName": "Nouvelle zone",
+    "newNameN": "Nouvelle zone {n}",
+    "name": "Nom de {zone}",
+    "delete": "Supprimer {zone}",
+    "deleteTitle": "Supprimer {zone} ?",
+    "deleteBody": "{count, plural, =0 {Elle ne contient aucun appareil.} one {Son appareil passe dans Autres.} other {Ses # appareils passent dans Autres.}}",
+    "deleteConfirm": "Supprimer"
+  },
+  "unsorted": {
+    "title": "Appareils non classés",
+    "close": "Fermer les appareils non classés",
+    "none": "Chaque appareil a une zone",
+    "suggest": "Suggérée : {zone}",
+    "accept": "Accepter",
+    "dismiss": "Retirer {name} de la carte",
+    "dismissTip": "Retirer de la carte",
+    "placeAll": "Tout placer"
+  },
+  "edit": {
+    "newZone": "Nouvelle zone",
+    "fit": "Ajuster la vue",
+    "arrange": "Ranger les zones",
+    "rename": "Renommer",
+    "collapse": "Réduire ou développer",
+    "deleteZone": "Supprimer la zone",
+    "moveToZone": "Déplacer vers une zone",
+    "removeFromZone": "Retirer de la zone",
+    "changeType": "Modifier la relation",
+    "deleteConnection": "Retirer la connexion",
+    "zoneSummary": "{devices, plural, one {# appareil} other {# appareils}}{zones, plural, =0 {} one {, # zone incluse} other {, # zones incluses}}"
+  },
+  "errors": {
+    "load": "La carte ne s’est pas chargée.",
+    "retry": "Réessayer",
+    "save": "Le hub n’a pas enregistré la modification. Réessayez.",
+    "copy": "Échec de la copie",
+    "edit": "Modifier la disposition ne s’est pas ouvert. Rechargez la page."
+  }
 }

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { ChevronRight } from "lucide-react";
+import { useTranslations } from "next-intl";
 import type { Zone, RelationshipType } from "./topologyCanvasTypes";
 import { RELATIONSHIP_TYPES } from "./topologyCanvasTypes";
 
@@ -32,66 +34,32 @@ interface TopologyContextMenuProps {
   onDeleteConnection?: (connId: string) => void;
 }
 
-
 function Separator() {
-  return <div className="my-1 h-px bg-[var(--line)]" />;
+  return <div className="lt-menu-sep" role="separator" />;
 }
 
-interface MenuItemProps {
-  icon: string;
-  label: string;
-  onClick: () => void;
-  destructive?: boolean;
-}
-
-function MenuItem({ icon, label, onClick, destructive }: MenuItemProps) {
+function MenuItem({ label, onClick, danger }: { label: string; onClick: () => void; danger?: boolean }) {
   return (
-    <button
-      onClick={onClick}
-      className={`flex w-full items-center gap-2 rounded px-3 py-1.5 text-xs cursor-pointer transition-colors duration-[var(--dur-fast)] hover:bg-[var(--hover)] ${
-        destructive ? "text-[var(--bad)]" : "text-[var(--text)]"
-      }`}
-    >
-      <span className="w-3.5 text-center leading-none">{icon}</span>
-      <span className="flex-1 text-left">{label}</span>
+    <button type="button" role="menuitem" onClick={onClick} className={`lt-menu-item mp-cm-item${danger ? " mp-danger" : ""}`}>
+      {label}
     </button>
   );
 }
 
-interface SubMenuProps {
-  icon: string;
-  label: string;
-  children: React.ReactNode;
-}
-
-function SubMenu({ icon, label, children }: SubMenuProps) {
+function SubMenu({ label, children }: { label: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
-
   return (
-    <div
-      className="relative"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-    >
-      <button
-        className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-xs text-[var(--text)] cursor-pointer transition-colors duration-[var(--dur-fast)] hover:bg-[var(--hover)]"
-      >
-        <span className="w-3.5 text-center leading-none">{icon}</span>
-        <span className="flex-1 text-left">{label}</span>
-        <span className="text-[var(--muted)]">›</span>
+    <div className="mp-cm-sub" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      <button type="button" role="menuitem" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="lt-menu-item mp-cm-item">
+        {label}
+        <ChevronRight aria-hidden="true" className="lt-menu-hint" />
       </button>
-      {open && (
-        <div
-          className="absolute left-full top-0 z-50 min-w-40 rounded-lg border border-[var(--panel-border)] bg-[var(--panel)] p-1 shadow-lg"
-          style={{ marginLeft: 2 }}
-        >
-          {children}
-        </div>
-      )}
+      {open && <div className="lt-menu mp-cm mp-cm-subm" role="menu">{children}</div>}
     </div>
   );
 }
 
+/** Edit layout: the right-click menus for the canvas, a zone, a device and a connection. */
 export function TopologyContextMenu({
   target,
   zones,
@@ -109,15 +77,15 @@ export function TopologyContextMenu({
   onChangeConnectionType,
   onDeleteConnection,
 }: TopologyContextMenuProps) {
+  const t = useTranslations("topology");
   const menuRef = useRef<HTMLDivElement>(null);
   const [adjustedPos, setAdjustedPos] = useState<{ x: number; y: number } | null>(null);
 
-  // Reset adjusted position when target changes so we always re-measure
+  // Re-measure whenever the target changes, then keep the menu inside the window.
   useEffect(() => {
     setAdjustedPos(null);
   }, [target]);
 
-  // Clamp menu position to stay within viewport after it renders
   useEffect(() => {
     if (!target || !menuRef.current) return;
     const rect = menuRef.current.getBoundingClientRect();
@@ -132,26 +100,17 @@ export function TopologyContextMenu({
     setAdjustedPos({ x, y });
   }, [target]);
 
-  // Close on outside click, Escape, or scroll
+  // Close on a click outside, Escape or scroll.
   useEffect(() => {
     if (!target) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-
+    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     const handleScroll = () => onClose();
-
     const handlePointerDown = (e: PointerEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        onClose();
-      }
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
     };
-
     document.addEventListener("keydown", handleKeyDown);
     document.addEventListener("pointerdown", handlePointerDown, true);
     document.addEventListener("scroll", handleScroll, true);
-
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("pointerdown", handlePointerDown, true);
@@ -161,11 +120,7 @@ export function TopologyContextMenu({
 
   if (!target) return null;
 
-  const wrap = (fn?: () => void) => () => {
-    fn?.();
-    onClose();
-  };
-
+  const wrap = (fn?: () => void) => () => { fn?.(); onClose(); };
   const wrapWith = <T,>(fn?: (arg: T) => void, arg?: T) => () => {
     if (fn && arg !== undefined) fn(arg);
     onClose();
@@ -174,117 +129,52 @@ export function TopologyContextMenu({
   return (
     <div
       ref={menuRef}
-      className="fixed z-[9999] min-w-44 rounded-lg border border-[var(--panel-border)] bg-[var(--panel)] p-1 shadow-lg"
+      role="menu"
+      className="lt-menu mp-cm"
       style={{ left: (adjustedPos ?? target).x, top: (adjustedPos ?? target).y }}
     >
       {target.type === "canvas" && (
         <>
-          <MenuItem
-            icon="+"
-            label="New Zone"
-            onClick={wrap(onCreateZone)}
-          />
-          <MenuItem
-            icon="⊡"
-            label="Fit View"
-            onClick={wrap(onFitView)}
-          />
-          <MenuItem
-            icon="⟳"
-            label="Auto-layout"
-            onClick={wrap(onAutoLayout)}
-          />
+          <MenuItem label={t("edit.newZone")} onClick={wrap(onCreateZone)} />
+          <MenuItem label={t("edit.fit")} onClick={wrap(onFitView)} />
+          <MenuItem label={t("edit.arrange")} onClick={wrap(onAutoLayout)} />
           <Separator />
-          <MenuItem
-            icon="↺"
-            label="Reset Layout"
-            destructive
-            onClick={() => {
-              if (window.confirm("Reset the entire topology layout? All zones, placements, and dismissed assets will be cleared and re-seeded from your current infrastructure.")) {
-                onResetLayout?.();
-              }
-              onClose();
-            }}
-          />
+          <MenuItem label={t("menu.reset")} danger onClick={wrap(onResetLayout)} />
         </>
       )}
 
       {target.type === "zone" && (
         <>
-          <MenuItem
-            icon="✎"
-            label="Rename"
-            onClick={wrapWith(onRenameZone, target.zoneId)}
-          />
-          <MenuItem
-            icon="⊟"
-            label="Collapse / Expand"
-            onClick={wrapWith(onToggleCollapse, target.zoneId)}
-          />
+          <MenuItem label={t("edit.rename")} onClick={wrapWith(onRenameZone, target.zoneId)} />
+          <MenuItem label={t("edit.collapse")} onClick={wrapWith(onToggleCollapse, target.zoneId)} />
           <Separator />
-          <MenuItem
-            icon="✕"
-            label="Delete Zone"
-            destructive
-            onClick={wrapWith(onDeleteZone, target.zoneId)}
-          />
+          <MenuItem label={t("edit.deleteZone")} danger onClick={wrapWith(onDeleteZone, target.zoneId)} />
         </>
       )}
 
       {target.type === "asset" && (
         <>
-          <MenuItem
-            icon="↔"
-            label="Connect to..."
-            onClick={wrapWith(onConnectTo, target.assetId)}
-          />
+          <MenuItem label={t("conn.connectTo")} onClick={wrapWith(onConnectTo, target.assetId)} />
           {zones.length > 0 && (
-            <SubMenu icon="⤷" label="Move to zone">
+            <SubMenu label={t("edit.moveToZone")}>
               {zones.map((z) => (
-                <button
-                  key={z.id}
-                  onClick={() => {
-                    onMoveToZone?.(target.assetId, z.id);
-                    onClose();
-                  }}
-                  className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-xs text-[var(--text)] cursor-pointer transition-colors duration-[var(--dur-fast)] hover:bg-[var(--hover)]"
-                >
-                  {z.label}
-                </button>
+                <MenuItem key={z.id} label={z.label} onClick={() => { onMoveToZone?.(target.assetId, z.id); onClose(); }} />
               ))}
             </SubMenu>
           )}
-          <MenuItem
-            icon="⊖"
-            label="Remove from zone"
-            onClick={wrapWith(onRemoveFromZone, target.assetId)}
-          />
+          <MenuItem label={t("edit.removeFromZone")} onClick={wrapWith(onRemoveFromZone, target.assetId)} />
         </>
       )}
 
       {target.type === "connection" && (
         <>
-          <SubMenu icon="⇄" label="Change type">
+          <SubMenu label={t("edit.changeType")}>
             {RELATIONSHIP_TYPES.map((rt) => (
-              <button
-                key={rt.value}
-                onClick={() => {
-                  onChangeConnectionType?.(target.connectionId, rt.value);
-                  onClose();
-                }}
-                className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-xs text-[var(--text)] cursor-pointer transition-colors duration-[var(--dur-fast)] hover:bg-[var(--hover)]"
-              >
-                {rt.label}
-              </button>
+              <MenuItem key={rt.value} label={t(`rel.${rt.value}`)} onClick={() => { onChangeConnectionType?.(target.connectionId, rt.value); onClose(); }} />
             ))}
           </SubMenu>
           <Separator />
-          <MenuItem
-            icon="✕"
-            label="Delete Connection"
-            destructive
-            onClick={wrapWith(onDeleteConnection, target.connectionId)}
-          />
+          <MenuItem label={t("edit.deleteConnection")} danger onClick={wrapWith(onDeleteConnection, target.connectionId)} />
         </>
       )}
     </div>

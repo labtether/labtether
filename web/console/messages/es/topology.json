@@ -1,4 +1,176 @@
 {
-  "title": "Topología",
-  "loading": "Cargando vista de topología..."
+  "title": "Mapa",
+  "loading": "Cargando el mapa",
+  "more": "Acciones del mapa",
+  "canvas": "Mapa de red",
+  "keys": "Las flechas recorren los dispositivos, Intro abre los detalles, Esc cierra, f ajusta al ancho, más y menos hacen zoom.",
+  "lone": "Sin conexión",
+  "other": "Otros",
+  "empty": "Aún no hay dispositivos",
+  "emptyLink": "Añadir un dispositivo",
+  "copied": "{text} copiado",
+  "mini": "{count, plural, one {Mapa de red de # dispositivo} other {Mapa de red de # dispositivos}}",
+  "menu": {
+    "find": "Buscar dispositivo",
+    "editLayout": "Editar diseño",
+    "doneEditing": "Listo",
+    "showList": "Ver como lista",
+    "showMap": "Ver como mapa",
+    "zones": "Zonas",
+    "newZone": "Nueva zona",
+    "unsorted": "Dispositivos sin zona",
+    "reset": "Restablecer mapa…"
+  },
+  "reset": {
+    "title": "¿Restablecer el mapa?",
+    "body": "Se borran las zonas, las ubicaciones, las conexiones que dibujaste y los dispositivos que dejaste fuera, y se crean de nuevo a partir de los dispositivos que el hub conoce ahora.",
+    "confirm": "Restablecer"
+  },
+  "view": {
+    "label": "Ver el mapa como",
+    "list": "Lista",
+    "map": "Mapa",
+    "listLabel": "Mapa como lista"
+  },
+  "zoom": {
+    "label": "Zoom",
+    "in": "Acercar",
+    "out": "Alejar",
+    "fit": "Ajustar",
+    "fitTip": "Ajustar al ancho (f)"
+  },
+  "find": {
+    "label": "Buscar dispositivo",
+    "placeholder": "Nombre, dirección o etiqueta",
+    "close": "Cerrar búsqueda",
+    "none": "Ningún dispositivo coincide"
+  },
+  "fold": {
+    "more": "+{count} más",
+    "less": "Ver menos"
+  },
+  "status": {
+    "online": "En línea",
+    "offline": "Desconectado",
+    "notResponding": "No responde",
+    "noCheckIn": "Sin reporte",
+    "offlineSince": "Desconectado desde {time}",
+    "notRespondingSince": "No responde desde {time}",
+    "noCheckInYet": "Aún sin reporte"
+  },
+  "node": {
+    "actions": "Acciones de {name}",
+    "moveTo": "Mover a {zone}",
+    "removeFrom": "Quitar de {zone}",
+    "open": "Abrir página del dispositivo",
+    "copy": "Copiar dirección"
+  },
+  "inspector": {
+    "close": "Cerrar detalles",
+    "closeTip": "Cerrar (Esc)",
+    "open": "Abrir página del dispositivo",
+    "terminal": "Terminal",
+    "address": "Dirección",
+    "copy": "Copiar",
+    "os": "SO",
+    "type": "Tipo",
+    "source": "Origen",
+    "runsOn": "Se ejecuta en",
+    "vmOn": "VM {vmid} en",
+    "zone": "Zona",
+    "noZone": "Sin zona",
+    "changeZone": "Zona {zone}, cambiar",
+    "uptime": "Tiempo activo",
+    "contents": "Contiene",
+    "cpu": "CPU · 24 h",
+    "cpuNow": "{value} % ahora",
+    "cpuLabel": "CPU de las últimas 24 horas, {value} % ahora"
+  },
+  "contents": {
+    "vms": "{count, plural, one {# VM} other {# VM}}",
+    "containers": "{count, plural, one {# contenedor} other {# contenedores}}",
+    "services": "{count, plural, one {# servicio} other {# servicios}}",
+    "stacks": "{count, plural, one {# stack} other {# stacks}}",
+    "pools": "{count, plural, one {# pool} other {# pools}}",
+    "datasets": "{count, plural, one {# dataset} other {# datasets}}",
+    "other": "{count} más"
+  },
+  "conn": {
+    "title": "Conexiones",
+    "none": "Sin conexiones",
+    "connectTo": "Conectar con…",
+    "device": "Dispositivo",
+    "relationship": "Relación",
+    "cancel": "Cancelar",
+    "connect": "Conectar",
+    "remove": "Quitar la conexión con {name}",
+    "removeShort": "Quitar",
+    "removed": "Conexión {a} → {b} quitada",
+    "undo": "Deshacer",
+    "change": "{rel} {name}, cambiar la relación",
+    "label": "Etiqueta",
+    "editLabel": "Editar etiqueta",
+    "discovered": "Encontrada por el hub"
+  },
+  "rel": {
+    "connected_to": "Conectado a",
+    "depends_on": "Depende de",
+    "runs_on": "Se ejecuta en",
+    "hosted_on": "Alojado en",
+    "provides_to": "Provee a",
+    "peer_of": "Par de",
+    "contains": "Contiene"
+  },
+  "inv": {
+    "connected_to": "Conectado a",
+    "depends_on": "Requerido por",
+    "runs_on": "Ejecuta",
+    "hosted_on": "Aloja",
+    "provides_to": "Usa",
+    "peer_of": "Par de",
+    "contains": "Dentro de"
+  },
+  "zones": {
+    "title": "Zonas",
+    "close": "Cerrar zonas",
+    "none": "Sin zonas",
+    "new": "Nueva zona",
+    "newName": "Nueva zona",
+    "newNameN": "Nueva zona {n}",
+    "name": "Nombre de {zone}",
+    "delete": "Eliminar {zone}",
+    "deleteTitle": "¿Eliminar {zone}?",
+    "deleteBody": "{count, plural, =0 {No tiene dispositivos.} one {Su dispositivo pasa a Otros.} other {Sus # dispositivos pasan a Otros.}}",
+    "deleteConfirm": "Eliminar"
+  },
+  "unsorted": {
+    "title": "Dispositivos sin zona",
+    "close": "Cerrar dispositivos sin zona",
+    "none": "Todos los dispositivos tienen zona",
+    "suggest": "Sugerida: {zone}",
+    "accept": "Aceptar",
+    "dismiss": "Dejar {name} fuera del mapa",
+    "dismissTip": "Dejar fuera del mapa",
+    "placeAll": "Ubicar todos"
+  },
+  "edit": {
+    "newZone": "Nueva zona",
+    "fit": "Ajustar vista",
+    "arrange": "Ordenar zonas",
+    "rename": "Renombrar",
+    "collapse": "Contraer o expandir",
+    "deleteZone": "Eliminar zona",
+    "moveToZone": "Mover a zona",
+    "removeFromZone": "Quitar de la zona",
+    "changeType": "Cambiar relación",
+    "deleteConnection": "Quitar conexión",
+    "zoneSummary": "{devices, plural, one {# dispositivo} other {# dispositivos}}{zones, plural, =0 {} one {, # zona dentro} other {, # zonas dentro}}"
+  },
+  "errors": {
+    "load": "El mapa no se cargó.",
+    "retry": "Reintentar",
+    "save": "El hub no guardó el cambio. Inténtalo de nuevo.",
+    "copy": "No se pudo copiar",
+    "edit": "Editar diseño no se abrió. Recarga la página."
+  }
 }
