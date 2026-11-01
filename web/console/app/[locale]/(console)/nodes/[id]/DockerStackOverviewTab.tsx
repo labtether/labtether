@@ -1,12 +1,17 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { usePollingTask } from "../../../../hooks/usePollingTask";
-import { Card } from "../../../../components/ui/Card";
-import { Badge } from "../../../../components/ui/Badge";
+import { useTranslations } from "next-intl";
+import { useMemo } from "react";
+import { Link } from "../../../../../i18n/navigation";
+import { dockerContainerAssetId, dockerHostAssetId, nodeHref } from "../../../../components/containers/containerModel";
+import { KV, ListEmpty, ListError, SectionHead } from "../../../../components/containers/PanelParts";
+import { useConfirm } from "../../../../components/containers/RowMenu";
+import { stackMembers, stackState } from "../../../../components/containers/stackModel";
+import { useHostDocker } from "../../../../components/containers/useHostDocker";
+import { useStackAction } from "../../../../components/containers/useStackAction";
 import { Button } from "../../../../components/ui/Button";
-import type { DockerContainer, DockerStack } from "../../../../../lib/docker";
-import { executeStackAction, fetchDockerContainers, fetchDockerStacks } from "../../../../../lib/docker";
+import { useAuth } from "../../../../contexts/AuthContext";
+import { hasWriteRole } from "../../../../lib/roles";
 
 type Props = {
   hostId: string;
@@ -14,134 +19,53 @@ type Props = {
   stackAssetId: string;
 };
 
+/** A compose stack's page: its state, host, compose file and containers, with Start, Restart and Down…. */
 export function DockerStackOverviewTab({ hostId, stackName, stackAssetId }: Props) {
-  const [stack, setStack] = useState<DockerStack | null>(null);
-  const [containers, setContainers] = useState<DockerContainer[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [actionInFlight, setActionInFlight] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const t = useTranslations("devices-docker.stacks");
+  const { user } = useAuth();
+  const { containers, stacks, loading, error, reload } = useHostDocker(hostId, { withStacks: true });
+  const stack = useMemo(() => stacks.find((s) => s.name.toLowerCase() === stackName.toLowerCase()) ?? null, [stacks, stackName]);
+  const members = useMemo(() => (stack ? stackMembers(stack, containers) : []), [stack, containers]);
+  const run = useStackAction(stackName, stackAssetId, () => void reload());
+  const [ask, dialog] = useConfirm();
 
-  const loadTask = useCallback(async (signal: AbortSignal) => {
-    try {
-      const [stacks, hostContainers] = await Promise.all([
-        fetchDockerStacks(hostId, signal),
-        fetchDockerContainers(hostId, signal),
-      ]);
-      if (signal.aborted) return;
-      const matchedStack = stacks.find((entry) => entry.name.toLowerCase() === stackName.toLowerCase()) ?? null;
-      setStack(matchedStack);
-      setContainers(hostContainers);
-      setError(null);
-    } catch (err) {
-      if (signal.aborted) return;
-      setError(err instanceof Error ? err.message : "failed to load stack details");
-    } finally {
-      if (!signal.aborted) setLoading(false);
-    }
-  }, [hostId, stackName]);
+  if (loading && !stack) return <ListEmpty text={t("loading")} />;
+  if (error && !stack) return <ListError text={t("loadFailed")} onRetry={() => void reload()} />;
+  if (!stack) return <ListEmpty text={t("notFound")} />;
 
-  const load = usePollingTask(loadTask, 10_000);
-
-  const isRunning = (stack?.status ?? "").trim().toLowerCase().startsWith("running");
-  const memberContainers = useMemo(() => {
-    if (!stack) return [];
-    const linked = new Set(stack.container_ids.map((value) => value.toLowerCase()));
-    return containers.filter((container) => {
-      if ((container.stack_name ?? "").toLowerCase() === stack.name.toLowerCase()) return true;
-      if (linked.has(container.name.toLowerCase())) return true;
-      if (linked.has(container.id.toLowerCase())) return true;
-      const shortID = container.id.length > 12 ? container.id.slice(0, 12) : container.id;
-      return linked.has(shortID.toLowerCase());
-    });
-  }, [containers, stack]);
-
-  async function runAction(action: string) {
-    setActionInFlight(action);
-    setError(null);
-    try {
-      await executeStackAction(stackAssetId, action);
-      setTimeout(() => void load(), 1200);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "stack action failed");
-    } finally {
-      setActionInFlight(null);
-    }
-  }
+  const st = stackState(members, stack.status);
+  const word = st.word === "partial" ? t("partial", { running: st.running, total: st.total }) : st.word ? t(st.word) : t("running");
+  const acts = hasWriteRole(user?.role) && st.tone !== "busy" ? (
+    <>
+      {st.running < st.total || !st.total ? <Button size="sm" onClick={() => void run("stack.up")}>{t("start")}</Button> : null}
+      {st.running ? <Button size="sm" onClick={() => void run("stack.restart")}>{t("restart")}</Button> : null}
+      <Button size="sm" variant="danger" onClick={() => ask({ title: t("downTitle", { name: stack.name }), body: t("downBody"), confirm: t("downConfirm"), danger: true, run: () => run("stack.down") })}>
+        {t("down")}
+      </Button>
+    </>
+  ) : null;
 
   return (
-    <Card className="mb-4">
-      <div className="mb-4 rounded-xl border border-[var(--line)] bg-[linear-gradient(135deg,var(--panel)_0%%,color-mix(in_oklab,var(--accent)_10%%,var(--panel))_100%%)] p-4">
-        <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">Compose Stack</p>
-        <div className="mt-2 flex items-center gap-2">
-          <p className="text-lg font-semibold text-[var(--text)]">{stackName}</p>
-          {stack ? <Badge status={isRunning ? "ok" : "bad"} size="sm" /> : null}
-          {stack ? (
-            <span className="text-[10px] uppercase tracking-wide text-[var(--muted)]">{stack.status}</span>
-          ) : null}
-        </div>
-        <p className="mt-2 text-xs text-[var(--muted)]">
-          Quick lifecycle controls and stack metadata.
-        </p>
-      </div>
-
-      {loading ? (
-        <p className="text-sm text-[var(--muted)]">Loading stack details...</p>
-      ) : stack ? (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div className="rounded-lg border border-[var(--line)] p-3">
-              <p className="text-[10px] uppercase tracking-wider text-[var(--muted)]">Status</p>
-              <p className="mt-1 text-sm font-medium text-[var(--text)]">{stack.status}</p>
-            </div>
-            <div className="rounded-lg border border-[var(--line)] p-3">
-              <p className="text-[10px] uppercase tracking-wider text-[var(--muted)]">Containers</p>
-              <p className="mt-1 text-sm font-medium text-[var(--text)]">{memberContainers.length}</p>
-            </div>
-            <div className="rounded-lg border border-[var(--line)] p-3">
-              <p className="text-[10px] uppercase tracking-wider text-[var(--muted)]">Host</p>
-              <p className="mt-1 text-sm font-medium text-[var(--text)] font-mono">{hostId}</p>
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-[var(--line)] p-3">
-            <p className="text-[10px] uppercase tracking-wider text-[var(--muted)]">Compose File</p>
-            <p className="mt-1 text-xs text-[var(--text)] font-mono break-all">{stack.config_file || "--"}</p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              disabled={actionInFlight === "stack.up"}
-              onClick={() => void runAction("stack.up")}
-            >
-              Up
-            </Button>
-            <Button
-              size="sm"
-              disabled={actionInFlight === "stack.restart"}
-              onClick={() => void runAction("stack.restart")}
-            >
-              Restart
-            </Button>
-            <Button
-              size="sm"
-              variant="danger"
-              disabled={actionInFlight === "stack.down"}
-              onClick={() => void runAction("stack.down")}
-            >
-              Down
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-col items-center justify-center gap-2 py-12">
-          <p className="text-sm font-medium text-[var(--text)]">Stack not found</p>
-          <p className="text-xs text-[var(--muted)]">This stack may have been removed or renamed.</p>
-        </div>
-      )}
-
-      {error ? <p className="mt-3 text-xs text-[var(--bad)]">{error}</p> : null}
-    </Card>
+    <div className="ct-tab">
+      <section aria-labelledby="ct-stk">
+        <SectionHead id="ct-stk" title={t("details")}>{acts}</SectionHead>
+        <dl className="ct-sheet ct-kvs">
+          <KV k={t("state")}>
+            {st.tone ? <i className={`ct-dot ${st.tone}`} aria-hidden="true" /> : null}
+            <span>{word}</span>
+          </KV>
+          <KV k={t("host")}><Link href={nodeHref(dockerHostAssetId(hostId))} className="ct-lnk">{hostId}</Link></KV>
+          <KV k={t("composeFile")} mono><span className="ct-wrap">{stack.config_file || "—"}</span></KV>
+          <KV k={t("containers")}>
+            {members.length ? (
+              <span className="ct-names wrap">
+                {members.map((c) => <Link key={c.id} href={nodeHref(dockerContainerAssetId(hostId, c.id))}>{c.name}</Link>)}
+              </span>
+            ) : <span className="ct-quiet">{t("noContainers")}</span>}
+          </KV>
+        </dl>
+      </section>
+      {dialog}
+    </div>
   );
 }
-

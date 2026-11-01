@@ -1,169 +1,115 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Badge } from "../../../../../components/ui/Badge";
+import { useTranslations } from "next-intl";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "../../../../../components/ui/Button";
-import { Card } from "../../../../../components/ui/Card";
+import { Bar, ListEmpty, ListError, ListSkeleton } from "../../../../../components/containers/PanelParts";
+import { RowMenu, useConfirm, type MenuEntry } from "../../../../../components/containers/RowMenu";
+import { useAuth } from "../../../../../contexts/AuthContext";
+import { useToast } from "../../../../../contexts/ToastContext";
+import { hasWriteRole } from "../../../../../lib/roles";
 import { portainerAction, portainerFetch } from "./usePortainerData";
 
 type PortainerStack = {
   Id: number;
   Name: string;
+  // 1 = active, 2 = inactive
   Status: number;
   Env?: Array<{ name: string; value: string }>;
-  // Status: 1 = active, 2 = inactive
 };
-
-function stackBadgeStatus(status: number): "ok" | "pending" | "bad" {
-  if (status === 1) return "ok";
-  return "bad";
-}
-
-function stackStatusLabel(status: number): string {
-  if (status === 1) return "active";
-  if (status === 2) return "inactive";
-  return String(status);
-}
+type StackAction = "start" | "stop" | "redeploy" | "remove";
 
 type Props = {
   assetId: string;
+  bar?: ReactNode;
 };
 
-export function PortainerStacksTab({ assetId }: Props) {
+/** The endpoint's Portainer stacks: Start, Stop…, Redeploy… and Remove… in each row's ⋯. */
+export function PortainerStacksTab({ assetId, bar }: Props) {
+  const t = useTranslations("devices-docker.portainer");
+  const { user } = useAuth();
+  const { addToast } = useToast();
+  const [ask, dialog] = useConfirm();
   const [stacks, setStacks] = useState<PortainerStack[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [actionInFlight, setActionInFlight] = useState<string | null>(null);
+  const [busy, setBusy] = useState<number | null>(null);
   const seqRef = useRef(0);
-  const latestRef = useRef(0);
 
   const load = useCallback(async () => {
     const id = ++seqRef.current;
-    latestRef.current = id;
     setLoading(true);
-    setError(null);
     try {
-      const data = await portainerFetch<PortainerStack[]>(
-        `/api/portainer/assets/${encodeURIComponent(assetId)}/stacks`,
-      );
-      if (latestRef.current !== id) return;
+      const data = await portainerFetch<PortainerStack[]>(`/api/portainer/assets/${encodeURIComponent(assetId)}/stacks`);
+      if (seqRef.current !== id) return;
       setStacks(data ?? []);
+      setError(null);
     } catch (err) {
-      if (latestRef.current !== id) return;
-      setError(err instanceof Error ? err.message : "failed to load stacks");
+      if (seqRef.current !== id) return;
+      setError(err instanceof Error ? err.message : "error");
     } finally {
-      if (latestRef.current === id) setLoading(false);
+      if (seqRef.current === id) setLoading(false);
     }
   }, [assetId]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
-  const doAction = useCallback(async (stackId: number, action: "start" | "stop" | "redeploy" | "remove") => {
-    setActionError(null);
-    setActionInFlight(`${stackId}-${action}`);
+  // Every stack action is a POST; the hub turns remove into Portainer's delete.
+  const doAction = useCallback(async (stack: PortainerStack, action: StackAction) => {
+    setBusy(stack.Id);
     try {
       await portainerAction(
-        `/api/portainer/assets/${encodeURIComponent(assetId)}/stacks/${encodeURIComponent(stackId)}/${action}`,
+        `/api/portainer/assets/${encodeURIComponent(assetId)}/stacks/${encodeURIComponent(stack.Id)}/${action}`,
         "POST",
       );
+      addToast("success", t(`stackToast.${action}`, { name: stack.Name }));
       await load();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : `failed to ${action} stack`);
+      const why = err instanceof Error && err.message ? `: ${err.message}` : "";
+      addToast("error", `${t(`stackFailed.${action}`, { name: stack.Name })}${why}`);
     } finally {
-      setActionInFlight(null);
+      setBusy(null);
     }
-  }, [assetId, load]);
+  }, [addToast, assetId, load, t]);
 
-  if (loading && stacks.length === 0) {
-    return <Card><p className="text-sm text-[var(--muted)]">Loading stacks…</p></Card>;
-  }
+  const menu = (s: PortainerStack): MenuEntry[] => {
+    if (!hasWriteRole(user?.role) || busy === s.Id) return [];
+    const active = s.Status === 1;
+    return [
+      active
+        ? { label: t("stop"), onSelect: () => ask({ title: t("stopTitle", { name: s.Name }), body: t("stopBody"), confirm: t("stopConfirm"), danger: true, run: () => doAction(s, "stop") }) }
+        : { label: t("start"), onSelect: () => void doAction(s, "start") },
+      { label: t("redeploy"), onSelect: () => ask({ title: t("redeployTitle", { name: s.Name }), body: t("redeployBody"), confirm: t("redeployConfirm"), run: () => doAction(s, "redeploy") }) },
+      "sep",
+      { label: t("remove"), danger: true, onSelect: () => ask({ title: t("removeTitle", { name: s.Name }), body: t("stackRemoveBody"), confirm: t("removeConfirm"), danger: true, run: () => doAction(s, "remove") }) },
+    ];
+  };
 
-  if (error && stacks.length === 0) {
-    return <Card><p className="text-sm text-[var(--bad)]">{error}</p></Card>;
-  }
+  let body: ReactNode;
+  if (loading && !stacks.length) body = <ListSkeleton />;
+  else if (error && !stacks.length) body = <ListError text={t("stacksFailed")} onRetry={() => void load()} />;
+  else if (!stacks.length) body = <ListEmpty text={t("noStacks")} />;
+  else body = (
+    <div className="ct-list" role="table" aria-label={t("stacks")}>
+      <div className="ct-row sm ct-cols" role="row"><span className="ct-lead" /><span>{t("stack")}</span><span /></div>
+      {[...stacks].sort((a, b) => a.Name.localeCompare(b.Name)).map((s) => (
+        <div key={s.Id} className="ct-row sm" role="row">
+          <span className="ct-lead" aria-hidden="true">{busy === s.Id ? <i className="ct-dot busy" /> : s.Status === 1 ? null : <i className="ct-dot off" />}</span>
+          <span className="ct-main" role="cell">
+            <span className="ct-nm plain">{s.Name}</span>
+            {s.Status !== 1 ? <span className="ct-grey w-off">{t("inactive")}</span> : null}
+          </span>
+          <span className="ct-act"><RowMenu label={t("stackMenu", { name: s.Name })} items={menu(s)} /></span>
+        </div>
+      ))}
+    </div>
+  );
 
   return (
-    <Card>
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-medium text-[var(--text)]">Stacks</h2>
-        <Button size="sm" variant="ghost" onClick={() => { void load(); }} disabled={loading}>
-          {loading ? "Refreshing…" : "Refresh"}
-        </Button>
-      </div>
-      {actionError && (
-        <p className="mb-3 text-xs text-[var(--bad)]">{actionError}</p>
-      )}
-      {stacks.length === 0 ? (
-        <p className="text-sm text-[var(--muted)]">No stacks found.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-[var(--line)]">
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Name</th>
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Status</th>
-                <th className="py-2 text-right font-medium text-[var(--muted)]">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--line)]">
-              {stacks.map((s) => (
-                <tr key={s.Id}>
-                  <td className="py-2 font-medium text-[var(--text)]">{s.Name}</td>
-                  <td className="py-2">
-                    <div className="flex items-center gap-2">
-                      <Badge status={stackBadgeStatus(s.Status)} size="sm" />
-                      <span className="text-[var(--muted)]">{stackStatusLabel(s.Status)}</span>
-                    </div>
-                  </td>
-                  <td className="py-2">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={!!actionInFlight || s.Status === 1}
-                        loading={actionInFlight === `${s.Id}-start`}
-                        onClick={() => { void doAction(s.Id, "start"); }}
-                      >
-                        Start
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={!!actionInFlight || s.Status !== 1}
-                        loading={actionInFlight === `${s.Id}-stop`}
-                        onClick={() => { void doAction(s.Id, "stop"); }}
-                      >
-                        Stop
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={!!actionInFlight}
-                        loading={actionInFlight === `${s.Id}-redeploy`}
-                        onClick={() => { void doAction(s.Id, "redeploy"); }}
-                      >
-                        Redeploy
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="danger"
-                        disabled={!!actionInFlight}
-                        loading={actionInFlight === `${s.Id}-remove`}
-                        onClick={() => { void doAction(s.Id, "remove"); }}
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Card>
+    <>
+      <Bar left={bar} right={<Button variant="ghost" onClick={() => void load()} disabled={loading}>{t("refresh")}</Button>} />
+      {body}
+      {dialog}
+    </>
   );
 }

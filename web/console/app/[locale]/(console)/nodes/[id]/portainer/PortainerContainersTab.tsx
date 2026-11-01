@@ -1,260 +1,125 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Badge } from "../../../../../components/ui/Badge";
+import { useTranslations } from "next-intl";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "../../../../../components/ui/Button";
-import { Card } from "../../../../../components/ui/Card";
-import { portainerAction, portainerFetch } from "./usePortainerData";
+import { ContainerList } from "../../../../../components/containers/ContainerList";
+import { nodeHref, railRows, sortRows, toRow, type CtHost, type CtRow, type Sort, type SortKey } from "../../../../../components/containers/containerModel";
+import { Bar, ListError, ListSkeleton } from "../../../../../components/containers/PanelParts";
+import type { DockerContainer } from "../../../../../../lib/docker";
+import { portainerFetch } from "./usePortainerData";
 import { buildBrowserWsUrl } from "../../../../../lib/ws";
 
 const XTerminal = dynamic(() => import("../../../../../components/XTerminal"), {
   ssr: false,
-  loading: () => (
-    <div className="flex items-center justify-center h-full min-h-[200px]">
-      <span className="text-sm text-[var(--muted)]">Loading terminal...</span>
-    </div>
-  ),
+  loading: () => <div className="ct-exec-wait" />,
 });
 
-type DockerContainer = {
+type RawContainer = {
   Id: string;
   Names: string[];
   Image: string;
   State: string;
   Status: string;
+  Created?: number;
+  Labels?: Record<string, string>;
   Ports?: Array<{ IP?: string; PrivatePort: number; PublicPort?: number; Type: string }>;
 };
 
-function containerBadgeStatus(state: string): "ok" | "pending" | "bad" {
-  const s = state.trim().toLowerCase();
-  if (s === "running") return "ok";
-  if (s === "paused" || s === "restarting") return "pending";
-  return "bad";
-}
-
-function formatPorts(ports?: DockerContainer["Ports"]): string {
-  if (!ports || ports.length === 0) return "--";
-  return ports
-    .filter((p) => p.PublicPort)
-    .map((p) => `${p.PublicPort}:${p.PrivatePort}/${p.Type}`)
-    .join(", ") || "--";
-}
-
-function containerName(c: DockerContainer): string {
+/** Portainer's container list in the hub's Docker shape. */
+function toDocker(c: RawContainer): DockerContainer {
   const name = c.Names?.[0] ?? c.Id.slice(0, 12);
-  return name.startsWith("/") ? name.slice(1) : name;
+  return {
+    id: c.Id,
+    name: name.startsWith("/") ? name.slice(1) : name,
+    image: c.Image,
+    state: (c.State || "").toLowerCase(),
+    status: c.Status || "",
+    created: c.Created ? new Date(c.Created * 1000).toISOString() : "",
+    ports: (c.Ports ?? []).filter((p) => p.PublicPort).map((p) => `${p.PublicPort}:${p.PrivatePort}/${p.Type}`).join(", "),
+    stack_name: c.Labels?.["com.docker.compose.project"] ?? "",
+    labels: c.Labels ?? {},
+  };
 }
-
-type ExecShellState = {
-  containerId: string;
-  containerName: string;
-  wsUrl: string;
-};
 
 type Props = {
   assetId: string;
+  hostName?: string;
   canExec: boolean;
+  bar?: ReactNode;
 };
 
-export function PortainerContainersTab({ assetId, canExec }: Props) {
-  const [containers, setContainers] = useState<DockerContainer[]>([]);
+/** The endpoint's containers, stacks kept together; Start, Stop…, Restart and Shell in each row's ⋯. */
+export function PortainerContainersTab({ assetId, hostName, canExec, bar }: Props) {
+  const t = useTranslations("devices-docker.portainer");
+  const tc = useTranslations("containers");
+  const [containers, setContainers] = useState<RawContainer[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [actionInFlight, setActionInFlight] = useState<string | null>(null);
-  const [execShell, setExecShell] = useState<ExecShellState | null>(null);
+  const [shell, setShell] = useState<{ name: string; wsUrl: string } | null>(null);
+  const [sort, setSort] = useState<Sort>({ key: "name", dir: "asc" });
   const seqRef = useRef(0);
-  const latestRef = useRef(0);
 
   const load = useCallback(async () => {
     const id = ++seqRef.current;
-    latestRef.current = id;
     setLoading(true);
-    setError(null);
     try {
-      const data = await portainerFetch<DockerContainer[]>(
-        `/api/portainer/assets/${encodeURIComponent(assetId)}/containers`,
-      );
-      if (latestRef.current !== id) return;
+      const data = await portainerFetch<RawContainer[]>(`/api/portainer/assets/${encodeURIComponent(assetId)}/containers`);
+      if (seqRef.current !== id) return;
       setContainers(data ?? []);
+      setError(null);
     } catch (err) {
-      if (latestRef.current !== id) return;
-      setError(err instanceof Error ? err.message : "failed to load containers");
+      if (seqRef.current !== id) return;
+      setError(err instanceof Error ? err.message : "error");
     } finally {
-      if (latestRef.current === id) setLoading(false);
+      if (seqRef.current === id) setLoading(false);
     }
   }, [assetId]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
-  const doAction = useCallback(async (containerId: string, action: "start" | "stop" | "restart") => {
-    setActionError(null);
-    setActionInFlight(`${containerId}-${action}`);
-    try {
-      await portainerAction(
-        `/api/portainer/assets/${encodeURIComponent(assetId)}/containers/${encodeURIComponent(containerId)}/${action}`,
-        "POST",
-      );
-      await load();
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : `failed to ${action} container`);
-    } finally {
-      setActionInFlight(null);
-    }
-  }, [assetId, load]);
+  const host = useMemo<CtHost>(() => ({ key: assetId, label: hostName || assetId, source: "portainer", href: nodeHref(assetId), canDeploy: false }), [assetId, hostName]);
+  const rows = useMemo(() => sortRows(containers.map((c) => toRow(host, toDocker(c))), sort), [containers, host, sort]);
+  const onSort = (key: SortKey) => setSort((cur) => (cur.key === key ? { key, dir: cur.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "name" ? "asc" : "desc" }));
+  const shellItem = (row: CtRow) => (canExec && row.state.kind === "running" ? [{
+    label: tc("menu.shell"),
+    onSelect: () => setShell({ name: row.name, wsUrl: buildBrowserWsUrl(`/portainer/assets/${encodeURIComponent(assetId)}/containers/${encodeURIComponent(row.id)}/exec`) }),
+  }] : []);
 
-  const openShell = useCallback((c: DockerContainer) => {
-    const streamPath = `/portainer/assets/${encodeURIComponent(assetId)}/containers/${encodeURIComponent(c.Id)}/exec`;
-    const wsUrl = buildBrowserWsUrl(streamPath);
-    setExecShell({ containerId: c.Id, containerName: containerName(c), wsUrl });
-  }, [assetId]);
-
-  const closeShell = useCallback(() => {
-    setExecShell(null);
-  }, []);
-
-  if (loading && containers.length === 0) {
-    return <Card><p className="text-sm text-[var(--muted)]">Loading containers…</p></Card>;
-  }
-
-  if (error && containers.length === 0) {
-    return <Card><p className="text-sm text-[var(--bad)]">{error}</p></Card>;
-  }
+  let body: ReactNode;
+  if (loading && !containers.length) body = <ListSkeleton />;
+  else if (error && !containers.length) body = <ListError text={tc("loadFailed")} onRetry={() => void load()} />;
+  else body = (
+    <ContainerList
+      label={tc("title")}
+      sections={rows.length ? [{ key: "all", title: "", kind: "all", rows: railRows(rows) }] : []}
+      sort={sort}
+      onSort={onSort}
+      onChanged={() => void load()}
+      storeKey={`labtether.containers.closed.${assetId}`}
+      empty={tc("empty.noContainers")}
+      extra={shellItem}
+    />
+  );
 
   return (
     <>
-      <Card>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-medium text-[var(--text)]">Containers</h2>
-          <Button size="sm" variant="ghost" onClick={() => { void load(); }} disabled={loading}>
-            {loading ? "Refreshing…" : "Refresh"}
-          </Button>
-        </div>
-        {actionError && (
-          <p className="mb-3 text-xs text-[var(--bad)]">{actionError}</p>
-        )}
-        {containers.length === 0 ? (
-          <p className="text-sm text-[var(--muted)]">No containers found.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-[var(--line)]">
-                  <th className="py-2 text-left font-medium text-[var(--muted)]">Name</th>
-                  <th className="py-2 text-left font-medium text-[var(--muted)]">State</th>
-                  <th className="py-2 text-left font-medium text-[var(--muted)]">Image</th>
-                  <th className="py-2 text-left font-medium text-[var(--muted)]">Status</th>
-                  <th className="py-2 text-left font-medium text-[var(--muted)]">Ports</th>
-                  <th className="py-2 text-right font-medium text-[var(--muted)]">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--line)]">
-                {containers.map((c) => {
-                  const name = containerName(c);
-                  return (
-                    <tr key={c.Id}>
-                      <td className="py-2 font-medium text-[var(--text)]">{name}</td>
-                      <td className="py-2">
-                        <div className="flex items-center gap-2">
-                          <Badge status={containerBadgeStatus(c.State)} size="sm" />
-                          <span className="text-[var(--muted)]">{c.State || "--"}</span>
-                        </div>
-                      </td>
-                      <td className="py-2 max-w-48 truncate text-[var(--muted)]">{c.Image || "--"}</td>
-                      <td className="py-2 text-[var(--muted)]">{c.Status || "--"}</td>
-                      <td className="py-2 text-[var(--muted)]">{formatPorts(c.Ports)}</td>
-                      <td className="py-2">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={!!actionInFlight || c.State === "running"}
-                            loading={actionInFlight === `${c.Id}-start`}
-                            onClick={() => { void doAction(c.Id, "start"); }}
-                          >
-                            Start
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={!!actionInFlight || c.State !== "running"}
-                            loading={actionInFlight === `${c.Id}-stop`}
-                            onClick={() => { void doAction(c.Id, "stop"); }}
-                          >
-                            Stop
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={!!actionInFlight}
-                            loading={actionInFlight === `${c.Id}-restart`}
-                            onClick={() => { void doAction(c.Id, "restart"); }}
-                          >
-                            Restart
-                          </Button>
-                          {canExec ? (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              disabled={c.State !== "running"}
-                              onClick={() => { openShell(c); }}
-                            >
-                              Shell
-                            </Button>
-                          ) : null}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      <Bar left={bar} right={<Button variant="ghost" onClick={() => void load()} disabled={loading}>{t("refresh")}</Button>} />
+      {body}
+      {shell ? (
+        <div className="ct-exec" role="dialog" aria-modal="true" aria-label={t("shellIn", { name: shell.name })} onClick={(e) => { if (e.target === e.currentTarget) setShell(null); }}>
+          <div className="ct-exec-box">
+            <div className="ct-exec-bar">
+              <span>{t("shellIn", { name: shell.name })}</span>
+              <Button size="sm" variant="ghost" onClick={() => setShell(null)}>{t("disconnect")}</Button>
+            </div>
+            <div className="ct-exec-term">
+              <XTerminal wsUrl={shell.wsUrl} onDisconnected={() => setShell(null)} />
+            </div>
           </div>
-        )}
-      </Card>
-
-      {execShell && (
-        <PortainerExecModal
-          containerName={execShell.containerName}
-          wsUrl={execShell.wsUrl}
-          onClose={closeShell}
-        />
-      )}
+        </div>
+      ) : null}
     </>
-  );
-}
-
-type ExecModalProps = {
-  containerName: string;
-  wsUrl: string;
-  onClose: () => void;
-};
-
-function PortainerExecModal({ containerName, wsUrl, onClose }: ExecModalProps) {
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div className="flex flex-col w-[90vw] max-w-4xl h-[70vh] bg-[var(--surface)] rounded-lg overflow-hidden shadow-xl">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--line)] shrink-0">
-          <span className="text-sm font-medium text-[var(--text)]">
-            Shell — {containerName}
-          </span>
-          <Button size="sm" variant="ghost" onClick={onClose}>
-            Close
-          </Button>
-        </div>
-        <div className="flex-1 overflow-hidden">
-          <XTerminal
-            wsUrl={wsUrl}
-            onDisconnected={onClose}
-          />
-        </div>
-      </div>
-    </div>
   );
 }

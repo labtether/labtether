@@ -1,0 +1,111 @@
+{
+  "title": "Contenedores",
+  "runContainer": "Ejecutar contenedor",
+  "deployStack": "Desplegar stack",
+  "filter": "Filtrar por nombre, imagen o host",
+  "filterHost": "Filtrar por nombre o imagen",
+  "show": {
+    "label": "Mostrar",
+    "all": "Todos",
+    "running": "En ejecución",
+    "stopped": "Detenidos",
+    "runningN": "En ejecución {count}",
+    "stoppedN": "Detenidos {count}"
+  },
+  "groupBy": "Agrupar",
+  "groupings": {
+    "host": "Host",
+    "stack": "Stack",
+    "none": "Ninguno"
+  },
+  "columns": {
+    "container": "Contenedor",
+    "ports": "Puertos",
+    "cpu": "CPU",
+    "memory": "Memoria",
+    "sortBy": "Ordenar por {column}"
+  },
+  "noStack": "Sin stack",
+  "shown": "{shown} de {total}",
+  "clearFilter": "Quitar filtro",
+  "retry": "Reintentar",
+  "loadFailed": "No se pudieron cargar los contenedores",
+  "hostsFailed": "{count, plural, one {# host Docker no respondió} other {# hosts Docker no respondieron}}",
+  "empty": {
+    "noHosts": "Aún no hay hosts Docker",
+    "noContainers": "Aún no hay contenedores",
+    "addHost": "Agregar host Docker",
+    "match": "Ningún contenedor coincide con «{query}»",
+    "noRunning": "No hay contenedores en ejecución",
+    "noStopped": "No hay contenedores detenidos"
+  },
+  "state": {
+    "running": "En ejecución",
+    "exited": "Finalizado",
+    "exitedAgo": "Finalizado {ago}",
+    "restarting": "Reiniciando",
+    "paused": "En pausa",
+    "created": "Creado, sin iniciar",
+    "dead": "Muerto",
+    "removing": "Eliminando",
+    "unhealthy": "No saludable",
+    "starting": "Iniciando",
+    "unknown": "Estado no informado"
+  },
+  "menu": {
+    "label": "Acciones de {name}",
+    "open": "Abrir",
+    "logs": "Registros",
+    "shell": "Shell",
+    "restart": "Reiniciar",
+    "start": "Iniciar",
+    "stop": "Detener…",
+    "stopTitle": "¿Detener {name}?",
+    "stopBody": "Permanece detenido hasta que se vuelva a iniciar.",
+    "stopConfirm": "Detener",
+    "copyImage": "Copiar imagen"
+  },
+  "toast": {
+    "startDone": "{name} iniciado",
+    "stopDone": "{name} detenido",
+    "restartDone": "{name} reiniciado",
+    "startFailed": "No se pudo iniciar {name}",
+    "stopFailed": "No se pudo detener {name}",
+    "restartFailed": "No se pudo reiniciar {name}"
+  },
+  "deploy": {
+    "crumbs": "Ruta de navegación",
+    "runTitle": "Ejecutar contenedor",
+    "stackTitle": "Desplegar stack",
+    "host": "Host",
+    "image": "Imagen",
+    "name": "Nombre",
+    "ports": "Puertos",
+    "portsHint": "host:container, uno por línea",
+    "environment": "Entorno",
+    "envHint": "NAME=value, una por línea",
+    "command": "Comando",
+    "cancel": "Cancelar",
+    "run": "Ejecutar",
+    "deploy": "Desplegar",
+    "open": "Abrir",
+    "ranLine": "{name} iniciado.",
+    "ranToast": "{name} iniciado en {host}",
+    "runFailed": "El contenedor no se inició",
+    "runFailedWith": "El contenedor no se inició: {reason}",
+    "deployedLine": "{name} desplegado.",
+    "deployedToast": "{name} desplegado en {host}",
+    "deployFailed": "El stack no se desplegó",
+    "deployFailedWith": "El stack no se desplegó: {reason}",
+    "errors": {
+      "required": "Obligatorio",
+      "image": "Introduzca una imagen como nginx:1.29",
+      "name": "Use letras, números, puntos, guiones y guiones bajos",
+      "ports": "Use host:container, como 8080:80 o 5353:53/udp",
+      "portRange": "Los puertos van del 1 al 65535",
+      "env": "Use NAME=value, una por línea",
+      "stackName": "Use minúsculas, números, guiones y guiones bajos",
+      "services": "El archivo necesita una sección services:"
+    }
+  }
+}

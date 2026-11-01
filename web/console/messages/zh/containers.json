@@ -1,0 +1,111 @@
+{
+  "title": "容器",
+  "runContainer": "运行容器",
+  "deployStack": "部署堆栈",
+  "filter": "按名称、镜像或主机筛选",
+  "filterHost": "按名称或镜像筛选",
+  "show": {
+    "label": "显示",
+    "all": "全部",
+    "running": "运行中",
+    "stopped": "已停止",
+    "runningN": "运行中 {count}",
+    "stoppedN": "已停止 {count}"
+  },
+  "groupBy": "分组",
+  "groupings": {
+    "host": "主机",
+    "stack": "堆栈",
+    "none": "无"
+  },
+  "columns": {
+    "container": "容器",
+    "ports": "端口",
+    "cpu": "CPU",
+    "memory": "内存",
+    "sortBy": "按 {column} 排序"
+  },
+  "noStack": "无堆栈",
+  "shown": "{shown} / {total}",
+  "clearFilter": "清除筛选",
+  "retry": "重试",
+  "loadFailed": "无法加载容器",
+  "hostsFailed": "{count, plural, other {# 个 Docker 主机没有响应}}",
+  "empty": {
+    "noHosts": "还没有 Docker 主机",
+    "noContainers": "还没有容器",
+    "addHost": "添加 Docker 主机",
+    "match": "没有与“{query}”匹配的容器",
+    "noRunning": "没有运行中的容器",
+    "noStopped": "没有已停止的容器"
+  },
+  "state": {
+    "running": "运行中",
+    "exited": "已退出",
+    "exitedAgo": "{ago}退出",
+    "restarting": "重启中",
+    "paused": "已暂停",
+    "created": "已创建，未启动",
+    "dead": "已死亡",
+    "removing": "移除中",
+    "unhealthy": "不健康",
+    "starting": "启动中",
+    "unknown": "未报告状态"
+  },
+  "menu": {
+    "label": "{name} 的操作",
+    "open": "打开",
+    "logs": "日志",
+    "shell": "Shell",
+    "restart": "重启",
+    "start": "启动",
+    "stop": "停止…",
+    "stopTitle": "停止 {name}？",
+    "stopBody": "它会保持停止，直到再次启动。",
+    "stopConfirm": "停止",
+    "copyImage": "复制镜像"
+  },
+  "toast": {
+    "startDone": "已启动 {name}",
+    "stopDone": "已停止 {name}",
+    "restartDone": "已重启 {name}",
+    "startFailed": "无法启动 {name}",
+    "stopFailed": "无法停止 {name}",
+    "restartFailed": "无法重启 {name}"
+  },
+  "deploy": {
+    "crumbs": "导航路径",
+    "runTitle": "运行容器",
+    "stackTitle": "部署堆栈",
+    "host": "主机",
+    "image": "镜像",
+    "name": "名称",
+    "ports": "端口",
+    "portsHint": "host:container，每行一个",
+    "environment": "环境变量",
+    "envHint": "NAME=value，每行一个",
+    "command": "命令",
+    "cancel": "取消",
+    "run": "运行",
+    "deploy": "部署",
+    "open": "打开",
+    "ranLine": "已启动 {name}。",
+    "ranToast": "已在 {host} 上启动 {name}",
+    "runFailed": "容器未能启动",
+    "runFailedWith": "容器未能启动：{reason}",
+    "deployedLine": "已部署 {name}。",
+    "deployedToast": "已在 {host} 上部署 {name}",
+    "deployFailed": "堆栈未能部署",
+    "deployFailedWith": "堆栈未能部署：{reason}",
+    "errors": {
+      "required": "必填",
+      "image": "输入镜像，例如 nginx:1.29",
+      "name": "使用字母、数字、点、短横线和下划线",
+      "ports": "使用 host:container 格式，例如 8080:80 或 5353:53/udp",
+      "portRange": "端口范围为 1 到 65535",
+      "env": "使用 NAME=value，每行一个",
+      "stackName": "使用小写字母、数字、短横线和下划线",
+      "services": "文件需要包含 services: 部分"
+    }
+  }
+}

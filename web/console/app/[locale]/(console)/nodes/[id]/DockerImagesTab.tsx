@@ -1,83 +1,93 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Card } from "../../../../components/ui/Card";
-import type { DockerImage } from "../../../../../lib/docker";
-import { fetchDockerImages } from "../../../../../lib/docker";
-import { formatBytes } from "../../../../console/formatters";
+import { ChevronDown, ChevronUp } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { formatMem } from "../../../../components/containers/containerModel";
+import { Bar, ListEmpty, ListError, ListSkeleton } from "../../../../components/containers/PanelParts";
+import { imageRows, type ImageRow as Row } from "../../../../components/containers/stackModel";
+import { fetchDockerContainers, fetchDockerImages, type DockerContainer } from "../../../../../lib/docker";
 
-type Props = { hostId: string };
+type ImageSort = { key: "name" | "size"; dir: "asc" | "desc" };
 
-export function DockerImagesTab({ hostId }: Props) {
-  const [images, setImages] = useState<DockerImage[]>([]);
+/** A Docker host's images: tag, size and the containers that use them, biggest first. */
+export function DockerImagesTab({ hostId, bar }: { hostId: string; bar?: ReactNode }) {
+  const t = useTranslations("devices-docker.images");
+  const locale = useLocale();
+  const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [sort, setSort] = useState<ImageSort>({ key: "size", dir: "desc" });
 
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const data = await fetchDockerImages(hostId);
-        if (!cancelled) {
-          setImages(data);
-          setError(null);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setImages([]);
-          setError(err instanceof Error ? err.message : "failed to load images");
-        }
-      }
-      finally { if (!cancelled) setLoading(false); }
-    })();
-    return () => { cancelled = true; };
-  }, [hostId]);
+    let live = true;
+    setLoading(true);
+    void Promise.all([fetchDockerImages(hostId), fetchDockerContainers(hostId).catch(() => [] as DockerContainer[])])
+      .then(([images, containers]) => { if (live) { setRows(imageRows(images, containers)); setError(null); } })
+      .catch((err: unknown) => { if (live) setError(err instanceof Error ? err.message : "error"); })
+      .finally(() => { if (live) setLoading(false); });
+    return () => { live = false; };
+  }, [hostId, attempt]);
+
+  const sorted = useMemo(() => {
+    const name = (r: Row) => r.tags[0] ?? "";
+    return [...rows].sort((a, b) => {
+      const d = sort.key === "size" ? a.size - b.size : name(a).localeCompare(name(b));
+      return sort.dir === "asc" ? d : -d;
+    });
+  }, [rows, sort]);
+  const date = (iso: string) => {
+    const d = new Date(iso);
+    return Number.isFinite(d.getTime()) ? d.toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" }) : "";
+  };
+  const head = (key: ImageSort["key"], label: string, right = false) => {
+    const on = sort.key === key;
+    const Icon = on && sort.dir === "desc" ? ChevronDown : ChevronUp;
+    return (
+      <button type="button" className={`ct-sort${on ? " on" : ""}${right ? " r" : ""}`} aria-pressed={on}
+        onClick={() => setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "size" ? "desc" : "asc" }))}>
+        {label}
+        {on ? <Icon aria-hidden="true" strokeWidth={2.2} /> : null}
+      </button>
+    );
+  };
+
+  let body: ReactNode;
+  if (loading && !rows.length) body = <ListSkeleton />;
+  else if (error && !rows.length) body = <ListError text={t("loadFailed")} onRetry={() => setAttempt((n) => n + 1)} />;
+  else if (!rows.length) body = <ListEmpty text={t("none")} />;
+  else body = (
+    <div className="ct-list" role="table" aria-label={t("label")}>
+      <div className="ct-row im ct-cols" role="row">
+        <span className="ct-lead" />
+        {head("name", t("image"))}
+        {head("size", t("size"), true)}
+        <span className="ct-names">{t("usedBy")}</span>
+      </div>
+      {sorted.map((r) => {
+        const size = formatMem(r.size).split(" ");
+        return (
+          <div key={r.id || r.tags.join()} className="ct-row im" role="row">
+            <span className="ct-lead" />
+            <span className="ct-main" role="cell">
+              <span className="ct-img mono" title={r.tags.join(", ") || r.id}>{r.tags.length ? r.tags.join(", ") : t("untagged", { id: r.id.slice(0, 12) })}</span>
+              <span className="ct-grey">{[r.tags.length ? r.id.slice(0, 12) : "", date(r.created)].filter(Boolean).join(" · ")}</span>
+            </span>
+            <span className="ct-n" role="cell">{size[0]}<span className="u"> {size[1]}</span></span>
+            <span className="ct-names plain" role="cell">
+              {r.users.length ? r.users.join(", ") : <span className="ct-grey">{t("unused")}</span>}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
 
   return (
-    <Card className="mb-4">
-      <h2 className="text-sm font-medium text-[var(--text)] mb-3">Images ({images.length})</h2>
-      {loading ? (
-        <p className="text-sm text-[var(--muted)]">Loading images...</p>
-      ) : error ? (
-        <div className="flex flex-col items-center justify-center py-12 gap-2">
-          <p className="text-sm font-medium text-[var(--bad)]">Failed to load images</p>
-          <p className="text-xs text-[var(--muted)]">{error}</p>
-        </div>
-      ) : images.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-[var(--line)]">
-                <th className="text-left py-2 text-[var(--muted)] font-medium">Repository:Tag</th>
-                <th className="text-left py-2 text-[var(--muted)] font-medium">ID</th>
-                <th className="text-right py-2 text-[var(--muted)] font-medium">Size</th>
-                <th className="text-left py-2 text-[var(--muted)] font-medium">Created</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--line)]">
-              {images.map((img) => (
-                <tr key={img.id} className="hover:bg-[var(--hover)]">
-                  <td className="py-2 text-[var(--text)] font-medium">
-                    {img.tags?.length > 0 ? img.tags.join(", ") : "<none>"}
-                  </td>
-                  <td className="py-2 text-[var(--muted)] font-mono">
-                    {img.id?.length > 19 ? img.id.slice(7, 19) : img.id}
-                  </td>
-                  <td className="py-2 text-right text-[var(--muted)]">{formatBytes(img.size)}</td>
-                  <td className="py-2 text-[var(--muted)]">
-                    {img.created ? new Date(img.created).toLocaleDateString() : "--"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="flex flex-col items-center justify-center py-12 gap-2">
-          <p className="text-sm font-medium text-[var(--text)]">No images</p>
-          <p className="text-xs text-[var(--muted)]">No images found on this Docker host.</p>
-        </div>
-      )}
-    </Card>
+    <>
+      <Bar left={bar} />
+      {body}
+    </>
   );
 }

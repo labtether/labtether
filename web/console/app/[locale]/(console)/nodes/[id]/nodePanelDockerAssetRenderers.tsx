@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { DockerInspectTab } from "./DockerInspectTab";
-import { DockerLogsTab } from "./DockerLogsTab";
+import { DockerLogsPanel } from "./DockerLogsPanel";
 import { DockerStackContainersTab } from "./DockerStackContainersTab";
 import { DockerStackInspectTab } from "./DockerStackInspectTab";
 import { DockerStatsTab } from "./DockerStatsTab";
@@ -9,7 +9,7 @@ import type { NodePanelRendererContext } from "./nodePanelRenderers";
 
 export function renderDockerLogsPanel(context: NodePanelRendererContext): ReactNode {
   if (context.isDockerContainer) {
-    return <DockerLogsTab containerId={context.dockerContainerId} />;
+    return <DockerLogsPanel containerId={context.dockerContainerId} />;
   }
   return <NodeLogsTabCard {...context.nodeLogsTabCardProps} />;
 }
