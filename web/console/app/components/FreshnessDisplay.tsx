@@ -96,8 +96,6 @@ export function FreshnessDisplay({ lastSeenAt }: { lastSeenAt: string }) {
   useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   return (
-    <span className="text-xs tabular-nums text-[var(--muted)]">
-      {computeLabel(lastSeenAt)}
-    </span>
+    <span className="kt-ago">{computeLabel(lastSeenAt)}</span>
   );
 }

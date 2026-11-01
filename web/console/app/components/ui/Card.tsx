@@ -9,10 +9,7 @@ type CardProps = {
   children: ReactNode;
 };
 
-const glassStyle: CSSProperties = {
-  boxShadow: "var(--shadow-panel)",
-};
-
+/** 2.0 sheet: the raised surface that holds content (kit.css .kt-sheet). `highlight` adds a slightly stronger edge. */
 export function Card({
   variant = "default",
   interactive = false,
@@ -21,45 +18,17 @@ export function Card({
   style,
   children,
 }: CardProps) {
-  const padding = variant === "flush" ? "" : "p-4";
-  const mergedStyle = style ? { ...glassStyle, ...style } : glassStyle;
+  const classes = [
+    "kt-sheet",
+    variant === "flush" ? "flush" : "",
+    interactive ? "link" : "",
+    highlight ? "mark" : "",
+    className,
+  ].filter(Boolean).join(" ");
 
-  const inner = (
-    <div
-      className={`relative bg-[var(--panel-glass)] border border-[var(--panel-border)] rounded-lg transition-[border-color,box-shadow,transform] duration-[var(--dur-fast)] overflow-hidden ${
-        interactive
-          ? "hover:border-[var(--line)] hover:-translate-y-px hover:shadow-[var(--shadow-sm)] cursor-pointer"
-          : ""
-      } ${padding} ${className}`}
-      style={mergedStyle}
-    >
-      {/* Top-edge specular highlight */}
-      <div
-        className="absolute top-0 left-[15%] right-[15%] h-px pointer-events-none"
-        style={{
-          background:
-            "linear-gradient(90deg, transparent, var(--surface), transparent)",
-        }}
-      />
+  return (
+    <div className={classes} style={style}>
       {children}
     </div>
   );
-
-  if (highlight) {
-    return (
-      <div
-        className="rounded-[calc(var(--radius-lg)+1px)] p-px"
-        style={{
-          background:
-            "linear-gradient(135deg, rgba(var(--accent-rgb),0.2), rgba(var(--accent-rgb),0.03) 40%, rgba(var(--accent-rgb),0.15) 60%, rgba(var(--accent-rgb),0.03))",
-          backgroundSize: "200% 200%",
-          animation: "border-travel 6s ease 1",
-        }}
-      >
-        {inner}
-      </div>
-    );
-  }
-
-  return inner;
 }

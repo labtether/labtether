@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Modal } from "./Modal";
 import { Button } from "./Button";
 
@@ -14,31 +15,33 @@ type ConfirmDialogProps = {
   loading?: boolean;
 };
 
+/** 2.0 confirm: title, one plain paragraph, Cancel and the confirm button bottom right (status red when destructive). */
 export function ConfirmDialog({
   open,
   onClose,
   onConfirm,
   title,
   message,
-  confirmLabel = "Confirm",
+  confirmLabel,
   danger = false,
   loading = false,
 }: ConfirmDialogProps) {
+  const t = useTranslations("common");
   return (
-    <Modal open={open} onClose={onClose} title={title} className="max-w-sm">
-      <div className="px-5 py-4 space-y-4">
-        <p className="text-sm text-[var(--text-secondary)] leading-relaxed">{message}</p>
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={onClose} disabled={loading}>
-            Cancel
+    <Modal open={open} onClose={onClose} title={title} className="confirm">
+      <div className="kt-dlg-body">
+        <p>{message}</p>
+        <div className="kt-dlg-acts">
+          <Button onClick={onClose} disabled={loading}>
+            {t("cancel")}
           </Button>
           <Button
             variant={danger ? "danger" : "primary"}
-            size="sm"
+            className={danger ? "kt-danger-fill" : ""}
             onClick={onConfirm}
             loading={loading}
           >
-            {confirmLabel}
+            {confirmLabel ?? t("confirm")}
           </Button>
         </div>
       </div>

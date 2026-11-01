@@ -6,8 +6,10 @@ const QUICK_CONNECT_REGEX = /^([\w.-]+@)?[\w.-]+(:\d+)?$/;
 export function createQuickConnectProvider(routerPush: (href: string) => void, enabled = true): PaletteProvider {
   return {
     id: "quick-connect",
-    group: "Quick Connect",
-    priority: 5,
+    group: "Quick connect",
+    // After pages, devices and actions: any plain word looks like a host name, so this group must not take Enter
+    // from a page or device the query names.
+    priority: 50,
     search(query: string): PaletteItem[] {
       if (!enabled) return [];
       const q = query.trim();
@@ -18,7 +20,7 @@ export function createQuickConnectProvider(routerPush: (href: string) => void, e
         {
           id: `quick-connect-${q}`,
           label: `Connect to ${q}`,
-          description: "Open terminal with quick connect",
+          description: "Terminal",
           icon: Zap,
           href,
           keywords: ["ssh", "connect", "quick"],

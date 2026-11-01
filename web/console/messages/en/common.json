@@ -11,6 +11,10 @@
     "label": "Search",
     "placeholder": "Search..."
   },
+  "palette": {
+    "placeholder": "Search devices, pages and settings",
+    "showAll": "Show all"
+  },
   "noResults": "No results found",
   "empty": "Nothing here yet",
   "actions": {

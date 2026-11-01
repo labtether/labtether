@@ -1,20 +1,12 @@
-import { SkeletonCard, SkeletonRow } from "../../components/ui/Skeleton";
+import { Skeleton, SkeletonTable } from "../../components/ui/Skeleton";
 
+/** 2.0 route loading: a title bar and one sheet of rows, shown only after 300 ms so fast pages never flash it. */
 export default function Loading() {
   return (
-    <div className="animate-fade-in p-4 space-y-4">
-      {/* KPI row skeleton */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <SkeletonCard key={i} lines={1} />
-        ))}
-      </div>
-      {/* Content skeleton */}
-      <SkeletonCard lines={4} />
-      <div className="space-y-1">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <SkeletonRow key={i} />
-        ))}
+    <div className="kt-loading" aria-busy="true">
+      <Skeleton width="180px" height="20px" className="mb-6" />
+      <div className="kt-sheet">
+        <SkeletonTable rows={6} cols={4} />
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { getStatusColors, getStatusLabel, statusConfig } from "../../lib/status";
+import { getStatusLabel, statusConfig } from "../../lib/status";
 
 type BadgeProps = {
   status: string;
@@ -7,67 +7,49 @@ type BadgeProps = {
   className?: string;
 };
 
-/** Map status color category to the CSS custom property for glow. */
-function getGlowStyle(status: string): React.CSSProperties {
-  const entry = statusConfig[status.toLowerCase()];
-  const color = entry?.color ?? "zinc";
+type Tone = "ok" | "warn" | "bad" | "off" | "busy";
 
-  switch (color) {
-    case "emerald":
-      return { boxShadow: "0 0 4px var(--ok-glow), 0 0 12px var(--ok-glow)" };
-    case "amber":
-      return { boxShadow: "0 0 4px var(--warn-glow), 0 0 12px var(--warn-glow)" };
-    case "red":
-      return { boxShadow: "0 0 4px var(--bad-glow), 0 0 12px var(--bad-glow)" };
-    default:
-      return {};
-  }
+/** Work in progress is not a problem: a neutral dot that pulses, not amber. */
+const busyStatuses = new Set(["pending", "running", "in_progress"]);
+
+const toneByColor: Record<string, Tone> = { emerald: "ok", amber: "warn", red: "bad", zinc: "off" };
+
+function toneOf(status: string): Tone | null {
+  const key = status.toLowerCase();
+  if (busyStatuses.has(key)) return "busy";
+  const entry = statusConfig[key];
+  return entry ? toneByColor[entry.color] ?? "off" : null;
 }
 
-/** Critical-severity statuses that get a pulse animation on the dot. */
-const criticalStatuses = new Set(["critical", "firing", "offline", "bad", "failed"]);
-/** Healthy statuses get a short entrance pulse, then keep their status color. */
-const aliveStatuses = new Set(["online", "ok", "healthy", "running", "active"]);
-
-function isCritical(status: string): boolean {
-  return criticalStatuses.has(status.toLowerCase());
-}
-
-function isAlive(status: string): boolean {
-  return aliveStatuses.has(status.toLowerCase());
-}
-
+/**
+ * 2.0 status: a dot and a word (kit.css .kt-st). The word takes the tone colour only for a problem.
+ * A label that is not a known status (a key type, a version) is a quiet tag with no dot.
+ */
 export function Badge({ status, size = "md", dot = false, className = "" }: BadgeProps) {
-  const colors = getStatusColors(status);
   const label = getStatusLabel(status);
-  const dotSize = size === "sm" ? "h-1.5 w-1.5" : "h-2 w-2";
-  const textSize = size === "sm" ? "text-xs" : "text-sm";
-
-  const glowStyle = getGlowStyle(status);
-  const pulseStyle: React.CSSProperties = isCritical(status)
-    ? { ...glowStyle, animation: "status-glow 1.5s ease-in-out 3" }
-    : isAlive(status)
-      ? { ...glowStyle, animation: "pulse-dot 2.5s ease-in-out 2" }
-      : glowStyle;
+  const tone = toneOf(status);
+  const small = size === "sm" ? " sm" : "";
+  const extra = className ? ` ${className}` : "";
 
   if (dot) {
     return (
       <span
-        className={`inline-block rounded-full ${dotSize} ${colors.dot} ${className}`}
-        style={pulseStyle}
+        className={`kt-dot${small} ${tone ?? "off"}${extra}`}
+        role="img"
+        aria-label={label}
         title={label}
       />
     );
   }
 
+  if (!tone) {
+    return <span className={`kt-tag${extra}`}>{label}</span>;
+  }
+
+  const wordTone = tone === "bad" || tone === "warn" ? ` ${tone}` : "";
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-0.5 ${textSize} font-medium ${colors.bg} ${colors.text} ${className}`}
-    >
-      <span
-        className={`inline-block rounded-full ${dotSize} ${colors.dot}`}
-        style={pulseStyle}
-      />
+    <span className={`kt-st${small}${wordTone}${extra}`}>
+      <span className={`kt-dot${small} ${tone}`} aria-hidden="true" />
       {label}
     </span>
   );

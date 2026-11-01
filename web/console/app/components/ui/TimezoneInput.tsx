@@ -170,49 +170,35 @@ export function TimezoneInput({
         className="pr-8"
       />
       <Clock3
-        size={13}
-        strokeWidth={1.8}
-        className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--muted)]"
+        size={14}
+        strokeWidth={1.75}
+        className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--text-3)]"
       />
 
       {hasSuggestions ? (
-        <div className="absolute z-[80] mt-1 w-full overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--panel)] shadow-2xl">
-          <ul id={listboxID} role="listbox" className="max-h-56 overflow-y-auto py-1">
-            {suggestions.map((timezone, index) => {
-              const isActive = index === activeIndex;
-              return (
-                <li key={timezone} role="option" aria-selected={isActive}>
-                  <button
-                    type="button"
-                    onMouseDown={(event) => {
-                      event.preventDefault();
-                    }}
-                    onClick={() => {
-                      commitSelection(timezone);
-                    }}
-                    className={`w-full px-2.5 py-1.5 text-left transition-colors ${
-                      isActive
-                        ? "bg-[var(--hover)] text-[var(--text)]"
-                        : "text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)]"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-xs font-medium">{timezone}</span>
-                      {timezone === localTimezone ? (
-                        <span className="shrink-0 rounded border border-[var(--line)] px-1 py-0.5 text-[10px] text-[var(--muted)]">
-                          local
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="mt-0.5 truncate text-[10px] text-[var(--muted)]">
-                      {timezoneHint(timezone)}
-                    </p>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+        <ul id={listboxID} role="listbox" className="kt-tz-list">
+          {suggestions.map((timezone, index) => {
+            const isActive = index === activeIndex;
+            return (
+              <li key={timezone} role="option" aria-selected={isActive}>
+                <button
+                  type="button"
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                  }}
+                  onClick={() => {
+                    commitSelection(timezone);
+                  }}
+                  className={`kt-tz-item${isActive ? " on" : ""}`}
+                >
+                  <span className="kt-tz-name">{timezone}</span>
+                  {timezone === localTimezone ? <span className="kt-tag">local</span> : null}
+                  <span className="kt-tz-hint">{timezoneHint(timezone)}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       ) : null}
     </div>
   );

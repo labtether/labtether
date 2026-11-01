@@ -11,6 +11,10 @@
     "label": "Buscar",
     "placeholder": "Buscar..."
   },
+  "palette": {
+    "placeholder": "Buscar dispositivos, páginas y configuración",
+    "showAll": "Mostrar todo"
+  },
   "noResults": "No se encontraron resultados",
   "empty": "Aún no hay nada aquí",
   "actions": {

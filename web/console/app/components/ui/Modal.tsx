@@ -1,7 +1,13 @@
 "use client";
 
-import { type ReactNode, type CSSProperties, useEffect, useLayoutEffect, useRef } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useRef } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
+
+const FIRST_FIELD = [
+  'input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([disabled]):not([readonly])',
+  "textarea:not([disabled]):not([readonly])",
+  "select:not([disabled])",
+].join(", ");
 
 type ModalProps = {
   open: boolean;
@@ -13,13 +19,12 @@ type ModalProps = {
   description?: string;
 };
 
-const glassStyle: CSSProperties = {
-  backdropFilter: "blur(40px)",
-  WebkitBackdropFilter: "blur(40px)",
-  boxShadow: "var(--shadow-panel)",
-  borderRadius: "var(--radius-lg)",
-};
-
+/**
+ * 2.0 dialog (kit.css .kt-dialog): a scrim, then a raised panel with a 16/24 title. Escape and a click on the scrim
+ * close it. Focus starts in the first field, stays inside while it is open and returns to the control that opened
+ * it. The scrim holds the panel and scrolls when the panel is taller than the window; on a phone the panel sits at
+ * the bottom.
+ */
 export function Modal({
   open,
   onClose,
@@ -30,6 +35,7 @@ export function Modal({
   description,
 }: ModalProps) {
   const returnFocusRef = useRef<HTMLElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const wasOpenRef = useRef(open);
 
   useEffect(() => {
@@ -65,39 +71,45 @@ export function Modal({
     return () => window.clearTimeout(timer);
   }, [open]);
 
+  // Without a description, drop Radix's aria-describedby rather than announce filler text.
+  const describedBy = description ? {} : { "aria-describedby": undefined };
+
   return (
     <Dialog.Root open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
       <Dialog.Portal>
-        <Dialog.Overlay
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm data-[state=open]:animate-[modal-overlay-in_200ms_ease-out] data-[state=closed]:animate-[modal-overlay-out_150ms_ease-in]"
-        />
-        <Dialog.Content
-          onOpenAutoFocus={() => {
-            if (!returnFocusRef.current?.isConnected && document.activeElement instanceof HTMLElement) {
-              returnFocusRef.current = document.activeElement;
-            }
-          }}
-          onCloseAutoFocus={(event) => {
-            event.preventDefault();
-            const returnTarget = returnFocusRef.current;
-            returnFocusRef.current = null;
-            if (!returnTarget?.isConnected) return;
-            returnTarget.focus({ preventScroll: true });
-          }}
-          className={`fixed inset-x-3 top-4 z-50 max-h-[calc(100vh-2rem)] overflow-hidden border border-[var(--panel-border)] bg-[var(--panel-glass)] focus:outline-none data-[state=open]:animate-[modal-content-in_200ms_ease-out] data-[state=closed]:animate-[modal-content-out_150ms_ease-in] sm:inset-x-4 md:left-1/2 md:right-auto md:w-full md:max-w-lg md:-translate-x-1/2 ${className}`}
-          style={glassStyle}
-        >
-          {title && (
-            <Dialog.Title className="px-5 py-4 text-sm font-medium text-[var(--text)] border-b border-[var(--panel-border)]">
-              {title}
-            </Dialog.Title>
-          )}
-          {!title && <Dialog.Title className="sr-only">{ariaTitle ?? "Dialog"}</Dialog.Title>}
-          <Dialog.Description className="sr-only">
-            {description ?? "Dialog content"}
-          </Dialog.Description>
-          {children}
-        </Dialog.Content>
+        <Dialog.Overlay className="kt-scrim">
+          <Dialog.Content
+            {...describedBy}
+            ref={contentRef}
+            onOpenAutoFocus={(event) => {
+              if (!returnFocusRef.current?.isConnected && document.activeElement instanceof HTMLElement) {
+                returnFocusRef.current = document.activeElement;
+              }
+              // Start in the first field, so a form dialog takes typing at once; otherwise Radix picks the first control.
+              const field = contentRef.current?.querySelector<HTMLElement>(FIRST_FIELD);
+              if (field) {
+                event.preventDefault();
+                field.focus({ preventScroll: true });
+              }
+            }}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              const returnTarget = returnFocusRef.current;
+              returnFocusRef.current = null;
+              if (!returnTarget?.isConnected) return;
+              returnTarget.focus({ preventScroll: true });
+            }}
+            className={`kt-dialog${className ? ` ${className}` : ""}`}
+          >
+            {title ? (
+              <Dialog.Title className="kt-dlg-title">{title}</Dialog.Title>
+            ) : (
+              <Dialog.Title className="sr-only">{ariaTitle ?? "Dialog"}</Dialog.Title>
+            )}
+            {description ? <Dialog.Description className="sr-only">{description}</Dialog.Description> : null}
+            {children}
+          </Dialog.Content>
+        </Dialog.Overlay>
       </Dialog.Portal>
     </Dialog.Root>
   );

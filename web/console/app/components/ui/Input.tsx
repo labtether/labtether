@@ -1,47 +1,53 @@
-import type { InputHTMLAttributes, SelectHTMLAttributes, ReactNode } from "react";
+import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 
-type InputProps = InputHTMLAttributes<HTMLInputElement> & {
+/** 2.0 fields (kit.css .kt-input): 32 px, a 1 px edge, a 3 px halo on focus, red edge when invalid. */
+
+type FieldState = {
   className?: string;
   error?: boolean;
   success?: boolean;
 };
 
-export function Input({ className = "", error, success, ...rest }: InputProps) {
-  const stateClasses = error
-    ? "border-[var(--border-error)] shadow-[0_0_0_3px_var(--bg-error)]"
-    : success
-      ? "border-[var(--border-success)] shadow-[0_0_0_3px_var(--bg-success)]"
-      : "border-[var(--line)] focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_var(--accent-subtle)]";
+function fieldClass(base: string, { className = "", success }: FieldState): string {
+  return [base, success ? "ok" : "", className].filter(Boolean).join(" ");
+}
 
+type InputProps = InputHTMLAttributes<HTMLInputElement> & FieldState;
+
+export function Input({ className = "", error, success, ...rest }: InputProps) {
   return (
     <input
-      className={`w-full bg-transparent border rounded-lg px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--muted)] transition-[border-color,box-shadow] duration-[var(--dur-fast)] outline-none disabled:bg-[var(--surface)] disabled:text-[var(--text-disabled)] disabled:cursor-not-allowed ${stateClasses} ${className}`}
+      aria-invalid={error ? true : undefined}
       {...rest}
+      className={fieldClass("kt-input", { className, success })}
     />
   );
 }
 
-type SelectProps = SelectHTMLAttributes<HTMLSelectElement> & {
-  className?: string;
+type SelectProps = SelectHTMLAttributes<HTMLSelectElement> & FieldState & {
   children: ReactNode;
-  error?: boolean;
-  success?: boolean;
 };
 
 export function Select({ className = "", children, error, success, ...rest }: SelectProps) {
-  const stateClasses = error
-    ? "border-[var(--border-error)] shadow-[0_0_0_3px_var(--bg-error)]"
-    : success
-      ? "border-[var(--border-success)] shadow-[0_0_0_3px_var(--bg-success)]"
-      : "border-[var(--line)] focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_var(--accent-subtle)]";
-
   return (
     <select
-      className={`appearance-none bg-[var(--surface)] border rounded-lg px-3 py-2 pr-8 text-sm text-[var(--text)] transition-[border-color,box-shadow] duration-[var(--dur-fast)] outline-none cursor-pointer disabled:text-[var(--text-disabled)] disabled:cursor-not-allowed select-chevron ${stateClasses} ${className}`}
-      style={{ backdropFilter: "blur(8px) saturate(1.4)" }}
+      aria-invalid={error ? true : undefined}
       {...rest}
+      className={fieldClass("kt-input select-chevron", { className, success })}
     >
       {children}
     </select>
+  );
+}
+
+type TextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & FieldState;
+
+export function Textarea({ className = "", error, success, ...rest }: TextareaProps) {
+  return (
+    <textarea
+      aria-invalid={error ? true : undefined}
+      {...rest}
+      className={fieldClass("kt-input", { className, success })}
+    />
   );
 }

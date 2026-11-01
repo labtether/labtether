@@ -9,30 +9,23 @@ type TipProps = {
   children: ReactNode;
 };
 
+/** Tooltips wait 450 ms, then show at once while the pointer moves between tipped controls. */
 export function TipProvider({ children }: { children: ReactNode }) {
   return (
-    <TooltipPrimitive.Provider delayDuration={200} skipDelayDuration={100}>
+    <TooltipPrimitive.Provider delayDuration={450} skipDelayDuration={500}>
       {children}
     </TooltipPrimitive.Provider>
   );
 }
 
+/** 2.0 tooltip (kit.css .kt-tip): a small dark pill, no arrow. */
 export function Tip({ content, side = "top", children }: TipProps) {
   return (
     <TooltipPrimitive.Root>
       <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
       <TooltipPrimitive.Portal>
-        <TooltipPrimitive.Content
-          side={side}
-          sideOffset={6}
-          className="z-[100] rounded-lg border border-[var(--panel-border)] bg-[var(--panel-glass)] px-2.5 py-1.5 text-xs text-[var(--text)] shadow-[var(--shadow-sm)]"
-          style={{
-            backdropFilter: "blur(var(--blur-lg))",
-            WebkitBackdropFilter: "blur(var(--blur-lg))",
-          }}
-        >
+        <TooltipPrimitive.Content side={side} sideOffset={6} collisionPadding={8} className="kt-tip">
           {content}
-          <TooltipPrimitive.Arrow className="fill-[var(--panel-border)]" width={10} height={5} />
         </TooltipPrimitive.Content>
       </TooltipPrimitive.Portal>
     </TooltipPrimitive.Root>

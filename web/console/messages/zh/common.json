@@ -11,6 +11,10 @@
     "label": "搜索",
     "placeholder": "搜索..."
   },
+  "palette": {
+    "placeholder": "搜索设备、页面和设置",
+    "showAll": "显示全部"
+  },
   "noResults": "未找到结果",
   "empty": "这里还没有内容",
   "actions": {

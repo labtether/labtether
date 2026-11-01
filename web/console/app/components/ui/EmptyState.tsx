@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
 type EmptyStateProps = {
+  /** Kept for existing callers; 2.0 empty states show no icon. */
   icon?: LucideIcon;
   title: string;
   description: string;
@@ -9,13 +10,13 @@ type EmptyStateProps = {
   className?: string;
 };
 
-export function EmptyState({ icon: Icon, title, description, action, className = "" }: EmptyStateProps) {
+/** 2.0 empty state (kit.css .kt-empty): what is missing, one plain line, and at most one button. */
+export function EmptyState({ title, description, action, className = "" }: EmptyStateProps) {
   return (
-    <div className={`flex flex-col items-center justify-center gap-2 py-12 px-6 text-center ${className}`}>
-      {Icon ? <Icon className="w-11 h-11 text-[var(--muted)] mb-1" strokeWidth={1.5} /> : null}
-      <p className="text-sm font-semibold text-[var(--text)]">{title}</p>
-      <p className="text-[0.8125rem] text-[var(--muted)] max-w-[280px] leading-relaxed">{description}</p>
-      {action ? <div className="mt-2">{action}</div> : null}
+    <div className={`kt-empty${className ? ` ${className}` : ""}`}>
+      <p className="kt-empty-t">{title}</p>
+      {description ? <p className="kt-empty-d">{description}</p> : null}
+      {action ? <div className="kt-empty-a">{action}</div> : null}
     </div>
   );
 }

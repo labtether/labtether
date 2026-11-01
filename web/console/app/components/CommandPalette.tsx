@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Command } from "cmdk";
-import { Search } from "lucide-react";
+import * as Dialog from "@radix-ui/react-dialog";
+import { useTranslations } from "next-intl";
 import { usePalette, type PaletteItem } from "../contexts/PaletteContext";
 
 const MAX_PER_GROUP = 5;
+const CODE_GROUPS = new Set(["Snippets", "Quick connect"]);
 
 interface GroupedResults {
   group: string;
@@ -13,41 +15,37 @@ interface GroupedResults {
   hasMore: boolean;
 }
 
+/**
+ * 2.0 ⌘K (kit.css .kt-pal): a scrim, a 56 px search line, then grouped results in 36 px rows with a quiet hint on the
+ * right. ⌘K / Ctrl+K toggles it, Escape closes it, focus stays inside while it is open.
+ */
 export function CommandPalette() {
+  const t = useTranslations("common");
   const { open, setOpen, getProviders } = usePalette();
   const [query, setQuery] = useState("");
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Global keyboard shortcut: Cmd+K / Ctrl+K to toggle
+  const reset = useCallback(() => {
+    setQuery("");
+    setExpandedGroups(new Set());
+  }, []);
+
+  // Global keyboard shortcut: Cmd+K / Ctrl+K to toggle.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setOpen((prev) => {
-          if (prev) return false;
-          setQuery("");
-          setExpandedGroups(new Set());
-          return true;
-        });
-      }
-      if (e.key === "Escape") {
-        setOpen(false);
+        reset();
+        setOpen((prev) => !prev);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [setOpen]);
+  }, [setOpen, reset]);
 
-  // Focus input when palette opens
-  useEffect(() => {
-    if (open) {
-      requestAnimationFrame(() => inputRef.current?.focus());
-    }
-  }, [open]);
-
-  // Compute grouped results from providers
+  // Compute grouped results from providers.
   const groupedResults = useMemo((): GroupedResults[] => {
+    if (!open) return [];
     const providers = getProviders();
     const trimmed = query.trim();
     const prefixChar = trimmed.length > 0 ? trimmed[0] : "";
@@ -69,12 +67,12 @@ export function CommandPalette() {
 
         groups.push({ group: provider.group, items, hasMore });
       } catch {
-        // Silently skip providers that throw
+        // A provider that throws is skipped; the others still answer.
       }
     }
 
     return groups;
-  }, [query, getProviders, expandedGroups]);
+  }, [open, query, getProviders, expandedGroups]);
 
   const handleSelect = useCallback(
     (item: PaletteItem) => {
@@ -84,11 +82,6 @@ export function CommandPalette() {
     },
     [setOpen],
   );
-
-  const handleClose = useCallback(() => {
-    setOpen(false);
-    setQuery("");
-  }, [setOpen]);
 
   const toggleGroupExpand = useCallback((group: string) => {
     setExpandedGroups((prev) => {
@@ -102,87 +95,62 @@ export function CommandPalette() {
     });
   }, []);
 
-  if (!open) return null;
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-[20vh] bg-black/50 backdrop-blur-sm"
-      onClick={handleClose}
+    <Dialog.Root
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) reset();
+      }}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        className="w-full max-w-lg bg-[var(--panel)] border border-[var(--line)] rounded-lg shadow-2xl overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => { if (e.key === "Escape") handleClose(); }}
-      >
-        <Command
-          label="Command palette"
-          shouldFilter={false}
-          loop
-        >
-          {/* Search input */}
-          <div className="flex items-center gap-2.5 px-4 h-12 border-b border-[var(--line)]">
-            <Search size={16} strokeWidth={1.5} className="text-[var(--muted)]" />
-            <Command.Input
-              ref={inputRef}
-              className="flex-1 bg-transparent text-sm text-[var(--text)] placeholder:text-[var(--muted)] outline-none"
-              placeholder="Type a command or search..."
-              value={query}
-              onValueChange={setQuery}
-            />
-            <kbd className="px-1.5 py-0.5 rounded text-[10px] text-[var(--muted)] border border-[var(--line)]">
-              ESC
-            </kbd>
-          </div>
+      <Dialog.Portal>
+        <Dialog.Overlay className="kt-scrim pal">
+          <Dialog.Content className="kt-pal" aria-describedby={undefined}>
+            <Dialog.Title className="sr-only">{t("search.label")}</Dialog.Title>
+            <Command label={t("search.label")} shouldFilter={false} loop>
+              <div className="kt-pal-in">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="m20 20-3.5-3.5" />
+                </svg>
+                <Command.Input
+                  className="kt-pal-q"
+                  placeholder={t("palette.placeholder")}
+                  value={query}
+                  onValueChange={setQuery}
+                />
+              </div>
 
-          {/* Results */}
-          <Command.List className="max-h-80 overflow-y-auto py-1">
-            <Command.Empty className="px-4 py-6 text-center text-sm text-[var(--muted)]">
-              No results found
-            </Command.Empty>
+              <Command.List className="kt-pal-list">
+                <Command.Empty className="kt-pal-empty">{t("noResults")}</Command.Empty>
 
-            {groupedResults.map(({ group, items, hasMore }) => (
-              <Command.Group
-                key={group}
-                heading={group}
-                className="[&_[cmdk-group-heading]]:px-4 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-mono [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-[var(--muted)]"
-              >
-                {items.map((item) => {
-                  const Icon = item.icon;
-                  const isCode = group === "Snippets" || group === "Quick Connect";
-
+                {groupedResults.map(({ group, items, hasMore }) => {
+                  const isCode = CODE_GROUPS.has(group);
                   return (
-                    <Command.Item
-                      key={item.id}
-                      value={item.id}
-                      onSelect={() => handleSelect(item)}
-                      className="flex items-center gap-3 px-4 py-2 text-sm cursor-pointer transition-colors duration-150 text-[var(--muted)] aria-selected:bg-[var(--surface)] aria-selected:text-[var(--text)] hover:bg-[var(--hover)]"
-                    >
-                      {Icon && <Icon size={16} strokeWidth={1.5} className="shrink-0 opacity-60" />}
-                      <span className={`flex-1 truncate ${isCode ? "font-mono" : ""}`}>{item.label}</span>
-                      {item.description && (
-                        <span className={`text-xs text-[var(--muted)] truncate ${isCode ? "font-mono" : ""}`}>
-                          {item.description}
-                        </span>
-                      )}
-                    </Command.Item>
+                    <Command.Group key={group} heading={group}>
+                      {items.map((item) => (
+                        <Command.Item key={item.id} value={item.id} onSelect={() => handleSelect(item)} className="kt-pal-item">
+                          <span className={`kt-pal-lbl${isCode ? " kt-mono" : ""}`}>{item.label}</span>
+                          {item.description ? <span className="kt-pal-hint">{item.description}</span> : null}
+                        </Command.Item>
+                      ))}
+                      {hasMore ? (
+                        <Command.Item
+                          value={`__show-more-${group}`}
+                          onSelect={() => toggleGroupExpand(group)}
+                          className="kt-pal-item kt-pal-more"
+                        >
+                          {t("palette.showAll")}
+                        </Command.Item>
+                      ) : null}
+                    </Command.Group>
                   );
                 })}
-                {hasMore && (
-                  <Command.Item
-                    value={`__show-more-${group}`}
-                    onSelect={() => toggleGroupExpand(group)}
-                    className="w-full px-4 py-1.5 text-[10px] text-[var(--accent)] aria-selected:text-[var(--text)] text-left font-mono uppercase tracking-wider transition-colors cursor-pointer"
-                  >
-                    Show all
-                  </Command.Item>
-                )}
-              </Command.Group>
-            ))}
-          </Command.List>
-        </Command>
-      </div>
-    </div>
+              </Command.List>
+            </Command>
+          </Dialog.Content>
+        </Dialog.Overlay>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
