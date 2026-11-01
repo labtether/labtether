@@ -1,324 +1,174 @@
 "use client";
-import { useEffect, useState } from "react";
+
+import { useTranslations } from "next-intl";
+import { useEffect, useMemo, useState } from "react";
+import { ConfirmDialog } from "../../../../components/ui/ConfirmDialog";
 import { useServices } from "../../../../hooks/useServices";
 import type { ServiceInfo } from "../../../../hooks/useServices";
+import { copyText, FilterField, FilterFoot, ListState, plainError, RefreshButton, RowMenu, ShowSwitch, type RowMenuItem } from "./systemViewParts";
 
-function ActiveStateBadge({ state }: { state: string }) {
-  const lower = state.toLowerCase();
-  let bg = "var(--surface)";
-  let color = "var(--muted)";
-  if (lower === "active") {
-    bg = "var(--ok-glow)";
-    color = "var(--ok)";
-  } else if (lower === "failed") {
-    bg = "var(--bad-glow)";
-    color = "var(--bad)";
-  } else if (lower === "activating" || lower === "deactivating" || lower === "reloading") {
-    bg = "var(--warn-glow)";
-    color = "var(--warn)";
+type Verb = "start" | "stop" | "restart";
+type Show = "all" | "stopped";
+
+const RUNNING = new Set(["active"]);
+/** systemd's in-between states and the words for them. */
+const BUSY: Record<string, string> = { activating: "starting", deactivating: "stopping", reloading: "reloading", refreshing: "reloading" };
+/** While LabTether runs an action on a unit. */
+const PENDING: Record<Verb, string> = { start: "starting", stop: "stopping", restart: "restarting" };
+const ENABLED = new Set(["enabled", "enabled-runtime", "alias"]);
+const KNOWN_ENABLED = new Set(["disabled", "static", "masked", "indirect", "generated", "transient"]);
+
+const notRunning = (svc: ServiceInfo) => !RUNNING.has(svc.active_state.trim().toLowerCase());
+const base = (name: string) => name.replace(/\.service$/, "").replace(/@.*/, "");
+/** Units whose stop cuts the way in, LabTether itself, or the device's containers: stopping them asks first. */
+function stopRisk(name: string): "ssh" | "agent" | "docker" | null {
+  const unit = base(name).toLowerCase();
+  if (unit === "ssh" || unit === "sshd") return "ssh";
+  if (unit.startsWith("labtether-agent")) return "agent";
+  if (unit === "docker") return "docker";
+  return null;
+}
+
+/** The state word and its tone; running units show no word. */
+function stateOf(svc: ServiceInfo, pending: Verb | null): { word: string; tone: "" | "bad" | "busy" | "off" } {
+  if (pending) return { word: PENDING[pending], tone: "busy" };
+  const active = svc.active_state.trim().toLowerCase();
+  if (active === "failed") return { word: "failed", tone: "bad" };
+  if (BUSY[active]) return { word: BUSY[active], tone: "busy" };
+  if (active === "inactive") return { word: "stopped", tone: "off" };
+  if (RUNNING.has(active)) {
+    const sub = svc.sub_state.trim().toLowerCase();
+    return { word: !sub || sub === "running" ? "" : `active:${sub}`, tone: "" };
   }
-  return (
-    <span
-      style={{
-        display: "inline-block",
-        padding: "2px 8px",
-        borderRadius: "4px",
-        fontSize: "10px",
-        fontWeight: 500,
-        background: bg,
-        color: color,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {state || "unknown"}
-    </span>
-  );
+  return { word: active ? `other:${active}` : "", tone: "off" };
 }
 
-function EnabledBadge({ enabled }: { enabled: string }) {
-  const lower = enabled.toLowerCase();
-  const isEnabled = lower === "enabled" || lower === "enabled-runtime";
-  return (
-    <span
-      style={{
-        display: "inline-block",
-        padding: "2px 8px",
-        borderRadius: "4px",
-        fontSize: "10px",
-        fontWeight: 500,
-        background: isEnabled ? "var(--ok-glow)" : "var(--surface)",
-        color: isEnabled ? "var(--ok)" : "var(--muted)",
-        whiteSpace: "nowrap",
-      }}
-    >
-      {enabled || "unknown"}
-    </span>
-  );
-}
-
-function ServiceActions({
-  service,
-  onAction,
-  busy,
-}: {
-  service: ServiceInfo;
-  onAction: (action: string) => void;
-  busy: boolean;
-}) {
-  const active = service.active_state.toLowerCase();
-  const isActive = active === "active";
-  const isFailed = active === "failed";
-  const isStopped = active === "inactive" || isFailed;
-
-  return (
-    <div style={{ display: "flex", gap: "4px" }}>
-      {isStopped ? (
-        <button
-          disabled={busy}
-          onClick={() => onAction("start")}
-          style={{
-            padding: "3px 8px",
-            fontSize: "10px",
-            borderRadius: "4px",
-            border: "1px solid var(--line)",
-            cursor: busy ? "default" : "pointer",
-            background: "transparent",
-            color: "var(--ok)",
-            opacity: busy ? 0.5 : 1,
-            whiteSpace: "nowrap",
-          }}
-        >
-          Start
-        </button>
-      ) : null}
-      {isActive ? (
-        <button
-          disabled={busy}
-          onClick={() => onAction("stop")}
-          style={{
-            padding: "3px 8px",
-            fontSize: "10px",
-            borderRadius: "4px",
-            border: "1px solid var(--line)",
-            cursor: busy ? "default" : "pointer",
-            background: "transparent",
-            color: "var(--bad)",
-            opacity: busy ? 0.5 : 1,
-            whiteSpace: "nowrap",
-          }}
-        >
-          Stop
-        </button>
-      ) : null}
-      {(isActive || isFailed) ? (
-        <button
-          disabled={busy}
-          onClick={() => onAction("restart")}
-          style={{
-            padding: "3px 8px",
-            fontSize: "10px",
-            borderRadius: "4px",
-            border: "1px solid var(--line)",
-            cursor: busy ? "default" : "pointer",
-            background: "transparent",
-            color: "var(--muted)",
-            opacity: busy ? 0.5 : 1,
-            whiteSpace: "nowrap",
-          }}
-        >
-          Restart
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
+/** The device's services (systemd units on Linux): state, enabled at boot, and start, stop and restart from the ⋯. */
 export function ServicesTab({ nodeId }: { nodeId: string }) {
+  const t = useTranslations("devices.system");
   const { services, loading, error, refresh, performAction } = useServices(nodeId);
   const [filter, setFilter] = useState("");
-  const [busyService, setBusyService] = useState<string | null>(null);
+  const [show, setShow] = useState<Show>("all");
+  const [busy, setBusy] = useState<{ name: string; verb: Verb } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [ask, setAsk] = useState<{ name: string; risk: "ssh" | "agent" | "docker" } | null>(null);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  const filtered = services.filter((svc) => {
-    if (!filter) return true;
-    const q = filter.toLowerCase();
-    return (
-      svc.name.toLowerCase().includes(q) ||
-      svc.description.toLowerCase().includes(q) ||
-      svc.active_state.toLowerCase().includes(q)
-    );
-  });
+  const stoppedCount = services.filter(notRunning).length;
+  const showing: Show = show === "stopped" && stoppedCount > 0 ? "stopped" : "all";
 
-  const handleAction = async (serviceName: string, action: string) => {
-    setBusyService(serviceName);
+  const rows = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    return [...services]
+      .filter((svc) => showing === "all" || notRunning(svc))
+      .filter((svc) => !q || svc.name.toLowerCase().includes(q) || svc.description.toLowerCase().includes(q) || svc.active_state.toLowerCase().includes(q))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [services, filter, showing]);
+
+  const run = async (name: string, verb: Verb) => {
+    setBusy({ name, verb });
     setActionError(null);
     try {
-      await performAction(serviceName, action);
+      await performAction(name, verb);
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : `Failed to ${action} service`);
+      const detail = plainError(err instanceof Error ? err.message : "");
+      setActionError(`${t(`units.failed.${verb}`, { name })}${detail ? `: ${detail}` : ""}`);
     } finally {
-      setBusyService(null);
+      setBusy(null);
     }
   };
 
+  const stateWord = (word: string) => {
+    if (!word) return "";
+    if (word.startsWith("active:")) return t("units.state.activeSub", { sub: word.slice(7) });
+    if (word.startsWith("other:")) return word.slice(6);
+    return t(`units.state.${word}`);
+  };
+  const enabledWord = (enabled: string) => {
+    const value = enabled.trim().toLowerCase();
+    if (!value || ENABLED.has(value)) return "";
+    return KNOWN_ENABLED.has(value) ? t(`units.enabled.${value}`) : value;
+  };
+
+  const itemsFor = (svc: ServiceInfo): RowMenuItem[] => {
+    const active = svc.active_state.trim().toLowerCase();
+    const isActive = RUNNING.has(active);
+    const isFailed = active === "failed";
+    const disabled = busy !== null;
+    const items: RowMenuItem[] = [];
+    if (active === "inactive" || isFailed) items.push({ label: t("units.start"), disabled, onSelect: () => void run(svc.name, "start") });
+    if (isActive || isFailed) items.push({ label: t("units.restart"), disabled, onSelect: () => void run(svc.name, "restart") });
+    if (isActive) {
+      const risk = stopRisk(svc.name);
+      items.push(risk
+        ? { label: t("units.stopAsk"), danger: true, disabled, onSelect: () => setAsk({ name: svc.name, risk }) }
+        : { label: t("units.stop"), disabled, onSelect: () => void run(svc.name, "stop") });
+    }
+    if (items.length) items.push("sep");
+    items.push({ label: t("units.copyName"), onSelect: () => copyText(svc.name) });
+    return items;
+  };
+
   return (
-    <div
-      style={{
-        background: "var(--panel)",
-        border: "1px solid var(--line)",
-        borderRadius: "8px",
-        padding: "16px",
-        marginBottom: "16px",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px", gap: "12px", flexWrap: "wrap" }}>
-        <h2 style={{ fontSize: "14px", fontWeight: 500, color: "var(--text)", margin: 0 }}>Services</h2>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, minWidth: "200px", maxWidth: "400px" }}>
-          <input
-            type="text"
-            placeholder="Filter services..."
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            style={{
-              flex: 1,
-              padding: "5px 10px",
-              fontSize: "12px",
-              borderRadius: "6px",
-              border: "1px solid var(--line)",
-              background: "transparent",
-              color: "var(--text)",
-              outline: "none",
-            }}
-          />
-          <button
-            onClick={() => void refresh()}
-            disabled={loading}
-            style={{
-              padding: "5px 10px",
-              fontSize: "11px",
-              borderRadius: "6px",
-              border: "1px solid var(--line)",
-              cursor: loading ? "default" : "pointer",
-              background: "transparent",
-              color: "var(--muted)",
-              opacity: loading ? 0.5 : 1,
-              whiteSpace: "nowrap",
-            }}
-          >
-            {loading ? "Loading..." : "Refresh"}
-          </button>
-        </div>
+    <div className="dsy">
+      <div className="dv-bar">
+        <FilterField value={filter} onChange={setFilter} placeholder={t("units.filter")} />
+        <ShowSwitch<Show> items={stoppedCount > 0 ? [["all", t("units.show.all")], ["stopped", t("units.show.stopped")]] : []} value={showing} onChange={setShow} label={t("units.show.label")} />
+        <span className="dv-sp" />
+        <RefreshButton loading={loading} onClick={() => void refresh()} />
       </div>
-
-      {actionError ? (
-        <p style={{ fontSize: "12px", color: "var(--bad)", marginBottom: "8px" }}>{actionError}</p>
-      ) : null}
-
-      {loading && services.length === 0 ? (
-        <p style={{ fontSize: "14px", color: "var(--muted)" }}>Loading services...</p>
-      ) : error ? (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 0", gap: "8px" }}>
-          <p style={{ fontSize: "12px", color: "var(--bad)" }}>{error}</p>
-          <button
-            onClick={() => void refresh()}
-            style={{
-              padding: "6px 12px",
-              fontSize: "12px",
-              borderRadius: "6px",
-              border: "1px solid var(--line)",
-              cursor: "pointer",
-              background: "transparent",
-              color: "var(--text)",
-            }}
-          >
-            Retry
-          </button>
-        </div>
-      ) : services.length === 0 ? (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "48px 0", gap: "8px" }}>
-          <p style={{ fontSize: "14px", fontWeight: 500, color: "var(--text)" }}>No services returned</p>
-          <p style={{ fontSize: "12px", color: "var(--muted)", textAlign: "center", maxWidth: "320px" }}>
-            The agent did not return any service data. Make sure the agent is connected and supports service listing.
-          </p>
-        </div>
-      ) : (
-        <>
-          {filter && (
-            <p style={{ fontSize: "11px", color: "var(--muted)", marginBottom: "8px" }}>
-              Showing {filtered.length} of {services.length} services
-            </p>
-          )}
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
-              <thead>
-                <tr style={{ borderBottom: "1px solid var(--line)" }}>
-                  {["Name", "Description", "Active", "Sub-State", "Enabled", "Load", "Actions"].map((col) => (
-                    <th
-                      key={col}
-                      style={{
-                        padding: "6px 8px",
-                        textAlign: "left",
-                        fontSize: "10px",
-                        fontWeight: 500,
-                        color: "var(--muted)",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.05em",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {col}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((svc) => (
-                  <tr
-                    key={svc.name}
-                    style={{ borderBottom: "1px solid var(--line)" }}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLTableRowElement).style.background = "var(--hover)";
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLTableRowElement).style.background = "transparent";
-                    }}
-                  >
-                    <td style={{ padding: "6px 8px", color: "var(--text)", fontWeight: 500, maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {svc.name}
-                    </td>
-                    <td style={{ padding: "6px 8px", color: "var(--muted)", maxWidth: "240px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {svc.description || "-"}
-                    </td>
-                    <td style={{ padding: "6px 8px" }}>
-                      <ActiveStateBadge state={svc.active_state} />
-                    </td>
-                    <td style={{ padding: "6px 8px", color: "var(--muted)", whiteSpace: "nowrap" }}>
-                      {svc.sub_state || "-"}
-                    </td>
-                    <td style={{ padding: "6px 8px" }}>
-                      <EnabledBadge enabled={svc.enabled} />
-                    </td>
-                    <td style={{ padding: "6px 8px", color: "var(--muted)", whiteSpace: "nowrap" }}>
-                      {svc.load_state || "-"}
-                    </td>
-                    <td style={{ padding: "6px 8px" }}>
-                      <ServiceActions
-                        service={svc}
-                        onAction={(action) => void handleAction(svc.name, action)}
-                        busy={busyService === svc.name}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {actionError ? <p className="dv-err dsy-msg" role="alert">{actionError}</p> : null}
+      <ListState
+        loading={loading}
+        hasRows={services.length > 0}
+        error={error}
+        loadError={t("units.loadError")}
+        empty={t("units.empty")}
+        onRetry={() => void refresh()}
+      >
+        <div className="dv-list dsy-hang dsy-unit" role="table" aria-label={t("units.label")}>
+          <div className="dv-cols" role="row">
+            <span role="columnheader">{t("units.cols.service")}</span>
+            <span role="columnheader">{t("units.cols.state")}</span>
+            <span role="columnheader" className="c-en">{t("units.cols.enabled")}</span>
+            <span role="columnheader" aria-label={t("actions")} />
           </div>
-        </>
-      )}
+          {rows.map((svc) => {
+            const pending = busy?.name === svc.name ? busy.verb : null;
+            const state = stateOf(svc, pending);
+            const load = svc.load_state.trim().toLowerCase();
+            return (
+              <div key={svc.name} className="dv-row" role="row" tabIndex={0}>
+                <span className="dsy-lead" aria-hidden="true">{state.tone ? <i className={`dv-dot ${state.tone}`} /> : null}</span>
+                <span role="cell" className="dv-ln">
+                  <span className="dv-nm">{svc.name}</span>
+                  {load && load !== "loaded" ? <span className="dv-prob warn">{load}</span> : null}
+                  {svc.description ? <span className="dv-grey">{svc.description}</span> : null}
+                </span>
+                <span role="cell" className={`dsy-word${state.tone === "bad" ? " bad" : ""}`}>
+                  {stateWord(state.word)}
+                </span>
+                <span role="cell" className="dv-txt c-en">{enabledWord(svc.enabled)}</span>
+                <RowMenu name={svc.name} items={itemsFor(svc)} />
+              </div>
+            );
+          })}
+          {rows.length === 0 ? <div className="dv-empty"><b>{t("units.noMatch")}</b></div> : null}
+          <FilterFoot shown={rows.length} total={services.length} onClear={() => { setFilter(""); setShow("all"); }} />
+        </div>
+      </ListState>
+      <ConfirmDialog
+        open={ask !== null}
+        onClose={() => setAsk(null)}
+        onConfirm={() => { const target = ask; setAsk(null); if (target) void run(target.name, "stop"); }}
+        title={ask ? t("units.stopTitle", { name: ask.name }) : ""}
+        message={ask ? t(`units.stopRisk.${ask.risk}`) : ""}
+        confirmLabel={t("units.stop")}
+        danger
+      />
     </div>
   );
 }

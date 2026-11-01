@@ -9,46 +9,41 @@ type SignalTone
 } from "./systemPanelMetrics";
 import type { SystemDrilldownView } from "./systemPanelTypes";
 
+/** A worded value: the component translates `phrase` (under devices.hardware.values) with `values`. */
+export type DetailPhrase = {
+  phrase: string;
+  values?: Record<string, string | number>;
+};
+
+/** One key-value row. The label is translated by `key` (devices.hardware.rows); the value is data or a phrase. */
 export type DetailRow = {
   key: string;
-  label: string;
-  value: string;
+  value: string | DetailPhrase;
+  /** warn or bad colours the value as a problem word; ok and neutral read as plain text. */
+  tone?: SignalTone;
 };
 
-export type DetailSummaryStat = {
-  key: string;
-  label: string;
-  value: string;
-  hint: string;
-  tone: SignalTone;
-};
-
+/** A titled block of rows. The title is translated by `key` (devices.hardware.sections). */
 export type DetailSection = {
   key: string;
-  title: string;
-  description: string;
   rows: DetailRow[];
 };
 
+/** A button to another System view or tab: the panel it opens, labelled by `key` (devices.hardware.actions). */
 export type DetailAction = {
   key: string;
-  label: string;
   panel: string;
-  variant?: "primary" | "secondary" | "ghost";
 };
 
 export type DrilldownContent = {
-  title: string;
-  subtitle: string;
-  heroLabel: string;
+  view: SystemDrilldownView;
   heroValue: string;
   heroHint: string;
-  statusLabel: string;
   statusTone: SignalTone;
-  summaryStats: DetailSummaryStat[];
+  /** The status word key (devices.hardware.status.<view>.<word>); empty while nothing is wrong. */
+  statusWord: string;
   sections: DetailSection[];
   actions: DetailAction[];
-  tips: string[];
 };
 
 export const HISTORY_METRICS: Record<SystemDrilldownView, string[]> = {
@@ -58,24 +53,27 @@ export const HISTORY_METRICS: Record<SystemDrilldownView, string[]> = {
   network: ["network_rx_bytes_per_sec", "network_tx_bytes_per_sec"],
 };
 
+/** The dash shown for a value the device does not report. */
+export const MISSING = "—";
+
 export function formatLoad(value: number | null): string {
   if (value == null) {
-    return "n/a";
+    return MISSING;
   }
   return value.toFixed(2);
 }
 
 export function formatRatio(value: number | null): string {
   if (value == null || !Number.isFinite(value)) {
-    return "n/a";
+    return MISSING;
   }
-  return `${value.toFixed(2)}x`;
+  return `${value.toFixed(2)}×`;
 }
 
 export function formatFrequency(raw: string): string {
   const value = parseFloatValue(raw);
   if (value == null || value <= 0) {
-    return "n/a";
+    return "";
   }
   if (value >= 1000) {
     return `${(value / 1000).toFixed(1)} GHz`;
@@ -100,93 +98,56 @@ export function usageTone(
   return "ok";
 }
 
-export function backupFreshness(asset: Asset): { value: string; tone: SignalTone } {
+/** How old the last backup is, as a phrase and a tone: amber after 7 days, red after 14 or with none. */
+export function backupFreshness(asset: Asset): { value: DetailPhrase | string; tone: SignalTone } {
   const backupState = readMeta(asset, "backup_state");
   const backupDays = parseFloatValue(readMeta(asset, "days_since_backup"));
 
   if (backupState === "none") {
-    return { value: "No backups", tone: "bad" };
+    return { value: { phrase: "noBackups" }, tone: "bad" };
   }
   if (backupDays != null) {
     if (backupDays < 1) {
       const hours = Math.round(backupDays * 24);
-      return { value: hours <= 0 ? "Backup today" : `${hours}h since backup`, tone: "ok" };
+      return { value: hours <= 0 ? { phrase: "backupToday" } : { phrase: "backupHours", values: { count: hours } }, tone: "ok" };
     }
     const rounded = Math.round(backupDays);
-    if (backupDays >= 14) {
-      return { value: `${rounded} days since backup`, tone: "bad" };
-    }
-    if (backupDays >= 7) {
-      return { value: `${rounded} days since backup`, tone: "warn" };
-    }
-    return { value: `${rounded} days since backup`, tone: "ok" };
+    const tone: SignalTone = backupDays >= 14 ? "bad" : backupDays >= 7 ? "warn" : "ok";
+    return { value: { phrase: "backupDays", values: { count: rounded } }, tone };
   }
   if (backupState !== "") {
     return { value: backupState, tone: "neutral" };
   }
-  return { value: "n/a", tone: "neutral" };
+  return { value: MISSING, tone: "neutral" };
 }
 
-export function cpuStatusLabel(tone: SignalTone): string {
-  switch (tone) {
-    case "ok":
-      return "Headroom available";
-    case "warn":
-      return "CPU pressure rising";
-    case "bad":
-      return "CPU saturated";
-    default:
-      return "Waiting for telemetry";
-  }
+/** The status word for a usage view: empty while usage is fine, else "warn" or "bad" (worded per view). */
+export function usageStatusWord(tone: SignalTone): string {
+  return tone === "warn" || tone === "bad" ? tone : "";
 }
 
-export function memoryStatusLabel(tone: SignalTone): string {
-  switch (tone) {
-    case "ok":
-      return "Memory headroom stable";
-    case "warn":
-      return "Memory pressure building";
-    case "bad":
-      return "Memory pressure high";
-    default:
-      return "Waiting for telemetry";
-  }
-}
-
-export function storageStatusLabel(tone: SignalTone): string {
-  switch (tone) {
-    case "ok":
-      return "Storage headroom healthy";
-    case "warn":
-      return "Capacity tightening";
-    case "bad":
-      return "Disk nearly full";
-    default:
-      return "Waiting for telemetry";
-  }
-}
-
+/** What is wrong with the device's network, if anything LabTether can tell from what the agent reports. */
 export function networkStatus(
   asset: Asset,
   metrics: MetricSnapshot,
-): { label: string; tone: SignalTone } {
+): { word: string; tone: SignalTone } {
   const interfaceCount = parseIntValue(readMeta(asset, "network_interface_count"));
   const primaryIP = readMeta(asset, "ip") || readMeta(asset, "ip_address");
   const tailscaleState = readMeta(asset, "tailscale_backend_state").toLowerCase();
 
   if (interfaceCount != null && interfaceCount <= 0) {
-    return { label: "No interfaces reported", tone: "bad" };
+    return { word: "noInterfaces", tone: "bad" };
   }
   if (primaryIP === "" && interfaceCount != null && interfaceCount > 0) {
-    return { label: "Addressing needs review", tone: "warn" };
+    return { word: "noAddress", tone: "warn" };
   }
   if (tailscaleState !== "" && tailscaleState !== "running" && tailscaleState !== "connected") {
-    return { label: "Overlay network not ready", tone: "warn" };
+    return { word: "tailscaleDown", tone: "warn" };
   }
   if (metrics.network_rx_bytes_per_sec == null && metrics.network_tx_bytes_per_sec == null) {
-    return { label: "Traffic snapshot unavailable", tone: "neutral" };
+    return { word: "", tone: "neutral" };
   }
-  return { label: "Network path looks healthy", tone: "ok" };
+  return { word: "", tone: "ok" };
 }
 
 export function relevantHistorySeries(

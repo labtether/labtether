@@ -1,24 +1,21 @@
 "use client";
 
-import { Badge } from "../../../../components/ui/Badge";
+import { RefreshCw } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Button } from "../../../../components/ui/Button";
-import { Card } from "../../../../components/ui/Card";
 import { useStatusControls } from "../../../../contexts/StatusContext";
 import { AgentDeviceNameCard } from "./AgentDeviceNameCard";
 import { AgentSettingsEditorSection } from "./AgentSettingsEditorSection";
 import { AgentSettingsOverviewSection } from "./AgentSettingsOverviewSection";
-import {
-  formatTime,
-  getAgentVersionStatusClass,
-  getAgentVersionStatusLabel,
-  settingControlSourceStatus,
-  settingKeyFilesRootMode,
-} from "./agentSettingsModel";
+import { formatTime, settingKeyFilesRootMode } from "./agentSettingsModel";
 import { useAgentDeviceName } from "./useAgentDeviceName";
 import { useAgentSettingsActions } from "./useAgentSettingsActions";
 import { useAgentSettingsData } from "./useAgentSettingsData";
 
+/** Settings › Agent: the agent's facts and updates, the device name it keeps, its settings and their apply history. */
 export function AgentSettingsTab({ nodeId, assetName }: { nodeId: string; assetName: string }) {
+  const t = useTranslations("devices.settingsTab.agent");
+  const tSet = useTranslations("devices.settingsTab.settings");
   const { fetchStatus } = useStatusControls();
 
   const {
@@ -71,26 +68,60 @@ export function AgentSettingsTab({ nodeId, assetName }: { nodeId: string; assetN
     deviceNameMessage,
   } = useAgentDeviceName({ nodeId, assetName, fetchStatus });
 
-  const versionStatusLabel = getAgentVersionStatusLabel(payload?.agent_version_status);
-  const versionStatusClass = getAgentVersionStatusClass(payload?.agent_version_status);
+  const saveBar = (
+    <>
+      {hasPendingChanges ? <span className="dv-hint">{tSet("unsaved")}</span> : null}
+      <Button size="sm" variant="ghost" onClick={() => void resetOverrides()} disabled={saving}>
+        {tSet("reset")}
+      </Button>
+      <Button size="sm" variant={hasPendingChanges ? "primary" : "secondary"} onClick={() => void saveSettings()} disabled={!hasPendingChanges || saving}>
+        {saving ? tSet("saving") : tSet("save")}
+      </Button>
+    </>
+  );
 
   return (
-    <Card className="mb-4">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-medium text-[var(--text)]">Agent Settings</h2>
-          <p className="text-xs text-[var(--muted)]">Per-agent runtime and Docker connectivity controls.</p>
+    <>
+      <section className="dv-sec" aria-labelledby="dst-agent-t">
+        <div className="dv-sh">
+          <h2 id="dst-agent-t">
+            {t("title")}
+            {payload ? (
+              <span className={`dv-quiet${payload.connected ? "" : " bad"}`}>{payload.connected ? t("connected") : t("disconnected")}</span>
+            ) : null}
+          </h2>
+          <button
+            type="button"
+            className="dst-icon"
+            onClick={() => void refresh()}
+            disabled={loading || saving || testingDocker}
+            aria-label={t("refresh")}
+            title={t("refresh")}
+          >
+            <RefreshCw aria-hidden="true" />
+          </button>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge status={payload?.connected ? "online" : "offline"} size="sm" />
-          <Button size="sm" onClick={() => void refresh()} disabled={loading || saving || testingDocker}>
-            {loading ? "Refreshing..." : "Refresh"}
-          </Button>
-        </div>
-      </div>
-
-      {error ? <p className="mb-3 text-xs text-[var(--bad)]">{error}</p> : null}
-      {message ? <p className="mb-3 text-xs text-[var(--ok)]">{message}</p> : null}
+        {error ? <p className="dv-err dst-msg-line" role="alert">{error}</p> : null}
+        {message ? <p className="dv-ok-text dst-msg-line" role="status">{message}</p> : null}
+        {loading ? (
+          <div className="dv-sheet"><p className="dv-hint">{t("loading")}</p></div>
+        ) : !payload ? (
+          <div className="dv-sheet"><p className="dv-hint">{t("none")}</p></div>
+        ) : (
+          <AgentSettingsOverviewSection
+            payload={payload}
+            formatTime={formatTime}
+            testingDocker={testingDocker}
+            onTestDocker={() => void testDocker()}
+            dockerTestOutput={dockerTestOutput}
+            forceAgentUpdate={forceAgentUpdate}
+            onForceAgentUpdateChange={setForceAgentUpdate}
+            updatingAgent={updatingAgent}
+            onUpdateAgent={() => void updateAgent()}
+            agentUpdateOutput={agentUpdateOutput}
+          />
+        )}
+      </section>
 
       <AgentDeviceNameCard
         deviceNameDraft={deviceNameDraft}
@@ -103,42 +134,18 @@ export function AgentSettingsTab({ nodeId, assetName }: { nodeId: string; assetN
         deviceNameMessage={deviceNameMessage}
       />
 
-      {loading ? (
-        <p className="text-sm text-[var(--muted)]">Loading agent settings...</p>
-      ) : !payload ? (
-        <p className="text-sm text-[var(--muted)]">No agent settings available.</p>
-      ) : (
-        <>
-          <AgentSettingsOverviewSection
-            payload={payload}
-            formatTime={formatTime}
-            versionStatusClass={versionStatusClass}
-            versionStatusLabel={versionStatusLabel}
-            hasPendingChanges={hasPendingChanges}
-            saving={saving}
-            onSave={() => void saveSettings()}
-            onResetOverrides={() => void resetOverrides()}
-            testingDocker={testingDocker}
-            onTestDocker={() => void testDocker()}
-            dockerTestOutput={dockerTestOutput}
-            forceAgentUpdate={forceAgentUpdate}
-            onForceAgentUpdateChange={setForceAgentUpdate}
-            updatingAgent={updatingAgent}
-            onUpdateAgent={() => void updateAgent()}
-            agentUpdateOutput={agentUpdateOutput}
-          />
-          <AgentSettingsEditorSection
-            serviceDiscoverySettings={serviceDiscoverySettings}
-            generalSettings={generalSettings}
-            draft={draft}
-            settingKeyFilesRootMode={settingKeyFilesRootMode}
-            settingControlSourceStatus={settingControlSourceStatus}
-            onUpdateDraftValue={updateDraftValue}
-            history={history}
-            formatTime={formatTime}
-          />
-        </>
-      )}
-    </Card>
+      {!loading && payload ? (
+        <AgentSettingsEditorSection
+          serviceDiscoverySettings={serviceDiscoverySettings}
+          generalSettings={generalSettings}
+          draft={draft}
+          settingKeyFilesRootMode={settingKeyFilesRootMode}
+          onUpdateDraftValue={updateDraftValue}
+          history={history}
+          formatTime={formatTime}
+          saveBar={saveBar}
+        />
+      ) : null}
+    </>
   );
 }

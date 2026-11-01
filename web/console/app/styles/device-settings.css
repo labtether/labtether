@@ -1,0 +1,136 @@
+/* 2.0 device page: Logs and Settings tabs (logs, action history, agent, connections, collector).
+   Built on the dv- vocabulary in device.css; dst- is this file's own prefix. */
+
+/* Small shared parts */
+.dst-grow { flex: 1; }
+.dst-grow-l { margin-right: auto; }
+.dst-gap { margin-top: 8px; }
+.dst-block { flex-basis: 100%; }
+.dst-msg-line { margin-bottom: 10px; }
+.dst-quiet { padding: 12px; font-size: var(--fs-meta); color: var(--text-3); }
+.dst-warn { font-size: var(--fs-meta); color: var(--warn-text); }
+.dst-bad { color: var(--bad-text); }
+.dst-small { font-size: var(--fs-meta); }
+.dst-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.dst-icon { display: grid; place-items: center; width: var(--ctl); height: var(--ctl); flex: none; border-radius: var(--r-3); color: var(--text-3); cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
+.dst-icon:hover { background: var(--hover); color: var(--text); }
+.dst-icon:disabled { opacity: 0.5; cursor: default; }
+.dst-icon svg { width: 14px; height: 14px; }
+.dv-sh .dst-icon { width: var(--ctl-sm); height: var(--ctl-sm); border-radius: var(--r-2); }
+.dst-out { margin: 8px 0; padding: 10px 12px; max-height: 240px; overflow: auto; border-radius: var(--r-2); background: var(--sunk); font-family: var(--font-mono); font-size: 12px; line-height: 18px; color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.dst-out-err { color: var(--bad-text); }
+
+/* Logs: the bar, the journal filters, then one list of lines. */
+.dst-logs { container: dstlog / inline-size; }
+.dst-logs .dv-bar .dv-input { width: auto; }
+.dst-select { min-width: 140px; }
+.dst-live { gap: 6px; }
+.dst-live.on { background: var(--sel); color: var(--text); }
+.dst-journal { margin-top: -8px; }
+.dst-inline { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-meta); color: var(--text-3); }
+.dst-inline .dv-input { width: 132px; }
+.dst-inline .dst-mono-in { width: 200px; font-family: var(--font-mono); font-size: 12px; }
+.dst-logs .dst-search { flex: 1 1 160px; max-width: 280px; }
+.dst-ln { align-items: start; }
+.dst-ln > * { line-height: 20px; }
+.dst-t { font-size: var(--fs-meta); color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dst-lv { font-size: var(--fs-meta); font-weight: 500; }
+.dst-lv.error { color: var(--bad-text); }
+.dst-lv.warn { color: var(--warn-text); }
+.dst-msg { font-family: var(--font-mono); font-size: 12px; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
+@container dstlog (max-width: 620px) {
+  .dst-log-list > .dv-cols, .dst-log-list > .dv-row { grid-template-columns: 72px 44px minmax(0, 1fr); }
+  .dst-log-list > .dv-cols > :nth-child(3), .dst-log-list > .dv-row > :nth-child(3) { display: none; }
+  .dst-inline .dv-input, .dst-inline .dst-mono-in { width: 120px; }
+}
+
+/* Action runs: name and command, status word, time; output opens under the row in a well. */
+.dst-runs { container: dstrun / inline-size; }
+.dst-run-main { display: grid; gap: 2px; min-width: 0; }
+.dst-run-nm { display: flex; align-items: center; gap: 6px; min-width: 0; text-align: left; white-space: nowrap; overflow: hidden; }
+button.dst-run-nm { cursor: pointer; }
+button.dst-run-nm:hover .dv-nm { text-decoration: underline; text-decoration-color: var(--text-3); text-underline-offset: 3px; }
+.dst-run-nm svg { width: 14px; height: 14px; flex: none; color: var(--text-3); transition: transform var(--dur-fast) var(--ease-out); }
+.dst-run-nm svg.open { transform: rotate(90deg); }
+.dst-run-nm .dv-nm { overflow: hidden; text-overflow: ellipsis; }
+.dst-chev-gap { display: inline-block; width: 14px; flex: none; }
+.dst-run-cmd { display: block; margin-left: 20px; }
+.dst-st { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-meta); font-weight: 500; color: var(--text-2); white-space: nowrap; }
+.dst-st.bad { color: var(--bad-text); }
+.dst-run > .dst-out { margin: 4px 12px 8px 32px; }
+@container dstrun (max-width: 520px) {
+  .dst-runs .dv-cols, .dst-runs .dv-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .dst-runs .dv-cols > :nth-child(3), .dst-runs .dv-row > :nth-child(3) { display: none; }
+}
+
+/* Agent: key-value rows, the name field, the settings list and the apply history. */
+.dst-agent .dv-kv dd > span { min-width: 0; }
+.dst-key { color: var(--text-2); overflow-wrap: anywhere; }
+.dst-agent .dv-sheet-foot { justify-content: flex-end; }
+.dst-check { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-meta); color: var(--text-2); cursor: pointer; }
+.dst-check input { width: 16px; height: 16px; flex: none; margin: 0; accent-color: var(--text); cursor: pointer; }
+.dst-check-block { align-items: flex-start; }
+.dst-check-block input { margin-top: 2px; }
+.dst-check-l { font-weight: 500; color: var(--text); }
+.dst-check-block.warn .dst-check-l { color: var(--warn-text); }
+.dst-name-row { align-items: flex-end; }
+.dst-name-row > .dv-field { flex: 1 1 240px; max-width: 360px; }
+.dst-sh-acts { display: flex; align-items: center; gap: 8px; }
+.dst-sub { margin: 24px 0 8px; font-size: var(--fs-meta); line-height: var(--lh-meta); font-weight: 600; color: var(--text-2); }
+.dst-sets { container: dstset / inline-size; display: grid; gap: 4px; }
+.dst-sets > .dv-hint { margin-bottom: 8px; }
+.dst-set { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 8px 24px; align-items: start; padding: 10px 0; }
+.dst-set:first-child { padding-top: 0; }
+.dst-set:last-child { padding-bottom: 0; }
+.dst-set-txt { min-width: 0; }
+.dst-set-txt > .dv-hint { margin-top: 2px; }
+.dst-line { margin-top: 4px; }
+.dst-meta { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 4px; font-size: var(--fs-micro); line-height: var(--lh-micro); color: var(--text-3); }
+.dst-meta .dv-mono { color: var(--text-2); }
+.dst-val { color: var(--text-2); }
+@container dstset (max-width: 560px) {
+  .dst-set { grid-template-columns: minmax(0, 1fr); }
+}
+.dst-hist-main { display: grid; gap: 2px; min-width: 0; }
+
+/* Connections: one list (protocols, then web services), forms open above it. */
+.dst-conn .dv-ln > .dst-dot { align-self: center; }
+.dst-grp { padding: 12px 12px 4px; font-size: var(--fs-meta); line-height: var(--lh-meta); font-weight: 600; color: var(--text-2); }
+.dst-conns > .dst-grp:first-child { padding-top: 8px; }
+.dst-more { display: grid; place-items: center; width: var(--ctl-sm); height: var(--ctl-sm); border-radius: var(--r-2); color: var(--text-3); cursor: pointer; opacity: 0; transition: opacity var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out); }
+.dst-more svg { width: 16px; height: 16px; }
+.dst-more:hover { background: var(--hover); color: var(--text); }
+.dv-row:hover .dst-more, .dv-row:focus-within .dst-more, .dst-more[data-state="open"], .dst-more:focus-visible { opacity: 1; }
+@media (hover: none) { .dst-more { opacity: 1; } }
+.lt-menu-item.dst-danger { color: var(--bad-text); }
+.lt-menu-item[data-disabled] { opacity: 0.5; cursor: default; }
+.dst-form-sheet { margin-bottom: 12px; }
+.dst-form-t { margin-bottom: 16px; font-size: var(--fs-body); line-height: var(--lh-body); font-weight: 600; }
+.dst-choices { container: dstpick / inline-size; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.dst-choice { display: grid; gap: 2px; padding: 12px 14px; border-radius: var(--r-3); background: var(--ctl-bg); box-shadow: var(--ctl-elev); text-align: left; cursor: pointer; transition: box-shadow var(--dur-fast) var(--ease-out); }
+.dst-choice:hover { box-shadow: var(--ctl-elev-hover); }
+.dst-result { display: flex; align-items: center; gap: 6px; font-size: var(--fs-meta); color: var(--text-2); }
+.dst-result.bad { color: var(--bad-text); }
+.dst-prompt { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border-radius: var(--r-3); background: var(--sunk); font-size: var(--fs-meta); color: var(--text-2); }
+.dst-cred { flex: 1 1 260px; }
+.dst-ca { max-width: 560px; font-size: 12px; }
+
+/* Hub SSH key: the sentence and one switch. */
+.dst-switch-row { display: flex; align-items: center; gap: 12px; }
+.dst-switch-txt { flex: 1; min-width: 0; color: var(--text-2); }
+.dst-switch-word { font-size: var(--fs-meta); font-weight: 500; color: var(--text-2); }
+.dst-switch { position: relative; width: 34px; height: 20px; flex: none; border-radius: 10px; background: var(--track); cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out); }
+.dst-switch i { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: var(--thumb-elev); transition: transform var(--dur-normal) var(--ease-out); }
+.dst-switch.on { background: var(--text); }
+.dst-switch.on i { transform: translateX(14px); background: var(--panel); }
+.dst-switch:disabled { opacity: 0.5; cursor: default; }
+.dst-switch:focus-visible { outline: 2px solid var(--text-3); outline-offset: 2px; }
+
+@media (max-width: 640px) {
+  .dst-choices { grid-template-columns: minmax(0, 1fr); }
+  .dst-switch-row { flex-wrap: wrap; }
+  .dst-switch-txt { flex-basis: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dst-icon, .dst-more, .dst-choice, .dst-switch, .dst-switch i, .dst-run-nm svg { transition: none; }
+}

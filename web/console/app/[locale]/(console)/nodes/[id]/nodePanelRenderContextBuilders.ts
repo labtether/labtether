@@ -145,6 +145,8 @@ export function buildNodePanelRenderContext({
       effectiveKind,
       canRunProxmoxQuickActions,
       proxmoxActionRunning,
+      proxmoxActionMessage,
+      proxmoxActionError,
       clusterStatus,
       networkInterfaces,
       proxmoxCollectorID,

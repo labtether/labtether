@@ -11,6 +11,7 @@ export {
   readMeta,
   toneColor,
   toneStyle,
+  toneTextClass,
   type MetricSnapshot,
   type SignalTone,
 } from "./systemPanelMetrics";

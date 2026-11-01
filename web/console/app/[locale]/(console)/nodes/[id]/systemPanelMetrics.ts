@@ -34,6 +34,10 @@ export function readMeta(asset: Asset, key: string): string {
 }
 
 export function parseFloatValue(raw: string): number | null {
+  // Number("") is 0: a value the device did not send must stay missing, not read as zero.
+  if (raw.trim() === "") {
+    return null;
+  }
   const value = Number(raw);
   if (!Number.isFinite(value)) {
     return null;
@@ -136,6 +140,13 @@ export function gatherMetrics(
     network_rx_bytes_per_sec: telemetry?.metrics?.network_rx_bytes_per_sec ?? fallback.network_rx_bytes_per_sec,
     network_tx_bytes_per_sec: telemetry?.metrics?.network_tx_bytes_per_sec ?? fallback.network_tx_bytes_per_sec,
   };
+}
+
+/** The text class for a value in a tone: problem words only for warn and bad. */
+export function toneTextClass(tone: SignalTone | undefined): string {
+  if (tone === "bad") return "dmt-bad";
+  if (tone === "warn") return "dmt-warn";
+  return "";
 }
 
 export function toneColor(tone: SignalTone): string {

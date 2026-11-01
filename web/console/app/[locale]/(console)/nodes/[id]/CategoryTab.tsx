@@ -1,13 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
+import { Fragment, useMemo, useState } from "react";
+import { ChevronDown } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Link } from "../../../../../i18n/navigation";
-import { Card } from "../../../../components/ui/Card";
-import { Badge } from "../../../../components/ui/Badge";
 import { useFastStatus } from "../../../../contexts/StatusContext";
-import { assetFreshnessLabel, formatAge } from "../../../../console/formatters";
+import { assetFreshnessLabel } from "../../../../console/formatters";
 import { buildNodeMetadataSections } from "../../../../console/models";
-import type { Asset } from "../../../../console/models";
+import type { Asset, TelemetryOverviewAsset } from "../../../../console/models";
 import {
   assetCategory,
   childParentKey,
@@ -17,58 +17,100 @@ import {
   sortCategoryAssets,
 } from "../../../../console/taxonomy";
 import type { CategoryDef } from "../../../../console/taxonomy";
+import { resolveAssetPresentationStatus, type AssetPresentationStatus } from "../../../../lib/status";
 
-function CategoryAssetRow({ asset }: { asset: Asset }) {
-  const freshness = assetFreshnessLabel(asset.last_seen_at);
-  const freshnessStatus = freshness === "online" ? "ok" : freshness === "unresponsive" ? "pending" : "bad";
-  const metadataSections = buildNodeMetadataSections(asset.metadata);
-  const metadataFieldCount = metadataSections.reduce((count, section) => count + section.rows.length, 0);
+/** "21:12" today, "1 Nov" before today; empty without a time. */
+function sinceTime(iso: string): string {
+  const at = new Date(iso);
+  if (!iso || !Number.isFinite(at.getTime())) return "";
+  if (at.toDateString() === new Date().toDateString()) {
+    return at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  }
+  return at.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+function Pct({ value }: { value: number | undefined }) {
+  if (value == null || !Number.isFinite(value)) return <span className="dv-n none dmt-u">—</span>;
+  const v = Math.round(value);
+  return <span className={`dv-n dmt-u${v >= 85 ? " hot" : ""}`}>{v}<span className="u">%</span></span>;
+}
+
+function CategoryAssetRow({ asset, telemetry }: { asset: Asset; telemetry: TelemetryOverviewAsset | undefined }) {
+  const t = useTranslations("devices.hardware.category");
+  const [open, setOpen] = useState(false);
+  const state: AssetPresentationStatus = resolveAssetPresentationStatus(
+    asset.status,
+    assetFreshnessLabel(asset.last_seen_at) as AssetPresentationStatus,
+  );
+  const sections = buildNodeMetadataSections(asset.metadata);
+  const fieldCount = sections.reduce((count, section) => count + section.rows.length, 0);
+  const meta = asset.metadata ?? {};
+  const time = sinceTime(asset.last_seen_at);
+  const online = state === "online";
+  const problem = state === "offline" ? (time ? t("offlineSince", { time }) : t("offline"))
+    : state === "unresponsive" ? (time ? t("notRespondingSince", { time }) : t("notResponding"))
+      : state === "unknown" ? t("noCheckIn") : "";
+  const tone = state === "offline" || state === "unknown" ? "bad" : "warn";
+  const grey = [friendlyTypeLabel(asset.type), meta.os_pretty_name || meta.os_name].filter(Boolean).join(" · ");
+  const metrics = online ? telemetry?.metrics : undefined;
 
   return (
-    <li className="py-2.5">
-      <div className="flex items-center gap-3">
-        <Link href={`/nodes/${asset.id}`} className="text-sm font-medium text-[var(--accent)] hover:underline">
-          {asset.name}
-        </Link>
-        <span className="text-[10px] px-1.5 py-0.5 rounded-lg border border-[var(--line)] text-[var(--muted)]">
-          {friendlyTypeLabel(asset.type)}
+    <>
+      <div className={`dv-row dmt-catrow${open ? " sel" : ""}`}>
+        {online ? null : <span className={`dv-dot ${tone} dmt-lead`} aria-hidden="true" />}
+        <span className="dv-ln">
+          <Link href={`/nodes/${encodeURIComponent(asset.id)}`} className="dv-nm">{asset.name}</Link>
+          {problem ? <span className={`dv-prob ${tone}`}>{problem}</span> : <span className="dv-grey">{grey}</span>}
         </span>
-        <Badge status={freshnessStatus} size="sm" />
-        <span className="text-xs text-[var(--muted)]">{formatAge(asset.last_seen_at)}</span>
+        <Pct value={metrics?.cpu_used_percent} />
+        <Pct value={metrics?.memory_used_percent} />
+        <Pct value={metrics?.disk_used_percent} />
+        {fieldCount > 0 ? (
+          <button
+            type="button"
+            className={`dmt-icon${open ? " open" : ""}`}
+            aria-expanded={open}
+            aria-label={t(open ? "hideDetails" : "showDetails", { name: asset.name })}
+            onClick={() => setOpen((value) => !value)}
+          >
+            <ChevronDown aria-hidden="true" />
+          </button>
+        ) : <span />}
       </div>
-      {metadataFieldCount > 0 ? (
-        <details className="mt-1.5 text-xs">
-          <summary className="cursor-pointer text-[var(--muted)] hover:text-[var(--text)] transition-colors duration-150">
-            {metadataFieldCount} {metadataFieldCount === 1 ? "field" : "fields"}
-          </summary>
-          <div className="space-y-6 mt-2 pl-2">
-            {metadataSections.map((section) => (
-              <div key={`${asset.id}-${section.title}`} className="space-y-2">
-                <p className="text-xs font-medium uppercase tracking-wider text-[var(--muted)]">{section.title}</p>
-                <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5">
-                  {section.rows.map((row) => (
-                    <div key={`${asset.id}-${section.title}-${row.key}`}>
-                      <dt className="text-xs text-[var(--muted)]">{row.label}</dt>
-                      <dd className="text-xs text-[var(--text)]">{row.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-            ))}
-          </div>
-        </details>
+      {open ? (
+        <div className="dmt-more">
+          {sections.map((section) => (
+            <Fragment key={section.title}>
+              <h3 className="dmt-more-t">{section.title}</h3>
+              <dl className="dv-kv dmt-kv2">
+                {section.rows.map((row) => (
+                  <div key={row.key}>
+                    <dt>{row.label}</dt>
+                    <dd><span>{row.value}</span></dd>
+                  </div>
+                ))}
+              </dl>
+            </Fragment>
+          ))}
+        </div>
       ) : null}
-    </li>
+    </>
   );
 }
 
+/** An infrastructure host's category (a Proxmox host's guests, its pools …): one row per resource under it. */
 export function CategoryTab({ category, hostAsset }: {
   category: CategoryDef;
   hostAsset: Asset;
 }) {
+  const t = useTranslations("devices.hardware.category");
   const status = useFastStatus();
   const allAssets = useMemo(() => status?.assets ?? [], [status?.assets]);
   const parentKey = useMemo(() => hostParentKey(hostAsset), [hostAsset]);
+  const telemetryByID = useMemo(
+    () => new Map((status?.telemetryOverview ?? []).map((entry) => [entry.asset_id, entry])),
+    [status?.telemetryOverview],
+  );
 
   const categoryAssets = useMemo(() => {
     const matched = allAssets.filter((a) => {
@@ -81,49 +123,24 @@ export function CategoryTab({ category, hostAsset }: {
     return sortCategoryAssets(matched);
   }, [allAssets, category.slug, hostAsset.id, hostAsset.source, parentKey]);
 
-  // Build type breakdown chips
-  const typeCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const a of categoryAssets) {
-      counts.set(a.type, (counts.get(a.type) ?? 0) + 1);
-    }
-    return Array.from(counts.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [categoryAssets]);
+  if (categoryAssets.length === 0) {
+    return <div className="dv-sheet dv-empty"><b>{t("empty")}</b></div>;
+  }
 
   return (
-    <Card className="mb-4">
-      {/* Summary header */}
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-medium text-[var(--text)]">{category.label}</h2>
-        <span className="text-xs text-[var(--muted)]">
-          {categoryAssets.length} {categoryAssets.length === 1 ? "resource" : "resources"}
-        </span>
-      </div>
-      {typeCounts.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          {typeCounts.map(([type, count]) => (
-            <span
-              key={type}
-              className="text-[10px] px-1.5 py-0.5 rounded-lg border border-[var(--line)] text-[var(--muted)]"
-            >
-              {friendlyTypeLabel(type)}: {count}
-            </span>
-          ))}
+    <div className="dmt">
+      <div className="dv-list dmt-cat">
+        <div className="dv-cols dmt-catrow" aria-hidden="true">
+          <span>{t("name")}</span>
+          <span className="r dmt-u">{t("cpu")}</span>
+          <span className="r dmt-u">{t("memory")}</span>
+          <span className="r dmt-u">{t("disk")}</span>
+          <span />
         </div>
-      )}
-
-      {/* Asset list */}
-      {categoryAssets.length === 0 ? (
-        <p className="text-sm text-[var(--muted)] py-8 text-center">
-          No {category.label.toLowerCase()} resources found.
-        </p>
-      ) : (
-        <ul className="divide-y divide-[var(--line)]">
-          {categoryAssets.map((asset) => (
-            <CategoryAssetRow key={asset.id} asset={asset} />
-          ))}
-        </ul>
-      )}
-    </Card>
+        {categoryAssets.map((asset) => (
+          <CategoryAssetRow key={asset.id} asset={asset} telemetry={telemetryByID.get(asset.id)} />
+        ))}
+      </div>
+    </div>
   );
 }

@@ -2,77 +2,53 @@
 
 import type { ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
+import { useTranslations } from "next-intl";
 import type { TelemetryWindow } from "../../../../console/models";
 import type { NetworkInterfaceInfo } from "../../../../hooks/useNetworkInterfaces";
-import { DataValue } from "../../../../components/ui/DataValue";
 import { Button } from "../../../../components/ui/Button";
-import { Card } from "../../../../components/ui/Card";
 import type { AnalyzedSeries } from "./nodeMetricsModel";
+import type { DetailRow } from "./systemPanelDrilldownModel";
 import {
   DRILLDOWN_ORDER,
-  drilldownLabel,
-  toneColor,
-  toneStyle,
+  toneTextClass,
   type DrilldownContent,
 } from "./systemPanelModel";
 import { SystemPanelHistoricalContext } from "./SystemPanelHistoricalContext";
 import { SystemPanelNetworkInterfacePreview } from "./SystemPanelNetworkInterfacePreview";
 import type { SystemDrilldownView } from "./systemPanelTypes";
 
+/**
+ * One cell of the Hardware view's usage sheet: the label, the value now and a grey hint. The whole cell is a button
+ * that opens that drill-down. icon is accepted for older callers and not drawn.
+ */
 export function SummaryMetricCard({
-  icon,
   title,
   value,
   hint,
+  hot = false,
   onClick,
 }: {
-  icon: ReactNode;
+  icon?: ReactNode;
   title: string;
   value: string;
   hint: string;
+  hot?: boolean;
   onClick?: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="rounded-lg border border-[var(--line)] bg-[var(--panel-glass)] px-4 py-3 text-left transition-colors hover:border-[var(--accent)]/50 hover:bg-[var(--surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--control-focus-ring)]"
-    >
-      <div className="flex items-center gap-2 text-[var(--text)]">
-        {icon}
-        <span className="text-sm font-medium">{title}</span>
-      </div>
-      <p className="mt-2 text-lg font-semibold tabular-nums text-[var(--text)]">{value}</p>
-      <p className="mt-1 text-xs text-[var(--muted)]">{hint}</p>
-      <p className="mt-2 text-xs text-[var(--accent)]">Open deep detail</p>
+    <button type="button" onClick={onClick} className="dmt-cell dmt-open">
+      <span className="dmt-k">{title}</span>
+      <b className={`dmt-readout${hot ? " hot" : ""}`}>{value}</b>
+      <span className="dmt-hint">{hint}</span>
     </button>
   );
 }
 
-function DrilldownNav({
-  activeView,
-  onOpenDrilldown,
-}: {
-  activeView: SystemDrilldownView;
-  onOpenDrilldown?: (view: SystemDrilldownView) => void;
-}) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {DRILLDOWN_ORDER.map((view) => {
-        const isActive = view === activeView;
-        return (
-          <Button
-            key={view}
-            size="sm"
-            variant={isActive ? "primary" : "ghost"}
-            onClick={() => onOpenDrilldown?.(view)}
-          >
-            {drilldownLabel(view)}
-          </Button>
-        );
-      })}
-    </div>
-  );
+function RowValue({ row }: { row: DetailRow }) {
+  const t = useTranslations("devices.hardware");
+  const text = typeof row.value === "string" ? row.value : t(`values.${row.value.phrase}`, row.value.values ?? {});
+  const cls = toneTextClass(row.tone);
+  return <span className={cls || undefined}>{text}</span>;
 }
 
 export function SystemPanelDrilldown({
@@ -100,143 +76,76 @@ export function SystemPanelDrilldown({
   interfacesLoading: boolean;
   interfacesError: string | null;
 }) {
+  const t = useTranslations("devices.hardware");
+  const quiet = [content.heroValue, content.heroHint].filter(Boolean).join(" · ");
+  const word = content.statusWord ? t(`status.${drilldown}.${content.statusWord}`) : "";
+
   return (
-    <div className="space-y-4">
-      <Card
-        highlight={content.statusTone === "bad"}
-        className="overflow-hidden"
-        style={{
-          backgroundImage: "radial-gradient(circle at top right, var(--accent-subtle), transparent 42%)",
-        }}
-      >
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-base font-semibold text-[var(--text)]">{content.title}</h3>
-              <span
-                className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium"
-                style={toneStyle(content.statusTone)}
-              >
-                {content.statusLabel}
-              </span>
-            </div>
-            <p className="max-w-2xl text-xs text-[var(--muted)]">{content.subtitle}</p>
-          </div>
-          <Button size="sm" variant="ghost" onClick={onCloseDrilldown}>
-            <ArrowLeft size={14} />
-            Back to Overview
-          </Button>
-        </div>
-
-        <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1.85fr)]">
-          <div className="rounded-lg border border-[var(--line)] bg-[var(--surface)] p-4">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-[var(--muted)]">
-              {content.heroLabel}
-            </p>
-            <div className="mt-2 text-3xl font-semibold text-[var(--text)]">
-              <DataValue value={content.heroValue} className="text-3xl" mono={false} />
-            </div>
-            <p className="mt-2 text-sm text-[var(--muted)]">{content.heroHint}</p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            {content.summaryStats.map((stat) => (
-              <div
-                key={stat.key}
-                className="rounded-lg border bg-[var(--surface)] p-3"
-                style={{
-                  borderColor: stat.tone === "neutral" ? "var(--line)" : toneColor(stat.tone),
-                }}
-              >
-                <p className="text-xs font-medium uppercase tracking-[0.16em] text-[var(--muted)]">
-                  {stat.label}
-                </p>
-                <p className="mt-2 text-lg font-semibold tabular-nums text-[var(--text)]">{stat.value}</p>
-                <p
-                  className="mt-1 text-xs"
-                  style={{ color: stat.tone === "neutral" ? "var(--muted)" : toneColor(stat.tone) }}
-                >
-                  {stat.hint}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-4">
-          <p className="mb-2 text-xs font-medium uppercase tracking-[0.18em] text-[var(--muted)]">
-            Switch Detail
-          </p>
-          <DrilldownNav activeView={drilldown} onOpenDrilldown={onOpenDrilldown} />
-        </div>
-      </Card>
-
-      <SystemPanelHistoricalContext
-        series={historySeries}
-        telemetryLoading={telemetryLoading}
-        telemetryWindow={telemetryWindow}
-      />
-
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(300px,1fr)]">
-        <div className="space-y-4">
-          {content.sections.map((section) => (
-            <Card key={section.key}>
-              <div className="space-y-1">
-                <h4 className="text-sm font-medium text-[var(--text)]">{section.title}</h4>
-                <p className="text-xs text-[var(--muted)]">{section.description}</p>
-              </div>
-              <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-2 md:grid-cols-2">
-                {section.rows.map((row) => (
-                  <div key={row.key} className="flex items-baseline justify-between gap-2 border-b border-[var(--line)]/40 pb-1">
-                    <dt className="text-xs text-[var(--muted)]">{row.label}</dt>
-                    <dd className="text-right text-xs font-medium text-[var(--text)]">{row.value}</dd>
-                  </div>
-                ))}
-              </dl>
-            </Card>
+    <div className="dmt">
+      <div className="dv-bar">
+        <Button size="sm" variant="ghost" onClick={onCloseDrilldown}>
+          <ArrowLeft size={14} aria-hidden="true" />
+          {t("back")}
+        </Button>
+        <div className="dv-seg" role="group" aria-label={t("detailSwitch")}>
+          {DRILLDOWN_ORDER.map((view) => (
+            <button
+              key={view}
+              type="button"
+              aria-pressed={view === drilldown}
+              onClick={() => onOpenDrilldown?.(view)}
+            >
+              {t(`views.${view}`)}
+            </button>
           ))}
         </div>
-
-        <div className="space-y-4">
-          <Card>
-            <h4 className="text-sm font-medium text-[var(--text)]">Related Diagnostics</h4>
-            <p className="mt-1 text-xs text-[var(--muted)]">
-              Use these pivots when the detail view tells you where to investigate next.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {content.actions.map((action) => (
-                <Button
-                  key={action.key}
-                  size="sm"
-                  variant={action.variant ?? "ghost"}
-                  onClick={() => onOpenPanel?.(action.panel)}
-                >
-                  {action.label}
-                </Button>
-              ))}
-            </div>
-          </Card>
-
-          <Card>
-            <h4 className="text-sm font-medium text-[var(--text)]">Investigation Flow</h4>
-            <div className="mt-3 space-y-2">
-              {content.tips.map((tip) => (
-                <p key={tip} className="text-xs leading-5 text-[var(--muted)]">
-                  {tip}
-                </p>
-              ))}
-            </div>
-          </Card>
-
-          {drilldown === "network" ? (
-            <SystemPanelNetworkInterfacePreview
-              interfaces={interfaces}
-              loading={interfacesLoading}
-              error={interfacesError}
-            />
-          ) : null}
-        </div>
+        <span className="dv-sp" />
+        {content.actions.map((action) => (
+          <Button key={action.key} size="sm" variant="secondary" onClick={() => onOpenPanel?.(action.panel)}>
+            {t(`actions.${action.key}`)}
+          </Button>
+        ))}
       </div>
+
+      <section className="dv-sec" aria-labelledby="dmt-dd">
+        <div className="dv-sh">
+          <h2 id="dmt-dd">
+            {t(`views.${drilldown}`)}
+            {quiet ? <span className="dv-quiet">{quiet}</span> : null}
+            {word ? <span className={`dmt-status ${content.statusTone}`}>{word}</span> : null}
+          </h2>
+          {telemetryWindow ? <span className="dv-hint">{t("window", { window: telemetryWindow })}</span> : null}
+        </div>
+        <SystemPanelHistoricalContext
+          series={historySeries}
+          telemetryLoading={telemetryLoading}
+          telemetryWindow={telemetryWindow}
+        />
+      </section>
+
+      <div className="dmt-pair">
+        {content.sections.map((section) => (
+          <section key={section.key} className="dv-sec" aria-labelledby={`dmt-${section.key}`}>
+            <div className="dv-sh"><h2 id={`dmt-${section.key}`}>{t(`sections.${section.key}`)}</h2></div>
+            <dl className="dv-sheet tight dv-kv">
+              {section.rows.map((row) => (
+                <div key={row.key}>
+                  <dt>{t(`rows.${row.key}`)}</dt>
+                  <dd><RowValue row={row} /></dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        ))}
+      </div>
+
+      {drilldown === "network" ? (
+        <SystemPanelNetworkInterfacePreview
+          interfaces={interfaces}
+          loading={interfacesLoading}
+          error={interfacesError}
+        />
+      ) : null}
     </div>
   );
 }

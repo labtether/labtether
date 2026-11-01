@@ -1,7 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Button } from "../../../../components/ui/Button";
-import { Input } from "../../../../components/ui/Input";
 import { Modal } from "../../../../components/ui/Modal";
 
 type NodeDeleteConfirmModalProps = {
@@ -15,6 +15,7 @@ type NodeDeleteConfirmModalProps = {
   onConfirm: () => void;
 };
 
+/** Remove a device: say what goes, and ask for its name before the red button works. */
 export function NodeDeleteConfirmModal({
   open,
   assetName,
@@ -25,41 +26,38 @@ export function NodeDeleteConfirmModal({
   onCancel,
   onConfirm,
 }: NodeDeleteConfirmModalProps) {
+  const t = useTranslations("devices.page.remove");
+  const ready = confirmInput === assetName && !deleting;
   return (
-    <Modal open={open} onClose={onCancel} title="Confirm Node Deletion">
-      <div className="px-5 py-4 space-y-4">
-        <p className="text-xs text-[var(--muted)]">
-          This will permanently delete <strong>{assetName}</strong> and all associated data.
-          Type <strong>{assetName}</strong> below to confirm.
-        </p>
-        <Input
-          placeholder={`Type "${assetName}" to confirm`}
-          value={confirmInput}
-          onChange={(event) => onConfirmInputChange(event.target.value)}
-          autoFocus
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && confirmInput === assetName) {
-              onConfirm();
-            }
-          }}
-        />
-        {error && (
-          <p className="text-xs text-[var(--bad)]">{error}</p>
-        )}
-        <div className="flex items-center gap-3">
-          <Button onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button
-            variant="danger"
-            className="bg-[var(--bad-glow)]"
-            disabled={confirmInput !== assetName || deleting}
-            onClick={onConfirm}
-          >
-            {deleting ? "Deleting..." : "Confirm Delete"}
+    <Modal open={open} onClose={onCancel} title={t("title", { name: assetName })}>
+      <form
+        className="kt-dlg-body dv-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (ready) onConfirm();
+        }}
+      >
+        <p>{t("body", { name: assetName })}</p>
+        <div className="dv-field">
+          <label htmlFor="dv-remove-name">{t("typeName", { name: assetName })}</label>
+          <input
+            id="dv-remove-name"
+            className="dv-input"
+            value={confirmInput}
+            onChange={(event) => onConfirmInputChange(event.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+            autoFocus
+          />
+        </div>
+        {error ? <p className="dv-err" role="alert">{t("failed", { name: assetName })}</p> : null}
+        <div className="kt-dlg-acts">
+          <Button type="button" onClick={onCancel} disabled={deleting}>{t("cancel")}</Button>
+          <Button type="submit" variant="danger" className="kt-danger-fill" disabled={!ready} loading={deleting}>
+            {t("confirm")}
           </Button>
         </div>
-      </div>
+      </form>
     </Modal>
   );
 }

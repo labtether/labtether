@@ -1,47 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import {
-  Terminal,
-  Monitor,
-  Wifi,
-  Network,
-  Apple,
-  Globe,
-  Plus,
-  Pencil,
-  Trash2,
-  FlaskConical,
-  Key,
-  ExternalLink,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Plus } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "../../../../../i18n/navigation";
-import { Card } from "../../../../components/ui/Card";
 import { Button } from "../../../../components/ui/Button";
 import { useProtocolConfigs, type ProtocolConfig, type ProtocolType } from "./useProtocolConfigs";
 import { useWebServices, type WebService } from "../../../../hooks/useWebServices";
 import { ProtocolForm } from "./ProtocolForm";
 import { ConnectionTypePicker } from "./ConnectionTypePicker";
 import { WebServiceForm } from "./WebServiceForm";
+import { CONNECTION_COLS, PROTOCOL_LABELS, ProtocolRow, WebServiceRow } from "./settingsViewConnections";
 import { safeHttpURL } from "../../../../../lib/safeExternalURL";
-
-const PROTOCOL_ICONS: Record<ProtocolType, LucideIcon> = {
-  ssh: Terminal,
-  telnet: Wifi,
-  vnc: Monitor,
-  rdp: Network,
-  ard: Apple,
-};
-
-const PROTOCOL_LABELS: Record<ProtocolType, string> = {
-  ssh: "SSH",
-  telnet: "Telnet",
-  vnc: "VNC",
-  rdp: "RDP",
-  ard: "ARD",
-};
 
 const CONNECT_TARGETS: Record<ProtocolType, string> = {
   ssh: "terminal",
@@ -51,31 +22,13 @@ const CONNECT_TARGETS: Record<ProtocolType, string> = {
   ard: "desktop",
 };
 
-function StatusDot({ status }: { status: string | null | undefined }) {
-  if (status === "success" || status === "up") {
-    return <span className="inline-block h-2 w-2 rounded-full bg-[var(--ok)]" title="OK" />;
-  }
-  if (status === "failed" || status === "down") {
-    return <span className="inline-block h-2 w-2 rounded-full bg-[var(--bad)]" title="Failed" />;
-  }
-  return <span className="inline-block h-2 w-2 rounded-full bg-[var(--muted)]" title="Unknown" />;
-}
-
-function formatLastTested(value: string | null): string {
-  if (!value) return "Never tested";
-  try {
-    const d = new Date(value);
-    return `Tested ${d.toLocaleDateString()} ${d.toLocaleTimeString()}`;
-  } catch {
-    return "Never tested";
-  }
-}
-
 type ConnectPanelProps = {
   nodeId: string;
 };
 
+/** Settings › Connections: how the hub reaches this device besides the agent (SSH, Telnet, VNC, RDP, ARD, web). */
 export function ConnectPanel({ nodeId }: ConnectPanelProps) {
+  const t = useTranslations("devices.settingsTab.connections");
   const router = useRouter();
   const searchParams = useSearchParams();
   const addingFromURL = searchParams.get("adding") === "true";
@@ -111,8 +64,7 @@ export function ConnectPanel({ nodeId }: ConnectPanelProps) {
   };
 
   const handleConnectProtocol = (protocol: ProtocolType) => {
-    const target = CONNECT_TARGETS[protocol];
-    router.push(`/nodes/${encodeURIComponent(nodeId)}?panel=${target}`);
+    router.push(`/nodes/${encodeURIComponent(nodeId)}?panel=${CONNECT_TARGETS[protocol]}`);
   };
 
   const handleConnectWebService = (url: string) => {
@@ -127,7 +79,7 @@ export function ConnectPanel({ nodeId }: ConnectPanelProps) {
   };
 
   const handleProtocolUpdate = async (data: Partial<ProtocolConfig>) => {
-    if (!editingProtocol) return { ok: false as const, error: "No protocol selected." };
+    if (!editingProtocol) return { ok: false as const, error: t("noneSelected") };
     const result = await updateProtocol(editingProtocol, data);
     if (result.ok) setEditingProtocol(null);
     return result;
@@ -136,20 +88,22 @@ export function ConnectPanel({ nodeId }: ConnectPanelProps) {
   const handleProtocolDelete = async (protocol: ProtocolType) => {
     setActionError(null);
     const result = await deleteProtocol(protocol);
-    if (!result.ok) setActionError(result.error ?? "Failed to remove protocol.");
+    if (!result.ok) setActionError(result.error ?? t("removeFailed"));
   };
 
   const handleTestProtocol = async (protocol: ProtocolType) => {
     setActionError(null);
     const result = await testConnection(protocol);
-    if (!result.success) setActionError(`${PROTOCOL_LABELS[protocol]} test failed: ${result.error ?? "unknown"}`);
+    if (!result.success) {
+      setActionError(t("testFailedFor", { name: PROTOCOL_LABELS[protocol], error: result.error ?? t("noReason") }));
+    }
     refetchProtocols();
   };
 
   const handlePushHubKey = async () => {
     setActionError(null);
     const result = await pushHubKey();
-    if (!result.ok) setActionError(result.error ?? "Failed to push hub key.");
+    if (!result.ok) setActionError(result.error ?? t("pushFailed"));
     return result;
   };
 
@@ -159,7 +113,7 @@ export function ConnectPanel({ nodeId }: ConnectPanelProps) {
       refreshWS();
       clearAddFlow();
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Failed to create web service.");
+      setActionError(e instanceof Error ? e.message : t("webAddFailed"));
     }
   };
 
@@ -169,7 +123,7 @@ export function ConnectPanel({ nodeId }: ConnectPanelProps) {
       refreshWS();
       setEditingWebService(null);
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Failed to update web service.");
+      setActionError(e instanceof Error ? e.message : t("webSaveFailed"));
     }
   };
 
@@ -178,7 +132,7 @@ export function ConnectPanel({ nodeId }: ConnectPanelProps) {
       await deleteManualService(id);
       refreshWS();
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Failed to delete web service.");
+      setActionError(e instanceof Error ? e.message : t("webRemoveFailed"));
     }
   };
 
@@ -190,18 +144,19 @@ export function ConnectPanel({ nodeId }: ConnectPanelProps) {
   const isEmpty = !hasProtocols && !hasWebServices;
 
   return (
-    <Card>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-medium text-[var(--text)]">Connections</h2>
+    <section className="dv-sec" aria-labelledby="dst-conn-t">
+      <div className="dv-sh">
+        <h2 id="dst-conn-t">{t("title")}</h2>
         {!isAdding && !isEditing && (
           <Button size="sm" onClick={() => { setAddingType("picker"); setActionError(null); }}>
-            <Plus size={14} />
-            Add Connection
+            <Plus size={14} aria-hidden="true" />
+            {t("add")}
           </Button>
         )}
       </div>
 
-      {actionError && <p className="text-xs text-[var(--bad)] mb-3">{actionError}</p>}
+      {actionError && <p className="dv-err dst-msg-line" role="alert">{actionError}</p>}
+      {!actionError && protocolsError && !protocolsLoading ? <p className="dv-err dst-msg-line" role="alert">{protocolsError}</p> : null}
 
       {addingType === "picker" && (
         <ConnectionTypePicker
@@ -212,8 +167,8 @@ export function ConnectPanel({ nodeId }: ConnectPanelProps) {
       )}
 
       {addingType === "protocol" && (
-        <div className="mb-4 rounded-lg border border-[var(--line)] p-3">
-          <p className="text-xs font-medium text-[var(--text)] mb-3">New Protocol</p>
+        <div className="dv-sheet dst-form-sheet">
+          <h3 className="dst-form-t">{t("newProtocol")}</h3>
           <ProtocolForm
             assetId={nodeId}
             onSave={handleProtocolAdd}
@@ -225,15 +180,15 @@ export function ConnectPanel({ nodeId }: ConnectPanelProps) {
       )}
 
       {addingType === "webservice" && (
-        <div className="mb-4 rounded-lg border border-[var(--line)] p-3">
-          <p className="text-xs font-medium text-[var(--text)] mb-3">New Web Service</p>
+        <div className="dv-sheet dst-form-sheet">
+          <h3 className="dst-form-t">{t("newWeb")}</h3>
           <WebServiceForm onSave={handleWebServiceCreate} onCancel={clearAddFlow} />
         </div>
       )}
 
       {editingProtocol !== null && (
-        <div className="mb-4 rounded-lg border border-[var(--line)] p-3">
-          <p className="text-xs font-medium text-[var(--text)] mb-3">Edit {PROTOCOL_LABELS[editingProtocol]}</p>
+        <div className="dv-sheet dst-form-sheet">
+          <h3 className="dst-form-t">{t("editTitle", { name: PROTOCOL_LABELS[editingProtocol] })}</h3>
           <ProtocolForm
             assetId={nodeId}
             initial={protocols.find(p => p.protocol === editingProtocol)}
@@ -247,8 +202,8 @@ export function ConnectPanel({ nodeId }: ConnectPanelProps) {
       )}
 
       {editingWebService !== null && (
-        <div className="mb-4 rounded-lg border border-[var(--line)] p-3">
-          <p className="text-xs font-medium text-[var(--text)] mb-3">Edit {editingWebService.name}</p>
+        <div className="dv-sheet dst-form-sheet">
+          <h3 className="dst-form-t">{t("editTitle", { name: editingWebService.name })}</h3>
           <WebServiceForm
             initial={editingWebService}
             onSave={(data) => handleWebServiceUpdate(editingWebService.id, data)}
@@ -257,101 +212,43 @@ export function ConnectPanel({ nodeId }: ConnectPanelProps) {
         </div>
       )}
 
-      {loading && <p className="text-sm text-[var(--muted)]">Loading connections...</p>}
-
-      {!loading && isEmpty && !isAdding && !isEditing && (
-        <div className="flex flex-col items-center justify-center py-8 gap-2">
-          <p className="text-sm font-medium text-[var(--text)]">No connections configured</p>
-          <p className="text-xs text-[var(--muted)]">Add protocols or web services to connect to this device.</p>
+      {loading && isEmpty ? (
+        <div className="dv-list"><p className="dst-quiet">{t("loading")}</p></div>
+      ) : isEmpty ? (
+        !isAdding && !isEditing ? (
+          <div className="dv-list">
+            <div className="dv-empty">
+              <b>{t("empty")}</b>
+              <span>{t("emptyHint")}</span>
+            </div>
+          </div>
+        ) : null
+      ) : (
+        <div className="dv-list dst-conns" style={CONNECTION_COLS}>
+          {hasProtocols ? <p className="dst-grp">{t("protocols")}</p> : null}
+          {protocols.map(p => (
+            <ProtocolRow
+              key={p.protocol}
+              config={p}
+              onConnect={() => handleConnectProtocol(p.protocol)}
+              onTest={() => void handleTestProtocol(p.protocol)}
+              onPushKey={p.protocol === "ssh" ? () => void handlePushHubKey() : undefined}
+              onEdit={() => { setEditingProtocol(p.protocol); setAddingType(null); setActionError(null); }}
+              onRemove={() => void handleProtocolDelete(p.protocol)}
+            />
+          ))}
+          {hasWebServices ? <p className="dst-grp">{t("webServices")}</p> : null}
+          {webServices.map(ws => (
+            <WebServiceRow
+              key={ws.id}
+              service={ws}
+              onOpen={() => handleConnectWebService(ws.url)}
+              onEdit={() => { setEditingWebService(ws); setAddingType(null); setActionError(null); }}
+              onRemove={() => void handleWebServiceDelete(ws.id)}
+            />
+          ))}
         </div>
       )}
-
-      {!loading && hasProtocols && (
-        <>
-          <span className="text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider">Protocols</span>
-          <div className="divide-y divide-[var(--line)] mb-4">
-            {protocols.map(p => {
-              const Icon = PROTOCOL_ICONS[p.protocol] ?? Network;
-              return (
-                <div key={p.protocol} className="flex items-center gap-3 py-3">
-                  <span className="flex items-center justify-center h-8 w-8 rounded-md bg-purple-500/10 shrink-0">
-                    <Icon size={14} className="text-purple-400" />
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-medium text-[var(--text)]">{PROTOCOL_LABELS[p.protocol]}</span>
-                      <StatusDot status={p.test_status} />
-                    </div>
-                    <p className="text-[11px] text-[var(--muted)] truncate">
-                      {p.host ? `${p.host}:${p.port}` : `Port ${p.port}`} &middot; {formatLastTested(p.last_tested_at)}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button type="button" title="Connect" onClick={() => handleConnectProtocol(p.protocol)}
-                      className="p-1.5 rounded-md text-sky-400 hover:bg-sky-500/10 transition-colors">
-                      <ExternalLink size={13} />
-                    </button>
-                    <button type="button" title="Test" onClick={() => void handleTestProtocol(p.protocol)}
-                      className="p-1.5 rounded-md text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--hover)] transition-colors">
-                      <FlaskConical size={13} />
-                    </button>
-                    {p.protocol === "ssh" && (
-                      <button type="button" title="Push hub key" onClick={() => void handlePushHubKey()}
-                        className="p-1.5 rounded-md text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--hover)] transition-colors">
-                        <Key size={13} />
-                      </button>
-                    )}
-                    <button type="button" title="Edit" onClick={() => { setEditingProtocol(p.protocol); setActionError(null); }}
-                      className="p-1.5 rounded-md text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--hover)] transition-colors">
-                      <Pencil size={13} />
-                    </button>
-                    <button type="button" title="Remove" onClick={() => void handleProtocolDelete(p.protocol)}
-                      className="p-1.5 rounded-md text-[var(--muted)] hover:text-[var(--bad)] hover:bg-[var(--bad-glow)] transition-colors">
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
-
-      {!loading && hasWebServices && (
-        <>
-          <span className="text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider">Web Services</span>
-          <div className="divide-y divide-[var(--line)]">
-            {webServices.map(ws => (
-              <div key={ws.id} className="flex items-center gap-3 py-3">
-                <span className="flex items-center justify-center h-8 w-8 rounded-md bg-sky-500/10 shrink-0">
-                  <Globe size={14} className="text-sky-400" />
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-medium text-[var(--text)]">{ws.name}</span>
-                    <StatusDot status={ws.status} />
-                  </div>
-                  <p className="text-[11px] text-[var(--muted)] truncate">{ws.url}</p>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <button type="button" title="Open" onClick={() => handleConnectWebService(ws.url)}
-                    className="p-1.5 rounded-md text-sky-400 hover:bg-sky-500/10 transition-colors">
-                    <ExternalLink size={13} />
-                  </button>
-                  <button type="button" title="Edit" onClick={() => { setEditingWebService(ws); setActionError(null); }}
-                    className="p-1.5 rounded-md text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--hover)] transition-colors">
-                    <Pencil size={13} />
-                  </button>
-                  <button type="button" title="Remove" onClick={() => void handleWebServiceDelete(ws.id)}
-                    className="p-1.5 rounded-md text-[var(--muted)] hover:text-[var(--bad)] hover:bg-[var(--bad-glow)] transition-colors">
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-    </Card>
+    </section>
   );
 }

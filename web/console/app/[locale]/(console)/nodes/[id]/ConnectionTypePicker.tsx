@@ -1,6 +1,6 @@
 "use client";
 
-import { Terminal, Globe } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Button } from "../../../../components/ui/Button";
 
 type ConnectionTypePickerProps = {
@@ -9,38 +9,24 @@ type ConnectionTypePickerProps = {
   onCancel: () => void;
 };
 
+/** The first step of Add connection: a remote protocol (SSH, Telnet, VNC, RDP, ARD) or a web address. */
 export function ConnectionTypePicker({ onSelectProtocol, onSelectWebService, onCancel }: ConnectionTypePickerProps) {
+  const t = useTranslations("devices.settingsTab.connections.picker");
   return (
-    <div className="mb-4 rounded-lg border border-[var(--line)] p-4">
-      <p className="text-xs font-medium text-[var(--text)] mb-3">What type of connection?</p>
-      <div className="grid grid-cols-2 gap-3 mb-3">
-        <button
-          type="button"
-          onClick={onSelectProtocol}
-          className="flex flex-col items-center gap-2 rounded-lg border border-[var(--line)] p-4
-            hover:border-purple-400/40 hover:bg-purple-500/5 transition-colors text-center"
-        >
-          <span className="flex items-center justify-center h-9 w-9 rounded-md bg-purple-500/10">
-            <Terminal size={16} className="text-purple-400" />
-          </span>
-          <span className="text-sm font-medium text-[var(--text)]">Protocol</span>
-          <span className="text-[11px] text-[var(--muted)]">SSH, VNC, RDP, Telnet, ARD</span>
+    <div className="dv-sheet dst-form-sheet">
+      <h3 className="dst-form-t">{t("title")}</h3>
+      <div className="dst-choices">
+        <button type="button" className="dst-choice" onClick={onSelectProtocol}>
+          <span className="dv-nm">{t("protocol")}</span>
+          <span className="dv-hint">{t("protocolHint")}</span>
         </button>
-        <button
-          type="button"
-          onClick={onSelectWebService}
-          className="flex flex-col items-center gap-2 rounded-lg border border-[var(--line)] p-4
-            hover:border-sky-400/40 hover:bg-sky-500/5 transition-colors text-center"
-        >
-          <span className="flex items-center justify-center h-9 w-9 rounded-md bg-sky-500/10">
-            <Globe size={16} className="text-sky-400" />
-          </span>
-          <span className="text-sm font-medium text-[var(--text)]">Web Service</span>
-          <span className="text-[11px] text-[var(--muted)]">HTTP/HTTPS URL</span>
+        <button type="button" className="dst-choice" onClick={onSelectWebService}>
+          <span className="dv-nm">{t("web")}</span>
+          <span className="dv-hint">{t("webHint")}</span>
         </button>
       </div>
-      <div className="flex justify-end">
-        <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
+      <div className="dv-form-acts dst-gap">
+        <Button size="sm" variant="ghost" onClick={onCancel}>{t("cancel")}</Button>
       </div>
     </div>
   );

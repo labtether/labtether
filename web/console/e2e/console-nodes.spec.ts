@@ -234,10 +234,12 @@ test("node metrics tolerates telemetry series with null points", async ({ page }
   });
 
   await page.goto("/nodes/docker-ct-1?panel=monitoring", { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("heading", { name: "Metrics History", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "CPU Usage", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Memory Usage", exact: true })).toBeVisible();
-  await expect(page.getByText("No data points in this window.", { exact: true })).toBeVisible();
+  // Metrics is a view of the System tab.
+  await expect(page.getByRole("navigation", { name: "Device sections" }).getByRole("link", { name: "System" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("group", { name: "Range" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "CPU", level: 3, exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Memory", level: 3, exact: true })).toBeVisible();
+  await expect(page.getByText("No samples in this range", { exact: true })).toBeVisible();
   expect(pageErrors).toEqual([]);
 });
 
@@ -503,7 +505,7 @@ test("device card navigation uses a single history entry per click", async ({ pa
 
   await page.getByRole("link", { name: "Node Alpha", exact: true }).click();
   await expect(page).toHaveURL(/(?:\/[a-z]{2})?\/nodes\/node-alpha$/);
-  await expect(page.getByText("Node Alpha", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Node Alpha", level: 1 })).toBeVisible();
 
   await page.goBack();
   await expect(page).toHaveURL(/(?:\/[a-z]{2})?\/nodes$/);
@@ -511,7 +513,7 @@ test("device card navigation uses a single history entry per click", async ({ pa
 
   await page.getByRole("link", { name: "Node Beta", exact: true }).click();
   await expect(page).toHaveURL(/(?:\/[a-z]{2})?\/nodes\/node-beta$/);
-  await expect(page.getByText("Node Beta", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Node Beta", level: 1 })).toBeVisible();
 
   await page.goBack();
   await expect(page).toHaveURL(/(?:\/[a-z]{2})?\/nodes$/);

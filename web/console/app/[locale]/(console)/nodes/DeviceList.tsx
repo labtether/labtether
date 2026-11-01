@@ -37,8 +37,9 @@ export function DeviceList({ sections, emptyText }: { sections: ListSection[]; e
 
   if (!sections.length) return <div className="ld-list"><p className="ld-empty">{emptyText}</p></div>;
 
+  // ld-more: each row ends with its ⋯ (device.css adds that column).
   return (
-    <div className="ld-list">
+    <div className="ld-list ld-more">
       <div className="ld-row ld-cols" aria-hidden="true">
         <span />
         <span>{t("columns.device")}</span>
@@ -46,6 +47,7 @@ export function DeviceList({ sections, emptyText }: { sections: ListSection[]; e
         <span>{t("columns.cpu")}</span>
         <span>{t("columns.memory")}</span>
         <span>{t("columns.disk")}</span>
+        <span />
       </div>
       {sections.map((section) => {
         const isClosed = closed.has(section.key);

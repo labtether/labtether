@@ -1,0 +1,219 @@
+@import "./device-system.css";
+@import "./device-settings.css";
+@import "./device-metrics.css";
+
+/* ── 2.0 device page ──
+   One device: the crumb, its tile and name with a status word only when something is wrong, its address, two
+   connect buttons and ⋯; then the tab row. Overview holds usage charts, services and activity with Details beside
+   them; every other tab runs full width. Content sits on sheets; titles, tabs and switches sit on the canvas.
+   The dv- vocabulary below (sections, sheets, lists, rows, key-value, segmented switch) serves every tab. */
+
+.dv { container: dv / inline-size; }
+
+/* Header */
+.dv-crumb { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; font-size: var(--fs-meta); line-height: var(--lh-meta); color: var(--text-3); }
+.dv-crumb a { font-weight: 500; color: var(--text-2); transition: color var(--dur-fast) var(--ease-out); }
+.dv-crumb a:hover { color: var(--text); }
+.dv-crumb [aria-current] { color: var(--text-3); }
+.dv-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 16px; min-height: var(--ctl); }
+.dv-id { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.dv-id-txt { min-width: 0; }
+.dv-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; min-width: 0; }
+.dv-title h1 { min-width: 0; font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; letter-spacing: -0.022em; overflow-wrap: anywhere; }
+.dv-sub { margin-top: 2px; font-size: var(--fs-meta); line-height: var(--lh-meta); color: var(--text-3); overflow-wrap: anywhere; }
+.dv-sub .mono { font-family: var(--font-mono); font-size: 12px; }
+.dv-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dv-acts svg { width: 14px; height: 14px; }
+.dv-acts .lt-icon-btn svg { width: 16px; height: 16px; }
+.dv-status { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-meta); font-weight: 500; color: var(--text-2); white-space: nowrap; }
+.dv-status.bad { color: var(--bad-text); }
+.dv-status.warn { color: var(--warn-text); }
+
+/* Tabs: the shell's tab look (shell.css .lt-tabs), on links that keep the device in the address. */
+.dv-tabs { display: flex; gap: 24px; margin: 20px 0 20px; box-shadow: inset 0 -1px 0 var(--divider); overflow-x: auto; scrollbar-width: none; }
+.dv-tabs::-webkit-scrollbar { display: none; }
+.dv-tabs a { position: relative; display: flex; align-items: center; flex: none; height: 36px; padding: 0 0 2px; font-weight: 500; color: var(--text-3); white-space: nowrap; transition: color var(--dur-fast) var(--ease-out); }
+.dv-tabs a:hover, .dv-tabs a[aria-current="page"] { color: var(--text); }
+.dv-tabs a[aria-current="page"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 2px; background: var(--text); }
+
+/* Sections on the canvas, content on sheets. */
+.dv-sec + .dv-sec { margin-top: var(--gap-section); }
+.dv-sh { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px; margin-bottom: 10px; }
+.dv-sh h2 { font-size: 15px; line-height: 22px; font-weight: 600; letter-spacing: -0.01em; color: var(--text); }
+.dv-sh h2 .dv-quiet { margin-left: 8px; font-size: var(--fs-meta); font-weight: 400; color: var(--text-3); letter-spacing: 0; }
+.dv-sh h2 .dv-quiet.bad { color: var(--bad-text); }
+.dv-sh > a, .dv-sh > .dv-link { font-size: var(--fs-meta); font-weight: 500; color: var(--text-3); transition: color var(--dur-fast) var(--ease-out); cursor: pointer; }
+.dv-sh > a:hover, .dv-sh > .dv-link:hover { color: var(--text); }
+.dv-sheet { padding: 20px; border-radius: var(--r-4); background: var(--panel); box-shadow: var(--elev-1); }
+.dv-sheet.tight { padding: 8px 16px; }
+.dv-sheet.flush { padding: 0; overflow: hidden; }
+.dv-sheet-foot { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin: 20px -20px -20px; padding: 12px 20px; box-shadow: inset 0 1px 0 var(--divider); }
+.dv-sheet.tight > .dv-sheet-foot { margin: 8px -16px -8px; padding: 10px 16px; }
+.dv-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.dv-bar > .dv-sp { flex: 1; }
+.dv-empty { display: grid; justify-items: center; gap: 4px; padding: 40px 16px; text-align: center; color: var(--text-3); }
+.dv-empty b { font-weight: 500; color: var(--text); }
+.dv-empty .dv-empty-act { margin-top: 12px; }
+.dv-hint { font-size: var(--fs-meta); line-height: var(--lh-meta); color: var(--text-3); }
+.dv-err { font-size: var(--fs-meta); line-height: var(--lh-meta); color: var(--bad-text); }
+.dv-ok-text { font-size: var(--fs-meta); line-height: var(--lh-meta); color: var(--text-2); }
+.dv-mono { font-family: var(--font-mono); font-size: 12px; }
+.dv-link { font-weight: 500; color: var(--text); cursor: pointer; }
+.dv-link:hover { text-decoration: underline; text-decoration-color: var(--text-3); text-underline-offset: 3px; }
+
+/* Lists: one sheet, an optional column header, plain rows. Each list sets its columns with --cols. */
+.dv-list { padding: 4px; border-radius: var(--r-4); background: var(--panel); box-shadow: var(--elev-1); }
+.dv-cols, .dv-row { display: grid; grid-template-columns: var(--cols, minmax(0, 1fr)); align-items: center; column-gap: 12px; padding: 0 12px; }
+.dv-cols { height: 36px; margin: -4px -4px 4px; padding: 0 16px; box-shadow: inset 0 -1px 0 var(--divider); font-size: var(--fs-micro); line-height: var(--lh-micro); font-weight: 500; color: var(--text-3); }
+.dv-cols > * { min-width: 0; font: inherit; color: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dv-cols button { display: inline-flex; align-items: center; gap: 2px; cursor: pointer; }
+.dv-cols button:hover, .dv-cols button[aria-sort] { color: var(--text); }
+.dv-cols button svg { width: 12px; height: 12px; }
+.dv-row { position: relative; min-height: var(--row-h); padding-top: 4px; padding-bottom: 4px; border-radius: var(--r-2); transition: background-color var(--dur-fast) var(--ease-out); }
+.dv-row.two { min-height: 48px; padding-top: 6px; padding-bottom: 6px; }
+.dv-row:hover { background: var(--hover); transition-duration: 0s; }
+.dv-row.sel { background: var(--sel); }
+.dv-row > * { min-width: 0; }
+.dv-cols > .r, .dv-row > .r { justify-self: end; text-align: right; }
+.dv-ln { display: flex; align-items: baseline; gap: 8px; min-width: 0; white-space: nowrap; overflow: hidden; }
+.dv-ln > .dv-nm { flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; }
+.dv-nm { font-weight: 500; color: var(--text); }
+a.dv-nm:hover { text-decoration: underline; text-decoration-color: var(--text-3); text-underline-offset: 3px; }
+.dv-grey { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-meta); color: var(--text-3); }
+.dv-grey.mono { font-family: var(--font-mono); font-size: 12px; }
+.dv-prob { flex: none; font-size: var(--fs-meta); font-weight: 500; }
+.dv-prob.bad, .dv-grey.bad { color: var(--bad-text); }
+.dv-prob.warn, .dv-grey.warn { color: var(--warn-text); }
+.dv-prob.busy, .dv-grey.busy { color: var(--text-2); }
+.dv-n { justify-self: end; text-align: right; font-size: var(--fs-meta); color: var(--text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dv-n .u { color: var(--text-3); }
+.dv-n.hot { color: var(--warn-text); font-weight: 500; }
+.dv-n.hot .u { color: inherit; }
+.dv-n.none { color: var(--text-3); }
+.dv-txt { font-size: var(--fs-meta); color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dv-foot { display: flex; justify-content: space-between; align-items: center; height: 40px; padding: 0 12px; font-size: var(--fs-meta); color: var(--text-3); }
+.dv-foot button, .dv-foot a { font-weight: 500; color: var(--text-2); cursor: pointer; }
+.dv-foot button:hover, .dv-foot a:hover { color: var(--text); }
+.dv-list > .dv-empty { padding: 32px 16px; }
+
+/* Status: a dot only when it means something, a word in its tone. */
+.dv-dot { display: inline-block; width: 8px; height: 8px; flex: none; border-radius: 50%; }
+.dv-dot.ok { background: var(--ok); }
+.dv-dot.warn { background: var(--warn); }
+.dv-dot.bad { background: var(--bad); }
+.dv-dot.off { background: none; box-shadow: inset 0 0 0 1.5px var(--text-3); }
+.dv-dot.busy { background: var(--text-3); animation: dv-pulse 1.4s ease-in-out infinite; }
+@keyframes dv-pulse { 50% { opacity: 0.35; } }
+.dv-tag { display: inline-block; padding: 0 6px; border-radius: var(--r-1); background: var(--pill); font-size: var(--fs-micro); line-height: 18px; font-weight: 500; color: var(--pill-text); white-space: nowrap; }
+
+/* Key-value blocks. */
+.dv-kv > div { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px; align-items: start; padding: 6px 0; min-height: 32px; }
+.dv-kv dt { font-size: var(--fs-meta); line-height: 20px; color: var(--text-3); }
+.dv-kv dd { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; min-width: 0; line-height: 20px; color: var(--text); overflow-wrap: anywhere; }
+.dv-kv dd .dv-grey { white-space: normal; }
+
+/* The small switch inside a tab (System, Logs, Settings). */
+.dv-seg { display: inline-flex; flex: none; align-items: center; max-width: 100%; height: var(--ctl); padding: 2px; gap: 2px; border-radius: var(--r-3); background: var(--track); overflow-x: auto; scrollbar-width: none; }
+.dv-seg::-webkit-scrollbar { display: none; }
+.dv-seg > a, .dv-seg > button { display: flex; flex: none; align-items: center; justify-content: center; height: 28px; padding: 0 10px; border-radius: var(--r-2); font-size: var(--fs-meta); font-weight: 500; color: var(--text-2); white-space: nowrap; cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
+.dv-seg > a:hover, .dv-seg > button:hover { color: var(--text); }
+.dv-seg > [aria-current="page"], .dv-seg > [aria-pressed="true"] { background: var(--thumb); color: var(--text); box-shadow: var(--thumb-elev); }
+.dv-sh .dv-seg { height: var(--ctl-sm); }
+.dv-sh .dv-seg > a, .dv-sh .dv-seg > button { height: 24px; padding: 0 8px; }
+
+/* Inputs and fields used in forms on the device page. */
+.dv-field { display: grid; gap: 6px; min-width: 0; }
+.dv-field > label, .dv-field > .dv-lbl { font-size: var(--fs-meta); font-weight: 500; color: var(--text-2); }
+.dv-input { width: 100%; height: var(--ctl); padding: 0 10px; border-radius: var(--r-3); background: var(--field-bg); box-shadow: inset 0 0 0 1px var(--field-line); color: var(--text); font-size: var(--fs-body); outline: none; transition: box-shadow var(--dur-fast) var(--ease-out); }
+.dv-input:focus { box-shadow: inset 0 0 0 1px var(--text-3), 0 0 0 3px var(--ring); }
+.dv-input[aria-invalid="true"] { box-shadow: inset 0 0 0 1px var(--bad); }
+textarea.dv-input { height: auto; min-height: 88px; padding: 8px 10px; resize: vertical; }
+select.dv-input { padding-right: 28px; }
+.dv-form { display: grid; gap: 16px; }
+.dv-form-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+.dv-form-row > .dv-field { flex: 1 1 200px; }
+.dv-form-acts { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+
+/* Header extras: crumb parts, link buttons that look like secondary buttons, the action result line. */
+.dv-crumb-part { display: inline-flex; align-items: center; gap: 6px; }
+.dv-head .ld-tile { width: 40px; height: 40px; border-radius: 10px; }
+.dv-head .ld-tile svg { width: 20px; height: 20px; }
+.dv-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: var(--ctl); padding: 0 12px; border-radius: var(--r-3); background: var(--ctl-bg); box-shadow: var(--ctl-elev); font-size: var(--fs-meta); font-weight: 500; color: var(--text); white-space: nowrap; transition: box-shadow var(--dur-fast) var(--ease-out); }
+.dv-btn:hover { box-shadow: var(--ctl-elev-hover); }
+.dv-btn:disabled { opacity: 0.5; cursor: default; }
+.dv-btn svg { width: 14px; height: 14px; color: var(--text-3); }
+.dv-note { margin-top: 12px; font-size: var(--fs-meta); color: var(--text-2); }
+.dv-note.bad { color: var(--bad-text); }
+.dv-menu-wrap { display: contents; }
+.lt-menu-item.dv-menu-danger { color: var(--bad-text); }
+.dv-gone { margin-top: 20px; padding: 56px 16px; }
+
+/* Overview: main column and Details beside it when the page is wide; Details under it otherwise. */
+.dv-ov { display: grid; gap: var(--gap-section) 32px; align-items: start; }
+@container dv (min-width: 1000px) { .dv-ov { grid-template-columns: minmax(0, 1fr) var(--aside-w); } .dv-aside { position: sticky; top: 16px; } }
+.dv-main { min-width: 0; }
+.dv-aside { min-width: 0; container: dvp / inline-size; }
+.dv-copy { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: var(--r-1); color: var(--text-3); opacity: 0; cursor: pointer; transition: opacity var(--dur-fast) var(--ease-out); }
+.dv-copy:hover { background: var(--hover); color: var(--text); }
+.dv-copy svg { width: 14px; height: 14px; }
+.dv-kv > div:hover .dv-copy, .dv-copy:focus-visible { opacity: 1; }
+@media (hover: none) { .dv-copy { opacity: 1; } }
+.dv-props > div { grid-template-columns: 96px minmax(0, 1fr); }
+.dv-hold { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+a.dv-prob:hover { text-decoration: underline; text-underline-offset: 3px; }
+@container dvp (min-width: 520px) { .dv-props { display: grid; grid-template-columns: 1fr 1fr; column-gap: 32px; } }
+
+/* Usage: chart cells split by hairline seams. */
+.dv-cells { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; overflow: hidden; border-radius: var(--r-4); background: var(--divider); box-shadow: var(--elev-1); }
+.dv-cell { min-width: 0; padding: 16px 20px 12px; background: var(--panel); }
+.dv-cell-k { display: block; font-size: var(--fs-meta); line-height: var(--lh-meta); color: var(--text-3); }
+.dv-cell-v { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; min-height: 28px; }
+.dv-cell-v .u { margin-right: 8px; font-size: var(--fs-meta); color: var(--text-3); }
+.dv-cell-v .u:last-child { margin-right: 0; }
+.dv-readout { font-size: var(--fs-readout); line-height: var(--lh-readout); font-weight: 500; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.dv-readout.hot { color: var(--warn-text); }
+.dv-readout.none { font-weight: 400; color: var(--text-3); }
+.dv-sw { display: inline-block; align-self: center; width: 12px; height: 0; margin-right: 2px; border-top: 2px solid var(--chart); border-radius: 1px; }
+.dv-sw.dash { border-top: 1.5px dashed var(--chart); opacity: 0.6; }
+.dv-mount { display: grid; grid-template-columns: minmax(0, 1fr) minmax(60px, 120px) 44px auto; align-items: center; gap: 12px; min-height: 30px; margin-top: 8px; }
+.dv-meter { display: block; height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; }
+.dv-meter i { display: block; height: 100%; border-radius: inherit; background: var(--text-3); }
+.dv-meter.hot i { background: var(--warn); }
+@container dv (max-width: 600px) { .dv-cells { grid-template-columns: minmax(0, 1fr); } }
+
+/* Services and Activity on Overview. */
+.dv-svc { --cols: 16px 20px minmax(0, 1fr) 56px; }
+.dv-svc .dv-row { column-gap: 10px; }
+.dv-lead { display: grid; place-items: center; width: 16px; }
+.dv-svc-ic { display: grid; place-items: center; width: 20px; height: 20px; }
+.dv-svc-ic > * { max-width: 18px; max-height: 18px; }
+.dv-ev { --cols: 52px minmax(0, 1fr); }
+.dv-ev .dv-row { min-height: 32px; }
+.dv-ev .dv-n { justify-self: start; text-align: left; color: var(--text-3); }
+.dv-ev-msg { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.dv-ev-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dv-ev-none { padding: 8px 12px; font-size: var(--fs-meta); color: var(--text-3); }
+
+/* Tabs other than Overview: System's facts line, Settings' column and Remove. */
+.dv-tab { min-width: 0; }
+.dv-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 20px; margin-bottom: 16px; font-size: var(--fs-meta); color: var(--text-3); }
+.dv-facts .dv-mono { color: var(--text-2); }
+.dv-facts-sep { margin-right: 6px; }
+.dv-set { max-width: 760px; }
+.dv-rm { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 16px; padding: 14px 16px; }
+
+/* Devices list: each row ends with its ⋯, shown on hover or focus (always on touch). Mirrors devices.css columns. */
+.ld-more .ld-row { grid-template-columns: 32px minmax(200px, 1fr) 128px repeat(3, minmax(54px, 160px)) 28px; }
+.ld-more-btn { display: grid; place-items: center; width: 28px; height: 28px; border-radius: var(--r-2); color: var(--text-3); opacity: 0; cursor: pointer; transition: opacity var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out); }
+.ld-more-btn svg { width: 16px; height: 16px; }
+.ld-more-btn:hover, .ld-more-btn[data-state="open"] { background: var(--hover); color: var(--text); }
+.ld-row:hover .ld-more-btn, .ld-row:focus-within .ld-more-btn, .ld-more-btn[data-state="open"], .ld-more-btn:focus-visible { opacity: 1; }
+@media (hover: none) { .ld-more-btn { opacity: 1; } }
+@container ld (max-width: 880px) { .ld-more .ld-row { grid-template-columns: 32px minmax(0, 1fr) repeat(3, minmax(54px, 110px)) 28px; } }
+@container ld (max-width: 620px) { .ld-more .ld-row { grid-template-columns: 32px minmax(0, 1fr) repeat(3, 40px) 28px; } }
+@container ld (max-width: 460px) { .ld-more .ld-row { grid-template-columns: 32px minmax(0, 1fr) 28px; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .dv-tabs a, .dv-row, .dv-seg > a, .dv-seg > button, .dv-crumb a, .dv-input, .dv-btn, .dv-copy, .ld-more-btn { transition: none; }
+  .dv-dot.busy { animation: none; }
+}

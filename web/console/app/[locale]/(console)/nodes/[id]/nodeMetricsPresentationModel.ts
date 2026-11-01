@@ -1,49 +1,50 @@
 import { formatMetric } from "../../../../console/formatters";
-import type { AnalyzedSeries } from "./nodeMetricsAnalysisModel";
 
 export type QualityTone = "bad" | "warn" | "info";
 
-export type ThresholdBand = {
-  key: string;
-  low: number;
-  high: number;
-  color: string;
-  opacity: number;
-};
-
-export function metricValueTone(value: number | null, unit: string): string {
-  if (value == null) return "text-[var(--muted)]";
-  if (unit === "percent") {
-    if (value >= 90) return "text-[var(--bad)]";
-    if (value >= 70) return "text-[var(--warn)]";
-    return "text-[var(--ok)]";
-  }
-  if (unit === "celsius") {
-    if (value >= 80) return "text-[var(--bad)]";
-    if (value >= 70) return "text-[var(--warn)]";
-    return "text-[var(--ok)]";
-  }
-  return "text-[var(--text)]";
+/** The value at which a metric turns amber: 85% for percentages, 80 °C for temperatures; none for rates. */
+export function hotThreshold(unit: string): number | null {
+  if (unit === "percent") return 85;
+  if (unit === "celsius") return 80;
+  return null;
 }
 
-export function dotToneClass(value: number | null, unit: string): string {
-  const tone = metricValueTone(value, unit);
-  if (tone === "text-[var(--bad)]") return "bg-[var(--bad)]";
-  if (tone === "text-[var(--warn)]") return "bg-[var(--warn)]";
-  if (tone === "text-[var(--ok)]") return "bg-[var(--ok)]";
-  return "bg-[var(--muted)]";
+export function isHot(value: number | null | undefined, unit: string): boolean {
+  const threshold = hotThreshold(unit);
+  return threshold != null && value != null && Number.isFinite(value) && value >= threshold;
 }
 
-export function flagToneClass(tone: QualityTone): string {
-  if (tone === "bad") return "border-[var(--bad)]/50 text-[var(--bad)] bg-[var(--bad-glow)]";
-  if (tone === "warn") return "border-[var(--warn)]/50 text-[var(--warn)] bg-[var(--warn-glow)]";
-  return "border-[var(--line)] text-[var(--muted)] bg-[var(--surface)]";
+/** A metric value for a readout: "23%", "41 °C", "1.2 MB/s"; a dash without a value. */
+export function formatReadout(value: number | null | undefined, unit: string): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  if (unit === "percent") return `${value < 10 && value > 0 ? value.toFixed(1) : Math.round(value)}%`;
+  if (unit === "celsius") return `${Math.round(value)} °C`;
+  return formatMetric(value, unit);
+}
+
+/** A chart axis label: whole numbers, short units. */
+export function formatAxisValue(value: number, unit: string): string {
+  if (!Number.isFinite(value)) return "";
+  if (unit === "percent") return `${Math.round(value)}%`;
+  if (unit === "celsius") return `${Math.round(value)} °C`;
+  if (unit === "bytes_per_sec") {
+    const units = ["B/s", "KB/s", "MB/s", "GB/s"];
+    let working = Math.max(0, value);
+    let idx = 0;
+    while (working >= 1024 && idx < units.length - 1) {
+      working /= 1024;
+      idx += 1;
+    }
+    return `${working >= 10 || working === 0 ? Math.round(working) : working.toFixed(1)} ${units[idx]}`;
+  }
+  if (unit === "mbit_per_sec") return `${value > 0 && value < 10 ? value.toFixed(1) : Math.round(value)} Mbit/s`;
+  return Math.abs(value) >= 10 ? String(Math.round(value)) : value.toFixed(1);
 }
 
 export function formatSignedMetric(value: number, unit: string): string {
   if (!Number.isFinite(value) || value === 0) return "0";
-  const sign = value > 0 ? "+" : "-";
-  return `${sign}${formatMetric(Math.abs(value), unit)}`;
+  const sign = value > 0 ? "+" : "−";
+  return `${sign}${formatReadout(Math.abs(value), unit)}`;
 }
 
 export function formatDurationSeconds(seconds: number): string {
@@ -53,49 +54,21 @@ export function formatDurationSeconds(seconds: number): string {
   return `${Math.round(seconds / 86400)}d`;
 }
 
+/** "10:00–11:00" on one day, "1 Nov 10:00 – 2 Nov 10:00" across days; empty when the range is unknown. */
 export function formatRange(fromISO: string, toISO: string): string {
   const from = new Date(fromISO);
   const to = new Date(toISO);
   if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime())) {
-    return "Time range unavailable";
+    return "";
   }
-  const sameDay = from.toDateString() === to.toDateString();
-  if (sameDay) {
-    return `${from.toLocaleDateString()} ${from.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} - ${to.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+  const time = (d: Date) => d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  if (from.toDateString() === to.toDateString()) {
+    return `${time(from)}–${time(to)}`;
   }
-  return `${from.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })} - ${to.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
+  const day = (d: Date) => d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  return `${day(from)} – ${day(to)}`;
 }
 
 export function formatTs(ts: number): string {
-  return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-}
-
-export function isCriticalThreshold(unit: string, value: number): boolean {
-  if (unit === "percent") return value >= 90;
-  if (unit === "celsius") return value >= 80;
-  return false;
-}
-
-export function thresholdBands(series: AnalyzedSeries): ThresholdBand[] {
-  if (series.unit === "percent") {
-    const warningHigh = Math.min(series.yMax, 90);
-    const warningBand = warningHigh > 70
-      ? [{ key: "percent-warn", low: 70, high: warningHigh, color: "#f59e0b", opacity: 0.08 }]
-      : [];
-    const criticalBand = series.yMax > 90
-      ? [{ key: "percent-critical", low: 90, high: series.yMax, color: "#ef4444", opacity: 0.08 }]
-      : [];
-    return [...warningBand, ...criticalBand];
-  }
-  if (series.unit === "celsius") {
-    const warningHigh = Math.min(series.yMax, 80);
-    const warningBand = warningHigh > 70
-      ? [{ key: "temp-warn", low: 70, high: warningHigh, color: "#f59e0b", opacity: 0.08 }]
-      : [];
-    const criticalBand = series.yMax > 80
-      ? [{ key: "temp-critical", low: 80, high: series.yMax, color: "#ef4444", opacity: 0.08 }]
-      : [];
-    return [...warningBand, ...criticalBand];
-  }
-  return [];
+  return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 }
