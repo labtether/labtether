@@ -1,12 +1,15 @@
 {
-  "title": "API 文档",
-  "subtitle": "LabTether REST API v2 交互式参考",
-  "search": "搜索端点...",
-  "noResults": "没有与搜索匹配的端点",
+  "search": "筛选端点",
+  "noResults": "没有与“{query}”匹配的端点",
+  "count": "{shown} / {total}",
+  "clearFilter": "清除筛选",
   "parameters": "参数",
   "requestBody": "请求体",
   "responses": "响应",
+  "required": "必填",
+  "deprecated": "已弃用",
   "authentication": "除非另有说明，所有端点都需要 Bearer API 密钥或会话 Cookie。",
-  "loading": "正在加载 API 规范...",
-  "loadError": "无法加载 API 规范"
+  "loading": "正在加载 API 参考…",
+  "loadError": "无法加载 API 参考。",
+  "retry": "重试"
 }

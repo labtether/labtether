@@ -1,26 +1,7 @@
-import type { ReactNode } from "react";
-import { useTranslations } from "next-intl";
-import { Bell, Activity, FileText, RefreshCw, Zap } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import type { IncidentEvent } from "../../../console/models";
 import { Button } from "../../../components/ui/Button";
-
-function timelineKindIcon(kind: string): ReactNode {
-  switch (kind) {
-    case "alert_fired":
-    case "alert_resolved":
-      return <Bell size={14} />;
-    case "metric_anomaly":
-    case "heartbeat_change":
-      return <Activity size={14} />;
-    case "log_burst":
-    case "audit":
-      return <FileText size={14} />;
-    case "config_change":
-      return <RefreshCw size={14} />;
-    default:
-      return <Zap size={14} />;
-  }
-}
+import { chronological, eventTone, fullWhen, shortWhen } from "./issuesModel";
 
 export type IncidentTimelineProps = {
   events: IncidentEvent[];
@@ -32,34 +13,40 @@ export type IncidentTimelineProps = {
   onRefresh: () => void;
 };
 
+/**
+ * What happened, oldest first: alerts firing (red dot) and recovering (green), things someone ran (solid), the rest
+ * as rings. The hub pages it newest first, so older history loads above.
+ */
 export function IncidentTimeline({ events, loading, error, hasMore, onLoadOlder, onRetry, onRefresh }: IncidentTimelineProps) {
   const t = useTranslations("incidents.timeline");
+  const locale = useLocale();
   return (
-    <section aria-label={t("title")} aria-busy={loading}>
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--muted)]">{t("title")}</h3>
-        <Button size="sm" variant="ghost" disabled={loading} onClick={onRefresh}>{t("refresh")}</Button>
+    <section className="iu-sec" aria-labelledby="iu-tl-h" aria-busy={loading}>
+      <div className="iu-sh">
+        <h2 id="iu-tl-h">{t("title")}</h2>
+        <button type="button" className="iu-sh-link" disabled={loading} onClick={onRefresh}>{t("refresh")}</button>
       </div>
-      {events.length === 0 && !loading && !error ? <p className="text-xs text-[var(--muted)]">{t("empty")}</p> : null}
+      {hasMore && !error ? (
+        <Button size="sm" variant="ghost" className="iu-tl-more" disabled={loading} onClick={onLoadOlder}>{t("loadOlder")}</Button>
+      ) : null}
       {events.length > 0 ? (
-        <ul className="divide-y divide-[var(--line)]">
-          {events.map((entry) => (
-            <li key={entry.id} className="flex items-start gap-3 py-2.5">
-              <span aria-hidden="true" className="text-[var(--muted)] mt-0.5 shrink-0">{timelineKindIcon(entry.event_type)}</span>
-              <div className="flex-1 min-w-0">
-                <span className="text-sm text-[var(--text)] block">{entry.summary}</span>
-              </div>
-              <time dateTime={entry.occurred_at} className="text-xs text-[var(--muted)]">{new Date(entry.occurred_at).toLocaleString()}</time>
+        <ol className="iu-tl">
+          {chronological(events).map((entry) => (
+            <li key={entry.id} className={eventTone(entry) || undefined}>
+              <time dateTime={entry.occurred_at} title={fullWhen(entry.occurred_at, locale)}>{shortWhen(entry.occurred_at, locale)}</time>
+              <span>{entry.summary}</span>
             </li>
           ))}
-        </ul>
+        </ol>
       ) : null}
-      {loading ? <p role="status" className="text-xs text-[var(--muted)]">{t("loading")}</p> : null}
-      {error ? <div role="alert" className="mt-2">
-        <p className="text-xs text-[var(--bad)]">{t("error")}</p>
-        <Button size="sm" disabled={loading} onClick={onRetry}>{t("retry")}</Button>
-      </div> : null}
-      {hasMore && !error ? <Button size="sm" disabled={loading} onClick={onLoadOlder}>{t("loadOlder")}</Button> : null}
+      {events.length === 0 && !loading && !error ? <p className="iu-quiet">{t("empty")}</p> : null}
+      {loading ? <p role="status" className="iu-quiet">{t("loading")}</p> : null}
+      {error ? (
+        <div className="iu-inline-err">
+          <p role="alert">{t("error")}</p>
+          <Button size="sm" disabled={loading} onClick={onRetry}>{t("retry")}</Button>
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -1,0 +1,89 @@
+{
+  "title": "Actualizaciones",
+  "crumbs": "Ruta de navegación",
+  "newPlan": "Nuevo plan",
+  "tabs": {
+    "label": "Vistas de actualizaciones",
+    "plans": "Planes",
+    "history": "Historial"
+  },
+  "plans": {
+    "label": "Planes de actualización",
+    "filter": "Filtrar planes",
+    "columns": {
+      "plan": "Plan",
+      "devices": "Dispositivos",
+      "lastRun": "Última ejecución"
+    },
+    "run": "Ejecutar…",
+    "never": "Nunca ejecutado",
+    "empty": "No hay planes de actualización",
+    "new": "Nuevo plan",
+    "previewDefault": "vista previa por defecto",
+    "noMatch": "Ningún plan coincide con «{query}»"
+  },
+  "lastRun": {
+    "queued": "En cola {time}",
+    "running": "En curso desde {time}",
+    "succeeded": "Hecho {time}",
+    "failed": "Falló {time}",
+    "other": "{time}"
+  },
+  "plan": {
+    "devices": "Dispositivos",
+    "options": "Opciones",
+    "what": "Actualizaciones",
+    "osPackages": "Paquetes del sistema",
+    "previewOnly": "Solo vista previa",
+    "runFailed": "No se pudo iniciar la ejecución.",
+    "back": "Atrás",
+    "run": "{count, plural, one {Ejecutar en # dispositivo} other {Ejecutar en # dispositivos}}",
+    "preview": "{count, plural, one {Vista previa en # dispositivo} other {Vista previa en # dispositivos}}",
+    "started": "{plan} iniciado",
+    "previewStarted": "Vista previa de {plan} iniciada"
+  },
+  "form": {
+    "title": "Nuevo plan",
+    "name": "Nombre",
+    "nameError": "Escribe un nombre",
+    "devices": "Dispositivos",
+    "filter": "Filtrar dispositivos",
+    "noMatch": "Ningún dispositivo coincide",
+    "noDevices": "Aún no hay dispositivos",
+    "selected": "{count} seleccionados",
+    "devicesError": "Elige al menos un dispositivo",
+    "what": "Actualizaciones",
+    "osPackages": "Paquetes del sistema",
+    "previewOnly": "Solo vista previa por defecto",
+    "failed": "No se pudo guardar el plan.",
+    "cancel": "Cancelar",
+    "save": "Guardar plan",
+    "saving": "Guardando…",
+    "saved": "{plan} guardado"
+  },
+  "status": {
+    "queued": "En cola",
+    "running": "En curso",
+    "succeeded": "Hecho",
+    "failed": "Falló"
+  },
+  "result": {
+    "succeeded": "{count} hechos",
+    "failed": "{count} fallidos",
+    "other": "{count} otros"
+  },
+  "history": {
+    "label": "Ejecuciones de actualización",
+    "columns": {
+      "when": "Cuándo",
+      "plan": "Plan",
+      "result": "Resultado",
+      "by": "Por"
+    },
+    "empty": "Aún no hay ejecuciones",
+    "show": "Mostrar dispositivos de {plan}",
+    "hide": "Ocultar dispositivos de {plan}",
+    "preview": "Vista previa",
+    "noResults": "Sin resultados"
+  }
+}

@@ -1,12 +1,15 @@
 {
-  "title": "Documentation de l'API",
-  "subtitle": "Référence interactive de l'API REST v2 de LabTether",
-  "search": "Rechercher des points de terminaison...",
-  "noResults": "Aucun point de terminaison ne correspond à votre recherche",
+  "search": "Filtrer les points de terminaison",
+  "noResults": "Aucun point de terminaison ne correspond à « {query} »",
+  "count": "{shown} sur {total}",
+  "clearFilter": "Effacer le filtre",
   "parameters": "Paramètres",
   "requestBody": "Corps de la requête",
   "responses": "Réponses",
+  "required": "obligatoire",
+  "deprecated": "Obsolète",
   "authentication": "Tous les points de terminaison nécessitent une clé API Bearer ou un cookie de session, sauf indication contraire.",
-  "loading": "Chargement de la spécification de l'API...",
-  "loadError": "Échec du chargement de la spécification de l'API"
+  "loading": "Chargement de la référence de l'API…",
+  "loadError": "Impossible de charger la référence de l'API.",
+  "retry": "Réessayer"
 }

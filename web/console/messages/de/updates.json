@@ -1,0 +1,89 @@
+{
+  "title": "Updates",
+  "crumbs": "Navigationspfad",
+  "newPlan": "Neuer Plan",
+  "tabs": {
+    "label": "Update-Ansichten",
+    "plans": "Pläne",
+    "history": "Verlauf"
+  },
+  "plans": {
+    "label": "Update-Pläne",
+    "filter": "Pläne filtern",
+    "columns": {
+      "plan": "Plan",
+      "devices": "Geräte",
+      "lastRun": "Letzter Lauf"
+    },
+    "run": "Ausführen…",
+    "never": "Nie ausgeführt",
+    "empty": "Keine Update-Pläne",
+    "new": "Neuer Plan",
+    "previewDefault": "standardmäßig Vorschau",
+    "noMatch": "Keine Pläne passen zu „{query}“"
+  },
+  "lastRun": {
+    "queued": "Eingereiht {time}",
+    "running": "Läuft seit {time}",
+    "succeeded": "Fertig {time}",
+    "failed": "Fehlgeschlagen {time}",
+    "other": "{time}"
+  },
+  "plan": {
+    "devices": "Geräte",
+    "options": "Optionen",
+    "what": "Updates",
+    "osPackages": "Betriebssystempakete",
+    "previewOnly": "Nur Vorschau",
+    "runFailed": "Der Lauf konnte nicht gestartet werden.",
+    "back": "Zurück",
+    "run": "{count, plural, one {Auf # Gerät ausführen} other {Auf # Geräten ausführen}}",
+    "preview": "{count, plural, one {Vorschau auf # Gerät} other {Vorschau auf # Geräten}}",
+    "started": "{plan} gestartet",
+    "previewStarted": "Vorschau von {plan} gestartet"
+  },
+  "form": {
+    "title": "Neuer Plan",
+    "name": "Name",
+    "nameError": "Namen eingeben",
+    "devices": "Geräte",
+    "filter": "Geräte filtern",
+    "noMatch": "Keine passenden Geräte",
+    "noDevices": "Noch keine Geräte",
+    "selected": "{count} ausgewählt",
+    "devicesError": "Mindestens ein Gerät auswählen",
+    "what": "Updates",
+    "osPackages": "Betriebssystempakete",
+    "previewOnly": "Standardmäßig nur Vorschau",
+    "failed": "Der Plan konnte nicht gespeichert werden.",
+    "cancel": "Abbrechen",
+    "save": "Plan speichern",
+    "saving": "Wird gespeichert…",
+    "saved": "{plan} gespeichert"
+  },
+  "status": {
+    "queued": "Eingereiht",
+    "running": "Läuft",
+    "succeeded": "Fertig",
+    "failed": "Fehlgeschlagen"
+  },
+  "result": {
+    "succeeded": "{count} fertig",
+    "failed": "{count} fehlgeschlagen",
+    "other": "{count} sonstige"
+  },
+  "history": {
+    "label": "Update-Läufe",
+    "columns": {
+      "when": "Wann",
+      "plan": "Plan",
+      "result": "Ergebnis",
+      "by": "Von"
+    },
+    "empty": "Noch keine Läufe",
+    "show": "Geräte für {plan} anzeigen",
+    "hide": "Geräte für {plan} ausblenden",
+    "preview": "Vorschau",
+    "noResults": "Keine Ergebnisse"
+  }
+}

@@ -11,6 +11,7 @@ export default function IncidentsError({
   reset: () => void;
 }) {
   const t = useTranslations("common");
+  const ti = useTranslations("incidents");
 
   useEffect(() => {
     console.error("Incidents section error:", error);
@@ -36,7 +37,7 @@ export default function IncidentsError({
           margin: 0,
         }}
       >
-        {t("errorBoundary.sectionTitle", { section: "Incidents" })}
+        {t("errorBoundary.sectionTitle", { section: ti("title") })}
       </h2>
       <p
         style={{

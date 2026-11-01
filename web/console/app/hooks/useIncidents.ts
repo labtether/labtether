@@ -6,6 +6,19 @@ import { extractIncident, upsertIncident } from "../lib/incidents";
 import { ensureArray, ensureRecord } from "../lib/responseGuards";
 import { useIncidentTimeline } from "./useIncidentTimeline";
 
+/** Saves changes to one incident and returns the hub's copy. Throws when the hub refuses or answers garbage. */
+export async function patchIncident(id: string, req: Record<string, unknown>): Promise<Incident> {
+  const res = await fetch(`/api/incidents/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) throw new Error(`Failed to update incident: ${res.status}`);
+  const updated = extractIncident(await res.json().catch(() => null));
+  if (!updated) throw new Error("Failed to parse updated incident");
+  return updated;
+}
+
 export function useIncidents() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,19 +66,14 @@ export function useIncidents() {
   }, [fetchIncidents]);
 
   const updateIncident = useCallback(async (id: string, req: Record<string, unknown>) => {
-    const res = await fetch(`/api/incidents/${encodeURIComponent(id)}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(req),
-    });
-    if (!res.ok) throw new Error(`Failed to update incident: ${res.status}`);
-    const updated = extractIncident(await res.json().catch(() => null));
-    if (!updated) {
+    try {
+      const updated = await patchIncident(id, req);
+      setIncidents((current) => upsertIncident(current, updated));
+      return updated;
+    } catch (err) {
       await fetchIncidents();
-      throw new Error("Failed to parse updated incident");
+      throw err;
     }
-    setIncidents((current) => upsertIncident(current, updated));
-    return updated;
   }, [fetchIncidents]);
 
   return {

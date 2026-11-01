@@ -1,12 +1,15 @@
 {
-  "title": "Documentación de la API",
-  "subtitle": "Referencia interactiva de la API REST v2 de LabTether",
-  "search": "Buscar endpoints...",
-  "noResults": "Ningún endpoint coincide con su búsqueda",
+  "search": "Filtrar endpoints",
+  "noResults": "Ningún endpoint coincide con «{query}»",
+  "count": "{shown} de {total}",
+  "clearFilter": "Quitar filtro",
   "parameters": "Parámetros",
   "requestBody": "Cuerpo de la solicitud",
   "responses": "Respuestas",
+  "required": "obligatorio",
+  "deprecated": "Obsoleto",
   "authentication": "Todos los endpoints requieren una clave de API Bearer o una cookie de sesión, salvo que se indique lo contrario.",
-  "loading": "Cargando la especificación de la API...",
-  "loadError": "No se pudo cargar la especificación de la API"
+  "loading": "Cargando la referencia de la API…",
+  "loadError": "No se pudo cargar la referencia de la API.",
+  "retry": "Reintentar"
 }

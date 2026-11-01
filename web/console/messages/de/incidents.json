@@ -1,29 +1,97 @@
 {
   "title": "Vorfälle",
-  "subtitle": "Probleme verfolgen und Geschehenes nachvollziehen",
-  "back": "Zurück",
-  "actions": {
-    "startInvestigating": "Untersuchung starten",
-    "markMitigated": "Als eingedämmt markieren",
-    "markResolved": "Als gelöst markieren"
+  "list": {
+    "show": {
+      "active": "Aktiv",
+      "resolved": "Gelöst",
+      "all": "Alle"
+    },
+    "showLabel": "Vorfälle anzeigen",
+    "stateFilter": "Status",
+    "anyState": "Alle",
+    "columns": {
+      "issue": "Vorfall",
+      "state": "Status",
+      "owner": "Zuständig",
+      "opened": "Geöffnet"
+    },
+    "empty": {
+      "active": "Keine aktiven Vorfälle",
+      "resolved": "Keine gelösten Vorfälle",
+      "all": "Keine Vorfälle",
+      "state": "Keine Vorfälle mit diesem Status"
+    },
+    "openAlerts": "Warnungen öffnen",
+    "error": "Vorfälle konnten nicht geladen werden.",
+    "retry": "Erneut versuchen"
+  },
+  "states": {
+    "open": "Offen",
+    "investigating": "In Untersuchung",
+    "mitigated": "Eingedämmt",
+    "resolved": "Gelöst",
+    "closed": "Geschlossen"
+  },
+  "severity": {
+    "critical": "Kritisch",
+    "high": "Hoch",
+    "medium": "Mittel",
+    "low": "Niedrig"
+  },
+  "detail": {
+    "crumbs": "Navigationspfad",
+    "opened": "Geöffnet {time}",
+    "openedFromAlert": "Geöffnet {time} aus einer Warnung",
+    "resolvedAfter": "Gelöst nach {duration}",
+    "stateMenu": "Status: {state}",
+    "ownerMenu": "Zuständig: {owner}",
+    "reopen": "Wieder öffnen",
+    "unassigned": "Nicht zugewiesen",
+    "assignToMe": "Mir zuweisen",
+    "unassign": "Zuweisung entfernen",
+    "saveError": "Die Änderung konnte nicht gespeichert werden. Erneut versuchen.",
+    "error": "Dieser Vorfall konnte nicht geladen werden.",
+    "retry": "Erneut versuchen"
+  },
+  "duration": {
+    "days": "{count, plural, one {# Tag} other {# Tage}}",
+    "hours": "{count, plural, one {# Stunde} other {# Stunden}}",
+    "minutes": "{count, plural, one {# Minute} other {# Minuten}}"
+  },
+  "device": {
+    "title": "Gerät",
+    "missing": "Nicht mehr unter Geräte",
+    "offline": "Offline",
+    "notResponding": "Antwortet nicht",
+    "noCheckIn": "Noch keine Meldung",
+    "since": "seit {time}"
   },
   "notes": {
     "title": "Notizen",
-    "placeholder": "Notiz eingeben...",
-    "emptyHint": "Fügen Sie Untersuchungsnotizen, Ursachenanalysen und Gegenmaßnahmen hinzu.",
+    "empty": "Keine Notizen",
+    "label": "Notiz",
+    "placeholder": "Notiz hinzufügen",
     "add": "Notiz hinzufügen"
   },
   "timeline": {
-    "title": "Was passiert ist",
+    "title": "Zeitverlauf",
     "refresh": "Aktualisieren",
-    "empty": "Für diesen Vorfall wurden noch keine Ereignisse erfasst.",
+    "empty": "Keine Ereignisse erfasst",
     "loading": "Zeitverlauf wird geladen…",
-    "error": "Der Zeitverlauf konnte nicht geladen werden. Bitte erneut versuchen.",
+    "error": "Der Zeitverlauf konnte nicht geladen werden.",
     "retry": "Erneut versuchen",
     "loadOlder": "Ältere laden"
   },
-  "detail": {
-    "error": "Dieser Vorfall konnte nicht geladen werden. Bitte erneut versuchen.",
-    "retry": "Erneut versuchen"
+  "writeup": {
+    "title": "Nachbericht",
+    "edit": "Bearbeiten",
+    "rootCause": "Ursache",
+    "followUps": "Folgeaufgaben, eine pro Zeile",
+    "followUpsTitle": "Folgeaufgaben",
+    "lessons": "Erkenntnisse",
+    "none": "Kein Nachbericht",
+    "cancel": "Abbrechen",
+    "save": "Nachbericht speichern",
+    "saving": "Wird gespeichert…"
   }
 }

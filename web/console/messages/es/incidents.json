@@ -1,29 +1,97 @@
 {
   "title": "Incidentes",
-  "subtitle": "Rastrear problemas y ver qué sucedió",
-  "back": "Volver",
-  "actions": {
-    "startInvestigating": "Iniciar investigación",
-    "markMitigated": "Marcar como mitigado",
-    "markResolved": "Marcar como resuelto"
+  "list": {
+    "show": {
+      "active": "Activos",
+      "resolved": "Resueltos",
+      "all": "Todos"
+    },
+    "showLabel": "Mostrar incidentes",
+    "stateFilter": "Estado",
+    "anyState": "Todos",
+    "columns": {
+      "issue": "Incidente",
+      "state": "Estado",
+      "owner": "Responsable",
+      "opened": "Abierto"
+    },
+    "empty": {
+      "active": "No hay incidentes activos",
+      "resolved": "No hay incidentes resueltos",
+      "all": "No hay incidentes",
+      "state": "No hay incidentes en este estado"
+    },
+    "openAlerts": "Abrir Alertas",
+    "error": "No se pudieron cargar los incidentes.",
+    "retry": "Reintentar"
+  },
+  "states": {
+    "open": "Abierto",
+    "investigating": "En investigación",
+    "mitigated": "Mitigado",
+    "resolved": "Resuelto",
+    "closed": "Cerrado"
+  },
+  "severity": {
+    "critical": "Crítico",
+    "high": "Alto",
+    "medium": "Medio",
+    "low": "Bajo"
+  },
+  "detail": {
+    "crumbs": "Ruta de navegación",
+    "opened": "Abierto {time}",
+    "openedFromAlert": "Abierto {time} desde una alerta",
+    "resolvedAfter": "Resuelto en {duration}",
+    "stateMenu": "Estado: {state}",
+    "ownerMenu": "Responsable: {owner}",
+    "reopen": "Reabrir",
+    "unassigned": "Sin asignar",
+    "assignToMe": "Asignármelo",
+    "unassign": "Quitar responsable",
+    "saveError": "No se pudo guardar el cambio. Inténtalo de nuevo.",
+    "error": "No se pudo cargar este incidente.",
+    "retry": "Reintentar"
+  },
+  "duration": {
+    "days": "{count, plural, one {# día} other {# días}}",
+    "hours": "{count, plural, one {# hora} other {# horas}}",
+    "minutes": "{count, plural, one {# minuto} other {# minutos}}"
+  },
+  "device": {
+    "title": "Dispositivo",
+    "missing": "Ya no está en Dispositivos",
+    "offline": "Sin conexión",
+    "notResponding": "No responde",
+    "noCheckIn": "Aún sin conexión inicial",
+    "since": "desde {time}"
   },
   "notes": {
     "title": "Notas",
-    "placeholder": "Escribir una nota...",
-    "emptyHint": "Agregue notas de investigación, análisis de causa raíz y pasos de mitigación.",
-    "add": "Agregar nota"
+    "empty": "Sin notas",
+    "label": "Nota",
+    "placeholder": "Añadir una nota",
+    "add": "Añadir nota"
   },
   "timeline": {
-    "title": "Qué sucedió",
+    "title": "Cronología",
     "refresh": "Actualizar",
-    "empty": "No se han registrado eventos para este incidente.",
-    "loading": "Cargando cronología…",
-    "error": "No se pudo cargar la cronología. Inténtelo de nuevo.",
+    "empty": "No hay eventos registrados",
+    "loading": "Cargando la cronología…",
+    "error": "No se pudo cargar la cronología.",
     "retry": "Reintentar",
     "loadOlder": "Cargar anteriores"
   },
-  "detail": {
-    "error": "No se pudo cargar este incidente. Inténtelo de nuevo.",
-    "retry": "Reintentar"
+  "writeup": {
+    "title": "Informe",
+    "edit": "Editar",
+    "rootCause": "Causa raíz",
+    "followUps": "Tareas pendientes, una por línea",
+    "followUpsTitle": "Tareas pendientes",
+    "lessons": "Lecciones aprendidas",
+    "none": "Sin informe",
+    "cancel": "Cancelar",
+    "save": "Guardar informe",
+    "saving": "Guardando…"
   }
 }

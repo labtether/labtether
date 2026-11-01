@@ -1,0 +1,89 @@
+{
+  "title": "Mises à jour",
+  "crumbs": "Fil d'Ariane",
+  "newPlan": "Nouveau plan",
+  "tabs": {
+    "label": "Vues des mises à jour",
+    "plans": "Plans",
+    "history": "Historique"
+  },
+  "plans": {
+    "label": "Plans de mise à jour",
+    "filter": "Filtrer les plans",
+    "columns": {
+      "plan": "Plan",
+      "devices": "Appareils",
+      "lastRun": "Dernière exécution"
+    },
+    "run": "Exécuter…",
+    "never": "Jamais exécuté",
+    "empty": "Aucun plan de mise à jour",
+    "new": "Nouveau plan",
+    "previewDefault": "aperçu par défaut",
+    "noMatch": "Aucun plan ne correspond à «\u00a0{query}\u00a0»"
+  },
+  "lastRun": {
+    "queued": "En file {time}",
+    "running": "En cours depuis {time}",
+    "succeeded": "Terminé {time}",
+    "failed": "Échec {time}",
+    "other": "{time}"
+  },
+  "plan": {
+    "devices": "Appareils",
+    "options": "Options",
+    "what": "Mises à jour",
+    "osPackages": "Paquets du système",
+    "previewOnly": "Aperçu seulement",
+    "runFailed": "Impossible de lancer l'exécution.",
+    "back": "Retour",
+    "run": "{count, plural, one {Exécuter sur # appareil} other {Exécuter sur # appareils}}",
+    "preview": "{count, plural, one {Aperçu sur # appareil} other {Aperçu sur # appareils}}",
+    "started": "{plan} lancé",
+    "previewStarted": "Aperçu de {plan} lancé"
+  },
+  "form": {
+    "title": "Nouveau plan",
+    "name": "Nom",
+    "nameError": "Saisissez un nom",
+    "devices": "Appareils",
+    "filter": "Filtrer les appareils",
+    "noMatch": "Aucun appareil ne correspond",
+    "noDevices": "Aucun appareil pour l'instant",
+    "selected": "{count} sélectionnés",
+    "devicesError": "Choisissez au moins un appareil",
+    "what": "Mises à jour",
+    "osPackages": "Paquets du système",
+    "previewOnly": "Aperçu seulement par défaut",
+    "failed": "Impossible d'enregistrer le plan.",
+    "cancel": "Annuler",
+    "save": "Enregistrer le plan",
+    "saving": "Enregistrement…",
+    "saved": "{plan} enregistré"
+  },
+  "status": {
+    "queued": "En file",
+    "running": "En cours",
+    "succeeded": "Terminé",
+    "failed": "Échec"
+  },
+  "result": {
+    "succeeded": "{count} terminés",
+    "failed": "{count} en échec",
+    "other": "{count} autres"
+  },
+  "history": {
+    "label": "Exécutions de mise à jour",
+    "columns": {
+      "when": "Quand",
+      "plan": "Plan",
+      "result": "Résultat",
+      "by": "Par"
+    },
+    "empty": "Aucune exécution pour l'instant",
+    "show": "Afficher les appareils de {plan}",
+    "hide": "Masquer les appareils de {plan}",
+    "preview": "Aperçu",
+    "noResults": "Aucun résultat"
+  }
+}

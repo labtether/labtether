@@ -1,0 +1,89 @@
+{
+  "title": "Updates",
+  "crumbs": "Breadcrumb",
+  "newPlan": "New plan",
+  "tabs": {
+    "label": "Update views",
+    "plans": "Plans",
+    "history": "History"
+  },
+  "plans": {
+    "label": "Update plans",
+    "filter": "Filter plans",
+    "columns": {
+      "plan": "Plan",
+      "devices": "Devices",
+      "lastRun": "Last run"
+    },
+    "run": "Run…",
+    "never": "Never run",
+    "empty": "No update plans",
+    "new": "New plan",
+    "previewDefault": "preview by default",
+    "noMatch": "No plans match “{query}”"
+  },
+  "lastRun": {
+    "queued": "Queued {time}",
+    "running": "Running since {time}",
+    "succeeded": "Done {time}",
+    "failed": "Failed {time}",
+    "other": "{time}"
+  },
+  "plan": {
+    "devices": "Devices",
+    "options": "Options",
+    "what": "Updates",
+    "osPackages": "OS packages",
+    "previewOnly": "Preview only",
+    "runFailed": "Could not start the run.",
+    "back": "Back",
+    "run": "{count, plural, one {Run on # device} other {Run on # devices}}",
+    "preview": "{count, plural, one {Preview on # device} other {Preview on # devices}}",
+    "started": "Started {plan}",
+    "previewStarted": "Started a preview of {plan}"
+  },
+  "form": {
+    "title": "New plan",
+    "name": "Name",
+    "nameError": "Enter a name",
+    "devices": "Devices",
+    "filter": "Filter devices",
+    "noMatch": "No devices match",
+    "noDevices": "No devices yet",
+    "selected": "{count} selected",
+    "devicesError": "Pick at least one device",
+    "what": "Updates",
+    "osPackages": "OS packages",
+    "previewOnly": "Preview only by default",
+    "failed": "Could not save the plan.",
+    "cancel": "Cancel",
+    "save": "Save plan",
+    "saving": "Saving…",
+    "saved": "Saved {plan}"
+  },
+  "status": {
+    "queued": "Queued",
+    "running": "Running",
+    "succeeded": "Done",
+    "failed": "Failed"
+  },
+  "result": {
+    "succeeded": "{count} done",
+    "failed": "{count} failed",
+    "other": "{count} other"
+  },
+  "history": {
+    "label": "Update runs",
+    "columns": {
+      "when": "When",
+      "plan": "Plan",
+      "result": "Result",
+      "by": "By"
+    },
+    "empty": "No runs yet",
+    "show": "Show devices for {plan}",
+    "hide": "Hide devices for {plan}",
+    "preview": "Preview",
+    "noResults": "No results"
+  }
+}
