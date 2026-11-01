@@ -195,8 +195,9 @@ function analyzeSeries(
   let yMin = min;
   let yMax = max;
   if (series.unit === "percent") {
+    // A percent chart tops out at 100%; only a reading above 100 (a sum across cores) gets headroom.
     yMin = 0;
-    yMax = Math.max(100, max * 1.05);
+    yMax = max <= 100 ? 100 : max * 1.05;
   } else if (min >= 0) {
     const span = Math.max(max - min, max * 0.15, 1);
     yMin = Math.max(0, min - span * 0.2);
