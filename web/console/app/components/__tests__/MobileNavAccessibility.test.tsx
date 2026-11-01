@@ -9,8 +9,19 @@ vi.mock("../../../i18n/navigation", () => ({
   usePathname: () => "/nodes",
 }));
 
+vi.mock("next-intl", () => ({
+  useTranslations: () => (key: string) =>
+    ({ primaryNav: "Primary navigation", openNav: "Open navigation", closeNav: "Close navigation" })[key] ?? key,
+}));
+vi.mock("../../contexts/DesktopSessionContext", () => ({ useDesktopSession: () => ({ activeSession: null }) }));
+vi.mock("../../contexts/ThemeContext", () => ({ useTheme: () => ({ theme: "light", setTheme: () => {} }) }));
+vi.mock("../LanguagePicker", () => ({
+  localeLabels: { en: "English" },
+  supportedLocales: ["en"],
+  useSwitchLocale: () => ({ locale: "en", switchTo: () => {} }),
+}));
 vi.mock("../../contexts/AuthContext", () => ({
-  useAuth: () => ({ user: { role: "owner" } }),
+  useAuth: () => ({ user: { username: "demo", role: "owner" } }),
 }));
 
 import { MobileNavOverlay, MobileNavToggle, useMobileNav } from "../MobileNav";

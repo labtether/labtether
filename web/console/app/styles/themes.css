@@ -1,255 +1,196 @@
-/* ── Theme system via CSS custom properties ── */
+/* ── LabTether 2.0 theme tokens ──
+   The console's own names (--bg, --panel, --text-secondary, --muted, --accent, --ok-glow …) carry the 2.0 values, so
+   every page moves to the calmer look at once. The 2.0 names (--canvas, --text-2, --text-3, --sel, --elev-*, --side-*,
+   --ctl-*) serve the new shell and the pages rebuilt for 2.0. Rose is for the main button only; the old glow names are
+   soft status tints or faint, never a halo. Themes stay "oled", "dark" and "light" so saved choices keep working. */
+
+/* Shared by every theme: sizes, type, radii and motion. Declared on body too, so the names below that point at theme
+   colours (var(--sel), var(--ok-glow) …) resolve against the body's theme, not the dark :root values. */
 :root,
-body[data-theme="oled"] {
-  color-scheme: dark;
-  --bg: #0a0a0c;
-  --panel: #0f0f12;
-  --panel-border: rgba(255,255,255,0.07);
-  --panel-glass: #121218;
-  --text: rgba(255, 255, 255, 0.85);
-  --text-secondary: rgba(255, 255, 255, 0.5);
-  --line: rgba(255, 255, 255, 0.08);
-  --muted: rgba(255, 255, 255, 0.4);
-  --surface: rgba(255, 255, 255, 0.04);
-  --hover: rgba(255, 255, 255, 0.06);
+body {
+  --ctl: 32px;
+  --ctl-sm: 28px;
+  --fs-title: 24px; --lh-title: 32px;
+  --fs-head: 16px;  --lh-head: 24px;
+  --fs-body: 14px;  --lh-body: 20px;
+  --fs-meta: 13px;  --lh-meta: 18px;
+  --fs-micro: 12px; --lh-micro: 16px;
+  --r-1: 4px; --r-2: 6px; --r-3: 8px; --r-4: 12px;
+  --content-w: 1200px;
+  --gutter: 40px;
+  --gap-section: 40px;
 
-  /* Accent — Neon Rose (default) */
-  --accent: #ff0080;
-  --accent-contrast: #ffffff;
-  --accent-glow: rgba(255,0,128,0.15);
-  --accent-subtle: rgba(255,0,128,0.08);
-  --accent-text: rgba(255,0,128,0.9);
-  --accent-secondary: #ff40a0;
-  --accent-rgb: 255,0,128;
-
-  /* Status colors */
-  --ok: #00e68a;
-  --warn: #f0b429;
-  --bad: #ff3355;
-
-  /* Status glow */
-  --ok-glow: rgba(0,230,138,0.15);
-  --warn-glow: rgba(240,180,41,0.15);
-  --bad-glow: rgba(255,51,85,0.18);
-
-  /* Shadow scale */
-  --shadow-xs: 0 1px 3px rgba(0,0,0,0.5);
-  --shadow-sm: 0 2px 8px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
-  --shadow-md: 0 4px 16px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.3);
-  --shadow-panel: inset 0 1px 0 rgba(255,255,255,0.04);
-
-  /* Animation */
   --dur-instant: 80ms;
   --dur-fast: 120ms;
-  --dur-normal: 200ms;
-  --dur-slow: 300ms;
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-normal: 160ms;
+  --dur-slow: 200ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-spring: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in: cubic-bezier(0.55, 0, 1, 0.45);
 
-  --control-fg: var(--text);
-  --control-fg-muted: var(--muted);
-  --control-fg-active: var(--accent-contrast);
-  --control-bg-active: var(--accent);
-  --control-bg-hover: var(--hover);
-  --control-border: var(--line);
-  --control-focus-ring: var(--muted);
-  --control-input-bg: transparent;
-  --control-input-border: var(--line);
-  --control-input-border-focus: var(--muted);
-
-  /* Blur scale */
   --blur-sm: 8px;
   --blur-md: 16px;
   --blur-lg: 40px;
 
-  /* Validation states */
-  --border-error: var(--bad);
-  --bg-error: rgba(248,113,113,0.08);
-  --border-success: var(--ok);
-  --bg-success: rgba(52,211,153,0.08);
-  --text-disabled: rgba(255,255,255,0.25);
+  /* Controls: active means the neutral selected fill, not rose. */
+  --control-fg: var(--text);
+  --control-fg-muted: var(--muted);
+  --control-fg-active: var(--text);
+  --control-bg-active: var(--sel);
+  --control-bg-hover: var(--hover);
+  --control-border: var(--line);
+  --control-focus-ring: var(--text-3);
+  --control-input-bg: var(--ctl-bg);
+  --control-input-border: var(--line);
+  --control-input-border-focus: var(--text-3);
 
-  /* Additional easing */
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --ease-in: cubic-bezier(0.55, 0, 1, 0.45);
+  --border-error: var(--bad);
+  --bg-error: var(--bad-glow);
+  --border-success: var(--ok);
+  --bg-success: var(--ok-glow);
 }
 
+/* Dark (the default before the theme script runs). */
+:root,
+body[data-theme="oled"],
 body[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0e0e10;
-  --panel: #141418;
-  --panel-border: rgba(255,255,255,0.09);
-  --panel-glass: #18181d;
-  --text: rgba(255, 255, 255, 0.80);
-  --text-secondary: rgba(255, 255, 255, 0.5);
-  --line: rgba(255, 255, 255, 0.10);
-  --muted: rgba(255, 255, 255, 0.45);
-  --surface: rgba(255, 255, 255, 0.05);
-  --hover: rgba(255, 255, 255, 0.07);
+  --canvas: #0a0a0c;
+  --bg: var(--canvas);
+  --panel: #131316;
+  --panel-glass: #1a1a1e;
+  --panel-border: rgba(255, 255, 255, 0.07);
+  --sunk: #0e0e11;
+  --text: #ededef;
+  --text-2: #a1a1aa;
+  --text-3: #8b8b94;
+  --text-secondary: var(--text-2);
+  --muted: var(--text-3);
+  --text-disabled: rgba(255, 255, 255, 0.32);
+  --line: rgba(255, 255, 255, 0.07);
+  --divider: rgba(255, 255, 255, 0.07);
+  --surface: rgba(255, 255, 255, 0.04);
+  --hover: rgba(255, 255, 255, 0.045);
+  --sel: rgba(255, 255, 255, 0.075);
 
-  /* Accent — Neon Rose (default) */
-  --accent: #ff0080;
+  --accent: #d6006f;
+  --accent-hover: #e5007f;
   --accent-contrast: #ffffff;
-  --accent-glow: rgba(255,0,128,0.15);
-  --accent-subtle: rgba(255,0,128,0.08);
-  --accent-text: rgba(255,0,128,0.9);
-  --accent-secondary: #ff40a0;
-  --accent-rgb: 255,0,128;
+  --accent-text: #f06aa9;
+  --accent-secondary: #e5007f;
+  --accent-rgb: 214, 0, 111;
+  --accent-glow: rgba(214, 0, 111, 0.1);
+  --accent-subtle: var(--sel);
 
-  /* Status colors */
-  --ok: #00e68a;
-  --warn: #f0b429;
-  --bad: #ff3355;
+  --ok: #3dbe7e;
+  --warn: #e3a23c;
+  --bad: #ee5a5f;
+  --warn-text: #e9ac55;
+  --bad-text: #f4787d;
+  --ok-glow: rgba(61, 190, 126, 0.12);
+  --warn-glow: #2a2112;
+  --bad-glow: #2a1416;
+  --chart: #8f97f7;
+  --track: rgba(255, 255, 255, 0.1);
 
-  /* Status glow */
-  --ok-glow: rgba(0,230,138,0.15);
-  --warn-glow: rgba(240,180,41,0.15);
-  --bad-glow: rgba(255,51,85,0.18);
+  --shadow-xs: 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --shadow-sm: 0 0 0 1px rgba(255, 255, 255, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --shadow-md: 0 12px 32px -8px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --shadow-panel: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --elev-1: 0 0 0 1px rgba(255, 255, 255, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --elev-2: 0 12px 32px -8px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --elev-3: 0 24px 56px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 
-  /* Shadow scale */
-  --shadow-xs: 0 1px 3px rgba(0,0,0,0.5);
-  --shadow-sm: 0 2px 8px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
-  --shadow-md: 0 4px 16px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.3);
-  --shadow-panel: inset 0 1px 0 rgba(255,255,255,0.04);
-
-  /* Animation */
-  --dur-instant: 80ms;
-  --dur-fast: 120ms;
-  --dur-normal: 200ms;
-  --dur-slow: 300ms;
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
-
-  --control-fg: var(--text);
-  --control-fg-muted: var(--muted);
-  --control-fg-active: var(--accent-contrast);
-  --control-bg-active: var(--accent);
-  --control-bg-hover: var(--hover);
-  --control-border: var(--line);
-  --control-focus-ring: var(--muted);
-  --control-input-bg: transparent;
-  --control-input-border: var(--line);
-  --control-input-border-focus: var(--muted);
-
-  /* Blur scale */
-  --blur-sm: 8px;
-  --blur-md: 16px;
-  --blur-lg: 40px;
-
-  /* Validation states */
-  --border-error: var(--bad);
-  --bg-error: rgba(248,113,113,0.08);
-  --border-success: var(--ok);
-  --bg-success: rgba(52,211,153,0.08);
-  --text-disabled: rgba(255,255,255,0.25);
-
-  /* Additional easing */
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --ease-in: cubic-bezier(0.55, 0, 1, 0.45);
+  --ctl-bg: #1a1a1e;
+  --ctl-elev: inset 0 0 0 1px rgba(255, 255, 255, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --ctl-elev-hover: inset 0 0 0 1px rgba(255, 255, 255, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --side-bg: var(--panel);
+  --side-elev: var(--elev-1), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+  --side-hover: rgba(255, 255, 255, 0.045);
+  --side-on: rgba(255, 255, 255, 0.075);
+  --side-pill: rgba(255, 255, 255, 0.1);
+  --side-acct: rgba(255, 255, 255, 0.035);
+  --scrim: rgba(0, 0, 0, 0.5);
 }
 
 body[data-theme="light"] {
   color-scheme: light;
-  --bg: #fafafa;
+  --canvas: #f6f6f7;
+  --bg: var(--canvas);
   --panel: #ffffff;
-  --panel-border: rgba(17,17,17,0.08);
   --panel-glass: #ffffff;
-  --text: rgba(17, 17, 17, 0.85);
-  --text-secondary: rgba(17, 17, 17, 0.5);
-  --line: rgba(17, 17, 17, 0.10);
-  --muted: rgba(17, 17, 17, 0.40);
-  --surface: rgba(17, 17, 17, 0.04);
-  --hover: rgba(17, 17, 17, 0.06);
+  --panel-border: rgba(15, 15, 20, 0.07);
+  --sunk: #f4f4f5;
+  --text: #18181b;
+  --text-2: #52525b;
+  --text-3: #686871;
+  --text-secondary: var(--text-2);
+  --muted: var(--text-3);
+  --text-disabled: rgba(15, 15, 20, 0.32);
+  --line: rgba(15, 15, 20, 0.07);
+  --divider: rgba(15, 15, 20, 0.07);
+  --surface: rgba(15, 15, 20, 0.04);
+  --hover: rgba(15, 15, 20, 0.04);
+  --sel: rgba(15, 15, 20, 0.065);
 
-  /* Accent — Neon Rose (default) */
-  --accent: #cc0066;
+  --accent: #e0007a;
+  --accent-hover: #c8006d;
   --accent-contrast: #ffffff;
-  --accent-glow: rgba(204,0,102,0.12);
-  --accent-subtle: rgba(204,0,102,0.06);
-  --accent-text: rgba(204,0,102,0.9);
-  --accent-secondary: #ff0080;
-  --accent-rgb: 204,0,102;
+  --accent-text: #b30061;
+  --accent-secondary: #c8006d;
+  --accent-rgb: 224, 0, 122;
+  --accent-glow: rgba(224, 0, 122, 0.08);
+  --accent-subtle: var(--sel);
 
-  /* Status colors */
-  --ok: #16a34a;
-  --warn: #ca8a04;
-  --bad: #dc2626;
+  --ok: #1a9f55;
+  --warn: #c27a0e;
+  --bad: #dc3030;
+  --warn-text: #9e5306;
+  --bad-text: #c42424;
+  --ok-glow: #e8f6ee;
+  --warn-glow: #fef3e2;
+  --bad-glow: #fdecec;
+  --chart: #5a63d8;
+  --track: rgba(15, 15, 20, 0.08);
 
-  /* Status glow */
-  --ok-glow: rgba(22,163,74,0.10);
-  --warn-glow: rgba(202,138,4,0.10);
-  --bad-glow: rgba(220,38,38,0.12);
+  --shadow-xs: 0 0 0 1px rgba(15, 15, 20, 0.06);
+  --shadow-sm: 0 0 0 1px rgba(15, 15, 20, 0.06), 0 1px 2px rgba(15, 15, 20, 0.04);
+  --shadow-md: 0 12px 32px -8px rgba(15, 15, 20, 0.18), 0 0 0 1px rgba(15, 15, 20, 0.06);
+  --shadow-panel: 0 0 0 1px rgba(15, 15, 20, 0.06), 0 1px 2px rgba(15, 15, 20, 0.04);
+  --elev-1: 0 0 0 1px rgba(15, 15, 20, 0.06), 0 1px 2px rgba(15, 15, 20, 0.04);
+  --elev-2: 0 12px 32px -8px rgba(15, 15, 20, 0.18), 0 0 0 1px rgba(15, 15, 20, 0.06);
+  --elev-3: 0 24px 56px -12px rgba(15, 15, 20, 0.26), 0 0 0 1px rgba(15, 15, 20, 0.06);
 
-  /* Shadow scale */
-  --shadow-xs: 0 1px 3px rgba(0,0,0,0.08);
-  --shadow-sm: 0 2px 8px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-md: 0 4px 16px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
-  --shadow-panel: inset 0 1px 0 rgba(255,255,255,0.8);
-
-  /* Animation */
-  --dur-instant: 80ms;
-  --dur-fast: 120ms;
-  --dur-normal: 200ms;
-  --dur-slow: 300ms;
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
-
-  --control-fg: var(--text);
-  --control-fg-muted: var(--muted);
-  --control-fg-active: var(--accent-contrast);
-  --control-bg-active: var(--accent);
-  --control-bg-hover: var(--hover);
-  --control-border: var(--line);
-  --control-focus-ring: var(--muted);
-  --control-input-bg: transparent;
-  --control-input-border: var(--line);
-  --control-input-border-focus: var(--muted);
-
-  /* Blur scale */
-  --blur-sm: 8px;
-  --blur-md: 16px;
-  --blur-lg: 40px;
-
-  /* Validation states */
-  --border-error: var(--bad);
-  --bg-error: rgba(220,38,38,0.06);
-  --border-success: var(--ok);
-  --bg-success: rgba(22,163,74,0.06);
-  --text-disabled: rgba(17,17,17,0.25);
-
-  /* Additional easing */
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --ease-in: cubic-bezier(0.55, 0, 1, 0.45);
+  --ctl-bg: #ffffff;
+  --ctl-elev: inset 0 0 0 1px rgba(15, 15, 20, 0.1), 0 1px 2px rgba(15, 15, 20, 0.05);
+  --ctl-elev-hover: inset 0 0 0 1px rgba(15, 15, 20, 0.15), 0 1px 2px rgba(15, 15, 20, 0.06);
+  --side-bg: var(--panel);
+  --side-elev: var(--elev-1), 0 8px 24px -12px rgba(15, 15, 20, 0.1);
+  --side-hover: rgba(15, 15, 20, 0.04);
+  --side-on: rgba(15, 15, 20, 0.065);
+  --side-pill: rgba(15, 15, 20, 0.07);
+  --side-acct: rgba(15, 15, 20, 0.03);
+  --scrim: rgba(10, 10, 12, 0.32);
 }
 
-/* ── Accent variant: Deep Signal ── */
+/* ── Accent variant: Deep Signal (a calm blue for the main button) ── */
 body[data-accent="deep-signal"],
-body[data-accent="deep-signal"][data-theme="oled"] {
-  --accent: #5b8eff;
-  --accent-contrast: #ffffff;
-  --accent-glow: rgba(91,142,255,0.15);
-  --accent-subtle: rgba(91,142,255,0.08);
-  --accent-text: rgba(91,142,255,0.9);
-  --accent-secondary: #7ba3ff;
-  --accent-rgb: 91,142,255;
-}
-
+body[data-accent="deep-signal"][data-theme="oled"],
 body[data-accent="deep-signal"][data-theme="dark"] {
-  --accent: #5b8eff;
-  --accent-contrast: #ffffff;
-  --accent-glow: rgba(91,142,255,0.15);
-  --accent-subtle: rgba(91,142,255,0.08);
-  --accent-text: rgba(91,142,255,0.9);
-  --accent-secondary: #7ba3ff;
-  --accent-rgb: 91,142,255;
+  --accent: #4f72e3;
+  --accent-hover: #6283ea;
+  --accent-text: #93a8f4;
+  --accent-secondary: #6283ea;
+  --accent-rgb: 79, 114, 227;
+  --accent-glow: rgba(79, 114, 227, 0.1);
 }
 
 body[data-accent="deep-signal"][data-theme="light"] {
-  --accent: #3a6edf;
-  --accent-contrast: #ffffff;
-  --accent-glow: rgba(58,110,223,0.12);
-  --accent-subtle: rgba(58,110,223,0.06);
-  --accent-text: rgba(58,110,223,0.9);
-  --accent-secondary: #5b8eff;
-  --accent-rgb: 58,110,223;
+  --accent: #3b62d6;
+  --accent-hover: #3256c2;
+  --accent-text: #2c4fb8;
+  --accent-secondary: #3256c2;
+  --accent-rgb: 59, 98, 214;
+  --accent-glow: rgba(59, 98, 214, 0.08);
 }

@@ -2,10 +2,9 @@
 
 import { useLocale } from "next-intl";
 import { useRouter, usePathname } from "next/navigation";
-import { useCallback, type ChangeEvent } from "react";
-import { Globe } from "lucide-react";
+import { useCallback } from "react";
 
-const localeLabels: Record<string, string> = {
+export const localeLabels: Record<string, string> = {
   en: "English",
   de: "Deutsch",
   fr: "Français",
@@ -13,17 +12,16 @@ const localeLabels: Record<string, string> = {
   zh: "简体中文",
 };
 
-const supportedLocales = ["en", "de", "fr", "es", "zh"] as const;
+export const supportedLocales = ["en", "de", "fr", "es", "zh"] as const;
 
-export function LanguagePicker() {
+/** The current locale and a switch to another one (the account menu's Language list). */
+export function useSwitchLocale() {
   const locale = useLocale();
   const router = useRouter();
   const pathname = usePathname();
 
-  const handleChange = useCallback(
-    (e: ChangeEvent<HTMLSelectElement>) => {
-      const nextLocale = e.target.value;
-
+  const switchTo = useCallback(
+    (nextLocale: string) => {
       // Set the NEXT_LOCALE cookie so middleware picks up the preference.
       document.cookie = `NEXT_LOCALE=${nextLocale};path=/;max-age=31536000;samesite=lax`;
 
@@ -44,21 +42,5 @@ export function LanguagePicker() {
     [pathname, router],
   );
 
-  return (
-    <div className="flex items-center gap-1.5 px-2">
-      <Globe className="w-3 h-3 text-[var(--muted)] shrink-0" strokeWidth={1.5} />
-      <select
-        value={locale}
-        onChange={handleChange}
-        className="flex-1 min-w-0 bg-transparent text-[10px] font-mono text-[var(--muted)] outline-none cursor-pointer appearance-none hover:text-[var(--text)] transition-colors"
-        aria-label="Select language"
-      >
-        {supportedLocales.map((loc) => (
-          <option key={loc} value={loc} className="bg-[var(--bg)] text-[var(--text)]">
-            {localeLabels[loc]}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
+  return { locale, switchTo };
 }

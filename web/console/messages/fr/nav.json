@@ -26,6 +26,25 @@
   "auditLog": "Journal d'audit",
   "apiDocs": "Docs API",
   "settings": "Paramètres",
+  "map": "Carte",
+  "automations": "Automatisations",
+  "general": "Général",
+  "search": "Rechercher",
+  "primaryNav": "Navigation principale",
+  "openNav": "Ouvrir la navigation",
+  "closeNav": "Fermer la navigation",
+  "navMenu": "Menu de navigation",
+  "account": "Compte",
+  "lightTheme": "Thème clair",
+  "darkTheme": "Thème sombre",
+  "language": "Langue",
+  "signOut": "Se déconnecter",
+  "roles": {
+    "owner": "Propriétaire",
+    "admin": "Administrateur",
+    "operator": "Opérateur",
+    "viewer": "Lecteur"
+  },
   "commandPalette": {
     "placeholder": "Rechercher des commandes..."
   }
