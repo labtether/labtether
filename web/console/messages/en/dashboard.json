@@ -1,37 +1,6 @@
 {
   "title": "Dashboard",
-  "subtitle": "Your homelab at a glance",
-  "export": "Export",
-  "addDevice": "+ Add Device",
   "errorHint": "Check that the backend is running and accessible.",
-  "loadingTopology": "Loading topology overview...",
-  "kpi": {
-    "online": "online",
-    "cpu": "cpu",
-    "memory": "memory",
-    "failures": "failures"
-  },
-  "fleetFocus": {
-    "label": "Fleet Focus",
-    "devicesLink": "Devices",
-    "loading": "Loading fleet data...",
-    "empty": "No devices found. Add your first device to get started.",
-    "showIssues": "Show only issues",
-    "showAll": "Show all fleet"
-  },
-  "activity": {
-    "label": "Activity",
-    "empty": "No recent activity. Commands and events will appear here.",
-    "command": "act",
-    "event": "evt",
-    "heartbeat": "hb"
-  },
-  "hotspots": {
-    "label": "Resource Hotspots",
-    "cpu": "Top CPU",
-    "memory": "Top Memory",
-    "disk": "Top Disk"
-  },
   "firstRun": {
     "title": "First-Run Checklist",
     "complete": "complete",
@@ -70,5 +39,38 @@
     "connectMcp": "Connect the MCP gateway",
     "community": "Community",
     "starGithub": "Star us on GitHub"
+  },
+  "sections": {
+    "attention": "Needs attention",
+    "running": "Running",
+    "servers": "Servers",
+    "services": "Services"
+  },
+  "links": {
+    "allAlerts": "All alerts",
+    "allDevices": "All devices",
+    "allServices": "All services"
+  },
+  "attention": {
+    "deviceOffline": "{name} is offline",
+    "deviceNotResponding": "{name} is not responding",
+    "deviceNoCheckIn": "{name} has not checked in yet",
+    "lastSeen": "Last seen {age}",
+    "workloadStatus": "{name} is {status}",
+    "onHost": "on {host}"
+  },
+  "running": {
+    "on": "{label} on {target}",
+    "started": "Started {time}"
+  },
+  "servers": {
+    "cpu": "CPU",
+    "memory": "Memory",
+    "disk": "Disk",
+    "cpu24h": "CPU, 24 h",
+    "guests": "{count, plural, one {# guest} other {# guests}}",
+    "offline": "Offline",
+    "notResponding": "Not responding",
+    "cpuLabel": "{name} CPU over the last 24 hours"
   }
 }

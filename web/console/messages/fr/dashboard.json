@@ -1,37 +1,6 @@
 {
   "title": "Tableau de bord",
-  "subtitle": "Votre homelab en un coup d'œil",
-  "export": "Exporter",
-  "addDevice": "+ Ajouter un appareil",
   "errorHint": "Vérifiez que le backend est en cours d'exécution et accessible.",
-  "loadingTopology": "Chargement de la vue topologique...",
-  "kpi": {
-    "online": "en ligne",
-    "cpu": "CPU",
-    "memory": "mémoire",
-    "failures": "échecs"
-  },
-  "fleetFocus": {
-    "label": "Vue de la flotte",
-    "devicesLink": "Appareils",
-    "loading": "Chargement des données de la flotte...",
-    "empty": "Aucun appareil trouvé. Ajoutez votre premier appareil pour commencer.",
-    "showIssues": "Afficher uniquement les problèmes",
-    "showAll": "Afficher toute la flotte"
-  },
-  "activity": {
-    "label": "Activité",
-    "empty": "Aucune activité récente. Les commandes et événements apparaîtront ici.",
-    "command": "act",
-    "event": "évé",
-    "heartbeat": "hb"
-  },
-  "hotspots": {
-    "label": "Points chauds des ressources",
-    "cpu": "Top CPU",
-    "memory": "Top Mémoire",
-    "disk": "Top Disque"
-  },
   "firstRun": {
     "title": "Liste de démarrage",
     "complete": "terminée",
@@ -70,5 +39,38 @@
     "connectMcp": "Connecter la passerelle MCP",
     "community": "Communauté",
     "starGithub": "Ajoutez une étoile sur GitHub"
+  },
+  "sections": {
+    "attention": "À vérifier",
+    "running": "En cours",
+    "servers": "Serveurs",
+    "services": "Services"
+  },
+  "links": {
+    "allAlerts": "Toutes les alertes",
+    "allDevices": "Tous les appareils",
+    "allServices": "Tous les services"
+  },
+  "attention": {
+    "deviceOffline": "{name} est hors ligne",
+    "deviceNotResponding": "{name} ne répond pas",
+    "deviceNoCheckIn": "{name} ne s’est pas encore signalé",
+    "lastSeen": "Vu {age}",
+    "workloadStatus": "{name} est {status}",
+    "onHost": "sur {host}"
+  },
+  "running": {
+    "on": "{label} sur {target}",
+    "started": "Lancé à {time}"
+  },
+  "servers": {
+    "cpu": "CPU",
+    "memory": "Mémoire",
+    "disk": "Disque",
+    "cpu24h": "CPU, 24 h",
+    "guests": "{count, plural, one {# invité} other {# invités}}",
+    "offline": "Hors ligne",
+    "notResponding": "Ne répond pas",
+    "cpuLabel": "CPU de {name} sur les dernières 24 heures"
   }
 }

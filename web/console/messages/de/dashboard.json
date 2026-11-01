@@ -1,37 +1,6 @@
 {
   "title": "Dashboard",
-  "subtitle": "Ihr Homelab auf einen Blick",
-  "export": "Exportieren",
-  "addDevice": "+ Gerät hinzufügen",
   "errorHint": "Überprüfen Sie, ob das Backend läuft und erreichbar ist.",
-  "loadingTopology": "Topologieübersicht wird geladen...",
-  "kpi": {
-    "online": "Online",
-    "cpu": "CPU",
-    "memory": "Speicher",
-    "failures": "Fehler"
-  },
-  "fleetFocus": {
-    "label": "Flottenübersicht",
-    "devicesLink": "Geräte",
-    "loading": "Flottendaten werden geladen...",
-    "empty": "Keine Geräte gefunden. Fügen Sie Ihr erstes Gerät hinzu, um zu beginnen.",
-    "showIssues": "Nur Probleme anzeigen",
-    "showAll": "Gesamte Flotte anzeigen"
-  },
-  "activity": {
-    "label": "Aktivität",
-    "empty": "Keine aktuelle Aktivität. Befehle und Ereignisse werden hier angezeigt.",
-    "command": "Akt",
-    "event": "Erg",
-    "heartbeat": "HB"
-  },
-  "hotspots": {
-    "label": "Ressourcen-Hotspots",
-    "cpu": "Top CPU",
-    "memory": "Top Speicher",
-    "disk": "Top Festplatte"
-  },
   "firstRun": {
     "title": "Checkliste für den Einstieg",
     "complete": "abgeschlossen",
@@ -70,5 +39,38 @@
     "connectMcp": "MCP-Gateway verbinden",
     "community": "Community",
     "starGithub": "Auf GitHub mit einem Stern markieren"
+  },
+  "sections": {
+    "attention": "Braucht Aufmerksamkeit",
+    "running": "Läuft",
+    "servers": "Server",
+    "services": "Dienste"
+  },
+  "links": {
+    "allAlerts": "Alle Warnungen",
+    "allDevices": "Alle Geräte",
+    "allServices": "Alle Dienste"
+  },
+  "attention": {
+    "deviceOffline": "{name} ist offline",
+    "deviceNotResponding": "{name} antwortet nicht",
+    "deviceNoCheckIn": "{name} hat sich noch nicht gemeldet",
+    "lastSeen": "Zuletzt gesehen {age}",
+    "workloadStatus": "{name} ist {status}",
+    "onHost": "auf {host}"
+  },
+  "running": {
+    "on": "{label} auf {target}",
+    "started": "Gestartet {time}"
+  },
+  "servers": {
+    "cpu": "CPU",
+    "memory": "Speicher",
+    "disk": "Festplatte",
+    "cpu24h": "CPU, 24 h",
+    "guests": "{count, plural, one {# Gast} other {# Gäste}}",
+    "offline": "Offline",
+    "notResponding": "Antwortet nicht",
+    "cpuLabel": "CPU von {name} in den letzten 24 Stunden"
   }
 }

@@ -1,37 +1,6 @@
 {
   "title": "仪表盘",
-  "subtitle": "您的家庭实验室一览",
-  "export": "导出",
-  "addDevice": "+ 添加设备",
   "errorHint": "请检查后端是否正在运行且可访问。",
-  "loadingTopology": "正在加载拓扑概览...",
-  "kpi": {
-    "online": "在线",
-    "cpu": "CPU",
-    "memory": "内存",
-    "failures": "故障"
-  },
-  "fleetFocus": {
-    "label": "设备群概览",
-    "devicesLink": "设备",
-    "loading": "正在加载设备群数据...",
-    "empty": "未找到设备。添加您的第一个设备以开始。",
-    "showIssues": "仅显示问题",
-    "showAll": "显示所有设备"
-  },
-  "activity": {
-    "label": "活动",
-    "empty": "暂无最近活动。命令和事件将在此显示。",
-    "command": "操作",
-    "event": "事件",
-    "heartbeat": "心跳"
-  },
-  "hotspots": {
-    "label": "资源热点",
-    "cpu": "Top CPU",
-    "memory": "Top 内存",
-    "disk": "Top 磁盘"
-  },
   "firstRun": {
     "title": "首次运行清单",
     "complete": "已完成",
@@ -70,5 +39,38 @@
     "connectMcp": "连接 MCP 网关",
     "community": "社区",
     "starGithub": "在 GitHub 上为我们加星"
+  },
+  "sections": {
+    "attention": "需要关注",
+    "running": "进行中",
+    "servers": "服务器",
+    "services": "服务"
+  },
+  "links": {
+    "allAlerts": "全部告警",
+    "allDevices": "全部设备",
+    "allServices": "全部服务"
+  },
+  "attention": {
+    "deviceOffline": "{name} 已离线",
+    "deviceNotResponding": "{name} 无响应",
+    "deviceNoCheckIn": "{name} 尚未上报",
+    "lastSeen": "最后在线 {age}",
+    "workloadStatus": "{name} 状态为 {status}",
+    "onHost": "位于 {host}"
+  },
+  "running": {
+    "on": "{target} 上的 {label}",
+    "started": "开始于 {time}"
+  },
+  "servers": {
+    "cpu": "CPU",
+    "memory": "内存",
+    "disk": "磁盘",
+    "cpu24h": "CPU，24 小时",
+    "guests": "{count, plural, other {# 个客户机}}",
+    "offline": "离线",
+    "notResponding": "无响应",
+    "cpuLabel": "{name} 最近 24 小时的 CPU"
   }
 }
