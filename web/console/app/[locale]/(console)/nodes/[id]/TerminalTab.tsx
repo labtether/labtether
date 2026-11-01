@@ -1,71 +1,52 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { SessionToolbar } from "../../../../components/SessionToolbar";
+import * as Menu from "@radix-ui/react-dropdown-menu";
+import { MoreHorizontal } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "../../../../../i18n/navigation";
 import { ErrorBoundary } from "../../../../components/ErrorBoundary";
 import { SessionPanel } from "../../../../components/SessionPanel";
-import { Card } from "../../../../components/ui/Card";
-import { Input, Select } from "../../../../components/ui/Input";
+import { SessionToolbar } from "../../../../components/SessionToolbar";
+import KeyboardToolbar from "../../../../components/terminal/KeyboardToolbar";
+import SearchBar from "../../../../components/terminal/SearchBar";
+import SettingsPanel from "../../../../components/terminal/SettingsPanel";
+import SnippetPicker from "../../../../components/terminal/SnippetPicker";
+import { shortcut } from "../../../../components/terminal/TerminalMoreMenu";
+import { resolveTerminalTheme } from "../../../../components/terminal/terminalLook";
+import { Select } from "../../../../components/ui/Input";
+import type { XTerminalHandle } from "../../../../components/XTerminal";
+import { useFastStatus } from "../../../../contexts/StatusContext";
+import { useTheme } from "../../../../contexts/ThemeContext";
+import { useConnectedAgents } from "../../../../hooks/useConnectedAgents";
 import { useSession } from "../../../../hooks/useSession";
 import { useTerminalPreferences } from "../../../../hooks/useTerminalPreferences";
 import { useTerminalSnippets } from "../../../../hooks/useTerminalSnippets";
-import { getThemeById } from "../../../../terminal/themes";
 import { getFontById } from "../../../../terminal/fonts";
-import type { XTerminalHandle } from "../../../../components/XTerminal";
-import { useFastStatus } from "../../../../contexts/StatusContext";
-import { useConnectedAgents } from "../../../../hooks/useConnectedAgents";
-import SearchBar from "../../../../components/terminal/SearchBar";
-import SnippetPicker from "../../../../components/terminal/SnippetPicker";
-import KeyboardToolbar from "../../../../components/terminal/KeyboardToolbar";
-import SettingsPanel from "../../../../components/terminal/SettingsPanel";
-import { Settings, Code2, Search } from "lucide-react";
 
-function tmuxInstallCommand(asset: { metadata?: Record<string, string> } | null): string | null {
-  if (!asset?.metadata) return "sudo apt install -y tmux";
-  const osId = (asset.metadata.os_id ?? "").toLowerCase();
-  const osIdLike = (asset.metadata.os_id_like ?? "").toLowerCase();
-  const osName = (asset.metadata.os_pretty_name ?? asset.metadata.os_name ?? "").toLowerCase();
-
-  if (osId === "debian" || osId === "ubuntu" || osId === "raspbian" || osIdLike.includes("debian") || osName.includes("debian") || osName.includes("ubuntu")) {
-    return "sudo apt install -y tmux";
-  }
-  if (osId === "fedora" || osId === "rhel" || osId === "centos" || osId === "rocky" || osId === "alma" || osIdLike.includes("fedora") || osIdLike.includes("rhel")) {
-    return "sudo dnf install -y tmux";
-  }
-  if (osId === "arch" || osId === "manjaro" || osIdLike.includes("arch")) {
-    return "sudo pacman -S --noconfirm tmux";
-  }
-  if (osId === "opensuse" || osId === "sles" || osIdLike.includes("suse")) {
-    return "sudo zypper install -y tmux";
-  }
-  if (osId === "alpine") {
-    return "sudo apk add tmux";
-  }
-  if (osId === "freebsd") {
-    return "sudo pkg install -y tmux";
-  }
-  if (osName.includes("macos") || osName.includes("darwin")) {
-    return "brew install tmux";
-  }
+/** The package manager command that installs tmux on the device's OS. */
+function tmuxInstallCommand(asset: { metadata?: Record<string, string> } | null): string {
+  const osId = (asset?.metadata?.os_id ?? "").toLowerCase();
+  const like = (asset?.metadata?.os_id_like ?? "").toLowerCase();
+  const name = (asset?.metadata?.os_pretty_name ?? asset?.metadata?.os_name ?? "").toLowerCase();
+  if (["fedora", "rhel", "centos", "rocky", "alma"].includes(osId) || like.includes("fedora") || like.includes("rhel")) return "sudo dnf install -y tmux";
+  if (["arch", "manjaro"].includes(osId) || like.includes("arch")) return "sudo pacman -S --noconfirm tmux";
+  if (["opensuse", "sles"].includes(osId) || like.includes("suse")) return "sudo zypper install -y tmux";
+  if (osId === "alpine") return "sudo apk add tmux";
+  if (osId === "freebsd") return "sudo pkg install -y tmux";
+  if (name.includes("macos") || name.includes("darwin")) return "brew install tmux";
   return "sudo apt install -y tmux";
 }
 
 const DOCKER_SHELL_PRESET_KEY_PREFIX = "labtether.docker-terminal.shell-preset.";
 const DOCKER_SHELL_CUSTOM_KEY_PREFIX = "labtether.docker-terminal.shell-custom.";
+const SHELL_PRESETS = ["sh", "bash", "ash", "/bin/sh", "/bin/bash", "/bin/ash", "pwsh", "custom"];
 
-const SHELL_PRESETS: Array<{ value: string; label: string }> = [
-  { value: "sh", label: "sh (Recommended)" },
-  { value: "bash", label: "bash" },
-  { value: "ash", label: "ash" },
-  { value: "/bin/sh", label: "/bin/sh" },
-  { value: "/bin/bash", label: "/bin/bash" },
-  { value: "/bin/ash", label: "/bin/ash" },
-  { value: "pwsh", label: "pwsh" },
-  { value: "custom", label: "Custom command..." },
-];
-
+/** A device's Terminal tab: one shell on this device, its status bar and ⋯ menu, in the 2.0 terminal colours. */
 export function TerminalTab({ nodeId }: { nodeId: string }) {
+  const t = useTranslations("terminal.device");
   const status = useFastStatus();
+  const { theme: appTheme } = useTheme();
   const { agentTmuxStatus } = useConnectedAgents();
   const { prefs, updatePrefs } = useTerminalPreferences();
   const session = useSession({ type: "terminal", fixedTarget: nodeId, autoReconnect: prefs.auto_reconnect });
@@ -73,23 +54,15 @@ export function TerminalTab({ nodeId }: { nodeId: string }) {
   const [shellPreset, setShellPreset] = useState("sh");
   const [customShell, setCustomShell] = useState("");
   const [tmuxHintDismissed, setTmuxHintDismissed] = useState(false);
-
-  // Terminal preferences + snippets
+  const [copied, setCopied] = useState(false);
   const { snippets } = useTerminalSnippets(nodeId);
-
-  // UI state for overlays
   const [searchOpen, setSearchOpen] = useState(false);
   const [snippetPickerOpen, setSnippetPickerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // Derived theme/font from preferences
-  const themeDef = useMemo(() => getThemeById(prefs.theme), [prefs.theme]);
+  const themeDef = useMemo(() => resolveTerminalTheme(prefs.theme, appTheme), [prefs.theme, appTheme]);
   const fontDef = useMemo(() => getFontById(prefs.font_family), [prefs.font_family]);
-
-  const asset = useMemo(
-    () => status?.assets?.find((entry) => entry.id === nodeId) ?? null,
-    [nodeId, status?.assets],
-  );
+  const asset = useMemo(() => status?.assets?.find((entry) => entry.id === nodeId) ?? null, [nodeId, status?.assets]);
   const isDockerContainer = asset?.source === "docker" && asset?.type === "docker-container";
   const presetStorageKey = `${DOCKER_SHELL_PRESET_KEY_PREFIX}${nodeId}`;
   const customStorageKey = `${DOCKER_SHELL_CUSTOM_KEY_PREFIX}${nodeId}`;
@@ -98,16 +71,11 @@ export function TerminalTab({ nodeId }: { nodeId: string }) {
     if (!isDockerContainer) return;
     try {
       const storedPreset = window.localStorage.getItem(presetStorageKey)?.trim() ?? "";
-      const knownPreset = SHELL_PRESETS.some((entry) => entry.value === storedPreset);
-      if (knownPreset) {
-        setShellPreset(storedPreset);
-      }
+      if (SHELL_PRESETS.includes(storedPreset)) setShellPreset(storedPreset);
       const storedCustom = window.localStorage.getItem(customStorageKey)?.trim() ?? "";
-      if (storedCustom) {
-        setCustomShell(storedCustom);
-      }
+      if (storedCustom) setCustomShell(storedCustom);
     } catch {
-      // ignore local preference failures
+      // Storage blocked: the default shell stays.
     }
   }, [customStorageKey, isDockerContainer, presetStorageKey]);
 
@@ -116,125 +84,61 @@ export function TerminalTab({ nodeId }: { nodeId: string }) {
     try {
       window.localStorage.setItem(presetStorageKey, shellPreset);
       if (shellPreset === "custom") {
-        if (customShell.trim()) {
-          window.localStorage.setItem(customStorageKey, customShell.trim());
-        } else {
-          window.localStorage.removeItem(customStorageKey);
-        }
+        if (customShell.trim()) window.localStorage.setItem(customStorageKey, customShell.trim());
+        else window.localStorage.removeItem(customStorageKey);
       }
     } catch {
-      // ignore local preference failures
+      // Storage blocked: the choice lasts until the page reloads.
     }
   }, [customShell, customStorageKey, isDockerContainer, presetStorageKey, shellPreset]);
 
   const terminalShell = shellPreset === "custom" ? customShell.trim() : shellPreset;
-
   const connectWithShell = () =>
-    void session.connect(undefined, {
-      terminalShell: isDockerContainer && terminalShell ? terminalShell : undefined,
-    });
+    void session.connect(undefined, { terminalShell: isDockerContainer && terminalShell ? terminalShell : undefined });
 
-  // Snippet selection handler: send command to terminal
-  const handleSnippetSelect = useCallback(
-    (command: string) => {
-      termRef.current?.sendData(command);
-      termRef.current?.focus();
-    },
-    [],
-  );
+  const handleSnippetSelect = useCallback((command: string) => {
+    termRef.current?.sendData(command);
+    termRef.current?.focus();
+  }, []);
 
-  // Global keyboard shortcuts for search (Ctrl+F) and snippets (Ctrl+;)
+  // Ctrl+F: find in the output. Ctrl+;: snippets.
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      // Ctrl+F: toggle search bar
-      if (e.ctrlKey && e.key === "f") {
-        e.preventDefault();
-        setSearchOpen((v) => !v);
+    const handler = (event: KeyboardEvent) => {
+      if (event.ctrlKey && !event.shiftKey && event.key === "f") {
+        event.preventDefault();
+        setSearchOpen((open) => !open);
       }
-      // Ctrl+;: toggle snippet picker
-      if (e.ctrlKey && e.key === ";") {
-        e.preventDefault();
-        setSnippetPickerOpen((v) => !v);
+      if (event.ctrlKey && event.key === ";") {
+        event.preventDefault();
+        setSnippetPickerOpen((open) => !open);
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  const hasTmux = agentTmuxStatus.get(nodeId);
-  const showTmuxHint = hasTmux === false && !tmuxHintDismissed && !isDockerContainer;
+  const name = asset?.name || nodeId;
+  const showTmuxHint = agentTmuxStatus.get(nodeId) === false && !tmuxHintDismissed && !isDockerContainer;
   const installCmd = tmuxInstallCommand(asset);
 
   return (
-    <>
-      {showTmuxHint && (
-        <Card className="mb-3 border-[var(--warn)]/20">
-          <div className="flex items-start gap-3">
-            <span className="text-[var(--warn)] text-sm shrink-0">&#x1F4E6;</span>
-            <div className="flex-1 space-y-1">
-              <p className="text-xs font-medium text-[var(--text)]">
-                Session persistence unavailable — tmux not installed
-              </p>
-              <p className="text-xs text-[var(--muted)]">
-                Without tmux, terminal sessions cannot survive disconnects. Environment variables, working directory, and running processes will be lost on reconnect.
-              </p>
-              {installCmd && (
-                <div className="mt-1.5 flex items-center gap-2">
-                  <code className="rounded border border-[var(--line)] bg-[var(--surface)] px-2 py-0.5 text-xs text-[var(--text)]">
-                    {installCmd}
-                  </code>
-                  <button
-                    type="button"
-                    className="rounded border border-[var(--line)] px-1.5 py-0.5 text-[10px] text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface)]"
-                    onClick={() => {
-                      void navigator.clipboard.writeText(installCmd);
-                    }}
-                  >
-                    Copy
-                  </button>
-                </div>
-              )}
-            </div>
-            <button
-              type="button"
-              className="text-[var(--muted)] hover:text-[var(--text)] text-xs"
-              onClick={() => setTmuxHintDismissed(true)}
-            >
-              Dismiss
-            </button>
-          </div>
-        </Card>
-      )}
-      {isDockerContainer && (
-        <Card className="mb-3">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">Container Shell</p>
-              <p className="text-xs text-[var(--muted)]">Saved per container for future terminal sessions.</p>
-            </div>
-            <div className="flex w-full flex-col gap-2 md:w-auto md:min-w-[260px]">
-              <Select
-                value={shellPreset}
-                onChange={(event) => setShellPreset(event.target.value)}
-              >
-                {SHELL_PRESETS.map((preset) => (
-                  <option key={preset.value} value={preset.value}>
-                    {preset.label}
-                  </option>
-                ))}
-              </Select>
-              {shellPreset === "custom" && (
-                <Input
-                  type="text"
-                  placeholder="Custom command (for example: bash -lc)"
-                  value={customShell}
-                  onChange={(event) => setCustomShell(event.target.value)}
-                />
-              )}
-            </div>
-          </div>
-        </Card>
-      )}
+    <div className="tm-devtab">
+      {showTmuxHint ? (
+        <div className="tm-note">
+          <span>{t("noTmux", { name })}</span>
+          <code>{installCmd}</code>
+          <button
+            type="button"
+            className="tm-qbtn"
+            onClick={() => {
+              void navigator.clipboard?.writeText(installCmd).then(() => setCopied(true), () => setCopied(false));
+            }}
+          >
+            {copied ? t("copied") : t("copy")}
+          </button>
+          <button type="button" className="tm-qbtn" onClick={() => setTmuxHintDismissed(true)}>{t("dismiss")}</button>
+        </div>
+      ) : null}
       <SessionToolbar
         type="terminal"
         target={session.target}
@@ -249,78 +153,53 @@ export function TerminalTab({ nodeId }: { nodeId: string }) {
         onDisconnect={session.disconnect}
         compact
         extraActions={
-          <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-            {/* Search button */}
-            <button
-              type="button"
-              onClick={() => setSearchOpen((v) => !v)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 24,
-                height: 24,
-                border: "none",
-                background: searchOpen ? "#333" : "none",
-                color: searchOpen ? "#e0e0e0" : "#888",
-                cursor: "pointer",
-                borderRadius: 4,
-              }}
-              title="Search terminal (Ctrl+F)"
-            >
-              <Search size={12} />
-            </button>
-            {/* Snippets button */}
-            <button
-              type="button"
-              onClick={() => setSnippetPickerOpen((v) => !v)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 24,
-                height: 24,
-                border: "none",
-                background: snippetPickerOpen ? "#333" : "none",
-                color: snippetPickerOpen ? "#e0e0e0" : "#888",
-                cursor: "pointer",
-                borderRadius: 4,
-              }}
-              title="Snippets (Ctrl+;)"
-            >
-              <Code2 size={12} />
-            </button>
-            {/* Settings button */}
-            <button
-              type="button"
-              onClick={() => setSettingsOpen((v) => !v)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 24,
-                height: 24,
-                border: "none",
-                background: settingsOpen ? "#333" : "none",
-                color: settingsOpen ? "#e0e0e0" : "#888",
-                cursor: "pointer",
-                borderRadius: 4,
-              }}
-              title="Terminal settings"
-            >
-              <Settings size={12} />
-            </button>
-          </div>
+          <>
+            {isDockerContainer ? (
+              <span className="tm-shell">
+                <Select aria-label={t("shell")} value={shellPreset} onChange={(event) => setShellPreset(event.target.value)}>
+                  {SHELL_PRESETS.map((preset) => (
+                    <option key={preset} value={preset}>{preset === "custom" ? t("customShell") : preset}</option>
+                  ))}
+                </Select>
+                {shellPreset === "custom" ? (
+                  <input
+                    className="kt-input tm-mono"
+                    aria-label={t("customShell")}
+                    placeholder="bash -l"
+                    value={customShell}
+                    onChange={(event) => setCustomShell(event.target.value)}
+                  />
+                ) : null}
+              </span>
+            ) : null}
+            <Menu.Root>
+              <Menu.Trigger className="tm-icon" aria-label={t("more")} title={t("more")}>
+                <MoreHorizontal aria-hidden="true" />
+              </Menu.Trigger>
+              <Menu.Portal>
+                <Menu.Content className="lt-menu tm-menu" align="end" sideOffset={6}>
+                  <Menu.Item className="lt-menu-item" onSelect={() => setSearchOpen(true)}>
+                    {t("find")}
+                    <span className="lt-menu-hint">{shortcut("F")}</span>
+                  </Menu.Item>
+                  <Menu.Item className="lt-menu-item" onSelect={() => setSnippetPickerOpen(true)}>
+                    {t("snippets")}
+                    <span className="lt-menu-hint">{shortcut(";")}</span>
+                  </Menu.Item>
+                  <Menu.Item className="lt-menu-item" onSelect={() => setSettingsOpen(true)}>{t("settings")}</Menu.Item>
+                  <Menu.Separator className="lt-menu-sep" />
+                  <Menu.Item className="lt-menu-item" asChild>
+                    <Link href={`/terminal?target=${encodeURIComponent(nodeId)}`}>{t("openInTerminal")}</Link>
+                  </Menu.Item>
+                </Menu.Content>
+              </Menu.Portal>
+            </Menu.Root>
+          </>
         }
       />
 
-      {/* Terminal panel with search overlay */}
-      <div style={{ position: "relative" }}>
-        <SearchBar
-          termRef={termRef}
-          open={searchOpen}
-          onClose={() => setSearchOpen(false)}
-        />
+      <div className="tm-devterm">
+        <SearchBar termRef={termRef} open={searchOpen} onClose={() => setSearchOpen(false)} />
         <ErrorBoundary>
           <SessionPanel
             type="terminal"
@@ -346,27 +225,9 @@ export function TerminalTab({ nodeId }: { nodeId: string }) {
         </ErrorBoundary>
       </div>
 
-      {/* Keyboard toolbar */}
-      <KeyboardToolbar
-        termRef={termRef}
-        keys={prefs.toolbar_keys ?? undefined}
-      />
-
-      {/* Snippet picker overlay */}
-      <SnippetPicker
-        snippets={snippets}
-        open={snippetPickerOpen}
-        onClose={() => setSnippetPickerOpen(false)}
-        onSelect={handleSnippetSelect}
-      />
-
-      {/* Settings panel overlay */}
-      <SettingsPanel
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        prefs={prefs}
-        onUpdatePrefs={updatePrefs}
-      />
-    </>
+      <KeyboardToolbar termRef={termRef} keys={prefs.toolbar_keys ?? undefined} />
+      <SnippetPicker snippets={snippets} open={snippetPickerOpen} onClose={() => setSnippetPickerOpen(false)} onSelect={handleSnippetSelect} />
+      <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} prefs={prefs} onUpdatePrefs={updatePrefs} />
+    </div>
   );
 }

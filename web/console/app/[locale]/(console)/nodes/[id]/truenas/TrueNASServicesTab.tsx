@@ -1,153 +1,80 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { Badge } from "../../../../../components/ui/Badge";
-import { Button } from "../../../../../components/ui/Button";
-import { Card } from "../../../../../components/ui/Card";
+// TrueNAS services: file sharing and remote access first. The state reads Running or Stopped (amber when the service
+// should start on boot); a state TrueNAS reports that is neither shows as it came, and then Start and Stop wait.
+// Start and Restart sit behind ⋯; Stop asks first.
+
+import { useTranslations } from "next-intl";
+import { DiCols, DiDots, DiList, DiMain, DiRow } from "../proxmox/DiList";
+import { DiRowMenu, useDiConfirm } from "../proxmox/DiControls";
+import { failureText, serviceState, sortServices } from "./truenasModel";
+import { TnFailure, TnListState, TnWord } from "./TrueNASParts";
+import type { TrueNASService } from "./truenasTypes";
+import { useTrueNASAction } from "./useTrueNASAction";
 import { truenasAction, useTrueNASList } from "./useTrueNASData";
 
-export type TrueNASService = {
-  name: string;
-  state?: string;
-  running?: boolean;
-  enabled: boolean;
-  uptime?: string;
-};
+export type { TrueNASService } from "./truenasTypes";
 
-const PRIORITY_SERVICES = new Set(["smb", "nfs", "ssh", "iscsi"]);
+type Verb = "start" | "stop" | "restart";
 
-function runningBadge(running: boolean | undefined): "ok" | "bad" | "pending" {
-  return running === undefined ? "pending" : running ? "ok" : "bad";
-}
+export function TrueNASServicesTab({ assetId }: { assetId: string }) {
+  const t = useTranslations("devices-truenas.services");
+  const k = useTranslations("devices-proxmox.kit");
+  const { data: services, loading, error, refresh } = useTrueNASList<TrueNASService>(assetId, "services");
+  const action = useTrueNASAction();
+  const { ask, dialog } = useDiConfirm();
 
-type Props = {
-  assetId: string;
-};
+  const run = (svc: TrueNASService, verb: Verb) => action.run(`${verb}:${svc.name}`, () => truenasAction(
+    `/api/truenas/assets/${encodeURIComponent(assetId)}/services/${encodeURIComponent(svc.name)}/${verb}`,
+    "POST",
+  ), refresh);
 
-export function TrueNASServicesTab({ assetId }: Props) {
-  const { data: services, loading, error, refresh } = useTrueNASList<TrueNASService>(
-    assetId,
-    "services",
-  );
-
-  const [actionInFlight, setActionInFlight] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const actionSeq = useRef(0);
-
-  const doAction = useCallback(
-    async (serviceName: string, action: "start" | "stop" | "restart") => {
-      const seq = ++actionSeq.current;
-      setActionError(null);
-      setActionInFlight(`${action}-${serviceName}`);
-      try {
-        await truenasAction(
-          `/api/truenas/assets/${encodeURIComponent(assetId)}/services/${encodeURIComponent(serviceName)}/${action}`,
-          "POST",
-        );
-        if (actionSeq.current === seq) refresh();
-      } catch (err) {
-        if (actionSeq.current === seq) {
-          setActionError(err instanceof Error ? err.message : `${action} failed`);
-        }
-      } finally {
-        if (actionSeq.current === seq) setActionInFlight(null);
-      }
-    },
-    [assetId, refresh],
-  );
-
-  const sorted = [...(Array.isArray(services) ? services : [])].sort((a, b) => {
-    const aPriority = PRIORITY_SERVICES.has(a.name.toLowerCase()) ? 0 : 1;
-    const bPriority = PRIORITY_SERVICES.has(b.name.toLowerCase()) ? 0 : 1;
-    if (aPriority !== bPriority) return aPriority - bPriority;
-    return a.name.localeCompare(b.name);
+  const stop = (svc: TrueNASService) => ask({
+    title: t("stopTitle", { name: svc.name }),
+    message: t("stopBody", { name: svc.name }),
+    confirmLabel: t("stopConfirm"),
+    onConfirm: () => run(svc, "stop"),
   });
 
-  if (loading && services.length === 0) {
-    return <Card><p className="text-sm text-[var(--muted)]">Loading services…</p></Card>;
-  }
-
-  if (error && services.length === 0) {
-    return <Card><p className="text-sm text-[var(--bad)]">{error}</p></Card>;
-  }
+  const failure = action.error
+    ? t(`${action.error.key.split(":")[0] as Verb}Failed`, {
+        name: action.error.key.split(":").slice(1).join(":"),
+        reason: failureText(action.error.message, t("noReason")),
+      })
+    : null;
 
   return (
-    <Card>
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-medium text-[var(--text)]">Services</h2>
-        <Button size="sm" variant="ghost" onClick={refresh} disabled={loading}>
-          {loading ? "Refreshing…" : "Refresh"}
-        </Button>
-      </div>
-      {actionError ? <p className="mb-3 text-xs text-[var(--bad)]">{actionError}</p> : null}
-      {sorted.length === 0 ? (
-        <p className="text-sm text-[var(--muted)]">No services found.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-[var(--line)]">
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Service</th>
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Running</th>
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Enabled</th>
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Uptime</th>
-                <th className="py-2 text-right font-medium text-[var(--muted)]">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--line)]">
-              {sorted.map((svc) => (
-                <tr key={svc.name}>
-                  <td className="py-2 font-medium text-[var(--text)]">{svc.name}</td>
-                  <td className="py-2">
-                    <div className="flex items-center gap-2">
-                      <Badge status={runningBadge(svc.running)} size="sm" dot />
-                      <span className="text-[var(--muted)]">{svc.running === undefined ? svc.state : svc.running ? "Running" : "Stopped"}</span>
-                    </div>
-                  </td>
-                  <td className="py-2">
-                    <div className="flex items-center gap-2">
-                      <Badge status={runningBadge(svc.enabled)} size="sm" dot />
-                      <span className="text-[var(--muted)]">{svc.enabled ? "Yes" : "No"}</span>
-                    </div>
-                  </td>
-                  <td className="py-2 text-[var(--muted)]">{svc.uptime ?? "--"}</td>
-                  <td className="py-2 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={!!actionInFlight || svc.running !== false}
-                        loading={actionInFlight === `start-${svc.name}`}
-                        onClick={() => { void doAction(svc.name, "start"); }}
-                      >
-                        Start
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={!!actionInFlight || svc.running !== true}
-                        loading={actionInFlight === `stop-${svc.name}`}
-                        onClick={() => { void doAction(svc.name, "stop"); }}
-                      >
-                        Stop
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={!!actionInFlight}
-                        loading={actionInFlight === `restart-${svc.name}`}
-                        onClick={() => { void doAction(svc.name, "restart"); }}
-                      >
-                        Restart
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Card>
+    <>
+      <TnFailure message={failure} />
+      <DiList label={t("label")} cols="minmax(0, 1fr) 120px 28px" colsS="minmax(0, 1fr) 96px 28px">
+        <DiCols>
+          <span>{t("colService")}</span>
+          <span>{t("colState")}</span>
+          <span />
+        </DiCols>
+        <TnListState loading={loading} error={error} count={services.length} empty={t("empty")} onRetry={refresh} failed={(reason) => t("loadFailed", { reason })} />
+        {sortServices(services).map((svc) => {
+          const state = serviceState(svc);
+          const word = state.word === "other" ? (state.raw ?? "") : t(state.word);
+          const busy = action.busy !== null;
+          return (
+            <DiRow key={svc.name}>
+              <DiMain name={svc.name} grey={<DiDots parts={[svc.enabled ? t("onBoot") : null, svc.uptime]} />} />
+              <TnWord tone={state.tone} word={word} />
+              <DiRowMenu
+                label={k("actionsFor", { name: svc.name })}
+                items={[
+                  { label: t("start"), disabled: busy || svc.running !== false, onSelect: () => { void run(svc, "start"); } },
+                  { label: t("restart"), disabled: busy, onSelect: () => { void run(svc, "restart"); } },
+                  { separator: true },
+                  { label: t("stop"), danger: true, disabled: busy || svc.running !== true, onSelect: () => stop(svc) },
+                ]}
+              />
+            </DiRow>
+          );
+        })}
+      </DiList>
+      {dialog}
+    </>
   );
 }

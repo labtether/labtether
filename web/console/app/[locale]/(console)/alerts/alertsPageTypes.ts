@@ -1,36 +1,62 @@
-export type AlertSeverityFilter = "critical" | "high" | "medium" | "low" | "all";
-export type AlertStateFilter = "pending" | "firing" | "acknowledged" | "resolved" | "all";
-export type AlertTab = "inbox" | "rules" | "silences" | "delivery";
+import type { AlertInstance, AlertRule } from "../../../console/models";
+
+/** The page's tabs, kept in the address as ?tab=…; Issues is its own route (/incidents). */
+export type AlertTab = "alerts" | "rules" | "silences" | "delivery";
+export const ALERT_TABS: AlertTab[] = ["alerts", "rules", "silences", "delivery"];
+export const parseAlertTab = (value: string | null): AlertTab =>
+  ALERT_TABS.includes(value as AlertTab) ? (value as AlertTab) : "alerts";
+
+export type Severity = AlertInstance["severity"];
+export const SEVERITIES: Severity[] = ["critical", "high", "medium", "low"];
+export type SeverityFilter = Severity | "all";
+export type StateFilter = AlertInstance["status"] | "all";
+export const STATES: AlertInstance["status"][] = ["firing", "acknowledged", "pending", "resolved"];
+export type AlertSort = "severity" | "severityAsc" | "newest" | "oldest";
+export const ALERT_SORTS: AlertSort[] = ["severity", "severityAsc", "newest", "oldest"];
+export type InboxFilter = { severity: SeverityFilter; state: StateFilter; sort: AlertSort };
+export const DEFAULT_FILTER: InboxFilter = { severity: "all", state: "all", sort: "severity" };
+
 export type DurationPreset = "1h" | "4h" | "12h" | "24h";
-export type RuleKind = "metric_threshold" | "metric_deadman" | "heartbeat_stale" | "log_pattern" | "composite" | "synthetic_check";
-export type RuleSeverity = "critical" | "high" | "medium" | "low";
-export type TargetType = "group" | "asset" | "global";
-
-export const ruleKindOptions: Array<{ id: RuleKind; label: string }> = [
-  { id: "metric_threshold", label: "Metric Threshold" },
-  { id: "metric_deadman", label: "Metric Deadman" },
-  { id: "heartbeat_stale", label: "Heartbeat Stale" },
-  { id: "log_pattern", label: "Log Pattern" },
-  { id: "composite", label: "Composite" },
-  { id: "synthetic_check", label: "Synthetic Check" },
+export const durationPresets: Array<{ id: DurationPreset; hours: number }> = [
+  { id: "1h", hours: 1 },
+  { id: "4h", hours: 4 },
+  { id: "12h", hours: 12 },
+  { id: "24h", hours: 24 },
 ];
 
-export const ruleSeverityOptions: Array<{ id: RuleSeverity; label: string }> = [
-  { id: "critical", label: "Critical" },
-  { id: "high", label: "High" },
-  { id: "medium", label: "Medium" },
-  { id: "low", label: "Low" },
-];
+export type RuleKind = AlertRule["kind"];
+export const RULE_KINDS: RuleKind[] = ["metric_threshold", "metric_deadman", "heartbeat_stale", "log_pattern", "composite", "synthetic_check"];
+export type RuleSeverity = Severity;
+export type TargetType = AlertRule["target_scope"];
+export const TARGET_TYPES: TargetType[] = ["global", "group", "asset"];
+export const OPERATORS = [">", "<", ">=", "<=", "=="] as const;
+export const AGGREGATES = ["avg", "max", "min", "last"] as const;
 
-export const targetTypeOptions: Array<{ id: TargetType; label: string }> = [
-  { id: "global", label: "Global" },
-  { id: "group", label: "Group" },
-  { id: "asset", label: "Asset" },
-];
+/** One notification the hub sent (or tried to send) for an alert: /api/notifications/history. */
+export type DeliveryStatus = "sent" | "failed" | "pending";
+export type DeliveryRecord = {
+  id: string;
+  channel_id: string;
+  alert_instance_id: string;
+  route_id: string;
+  status: DeliveryStatus;
+  sent_at: string | null;
+  error: string;
+  retry_count: number;
+  max_retries: number;
+  next_retry_at: string | null;
+  created_at: string;
+};
 
-export const durationPresets: Array<{ id: DurationPreset; label: string; hours: number }> = [
-  { id: "1h", label: "1 hour", hours: 1 },
-  { id: "4h", label: "4 hours", hours: 4 },
-  { id: "12h", label: "12 hours", hours: 12 },
-  { id: "24h", label: "24 hours", hours: 24 },
-];
+export type SilencePayload = {
+  matchers: Record<string, string>;
+  starts_at: string;
+  ends_at: string;
+  reason?: string;
+};
+
+/** One label=value row in the silence and rule forms; rows without a label are left out. */
+export type LabelRow = { key: string; value: string };
+export const blankLabel = (): LabelRow => ({ key: "", value: "" });
+export const labelsFromRows = (rows: LabelRow[]): Record<string, string> =>
+  Object.fromEntries(rows.filter((r) => r.key.trim()).map((r) => [r.key.trim(), r.value.trim()]));

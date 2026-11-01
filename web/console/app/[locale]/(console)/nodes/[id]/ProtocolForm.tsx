@@ -1,11 +1,20 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "../../../../components/ui/Button";
-import { Input } from "../../../../components/ui/Input";
 import { CredentialProfileSelect } from "../../../../components/credentials/CredentialProfileSelect";
 import { useCredentialProfiles } from "../../../../hooks/useCredentialProfiles";
 import type { ProtocolConfig, ProtocolType, TestResult } from "./useProtocolConfigs";
+import {
+  KeyInstallPrompt,
+  OptionCheck,
+  RdpOptions,
+  SshOptions,
+  TestResultLine,
+  TextField,
+  type RdpOptionsState,
+} from "./settingsViewProtocolOptions";
 
 const DEFAULT_PORTS: Record<ProtocolType, number> = {
   ssh: 22,
@@ -43,6 +52,12 @@ type ProtocolFormProps = {
   onCancel: () => void;
 };
 
+const configBool = (initial: Partial<ProtocolConfig> | undefined, key: string) =>
+  (initial?.config?.[key] as boolean | undefined) ?? false;
+const configText = (initial: Partial<ProtocolConfig> | undefined, key: string) =>
+  (initial?.config?.[key] as string | undefined) ?? "";
+
+/** Add or edit one remote protocol: where it connects, which login it uses, its options, Test and Save. */
 export function ProtocolForm({
   assetId: _assetId,
   initial,
@@ -52,6 +67,7 @@ export function ProtocolForm({
   onPushHubKey,
   onCancel,
 }: ProtocolFormProps) {
+  const t = useTranslations("devices.settingsTab.protocolForm");
   const [protocol, setProtocol] = useState<ProtocolType>(initial?.protocol ?? "ssh");
   const [host, setHost] = useState(initial?.host ?? "");
   const [port, setPort] = useState<number>(initial?.port ?? DEFAULT_PORTS[initial?.protocol ?? "ssh"]);
@@ -59,35 +75,17 @@ export function ProtocolForm({
   const [credentialProfileId, setCredentialProfileId] = useState(initial?.credential_profile_id ?? "");
   const credentialProfiles = useCredentialProfiles();
 
-  // SSH-specific
-  const [strictHostKey, setStrictHostKey] = useState<boolean>((initial?.config?.["strict_host_key"] as boolean | undefined) ?? false);
-  const [hostKey, setHostKey] = useState<string>((initial?.config?.["host_key"] as string | undefined) ?? "");
-
-  // VNC/ARD-specific
-  const [allowInsecureVNC, setAllowInsecureVNC] = useState<boolean>(
-    (initial?.config?.["allow_insecure_vnc"] as boolean | undefined) ?? false,
-  );
-
-  // Telnet-specific
-  const [allowInsecureTelnet, setAllowInsecureTelnet] = useState<boolean>(
-    (initial?.config?.["allow_insecure_telnet"] as boolean | undefined) ?? false,
-  );
-
-  // RDP-specific
-  const [rdpDomain, setRdpDomain] = useState<string>((initial?.config?.["domain"] as string | undefined) ?? "");
-  const [nla, setNla] = useState<boolean>((initial?.config?.["nla_enabled"] as boolean | undefined) ?? false);
-  const [ignoreCertificate, setIgnoreCertificate] = useState<boolean>(
-    (initial?.config?.["ignore_certificate"] as boolean | undefined) ?? false,
-  );
-  const [allowLegacySecurity, setAllowLegacySecurity] = useState<boolean>(
-    (initial?.config?.["allow_legacy_security"] as boolean | undefined) ??
-      false,
-  );
-  const [certificateFingerprints, setCertificateFingerprints] =
-    useState<string>(
-      (initial?.config?.["certificate_fingerprints"] as string | undefined) ??
-        "",
-    );
+  const [strictHostKey, setStrictHostKey] = useState<boolean>(configBool(initial, "strict_host_key"));
+  const [hostKey, setHostKey] = useState<string>(configText(initial, "host_key"));
+  const [allowInsecureVNC, setAllowInsecureVNC] = useState<boolean>(configBool(initial, "allow_insecure_vnc"));
+  const [allowInsecureTelnet, setAllowInsecureTelnet] = useState<boolean>(configBool(initial, "allow_insecure_telnet"));
+  const [rdp, setRdp] = useState<RdpOptionsState>({
+    domain: configText(initial, "domain"),
+    nla: configBool(initial, "nla_enabled"),
+    ignoreCertificate: configBool(initial, "ignore_certificate"),
+    allowLegacySecurity: configBool(initial, "allow_legacy_security"),
+    fingerprints: configText(initial, "certificate_fingerprints"),
+  });
 
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -114,20 +112,14 @@ export function ProtocolForm({
       if (hostKey.trim()) cfg["host_key"] = hostKey.trim();
     }
     if (protocol === "rdp") {
-      if (rdpDomain.trim()) cfg["domain"] = rdpDomain.trim();
-      cfg["nla_enabled"] = nla;
-      cfg["ignore_certificate"] = ignoreCertificate;
-      cfg["allow_legacy_security"] = allowLegacySecurity;
-      if (certificateFingerprints.trim()) {
-        cfg["certificate_fingerprints"] = certificateFingerprints.trim();
-      }
+      if (rdp.domain.trim()) cfg["domain"] = rdp.domain.trim();
+      cfg["nla_enabled"] = rdp.nla;
+      cfg["ignore_certificate"] = rdp.ignoreCertificate;
+      cfg["allow_legacy_security"] = rdp.allowLegacySecurity;
+      if (rdp.fingerprints.trim()) cfg["certificate_fingerprints"] = rdp.fingerprints.trim();
     }
-    if (protocol === "vnc" || protocol === "ard") {
-      cfg["allow_insecure_vnc"] = allowInsecureVNC;
-    }
-    if (protocol === "telnet") {
-      cfg["allow_insecure_telnet"] = allowInsecureTelnet;
-    }
+    if (protocol === "vnc" || protocol === "ard") cfg["allow_insecure_vnc"] = allowInsecureVNC;
+    if (protocol === "telnet") cfg["allow_insecure_telnet"] = allowInsecureTelnet;
     return cfg;
   };
 
@@ -135,19 +127,12 @@ export function ProtocolForm({
     setFormError("");
     setSaving(true);
     try {
-      const data: Partial<ProtocolConfig> = {
-        protocol,
-        port,
-        config: buildConfig(),
-      };
+      const data: Partial<ProtocolConfig> = { protocol, port, config: buildConfig() };
       if (host.trim()) data.host = host.trim();
       if (username.trim()) data.username = username.trim();
       data.credential_profile_id = credentialProfileId.trim();
-
       const result = await onSave(data);
-      if (!result.ok) {
-        setFormError(result.error ?? "Failed to save.");
-      }
+      if (!result.ok) setFormError(result.error ?? t("saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -161,9 +146,7 @@ export function ProtocolForm({
     try {
       const result = await onTest(protocol);
       setTestResult(result);
-      if (result.success && protocol === "ssh") {
-        setShowKeyInstallBanner(true);
-      }
+      if (result.success && protocol === "ssh") setShowKeyInstallBanner(true);
     } finally {
       setTesting(false);
     }
@@ -175,316 +158,101 @@ export function ProtocolForm({
     setFormError("");
     try {
       const result = await onPushHubKey();
-      if (!result.ok) {
-        setFormError(result.error ?? "Failed to push hub key.");
-      } else {
-        setShowKeyInstallBanner(false);
-      }
+      if (!result.ok) setFormError(result.error ?? t("pushFailed"));
+      else setShowKeyInstallBanner(false);
     } finally {
       setPushingKey(false);
     }
   };
 
-  const showUsername = PROTOCOLS_WITH_USERNAME.includes(protocol);
+  const insecureBlocked = ((protocol === "vnc" || protocol === "ard") && !allowInsecureVNC) || (protocol === "telnet" && !allowInsecureTelnet);
 
   return (
-    <div className="space-y-3">
-      {formError ? <p className="text-xs text-[var(--bad)]">{formError}</p> : null}
+    <div className="dv-form">
+      {formError ? <p className="dv-err" role="alert">{formError}</p> : null}
 
-      {/* Protocol selector — disabled in edit mode */}
-      <div>
-        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Protocol</label>
-        <select
-          value={protocol}
-          disabled={editMode}
-          onChange={(e) => handleProtocolChange(e.target.value as ProtocolType)}
-          className="w-full rounded-md border border-[var(--line)] bg-[var(--surface)] px-2 py-2 text-xs text-[var(--text)] disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {PROTOCOL_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Telnet warning and explicit opt-in */}
-      {protocol === "telnet" && (
-        <div className="rounded-lg border border-[var(--warn)]/30 bg-[var(--warn-glow)] px-3 py-2">
-          <label className="flex items-start gap-2 text-xs text-[var(--warn)]">
-            <input
-              type="checkbox"
-              checked={allowInsecureTelnet}
-              onChange={(event) => setAllowInsecureTelnet(event.target.checked)}
-              className="mt-0.5"
-            />
-            <span>
-              Allow plain Telnet. Passwords, commands, and output can be read or
-              changed on the network. The Hub must also enable insecure transport.
-            </span>
-          </label>
+      <div className="dv-form-row">
+        <div className="dv-field">
+          <label htmlFor="protocol-kind">{t("protocol")}</label>
+          <select
+            id="protocol-kind"
+            className="dv-input"
+            value={protocol}
+            disabled={editMode}
+            onChange={(e) => handleProtocolChange(e.target.value as ProtocolType)}
+          >
+            {PROTOCOL_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
         </div>
-      )}
-
-      {(protocol === "vnc" || protocol === "ard") && (
-        <div className="rounded-lg border border-[var(--warn)]/30 bg-[var(--warn-glow)] px-3 py-2">
-          <label className="flex items-start gap-2 text-xs text-[var(--warn)]">
-            <input
-              type="checkbox"
-              checked={allowInsecureVNC}
-              onChange={(event) => setAllowInsecureVNC(event.target.checked)}
-              className="mt-0.5"
-            />
-            <span>
-              Allow plain VNC. Screen, keyboard, and login data can be read or
-              changed on the network. The Hub must also enable insecure
-              transport.
-            </span>
-          </label>
-        </div>
-      )}
-
-      {/* Host override */}
-      <div>
-        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Host override</label>
-        <Input
-          value={host}
-          onChange={(e) => setHost(e.target.value)}
-          placeholder="Inherits from device if empty"
-        />
-      </div>
-
-      {/* Port */}
-      <div>
-        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Port</label>
-        <Input
+        <TextField id="protocol-host" label={t("host")} value={host} onChange={setHost} placeholder={t("hostPlaceholder")} />
+        <TextField
+          id="protocol-port"
+          label={t("port")}
           type="number"
           min={1}
           max={65535}
           value={port}
-          onChange={(e) => setPort(Number(e.target.value) || DEFAULT_PORTS[protocol])}
+          onChange={(value) => setPort(Number(value) || DEFAULT_PORTS[protocol])}
         />
       </div>
 
-      {/* Username */}
-      {showUsername && (
-        <div>
-          <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Username</label>
-          <Input
+      {protocol === "telnet" && (
+        <OptionCheck warn checked={allowInsecureTelnet} onChange={setAllowInsecureTelnet} label={t("telnetOptIn")} hint={t("telnetOptInHint")} />
+      )}
+      {(protocol === "vnc" || protocol === "ard") && (
+        <OptionCheck warn checked={allowInsecureVNC} onChange={setAllowInsecureVNC} label={t("vncOptIn")} hint={t("vncOptInHint")} />
+      )}
+
+      <div className="dv-form-row">
+        {PROTOCOLS_WITH_USERNAME.includes(protocol) && (
+          <TextField
+            id="protocol-username"
+            label={t("username")}
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder={protocol === "rdp" ? "DOMAIN\\user or user" : "admin"}
+            onChange={setUsername}
+            placeholder={protocol === "rdp" ? "DOMAIN\\user" : "root"}
           />
+        )}
+        <div className="dv-field dst-cred">
+          <CredentialProfileSelect
+            id="protocol-credential-profile"
+            label={t("credential")}
+            value={credentialProfileId}
+            onChange={setCredentialProfileId}
+            profiles={credentialProfiles.profiles}
+            loading={credentialProfiles.loading}
+            error={credentialProfiles.error}
+            allowedKinds={PROTOCOL_CREDENTIAL_KINDS[protocol]}
+          />
+          <p className="dv-hint">{t("credentialHint")}</p>
         </div>
-      )}
-
-      {/* Credential profile */}
-      <div>
-        <CredentialProfileSelect
-          id="protocol-credential-profile"
-          label="Credential profile"
-          value={credentialProfileId}
-          onChange={setCredentialProfileId}
-          profiles={credentialProfiles.profiles}
-          loading={credentialProfiles.loading}
-          error={credentialProfiles.error}
-          allowedKinds={PROTOCOL_CREDENTIAL_KINDS[protocol]}
-        />
-        <p className="mt-1 text-[11px] text-[var(--muted)]">Leave blank to use the default credential for this device.</p>
       </div>
 
-      {/* SSH-specific */}
       {protocol === "ssh" && (
-        <label className="flex items-center gap-2 text-xs text-[var(--muted)]">
-          <input
-            type="checkbox"
-            checked={strictHostKey}
-            onChange={(e) => setStrictHostKey(e.target.checked)}
-          />
-          Strict host key checking
-        </label>
+        <SshOptions
+          strictHostKey={strictHostKey}
+          onStrictHostKeyChange={setStrictHostKey}
+          hostKey={hostKey}
+          onHostKeyChange={setHostKey}
+        />
       )}
-      {protocol === "ssh" && (
-        <div>
-          <label htmlFor="protocol-host-key" className="text-xs font-medium text-[var(--muted)] mb-1 block">Host key</label>
-          <Input
-            id="protocol-host-key"
-            value={hostKey}
-            onChange={(e) => setHostKey(e.target.value)}
-            placeholder="ssh-ed25519 AAAA..."
-          />
-          <p className="mt-1 text-[11px] text-[var(--muted)]">The device&apos;s SSH host public key, from a file such as /etc/ssh/ssh_host_ed25519_key.pub.</p>
-        </div>
-      )}
+      {protocol === "rdp" && <RdpOptions value={rdp} onChange={setRdp} />}
 
-      {/* RDP-specific */}
-      {protocol === "rdp" && (
-        <>
-          <div>
-            <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Domain</label>
-            <Input
-              value={rdpDomain}
-              onChange={(e) => setRdpDomain(e.target.value)}
-              placeholder="WORKGROUP or corp.example.com"
-            />
-          </div>
-          <label className="flex items-center gap-2 text-xs text-[var(--muted)]">
-            <input
-              type="checkbox"
-              checked={nla}
-              onChange={(e) => {
-                setNla(e.target.checked);
-                if (e.target.checked) setAllowLegacySecurity(false);
-              }}
-            />
-            Network Level Authentication (NLA)
-          </label>
-          <div>
-            <label className="text-xs font-medium text-[var(--muted)] mb-1 block">
-              Trusted certificate fingerprint
-            </label>
-            <Input
-              value={certificateFingerprints}
-              onChange={(e) => {
-                setCertificateFingerprints(e.target.value);
-                if (e.target.value.trim()) {
-                  setIgnoreCertificate(false);
-                  setAllowLegacySecurity(false);
-                }
-              }}
-              placeholder="sha256:AA:BB:..."
-            />
-            <p className="mt-1 text-[11px] text-[var(--muted)]">
-              Use this for a self-signed certificate or a DNS name pinned to an
-              IP.
-            </p>
-          </div>
-          <div className="space-y-2 rounded-lg border border-[var(--warn)]/30 bg-[var(--warn-glow)] px-3 py-2">
-            <label className="flex items-start gap-2 text-xs text-[var(--warn)]">
-              <input
-                type="checkbox"
-                checked={ignoreCertificate}
-                onChange={(e) => {
-                  setIgnoreCertificate(e.target.checked);
-                  if (e.target.checked) {
-                    setAllowLegacySecurity(false);
-                    setCertificateFingerprints("");
-                  }
-                }}
-              />
-              <span>
-                Allow an untrusted RDP certificate. This can expose the password
-                and screen to an attacker. The Hub must also enable insecure
-                transport.
-              </span>
-            </label>
-            <label className="flex items-start gap-2 text-xs text-[var(--warn)]">
-              <input
-                type="checkbox"
-                checked={allowLegacySecurity}
-                onChange={(e) => {
-                  setAllowLegacySecurity(e.target.checked);
-                  if (e.target.checked) {
-                    setNla(false);
-                    setIgnoreCertificate(false);
-                    setCertificateFingerprints("");
-                  }
-                }}
-              />
-              <span>
-                Allow old RDP security. It has no server certificate and can be
-                intercepted. The Hub must also enable insecure transport.
-              </span>
-            </label>
-          </div>
-        </>
-      )}
+      {testResult !== null && <TestResultLine protocol={protocol} result={testResult} />}
 
-      {/* Test result */}
-      {testResult !== null && (
-        <div
-          className={`rounded-lg border px-3 py-2 ${
-            testResult.success
-              ? "border-[var(--ok)]/30 bg-[var(--ok-glow)]"
-              : "border-[var(--bad)]/30 bg-[var(--bad-glow)]"
-          }`}
-        >
-          {testResult.success ? (
-            <p className="text-xs text-[var(--ok)]">
-              {protocol === "rdp" ? (
-                <>
-                  RDP endpoint and guacd are reachable
-                  {testResult.latency_ms > 0
-                    ? ` (${testResult.latency_ms}ms)`
-                    : ""}
-                  . Certificate, security mode, and sign-in were not tested.
-                </>
-              ) : (
-                <>
-                  Connection successful
-                  {testResult.latency_ms > 0
-                    ? ` (${testResult.latency_ms}ms)`
-                    : ""}
-                  .
-                </>
-              )}
-            </p>
-          ) : (
-            <p className="text-xs text-[var(--bad)]">
-              {testResult.error ?? "Connection failed."}
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* SSH key install banner */}
       {showKeyInstallBanner && protocol === "ssh" && onPushHubKey && (
-        <div className="rounded-lg border border-[var(--ok)]/30 bg-[var(--ok-glow)] px-3 py-2">
-          <p className="text-xs text-[var(--ok)] mb-2">
-            Connection works! Install hub SSH key for passwordless access?
-          </p>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="primary"
-              disabled={pushingKey}
-              onClick={() => void handlePushKey()}
-            >
-              {pushingKey ? "Installing..." : "Install"}
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => setShowKeyInstallBanner(false)}
-            >
-              Skip
-            </Button>
-          </div>
-        </div>
+        <KeyInstallPrompt busy={pushingKey} onInstall={() => void handlePushKey()} onSkip={() => setShowKeyInstallBanner(false)} />
       )}
 
-      <div className="flex items-center gap-3 pt-2">
-        <Button onClick={onCancel}>Cancel</Button>
-        <Button
-          disabled={testing || saving}
-          onClick={() => void handleTest()}
-        >
-          {testing
-            ? "Testing..."
-            : protocol === "rdp"
-              ? "Test Reachability"
-              : "Test Connection"}
+      <div className="dv-form-acts">
+        <Button size="sm" variant="ghost" onClick={onCancel}>{t("cancel")}</Button>
+        <Button size="sm" disabled={testing || saving} onClick={() => void handleTest()}>
+          {testing ? t("testing") : protocol === "rdp" ? t("testRdp") : t("test")}
         </Button>
-        <Button
-          variant="primary"
-          disabled={
-            saving ||
-            testing ||
-            ((protocol === "vnc" || protocol === "ard") && !allowInsecureVNC) ||
-            (protocol === "telnet" && !allowInsecureTelnet)
-          }
-          onClick={() => void handleSave()}
-        >
-          {saving ? "Saving..." : "Save"}
+        <Button size="sm" variant="primary" disabled={saving || testing || insecureBlocked} onClick={() => void handleSave()}>
+          {saving ? t("saving") : t("save")}
         </Button>
       </div>
     </div>

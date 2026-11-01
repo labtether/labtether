@@ -1,31 +1,68 @@
 {
   "title": "分组",
-  "subtitle": "管理用于设备、拓扑、告警和可靠性的分组",
-  "manage": "管理",
-  "done": "完成",
   "newGroup": "新建分组",
-  "expandAll": "全部展开",
-  "collapseAll": "全部折叠",
-  "empty": {
-    "title": "还没有分组",
-    "description": "创建您的第一个分组来组织设备。",
-    "action": "创建分组"
+  "list": {
+    "group": "分组",
+    "devices": "设备",
+    "namesMore": "{names} +{count}",
+    "noDevices": "没有直属设备",
+    "through": "经由 {hosts}",
+    "ungrouped": "未分组",
+    "fold": "收起 {name}",
+    "unfold": "展开 {name}",
+    "actions": "操作",
+    "actionsFor": "{name} 的操作",
+    "more": "更多",
+    "expandAll": "全部展开",
+    "collapseAll": "全部收起",
+    "empty": "没有分组"
   },
-  "dropToRoot": "拖放到此处以移动到顶层",
-  "editModal": {
-    "title": "编辑分组",
+  "menu": {
+    "edit": "编辑…",
+    "child": "在其中新建分组…",
+    "delete": "删除…"
+  },
+  "form": {
     "name": "名称",
-    "parentGroup": "父分组",
-    "jumpChain": "网络访问 — 跳转链",
-    "saving": "正在保存..."
+    "slug": "标识",
+    "inside": "所属",
+    "none": "无",
+    "topLevel": "顶层",
+    "deep": "嵌套超过 {levels} 层的分组会拖慢仪表盘。"
   },
   "create": {
-    "nameSlugRequired": "名称和标识符为必填项。"
+    "title": "新建分组",
+    "submit": "创建分组"
   },
   "edit": {
-    "nameRequired": "名称为必填项。"
+    "title": "编辑 {name}",
+    "submit": "保存"
   },
   "delete": {
-    "confirmHint": "请输入完全匹配的分组名称以确认。"
+    "title": "删除 {name}？",
+    "submit": "删除分组",
+    "devices": "{count, plural, other {# 台设备将不属于任何分组。}}",
+    "noDevices": "其中没有设备。",
+    "childrenInto": "{names} {count, plural, other {将移入}} {parent}。",
+    "childrenTop": "{names} {count, plural, other {将移到}}顶层。"
+  },
+  "jump": {
+    "title": "经由跳板访问",
+    "direct": "直接访问",
+    "host": "主机 {n}",
+    "port": "端口 {n}",
+    "username": "用户名 {n}",
+    "usernameHint": "用户名",
+    "login": "SSH 登录凭据 {n}",
+    "noLogin": "没有已保存的登录凭据",
+    "remove": "移除跳板 {n}",
+    "add": "添加跳板"
+  },
+  "errors": {
+    "nameEmpty": "请输入名称",
+    "slugEmpty": "请输入标识",
+    "createFailed": "分组未创建。",
+    "saveFailed": "分组未保存。",
+    "deleteFailed": "分组未删除。"
   }
 }

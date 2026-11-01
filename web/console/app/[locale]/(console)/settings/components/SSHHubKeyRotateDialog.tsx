@@ -44,14 +44,14 @@ export function SSHHubKeyRotateDialog({
 
   return (
     <Modal open onClose={onClose} title="Rotate SSH hub key" className="max-w-lg">
-      <form className="space-y-4 px-5 py-4" onSubmit={(event) => { void handleSubmit(event); }}>
-        <p className="text-sm leading-relaxed text-[var(--text-secondary)]">
-          LabTether will stage the replacement public key on connected agents before activating it.
-          A failed stage or save leaves the current key active.
+      <form className="st-modal-form" onSubmit={(event) => { void handleSubmit(event); }}>
+        <p className="st-msg">
+          Connected agents get the new public key before it becomes active. If that fails, the current key stays active.
+          Offline devices get the active key when they reconnect.
         </p>
 
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-[var(--text)]" htmlFor="ssh-hub-key-type">
+        <div className="st-field">
+          <label htmlFor="ssh-hub-key-type">
             Key type
           </label>
           <Select
@@ -60,32 +60,32 @@ export function SSHHubKeyRotateDialog({
             onChange={(event) => setKeyType(event.target.value as SSHHubKeyType)}
             disabled={loading}
           >
-            <option value="ed25519">Ed25519 (recommended)</option>
+            <option value="ed25519">Ed25519</option>
             <option value="rsa">RSA 4096</option>
           </Select>
         </div>
 
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-[var(--text)]" htmlFor="ssh-hub-key-reason">
-            Maintenance note (optional)
+        <div className="st-field">
+          <label htmlFor="ssh-hub-key-reason">
+            Note (optional)
           </label>
           <Input
             id="ssh-hub-key-reason"
             value={reason}
             onChange={(event) => setReason(event.target.value)}
             maxLength={SSH_HUB_KEY_ROTATION_REASON_MAX_LENGTH}
-            placeholder="Change ticket or reason; do not include secrets"
+            placeholder="Change ticket or reason"
             disabled={loading}
           />
         </div>
 
-        <div className="rounded-lg border border-[var(--bad)]/30 bg-[var(--bad-glow)] p-3">
-          <label className="text-xs font-medium text-[var(--bad)]" htmlFor="ssh-hub-key-confirmation">
+        <div className="st-field">
+          <label htmlFor="ssh-hub-key-confirmation">
             Type {SSH_HUB_KEY_ROTATION_CONFIRMATION} to confirm
           </label>
           <Input
             id="ssh-hub-key-confirmation"
-            className="mt-2 font-mono"
+            className="font-mono"
             value={confirmation}
             onChange={(event) => setConfirmation(event.target.value)}
             autoComplete="off"
@@ -93,18 +93,15 @@ export function SSHHubKeyRotateDialog({
             error={confirmation.length > 0 && !confirmationMatches}
             disabled={loading}
           />
-          <p className="mt-2 text-xs text-[var(--muted)]">
-            Devices that are offline will receive the active key when they reconnect.
-          </p>
         </div>
 
-        {error ? <p role="alert" className="text-sm text-[var(--bad)]">{error}</p> : null}
+        {error ? <p role="alert" className="st-msg bad">{error}</p> : null}
 
-        <div className="flex justify-end gap-2">
+        <div className="st-dlg-acts">
           <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>
             Cancel
           </Button>
-          <Button type="submit" variant="danger" loading={loading} disabled={!confirmationMatches}>
+          <Button type="submit" variant="danger" className="st-danger-fill" loading={loading} disabled={!confirmationMatches}>
             Rotate key
           </Button>
         </div>

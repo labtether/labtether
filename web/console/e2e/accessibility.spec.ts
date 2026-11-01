@@ -5,11 +5,19 @@ const ROUTES = [
   { path: "/settings", heading: "Settings" },
   { path: "/alerts", heading: "Alerts" },
   { path: "/logs", heading: "Logs" },
-  { path: "/reliability", heading: "Health" },
+  { path: "/reliability", heading: "Settings" },
   { path: "/nodes", heading: "Devices" },
 ] as const;
 
 const THEMES = ["oled", "dark", "light"] as const;
+const ADD_DEVICE = /^add device$/i;
+
+function focusInsideDialog(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const dialog = document.querySelector("[role='dialog']");
+    return Boolean(dialog && document.activeElement && dialog.contains(document.activeElement));
+  });
+}
 
 async function tabUntil(page: Page, predicate: () => Promise<boolean>, maxTabs = 40): Promise<boolean> {
   for (let i = 0; i < maxTabs; i++) {
@@ -26,30 +34,49 @@ test("add device modal traps keyboard focus and closes with Escape", async ({ pa
   await page.goto("/nodes");
   await expect(page.getByRole("heading", { name: "Devices", level: 1, exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Add Device", exact: true }).click();
+  await page.getByRole("button", { name: ADD_DEVICE }).first().click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
 
   if (browserName !== "webkit") {
     for (let i = 0; i < 18; i++) {
       await page.keyboard.press("Tab");
-      const isInside = await page.evaluate(() => {
-        const modal = document.querySelector("[role='dialog']");
-        return Boolean(modal && document.activeElement && modal.contains(document.activeElement));
-      });
-      expect(isInside).toBeTruthy();
+      expect(await focusInsideDialog(page)).toBeTruthy();
     }
 
     await page.keyboard.press("Shift+Tab");
-    const stillInside = await page.evaluate(() => {
-      const modal = document.querySelector("[role='dialog']");
-      return Boolean(modal && document.activeElement && modal.contains(document.activeElement));
-    });
-    expect(stillInside).toBeTruthy();
+    expect(await focusInsideDialog(page)).toBeTruthy();
   }
 
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
+});
+
+test("command palette opens from the keyboard, keeps focus inside, goes to a page and closes with Escape", async ({ page }) => {
+  await installConsoleApiMocks(page);
+  await page.goto("/nodes", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("h1").first()).toBeVisible();
+
+  await page.keyboard.press("ControlOrMeta+k");
+  const palette = page.getByRole("dialog", { name: "Search" });
+  await expect(palette).toBeVisible();
+  const input = palette.getByRole("combobox");
+  await expect(input).toBeFocused();
+  for (let i = 0; i < 3; i++) {
+    await page.keyboard.press("Tab");
+    expect(await focusInsideDialog(page)).toBeTruthy();
+  }
+
+  await input.fill("logs");
+  await expect(palette.getByRole("option", { name: /^Logs/ }).first()).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(palette).toHaveCount(0);
+  await expect(page).toHaveURL(/\/logs$/);
+
+  await page.keyboard.press("ControlOrMeta+k");
+  await expect(page.getByRole("dialog", { name: "Search" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Search" })).toHaveCount(0);
 });
 
 test("core page headings keep accessible contrast across themes", async ({ page }) => {
@@ -158,7 +185,7 @@ test("keyboard navigation reaches sidebar links and add-device flow", async ({ p
       const active = document.activeElement as HTMLElement | null;
       return active?.textContent?.trim() ?? "";
     });
-    return name.includes("Add Device");
+    return ADD_DEVICE.test(name);
   }, 60);
   expect(reachedAddDevice).toBeTruthy();
 

@@ -113,8 +113,8 @@ describe("controls only the owner may use", () => {
     });
 
     // Row actions: only the admin's own row and the operator's row.
-    const rowNames = [...container.querySelectorAll<HTMLButtonElement>('button[aria-label="User actions"]')]
-      .map((button) => button.closest("li")?.textContent ?? "");
+    const rowNames = [...container.querySelectorAll<HTMLButtonElement>('button[aria-label="list.actionsFor"]')]
+      .map((button) => button.closest('[role="row"]')?.textContent ?? "");
     expect(rowNames).toHaveLength(2);
     expect(rowNames.some((text) => text.includes("alice"))).toBe(true);
     expect(rowNames.some((text) => text.includes("oscar"))).toBe(true);
@@ -126,8 +126,9 @@ describe("controls only the owner may use", () => {
     await act(async () => {
       addUser.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
-    const dialog = container.querySelector<HTMLElement>('[aria-labelledby="create-user-dialog-title"]');
-    const roles = [...(dialog?.querySelectorAll<HTMLOptionElement>("option") ?? [])].map((option) => option.value);
+    // The dialog renders in a portal on document.body.
+    const roleSelect = document.body.querySelector<HTMLSelectElement>('[role="dialog"] select[name="role"]');
+    const roles = [...(roleSelect?.querySelectorAll<HTMLOptionElement>("option") ?? [])].map((option) => option.value);
     expect(roles).toEqual(["operator", "viewer"]);
 
     // API keys: edit and revoke on the admin's own admin key and on the

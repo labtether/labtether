@@ -4,6 +4,7 @@ import { useDeferredValue, useMemo, useState, useCallback, useEffect, useRef } f
 import { useTranslations } from "next-intl";
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { MoreHorizontal, Plus, Search, Server } from "lucide-react";
+import { Link } from "../../../../i18n/navigation";
 import { PageHeader } from "../../../components/PageHeader";
 import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
@@ -33,6 +34,7 @@ const GROUPING_KEY = "labtether.devices.grouping";
 
 export default function NodesPage() {
   const t = useTranslations('devices');
+  const tNav = useTranslations('nav');
   const status = useFastStatus();
   const slowStatus = useSlowStatus();
   const { fetchStatus } = useStatusControls();
@@ -199,6 +201,9 @@ export default function NodesPage() {
                 </Menu.Trigger>
                 <Menu.Portal>
                   <Menu.Content className="lt-menu" align="end" sideOffset={6}>
+                    <Menu.Item className="lt-menu-item" asChild>
+                      <Link href="/updates">{tNav('updates')}</Link>
+                    </Menu.Item>
                     <Menu.Item className="lt-menu-item" onSelect={() => setArranging(!arranging)}>
                       {t(arranging ? 'list.backToList' : 'list.arrangeGroups')}
                     </Menu.Item>

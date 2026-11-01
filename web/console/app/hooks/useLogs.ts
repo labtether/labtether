@@ -6,6 +6,10 @@ import { telemetryWindows } from "../console/models";
 import type { LogEvent, LogLevel, TelemetryWindow } from "../console/models";
 import { ensureArray, ensureRecord, ensureString } from "../lib/responseGuards";
 import { reportRoutePerfMetric } from "./useRoutePerfTelemetry";
+import { useDocumentVisibility } from "./useDocumentVisibility";
+
+/** While Live is on, the query runs again this often (only while the tab is visible). */
+const LIVE_REFRESH_MS = 5_000;
 
 export function useLogs() {
   const status = useSlowStatus();
@@ -17,6 +21,10 @@ export function useLogs() {
 
   const [logWindow, setLogWindow] = useState<TelemetryWindow>(defaultLogWindow);
   const [selectedLogSource, setSelectedLogSource] = useState<string>("all");
+  const [selectedAsset, setSelectedAsset] = useState<string>("all");
+  const [live, setLive] = useState(false);
+  const [reloadTick, setReloadTick] = useState(0);
+  const visible = useDocumentVisibility();
   const [logLevel, setLogLevel] = useState<LogLevel>("all");
   const [includeHeartbeats, setIncludeHeartbeats] = useState(false);
   const [logQuery, setLogQuery] = useState<string>("");
@@ -24,6 +32,7 @@ export function useLogs() {
   const [logEvents, setLogEvents] = useState<LogEvent[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsError, setLogsError] = useState<string | null>(null);
+  const [logsLoaded, setLogsLoaded] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
   // Hydrate default window from settings
@@ -47,6 +56,12 @@ export function useLogs() {
   }, [logQuery]);
 
   useEffect(() => {
+    if (!live || !visible) return;
+    const timer = window.setInterval(() => setReloadTick((tick) => tick + 1), LIVE_REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, [live, visible]);
+
+  useEffect(() => {
     const controller = new AbortController();
     const load = async () => {
       setLogsLoading(true);
@@ -57,6 +72,9 @@ export function useLogs() {
       params.set("limit", String(logQueryLimit));
       if (selectedLogSource !== "all") {
         params.set("source", selectedLogSource);
+      }
+      if (selectedAsset !== "all") {
+        params.set("asset_id", selectedAsset);
       }
       if (logLevel !== "all") {
         params.set("level", logLevel);
@@ -142,6 +160,7 @@ export function useLogs() {
       } finally {
         if (!controller.signal.aborted) {
           setLogsLoading(false);
+          setLogsLoaded(true);
         }
       }
     };
@@ -150,7 +169,7 @@ export function useLogs() {
     return () => {
       controller.abort();
     };
-  }, [logWindow, selectedLogSource, logLevel, includeHeartbeats, debouncedLogQuery, logQueryLimit, selectedGroupFilter]);
+  }, [logWindow, selectedLogSource, selectedAsset, logLevel, includeHeartbeats, debouncedLogQuery, logQueryLimit, selectedGroupFilter, reloadTick]);
 
   return {
     logSources,
@@ -160,6 +179,11 @@ export function useLogs() {
     telemetryWindows,
     selectedLogSource,
     setSelectedLogSource,
+    selectedAsset,
+    setSelectedAsset,
+    live,
+    setLive,
+    reload: () => setReloadTick((tick) => tick + 1),
     logLevel,
     setLogLevel,
     includeHeartbeats,
@@ -168,6 +192,7 @@ export function useLogs() {
     setLogQuery,
     logEvents,
     logsLoading,
+    logsLoaded,
     logsError
   };
 }

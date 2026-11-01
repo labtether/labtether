@@ -138,12 +138,12 @@ export function URLGroupingCard() {
   });
 
   return (
-    <div className="rounded-xl border border-[var(--panel-border)] bg-[var(--panel-glass)]">
+    <div className="sv-sheet flush">
       {/* Header */}
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="flex items-center justify-between gap-3 w-full px-4 py-3 cursor-pointer"
+        className="flex items-center justify-between gap-3 w-full px-5 py-4 cursor-pointer"
       >
         <div className="flex items-center gap-2 min-w-0">
           {expanded ? (
@@ -163,7 +163,7 @@ export function URLGroupingCard() {
       </button>
 
       {expanded && (
-        <div className="px-4 pb-4 space-y-4 border-t border-[var(--line)]">
+        <div className="sv-sheet-b">
           {loading && (
             <div className="text-[12px] text-[var(--muted)] pt-3">
               {t("config.grouping.loadingGrouping")}
@@ -173,7 +173,7 @@ export function URLGroupingCard() {
           {!loading && (
             <>
               {/* Quick presets */}
-              <div className="rounded-lg border border-[var(--line)] bg-[var(--surface)]/60 p-3 mt-3 space-y-2">
+              <div className="sv-well sv-mt">
                 <p className="text-[12px] font-medium text-[var(--text)]">
                   {t("config.grouping.quickPresets")}
                 </p>
@@ -183,20 +183,20 @@ export function URLGroupingCard() {
                     value={presetDomain}
                     onChange={(e) => setPresetDomain(e.target.value)}
                     placeholder={t("config.grouping.domainPlaceholder")}
-                    className="h-8 px-3 rounded border border-[var(--line)] bg-[var(--surface)] text-[12px] text-[var(--text)] focus:outline-none focus:border-[var(--accent)]"
+                    className="sv-input sv-auto"
                   />
                   <div className="flex items-center gap-2 flex-wrap">
                     <button
                       type="button"
                       onClick={addMiddleLabelPreset}
-                      className="h-7 px-2.5 rounded border border-[var(--line)] text-xs font-medium text-[var(--text)] hover:bg-[var(--hover)] transition-colors cursor-pointer"
+                      className="sv-chip sm"
                     >
                       {t("config.grouping.presets.ignoreMiddleLabel")}
                     </button>
                     <button
                       type="button"
                       onClick={applyBalancedPreset}
-                      className="h-7 px-2.5 rounded border border-[var(--line)] text-xs font-medium text-[var(--text)] hover:bg-[var(--hover)] transition-colors cursor-pointer"
+                      className="sv-chip sm"
                     >
                       {t("config.grouping.presets.balanced")}
                     </button>
@@ -227,7 +227,7 @@ export function URLGroupingCard() {
                       mode: normalizeMode(e.target.value),
                     }))
                   }
-                  className="w-full h-8 px-3 rounded border border-[var(--line)] bg-[var(--surface)] text-[13px] text-[var(--text)] focus:outline-none focus:border-[var(--accent)] cursor-pointer"
+                  className="sv-input"
                 >
                   {groupingModeValues.map((v) => (
                     <option key={v} value={v}>
@@ -260,7 +260,7 @@ export function URLGroupingCard() {
                       confidenceThreshold: e.target.value,
                     }))
                   }
-                  className="w-full h-8 px-3 rounded border border-[var(--line)] bg-[var(--surface)] text-[13px] text-[var(--text)] focus:outline-none focus:border-[var(--accent)]"
+                  className="sv-input"
                 />
               </div>
 
@@ -281,7 +281,7 @@ export function URLGroupingCard() {
                     }
                     rows={7}
                     placeholder={t("config.grouping.aliasRulesPlaceholder")}
-                    className="w-full px-3 py-2 rounded border border-[var(--line)] bg-[var(--surface)] text-[12px] text-[var(--text)] font-mono focus:outline-none focus:border-[var(--accent)] resize-y"
+                    className="sv-input sv-ta mono"
                   />
                   <p className="text-xs text-[var(--muted)]">
                     {t("config.grouping.aliasRulesDesc")}
@@ -306,7 +306,7 @@ export function URLGroupingCard() {
                     }
                     rows={7}
                     placeholder={t("config.grouping.urlPairPlaceholder")}
-                    className="w-full px-3 py-2 rounded border border-[var(--line)] bg-[var(--surface)] text-[12px] text-[var(--text)] font-mono focus:outline-none focus:border-[var(--accent)] resize-y"
+                    className="sv-input sv-ta mono"
                   />
                   <p className="text-xs text-[var(--muted)]">
                     {t("config.grouping.neverGroupDesc")}
@@ -316,7 +316,7 @@ export function URLGroupingCard() {
             </>
           )}
 
-          {error && <p className="text-[12px] text-[var(--bad)]">{error}</p>}
+          {error && <p className="sv-err">{error}</p>}
           {message && (
             <p className="text-[12px] text-[var(--muted)]">{message}</p>
           )}
@@ -328,7 +328,7 @@ export function URLGroupingCard() {
                 type="button"
                 onClick={() => void save()}
                 disabled={saving}
-                className="h-7 px-4 rounded bg-[var(--accent)] text-[var(--accent-contrast)] text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
+                className="sv-chip sm"
               >
                 {saving ? t("config.grouping.saving") : t("config.grouping.save")}
               </button>

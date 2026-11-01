@@ -1,6 +1,7 @@
 "use client";
 
-import { Badge } from "../../../../components/ui/Badge";
+import { useTranslations } from "next-intl";
+import type { CSSProperties, ReactNode } from "react";
 import { AgentSettingInputControl } from "./AgentSettingInputControl";
 import type { AgentSettingEntry, AgentSettingsHistoryEvent } from "./agentSettingsModel";
 
@@ -9,124 +10,141 @@ type AgentSettingsEditorSectionProps = {
   generalSettings: AgentSettingEntry[];
   draft: Record<string, string>;
   settingKeyFilesRootMode: string;
-  settingControlSourceStatus: (source: string) => string;
   onUpdateDraftValue: (key: string, value: string) => void;
   history: AgentSettingsHistoryEvent[];
   formatTime: (value?: string) => string;
+  /** Save and Reset for every setting below, shown in the section's title row. */
+  saveBar?: ReactNode;
 };
 
+const HISTORY_COLS = { "--cols": "minmax(0, 1fr) minmax(0, 160px) minmax(0, 160px)" } as CSSProperties;
+
+function SettingRow({
+  setting,
+  value,
+  filesRootMode,
+  onChange,
+}: {
+  setting: AgentSettingEntry;
+  value: string;
+  filesRootMode: string;
+  onChange: (key: string, value: string) => void;
+}) {
+  const t = useTranslations("devices.settingsTab.settings");
+  const source = setting.source === "hub-override" ? "override" : setting.source === "hub-default" ? "hub" : "device";
+  const values = setting.sensitive
+    ? []
+    : [
+        [t("values.default"), setting.default_value],
+        [t("values.global"), setting.global_value],
+        [t("values.override"), setting.override_value],
+        [t("values.reported"), setting.state_value],
+      ].filter(([, v]) => v);
+  return (
+    <div className="dst-set">
+      <div className="dst-set-txt">
+        <span className="dv-nm">{setting.label}</span>
+        {setting.description ? <p className="dv-hint">{setting.description}</p> : null}
+        {setting.key === filesRootMode && value === "full" ? <p className="dst-warn dst-line">{t("filesFull")}</p> : null}
+        <p className="dst-meta">
+          <code className="dv-mono">{setting.key}</code>
+          <span>{t(`source.${source}`)}</span>
+          {setting.restart_required ? <span>{t("restarts")}</span> : null}
+          {setting.drift ? <span className="dst-warn">{t("drift")}</span> : null}
+          {setting.sensitive && setting.configured ? <span>{t("secretSaved")}</span> : null}
+        </p>
+        {values.length ? (
+          <p className="dst-meta">
+            {values.map(([label, v]) => <span key={label}>{label} <span className="dst-val">{v}</span></span>)}
+          </p>
+        ) : null}
+      </div>
+      <div className="dst-set-ctl">
+        <AgentSettingInputControl
+          setting={setting}
+          currentValue={value}
+          editable={setting.hub_managed && !setting.local_only}
+          onChange={onChange}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** The agent's settings (general, then service discovery) and the last applies the agent reported. */
 export function AgentSettingsEditorSection({
   serviceDiscoverySettings,
   generalSettings,
   draft,
   settingKeyFilesRootMode,
-  settingControlSourceStatus,
   onUpdateDraftValue,
   history,
   formatTime,
+  saveBar,
 }: AgentSettingsEditorSectionProps) {
+  const t = useTranslations("devices.settingsTab.settings");
+  const row = (setting: AgentSettingEntry) => (
+    <SettingRow
+      key={setting.key}
+      setting={setting}
+      value={draft[setting.key] ?? setting.effective_value}
+      filesRootMode={settingKeyFilesRootMode}
+      onChange={onUpdateDraftValue}
+    />
+  );
+
   return (
     <>
-      {serviceDiscoverySettings.length > 0 ? (
-        <div className="mb-4 rounded-lg border border-[var(--line)] bg-[var(--surface)] p-3">
-          <p className="text-sm font-medium text-[var(--text)]">Service Discovery Policy</p>
-          <p className="mt-1 text-xs text-[var(--muted)]">
-            Per-node discovery overrides. Apply to 1-2 canary nodes first, verify Services output, then scale rollout.
-          </p>
-          <p className="mt-1 text-xs text-[var(--muted)]">
-            Keep LAN scan disabled unless required. When enabled, use narrow private CIDRs and minimal port lists.
-          </p>
-          <div className="mt-3 divide-y divide-[var(--line)]">
-            {serviceDiscoverySettings.map((setting) => {
-              const currentValue = draft[setting.key] ?? setting.effective_value;
-              const editable = setting.hub_managed && !setting.local_only;
-              return (
-                <div key={setting.key} className="grid gap-2 py-2 md:grid-cols-[minmax(0,1fr)_260px] md:items-start">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-[var(--text)]">{setting.label}</p>
-                    <p className="text-xs text-[var(--muted)]">{setting.description}</p>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
-                      <span>Key: {setting.key}</span>
-                      <Badge status={settingControlSourceStatus(setting.source)} size="sm" />
-                      {setting.restart_required ? <span>Restart required</span> : null}
-                    </div>
-                  </div>
-                  <div className="w-full">
-                    <AgentSettingInputControl
-                      setting={setting}
-                      currentValue={currentValue}
-                      editable={editable}
-                      onChange={onUpdateDraftValue}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+      <section className="dv-sec" aria-labelledby="dst-set-t">
+        <div className="dv-sh">
+          <h2 id="dst-set-t">{t("title")}</h2>
+          {saveBar ? <div className="dst-sh-acts">{saveBar}</div> : null}
         </div>
-      ) : null}
-
-      <div className="divide-y divide-[var(--line)]">
-        {generalSettings.map((setting) => {
-          const currentValue = draft[setting.key] ?? setting.effective_value;
-          const editable = setting.hub_managed && !setting.local_only;
-          return (
-            <div key={setting.key} className="grid gap-2 py-3 md:grid-cols-[minmax(0,1fr)_280px] md:items-start">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-[var(--text)]">{setting.label}</p>
-                <p className="text-xs text-[var(--muted)]">{setting.description}</p>
-                {setting.key === settingKeyFilesRootMode && currentValue === "full" ? (
-                  <p className="mt-1 text-xs text-[var(--warn)]">
-                    Full mode allows browsing the entire filesystem on this agent. Use only on trusted hosts.
-                  </p>
-                ) : null}
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
-                  <span>Key: {setting.key}</span>
-                  <Badge status={settingControlSourceStatus(setting.source)} size="sm" />
-                  {setting.restart_required ? <span>Restart required</span> : null}
-                  {setting.drift ? <span className="text-[var(--warn)]">Runtime drift detected</span> : null}
-				  {setting.sensitive && setting.configured ? <span>Secret configured</span> : null}
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-[var(--muted)]">
-				  {!setting.sensitive ? <span>Default: {setting.default_value}</span> : null}
-				  {!setting.sensitive && setting.global_value ? <span>Global: {setting.global_value}</span> : null}
-				  {!setting.sensitive && setting.override_value ? <span>Override: {setting.override_value}</span> : null}
-				  {!setting.sensitive && setting.state_value ? <span>Reported: {setting.state_value}</span> : null}
-                </div>
-              </div>
-              <div className="w-full">
-                <AgentSettingInputControl
-                  setting={setting}
-                  currentValue={currentValue}
-                  editable={editable}
-                  onChange={onUpdateDraftValue}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="mt-4 rounded-lg border border-[var(--line)] bg-[var(--surface)] p-3">
-        <p className="mb-2 text-xs font-medium text-[var(--text)]">Recent Apply History</p>
-        {history.length === 0 ? (
-          <p className="text-xs text-[var(--muted)]">No apply history reported yet.</p>
+        {generalSettings.length > 0 ? (
+          <div className="dv-sheet dst-sets">{generalSettings.map(row)}</div>
         ) : (
-          <ul className="space-y-2 text-xs text-[var(--muted)]">
-            {history.slice(0, 5).map((event, index) => (
-              <li key={`${event.revision || "rev"}-${index}`} className="rounded-md border border-[var(--line)] p-2">
-                <p>
-                  Status: <span className="text-[var(--text)]">{event.status || "unknown"}</span>
-                </p>
-                <p>Updated: {formatTime(event.updated_at)}</p>
-                <p>Applied: {formatTime(event.applied_at)}</p>
-                {event.revision ? <p>Revision: {event.revision}</p> : null}
-                {event.last_error ? <p className="text-[var(--bad)]">Error: {event.last_error}</p> : null}
-              </li>
-            ))}
-          </ul>
+          <div className="dv-sheet"><p className="dv-hint">{t("none")}</p></div>
         )}
-      </div>
+        {serviceDiscoverySettings.length > 0 ? (
+          <>
+            <h3 className="dst-sub" id="dst-disc-t">{t("discovery")}</h3>
+            <div className="dv-sheet dst-sets" aria-labelledby="dst-disc-t">
+              <p className="dv-hint">{t("discoveryHint")}</p>
+              {serviceDiscoverySettings.map(row)}
+            </div>
+          </>
+        ) : null}
+      </section>
+
+      <section className="dv-sec" aria-labelledby="dst-hist-t">
+        <div className="dv-sh"><h2 id="dst-hist-t">{t("history")}</h2></div>
+        <div className="dv-list" style={HISTORY_COLS}>
+          {history.length === 0 ? (
+            <div className="dv-empty"><b>{t("historyEmpty")}</b></div>
+          ) : (
+            <>
+              <div className="dv-cols">
+                <span>{t("historyCols.status")}</span>
+                <span>{t("historyCols.changed")}</span>
+                <span>{t("historyCols.applied")}</span>
+              </div>
+              {history.slice(0, 5).map((event, index) => (
+                <div key={`${event.revision || "rev"}-${index}`} className={`dv-row${event.last_error ? " two" : ""}`}>
+                  <div className="dst-hist-main">
+                    <span className="dv-ln">
+                      <span className={event.last_error ? "dst-bad" : "dv-nm"}>{event.status || t("historyUnknown")}</span>
+                      {event.revision ? <span className="dv-grey mono">{event.revision}</span> : null}
+                    </span>
+                    {event.last_error ? <span className="dst-bad dst-small">{event.last_error}</span> : null}
+                  </div>
+                  <span className="dv-txt">{formatTime(event.updated_at)}</span>
+                  <span className="dv-txt">{formatTime(event.applied_at)}</span>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      </section>
     </>
   );
 }

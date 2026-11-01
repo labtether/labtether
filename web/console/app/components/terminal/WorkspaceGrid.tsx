@@ -40,25 +40,16 @@ interface WorkspaceGridProps {
   paneCount: number;
   panelSizes: PanelSizes;
   onPanelResize: (sizes: PanelSizes) => void;
+  /** Narrow screens: the panes one under another, without resizing. */
+  stacked?: boolean;
   children: ReactNode[];
 }
 
+/** The gap between two panes; dragging it resizes them. A thin line shows on hover and while dragging. */
 function ResizeHandle({ direction }: { direction: "horizontal" | "vertical" }) {
   return (
-    <Separator
-      className={`group relative flex items-center justify-center ${
-        direction === "vertical"
-          ? "w-[4px] cursor-col-resize"
-          : "h-[4px] cursor-row-resize"
-      }`}
-    >
-      <div
-        className={`rounded-full bg-[var(--border)] transition-colors group-hover:bg-[var(--accent)] group-data-[state=dragging]:bg-[var(--accent)] ${
-          direction === "vertical"
-            ? "h-8 w-[2px]"
-            : "h-[2px] w-8"
-        }`}
-      />
+    <Separator className={`tm-sep ${direction === "vertical" ? "v" : "h"}`}>
+      <i aria-hidden="true" />
     </Separator>
   );
 }
@@ -99,7 +90,7 @@ function gridSizes(panelSizes: PanelSizes): {
 
 function SingleLayout({ children }: { children: ReactNode[] }) {
   return (
-    <div style={{ display: "flex", flex: 1, minHeight: 0, padding: 2 }}>
+    <div style={{ display: "flex", flex: 1, minHeight: 0, padding: 0 }}>
       <PaneWrapper>{children[0]}</PaneWrapper>
     </div>
   );
@@ -122,7 +113,7 @@ function ColumnsLayout({
     [onPanelResize],
   );
   return (
-    <Group orientation="horizontal" defaultLayout={arrayToLayout(sizes, COL_IDS)} onLayoutChanged={handleResize} style={{ flex: 1, minHeight: 0, padding: 2 }}>
+    <Group orientation="horizontal" defaultLayout={arrayToLayout(sizes, COL_IDS)} onLayoutChanged={handleResize} style={{ flex: 1, minHeight: 0, padding: 0 }}>
       <Panel id="left" minSize={MIN_PANEL_SIZE}>
         <PaneWrapper>{children[0]}</PaneWrapper>
       </Panel>
@@ -151,7 +142,7 @@ function RowsLayout({
     [onPanelResize],
   );
   return (
-    <Group orientation="vertical" defaultLayout={arrayToLayout(sizes, ROW_IDS)} onLayoutChanged={handleResize} style={{ flex: 1, minHeight: 0, padding: 2 }}>
+    <Group orientation="vertical" defaultLayout={arrayToLayout(sizes, ROW_IDS)} onLayoutChanged={handleResize} style={{ flex: 1, minHeight: 0, padding: 0 }}>
       <Panel id="top" minSize={MIN_PANEL_SIZE}>
         <PaneWrapper>{children[0]}</PaneWrapper>
       </Panel>
@@ -178,7 +169,7 @@ function MainSideLayout({
     [onPanelResize],
   );
   return (
-    <Group orientation="horizontal" defaultLayout={arrayToLayout(sizes, COL_IDS)} onLayoutChanged={handleResize} style={{ flex: 1, minHeight: 0, padding: 2 }}>
+    <Group orientation="horizontal" defaultLayout={arrayToLayout(sizes, COL_IDS)} onLayoutChanged={handleResize} style={{ flex: 1, minHeight: 0, padding: 0 }}>
       <Panel id="left" minSize={MIN_PANEL_SIZE}>
         <PaneWrapper>{children[0]}</PaneWrapper>
       </Panel>
@@ -205,7 +196,7 @@ function MainBottomLayout({
     [onPanelResize],
   );
   return (
-    <Group orientation="vertical" defaultLayout={arrayToLayout(sizes, ROW_IDS)} onLayoutChanged={handleResize} style={{ flex: 1, minHeight: 0, padding: 2 }}>
+    <Group orientation="vertical" defaultLayout={arrayToLayout(sizes, ROW_IDS)} onLayoutChanged={handleResize} style={{ flex: 1, minHeight: 0, padding: 0 }}>
       <Panel id="top" minSize={MIN_PANEL_SIZE}>
         <PaneWrapper>{children[0]}</PaneWrapper>
       </Panel>
@@ -257,7 +248,7 @@ function GridLayout({
   );
 
   return (
-    <Group orientation="vertical" defaultLayout={arrayToLayout(gs.outer, GRID_OUTER_IDS)} onLayoutChanged={handleOuterResize} style={{ flex: 1, minHeight: 0, padding: 2 }}>
+    <Group orientation="vertical" defaultLayout={arrayToLayout(gs.outer, GRID_OUTER_IDS)} onLayoutChanged={handleOuterResize} style={{ flex: 1, minHeight: 0, padding: 0 }}>
       <Panel id="row-top" minSize={MIN_PANEL_SIZE}>
         <Group orientation="horizontal" defaultLayout={arrayToLayout(gs.top, GRID_TOP_IDS)} onLayoutChanged={handleTopResize}>
           <Panel id="tl" minSize={MIN_PANEL_SIZE}>
@@ -290,6 +281,7 @@ export default function WorkspaceGrid({
   paneCount,
   panelSizes,
   onPanelResize,
+  stacked = false,
   children,
 }: WorkspaceGridProps) {
   const def = layouts[layout] ?? layouts.single;
@@ -297,6 +289,16 @@ export default function WorkspaceGrid({
   const visibleChildren = Array.isArray(children)
     ? children.slice(0, visibleCount)
     : [children];
+
+  if (stacked && visibleChildren.length > 1) {
+    return (
+      <div className="tm-stack">
+        {visibleChildren.map((child, index) => (
+          <div key={index} className="tm-stack-cell">{child}</div>
+        ))}
+      </div>
+    );
+  }
 
   switch (layout) {
     case "columns":

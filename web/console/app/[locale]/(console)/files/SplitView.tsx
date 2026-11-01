@@ -1,520 +1,216 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  ChevronUp,
-  FolderOpen,
-  Loader2,
-  Server,
-  FolderKey,
-  HardDrive,
-  Globe,
-  Columns2,
-} from "lucide-react";
-import type { FileSource } from "./useFileTabsState";
-import {
-  unifiedListFiles,
-  type UnifiedFileEntry,
-} from "./fileOpsClient";
-import { fileIconComponent } from "./filesPageUtils";
-import { formatSize } from "./fileWorkspaceUtils";
+import * as Menu from "@radix-ui/react-dropdown-menu";
+import { ChevronDown, Copy, X } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import type { FileEntry } from "./fileOpsClient";
+import { unifiedListFiles, type UnifiedFileEntry } from "./fileOpsClient";
 import { parentPath } from "./fileWorkspaceUtils";
-import { useFileConnections } from "./useFileConnections";
-import { useFastStatus } from "../../../contexts/StatusContext";
-import { useConnectedAgents } from "../../../hooks/useConnectedAgents";
+import { clickSelection } from "./filesListModel";
+import { FileListView } from "./FileListView";
+import { ToolMenu, type MenuItemSpec } from "./FileMenus";
+import { FilesPathBar } from "./FilesPathBar";
+import type { SplitChoice } from "./FilesToolbar";
+import type { FileSource } from "./useFileTabsState";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+// Two panes side by side (stacked on a phone): the tab's source on the left, a second source (or the same one in
+// another folder) on the right. Picked items copy into the other pane's open folder with "Copy to …" or by dragging
+// them across; every copy runs as a transfer.
+
+const DRAG_TYPE = "application/x-labtether-files";
 
 interface SplitViewProps {
   leftSource: FileSource;
-  leftProtocol?: string;
-  rightSource: FileSource | null;
-  rightProtocol?: string;
-  onTransfer: (
-    sourceFiles: string[],
-    sourceSource: FileSource,
-    destSource: FileSource,
-    destPath: string,
-  ) => void;
-  onSelectRightSource: () => void;
-  onSetSplitTarget?: (connectionId: string, protocol: string) => void;
+  leftLabel: string;
+  rightSource: FileSource;
+  rightLabel: string;
+  onTransfer: (sourceFiles: string[], sourceSource: FileSource, destSource: FileSource, destPath: string) => void;
+  choices: SplitChoice[];
+  onClose: () => void;
 }
 
-// ---------------------------------------------------------------------------
-// Protocol badge metadata
-// ---------------------------------------------------------------------------
-
-type ProtocolBadgeMeta = {
-  label: string;
-  icon: typeof Server;
-  className: string;
-};
-
-const PROTOCOL_BADGES: Record<string, ProtocolBadgeMeta> = {
-  agent: {
-    label: "Agent",
-    icon: Server,
-    className: "bg-green-500/10 text-green-400 border-green-500/20",
-  },
-  sftp: {
-    label: "SFTP",
-    icon: FolderKey,
-    className: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-  },
-  smb: {
-    label: "SMB",
-    icon: HardDrive,
-    className: "bg-orange-500/10 text-orange-400 border-orange-500/20",
-  },
-  ftp: {
-    label: "FTP",
-    icon: Server,
-    className: "bg-teal-500/10 text-teal-400 border-teal-500/20",
-  },
-  webdav: {
-    label: "WebDAV",
-    icon: Globe,
-    className: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
-  },
-};
-
-function getProtocolBadge(source: FileSource, protocol?: string): ProtocolBadgeMeta {
-  if (source.type === "agent") return PROTOCOL_BADGES.agent;
-  return PROTOCOL_BADGES[protocol ?? ""] ?? PROTOCOL_BADGES.sftp;
-}
-
-function ProtocolBadge({ source, protocol }: { source: FileSource; protocol?: string }) {
-  const badge = getProtocolBadge(source, protocol);
-  const Icon = badge.icon;
-  return (
-    <span
-      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border ${badge.className}`}
-    >
-      <Icon className="w-3 h-3" />
-      {badge.label}
-    </span>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// SplitPane -- lightweight single-pane file browser
-// ---------------------------------------------------------------------------
-
-interface SplitPaneProps {
-  source: FileSource;
-  protocol?: string;
+type PaneProps = {
   side: "left" | "right";
-  dragOverlay: boolean;
-  onDrop: (files: string[], destPath: string) => void;
-  onDragStart: (files: string[], source: FileSource) => void;
-}
+  source: FileSource;
+  label: string;
+  otherLabel: string;
+  otherPath: string;
+  onPath: (path: string) => void;
+  onCopy: (paths: string[]) => void;
+  head?: ReactNode;
+};
 
-function SplitPane({ source, protocol, side, dragOverlay, onDrop, onDragStart }: SplitPaneProps) {
-  const [currentPath, setCurrentPath] = useState("/");
+const toEntry = (e: UnifiedFileEntry): FileEntry => ({ name: e.name, is_dir: e.is_dir, size: e.size, mod_time: e.mod_time ?? "", mode: e.mode ?? "" });
+
+function SplitPane({ side, source, label, otherLabel, otherPath, onPath, onCopy, head }: PaneProps) {
+  const t = useTranslations("files");
+  const [path, setPath] = useState(source.type === "agent" ? "~" : "/");
   const [entries, setEntries] = useState<UnifiedFileEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const fetchIdRef = useRef(0);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [dropping, setDropping] = useState(false);
+  const anchor = useRef<string | null>(null);
+  const fetchId = useRef(0);
 
-  // Fetch file listing
-  const fetchEntries = useCallback(
-    async (path: string) => {
-      const id = ++fetchIdRef.current;
-      setLoading(true);
-      setError(null);
-      setSelected(new Set());
-      try {
-        const result = await unifiedListFiles(source, path);
-        if (id !== fetchIdRef.current) return; // stale response
-        const resolvedPath = result.path ?? path;
-        setCurrentPath(resolvedPath);
-        const sorted = [...result.entries].sort((a, b) => {
-          if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;
-          return a.name.localeCompare(b.name);
-        });
-        setEntries(sorted);
-      } catch (err) {
-        if (id !== fetchIdRef.current) return;
-        setError(err instanceof Error ? err.message : "Failed to list files");
-        setEntries([]);
-      } finally {
-        if (id === fetchIdRef.current) setLoading(false);
-      }
-    },
-    [source],
-  );
-
-  // Initial load
-  useEffect(() => {
-    void fetchEntries(source.type === "agent" ? "~" : "/");
-  }, [fetchEntries, source]);
-
-  const navigateTo = useCallback(
-    (path: string) => {
-      void fetchEntries(path);
-    },
-    [fetchEntries],
-  );
-
-  const navigateUp = useCallback(() => {
-    const parent = parentPath(currentPath);
-    void fetchEntries(parent);
-  }, [currentPath, fetchEntries]);
-
-  const handleEntryClick = useCallback(
-    (entry: UnifiedFileEntry) => {
-      if (entry.is_dir) {
-        navigateTo(entry.path);
-      } else {
-        // Toggle selection for files
-        setSelected((prev) => {
-          const next = new Set(prev);
-          if (next.has(entry.path)) {
-            next.delete(entry.path);
-          } else {
-            next.add(entry.path);
-          }
-          return next;
-        });
-      }
-    },
-    [navigateTo],
-  );
-
-  const handleEntryDoubleClick = useCallback(
-    (entry: UnifiedFileEntry) => {
-      if (entry.is_dir) {
-        navigateTo(entry.path);
-      }
-    },
-    [navigateTo],
-  );
-
-  // ---------- Drag: start dragging selected files from this pane ----------
-  const handleDragStart = useCallback(
-    (event: React.DragEvent, entry: UnifiedFileEntry) => {
-      // If the dragged item is not in the selection, drag just this item
-      let dragPaths: string[];
-      if (selected.has(entry.path)) {
-        dragPaths = Array.from(selected);
-      } else {
-        dragPaths = [entry.path];
-      }
-
-      event.dataTransfer.setData(
-        "application/x-labtether-files",
-        JSON.stringify({ paths: dragPaths, side }),
-      );
-      event.dataTransfer.effectAllowed = "copy";
-      onDragStart(dragPaths, source);
-    },
-    [selected, side, source, onDragStart],
-  );
-
-  // ---------- Drop: accept files from the other pane ----------
-  const handleDragOver = useCallback((event: React.DragEvent) => {
-    if (event.dataTransfer.types.includes("application/x-labtether-files")) {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "copy";
+  const load = useCallback(async (next: string) => {
+    const id = ++fetchId.current;
+    setLoading(true);
+    setError(null);
+    setPicked(new Set());
+    try {
+      const result = await unifiedListFiles(source, next);
+      if (id !== fetchId.current) return;
+      setPath(result.path ?? next);
+      setEntries([...result.entries].sort((a, b) => (a.is_dir !== b.is_dir ? (a.is_dir ? -1 : 1) : a.name.localeCompare(b.name))));
+    } catch (err) {
+      if (id !== fetchId.current) return;
+      setError(err instanceof Error ? err.message : String(err));
+      setEntries([]);
+    } finally {
+      if (id === fetchId.current) setLoading(false);
     }
-  }, []);
+  }, [source]);
 
-  const handleDrop = useCallback(
-    (event: React.DragEvent) => {
-      event.preventDefault();
-      try {
-        const raw = event.dataTransfer.getData("application/x-labtether-files");
-        if (!raw) return;
-        const data = JSON.parse(raw) as { paths: string[]; side: string };
-        // Only accept drops from the opposite pane
-        if (data.side === side) return;
-        onDrop(data.paths, currentPath);
-      } catch {
-        // Ignore malformed drag data
-      }
-    },
-    [currentPath, onDrop, side],
-  );
-
-  return (
-    <div
-      className="flex flex-col flex-1 min-w-0 min-h-0 relative"
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
-    >
-      {/* Pane header */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--line)] bg-[var(--panel)] flex-shrink-0">
-        <ProtocolBadge source={source} protocol={protocol} />
-        <button
-          className="p-1 rounded text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--hover)] transition-colors cursor-pointer bg-transparent border-none flex-shrink-0"
-          onClick={navigateUp}
-          title="Go up"
-        >
-          <ChevronUp className="w-3.5 h-3.5" />
-        </button>
-        <span className="text-xs text-[var(--muted)] truncate flex-1 min-w-0">
-          {currentPath}
-        </span>
-      </div>
-
-      {/* File list */}
-      <div className="flex-1 overflow-y-auto">
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2
-              className="w-5 h-5 text-[var(--muted)]"
-              style={{ animation: "spin 1s linear infinite" }}
-            />
-          </div>
-        ) : error ? (
-          <div className="flex flex-col items-center justify-center gap-2 py-12 px-4 text-center">
-            <p className="text-xs text-red-400">{error}</p>
-            <button
-              className="text-xs text-[var(--accent)] hover:underline cursor-pointer bg-transparent border-none"
-              onClick={() => void fetchEntries(currentPath)}
-            >
-              Retry
-            </button>
-          </div>
-        ) : entries.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 py-12 px-4 text-center">
-            <FolderOpen className="w-8 h-8 text-[var(--muted)]" strokeWidth={1.5} />
-            <p className="text-xs text-[var(--muted)]">Empty folder</p>
-          </div>
-        ) : (
-          <div className="flex flex-col">
-            {entries.map((entry) => {
-              const Icon = fileIconComponent(entry.name, entry.is_dir);
-              const isSelected = selected.has(entry.path);
-
-              return (
-                <div
-                  key={entry.path}
-                  className={`group flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-colors duration-[var(--dur-instant)] ${
-                    isSelected
-                      ? "bg-[rgba(var(--accent-rgb),0.08)]"
-                      : "hover:bg-[var(--hover)]"
-                  }`}
-                  onClick={() => handleEntryClick(entry)}
-                  onDoubleClick={() => handleEntryDoubleClick(entry)}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, entry)}
-                >
-                  <Icon
-                    className={`w-4 h-4 flex-shrink-0 ${
-                      entry.is_dir ? "text-[var(--accent)]" : "text-[var(--muted)]"
-                    }`}
-                    strokeWidth={1.5}
-                  />
-                  <span className="text-xs text-[var(--text)] truncate flex-1 min-w-0">
-                    {entry.name}
-                  </span>
-                  <span className="text-[10px] text-[var(--muted)] tabular-nums flex-shrink-0">
-                    {entry.is_dir ? "" : formatSize(entry.size)}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Drop overlay */}
-      {dragOverlay && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[rgba(var(--accent-rgb),0.08)] border-2 border-dashed border-[var(--accent)] rounded pointer-events-none">
-          <p className="text-sm font-medium text-[var(--accent)]">Drop here to copy</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Right pane placeholder
-// ---------------------------------------------------------------------------
-
-const PROTOCOL_DOT_COLOR: Record<string, string> = {
-  agent: "bg-green-500",
-  sftp: "bg-blue-500",
-  smb: "bg-orange-500",
-  ftp: "bg-teal-500",
-  webdav: "bg-cyan-500",
-};
-
-function RightPanePicker({ onSelect }: { onSelect: (source: FileSource, protocol: string) => void }) {
-  const status = useFastStatus();
-  const { connectedAgentIds } = useConnectedAgents();
-  const { connections, loading } = useFileConnections();
-
-  const connectedAgents = useMemo(() => {
-    const allAssets = status?.assets ?? [];
-    return allAssets.filter((asset) => connectedAgentIds.has(asset.id));
-  }, [status, connectedAgentIds]);
-
-  return (
-    <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-      <div className="px-3 py-2 border-b border-[var(--line)] bg-[var(--panel)] flex-shrink-0">
-        <span className="text-xs font-medium text-[var(--muted)] uppercase tracking-wider">
-          Pick right pane
-        </span>
-      </div>
-
-      {/* Connected agents */}
-      {connectedAgents.length > 0 && (
-        <div className="px-3 pt-3 pb-1">
-          <span className="text-[10px] font-medium text-[var(--muted)] uppercase tracking-wider">Agents</span>
-        </div>
-      )}
-      {connectedAgents.map((agent) => (
-        <button
-          key={agent.id}
-          className="flex items-center gap-2 px-3 py-1.5 w-full text-left hover:bg-[var(--hover)] transition-colors cursor-pointer bg-transparent border-none"
-          onClick={() => onSelect({ type: "agent", assetId: agent.id }, "agent")}
-        >
-          <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
-          <span className="text-xs text-[var(--text)] truncate">{agent.name}</span>
-        </button>
-      ))}
-
-      {/* Saved connections */}
-      {loading ? (
-        <div className="px-3 py-4 text-xs text-[var(--muted)]">Loading...</div>
-      ) : connections.length > 0 ? (
-        <>
-          <div className="px-3 pt-3 pb-1">
-            <span className="text-[10px] font-medium text-[var(--muted)] uppercase tracking-wider">Connections</span>
-          </div>
-          {connections.map((conn) => (
-            <button
-              key={conn.id}
-              className="flex items-center gap-2 px-3 py-1.5 w-full text-left hover:bg-[var(--hover)] transition-colors cursor-pointer bg-transparent border-none"
-              onClick={() => onSelect({ type: "connection", connectionId: conn.id }, conn.protocol)}
-            >
-              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${PROTOCOL_DOT_COLOR[conn.protocol] ?? "bg-[var(--muted)]"}`} />
-              <span className="text-xs text-[var(--text)] truncate">{conn.name}</span>
-              <span className="text-[10px] text-[var(--muted)] uppercase ml-auto flex-shrink-0">{conn.protocol}</span>
-            </button>
-          ))}
-        </>
-      ) : null}
-
-      {/* Empty state */}
-      {connectedAgents.length === 0 && connections.length === 0 && !loading && (
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 px-4">
-          <Columns2 className="w-10 h-10 text-[var(--muted)]" strokeWidth={1.25} />
-          <p className="text-xs text-[var(--muted)] text-center">No connections available</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// SplitView -- dual-pane layout
-// ---------------------------------------------------------------------------
-
-export function SplitView({
-  leftSource,
-  leftProtocol,
-  rightSource,
-  rightProtocol,
-  onTransfer,
-  onSelectRightSource,
-  onSetSplitTarget,
-}: SplitViewProps) {
-  const [leftDragOver, setLeftDragOver] = useState(false);
-  const [rightDragOver, setRightDragOver] = useState(false);
-  const [dragOrigin, setDragOrigin] = useState<"left" | "right" | null>(null);
-
-  // Track drag origin to show overlay on the opposite pane only
-  const handleDragStartLeft = useCallback(() => {
-    setDragOrigin("left");
-    setRightDragOver(true);
-  }, []);
-
-  const handleDragStartRight = useCallback(() => {
-    setDragOrigin("right");
-    setLeftDragOver(true);
-  }, []);
-
-  // Clear drag state when drag ends globally
   useEffect(() => {
-    const clearDrag = () => {
-      setLeftDragOver(false);
-      setRightDragOver(false);
-      setDragOrigin(null);
-    };
-    window.addEventListener("dragend", clearDrag);
-    return () => window.removeEventListener("dragend", clearDrag);
-  }, []);
+    void load(source.type === "agent" ? "~" : "/");
+  }, [load, source]);
 
-  // Transfer handlers for each pane
-  const handleDropOnLeft = useCallback(
-    (files: string[], destPath: string) => {
-      setLeftDragOver(false);
-      setDragOrigin(null);
-      if (rightSource) {
-        onTransfer(files, rightSource, leftSource, destPath);
-      }
-    },
-    [leftSource, rightSource, onTransfer],
+  useEffect(() => { onPath(path); }, [onPath, path]);
+
+  const list = useMemo(() => entries.map(toEntry), [entries]);
+  const order = useMemo(() => entries.map((e) => e.name), [entries]);
+  const pathsOf = (names: string[]) => entries.filter((e) => names.includes(e.name)).map((e) => e.path);
+  const copyTo = otherLabel === label ? otherPath : otherLabel;
+
+  const accept = (e: DragEvent) => {
+    if (!e.dataTransfer.types.includes(DRAG_TYPE)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    setDropping(true);
+  };
+
+  return (
+    <section className="fx-pane" aria-label={`${label} ${path}`}>
+      <div className="fx-pane-h">
+        <span className="fx-pane-nm">{label}</span>
+        <span className="fx-sp" />
+        {head}
+      </div>
+      <div className="fx-pane-path">
+        <FilesPathBar path={path} onGo={(p) => void load(p)} canUp={path !== "/" && path !== "~" && parentPath(path) !== path} onUp={() => void load(parentPath(path))} busy={loading} idSuffix={`-${side}`} />
+      </div>
+      {error ? <p className="fx-err" role="alert">{error}</p> : null}
+      <FileListView
+        entries={list}
+        compact
+        label={t("list.label", { path })}
+        loading={loading}
+        emptyText={t("list.empty")}
+        picked={picked}
+        dropText={dropping ? t("list.dropCopy") : null}
+        drop={{
+          onDragOver: accept,
+          onDragLeave: (e) => { if (!(e.relatedTarget instanceof Node) || !e.currentTarget.contains(e.relatedTarget)) setDropping(false); },
+          onDrop: (e) => {
+            setDropping(false);
+            const raw = e.dataTransfer.getData(DRAG_TYPE);
+            if (!raw) return;
+            e.preventDefault();
+            try {
+              const data = JSON.parse(raw) as { paths: string[]; side: string };
+              if (data.side !== side && data.paths.length) onCopy(data.paths);
+            } catch {
+              // Not our drag data.
+            }
+          },
+        }}
+        handlers={{
+          onPick: (name, mods) => {
+            const next = clickSelection(picked, order, name, anchor.current, mods);
+            anchor.current = next.anchor;
+            setPicked(next.selected);
+          },
+          onToggle: (name) => setPicked((prev) => clickSelection(prev, order, name, null, { toggle: true, range: false }).selected),
+          onOpen: (entry) => { if (entry.is_dir) void load(entries.find((e) => e.name === entry.name)?.path ?? path); },
+          onContextMenu: () => {},
+          onDragStart: (e, entry) => {
+            const names = picked.has(entry.name) ? Array.from(picked) : [entry.name];
+            e.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ paths: pathsOf(names), side }));
+            e.dataTransfer.effectAllowed = "copy";
+          },
+          menuItems: (entry): MenuItemSpec[] => [
+            ...(entry.is_dir ? [{ key: "open", label: t("menu.open"), onSelect: () => void load(entries.find((x) => x.name === entry.name)?.path ?? path) }] : []),
+            { key: "copy", label: t("split.copyTo", { name: copyTo }), onSelect: () => onCopy(pathsOf(picked.has(entry.name) ? Array.from(picked) : [entry.name])) },
+          ],
+          menuLabel: (name) => t("menu.actionsFor", { name }),
+          selectLabel: (name) => t("list.select", { name }),
+          renameLabel: t("list.rename"),
+        }}
+      />
+      {picked.size ? (
+        <div className="fx-status">
+          <span className="fx-num">{t("status.picked", { count: picked.size })}</span>
+          <span className="fx-sp" />
+          <button type="button" className="fx-btn sm" onClick={() => { onCopy(pathsOf(Array.from(picked))); setPicked(new Set()); }}>
+            <Copy aria-hidden="true" width={13} height={13} strokeWidth={2} />
+            {t("split.copyTo", { name: copyTo })}
+          </button>
+          <button type="button" className="fx-btn sm quiet" onClick={() => setPicked(new Set())}>{t("status.clear")}</button>
+        </div>
+      ) : null}
+    </section>
   );
+}
 
-  const handleDropOnRight = useCallback(
-    (files: string[], destPath: string) => {
-      setRightDragOver(false);
-      setDragOrigin(null);
-      if (rightSource) {
-        onTransfer(files, leftSource, rightSource, destPath);
-      }
-    },
-    [leftSource, rightSource, onTransfer],
-  );
+export function SplitView({ leftSource, leftLabel, rightSource, rightLabel, onTransfer, choices, onClose }: SplitViewProps) {
+  const t = useTranslations("files");
+  const [leftPath, setLeftPath] = useState("");
+  const [rightPath, setRightPath] = useState("");
 
-  const handlePickRightSource = useCallback(
-    (source: FileSource, protocol: string) => {
-      if (onSetSplitTarget && source.type === "connection") {
-        onSetSplitTarget(source.connectionId, protocol);
-      } else if (onSetSplitTarget && source.type === "agent") {
-        onSetSplitTarget(source.assetId, "agent");
-      } else {
-        onSelectRightSource();
-      }
-    },
-    [onSetSplitTarget, onSelectRightSource],
+  const swap = (
+    <>
+      <ToolMenu
+        label={t("split.pick")}
+        trigger={
+          <button type="button" className="fx-ib sm" title={t("split.pick")}>
+            <ChevronDown aria-hidden="true" width={14} height={14} strokeWidth={2} />
+          </button>
+        }
+      >
+        <div className="fx-menu-scroll">
+          {choices.map((c) => <Menu.Item key={c.key} className="lt-menu-item" onSelect={c.onSelect}>{c.label}</Menu.Item>)}
+        </div>
+      </ToolMenu>
+      <button type="button" className="fx-ib sm" onClick={onClose} aria-label={t("bar.closeSplit")} title={t("bar.closeSplit")}>
+        <X aria-hidden="true" width={14} height={14} strokeWidth={2} />
+      </button>
+    </>
   );
 
   return (
-    <div className="flex flex-1 min-h-0 border border-[var(--panel-border)] rounded-lg overflow-hidden bg-[var(--panel-glass)]">
-      {/* Left pane */}
+    <div className="fx-split">
       <SplitPane
-        source={leftSource}
-        protocol={leftProtocol}
         side="left"
-        dragOverlay={leftDragOver && dragOrigin === "right"}
-        onDrop={handleDropOnLeft}
-        onDragStart={handleDragStartLeft}
+        source={leftSource}
+        label={leftLabel}
+        otherLabel={rightLabel}
+        otherPath={rightPath}
+        onPath={setLeftPath}
+        onCopy={(paths) => onTransfer(paths, leftSource, rightSource, rightPath)}
       />
-
-      {/* Divider */}
-      <div className="w-px bg-[var(--line)] flex-shrink-0" />
-
-      {/* Right pane */}
-      {rightSource ? (
-        <SplitPane
-          source={rightSource}
-          protocol={rightProtocol}
-          side="right"
-          dragOverlay={rightDragOver && dragOrigin === "left"}
-          onDrop={handleDropOnRight}
-          onDragStart={handleDragStartRight}
-        />
-      ) : (
-        <RightPanePicker onSelect={handlePickRightSource} />
-      )}
+      <SplitPane
+        key={`${rightSource.type}:${rightSource.type === "agent" ? rightSource.assetId : rightSource.connectionId}`}
+        side="right"
+        source={rightSource}
+        label={rightLabel}
+        otherLabel={leftLabel}
+        otherPath={leftPath}
+        onPath={setRightPath}
+        onCopy={(paths) => onTransfer(paths, rightSource, leftSource, leftPath)}
+        head={swap}
+      />
     </div>
   );
 }

@@ -1,23 +1,60 @@
 {
   "title": "Protokolle",
-  "subtitle": "Protokollausgaben Ihrer Geräte suchen und filtern",
-  "filters": {
-    "source": "Quelle",
+  "filter": "Nach Gerät, Quelle oder Meldung filtern",
+  "device": {
+    "all": "Alle Geräte"
+  },
+  "level": {
+    "all": "Alle Stufen",
+    "error": "Fehler",
+    "warn": "Warnungen",
+    "info": "Info",
+    "debug": "Debug"
+  },
+  "levelWord": {
+    "error": "Fehler",
+    "warn": "Warnung",
+    "debug": "Debug"
+  },
+  "range": {
+    "label": "Zeitraum",
+    "15m": "Letzte 15 Minuten",
+    "1h": "Letzte Stunde",
+    "6h": "Letzte 6 Stunden",
+    "24h": "Letzte 24 Stunden"
+  },
+  "source": {
+    "all": "Alle Quellen",
+    "allWithHeartbeats": "Alle Quellen und Heartbeats",
+    "heartbeats": "Heartbeats einbeziehen"
+  },
+  "live": "Live",
+  "cols": {
+    "time": "Zeit",
     "level": "Stufe",
-    "events": "Ereignisse",
-    "range": "Zeitraum",
-    "search": "Suche",
-    "allSources": "Alle Quellen",
-    "operational": "Betrieblich",
-    "all": "Alle"
+    "device": "Gerät",
+    "source": "Quelle",
+    "message": "Meldung"
   },
-  "search": {
-    "placeholder": "Nachrichtentext suchen (error, timeout, zfs...)"
-  },
-  "empty": {
-    "title": "Noch keine Protokollereignisse",
-    "description": "Ereignisse werden hier angezeigt, sobald Geräte Daten melden. Stellen Sie sicher, dass mindestens ein Gerät verbunden ist.",
-    "viewDevices": "Geräte anzeigen"
-  },
-  "noMatch": "Keine Protokollereignisse entsprechen Ihren aktuellen Filtern."
+  "selectLine": "Zeile {time} von {device} auswählen",
+  "selectAll": "Alle Zeilen auswählen",
+  "selected": "{count} ausgewählt",
+  "copyLines": "{count, plural, one {# Zeile kopieren} other {# Zeilen kopieren}}",
+  "copiedLines": "{count, plural, one {# Zeile kopiert} other {# Zeilen kopiert}}",
+  "copyLine": "Zeile kopieren",
+  "copiedLine": "Zeile kopiert",
+  "copyFailed": "Der Browser hat das Kopieren blockiert",
+  "openDevice": "{device} öffnen",
+  "fields": "Felder",
+  "clearFilter": "Filter zurücksetzen",
+  "clearSelection": "Aufheben",
+  "lines": "{count, plural, one {# Zeile} other {# Zeilen}}",
+  "empty": "Noch keine Protokollzeilen",
+  "noMatch": "Keine Protokollzeilen passen zu „{query}“",
+  "noneFiltered": "Keine Protokollzeilen für diese Filter",
+  "addDevice": "Gerät hinzufügen",
+  "loadFailed": "Protokolle wurden nicht geladen",
+  "retry": "Erneut versuchen",
+  "loading": "Protokollzeilen werden geladen",
+  "noneInRange": "Keine Protokollzeilen in diesem Zeitraum"
 }

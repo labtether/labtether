@@ -1,13 +1,11 @@
 "use client";
 
-import { useMemo, type Dispatch, type SetStateAction } from "react";
+import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { useTranslations } from "next-intl";
 import { runtimeSettingKeys, type RuntimeSettingEntry } from "../../../../console/models";
-import { sourceClassName } from "../../../../console/formatters";
-import { Card } from "../../../../components/ui/Card";
-import { Badge } from "../../../../components/ui/Badge";
 import { Button } from "../../../../components/ui/Button";
-import { Input, Select } from "../../../../components/ui/Input";
+import { RuntimeControl } from "./AdvancedSettingsCard";
+import { Section, Sheet, SheetFoot } from "./SettingsKit";
 
 type ServiceDiscoveryDefaultsCardProps = {
   runtimeSettings: RuntimeSettingEntry[];
@@ -15,37 +13,26 @@ type ServiceDiscoveryDefaultsCardProps = {
   setRuntimeDraftValues: Dispatch<SetStateAction<Record<string, string>>>;
   runtimeSettingsLoading: boolean;
   runtimeSettingsSaving: boolean;
+  /** The hub's answer to the last runtime save; shown here only after this section saved. */
+  runtimeSettingsMessage?: string | null;
   saveRuntimeSettings: (keys?: string[]) => Promise<void> | void;
 };
 
-const serviceDiscoveryFields: Array<{
-  key: string;
-  type: "bool" | "string" | "int";
-}> = [
-  { key: runtimeSettingKeys.servicesDiscoveryDefaultDockerEnabled, type: "bool" },
-  { key: runtimeSettingKeys.servicesDiscoveryDefaultProxyEnabled, type: "bool" },
-  { key: runtimeSettingKeys.servicesDiscoveryDefaultProxyTraefikEnabled, type: "bool" },
-  { key: runtimeSettingKeys.servicesDiscoveryDefaultProxyCaddyEnabled, type: "bool" },
-  { key: runtimeSettingKeys.servicesDiscoveryDefaultProxyNPMEnabled, type: "bool" },
-  { key: runtimeSettingKeys.servicesDiscoveryDefaultPortScanEnabled, type: "bool" },
-  { key: runtimeSettingKeys.servicesDiscoveryDefaultPortScanIncludeListening, type: "bool" },
-  { key: runtimeSettingKeys.servicesDiscoveryDefaultPortScanPorts, type: "string" },
-  { key: runtimeSettingKeys.servicesDiscoveryDefaultLANScanEnabled, type: "bool" },
-  { key: runtimeSettingKeys.servicesDiscoveryDefaultLANScanCIDRs, type: "string" },
-  { key: runtimeSettingKeys.servicesDiscoveryDefaultLANScanPorts, type: "string" },
-  { key: runtimeSettingKeys.servicesDiscoveryDefaultLANScanMaxHosts, type: "int" },
+/** The discovery settings new agents start with, in the order an agent applies them. */
+const serviceDiscoveryKeys: string[] = [
+  runtimeSettingKeys.servicesDiscoveryDefaultDockerEnabled,
+  runtimeSettingKeys.servicesDiscoveryDefaultProxyEnabled,
+  runtimeSettingKeys.servicesDiscoveryDefaultProxyTraefikEnabled,
+  runtimeSettingKeys.servicesDiscoveryDefaultProxyCaddyEnabled,
+  runtimeSettingKeys.servicesDiscoveryDefaultProxyNPMEnabled,
+  runtimeSettingKeys.servicesDiscoveryDefaultPortScanEnabled,
+  runtimeSettingKeys.servicesDiscoveryDefaultPortScanIncludeListening,
+  runtimeSettingKeys.servicesDiscoveryDefaultPortScanPorts,
+  runtimeSettingKeys.servicesDiscoveryDefaultLANScanEnabled,
+  runtimeSettingKeys.servicesDiscoveryDefaultLANScanCIDRs,
+  runtimeSettingKeys.servicesDiscoveryDefaultLANScanPorts,
+  runtimeSettingKeys.servicesDiscoveryDefaultLANScanMaxHosts,
 ];
-
-function sourcePillLabel(source: RuntimeSettingEntry["source"]): string {
-  switch (source) {
-    case "ui":
-      return "UI";
-    case "docker":
-      return "Docker";
-    default:
-      return "Default";
-  }
-}
 
 export function ServiceDiscoveryDefaultsCard({
   runtimeSettings,
@@ -53,96 +40,58 @@ export function ServiceDiscoveryDefaultsCard({
   setRuntimeDraftValues,
   runtimeSettingsLoading,
   runtimeSettingsSaving,
+  runtimeSettingsMessage,
   saveRuntimeSettings,
 }: ServiceDiscoveryDefaultsCardProps) {
   const t = useTranslations("settings");
-  const runtimeSettingsByKey = useMemo(() => {
-    const out = new Map<string, RuntimeSettingEntry>();
-    for (const entry of runtimeSettings) {
-      out.set(entry.key, entry);
-    }
-    return out;
+  const [savedHere, setSavedHere] = useState(false);
+  const entries = useMemo(() => {
+    const byKey = new Map(runtimeSettings.map((entry) => [entry.key, entry]));
+    return serviceDiscoveryKeys.map((key) => byKey.get(key)).filter((entry): entry is RuntimeSettingEntry => Boolean(entry));
   }, [runtimeSettings]);
 
-  const serviceDiscoveryEntries = useMemo(() => {
-    return serviceDiscoveryFields
-      .map((field) => ({ field, entry: runtimeSettingsByKey.get(field.key) }))
-      .filter((item): item is { field: (typeof serviceDiscoveryFields)[number]; entry: RuntimeSettingEntry } => Boolean(item.entry));
-  }, [runtimeSettingsByKey]);
+  if (entries.length === 0) return null;
 
-  if (serviceDiscoveryEntries.length === 0) {
-    return null;
-  }
+  const draftOf = (entry: RuntimeSettingEntry) => runtimeDraftValues[entry.key] ?? entry.effective_value;
+  const dirty = entries.some((entry) => draftOf(entry).trim() !== entry.effective_value);
 
   return (
-    <Card className="mb-6">
-      <h2>{t("discoveryDefaults.title")}</h2>
-      <p className="text-xs text-[var(--muted)]">
-        {t("discoveryDefaults.description")}
-      </p>
-      <div className="mt-3 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--muted)]">
-        {t("discoveryDefaults.lanScanWarning")}
-      </div>
-
-      <div className="divide-y divide-[var(--line)] mt-3">
-        {serviceDiscoveryEntries.map(({ field, entry }) => {
-          const draftValue = runtimeDraftValues[entry.key] ?? entry.effective_value;
+    <Section title={t("discoveryDefaults.title")} id="discovery">
+      <Sheet>
+        {entries.map((entry) => {
+          const id = `st-sd-${entry.key.replace(/[^a-z0-9]+/gi, "-")}`;
           return (
-            <div key={entry.key} className="grid gap-2 py-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-[var(--text)]">{entry.label}</p>
-                <p className="text-[11px] text-[var(--muted)]">{entry.description}</p>
-                <p className="mt-1 text-[10px] text-[var(--muted)]">Key: {entry.key}</p>
+            <div key={entry.key} className="st-row two">
+              <div className="st-row-l">
+                {entry.type === "bool" ? <span className="st-nm">{entry.label}</span> : <label className="st-nm" htmlFor={id}>{entry.label}</label>}
+                {entry.description ? <span className="st-g">{entry.description}</span> : null}
               </div>
-              <div className="flex items-center gap-2">
-                {field.type === "bool" ? (
-                  <Select
-                    value={draftValue}
-                    onChange={(event) =>
-                      setRuntimeDraftValues((current) => ({ ...current, [entry.key]: event.target.value }))
-                    }
-                    className="w-28"
-                    data-testid={`service-discovery-default-${entry.key}`}
-                  >
-                    <option value="true">true</option>
-                    <option value="false">false</option>
-                  </Select>
-                ) : field.type === "int" ? (
-                  <Input
-                    type="number"
-                    min={entry.min_int}
-                    max={entry.max_int}
-                    value={draftValue}
-                    onChange={(event) =>
-                      setRuntimeDraftValues((current) => ({ ...current, [entry.key]: event.target.value }))
-                    }
-                    className="w-32"
-                    data-testid={`service-discovery-default-${entry.key}`}
-                  />
-                ) : (
-                  <Input
-                    value={draftValue}
-                    onChange={(event) =>
-                      setRuntimeDraftValues((current) => ({ ...current, [entry.key]: event.target.value }))
-                    }
-                    className="w-64"
-                    data-testid={`service-discovery-default-${entry.key}`}
-                  />
-                )}
-                <span className="shrink-0" data-tooltip={`Source: ${sourcePillLabel(entry.source)}`}>
-                  <Badge status={sourceClassName(entry.source) || "disabled"} size="sm" />
-                </span>
+              <div className="st-row-r">
+                {entry.source !== "default" ? <span className="st-g">{t(`advanced.source.${entry.source}`)}</span> : null}
+                <RuntimeControl
+                  id={id}
+                  entry={entry}
+                  value={draftOf(entry)}
+                  onChange={(value) => setRuntimeDraftValues((current) => ({ ...current, [entry.key]: value }))}
+                  testId={`service-discovery-default-${entry.key}`}
+                />
               </div>
             </div>
           );
         })}
-      </div>
-
-      <div className="flex items-center gap-3 pt-3">
-        <Button variant="primary" disabled={runtimeSettingsSaving || runtimeSettingsLoading} onClick={() => void saveRuntimeSettings()}>
-          {runtimeSettingsSaving ? t("discoveryDefaults.saving") : t("discoveryDefaults.saveDefaults")}
-        </Button>
-      </div>
-    </Card>
+        <SheetFoot message={savedHere ? runtimeSettingsMessage : null}>
+          <Button
+            size="sm"
+            disabled={runtimeSettingsSaving || runtimeSettingsLoading || !dirty}
+            onClick={() => {
+              setSavedHere(true);
+              void saveRuntimeSettings(entries.map((entry) => entry.key));
+            }}
+          >
+            {runtimeSettingsSaving ? t("discoveryDefaults.saving") : t("discoveryDefaults.saveDefaults")}
+          </Button>
+        </SheetFoot>
+      </Sheet>
+    </Section>
   );
 }

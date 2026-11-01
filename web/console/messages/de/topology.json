@@ -1,4 +1,176 @@
 {
-  "title": "Topologie",
-  "loading": "Topologieansicht wird geladen..."
+  "title": "Karte",
+  "loading": "Karte wird geladen",
+  "more": "Kartenaktionen",
+  "canvas": "Netzwerkkarte",
+  "keys": "Pfeiltasten wechseln zwischen Geräten, Eingabe öffnet Details, Esc schließt, f passt an die Breite an, Plus und Minus zoomen.",
+  "lone": "Nicht verbunden",
+  "other": "Sonstige",
+  "empty": "Noch keine Geräte",
+  "emptyLink": "Gerät hinzufügen",
+  "copied": "{text} kopiert",
+  "mini": "{count, plural, one {Netzwerkkarte mit # Gerät} other {Netzwerkkarte mit # Geräten}}",
+  "menu": {
+    "find": "Gerät suchen",
+    "editLayout": "Layout bearbeiten",
+    "doneEditing": "Fertig",
+    "showList": "Als Liste zeigen",
+    "showMap": "Als Karte zeigen",
+    "zones": "Zonen",
+    "newZone": "Neue Zone",
+    "unsorted": "Nicht einsortierte Geräte",
+    "reset": "Karte zurücksetzen…"
+  },
+  "reset": {
+    "title": "Karte zurücksetzen?",
+    "body": "Zonen, Platzierungen, selbst gezogene Verbindungen und ausgeblendete Geräte werden gelöscht und aus den Geräten neu angelegt, die der Hub jetzt kennt.",
+    "confirm": "Zurücksetzen"
+  },
+  "view": {
+    "label": "Karte anzeigen als",
+    "list": "Liste",
+    "map": "Karte",
+    "listLabel": "Karte als Liste"
+  },
+  "zoom": {
+    "label": "Zoom",
+    "in": "Vergrößern",
+    "out": "Verkleinern",
+    "fit": "Einpassen",
+    "fitTip": "An die Breite anpassen (f)"
+  },
+  "find": {
+    "label": "Gerät suchen",
+    "placeholder": "Name, Adresse oder Tag",
+    "close": "Suche schließen",
+    "none": "Kein Gerät passt"
+  },
+  "fold": {
+    "more": "+{count} weitere",
+    "less": "Weniger zeigen"
+  },
+  "status": {
+    "online": "Online",
+    "offline": "Offline",
+    "notResponding": "Antwortet nicht",
+    "noCheckIn": "Keine Meldung",
+    "offlineSince": "Offline seit {time}",
+    "notRespondingSince": "Antwortet nicht seit {time}",
+    "noCheckInYet": "Noch keine Meldung"
+  },
+  "node": {
+    "actions": "Aktionen für {name}",
+    "moveTo": "Nach {zone} verschieben",
+    "removeFrom": "Aus {zone} entfernen",
+    "open": "Geräteseite öffnen",
+    "copy": "Adresse kopieren"
+  },
+  "inspector": {
+    "close": "Details schließen",
+    "closeTip": "Schließen (Esc)",
+    "open": "Geräteseite öffnen",
+    "terminal": "Terminal",
+    "address": "Adresse",
+    "copy": "Kopieren",
+    "os": "OS",
+    "type": "Typ",
+    "source": "Quelle",
+    "runsOn": "Läuft auf",
+    "vmOn": "VM {vmid} auf",
+    "zone": "Zone",
+    "noZone": "Keine Zone",
+    "changeZone": "Zone {zone}, ändern",
+    "uptime": "Laufzeit",
+    "contents": "Enthält",
+    "cpu": "CPU · 24 h",
+    "cpuNow": "jetzt {value} %",
+    "cpuLabel": "CPU der letzten 24 Stunden, jetzt {value} %"
+  },
+  "contents": {
+    "vms": "{count, plural, one {# VM} other {# VMs}}",
+    "containers": "{count, plural, one {# Container} other {# Container}}",
+    "services": "{count, plural, one {# Dienst} other {# Dienste}}",
+    "stacks": "{count, plural, one {# Stack} other {# Stacks}}",
+    "pools": "{count, plural, one {# Pool} other {# Pools}}",
+    "datasets": "{count, plural, one {# Dataset} other {# Datasets}}",
+    "other": "{count} sonstige"
+  },
+  "conn": {
+    "title": "Verbindungen",
+    "none": "Keine Verbindungen",
+    "connectTo": "Verbinden mit…",
+    "device": "Gerät",
+    "relationship": "Beziehung",
+    "cancel": "Abbrechen",
+    "connect": "Verbinden",
+    "remove": "Verbindung zu {name} entfernen",
+    "removeShort": "Entfernen",
+    "removed": "Verbindung {a} → {b} entfernt",
+    "undo": "Rückgängig",
+    "change": "{rel} {name}, Beziehung ändern",
+    "label": "Bezeichnung",
+    "editLabel": "Bezeichnung bearbeiten",
+    "discovered": "Vom Hub gefunden"
+  },
+  "rel": {
+    "connected_to": "Verbunden mit",
+    "depends_on": "Hängt ab von",
+    "runs_on": "Läuft auf",
+    "hosted_on": "Gehostet auf",
+    "provides_to": "Stellt bereit für",
+    "peer_of": "Gleichrangig mit",
+    "contains": "Enthält"
+  },
+  "inv": {
+    "connected_to": "Verbunden mit",
+    "depends_on": "Benötigt von",
+    "runs_on": "Führt aus",
+    "hosted_on": "Hostet",
+    "provides_to": "Nutzt",
+    "peer_of": "Gleichrangig mit",
+    "contains": "Enthalten in"
+  },
+  "zones": {
+    "title": "Zonen",
+    "close": "Zonen schließen",
+    "none": "Keine Zonen",
+    "new": "Neue Zone",
+    "newName": "Neue Zone",
+    "newNameN": "Neue Zone {n}",
+    "name": "Name von {zone}",
+    "delete": "{zone} löschen",
+    "deleteTitle": "{zone} löschen?",
+    "deleteBody": "{count, plural, =0 {Sie enthält keine Geräte.} one {Ihr Gerät kommt zu Sonstige.} other {Ihre # Geräte kommen zu Sonstige.}}",
+    "deleteConfirm": "Löschen"
+  },
+  "unsorted": {
+    "title": "Nicht einsortierte Geräte",
+    "close": "Nicht einsortierte Geräte schließen",
+    "none": "Jedes Gerät hat eine Zone",
+    "suggest": "Vorschlag: {zone}",
+    "accept": "Übernehmen",
+    "dismiss": "{name} nicht auf der Karte zeigen",
+    "dismissTip": "Nicht auf der Karte zeigen",
+    "placeAll": "Alle einsortieren"
+  },
+  "edit": {
+    "newZone": "Neue Zone",
+    "fit": "Ansicht einpassen",
+    "arrange": "Zonen anordnen",
+    "rename": "Umbenennen",
+    "collapse": "Ein- oder ausklappen",
+    "deleteZone": "Zone löschen",
+    "moveToZone": "In Zone verschieben",
+    "removeFromZone": "Aus Zone entfernen",
+    "changeType": "Beziehung ändern",
+    "deleteConnection": "Verbindung entfernen",
+    "zoneSummary": "{devices, plural, one {# Gerät} other {# Geräte}}{zones, plural, =0 {} one {, # Zone darin} other {, # Zonen darin}}"
+  },
+  "errors": {
+    "load": "Die Karte wurde nicht geladen.",
+    "retry": "Erneut versuchen",
+    "save": "Der Hub hat die Änderung nicht gespeichert. Erneut versuchen.",
+    "copy": "Kopieren fehlgeschlagen",
+    "edit": "Layout bearbeiten ließ sich nicht öffnen. Seite neu laden."
+  }
 }

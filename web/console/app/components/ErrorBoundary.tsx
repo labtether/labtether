@@ -1,6 +1,8 @@
 "use client";
 
 import { Component, type ReactNode, type ErrorInfo } from "react";
+import { useTranslations } from "next-intl";
+import { PageError } from "./ui/PageError";
 
 interface Props {
   children: ReactNode;
@@ -10,6 +12,11 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+}
+
+function DefaultFallback({ onRetry }: { onRetry: () => void }) {
+  const t = useTranslations("common.errorBoundary");
+  return <PageError title={t("title")} retryLabel={t("tryAgain")} onRetry={onRetry} />;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
@@ -26,19 +33,7 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       if (this.props.fallback) return this.props.fallback;
-      return (
-        <div className="flex flex-col items-center justify-center p-8 text-center">
-          <p className="text-sm text-[var(--muted)] mb-4">
-            Something went wrong loading this section.
-          </p>
-          <button
-            onClick={() => this.setState({ hasError: false, error: null })}
-            className="text-sm underline hover:no-underline"
-          >
-            Try again
-          </button>
-        </div>
-      );
+      return <DefaultFallback onRetry={() => this.setState({ hasError: false, error: null })} />;
     }
     return this.props.children;
   }

@@ -21,7 +21,8 @@ export function createNavigationProvider(routerPush: (href: string) => void, rol
             items.push({
               id: `nav-${item.href}`,
               label: item.label,
-              description: group.category,
+              // The group heading already says "Pages"; a sub-page names its section instead.
+              description: group.category === "Pages" ? undefined : group.category,
               icon: item.icon,
               href: item.href,
               keywords: [group.category.toLowerCase()],

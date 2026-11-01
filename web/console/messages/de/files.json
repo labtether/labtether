@@ -1,11 +1,177 @@
 {
   "title": "Dateien",
-  "subtitle": "Dateien auf Ihren Geräten durchsuchen und übertragen",
-  "empty": {
-    "title": "Datei-Browser",
-    "description": "Wählen Sie ein Gerät mit verbundenem Agenten aus, um Dateien zu durchsuchen und zu übertragen."
-  },
   "webdavCleartextWarning": "Unverschlüsseltes HTTP für WebDAV erlauben. Personen im Netzwerk können Passwörter und Dateien lesen oder ändern. Der Hub muss unsichere Verbindungen ebenfalls erlauben.",
   "webdavCleartextRequired": "Bestätigen Sie die Warnung zu unverschlüsseltem HTTP oder verwenden Sie HTTPS.",
-  "webdavTransportNotice": "Diese Verbindung verwendet unverschlüsseltes HTTP, das LabTether 1.7.1 standardmäßig blockiert. Bearbeiten Sie sie, um HTTPS zu verwenden, oder erlauben Sie unverschlüsseltes HTTP für die Verbindung und setzen Sie LABTETHER_ALLOW_INSECURE_TRANSPORT=true auf dem Hub."
+  "webdavTransportNotice": "Diese Verbindung verwendet unverschlüsseltes HTTP, das LabTether 1.7.1 standardmäßig blockiert. Bearbeiten Sie sie, um HTTPS zu verwenden, oder erlauben Sie unverschlüsseltes HTTP für die Verbindung und setzen Sie LABTETHER_ALLOW_INSECURE_TRANSPORT=true auf dem Hub.",
+  "tabs": {
+    "label": "Datei-Tabs",
+    "newTab": "Neuer Tab",
+    "new": "Neuer Tab",
+    "close": "{name} schließen"
+  },
+  "picker": {
+    "connectTo": "Verbinden mit …",
+    "devices": "Geräte",
+    "connections": "Gespeicherte Verbindungen",
+    "newConnection": "Neue Verbindung",
+    "notAvailable": "Nicht verfügbar",
+    "offline": "Offline",
+    "noAgent": "Kein Agent",
+    "noDevices": "Kein Gerät hat einen verbundenen Agenten",
+    "noDeviceMatch": "Kein Gerät passt zu „{query}“",
+    "noConnections": "Keine gespeicherten Verbindungen",
+    "noConnectionMatch": "Keine Verbindung passt zu „{query}“",
+    "loading": "Wird geladen",
+    "guestVm": "VM {id} auf {host}",
+    "guestLxc": "LXC {id} auf {host}",
+    "edit": "Bearbeiten …",
+    "test": "Testen",
+    "testing": "Wird getestet",
+    "answers": "Antwortet · {ms} ms",
+    "noAnswer": "Keine Antwort",
+    "deleteTitle": "{name} löschen?",
+    "deleteBody": "Die gespeicherte Verbindung wird entfernt. Dateien auf {host} bleiben erhalten.",
+    "delete": "Löschen"
+  },
+  "bar": {
+    "back": "Zurück",
+    "up": "Einen Ordner nach oben",
+    "path": "Pfad",
+    "typePath": "Pfad eingeben",
+    "places": "Orte",
+    "home": "Persönlicher Ordner",
+    "root": "Stammverzeichnis",
+    "search": "In diesem Ordner suchen",
+    "view": "Ansicht",
+    "list": "Liste",
+    "grid": "Raster",
+    "more": "Mehr",
+    "upload": "Hochladen",
+    "newFolder": "Neuer Ordner …",
+    "showHidden": "Versteckte Dateien zeigen",
+    "hideHidden": "Versteckte Dateien ausblenden",
+    "refresh": "Aktualisieren",
+    "openSplit": "Zweiten Bereich öffnen",
+    "closeSplit": "Zweiten Bereich schließen",
+    "thisTab": "{name} (dieser Tab)"
+  },
+  "clip": {
+    "copy": "{count, plural, one {# Element} other {# Elemente}} zum Einfügen",
+    "cut": "{count, plural, one {# Element} other {# Elemente}} zum Verschieben",
+    "paste": "Hier einfügen",
+    "clear": "Zwischenablage leeren"
+  },
+  "list": {
+    "label": "Dateien in {path}",
+    "name": "Name",
+    "size": "Größe",
+    "modified": "Geändert",
+    "permissions": "Rechte",
+    "selectAll": "Alle auswählen",
+    "select": "{name} auswählen",
+    "empty": "Leerer Ordner",
+    "noMatch": "Kein Treffer für „{query}“",
+    "drop": "Dateien zum Hochladen hier ablegen",
+    "dropCopy": "Zum Kopieren hier ablegen",
+    "rename": "Neuer Name"
+  },
+  "menu": {
+    "label": "Dateien-Kontextmenü",
+    "actionsFor": "Aktionen für {name}",
+    "open": "Öffnen",
+    "download": "Herunterladen",
+    "downloadMany": "{count} Elemente herunterladen",
+    "rename": "Umbenennen",
+    "copy": "Kopieren",
+    "copyMany": "{count} Elemente kopieren",
+    "cut": "Ausschneiden",
+    "cutMany": "{count} Elemente ausschneiden",
+    "paste": "Einfügen",
+    "pasteInto": "In {name} einfügen",
+    "copyPath": "Pfad kopieren",
+    "delete": "Löschen …",
+    "deleteMany": "{count} Elemente löschen …",
+    "newFolder": "Neuer Ordner …",
+    "uploadHere": "Hierher hochladen",
+    "refresh": "Aktualisieren"
+  },
+  "status": {
+    "count": "{count, plural, one {# Element} other {# Elemente}}",
+    "filtered": "{shown} von {count, plural, one {# Element} other {# Elementen}}",
+    "picked": "{count} ausgewählt",
+    "pickedSize": "{count} ausgewählt ({size})",
+    "download": "Herunterladen",
+    "delete": "Löschen …",
+    "clear": "Auswahl aufheben"
+  },
+  "dialog": {
+    "deleteOne": "{name} löschen?",
+    "deleteOneBody": "Wird aus {where} entfernt. Das lässt sich nicht rückgängig machen.",
+    "deleteMany": "{count} Elemente löschen?",
+    "deleteManyBody": "Aus {where} entfernt: {names}. Das lässt sich nicht rückgängig machen.",
+    "delete": "Löschen",
+    "uploadTitle": "{count} Dateien hochladen ({size})?",
+    "uploadBody": "Ziel: {where}.",
+    "upload": "Hochladen",
+    "newFolder": "Neuer Ordner",
+    "create": "Erstellen",
+    "name": "Name",
+    "badName": "Ein Name darf kein / oder \\ enthalten",
+    "cancel": "Abbrechen",
+    "where": "{path} auf {source}"
+  },
+  "viewer": {
+    "lines": "{count, plural, one {# Zeile} other {# Zeilen}}",
+    "download": "Herunterladen",
+    "close": "Schließen",
+    "contents": "Inhalt von {name}",
+    "more": "{count} weitere Zeilen. Laden Sie die Datei herunter, um sie zu lesen."
+  },
+  "xfer": {
+    "title": "Übertragungen",
+    "running": "{count} laufen",
+    "done": "Fertig",
+    "clear": "Fertige entfernen",
+    "cancel": "Abbrechen",
+    "cancelOne": "{name} abbrechen",
+    "toBrowser": "In diesen Browser",
+    "uploadRun": "{name} wird hochgeladen",
+    "uploadDone": "{name} hochgeladen",
+    "uploadFailed": "Hochladen von {name} fehlgeschlagen",
+    "downloadRun": "{name} wird heruntergeladen",
+    "downloadDone": "{name} heruntergeladen",
+    "downloadFailed": "Herunterladen von {name} fehlgeschlagen",
+    "copyRun": "{name} wird kopiert",
+    "copyDone": "{name} kopiert",
+    "copyFailed": "Kopieren von {name} fehlgeschlagen",
+    "progress": "{done} von {total} · {pct} %",
+    "starting": "Startet",
+    "failed": "Fehlgeschlagen"
+  },
+  "split": {
+    "pick": "Andere Quelle zeigen",
+    "copyTo": "Nach {name} kopieren"
+  },
+  "state": {
+    "noAgent": "{name} · Agent nicht verbunden"
+  },
+  "errors": {
+    "crossMove": "Ausgeschnittene Elemente lassen sich nur innerhalb eines Geräts oder einer Verbindung verschieben. Kopieren Sie sie stattdessen."
+  },
+  "device": {
+    "readOnly": "Nur lesen",
+    "allowChanges": "Änderungen erlauben …",
+    "stopChanges": "Zurück zu nur lesen",
+    "allowTitle": "Änderungen auf diesem Gerät erlauben?",
+    "allowBody": "Hochladen, neuer Ordner, Einfügen, Umbenennen, Verschieben und Löschen bleiben aktiv, bis Sie diese Seite verlassen. Gelöschte Dateien lassen sich nicht wiederherstellen.",
+    "allow": "Änderungen erlauben"
+  },
+  "drop": {
+    "dropTo": "Dateien zum Hochladen nach {path} ablegen",
+    "queue": "Datei {index} von {total}",
+    "progress": "{pct} % · {done} von {total}",
+    "progressSpeed": "{pct} % · {done} von {total} · {speed}/s",
+    "done": "{total} · Fertig",
+    "failed": "Hochladen fehlgeschlagen"
+  }
 }

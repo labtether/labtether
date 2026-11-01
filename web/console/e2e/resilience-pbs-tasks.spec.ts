@@ -83,14 +83,16 @@ test("pbs task lifecycle works in node detail (status, log, stop)", async ({ pag
   await page.goto(`/nodes/${encodeURIComponent(pbsAsset.id)}?panel=pbs`);
   await expect(page.locator("main").getByRole("heading", { name: "Lab PBS", exact: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "Tasks", exact: true }).click();
-  await expect(page.getByText("Recent PBS Tasks")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Recent tasks", exact: true })).toBeVisible();
 
-  await page.getByRole("button").filter({ hasText: taskUPID }).click();
-  await expect(page.getByText("Task Details")).toBeVisible();
-  await expect(page.getByText("start backup job")).toBeVisible();
+  await page.getByRole("button", { name: "Backup", exact: true }).click();
+  const taskPanel = page.getByRole("region", { name: "Backup task" });
+  await expect(taskPanel).toBeVisible();
+  await expect(taskPanel.getByText("start backup job")).toBeVisible();
+  await expect(taskPanel.getByText(taskUPID)).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Stop Task", exact: true }).click();
-  await page.getByRole("button", { name: "Confirm Stop", exact: true }).click();
+  await taskPanel.getByRole("button", { name: "Stop task", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Stop task", exact: true }).click();
   await expect.poll(() => stopCalls).toBeGreaterThanOrEqual(1);
 });
 
@@ -140,13 +142,14 @@ test("pbs task lifecycle surfaces status/log backend errors in node detail", asy
   await page.goto(`/nodes/${encodeURIComponent(pbsAsset.id)}?panel=pbs`);
   await expect(page.locator("main").getByRole("heading", { name: "Lab PBS", exact: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "Tasks", exact: true }).click();
-  await expect(page.getByText("Recent PBS Tasks")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Recent tasks", exact: true })).toBeVisible();
 
-  const backupTaskButton = page.getByRole("button").filter({ hasText: taskUPID });
+  const backupTaskButton = page.getByRole("button", { name: "Backup", exact: true });
   await expect(backupTaskButton).toBeVisible();
   await backupTaskButton.click();
-  await expect(page.getByText("Task Details")).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText("status failed")).toBeVisible({ timeout: 10_000 });
+  const taskPanel = page.getByRole("region", { name: "Backup task" });
+  await expect(taskPanel).toBeVisible({ timeout: 10_000 });
+  await expect(taskPanel.getByText("status failed")).toBeVisible({ timeout: 10_000 });
 });
 
 test("pbs task lifecycle handles stop backend 500 without breaking task panel", async ({ page }) => {
@@ -215,28 +218,29 @@ test("pbs task lifecycle handles stop backend 500 without breaking task panel", 
   await expect(page.locator("main").getByRole("heading", { name: "Lab PBS", exact: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "Tasks", exact: true }).click();
 
-  const backupTaskButton = page.getByRole("button").filter({ hasText: taskUPID });
-  const taskDetailsHeading = page.getByText("Task Details");
-  let taskDetailsVisible = false;
+  const backupTaskButton = page.getByRole("button", { name: "Backup", exact: true });
+  const taskPanel = page.getByRole("region", { name: "Backup task" });
+  let taskPanelVisible = false;
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    await backupTaskButton.click();
+    if ((await backupTaskButton.getAttribute("aria-expanded")) !== "true") await backupTaskButton.click();
     try {
-      await expect(taskDetailsHeading).toBeVisible({ timeout: 2_500 });
-      taskDetailsVisible = true;
+      await expect(taskPanel).toBeVisible({ timeout: 2_500 });
+      taskPanelVisible = true;
       break;
     } catch {
       // Retry selection when list rerenders race with the first click.
     }
   }
-  expect(taskDetailsVisible).toBe(true);
-  await expect(page.getByText("task still running")).toBeVisible({ timeout: 10_000 });
+  expect(taskPanelVisible).toBe(true);
+  await expect(taskPanel.getByText("task still running")).toBeVisible({ timeout: 10_000 });
 
-  await page.getByRole("button", { name: "Stop Task", exact: true }).click();
-  await page.getByRole("button", { name: "Confirm Stop", exact: true }).click();
+  await taskPanel.getByRole("button", { name: "Stop task", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Stop task", exact: true }).click();
   await page.waitForTimeout(750);
   if (stopStatuses.length > 0) {
     expect(stopStatuses.at(-1)).toBe(500);
   }
-  await expect(page.getByRole("button", { name: "Stop Task", exact: true })).toBeEnabled();
-  await expect(page.getByText("Task Details")).toBeVisible();
+  await expect(taskPanel.getByText("stop failed")).toBeVisible();
+  await expect(taskPanel.getByRole("button", { name: "Stop task", exact: true })).toBeEnabled();
+  await expect(taskPanel).toBeVisible();
 });

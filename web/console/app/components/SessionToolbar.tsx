@@ -1,16 +1,11 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
-import { Card } from "./ui/Card";
-import { Button } from "./ui/Button";
-import { Select } from "./ui/Input";
 import type { SessionConnectionState, SessionType } from "../hooks/useSession";
+import { Select } from "./ui/Input";
 
-const qualityOptions = [
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-];
+const qualityOptions = ["low", "medium", "high"] as const;
 
 export interface SessionToolbarProps {
   type: SessionType;
@@ -20,6 +15,7 @@ export interface SessionToolbarProps {
   assets: { id: string; name: string; platform?: string; source: string }[];
   connectedAgentIds: Set<string>;
   connectionState: SessionConnectionState;
+  /** Kept for callers; the session's ID is not shown. */
   activeSessionId: string;
   isReconnecting: boolean;
   quality?: string;
@@ -30,6 +26,10 @@ export interface SessionToolbarProps {
   compact?: boolean;
 }
 
+/**
+ * A session's bar: a status dot and word on the left ("Connected via SSH", "Reconnecting…"), then the device choice
+ * when it is not fixed, Connect or Disconnect, and the caller's own actions.
+ */
 export function SessionToolbar({
   type,
   target,
@@ -38,7 +38,6 @@ export function SessionToolbar({
   assets,
   connectedAgentIds,
   connectionState,
-  activeSessionId,
   isReconnecting,
   quality,
   setQuality,
@@ -47,100 +46,60 @@ export function SessionToolbar({
   extraActions,
   compact,
 }: SessionToolbarProps) {
+  const t = useTranslations("terminal.toolbar");
   const isConnected = connectionState === "connected";
   const isConnecting = connectionState === "connecting";
   const isAuthenticating = connectionState === "authenticating";
   const isError = connectionState === "error";
   const isActive = isConnecting || isAuthenticating || isConnected;
-  const targetHasAgent = connectedAgentIds.has(target);
   const targetAsset = assets.find((asset) => asset.id === target);
-  const targetLabel = targetAsset?.name ?? target;
-  const targetIsProxmox = targetAsset?.source === "proxmox";
-  const transportLabel = targetHasAgent
-    ? "agent tunnel"
-    : targetIsProxmox
-      ? "direct API"
-      : type === "terminal"
-        ? "SSH"
-        : "VNC";
+  const via = connectedAgentIds.has(target)
+    ? ""
+    : targetAsset?.source === "proxmox"
+      ? t("viaProxmox")
+      : type === "terminal" ? t("viaSsh") : t("viaVnc");
 
   const statusText = isConnected
-    ? `${targetLabel} connected via ${transportLabel}`
+    ? via ? t("connectedVia", { via }) : t("connected")
     : isAuthenticating
-      ? `Authenticating ${targetLabel}...`
+      ? t("signingIn")
       : isConnecting
-        ? isReconnecting ? `Reconnecting to ${targetLabel}...` : `Connecting to ${targetLabel}...`
+        ? isReconnecting ? t("reconnecting") : t("connecting")
         : isError
-          ? "Connection failed"
-          : "Ready to connect";
-
-  const statusDotClass = isConnected
-    ? "h-1.5 w-1.5 rounded-full bg-[var(--ok)]"
-    : isConnecting || isAuthenticating
-      ? "h-1.5 w-1.5 rounded-full bg-[var(--warn)]"
-      : isError
-        ? "h-1.5 w-1.5 rounded-full bg-[var(--bad)]"
-        : "h-1.5 w-1.5 rounded-full bg-[var(--muted)]";
+          ? t("failed")
+          : t("notConnected");
+  const tone = isConnected ? "ok" : isError ? "bad" : isActive ? "warn" : "off";
 
   return (
-    <Card className={`flex items-center justify-between mb-4${compact ? " py-2" : ""}`}>
-      <div className="flex items-center gap-2">
-        {!isFixedTarget && (
-          <Select
-            className="min-w-[220px]"
-            value={target}
-            onChange={(e) => setTarget(e.target.value)}
-            disabled={isActive}
-          >
-            <option value="">Choose a device...</option>
-            {assets.map((asset) => (
-              <option key={asset.id} value={asset.id}>
-                {connectedAgentIds.has(asset.id) ? "\u2713 " : ""}{asset.name} ({asset.platform || asset.source})
-              </option>
-            ))}
-          </Select>
-        )}
-        {type === "desktop" && setQuality && (
-          <Select
-            className="min-w-[110px]"
-            value={quality}
-            onChange={(e) => setQuality(e.target.value)}
-            disabled={isActive}
-          >
-            {qualityOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </Select>
-        )}
-        {isConnected || isAuthenticating ? (
-          <Button variant="danger" onClick={onDisconnect}>
-            Disconnect
-          </Button>
-        ) : (
-          <Button
-            variant="primary"
-            onClick={onConnect}
-            disabled={!target || isConnecting}
-          >
-            {isConnecting ? (isReconnecting ? "Reconnecting..." : "Connecting...") : "Connect"}
-          </Button>
-        )}
-      </div>
-      <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
-        <span className={statusDotClass} />
-        <span>{statusText}</span>
-        {(isConnected || activeSessionId) && (
-          <>
-            <span className="w-px h-3 bg-[var(--line)]" />
-            {extraActions}
-            {activeSessionId && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-lg border border-[var(--line)] font-mono">
-                {activeSessionId.slice(0, 12)}
-              </span>
-            )}
-          </>
-        )}
-      </div>
-    </Card>
+    <div className={`tm-tabbar${compact ? " compact" : ""}`}>
+      <span className={`kt-st${isError ? " bad" : ""}`} role="status">
+        <i className={`kt-dot sm ${tone}${isConnecting || isAuthenticating ? " busy" : ""}`} aria-hidden="true" />
+        {statusText}
+      </span>
+      <span className="tm-sp" />
+      {!isFixedTarget ? (
+        <Select aria-label={t("device")} value={target} onChange={(e) => setTarget(e.target.value)} disabled={isActive}>
+          <option value="">{t("chooseDevice")}</option>
+          {assets.map((asset) => (
+            <option key={asset.id} value={asset.id}>{asset.name}</option>
+          ))}
+        </Select>
+      ) : null}
+      {type === "desktop" && setQuality ? (
+        <Select aria-label={t("quality")} value={quality} onChange={(e) => setQuality(e.target.value)} disabled={isActive}>
+          {qualityOptions.map((value) => (
+            <option key={value} value={value}>{t(`quality_${value}`)}</option>
+          ))}
+        </Select>
+      ) : null}
+      {isConnected || isAuthenticating ? (
+        <button type="button" className="tm-qbtn" title={t("disconnect")} onClick={onDisconnect}>{t("disconnect")}</button>
+      ) : (
+        <button type="button" className="tm-qbtn" onClick={onConnect} disabled={!target || isConnecting}>
+          {t("connect")}
+        </button>
+      )}
+      {extraActions}
+    </div>
   );
 }

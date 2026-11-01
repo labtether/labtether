@@ -1,165 +1,102 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { Badge } from "../../../../../components/ui/Badge";
-import { Button } from "../../../../../components/ui/Button";
-import { Card } from "../../../../../components/ui/Card";
+// VMs on TrueNAS SCALE: name, whether it starts on boot, the power state, vCPUs and memory. Start sits behind ⋯;
+// Restart and Stop ask first. A state that is neither running nor stopped keeps Start and Stop waiting.
+
+import { useTranslations } from "next-intl";
+import { DiCols, DiEmpty, DiList, DiMain, DiNum, DiRow } from "../proxmox/DiList";
+import { DiRowMenu, useDiConfirm } from "../proxmox/DiControls";
+import { sizeParts } from "../proxmox/diFormat";
+import { failureText, vmState } from "./truenasModel";
+import { TnFailure, TnListState, TnWord } from "./TrueNASParts";
+import type { TrueNASVM } from "./truenasTypes";
+import { useTrueNASAction } from "./useTrueNASAction";
 import { truenasAction, useTrueNASList } from "./useTrueNASData";
 
-export type TrueNASVM = {
-  id: string | number;
-  name: string;
-  status?: string;
-  vcpus?: number;
-  memory?: number;
-  autostart?: boolean;
-};
+export type { TrueNASVM } from "./truenasTypes";
 
-function vmStatusBadge(status?: string): "ok" | "pending" | "bad" {
-  if (!status) return "pending";
-  const s = status.toUpperCase();
-  if (s === "RUNNING") return "ok";
-  if (s === "SUSPENDED") return "pending";
-  return "bad";
+type Verb = "start" | "stop" | "restart";
+
+/** TrueNAS reports VM memory in MiB. */
+function memoryParts(mib?: number) {
+  return typeof mib === "number" ? sizeParts(mib * 1024 * 1024) : null;
 }
 
-type Props = {
-  assetId: string;
-};
-
-export function TrueNASVMsTab({ assetId }: Props) {
+export function TrueNASVMsTab({ assetId }: { assetId: string }) {
+  const t = useTranslations("devices-truenas.vms");
+  const k = useTranslations("devices-proxmox.kit");
   const { data: vms, loading, error, refresh } = useTrueNASList<TrueNASVM>(assetId, "vms");
-  const [actionInFlight, setActionInFlight] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const actionSeq = useRef(0);
+  const action = useTrueNASAction();
+  const { ask, dialog } = useDiConfirm();
 
-  const doAction = useCallback(
-    async (vmId: string | number, action: "start" | "stop" | "restart") => {
-      const seq = ++actionSeq.current;
-      setActionError(null);
-      setActionInFlight(`${action}-${vmId}`);
-      try {
-        await truenasAction(
-          `/api/truenas/assets/${encodeURIComponent(assetId)}/vms/${encodeURIComponent(String(vmId))}/${action}`,
-          "POST",
-        );
-        if (actionSeq.current === seq) refresh();
-      } catch (err) {
-        if (actionSeq.current === seq) {
-          setActionError(err instanceof Error ? err.message : `${action} failed`);
-        }
-      } finally {
-        if (actionSeq.current === seq) setActionInFlight(null);
-      }
-    },
-    [assetId, refresh],
-  );
+  const run = (vm: TrueNASVM, verb: Verb) => action.run(`${verb}:${vm.name}`, () => truenasAction(
+    `/api/truenas/assets/${encodeURIComponent(assetId)}/vms/${encodeURIComponent(String(vm.id))}/${verb}`,
+    "POST",
+  ), refresh);
 
-  if (loading && vms.length === 0) {
-    return <Card><p className="text-sm text-[var(--muted)]">Loading VMs…</p></Card>;
+  const confirm = (vm: TrueNASVM, verb: "stop" | "restart") => ask({
+    title: t(`${verb}Title`, { name: vm.name }),
+    message: t(`${verb}Body`, { name: vm.name }),
+    confirmLabel: t(`${verb}Confirm`),
+    danger: verb === "stop",
+    onConfirm: () => run(vm, verb),
+  });
+
+  const scaleOnly = !!error && /scale|core/i.test(error);
+  if (scaleOnly) {
+    return <DiList cols="minmax(0, 1fr)"><DiEmpty title={t("scaleOnly")} /></DiList>;
   }
 
-  // Surface CORE/SCALE mismatch warning
-  if (error) {
-    const isScaleOnly =
-      error.toLowerCase().includes("scale") || error.toLowerCase().includes("core");
-    if (isScaleOnly) {
-      return (
-        <Card>
-          <p className="text-sm text-[var(--muted)]">
-            VMs are only available on TrueNAS SCALE. This asset may be running TrueNAS CORE.
-          </p>
-        </Card>
-      );
-    }
-    if (vms.length === 0) {
-      return <Card><p className="text-sm text-[var(--bad)]">{error}</p></Card>;
-    }
-  }
+  const failure = action.error
+    ? t(`${action.error.key.split(":")[0] as Verb}Failed`, {
+        name: action.error.key.split(":").slice(1).join(":"),
+        reason: failureText(action.error.message, t("noReason")),
+      })
+    : null;
 
   return (
-    <Card>
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-medium text-[var(--text)]">Virtual Machines</h2>
-        <Button size="sm" variant="ghost" onClick={refresh} disabled={loading}>
-          {loading ? "Refreshing…" : "Refresh"}
-        </Button>
-      </div>
-      {actionError ? <p className="mb-3 text-xs text-[var(--bad)]">{actionError}</p> : null}
-      {vms.length === 0 ? (
-        <p className="text-sm text-[var(--muted)]">No virtual machines found.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-[var(--line)]">
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Name</th>
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Status</th>
-                <th className="py-2 text-left font-medium text-[var(--muted)]">vCPUs</th>
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Memory</th>
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Autostart</th>
-                <th className="py-2 text-right font-medium text-[var(--muted)]">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--line)]">
-              {vms.map((vm) => {
-                const state = vm.status?.trim().toUpperCase();
-                const isRunning = state === "RUNNING";
-                const isStopped = state === "STOPPED";
-                return (
-                  <tr key={String(vm.id)}>
-                    <td className="py-2 font-medium text-[var(--text)]">{vm.name}</td>
-                    <td className="py-2">
-                      <div className="flex items-center gap-2">
-                        <Badge status={vmStatusBadge(vm.status)} size="sm" />
-                        <span className="text-[var(--muted)]">{vm.status ?? "--"}</span>
-                      </div>
-                    </td>
-                    <td className="py-2 text-[var(--muted)]">{vm.vcpus ?? "--"}</td>
-                    <td className="py-2 text-[var(--muted)]">
-                      {vm.memory != null ? `${vm.memory} MiB` : "--"}
-                    </td>
-                    <td className="py-2 text-[var(--muted)]">
-                      {vm.autostart != null ? (vm.autostart ? "Yes" : "No") : "--"}
-                    </td>
-                    <td className="py-2 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={!!actionInFlight || !isStopped}
-                          loading={actionInFlight === `start-${vm.id}`}
-                          onClick={() => { void doAction(vm.id, "start"); }}
-                        >
-                          Start
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={!!actionInFlight || !isRunning}
-                          loading={actionInFlight === `stop-${vm.id}`}
-                          onClick={() => { void doAction(vm.id, "stop"); }}
-                        >
-                          Stop
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={!!actionInFlight}
-                          loading={actionInFlight === `restart-${vm.id}`}
-                          onClick={() => { void doAction(vm.id, "restart"); }}
-                        >
-                          Restart
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Card>
+    <>
+      <TnFailure message={failure} />
+      <DiList
+        label={t("label")}
+        cols="minmax(0, 1fr) 120px 64px 80px 28px"
+        colsM="minmax(0, 1fr) 120px 80px 28px"
+        colsS="minmax(0, 1fr) 96px 28px"
+      >
+        <DiCols>
+          <span>{t("colVm")}</span>
+          <span>{t("colState")}</span>
+          <span className="r di-m">{t("colCpu")}</span>
+          <span className="r di-s">{t("colMemory")}</span>
+          <span />
+        </DiCols>
+        <TnListState loading={loading} error={error} count={vms.length} empty={t("empty")} onRetry={refresh} failed={(reason) => t("loadFailed", { reason })} />
+        {vms.map((vm) => {
+          const state = vmState(vm.status);
+          const word = state.word === "other" ? (state.raw ?? "") : t(state.word);
+          const memory = memoryParts(vm.memory);
+          const busy = action.busy !== null;
+          const running = state.word === "running";
+          return (
+            <DiRow key={String(vm.id)}>
+              <DiMain name={vm.name} grey={vm.autostart ? t("onBoot") : undefined} />
+              <TnWord tone={state.tone} word={word} />
+              <DiNum value={vm.vcpus} className="di-m" />
+              <DiNum value={memory?.value} unit={memory?.unit} className="di-s" />
+              <DiRowMenu
+                label={k("actionsFor", { name: vm.name })}
+                items={[
+                  { label: t("start"), disabled: busy || state.word !== "stopped", onSelect: () => { void run(vm, "start"); } },
+                  { label: t("restart"), disabled: busy, onSelect: () => confirm(vm, "restart") },
+                  { separator: true },
+                  { label: t("stop"), danger: true, disabled: busy || !running, onSelect: () => confirm(vm, "stop") },
+                ]}
+              />
+            </DiRow>
+          );
+        })}
+      </DiList>
+      {dialog}
+    </>
   );
 }

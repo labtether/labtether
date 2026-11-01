@@ -101,7 +101,7 @@ test("desktop WebRTC renders multi-monitor streams as a stitched layout", async 
   await installDesktopApiMocks(page, { sessionRequests });
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
-  await page.getByRole("combobox", { name: "Desktop protocol" }).selectOption("webrtc");
+  await page.getByRole("combobox", { name: "Protocol" }).selectOption("webrtc");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect
@@ -121,7 +121,7 @@ test("desktop WebRTC native scaling uses a scrollable 1:1 container", async ({
   await installDesktopApiMocks(page, { sessionRequests });
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
-  await page.getByRole("combobox", { name: "Desktop protocol" }).selectOption("webrtc");
+  await page.getByRole("combobox", { name: "Protocol" }).selectOption("webrtc");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect
@@ -129,10 +129,8 @@ test("desktop WebRTC native scaling uses a scrollable 1:1 container", async ({
     .toBe("webrtc");
   await expect(page.getByTitle("Disconnect")).toBeVisible();
 
-  await page
-    .getByRole("group", { name: "Scaling mode" })
-    .getByRole("button", { name: "1:1" })
-    .click();
+  await page.getByRole("button", { name: "More", exact: true }).click();
+  await page.getByRole("menuitemradio", { name: "100%" }).click();
 
   await expect
     .poll(() =>

@@ -1,6 +1,80 @@
 {
   "title": "用户",
-  "subtitle": "管理本地用户账户和角色",
   "addUser": "添加用户",
-  "userManagement": "用户管理"
+  "roles": {
+    "owner": "所有者",
+    "admin": "管理员",
+    "operator": "操作员",
+    "viewer": "查看者"
+  },
+  "list": {
+    "user": "用户",
+    "role": "角色",
+    "twoFactor": "双重验证",
+    "on": "开",
+    "off": "关",
+    "local": "本地账户",
+    "sso": "单点登录",
+    "youAnd": "你 · {kind}",
+    "empty": "没有用户",
+    "loadFailed": "用户未能加载。",
+    "actions": "操作",
+    "actionsFor": "{name} 的操作"
+  },
+  "menu": {
+    "role": "更改角色…",
+    "password": "重置密码…",
+    "signOut": "在所有设备上退出…",
+    "remove": "移除…"
+  },
+  "fields": {
+    "username": "用户名",
+    "role": "角色",
+    "password": "密码",
+    "newPassword": "新密码",
+    "repeatPassword": "再次输入密码"
+  },
+  "add": {
+    "title": "添加用户",
+    "submit": "添加用户"
+  },
+  "role": {
+    "title": "更改 {name} 的角色",
+    "submit": "保存"
+  },
+  "password": {
+    "title": "重置 {name} 的密码",
+    "submit": "重置密码"
+  },
+  "signOut": {
+    "title": "让 {name} 在所有设备上退出？",
+    "titleYou": "在所有设备上退出？",
+    "body": "{name} 的所有会话都会结束。{name} 可以重新登录。",
+    "bodyYou": "你的所有会话都会结束，包括当前会话。",
+    "submit": "退出"
+  },
+  "remove": {
+    "title": "移除 {name}？",
+    "body": "{name} 将无法再登录，其会话都会结束。",
+    "submit": "移除"
+  },
+  "errors": {
+    "nameEmpty": "请输入用户名",
+    "nameChars": "只能使用字母、数字、点、连字符或下划线",
+    "nameLong": "最多 32 个字符",
+    "passShort": "至少 8 个字符",
+    "passMismatch": "两次输入的密码不一致",
+    "addFailed": "用户未添加。",
+    "roleFailed": "角色未更改。",
+    "passwordFailed": "密码未重置。",
+    "signOutFailed": "会话未结束。",
+    "removeFailed": "用户未移除。"
+  },
+  "toast": {
+    "added": "已添加 {name}",
+    "role": "{name} 现在是{role}",
+    "password": "已重置 {name} 的密码",
+    "signedOut": "已让 {name} 在所有设备上退出",
+    "removed": "已移除 {name}"
+  }
 }

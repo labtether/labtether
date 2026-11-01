@@ -1,4 +1,4 @@
-import { Settings, Globe, Palette, UserCog, Lock } from "lucide-react";
+import { Settings, Globe, Palette, UserCog, Lock, BellRing, Cpu } from "lucide-react";
 import type { PaletteItem, PaletteProvider } from "../../../contexts/PaletteContext";
 import { meetsMinimumRole, type MinimumRole } from "../../../lib/roles";
 
@@ -17,7 +17,7 @@ const SETTINGS_ITEMS: SettingsEntry[] = [
     label: "Settings",
     description: "General hub settings and configuration",
     href: "/settings",
-    keywords: ["settings", "configuration", "general"],
+    keywords: ["settings", "configuration", "general", "retention", "backup", "export", "database", "postgres", "reset"],
     minimumRole: "admin",
   },
   {
@@ -28,11 +28,27 @@ const SETTINGS_ITEMS: SettingsEntry[] = [
     keywords: ["users", "accounts", "roles", "members"],
   },
   {
+    id: "settings-notifications",
+    label: "Notifications",
+    description: "Channels that alerts are sent to",
+    href: "/settings/notifications",
+    keywords: ["notifications", "channels", "email", "slack", "discord", "ntfy", "webhook", "gotify"],
+    minimumRole: "admin",
+  },
+  {
     id: "settings-security",
     label: "Security",
-    description: "TLS, agent setup, database, and security settings",
+    description: "HTTPS, single sign-on, saved logins and API keys",
     href: "/security",
-    keywords: ["security", "tls", "ssl", "certificate", "https", "agent", "setup", "install", "endpoint", "database", "postgres", "storage", "db"],
+    keywords: ["security", "tls", "ssl", "certificate", "https", "tailscale", "oidc", "sso", "api", "keys", "tokens", "prometheus", "mcp"],
+    minimumRole: "admin",
+  },
+  {
+    id: "settings-agents",
+    label: "Agents",
+    description: "Connect agents, enrollment tokens and the hub SSH key",
+    href: "/settings/agents",
+    keywords: ["agents", "agent", "setup", "install", "enroll", "enrollment", "token", "ssh"],
     minimumRole: "admin",
   },
   {
@@ -56,7 +72,9 @@ const SETTINGS_ITEMS: SettingsEntry[] = [
 const ICONS = {
   "settings-main": Settings,
   "settings-users": UserCog,
+  "settings-notifications": BellRing,
   "settings-security": Lock,
+  "settings-agents": Cpu,
   "settings-discovery": Globe,
   "settings-appearance": Palette,
 } as const;

@@ -148,9 +148,7 @@ export function buildAssetNodes(
     if (entry) {
       hasChildren = entry.deviceChildren.length > 0 || entry.workloadChildren.length > 0;
       summaryBadge = formatWorkloadSummary(entry.workloads);
-      if (summaryBadge === "no workloads" && entry.deviceChildren.length === 0) {
-        summaryBadge = "";
-      }
+      if (summaryBadge === "no workloads") summaryBadge = "";
 
       // Group all children (device + workload) by source+label
       const allChildren = [...entry.deviceChildren, ...entry.workloadChildren];
@@ -204,39 +202,18 @@ export function buildAssetNodes(
   });
 }
 
-export function getConnectionColor(relationship: string): string {
-  switch (relationship) {
-    case "runs_on":
-    case "hosted_on":
-      return "var(--ok)";       // neon green
-    case "depends_on":
-      return "#f97316";          // orange
-    case "provides_to":
-      return "var(--accent)";   // neon rose
-    default:
-      return "var(--muted)";
-  }
-}
-
+/** Network links draw solid, everything else dashed; one quiet line colour (status colours mean status only). */
 export function buildConnectionEdges(connections: TopologyConnection[], visibleAssetIDs: Set<string>): Edge[] {
   return connections
     .filter(conn => visibleAssetIDs.has(conn.source_asset_id) && visibleAssetIDs.has(conn.target_asset_id))
     .map((conn) => {
-      const color = getConnectionColor(conn.relationship);
+      const network = conn.relationship === "connected_to" || conn.relationship === "peer_of";
       return {
         id: `conn-${conn.id}`,
         source: `asset-${conn.source_asset_id}`,
         target: `asset-${conn.target_asset_id}`,
         type: "default",
-        animated: conn.relationship === "runs_on",
-        style: {
-          stroke: color,
-          strokeWidth: 2,
-          strokeDasharray: conn.origin === "discovered" ? "6 4" : undefined,
-          opacity: conn.origin === "discovered" ? 0.5 : 0.6,
-          filter: `drop-shadow(0 0 3px ${color})`,
-          transition: `opacity var(--dur-fast) ease`,
-        },
+        className: network ? "mp-edge" : "mp-edge dep",
         data: { connectionId: conn.id, relationship: conn.relationship, origin: conn.origin },
       };
     });

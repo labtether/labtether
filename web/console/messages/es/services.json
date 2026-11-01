@@ -1,36 +1,327 @@
 {
   "title": "Servicios",
-  "subtitle": {
-    "default": "Servicios web descubiertos en su homelab",
-    "count": "{upCount}/{totalCount} servicios en línea"
+  "actions": {
+    "refresh": "Actualizar",
+    "add": "Añadir servicio",
+    "more": "Más acciones",
+    "editShown": "{count, plural, one {Editar # servicio mostrado…} other {Editar # servicios mostrados…}}",
+    "pulling": "Descargando imágenes…",
+    "pullImages": "{count, plural, one {Descargar # imagen…} other {Descargar # imágenes…}}",
+    "noImages": "No hay imágenes que descargar",
+    "arrange": "Ordenar",
+    "doneArranging": "Terminar de ordenar",
+    "settings": "Ajustes de servicios",
+    "discovery": "Detección"
+  },
+  "arrange": {
+    "title": "Ordenando",
+    "hint": "Arrastra una fila para moverla dentro de su categoría.",
+    "reset": "Restablecer orden",
+    "done": "Hecho"
+  },
+  "toolbar": {
+    "filter": "Filtrar por nombre, dispositivo o dirección",
+    "show": "Mostrar",
+    "shows": {
+      "all": "Todos",
+      "down": "Caídos",
+      "hidden": "Ocultos"
+    },
+    "filters": "Filtros",
+    "category": "Categoría",
+    "anyCategory": "Cualquier categoría",
+    "device": "Dispositivo",
+    "anyDevice": "Cualquier dispositivo",
+    "source": "Encontrado por",
+    "anySource": "Cualquiera",
+    "sources": {
+      "docker": "Docker",
+      "proxy": "Proxy inverso",
+      "scan": "Escaneo de puertos",
+      "manual": "Añadido a mano"
+    },
+    "status": "Estado",
+    "anyStatus": "Cualquier estado",
+    "statuses": {
+      "up": "Activo",
+      "down": "Caído",
+      "unknown": "Desconocido"
+    },
+    "health": "Estabilidad",
+    "anyHealth": "Cualquiera",
+    "healths": {
+      "unstable": "Menos del 95 % de uptime",
+      "changed_recently": "Cambió en las últimas 2 horas"
+    },
+    "sort": "Ordenar",
+    "sorts": {
+      "name": "Nombre",
+      "latency": "Latencia",
+      "most_unstable": "Menos estables primero",
+      "uptime_high": "Más uptime primero",
+      "recently_changed": "Último cambio primero"
+    },
+    "clear": "Quitar filtros",
+    "group": "Agrupar",
+    "groupings": {
+      "none": "Ninguno",
+      "category": "Categoría",
+      "host": "Dispositivo"
+    }
+  },
+  "list": {
+    "label": "Servicios",
+    "selectAll": "Seleccionar todos los mostrados",
+    "columns": {
+      "service": "Servicio",
+      "latency": "Latencia"
+    },
+    "noDevice": "Sin dispositivo",
+    "shownOf": "{shown} de {total}",
+    "clearFilter": "Quitar filtro",
+    "downSince": "Caído desde {time}",
+    "down": "Caído",
+    "unknown": "Estado desconocido",
+    "hidden": "Oculto",
+    "rowLabel": "{name} en {host}",
+    "select": "Seleccionar {name}",
+    "actionsFor": "Acciones de {name}",
+    "open": "Abrir",
+    "copyAddress": "Copiar dirección",
+    "goTo": "Ir a {host}",
+    "details": "Detalles",
+    "hideDetails": "Ocultar detalles",
+    "edit": "Editar…",
+    "hide": "Ocultar en Servicios",
+    "unhide": "Mostrar en Servicios",
+    "remove": "Quitar…",
+    "noMatch": "Ningún servicio coincide con «{query}»",
+    "noHidden": "No hay servicios ocultos",
+    "noneDown": "Ningún servicio está caído",
+    "noneFiltered": "Ningún servicio coincide con los filtros",
+    "loading": "Cargando servicios",
+    "emptyTitle": "Aún no hay servicios",
+    "emptyBody": "Los servicios aparecen cuando un agente encuentra una aplicación web en un dispositivo.",
+    "emptyAdd": "Añadir servicio",
+    "updateFailed": "No se pudieron actualizar los servicios.",
+    "loadFailed": "No se pudieron cargar los servicios.",
+    "retry": "Reintentar"
+  },
+  "details": {
+    "label": "Comprobaciones de {name}",
+    "downTimes": "{count, plural, one {Caído una vez en las comprobaciones recientes} other {Caído # veces en las comprobaciones recientes}}",
+    "upAll": "Activo en todas las comprobaciones recientes",
+    "noAnswer": "Sin respuesta",
+    "window": "Últimas {window}",
+    "uptime": "Uptime {pct} %",
+    "avg": "Media {ms}",
+    "peak": "Pico {ms}",
+    "outages": "Caídas",
+    "none": "Ninguna",
+    "lastCheck": "Última comprobación",
+    "lastChange": "Último cambio",
+    "recentChecks": "Comprobaciones recientes",
+    "status": {
+      "up": "Activo",
+      "down": "Caído",
+      "unk": "Desconocido"
+    },
+    "url": "URL",
+    "device": "Dispositivo",
+    "source": "Encontrado por",
+    "sources": {
+      "docker": "Docker",
+      "proxy": "Proxy inverso",
+      "scan": "Escaneo de puertos",
+      "manual": "Añadido a mano",
+      "other": "Otro"
+    },
+    "lan": "Escaneo LAN",
+    "scanned": "Dirección escaneada",
+    "container": "Contenedor",
+    "image": "Imagen",
+    "unit": "Unidad",
+    "router": "Router",
+    "backend": "Backend",
+    "direct": "URL directa",
+    "altUrls": "Otras direcciones",
+    "compat": "API compatible",
+    "authHint": "Inicio de sesión",
+    "profile": "Perfil de detección",
+    "evidence": "Pruebas de detección",
+    "downFor": "Caído desde hace {duration}",
+    "minutes": "{count, plural, one {# minuto} other {# minutos}}",
+    "hours": "{count, plural, one {# hora} other {# horas}}"
+  },
+  "add": {
+    "label": "Añadir servicio",
+    "name": "Nombre",
+    "url": "URL",
+    "device": "Dispositivo",
+    "noDevice": "Ninguno",
+    "category": "Categoría",
+    "nameMissing": "Escribe un nombre",
+    "urlMissing": "Escribe una URL",
+    "urlInvalid": "Escribe una URL como https://host:puerto",
+    "failed": "No se pudo añadir el servicio.",
+    "cancel": "Cancelar",
+    "submit": "Añadir"
+  },
+  "bulk": {
+    "label": "Servicios seleccionados",
+    "selected": "<b>{count}</b> seleccionados",
+    "edit": "Editar…",
+    "hide": "Ocultar",
+    "show": "Mostrar",
+    "clear": "Quitar selección"
+  },
+  "bulkEdit": {
+    "title": "{count, plural, one {Editar # servicio} other {Editar # servicios}}",
+    "category": "Categoría",
+    "visibility": "En Servicios",
+    "noChange": "Sin cambios",
+    "hide": "Ocultar",
+    "show": "Mostrar",
+    "icon": "Icono",
+    "iconModes": {
+      "no_change": "Sin cambios",
+      "set": "Elegir",
+      "clear": "Usar el encontrado"
+    },
+    "noIcon": "Ningún icono elegido",
+    "pickIcon": "Elige un icono.",
+    "nothing": "Elige un cambio.",
+    "failed": "No se pudieron guardar los cambios.",
+    "cancel": "Cancelar",
+    "applying": "Guardando…",
+    "apply": "{count, plural, one {Guardar # servicio} other {Guardar # servicios}}"
+  },
+  "edit": {
+    "close": "Cerrar",
+    "title": "Editar {name}",
+    "name": "Nombre",
+    "url": "URL",
+    "category": "Categoría",
+    "icon": "Icono",
+    "iconFound": "Encontrado automáticamente",
+    "iconChange": "Cambiar",
+    "iconDone": "Hecho",
+    "tags": "Etiquetas",
+    "tagAdd": "Añadir etiqueta",
+    "tagRemove": "Quitar la etiqueta {tag}",
+    "altUrls": "Otras direcciones",
+    "altAdd": "Añadir una dirección",
+    "add": "Añadir",
+    "altRemove": "Quitar {url}",
+    "altAdded": "Dirección añadida.",
+    "altRemoved": "Dirección quitada.",
+    "altSource": {
+      "accepted": "Aceptada",
+      "manual": "Añadida a mano",
+      "found": "Encontrada"
+    },
+    "altLoadFailed": "No se pudieron cargar las otras direcciones.",
+    "altFailed": "No se pudo guardar la dirección.",
+    "altAddFailed": "No se pudo añadir la dirección.",
+    "altRemoveFailed": "No se pudo quitar la dirección.",
+    "hide": "Ocultar en Servicios",
+    "reset": "Volver a lo detectado",
+    "resetFailed": "No se pudo restablecer el servicio.",
+    "nameMissing": "Escribe un nombre",
+    "saveFailed": "No se pudieron guardar los cambios.",
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "saving": "Guardando…"
+  },
+  "icons": {
+    "library": "Subidos",
+    "upload": "Subir icono",
+    "uploading": "Subiendo…",
+    "limits": "PNG, JPEG, WEBP, GIF o SVG de hasta {max}",
+    "badType": "Usa un archivo PNG, JPEG, WEBP, GIF o SVG.",
+    "tooLarge": "El icono ocupa más de {max}.",
+    "unreadable": "No se pudo leer el archivo.",
+    "uploaded": "{name} subido.",
+    "deleteAsk": "¿Eliminar {name} de los iconos subidos?",
+    "deleted": "{name} eliminado.",
+    "deleteFailed": "No se pudo eliminar el icono.",
+    "renameAsk": "Nombre del icono",
+    "renamed": "Renombrado a {name}.",
+    "renameFailed": "No se pudo renombrar el icono.",
+    "rename": "Renombrar {name}",
+    "delete": "Eliminar {name}",
+    "clearCustom": "Usar el icono encontrado",
+    "search": "Buscar iconos",
+    "more": "Se muestran {shown} de {total}",
+    "noMatch": "Ningún icono coincide con «{query}»"
+  },
+  "toasts": {
+    "added": "{name} añadido",
+    "hidden": "{name} está oculto en Servicios",
+    "shown": "{name} vuelve a mostrarse en Servicios",
+    "saveFailed": "No se pudo guardar {name}.",
+    "removed": "{name} quitado",
+    "removeFailed": "No se pudo quitar {name}.",
+    "copied": "{address} copiada",
+    "copyFailed": "No se pudo copiar la dirección.",
+    "notSaved": "no guardado",
+    "bulkPartial": "Guardados {saved} de {total}. {first}",
+    "bulkSaved": "{count, plural, one {# servicio guardado} other {# servicios guardados}}",
+    "bulkFailed": "No se pudieron guardar los cambios.",
+    "pullFailedOne": "la descarga falló",
+    "pullPartial": "Descargadas {pulled} de {total} imágenes. {first}",
+    "pulled": "{count, plural, one {# imagen descargada} other {# imágenes descargadas}}"
+  },
+  "remove": {
+    "title": "¿Quitar {name}?",
+    "body": "LabTether deja de comprobar {address}.",
+    "confirm": "Quitar"
+  },
+  "pull": {
+    "title": "{count, plural, one {¿Descargar # imagen?} other {¿Descargar # imágenes?}}",
+    "body": "La imagen más reciente de cada servicio Docker en {scope}. Los contenedores en marcha conservan su imagen hasta que se vuelven a crear.",
+    "confirm": "Descargar",
+    "allDevices": "todos los dispositivos"
   },
   "suggestions": {
+    "ask": "¿Es {url} otra dirección de {name}?",
     "accept": "Aceptar",
     "deny": "Rechazar"
   },
+  "discovery": {
+    "title": "Últimos ciclos",
+    "label": "Detección de servicios",
+    "defaults": "Valores de detección por defecto",
+    "devices": "{count, plural, one {# dispositivo informa} other {# dispositivos informan}}",
+    "perCycle": "{count} servicios por ciclo",
+    "cycleTime": "{ms} ms por ciclo",
+    "lastCycle": "Último ciclo {time}",
+    "source": "Fuente",
+    "enabled": "Activa en",
+    "found": "Encontrados",
+    "time": "Tiempo",
+    "sources": {
+      "docker": "Docker",
+      "proxy": "API de proxy inverso",
+      "local_scan": "Escaneo de puertos local",
+      "lan_scan": "Escaneo LAN"
+    },
+    "enabledOn": "{on} de {total} dispositivos",
+    "device": "Dispositivo",
+    "lastReport": "Último informe",
+    "services": "Servicios",
+    "loading": "Cargando",
+    "noneTitle": "Aún no hay informes de detección",
+    "noneBody": "Cada agente informa tras su ciclo de detección."
+  },
   "config": {
-    "title": "Configuración de servicios",
-    "backToServices": "Volver a servicios",
+    "title": "Ajustes de servicios",
     "tabs": {
       "manual": "Servicios manuales",
       "overrides": "Anulaciones",
       "grouping": "Agrupación y fusión",
-      "icons": "Iconos"
-    },
-    "header": {
-      "edit": "Editar",
-      "addManualService": "Agregar servicio manual",
-      "doneSelect": "Finalizar selección",
-      "selectServices": "Seleccionar servicios",
-      "bulkEdit": "Edición masiva ({count})",
-      "doneArranging": "Finalizar organización",
-      "arrangeServices": "Organizar servicios",
-      "syncing": "Sincronizando...",
-      "refresh": "Actualizar",
-      "pulling": "Descargando...",
-      "pullImages": "Descargar imágenes ({count})",
-      "pullImagesTitle": "Descargar {count} imagen(es) única(s)",
-      "noImagesAvailable": "No hay imágenes de servicios Docker disponibles para descargar"
+      "icons": "Iconos",
+      "discovery": "Detección"
     },
     "overrides": {
       "serviceName": "Nombre del servicio",
@@ -121,7 +412,7 @@
       "urlInvalid": "La URL debe comenzar con http:// o https://",
       "categoryRequired": "La categoría es obligatoria",
       "hostPlaceholder": "Seleccionar un activo (opcional)",
-      "emptyState": "No hay servicios manuales. Haga clic en \"Agregar servicio\" para crear uno.",
+      "emptyState": "Aún no hay servicios manuales.",
       "form": {
         "name": "Nombre *",
         "namePlaceholder": "Mi servicio",
@@ -158,6 +449,7 @@
       "fileTooLarge": "El archivo supera el límite de 512KB",
       "uploadFailed": "Error al subir",
       "emptyState": "No hay iconos personalizados. Suba iconos para usarlos en sus servicios."
-    }
+    },
+    "crumb": "Ruta"
   }
 }

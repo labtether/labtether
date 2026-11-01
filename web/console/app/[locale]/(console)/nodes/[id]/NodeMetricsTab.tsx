@@ -1,19 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Card } from "../../../../components/ui/Card";
-import { SegmentedTabs } from "../../../../components/ui/SegmentedTabs";
+import { useTranslations } from "next-intl";
 import { telemetryWindows } from "../../../../console/models";
 import type {
   AssetTelemetryDetails,
   TelemetryWindow,
 } from "../../../../console/models";
 import { NodeMetricsControls } from "./NodeMetricsControls";
-import { MetricPanel, SummaryStat } from "./NodeMetricsPanels";
+import { MetricPanel } from "./NodeMetricsPanels";
 import {
   analyzeTelemetryDetails,
   formatRange,
 } from "./nodeMetricsModel";
+import { useMetricWords } from "./metricsViewWords";
 
 type Props = {
   telemetryDetails: AssetTelemetryDetails | null;
@@ -23,6 +23,10 @@ type Props = {
   requestedFocusMetric?: string | null;
 };
 
+/**
+ * The System tab's Metrics view: every metric the device reports over the chosen range, one chart each. The bar
+ * holds the range, the time span and one metric to show alone; chips below show or hide metrics.
+ */
 export function NodeMetricsTab({
   telemetryDetails,
   telemetryLoading,
@@ -30,6 +34,8 @@ export function NodeMetricsTab({
   onTelemetryWindowChange,
   requestedFocusMetric,
 }: Props) {
+  const t = useTranslations("devices.metrics");
+  const words = useMetricWords();
   const analyzed = useMemo(
     () => analyzeTelemetryDetails(telemetryDetails),
     [telemetryDetails]
@@ -62,7 +68,7 @@ export function NodeMetricsTab({
     if (!focusMetric) return;
     const stillVisible = visibleSeries.some((series) => series.metric === focusMetric);
     if (!stillVisible) {
-      setFocusMetric(visibleSeries[0]?.metric ?? null);
+      setFocusMetric(null);
     }
   }, [focusMetric, visibleSeries]);
 
@@ -83,103 +89,76 @@ export function NodeMetricsTab({
     return visibleSeries.filter((series) => series.metric === focusMetric);
   }, [focusMetric, visibleSeries]);
 
-  const warningMetricCount = useMemo(
-    () => analyzed.filter((series) => series.flags.some((flag) => flag.tone !== "info")).length,
-    [analyzed]
-  );
-
+  const problemCount = analyzed.filter((series) => series.warningCount > 0).length;
   const hiddenCount = analyzed.length - visibleSeries.length;
-  const infoFlagCount = analyzed.reduce(
-    (sum, series) => sum + series.flags.filter((flag) => flag.tone === "info").length,
-    0
-  );
-  const selectedLabel = focusMetric
-    ? analyzed.find((series) => series.metric === focusMetric)?.label ?? "Single metric"
-    : "All visible metrics";
-  const sampleCount = analyzed.reduce((sum, series) => sum + series.rawSampleCount, 0);
-  const staleCount = analyzed.filter((series) => series.flags.some((flag) => flag.label === "Stale")).length;
+  const span = telemetryDetails ? formatRange(telemetryDetails.from, telemetryDetails.to) : "";
+  const showAll = () =>
+    setHiddenMetrics((prev) => Object.fromEntries(Object.keys(prev).map((metric) => [metric, false])));
 
   return (
-    <Card className="mb-4">
-      <div className="mb-3 flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <h2 className="text-sm font-medium text-[var(--text)]">Metrics History</h2>
-          {telemetryDetails ? (
-            <p className="text-[11px] text-[var(--muted)]">
-              {formatRange(telemetryDetails.from, telemetryDetails.to)} · {telemetryDetails.step} cadence
-              {warningMetricCount > 0 ? ` · ${warningMetricCount} signals need attention` : " · signal quality healthy"}
-            </p>
-          ) : null}
+    <div className="dmt">
+      <div className="dv-bar">
+        <div className="dv-seg" role="group" aria-label={t("window")}>
+          {telemetryWindows.map((window) => (
+            <button
+              key={window}
+              type="button"
+              aria-pressed={window === telemetryWindow}
+              onClick={() => onTelemetryWindowChange(window)}
+            >
+              {window}
+            </button>
+          ))}
         </div>
-        <SegmentedTabs
-          size="sm"
-          value={telemetryWindow}
-          options={telemetryWindows.map((window) => ({ id: window, label: window }))}
-          onChange={onTelemetryWindowChange}
-        />
+        {telemetryDetails ? (
+          <span className="dv-hint">
+            {[span, telemetryDetails.step ? t("every", { step: telemetryDetails.step }) : ""].filter(Boolean).join(" · ")}
+            {problemCount > 0 ? <span className="dmt-warn"> · {t("withProblems", { count: problemCount })}</span> : null}
+          </span>
+        ) : null}
+        <span className="dv-sp" />
+        {visibleSeries.length > 1 ? (
+          <select
+            className="dv-input dmt-select"
+            aria-label={t("focus")}
+            value={focusMetric ?? ""}
+            onChange={(event) => setFocusMetric(event.target.value || null)}
+          >
+            <option value="">{t("allMetrics")}</option>
+            {visibleSeries.map((series) => (
+              <option key={series.metric} value={series.metric}>{words.name(series)}</option>
+            ))}
+          </select>
+        ) : null}
       </div>
 
       {telemetryLoading ? (
-        <p className="text-sm text-[var(--muted)]">Loading telemetry data...</p>
-      ) : analyzed.length > 0 ? (
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
-            <SummaryStat label="Visible" value={`${visibleSeries.length}/${analyzed.length}`} tone="neutral" />
-            <SummaryStat
-              label="Warnings"
-              value={`${warningMetricCount}`}
-              tone={warningMetricCount > 0 ? "warn" : "ok"}
-            />
-            <SummaryStat label="Info Flags" value={`${infoFlagCount}`} tone="neutral" />
-            <SummaryStat label="Stale Feeds" value={`${staleCount}`} tone={staleCount > 0 ? "warn" : "ok"} />
-            <SummaryStat label="Samples" value={`${sampleCount}`} tone="neutral" />
-          </div>
-
+        <p className="dv-hint">{t("loading")}</p>
+      ) : analyzed.length === 0 ? (
+        <div className="dv-sheet dv-empty"><b>{t("empty")}</b></div>
+      ) : (
+        <>
           <NodeMetricsControls
             analyzed={analyzed}
-            visibleSeries={visibleSeries}
             hiddenMetrics={hiddenMetrics}
-            focusMetric={focusMetric}
             hiddenCount={hiddenCount}
-            selectedLabel={selectedLabel}
-            onShowAllMetrics={() => {
-              setHiddenMetrics((prev) => {
-                const next: Record<string, boolean> = {};
-                for (const metric of Object.keys(prev)) {
-                  next[metric] = false;
-                }
-                return next;
-              });
-            }}
-            onToggleMetric={(metric) => {
-              setHiddenMetrics((prev) => ({ ...prev, [metric]: !prev[metric] }));
-            }}
-            onFocusMetricChange={setFocusMetric}
+            onShowAllMetrics={showAll}
+            onToggleMetric={(metric) => setHiddenMetrics((prev) => ({ ...prev, [metric]: !prev[metric] }))}
           />
-
-          {visibleSeries.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-[var(--line)] p-6 text-center">
-              <p className="text-sm font-medium text-[var(--text)]">No metrics selected</p>
-              <p className="mt-1 text-xs text-[var(--muted)]">Enable at least one metric to render charts.</p>
+          {displayedSeries.length === 0 ? (
+            <div className="dv-sheet dv-empty dmt-gap">
+              <b>{t("allHidden")}</b>
+              <button type="button" className="dmt-quiet dv-empty-act" onClick={showAll}>{t("showAll", { count: hiddenCount })}</button>
             </div>
-          ) : null}
-
-          {displayedSeries.length > 0 ? (
-            <div className="space-y-3">
+          ) : (
+            <div className={`dmt-cells dmt-gap${displayedSeries.length === 1 ? " one" : ""}`}>
               {displayedSeries.map((series) => (
                 <MetricPanel key={series.metric} series={series} />
               ))}
             </div>
-          ) : null}
-        </div>
-      ) : (
-        <div className="flex flex-col items-center justify-center gap-2 py-12">
-          <p className="text-sm font-medium text-[var(--text)]">No metrics yet</p>
-          <p className="max-w-sm text-center text-xs text-[var(--muted)]">
-            No data for this device in the current time range. Try a wider range or check if the device is online.
-          </p>
-        </div>
+          )}
+        </>
       )}
-    </Card>
+    </div>
   );
 }

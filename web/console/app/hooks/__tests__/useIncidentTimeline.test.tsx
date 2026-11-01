@@ -3,16 +3,19 @@ import { createRoot, type Root } from "react-dom/client";
 import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useIncidentDetail } from "../useIncidents";
-import { IncidentCockpitCard } from "../../[locale]/(console)/incidents/IncidentCockpitCard";
-import IncidentsPage from "../../[locale]/(console)/incidents/page";
+import { IncidentTimeline } from "../../[locale]/(console)/incidents/IncidentTimeline";
+import { IssueView } from "../../[locale]/(console)/incidents/IssueView";
 import messages from "../../../messages/en/incidents.json";
 
-// The incident page owns selection; Next's app-router Link is outside this fixture.
+// The issue page reads its id from the route; Next's app-router Link, the signed-in user and the live device
+// status are outside this fixture.
 vi.mock("../../../i18n/navigation", () => ({
   Link: ({ href, ...props }: AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) => (
     <a href={href} {...props} />
   ),
 }));
+vi.mock("../../contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u-1", username: "owner", role: "owner" } }) }));
+vi.mock("../../contexts/StatusContext", () => ({ useFastStatus: () => null }));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -24,7 +27,7 @@ let fetchMock: ReturnType<typeof vi.fn>;
 
 function Consumer({ id }: { id: string }) {
   const { incident, timeline } = useIncidentDetail(id);
-  return incident ? <IncidentCockpitCard incident={incident} timeline={timeline} /> : null;
+  return incident ? <IncidentTimeline {...timeline} /> : null;
 }
 
 async function show(id: string) {
@@ -132,24 +135,19 @@ it("aborts old incident pages and ignores late replies after selection changes",
   expect(container.textContent).not.toContain(messages.timeline.loadOlder);
 });
 
-it("shows detail failure and retry on the actual page, and ignores a canceled detail from another selection", async () => {
+it("shows detail failure and retry on the actual page, and ignores a canceled detail from another issue", async () => {
   const details: PendingPage[] = [];
   fetchMock.mockImplementation((input: string, options?: RequestInit) => {
     const url = new URL(input, "https://console.example.test");
-    if (url.pathname === "/api/incidents") return Promise.resolve(Response.json({ incidents: [incident("incident-a"), incident("incident-b")] }));
     return new Promise<Response>((resolve) => {
       (url.pathname.endsWith("/events") ? pending : details).push({ url, signal: options?.signal ?? undefined, resolve });
     });
   });
-  await act(async () => root.render(
-    <NextIntlClientProvider locale="en" timeZone="UTC" messages={{ incidents: messages }}><IncidentsPage /></NextIntlClientProvider>,
+  const open = async (id: string) => act(async () => root.render(
+    <NextIntlClientProvider locale="en" timeZone="UTC" messages={{ incidents: messages }}><IssueView id={id} /></NextIntlClientProvider>,
   ));
-  const select = async (id: string) => {
-    const row = [...container.querySelectorAll("li")].find((item) => item.textContent?.includes(id));
-    expect(row).toBeDefined();
-    await act(async () => row!.click());
-  };
-  await select("incident-a");
+  const title = () => [...container.querySelectorAll("h1")].map((heading) => heading.textContent);
+  await open("incident-a");
   await reply(details.shift()!, { error: "unavailable" }, 503);
   await reply(pending.shift()!, { events: [] });
   expect(container.querySelector('[role="alert"]')?.textContent).toBe(messages.detail.error);
@@ -157,20 +155,18 @@ it("shows detail failure and retry on the actual page, and ignores a canceled de
   await act(async () => button(messages.detail.retry).click());
   await reply(details.shift()!, { incident: incident("incident-a") });
   expect(container.querySelector('[role="alert"]')).toBeNull();
-  expect([...container.querySelectorAll("h2")].some((heading) => heading.textContent === "incident-a")).toBe(true);
+  expect(title()).toEqual(["incident-a"]);
 
-  await act(async () => button(messages.back).click());
-  await select("incident-b");
+  await open("incident-b");
   const staleDetail = details.shift()!;
   const stalePage = pending.shift()!;
-  await act(async () => button(messages.back).click());
+  await open("incident-a");
   expect(staleDetail.signal?.aborted).toBe(true);
-  await select("incident-a");
   await reply(details.shift()!, { incident: incident("incident-a") });
   await reply(pending.shift()!, { events: [event("current-a")] });
   await reply(staleDetail, { incident: incident("incident-b") });
   await reply(stalePage, { events: [event("late-b", "incident-b")] });
-  expect([...container.querySelectorAll("h2")].some((heading) => heading.textContent === "incident-a")).toBe(true);
+  expect(title()).toEqual(["incident-a"]);
   expect(container.textContent).not.toContain("incident-b");
   expect(container.textContent).not.toContain("late-b");
   expect(container.textContent).toContain("Stored event current-a");

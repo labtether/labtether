@@ -1,57 +1,133 @@
 {
   "title": "Salud",
-  "subtitle": "Puntajes de disponibilidad, trabajos fallidos, historial de eventos y ventanas de mantenimiento",
-  "tabs": {
-    "scores": "Puntajes",
-    "timeline": "Eventos",
-    "maintenance": "Mantenimiento",
-    "map": "Mapa"
-  },
-  "scores": {
-    "locationHealth": "// Salud por ubicación",
-    "failedJobs": "// Trabajos fallidos",
-    "commonErrors": "// Errores comunes",
-    "failedJobsTrend": "// Tendencia de trabajos fallidos",
-    "dataCleanup": "// Limpieza de datos",
-    "healthEmpty": {
-      "title": "Aún no hay datos de salud",
-      "description": "Los puntajes de salud aparecerán cuando los grupos tengan dispositivos conectados."
+  "hub": {
+    "title": "Hub",
+    "checked": "Comprobado {time}",
+    "names": {
+      "hub": "Hub",
+      "api": "API",
+      "nodeAgent": "Agente del nodo",
+      "jobs": "Trabajos en segundo plano",
+      "cleanup": "Limpieza de datos"
     },
-    "noFailedJobs": "Sin trabajos fallidos.",
-    "noRecurringErrors": "Sin errores recurrentes.",
-    "noTrendData": "Sin datos de tendencia.",
-    "retentionHealthy": "Ciclo de retención saludable."
+    "words": {
+      "running": "En marcha",
+      "up": "Activo",
+      "down": "Caído",
+      "notSet": "Sin dirección",
+      "failedCount": "{count} fallidos en {window}",
+      "noFailures": "Sin fallos",
+      "failed": "Falló",
+      "ok": "OK"
+    },
+    "version": "Versión {version}",
+    "since": "Desde {time}",
+    "lastAt": "Último {time}",
+    "latency": "{ms} ms"
   },
-  "timeline": {
-    "heading": "// Historial de eventos",
-    "group": "Grupo",
-    "range": "Rango",
-    "errors": "Errores",
-    "warnings": "Advertencias",
-    "failedActions": "Acciones fallidas",
-    "failedUpdates": "Actualizaciones fallidas",
-    "unresponsive": "Sin respuesta",
-    "offline": "Sin conexión",
-    "noEvents": "Sin eventos en el rango de tiempo.",
-    "showMore": "Ver más",
-    "showLess": "Ver menos"
+  "downtime": {
+    "title": "Mantenimiento",
+    "schedule": "Programar mantenimiento",
+    "partial": "El mantenimiento de algunos grupos no se cargó.",
+    "effects": {
+      "mutes": "silencia alertas",
+      "pausesActions": "pausa acciones",
+      "pausesUpdates": "pausa actualizaciones",
+      "none": "No pausa nada"
+    },
+    "state": {
+      "activeUntil": "Hasta {time}",
+      "ended": "Terminó {time}"
+    },
+    "actionsFor": "Acciones para el mantenimiento de {name}",
+    "endNow": "Terminar ahora…",
+    "delete": "Eliminar…",
+    "loading": "Cargando mantenimiento",
+    "empty": "No hay mantenimiento programado"
   },
-  "maintenance": {
-    "heading": "// Ventanas de mantenimiento",
+  "schedule": {
+    "title": "Programar mantenimiento",
+    "submit": "Programar",
+    "defaultName": "Ventana de parches",
     "group": "Grupo",
     "name": "Nombre",
-    "start": "Inicio",
-    "end": "Fin",
-    "muteAlerts": "Silenciar alertas",
+    "starts": "Empieza",
+    "ends": "Termina",
+    "effects": "Durante el mantenimiento",
+    "mute": "Silenciar alertas",
     "pauseActions": "Pausar acciones",
     "pauseUpdates": "Pausar actualizaciones",
-    "submit": "Programar mantenimiento",
-    "saving": "Guardando...",
-    "empty": "No hay ventanas de mantenimiento programadas."
+    "errors": {
+      "name": "Escribe un nombre",
+      "times": "Escribe un inicio y un final",
+      "order": "El final debe ser posterior al inicio",
+      "failed": "El mantenimiento no se programó."
+    }
   },
-  "map": {
-    "heading": "// Mapa de ubicaciones",
-    "noCoordinates": "sin coordenadas",
-    "noLocationData": "Sin datos de ubicación para el mapa."
+  "end": {
+    "title": "¿Eliminar el mantenimiento de {name}?",
+    "titleActive": "¿Terminar ahora el mantenimiento de {name}?",
+    "bodyActive": "Las alertas, acciones y actualizaciones vuelven a funcionar como siempre.",
+    "submit": "Eliminar",
+    "submitActive": "Terminar ahora",
+    "failed": "El mantenimiento no terminó."
+  },
+  "groups": {
+    "title": "Grupos",
+    "online": "{online} de {total} en línea",
+    "offline": "{count} sin conexión",
+    "stale": "{count} sin respuesta",
+    "score": "{score} · {grade}",
+    "words": {
+      "good": "Bien",
+      "fair": "Regular",
+      "poor": "Mal",
+      "downtime": "En mantenimiento"
+    },
+    "empty": "No hay grupos con dispositivos"
+  },
+  "events": {
+    "title": "Eventos",
+    "group": "Grupo",
+    "range": "Intervalo",
+    "ranges": {
+      "1h": "1 h",
+      "6h": "6 h",
+      "24h": "24 h"
+    },
+    "impact": {
+      "errors": "{count, plural, one {# error} other {# errores}}",
+      "warnings": "{count, plural, one {# advertencia} other {# advertencias}}",
+      "failedActions": "{count, plural, one {# acción fallida} other {# acciones fallidas}}",
+      "failedUpdates": "{count, plural, one {# actualización fallida} other {# actualizaciones fallidas}}",
+      "stale": "{count} sin respuesta",
+      "offline": "{count} sin conexión"
+    },
+    "quiet": "Sin errores, advertencias ni fallos en este intervalo",
+    "severity": {
+      "error": "Error",
+      "warning": "Advertencia",
+      "info": "Info"
+    },
+    "failed": "Los eventos no se cargaron.",
+    "empty": "No hay eventos en este intervalo",
+    "loading": "Cargando eventos",
+    "noGroups": "No hay grupos",
+    "showAll": "Mostrar los {count}",
+    "showLess": "Mostrar menos"
+  },
+  "jobs": {
+    "title": "Trabajos fallidos",
+    "rate": "{hour} por hora · {day} por día",
+    "worker": "Worker",
+    "none": "No hay trabajos fallidos",
+    "common": "Errores frecuentes",
+    "times": "{count, plural, one {# vez} other {# veces}}",
+    "byHour": "Por hora:",
+    "hourCount": "{count} a las {time}"
+  },
+  "toast": {
+    "scheduled": "Mantenimiento programado para {name}",
+    "ended": "Mantenimiento de {name} terminado"
   }
 }

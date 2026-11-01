@@ -6,7 +6,7 @@ const VISUAL_ROUTES = [
   { id: "settings", path: "/settings", heading: "Settings" },
   { id: "alerts", path: "/alerts", heading: "Alerts" },
   { id: "logs", path: "/logs", heading: "Logs" },
-  { id: "health", path: "/reliability", heading: "Health" },
+  { id: "health", path: "/reliability", heading: "Settings" },
   { id: "devices", path: "/nodes", heading: "Devices" },
 ] as const;
 
@@ -173,6 +173,11 @@ async function installConsoleApiMocks(page: Page, unmocked: Set<string>) {
 
     if (pathname === "/api/settings/retention") {
       await fulfillJSON(route, retentionPayload);
+      return;
+    }
+
+    if (pathname === "/api/settings/managed-database") {
+      await fulfillJSON(route, { enabled: false, host: "", port: 5432, username: "", password: "", database: "" });
       return;
     }
 

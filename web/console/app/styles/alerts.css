@@ -1,0 +1,223 @@
+/* ── 2.0 Alerts ──
+   A Linear-style inbox: the alert list (340 px, titles on up to two lines) beside the chosen alert, both sheets as tall
+   as their content; under 640 px of room the detail sits below the list. Severity is a dot plus a word for critical
+   (red) and high (amber); medium and low are a quiet word. Rules, Silences and the Delivery log are plain lists.
+   Layouts follow the content's own width (container queries). */
+
+.al-ph { margin-bottom: 20px; }
+/* The tab row; the Alerts tab's Filter and Order menus sit at its right end (under it on a phone). */
+.al-tabrow { display: flex; align-items: stretch; margin-bottom: 16px; }
+.al-tabrow .al-tabs { flex: 1 1 auto; min-width: 0; margin-bottom: 0; }
+.al-tabtools { display: flex; align-items: center; gap: 8px; flex: none; padding-left: 16px; box-shadow: inset 0 -1px 0 var(--divider); }
+.al-tabtools .al-chip { height: var(--ctl-sm); padding: 0 10px; border-radius: var(--r-2); }
+.al-error { margin-bottom: 12px; font-size: var(--fs-meta); line-height: var(--lh-meta); color: var(--bad-text); }
+.al-sp { flex: 1; }
+.al-mono { font-family: var(--font-mono); font-size: 12px; }
+.al-trunc { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Toolbar: chips with menus, a segmented filter, page buttons on the right. */
+.al-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.al-tools:empty { display: none; }
+.al-chip { display: inline-flex; align-items: center; gap: 6px; height: var(--ctl); padding: 0 12px; border-radius: var(--r-3); background: var(--ctl-bg); box-shadow: var(--ctl-elev); font-size: var(--fs-meta); font-weight: 500; color: var(--text-2); white-space: nowrap; cursor: pointer; transition: color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
+.al-chip:hover, .al-chip[data-state="open"] { color: var(--text); box-shadow: var(--ctl-elev-hover); }
+.al-chip.on { background: var(--sel); box-shadow: none; color: var(--text); }
+.al-chip svg { width: 14px; height: 14px; }
+.al-chip-k { font-weight: 400; color: var(--text-3); }
+.al-menu-h { padding: 6px 10px 4px; font-size: var(--fs-micro); line-height: var(--lh-micro); font-weight: 500; color: var(--text-3); }
+.al-seg { display: inline-flex; flex: none; align-items: center; height: var(--ctl); padding: 2px; gap: 2px; border-radius: var(--r-3); background: var(--track); }
+.al-seg button { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: var(--r-2); font-size: var(--fs-meta); font-weight: 500; color: var(--text-2); cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
+.al-seg button:hover { color: var(--text); }
+.al-seg button.on { background: var(--ctl-bg); box-shadow: var(--ctl-elev); color: var(--text); }
+.al-n { font-weight: 400; color: var(--text-3); font-variant-numeric: tabular-nums; }
+
+/* A secondary button for menu triggers (the kit Button look). */
+.al-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: var(--ctl); padding: 0 12px; border-radius: var(--r-3); background: var(--ctl-bg); box-shadow: var(--ctl-elev); font-size: var(--fs-meta); font-weight: 500; color: var(--text); white-space: nowrap; cursor: pointer; transition: box-shadow var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out); }
+.al-btn:hover, .al-btn[data-state="open"] { box-shadow: var(--ctl-elev-hover); }
+.al-btn svg { width: 14px; height: 14px; flex: none; color: var(--text-3); }
+.al-btn.icon { width: var(--ctl); padding: 0; }
+.al-btn.quiet { background: transparent; box-shadow: none; color: var(--text-2); }
+.al-btn.quiet:hover { background: var(--hover); color: var(--text); }
+.al-btn:disabled { opacity: 0.5; cursor: default; box-shadow: var(--ctl-elev); }
+.al-btn:focus-visible, .al-chip:focus-visible, .al-seg button:focus-visible { outline: 2px solid var(--control-focus-ring); outline-offset: 2px; }
+.al-danger, .al-danger:hover { color: var(--bad-text); }
+
+/* Sheets and their small parts */
+.al-sheet { border-radius: var(--r-4); background: var(--panel); box-shadow: var(--elev-1); }
+.al-empty { display: grid; justify-items: center; gap: 4px; padding: 48px 16px; text-align: center; color: var(--text-3); }
+.al-empty b { font-weight: 500; color: var(--text); }
+.al-quiet { margin-top: 8px; font-weight: 500; color: var(--text-2); cursor: pointer; }
+.al-quiet:hover { color: var(--text); }
+.al-none { padding: 14px 12px 14px 32px; font-size: var(--fs-meta); color: var(--text-3); }
+.al-group { padding: 20px 12px 6px 32px; font-size: var(--fs-meta); line-height: var(--lh-meta); font-weight: 600; color: var(--text-2); }
+.al-foot { display: flex; justify-content: space-between; align-items: center; height: 40px; padding: 0 12px; font-size: var(--fs-meta); color: var(--text-3); }
+.al-foot button { font-weight: 500; color: var(--text-2); cursor: pointer; }
+.al-foot button:hover { color: var(--text); }
+.al-more-row { display: block; width: 100%; padding: 8px 12px 8px 32px; border-radius: var(--r-2); text-align: left; font-size: var(--fs-meta); font-weight: 500; color: var(--text-2); cursor: pointer; }
+.al-more-row:hover { background: var(--hover); color: var(--text); }
+.al-dot { display: block; width: 8px; height: 8px; flex: none; border-radius: 50%; }
+.al-dot.bad { background: var(--bad); }
+.al-dot.warn { background: var(--warn); }
+.al-dot.ok { background: var(--ok); }
+.al-dot.off { box-shadow: inset 0 0 0 1.5px var(--text-3); }
+.al-dot-none { display: block; width: 8px; }
+
+/* Inbox: the list and the chosen alert */
+.al-wrap { container: al-inbox / inline-size; }
+.al-split { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px; align-items: start; }
+.al-list { padding: 4px; }
+.al-item { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; gap: 12px; align-items: start; width: 100%; min-height: 52px; padding: 8px 12px; border-radius: var(--r-2); text-align: left; cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out); }
+.al-item:hover { background: var(--hover); transition-duration: 0s; }
+.al-item.on, .al-item.on:focus { background: var(--sel); }
+.al-item:focus-visible { outline: 0; box-shadow: inset 0 0 0 1.5px var(--text-3); }
+.al-item .al-dot, .al-row .al-dot { margin-top: 6px; }
+.al-it { min-width: 0; }
+.al-t { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; font-weight: 500; line-height: 20px; color: var(--text); overflow-wrap: anywhere; text-wrap: pretty; }
+.al-s { display: block; margin-top: 2px; font-size: var(--fs-meta); line-height: 18px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.al-time { font-size: var(--fs-meta); line-height: 20px; color: var(--text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.al-item.done .al-t, .al-row.done .al-t1 { font-weight: 400; color: var(--text-2); }
+
+.al-detail { min-width: 0; padding: 24px 28px 28px; }
+.al-dt { overflow-wrap: anywhere; }
+.al-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; font-size: var(--fs-meta); line-height: var(--lh-meta); color: var(--text-3); }
+.al-sev { display: inline-flex; align-items: center; gap: 8px; font-weight: 500; color: var(--text-2); }
+.al-sev.bad { color: var(--bad-text); }
+.al-sev.warn { color: var(--warn-text); }
+.al-acts { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.al-why { margin-top: 20px; max-width: 62ch; line-height: 22px; color: var(--text); overflow-wrap: anywhere; }
+.al-facts { margin-top: 16px; }
+.al-kv { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px; align-items: center; min-height: 32px; }
+.al-kv dt { font-size: var(--fs-meta); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; }
+.al-kv dd { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--text); }
+.al-kv dd > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.al-detail .al-kv { grid-template-columns: 96px minmax(0, 1fr); }
+.al-st { flex: none; color: var(--text-3); }
+.al-st.bad { color: var(--bad-text); }
+.al-st.warn { color: var(--warn-text); }
+.al-lnk { min-width: 0; font-weight: 500; color: var(--text); text-align: left; text-decoration: underline; text-decoration-color: var(--divider); text-underline-offset: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; transition: text-decoration-color var(--dur-fast) var(--ease-out); }
+.al-lnk:hover { text-decoration-color: var(--text-3); }
+.al-cap { margin: 28px 0 8px; font-size: var(--fs-body); line-height: 20px; font-weight: 600; color: var(--text); }
+.al-tl { position: relative; padding-left: 20px; list-style: none; }
+.al-tl::before { content: ""; position: absolute; left: 3px; top: 10px; bottom: 10px; width: 1px; background: var(--divider); }
+.al-tl li { position: relative; display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; padding: 4px 0; }
+.al-tl li::before { content: ""; position: absolute; left: -20px; top: 10px; width: 7px; height: 7px; border-radius: 50%; background: var(--panel); box-shadow: inset 0 0 0 1.5px var(--text-3); }
+.al-tl li.hot.bad::before { background: var(--bad); box-shadow: none; }
+.al-tl li.hot.warn::before { background: var(--warn); box-shadow: none; }
+.al-tl time { font-size: var(--fs-meta); line-height: 20px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.al-tl span { overflow-wrap: anywhere; }
+
+@container al-inbox (max-width: 900px) {
+  .al-detail { padding: 20px 24px 24px; }
+}
+@container al-inbox (max-width: 640px) {
+  .al-split { grid-template-columns: minmax(0, 1fr); }
+  .al-detail { padding: 16px 16px 20px; scroll-margin-top: 12px; }
+  .al-kv { grid-template-columns: 96px minmax(0, 1fr); }
+}
+
+/* Rules: the list, a rule's settings and the editor */
+.al-rules { container: al-rl / inline-size; padding: 4px; }
+.al-rrow { display: grid; grid-template-columns: minmax(0, 1fr) 88px minmax(0, 180px) 72px; gap: 16px; align-items: center; min-height: 40px; padding: 4px 12px; border-radius: var(--r-2); }
+.al-rcols { min-height: 36px; margin: -4px -4px 4px; padding: 0 16px; border-radius: var(--r-4) var(--r-4) 0 0; box-shadow: inset 0 -1px 0 var(--divider); font-size: var(--fs-micro); line-height: var(--lh-micro); font-weight: 500; color: var(--text-3); }
+.al-r { justify-self: end; text-align: right; }
+.al-sort { display: inline-flex; align-items: center; gap: 4px; justify-self: start; font: inherit; color: inherit; cursor: pointer; }
+.al-sort:hover, .al-sort.on { color: var(--text); }
+.al-sort svg { width: 12px; height: 12px; }
+.al-rule { cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out); }
+.al-rule:hover { background: var(--hover); transition-duration: 0s; }
+.al-rule.on { background: var(--sel); }
+.al-rln { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.al-rname { flex: none; max-width: 60%; font-weight: 500; color: var(--text); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.al-rname:hover { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--text-3); }
+.al-rule.off .al-rname { font-weight: 400; color: var(--text-2); }
+.al-rsum { flex: 1 1 0; min-width: 0; font-size: var(--fs-meta); color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.al-rsev, .al-rstate { font-size: var(--fs-meta); color: var(--text-2); }
+.al-rscope { min-width: 0; font-size: var(--fs-meta); color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.al-well { display: grid; gap: 16px; margin: 2px 0 6px; padding: 16px 20px; border-radius: var(--r-3); background: var(--sunk); }
+.al-well .al-facts { margin-top: 0; }
+.al-ed-acts { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+
+.al-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.al-wide { grid-column: 1 / -1; }
+.al-field { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.al-field > label, .al-lbl { font-size: var(--fs-meta); line-height: var(--lh-meta); font-weight: 500; color: var(--text-2); }
+/* Fields: the kit's field look (--field-bg, a 1 px --field-line edge; focus darkens it and adds the --ring halo). */
+.al-in { width: 100%; min-width: 0; height: var(--ctl); padding: 0 10px; border: 1px solid var(--field-line); border-radius: var(--r-3); background-color: var(--field-bg); box-shadow: inset 0 1px 1px rgba(15, 15, 20, 0.03); color: var(--text); font-size: var(--fs-body); outline: none; transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
+.al-in::placeholder { color: var(--text-3); opacity: 1; }
+.al-in:hover { border-color: color-mix(in srgb, var(--field-line) 60%, var(--text-3)); }
+.al-in:focus { border-color: var(--text-3); box-shadow: 0 0 0 3px var(--ring); }
+.al-in[aria-invalid="true"] { border-color: var(--bad); }
+.al-in[aria-invalid="true"]:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 16%, transparent); }
+select.al-in { appearance: none; -webkit-appearance: none; padding-right: 30px; cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238B8B94' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 9px center; }
+.al-in.al-mono { font-size: 13px; }
+.al-when { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.al-when select { flex: 1; min-width: 0; }
+.al-num { width: 96px; flex: none; font-variant-numeric: tabular-nums; }
+.al-when .al-op { width: 72px; flex: none; }
+.al-unit { flex: none; font-size: var(--fs-meta); color: var(--text-3); white-space: nowrap; }
+.al-hint { font-size: var(--fs-meta); line-height: var(--lh-meta); color: var(--text-3); }
+.al-hint.bad { color: var(--bad-text); }
+.al-timing { min-width: 0; margin: 0; padding: 0; border: 0; }
+.al-timing > legend { margin-bottom: 8px; padding: 0; }
+.al-addrow { margin-left: -10px; }
+.al-timing-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.al-timing-grid .al-num { width: 100%; flex: 1; }
+.al-parts { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 2px 12px; max-height: 212px; overflow: auto; padding: 4px; border-radius: var(--r-3); background: var(--panel); box-shadow: inset 0 0 0 1px var(--line); }
+.al-part { display: flex; align-items: center; gap: 8px; min-width: 0; height: var(--ctl-sm); padding: 0 8px; border-radius: var(--r-2); text-align: left; cursor: pointer; }
+.al-part:hover { background: var(--hover); }
+.al-box { display: grid; place-items: center; width: 16px; height: 16px; flex: none; border-radius: var(--r-1); box-shadow: inset 0 0 0 1.5px var(--text-3); color: var(--panel); }
+.al-box.on { background: var(--text); box-shadow: none; }
+.al-box svg { width: 11px; height: 11px; }
+
+@container al-rl (max-width: 700px) {
+  .al-rrow { grid-template-columns: minmax(0, 1fr) 72px 64px; }
+  .al-rscope { display: none; }
+  .al-rcols > :nth-child(3) { display: none; }
+  .al-timing-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container al-rl (max-width: 480px) {
+  .al-rrow { grid-template-columns: minmax(0, 1fr) 56px; padding-top: 6px; padding-bottom: 6px; }
+  .al-rcols, .al-rsev { display: none; }
+  .al-rln { flex-direction: column; align-items: stretch; gap: 0; }
+  .al-rname { max-width: none; }
+  .al-rsum { flex: none; }
+  .al-grid { grid-template-columns: minmax(0, 1fr); }
+  .al-well { padding: 16px; }
+}
+
+/* Silences and the delivery log: plain lists */
+.al-plain { container: al-pl / inline-size; padding: 4px; }
+.al-sform { display: grid; gap: 16px; margin-bottom: 16px; padding: 20px; }
+.al-matchers { display: grid; gap: 8px; }
+.al-matcher { display: flex; align-items: center; gap: 8px; max-width: 560px; }
+.al-matcher .al-hint { margin-top: 0; }
+.al-sform .al-hint { margin-top: 6px; }
+.al-row { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; gap: 12px; align-items: start; min-height: 52px; padding: 8px 12px; border-radius: var(--r-2); }
+.al-row:hover { background: var(--hover); transition-duration: 0s; }
+.al-t1 { display: block; font-weight: 500; line-height: 20px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.al-row-end { display: flex; align-items: center; gap: 8px; }
+.al-dl-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1.4fr) 180px; gap: 4px 16px; align-items: center; min-height: 40px; padding: 4px 12px; border-radius: var(--r-2); }
+.al-dl-row.al-rcols { padding: 0 16px; min-height: 36px; }
+.al-dl-row:not(.al-rcols):hover { background: var(--hover); }
+.al-dl-row.two { padding-top: 8px; padding-bottom: 8px; }
+.al-dl-state { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-meta); color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.al-dl-state .al-dot-none { display: none; }
+.al-dl-state.failed { color: var(--bad-text); font-weight: 500; }
+.al-dl-err { grid-column: 2 / -1; min-width: 0; font-size: var(--fs-meta); line-height: 18px; color: var(--text-3); overflow-wrap: anywhere; }
+.al-spin { animation: al-spin 1s linear infinite; }
+@keyframes al-spin { to { transform: rotate(360deg); } }
+
+@container al-pl (max-width: 560px) {
+  .al-dl-row { grid-template-columns: 52px minmax(0, 1fr) auto; }
+  .al-dl-row > :nth-child(2) { display: none; }
+  .al-row-end { flex-direction: column; align-items: flex-end; gap: 2px; }
+}
+@media (max-width: 640px) {
+  .al-tabrow { flex-direction: column; }
+  .al-tabtools { justify-content: flex-end; flex-wrap: wrap; padding: 12px 0 0; box-shadow: none; }
+  .al-sform { padding: 16px; }
+  .al-sform .al-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .al-item, .al-rule, .al-chip, .al-btn, .al-in, .al-lnk, .al-seg button { transition: none; }
+  .al-spin { animation: none; }
+}

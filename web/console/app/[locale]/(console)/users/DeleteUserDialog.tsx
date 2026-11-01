@@ -1,87 +1,76 @@
 "use client";
 
-import { useState } from "react";
-import { Button } from "../../../components/ui/Button";
-import { Card } from "../../../components/ui/Card";
-import { Input } from "../../../components/ui/Input";
+import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import type { HubUser } from "../../../hooks/useHubUsers";
+import { PeopleDialog, errorText } from "./PeopleDialog";
 
-type DeleteUserDialogProps = {
+type UserConfirmProps = {
   user: HubUser | null;
+  you?: boolean;
   onClose: () => void;
   onConfirm: (user: HubUser) => Promise<void>;
 };
 
-export function DeleteUserDialog({ user, onClose, onConfirm }: DeleteUserDialogProps) {
-  const [confirmInput, setConfirmInput] = useState("");
+/** Asks once, shows the hub's refusal in place, and stays open until the action is done. */
+function useConfirm(user: HubUser | null, onConfirm: (user: HubUser) => Promise<void>, fallback: string) {
   const [error, setError] = useState("");
-  const [deleting, setDeleting] = useState(false);
-
-  if (!user) return null;
-
-  const handleConfirm = async () => {
-    if (confirmInput.trim() !== user.username) {
-      setError("Username does not match.");
-      return;
-    }
-    setDeleting(true);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    setError("");
+    setBusy(false);
+  }, [user]);
+  const run = async () => {
+    if (!user) return;
+    setBusy(true);
     setError("");
     try {
       await onConfirm(user);
-      setConfirmInput("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete user.");
-      setDeleting(false);
+      setError(errorText(err, fallback));
+      setBusy(false);
     }
   };
+  return { error, busy, run };
+}
 
-  const handleClose = () => {
-    if (deleting) return;
-    setConfirmInput("");
-    setError("");
-    onClose();
-  };
-
+/** Remove a user: the account and its sessions end. */
+export function DeleteUserDialog({ user, onClose, onConfirm }: UserConfirmProps) {
+  const t = useTranslations("users");
+  const { error, busy, run } = useConfirm(user, onConfirm, t("errors.removeFailed"));
+  const name = user?.username ?? "";
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      onClick={handleClose}
+    <PeopleDialog
+      open={Boolean(user)}
+      title={t("remove.title", { name })}
+      onClose={onClose}
+      onSubmit={() => { void run(); }}
+      submitLabel={t("remove.submit")}
+      tone="danger"
+      busy={busy}
+      error={error}
     >
-      <div onClick={(e) => e.stopPropagation()}>
-        <Card className="w-[32rem] max-w-[92vw] space-y-4">
-          <h3 className="text-sm font-medium text-[var(--text)]">Delete User</h3>
-          <p className="text-xs text-[var(--muted)]">
-            This action cannot be undone. All sessions will be revoked.
-          </p>
-          <p className="text-xs text-[var(--muted)]">
-            You are about to delete <strong className="text-[var(--text)]">{user.username}</strong>.
-          </p>
-          <label className="block space-y-1">
-            <span className="text-[10px] text-[var(--muted)]">Type the username to confirm</span>
-            <Input
-              value={confirmInput}
-              onChange={(e) => setConfirmInput(e.target.value)}
-              placeholder={user.username}
-              disabled={deleting}
-              autoFocus
-            />
-          </label>
-          {error ? <p className="text-xs text-[var(--bad)]">{error}</p> : null}
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="secondary" onClick={handleClose} disabled={deleting}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              loading={deleting}
-              disabled={deleting || confirmInput.trim() !== user.username}
-              onClick={() => { void handleConfirm(); }}
-            >
-              Delete User
-            </Button>
-          </div>
-        </Card>
-      </div>
-    </div>
+      <p className="pp-say">{t("remove.body", { name })}</p>
+    </PeopleDialog>
+  );
+}
+
+/** Sign out everywhere: every session of the user ends, this one too when it is your own account. */
+export function SignOutUserDialog({ user, you = false, onClose, onConfirm }: UserConfirmProps) {
+  const t = useTranslations("users");
+  const { error, busy, run } = useConfirm(user, onConfirm, t("errors.signOutFailed"));
+  const name = user?.username ?? "";
+  return (
+    <PeopleDialog
+      open={Boolean(user)}
+      title={you ? t("signOut.titleYou") : t("signOut.title", { name })}
+      onClose={onClose}
+      onSubmit={() => { void run(); }}
+      submitLabel={t("signOut.submit")}
+      busy={busy}
+      error={error}
+    >
+      <p className="pp-say">{you ? t("signOut.bodyYou") : t("signOut.body", { name })}</p>
+    </PeopleDialog>
   );
 }

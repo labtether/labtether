@@ -1,4 +1,3 @@
-import type React from "react";
 import type { WebService } from "../../../hooks/useWebServices";
 
 export const CATEGORY_ORDER = [
@@ -34,21 +33,10 @@ export interface DockerImagePullPlan {
   missingImageCount: number;
 }
 
-export function statusDotColor(status: string): string {
-  switch (status) {
-    case "up":
-      return "bg-[var(--ok)]";
-    case "down":
-      return "bg-[var(--bad)]";
-    default:
-      return "bg-[var(--muted)]";
-  }
-}
-
 export function formatResponseTime(ms: number): string {
   if (ms <= 0) return "";
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  return `${(ms / 1000).toFixed(1)} s`;
 }
 
 export function proxyProviderLabel(provider: string): string {
@@ -286,89 +274,6 @@ export function buildCategoryLayoutOrder(
     }
   }
   return normalizedExisting;
-}
-
-export function groupServicesByCategory(
-  filtered: WebService[],
-  layoutOrderByCategory: ServiceLayoutState,
-  sortMode: ServiceSortMode = "default",
-): Array<[string, WebService[]]> {
-  const groups = new Map<string, WebService[]>();
-  for (const svc of filtered) {
-    const category = svc.category;
-    if (!groups.has(category)) {
-      groups.set(category, []);
-    }
-    groups.get(category)!.push(svc);
-  }
-
-  for (const [category, categoryServices] of groups) {
-    const ordered = [...categoryServices].sort((left, right) => serviceSortCompare(left, right, sortMode));
-    if (sortMode !== "default") {
-      groups.set(category, ordered);
-      continue;
-    }
-    const configuredOrder = layoutOrderByCategory[category] ?? [];
-    if (configuredOrder.length === 0) {
-      groups.set(category, ordered);
-      continue;
-    }
-
-    const byKey = new Map<string, WebService>();
-    for (const service of ordered) {
-      byKey.set(serviceLayoutKey(service), service);
-    }
-
-    const arranged: WebService[] = [];
-    for (const key of configuredOrder) {
-      const service = byKey.get(key);
-      if (!service) {
-        continue;
-      }
-      arranged.push(service);
-      byKey.delete(key);
-    }
-    for (const service of ordered) {
-      if (byKey.has(serviceLayoutKey(service))) {
-        arranged.push(service);
-      }
-    }
-    groups.set(category, arranged);
-  }
-
-  return Array.from(groups.entries()).sort(([left], [right]) => {
-    const leftIndex = CATEGORY_ORDER.indexOf(left);
-    const rightIndex = CATEGORY_ORDER.indexOf(right);
-    return (leftIndex === -1 ? 999 : leftIndex) - (rightIndex === -1 ? 999 : rightIndex);
-  });
-}
-
-export function extractDomain(url: string): string {
-  try {
-    const parsed = new URL(url);
-    return parsed.hostname;
-  } catch {
-    return url;
-  }
-}
-
-export function statusGlowStyle(status: string): React.CSSProperties {
-  switch (status) {
-    case "up":
-      return {
-        borderLeftColor: "var(--ok)",
-        boxShadow: "inset 3px 0 12px -4px var(--ok-glow)",
-      };
-    case "down":
-      return {
-        borderLeftColor: "var(--bad)",
-        boxShadow: "inset 3px 0 12px -4px var(--bad-glow)",
-      };
-    default:
-      return {
-        borderLeftColor: "color-mix(in srgb, var(--muted) 50%, transparent)",
-      };
-  }
 }
 
 export function buildDockerImagePullPlan(

@@ -137,9 +137,9 @@ export function useGroupTree(params: {
     return applyExpansion(structuralTree);
   }, [structuralTree, expandedSet]);
 
-  // Auto-expand all on first load if no saved state
+  // Open every group the first time the groups arrive, unless a saved state exists.
   useEffect(() => {
-    if (initializedRef.current) return;
+    if (initializedRef.current || structuralTree.length === 0) return;
     initializedRef.current = true;
 
     if (expandedSet.size > 0) return;

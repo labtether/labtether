@@ -1,3 +1,5 @@
+import { HOT_PERCENT } from "./MiniBar";
+
 type RingGaugeProps = {
   value?: number;
   max?: number;
@@ -6,73 +8,48 @@ type RingGaugeProps = {
   size?: number;
 };
 
+/** 2.0 ring gauge: one quiet hue on a track, amber from 85% (the meter rule). */
 export function RingGauge({ value, max = 100, label, unit = "%", size = 72 }: RingGaugeProps) {
   const hasValue = typeof value === "number" && Number.isFinite(value);
   const percent = hasValue ? Math.min(100, Math.max(0, (value / max) * 100)) : 0;
-  const displayValue = hasValue ? `${Math.round(value)}` : "--";
+  const displayValue = hasValue ? `${Math.round(value)}` : "—";
+  const hot = hasValue && percent >= HOT_PERCENT;
 
-  // SVG ring math
-  const strokeWidth = 5;
+  const strokeWidth = 4;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (percent / 100) * circumference;
 
-  // Color based on percentage thresholds
-  const strokeColor = !hasValue
-    ? "var(--muted)"
-    : percent > 90
-      ? "var(--bad)"
-      : percent > 70
-        ? "var(--warn)"
-        : "var(--ok)";
-
-  const textColor = !hasValue
-    ? "text-[var(--muted)]"
-    : percent > 90
-      ? "text-[var(--bad)]"
-      : percent > 70
-        ? "text-[var(--warn)]"
-        : "text-[var(--ok)]";
-
   return (
-    <div className="flex flex-col items-center gap-1">
-      <div className="relative" style={{ width: size, height: size }}>
-        <svg width={size} height={size} className="-rotate-90" role="img" aria-label={hasValue ? `${label}: ${displayValue}${unit}` : `${label}: no data`}>
-          {/* Background track */}
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            fill="none"
-            stroke="var(--surface)"
-            strokeWidth={strokeWidth}
-          />
-          {/* Value arc */}
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            fill="none"
-            stroke={strokeColor}
-            strokeWidth={strokeWidth}
-            strokeLinecap="round"
-            strokeDasharray={circumference}
-            strokeDashoffset={hasValue ? offset : circumference}
-            style={{
-              transition: "stroke-dashoffset 0.6s ease, stroke 0.3s ease",
-              ...(hasValue ? {} : { strokeDasharray: "4 8" }),
-            }}
-          />
+    <div className="kt-ring">
+      <div className="kt-ring-c" style={{ width: size, height: size }}>
+        <svg
+          width={size}
+          height={size}
+          role="img"
+          aria-label={hasValue ? `${label}: ${displayValue}${unit}` : `${label}: no data`}
+        >
+          <circle className="kt-ring-t" cx={size / 2} cy={size / 2} r={radius} strokeWidth={strokeWidth} />
+          {hasValue ? (
+            <circle
+              className={`kt-ring-a${hot ? " hot" : ""}`}
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              strokeWidth={strokeWidth}
+              strokeDasharray={circumference}
+              strokeDashoffset={offset}
+            />
+          ) : null}
         </svg>
-        {/* Center value */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className={`text-sm font-semibold tabular-nums ${textColor}`}>
+        <span className={`kt-ring-v kt-num${hot ? " kt-hot" : ""}`} aria-hidden="true">
+          <span>
             {displayValue}
-            {hasValue && <span className="text-[10px] font-normal">{unit}</span>}
+            {hasValue ? <small>{unit}</small> : null}
           </span>
-        </div>
+        </span>
       </div>
-      <span className="text-[10px] text-[var(--muted)] uppercase tracking-wider">{label}</span>
+      <span className="kt-ring-l">{label}</span>
     </div>
   );
 }

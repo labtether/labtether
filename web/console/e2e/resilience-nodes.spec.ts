@@ -172,44 +172,78 @@ test("node system panel deep drilldown routes and returns to overview", async ({
 
   await page.goto(`/nodes/${encodeURIComponent(nodeID)}?panel=system`);
   await expect(page.getByRole("heading", { name: "drilldown-node", exact: true }).first()).toBeVisible();
+  const drill = (name: string) => page.getByRole("heading", { level: 2, name: new RegExp(`^${name}`) }).and(page.locator("#dmt-dd"));
 
   await page.getByRole("button", { name: /^CPU/i }).click();
   await expect(page).toHaveURL(new RegExp(`/nodes/${encodeURIComponent(nodeID)}\\?panel=system&detail=cpu$`));
-  await expect(page.getByText("CPU Deep Detail")).toBeVisible();
-  await expect(page.getByText("Live Pressure")).toBeVisible();
-  await expect(page.getByText("Compute Topology")).toBeVisible();
-  await expect(page.getByText("Switch Detail")).toBeVisible();
-  await expect(page.getByText("Historical Context")).toBeVisible();
-  await expect(page.getByText("CPU Usage", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Open Metrics", exact: true })).toBeVisible();
+  await expect(drill("CPU")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Load", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Topology", exact: true })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Detail" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "CPU", level: 3, exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Metrics", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Memory", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/nodes/${encodeURIComponent(nodeID)}\\?panel=system&detail=memory$`));
-  await expect(page.getByText("Memory Deep Detail")).toBeVisible();
-  await expect(page.getByText("Capacity Snapshot")).toBeVisible();
-  await expect(page.getByText("Swap And Pressure")).toBeVisible();
-  await expect(page.getByText("Memory Usage", { exact: true })).toBeVisible();
+  await expect(drill("Memory")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Capacity", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Swap and system", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Memory", level: 3, exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Storage", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/nodes/${encodeURIComponent(nodeID)}\\?panel=system&detail=storage$`));
-  await expect(page.getByText("Storage Deep Detail")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Filesystem Capacity", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Operational Signals", exact: true })).toBeVisible();
-  await expect(page.getByText("Disk Usage", { exact: true })).toBeVisible();
+  await expect(drill("Storage")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Root filesystem", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Disk activity and backup", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Disk", level: 3, exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Back to Overview", exact: true }).click();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/nodes/${encodeURIComponent(nodeID)}\\?panel=system$`));
-  await expect(page.getByText("Storage Deep Detail")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Root filesystem", exact: true })).toHaveCount(0);
 
   await page.goto(`/nodes/${encodeURIComponent(nodeID)}?panel=system&detail=network`);
-  await expect(page.getByText("Network Deep Detail")).toBeVisible();
+  await expect(drill("Network")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Addressing", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Overlay And Traffic", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Investigation Flow", exact: true })).toBeVisible();
-  await expect(page.getByText("Network RX", { exact: true })).toBeVisible();
-  await expect(page.getByText("Network TX", { exact: true })).toBeVisible();
-  await expect(page.getByText("Top Interface Activity")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Traffic and Tailscale", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Network in", level: 3, exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Network out", level: 3, exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Busiest interfaces", exact: true })).toBeVisible();
   await expect(page.getByText("eth0", { exact: true })).toBeVisible();
   await expect(page.getByText("tailscale0", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Open Interfaces", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Interfaces", exact: true })).toBeVisible();
+});
+
+// Older links (?panel=actions, ?panel=connect …) must land in their 2.0 tab, and a Devices list row's ⋯ must act
+// on that device in place instead of opening it.
+test("device tabs keep older panel links and the list ⋯ edits a device in place", async ({ page }) => {
+  const statusPayload = buildStatusPayload({
+    assets: [
+      {
+        id: "nas01",
+        type: "host",
+        name: "nas01",
+        source: "agent",
+        status: "online",
+        last_seen_at: BASE_TS,
+        platform: "linux",
+        metadata: { ip_address: "192.0.2.10" },
+      },
+    ],
+  });
+  await installConsoleApiMocks(page, { statusPayload });
+
+  await page.goto("/nodes/nas01?panel=actions");
+  const tabs = page.getByRole("navigation", { name: "Device sections" });
+  await expect(page.getByRole("heading", { name: "nas01", level: 1 })).toBeVisible();
+  await expect(tabs.getByRole("link", { name: "Logs", exact: true })).toHaveAttribute("aria-current", "page");
+
+  await tabs.getByRole("link", { name: "Settings", exact: true }).click();
+  await expect(page).toHaveURL(/\/nodes\/nas01\?panel=settings$/);
+  await expect(page.getByRole("button", { name: "Remove…", exact: true })).toBeVisible();
+
+  await page.goto("/nodes");
+  await page.getByRole("button", { name: "Actions for nas01", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Edit…", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Edit nas01" })).toBeVisible();
+  await expect(page).toHaveURL(/\/nodes$/);
 });

@@ -1,0 +1,89 @@
+{
+  "title": "更新",
+  "crumbs": "导航路径",
+  "newPlan": "新建计划",
+  "tabs": {
+    "label": "更新视图",
+    "plans": "计划",
+    "history": "历史"
+  },
+  "plans": {
+    "label": "更新计划",
+    "filter": "筛选计划",
+    "columns": {
+      "plan": "计划",
+      "devices": "设备",
+      "lastRun": "上次运行"
+    },
+    "run": "运行…",
+    "never": "从未运行",
+    "empty": "没有更新计划",
+    "new": "新建计划",
+    "previewDefault": "默认仅预览",
+    "noMatch": "没有与“{query}”匹配的计划"
+  },
+  "lastRun": {
+    "queued": "{time} 排队",
+    "running": "{time} 起运行",
+    "succeeded": "{time} 完成",
+    "failed": "{time} 失败",
+    "other": "{time}"
+  },
+  "plan": {
+    "devices": "设备",
+    "options": "选项",
+    "what": "更新内容",
+    "osPackages": "系统软件包",
+    "previewOnly": "仅预览",
+    "runFailed": "无法开始运行。",
+    "back": "返回",
+    "run": "{count, plural, other {在 # 台设备上运行}}",
+    "preview": "{count, plural, other {在 # 台设备上预览}}",
+    "started": "已开始 {plan}",
+    "previewStarted": "已开始预览 {plan}"
+  },
+  "form": {
+    "title": "新建计划",
+    "name": "名称",
+    "nameError": "请输入名称",
+    "devices": "设备",
+    "filter": "筛选设备",
+    "noMatch": "没有匹配的设备",
+    "noDevices": "还没有设备",
+    "selected": "已选 {count} 台",
+    "devicesError": "至少选择一台设备",
+    "what": "更新内容",
+    "osPackages": "系统软件包",
+    "previewOnly": "默认仅预览",
+    "failed": "无法保存计划。",
+    "cancel": "取消",
+    "save": "保存计划",
+    "saving": "正在保存…",
+    "saved": "已保存 {plan}"
+  },
+  "status": {
+    "queued": "排队中",
+    "running": "运行中",
+    "succeeded": "完成",
+    "failed": "失败"
+  },
+  "result": {
+    "succeeded": "{count} 台完成",
+    "failed": "{count} 台失败",
+    "other": "{count} 台其他"
+  },
+  "history": {
+    "label": "更新运行",
+    "columns": {
+      "when": "时间",
+      "plan": "计划",
+      "result": "结果",
+      "by": "执行者"
+    },
+    "empty": "还没有运行记录",
+    "show": "显示 {plan} 的设备",
+    "hide": "隐藏 {plan} 的设备",
+    "preview": "预览",
+    "noResults": "没有结果"
+  }
+}

@@ -1,4 +1,4 @@
-import { expect, test, type Route } from "@playwright/test";
+import { expect, test, type Page, type Route } from "@playwright/test";
 
 import {
   buildLiveStatusPayload,
@@ -237,6 +237,13 @@ function filteredServices(overrides: Record<string, string>): MockService[] {
   });
 }
 
+/** Settings › Service discovery defaults (#discovery) shows each on/off default as a switch inside its test id. */
+async function setDiscoveryDefault(page: Page, key: string, on: boolean) {
+  const control = page.locator("#discovery").getByTestId(`service-discovery-default-${key}`).getByRole("switch");
+  if ((await control.getAttribute("aria-checked")) !== String(on)) await control.click();
+  await expect(control).toHaveAttribute("aria-checked", String(on));
+}
+
 async function fulfillJSON(route: Route, body: unknown, status = 200) {
   await route.fulfill({
     status,
@@ -402,14 +409,14 @@ test("services discovery defaults toggle source include/exclude behavior", async
   await expect(page.getByText("LAN Scan UI")).toHaveCount(0);
 
   await page.goto("/settings?tab=advanced");
-  await expect(page.getByRole("heading", { name: "Settings", level: 1, exact: true })).toBeVisible();
+  await expect(page.locator("#discovery").getByTestId(`service-discovery-default-${keyDocker}`)).toBeVisible();
 
-  await page.getByTestId(`service-discovery-default-${keyDocker}`).selectOption("false");
-  await page.getByTestId(`service-discovery-default-${keyProxy}`).selectOption("false");
-  await page.getByTestId(`service-discovery-default-${keyPortScan}`).selectOption("false");
-  await page.getByTestId(`service-discovery-default-${keyLANScan}`).selectOption("true");
-  await page.getByRole("button", { name: "Save Discovery Defaults", exact: true }).click();
-  await expect(page.locator("text=Runtime settings saved.").first()).toBeVisible();
+  await setDiscoveryDefault(page, keyDocker, false);
+  await setDiscoveryDefault(page, keyProxy, false);
+  await setDiscoveryDefault(page, keyPortScan, false);
+  await setDiscoveryDefault(page, keyLANScan, true);
+  await page.locator("#discovery").getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Runtime settings saved." }).first()).toBeVisible();
 
   await page.goto("/services");
   await page.getByRole("button", { name: "Refresh", exact: true }).click();
@@ -419,9 +426,9 @@ test("services discovery defaults toggle source include/exclude behavior", async
   await expect(page.getByText("LAN Scan UI")).toBeVisible();
 
   await page.goto("/settings?tab=advanced");
-  await page.getByTestId(`service-discovery-default-${keyDocker}`).selectOption("true");
-  await page.getByRole("button", { name: "Save Discovery Defaults", exact: true }).click();
-  await expect(page.locator("text=Runtime settings saved.").first()).toBeVisible();
+  await setDiscoveryDefault(page, keyDocker, true);
+  await page.locator("#discovery").getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Runtime settings saved." }).first()).toBeVisible();
 
   await page.goto("/services");
   await page.getByRole("button", { name: "Refresh", exact: true }).click();
@@ -431,9 +438,9 @@ test("services discovery defaults toggle source include/exclude behavior", async
   await expect(page.getByText("LAN Scan UI")).toBeVisible();
 
   await page.goto("/settings?tab=advanced");
-  await page.getByTestId(`service-discovery-default-${keyProxy}`).selectOption("true");
-  await page.getByRole("button", { name: "Save Discovery Defaults", exact: true }).click();
-  await expect(page.locator("text=Runtime settings saved.").first()).toBeVisible();
+  await setDiscoveryDefault(page, keyProxy, true);
+  await page.locator("#discovery").getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Runtime settings saved." }).first()).toBeVisible();
 
   await page.goto("/services");
   await page.getByRole("button", { name: "Refresh", exact: true }).click();
@@ -443,9 +450,9 @@ test("services discovery defaults toggle source include/exclude behavior", async
   await expect(page.getByText("LAN Scan UI")).toBeVisible();
 
   await page.goto("/settings?tab=advanced");
-  await page.getByTestId(`service-discovery-default-${keyPortScan}`).selectOption("true");
-  await page.getByRole("button", { name: "Save Discovery Defaults", exact: true }).click();
-  await expect(page.locator("text=Runtime settings saved.").first()).toBeVisible();
+  await setDiscoveryDefault(page, keyPortScan, true);
+  await page.locator("#discovery").getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Runtime settings saved." }).first()).toBeVisible();
 
   await page.goto("/services");
   await page.getByRole("button", { name: "Refresh", exact: true }).click();

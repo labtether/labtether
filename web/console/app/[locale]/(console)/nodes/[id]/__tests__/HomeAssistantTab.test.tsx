@@ -1,6 +1,9 @@
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { NextIntlClientProvider } from "next-intl";
+
+import messages from "../../../../../../messages/en/devices-proxmox.json";
 
 import type { Asset } from "../../../../../console/models";
 
@@ -62,12 +65,20 @@ const staleEntity: Asset = {
 let container: HTMLDivElement;
 let root: Root;
 
-function refreshButton(): HTMLButtonElement {
-  const button = [...container.querySelectorAll("button")].find((candidate) => candidate.textContent?.trim() === "Refresh");
+function syncButton(): HTMLButtonElement {
+  const button = [...container.querySelectorAll("button")].find((candidate) => candidate.textContent?.trim() === "Sync now");
   if (!(button instanceof HTMLButtonElement)) {
-    throw new Error("Refresh button not found");
+    throw new Error("Sync now button not found");
   }
   return button;
+}
+
+function renderTab(asset: Asset) {
+  root.render(
+    <NextIntlClientProvider locale="en" messages={{ "devices-proxmox": messages }}>
+      <HomeAssistantTab asset={asset} />
+    </NextIntlClientProvider>,
+  );
 }
 
 beforeEach(() => {
@@ -85,7 +96,7 @@ afterEach(async () => {
   container.remove();
 });
 
-describe("HomeAssistantTab manual refresh", () => {
+describe("HomeAssistantTab Sync now", () => {
   it("surfaces an actionable reachability error and labels retained inventory as stale", async () => {
     mocks.waitForCollectorRun.mockResolvedValue({
       ok: false,
@@ -93,38 +104,36 @@ describe("HomeAssistantTab manual refresh", () => {
     });
 
     await act(async () => {
-      root.render(<HomeAssistantTab asset={hubAsset} />);
+      renderTab(hubAsset);
     });
     expect(container.textContent).toContain("Last Successful Light");
 
     await act(async () => {
-      refreshButton().click();
+      syncButton().click();
       await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
     });
 
     expect(mocks.startCollectorRun).toHaveBeenCalledWith("collector-ha");
     expect(mocks.fetchStatus).toHaveBeenCalledTimes(1);
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain("Unable to reach Home Assistant");
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("Could not reach Home Assistant");
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("Showing data from the last successful sync");
     expect(container.textContent).toContain("Last Successful Light");
-    expect(container.textContent).not.toContain("Home Assistant data refreshed from the connector");
+    expect(container.textContent).not.toContain("Synced from Home Assistant");
   });
 
   it("claims fresh data only after the collector reports a successful pass", async () => {
     mocks.waitForCollectorRun.mockResolvedValue({ ok: true, discovered: 1 });
 
     await act(async () => {
-      root.render(<HomeAssistantTab asset={hubAsset} />);
+      renderTab(hubAsset);
     });
     await act(async () => {
-      refreshButton().click();
+      syncButton().click();
       await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
     });
 
     expect(mocks.fetchStatus).toHaveBeenCalledTimes(1);
-    expect(container.querySelector('[role="status"]')?.textContent).toContain(
-      "Home Assistant data refreshed from the connector",
-    );
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("Synced from Home Assistant");
     expect(container.querySelector('[role="alert"]')).toBeNull();
   });
 });

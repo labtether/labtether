@@ -1,57 +1,133 @@
 {
   "title": "Santé",
-  "subtitle": "Scores de disponibilité, jobs échoués, historique des événements et fenêtres de maintenance",
-  "tabs": {
-    "scores": "Scores",
-    "timeline": "Événements",
-    "maintenance": "Maintenance",
-    "map": "Carte"
-  },
-  "scores": {
-    "locationHealth": "// Santé par emplacement",
-    "failedJobs": "// Jobs échoués",
-    "commonErrors": "// Erreurs fréquentes",
-    "failedJobsTrend": "// Tendance des jobs échoués",
-    "dataCleanup": "// Nettoyage des données",
-    "healthEmpty": {
-      "title": "Aucune donnée de santé pour le moment",
-      "description": "Les scores de santé apparaîtront lorsque les groupes auront des appareils connectés."
+  "hub": {
+    "title": "Hub",
+    "checked": "Vérifié à {time}",
+    "names": {
+      "hub": "Hub",
+      "api": "API",
+      "nodeAgent": "Agent du nœud",
+      "jobs": "Jobs en arrière-plan",
+      "cleanup": "Nettoyage des données"
     },
-    "noFailedJobs": "Aucun job échoué.",
-    "noRecurringErrors": "Aucune erreur récurrente.",
-    "noTrendData": "Aucune donnée de tendance.",
-    "retentionHealthy": "Boucle de rétention saine."
+    "words": {
+      "running": "En marche",
+      "up": "Joignable",
+      "down": "Injoignable",
+      "notSet": "Aucune adresse",
+      "failedCount": "{count} échoués en {window}",
+      "noFailures": "Aucun échec",
+      "failed": "Échec",
+      "ok": "OK"
+    },
+    "version": "Version {version}",
+    "since": "Depuis {time}",
+    "lastAt": "Dernier à {time}",
+    "latency": "{ms} ms"
   },
-  "timeline": {
-    "heading": "// Historique des événements",
-    "group": "Groupe",
-    "range": "Période",
-    "errors": "Erreurs",
-    "warnings": "Avertissements",
-    "failedActions": "Actions échouées",
-    "failedUpdates": "Mises à jour échouées",
-    "unresponsive": "Non réactif",
-    "offline": "Hors ligne",
-    "noEvents": "Aucun événement dans la période.",
-    "showMore": "Voir plus",
-    "showLess": "Voir moins"
+  "downtime": {
+    "title": "Maintenance",
+    "schedule": "Planifier une maintenance",
+    "partial": "La maintenance de certains groupes n’a pas été chargée.",
+    "effects": {
+      "mutes": "met les alertes en sourdine",
+      "pausesActions": "suspend les actions",
+      "pausesUpdates": "suspend les mises à jour",
+      "none": "Ne suspend rien"
+    },
+    "state": {
+      "activeUntil": "Jusqu’à {time}",
+      "ended": "Terminée {time}"
+    },
+    "actionsFor": "Actions pour la maintenance de {name}",
+    "endNow": "Terminer maintenant…",
+    "delete": "Supprimer…",
+    "loading": "Chargement de la maintenance",
+    "empty": "Aucune maintenance planifiée"
   },
-  "maintenance": {
-    "heading": "// Fenêtres de maintenance",
+  "schedule": {
+    "title": "Planifier une maintenance",
+    "submit": "Planifier",
+    "defaultName": "Fenêtre de correctifs",
     "group": "Groupe",
     "name": "Nom",
-    "start": "Début",
-    "end": "Fin",
-    "muteAlerts": "Mettre les alertes en sourdine",
+    "starts": "Début",
+    "ends": "Fin",
+    "effects": "Pendant la maintenance",
+    "mute": "Mettre les alertes en sourdine",
     "pauseActions": "Suspendre les actions",
     "pauseUpdates": "Suspendre les mises à jour",
-    "submit": "Planifier la maintenance",
-    "saving": "Enregistrement...",
-    "empty": "Aucune fenêtre de maintenance planifiée."
+    "errors": {
+      "name": "Saisissez un nom",
+      "times": "Saisissez un début et une fin",
+      "order": "La fin doit suivre le début",
+      "failed": "La maintenance n’a pas été planifiée."
+    }
   },
-  "map": {
-    "heading": "// Carte des emplacements",
-    "noCoordinates": "pas de coordonnées",
-    "noLocationData": "Aucune donnée de localisation pour la carte."
+  "end": {
+    "title": "Supprimer la maintenance de {name}\u00a0?",
+    "titleActive": "Terminer maintenant la maintenance de {name}\u00a0?",
+    "bodyActive": "Les alertes, actions et mises à jour reprennent normalement.",
+    "submit": "Supprimer",
+    "submitActive": "Terminer maintenant",
+    "failed": "La maintenance ne s’est pas terminée."
+  },
+  "groups": {
+    "title": "Groupes",
+    "online": "{online} sur {total} en ligne",
+    "offline": "{count} hors ligne",
+    "stale": "{count} sans réponse",
+    "score": "{score} · {grade}",
+    "words": {
+      "good": "Bon",
+      "fair": "Moyen",
+      "poor": "Mauvais",
+      "downtime": "En maintenance"
+    },
+    "empty": "Aucun groupe avec des appareils"
+  },
+  "events": {
+    "title": "Événements",
+    "group": "Groupe",
+    "range": "Période",
+    "ranges": {
+      "1h": "1 h",
+      "6h": "6 h",
+      "24h": "24 h"
+    },
+    "impact": {
+      "errors": "{count, plural, one {# erreur} other {# erreurs}}",
+      "warnings": "{count, plural, one {# avertissement} other {# avertissements}}",
+      "failedActions": "{count, plural, one {# action échouée} other {# actions échouées}}",
+      "failedUpdates": "{count, plural, one {# mise à jour échouée} other {# mises à jour échouées}}",
+      "stale": "{count} sans réponse",
+      "offline": "{count} hors ligne"
+    },
+    "quiet": "Aucune erreur, aucun avertissement ni échec sur cette période",
+    "severity": {
+      "error": "Erreur",
+      "warning": "Avertissement",
+      "info": "Info"
+    },
+    "failed": "Les événements n’ont pas été chargés.",
+    "empty": "Aucun événement sur cette période",
+    "loading": "Chargement des événements",
+    "noGroups": "Aucun groupe",
+    "showAll": "Tout afficher ({count})",
+    "showLess": "Afficher moins"
+  },
+  "jobs": {
+    "title": "Jobs échoués",
+    "rate": "{hour} par heure · {day} par jour",
+    "worker": "Worker",
+    "none": "Aucun job échoué",
+    "common": "Erreurs fréquentes",
+    "times": "{count, plural, one {# fois} other {# fois}}",
+    "byHour": "Par heure\u00a0:",
+    "hourCount": "{count} à {time}"
+  },
+  "toast": {
+    "scheduled": "Maintenance planifiée pour {name}",
+    "ended": "Maintenance de {name} terminée"
   }
 }

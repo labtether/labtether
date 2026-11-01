@@ -25,7 +25,7 @@ const handleI18nRouting = createMiddleware({
 export function proxy(request: NextRequest) {
   const { pathname } = new URL(request.url);
 
-  if (pathname.startsWith("/api/") || pathname.startsWith("/api")) {
+  if (pathname === "/api" || pathname.startsWith("/api/")) {
     if (request.method === "OPTIONS") {
       return NextResponse.next();
     }

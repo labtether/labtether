@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from "react";
 import type { ITheme } from "@xterm/xterm";
+import { labtetherTerminalTheme } from "./terminal/terminalLook";
 
 export type XTerminalHandle = {
   /** Write data to the terminal display (does NOT send to remote) */
@@ -76,28 +77,21 @@ export type TerminalStreamStatusEvent = {
   elapsed_ms?: number;
 };
 
-const defaultTheme: ITheme = {
-  background: "#080808",
-  foreground: "#e0e0e0",
-  cursor: "#58a6ff",
-  selectionBackground: "rgba(88, 166, 255, 0.3)",
-  black: "#080808",
-  red: "#ff6b6b",
-  green: "#51cf66",
-  yellow: "#fcc419",
-  blue: "#58a6ff",
-  magenta: "#da77f2",
-  cyan: "#66d9ef",
-  white: "#e0e0e0",
-  brightBlack: "#6c7086",
-  brightRed: "#ff8787",
-  brightGreen: "#69db7c",
-  brightYellow: "#ffd43b",
-  brightBlue: "#74c7ec",
-  brightMagenta: "#e599f7",
-  brightCyan: "#89dceb",
-  brightWhite: "#ffffff",
-};
+/**
+ * A terminal that opens or connects takes the keyboard, unless the person is busy elsewhere: typing in a field, or
+ * in an open menu or dialog. (A connecting pane used to close the menu a person had just opened.)
+ */
+function focusUnlessBusy(term: { focus: () => void }, container: HTMLElement | null) {
+  const active = document.activeElement;
+  if (active instanceof HTMLElement && active !== document.body && !container?.contains(active)) {
+    if (active.matches("input, textarea, select, [contenteditable='true']")) return;
+    if (active.closest("[role='menu'], [role='dialog'], [role='listbox']")) return;
+  }
+  term.focus();
+}
+
+/** Without a theme from the caller, the 2.0 terminal colours. */
+const defaultTheme: ITheme = labtetherTerminalTheme("dark");
 
 const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XTerminal(
   {
@@ -306,7 +300,7 @@ const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XTerminal
 
       term.open(containerRef.current);
       fitAddon.fit();
-      term.focus();
+      focusUnlessBusy(term, containerRef.current);
 
       termRef.current = term;
       fitAddonRef.current = fitAddon;
@@ -353,7 +347,7 @@ const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XTerminal
       socket.onopen = () => {
         if (cancelled) return;
         onConnectedRef.current?.();
-        term.focus();
+        focusUnlessBusy(term, containerRef.current);
 
         // Send initial terminal size
         const dims = fitAddonRef.current?.proposeDimensions();
@@ -404,7 +398,7 @@ const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XTerminal
       socket.onclose = (event) => {
         if (cancelled) return;
         socketRef.current = null;
-        const reason = event.reason || (event.code !== 1000 ? `Connection closed (code ${event.code})` : undefined);
+        const reason = event.reason || (event.code !== 1000 ? "The connection closed unexpectedly" : undefined);
         onDisconnectedRef.current?.(reason);
         term.write("\r\n\x1b[90m--- Session ended ---\x1b[0m\r\n");
       };

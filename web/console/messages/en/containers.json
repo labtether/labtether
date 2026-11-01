@@ -1,0 +1,111 @@
+{
+  "title": "Containers",
+  "runContainer": "Run container",
+  "deployStack": "Deploy stack",
+  "filter": "Filter by name, image or host",
+  "filterHost": "Filter by name or image",
+  "show": {
+    "label": "Show",
+    "all": "All",
+    "running": "Running",
+    "stopped": "Stopped",
+    "runningN": "Running {count}",
+    "stoppedN": "Stopped {count}"
+  },
+  "groupBy": "Group",
+  "groupings": {
+    "host": "Host",
+    "stack": "Stack",
+    "none": "None"
+  },
+  "columns": {
+    "container": "Container",
+    "ports": "Ports",
+    "cpu": "CPU",
+    "memory": "Memory",
+    "sortBy": "Sort by {column}"
+  },
+  "noStack": "No stack",
+  "shown": "{shown} of {total}",
+  "clearFilter": "Clear filter",
+  "retry": "Try again",
+  "loadFailed": "Could not load containers",
+  "hostsFailed": "{count, plural, one {# Docker host did not answer} other {# Docker hosts did not answer}}",
+  "empty": {
+    "noHosts": "No Docker hosts yet",
+    "noContainers": "No containers yet",
+    "addHost": "Add Docker host",
+    "match": "No containers match “{query}”",
+    "noRunning": "No running containers",
+    "noStopped": "No stopped containers"
+  },
+  "state": {
+    "running": "Running",
+    "exited": "Exited",
+    "exitedAgo": "Exited {ago}",
+    "restarting": "Restarting",
+    "paused": "Paused",
+    "created": "Created, not started",
+    "dead": "Dead",
+    "removing": "Removing",
+    "unhealthy": "Unhealthy",
+    "starting": "Starting",
+    "unknown": "State not reported"
+  },
+  "menu": {
+    "label": "Actions for {name}",
+    "open": "Open",
+    "logs": "Logs",
+    "shell": "Shell",
+    "restart": "Restart",
+    "start": "Start",
+    "stop": "Stop…",
+    "stopTitle": "Stop {name}?",
+    "stopBody": "It stays stopped until started again.",
+    "stopConfirm": "Stop",
+    "copyImage": "Copy image"
+  },
+  "toast": {
+    "startDone": "Started {name}",
+    "stopDone": "Stopped {name}",
+    "restartDone": "Restarted {name}",
+    "startFailed": "Could not start {name}",
+    "stopFailed": "Could not stop {name}",
+    "restartFailed": "Could not restart {name}"
+  },
+  "deploy": {
+    "crumbs": "Breadcrumb",
+    "runTitle": "Run container",
+    "stackTitle": "Deploy stack",
+    "host": "Host",
+    "image": "Image",
+    "name": "Name",
+    "ports": "Ports",
+    "portsHint": "host:container, one per line",
+    "environment": "Environment",
+    "envHint": "NAME=value, one per line",
+    "command": "Command",
+    "cancel": "Cancel",
+    "run": "Run",
+    "deploy": "Deploy",
+    "open": "Open",
+    "ranLine": "Started {name}.",
+    "ranToast": "Started {name} on {host}",
+    "runFailed": "The container did not start",
+    "runFailedWith": "The container did not start: {reason}",
+    "deployedLine": "Deployed {name}.",
+    "deployedToast": "Deployed {name} on {host}",
+    "deployFailed": "The stack was not deployed",
+    "deployFailedWith": "The stack was not deployed: {reason}",
+    "errors": {
+      "required": "Required",
+      "image": "Enter an image like nginx:1.29",
+      "name": "Use letters, numbers, dots, dashes and underscores",
+      "ports": "Use host:container, like 8080:80 or 5353:53/udp",
+      "portRange": "Ports run from 1 to 65535",
+      "env": "Use NAME=value, one per line",
+      "stackName": "Use lowercase letters, numbers, dashes and underscores",
+      "services": "The file needs a services: section"
+    }
+  }
+}

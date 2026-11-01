@@ -185,8 +185,8 @@ export function ProxmoxSetupStep({ onBack, onClose, onAdded, compatPrefills = []
 
       {authMethod === "api_token" ? (
         <>
-          <div className="rounded-lg border border-[var(--warn)]/30 bg-[var(--warn-glow)] px-3 py-2">
-            <p className="text-xs text-[var(--warn)]">
+          <div>
+            <p className="text-xs text-[var(--warn-text)]">
               API tokens do not support Proxmox console/terminal access due to a known Proxmox limitation (bug #6079). Terminal sessions will fall back to SSH.
             </p>
           </div>
@@ -289,8 +289,8 @@ function AuthMethodButton({ active, onClick, label }: { active: boolean; onClick
       onClick={onClick}
       className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors duration-150 ${
         active
-          ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
-          : "border-[var(--line)] bg-transparent text-[var(--muted)] hover:border-[var(--muted)]"
+          ? "border-transparent bg-[var(--sel)] text-[var(--text)]"
+          : "border-[var(--line)] bg-transparent text-[var(--text-2)] hover:text-[var(--text)]"
       }`}
     >
       {label}

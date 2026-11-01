@@ -1,0 +1,206 @@
+/* ── LabTether 2.0 kit ──
+   The shared parts every page uses: sheets (Card), status words (Badge), fields (Input, Select, Textarea, Switch),
+   dialogs (Modal, ConfirmDialog), the segmented control, the tab row, meters, skeletons, tooltips, the ⌘K palette and
+   toasts. The look comes from the mockup's kit.css. Component looks sit in the components layer, so a className
+   utility passed to a component still wins; the few rules that must beat old Tailwind classes are unlayered below.
+   Page CSS may use these classes as they are: .kt-sheet .kt-input .kt-field .kt-label .kt-hint .kt-st .kt-dot
+   .kt-tag .kt-empty .kt-switch .kt-seg .kt-tabs .kt-meter .kt-skel. */
+
+@layer components {
+  /* Sheet (Card): the raised surface that holds content. A hairline ring, radius 12, no glow, no gradient. */
+  .kt-sheet { position: relative; overflow: hidden; padding: 20px; border-radius: var(--r-4); background: var(--panel); box-shadow: var(--elev-1); }
+  .kt-sheet.flush { padding: 0; }
+  .kt-sheet.link { cursor: pointer; transition: background-color var(--t-fast) var(--ease); }
+  .kt-sheet.link:hover { background: color-mix(in srgb, var(--panel), var(--text) 3%); }
+  .kt-sheet.mark { box-shadow: var(--elev-1), 0 0 0 1px color-mix(in srgb, var(--text-3) 40%, transparent); }
+
+  /* Status: a dot and a word; the word takes the tone colour only for a problem. A label that is not a status is a
+     quiet tag. A dot is 8 px (6 small): ok, warn, bad, off (a ring), busy (a slow pulse: something is live). */
+  .kt-st { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-meta); line-height: var(--lh-meta); font-weight: 500; color: var(--text-2); white-space: nowrap; }
+  .kt-st.sm { font-size: var(--fs-micro); line-height: var(--lh-micro); }
+  .kt-st.bad { color: var(--bad-text); }
+  .kt-st.warn { color: var(--warn-text); }
+  .kt-dot { display: inline-block; width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--text-3); }
+  .kt-dot.sm { width: 6px; height: 6px; }
+  .kt-dot.ok { background: var(--ok); }
+  .kt-dot.warn { background: var(--warn); }
+  .kt-dot.bad { background: var(--bad); }
+  .kt-dot.off { background: none; box-shadow: inset 0 0 0 1.5px var(--text-3); }
+  .kt-dot.busy { animation: kt-pulse 1.4s ease-in-out infinite; }
+  .kt-tag { display: inline-block; padding: 0 6px; border-radius: var(--r-1); background: var(--pill); color: var(--pill-text); font-size: var(--fs-micro); line-height: 18px; font-weight: 500; white-space: nowrap; }
+
+  /* Fields: 32 px, radius 8, a 1 px edge and a faint inset. Focus: the edge darkens and a 3 px halo appears. */
+  .kt-input { width: 100%; height: var(--ctl); padding: 0 10px; border: 1px solid var(--field-line); border-radius: var(--r-3); background-color: var(--field-bg); color: var(--text); font-size: var(--fs-body); line-height: var(--lh-body); box-shadow: inset 0 1px 1px rgba(15, 15, 20, 0.03); outline: none; transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease); }
+  .kt-input::placeholder { color: var(--text-3); opacity: 1; }
+  .kt-input:hover:not(:disabled) { border-color: color-mix(in srgb, var(--field-line) 60%, var(--text-3)); }
+  .kt-input:focus { border-color: var(--text-3); box-shadow: 0 0 0 3px var(--ring); }
+  .kt-input[aria-invalid="true"] { border-color: var(--bad); }
+  .kt-input[aria-invalid="true"]:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 16%, transparent); }
+  .kt-input.ok { border-color: var(--ok); }
+  .kt-input:disabled { opacity: 0.55; cursor: default; }
+  textarea.kt-input { height: auto; min-height: 88px; padding: 8px 10px; resize: vertical; }
+  select.kt-input { width: auto; max-width: 100%; appearance: none; padding-right: 30px; cursor: pointer; }
+  .kt-field { display: grid; gap: 6px; }
+  .kt-field > label, .kt-label { font-size: var(--fs-meta); line-height: var(--lh-meta); font-weight: 500; color: var(--text-2); }
+  .kt-hint { font-size: var(--fs-meta); line-height: var(--lh-meta); color: var(--text-3); }
+  .kt-hint.bad { color: var(--bad-text); }
+
+  /* A field's suggestion list (TimezoneInput): the menu look. */
+  .kt-tz-list { position: absolute; z-index: 80; left: 0; right: 0; top: calc(100% + 6px); max-height: 15rem; padding: 6px; overflow-y: auto; border-radius: var(--r-4); background: var(--surface-2); box-shadow: var(--elev-2); }
+  .kt-tz-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 8px; width: 100%; padding: 6px 10px; border-radius: var(--r-2); text-align: left; color: var(--text); cursor: pointer; }
+  .kt-tz-item:hover, .kt-tz-item.on { background: var(--sel); }
+  .kt-tz-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kt-tz-hint { grid-column: 1 / -1; font-size: var(--fs-meta); line-height: var(--lh-meta); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Switch: 34×20 (28×16 small). On is the text colour, not rose. */
+  .kt-switch { position: relative; display: inline-block; width: 34px; height: 20px; flex: none; border-radius: 10px; background: var(--track); cursor: pointer; transition: background-color var(--t) var(--ease); }
+  .kt-switch > i { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(15, 15, 20, 0.2), 0 0 0 0.5px rgba(15, 15, 20, 0.06); transition: transform var(--t-slow) var(--ease); }
+  .kt-switch[aria-checked="true"] { background: var(--text); }
+  .kt-switch[aria-checked="true"] > i { transform: translateX(14px); background: var(--panel); }
+  .kt-switch.sm { width: 28px; height: 16px; border-radius: 8px; }
+  .kt-switch.sm > i { width: 12px; height: 12px; }
+  .kt-switch.sm[aria-checked="true"] > i { transform: translateX(12px); }
+  .kt-switch:disabled { opacity: 0.5; cursor: default; }
+
+  /* Segmented control: a sunk track with a raised thumb. 32 px, or 28 px small (section title rows, rows). */
+  .kt-seg { display: inline-flex; flex: none; align-items: center; max-width: 100%; height: var(--ctl); padding: 2px; gap: 2px; border-radius: var(--r-3); background: var(--track); overflow-x: auto; scrollbar-width: none; }
+  .kt-seg::-webkit-scrollbar { display: none; }
+  .kt-seg > button { display: flex; align-items: center; justify-content: center; flex: none; height: 28px; padding: 0 10px; border-radius: var(--r-2); font-size: var(--fs-meta); font-weight: 500; color: var(--text-2); white-space: nowrap; cursor: pointer; transition: background-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease); }
+  .kt-seg > button:hover:not(:disabled) { color: var(--text); }
+  .kt-seg > button[aria-pressed="true"] { background: var(--thumb); color: var(--text); box-shadow: var(--thumb-elev); }
+  .kt-seg > button:disabled { opacity: 0.5; cursor: default; }
+  .kt-seg.sm { height: var(--ctl-sm); }
+  .kt-seg.sm > button { height: 24px; padding: 0 8px; }
+
+  /* Tab row: 14/500 quiet words on one hairline; the open tab is the text colour with a 2 px rounded ink. */
+  .kt-tabs { display: flex; gap: 24px; margin-bottom: 16px; box-shadow: inset 0 -1px 0 var(--divider); overflow-x: auto; scrollbar-width: none; }
+  .kt-tabs::-webkit-scrollbar { display: none; }
+  .kt-tabs > button, .kt-tabs > a { position: relative; display: flex; align-items: center; flex: none; height: 36px; padding: 0 0 2px; font-size: var(--fs-body); font-weight: 500; color: var(--text-3); white-space: nowrap; cursor: pointer; transition: color var(--t-fast) var(--ease); }
+  .kt-tabs > button:hover, .kt-tabs > a:hover, .kt-tabs > [aria-current] { color: var(--text); }
+  .kt-tabs > [aria-current]::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 2px; background: var(--text); }
+
+  /* Dialog: the scrim holds the dialog and scrolls when it is taller than the window. On a phone it sits at the bottom. */
+  .kt-scrim { position: fixed; inset: 0; z-index: 50; display: grid; align-items: start; justify-items: center; padding: clamp(16px, 14vh, 128px) 16px 16px; overflow-y: auto; background: var(--scrim); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); animation: kt-fade var(--t-slow) var(--ease); }
+  .kt-scrim[data-state="closed"], .kt-scrim > [data-state="closed"] { animation: kt-out var(--t-fast) var(--ease) forwards; }
+  .kt-dialog { position: relative; width: 100%; max-width: 32rem; border-radius: var(--r-4); background: var(--surface-2); box-shadow: var(--elev-3); color: var(--text); animation: kt-pop var(--t-slow) var(--ease); }
+  .kt-dialog.confirm { max-width: 440px; }
+  .kt-dlg-title { padding: 20px 20px 0; font-size: var(--fs-head); line-height: var(--lh-head); font-weight: 600; letter-spacing: -0.011em; color: var(--text); }
+  .kt-dlg-body { padding: 6px 20px 20px; }
+  .kt-dlg-body > p { color: var(--text-2); overflow-wrap: anywhere; }
+  .kt-dlg-acts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 24px; }
+
+  /* ⌘K: a 56 px search line, grouped results, 36 px rows; the chosen row is the selection fill. */
+  .kt-scrim.pal { padding-top: 14vh; }
+  .kt-pal { width: 100%; max-width: 600px; border-radius: var(--r-4); background: var(--surface-2); box-shadow: var(--elev-3); color: var(--text); overflow: hidden; animation: kt-pop var(--t-slow) var(--ease); }
+  .kt-pal-in { display: flex; align-items: center; gap: 12px; height: 56px; padding: 0 18px; border-bottom: 1px solid var(--divider); color: var(--text-3); }
+  .kt-pal-in svg { width: 16px; height: 16px; flex: none; }
+  .kt-pal-q { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font-size: 16px; color: var(--text); }
+  .kt-pal-q::placeholder { color: var(--text-3); opacity: 1; }
+  .kt-pal-list { max-height: min(52vh, 440px); padding: 6px; overflow-y: auto; scrollbar-width: thin; }
+  .kt-pal-list [cmdk-group-heading] { padding: 12px 12px 6px; font-size: var(--fs-micro); line-height: var(--lh-micro); font-weight: 500; color: var(--text-3); }
+  .kt-pal-list [cmdk-list-sizer] > [cmdk-group]:first-child [cmdk-group-heading] { padding-top: 6px; }
+  .kt-pal-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 36px; padding: 0 12px; border-radius: var(--r-2); cursor: pointer; }
+  .kt-pal-item[data-selected="true"] { background: var(--sel); }
+  .kt-pal-lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kt-pal-hint { flex: 0 1 auto; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-meta); color: var(--text-3); }
+  .kt-pal-more { font-size: var(--fs-meta); font-weight: 500; color: var(--text-2); }
+  .kt-pal-empty { padding: 20px 12px; color: var(--text-3); }
+  .kt-mono { font-family: var(--font-mono); font-size: 12px; }
+
+  /* Toasts: a surface card bottom right; full width on a phone. */
+  .kt-toasts { position: fixed; z-index: 100; right: max(24px, env(safe-area-inset-right, 0px)); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; align-items: flex-end; gap: 8px; max-width: min(440px, calc(100vw - 32px)); pointer-events: none; }
+  .kt-toast { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 8px 8px 8px 14px; border-radius: var(--r-4); background: var(--surface-2); color: var(--text); font-size: var(--fs-body); line-height: var(--lh-body); font-weight: 500; box-shadow: var(--elev-2); pointer-events: auto; animation: kt-toast-in var(--t-slow) var(--ease); }
+  .kt-toast > svg { width: 14px; height: 14px; flex: none; color: var(--text-3); }
+  .kt-toast.toast-success > svg { color: var(--ok); }
+  .kt-toast.toast-warning > svg { color: var(--warn); }
+  .kt-toast.toast-error > svg { color: var(--bad); }
+  .kt-toast-msg { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .kt-toast-act { flex: none; font-weight: 500; color: var(--text); text-decoration: underline; text-decoration-color: var(--text-3); text-underline-offset: 3px; white-space: nowrap; cursor: pointer; }
+  .kt-toast-act.alt { color: var(--text-2); text-decoration: none; }
+  .kt-toast-act:hover { color: var(--text); }
+  .kt-toast-x { display: grid; place-items: center; width: 24px; height: 24px; flex: none; border-radius: var(--r-2); color: var(--text-3); cursor: pointer; }
+  .kt-toast-x:hover { background: var(--hover); color: var(--text); }
+
+  /* Tooltip: a small dark pill. */
+  .kt-tip { z-index: 100; max-width: 260px; padding: 4px 8px; border-radius: var(--r-2); background: var(--tip-bg); color: var(--tip-text); font-size: var(--fs-micro); line-height: var(--lh-micro); font-weight: 500; box-shadow: var(--tip-elev); animation: kt-fade var(--t-fast) var(--ease); }
+
+  /* Empty state: one plain line and at most one button. */
+  .kt-empty { display: grid; justify-items: center; gap: 4px; padding: 48px 16px; text-align: center; color: var(--text-3); }
+  .kt-empty-t { font-size: var(--fs-body); line-height: var(--lh-body); font-weight: 500; color: var(--text); }
+  .kt-empty-d { max-width: 52ch; }
+  .kt-empty-a { margin-top: 12px; }
+
+  /* Meters: a 4 px track in one quiet hue; amber from 85%. Ring gauges follow the same rule. */
+  .kt-meter { display: block; height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; }
+  .kt-meter > i { display: block; height: 100%; border-radius: inherit; background: var(--text-3); transition: width var(--t-slow) var(--ease); }
+  .kt-meter.hot > i { background: var(--warn); }
+  .kt-num { font-variant-numeric: tabular-nums; }
+  .kt-hot { color: var(--warn-text); font-weight: 500; }
+  .kt-minibar { display: inline-flex; align-items: center; gap: 8px; }
+  .kt-minibar .kt-meter { width: 52px; }
+  .kt-minibar-n { font-size: var(--fs-micro); line-height: var(--lh-micro); color: var(--text-2); }
+  .kt-gauge-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; font-size: var(--fs-meta); line-height: var(--lh-meta); }
+  .kt-gauge-l { color: var(--text-3); }
+  .kt-gauge-v { color: var(--text-2); }
+  .kt-ring { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .kt-ring-c { position: relative; }
+  .kt-ring-c svg { display: block; transform: rotate(-90deg); }
+  .kt-ring-t { fill: none; stroke: var(--track); }
+  .kt-ring-a { fill: none; stroke: var(--text-2); stroke-linecap: round; transition: stroke-dashoffset 0.6s var(--ease); }
+  .kt-ring-a.hot { stroke: var(--warn); }
+  .kt-ring-v { position: absolute; inset: 0; display: grid; place-items: center; font-size: var(--fs-body); font-weight: 600; color: var(--text); }
+  .kt-ring-v small { font-size: 11px; font-weight: 500; color: var(--text-3); }
+  .kt-ring-l { font-size: var(--fs-micro); line-height: var(--lh-micro); font-weight: 500; color: var(--text-3); }
+
+  /* Spinner: a thin ring with a turning arc. */
+  .kt-spin { display: inline-block; flex: none; color: var(--text-2); animation: kt-spin 0.9s linear infinite; }
+  .kt-spin circle { fill: none; stroke-width: 2; }
+  .kt-spin .t { stroke: var(--track); }
+  .kt-spin .a { stroke: currentColor; stroke-linecap: round; }
+
+  /* Skeletons: flat bars, no shimmer. */
+  .kt-skel { display: block; max-width: 100%; border-radius: var(--r-1); background: var(--sel); }
+  .kt-skel.round { border-radius: 999px; }
+  .kt-skel-rows > * + * { box-shadow: inset 0 1px 0 var(--divider); }
+  .kt-loading { animation: kt-fade var(--t-slow) var(--ease) 300ms both; }
+
+  /* Small text-only parts: freshness, the error view, the demo line. */
+  .kt-ago { font-size: var(--fs-meta); line-height: var(--lh-meta); color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .kt-error { display: grid; justify-items: center; gap: 6px; padding: 64px 16px; text-align: center; }
+  .kt-error-t { font-size: var(--fs-head); line-height: var(--lh-head); font-weight: 600; color: var(--text); }
+  .kt-error-d { max-width: 52ch; color: var(--text-2); overflow-wrap: anywhere; }
+  .kt-error-a { margin-top: 12px; }
+  .kt-demo { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 12px; min-height: 36px; padding: 8px 16px; background: var(--sunk); box-shadow: inset 0 -1px 0 var(--divider); font-size: var(--fs-meta); line-height: var(--lh-meta); color: var(--text-2); text-align: center; }
+  .kt-demo a { font-weight: 500; color: var(--text); text-decoration: underline; text-decoration-color: var(--text-3); text-underline-offset: 3px; }
+
+  @media (max-width: 640px) {
+    .kt-sheet { padding: 16px; }
+    .kt-sheet.flush { padding: 0; }
+    .kt-scrim:not(.pal) { align-items: end; }
+    .kt-toasts { left: 16px; right: 16px; align-items: stretch; max-width: none; }
+  }
+}
+
+/* Unlayered: these must beat old Tailwind classes and the global focus ring. */
+
+/* The destructive dialog's confirm button is the status red with white text. */
+.kt-danger-fill { background: var(--bad-fill); color: #fff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 1px 2px rgba(15, 15, 20, 0.14); }
+.kt-danger-fill:hover { background: color-mix(in srgb, var(--bad-fill) 90%, #000); }
+
+/* Checkboxes, radios and sliders take the text colour: rose is for the main button only. Status-coloured ones keep their colour. */
+input:is([type="checkbox"], [type="radio"], [type="range"]):not([class*="accent-[var(--bad)]"], [class*="accent-[var(--warn)]"]) { accent-color: var(--text); }
+
+.kt-dialog:focus-visible, .kt-pal:focus-visible { outline: none; }
+.kt-seg > button:focus-visible, .kt-tabs > :focus-visible { outline-offset: -2px; }
+.kt-pal-in .kt-pal-q:focus-visible { border: 0; box-shadow: none; }
+
+@keyframes kt-pop { from { opacity: 0; scale: 0.98; } }
+@keyframes kt-fade { from { opacity: 0; } }
+@keyframes kt-out { to { opacity: 0; } }
+@keyframes kt-toast-in { from { opacity: 0; translate: 0 6px; scale: 0.98; } }
+@keyframes kt-pulse { 50% { opacity: 0.35; } }
+@keyframes kt-spin { to { rotate: 360deg; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .kt-dot.busy, .kt-spin { animation: none; }
+}

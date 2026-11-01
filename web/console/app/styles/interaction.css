@@ -11,7 +11,21 @@ select:focus-visible,
 textarea:focus-visible {
   outline: none;
   border-color: var(--text-3);
+}
+/* Checkboxes, radios, sliders and selects show a thin ring. A bare text field sits inside a box (a filter or search
+   field) that shows focus with :focus-within, so it draws no second ring of its own. Low specificity on purpose:
+   a page's own field class sets its own focus look. */
+input:where([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]):focus-visible,
+select:focus-visible {
   box-shadow: 0 0 0 1px var(--text-3);
+}
+/* A field with its own edge gets the 2.0 focus: the edge darkens and a 3 px halo appears (kit .kt-input). */
+:is(input, select, textarea):is([class*="border"], .kt-input):not([class*="border-0"], [class*="border-none"]):focus-visible {
+  box-shadow: 0 0 0 3px var(--ring);
+}
+:is(input, select, textarea):is([class*="border"], .kt-input):not([class*="border-0"], [class*="border-none"])[aria-invalid="true"]:focus-visible {
+  border-color: var(--bad);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 16%, transparent);
 }
 /* Container focus-within for grouped controls */
 fieldset:focus-within,

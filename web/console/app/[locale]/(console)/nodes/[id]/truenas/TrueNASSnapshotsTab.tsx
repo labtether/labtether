@@ -1,285 +1,171 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+// ZFS snapshots: name with its dataset in grey, size, referenced data and when it was taken; newest first, filter by
+// dataset, pick several to delete together. Roll back and Delete sit behind ⋯ and ask first.
+
+import { useMemo, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { Button } from "../../../../../components/ui/Button";
-import { Card } from "../../../../../components/ui/Card";
-import { formatBytes, formatRelativeTime } from "../truenasTabModel";
+import { DiCols, DiList, DiMain, DiNum, DiRow, DiTime } from "../proxmox/DiList";
+import { DiPick, DiRowMenu, DiSortHead, useDiConfirm } from "../proxmox/DiControls";
+import { sizeParts, whenText } from "../proxmox/diFormat";
+import { failureText, sortSnapshots, type SnapshotSort } from "./truenasModel";
+import { TnFailure, TnListState } from "./TrueNASParts";
+import type { TrueNASSnapshot } from "./truenasTypes";
+import { useTrueNASAction } from "./useTrueNASAction";
 import { truenasAction, useTrueNASList } from "./useTrueNASData";
 
-export type TrueNASSnapshot = {
-  id: string;
-  name: string;
-  dataset: string;
-  snapshot_name: string;
-  created?: string;
-  used?: number;
-  referenced?: number;
-};
+export type { TrueNASSnapshot } from "./truenasTypes";
 
-type Props = {
-  assetId: string;
-};
+const ALL = "__all__";
 
-export function TrueNASSnapshotsTab({ assetId }: Props) {
-  const { data: snapshots, loading, error, refresh } = useTrueNASList<TrueNASSnapshot>(
-    assetId,
-    "snapshots",
-  );
+function SizeCell({ bytes, className = "" }: { bytes?: number; className?: string }) {
+  const parts = sizeParts(bytes);
+  return <DiNum value={parts?.value} unit={parts?.unit} className={className} />;
+}
 
-  const [datasetFilter, setDatasetFilter] = useState<string>("__all__");
+export function TrueNASSnapshotsTab({ assetId }: { assetId: string }) {
+  const t = useTranslations("devices-truenas.snapshots");
+  const k = useTranslations("devices-proxmox.kit");
+  const locale = useLocale();
+  const { data: snapshots, loading, error, refresh } = useTrueNASList<TrueNASSnapshot>(assetId, "snapshots");
+  const [dataset, setDataset] = useState<string>(ALL);
+  const [sort, setSort] = useState<SnapshotSort>({ key: "created", dir: "desc" });
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [actionInFlight, setActionInFlight] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [confirmDeleteBulk, setConfirmDeleteBulk] = useState(false);
-  const actionSeq = useRef(0);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const action = useTrueNASAction();
+  const { ask, dialog } = useDiConfirm();
 
-  const datasets = useMemo(() => {
-    const seen = new Set<string>();
-    for (const snap of snapshots) {
-      seen.add(snap.dataset);
-    }
-    return Array.from(seen).sort();
-  }, [snapshots]);
-
-  const filtered = useMemo(() => {
-    if (datasetFilter === "__all__") return snapshots;
-    return snapshots.filter((s) => s.dataset === datasetFilter);
-  }, [snapshots, datasetFilter]);
-
-  const toggleSelect = useCallback((id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-
-  const doDelete = useCallback(
-    async (id: string) => {
-      const seq = ++actionSeq.current;
-      setActionError(null);
-      setActionInFlight(`delete-${id}`);
-      setConfirmDeleteId(null);
-      try {
-        await truenasAction(
-          `/api/truenas/assets/${encodeURIComponent(assetId)}/snapshots/${encodeURIComponent(id)}`,
-          "DELETE",
-        );
-        if (actionSeq.current === seq) {
-          setSelected((prev) => {
-            const next = new Set(prev);
-            next.delete(id);
-            return next;
-          });
-          refresh();
-        }
-      } catch (err) {
-        if (actionSeq.current === seq) {
-          setActionError(err instanceof Error ? err.message : "delete failed");
-        }
-      } finally {
-        if (actionSeq.current === seq) setActionInFlight(null);
-      }
-    },
-    [assetId, refresh],
+  const datasets = useMemo(() => [...new Set(snapshots.map((snap) => snap.dataset))].sort(), [snapshots]);
+  const shown = useMemo(
+    () => sortSnapshots(dataset === ALL ? snapshots : snapshots.filter((snap) => snap.dataset === dataset), sort),
+    [snapshots, dataset, sort],
   );
+  const picked = shown.filter((snap) => selected.has(snap.id));
+  const path = (id: string, suffix = "") => `/api/truenas/assets/${encodeURIComponent(assetId)}/snapshots/${encodeURIComponent(id)}${suffix}`;
 
-  const doBulkDelete = useCallback(async () => {
-    const seq = ++actionSeq.current;
-    setActionError(null);
-    setActionInFlight("bulk-delete");
-    setConfirmDeleteBulk(false);
-    const ids = Array.from(selected);
-    const errors: string[] = [];
-    for (const id of ids) {
-      try {
-        await truenasAction(
-          `/api/truenas/assets/${encodeURIComponent(assetId)}/snapshots/${encodeURIComponent(id)}`,
-          "DELETE",
-        );
-      } catch (err) {
-        errors.push(err instanceof Error ? err.message : id);
-      }
-    }
-    if (actionSeq.current !== seq) return;
-    setActionInFlight(null);
-    setSelected(new Set());
-    if (errors.length > 0) {
-      setActionError(`Failed to delete: ${errors.join(", ")}`);
-    }
-    refresh();
-  }, [assetId, selected, refresh]);
+  const toggle = (id: string) => setSelected((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  });
 
-  const doRollback = useCallback(
-    async (id: string) => {
-      const seq = ++actionSeq.current;
-      setActionError(null);
-      setActionInFlight(`rollback-${id}`);
-      try {
-        await truenasAction(
-          `/api/truenas/assets/${encodeURIComponent(assetId)}/snapshots/${encodeURIComponent(id)}/rollback`,
-          "POST",
-        );
-        if (actionSeq.current === seq) refresh();
-      } catch (err) {
-        if (actionSeq.current === seq) {
-          setActionError(err instanceof Error ? err.message : "rollback failed");
+  const rollback = (snap: TrueNASSnapshot) => ask({
+    title: t("rollbackTitle", { dataset: snap.dataset, name: snap.snapshot_name }),
+    message: snap.created ? t("rollbackBody", { dataset: snap.dataset, when: whenText(snap.created, locale) }) : t("rollbackBodyNoTime", { dataset: snap.dataset }),
+    confirmLabel: t("rollbackConfirm"),
+    onConfirm: () => action.run(`rollback:${snap.id}`, () => truenasAction(path(snap.id, "/rollback"), "POST"), refresh),
+  });
+
+  const remove = (snap: TrueNASSnapshot) => ask({
+    title: t("deleteTitle", { name: snap.snapshot_name }),
+    message: snap.dataset,
+    confirmLabel: t("deleteConfirm"),
+    onConfirm: () => action.run(`delete:${snap.id}`, () => truenasAction(path(snap.id), "DELETE"), () => {
+      setSelected((prev) => { const next = new Set(prev); next.delete(snap.id); return next; });
+      refresh();
+    }),
+  });
+
+  const removePicked = () => ask({
+    title: t("bulkTitle", { count: picked.length }),
+    message: picked.slice(0, 6).map((snap) => snap.id).join(", ") + (picked.length > 6 ? " …" : ""),
+    confirmLabel: t("deleteConfirm"),
+    onConfirm: async () => {
+      setBulkError(null);
+      const failed: string[] = [];
+      for (const snap of picked) {
+        try {
+          await truenasAction(path(snap.id), "DELETE");
+        } catch (err) {
+          failed.push(failureText(err instanceof Error ? err.message : "", snap.id));
         }
-      } finally {
-        if (actionSeq.current === seq) setActionInFlight(null);
       }
+      setSelected(new Set());
+      if (failed.length > 0) setBulkError(t("bulkFailed", { count: failed.length, reason: failed.join(", ") }));
+      refresh();
     },
-    [assetId, refresh],
-  );
+  });
 
-  if (loading && snapshots.length === 0) {
-    return <Card><p className="text-sm text-[var(--muted)]">Loading snapshots…</p></Card>;
-  }
-
-  if (error && snapshots.length === 0) {
-    return <Card><p className="text-sm text-[var(--bad)]">{error}</p></Card>;
-  }
+  const failure = action.error
+    ? t(action.error.key.startsWith("rollback:") ? "rollbackFailed" : "deleteFailed", {
+        name: action.error.key.split(":").slice(1).join(":"),
+        reason: failureText(action.error.message, t("noReason")),
+      })
+    : bulkError;
 
   return (
-    <Card>
-      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <h2 className="text-sm font-medium text-[var(--text)]">Snapshots</h2>
-        <div className="flex items-center gap-2 flex-wrap">
-          {datasets.length > 0 ? (
-            <select
-              value={datasetFilter}
-              onChange={(e) => setDatasetFilter(e.target.value)}
-              className="rounded border border-[var(--line)] bg-[var(--surface)] text-xs text-[var(--text)] px-2 py-1"
-            >
-              <option value="__all__">All datasets</option>
-              {datasets.map((ds) => (
-                <option key={ds} value={ds}>
-                  {ds}
-                </option>
-              ))}
-            </select>
+    <>
+      {datasets.length > 1 || picked.length > 0 ? (
+        <div className="di-tools">
+          {datasets.length > 1 ? (
+            <DiPick
+              label={t("datasetFilter")}
+              value={dataset}
+              onChange={(next) => { setDataset(next); setSelected(new Set()); }}
+              options={[{ id: ALL, label: t("allDatasets") }, ...datasets.map((name) => ({ id: name, label: name }))]}
+            />
           ) : null}
-          {selected.size > 0 ? (
-            confirmDeleteBulk ? (
-              <>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  loading={actionInFlight === "bulk-delete"}
-                  onClick={() => { void doBulkDelete(); }}
-                >
-                  Confirm Delete ({selected.size})
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setConfirmDeleteBulk(false)}>
-                  Cancel
-                </Button>
-              </>
-            ) : (
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={!!actionInFlight}
-                onClick={() => setConfirmDeleteBulk(true)}
-              >
-                Delete Selected ({selected.size})
+          {picked.length > 0 ? (
+            <>
+              <span className="di-word">{t("selected", { count: picked.length })}</span>
+              <Button size="sm" variant="danger" disabled={action.busy !== null} onClick={removePicked}>
+                {t("deleteSelected", { count: picked.length })}
               </Button>
-            )
+              <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>{t("clear")}</Button>
+            </>
           ) : null}
-          <Button size="sm" variant="ghost" onClick={refresh} disabled={loading}>
-            {loading ? "Refreshing…" : "Refresh"}
-          </Button>
         </div>
-      </div>
-      {actionError ? <p className="mb-3 text-xs text-[var(--bad)]">{actionError}</p> : null}
-      {filtered.length === 0 ? (
-        <p className="text-sm text-[var(--muted)]">No snapshots found.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-[var(--line)]">
-                <th className="py-2 text-left font-medium text-[var(--muted)] w-6">
-                  <span className="sr-only">Select</span>
-                </th>
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Name</th>
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Dataset</th>
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Created</th>
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Used</th>
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Referenced</th>
-                <th className="py-2 text-right font-medium text-[var(--muted)]">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--line)]">
-              {filtered.map((snap) => (
-                <tr key={snap.id}>
-                  <td className="py-2">
-                    <input
-                      type="checkbox"
-                      checked={selected.has(snap.id)}
-                      onChange={() => toggleSelect(snap.id)}
-                      className="rounded"
-                    />
-                  </td>
-                  <td className="py-2 font-medium text-[var(--text)]">{snap.name}</td>
-                  <td className="py-2 text-[var(--muted)]">{snap.dataset}</td>
-                  <td className="py-2 text-[var(--muted)]">
-                    {snap.created ? formatRelativeTime(snap.created) : "--"}
-                  </td>
-                  <td className="py-2 text-[var(--muted)]">
-                    {snap.used != null ? formatBytes(snap.used) : "--"}
-                  </td>
-                  <td className="py-2 text-[var(--muted)]">
-                    {snap.referenced != null ? formatBytes(snap.referenced) : "--"}
-                  </td>
-                  <td className="py-2 text-right">
-                    {confirmDeleteId === snap.id ? (
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          loading={actionInFlight === `delete-${snap.id}`}
-                          onClick={() => { void doDelete(snap.id); }}
-                        >
-                          Confirm
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setConfirmDeleteId(null)}
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={!!actionInFlight}
-                          loading={actionInFlight === `rollback-${snap.id}`}
-                          onClick={() => { void doRollback(snap.id); }}
-                        >
-                          Rollback
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={!!actionInFlight}
-                          onClick={() => setConfirmDeleteId(snap.id)}
-                        >
-                          Delete
-                        </Button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Card>
+      ) : null}
+      <TnFailure message={failure} />
+      <DiList
+        label={t("label")}
+        cols="16px minmax(0, 1fr) 72px 80px 96px 28px"
+        colsM="16px minmax(0, 1fr) 72px 96px 28px"
+        colsS="16px minmax(0, 1fr) 72px 28px"
+      >
+        <DiCols>
+          <span />
+          <DiSortHead id="name" label={t("colName")} sort={sort} onSort={(next) => setSort(next as SnapshotSort)} />
+          <DiSortHead id="used" label={t("colSize")} sort={sort} onSort={(next) => setSort(next as SnapshotSort)} right />
+          <span className="r di-m">{t("colReferenced")}</span>
+          <DiSortHead id="created" label={t("colTaken")} sort={sort} onSort={(next) => setSort(next as SnapshotSort)} right className="di-s" />
+          <span />
+        </DiCols>
+        <TnListState
+          loading={loading}
+          error={error}
+          count={shown.length}
+          empty={dataset === ALL ? t("empty") : t("emptyFiltered", { dataset })}
+          onRetry={refresh}
+          failed={(reason) => t("loadFailed", { reason })}
+        />
+        {shown.map((snap) => (
+          <DiRow key={snap.id} selected={selected.has(snap.id)}>
+            <input
+              type="checkbox"
+              className="di-tn-check"
+              checked={selected.has(snap.id)}
+              onChange={() => toggle(snap.id)}
+              aria-label={t("select", { name: snap.id })}
+            />
+            <DiMain name={snap.snapshot_name} grey={<span className="di-mono">{snap.dataset}</span>} />
+            <SizeCell bytes={snap.used} />
+            <SizeCell bytes={snap.referenced} className="di-m" />
+            <DiTime className="di-s">{whenText(snap.created, locale)}</DiTime>
+            <DiRowMenu
+              label={k("actionsFor", { name: snap.snapshot_name })}
+              items={[
+                { label: t("rollback"), disabled: action.busy !== null, onSelect: () => rollback(snap) },
+                { separator: true },
+                { label: t("delete"), danger: true, disabled: action.busy !== null, onSelect: () => remove(snap) },
+              ]}
+            />
+          </DiRow>
+        ))}
+      </DiList>
+      {dialog}
+    </>
   );
 }

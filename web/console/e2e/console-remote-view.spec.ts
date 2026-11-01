@@ -100,6 +100,8 @@ test("node detail shows remote view for connected agent host", async ({ page }) 
   await page.goto("/nodes", { waitUntil: "domcontentloaded" });
   await page.getByRole("link", { name: "Lab Host", exact: true }).click();
   await expect(page).toHaveURL(/(?:\/[a-z]{2})?\/nodes\/agent-host-1$/);
-  await expect(page.getByText("Lab Host", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Remote View/i }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Lab Host", level: 1 })).toBeVisible();
+  // A Linux host offers Terminal in the header, so Remote view sits in the device's ⋯ menu.
+  await page.getByRole("button", { name: "Device actions" }).click();
+  await expect(page.getByRole("menuitem", { name: "Remote view" })).toBeVisible();
 });

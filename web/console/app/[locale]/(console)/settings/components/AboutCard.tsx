@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Card } from "../../../../components/ui/Card";
+import { Facts, Section, Sheet } from "./SettingsKit";
 
 type VersionPayload = {
   version?: string;
@@ -38,18 +38,20 @@ export function AboutCard() {
       .catch(() => {});
   }, []);
 
-  const version = data?.version ?? "—";
-  const uptime = data?.started_at ? formatUptime(data.started_at) : null;
+  const uptime = data?.started_at ? formatUptime(data.started_at) : "";
 
   return (
-    <Card className="mb-6">
-      <p className="text-xs font-mono uppercase tracking-wider text-[var(--muted)] mb-2">{t("about.heading")}</p>
-      <p className="text-xs text-[var(--muted)]">
-        {t("about.version", { version })}
-        {uptime ? ` · ${t("about.uptime", { uptime })}` : ""}
-        {/* Session lifetime is hardcoded to 24 h; making it configurable requires a backend runtime setting */}
-        {` · ${t("about.sessionLifetime", { duration: "24h" })}`}
-      </p>
-    </Card>
+    <Section title={t("about.heading")} id="about">
+      <Sheet>
+        <Facts
+          items={[
+            [t("about.version"), <span key="v" className="st-num">{data?.version ?? "—"}</span>],
+            uptime ? [t("about.uptime"), <span key="u" className="st-num">{uptime}</span>] : false,
+            // Sign-in lasts 24 h: a fixed hub value, not a setting yet.
+            [t("about.sessionLifetime"), t("about.sessionLength")],
+          ]}
+        />
+      </Sheet>
+    </Section>
   );
 }

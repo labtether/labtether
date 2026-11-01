@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, type RefObject } from "react";
+import { ChevronDown, ChevronUp, X } from "lucide-react";
+import { useTranslations } from "next-intl";
 import type { XTerminalHandle } from "../XTerminal";
 
 interface SearchBarProps {
@@ -9,7 +11,9 @@ interface SearchBarProps {
   onClose: () => void;
 }
 
+/** Find in the scrollback: Enter and Shift+Enter move between matches, Esc closes. */
 export default function SearchBar({ termRef, open, onClose }: SearchBarProps) {
+  const t = useTranslations("terminal.find");
   const [query, setQuery] = useState("");
   const [useRegex, setUseRegex] = useState(false);
   const [caseSensitive, setCaseSensitive] = useState(false);
@@ -72,78 +76,33 @@ export default function SearchBar({ termRef, open, onClose }: SearchBarProps) {
 
   if (!open) return null;
 
-  const toggleButtonClass = (active: boolean) =>
-    `rounded-md border px-2 py-0.5 font-mono text-xs transition-colors ${
-      active
-        ? "border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-contrast)]"
-        : "border-[var(--line)] bg-[var(--surface)] text-[var(--text)] hover:bg-[var(--hover)]"
-    }`;
-
   return (
-    <div
-      className="absolute left-0 right-0 top-0 z-10 flex items-center gap-1.5 border-b border-[var(--line)] bg-[var(--panel-glass)] px-2 py-1.5 backdrop-blur-[12px]"
-      style={{ animation: "searchBarSlideIn 0.15s ease-out" }}
-    >
-      <style>{`
-        @keyframes searchBarSlideIn {
-          from { transform: translateY(-100%); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
-        }
-      `}</style>
-
+    <div className="tm-find" role="search" aria-label={t("label")}>
       <input
         ref={inputRef}
         type="text"
+        className="tm-find-q"
+        aria-label={t("label")}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Search terminal..."
-        className="min-w-0 flex-1 rounded-md border border-[var(--line)] bg-[var(--surface)] px-2 py-1 font-mono text-xs text-[var(--text)] outline-none transition-colors focus:border-[var(--accent)]"
+        placeholder={t("placeholder")}
+        spellCheck={false}
       />
-
-      <button
-        type="button"
-        onClick={() => setUseRegex((v) => !v)}
-        title="Use regular expression"
-        className={toggleButtonClass(useRegex)}
-      >
-        .*
-      </button>
-
-      <button
-        type="button"
-        onClick={() => setCaseSensitive((v) => !v)}
-        title="Match case"
-        className={toggleButtonClass(caseSensitive)}
-      >
+      <button type="button" className="tm-find-b tm-find-t" aria-pressed={caseSensitive} onClick={() => setCaseSensitive((v) => !v)} title={t("matchCase")}>
         Aa
       </button>
-
-      <button
-        type="button"
-        onClick={doSearchPrevious}
-        title="Previous match (Shift+Enter)"
-        className="rounded-md border border-[var(--line)] bg-[var(--surface)] px-2 py-0.5 text-xs text-[var(--text)] transition-colors hover:bg-[var(--hover)]"
-      >
-        {"\u2191"}
+      <button type="button" className="tm-find-b tm-find-t" aria-pressed={useRegex} onClick={() => setUseRegex((v) => !v)} title={t("regex")}>
+        .*
       </button>
-
-      <button
-        type="button"
-        onClick={doSearchNext}
-        title="Next match (Enter)"
-        className="rounded-md border border-[var(--line)] bg-[var(--surface)] px-2 py-0.5 text-xs text-[var(--text)] transition-colors hover:bg-[var(--hover)]"
-      >
-        {"\u2193"}
+      <button type="button" className="tm-find-b" onClick={doSearchPrevious} disabled={!query} title={t("previous")} aria-label={t("previous")}>
+        <ChevronUp aria-hidden="true" />
       </button>
-
-      <button
-        type="button"
-        onClick={handleClose}
-        title="Close search (Escape)"
-        className="rounded-md border border-[var(--line)] bg-[var(--surface)] px-2 py-0.5 text-xs text-[var(--text)] transition-colors hover:bg-[var(--hover)]"
-      >
-        {"\u2715"}
+      <button type="button" className="tm-find-b" onClick={doSearchNext} disabled={!query} title={t("next")} aria-label={t("next")}>
+        <ChevronDown aria-hidden="true" />
+      </button>
+      <button type="button" className="tm-find-b" onClick={handleClose} title={t("close")} aria-label={t("close")}>
+        <X aria-hidden="true" />
       </button>
     </div>
   );

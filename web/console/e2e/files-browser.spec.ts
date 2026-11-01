@@ -182,26 +182,27 @@ test.describe("files browser context actions", () => {
     const contextMenu = () => page.getByRole("menu", { name: "Files context menu" });
 
     await rowFor("alpha.txt").click({ button: "right" });
-    await contextMenu().getByRole("button", { name: /^Copy/ }).click();
+    await contextMenu().getByRole("menuitem", { name: "Copy", exact: true }).click();
 
     await rowFor("docs").click({ button: "right" });
-    await contextMenu().getByRole("button", { name: "Paste" }).click();
+    await contextMenu().getByRole("menuitem", { name: /^Paste/ }).click();
 
     await expect.poll(() => copyCalls.length).toBe(1);
     expect(copyCalls[0]).toEqual({ src: "~/alpha.txt", dst: "~/docs/alpha.txt" });
 
     await rowFor("beta.txt").click({ button: "right" });
-    await contextMenu().getByRole("button", { name: /^Cut/ }).click();
+    await contextMenu().getByRole("menuitem", { name: "Cut", exact: true }).click();
 
     await rowFor("docs").click({ button: "right" });
-    await contextMenu().getByRole("button", { name: "Paste" }).click();
+    await contextMenu().getByRole("menuitem", { name: /^Paste/ }).click();
 
     await expect.poll(() => renameCalls.length).toBe(1);
     expect(renameCalls[0]).toEqual({ oldPath: "~/beta.txt", newPath: "~/docs/beta.txt" });
-    await expect(page.getByText(/^Clipboard:/)).toHaveCount(0);
+    // A paste of cut items empties the clipboard: its chip leaves the toolbar.
+    await expect(page.getByText(/to move$/)).toHaveCount(0);
 
     await rowFor("alpha.txt").click({ button: "right" });
-    await contextMenu().getByRole("button", { name: "Download" }).click();
+    await contextMenu().getByRole("menuitem", { name: "Download", exact: true }).click();
 
     await expect.poll(() => downloadCalls.length).toBe(1);
     expect(downloadCalls[0]).toBe("~/alpha.txt");
@@ -279,7 +280,7 @@ test.describe("files browser context actions", () => {
 
     const docsRow = page.locator('[data-file-entry-name="docs"]').first();
     await docsRow.click({ button: "right" });
-    await page.getByRole("menu", { name: "Files context menu" }).getByRole("button", { name: "Upload Here" }).click();
+    await page.getByRole("menu", { name: "Files context menu" }).getByRole("menuitem", { name: "Upload here", exact: true }).click();
 
     await page.locator('input[type="file"]').setInputFiles({
       name: "upload.txt",

@@ -1,41 +1,21 @@
 "use client";
 
-export function ToolbarRevealHandle({
-  style,
-  resetTimer,
-}: {
-  style: React.CSSProperties;
-  resetTimer: () => void;
-}) {
+import { useTranslations } from "next-intl";
+
+/** What is left of the full-screen toolbar while it is hidden: a small tab on the screen's edge that brings it back. */
+export function ToolbarRevealHandle({ position, onReveal }: { position: "top" | "bottom"; onReveal: () => void }) {
+  const t = useTranslations("desktop.tools");
   return (
     <button
       type="button"
-      onClick={resetTimer}
-      onMouseEnter={resetTimer}
-      title="Show remote view tools"
-      aria-label="Show remote view tools"
-      style={style}
+      className={`rv-handle ${position}`}
+      onClick={onReveal}
+      onMouseEnter={onReveal}
+      onFocus={onReveal}
+      aria-label={t("showTools")}
+      title={t("showTools")}
     >
-      <div
-        style={{
-          width: 24,
-          height: 3,
-          borderRadius: 2,
-          backgroundColor: "rgba(255,255,255,0.35)",
-        }}
-      />
-      <span
-        style={{
-          fontSize: 10,
-          fontWeight: 700,
-          letterSpacing: "0.08em",
-          textTransform: "uppercase",
-          color: "rgba(255,255,255,0.82)",
-          whiteSpace: "nowrap",
-        }}
-      >
-        Tools
-      </span>
+      <i aria-hidden="true" />
     </button>
   );
 }

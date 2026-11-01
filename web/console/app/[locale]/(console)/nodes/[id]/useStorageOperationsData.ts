@@ -27,9 +27,9 @@ type UseStorageOperationsDataArgs = {
   proxmoxDetails: ProxmoxStorageDetails | null;
 };
 
+/** A risk filter and how many pools it matches; the tab words it. */
 export type StorageRiskChip = {
   key: RiskFilter;
-  label: string;
   value: number;
 };
 
@@ -102,7 +102,15 @@ export function useStorageOperationsData({
     [insights],
   );
 
-  const rows = insightRows.length > 0 ? insightRows : fallbackRows;
+  // Insight rows do not carry the Proxmox storage type; take it from the storage asset of the same name.
+  const rows = useMemo<StorageRow[]>(() => {
+    if (insightRows.length === 0) return fallbackRows;
+    const typeByKey = new Map(fallbackRows.map((row) => [row.key, row.typeLabel]));
+    return insightRows.map((row) => {
+      const known = typeByKey.get(row.key);
+      return known && known !== "storage" ? { ...row, typeLabel: known } : row;
+    });
+  }, [fallbackRows, insightRows]);
 
   const rowByKey = useMemo(() => {
     const index = new Map<string, StorageRow>();
@@ -138,12 +146,12 @@ export function useStorageOperationsData({
   );
 
   const riskChips = useMemo<StorageRiskChip[]>(() => ([
-    { key: "all", label: "All Pools", value: rows.length },
-    { key: "degraded", label: "Degraded", value: summary.degraded },
-    { key: "hot", label: "Pools >80%", value: summary.hot },
-    { key: "predicted", label: "Predicted <30d", value: summary.predicted },
-    { key: "scrub", label: "Scrub Overdue", value: summary.scrub },
-    { key: "stale", label: "Telemetry Stale", value: summary.stale },
+    { key: "all", value: rows.length },
+    { key: "degraded", value: summary.degraded },
+    { key: "hot", value: summary.hot },
+    { key: "predicted", value: summary.predicted },
+    { key: "scrub", value: summary.scrub },
+    { key: "stale", value: summary.stale },
   ]), [rows.length, summary.degraded, summary.hot, summary.predicted, summary.scrub, summary.stale]);
 
   return {

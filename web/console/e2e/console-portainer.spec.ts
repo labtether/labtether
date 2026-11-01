@@ -232,38 +232,41 @@ test("portainer node detail shows endpoint-scoped inventory and workload details
   await page.goto("/nodes", { waitUntil: "domcontentloaded" });
   await page.getByRole("link", { name: "Lab Portainer", exact: true }).click();
   await expect(page).toHaveURL(/(?:\/[a-z]{2})?\/nodes\/portainer-endpoint-1$/);
-  await expect(page.getByRole("button", { name: /^Docker$/i })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /Portainer/i }).first()).toBeVisible();
+  const sections = page.getByRole("navigation", { name: "Device sections" });
+  await expect(sections.getByRole("link", { name: "Docker", exact: true })).toHaveCount(0);
+  await expect(sections.getByRole("link", { name: "Portainer", exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: /Portainer/i }).first().click();
-  await page.getByRole("button", { name: "Containers", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Containers", exact: true })).toBeVisible();
-  await expect(page.getByRole("cell", { name: "nginx", exact: true })).toBeVisible();
-  await expect(page.getByRole("cell", { name: "nginx:latest", exact: true })).toBeVisible();
-  await expect(page.getByRole("cell", { name: "8080:80/tcp", exact: true })).toBeVisible();
+  await sections.getByRole("link", { name: "Portainer", exact: true }).click();
+  await page.getByRole("radio", { name: "Containers", exact: true }).click();
+  const containerList = page.getByRole("table", { name: "Containers", exact: true });
+  await expect(containerList.getByRole("link", { name: "nginx", exact: true })).toBeVisible();
+  await expect(containerList.getByText("nginx:latest", { exact: true })).toBeVisible();
+  await expect(containerList.getByText("8080", { exact: true })).toBeVisible();
   await expect(page.getByText("redis", { exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Stacks", exact: true }).click();
+  await page.getByRole("radio", { name: "Stacks", exact: true }).click();
   await expect(page.getByRole("cell", { name: "web", exact: true })).toBeVisible();
 
-  await page.getByLabel("Back to dashboard").click();
-  await page.getByRole("button", { name: /Compute/i }).first().click();
+  await sections.getByRole("link", { name: "Overview", exact: true }).click();
+  await sections.getByRole("link", { name: "Compute", exact: true }).click();
   await expect(page.getByRole("link", { name: "nginx", exact: true })).toBeVisible();
   await expect(page.getByText("redis", { exact: true })).toHaveCount(0);
 
   await page.getByRole("link", { name: "nginx", exact: true }).click();
   await expect(page).toHaveURL(/(?:\/[a-z]{2})?\/nodes\/portainer-container-1-abc123def456$/);
-  await page.getByRole("button", { name: /Portainer/i }).first().click();
-  await expect(page.getByText("nginx:latest", { exact: true })).toBeVisible();
-  await expect(page.getByText("8080->80/tcp", { exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Lab Portainer", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "web", exact: true })).toBeVisible();
+  await sections.getByRole("link", { name: "Portainer", exact: true }).click();
+  const details = page.locator("section[aria-labelledby='pt-det']");
+  await expect(details.getByText("nginx:latest", { exact: true })).toBeVisible();
+  await expect(details.getByText("8080->80/tcp", { exact: true })).toBeVisible();
+  await expect(details.getByRole("link", { name: "Lab Portainer", exact: true })).toBeVisible();
+  await expect(details.getByRole("link", { name: "web", exact: true })).toBeVisible();
 
-  await page.getByRole("link", { name: "Lab Portainer", exact: true }).click();
+  await details.getByRole("link", { name: "Lab Portainer", exact: true }).click();
   await page.goto("/nodes/portainer-stack-10", { waitUntil: "domcontentloaded" });
   await expect(page).toHaveURL(/(?:\/[a-z]{2})?\/nodes\/portainer-stack-10$/);
-  await page.getByRole("button", { name: /Portainer/i }).first().click();
-  await expect(page.getByRole("heading", { name: "Member Containers", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "nginx", exact: true })).toBeVisible();
+  await sections.getByRole("link", { name: "Portainer", exact: true }).click();
+  const members = page.locator("section[aria-labelledby='pt-sm']");
+  await expect(members.getByRole("heading", { name: "Containers", exact: true })).toBeVisible();
+  await expect(members.getByRole("link", { name: "nginx", exact: true })).toBeVisible();
   await expect(page.getByText("redis", { exact: true })).toHaveCount(0);
 });
 
@@ -398,7 +401,7 @@ test("docker stack detail tolerates null container id lists", async ({ page }) =
   });
 
   await page.goto("/nodes/docker-stack-agent-host-1-app", { waitUntil: "domcontentloaded" });
-  await expect(page.getByText("Compose Stack", { exact: true })).toBeVisible();
   await expect(page.getByText("/opt/app-stack/compose.yaml", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "app", exact: true })).toBeVisible();
   expect(pageErrors).toEqual([]);
 });

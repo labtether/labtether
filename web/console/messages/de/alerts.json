@@ -1,13 +1,290 @@
 {
   "title": "Alarme",
-  "subtitle": {
-    "label": "Ihr Alarm-Posteingang{activeInfo}, Regeln und Stummschaltung",
-    "active": " · {count} aktiv"
-  },
+  "newRule": "Neue Regel",
   "tabs": {
-    "inbox": "Posteingang",
+    "label": "Alarmansichten",
+    "alerts": "Alarme",
+    "issues": "Vorfälle",
     "rules": "Regeln",
-    "silences": "Stummgeschaltet",
+    "silences": "Stummschaltungen",
     "delivery": "Zustellprotokoll"
+  },
+  "severity": {
+    "critical": "Kritisch",
+    "high": "Hoch",
+    "medium": "Mittel",
+    "low": "Niedrig"
+  },
+  "state": {
+    "firing": "Ausgelöst",
+    "acknowledged": "Bestätigt",
+    "pending": "Ausstehend",
+    "resolved": "Aufgelöst"
+  },
+  "duration": {
+    "h": "{n} h",
+    "min": "{n} min",
+    "s": "{n} s"
+  },
+  "errors": {
+    "action": "Der Alarm konnte nicht geändert werden"
+  },
+  "inbox": {
+    "loading": "Alarme werden geladen",
+    "list": "Alarme",
+    "unnamed": "Alarm",
+    "filter": "Filter",
+    "filterAll": "Alle",
+    "filterSeverity": "Schweregrad",
+    "filterState": "Zustand",
+    "allSeverities": "Alle Schweregrade",
+    "allStates": "Alle Zustände",
+    "sort": "Reihenfolge",
+    "sortBy": {
+      "severity": "Schwerste zuerst",
+      "severityAsc": "Leichteste zuerst",
+      "newest": "Neueste zuerst",
+      "oldest": "Älteste zuerst"
+    },
+    "clear": "Filter zurücksetzen",
+    "shown": "{shown} von {total} Alarmen",
+    "groups": {
+      "silenced": "Stummgeschaltet",
+      "resolved": "Aufgelöst"
+    },
+    "noOpen": "Keine offenen Alarme",
+    "empty": "Keine Alarme",
+    "emptyFiltered": "Keine Alarme passen zu diesem Filter",
+    "showAllResolved": "Alle {count} aufgelösten zeigen",
+    "row": {
+      "resolvedAt": "Aufgelöst um {time}",
+      "silencedUntil": "Stumm bis {time}",
+      "acknowledgedAt": "Bestätigt · {time}",
+      "pending": "Ausstehend",
+      "pendingWith": "Ausstehend · {text}",
+      "sevWith": "{severity} · {text}"
+    }
+  },
+  "detail": {
+    "unnamed": "Alarm",
+    "since": "Seit {time}",
+    "resolvedAt": "Aufgelöst um {time}",
+    "acknowledgedAt": "Bestätigt · {time}",
+    "pending": "Ausstehend",
+    "silencedUntil": "Stumm bis {time}",
+    "acknowledge": "Bestätigen",
+    "resolve": "Auflösen",
+    "silence": "Stummschalten",
+    "silenceNoLabels": "Die Regel dieses Alarms hat keine Labels zum Abgleichen",
+    "silenceFor": {
+      "1h": "Für 1 Stunde",
+      "4h": "Für 4 Stunden",
+      "12h": "Für 12 Stunden",
+      "24h": "Für 24 Stunden"
+    },
+    "silenced": "Stumm bis {time}",
+    "endSilence": "Stummschaltung beenden",
+    "silenceEnded": "Stummschaltung beendet",
+    "more": "Weitere Aktionen",
+    "openRule": "Regel öffnen",
+    "openDevice": "Gerät öffnen",
+    "openIssue": "Vorfall öffnen",
+    "openIssues": "Vorfälle öffnen",
+    "device": "Gerät",
+    "deviceState": {
+      "offline": "Offline",
+      "unresponsive": "Reagiert nicht"
+    },
+    "rule": "Regel",
+    "issue": "Vorfall",
+    "started": "Begonnen",
+    "lastFired": "Zuletzt ausgelöst",
+    "labels": "Labels",
+    "annotations": "Anmerkungen",
+    "timeline": {
+      "title": "Verlauf",
+      "opened": "Alarm geöffnet",
+      "fired": "Erneut ausgelöst",
+      "acknowledged": "Bestätigt",
+      "resolved": "Aufgelöst",
+      "sent": "An {channel} gesendet",
+      "failed": "Senden an {channel} fehlgeschlagen",
+      "pending": "Wird an {channel} gesendet",
+      "unknownChannel": "einen unbekannten Kanal"
+    }
+  },
+  "kinds": {
+    "metric_threshold": "Metrik-Schwellenwert",
+    "metric_deadman": "Metrik meldet nicht mehr",
+    "heartbeat_stale": "Heartbeat verpasst",
+    "log_pattern": "Logzeile passt",
+    "composite": "Kombinierte Regeln",
+    "synthetic_check": "Dienstprüfung schlägt fehl"
+  },
+  "labelRows": {
+    "label": "Label",
+    "value": "Wert",
+    "add": "Label hinzufügen",
+    "remove": "Label entfernen"
+  },
+  "rules": {
+    "loading": "Regeln werden geladen",
+    "empty": "Noch keine Alarmregeln",
+    "emptyFiltered": "Keine Regeln passen zu diesem Filter",
+    "listLabel": "Alarmregeln",
+    "showLabel": "Regeln zeigen",
+    "show": {
+      "all": "Alle",
+      "on": "An",
+      "off": "Aus"
+    },
+    "shown": "{shown} von {total} Regeln",
+    "clear": "Filter zurücksetzen",
+    "cols": {
+      "name": "Regel",
+      "severity": "Schweregrad",
+      "scope": "Gilt für",
+      "state": "Zustand"
+    },
+    "on": "An",
+    "off": "Aus",
+    "everything": "Alle Geräte",
+    "scope": {
+      "global": "Alle Geräte",
+      "group": "Gruppe",
+      "asset": "Gerät"
+    },
+    "summary": {
+      "metric": "{aggregate} {metric} {op} {value}",
+      "deadman": "{metric} still seit {time}",
+      "heartbeat": "Kein Heartbeat seit {time}",
+      "log": "„{pattern}“ ×{count}",
+      "check": "{count, plural, one {Schlägt einmal fehl} other {Schlägt # Mal in Folge fehl}}",
+      "composite": "{join, select, or {Eine von {count, plural, one {# Regel} other {# Regeln}}} other {Alle von {count, plural, one {# Regel} other {# Regeln}}}}"
+    },
+    "facts": {
+      "kind": "Art",
+      "condition": "Bedingung",
+      "appliesTo": "Gilt für",
+      "window": "Zeitfenster",
+      "interval": "Geprüft alle",
+      "cooldown": "Abklingzeit",
+      "reopen": "Wieder öffnen nach",
+      "lastChecked": "Zuletzt geprüft",
+      "never": "Noch nicht",
+      "openAlerts": "Offene Alarme",
+      "description": "Beschreibung",
+      "labels": "Labels"
+    },
+    "copy": "In neue Regel kopieren",
+    "deleteAsk": "Löschen…",
+    "deleteTitle": "Regel „{name}“ löschen?",
+    "deleteBody": "{count, plural, =0 {Sie hat keine Alarme ausgelöst.} one {Ihr # Alarm wird ebenfalls gelöscht.} other {Ihre # Alarme werden ebenfalls gelöscht.}}",
+    "delete": "Löschen",
+    "deleted": "„{name}“ gelöscht",
+    "deleteFailed": "Die Regel konnte nicht gelöscht werden",
+    "added": "„{name}“ hinzugefügt"
+  },
+  "editor": {
+    "title": "Neue Regel",
+    "from": "Ausgehend von",
+    "blank": "Leere Regel",
+    "name": "Name",
+    "namePlaceholder": "CPU über 90 %",
+    "kind": "Art",
+    "severity": "Schweregrad",
+    "appliesTo": "Gilt für",
+    "targets": {
+      "global": "Alle Geräte",
+      "group": "Eine Gruppe",
+      "asset": "Ein Gerät"
+    },
+    "device": "Gerät",
+    "group": "Gruppe",
+    "pickDevice": "Gerät wählen",
+    "pickGroup": "Gruppe wählen",
+    "metric": "Metrik",
+    "when": "Wenn",
+    "aggregate": "Aggregation",
+    "aggregates": {
+      "avg": "Durchschnitt",
+      "max": "Höchstwert",
+      "min": "Tiefstwert",
+      "last": "Letzter Wert"
+    },
+    "operator": "Vergleich",
+    "threshold": "Schwellenwert",
+    "silentFor": "Still seit",
+    "missedFor": "Ausgeblieben seit",
+    "pattern": "Muster",
+    "count": "Anzahl",
+    "timesInWindow": "Mal im Zeitfenster",
+    "check": "Prüfung",
+    "failures": "Fehlschläge",
+    "inARow": "in Folge",
+    "join": "Löst aus, wenn",
+    "joins": {
+      "and": "Alle auslösen",
+      "or": "Eine auslöst"
+    },
+    "rules": "Regeln",
+    "noOtherRules": "Zuerst eine weitere Regel anlegen",
+    "timing": "Zeitsteuerung",
+    "window": "Zeitfenster",
+    "interval": "Prüfen alle",
+    "cooldown": "Abklingzeit",
+    "reopen": "Wieder öffnen nach",
+    "seconds": "Sekunden",
+    "labels": "Labels",
+    "labelsHint": "Stummschaltungen gleichen diese Labels ab.",
+    "description": "Beschreibung",
+    "cancel": "Abbrechen",
+    "add": "Regel hinzufügen",
+    "adding": "Wird hinzugefügt…",
+    "errors": {
+      "name": "Namen eingeben",
+      "nameTaken": "Eine Regel mit diesem Namen existiert",
+      "target": "Wählen, wofür sie gilt",
+      "whole": "Eine ganze Zahl über 0 eingeben",
+      "wholeZero": "Eine ganze Zahl ab 0 eingeben",
+      "metric": "Metriknamen eingeben",
+      "number": "Eine Zahl eingeben",
+      "pattern": "Den zu suchenden Text eingeben",
+      "check": "Die Prüfung eingeben",
+      "rules": "Eine oder mehrere Regeln wählen",
+      "save": "Die Regel konnte nicht hinzugefügt werden"
+    }
+  },
+  "silences": {
+    "listLabel": "Stummschaltungen",
+    "add": "Alarme stummschalten",
+    "matchers": "Passende Labels",
+    "matchHint": "Jedes Label muss einem Label der Alarmregel entsprechen.",
+    "duration": "Dauer",
+    "durations": {
+      "1h": "1 Stunde",
+      "4h": "4 Stunden",
+      "12h": "12 Stunden",
+      "24h": "24 Stunden"
+    },
+    "reason": "Grund",
+    "reasonPlaceholder": "Wartung",
+    "cancel": "Abbrechen",
+    "save": "Stummschalten",
+    "saving": "Wird gespeichert…",
+    "created": "Stummschaltung hinzugefügt",
+    "unnamed": "Stummschaltung",
+    "until": "Bis {time}",
+    "endedAt": "Beendet {time}",
+    "end": "Beenden",
+    "remove": "Entfernen",
+    "ended": "Beendet",
+    "empty": "Keine Stummschaltungen",
+    "noneActive": "Keine aktiven Stummschaltungen",
+    "errors": {
+      "matchers": "Mindestens ein Label eingeben",
+      "save": "Die Stummschaltung konnte nicht hinzugefügt werden",
+      "delete": "Die Stummschaltung konnte nicht entfernt werden"
+    }
   }
 }

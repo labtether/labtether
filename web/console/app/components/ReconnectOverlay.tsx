@@ -1,48 +1,36 @@
 "use client";
 
-import { ReconnectState } from "../types/viewer";
+import { useTranslations } from "next-intl";
+import type { ReconnectState } from "../types/viewer";
 
 interface ReconnectOverlayProps {
   state: ReconnectState;
   onReconnectNow: () => void;
 }
 
+/** A lost connection, over the dimmed screen: what happened and how far the retries are, and one button. */
 export default function ReconnectOverlay({ state, onReconnectNow }: ReconnectOverlayProps) {
+  const t = useTranslations("desktop.screen");
   if (!state.active) return null;
 
   const exhausted = state.attempt >= state.maxAttempts;
 
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-45 bg-black/75 backdrop-blur-sm">
-      {exhausted ? (
-        <>
-          <p className="text-sm font-medium" style={{ color: "var(--bad)" }}>
-            Connection lost
-          </p>
-          <p className="text-xs text-white/60 text-center max-w-sm">
-            Unable to reconnect after {state.maxAttempts} attempts
-          </p>
-          <button
-            onClick={onReconnectNow}
-            className="mt-1 px-4 py-1.5 rounded text-sm font-medium bg-[var(--accent)] text-[var(--accent-contrast)]"
-          >
-            Try Again
+    <div className="rv-over dim" role="status">
+      <div className="rv-card">
+        <p className="rv-st">
+          <i className="rv-dot bad" aria-hidden="true" />
+          {exhausted ? t("lostAfter", { max: state.maxAttempts }) : t("lost")}
+        </p>
+        {exhausted ? null : (
+          <p className="rv-card-sub">{t("reconnecting", { attempt: state.attempt, max: state.maxAttempts })}</p>
+        )}
+        <div className="rv-card-foot">
+          <button type="button" className={`rv-btn${exhausted ? " primary" : ""}`} onClick={onReconnectNow}>
+            {t(exhausted ? "tryAgain" : "reconnectNow")}
           </button>
-        </>
-      ) : (
-        <>
-          <div className="h-6 w-6 rounded-full border-2 border-white/20 border-t-[var(--accent)] animate-spin" />
-          <p className="text-sm font-medium text-white">
-            Reconnecting (attempt {state.attempt}/{state.maxAttempts})...
-          </p>
-          <button
-            onClick={onReconnectNow}
-            className="mt-1 px-4 py-1.5 rounded text-sm font-medium bg-white/10 hover:bg-white/20 text-white"
-          >
-            Reconnect Now
-          </button>
-        </>
-      )}
+        </div>
+      </div>
     </div>
   );
 }

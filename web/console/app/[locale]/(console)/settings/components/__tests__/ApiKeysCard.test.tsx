@@ -103,6 +103,12 @@ describe("ApiKeysCard asset restrictions", () => {
       root.render(<ApiKeysCard />);
     });
 
+    const openForm = [...container.querySelectorAll<HTMLButtonElement>("button")].find((button) =>
+      button.textContent === "apiKeys.createKey",
+    );
+    if (!openForm) throw new Error("missing Create key button");
+    await click(openForm);
+
     const nameInput = container.querySelector<HTMLInputElement>('input[type="text"]');
     if (!nameInput) throw new Error("missing API key name input");
     await setInputValue(nameInput, "Scoped integration");
@@ -111,8 +117,8 @@ describe("ApiKeysCard asset restrictions", () => {
     expect(assetModeRadios).toHaveLength(2);
     await click(assetModeRadios[1]!);
 
-    const createButton = [...container.querySelectorAll<HTMLButtonElement>("button")].find((button) =>
-      button.textContent?.includes("apiKeys.createKey"),
+    const createButton = [...container.querySelectorAll<HTMLButtonElement>('button[type="submit"]')].find((button) =>
+      button.textContent === "apiKeys.create",
     );
     if (!createButton) throw new Error("missing create button");
     expect(createButton.disabled).toBe(true);

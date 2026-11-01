@@ -5,6 +5,9 @@ import { useTranslations } from "next-intl";
 import type { MouseEvent } from "react";
 import { Link, useRouter } from "../../../../i18n/navigation";
 import { formatAge } from "../../../console/formatters";
+import { useConnectedAgents } from "../../../hooks/useConnectedAgents";
+import { DeviceMenu } from "./[id]/DeviceMenu";
+import { rowOffers } from "./[id]/deviceMenuModel";
 import { friendlySourceLabel } from "../../../console/taxonomy";
 import { deviceIcon, needsAttention } from "./deviceListModel";
 import type { DeviceCardData } from "./nodesPageUtils";
@@ -55,6 +58,7 @@ export function DeviceRow({
 }) {
   const t = useTranslations("devices.list");
   const router = useRouter();
+  const { connectedAgentIds } = useConnectedAgents();
   const { asset } = card;
   const href = `/nodes/${asset.id}`;
   const meta = asset.metadata ?? {};
@@ -106,6 +110,7 @@ export function DeviceRow({
       <UsageBar value={needsAttention(card) ? null : card.cpu} />
       <UsageBar value={needsAttention(card) ? null : card.mem} />
       <UsageBar value={needsAttention(card) ? null : card.disk} />
+      <DeviceMenu asset={asset} offers={rowOffers(asset, connectedAgentIds.has(asset.id))} variant="row" className="ld-more-btn" />
     </div>
   );
 }

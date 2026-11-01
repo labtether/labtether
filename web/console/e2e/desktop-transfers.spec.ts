@@ -21,14 +21,14 @@ test("desktop VNC toolbar supports clipboard sync through the agent API", async 
     .poll(() => sessionRequests.at(-1)?.protocol ?? null)
     .toBe("vnc");
   await expect(page.getByTitle("Disconnect")).toBeVisible();
-  if ((await page.getByTitle("Pull clipboard from remote").count()) === 0) {
-    await page.getByTitle("More viewer tools").click();
-  }
-  await expect(page.getByTitle("Pull clipboard from remote")).toBeVisible();
-  await expect(page.getByTitle("Push clipboard to remote")).toBeVisible();
+  await page.getByRole("button", { name: "Clipboard", exact: true }).click();
+  await expect(page.getByRole("menuitem", { name: "Pull from remote" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Push to remote" })).toBeVisible();
+  await page.keyboard.press("Escape");
 
   await page.evaluate(async () => navigator.clipboard.writeText("local clipboard text"));
-  await page.getByTitle("Push clipboard to remote").click();
+  await page.getByRole("button", { name: "Clipboard", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Push to remote" }).click();
   await expect
     .poll(() =>
       page.evaluate(async () => {
@@ -50,7 +50,8 @@ test("desktop VNC toolbar supports clipboard sync through the agent API", async 
       body: JSON.stringify({ format: "text", text: "remote clipboard text" }),
     });
   });
-  await page.getByTitle("Pull clipboard from remote").click();
+  await page.getByRole("button", { name: "Clipboard", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Pull from remote" }).click();
   await expect.poll(() => page.evaluate(async () => navigator.clipboard.readText())).toBe(
     "remote clipboard text",
   );
@@ -75,9 +76,7 @@ test("desktop VNC drag-and-drop upload falls back to the files API", async ({
   await expect(page.getByTitle("Disconnect")).toBeVisible({ timeout: 15000 });
 
   await page.evaluate(() => {
-    const target = document.querySelector(
-      ".vncViewerStage .relative.h-full.w-full",
-    );
+    const target = document.querySelector(".rv-stage .relative.h-full.w-full");
     if (!(target instanceof HTMLDivElement)) {
       throw new Error("file drop target unavailable");
     }
@@ -141,7 +140,7 @@ test("desktop WebRTC toolbar supports browser recording and clipboard sync", asy
   await installDesktopApiMocks(page, { sessionRequests });
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
-  await page.getByRole("combobox", { name: "Desktop protocol" }).selectOption("webrtc");
+  await page.getByRole("combobox", { name: "Protocol" }).selectOption("webrtc");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect
@@ -158,12 +157,14 @@ test("desktop WebRTC toolbar supports browser recording and clipboard sync", asy
     )
     .toContain("pc:connected");
   await expect(page.getByTitle("Disconnect")).toBeVisible({ timeout: 15000 });
-  await expect(page.getByTitle("Start recording")).toBeVisible({ timeout: 15000 });
+  await page.getByRole("button", { name: "More", exact: true }).click();
+  await expect(page.getByRole("menuitem", { name: "Record" })).toBeVisible({ timeout: 15000 });
   await expect(page.getByLabel("Volume")).toBeVisible({ timeout: 15000 });
 
-  await page.getByTitle("Start recording").click();
-  await expect(page.getByTitle("Stop recording")).toBeVisible();
-  await page.getByTitle("Stop recording").click();
+  await page.getByRole("menuitem", { name: "Record" }).click();
+  await expect(page.getByText("Recording", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "More", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Stop recording" }).click();
 
   await expect
     .poll(() =>
@@ -182,10 +183,9 @@ test("desktop WebRTC toolbar supports browser recording and clipboard sync", asy
     )
     .toEqual({ starts: 1, stops: 1 });
 
-  await page.getByTitle("More viewer tools").click();
-  await expect(page.getByTitle("Pull clipboard from remote")).toBeVisible();
-  await expect(page.getByTitle("Push clipboard to remote")).toBeVisible();
-  await page.getByTitle("Push clipboard to remote").click();
+  await page.getByRole("button", { name: "Clipboard", exact: true }).click();
+  await expect(page.getByRole("menuitem", { name: "Pull from remote" })).toBeVisible();
+  await page.getByRole("menuitem", { name: "Push to remote" }).click();
   await expect
     .poll(() =>
       page.evaluate(() => {
@@ -197,7 +197,8 @@ test("desktop WebRTC toolbar supports browser recording and clipboard sync", asy
     )
     .toBe("local clipboard text");
 
-  await page.getByTitle("Pull clipboard from remote").click();
+  await page.getByRole("button", { name: "Clipboard", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Pull from remote" }).click();
   await expect.poll(() => page.evaluate(async () => navigator.clipboard.readText())).toBe(
     "remote clipboard text",
   );
@@ -211,7 +212,7 @@ test("desktop WebRTC drag-and-drop upload sends file transfer chunks", async ({
   await installDesktopApiMocks(page, { sessionRequests });
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
-  await page.getByRole("combobox", { name: "Desktop protocol" }).selectOption("webrtc");
+  await page.getByRole("combobox", { name: "Protocol" }).selectOption("webrtc");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect
@@ -220,9 +221,7 @@ test("desktop WebRTC drag-and-drop upload sends file transfer chunks", async ({
   await expect(page.getByTitle("Disconnect")).toBeVisible({ timeout: 15000 });
 
   await page.evaluate(() => {
-    const target = document.querySelector(
-      ".vncViewerStage .relative.h-full.w-full",
-    );
+    const target = document.querySelector(".rv-stage .relative.h-full.w-full");
     if (!(target instanceof HTMLDivElement)) {
       throw new Error("file drop target unavailable");
     }

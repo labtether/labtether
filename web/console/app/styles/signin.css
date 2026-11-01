@@ -1,0 +1,107 @@
+/* ── 2.0 Sign in, first-run setup and onboarding ──
+   Sign in and setup: one quiet column a little above the middle of the plain canvas, the mascot, a heading and the
+   form on one sheet. Onboarding: the Dashboard's first-run checklist and the Add device dialog. */
+
+.si { min-height: 100vh; min-height: 100dvh; display: grid; grid-template-rows: 38fr auto 62fr; justify-items: center; padding: 32px max(16px, env(safe-area-inset-right, 0px)) 32px max(16px, env(safe-area-inset-left, 0px)); background: var(--canvas); color: var(--text); }
+.si-col { grid-row: 2; width: min(360px, 100%); }
+.si-col.wide { width: min(400px, 100%); }
+.si-logo { display: block; }
+.si-wait { color: var(--text-2); text-align: center; }
+.si-step { margin-top: 20px; font-size: var(--fs-meta); color: var(--text-3); }
+.si-h { margin-top: 20px; font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; letter-spacing: -0.022em; }
+.si-step + .si-h { margin-top: 2px; }
+.si-who { margin-top: 4px; font-size: var(--fs-meta); color: var(--text-2); }
+.si-note { margin-top: 8px; font-size: var(--fs-meta); color: var(--text-2); }
+.si-form { display: grid; gap: 16px; margin-top: 20px; padding: 24px; border-radius: var(--r-4); background: var(--panel); box-shadow: var(--elev-1); }
+.si-field { display: grid; gap: 6px; min-width: 0; }
+.si-field label { font-size: var(--fs-meta); line-height: var(--lh-meta); font-weight: 500; color: var(--text-2); }
+.si-err { font-size: var(--fs-meta); line-height: var(--lh-meta); color: var(--bad-text); }
+.si-hint { display: grid; gap: 6px; font-size: var(--fs-meta); line-height: var(--lh-meta); color: var(--text-2); }
+.si-go { width: 100%; }
+.si-form > .si-go:first-of-type { margin-top: 8px; }
+.si-form > .si-sso { margin-top: -8px; }
+.si-alt { display: flex; justify-content: space-between; gap: 8px; margin-top: 12px; }
+.si-otp { letter-spacing: 0.3em; font-variant-numeric: tabular-nums; }
+.si-rec, .si-mono { font-family: var(--font-mono); letter-spacing: 0.02em; }
+
+/* A command to run on the host, with Copy beside it. */
+.si-cmd { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.si-cmd code, .si-addr code { flex: 1; min-width: 0; padding: 6px 8px; border-radius: var(--r-2); background: var(--sunk); font-family: var(--font-mono); font-size: var(--fs-micro); line-height: 16px; color: var(--text); overflow-wrap: anywhere; }
+
+/* Setup › Remote access: two choices as radio rows, then what the host reports. */
+.si-ways { display: grid; gap: 4px; }
+.si-way { display: flex; align-items: flex-start; gap: 12px; padding: 10px 12px; border-radius: var(--r-3); text-align: left; box-shadow: inset 0 0 0 1px var(--line); cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out); }
+.si-way:hover { background: var(--hover); }
+.si-way.on { box-shadow: inset 0 0 0 1.5px var(--text-3); }
+.si-radio { flex: none; width: 16px; height: 16px; margin-top: 2px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--line) 50%, var(--text-3)); }
+.si-way.on .si-radio { box-shadow: inset 0 0 0 5px var(--text); }
+.si-wt { display: grid; min-width: 0; }
+.si-wn { font-weight: 500; }
+.si-ws { font-size: var(--fs-meta); color: var(--text-2); overflow-wrap: anywhere; }
+.si-ts { display: grid; gap: 12px; }
+.si-kv { display: grid; gap: 4px; }
+.si-kv > div { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 12px; align-items: baseline; font-size: var(--fs-meta); }
+.si-kv dt { color: var(--text-3); }
+.si-kv dd { min-width: 0; overflow-wrap: anywhere; }
+.si-addr { display: flex; align-items: flex-start; gap: 8px; }
+.si-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Small buttons for onboarding rows; rose only on the next step's. */
+.si-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: var(--ctl-sm); padding: 0 10px; border-radius: var(--r-2); background: var(--ctl-bg); box-shadow: var(--ctl-elev); font-size: var(--fs-meta); font-weight: 500; color: var(--text); white-space: nowrap; cursor: pointer; transition: box-shadow var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out); }
+.si-btn:hover { box-shadow: var(--ctl-elev-hover); }
+.si-btn.primary { background: var(--accent); color: var(--accent-contrast); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 1px 2px rgba(15, 15, 20, 0.14); }
+.si-btn.primary:hover { background: var(--accent-hover); }
+.si-btn.quiet { background: none; box-shadow: none; color: var(--text-2); }
+.si-btn.quiet:hover { background: var(--hover); color: var(--text); }
+
+/* Dashboard › First-run checklist: the mascot greets a new lab (brand, no box); the steps sit on one sheet. */
+.si-fr { margin-bottom: var(--gap-section); }
+.si-fr-logo { display: block; margin-bottom: 16px; }
+.si-fr-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px; margin-bottom: 8px; }
+.si-fr-h h2 { font-size: 15px; line-height: 22px; font-weight: 600; letter-spacing: -0.01em; }
+.si-fr-done { font-weight: 500; color: var(--text-3); }
+.si-fr-list { list-style: none; margin: 0; padding: 4px; border-radius: var(--r-4); background: var(--panel); box-shadow: var(--elev-1); }
+.si-fr-step { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 12px; align-items: center; min-height: 52px; padding: 6px 12px; border-radius: var(--r-2); }
+.si-tick { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--line) 50%, var(--text-3)); color: var(--panel); transition: background-color var(--dur-slow) var(--ease-out); }
+.si-tick svg { width: 12px; height: 12px; }
+.si-fr-step.done .si-tick { background: var(--text); box-shadow: none; }
+.si-fr-tx { min-width: 0; }
+.si-fr-nm { font-weight: 500; }
+.si-fr-step.done .si-fr-nm { font-weight: 400; color: var(--text-2); }
+.si-fr-sub { margin-top: 2px; font-size: var(--fs-meta); color: var(--text-2); }
+.si-fr-more { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; font-size: var(--fs-meta); }
+.si-fr-more a { color: var(--text-2); }
+.si-fr-more a:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+
+/* Add device dialog: the step in the header, then a plain list of systems grouped by how they connect. */
+.si-ad-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px 14px 20px; box-shadow: inset 0 -1px 0 var(--divider); }
+.si-ad-crumb { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: var(--fs-body); font-weight: 600; }
+.si-ad-crumb svg { width: 14px; height: 14px; flex: none; color: var(--text-3); }
+.si-ad-crumb span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.si-ad-up { font-weight: 500; color: var(--text-2); cursor: pointer; }
+.si-ad-up:hover { color: var(--text); }
+.si-ad-x { display: grid; place-items: center; width: 28px; height: 28px; flex: none; border-radius: var(--r-2); color: var(--text-2); cursor: pointer; }
+.si-ad-x:hover { background: var(--hover); color: var(--text); }
+.si-ad-x svg { width: 16px; height: 16px; }
+.si-ad-b { max-height: calc(100dvh - 9rem); overflow-y: auto; padding: 16px 20px 20px; }
+.si-ad-pick { display: grid; gap: 16px; }
+.si-ad-grp { display: grid; gap: 2px; }
+.si-ad-gh { margin: 0 0 4px; padding: 0 12px; font-size: var(--fs-micro); font-weight: 500; color: var(--text-3); }
+.si-ad-src { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 6px 12px; border-radius: var(--r-2); text-align: left; cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out); }
+.si-ad-src:hover { background: var(--hover); transition-duration: 0s; }
+.si-ad-src:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--control-focus-ring); }
+.si-ad-src > svg { width: 16px; height: 16px; flex: none; color: var(--text-3); }
+.si-ad-tx { display: grid; flex: 1; min-width: 0; }
+.si-ad-nm { font-weight: 500; }
+.si-ad-sub { font-size: var(--fs-meta); color: var(--text-2); overflow-wrap: anywhere; }
+
+@media (max-width: 640px) {
+  .si { grid-template-rows: 12vh auto 1fr; }
+  .si-form { padding: 20px; }
+  .si-fr-step { grid-template-columns: 20px minmax(0, 1fr); padding-top: 10px; padding-bottom: 10px; }
+  .si-fr-step > .si-btn { grid-column: 2; justify-self: start; }
+  .si-ad-b { padding: 12px 12px 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .si-way, .si-btn, .si-tick, .si-ad-src { transition: none; }
+}

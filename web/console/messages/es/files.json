@@ -1,11 +1,177 @@
 {
   "title": "Archivos",
-  "subtitle": "Explorar y transferir archivos en sus dispositivos",
-  "empty": {
-    "title": "Explorador de archivos",
-    "description": "Seleccione un dispositivo con un agente conectado para explorar y transferir archivos."
-  },
   "webdavCleartextWarning": "Permitir HTTP sin cifrar para WebDAV. Las personas en la red pueden leer o modificar contraseñas y archivos. El Hub también debe permitir el transporte inseguro.",
   "webdavCleartextRequired": "Confirme la advertencia de HTTP sin cifrar o use HTTPS.",
-  "webdavTransportNotice": "Esta conexión usa HTTP sin cifrar, que LabTether 1.7.1 bloquea de forma predeterminada. Edítela para usar HTTPS, o permita HTTP sin cifrar en la conexión y establezca LABTETHER_ALLOW_INSECURE_TRANSPORT=true en el Hub."
+  "webdavTransportNotice": "Esta conexión usa HTTP sin cifrar, que LabTether 1.7.1 bloquea de forma predeterminada. Edítela para usar HTTPS, o permita HTTP sin cifrar en la conexión y establezca LABTETHER_ALLOW_INSECURE_TRANSPORT=true en el Hub.",
+  "tabs": {
+    "label": "Pestañas de archivos",
+    "newTab": "Pestaña nueva",
+    "new": "Pestaña nueva",
+    "close": "Cerrar {name}"
+  },
+  "picker": {
+    "connectTo": "Conectar a…",
+    "devices": "Dispositivos",
+    "connections": "Conexiones guardadas",
+    "newConnection": "Conexión nueva",
+    "notAvailable": "No disponibles",
+    "offline": "Sin conexión",
+    "noAgent": "Sin agente",
+    "noDevices": "Ningún dispositivo tiene un agente conectado",
+    "noDeviceMatch": "Ningún dispositivo coincide con «{query}»",
+    "noConnections": "No hay conexiones guardadas",
+    "noConnectionMatch": "Ninguna conexión coincide con «{query}»",
+    "loading": "Cargando",
+    "guestVm": "VM {id} en {host}",
+    "guestLxc": "LXC {id} en {host}",
+    "edit": "Editar…",
+    "test": "Probar",
+    "testing": "Probando",
+    "answers": "Responde · {ms} ms",
+    "noAnswer": "Sin respuesta",
+    "deleteTitle": "¿Eliminar {name}?",
+    "deleteBody": "Se elimina la conexión guardada. Los archivos en {host} se conservan.",
+    "delete": "Eliminar"
+  },
+  "bar": {
+    "back": "Atrás",
+    "up": "Subir una carpeta",
+    "path": "Ruta",
+    "typePath": "Escribir una ruta",
+    "places": "Lugares",
+    "home": "Carpeta personal",
+    "root": "Raíz",
+    "search": "Buscar en esta carpeta",
+    "view": "Vista",
+    "list": "Lista",
+    "grid": "Cuadrícula",
+    "more": "Más",
+    "upload": "Subir",
+    "newFolder": "Carpeta nueva…",
+    "showHidden": "Mostrar archivos ocultos",
+    "hideHidden": "No mostrar archivos ocultos",
+    "refresh": "Actualizar",
+    "openSplit": "Abrir segundo panel",
+    "closeSplit": "Cerrar segundo panel",
+    "thisTab": "{name} (esta pestaña)"
+  },
+  "clip": {
+    "copy": "{count, plural, one {# elemento} other {# elementos}} para pegar",
+    "cut": "{count, plural, one {# elemento} other {# elementos}} para mover",
+    "paste": "Pegar aquí",
+    "clear": "Vaciar portapapeles"
+  },
+  "list": {
+    "label": "Archivos en {path}",
+    "name": "Nombre",
+    "size": "Tamaño",
+    "modified": "Modificado",
+    "permissions": "Permisos",
+    "selectAll": "Seleccionar todo",
+    "select": "Seleccionar {name}",
+    "empty": "Carpeta vacía",
+    "noMatch": "Sin resultados para «{query}»",
+    "drop": "Suelte archivos aquí para subirlos",
+    "dropCopy": "Suelte aquí para copiar",
+    "rename": "Nombre nuevo"
+  },
+  "menu": {
+    "label": "Menú contextual de archivos",
+    "actionsFor": "Acciones para {name}",
+    "open": "Abrir",
+    "download": "Descargar",
+    "downloadMany": "Descargar {count} elementos",
+    "rename": "Renombrar",
+    "copy": "Copiar",
+    "copyMany": "Copiar {count} elementos",
+    "cut": "Cortar",
+    "cutMany": "Cortar {count} elementos",
+    "paste": "Pegar",
+    "pasteInto": "Pegar en {name}",
+    "copyPath": "Copiar ruta",
+    "delete": "Eliminar…",
+    "deleteMany": "Eliminar {count} elementos…",
+    "newFolder": "Carpeta nueva…",
+    "uploadHere": "Subir aquí",
+    "refresh": "Actualizar"
+  },
+  "status": {
+    "count": "{count, plural, one {# elemento} other {# elementos}}",
+    "filtered": "{shown} de {count, plural, one {# elemento} other {# elementos}}",
+    "picked": "{count} seleccionados",
+    "pickedSize": "{count} seleccionados ({size})",
+    "download": "Descargar",
+    "delete": "Eliminar…",
+    "clear": "Quitar selección"
+  },
+  "dialog": {
+    "deleteOne": "¿Eliminar {name}?",
+    "deleteOneBody": "Se elimina de {where}. No se puede deshacer.",
+    "deleteMany": "¿Eliminar {count} elementos?",
+    "deleteManyBody": "Se eliminan de {where}: {names}. No se puede deshacer.",
+    "delete": "Eliminar",
+    "uploadTitle": "¿Subir {count} archivos ({size})?",
+    "uploadBody": "Destino: {where}.",
+    "upload": "Subir",
+    "newFolder": "Carpeta nueva",
+    "create": "Crear",
+    "name": "Nombre",
+    "badName": "Un nombre no puede contener / ni \\",
+    "cancel": "Cancelar",
+    "where": "{path} en {source}"
+  },
+  "viewer": {
+    "lines": "{count, plural, one {# línea} other {# líneas}}",
+    "download": "Descargar",
+    "close": "Cerrar",
+    "contents": "Contenido de {name}",
+    "more": "{count} líneas más. Descargue el archivo para leerlas."
+  },
+  "xfer": {
+    "title": "Transferencias",
+    "running": "{count} en curso",
+    "done": "Terminado",
+    "clear": "Quitar terminadas",
+    "cancel": "Cancelar",
+    "cancelOne": "Cancelar {name}",
+    "toBrowser": "A este navegador",
+    "uploadRun": "Subiendo {name}",
+    "uploadDone": "{name} subido",
+    "uploadFailed": "Falló la subida de {name}",
+    "downloadRun": "Descargando {name}",
+    "downloadDone": "{name} descargado",
+    "downloadFailed": "Falló la descarga de {name}",
+    "copyRun": "Copiando {name}",
+    "copyDone": "{name} copiado",
+    "copyFailed": "Falló la copia de {name}",
+    "progress": "{done} de {total} · {pct} %",
+    "starting": "Iniciando",
+    "failed": "Falló"
+  },
+  "split": {
+    "pick": "Mostrar otro origen",
+    "copyTo": "Copiar a {name}"
+  },
+  "state": {
+    "noAgent": "{name} · Agente no conectado"
+  },
+  "errors": {
+    "crossMove": "Los elementos cortados solo se mueven dentro de un dispositivo o una conexión. Cópielos en su lugar."
+  },
+  "device": {
+    "readOnly": "Solo lectura",
+    "allowChanges": "Permitir cambios…",
+    "stopChanges": "Volver a solo lectura",
+    "allowTitle": "¿Permitir cambios en este dispositivo?",
+    "allowBody": "Subir, carpeta nueva, pegar, renombrar, mover y eliminar siguen activos hasta que salga de esta página. Los archivos eliminados no se pueden recuperar.",
+    "allow": "Permitir cambios"
+  },
+  "drop": {
+    "dropTo": "Suelte archivos para subirlos a {path}",
+    "queue": "Archivo {index} de {total}",
+    "progress": "{pct} % · {done} de {total}",
+    "progressSpeed": "{pct} % · {done} de {total} · {speed}/s",
+    "done": "{total} · Terminado",
+    "failed": "Falló la subida"
+  }
 }

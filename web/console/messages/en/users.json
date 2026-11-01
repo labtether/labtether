@@ -1,6 +1,80 @@
 {
   "title": "Users",
-  "subtitle": "Manage local user accounts and roles",
-  "addUser": "Add User",
-  "userManagement": "User Management"
+  "addUser": "Add user",
+  "roles": {
+    "owner": "Owner",
+    "admin": "Admin",
+    "operator": "Operator",
+    "viewer": "Viewer"
+  },
+  "list": {
+    "user": "User",
+    "role": "Role",
+    "twoFactor": "2FA",
+    "on": "On",
+    "off": "Off",
+    "local": "Local account",
+    "sso": "Single sign-on",
+    "youAnd": "You · {kind}",
+    "empty": "No users",
+    "loadFailed": "Users did not load.",
+    "actions": "Actions",
+    "actionsFor": "Actions for {name}"
+  },
+  "menu": {
+    "role": "Change role…",
+    "password": "Reset password…",
+    "signOut": "Sign out everywhere…",
+    "remove": "Remove…"
+  },
+  "fields": {
+    "username": "Username",
+    "role": "Role",
+    "password": "Password",
+    "newPassword": "New password",
+    "repeatPassword": "Repeat password"
+  },
+  "add": {
+    "title": "Add user",
+    "submit": "Add user"
+  },
+  "role": {
+    "title": "Change role for {name}",
+    "submit": "Save"
+  },
+  "password": {
+    "title": "Reset password for {name}",
+    "submit": "Reset password"
+  },
+  "signOut": {
+    "title": "Sign {name} out everywhere?",
+    "titleYou": "Sign out everywhere?",
+    "body": "Every session of {name} ends. {name} can sign in again.",
+    "bodyYou": "Every session of yours ends, this one too.",
+    "submit": "Sign out"
+  },
+  "remove": {
+    "title": "Remove {name}?",
+    "body": "{name} can no longer sign in. Their sessions end.",
+    "submit": "Remove"
+  },
+  "errors": {
+    "nameEmpty": "Enter a username",
+    "nameChars": "Use letters, numbers, dots, dashes or underscores",
+    "nameLong": "Use 32 characters or fewer",
+    "passShort": "Use at least 8 characters",
+    "passMismatch": "Passwords do not match",
+    "addFailed": "The user was not added.",
+    "roleFailed": "The role did not change.",
+    "passwordFailed": "The password was not reset.",
+    "signOutFailed": "The sessions did not end.",
+    "removeFailed": "The user was not removed."
+  },
+  "toast": {
+    "added": "Added {name}",
+    "role": "{name} is now {role}",
+    "password": "Reset the password for {name}",
+    "signedOut": "Signed {name} out everywhere",
+    "removed": "Removed {name}"
+  }
 }

@@ -18,7 +18,7 @@ for (const statusCode of [401, 403, 429, 500]) {
     await page.goto("/nodes");
     await expect(page.getByRole("heading", { name: "Devices", level: 1, exact: true })).toBeVisible();
 
-    await page.getByRole("button", { name: "Add Device", exact: true }).click();
+    await page.getByRole("button", { name: "Add device", exact: true }).click();
     await page.getByRole("button", { name: /Proxmox Backup/i }).first().click();
 
     await page.getByPlaceholder("https://pbs.local:8007").fill("https://pbs.local:8007/");
@@ -45,7 +45,7 @@ test("pbs setup redacts secret literals in test-connection errors", async ({ pag
   });
 
   await page.goto("/nodes");
-  await page.getByRole("button", { name: "Add Device", exact: true }).click();
+  await page.getByRole("button", { name: "Add device", exact: true }).click();
   await page.getByRole("button", { name: /Proxmox Backup/i }).first().click();
 
   await page.getByPlaceholder("https://pbs.local:8007").fill("https://pbs.local:8007/");
@@ -69,7 +69,7 @@ test("pbs setup surfaces offline network failures", async ({ page }) => {
   });
 
   await page.goto("/nodes");
-  await page.getByRole("button", { name: "Add Device", exact: true }).click();
+  await page.getByRole("button", { name: "Add device", exact: true }).click();
   await page.getByRole("button", { name: /Proxmox Backup/i }).first().click();
 
   await page.getByPlaceholder("https://pbs.local:8007").fill("https://pbs.local:8007/");
@@ -94,7 +94,7 @@ test("pbs setup save failures keep the wizard open with actionable error", async
   });
 
   await page.goto("/nodes");
-  await page.getByRole("button", { name: "Add Device", exact: true }).click();
+  await page.getByRole("button", { name: "Add device", exact: true }).click();
   await page.getByRole("button", { name: /Proxmox Backup/i }).first().click();
 
   await page.getByPlaceholder("https://pbs.local:8007").fill("https://pbs.local:8007/");
@@ -136,7 +136,7 @@ test("pbs setup recovers after transient test/save failures with retry", async (
   });
 
   await page.goto("/nodes");
-  await page.getByRole("button", { name: "Add Device", exact: true }).click();
+  await page.getByRole("button", { name: "Add device", exact: true }).click();
   await page.getByRole("button", { name: /Proxmox Backup/i }).first().click();
 
   await page.getByPlaceholder("https://pbs.local:8007").fill("https://pbs.local:8007/");

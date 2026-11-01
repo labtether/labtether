@@ -1,11 +1,16 @@
 "use client";
 
-import React, { useCallback, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { type FileEntry } from "../../files/fileOpsClient";
+import { joinPath } from "../../files/fileWorkspaceUtils";
+import { filterEntries, pickedBytes } from "../../files/filesListModel";
+import { FilesStatusLine } from "../../files/FilesStatusLine";
 import { useFileWorkspaceState } from "../../files/useFileWorkspaceState";
+import { usePathHistory } from "../../files/usePathHistory";
 import { FilesTabControls } from "./FilesTabControls";
 import { FilesEntriesTable } from "./FilesEntriesTable";
-import { FilesContextMenu } from "./FilesContextMenu";
+import { FilesContextMenu, useFilesTabMenu, type FilesTabMenuHandlers } from "./FilesContextMenu";
 import { FilesTabOverlays, FilesTabStatus } from "./FilesTabOverlays";
 import { useFilesTabClipboardActions } from "./useFilesTabClipboardActions";
 import { useFilesTabContextMenuInteractions } from "./useFilesTabContextMenuInteractions";
@@ -13,246 +18,199 @@ import { useFilesTabDirectoryState } from "./useFilesTabDirectoryState";
 import { useFilesTabMutations } from "./useFilesTabMutations";
 import { useFilesTabWriteAccess } from "./useFilesTabWriteAccess";
 
+/** A device's Files tab: the 2.0 file list on the device's agent. It opens read-only; "Allow changes" turns on writes. */
 export function FilesTab({ nodeId }: { nodeId: string }) {
+  const t = useTranslations("files");
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
-
-  const {
-    actionBusy,
-    setActionBusy,
-    error,
-    setError,
-    actionMessage,
-    setActionMessage,
-    newFolderName,
-    setNewFolderName,
-    deleteTarget,
-    setDeleteTarget,
-    renameTarget,
-    renameName,
-    setRenameName,
-    downloadEntry,
-    createFolder,
-    uploadSelectedFiles,
-    renameEntry,
-    commitRename,
-    cancelRename,
-    deleteEntry,
-    commitDelete,
-  } = useFilesTabMutations({ nodeId });
-
-  const {
-    selectedEntries,
-    selectionNamesFromEntry,
-    selectOnly,
-    clipboard,
-    setClipboardItems,
-    clearClipboard,
-    contextMenu,
-    openContextMenu,
-    closeContextMenu,
-  } = useFileWorkspaceState<FileEntry>();
-
-  const {
-    entries,
-    sortedEntries,
-    currentPath,
-    pathInput,
-    loading,
-    showHidden,
-    setShowHidden,
-    setPathInput,
-    listDir,
-    navigateUp,
-    navigateTo,
-    openEntry,
-  } = useFilesTabDirectoryState({
+  const m = useFilesTabMutations({ nodeId });
+  const ws = useFileWorkspaceState<FileEntry>();
+  const dir = useFilesTabDirectoryState({ nodeId, setError: m.setError });
+  const cur = dir.currentPath;
+  const { listDir } = dir;
+  const access = useFilesTabWriteAccess({ currentPath: cur, uploadInputRef });
+  const write = access.writeEnabled;
+  const clip = useFilesTabClipboardActions({
     nodeId,
-    setError,
-  });
-
-  const {
-    filesMenuHostRef,
-    handleEntryContextMenu,
-    handleBackgroundContextMenu,
-  } = useFilesTabContextMenuInteractions({
-    currentPath,
-    selectedEntries,
-    selectionNamesFromEntry,
-    selectOnly,
-    openContextMenu,
-    closeContextMenu,
-  });
-
-  const {
-    writeEnabled,
-    enableWriteOpen,
-    setEnableWriteOpen,
-    uploadDestinationPath,
-    enableWriteActions,
-    handleConfirmEnableWrite,
-    handleUploadHere,
-  } = useFilesTabWriteAccess({
-    currentPath,
-    uploadInputRef,
-  });
-
-  const {
-    handleCopyEntry,
-    handleCutEntry,
-    handleCopyNames,
-    handleCutNames,
-    handlePasteTo,
-  } = useFilesTabClipboardActions({
-    nodeId,
-    entries,
-    currentPath,
-    clipboard,
-    setClipboardItems,
-    clearClipboard,
-    writeEnabled,
+    entries: dir.entries,
+    currentPath: cur,
+    clipboard: ws.clipboard,
+    setClipboardItems: ws.setClipboardItems,
+    clearClipboard: ws.clearClipboard,
+    writeEnabled: write,
     listDir,
-    setActionBusy,
-    setError,
-    setActionMessage,
+    setActionBusy: m.setActionBusy,
+    setError: m.setError,
+    setActionMessage: m.setActionMessage,
   });
+  const { handleContextMenu } = useFilesTabContextMenuInteractions({
+    currentPath: cur,
+    selectedEntries: ws.selectedEntries,
+    selectionNamesFromEntry: ws.selectionNamesFromEntry,
+    selectOnly: ws.selectOnly,
+    openContextMenu: ws.openContextMenu,
+  });
+  const history = usePathHistory(nodeId, cur, !dir.loading);
+  const [query, setQuery] = useState("");
+  const [newFolderOpen, setNewFolderOpen] = useState(false);
+  // Enter, Escape and blur can all end one rename; only the first counts.
+  const renameLive = useRef(false);
+  const { clearSelection } = ws;
 
-  const refreshCurrentDir = useCallback(() => {
-    void listDir(currentPath);
-  }, [currentPath, listDir]);
+  const visible = useMemo(() => filterEntries(dir.sortedEntries, query), [dir.sortedEntries, query]);
+  const order = useMemo(() => visible.map((e) => e.name), [visible]);
 
-  const handleUploadSelectedFiles = useCallback(() => {
-    void uploadSelectedFiles({
-      currentPath,
-      listDir,
-      writeEnabled,
-      uploadDestinationPath,
-      uploadInputRef,
-    });
-  }, [currentPath, listDir, uploadDestinationPath, uploadSelectedFiles, writeEnabled]);
+  useEffect(() => {
+    clearSelection();
+    setQuery("");
+  }, [cur, clearSelection]);
 
-  const handleCreateFolder = useCallback(() => {
-    void createFolder({
-      currentPath,
-      listDir,
-      writeEnabled,
-    });
-  }, [createFolder, currentPath, listDir, writeEnabled]);
+  const refresh = useCallback(() => {
+    void listDir(cur);
+  }, [cur, listDir]);
 
-  const handleNavigateToPath = useCallback(() => {
-    navigateTo(pathInput);
-  }, [navigateTo, pathInput]);
+  const downloadAll = async (entries: FileEntry[]) => {
+    for (const entry of entries) {
+      if (!entry.is_dir) await m.downloadEntry(entry, cur);
+    }
+  };
+  const startRename = (entry: FileEntry) => {
+    if (!write) return;
+    renameLive.current = true;
+    m.renameEntry(entry, { currentPath: cur, writeEnabled: write });
+  };
+  const remove = (entries: FileEntry[]) => m.deleteEntries(entries, { currentPath: cur, writeEnabled: write });
 
-  const handleDownloadEntry = useCallback((entry: FileEntry) => {
-    void downloadEntry(entry, currentPath);
-  }, [currentPath, downloadEntry]);
+  const handlers: FilesTabMenuHandlers = {
+    open: (entry) => (entry.is_dir ? dir.openEntry(entry) : void m.downloadEntry(entry, cur)),
+    download: (entries) => void downloadAll(entries),
+    rename: startRename,
+    copyNames: clip.handleCopyNames,
+    cutNames: clip.handleCutNames,
+    pasteTo: clip.handlePasteTo,
+    remove,
+    newFolder: () => setNewFolderOpen(true),
+    uploadHere: access.handleUploadHere,
+    refresh,
+  };
+  const menuFor = useFilesTabMenu({ entries: dir.entries, currentPath: cur, writeEnabled: write, clipboard: ws.clipboard, h: handlers });
+  const targets = (entry: FileEntry) => (
+    ws.selectedEntries.has(entry.name) && ws.selectedEntries.size > 1 ? Array.from(ws.selectedEntries) : [entry.name]
+  );
+  const picked = ws.selectedEntries;
+  const pickedList = dir.entries.filter((e) => picked.has(e.name));
 
-  const handleRenameEntry = useCallback((entry: FileEntry) => {
-    renameEntry(entry, { currentPath, writeEnabled });
-  }, [currentPath, renameEntry, writeEnabled]);
-
-  const handleDeleteEntry = useCallback((entry: FileEntry) => {
-    deleteEntry(entry, { currentPath, writeEnabled });
-  }, [currentPath, deleteEntry, writeEnabled]);
-
-  const handleCommitDelete = useCallback(() => {
-    void commitDelete({ currentPath, listDir });
-  }, [commitDelete, currentPath, listDir]);
-
-  const handleCommitRename = useCallback(() => {
-    void commitRename({ currentPath, listDir });
-  }, [commitRename, currentPath, listDir]);
+  const rename = m.renameTarget
+    ? {
+      name: m.renameTarget.name,
+      value: m.renameName,
+      onChange: m.setRenameName,
+      onCommit: () => {
+        if (!renameLive.current) return;
+        renameLive.current = false;
+        void m.commitRename({ currentPath: cur, listDir });
+      },
+      onCancel: () => {
+        renameLive.current = false;
+        m.cancelRename();
+      },
+    }
+    : null;
 
   return (
-    <div
-      ref={filesMenuHostRef}
-      style={{
-        background: "var(--panel)",
-        border: "1px solid var(--line)",
-        borderRadius: "8px",
-        padding: "16px",
-        marginBottom: "16px",
-        position: "relative",
-      }}
-      onContextMenu={handleBackgroundContextMenu}
-    >
+    <div className="fx-dev">
       <FilesTabControls
-        showHidden={showHidden}
-        onShowHiddenChange={(next) => setShowHidden(next)}
-        onRefresh={refreshCurrentDir}
-        loading={loading}
-        actionBusy={actionBusy}
-        writeEnabled={writeEnabled}
-        onToggleWriteActions={enableWriteActions}
-        currentPath={currentPath}
-        clipboard={clipboard}
-        onNavigateUp={navigateUp}
-        disableNavigateUp={loading || actionBusy || currentPath === "~" || currentPath === "/"}
-        pathInput={pathInput}
-        onPathInputChange={(next) => setPathInput(next)}
-        onNavigateToPath={handleNavigateToPath}
-        uploadInputRef={uploadInputRef}
-        onUploadSelectedFiles={handleUploadSelectedFiles}
-        newFolderName={newFolderName}
-        onNewFolderNameChange={(next) => setNewFolderName(next)}
-        onCreateFolder={handleCreateFolder}
-        disableCreateFolder={newFolderName.trim() === ""}
+        currentPath={cur}
+        pathInput={dir.pathInput}
+        onPathInputChange={dir.setPathInput}
+        onNavigateToPath={dir.navigateTo}
+        onNavigateUp={dir.navigateUp}
+        disableNavigateUp={dir.loading || m.actionBusy || cur === "~" || cur === "/"}
+        canBack={history.canGoBack}
+        onBack={() => {
+          const prev = history.back();
+          if (prev) dir.navigateTo(prev);
+        }}
+        busy={dir.loading || m.actionBusy}
+        query={query}
+        onQuery={setQuery}
+        clipboard={ws.clipboard}
+        onPaste={() => clip.handlePasteTo(cur)}
+        onClearClipboard={ws.clearClipboard}
+        showHidden={dir.showHidden}
+        onShowHiddenChange={dir.setShowHidden}
+        onRefresh={refresh}
+        writeEnabled={write}
+        onToggleWriteActions={access.enableWriteActions}
+        onNewFolder={() => setNewFolderOpen(true)}
+        onUpload={() => access.handleUploadHere(cur)}
       />
 
-      <FilesTabStatus
-        error={error}
-        actionMessage={actionMessage}
+      <FilesTabStatus error={m.error} actionMessage={m.actionMessage} />
+
+      <div className="fx-sheet">
+        <FilesEntriesTable
+          loading={dir.loading}
+          currentPath={cur}
+          entries={visible}
+          emptyText={query ? t("list.noMatch", { query }) : t("list.empty")}
+          picked={picked}
+          rename={rename}
+          dropText={null}
+          drop={undefined}
+          onPick={(name, mods) => ws.pickClick(name, order, mods)}
+          onToggle={ws.toggleSelected}
+          onSelectAll={() => ws.toggleSelectAll(order)}
+          onOpenEntry={handlers.open}
+          onContextMenu={handleContextMenu}
+          onKeyAction={(action, entry) => {
+            if (action === "rename") startRename(entry);
+            else remove(dir.entries.filter((e) => targets(entry).includes(e.name)));
+          }}
+          menuFor={(entry) => {
+            const names = targets(entry);
+            return menuFor(entry, names, entry.is_dir && names.length === 1 ? joinPath(cur, entry.name) : cur);
+          }}
+        />
+        <FilesStatusLine
+          shown={visible.length}
+          total={dir.entries.length}
+          searching={query.trim() !== ""}
+          picked={picked.size}
+          pickedBytes={pickedBytes(dir.entries, picked)}
+          onDownload={pickedList.some((e) => !e.is_dir) ? () => void downloadAll(pickedList) : undefined}
+          onDelete={write ? () => remove(pickedList) : undefined}
+          onClear={clearSelection}
+          extra={write ? null : <span className="fx-c3">{t("device.readOnly")}</span>}
+        />
+      </div>
+
+      <input
+        ref={uploadInputRef}
+        type="file"
+        multiple
+        hidden
+        onChange={() => {
+          void m.uploadSelectedFiles({ currentPath: cur, listDir, writeEnabled: write, uploadDestinationPath: access.uploadDestinationPath, uploadInputRef });
+        }}
       />
 
-      <FilesEntriesTable
-        loading={loading}
-        actionBusy={actionBusy}
-        writeEnabled={writeEnabled}
-        entriesCount={entries.length}
-        sortedEntries={sortedEntries}
-        contextMenuEntryName={contextMenu?.entry?.name ?? null}
-        onBackgroundContextMenu={handleBackgroundContextMenu}
-        onEntryContextMenu={handleEntryContextMenu}
-        onOpenEntry={openEntry}
-        onDownloadEntry={handleDownloadEntry}
-        onCopyEntry={handleCopyEntry}
-        onCutEntry={handleCutEntry}
-        onRenameEntry={handleRenameEntry}
-        onDeleteEntry={handleDeleteEntry}
-      />
-
-      <FilesContextMenu
-        contextMenu={contextMenu}
-        writeEnabled={writeEnabled}
-        clipboard={clipboard}
-        onClose={closeContextMenu}
-        onOpenEntry={openEntry}
-        onDownloadEntry={handleDownloadEntry}
-        onCopyNames={handleCopyNames}
-        onCutNames={handleCutNames}
-        onPasteTo={handlePasteTo}
-        onRenameEntry={handleRenameEntry}
-        onDeleteEntry={handleDeleteEntry}
-        onUploadHere={handleUploadHere}
-        onRefresh={refreshCurrentDir}
-      />
+      <FilesContextMenu contextMenu={ws.contextMenu} menuFor={menuFor} onClose={ws.closeContextMenu} />
 
       <FilesTabOverlays
-        enableWriteOpen={enableWriteOpen}
-        onCloseEnableWrite={() => {
-          setEnableWriteOpen(false);
+        where={cur}
+        enableWriteOpen={access.enableWriteOpen}
+        onCloseEnableWrite={() => access.setEnableWriteOpen(false)}
+        onConfirmEnableWrite={access.handleConfirmEnableWrite}
+        deleteTargets={m.deleteTargets}
+        onCloseDelete={() => m.setDeleteTargets(null)}
+        onConfirmDelete={() => void m.commitDelete({ currentPath: cur, listDir })}
+        actionBusy={m.actionBusy}
+        newFolderOpen={newFolderOpen}
+        onCloseNewFolder={() => setNewFolderOpen(false)}
+        onCreateFolder={(name) => {
+          setNewFolderOpen(false);
+          void m.createFolder({ currentPath: cur, listDir, writeEnabled: write, name });
         }}
-        onConfirmEnableWrite={handleConfirmEnableWrite}
-        deleteTarget={deleteTarget}
-        onCloseDelete={() => {
-          setDeleteTarget(null);
-        }}
-        onConfirmDelete={handleCommitDelete}
-        actionBusy={actionBusy}
-        renameTarget={renameTarget}
-        renameName={renameName}
-        onRenameNameChange={setRenameName}
-        onCommitRename={handleCommitRename}
-        onCancelRename={cancelRename}
       />
     </div>
   );

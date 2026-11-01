@@ -1,53 +1,54 @@
 import type { ReactNode } from "react";
 
-export function flowEdgeBadge(text: string, tooltip: string, tone: "info" | "success" | "danger"): ReactNode {
-  const toneClass = tone === "success"
-    ? "bg-[var(--ok-glow)] text-[var(--ok)]"
-    : tone === "danger"
-      ? "bg-[var(--bad-glow)] text-[var(--bad)]"
-      : "bg-[var(--accent-subtle)] text-[var(--accent-text)]";
+/** The words the cluster graph draws on its tiles and edges, already in the page's language. */
+export type ClusterFlowWords = {
+  local: string;
+  guests: (count: number) => string;
+  linkedTo: (name: string) => string;
+  links: (count: number) => string;
+  auto: string;
+  manual: string;
+  missing: string;
+  missingTarget: string;
+  autoLink: (guest: string, host: string) => string;
+  manualLink: (guest: string, host: string) => string;
+  missingLink: (target: string) => string;
+};
 
+/** A small neutral label on a graph edge; the tooltip says what the link is. */
+export function flowEdgeBadge(text: string, tooltip: string): ReactNode {
   return (
-    <span
-      title={tooltip}
-      className={`pointer-events-auto rounded px-1.5 py-0.5 text-[10px] font-semibold shadow-sm ${toneClass}`}
-    >
+    <span title={tooltip} className="di-ct-edge">
       {text}
     </span>
   );
 }
 
+const SOURCE_NAMES: Record<string, string> = {
+  truenas: "TrueNAS", docker: "Docker", portainer: "Portainer", pbs: "PBS", proxmox: "Proxmox",
+  homeassistant: "Home Assistant", agent: "Agent",
+};
+
+/** The integration a host comes from, as its product name ("TrueNAS", "Agent"). */
 export function sourceBadgeLabel(source?: string): string {
   const normalized = (source ?? "").trim().toLowerCase();
-  if (normalized === "truenas") {
-    return "TrueNAS";
-  }
-  if (normalized === "docker") {
-    return "Docker";
-  }
-  if (normalized === "portainer") {
-    return "Portainer";
-  }
-  if (!normalized) {
-    return "External";
-  }
-  return normalized.toUpperCase();
+  if (!normalized) return "External";
+  return SOURCE_NAMES[normalized] ?? normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 
-export function haStateColor(state?: string): string {
-  if (!state) return "text-[var(--muted)]";
-  const s = state.toLowerCase();
-  if (s === "started" || s === "running" || s === "enabled") return "text-[var(--ok)]";
-  if (s === "stopped" || s === "disabled") return "text-[var(--muted)]";
-  if (s === "error" || s === "fence" || s === "recovery") return "text-[var(--bad)]";
-  if (s === "migrate" || s === "relocate" || s === "freeze") return "text-[var(--warn)]";
-  return "text-[var(--muted)]";
+/** A HA state as a status tone: errors are problems, moves are warnings, stopped is off, started shows nothing. */
+export function haStateTone(state?: string): "bad" | "warn" | "off" | "" {
+  const s = (state ?? "").toLowerCase();
+  if (s === "error" || s === "fence" || s === "recovery") return "bad";
+  if (s === "migrate" || s === "relocate" || s === "freeze") return "warn";
+  if (s === "stopped" || s === "disabled") return "off";
+  return "";
 }
 
-export function guestStatusColor(status?: string): string {
-  if (!status) return "text-[var(--muted)]";
-  if (status === "running" || status === "online" || status === "active") return "text-[var(--ok)]";
-  if (status === "stopped" || status === "paused" || status === "offline") return "text-[var(--muted)]";
-  if (status === "error" || status === "failed") return "text-[var(--bad)]";
-  return "text-[var(--muted)]";
+/** A guest status as a status tone: failed is a problem, stopped is off, running shows nothing. */
+export function guestStatusTone(status?: string): "bad" | "off" | "" {
+  const s = (status ?? "").toLowerCase();
+  if (s === "error" || s === "failed") return "bad";
+  if (s === "stopped" || s === "paused" || s === "offline") return "off";
+  return "";
 }

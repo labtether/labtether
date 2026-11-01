@@ -1,24 +1,32 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type RefObject } from "react";
-import { useSession } from "../../hooks/useSession";
-import type { QuickConnectParams } from "../../hooks/useSession";
+import { useTranslations } from "next-intl";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import { useFastStatus } from "../../contexts/StatusContext";
-import XTerminal from "../XTerminal";
-import SearchBar from "./SearchBar";
-import ConnectionLanding from "./ConnectionLanding";
-import QuickConnectDialog from "./QuickConnectDialog";
-import type { TerminalClipboardActionResult, XTerminalHandle } from "../XTerminal";
-import type { TerminalPreferences } from "../../hooks/useTerminalPreferences";
-import type { TerminalThemeDef } from "../../terminal/themes";
-import type { TerminalFontDef } from "../../terminal/fonts";
 import { isHiddenAsset } from "../../console/taxonomy";
-import { RotateCcw, Wifi, WifiOff } from "lucide-react";
-import { TerminalTargetPicker } from "./TerminalTargetPicker";
+import type { QuickConnectParams } from "../../hooks/useSession";
+import type { TerminalPreferences } from "../../hooks/useTerminalPreferences";
+import type { TerminalFontDef } from "../../terminal/fonts";
+import type { TerminalThemeDef } from "../../terminal/themes";
+import XTerminal, { type XTerminalHandle } from "../XTerminal";
+import SearchBar from "./SearchBar";
+import TerminalPicker from "./TerminalPicker";
 import { TerminalPaneMenu, type PaneContextMenuState } from "./TerminalPaneMenu";
-import { saveRecentTarget } from "./terminalRecentTargets";
+import { TerminalTargetPicker } from "./TerminalTargetPicker";
+import { usePaneSession, type PaneStatus } from "./usePaneSession";
 export { loadRecentTargets, saveRecentTarget, recentsStorageKey } from "./terminalRecentTargets";
 export type { RecentTarget } from "./terminalRecentTargets";
+export type { PaneStatus } from "./usePaneSession";
+
+/** What the workspace bar and the ⋯ menu can do to a pane. */
+export type PaneControls = {
+  disconnect: () => void;
+  reconnect: () => void;
+  openFind: () => void;
+  changeTarget: () => void;
+  copyAll: () => void;
+  clear: () => void;
+};
 
 interface TerminalPaneProps {
   paneIndex: number;
@@ -33,135 +41,46 @@ interface TerminalPaneProps {
   prefs: TerminalPreferences;
   themeDef: TerminalThemeDef;
   fontDef: TerminalFontDef;
-  /** Optional: bypass target selection and attach to an existing persistent session. */
+  /** More than one pane shows: each gets a head with its name, status and Disconnect. */
+  split?: boolean;
+  /** An address from "Connect to an address…" for this pane (kept in memory only). */
+  quickConnectParams?: QuickConnectParams;
+  /** Opens the address form for this pane, filled with the address when given. */
+  onRequestAddress?: (address: string) => void;
+  onStatusChange?: (status: PaneStatus) => void;
+  onControls?: (controls: PaneControls | null) => void;
+  /** Optional: attach to an existing persistent session (not used yet). */
   initialPersistentSessionId?: string;
-  /** Optional: pre-issued stream ticket for direct WebSocket connection. */
   initialStreamTicket?: string;
 }
 
-type ClipboardNotice = {
-  id: number;
-  message: string;
-};
+const clamp = (value: number, max: number, size: number) => Math.max(8, Math.min(value, max - size - 8));
 
-function clampMenuPosition(
-  x: number,
-  y: number,
-  bounds?: { width: number; height: number },
-  width = 220,
-  height = 280,
-  padding = 8,
-) {
-  const maxWidth = bounds?.width ?? (typeof window !== "undefined" ? window.innerWidth : width + padding * 2);
-  const maxHeight = bounds?.height ?? (typeof window !== "undefined" ? window.innerHeight : height + padding * 2);
-  return {
-    x: Math.max(padding, Math.min(x, maxWidth - width - padding)),
-    y: Math.max(padding, Math.min(y, maxHeight - height - padding)),
-  };
-}
-
-function isEditableTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  if (target.isContentEditable) return true;
-  const tag = target.tagName.toLowerCase();
-  return tag === "input" || tag === "textarea" || tag === "select";
-}
-
-function formatElapsed(ms: number): string {
-  const safe = Number.isFinite(ms) ? Math.max(0, ms) : 0;
-  if (safe < 1000) return `${safe}ms`;
-  const seconds = safe / 1000;
-  if (seconds < 60) return `${seconds.toFixed(1)}s`;
-  const minutes = Math.floor(seconds / 60);
-  const rem = Math.floor(seconds % 60);
-  return `${minutes}m ${rem}s`;
-}
-
+/** One shell in the workspace, or the device list when the pane has no device yet. */
 export default function TerminalPane({
-  paneIndex,
-  targetNodeId,
-  onTargetChange,
-  isTabActive,
-  isFocused,
-  onFocus,
-  broadcastActive,
-  onBroadcastData,
-  onTerminalRef,
-  prefs,
-  themeDef,
-  fontDef,
-  initialPersistentSessionId: _initialPersistentSessionId,
-  initialStreamTicket: _initialStreamTicket,
+  paneIndex, targetNodeId, onTargetChange, isTabActive, isFocused, onFocus, broadcastActive, onBroadcastData,
+  onTerminalRef, prefs, themeDef, fontDef, split = false, quickConnectParams, onRequestAddress, onStatusChange, onControls,
 }: TerminalPaneProps) {
-  const [quickConnectParams, setQuickConnectParams] = useState<QuickConnectParams | undefined>(undefined);
-  const [quickConnectOpen, setQuickConnectOpen] = useState(false);
-  const session = useSession({ type: "terminal", autoReconnect: quickConnectParams ? false : prefs.auto_reconnect, quickConnectParams });
+  const t = useTranslations("terminal.pane");
   const status = useFastStatus();
-  const termRef = useRef<XTerminalHandle | null>(null);
-  const paneMenuHostRef = useRef<HTMLDivElement | null>(null);
+  const assets = useMemo(() => (status?.assets ?? []).filter((asset) => !isHiddenAsset(asset)), [status?.assets]);
+  const asset = assets.find((entry) => entry.id === targetNodeId);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [wasConnected, setWasConnected] = useState(false);
-  const [targetPickerOpen, setTargetPickerOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [paneMenu, setPaneMenu] = useState<PaneContextMenuState | null>(null);
-  const [clipboardNotice, setClipboardNotice] = useState<ClipboardNotice | null>(null);
-  const setTargetRef = useRef(session.setTarget);
-  const connectRef = useRef(session.connect);
+  const [clipboardNotice, setClipboardNotice] = useState<{ id: number; action: "copy" | "paste" } | null>(null);
+  const hostRef = useRef<HTMLElement | null>(null);
 
-  const assets = status?.assets;
-  const visibleTargets = useMemo(
-    () => (assets ?? []).filter((asset) => !isHiddenAsset(asset)),
-    [assets],
-  );
-
-  useEffect(() => {
-    setTargetRef.current = session.setTarget;
-  }, [session.setTarget]);
-
-  useEffect(() => {
-    connectRef.current = session.connect;
-  }, [session.connect]);
-
-  useEffect(() => {
-    if (targetNodeId) {
-      setTargetRef.current(targetNodeId);
-    }
-  }, [targetNodeId]);
-
-  useEffect(() => {
-    if (isTabActive && targetNodeId && session.connectionState === "idle" && !wasConnected) {
-      void connectRef.current(targetNodeId);
-    }
-  }, [isTabActive, targetNodeId, session.connectionState, wasConnected]);
-
-  const handleConnected = useCallback(() => {
-    setWasConnected(true);
-    session.handleConnected();
-  }, [session]);
-
-  const handleStreamReady = useCallback((message?: string) => {
-    setWasConnected(true);
-    session.handleStreamReady(message);
-  }, [session]);
-
-  const handleDisconnected = useCallback(
-    (reason?: string) => {
-      session.handleDisconnected(reason);
-    },
-    [session],
-  );
-
-  // Forward ref to parent.
-  const setTermRef = useCallback(
-    (el: XTerminalHandle | null) => {
-      termRef.current = el;
-      onTerminalRef(el);
-    },
-    [onTerminalRef],
-  );
-
-  const closePaneMenu = useCallback(() => {
-    setPaneMenu(null);
-  }, []);
+  const onClipboardBlocked = useCallback((action: "copy" | "paste") => setClipboardNotice({ id: Date.now(), action }), []);
+  const toggleSearch = useCallback(() => setSearchOpen((open) => !open), []);
+  const pane = usePaneSession({
+    targetNodeId, targetSource: asset?.source ?? "", isTabActive, isFocused, autoReconnect: prefs.auto_reconnect,
+    quickConnectParams, onClipboardBlocked, onToggleSearch: toggleSearch,
+  });
+  const { session, termRef } = pane;
+  const name = quickConnectParams
+    ? `${quickConnectParams.username}@${quickConnectParams.host}`
+    : asset?.name || targetNodeId;
 
   useEffect(() => {
     if (!clipboardNotice) return undefined;
@@ -169,284 +88,138 @@ export default function TerminalPane({
     return () => window.clearTimeout(timer);
   }, [clipboardNotice]);
 
-  const handleClipboardActionResult = useCallback(
-    (result: TerminalClipboardActionResult, action: "copy" | "paste") => {
-      if (result.ok || result.reason !== "permission-denied") {
-        return;
-      }
-      const message = action === "copy"
-        ? "Clipboard write was blocked by the browser. Allow clipboard access or use your browser's native copy prompt."
-        : "Clipboard read was blocked by the browser. Allow clipboard access and try paste again.";
-      setClipboardNotice({ id: Date.now(), message });
-    },
-    [],
-  );
-
-  // Broadcast data capture: forward typed data to other panes.
-  const handleDataCapture = useCallback(
-    (data: string) => {
-      if (broadcastActive && isFocused) {
-        onBroadcastData(data, paneIndex);
-      }
-    },
-    [broadcastActive, isFocused, onBroadcastData, paneIndex],
-  );
-
-  // Keyboard shortcuts for focused pane.
-  useEffect(() => {
-    if (!isFocused) return undefined;
-    const handler = (event: KeyboardEvent) => {
-      if (isEditableTarget(event.target)) return;
-      const key = event.key.toLowerCase();
-      const hasPrimaryModifier = event.ctrlKey || event.metaKey;
-
-      if (!hasPrimaryModifier) return;
-
-      if (key === "f") {
-        event.preventDefault();
-        setSearchOpen((value) => !value);
-        return;
-      }
-
-      if (key === "a" && !event.shiftKey) {
-        event.preventDefault();
-        termRef.current?.selectAll();
-        return;
-      }
-
-      if (event.shiftKey && key === "c") {
-        event.preventDefault();
-        void termRef.current?.copySelection().then((result) => {
-          if (result) handleClipboardActionResult(result, "copy");
-        });
-        return;
-      }
-
-      if (event.shiftKey && key === "v") {
-        event.preventDefault();
-        void termRef.current?.pasteFromClipboard().then((result) => {
-          if (result) handleClipboardActionResult(result, "paste");
-        });
-      }
-    };
-
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [handleClipboardActionResult, isFocused]);
-
   useEffect(() => {
     if (!paneMenu) return undefined;
     const onEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        closePaneMenu();
-      }
+      if (event.key === "Escape") setPaneMenu(null);
     };
     window.addEventListener("keydown", onEscape);
     return () => window.removeEventListener("keydown", onEscape);
-  }, [paneMenu, closePaneMenu]);
+  }, [paneMenu]);
 
-  const handleTargetSelect = useCallback(
-    (newTarget: string) => {
-      const trimmed = newTarget.trim();
-      if (!trimmed || trimmed === targetNodeId) {
-        return;
-      }
-      onTargetChange(trimmed);
-      session.disconnect();
-      setWasConnected(false);
-      setTargetPickerOpen(false);
-      void session.connect(trimmed);
-    },
-    [onTargetChange, session, targetNodeId],
-  );
-
-  const handleReconnect = useCallback(() => {
-    if (targetNodeId) {
-      void session.connect(targetNodeId);
-    }
-  }, [session, targetNodeId]);
-
-  const handleQuickConnect = useCallback(
-    (params: QuickConnectParams) => {
-      setQuickConnectOpen(false);
-      session.disconnect();
-      setWasConnected(false);
-      setQuickConnectParams(params);
-      // connect() is triggered by useEffect below once quickConnectParams state settles.
-    },
-    [session],
-  );
-
-  // Trigger connect once when quickConnectParams are set.
-  // Intentionally excludes session.connect from deps — we only want to fire
-  // when quickConnectParams changes, not on every session state transition.
-  const sessionConnectRef = useRef(session.connect);
-  sessionConnectRef.current = session.connect;
-
+  const onStatusRef = useRef(onStatusChange);
+  onStatusRef.current = onStatusChange;
+  const { state, progress, error, via } = pane.status;
+  // The bar above needs the state, not the ticking progress text.
   useEffect(() => {
-    if (!quickConnectParams) return;
-    void sessionConnectRef.current("quick-connect");
-  }, [quickConnectParams]);
+    onStatusRef.current?.({ state, progress: "", error, via });
+  }, [state, error, via]);
 
-  const handlePaneContextMenu = useCallback((event: MouseEvent) => {
+  const reconnectRef = useRef(pane.reconnect);
+  reconnectRef.current = pane.reconnect;
+  const disconnectRef = useRef(session.disconnect);
+  disconnectRef.current = session.disconnect;
+  const reportRef = useRef(pane.report);
+  reportRef.current = pane.report;
+  useEffect(() => {
+    onControls?.({
+      disconnect: () => disconnectRef.current(),
+      reconnect: () => reconnectRef.current(),
+      openFind: () => setSearchOpen(true),
+      changeTarget: () => setPickerOpen(true),
+      copyAll: () => {
+        termRef.current?.selectAll();
+        void termRef.current?.copySelection().then((result) => reportRef.current(result, "copy"));
+      },
+      clear: () => {
+        termRef.current?.clearScrollback();
+        termRef.current?.focus();
+      },
+    });
+    return () => onControls?.(null);
+  }, [onControls, termRef]);
+
+  const setTermRef = useCallback((handle: XTerminalHandle | null) => {
+    termRef.current = handle;
+    onTerminalRef(handle);
+  }, [onTerminalRef, termRef]);
+
+  const handleTargetSelect = useCallback((id: string) => {
+    const next = id.trim();
+    if (!next || (next === targetNodeId && !quickConnectParams)) return;
+    onTargetChange(next);
+    pane.switchTarget(next);
+  }, [onTargetChange, pane, quickConnectParams, targetNodeId]);
+
+  const handleDataCapture = useCallback((data: string) => {
+    if (broadcastActive && isFocused) onBroadcastData(data, paneIndex);
+  }, [broadcastActive, isFocused, onBroadcastData, paneIndex]);
+
+  const openMenu = useCallback((event: MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
     onFocus();
-    const hostRect = paneMenuHostRef.current?.getBoundingClientRect();
-    const pos = clampMenuPosition(
-      hostRect ? event.clientX - hostRect.left : event.clientX,
-      hostRect ? event.clientY - hostRect.top : event.clientY,
-      hostRect ? { width: hostRect.width, height: hostRect.height } : undefined,
-    );
+    const rect = hostRef.current?.getBoundingClientRect();
+    const x = rect ? event.clientX - rect.left : event.clientX;
+    const y = rect ? event.clientY - rect.top : event.clientY;
     setPaneMenu({
-      x: pos.x,
-      y: pos.y,
+      x: rect ? clamp(x, rect.width, 220) : x,
+      y: rect ? clamp(y, rect.height, 300) : y,
       hasSelection: termRef.current?.hasSelection() ?? false,
     });
-  }, [onFocus]);
+  }, [onFocus, termRef]);
 
-  const handleCopySelection = useCallback(async () => {
-    const result = await termRef.current?.copySelection();
-    if (result) handleClipboardActionResult(result, "copy");
-    closePaneMenu();
-    termRef.current?.focus();
-  }, [closePaneMenu, handleClipboardActionResult]);
+  const closeMenuThen = (action: () => void) => () => {
+    action();
+    setPaneMenu(null);
+  };
+  const requestAddress = (address: string) => onRequestAddress?.(address);
 
-  const handlePaste = useCallback(async () => {
-    const result = await termRef.current?.pasteFromClipboard();
-    if (result) handleClipboardActionResult(result, "paste");
-    closePaneMenu();
-    termRef.current?.focus();
-  }, [closePaneMenu, handleClipboardActionResult]);
+  if (state === "empty") {
+    return (
+      <section className={`tm-pane slot${split && isFocused ? " on" : ""}`} aria-label={t("emptyPane")} onClick={onFocus}>
+        <TerminalPicker
+          assets={assets}
+          connectedAgentIds={session.connectedAgentIds}
+          onPick={handleTargetSelect}
+          onAddress={requestAddress}
+          autoFocus={isTabActive && isFocused}
+          compact
+        />
+      </section>
+    );
+  }
 
-  const handleSelectAll = useCallback(() => {
-    termRef.current?.selectAll();
-    closePaneMenu();
-  }, [closePaneMenu]);
-
-  const handleOpenSearch = useCallback(() => {
-    setSearchOpen(true);
-    closePaneMenu();
-  }, [closePaneMenu]);
-
-  const handleClearScrollback = useCallback(() => {
-    termRef.current?.clearScrollback();
-    closePaneMenu();
-    termRef.current?.focus();
-  }, [closePaneMenu]);
-
-  const handleDisconnect = useCallback(() => {
-    session.disconnect();
-    closePaneMenu();
-  }, [session, closePaneMenu]);
-
-  const handleReconnectFromMenu = useCallback(() => {
-    handleReconnect();
-    closePaneMenu();
-  }, [handleReconnect, closePaneMenu]);
-
-  const isConnected = session.connectionState === "connected";
-  const isDisconnected = session.connectionState === "idle" && wasConnected;
-  const isError = session.connectionState === "error";
-
-  const paneBorder = isFocused
-    ? broadcastActive
-      ? "1px solid var(--warn)"
-      : "1px solid var(--accent)"
-    : broadcastActive
-      ? "1px solid var(--warn-glow)"
-      : "1px solid var(--line)";
-
-  const statusColor = isConnected
-    ? "var(--ok)"
-    : session.connectionState === "connecting"
-      ? "var(--warn)"
-      : isError
-        ? "var(--bad)"
-        : "var(--muted)";
-
-  const showProgress = session.connectionState === "connecting" || session.connectionState === "authenticating";
-  const progressLabel = `${session.connectionProgress.message} (${formatElapsed(session.connectionProgress.totalElapsedMs)})`;
+  const live = state === "connected";
+  const statusWord = live
+    ? via === "agent" ? t("connected") : t("connectedVia", { via: t(`via_${via}`) })
+    : state === "connecting" ? t("connecting") : state === "error" ? t("failed") : state === "disconnected" ? t("disconnected") : "";
 
   return (
-    <div
-      ref={paneMenuHostRef}
+    <section
+      ref={hostRef}
+      className={`tm-pane${split && isFocused ? " on" : ""}${broadcastActive ? " cast" : ""}`}
+      style={{ "--tm-bg": themeDef.theme.background, "--tm-fg": themeDef.theme.foreground } as CSSProperties}
+      aria-label={t("sessionOn", { name })}
       onClick={onFocus}
-      className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-lg bg-[var(--panel)]"
-      style={{ border: paneBorder }}
     >
-      {broadcastActive ? (
-        <div
-          className="absolute left-0 right-0 top-0 z-[5] h-0.5"
-          style={{ backgroundColor: "var(--warn)" }}
-        />
+      {split ? (
+        <div className="tm-ph">
+          {state === "error" || state === "disconnected" ? <i className="kt-dot sm bad" aria-hidden="true" /> : null}
+          <button type="button" className="tm-ph-nm" title={t("changeDevice")} onClick={() => setPickerOpen(true)}>{name}</button>
+          <span className="tm-ph-st">{statusWord}</span>
+          {broadcastActive ? <span className="tm-ph-all">{t("sendingToAll")}</span> : null}
+          <span className="tm-sp" />
+          {live ? (
+            <button type="button" className="tm-ph-btn" aria-label={t("disconnectFrom", { name })} onClick={() => session.disconnect()}>
+              {t("disconnect")}
+            </button>
+          ) : null}
+        </div>
       ) : null}
 
-      {/* Pane header */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-[var(--line)] bg-[var(--surface)] px-2 py-1.5 text-xs">
-        <TerminalTargetPicker
-          assets={visibleTargets}
-          selectedTargetID={targetNodeId}
-          connectedAgentIDs={session.connectedAgentIds}
-          onSelect={handleTargetSelect}
-          open={targetPickerOpen}
-          onOpenChange={setTargetPickerOpen}
-        />
-
-        <span
-          className="inline-block h-2 w-2 rounded-full"
-          style={{ backgroundColor: statusColor }}
-          title={session.connectionState}
-        />
-
-        {broadcastActive ? (
-          <span className="rounded-full border border-[var(--warn)]/45 bg-[var(--warn-glow)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-[var(--warn)]">
-            Cast
-          </span>
-        ) : null}
-
-        {showProgress ? (
-          <span className="rounded-full border border-[var(--line)] bg-[var(--surface)] px-1.5 py-0.5 text-[10px] uppercase tracking-[0.06em] text-[var(--muted)]">
-            {progressLabel}
-          </span>
-        ) : null}
-
-        {isConnected ? (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              session.disconnect();
-            }}
-            className="inline-flex h-5 w-5 items-center justify-center rounded border border-transparent text-[var(--muted)] transition-colors hover:border-[var(--line)] hover:bg-[var(--hover)] hover:text-[var(--text)]"
-            title="Disconnect"
-          >
-            <WifiOff size={11} />
-          </button>
-        ) : null}
-      </div>
-
-      {/* Terminal area */}
-      <div
-        className="relative min-h-0 flex-1"
-        onContextMenu={handlePaneContextMenu}
-      >
-        <SearchBar
-          termRef={termRef as RefObject<XTerminalHandle | null>}
-          open={searchOpen}
-          onClose={() => setSearchOpen(false)}
-        />
-
+      <div className="tm-body" onContextMenu={openMenu}>
+        <SearchBar termRef={termRef} open={searchOpen} onClose={() => setSearchOpen(false)} />
         {session.wsUrl ? (
-          <>
+          <div className="tm-xt">
             <XTerminal
               ref={setTermRef}
               wsUrl={session.wsUrl}
-              onConnected={handleConnected}
-              onDisconnected={handleDisconnected}
+              onConnected={pane.handleConnected}
+              onDisconnected={session.handleDisconnected}
               onError={session.handleError}
               onStreamStatus={session.handleStreamStatus}
-              onStreamReady={handleStreamReady}
+              onStreamReady={pane.handleStreamReady}
               theme={themeDef.theme}
               fontFamily={fontDef.family}
               fontSize={prefs.font_size}
@@ -455,98 +228,71 @@ export default function TerminalPane({
               scrollback={prefs.scrollback}
               onDataCapture={handleDataCapture}
             />
-            {showProgress ? (
-              <div className="pointer-events-none absolute left-3 top-3 z-[6] rounded-md border border-[var(--line)] bg-[var(--panel)] px-2 py-1 text-[10px] text-[var(--muted)] backdrop-blur-sm">
-                {progressLabel}
-              </div>
-            ) : null}
-          </>
-        ) : (
-          <div className="flex h-full min-h-[120px] flex-col items-center justify-center gap-3 px-3 text-center text-xs text-[var(--muted)]">
-            {!targetNodeId && !quickConnectParams ? (
-              <ConnectionLanding
-                onSelectTarget={handleTargetSelect}
-                onBrowseTargets={() => setTargetPickerOpen(true)}
-                onQuickConnect={() => setQuickConnectOpen(true)}
-              />
-            ) : session.connectionState === "connecting" ? (
-              <span>{progressLabel}</span>
-            ) : isError ? (
+          </div>
+        ) : null}
+        {state === "connecting" ? <p className="tm-progress">{progress}</p> : null}
+        {!session.wsUrl && state !== "connecting" ? (
+          <div className="tm-state">
+            {state === "error" ? (
               <>
-                <span className="text-[var(--bad)]">{session.error || "Connection error"}</span>
-                <button
-                  type="button"
-                  onClick={handleReconnect}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-xs text-[var(--text)] transition-colors hover:bg-[var(--hover)]"
-                >
-                  <RotateCcw size={12} />
-                  Retry
-                </button>
+                <p className="tm-state-t bad">{error || t("failed")}</p>
+                <button type="button" className="tm-tbtn" onClick={pane.reconnect}>{t("retry")}</button>
               </>
-            ) : targetNodeId && !wasConnected ? (
-              <button
-                type="button"
-                onClick={handleReconnect}
-                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-xs text-[var(--text)] transition-colors hover:bg-[var(--hover)]"
-              >
-                <Wifi size={12} />
-                Connect
-              </button>
+            ) : state === "idle" ? (
+              <button type="button" className="tm-tbtn" onClick={pane.reconnect}>{t("connect")}</button>
             ) : null}
           </div>
-        )}
-
-        {/* Reconnect overlay */}
-        {isDisconnected ? (
-          <div className="absolute inset-0 z-[5] flex flex-col items-center justify-center gap-3 bg-black/65 px-3">
-            <span className="text-xs text-[var(--text)]">Session disconnected</span>
-            <button
-              type="button"
-              onClick={handleReconnect}
-              className="inline-flex items-center gap-1.5 rounded-md border border-[var(--line)] bg-[var(--panel)] px-3 py-1.5 text-xs text-[var(--text)] transition-colors hover:bg-[var(--hover)]"
-            >
-              <RotateCcw size={12} />
-              Reconnect
-            </button>
+        ) : null}
+        {state === "disconnected" ? (
+          <div className="tm-state over">
+            <p className="tm-state-t">{t("sessionDisconnected")}</p>
+            <button type="button" className="tm-tbtn" onClick={pane.reconnect}>{t("reconnect")}</button>
           </div>
         ) : null}
-
         {clipboardNotice ? (
-          <div className="pointer-events-none absolute right-3 top-3 z-[7] max-w-[20rem]">
-            <div
-              key={clipboardNotice.id}
-              role="status"
-              aria-live="polite"
-              className="rounded-md border border-[var(--warn)]/35 bg-[var(--panel)]/95 px-3 py-2 text-xs text-[var(--warn)] shadow-[var(--shadow-md)] backdrop-blur-sm"
-            >
-              {clipboardNotice.message}
-            </div>
-          </div>
+          <p key={clipboardNotice.id} className="tm-notice" role="status" aria-live="polite">
+            {clipboardNotice.action === "copy" ? t("copyBlocked") : t("pasteBlocked")}
+          </p>
         ) : null}
-
       </div>
 
       {paneMenu ? (
         <TerminalPaneMenu
           paneMenu={paneMenu}
-          isConnected={isConnected}
-          canReconnect={Boolean(targetNodeId)}
-          closePaneMenu={closePaneMenu}
-          handleCopySelection={handleCopySelection}
-          handlePaste={handlePaste}
-          handleSelectAll={handleSelectAll}
-          handleOpenSearch={handleOpenSearch}
-          handleClearScrollback={handleClearScrollback}
-          handleDisconnect={handleDisconnect}
-          handleReconnectFromMenu={handleReconnectFromMenu}
+          isConnected={live}
+          canReconnect={Boolean(targetNodeId || quickConnectParams)}
+          closePaneMenu={() => setPaneMenu(null)}
+          handleCopySelection={async () => {
+            pane.report(await termRef.current?.copySelection(), "copy");
+            setPaneMenu(null);
+            termRef.current?.focus();
+          }}
+          handlePaste={async () => {
+            pane.report(await termRef.current?.pasteFromClipboard(), "paste");
+            setPaneMenu(null);
+            termRef.current?.focus();
+          }}
+          handleSelectAll={closeMenuThen(() => termRef.current?.selectAll())}
+          handleOpenSearch={closeMenuThen(() => setSearchOpen(true))}
+          handleClearScrollback={closeMenuThen(() => {
+            termRef.current?.clearScrollback();
+            termRef.current?.focus();
+          })}
+          handleDisconnect={closeMenuThen(() => session.disconnect())}
+          handleReconnectFromMenu={closeMenuThen(pane.reconnect)}
+          handleChangeTarget={closeMenuThen(() => setPickerOpen(true))}
         />
       ) : null}
 
-      <QuickConnectDialog
-        open={quickConnectOpen}
-        onClose={() => setQuickConnectOpen(false)}
-        onConnect={handleQuickConnect}
+      <TerminalTargetPicker
+        assets={assets}
+        selectedTargetID={targetNodeId}
+        connectedAgentIDs={session.connectedAgentIds}
+        onSelect={handleTargetSelect}
+        onAddress={requestAddress}
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
       />
-    </div>
+    </section>
   );
 }

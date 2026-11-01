@@ -1,29 +1,97 @@
 {
   "title": "事件",
-  "subtitle": "跟踪问题并查看发生了什么",
-  "back": "返回",
-  "actions": {
-    "startInvestigating": "开始调查",
-    "markMitigated": "标记为已缓解",
-    "markResolved": "标记为已解决"
+  "list": {
+    "show": {
+      "active": "进行中",
+      "resolved": "已解决",
+      "all": "全部"
+    },
+    "showLabel": "显示事件",
+    "stateFilter": "状态",
+    "anyState": "全部",
+    "columns": {
+      "issue": "事件",
+      "state": "状态",
+      "owner": "负责人",
+      "opened": "开启时间"
+    },
+    "empty": {
+      "active": "没有进行中的事件",
+      "resolved": "没有已解决的事件",
+      "all": "没有事件",
+      "state": "没有处于此状态的事件"
+    },
+    "openAlerts": "打开告警",
+    "error": "无法加载事件。",
+    "retry": "重试"
+  },
+  "states": {
+    "open": "未处理",
+    "investigating": "调查中",
+    "mitigated": "已缓解",
+    "resolved": "已解决",
+    "closed": "已关闭"
+  },
+  "severity": {
+    "critical": "严重",
+    "high": "高",
+    "medium": "中",
+    "low": "低"
+  },
+  "detail": {
+    "crumbs": "导航路径",
+    "opened": "开启于 {time}",
+    "openedFromAlert": "{time} 由告警开启",
+    "resolvedAfter": "用时 {duration} 解决",
+    "stateMenu": "状态：{state}",
+    "ownerMenu": "负责人：{owner}",
+    "reopen": "重新开启",
+    "unassigned": "未指派",
+    "assignToMe": "指派给我",
+    "unassign": "移除负责人",
+    "saveError": "无法保存更改，请重试。",
+    "error": "无法加载此事件。",
+    "retry": "重试"
+  },
+  "duration": {
+    "days": "{count, plural, other {# 天}}",
+    "hours": "{count, plural, other {# 小时}}",
+    "minutes": "{count, plural, other {# 分钟}}"
+  },
+  "device": {
+    "title": "设备",
+    "missing": "已不在设备中",
+    "offline": "离线",
+    "notResponding": "无响应",
+    "noCheckIn": "尚未签到",
+    "since": "自 {time} 起"
   },
   "notes": {
     "title": "备注",
-    "placeholder": "输入备注...",
-    "emptyHint": "添加调查备注、根因分析和缓解步骤。",
+    "empty": "没有备注",
+    "label": "备注",
+    "placeholder": "添加备注",
     "add": "添加备注"
   },
   "timeline": {
-    "title": "事件经过",
+    "title": "时间线",
     "refresh": "刷新",
-    "empty": "此事件尚无记录。",
+    "empty": "没有记录的事件",
     "loading": "正在加载时间线…",
-    "error": "无法加载时间线，请重试。",
+    "error": "无法加载时间线。",
     "retry": "重试",
-    "loadOlder": "加载更早的记录"
+    "loadOlder": "加载更早的"
   },
-  "detail": {
-    "error": "无法加载此事件，请重试。",
-    "retry": "重试"
+  "writeup": {
+    "title": "复盘",
+    "edit": "编辑",
+    "rootCause": "根本原因",
+    "followUps": "后续事项，每行一项",
+    "followUpsTitle": "后续事项",
+    "lessons": "经验教训",
+    "none": "没有复盘",
+    "cancel": "取消",
+    "save": "保存复盘",
+    "saving": "正在保存…"
   }
 }

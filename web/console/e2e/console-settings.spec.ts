@@ -121,33 +121,24 @@ test("settings page saves and resets runtime overrides", async ({ page }) => {
 
   await page.goto("/settings");
   await expect(page.getByRole("heading", { name: "Settings", level: 1, exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Advanced", exact: true }).click();
 
-  const advancedSettings = page
-    .locator("div")
-    .filter({ has: page.getByRole("heading", { name: "Advanced Settings", level: 2, exact: true }) })
-    .first();
-  const pollRow = advancedSettings
-    .getByRole("button", { name: "Setting key: console.poll_interval_seconds", exact: true })
-    .locator("xpath=ancestor::div[contains(@class,'grid')][1]");
-  const pollInput = pollRow.locator("input[type='number']").first();
-  const actorRow = advancedSettings
-    .getByRole("button", { name: "Setting key: console.default_actor_id", exact: true })
-    .locator("xpath=ancestor::div[contains(@class,'grid')][1]");
-  const actorInput = actorRow.locator("input").first();
-  const pollWidth = await pollInput.evaluate((node) => window.getComputedStyle(node).width);
-  const actorWidth = await actorInput.evaluate((node) => window.getComputedStyle(node).width);
-
-  expect(pollWidth).toBe("96px");
-  expect(actorWidth).toBe("256px");
+  // Advanced (behind Show): every runtime setting is a row named by its key; numbers get a narrow box, text a wide one.
+  const advanced = page.locator("#advanced");
+  await advanced.getByRole("button", { name: "Show", exact: true }).click();
+  const pollRow = advanced.locator('[data-setting-key="console.poll_interval_seconds"]');
+  const pollInput = pollRow.locator("input[type='number']");
+  const actorInput = advanced.locator('[data-setting-key="console.default_actor_id"] input');
+  expect(await pollInput.evaluate((node) => window.getComputedStyle(node).width)).toBe("96px");
+  expect(await actorInput.evaluate((node) => window.getComputedStyle(node).width)).toBe("256px");
 
   await pollInput.fill("8");
-  await page.getByRole("button", { name: "Save Advanced Settings", exact: true }).click();
+  await advanced.getByRole("button", { name: "Save", exact: true }).click();
 
-  await expect(page.getByText("Runtime settings saved.")).toBeVisible();
+  await expect(advanced.getByText("Runtime settings saved.")).toBeVisible();
   await expect(pollInput).toHaveValue("8");
+  await expect(pollRow.getByText("Set here", { exact: true })).toBeVisible();
 
-  await pollRow.getByRole("button", { name: "Reset", exact: true }).click();
-  await expect(page.getByText("Runtime setting reset to Docker/default baseline.")).toBeVisible();
+  await pollRow.getByRole("button", { name: "Reset Status Poll Interval", exact: true }).click();
+  await expect(advanced.getByText("Runtime setting reset to Docker/default baseline.")).toBeVisible();
   await expect(pollInput).toHaveValue("5");
 });

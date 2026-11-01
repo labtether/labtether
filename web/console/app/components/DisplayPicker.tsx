@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-
-import { Select } from "./ui/Input";
+import { useTranslations } from "next-intl";
 
 export interface DisplayInfo {
   name: string;
@@ -19,7 +18,9 @@ interface DisplayPickerProps {
   onSelect: (displayName: string) => void;
 }
 
+/** The remote machine's displays as a compact select; hidden when it has one. Picks the primary display by default. */
 export default function DisplayPicker({ assetId, value, onSelect }: DisplayPickerProps) {
+  const t = useTranslations("desktop.device");
   const [loading, setLoading] = useState(true);
   const [displays, setDisplays] = useState<DisplayInfo[]>([]);
 
@@ -66,7 +67,7 @@ export default function DisplayPicker({ assetId, value, onSelect }: DisplayPicke
   );
 
   if (loading) {
-    return <span className="text-xs text-[var(--muted)]">Detecting displays...</span>;
+    return <span className="rv-sel-note">{t("detecting")}</span>;
   }
 
   if (displays.length <= 1) {
@@ -74,21 +75,16 @@ export default function DisplayPicker({ assetId, value, onSelect }: DisplayPicke
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs text-[var(--muted)]">Display</span>
-      <Select
-        aria-label="Display"
-        className="min-w-[180px]"
-        value={selectedValue}
-        onChange={(event) => handleChange(event.target.value)}
-      >
-        <option value="">All Displays</option>
+    <label className="rv-sel">
+      <span aria-hidden="true">{t("display")}</span>
+      <select aria-label={t("display")} value={selectedValue} onChange={(event) => handleChange(event.target.value)}>
+        <option value="">{t("allDisplays")}</option>
         {displays.map((display) => (
           <option key={display.name} value={display.name}>
-            {display.name} ({display.width}x{display.height}){display.primary ? " *" : ""}
+            {t(display.primary ? "displayPrimary" : "displayItem", { name: display.name, width: display.width, height: display.height })}
           </option>
         ))}
-      </Select>
-    </div>
+      </select>
+    </label>
   );
 }

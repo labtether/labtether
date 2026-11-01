@@ -106,8 +106,13 @@ async function responsePayload(response: Response): Promise<UnknownRecord | null
   return record(await response.json().catch(() => null));
 }
 
-function responseError(response: Response, payload: UnknownRecord | null, fallback: string): Error {
-  const raw = stringValue(payload?.message) || stringValue(payload?.error) || `${fallback} (${response.status})`;
+/**
+ * The hub's sentence for a refusal (v2 errors carry a code in `error` and the sentence in `message`). With no sentence
+ * the error carries `fallback`, which callers may leave empty to put their own translated words in its place.
+ */
+function responseError(payload: UnknownRecord | null, fallback: string): Error {
+  const code = stringValue(payload?.error) ?? "";
+  const raw = stringValue(payload?.message) || (code.includes(" ") ? code : "");
   return new Error(sanitizeErrorMessage(raw, fallback));
 }
 
@@ -122,7 +127,7 @@ export function useSavedActions() {
     try {
       const response = await fetch("/api/v2/actions?limit=100", { cache: "no-store", signal });
       const payload = await responsePayload(response);
-      if (!response.ok) throw responseError(response, payload, "Failed to load saved actions");
+      if (!response.ok) throw responseError(payload, "Failed to load saved actions");
       const data = payload?.data;
       if (!Array.isArray(data)) throw new Error("Saved actions returned an invalid response");
       const parsed = data.map(savedAction);
@@ -152,7 +157,7 @@ export function useSavedActions() {
       cache: "no-store",
     });
     const payload = await responsePayload(response);
-    if (!response.ok) throw responseError(response, payload, "Failed to create saved action");
+    if (!response.ok) throw responseError(payload, "");
     const created = savedAction(payload?.data);
     if (!created) throw new Error("Saved action creation returned an invalid response");
     setActions((current) => [created, ...current.filter((item) => item.id !== created.id)]);
@@ -162,7 +167,7 @@ export function useSavedActions() {
   const getAction = useCallback(async (id: string): Promise<SavedAction> => {
     const response = await fetch(`/api/v2/actions/${encodeURIComponent(id)}`, { cache: "no-store" });
     const payload = await responsePayload(response);
-    if (!response.ok) throw responseError(response, payload, "Failed to load saved action");
+    if (!response.ok) throw responseError(payload, "");
     const loaded = savedAction(payload?.data);
     if (!loaded) throw new Error("Saved action returned an invalid response");
     setActions((current) => current.map((item) => item.id === loaded.id ? loaded : item));
@@ -175,7 +180,7 @@ export function useSavedActions() {
       cache: "no-store",
     });
     const payload = await responsePayload(response);
-    if (!response.ok) throw responseError(response, payload, "Failed to run saved action");
+    if (!response.ok) throw responseError(payload, "");
     const data = record(payload?.data);
     const actionID = stringValue(data?.action_id);
     if (!data || actionID === null || !Array.isArray(data.steps)) {
@@ -192,7 +197,7 @@ export function useSavedActions() {
       cache: "no-store",
     });
     const payload = await responsePayload(response);
-    if (!response.ok) throw responseError(response, payload, "Failed to delete saved action");
+    if (!response.ok) throw responseError(payload, "");
     const data = record(payload?.data);
     if (stringValue(data?.status) !== "deleted") throw new Error("Saved action deletion returned an invalid response");
     setActions((current) => current.filter((item) => item.id !== id));

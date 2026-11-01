@@ -57,23 +57,17 @@ export interface UnsortedResponse {
   suggestions: PlacementSuggestion[]
 }
 
-// ── Shared color constants ─────────────────────────────────────────────────────
+// ── Status tone for the Edit layout cards: a dot only when something is wrong ──
 
-export const SOURCE_COLORS: Record<string, { bg: string; text: string }> = {
-  proxmox:        { bg: "rgba(249,115,22,0.12)", text: "#fb923c" },
-  agent:          { bg: "rgba(59,130,246,0.12)",  text: "#60a5fa" },
-  docker:         { bg: "rgba(34,197,94,0.12)",   text: "#4ade80" },
-  portainer:      { bg: "rgba(139,92,246,0.12)",  text: "#a78bfa" },
-  truenas:        { bg: "rgba(6,182,212,0.12)",    text: "#22d3ee" },
-  homeassistant:  { bg: "rgba(234,179,8,0.12)",   text: "#fbbf24" },
+export const STATUS_TONE: Record<string, "bad" | "warn" | ""> = {
+  offline: "bad",
+  down: "bad",
+  error: "bad",
+  stopped: "bad",
+  degraded: "warn",
+  unresponsive: "warn",
+  warning: "warn",
 };
-
-export const STATUS_COLORS: Record<string, string> = {
-  online:   "#22c55e",
-  degraded: "#eab308",
-  offline:  "#ef4444",
-  unknown:  "#71717a",
-}
 
 export const RELATIONSHIP_TYPES: { value: RelationshipType; label: string }[] = [
   { value: "runs_on",      label: "Runs on" },

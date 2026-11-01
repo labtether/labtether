@@ -1,5 +1,7 @@
 "use client";
 
+import type { WebService } from "../../../../hooks/useWebServices";
+
 import type {
   Asset,
   TelemetryOverviewAsset,
@@ -58,6 +60,8 @@ export type UseNodeDetailPageModelResult = {
   mergedDockerHost: Asset | null;
   mergedDockerHostId: string;
   parentInfraHost: Asset | null;
+  /** Web services the hub found on this device (Overview's Services). */
+  webServicesForNode: WebService[];
   infraCategories: Map<CategorySlug, { def: CategoryDef; count: number }>;
   shouldShowDesktop: boolean;
   panelContext: PanelContext;

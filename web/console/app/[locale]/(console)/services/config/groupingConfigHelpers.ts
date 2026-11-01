@@ -74,13 +74,7 @@ export function sourceLabel(source: RuntimeSettingEntry["source"] | undefined): 
   }
 }
 
+/** Where a setting's value comes from, as a quiet tag (not a status colour). */
 export function sourceClassName(source: RuntimeSettingEntry["source"] | undefined): string {
-  switch (source) {
-    case "ui":
-      return "bg-[var(--ok)]/15 text-[var(--ok)]";
-    case "docker":
-      return "bg-[var(--warn)]/15 text-[var(--warn)]";
-    default:
-      return "bg-[var(--surface)] text-[var(--muted)]";
-  }
+  return source === "ui" || source === "docker" ? "sv-tag" : "sv-tag sv-q";
 }

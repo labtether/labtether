@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useDocumentVisibility } from "../../../../hooks/useDocumentVisibility";
 import {
   normalizeClusterStatusEntries,
@@ -10,6 +11,18 @@ import {
   type NetworkInterface,
   type ProxmoxDetails,
 } from "./nodeDetailTypes";
+
+/** The words for a queued Proxmox action, by action ID; others read "Sent to Proxmox". */
+const ACTION_WORDS: Record<string, string> = {
+  "vm.snapshot.rollback": "rollback",
+  "ct.snapshot.rollback": "rollback",
+  "vm.snapshot.delete": "snapshotDelete",
+  "ct.snapshot.delete": "snapshotDelete",
+  "vm.snapshot.create": "snapshot",
+  "ct.snapshot.create": "snapshot",
+  "vm.backup": "backup",
+  "ct.backup": "backup",
+};
 
 type UseNodeProxmoxDataArgs = {
   activeTab: string;
@@ -32,6 +45,7 @@ export function useNodeProxmoxData({
   proxmoxTarget,
   proxmoxCollectorHint,
 }: UseNodeProxmoxDataArgs) {
+  const t = useTranslations("devices-proxmox.pve.actions");
   const [proxmoxActionRunning, setProxmoxActionRunning] = useState(false);
   const [proxmoxActionMessage, setProxmoxActionMessage] = useState<string | null>(null);
   const [proxmoxActionError, setProxmoxActionError] = useState<string | null>(null);
@@ -171,7 +185,7 @@ export function useNodeProxmoxData({
   ) => {
     const target = (targetOverride ?? "").trim() || proxmoxTarget;
     if (!target) {
-      setProxmoxActionError("Proxmox target is unavailable for this action.");
+      setProxmoxActionError(t("noTarget"));
       return;
     }
     const actionParams: Record<string, string> = {
@@ -196,17 +210,18 @@ export function useNodeProxmoxData({
           params: actionParams,
         }),
       });
-      const payload = (await response.json()) as { error?: string; run?: { id?: string } };
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) {
-        throw new Error(payload.error || `action failed (${response.status})`);
+        throw new Error(payload.error || "");
       }
-      setProxmoxActionMessage(`Queued ${actionID} on ${target}${payload.run?.id ? ` (${payload.run.id.slice(0, 8)})` : ""}`);
+      setProxmoxActionMessage(t(`sent.${ACTION_WORDS[actionID] ?? "other"}`));
     } catch (err) {
-      setProxmoxActionError(err instanceof Error ? err.message : "failed to queue Proxmox action");
+      const reason = err instanceof Error ? err.message.trim() : "";
+      setProxmoxActionError(reason ? t("failedWith", { reason }) : t("failed"));
     } finally {
       setProxmoxActionRunning(false);
     }
-  }, [proxmoxCollectorID, proxmoxTarget]);
+  }, [proxmoxCollectorID, proxmoxTarget, t]);
 
   return {
     proxmoxDetails,

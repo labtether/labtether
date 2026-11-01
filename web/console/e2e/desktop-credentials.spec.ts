@@ -27,14 +27,14 @@ test("desktop VNC credentials prompt supports retry after auth failure", async (
   await selectors.nth(1).selectOption("vnc");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
 
-  await expect(page.getByText("Authentication Required", { exact: true })).toBeVisible();
-  await page.getByPlaceholder("Username").fill("operator");
-  await page.getByPlaceholder("Password").fill("wrong-password");
-  await page.getByRole("button", { name: "Authenticate" }).click();
+  await expect(page.getByText("Username and password", { exact: true })).toBeVisible();
+  await page.getByLabel("Username", { exact: true }).fill("operator");
+  await page.getByLabel("Password", { exact: true }).fill("wrong-password");
+  await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page.getByText("Authentication Required", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Username and password", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Authentication failed", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
   await expect
     .poll(() =>
       page.evaluate(() => {
@@ -58,15 +58,15 @@ test("desktop VNC credentials prompt supports retry after auth failure", async (
       },
     ]);
 
-  await page.getByRole("button", { name: "Retry" }).click({ force: true });
-  await expect(page.getByText("Authentication Required", { exact: true })).toBeVisible();
-  await page.getByPlaceholder("Username").fill("operator");
-  await page.getByPlaceholder("Password").fill("correct-password");
-  await page.getByRole("button", { name: "Authenticate" }).click();
+  await page.getByRole("button", { name: "Try again" }).click({ force: true });
+  await expect(page.getByText("Username and password", { exact: true })).toBeVisible();
+  await page.getByLabel("Username", { exact: true }).fill("operator");
+  await page.getByLabel("Password", { exact: true }).fill("correct-password");
+  await page.getByRole("button", { name: "Sign in" }).click();
 
   await expect.poll(() => sessionRequests.length).toBe(2);
   await expect(page.getByTitle("Disconnect")).toBeVisible();
-  await expect(page.getByText("Authentication Required", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Username and password", { exact: true })).toHaveCount(0);
 });
 
 test("desktop VNC password-only challenge auto-submits the session password", async ({
@@ -94,8 +94,8 @@ test("desktop VNC password-only challenge auto-submits the session password", as
 
   await expect.poll(() => sessionRequests.length).toBe(1);
   await expect(page.getByTitle("Disconnect")).toBeVisible();
-  await expect(page.getByText("VNC Password Required", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("Authentication Required", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("VNC password", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Username and password", { exact: true })).toHaveCount(0);
   await expect
     .poll(() =>
       page.evaluate(() => {
@@ -156,8 +156,8 @@ test("desktop VNC password-only auto-submit resets across reconnects", async ({
 
   await expect.poll(() => sessionRequests.length).toBe(2);
   await expect(page.getByTitle("Disconnect")).toBeVisible();
-  await expect(page.getByText("VNC Password Required", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("Authentication Required", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("VNC password", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Username and password", { exact: true })).toHaveCount(0);
   await expect
     .poll(() =>
       page.evaluate(() => {
@@ -211,7 +211,7 @@ test("desktop VNC stored password falls back to the visible prompt after one fai
   await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect.poll(() => sessionRequests.length).toBe(1);
-  await expect(page.getByText("VNC Password Required", { exact: true })).toBeVisible();
+  await expect(page.getByText("VNC password", { exact: true })).toBeVisible();
   await expect
     .poll(() =>
       page.evaluate(() => {
@@ -234,10 +234,10 @@ test("desktop VNC stored password falls back to the visible prompt after one fai
       },
     ]);
 
-  await page.getByPlaceholder("Password").fill("manual-secret");
-  await page.getByRole("button", { name: "Authenticate" }).click();
+  await page.getByLabel("Password", { exact: true }).fill("manual-secret");
+  await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page.getByText("VNC Password Required", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("VNC password", { exact: true })).toHaveCount(0);
   await expect(page.getByTitle("Disconnect")).toBeVisible();
   await expect
     .poll(() =>

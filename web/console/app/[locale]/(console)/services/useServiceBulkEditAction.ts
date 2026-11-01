@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useCallback, useState } from "react";
 import type { ServiceBulkEditChanges } from "../../../components/ServiceBulkEditModal";
 import type {
@@ -7,134 +8,72 @@ import type {
   WebServiceOverride,
   WebServiceOverrideInput,
 } from "../../../hooks/useWebServices";
-import {
-  runWithConcurrencyLimit,
-  serviceOverrideLookupKey,
-} from "./servicesPageHelpers";
+import { runWithConcurrencyLimit, serviceOverrideLookupKey } from "./servicesLayoutHelpers";
+import { readableError, type Notify } from "./servicesListModel";
 
 interface UseServiceBulkEditActionArgs {
-  bulkEditTargets: WebService[];
-  selectionMode: boolean;
-  clearSelection: () => void;
   listServiceOverrides: (hostAssetID?: string) => Promise<WebServiceOverride[]>;
   saveServiceOverride: (input: WebServiceOverrideInput) => Promise<void>;
   refresh: () => Promise<void>;
+  notify: Notify;
 }
 
-export function useServiceBulkEditAction({
-  bulkEditTargets,
-  selectionMode,
-  clearSelection,
-  listServiceOverrides,
-  saveServiceOverride,
-  refresh,
-}: UseServiceBulkEditActionArgs) {
+/**
+ * Applies one set of changes (category, hidden, icon) to many services, keeping each one's other overrides. Six saves
+ * run at a time; the toast says how many saved and names the first that failed.
+ */
+export function useServiceBulkEditAction({ listServiceOverrides, saveServiceOverride, refresh, notify }: UseServiceBulkEditActionArgs) {
+  const t = useTranslations("services.toasts");
   const [bulkSaving, setBulkSaving] = useState(false);
 
-  const handleApplyBulkEdits = useCallback(
-    async (changes: ServiceBulkEditChanges) => {
-      if (bulkEditTargets.length === 0) {
-        return;
-      }
-
-      setBulkSaving(true);
-      try {
-        const hostAssetIDs = Array.from(
-          new Set(bulkEditTargets.map((service) => service.host_asset_id))
-        );
-        const existingOverrides = new Map<string, WebServiceOverride>();
-
-        await Promise.all(
-          hostAssetIDs.map(async (hostAssetID) => {
-            const hostOverrides = await listServiceOverrides(hostAssetID);
-            for (const override of hostOverrides) {
-              existingOverrides.set(
-                serviceOverrideLookupKey(override.host_asset_id, override.service_id),
-                override
-              );
-            }
-          })
-        );
-
-        const failures: string[] = [];
-        let successCount = 0;
-
-        const tasks = bulkEditTargets.map((service) => async () => {
-          const existingOverride = existingOverrides.get(
-            serviceOverrideLookupKey(service.host_asset_id, service.id)
-          );
-          const hidden =
-            changes.hidden !== undefined ? changes.hidden : service.metadata?.hidden === "true";
-
-          let iconOverride = existingOverride?.icon_key_override;
-          if (changes.iconMode === "set") {
-            iconOverride = changes.iconValue ?? "";
-          } else if (changes.iconMode === "clear") {
-            iconOverride = "";
-          }
-
-          try {
-            await saveServiceOverride({
-              host_asset_id: service.host_asset_id,
-              service_id: service.id,
-              name_override: existingOverride?.name_override,
-              category_override:
-                changes.category !== undefined
-                  ? changes.category
-                  : existingOverride?.category_override,
-              url_override: existingOverride?.url_override,
-              icon_key_override: iconOverride,
-              hidden,
-            });
-            successCount += 1;
-          } catch (err) {
-            failures.push(
-              `${service.name}: ${err instanceof Error ? err.message : "failed to save override"}`
-            );
-          }
-        });
-
-        await runWithConcurrencyLimit(tasks, 6);
-        await refresh();
-
-        if (failures.length > 0) {
-          const lines = failures
-            .slice(0, 5)
-            .map((entry) => `- ${entry}`)
-            .join("\n");
-          const overflow =
-            failures.length > 5 ? `\n- ...and ${failures.length - 5} more` : "";
-          window.alert(
-            "Bulk edit applied with partial failures.\n" +
-              `Updated: ${successCount}/${bulkEditTargets.length}\n` +
-              `Failed: ${failures.length}\n\n` +
-              `${lines}${overflow}`
-          );
-          return;
+  const applyBulkEdits = useCallback(async (targets: WebService[], changes: ServiceBulkEditChanges) => {
+    if (targets.length === 0) return;
+    setBulkSaving(true);
+    try {
+      const existing = new Map<string, WebServiceOverride>();
+      const hosts = Array.from(new Set(targets.map((service) => service.host_asset_id)));
+      await Promise.all(hosts.map(async (host) => {
+        for (const override of await listServiceOverrides(host)) {
+          existing.set(serviceOverrideLookupKey(override.host_asset_id, override.service_id), override);
         }
+      }));
 
-        window.alert(
-          `Bulk edit applied to ${successCount} service${successCount === 1 ? "" : "s"}.`
-        );
-      } finally {
-        setBulkSaving(false);
-        if (selectionMode) {
-          clearSelection();
+      const failures: string[] = [];
+      let saved = 0;
+      await runWithConcurrencyLimit(targets.map((service) => async () => {
+        const prior = existing.get(serviceOverrideLookupKey(service.host_asset_id, service.id));
+        let icon = prior?.icon_key_override;
+        if (changes.iconMode === "set") icon = changes.iconValue ?? "";
+        else if (changes.iconMode === "clear") icon = "";
+        try {
+          await saveServiceOverride({
+            host_asset_id: service.host_asset_id,
+            service_id: service.id,
+            name_override: prior?.name_override,
+            category_override: changes.category ?? prior?.category_override,
+            url_override: prior?.url_override,
+            icon_key_override: icon,
+            tags_override: prior?.tags_override,
+            hidden: changes.hidden ?? service.metadata?.hidden === "true",
+          });
+          saved += 1;
+        } catch (err) {
+          failures.push(`${service.name}: ${readableError(err, t("notSaved"))}`);
         }
-      }
-    },
-    [
-      bulkEditTargets,
-      clearSelection,
-      listServiceOverrides,
-      refresh,
-      saveServiceOverride,
-      selectionMode,
-    ]
-  );
+      }), 6);
+      await refresh();
 
-  return {
-    bulkSaving,
-    handleApplyBulkEdits,
-  };
+      if (failures.length > 0) {
+        notify("error", t("bulkPartial", { saved, total: targets.length, first: failures[0] }));
+      } else {
+        notify("success", t("bulkSaved", { count: saved }));
+      }
+    } catch (err) {
+      notify("error", readableError(err, t("bulkFailed")));
+    } finally {
+      setBulkSaving(false);
+    }
+  }, [listServiceOverrides, notify, refresh, saveServiceOverride, t]);
+
+  return { bulkSaving, applyBulkEdits };
 }

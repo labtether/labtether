@@ -27,8 +27,8 @@ test("add device agent linux installer enables install-vnc-prereqs by default", 
   await page.goto("/nodes");
   await expect(page.getByRole("heading", { name: "Devices", level: 1, exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Add Device", exact: true }).click();
-  await page.getByRole("button", { name: /^Agent/i }).first().click();
+  await page.getByRole("button", { name: "Add device", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /^Agent/ }).click();
 
   await expect(page.getByText("Install Agent", { exact: true })).toBeVisible();
   await page.getByLabel("Expected hostname").fill("vnc-test-node");
@@ -141,8 +141,8 @@ test("add device portainer flow tests and saves connector settings", async ({ pa
   await page.goto("/nodes");
   await expect(page.getByRole("heading", { name: "Devices", level: 1, exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Add Device", exact: true }).click();
-  await page.getByRole("button", { name: /Portainer/i }).first().click();
+  await page.getByRole("button", { name: "Add device", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /^Portainer/ }).click();
 
   await expect(page.getByText("Connect Portainer", { exact: true })).toBeVisible();
 
@@ -250,8 +250,8 @@ test("add device portainer flow lets operator choose detected endpoint", async (
   await page.goto("/nodes");
   await expect(page.getByRole("heading", { name: "Devices", level: 1, exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Add Device", exact: true }).click();
-  await page.getByRole("button", { name: /Portainer/i }).first().click();
+  await page.getByRole("button", { name: "Add device", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /^Portainer/ }).click();
 
   const detectedEndpointBlock = page
     .locator("div")
@@ -315,8 +315,8 @@ test("add device portainer flow surfaces test-connection failures", async ({ pag
   await page.goto("/nodes");
   await expect(page.getByRole("heading", { name: "Devices", level: 1, exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Add Device", exact: true }).click();
-  await page.getByRole("button", { name: /Portainer/i }).first().click();
+  await page.getByRole("button", { name: "Add device", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /^Portainer/ }).click();
 
   await expect(page.getByText("Connect Portainer", { exact: true })).toBeVisible();
   await page.getByPlaceholder("https://portainer.local:9443").fill("https://portainer.local:9443/");
@@ -426,8 +426,8 @@ test("add device pbs flow tests and saves connector settings", async ({ page }) 
   await page.goto("/nodes");
   await expect(page.getByRole("heading", { name: "Devices", level: 1, exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Add Device", exact: true }).click();
-  await page.getByRole("button", { name: /Proxmox Backup/i }).first().click();
+  await page.getByRole("button", { name: "Add device", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /^Proxmox Backup Server/ }).click();
 
   await expect(page.getByText("Connect PBS", { exact: true })).toBeVisible();
 
@@ -503,8 +503,8 @@ test("add device pbs flow surfaces test-connection failures", async ({ page }) =
   await page.goto("/nodes");
   await expect(page.getByRole("heading", { name: "Devices", level: 1, exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Add Device", exact: true }).click();
-  await page.getByRole("button", { name: /Proxmox Backup/i }).first().click();
+  await page.getByRole("button", { name: "Add device", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /^Proxmox Backup Server/ }).click();
 
   await expect(page.getByText("Connect PBS", { exact: true })).toBeVisible();
   await page.getByLabel("Base URL", { exact: true }).fill("https://pbs.local:8007/");
@@ -611,8 +611,8 @@ test("add device truenas flow tests and saves connector settings", async ({ page
   await page.goto("/nodes");
   await expect(page.getByRole("heading", { name: "Devices", level: 1, exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Add Device", exact: true }).click();
-  await page.getByRole("button", { name: /TrueNAS/i }).first().click();
+  await page.getByRole("button", { name: "Add device", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /^TrueNAS/ }).click();
 
   await expect(page.getByText("Connect TrueNAS", { exact: true })).toBeVisible();
 

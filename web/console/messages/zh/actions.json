@@ -1,110 +1,112 @@
 {
   "title": "操作",
-  "subtitle": "在设备上运行任务并查看结果",
-  "runAction": {
-    "heading": "// 运行操作",
-    "integration": {
-      "label": "集成",
-      "tooltip": "提供此操作的集成模块"
-    },
-    "action": "操作",
-    "device": {
-      "label": "设备",
-      "tooltip": "要操作的资源标识符（容器 ID、虚拟机名称等）",
-      "placeholder": "容器 ID / 虚拟机 ID / 实体 ID",
-      "notRequired": "此操作不需要目标设备。"
-    },
-    "parameters": {
-      "none": "此操作不需要额外参数。",
-      "required": "（必填）"
-    },
-    "previewOnly": {
-      "label": "仅预览",
-      "tooltip": "模拟操作而不进行实际更改",
-      "unsupportedTooltip": "此操作会直接执行，不支持预览模式"
-    },
-    "submit": "运行",
-    "submitting": "正在排队..."
-  },
-  "savedActions": {
-    "heading": "// 已保存的命令操作",
-    "description": "为指定设备创建可重复使用的有序命令序列。",
-    "reload": "重新加载",
-    "create": "新建已保存操作",
-    "noAssets": "没有可访问的设备。请先添加或连接设备。",
-    "loading": "正在加载已保存操作...",
-    "empty": "还没有已保存的命令操作。",
-    "listLabel": "已保存的命令操作",
-    "summary": "{count} 个步骤 · 创建于 {date}",
-    "view": "查看",
-    "run": "运行",
-    "delete": "删除",
-    "deleteAction": "删除 {name}",
-    "createTitle": "创建已保存的命令操作",
-    "fields": { "name": "操作名称", "description": "描述（可选）", "steps": "命令步骤", "stepName": "步骤名称", "asset": "设备", "command": "命令" },
-    "defaultStepName": "步骤 {number}",
-    "stepHeading": "步骤 {number}",
-    "removeStep": "移除步骤 {number}",
-    "remove": "移除",
-    "selectAsset": "选择设备",
-    "addStep": "添加步骤",
+  "new": "新建操作",
+  "common": {
     "cancel": "取消",
-    "close": "关闭",
-    "creating": "正在创建...",
-    "createAction": "创建操作",
-    "detailsTitle": "已保存操作详情",
-    "loadingDetails": "正在加载最新详情...",
-    "stepListLabel": "已保存操作的命令步骤",
-    "runNow": "立即运行",
-    "running": "正在运行...",
-    "results": "运行结果",
-    "failed": "失败",
-    "succeeded": "成功",
-    "exitCode": "退出码 {code}",
-    "noOutput": "命令已完成，没有输出。",
-    "deleteTitle": "删除已保存操作",
-    "deleteWarning": "这将永久删除“{name}”。已经运行的命令不会被取消。",
-    "deletePrompt": "准确输入 {name} 以确认",
-    "deleting": "正在删除...",
-    "deleteActionButton": "删除操作",
-    "errors": { "nameRequired": "请输入操作名称。", "stepRequired": "每个步骤都需要设备和命令。", "assetUnavailable": "一个或多个所选设备已不可用。", "createFailed": "无法创建已保存操作。", "loadOneFailed": "无法加载已保存操作。", "runFailed": "无法运行已保存操作。", "deleteFailed": "无法删除已保存操作。" },
-    "messages": { "created": "已创建“{name}”。", "runFinished": "“{name}”运行完毕。", "runFinishedWithFailures": "“{name}”运行完毕，其中 {count} 个步骤失败。", "deleted": "已删除“{name}”。" }
+    "create": "创建",
+    "save": "保存",
+    "delete": "删除",
+    "deleteMenu": "删除…",
+    "edit": "编辑…",
+    "rowMenu": "{name} 的操作",
+    "loading": "正在加载…",
+    "retry": "重试",
+    "never": "从未",
+    "on": "启用",
+    "remove": "移除 {name}"
   },
-  "history": {
-    "heading": "// 执行历史",
-    "viewLogs": "查看日志",
-    "empty": {
-      "title": "还没有执行记录",
-      "description": "选择上方的集成和操作，然后点击运行。"
-    }
-  },
-  "updates": {
-    "title": "更新",
-    "subtitle": "在您的实验室中计划和运行更新",
-    "planName": "计划名称",
-    "devices": {
-      "label": "设备",
-      "tooltip": "要更新的设备主机名，以逗号分隔",
-      "placeholder": "lab-host-01, docker-host-01"
-    },
-    "scopes": {
-      "label": "范围",
-      "tooltip": "当前支持的更新类别：os_packages",
-      "placeholder": "os_packages"
-    },
-    "previewOnly": "仅预览",
-    "createPlan": "创建计划",
-    "saving": "正在保存...",
-    "plans": "计划",
-    "recentRuns": "最近执行",
+  "list": {
+    "label": "已保存的操作",
+    "action": "操作",
+    "empty": "没有已保存的操作",
+    "loadFailed": "无法加载已保存的操作",
+    "steps": "{count, plural, other {# 个步骤}}",
     "run": "运行",
-    "plansEmpty": {
-      "title": "还没有更新计划",
-      "description": "在上方创建计划以定义要更新的设备和范围。"
-    },
-    "runsEmpty": {
-      "title": "还没有更新执行记录",
-      "description": "执行一个计划以开始运行。"
-    }
+    "runMany": "运行…",
+    "runLabel": "运行 {name}",
+    "running": "运行中",
+    "failed": "失败",
+    "succeededAt": "成功 · {time}",
+    "showSteps": "显示步骤",
+    "hideSteps": "隐藏步骤",
+    "duplicate": "复制…"
+  },
+  "panel": {
+    "steps": "步骤",
+    "command": "命令",
+    "lastRun": "上次运行",
+    "running": "运行中",
+    "exit": "退出码 {code}",
+    "succeeded": "成功",
+    "failed": "失败",
+    "noOutput": "无输出",
+    "duration": "{ms} 毫秒",
+    "loadFailed": "无法加载当前步骤"
+  },
+  "run": {
+    "title": "运行“{name}”？",
+    "body": "将在 {count} 台设备上运行：{devices}。",
+    "confirm": "在 {count} 台设备上运行",
+    "finished": "“{name}”已完成",
+    "finishedFailures": "“{name}”已完成，{count, plural, other {# 个步骤失败}}",
+    "failed": "无法运行“{name}”"
+  },
+  "delete": {
+    "title": "删除“{name}”？",
+    "body": "已在运行的命令会继续运行。",
+    "prompt": "输入 {name} 以确认",
+    "deleted": "已删除“{name}”",
+    "failed": "无法删除该操作"
+  },
+  "editor": {
+    "newTitle": "新建操作",
+    "copyTitle": "复制操作",
+    "command": "命令",
+    "integration": "集成操作",
+    "name": "名称",
+    "description": "描述",
+    "optional": "可选",
+    "noDevices": "没有可运行命令的设备",
+    "steps": "步骤",
+    "device": "设备",
+    "stepDevice": "步骤 {number} 的设备",
+    "stepCommand": "步骤 {number} 的命令",
+    "removeStep": "移除步骤 {number}",
+    "addStep": "添加步骤",
+    "defaultStepName": "步骤 {number}",
+    "nameRequired": "请输入名称",
+    "commandRequired": "请输入命令",
+    "deviceRequired": "请选择设备",
+    "deviceGone": "该设备已不可用",
+    "created": "已创建“{name}”",
+    "createFailed": "无法创建该操作",
+    "copyName": "{name}（副本）"
+  },
+  "integration": {
+    "none": "没有已连接的集成",
+    "integration": "集成",
+    "action": "操作",
+    "target": "目标",
+    "targetRequired": "请输入目标",
+    "paramRequired": "必填",
+    "optional": "可选",
+    "loadFailed": "无法加载此集成的操作",
+    "preview": "预览",
+    "previewHint": "试运行：只检查，不做更改",
+    "noPreview": "此操作不支持试运行",
+    "once": "只运行一次，不保存",
+    "run": "运行",
+    "runPreview": "运行预览",
+    "queued": "已将“{name}”加入队列",
+    "previewQueued": "已将“{name}”的预览加入队列",
+    "failed": "无法运行该操作"
+  },
+  "runs": {
+    "title": "最近运行",
+    "empty": "暂无运行",
+    "running": "运行中",
+    "queued": "排队中",
+    "failed": "失败",
+    "logs": "日志"
   }
 }

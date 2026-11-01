@@ -2,8 +2,10 @@
 
 import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { Card } from "../../../../components/ui/Card";
+import { useTranslations } from "next-intl";
 import { buildClusterFlowModel } from "./clusterTopologyFlowModel";
+import type { ClusterFlowWords } from "./clusterTopologyPresentation";
+import { DiEmpty, DiPage, DiSection, DiSheet } from "./proxmox/DiList";
 import { ClusterTopologyHeader } from "./ClusterTopologyHeader";
 import { ClusterTopologyListView } from "./ClusterTopologyListView";
 import { useClusterTopologyDerivedData } from "./useClusterTopologyDerivedData";
@@ -18,16 +20,36 @@ const ClusterTopologyGraphView = dynamic(
   () => import("./ClusterTopologyGraphView").then((mod) => ({ default: mod.ClusterTopologyGraphView })),
   {
     ssr: false,
-    loading: () => (
-      <div className="flex items-center justify-center h-full">
-        <span className="text-muted-foreground">Loading topology graph...</span>
-      </div>
-    ),
+    loading: () => <GraphLoading />,
   },
 );
 
+function GraphLoading() {
+  const t = useTranslations("devices-proxmox.topology");
+  return (
+    <DiSheet>
+      <DiEmpty title={t("loadingGraph")} />
+    </DiSheet>
+  );
+}
+
+/** The Proxmox cluster on a node's Overview: nodes, their guests and the hosts guests are linked to, as a graph or a list. */
 export function ClusterTopologySection({ clusterStatus, haResources, assets = [] }: ClusterTopologySectionProps) {
+  const t = useTranslations("devices-proxmox.topology");
   const [topologyView, setTopologyView] = useState<TopologyView>("graph");
+  const words = useMemo<ClusterFlowWords>(() => ({
+    local: t("local"),
+    guests: (count) => t("guests", { count }),
+    linkedTo: (name) => t("linkedTo", { name }),
+    links: (count) => t("links", { count }),
+    auto: t("auto"),
+    manual: t("manual"),
+    missing: t("missing"),
+    missingTarget: t("missingTarget"),
+    autoLink: (guest, host) => t("autoLink", { guest, host }),
+    manualLink: (guest, host) => t("manualLink", { guest, host }),
+    missingLink: (target) => t("missingLink", { target }),
+  }), [t]);
   const {
     clusterEntry,
     nodeEntries,
@@ -107,20 +129,26 @@ export function ClusterTopologySection({ clusterStatus, haResources, assets = []
       graphSelectedGuestID,
       nodeEntries,
       proxmoxNodeAssetIDByName,
+      words,
     }),
-    [apiHosts, apiHostsByID, guestAssets, guestRunsOn, guestsByNode, graphSelectedGuestID, nodeEntries, proxmoxNodeAssetIDByName],
+    [apiHosts, apiHostsByID, guestAssets, guestRunsOn, guestsByNode, graphSelectedGuestID, nodeEntries, proxmoxNodeAssetIDByName, words],
   );
 
   if (nodeEntries.length === 0) return null;
 
   return (
-    <Card className="mb-4">
-      <div className="space-y-4">
-        <ClusterTopologyHeader
-          topologyView={topologyView}
-          onTopologyViewChange={setTopologyView}
-          clusterEntry={clusterEntry}
-        />
+    <DiPage className="di-ct">
+      <DiSection
+        id="cluster-topology"
+        title={clusterEntry?.name ? t("titleNamed", { name: clusterEntry.name }) : t("title")}
+        right={
+          <ClusterTopologyHeader
+            topologyView={topologyView}
+            onTopologyViewChange={setTopologyView}
+            clusterEntry={clusterEntry}
+          />
+        }
+      >
 
         {topologyView === "graph" ? (
           <ClusterTopologyGraphView
@@ -192,7 +220,7 @@ export function ClusterTopologySection({ clusterStatus, haResources, assets = []
             onClearGuestLink={(guest) => { void clearGuestLink(guest); }}
           />
         )}
-      </div>
-    </Card>
+      </DiSection>
+    </DiPage>
   );
 }

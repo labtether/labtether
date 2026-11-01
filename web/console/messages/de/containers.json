@@ -1,0 +1,111 @@
+{
+  "title": "Container",
+  "runContainer": "Container ausführen",
+  "deployStack": "Stack bereitstellen",
+  "filter": "Nach Name, Image oder Host filtern",
+  "filterHost": "Nach Name oder Image filtern",
+  "show": {
+    "label": "Anzeigen",
+    "all": "Alle",
+    "running": "Laufend",
+    "stopped": "Gestoppt",
+    "runningN": "Laufend {count}",
+    "stoppedN": "Gestoppt {count}"
+  },
+  "groupBy": "Gruppieren",
+  "groupings": {
+    "host": "Host",
+    "stack": "Stack",
+    "none": "Keine"
+  },
+  "columns": {
+    "container": "Container",
+    "ports": "Ports",
+    "cpu": "CPU",
+    "memory": "Speicher",
+    "sortBy": "Nach {column} sortieren"
+  },
+  "noStack": "Kein Stack",
+  "shown": "{shown} von {total}",
+  "clearFilter": "Filter löschen",
+  "retry": "Erneut versuchen",
+  "loadFailed": "Container konnten nicht geladen werden",
+  "hostsFailed": "{count, plural, one {# Docker-Host hat nicht geantwortet} other {# Docker-Hosts haben nicht geantwortet}}",
+  "empty": {
+    "noHosts": "Noch keine Docker-Hosts",
+    "noContainers": "Noch keine Container",
+    "addHost": "Docker-Host hinzufügen",
+    "match": "Keine Container passen zu „{query}“",
+    "noRunning": "Keine laufenden Container",
+    "noStopped": "Keine gestoppten Container"
+  },
+  "state": {
+    "running": "Läuft",
+    "exited": "Beendet",
+    "exitedAgo": "Beendet {ago}",
+    "restarting": "Startet neu",
+    "paused": "Pausiert",
+    "created": "Erstellt, nicht gestartet",
+    "dead": "Tot",
+    "removing": "Wird entfernt",
+    "unhealthy": "Ungesund",
+    "starting": "Startet",
+    "unknown": "Status nicht gemeldet"
+  },
+  "menu": {
+    "label": "Aktionen für {name}",
+    "open": "Öffnen",
+    "logs": "Logs",
+    "shell": "Shell",
+    "restart": "Neu starten",
+    "start": "Starten",
+    "stop": "Stoppen…",
+    "stopTitle": "{name} stoppen?",
+    "stopBody": "Er bleibt gestoppt, bis er wieder gestartet wird.",
+    "stopConfirm": "Stoppen",
+    "copyImage": "Image kopieren"
+  },
+  "toast": {
+    "startDone": "{name} gestartet",
+    "stopDone": "{name} gestoppt",
+    "restartDone": "{name} neu gestartet",
+    "startFailed": "{name} konnte nicht gestartet werden",
+    "stopFailed": "{name} konnte nicht gestoppt werden",
+    "restartFailed": "{name} konnte nicht neu gestartet werden"
+  },
+  "deploy": {
+    "crumbs": "Navigationspfad",
+    "runTitle": "Container ausführen",
+    "stackTitle": "Stack bereitstellen",
+    "host": "Host",
+    "image": "Image",
+    "name": "Name",
+    "ports": "Ports",
+    "portsHint": "host:container, einer pro Zeile",
+    "environment": "Umgebung",
+    "envHint": "NAME=value, eine pro Zeile",
+    "command": "Befehl",
+    "cancel": "Abbrechen",
+    "run": "Ausführen",
+    "deploy": "Bereitstellen",
+    "open": "Öffnen",
+    "ranLine": "{name} gestartet.",
+    "ranToast": "{name} auf {host} gestartet",
+    "runFailed": "Der Container ist nicht gestartet",
+    "runFailedWith": "Der Container ist nicht gestartet: {reason}",
+    "deployedLine": "{name} bereitgestellt.",
+    "deployedToast": "{name} auf {host} bereitgestellt",
+    "deployFailed": "Der Stack wurde nicht bereitgestellt",
+    "deployFailedWith": "Der Stack wurde nicht bereitgestellt: {reason}",
+    "errors": {
+      "required": "Erforderlich",
+      "image": "Ein Image wie nginx:1.29 eingeben",
+      "name": "Buchstaben, Ziffern, Punkte, Bindestriche und Unterstriche verwenden",
+      "ports": "host:container verwenden, etwa 8080:80 oder 5353:53/udp",
+      "portRange": "Ports reichen von 1 bis 65535",
+      "env": "NAME=value verwenden, eine pro Zeile",
+      "stackName": "Kleinbuchstaben, Ziffern, Bindestriche und Unterstriche verwenden",
+      "services": "Die Datei braucht einen Abschnitt services:"
+    }
+  }
+}

@@ -260,7 +260,7 @@ export function PBSSetupStep({ onBack, onClose, onAdded, compatPrefills = [], se
             </label>
             <textarea
               id={`${fieldID}-ca-pem`}
-              className="w-full bg-transparent border border-[var(--line)] rounded-lg px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:outline-none focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_var(--accent-subtle)] transition-[border-color,box-shadow] duration-[var(--dur-fast)] resize-y"
+              className="w-full bg-transparent border border-[var(--line)] rounded-lg px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:outline-none focus:border-[var(--text-3)] focus:shadow-[0_0_0_3px_var(--ring)] transition-[border-color,box-shadow] duration-[var(--dur-fast)] resize-y"
               rows={4}
               value={caPEM}
               onChange={(e) => setCAPEM(e.target.value)}

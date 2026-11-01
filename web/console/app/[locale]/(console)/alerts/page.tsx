@@ -1,118 +1,144 @@
 "use client";
 
+import { Plus } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
-import { useTranslations } from "next-intl";
+import { useRouter } from "../../../../i18n/navigation";
 import { PageHeader } from "../../../components/PageHeader";
-import { Card } from "../../../components/ui/Card";
-import { SegmentedTabs } from "../../../components/ui/SegmentedTabs";
+import { Button } from "../../../components/ui/Button";
+import type { AlertInstance, AlertSilence } from "../../../console/models";
+import { useToast } from "../../../contexts/ToastContext";
 import { useAlerts } from "../../../hooks/useAlerts";
-import { AlertsInboxTab } from "./AlertsInboxTab";
-import { AlertRulesTab } from "./AlertRulesTab";
 import { AlertDeliveryLogTab } from "./AlertDeliveryLogTab";
+import { AlertInbox } from "./AlertInbox";
+import { AlertInboxToolbar } from "./AlertInboxToolbar";
+import { AlertRulesTab, type RuleOpen } from "./AlertRulesTab";
 import { AlertSilencesTab } from "./AlertSilencesTab";
-import type {
-  AlertSeverityFilter,
-  AlertStateFilter,
-  AlertTab,
-} from "./alertsPageTypes";
+import { AlertTabs } from "./AlertTabs";
+import type { AlertActions } from "./AlertDetail";
+import { shortTime } from "./alertsModel";
+import { DEFAULT_FILTER, durationPresets, parseAlertTab, type DurationPreset, type InboxFilter } from "./alertsPageTypes";
 
+/**
+ * Alerts: the open alerts beside the chosen one, Rules (and the rule editor), Silences and the delivery log, one
+ * tab each (?tab=…). Issues is its own page in the same tab row. ?alert=<id> opens on that alert.
+ */
 export default function AlertsPage() {
-  const t = useTranslations('alerts');
-  const {
-    instances,
-    rules,
-    templates,
-    silences,
-    loading,
-    error,
-    ackAlert,
-    resolveAlert,
-    createSilence,
-    deleteSilence,
-    createRule,
-    deleteRule,
-  } = useAlerts();
+  const t = useTranslations("alerts");
+  const locale = useLocale();
+  const params = useSearchParams();
+  const router = useRouter();
+  const { addToast } = useToast();
+  const tab = parseAlertTab(params.get("tab"));
+  const data = useAlerts();
+  const [selectedAlert, setSelectedAlert] = useState<string | null>(params.get("alert"));
+  const [ruleOpen, setRuleOpen] = useState<RuleOpen>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [filter, setFilter] = useState<InboxFilter>(DEFAULT_FILTER);
 
-  const [activeTab, setActiveTab] = useState<AlertTab>("inbox");
-  const [severityFilter, setSeverityFilter] = useState<AlertSeverityFilter>("all");
-  const [stateFilter, setStateFilter] = useState<AlertStateFilter>("all");
-  const [highlightedRuleId, setHighlightedRuleId] = useState<string | null>(null);
+  const openRules = (open: RuleOpen) => {
+    setRuleOpen(open);
+    if (tab !== "rules") router.push("/alerts?tab=rules");
+  };
+  const showAlert = (id: string) => {
+    setSelectedAlert(id);
+    router.push("/alerts");
+  };
 
-  const firingCount = instances.filter((instance) => instance.status === "firing").length;
-
-  function handleGoToRule(ruleId: string) {
-    setHighlightedRuleId(ruleId);
-    setActiveTab("rules");
+  async function run(alert: AlertInstance, work: () => Promise<void>, done?: string) {
+    setBusy(alert.id);
+    try {
+      await work();
+      if (done) addToast("success", done);
+    } catch (err) {
+      addToast("error", err instanceof Error && err.message ? err.message : t("errors.action"));
+    } finally {
+      setBusy(null);
+    }
   }
 
+  const actions: AlertActions = {
+    busy,
+    acknowledge: (alert) => run(alert, () => data.ackAlert(alert.id)),
+    resolve: (alert) => run(alert, () => data.resolveAlert(alert.id)),
+    silence: (alert, preset: DurationPreset) => {
+      const hours = durationPresets.find((p) => p.id === preset)?.hours ?? 1;
+      const start = new Date();
+      const end = new Date(start.getTime() + hours * 3_600_000);
+      return run(alert, () => data.createSilence({
+        matchers: { ...(alert.labels ?? {}) },
+        starts_at: start.toISOString(),
+        ends_at: end.toISOString(),
+        reason: alert.labels?.rule_name || data.rules.find((r) => r.id === alert.rule_id)?.name || undefined,
+      }), t("detail.silenced", { time: shortTime(end.toISOString(), locale, Date.now()) }));
+    },
+    endSilence: async (silence: AlertSilence) => {
+      setBusy(silence.id);
+      try {
+        await data.deleteSilence(silence.id);
+        addToast("success", t("detail.silenceEnded"));
+      } catch (err) {
+        addToast("error", err instanceof Error && err.message ? err.message : t("errors.action"));
+      } finally {
+        setBusy(null);
+      }
+    },
+    openRule: (ruleId) => openRules({ kind: "rule", id: ruleId }),
+  };
+
+  const newRuleMain = tab === "rules" && ruleOpen?.kind !== "new";
   return (
     <>
       <PageHeader
-        title={t('title')}
-        subtitle={t('subtitle.label', { activeInfo: firingCount > 0 ? t('subtitle.active', { count: firingCount }) : '' })}
+        title={t("title")}
+        className="al-ph"
+        action={(
+          <Button variant={newRuleMain ? "primary" : "secondary"} onClick={() => openRules({ kind: "new", seq: Date.now(), from: null })}>
+            <Plus aria-hidden="true" size={14} strokeWidth={2} />
+            {t("newRule")}
+          </Button>
+        )}
       />
+      <AlertTabs current={tab} tools={tab === "alerts" && data.instances.length > 0 ? <AlertInboxToolbar filter={filter} onFilter={setFilter} /> : undefined} />
+      {data.error ? <p role="alert" className="al-error">{data.error}</p> : null}
 
-      {error ? (
-        <p role="alert" className="mb-4 text-xs text-[var(--bad)]">{error}</p>
-      ) : null}
-
-      <Card className="mb-4 flex items-center justify-between">
-        <SegmentedTabs
-          value={activeTab}
-          options={(["inbox", "rules", "silences", "delivery"] as AlertTab[]).map((tab) => ({
-            id: tab,
-            label: (
-              <span className="inline-flex items-center gap-1.5">
-                {t(`tabs.${tab}`)}
-                {tab === "inbox" && firingCount > 0 ? (
-                  <span className="rounded-lg border border-[var(--control-border)] px-1.5 py-0.5 text-[10px] text-[var(--control-fg-muted)]">
-                    {firingCount}
-                  </span>
-                ) : null}
-              </span>
-            ),
-          }))}
-          onChange={setActiveTab}
-        />
-      </Card>
-
-      {activeTab === "inbox" ? (
-        <AlertsInboxTab
-          loading={loading}
-          instances={instances}
-          rules={rules}
-          severityFilter={severityFilter}
-          stateFilter={stateFilter}
-          onSeverityFilterChange={setSeverityFilter}
-          onStateFilterChange={setStateFilter}
-          onAck={(id) => void ackAlert(id)}
-          onResolve={(id) => void resolveAlert(id)}
-          onGoToRule={handleGoToRule}
+      {tab === "alerts" ? (
+        <AlertInbox
+          loading={data.loading}
+          instances={data.instances}
+          rules={data.rules}
+          silences={data.silences}
+          selectedId={selectedAlert}
+          onSelect={setSelectedAlert}
+          filter={filter}
+          onFilter={setFilter}
+          actions={actions}
         />
       ) : null}
 
-      {activeTab === "rules" ? (
+      {tab === "rules" ? (
         <AlertRulesTab
-          rules={rules}
-          templates={templates}
-          highlightedRuleId={highlightedRuleId}
-          onHighlightedRuleIdChange={setHighlightedRuleId}
-          createRule={createRule}
-          deleteRule={deleteRule}
+          loading={data.loading}
+          rules={data.rules}
+          templates={data.templates}
+          instances={data.instances}
+          open={ruleOpen}
+          onOpen={setRuleOpen}
+          createRule={data.createRule}
+          deleteRule={data.deleteRule}
         />
       ) : null}
 
-      {activeTab === "silences" ? (
+      {tab === "silences" ? (
         <AlertSilencesTab
-          silences={silences}
-          createSilence={createSilence}
-          deleteSilence={deleteSilence}
+          silences={data.silences}
+          createSilence={data.createSilence}
+          deleteSilence={data.deleteSilence}
         />
       ) : null}
 
-      {activeTab === "delivery" ? (
-        <AlertDeliveryLogTab />
-      ) : null}
+      {tab === "delivery" ? <AlertDeliveryLogTab instances={data.instances} rules={data.rules} onShowAlert={showAlert} /> : null}
     </>
   );
 }

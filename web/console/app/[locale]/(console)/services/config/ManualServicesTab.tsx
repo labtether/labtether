@@ -234,7 +234,8 @@ export default function ManualServicesTab({ prefilledAssetId }: ManualServicesTa
     if (!service.host_asset_id) {
       return t("config.manual.notMonitored");
     }
-    return service.status || t("config.manual.notMonitored");
+    const status = service.status;
+    return status === "up" || status === "down" || status === "unknown" ? t(`toolbar.statuses.${status}`) : status || t("config.manual.notMonitored");
   }
 
   function hostLabel(service: WebService): string {
@@ -267,7 +268,7 @@ export default function ManualServicesTab({ prefilledAssetId }: ManualServicesTa
 
       {/* Inline add/edit form */}
       {showForm && (
-        <div className="rounded-lg border border-[var(--line)] bg-[var(--surface)] p-4">
+        <div className="sv-sheet">
           <h3 className="text-sm font-semibold text-[var(--text)] mb-3">
             {editingId
               ? t("config.manual.editService")
@@ -287,7 +288,7 @@ export default function ManualServicesTab({ prefilledAssetId }: ManualServicesTa
                 error={Boolean(formErrors.name)}
               />
               {formErrors.name && (
-                <span className="text-xs text-[var(--bad)]">{formErrors.name}</span>
+                <span className="sv-err">{formErrors.name}</span>
               )}
             </div>
 
@@ -303,7 +304,7 @@ export default function ManualServicesTab({ prefilledAssetId }: ManualServicesTa
                 error={Boolean(formErrors.url)}
               />
               {formErrors.url && (
-                <span className="text-xs text-[var(--bad)]">{formErrors.url}</span>
+                <span className="sv-err">{formErrors.url}</span>
               )}
             </div>
 
@@ -325,7 +326,7 @@ export default function ManualServicesTab({ prefilledAssetId }: ManualServicesTa
                 ))}
               </Select>
               {formErrors.category && (
-                <span className="text-xs text-[var(--bad)]">
+                <span className="sv-err">
                   {formErrors.category}
                 </span>
               )}
@@ -442,26 +443,26 @@ export default function ManualServicesTab({ prefilledAssetId }: ManualServicesTa
           }
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-[var(--line)]">
+        <div className="sv-tbl">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-[var(--line)] bg-[var(--surface)]">
-                <th className="text-left px-3 py-2 text-xs font-semibold text-[var(--muted)]">
+              <tr className="sv-tbl-h">
+                <th>
                   {t("config.manual.table.name")}
                 </th>
-                <th className="text-left px-3 py-2 text-xs font-semibold text-[var(--muted)]">
+                <th>
                   {t("config.manual.table.url")}
                 </th>
-                <th className="text-left px-3 py-2 text-xs font-semibold text-[var(--muted)]">
+                <th>
                   {t("config.manual.table.category")}
                 </th>
-                <th className="text-left px-3 py-2 text-xs font-semibold text-[var(--muted)]">
+                <th>
                   {t("config.manual.table.host")}
                 </th>
-                <th className="text-left px-3 py-2 text-xs font-semibold text-[var(--muted)]">
+                <th>
                   {t("config.manual.table.status")}
                 </th>
-                <th className="text-right px-3 py-2 text-xs font-semibold text-[var(--muted)]">
+                <th className="sv-r">
                   {t("config.manual.table.actions")}
                 </th>
               </tr>
@@ -470,7 +471,7 @@ export default function ManualServicesTab({ prefilledAssetId }: ManualServicesTa
               {manualServices.map((service) => (
                 <tr
                   key={service.id}
-                  className="border-b border-[var(--line)] last:border-b-0 hover:bg-[var(--hover)] transition-colors"
+                  className="sv-tbl-r"
                 >
                   <td className="px-3 py-2 text-[var(--text)] font-medium">
                     {service.name}
@@ -491,7 +492,7 @@ export default function ManualServicesTab({ prefilledAssetId }: ManualServicesTa
                   <td className="px-3 py-2 text-[var(--muted)]">
                     {hostLabel(service)}
                   </td>
-                  <td className="px-3 py-2 text-[var(--muted)]">
+                  <td className={`px-3 py-2 ${service.status === "down" ? "text-[var(--bad-text)]" : "text-[var(--muted)]"}`}>
                     {statusLabel(service)}
                   </td>
                   <td className="px-3 py-2 text-right">

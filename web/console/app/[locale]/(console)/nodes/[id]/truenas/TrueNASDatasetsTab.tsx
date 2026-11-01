@@ -1,188 +1,106 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { Button } from "../../../../../components/ui/Button";
-import { Card } from "../../../../../components/ui/Card";
-import { formatBytes } from "../truenasTabModel";
+// Datasets: full name, mount point and settings as grey text, a meter of the dataset against its pool, used and
+// available space; sortable by name or size (largest first). Delete sits behind ⋯ and asks first.
+
+import { useState } from "react";
+import { useTranslations } from "next-intl";
+import { DiCols, DiDots, DiList, DiMain, DiMeter, DiNum, DiRow } from "../proxmox/DiList";
+import { DiRowMenu, DiSortHead, useDiConfirm } from "../proxmox/DiControls";
+import { percentOf, sizeParts, sizeText } from "../proxmox/diFormat";
+import { failureText, sortDatasets, type DatasetSort } from "./truenasModel";
+import { TnFailure, TnListState } from "./TrueNASParts";
+import type { TrueNASDataset } from "./truenasTypes";
+import { useTrueNASAction } from "./useTrueNASAction";
 import { truenasAction, useTrueNASList } from "./useTrueNASData";
 
-export type TrueNASDataset = {
-  id: string;
-  name: string;
-  used?: number;
-  available?: number;
-  quota?: number;
-  compression?: string;
-  mountpoint?: string;
-  readonly?: boolean;
-};
+export type { TrueNASDataset } from "./truenasTypes";
 
-function datasetDepth(name: string): number {
-  return (name.match(/\//g) ?? []).length;
-}
-
-function datasetShortName(name: string): string {
-  const parts = name.split("/");
-  return parts[parts.length - 1] ?? name;
+function SizeCell({ bytes, className = "" }: { bytes?: number; className?: string }) {
+  const parts = sizeParts(bytes);
+  return <DiNum value={parts?.value} unit={parts?.unit} className={className} />;
 }
 
 type Props = {
   assetId: string;
+  /** Pool sizes by pool name, for the meter. Without them the meter compares used with used + available. */
+  poolSizes?: Map<string, number>;
 };
 
-export function TrueNASDatasetsTab({ assetId }: Props) {
-  const { data: datasets, loading, error, refresh } = useTrueNASList<TrueNASDataset>(
-    assetId,
-    "datasets",
-  );
-  const [actionInFlight, setActionInFlight] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const actionSeq = useRef(0);
+export function TrueNASDatasetsTab({ assetId, poolSizes }: Props) {
+  const t = useTranslations("devices-truenas.datasets");
+  const k = useTranslations("devices-proxmox.kit");
+  const { data: datasets, loading, error, refresh } = useTrueNASList<TrueNASDataset>(assetId, "datasets");
+  const [sort, setSort] = useState<DatasetSort>({ key: "used", dir: "desc" });
+  const action = useTrueNASAction();
+  const { ask, dialog } = useDiConfirm();
 
-  const doDelete = useCallback(
-    async (id: string) => {
-      const seq = ++actionSeq.current;
-      setActionError(null);
-      setActionInFlight(`delete-${id}`);
-      setConfirmDelete(null);
-      try {
-        await truenasAction(
-          `/api/truenas/assets/${encodeURIComponent(assetId)}/datasets/${encodeURIComponent(id)}`,
-          "DELETE",
-        );
-        if (actionSeq.current === seq) refresh();
-      } catch (err) {
-        if (actionSeq.current === seq) {
-          setActionError(err instanceof Error ? err.message : "delete failed");
-        }
-      } finally {
-        if (actionSeq.current === seq) setActionInFlight(null);
-      }
-    },
-    [assetId, refresh],
-  );
+  const remove = (ds: TrueNASDataset) => {
+    ask({
+      title: t("deleteTitle", { name: ds.name }),
+      message: t("deleteBody"),
+      confirmLabel: t("deleteConfirm"),
+      onConfirm: () => action.run(ds.name, () => truenasAction(
+        `/api/truenas/assets/${encodeURIComponent(assetId)}/datasets/${encodeURIComponent(ds.id)}`,
+        "DELETE",
+      ), refresh),
+    });
+  };
 
-  if (loading && datasets.length === 0) {
-    return <Card><p className="text-sm text-[var(--muted)]">Loading datasets…</p></Card>;
-  }
+  const meter = (ds: TrueNASDataset) => {
+    const pool = poolSizes?.get(ds.name.split("/")[0]);
+    if (pool) return percentOf(ds.used, pool);
+    return percentOf(ds.used, (ds.used ?? 0) + (ds.available ?? 0));
+  };
 
-  if (error && datasets.length === 0) {
-    return <Card><p className="text-sm text-[var(--bad)]">{error}</p></Card>;
-  }
+  const grey = (ds: TrueNASDataset) => {
+    const quotaPct = ds.quota && ds.quota > 0 ? percentOf(ds.used, ds.quota) : null;
+    return (
+      <DiDots
+        parts={[
+          ds.mountpoint ? <span className="di-mono">{ds.mountpoint}</span> : null,
+          ds.compression,
+          ds.quota && ds.quota > 0
+            ? (quotaPct != null ? t("quotaPct", { size: sizeText(ds.quota), pct: Math.round(quotaPct) }) : t("quota", { size: sizeText(ds.quota) }))
+            : null,
+          ds.readonly ? t("readOnly") : null,
+        ]}
+      />
+    );
+  };
 
+  const rows = sortDatasets(datasets, sort);
   return (
-    <Card>
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-medium text-[var(--text)]">Datasets</h2>
-        <Button size="sm" variant="ghost" onClick={refresh} disabled={loading}>
-          {loading ? "Refreshing…" : "Refresh"}
-        </Button>
-      </div>
-      {actionError ? <p className="mb-3 text-xs text-[var(--bad)]">{actionError}</p> : null}
-      {datasets.length === 0 ? (
-        <p className="text-sm text-[var(--muted)]">No datasets found.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-[var(--line)]">
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Name</th>
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Used</th>
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Available</th>
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Quota</th>
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Compression</th>
-                <th className="py-2 text-left font-medium text-[var(--muted)]">Mountpoint</th>
-                <th className="py-2 text-left font-medium text-[var(--muted)]">RO</th>
-                <th className="py-2 text-right font-medium text-[var(--muted)]">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--line)]">
-              {datasets.map((ds) => {
-                const depth = datasetDepth(ds.name);
-                const shortName = datasetShortName(ds.name);
-                const quotaUsedPct =
-                  ds.quota && ds.quota > 0 && ds.used != null
-                    ? Math.min(100, Math.round((ds.used / ds.quota) * 100))
-                    : null;
-                return (
-                  <tr key={ds.id}>
-                    <td className="py-2 text-[var(--text)] max-w-[200px]">
-                      <div style={{ paddingLeft: `${depth * 12}px` }}>
-                        <span className="font-medium">{shortName}</span>
-                      </div>
-                    </td>
-                    <td className="py-2 text-[var(--muted)]">
-                      {ds.used != null ? formatBytes(ds.used) : "--"}
-                    </td>
-                    <td className="py-2 text-[var(--muted)]">
-                      {ds.available != null ? formatBytes(ds.available) : "--"}
-                    </td>
-                    <td className="py-2 text-[var(--muted)]">
-                      {ds.quota && ds.quota > 0 ? (
-                        <div>
-                          <span>{formatBytes(ds.quota)}</span>
-                          {quotaUsedPct !== null ? (
-                            <div className="mt-1 h-1 w-16 rounded-full bg-[var(--surface)] overflow-hidden">
-                              <div
-                                className={`h-full rounded-full ${
-                                  quotaUsedPct >= 90
-                                    ? "bg-[var(--bad)]"
-                                    : quotaUsedPct >= 75
-                                      ? "bg-[var(--warn)]"
-                                      : "bg-[var(--ok)]"
-                                }`}
-                                style={{ width: `${quotaUsedPct}%` }}
-                              />
-                            </div>
-                          ) : null}
-                        </div>
-                      ) : (
-                        "--"
-                      )}
-                    </td>
-                    <td className="py-2 text-[var(--muted)]">{ds.compression ?? "--"}</td>
-                    <td className="py-2 text-[var(--muted)] max-w-[180px] truncate">
-                      {ds.mountpoint ?? "--"}
-                    </td>
-                    <td className="py-2 text-[var(--muted)]">{ds.readonly ? "yes" : "no"}</td>
-                    <td className="py-2 text-right">
-                      {confirmDelete === ds.id ? (
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            loading={actionInFlight === `delete-${ds.id}`}
-                            onClick={() => { void doDelete(ds.id); }}
-                          >
-                            Confirm
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setConfirmDelete(null)}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={!!actionInFlight}
-                          onClick={() => setConfirmDelete(ds.id)}
-                        >
-                          Delete
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Card>
+    <>
+      <TnFailure message={action.error ? t("deleteFailed", { name: action.error.key, reason: failureText(action.error.message, t("noReason")) }) : null} />
+      <DiList
+        label={t("label")}
+        cols="minmax(0, 1fr) minmax(48px, 160px) 72px 80px 28px"
+        colsM="minmax(0, 1fr) minmax(48px, 120px) 72px 28px"
+        colsS="minmax(0, 1fr) 72px 28px"
+      >
+        <DiCols>
+          <DiSortHead id="name" label={t("colName")} sort={sort} onSort={(next) => setSort(next as DatasetSort)} />
+          <span className="di-s" />
+          <DiSortHead id="used" label={t("colUsed")} sort={sort} onSort={(next) => setSort(next as DatasetSort)} right />
+          <span className="r di-m">{t("colAvailable")}</span>
+          <span />
+        </DiCols>
+        <TnListState loading={loading} error={error} count={datasets.length} empty={t("empty")} onRetry={refresh} failed={(reason) => t("loadFailed", { reason })} />
+        {rows.map((ds) => (
+          <DiRow key={ds.id}>
+            <DiMain name={ds.name} mono grey={grey(ds)} />
+            <DiMeter pct={meter(ds)} className="di-s" />
+            <SizeCell bytes={ds.used} />
+            <SizeCell bytes={ds.available} className="di-m" />
+            <DiRowMenu
+              label={k("actionsFor", { name: ds.name })}
+              items={[{ label: t("delete"), danger: true, disabled: action.busy !== null, onSelect: () => remove(ds) }]}
+            />
+          </DiRow>
+        ))}
+      </DiList>
+      {dialog}
+    </>
   );
 }

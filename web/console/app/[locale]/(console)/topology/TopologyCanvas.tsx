@@ -313,7 +313,7 @@ function TopologyCanvasInner({
   }, [topology.zones, onZoneMove, fitView]);
 
   return (
-    <div className="h-full w-full" onContextMenu={(e) => e.preventDefault()}>
+    <div className="mp-rf" onContextMenu={(e) => e.preventDefault()}>
     <ReactFlow
       nodes={nodes}
       edges={edges}
@@ -339,22 +339,9 @@ function TopologyCanvasInner({
       selectNodesOnDrag={false}
       proOptions={{ hideAttribution: true }}
     >
-      <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="var(--surface)" />
-      <Controls
-        showInteractive={false}
-        className="!bg-[var(--panel-glass)] !border-[var(--panel-border)] !shadow-none !rounded-[var(--radius-md)] [&>button]:!bg-transparent [&>button]:!border-[var(--line)] [&>button]:!text-[var(--muted)] [&>button:hover]:!bg-[var(--hover)]"
-        style={{ backdropFilter: "blur(var(--blur-sm))", WebkitBackdropFilter: "blur(var(--blur-sm))" }}
-      />
-      <MiniMap
-        style={{
-          background: "var(--panel-glass)",
-          border: "1px solid var(--panel-border)",
-          borderRadius: "var(--radius-md)",
-          backdropFilter: "blur(8px)",
-          WebkitBackdropFilter: "blur(8px)",
-        }}
-        maskColor="rgba(0,0,0,0.6)"
-      />
+      <Background variant={BackgroundVariant.Dots} gap={24} size={1} className="mp-dots-bg" />
+      <Controls showInteractive={false} className="mp-rf-ctl" />
+      <MiniMap className="mp-rf-mini" maskColor="var(--scrim)" pannable zoomable />
     </ReactFlow>
     <TopologyContextMenu
       target={contextMenu}

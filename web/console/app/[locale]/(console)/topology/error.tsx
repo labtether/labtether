@@ -11,9 +11,10 @@ export default function TopologyError({
   reset: () => void;
 }) {
   const t = useTranslations("common");
+  const tm = useTranslations("topology");
 
   useEffect(() => {
-    console.error("Topology section error:", error);
+    console.error("Map section error:", error);
   }, [error]);
 
   return (
@@ -36,7 +37,7 @@ export default function TopologyError({
           margin: 0,
         }}
       >
-        {t("errorBoundary.sectionTitle", { section: "Topology" })}
+        {t("errorBoundary.sectionTitle", { section: tm("title") })}
       </h2>
       <p
         style={{

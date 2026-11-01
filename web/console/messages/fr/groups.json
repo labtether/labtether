@@ -1,31 +1,68 @@
 {
   "title": "Groupes",
-  "subtitle": "Gérer les groupes utilisés pour les appareils, la topologie, les alertes et la fiabilité",
-  "manage": "Gérer",
-  "done": "Terminé",
   "newGroup": "Nouveau groupe",
-  "expandAll": "Tout développer",
-  "collapseAll": "Tout réduire",
-  "empty": {
-    "title": "Aucun groupe pour le moment",
-    "description": "Créez votre premier groupe pour organiser les appareils.",
-    "action": "Créer un groupe"
+  "list": {
+    "group": "Groupe",
+    "devices": "Appareils",
+    "namesMore": "{names} +{count}",
+    "noDevices": "Aucun appareil propre",
+    "through": "Via {hosts}",
+    "ungrouped": "Hors groupe",
+    "fold": "Replier {name}",
+    "unfold": "Déplier {name}",
+    "actions": "Actions",
+    "actionsFor": "Actions pour {name}",
+    "more": "Plus",
+    "expandAll": "Tout déplier",
+    "collapseAll": "Tout replier",
+    "empty": "Aucun groupe"
   },
-  "dropToRoot": "Déposer ici pour déplacer au niveau supérieur",
-  "editModal": {
-    "title": "Modifier le groupe",
+  "menu": {
+    "edit": "Modifier…",
+    "child": "Nouveau groupe à l’intérieur…",
+    "delete": "Supprimer…"
+  },
+  "form": {
     "name": "Nom",
-    "parentGroup": "Groupe parent",
-    "jumpChain": "Accès réseau — Chaîne de rebond",
-    "saving": "Enregistrement..."
+    "slug": "Slug",
+    "inside": "Dans",
+    "none": "Aucun",
+    "topLevel": "Premier niveau",
+    "deep": "Les groupes à plus de {levels} niveaux de profondeur ralentissent le tableau de bord."
   },
   "create": {
-    "nameSlugRequired": "Le nom et le slug sont requis."
+    "title": "Nouveau groupe",
+    "submit": "Créer le groupe"
   },
   "edit": {
-    "nameRequired": "Le nom est requis."
+    "title": "Modifier {name}",
+    "submit": "Enregistrer"
   },
   "delete": {
-    "confirmHint": "Saisissez le nom exact du groupe pour confirmer."
+    "title": "Supprimer {name}\u00a0?",
+    "submit": "Supprimer le groupe",
+    "devices": "{count, plural, one {# appareil n’est} other {# appareils ne sont}} plus dans aucun groupe.",
+    "noDevices": "Il ne contient aucun appareil.",
+    "childrenInto": "{names} {count, plural, one {passe} other {passent}} dans {parent}.",
+    "childrenTop": "{names} {count, plural, one {passe} other {passent}} au premier niveau."
+  },
+  "jump": {
+    "title": "Atteindre via",
+    "direct": "Direct",
+    "host": "Hôte {n}",
+    "port": "Port {n}",
+    "username": "Utilisateur {n}",
+    "usernameHint": "Utilisateur",
+    "login": "Identifiant SSH {n}",
+    "noLogin": "Aucun identifiant enregistré",
+    "remove": "Retirer le rebond {n}",
+    "add": "Ajouter un rebond"
+  },
+  "errors": {
+    "nameEmpty": "Saisissez un nom",
+    "slugEmpty": "Saisissez un slug",
+    "createFailed": "Le groupe n’a pas été créé.",
+    "saveFailed": "Le groupe n’a pas été enregistré.",
+    "deleteFailed": "Le groupe n’a pas été supprimé."
   }
 }

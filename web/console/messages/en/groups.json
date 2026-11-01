@@ -1,31 +1,68 @@
 {
   "title": "Groups",
-  "subtitle": "Manage groups used across devices, topology, alerts, and reliability",
-  "manage": "Manage",
-  "done": "Done",
-  "newGroup": "New Group",
-  "expandAll": "Expand all",
-  "collapseAll": "Collapse all",
-  "empty": {
-    "title": "No groups yet",
-    "description": "Create your first group to organize devices.",
-    "action": "Create Group"
+  "newGroup": "New group",
+  "list": {
+    "group": "Group",
+    "devices": "Devices",
+    "namesMore": "{names} +{count}",
+    "noDevices": "No devices of its own",
+    "through": "Through {hosts}",
+    "ungrouped": "Not in a group",
+    "fold": "Fold {name}",
+    "unfold": "Unfold {name}",
+    "actions": "Actions",
+    "actionsFor": "Actions for {name}",
+    "more": "More",
+    "expandAll": "Unfold all",
+    "collapseAll": "Fold all",
+    "empty": "No groups"
   },
-  "dropToRoot": "Drop here to move to top level",
-  "editModal": {
-    "title": "Edit Group",
+  "menu": {
+    "edit": "Edit…",
+    "child": "New group inside…",
+    "delete": "Delete…"
+  },
+  "form": {
     "name": "Name",
-    "parentGroup": "Parent Group",
-    "jumpChain": "Network Access — Jump Chain",
-    "saving": "Saving..."
+    "slug": "Slug",
+    "inside": "Inside",
+    "none": "None",
+    "topLevel": "Top level",
+    "deep": "Groups more than {levels} levels deep slow down the dashboard."
   },
   "create": {
-    "nameSlugRequired": "Name and slug are required."
+    "title": "New group",
+    "submit": "Create group"
   },
   "edit": {
-    "nameRequired": "Name is required."
+    "title": "Edit {name}",
+    "submit": "Save"
   },
   "delete": {
-    "confirmHint": "Type the group name exactly to confirm."
+    "title": "Delete {name}?",
+    "submit": "Delete group",
+    "devices": "{count, plural, one {# device becomes} other {# devices become}} ungrouped.",
+    "noDevices": "No devices are in it.",
+    "childrenInto": "{names} {count, plural, one {moves} other {move}} into {parent}.",
+    "childrenTop": "{names} {count, plural, one {moves} other {move}} to the top level."
+  },
+  "jump": {
+    "title": "Reach through",
+    "direct": "Direct",
+    "host": "Host {n}",
+    "port": "Port {n}",
+    "username": "Username {n}",
+    "usernameHint": "Username",
+    "login": "SSH login {n}",
+    "noLogin": "No saved login",
+    "remove": "Remove hop {n}",
+    "add": "Add hop"
+  },
+  "errors": {
+    "nameEmpty": "Enter a name",
+    "slugEmpty": "Enter a slug",
+    "createFailed": "The group was not created.",
+    "saveFailed": "The group was not saved.",
+    "deleteFailed": "The group was not deleted."
   }
 }

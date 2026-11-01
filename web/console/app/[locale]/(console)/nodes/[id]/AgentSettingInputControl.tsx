@@ -1,6 +1,5 @@
 "use client";
 
-import { Input, Select } from "../../../../components/ui/Input";
 import type { AgentSettingEntry } from "./agentSettingsModel";
 
 type AgentSettingInputControlSetting = Pick<
@@ -15,6 +14,7 @@ type AgentSettingInputControlProps = {
   onChange: (key: string, value: string) => void;
 };
 
+/** One agent setting's control, named by the setting's own label. Read-only settings show their value, secrets masked. */
 export function AgentSettingInputControl({
   setting,
   currentValue,
@@ -22,8 +22,9 @@ export function AgentSettingInputControl({
   onChange,
 }: AgentSettingInputControlProps) {
   if (!editable) {
-	return (
-      <Input
+    return (
+      <input
+        className="dv-input"
         aria-label={setting.label}
         type={setting.sensitive ? "password" : "text"}
         value={currentValue}
@@ -32,40 +33,28 @@ export function AgentSettingInputControl({
     );
   }
 
-  if (setting.type === "bool") {
+  if (setting.type === "bool" || setting.type === "enum") {
+    const options = setting.type === "bool" ? ["true", "false"] : (setting.allowed_values ?? []);
     return (
-      <Select
+      <select
+        className="dv-input"
         aria-label={setting.label}
         value={currentValue}
         onChange={(event) => onChange(setting.key, event.target.value)}
-        className="w-full"
       >
-        <option value="true">true</option>
-        <option value="false">false</option>
-      </Select>
-    );
-  }
-
-  if (setting.type === "enum") {
-    return (
-      <Select
-        aria-label={setting.label}
-        value={currentValue}
-        onChange={(event) => onChange(setting.key, event.target.value)}
-        className="w-full"
-      >
-        {(setting.allowed_values ?? []).map((option) => (
+        {options.map((option) => (
           <option key={option} value={option}>
             {option}
           </option>
         ))}
-      </Select>
+      </select>
     );
   }
 
   if (setting.type === "int") {
     return (
-      <Input
+      <input
+        className="dv-input"
         aria-label={setting.label}
         type="number"
         min={setting.min_int}
@@ -77,13 +66,15 @@ export function AgentSettingInputControl({
   }
 
   return (
-    <Input
-	  aria-label={setting.label}
-	  type={setting.sensitive ? "password" : "text"}
-	  autoComplete={setting.sensitive ? "new-password" : undefined}
-	  placeholder={setting.sensitive && setting.configured ? "•••••••• (unchanged)" : undefined}
+    <input
+      className={`dv-input${setting.sensitive ? " dv-mono" : ""}`}
+      aria-label={setting.label}
+      type={setting.sensitive ? "password" : "text"}
+      autoComplete={setting.sensitive ? "new-password" : undefined}
+      placeholder={setting.sensitive && setting.configured ? "••••••••" : undefined}
       value={currentValue}
       onChange={(event) => onChange(setting.key, event.target.value)}
+      spellCheck={false}
     />
   );
 }

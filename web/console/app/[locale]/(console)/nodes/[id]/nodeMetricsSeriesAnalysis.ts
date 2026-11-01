@@ -8,10 +8,15 @@ import { valueToChartY } from "./nodeMetricsChartGeometry";
 import { formatDurationSeconds } from "./nodeMetricsPresentationModel";
 import type { QualityTone } from "./nodeMetricsPresentationModel";
 
+export type QualityFlagKind = "sparse" | "stale" | "flatline" | "noisy" | "outlier" | "gaps";
+
 export type QualityFlag = {
+  kind: QualityFlagKind;
   label: string;
   tone: QualityTone;
   detail: string;
+  /** For stale and gaps: how far behind the last sample is, or the longest gap, in seconds. */
+  seconds?: number;
 };
 
 export type AnalyzedSeries = {
@@ -36,12 +41,12 @@ export type AnalyzedSeries = {
 };
 
 const METRIC_LABELS: Readonly<Record<string, string>> = {
-  cpu_used_percent: "CPU Usage",
-  memory_used_percent: "Memory Usage",
-  disk_used_percent: "Disk Usage",
+  cpu_used_percent: "CPU",
+  memory_used_percent: "Memory",
+  disk_used_percent: "Disk",
   temperature_celsius: "Temperature",
-  network_rx_bytes_per_sec: "Network RX",
-  network_tx_bytes_per_sec: "Network TX",
+  network_rx_bytes_per_sec: "Network in",
+  network_tx_bytes_per_sec: "Network out",
 };
 
 const METRIC_ORDER: Readonly<Record<string, number>> = {
@@ -224,6 +229,7 @@ function analyzeSeries(
   const flags: QualityFlag[] = [];
   if (rawPoints.length < 4) {
     flags.push({
+      kind: "sparse",
       label: "Sparse",
       tone: "info",
       detail: "Low sample count in this time window.",
@@ -245,9 +251,11 @@ function analyzeSeries(
     const streamLagSeconds = latestTsAcrossSeries - lastTs;
     if (streamLagSeconds > stepSeconds * 3) {
       flags.push({
+        kind: "stale",
         label: "Stale",
         tone: streamLagSeconds > stepSeconds * 6 ? "bad" : "warn",
         detail: `Latest sample is ${formatDurationSeconds(streamLagSeconds)} behind.`,
+        seconds: streamLagSeconds,
       });
     }
   }
@@ -261,6 +269,7 @@ function analyzeSeries(
         : Math.max(Math.abs(avg) * 0.01, 0.05);
   if (rawPoints.length >= 8 && range <= flatTolerance) {
     flags.push({
+      kind: "flatline",
       label: "Flatline",
       tone: "info",
       detail: "Signal has negligible variance across the selected window.",
@@ -278,6 +287,7 @@ function analyzeSeries(
         : 0;
     if (range > 0 && avgDelta / range > 0.65) {
       flags.push({
+        kind: "noisy",
         label: "Noisy",
         tone: "warn",
         detail: "Step-to-step variance is high relative to total range.",
@@ -285,6 +295,7 @@ function analyzeSeries(
     }
     if (hasRobustOutlier(values)) {
       flags.push({
+        kind: "outlier",
         label: "Outlier",
         tone: "warn",
         detail: "One or more spikes are well outside typical values.",
@@ -299,9 +310,11 @@ function analyzeSeries(
     }
     if (largestGap > stepSeconds * 3) {
       flags.push({
+        kind: "gaps",
         label: "Gaps",
         tone: largestGap > stepSeconds * 6 ? "bad" : "warn",
         detail: `Largest collection gap is ${formatDurationSeconds(largestGap)}.`,
+        seconds: largestGap,
       });
     }
   }

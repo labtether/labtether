@@ -49,6 +49,24 @@ body {
   --bg-error: var(--bad-glow);
   --border-success: var(--ok);
   --bg-success: var(--ok-glow);
+
+  /* The mockup's names (lt-proto/app.css), so page CSS copied from the mockup resolves. Note: here --surface is a
+     faint fill; a sheet's background is --panel, and an input's is --field-bg. */
+  --fs-readout: 20px; --lh-readout: 28px;
+  --row-h: 36px;
+  --aside-w: 320px; --aside-gap: 32px;
+  --ease: var(--ease-out);
+  --t-fast: var(--dur-fast); --t: 140ms; --t-slow: var(--dur-normal);
+  --sans: var(--font-sans);
+  --mono: var(--font-mono);
+  --tree: color-mix(in srgb, var(--text-3) 70%, var(--canvas));
+  --rose: var(--accent);
+  --rose-hover: var(--accent-hover);
+  --rose-press: color-mix(in srgb, var(--accent) 86%, #000);
+  --bad-soft: var(--bad-glow);
+  --warn-soft: var(--warn-glow);
+  --elev-side: var(--side-elev);
+  --field-bg: var(--panel);
 }
 
 /* Dark (the default before the theme script runs). */
@@ -113,6 +131,27 @@ body[data-theme="dark"] {
   --side-pill: rgba(255, 255, 255, 0.1);
   --side-acct: rgba(255, 255, 255, 0.035);
   --scrim: rgba(0, 0, 0, 0.5);
+
+  /* Kit (mockup names): popovers, inputs, segmented thumb, tooltips, danger confirm, chart fill. */
+  --surface-2: var(--panel-glass);
+  --field-line: #2a2a30;
+  --ring: rgba(255, 255, 255, 0.1);
+  --ctl-hover: #202025;
+  --ctl-press: #16161a;
+  --thumb: #2c2c32;
+  --thumb-elev: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 1px 2px rgba(0, 0, 0, 0.5);
+  --tip-bg: #2c2c32;
+  --tip-text: #ededef;
+  --tip-elev: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 4px 12px -2px rgba(0, 0, 0, 0.5);
+  --bad-fill: #c8353b;
+  --chart-fill: rgba(143, 151, 247, 0.1);
+  --grid: rgba(255, 255, 255, 0.08);
+  --pill: rgba(255, 255, 255, 0.06);
+  --pill-text: #b4b4bc;
+  --term-bg: #111114;
+  --term-text: #e4e4e8;
+  --term-dim: #8b8b94;
+  --term-ok: #3dd68c;
 }
 
 body[data-theme="light"] {
@@ -174,6 +213,27 @@ body[data-theme="light"] {
   --side-pill: rgba(15, 15, 20, 0.07);
   --side-acct: rgba(15, 15, 20, 0.03);
   --scrim: rgba(10, 10, 12, 0.32);
+
+  /* Kit (mockup names): popovers, inputs, segmented thumb, tooltips, danger confirm, chart fill. */
+  --surface-2: var(--panel-glass);
+  --field-line: #e4e4e8;
+  --ring: rgba(15, 15, 20, 0.08);
+  --ctl-hover: #fafafa;
+  --ctl-press: #f3f3f4;
+  --thumb: #ffffff;
+  --thumb-elev: 0 1px 2px rgba(15, 15, 20, 0.1), 0 0 0 0.5px rgba(15, 15, 20, 0.1);
+  --tip-bg: #1f1f23;
+  --tip-text: #f4f4f5;
+  --tip-elev: 0 4px 12px -2px rgba(15, 15, 20, 0.2);
+  --bad-fill: #d42f2f;
+  --chart-fill: rgba(90, 99, 216, 0.08);
+  --grid: rgba(15, 15, 20, 0.08);
+  --pill: rgba(15, 15, 20, 0.05);
+  --pill-text: #4a4a53;
+  --term-bg: #0e0e10;
+  --term-text: #e4e4e8;
+  --term-dim: #8b8b94;
+  --term-ok: #3dd68c;
 }
 
 /* ── Accent variant: Deep Signal (a calm blue for the main button) ── */

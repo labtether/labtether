@@ -1,141 +1,113 @@
 "use client";
 
-import type { Dispatch, RefObject, SetStateAction } from "react";
 import { Ellipsis } from "lucide-react";
-import { REMOTE_SHORTCUTS } from "../../types/viewer";
-import type { RemoteViewToolbarProps } from "./types";
-import { IconButton } from "./ToolbarButtons";
-import { ToolbarDisplayPicker } from "./ToolbarDisplayControls";
-import {
-  ToolbarKeyboardGrab,
-  ToolbarPerformance,
-  ToolbarVirtualKeyboard,
-} from "./ToolbarInputControls";
-import {
-  ToolbarTransferControls,
-  type useToolbarTransferState,
-} from "./ToolbarTransferControls";
-import {
-  moreMenuActionButtonClass,
-  moreMenuRowStyle,
-  moreMenuSectionStyle,
-  moreMenuSectionTitleStyle,
-  moreMenuShortcutButtonStyle,
-} from "./toolbarStyles";
+import { useTranslations } from "next-intl";
+import type { RemoteViewToolbarProps, ScalingMode } from "./types";
+import { ToolCheck, ToolChoice, ToolItem, ToolLabel, ToolMenu, ToolSep } from "./ToolbarButtons";
 
-type MoreMenuProps = Pick<
-  RemoteViewToolbarProps,
-  | "onSendShortcut"
-  | "onCtrlAltDel"
-  | "keyboardGrabState"
-  | "onKeyboardGrabToggle"
-  | "onPerformanceOverlayToggle"
-  | "showPerformanceOverlay"
-  | "onClipboardPull"
-  | "onClipboardPush"
-  | "clipboardSyncing"
-  | "onFileDrawerToggle"
-  | "fileDrawerOpen"
-  | "fileDownloading"
-  | "onDownloadFile"
-  | "isTouchDevice"
-  | "onToggleVirtualKeyboard"
-  | "displays"
-  | "selectedDisplay"
-  | "onDisplayChange"
-> & {
-  menuRef: RefObject<HTMLDivElement | null>;
-  open: boolean;
-  setOpen: Dispatch<SetStateAction<boolean>>;
-  panelStyle: React.CSSProperties;
-  transfer: ReturnType<typeof useToolbarTransferState>;
+type MoreMenuProps = RemoteViewToolbarProps & {
+  onOpenChange: (open: boolean) => void;
+  overlay: boolean;
+  autoHide: boolean;
+  onAutoHideToggle: () => void;
+  position: "top" | "bottom";
+  onPositionToggle: () => void;
 };
 
-const groupStyle = {
-  ...moreMenuSectionStyle,
-  marginTop: 10,
-  paddingTop: 10,
-  borderTop: "1px solid rgba(255,255,255,0.08)",
-};
+const QUALITIES = ["low", "medium", "high"] as const;
+const SCALINGS: ScalingMode[] = ["fit", "native", "fill"];
 
+/**
+ * More: the screen's settings. Display (when there are several), scaling, quality, sound, the performance numbers,
+ * recording and view only; in full screen also where the toolbar sits and whether it hides.
+ */
 export function ToolbarMoreMenu(props: MoreMenuProps) {
-  const { menuRef, open, setOpen, panelStyle, transfer } = props;
-  const hasKeyboard =
-    props.keyboardGrabState &&
-    props.keyboardGrabState !== "unsupported" &&
-    props.onKeyboardGrabToggle;
-  const hasTransfer =
-    props.onClipboardPull ||
-    props.onClipboardPush ||
-    props.onFileDrawerToggle ||
-    props.onDownloadFile ||
-    (props.isTouchDevice && props.onToggleVirtualKeyboard);
-  const hasDisplay =
-    props.displays && props.displays.length > 1 && props.onDisplayChange;
-
+  const t = useTranslations("desktop.tools");
+  const displays = props.displays && props.displays.length > 1 && props.onDisplayChange ? props.displays : null;
+  const sound = props.onAudioToggle || props.audioUnavailable;
   return (
-    <div ref={menuRef} style={{ position: "relative", pointerEvents: "auto" }}>
-      <IconButton
-        onClick={() => setOpen((current) => !current)}
-        active={open}
-        title="More viewer tools"
-      >
-        <Ellipsis className="w-3.5 h-3.5" />
-      </IconButton>
-      {open && (
-        <div style={panelStyle}>
-          <div style={moreMenuSectionStyle}>
-            <span style={moreMenuSectionTitleStyle}>Shortcuts</span>
-            <div style={moreMenuRowStyle}>
-              {REMOTE_SHORTCUTS.map((shortcut) => (
-                <button
-                  key={shortcut.id}
-                  type="button"
-                  onClick={() => {
-                    if (props.onSendShortcut)
-                      props.onSendShortcut(shortcut.keysyms);
-                    else if (shortcut.id === "ctrl-alt-del")
-                      props.onCtrlAltDel();
-                    setOpen(false);
-                  }}
-                  title={shortcut.title}
-                  aria-label={shortcut.title}
-                  className={moreMenuActionButtonClass}
-                  style={moreMenuShortcutButtonStyle}
-                >
-                  {shortcut.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          {(hasKeyboard || props.onPerformanceOverlayToggle) && (
-            <div style={groupStyle}>
-              <span style={moreMenuSectionTitleStyle}>Viewer</span>
-              <div style={moreMenuRowStyle}>
-                <ToolbarKeyboardGrab {...props} />
-                <ToolbarPerformance {...props} />
-              </div>
-            </div>
-          )}
-          {hasTransfer && (
-            <div style={groupStyle}>
-              <span style={moreMenuSectionTitleStyle}>Transfer</span>
-              <div style={moreMenuRowStyle}>
-                <ToolbarTransferControls {...props} transfer={transfer} />
-                <ToolbarVirtualKeyboard {...props} />
-              </div>
-            </div>
-          )}
-          {hasDisplay && (
-            <div style={groupStyle}>
-              <span style={moreMenuSectionTitleStyle}>Display</span>
-              <div style={moreMenuRowStyle}>
-                <ToolbarDisplayPicker {...props} />
-              </div>
-            </div>
-          )}
+    <ToolMenu icon={<Ellipsis aria-hidden="true" />} label={t("more")} onOpenChange={props.onOpenChange}>
+      {displays ? (
+        <>
+          <ToolChoice
+            label={t("display")}
+            value={props.selectedDisplay || displays.find((d) => d.primary)?.name || displays[0].name}
+            options={displays.map((d) => ({
+              value: d.name,
+              label: t(d.primary ? "displayPrimary" : "displayItem", { name: d.name, width: d.width, height: d.height }),
+            }))}
+            onChange={(name) => props.onDisplayChange?.(name)}
+          />
+          <ToolSep />
+        </>
+      ) : null}
+      <ToolChoice
+        label={t("scaling")}
+        value={props.scalingMode}
+        options={SCALINGS.map((mode) => ({ value: mode, label: t(`scale.${mode}`) }))}
+        onChange={props.onScalingModeChange}
+      />
+      <ToolSep />
+      <ToolChoice
+        label={t("quality")}
+        value={props.quality}
+        options={QUALITIES.map((q) => ({ value: q, label: t(`q.${q}`) }))}
+        onChange={props.onQualityChange}
+      />
+      {props.onAdaptiveQualityToggle ? (
+        <ToolCheck checked={!!props.adaptiveQualityEnabled} onChange={props.onAdaptiveQualityToggle}>
+          {t("autoQuality")}
+        </ToolCheck>
+      ) : null}
+      {props.qualitySuggestion && props.onQualitySuggestionApply ? (
+        <ToolItem onSelect={props.onQualitySuggestionApply}>
+          {t(props.qualitySuggestion === "upgrade" ? "raiseQuality" : "lowerQuality")}
+        </ToolItem>
+      ) : null}
+      <ToolSep />
+      {sound ? (
+        <ToolCheck
+          checked={!props.audioMuted && !props.audioUnavailable}
+          onChange={props.onAudioToggle ?? (() => {})}
+          disabled={props.audioUnavailable}
+        >
+          {t(props.audioUnavailable ? "soundUnavailable" : "sound")}
+        </ToolCheck>
+      ) : null}
+      {sound && props.onVolumeChange && !props.audioUnavailable ? (
+        <div className="rv-vol">
+          <input
+            type="range"
+            aria-label={t("volume")}
+            min={0}
+            max={1}
+            step={0.05}
+            value={Math.max(0, Math.min(1, props.volume ?? 1))}
+            onChange={(event) => props.onVolumeChange?.(Number(event.target.value))}
+          />
         </div>
-      )}
-    </div>
+      ) : null}
+      {props.onPerformanceOverlayToggle ? (
+        <ToolCheck checked={!!props.showPerformanceOverlay} onChange={props.onPerformanceOverlayToggle} hint="Ctrl+F1">
+          {t("performance")}
+        </ToolCheck>
+      ) : null}
+      {props.onToggleRecording ? (
+        <ToolItem onSelect={props.onToggleRecording}>{t(props.recording ? "stopRecording" : "record")}</ToolItem>
+      ) : null}
+      <ToolCheck checked={props.viewOnly} onChange={props.onViewOnlyToggle}>
+        {t("viewOnly")}
+      </ToolCheck>
+      {props.overlay ? (
+        <>
+          <ToolSep />
+          <ToolLabel>{t("toolbar")}</ToolLabel>
+          <ToolCheck checked={props.autoHide} onChange={props.onAutoHideToggle}>
+            {t("autoHide")}
+          </ToolCheck>
+          <ToolItem onSelect={props.onPositionToggle}>{t(props.position === "top" ? "moveBottom" : "moveTop")}</ToolItem>
+        </>
+      ) : null}
+    </ToolMenu>
   );
 }

@@ -1,342 +1,153 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
-import { Pencil, Sparkles } from "lucide-react";
-import { Badge } from "../../../components/ui/Badge";
-import { Button } from "../../../components/ui/Button";
-import { Card } from "../../../components/ui/Card";
-import { EmptyState } from "../../../components/ui/EmptyState";
-import { formatMetadataLabel } from "../../../console/formatters";
-import type { AlertRule, AlertRuleTemplate, Asset, Group } from "../../../console/models";
-import { useFastStatus, useGroupLabelByID, useSlowStatus } from "../../../contexts/StatusContext";
-import { type RuleFormState, createRuleFormState, formStateFromTemplate } from "./alertRuleFormState";
+import { ArrowDown, ArrowUp } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useMemo, useState } from "react";
+import { ConfirmDialog } from "../../../components/ui/ConfirmDialog";
+import type { AlertInstance, AlertRule, AlertRuleTemplate } from "../../../console/models";
+import { useFastStatus, useSlowStatus } from "../../../contexts/StatusContext";
+import { useToast } from "../../../contexts/ToastContext";
 import { AlertRuleEditor } from "./AlertRuleEditor";
+import { AlertRuleRow } from "./AlertRuleRow";
+import { createRuleFormState, formStateFromRule } from "./alertRuleFormState";
+import { RULE_SHOWS, ruleShown, ruleTargets, visibleRules, type RuleShow, type RuleSort, type RuleSortKey } from "./rulesModel";
 
-type AlertRulesTabProps = {
+/** Which rule is open: the editor for a new one (seq tells one "New rule" click from the next), or a rule's facts. */
+export type RuleOpen = { kind: "new"; seq: number; from: AlertRule | null } | { kind: "rule"; id: string } | null;
+
+type Props = {
+  loading: boolean;
   rules: AlertRule[];
   templates: AlertRuleTemplate[];
-  highlightedRuleId: string | null;
-  onHighlightedRuleIdChange: (ruleId: string | null) => void;
+  instances: AlertInstance[];
+  open: RuleOpen;
+  onOpen: (open: RuleOpen) => void;
   createRule: (rule: Record<string, unknown>) => Promise<void>;
   deleteRule: (id: string) => Promise<void>;
 };
 
-function describeRuleTargets(rule: AlertRule, assetsByID: Map<string, Asset>, groupsByID: Map<string, Group>): string {
-  if (rule.target_scope === "global") {
-    return "Global";
-  }
-  if (!Array.isArray(rule.targets) || rule.targets.length === 0) {
-    return formatMetadataLabel(rule.target_scope);
-  }
-
-  const labels = rule.targets.map((target) => {
-    if (target.asset_id) {
-      const asset = assetsByID.get(target.asset_id);
-      return asset?.name ?? target.asset_id;
-    }
-    if (target.group_id) {
-      const group = groupsByID.get(target.group_id);
-      return group?.name ?? target.group_id;
-    }
-    return target.id;
-  });
-
-  return labels.join(", ");
-}
-
-export function AlertRulesTab({
-  rules,
-  templates,
-  highlightedRuleId,
-  onHighlightedRuleIdChange,
-  createRule,
-  deleteRule,
-}: AlertRulesTabProps) {
+/** Rules as a 2.0 list: On/Off filter, sortable columns; a row opens its facts, New rule opens the editor on top. */
+export function AlertRulesTab({ loading, rules, templates, instances, open, onOpen, createRule, deleteRule }: Props) {
+  const t = useTranslations("alerts.rules");
+  const { addToast } = useToast();
   const status = useFastStatus();
-  const slowStatus = useSlowStatus();
-  const groupLabelByID = useGroupLabelByID();
-  const [showRuleForm, setShowRuleForm] = useState(false);
-  const [ruleForm, setRuleForm] = useState<RuleFormState>(createRuleFormState());
-  const [ruleSubmitting, setRuleSubmitting] = useState(false);
-  const [ruleError, setRuleError] = useState<string | null>(null);
-  const [presetId, setPresetId] = useState<string | null>(null);
+  const slow = useSlowStatus();
+  const [show, setShow] = useState<RuleShow>("all");
+  const [sort, setSort] = useState<RuleSort>({ key: "name", dir: 1 });
+  const [deleting, setDeleting] = useState<AlertRule | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
-  const assets = useMemo(() => (
-    [...(status?.assets ?? [])].sort((left, right) => left.name.localeCompare(right.name))
-  ), [status?.assets]);
-  const groups = useMemo(() => (
-    [...(slowStatus?.groups ?? [])].sort((left, right) => left.name.localeCompare(right.name))
-  ), [slowStatus?.groups]);
+  const assets = useMemo(() => [...(status?.assets ?? [])].sort((a, b) => a.name.localeCompare(b.name)), [status?.assets]);
+  const groups = useMemo(() => [...(slow?.groups ?? [])].sort((a, b) => a.name.localeCompare(b.name)), [slow?.groups]);
+  const assetsByID = useMemo(() => new Map(assets.map((a) => [a.id, a])), [assets]);
+  const groupsByID = useMemo(() => new Map(groups.map((g) => [g.id, g])), [groups]);
+  const scopeLabel = (rule: AlertRule) => {
+    const target = ruleTargets(rule, assetsByID, groupsByID);
+    return "all" in target ? t("everything") : target.names.join(", ") || t(`scope.${rule.target_scope}`);
+  };
+  const shown = visibleRules(rules, show, sort, scopeLabel);
+  const alertCount = (rule: AlertRule) => instances.filter((a) => a.rule_id === rule.id).length;
 
-  const assetsByID = useMemo(() => new Map(assets.map((asset) => [asset.id, asset])), [assets]);
-  const groupsByID = useMemo(() => new Map(groups.map((group) => [group.id, group])), [groups]);
-  const sortedTemplates = useMemo(() => {
-    return [...templates].sort((left, right) => {
-      const leftStarter = left.metadata?.category === "starter" ? 0 : 1;
-      const rightStarter = right.metadata?.category === "starter" ? 0 : 1;
-      if (leftStarter !== rightStarter) {
-        return leftStarter - rightStarter;
-      }
-      return left.name.localeCompare(right.name);
-    });
-  }, [templates]);
-  const selectedPreset = presetId ? sortedTemplates.find((template) => template.id === presetId) ?? null : null;
-  const targetOptions = ruleForm.targetType === "asset" ? assets : groups;
+  const sortBy = (key: RuleSortKey) => setSort((s) => ({ key, dir: s.key === key ? (s.dir === 1 ? -1 : 1) : 1 }));
+  const head = (key: RuleSortKey) => (
+    <button type="button" className={`al-sort${sort.key === key ? " on" : ""}`} onClick={() => sortBy(key)}>
+      {t(`cols.${key}`)}
+      {sort.key === key ? (sort.dir === 1 ? <ArrowDown aria-hidden="true" /> : <ArrowUp aria-hidden="true" />) : null}
+    </button>
+  );
 
-  function setField<K extends keyof RuleFormState>(field: K, value: RuleFormState[K]) {
-    setRuleForm((current) => ({ ...current, [field]: value }));
-  }
-
-  function resetRuleForm() {
-    setRuleForm(createRuleFormState());
-    setRuleError(null);
-    setRuleSubmitting(false);
-    setPresetId(null);
-  }
-
-  function openBlankForm() {
-    setShowRuleForm(true);
-    resetRuleForm();
-  }
-
-  function applyPreset(template: AlertRuleTemplate) {
-    setShowRuleForm(true);
-    setRuleError(null);
-    setRuleSubmitting(false);
-    setPresetId(template.id);
-    setRuleForm(formStateFromTemplate(template));
-  }
-
-  function validateAndBuildCondition(): Record<string, unknown> | null {
-    switch (ruleForm.kind) {
-      case "metric_threshold":
-        if (!ruleForm.metric.trim()) {
-          setRuleError("Metric name is required for metric threshold rules.");
-          return null;
-        }
-        return {
-          metric: ruleForm.metric.trim(),
-          operator: ruleForm.operator,
-          value: ruleForm.thresholdValue,
-          aggregate: ruleForm.aggregate,
-        };
-      case "metric_deadman":
-        if (!ruleForm.metric.trim()) {
-          setRuleError("Metric name is required for deadman rules.");
-          return null;
-        }
-        return {
-          metric: ruleForm.metric.trim(),
-          max_silence_seconds: ruleForm.maxSilenceSeconds,
-        };
-      case "heartbeat_stale":
-        return { max_stale_seconds: ruleForm.maxStaleSeconds };
-      case "log_pattern":
-        if (!ruleForm.pattern.trim()) {
-          setRuleError("Pattern is required for log pattern rules.");
-          return null;
-        }
-        return {
-          pattern: ruleForm.pattern.trim(),
-          min_occurrences: ruleForm.minOccurrences,
-        };
-      case "synthetic_check":
-        if (!ruleForm.checkId.trim()) {
-          setRuleError("Check ID is required for synthetic check rules.");
-          return null;
-        }
-        return {
-          check_id: ruleForm.checkId.trim(),
-          consecutive_failures: ruleForm.consecutiveFailures,
-        };
-      case "composite": {
-        const ruleIDs = ruleForm.subRuleIds.split(",").map((value) => value.trim()).filter(Boolean);
-        if (ruleIDs.length === 0) {
-          setRuleError("Add at least one sub-rule ID for composite rules.");
-          return null;
-        }
-        return {
-          rule_ids: ruleIDs,
-          operator: ruleForm.compositeOperator,
-        };
-      }
-    }
-  }
-
-  async function handleCreateRule(event: FormEvent) {
-    event.preventDefault();
-    setRuleError(null);
-
-    if (!ruleForm.name.trim()) {
-      setRuleError("Rule name is required.");
-      return;
-    }
-    if (ruleForm.targetType !== "global" && !ruleForm.targetId.trim()) {
-      const article = ruleForm.targetType === "asset" ? "an" : "a";
-      setRuleError(`Choose ${article} ${ruleForm.targetType} target for this rule.`);
-      return;
-    }
-
-    const condition = validateAndBuildCondition();
-    if (!condition) {
-      return;
-    }
-
-    const payload: Record<string, unknown> = {
-      name: ruleForm.name.trim(),
-      description: ruleForm.description.trim(),
-      kind: ruleForm.kind,
-      severity: ruleForm.severity,
-      status: "active",
-      target_scope: ruleForm.targetType,
-      window_seconds: ruleForm.windowSeconds,
-      cooldown_seconds: ruleForm.cooldownSeconds,
-      reopen_after_seconds: ruleForm.reopenAfterSeconds,
-      evaluation_interval_seconds: ruleForm.evaluationIntervalSeconds,
-      condition,
-    };
-
-    if (ruleForm.targetType === "asset") {
-      payload.targets = [{ asset_id: ruleForm.targetId.trim() }];
-    } else if (ruleForm.targetType === "group") {
-      payload.targets = [{ group_id: ruleForm.targetId.trim() }];
-    }
-
-    setRuleSubmitting(true);
+  async function confirmDelete() {
+    if (!deleting) return;
+    setDeleteBusy(true);
     try {
-      await createRule(payload);
-      resetRuleForm();
-      setShowRuleForm(false);
+      await deleteRule(deleting.id);
+      addToast("success", t("deleted", { name: deleting.name }));
+      if (open?.kind === "rule" && open.id === deleting.id) onOpen(null);
+      setDeleting(null);
     } catch (err) {
-      setRuleError(err instanceof Error ? err.message : "Could not create rule");
+      addToast("error", err instanceof Error && err.message ? err.message : t("deleteFailed"));
     } finally {
-      setRuleSubmitting(false);
+      setDeleteBusy(false);
     }
   }
 
-  async function handleDeleteRule(id: string) {
-    try {
-      await deleteRule(id);
-    } catch {
-      // Preserve the existing quiet failure behavior in this list action.
-    }
-  }
+  const editor = open?.kind === "new" ? (
+    <AlertRuleEditor
+      key={open.seq}
+      initial={open.from ? formStateFromRule(open.from) : createRuleFormState()}
+      templates={templates}
+      rules={rules}
+      assets={assets}
+      groups={groups}
+      onCancel={() => onOpen(null)}
+      onSubmit={async (payload, name) => {
+        await createRule(payload);
+        addToast("success", t("added", { name }));
+        onOpen(null);
+      }}
+    />
+  ) : null;
 
   return (
-    <Card className="mb-4">
-      <div className="flex flex-col gap-3 mb-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2>Alert Rules</h2>
-            <p className="text-sm text-[var(--muted)]">
-              Start with a shared template or build a custom rule against metrics, heartbeats, logs, checks, or other rules.
-            </p>
+    <>
+      {rules.length > 0 ? (
+        <div className="al-tools">
+          <div className="al-seg" role="group" aria-label={t("showLabel")}>
+            {RULE_SHOWS.map((key) => (
+              <button key={key} type="button" className={show === key ? "on" : undefined} aria-pressed={show === key} onClick={() => setShow(key)}>
+                {t(`show.${key}`)}
+                <span className="al-n">{rules.filter((r) => ruleShown(r, key)).length}</span>
+              </button>
+            ))}
           </div>
-          <Button size="sm" onClick={() => {
-            if (showRuleForm) {
-              resetRuleForm();
-              setShowRuleForm(false);
-            } else {
-              openBlankForm();
-            }
-          }}>
-            {showRuleForm ? "Cancel" : "New Rule"}
-          </Button>
         </div>
-
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {sortedTemplates.map((template) => (
-            <div key={template.id} className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-4">
-              <div className="mb-3 flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-[var(--accent)]" />
-                    <h3 className="text-sm font-semibold text-[var(--text)]">{template.name}</h3>
-                  </div>
-                  <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{template.description}</p>
-                </div>
-              </div>
-              <div className="mb-3 flex flex-wrap items-center gap-2">
-                <Badge status={template.severity} />
-                <span className="rounded-full border border-[var(--line)] px-2 py-1 text-xs text-[var(--muted)]">
-                  {formatMetadataLabel(template.kind)}
-                </span>
-                <span className="rounded-full border border-[var(--line)] px-2 py-1 text-xs text-[var(--muted)]">
-                  {formatMetadataLabel(template.target_scope)}
-                </span>
-                {template.metadata?.category === "starter" ? (
-                  <span className="rounded-full border border-[var(--line)] px-2 py-1 text-xs text-[var(--muted)]">
-                    Starter
-                  </span>
-                ) : null}
-              </div>
-              <Button size="sm" variant="primary" onClick={() => applyPreset(template)}>
-                Use Template
-              </Button>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {showRuleForm ? (
-        <AlertRuleEditor
-          ruleForm={ruleForm}
-          setRuleForm={setRuleForm}
-          setField={setField}
-          selectedPreset={selectedPreset}
-          targetOptions={targetOptions}
-          assets={assets}
-          groups={groups}
-          groupLabelByID={groupLabelByID}
-          ruleError={ruleError}
-          ruleSubmitting={ruleSubmitting}
-          handleCreateRule={handleCreateRule}
-          resetRuleForm={resetRuleForm}
-          setShowRuleForm={setShowRuleForm}
-        />
       ) : null}
 
-      {rules.length === 0 && !showRuleForm ? (
-        <EmptyState
-          icon={Pencil}
-          title="No alert rules yet"
-          description="Start with a starter rule or create a custom rule that watches your devices and services."
-        />
-      ) : rules.length > 0 ? (
-        <ul className="divide-y divide-[var(--line)] border-t border-[var(--line)] pt-2">
-          {rules.map((rule) => (
-            <li
+      {rules.length === 0 && !editor ? (
+        <div className="al-sheet al-empty">
+          <b>{loading ? t("loading") : t("empty")}</b>
+        </div>
+      ) : (
+        <div className="al-sheet al-rules" aria-label={t("listLabel")} role="group">
+          <div className="al-rrow al-rcols">
+            {head("name")}
+            {head("severity")}
+            {head("scope")}
+            <span className="al-r">{t("cols.state")}</span>
+          </div>
+          {editor}
+          {shown.map((rule) => (
+            <AlertRuleRow
               key={rule.id}
-              className={`flex items-center justify-between gap-3 py-2.5${highlightedRuleId === rule.id ? " bg-[var(--hover)]" : ""}`}
-              onClick={() => onHighlightedRuleIdChange(highlightedRuleId === rule.id ? null : rule.id)}
-            >
-              <div className="min-w-0 flex-1">
-                <span className="text-sm font-medium text-[var(--text)]">{rule.name}</span>
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
-                  <code>{formatMetadataLabel(rule.kind)}</code>
-                  <span>&middot;</span>
-                  <span>{describeRuleTargets(rule, assetsByID, groupsByID)}</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge status={rule.severity} />
-                <Badge status={rule.status} />
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void handleDeleteRule(rule.id);
-                  }}
-                  title="Delete rule"
-                >
-                  Delete
-                </Button>
-              </div>
-            </li>
+              rule={rule}
+              scope={scopeLabel(rule)}
+              open={open?.kind === "rule" && open.id === rule.id}
+              openAlerts={instances.filter((a) => a.rule_id === rule.id && a.status !== "resolved").length}
+              onToggle={() => onOpen(open?.kind === "rule" && open.id === rule.id ? null : { kind: "rule", id: rule.id })}
+              onCopy={() => onOpen({ kind: "new", seq: Date.now(), from: rule })}
+              onDelete={() => setDeleting(rule)}
+            />
           ))}
-        </ul>
-      ) : null}
-    </Card>
+          {rules.length > 0 && shown.length === 0 ? <p className="al-none">{t("emptyFiltered")}</p> : null}
+          {show !== "all" ? (
+            <div className="al-foot">
+              <span>{t("shown", { shown: shown.length, total: rules.length })}</span>
+              <button type="button" onClick={() => setShow("all")}>{t("clear")}</button>
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={deleting !== null}
+        onClose={() => (deleteBusy ? undefined : setDeleting(null))}
+        onConfirm={() => void confirmDelete()}
+        title={deleting ? t("deleteTitle", { name: deleting.name }) : ""}
+        message={deleting ? t("deleteBody", { count: alertCount(deleting) }) : ""}
+        confirmLabel={t("delete")}
+        danger
+        loading={deleteBusy}
+      />
+    </>
   );
 }

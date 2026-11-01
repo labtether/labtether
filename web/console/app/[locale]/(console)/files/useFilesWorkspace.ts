@@ -1,515 +1,237 @@
 "use client";
 
-import { useCallback,useEffect,useMemo,useRef,useState } from "react";
-import { useFiles,type FileEntry } from "../../../hooks/useFiles";
-import type { UnifiedFileEntry } from "./fileOpsClient";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from "react";
+import { useTranslations } from "next-intl";
+import type { FileEntry } from "./fileOpsClient";
+import { applyWorkspaceClipboard, buildWorkspaceClipboardItems } from "./fileWorkspaceClipboard";
 import { joinPath } from "./fileWorkspaceUtils";
-import { useConnectionBrowser } from "./useConnectionBrowser";
-import { useFileTabsState } from "./useFileTabsState";
+import { filterEntries, menuActions } from "./filesListModel";
+import { toMenuItems, useMenuLabels, type MenuItemSpec } from "./FileMenus";
+import { useFileTabsState, sourceFromKey } from "./useFileTabsState";
 import { useFileTransfers } from "./useFileTransfers";
-import { useFileWorkspaceState } from "./useFileWorkspaceState";
-import { useFilesClipboardActions } from "./useFilesClipboardActions";
-import { useFilesContextMenuInteractions } from "./useFilesContextMenuInteractions";
-import { useFilesUploadInteractions } from "./useFilesUploadInteractions";
+import { useFileWorkspaceState, type WorkspaceClipboardMode } from "./useFileWorkspaceState";
+import { useFilesSource } from "./useFilesSource";
+import { usePathHistory } from "./usePathHistory";
 
+export type FileViewMode = "list" | "grid";
+
+const BAD_NAME = /[/\\\0]/;
+
+/** State and actions of the Files page: tabs, the open folder, picks, clipboard, menus, dialogs and transfers. */
 export function useFilesWorkspace() {
-
-  // -------------------------------------------------------------------------
-  // Tab state + transfer state
-  // -------------------------------------------------------------------------
-
+  const t = useTranslations("files");
+  const label = useMenuLabels();
   const tabs = useFileTabsState();
   const transfers = useFileTransfers();
+  const src = useFilesSource(tabs.activeTab);
+  const ws = useFileWorkspaceState<FileEntry>();
+  const { clearSelection, selectedEntries, clipboard } = ws;
 
-  // -------------------------------------------------------------------------
-  // Existing file browser state (agent-based)
-  // -------------------------------------------------------------------------
-
-  const {
-    target,
-    setTarget,
-    connectedAgentIds,
-    currentPath,
-    rootPath,
-    entries,
-    loading,
-    error,
-    showHidden,
-    setShowHidden,
-    sortField,
-    sortDir,
-    toggleSort,
-    listDir,
-    navigate,
-    navigateUp,
-    navigateToPath,
-    downloadFile,
-    uploadFile,
-    createDir,
-    deleteEntry,
-    renameEntry,
-    copyEntry,
-    uploadProgress,
-    cancelUpload,
-    downloadProgress,
-    cancelDownload,
-    deleteSelected,
-    isPreviewable,
-    previewFile,
-    previewContent,
-    closePreview,
-    setErrorMessage,
-  } = useFiles();
-
-  // -------------------------------------------------------------------------
-  // Derive active tab/source early (needed by hooks below)
-  // -------------------------------------------------------------------------
-
-  const activeTab = tabs.activeTab;
-  const activeSource = tabs.activeSource;
-  const isAgentTab = activeTab?.type === "agent";
-  const isConnectionTab = activeTab?.type === "connection";
-  const isBrowsingTab = isAgentTab || isConnectionTab;
-  const isNewTab = activeTab?.type === "new";
-  const inSplitMode = tabs.splitMode && isBrowsingTab;
-
-  // -------------------------------------------------------------------------
-  // Connection browser state (used when active tab is a connection)
-  // -------------------------------------------------------------------------
-
-  const connBrowser = useConnectionBrowser(
-    activeTab?.type === "connection" && activeSource ? activeSource : null,
-  );
-
-  // Map UnifiedFileEntry → FileEntry for FilesBrowserCard compatibility
-  const connMappedEntries: FileEntry[] = useMemo(
-    () =>
-      connBrowser.entries.map((e: UnifiedFileEntry) => ({
-        name: e.name,
-        is_dir: e.is_dir,
-        size: e.size,
-        mod_time: e.mod_time ?? "",
-        mode: e.mode ?? "",
-      })),
-    [connBrowser.entries],
-  );
-
-  // Connection file input ref for uploads
-  const connFileInputRef = useRef<HTMLInputElement>(null);
-
-  // Connection clipboard (copy/cut/paste within a connection)
-  const [connClipboardState, setConnClipboardState] = useState<{
-    mode: "copy" | "cut";
-    names: string[];
-    basePath: string;
-  } | null>(null);
-
-  const connClipboard = useMemo(() => ({
-    canPaste: connClipboardState != null && connClipboardState.names.length > 0,
-    setCopy: (names: string[]) =>
-      setConnClipboardState({ mode: "copy", names, basePath: connBrowser.currentPath }),
-    setCut: (names: string[]) =>
-      setConnClipboardState({ mode: "cut", names, basePath: connBrowser.currentPath }),
-    paste: async (targetDirPath: string) => {
-      if (!connClipboardState) return;
-      const { mode, names, basePath } = connClipboardState;
-      for (const name of names) {
-        const srcPath = joinPath(basePath, name);
-        const dstPath = joinPath(targetDirPath, name);
-        if (mode === "copy") {
-          await connBrowser.copyEntry(srcPath, dstPath);
-        } else {
-          await connBrowser.renameEntry(srcPath, dstPath);
-        }
-      }
-      if (mode === "cut") setConnClipboardState(null);
-      connBrowser.refresh();
-    },
-  }), [connClipboardState, connBrowser]);
-
-  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
-  const [mkdirName, setMkdirName] = useState("");
-  const [showMkdir, setShowMkdir] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [confirmBatchDelete, setConfirmBatchDelete] = useState(false);
+  const [query, setQuery] = useState("");
+  const [view, setView] = useState<FileViewMode>("list");
+  const [renaming, setRenaming] = useState<{ name: string; value: string } | null>(null);
+  const [deleteNames, setDeleteNames] = useState<string[] | null>(null);
+  const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [pendingUpload, setPendingUpload] = useState<{ files: File[]; dir: string } | null>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [renamingEntry, setRenamingEntry] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState("");
-  const renameInputRef = useRef<HTMLInputElement>(null);
-  const targetHasAgent = connectedAgentIds.has(target);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const uploadDirRef = useRef("~");
+  // Enter, Escape and blur can all end one rename; only the first counts.
+  const renameOpen = useRef(false);
+  const history = usePathHistory(`${tabs.activeTabId}|${src.key}`, src.currentPath, !src.loading);
 
-  const {
-    selectedEntries,
-    toggleSelected,
-    toggleSelectAll,
-    clearSelection,
-    selectOnly,
-    setSelectedNames,
-    selectionNamesFromEntry,
-    clipboard,
-    setClipboardItems,
-    clearClipboard,
-    contextMenu,
-    openContextMenu,
-    closeContextMenu,
-  } = useFileWorkspaceState<FileEntry>();
+  const cur = src.currentPath;
+  const visible = useMemo(() => filterEntries(src.entries, query), [src.entries, query]);
+  const order = useMemo(() => visible.map((e) => e.name), [visible]);
 
-  // -------------------------------------------------------------------------
-  // Sync tab selection -> useFiles target
-  // -------------------------------------------------------------------------
-
-  // Track the previous active tab ID so we only react to actual tab changes.
-  const prevActiveTabIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    const activeTab = tabs.activeTab;
-    if (!activeTab) return;
-
-    // Only sync when the active tab actually changes.
-    if (prevActiveTabIdRef.current === activeTab.id) return;
-    prevActiveTabIdRef.current = activeTab.id;
-
-    if (activeTab.type === "agent" && activeTab.sourceId) {
-      setTarget(activeTab.sourceId);
-    } else if (activeTab.type === "connection") {
-      // Connection tabs don't use the legacy useFiles target.
-      // Clear target so agent-specific UI doesn't show.
-      setTarget("");
-    } else if (activeTab.type === "new") {
-      setTarget("");
-    }
-  }, [tabs.activeTab, setTarget]);
-
-  // Auto-list when target changes or when the selected target becomes connected.
-  useEffect(() => {
-    if (target && targetHasAgent) {
-      void listDir(target, "~");
-    }
-  }, [target, targetHasAgent, listDir]);
-
-  // Clear selection when directory changes.
+  // Opening another folder (or tab) clears the picks, the search and a rename.
   useEffect(() => {
     clearSelection();
-  }, [currentPath, clearSelection]);
+    setQuery("");
+    setRenaming(null);
+    renameOpen.current = false;
+  }, [cur, src.key, clearSelection]);
 
-  // Keyboard shortcuts.
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setConfirmDelete(null);
-        setConfirmBatchDelete(false);
-        setRenamingEntry(null);
-        setShowMkdir(false);
-        closeContextMenu();
-        closePreview();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [closeContextMenu, closePreview]);
+  const goBack = useCallback(() => {
+    const prev = history.back();
+    if (prev) src.goTo(prev);
+  }, [history, src]);
 
-  // Focus rename input when it appears.
-  useEffect(() => {
-    if (renamingEntry && renameInputRef.current) {
-      renameInputRef.current.focus();
-      const dotIdx = renameValue.lastIndexOf(".");
-      if (dotIdx > 0) {
-        renameInputRef.current.setSelectionRange(0, dotIdx);
+  // ----- Clipboard -----
+  const toClipboard = useCallback((mode: WorkspaceClipboardMode, names: string[]) => {
+    const items = buildWorkspaceClipboardItems({
+      entries: src.entries,
+      names,
+      getName: (e) => e.name,
+      getPath: (e) => joinPath(cur, e.name),
+      getIsDir: (e) => e.is_dir,
+    });
+    ws.setClipboardItems(mode, src.key, items);
+  }, [cur, src.entries, src.key, ws]);
+
+  /** Same source: copy or move at once. Another source: a copy runs as a transfer; a move is refused. */
+  const paste = useCallback(async (dir: string) => {
+    if (!clipboard || !src.source) return;
+    if (clipboard.ownerID !== src.key) {
+      const from = sourceFromKey(clipboard.ownerID);
+      if (clipboard.mode === "copy" && from) {
+        void transfers.startTransfer(clipboard.items.map((i) => i.path), from, src.source, dir);
       } else {
-        renameInputRef.current.select();
+        src.setError(t("errors.crossMove"));
       }
+      return;
     }
-  }, [renamingEntry, renameValue]);
+    const outcome = await applyWorkspaceClipboard({
+      clipboard,
+      ownerID: src.key,
+      targetDirPath: dir,
+      copyItem: src.copyPath,
+      moveItem: src.movePath,
+    });
+    if (outcome.status !== "applied") return;
+    src.refresh();
+    if (!outcome.failed && outcome.mode === "cut") ws.clearClipboard();
+  }, [clipboard, src, t, transfers, ws]);
 
-  const fullPathForName = useCallback((name: string) => {
-    return joinPath(currentPath, name);
-  }, [currentPath]);
-
-  const {
-    fileInputRef,
-    handleDrop,
-    handleFileInput,
-    handleToolbarUpload,
-    handleContextUploadHere,
-  } = useFilesUploadInteractions({
-    currentPath,
-    uploadFile,
-    setDragOver,
-  });
-
-  const {
-    workspaceMenuHostRef,
-    handleEntryContextMenu,
-    handleBackgroundContextMenu,
-  } = useFilesContextMenuInteractions({
-    currentPath,
-    selectedEntries,
-    selectionNamesFromEntry,
-    selectOnly,
-    fullPathForName,
-    openContextMenu,
-    closeContextMenu,
-  });
-
-  const { setClipboardFromNames, pasteClipboardToDir } = useFilesClipboardActions({
-    target,
-    entries,
-    fullPathForName,
-    setClipboardItems,
-    clipboard,
-    copyEntry,
-    renameEntry,
-    listDir,
-    currentPath,
-    clearClipboard,
-    setErrorMessage,
-  });
-
-  const handleEntryClick = useCallback(
-    (entry: FileEntry) => {
-      if (renamingEntry) return;
-      if (entry.is_dir) {
-        navigate(entry.name);
-      } else {
-        const fullPath = joinPath(currentPath, entry.name);
-        if (isPreviewable(entry.name, entry.size)) {
-          void previewFile(fullPath, entry.name);
-        } else {
-          downloadFile(fullPath);
-        }
-      }
-    },
-    [navigate, currentPath, downloadFile, renamingEntry, isPreviewable, previewFile]
-  );
-
-  const handleCreateDir = useCallback(() => {
-    const name = mkdirName.trim();
-    if (name) {
-      void createDir(name);
-      setMkdirName("");
-      setShowMkdir(false);
-    }
-  }, [mkdirName, createDir]);
-
-  const handleDeleteConfirm = useCallback(() => {
-    if (!confirmDelete) return;
-    if (isConnectionTab) {
-      void connBrowser.deleteEntry(joinPath(connBrowser.currentPath, confirmDelete));
-    } else {
-      const fullPath = joinPath(currentPath, confirmDelete);
-      void deleteEntry(fullPath);
-    }
-    setConfirmDelete(null);
-  }, [confirmDelete, currentPath, deleteEntry, isConnectionTab, connBrowser]);
-
-  const handleBatchDeleteConfirm = useCallback(() => {
-    if (isConnectionTab) {
-      void connBrowser.deleteSelected(Array.from(selectedEntries));
-    } else {
-      void deleteSelected(Array.from(selectedEntries));
-    }
-    clearSelection();
-    setConfirmBatchDelete(false);
-  }, [clearSelection, deleteSelected, selectedEntries, isConnectionTab, connBrowser]);
-
-  const startRename = useCallback((entryName: string) => {
-    setRenamingEntry(entryName);
-    setRenameValue(entryName);
+  // ----- Upload, rename, delete -----
+  const pickUpload = useCallback((dir: string) => {
+    uploadDirRef.current = dir;
+    uploadInputRef.current?.click();
   }, []);
 
+  const onUploadInput = useCallback((files: File[]) => {
+    if (files.length) void src.upload(files, uploadDirRef.current);
+  }, [src]);
+
+  const startRename = useCallback((name: string) => {
+    renameOpen.current = true;
+    setRenaming({ name, value: name });
+  }, []);
+  const cancelRename = useCallback(() => {
+    renameOpen.current = false;
+    setRenaming(null);
+  }, []);
   const commitRename = useCallback(() => {
-    if (!renamingEntry || !renameValue.trim() || renameValue.trim() === renamingEntry) {
-      setRenamingEntry(null);
-      return;
-    }
-    const oldPath = joinPath(currentPath, renamingEntry);
-    const newPath = joinPath(currentPath, renameValue.trim());
-    void renameEntry(oldPath, newPath);
-    setRenamingEntry(null);
-  }, [renamingEntry, renameValue, currentPath, renameEntry]);
+    if (!renaming || !renameOpen.current) return;
+    renameOpen.current = false;
+    const next = renaming.value.trim();
+    setRenaming(null);
+    if (!next || next === renaming.name || BAD_NAME.test(next)) return;
+    void src.rename(renaming.name, next);
+  }, [renaming, src]);
 
-  const handleContextDelete = useCallback((names: string[]) => {
-    if (names.length === 0) return;
-    setSelectedNames(names);
-    if (names.length === 1) {
-      setConfirmDelete(names[0]);
-      return;
-    }
-    setConfirmBatchDelete(true);
-  }, [setSelectedNames]);
+  const confirmDelete = useCallback(() => {
+    if (!deleteNames) return;
+    void src.remove(deleteNames);
+    clearSelection();
+    setDeleteNames(null);
+  }, [clearSelection, deleteNames, src]);
 
-  const handleContextOpen = useCallback((entry: FileEntry) => {
-    if (entry.is_dir) {
-      navigate(entry.name);
-      return;
-    }
-    const fullPath = fullPathForName(entry.name);
-    if (isPreviewable(entry.name, entry.size)) {
-      void previewFile(fullPath, entry.name);
-    } else {
-      downloadFile(fullPath);
-    }
-  }, [downloadFile, fullPathForName, isPreviewable, navigate, previewFile]);
+  const createFolder = useCallback((name: string) => {
+    setNewFolderOpen(false);
+    if (name.trim() && !BAD_NAME.test(name.trim())) void src.createDir(name.trim());
+  }, [src]);
 
-  const handleEntryDoubleClick = useCallback((name: string) => {
-    const entry = entries.find((item) => item.name === name);
-    if (!entry) return;
-    handleContextOpen(entry);
-  }, [entries, handleContextOpen]);
+  const confirmUpload = useCallback(() => {
+    if (pendingUpload) void src.upload(pendingUpload.files, pendingUpload.dir);
+    setPendingUpload(null);
+  }, [pendingUpload, src]);
 
-  const handleShowHiddenChange = useCallback((nextShowHidden: boolean) => {
-    setShowHidden(nextShowHidden);
-    if (target) {
-      void listDir(target, currentPath, nextShowHidden);
-    }
-  }, [currentPath, listDir, setShowHidden, target]);
+  // ----- Menus -----
+  const canPaste = Boolean(clipboard && clipboard.items.length > 0 && (clipboard.ownerID === src.key || clipboard.mode === "copy"));
 
-  const handleToolbarRefresh = useCallback(() => {
-    if (!target) return;
-    void listDir(target, currentPath);
-  }, [currentPath, listDir, target]);
+  const menuFor = useCallback((entry: FileEntry | null, names: string[], dirPath: string): MenuItemSpec[] => {
+    const hasFiles = names.some((n) => src.entries.some((e) => e.name === n && !e.is_dir));
+    const slots = menuActions({ entry, count: names.length, hasFiles, canPaste, canWrite: true });
+    return toMenuItems(slots, {
+      open: entry ? () => src.openFile(entry) : undefined,
+      download: () => src.download(names),
+      rename: entry ? () => startRename(entry.name) : undefined,
+      copy: () => toClipboard("copy", names),
+      cut: () => toClipboard("cut", names),
+      paste: () => void paste(dirPath),
+      copyPath: entry ? () => void navigator.clipboard?.writeText(joinPath(cur, entry.name)) : undefined,
+      delete: () => setDeleteNames(names),
+      newFolder: () => setNewFolderOpen(true),
+      uploadHere: () => pickUpload(dirPath),
+      refresh: src.refresh,
+    }, (a) => label(a, { count: names.length, name: entry?.name ?? "", dir: Boolean(entry?.is_dir) }));
+  }, [canPaste, cur, label, paste, pickUpload, src, startRename, toClipboard]);
 
-  const handleDownloadEntry = useCallback((entry: FileEntry) => {
-    downloadFile(fullPathForName(entry.name));
-  }, [downloadFile, fullPathForName]);
+  /** The names an item action works on: the picked rows when the item is one of them, else the item. */
+  const targetsFor = useCallback((entry: FileEntry) => (
+    selectedEntries.has(entry.name) && selectedEntries.size > 1 ? Array.from(selectedEntries) : [entry.name]
+  ), [selectedEntries]);
 
-  const handleContextDownload = useCallback((entry: FileEntry) => {
-    downloadFile(fullPathForName(entry.name));
-  }, [downloadFile, fullPathForName]);
+  const rowMenu = useCallback((entry: FileEntry) => {
+    const names = targetsFor(entry);
+    return menuFor(entry, names, entry.is_dir && names.length === 1 ? joinPath(cur, entry.name) : cur);
+  }, [cur, menuFor, targetsFor]);
 
-  const handleDownloadSelected = useCallback(() => {
-    if (isConnectionTab) {
-      for (const name of selectedEntries) {
-        const entry = connMappedEntries.find((e) => e.name === name);
-        if (entry && !entry.is_dir) {
-          connBrowser.downloadFile(joinPath(connBrowser.currentPath, name));
-        }
-      }
-    } else {
-      for (const name of selectedEntries) {
-        const entry = entries.find((e) => e.name === name);
-        if (entry && !entry.is_dir) {
-          downloadFile(fullPathForName(name));
-        }
-      }
-    }
-  }, [isConnectionTab, selectedEntries, entries, connMappedEntries, downloadFile, fullPathForName, connBrowser]);
+  const onContextMenu = useCallback((event: MouseEvent, entry: FileEntry | null) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (entry && (!selectedEntries.has(entry.name) || selectedEntries.size <= 1)) ws.selectOnly(entry.name);
+    const names = entry ? targetsFor(entry) : Array.from(selectedEntries);
+    ws.openContextMenu(event.clientX, event.clientY, {
+      entry,
+      names,
+      targetDirPath: entry?.is_dir ? joinPath(cur, entry.name) : cur,
+    });
+  }, [cur, selectedEntries, targetsFor, ws]);
 
-  const selectionCount = selectedEntries.size;
-  const allSelected = entries.length > 0 && selectionCount === entries.length;
-  const clipboardCount = clipboard?.items.length ?? 0;
-  const canPaste = Boolean(
-    target
-      && targetHasAgent
-      && contextMenu
-      && clipboard
-      && clipboardCount > 0
-      && clipboard.ownerID === target,
-  );
+  const contextItems = ws.contextMenu
+    ? menuFor(ws.contextMenu.entry, ws.contextMenu.entry ? ws.contextMenu.names : [], ws.contextMenu.targetDirPath)
+    : [];
 
-  // -------------------------------------------------------------------------
-  // Tab callbacks
-  // -------------------------------------------------------------------------
+  // ----- Drag and drop from the computer -----
+  const drop = useMemo(() => ({
+    onDragOver: (e: DragEvent) => {
+      if (!e.dataTransfer.types.includes("Files")) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+      setDragOver(true);
+    },
+    onDragLeave: (e: DragEvent) => {
+      if (!(e.relatedTarget instanceof Node) || !e.currentTarget.contains(e.relatedTarget)) setDragOver(false);
+    },
+    onDrop: (e: DragEvent) => {
+      e.preventDefault();
+      setDragOver(false);
+      const files = Array.from(e.dataTransfer.files ?? []);
+      if (files.length > 1) setPendingUpload({ files, dir: cur });
+      else if (files.length === 1) void src.upload(files, cur);
+    },
+  }), [cur, src]);
 
-  const handleOpenAgent = useCallback((assetId: string, name: string) => {
-    tabs.addTab({ type: "agent", sourceId: assetId, label: name, protocol: "agent" });
-  }, [tabs]);
-
-  const handleOpenConnection = useCallback((connId: string, name: string, protocol: string) => {
-    tabs.addTab({ type: "connection", sourceId: connId, label: name, protocol });
-  }, [tabs]);
-
-  const handleNewConnection = useCallback((_protocol: string) => {
-    // The NewTabPage handles this internally by showing the ConnectionForm
-  }, []);
   return {
+    t,
     tabs,
-    isNewTab,
-    handleOpenAgent,
-    handleOpenConnection,
-    handleNewConnection,
-    isAgentTab,
-    inSplitMode,
-    workspaceMenuHostRef,
-    activeSource,
-    activeTab,
-    showHidden,
-    clipboardCount,
-    clipboard,
-    selectionCount,
-    currentPath,
-    rootPath,
-    handleShowHiddenChange,
-    setConfirmBatchDelete,
-    handleDownloadSelected,
-    handleToolbarUpload,
-    setShowMkdir,
-    handleToolbarRefresh,
-    navigateToPath,
-    navigateUp,
-    clearSelection,
-    viewMode,
-    setViewMode,
-    fileInputRef,
-    handleFileInput,
-    showMkdir,
-    mkdirName,
-    setMkdirName,
-    handleCreateDir,
-    uploadProgress,
-    cancelUpload,
-    downloadProgress,
-    cancelDownload,
-    error,
-    target,
-    targetHasAgent,
-    entries,
-    loading,
-    dragOver,
-    sortField,
-    sortDir,
-    selectedEntries,
-    allSelected,
-    renamingEntry,
-    renameValue,
-    renameInputRef,
-    toggleSort,
-    toggleSelectAll,
-    toggleSelected,
-    handleEntryClick,
-    handleEntryDoubleClick,
-    handleDownloadEntry,
-    startRename,
-    setRenameValue,
-    commitRename,
-    setRenamingEntry,
-    setConfirmDelete,
-    handleBackgroundContextMenu,
-    handleEntryContextMenu,
-    setDragOver,
-    handleDrop,
-    contextMenu,
-    canPaste,
-    closeContextMenu,
-    handleContextOpen,
-    handleContextDownload,
-    setClipboardFromNames,
-    pasteClipboardToDir,
-    handleContextDelete,
-    handleContextUploadHere,
-    isConnectionTab,
-    connBrowser,
-    connMappedEntries,
-    connFileInputRef,
-    connClipboard,
     transfers,
-    isBrowsingTab,
-    confirmDelete,
-    handleDeleteConfirm,
-    confirmBatchDelete,
-    handleBatchDeleteConfirm,
-    previewContent,
-    closePreview,
-    downloadFile,
+    src,
+    ws,
+    view,
+    setView,
+    query,
+    setQuery,
+    visible,
+    order,
+    history: { canBack: history.canGoBack, back: goBack },
+    clipboard: { value: clipboard, canPaste, paste: () => void paste(cur), clear: ws.clearClipboard },
+    rename: renaming
+      ? { name: renaming.name, value: renaming.value, onChange: (value: string) => setRenaming({ ...renaming, value }), onCommit: commitRename, onCancel: cancelRename }
+      : null,
+    startRename,
+    rowMenu,
+    onContextMenu,
+    contextItems,
+    targetsFor,
+    upload: { inputRef: uploadInputRef, pick: pickUpload, onInput: onUploadInput, pending: pendingUpload, confirm: confirmUpload, cancel: () => setPendingUpload(null) },
+    del: { names: deleteNames, ask: setDeleteNames, confirm: confirmDelete, cancel: () => setDeleteNames(null) },
+    newFolder: { open: newFolderOpen, show: () => setNewFolderOpen(true), create: createFolder, cancel: () => setNewFolderOpen(false) },
+    drop,
+    dragOver,
   };
 }
+
+export type FilesWorkspaceState = ReturnType<typeof useFilesWorkspace>;

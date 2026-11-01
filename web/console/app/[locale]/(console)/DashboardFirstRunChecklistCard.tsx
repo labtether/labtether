@@ -1,15 +1,17 @@
 "use client";
 
-import { Link } from "../../../i18n/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { ArrowRight, CheckCircle2, ChevronDown, ChevronRight, Circle } from "lucide-react";
-import { Card } from "../../components/ui/Card";
-import { Button } from "../../components/ui/Button";
+import { Check } from "lucide-react";
+import { Link } from "../../../i18n/navigation";
+import { useFastStatus } from "../../contexts/StatusContext";
+import { useHubUsers } from "../../hooks/useHubUsers";
 import { COMMUNITY_URL, GITHUB_REPO_URL, MCP_GATEWAY_DOCS_URL } from "../../lib/externalLinks";
+import { checklistSteps, type ChecklistStep } from "../../components/AddDeviceModal/firstRunSteps";
 
 const DISMISS_KEY = "labtether.dashboard.firstRun.dismissed";
-const COLLAPSE_KEY = "labtether.dashboard.firstRun.collapsed";
+// Set the first time this browser sees the hub with no devices: a lab that already had devices skips the checklist.
+const STARTED_KEY = "labtether.dashboard.firstRun.started";
 
 type DashboardFirstRunChecklistCardProps = {
   loading: boolean;
@@ -23,180 +25,119 @@ type DashboardFirstRunChecklistCardProps = {
   onAddDevice: () => void;
 };
 
-type ChecklistItemId = "hub" | "device" | "connector" | "terminal" | "logs";
+/** Notification channels exist (admins only); null until known. */
+function useHasChannels(enabled: boolean): boolean | null {
+  const [has, setHas] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    const controller = new AbortController();
+    fetch("/api/notifications/channels?limit=1&offset=0", { cache: "no-store", signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((payload: { channels?: unknown[] } | null) => setHas(Array.isArray(payload?.channels) && payload.channels.length > 0))
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [enabled]);
+  return has;
+}
 
-type ChecklistItem = {
-  id: ChecklistItemId;
-  done: boolean;
-};
-
+/**
+ * The Dashboard's first-run checklist: the mascot, then five steps that tick themselves from what the hub reports
+ * (a device with the agent, a system connected through its API, a terminal command, a notification channel, a second
+ * person). The next open step's button is the page's one rose button. It shows from a lab's first empty Dashboard
+ * until Dismiss, which hides it for good on this browser.
+ */
 export function DashboardFirstRunChecklistCard({
   loading,
   hasError,
   deviceCount,
   connectorCount,
   recentCommandCount,
-  recentLogCount,
   canWrite,
   canAdmin,
   onAddDevice,
 }: DashboardFirstRunChecklistCardProps) {
-  const t = useTranslations("dashboard.firstRun");
-  const [dismissed, setDismissed] = useState(false);
-  const [collapsed, setCollapsed] = useState(true);
+  const t = useTranslations("auth.firstRun");
+  const [dismissed, setDismissed] = useState(true);
+  const [started, setStarted] = useState(false);
+  const fast = useFastStatus();
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    setDismissed(window.localStorage.getItem(DISMISS_KEY) === "true");
-    const stored = window.localStorage.getItem(COLLAPSE_KEY);
-    // Default to collapsed unless user explicitly expanded
-    setCollapsed(stored !== "false");
+    try {
+      setDismissed(window.localStorage.getItem(DISMISS_KEY) === "true");
+      setStarted(window.localStorage.getItem(STARTED_KEY) === "true");
+    } catch {
+      setDismissed(false);
+    }
   }, []);
 
-  const items = useMemo<ChecklistItem[]>(() => {
-    const hubHealthy = !loading && !hasError;
-    return [
-      { id: "hub", done: hubHealthy },
-      { id: "device", done: deviceCount > 0 },
-      { id: "connector", done: connectorCount > 0 },
-      { id: "terminal", done: recentCommandCount > 0 },
-      { id: "logs", done: recentLogCount > 0 },
-    ];
-  }, [loading, hasError, deviceCount, connectorCount, recentCommandCount, recentLogCount]);
+  useEffect(() => {
+    if (loading || hasError || deviceCount > 0 || !fast) return;
+    setStarted(true);
+    try {
+      window.localStorage.setItem(STARTED_KEY, "true");
+    } catch {
+      // Without storage the checklist shows while the lab is empty.
+    }
+  }, [deviceCount, fast, hasError, loading]);
 
-  const completed = items.filter((item) => item.done).length;
-  const allComplete = completed === items.length;
+  const active = started && !dismissed && !loading && !hasError;
+  const { users } = useHubUsers(active && canAdmin);
+  const hasChannels = useHasChannels(active && canAdmin);
+  const steps = useMemo(
+    () => checklistSteps({ assets: fast?.assets ?? [], connectorCount, recentCommandCount, hasChannels: Boolean(hasChannels), users, canWrite, canAdmin }),
+    [fast?.assets, connectorCount, recentCommandCount, hasChannels, users, canWrite, canAdmin],
+  );
 
-  if (dismissed) {
-    return null;
-  }
+  if (!active || steps.length === 0) return null;
 
   const dismiss = () => {
     setDismissed(true);
-    if (typeof window !== "undefined") {
+    try {
       window.localStorage.setItem(DISMISS_KEY, "true");
+    } catch {
+      // Private windows can refuse storage; the checklist then hides until the page reloads.
     }
   };
+  const next = steps.find((s) => !s.done && s.action);
+  const allDone = steps.every((s) => s.done);
 
-  const toggleCollapse = () => {
-    const next = !collapsed;
-    setCollapsed(next);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(COLLAPSE_KEY, String(next));
-    }
+  const button = (s: ChecklistStep) => {
+    const cls = `si-btn${s === next ? " primary" : ""}`;
+    if (s.action === "add") return <button type="button" className={cls} onClick={onAddDevice}>{t(`steps.${s.id}.button`)}</button>;
+    if (s.href) return <Link href={s.href} className={cls}>{t(`steps.${s.id}.button`)}</Link>;
+    return null;
   };
 
   return (
-    <Card className="mb-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <button type="button" onClick={toggleCollapse} className="flex items-center gap-1.5 cursor-pointer group">
-          {collapsed ? (
-            <ChevronRight size={14} className="text-[var(--muted)] group-hover:text-[var(--text)] transition-colors" />
-          ) : (
-            <ChevronDown size={14} className="text-[var(--muted)] group-hover:text-[var(--text)] transition-colors" />
-          )}
-          <h2 className="text-sm font-medium text-[var(--text)]">{t("title")}</h2>
-          <span className="text-xs text-[var(--muted)] ml-1">
-            {allComplete ? t("complete") : t("progress", { completed, total: items.length })}
-          </span>
-        </button>
-        <button
-          type="button"
-          onClick={dismiss}
-          className="text-xs text-[var(--muted)] transition-colors hover:text-[var(--text)]"
-        >
-          {t("dismiss")}
-        </button>
+    <section className="si-fr" aria-labelledby="si-fr-t">
+      <img src="/logo.svg" alt="" width={64} height={64} aria-hidden="true" className="si-fr-logo" />
+      <div className="si-fr-h">
+        <h2 id="si-fr-t">
+          {t("title")}
+          {allDone ? <span className="si-fr-done"> · {t("done")}</span> : null}
+        </h2>
+        <button type="button" className="si-btn quiet" onClick={dismiss}>{t("dismiss")}</button>
       </div>
-
-      {!collapsed && (
-        <>
-          <p className="mt-1 text-xs text-[var(--muted)]">
-            {allComplete ? t("summaryComplete") : t("summaryPending")}
-          </p>
-
-          <div className="mt-3 space-y-2">
-            {items.map((item) => (
-              <div key={item.id} className="flex items-start gap-2 rounded-md border border-[var(--panel-border)] p-2">
-                <div className="pt-0.5">
-                  {item.done ? (
-                    <CheckCircle2 size={14} className="text-[var(--ok)]" />
-                  ) : (
-                    <Circle size={14} className="text-[var(--muted)]" />
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-[var(--text)]">{t(`items.${item.id}.label`)}</p>
-                  <p className="text-[11px] text-[var(--muted)]">{t(`items.${item.id}.description`)}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {!allComplete ? (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              {canWrite ? (
-                <Button size="sm" variant="primary" onClick={onAddDevice}>
-                  {t("addDevice")}
-                </Button>
-              ) : null}
-              {canAdmin ? (
-                <Link href="/settings" className="text-xs text-[var(--accent)] hover:underline inline-flex items-center gap-1">
-                  {t("openConnectorSettings")} <ArrowRight size={12} />
-                </Link>
-              ) : null}
-              {canWrite ? (
-                <Link href="/terminal" className="text-xs text-[var(--accent)] hover:underline inline-flex items-center gap-1">
-                  {t("openTerminal")} <ArrowRight size={12} />
-                </Link>
-              ) : null}
-              <Link href="/logs" className="text-xs text-[var(--accent)] hover:underline inline-flex items-center gap-1">
-                {t("openLogs")} <ArrowRight size={12} />
-              </Link>
+      <ol className="si-fr-list">
+        {steps.map((s) => (
+          <li key={s.id} className={`si-fr-step${s.done ? " done" : ""}`}>
+            <span className="si-tick" aria-hidden="true">{s.done ? <Check strokeWidth={2.6} /> : null}</span>
+            <div className="si-fr-tx">
+              <span className="si-fr-nm">{t(`steps.${s.id}.label`)}</span>
+              <span className="sr-only">{s.done ? t("isDone") : t("notDone")}</span>
+              {s.sub ? <p className="si-fr-sub">{t(`steps.${s.id}.sub`, { name: s.sub })}</p> : null}
             </div>
-          ) : (
-            <div className="mt-4">
-              <p className="text-xs font-medium text-[var(--text)]">
-                {t("nextStepsTitle")}
-              </p>
-              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {canAdmin ? (
-                  <Link
-                    href="/settings"
-                    className="block rounded-lg px-3 py-2 bg-[var(--panel-glass)] border border-[var(--panel-border)] text-xs text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors"
-                  >
-                    {t("setupNotifications")}
-                  </Link>
-                ) : null}
-                <a
-                  href={MCP_GATEWAY_DOCS_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block rounded-lg px-3 py-2 bg-[var(--panel-glass)] border border-[var(--panel-border)] text-xs text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors"
-                >
-                  {t("connectMcp")}
-                </a>
-                <a
-                  href={COMMUNITY_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block rounded-lg px-3 py-2 bg-[var(--panel-glass)] border border-[var(--panel-border)] text-xs text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors"
-                >
-                  {t("community")}
-                </a>
-                <a
-                  href={GITHUB_REPO_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block rounded-lg px-3 py-2 bg-[var(--panel-glass)] border border-[var(--panel-border)] text-xs text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors"
-                >
-                  {t("starGithub")}
-                </a>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-    </Card>
+            {s.done ? null : button(s)}
+          </li>
+        ))}
+      </ol>
+      {allDone ? (
+        <p className="si-fr-more">
+          <a href={MCP_GATEWAY_DOCS_URL} target="_blank" rel="noopener noreferrer">{t("mcp")}</a>
+          <a href={COMMUNITY_URL} target="_blank" rel="noopener noreferrer">{t("community")}</a>
+          <a href={GITHUB_REPO_URL} target="_blank" rel="noopener noreferrer">{t("github")}</a>
+        </p>
+      ) : null}
+    </section>
   );
 }

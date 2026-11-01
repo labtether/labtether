@@ -1,191 +1,86 @@
 "use client";
+
+import { useTranslations } from "next-intl";
 import { useEffect, useMemo } from "react";
 import type { NetworkInterfaceInfo } from "../../../../hooks/useNetworkInterfaces";
 import { useNetworkInterfaces } from "../../../../hooks/useNetworkInterfaces";
+import { copyText, ListState, RefreshButton, RowMenu, SizeCell } from "./systemViewParts";
 
-function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes < 0) {
-    return "-";
-  }
-  if (bytes < 1) {
-    return "0 B";
-  }
-  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
-  const index = Math.min(Math.max(0, Math.floor(Math.log(bytes) / Math.log(1024))), units.length - 1);
-  const value = bytes / Math.pow(1024, index);
-  return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
-}
+const isUp = (entry: NetworkInterfaceInfo) => {
+  const state = entry.state.trim().toLowerCase();
+  return state === "up" || state === "active";
+};
+const isDown = (entry: NetworkInterfaceInfo) => {
+  const state = entry.state.trim().toLowerCase();
+  return state === "down" || state === "inactive";
+};
 
-function stateBadgeTone(state: string): { background: string; color: string } {
-  const normalized = state.trim().toLowerCase();
-  if (normalized === "up" || normalized === "active") {
-    return { background: "var(--ok-glow)", color: "var(--ok)" };
-  }
-  if (normalized === "down" || normalized === "inactive") {
-    return { background: "var(--bad-glow)", color: "var(--bad)" };
-  }
-  return { background: "var(--surface)", color: "var(--muted)" };
-}
-
+/** Interfaces that are up first, then by name. */
 function sortInterfaces(entries: NetworkInterfaceInfo[]): NetworkInterfaceInfo[] {
-  return [...entries].sort((left, right) => {
-    const leftActive = left.state.trim().toLowerCase() === "up" || left.state.trim().toLowerCase() === "active";
-    const rightActive = right.state.trim().toLowerCase() === "up" || right.state.trim().toLowerCase() === "active";
-    if (leftActive !== rightActive) {
-      return leftActive ? -1 : 1;
-    }
-    return left.name.localeCompare(right.name);
-  });
+  return [...entries].sort((left, right) => Number(isUp(right)) - Number(isUp(left)) || left.name.localeCompare(right.name));
 }
 
+/** The device's network interfaces: state, MAC and MTU, addresses, and bytes received and sent since they came up. */
 export function InterfacesTab({ nodeId }: { nodeId: string }) {
+  const t = useTranslations("devices.system");
   const { interfaces, loading, error, refresh } = useNetworkInterfaces(nodeId);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  const sortedInterfaces = useMemo(() => sortInterfaces(interfaces), [interfaces]);
+  const rows = useMemo(() => sortInterfaces(interfaces), [interfaces]);
 
   return (
-    <div
-      style={{
-        background: "var(--panel)",
-        border: "1px solid var(--line)",
-        borderRadius: "8px",
-        padding: "16px",
-        marginBottom: "16px",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px", gap: "12px", flexWrap: "wrap" }}>
-        <h2 style={{ fontSize: "14px", fontWeight: 500, color: "var(--text)", margin: 0 }}>Network Interfaces</h2>
-        <button
-          onClick={() => void refresh()}
-          disabled={loading}
-          style={{
-            padding: "5px 10px",
-            fontSize: "11px",
-            borderRadius: "6px",
-            border: "1px solid var(--line)",
-            cursor: loading ? "default" : "pointer",
-            background: "transparent",
-            color: "var(--muted)",
-            opacity: loading ? 0.5 : 1,
-            whiteSpace: "nowrap",
-          }}
-        >
-          {loading ? "Loading..." : "Refresh"}
-        </button>
+    <div className="dsy">
+      <div className="dv-bar">
+        <span className="dv-sp" />
+        <RefreshButton loading={loading} onClick={() => void refresh()} />
       </div>
-
-      {loading && interfaces.length === 0 ? (
-        <p style={{ fontSize: "14px", color: "var(--muted)" }}>Loading network interfaces...</p>
-      ) : error ? (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 0", gap: "8px" }}>
-          <p style={{ fontSize: "12px", color: "var(--bad)" }}>{error}</p>
-          <button
-            onClick={() => void refresh()}
-            style={{
-              padding: "6px 12px",
-              fontSize: "12px",
-              borderRadius: "6px",
-              border: "1px solid var(--line)",
-              cursor: "pointer",
-              background: "transparent",
-              color: "var(--text)",
-            }}
-          >
-            Retry
-          </button>
+      <ListState
+        loading={loading}
+        hasRows={rows.length > 0}
+        error={error}
+        loadError={t("interfaces.loadError")}
+        empty={t("interfaces.empty")}
+        onRetry={() => void refresh()}
+      >
+        <div className="dv-list dsy-if" role="table" aria-label={t("interfaces.label")}>
+          <div className="dv-cols" role="row">
+            <span role="columnheader">{t("interfaces.cols.interface")}</span>
+            <span role="columnheader" className="c-addr">{t("interfaces.cols.address")}</span>
+            <span role="columnheader" className="r">{t("interfaces.cols.received")}</span>
+            <span role="columnheader" className="r c-tx">{t("interfaces.cols.sent")}</span>
+            <span role="columnheader" aria-label={t("actions")} />
+          </div>
+          {rows.map((entry) => {
+            const grey = [entry.mac, Number.isFinite(entry.mtu) && entry.mtu > 0 ? t("interfaces.mtu", { mtu: entry.mtu }) : ""].filter(Boolean).join(" · ");
+            const addresses = entry.ips?.length ? entry.ips.join(", ") : "";
+            const state = entry.state.trim();
+            return (
+              <div key={entry.name} className="dv-row" role="row" tabIndex={0}>
+                <span role="cell" className="dv-ln">
+                  <span className="dv-nm">{entry.name || "—"}</span>
+                  {isDown(entry) ? <span className="dv-prob bad">{t("interfaces.down")}</span>
+                    : !isUp(entry) && state ? <span className="dv-prob busy">{state}</span> : null}
+                  {grey ? <span className="dv-grey">{grey}</span> : null}
+                </span>
+                <span role="cell" className="dv-txt c-addr" title={addresses || undefined}>{addresses || "—"}</span>
+                <SizeCell bytes={entry.rx_bytes} title={t("interfaces.packets", { count: entry.rx_packets ?? 0 })} />
+                <SizeCell bytes={entry.tx_bytes} className="c-tx" title={t("interfaces.packets", { count: entry.tx_packets ?? 0 })} />
+                <RowMenu
+                  name={entry.name}
+                  items={[
+                    ...(addresses ? [{ label: t("interfaces.copyAddress"), onSelect: () => copyText(entry.ips[0] ?? "") }] : []),
+                    ...(entry.mac ? [{ label: t("interfaces.copyMac"), onSelect: () => copyText(entry.mac) }] : []),
+                    { label: t("interfaces.copyName"), onSelect: () => copyText(entry.name) },
+                  ]}
+                />
+              </div>
+            );
+          })}
         </div>
-      ) : sortedInterfaces.length === 0 ? (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "48px 0", gap: "8px" }}>
-          <p style={{ fontSize: "14px", fontWeight: 500, color: "var(--text)" }}>No interfaces returned</p>
-          <p style={{ fontSize: "12px", color: "var(--muted)", textAlign: "center", maxWidth: "360px" }}>
-            The agent did not report any network interfaces for this node.
-          </p>
-        </div>
-      ) : (
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
-            <thead>
-              <tr style={{ borderBottom: "1px solid var(--line)" }}>
-                {["Interface", "State", "MAC", "MTU", "IPs", "RX", "TX"].map((column) => (
-                  <th
-                    key={column}
-                    style={{
-                      padding: "6px 8px",
-                      textAlign: "left",
-                      fontSize: "10px",
-                      fontWeight: 500,
-                      color: "var(--muted)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.05em",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {column}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {sortedInterfaces.map((entry) => {
-                const tone = stateBadgeTone(entry.state);
-                return (
-                  <tr
-                    key={entry.name}
-                    style={{ borderBottom: "1px solid var(--line)" }}
-                    onMouseEnter={(event) => {
-                      (event.currentTarget as HTMLTableRowElement).style.background = "var(--hover)";
-                    }}
-                    onMouseLeave={(event) => {
-                      (event.currentTarget as HTMLTableRowElement).style.background = "transparent";
-                    }}
-                  >
-                    <td style={{ padding: "6px 8px", color: "var(--text)", fontWeight: 500, whiteSpace: "nowrap" }}>
-                      {entry.name || "-"}
-                    </td>
-                    <td style={{ padding: "6px 8px" }}>
-                      <span
-                        style={{
-                          display: "inline-block",
-                          padding: "2px 8px",
-                          borderRadius: "4px",
-                          fontSize: "10px",
-                          fontWeight: 500,
-                          background: tone.background,
-                          color: tone.color,
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {entry.state || "unknown"}
-                      </span>
-                    </td>
-                    <td style={{ padding: "6px 8px", color: "var(--muted)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-                      {entry.mac || "-"}
-                    </td>
-                    <td style={{ padding: "6px 8px", color: "var(--muted)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-                      {Number.isFinite(entry.mtu) && entry.mtu > 0 ? entry.mtu : "-"}
-                    </td>
-                    <td style={{ padding: "6px 8px", color: "var(--muted)", fontVariantNumeric: "tabular-nums", maxWidth: "260px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {entry.ips?.length ? entry.ips.join(", ") : "-"}
-                    </td>
-                    <td style={{ padding: "6px 8px", color: "var(--muted)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-                      <div>{formatBytes(entry.rx_bytes)}</div>
-                      <div style={{ fontSize: "10px", color: "var(--muted)" }}>{(entry.rx_packets ?? 0).toLocaleString()} packets</div>
-                    </td>
-                    <td style={{ padding: "6px 8px", color: "var(--muted)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-                      <div>{formatBytes(entry.tx_bytes)}</div>
-                      <div style={{ fontSize: "10px", color: "var(--muted)" }}>{(entry.tx_packets ?? 0).toLocaleString()} packets</div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      </ListState>
     </div>
   );
 }

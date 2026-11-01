@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { X, ChevronRight } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Modal } from "../ui/Modal";
 import { SourcePicker, type SourceType } from "./SourcePicker";
 import { AgentSetupStep } from "./AgentSetupStep";
@@ -21,6 +22,7 @@ type AddDeviceModalProps = {
   onAdded?: (event: AddDeviceAddedEvent) => void;
 };
 
+// Step titles (English, as the setup steps' own text is).
 const sourceLabels: Record<SourceType, string> = {
   agent: "Install Agent",
   proxmox: "Connect Proxmox",
@@ -28,11 +30,16 @@ const sourceLabels: Record<SourceType, string> = {
   docker: "Connect Docker",
   portainer: "Connect Portainer",
   truenas: "Connect TrueNAS",
-  homeassistant: "Home Assistant Setup",
-  manual: "Add Manual Device",
+  homeassistant: "Connect Home Assistant",
+  manual: "Add a manual device",
 };
 
+/**
+ * Add a device: pick how it connects (the agent, an API, or by hand), then that system's setup step.
+ * The header names the step; Back in each step returns to the list.
+ */
 export function AddDeviceModal({ open, onClose, onAdded }: AddDeviceModalProps) {
+  const t = useTranslations("auth.addDevice");
   const [selectedSource, setSelectedSource] = useState<SourceType | null>(null);
   const [prefillsBySource, setPrefillsBySource] = useState<Partial<Record<SourceType, AddDeviceCompatPrefill[]>>>({});
 
@@ -123,45 +130,34 @@ export function AddDeviceModal({ open, onClose, onAdded }: AddDeviceModalProps) 
     <Modal
       open={open}
       onClose={handleClose}
-      ariaTitle={selectedSource ? `Add Device: ${sourceLabels[selectedSource]}` : "Add Device"}
-      description="Choose a connection source and configure it for LabTether."
+      ariaTitle={selectedSource ? `${t("title")}: ${sourceLabels[selectedSource]}` : t("title")}
+      description={t("description")}
+      className="si-ad"
     >
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--line)]">
-        <div className="flex items-center gap-2 text-sm font-medium text-[var(--text)]">
-          <span>Add Device</span>
-          {selectedSource && (
+      <div className="si-ad-h">
+        <div className="si-ad-crumb">
+          {selectedSource ? (
             <>
-              <ChevronRight size={14} className="text-[var(--muted)]" />
+              <button type="button" className="si-ad-up" onClick={handleBack}>{t("title")}</button>
+              <ChevronRight aria-hidden="true" strokeWidth={2} />
               <span>{sourceLabels[selectedSource]}</span>
             </>
+          ) : (
+            <span>{t("title")}</span>
           )}
         </div>
-        <button
-          type="button"
-          onClick={handleClose}
-          aria-label="Close Add Device dialog"
-          className="p-1 rounded hover:bg-[var(--hover)] transition-colors duration-150"
-        >
-          <X size={16} className="text-[var(--muted)]" />
+        <button type="button" onClick={handleClose} aria-label={t("close")} className="si-ad-x">
+          <X aria-hidden="true" />
         </button>
       </div>
 
-      {/* Body: max-height constrains scroll so the modal fits within the
-          viewport on mobile/tablet/desktop. Uses 100dvh (dynamic viewport
-          height) so the calculation tracks the visible area even when the
-          browser toolbar is visible on mobile. The ~9rem overhead accounts
-          for the dialog's top offset (1rem), bottom clearance (1rem),
-          and the header row (~3.5rem). */}
-      <div className="max-h-[calc(100dvh-9rem)] overflow-y-auto px-5 py-4">
+      {/* The body scrolls inside the dialog so it fits the visible viewport (100dvh tracks mobile toolbars). */}
+      <div className="si-ad-b">
         {selectedSource === null && (
-          <>
-            <p className="text-xs text-[var(--muted)] mb-4">How will this device connect to LabTether?</p>
-            <SourcePicker
-              onSelect={setSelectedSource}
-              prefillBySource={primaryPrefillBySource(prefillsBySource)}
-            />
-          </>
+          <SourcePicker
+            onSelect={setSelectedSource}
+            prefillBySource={primaryPrefillBySource(prefillsBySource)}
+          />
         )}
         {selectedSource === "agent" && (
           <AgentSetupStep onBack={handleBack} onClose={handleClose} onAdded={onAdded} />

@@ -1,6 +1,80 @@
 {
   "title": "Usuarios",
-  "subtitle": "Gestionar cuentas de usuario locales y roles",
   "addUser": "Agregar usuario",
-  "userManagement": "Gestión de usuarios"
+  "roles": {
+    "owner": "Propietario",
+    "admin": "Administrador",
+    "operator": "Operador",
+    "viewer": "Observador"
+  },
+  "list": {
+    "user": "Usuario",
+    "role": "Rol",
+    "twoFactor": "2FA",
+    "on": "Activado",
+    "off": "Desactivado",
+    "local": "Cuenta local",
+    "sso": "Inicio de sesión único",
+    "youAnd": "Tú · {kind}",
+    "empty": "No hay usuarios",
+    "loadFailed": "Los usuarios no se cargaron.",
+    "actions": "Acciones",
+    "actionsFor": "Acciones para {name}"
+  },
+  "menu": {
+    "role": "Cambiar rol…",
+    "password": "Restablecer contraseña…",
+    "signOut": "Cerrar sesión en todas partes…",
+    "remove": "Quitar…"
+  },
+  "fields": {
+    "username": "Nombre de usuario",
+    "role": "Rol",
+    "password": "Contraseña",
+    "newPassword": "Nueva contraseña",
+    "repeatPassword": "Repetir contraseña"
+  },
+  "add": {
+    "title": "Agregar usuario",
+    "submit": "Agregar usuario"
+  },
+  "role": {
+    "title": "Cambiar el rol de {name}",
+    "submit": "Guardar"
+  },
+  "password": {
+    "title": "Restablecer la contraseña de {name}",
+    "submit": "Restablecer contraseña"
+  },
+  "signOut": {
+    "title": "¿Cerrar la sesión de {name} en todas partes?",
+    "titleYou": "¿Cerrar sesión en todas partes?",
+    "body": "Todas las sesiones de {name} terminan. {name} puede volver a iniciar sesión.",
+    "bodyYou": "Todas tus sesiones terminan, también esta.",
+    "submit": "Cerrar sesión"
+  },
+  "remove": {
+    "title": "¿Quitar a {name}?",
+    "body": "{name} ya no puede iniciar sesión. Sus sesiones terminan.",
+    "submit": "Quitar"
+  },
+  "errors": {
+    "nameEmpty": "Escribe un nombre de usuario",
+    "nameChars": "Usa letras, números, puntos, guiones o guiones bajos",
+    "nameLong": "Usa 32 caracteres o menos",
+    "passShort": "Usa al menos 8 caracteres",
+    "passMismatch": "Las contraseñas no coinciden",
+    "addFailed": "El usuario no se agregó.",
+    "roleFailed": "El rol no cambió.",
+    "passwordFailed": "La contraseña no se restableció.",
+    "signOutFailed": "Las sesiones no terminaron.",
+    "removeFailed": "El usuario no se quitó."
+  },
+  "toast": {
+    "added": "Se agregó a {name}",
+    "role": "{name} ahora es {role}",
+    "password": "Se restableció la contraseña de {name}",
+    "signedOut": "Se cerró la sesión de {name} en todas partes",
+    "removed": "Se quitó a {name}"
+  }
 }

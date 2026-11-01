@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "../../../components/ui/Button";
-import { Card } from "../../../components/ui/Card";
+import { useTranslations } from "next-intl";
 import { Input, Select } from "../../../components/ui/Input";
 import { assignableUserRoles } from "../../../lib/roles";
+import { Field, PeopleDialog, errorText } from "./PeopleDialog";
 
 type CreateUserDialogProps = {
   open: boolean;
@@ -13,153 +13,123 @@ type CreateUserDialogProps = {
   onConfirm: (payload: { username: string; password: string; role: string }) => Promise<void>;
 };
 
-const roleLabels: Record<string, string> = { admin: "Admin", operator: "Operator", viewer: "Viewer" };
-
 const USERNAME_RE = /^[a-zA-Z0-9\-._]+$/;
 
+type Errors = { name?: string; pass?: string; pass2?: string; hub?: string };
+
+/** Add user: a username, a role the caller may give, and a password typed twice. Passwords are cleared on close. */
 export function CreateUserDialog({ open, callerRole, onClose, onConfirm }: CreateUserDialogProps) {
+  const t = useTranslations("users");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [role, setRole] = useState("viewer");
-  const [error, setError] = useState("");
+  const [errors, setErrors] = useState<Errors>({});
   const [creating, setCreating] = useState(false);
 
-  if (!open) return null;
-  const roleOptions = assignableUserRoles(callerRole).map((value) => ({ value, label: roleLabels[value] }));
-
-	const handleConfirm = async () => {
-		const u = username.trim().toLowerCase();
-		const pw = password;
-		const cpw = confirmPassword;
-
-    if (!u) {
-      setError("Username is required.");
-      return;
-    }
-    if (!USERNAME_RE.test(u)) {
-      setError("Username may only contain letters, numbers, hyphens, dots, and underscores.");
-      return;
-    }
-    if (u.length > 32) {
-      setError("Username must be 32 characters or fewer.");
-      return;
-    }
-    if (pw.length < 8) {
-      setError("Password must be at least 8 characters.");
-      return;
-    }
-    if (pw !== cpw) {
-      setError("Passwords do not match.");
-      return;
-    }
-
-    setCreating(true);
-    setError("");
-    try {
-      await onConfirm({ username: u, password: pw, role });
-      setUsername("");
-      setPassword("");
-      setConfirmPassword("");
-      setRole("viewer");
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create user.");
-      setCreating(false);
-    }
-  };
-
-  const handleClose = () => {
-    if (creating) return;
+  const reset = () => {
     setUsername("");
     setPassword("");
     setConfirmPassword("");
     setRole("viewer");
-    setError("");
+    setErrors({});
+    setCreating(false);
+  };
+
+  const check = (name: string): Errors => {
+    const next: Errors = {};
+    if (!name) next.name = t("errors.nameEmpty");
+    else if (!USERNAME_RE.test(name)) next.name = t("errors.nameChars");
+    else if (name.length > 32) next.name = t("errors.nameLong");
+    if (password.length < 8) next.pass = t("errors.passShort");
+    else if (password !== confirmPassword) next.pass2 = t("errors.passMismatch");
+    return next;
+  };
+
+  const submit = async () => {
+    const name = username.trim().toLowerCase();
+    const found = check(name);
+    setErrors(found);
+    if (Object.keys(found).length) return;
+    setCreating(true);
+    try {
+      await onConfirm({ username: name, password, role });
+      reset();
+      onClose();
+    } catch (err) {
+      setErrors({ hub: errorText(err, t("errors.addFailed")) });
+      setCreating(false);
+    }
+  };
+
+  const close = () => {
+    reset();
     onClose();
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      onClick={handleClose}
+    <PeopleDialog
+      open={open}
+      title={t("add.title")}
+      onClose={close}
+      onSubmit={() => { void submit(); }}
+      submitLabel={t("add.submit")}
+      tone="main"
+      busy={creating}
+      error={errors.hub}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="create-user-dialog-title"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") handleClose();
-        }}
-      >
-        <Card className="w-[32rem] max-w-[92vw] space-y-4">
-          <h3 id="create-user-dialog-title" className="text-sm font-medium text-[var(--text)]">Add User</h3>
-          <label className="block space-y-1">
-            <span className="text-[10px] text-[var(--muted)]">Username</span>
-            <Input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="ops-viewer"
-              maxLength={32}
-              disabled={creating}
-              autoFocus
-            />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-[10px] text-[var(--muted)]">Password</span>
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 8 characters"
-              maxLength={256}
-              autoComplete="new-password"
-              disabled={creating}
-            />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-[10px] text-[var(--muted)]">Confirm Password</span>
-            <Input
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Repeat password"
-              maxLength={256}
-              autoComplete="new-password"
-              disabled={creating}
-            />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-[10px] text-[var(--muted)]">Role</span>
-            <Select
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              disabled={creating}
-              className="w-full"
-            >
-              {roleOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </Select>
-          </label>
-          {error ? <p className="text-xs text-[var(--bad)]">{error}</p> : null}
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="secondary" onClick={handleClose} disabled={creating}>
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              loading={creating}
-              onClick={() => { void handleConfirm(); }}
-            >
-              Create User
-            </Button>
-          </div>
-        </Card>
+      <div className="pp-grid2">
+        <Field id="pp-u-name" label={t("fields.username")} error={errors.name}>
+          <Input
+            id="pp-u-name"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="ops-viewer"
+            maxLength={32}
+            autoComplete="off"
+            autoFocus
+            disabled={creating}
+            error={Boolean(errors.name)}
+            aria-invalid={errors.name ? true : undefined}
+            aria-describedby={errors.name ? "pp-u-name-err" : undefined}
+          />
+        </Field>
+        <Field id="pp-u-role" label={t("fields.role")}>
+          <Select id="pp-u-role" name="role" value={role} onChange={(e) => setRole(e.target.value)} disabled={creating} className="w-full">
+            {assignableUserRoles(callerRole).map((value) => (
+              <option key={value} value={value}>{t(`roles.${value}`)}</option>
+            ))}
+          </Select>
+        </Field>
+        <Field id="pp-u-pass" label={t("fields.password")} error={errors.pass}>
+          <Input
+            id="pp-u-pass"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            maxLength={256}
+            autoComplete="new-password"
+            disabled={creating}
+            error={Boolean(errors.pass)}
+            aria-invalid={errors.pass ? true : undefined}
+            aria-describedby={errors.pass ? "pp-u-pass-err" : undefined}
+          />
+        </Field>
+        <Field id="pp-u-pass2" label={t("fields.repeatPassword")} error={errors.pass2}>
+          <Input
+            id="pp-u-pass2"
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            maxLength={256}
+            autoComplete="new-password"
+            disabled={creating}
+            error={Boolean(errors.pass2)}
+            aria-invalid={errors.pass2 ? true : undefined}
+            aria-describedby={errors.pass2 ? "pp-u-pass2-err" : undefined}
+          />
+        </Field>
       </div>
-    </div>
+    </PeopleDialog>
   );
 }

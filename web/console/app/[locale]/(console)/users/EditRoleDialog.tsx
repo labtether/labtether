@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { Button } from "../../../components/ui/Button";
-import { Card } from "../../../components/ui/Card";
+import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Select } from "../../../components/ui/Input";
 import type { HubUser } from "../../../hooks/useHubUsers";
 import { assignableUserRoles } from "../../../lib/roles";
+import { Field, PeopleDialog, errorText } from "./PeopleDialog";
 
 type EditRoleDialogProps = {
   user: HubUser | null;
@@ -14,76 +14,52 @@ type EditRoleDialogProps = {
   onConfirm: (user: HubUser, role: string) => Promise<void>;
 };
 
-const roleLabels: Record<string, string> = { admin: "Admin", operator: "Operator", viewer: "Viewer" };
-
+/** Change role: the roles the caller may give this user, the current one picked. */
 export function EditRoleDialog({ user, callerRole, onClose, onConfirm }: EditRoleDialogProps) {
-  const [role, setRole] = useState(user?.role === "owner" ? "admin" : (user?.role ?? "viewer"));
+  const t = useTranslations("users");
+  const [role, setRole] = useState("viewer");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  if (!user) return null;
-  const roleOptions = assignableUserRoles(callerRole, user.role).map((value) => ({ value, label: roleLabels[value] }));
+  useEffect(() => {
+    if (!user) return;
+    setRole(user.role === "owner" ? "admin" : user.role || "viewer");
+    setError("");
+    setSaving(false);
+  }, [user]);
 
-  const handleConfirm = async () => {
+  const submit = async () => {
+    if (!user) return;
     setSaving(true);
     setError("");
     try {
       await onConfirm(user, role);
-      onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update role.");
+      setError(errorText(err, t("errors.roleFailed")));
       setSaving(false);
     }
   };
 
-  const handleClose = () => {
-    if (saving) return;
-    setError("");
-    onClose();
-  };
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      onClick={handleClose}
+    <PeopleDialog
+      open={Boolean(user)}
+      title={t("role.title", { name: user?.username ?? "" })}
+      onClose={onClose}
+      onSubmit={() => { void submit(); }}
+      submitLabel={t("role.submit")}
+      busy={saving}
+      error={error}
+      disabled={role === user?.role}
     >
-      <div onClick={(e) => e.stopPropagation()}>
-        <Card className="w-[28rem] max-w-[92vw] space-y-4">
-          <h3 className="text-sm font-medium text-[var(--text)]">Edit Role</h3>
-          <div className="space-y-1">
-            <span className="text-[10px] text-[var(--muted)]">Username</span>
-            <p className="text-sm text-[var(--text)] font-mono">{user.username}</p>
-          </div>
-          <label className="block space-y-1">
-            <span className="text-[10px] text-[var(--muted)]">Role</span>
-            <Select
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              disabled={saving}
-              className="w-full"
-            >
-              {roleOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </Select>
-          </label>
-          {error ? <p className="text-xs text-[var(--bad)]">{error}</p> : null}
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="secondary" onClick={handleClose} disabled={saving}>
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              loading={saving}
-              onClick={() => { void handleConfirm(); }}
-            >
-              Update Role
-            </Button>
-          </div>
-        </Card>
-      </div>
-    </div>
+      <Field id="pp-role" label={t("fields.role")}>
+        <Select id="pp-role" name="role" value={role} onChange={(e) => setRole(e.target.value)} disabled={saving} className="w-full">
+          {user
+            ? assignableUserRoles(callerRole, user.role).map((value) => (
+                <option key={value} value={value}>{t(`roles.${value}`)}</option>
+              ))
+            : null}
+        </Select>
+      </Field>
+    </PeopleDialog>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { clickSelection, type ClickMods } from "./filesListModel";
 
 export type WorkspaceClipboardMode = "copy" | "cut";
 
@@ -22,14 +23,6 @@ export type WorkspaceContextMenuState<Entry> = {
   entry: Entry | null;
   names: string[];
   targetDirPath: string;
-};
-
-type ContextMenuSize = {
-  width?: number;
-  height?: number;
-  padding?: number;
-  boundsWidth?: number;
-  boundsHeight?: number;
 };
 
 type OpenContextMenuArgs<Entry> = Omit<WorkspaceContextMenuState<Entry>, "x" | "y">;
@@ -72,6 +65,16 @@ export function useFileWorkspaceState<Entry, ScopeID extends string = string>() 
     setSelectedEntries(new Set(names));
   }, []);
 
+  const anchorRef = useRef<string | null>(null);
+  /** A click on a row (⌘/Ctrl toggles, Shift picks a run); ordered is the list as shown. */
+  const pickClick = useCallback((name: string, ordered: string[], mods: ClickMods) => {
+    setSelectedEntries((prev) => {
+      const next = clickSelection(prev, ordered, name, anchorRef.current, mods);
+      anchorRef.current = next.anchor;
+      return next.selected;
+    });
+  }, []);
+
   const selectionNamesFromEntry = useCallback((entryName: string): string[] => {
     if (selectedEntries.has(entryName) && selectedEntries.size > 0) {
       return Array.from(selectedEntries);
@@ -98,25 +101,9 @@ export function useFileWorkspaceState<Entry, ScopeID extends string = string>() 
     setClipboard(null);
   }, []);
 
-  const openContextMenu = useCallback((
-    x: number,
-    y: number,
-    state: OpenContextMenuArgs<Entry>,
-    size?: ContextMenuSize,
-  ) => {
-    const menuWidth = size?.width ?? 240;
-    const menuHeight = size?.height ?? 320;
-    const padding = size?.padding ?? 8;
-    const maxWidth = size?.boundsWidth ?? window.innerWidth;
-    const maxHeight = size?.boundsHeight ?? window.innerHeight;
-    const clampedX = Math.max(padding, Math.min(x, maxWidth - menuWidth - padding));
-    const clampedY = Math.max(padding, Math.min(y, maxHeight - menuHeight - padding));
-
-    setContextMenu({
-      x: clampedX,
-      y: clampedY,
-      ...state,
-    });
+  /** Opens the right-click menu at viewport coordinates (the menu keeps itself inside the window). */
+  const openContextMenu = useCallback((x: number, y: number, state: OpenContextMenuArgs<Entry>) => {
+    setContextMenu({ x, y, ...state });
   }, []);
 
   const closeContextMenu = useCallback(() => {
@@ -130,6 +117,7 @@ export function useFileWorkspaceState<Entry, ScopeID extends string = string>() 
     clearSelection,
     selectOnly,
     setSelectedNames,
+    pickClick,
     selectionNamesFromEntry,
     clipboard,
     setClipboardItems,

@@ -184,7 +184,7 @@ test("nodes and logs stay responsive under high-volume payloads", async ({ page 
   await expect(page.getByRole("heading", { name: "Logs", level: 1, exact: true })).toBeVisible();
   expect(Date.now() - logsStarted).toBeLessThan(7000);
 
-  await page.getByPlaceholder("Search message text (error, timeout, zfs...)").fill("high-volume-event-4999");
+  await page.getByPlaceholder("Filter by device, source or message").fill("high-volume-event-4999");
   await expect(page.getByText("high-volume-event-4999")).toBeVisible({ timeout: 3000 });
 });
 

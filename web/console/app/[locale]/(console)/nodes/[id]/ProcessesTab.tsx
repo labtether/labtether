@@ -1,170 +1,90 @@
 "use client";
-import { useEffect, useState } from "react";
-import { useProcesses } from "../../../../hooks/useProcesses";
 
-function formatRSS(bytes: number): string {
-  if (bytes >= 1024 * 1024 * 1024) {
-    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-  }
-  if (bytes >= 1024 * 1024) {
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  }
-  if (bytes >= 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-  return `${bytes} B`;
-}
+import { useTranslations } from "next-intl";
+import { useEffect, useMemo, useState } from "react";
+import { useProcesses, type ProcessInfo } from "../../../../hooks/useProcesses";
+import { copyText, ListState, PctCell, RefreshButton, RowMenu, SizeCell, SortHead, type SortState } from "./systemViewParts";
 
+type ProcSort = "name" | "pid" | "user" | "cpu" | "memory";
+
+const COMPARE: Record<ProcSort, (a: ProcessInfo, b: ProcessInfo) => number> = {
+  name: (a, b) => a.name.localeCompare(b.name),
+  pid: (a, b) => a.pid - b.pid,
+  user: (a, b) => a.user.localeCompare(b.user),
+  cpu: (a, b) => a.cpu_pct - b.cpu_pct,
+  memory: (a, b) => a.mem_rss - b.mem_rss || a.mem_pct - b.mem_pct,
+};
+
+/** The busiest processes on the device (the hub picks them by CPU or memory), with their command line in grey. */
 export function ProcessesTab({ nodeId }: { nodeId: string }) {
+  const t = useTranslations("devices.system");
   const { processes, loading, error, refresh } = useProcesses(nodeId);
-  const [sortBy, setSortBy] = useState<"cpu" | "memory">("cpu");
+  const [sort, setSort] = useState<SortState<ProcSort>>({ key: "cpu", dir: "desc" });
+  // The hub returns the top processes by CPU or by memory; the other columns sort what it sent.
+  const fetchBy = sort.key === "memory" ? "memory" : "cpu";
 
   useEffect(() => {
-    void refresh(sortBy);
-  }, [refresh, sortBy]);
+    void refresh(fetchBy);
+  }, [refresh, fetchBy]);
+
+  const rows = useMemo(() => {
+    const list = [...processes].sort(COMPARE[sort.key]);
+    return sort.dir === "desc" ? list.reverse() : list;
+  }, [processes, sort]);
+
+  const head = (k: ProcSort, label: string, right: boolean, className = "") => (
+    <SortHead k={k} label={label} sort={sort} onSort={setSort} right={right} className={className} firstDir={right ? "desc" : "asc"} />
+  );
 
   return (
-    <div
-      style={{
-        background: "var(--panel)",
-        border: "1px solid var(--line)",
-        borderRadius: "8px",
-        padding: "16px",
-        marginBottom: "16px",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-        <h2 style={{ fontSize: "14px", fontWeight: 500, color: "var(--text)", margin: 0 }}>Processes</h2>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <span style={{ fontSize: "11px", color: "var(--muted)" }}>Sort by:</span>
-          {(["cpu", "memory"] as const).map((s) => (
-            <button
-              key={s}
-              onClick={() => setSortBy(s)}
-              style={{
-                padding: "4px 10px",
-                fontSize: "11px",
-                borderRadius: "6px",
-                border: "none",
-                cursor: "pointer",
-                background: sortBy === s ? "var(--accent)" : "var(--surface)",
-                color: sortBy === s ? "var(--accent-contrast)" : "var(--muted)",
-                transition: "background 150ms, color 150ms",
-              }}
-            >
-              {s === "cpu" ? "CPU" : "Memory"}
-            </button>
-          ))}
-          <button
-            onClick={() => void refresh(sortBy)}
-            disabled={loading}
-            style={{
-              padding: "4px 10px",
-              fontSize: "11px",
-              borderRadius: "6px",
-              border: "1px solid var(--line)",
-              cursor: loading ? "default" : "pointer",
-              background: "transparent",
-              color: "var(--muted)",
-              transition: "color 150ms",
-              opacity: loading ? 0.5 : 1,
-            }}
-          >
-            {loading ? "Loading..." : "Refresh"}
-          </button>
-        </div>
+    <div className="dsy">
+      <div className="dv-bar">
+        {processes.length > 0 ? (
+          <span className="dv-hint">{t(fetchBy === "memory" ? "processes.topMemory" : "processes.topCpu", { count: processes.length })}</span>
+        ) : null}
+        <span className="dv-sp" />
+        <RefreshButton loading={loading} onClick={() => void refresh(fetchBy)} />
       </div>
-
-      {loading && processes.length === 0 ? (
-        <p style={{ fontSize: "14px", color: "var(--muted)" }}>Loading processes...</p>
-      ) : error ? (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 0", gap: "8px" }}>
-          <p style={{ fontSize: "12px", color: "var(--bad)" }}>{error}</p>
-          <button
-            onClick={() => void refresh(sortBy)}
-            style={{
-              padding: "6px 12px",
-              fontSize: "12px",
-              borderRadius: "6px",
-              border: "1px solid var(--line)",
-              cursor: "pointer",
-              background: "transparent",
-              color: "var(--text)",
-            }}
-          >
-            Retry
-          </button>
+      <ListState
+        loading={loading}
+        hasRows={rows.length > 0}
+        error={error}
+        loadError={t("processes.loadError")}
+        empty={t("processes.empty")}
+        onRetry={() => void refresh(fetchBy)}
+      >
+        <div className="dv-list dsy-proc" role="table" aria-label={t("processes.label")}>
+          <div className="dv-cols" role="row">
+            {head("name", t("processes.cols.process"), false)}
+            {head("pid", t("processes.cols.pid"), true, "c-pid")}
+            {head("user", t("processes.cols.user"), false, "c-user")}
+            {head("cpu", t("processes.cols.cpu"), true)}
+            <span role="columnheader" className="r c-mempct">{t("processes.cols.memPct")}</span>
+            {head("memory", t("processes.cols.memory"), true, "c-rss")}
+            <span role="columnheader" aria-label={t("actions")} />
+          </div>
+          {rows.map((proc) => (
+            <div key={proc.pid} className="dv-row" role="row" tabIndex={0}>
+              <span role="cell" className="dv-ln">
+                <span className="dv-nm">{proc.name || "—"}</span>
+                {proc.command && proc.command !== proc.name ? <span className="dv-grey mono dsy-cmd">{proc.command}</span> : null}
+              </span>
+              <span role="cell" className="dv-n none c-pid">{proc.pid}</span>
+              <span role="cell" className="dv-txt c-user">{proc.user || "—"}</span>
+              <PctCell value={proc.cpu_pct} />
+              <PctCell value={proc.mem_pct} className="c-mempct" />
+              <SizeCell bytes={proc.mem_rss} className="c-rss" />
+              <RowMenu
+                name={proc.name}
+                items={[
+                  { label: t("processes.copyPid"), onSelect: () => copyText(String(proc.pid)) },
+                  { label: t("processes.copyCommand"), onSelect: () => copyText(proc.command || proc.name) },
+                ]}
+              />
+            </div>
+          ))}
         </div>
-      ) : processes.length === 0 ? (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "48px 0", gap: "8px" }}>
-          <p style={{ fontSize: "14px", fontWeight: 500, color: "var(--text)" }}>No processes returned</p>
-          <p style={{ fontSize: "12px", color: "var(--muted)", textAlign: "center", maxWidth: "320px" }}>
-            The agent did not return any process data. Make sure the agent is connected and supports process listing.
-          </p>
-        </div>
-      ) : (
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
-            <thead>
-              <tr style={{ borderBottom: "1px solid var(--line)" }}>
-                {["PID", "Name", "User", "CPU %", "Mem %", "RSS", "Command"].map((col) => (
-                  <th
-                    key={col}
-                    style={{
-                      padding: "6px 8px",
-                      textAlign: "left",
-                      fontSize: "10px",
-                      fontWeight: 500,
-                      color: "var(--muted)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.05em",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {col}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {processes.map((proc) => (
-                <tr
-                  key={proc.pid}
-                  style={{ borderBottom: "1px solid var(--line)" }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLTableRowElement).style.background = "var(--hover)";
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLTableRowElement).style.background = "transparent";
-                  }}
-                >
-                  <td style={{ padding: "6px 8px", color: "var(--muted)", fontVariantNumeric: "tabular-nums" }}>
-                    {proc.pid}
-                  </td>
-                  <td style={{ padding: "6px 8px", color: "var(--text)", fontWeight: 500, maxWidth: "160px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {proc.name}
-                  </td>
-                  <td style={{ padding: "6px 8px", color: "var(--muted)" }}>
-                    {proc.user}
-                  </td>
-                  <td style={{ padding: "6px 8px", color: proc.cpu_pct > 50 ? "var(--bad)" : proc.cpu_pct > 20 ? "var(--warn)" : "var(--text)", fontVariantNumeric: "tabular-nums" }}>
-                    {proc.cpu_pct.toFixed(1)}%
-                  </td>
-                  <td style={{ padding: "6px 8px", color: proc.mem_pct > 50 ? "var(--bad)" : proc.mem_pct > 20 ? "var(--warn)" : "var(--text)", fontVariantNumeric: "tabular-nums" }}>
-                    {proc.mem_pct.toFixed(1)}%
-                  </td>
-                  <td style={{ padding: "6px 8px", color: "var(--muted)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-                    {formatRSS(proc.mem_rss)}
-                  </td>
-                  <td style={{ padding: "6px 8px", color: "var(--muted)", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    <code style={{ fontSize: "11px" }}>{proc.command}</code>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      </ListState>
     </div>
   );
 }

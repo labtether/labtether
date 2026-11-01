@@ -17,11 +17,12 @@ import { hasAdminRole, hasWriteRole } from "../../lib/roles";
 import { DashboardFirstRunChecklistCard } from "./DashboardFirstRunChecklistCard";
 import { attentionItems, runningItems, serverCards } from "./dashboardModel";
 import { buildDeviceCards } from "./nodes/deviceCards";
+import { MapPreview } from "./topology/MapPreview";
 
 /**
  * Dashboard (2.0): what needs you (only when something does) beside what is running (only while something runs), then
  * the servers with CPU over the last day, then every web service one click away. Before the first device, the
- * first-run checklist leads. The small map arrives with the Map page rebuild, which draws it.
+ * first-run checklist leads. Last, the small map: the Map's tree down to the first tier under the switch.
  */
 export default function DashboardPage() {
   const t = useTranslations("dashboard");
@@ -114,6 +115,7 @@ export default function DashboardPage() {
             <ServicesLauncher services={services} assets={allAssets} />
           </DashSection>
         )}
+        <MapPreview />
       </div>
 
       <AddDeviceModal open={addDeviceOpen} onClose={() => setAddDeviceOpen(false)} />

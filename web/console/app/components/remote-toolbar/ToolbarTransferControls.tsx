@@ -1,58 +1,39 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import {
-  ClipboardCopy,
-  ClipboardPaste,
-  Download,
-  FolderOpen,
-  Loader2,
-} from "lucide-react";
-import type { RemoteViewToolbarProps } from "./types";
-import { IconButton } from "./ToolbarButtons";
 
-export function useToolbarTransferState(
-  clipboardLastSync: RemoteViewToolbarProps["clipboardLastSync"] = "idle",
-) {
-  const [clipboardFlash, setClipboardFlash] = useState<
-    "success" | "error" | null
-  >(null);
-  const [showDownloadInput, setShowDownloadInput] = useState(false);
+import * as Popover from "@radix-ui/react-popover";
+import { ClipboardList, Download, Folder, Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useContext, useEffect, useRef, useState } from "react";
+import type { RemoteViewToolbarProps } from "./types";
+import { ToolButton, ToolItem, ToolMenu, ToolbarPortalContext } from "./ToolbarButtons";
+
+/**
+ * State that outlives the menus: the last clipboard sync's result, shown for 1.5 s, and a download path being typed
+ * (kept while its popover is closed).
+ */
+export function useToolbarTransferState(clipboardLastSync: RemoteViewToolbarProps["clipboardLastSync"] = "idle") {
+  const [clipboardFlash, setClipboardFlash] = useState<"success" | "error" | null>(null);
   const [downloadPath, setDownloadPath] = useState("");
-  const downloadInputRef = useRef<HTMLInputElement>(null);
-  const clipboardFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevLastSync = useRef(clipboardLastSync);
   useEffect(() => {
-    if (
-      clipboardLastSync !== prevLastSync.current &&
-      clipboardLastSync !== "idle"
-    ) {
+    if (clipboardLastSync !== prevLastSync.current && clipboardLastSync !== "idle") {
       setClipboardFlash(clipboardLastSync);
-      if (clipboardFlashTimerRef.current)
-        clearTimeout(clipboardFlashTimerRef.current);
-      clipboardFlashTimerRef.current = setTimeout(
-        () => setClipboardFlash(null),
-        1500,
-      );
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null;
+        setClipboardFlash(null);
+      }, 1500);
     }
     prevLastSync.current = clipboardLastSync;
   }, [clipboardLastSync]);
   useEffect(
     () => () => {
-      if (clipboardFlashTimerRef.current)
-        clearTimeout(clipboardFlashTimerRef.current);
+      if (timerRef.current) clearTimeout(timerRef.current);
     },
     [],
   );
-  return {
-    clipboardFlash,
-    showDownloadInput,
-    setShowDownloadInput,
-    downloadPath,
-    setDownloadPath,
-    downloadInputRef,
-  };
+  return { clipboardFlash, downloadPath, setDownloadPath };
 }
 
 type TransferProps = Pick<
@@ -66,128 +47,99 @@ type TransferProps = Pick<
   | "onDownloadFile"
 > & {
   transfer: ReturnType<typeof useToolbarTransferState>;
+  onOpenChange: (open: boolean) => void;
 };
-export function ToolbarTransferControls({
-  onClipboardPull,
-  onClipboardPush,
-  clipboardSyncing = false,
-  onFileDrawerToggle,
-  fileDrawerOpen = false,
-  fileDownloading = false,
-  onDownloadFile,
-  transfer,
-}: TransferProps) {
-  const {
-    clipboardFlash,
-    showDownloadInput,
-    setShowDownloadInput,
-    downloadPath,
-    setDownloadPath,
-    downloadInputRef,
-  } = transfer;
-  const clipboardControls =
-    onClipboardPull || onClipboardPush ? (
-      <div
-        className="flex items-center gap-0.5 rounded-md transition-[box-shadow,border-color,opacity] duration-300"
-        style={{
-          boxShadow:
-            clipboardFlash === "success"
-              ? "0 0 6px var(--ok)"
-              : clipboardFlash === "error"
-                ? "0 0 6px var(--bad)"
-                : "none",
-          border:
-            clipboardFlash === "success"
-              ? "1px solid var(--ok)"
-              : clipboardFlash === "error"
-                ? "1px solid var(--bad)"
-                : "1px solid transparent",
-          opacity: clipboardSyncing ? 0.6 : 1,
-          animation: clipboardSyncing
-            ? "pulse 1.5s ease-in-out infinite"
-            : "none",
-        }}
-      >
-        {onClipboardPull && (
-          <IconButton
-            onClick={onClipboardPull}
-            title="Pull clipboard from remote"
-          >
-            <ClipboardPaste className="w-3.5 h-3.5" />
-          </IconButton>
-        )}
-        {onClipboardPush && (
-          <IconButton
-            onClick={onClipboardPush}
-            title="Push clipboard to remote"
-          >
-            <ClipboardCopy className="w-3.5 h-3.5" />
-          </IconButton>
-        )}
-      </div>
-    ) : null;
-  const downloadControls = onFileDrawerToggle ? (
-    <IconButton
-      onClick={onFileDrawerToggle}
-      active={fileDrawerOpen}
-      title={fileDrawerOpen ? "Close file browser" : "Browse & transfer files"}
-    >
-      {fileDownloading ? (
-        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-      ) : (
-        <FolderOpen className="w-3.5 h-3.5" />
-      )}
-    </IconButton>
-  ) : onDownloadFile ? (
-    <>
-      <IconButton
-        onClick={() => {
-          setShowDownloadInput((prev) => !prev);
-          if (!showDownloadInput) {
-            setTimeout(() => downloadInputRef.current?.focus(), 0);
-          }
-        }}
-        active={showDownloadInput}
-        title="Download file from remote"
-      >
-        {fileDownloading ? (
-          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-        ) : (
-          <Download className="w-3.5 h-3.5" />
-        )}
-      </IconButton>
-      {showDownloadInput && (
-        <input
-          ref={downloadInputRef}
-          type="text"
-          placeholder="/path/to/file"
-          value={downloadPath}
-          onChange={(e) => setDownloadPath(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && downloadPath.trim()) {
-              onDownloadFile(downloadPath.trim());
-              setDownloadPath("");
-              setShowDownloadInput(false);
-            } else if (e.key === "Escape") {
-              setShowDownloadInput(false);
-              setDownloadPath("");
-            }
-            e.stopPropagation();
-          }}
-          onBlur={() => {
-            setShowDownloadInput(false);
-            setDownloadPath("");
-          }}
-          className="rounded-md border border-white/20 bg-white/5 text-white/90 placeholder:text-white/30 px-2 py-0.5 outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]"
-          style={{ fontSize: 11, width: 160 }}
-        />
-      )}
-    </>
-  ) : null;
+
+/** Clipboard: pull the remote clipboard to this computer, or push this computer's clipboard to the remote one. */
+export function ToolbarClipboard({ onClipboardPull, onClipboardPush, clipboardSyncing = false, onOpenChange }: TransferProps) {
+  const t = useTranslations("desktop.tools");
+  if (!onClipboardPull && !onClipboardPush) return null;
   return (
-    <>
-      {clipboardControls}
-      {downloadControls}
-    </>
+    <ToolMenu
+      icon={clipboardSyncing ? <Loader2 className="rv-spin" aria-hidden="true" /> : <ClipboardList aria-hidden="true" />}
+      label={t("clipboard")}
+      onOpenChange={onOpenChange}
+    >
+      {onClipboardPull ? <ToolItem onSelect={onClipboardPull}>{t("pull")}</ToolItem> : null}
+      {onClipboardPush ? <ToolItem onSelect={onClipboardPush}>{t("push")}</ToolItem> : null}
+    </ToolMenu>
+  );
+}
+
+/**
+ * Files: opens the file drawer when the device's agent can browse files, else a field for one remote path to download,
+ * else stays disabled and says why.
+ */
+export function ToolbarFiles(props: TransferProps) {
+  const t = useTranslations("desktop.tools");
+  const { onFileDrawerToggle, fileDrawerOpen = false, fileDownloading = false, onDownloadFile } = props;
+  const icon = fileDownloading ? <Loader2 className="rv-spin" aria-hidden="true" /> : <Folder aria-hidden="true" />;
+  if (onFileDrawerToggle) {
+    return (
+      <ToolButton label={t("files")} pressed={fileDrawerOpen} onClick={onFileDrawerToggle}>
+        {icon}
+      </ToolButton>
+    );
+  }
+  if (onDownloadFile) return <DownloadPopover {...props} />;
+  return (
+    <ToolButton label={t("filesNeedAgent")} disabled>
+      <Folder aria-hidden="true" />
+    </ToolButton>
+  );
+}
+
+function DownloadPopover({ onDownloadFile, fileDownloading = false, transfer, onOpenChange }: TransferProps) {
+  const t = useTranslations("desktop.tools");
+  const container = useContext(ToolbarPortalContext);
+  const [open, setOpen] = useState(false);
+  const setBoth = (next: boolean) => {
+    setOpen(next);
+    onOpenChange(next);
+  };
+  const submit = () => {
+    const path = transfer.downloadPath.trim();
+    if (!path) return;
+    onDownloadFile?.(path);
+    transfer.setDownloadPath("");
+    setBoth(false);
+  };
+  return (
+    <Popover.Root open={open} onOpenChange={setBoth}>
+      <Popover.Trigger asChild>
+        <ToolButton label={t("downloadFile")} pressed={open}>
+          {fileDownloading ? <Loader2 className="rv-spin" aria-hidden="true" /> : <Download aria-hidden="true" />}
+        </ToolButton>
+      </Popover.Trigger>
+      <Popover.Portal container={container ?? undefined}>
+        <Popover.Content className="rv-pop" align="end" sideOffset={6} collisionPadding={8}>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              submit();
+            }}
+          >
+            <label className="rv-field-l" htmlFor="rv-download-path">
+              {t("downloadPath")}
+            </label>
+            <input
+              id="rv-download-path"
+              className="rv-input mono"
+              placeholder="/path/to/file"
+              value={transfer.downloadPath}
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(event) => transfer.setDownloadPath(event.target.value)}
+              onKeyDown={(event) => event.stopPropagation()}
+            />
+            <div className="rv-pop-foot">
+              <button type="submit" className="rv-btn" disabled={!transfer.downloadPath.trim()}>
+                {t("download")}
+              </button>
+            </div>
+          </form>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }

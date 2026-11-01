@@ -173,18 +173,18 @@ test("nodes page shows populated Home Assistant detail panels and keeps entity g
     homeAssistantCard.click(),
   ]);
 
-  const homeAssistantPanel = page.getByRole("button", { name: /Home Assistant/i }).first();
-  const servicesPanel = page.getByRole("button", { name: /Services/i }).first();
-  await expect(homeAssistantPanel).toBeVisible();
-  await expect(servicesPanel).toContainText("Services");
-  await expect(servicesPanel).toContainText("2 items");
-  await expect(page.getByRole("button", { name: /Monitoring/i })).toHaveCount(0);
+  const sections = page.getByRole("navigation", { name: "Device sections" });
+  const homeAssistantTab = sections.getByRole("link", { name: "Home Assistant", exact: true });
+  await expect(homeAssistantTab).toBeVisible();
+  await expect(sections.getByRole("link", { name: "Services", exact: true })).toBeVisible();
+  await expect(sections.getByRole("link", { name: "System", exact: true })).toHaveCount(0);
 
-  await homeAssistantPanel.click();
-  await expect(page.getByRole("heading", { name: "Home Assistant Hub", exact: true })).toBeVisible();
-  await expect(page.getByText("http://ha-main.local:8123", { exact: true })).toBeVisible();
-  await expect(page.getByText("Kitchen Light", { exact: true })).toBeVisible();
-  await expect(page.getByText("Office Temp", { exact: true })).toBeVisible();
+  await homeAssistantTab.click();
+  const hubPanel = page.locator(".di-ha");
+  await expect(hubPanel.getByRole("heading", { name: "Connection", exact: true })).toBeVisible();
+  await expect(hubPanel.getByText("ha-main.local:8123", { exact: true })).toBeVisible();
+  await expect(hubPanel.getByRole("link", { name: "Kitchen Light", exact: true })).toBeVisible();
+  await expect(hubPanel.getByRole("link", { name: "Office Temp", exact: true })).toBeVisible();
   await expect(page.getByText("Garden Switch", { exact: true })).toHaveCount(0);
 
   await page.goto("/nodes/ha-hub-main?panel=services");
@@ -194,12 +194,14 @@ test("nodes page shows populated Home Assistant detail panels and keeps entity g
 
   await page.getByRole("link", { name: "Kitchen Light" }).click();
   await expect(page).toHaveURL(/(?:\/[a-z]{2})?\/nodes\/ha-entity-light-kitchen$/);
-  await expect(page.getByRole("button", { name: /Home Assistant/i }).first()).toBeVisible();
-  await expect(page.getByRole("button", { name: /Monitoring/i })).toHaveCount(0);
+  const entitySections = page.getByRole("navigation", { name: "Device sections" });
+  await expect(entitySections.getByRole("link", { name: "Home Assistant", exact: true })).toBeVisible();
+  await expect(entitySections.getByRole("link", { name: "System", exact: true })).toHaveCount(0);
 
-  await page.getByRole("button", { name: /Home Assistant/i }).first().click();
-  await expect(page.getByRole("heading", { name: "Home Assistant Entity", exact: true })).toBeVisible();
-  await expect(page.getByText("Current State", { exact: true })).toBeVisible();
-  await expect(page.getByText("light.kitchen", { exact: true })).toBeVisible();
-  await expect(page.getByText("Home Assistant Main", { exact: true })).toBeVisible();
+  await entitySections.getByRole("link", { name: "Home Assistant", exact: true }).click();
+  const entityPanel = page.locator(".di-ha");
+  await expect(entityPanel.getByRole("heading", { name: "State", exact: true })).toBeVisible();
+  await expect(entityPanel.getByText("Current state", { exact: true })).toBeVisible();
+  await expect(entityPanel.getByText("light.kitchen", { exact: true })).toBeVisible();
+  await expect(entityPanel.getByRole("link", { name: "Home Assistant Main", exact: true })).toBeVisible();
 });

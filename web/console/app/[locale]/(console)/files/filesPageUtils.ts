@@ -12,18 +12,6 @@ export function formatSize(bytes: number): string {
   return `${val.toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
 }
 
-export function formatDate(iso: string): string {
-  if (!iso) return "\u2014";
-  const date = new Date(iso);
-  return date.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 export function fileIconComponent(name: string, isDir: boolean): LucideIcon {
   if (isDir) return Folder;
   const ext = name.includes(".") ? name.split(".").pop()?.toLowerCase() : "";

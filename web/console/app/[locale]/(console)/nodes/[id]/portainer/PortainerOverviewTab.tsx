@@ -1,77 +1,51 @@
 "use client";
 
-import { Card } from "../../../../../components/ui/Card";
+import { useTranslations } from "next-intl";
+import type { ReactNode } from "react";
+import { Bar, KV, ListEmpty, ListError, SectionHead } from "../../../../../components/containers/PanelParts";
 import { usePortainerOverview } from "./usePortainerData";
 
 type Props = {
   assetId: string;
+  bar?: ReactNode;
 };
 
-function StatItem({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="rounded-lg border border-[var(--line)] bg-[var(--panel-glass)] px-4 py-3">
-      <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--muted)]">{label}</p>
-      <p className="mt-1 text-sm font-medium text-[var(--text)]">{String(value)}</p>
+/** The endpoint's Portainer version and address, and how many containers, stacks, images, volumes and networks it has. */
+export function PortainerOverviewTab({ assetId, bar }: Props) {
+  const t = useTranslations("devices-docker.portainer");
+  const { data, loading, error, refresh } = usePortainerOverview(assetId);
+
+  let body: ReactNode;
+  if (loading && !data) body = <ListEmpty text={t("loading")} />;
+  else if (error && !data) body = <ListError text={t("loadFailed")} onRetry={refresh} />;
+  else if (!data) body = <ListEmpty text={t("noOverview")} />;
+  else body = (
+    <div className="ct-two">
+      <section aria-labelledby="pt-srv">
+        <SectionHead id="pt-srv" title={t("server")} />
+        <dl className="ct-sheet ct-kvs">
+          <KV k={t("version")}>{data.server_version || "—"}</KV>
+          <KV k={t("endpoint")}>{data.endpoint_name || "—"}</KV>
+          <KV k={t("url")} mono><span className="ct-wrap">{data.endpoint_url || "—"}</span></KV>
+        </dl>
+      </section>
+      <section aria-labelledby="pt-res">
+        <SectionHead id="pt-res" title={t("resources")} />
+        <dl className="ct-sheet ct-kvs">
+          <KV k={t("containers")}>{t("runStop", { running: data.containers.running, stopped: data.containers.stopped })}</KV>
+          <KV k={t("stacks")}>{t("runStop", { running: data.stacks.running, stopped: data.stacks.stopped })}</KV>
+          <KV k={t("images")}>{data.images.count}</KV>
+          <KV k={t("volumes")}>{data.volumes.count}</KV>
+          <KV k={t("networks")}>{data.networks.count}</KV>
+        </dl>
+      </section>
     </div>
   );
-}
-
-export function PortainerOverviewTab({ assetId }: Props) {
-  const { data, loading, error } = usePortainerOverview(assetId);
-
-  if (loading && !data) {
-    return (
-      <Card>
-        <p className="text-sm text-[var(--muted)]">Loading overview…</p>
-      </Card>
-    );
-  }
-
-  if (error && !data) {
-    return (
-      <Card>
-        <p className="text-sm text-[var(--bad)]">{error}</p>
-      </Card>
-    );
-  }
-
-  if (!data) {
-    return (
-      <Card>
-        <p className="text-sm text-[var(--muted)]">No overview data available.</p>
-      </Card>
-    );
-  }
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <h2 className="mb-3 text-sm font-medium text-[var(--text)]">Server Info</h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <StatItem label="Version" value={data.server_version || "--"} />
-          <StatItem label="Endpoint" value={data.endpoint_name || "--"} />
-          <StatItem label="URL" value={data.endpoint_url || "--"} />
-        </div>
-      </Card>
-
-      <Card>
-        <h2 className="mb-3 text-sm font-medium text-[var(--text)]">Resources</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-          <div className="rounded-lg border border-[var(--line)] bg-[var(--panel-glass)] px-4 py-3">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--muted)]">Containers</p>
-            <p className="mt-1 text-sm font-medium text-[var(--text)]">{data.containers.running} running</p>
-            <p className="mt-0.5 text-xs text-[var(--muted)]">{data.containers.stopped} stopped · {data.containers.total} total</p>
-          </div>
-          <div className="rounded-lg border border-[var(--line)] bg-[var(--panel-glass)] px-4 py-3">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--muted)]">Stacks</p>
-            <p className="mt-1 text-sm font-medium text-[var(--text)]">{data.stacks.running} running</p>
-            <p className="mt-0.5 text-xs text-[var(--muted)]">{data.stacks.stopped} stopped · {data.stacks.total} total</p>
-          </div>
-          <StatItem label="Images" value={data.images.count} />
-          <StatItem label="Volumes" value={data.volumes.count} />
-          <StatItem label="Networks" value={data.networks.count} />
-        </div>
-      </Card>
-    </div>
+    <>
+      <Bar left={bar} />
+      {body}
+    </>
   );
 }

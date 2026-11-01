@@ -1,110 +1,112 @@
 {
   "title": "Aktionen",
-  "subtitle": "Aufgaben auf Ihren Geräten ausführen und Ergebnisse überprüfen",
-  "runAction": {
-    "heading": "// Aktion ausführen",
-    "integration": {
-      "label": "Integration",
-      "tooltip": "Integrationsmodul, das diese Aktion bereitstellt"
-    },
-    "action": "Aktion",
-    "device": {
-      "label": "Gerät",
-      "tooltip": "Die Ressourcenkennung, auf die eingewirkt wird (Container-ID, VM-Name usw.)",
-      "placeholder": "Container-ID / VM-ID / Entity-ID",
-      "notRequired": "Diese Aktion benötigt kein Zielgerät."
-    },
-    "parameters": {
-      "none": "Diese Aktion benötigt keine zusätzlichen Parameter.",
-      "required": "(erforderlich)"
-    },
-    "previewOnly": {
-      "label": "Nur Vorschau",
-      "tooltip": "Aktion simulieren, ohne Änderungen vorzunehmen",
-      "unsupportedTooltip": "Diese Aktion läuft direkt und unterstützt keinen Vorschaumodus"
-    },
-    "submit": "Ausführen",
-    "submitting": "Wird eingereiht..."
-  },
-  "savedActions": {
-    "heading": "// Gespeicherte Befehlsaktionen",
-    "description": "Wiederverwendbare, geordnete Befehlsfolgen für bestimmte Geräte erstellen.",
-    "reload": "Neu laden",
-    "create": "Neue gespeicherte Aktion",
-    "noAssets": "Es sind keine zugänglichen Geräte verfügbar. Fügen Sie ein Gerät hinzu oder verbinden Sie es, bevor Sie eine Aktion erstellen.",
-    "loading": "Gespeicherte Aktionen werden geladen...",
-    "empty": "Noch keine gespeicherten Befehlsaktionen.",
-    "listLabel": "Gespeicherte Befehlsaktionen",
-    "summary": "{count} Schritte · erstellt {date}",
-    "view": "Anzeigen",
-    "run": "Ausführen",
-    "delete": "Löschen",
-    "deleteAction": "{name} löschen",
-    "createTitle": "Gespeicherte Befehlsaktion erstellen",
-    "fields": { "name": "Aktionsname", "description": "Beschreibung (optional)", "steps": "Befehlsschritte", "stepName": "Schrittname", "asset": "Gerät", "command": "Befehl" },
-    "defaultStepName": "Schritt {number}",
-    "stepHeading": "Schritt {number}",
-    "removeStep": "Schritt {number} entfernen",
-    "remove": "Entfernen",
-    "selectAsset": "Gerät auswählen",
-    "addStep": "Schritt hinzufügen",
+  "new": "Neue Aktion",
+  "common": {
     "cancel": "Abbrechen",
-    "close": "Schließen",
-    "creating": "Wird erstellt...",
-    "createAction": "Aktion erstellen",
-    "detailsTitle": "Details der gespeicherten Aktion",
-    "loadingDetails": "Aktuelle Aktionsdetails werden geladen...",
-    "stepListLabel": "Befehlsschritte der gespeicherten Aktion",
-    "runNow": "Jetzt ausführen",
-    "running": "Wird ausgeführt...",
-    "results": "Ausführungsergebnisse",
-    "failed": "Fehlgeschlagen",
-    "succeeded": "Erfolgreich",
-    "exitCode": "Exit {code}",
-    "noOutput": "Befehl ohne Ausgabe abgeschlossen.",
-    "deleteTitle": "Gespeicherte Aktion löschen",
-    "deleteWarning": "„{name}“ wird dauerhaft gelöscht. Bereits laufende Befehle werden nicht abgebrochen.",
-    "deletePrompt": "Geben Sie zur Bestätigung genau {name} ein",
-    "deleting": "Wird gelöscht...",
-    "deleteActionButton": "Aktion löschen",
-    "errors": { "nameRequired": "Geben Sie einen Aktionsnamen ein.", "stepRequired": "Jeder Schritt benötigt ein Gerät und einen Befehl.", "assetUnavailable": "Mindestens ein ausgewähltes Gerät ist nicht mehr verfügbar.", "createFailed": "Gespeicherte Aktion konnte nicht erstellt werden.", "loadOneFailed": "Gespeicherte Aktion konnte nicht geladen werden.", "runFailed": "Gespeicherte Aktion konnte nicht ausgeführt werden.", "deleteFailed": "Gespeicherte Aktion konnte nicht gelöscht werden." },
-    "messages": { "created": "„{name}“ wurde erstellt.", "runFinished": "Ausführung von „{name}“ abgeschlossen.", "runFinishedWithFailures": "Ausführung von „{name}“ mit {count} fehlgeschlagenen Schritten abgeschlossen.", "deleted": "„{name}“ wurde gelöscht." }
+    "create": "Erstellen",
+    "save": "Speichern",
+    "delete": "Löschen",
+    "deleteMenu": "Löschen…",
+    "edit": "Bearbeiten…",
+    "rowMenu": "Aktionen für {name}",
+    "loading": "Wird geladen…",
+    "retry": "Erneut versuchen",
+    "never": "Nie",
+    "on": "An",
+    "remove": "{name} entfernen"
   },
-  "history": {
-    "heading": "// Ausführungsverlauf",
-    "viewLogs": "Protokolle anzeigen",
-    "empty": {
-      "title": "Noch keine Ausführungen",
-      "description": "Wählen Sie oben eine Integration und Aktion aus und klicken Sie auf Ausführen."
-    }
-  },
-  "updates": {
-    "title": "Aktualisierungen",
-    "subtitle": "Aktualisierungen planen und im gesamten Lab ausführen",
-    "planName": "Planname",
-    "devices": {
-      "label": "Geräte",
-      "tooltip": "Kommagetrennte Liste der zu aktualisierenden Geräte-Hostnamen",
-      "placeholder": "lab-host-01, docker-host-01"
-    },
-    "scopes": {
-      "label": "Bereiche",
-      "tooltip": "Derzeit unterstützte Update-Kategorie: os_packages.",
-      "placeholder": "os_packages"
-    },
-    "previewOnly": "Nur Vorschau",
-    "createPlan": "Plan erstellen",
-    "saving": "Wird gespeichert...",
-    "plans": "Pläne",
-    "recentRuns": "Letzte Ausführungen",
+  "list": {
+    "label": "Gespeicherte Aktionen",
+    "action": "Aktion",
+    "empty": "Keine gespeicherten Aktionen",
+    "loadFailed": "Gespeicherte Aktionen konnten nicht geladen werden",
+    "steps": "{count, plural, one {# Schritt} other {# Schritte}}",
     "run": "Ausführen",
-    "plansEmpty": {
-      "title": "Noch keine Update-Pläne",
-      "description": "Erstellen Sie oben einen Plan, um festzulegen, welche Geräte und Bereiche aktualisiert werden sollen."
-    },
-    "runsEmpty": {
-      "title": "Noch keine Update-Ausführungen",
-      "description": "Führen Sie einen Plan aus, um eine Ausführung zu starten."
-    }
+    "runMany": "Ausführen…",
+    "runLabel": "{name} ausführen",
+    "running": "Läuft",
+    "failed": "Fehlgeschlagen",
+    "succeededAt": "Erfolgreich · {time}",
+    "showSteps": "Schritte zeigen",
+    "hideSteps": "Schritte ausblenden",
+    "duplicate": "Duplizieren…"
+  },
+  "panel": {
+    "steps": "Schritte",
+    "command": "Befehl",
+    "lastRun": "Letzter Lauf",
+    "running": "Läuft",
+    "exit": "Exit-Code {code}",
+    "succeeded": "Erfolgreich",
+    "failed": "Fehlgeschlagen",
+    "noOutput": "Keine Ausgabe",
+    "duration": "{ms} ms",
+    "loadFailed": "Die aktuellen Schritte konnten nicht geladen werden"
+  },
+  "run": {
+    "title": "„{name}“ ausführen?",
+    "body": "Sie läuft auf {count} Geräten: {devices}.",
+    "confirm": "Auf {count} Geräten ausführen",
+    "finished": "„{name}“ abgeschlossen",
+    "finishedFailures": "„{name}“ abgeschlossen, {count, plural, one {# Schritt fehlgeschlagen} other {# Schritte fehlgeschlagen}}",
+    "failed": "„{name}“ konnte nicht ausgeführt werden"
+  },
+  "delete": {
+    "title": "„{name}“ löschen?",
+    "body": "Bereits laufende Befehle laufen weiter.",
+    "prompt": "Zum Bestätigen {name} eingeben",
+    "deleted": "„{name}“ gelöscht",
+    "failed": "Die Aktion konnte nicht gelöscht werden"
+  },
+  "editor": {
+    "newTitle": "Neue Aktion",
+    "copyTitle": "Aktion duplizieren",
+    "command": "Befehl",
+    "integration": "Integrationsaktion",
+    "name": "Name",
+    "description": "Beschreibung",
+    "optional": "Optional",
+    "noDevices": "Keine Geräte, die Befehle ausführen können",
+    "steps": "Schritte",
+    "device": "Gerät",
+    "stepDevice": "Gerät für Schritt {number}",
+    "stepCommand": "Befehl für Schritt {number}",
+    "removeStep": "Schritt {number} entfernen",
+    "addStep": "Schritt hinzufügen",
+    "defaultStepName": "Schritt {number}",
+    "nameRequired": "Namen eingeben",
+    "commandRequired": "Befehl eingeben",
+    "deviceRequired": "Gerät wählen",
+    "deviceGone": "Dieses Gerät ist nicht mehr verfügbar",
+    "created": "„{name}“ erstellt",
+    "createFailed": "Die Aktion konnte nicht erstellt werden",
+    "copyName": "{name} (Kopie)"
+  },
+  "integration": {
+    "none": "Keine Integrationen verbunden",
+    "integration": "Integration",
+    "action": "Aktion",
+    "target": "Ziel",
+    "targetRequired": "Ziel eingeben",
+    "paramRequired": "Erforderlich",
+    "optional": "Optional",
+    "loadFailed": "Die Aktionen dieser Integration konnten nicht geladen werden",
+    "preview": "Vorschau",
+    "previewHint": "Probelauf: prüft die Aktion, ändert nichts",
+    "noPreview": "Kein Probelauf für diese Aktion",
+    "once": "Läuft einmal, wird nicht gespeichert",
+    "run": "Ausführen",
+    "runPreview": "Vorschau ausführen",
+    "queued": "„{name}“ eingereiht",
+    "previewQueued": "Vorschau von „{name}“ eingereiht",
+    "failed": "Die Aktion konnte nicht ausgeführt werden"
+  },
+  "runs": {
+    "title": "Letzte Läufe",
+    "empty": "Noch keine Läufe",
+    "running": "Läuft",
+    "queued": "Eingereiht",
+    "failed": "Fehlgeschlagen",
+    "logs": "Protokolle"
   }
 }

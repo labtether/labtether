@@ -1,196 +1,104 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useParams } from "next/navigation";
-import { useRouter, Link } from "../../../../../../i18n/navigation";
+import { useState, type FormEvent } from "react";
+import { Link, useRouter } from "../../../../../../i18n/navigation";
 import { PageHeader } from "../../../../../components/PageHeader";
-import { Card } from "../../../../../components/ui/Card";
+import { dockerContainerAssetId, hostKey, nodeHref } from "../../../../../components/containers/containerModel";
+import { repoName, runErrors, runParams, type RunErrors, type RunValues } from "../../../../../components/containers/deployModel";
+import { DeployCrumbs, Field, HostSelect, dockerTabHref, invalid, useDeployHosts } from "../../../../../components/containers/DeployParts";
 import { Button } from "../../../../../components/ui/Button";
+import { useToast } from "../../../../../contexts/ToastContext";
 import { executeDockerHostAction } from "../../../../../../lib/docker";
 
-function normalizeHostID(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replaceAll(" ", "-")
-    .replaceAll(".", "-")
-    .replace(/^docker-host-/, "")
-    .replace(/^docker-/, "");
-}
+const EMPTY: RunValues = { image: "", name: "", ports: "", env: "", command: "" };
 
+/** Run container: pull an image and start one container on a Docker host. */
 export default function NewContainerPage() {
+  const t = useTranslations("containers.deploy");
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const { addToast } = useToast();
+  const routeKey = hostKey(decodeURIComponent((params.id ?? "").trim()));
+  const hosts = useDeployHosts(routeKey);
+  const [host, setHost] = useState(routeKey);
+  const [values, setValues] = useState<RunValues>(EMPTY);
+  const [tried, setTried] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  const [made, setMade] = useState<{ name: string; href: string } | null>(null);
 
-  const routeNodeID = decodeURIComponent((params.id ?? "").trim());
-  const normalizedHostID = useMemo(() => normalizeHostID(routeNodeID), [routeNodeID]);
-  const hostNodeID = normalizedHostID ? `docker-host-${normalizedHostID}` : routeNodeID;
-  const hostActionTarget = normalizedHostID || routeNodeID;
+  const errors: RunErrors = tried ? runErrors(values) : {};
+  const msg = (k: keyof RunErrors) => (errors[k] ? t(`errors.${errors[k]}`) : undefined);
+  const set = (k: keyof RunValues) => (e: { target: { value: string } }) => setValues((v) => ({ ...v, [k]: e.target.value }));
+  const current = hosts.find((h) => h.key === host);
+  const back = dockerTabHref(host, "containers");
 
-  const [image, setImage] = useState("");
-  const [name, setName] = useState("");
-  const [command, setCommand] = useState("");
-  const [environment, setEnvironment] = useState("");
-  const [ports, setPorts] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [createdID, setCreatedID] = useState<string>("");
-
-  const hostContainersHref = `/nodes/${encodeURIComponent(hostNodeID)}?panel=docker&sub=containers`;
-  const hostStacksHref = `/nodes/${encodeURIComponent(hostNodeID)}?panel=docker&sub=stacks`;
-
-  const createdContainerAssetID = useMemo(() => {
-    const trimmed = createdID.trim();
-    if (!trimmed || !normalizedHostID) return "";
-    const shortID = trimmed.length > 12 ? trimmed.slice(0, 12) : trimmed;
-    return `docker-ct-${normalizedHostID}-${shortID}`;
-  }, [createdID, normalizedHostID]);
-
-  async function onCreate() {
-    const trimmedImage = image.trim();
-    if (!trimmedImage) {
-      setError("Image is required.");
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setTried(true);
+    setFailure(null);
+    if (Object.keys(runErrors(values)).length) {
+      requestAnimationFrame(() => document.querySelector<HTMLElement>(".ct-form [aria-invalid=true]")?.focus());
       return;
     }
-
-    setSubmitting(true);
-    setError(null);
-    setCreatedID("");
+    const name = values.name.trim() || repoName(values.image);
+    setBusy(true);
     try {
-      const result = await executeDockerHostAction(hostActionTarget, "container.create", {
-        image: trimmedImage,
-        name: name.trim(),
-        command: command.trim(),
-        env: environment.trim(),
-        ports: ports.trim(),
-      });
-      if (result.status !== "succeeded") {
-        throw new Error(result.message || "container creation failed");
-      }
-      const newID = (result.output ?? "").trim();
-      setCreatedID(newID);
-      setName("");
-      setCommand("");
-      setEnvironment("");
-      setPorts("");
-      setTimeout(() => {
-        router.push(hostContainersHref);
-      }, 900);
+      const result = await executeDockerHostAction(host, "container.create", runParams(values));
+      if (result.status !== "succeeded") throw new Error(result.message);
+      const id = (result.output ?? "").trim();
+      setMade({ name, href: id ? nodeHref(dockerContainerAssetId(host, id)) : back });
+      setValues(EMPTY);
+      setTried(false);
+      addToast("success", t("ranToast", { name, host: current?.label ?? host }));
+      setTimeout(() => router.push(back), 900);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "container creation failed");
+      setFailure(err instanceof Error && err.message ? err.message : t("runFailed"));
     } finally {
-      setSubmitting(false);
+      setBusy(false);
     }
   }
 
   return (
     <>
-      <PageHeader
-        title="New Container"
-        subtitle={(
-          <span className="flex flex-wrap items-center gap-1">
-            <Link href="/nodes" className="text-[var(--accent)] hover:underline">Devices</Link>
-            <span>/</span>
-            <Link href={`/nodes/${encodeURIComponent(hostNodeID)}`} className="text-[var(--accent)] hover:underline">
-              {hostNodeID}
-            </Link>
-            <span>/</span>
-            <span>Create Container</span>
-          </span>
-        )}
-      />
-
-      <Card className="mb-4">
-        <div className="mb-4 rounded-xl border border-[var(--line)] bg-[linear-gradient(135deg,var(--panel)_0%%,color-mix(in_oklab,var(--accent)_10%%,var(--panel))_100%%)] p-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">Container Builder</p>
-          <p className="mt-1 text-sm text-[var(--text)]">
-            Launch a new container on <span className="font-mono">{hostActionTarget}</span>. Use one value per line for
-            environment variables and one mapping per line for ports.
+      <DeployCrumbs host={current} />
+      <PageHeader title={t("runTitle")} />
+      <form className="ct-form ct-sheet" onSubmit={(e) => void submit(e)} noValidate>
+        <div className="ct-grid three">
+          <Field id="ct-host" label={t("host")}>
+            <HostSelect id="ct-host" hosts={hosts} value={host} onChange={setHost} />
+          </Field>
+          <Field id="ct-img" label={t("image")} error={msg("image")}>
+            <input className="ct-input mono" id="ct-img" value={values.image} onChange={set("image")} placeholder="nginx:1.29" autoComplete="off" spellCheck={false} autoFocus {...invalid("ct-img", msg("image"))} />
+          </Field>
+          <Field id="ct-name" label={t("name")} error={msg("name")}>
+            <input className="ct-input mono" id="ct-name" value={values.name} onChange={set("name")} placeholder={repoName(values.image) || "nginx"} autoComplete="off" spellCheck={false} {...invalid("ct-name", msg("name"))} />
+          </Field>
+        </div>
+        <div className="ct-grid two">
+          <Field id="ct-ports" label={t("ports")} error={msg("ports")} hint={t("portsHint")}>
+            <textarea className="ct-input mono ct-ta" id="ct-ports" rows={3} value={values.ports} onChange={set("ports")} placeholder={"8080:80\n5353:5353/udp"} spellCheck={false} {...invalid("ct-ports", msg("ports"))} />
+          </Field>
+          <Field id="ct-env" label={t("environment")} error={msg("env")} hint={t("envHint")}>
+            <textarea className="ct-input mono ct-ta" id="ct-env" rows={3} value={values.env} onChange={set("env")} placeholder={"TZ=Etc/UTC\nPUID=1000"} spellCheck={false} {...invalid("ct-env", msg("env"))} />
+          </Field>
+        </div>
+        <Field id="ct-cmd" label={t("command")} wide>
+          <input className="ct-input mono" id="ct-cmd" value={values.command} onChange={set("command")} placeholder="python -m http.server 8080" autoComplete="off" spellCheck={false} />
+        </Field>
+        {failure ? <p className="ct-err" role="alert">{t("runFailedWith", { reason: failure })}</p> : null}
+        {made && !failure ? (
+          <p className="ct-done" role="status">
+            {t("ranLine", { name: made.name })} <Link href={made.href}>{t("open")}</Link>
           </p>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <label className="space-y-1">
-            <span className="text-xs font-medium text-[var(--muted)]">Image *</span>
-            <input
-              value={image}
-              onChange={(event) => setImage(event.target.value)}
-              placeholder="e.g. nginx:latest"
-              className="h-10 w-full rounded-md border border-[var(--line)] bg-transparent px-3 text-sm text-[var(--text)]"
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="text-xs font-medium text-[var(--muted)]">Container Name</span>
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="optional"
-              className="h-10 w-full rounded-md border border-[var(--line)] bg-transparent px-3 text-sm text-[var(--text)]"
-            />
-          </label>
-          <label className="space-y-1 md:col-span-2">
-            <span className="text-xs font-medium text-[var(--muted)]">Command Override</span>
-            <input
-              value={command}
-              onChange={(event) => setCommand(event.target.value)}
-              placeholder="optional, e.g. python -m http.server 8080"
-              className="h-10 w-full rounded-md border border-[var(--line)] bg-transparent px-3 text-sm text-[var(--text)]"
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="text-xs font-medium text-[var(--muted)]">Environment Variables</span>
-            <textarea
-              value={environment}
-              onChange={(event) => setEnvironment(event.target.value)}
-              placeholder={"TZ=America/New_York\nPUID=1000\nPGID=1000"}
-              className="min-h-36 w-full rounded-md border border-[var(--line)] bg-transparent px-3 py-2 text-xs text-[var(--text)] font-mono"
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="text-xs font-medium text-[var(--muted)]">Port Mappings</span>
-            <textarea
-              value={ports}
-              onChange={(event) => setPorts(event.target.value)}
-              placeholder={"8080:80\n9443:9443/tcp\n5353:5353/udp"}
-              className="min-h-36 w-full rounded-md border border-[var(--line)] bg-transparent px-3 py-2 text-xs text-[var(--text)] font-mono"
-            />
-          </label>
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <Button size="md" disabled={submitting} onClick={() => void onCreate()}>
-            {submitting ? "Creating..." : "Create Container"}
-          </Button>
-          <Link
-            href={hostContainersHref}
-            className="inline-flex items-center justify-center rounded-lg border border-[var(--control-border)] px-3 py-1.5 text-xs font-medium text-[var(--control-fg)] transition-colors hover:bg-[var(--control-bg-hover)]"
-          >
-            Back to Containers
-          </Link>
-          <Link
-            href={hostStacksHref}
-            className="inline-flex items-center justify-center rounded-lg border border-[var(--control-border)] px-3 py-1.5 text-xs font-medium text-[var(--control-fg)] transition-colors hover:bg-[var(--control-bg-hover)]"
-          >
-            Go to Stacks
-          </Link>
-        </div>
-
-        {error ? <p className="mt-3 text-xs text-[var(--bad)]">{error}</p> : null}
-        {!error && createdID ? (
-          <div className="mt-3 space-y-1">
-            <p className="text-xs text-[var(--ok)]">Container created: <span className="font-mono">{createdID}</span></p>
-            {createdContainerAssetID ? (
-              <Link
-                href={`/nodes/${encodeURIComponent(createdContainerAssetID)}`}
-                className="text-xs text-[var(--accent)] hover:underline"
-              >
-                Open container details
-              </Link>
-            ) : null}
-          </div>
         ) : null}
-      </Card>
+        <div className="ct-form-foot">
+          <Link href={back} className="ct-btn">{t("cancel")}</Link>
+          <Button type="submit" variant="primary" loading={busy} disabled={!host}>{t("run")}</Button>
+        </div>
+      </form>
     </>
   );
 }
-

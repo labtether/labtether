@@ -83,24 +83,32 @@ test("terminal broadcast mirrors snippet input across panes", async ({ page }) =
     },
   });
 
-  await page.goto("/terminal");
-  await expect(page.getByTitle("Insert Echo Identity")).toBeVisible();
+  const insertSnippet = async () => {
+    await page.getByRole("button", { name: "More terminal actions" }).click();
+    await page.getByRole("menuitem", { name: "Snippets" }).click();
+    await page.getByRole("menuitem", { name: "Echo Identity" }).click();
+  };
 
+  await page.goto("/terminal");
+  await expect(page.getByRole("region", { name: "Session on alpha-host" })).toBeVisible();
+
+  // Both panes' shells are open (each socket sent its size) before the menu is used.
   await expect.poll(async () => {
     return page.evaluate(() => {
       const win = window as unknown as {
-        __terminalWsEvents?: Array<{ data: string }>;
+        __terminalWsEvents?: Array<{ url: string; data: string }>;
       };
       const events = win.__terminalWsEvents ?? [];
-      return events.filter((event) => event.data.includes('"type":"resize"')).length;
+      return new Set(events.filter((event) => event.data.includes('"type":"resize"')).map((event) => event.url)).size;
     });
-  }).toBeGreaterThanOrEqual(2);
+  }).toBe(2);
 
-  await page.getByTitle("Insert Echo Identity").click();
+  await insertSnippet();
   await expect.poll(async () => (await commandSendEvents(page, broadcastCommand)).length).toBe(1);
 
-  await page.getByTitle("Broadcast OFF (Ctrl+Shift+B)").click();
-  await page.getByTitle("Insert Echo Identity").click();
+  await page.getByRole("button", { name: "More terminal actions" }).click();
+  await page.getByRole("menuitemcheckbox", { name: /Send to all panes/ }).click();
+  await insertSnippet();
 
   await expect.poll(async () => (await commandSendEvents(page, broadcastCommand)).length).toBe(3);
 

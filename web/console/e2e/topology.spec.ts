@@ -1,461 +1,145 @@
-import { expect,test } from "@playwright/test";
-import { assignDeviceToGroup,BASE_TS,installGroupTopologyWorkflowMocks,mockTopologyData,switchToTreeView,TopologyDependency } from './helpers/topologyMocks';
+import { expect, test, type Locator, type Page } from "@playwright/test";
+import { assignDeviceToGroup, BASE_TS, installGroupTopologyWorkflowMocks, mockTopologyData, type TopologyAsset, type TopologyDependency } from "./helpers/topologyMocks";
 
-test.describe("topology tree relationships", () => {
-  test("keeps runs_on semantics aligned in tree view", async ({ page }) => {
-    await mockTopologyData(
-      page,
-      [
-        {
-          id: "asset-host-1",
-          name: "Agent Host",
-          type: "host",
-          source: "agent",
-          status: "online",
-          platform: "linux",
-          last_seen_at: BASE_TS,
-        },
-        {
-          id: "asset-vm-1",
-          name: "Guest VM",
-          type: "vm",
-          source: "agent",
-          status: "online",
-          platform: "linux",
-          last_seen_at: BASE_TS,
-        },
-      ],
-      [
-        {
-          id: "dep-runs-on-1",
-          source_asset_id: "asset-vm-1",
-          target_asset_id: "asset-host-1",
-          relationship_type: "runs_on",
-        },
-      ],
-    );
+// Promise: the Map draws the hub's devices with their guests under their hosts, and selecting a device opens an
+// Inspector that lists what the hub knows it is connected to (stored, discovered and inferred), worded from that
+// device's side. Nothing on the Map is made up: a device the hub does not report never shows.
 
+const asset = (id: string, name: string, type: string, source: string, metadata?: Record<string, string>): TopologyAsset =>
+  ({ id, name, type, source, status: "online", platform: "linux", last_seen_at: BASE_TS, ...(metadata ? { metadata } : {}) });
+const dep = (id: string, source: string, target: string, rel = "runs_on"): TopologyDependency =>
+  ({ id, source_asset_id: source, target_asset_id: target, relationship_type: rel });
+
+/** The tile of a device in the tree (its name, then its state). */
+const node = (page: Page, name: string) => page.locator(".mp-n").getByRole("button", { name: new RegExp(`^${name},`) });
+const guestRow = (page: Page, name: string) => page.locator(".mp-g", { hasText: name });
+async function open(page: Page, name: string) {
+  await node(page, name).click();
+  const inspector = page.getByRole("complementary", { name, exact: true });
+  await expect(inspector).toBeVisible();
+  return inspector;
+}
+const connection = (inspector: Locator, other: string) => inspector.locator(".mp-lk", { hasText: other });
+
+test.describe("map", () => {
+  test("shows a VM on its host's spine and the runs-on link in the host's Inspector", async ({ page }) => {
+    await mockTopologyData(page, [asset("asset-host-1", "Agent Host", "host", "agent"), asset("asset-vm-1", "Guest VM", "vm", "agent")],
+      [dep("dep-runs-on-1", "asset-vm-1", "asset-host-1")]);
     await page.goto("/topology", { waitUntil: "domcontentloaded" });
-    await switchToTreeView(page);
 
-    await page.getByText("Agent Host", { exact: true }).first().click();
+    await expect(page.getByRole("heading", { name: "Map", level: 1 })).toBeVisible();
+    await expect(guestRow(page, "Guest VM")).toBeVisible();
+    await expect(page.locator(".mp-n", { hasText: "Guest VM" })).toHaveCount(0);
 
-    const inspectorPanel = page
-      .locator("div")
-      .filter({ has: page.getByRole("button", { name: "Close inspector" }) })
-      .first();
-
-    await expect(inspectorPanel).toBeVisible();
-    await expect(inspectorPanel.getByText("Connections (1)", { exact: true })).toBeVisible();
-    await expect(inspectorPanel.getByText("← Guest VM", { exact: true })).toBeVisible();
-    await expect(inspectorPanel.getByText("runs on", { exact: true }).first()).toBeVisible();
+    const inspector = await open(page, "Agent Host");
+    await expect(connection(inspector, "Guest VM")).toContainText("Runs");
   });
 
-  test("keeps docker host/container hierarchy connected when filtering to Docker source in tree view", async ({ page }) => {
-    await mockTopologyData(
-      page,
-      [
-        {
-          id: "agent-host-srv-1",
-          name: "Agent Host",
-          type: "host",
-          source: "agent",
-          status: "online",
-          platform: "linux",
-          last_seen_at: BASE_TS,
-          metadata: {
-            agent_id: "srv-1",
-          },
-        },
-        {
-          id: "docker-host-srv-1",
-          name: "Docker Host",
-          type: "container-host",
-          source: "docker",
-          status: "online",
-          platform: "linux",
-          last_seen_at: BASE_TS,
-          metadata: {
-            agent_id: "srv-1",
-          },
-        },
-        {
-          id: "docker-container-srv-1",
-          name: "App Container",
-          type: "docker-container",
-          source: "docker",
-          status: "online",
-          platform: "linux",
-          last_seen_at: BASE_TS,
-          metadata: {
-            agent_id: "srv-1",
-          },
-        },
-      ],
-      [],
-    );
-
+  test("lists a Docker host's container in its Inspector when the host is not merged into an agent", async ({ page }) => {
+    await mockTopologyData(page, [
+      asset("agent-host-srv-1", "Agent Host", "host", "agent", { agent_id: "srv-1" }),
+      asset("docker-host-srv-1", "Docker Host", "container-host", "docker", { agent_id: "srv-1" }),
+      asset("docker-container-srv-1", "App Container", "docker-container", "docker", { agent_id: "srv-1" }),
+    ], []);
     await page.goto("/topology", { waitUntil: "domcontentloaded" });
-    await switchToTreeView(page);
-    await expect(page.getByText("No zones or assets.", { exact: true })).toHaveCount(0);
 
-    await page.getByText("Docker Host", { exact: true }).first().click();
-
-    const inspectorPanel = page
-      .locator("div")
-      .filter({ has: page.getByRole("button", { name: "Close inspector" }) })
-      .first();
-
-    await expect(inspectorPanel).toBeVisible();
-    await expect(inspectorPanel.getByText("Connections (1)", { exact: true })).toBeVisible();
-    await expect(inspectorPanel.getByText("← App Container", { exact: true })).toBeVisible();
-    await expect(inspectorPanel.getByText("hosted on", { exact: true }).first()).toBeVisible();
+    const inspector = await open(page, "Docker Host");
+    await expect(connection(inspector, "App Container")).toContainText("Hosts");
   });
 
-  test("infers docker host/container hierarchy from docker asset IDs when child metadata.agent_id is missing", async ({ page }) => {
-    await mockTopologyData(
-      page,
-      [
-        {
-          id: "docker-host-dockerhost1-northserver",
-          name: "docker-dockerhost1-northserver",
-          type: "container-host",
-          source: "docker",
-          status: "online",
-          platform: "linux",
-          last_seen_at: BASE_TS,
-          metadata: {
-            agent_id: "dockerhost1-northserver",
-          },
-        },
-        {
-          id: "docker-ct-dockerhost1-northserver-abc123def456",
-          name: "App Container",
-          type: "docker-container",
-          source: "docker",
-          status: "online",
-          platform: "linux",
-          last_seen_at: BASE_TS,
-          metadata: {
-            container_id: "abc123def456",
-          },
-        },
-      ],
-      [],
-    );
-
+  test("infers a Docker host's container from the asset IDs when the container has no agent_id", async ({ page }) => {
+    await mockTopologyData(page, [
+      asset("docker-host-dockerhost1-northserver", "docker-dockerhost1-northserver", "container-host", "docker", { agent_id: "dockerhost1-northserver" }),
+      asset("docker-ct-dockerhost1-northserver-abc123def456", "App Container", "docker-container", "docker", { container_id: "abc123def456" }),
+    ], []);
     await page.goto("/topology", { waitUntil: "domcontentloaded" });
-    await switchToTreeView(page);
-    await expect(page.getByText("No zones or assets.", { exact: true })).toHaveCount(0);
 
-    await page.getByText("docker-dockerhost1-northserver", { exact: true }).first().click();
-
-    const inspectorPanel = page
-      .locator("div")
-      .filter({ has: page.getByRole("button", { name: "Close inspector" }) })
-      .first();
-
-    await expect(inspectorPanel).toBeVisible();
-    await expect(inspectorPanel.getByText("Connections (1)", { exact: true })).toBeVisible();
-    await expect(inspectorPanel.getByText("← App Container", { exact: true })).toBeVisible();
-    await expect(inspectorPanel.getByText("hosted on", { exact: true }).first()).toBeVisible();
+    const inspector = await open(page, "docker-dockerhost1-northserver");
+    await expect(connection(inspector, "App Container")).toContainText("Hosts");
   });
 
-  test("renders inferred containment on the canvas", async ({ page }) => {
-    await mockTopologyData(
-      page,
-      [
-        {
-          id: "docker-host-srv-1",
-          name: "Docker Host",
-          type: "container-host",
-          source: "docker",
-          status: "online",
-          platform: "linux",
-          last_seen_at: BASE_TS,
-          metadata: {
-            agent_id: "srv-1",
-          },
-        },
-        {
-          id: "docker-vm-srv-1-a",
-          name: "VM A",
-          type: "vm",
-          source: "docker",
-          status: "online",
-          platform: "linux",
-          last_seen_at: BASE_TS,
-          metadata: {
-            agent_id: "srv-1",
-          },
-        },
-        {
-          id: "docker-vm-srv-1-b",
-          name: "VM B",
-          type: "vm",
-          source: "docker",
-          status: "online",
-          platform: "linux",
-          last_seen_at: BASE_TS,
-          metadata: {
-            agent_id: "srv-1",
-          },
-        },
-      ],
-      [],
-    );
-
+  test("draws guests the hub infers from metadata under their host, not as their own tiles", async ({ page }) => {
+    await mockTopologyData(page, [
+      asset("docker-host-srv-1", "Docker Host", "container-host", "docker", { agent_id: "srv-1" }),
+      asset("docker-vm-srv-1-a", "VM A", "vm", "docker", { agent_id: "srv-1" }),
+      asset("docker-vm-srv-1-b", "VM B", "vm", "docker", { agent_id: "srv-1" }),
+    ], []);
     await page.goto("/topology", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("button", { name: /Docker Host container-host docker no workloads/i })).toBeVisible();
-    await expect(page.getByText("VM A", { exact: true })).toHaveCount(0);
-    await expect(page.getByText("VM B", { exact: true })).toHaveCount(0);
+
+    await expect(node(page, "Docker Host")).toBeVisible();
+    await expect(guestRow(page, "VM A")).toBeVisible();
+    await expect(guestRow(page, "VM B")).toBeVisible();
+    await expect(page.locator(".mp-n", { hasText: "VM A" })).toHaveCount(0);
   });
 
-  test("keeps tree visible when graph lanes are hidden", async ({ page }) => {
-    await mockTopologyData(
-      page,
-      [
-        {
-          id: "asset-host-2",
-          name: "Node Host",
-          type: "host",
-          source: "agent",
-          status: "online",
-          platform: "linux",
-          last_seen_at: BASE_TS,
-        },
-        {
-          id: "asset-vm-2",
-          name: "Node VM",
-          type: "vm",
-          source: "agent",
-          status: "online",
-          platform: "linux",
-          last_seen_at: BASE_TS,
-        },
-      ],
-      [
-        {
-          id: "dep-runs-on-2",
-          source_asset_id: "asset-vm-2",
-          target_asset_id: "asset-host-2",
-          relationship_type: "runs_on",
-        },
-      ],
-    );
-
+  test("shows the same tree as a list from the page menu", async ({ page }) => {
+    await mockTopologyData(page, [asset("asset-host-2", "Node Host", "host", "agent"), asset("asset-vm-2", "Node VM", "vm", "agent")],
+      [dep("dep-runs-on-2", "asset-vm-2", "asset-host-2")]);
     await page.goto("/topology", { waitUntil: "domcontentloaded" });
-    await switchToTreeView(page);
-    await expect(page.getByText("No zones or assets.", { exact: true })).toHaveCount(0);
-    await expect(page.getByText("Node Host", { exact: true }).first()).toBeVisible();
+
+    await page.getByRole("button", { name: "Map actions" }).click();
+    await page.getByRole("menuitem", { name: "Show as list" }).click();
+    const list = page.getByRole("navigation", { name: "Map as a list" });
+    await expect(list.getByRole("link", { name: /Node Host/ })).toBeVisible();
+    await expect(list.getByRole("link", { name: /Node VM/ })).toBeVisible();
   });
 
-  test("shows dependency-linked service assets in topology tree view", async ({ page }) => {
-    await mockTopologyData(
-      page,
-      [
-        {
-          id: "agent-host-3",
-          name: "Lab Host",
-          type: "host",
-          source: "agent",
-          status: "online",
-          platform: "linux",
-          last_seen_at: BASE_TS,
-        },
-        {
-          id: "agent-service-3",
-          name: "Lab API",
-          type: "service",
-          source: "agent",
-          status: "online",
-          platform: "linux",
-          last_seen_at: BASE_TS,
-        },
-      ],
-      [
-        {
-          id: "dep-runs-on-3",
-          source_asset_id: "agent-service-3",
-          target_asset_id: "agent-host-3",
-          relationship_type: "runs_on",
-        },
-      ],
-    );
-
+  test("lists a service that runs on a host in the host's Inspector", async ({ page }) => {
+    await mockTopologyData(page, [asset("agent-host-3", "Lab Host", "host", "agent"), asset("agent-service-3", "Lab API", "service", "agent")],
+      [dep("dep-runs-on-3", "agent-service-3", "agent-host-3")]);
     await page.goto("/topology", { waitUntil: "domcontentloaded" });
-    await switchToTreeView(page);
-    await page.getByText("Lab Host", { exact: true }).first().click();
 
-    await expect(page.getByText("Lab API", { exact: true }).first()).toBeVisible();
+    const inspector = await open(page, "Lab Host");
+    await expect(connection(inspector, "Lab API")).toContainText("Runs");
   });
 
-  test("ignores malformed dependency rows without breaking topology rendering", async ({ page }) => {
-    await mockTopologyData(
-      page,
-      [
-        {
-          id: "agent-host-4",
-          name: "Lab Host 4",
-          type: "host",
-          source: "agent",
-          status: "online",
-          platform: "linux",
-          last_seen_at: BASE_TS,
-        },
-        {
-          id: "agent-vm-4",
-          name: "Lab VM 4",
-          type: "vm",
-          source: "agent",
-          status: "online",
-          platform: "linux",
-          last_seen_at: BASE_TS,
-        },
-      ],
-      [
-        {
-          id: "dep-valid-4",
-          source_asset_id: "agent-vm-4",
-          target_asset_id: "agent-host-4",
-          relationship_type: "runs_on",
-        },
-        {
-          id: "dep-bad-4",
-          source_asset_id: "agent-vm-4",
-          target_asset_id: "agent-host-4",
-          relationship_type: null,
-        } as unknown as TopologyDependency,
-      ],
-    );
-
+  test("ignores malformed relationship rows", async ({ page }) => {
+    await mockTopologyData(page, [asset("agent-host-4", "Lab Host 4", "host", "agent"), asset("agent-vm-4", "Lab VM 4", "vm", "agent")], [
+      dep("dep-valid-4", "agent-vm-4", "agent-host-4"),
+      { id: "dep-bad-4", source_asset_id: "agent-vm-4", target_asset_id: "agent-host-4", relationship_type: null } as unknown as TopologyDependency,
+    ]);
     await page.goto("/topology", { waitUntil: "domcontentloaded" });
-    await switchToTreeView(page);
-    await expect(page.getByText("Lab Host 4", { exact: true }).first()).toBeVisible();
+
+    await expect(node(page, "Lab Host 4")).toBeVisible();
+    await expect(guestRow(page, "Lab VM 4")).toBeVisible();
   });
 
-  test("keeps created groups, assigned mixed-source devices, and topology lanes aligned", async ({ page }) => {
+  test("keeps groups as zones and mixed-source devices with their guests on the map", async ({ page }) => {
     await installGroupTopologyWorkflowMocks(page, {
       groups: [
-        {
-          id: "group-home",
-          name: "Home",
-          slug: "home",
-          sort_order: 0,
-          created_at: BASE_TS,
-          updated_at: BASE_TS,
-        },
+        { id: "group-home", name: "Home", slug: "home", sort_order: 0, created_at: BASE_TS, updated_at: BASE_TS },
+        { id: "group-operations", name: "Operations", slug: "operations", sort_order: 1, created_at: BASE_TS, updated_at: BASE_TS },
       ],
       assets: [
-        {
-          id: "proxmox-node-1",
-          name: "Proxmox Cluster",
-          type: "hypervisor-node",
-          source: "proxmox",
-          status: "online",
-          platform: "linux",
-          last_seen_at: BASE_TS,
-          metadata: { node: "pve01" },
-        },
-        {
-          id: "proxmox-vm-201",
-          name: "Kubernetes VM",
-          type: "vm",
-          source: "proxmox",
-          status: "online",
-          platform: "linux",
-          last_seen_at: BASE_TS,
-          metadata: { node: "pve01" },
-        },
-        {
-          id: "docker-host-1",
-          name: "Docker Runtime",
-          type: "container-host",
-          source: "docker",
-          status: "online",
-          platform: "linux",
-          last_seen_at: BASE_TS,
-          metadata: { agent_id: "srv-ops-1" },
-        },
-        {
-          id: "docker-container-1",
-          name: "API Container",
-          type: "docker-container",
-          source: "docker",
-          status: "online",
-          platform: "linux",
-          last_seen_at: BASE_TS,
-          metadata: { agent_id: "srv-ops-1", container_id: "abc123" },
-        },
-        {
-          id: "truenas-controller-1",
-          name: "TrueNAS Core",
-          type: "nas",
-          source: "truenas",
-          status: "online",
-          platform: "linux",
-          last_seen_at: BASE_TS,
-          metadata: { collector_id: "collector-truenas-1" },
-        },
-        {
-          id: "truenas-dataset-1",
-          name: "Media Dataset",
-          type: "dataset",
-          source: "truenas",
-          status: "online",
-          platform: "linux",
-          last_seen_at: BASE_TS,
-          metadata: { collector_id: "collector-truenas-1" },
-        },
+        asset("proxmox-node-1", "Proxmox Cluster", "hypervisor-node", "proxmox", { node: "pve01" }),
+        asset("proxmox-vm-201", "Kubernetes VM", "vm", "proxmox", { node: "pve01" }),
+        asset("docker-host-1", "Docker Runtime", "container-host", "docker", { agent_id: "srv-ops-1" }),
+        asset("docker-container-1", "API Container", "docker-container", "docker", { agent_id: "srv-ops-1", container_id: "abc123" }),
+        asset("truenas-controller-1", "TrueNAS Core", "nas", "truenas", { collector_id: "collector-truenas-1" }),
+        asset("truenas-dataset-1", "Media Dataset", "dataset", "truenas", { collector_id: "collector-truenas-1" }),
       ],
       dependencies: [
-        {
-          id: "dep-proxmox-vm",
-          source_asset_id: "proxmox-vm-201",
-          target_asset_id: "proxmox-node-1",
-          relationship_type: "runs_on",
-        },
-        {
-          id: "dep-docker-container",
-          source_asset_id: "docker-container-1",
-          target_asset_id: "docker-host-1",
-          relationship_type: "hosted_on",
-        },
-        {
-          id: "dep-truenas-dataset",
-          source_asset_id: "truenas-controller-1",
-          target_asset_id: "truenas-dataset-1",
-          relationship_type: "contains",
-        },
+        dep("dep-proxmox-vm", "proxmox-vm-201", "proxmox-node-1"),
+        dep("dep-docker-container", "docker-container-1", "docker-host-1", "hosted_on"),
+        dep("dep-truenas-dataset", "truenas-controller-1", "truenas-dataset-1", "contains"),
       ],
     });
-
-    await page.goto("/groups", { waitUntil: "domcontentloaded" });
-    await page.getByRole("button", { name: "New Group" }).click();
-    await page.getByPlaceholder("Home Lab").fill("Operations");
-    await page.getByPlaceholder("home-lab").fill("operations");
-    await page.getByRole("button", { name: "Create Group", exact: true }).click();
-    await expect(page.getByText("Operations", { exact: true })).toBeVisible();
-
-    await assignDeviceToGroup(page, "proxmox-node-1", "group-operations");
-    await assignDeviceToGroup(page, "docker-host-1", "group-operations");
-    await assignDeviceToGroup(page, "truenas-controller-1", "group-operations");
-
     await page.goto("/topology", { waitUntil: "domcontentloaded" });
-    await switchToTreeView(page);
+    for (const id of ["proxmox-node-1", "docker-host-1", "truenas-controller-1"]) await assignDeviceToGroup(page, id, "group-operations");
+    await page.reload({ waitUntil: "domcontentloaded" });
 
-    await expect(page.getByText("Operations", { exact: true }).first()).toBeVisible();
-    await expect(page.getByText("Proxmox Cluster", { exact: true }).first()).toBeVisible();
-    await expect(page.getByText("Docker Runtime", { exact: true }).first()).toBeVisible();
-    await expect(page.getByText("TrueNAS Core", { exact: true }).first()).toBeVisible();
+    for (const name of ["Proxmox Cluster", "Docker Runtime", "TrueNAS Core"]) await expect(node(page, name)).toBeVisible();
+    await expect(guestRow(page, "Kubernetes VM")).toBeVisible();
+    await expect(connection(await open(page, "Docker Runtime"), "API Container")).toContainText("Hosts");
+    // The hub reports two relationships for this pair (the stored contains edge and the one the collector ID
+    // implies); each is its own row, listed once.
+    const media = connection(await open(page, "TrueNAS Core"), "Media Dataset");
+    await expect(media).toHaveCount(2);
+    await expect(media.filter({ hasText: "Hosts" })).toHaveCount(1);
+    await expect(media.filter({ hasText: "Runs" })).toHaveCount(1);
 
-    for (const parentAssetName of ["Proxmox Cluster", "Docker Runtime", "TrueNAS Core"]) {
-      await page.getByText(parentAssetName, { exact: true }).first().click();
-    }
-
-    for (const assetName of ["Kubernetes VM", "API Container", "Media Dataset"]) {
-      await page.getByText(assetName, { exact: true }).first().click();
-      await expect(page.getByText(assetName, { exact: true }).first()).toBeVisible();
-    }
+    await page.getByRole("button", { name: "Map actions" }).click();
+    await page.getByRole("menuitem", { name: "Zones", exact: true }).click();
+    await expect(page.getByRole("textbox", { name: "Name of Operations" })).toHaveValue("Operations");
   });
 });

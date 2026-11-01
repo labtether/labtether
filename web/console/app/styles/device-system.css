@@ -1,0 +1,100 @@
+/* 2.0 device page: System tab lists (processes, network, units, cron, packages, disks, users).
+   Each view is a bar (filter, switches, refresh) over one list sheet. Columns come from --cols on the list and
+   narrow with the view's own width (container queries), so a list holds in an 860 px window and at 375 px. */
+
+.dsy { container: dsy / inline-size; }
+
+/* Bar controls */
+.dsy-filter { display: flex; align-items: center; gap: 8px; flex: 0 1 320px; min-width: 160px; height: var(--ctl); padding: 0 10px; border-radius: var(--r-3); background: var(--ctl-bg); box-shadow: var(--ctl-elev); color: var(--text-3); }
+.dsy-filter:focus-within { box-shadow: var(--ctl-elev-hover), 0 0 0 3px var(--ring); }
+.dsy-filter svg { width: 14px; height: 14px; flex: none; }
+.dsy-filter input { flex: 1; min-width: 0; border: 0; background: none; outline: none; color: var(--text); font-size: var(--fs-body); }
+.dsy-filter input::placeholder { color: var(--text-3); }
+.dsy-filter input::-webkit-search-cancel-button { display: none; }
+.dsy-icon { display: grid; place-items: center; width: var(--ctl); height: var(--ctl); flex: none; border-radius: var(--r-3); background: var(--ctl-bg); box-shadow: var(--ctl-elev); color: var(--text-2); cursor: pointer; transition: box-shadow var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
+.dsy-icon:hover { box-shadow: var(--ctl-elev-hover); color: var(--text); }
+.dsy-icon:disabled { cursor: default; }
+.dsy-icon svg { width: 14px; height: 14px; }
+.dsy-icon.busy svg { animation: dsy-turn 1s linear infinite; }
+@keyframes dsy-turn { to { transform: rotate(360deg); } }
+.dsy-pkform .dv-input { flex: 1 1 240px; max-width: 420px; }
+.dsy-pkform select.dv-input { flex: 0 0 140px; }
+.dsy-msg { margin: -4px 0 12px; }
+.dsy-out { max-height: 160px; margin: 0 0 16px; padding: 10px 12px; overflow: auto; border-radius: var(--r-3); background: var(--sunk); font-family: var(--font-mono); font-size: 12px; line-height: 18px; color: var(--text-2); white-space: pre-wrap; word-break: break-word; }
+
+/* Headers that sort */
+.dsy-sort { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; font: inherit; color: inherit; cursor: pointer; }
+.dsy-sort:hover, .dsy-sort.on { color: var(--text); }
+.dsy-sort svg { width: 12px; height: 12px; flex: none; }
+.dv-cols > .r .dsy-sort { justify-content: flex-end; }
+
+/* Cells */
+.dsy-word { font-size: var(--fs-meta); font-weight: 500; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dsy-word.bad { color: var(--bad-text); }
+.dsy-trunc { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.dsy-cmd { flex: 1 1 auto; }
+.dsy-num { font-variant-numeric: tabular-nums; }
+.dsy-path { font-size: 12px; }
+.dsy-meter { display: grid; grid-template-columns: minmax(0, 1fr) 40px; align-items: center; gap: 8px; min-width: 0; font-size: var(--fs-meta); }
+.dsy-meter-t { height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; }
+.dsy-meter-t i { display: block; height: 100%; border-radius: inherit; background: var(--text-3); }
+.dsy-meter-n { text-align: right; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.dsy-meter-n .u { color: var(--text-3); }
+.dsy-meter.hot .dsy-meter-t i { background: var(--warn); }
+.dsy-meter.hot .dsy-meter-n, .dsy-meter.hot .dsy-meter-n .u { color: var(--warn-text); font-weight: 500; }
+
+/* A status dot hung in the row's left margin, only when the row is not fine. */
+.dsy-hang > .dv-row { padding-left: 28px; }
+.dsy-hang > .dv-cols { padding-left: 32px; }
+.dsy-lead { position: absolute; left: 12px; top: 50%; display: grid; place-items: center; width: 8px; height: 8px; translate: 0 -50%; }
+
+/* The row ⋯: on hover, focus or while open; always on touch screens. */
+.dsy-menu-cell { justify-self: end; display: flex; }
+.dsy-more { display: grid; place-items: center; width: var(--ctl-sm); height: var(--ctl-sm); border-radius: var(--r-2); color: var(--text-3); opacity: 0; cursor: pointer; transition: opacity var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out); }
+.dsy-more svg { width: 16px; height: 16px; }
+.dsy-more:hover, .dsy-more[data-state="open"] { background: var(--hover); color: var(--text); }
+.dv-row:hover .dsy-more, .dv-row:focus-within .dsy-more, .dsy-more[data-state="open"], .dsy-more:focus-visible { opacity: 1; }
+@media (hover: none) { .dsy-more { opacity: 1; } }
+.lt-menu-item.dsy-danger { color: var(--bad-text); }
+.lt-menu-item[data-disabled] { opacity: 0.5; cursor: default; }
+
+/* Loading: quiet bars, no shimmer. */
+.dsy-skel .dv-row i { display: block; width: 40%; height: 10px; border-radius: var(--r-1); background: var(--track); }
+.dsy-skel .dv-row:nth-child(2n) i { width: 56%; }
+.dsy-skel .dv-row:hover { background: none; }
+
+/* Columns per list */
+.dsy-proc { --cols: minmax(0, 1fr) 64px 88px 48px 48px 64px 28px; }
+.dsy-if { --cols: minmax(0, 1fr) 180px 72px 72px 28px; }
+.dsy-unit { --cols: minmax(0, 1fr) 128px 80px 28px; }
+.dsy-cron { --cols: 120px minmax(0, 1fr) 120px 88px 88px 28px; }
+.dsy-disk { --cols: minmax(0, 1fr) 140px 72px 72px 72px 28px; }
+.dsy-usr { --cols: minmax(0, 1fr) 96px; }
+.dsy-pkg { --cols: minmax(0, 1fr) 220px 28px; }
+
+@container dsy (max-width: 760px) {
+  .dsy-cmd, .dsy-proc .c-user, .dsy-proc .c-mempct, .dsy-cron .c-last, .dsy-disk .c-free { display: none; }
+  .dsy-proc { --cols: minmax(0, 1fr) 64px 48px 64px 28px; }
+  .dsy-if { --cols: minmax(0, 1fr) 140px 72px 72px 28px; }
+  .dsy-cron { --cols: 110px minmax(0, 1fr) 100px 88px 28px; }
+  .dsy-disk { --cols: minmax(0, 1fr) 120px 72px 72px 28px; }
+  .dsy-pkg { --cols: minmax(0, 1fr) 160px 28px; }
+}
+@container dsy (max-width: 480px) {
+  .dsy-proc .c-pid, .dsy-if .c-addr, .dsy-if .c-tx, .dsy-unit .c-en, .dsy-cron .c-user, .dsy-cron .c-next,
+  .dsy-disk .c-used, .dsy-disk .c-size, .dsy-pkg .c-ver { display: none; }
+  .dsy-proc { --cols: minmax(0, 1fr) 48px 64px 28px; }
+  .dsy-if { --cols: minmax(0, 1fr) 72px 28px; }
+  .dsy-unit { --cols: minmax(0, 1fr) 88px 28px; }
+  .dsy-cron { --cols: 96px minmax(0, 1fr) 28px; }
+  .dsy-disk { --cols: minmax(0, 1fr) 96px 28px; }
+  .dsy-pkg { --cols: minmax(0, 1fr) 28px; }
+  .dsy-filter { flex: 1 1 100%; }
+  .dsy-pkform .dv-input { max-width: none; }
+  .dsy-pkform select.dv-input { flex: 1 1 120px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dsy-icon, .dsy-more { transition: none; }
+  .dsy-icon.busy svg { animation: none; }
+}

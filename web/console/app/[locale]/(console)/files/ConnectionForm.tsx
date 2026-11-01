@@ -43,13 +43,6 @@ const PROTOCOL_LABELS: Record<string, string> = {
   webdav: "WebDAV",
 };
 
-const PROTOCOL_ACCENT: Record<string, string> = {
-  sftp: "bg-blue-500",
-  smb: "bg-orange-500",
-  ftp: "bg-teal-500",
-  webdav: "bg-cyan-500",
-};
-
 export function ftpTLSFromExtraConfig(extra: Record<string, unknown>): boolean {
   if (typeof extra.ftp_tls === "boolean") return extra.ftp_tls;
   if (typeof extra.use_tls === "boolean") return extra.use_tls;
@@ -267,7 +260,6 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
   // ---------------------------------------------------------------------------
 
   const label = PROTOCOL_LABELS[protocol] ?? protocol.toUpperCase();
-  const accent = PROTOCOL_ACCENT[protocol] ?? "bg-blue-500";
 
   return (
     <div className="flex flex-col gap-4">
@@ -280,7 +272,6 @@ export function ConnectionForm({ protocol, existingConnection, onConnect, onCanc
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
-        <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${accent}`} />
         <h2 className="text-base font-semibold text-[var(--text)]">
           {isEdit ? `Edit ${label} Connection` : `New ${label} Connection`}
         </h2>

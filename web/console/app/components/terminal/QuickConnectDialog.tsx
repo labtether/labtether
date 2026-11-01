@@ -1,281 +1,173 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { QuickConnectParams } from "../../hooks/useSession";
-import { parsePortInput } from "../../lib/portParsing";
+import { Button } from "../ui/Button";
+import { Select, Textarea } from "../ui/Input";
+import { Modal } from "../ui/Modal";
+import { parseAddress } from "./terminalTargets";
 
 type AuthMethod = "password" | "private_key";
+type Errors = { address?: string; secret?: string; key?: string };
 
 interface QuickConnectDialogProps {
   open: boolean;
   onClose: () => void;
   onConnect: (params: QuickConnectParams) => void;
+  /** The address to start from ("root@10.20.0.50:22"), from "Connect to <address>". */
+  initialAddress?: string;
 }
 
-export default function QuickConnectDialog({
-  open,
-  onClose,
-  onConnect,
-}: QuickConnectDialogProps) {
-  const [host, setHost] = useState("");
-  const [port, setPort] = useState("22");
-  const [username, setUsername] = useState("");
+/**
+ * Connect to an address: SSH to a host that is not a device here (user@host:port) with a password or a private key,
+ * the host key checked against the hub's known hosts unless turned off. Secrets are dropped when the form closes.
+ */
+export default function QuickConnectDialog({ open, onClose, onConnect, initialAddress = "" }: QuickConnectDialogProps) {
+  const t = useTranslations("terminal.address");
+  const [address, setAddress] = useState("");
   const [authMethod, setAuthMethod] = useState<AuthMethod>("password");
   const [password, setPassword] = useState("");
   const [privateKey, setPrivateKey] = useState("");
   const [passphrase, setPassphrase] = useState("");
-  const [strictHostKey, setStrictHostKey] = useState(true);
+  const [checkHostKey, setCheckHostKey] = useState(true);
+  const [errors, setErrors] = useState<Errors>({});
+  const addressRef = useRef<HTMLInputElement | null>(null);
+  const secretRef = useRef<HTMLInputElement | null>(null);
 
-  const hostInputRef = useRef<HTMLInputElement | null>(null);
-
-  // Focus host input when dialog opens.
-  useEffect(() => {
-    if (open) {
-      const timer = window.setTimeout(() => hostInputRef.current?.focus(), 0);
-      return () => window.clearTimeout(timer);
-    }
-  }, [open]);
-
-  // Close on Escape.
   useEffect(() => {
     if (!open) return undefined;
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
+    setAddress(initialAddress);
+    setAuthMethod("password");
+    setPassword("");
+    setPrivateKey("");
+    setPassphrase("");
+    setCheckHostKey(true);
+    setErrors({});
+    const timer = window.setTimeout(() => (initialAddress ? secretRef.current : addressRef.current)?.focus(), 30);
+    return () => window.clearTimeout(timer);
+  }, [open, initialAddress]);
+
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    const parsed = parseAddress(address);
+    const next: Errors = {};
+    if (!parsed) next.address = t("errAddress");
+    else if (parsed.port < 1 || parsed.port > 65535) next.address = t("errPort");
+    else if (!parsed.user) next.address = t("errUser", { host: parsed.host });
+    if (authMethod === "password" && !password) next.secret = t("errPassword");
+    if (authMethod === "private_key" && !privateKey.trim()) next.key = t("errKey");
+    setErrors(next);
+    if (!parsed || Object.keys(next).length > 0) {
+      (next.address ? addressRef.current : secretRef.current)?.focus();
+      return;
+    }
+    const params: QuickConnectParams = {
+      host: parsed.host,
+      port: parsed.port,
+      username: parsed.user,
+      auth_method: authMethod,
+      strict_host_key: checkHostKey,
     };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [open, onClose]);
+    if (authMethod === "password") params.password = password;
+    else {
+      params.private_key = privateKey;
+      if (passphrase) params.passphrase = passphrase;
+    }
+    setPassword("");
+    setPrivateKey("");
+    setPassphrase("");
+    onConnect(params);
+  };
 
-  const handleSubmit = useCallback(
-    (event: React.FormEvent) => {
-      event.preventDefault();
-      const trimmedHost = host.trim();
-      const trimmedUsername = username.trim();
-      if (!trimmedHost || !trimmedUsername) return;
-
-      const params: QuickConnectParams = {
-        host: trimmedHost,
-        port: parsePortInput(port, 22),
-        username: trimmedUsername,
-        auth_method: authMethod,
-        strict_host_key: strictHostKey,
-      };
-
-      if (authMethod === "password") {
-        params.password = password;
-      } else {
-        params.private_key = privateKey;
-        if (passphrase) {
-          params.passphrase = passphrase;
-        }
-      }
-
-      onConnect(params);
-    },
-    [host, port, username, authMethod, password, privateKey, passphrase, strictHostKey, onConnect],
-  );
-
-  if (!open) return null;
-
-  const canSubmit = host.trim() !== "" && username.trim() !== "";
+  const hint = (id: string, text?: string) => (text ? <p className="kt-hint bad" id={id}>{text}</p> : null);
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Quick Connect"
-      className="fixed inset-0 z-[70] flex items-start justify-center p-4 pt-[8vh]"
-    >
-      <button
-        type="button"
-        aria-label="Close quick connect"
-        onClick={onClose}
-        className="absolute inset-0 bg-black/76"
-      />
-
-      <div className="relative z-10 w-full max-w-md overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--panel)] shadow-[var(--shadow-lg)]">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-3">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
-              Quick Connect
-            </p>
-            <p className="mt-0.5 text-sm font-semibold text-[var(--text)]">
-              SSH into any host
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] transition-colors hover:bg-[var(--hover)] hover:text-[var(--text)]"
-          >
-            <X size={13} />
-          </button>
+    <Modal open={open} onClose={onClose} title={t("title")}>
+      <form className="kt-dlg-body tm-form" onSubmit={handleSubmit} noValidate>
+        <div className="kt-field tm-wide">
+          <label htmlFor="tm-qc-addr">{t("address")}</label>
+          <input
+            ref={addressRef}
+            id="tm-qc-addr"
+            className="kt-input tm-mono"
+            value={address}
+            placeholder="root@10.20.0.50:22"
+            autoComplete="off"
+            spellCheck={false}
+            aria-invalid={errors.address ? true : undefined}
+            aria-describedby={errors.address ? "tm-qc-addr-err" : undefined}
+            onChange={(event) => setAddress(event.target.value)}
+          />
+          {hint("tm-qc-addr-err", errors.address)}
         </div>
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4 p-4">
-          {/* Host + Port */}
-          <div className="grid grid-cols-[1fr_5rem] gap-2">
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium text-[var(--muted)]">
-                Host <span className="text-[var(--bad)]">*</span>
-              </span>
-              <input
-                ref={hostInputRef}
-                type="text"
-                value={host}
-                onChange={(e) => setHost(e.target.value)}
-                placeholder="192.168.1.10 or hostname"
-                className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none transition-colors placeholder:text-[var(--muted)]/50 focus:border-[var(--accent)]"
-                autoComplete="off"
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium text-[var(--muted)]">
-                Port
-              </span>
-              <input
-                type="text"
-                inputMode="numeric"
-                value={port}
-                onChange={(e) => setPort(e.target.value)}
-                placeholder="22"
-                className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none transition-colors placeholder:text-[var(--muted)]/50 focus:border-[var(--accent)]"
-              />
-            </label>
-          </div>
-
-          {/* Username */}
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-[var(--muted)]">
-              Username <span className="text-[var(--bad)]">*</span>
-            </span>
+        <div className="kt-field">
+          <label htmlFor="tm-qc-auth">{t("login")}</label>
+          <Select id="tm-qc-auth" value={authMethod} onChange={(event) => setAuthMethod(event.target.value as AuthMethod)}>
+            <option value="password">{t("password")}</option>
+            <option value="private_key">{t("privateKey")}</option>
+          </Select>
+        </div>
+        {authMethod === "password" ? (
+          <div className="kt-field">
+            <label htmlFor="tm-qc-pass">{t("password")}</label>
             <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="root"
-              className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none transition-colors placeholder:text-[var(--muted)]/50 focus:border-[var(--accent)]"
+              ref={secretRef}
+              id="tm-qc-pass"
+              className="kt-input"
+              type="password"
+              value={password}
               autoComplete="off"
+              aria-invalid={errors.secret ? true : undefined}
+              aria-describedby={errors.secret ? "tm-qc-pass-err" : undefined}
+              onChange={(event) => setPassword(event.target.value)}
             />
-          </label>
-
-          {/* Auth Method Toggle */}
-          <div>
-            <span className="mb-1.5 block text-xs font-medium text-[var(--muted)]">
-              Authentication
-            </span>
-            <div className="inline-flex rounded-lg border border-[var(--line)] bg-[var(--surface)] p-0.5">
-              <button
-                type="button"
-                onClick={() => setAuthMethod("password")}
-                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                  authMethod === "password"
-                    ? "bg-[var(--panel)] text-[var(--text)] shadow-sm"
-                    : "text-[var(--muted)] hover:text-[var(--text)]"
-                }`}
-              >
-                Password
-              </button>
-              <button
-                type="button"
-                onClick={() => setAuthMethod("private_key")}
-                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                  authMethod === "private_key"
-                    ? "bg-[var(--panel)] text-[var(--text)] shadow-sm"
-                    : "text-[var(--muted)] hover:text-[var(--text)]"
-                }`}
-              >
-                Private Key
-              </button>
-            </div>
+            {hint("tm-qc-pass-err", errors.secret)}
           </div>
-
-          {/* Credential Fields */}
-          {authMethod === "password" ? (
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium text-[var(--muted)]">
-                Password
-              </span>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="SSH password"
-                className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none transition-colors placeholder:text-[var(--muted)]/50 focus:border-[var(--accent)]"
-                autoComplete="off"
+        ) : (
+          <>
+            <div className="kt-field tm-wide">
+              <label htmlFor="tm-qc-key">{t("privateKey")}</label>
+              <Textarea
+                id="tm-qc-key"
+                className="tm-mono"
+                rows={4}
+                spellCheck={false}
+                value={privateKey}
+                placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
+                error={Boolean(errors.key)}
+                aria-describedby={errors.key ? "tm-qc-key-err" : undefined}
+                onChange={(event) => setPrivateKey(event.target.value)}
               />
-            </label>
-          ) : (
-            <div className="space-y-3">
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-[var(--muted)]">
-                  Private Key (PEM)
-                </span>
-                <textarea
-                  value={privateKey}
-                  onChange={(e) => setPrivateKey(e.target.value)}
-                  placeholder={"-----BEGIN OPENSSH PRIVATE KEY-----\n..."}
-                  rows={4}
-                  className="w-full resize-y rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2 font-mono text-xs text-[var(--text)] outline-none transition-colors placeholder:text-[var(--muted)]/50 focus:border-[var(--accent)]"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-[var(--muted)]">
-                  Passphrase <span className="text-xs font-normal text-[var(--muted)]">(optional)</span>
-                </span>
-                <input
-                  type="password"
-                  value={passphrase}
-                  onChange={(e) => setPassphrase(e.target.value)}
-                  placeholder="Key passphrase"
-                  className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none transition-colors placeholder:text-[var(--muted)]/50 focus:border-[var(--accent)]"
-                  autoComplete="off"
-                />
-              </label>
+              {hint("tm-qc-key-err", errors.key)}
             </div>
-          )}
-
-          {/* Strict Host Key Checking */}
-          <label className="flex cursor-pointer items-center gap-2">
-            <input
-              type="checkbox"
-              checked={strictHostKey}
-              onChange={(e) => setStrictHostKey(e.target.checked)}
-              className="h-3.5 w-3.5 rounded border-[var(--line)] accent-[var(--accent)]"
-            />
-            <span className="text-xs text-[var(--text)]">
-              Strict host key checking
-            </span>
+            <div className="kt-field">
+              <label htmlFor="tm-qc-phrase">{t("passphrase")}</label>
+              <input
+                ref={secretRef}
+                id="tm-qc-phrase"
+                className="kt-input"
+                type="password"
+                value={passphrase}
+                placeholder={t("optional")}
+                autoComplete="off"
+                onChange={(event) => setPassphrase(event.target.value)}
+              />
+            </div>
+          </>
+        )}
+        <div className="tm-wide tm-check">
+          <label className="tm-cb">
+            <input type="checkbox" checked={checkHostKey} onChange={(event) => setCheckHostKey(event.target.checked)} />
+            {t("checkHostKey")}
           </label>
-
-          {/* Actions */}
-          <div className="flex items-center justify-end gap-2 pt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--text)] transition-colors hover:bg-[var(--hover)]"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!canSubmit}
-              className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                canSubmit
-                  ? "bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]"
-                  : "cursor-not-allowed bg-[var(--surface)] text-[var(--muted)] opacity-60"
-              }`}
-            >
-              Connect
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+          {checkHostKey ? null : <p className="kt-hint">{t("uncheckedHint")}</p>}
+        </div>
+        <div className="kt-dlg-acts tm-wide">
+          <Button type="button" variant="ghost" onClick={onClose}>{t("cancel")}</Button>
+          <Button type="submit" variant="primary">{t("connect")}</Button>
+        </div>
+      </form>
+    </Modal>
   );
 }

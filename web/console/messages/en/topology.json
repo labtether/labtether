@@ -1,4 +1,176 @@
 {
-  "title": "Topology",
-  "loading": "Loading topology view..."
+  "title": "Map",
+  "loading": "Loading the map",
+  "more": "Map actions",
+  "canvas": "Network map",
+  "keys": "Arrow keys move between devices, Enter opens details, Esc closes, f fits to the width, plus and minus zoom.",
+  "lone": "Not connected",
+  "other": "Other",
+  "empty": "No devices yet",
+  "emptyLink": "Add a device",
+  "copied": "Copied {text}",
+  "mini": "{count, plural, one {Network map of # device} other {Network map of # devices}}",
+  "menu": {
+    "find": "Find device",
+    "editLayout": "Edit layout",
+    "doneEditing": "Done",
+    "showList": "Show as list",
+    "showMap": "Show as map",
+    "zones": "Zones",
+    "newZone": "New zone",
+    "unsorted": "Unsorted devices",
+    "reset": "Reset map…"
+  },
+  "reset": {
+    "title": "Reset the map?",
+    "body": "Zones, placements, connections you drew and devices you left off are cleared, then set up again from the devices the hub knows now.",
+    "confirm": "Reset"
+  },
+  "view": {
+    "label": "Show the map as",
+    "list": "List",
+    "map": "Map",
+    "listLabel": "Map as a list"
+  },
+  "zoom": {
+    "label": "Zoom",
+    "in": "Zoom in",
+    "out": "Zoom out",
+    "fit": "Fit",
+    "fitTip": "Fit to the width (f)"
+  },
+  "find": {
+    "label": "Find device",
+    "placeholder": "Name, address or tag",
+    "close": "Close find",
+    "none": "No device matches"
+  },
+  "fold": {
+    "more": "+{count} more",
+    "less": "Show fewer"
+  },
+  "status": {
+    "online": "Online",
+    "offline": "Offline",
+    "notResponding": "Not responding",
+    "noCheckIn": "No check-in",
+    "offlineSince": "Offline since {time}",
+    "notRespondingSince": "Not responding since {time}",
+    "noCheckInYet": "No check-in yet"
+  },
+  "node": {
+    "actions": "Actions for {name}",
+    "moveTo": "Move to {zone}",
+    "removeFrom": "Remove from {zone}",
+    "open": "Open device page",
+    "copy": "Copy address"
+  },
+  "inspector": {
+    "close": "Close details",
+    "closeTip": "Close (Esc)",
+    "open": "Open device page",
+    "terminal": "Terminal",
+    "address": "Address",
+    "copy": "Copy",
+    "os": "OS",
+    "type": "Type",
+    "source": "Source",
+    "runsOn": "Runs on",
+    "vmOn": "VM {vmid} on",
+    "zone": "Zone",
+    "noZone": "No zone",
+    "changeZone": "Zone {zone}, change",
+    "uptime": "Uptime",
+    "contents": "Contains",
+    "cpu": "CPU · 24 h",
+    "cpuNow": "{value}% now",
+    "cpuLabel": "CPU over the last 24 hours, {value}% now"
+  },
+  "contents": {
+    "vms": "{count, plural, one {# VM} other {# VMs}}",
+    "containers": "{count, plural, one {# container} other {# containers}}",
+    "services": "{count, plural, one {# service} other {# services}}",
+    "stacks": "{count, plural, one {# stack} other {# stacks}}",
+    "pools": "{count, plural, one {# pool} other {# pools}}",
+    "datasets": "{count, plural, one {# dataset} other {# datasets}}",
+    "other": "{count} other"
+  },
+  "conn": {
+    "title": "Connections",
+    "none": "No connections",
+    "connectTo": "Connect to…",
+    "device": "Device",
+    "relationship": "Relationship",
+    "cancel": "Cancel",
+    "connect": "Connect",
+    "remove": "Remove the connection to {name}",
+    "removeShort": "Remove",
+    "removed": "Removed the connection {a} → {b}",
+    "undo": "Undo",
+    "change": "{rel} {name}, change the relationship",
+    "label": "Label",
+    "editLabel": "Edit label",
+    "discovered": "Found by the hub"
+  },
+  "rel": {
+    "connected_to": "Connected to",
+    "depends_on": "Depends on",
+    "runs_on": "Runs on",
+    "hosted_on": "Hosted on",
+    "provides_to": "Provides to",
+    "peer_of": "Peer of",
+    "contains": "Contains"
+  },
+  "inv": {
+    "connected_to": "Connected to",
+    "depends_on": "Needed by",
+    "runs_on": "Runs",
+    "hosted_on": "Hosts",
+    "provides_to": "Uses",
+    "peer_of": "Peer of",
+    "contains": "Inside"
+  },
+  "zones": {
+    "title": "Zones",
+    "close": "Close zones",
+    "none": "No zones",
+    "new": "New zone",
+    "newName": "New zone",
+    "newNameN": "New zone {n}",
+    "name": "Name of {zone}",
+    "delete": "Delete {zone}",
+    "deleteTitle": "Delete {zone}?",
+    "deleteBody": "{count, plural, =0 {It has no devices.} one {Its device moves to Other.} other {Its # devices move to Other.}}",
+    "deleteConfirm": "Delete"
+  },
+  "unsorted": {
+    "title": "Unsorted devices",
+    "close": "Close unsorted devices",
+    "none": "Every device has a zone",
+    "suggest": "Suggested: {zone}",
+    "accept": "Accept",
+    "dismiss": "Leave {name} off the map",
+    "dismissTip": "Leave off the map",
+    "placeAll": "Place all"
+  },
+  "edit": {
+    "newZone": "New zone",
+    "fit": "Fit view",
+    "arrange": "Arrange zones",
+    "rename": "Rename",
+    "collapse": "Collapse or expand",
+    "deleteZone": "Delete zone",
+    "moveToZone": "Move to zone",
+    "removeFromZone": "Remove from zone",
+    "changeType": "Change relationship",
+    "deleteConnection": "Remove connection",
+    "zoneSummary": "{devices, plural, one {# device} other {# devices}}{zones, plural, =0 {} one {, # zone inside} other {, # zones inside}}"
+  },
+  "errors": {
+    "load": "The map did not load.",
+    "retry": "Try again",
+    "save": "The hub did not save the change. Try again.",
+    "copy": "Copy failed",
+    "edit": "Edit layout did not open. Reload the page."
+  }
 }

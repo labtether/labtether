@@ -11,10 +11,11 @@ type UseNodeTelemetryDataArgs = {
 export function useNodeTelemetryData({ activeTab, nodeId }: UseNodeTelemetryDataArgs) {
   const [telemetryDetails, setTelemetryDetails] = useState<AssetTelemetryDetails | null>(null);
   const [telemetryLoading, setTelemetryLoading] = useState(false);
-  const [telemetryWindow, setTelemetryWindow] = useState<TelemetryWindow>("1h");
+  const [telemetryWindow, setTelemetryWindow] = useState<TelemetryWindow>("24h");
 
   useEffect(() => {
-    if (activeTab !== "telemetry" || !nodeId) return;
+    // Overview draws the usage charts; the System tab's Metrics view and drill-downs ask as "telemetry".
+    if ((activeTab !== "telemetry" && activeTab !== "overview") || !nodeId) return;
     const controller = new AbortController();
     setTelemetryDetails(null);
     setTelemetryLoading(true);

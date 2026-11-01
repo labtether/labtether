@@ -2,6 +2,10 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("next-intl", () => ({
+  useTranslations: () => (key: string) => key,
+}));
+
 vi.mock("../../../../../hooks/useTailscaleServeStatus", () => ({
   useTailscaleServeStatus: () => ({
     status: {
@@ -60,14 +64,12 @@ afterEach(async () => {
 });
 
 describe("TailscaleServeCard accessibility", () => {
-  it("names its mode and upstream controls with their visible labels", async () => {
+  it("names its mode and upstream controls with their visible labels behind Show", async () => {
     const mode = runtimeSetting(runtimeSettingKeys.remoteAccessMode, "off");
     const target = runtimeSetting(runtimeSettingKeys.remoteAccessTailscaleServeTarget, "");
     await act(async () => {
       root.render(
         <TailscaleServeCard
-          copyToClipboard={vi.fn()}
-          copied=""
           runtimeSettings={[mode, target]}
           runtimeDraftValues={{ [mode.key]: "off", [target.key]: "" }}
           setRuntimeDraftValues={vi.fn()}
@@ -81,7 +83,16 @@ describe("TailscaleServeCard accessibility", () => {
       );
     });
 
-    expect(container.querySelector('select[aria-label="Preferred Access Mode"]')).not.toBeNull();
-    expect(container.querySelector('input[aria-label="Preferred Serve Upstream"]')).not.toBeNull();
+    const show = container.querySelector<HTMLButtonElement>('button[aria-controls="st-ts-details"]');
+    if (!show) throw new Error("missing Show button");
+    await act(async () => show.click());
+
+    // Each control is named by the visible label that points at it.
+    const modeSelect = container.querySelector<HTMLSelectElement>("select#st-ts-mode");
+    const upstream = container.querySelector<HTMLInputElement>("input#st-ts-upstream");
+    expect(container.querySelector('label[for="st-ts-mode"]')?.textContent).toBe("ts.mode");
+    expect(container.querySelector('label[for="st-ts-upstream"]')?.textContent).toBe("ts.upstream");
+    expect(modeSelect?.value).toBe("off");
+    expect(upstream).not.toBeNull();
   });
 });

@@ -1,162 +1,152 @@
 "use client";
 
-import { type ChangeEvent } from "react";
-import { Pencil } from "lucide-react";
+import { Pencil, X } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useCallback, useState, type ChangeEvent } from "react";
 import { IconPicker } from "./IconPicker";
-import { ServiceIcon } from "./ServiceIcon";
+import { isCustomServiceIconSource, ServiceIcon } from "./ServiceIcon";
 import type { ServiceCustomIcon } from "../hooks/useWebServices";
-import { CUSTOM_ICON_ACCEPT, formatByteSize, MAX_CUSTOM_ICON_UPLOAD_BYTES } from "./serviceIconUpload";
+import {
+  CUSTOM_ICON_ACCEPT,
+  CUSTOM_ICON_UPLOAD_TYPES,
+  formatByteSize,
+  MAX_CUSTOM_ICON_UPLOAD_BYTES,
+  normalizeCustomIconName,
+  readFileAsDataURL,
+  readableServiceError,
+} from "./serviceIconUpload";
+
+type IconActionArgs = {
+  iconKey: string;
+  setIconKey: (value: string) => void;
+  report: (error: string | null, message?: string | null) => void;
+  onCreateCustomIcon?: (input: { name: string; data_url: string }) => Promise<ServiceCustomIcon>;
+  onDeleteCustomIcon?: (id: string) => Promise<void>;
+  onRenameCustomIcon?: (id: string, name: string) => Promise<ServiceCustomIcon>;
+};
+
+/** Upload an icon to the library (and pick it), delete one, rename one. Results go to the dialog's message line. */
+export function useCustomIconActions({ iconKey, setIconKey, report, onCreateCustomIcon, onDeleteCustomIcon, onRenameCustomIcon }: IconActionArgs) {
+  const t = useTranslations("services.icons");
+  const [working, setWorking] = useState<string | null>(null);
+
+  const upload = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!file) return;
+    if (!CUSTOM_ICON_UPLOAD_TYPES.has(file.type.toLowerCase().trim())) { report(t("badType")); return; }
+    if (file.size > MAX_CUSTOM_ICON_UPLOAD_BYTES) { report(t("tooLarge", { max: formatByteSize(MAX_CUSTOM_ICON_UPLOAD_BYTES) })); return; }
+    setWorking("upload");
+    report(null);
+    try {
+      const data = await readFileAsDataURL(file);
+      if (!isCustomServiceIconSource(data)) throw new Error(t("unreadable"));
+      if (onCreateCustomIcon) {
+        const created = await onCreateCustomIcon({ name: normalizeCustomIconName(file.name), data_url: data });
+        setIconKey(created.data_url);
+        report(null, t("uploaded", { name: created.name }));
+      } else {
+        setIconKey(data);
+        report(null, t("uploaded", { name: file.name }));
+      }
+    } catch (err) {
+      report(readableServiceError(err, t("unreadable")));
+    } finally {
+      setWorking(null);
+    }
+  }, [onCreateCustomIcon, report, setIconKey, t]);
+
+  const remove = useCallback(async (icon: ServiceCustomIcon) => {
+    if (!onDeleteCustomIcon || !window.confirm(t("deleteAsk", { name: icon.name }))) return;
+    setWorking(icon.id);
+    report(null);
+    try {
+      await onDeleteCustomIcon(icon.id);
+      if (iconKey === icon.data_url) setIconKey("");
+      report(null, t("deleted", { name: icon.name }));
+    } catch (err) {
+      report(readableServiceError(err, t("deleteFailed")));
+    } finally {
+      setWorking(null);
+    }
+  }, [iconKey, onDeleteCustomIcon, report, setIconKey, t]);
+
+  const rename = useCallback(async (icon: ServiceCustomIcon) => {
+    if (!onRenameCustomIcon) return;
+    const next = (window.prompt(t("renameAsk"), icon.name) ?? "").trim();
+    if (!next || next === icon.name) return;
+    setWorking(icon.id);
+    report(null);
+    try {
+      const renamed = await onRenameCustomIcon(icon.id, next);
+      report(null, t("renamed", { name: renamed.name }));
+    } catch (err) {
+      report(readableServiceError(err, t("renameFailed")));
+    } finally {
+      setWorking(null);
+    }
+  }, [onRenameCustomIcon, report, t]);
+
+  return {
+    busy: working !== null,
+    uploading: working === "upload",
+    working,
+    upload,
+    remove: onDeleteCustomIcon ? remove : undefined,
+    rename: onRenameCustomIcon ? rename : undefined,
+  };
+}
 
 export type ServiceIconEditorProps = {
   icons: string[];
   customIcons: ServiceCustomIcon[];
   iconKey: string;
   setIconKey: (value: string) => void;
-  iconSelectionLabel: string;
-  hasCustomIconSource: boolean;
-  saving: boolean;
-  removingURL: string | null;
-  uploadingIcon: boolean;
-  deletingCustomIconID: string | null;
-  renamingCustomIconID: string | null;
-  onDeleteCustomIcon: ((id: string) => Promise<void>) | undefined;
-  onRenameCustomIcon: ((id: string, name: string) => Promise<ServiceCustomIcon>) | undefined;
-  handleDeleteCustomIcon: (icon: ServiceCustomIcon) => Promise<void>;
-  handleRenameCustomIcon: (icon: ServiceCustomIcon) => Promise<void>;
-  handleUploadIcon: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
+  disabled: boolean;
+  actions: ReturnType<typeof useCustomIconActions>;
 };
 
-export function ServiceIconEditor({
-  icons,
-  customIcons,
-  iconKey,
-  setIconKey,
-  iconSelectionLabel,
-  hasCustomIconSource,
-  saving,
-  removingURL,
-  uploadingIcon,
-  deletingCustomIconID,
-  renamingCustomIconID,
-  onDeleteCustomIcon,
-  onRenameCustomIcon,
-  handleDeleteCustomIcon,
-  handleRenameCustomIcon,
-  handleUploadIcon,
-}: ServiceIconEditorProps) {
+/** The icon chooser in a sunk well: the uploaded library, the built-in set with search, and Upload. */
+export function ServiceIconEditor({ icons, customIcons, iconKey, setIconKey, disabled, actions }: ServiceIconEditorProps) {
+  const t = useTranslations("services.icons");
   return (
-    <div>
-      <label className="block text-xs font-medium text-[var(--muted)] mb-1">
-        Icon {iconSelectionLabel && <span className="text-[var(--text)]">— {iconSelectionLabel}</span>}
-      </label>
+    <div className="sv-well">
       {customIcons.length > 0 && (
-        <div className="mb-2">
-          <p className="mb-1 text-xs text-[var(--muted)]">Custom Library</p>
-          <div className="grid grid-cols-8 gap-1 max-h-[120px] overflow-y-auto p-1 border border-[var(--line)] rounded">
+        <div className="sv-field">
+          <span className="sv-lbl">{t("library")}</span>
+          <div className="sv-icgrid">
             {customIcons.map((icon) => (
-              <div key={icon.id} className="relative">
-                <button
-                  type="button"
-                  onClick={() => setIconKey(icon.data_url)}
-                  title={icon.name}
-                  disabled={
-                    saving
-                    || removingURL !== null
-                    || uploadingIcon
-                    || deletingCustomIconID !== null
-                    || renamingCustomIconID !== null
-                  }
-                  className={`w-9 h-9 rounded flex items-center justify-center transition-colors duration-[var(--dur-fast)] cursor-pointer ${
-                    iconKey === icon.data_url
-                      ? "bg-[var(--accent)]/20 border border-[var(--accent)]"
-                      : "hover:bg-[var(--hover)] border border-transparent"
-                  } disabled:opacity-60 disabled:cursor-not-allowed`}
-                >
+              <span key={icon.id} className="sv-icl">
+                <button type="button" className={`sv-ictile${iconKey === icon.data_url ? " on" : ""}`} onClick={() => setIconKey(icon.data_url)}
+                  disabled={disabled} aria-pressed={iconKey === icon.data_url} aria-label={icon.name} title={icon.name}>
                   <ServiceIcon iconKey={icon.data_url} size={20} />
                 </button>
-                {onDeleteCustomIcon && (
-                  <button
-                    type="button"
-                    onClick={() => void handleDeleteCustomIcon(icon)}
-                    disabled={
-                      saving
-                      || removingURL !== null
-                      || uploadingIcon
-                      || deletingCustomIconID !== null
-                      || renamingCustomIconID !== null
-                    }
-                    className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[var(--panel)] border border-[var(--line)] text-[10px] text-[var(--muted)] hover:text-[var(--bad)] transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                    title={`Delete ${icon.name}`}
-                    aria-label={`Delete ${icon.name}`}
-                  >
-                    {deletingCustomIconID === icon.id ? "…" : "×"}
+                {actions.rename && (
+                  <button type="button" className="sv-icl-a l" onClick={() => void actions.rename?.(icon)} disabled={disabled} aria-label={t("rename", { name: icon.name })}>
+                    {actions.working === icon.id ? "…" : <Pencil aria-hidden="true" />}
                   </button>
                 )}
-                {onRenameCustomIcon && (
-                  <button
-                    type="button"
-                    onClick={() => void handleRenameCustomIcon(icon)}
-                    disabled={
-                      saving
-                      || removingURL !== null
-                      || uploadingIcon
-                      || deletingCustomIconID !== null
-                      || renamingCustomIconID !== null
-                    }
-                    className="absolute -top-1 -left-1 w-4 h-4 rounded-full bg-[var(--panel)] border border-[var(--line)] text-[10px] text-[var(--muted)] hover:text-[var(--text)] transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center"
-                    title={`Rename ${icon.name}`}
-                    aria-label={`Rename ${icon.name}`}
-                  >
-                    {renamingCustomIconID === icon.id ? "…" : <Pencil size={9} />}
+                {actions.remove && (
+                  <button type="button" className="sv-icl-a r" onClick={() => void actions.remove?.(icon)} disabled={disabled} aria-label={t("delete", { name: icon.name })}>
+                    {actions.working === icon.id ? "…" : <X aria-hidden="true" />}
                   </button>
                 )}
-              </div>
+              </span>
             ))}
           </div>
         </div>
       )}
-      <IconPicker
-        selectedIcon={iconKey}
-        onSelect={setIconKey}
-        icons={icons}
-      />
-      <div className="mt-2 flex items-center gap-2">
-        <label className="h-7 px-3 rounded border border-[var(--line)] text-xs font-medium text-[var(--text)] hover:bg-[var(--hover)] transition-colors cursor-pointer inline-flex items-center">
-          {uploadingIcon ? "Uploading..." : "Upload icon"}
-          <input
-            type="file"
-            accept={CUSTOM_ICON_ACCEPT}
-            onChange={(event) => void handleUploadIcon(event)}
-            className="hidden"
-            disabled={
-              saving
-              || removingURL !== null
-              || uploadingIcon
-              || deletingCustomIconID !== null
-              || renamingCustomIconID !== null
-            }
-          />
+      <IconPicker selectedIcon={iconKey} onSelect={setIconKey} icons={icons} />
+      <div className="sv-row-in">
+        <label className={`sv-chip${disabled ? " off" : ""}`}>
+          {actions.uploading ? t("uploading") : t("upload")}
+          <input type="file" accept={CUSTOM_ICON_ACCEPT} onChange={(event) => void actions.upload(event)} className="sr-only" disabled={disabled} />
         </label>
-        {hasCustomIconSource && (
-          <button
-            type="button"
-            onClick={() => setIconKey("")}
-            disabled={
-              saving
-              || removingURL !== null
-              || uploadingIcon
-              || deletingCustomIconID !== null
-              || renamingCustomIconID !== null
-            }
-            className="h-7 px-3 rounded text-xs font-medium text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--hover)] transition-colors cursor-pointer disabled:opacity-50"
-          >
-            Clear custom
-          </button>
+        {isCustomServiceIconSource(iconKey) && (
+          <button type="button" className="sv-chip" onClick={() => setIconKey("")} disabled={disabled}>{t("clearCustom")}</button>
         )}
+        <span className="sv-hint">{t("limits", { max: formatByteSize(MAX_CUSTOM_ICON_UPLOAD_BYTES) })}</span>
       </div>
-      <p className="mt-1 text-xs text-[var(--muted)]">
-        PNG, JPEG, WEBP, GIF, or SVG up to {formatByteSize(MAX_CUSTOM_ICON_UPLOAD_BYTES)}.
-      </p>
     </div>
   );
 }

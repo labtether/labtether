@@ -9,6 +9,7 @@ import {
   type ClusterTopologyNodeData,
 } from "./clusterTopologyFlowElements";
 import { projectClusterTopologyFlowLayout } from "./clusterTopologyFlowLayout";
+import type { ClusterFlowWords } from "./clusterTopologyPresentation";
 import {
   deriveClusterTopologyPlacements,
   type ClusterStatusEntry,
@@ -26,6 +27,7 @@ export function buildClusterFlowModel(params: {
   graphSelectedGuestID: string | null;
   nodeEntries: ClusterStatusEntry[];
   proxmoxNodeAssetIDByName: Map<string, string>;
+  words: ClusterFlowWords;
 }): {
   nodes: Node<ClusterTopologyNodeData>[];
   edges: Edge[];
@@ -39,6 +41,7 @@ export function buildClusterFlowModel(params: {
     graphSelectedGuestID,
     nodeEntries,
     proxmoxNodeAssetIDByName,
+    words,
   } = params;
 
   const laneX = { cluster: 28, guest: 360, api: 700 };
@@ -55,11 +58,11 @@ export function buildClusterFlowModel(params: {
   const baseNodeStyle: CSSProperties = {
     width: clusterNodeWidth,
     borderRadius: 10,
-    border: "1px solid var(--line)",
-    background: "color-mix(in oklab, var(--panel) 86%, transparent)",
+    border: "1px solid transparent",
+    background: "var(--panel)",
     color: "var(--text)",
     padding: "10px 12px",
-    boxShadow: "0 8px 20px rgba(0, 0, 0, 0.22)",
+    boxShadow: "var(--elev-tile)",
     cursor: "pointer",
   };
 
@@ -123,5 +126,6 @@ export function buildClusterFlowModel(params: {
     apiYByID,
     missingYByID,
     shiftedY,
+    words,
   });
 }

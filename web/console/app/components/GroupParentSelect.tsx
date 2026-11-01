@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo } from "react";
+import { useId, useMemo } from "react";
+import { useTranslations } from "next-intl";
 import type { Group } from "../console/models";
+import { Select } from "./ui/Input";
 
 type GroupParentSelectProps = {
   groups: Group[];
@@ -10,6 +12,9 @@ type GroupParentSelectProps = {
   excludeGroupId?: string; // exclude self + descendants
   disabled?: boolean;
   label?: string;
+  /** The first option, for "no group"; defaults to "None". */
+  noneLabel?: string;
+  id?: string;
 };
 
 type FlatOption = {
@@ -24,7 +29,7 @@ function collectDescendantIds(rootId: string, groups: Group[]): Set<string> {
   while (queue.length > 0) {
     const current = queue.pop()!;
     for (const g of groups) {
-      if (g.parent_group_id === current) {
+      if (g.parent_group_id === current && !result.has(g.id)) {
         result.add(g.id);
         queue.push(g.id);
       }
@@ -33,51 +38,37 @@ function collectDescendantIds(rootId: string, groups: Group[]): Set<string> {
   return result;
 }
 
-/** Build a flat, depth-annotated option list from a flat Group array. */
-function buildFlatOptions(
-  groups: Group[],
-  excludeGroupId: string | undefined
-): FlatOption[] {
-  // Determine which IDs to exclude (self + all descendants).
+/** Tree order (sort_order, then name), each option labelled with its path from the top: "Home / Rack A". */
+function buildFlatOptions(groups: Group[], excludeGroupId: string | undefined): FlatOption[] {
   const excluded = new Set<string>();
   if (excludeGroupId) {
     excluded.add(excludeGroupId);
-    const descendants = collectDescendantIds(excludeGroupId, groups);
-    descendants.forEach((id) => excluded.add(id));
+    collectDescendantIds(excludeGroupId, groups).forEach((id) => excluded.add(id));
   }
 
   const visible = groups.filter((g) => !excluded.has(g.id));
   const visibleIds = new Set(visible.map((g) => g.id));
-
-  // Sort helper: sort_order ascending, then name ascending.
-  const sorted = [...visible].sort((a, b) => {
-    if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
-    return a.name.localeCompare(b.name);
-  });
+  const sorted = [...visible].sort((a, b) => (a.sort_order !== b.sort_order ? a.sort_order - b.sort_order : a.name.localeCompare(b.name)));
 
   const options: FlatOption[] = [];
-
-  function walk(parentId: string | undefined, depth: number) {
-    const children = sorted.filter((g) => {
-      if (parentId === undefined) {
-        // Root level: include groups with no parent or orphaned parent
-        return !g.parent_group_id || !visibleIds.has(g.parent_group_id);
-      }
-      return g.parent_group_id === parentId;
-    });
+  const seen = new Set<string>();
+  function walk(parentId: string | undefined, path: string) {
+    const children = sorted.filter((g) =>
+      parentId === undefined ? !g.parent_group_id || !visibleIds.has(g.parent_group_id) : g.parent_group_id === parentId,
+    );
     for (const g of children) {
-      const indent = "\u00a0\u00a0\u00a0\u00a0".repeat(depth); // 4 NBSP per level
-      const prefix = depth > 0 ? "\u251c\u2500\u2500 " : ""; // ├── for non-root
-      options.push({ id: g.id, label: `${indent}${prefix}${g.name}` });
-      walk(g.id, depth + 1);
+      if (seen.has(g.id)) continue;
+      seen.add(g.id);
+      const label = path ? `${path} / ${g.name}` : g.name;
+      options.push({ id: g.id, label });
+      walk(g.id, label);
     }
   }
-
-  walk(undefined, 0);
-
+  walk(undefined, "");
   return options;
 }
 
+/** A group picker in tree order. Used for a group's parent and for the group a device is in. */
 export function GroupParentSelect({
   groups,
   value,
@@ -85,33 +76,32 @@ export function GroupParentSelect({
   excludeGroupId,
   disabled = false,
   label,
+  noneLabel,
+  id,
 }: GroupParentSelectProps) {
-  const options = useMemo(
-    () => buildFlatOptions(groups, excludeGroupId),
-    [groups, excludeGroupId]
-  );
+  const t = useTranslations("groups");
+  const autoId = useId();
+  const selectId = id ?? autoId;
+  const options = useMemo(() => buildFlatOptions(groups, excludeGroupId), [groups, excludeGroupId]);
 
   return (
-    <div className="flex flex-col gap-1">
-      {label && (
-        <span className="text-[10px] text-[var(--muted)]">{label}</span>
-      )}
-      <div className="relative">
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          disabled={disabled}
-          className="w-full appearance-none rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2 pr-8 text-sm text-[var(--text)] outline-none select-chevron focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_var(--accent-subtle)] disabled:text-[var(--text-disabled)] disabled:cursor-not-allowed transition-[border-color,box-shadow]"
-          style={{ transitionDuration: "var(--dur-fast)" }}
-        >
-          <option value="">(None — top level)</option>
-          {options.map((opt) => (
-            <option key={opt.id} value={opt.id}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </div>
+    <div className="pp-field">
+      {label ? <label htmlFor={selectId}>{label}</label> : null}
+      <Select
+        id={selectId}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        className="w-full"
+        aria-label={label ? undefined : t("form.inside")}
+      >
+        <option value="">{noneLabel ?? t("form.none")}</option>
+        {options.map((opt) => (
+          <option key={opt.id} value={opt.id}>
+            {opt.label}
+          </option>
+        ))}
+      </Select>
     </div>
   );
 }

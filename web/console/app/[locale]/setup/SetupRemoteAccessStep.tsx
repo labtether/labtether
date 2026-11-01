@@ -1,13 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { CheckCircle2, Copy, RefreshCw, Shield, SkipForward } from "lucide-react";
 import { Button } from "../../components/ui/Button";
-import { Badge } from "../../components/ui/Badge";
 import type { useTailscaleServeStatus } from "../../hooks/useTailscaleServeStatus";
 
+type Status = ReturnType<typeof useTailscaleServeStatus>["status"];
+
 export type SetupRemoteAccessStepProps = {
-  tailscaleStatus: ReturnType<typeof useTailscaleServeStatus>["status"];
+  tailscaleStatus: Status;
   tailscaleLoading: boolean;
   tailscaleError: ReturnType<typeof useTailscaleServeStatus>["error"];
   refreshTailscaleStatus: () => void;
@@ -20,8 +21,26 @@ export type SetupRemoteAccessStepProps = {
   continueToConsole: (mode: "serve" | "off") => Promise<void>;
 };
 
+type Way = "tailscale" | "own";
+
+/** What the host reports for Tailscale itself: its own state word, or ours. */
+function tailscaleWord(t: ReturnType<typeof useTranslations>, s: Status, loading: boolean) {
+  if (!s) return loading ? t("remoteAccess.checking") : t("remoteAccess.unavailable");
+  if (!s.tailscale_installed) return t("remoteAccess.notInstalled");
+  return s.backend_state || (s.logged_in ? t("remoteAccess.connected") : t("remoteAccess.loginRequired"));
+}
+
+function httpsWord(t: ReturnType<typeof useTranslations>, s: Status, loading: boolean) {
+  if (!s) return loading ? t("remoteAccess.checking") : t("remoteAccess.unavailable");
+  if (s.serve_configured) return t("remoteAccess.on");
+  if (s.serve_status === "login_required") return t("remoteAccess.loginRequired");
+  if (s.serve_status === "not_installed") return t("remoteAccess.notInstalled");
+  return t("remoteAccess.notSetUp");
+}
+
+/** Remote access: Tailscale HTTPS (the host runs `tailscale serve`; Check reads its state) or the hub's own address. */
 export function SetupRemoteAccessStep({
-  tailscaleStatus,
+  tailscaleStatus: s,
   tailscaleLoading,
   tailscaleError,
   refreshTailscaleStatus,
@@ -34,311 +53,97 @@ export function SetupRemoteAccessStep({
   continueToConsole,
 }: SetupRemoteAccessStepProps) {
   const t = useTranslations("auth");
+  const [way, setWay] = useState<Way>("tailscale");
+  const [finishing, setFinishing] = useState(false);
+  const ready = way === "own" || Boolean(s?.serve_configured);
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
+
+  const choice = (id: Way, name: string, sub: string) => (
+    <button type="button" role="radio" aria-checked={way === id} className={`si-way${way === id ? " on" : ""}`} onClick={() => setWay(id)}>
+      <span className="si-radio" aria-hidden="true" />
+      <span className="si-wt">
+        <span className="si-wn">{name}</span>
+        <span className="si-ws">{sub}</span>
+      </span>
+    </button>
+  );
+
+  const finish = async () => {
+    setFinishing(true);
+    try {
+      await continueToConsole(way === "tailscale" ? "serve" : "off");
+    } finally {
+      setFinishing(false);
+    }
+  };
+
   return (
-    <div className="space-y-6">
-      <div className="rounded-lg border border-[var(--accent)]/20 bg-[var(--accent-glow)]/30 px-4 py-3">
-        <div className="flex items-start gap-3">
-          <Shield
-            size={16}
-            className="mt-0.5 shrink-0 text-[var(--accent)]"
-          />
-          <div className="space-y-1.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge
-                status={
-                  tailscaleStatus?.serve_configured
-                    ? "enabled"
-                    : "pending"
-                }
-                size="sm"
-              />
-              <span className="text-sm font-medium text-[var(--text)]">
-                {t("remoteAccess.recommended")}
+    <div className="si-form">
+      <div className="si-ways" role="radiogroup" aria-label={t("remoteAccess.title")}>
+        {choice("tailscale", t("remoteAccess.tailscaleHttps"), t("remoteAccess.tailscaleHttpsSub"))}
+        {choice("own", t("remoteAccess.ownAddress"), origin)}
+      </div>
+
+      {way === "tailscale" ? (
+        <div className="si-ts">
+          <dl className="si-kv">
+            <div><dt>{t("remoteAccess.tailscale")}</dt><dd>{tailscaleWord(t, s, tailscaleLoading)}</dd></div>
+            <div><dt>{t("remoteAccess.https")}</dt><dd>{httpsWord(t, s, tailscaleLoading)}</dd></div>
+            {s?.tsnet_url ? (
+              <div>
+                <dt>{t("remoteAccess.address")}</dt>
+                <dd className="si-addr">
+                  <code>{s.tsnet_url}</code>
+                  <Button variant="ghost" size="sm" onClick={() => copyToClipboard(s.tsnet_url!, "setup-url")}>
+                    {copied === "setup-url" ? t("copied") : t("copy")}
+                  </Button>
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+          {tailscaleError && !s ? <p className="si-err" role="alert">{tailscaleError}</p> : null}
+          {s?.status_note ? <p className="si-hint">{s.status_note}</p> : null}
+
+          {!s?.serve_configured && s?.suggested_command && !s.can_manage ? (
+            <div className="si-hint">
+              <span>{t("remoteAccess.onHost")}</span>
+              <span className="si-cmd">
+                <code>{s.suggested_command}</code>
+                <Button variant="ghost" size="sm" onClick={() => copyToClipboard(s.suggested_command!, "setup-command")}>
+                  {copied === "setup-command" ? t("copied") : t("copy")}
+                </Button>
               </span>
             </div>
-            <p className="text-sm text-[var(--text)]/90">
-              {t("remoteAccess.description")}
-            </p>
-            <p className="text-xs text-[var(--muted)]">
-              {t("remoteAccess.skipNote")}
-            </p>
-          </div>
-        </div>
-      </div>
+          ) : null}
+          {!s?.serve_configured && !s?.suggested_command && s && !s.can_manage ? (
+            <p className="si-hint">{t("remoteAccess.installFirst")}</p>
+          ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)]">
-        <div className="space-y-4">
-          <div className="rounded-lg border border-[var(--line)] bg-[var(--surface)]/55 p-4">
-            <p className="text-[10px] font-mono uppercase tracking-[0.14em] text-[var(--muted)]">
-              {t("remoteAccess.suggestedSteps")}
-            </p>
-            <div className="mt-3 space-y-3 text-sm text-[var(--text)]">
-              <div>
-                <p className="font-medium">
-                  {t("remoteAccess.step1.title")}
-                </p>
-                <p className="text-xs text-[var(--muted)]">
-                  {t("remoteAccess.step1.description")}
-                </p>
-              </div>
-              <div>
-                <p className="font-medium">
-                  {t("remoteAccess.step2.title")}
-                </p>
-                {tailscaleStatus?.suggested_command ? (
-                  <div className="mt-2 rounded-lg border border-[var(--line)] bg-[var(--bg)]/70 p-3">
-                    <code className="block break-all text-xs sm:text-sm">
-                      {tailscaleStatus.suggested_command}
-                    </code>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          copyToClipboard(
-                            tailscaleStatus.suggested_command!,
-                            "setup-command",
-                          )
-                        }
-                      >
-                        <Copy size={13} className="shrink-0" />
-                        {copied === "setup-command"
-                          ? t("remoteAccess.copied")
-                          : t("remoteAccess.copyCommand")}
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="mt-1 text-xs text-[var(--muted)]">
-                    {t("remoteAccess.step2.fallback")}
-                  </p>
-                )}
-              </div>
-              <div>
-                <p className="font-medium">
-                  {t("remoteAccess.step3.title")}
-                </p>
-                <p className="text-xs text-[var(--muted)]">
-                  {t("remoteAccess.step3.description")}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-[var(--line)] bg-[var(--surface)]/55 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-[10px] font-mono uppercase tracking-[0.14em] text-[var(--muted)]">
-                  {t("remoteAccess.detectedStatus")}
-                </p>
-                <p className="mt-1 text-sm text-[var(--text)]">
-                  {t("remoteAccess.detectedDescription")}
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                loading={tailscaleLoading && Boolean(tailscaleStatus)}
-                onClick={refreshTailscaleStatus}
-              >
-                <RefreshCw size={13} className="shrink-0" />
-                {t("remoteAccess.verify")}
+          <div className="si-acts">
+            {s?.can_manage ? (
+              <Button loading={managedActionLoading === "apply"} onClick={() => void runManagedTailscaleAction("apply")}>
+                {s.serve_configured ? t("remoteAccess.reapplyHttps") : t("remoteAccess.enableHttps")}
               </Button>
-            </div>
-
-            {tailscaleError && !tailscaleStatus ? (
-              <div className="mt-3 rounded-lg bg-[var(--bad-glow)] px-3 py-2 text-sm text-[var(--bad)]">
-                {tailscaleError}
-              </div>
             ) : null}
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-lg border border-[var(--line)] bg-[var(--bg)]/60 px-3 py-3">
-                <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-[var(--muted)]">
-                  {t("remoteAccess.tailscale")}
-                </p>
-                <div className="mt-2 flex items-center gap-2">
-                  <Badge
-                    status={
-                      tailscaleStatus?.tailscale_installed
-                        ? tailscaleStatus.logged_in
-                          ? "enabled"
-                          : "pending"
-                        : "disabled"
-                    }
-                    size="sm"
-                  />
-                  <span className="text-sm text-[var(--text)]">
-                    {tailscaleStatus
-                      ? tailscaleStatus.tailscale_installed
-                        ? tailscaleStatus.backend_state ||
-                          (tailscaleStatus.logged_in
-                            ? t("remoteAccess.connected")
-                            : t("remoteAccess.installed"))
-                        : t("remoteAccess.notDetected")
-                      : tailscaleLoading
-                        ? t("remoteAccess.checking")
-                        : t("remoteAccess.unavailable")}
-                  </span>
-                </div>
-              </div>
-
-              <div className="rounded-lg border border-[var(--line)] bg-[var(--bg)]/60 px-3 py-3">
-                <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-[var(--muted)]">
-                  {t("remoteAccess.serve")}
-                </p>
-                <div className="mt-2 flex items-center gap-2">
-                  <Badge
-                    status={
-                      tailscaleStatus?.serve_configured
-                        ? "enabled"
-                        : tailscaleStatus?.logged_in
-                          ? "pending"
-                          : "disabled"
-                    }
-                    size="sm"
-                  />
-                  <span className="text-sm text-[var(--text)]">
-                    {tailscaleStatus
-                      ? tailscaleStatus.serve_configured
-                        ? t("remoteAccess.httpsActive")
-                        : tailscaleStatus.serve_status ===
-                            "login_required"
-                          ? t("remoteAccess.loginRequired")
-                          : tailscaleStatus.serve_status ===
-                              "not_installed"
-                            ? t("remoteAccess.notInstalled")
-                            : t("remoteAccess.notConfigured")
-                      : tailscaleLoading
-                        ? t("remoteAccess.checking")
-                        : t("remoteAccess.unavailable")}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {tailscaleStatus?.tsnet_url ? (
-              <div className="mt-3 rounded-lg border border-[var(--line)] bg-[var(--bg)]/60 px-3 py-3">
-                <p className="text-[10px] font-mono uppercase tracking-[0.12em] text-[var(--muted)]">
-                  {t("remoteAccess.httpsUrl")}
-                </p>
-                <code className="mt-2 block break-all text-xs sm:text-sm">
-                  {tailscaleStatus.tsnet_url}
-                </code>
-                <div className="mt-3">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      copyToClipboard(
-                        tailscaleStatus.tsnet_url!,
-                        "setup-url",
-                      )
-                    }
-                  >
-                    <Copy size={13} className="shrink-0" />
-                    {copied === "setup-url"
-                      ? t("remoteAccess.copied")
-                      : t("remoteAccess.copyUrl")}
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-
-            {tailscaleStatus?.status_note ? (
-              <p className="mt-3 text-xs text-[var(--muted)]">
-                {tailscaleStatus.status_note}
-              </p>
-            ) : null}
-
-            {tailscaleStatus?.can_manage ? (
-              <div className="mt-4 rounded-lg border border-[var(--accent)]/20 bg-[var(--accent-glow)]/15 px-3 py-3">
-                <p className="text-sm font-medium text-[var(--text)]">
-                  {t("remoteAccess.managedTitle")}
-                </p>
-                <p className="mt-1 text-xs text-[var(--muted)]">
-                  {t("remoteAccess.managedDescription")}
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    loading={managedActionLoading === "apply"}
-                    onClick={() =>
-                      void runManagedTailscaleAction("apply")
-                    }
-                  >
-                    {tailscaleStatus.serve_configured
-                      ? t("remoteAccess.reapplyHttps")
-                      : t("remoteAccess.enableHttps")}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    loading={managedActionLoading === "disable"}
-                    onClick={() =>
-                      void runManagedTailscaleAction("disable")
-                    }
-                  >
-                    {t("remoteAccess.disableHttps")}
-                  </Button>
-                </div>
-                {managedActionMessage ? (
-                  <p className="mt-3 text-xs text-[var(--muted)]">
-                    {managedActionMessage}
-                  </p>
-                ) : null}
-                {managedActionError ? (
-                  <p className="mt-3 text-xs text-[var(--bad)]">
-                    {managedActionError}
-                  </p>
-                ) : null}
-              </div>
+            <Button variant={s?.can_manage ? "ghost" : "secondary"} loading={tailscaleLoading && Boolean(s)} onClick={refreshTailscaleStatus}>
+              {t("remoteAccess.check")}
+            </Button>
+            {s?.can_manage && s.serve_configured ? (
+              <Button variant="ghost" loading={managedActionLoading === "disable"} onClick={() => void runManagedTailscaleAction("disable")}>
+                {t("remoteAccess.disableHttps")}
+              </Button>
             ) : null}
           </div>
+          {managedActionMessage ? <p className="si-hint" role="status">{managedActionMessage}</p> : null}
+          {managedActionError ? <p className="si-err" role="alert">{managedActionError}</p> : null}
         </div>
+      ) : (
+        <p className="si-hint">{t("remoteAccess.ownNote")}</p>
+      )}
 
-        <div className="rounded-lg border border-[var(--line)] bg-[var(--surface)]/55 p-4">
-          <p className="text-[10px] font-mono uppercase tracking-[0.14em] text-[var(--muted)]">
-            {t("remoteAccess.finishSetup")}
-          </p>
-          <div className="mt-3 space-y-3">
-            <div className="rounded-lg border border-[var(--line)] bg-[var(--bg)]/60 px-3 py-3">
-              <p className="text-sm font-medium text-[var(--text)]">
-                {t("remoteAccess.continueNow")}
-              </p>
-              <p className="mt-1 text-xs text-[var(--muted)]">
-                {t("remoteAccess.continueNowDescription")}
-              </p>
-              <Button
-                variant="secondary"
-                className="mt-3 w-full"
-                onClick={() => void continueToConsole("off")}
-              >
-                <SkipForward size={14} className="shrink-0" />
-                {t("remoteAccess.continueWithout")}
-              </Button>
-            </div>
-
-            <div className="rounded-lg border border-[var(--accent)]/20 bg-[var(--accent-glow)]/20 px-3 py-3">
-              <p className="text-sm font-medium text-[var(--text)]">
-                {t("remoteAccess.finishRecommended")}
-              </p>
-              <p className="mt-1 text-xs text-[var(--muted)]">
-                {t("remoteAccess.finishRecommendedDescription")}
-              </p>
-              <Button
-                variant="primary"
-                className="mt-3 w-full"
-                onClick={() => void continueToConsole("serve")}
-              >
-                <CheckCircle2 size={14} className="shrink-0" />
-                {t("remoteAccess.openLabTether")}
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <Button variant="primary" className="si-go" disabled={!ready || finishing} onClick={() => void finish()}>
+        {t("remoteAccess.finish")}
+      </Button>
     </div>
   );
 }

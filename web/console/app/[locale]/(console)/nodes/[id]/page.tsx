@@ -1,33 +1,34 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import { useEffect, useMemo } from "react";
 import { useParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useRouter, Link } from "../../../../../i18n/navigation";
-import { Card } from "../../../../components/ui/Card";
 import { DeviceIdentityBar } from "../../../../components/DeviceIdentityBar";
 import type { Asset } from "../../../../console/models";
-import { DeviceCapabilityGrid } from "./DeviceCapabilityGrid";
-import { useFastStatus, useGroupLabelByID, useSlowStatus, useStatusControls } from "../../../../contexts/StatusContext";
+import { useFastStatus, useGroupLabelByID, useSlowStatus } from "../../../../contexts/StatusContext";
 import { useConnectedAgents } from "../../../../hooks/useConnectedAgents";
 import { ClusterTopologySection } from "./ClusterTopologySection";
 import { DockerStackOverviewTab } from "./DockerStackOverviewTab";
-import { NodeDeleteConfirmModal } from "./NodeDeleteConfirmModal";
-import { NodeEditModal } from "./NodeEditModal";
 import { renderNodeDetailPanel } from "./nodePanelRenderers";
-import { useNodeDeleteFlow } from "./useNodeDeleteFlow";
 import { useNodeDetailData } from "./useNodeDetailData";
 import { useNodeDetailPageModel } from "./useNodeDetailPageModel";
 import { useNodePanelRenderContext } from "./useNodePanelRenderContext";
 import { useNodeDetailRouting } from "./useNodeDetailRouting";
 import { HierarchyBreadcrumb } from "./HierarchyBreadcrumb";
-import { GroupPathBreadcrumb } from "./GroupPathBreadcrumb";
-import { FacetTabs } from "./FacetTabs";
-import { ContainsSummary } from "./ContainsSummary";
+import { DeviceHeaderActions } from "./DeviceHeaderActions";
+import { DeviceContainerActions } from "./DeviceContainerActions";
+import { DeviceTabBar } from "./DeviceTabBar";
+import { DeviceDetails } from "./DeviceDetails";
+import { DeviceUsage } from "./DeviceUsage";
+import { DeviceActivity, DeviceServicesList } from "./DeviceOverviewLists";
+import { DeviceLogsTab, DeviceOverviewLayout, DeviceSettingsTab, DeviceSystemTab } from "./DeviceTabShells";
+import { buildDeviceTabs, logsViewsOf, systemViewsOf, tabOfPanel } from "./deviceTabsModel";
+import { useDeviceActivity } from "./useDeviceActivity";
+import { guestsOf } from "./deviceStatusModel";
 import { useAuth } from "../../../../contexts/AuthContext";
 import { canAccessHostData, hasWriteRole, isNodePanelAllowed } from "../../../../lib/roles";
 import { OperatorAccessRequired } from "../../../../components/OperatorAccessRequired";
-import { useTranslations } from "next-intl";
 
 export default function NodeDetailPage() {
   const params = useParams();
@@ -35,9 +36,9 @@ export default function NodeDetailPage() {
   const nodeId = params.id as string;
   const status = useFastStatus();
   const slowStatus = useSlowStatus();
-  const { fetchStatus } = useStatusControls();
   const groupLabelByID = useGroupLabelByID();
   const { user } = useAuth();
+  const t = useTranslations("devices.page");
   const tAccess = useTranslations("common.operatorAccess");
   const canWrite = hasWriteRole(user?.role);
   // Host journal queries are host data; viewers keep stored log history only.
@@ -46,324 +47,187 @@ export default function NodeDetailPage() {
   const { connectedAgentIds } = useConnectedAgents();
   const nodeHasAgent = connectedAgentIds.has(nodeId);
 
-  const {
-    showDeleteConfirm,
-    deleteConfirmInput,
-    deleting,
-    deleteError,
-    openDeleteConfirm,
-    setDeleteConfirmInput,
-    cancelDeleteConfirm,
-    confirmDelete,
-  } = useNodeDeleteFlow({ nodeId });
-
-  const [showEditModal, setShowEditModal] = useState(false);
-
-  const {
-    asset,
-    telemetryOverview,
-    freshnessClass,
-    groupName,
-    metadata,
-    proxmoxNode,
-    proxmoxVMID,
-    isProxmoxAsset,
-    isDockerContainer,
-    isDockerStack,
-    dockerContainerId,
-    dockerStackName,
-    dockerStackAssetId,
-    dockerStackHostId,
-    canonicalDockerHostNodeID,
-    fallbackDockerHostNodeID,
-    effectiveKind,
-    proxmoxTarget,
-    isInfra,
-    isLinuxAgentNode,
-    supportsServiceListing,
-    supportsPackageListing,
-    supportsScheduleListing,
-    supportsNetworkListing,
-    supportsNetworkActions,
-    supportsLogQuery,
-    logQueryModeLabel,
-    nodeNetworkMethodOptions,
-    nodeNetworkControlsLabel,
-    nodeNetworkControlsHint,
-    infraCategories,
-    panelContext,
-    panels,
-    dockerHostForPanel,
-  } = useNodeDetailPageModel({
+  const model = useNodeDetailPageModel({
     nodeId,
     assets: status?.assets,
     telemetry: status?.telemetryOverview,
     groupLabelByID,
     nodeHasAgent,
   });
+  const { asset, metadata, isProxmoxAsset, isDockerContainer, isDockerStack, effectiveKind, infraCategories, panels } = model;
 
   const { activePanel, activeSub, activeDetail, activeTabForHook } = useNodeDetailRouting({
     nodeId,
-    canonicalDockerHostNodeID,
-    fallbackDockerHostNodeID,
+    canonicalDockerHostNodeID: model.canonicalDockerHostNodeID,
+    fallbackDockerHostNodeID: model.fallbackDockerHostNodeID,
   });
 
-  const openPanel = (panel: string) => {
-    router.push(`/nodes/${encodeURIComponent(nodeId)}?panel=${panel}`);
-  };
-
-  const openSystemDetail = (detail: "cpu" | "memory" | "storage" | "network") => {
-    router.push(`/nodes/${encodeURIComponent(nodeId)}?panel=system&detail=${detail}`);
-  };
-
-  const closeSystemDetail = () => {
-    router.replace(`/nodes/${encodeURIComponent(nodeId)}?panel=system`);
-  };
-
-  const {
-    telemetryDetails,
-    telemetryLoading,
-    telemetryWindow,
-    setTelemetryWindow,
-    logEvents,
-    logsLoading,
-    logsError,
-    logLevelFilter,
-    setLogLevelFilter,
-    logMode,
-    setLogMode,
-    logWindow,
-    setLogWindow,
-    journalSince,
-    setJournalSince,
-    journalUntil,
-    setJournalUntil,
-    journalUnit,
-    setJournalUnit,
-    journalPriority,
-    setJournalPriority,
-    journalQuery,
-    setJournalQuery,
-    journalLiveTail,
-    setJournalLiveTail,
-    refreshLogs,
-    actionRuns,
-    actionsLoading,
-    expandedActionId,
-    setExpandedActionId,
-    proxmoxDetails,
-    proxmoxLoading,
-    proxmoxError,
-    clusterStatus,
-    networkInterfaces,
-    proxmoxCollectorID,
-    proxmoxActionRunning,
-    proxmoxActionMessage,
-    proxmoxActionError,
-    nodeActionRunning,
-    nodeActionMessage,
-    nodeActionError,
-    nodeNetworkActionRunning,
-    nodeNetworkActionMessage,
-    nodeNetworkActionError,
-    fetchProxmoxDetails,
-    runProxmoxQuickAction,
-    runNodeQuickAction,
-    runNodeNetworkAction,
-  } = useNodeDetailData({
-    activeTab: activeTabForHook,
-    nodeId,
-    isProxmoxAsset,
-    isInfra,
-    effectiveKind,
-    proxmoxNode,
-    proxmoxTarget,
-    proxmoxCollectorHint: asset?.metadata?.collector_id?.trim() ?? "",
-  });
-
-  const journalAllowed = supportsLogQuery && hostDataAllowed;
-  useEffect(() => {
-    if (!journalAllowed && logMode === "journal") {
-      setLogMode("stored");
-    }
-  }, [journalAllowed, logMode, setLogMode]);
   const visiblePanels = panels.filter((panel) => isNodePanelAllowed(panel.id, user?.role, { isDockerContainer }));
+  const panelIds = visiblePanels.map((panel) => panel.id);
+  const categorySlugs = useMemo(() => new Set<string>(infraCategories.keys()), [infraCategories]);
+  const currentTab = tabOfPanel(activePanel, categorySlugs);
+  const tabs = buildDeviceTabs({
+    panelIds,
+    categorySlugs,
+    isDockerContainer,
+    isDockerStack,
+    isProxmoxHost: isProxmoxAsset && effectiveKind === "node",
+    activePanel,
+  });
   const activePanelBlocked = activePanel !== null && !isNodePanelAllowed(activePanel, user?.role, { isDockerContainer });
 
-  const canRunProxmoxQuickActions = isProxmoxAsset && (effectiveKind === "qemu" || effectiveKind === "lxc");
+  const openPanel = (panel: string) => router.push(`/nodes/${encodeURIComponent(nodeId)}?panel=${panel}`);
+
+  const data = useNodeDetailData({
+    // Settings shows the agent, the collector and connections together; the collector loads as "settings".
+    activeTab: currentTab === "settings" ? "settings" : activeTabForHook,
+    nodeId,
+    isProxmoxAsset,
+    isInfra: model.isInfra,
+    effectiveKind,
+    proxmoxNode: model.proxmoxNode,
+    proxmoxTarget: model.proxmoxTarget,
+    proxmoxCollectorHint: asset?.metadata?.collector_id?.trim() ?? "",
+  });
+  const activity = useDeviceActivity(nodeId, currentTab === "overview" && !!asset && !isDockerStack);
+
+  const journalAllowed = model.supportsLogQuery && hostDataAllowed;
+  const { logMode, setLogMode } = data;
+  useEffect(() => {
+    if (!journalAllowed && logMode === "journal") setLogMode("stored");
+  }, [journalAllowed, logMode, setLogMode]);
+
   const renderAsset: Asset = asset ?? {
-    id: nodeId,
-    name: nodeId,
-    type: "unknown",
-    source: "unknown",
-    status: "unknown",
-    last_seen_at: "",
-    metadata: {},
+    id: nodeId, name: nodeId, type: "unknown", source: "unknown", status: "unknown", last_seen_at: "", metadata: {},
   };
   const panelRenderContext = useNodePanelRenderContext({
+    ...data,
     activePanel,
     activeSub,
     activeDetail,
     nodeId,
     asset: renderAsset,
     metadata,
-    telemetryOverview,
-    telemetryDetails,
-    telemetryLoading: telemetryLoading ?? false,
-    telemetryWindow,
+    telemetryOverview: model.telemetryOverview,
+    telemetryLoading: data.telemetryLoading ?? false,
     infraCategories,
     isDockerContainer,
     isDockerStack,
     isProxmoxAsset,
     effectiveKind,
-    dockerHostForPanel,
-    dockerContainerId,
-    dockerStackHostId,
-    dockerStackName,
-    dockerStackAssetId,
+    dockerHostForPanel: model.dockerHostForPanel,
+    dockerContainerId: model.dockerContainerId,
+    dockerStackHostId: model.dockerStackHostId,
+    dockerStackName: model.dockerStackName,
+    dockerStackAssetId: model.dockerStackAssetId,
     openPanel,
-    openSystemDetail,
-    closeSystemDetail,
+    openSystemDetail: (detail) => router.push(`/nodes/${encodeURIComponent(nodeId)}?panel=system&detail=${detail}`),
+    closeSystemDetail: () => router.replace(`/nodes/${encodeURIComponent(nodeId)}?panel=system`),
     replaceDockerSub: (sub) => router.replace(`/nodes/${encodeURIComponent(nodeId)}?panel=docker&sub=${sub}`),
-    telemetryWindowChange: setTelemetryWindow,
-    logsLoading,
-    logsError,
-    logEvents,
-    logLevelFilter,
-    setLogLevelFilter,
-    logMode,
-    setLogMode,
+    telemetryWindowChange: data.setTelemetryWindow,
     supportsLogQuery: journalAllowed,
-    logQueryModeLabel,
-    logWindow,
-    setLogWindow,
-    journalSince,
-    setJournalSince,
-    journalUntil,
-    setJournalUntil,
-    journalUnit,
-    setJournalUnit,
-    journalPriority,
-    setJournalPriority,
-    journalQuery,
-    setJournalQuery,
-    journalLiveTail,
-    setJournalLiveTail,
-    refreshLogs,
-    actionsLoading,
-    actionRuns,
-    expandedActionId,
-    setExpandedActionId,
-    proxmoxDetails,
-    proxmoxLoading,
-    proxmoxError,
-    proxmoxNode,
-    proxmoxVMID,
-    canRunProxmoxQuickActions,
-    proxmoxActionRunning,
-    clusterStatus,
-    networkInterfaces,
-    proxmoxCollectorID,
-    fetchProxmoxDetails,
-    runProxmoxQuickAction,
-    proxmoxCollectorId: proxmoxCollectorID || null,
-    proxmoxActionMessage,
-    proxmoxActionError,
+    logQueryModeLabel: model.logQueryModeLabel,
+    proxmoxNode: model.proxmoxNode,
+    proxmoxVMID: model.proxmoxVMID,
+    canRunProxmoxQuickActions: isProxmoxAsset && (effectiveKind === "qemu" || effectiveKind === "lxc"),
+    proxmoxCollectorId: data.proxmoxCollectorID || null,
   });
 
   if (!asset) {
+    if (!status) return null;
     return (
-      <Card>
-        <div className="flex flex-col items-center justify-center gap-2 py-12">
-          <p className="text-sm font-medium text-[var(--text)]">Device not found</p>
-          <p className="max-w-sm text-center text-xs text-[var(--muted)]">Couldn&apos;t find a device with that ID. It may not have checked in yet.</p>
+      <div className="dv">
+        <nav className="dv-crumb" aria-label={t("crumbLabel")}><Link href="/nodes">{t("crumb")}</Link></nav>
+        <div className="dv-sheet dv-empty dv-gone">
+          <b>{t("notFound", { id: nodeId })}</b>
+          <Link href="/nodes" className="dv-btn dv-empty-act">{t("crumb")}</Link>
         </div>
-      </Card>
+      </div>
     );
   }
 
-  return (
-    <>
-      <Link
-        href="/nodes"
-        className="group inline-flex items-center gap-1.5 text-xs text-[var(--muted)] hover:text-[var(--text)] transition-colors mb-3"
-        style={{ transitionDuration: "var(--dur-fast)" }}
-      >
-        <ArrowLeft size={14} className="transition-transform group-hover:-translate-x-0.5" style={{ transitionDuration: "var(--dur-fast)" }} />
-        Devices
-      </Link>
-      <GroupPathBreadcrumb groupId={asset.group_id} groups={slowStatus?.groups ?? []} />
-      <HierarchyBreadcrumb assetID={nodeId} />
-      <DeviceIdentityBar
-        asset={asset}
-        telemetry={telemetryOverview}
-        groupName={groupName}
-        freshnessStatus={freshnessClass === "ok" ? "ok" : freshnessClass === "pending" ? "pending" : "bad"}
-        agentConnected={nodeHasAgent}
-        activePanel={activePanel}
-        onBack={() => router.push(`/nodes/${encodeURIComponent(nodeId)}`)}
-        onQuickAction={nodeHasAgent && canWrite ? (command) => void runNodeQuickAction(command, command) : undefined}
-        onEdit={() => setShowEditModal(true)}
-        onDelete={openDeleteConfirm}
-        onAddConnection={() => router.push(`/nodes/${encodeURIComponent(nodeId)}?panel=connect&adding=true`)}
-      />
-      <FacetTabs />
+  const panelAt = (panel: string) => renderNodeDetailPanel({ ...panelRenderContext, activePanel: panel });
+  const has = (panel: string) => panelIds.includes(panel);
+  const offers = { terminal: has("terminal"), files: has("files"), desktop: has("desktop") };
 
-      <div
-        key={activePanel ?? "dashboard"}
-        className="animate-[slide-in_150ms_ease-out]"
-      >
-        {/* Dashboard view — no active panel */}
-        {!activePanel && (
+  let body;
+  if (activePanelBlocked) {
+    body = <OperatorAccessRequired title={tAccess("title")} feature="hostData" />;
+  } else if (currentTab === "overview") {
+    body = isDockerStack ? (
+      <DockerStackOverviewTab hostId={model.dockerStackHostId} stackName={model.dockerStackName} stackAssetId={model.dockerStackAssetId} />
+    ) : (
+      <DeviceOverviewLayout
+        main={
           <>
-            <ContainsSummary assetID={nodeId} />
-            {isDockerStack ? (
-              <DockerStackOverviewTab
-                hostId={dockerStackHostId}
-                stackName={dockerStackName}
-                stackAssetId={dockerStackAssetId}
-              />
-            ) : (
-              <DeviceCapabilityGrid
-                panels={visiblePanels}
-                context={panelContext}
-                onOpenPanel={openPanel}
-              />
-            )}
-            {isProxmoxAsset && effectiveKind === "node" && clusterStatus.length > 0 ? (
-              <ClusterTopologySection
-                clusterStatus={clusterStatus}
-                haResources={proxmoxDetails?.ha?.resources}
-                assets={status?.assets ?? []}
-              />
+            <DeviceUsage
+              asset={asset}
+              telemetry={model.telemetryOverview}
+              details={data.telemetryDetails}
+              loading={data.telemetryLoading ?? false}
+              window={data.telemetryWindow}
+              onWindowChange={data.setTelemetryWindow}
+            />
+            <DeviceServicesList services={model.webServicesForNode} />
+            <DeviceActivity nodeId={nodeId} events={activity.events} loaded={activity.loaded} />
+            {isProxmoxAsset && effectiveKind === "node" && data.clusterStatus.length > 0 ? (
+              <ClusterTopologySection clusterStatus={data.clusterStatus} haResources={data.proxmoxDetails?.ha?.resources} assets={status?.assets ?? []} />
             ) : null}
           </>
-        )}
-
-        {/* Panel content */}
-        {activePanelBlocked
-          ? <OperatorAccessRequired title={tAccess("title")} feature="hostData" />
-          : renderNodeDetailPanel(panelRenderContext)}
-      </div>
-
-      <NodeDeleteConfirmModal
-        open={showDeleteConfirm}
-        assetName={asset.name}
-        confirmInput={deleteConfirmInput}
-        deleting={deleting}
-        error={deleteError}
-        onConfirmInputChange={setDeleteConfirmInput}
-        onCancel={cancelDeleteConfirm}
-        onConfirm={() => { void confirmDelete(); }}
+        }
+        details={
+          <DeviceDetails
+            asset={asset}
+            nodeHasAgent={nodeHasAgent}
+            host={model.parentInfraHost}
+            groups={slowStatus?.groups ?? []}
+            guests={isProxmoxAsset && effectiveKind === "node" ? guestsOf(asset, status?.assets ?? []) : null}
+          />
+        }
       />
-      {showEditModal && asset && (
-        <NodeEditModal
-          asset={asset}
-          groups={slowStatus?.groups ?? []}
-          onClose={() => setShowEditModal(false)}
-          onSave={() => fetchStatus()}
-        />
-      )}
-    </>
+    );
+  } else if (currentTab === "system") {
+    body = (
+      <DeviceSystemTab asset={asset} views={systemViewsOf(panelIds, categorySlugs)} current={activePanel ?? "system"}>
+        {renderNodeDetailPanel(panelRenderContext)}
+      </DeviceSystemTab>
+    );
+  } else if (currentTab === "logs") {
+    body = (
+      <DeviceLogsTab nodeId={nodeId} views={logsViewsOf(panelIds)} current={activePanel ?? "logs"}>
+        {renderNodeDetailPanel(panelRenderContext)}
+      </DeviceLogsTab>
+    );
+  } else if (currentTab === "settings") {
+    body = (
+      <DeviceSettingsTab asset={asset}>
+        {has("agent-settings") ? panelAt("agent-settings") : null}
+        {isProxmoxAsset && model.isInfra ? panelAt("settings") : null}
+        {panelAt("connect")}
+      </DeviceSettingsTab>
+    );
+  } else {
+    body = <div className="dv-tab">{renderNodeDetailPanel(panelRenderContext)}</div>;
+  }
+
+  return (
+    <div className="dv">
+      <HierarchyBreadcrumb assetID={nodeId} name={asset.name} />
+      <DeviceIdentityBar
+        asset={asset}
+        actions={isDockerContainer ? <DeviceContainerActions asset={asset} /> : (
+          <DeviceHeaderActions
+            asset={asset}
+            offers={offers}
+            onPower={nodeHasAgent && canWrite ? (command) => void data.runNodeQuickAction(command, command) : undefined}
+          />
+        )}
+      />
+      {data.nodeActionError || data.nodeActionMessage ? (
+        <p className={`dv-note${data.nodeActionError ? " bad" : ""}`} role="status">{data.nodeActionError ?? data.nodeActionMessage}</p>
+      ) : null}
+      <DeviceTabBar nodeId={nodeId} tabs={tabs} current={currentTab} />
+      <div key={currentTab}>{body}</div>
+    </div>
   );
 }

@@ -38,27 +38,22 @@ export type BookmarkFormData = {
 export type SessionsPanelProps = {
   isOpen: boolean;
   onClose: () => void;
+  /** A running session was reattached (or is already attached); target is the device it runs on. */
   onSessionSelect: (
     sessionId: string,
     persistentSessionId: string,
     streamTicket: string,
     newTab: boolean,
+    target?: string,
   ) => void;
-  onBookmarkConnect: (bookmarkId: string, newTab: boolean) => void;
+  /** A saved connection was opened. */
+  onBookmarkConnect: (bookmarkId: string, newTab: boolean, bookmark?: Bookmark) => void;
   onArchivedView: (persistentSessionId: string, title: string) => void;
 };
 
-export type ContextMenuState = {
-  x: number;
-  y: number;
-  type: "active" | "detached" | "archived" | "saved";
-  sessionId?: string;
-  bookmarkId?: string;
-  hasBookmark?: boolean;
-};
-
-export type ContextMenuOption = {
-  label: string;
-  action: () => void;
-  danger?: boolean;
+/** What a rename is editing: a session's title or a saved connection's name. */
+export type RenameTarget = {
+  type: "session" | "bookmark";
+  id: string;
+  currentTitle: string;
 };

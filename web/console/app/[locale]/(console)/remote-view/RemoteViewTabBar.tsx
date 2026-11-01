@@ -1,8 +1,8 @@
 "use client";
 
-import { X, Plus } from "lucide-react";
-import type { RemoteViewTab, RemoteViewConnectionState } from "./types";
-import { PROTOCOL_DOT_COLOR } from "./types";
+import { Plus, X } from "lucide-react";
+import { useTranslations } from "next-intl";
+import type { RemoteViewConnectionState, RemoteViewTab } from "./types";
 
 interface RemoteViewTabBarProps {
   tabs: RemoteViewTab[];
@@ -10,115 +10,42 @@ interface RemoteViewTabBarProps {
   onAddTab: () => void;
   onRemoveTab: (tabId: string) => void;
   onSetActiveTab: (tabId: string) => void;
-  connectionState?: RemoteViewConnectionState;
-  latencyMs?: number | null;
 }
 
-function protocolDotClass(protocol: string | undefined): string {
-  if (!protocol) return "bg-[var(--muted)]";
-  return PROTOCOL_DOT_COLOR[protocol as keyof typeof PROTOCOL_DOT_COLOR] ?? "bg-[var(--muted)]";
+/** A tab's dot only when its screen is not simply connected: starting, failed or ended. */
+function tone(state: RemoteViewConnectionState): string {
+  if (state === "connecting" || state === "authenticating") return "busy";
+  if (state === "error") return "bad";
+  if (state === "disconnected") return "off";
+  return "";
 }
 
-function statusColor(state: RemoteViewConnectionState): string {
-  switch (state) {
-    case "connected":
-      return "bg-[var(--ok)]";
-    case "connecting":
-    case "authenticating":
-      return "bg-[var(--warn)] animate-pulse";
-    case "error":
-      return "bg-[var(--bad)]";
-    default:
-      return "bg-[var(--muted)]";
-  }
-}
-
-function statusLabel(state: RemoteViewConnectionState): string {
-  switch (state) {
-    case "connected":
-      return "Connected";
-    case "connecting":
-      return "Connecting";
-    case "authenticating":
-      return "Authenticating";
-    case "disconnected":
-      return "Disconnected";
-    case "error":
-      return "Error";
-    default:
-      return "Idle";
-  }
-}
-
-export default function RemoteViewTabBar({
-  tabs,
-  activeTabId,
-  onAddTab,
-  onRemoveTab,
-  onSetActiveTab,
-  connectionState,
-  latencyMs,
-}: RemoteViewTabBarProps) {
+/** Remote View's tabs, each with its close button, and "+" for a new tab. */
+export default function RemoteViewTabBar({ tabs, activeTabId, onAddTab, onRemoveTab, onSetActiveTab }: RemoteViewTabBarProps) {
+  const t = useTranslations("desktop.tabs");
   return (
-    <div className="flex items-center gap-0.5 px-2 py-1 border-b border-[var(--line)] overflow-x-auto bg-[var(--surface)]">
-      <div role="tablist" aria-label="Remote view tabs" className="flex items-center gap-0.5">
+    <div className="rv-tabs">
+      <div role="tablist" aria-label={t("label")} className="rv-tablist">
         {tabs.map((tab) => {
-          const isActive = tab.id === activeTabId;
+          const active = tab.id === activeTabId;
+          const label = tab.type === "new" ? t("newTab") : tab.label;
+          const dot = tone(tab.connectionState);
           return (
-            <div
-              key={tab.id}
-              className={`group flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs whitespace-nowrap transition-colors duration-[var(--dur-fast)] ${
-                isActive
-                  ? "bg-[var(--panel-glass)] text-[var(--text)] shadow-sm"
-                  : "text-[var(--text-secondary)] hover:bg-[var(--panel-glass)]/50"
-              }`}
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                className="flex min-w-0 items-center gap-1.5 bg-transparent border-none"
-                onClick={() => onSetActiveTab(tab.id)}
-              >
-                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${protocolDotClass(tab.protocol)}`} />
-                <span className="max-w-[140px] truncate">{tab.label}</span>
+            <div key={tab.id} className={`rv-tab${active ? " on" : ""}`}>
+              <button type="button" role="tab" aria-selected={active} className="rv-tab-b" onClick={() => onSetActiveTab(tab.id)}>
+                {dot ? <i className={`rv-dot ${dot}`} aria-hidden="true" /> : null}
+                <span>{label}</span>
               </button>
-              <button
-                type="button"
-                aria-label={`Close ${tab.label} tab`}
-                className={`ml-0.5 p-0.5 rounded hover:bg-[var(--hover)] ${
-                  isActive ? "opacity-60 hover:opacity-100" : "opacity-0 group-hover:opacity-60 hover:!opacity-100 focus-visible:opacity-100"
-                }`}
-                onClick={() => onRemoveTab(tab.id)}
-              >
-                <X className="w-3 h-3" />
+              <button type="button" className="rv-tab-x" aria-label={t("close", { name: label })} onClick={() => onRemoveTab(tab.id)}>
+                <X aria-hidden="true" />
               </button>
             </div>
           );
         })}
       </div>
-
-      <button
-        type="button"
-        aria-label="New tab"
-        onClick={onAddTab}
-        className="flex-shrink-0 p-1.5 rounded-md text-[var(--text-secondary)] hover:bg-[var(--panel-glass)]/50 transition-colors duration-[var(--dur-fast)]"
-        title="New tab"
-      >
-        <Plus className="w-3.5 h-3.5" />
+      <button type="button" className="rv-ib sm rv-tab-add" aria-label={t("newTab")} title={t("newTab")} onClick={onAddTab}>
+        <Plus aria-hidden="true" />
       </button>
-
-      <div className="flex-1" />
-
-      {connectionState && connectionState !== "idle" && (
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-[var(--panel-glass)] text-xs flex-shrink-0">
-          <span className={`w-1.5 h-1.5 rounded-full ${statusColor(connectionState)}`} />
-          <span className="text-[var(--text-secondary)]">{statusLabel(connectionState)}</span>
-          {connectionState === "connected" && latencyMs != null && (
-            <span className="text-[var(--muted)] ml-1">{latencyMs}ms</span>
-          )}
-        </div>
-      )}
     </div>
   );
 }

@@ -1,194 +1,110 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+// Disks with their SMART health joined by name: model, serial, type and the last SMART test in grey; a word in its
+// tone replaces them only on a SMART fault. Size, temperature (amber above 50 °C) and pool. SMART tests sit behind ⋯.
+
+import { useCallback, useMemo, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { usePollingTask } from "../../../../../hooks/usePollingTask";
-import { Badge } from "../../../../../components/ui/Badge";
-import { Button } from "../../../../../components/ui/Button";
-import { Card } from "../../../../../components/ui/Card";
-import { TrueNASSmartHealthCard } from "../TrueNASSmartHealthCard";
-import {
-  diskStatusBadge,
-  formatBytes,
-  normalizeTrueNASSmartResponse,
-} from "../truenasTabModel";
-import type { TrueNASSmartResponse } from "../truenasTabModel";
+import { DiCols, DiDots, DiList, DiMain, DiNote, DiNum, DiRow } from "../proxmox/DiList";
+import { DiRowMenu } from "../proxmox/DiControls";
+import { sizeParts, whenText } from "../proxmox/diFormat";
+import { normalizeTrueNASSmartResponse, type TrueNASSmartResponse } from "../truenasTabModel";
+import { diskRows, failureText, type DiskRow } from "./truenasModel";
+import { TnFailure, TnListState } from "./TrueNASParts";
+import type { TrueNASDisk } from "./truenasTypes";
+import { useTrueNASAction } from "./useTrueNASAction";
 import { truenasAction, useTrueNASList } from "./useTrueNASData";
 
-export type TrueNASDisk = {
-  name: string;
-  model?: string;
-  serial?: string;
-  type?: string;
-  size?: number;
-  temperature_celsius?: number;
-  smart_status?: string;
-  pool?: string;
-};
+export type { TrueNASDisk } from "./truenasTypes";
 
-function tempClass(temp: number): string {
-  if (temp > 50) return "text-[var(--bad)]";
-  if (temp >= 40) return "text-[var(--warn)]";
-  return "text-[var(--ok)]";
-}
-
-type Props = {
-  assetId: string;
-};
-
-export function TrueNASDisksTab({ assetId }: Props) {
-  const { data: disks, loading: disksLoading, error: disksError, refresh: refreshDisks } =
-    useTrueNASList<TrueNASDisk>(assetId, "disks");
-
-  // SMART health card state — mirrors TrueNASTab.tsx fetch logic
+/** SMART health of every disk, polled every minute. */
+function useTrueNASSmart(assetId: string) {
   const [smart, setSmart] = useState<TrueNASSmartResponse | null>(null);
-  const [smartLoading, setSmartLoading] = useState(false);
-  const [smartError, setSmartError] = useState<string | null>(null);
-
-  const fetchSmartTask = useCallback(async (signal: AbortSignal) => {
-    setSmartLoading(true);
-    setSmartError(null);
+  const [error, setError] = useState<string | null>(null);
+  const task = useCallback(async (signal: AbortSignal) => {
+    setError(null);
     try {
-      const res = await fetch(
-        `/api/truenas/assets/${encodeURIComponent(assetId)}/smart`,
-        { cache: "no-store", signal },
-      );
+      const res = await fetch(`/api/truenas/assets/${encodeURIComponent(assetId)}/smart`, { cache: "no-store", signal });
       const payload = normalizeTrueNASSmartResponse(await res.json().catch(() => null));
-      if (!res.ok) throw new Error(payload.error ?? `failed to load disk health (${res.status})`);
+      if (!res.ok) throw new Error(payload.error ?? "");
       if (!signal.aborted) setSmart(payload);
     } catch (err) {
       if (signal.aborted) return;
-      setSmartError(err instanceof Error ? err.message : "failed to load disk health");
+      setError(err instanceof Error ? err.message : "");
       setSmart(null);
-    } finally {
-      if (!signal.aborted) setSmartLoading(false);
     }
   }, [assetId]);
+  usePollingTask(task, 60_000);
+  return { smart, error };
+}
 
-  const fetchSmart = usePollingTask(fetchSmartTask, 60_000);
+export function TrueNASDisksTab({ assetId }: { assetId: string }) {
+  const t = useTranslations("devices-truenas.disks");
+  const k = useTranslations("devices-proxmox.kit");
+  const locale = useLocale();
+  const { data: disks, loading, error, refresh } = useTrueNASList<TrueNASDisk>(assetId, "disks");
+  const { smart, error: smartError } = useTrueNASSmart(assetId);
+  const action = useTrueNASAction();
+  const rows = useMemo(() => diskRows(disks, smart?.disks ?? []), [disks, smart]);
 
-  const [actionInFlight, setActionInFlight] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const actionSeq = useRef(0);
+  const test = (row: DiskRow, type: "short" | "long") => {
+    void action.run(row.name, () => truenasAction(
+      `/api/truenas/assets/${encodeURIComponent(assetId)}/disks/${encodeURIComponent(row.name)}/smart-test`,
+      "POST",
+      { type },
+    ), refresh);
+  };
 
-  const doSmartTest = useCallback(
-    async (diskName: string, testType: "short" | "long") => {
-      const seq = ++actionSeq.current;
-      setActionError(null);
-      setActionInFlight(`smart-${diskName}-${testType}`);
-      try {
-        await truenasAction(
-          `/api/truenas/assets/${encodeURIComponent(assetId)}/disks/${encodeURIComponent(diskName)}/smart-test`,
-          "POST",
-          { type: testType },
-        );
-        if (actionSeq.current === seq) refreshDisks();
-      } catch (err) {
-        if (actionSeq.current === seq) {
-          setActionError(err instanceof Error ? err.message : "SMART test failed");
-        }
-      } finally {
-        if (actionSeq.current === seq) setActionInFlight(null);
-      }
-    },
-    [assetId, refreshDisks],
-  );
+  const grey = (row: DiskRow) => {
+    const last = row.lastTest?.at ? t("lastTest", { when: whenText(row.lastTest.at, locale) }) : null;
+    return <DiDots parts={[row.model, row.serial ? <span className="di-mono">{row.serial}</span> : null, row.type, last]} />;
+  };
+
+  const fault = (row: DiskRow) => (row.fault
+    ? { tone: row.fault.tone, text: row.fault.text ? t("fault", { status: row.fault.text }) : t(row.fault.tone === "bad" ? "failing" : "warning") }
+    : null);
 
   return (
-    <div className="space-y-4">
-      <TrueNASSmartHealthCard
-        loading={smartLoading}
-        error={smartError}
-        summary={smart?.summary}
-        warnings={smart?.warnings ?? []}
-        disks={smart?.disks ?? []}
-        onRefresh={() => { void fetchSmart(); }}
-      />
-
-      <Card>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-medium text-[var(--text)]">All Disks</h2>
-          <Button size="sm" variant="ghost" onClick={refreshDisks} disabled={disksLoading}>
-            {disksLoading ? "Refreshing…" : "Refresh"}
-          </Button>
-        </div>
-        {actionError ? <p className="mb-3 text-xs text-[var(--bad)]">{actionError}</p> : null}
-        {disksError && disks.length === 0 ? (
-          <p className="text-sm text-[var(--bad)]">{disksError}</p>
-        ) : disksLoading && disks.length === 0 ? (
-          <p className="text-sm text-[var(--muted)]">Loading disks…</p>
-        ) : disks.length === 0 ? (
-          <p className="text-sm text-[var(--muted)]">No disks found.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-[var(--line)]">
-                  <th className="py-2 text-left font-medium text-[var(--muted)]">Name</th>
-                  <th className="py-2 text-left font-medium text-[var(--muted)]">Model</th>
-                  <th className="py-2 text-left font-medium text-[var(--muted)]">Serial</th>
-                  <th className="py-2 text-left font-medium text-[var(--muted)]">Type</th>
-                  <th className="py-2 text-left font-medium text-[var(--muted)]">Size</th>
-                  <th className="py-2 text-left font-medium text-[var(--muted)]">Temp</th>
-                  <th className="py-2 text-left font-medium text-[var(--muted)]">SMART</th>
-                  <th className="py-2 text-left font-medium text-[var(--muted)]">Pool</th>
-                  <th className="py-2 text-right font-medium text-[var(--muted)]">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--line)]">
-                {disks.map((disk) => (
-                  <tr key={disk.name}>
-                    <td className="py-2 font-medium text-[var(--text)]">{disk.name}</td>
-                    <td className="py-2 text-[var(--muted)]">{disk.model ?? "--"}</td>
-                    <td className="py-2 text-[var(--muted)]">{disk.serial ?? "--"}</td>
-                    <td className="py-2 text-[var(--muted)]">{disk.type ?? "--"}</td>
-                    <td className="py-2 text-[var(--muted)]">
-                      {disk.size != null ? formatBytes(disk.size) : "--"}
-                    </td>
-                    <td className={`py-2 font-medium ${disk.temperature_celsius != null ? tempClass(disk.temperature_celsius) : "text-[var(--muted)]"}`}>
-                      {disk.temperature_celsius != null
-                        ? `${disk.temperature_celsius.toFixed(1)}°C`
-                        : "--"}
-                    </td>
-                    <td className="py-2">
-                      {disk.smart_status ? (
-                        <div className="flex items-center gap-2">
-                          <Badge status={diskStatusBadge(disk.smart_status)} size="sm" />
-                          <span className="text-[var(--muted)]">{disk.smart_status}</span>
-                        </div>
-                      ) : (
-                        <span className="text-[var(--muted)]">--</span>
-                      )}
-                    </td>
-                    <td className="py-2 text-[var(--muted)]">{disk.pool ?? "--"}</td>
-                    <td className="py-2 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={!!actionInFlight}
-                          loading={actionInFlight === `smart-${disk.name}-short`}
-                          onClick={() => { void doSmartTest(disk.name, "short"); }}
-                        >
-                          Short
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={!!actionInFlight}
-                          loading={actionInFlight === `smart-${disk.name}-long`}
-                          onClick={() => { void doSmartTest(disk.name, "long"); }}
-                        >
-                          Long
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-    </div>
+    <>
+      {smartError ? <DiNote tone="warn">{t("smartFailed", { reason: failureText(smartError, t("noReason")) })}</DiNote> : null}
+      {(smart?.warnings ?? []).map((warning) => <DiNote key={warning} tone="warn">{warning}</DiNote>)}
+      <TnFailure message={action.error ? t("testFailed", { disk: action.error.key, reason: failureText(action.error.message, t("noReason")) }) : null} />
+      <DiList
+        hang
+        label={t("label")}
+        cols="minmax(0, 1fr) 72px 64px 96px 28px"
+        colsM="minmax(0, 1fr) 72px 64px 28px"
+        colsS="minmax(0, 1fr) 64px 28px"
+      >
+        <DiCols>
+          <span>{t("colDisk")}</span>
+          <span className="r di-s">{t("colSize")}</span>
+          <span className="r">{t("colTemp")}</span>
+          <span className="di-m">{t("colPool")}</span>
+          <span />
+        </DiCols>
+        <TnListState loading={loading} error={error} count={rows.length} empty={t("empty")} onRetry={refresh} failed={(reason) => t("loadFailed", { reason })} />
+        {rows.map((row) => {
+          const size = sizeParts(row.size);
+          const temp = row.temperature;
+          return (
+            <DiRow key={row.name} tone={row.fault?.tone ?? ""}>
+              <DiMain name={row.name} grey={grey(row)} problem={fault(row)} />
+              <DiNum value={size?.value} unit={size?.unit} className="di-s" />
+              <DiNum value={typeof temp === "number" ? Number(temp.toFixed(1)) : undefined} unit="°C" hot={typeof temp === "number" && temp > 50} />
+              <span className="di-tn-cell di-m">{row.pool ?? "—"}</span>
+              <DiRowMenu
+                label={k("actionsFor", { name: row.name })}
+                items={[
+                  { label: t("shortTest"), disabled: action.busy !== null, onSelect: () => test(row, "short") },
+                  { label: t("longTest"), disabled: action.busy !== null, onSelect: () => test(row, "long") },
+                ]}
+              />
+            </DiRow>
+          );
+        })}
+      </DiList>
+    </>
   );
 }

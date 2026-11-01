@@ -6,121 +6,117 @@ import { useTranslations } from "next-intl";
 import { PageHeader } from "../../../components/PageHeader";
 import { Button } from "../../../components/ui/Button";
 import { useAuth } from "../../../contexts/AuthContext";
+import { useToast } from "../../../contexts/ToastContext";
 import { useHubUsers } from "../../../hooks/useHubUsers";
 import type { HubUser } from "../../../hooks/useHubUsers";
-import { UsersTable } from "./UsersTable";
+import { canManageUserAccount, hasAdminRole } from "../../../lib/roles";
+import { AccountSecurityCard } from "../settings/components/AccountSecurityCard";
 import { CreateUserDialog } from "./CreateUserDialog";
+import { DeleteUserDialog, SignOutUserDialog } from "./DeleteUserDialog";
 import { EditRoleDialog } from "./EditRoleDialog";
 import { ResetPasswordDialog } from "./ResetPasswordDialog";
-import { DeleteUserDialog } from "./DeleteUserDialog";
-import { useToast } from "../../../contexts/ToastContext";
-import { AccountSecurityCard } from "../settings/components/AccountSecurityCard";
-import { canManageUserAccount, hasAdminRole } from "../../../lib/roles";
+import { UserList, type UserAction } from "./UserList";
 
-type Dialog =
-  | { type: "create" }
-  | { type: "editRole"; user: HubUser }
-  | { type: "resetPassword"; user: HubUser }
-  | { type: "delete"; user: HubUser }
-  | null;
+type Dialog = { type: "create" } | { type: UserAction; user: HubUser } | null;
 
+/**
+ * Settings › Users. Admins see the user list (Add user; each row's ⋯ changes the role, resets a local password, signs
+ * the user out everywhere or removes them). Everyone keeps their own password and two-factor sign-in below it.
+ */
 export default function UsersPage() {
   const t = useTranslations("users");
+  const tc = useTranslations("common");
   const { user: currentUser } = useAuth();
   const canManage = hasAdminRole(currentUser?.role);
-  const { users, loading, error, createUser, updateRole, resetPassword, deleteUser, revokeSessions } = useHubUsers(canManage);
+  const { users, loading, error, refresh, createUser, updateRole, resetPassword, deleteUser, revokeSessions } = useHubUsers(canManage);
   const { addToast } = useToast();
   const [dialog, setDialog] = useState<Dialog>(null);
+  const close = () => setDialog(null);
+  const target = (type: UserAction) => (dialog && dialog.type === type ? dialog.user : null);
+  const you = (user: HubUser | null) => Boolean(user && user.id === currentUser?.id);
 
-  const handleCreate = async (payload: { username: string; password: string; role: string }) => {
-    await createUser(payload);
-    addToast("success", `User ${payload.username} created.`);
+  const done = (message: string) => {
+    addToast("success", message);
     setDialog(null);
   };
-
-  const handleEditRole = async (user: HubUser, role: string) => {
-    await updateRole(user.id, role);
-    addToast("success", `Role updated for ${user.username}.`);
-    setDialog(null);
-  };
-
-  const handleResetPassword = async (user: HubUser, password: string) => {
-    await resetPassword(user.id, password);
-    addToast("success", `Password reset for ${user.username}.`);
-    setDialog(null);
-  };
-
-  const handleDelete = async (user: HubUser) => {
-    await deleteUser(user.id);
-    addToast("success", `User ${user.username} deleted.`);
-    setDialog(null);
-  };
-
-  const handleRevokeSessions = async (user: HubUser) => {
-    await revokeSessions(user.id);
-    addToast("success", `Sessions revoked for ${user.username}.`);
-  };
-
-  const sortedUsers = [...users].sort((a, b) => a.username.localeCompare(b.username));
 
   return (
     <>
-      <PageHeader title={t("title")} subtitle={t("subtitle")} />
+      <PageHeader
+        title={t("title")}
+        action={canManage ? (
+          <Button variant="primary" onClick={() => setDialog({ type: "create" })}>
+            <Plus size={14} aria-hidden="true" />
+            {t("addUser")}
+          </Button>
+        ) : undefined}
+      />
 
-      <AccountSecurityCard />
-
-      {canManage && (
+      {canManage ? (
         <>
-          <div className="flex items-center justify-between mb-6 mt-2">
-            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">{t("userManagement")}</p>
-            <Button variant="primary" size="sm" onClick={() => setDialog({ type: "create" })}>
-              <Plus size={14} />
-              {t("addUser")}
-            </Button>
-          </div>
-
           {error ? (
-            <p className="mb-4 text-sm text-[var(--bad)]">{error}</p>
+            <p className="pp-err pp-load" role="alert">
+              {t("list.loadFailed")}
+              <button type="button" className="pp-link" onClick={() => { void refresh(); }}>{tc("retry")}</button>
+            </p>
           ) : null}
-
-          <UsersTable
-            users={sortedUsers}
+          <UserList
+            users={users}
             loading={loading}
             currentUserId={currentUser?.id ?? ""}
             canManage={(user) => canManageUserAccount(currentUser, user)}
-            onEditRole={(user) => setDialog({ type: "editRole", user })}
-            onResetPassword={(user) => setDialog({ type: "resetPassword", user })}
-            onRevokeSessions={(user) => { void handleRevokeSessions(user); }}
-            onDelete={(user) => setDialog({ type: "delete", user })}
-          />
-
-          <CreateUserDialog
-            open={dialog?.type === "create"}
-            callerRole={currentUser?.role}
-            onClose={() => setDialog(null)}
-            onConfirm={handleCreate}
-          />
-
-          <EditRoleDialog
-            user={dialog?.type === "editRole" ? dialog.user : null}
-            callerRole={currentUser?.role}
-            onClose={() => setDialog(null)}
-            onConfirm={handleEditRole}
-          />
-
-          <ResetPasswordDialog
-            user={dialog?.type === "resetPassword" ? dialog.user : null}
-            onClose={() => setDialog(null)}
-            onConfirm={handleResetPassword}
-          />
-
-          <DeleteUserDialog
-            user={dialog?.type === "delete" ? dialog.user : null}
-            onClose={() => setDialog(null)}
-            onConfirm={handleDelete}
+            onAction={(type, user) => setDialog({ type, user })}
           />
         </>
-      )}
+      ) : null}
+
+      <div className={canManage ? "pp-own" : undefined}>
+        <AccountSecurityCard />
+      </div>
+
+      <CreateUserDialog
+        open={dialog?.type === "create"}
+        callerRole={currentUser?.role}
+        onClose={close}
+        onConfirm={async (payload) => {
+          await createUser(payload);
+          addToast("success", t("toast.added", { name: payload.username }));
+        }}
+      />
+      <EditRoleDialog
+        user={target("role")}
+        callerRole={currentUser?.role}
+        onClose={close}
+        onConfirm={async (user, role) => {
+          await updateRole(user.id, role);
+          done(t("toast.role", { name: user.username, role: t(`roles.${role}`) }));
+        }}
+      />
+      <ResetPasswordDialog
+        user={target("password")}
+        onClose={close}
+        onConfirm={async (user, password) => {
+          await resetPassword(user.id, password);
+          done(t("toast.password", { name: user.username }));
+        }}
+      />
+      <SignOutUserDialog
+        user={target("signOut")}
+        you={you(target("signOut"))}
+        onClose={close}
+        onConfirm={async (user) => {
+          await revokeSessions(user.id);
+          done(t("toast.signedOut", { name: user.username }));
+        }}
+      />
+      <DeleteUserDialog
+        user={target("remove")}
+        onClose={close}
+        onConfirm={async (user) => {
+          await deleteUser(user.id);
+          done(t("toast.removed", { name: user.username }));
+        }}
+      />
     </>
   );
 }

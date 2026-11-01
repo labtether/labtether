@@ -2,6 +2,7 @@
 
 import { useCallback } from "react";
 import { Plus, X } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import type { HopConfig } from "../console/models";
@@ -18,15 +19,22 @@ type JumpChainEditorProps = {
   disabled?: boolean;
 };
 
+const MAX_HOPS = 8;
+
 function emptyHop(): HopConfig {
   return { host: "", port: 22, username: "", credential_profile_id: "" };
 }
 
+/**
+ * "Reach through": the SSH jump hosts the hub goes through, in order, to reach a group's devices. Each hop is a host,
+ * port, username and a saved SSH login. No hops means the hub reaches the devices directly.
+ */
 export function JumpChainEditor({
   value,
   onChange,
   disabled = false,
 }: JumpChainEditorProps) {
+  const t = useTranslations("groups");
   const credentialProfiles = useCredentialProfiles(!disabled || value.length > 0);
 
   const addHop = useCallback(() => {
@@ -42,60 +50,53 @@ export function JumpChainEditor({
 
   const updateHop = useCallback(
     (index: number, field: keyof HopConfig, fieldValue: string | number) => {
-      const next = value.map((hop, i) =>
-        i === index ? { ...hop, [field]: fieldValue } : hop,
-      );
-      onChange(next);
+      onChange(value.map((hop, i) => (i === index ? { ...hop, [field]: fieldValue } : hop)));
     },
     [value, onChange],
   );
 
   return (
-    <div className="space-y-2">
+    <fieldset className="pp-hops">
+      <legend>{t("jump.title")}</legend>
       {value.length === 0 ? (
-        <p className="text-[11px] text-[var(--muted)] py-1">
-          Assets in this group are accessed directly (no jump hosts).
-        </p>
+        <p className="pp-grey">{t("jump.direct")}</p>
       ) : (
-        <div className="space-y-2">
-          {value.map((hop, index) => (
-            <div
-              key={index}
-              className="flex items-start gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface)] p-2"
-            >
-              <span className="shrink-0 mt-2 text-[10px] font-mono text-[var(--muted)] w-4 text-right">
-                {index + 1}.
-              </span>
-              <div className="flex-1 grid grid-cols-[1fr_70px_1fr_1fr] gap-2">
+        <div className="pp-hop-list">
+          {value.map((hop, index) => {
+            const n = index + 1;
+            return (
+              <div key={index} className="pp-hop">
+                <span className="pp-hop-n pp-num" aria-hidden="true">{n}</span>
                 <Input
-                  placeholder="Host"
+                  placeholder="bastion.example.com"
+                  aria-label={t("jump.host", { n })}
                   value={hop.host}
                   onChange={(e) => updateHop(index, "host", e.target.value)}
                   disabled={disabled}
-                  className="!py-1.5 !text-xs"
+                  autoComplete="off"
+                  spellCheck={false}
                 />
                 <Input
                   type="number"
-                  placeholder="Port"
+                  aria-label={t("jump.port", { n })}
                   value={hop.port}
-                  onChange={(e) =>
-                    updateHop(index, "port", parsePortInput(e.target.value, 22))
-                  }
+                  onChange={(e) => updateHop(index, "port", parsePortInput(e.target.value, 22))}
                   disabled={disabled}
-                  className="!py-1.5 !text-xs"
                   min={1}
                   max={65535}
                 />
                 <Input
-                  placeholder="Username"
+                  aria-label={t("jump.username", { n })}
+                  placeholder={t("jump.usernameHint")}
                   value={hop.username}
                   onChange={(e) => updateHop(index, "username", e.target.value)}
                   disabled={disabled}
-                  className="!py-1.5 !text-xs"
+                  autoComplete="off"
+                  spellCheck={false}
                 />
                 <CredentialProfileSelect
                   id={`jump-hop-${index}-credential-profile`}
-                  ariaLabel={`Jump host ${index + 1} credential profile`}
+                  ariaLabel={t("jump.login", { n })}
                   value={hop.credential_profile_id}
                   onChange={(next) => updateHop(index, "credential_profile_id", next)}
                   profiles={credentialProfiles.profiles}
@@ -103,34 +104,31 @@ export function JumpChainEditor({
                   error={index === 0 ? credentialProfiles.error : null}
                   allowedKinds={sshCredentialKinds}
                   disabled={disabled}
-                  className="min-w-0 [&_select]:!py-1.5 [&_select]:!text-xs"
-                  emptyLabel="No credential"
+                  className="min-w-0"
+                  emptyLabel={t("jump.noLogin")}
                 />
+                <button
+                  type="button"
+                  className="pp-more pp-shown"
+                  onClick={() => removeHop(index)}
+                  disabled={disabled}
+                  aria-label={t("jump.remove", { n })}
+                >
+                  <X aria-hidden="true" />
+                </button>
               </div>
-              <button
-                type="button"
-                className="shrink-0 mt-1.5 p-1 rounded text-[var(--muted)] hover:text-[var(--bad)] hover:bg-[var(--hover)] transition-colors cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
-                style={{ transitionDuration: "var(--dur-instant)" }}
-                onClick={() => removeHop(index)}
-                disabled={disabled}
-                title="Remove hop"
-              >
-                <X size={12} />
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
-
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={addHop}
-        disabled={disabled}
-      >
-        <Plus size={12} />
-        Add hop
-      </Button>
-    </div>
+      {value.length < MAX_HOPS ? (
+        <div>
+          <Button type="button" size="sm" onClick={addHop} disabled={disabled}>
+            <Plus size={14} aria-hidden="true" />
+            {t("jump.add")}
+          </Button>
+        </div>
+      ) : null}
+    </fieldset>
   );
 }

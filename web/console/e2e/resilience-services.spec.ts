@@ -110,18 +110,18 @@ test("services triage filters and unstable sorting prioritize actionable items",
   await expect(page.locator('[data-service-name="Healthy Service"]')).toHaveCount(1);
 
   await page.getByRole("button", { name: "Filters", exact: true }).click();
-  await page.getByLabel("Health Filter").selectOption("unstable");
+  await page.getByLabel("Stability", { exact: true }).selectOption("unstable");
   await expect(page.locator('[data-service-name="Healthy Service"]')).toHaveCount(0);
   await expect(page.locator('[data-service-name="Down Service"]')).toHaveCount(1);
   await expect(page.locator('[data-service-name="Recently Changed"]')).toHaveCount(1);
 
-  await page.getByLabel("Health Filter").selectOption("changed_recently");
+  await page.getByLabel("Stability", { exact: true }).selectOption("changed_recently");
   await expect(page.locator('[data-service-name="Recently Changed"]')).toHaveCount(1);
   await expect(page.locator('[data-service-name="Healthy Service"]')).toHaveCount(0);
   await expect(page.locator('[data-service-name="Down Service"]')).toHaveCount(0);
 
-  await page.getByLabel("Health Filter").selectOption("all");
-  await page.getByLabel("Sort Mode").selectOption("most_unstable");
+  await page.getByLabel("Stability", { exact: true }).selectOption("all");
+  await page.getByLabel("Sort", { exact: true }).selectOption("most_unstable");
   await expect(page.locator('[data-service-name="Down Service"]')).toHaveCount(1);
   const orderedNames = (await page.locator("[data-service-name]").allTextContents()).map((name) => name.trim());
   expect(orderedNames[0]).toBe("Down Service");
@@ -217,12 +217,13 @@ test("service detail health panel shows uptime history and recent checks", async
   });
 
   await page.goto("/services");
-  await page.getByRole("button", { name: "Details", exact: true }).click();
+  await page.getByRole("button", { name: "Actions for History Service on lab-host-1", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Details", exact: true }).click();
 
-  const healthPanel = page.getByLabel("Health History");
-  await expect(healthPanel.getByText("Health History", { exact: true })).toBeVisible();
-  await expect(healthPanel.getByText("75.0%", { exact: true })).toBeVisible();
-  await expect(healthPanel.getByText("Availability Timeline", { exact: true })).toBeVisible();
-  await expect(healthPanel.getByText("Recent Checks", { exact: true })).toBeVisible();
-  await expect(healthPanel.getByText(/Last outage/i)).toBeVisible();
+  const healthPanel = page.getByRole("region", { name: "History Service checks" });
+  await expect(healthPanel).toContainText("Uptime 75.0%");
+  await expect(healthPanel.getByRole("img", { name: "Down once in the recent checks" })).toBeVisible();
+  await expect(healthPanel.getByText("Outages", { exact: true })).toBeVisible();
+  await expect(healthPanel).toContainText("20 minutes");
+  await expect(healthPanel.getByRole("list", { name: "Recent checks" }).getByRole("listitem")).toHaveCount(6);
 });

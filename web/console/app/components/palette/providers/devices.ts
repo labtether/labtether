@@ -22,6 +22,7 @@ export function createDevicesProvider(
             asset.id,
             asset.platform ?? "",
             asset.type,
+            deviceAddress(asset.metadata) ?? "",
             ...(asset.tags ?? []),
           ]
             .join(" ")
@@ -33,7 +34,7 @@ export function createDevicesProvider(
           return {
             id: `device-${asset.id}`,
             label: asset.name || asset.id,
-            description: [asset.platform, asset.type].filter(Boolean).join(" · "),
+            description: deviceAddress(asset.metadata),
             icon: Server,
             href,
             keywords: [...(asset.tags ?? []), asset.platform ?? "", asset.type].filter(Boolean),
@@ -42,4 +43,10 @@ export function createDevicesProvider(
         });
     },
   };
+}
+
+/** The device's address, the hint the 2.0 palette shows beside its name. */
+function deviceAddress(meta: Record<string, string> | undefined): string | undefined {
+  if (!meta) return undefined;
+  return meta.ip_address || meta.ip || meta.primary_ip || undefined;
 }

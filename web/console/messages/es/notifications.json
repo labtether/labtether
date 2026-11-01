@@ -1,16 +1,13 @@
 {
-  "heading": "// Notificaciones",
-  "addChannel": "+ Agregar canal",
-  "empty": "No hay canales de notificación configurados. Agregue uno para recibir alertas.",
-  "enabled": "Habilitado",
-  "disabled": "Deshabilitado",
-  "edit": "Editar",
+  "addChannel": "Añadir canal",
+  "empty": "Aún no hay canales",
+  "edit": "Editar…",
   "test": "Enviar prueba",
   "testSent": "Prueba enviada",
   "testFailed": "La prueba falló",
-  "delete": "Eliminar",
+  "delete": "Eliminar…",
   "typeSelect": {
-    "heading": "Seleccione un tipo de canal",
+    "heading": "Añadir canal",
     "slack": {
       "name": "Slack",
       "description": "Enviar alertas a un canal de Slack mediante un webhook entrante"
@@ -63,9 +60,10 @@
   "cancel": "Cancelar",
   "back": "Volver",
   "deleteDialog": {
-    "title": "Eliminar canal",
-    "body": "Esto eliminará permanentemente el canal {name}. Esta acción no se puede deshacer.",
-    "confirm": "Eliminar canal"
+    "title": "¿Eliminar {name}?",
+    "body": "Las alertas dejan de enviarse a este canal.",
+    "confirm": "Eliminar",
+    "failed": "El canal no se eliminó."
   },
   "errors": {
     "nameRequired": "El nombre del canal es obligatorio.",
@@ -85,5 +83,11 @@
     "serverUrlRequired": "La URL del servidor es obligatoria.",
     "topicRequired": "El tema es obligatorio.",
     "appTokenRequired": "El token de aplicación es obligatorio."
-  }
+  },
+  "title": "Notificaciones",
+  "emptyHint": "Slack, correo, webhooks, ntfy y Gotify pueden recibir alertas.",
+  "sending": "Enviando",
+  "sendTo": "Enviar a {name}",
+  "actionsFor": "Acciones para {name}",
+  "toggleFailed": "El canal no se cambió."
 }

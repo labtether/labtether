@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import { Cpu, HardDrive, MemoryStick, Network } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { buildNodeMetadataSections } from "../../../../console/models";
 import { useNetworkInterfaces } from "../../../../hooks/useNetworkInterfaces";
-import { DataValue } from "../../../../components/ui/DataValue";
 import { SummaryMetricCard, SystemPanelDrilldown } from "./SystemPanelDrilldown";
-import { analyzeTelemetryDetails } from "./nodeMetricsModel";
+import { analyzeTelemetryDetails, isHot } from "./nodeMetricsModel";
 import {
   CURATED_SECTIONS,
   buildDrilldownContent,
@@ -21,6 +20,23 @@ import type { SystemPanelProps } from "./systemPanelTypes";
 
 export type { SystemDrilldownView, SystemPanelProps } from "./systemPanelTypes";
 
+/** The metadata section names the Hardware view translates; others keep the hub's own name. */
+const SECTION_KEYS: Record<string, string> = {
+  System: "system",
+  Hardware: "hardware",
+  CPU: "cpu",
+  Memory: "memory",
+  Storage: "storage",
+  Firmware: "firmware",
+  Network: "network",
+};
+
+const dash = (text: string) => (text === "" || text === "n/a" ? "—" : text);
+
+/**
+ * The System tab's Hardware view: CPU, memory, storage and network now as one sheet of four cells (each opens its
+ * drill-down), then what the device reports about itself, section by section.
+ */
 export function SystemPanel({
   nodeId,
   asset,
@@ -33,6 +49,7 @@ export function SystemPanel({
   onCloseDrilldown,
   onOpenPanel,
 }: SystemPanelProps) {
+  const t = useTranslations("devices.hardware");
   const sections = buildNodeMetadataSections(asset.metadata);
   const curated = sections.filter((section) => CURATED_SECTIONS.includes(section.title));
   const metrics = gatherMetrics(asset, telemetry);
@@ -74,69 +91,67 @@ export function SystemPanel({
   }
 
   if (curated.length === 0) {
-    return (
-      <div className="rounded-lg border border-[var(--line)] bg-[var(--panel-glass)] p-6 text-center text-sm text-[var(--muted)]">
-        No system information available for this device.
-      </div>
-    );
+    return <div className="dv-sheet dv-empty"><b>{t("empty")}</b></div>;
   }
 
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryMetricCard
-          icon={<Cpu size={15} />}
-          title="CPU"
-          value={formatPercent(metrics.cpu_used_percent)}
-          hint={readMeta(asset, "cpu_model") || "Open CPU model and load diagnostics"}
-          onClick={() => onOpenDrilldown?.("cpu")}
-        />
-        <SummaryMetricCard
-          icon={<MemoryStick size={15} />}
-          title="Memory"
-          value={formatPercent(metrics.memory_used_percent)}
-          hint={formatBytes(readMeta(asset, "memory_total_bytes") || readMeta(asset, "physmem")) || "Open memory diagnostics"}
-          onClick={() => onOpenDrilldown?.("memory")}
-        />
-        <SummaryMetricCard
-          icon={<HardDrive size={15} />}
-          title="Storage"
-          value={formatPercent(metrics.disk_used_percent)}
-          hint={formatBytes(readMeta(asset, "disk_root_total_bytes")) || "Open storage diagnostics"}
-          onClick={() => onOpenDrilldown?.("storage")}
-        />
-        <SummaryMetricCard
-          icon={<Network size={15} />}
-          title="Network"
-          value={`${formatRate(metrics.network_rx_bytes_per_sec)} / ${formatRate(metrics.network_tx_bytes_per_sec)}`}
-          hint={`${readMeta(asset, "network_interface_count") || "n/a"} interfaces`}
-          onClick={() => onOpenDrilldown?.("network")}
-        />
-      </div>
+  const interfaceCount = Number(readMeta(asset, "network_interface_count"));
+  const rx = formatRate(metrics.network_rx_bytes_per_sec);
+  const tx = formatRate(metrics.network_tx_bytes_per_sec);
 
-      {curated.map((section) => (
-        <div
-          key={section.title}
-          className="rounded-lg border border-[var(--line)] bg-[var(--panel-glass)] px-4 py-3"
-        >
-          <h3 className="mb-2 text-sm font-medium text-[var(--text)]">
-            {section.title}
-          </h3>
-          <div className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
-            {section.rows.map((row) => (
-              <div key={row.key} className="flex min-w-0 items-baseline gap-2">
-                <span className="w-[140px] shrink-0 text-[11px] text-[var(--muted)]">
-                  {row.label}
-                </span>
-                <DataValue
-                  value={row.value}
-                  className="truncate text-xs text-[var(--text)]"
-                />
-              </div>
-            ))}
-          </div>
+  return (
+    <div className="dmt">
+      <section className="dv-sec" aria-label={t("usage")}>
+        <div className="dmt-cells dmt-four">
+          <SummaryMetricCard
+            title={t("views.cpu")}
+            value={dash(formatPercent(metrics.cpu_used_percent))}
+            hot={isHot(metrics.cpu_used_percent, "percent")}
+            hint={readMeta(asset, "cpu_model")}
+            onClick={() => onOpenDrilldown?.("cpu")}
+          />
+          <SummaryMetricCard
+            title={t("views.memory")}
+            value={dash(formatPercent(metrics.memory_used_percent))}
+            hot={isHot(metrics.memory_used_percent, "percent")}
+            hint={formatBytes(readMeta(asset, "memory_total_bytes") || readMeta(asset, "physmem"))}
+            onClick={() => onOpenDrilldown?.("memory")}
+          />
+          <SummaryMetricCard
+            title={t("views.storage")}
+            value={dash(formatPercent(metrics.disk_used_percent))}
+            hot={isHot(metrics.disk_used_percent, "percent")}
+            hint={formatBytes(readMeta(asset, "disk_root_total_bytes"))}
+            onClick={() => onOpenDrilldown?.("storage")}
+          />
+          <SummaryMetricCard
+            title={t("views.network")}
+            value={rx === "n/a" && tx === "n/a" ? "—" : `${dash(rx)} / ${dash(tx)}`}
+            hint={readMeta(asset, "network_interface_count") !== "" && Number.isFinite(interfaceCount)
+              ? t("interfaces", { count: interfaceCount })
+              : ""}
+            onClick={() => onOpenDrilldown?.("network")}
+          />
         </div>
-      ))}
+      </section>
+
+      {curated.map((section) => {
+        const key = SECTION_KEYS[section.title];
+        return (
+          <section key={section.title} className="dv-sec" aria-labelledby={`dmt-s-${section.title}`}>
+            <div className="dv-sh">
+              <h2 id={`dmt-s-${section.title}`}>{key ? t(`metaSections.${key}`) : section.title}</h2>
+            </div>
+            <dl className="dv-sheet tight dv-kv dmt-kv2">
+              {section.rows.map((row) => (
+                <div key={row.key}>
+                  <dt>{row.label}</dt>
+                  <dd><span>{row.value}</span></dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        );
+      })}
     </div>
   );
 }

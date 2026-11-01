@@ -19,10 +19,10 @@ import { createRecentProvider } from "../../components/palette/providers/recent"
 import { createSnippetsProvider } from "../../components/palette/providers/snippets";
 import { DemoBanner } from "../../components/DemoBanner";
 import { Sidebar } from "../../components/Sidebar";
+import { PageSectionProvider } from "../../components/shell/PageSectionProvider";
 import { CommandPalette } from "../../components/CommandPalette";
 import { MobileNavOverlay, useMobileNav } from "../../components/MobileNav";
 import { TopBar } from "../../components/shell/TopBar";
-import { SectionTabs } from "../../components/shell/SectionTabs";
 import { usePresenceToasts } from "../../hooks/usePresenceToasts";
 import { hasWriteRole } from "../../lib/roles";
 import { useCallback, useEffect, useMemo, useRef } from "react";
@@ -102,8 +102,7 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
       <main className="lt-content">
         <TopBar navOpen={open} onToggleNav={toggle} />
         <div className="lt-page">
-          <SectionTabs />
-          {children}
+          <PageSectionProvider>{children}</PageSectionProvider>
         </div>
       </main>
       <BuiltInPaletteProviders />

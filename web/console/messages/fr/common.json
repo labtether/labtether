@@ -11,6 +11,10 @@
     "label": "Recherche",
     "placeholder": "Rechercher..."
   },
+  "palette": {
+    "placeholder": "Rechercher des appareils, pages et paramètres",
+    "showAll": "Tout afficher"
+  },
   "noResults": "Aucun résultat trouvé",
   "empty": "Rien ici pour le moment",
   "actions": {

@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Copy, Check, ChevronDown, ChevronRight } from "lucide-react";
-import { Card } from "../../../../components/ui/Card";
+import { Button } from "../../../../components/ui/Button";
+import { CodeBlock, CopyButton, Facts, Row, Section, Sheet } from "./SettingsKit";
+import { useHubUrl } from "./useHubUrl";
 
 export const MCP_TOOL_GROUPS = [
   { name: "Identity", tools: ["whoami"] },
@@ -41,132 +42,59 @@ export function buildMcpConnectionSnippets(mcpUrl: string) {
   };
 }
 
-function CopyButton({ text, label }: { text: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-  const t = useTranslations("settings");
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // clipboard unavailable in non-secure context
-    }
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={() => { void handleCopy(); }}
-      className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-mono text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--hover)] rounded transition-colors cursor-pointer bg-transparent border-none"
-      aria-label={label}
-    >
-      {copied ? <Check size={12} className="text-[var(--good)]" /> : <Copy size={12} />}
-      {copied ? t("mcp.copied") : t("mcp.copy")}
-    </button>
-  );
-}
-
 export function McpConnectionCard() {
   const t = useTranslations("settings");
+  const [open, setOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
-  const [hubUrl, setHubUrl] = useState("");
-  const [hubLoading, setHubLoading] = useState(true);
-
-  const fetchHubUrl = useCallback(async () => {
-    try {
-      const res = await fetch("/api/settings/enrollment", { cache: "no-store", signal: AbortSignal.timeout(10_000) });
-      if (!res.ok) throw new Error();
-      const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-      const url = typeof data?.hub_url === "string" ? data.hub_url.trim() : "";
-      setHubUrl(url || window.location.origin);
-    } catch {
-      // Fallback to browser origin if enrollment endpoint unavailable
-      setHubUrl(window.location.origin);
-    } finally {
-      setHubLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { void fetchHubUrl(); }, [fetchHubUrl]);
+  const { hubUrl, loading: hubLoading } = useHubUrl();
 
   const mcpUrl = hubUrl ? `${hubUrl}/mcp` : "";
 
   const snippets = buildMcpConnectionSnippets(mcpUrl);
 
   return (
-    <Card className="mb-6">
-      <p className="text-xs font-mono uppercase tracking-wider text-[var(--muted)] mb-1">
-        {t("mcp.heading")}
-      </p>
-      <p className="text-xs text-[var(--muted)] mb-4">{t("mcp.description")}</p>
-
-      {hubLoading && <p className="text-xs text-[var(--muted)] py-2">&nbsp;</p>}
-
-      {!hubLoading && <>
-      {/* Endpoint */}
-      <div className="flex items-center gap-2 mb-4">
-        <span className="text-xs text-[var(--muted)]">{t("mcp.endpoint")}:</span>
-        <code className="text-xs font-mono text-[var(--text)] bg-[var(--surface)] px-2 py-1 rounded">
-          {mcpUrl}
-        </code>
-        <CopyButton text={mcpUrl} label="Copy MCP URL" />
-        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
-          {t("mcp.transport")}
-        </span>
-      </div>
-
-      {/* Claude Code snippet */}
-      <div className="mb-3">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--muted)]">
-            {t("mcp.claudeCode")}
-          </span>
-          <CopyButton text={snippets.claude} label="Copy Claude Code command" />
-        </div>
-        <pre className="text-xs font-mono text-[var(--text)] bg-[var(--surface)] border border-[var(--panel-border)] rounded-lg p-3 overflow-x-auto">
-          {snippets.claude}
-        </pre>
-      </div>
-
-      {/* Generic config snippet */}
-      <div className="mb-4">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--muted)]">
-            {t("mcp.genericConfig")}
-          </span>
-          <CopyButton text={snippets.generic} label="Copy MCP config" />
-        </div>
-        <pre className="text-xs font-mono text-[var(--text)] bg-[var(--surface)] border border-[var(--panel-border)] rounded-lg p-3 overflow-x-auto">
-          {snippets.generic}
-        </pre>
-      </div>
-
-      {/* Auth note */}
-      <p className="text-[10px] text-[var(--muted)] mb-4 italic">{t("mcp.authNote")}</p>
-
-      {/* Collapsible tools list */}
-      <button
-        type="button"
-        onClick={() => setToolsOpen((prev) => !prev)}
-        className="flex items-center gap-1.5 text-xs text-[var(--muted)] hover:text-[var(--text)] transition-colors cursor-pointer bg-transparent border-none p-0"
-      >
-        {toolsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        {t("mcp.toolsToggle", { count: TOTAL_TOOLS })}
-      </button>
-
-      {toolsOpen && (
-        <div className="mt-2 space-y-1.5 ml-5">
-          {MCP_TOOL_GROUPS.map((group) => (
-            <div key={group.name}>
-              <span className="text-xs text-[var(--text)]">{group.name}</span>
-              <span className="text-[10px] font-mono text-[var(--muted)] ml-2">{group.tools.join(", ")}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      </>}
-    </Card>
+    <Section title={t("mcp.heading")} id="mcp">
+      <Sheet className={hubLoading ? "st-loading" : ""}>
+        {hubLoading ? null : (
+          <>
+            <Row
+              label={t("mcp.endpoint")}
+              hint={(
+                <span className="st-cv">
+                  <code className="st-mono">{mcpUrl}</code>
+                  <CopyButton text={mcpUrl} label={t("mcp.copyUrl")} />
+                  <span>{t("mcp.transport")}</span>
+                </span>
+              )}
+            >
+              <Button size="sm" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-controls="st-mcp-details">
+                {open ? t("mcp.hide") : t("mcp.show")}
+              </Button>
+            </Row>
+            {open ? (
+              <div className="st-x" id="st-mcp-details">
+                <div className="st-field">
+                  <span className="st-lbl">{t("mcp.claudeCode")}</span>
+                  <CodeBlock code={snippets.claude} copyLabel={t("mcp.copyClaude")} />
+                </div>
+                <div className="st-field">
+                  <span className="st-lbl">{t("mcp.genericConfig")}</span>
+                  <CodeBlock code={snippets.generic} copyLabel={t("mcp.copyConfig")} />
+                </div>
+                <p className="st-g">{t("mcp.authNote")}</p>
+                <div className="st-field">
+                  <button type="button" className="st-link st-left" onClick={() => setToolsOpen((prev) => !prev)} aria-expanded={toolsOpen}>
+                    {toolsOpen ? t("mcp.toolsHide") : t("mcp.toolsToggle", { count: TOTAL_TOOLS })}
+                  </button>
+                  {toolsOpen ? (
+                    <Facts items={MCP_TOOL_GROUPS.map((group) => [group.name, <code key={group.name} className="st-mono">{group.tools.join(", ")}</code>] as const)} />
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+          </>
+        )}
+      </Sheet>
+    </Section>
   );
 }

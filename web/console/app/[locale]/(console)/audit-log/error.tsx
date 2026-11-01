@@ -36,7 +36,7 @@ export default function AuditLogError({
           margin: 0,
         }}
       >
-        {t("errorBoundary.sectionTitle", { section: "Audit Log" })}
+        {t("errorBoundary.sectionTitle", { section: "Audit log" })}
       </h2>
       <p
         style={{

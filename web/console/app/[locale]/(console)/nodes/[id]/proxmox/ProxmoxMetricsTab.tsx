@@ -1,7 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Card } from "../../../../../components/ui/Card";
+import { useLocale, useTranslations } from "next-intl";
+import { Button } from "../../../../../components/ui/Button";
+import { withCollector } from "../proxmoxFormatters";
+import { DiSeg } from "./DiControls";
+import { DiCols, DiEmpty, DiList, DiNote, DiNum, DiRow, DiSection, DiTime } from "./DiList";
+import { sizeParts, whenText } from "./diFormat";
 import { useProxmoxFetch } from "./useProxmoxData";
 
 type MetricPoint = {
@@ -25,117 +30,71 @@ type MetricsResponse = {
 const WINDOWS = ["hour", "day", "week", "month"] as const;
 type Window = (typeof WINDOWS)[number];
 
-const WINDOW_LABELS: Record<Window, string> = {
-  hour: "1h",
-  day: "24h",
-  week: "7d",
-  month: "30d",
-};
-
 type Props = {
   assetId: string;
   proxmoxCollectorID: string;
 };
 
-function fmtPct(v: number | undefined): string {
-  if (v == null) return "-";
-  return `${(v * 100).toFixed(1)}%`;
+function Rate({ bytes, className = "" }: { bytes?: number; className?: string }) {
+  const size = sizeParts(bytes);
+  return <DiNum value={size?.value} unit={size ? `${size.unit}/s` : undefined} className={className} />;
 }
 
-function fmtBytes(v: number | undefined): string {
-  if (v == null) return "-";
-  if (v >= 1_073_741_824) return `${(v / 1_073_741_824).toFixed(1)} GB`;
-  if (v >= 1_048_576) return `${(v / 1_048_576).toFixed(1)} MB`;
-  if (v >= 1024) return `${(v / 1024).toFixed(1)} KB`;
-  return `${v} B`;
+function Size({ bytes, className = "" }: { bytes?: number; className?: string }) {
+  const size = sizeParts(bytes);
+  return <DiNum value={size?.value} unit={size?.unit} className={className} />;
 }
 
+/** Proxmox's own samples (RRD) for the resource: CPU, memory, network and disk rates, newest first. */
 export function ProxmoxMetricsTab({ assetId, proxmoxCollectorID }: Props) {
-  const [window_, setWindow] = useState<Window>("hour");
-
-  const collectorSuffix = proxmoxCollectorID
-    ? `&collector_id=${encodeURIComponent(proxmoxCollectorID)}`
-    : "";
-
-  const path = `/api/proxmox/assets/${encodeURIComponent(assetId)}/metrics?timeframe=${window_}${collectorSuffix}`;
+  const t = useTranslations("devices-proxmox.pve.metrics");
+  const kit = useTranslations("devices-proxmox.kit");
+  const locale = useLocale();
+  const [range, setRange] = useState<Window>("hour");
+  const path = withCollector(`/api/proxmox/assets/${encodeURIComponent(assetId)}/metrics?timeframe=${range}`, proxmoxCollectorID);
   const { data, loading, error, refresh } = useProxmoxFetch<MetricsResponse>(path);
-
   const points: MetricPoint[] = data?.data ?? (Array.isArray(data) ? (data as MetricPoint[]) : []);
-
-  // Show last N points in table (most recent last)
-  const displayPoints = points.slice(-50);
+  const shown = points.slice(-50).reverse();
 
   return (
-    <Card>
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <h2 className="text-sm font-medium text-[var(--text)]">Metrics</h2>
-        <div className="ml-auto flex items-center gap-2">
-          <div className="flex rounded border border-[var(--line)] overflow-hidden">
-            {WINDOWS.map((w) => (
-              <button
-                key={w}
-                onClick={() => { setWindow(w); }}
-                className={`px-2 py-1 text-xs transition-colors ${
-                  window_ === w
-                    ? "bg-[var(--accent)] text-white"
-                    : "bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--text)]"
-                }`}
-              >
-                {WINDOW_LABELS[w]}
-              </button>
-            ))}
-          </div>
-          <button
-            className="text-xs text-[var(--accent)] hover:underline"
-            onClick={refresh}
-            disabled={loading}
-          >
-            {loading ? "Loading..." : "Refresh"}
-          </button>
-        </div>
-      </div>
-      {error ? (
-        <p className="text-xs text-[var(--bad)]">{error}</p>
-      ) : loading && displayPoints.length === 0 ? (
-        <p className="text-xs text-[var(--muted)]">Loading metrics...</p>
-      ) : displayPoints.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-[var(--line)]">
-                <th className="px-2 py-1 text-left font-medium text-[var(--muted)]">Time</th>
-                <th className="px-2 py-1 text-left font-medium text-[var(--muted)]">CPU</th>
-                <th className="px-2 py-1 text-left font-medium text-[var(--muted)]">Mem Used</th>
-                <th className="px-2 py-1 text-left font-medium text-[var(--muted)]">Mem Total</th>
-                <th className="px-2 py-1 text-left font-medium text-[var(--muted)]">Disk Used</th>
-                <th className="px-2 py-1 text-left font-medium text-[var(--muted)]">Net In</th>
-                <th className="px-2 py-1 text-left font-medium text-[var(--muted)]">Net Out</th>
-                <th className="px-2 py-1 text-left font-medium text-[var(--muted)]">Disk Read</th>
-                <th className="px-2 py-1 text-left font-medium text-[var(--muted)]">Disk Write</th>
-              </tr>
-            </thead>
-            <tbody>
-              {displayPoints.map((pt, idx) => (
-                <tr key={pt.time ?? idx} className="border-b border-[var(--line)] border-opacity-30">
-                  <td className="px-2 py-1 text-[var(--muted)]">
-                    {pt.time ? new Date(pt.time * 1000).toLocaleTimeString() : "-"}
-                  </td>
-                  <td className="px-2 py-1 text-[var(--text)]">{fmtPct(pt.cpu)}</td>
-                  <td className="px-2 py-1 text-[var(--text)]">{fmtBytes(pt.mem)}</td>
-                  <td className="px-2 py-1 text-[var(--muted)]">{fmtBytes(pt.maxmem)}</td>
-                  <td className="px-2 py-1 text-[var(--muted)]">{fmtBytes(pt.disk)}</td>
-                  <td className="px-2 py-1 text-[var(--muted)]">{fmtBytes(pt.netin)}</td>
-                  <td className="px-2 py-1 text-[var(--muted)]">{fmtBytes(pt.netout)}</td>
-                  <td className="px-2 py-1 text-[var(--muted)]">{fmtBytes(pt.diskread)}</td>
-                  <td className="px-2 py-1 text-[var(--muted)]">{fmtBytes(pt.diskwrite)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <p className="text-xs text-[var(--muted)]">No metrics data available for this time range.</p>
-      )}
-    </Card>
+    <DiSection
+      title={t("title")}
+      right={
+        <>
+          <DiSeg label={t("rangeLabel")} options={WINDOWS.map((id) => ({ id, label: t(`range.${id}`) }))} value={range} onChange={setRange} />
+          <Button size="sm" onClick={refresh} disabled={loading}>{loading ? kit("loading") : kit("refresh")}</Button>
+        </>
+      }
+    >
+      {error ? <DiNote tone="bad">{t("loadFailed", { error })}</DiNote> : null}
+      <DiList
+        cols="96px repeat(6, minmax(0, 1fr))"
+        colsM="80px repeat(4, minmax(0, 1fr))"
+        colsS="72px repeat(2, minmax(0, 1fr))"
+        label={t("title")}
+      >
+        <DiCols>
+          <span>{t("time")}</span>
+          <span className="r">{t("cpu")}</span>
+          <span className="r">{t("memory")}</span>
+          <span className="r di-s">{t("netIn")}</span>
+          <span className="r di-s">{t("netOut")}</span>
+          <span className="r di-m">{t("diskRead")}</span>
+          <span className="r di-m">{t("diskWrite")}</span>
+        </DiCols>
+        {shown.length === 0 ? <DiEmpty title={loading ? kit("loading") : t("none")} /> : null}
+        {shown.map((point, index) => (
+          <DiRow key={point.time ?? index}>
+            <DiTime className="di-left">{whenText(point.time, locale)}</DiTime>
+            <DiNum value={point.cpu != null ? (point.cpu * 100).toFixed(1) : undefined} unit="%" hot={point.cpu != null && point.cpu >= 0.85} />
+            <Size bytes={point.mem} />
+            <Rate bytes={point.netin} className="di-s" />
+            <Rate bytes={point.netout} className="di-s" />
+            <Rate bytes={point.diskread} className="di-m" />
+            <Rate bytes={point.diskwrite} className="di-m" />
+          </DiRow>
+        ))}
+      </DiList>
+    </DiSection>
   );
 }

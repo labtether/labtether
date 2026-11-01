@@ -7,6 +7,7 @@ export type {
   StorageInsightsResponse,
   RiskFilter,
   StorageRow,
+  StorageReasonKey,
   Recommendation,
 } from "./storageOperationsTypes";
 

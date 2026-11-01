@@ -1,0 +1,184 @@
+"use client";
+
+import { useCallback, useEffect, useMemo } from "react";
+import { useFiles, type FileEntry, type SortField } from "../../../hooks/useFiles";
+import type { UnifiedFileEntry } from "./fileOpsClient";
+import { joinPath, parentPath } from "./fileWorkspaceUtils";
+import { useConnectionBrowser } from "./useConnectionBrowser";
+import { sourceKey, sourceOf, type FileSource, type FileTab } from "./useFileTabsState";
+
+// One shape for the folder a Files tab shows, whether it browses a device through its agent (useFiles) or a saved
+// connection (useConnectionBrowser). Paths in names-based calls are inside the open folder.
+
+export type Progress = { fileName: string; loaded: number; total: number };
+
+export type FilesSourceApi = {
+  key: string;
+  source: FileSource | null;
+  /** The tab browses a device whose agent is not connected. */
+  waiting: boolean;
+  currentPath: string;
+  rootPath: string;
+  entries: FileEntry[];
+  loading: boolean;
+  error: string | null;
+  setError: (message: string | null) => void;
+  showHidden: boolean;
+  setShowHidden: (next: boolean) => void;
+  sortField: SortField;
+  sortDir: "asc" | "desc";
+  toggleSort: (field: SortField) => void;
+  refresh: () => void;
+  goTo: (path: string) => void;
+  goUp: () => void;
+  canUp: boolean;
+  openFile: (entry: FileEntry) => void;
+  download: (names: string[]) => void;
+  upload: (files: File[], dir: string) => Promise<void>;
+  createDir: (name: string) => Promise<void>;
+  remove: (names: string[]) => Promise<void>;
+  rename: (from: string, to: string) => Promise<void>;
+  copyPath: (src: string, dst: string) => Promise<boolean>;
+  movePath: (src: string, dst: string) => Promise<boolean>;
+  preview: { name: string; content: string } | null;
+  closePreview: () => void;
+  uploadProgress: Progress | null;
+  cancelUpload: () => void;
+  downloadProgress: Progress | null;
+  cancelDownload: () => void;
+};
+
+const toEntry = (e: UnifiedFileEntry): FileEntry => ({ name: e.name, is_dir: e.is_dir, size: e.size, mod_time: e.mod_time ?? "", mode: e.mode ?? "" });
+
+export function useFilesSource(tab: FileTab | null): FilesSourceApi {
+  const files = useFiles();
+  const { target, setTarget, connectedAgentIds, listDir } = files;
+  const source = useMemo(() => sourceOf(tab), [tab]);
+  const conn = useConnectionBrowser(source?.type === "connection" ? source : null);
+  const isConn = source?.type === "connection";
+
+  const agentId = source?.type === "agent" ? source.assetId : "";
+  const agentConnected = agentId !== "" && connectedAgentIds.has(agentId);
+  // useFiles drops a target that is not among its connected assets, so wait until the status lists the device too.
+  const agentReady = agentConnected && files.assets.some((a) => a.id === agentId);
+
+  // The agent tab follows the active tab and its agent's connection; it opens at the device's home folder.
+  useEffect(() => {
+    setTarget(agentReady ? agentId : "");
+  }, [agentId, agentReady, setTarget]);
+  useEffect(() => {
+    if (target && target === agentId) void listDir(target, "~");
+  }, [target, agentId, listDir]);
+
+  const connEntries = useMemo(() => conn.entries.map(toEntry), [conn.entries]);
+  const currentPath = isConn ? conn.currentPath : files.currentPath;
+  const entries = isConn ? connEntries : files.entries;
+  const rootPath = isConn ? conn.rootPath : files.rootPath;
+  const at = useCallback((name: string) => joinPath(currentPath, name), [currentPath]);
+
+  const download = useCallback((names: string[]) => {
+    for (const name of names) {
+      const entry = entries.find((e) => e.name === name);
+      if (!entry || entry.is_dir) continue;
+      if (isConn) conn.downloadFile(at(name));
+      else files.downloadFile(at(name));
+    }
+  }, [at, conn, entries, files, isConn]);
+
+  const openFile = useCallback((entry: FileEntry) => {
+    if (entry.is_dir) {
+      if (isConn) conn.navigate(entry.name);
+      else files.navigate(entry.name);
+      return;
+    }
+    if (!isConn && files.isPreviewable(entry.name, entry.size)) void files.previewFile(at(entry.name), entry.name);
+    else download([entry.name]);
+  }, [at, conn, download, files, isConn]);
+
+  const upload = useCallback(async (list: File[], dir: string) => {
+    for (const file of list) {
+      if (isConn) await conn.uploadFile(joinPath(dir, file.name), file);
+      else await files.uploadFile(file, dir);
+    }
+  }, [conn, files, isConn]);
+
+  const remove = useCallback(async (names: string[]) => {
+    if (names.length === 0) return;
+    if (names.length === 1) {
+      if (isConn) await conn.deleteEntry(at(names[0]));
+      else await files.deleteEntry(at(names[0]));
+      return;
+    }
+    if (isConn) await conn.deleteSelected(names);
+    else await files.deleteSelected(names);
+  }, [at, conn, files, isConn]);
+
+  const rename = useCallback(async (from: string, to: string) => {
+    if (isConn) await conn.renameEntry(at(from), at(to));
+    else await files.renameEntry(at(from), at(to));
+  }, [at, conn, files, isConn]);
+
+  const copyPath = useCallback(async (src: string, dst: string) => {
+    if (!isConn) return files.copyEntry(src, dst, { refresh: false });
+    await conn.copyEntry(src, dst);
+    return true;
+  }, [conn, files, isConn]);
+
+  const movePath = useCallback(async (src: string, dst: string) => {
+    if (!isConn) return files.renameEntry(src, dst, { refresh: false });
+    await conn.renameEntry(src, dst);
+    return true;
+  }, [conn, files, isConn]);
+
+  const refresh = useCallback(() => {
+    if (isConn) conn.refresh();
+    else if (target) void listDir(target, files.currentPath);
+  }, [conn, files.currentPath, isConn, listDir, target]);
+
+  const setShowHidden = useCallback((next: boolean) => {
+    if (isConn) {
+      conn.setShowHidden(next);
+      return;
+    }
+    files.setShowHidden(next);
+    if (target) void listDir(target, files.currentPath, next);
+  }, [conn, files, isConn, listDir, target]);
+
+  const normalizedRoot = rootPath === "~" || rootPath === "" ? "" : rootPath;
+  const canUp = currentPath !== "~" && currentPath !== "/" && currentPath !== normalizedRoot && parentPath(currentPath) !== currentPath;
+
+  return {
+    key: sourceKey(source),
+    source,
+    waiting: source?.type === "agent" && !agentConnected,
+    currentPath,
+    rootPath,
+    entries,
+    loading: isConn ? conn.loading : files.loading || (agentConnected && target !== agentId),
+    error: isConn ? conn.error : files.error,
+    setError: isConn ? conn.setError : files.setErrorMessage,
+    showHidden: isConn ? conn.showHidden : files.showHidden,
+    setShowHidden,
+    sortField: isConn ? conn.sortField : files.sortField,
+    sortDir: isConn ? conn.sortDir : files.sortDir,
+    toggleSort: isConn ? conn.toggleSort : files.toggleSort,
+    refresh,
+    goTo: isConn ? conn.navigateToPath : files.navigateToPath,
+    goUp: isConn ? conn.navigateUp : files.navigateUp,
+    canUp,
+    openFile,
+    download,
+    upload,
+    createDir: isConn ? conn.createDir : files.createDir,
+    remove,
+    rename,
+    copyPath,
+    movePath,
+    preview: isConn ? null : files.previewContent,
+    closePreview: files.closePreview,
+    uploadProgress: isConn ? null : files.uploadProgress,
+    cancelUpload: files.cancelUpload,
+    downloadProgress: isConn ? null : files.downloadProgress,
+    cancelDownload: files.cancelDownload,
+  };
+}

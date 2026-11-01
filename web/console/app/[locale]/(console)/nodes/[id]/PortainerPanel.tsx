@@ -1,16 +1,16 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { Link } from "../../../../../i18n/navigation";
-import { Badge } from "../../../../components/ui/Badge";
-import { Card } from "../../../../components/ui/Card";
-import { SubTabBar } from "../../../../components/ui/SubTabBar";
+import { Seg } from "../../../../components/containers/ContainersToolbar";
+import { nodeHref, parseDockerStatus, stateTone } from "../../../../components/containers/containerModel";
+import { KV, ListEmpty, SectionHead } from "../../../../components/containers/PanelParts";
+import { useStateWord } from "../../../../components/containers/useContainerWords";
 import { useFastStatus } from "../../../../contexts/StatusContext";
 import { useAuth } from "../../../../contexts/AuthContext";
 import { canAccessHostData } from "../../../../lib/roles";
-import { formatAge } from "../../../../console/formatters";
 import type { Asset } from "../../../../console/models";
-import { childParentKey, hostParentKey } from "../../../../console/taxonomy";
 import { usePortainerCapabilities } from "./useDeviceCapabilities";
 import { PortainerOverviewTab } from "./portainer/PortainerOverviewTab";
 import { PortainerContainersTab } from "./portainer/PortainerContainersTab";
@@ -23,269 +23,152 @@ type PortainerPanelProps = {
   asset: Asset;
 };
 
-type LabelEntry = {
-  key: string;
-  value: string;
-};
+const HOST_VIEWS = ["overview", "containers", "stacks", "images", "volumes", "networks"] as const;
+type HostView = (typeof HOST_VIEWS)[number];
 
-function panelBadgeStatus(value: string): "ok" | "pending" | "bad" {
-  const normalized = value.trim().toLowerCase();
-  if (normalized.includes("running") || normalized.includes("up") || normalized.includes("active")) {
-    return "ok";
-  }
-  if (normalized.includes("paused") || normalized.includes("restarting")) {
-    return "pending";
-  }
-  return "bad";
-}
-
-function formatTimestamp(value?: string): string {
-  const raw = value?.trim() ?? "";
-  if (!raw) {
-    return "--";
-  }
-  const parsed = Date.parse(raw);
-  if (!Number.isFinite(parsed)) {
-    return raw;
-  }
-  return new Date(parsed).toLocaleString();
-}
-
-function parseLabels(raw?: string): LabelEntry[] {
-  const value = raw?.trim() ?? "";
-  if (!value) {
-    return [];
-  }
+function parseLabels(raw?: string): Array<[string, string]> {
   try {
-    const parsed = JSON.parse(value) as Record<string, unknown>;
+    const parsed = JSON.parse(raw?.trim() || "{}") as Record<string, unknown>;
     return Object.entries(parsed)
-      .filter(([, entry]) => typeof entry === "string")
-      .map(([key, entry]) => ({ key, value: entry as string }))
-      .sort((left, right) => left.key.localeCompare(right.key));
+      .filter((e): e is [string, string] => typeof e[1] === "string")
+      .sort(([a], [b]) => a.localeCompare(b));
   } catch {
     return [];
   }
 }
 
-function SummaryCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <div className="rounded-lg border border-[var(--line)] bg-[var(--panel-glass)] px-4 py-3">
-      <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--muted)]">{label}</p>
-      <p className="mt-1 text-sm font-medium text-[var(--text)] break-all">{value || "--"}</p>
-      {hint ? <p className="mt-1 text-xs text-[var(--muted)] break-all">{hint}</p> : null}
-    </div>
-  );
-}
-
-const ALL_HOST_TABS = [
-  { id: "overview", label: "Overview" },
-  { id: "containers", label: "Containers" },
-  { id: "stacks", label: "Stacks" },
-  { id: "images", label: "Images" },
-  { id: "volumes", label: "Volumes" },
-  { id: "networks", label: "Networks" },
-] as const;
-
-type HostTabId = (typeof ALL_HOST_TABS)[number]["id"];
-
+/** A Portainer endpoint: Overview · Containers · Stacks · Images · Volumes · Networks, as far as the endpoint allows. */
 function PortainerHostPanel({ asset }: { asset: Asset }) {
-  const [activeTab, setActiveTab] = useState<HostTabId>("overview");
+  const t = useTranslations("devices-docker.views");
+  const [view, setView] = useState<HostView>("overview");
   const { data: caps } = usePortainerCapabilities(asset.id);
   const { user } = useAuth();
   // Container shells are interactive sessions, which the Hub keeps for operators.
   const canExec = caps?.can_exec === true && canAccessHostData(user?.role);
-
-  // Filter tabs by capabilities response. Fall back to all host tabs while
-  // the capabilities endpoint is loading so there is no layout shift.
-  const visibleTabs = useMemo(() => {
-    if (!caps) {
-      return ALL_HOST_TABS;
-    }
-    const allowed = new Set(caps.tabs);
-    return ALL_HOST_TABS.filter((t) => allowed.has(t.id));
-  }, [caps]);
-
-  const effectiveTab: HostTabId =
-    visibleTabs.some((t) => t.id === activeTab) ? activeTab : "overview";
+  // All views while the endpoint's capabilities load, so the switch does not jump.
+  const views = useMemo(() => (caps ? HOST_VIEWS.filter((v) => caps.tabs.includes(v)) : [...HOST_VIEWS]), [caps]);
+  const current: HostView = views.includes(view) ? view : views[0] ?? "overview";
+  const bar = views.length > 1 ? <Seg<HostView> value={current} items={views.map((v) => [v, t(v)])} onChange={setView} label={t("portainer")} /> : null;
 
   return (
-    <div className="space-y-0">
-      <SubTabBar
-        tabs={visibleTabs as unknown as Array<{ id: string; label: string }>}
-        activeTab={effectiveTab}
-        onTabChange={(id) => setActiveTab(id as HostTabId)}
-      />
-      {effectiveTab === "overview" && <PortainerOverviewTab assetId={asset.id} />}
-      {effectiveTab === "containers" && <PortainerContainersTab assetId={asset.id} canExec={canExec} />}
-      {effectiveTab === "stacks" && <PortainerStacksTab assetId={asset.id} />}
-      {effectiveTab === "images" && <PortainerImagesTab assetId={asset.id} />}
-      {effectiveTab === "volumes" && <PortainerVolumesTab assetId={asset.id} />}
-      {effectiveTab === "networks" && <PortainerNetworksTab assetId={asset.id} />}
+    <div className="ct-tab">
+      {current === "overview" && <PortainerOverviewTab assetId={asset.id} bar={bar} />}
+      {current === "containers" && <PortainerContainersTab assetId={asset.id} hostName={asset.name} canExec={canExec} bar={bar} />}
+      {current === "stacks" && <PortainerStacksTab assetId={asset.id} bar={bar} />}
+      {current === "images" && <PortainerImagesTab assetId={asset.id} bar={bar} />}
+      {current === "volumes" && <PortainerVolumesTab assetId={asset.id} bar={bar} />}
+      {current === "networks" && <PortainerNetworksTab assetId={asset.id} bar={bar} />}
     </div>
   );
 }
 
+/** The Portainer endpoint and stack an asset belongs to (by endpoint id and stack name). */
+function usePortainerRelations(endpointID: string, stackName: string) {
+  const assets = useFastStatus()?.assets;
+  return useMemo(() => {
+    const list = (assets ?? []).filter((a) => a.source === "portainer" && a.metadata?.endpoint_id === endpointID);
+    const host = list.find((a) => a.type === "container-host") ?? null;
+    const name = stackName.trim().toLowerCase();
+    const stack = name ? list.find((a) => (a.type === "stack" || a.type === "compose-stack") && a.name.toLowerCase() === name) ?? null : null;
+    return { list, host, stack };
+  }, [assets, endpointID, stackName]);
+}
+
 function PortainerContainerPanel({ asset }: { asset: Asset }) {
-  const status = useFastStatus();
-  const assets = status?.assets;
-  const endpointID = asset.metadata?.endpoint_id ?? "";
-  const parentHost = useMemo(
-    () => (assets ?? []).find((candidate) =>
-      candidate.source === "portainer"
-      && candidate.type === "container-host"
-      && candidate.metadata?.endpoint_id === endpointID
-    ) ?? null,
-    [assets, endpointID],
-  );
-  const stackAsset = useMemo(
-    () => (assets ?? []).find((candidate) =>
-      candidate.source === "portainer"
-      && (candidate.type === "stack" || candidate.type === "compose-stack")
-      && candidate.metadata?.endpoint_id === endpointID
-      && candidate.name.toLowerCase() === (asset.metadata?.stack ?? "").trim().toLowerCase()
-    ) ?? null,
-    [assets, asset.metadata?.stack, endpointID],
-  );
-  const labels = useMemo(() => parseLabels(asset.metadata?.labels_json), [asset.metadata?.labels_json]);
-  const state = asset.metadata?.state || asset.metadata?.status || asset.status;
+  const t = useTranslations("devices-docker.portainer");
+  const word = useStateWord();
+  const meta = asset.metadata ?? {};
+  const { host, stack } = usePortainerRelations(meta.endpoint_id ?? "", meta.stack ?? "");
+  const labels = useMemo(() => parseLabels(meta.labels_json), [meta.labels_json]);
+  const st = parseDockerStatus(meta.state || "", meta.status || "");
+  const tone = stateTone(st);
+  const created = meta.created_at ? new Date(meta.created_at) : null;
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard label="Image" value={asset.metadata?.image || "--"} hint={asset.metadata?.container_id} />
-        <SummaryCard label="State" value={state || "--"} />
-        <SummaryCard label="Ports" value={asset.metadata?.ports || "--"} />
-        <SummaryCard
-          label="Endpoint"
-          value={parentHost?.name || asset.metadata?.endpoint_id || "--"}
-          hint={parentHost?.metadata?.url || parentHost?.metadata?.collector_base_url}
-        />
-        <SummaryCard
-          label="Stack"
-          value={asset.metadata?.stack || "--"}
-          hint={asset.metadata?.created_at ? `Created ${formatTimestamp(asset.metadata.created_at)}` : undefined}
-        />
-      </div>
-
-      <Card>
-        <h2 className="mb-3 text-sm font-medium text-[var(--text)]">Links</h2>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div className="rounded-lg border border-[var(--line)] p-3">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--muted)]">Endpoint Host</p>
-            {parentHost ? (
-              <Link href={`/nodes/${encodeURIComponent(parentHost.id)}`} className="mt-1 inline-block text-sm text-[var(--accent)] hover:underline">
-                {parentHost.name}
-              </Link>
-            ) : (
-              <p className="mt-1 text-sm text-[var(--muted)]">Not available</p>
-            )}
-          </div>
-          <div className="rounded-lg border border-[var(--line)] p-3">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-[var(--muted)]">Compose Stack</p>
-            {stackAsset ? (
-              <Link href={`/nodes/${encodeURIComponent(stackAsset.id)}`} className="mt-1 inline-block text-sm text-[var(--accent)] hover:underline">
-                {stackAsset.name}
-              </Link>
-            ) : (
-              <p className="mt-1 text-sm text-[var(--muted)]">{asset.metadata?.stack || "Standalone container"}</p>
-            )}
-          </div>
-        </div>
-      </Card>
-
-      {labels.length > 0 ? (
-        <Card>
-          <h2 className="mb-3 text-sm font-medium text-[var(--text)]">Labels</h2>
-          <div className="grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
-            {labels.map((label) => (
-              <div key={label.key} className="flex min-w-0 items-baseline gap-2">
-                <span className="w-[180px] shrink-0 text-xs text-[var(--muted)]">{label.key}</span>
-                <span className="truncate text-xs text-[var(--text)]">{label.value}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
+    <div className="ct-tab">
+      <section aria-labelledby="pt-det">
+        <SectionHead id="pt-det" title={t("details")} />
+        <dl className="ct-sheet ct-kvs">
+          <KV k={t("image")} mono><span className="ct-wrap">{meta.image || "—"}</span></KV>
+          <KV k={t("state")}>
+            {tone ? <i className={`ct-dot ${tone}`} aria-hidden="true" /> : null}
+            <span>{word(st, true)}</span>
+            {meta.status ? <span className="ct-quiet">{meta.status}</span> : null}
+          </KV>
+          <KV k={t("ports")} mono>{meta.ports || <span className="ct-quiet">{t("noPorts")}</span>}</KV>
+          <KV k={t("endpoint")}>
+            {host ? <Link href={nodeHref(host.id)} className="ct-lnk">{host.name}</Link> : <span className="ct-quiet">{meta.endpoint_id || "—"}</span>}
+          </KV>
+          <KV k={t("stack")}>
+            {stack ? <Link href={nodeHref(stack.id)} className="ct-lnk">{stack.name}</Link> : <span className="ct-quiet">{meta.stack || t("standalone")}</span>}
+          </KV>
+          {created && Number.isFinite(created.getTime()) ? <KV k={t("created")}>{created.toLocaleString()}</KV> : null}
+          {meta.container_id ? <KV k={t("containerId")} mono><span className="ct-wrap" title={meta.container_id}>{meta.container_id.slice(0, 12)}</span></KV> : null}
+        </dl>
+      </section>
+      {labels.length ? (
+        <section className="ct-sec" aria-labelledby="pt-lbl">
+          <SectionHead id="pt-lbl" title={t("labels")} />
+          <dl className="ct-sheet ct-pairs">
+            {labels.map(([k, v]) => <div key={k}><dt className="mono">{k}</dt><dd className="mono">{v}</dd></div>)}
+          </dl>
+        </section>
       ) : null}
     </div>
   );
 }
 
 function PortainerStackPanel({ asset }: { asset: Asset }) {
-  const status = useFastStatus();
-  const assets = status?.assets;
-  const endpointID = asset.metadata?.endpoint_id ?? "";
-  const parentHost = useMemo(
-    () => (assets ?? []).find((candidate) =>
-      candidate.source === "portainer"
-      && candidate.type === "container-host"
-      && candidate.metadata?.endpoint_id === endpointID
-    ) ?? null,
-    [assets, endpointID],
-  );
-  const memberContainers = useMemo(
-    () => (assets ?? [])
-      .filter((candidate) =>
-        candidate.source === "portainer"
-        && candidate.type === "container"
-        && candidate.metadata?.endpoint_id === endpointID
-        && (candidate.metadata?.stack ?? "").trim().toLowerCase() === asset.name.trim().toLowerCase()
-      )
-      .sort((left, right) => left.name.localeCompare(right.name)),
-    [assets, asset.name, endpointID],
-  );
-  const statusLabel = asset.metadata?.status || asset.status;
+  const t = useTranslations("devices-docker.portainer");
+  const word = useStateWord();
+  const meta = asset.metadata ?? {};
+  const { list, host } = usePortainerRelations(meta.endpoint_id ?? "", "");
+  const members = useMemo(() => list
+    .filter((a) => a.type === "container" && (a.metadata?.stack ?? "").trim().toLowerCase() === asset.name.trim().toLowerCase())
+    .sort((a, b) => a.name.localeCompare(b.name)), [list, asset.name]);
+  const active = (meta.status || asset.status || "").toLowerCase();
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard label="Status" value={statusLabel || "--"} hint={asset.metadata?.type ? `Type: ${asset.metadata.type}` : undefined} />
-        <SummaryCard label="Containers" value={asset.metadata?.portainer_stack_container_count || String(memberContainers.length)} hint="Matched to this stack" />
-        <SummaryCard label="Endpoint" value={parentHost?.name || endpointID || "--"} hint={parentHost?.metadata?.url || parentHost?.metadata?.collector_base_url} />
-        <SummaryCard label="Git / Entry" value={asset.metadata?.git_url || asset.metadata?.entry_point || "--"} hint={asset.metadata?.created_by ? `Created by ${asset.metadata.created_by}` : undefined} />
-      </div>
-
-      <Card>
-        <h2 className="mb-3 text-sm font-medium text-[var(--text)]">Member Containers</h2>
-        {memberContainers.length === 0 ? (
-          <p className="text-sm text-[var(--muted)]">No containers are currently mapped to this stack.</p>
-        ) : (
-          <div className="space-y-3">
-            {memberContainers.map((container) => (
-              <div key={container.id} className="rounded-lg border border-[var(--line)] p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <Link href={`/nodes/${encodeURIComponent(container.id)}`} className="text-sm font-medium text-[var(--accent)] hover:underline">
-                      {container.name}
-                    </Link>
-                    <p className="mt-1 truncate text-xs text-[var(--muted)]">{container.metadata?.image || "--"}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge status={panelBadgeStatus(container.metadata?.state || container.status)} size="sm" />
-                    <span className="text-xs text-[var(--muted)]">{container.metadata?.state || container.metadata?.status || container.status || "--"}</span>
-                  </div>
+    <div className="ct-tab">
+      <section aria-labelledby="pt-sd">
+        <SectionHead id="pt-sd" title={t("details")} />
+        <dl className="ct-sheet ct-kvs">
+          <KV k={t("state")}>{active === "active" || active === "online" ? t("active") : active === "inactive" ? t("inactive") : (meta.status || asset.status || "—")}</KV>
+          {meta.type ? <KV k={t("type")}>{meta.type}</KV> : null}
+          <KV k={t("endpoint")}>{host ? <Link href={nodeHref(host.id)} className="ct-lnk">{host.name}</Link> : <span className="ct-quiet">{meta.endpoint_id || "—"}</span>}</KV>
+          {meta.git_url ? <KV k={t("git")} mono><span className="ct-wrap">{meta.git_url}</span></KV> : null}
+          {meta.entry_point ? <KV k={t("entryPoint")} mono>{meta.entry_point}</KV> : null}
+          {meta.created_by ? <KV k={t("createdBy")}>{meta.created_by}</KV> : null}
+        </dl>
+      </section>
+      <section className="ct-sec" aria-labelledby="pt-sm">
+        <SectionHead id="pt-sm" title={t("members")} />
+        {members.length ? (
+          <div className="ct-list">
+            {members.map((c) => {
+              const st = parseDockerStatus(c.metadata?.state || "", c.metadata?.status || "");
+              const tone = stateTone(st);
+              return (
+                <div key={c.id} className="ct-row sm">
+                  <span className="ct-lead" aria-hidden="true">{tone ? <i className={`ct-dot ${tone}`} /> : null}</span>
+                  <span className="ct-main">
+                    <Link href={nodeHref(c.id)} className="ct-nm">{c.name}</Link>
+                    <span className="ct-grey">{word(st) || c.metadata?.image || ""}</span>
+                  </span>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
-        )}
-      </Card>
+        ) : <ListEmpty text={t("noMembers")} />}
+      </section>
     </div>
   );
 }
 
 export function PortainerPanel({ asset }: PortainerPanelProps) {
-  if (asset.type === "container-host") {
-    return <PortainerHostPanel asset={asset} />;
-  }
-  if (asset.type === "container") {
-    return <PortainerContainerPanel asset={asset} />;
-  }
-  if (asset.type === "stack" || asset.type === "compose-stack") {
-    return <PortainerStackPanel asset={asset} />;
-  }
-  return (
-    <Card>
-      <p className="text-sm text-[var(--muted)]">No Portainer details are available for this asset type yet.</p>
-    </Card>
-  );
+  const t = useTranslations("devices-docker.portainer");
+  if (asset.type === "container-host") return <PortainerHostPanel asset={asset} />;
+  if (asset.type === "container") return <PortainerContainerPanel asset={asset} />;
+  if (asset.type === "stack" || asset.type === "compose-stack") return <PortainerStackPanel asset={asset} />;
+  return <ListEmpty text={t("noDetails")} />;
 }

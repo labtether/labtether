@@ -1,4 +1,176 @@
 {
-  "title": "拓扑",
-  "loading": "正在加载拓扑视图..."
+  "title": "地图",
+  "loading": "正在加载地图",
+  "more": "地图操作",
+  "canvas": "网络地图",
+  "keys": "方向键在设备间移动，回车打开详情，Esc 关闭，f 适应宽度，加号和减号缩放。",
+  "lone": "未连接",
+  "other": "其他",
+  "empty": "还没有设备",
+  "emptyLink": "添加设备",
+  "copied": "已复制 {text}",
+  "mini": "{count, plural, other {# 台设备的网络地图}}",
+  "menu": {
+    "find": "查找设备",
+    "editLayout": "编辑布局",
+    "doneEditing": "完成",
+    "showList": "以列表显示",
+    "showMap": "以地图显示",
+    "zones": "区域",
+    "newZone": "新建区域",
+    "unsorted": "未归类设备",
+    "reset": "重置地图…"
+  },
+  "reset": {
+    "title": "重置地图？",
+    "body": "区域、摆放位置、你画的连接和已隐藏的设备都会被清除，然后按集线器当前已知的设备重新生成。",
+    "confirm": "重置"
+  },
+  "view": {
+    "label": "地图显示方式",
+    "list": "列表",
+    "map": "地图",
+    "listLabel": "列表形式的地图"
+  },
+  "zoom": {
+    "label": "缩放",
+    "in": "放大",
+    "out": "缩小",
+    "fit": "适应",
+    "fitTip": "适应宽度 (f)"
+  },
+  "find": {
+    "label": "查找设备",
+    "placeholder": "名称、地址或标签",
+    "close": "关闭查找",
+    "none": "没有匹配的设备"
+  },
+  "fold": {
+    "more": "还有 {count} 个",
+    "less": "收起"
+  },
+  "status": {
+    "online": "在线",
+    "offline": "离线",
+    "notResponding": "无响应",
+    "noCheckIn": "未上报",
+    "offlineSince": "自 {time} 起离线",
+    "notRespondingSince": "自 {time} 起无响应",
+    "noCheckInYet": "尚未上报"
+  },
+  "node": {
+    "actions": "{name} 的操作",
+    "moveTo": "移到 {zone}",
+    "removeFrom": "从 {zone} 移出",
+    "open": "打开设备页面",
+    "copy": "复制地址"
+  },
+  "inspector": {
+    "close": "关闭详情",
+    "closeTip": "关闭 (Esc)",
+    "open": "打开设备页面",
+    "terminal": "终端",
+    "address": "地址",
+    "copy": "复制",
+    "os": "系统",
+    "type": "类型",
+    "source": "来源",
+    "runsOn": "运行于",
+    "vmOn": "VM {vmid} 位于",
+    "zone": "区域",
+    "noZone": "无区域",
+    "changeZone": "区域 {zone}，更改",
+    "uptime": "运行时间",
+    "contents": "包含",
+    "cpu": "CPU · 24 小时",
+    "cpuNow": "当前 {value}%",
+    "cpuLabel": "过去 24 小时的 CPU，当前 {value}%"
+  },
+  "contents": {
+    "vms": "{count, plural, other {# 台虚拟机}}",
+    "containers": "{count, plural, other {# 个容器}}",
+    "services": "{count, plural, other {# 个服务}}",
+    "stacks": "{count, plural, other {# 个堆栈}}",
+    "pools": "{count, plural, other {# 个存储池}}",
+    "datasets": "{count, plural, other {# 个数据集}}",
+    "other": "其他 {count} 个"
+  },
+  "conn": {
+    "title": "连接",
+    "none": "没有连接",
+    "connectTo": "连接到…",
+    "device": "设备",
+    "relationship": "关系",
+    "cancel": "取消",
+    "connect": "连接",
+    "remove": "移除与 {name} 的连接",
+    "removeShort": "移除",
+    "removed": "已移除连接 {a} → {b}",
+    "undo": "撤销",
+    "change": "{rel} {name}，更改关系",
+    "label": "标签",
+    "editLabel": "编辑标签",
+    "discovered": "由集线器发现"
+  },
+  "rel": {
+    "connected_to": "连接到",
+    "depends_on": "依赖",
+    "runs_on": "运行于",
+    "hosted_on": "托管于",
+    "provides_to": "提供给",
+    "peer_of": "对等于",
+    "contains": "包含"
+  },
+  "inv": {
+    "connected_to": "连接到",
+    "depends_on": "被依赖于",
+    "runs_on": "运行",
+    "hosted_on": "托管",
+    "provides_to": "使用",
+    "peer_of": "对等于",
+    "contains": "位于"
+  },
+  "zones": {
+    "title": "区域",
+    "close": "关闭区域",
+    "none": "没有区域",
+    "new": "新建区域",
+    "newName": "新区域",
+    "newNameN": "新区域 {n}",
+    "name": "{zone} 的名称",
+    "delete": "删除 {zone}",
+    "deleteTitle": "删除 {zone}？",
+    "deleteBody": "{count, plural, =0 {其中没有设备。} other {其中的 # 台设备将移到“其他”。}}",
+    "deleteConfirm": "删除"
+  },
+  "unsorted": {
+    "title": "未归类设备",
+    "close": "关闭未归类设备",
+    "none": "每台设备都有区域",
+    "suggest": "建议：{zone}",
+    "accept": "接受",
+    "dismiss": "不在地图上显示 {name}",
+    "dismissTip": "不在地图上显示",
+    "placeAll": "全部归类"
+  },
+  "edit": {
+    "newZone": "新建区域",
+    "fit": "适应视图",
+    "arrange": "排列区域",
+    "rename": "重命名",
+    "collapse": "折叠或展开",
+    "deleteZone": "删除区域",
+    "moveToZone": "移到区域",
+    "removeFromZone": "移出区域",
+    "changeType": "更改关系",
+    "deleteConnection": "移除连接",
+    "zoneSummary": "{devices, plural, other {# 台设备}}{zones, plural, =0 {} other {，内含 # 个区域}}"
+  },
+  "errors": {
+    "load": "地图未能加载。",
+    "retry": "重试",
+    "save": "集线器未保存此更改。请重试。",
+    "copy": "复制失败",
+    "edit": "编辑布局未能打开。请重新加载页面。"
+  }
 }

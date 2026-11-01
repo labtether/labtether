@@ -36,6 +36,7 @@ type PathAndWrite = {
 
 type CreateFolderArgs = PathAndListDir & {
   writeEnabled: boolean;
+  name: string;
 };
 
 type UploadSelectedFilesArgs = PathAndListDir & {
@@ -52,8 +53,7 @@ export function useFilesTabMutations({ nodeId }: UseFilesTabMutationsArgs) {
   const [actionBusy, setActionBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const [newFolderName, setNewFolderName] = useState("");
-  const [deleteTarget, setDeleteTarget] = useState<EntryTarget | null>(null);
+  const [deleteTargets, setDeleteTargets] = useState<EntryTarget[] | null>(null);
   const [renameTarget, setRenameTarget] = useState<EntryTarget | null>(null);
   const [renameName, setRenameName] = useState("");
 
@@ -80,8 +80,9 @@ export function useFilesTabMutations({ nodeId }: UseFilesTabMutationsArgs) {
     currentPath,
     listDir,
     writeEnabled,
+    name: rawName,
   }: CreateFolderArgs) => {
-    const name = newFolderName.trim();
+    const name = rawName.trim();
     if (!writeEnabled || name === "") return;
     setActionBusy(true);
     setError(null);
@@ -91,7 +92,6 @@ export function useFilesTabMutations({ nodeId }: UseFilesTabMutationsArgs) {
       await createDirectory(nodeId, path, {
         fallbackError: (status) => `mkdir failed (${status})`,
       });
-      setNewFolderName("");
       setActionMessage(`Created folder ${name}`);
       await listDir(currentPath);
     } catch (err) {
@@ -99,7 +99,7 @@ export function useFilesTabMutations({ nodeId }: UseFilesTabMutationsArgs) {
     } finally {
       setActionBusy(false);
     }
-  }, [newFolderName, nodeId]);
+  }, [nodeId]);
 
   const uploadSelectedFiles = useCallback(async ({
     currentPath,
@@ -165,6 +165,8 @@ export function useFilesTabMutations({ nodeId }: UseFilesTabMutationsArgs) {
       setRenameName("");
       await listDir(currentPath);
     } catch (err) {
+      setRenameTarget(null);
+      setRenameName("");
       setError(toErrorMessage(err, "rename failed"));
     } finally {
       setActionBusy(false);
@@ -176,29 +178,35 @@ export function useFilesTabMutations({ nodeId }: UseFilesTabMutationsArgs) {
     setRenameName("");
   }, []);
 
-  const deleteEntry = useCallback((entry: FileEntry, { currentPath, writeEnabled }: PathAndWrite) => {
-    if (!writeEnabled) return;
-    setDeleteTarget({ name: entry.name, path: joinPath(currentPath, entry.name) });
+  const deleteEntries = useCallback((entries: FileEntry[], { currentPath, writeEnabled }: PathAndWrite) => {
+    if (!writeEnabled || entries.length === 0) return;
+    setDeleteTargets(entries.map((entry) => ({ name: entry.name, path: joinPath(currentPath, entry.name) })));
   }, []);
 
   const commitDelete = useCallback(async ({ currentPath, listDir }: PathAndListDir) => {
-    if (!deleteTarget) return;
+    if (!deleteTargets?.length) return;
     setActionBusy(true);
     setError(null);
     setActionMessage(null);
-    try {
-      await deleteFilePath(nodeId, deleteTarget.path, {
-        fallbackError: (status) => `delete failed (${status})`,
-      });
-      setActionMessage(`Deleted ${deleteTarget.name}`);
-      setDeleteTarget(null);
-      await listDir(currentPath);
-    } catch (err) {
-      setError(toErrorMessage(err, "delete failed"));
-    } finally {
-      setActionBusy(false);
+    let deleted = 0;
+    let failure: string | null = null;
+    for (const target of deleteTargets) {
+      try {
+        await deleteFilePath(nodeId, target.path, {
+          fallbackError: (status) => `delete failed (${status})`,
+        });
+        deleted += 1;
+      } catch (err) {
+        failure = toErrorMessage(err, "delete failed");
+        break;
+      }
     }
-  }, [deleteTarget, nodeId]);
+    setDeleteTargets(null);
+    if (deleted > 0) await listDir(currentPath);
+    if (failure) setError(failure);
+    else setActionMessage(deleted === 1 ? `Deleted ${deleteTargets[0].name}` : `Deleted ${deleted} items`);
+    setActionBusy(false);
+  }, [deleteTargets, nodeId]);
 
   return {
     actionBusy,
@@ -207,10 +215,8 @@ export function useFilesTabMutations({ nodeId }: UseFilesTabMutationsArgs) {
     setError,
     actionMessage,
     setActionMessage,
-    newFolderName,
-    setNewFolderName,
-    deleteTarget,
-    setDeleteTarget,
+    deleteTargets,
+    setDeleteTargets,
     renameTarget,
     renameName,
     setRenameName,
@@ -220,7 +226,7 @@ export function useFilesTabMutations({ nodeId }: UseFilesTabMutationsArgs) {
     renameEntry,
     commitRename,
     cancelRename,
-    deleteEntry,
+    deleteEntries,
     commitDelete,
   };
 }

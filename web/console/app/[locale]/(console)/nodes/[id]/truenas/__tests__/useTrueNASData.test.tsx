@@ -1,7 +1,10 @@
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import truenasMessages from "../../../../../../../messages/en/devices-truenas.json";
+import proxmoxMessages from "../../../../../../../messages/en/devices-proxmox.json";
 import { useTrueNASList, type TrueNASListEndpoint } from "../useTrueNASData";
 import { TrueNASServicesTab } from "../TrueNASServicesTab";
 import { TrueNASDatasetsTab } from "../TrueNASDatasetsTab";
@@ -13,8 +16,32 @@ import { TrueNASDisksTab } from "../TrueNASDisksTab";
 import { TrueNASSharesTab } from "../TrueNASSharesTab";
 import { TrueNASOverviewTab } from "../TrueNASOverviewTab";
 
+vi.mock("../../../../../../../i18n/navigation", () => ({
+  Link: ({ children, href }: { children: ReactNode; href: string }) => <a href={href}>{children}</a>,
+}));
+
+// Row menus and confirm dialogs render through Radix portals; here the menu items are plain buttons and a confirm
+// request is accepted at once, so the tests reach the same actions a person reaches through ⋯ and the dialog.
+vi.mock("../../proxmox/DiControls", async (original) => ({
+  ...await original<typeof import("../../proxmox/DiControls")>(),
+  DiRowMenu: ({ items }: { items: Array<{ label?: string; disabled?: boolean; onSelect?: () => void; separator?: true }> }) => (
+    <span data-menu="">
+      {items.filter((item) => !item.separator).map((item) => (
+        <button key={item.label} type="button" disabled={item.disabled} onClick={item.onSelect}>{item.label}</button>
+      ))}
+    </span>
+  ),
+  useDiConfirm: () => ({ ask: (request: { onConfirm: () => unknown }) => { void request.onConfirm(); }, dialog: null }),
+}));
+
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
   .IS_REACT_ACT_ENVIRONMENT = true;
+
+const intl = (node: ReactNode) => (
+  <NextIntlClientProvider locale="en" timeZone="UTC" messages={{ "devices-truenas": truenasMessages, "devices-proxmox": proxmoxMessages }}>
+    {node}
+  </NextIntlClientProvider>
+);
 
 let container: HTMLDivElement;
 let root: Root;
@@ -104,8 +131,23 @@ describe("TrueNAS list response contract", () => {
 });
 
 
+
+/** The text of the list row whose name is exactly `name`, inside the section of `kind`. */
+function row(kind: string, name: string): HTMLElement {
+  const found = [...container.querySelectorAll<HTMLElement>(`[data-kind="${kind}"] [role="listitem"]`)]
+    .find((item) => item.querySelector(".di-nm")?.textContent === name);
+  if (!found) throw new Error(`no ${kind} row named ${name}`);
+  return found;
+}
+
+function menuButton(scope: HTMLElement, label: string): HTMLButtonElement {
+  const button = [...scope.querySelectorAll<HTMLButtonElement>("[data-menu] button")].find((item) => item.textContent === label);
+  if (!button) throw new Error(`no menu item ${label}`);
+  return button;
+}
+
 describe("TrueNAS raw row consumers", () => {
-  it("renders real service, ZFS property, VM status and replication schedule rows in their tabs", async () => {
+  it("renders real service, ZFS property, VM status and replication schedule rows in their views", async () => {
     const bodies: Record<string, unknown> = {
       services: { services: [
         { id: "1", service: "nfs", state: "running", enabled: true },
@@ -130,39 +172,35 @@ describe("TrueNAS raw row consumers", () => {
       if (!body) throw new Error("unexpected fixture URL");
       return new Response(JSON.stringify(body));
     });
-    await act(async () => { root.render(<>
+    await act(async () => { root.render(intl(<>
       <section data-kind="services"><TrueNASServicesTab assetId="nas" /></section>
       <section data-kind="datasets"><TrueNASDatasetsTab assetId="nas" /></section>
       <section data-kind="vms"><TrueNASVMsTab assetId="nas" /></section>
       <section data-kind="replication"><TrueNASReplicationTab assetId="nas" /></section>
-    </>); });
-    const cells = (kind: string) => [...container.querySelectorAll(`[data-kind="${kind}"] tbody td`)]
-      .map((cell) => cell.textContent);
-    expect(cells("services")).toEqual(expect.arrayContaining(["nfs", "Running", "Stopped", "Yes", "No"]));
-    expect(cells("datasets")).toEqual(expect.arrayContaining(["data", "1.0 KB", "2.0 KB", "lz4", "/mnt/tank/data"]));
-    expect(cells("datasets").join(" ")).not.toMatch(/NaN|\[object Object\]/);
-    expect(cells("vms")).toEqual(expect.arrayContaining(["builder", "512 MiB"]));
-    expect(cells("vms").join(" ")).toContain("RUNNING");
-    expect(cells("replication")).toEqual(expect.arrayContaining(["nightly", "0 2 * * *", "tank/data", "backup/data"]));
-    expect(cells("replication").join(" ")).toContain("FINISHED");
-    const unknownService = [...container.querySelectorAll('[data-kind="services"] tbody tr')]
-      .find((row) => row.querySelector("td")?.textContent === "fixture")!;
+    </>)); });
+    expect(row("services", "nfs").textContent).toContain("Running");
+    expect(row("services", "ssh").textContent).toContain("Stopped");
+    const dataset = row("datasets", "tank/data").textContent ?? "";
+    for (const part of ["1 KB", "2 KB", "lz4", "/mnt/tank/data"]) expect(dataset).toContain(part);
+    expect(container.textContent).not.toMatch(/NaN|\[object Object\]/);
+    expect(row("vms", "builder").textContent).toContain("512 MB");
+    expect(row("vms", "builder").textContent).toContain("Running");
+    const nightly = row("replication", "nightly").textContent ?? "";
+    for (const part of ["0 2 * * *", "tank/data to backup/data", "Finished"]) expect(nightly).toContain(part);
+
+    // A state TrueNAS reports that is neither running nor stopped shows as it came, and Start and Stop wait.
+    const unknownService = row("services", "fixture");
     expect(unknownService.textContent).toContain("STARTING");
     expect(unknownService.textContent).not.toContain("Stopped");
-    const stateButtons = [...unknownService.querySelectorAll("button")]
-      .filter((button) => ["Start", "Stop"].includes(button.textContent ?? ""));
-    expect(stateButtons).toHaveLength(2);
-    expect(stateButtons.every((button) => button.disabled)).toBe(true);
-    const unknownVM = [...container.querySelectorAll('[data-kind="vms"] tbody tr')]
-      .find((row) => row.querySelector("td")?.textContent === "uncertain")!;
+    expect(menuButton(unknownService, "Start").disabled).toBe(true);
+    expect(menuButton(unknownService, "Stop…").disabled).toBe(true);
+    const unknownVM = row("vms", "uncertain");
     expect(unknownVM.textContent).toContain("UNKNOWN");
-    const vmStateButtons = [...unknownVM.querySelectorAll("button")]
-      .filter((button) => ["Start", "Stop"].includes(button.textContent ?? ""));
-    expect(vmStateButtons).toHaveLength(2);
-    expect(vmStateButtons.every((button) => button.disabled)).toBe(true);
+    expect(menuButton(unknownVM, "Start").disabled).toBe(true);
+    expect(menuButton(unknownVM, "Stop…").disabled).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(4);
-    const stop = [...container.querySelectorAll<HTMLButtonElement>('[data-kind="vms"] button')]
-      .find((button) => button.textContent === "Stop")!;
+
+    const stop = menuButton(row("vms", "builder"), "Stop…");
     expect(stop.disabled).toBe(false);
     await act(async () => { stop.click(); });
     expect(fetchMock).toHaveBeenCalledWith("/api/truenas/assets/nas/vms/42/stop", expect.objectContaining({ method: "POST" }));
@@ -194,47 +232,38 @@ describe("TrueNAS raw row consumers", () => {
       if (!body) throw new Error("unexpected storage fixture URL");
       return new Response(JSON.stringify(body));
     });
-    await act(async () => { root.render(<>
+    await act(async () => { root.render(intl(<>
       <section data-kind="pools"><TrueNASPoolsTab assetId="nas" /></section>
       <section data-kind="snapshots"><TrueNASSnapshotsTab assetId="nas" /></section>
       <section data-kind="disks"><TrueNASDisksTab assetId="nas" /></section>
       <section data-kind="shares"><TrueNASSharesTab assetId="nas" /></section>
-    </>); });
+    </>)); });
     const text = (kind: string) => container.querySelector(`[data-kind="${kind}"]`)!.textContent;
-    const click = async (kind: string, label: string) => {
-      const button = [...container.querySelectorAll<HTMLButtonElement>(`[data-kind="${kind}"] button`)]
-        .find((item) => item.textContent === label)!;
-      expect(button.disabled).toBe(false);
-      await act(async () => { button.click(); });
-    };
-    expect(text("pools")).toContain("4.0 KB");
-    expect(text("pools")).toContain("1h ago");
-    await click("pools", "▸");
+    const pool = row("pools", "tank");
+    for (const part of ["Mirror", "1 disk", "Last scrub", "25%", "1 of 4 KB"]) expect(pool.textContent).toContain(part);
+    await act(async () => { pool.querySelector<HTMLElement>(".di-row")!.click(); });
     expect(text("pools")).toContain("mirror-0");
     expect(text("pools")).toContain("/dev/sda");
-    expect(text("snapshots")).toContain("tank/data");
-    expect(text("snapshots")).toContain("1h ago");
-    expect(text("snapshots")).toContain("1.0 KB");
-    expect(text("snapshots")).toContain("2.0 KB");
-    expect(text("disks")).toContain("Fixture SSD");
-    expect(text("disks")).toContain("8.0 KB");
-    expect(text("disks")).toContain("42.5°C");
-    expect(text("shares")).toContain("/mnt/tank/smb");
-    expect(text("shares")).toContain("/mnt/tank/nfs");
-    expect(text("shares")).toContain("192.0.2.0/24");
-    expect(text("shares")).toContain("fixture.invalid");
+    const snapshot = row("snapshots", "keep").textContent ?? "";
+    for (const part of ["tank/data", "1 KB", "2 KB"]) expect(snapshot).toContain(part);
+    const disk = row("disks", "sda").textContent ?? "";
+    for (const part of ["Fixture SSD", "8 KB", "42.5"]) expect(disk).toContain(part);
+    for (const part of ["/mnt/tank/smb", "/mnt/tank/nfs", "192.0.2.0/24", "fixture.invalid"]) expect(text("shares")).toContain(part);
     expect(container.textContent).not.toMatch(/NaN|\[object Object\]/);
     expect(fetchMock).toHaveBeenCalledTimes(6);
-    await click("snapshots", "Rollback");
+
+    await act(async () => { menuButton(row("snapshots", "keep"), "Roll back…").click(); });
     expect(fetchMock).toHaveBeenCalledWith("/api/truenas/assets/nas/snapshots/tank%2Fdata%40keep/rollback", expect.objectContaining({ method: "POST" }));
-    await click("shares", "Disable");
+    const share = (label: string) => container.querySelector<HTMLButtonElement>(`[role="switch"][aria-label="${label}"]`)!;
+    expect(share("SMB share /mnt/tank/smb").getAttribute("aria-checked")).toBe("true");
+    await act(async () => { share("SMB share /mnt/tank/smb").click(); });
     expect(fetchMock).toHaveBeenCalledWith("/api/truenas/assets/nas/shares/smb/17", expect.objectContaining({ method: "PUT", body: '{"enabled":false}' }));
-    await click("shares", "Enable");
+    await act(async () => { share("NFS share /mnt/tank/nfs").click(); });
     expect(fetchMock).toHaveBeenCalledWith("/api/truenas/assets/nas/shares/nfs/23", expect.objectContaining({ method: "PUT", body: '{"enabled":true}' }));
     expect(fetchMock).toHaveBeenCalledTimes(12);
   });
 
-  it("shows nested system, pool totals and mapped services and alerts in the actual overview", async () => {
+  it("shows nested system details, pool totals, mapped services and alerts in the system view", async () => {
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
       hostname: "audit-nas", system_info: { version: "TrueNAS-SCALE-25.10", model: "Fixture CPU",
         uptime: "1 day", cores: 8, physmem: 1073741824, ecc_memory: true },
@@ -243,19 +272,11 @@ describe("TrueNAS raw row consumers", () => {
         { service: "fixture", state: "STARTING", enabled: true }],
       alerts: [{ level: "WARNING", formatted: "Fixture storage warning", dismissed: false }],
     })));
-    await act(async () => { root.render(<TrueNASOverviewTab assetId="nas" />); });
-    expect(container.textContent).toContain("TrueNAS-SCALE-25.10");
-    expect(container.textContent).toContain("Fixture CPU");
-    expect(container.textContent).toContain("1 day");
-    expect(container.textContent).toContain("25%");
-    expect(container.textContent).toContain("1.0 GB");
-    expect(container.textContent).toContain("2.0 KB used");
-    expect(container.textContent).toContain("8.0 KB total");
-    expect(container.textContent).toContain("1 running");
-    expect(container.textContent).toContain("0 stopped");
-    expect(container.textContent).toContain("1 other states");
-    expect(container.textContent).not.toContain("Auto-start services that are stopped");
-    expect(container.textContent).toContain("Fixture storage warning");
+    await act(async () => { root.render(intl(<TrueNASOverviewTab assetId="nas" />)); });
+    for (const part of ["TrueNAS-SCALE-25.10", "Fixture CPU", "1 day", "1 GB", "2 of 8 KB · 25%", "1 of 2 running", "Fixture storage warning"]) {
+      expect(container.textContent).toContain(part);
+    }
+    expect(container.textContent).not.toContain("Stopped, set to start on boot");
     expect(container.textContent).not.toMatch(/NaN|\[object Object\]/);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

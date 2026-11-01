@@ -1,447 +1,105 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { Plus, Webhook, Pencil, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { PageHeader } from "../../../components/PageHeader";
-import { Card } from "../../../components/ui/Card";
 import { Button } from "../../../components/ui/Button";
-import { EmptyState } from "../../../components/ui/EmptyState";
-import { SkeletonRow } from "../../../components/ui/Skeleton";
-import { apiFetch, apiMutate } from "../../../lib/api";
-import { webhookRecordsFromPayload, type WebhookRecord } from "./webhookPayload";
-import { WebhookModal } from "./WebhookModal";
+import { useToast } from "../../../contexts/ToastContext";
+import { errorText } from "../actions/_parts/autoApi";
+import { AutoDialog } from "../actions/_parts/AutoDialog";
+import { type WebhookInput, useWebhooks } from "./useWebhooks";
+import { WebhookEditor } from "./WebhookEditor";
+import { WebhookList } from "./WebhookList";
+import type { WebhookRecord } from "./webhookPayload";
 
-// ── Helpers ──
+type EditorState = { mode: "new" } | { mode: "edit"; webhook: WebhookRecord };
 
-function truncateUrl(url: string, max = 40): string {
-  return url.length > max ? `${url.slice(0, max)}…` : url;
-}
-
-function relativeTime(iso: string | null | undefined): string | null {
-  if (!iso) return null;
-  const diff = Date.now() - new Date(iso).getTime();
-  if (isNaN(diff)) return null;
-  const secs = Math.floor(diff / 1000);
-  if (secs < 60) return `${secs}s ago`;
-  const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
-
-// ── Page ──
-
+/** Automations › Webhooks: addresses the hub posts events to, signed with a secret when one is set. */
 export default function WebhooksPage() {
   const t = useTranslations("webhooks");
-
-  const [webhooks, setWebhooks] = useState<WebhookRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-
-  // Modal state
-  const [showCreate, setShowCreate] = useState(false);
-  const [editTarget, setEditTarget] = useState<WebhookRecord | null>(null);
-  const [modalSaving, setModalSaving] = useState(false);
-  const [modalError, setModalError] = useState("");
-
-  // Inline delete confirm
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const tc = useTranslations("actions.common");
+  const { addToast } = useToast();
+  const { webhooks, loading, failed, load, create, update, remove, setEnabled } = useWebhooks();
+  const [editor, setEditor] = useState<EditorState | null>(null);
+  const [toDelete, setToDelete] = useState<WebhookRecord | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const deleteRef = useRef<HTMLDivElement | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  // Toggling enabled state
-  const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
-
-  // ── Fetch ──
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const { response, data } = await apiFetch<unknown>(
-        "/api/v2/webhooks",
-      );
-      if (!response.ok) {
-        const msg =
-          data && typeof data === "object" && "error" in data
-            ? String((data as { error?: string }).error)
-            : `Failed to load webhooks (${response.status})`;
-        throw new Error(msg);
-      }
-      setWebhooks(webhookRecordsFromPayload(data));
-    } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Failed to load webhooks.");
-    } finally {
-      setLoading(false);
+  const save = async (input: WebhookInput) => {
+    if (editor?.mode === "edit") {
+      await update(editor.webhook, input);
+      addToast("success", t("saved", { name: input.name }));
+    } else {
+      await create(input);
+      addToast("success", t("created", { name: input.name }));
     }
-  }, []);
+    setEditor(null);
+  };
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const toggle = (webhook: WebhookRecord, on: boolean) => {
+    setEnabled(webhook, on).catch((cause: unknown) => {
+      addToast("error", errorText(cause, t("toggleFailed", { name: webhook.name })));
+    });
+  };
 
-  // Close inline delete confirm when clicking outside
-  useEffect(() => {
-    if (!deleteTarget) return;
-    const handler = (e: MouseEvent) => {
-      if (deleteRef.current && !deleteRef.current.contains(e.target as Node)) {
-        setDeleteTarget(null);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [deleteTarget]);
-
-  // ── Create ──
-
-  const openCreate = useCallback(() => {
-    setModalError("");
-    setShowCreate(true);
-  }, []);
-
-  const closeCreate = useCallback(() => {
-    if (modalSaving) return;
-    setShowCreate(false);
-    setModalError("");
-  }, [modalSaving]);
-
-  const handleCreate = useCallback(
-    async (fields: { name: string; url: string; secret: string; events: string[] }) => {
-      const name = fields.name.trim();
-      const url = fields.url.trim();
-      if (!name || !url) {
-        setModalError("Name and URL are required.");
-        return;
-      }
-      setModalSaving(true);
-      setModalError("");
-      setActionError(null);
-      try {
-        await apiMutate<WebhookRecord>("/api/v2/webhooks", "POST", {
-          name,
-          url,
-          secret: fields.secret.length > 0 ? fields.secret : undefined,
-          events: fields.events,
-        });
-        setShowCreate(false);
-        await load();
-      } catch (err) {
-        setModalError(err instanceof Error ? err.message : "Failed to create webhook.");
-      } finally {
-        setModalSaving(false);
-      }
-    },
-    [load],
-  );
-
-  // ── Edit ──
-
-  const openEdit = useCallback((webhook: WebhookRecord) => {
-    setModalError("");
-    setEditTarget(webhook);
-  }, []);
-
-  const closeEdit = useCallback(() => {
-    if (modalSaving) return;
-    setEditTarget(null);
-    setModalError("");
-  }, [modalSaving]);
-
-  const handleEdit = useCallback(
-    async (fields: { name: string; url: string; secret: string; events: string[] }) => {
-      if (!editTarget) return;
-      const name = fields.name.trim();
-      const url = fields.url.trim();
-      if (!name || !url) {
-        setModalError("Name and URL are required.");
-        return;
-      }
-      setModalSaving(true);
-      setModalError("");
-      setActionError(null);
-      try {
-        await apiMutate<WebhookRecord>(
-          `/api/v2/webhooks/${encodeURIComponent(editTarget.id)}`,
-          "PATCH",
-          {
-            name,
-            url,
-            secret: fields.secret.length > 0 ? fields.secret : undefined,
-            events: fields.events,
-            enabled: editTarget.enabled,
-          },
-        );
-        setEditTarget(null);
-        await load();
-      } catch (err) {
-        setModalError(err instanceof Error ? err.message : "Failed to update webhook.");
-      } finally {
-        setModalSaving(false);
-      }
-    },
-    [editTarget, load],
-  );
-
-  // ── Delete ──
-
-  const handleDelete = useCallback(
-    async (id: string) => {
-      setDeleting(true);
-      setActionError(null);
-      try {
-        await apiMutate(`/api/v2/webhooks/${encodeURIComponent(id)}`, "DELETE");
-        setDeleteTarget(null);
-        await load();
-      } catch (err) {
-        setActionError(err instanceof Error ? err.message : "Failed to delete webhook.");
-      } finally {
-        setDeleting(false);
-      }
-    },
-    [load],
-  );
-
-  // ── Toggle enabled ──
-
-  const handleToggleEnabled = useCallback(
-    async (webhook: WebhookRecord) => {
-      setTogglingIds((prev) => new Set(prev).add(webhook.id));
-      setActionError(null);
-      try {
-        await apiMutate<WebhookRecord>(
-          `/api/v2/webhooks/${encodeURIComponent(webhook.id)}`,
-          "PATCH",
-          { enabled: !webhook.enabled },
-        );
-        await load();
-      } catch (err) {
-        setActionError(err instanceof Error ? err.message : "Failed to update webhook.");
-      } finally {
-        setTogglingIds((prev) => {
-          const next = new Set(prev);
-          next.delete(webhook.id);
-          return next;
-        });
-      }
-    },
-    [load],
-  );
-
-  // ── Render ──
+  const confirmDelete = async () => {
+    if (!toDelete) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await remove(toDelete.id);
+      if (editor?.mode === "edit" && editor.webhook.id === toDelete.id) setEditor(null);
+      addToast("success", t("deleted", { name: toDelete.name }));
+      setToDelete(null);
+    } catch (cause) {
+      setDeleteError(errorText(cause, t("deleteFailed")));
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
-    <>
+    <div className="au-page">
       <PageHeader
         title={t("title")}
-        subtitle={t("subtitle")}
-        action={
-          <Button variant="primary" size="sm" onClick={openCreate}>
-            <Plus size={14} />
-            {t("createWebhook")}
+        action={(
+          <Button variant={editor ? "secondary" : "primary"} onClick={() => setEditor({ mode: "new" })}>
+            <Plus size={14} aria-hidden="true" />
+            {t("new")}
           </Button>
-        }
-      />
-
-      {actionError ? (
-        <div role="alert" className="mb-3 rounded-lg border border-[var(--bad)]/40 bg-[var(--bad)]/10 px-3 py-2 text-xs text-[var(--bad)]">
-          {actionError}
-        </div>
-      ) : null}
-
-      <Card variant="flush">
-        {loading ? (
-          <div className="p-4 space-y-1">
-            <SkeletonRow />
-            <SkeletonRow />
-            <SkeletonRow />
-          </div>
-        ) : loadError ? (
-          <div className="p-6 text-sm text-[var(--bad)]">{loadError}</div>
-        ) : webhooks.length === 0 ? (
-          <div className="p-4">
-            <EmptyState
-              icon={Webhook}
-              title={t("noWebhooks")}
-              description={t("noWebhooksDesc")}
-              action={
-                <Button size="sm" variant="secondary" onClick={openCreate}>
-                  <Plus size={14} />
-                  {t("createWebhook")}
-                </Button>
-              }
-            />
-          </div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-[var(--line)] text-left">
-                <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">
-                  {t("name")}
-                </th>
-                <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] hidden sm:table-cell">
-                  {t("url")}
-                </th>
-                <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] hidden md:table-cell">
-                  {t("events")}
-                </th>
-                <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">
-                  {t("enabled")}
-                </th>
-                <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] hidden lg:table-cell">
-                  {t("lastTriggered")}
-                </th>
-                <th className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] text-right">
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {webhooks.map((wh) => {
-                const lastTriggered = relativeTime(wh.last_triggered_at);
-                const isDeletePending = deleteTarget === wh.id;
-                const isToggling = togglingIds.has(wh.id);
-
-                return (
-                  <tr
-                    key={wh.id}
-                    className="border-b border-[var(--line)] last:border-0 hover:bg-[var(--surface-hover)] transition-colors duration-[var(--dur-instant)]"
-                  >
-                    {/* Name */}
-                    <td className="px-4 py-3 text-[var(--text)] font-medium">
-                      {wh.name}
-                    </td>
-
-                    {/* URL */}
-                    <td className="px-4 py-3 text-[var(--muted)] font-mono text-xs hidden sm:table-cell">
-                      <span title={wh.url}>{truncateUrl(wh.url)}</span>
-                    </td>
-
-                    {/* Events */}
-                    <td className="px-4 py-3 hidden md:table-cell">
-                      <div className="flex flex-wrap gap-1">
-                        {wh.events.length === 0 ? (
-                          <span className="text-xs text-[var(--muted)]">—</span>
-                        ) : (
-                          wh.events.map((evt) => (
-                            <span
-                              key={evt}
-                              className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-[var(--surface)] text-[var(--muted)]"
-                            >
-                              {evt}
-                            </span>
-                          ))
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Enabled */}
-                    <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        title={wh.enabled ? "Enabled — click to disable" : "Disabled — click to enable"}
-                        aria-label={`${wh.enabled ? "Disable" : "Enable"} ${wh.name}`}
-                        disabled={isToggling}
-                        onClick={() => { void handleToggleEnabled(wh); }}
-                        className="inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
-                      >
-                        <span
-                          className={`inline-block h-2 w-2 rounded-full transition-colors duration-[var(--dur-fast)] ${
-                            wh.enabled
-                              ? "bg-[var(--ok)] shadow-[0_0_4px_var(--ok-glow)]"
-                              : "bg-[var(--muted)]"
-                          }`}
-                        />
-                      </button>
-                    </td>
-
-                    {/* Last triggered */}
-                    <td className="px-4 py-3 text-xs text-[var(--muted)] hidden lg:table-cell">
-                      {lastTriggered ?? t("never")}
-                    </td>
-
-                    {/* Actions */}
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1">
-                        {isDeletePending ? (
-                          <div
-                            ref={deleteRef}
-                            className="flex items-center gap-1"
-                          >
-                            <Button
-                              variant="danger"
-                              size="sm"
-                              loading={deleting}
-                              onClick={() => { void handleDelete(wh.id); }}
-                            >
-                              <Trash2 size={12} />
-                              {t("delete")}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              disabled={deleting}
-                              onClick={() => setDeleteTarget(null)}
-                            >
-                              {t("cancel")}
-                            </Button>
-                          </div>
-                        ) : (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openEdit(wh)}
-                              aria-label={`${t("editWebhook")}: ${wh.name}`}
-                              title={t("editWebhook")}
-                            >
-                              <Pencil size={12} />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setDeleteTarget(wh.id)}
-                              aria-label={`${t("delete")}: ${wh.name}`}
-                              title={t("delete")}
-                            >
-                              <Trash2 size={12} />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
         )}
-      </Card>
-
-      {/* Create modal */}
-      {showCreate ? (
-        <WebhookModal
-          mode="create"
-          saving={modalSaving}
-          error={modalError}
-          onClose={closeCreate}
-          onSubmit={(fields) => { void handleCreate(fields); }}
+      />
+      {editor ? (
+        <WebhookEditor
+          key={editor.mode === "edit" ? editor.webhook.id : "new"}
+          webhook={editor.mode === "edit" ? editor.webhook : undefined}
+          onSave={save}
+          onClose={() => setEditor(null)}
         />
       ) : null}
-
-      {/* Edit modal */}
-      {editTarget ? (
-        <WebhookModal
-          mode="edit"
-          initial={editTarget}
-          saving={modalSaving}
-          error={modalError}
-          onClose={closeEdit}
-          onSubmit={(fields) => { void handleEdit(fields); }}
-        />
-      ) : null}
-    </>
+      <WebhookList
+        webhooks={webhooks}
+        loading={loading}
+        failed={failed}
+        onEdit={(webhook) => setEditor({ mode: "edit", webhook })}
+        onToggle={toggle}
+        onDelete={(webhook) => { setToDelete(webhook); setDeleteError(null); }}
+        onRetry={() => { void load(); }}
+      />
+      <AutoDialog
+        open={toDelete !== null}
+        title={t("deleteTitle", { name: toDelete?.name ?? "" })}
+        cancelLabel={tc("cancel")}
+        confirmLabel={tc("delete")}
+        danger
+        pending={deleting}
+        error={deleteError}
+        onConfirm={() => { void confirmDelete(); }}
+        onClose={() => setToDelete(null)}
+      >
+        <p>{t("deleteBody")}</p>
+      </AutoDialog>
+    </div>
   );
 }

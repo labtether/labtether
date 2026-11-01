@@ -1,16 +1,22 @@
 {
-  "title": "会话录制",
-  "empty": "还没有录制记录。",
+  "title": "录像",
+  "filter": "按设备筛选",
+  "all": "全部",
   "columns": {
-    "asset": "资产",
+    "device": "设备",
     "protocol": "协议",
     "duration": "时长",
     "size": "大小",
-    "status": "状态",
-    "date": "日期",
-    "actions": "操作"
+    "date": "时间"
   },
+  "kind": "远程查看 · {protocol}",
   "download": "下载",
-  "downloadLabel": "下载 {asset} 的录制",
-  "inProgress": "录制中"
+  "downloadLabel": "下载 {asset} 的录像",
+  "inProgress": "录制中",
+  "empty": "还没有录像",
+  "loadFailed": "录像未能加载",
+  "loading": "正在加载录像",
+  "noMatch": "没有与“{query}”匹配的录像",
+  "shown": "{total} 个中的 {count} 个",
+  "clearFilter": "清除筛选"
 }

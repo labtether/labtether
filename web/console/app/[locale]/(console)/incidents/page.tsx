@@ -1,189 +1,94 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useMemo, useState } from "react";
+import * as Menu from "@radix-ui/react-dropdown-menu";
+import { Check, ChevronDown } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { ChevronLeft } from "lucide-react";
 import { PageHeader } from "../../../components/PageHeader";
-import { Badge } from "../../../components/ui/Badge";
-import { Card } from "../../../components/ui/Card";
+import { AlertTabs } from "../alerts/AlertTabs";
 import { Button } from "../../../components/ui/Button";
-import { SkeletonRow } from "../../../components/ui/Skeleton";
-import { useIncidents, useIncidentDetail } from "../../../hooks/useIncidents";
-import type { Incident } from "../../../console/models";
-import { IncidentsListView, type IncidentStatusFilter } from "./IncidentsListView";
-import { IncidentCockpitCard } from "./IncidentCockpitCard";
-import { IncidentPostmortemCard } from "./IncidentPostmortemCard";
-import { useIncidentPostmortemEditor } from "./useIncidentPostmortemEditor";
+import { useStatusAssetNameMap } from "../../../contexts/StatusContext";
+import { useIncidents } from "../../../hooks/useIncidents";
+import { IssueList } from "./IssueList";
+import {
+  filterIssues, nextSort, SHOWS, sortIssues, STATES,
+  type Issue, type IssueFilter, type IssueShow, type IssueSort, type IssueStatus,
+} from "./issuesModel";
 
-type IncidentView = "list" | "detail";
-
-export default function IncidentsPage() {
-  const t = useTranslations('incidents');
-  const { incidents, loading, updateIncident } = useIncidents();
-  const [view, setView] = useState<IncidentView>("list");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<IncidentStatusFilter>("all");
-  const [noteText, setNoteText] = useState("");
-
-  const {
-    pmRootCause,
-    pmActionItems,
-    pmLessonsLearned,
-    pmSaving,
-    pmDirty,
-    loadPostmortemFields,
-    resetPmDirty,
-    handleSavePostmortem,
-    handleAddActionItem,
-    handleRemoveActionItem,
-    handleUpdateActionItem,
-    handleRootCauseChange,
-    handleLessonsLearnedChange,
-  } = useIncidentPostmortemEditor({ updateIncident });
-
-  const { incident: selectedIncident, timeline, loading: detailLoading, error: detailError, retryDetail, replaceIncident } = useIncidentDetail(
-    view === "detail" ? selectedId : null
+/** Active, Resolved or All as a segmented switch, and one exact state from the State menu. */
+function IssuesToolbar({ filter, onFilter }: { filter: IssueFilter; onFilter: (value: IssueFilter) => void }) {
+  const t = useTranslations("incidents");
+  const exact = (STATES as string[]).includes(filter) ? (filter as IssueStatus) : null;
+  return (
+    <div className="iu-tools">
+      <div className="iu-seg" role="group" aria-label={t("list.showLabel")}>
+        {SHOWS.map((show) => (
+          <button key={show} type="button" className={filter === show ? "on" : undefined} aria-pressed={filter === show} onClick={() => onFilter(show)}>
+            {t(`list.show.${show}`)}
+          </button>
+        ))}
+      </div>
+      <Menu.Root>
+        <Menu.Trigger className={`iu-chip${exact ? " on" : ""}`}>
+          <span className="iu-chip-k">{t("list.stateFilter")}</span>
+          {exact ? t(`states.${exact}`) : t("list.anyState")}
+          <ChevronDown aria-hidden="true" strokeWidth={2} />
+        </Menu.Trigger>
+        <Menu.Portal>
+          <Menu.Content className="lt-menu" align="start" sideOffset={6}>
+            <Menu.RadioGroup value={exact ?? "any"} onValueChange={(v) => onFilter((v === "any" ? "active" : v) as IssueFilter)}>
+              <Menu.RadioItem value="any" className="lt-menu-item">
+                {t("list.anyState")}
+                <Menu.ItemIndicator className="lt-menu-check"><Check aria-hidden="true" /></Menu.ItemIndicator>
+              </Menu.RadioItem>
+              <Menu.Separator className="lt-menu-sep" />
+              {STATES.map((s) => (
+                <Menu.RadioItem key={s} value={s} className="lt-menu-item">
+                  {t(`states.${s}`)}
+                  <Menu.ItemIndicator className="lt-menu-check"><Check aria-hidden="true" /></Menu.ItemIndicator>
+                </Menu.RadioItem>
+              ))}
+            </Menu.RadioGroup>
+          </Menu.Content>
+        </Menu.Portal>
+      </Menu.Root>
+    </div>
   );
+}
 
-  useEffect(() => {
-    if (selectedIncident && !detailLoading) {
-      loadPostmortemFields(selectedIncident);
-    }
-  }, [detailLoading, loadPostmortemFields, selectedIncident]);
+/**
+ * Issues (2.0): one list of the hub's issues, active ones first by default, newest first. A row opens the issue page.
+ */
+export default function IssuesPage() {
+  const t = useTranslations("incidents");
+  const tNav = useTranslations("nav");
+  const { incidents, loading, error, refresh } = useIncidents();
+  const deviceNames = useStatusAssetNameMap();
+  const [filter, setFilter] = useState<IssueFilter>("active");
+  const [sort, setSort] = useState<IssueSort>({ key: "opened", dir: "desc" });
 
-  const handleSelectIncident = (incident: Incident) => {
-    setSelectedId(incident.id);
-    setView("detail");
-    loadPostmortemFields(incident);
-  };
-
-  const handleBack = () => {
-    setSelectedId(null);
-    setView("list");
-    resetPmDirty();
-  };
-
-  const handleStatusChange = async (id: string, newStatus: string) => {
-    const updatedIncident = await updateIncident(id, { status: newStatus });
-    replaceIncident(updatedIncident);
-  };
+  const shown = useMemo(() => sortIssues(filterIssues(incidents as Issue[], filter), sort), [incidents, filter, sort]);
+  const emptyText = (SHOWS as string[]).includes(filter) ? t(`list.empty.${filter as IssueShow}`) : t("list.empty.state");
 
   return (
     <>
-      <PageHeader title={t('title')} subtitle={t('subtitle')} />
-
-      {view === "list" ? (
-        <IncidentsListView
-          incidents={incidents}
-          loading={loading}
-          statusFilter={statusFilter}
-          onStatusFilterChange={setStatusFilter}
-          onSelectIncident={handleSelectIncident}
-        />
+      <PageHeader title={tNav("alerts")} />
+      <AlertTabs current="issues" />
+      <IssuesToolbar filter={filter} onFilter={setFilter} />
+      {error ? (
+        <div className="iu-inline-err iu-top-err">
+          <p role="alert">{t("list.error")}</p>
+          <Button size="sm" onClick={() => void refresh()}>{t("list.retry")}</Button>
+        </div>
       ) : null}
-
-      {view === "detail" && (selectedIncident || detailLoading || detailError) ? (
-        <>
-          <Card className="flex items-center justify-between mb-4">
-            <Button variant="ghost" onClick={handleBack}>
-              <ChevronLeft size={14} />
-              {t('back')}
-            </Button>
-            {selectedIncident ? (
-              <div className="flex items-center gap-2 ml-auto">
-                <Badge status={selectedIncident.severity} />
-                <Badge status={selectedIncident.status} />
-                {selectedIncident.status === "open" ? (
-                  <Button size="sm" onClick={() => void handleStatusChange(selectedIncident.id, "investigating")}>
-                    {t('actions.startInvestigating')}
-                  </Button>
-                ) : null}
-                {selectedIncident.status === "investigating" ? (
-                  <Button size="sm" onClick={() => void handleStatusChange(selectedIncident.id, "mitigated")}>
-                    {t('actions.markMitigated')}
-                  </Button>
-                ) : null}
-                {(selectedIncident.status === "mitigated" || selectedIncident.status === "investigating") ? (
-                  <Button size="sm" onClick={() => void handleStatusChange(selectedIncident.id, "resolved")}>
-                    {t('actions.markResolved')}
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
-          </Card>
-
-          {detailLoading ? (
-            <Card className="mb-4">
-              <div className="space-y-1">
-                <SkeletonRow />
-                <SkeletonRow />
-                <SkeletonRow />
-              </div>
-            </Card>
-          ) : detailError ? (
-            <Card className="mb-4">
-              <p role="alert" className="text-sm text-[var(--bad)] mb-2">{t('detail.error')}</p>
-              <Button onClick={retryDetail}>{t('detail.retry')}</Button>
-            </Card>
-          ) : selectedIncident ? (
-            <>
-              <IncidentCockpitCard incident={selectedIncident} timeline={timeline} />
-
-              <Card className="mb-4">
-                <h2>{t('notes.title')}</h2>
-                <div className="space-y-3">
-                  {selectedIncident.summary ? (
-                    <p className="text-xs text-[var(--muted)]">{selectedIncident.summary}</p>
-                  ) : (
-                    <p className="text-xs text-[var(--muted)]">{t('notes.emptyHint')}</p>
-                  )}
-                  <textarea
-                    className="w-full bg-transparent border border-[var(--line)] rounded-lg px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:outline-none focus:border-[var(--muted)] transition-colors duration-150 resize-y"
-                    placeholder={t('notes.placeholder')}
-                    rows={3}
-                    value={noteText}
-                    onChange={(e) => setNoteText(e.target.value)}
-                  />
-                  <Button
-                    disabled={!noteText.trim()}
-                    onClick={() => {
-                      void (async () => {
-                        const updatedIncident = await updateIncident(selectedIncident.id, {
-                          summary: (selectedIncident.summary ? selectedIncident.summary + "\n" : "") + noteText.trim()
-                        });
-                        replaceIncident(updatedIncident);
-                        setNoteText("");
-                      })();
-                    }}
-                  >
-                    {t('notes.add')}
-                  </Button>
-                </div>
-              </Card>
-
-              {(selectedIncident.status === "resolved" || selectedIncident.status === "closed") ? (
-                <IncidentPostmortemCard
-                  incident={selectedIncident}
-                  pmRootCause={pmRootCause}
-                  pmActionItems={pmActionItems}
-                  pmLessonsLearned={pmLessonsLearned}
-                  pmSaving={pmSaving}
-                  pmDirty={pmDirty}
-                  onRootCauseChange={handleRootCauseChange}
-                  onAddActionItem={handleAddActionItem}
-                  onRemoveActionItem={handleRemoveActionItem}
-                  onUpdateActionItem={handleUpdateActionItem}
-                  onLessonsLearnedChange={handleLessonsLearnedChange}
-                  onSave={async () => {
-                    const updatedIncident = await handleSavePostmortem(selectedIncident.id);
-                    replaceIncident(updatedIncident);
-                  }}
-                />
-              ) : null}
-            </>
-          ) : null}
-        </>
-      ) : null}
+      <IssueList
+        issues={shown}
+        loading={loading}
+        sort={sort}
+        onSort={(key) => setSort((current) => nextSort(current, key))}
+        deviceNames={deviceNames}
+        emptyText={emptyText}
+      />
     </>
   );
 }

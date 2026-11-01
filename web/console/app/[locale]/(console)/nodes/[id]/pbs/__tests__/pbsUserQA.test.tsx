@@ -1,13 +1,22 @@
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PBSDatastoresCard } from "../../PBSDatastoresCard";
-import { PBSBackupGroupsTab } from "../PBSBackupGroupsTab";
-import { PBSDatastoresTab } from "../PBSDatastoresTab";
-import { PBSSnapshotsTab } from "../PBSSnapshotsTab";
-import { PBSTasksTab } from "../PBSTasksTab";
+import commonMessages from "../../../../../../../messages/en/common.json";
+import messages from "../../../../../../../messages/en/devices-proxmox.json";
+import { normalizePBSAssetDetailsResponse } from "../../pbsTabModel";
+import { PBSCoverageList } from "../PBSCoverageList";
+import { PBSDatastoreList } from "../PBSDatastoreList";
+import { PBSSnapshotsView } from "../PBSSnapshotsView";
+import { PBSTasksView } from "../PBSTasksView";
 import { usePBSDetails } from "../usePBSData";
+
+vi.mock("../../../../../../../i18n/navigation", () => ({
+  Link: ({ children, href, className }: { children: ReactNode; href: string; className?: string }) => (
+    <a href={href} className={className}>{children}</a>
+  ),
+}));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -31,39 +40,37 @@ const detailsPayload = {
     },
   ],
 };
+const details = normalizePBSAssetDetailsResponse(detailsPayload);
+const sortedStores = [...(details.datastores ?? [])].sort((a, b) => a.store.localeCompare(b.store));
 
 let container: HTMLDivElement;
 let root: Root;
+
+function respond(payload: unknown, ok = true, status = 200): Response {
+  return { ok, status, json: async () => payload } as Response;
+}
 
 beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+  if (!("PointerEvent" in window)) vi.stubGlobal("PointerEvent", MouseEvent);
+  if (!("ResizeObserver" in window)) {
+    vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  }
+  if (!("hasPointerCapture" in HTMLElement.prototype)) {
+    Object.defineProperty(HTMLElement.prototype, "hasPointerCapture", { configurable: true, value: () => false });
+  }
+  if (!("scrollIntoView" in HTMLElement.prototype)) {
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: () => undefined });
+  }
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
-      const payload = url.includes("/groups")
-        ? {
-            datastores: [
-              {
-                store: "qa-store",
-                groups: [
-                  {
-                    backup_type: "vm",
-                    backup_id: "900",
-                    backup_count: 2,
-                  },
-                ],
-              },
-            ],
-          }
-        : detailsPayload;
-      return {
-        ok: true,
-        status: 200,
-        json: async () => payload,
-      } as Response;
+      return respond(url.includes("/groups")
+        ? { datastores: [{ store: "qa-store", groups: [{ backup_type: "vm", backup_id: "900", backup_count: 2 }] }] }
+        : detailsPayload);
     }),
   );
 });
@@ -80,19 +87,48 @@ async function flushEffects() {
   });
 }
 
-function PBSDetailsHarness({
-  onManualRefreshSettled,
-}: {
-  onManualRefreshSettled?: () => void;
-}) {
-  const { details, error, refresh } = usePBSDetails(
-    "pbs-server-qa",
-    onManualRefreshSettled,
-  );
+async function render(node: ReactNode) {
+  await act(async () => root.render(
+    <NextIntlClientProvider locale="en" messages={{ common: commonMessages, "devices-proxmox": messages }}>{node}</NextIntlClientProvider>,
+  ));
+  await flushEffects();
+}
+
+function buttons(text: string, exact = true): HTMLButtonElement[] {
+  return [...document.body.querySelectorAll<HTMLButtonElement>("button")].filter((button) =>
+    exact ? button.textContent?.trim() === text : button.textContent?.includes(text));
+}
+
+async function openMenu(label: string) {
+  const trigger = document.body.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+  expect(trigger).not.toBeNull();
+  await act(async () => {
+    trigger?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+  });
+}
+
+async function chooseMenuItem(text: string) {
+  const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((node) => node.textContent?.trim() === text);
+  expect(item).not.toBeUndefined();
+  await act(async () => item?.click());
+  await flushEffects();
+}
+
+async function confirmDialog(text: string) {
+  const dialog = document.body.querySelector('[role="dialog"]');
+  expect(dialog).not.toBeNull();
+  const confirm = [...(dialog?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find((button) => button.textContent?.trim() === text);
+  await act(async () => confirm?.click());
+  await flushEffects();
+  await flushEffects();
+}
+
+function PBSDetailsHarness({ onManualRefreshSettled }: { onManualRefreshSettled?: () => void }) {
+  const { details: loaded, error, refresh } = usePBSDetails("pbs-server-qa", onManualRefreshSettled);
   return (
     <div>
       {error && <p role="alert">{error}</p>}
-      {details && <p>{details.asset_id}</p>}
+      {loaded && <p>{loaded.asset_id}</p>}
       <button type="button" onClick={refresh}>Refresh details</button>
     </div>
   );
@@ -100,35 +136,19 @@ function PBSDetailsHarness({
 
 describe("PBS user-facing controls", () => {
   it("turns a generic gateway failure into an actionable PBS message", async () => {
-    vi.mocked(fetch).mockResolvedValue({
-      ok: false,
-      status: 502,
-      json: async () => ({ error: "An internal error occurred." }),
-    } as Response);
+    vi.mocked(fetch).mockResolvedValue(respond({ error: "An internal error occurred." }, false, 502));
+    await render(<PBSDetailsHarness />);
 
-    await act(async () => root.render(<PBSDetailsHarness />));
-    await flushEffects();
-
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
-      "Unable to reach Proxmox Backup Server",
-    );
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("Unable to reach Proxmox Backup Server");
     expect(container.textContent).not.toContain("An internal error occurred.");
   });
 
   it("refreshes parent status after a successful manual PBS refresh", async () => {
     const onManualRefreshSettled = vi.fn();
-    await act(async () =>
-      root.render(
-        <PBSDetailsHarness onManualRefreshSettled={onManualRefreshSettled} />,
-      ),
-    );
-    await flushEffects();
+    await render(<PBSDetailsHarness onManualRefreshSettled={onManualRefreshSettled} />);
     expect(onManualRefreshSettled).not.toHaveBeenCalled();
 
-    const refresh = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent?.trim() === "Refresh details",
-    );
-    await act(async () => refresh?.click());
+    await act(async () => buttons("Refresh details")[0]?.click());
     await flushEffects();
 
     expect(onManualRefreshSettled).toHaveBeenCalledTimes(1);
@@ -137,51 +157,22 @@ describe("PBS user-facing controls", () => {
 
   it("refreshes parent status and retains inventory after a failed manual PBS refresh", async () => {
     const onManualRefreshSettled = vi.fn();
-    await act(async () =>
-      root.render(
-        <PBSDetailsHarness onManualRefreshSettled={onManualRefreshSettled} />,
-      ),
-    );
-    await flushEffects();
+    await render(<PBSDetailsHarness onManualRefreshSettled={onManualRefreshSettled} />);
     expect(container.textContent).toContain("pbs-server-qa");
 
-    vi.mocked(fetch).mockResolvedValueOnce({
-      ok: false,
-      status: 502,
-      json: async () => ({ error: "An internal error occurred." }),
-    } as Response);
-
-    const refresh = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent?.trim() === "Refresh details",
-    );
-    await act(async () => refresh?.click());
+    vi.mocked(fetch).mockResolvedValueOnce(respond({ error: "An internal error occurred." }, false, 502));
+    await act(async () => buttons("Refresh details")[0]?.click());
     await flushEffects();
 
     expect(onManualRefreshSettled).toHaveBeenCalledTimes(1);
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
-      "Unable to reach Proxmox Backup Server",
-    );
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("Unable to reach Proxmox Backup Server");
     expect(container.textContent).toContain("pbs-server-qa");
   });
 
   it("exposes datastore expansion as a named keyboard button", async () => {
-    await act(async () => {
-      root.render(
-        <PBSDatastoresCard
-          assetId="pbs-server-qa"
-          datastores={detailsPayload.datastores.map((store) => ({
-            ...store,
-            group_count: 1,
-            snapshot_count: 2,
-            usage_percent: 25,
-          }))}
-        />,
-      );
-    });
+    await render(<PBSDatastoreList assetId="pbs-server-qa" datastores={sortedStores} onChanged={() => undefined} />);
 
-    const toggle = [...container.querySelectorAll("button")].find((button) =>
-      button.textContent?.includes("qa-store"),
-    );
+    const toggle = buttons("qa-store")[0];
     expect(toggle?.getAttribute("aria-expanded")).toBe("false");
 
     await act(async () => toggle?.click());
@@ -191,96 +182,55 @@ describe("PBS user-facing controls", () => {
   });
 
   it("populates the snapshot datastore selector from discovered inventory", async () => {
-    await act(async () => root.render(<PBSSnapshotsTab assetId="pbs-server-qa" />));
-    await flushEffects();
+    await render(<PBSSnapshotsView assetId="pbs-server-qa" details={details} />);
 
     const select = container.querySelector<HTMLSelectElement>('select[aria-label="Datastore"]');
     expect(select).not.toBeNull();
-    expect([...select!.options].map((option) => option.value)).toEqual([
-      "archive-store",
-      "qa-store",
-    ]);
+    expect([...select!.options].map((option) => option.value)).toEqual(["archive-store", "qa-store"]);
     expect(select?.value).toBe("archive-store");
   });
 
-  it("does not allow protected snapshots into the bulk-forget path", async () => {
-    vi.mocked(fetch).mockImplementation(async (input: string | URL | Request) => {
-      const url = String(input);
-      const payload = url.includes("/snapshots?")
-        ? {
-            snapshots: [
-              {
-                backup_type: "vm",
-                backup_id: "900",
-                backup_time: 1784088000,
-                protected: true,
-              },
-              {
-                backup_type: "vm",
-                backup_id: "901",
-                backup_time: 1784088060,
-                protected: false,
-              },
-            ],
-          }
-        : detailsPayload;
-      return {
-        ok: true,
-        status: 200,
-        json: async () => payload,
-      } as Response;
-    });
+  it("does not allow protected snapshots into the forget paths", async () => {
+    vi.mocked(fetch).mockImplementation(async (input: string | URL | Request) => respond(String(input).includes("/snapshots?")
+      ? {
+          snapshots: [
+            { backup_type: "vm", backup_id: "900", backup_time: 1784088000, protected: true },
+            { backup_type: "vm", backup_id: "901", backup_time: 1784088060, protected: false },
+          ],
+        }
+      : detailsPayload));
 
-    await act(async () => root.render(<PBSSnapshotsTab assetId="pbs-server-qa" />));
-    await flushEffects();
+    await render(<PBSSnapshotsView assetId="pbs-server-qa" details={details} />);
 
-    const load = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent?.trim() === "Load",
-    );
-    await act(async () => load?.click());
-    await flushEffects();
-
-    const protectedCheckbox = container.querySelector<HTMLInputElement>(
-      'input[aria-label="Select snapshot vm/900/1784088000"]',
-    );
-    const disposableCheckbox = container.querySelector<HTMLInputElement>(
-      'input[aria-label="Select snapshot vm/901/1784088060"]',
-    );
+    const protectedCheckbox = container.querySelector<HTMLInputElement>('input[data-key="vm/900/1784088000"]');
+    const disposableCheckbox = container.querySelector<HTMLInputElement>('input[data-key="vm/901/1784088060"]');
     expect(protectedCheckbox?.disabled).toBe(true);
     expect(disposableCheckbox?.disabled).toBe(false);
 
-    const verify = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent?.trim() === "Verify",
-    );
-    await act(async () => verify?.click());
-    const confirmVerify = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent?.trim() === "Confirm Verify",
-    );
-    await act(async () => confirmVerify?.click());
-    await flushEffects();
+    const menus = [...container.querySelectorAll<HTMLButtonElement>("button.di-more")];
+    const protectedMenu = menus.find((button) => button.getAttribute("aria-label")?.includes("vm/900"));
+    const disposableMenu = menus.find((button) => button.getAttribute("aria-label")?.includes("vm/901"));
 
+    await openMenu(disposableMenu?.getAttribute("aria-label") ?? "");
+    await chooseMenuItem("Verify");
     const verifyCall = vi.mocked(fetch).mock.calls.find(([input, init]) =>
-      String(input).includes("/snapshots/verify") && init?.method === "POST",
-    );
+      String(input).includes("/snapshots/verify") && init?.method === "POST");
     expect(String(verifyCall?.[0])).toContain("/snapshots/verify?store=archive-store");
 
-    const forget = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent?.trim() === "Forget" && !button.hasAttribute("disabled"),
-    );
-    await act(async () => forget?.click());
-    const confirmForget = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent?.trim() === "Confirm",
-    );
-    await act(async () => confirmForget?.click());
-    await flushEffects();
+    await openMenu(disposableMenu?.getAttribute("aria-label") ?? "");
+    await chooseMenuItem("Forget…");
+    await confirmDialog("Forget");
 
     const forgetCall = vi.mocked(fetch).mock.calls.find(([input, init]) =>
-      String(input).includes("/snapshots/forget") && init?.method === "DELETE",
-    );
+      String(input).includes("/snapshots/forget") && init?.method === "DELETE");
     expect(String(forgetCall?.[0])).toContain("store=archive-store");
     expect(String(forgetCall?.[0])).toContain("backup-type=vm");
     expect(String(forgetCall?.[0])).toContain("backup-id=901");
     expect(String(forgetCall?.[0])).toContain("backup-time=1784088060");
+
+    await openMenu(protectedMenu?.getAttribute("aria-label") ?? "");
+    const protectedForget = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((node) => node.textContent?.startsWith("Forget"));
+    expect(protectedForget?.hasAttribute("data-disabled")).toBe(true);
   });
 
   it("uses the backend delete contract for group forget", async () => {
@@ -289,118 +239,59 @@ describe("PBS user-facing controls", () => {
       const url = String(input);
       if (url.includes("/groups/forget") && init?.method === "DELETE") {
         deleted = true;
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({ status: "forgotten" }),
-        } as Response;
+        return respond({ status: "forgotten" });
       }
-      const payload = url.includes("/groups")
-        ? {
-            datastores: [
-              {
-                store: "qa-store",
-                groups: deleted
-                  ? []
-                  : [
-                      {
-                        backup_type: "vm",
-                        backup_id: "900",
-                        backup_count: 2,
-                      },
-                    ],
-              },
-            ],
-          }
-        : detailsPayload;
-      return {
-        ok: true,
-        status: 200,
-        json: async () => payload,
-      } as Response;
+      return respond(url.includes("/groups")
+        ? { datastores: [{ store: "qa-store", groups: deleted ? [] : [{ backup_type: "vm", backup_id: "900", backup_count: 2 }] }] }
+        : detailsPayload);
     });
 
-    await act(async () => root.render(<PBSBackupGroupsTab assetId="pbs-server-qa" />));
-    await flushEffects();
-
-    const open = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent?.trim() === "Forget Group",
-    );
-    await act(async () => open?.click());
-    await flushEffects();
-
-    const review = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent?.trim() === "Review Forget",
-    );
-    await act(async () => review?.click());
-    const confirm = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent?.trim() === "Confirm Forget",
-    );
-    await act(async () => confirm?.click());
-    await flushEffects();
+    await render(<PBSCoverageList assetId="pbs-server-qa" />);
+    await openMenu("Actions for vm/900");
+    await chooseMenuItem("Forget group…");
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/groups/forget"))).toBe(false);
+    await confirmDialog("Forget group");
 
     const groupForgetCall = vi.mocked(fetch).mock.calls.find(([input, init]) =>
-      String(input).includes("/groups/forget") && init?.method === "DELETE",
-    );
+      String(input).includes("/groups/forget") && init?.method === "DELETE");
     expect(String(groupForgetCall?.[0])).toContain("store=qa-store");
     expect(String(groupForgetCall?.[0])).toContain("backup-type=vm");
     expect(String(groupForgetCall?.[0])).toContain("backup-id=900");
-    expect(container.textContent).not.toContain("Forget Backup Group");
-    expect(container.textContent).toContain("No groups in this datastore.");
+    expect(container.textContent).toContain("No backup groups");
   });
 
   it("requires confirmation before a datastore mutation", async () => {
-    await act(async () => root.render(<PBSDatastoresTab assetId="pbs-server-qa" />));
-    await flushEffects();
+    await render(<PBSDatastoreList assetId="pbs-server-qa" datastores={sortedStores} onChanged={() => undefined} />);
 
-    const runGC = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent?.trim() === "Run GC",
-    );
-    await act(async () => runGC?.click());
+    await openMenu("Actions for archive-store");
+    await chooseMenuItem("Run garbage collection…");
 
-    const postCallsBeforeConfirm = vi
-      .mocked(fetch)
-      .mock.calls.filter(([, init]) => init?.method === "POST");
-    expect(postCallsBeforeConfirm).toHaveLength(0);
-    expect(container.textContent).toContain("Confirm: run garbage collection on archive-store?");
+    expect(vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(0);
+    expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain("Run garbage collection on archive-store?");
 
-    const confirm = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent?.trim() === "Confirm",
-    );
-    await act(async () => confirm?.click());
-    await flushEffects();
+    await confirmDialog("Run garbage collection");
 
-    const postCallsAfterConfirm = vi
-      .mocked(fetch)
-      .mock.calls.filter(([, init]) => init?.method === "POST");
-    expect(postCallsAfterConfirm).toHaveLength(1);
-    expect(container.querySelector('[role="status"]')?.textContent).toContain(
-      "requested for archive-store",
-    );
+    const posts = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "POST");
+    expect(posts).toHaveLength(1);
+    expect(String(posts[0]?.[0])).toContain("/datastores/archive-store/gc");
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("Garbage collection started on archive-store");
   });
 
-  it("labels the task-type filter and renders one status-filter control set", async () => {
-    await act(async () => root.render(<PBSTasksTab assetId="pbs-server-qa" />));
-    await flushEffects();
+  it("labels the task-type filter, renders one status-filter set and offers no stop on a finished task", async () => {
+    await render(<PBSTasksView details={details} onRefreshDetails={() => undefined} />);
 
     expect(container.querySelector('select[aria-label="Task type"]')).not.toBeNull();
     for (const label of ["All", "Errors", "Running"]) {
-      const matching = [...container.querySelectorAll("button")].filter(
-        (button) => button.textContent?.trim() === label,
-      );
-      expect(matching).toHaveLength(1);
+      expect(buttons(label)).toHaveLength(1);
     }
 
-    const completedTask = [...container.querySelectorAll("button")].find((button) =>
-      button.textContent?.includes("weekly-integrity"),
-    );
-    await act(async () => completedTask?.click());
+    const finishedTask = container.querySelector<HTMLButtonElement>("button.di-pbs-open");
+    expect(finishedTask?.textContent).toBe("Verify");
+    await act(async () => finishedTask?.click());
     await flushEffects();
 
-    const finishedButton = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent?.trim() === "Task Finished",
-    );
-    expect(finishedButton).not.toBeUndefined();
-    expect(finishedButton?.hasAttribute("disabled")).toBe(true);
+    expect(finishedTask?.getAttribute("aria-expanded")).toBe("true");
+    expect(container.textContent).toContain("weekly-integrity");
+    expect(buttons("Stop task")).toHaveLength(0);
   });
 });

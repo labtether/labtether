@@ -1,5 +1,8 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+import { useEffect, useRef } from "react";
+
 export type PaneContextMenuState = {
   x: number;
   y: number;
@@ -18,90 +21,70 @@ type TerminalPaneMenuProps = {
   handleClearScrollback: () => void;
   handleDisconnect: () => void;
   handleReconnectFromMenu: () => void;
+  /** Opens the device picker for this pane. */
+  handleChangeTarget?: () => void;
 };
 
+/** The pane's right-click menu: clipboard, Find, Clear, and Disconnect or Reconnect. */
 export function TerminalPaneMenu({ paneMenu, isConnected, canReconnect, closePaneMenu,
   handleCopySelection, handlePaste, handleSelectAll, handleOpenSearch,
-  handleClearScrollback, handleDisconnect, handleReconnectFromMenu,
+  handleClearScrollback, handleDisconnect, handleReconnectFromMenu, handleChangeTarget,
 }: TerminalPaneMenuProps) {
+  const t = useTranslations("terminal.pane");
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    menuRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+  }, []);
+
+  const item = (label: string, onClick: () => void, disabled = false, danger = false) => (
+    <button
+      type="button"
+      role="menuitem"
+      className={`lt-menu-item tm-mi${danger ? " tm-danger" : ""}`}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {label}
+    </button>
+  );
+
   return (
-<div
-          className="absolute inset-0 z-[60]"
-          onClick={closePaneMenu}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            closePaneMenu();
-          }}
-        >
-          <div
-            className="absolute min-w-[220px] rounded-lg border border-[var(--line)] bg-[var(--panel)] p-1 shadow-xl"
-            style={{ left: paneMenu.x, top: paneMenu.y }}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <button
-              type="button"
-              className={paneMenu.hasSelection
-                ? "flex w-full items-center rounded px-3 py-1.5 text-left text-xs text-[var(--text)] transition-colors hover:bg-[var(--hover)]"
-                : "flex w-full cursor-default items-center rounded px-3 py-1.5 text-left text-xs text-[var(--muted)] opacity-60"}
-              disabled={!paneMenu.hasSelection}
-              onClick={() => {
-                void handleCopySelection();
-              }}
-            >
-              Copy Selection
-            </button>
-            <button
-              type="button"
-              className="flex w-full items-center rounded px-3 py-1.5 text-left text-xs text-[var(--text)] transition-colors hover:bg-[var(--hover)]"
-              onClick={() => {
-                void handlePaste();
-              }}
-            >
-              Paste
-            </button>
-            <button
-              type="button"
-              className="flex w-full items-center rounded px-3 py-1.5 text-left text-xs text-[var(--text)] transition-colors hover:bg-[var(--hover)]"
-              onClick={handleSelectAll}
-            >
-              Select All
-            </button>
-            <button
-              type="button"
-              className="flex w-full items-center rounded px-3 py-1.5 text-left text-xs text-[var(--text)] transition-colors hover:bg-[var(--hover)]"
-              onClick={handleOpenSearch}
-            >
-              Find
-            </button>
-            <button
-              type="button"
-              className="flex w-full items-center rounded px-3 py-1.5 text-left text-xs text-[var(--text)] transition-colors hover:bg-[var(--hover)]"
-              onClick={handleClearScrollback}
-            >
-              Clear Scrollback
-            </button>
-            <div className="my-1 border-t border-[var(--line)]" />
-            {isConnected ? (
-              <button
-                type="button"
-                className="flex w-full items-center rounded px-3 py-1.5 text-left text-xs text-[var(--bad)] transition-colors hover:bg-[var(--bad-glow)]"
-                onClick={handleDisconnect}
-              >
-                Disconnect
-              </button>
-            ) : (
-              <button
-                type="button"
-                className={canReconnect
-                  ? "flex w-full items-center rounded px-3 py-1.5 text-left text-xs text-[var(--text)] transition-colors hover:bg-[var(--hover)]"
-                  : "flex w-full cursor-default items-center rounded px-3 py-1.5 text-left text-xs text-[var(--muted)] opacity-60"}
-                disabled={!canReconnect}
-                onClick={handleReconnectFromMenu}
-              >
-                Reconnect
-              </button>
-            )}
-          </div>
-        </div>
+    <div
+      className="tm-ctx-back"
+      onClick={closePaneMenu}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        closePaneMenu();
+      }}
+    >
+      <div
+        ref={menuRef}
+        role="menu"
+        aria-label={t("menu")}
+        className="lt-menu tm-ctx"
+        style={{ left: paneMenu.x, top: paneMenu.y }}
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+          event.preventDefault();
+          const items = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? []);
+          const at = items.indexOf(document.activeElement as HTMLButtonElement);
+          items[(at + (event.key === "ArrowDown" ? 1 : items.length - 1)) % items.length]?.focus();
+        }}
+      >
+        {item(t("copy"), () => void handleCopySelection(), !paneMenu.hasSelection)}
+        {item(t("paste"), () => void handlePaste())}
+        {item(t("selectAll"), handleSelectAll)}
+        <div className="lt-menu-sep" role="separator" />
+        {item(t("find"), handleOpenSearch)}
+        {item(t("clear"), handleClearScrollback)}
+        {handleChangeTarget ? item(t("changeDevice"), handleChangeTarget) : null}
+        <div className="lt-menu-sep" role="separator" />
+        {isConnected
+          ? item(t("disconnect"), handleDisconnect, false, true)
+          : item(t("reconnect"), handleReconnectFromMenu, !canReconnect)}
+      </div>
+    </div>
   );
 }

@@ -1,23 +1,60 @@
 {
   "title": "Journaux",
-  "subtitle": "Rechercher et filtrer les sorties de journal de vos appareils",
-  "filters": {
-    "source": "Source",
+  "filter": "Filtrer par appareil, source ou message",
+  "device": {
+    "all": "Tous les appareils"
+  },
+  "level": {
+    "all": "Tous les niveaux",
+    "error": "Erreurs",
+    "warn": "Avertissements",
+    "info": "Info",
+    "debug": "Débogage"
+  },
+  "levelWord": {
+    "error": "erreur",
+    "warn": "avert.",
+    "debug": "debug"
+  },
+  "range": {
+    "label": "Période",
+    "15m": "15 dernières minutes",
+    "1h": "Dernière heure",
+    "6h": "6 dernières heures",
+    "24h": "24 dernières heures"
+  },
+  "source": {
+    "all": "Toutes les sources",
+    "allWithHeartbeats": "Toutes les sources et heartbeats",
+    "heartbeats": "Inclure les heartbeats"
+  },
+  "live": "En direct",
+  "cols": {
+    "time": "Heure",
     "level": "Niveau",
-    "events": "Événements",
-    "range": "Période",
-    "search": "Recherche",
-    "allSources": "Toutes les sources",
-    "operational": "Opérationnel",
-    "all": "Tous"
+    "device": "Appareil",
+    "source": "Source",
+    "message": "Message"
   },
-  "search": {
-    "placeholder": "Rechercher dans le texte (error, timeout, zfs...)"
-  },
-  "empty": {
-    "title": "Aucun événement de journal pour le moment",
-    "description": "Les événements apparaîtront ici une fois que les appareils commenceront à rapporter. Vérifiez qu'au moins un appareil est connecté.",
-    "viewDevices": "Voir les appareils"
-  },
-  "noMatch": "Aucun événement de journal ne correspond à vos filtres actuels."
+  "selectLine": "Sélectionner la ligne {time} de {device}",
+  "selectAll": "Sélectionner toutes les lignes",
+  "selected": "{count} sélectionnées",
+  "copyLines": "{count, plural, one {Copier # ligne} other {Copier # lignes}}",
+  "copiedLines": "{count, plural, one {# ligne copiée} other {# lignes copiées}}",
+  "copyLine": "Copier la ligne",
+  "copiedLine": "Ligne copiée",
+  "copyFailed": "Le navigateur a bloqué la copie",
+  "openDevice": "Ouvrir {device}",
+  "fields": "Champs",
+  "clearFilter": "Effacer le filtre",
+  "clearSelection": "Effacer",
+  "lines": "{count, plural, one {# ligne} other {# lignes}}",
+  "empty": "Aucune ligne de journal pour l’instant",
+  "noMatch": "Aucune ligne ne correspond à « {query} »",
+  "noneFiltered": "Aucune ligne pour ces filtres",
+  "addDevice": "Ajouter un appareil",
+  "loadFailed": "Les journaux ne se sont pas chargés",
+  "retry": "Réessayer",
+  "loading": "Chargement des lignes",
+  "noneInRange": "Aucune ligne sur cette période"
 }

@@ -1,10 +1,13 @@
 "use client";
 
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useFastStatus, useSlowStatus, useStatusControls, useStatusSettings } from "../contexts/StatusContext";
 import type { ConnectorActionDescriptor } from "../console/models";
 import { buildConnectorActionRequest, syncActionParamValues, type ActionParamValues } from "../lib/actionForm";
 import { ensureArray, ensureRecord, ensureString } from "../lib/responseGuards";
+
+/** The result of queueing a connector action: queued (as a preview when dryRun), or refused with the hub's words. */
+export type ConnectorActionOutcome = { ok: true; dryRun: boolean } | { ok: false; error: string };
 
 export function useActions() {
   const fastStatus = useFastStatus();
@@ -23,7 +26,6 @@ export function useActions() {
   const [actionParamValues, setActionParamValues] = useState<ActionParamValues>({});
   const [actionDryRun, setActionDryRun] = useState<boolean>(defaultActionDryRun);
   const [actionSubmitting, setActionSubmitting] = useState(false);
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [connectorActionsError, setConnectorActionsError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -93,7 +95,6 @@ export function useActions() {
 
   useEffect(() => {
     setActionParamValues((current) => syncActionParamValues(current, selectedActionDescriptor));
-    setActionMessage(null);
   }, [selectedActionDescriptor]);
 
   useEffect(() => {
@@ -109,8 +110,8 @@ export function useActions() {
     }));
   }, []);
 
-  const submitConnectorAction = useCallback(async (event: FormEvent) => {
-    event.preventDefault();
+  /** Queues the chosen connector action. Resolves with what happened instead of a message, so the page words it. */
+  const submitConnectorAction = useCallback(async (): Promise<ConnectorActionOutcome> => {
     const request = buildConnectorActionRequest({
       actionDryRun,
       actionId: selectedConnectorAction,
@@ -121,13 +122,9 @@ export function useActions() {
       selectedGroupFilter,
       target: actionTarget,
     });
-    if (!request.ok) {
-      setActionMessage(request.error);
-      return;
-    }
+    if (!request.ok) return { ok: false, error: request.error };
 
     setActionSubmitting(true);
-    setActionMessage(null);
     try {
       const response = await fetch("/api/actions/execute", {
         method: "POST",
@@ -136,13 +133,13 @@ export function useActions() {
       });
       const result = ensureRecord(await response.json().catch(() => null));
       if (!response.ok) {
-        throw new Error(ensureString(result?.error) || `action queue failed: ${response.status}`);
+        return { ok: false, error: ensureString(result?.message) || ensureString(result?.error) };
       }
-      setActionMessage(`Action queued as ${ensureString(result?.job_id) || "job"}`);
       setActionParamValues((current) => syncActionParamValues(current, selectedActionDescriptor));
       await fetchStatus();
-    } catch (err) {
-      setActionMessage(err instanceof Error ? err.message : "failed to queue action");
+      return { ok: true, dryRun: request.payload.dry_run === true };
+    } catch {
+      return { ok: false, error: "" };
     } finally {
       setActionSubmitting(false);
     }
@@ -177,7 +174,6 @@ export function useActions() {
     actionDryRun,
     setActionDryRun,
     actionSubmitting,
-    actionMessage,
     connectorActionsError,
     actionRuns,
     submitConnectorAction

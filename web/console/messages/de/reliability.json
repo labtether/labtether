@@ -1,57 +1,133 @@
 {
   "title": "Zustand",
-  "subtitle": "Verfügbarkeitswerte, fehlgeschlagene Jobs, Ereignisverlauf und Wartungsfenster",
-  "tabs": {
-    "scores": "Werte",
-    "timeline": "Ereignisse",
-    "maintenance": "Ausfallzeiten",
-    "map": "Karte"
-  },
-  "scores": {
-    "locationHealth": "// Standort-Zustand",
-    "failedJobs": "// Fehlgeschlagene Jobs",
-    "commonErrors": "// Häufige Fehler",
-    "failedJobsTrend": "// Fehlgeschlagene Jobs Trend",
-    "dataCleanup": "// Datenbereinigung",
-    "healthEmpty": {
-      "title": "Noch keine Zustandsdaten",
-      "description": "Zustandswerte werden angezeigt, sobald Gruppen verbundene Geräte haben."
+  "hub": {
+    "title": "Hub",
+    "checked": "Geprüft {time}",
+    "names": {
+      "hub": "Hub",
+      "api": "API",
+      "nodeAgent": "Node-Agent",
+      "jobs": "Hintergrundjobs",
+      "cleanup": "Datenbereinigung"
     },
-    "noFailedJobs": "Keine fehlgeschlagenen Jobs.",
-    "noRecurringErrors": "Keine wiederkehrenden Fehler.",
-    "noTrendData": "Keine Trenddaten.",
-    "retentionHealthy": "Aufbewahrungsschleife gesund."
+    "words": {
+      "running": "Läuft",
+      "up": "Erreichbar",
+      "down": "Nicht erreichbar",
+      "notSet": "Keine Adresse",
+      "failedCount": "{count} fehlgeschlagen in {window}",
+      "noFailures": "Keine Fehler",
+      "failed": "Fehlgeschlagen",
+      "ok": "OK"
+    },
+    "version": "Version {version}",
+    "since": "Seit {time}",
+    "lastAt": "Zuletzt {time}",
+    "latency": "{ms} ms"
   },
-  "timeline": {
-    "heading": "// Ereignisverlauf",
-    "group": "Gruppe",
-    "range": "Zeitraum",
-    "errors": "Fehler",
-    "warnings": "Warnungen",
-    "failedActions": "Fehlgeschlagene Aktionen",
-    "failedUpdates": "Fehlgeschlagene Aktualisierungen",
-    "unresponsive": "Nicht reagierend",
-    "offline": "Offline",
-    "noEvents": "Keine Zeitleistenereignisse im Zeitraum.",
-    "showMore": "Mehr anzeigen",
-    "showLess": "Weniger anzeigen"
+  "downtime": {
+    "title": "Ausfallzeiten",
+    "schedule": "Wartung planen",
+    "partial": "Die Wartungsfenster einiger Gruppen wurden nicht geladen.",
+    "effects": {
+      "mutes": "schaltet Alarme stumm",
+      "pausesActions": "pausiert Aktionen",
+      "pausesUpdates": "pausiert Aktualisierungen",
+      "none": "Pausiert nichts"
+    },
+    "state": {
+      "activeUntil": "Bis {time}",
+      "ended": "Beendet {time}"
+    },
+    "actionsFor": "Aktionen für die Wartung von {name}",
+    "endNow": "Jetzt beenden…",
+    "delete": "Löschen…",
+    "loading": "Wartungsfenster werden geladen",
+    "empty": "Keine Wartung geplant"
   },
-  "maintenance": {
-    "heading": "// Wartungsfenster",
+  "schedule": {
+    "title": "Wartung planen",
+    "submit": "Planen",
+    "defaultName": "Patch-Fenster",
     "group": "Gruppe",
     "name": "Name",
-    "start": "Start",
-    "end": "Ende",
-    "muteAlerts": "Alarme stummschalten",
+    "starts": "Beginn",
+    "ends": "Ende",
+    "effects": "Während der Wartung",
+    "mute": "Alarme stummschalten",
     "pauseActions": "Aktionen pausieren",
     "pauseUpdates": "Aktualisierungen pausieren",
-    "submit": "Wartungsfenster planen",
-    "saving": "Wird gespeichert...",
-    "empty": "Keine Wartungsfenster geplant."
+    "errors": {
+      "name": "Namen eingeben",
+      "times": "Beginn und Ende eingeben",
+      "order": "Das Ende muss nach dem Beginn liegen",
+      "failed": "Die Wartung wurde nicht geplant."
+    }
   },
-  "map": {
-    "heading": "// Standortkarte",
-    "noCoordinates": "keine Koordinaten",
-    "noLocationData": "Keine Standortdaten für die Karte."
+  "end": {
+    "title": "Wartung für {name} löschen?",
+    "titleActive": "Wartung für {name} jetzt beenden?",
+    "bodyActive": "Alarme, Aktionen und Aktualisierungen laufen wieder wie gewohnt.",
+    "submit": "Löschen",
+    "submitActive": "Jetzt beenden",
+    "failed": "Die Wartung wurde nicht beendet."
+  },
+  "groups": {
+    "title": "Gruppen",
+    "online": "{online} von {total} online",
+    "offline": "{count} offline",
+    "stale": "{count} ohne Antwort",
+    "score": "{score} · {grade}",
+    "words": {
+      "good": "Gut",
+      "fair": "Mittel",
+      "poor": "Schlecht",
+      "downtime": "In Wartung"
+    },
+    "empty": "Keine Gruppen mit Geräten"
+  },
+  "events": {
+    "title": "Ereignisse",
+    "group": "Gruppe",
+    "range": "Zeitraum",
+    "ranges": {
+      "1h": "1 Std.",
+      "6h": "6 Std.",
+      "24h": "24 Std."
+    },
+    "impact": {
+      "errors": "{count, plural, one {# Fehler} other {# Fehler}}",
+      "warnings": "{count, plural, one {# Warnung} other {# Warnungen}}",
+      "failedActions": "{count, plural, one {# fehlgeschlagene Aktion} other {# fehlgeschlagene Aktionen}}",
+      "failedUpdates": "{count, plural, one {# fehlgeschlagene Aktualisierung} other {# fehlgeschlagene Aktualisierungen}}",
+      "stale": "{count} ohne Antwort",
+      "offline": "{count} offline"
+    },
+    "quiet": "Keine Fehler, Warnungen oder Ausfälle in diesem Zeitraum",
+    "severity": {
+      "error": "Fehler",
+      "warning": "Warnung",
+      "info": "Info"
+    },
+    "failed": "Die Ereignisse wurden nicht geladen.",
+    "empty": "Keine Ereignisse in diesem Zeitraum",
+    "loading": "Ereignisse werden geladen",
+    "noGroups": "Keine Gruppen",
+    "showAll": "Alle {count} zeigen",
+    "showLess": "Weniger zeigen"
+  },
+  "jobs": {
+    "title": "Fehlgeschlagene Jobs",
+    "rate": "{hour} pro Stunde · {day} pro Tag",
+    "worker": "Worker",
+    "none": "Keine fehlgeschlagenen Jobs",
+    "common": "Häufige Fehler",
+    "times": "{count, plural, one {# Mal} other {# Mal}}",
+    "byHour": "Pro Stunde:",
+    "hourCount": "{count} um {time}"
+  },
+  "toast": {
+    "scheduled": "Wartung für {name} geplant",
+    "ended": "Wartung für {name} beendet"
   }
 }

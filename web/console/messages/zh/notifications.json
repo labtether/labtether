@@ -1,16 +1,13 @@
 {
-  "heading": "// 通知",
-  "addChannel": "+ 添加渠道",
-  "empty": "尚未配置通知渠道。添加一个渠道以接收告警。",
-  "enabled": "已启用",
-  "disabled": "已禁用",
-  "edit": "编辑",
+  "addChannel": "添加渠道",
+  "empty": "还没有通知渠道",
+  "edit": "编辑…",
   "test": "发送测试",
   "testSent": "测试已发送",
   "testFailed": "测试失败",
-  "delete": "删除",
+  "delete": "删除…",
   "typeSelect": {
-    "heading": "选择渠道类型",
+    "heading": "添加渠道",
     "slack": {
       "name": "Slack",
       "description": "通过传入 Webhook 将告警发送到 Slack 频道"
@@ -63,9 +60,10 @@
   "cancel": "取消",
   "back": "返回",
   "deleteDialog": {
-    "title": "删除渠道",
-    "body": "这将永久移除渠道 {name}。此操作无法撤销。",
-    "confirm": "删除渠道"
+    "title": "删除 {name}？",
+    "body": "告警将不再发送到此渠道。",
+    "confirm": "删除",
+    "failed": "渠道未删除。"
   },
   "errors": {
     "nameRequired": "渠道名称为必填项。",
@@ -85,5 +83,11 @@
     "serverUrlRequired": "服务器 URL 为必填项。",
     "topicRequired": "主题为必填项。",
     "appTokenRequired": "应用令牌为必填项。"
-  }
+  },
+  "title": "通知",
+  "emptyHint": "Slack、电子邮件、Webhook、ntfy 和 Gotify 都可以接收告警。",
+  "sending": "正在发送",
+  "sendTo": "发送到 {name}",
+  "actionsFor": "{name} 的操作",
+  "toggleFailed": "渠道未更改。"
 }

@@ -1,0 +1,111 @@
+{
+  "title": "Conteneurs",
+  "runContainer": "Lancer un conteneur",
+  "deployStack": "Déployer une stack",
+  "filter": "Filtrer par nom, image ou hôte",
+  "filterHost": "Filtrer par nom ou image",
+  "show": {
+    "label": "Afficher",
+    "all": "Tous",
+    "running": "En marche",
+    "stopped": "Arrêtés",
+    "runningN": "En marche {count}",
+    "stoppedN": "Arrêtés {count}"
+  },
+  "groupBy": "Grouper",
+  "groupings": {
+    "host": "Hôte",
+    "stack": "Stack",
+    "none": "Aucun"
+  },
+  "columns": {
+    "container": "Conteneur",
+    "ports": "Ports",
+    "cpu": "CPU",
+    "memory": "Mémoire",
+    "sortBy": "Trier par {column}"
+  },
+  "noStack": "Sans stack",
+  "shown": "{shown} sur {total}",
+  "clearFilter": "Effacer le filtre",
+  "retry": "Réessayer",
+  "loadFailed": "Impossible de charger les conteneurs",
+  "hostsFailed": "{count, plural, one {# hôte Docker n’a pas répondu} other {# hôtes Docker n’ont pas répondu}}",
+  "empty": {
+    "noHosts": "Aucun hôte Docker pour le moment",
+    "noContainers": "Aucun conteneur pour le moment",
+    "addHost": "Ajouter un hôte Docker",
+    "match": "Aucun conteneur ne correspond à «\u202f{query}\u202f»",
+    "noRunning": "Aucun conteneur en marche",
+    "noStopped": "Aucun conteneur arrêté"
+  },
+  "state": {
+    "running": "En marche",
+    "exited": "Terminé",
+    "exitedAgo": "Terminé {ago}",
+    "restarting": "Redémarrage",
+    "paused": "En pause",
+    "created": "Créé, non démarré",
+    "dead": "Mort",
+    "removing": "Suppression",
+    "unhealthy": "Défaillant",
+    "starting": "Démarrage",
+    "unknown": "État non signalé"
+  },
+  "menu": {
+    "label": "Actions pour {name}",
+    "open": "Ouvrir",
+    "logs": "Journaux",
+    "shell": "Shell",
+    "restart": "Redémarrer",
+    "start": "Démarrer",
+    "stop": "Arrêter…",
+    "stopTitle": "Arrêter {name}\u202f?",
+    "stopBody": "Il reste arrêté jusqu’à son prochain démarrage.",
+    "stopConfirm": "Arrêter",
+    "copyImage": "Copier l’image"
+  },
+  "toast": {
+    "startDone": "{name} démarré",
+    "stopDone": "{name} arrêté",
+    "restartDone": "{name} redémarré",
+    "startFailed": "Impossible de démarrer {name}",
+    "stopFailed": "Impossible d’arrêter {name}",
+    "restartFailed": "Impossible de redémarrer {name}"
+  },
+  "deploy": {
+    "crumbs": "Fil d’Ariane",
+    "runTitle": "Lancer un conteneur",
+    "stackTitle": "Déployer une stack",
+    "host": "Hôte",
+    "image": "Image",
+    "name": "Nom",
+    "ports": "Ports",
+    "portsHint": "host:container, un par ligne",
+    "environment": "Environnement",
+    "envHint": "NAME=value, une par ligne",
+    "command": "Commande",
+    "cancel": "Annuler",
+    "run": "Lancer",
+    "deploy": "Déployer",
+    "open": "Ouvrir",
+    "ranLine": "{name} démarré.",
+    "ranToast": "{name} démarré sur {host}",
+    "runFailed": "Le conteneur n’a pas démarré",
+    "runFailedWith": "Le conteneur n’a pas démarré\u202f: {reason}",
+    "deployedLine": "{name} déployée.",
+    "deployedToast": "{name} déployée sur {host}",
+    "deployFailed": "La stack n’a pas été déployée",
+    "deployFailedWith": "La stack n’a pas été déployée\u202f: {reason}",
+    "errors": {
+      "required": "Obligatoire",
+      "image": "Saisissez une image comme nginx:1.29",
+      "name": "Utilisez des lettres, chiffres, points, tirets et tirets bas",
+      "ports": "Utilisez host:container, comme 8080:80 ou 5353:53/udp",
+      "portRange": "Les ports vont de 1 à 65535",
+      "env": "Utilisez NAME=value, une par ligne",
+      "stackName": "Utilisez des minuscules, chiffres, tirets et tirets bas",
+      "services": "Le fichier doit contenir une section services:"
+    }
+  }
+}

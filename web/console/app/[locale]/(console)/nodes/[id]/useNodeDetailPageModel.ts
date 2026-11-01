@@ -114,6 +114,11 @@ export function useNodeDetailPageModel({
   const { protocols } = useProtocolConfigs(nodeId);
   const { services: webServicesForNode } = useWebServices({ host: nodeId, detailLevel: "compact" });
 
+  const nodeWebServices = useMemo(
+    () => webServicesForNode.filter((s) => s.host_asset_id === nodeId),
+    [webServicesForNode, nodeId],
+  );
+
   const mergedDockerHost = useMemo(() => {
     return deriveMergedDockerHost(asset, assets);
   }, [asset, assets]);
@@ -248,6 +253,7 @@ export function useNodeDetailPageModel({
     mergedDockerHost,
     mergedDockerHostId,
     parentInfraHost,
+    webServicesForNode: nodeWebServices,
     infraCategories,
     shouldShowDesktop,
     panelContext,

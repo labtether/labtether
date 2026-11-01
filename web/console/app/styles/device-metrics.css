@@ -1,0 +1,101 @@
+/* Loaded before device.css (its @import), so rules that refine a dv- class use two classes. */
+/* 2.0 device page: System tab Hardware view (system info and drill-downs) and Metrics view, and an infrastructure
+   host's category list. Charts use one hue (amber only when the latest value is at or above its hot mark), sit in a
+   sheet split into cells by hairline seams, and read 20/28 values. Layout follows the view's own width. */
+
+.dmt { container: dmt / inline-size; }
+.dmt > .dv-sec, .dmt > .dmt-pair { margin-top: var(--gap-section); }
+.dmt > .dv-sec:first-child, .dmt > .dv-bar + .dv-sec { margin-top: 0; }
+.dmt-gap { margin-top: 16px; }
+.dmt-bad { color: var(--bad-text); font-weight: 500; }
+.dmt-warn { color: var(--warn-text); font-weight: 500; }
+
+/* Cells: a sheet split by 1px seams; two across, four for the usage row when wide, one on a phone. */
+.dmt-cells { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; border-radius: var(--r-4); background: var(--divider); box-shadow: var(--elev-1); overflow: hidden; }
+.dmt-cells.one { grid-template-columns: minmax(0, 1fr); }
+.dmt-cells > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+.dmt-cell { display: flex; flex-direction: column; min-width: 0; padding: 16px 20px 12px; background: var(--panel); text-align: left; }
+.dmt-open { cursor: pointer; transition: box-shadow var(--dur-fast) var(--ease-out); }
+.dmt-open:hover { box-shadow: inset 0 0 0 999px var(--hover); transition-duration: 0s; }
+.dmt-open:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--text-3); }
+.dmt-k { font-size: var(--fs-meta); line-height: var(--lh-meta); font-weight: 400; color: var(--text-3); }
+.dmt-readout { font-size: var(--fs-readout); line-height: var(--lh-readout); font-weight: 500; letter-spacing: -0.01em; color: var(--text); font-variant-numeric: tabular-nums; }
+.dmt-readout.hot { color: var(--warn-text); }
+.dmt-hint { min-height: 18px; font-size: var(--fs-meta); line-height: var(--lh-meta); color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dmt-cell-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.dmt-read { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 8px; min-height: 28px; }
+.dmt-u { font-size: var(--fs-meta); color: var(--text-3); font-variant-numeric: tabular-nums; }
+.dmt-foot { display: flex; flex-wrap: wrap; gap: 0 12px; margin-top: 6px; font-size: var(--fs-micro); line-height: var(--lh-micro); color: var(--text-3); }
+.dmt-few { padding: 24px 0 8px; }
+@container dmt (min-width: 760px) { .dmt-cells.dmt-four { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@container dmt (max-width: 520px) { .dmt-cells { grid-template-columns: minmax(0, 1fr); } }
+
+/* Data-quality words and the drill-down's status word: amber or red only when they matter. */
+.dmt-flags { display: inline-flex; flex-wrap: wrap; gap: 8px; }
+.dmt-flag { font-size: var(--fs-micro); line-height: var(--lh-micro); font-weight: 500; color: var(--text-3); cursor: default; }
+.dmt-flag.warn { color: var(--warn-text); }
+.dmt-flag.bad { color: var(--bad-text); }
+.dmt-status { margin-left: 8px; font-size: var(--fs-meta); font-weight: 500; letter-spacing: 0; }
+.dmt-status.warn { color: var(--warn-text); }
+.dmt-status.bad { color: var(--bad-text); }
+.dmt-status.ok, .dmt-status.neutral { display: none; }
+
+/* Chart: the plot with the scale on its right, times underneath. */
+.dmt-chart { margin-top: 8px; }
+.dmt-plot { position: relative; height: 112px; padding-right: 56px; }
+.dmt-chart.sm .dmt-plot { height: 96px; }
+.dmt-plot svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.dmt-grid { stroke: var(--grid); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+.dmt-base { stroke: var(--grid); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.dmt-line { fill: none; stroke: var(--chart); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.dmt-fill { fill: var(--chart-fill); }
+.dmt-chart.hot .dmt-line { stroke: var(--warn); }
+.dmt-chart.hot .dmt-fill { fill: color-mix(in srgb, var(--warn) 10%, transparent); }
+.dmt-y { position: absolute; right: 0; width: 52px; transform: translateY(-50%); font-size: var(--fs-micro); line-height: var(--lh-micro); color: var(--text-3); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dmt-x { position: relative; height: 18px; margin: 4px 56px 0 0; font-size: var(--fs-micro); line-height: 18px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.dmt-x span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+.dmt-x span.first { transform: none; }
+.dmt-x span.last { transform: translateX(-100%); }
+
+/* Metrics view controls: which metrics show, one to show alone. */
+.dmt-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.dmt-chip { display: inline-flex; align-items: center; gap: 6px; height: var(--ctl-sm); padding: 0 10px; border-radius: var(--r-2); background: none; font-size: var(--fs-meta); font-weight: 500; color: var(--text-3); cursor: pointer; transition: color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
+.dmt-chip:hover { color: var(--text); }
+.dmt-chip[aria-pressed="true"] { background: var(--ctl-bg); box-shadow: var(--ctl-elev); color: var(--text); }
+.dmt-chip[aria-pressed="true"]:hover { box-shadow: var(--ctl-elev-hover); }
+.dmt-chip-v { font-weight: 400; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.dmt-chip-v.hot { color: var(--warn-text); font-weight: 500; }
+.dmt-quiet { height: var(--ctl-sm); padding: 0 8px; border-radius: var(--r-2); font-size: var(--fs-meta); font-weight: 500; color: var(--text-2); cursor: pointer; }
+.dmt-quiet:hover { background: var(--hover); color: var(--text); }
+.dv-input.dmt-select { width: auto; max-width: 220px; }
+
+/* Key-value blocks two across when the view is wide; drill-down sections side by side. */
+@container dmt (min-width: 640px) { .dmt-kv2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 32px; } }
+.dmt-pair { display: grid; gap: var(--gap-section) 32px; align-items: start; }
+.dmt .dmt-pair > .dv-sec { margin: 0; }
+@container dmt (min-width: 880px) { .dmt-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Busiest interfaces. */
+.dmt-if { --cols: minmax(0, 1fr) 88px 88px; }
+
+/* A category's resources: a dot in the row's left margin only when something is wrong, usage, details on demand. */
+.dmt-catrow { --cols: minmax(0, 1fr) 48px 48px 48px 28px; }
+.dv-row.dmt-catrow { padding-left: 28px; }
+.dv-cols.dmt-catrow { padding-left: 32px; }
+.dmt-lead { position: absolute; left: 12px; top: 50%; translate: 0 -50%; }
+.dmt-icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: var(--r-2); color: var(--text-3); cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
+.dmt-icon:hover { background: var(--hover); color: var(--text); }
+.dmt-icon svg { width: 14px; height: 14px; transition: transform var(--dur-normal) var(--ease-out); }
+.dmt-icon.open svg { transform: rotate(180deg); }
+.dmt-more { margin: 2px 0 6px; padding: 12px 16px; border-radius: var(--r-2); background: var(--sunk); }
+.dmt-more-t { margin: 12px 0 4px; font-size: var(--fs-meta); line-height: var(--lh-meta); font-weight: 600; color: var(--text-2); }
+.dmt-more-t:first-child { margin-top: 0; }
+@container dmt (max-width: 520px) {
+  .dmt-catrow { --cols: minmax(0, 1fr) 28px; }
+  .dmt-catrow > .dmt-u { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dmt-open, .dmt-chip, .dmt-icon, .dmt-icon svg { transition: none; }
+}
+.dmt-line2 { stroke-width: 1.25; stroke-dasharray: 3 3; opacity: 0.6; }
