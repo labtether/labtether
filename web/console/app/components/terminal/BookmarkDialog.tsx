@@ -1,292 +1,139 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { parsePortInput } from "../../lib/portParsing";
-import {
-  CredentialProfileSelect,
-  sshCredentialKinds,
-} from "../credentials/CredentialProfileSelect";
+import { CredentialProfileSelect, sshCredentialKinds } from "../credentials/CredentialProfileSelect";
 import { useCredentialProfiles } from "../../hooks/useCredentialProfiles";
+import { Button } from "../ui/Button";
+import { Select } from "../ui/Input";
+import { Modal } from "../ui/Modal";
+import type { BookmarkFormData } from "./terminalSessionTypes";
 
-type Bookmark = {
-  id: string;
-  title: string;
-  asset_id?: string;
-  host?: string;
-  port?: number;
-  username?: string;
-  credential_profile_id?: string;
-};
-
-type BookmarkFormData = {
-  title: string;
-  asset_id?: string;
-  host?: string;
-  port?: number;
-  username?: string;
-  credential_profile_id?: string;
-};
+type EditableBookmark = BookmarkFormData & { id: string };
 
 type BookmarkDialogProps = {
   isOpen: boolean;
   onClose: () => void;
   onSave: (bookmark: BookmarkFormData) => void;
-  editBookmark?: Bookmark;
+  editBookmark?: EditableBookmark;
+  /** Devices a saved connection can point at; without them the form asks for an address only. */
+  devices?: Array<{ id: string; name: string }>;
 };
 
-export default function BookmarkDialog({
-  isOpen,
-  onClose,
-  onSave,
-  editBookmark,
-}: BookmarkDialogProps) {
+/** Save a connection: a name, then a device here or an address (host, port, user), and an optional saved login. */
+export default function BookmarkDialog({ isOpen, onClose, onSave, editBookmark, devices = [] }: BookmarkDialogProps) {
+  const t = useTranslations("terminal.bookmark");
   const [title, setTitle] = useState("");
   const [assetId, setAssetId] = useState("");
   const [host, setHost] = useState("");
   const [port, setPort] = useState("22");
   const [username, setUsername] = useState("");
   const [credentialProfileId, setCredentialProfileId] = useState("");
+  const [titleError, setTitleError] = useState(false);
   const credentialProfiles = useCredentialProfiles(isOpen);
+  const titleRef = useRef<HTMLInputElement | null>(null);
 
-  const titleInputRef = useRef<HTMLInputElement | null>(null);
-  const prevOpenRef = useRef(false);
-
-  // Pre-fill fields when the dialog transitions from closed to open.
-  useEffect(() => {
-    if (isOpen && !prevOpenRef.current) {
-      if (editBookmark) {
-        setTitle(editBookmark.title);
-        setAssetId(editBookmark.asset_id ?? "");
-        setHost(editBookmark.host ?? "");
-        setPort(editBookmark.port != null ? String(editBookmark.port) : "22");
-        setUsername(editBookmark.username ?? "");
-        setCredentialProfileId(editBookmark.credential_profile_id ?? "");
-      } else {
-        setTitle("");
-        setAssetId("");
-        setHost("");
-        setPort("22");
-        setUsername("");
-        setCredentialProfileId("");
-      }
-    }
-    prevOpenRef.current = isOpen;
-  }, [isOpen, editBookmark]);
-
-  // Focus title input when dialog opens.
-  useEffect(() => {
-    if (isOpen) {
-      const timer = window.setTimeout(() => titleInputRef.current?.focus(), 0);
-      return () => window.clearTimeout(timer);
-    }
-  }, [isOpen]);
-
-  // Close on Escape.
   useEffect(() => {
     if (!isOpen) return undefined;
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [isOpen, onClose]);
+    setTitle(editBookmark?.title ?? "");
+    setAssetId(editBookmark?.asset_id ?? "");
+    setHost(editBookmark?.host ?? "");
+    setPort(editBookmark?.port != null ? String(editBookmark.port) : "22");
+    setUsername(editBookmark?.username ?? "");
+    setCredentialProfileId(editBookmark?.credential_profile_id ?? "");
+    setTitleError(false);
+    const timer = window.setTimeout(() => titleRef.current?.focus(), 30);
+    return () => window.clearTimeout(timer);
+  }, [isOpen, editBookmark]);
 
-  const assetLinked = assetId.trim() !== "";
+  const linked = assetId.trim() !== "";
 
-  const handleSubmit = useCallback(
-    (event: React.FormEvent) => {
-      event.preventDefault();
-      const trimmedTitle = title.trim();
-      if (!trimmedTitle) return;
-
-      const formData: BookmarkFormData = {
-        title: trimmedTitle,
-      };
-
-      if (assetId.trim()) {
-        formData.asset_id = assetId.trim();
-      } else {
-        if (host.trim()) formData.host = host.trim();
-        formData.port = parsePortInput(port, 22);
-        if (username.trim()) formData.username = username.trim();
-      }
-
-      if (credentialProfileId.trim()) {
-        formData.credential_profile_id = credentialProfileId.trim();
-      }
-
-      onSave(formData);
-    },
-    [title, assetId, host, port, username, credentialProfileId, onSave],
-  );
-
-  if (!isOpen) return null;
-
-  const canSubmit = title.trim() !== "";
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    const name = title.trim();
+    if (!name) {
+      setTitleError(true);
+      titleRef.current?.focus();
+      return;
+    }
+    const data: BookmarkFormData = { title: name };
+    if (linked) data.asset_id = assetId.trim();
+    else {
+      if (host.trim()) data.host = host.trim();
+      data.port = parsePortInput(port, 22);
+      if (username.trim()) data.username = username.trim();
+    }
+    if (credentialProfileId.trim()) data.credential_profile_id = credentialProfileId.trim();
+    onSave(data);
+  };
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={editBookmark ? "Edit Bookmark" : "New Bookmark"}
-      className="fixed inset-0 z-[70] flex items-start justify-center p-4 pt-[8vh]"
-    >
-      <button
-        type="button"
-        aria-label="Close bookmark dialog"
-        onClick={onClose}
-        className="absolute inset-0 bg-black/76"
-      />
-
-      <div className="relative z-10 w-full max-w-md overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--panel)] shadow-[var(--shadow-lg)]">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-3">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--muted)]">
-              {editBookmark ? "Edit Bookmark" : "New Bookmark"}
-            </p>
-            <p className="mt-0.5 text-sm font-semibold text-[var(--text)]">
-              {editBookmark ? "Update saved connection" : "Save a connection"}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] transition-colors hover:bg-[var(--hover)] hover:text-[var(--text)]"
-          >
-            <X size={13} />
-          </button>
+    <Modal open={isOpen} onClose={onClose} title={editBookmark ? t("editTitle") : t("title")}>
+      <form className="kt-dlg-body tm-form" onSubmit={handleSubmit} noValidate>
+        <div className="kt-field tm-wide">
+          <label htmlFor="tm-bm-title">{t("name")}</label>
+          <input
+            ref={titleRef}
+            id="tm-bm-title"
+            className="kt-input"
+            value={title}
+            placeholder="nas01"
+            autoComplete="off"
+            aria-invalid={titleError ? true : undefined}
+            aria-describedby={titleError ? "tm-bm-title-err" : undefined}
+            onChange={(event) => setTitle(event.target.value)}
+          />
+          {titleError ? <p className="kt-hint bad" id="tm-bm-title-err">{t("errName")}</p> : null}
         </div>
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4 p-4">
-          {/* Title */}
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-[var(--muted)]">
-              Title <span className="text-[var(--bad)]">*</span>
-            </span>
-            <input
-              ref={titleInputRef}
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="My Server"
-              className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none transition-colors placeholder:text-[var(--muted)]/50 focus:border-[var(--accent)]"
-              autoComplete="off"
-            />
-          </label>
-
-          {/* Asset ID */}
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-[var(--muted)]">
-              Asset ID{" "}
-              <span className="text-xs font-normal text-[var(--muted)]">
-                (optional — links to a managed asset)
-              </span>
-            </span>
-            <input
-              type="text"
-              value={assetId}
-              onChange={(e) => setAssetId(e.target.value)}
-              placeholder="asset-uuid"
-              className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none transition-colors placeholder:text-[var(--muted)]/50 focus:border-[var(--accent)]"
-              autoComplete="off"
-            />
-          </label>
-
-          {/* Host + Port */}
-          <div className="grid grid-cols-[1fr_5rem] gap-2">
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium text-[var(--muted)]">
-                Host
-              </span>
-              <input
-                type="text"
-                value={host}
-                onChange={(e) => setHost(e.target.value)}
-                placeholder="192.168.1.10 or hostname"
-                disabled={assetLinked}
-                className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none transition-colors placeholder:text-[var(--muted)]/50 focus:border-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
-                autoComplete="off"
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium text-[var(--muted)]">
-                Port
-              </span>
-              <input
-                type="text"
-                inputMode="numeric"
-                value={port}
-                onChange={(e) => setPort(e.target.value)}
-                placeholder="22"
-                disabled={assetLinked}
-                className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none transition-colors placeholder:text-[var(--muted)]/50 focus:border-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
-              />
-            </label>
-          </div>
-
-          {/* Username */}
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-[var(--muted)]">
-              Username
-            </span>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="root"
-              disabled={assetLinked}
-              className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none transition-colors placeholder:text-[var(--muted)]/50 focus:border-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
-              autoComplete="off"
-            />
-          </label>
-
-          {/* Credential Profile */}
+        <div className="kt-field tm-wide">
+          <label htmlFor="tm-bm-device">{t("device")}</label>
+          {devices.length > 0 || !assetId ? (
+            <Select id="tm-bm-device" value={assetId} onChange={(event) => setAssetId(event.target.value)}>
+              <option value="">{t("noDevice")}</option>
+              {assetId && !devices.some((d) => d.id === assetId) ? <option value={assetId}>{assetId}</option> : null}
+              {devices.map((device) => (
+                <option key={device.id} value={device.id}>{device.name}</option>
+              ))}
+            </Select>
+          ) : (
+            <input id="tm-bm-device" className="kt-input" value={assetId} onChange={(event) => setAssetId(event.target.value)} />
+          )}
+        </div>
+        {linked ? null : (
+          <>
+            <div className="kt-field">
+              <label htmlFor="tm-bm-host">{t("host")}</label>
+              <input id="tm-bm-host" className="kt-input tm-mono" value={host} placeholder="10.20.0.50" autoComplete="off" spellCheck={false} onChange={(event) => setHost(event.target.value)} />
+            </div>
+            <div className="kt-field">
+              <label htmlFor="tm-bm-port">{t("port")}</label>
+              <input id="tm-bm-port" className="kt-input tm-mono" inputMode="numeric" value={port} placeholder="22" onChange={(event) => setPort(event.target.value)} />
+            </div>
+            <div className="kt-field">
+              <label htmlFor="tm-bm-user">{t("user")}</label>
+              <input id="tm-bm-user" className="kt-input tm-mono" value={username} placeholder="root" autoComplete="off" spellCheck={false} onChange={(event) => setUsername(event.target.value)} />
+            </div>
+          </>
+        )}
+        <div className="kt-field tm-wide">
           <CredentialProfileSelect
-            id="bookmark-credential-profile"
-            label="Credential profile (optional)"
+            id="tm-bm-login"
+            label={t("login")}
             value={credentialProfileId}
             onChange={setCredentialProfileId}
             profiles={credentialProfiles.profiles}
             loading={credentialProfiles.loading}
             error={credentialProfiles.error}
             allowedKinds={sshCredentialKinds}
+            emptyLabel={t("noLogin")}
           />
-
-          {/* Asset-linked hint */}
-          {assetLinked && (
-            <p className="text-xs text-[var(--muted)]">
-              Host, port, and username are resolved from the linked asset.
-            </p>
-          )}
-
-          {/* Actions */}
-          <div className="flex items-center justify-end gap-2 pt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--text)] transition-colors hover:bg-[var(--hover)]"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!canSubmit}
-              className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                canSubmit
-                  ? "bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]"
-                  : "cursor-not-allowed bg-[var(--surface)] text-[var(--muted)] opacity-60"
-              }`}
-            >
-              {editBookmark ? "Update" : "Save"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </div>
+        <div className="kt-dlg-acts tm-wide">
+          <Button type="button" variant="ghost" onClick={onClose}>{t("cancel")}</Button>
+          <Button type="submit" variant="primary">{t("save")}</Button>
+        </div>
+      </form>
+    </Modal>
   );
 }

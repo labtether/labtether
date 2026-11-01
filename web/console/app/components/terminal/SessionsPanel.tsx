@@ -1,425 +1,216 @@
 "use client";
 
-import SessionCard from "./SessionCard";
-import BookmarkDialog from "./BookmarkDialog";
-import { useTerminalSessionLibrary } from "./useTerminalSessionLibrary";
-import type { SessionsPanelProps } from "./terminalSessionTypes";
+import { ChevronRight } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useState } from "react";
+import { Button } from "../ui/Button";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { Modal } from "../ui/Modal";
+import SessionCard, { type SessionRowAction } from "./SessionCard";
+import type { TerminalSessionLibrary } from "./useTerminalSessionLibrary";
+import { useTerminalWhen } from "./useTerminalWhen";
+import type { Bookmark, PersistentSession } from "./terminalSessionTypes";
 export type { SessionsPanelProps } from "./terminalSessionTypes";
 
-function timeAgo(isoString: string | undefined): string {
-  if (!isoString) return "";
-  const diff = Date.now() - new Date(isoString).getTime();
-  if (!Number.isFinite(diff) || diff < 0) return "just now";
-  const seconds = Math.floor(diff / 1000);
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
+type SectionProps = { lib: TerminalSessionLibrary; nameOf: (id: string) => string };
+type Ask = { title: string; body: string; confirm: string; run: () => void } | null;
 
-function durationSince(isoString: string | undefined): string {
-  if (!isoString) return "";
-  const diff = Date.now() - new Date(isoString).getTime();
-  if (!Number.isFinite(diff) || diff < 0) return "0s";
-  const seconds = Math.floor(diff / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ${minutes % 60}m`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ${hours % 24}h`;
-}
-
-export default function SessionsPanel({
-  isOpen,
-  onClose,
-  onSessionSelect,
-  onBookmarkConnect,
-  onArchivedView,
-}: SessionsPanelProps) {
-  const {
-    searchQuery,
-    setSearchQuery,
-    bookmarkDialogOpen,
-    setBookmarkDialogOpen,
-    contextMenu,
-    renameTarget,
-    setRenameTarget,
-    renameValue,
-    setRenameValue,
-    panelRef,
-    searchInputRef,
-    renameInputRef,
-    query,
-    activeSessions,
-    detachedSessions,
-    archivedSessions,
-    savedBookmarks,
-    handleSessionClick,
-    handleBookmarkClick,
-    handleContextMenu,
-    contextMenuOptions,
-    handleRenameSubmit,
-    handleBookmarkSave,
-  } = useTerminalSessionLibrary({ isOpen, onSessionSelect, onBookmarkConnect, onArchivedView });
-
-  if (!isOpen) return null;
-
-  const renderSectionHeader = (
-    label: string,
-    count: number,
-    color: string,
-    icon: string,
-  ) => (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 6,
-        padding: "8px 10px 4px",
-        userSelect: "none",
+/** The rename field that takes a row's name while renaming. */
+function RenameField({ lib, label }: { lib: TerminalSessionLibrary; label: string }) {
+  return (
+    <input
+      ref={lib.renameInputRef}
+      className="tm-rename"
+      aria-label={label}
+      value={lib.renameValue}
+      maxLength={80}
+      onChange={(event) => lib.setRenameValue(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          void lib.handleRenameSubmit();
+        } else if (event.key === "Escape") {
+          lib.setRenameTarget(null);
+        }
       }}
-    >
-      <span style={{ fontSize: 10, color }}>{icon}</span>
-      <span
-        style={{
-          fontSize: 10,
-          fontWeight: 600,
-          textTransform: "uppercase",
-          letterSpacing: "0.06em",
-          color: "#999",
-        }}
-      >
-        {label}
-      </span>
-      <span
-        style={{
-          fontSize: 9,
-          color: "#666",
-          marginLeft: "auto",
-        }}
-      >
-        {count}
-      </span>
-    </div>
+      onBlur={() => void lib.handleRenameSubmit()}
+    />
   );
+}
 
-  const renderRenameInline = (id: string, type: "session" | "bookmark") => {
-    if (!renameTarget || renameTarget.id !== id || renameTarget.type !== type) {
-      return null;
-    }
+function AskDialog({ ask, onClose }: { ask: Ask; onClose: () => void }) {
+  return (
+    <ConfirmDialog
+      open={ask !== null}
+      onClose={onClose}
+      onConfirm={() => {
+        ask?.run();
+        onClose();
+      }}
+      title={ask?.title ?? ""}
+      message={ask?.body ?? ""}
+      confirmLabel={ask?.confirm}
+      danger
+    />
+  );
+}
+
+/** Sessions that keep running on the hub after their tab closed (or are open elsewhere). Rows reattach. */
+export function RunningSessions({ lib, nameOf }: SectionProps) {
+  const t = useTranslations("terminal.sessions");
+  const when = useTerminalWhen();
+  const [ask, setAsk] = useState<Ask>(null);
+  const list = [...lib.detachedSessions, ...lib.activeSessions];
+  if (list.length === 0) return null;
+  const row = (s: PersistentSession) => {
+    const device = nameOf(s.target) || s.target;
+    const name = s.title || device;
+    const renaming = lib.renameTarget?.type === "session" && lib.renameTarget.id === s.id;
+    const meta = s.status === "attached" ? t("attached") : t("detachedAt", { time: when(s.last_detached_at || s.updated_at) });
+    const save: SessionRowAction[] = s.bookmark_id ? [] : [{ label: t("saveConnection"), onSelect: () => void lib.saveAsBookmark(s) }];
     return (
-      <div style={{ padding: "4px 10px" }}>
-        <input
-          ref={renameInputRef}
-          type="text"
-          value={renameValue}
-          onChange={(e) => setRenameValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              handleRenameSubmit();
-            } else if (e.key === "Escape") {
-              setRenameTarget(null);
-            }
-          }}
-          onBlur={handleRenameSubmit}
-          style={{
-            width: "100%",
-            backgroundColor: "#1a1a2e",
-            border: "1px solid #444",
-            borderRadius: 3,
-            padding: "3px 6px",
-            fontSize: 11,
-            color: "#e0e0e0",
-            outline: "none",
-          }}
-        />
-      </div>
+      <SessionCard
+        key={s.id}
+        name={name}
+        grey={name === device ? undefined : device}
+        meta={meta}
+        tone={s.status === "attached" ? "ok" : undefined}
+        onOpen={(newTab) => void lib.reattach(s, newTab)}
+        openLabel={t("reattachTo", { name })}
+        moreLabel={t("more", { name })}
+        editor={renaming ? <RenameField lib={lib} label={t("renameLabel", { name })} /> : undefined}
+        actions={[
+          { label: t("reattach"), onSelect: () => void lib.reattach(s) },
+          { label: t("openNewTab"), onSelect: () => void lib.reattach(s, true) },
+          "sep",
+          { label: t("rename"), onSelect: () => lib.startRename({ type: "session", id: s.id, currentTitle: s.title }) },
+          ...save,
+          "sep",
+          {
+            label: t("end"),
+            danger: true,
+            onSelect: () => setAsk({ title: t("endTitle", { name: device }), body: t("endBody", { name: device }), confirm: t("endConfirm"), run: () => void lib.endSession(s.id) }),
+          },
+        ]}
+      />
     );
   };
-
   return (
-    <>
-      <div
-        ref={panelRef}
-        style={{
-          width: 260,
-          height: "100%",
-          backgroundColor: "#12122a",
-          borderRight: "1px solid #2a2a3e",
-          display: "flex",
-          flexDirection: "column",
-          flexShrink: 0,
-          position: "relative",
-          overflow: "hidden",
-        }}
-      >
-        {/* Header */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "10px 10px 8px",
-            borderBottom: "1px solid #2a2a3e",
-          }}
-        >
-          <span
-            style={{
-              fontSize: 12,
-              fontWeight: 600,
-              color: "#ccc",
-              letterSpacing: "0.02em",
-            }}
-          >
-            Sessions
-          </span>
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <button
-              type="button"
-              onClick={() => setBookmarkDialogOpen(true)}
-              style={{
-                fontSize: 10,
-                fontWeight: 600,
-                color: "#60a5fa",
-                backgroundColor: "rgba(96, 165, 250, 0.12)",
-                border: "1px solid rgba(96, 165, 250, 0.25)",
-                borderRadius: 4,
-                padding: "2px 8px",
-                cursor: "pointer",
-                lineHeight: "16px",
-              }}
-            >
-              + New
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close sessions panel"
-              style={{
-                fontSize: 14,
-                color: "#666",
-                backgroundColor: "transparent",
-                border: "none",
-                borderRadius: 3,
-                padding: "2px 4px",
-                cursor: "pointer",
-                lineHeight: "16px",
-              }}
-            >
-              ×
-            </button>
-          </div>
-        </div>
+    <section className="tm-sec" aria-labelledby="tm-running-h">
+      <h2 className="tm-h" id="tm-running-h">{t("running")}</h2>
+      <div className="tm-list">{list.map(row)}</div>
+      <AskDialog ask={ask} onClose={() => setAsk(null)} />
+    </section>
+  );
+}
 
-        {/* Search */}
-        <div style={{ padding: "6px 10px" }}>
-          <input
-            ref={searchInputRef}
-            type="text"
-            placeholder="Filter sessions..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              width: "100%",
-              backgroundColor: "#1a1a2e",
-              border: "1px solid #2a2a3e",
-              borderRadius: 4,
-              padding: "5px 8px",
-              fontSize: 11,
-              color: "#ccc",
-              outline: "none",
-            }}
-          />
-        </div>
+const addressOf = (b: Bookmark) =>
+  b.host ? `${b.username ? `${b.username}@` : ""}${b.host}${b.port && b.port !== 22 ? `:${b.port}` : ""}` : "";
 
-        {/* Scrollable session list */}
-        <div
-          style={{
-            flex: 1,
-            overflowY: "auto",
-            overflowX: "hidden",
-            paddingBottom: 12,
-          }}
-        >
-          {/* Active Sessions */}
-          {activeSessions.length > 0 && (
-            <div>
-              {renderSectionHeader("Active", activeSessions.length, "#4ade80", "●")}
-              {activeSessions.map((s) => (
-                <div key={s.id} style={{ padding: "0 6px" }}>
-                  {renameTarget?.id === s.id ? (
-                    renderRenameInline(s.id, "session")
-                  ) : (
-                    <SessionCard
-                      type="active"
-                      title={s.title || s.target}
-                      subtitle={s.target}
-                      metadata={durationSince(s.last_attached_at)}
-                      onClick={(e) => handleSessionClick(s, e)}
-                      onContextMenu={(e) =>
-                        handleContextMenu(e, "active", s.id, s.bookmark_id, !!s.bookmark_id)
-                      }
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Detached Sessions */}
-          {detachedSessions.length > 0 && (
-            <div>
-              {renderSectionHeader("Detached", detachedSessions.length, "#facc15", "◐")}
-              {detachedSessions.map((s) => (
-                <div key={s.id} style={{ padding: "0 6px" }}>
-                  {renameTarget?.id === s.id ? (
-                    renderRenameInline(s.id, "session")
-                  ) : (
-                    <SessionCard
-                      type="detached"
-                      title={s.title || s.target}
-                      subtitle={s.target}
-                      metadata={timeAgo(s.last_detached_at)}
-                      onClick={(e) => handleSessionClick(s, e)}
-                      onContextMenu={(e) =>
-                        handleContextMenu(e, "detached", s.id, s.bookmark_id, !!s.bookmark_id)
-                      }
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Archived Sessions */}
-          {archivedSessions.length > 0 && (
-            <div>
-              {renderSectionHeader("Archived", archivedSessions.length, "#666", "▫")}
-              {archivedSessions.map((s) => (
-                <div key={s.id} style={{ padding: "0 6px" }}>
-                  <SessionCard
-                    type="archived"
-                    title={s.title || s.target}
-                    subtitle={s.target}
-                    metadata={timeAgo(s.archived_at)}
-                    onClick={(e) => handleSessionClick(s, e)}
-                    onContextMenu={(e) =>
-                      handleContextMenu(e, "archived", s.id)
-                    }
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Saved Bookmarks */}
-          {savedBookmarks.length > 0 && (
-            <div>
-              {renderSectionHeader("Saved", savedBookmarks.length, "#60a5fa", "☆")}
-              {savedBookmarks.map((b) => (
-                <div key={b.id} style={{ padding: "0 6px" }}>
-                  {renameTarget?.id === b.id ? (
-                    renderRenameInline(b.id, "bookmark")
-                  ) : (
-                    <SessionCard
-                      type="saved"
-                      title={b.title}
-                      subtitle={
-                        b.host
-                          ? `${b.username ? b.username + "@" : ""}${b.host}${b.port && b.port !== 22 ? ":" + b.port : ""}`
-                          : "No host configured"
-                      }
-                      isAssetLinked={!!b.asset_id}
-                      onClick={(e) => handleBookmarkClick(b, e)}
-                      onContextMenu={(e) =>
-                        handleContextMenu(e, "saved", undefined, b.id)
-                      }
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Empty state */}
-          {activeSessions.length === 0 &&
-            detachedSessions.length === 0 &&
-            archivedSessions.length === 0 &&
-            savedBookmarks.length === 0 && (
-              <div
-                style={{
-                  padding: "24px 16px",
-                  textAlign: "center",
-                  color: "#666",
-                  fontSize: 11,
-                }}
-              >
-                {query
-                  ? "No sessions match your filter."
-                  : "No sessions or bookmarks yet."}
-              </div>
-            )}
-        </div>
-
-        {/* Context Menu */}
-        {contextMenu && contextMenuOptions.length > 0 && (
-          <div
-            style={{
-              position: "absolute",
-              top: contextMenu.y,
-              left: contextMenu.x,
-              backgroundColor: "#1e1e2e",
-              border: "1px solid #3a3a4e",
-              borderRadius: 6,
-              boxShadow: "0 8px 24px rgba(0, 0, 0, 0.5)",
-              padding: "4px 0",
-              zIndex: 200,
-              minWidth: 160,
-            }}
-          >
-            {contextMenuOptions.map((opt) => (
-              <button
-                key={opt.label}
-                type="button"
-                onClick={opt.action}
-                style={{
-                  display: "block",
-                  width: "100%",
-                  textAlign: "left",
-                  padding: "6px 12px",
-                  fontSize: 11,
-                  color: opt.danger ? "#f87171" : "#ccc",
-                  backgroundColor: "transparent",
-                  border: "none",
-                  cursor: "pointer",
-                  whiteSpace: "nowrap",
-                }}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#2a2a3e";
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent";
-                }}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Bookmark Dialog */}
-      <BookmarkDialog
-        isOpen={bookmarkDialogOpen}
-        onClose={() => setBookmarkDialogOpen(false)}
-        onSave={handleBookmarkSave}
+/** Saved SSH connections (terminal bookmarks). Rows connect. */
+export function SavedConnections({ lib, nameOf }: SectionProps) {
+  const t = useTranslations("terminal.sessions");
+  const when = useTerminalWhen();
+  const [ask, setAsk] = useState<Ask>(null);
+  if (lib.savedBookmarks.length === 0) return null;
+  const row = (b: Bookmark) => {
+    const renaming = lib.renameTarget?.type === "bookmark" && lib.renameTarget.id === b.id;
+    const grey = b.asset_id ? nameOf(b.asset_id) || b.asset_id : addressOf(b);
+    return (
+      <SessionCard
+        key={b.id}
+        name={b.title}
+        grey={grey}
+        meta={b.last_used_at ? t("usedAt", { time: when(b.last_used_at) }) : undefined}
+        onOpen={(newTab) => void lib.connectBookmark(b, newTab)}
+        openLabel={t("connectTo", { name: b.title })}
+        moreLabel={t("more", { name: b.title })}
+        editor={renaming ? <RenameField lib={lib} label={t("renameLabel", { name: b.title })} /> : undefined}
+        actions={[
+          { label: t("connect"), onSelect: () => void lib.connectBookmark(b) },
+          { label: t("openNewTab"), onSelect: () => void lib.connectBookmark(b, true) },
+          "sep",
+          { label: t("rename"), onSelect: () => lib.startRename({ type: "bookmark", id: b.id, currentTitle: b.title }) },
+          {
+            label: t("delete"),
+            danger: true,
+            onSelect: () => setAsk({ title: t("deleteTitle", { name: b.title }), body: t("deleteBody"), confirm: t("deleteConfirm"), run: () => void lib.deleteBookmark(b.id) }),
+          },
+        ]}
       />
-    </>
+    );
+  };
+  return (
+    <section className="tm-sec" aria-labelledby="tm-saved-h">
+      <h2 className="tm-h" id="tm-saved-h">{t("saved")}</h2>
+      <div className="tm-list">{lib.savedBookmarks.map(row)}</div>
+      <AskDialog ask={ask} onClose={() => setAsk(null)} />
+    </section>
+  );
+}
+
+/** Sessions that ended, folded until asked for (or while filtering). Rows show what they printed. */
+export function EndedSessions({ lib, nameOf }: SectionProps) {
+  const t = useTranslations("terminal.sessions");
+  const when = useTerminalWhen();
+  const [open, setOpen] = useState(false);
+  if (lib.archivedSessions.length === 0) return null;
+  const shown = open || lib.query !== "";
+  return (
+    <section className="tm-sec">
+      <button type="button" className="tm-h tm-fold" aria-expanded={shown} onClick={() => setOpen((v) => !v)}>
+        <ChevronRight aria-hidden="true" className={shown ? "open" : undefined} />
+        {t("ended")}
+      </button>
+      {shown ? (
+        <div className="tm-list">
+          {lib.archivedSessions.map((s) => {
+            const name = s.title || nameOf(s.target) || s.target;
+            return (
+              <SessionCard
+                key={s.id}
+                name={name}
+                meta={t("endedAt", { time: when(s.archived_at) })}
+                onOpen={() => void lib.reattach(s)}
+                openLabel={t("viewOutput", { name })}
+                moreLabel={t("more", { name })}
+                actions={[{ label: t("view"), onSelect: () => void lib.reattach(s) }]}
+              />
+            );
+          })}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+/** Every session and saved connection, from the workspace's "+" menu. */
+export default function SessionsPanel({
+  open,
+  onClose,
+  lib,
+  nameOf,
+  onAddConnection,
+}: SectionProps & { open: boolean; onClose: () => void; onAddConnection: () => void }) {
+  const t = useTranslations("terminal.sessions");
+  const empty = lib.activeSessions.length + lib.detachedSessions.length + lib.savedBookmarks.length + lib.archivedSessions.length === 0;
+  return (
+    <Modal open={open} onClose={onClose} title={t("title")} className="tm-dlg-wide">
+      <div className="tm-dlg">
+        <div className="tm-dlg-tools">
+          <label className="tm-q tm-q-sm">
+            <span className="sr-only">{t("filter")}</span>
+            <input type="search" value={lib.searchQuery} placeholder={t("filter")} onChange={(e) => lib.setSearchQuery(e.target.value)} />
+          </label>
+          <Button onClick={onAddConnection}>{t("add")}</Button>
+        </div>
+        <div className="tm-dlg-scroll">
+          <RunningSessions lib={lib} nameOf={nameOf} />
+          <SavedConnections lib={lib} nameOf={nameOf} />
+          <EndedSessions lib={lib} nameOf={nameOf} />
+          {empty ? <p className="tm-none">{lib.query ? t("noMatch") : t("none")}</p> : null}
+        </div>
+      </div>
+    </Modal>
   );
 }

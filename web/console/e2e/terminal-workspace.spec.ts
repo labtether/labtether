@@ -7,12 +7,13 @@ installConsoleApiMocks,
 import { installTerminalWebSocketMock,makeTerminalAsset } from './helpers/terminalWorkspaceMocks';
 
 test("terminal multipane layout switching updates pane count and persists", async ({ page }) => {
+  await installTerminalWebSocketMock(page);
   const assets = [makeTerminalAsset("node-1", "alpha-host")];
   const workspaceTab = {
     id: "tab-1",
     name: "Default",
     layout: "single",
-    panes: [] as Array<{ targetNodeId: string }>,
+    panes: [{ targetNodeId: "node-1" }] as Array<{ targetNodeId: string }>,
     sort_order: 0,
   };
 
@@ -46,23 +47,35 @@ test("terminal multipane layout switching updates pane count and persists", asyn
         await fulfillJSON({ tab: workspaceTab });
         return true;
       }
+      if (pathname === "/api/terminal/session" && method === "POST") {
+        await fulfillJSON({ session: { id: "session-1" } });
+        return true;
+      }
+      if (pathname === "/api/terminal/stream-ticket" && method === "POST") {
+        await fulfillJSON({ wsUrl: "ws://terminal.mock/session-1" });
+        return true;
+      }
       return false;
     },
   });
 
   await page.goto("/terminal");
 
-  const targetButtons = page.getByTitle("Choose terminal target");
-  await expect.poll(() => targetButtons.count()).toBe(1);
+  const sessionPanes = page.getByRole("region", { name: "Session on alpha-host" });
+  const emptyPanes = page.getByRole("region", { name: "Empty pane" });
+  await expect(sessionPanes).toHaveCount(1);
+  await expect(emptyPanes).toHaveCount(0);
 
-  await page.getByTitle("Change layout").click();
-  await page.getByRole("button", { name: "Grid", exact: true }).click();
+  await page.getByRole("button", { name: "More terminal actions" }).click();
+  await page.getByRole("menuitem", { name: "Split" }).click();
+  await page.getByRole("menuitemradio", { name: "Grid" }).click();
 
-  await expect.poll(() => targetButtons.count()).toBe(4);
+  await expect(emptyPanes).toHaveCount(3);
   await expect.poll(() => workspaceTab.layout).toBe("grid");
 
   await page.reload();
-  await expect.poll(() => targetButtons.count()).toBe(4);
+  await expect(sessionPanes).toHaveCount(1);
+  await expect(emptyPanes).toHaveCount(3);
 });
 
 test("terminal creates a default workspace tab when none exist", async ({ page }) => {
@@ -105,9 +118,9 @@ test("terminal creates a default workspace tab when none exist", async ({ page }
 
   await page.goto("/terminal");
 
-  await expect(page.getByText("Default", { exact: true })).toBeVisible();
   await expect.poll(() => created).toBe(true);
-  await expect.poll(() => page.getByTitle("Choose terminal target").count()).toBe(1);
+  await expect(page.getByRole("heading", { name: "Terminal", level: 1 })).toBeVisible();
+  await expect(page.getByRole("searchbox", { name: "Connect to…" })).toBeVisible();
 });
 
 test("terminal creates a default workspace tab when the tabs payload is malformed", async ({ page }) => {
@@ -148,9 +161,8 @@ test("terminal creates a default workspace tab when the tabs payload is malforme
 
   await page.goto("/terminal");
 
-  await expect(page.getByText("Default", { exact: true })).toBeVisible();
   await expect.poll(() => created).toBe(true);
-  await expect(page.getByTitle("Choose terminal target").first()).toBeVisible();
+  await expect(page.getByRole("searchbox", { name: "Connect to…" })).toBeVisible();
 });
 
 test("terminal tab switches reuse an existing session when returning to a pane", async ({ page }) => {
@@ -247,7 +259,7 @@ test("terminal tab rename from right-click menu persists after reload", async ({
     id: "tab-1",
     name: "Default",
     layout: "single",
-    panes: [] as Array<{ targetNodeId: string }>,
+    panes: [{ targetNodeId: "node-1" }] as Array<{ targetNodeId: string }>,
     sort_order: 0,
   };
 
@@ -290,10 +302,10 @@ test("terminal tab rename from right-click menu persists after reload", async ({
 
   await page.goto("/terminal");
   const tabChip = page.locator("[data-tab-id='tab-1']");
-  await expect(tabChip).toBeVisible();
+  await expect(tabChip).toContainText("alpha-host");
 
   await tabChip.click({ button: "right" });
-  await page.getByRole("button", { name: "Rename Tab", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Rename…", exact: true }).click();
 
   const renameInput = tabChip.locator("input");
   await expect(renameInput).toBeVisible();
@@ -389,16 +401,17 @@ test("terminal tab menu duplicate and close-other actions keep expected tab set"
   await expect(page.locator("[data-tab-id='tab-2']")).toBeVisible();
 
   await page.locator("[data-tab-id='tab-1']").click({ button: "right" });
-  await page.getByRole("button", { name: "Duplicate Tab", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Duplicate", exact: true }).click();
 
   await expect.poll(() => tabs.length).toBe(3);
-  await expect(page.locator("[data-tab-id='tab-3']")).toContainText("Default Copy");
+  await expect(page.locator("[data-tab-id='tab-3']")).toBeVisible();
+  expect(tabs[2].name).toBe("Default Copy");
 
   await page.locator("[data-tab-id='tab-3']").click({ button: "right" });
-  await page.getByRole("button", { name: "Close Other Tabs", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Close other tabs", exact: true }).click();
 
-  await expect.poll(() => tabs.length).toBe(1);
-  await expect(page.locator("[data-tab-id='tab-3']")).toBeVisible();
-  await expect(page.locator("[data-tab-id='tab-1']")).toHaveCount(0);
-  await expect(page.locator("[data-tab-id='tab-2']")).toHaveCount(0);
+  // One empty tab is left, so Terminal shows its start page.
+  await expect.poll(() => tabs.map((tab) => tab.id)).toEqual(["tab-3"]);
+  await expect(page.getByRole("searchbox", { name: "Connect to…" })).toBeVisible();
+  await expect(page.locator("[data-tab-id]")).toHaveCount(0);
 });

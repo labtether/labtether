@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import { X } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useTheme } from "../../contexts/ThemeContext";
+import { labtetherTerminalTheme } from "./terminalLook";
 
 export type ScrollbackViewerProps = {
   persistentSessionId: string;
@@ -10,6 +13,10 @@ export type ScrollbackViewerProps = {
 };
 
 export default function ScrollbackViewer({ persistentSessionId, title, onClose }: ScrollbackViewerProps) {
+  const t = useTranslations("terminal.scrollback");
+  const { theme: appTheme } = useTheme();
+  const noOutput = t("noOutput");
+  const loadFailed = t("loadFailed");
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<import("@xterm/xterm").Terminal | null>(null);
   const fitAddonRef = useRef<import("@xterm/addon-fit").FitAddon | null>(null);
@@ -48,28 +55,7 @@ export default function ScrollbackViewer({ persistentSessionId, title, onClose }
         cursorStyle: "block",
         fontSize: 13,
         fontFamily: '"JetBrains Mono", "SF Mono", Menlo, Monaco, Consolas, monospace',
-        theme: {
-          background: "#080808",
-          foreground: "#e0e0e0",
-          cursor: "#58a6ff",
-          selectionBackground: "rgba(88, 166, 255, 0.3)",
-          black: "#080808",
-          red: "#ff6b6b",
-          green: "#51cf66",
-          yellow: "#fcc419",
-          blue: "#58a6ff",
-          magenta: "#da77f2",
-          cyan: "#66d9ef",
-          white: "#e0e0e0",
-          brightBlack: "#6c7086",
-          brightRed: "#ff8787",
-          brightGreen: "#69db7c",
-          brightYellow: "#ffd43b",
-          brightBlue: "#74c7ec",
-          brightMagenta: "#e599f7",
-          brightCyan: "#89dceb",
-          brightWhite: "#ffffff",
-        },
+        theme: labtetherTerminalTheme(appTheme),
         scrollback: 10000,
         convertEol: false,
         allowProposedApi: true,
@@ -116,10 +102,10 @@ export default function ScrollbackViewer({ persistentSessionId, title, onClose }
           if (buffer.byteLength > 0) {
             term.write(new Uint8Array(buffer));
           } else {
-            term.write("\x1b[90m(no scrollback data available)\x1b[0m\r\n");
+            term.write(`\x1b[90m${noOutput}\x1b[0m\r\n`);
           }
         } else {
-          let errorMessage = "Failed to load scrollback";
+          let errorMessage = loadFailed;
           try {
             const payload = await response.json() as Record<string, unknown>;
             if (typeof payload?.error === "string" && payload.error) {
@@ -128,12 +114,11 @@ export default function ScrollbackViewer({ persistentSessionId, title, onClose }
           } catch {
             // ignore parse errors
           }
-          term.write(`\x1b[31mError: ${errorMessage}\x1b[0m\r\n`);
+          term.write(`\x1b[31m${errorMessage}\x1b[0m\r\n`);
         }
-      } catch (err) {
+      } catch {
         if (!cancelled) {
-          const message = err instanceof Error ? err.message : "Network error";
-          term.write(`\x1b[31mError: ${message}\x1b[0m\r\n`);
+          term.write(`\x1b[31m${loadFailed}\x1b[0m\r\n`);
         }
       }
 
@@ -155,7 +140,7 @@ export default function ScrollbackViewer({ persistentSessionId, title, onClose }
       }
       cleanup();
     };
-  }, [persistentSessionId, cleanup]);
+  }, [persistentSessionId, cleanup, appTheme, noOutput, loadFailed]);
 
   // Close on Escape key
   useEffect(() => {
@@ -169,125 +154,17 @@ export default function ScrollbackViewer({ persistentSessionId, title, onClose }
   }, [onClose]);
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 60,
-        display: "flex",
-        flexDirection: "column",
-        backgroundColor: "rgba(0, 0, 0, 0.85)",
-        backdropFilter: "blur(4px)",
-        WebkitBackdropFilter: "blur(4px)",
-      }}
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Scrollback viewer: ${title}`}
-    >
-      {/* Overlay backdrop — click outside closes */}
-      <div
-        style={{ position: "absolute", inset: 0 }}
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      {/* Main panel */}
-      <div
-        style={{
-          position: "relative",
-          margin: "auto",
-          width: "calc(100% - 3rem)",
-          maxWidth: "1400px",
-          height: "calc(100vh - 3rem)",
-          display: "flex",
-          flexDirection: "column",
-          backgroundColor: "#080808",
-          border: "1px solid rgba(255, 255, 255, 0.1)",
-          borderRadius: 8,
-          overflow: "hidden",
-          boxShadow: "0 24px 80px rgba(0, 0, 0, 0.7)",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header bar */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "8px 12px",
-            borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
-            backgroundColor: "#0f0f12",
-            flexShrink: 0,
-            gap: 12,
-          }}
-        >
-          {/* Left: title */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-            <span
-              style={{
-                fontSize: 13,
-                fontWeight: 500,
-                color: "rgba(255, 255, 255, 0.85)",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {title}
-            </span>
-            <span
-              style={{
-                fontSize: 10,
-                fontWeight: 500,
-                textTransform: "uppercase",
-                letterSpacing: "0.07em",
-                color: "rgba(255, 255, 255, 0.4)",
-                backgroundColor: "rgba(255, 255, 255, 0.06)",
-                border: "1px solid rgba(255, 255, 255, 0.1)",
-                borderRadius: 3,
-                padding: "1px 5px",
-                flexShrink: 0,
-              }}
-            >
-              Read-only archived session
-            </span>
-          </div>
-
-          {/* Right: close button */}
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close scrollback viewer"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 28,
-              height: 28,
-              borderRadius: 4,
-              border: "none",
-              backgroundColor: "transparent",
-              color: "rgba(255, 255, 255, 0.5)",
-              cursor: "pointer",
-              flexShrink: 0,
-              transition: "background-color 0.12s, color 0.12s",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.08)";
-              e.currentTarget.style.color = "rgba(255, 255, 255, 0.9)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = "transparent";
-              e.currentTarget.style.color = "rgba(255, 255, 255, 0.5)";
-            }}
-          >
-            <X size={16} />
+    <div className="tm-sb-scrim" role="dialog" aria-modal="true" aria-label={t("aria", { title })}>
+      <div className="tm-sb-back" onClick={onClose} aria-hidden="true" />
+      <div className="tm-sb">
+        <div className="tm-sb-head">
+          <span className="tm-nm">{title}</span>
+          <span className="tm-sb-note">{t("readOnly")}</span>
+          <button type="button" className="tm-icon" onClick={onClose} aria-label={t("close")}>
+            <X aria-hidden="true" />
           </button>
         </div>
-
-        {/* Terminal area */}
-        <div style={{ flex: 1, overflow: "hidden", padding: 4 }}>
+        <div className="tm-sb-body">
           <div ref={containerRef} className="xtermContainer" />
         </div>
       </div>

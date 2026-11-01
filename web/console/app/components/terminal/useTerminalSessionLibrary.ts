@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePollingTask } from "../../hooks/usePollingTask";
-import type { PersistentSession, Bookmark, BookmarkFormData, ContextMenuState, ContextMenuOption, SessionsPanelProps } from "./terminalSessionTypes";
+import type { Bookmark, BookmarkFormData, PersistentSession, RenameTarget, SessionsPanelProps } from "./terminalSessionTypes";
 
 async function safeJSON(response: Response): Promise<unknown> {
   try {
@@ -12,6 +12,20 @@ async function safeJSON(response: Response): Promise<unknown> {
   }
 }
 
+const jsonInit = (method: string, body: unknown = {}): RequestInit => ({
+  method,
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+});
+
+function matches(query: string, ...fields: Array<string | undefined>): boolean {
+  return query === "" || fields.some((field) => (field ?? "").toLowerCase().includes(query));
+}
+
+/**
+ * The hub's terminal sessions that outlive a tab (running, ended) and the saved connections, polled every 10 s while
+ * isOpen. Rows call the actions below; each refreshes the lists once the hub answers.
+ */
 export function useTerminalSessionLibrary({
   isOpen, onSessionSelect, onBookmarkConnect, onArchivedView,
 }: Omit<SessionsPanelProps, "onClose">) {
@@ -19,22 +33,10 @@ export function useTerminalSessionLibrary({
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [bookmarkDialogOpen, setBookmarkDialogOpen] = useState(false);
-  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const [renameTarget, setRenameTarget] = useState<{
-    type: "session" | "bookmark";
-    id: string;
-    currentTitle: string;
-  } | null>(null);
+  const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null);
   const [renameValue, setRenameValue] = useState("");
-
-  const panelRef = useRef<HTMLDivElement | null>(null);
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const renameInputRef = useRef<HTMLInputElement | null>(null);
   const renameSubmittedRef = useRef(false);
-
-  // -----------------------------------------------------------------------
-  // Data fetching
-  // -----------------------------------------------------------------------
 
   const fetchDataTask = useCallback(async (signal: AbortSignal) => {
     try {
@@ -42,423 +44,150 @@ export function useTerminalSessionLibrary({
         fetch("/api/terminal/persistent-sessions", { signal }),
         fetch("/api/terminal/bookmarks", { signal }),
       ]);
-
       if (sessionsRes.ok) {
-        const data = (await safeJSON(sessionsRes)) as {
-          persistent_sessions?: PersistentSession[];
-        } | null;
-        if (!signal.aborted) setSessions(data?.persistent_sessions ?? []);
+        const data = (await safeJSON(sessionsRes)) as { persistent_sessions?: PersistentSession[] } | null;
+        if (!signal.aborted) setSessions(Array.isArray(data?.persistent_sessions) ? data.persistent_sessions : []);
       }
-
       if (bookmarksRes.ok) {
-        const data = (await safeJSON(bookmarksRes)) as {
-          bookmarks?: Bookmark[];
-        } | null;
-        if (!signal.aborted) setBookmarks(data?.bookmarks ?? []);
+        const data = (await safeJSON(bookmarksRes)) as { bookmarks?: Bookmark[] } | null;
+        if (!signal.aborted) setBookmarks(Array.isArray(data?.bookmarks) ? data.bookmarks : []);
       }
     } catch {
-      // Silently ignore fetch failures — data stays stale.
+      // The lists keep their last answer until the next poll.
     }
   }, []);
 
   const fetchData = usePollingTask(fetchDataTask, 10_000, isOpen);
 
-  // Focus search input on open.
   useEffect(() => {
-    if (isOpen) {
-      const timer = setTimeout(() => searchInputRef.current?.focus(), 80);
-      return () => clearTimeout(timer);
-    }
-  }, [isOpen]);
-
-  // Close context menu on outside click.
-  useEffect(() => {
-    if (!contextMenu) return;
-    const handler = (e: MouseEvent) => {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
-        setContextMenu(null);
-      }
-    };
-    // Use capture to catch clicks before they propagate.
-    document.addEventListener("mousedown", handler, true);
-    return () => document.removeEventListener("mousedown", handler, true);
-  }, [contextMenu]);
-
-  // Close context menu on Escape.
-  useEffect(() => {
-    if (!contextMenu) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setContextMenu(null);
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [contextMenu]);
-
-  // Focus rename input when rename starts.
-  useEffect(() => {
-    if (renameTarget) {
-      renameSubmittedRef.current = false;
-      const timer = setTimeout(() => renameInputRef.current?.focus(), 0);
-      return () => clearTimeout(timer);
-    }
+    if (!renameTarget) return undefined;
+    renameSubmittedRef.current = false;
+    const timer = setTimeout(() => renameInputRef.current?.focus(), 0);
+    return () => clearTimeout(timer);
   }, [renameTarget]);
 
-  // -----------------------------------------------------------------------
-  // Grouped & filtered data
-  // -----------------------------------------------------------------------
-
   const query = searchQuery.toLowerCase().trim();
-
-  const activeSessions = useMemo(
-    () =>
-      sessions.filter(
-        (s) =>
-          s.status === "attached" &&
-          (query === "" ||
-            s.title.toLowerCase().includes(query) ||
-            s.target.toLowerCase().includes(query)),
-      ),
+  const byStatus = useCallback(
+    (status: PersistentSession["status"]) =>
+      sessions.filter((s) => s.status === status && matches(query, s.title, s.target)),
     [sessions, query],
   );
+  const activeSessions = useMemo(() => byStatus("attached"), [byStatus]);
+  const detachedSessions = useMemo(() => byStatus("detached"), [byStatus]);
+  const archivedSessions = useMemo(() => byStatus("archived"), [byStatus]);
 
-  const detachedSessions = useMemo(
-    () =>
-      sessions.filter(
-        (s) =>
-          s.status === "detached" &&
-          (query === "" ||
-            s.title.toLowerCase().includes(query) ||
-            s.target.toLowerCase().includes(query)),
-      ),
-    [sessions, query],
-  );
+  // A saved connection with a running session shows as that session.
+  const savedBookmarks = useMemo(() => {
+    const linked = new Set(
+      sessions.filter((s) => (s.status === "attached" || s.status === "detached") && s.bookmark_id).map((s) => s.bookmark_id),
+    );
+    return bookmarks.filter((b) => !linked.has(b.id) && matches(query, b.title, b.host, b.username));
+  }, [bookmarks, sessions, query]);
 
-  const archivedSessions = useMemo(
-    () =>
-      sessions.filter(
-        (s) =>
-          s.status === "archived" &&
-          (query === "" ||
-            s.title.toLowerCase().includes(query) ||
-            s.target.toLowerCase().includes(query)),
-      ),
-    [sessions, query],
-  );
-
-  // Bookmarks that have no active/detached persistent session.
-  const linkedBookmarkIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const s of sessions) {
-      if ((s.status === "attached" || s.status === "detached") && s.bookmark_id) {
-        ids.add(s.bookmark_id);
-      }
-    }
-    return ids;
-  }, [sessions]);
-
-  const savedBookmarks = useMemo(
-    () =>
-      bookmarks.filter(
-        (b) =>
-          !linkedBookmarkIds.has(b.id) &&
-          (query === "" ||
-            b.title.toLowerCase().includes(query) ||
-            (b.host ?? "").toLowerCase().includes(query) ||
-            (b.username ?? "").toLowerCase().includes(query)),
-      ),
-    [bookmarks, linkedBookmarkIds, query],
-  );
-
-  // -----------------------------------------------------------------------
-  // Interaction handlers
-  // -----------------------------------------------------------------------
-
-  const isNewTab = useCallback((e: React.MouseEvent) => {
-    return e.shiftKey || e.button === 1;
-  }, []);
-
-  const handleSessionClick = useCallback(
-    async (session: PersistentSession, e: React.MouseEvent) => {
-      const newTab = isNewTab(e);
-
+  /** Back to a running session (attached elsewhere: open it here too). */
+  const reattach = useCallback(
+    async (session: PersistentSession, newTab = false) => {
       if (session.status === "archived") {
         onArchivedView(session.id, session.title || session.target);
         return;
       }
-
       if (session.status === "attached") {
-        // Already attached — just select it.
-        onSessionSelect("", session.id, "", newTab);
+        onSessionSelect("", session.id, "", newTab, session.target);
         return;
       }
-
-      // Detached — attach first.
       try {
-        const res = await fetch(
-          `/api/terminal/persistent-sessions/${encodeURIComponent(session.id)}/attach`,
-          { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
-        );
-        if (res.ok) {
-          const data = (await safeJSON(res)) as {
-            session?: { id?: string; persistent_session_id?: string };
-          } | null;
-          onSessionSelect(
-            data?.session?.id ?? "",
-            data?.session?.persistent_session_id ?? session.id,
-            "",
-            newTab,
-          );
-          // Refresh data after attach.
-          fetchData();
-        }
-      } catch {
-        // Silently ignore.
-      }
-    },
-    [isNewTab, onSessionSelect, onArchivedView, fetchData],
-  );
-
-  const handleBookmarkClick = useCallback(
-    async (bookmark: Bookmark, e: React.MouseEvent) => {
-      const newTab = isNewTab(e);
-
-      try {
-        const res = await fetch(
-          `/api/terminal/bookmarks/${encodeURIComponent(bookmark.id)}/connect`,
-          { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
-        );
-        if (res.ok) {
-          onBookmarkConnect(bookmark.id, newTab);
-          fetchData();
-        }
-      } catch {
-        // Silently ignore.
-      }
-    },
-    [isNewTab, onBookmarkConnect, fetchData],
-  );
-
-  // -----------------------------------------------------------------------
-  // Save as Bookmark
-  // -----------------------------------------------------------------------
-
-  const handleSaveAsBookmark = useCallback(
-    async (session: PersistentSession) => {
-      try {
-        await fetch("/api/terminal/bookmarks", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: session.title || session.target,
-            host: session.target,
-          }),
-        });
+        const res = await fetch(`/api/terminal/persistent-sessions/${encodeURIComponent(session.id)}/attach`, jsonInit("POST"));
+        if (!res.ok) return;
+        const data = (await safeJSON(res)) as { session?: { id?: string; persistent_session_id?: string } } | null;
+        onSessionSelect(data?.session?.id ?? "", data?.session?.persistent_session_id ?? session.id, "", newTab, session.target);
         fetchData();
       } catch {
-        // Silently ignore.
+        // The row stays as it was; the next poll shows the hub's state.
+      }
+    },
+    [onSessionSelect, onArchivedView, fetchData],
+  );
+
+  const connectBookmark = useCallback(
+    async (bookmark: Bookmark, newTab = false) => {
+      try {
+        const res = await fetch(`/api/terminal/bookmarks/${encodeURIComponent(bookmark.id)}/connect`, jsonInit("POST"));
+        if (!res.ok) return;
+        onBookmarkConnect(bookmark.id, newTab, bookmark);
+        fetchData();
+      } catch {
+        // Nothing opened; the row stays.
+      }
+    },
+    [onBookmarkConnect, fetchData],
+  );
+
+  const saveAsBookmark = useCallback(
+    async (session: PersistentSession) => {
+      try {
+        await fetch("/api/terminal/bookmarks", jsonInit("POST", { title: session.title || session.target, host: session.target }));
+        fetchData();
+      } catch {
+        // The next poll shows whether it was saved.
       }
     },
     [fetchData],
   );
 
-  // -----------------------------------------------------------------------
-  // Context menu actions
-  // -----------------------------------------------------------------------
-
-  const handleContextMenu = useCallback(
-    (
-      e: React.MouseEvent,
-      type: ContextMenuState["type"],
-      sessionId?: string,
-      bookmarkId?: string,
-      hasBookmark?: boolean,
-    ) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const rect = panelRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const MENU_WIDTH = 180;
-      const MENU_HEIGHT = 200; // approximate
-      const x = Math.min(e.clientX - rect.left, rect.width - MENU_WIDTH);
-      const y = Math.min(e.clientY - rect.top, rect.height - MENU_HEIGHT);
-      setContextMenu({ x, y, type, sessionId, bookmarkId, hasBookmark });
+  const endSession = useCallback(
+    async (sessionId: string) => {
+      try {
+        await fetch(`/api/terminal/persistent-sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
+        fetchData();
+      } catch {
+        // The next poll shows whether it ended.
+      }
     },
-    [],
+    [fetchData],
   );
 
-  const contextMenuOptions = useMemo((): ContextMenuOption[] => {
-    if (!contextMenu) return [];
-    const opts: ContextMenuOption[] = [];
+  const deleteBookmark = useCallback(
+    async (bookmarkId: string) => {
+      try {
+        await fetch(`/api/terminal/bookmarks/${encodeURIComponent(bookmarkId)}`, { method: "DELETE" });
+        fetchData();
+      } catch {
+        // The next poll shows whether it was deleted.
+      }
+    },
+    [fetchData],
+  );
 
-    // Rename
-    if (contextMenu.type !== "archived") {
-      opts.push({
-        label: "Rename\u2026",
-        action: () => {
-          if (contextMenu.type === "saved" && contextMenu.bookmarkId) {
-            const bm = bookmarks.find((b) => b.id === contextMenu.bookmarkId);
-            setRenameTarget({
-              type: "bookmark",
-              id: contextMenu.bookmarkId,
-              currentTitle: bm?.title ?? "",
-            });
-            setRenameValue(bm?.title ?? "");
-          } else if (contextMenu.sessionId) {
-            const s = sessions.find((sess) => sess.id === contextMenu.sessionId);
-            setRenameTarget({
-              type: "session",
-              id: contextMenu.sessionId,
-              currentTitle: s?.title ?? "",
-            });
-            setRenameValue(s?.title ?? "");
-          }
-          setContextMenu(null);
-        },
-      });
-    }
-
-    // Save as Bookmark (active/detached without a bookmark)
-    if (
-      (contextMenu.type === "active" || contextMenu.type === "detached") &&
-      !contextMenu.hasBookmark
-    ) {
-      opts.push({
-        label: "Save as Bookmark",
-        action: () => {
-          if (contextMenu.sessionId) {
-            const s = sessions.find((sess) => sess.id === contextMenu.sessionId);
-            if (s) {
-              handleSaveAsBookmark(s);
-            }
-          }
-          setContextMenu(null);
-        },
-      });
-    }
-
-    // Open in New Tab
-    opts.push({
-      label: "Open in New Tab",
-      action: () => {
-        if (contextMenu.type === "saved" && contextMenu.bookmarkId) {
-          const bm = bookmarks.find((b) => b.id === contextMenu.bookmarkId);
-          if (bm) {
-            handleBookmarkClick(bm, { shiftKey: true, button: 0 } as unknown as React.MouseEvent);
-          }
-        } else if (contextMenu.sessionId) {
-          const s = sessions.find((sess) => sess.id === contextMenu.sessionId);
-          if (s) {
-            handleSessionClick(s, { shiftKey: true, button: 0 } as unknown as React.MouseEvent);
-          }
-        }
-        setContextMenu(null);
-      },
-    });
-
-    // Terminate Session (active/detached)
-    if (contextMenu.type === "active" || contextMenu.type === "detached") {
-      opts.push({
-        label: "Terminate Session",
-        danger: true,
-        action: async () => {
-          if (contextMenu.sessionId) {
-            try {
-              await fetch(
-                `/api/terminal/persistent-sessions/${encodeURIComponent(contextMenu.sessionId)}`,
-                { method: "DELETE" },
-              );
-              fetchData();
-            } catch {
-              // Silently ignore.
-            }
-          }
-          setContextMenu(null);
-        },
-      });
-    }
-
-    // Delete Bookmark (saved)
-    if (contextMenu.type === "saved" && contextMenu.bookmarkId) {
-      opts.push({
-        label: "Delete Bookmark",
-        danger: true,
-        action: async () => {
-          if (contextMenu.bookmarkId) {
-            try {
-              await fetch(
-                `/api/terminal/bookmarks/${encodeURIComponent(contextMenu.bookmarkId)}`,
-                { method: "DELETE" },
-              );
-              fetchData();
-            } catch {
-              // Silently ignore.
-            }
-          }
-          setContextMenu(null);
-        },
-      });
-    }
-
-    return opts;
-  }, [contextMenu, sessions, bookmarks, handleSessionClick, handleBookmarkClick, handleSaveAsBookmark, fetchData]);
-
-  // -----------------------------------------------------------------------
-  // Rename
-  // -----------------------------------------------------------------------
+  const startRename = useCallback((target: RenameTarget) => {
+    setRenameTarget(target);
+    setRenameValue(target.currentTitle);
+  }, []);
 
   const handleRenameSubmit = useCallback(async () => {
-    if (renameSubmittedRef.current) return;
-    if (!renameTarget) return;
+    if (renameSubmittedRef.current || !renameTarget) return;
     renameSubmittedRef.current = true;
     const trimmed = renameValue.trim();
     if (!trimmed || trimmed === renameTarget.currentTitle) {
       setRenameTarget(null);
       return;
     }
-
+    const path = renameTarget.type === "session" ? "persistent-sessions" : "bookmarks";
     try {
-      if (renameTarget.type === "session") {
-        await fetch(
-          `/api/terminal/persistent-sessions/${encodeURIComponent(renameTarget.id)}`,
-          {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title: trimmed }),
-          },
-        );
-      } else {
-        await fetch(
-          `/api/terminal/bookmarks/${encodeURIComponent(renameTarget.id)}`,
-          {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title: trimmed }),
-          },
-        );
-      }
+      await fetch(`/api/terminal/${path}/${encodeURIComponent(renameTarget.id)}`, jsonInit("PUT", { title: trimmed }));
       fetchData();
     } catch {
-      // Silently ignore.
+      // The next poll shows the hub's title.
     }
-
     setRenameTarget(null);
   }, [renameTarget, renameValue, fetchData]);
-
-  // -----------------------------------------------------------------------
-  // Bookmark dialog handlers
-  // -----------------------------------------------------------------------
 
   const handleBookmarkSave = useCallback(
     async (formData: BookmarkFormData) => {
       try {
-        await fetch("/api/terminal/bookmarks", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(formData),
-        });
+        await fetch("/api/terminal/bookmarks", jsonInit("POST", formData));
         fetchData();
       } catch {
-        // Silently ignore.
+        // The next poll shows whether it was saved.
       }
       setBookmarkDialogOpen(false);
     },
@@ -470,24 +199,25 @@ export function useTerminalSessionLibrary({
     setSearchQuery,
     bookmarkDialogOpen,
     setBookmarkDialogOpen,
-    contextMenu,
     renameTarget,
     setRenameTarget,
     renameValue,
     setRenameValue,
-    panelRef,
-    searchInputRef,
     renameInputRef,
     query,
     activeSessions,
     detachedSessions,
     archivedSessions,
     savedBookmarks,
-    handleSessionClick,
-    handleBookmarkClick,
-    handleContextMenu,
-    contextMenuOptions,
+    reattach,
+    connectBookmark,
+    saveAsBookmark,
+    endSession,
+    deleteBookmark,
+    startRename,
     handleRenameSubmit,
     handleBookmarkSave,
   };
 }
+
+export type TerminalSessionLibrary = ReturnType<typeof useTerminalSessionLibrary>;

@@ -1,55 +1,19 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type { RefObject, ReactNode } from "react";
-import { Card } from "./ui/Card";
-import { Button } from "./ui/Button";
-import type {
-  SessionConnectionState,
-  SessionStreamStatus,
-  SessionType,
-} from "../hooks/useSession";
-import type { XTerminalHandle } from "./XTerminal";
-import type { VNCViewerHandle, VNCCredentialRequest } from "./VNCViewer";
-import type { GuacamoleViewerHandle } from "./GuacamoleViewer";
-import type { SPICEViewerHandle } from "./SPICEViewer";
-import type {
-  WebRTCViewerHandle,
-  WebRTCConnectionStats,
-  WebRTCDisplayLayout,
-} from "./WebRTCViewer";
-import type { ScalingMode } from "./RemoteViewToolbar";
+import type { CSSProperties, RefObject } from "react";
+import { useTranslations } from "next-intl";
 import type { ITheme } from "@xterm/xterm";
+import type { SessionConnectionState, SessionStreamStatus, SessionType } from "../hooks/useSession";
+import type { XTerminalHandle } from "./XTerminal";
 
-function ViewerLoadingFallback({ label }: { label: string }) {
-  return (
-    <div className="flex items-center justify-center h-full min-h-[200px]">
-      <span className="text-sm text-[var(--muted)]">Loading {label}...</span>
-    </div>
-  );
-}
-
+/** While the terminal's code loads: a quiet empty frame, no words. */
 const XTerminal = dynamic(() => import("./XTerminal"), {
   ssr: false,
-  loading: () => <ViewerLoadingFallback label="terminal" />,
-});
-const VNCViewer = dynamic(() => import("./VNCViewer"), {
-  ssr: false,
-  loading: () => <ViewerLoadingFallback label="VNC viewer" />,
-});
-const GuacamoleViewer = dynamic(() => import("./GuacamoleViewer"), {
-  ssr: false,
-  loading: () => <ViewerLoadingFallback label="remote desktop" />,
-});
-const SPICEViewer = dynamic(() => import("./SPICEViewer"), {
-  ssr: false,
-  loading: () => <ViewerLoadingFallback label="SPICE viewer" />,
-});
-const WebRTCViewer = dynamic(() => import("./WebRTCViewer"), {
-  ssr: false,
-  loading: () => <ViewerLoadingFallback label="WebRTC viewer" />,
+  loading: () => <div className="tm-loading-frame" aria-busy="true" />,
 });
 
+/** Remote View's protocols (its viewers live in RemoteViewerShell; the types stay here for its callers). */
 export type DesktopProtocol = "vnc" | "rdp" | "spice" | "webrtc";
 
 export interface SpiceTicket {
@@ -61,59 +25,40 @@ export interface SpiceTicket {
 }
 
 export interface SessionPanelProps {
+  /** Only "terminal" is drawn here; Remote View has its own viewer shell. */
   type: SessionType;
   connectionState: SessionConnectionState;
   wsUrl: string | null;
   error: string | null;
   target: string;
+  /** Kept for callers; how the shell is reached shows in the toolbar. */
   connectedAgentIds: Set<string>;
   onRetry: () => void;
-  // Terminal refs/callbacks
   termRef?: RefObject<XTerminalHandle | null>;
   onTerminalConnected?: () => void;
   onTerminalDisconnected?: (reason?: string) => void;
   onTerminalError?: (message: string) => void;
   onTerminalStreamReady?: (message?: string) => void;
   onTerminalStreamStatus?: (status: SessionStreamStatus) => void;
-  // Terminal appearance props (passed through to XTerminal)
   terminalTheme?: ITheme;
   terminalFontFamily?: string;
   terminalFontSize?: number;
   terminalCursorStyle?: "block" | "underline" | "bar";
   terminalCursorBlink?: boolean;
   terminalScrollback?: number;
-  // Desktop refs/callbacks
-  vncRef?: RefObject<VNCViewerHandle | null>;
-  guacRef?: RefObject<GuacamoleViewerHandle | null>;
-  spiceRef?: RefObject<SPICEViewerHandle | null>;
-  webrtcRef?: RefObject<WebRTCViewerHandle | null>;
-  protocol?: DesktopProtocol;
-  spiceTicket?: SpiceTicket | null;
-  quality?: string;
-  scalingMode?: ScalingMode;
-  viewOnly?: boolean;
-  audioEnabled?: boolean;
-  volume?: number;
-  onWebRTCStats?: (stats: WebRTCConnectionStats) => void;
-  onWebRTCStream?: (stream: MediaStream | null) => void;
-  webrtcDisplayLayout?: WebRTCDisplayLayout[];
-  onDesktopConnect?: () => void;
-  onDesktopDisconnect?: (detail: { clean: boolean; reason?: string }) => void;
-  onDesktopError?: (message: string) => void;
-  onCredentialsRequired?: (request: VNCCredentialRequest) => void;
-  // Credential overlay (desktop only, managed by parent)
-  credentialOverlay?: ReactNode;
-  // Idle overlay text override
+  /** Replaces "Not connected" while idle. */
   idleText?: string;
 }
 
+/**
+ * One terminal on the 2.0 canvas: a red line with Retry when the hub reports an error, "Connecting to …" while the
+ * shell starts, and "Not connected" with Connect while idle.
+ */
 export function SessionPanel({
-  type,
   connectionState,
   wsUrl,
   error,
   target,
-  connectedAgentIds,
   onRetry,
   termRef,
   onTerminalConnected,
@@ -127,104 +72,36 @@ export function SessionPanel({
   terminalCursorStyle,
   terminalCursorBlink,
   terminalScrollback,
-  vncRef,
-  guacRef,
-  spiceRef,
-  webrtcRef,
-  protocol = "vnc",
-  spiceTicket,
-  quality,
-  scalingMode,
-  viewOnly,
-  audioEnabled = true,
-  volume = 1,
-  onWebRTCStats,
-  onWebRTCStream,
-  webrtcDisplayLayout,
-  onDesktopConnect,
-  onDesktopDisconnect,
-  onDesktopError,
-  onCredentialsRequired,
-  credentialOverlay,
   idleText,
 }: SessionPanelProps) {
-  const isIdle = connectionState === "idle";
-  const isConnecting = connectionState === "connecting";
-  const isError = connectionState === "error";
-  const targetHasAgent = connectedAgentIds.has(target);
+  const t = useTranslations("terminal.panel");
+  const isConnecting = connectionState === "connecting" || connectionState === "authenticating";
 
-  const panelMinHeight =
-    type === "terminal" ? "min-h-[400px]" : "min-h-[500px]";
-  const desktopPanelHeight = type === "desktop" ? "h-full" : "";
-  const emptyIcon = type === "terminal" ? "\u2318" : "\uD83D\uDDA5";
+  const overlay = isConnecting ? (
+    <div className="tm-state over">
+      <p className="tm-state-t">{t("connectingTo", { target })}</p>
+    </div>
+  ) : connectionState === "idle" && !wsUrl ? (
+    <div className="tm-state over">
+      <p className="tm-state-t">{idleText ?? t("notConnected")}</p>
+      {target ? <button type="button" className="tm-tbtn" onClick={onRetry}>{t("connect")}</button> : null}
+    </div>
+  ) : null;
 
-  const errorHelpText =
-    type === "terminal"
-      ? "Devices with a connected agent (\u2713) support instant terminal access. Other devices require SSH credentials."
-      : "Remote view supports WebRTC, RDP, SPICE, and VNC. Agent-connected devices (\u2713) can negotiate the best mode automatically.";
-
-  const defaultIdleText =
-    type === "terminal"
-      ? "Select a device and click Connect. Agent-connected devices (\u2713) use instant terminal access; other devices use SSH."
-      : "Select a device from the dropdown and click Connect to start a remote view session.";
-
-  // Suppress unused variable warning - targetHasAgent is used for future conditional logic
-  void targetHasAgent;
+  const colours = terminalTheme?.background
+    ? ({ "--tm-bg": terminalTheme.background, "--tm-fg": terminalTheme.foreground } as CSSProperties)
+    : undefined;
 
   return (
     <>
-      {/* Error banner */}
-      {error && (
-        <Card className="flex items-start gap-3 border-[var(--bad)]/20 mb-4">
-          <span className="text-[var(--bad)] text-sm font-medium shrink-0">
-            &#x26A0;
-          </span>
-          <div className="flex-1 space-y-1">
-            <p className="text-sm text-[var(--bad)]">{error}</p>
-            <p className="text-xs text-[var(--muted)]">{errorHelpText}</p>
-          </div>
-          <Button size="sm" onClick={onRetry} disabled={!target}>
-            Retry
-          </Button>
-        </Card>
-      )}
-
-      {/* Panel with overlays */}
-      <Card
-        variant="flush"
-        className={`relative ${panelMinHeight} ${desktopPanelHeight} overflow-hidden`}
-      >
-        {/* Idle overlay */}
-        {isIdle && !isConnecting && !credentialOverlay && (
-          <div className="absolute inset-0 flex items-center justify-center z-10 bg-[var(--panel)]">
-            <div className="flex flex-col items-center justify-center py-12 gap-2">
-              <div className="text-[var(--muted)]">{emptyIcon}</div>
-              <p className="text-sm font-medium text-[var(--text)]">
-                No active session
-              </p>
-              <p className="text-xs text-[var(--muted)] text-center max-w-sm">
-                {idleText ?? defaultIdleText}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Connecting overlay */}
-        {isConnecting && !credentialOverlay && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10 bg-[var(--panel)]">
-            <div className="h-5 w-5 rounded-full border-2 border-[var(--line)] border-t-[var(--accent)] animate-spin" />
-            <p className="text-sm font-medium text-[var(--text)]">Connecting</p>
-            <p className="text-xs text-[var(--muted)] text-center max-w-sm">
-              Connecting to {target}...
-            </p>
-          </div>
-        )}
-
-        {/* Credential overlay (desktop only) */}
-        {credentialOverlay}
-
-        {/* Viewer */}
-        {type === "terminal" ? (
+      {error ? (
+        <div className="tm-alert" role="alert">
+          <span>{error}</span>
+          <button type="button" className="tm-qbtn" onClick={onRetry} disabled={!target}>{t("retry")}</button>
+        </div>
+      ) : null}
+      <div className="tm-canvas" style={colours}>
+        <div className="tm-xt">
           <XTerminal
             ref={termRef}
             wsUrl={wsUrl}
@@ -240,49 +117,9 @@ export function SessionPanel({
             cursorBlink={terminalCursorBlink}
             scrollback={terminalScrollback}
           />
-        ) : protocol === "rdp" ? (
-          <GuacamoleViewer
-            ref={guacRef}
-            wsUrl={wsUrl}
-            onConnect={onDesktopConnect}
-            onDisconnect={onDesktopDisconnect}
-          />
-        ) : protocol === "spice" && spiceTicket ? (
-          <SPICEViewer
-            ref={spiceRef}
-            wsUrl={spiceTicket.wsUrl}
-            password={spiceTicket.password}
-            onConnect={onDesktopConnect}
-            onDisconnect={onDesktopDisconnect}
-          />
-        ) : protocol === "webrtc" ? (
-          <WebRTCViewer
-            key={wsUrl ?? "webrtc-idle"}
-            ref={webrtcRef}
-            wsUrl={wsUrl}
-            scalingMode={scalingMode}
-            audioEnabled={audioEnabled}
-            volume={volume}
-            onStats={onWebRTCStats}
-            onStream={onWebRTCStream}
-            displayLayout={webrtcDisplayLayout}
-            onConnect={onDesktopConnect}
-            onDisconnect={onDesktopDisconnect}
-          />
-        ) : (
-          <VNCViewer
-            ref={vncRef}
-            wsUrl={wsUrl}
-            onConnect={onDesktopConnect}
-            onDisconnect={onDesktopDisconnect}
-            onError={onDesktopError}
-            onCredentialsRequired={onCredentialsRequired}
-            quality={quality}
-            scalingMode={scalingMode}
-            viewOnly={viewOnly}
-          />
-        )}
-      </Card>
+        </div>
+        {overlay}
+      </div>
     </>
   );
 }

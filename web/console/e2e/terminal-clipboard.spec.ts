@@ -75,11 +75,11 @@ test("terminal pane context menu paste sends clipboard text to stream", async ({
   }).toBeGreaterThanOrEqual(1);
 
   await terminal.click({ button: "right" });
-  await expect(page.getByRole("button", { name: "Copy Selection", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Select All", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Find", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Clear Scrollback", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Paste", exact: true }).click();
+  await expect(page.getByRole("menuitem", { name: "Copy", exact: true })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Select all", exact: true })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Find…", exact: true })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Clear", exact: true })).toBeVisible();
+  await page.getByRole("menuitem", { name: "Paste", exact: true }).click();
   // Paste goes through xterm's paste(), which sends LF as CR (the Enter key)
   // and adds bracketed-paste markers only when the shell enables them; the
   // mock shell never does, so one CR-terminated frame is expected.
@@ -234,9 +234,9 @@ test("terminal shows clipboard permission feedback for copy and paste actions", 
   await terminal.click();
   await triggerTerminalShortcut(page, "a", { ctrl: true });
   await triggerTerminalShortcut(page, "C", { ctrl: true, shift: true });
-  await expect(page.getByRole("status")).toContainText("Clipboard write was blocked by the browser");
+  await expect(page.getByRole("status")).toContainText("The browser blocked copying");
 
   await terminal.click({ button: "right" });
-  await page.getByRole("button", { name: "Paste", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("Clipboard read was blocked by the browser");
+  await page.getByRole("menuitem", { name: "Paste", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("The browser blocked pasting");
 });

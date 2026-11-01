@@ -10,6 +10,8 @@ import {
 } from "react";
 import type { WorkspaceTab } from "./useWorkspaceTabs";
 
+export type WorkspaceErrorCode = "emptyName" | "createFailed" | "deleteFailed" | "renameFailed" | "duplicateFailed" | "closeOthersFailed";
+
 export type TabContextMenuState = {
   tabId: string;
   x: number;
@@ -52,7 +54,8 @@ export function useTerminalWorkspaceTabUI({
   deleteTab,
 }: UseTerminalWorkspaceTabUIOptions) {
   const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
-  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  /** What went wrong last, as a message key under terminal.errors (shown for six seconds). */
+  const [workspaceError, setWorkspaceError] = useState<WorkspaceErrorCode | null>(null);
   const [tabMenu, setTabMenu] = useState<TabContextMenuState | null>(null);
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editingTabName, setEditingTabName] = useState("");
@@ -115,20 +118,28 @@ export function useTerminalWorkspaceTabUI({
     setTabMenu(null);
   }, []);
 
-  const openTabMenu = useCallback(
-    (event: ReactMouseEvent, tabId: string) => {
-      event.preventDefault();
-      event.stopPropagation();
+  /** Opens a tab's menu at a point on screen (a right-click, or under the tab from the keyboard). */
+  const openTabMenuAt = useCallback(
+    (tabId: string, clientX: number, clientY: number) => {
       setActiveTab(tabId);
       const hostRect = tabMenuHostRef.current?.getBoundingClientRect();
       const pos = clampContextMenuPosition(
-        hostRect ? event.clientX - hostRect.left : event.clientX,
-        hostRect ? event.clientY - hostRect.top : event.clientY,
+        hostRect ? clientX - hostRect.left : clientX,
+        hostRect ? clientY - hostRect.top : clientY,
         hostRect ? { width: hostRect.width, height: hostRect.height } : undefined,
       );
       setTabMenu({ tabId, x: pos.x, y: pos.y });
     },
     [setActiveTab],
+  );
+
+  const openTabMenu = useCallback(
+    (event: ReactMouseEvent, tabId: string) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openTabMenuAt(tabId, event.clientX, event.clientY);
+    },
+    [openTabMenuAt],
   );
 
   const beginRenameTab = useCallback((tab: WorkspaceTab) => {
@@ -149,16 +160,16 @@ export function useTerminalWorkspaceTabUI({
 
   const handleCreateTab = useCallback(() => {
     setWorkspaceError(null);
-    void createTab().catch((error) => {
-      setWorkspaceError(error instanceof Error ? error.message : "Failed to create tab");
+    void createTab().catch(() => {
+      setWorkspaceError("createFailed");
     });
   }, [createTab]);
 
   const handleDeleteTab = useCallback(
     (id: string) => {
       setWorkspaceError(null);
-      void deleteTab(id).catch((error) => {
-        setWorkspaceError(error instanceof Error ? error.message : "Failed to delete tab");
+      void deleteTab(id).catch(() => {
+        setWorkspaceError("deleteFailed");
       });
     },
     [deleteTab],
@@ -175,7 +186,7 @@ export function useTerminalWorkspaceTabUI({
     if (!editingTabId) return;
     const normalized = editingTabName.trim().replace(/\s+/g, " ");
     if (!normalized) {
-      setWorkspaceError("Tab name cannot be empty");
+      setWorkspaceError("emptyName");
       return;
     }
     const safeName = normalized.slice(0, 48);
@@ -184,8 +195,8 @@ export function useTerminalWorkspaceTabUI({
     setEditingTabName("");
     try {
       await updateTab(editingTabId, { name: safeName });
-    } catch (error) {
-      setWorkspaceError(error instanceof Error ? error.message : "Failed to rename tab");
+    } catch {
+      setWorkspaceError("renameFailed");
     }
   }, [editingTabId, editingTabName, updateTab]);
 
@@ -208,8 +219,8 @@ export function useTerminalWorkspaceTabUI({
           panes: tab.panes.map((pane) => ({ ...pane })),
         });
         setActiveTab(duplicated.id);
-      } catch (error) {
-        setWorkspaceError(error instanceof Error ? error.message : "Failed to duplicate tab");
+      } catch {
+        setWorkspaceError("duplicateFailed");
       }
     },
     [createTab, setActiveTab, updateTab],
@@ -225,8 +236,8 @@ export function useTerminalWorkspaceTabUI({
           await deleteTab(tab.id);
         }
         setActiveTab(keepTabId);
-      } catch (error) {
-        setWorkspaceError(error instanceof Error ? error.message : "Failed to close other tabs");
+      } catch {
+        setWorkspaceError("closeOthersFailed");
       }
     },
     [deleteTab, setActiveTab, tabs],
@@ -246,6 +257,7 @@ export function useTerminalWorkspaceTabUI({
     tabRenameInputRef,
     closeTabMenu,
     openTabMenu,
+    openTabMenuAt,
     beginRenameTab,
     handleLayoutChange,
     handleCreateTab,

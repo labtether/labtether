@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, type RefObject } from "react";
+import { useTranslations } from "next-intl";
 import type { XTerminalHandle } from "../XTerminal";
 
 const DEFAULT_KEYS = ["Esc", "Ctrl", "Alt", "Tab", "\u2191", "\u2193", "\u2190", "\u2192", "|", "~", "$", "/"];
@@ -38,6 +39,7 @@ export default function KeyboardToolbar({
   keys = DEFAULT_KEYS,
   visible,
 }: KeyboardToolbarProps) {
+  const t = useTranslations("terminal.keys");
   const [latchedModifiers, setLatchedModifiers] = useState<Set<string>>(new Set());
 
   // Default visibility: true on mobile (touch devices), false on desktop.
@@ -81,7 +83,7 @@ export default function KeyboardToolbar({
   if (!isVisible) return null;
 
   return (
-    <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-t border-[var(--line)] bg-[var(--panel)] px-2 py-1.5">
+    <div className="tm-keys" role="toolbar" aria-label={t("label")}>
       {keys.map((key) => {
         const isModifier = MODIFIER_KEYS.has(key);
         const isLatched = latchedModifiers.has(key);
@@ -90,12 +92,9 @@ export default function KeyboardToolbar({
             key={key}
             type="button"
             onClick={() => handleKeyPress(key)}
-            className={`min-w-8 whitespace-nowrap rounded border px-2 py-1 font-mono text-xs transition-colors ${
-              isLatched
-                ? "border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-contrast)]"
-                : "border-[var(--line)] bg-[var(--surface)] text-[var(--text)] hover:bg-[var(--hover)]"
-            }`}
-            title={isModifier ? `Toggle ${key} modifier` : `Send ${key}`}
+            className="tm-key"
+            aria-pressed={isModifier ? isLatched : undefined}
+            title={isModifier ? t("hold", { key }) : t("send", { key })}
           >
             {key}
           </button>

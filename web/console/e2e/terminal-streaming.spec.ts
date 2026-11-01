@@ -83,8 +83,14 @@ test("terminal broadcast mirrors snippet input across panes", async ({ page }) =
     },
   });
 
+  const insertSnippet = async () => {
+    await page.getByRole("button", { name: "More terminal actions" }).click();
+    await page.getByRole("menuitem", { name: "Snippets" }).click();
+    await page.getByRole("menuitem", { name: "Echo Identity" }).click();
+  };
+
   await page.goto("/terminal");
-  await expect(page.getByTitle("Insert Echo Identity")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Session on alpha-host" })).toBeVisible();
 
   await expect.poll(async () => {
     return page.evaluate(() => {
@@ -96,11 +102,12 @@ test("terminal broadcast mirrors snippet input across panes", async ({ page }) =
     });
   }).toBeGreaterThanOrEqual(2);
 
-  await page.getByTitle("Insert Echo Identity").click();
+  await insertSnippet();
   await expect.poll(async () => (await commandSendEvents(page, broadcastCommand)).length).toBe(1);
 
-  await page.getByTitle("Broadcast OFF (Ctrl+Shift+B)").click();
-  await page.getByTitle("Insert Echo Identity").click();
+  await page.getByRole("button", { name: "More terminal actions" }).click();
+  await page.getByRole("menuitemcheckbox", { name: /Send to all panes/ }).click();
+  await insertSnippet();
 
   await expect.poll(async () => (await commandSendEvents(page, broadcastCommand)).length).toBe(3);
 
