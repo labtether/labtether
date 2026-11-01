@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState, type RefObject } from "react";
 import type { VNCViewerHandle, VNCCredentialRequest } from "../../../components/VNCViewer";
+import { SignInCard } from "../../../components/remote-toolbar/SignInCard";
 
 type CredentialPromptOptions = {
   vncRef: RefObject<VNCViewerHandle | null>;
@@ -55,66 +56,19 @@ export function useVNCCredentialPrompt({ vncRef, initialCredentials, vncPassword
 
   // ── Credential overlay ──
   const credentialOverlay = credentialRequest ? (
-    <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-20">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="remote-view-auth-title"
-        className="bg-[var(--surface)] border border-[var(--line)] rounded-lg p-6 w-80 shadow-lg"
-      >
-        <h3
-          id="remote-view-auth-title"
-          className="text-sm font-semibold text-[var(--text)] mb-3"
-        >
-          Authentication Required
-        </h3>
-        {credentialRequest.types?.includes("username") && (
-          <input
-            type="text"
-            aria-label="Username"
-            placeholder="Username"
-            value={credUsername}
-            onChange={(e) => setCredUsername(e.target.value)}
-            className="w-full mb-2 px-3 py-1.5 rounded border border-[var(--line)] bg-[var(--input)] text-[var(--text)] text-sm"
-            autoFocus
-          />
-        )}
-        {credentialRequest.types?.includes("password") && (
-          <input
-            type="password"
-            aria-label="Password"
-            placeholder="Password"
-            value={credPassword}
-            onChange={(e) => setCredPassword(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleCredentialSubmit();
-            }}
-            className="w-full mb-3 px-3 py-1.5 rounded border border-[var(--line)] bg-[var(--input)] text-[var(--text)] text-sm"
-            autoFocus={!credentialRequest.types?.includes("username")}
-          />
-        )}
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setCredentialRequest(null);
-              setCredPassword("");
-              setCredUsername("");
-            }}
-            className="px-3 py-1.5 text-xs rounded border border-[var(--line)] text-[var(--muted)] hover:text-[var(--text)]"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleCredentialSubmit}
-            className="px-3 py-1.5 text-xs rounded bg-[var(--accent)] text-white"
-          >
-            Connect
-          </button>
-        </div>
-      </div>
-    </div>
+    <SignInCard
+      needsUsername={credentialRequest.types?.includes("username") ?? false}
+      username={credUsername}
+      onUsernameChange={setCredUsername}
+      password={credPassword}
+      onPasswordChange={setCredPassword}
+      onSubmit={handleCredentialSubmit}
+      onCancel={() => {
+        setCredentialRequest(null);
+        setCredPassword("");
+        setCredUsername("");
+      }}
+    />
   ) : null;
 
   return { credentialOverlay, handleCredentialsRequired };

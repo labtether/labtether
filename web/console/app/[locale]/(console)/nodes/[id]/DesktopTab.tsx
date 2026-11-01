@@ -218,9 +218,11 @@ export function DesktopTab({ nodeId }: { nodeId: string }) {
     connect: session.connect,
   });
 
-  const { controlsCardProps, remoteViewerShellProps } = useDesktopTabViewProps({
+  const { connectBarProps, remoteViewerShellProps } = useDesktopTabViewProps({
     nodeId,
+    nodeName,
     connectionState: session.connectionState,
+    connectionPhase: session.connectionProgress?.phase,
     quality: session.quality,
     setQuality: session.setQuality,
     protocol,
@@ -294,7 +296,7 @@ export function DesktopTab({ nodeId }: { nodeId: string }) {
 
   return (
     <DesktopRemoteViewSection
-      controlsCardProps={controlsCardProps}
+      connectBarProps={connectBarProps}
       protocolSwitchNotice={protocolSwitchNotice}
       remoteViewerShellProps={remoteViewerShellProps}
     />

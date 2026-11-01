@@ -1,34 +1,26 @@
 "use client";
 
-import type { ComponentProps } from "react";
-
-import { Card } from "../../../../components/ui/Card";
-import {
-  RemoteViewerShell,
-  type RemoteViewerShellProps,
-} from "../../../../components/RemoteViewerShell";
-import { DesktopConnectionControlsCard } from "./DesktopConnectionControlsCard";
+import { RemoteViewerShell, type RemoteViewerShellProps } from "../../../../components/RemoteViewerShell";
+import { DesktopConnectBar, type DesktopConnectBarProps } from "./DesktopConnectBar";
 
 export interface DesktopRemoteViewSectionProps {
-  controlsCardProps: ComponentProps<typeof DesktopConnectionControlsCard>;
+  connectBarProps: DesktopConnectBarProps;
   protocolSwitchNotice?: string | null;
   remoteViewerShellProps: RemoteViewerShellProps;
 }
 
+/** A device's Desktop tab: its remote screen, with the connect options in the row above it until it connects. */
 export function DesktopRemoteViewSection({
-  controlsCardProps,
+  connectBarProps,
   protocolSwitchNotice,
   remoteViewerShellProps,
 }: DesktopRemoteViewSectionProps) {
   return (
-    <>
-      <DesktopConnectionControlsCard {...controlsCardProps} />
-      {protocolSwitchNotice ? (
-        <Card className="mb-4 py-2 text-sm text-[var(--warn)]">
-          {protocolSwitchNotice}
-        </Card>
-      ) : null}
-      <RemoteViewerShell {...remoteViewerShellProps} />
-    </>
+    <RemoteViewerShell
+      {...remoteViewerShellProps}
+      offlineTools={<DesktopConnectBar {...connectBarProps} />}
+      notice={protocolSwitchNotice || undefined}
+      startLabel="connect"
+    />
   );
 }

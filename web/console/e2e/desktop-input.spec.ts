@@ -53,10 +53,8 @@ test("desktop VNC native scaling keeps remote drag input enabled", async ({
     .toBe("vnc");
   await expect(page.getByTitle("Disconnect")).toBeVisible();
 
-  await page
-    .getByRole("group", { name: "Scaling mode" })
-    .getByRole("button", { name: "1:1" })
-    .click();
+  await page.getByRole("button", { name: "More", exact: true }).click();
+  await page.getByRole("menuitemradio", { name: "100%" }).click();
 
   await expect
     .poll(() =>
@@ -105,8 +103,8 @@ test("desktop VNC toolbar shortcuts pass through to remote keys", async ({
     .poll(() => sessionRequests.at(-1)?.protocol ?? null)
     .toBe("vnc");
 
-  await page.getByTitle("More viewer tools").click();
-  await page.getByTitle("Alt+Tab").click();
+  await page.getByRole("button", { name: "Send keys" }).click();
+  await page.getByRole("menuitem", { name: "Alt+Tab" }).click();
   await expect
     .poll(() =>
       page.evaluate(() => {
@@ -145,7 +143,8 @@ test("desktop VNC mouse button returns focus and enters pointer lock", async ({
     .poll(() => sessionRequests.at(-1)?.protocol ?? null)
     .toBe("vnc");
 
-  await page.getByTitle("Send mouse to remote session").click();
+  await page.getByRole("button", { name: "Send keys" }).click();
+  await page.getByRole("menuitemcheckbox", { name: "Capture mouse" }).click();
 
   await expect
     .poll(() =>
@@ -181,8 +180,8 @@ test("desktop VNC keyboard capture returns typing to the remote viewer", async (
     .poll(() => sessionRequests.at(-1)?.protocol ?? null)
     .toBe("vnc");
 
-  await page.getByTitle("More viewer tools").click();
-  await page.getByTitle("Send keyboard to remote session").click();
+  await page.getByRole("button", { name: "Send keys" }).click();
+  await page.getByRole("menuitemcheckbox", { name: "Capture keyboard" }).click();
   await expect
     .poll(() =>
       page.evaluate(() => document.pointerLockElement?.className ?? ""),
@@ -233,21 +232,23 @@ test("desktop VNC shows a fallback cursor when the remote cursor is hidden", asy
     "visible",
   );
 
-  await page.getByTitle("Send mouse to remote session").click();
+  await page.getByRole("button", { name: "Send keys" }).click();
+  await page.getByRole("menuitemcheckbox", { name: "Capture mouse" }).click();
 
   await expect(page.locator(".vncContainer").first()).not.toHaveAttribute(
     "data-cursor-fallback",
     "visible",
   );
 
-  await page.getByTitle("Mouse ready in remote session").click();
+  await page.getByRole("button", { name: "Send keys" }).click();
+  await page.getByRole("menuitemcheckbox", { name: "Capture mouse" }).click();
   await expect(page.locator(".vncContainer").first()).toHaveAttribute(
     "data-cursor-fallback",
     "visible",
   );
 });
 
-test("desktop fullscreen toolbar defaults to bottom and supports top toggle plus auto-hide", async ({
+test("desktop fullscreen toolbar floats at the top, moves to the bottom and hides into a handle", async ({
   page,
 }) => {
   const sessionRequests: Array<Record<string, unknown>> = [];
@@ -255,14 +256,14 @@ test("desktop fullscreen toolbar defaults to bottom and supports top toggle plus
   await installDesktopApiMocks(page, { sessionRequests });
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
-  await page.getByRole("combobox", { name: "Desktop protocol" }).selectOption("webrtc");
+  await page.getByRole("combobox", { name: "Protocol" }).selectOption("webrtc");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect
     .poll(() => sessionRequests.at(-1)?.protocol ?? null)
     .toBe("webrtc");
 
-  await page.getByTitle("Fullscreen").click();
+  await page.getByRole("button", { name: "Full screen", exact: true }).click();
   await expect
     .poll(() => page.evaluate(() => document.fullscreenElement !== null))
     .toBe(true);
@@ -273,29 +274,29 @@ test("desktop fullscreen toolbar defaults to bottom and supports top toggle plus
     throw new Error("viewport unavailable");
   }
 
-  const bottomBox = await disconnectButton.boundingBox();
-  if (!bottomBox) {
-    throw new Error("disconnect button not rendered");
-  }
-  expect(bottomBox.y).toBeGreaterThan(viewport.height * 0.65);
-
-  await expect(page.getByTitle("More viewer tools")).toBeVisible();
-  await page.getByTitle("More viewer tools").click();
-  await expect(page.getByTitle("Alt+Tab")).toBeVisible();
-
-  await page.getByTitle("Move toolbar to top").click();
   const topBox = await disconnectButton.boundingBox();
   if (!topBox) {
-    throw new Error("disconnect button missing after moving toolbar");
+    throw new Error("disconnect button not rendered");
   }
   expect(topBox.y).toBeLessThan(viewport.height * 0.35);
 
-  await page.getByTitle("Enable auto-hide").click();
-  await expect(page.getByTitle("Disable auto-hide")).toBeVisible();
-  await page.waitForTimeout(5200);
-  await expect(disconnectButton).toBeHidden();
-  await expect(page.getByLabel("Show remote view tools")).toBeVisible();
+  await page.getByRole("button", { name: "Send keys" }).click();
+  await expect(page.getByRole("menuitem", { name: "Alt+Tab" })).toBeVisible();
+  await page.keyboard.press("Escape");
 
-  await page.mouse.move(Math.round(viewport.width / 2), 2);
+  await page.getByRole("button", { name: "More", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Move to bottom" }).click();
+  const bottomBox = await disconnectButton.boundingBox();
+  if (!bottomBox) {
+    throw new Error("disconnect button missing after moving toolbar");
+  }
+  expect(bottomBox.y).toBeGreaterThan(viewport.height * 0.65);
+
+  await page.mouse.move(Math.round(viewport.width / 2), Math.round(viewport.height / 2));
+  await page.waitForTimeout(2600);
+  await expect(disconnectButton).toBeHidden();
+  await expect(page.getByLabel("Show Remote View tools")).toBeVisible();
+
+  await page.mouse.move(Math.round(viewport.width / 2), viewport.height - 2);
   await expect(page.getByTitle("Disconnect")).toBeVisible();
 });

@@ -14,7 +14,7 @@ test("desktop relay-backed WebRTC falls back to VNC and recovers back to WebRTC"
   await installDesktopApiMocks(page, { sessionRequests });
 
   await page.goto("/nodes/agent-host-1?panel=desktop");
-  await page.getByRole("combobox", { name: "Desktop protocol" }).selectOption("webrtc");
+  await page.getByRole("combobox", { name: "Protocol" }).selectOption("webrtc");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
 
   await expect
@@ -73,9 +73,9 @@ test("desktop VNC reconnect now preserves the chosen monitor and clears the queu
       display: "Display 2",
     });
   await expect(page.getByTitle("Disconnect")).toBeVisible();
-  await expect(page.getByText("Reconnecting (attempt 1/5)...")).toBeVisible();
+  await expect(page.getByText("Reconnecting · attempt 1 of 5")).toBeVisible();
 
-  await page.getByRole("button", { name: "Reconnect Now" }).click();
+  await page.getByRole("button", { name: "Reconnect now" }).click();
 
   await expect
     .poll(() => sessionRequests.length)
@@ -86,7 +86,7 @@ test("desktop VNC reconnect now preserves the chosen monitor and clears the queu
     display: "Display 2",
     record: false,
   });
-  await expect(page.getByText("Reconnecting (attempt 1/5)...")).toHaveCount(0);
+  await expect(page.getByText("Reconnecting · attempt 1 of 5")).toHaveCount(0);
   await expect(page.getByTitle("Disconnect")).toBeVisible();
 
   await page.waitForTimeout(1100);
@@ -120,20 +120,24 @@ test("desktop VNC audio unavailable state clears after reconnect recovery", asyn
     .poll(() => sessionRequests.at(0)?.protocol ?? null)
     .toBe("vnc");
   await expect(page.getByTitle("Disconnect")).toBeVisible();
-  await expect(page.getByTitle("Audio unavailable")).toBeDisabled();
+  await page.getByRole("button", { name: "More", exact: true }).click();
+  await expect(page.getByRole("menuitemcheckbox", { name: "Sound unavailable" })).toBeDisabled();
   await expect(page.getByLabel("Volume")).toHaveCount(0);
+  await page.keyboard.press("Escape");
 
   await page.getByTitle("Disconnect").click();
   await expect(page.getByRole("button", { name: "Connect", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect.poll(() => sessionRequests.length).toBe(2);
-  await expect(page.getByTitle("Audio unavailable")).toHaveCount(0);
-  await expect(page.getByTitle("Mute audio")).toBeVisible();
+  await expect(page.getByTitle("Disconnect")).toBeVisible();
+  await page.getByRole("button", { name: "More", exact: true }).click();
+  await expect(page.getByRole("menuitemcheckbox", { name: "Sound unavailable" })).toHaveCount(0);
+  await expect(page.getByRole("menuitemcheckbox", { name: "Sound", exact: true })).toBeVisible();
   await expect(page.getByLabel("Volume")).toBeVisible();
 });
 
-test("desktop VNC reconnect exhaustion surfaces Try Again and can recover", async ({
+test("desktop VNC reconnect exhaustion surfaces Try again and can recover", async ({
   page,
 }) => {
   const sessionRequests: Array<Record<string, unknown>> = [];
@@ -188,16 +192,13 @@ test("desktop VNC reconnect exhaustion surfaces Try Again and can recover", asyn
   await expect
     .poll(() => sessionRequests.length)
     .toBe(6);
-  await expect(page.getByText("Connection lost", { exact: true })).toBeVisible();
-  await expect(
-    page.getByText("Unable to reconnect after 5 attempts", { exact: true }),
-  ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Try Again" })).toBeVisible();
+  await expect(page.getByText("Connection lost after 5 attempts", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Try Again" }).click();
+  await page.getByRole("button", { name: "Try again" }).click();
   await expect
     .poll(() => sessionRequests.length)
     .toBe(7);
   await expect(page.getByTitle("Disconnect")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Try Again" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Try again" })).toHaveCount(0);
 });

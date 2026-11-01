@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-
-import { Button } from "./ui/Button";
+import { useTranslations } from "next-intl";
 
 type WakeState = "idle" | "sending" | "sent" | "error";
 
@@ -11,7 +10,9 @@ interface WakeButtonProps {
   onWoken?: () => void;
 }
 
+/** Wake-on-LAN as a plain button: sends the packet, then watches for the device to come online for two minutes. */
 export default function WakeButton({ assetId, onWoken }: WakeButtonProps) {
+  const t = useTranslations("desktop.wake");
   const [state, setState] = useState<WakeState>("idle");
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -81,16 +82,13 @@ export default function WakeButton({ assetId, onWoken }: WakeButtonProps) {
   }, [assetId, startPoll]);
 
   return (
-    <Button
-      variant={state === "error" ? "danger" : "secondary"}
-      size="sm"
+    <button
+      type="button"
+      className={`rv-btn${state === "error" ? " bad" : ""}`}
       onClick={handleWake}
       disabled={state === "sending" || state === "sent"}
     >
-      {state === "idle" && "Wake Node"}
-      {state === "sending" && "Sending..."}
-      {state === "sent" && "Packet Sent"}
-      {state === "error" && "Wake Failed"}
-    </Button>
+      {t(state)}
+    </button>
   );
 }

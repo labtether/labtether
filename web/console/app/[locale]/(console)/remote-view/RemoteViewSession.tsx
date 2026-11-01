@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { GuacamoleViewerHandle } from "../../../components/GuacamoleViewer";
 import {
@@ -43,6 +43,8 @@ function buildSessionTarget(tab: RemoteViewTab): string {
 
 interface RemoteViewSessionProps {
   tab: RemoteViewTab;
+  /** Remote View's tabs, shown left of the tools in the row above the screen. */
+  tabBar?: ReactNode;
   onConnectionStateChange: (state: RemoteViewConnectionState) => void;
   /** Pre-collected credentials to auto-submit when the remote requests auth. */
   initialCredentials?: { username?: string; password?: string };
@@ -50,6 +52,7 @@ interface RemoteViewSessionProps {
 
 export default function RemoteViewSession({
   tab,
+  tabBar,
   onConnectionStateChange,
   initialCredentials,
 }: RemoteViewSessionProps) {
@@ -374,12 +377,21 @@ export default function RemoteViewSession({
 
   // ── Build RemoteViewerShell props ──
   const shellProps: RemoteViewerShellProps = {
-    // Identity
+    // Identity and layout
     nodeId,
     viewerWrapperRef,
+    targetLabel: tab.label,
+    leading: tabBar,
+    startLabel: "reconnect",
 
     // Connection state
-    connectionState: session.connectionState,
+    // Before the first connect starts, the screen already reads as connecting (not as disconnected for a frame).
+    connectionState:
+      session.connectionState === "idle" && sessionTarget && !hasAutoConnected.current
+        ? "connecting"
+        : session.connectionState,
+    connectionPhase: session.connectionProgress?.phase,
+    isReconnecting: session.isReconnecting,
     latencyMs,
     transportLabel: viewerRuntime.effectiveTransportLabel,
     networkQuality: viewerRuntime.networkQuality,

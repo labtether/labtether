@@ -1,7 +1,9 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import messages from "../../../../../messages/en/desktop.json";
 import RemoteViewTabBar from "../RemoteViewTabBar";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -26,19 +28,21 @@ describe("RemoteViewTabBar accessibility", () => {
     const onSetActiveTab = vi.fn();
     await act(async () => {
       root.render(
-        <RemoteViewTabBar
-          tabs={[{ id: "new", type: "new", label: "New Tab", connectionState: "idle" }]}
-          activeTabId="new"
-          onAddTab={vi.fn()}
-          onRemoveTab={onRemoveTab}
-          onSetActiveTab={onSetActiveTab}
-        />,
+        <NextIntlClientProvider locale="en" messages={{ desktop: messages }}>
+          <RemoteViewTabBar
+            tabs={[{ id: "new", type: "new", label: "New Tab", connectionState: "idle" }]}
+            activeTabId="new"
+            onAddTab={vi.fn()}
+            onRemoveTab={onRemoveTab}
+            onSetActiveTab={onSetActiveTab}
+          />
+        </NextIntlClientProvider>,
       );
     });
 
     const tab = container.querySelector<HTMLElement>('[role="tab"]');
-    const close = container.querySelector<HTMLButtonElement>('button[aria-label="Close New Tab tab"]');
-    expect(container.querySelector('[role="tablist"]')?.getAttribute("aria-label")).toBe("Remote view tabs");
+    const close = container.querySelector<HTMLButtonElement>('button[aria-label="Close New tab"]');
+    expect(container.querySelector('[role="tablist"]')?.getAttribute("aria-label")).toBe("Remote View tabs");
     expect(tab?.getAttribute("aria-selected")).toBe("true");
     expect(close).not.toBeNull();
     expect(tab?.contains(close ?? null)).toBe(false);

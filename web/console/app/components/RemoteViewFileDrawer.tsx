@@ -1,13 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  X, Upload, RefreshCw, FolderOpen, ChevronRight, Eye, EyeOff,
-  ArrowUp, Download, Loader2,
-} from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
+import { useTranslations } from "next-intl";
+import { ArrowUp, ChevronRight, Download, Eye, EyeOff, RefreshCw, Upload, X } from "lucide-react";
 import { listFiles } from "../[locale]/(console)/files/fileOpsClient";
 import type { FileEntry } from "../[locale]/(console)/files/fileOpsClient";
-import { fileIconComponent, formatSize } from "../[locale]/(console)/files/filesPageUtils";
+import { formatSize } from "../[locale]/(console)/files/filesPageUtils";
 import { useFileDownload } from "../hooks/useFileDownload";
 
 type Props = {
@@ -16,7 +14,15 @@ type Props = {
   onClose: () => void;
 };
 
+const join = (dir: string, name: string) => (dir.endsWith("/") ? `${dir}${name}` : `${dir}/${name}`);
+
+/**
+ * Files on the remote machine, over the right of the screen: one folder (home first), Upload from this computer (or
+ * drop files on the drawer), Download by choosing a file, with the transfer's progress at the bottom. Goes through the
+ * device's agent.
+ */
 export function RemoteViewFileDrawer({ nodeId, open, onClose }: Props) {
+  const t = useTranslations("desktop.files");
   const [currentPath, setCurrentPath] = useState("");
   const [homePath, setHomePath] = useState("");
   const [entries, setEntries] = useState<FileEntry[]>([]);
@@ -24,315 +30,212 @@ export function RemoteViewFileDrawer({ nodeId, open, onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [showHidden, setShowHidden] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<{ name: string; percent: number } | null>(null);
+  const [upload, setUpload] = useState<{ name: string; percent: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
   const { downloading, progress, filename, downloadFile } = useFileDownload(nodeId);
 
-  const fetchEntries = useCallback(async (path: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await listFiles(nodeId, path, { showHidden });
-      setEntries(result.entries ?? []);
-      if (result.path) {
-        setCurrentPath(result.path);
-        if (!homePath) setHomePath(result.path);
+  const fetchEntries = useCallback(
+    async (path: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await listFiles(nodeId, path, { showHidden });
+        setEntries(result.entries ?? []);
+        if (result.path) {
+          setCurrentPath(result.path);
+          if (!homePath) setHomePath(result.path);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : t("listFailed"));
+        setEntries([]);
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to list files");
-      setEntries([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [nodeId, showHidden, homePath]);
+    },
+    [nodeId, showHidden, homePath, t],
+  );
 
   useEffect(() => {
     if (open) void fetchEntries(currentPath || "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, showHidden]);
 
-  const navigateTo = useCallback((path: string) => {
-    setCurrentPath(path);
-    void fetchEntries(path);
-  }, [fetchEntries]);
+  const navigateTo = useCallback(
+    (path: string) => {
+      setCurrentPath(path);
+      void fetchEntries(path);
+    },
+    [fetchEntries],
+  );
 
-  const handleFileClick = useCallback((entry: FileEntry) => {
-    const childPath = currentPath.endsWith("/")
-      ? `${currentPath}${entry.name}`
-      : `${currentPath}/${entry.name}`;
-    if (entry.is_dir) {
-      navigateTo(childPath);
-    } else {
-      void downloadFile(childPath);
-    }
-  }, [currentPath, navigateTo, downloadFile]);
-
-  // Build breadcrumb segments relative to home
-  const relativePath = homePath && currentPath.startsWith(homePath)
-    ? currentPath.slice(homePath.length)
-    : currentPath;
-  const breadcrumbSegments = relativePath.split("/").filter(Boolean);
-  const isAtHome = !relativePath || relativePath === "/";
-
-  const handleUpload = useCallback((files: FileList | File[]) => {
-    const fileArray = Array.from(files);
-    if (fileArray.length === 0) return;
-    const file = fileArray[0];
-    const uploadPath = currentPath.endsWith("/")
-      ? `${currentPath}${file.name}`
-      : `${currentPath}/${file.name}`;
-    setUploadProgress({ name: file.name, percent: 0 });
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", `/api/files/${encodeURIComponent(nodeId)}/upload?path=${encodeURIComponent(uploadPath)}`);
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        setUploadProgress({ name: file.name, percent: Math.round((e.loaded / e.total) * 100) });
-      }
-    };
-    xhr.onload = () => { setUploadProgress(null); void fetchEntries(currentPath); };
-    xhr.onerror = () => { setUploadProgress(null); setError("Upload failed"); };
-    xhr.send(file);
-  }, [nodeId, currentPath, fetchEntries]);
-
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    dragCounterRef.current++;
-    if (e.dataTransfer.types.includes("Files")) setDragOver(true);
-  }, []);
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    dragCounterRef.current--;
-    if (dragCounterRef.current === 0) setDragOver(false);
-  }, []);
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    dragCounterRef.current = 0;
-    setDragOver(false);
-    if (e.dataTransfer.files.length > 0) handleUpload(e.dataTransfer.files);
-  }, [handleUpload]);
+  const handleUpload = useCallback(
+    (files: FileList | File[]) => {
+      const file = Array.from(files)[0];
+      if (!file) return;
+      setUpload({ name: file.name, percent: 0 });
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `/api/files/${encodeURIComponent(nodeId)}/upload?path=${encodeURIComponent(join(currentPath, file.name))}`);
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) setUpload({ name: file.name, percent: Math.round((event.loaded / event.total) * 100) });
+      };
+      xhr.onload = () => {
+        setUpload(null);
+        void fetchEntries(currentPath);
+      };
+      xhr.onerror = () => {
+        setUpload(null);
+        setError(t("uploadFailed"));
+      };
+      xhr.send(file);
+    },
+    [nodeId, currentPath, fetchEntries, t],
+  );
 
   useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { onClose(); e.stopPropagation(); }
+    if (!open) return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+        event.stopPropagation();
+      }
     };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
   if (!open) return null;
 
-  const sorted = [...entries].sort((a, b) => {
-    if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;
-    return a.name.localeCompare(b.name);
-  });
-
-  const hasTransfer = downloading || !!uploadProgress;
+  const relative = homePath && currentPath.startsWith(homePath) ? currentPath.slice(homePath.length) : currentPath;
+  const segments = relative.split("/").filter(Boolean);
+  const atHome = !relative || relative === "/";
+  const sorted = [...entries].sort((a, b) => (a.is_dir !== b.is_dir ? (a.is_dir ? -1 : 1) : a.name.localeCompare(b.name)));
+  const goUp = () => {
+    const parent = `/${currentPath.split("/").filter(Boolean).slice(0, -1).join("/")}`;
+    navigateTo(parent.length <= homePath.length ? "" : parent);
+  };
+  const onDrag = (event: DragEvent, step: 1 | -1) => {
+    event.preventDefault();
+    dragCounterRef.current += step;
+    if (step > 0 && event.dataTransfer.types.includes("Files")) setDragOver(true);
+    if (dragCounterRef.current === 0) setDragOver(false);
+  };
+  const transfer = downloading
+    ? { name: filename, percent: progress >= 0 ? progress : null, label: t("downloading") }
+    : upload
+      ? { name: upload.name, percent: upload.percent, label: t("uploading") }
+      : null;
 
   return (
-    <div
-      className="absolute top-0 right-0 bottom-0 z-30 flex flex-col"
-      style={{
-        width: 300,
-        background: "rgba(12, 12, 16, 0.96)",
-        backdropFilter: "blur(12px)",
-        borderLeft: "1px solid rgba(255, 255, 255, 0.06)",
-        animation: "slideInRight 0.15s ease-out",
+    <aside
+      className="rv-drawer"
+      aria-label={t("label")}
+      onDragEnter={(event) => onDrag(event, 1)}
+      onDragOver={(event) => event.preventDefault()}
+      onDragLeave={(event) => onDrag(event, -1)}
+      onDrop={(event) => {
+        event.preventDefault();
+        dragCounterRef.current = 0;
+        setDragOver(false);
+        if (event.dataTransfer.files.length > 0) handleUpload(event.dataTransfer.files);
       }}
-      onDragEnter={handleDragEnter}
-      onDragOver={(e) => e.preventDefault()}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
     >
-      <style>{`@keyframes slideInRight { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }`}</style>
-
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between px-3 h-9 shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-        <span className="text-xs font-semibold tracking-wide uppercase text-white/50">Files</span>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center justify-center w-6 h-6 rounded text-white/30 hover:text-white/70 hover:bg-white/5 transition-colors"
-            title="Upload file"
-          >
-            <Upload size={12} />
+      <div className="rv-drawer-h">
+        <nav className="rv-path mono" aria-label={t("path")}>
+          <button type="button" onClick={() => navigateTo("")} aria-current={atHome ? "location" : undefined}>
+            ~
           </button>
-          <button
-            type="button"
-            onClick={() => void fetchEntries(currentPath)}
-            className="flex items-center justify-center w-6 h-6 rounded text-white/30 hover:text-white/70 hover:bg-white/5 transition-colors"
-            title="Refresh"
-            disabled={loading}
-          >
-            <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowHidden((v) => !v)}
-            className="flex items-center justify-center w-6 h-6 rounded text-white/30 hover:text-white/70 hover:bg-white/5 transition-colors"
-            title={showHidden ? "Hide hidden files" : "Show hidden files"}
-          >
-            {showHidden ? <Eye size={12} /> : <EyeOff size={12} />}
-          </button>
-          <div className="w-px h-3.5 bg-white/8 mx-0.5" />
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex items-center justify-center w-6 h-6 rounded text-white/30 hover:text-white/70 hover:bg-white/5 transition-colors"
-            title="Close"
-          >
-            <X size={12} />
-          </button>
-        </div>
-        <input ref={fileInputRef} type="file" className="hidden" onChange={(e) => { if (e.target.files) handleUpload(e.target.files); e.target.value = ""; }} />
-      </div>
-
-      {/* ── Breadcrumb ── */}
-      <div
-        className="flex items-center gap-0 px-3 h-7 shrink-0 overflow-x-auto scrollbar-none"
-        style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
-      >
-        <button
-          type="button"
-          onClick={() => navigateTo("")}
-          className={`text-xs shrink-0 transition-colors ${isAtHome ? "text-white/60 font-medium" : "text-blue-400/80 hover:text-blue-300"}`}
-        >
-          ~
-        </button>
-        {breadcrumbSegments.map((segment, idx) => {
-          const isLast = idx === breadcrumbSegments.length - 1;
-          const targetPath = homePath + "/" + breadcrumbSegments.slice(0, idx + 1).join("/");
-          return (
-            <span key={idx} className="flex items-center shrink-0">
-              <ChevronRight size={9} className="text-white/15 mx-0.5" />
+          {segments.map((segment, i) => (
+            <span key={`${i}-${segment}`}>
+              <span aria-hidden="true">/</span>
               <button
                 type="button"
-                onClick={() => navigateTo(targetPath)}
-                className={`text-xs transition-colors ${isLast ? "text-white/60 font-medium" : "text-blue-400/80 hover:text-blue-300"}`}
+                onClick={() => navigateTo(`${homePath}/${segments.slice(0, i + 1).join("/")}`)}
+                aria-current={i === segments.length - 1 ? "location" : undefined}
               >
                 {segment}
               </button>
             </span>
-          );
-        })}
+          ))}
+        </nav>
+        <button type="button" className="rv-ib sm" onClick={() => void fetchEntries(currentPath)} disabled={loading} aria-label={t("refresh")} title={t("refresh")}>
+          <RefreshCw aria-hidden="true" className={loading ? "rv-spin" : undefined} />
+        </button>
+        <button
+          type="button"
+          className="rv-ib sm"
+          onClick={() => setShowHidden((v) => !v)}
+          aria-pressed={showHidden}
+          aria-label={t("hidden")}
+          title={t("hidden")}
+        >
+          {showHidden ? <Eye aria-hidden="true" /> : <EyeOff aria-hidden="true" />}
+        </button>
+        <button type="button" className="rv-ib sm" onClick={onClose} aria-label={t("close")} title={t("close")}>
+          <X aria-hidden="true" />
+        </button>
       </div>
-
-      {/* ── File list ── */}
-      <div className="flex-1 overflow-y-auto relative">
-        {/* Drag overlay */}
-        {dragOver && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center m-2 rounded-lg" style={{ background: "rgba(59, 130, 246, 0.08)", border: "2px dashed rgba(59, 130, 246, 0.3)" }}>
-            <div className="text-center">
-              <Upload size={20} className="mx-auto mb-1" style={{ color: "rgba(59, 130, 246, 0.5)" }} />
-              <p className="text-xs" style={{ color: "rgba(59, 130, 246, 0.7)" }}>Drop to upload here</p>
-            </div>
-          </div>
-        )}
-
+      <div className="rv-drawer-up">
+        <button type="button" className="rv-btn sm" onClick={() => fileInputRef.current?.click()}>
+          <Upload aria-hidden="true" />
+          {t("upload")}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          hidden
+          onChange={(event) => {
+            if (event.target.files) handleUpload(event.target.files);
+            event.target.value = "";
+          }}
+        />
+      </div>
+      <div className="rv-drawer-list">
+        {dragOver ? <div className="rv-drop">{t("dropHere")}</div> : null}
         {loading && entries.length === 0 ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 size={16} className="animate-spin text-white/20" />
-          </div>
+          <p className="rv-drawer-note">{t("loading")}</p>
         ) : error ? (
-          <div className="px-4 py-10 text-center">
-            <p className="text-xs text-red-400/80 leading-relaxed">{error}</p>
-            <button type="button" onClick={() => void fetchEntries(currentPath)} className="mt-3 text-[10px] text-blue-400/80 hover:text-blue-300 transition-colors">
-              Try again
+          <div className="rv-drawer-note">
+            <p className="rv-err">{error}</p>
+            <button type="button" className="rv-btn sm" onClick={() => void fetchEntries(currentPath)}>
+              {t("tryAgain")}
             </button>
           </div>
         ) : sorted.length === 0 ? (
-          <div className="px-4 py-12 text-center">
-            <FolderOpen size={20} className="mx-auto mb-2 text-white/10" />
-            <p className="text-xs text-white/25">No files here</p>
-          </div>
+          <p className="rv-drawer-note">{t("empty")}</p>
         ) : (
-          <div className="py-0.5">
-            {/* Parent directory */}
-            {!isAtHome && (
-              <button
-                type="button"
-                onClick={() => {
-                  const segments = currentPath.split("/").filter(Boolean);
-                  const parent = "/" + segments.slice(0, -1).join("/");
-                  navigateTo(parent.length <= (homePath || "").length ? "" : parent);
-                }}
-                className="flex items-center gap-2.5 w-full px-3 h-7 text-left hover:bg-white/[0.03] transition-colors"
-              >
-                <ArrowUp size={12} className="text-white/20 shrink-0" />
-                <span className="text-xs text-white/35">..</span>
+          <>
+            {atHome ? null : (
+              <button type="button" className="rv-file" onClick={goUp}>
+                <span className="rv-file-n">..</span>
+                <ArrowUp aria-hidden="true" />
               </button>
             )}
-
-            {sorted.map((entry) => {
-              const Icon = fileIconComponent(entry.name, entry.is_dir);
-              return (
-                <button
-                  key={entry.name}
-                  type="button"
-                  onClick={() => handleFileClick(entry)}
-                  className="flex items-center gap-2.5 w-full px-3 h-7 text-left hover:bg-white/[0.03] transition-colors group"
-                >
-                  <Icon
-                    size={13}
-                    className={`shrink-0 ${entry.is_dir ? "text-blue-400/50 group-hover:text-blue-400/70" : "text-white/20 group-hover:text-white/35"}`}
-                  />
-                  <span className="text-xs text-white/70 group-hover:text-white/90 truncate flex-1 min-w-0 transition-colors">
-                    {entry.name}
-                  </span>
-                  {!entry.is_dir && (
-                    <span className="text-[10px] text-white/15 shrink-0 tabular-nums">
-                      {formatSize(entry.size)}
-                    </span>
-                  )}
-                  {!entry.is_dir && (
-                    <Download size={10} className="text-white/0 group-hover:text-white/30 shrink-0 transition-colors" />
-                  )}
-                  {entry.is_dir && (
-                    <ChevronRight size={10} className="text-white/0 group-hover:text-white/20 shrink-0 transition-colors" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
+            {sorted.map((entry) => (
+              <button
+                key={entry.name}
+                type="button"
+                className="rv-file"
+                onClick={() => (entry.is_dir ? navigateTo(join(currentPath, entry.name)) : void downloadFile(join(currentPath, entry.name)))}
+                title={entry.is_dir ? undefined : t("download", { name: entry.name })}
+              >
+                <span className="rv-file-n">{entry.name}</span>
+                {entry.is_dir ? null : <span className="rv-file-s">{formatSize(entry.size)}</span>}
+                {entry.is_dir ? <ChevronRight aria-hidden="true" /> : <Download aria-hidden="true" />}
+              </button>
+            ))}
+          </>
         )}
       </div>
-
-      {/* ── Transfer progress ── */}
-      {hasTransfer && (
-        <div className="px-3 py-2 shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-          <div className="flex items-center gap-2">
-            <div className="flex-1 min-w-0">
-              <p className="text-[10px] text-white/40 truncate">
-                {downloading ? `${filename}` : `${uploadProgress?.name}`}
-              </p>
-              <div className="mt-1 h-[3px] rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
-                <div
-                  className="h-full rounded-full transition-all duration-300 ease-out"
-                  style={{
-                    width: `${downloading ? (progress >= 0 ? progress : 30) : (uploadProgress?.percent ?? 0)}%`,
-                    background: downloading ? "var(--accent)" : "var(--ok)",
-                    animation: (downloading && progress < 0) ? "pulse 2s ease-in-out infinite" : undefined,
-                  }}
-                />
-              </div>
-            </div>
-            <span className="text-[10px] text-white/25 shrink-0 tabular-nums w-8 text-right">
-              {downloading ? (progress >= 0 ? `${progress}%` : "") : `${uploadProgress?.percent ?? 0}%`}
-            </span>
-          </div>
+      {transfer ? (
+        <div className="rv-xfer" role="status">
+          <span className="rv-file-n">{transfer.name}</span>
+          <span className="rv-file-s">{transfer.percent === null ? transfer.label : `${transfer.label} ${transfer.percent}%`}</span>
+          <i className="rv-prog" aria-hidden="true">
+            <b style={{ width: `${transfer.percent ?? 30}%` }} />
+          </i>
         </div>
-      )}
-
-      {/* ── Footer ── */}
-      {!hasTransfer && sorted.length > 0 && (
-        <div className="px-3 h-6 shrink-0 flex items-center" style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-          <span className="text-[10px] text-white/15 tabular-nums">
-            {sorted.filter((e) => e.is_dir).length} folders, {sorted.filter((e) => !e.is_dir).length} files
-          </span>
-        </div>
-      )}
-    </div>
+      ) : null}
+    </aside>
   );
 }

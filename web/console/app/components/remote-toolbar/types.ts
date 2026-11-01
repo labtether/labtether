@@ -2,6 +2,7 @@ import type { KeyboardGrabState } from "../../types/viewer";
 
 export type ScalingMode = "fit" | "native" | "fill";
 
+/** dock: a row above the screen. overlay: a pill floating over the screen in full screen, which can hide into a handle. */
 export type RemoteViewToolbarLayout = "overlay" | "dock";
 
 export interface RemoteViewToolbarProps {
@@ -16,6 +17,8 @@ export interface RemoteViewToolbarProps {
   transportLabel: string;
   networkQuality?: "good" | "fair" | "poor" | null;
   protocol: "vnc" | "rdp" | "spice" | "webrtc";
+  /** The screen's name; the full-screen pill shows it before the status. */
+  targetLabel?: string;
   quality: string;
   onQualityChange: (q: string) => void;
   scalingMode: ScalingMode;
@@ -60,4 +63,8 @@ export interface RemoteViewToolbarProps {
   }>;
   selectedDisplay?: string;
   onDisplayChange?: (displayName: string) => void;
+  adaptiveQualityEnabled?: boolean;
+  onAdaptiveQualityToggle?: () => void;
+  qualitySuggestion?: "upgrade" | "downgrade" | null;
+  onQualitySuggestionApply?: () => void;
 }

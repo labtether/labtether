@@ -1,260 +1,95 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronsDown, ChevronsUp, Clock3 } from "lucide-react";
+import { useRef, useState } from "react";
+import { useTranslations } from "next-intl";
+import { Image as ImageIcon, Maximize, Minimize } from "lucide-react";
 import type { RemoteViewToolbarProps } from "./remote-toolbar/types";
-import { IconButton } from "./remote-toolbar/ToolbarButtons";
-import {
-  ToolbarStatus,
-  ToolbarStatusBadges,
-  ToolbarQuality,
-  ToolbarDisplayPicker,
-  ToolbarScaling,
-} from "./remote-toolbar/ToolbarDisplayControls";
-import {
-  ToolbarPointerLock,
-  ToolbarViewOnly,
-} from "./remote-toolbar/ToolbarInputControls";
-import {
-  ToolbarRecording,
-  ToolbarScreenshot,
-  ToolbarAudio,
-  ToolbarFullscreen,
-  ToolbarDisconnect,
-} from "./remote-toolbar/ToolbarMediaControls";
-import { useToolbarTransferState } from "./remote-toolbar/ToolbarTransferControls";
+import { ToolButton } from "./remote-toolbar/ToolbarButtons";
+import { ToolbarStatus } from "./remote-toolbar/ToolbarStatus";
+import { ToolbarKeysMenu } from "./remote-toolbar/ToolbarKeysMenu";
+import { ToolbarClipboard, ToolbarFiles, useToolbarTransferState } from "./remote-toolbar/ToolbarTransferControls";
 import { ToolbarMoreMenu } from "./remote-toolbar/ToolbarMoreMenu";
 import { ToolbarRevealHandle } from "./remote-toolbar/ToolbarRevealHandle";
-import { dividerStyle, toolbarStyles } from "./remote-toolbar/toolbarStyles";
+import { useToolbarAutoHide } from "./remote-toolbar/useToolbarAutoHide";
 
-export type {
-  RemoteViewToolbarProps,
-  RemoteViewToolbarLayout,
-  ScalingMode,
-} from "./remote-toolbar/types";
+export type { RemoteViewToolbarProps, RemoteViewToolbarLayout, ScalingMode } from "./remote-toolbar/types";
 
-const AUTOHIDE_DELAY = 5000;
-const HOT_ZONE_PX = 64;
-
+/**
+ * The Remote View tools: how the screen is reached, then Send keys, Clipboard, Files, Screenshot, Full screen and More,
+ * then Disconnect. Docked, they sit in the row above the screen. In full screen they float as a pill over the screen,
+ * hide into a handle when the pointer rests, and can move to the bottom edge. Nothing shows until the screen is connected.
+ */
 export function RemoteViewToolbar(props: RemoteViewToolbarProps) {
+  const t = useTranslations("desktop.tools");
   const { layout = "overlay", connectionState } = props;
+  const overlay = layout === "overlay";
   const transfer = useToolbarTransferState(props.clipboardLastSync);
-  const isOverlayLayout = layout === "overlay";
-  const [visible, setVisible] = useState(true);
-  const [overlayPosition, setOverlayPosition] = useState<"top" | "bottom">(
-    "bottom",
-  );
-  const [autoHideEnabled, setAutoHideEnabled] = useState(false);
-
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
-
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  const [openMenus, setOpenMenus] = useState(0);
+  const [position, setPosition] = useState<"top" | "bottom">("top");
+  const [autoHide, setAutoHide] = useState(true);
   const toolbarRef = useRef<HTMLDivElement>(null);
-  const moreMenuRef = useRef<HTMLDivElement>(null);
-  const visibleRef = useRef(visible);
-  visibleRef.current = visible;
-
-  // Auto-hide timer management
-  const resetTimer = useCallback(() => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    setVisible(true);
-    if (isOverlayLayout && autoHideEnabled) {
-      timerRef.current = setTimeout(() => setVisible(false), AUTOHIDE_DELAY);
-    }
-  }, [autoHideEnabled, isOverlayLayout]);
-
-  // Start timer on mount / when overlay behavior changes
-  useEffect(() => {
-    if (!isOverlayLayout) {
-      setVisible(true);
-      return;
-    }
-    if (!autoHideEnabled) {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      setVisible(true);
-      return;
-    }
-    resetTimer();
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [autoHideEnabled, isOverlayLayout, resetTimer]);
-
-  // Track mouse movement in container (parent)
-  useEffect(() => {
-    if (!isOverlayLayout) return;
-    const container = toolbarRef.current?.parentElement;
-    if (!container) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const rect = container.getBoundingClientRect();
-      const relativeY = e.clientY - rect.top;
-      const inRevealZone =
-        overlayPosition === "top"
-          ? relativeY <= HOT_ZONE_PX
-          : relativeY >= rect.height - HOT_ZONE_PX;
-
-      if (!visibleRef.current && autoHideEnabled && inRevealZone) {
-        resetTimer();
-      } else if (visibleRef.current && autoHideEnabled) {
-        resetTimer();
-      }
-    };
-
-    container.addEventListener("mousemove", handleMouseMove);
-    return () => container.removeEventListener("mousemove", handleMouseMove);
-  }, [autoHideEnabled, isOverlayLayout, overlayPosition, resetTimer]);
-
-  useEffect(() => {
-    if (!showMoreMenu) return;
-
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!moreMenuRef.current?.contains(event.target as Node)) {
-        setShowMoreMenu(false);
-      }
-    };
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setShowMoreMenu(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [showMoreMenu]);
+  const { visible, reveal } = useToolbarAutoHide({
+    enabled: overlay && autoHide && connectionState === "connected",
+    busy: openMenus > 0,
+    position,
+    toolbarRef,
+  });
 
   if (connectionState !== "connected") return null;
 
-  const {
-    moreMenuPanelStyle,
-    overlayContainerStyle,
-    overlayBodyStyle,
-    overlayHandleStyle,
-  } = toolbarStyles(overlayPosition, visible);
-  const displayAvailable =
-    props.displays && props.displays.length > 1 && props.onDisplayChange;
-  const moreMenu = (
-    <ToolbarMoreMenu
-      {...props}
-      menuRef={moreMenuRef}
-      open={showMoreMenu}
-      setOpen={setShowMoreMenu}
-      transfer={transfer}
-      panelStyle={
-        isOverlayLayout
-          ? moreMenuPanelStyle
-          : { ...moreMenuPanelStyle, bottom: "calc(100% + 8px)" }
-      }
-    />
-  );
-  const primaryControls = (
-    <>
-      <ToolbarPointerLock {...props} />
-      <ToolbarViewOnly {...props} />
-      <ToolbarRecording {...props} />
-      <ToolbarScreenshot {...props} />
-      <ToolbarAudio {...props} />
-    </>
-  );
+  const onOpenChange = (open: boolean) => {
+    setOpenMenus((n) => Math.max(0, n + (open ? 1 : -1)));
+    if (open) reveal();
+  };
 
-  if (!isOverlayLayout) {
-    return (
-      <div
-        ref={toolbarRef}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 3,
-          padding: "5px 12px",
-          background:
-            "linear-gradient(180deg, rgba(15, 15, 22, 0.85) 0%, rgba(8, 8, 14, 0.92) 100%)",
-          backdropFilter: "blur(20px) saturate(1.4)",
-          WebkitBackdropFilter: "blur(20px) saturate(1.4)",
-          borderTop: "1px solid rgba(255,255,255,0.05)",
-          boxShadow: "0 -4px 24px rgba(0,0,0,0.3)",
+  const body = (
+    <div
+      className={`rv-tools${overlay ? " pill" : ""}`}
+      role="toolbar"
+      aria-label={t("label")}
+      aria-hidden={!visible || undefined}
+      inert={!visible || undefined}
+    >
+      <ToolbarStatus {...props} clipboardFlash={transfer.clipboardFlash} pill={overlay} />
+      <i className="rv-sep" aria-hidden="true" />
+      <ToolbarKeysMenu {...props} onOpenChange={onOpenChange} />
+      <ToolbarClipboard {...props} transfer={transfer} onOpenChange={onOpenChange} />
+      <ToolbarFiles {...props} transfer={transfer} onOpenChange={onOpenChange} />
+      {props.onScreenshot ? (
+        <ToolButton label={t("screenshot")} onClick={props.onScreenshot}>
+          <ImageIcon aria-hidden="true" />
+        </ToolButton>
+      ) : null}
+      <ToolButton label={t(props.isFullscreen ? "exitFullScreen" : "fullScreen")} onClick={props.onFullscreenToggle}>
+        {props.isFullscreen ? <Minimize aria-hidden="true" /> : <Maximize aria-hidden="true" />}
+      </ToolButton>
+      <ToolbarMoreMenu
+        {...props}
+        onOpenChange={onOpenChange}
+        overlay={overlay}
+        autoHide={autoHide}
+        onAutoHideToggle={() => {
+          setAutoHide((on) => !on);
+          reveal();
         }}
-      >
-        <ToolbarStatus {...props} isOverlayLayout={false} />
-        <div style={dividerStyle} />
-        <ToolbarQuality {...props} />
-        <div style={dividerStyle} />
-        <ToolbarScaling {...props} />
-        <div style={dividerStyle} />
-        {primaryControls}
-        <div style={dividerStyle} />
-        {moreMenu}
-        <div style={dividerStyle} />
-        <ToolbarFullscreen {...props} />
-        <div style={dividerStyle} />
-        <ToolbarDisconnect {...props} />
-      </div>
-    );
-  }
+        position={position}
+        onPositionToggle={() => {
+          setPosition((p) => (p === "top" ? "bottom" : "top"));
+          reveal();
+        }}
+      />
+      <i className="rv-sep" aria-hidden="true" />
+      <button type="button" className="rv-disc" onClick={props.onDisconnect} title={t("disconnect")}>
+        {t("disconnect")}
+      </button>
+    </div>
+  );
 
-  const revealHandle = autoHideEnabled ? (
-    <ToolbarRevealHandle style={overlayHandleStyle} resetTimer={resetTimer} />
-  ) : null;
+  if (!overlay) return body;
   return (
-    <div ref={toolbarRef} style={overlayContainerStyle}>
-      {overlayPosition === "bottom" && revealHandle}
-      <div style={overlayBodyStyle}>
-        <ToolbarStatus {...props} isOverlayLayout />
-        <ToolbarStatusBadges {...props} />
-        <IconButton
-          onClick={() => {
-            setOverlayPosition((current) =>
-              current === "top" ? "bottom" : "top",
-            );
-            setVisible(true);
-          }}
-          active={overlayPosition === "top"}
-          title={
-            overlayPosition === "top"
-              ? "Move toolbar to bottom"
-              : "Move toolbar to top"
-          }
-        >
-          {overlayPosition === "top" ? (
-            <ChevronsDown className="w-3.5 h-3.5" />
-          ) : (
-            <ChevronsUp className="w-3.5 h-3.5" />
-          )}
-        </IconButton>
-        <IconButton
-          onClick={() => {
-            setAutoHideEnabled((current) => !current);
-            setVisible(true);
-          }}
-          active={autoHideEnabled}
-          title={autoHideEnabled ? "Disable auto-hide" : "Enable auto-hide"}
-        >
-          <Clock3 className="w-3.5 h-3.5" />
-        </IconButton>
-        <div style={dividerStyle} />
-        <ToolbarQuality {...props} />
-        {displayAvailable && (
-          <>
-            <div style={dividerStyle} />
-            <ToolbarDisplayPicker {...props} />
-          </>
-        )}
-        <div style={dividerStyle} />
-        <ToolbarScaling {...props} />
-        <div style={dividerStyle} />
-        {primaryControls}
-        <div style={dividerStyle} />
-        {moreMenu}
-        <ToolbarFullscreen {...props} />
-        <div style={dividerStyle} />
-        <ToolbarDisconnect {...props} />
-      </div>
-      {overlayPosition === "top" && revealHandle}
+    <div ref={toolbarRef} className={`rv-float ${position}${visible ? "" : " hidden"}`}>
+      {body}
+      {!visible ? <ToolbarRevealHandle position={position} onReveal={reveal} /> : null}
     </div>
   );
 }

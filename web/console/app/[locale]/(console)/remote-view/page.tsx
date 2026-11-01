@@ -2,12 +2,14 @@
 
 import { useCallback, useState } from "react";
 import { useTranslations } from "next-intl";
+import { Link } from "../../../../i18n/navigation";
 import { useRemoteViewTabsState } from "./useRemoteViewTabsState";
 import RemoteViewTabBar from "./RemoteViewTabBar";
 import NewTabPage from "./NewTabPage";
 import RemoteViewSession from "./RemoteViewSession";
 import { defaultPort } from "./types";
 import type { RemoteViewProtocol, RemoteViewConnectionState } from "./types";
+import type { AdhocConnectParams } from "./quickConnectModel";
 import { useAuth } from "../../../contexts/AuthContext";
 import { canAccessHostData } from "../../../lib/roles";
 import { OperatorAccessRequired } from "../../../components/OperatorAccessRequired";
@@ -31,6 +33,8 @@ export default function RemoteViewPage() {
 }
 
 function RemoteViewPageContent() {
+  const t = useTranslations("desktop.page");
+  const tNav = useTranslations("nav");
   const tabs = useRemoteViewTabsState();
   const activeTab = tabs.activeTab;
 
@@ -96,20 +100,7 @@ function RemoteViewPageContent() {
   );
 
   const handleConnectAdhoc = useCallback(
-    (params: {
-      host: string;
-      port: number;
-      protocol: RemoteViewProtocol;
-      username?: string;
-      password?: string;
-      allowInsecureVNC?: boolean;
-      ignoreCertificate?: boolean;
-      allowLegacySecurity?: boolean;
-      certificateFingerprints?: string;
-      spiceSecurityMode?: "tls" | "cleartext";
-      spiceCAPEM?: string;
-      saveBookmark?: { label: string };
-    }) => {
+    (params: AdhocConnectParams) => {
       const {
         host,
         port,
@@ -173,35 +164,47 @@ function RemoteViewPageContent() {
     [tabs, activeTab],
   );
 
-  return (
-    <div className="flex flex-col h-full">
-      <RemoteViewTabBar
-        tabs={tabs.tabs}
-        activeTabId={tabs.activeTabId}
-        onAddTab={() => tabs.addTab()}
-        onRemoveTab={tabs.removeTab}
-        onSetActiveTab={tabs.setActiveTab}
-        connectionState={activeTab?.connectionState}
-        latencyMs={null}
-      />
+  const tabBar = (
+    <RemoteViewTabBar
+      tabs={tabs.tabs}
+      activeTabId={tabs.activeTabId}
+      onAddTab={() => tabs.addTab()}
+      onRemoveTab={tabs.removeTab}
+      onSetActiveTab={tabs.setActiveTab}
+    />
+  );
 
-      {isNewTab && (
+  if (isSessionTab && activeTab) {
+    const deviceId = activeTab.type === "device" ? activeTab.target?.assetId : undefined;
+    return (
+      <div className="rv-page">
+        <nav className="rv-crumb" aria-label={t("breadcrumb")}>
+          <span>{tNav("remoteView")}</span>
+          <span aria-hidden="true">/</span>
+          {deviceId ? <Link href={`/nodes/${encodeURIComponent(deviceId)}`}>{activeTab.label}</Link> : <span>{activeTab.label}</span>}
+        </nav>
+        <h1 className="sr-only">{`${tNav("remoteView")} · ${activeTab.label}`}</h1>
+        <RemoteViewSession
+          key={activeTab.id}
+          tab={activeTab}
+          tabBar={tabBar}
+          initialCredentials={sessionCredentials[activeTab.id]}
+          onConnectionStateChange={handleConnectionStateChange}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="rv-page">
+      {isNewTab ? (
         <NewTabPage
+          tabBar={tabs.tabs.length > 1 ? tabBar : undefined}
           onConnectDevice={handleConnectDevice}
           onConnectBookmark={handleConnectBookmark}
           onConnectAdhoc={handleConnectAdhoc}
         />
-      )}
-
-      {isSessionTab && activeTab && (
-        <RemoteViewSession
-          key={activeTab.id}
-          tab={activeTab}
-          initialCredentials={sessionCredentials[activeTab.id]}
-          onConnectionStateChange={handleConnectionStateChange}
-        />
-      )}
-
+      ) : null}
     </div>
   );
 }

@@ -5,7 +5,6 @@ import {
   useEffect,
   useMemo,
   useState,
-  type ComponentProps,
   type Dispatch,
   type ReactNode,
   type RefObject,
@@ -22,16 +21,18 @@ import type {
   WebRTCConnectionStats,
   WebRTCViewerHandle,
 } from "../../../../components/WebRTCViewer";
-import type { SessionConnectionState } from "../../../../hooks/useSession";
+import type { SessionConnectionPhase, SessionConnectionState } from "../../../../hooks/useSession";
 import type { KeyboardGrabState } from "../../../../types/viewer";
-import { DesktopConnectionControlsCard } from "./DesktopConnectionControlsCard";
+import type { DesktopConnectBarProps } from "./DesktopConnectBar";
 import type { DisplayInfo } from "../../../../hooks/useDisplayList";
 
 type QualityLevel = "low" | "medium" | "high";
 
 type UseDesktopTabViewPropsArgs = {
   nodeId: string;
+  nodeName: string;
   connectionState: SessionConnectionState;
+  connectionPhase?: SessionConnectionPhase;
   quality: string;
   setQuality: (quality: string) => void;
   protocol: DesktopProtocol;
@@ -132,7 +133,9 @@ type UseDesktopTabViewPropsArgs = {
 
 export function useDesktopTabViewProps({
   nodeId,
+  nodeName,
   connectionState,
+  connectionPhase,
   quality,
   setQuality,
   protocol,
@@ -270,7 +273,7 @@ export function useDesktopTabViewProps({
     }
   }, [adaptiveQuality, setQuality]);
 
-  const controlsCardProps = useMemo<ComponentProps<typeof DesktopConnectionControlsCard>>(
+  const connectBarProps = useMemo<DesktopConnectBarProps>(
     () => ({
       nodeId,
       connectionState,
@@ -284,17 +287,11 @@ export function useDesktopTabViewProps({
       onSelectedDisplayChange: setSelectedDisplay,
       targetStatus,
       onWake: refreshConnected,
-      isReconnecting,
-      onConnect: connectDesktop,
-      onDisconnect: handleDisconnect,
     }),
     [
       availableProtocols,
-      connectDesktop,
       connectionState,
-      handleDisconnect,
       handleProtocolChange,
-      isReconnecting,
       nodeId,
       protocol,
       protocolLabel,
@@ -310,8 +307,11 @@ export function useDesktopTabViewProps({
   const remoteViewerShellProps = useMemo<RemoteViewerShellProps>(
     () => ({
       nodeId,
+      targetLabel: nodeName,
       viewerWrapperRef,
       connectionState,
+      connectionPhase,
+      isReconnecting,
       latencyMs,
       transportLabel: effectiveTransportLabel,
       networkQuality,
@@ -400,6 +400,7 @@ export function useDesktopTabViewProps({
       connect,
       connectDesktop,
       connectedAgentIds,
+      connectionPhase,
       connectionState,
       credentialOverlay,
       displayList.displays,
@@ -422,10 +423,12 @@ export function useDesktopTabViewProps({
       handleSendShortcut,
       handleSessionPanelDisconnect,
       isFullscreen,
+      isReconnecting,
       keyboardGrab.state,
       latencyMs,
       networkQuality,
       nodeId,
+      nodeName,
       pointerLocked,
       pointerLockSupported,
       protocol,
@@ -464,7 +467,7 @@ export function useDesktopTabViewProps({
   );
 
   return {
-    controlsCardProps,
+    connectBarProps,
     remoteViewerShellProps,
   };
 }
