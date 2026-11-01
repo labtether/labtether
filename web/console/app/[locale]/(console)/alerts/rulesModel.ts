@@ -51,6 +51,13 @@ export function ruleTargets(rule: AlertRule, assetsByID: Map<string, Asset>, gro
   return { names };
 }
 
+/** True when the editor cannot show what a rule applies to as one device or group: several targets, or a selector. */
+export function ruleTargetFixed(rule: AlertRule): boolean {
+  if (rule.target_scope === "global") return false;
+  const targets = rule.targets ?? [];
+  return targets.length !== 1 || !(targets[0].asset_id || targets[0].group_id);
+}
+
 export type RuleShow = "all" | "on" | "off";
 export const RULE_SHOWS: RuleShow[] = ["all", "on", "off"];
 export type RuleSortKey = "name" | "severity" | "scope";

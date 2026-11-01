@@ -9,11 +9,14 @@ import { useFastStatus, useSlowStatus } from "../../../contexts/StatusContext";
 import { useToast } from "../../../contexts/ToastContext";
 import { AlertRuleEditor } from "./AlertRuleEditor";
 import { AlertRuleRow } from "./AlertRuleRow";
-import { createRuleFormState, formStateFromRule } from "./alertRuleFormState";
-import { RULE_SHOWS, ruleShown, ruleTargets, visibleRules, type RuleShow, type RuleSort, type RuleSortKey } from "./rulesModel";
+import { createRuleFormState, formStateFromRule, rulePayload, ruleUpdatePayload } from "./alertRuleFormState";
+import { RULE_SHOWS, ruleIsOn, ruleShown, ruleTargetFixed, ruleTargets, visibleRules, type RuleShow, type RuleSort, type RuleSortKey } from "./rulesModel";
 
-/** Which rule is open: the editor for a new one (seq tells one "New rule" click from the next), or a rule's facts. */
-export type RuleOpen = { kind: "new"; seq: number; from: AlertRule | null } | { kind: "rule"; id: string } | null;
+/**
+ * Which rule is open: the editor for a new one (seq tells one "New rule" click from the next), a rule's facts, or
+ * the editor for changing a rule.
+ */
+export type RuleOpen = { kind: "new"; seq: number } | { kind: "rule" | "edit"; id: string } | null;
 
 type Props = {
   loading: boolean;
@@ -23,11 +26,15 @@ type Props = {
   open: RuleOpen;
   onOpen: (open: RuleOpen) => void;
   createRule: (rule: Record<string, unknown>) => Promise<void>;
+  updateRule: (id: string, changes: Record<string, unknown>) => Promise<void>;
   deleteRule: (id: string) => Promise<void>;
 };
 
-/** Rules as a 2.0 list: On/Off filter, sortable columns; a row opens its facts, New rule opens the editor on top. */
-export function AlertRulesTab({ loading, rules, templates, instances, open, onOpen, createRule, deleteRule }: Props) {
+/**
+ * Rules as a 2.0 list: On/Off filter, sortable columns and a switch per rule; a row opens its facts and Edit, New
+ * rule opens the editor on top.
+ */
+export function AlertRulesTab({ loading, rules, templates, instances, open, onOpen, createRule, updateRule, deleteRule }: Props) {
   const t = useTranslations("alerts.rules");
   const { addToast } = useToast();
   const status = useFastStatus();
@@ -36,6 +43,8 @@ export function AlertRulesTab({ loading, rules, templates, instances, open, onOp
   const [sort, setSort] = useState<RuleSort>({ key: "name", dir: 1 });
   const [deleting, setDeleting] = useState<AlertRule | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  // Rule ID → the state its switch was moved to, while the hub takes the change.
+  const [switching, setSwitching] = useState<Record<string, boolean>>({});
 
   const assets = useMemo(() => [...(status?.assets ?? [])].sort((a, b) => a.name.localeCompare(b.name)), [status?.assets]);
   const groups = useMemo(() => [...(slow?.groups ?? [])].sort((a, b) => a.name.localeCompare(b.name)), [slow?.groups]);
@@ -47,6 +56,7 @@ export function AlertRulesTab({ loading, rules, templates, instances, open, onOp
   };
   const shown = visibleRules(rules, show, sort, scopeLabel);
   const alertCount = (rule: AlertRule) => instances.filter((a) => a.rule_id === rule.id).length;
+  const isOpen = (id: string) => open !== null && open.kind !== "new" && open.id === id;
 
   const sortBy = (key: RuleSortKey) => setSort((s) => ({ key, dir: s.key === key ? (s.dir === 1 ? -1 : 1) : 1 }));
   const head = (key: RuleSortKey) => (
@@ -62,7 +72,7 @@ export function AlertRulesTab({ loading, rules, templates, instances, open, onOp
     try {
       await deleteRule(deleting.id);
       addToast("success", t("deleted", { name: deleting.name }));
-      if (open?.kind === "rule" && open.id === deleting.id) onOpen(null);
+      if (isOpen(deleting.id)) onOpen(null);
       setDeleting(null);
     } catch (err) {
       addToast("error", err instanceof Error && err.message ? err.message : t("deleteFailed"));
@@ -71,22 +81,48 @@ export function AlertRulesTab({ loading, rules, templates, instances, open, onOp
     }
   }
 
-  const editor = open?.kind === "new" ? (
+  async function switchRule(rule: AlertRule, on: boolean) {
+    setSwitching((s) => ({ ...s, [rule.id]: on }));
+    try {
+      await updateRule(rule.id, { status: on ? "active" : "paused" });
+    } catch (err) {
+      addToast("error", err instanceof Error && err.message ? err.message : t("switchFailed", { state: on ? "on" : "off", name: rule.name }));
+    } finally {
+      setSwitching((s) => {
+        const next = { ...s };
+        delete next[rule.id];
+        return next;
+      });
+    }
+  }
+
+  // A new rule, or a change to `rule`; either way the editor closes on save.
+  const editorFor = (rule: AlertRule | null, key: string) => (
     <AlertRuleEditor
-      key={open.seq}
-      initial={open.from ? formStateFromRule(open.from) : createRuleFormState()}
+      key={key}
+      initial={rule ? formStateFromRule(rule) : createRuleFormState()}
+      editing={rule ?? undefined}
+      fixedTarget={rule && ruleTargetFixed(rule) ? scopeLabel(rule) : undefined}
       templates={templates}
       rules={rules}
       assets={assets}
       groups={groups}
-      onCancel={() => onOpen(null)}
-      onSubmit={async (payload, name) => {
-        await createRule(payload);
-        addToast("success", t("added", { name }));
-        onOpen(null);
+      onCancel={() => onOpen(rule ? { kind: "rule", id: rule.id } : null)}
+      onSubmit={async (form, before) => {
+        const name = form.name.trim();
+        if (rule) {
+          await updateRule(rule.id, ruleUpdatePayload(rule, before, form));
+          addToast("success", t("saved", { name }));
+          onOpen({ kind: "rule", id: rule.id });
+        } else {
+          await createRule(rulePayload(form));
+          addToast("success", t("added", { name }));
+          onOpen(null);
+        }
       }}
     />
-  ) : null;
+  );
+  const editor = open?.kind === "new" ? editorFor(null, String(open.seq)) : null;
 
   return (
     <>
@@ -121,10 +157,14 @@ export function AlertRulesTab({ loading, rules, templates, instances, open, onOp
               key={rule.id}
               rule={rule}
               scope={scopeLabel(rule)}
-              open={open?.kind === "rule" && open.id === rule.id}
+              open={isOpen(rule.id)}
+              on={switching[rule.id] ?? ruleIsOn(rule)}
+              switching={rule.id in switching}
+              editor={open?.kind === "edit" && open.id === rule.id ? editorFor(rule, `edit-${rule.id}`) : undefined}
               openAlerts={instances.filter((a) => a.rule_id === rule.id && a.status !== "resolved").length}
-              onToggle={() => onOpen(open?.kind === "rule" && open.id === rule.id ? null : { kind: "rule", id: rule.id })}
-              onCopy={() => onOpen({ kind: "new", seq: Date.now(), from: rule })}
+              onToggle={() => onOpen(isOpen(rule.id) ? null : { kind: "rule", id: rule.id })}
+              onSwitch={(on) => void switchRule(rule, on)}
+              onEdit={() => onOpen({ kind: "edit", id: rule.id })}
               onDelete={() => setDeleting(rule)}
             />
           ))}

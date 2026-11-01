@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AlertRule } from "../../../../console/models";
-import { createRuleFormState, formStateFromRule, ruleFormErrors, rulePayload } from "../alertRuleFormState";
+import { createRuleFormState, formStateFromRule, ruleFormErrors, rulePayload, ruleUpdatePayload } from "../alertRuleFormState";
 
 // Risk: the editor is the only way to add a rule. A form that passes the check must post the body the hub expects
 // for its kind, target and labels (silences match them); a form that would fail at the hub must be stopped with the
@@ -33,12 +33,43 @@ describe("rule editor values", () => {
     expect(payload).not.toHaveProperty("targets");
   });
 
-  it("copies an existing rule's settings and first target into a new form", () => {
+  it("opens an existing rule's settings and first target in the form", () => {
     const rule = {
       id: "r1", name: "Camera stops checking in", status: "active", kind: "heartbeat_stale", severity: "critical", target_scope: "asset",
       cooldown_seconds: 600, window_seconds: 120, condition: { max_stale_seconds: 900 }, targets: [{ id: "t1", asset_id: "rpi-camera" }],
       created_at: "", updated_at: "",
     } as AlertRule;
     expect(formStateFromRule(rule)).toMatchObject({ kind: "heartbeat_stale", severity: "critical", targetType: "asset", targetId: "rpi-camera", maxStaleSeconds: 900, cooldownSeconds: 600 });
+  });
+});
+
+// Risk: the hub replaces a rule's condition and targets whole. A change must send only what the person changed, so
+// an edit never drops condition keys the form does not show, extra targets, or the rule's on/off state.
+describe("rule change body", () => {
+  const rule = {
+    id: "r2", name: "Error flood", status: "paused", kind: "log_pattern", severity: "high", target_scope: "asset",
+    cooldown_seconds: 300, window_seconds: 300, condition: { pattern: "error", min_occurrences: 5, source: "syslog" },
+    labels: { team: "lab" }, targets: [{ id: "t1", asset_id: "nas01" }, { id: "t2", asset_id: "nas02" }], created_at: "", updated_at: "",
+  } as AlertRule;
+  const before = formStateFromRule(rule);
+
+  it("sends nothing the form left alone", () => {
+    expect(ruleUpdatePayload(rule, before, { ...before })).toEqual({});
+  });
+
+  it("sends the changed fields and keeps the condition keys the form does not show", () => {
+    const after = { ...before, severity: "critical" as const, minOccurrences: 10, labels: [] };
+    expect(ruleUpdatePayload(rule, before, after)).toEqual({
+      severity: "critical",
+      condition: { pattern: "error", min_occurrences: 10, source: "syslog" },
+      labels: {},
+    });
+  });
+
+  it("drops the old threshold name so the hub does not refuse a new value", () => {
+    const metric = { ...rule, kind: "metric_threshold", condition: { metric: "cpu_used_percent", operator: ">", threshold: 80 } } as AlertRule;
+    const start = formStateFromRule(metric);
+    expect(ruleUpdatePayload(metric, start, { ...start, thresholdValue: 95 }).condition)
+      .toEqual({ metric: "cpu_used_percent", operator: ">", value: 95, aggregate: "avg" });
   });
 });

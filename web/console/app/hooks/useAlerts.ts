@@ -251,6 +251,19 @@ export function useAlerts() {
     }
   }, [fetchAll]);
 
+  // Not tied to mutationAbortRef: switching two rules in a row must send both changes, not cancel the first.
+  const updateRule = useCallback(async (id: string, changes: Record<string, unknown>) => {
+    const res = await fetch(`/api/alerts/rules/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(changes),
+    });
+    if (!res.ok) {
+      throw await responseError(res, "failed to update rule");
+    }
+    await fetchAll();
+  }, [fetchAll]);
+
   const deleteRule = useCallback(async (id: string) => {
     mutationAbortRef.current?.abort();
     const controller = new AbortController();
@@ -287,6 +300,7 @@ export function useAlerts() {
     createSilence,
     deleteSilence,
     createRule,
+    updateRule,
     deleteRule,
   };
 }

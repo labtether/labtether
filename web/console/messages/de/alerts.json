@@ -146,8 +146,6 @@
       "scope": "Gilt für",
       "state": "Zustand"
     },
-    "on": "An",
-    "off": "Aus",
     "everything": "Alle Geräte",
     "scope": {
       "global": "Alle Geräte",
@@ -176,17 +174,21 @@
       "description": "Beschreibung",
       "labels": "Labels"
     },
-    "copy": "In neue Regel kopieren",
+    "switch": "{name} an",
+    "switchFailed": "{state, select, on {„{name}“ konnte nicht eingeschaltet werden} other {„{name}“ konnte nicht ausgeschaltet werden}}",
+    "edit": "Bearbeiten",
     "deleteAsk": "Löschen…",
     "deleteTitle": "Regel „{name}“ löschen?",
     "deleteBody": "{count, plural, =0 {Sie hat keine Alarme ausgelöst.} one {Ihr # Alarm wird ebenfalls gelöscht.} other {Ihre # Alarme werden ebenfalls gelöscht.}}",
     "delete": "Löschen",
     "deleted": "„{name}“ gelöscht",
     "deleteFailed": "Die Regel konnte nicht gelöscht werden",
-    "added": "„{name}“ hinzugefügt"
+    "added": "„{name}“ hinzugefügt",
+    "saved": "„{name}“ gespeichert"
   },
   "editor": {
     "title": "Neue Regel",
+    "editTitle": "„{name}“ bearbeiten",
     "from": "Ausgehend von",
     "blank": "Leere Regel",
     "name": "Name",
@@ -241,6 +243,8 @@
     "cancel": "Abbrechen",
     "add": "Regel hinzufügen",
     "adding": "Wird hinzugefügt…",
+    "save": "Speichern",
+    "saving": "Wird gespeichert…",
     "errors": {
       "name": "Namen eingeben",
       "nameTaken": "Eine Regel mit diesem Namen existiert",
@@ -252,7 +256,8 @@
       "pattern": "Den zu suchenden Text eingeben",
       "check": "Die Prüfung eingeben",
       "rules": "Eine oder mehrere Regeln wählen",
-      "save": "Die Regel konnte nicht hinzugefügt werden"
+      "save": "Die Regel konnte nicht hinzugefügt werden",
+      "update": "Die Regel konnte nicht gespeichert werden"
     }
   },
   "silences": {

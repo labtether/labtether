@@ -105,7 +105,7 @@ function formStateFrom(source: RuleLike, targetId = ""): RuleFormState {
 
 export const formStateFromTemplate = (template: AlertRuleTemplate) => formStateFrom(template);
 
-/** A new rule's values copied from an existing rule (the hub keeps one target per new rule: the first). */
+/** An existing rule's values, for changing it. The form holds one target: the first. */
 export function formStateFromRule(rule: AlertRule): RuleFormState {
   const first = rule.targets?.[0];
   return formStateFrom(rule as RuleLike, first?.asset_id ?? first?.group_id ?? "");
@@ -194,4 +194,29 @@ export function rulePayload(form: RuleFormState): Record<string, unknown> {
   if (form.targetType === "asset") payload.targets = [{ asset_id: form.targetId.trim() }];
   else if (form.targetType === "group") payload.targets = [{ group_id: form.targetId.trim() }];
   return payload;
+}
+
+const CHANGEABLE = ["name", "description", "severity", "window_seconds", "cooldown_seconds", "reopen_after_seconds", "evaluation_interval_seconds"];
+const sameJSON = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * The PATCH /api/alerts/rules/<id> body for a changed rule: only what differs from `before` (the form as it opened).
+ * The hub keeps kind, scope and status, and replaces condition, labels and targets whole. So the condition keeps the
+ * keys the form does not show, and targets go only when the target changed (a rule may have more than the first).
+ */
+export function ruleUpdatePayload(rule: AlertRule, before: RuleFormState, after: RuleFormState): Record<string, unknown> {
+  const prev = rulePayload(before);
+  const next = rulePayload(after);
+  const changes: Record<string, unknown> = {};
+  for (const key of CHANGEABLE) if (next[key] !== prev[key]) changes[key] = next[key];
+  if (!sameJSON(next.condition, prev.condition)) {
+    const kept: Record<string, unknown> = { ...(rule.condition ?? {}) };
+    // "threshold" is the old name of "value"; the hub refuses a condition where the two disagree.
+    if (rule.kind === "metric_threshold") delete kept.threshold;
+    changes.condition = { ...kept, ...(next.condition as Record<string, unknown>) };
+  }
+  const labels = labelsFromRows(after.labels);
+  if (!sameJSON(labels, labelsFromRows(before.labels))) changes.labels = labels;
+  if (after.targetId.trim() !== before.targetId.trim() && next.targets) changes.targets = next.targets;
+  return changes;
 }

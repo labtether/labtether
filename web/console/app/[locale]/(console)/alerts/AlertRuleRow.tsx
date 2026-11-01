@@ -1,12 +1,13 @@
 "use client";
 
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { Button } from "../../../components/ui/Button";
+import { Switch } from "../../../components/ui/Switch";
 import type { AlertRule } from "../../../console/models";
 import { useDuration } from "./alertBits";
 import { fullTime } from "./alertsModel";
-import { ruleCondition, ruleIsOn, type RuleCondition } from "./rulesModel";
+import { ruleCondition, type RuleCondition } from "./rulesModel";
 
 /** "cpu_used_percent > 90 (average)", "No heartbeat for 5 min" …: what a rule watches, in words. */
 export function useRuleSummary() {
@@ -30,14 +31,20 @@ type Props = {
   rule: AlertRule;
   scope: string;
   open: boolean;
+  /** The switch: on, or the state it is being switched to. */
+  on: boolean;
+  switching: boolean;
+  /** The editor, shown in place of the settings while the rule is being changed. */
+  editor?: ReactNode;
   openAlerts: number;
   onToggle: () => void;
-  onCopy: () => void;
+  onSwitch: (on: boolean) => void;
+  onEdit: () => void;
   onDelete: () => void;
 };
 
-/** One rule: its name and what it watches, severity, what it applies to and On/Off. Open, it shows its settings. */
-export function AlertRuleRow({ rule, scope, open, openAlerts, onToggle, onCopy, onDelete }: Props) {
+/** One rule: its name and what it watches, severity, what it applies to and its switch. Open, it shows its settings. */
+export function AlertRuleRow({ rule, scope, open, on, switching, editor, openAlerts, onToggle, onSwitch, onEdit, onDelete }: Props) {
   const t = useTranslations("alerts.rules");
   const tKind = useTranslations("alerts.kinds");
   const tSev = useTranslations("alerts.severity");
@@ -45,7 +52,6 @@ export function AlertRuleRow({ rule, scope, open, openAlerts, onToggle, onCopy, 
   const summary = useRuleSummary();
   const duration = useDuration();
   const rowRef = useRef<HTMLDivElement>(null);
-  const on = ruleIsOn(rule);
   const watch = summary(ruleCondition(rule));
   const extra = rule as AlertRule & { evaluation_interval_seconds?: number; reopen_after_seconds?: number };
   const labels = Object.entries(rule.labels ?? {});
@@ -67,9 +73,12 @@ export function AlertRuleRow({ rule, scope, open, openAlerts, onToggle, onCopy, 
         </span>
         <span className="al-rsev">{tSev.has(rule.severity) ? tSev(rule.severity) : rule.severity}</span>
         <span className="al-rscope">{scope}</span>
-        <span className="al-r al-rstate">{on ? t("on") : t("off")}</span>
+        {/* The span keeps a click on the switch, enabled or not, from opening the row. */}
+        <span className="al-r al-rstate" onClick={(e) => e.stopPropagation()}>
+          <Switch size="sm" checked={on} disabled={switching} onChange={onSwitch} aria-label={t("switch", { name: rule.name })} />
+        </span>
       </div>
-      {open ? (
+      {open && editor ? editor : open ? (
         <div className="al-well" role="group" aria-label={rule.name}>
           <dl className="al-facts">
             {kv(t("facts.kind"), tKind.has(rule.kind) ? tKind(rule.kind) : rule.kind)}
@@ -87,7 +96,7 @@ export function AlertRuleRow({ rule, scope, open, openAlerts, onToggle, onCopy, 
           <div className="al-ed-acts">
             <Button variant="ghost" className="al-danger" onClick={onDelete}>{t("deleteAsk")}</Button>
             <span className="al-sp" />
-            <Button onClick={onCopy}>{t("copy")}</Button>
+            <Button onClick={onEdit}>{t("edit")}</Button>
           </div>
         </div>
       ) : null}
