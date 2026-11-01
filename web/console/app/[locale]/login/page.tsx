@@ -350,7 +350,7 @@ export default function LoginPage() {
                     Demo Instance
                   </p>
                   <p className="text-xs text-[var(--muted)]">
-                    Credentials are pre-filled. Just hit sign in.
+                    The demo username and password are filled in.
                   </p>
                 </div>
               ) : null}

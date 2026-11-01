@@ -8,9 +8,8 @@
 
 [![CI](https://github.com/labtether/labtether/actions/workflows/ci.yml/badge.svg)](https://github.com/labtether/labtether/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square)](LICENSE)
-[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/Be6Fa9hv)
 
-[Live demo](https://demo.labtether.com) &middot; [Docs](https://labtether.com/docs) &middot; [Website](https://labtether.com) &middot; [Discord](https://discord.gg/Be6Fa9hv)
+[Live demo](https://demo.labtether.com) &middot; [Docs](https://labtether.com/docs) &middot; [Website](https://labtether.com) &middot; [Discussions](https://github.com/labtether/labtether/discussions)
 
 </div>
 
@@ -32,8 +31,8 @@ your network.
 - **Every device on one dashboard.** CPU, memory, disk, network and temperature
   for each node, with its VMs and containers beside it.
 - **Works with what you already run.** Connect Proxmox VE, Proxmox Backup
-  Server, TrueNAS, Docker, Portainer and Home Assistant with an API key.
-  Nothing to install on them.
+  Server, TrueNAS, Portainer and Home Assistant with an API key, with nothing
+  to install on them. Docker hosts need the agent.
 - **Terminal and remote desktop in the browser.** Open a shell, or a VNC, RDP,
   SPICE or WebRTC desktop, on any node. Agent nodes need no SSH keys.
 - **Alerts you can act on.** Alert rules, notification routes and maintenance
@@ -81,9 +80,10 @@ External Postgres, custom TLS and other options are in the
 
 Mix both kinds as you like.
 
-**Connectors** cover Proxmox VE, Proxmox Backup Server, TrueNAS, Docker,
-Portainer and Home Assistant. You give the hub an API key and it finds your
-VMs, pools and containers. See [connectors](https://labtether.com/docs/guides/connectors).
+**Connectors** cover Proxmox VE, Proxmox Backup Server, TrueNAS, Portainer and
+Home Assistant. You give the hub an API key and it finds your VMs, pools and
+containers. Docker containers come from the agent on each Docker host. See
+[connectors](https://labtether.com/docs/guides/connectors).
 
 **Agents** add live metrics, terminal, desktop, files and actions on a machine.
 In the hub, click **Add Device** and copy the command for your OS. See
@@ -151,7 +151,7 @@ Full details: [platform support](https://labtether.com/docs/reference/platform-s
 - [Known issues](KNOWN_ISSUES.md) and [support](SUPPORT.md)
 - [Changelog](CHANGELOG.md)
 - [Security policy](SECURITY.md) and [closed CVEs](https://github.com/labtether/labtether/issues?q=is%3Aissue%20is%3Aclosed%20label%3Acve)
-- [GitHub Discussions](https://github.com/labtether/labtether/discussions) and [Discord](https://discord.gg/Be6Fa9hv)
+- [GitHub Discussions](https://github.com/labtether/labtether/discussions)
 
 ## Contributing
 
