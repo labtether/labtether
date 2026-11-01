@@ -22,28 +22,27 @@ func (s *apiServer) handleHubRoot(w http.ResponseWriter, r *http.Request) {
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"service":      "labtether-hub",
 		"message":      "LabTether hub API is running.",
-		"console_url":  consoleURLFromRequest(r, s != nil && s.tlsState.Enabled),
+		"console_url":  consoleURLFromRequest(r),
 		"healthz_path": "/healthz",
 		"readyz_path":  "/readyz",
 		"version_path": "/version",
 	})
 }
 
-func consoleURLFromRequest(r *http.Request, tlsEnabled bool) string {
+// consoleURLFromRequest names the bundled console. Its port 3000 serves plain
+// HTTP even when the Hub API uses TLS; set LABTETHER_CONSOLE_URL when a TLS
+// front end serves the console instead.
+func consoleURLFromRequest(r *http.Request) string {
 	override := strings.TrimSpace(envOrDefault("LABTETHER_CONSOLE_URL", ""))
 	if override != "" {
 		return override
 	}
 
-	scheme := "http"
-	if tlsEnabled {
-		scheme = "https"
-	}
 	host := hostWithoutPort(r)
 	if strings.Contains(host, ":") && !strings.HasPrefix(host, "[") {
 		host = "[" + host + "]"
 	}
-	return fmt.Sprintf("%s://%s:3000", scheme, host)
+	return fmt.Sprintf("http://%s:3000", host)
 }
 
 func hostWithoutPort(r *http.Request) string {

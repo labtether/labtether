@@ -243,26 +243,38 @@ func TestSendSSHKeyInstallAndRemoveEmitHubKey(t *testing.T) {
 		return payload.PublicKey
 	}
 
+	// Uninstall finds every Hub key by its comment, so the installed line must
+	// carry it; removal must also clear the plain line older Hubs installed.
+	const marked = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHUB labtether-hub"
 	sut.sendSSHKeyInstall(conn)
-	if got := readPayload(agentmgr.MsgSSHKeyInstall); got != sut.hubIdentity.PublicKey {
-		t.Fatalf("install public key=%q, want %q", got, sut.hubIdentity.PublicKey)
+	if got := readPayload(agentmgr.MsgSSHKeyInstall); got != marked {
+		t.Fatalf("install public key=%q, want %q", got, marked)
 	}
 
 	sut.sendSSHKeyRemove(conn)
-	if got := readPayload(agentmgr.MsgSSHKeyRemove); got != sut.hubIdentity.PublicKey {
-		t.Fatalf("remove public key=%q, want %q", got, sut.hubIdentity.PublicKey)
+	for _, want := range []string{sut.hubIdentity.PublicKey, marked} {
+		if got := readPayload(agentmgr.MsgSSHKeyRemove); got != want {
+			t.Fatalf("remove public key=%q, want %q", got, want)
+		}
 	}
 }
 
+// The saved host is where the Hub later uses its SSH key. It must be the
+// address the Hub saw, not a hostname the agent chose, so a compromised agent
+// cannot point the Hub's key at another machine.
 func TestProcessAgentSSHKeyInstalledSavesTerminalConfigWhenMissing(t *testing.T) {
 	sut := newTestAPIServer(t)
 	sut.hubIdentity = &hubSSHIdentity{ProfileID: "cred-hub"}
+	enableTestHubSSHKey(t, sut, "node-ssh")
+	enableTestHubSSHKey(t, sut, "node-ssh-loopback")
 
 	msg := marshalAgentMessage(t, agentmgr.SSHKeyInstalledData{
 		Username: "labuser",
-		Hostname: "lab-host",
+		Hostname: "other-host.example.com",
 	})
-	sut.processAgentSSHKeyInstalled(&agentmgr.AgentConn{AssetID: "node-ssh"}, msg)
+	conn := &agentmgr.AgentConn{AssetID: "node-ssh"}
+	conn.SetMeta("ssh_source_ip", "192.0.2.10")
+	sut.processAgentSSHKeyInstalled(conn, msg)
 
 	cfg, ok, err := sut.credentialStore.GetAssetTerminalConfig("node-ssh")
 	if err != nil {
@@ -271,14 +283,22 @@ func TestProcessAgentSSHKeyInstalledSavesTerminalConfigWhenMissing(t *testing.T)
 	if !ok {
 		t.Fatalf("expected terminal config to be saved")
 	}
-	if cfg.Host != "lab-host" || cfg.Port != 22 || cfg.Username != "labuser" || cfg.CredentialProfileID != "cred-hub" || !cfg.StrictHostKey {
+	if cfg.Host != "192.0.2.10" || cfg.Port != 22 || cfg.Username != "labuser" || cfg.CredentialProfileID != "cred-hub" || !cfg.StrictHostKey {
 		t.Fatalf("unexpected terminal config %+v", cfg)
+	}
+
+	loopback := &agentmgr.AgentConn{AssetID: "node-ssh-loopback"}
+	loopback.SetMeta("ssh_source_ip", "127.0.0.1")
+	sut.processAgentSSHKeyInstalled(loopback, msg)
+	if _, ok, err := sut.credentialStore.GetAssetTerminalConfig("node-ssh-loopback"); err != nil || ok {
+		t.Fatalf("loopback source saved a terminal config: ok=%v err=%v", ok, err)
 	}
 }
 
 func TestProcessAgentSSHKeyInstalledPreservesExistingTerminalConfig(t *testing.T) {
 	sut := newTestAPIServer(t)
 	sut.hubIdentity = &hubSSHIdentity{ProfileID: "cred-hub"}
+	enableTestHubSSHKey(t, sut, "node-ssh")
 
 	existing, err := sut.credentialStore.SaveAssetTerminalConfig(credentials.AssetTerminalConfig{
 		AssetID:             "node-ssh",

@@ -13,8 +13,9 @@ Restart=on-failure
 RestartSec=5s
 NoNewPrivileges=true
 # Package actions, OS updates, and agent self-update need to write system paths.
+# Files, terminal sessions and the Hub SSH key write to /root and /home, so home
+# directories stay writable.
 ProtectSystem=off
-ProtectHome=read-only
 PrivateTmp=true
 
 [Install]

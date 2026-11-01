@@ -8,6 +8,7 @@ import { POST as bootstrap } from "../../app/api/auth/bootstrap/route";
 
 vi.mock("../backend", () => ({
   resolvedBackendBaseURLs: async () => ({ api: "https://hub.example.test" }),
+  shouldUseSecureWebSocket: () => true,
   upstreamErrorPayload: (_status: number, payload: unknown) => payload,
 }));
 vi.mock("../proxyAuth", () => ({ isMutationRequestOriginAllowed: () => true }));

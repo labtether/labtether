@@ -78,7 +78,7 @@ func SanitizeSHA256Hex(raw string) (string, bool) {
 // GenerateBootstrapScript returns a self-contained bootstrap script that:
 //  1. downloads the hub CA cert with bootstrap transport (-k/no-check),
 //  2. verifies the downloaded cert against the expected SHA-256 fingerprint,
-//  3. installs the CA locally (+ optional system trust update),
+//  3. saves the CA where the agent pins it (not in the system trust store),
 //  4. fetches install.sh using CA-verified TLS and executes it with --tls-ca-file.
 func GenerateBootstrapScript(hubURL, expectedCAFingerprint string) string {
 	return fmt.Sprintf(

@@ -60,7 +60,7 @@ func (s handlerTestExecutionStore) FinishJobExecution(ctx context.Context, j *jo
 	switch {
 	case r.Terminal != nil:
 		p := r.Terminal
-		err = s.d.TerminalStore.UpdateCommandResult(p.SessionID, p.CommandID, p.Status, p.Output)
+		err = s.d.TerminalStore.UpdateCommandResult(p.SessionID, p.CommandID, p.Status, p.Output, p.ExitCode)
 	case r.Action != nil:
 		err = s.d.ActionStore.ApplyActionResult(*r.Action)
 	case r.Update != nil:

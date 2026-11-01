@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -274,13 +275,35 @@ func TestHandleAuthUserActionsDeleteUserPreventsSelfDelete(t *testing.T) {
 	}
 }
 
+// One admin must not delete, demote, reset or sign out another admin. Only
+// the owner may act on admin accounts.
 func TestHandleAuthUserActionsDeleteUser(t *testing.T) {
 	deps, store := newTestAuthDeps(t)
 	hash, _ := auth.HashPassword("testpassword123")
 	u, _ := store.CreateUserWithRole("alice", hash, auth.RoleAdmin, "local", "")
 	// Caller is a different user.
 	deps.UserIDFromContext = func(_ context.Context) string { return "other-user" }
+	callerRole := auth.RoleAdmin
+	deps.UserRoleFromContext = func(_ context.Context) string { return callerRole }
 
+	for _, tc := range []struct{ method, path, body string }{
+		{http.MethodDelete, "/auth/users/" + u.ID, ""},
+		{http.MethodDelete, "/auth/users/" + u.ID + "/sessions", ""},
+		{http.MethodPatch, "/auth/users/" + u.ID, `{"role":"viewer"}`},
+		{http.MethodPatch, "/auth/users/" + u.ID, `{"password":"replacement-password"}`},
+	} {
+		req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+		rec := httptest.NewRecorder()
+		deps.HandleAuthUserActions(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("admin %s %s: expected 403, got %d: %s", tc.method, tc.path, rec.Code, rec.Body.String())
+		}
+	}
+	if got, ok, _ := store.GetUserByID(u.ID); !ok || got.Role != auth.RoleAdmin || !auth.CheckPassword("testpassword123", got.PasswordHash) {
+		t.Fatal("admin changed another admin account")
+	}
+
+	callerRole = auth.RoleOwner
 	req := httptest.NewRequest(http.MethodDelete, "/auth/users/"+u.ID, nil)
 	rec := httptest.NewRecorder()
 	deps.HandleAuthUserActions(rec, req)

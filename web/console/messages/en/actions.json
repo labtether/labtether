@@ -66,6 +66,7 @@
     "running": "Running...",
     "results": "Run results",
     "failed": "Failed",
+    "succeeded": "Succeeded",
     "exitCode": "Exit {code}",
     "noOutput": "Command completed without output.",
     "deleteTitle": "Delete saved action",

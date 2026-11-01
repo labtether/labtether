@@ -1,0 +1,96 @@
+/* ── LabTether 2.0 shell ──
+   A floating sidebar on the canvas, then a top bar and a 1200 px page column. Under 900 px the sidebar folds into a
+   drawer and the top bar gains the menu button; page layouts stay desktop until 640 px, because a narrow window
+   without the sidebar still has more room than a wider one with it. */
+
+.lt-shell { display: grid; grid-template-columns: 236px minmax(0, 1fr); min-height: 100vh; background: var(--bg); color: var(--text); }
+.lt-content { min-width: 0; }
+
+/* Sidebar */
+.lt-side { position: sticky; top: 12px; height: calc(100vh - 24px); margin: 12px 0 12px 12px; display: flex; flex-direction: column; padding: 20px 12px 14px; border-radius: 14px; background: var(--side-bg); box-shadow: var(--side-elev); overflow-y: auto; scrollbar-width: none; }
+.lt-brand { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 10px 22px; }
+.lt-brand-link { display: flex; align-items: center; gap: 10px; font-family: var(--font-heading); font-size: 20px; font-weight: 600; letter-spacing: -0.02em; color: var(--text); }
+.lt-brand-link img { flex: none; }
+.lt-nav { display: flex; flex-direction: column; gap: 2px; }
+.lt-nav a { display: flex; align-items: center; gap: 12px; height: 42px; padding: 0 12px; border-radius: 10px; font-size: 15px; font-weight: 500; color: var(--text-2); transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
+.lt-nav a:hover { background: var(--side-hover); color: var(--text); transition-duration: 0s; }
+.lt-nav a[aria-current="page"] { background: var(--side-on); color: var(--text); }
+.lt-nav a svg { width: 18px; height: 18px; flex: none; }
+.lt-nav a span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lt-nav-tools { margin-top: 12px; }
+.lt-side-foot { margin-top: auto; padding-top: 16px; }
+
+/* A desktop session still open on a device: its name, and a dot that means it is live. */
+.lt-session { display: flex; align-items: center; gap: 10px; height: 36px; margin-bottom: 8px; padding: 0 12px; border-radius: 10px; font-size: var(--fs-meta); font-weight: 500; color: var(--text); background: var(--side-hover); }
+.lt-session svg { width: 16px; height: 16px; flex: none; color: var(--text-2); }
+.lt-session span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lt-live { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--ok); }
+
+/* Account button and its menu */
+.lt-acct { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 10px; padding: 10px; border-radius: 14px; background: var(--side-acct); color: var(--text); text-align: left; cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out); }
+.lt-acct:hover, .lt-acct[data-state="open"] { background: var(--side-hover); }
+.lt-av { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 50%; background: var(--side-pill); font-size: 14px; font-weight: 600; color: var(--text-2); }
+.lt-who { min-width: 0; font-size: 14px; font-weight: 500; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lt-who span { display: block; font-weight: 400; color: var(--text-3); }
+.lt-menu { z-index: 70; min-width: 208px; padding: 4px; border-radius: 10px; background: var(--panel-glass); box-shadow: var(--elev-2); color: var(--text); }
+.lt-menu-item { position: relative; display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px; border-radius: var(--r-2); font-size: var(--fs-meta); outline: none; cursor: pointer; user-select: none; }
+.lt-menu-item svg { width: 15px; height: 15px; flex: none; color: var(--text-2); }
+.lt-menu-item[data-highlighted], .lt-menu-item[data-state="open"] { background: var(--hover); }
+.lt-menu-hint { margin-left: auto; color: var(--text-3); }
+.lt-menu-check { margin-left: auto; display: flex; }
+.lt-menu-sep { height: 1px; margin: 4px 0; background: var(--divider); }
+
+/* Top bar */
+.lt-bar { display: flex; align-items: center; gap: 10px; height: 68px; max-width: calc(var(--content-w) + 2 * var(--gutter)); margin: 0 auto; padding: 12px var(--gutter) 0; }
+.lt-sp { flex: 1; }
+.lt-search { display: flex; align-items: center; gap: 8px; height: var(--ctl); min-width: 320px; padding: 0 6px 0 10px; border-radius: var(--r-3); background: var(--ctl-bg); box-shadow: var(--ctl-elev); color: var(--text-3); font-size: var(--fs-body); cursor: pointer; transition: box-shadow var(--dur-fast) var(--ease-out); }
+.lt-search:hover { box-shadow: var(--ctl-elev-hover); }
+.lt-search svg { width: 14px; height: 14px; flex: none; }
+.lt-search span { flex: 1; text-align: left; }
+.lt-search kbd { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: var(--r-1); background: var(--sunk); box-shadow: inset 0 0 0 1px var(--divider); font: 500 11px/1 var(--font-sans); color: var(--text-3); }
+.lt-icon-btn { display: grid; place-items: center; width: var(--ctl); height: var(--ctl); flex: none; border-radius: var(--r-3); background: var(--ctl-bg); box-shadow: var(--ctl-elev); color: var(--text-2); cursor: pointer; transition: box-shadow var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
+.lt-icon-btn:hover { box-shadow: var(--ctl-elev-hover); color: var(--text); }
+.lt-icon-btn svg { width: 16px; height: 16px; }
+.lt-menu-btn, .lt-bar-logo { display: none; }
+
+/* Page column */
+.lt-page { max-width: calc(var(--content-w) + 2 * var(--gutter)); margin: 0 auto; padding: 20px var(--gutter) 80px; }
+
+/* Page header: title and actions; a subtitle is one grey line. */
+.lt-ph { margin-bottom: 24px; }
+.lt-ph-row { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; min-height: var(--ctl); }
+.lt-ph-row h1 { min-width: 0; }
+.lt-ph-sub { margin-top: 4px; font-size: var(--fs-body); line-height: var(--lh-body); color: var(--text-2); }
+
+/* A sidebar entry's pages as a tab row (the device page's tabs look). */
+.lt-tabs { display: flex; gap: 24px; margin-bottom: 24px; box-shadow: inset 0 -1px 0 var(--divider); overflow-x: auto; scrollbar-width: none; }
+.lt-tabs::-webkit-scrollbar { display: none; }
+.lt-tabs a { position: relative; display: flex; align-items: center; flex: none; height: 36px; padding: 0 0 2px; font-weight: 500; color: var(--text-3); white-space: nowrap; transition: color var(--dur-fast) var(--ease-out); }
+.lt-tabs a:hover, .lt-tabs a[aria-current="page"] { color: var(--text); }
+.lt-tabs a[aria-current="page"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 2px; background: var(--text); }
+
+/* Drawer (under 900 px) */
+.lt-drawer-scrim { position: fixed; inset: 0; z-index: 50; background: var(--scrim); }
+.lt-drawer { position: fixed; top: 0; bottom: 0; left: 0; z-index: 51; display: flex; width: min(280px, 86vw); padding: calc(20px + env(safe-area-inset-top, 0px)) 12px 14px; border-radius: 0 14px 14px 0; background: var(--panel); box-shadow: var(--elev-3); overflow-y: auto; }
+.lt-drawer-nav { display: flex; flex: 1; flex-direction: column; min-height: 100%; }
+.lt-drawer-x { width: 28px; height: 28px; box-shadow: none; background: none; }
+
+@media (max-width: 1100px) {
+  :root, body { --gutter: 28px; }
+}
+@media (max-width: 900px) {
+  :root, body { --gutter: 24px; }
+  .lt-shell { grid-template-columns: minmax(0, 1fr); }
+  .lt-side { display: none; }
+  .lt-menu-btn, .lt-bar-logo { display: grid; }
+  .lt-bar .lt-sp { display: none; }
+  .lt-search { min-width: 0; flex: 1; }
+  .lt-search kbd { display: none; }
+  .lt-page { padding-top: 12px; }
+}
+@media (max-width: 640px) {
+  :root, body { --gutter: 16px; --gap-section: 32px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lt-nav a, .lt-acct, .lt-search, .lt-icon-btn, .lt-tabs a { transition: none; }
+}

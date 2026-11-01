@@ -252,28 +252,6 @@ func TestLegacyOwnerWebSocketCannotReconnectRetiredIdentity(t *testing.T) {
 	}
 }
 
-func TestAgentWSInboundBudgetAccountsForMessagesAndBytes(t *testing.T) {
-	base := time.Now()
-	budget := &agentWSInboundBudget{
-		messagesPerSecond: 1,
-		messageBurst:      2,
-		bytesPerSecond:    4,
-		byteBurst:         5,
-		messageTokens:     2,
-		byteTokens:        5,
-		lastRefill:        base,
-	}
-	if !budget.allow(2, base) || !budget.allow(3, base) {
-		t.Fatal("initial burst was rejected")
-	}
-	if budget.allow(1, base) {
-		t.Fatal("message/byte burst overrun was admitted")
-	}
-	if !budget.allow(1, base.Add(time.Second)) {
-		t.Fatal("refilled budget was rejected")
-	}
-}
-
 func TestConfiguredAgentWSCredentialLeaseIsHardBounded(t *testing.T) {
 	t.Setenv("LABTETHER_AGENT_WS_CREDENTIAL_LEASE", "1ms")
 	if got := configuredAgentWSCredentialLease(); got != minAgentWSCredentialLease {

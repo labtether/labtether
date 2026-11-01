@@ -8,12 +8,16 @@ services:
       args:
         SERVICE_DIR: cmd/labtether
     hostname: labtether
+    # Settings > Restart exits the Hub and relies on the restart policy.
+    restart: unless-stopped
     environment:
       # Change via .env or POSTGRES_PASSWORD=secret docker compose up
       DATABASE_URL: postgres://labtether:${POSTGRES_PASSWORD:-labtether}@postgres:5432/labtether?sslmode=disable
       LABTETHER_API_TOKEN_FILE: /run/labtether/api-token
       LABTETHER_API_BASE_URL: https://labtether:8443
       LABTETHER_EXTERNAL_URL: ${LABTETHER_EXTERNAL_URL:-}
+      # Browser address of the console; single sign-on returns here.
+      LABTETHER_CONSOLE_URL: ${LABTETHER_CONSOLE_URL:-}
       LABTETHER_CORS_ALLOWED_ORIGINS: ${LABTETHER_CORS_ALLOWED_ORIGINS:-}
       # Trust only the bundled console service when it forwards browser origins.
       LABTETHER_TRUST_PROXY_HOSTS: ${LABTETHER_TRUST_PROXY_HOSTS:-web-console}
@@ -24,6 +28,10 @@ services:
       LABTETHER_OUTBOUND_ALLOW_PRIVATE: ${LABTETHER_OUTBOUND_ALLOW_PRIVATE:-true}
       LABTETHER_OUTBOUND_ALLOW_LOOPBACK: ${LABTETHER_OUTBOUND_ALLOW_LOOPBACK:-false}
       LABTETHER_OUTBOUND_ALLOW_LINK_LOCAL: ${LABTETHER_OUTBOUND_ALLOW_LINK_LOCAL:-false}
+      # Wake-on-LAN without an agent relay: the Hub's own broadcast only
+      # reaches the LAN with host networking (detected) or macvlan networking.
+      # Set true for macvlan; false turns the Hub broadcast off.
+      LABTETHER_WOL_HUB_BROADCAST: ${LABTETHER_WOL_HUB_BROADCAST:-}
       SSL_CERT_FILE: /ca/ca.crt
       LABTETHER_DATA_DIR: /data
       LABTETHER_OWNER_TOKEN: ${LABTETHER_OWNER_TOKEN:-}
@@ -60,6 +68,7 @@ services:
 
   postgres:
     image: postgres:18-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-labtether}
       POSTGRES_DB: ${POSTGRES_DB:-labtether}
@@ -78,6 +87,12 @@ services:
   web-console:
     build:
       context: ./web/console
+    restart: unless-stopped
+    # The Hub (65532) writes the service token file with mode 0600. Run the
+    # console as the same user so it can read it, with a private Next.js cache.
+    user: "65532:65532"
+    tmpfs:
+      - /app/.next/cache:rw,noexec,nosuid,nodev,uid=65532,gid=65532,mode=0700
     environment:
       HOSTNAME: 0.0.0.0
       # The built-in certificate includes the labtether service hostname. The

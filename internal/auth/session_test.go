@@ -7,10 +7,10 @@ import (
 	"time"
 )
 
-func TestSetSessionCookieAlwaysSecure(t *testing.T) {
+func TestSetSessionCookieSecureOverHTTPS(t *testing.T) {
 	rec := httptest.NewRecorder()
 
-	SetSessionCookie(rec, "raw-token", 30*time.Minute)
+	SetSessionCookie(rec, "raw-token", 30*time.Minute, true)
 
 	cookies := rec.Result().Cookies()
 	if len(cookies) != 1 {
@@ -40,7 +40,18 @@ func TestSetSessionCookieAlwaysSecure(t *testing.T) {
 	}
 }
 
-func TestClearSessionCookieAlwaysSecure(t *testing.T) {
+// A Secure cookie set over plain HTTP is dropped by browsers, so plain-HTTP
+// sign-in from another machine must get a cookie without Secure.
+func TestSetSessionCookieOverPlainHTTPIsNotSecure(t *testing.T) {
+	rec := httptest.NewRecorder()
+	SetSessionCookie(rec, "raw-token", 30*time.Minute, false)
+	cookies := rec.Result().Cookies()
+	if len(cookies) != 1 || cookies[0].Secure || !cookies[0].HttpOnly {
+		t.Fatalf("plain-HTTP session cookie = %+v, want HttpOnly without Secure", cookies)
+	}
+}
+
+func TestClearSessionCookieExpiresCookie(t *testing.T) {
 	rec := httptest.NewRecorder()
 
 	ClearSessionCookie(rec)
@@ -64,9 +75,6 @@ func TestClearSessionCookieAlwaysSecure(t *testing.T) {
 	}
 	if !cookie.HttpOnly {
 		t.Fatal("expected HttpOnly session cookie")
-	}
-	if !cookie.Secure {
-		t.Fatal("expected Secure session cookie")
 	}
 	if cookie.SameSite != http.SameSiteLaxMode {
 		t.Fatalf("expected SameSite=Lax, got %v", cookie.SameSite)

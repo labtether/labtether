@@ -33,6 +33,9 @@ type Command struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Output    string    `json:"output,omitempty"`
+	// ExitCode is the command's real exit status, including 0. It is nil
+	// when unknown: an older agent, a timeout, or a command that never ran.
+	ExitCode *int `json:"exit_code,omitempty"`
 }
 
 type CreateSessionRequest struct {
@@ -129,4 +132,7 @@ type CommandResult struct {
 	Status      string    `json:"status"`
 	Output      string    `json:"output"`
 	CompletedAt time.Time `json:"completed_at"`
+	// ExitCode is nil when the exit status is unknown; it is never 0 then.
+	// Status still decides success.
+	ExitCode *int `json:"exit_code,omitempty"`
 }

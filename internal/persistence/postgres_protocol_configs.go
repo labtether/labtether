@@ -66,12 +66,16 @@ func scanProtocolConfig(row protocolConfigScanner) (*protocols.ProtocolConfig, e
 
 const protocolConfigColumns = `id, asset_id, protocol, host, port, username, credential_profile_id, enabled, last_tested_at, test_status, test_error, config, created_at, updated_at`
 
+// protocolConfigInsertColumns leaves out id: the column is a UUID that
+// PostgreSQL assigns (gen_random_uuid), like the other UUID-keyed tables.
+const protocolConfigInsertColumns = `asset_id, protocol, host, port, username, credential_profile_id, enabled, last_tested_at, test_status, test_error, config, created_at, updated_at`
+
 // --- store methods ---
 
 // SaveProtocolConfig upserts a protocol config record for the given asset.
 // On conflict (asset_id, protocol) the existing row is updated in place,
 // and the database-assigned id, created_at, and updated_at are written back
-// into pc.
+// into pc. pc.ID is never sent: a new row gets its UUID from PostgreSQL.
 func (s *PostgresStore) SaveProtocolConfig(ctx context.Context, pc *protocols.ProtocolConfig) error {
 	configPayload := pc.Config
 	if len(configPayload) == 0 {
@@ -79,10 +83,16 @@ func (s *PostgresStore) SaveProtocolConfig(ctx context.Context, pc *protocols.Pr
 	}
 
 	credentialProfileID := nullIfBlank(pc.CredentialProfileID)
+	// The table only accepts untested, success or failed. A new config has
+	// not been tested; an update keeps the stored result.
+	testStatus := strings.TrimSpace(pc.TestStatus)
+	if testStatus == "" {
+		testStatus = "untested"
+	}
 
 	row := s.pool.QueryRow(ctx,
 		fmt.Sprintf(`INSERT INTO asset_protocol_configs (%s)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, now(), now())
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, now(), now())
 		 ON CONFLICT (asset_id, protocol) DO UPDATE
 		 SET host = EXCLUDED.host,
 		     port = EXCLUDED.port,
@@ -91,8 +101,7 @@ func (s *PostgresStore) SaveProtocolConfig(ctx context.Context, pc *protocols.Pr
 		     enabled = EXCLUDED.enabled,
 		     config = EXCLUDED.config,
 		     updated_at = now()
-		 RETURNING %s`, protocolConfigColumns, protocolConfigColumns),
-		pc.ID,
+		 RETURNING %s`, protocolConfigInsertColumns, protocolConfigColumns),
 		pc.AssetID,
 		pc.Protocol,
 		pc.Host,
@@ -101,7 +110,7 @@ func (s *PostgresStore) SaveProtocolConfig(ctx context.Context, pc *protocols.Pr
 		credentialProfileID,
 		pc.Enabled,
 		nullTime(pc.LastTestedAt),
-		pc.TestStatus,
+		testStatus,
 		nullIfBlank(pc.TestError),
 		configPayload,
 	)

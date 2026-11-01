@@ -66,3 +66,25 @@ func TestValidateOIDCRedirectURIAllowsConfiguredExternalOrigin(t *testing.T) {
 		t.Fatalf("redirect = %q", got)
 	}
 }
+
+// On a default LAN install the console is http://<LAN address>:3000 and calls
+// the Hub at https://labtether:8443, so single sign-on needs the console's
+// browser address configured. Request headers must not widen the list.
+func TestValidateOIDCRedirectURIAllowsConfiguredConsoleOriginOnly(t *testing.T) {
+	sut := &apiServer{consoleURL: "http://192.0.2.10:3000/"}
+	req := httptest.NewRequest("POST", "https://labtether:8443/auth/oidc/start", nil)
+	req.Host = "labtether:8443"
+
+	got, err := sut.validateOIDCRedirectURI(req, "http://192.0.2.10:3000/api/auth/oidc/callback")
+	if err != nil || got != "http://192.0.2.10:3000/api/auth/oidc/callback" {
+		t.Fatalf("configured console callback = %q, %v", got, err)
+	}
+	if _, err := sut.validateOIDCRedirectURI(req, "http://192.0.2.10:3001/api/auth/oidc/callback"); err == nil {
+		t.Fatal("another port on the console host was allowed")
+	}
+	req.Header.Set("X-Forwarded-Host", "attacker.example")
+	req.Header.Set("X-Forwarded-Proto", "https")
+	if _, err := sut.validateOIDCRedirectURI(req, "https://attacker.example/api/auth/oidc/callback"); err == nil {
+		t.Fatal("a forwarded host from an untrusted peer was allowed")
+	}
+}

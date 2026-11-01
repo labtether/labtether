@@ -24,6 +24,9 @@ type BrowserClient struct {
 	Outgoing chan []byte
 	closeMu  sync.Mutex
 	closed   bool
+	// principals name the credentials behind this socket (see
+	// StreamPrincipalKeys), so DisconnectPrincipals can end it.
+	principals []string
 }
 
 // EventBroadcaster manages browser WebSocket connections for live event streaming.
@@ -71,9 +74,15 @@ func (eb *EventBroadcaster) SetOnEvent(fn func(eventType string, data any, at ti
 
 // Register adds a WebSocket connection to the broadcast list.
 func (eb *EventBroadcaster) Register(conn *websocket.Conn) *BrowserClient {
+	return eb.RegisterWithPrincipals(conn, nil)
+}
+
+// RegisterWithPrincipals adds a connection opened with the given credentials.
+func (eb *EventBroadcaster) RegisterWithPrincipals(conn *websocket.Conn, principals []string) *BrowserClient {
 	client := &BrowserClient{
-		conn:     conn,
-		Outgoing: make(chan []byte, 32),
+		conn:       conn,
+		Outgoing:   make(chan []byte, 32),
+		principals: append([]string(nil), principals...),
 	}
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
@@ -128,6 +137,30 @@ func (eb *EventBroadcaster) Broadcast(eventType string, data any) {
 			eb.Unregister(client)
 		}
 	}
+}
+
+// DisconnectPrincipals closes every event socket opened with one of keys, so
+// logout, user removal, demotion and key revocation also end live feeds.
+func (eb *EventBroadcaster) DisconnectPrincipals(keys ...string) int {
+	match := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		match[key] = struct{}{}
+	}
+	eb.mu.RLock()
+	var targets []*BrowserClient
+	for client := range eb.clients {
+		for _, principal := range client.principals {
+			if _, ok := match[principal]; ok {
+				targets = append(targets, client)
+				break
+			}
+		}
+	}
+	eb.mu.RUnlock()
+	for _, client := range targets {
+		eb.Unregister(client)
+	}
+	return len(targets)
 }
 
 // Count returns the number of connected browser clients.
@@ -193,6 +226,14 @@ type BrowserEventsDeps struct {
 	// if the ticket is valid and has not been used.
 	ConsumeEventTicket func(ticket string) bool
 
+	// ConsumeEventTicketPrincipals, when set, replaces ConsumeEventTicket and
+	// also returns the credentials the ticket was issued to.
+	ConsumeEventTicketPrincipals func(ticket string) ([]string, bool)
+
+	// SessionPrincipals, when set, replaces ValidateSession for cookie sign-ins
+	// and also returns the credentials behind the session.
+	SessionPrincipals func(hashedToken string) ([]string, bool, error)
+
 	// IssueStreamTicket issues a new one-time stream ticket for the given
 	// sessionID, returning the ticket string and its expiry time.
 	IssueStreamTicket func(ctx context.Context, sessionID string) (string, time.Time, error)
@@ -252,11 +293,14 @@ func (d *BrowserEventsDeps) HandleEventTicket(w http.ResponseWriter, r *http.Req
 // HandleBrowserEvents upgrades an HTTP connection to WebSocket for live event streaming.
 func (d *BrowserEventsDeps) HandleBrowserEvents(w http.ResponseWriter, r *http.Request) {
 	authenticated := false
+	var principals []string
 
 	// Check one-time ticket (preferred for browser WS — avoids token in URL).
 	ticketSupplied := r.URL.Query().Has("ticket")
 	if ticket := strings.TrimSpace(r.URL.Query().Get("ticket")); ticketSupplied && ticket != "" {
-		if d.ConsumeEventTicket != nil {
+		if d.ConsumeEventTicketPrincipals != nil {
+			principals, authenticated = d.ConsumeEventTicketPrincipals(ticket)
+		} else if d.ConsumeEventTicket != nil {
 			authenticated = d.ConsumeEventTicket(ticket)
 		}
 	}
@@ -270,9 +314,14 @@ func (d *BrowserEventsDeps) HandleBrowserEvents(w http.ResponseWriter, r *http.R
 	}
 
 	// Fallback: cookie session auth.
-	if !authenticated && d.ValidateSession != nil {
-		if token := auth.ExtractSessionToken(r); token != "" {
-			hashed := auth.HashToken(token)
+	if token := auth.ExtractSessionToken(r); !authenticated && token != "" {
+		hashed := auth.HashToken(token)
+		if d.SessionPrincipals != nil {
+			keys, ok, err := d.SessionPrincipals(hashed)
+			if err == nil && ok {
+				authenticated, principals = true, keys
+			}
+		} else if d.ValidateSession != nil {
 			ok, err := d.ValidateSession(hashed)
 			if err == nil && ok {
 				authenticated = true
@@ -287,7 +336,21 @@ func (d *BrowserEventsDeps) HandleBrowserEvents(w http.ResponseWriter, r *http.R
 			return
 		}
 	}
+	d.serveBrowserEvents(w, r, principals)
+}
 
+// ServeAuthenticatedBrowserEvents streams events to a caller the route's auth
+// wrapper already accepted, including API keys with events:subscribe. The
+// feed is global, so asset-restricted keys are refused as at ticket issue.
+func (d *BrowserEventsDeps) ServeAuthenticatedBrowserEvents(w http.ResponseWriter, r *http.Request) {
+	if apiv2.APIKeyIDFromContext(r.Context()) != "" && len(apiv2.AllowedAssetsFromContext(r.Context())) > 0 {
+		servicehttp.WriteError(w, http.StatusForbidden, "asset-restricted API keys cannot subscribe to the global event stream")
+		return
+	}
+	d.serveBrowserEvents(w, r, StreamPrincipalKeys(r.Context()))
+}
+
+func (d *BrowserEventsDeps) serveBrowserEvents(w http.ResponseWriter, r *http.Request, principals []string) {
 	upgrader := websocket.Upgrader{CheckOrigin: d.CheckOrigin}
 
 	wsConn, err := UpgradeWebSocket(&upgrader, w, r, nil)
@@ -302,7 +365,7 @@ func (d *BrowserEventsDeps) HandleBrowserEvents(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	client := d.Broadcaster.Register(wsConn)
+	client := d.Broadcaster.RegisterWithPrincipals(wsConn, principals)
 	defer func() {
 		d.Broadcaster.Unregister(client)
 		_ = wsConn.Close()

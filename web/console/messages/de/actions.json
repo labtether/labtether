@@ -59,6 +59,7 @@
     "running": "Wird ausgeführt...",
     "results": "Ausführungsergebnisse",
     "failed": "Fehlgeschlagen",
+    "succeeded": "Erfolgreich",
     "exitCode": "Exit {code}",
     "noOutput": "Befehl ohne Ausgabe abgeschlossen.",
     "deleteTitle": "Gespeicherte Aktion löschen",

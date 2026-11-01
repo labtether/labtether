@@ -9,19 +9,19 @@ import (
 	"github.com/labtether/labtether/internal/securityruntime"
 )
 
-// Before 1.7.0 a WebDAV connection used plain HTTP unless its port was 443 or
-// webdav_tls was true. 1.7.0 defaults to HTTPS and allows plain HTTP only with
+// Before 1.7.1 a WebDAV connection used plain HTTP unless its port was 443 or
+// webdav_tls was true. 1.7.1 defaults to HTTPS and allows plain HTTP only with
 // an explicit per-connection opt-in plus LABTETHER_ALLOW_INSECURE_TRANSPORT.
 // Such saved connections must say why they stopped working instead of failing
 // with a TLS handshake error or a generic message.
-const legacyPlainWebDAVNotice = "This WebDAV connection uses plain HTTP, which LabTether 1.7.0 no longer allows by default. " +
+const legacyPlainWebDAVNotice = "This WebDAV connection uses plain HTTP, which LabTether 1.7.1 no longer allows by default. " +
 	"Edit the connection to use HTTPS, or keep plain HTTP by setting webdav_allow_cleartext=true on the connection " +
 	"and LABTETHER_ALLOW_INSECURE_TRANSPORT=true on the Hub."
 
 var errLegacyPlainWebDAV = errors.New(legacyPlainWebDAVNotice)
 
 // legacyPlainWebDAV reports a saved WebDAV connection that relies on plain
-// HTTP without the 1.7.0 opt-in.
+// HTTP without the 1.7.1 opt-in.
 func legacyPlainWebDAV(fc *persistence.FileConnection) bool {
 	if fc == nil || !strings.EqualFold(strings.TrimSpace(fc.Protocol), "webdav") {
 		return false

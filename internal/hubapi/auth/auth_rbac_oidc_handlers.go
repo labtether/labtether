@@ -237,7 +237,7 @@ func (d *Deps) HandleAuthOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create session")
 		return
 	}
-	auth.SetSessionCookie(w, raw, auth.SessionDuration)
+	auth.SetSessionCookie(w, raw, auth.SessionDuration, d.requestIsSecure(r))
 	d.appendOIDCAudit("web", "allow", "", user, session, created)
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{

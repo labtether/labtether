@@ -141,6 +141,7 @@ func (d *Deps) executeViaAgent(ctx context.Context, cmdJob terminal.CommandJob, 
 			CommandID:   result.CommandID,
 			Status:      result.Status,
 			Output:      result.Output,
+			ExitCode:    result.ExitCode,
 			CompletedAt: time.Now().UTC(),
 		}
 	case <-ctx.Done():

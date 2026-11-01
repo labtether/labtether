@@ -391,7 +391,6 @@ func TestGenerateInstallScript(t *testing.T) {
 		{"docker ui tip", "configure Add Device"},
 		{"purge cleanup message", "uninstalled and purged"},
 		{"systemd unit description", "LabTether Agent"},
-		{"systemd protect home read-only", "ProtectHome=read-only"},
 		{"systemd protect system off", "ProtectSystem=off"},
 		{"systemd enable", "systemctl enable --now"},
 		{"daemon-reload", "daemon-reload"},
@@ -404,6 +403,10 @@ func TestGenerateInstallScript(t *testing.T) {
 		if !strings.Contains(script, c.snippet) {
 			t.Errorf("missing %s: snippet %q not found in script", c.desc, c.snippet)
 		}
+	}
+	// Files, terminal sessions and the Hub SSH key need writable home folders.
+	if strings.Contains(script, "ProtectHome=") {
+		t.Error("systemd unit must not make home directories read-only")
 	}
 }
 

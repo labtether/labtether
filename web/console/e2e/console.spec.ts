@@ -7,7 +7,8 @@ test("theme and layout toggles persist", async ({ page }) => {
 
   await expect(page.getByRole("heading", { name: "Settings", level: 1, exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Dark" }).click();
+  // The Settings theme option; the top bar also has a "Dark theme" switch.
+  await page.getByRole("button", { name: "Dark", exact: true }).click();
   await expect(page.locator("body")).toHaveAttribute("data-theme", "dark");
 
   await page.getByRole("button", { name: "Diagnostic" }).click();

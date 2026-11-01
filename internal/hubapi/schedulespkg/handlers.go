@@ -393,7 +393,7 @@ func (d *Deps) V2UpdateSchedule(w http.ResponseWriter, r *http.Request, id strin
 		nextRun.Value = &next
 	}
 
-	if err := d.ScheduleStore.UpdateScheduledTask(r.Context(), id, req.Name, req.CronExpr, req.Command, req.Targets, req.GroupID, req.Enabled, nextRun); err != nil {
+	if err := d.ScheduleStore.UpdateScheduledTask(r.Context(), id, req.Name, req.CronExpr, req.Command, req.Targets, req.GroupID, req.Enabled, nextRun, apiv2.PrincipalActorID(r.Context())); err != nil {
 		if errors.Is(err, persistence.ErrNotFound) {
 			apiv2.WriteError(w, http.StatusNotFound, "not_found", "schedule not found")
 			return

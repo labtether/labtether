@@ -53,6 +53,9 @@ type Deps struct {
 	FileConnectionStore persistence.FileConnectionStore
 	FileTransferStore   persistence.FileTransferStore
 	ActiveTransfers     *sync.Map // transfer ID → context.CancelFunc
+	// SpoolDir is a disk-backed directory for staging transfers and copies.
+	// Empty falls back to the system temp directory.
+	SpoolDir string
 
 	// Remote desktop bookmark store.
 	RemoteBookmarkStore RemoteBookmarkStoreInterface
@@ -124,6 +127,11 @@ type Deps struct {
 	HandleCreateProtocolConfig       func(w http.ResponseWriter, r *http.Request, assetID string)
 	HandleUpdateProtocolConfig       func(w http.ResponseWriter, r *http.Request, assetID, protocol string)
 	HandleDeleteProtocolConfig       func(w http.ResponseWriter, r *http.Request, assetID, protocol string)
+	HandleHubSSHKey                  func(w http.ResponseWriter, r *http.Request, asset assets.Asset)
+
+	// HubSSHKeyEnabled reports whether the Hub SSH key is on for a device.
+	// When set, single-device responses include hub_ssh_key_enabled.
+	HubSSHKeyEnabled func(assetID string) bool
 
 	// Cross-cutting helpers injected from cmd/labtether.
 	DecodeJSONBody  func(w http.ResponseWriter, r *http.Request, dst any) error

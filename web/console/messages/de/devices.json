@@ -33,5 +33,57 @@
     "matchSignals": "Übereinstimmungsmerkmale",
     "confidence": "Konfidenz: {value}%",
     "newSuggestions": "{count} vorgeschlagene Beziehungen"
+  },
+  "hubSshKey": {
+    "title": "Hub-SSH-Schlüssel",
+    "description": "Erlaubt dem Hub, sich per SSH als root an diesem Gerät anzumelden.",
+    "on": "An",
+    "off": "Aus",
+    "loading": "Wird geladen...",
+    "removalPending": "Der Hub entfernt seinen Schlüssel, sobald sich der Agent wieder verbindet.",
+    "removalSent": "Der Hub hat den Agenten angewiesen, seinen Schlüssel zu entfernen.",
+    "noAgent": "Dieses Gerät hat keinen Agenten. Entfernen Sie den Hub-Schlüssel auf dem Gerät aus authorized_keys.",
+    "adminOnly": "Nur ein Administrator oder Eigentümer kann dies ändern.",
+    "loadError": "Die Einstellung für den Hub-SSH-Schlüssel konnte nicht geladen werden.",
+    "saveError": "Die Einstellung für den Hub-SSH-Schlüssel konnte nicht geändert werden."
+  },
+  "list": {
+    "filter": "Nach Name, IP, OS oder Tag filtern",
+    "groupBy": "Gruppieren",
+    "more": "Weitere Aktionen",
+    "arrangeGroups": "Gruppen anordnen",
+    "backToList": "Zurück zur Liste",
+    "noMatch": "Keine passenden Geräte",
+    "columns": {
+      "device": "Gerät",
+      "address": "Adresse",
+      "cpu": "CPU",
+      "memory": "Speicher",
+      "disk": "Festplatte"
+    },
+    "sections": {
+      "servers": "Server",
+      "storage": "Speicher",
+      "computers": "Computer",
+      "vms": "VMs",
+      "other": "Sonstige",
+      "attention": "Braucht Aufmerksamkeit",
+      "online": "Online",
+      "noGroup": "Keine Gruppe"
+    },
+    "groupings": {
+      "type": "Typ",
+      "status": "Status",
+      "group": "Gruppe",
+      "none": "Keine"
+    },
+    "guests": "{count, plural, one {# Gast} other {# Gäste}}",
+    "containers": "{count, plural, one {# Container} other {# Container}}",
+    "vm": "VM {vmid}",
+    "vmOn": "VM {vmid} auf {host}",
+    "on": "auf {host}",
+    "offline": "Offline · zuletzt gesehen {age}",
+    "notResponding": "Antwortet nicht · zuletzt gesehen {age}",
+    "noCheckIn": "Noch keine Meldung"
   }
 }

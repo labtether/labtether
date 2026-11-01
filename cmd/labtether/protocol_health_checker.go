@@ -112,6 +112,9 @@ func (s *apiServer) testProtocolConfig(ctx context.Context, pc *protocols.Protoc
 	var password, privateKey string
 	if pc.Protocol == protocols.ProtocolSSH && pc.CredentialProfileID != "" && s.credentialStore != nil && s.secretsManager != nil {
 		profile, ok, err := s.credentialStore.GetCredentialProfile(pc.CredentialProfileID)
+		if err == nil && ok && profile.Kind == credentials.KindHubSSHIdentity && !s.hubSSHKeyEnabled(pc.AssetID) {
+			return // the Hub SSH key is off for this device; do not offer it
+		}
 		if err == nil && ok {
 			secret, decErr := s.secretsManager.DecryptString(profile.SecretCiphertext, profile.ID)
 			if decErr == nil {

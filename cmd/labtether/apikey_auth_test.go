@@ -153,3 +153,51 @@ func TestWithAuth_APIKey_StoreNil_Returns503(t *testing.T) {
 		t.Errorf("expected 503 for nil store, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
+
+// A key must not outlive or outrank the user who made it: deleting the
+// creator stops the key, and demoting the creator caps the key's role.
+func TestWithAuthAPIKeyFollowsCreatorAccount(t *testing.T) {
+	s := newTestAPIServer(t)
+	creator, err := s.authStore.CreateUserWithRole("key-creator", "unused", auth.RoleAdmin, "local", "")
+	if err != nil {
+		t.Fatalf("create creator: %v", err)
+	}
+	generated, err := apikeys.GenerateKey()
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	if err := s.apiKeyStore.CreateAPIKey(context.Background(), apikeys.APIKey{
+		ID: "key_creator_bound", Name: "personal admin key", Prefix: generated.Prefix, SecretHash: generated.Hash,
+		Role: auth.RoleAdmin, Scopes: []string{"*"}, CreatedBy: creator.ID, CreatedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("seed key: %v", err)
+	}
+	call := func() (int, string) {
+		var role string
+		handler := s.withAuth(func(w http.ResponseWriter, r *http.Request) {
+			role = userRoleFromContext(r.Context())
+			w.WriteHeader(http.StatusNoContent)
+		})
+		req := httptest.NewRequest(http.MethodGet, "/test", nil)
+		req.TLS = &tls.ConnectionState{}
+		req.Header.Set("Authorization", "Bearer "+generated.Raw)
+		rec := httptest.NewRecorder()
+		handler(rec, req)
+		return rec.Code, role
+	}
+	if code, role := call(); code != http.StatusNoContent || role != auth.RoleAdmin {
+		t.Fatalf("active creator: status=%d role=%q, want 204 admin", code, role)
+	}
+	if err := s.authStore.UpdateUserRole(creator.ID, auth.RoleViewer); err != nil {
+		t.Fatalf("demote creator: %v", err)
+	}
+	if code, role := call(); code != http.StatusNoContent || role != auth.RoleViewer {
+		t.Fatalf("demoted creator: status=%d role=%q, want 204 viewer", code, role)
+	}
+	if err := s.authStore.DeleteUser(creator.ID); err != nil {
+		t.Fatalf("delete creator: %v", err)
+	}
+	if code, _ := call(); code != http.StatusUnauthorized {
+		t.Fatalf("deleted creator: status=%d, want 401", code)
+	}
+}

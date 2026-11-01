@@ -179,7 +179,10 @@ func TestEnrollFullFlow_UsesExternalURLForHubEndpoints(t *testing.T) {
 	}
 }
 
-func TestEnrollFullFlow_PrefersTailscaleHubEndpointsWhenAvailable(t *testing.T) {
+// An enrolling agent switches to the returned URLs at once. A host that
+// enrolled over the LAN may not be on the tailnet, so it must keep the origin
+// it reached instead of the Hub's Tailscale HTTPS address.
+func TestEnrollFullFlow_KeepsRequestOriginWhenTailscaleIsAvailable(t *testing.T) {
 	t.Setenv(envTailscaleManaged, "true")
 
 	sut := newTestAPIServer(t)
@@ -235,8 +238,8 @@ func TestEnrollFullFlow_PrefersTailscaleHubEndpointsWhenAvailable(t *testing.T) 
 	})
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/enroll", bytes.NewReader(enrollPayload))
-	req.Host = "localhost:8443"
-	req.RemoteAddr = "127.0.0.1:12345"
+	req.Host = "192.0.2.10:8443"
+	req.RemoteAddr = "192.0.2.20:12345"
 	rec := httptest.NewRecorder()
 	sut.handleEnroll(rec, req)
 
@@ -248,10 +251,10 @@ func TestEnrollFullFlow_PrefersTailscaleHubEndpointsWhenAvailable(t *testing.T) 
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode error: %v", err)
 	}
-	if resp.HubAPIURL != "https://hub.homelab.ts.net" {
-		t.Fatalf("expected tailscale hub_api_url, got %q", resp.HubAPIURL)
+	if resp.HubAPIURL != "http://192.0.2.10:8443" {
+		t.Fatalf("expected the requested hub_api_url, got %q", resp.HubAPIURL)
 	}
-	if resp.HubWSURL != "wss://hub.homelab.ts.net/ws/agent" {
-		t.Fatalf("expected tailscale hub_ws_url, got %q", resp.HubWSURL)
+	if resp.HubWSURL != "ws://192.0.2.10:8443/ws/agent" {
+		t.Fatalf("expected the requested hub_ws_url, got %q", resp.HubWSURL)
 	}
 }

@@ -12,6 +12,9 @@ type OIDCProviderRef struct {
 	mu            sync.RWMutex
 	provider      *auth.OIDCProvider
 	autoProvision bool
+	// version counts swaps, so a background start-up retry can tell that an
+	// admin applied settings in the meantime.
+	version uint64
 }
 
 // NewOIDCProviderRef creates a new ref with the given initial state.
@@ -42,4 +45,32 @@ func (r *OIDCProviderRef) Swap(provider *auth.OIDCProvider, autoProvision bool) 
 	defer r.mu.Unlock()
 	r.provider = provider
 	r.autoProvision = autoProvision
+	r.version++
+}
+
+// Version returns how many times the provider was swapped.
+func (r *OIDCProviderRef) Version() uint64 {
+	if r == nil {
+		return 0
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.version
+}
+
+// SwapIfVersion swaps only when no other swap happened since version was
+// read, and reports whether it swapped.
+func (r *OIDCProviderRef) SwapIfVersion(version uint64, provider *auth.OIDCProvider, autoProvision bool) bool {
+	if r == nil {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.version != version {
+		return false
+	}
+	r.provider = provider
+	r.autoProvision = autoProvision
+	r.version++
+	return true
 }

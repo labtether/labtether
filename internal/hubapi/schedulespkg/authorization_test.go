@@ -115,3 +115,25 @@ func TestAuthorizeExecutionTargetRevalidatesUserAndAPIKeyAuthority(t *testing.T)
 		})
 	}
 }
+
+// An edited schedule must run with the editor's authority, so revoking the
+// editor's key stops the new command instead of leaving it to run as owner.
+func TestScheduleEditTransfersAuthorityToEditor(t *testing.T) {
+	store := persistence.NewMemoryScheduleStore()
+	d := &Deps{ScheduleStore: store}
+	task := schedules.ScheduledTask{ID: "nightly", Name: "nightly", CronExpr: "0 * * * *", Command: "uptime", Targets: []string{"asset-a"}, Enabled: true, CreatedBy: "owner", CreatedAt: time.Now()}
+	if err := store.CreateScheduledTask(context.Background(), task); err != nil {
+		t.Fatal(err)
+	}
+	ctx := apiv2.ContextWithUserID(context.Background(), "apikey:editor")
+	req := httptest.NewRequest(http.MethodPatch, "/api/v2/schedules/nightly", bytes.NewReader([]byte(`{"command":"id"}`))).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	d.V2UpdateSchedule(rec, req, "nightly")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update: expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	got, ok, err := store.GetScheduledTask(context.Background(), "nightly")
+	if err != nil || !ok || got.CreatedBy != "apikey:editor" {
+		t.Fatalf("schedule authority after edit = %q (ok=%v err=%v), want editor", got.CreatedBy, ok, err)
+	}
+}

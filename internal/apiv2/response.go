@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"time"
 )
 
 func WriteJSON(w http.ResponseWriter, status int, data any) {
@@ -83,7 +84,7 @@ func NewRequestID() string {
 func WrapV1Handler(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Capture the v1 response.
-		rec := &v2EnvelopeRecorder{ResponseRecorder: httptest.NewRecorder()}
+		rec := &v2EnvelopeRecorder{ResponseRecorder: httptest.NewRecorder(), outer: w}
 		next(rec, r)
 
 		result := rec.Result()
@@ -140,6 +141,18 @@ func WrapV1Handler(next http.HandlerFunc) http.HandlerFunc {
 type v2EnvelopeRecorder struct {
 	*httptest.ResponseRecorder
 	isV2Envelope bool
+	outer        http.ResponseWriter
+}
+
+// SetReadDeadline and SetWriteDeadline reach the real connection, so a wrapped
+// handler that keeps a long upload alive works through the v2 routes too. The
+// response body is still buffered here; nothing else is passed through.
+func (r *v2EnvelopeRecorder) SetReadDeadline(deadline time.Time) error {
+	return http.NewResponseController(r.outer).SetReadDeadline(deadline)
+}
+
+func (r *v2EnvelopeRecorder) SetWriteDeadline(deadline time.Time) error {
+	return http.NewResponseController(r.outer).SetWriteDeadline(deadline)
 }
 
 func markV2Envelope(w http.ResponseWriter) {

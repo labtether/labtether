@@ -139,6 +139,7 @@ func newTestAPIServer(t *testing.T) *apiServer {
 		webhookStore:            persistence.NewMemoryWebhookStore(),
 		savedActionStore:        persistence.NewMemorySavedActionStore(),
 		linkSuggestionStore:     linkSuggestionStore,
+		hubSSHKeyStore:          persistence.NewMemoryHubSSHKeyStore(),
 		authStore:               authStore,
 		secretsManager:          secretsManager,
 		policyState:             newPolicyRuntimeState(policy.DefaultEvaluatorConfig()),

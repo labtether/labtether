@@ -119,6 +119,10 @@ type Deps struct {
 	// for the given identity.
 	LoadHubPrivateKeyPEM func(identity *HubSSHIdentity) (string, error)
 
+	// HubSSHKeyEnabled reports whether an admin turned on the Hub SSH key for
+	// a device. When nil, the key is treated as off.
+	HubSSHKeyEnabled func(assetID string) bool
+
 	// UserRoleFromContext extracts the user role string from the request
 	// context. Used by the Tailscale serve mutation handler for admin-role
 	// enforcement. If nil, the handler treats every caller as non-admin.
@@ -165,6 +169,12 @@ func (d *Deps) principalActorID(ctx context.Context) string {
 		return d.PrincipalActorID(ctx)
 	}
 	return ""
+}
+
+// hubSSHKeyEnabled reports whether the Hub may add or use its SSH key on the
+// device. Without the injected check the key is treated as off.
+func (d *Deps) hubSSHKeyEnabled(assetID string) bool {
+	return d.HubSSHKeyEnabled != nil && d.HubSSHKeyEnabled(assetID)
 }
 
 func (d *Deps) currentHubIdentity() *HubSSHIdentity {

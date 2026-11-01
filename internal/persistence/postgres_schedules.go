@@ -132,7 +132,7 @@ func (s *PostgresStore) ListScheduledTasksForEvaluation(
 	return result, rows.Err()
 }
 
-func (s *PostgresStore) UpdateScheduledTask(ctx context.Context, id string, name *string, cronExpr *string, command *string, targets *[]string, groupID *string, enabled *bool, nextRun schedules.NextRunUpdate) error {
+func (s *PostgresStore) UpdateScheduledTask(ctx context.Context, id string, name *string, cronExpr *string, command *string, targets *[]string, groupID *string, enabled *bool, nextRun schedules.NextRunUpdate, editedBy string) error {
 	var setClauses []string
 	var args []any
 	argIdx := 1
@@ -185,6 +185,12 @@ func (s *PostgresStore) UpdateScheduledTask(ctx context.Context, id string, name
 
 	if len(setClauses) == 0 {
 		return nil
+	}
+	// The schedule runs with the authority of whoever last changed it.
+	if editedBy = strings.TrimSpace(editedBy); editedBy != "" {
+		setClauses = append(setClauses, fmt.Sprintf("created_by = $%d", argIdx))
+		args = append(args, editedBy)
+		argIdx++
 	}
 
 	query := fmt.Sprintf("UPDATE scheduled_tasks SET %s WHERE id = $%d",

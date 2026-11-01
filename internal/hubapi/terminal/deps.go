@@ -104,6 +104,9 @@ type Deps struct {
 	// Credential helpers.
 	GetAssetTerminalConfig  func(assetID string) (credentials.AssetTerminalConfig, bool, error)
 	SaveAssetTerminalConfig func(cfg credentials.AssetTerminalConfig) (credentials.AssetTerminalConfig, error)
+	// HubSSHKeyEnabled reports whether an admin turned on the Hub SSH key for
+	// a device. When nil, the Hub never logs in with its key.
+	HubSSHKeyEnabled func(assetID string) bool
 
 	// In-memory terminal store for ring buffer access (scrollback capture).
 	TerminalInMemStore *terminal.Store

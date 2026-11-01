@@ -11,6 +11,7 @@ type UsersTableProps = {
   users: HubUser[];
   loading: boolean;
   currentUserId: string;
+  canManage: (user: HubUser) => boolean;
   onEditRole: (user: HubUser) => void;
   onResetPassword: (user: HubUser) => void;
   onRevokeSessions: (user: HubUser) => void;
@@ -133,6 +134,7 @@ export function UsersTable({
   users,
   loading,
   currentUserId,
+  canManage,
   onEditRole,
   onResetPassword,
   onRevokeSessions,
@@ -206,14 +208,16 @@ export function UsersTable({
                 <span className="text-xs text-[var(--muted)]">{relativeTime(user.created_at)}</span>
 
                 <div className="flex justify-end">
-                  <ActionsMenu
-                    user={user}
-                    isCurrentUser={isCurrentUser}
-                    onEditRole={() => onEditRole(user)}
-                    onResetPassword={() => onResetPassword(user)}
-                    onRevokeSessions={() => onRevokeSessions(user)}
-                    onDelete={() => onDelete(user)}
-                  />
+                  {canManage(user) ? (
+                    <ActionsMenu
+                      user={user}
+                      isCurrentUser={isCurrentUser}
+                      onEditRole={() => onEditRole(user)}
+                      onResetPassword={() => onResetPassword(user)}
+                      onRevokeSessions={() => onRevokeSessions(user)}
+                      onDelete={() => onDelete(user)}
+                    />
+                  ) : null}
                 </div>
               </li>
             );

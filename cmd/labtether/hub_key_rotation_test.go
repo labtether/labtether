@@ -93,6 +93,10 @@ func readHubSSHKeyMessage(t *testing.T, conn *websocket.Conn, wantType string) s
 	if err := json.Unmarshal(message.Data, &payload); err != nil {
 		t.Fatalf("decode %s payload: %v", wantType, err)
 	}
+	// Compare key type and data only; installed lines carry the Hub comment.
+	if fields := strings.Fields(payload.PublicKey); len(fields) >= 2 {
+		return fields[0] + " " + fields[1]
+	}
 	return payload.PublicKey
 }
 
@@ -176,6 +180,7 @@ func TestSSHHubKeyRotationStagesBeforePersistAndRemovesOldKeyAfterward(t *testin
 	defer cleanup()
 	server.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-ssh-rotation", "linux"))
 	defer server.agentMgr.Unregister("node-ssh-rotation")
+	enableTestHubSSHKey(t, server, "node-ssh-rotation")
 
 	response := httptest.NewRecorder()
 	request := newHubSSHKeyRotationRequest(t, "user-admin-1", `{"key_type":"ed25519","reason":"LTQA-245","confirm":"ROTATE"}`)
@@ -233,6 +238,7 @@ func TestSSHHubKeyRotationPersistenceFailureKeepsOldIdentity(t *testing.T) {
 	defer cleanup()
 	server.agentMgr.Register(agentmgr.NewAgentConn(serverConn, "node-ssh-persist-failure", "linux"))
 	defer server.agentMgr.Unregister("node-ssh-persist-failure")
+	enableTestHubSSHKey(t, server, "node-ssh-persist-failure")
 
 	response := httptest.NewRecorder()
 	request := newHubSSHKeyRotationRequest(t, "user-admin-2", `{"reason":"failure ordering","confirm":"ROTATE"}`)

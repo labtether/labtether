@@ -45,7 +45,7 @@ func downloadRecording(d *Deps, path, actorID, role string) *httptest.ResponseRe
 func TestRecordingDownloadStreamsAttachmentFromDataDir(t *testing.T) {
 	const fileName = "rec_1_20261026T120000.bin"
 	d := recordingDownloadDeps(t, map[string]RecordingMetadata{
-		// Rows written before 1.7.0 store the old relative path; the file is
+		// Rows written before 1.7.1 store the old relative path; the file is
 		// still resolved by base name inside the recordings directory.
 		"rec_1": {ID: "rec_1", SessionID: "sess-1", AssetID: "srv1", ActorID: "op-1", FilePath: "data/recordings/" + fileName, Status: "completed"},
 	})

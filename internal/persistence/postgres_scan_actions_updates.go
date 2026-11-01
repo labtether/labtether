@@ -100,7 +100,7 @@ func (s *PostgresStore) listActionRunStepsByRunIDs(runIDs []string) (map[string]
 	}
 
 	rows, err := s.pool.Query(context.Background(),
-		`SELECT id, run_id, name, status, output, error, created_at, updated_at
+		`SELECT id, run_id, name, status, output, error, exit_code, created_at, updated_at
 		 FROM action_run_steps
 		 WHERE run_id = ANY($1)
 		 ORDER BY run_id ASC, created_at ASC`,
@@ -121,6 +121,7 @@ func (s *PostgresStore) listActionRunStepsByRunIDs(runIDs []string) (map[string]
 			&step.Status,
 			&step.Output,
 			&step.Error,
+			&step.ExitCode,
 			&step.CreatedAt,
 			&step.UpdatedAt,
 		); err != nil {

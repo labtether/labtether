@@ -28,7 +28,8 @@ const jumpChainHopDialTimeout = 6 * time.Second
 //  1. Inline SSH config (Quick Connect sessions)
 //  2. Ephemeral process-local Quick Connect config by session ID
 //  3. asset_protocol_configs row for SSH
-//  4. Environment variable fallback
+//  4. Saved SSH login (stored when an agent installs the Hub SSH key)
+//  5. Environment variable fallback
 func (d *Deps) ResolveSessionSSHConfig(session terminal.Session) (*terminal.SSHConfig, error) {
 	if session.InlineSSHConfig != nil {
 		return session.InlineSSHConfig, nil
@@ -47,6 +48,9 @@ func (d *Deps) ResolveSessionSSHConfig(session terminal.Session) (*terminal.SSHC
 		if pc != nil {
 			return d.resolveProtocolConfigSSH(pc, session.Target)
 		}
+	}
+	if saved, err := d.resolveSavedTerminalSSH(session.Target); err != nil || saved != nil {
+		return saved, err
 	}
 
 	return resolveEnvSSHConfig(session.Target)
@@ -87,6 +91,11 @@ func (d *Deps) resolveProtocolConfigSSH(pc *protocols.ProtocolConfig, assetID st
 			resolved.HostKey = strings.TrimSpace(sshCfg.HostKey)
 		}
 	}
+	// A host key typed into the entry wins; otherwise use the one the agent
+	// reported for the same address.
+	if resolved.HostKey == "" {
+		resolved.HostKey = d.agentPinnedHostKey(assetID, host, port)
+	}
 
 	if pc.CredentialProfileID == "" {
 		if strings.TrimSpace(resolved.User) == "" {
@@ -104,6 +113,10 @@ func (d *Deps) resolveProtocolConfigSSH(pc *protocols.ProtocolConfig, assetID st
 	}
 	if !ok {
 		return nil, fmt.Errorf("credential profile %s not found", pc.CredentialProfileID)
+	}
+	if strings.TrimSpace(profile.Kind) == credentials.KindHubSSHIdentity &&
+		(d.HubSSHKeyEnabled == nil || !d.HubSSHKeyEnabled(assetID)) {
+		return nil, shared.ErrHubSSHKeyOff
 	}
 
 	if strings.TrimSpace(resolved.User) == "" {
@@ -137,6 +150,9 @@ func (d *Deps) resolveProtocolConfigSSH(pc *protocols.ProtocolConfig, assetID st
 
 	if strings.TrimSpace(resolved.User) == "" {
 		return nil, errors.New("ssh username is required")
+	}
+	if sshHostKeyNeeded(resolved) {
+		return nil, d.sshHostKeyMissingError(assetID, host, true)
 	}
 	return resolved, nil
 }
@@ -223,10 +239,11 @@ func (d *Deps) CreateSSHClientConfig(resolved *terminal.SSHConfig, timeout time.
 		return nil, err
 	}
 	return &ssh.ClientConfig{
-		User:            strings.TrimSpace(resolved.User),
-		Auth:            authMethods,
-		HostKeyCallback: hostKeyCallback,
-		Timeout:         timeout,
+		User:              strings.TrimSpace(resolved.User),
+		Auth:              authMethods,
+		HostKeyCallback:   hostKeyCallback,
+		HostKeyAlgorithms: pinnedHostKeyAlgorithms(resolved),
+		Timeout:           timeout,
 	}, nil
 }
 

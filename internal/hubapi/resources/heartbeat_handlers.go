@@ -117,7 +117,7 @@ func (d *Deps) HandleRecordAssetHeartbeat(w http.ResponseWriter, r *http.Request
 		}
 		commitCtx, cancelCommit := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancelCommit()
-		committed, commitErr := d.EnrollmentTransactions.CommitAuthenticatedAgentHeartbeat(commitCtx, agentTokenID, req)
+		committed, commitErr := d.EnrollmentTransactions.CommitAuthenticatedAgentHeartbeat(commitCtx, agentTokenID, shared.AgentTokenTTL(), req)
 		if commitErr != nil {
 			if errors.Is(commitErr, persistence.ErrAgentCredentialInactive) || errors.Is(commitErr, persistence.ErrNotFound) {
 				servicehttp.WriteError(w, http.StatusUnauthorized, "agent credential is no longer active")

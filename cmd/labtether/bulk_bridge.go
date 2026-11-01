@@ -29,6 +29,7 @@ func (s *apiServer) execOnAssetForBulk(r *http.Request, assetID, command string,
 	res := s.v2ExecOnAsset(r, assetID, command, timeoutSec)
 	return bulkpkg.ExecResult{
 		AssetID:    res.AssetID,
+		Status:     res.Status,
 		ExitCode:   res.ExitCode,
 		Stdout:     res.Stdout,
 		DurationMs: res.DurationMs,

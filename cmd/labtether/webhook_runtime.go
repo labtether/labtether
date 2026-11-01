@@ -6,7 +6,6 @@ import (
 	"errors"
 	"log"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/labtether/labtether/internal/idgen"
@@ -23,9 +22,8 @@ type webhookDispatchEvent struct {
 }
 
 const (
-	maxWebhookEventDataBytes   = 256 << 10
-	maxWebhookEventTypeBytes   = 128
-	webhookDeliveryConcurrency = 8
+	maxWebhookEventDataBytes = 256 << 10
+	maxWebhookEventTypeBytes = 128
 )
 
 func (s *apiServer) enqueueWebhookEvent(eventType string, data any, at time.Time) {
@@ -96,73 +94,88 @@ func (s *apiServer) runWebhookRelay(ctx context.Context) {
 		return
 	}
 
+	queues := newWebhookDeliveryQueues(ctx, func(ctx context.Context, delivery webhookDelivery) {
+		s.deliverWebhook(ctx, adapter, delivery)
+	})
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case event := <-s.webhookEventCh:
-			s.dispatchWebhookEvent(ctx, adapter, event)
+			s.dispatchWebhookEvent(ctx, queues, event)
 		}
 	}
 }
 
-func (s *apiServer) dispatchWebhookEvent(ctx context.Context, adapter *notifications.WebhookAdapter, event webhookDispatchEvent) {
+// dispatchWebhookEvent hands an event to the queue of every matching webhook.
+// It never waits for a delivery, so one slow endpoint cannot hold up the relay.
+func (s *apiServer) dispatchWebhookEvent(ctx context.Context, queues *webhookDeliveryQueues, event webhookDispatchEvent) {
 	hooks, err := s.listDispatchWebhooks(ctx)
 	if err != nil {
 		log.Printf("webhooks: load failed for event %q: %v", event.EventType, err)
 		return
 	}
-	if len(hooks) == 0 {
-		return
-	}
-
-	payload := map[string]any{
-		"id":   event.ID,
-		"type": event.EventType,
-		"data": event.Data,
-		"ts":   event.Timestamp.UTC().Format(time.RFC3339),
-	}
-	var wg sync.WaitGroup
-	deliverySem := make(chan struct{}, webhookDeliveryConcurrency)
 	for _, wh := range hooks {
 		if !wh.Enabled || !webhookMatchesEvent(wh, event.EventType) {
 			continue
 		}
-		wh := wh
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			select {
-			case deliverySem <- struct{}{}:
-				defer func() { <-deliverySem }()
-			case <-ctx.Done():
-				return
-			}
-
-			config := map[string]any{
-				"url":        wh.URL,
-				"event_type": event.EventType,
-				"timestamp":  payload["ts"],
-			}
-			secret, err := s.runtimeWebhookSecret(ctx, wh)
-			if err != nil {
-				log.Printf("webhooks: %s secret unavailable: %v", wh.ID, err)
-				return
-			}
-			if secret != "" {
-				config["secret"] = secret
-			}
-			if err := adapter.Send(ctx, config, payload); err != nil {
-				log.Printf("webhooks: %s delivery failed for %q: %v", wh.ID, event.EventType, err)
-				return
-			}
-			if err := s.webhookStore.MarkWebhookTriggered(ctx, wh.ID, event.Timestamp); err != nil && !errors.Is(err, persistence.ErrNotFound) {
-				log.Printf("webhooks: %s trigger timestamp update failed: %v", wh.ID, err)
-			}
-			s.setWebhookCacheLastTriggered(wh.ID, event.Timestamp)
-		}()
+		if !queues.enqueue(webhookDelivery{hookID: wh.ID, event: event}) {
+			log.Printf("webhooks: %s is not keeping up; dropping event %q", wh.ID, event.EventType)
+		}
 	}
-	wg.Wait()
+}
+
+func (s *apiServer) deliverWebhook(ctx context.Context, adapter *notifications.WebhookAdapter, delivery webhookDelivery) {
+	// Read the subscription again: it may have been disabled, deleted or
+	// pointed elsewhere while this event waited in its queue.
+	wh, ok := s.currentDispatchWebhook(ctx, delivery.hookID)
+	event := delivery.event
+	if !ok || !wh.Enabled || !webhookMatchesEvent(wh, event.EventType) {
+		return
+	}
+	timestamp := event.Timestamp.UTC().Format(time.RFC3339)
+	payload := map[string]any{
+		"id":   event.ID,
+		"type": event.EventType,
+		"data": event.Data,
+		"ts":   timestamp,
+	}
+	config := map[string]any{
+		"url":        wh.URL,
+		"event_type": event.EventType,
+		"timestamp":  timestamp,
+	}
+	secret, err := s.runtimeWebhookSecret(ctx, wh)
+	if err != nil {
+		log.Printf("webhooks: %s secret unavailable: %v", wh.ID, err)
+		return
+	}
+	if secret != "" {
+		config["secret"] = secret
+	}
+	if err := adapter.Send(ctx, config, payload); err != nil {
+		// Webhook URLs often carry an access token, so the log keeps only
+		// the scheme and host.
+		log.Printf("webhooks: %s delivery failed for %q: %s", wh.ID, event.EventType, notifications.SanitizeDeliveryError(err))
+		return
+	}
+	if err := s.webhookStore.MarkWebhookTriggered(ctx, wh.ID, event.Timestamp); err != nil && !errors.Is(err, persistence.ErrNotFound) {
+		log.Printf("webhooks: %s trigger timestamp update failed: %v", wh.ID, err)
+	}
+	s.setWebhookCacheLastTriggered(wh.ID, event.Timestamp)
+}
+
+func (s *apiServer) currentDispatchWebhook(ctx context.Context, id string) (webhooks.Webhook, bool) {
+	hooks, err := s.listDispatchWebhooks(ctx)
+	if err != nil {
+		return webhooks.Webhook{}, false
+	}
+	for _, wh := range hooks {
+		if wh.ID == id {
+			return wh, true
+		}
+	}
+	return webhooks.Webhook{}, false
 }
 
 func (s *apiServer) listDispatchWebhooks(ctx context.Context) ([]webhooks.Webhook, error) {

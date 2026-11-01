@@ -1,7 +1,7 @@
 import { expect,test } from "@playwright/test";
 import { mockConsoleBootstrap } from './helpers/consoleBootstrap';
 
-test("nodes page renders canonical kind labels when available", async ({ page }) => {
+test("nodes page lists a device in its type section with what it runs", async ({ page }) => {
   await mockConsoleBootstrap(page);
 
   const now = new Date().toISOString();
@@ -98,11 +98,9 @@ test("nodes page renders canonical kind labels when available", async ({ page })
   await page.goto("/nodes", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: "Devices", level: 1, exact: true })).toBeVisible();
 
-  const row = page
-    .locator("[role='link']")
-    .filter({ has: page.getByText("VaultNAS", { exact: true }) })
-    .first();
-  await expect(row).toContainText("Storage Controller");
+  const storage = page.getByRole("region", { name: "Storage", exact: true });
+  await expect(storage.getByRole("link", { name: "VaultNAS", exact: true })).toBeVisible();
+  await expect(storage).toContainText("TrueNAS");
 });
 
 test("node metrics tolerates telemetry series with null points", async ({ page }) => {
@@ -387,17 +385,17 @@ test("nodes page search narrows visible device cards", async ({ page }) => {
   await page.goto("/nodes");
   await expect(page.getByRole("heading", { name: "Devices", level: 1, exact: true })).toBeVisible();
 
-  const search = page.getByLabel("Search devices");
+  const device = (name: string) => page.getByRole("link", { name, exact: true });
+  const search = page.getByLabel("Filter by name, IP, OS or tag");
   await search.fill("Node Beta");
-  await expect(page.locator("[role='link']").filter({ hasText: "Node Beta" })).toHaveCount(1);
-  await expect(page.locator("[role='link']").filter({ hasText: "Node Alpha" })).toHaveCount(0);
-  await expect(page.locator("[role='link']").filter({ hasText: "Node Gamma" })).toHaveCount(0);
+  await expect(device("Node Beta")).toHaveCount(1);
+  await expect(device("Node Alpha")).toHaveCount(0);
+  await expect(device("Node Gamma")).toHaveCount(0);
 
   await search.fill("");
-  await page.getByRole("button", { name: "Expand", exact: true }).click();
-  await expect(page.locator("[role='link']").filter({ hasText: "Node Alpha" })).toHaveCount(1);
-  await expect(page.locator("[role='link']").filter({ hasText: "Node Beta" })).toHaveCount(1);
-  await expect(page.locator("[role='link']").filter({ hasText: "Node Gamma" })).toHaveCount(1);
+  await expect(device("Node Alpha")).toHaveCount(1);
+  await expect(device("Node Beta")).toHaveCount(1);
+  await expect(device("Node Gamma")).toHaveCount(1);
 });
 
 test("device card navigation uses a single history entry per click", async ({ page }) => {
@@ -503,7 +501,7 @@ test("device card navigation uses a single history entry per click", async ({ pa
   await page.goto("/nodes");
   await expect(page.getByRole("heading", { name: "Devices", level: 1, exact: true })).toBeVisible();
 
-  await page.locator("[role='link']").filter({ hasText: "Node Alpha" }).first().click();
+  await page.getByRole("link", { name: "Node Alpha", exact: true }).click();
   await expect(page).toHaveURL(/(?:\/[a-z]{2})?\/nodes\/node-alpha$/);
   await expect(page.getByText("Node Alpha", { exact: true })).toBeVisible();
 
@@ -511,7 +509,7 @@ test("device card navigation uses a single history entry per click", async ({ pa
   await expect(page).toHaveURL(/(?:\/[a-z]{2})?\/nodes$/);
   await expect(page.getByRole("heading", { name: "Devices", level: 1, exact: true })).toBeVisible();
 
-  await page.locator("[role='link']").filter({ hasText: "Node Beta" }).first().click();
+  await page.getByRole("link", { name: "Node Beta", exact: true }).click();
   await expect(page).toHaveURL(/(?:\/[a-z]{2})?\/nodes\/node-beta$/);
   await expect(page.getByText("Node Beta", { exact: true })).toBeVisible();
 

@@ -149,15 +149,16 @@ func (d *Deps) HandleV2BulkServiceAction(w http.ResponseWriter, r *http.Request)
 		result := orderedResults[index]
 		if result.Error != "" {
 			results[target] = map[string]any{"error": result.Error, "message": result.Message}
-		} else if result.ExitCode != 0 {
-			results[target] = map[string]any{
-				"status":    "failed",
-				"exit_code": result.ExitCode,
-				"output":    result.Stdout,
-			}
-		} else {
-			results[target] = map[string]any{"status": "ok", "exit_code": 0, "output": result.Stdout}
+			continue
 		}
+		entry := map[string]any{"status": "ok", "output": result.Stdout}
+		if result.Status != "succeeded" {
+			entry["status"] = "failed"
+		}
+		if result.ExitCode != nil {
+			entry["exit_code"] = *result.ExitCode
+		}
+		results[target] = entry
 	}
 
 	shared.AppendAuditEventBestEffort(d.AuditStore, audit.Event{

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	neturl "net/url"
 	"strconv"
@@ -50,10 +49,6 @@ func NewClient(cfg Config) (*Client, error) {
 		MaxConnsPerHost:     20,
 		IdleConnTimeout:     90 * time.Second,
 	}
-	transport.DialContext = securityruntime.PreferSameSubnetPrivateDialContext(&net.Dialer{
-		Timeout:   timeout,
-		KeepAlive: 30 * time.Second,
-	})
 	if strings.TrimSpace(cfg.CAPEM) != "" {
 		pool := x509.NewCertPool()
 		if ok := pool.AppendCertsFromPEM([]byte(cfg.CAPEM)); !ok {

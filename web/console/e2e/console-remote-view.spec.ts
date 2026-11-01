@@ -98,7 +98,7 @@ test("node detail shows remote view for connected agent host", async ({ page }) 
   });
 
   await page.goto("/nodes", { waitUntil: "domcontentloaded" });
-  await page.locator("[role='link']").filter({ hasText: "Lab Host" }).first().click();
+  await page.getByRole("link", { name: "Lab Host", exact: true }).click();
   await expect(page).toHaveURL(/(?:\/[a-z]{2})?\/nodes\/agent-host-1$/);
   await expect(page.getByText("Lab Host", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /Remote View/i }).first()).toBeVisible();

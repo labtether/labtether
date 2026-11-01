@@ -17,7 +17,7 @@ import (
 
 // stubExec returns an ExecResult with no error for any call.
 func stubExec(_ *http.Request, assetID, _ string, _ int) ExecResult {
-	return ExecResult{AssetID: assetID, Stdout: "active", ExitCode: 0}
+	return ExecResult{AssetID: assetID, Status: "succeeded", Stdout: "active", ExitCode: new(0)}
 }
 
 func newTestDeps() *Deps {
@@ -167,7 +167,7 @@ func TestHandleV2BulkServiceAction_Success(t *testing.T) {
 func TestHandleV2BulkServiceActionReportsNonzeroExitAsFailure(t *testing.T) {
 	d := newTestDeps()
 	d.ExecOnAsset = func(_ *http.Request, assetID, _ string, _ int) ExecResult {
-		return ExecResult{AssetID: assetID, ExitCode: 1, Stdout: "service command failed"}
+		return ExecResult{AssetID: assetID, Status: "failed", ExitCode: new(1), Stdout: "service command failed"}
 	}
 	body := `{"action":"status","service":"missing-service","targets":["srv1"]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/bulk/service-action", strings.NewReader(body))

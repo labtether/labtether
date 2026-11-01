@@ -32,11 +32,15 @@ type EnrollmentState = {
   generating: boolean;
   generateToken: (label: string, ttlHours: number, maxUses: number, scope: EnrollmentTokenScopeRequest) => Promise<string>;
   revokeEnrollmentToken: (id: string) => Promise<void>;
-  revokeAgentToken: (id: string) => Promise<void>;
+  revokeAgentToken: (id: string) => Promise<AgentTokenRevokeResult | null>;
   cleanupDeadTokens: () => Promise<{ enrollment_deleted: number; agent_deleted: number } | null>;
   clearNewToken: () => void;
   refresh: () => void;
 };
+
+// hubSSHKey is "removal_sent" when the connected agent was asked to remove
+// the Hub SSH key, "not_removed" when it could not be reached, or empty.
+export type AgentTokenRevokeResult = { hubSSHKey: string };
 
 export type EnrollmentTokenScopeRequest = {
   scope: "asset" | "group" | "unplaced" | "unrestricted";
@@ -234,13 +238,16 @@ export function useEnrollment(): EnrollmentState {
     }
   }, [refresh]);
 
-  const revokeAgentToken = useCallback(async (id: string) => {
+  const revokeAgentToken = useCallback(async (id: string): Promise<AgentTokenRevokeResult | null> => {
     try {
       const res = await fetch(`/api/settings/agent-tokens/${encodeURIComponent(id)}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to revoke agent token");
+      const data = ensureRecord(await res.json().catch(() => null));
       refresh();
+      return { hubSSHKey: ensureString(data?.hub_ssh_key) };
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
+      return null;
     }
   }, [refresh]);
 

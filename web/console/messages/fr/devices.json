@@ -33,5 +33,57 @@
     "matchSignals": "Signaux de correspondance",
     "confidence": "Confiance\u00a0: {value}%",
     "newSuggestions": "{count} relations suggérées"
+  },
+  "hubSshKey": {
+    "title": "Clé SSH du Hub",
+    "description": "Permet au Hub de se connecter à cet appareil en SSH en tant que root.",
+    "on": "Activée",
+    "off": "Désactivée",
+    "loading": "Chargement...",
+    "removalPending": "Le Hub retire sa clé à la prochaine connexion de l'agent.",
+    "removalSent": "Le Hub a demandé à l'agent de retirer sa clé.",
+    "noAgent": "Cet appareil n'a pas d'agent. Retirez la clé du Hub de authorized_keys sur l'appareil.",
+    "adminOnly": "Seul un administrateur ou le propriétaire peut modifier ce réglage.",
+    "loadError": "Impossible de charger le réglage de la clé SSH du Hub.",
+    "saveError": "Impossible de modifier le réglage de la clé SSH du Hub."
+  },
+  "list": {
+    "filter": "Filtrer par nom, IP, OS ou étiquette",
+    "groupBy": "Grouper",
+    "more": "Plus d’actions",
+    "arrangeGroups": "Organiser les groupes",
+    "backToList": "Retour à la liste",
+    "noMatch": "Aucun appareil ne correspond",
+    "columns": {
+      "device": "Appareil",
+      "address": "Adresse",
+      "cpu": "CPU",
+      "memory": "Mémoire",
+      "disk": "Disque"
+    },
+    "sections": {
+      "servers": "Serveurs",
+      "storage": "Stockage",
+      "computers": "Ordinateurs",
+      "vms": "VMs",
+      "other": "Autres",
+      "attention": "À vérifier",
+      "online": "En ligne",
+      "noGroup": "Sans groupe"
+    },
+    "groupings": {
+      "type": "Type",
+      "status": "État",
+      "group": "Groupe",
+      "none": "Aucun"
+    },
+    "guests": "{count, plural, one {# invité} other {# invités}}",
+    "containers": "{count, plural, one {# conteneur} other {# conteneurs}}",
+    "vm": "VM {vmid}",
+    "vmOn": "VM {vmid} sur {host}",
+    "on": "sur {host}",
+    "offline": "Hors ligne · vu {age}",
+    "notResponding": "Ne répond pas · vu {age}",
+    "noCheckIn": "Pas encore de signal"
   }
 }

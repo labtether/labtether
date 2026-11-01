@@ -16,6 +16,12 @@ func RecoverMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
+				if err == http.ErrAbortHandler {
+					// A handler that already started its response asked net/http to
+					// drop the connection. Writing a 500 body here would turn that
+					// failure into a response that looks complete.
+					panic(err)
+				}
 				securityruntime.Logf("http: panic recovered on %s %s: %v\n%s", r.Method, r.URL.Path, err, debug.Stack())
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusInternalServerError)

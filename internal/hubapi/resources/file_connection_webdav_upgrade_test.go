@@ -12,8 +12,8 @@ import (
 
 func intPtr(value int) *int { return &value }
 
-// WebDAV connections saved before 1.7.0 used plain HTTP on non-443 ports.
-// 1.7.0 forces HTTPS by default; those connections must explain why they
+// WebDAV connections saved before 1.7.1 used plain HTTP on non-443 ports.
+// 1.7.1 forces HTTPS by default; those connections must explain why they
 // stopped working instead of failing silently or with a TLS error.
 func TestLegacyPlainWebDAVConnectionsGetExplicitUpgradeNotice(t *testing.T) {
 	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "")

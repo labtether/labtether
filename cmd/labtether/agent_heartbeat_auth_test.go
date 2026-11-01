@@ -20,14 +20,14 @@ type blockingAuthenticatedHeartbeatStore struct {
 	release chan struct{}
 }
 
-func (s *blockingAuthenticatedHeartbeatStore) CommitAuthenticatedAgentHeartbeat(ctx context.Context, tokenID string, req assets.HeartbeatRequest) (assets.Asset, error) {
+func (s *blockingAuthenticatedHeartbeatStore) CommitAuthenticatedAgentHeartbeat(ctx context.Context, tokenID string, tokenTTL time.Duration, req assets.HeartbeatRequest) (assets.Asset, error) {
 	close(s.entered)
 	select {
 	case <-s.release:
 	case <-ctx.Done():
 		return assets.Asset{}, ctx.Err()
 	}
-	return s.AgentEnrollmentTransactionStore.CommitAuthenticatedAgentHeartbeat(ctx, tokenID, req)
+	return s.AgentEnrollmentTransactionStore.CommitAuthenticatedAgentHeartbeat(ctx, tokenID, tokenTTL, req)
 }
 
 func TestAgentHeartbeatAuthBindsTokenToExactAssetAndRoute(t *testing.T) {

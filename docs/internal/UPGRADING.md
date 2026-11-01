@@ -13,6 +13,12 @@ This guide covers the upgrade procedure for LabTether hub deployments, including
    ```
 
    Backups are stored in `backups/` with 7-day retention by default.
+   The dump holds saved credentials, webhook secrets and 2FA enrolments only in
+   encrypted form. Also back up the Hub's encryption key and keep it secret:
+   the `encryption_key` value in `/data/install/secrets.json` in the Hub data
+   volume, or `LABTETHER_ENCRYPTION_KEY` if you set it. Restore it together
+   with the database. A Hub that finds encrypted secrets in its database but
+   has no key refuses to start instead of making a new key.
    The backup and restore scripts require Python 3 and PostgreSQL client tools
    with their shared `libpq` library. They parse `DATABASE_URL` with libpq and
    use temporary private service/password files, so credentials stay out of
@@ -158,6 +164,10 @@ This means the SQL statements for an already-applied migration were edited in so
      `DATABASE_URL` inside the container and does not store its password in
      `.env.deploy`
    - Migration error: check logs for the failing migration version, restore backup, report issue
+   - `encryption_configuration` with "no encryption key": the database holds
+     encrypted secrets but `secrets.json` has no key. Restore `secrets.json`
+     from the same backup as the database, or set `LABTETHER_ENCRYPTION_KEY`
+     to its `encryption_key` value
    - Port conflict: ensure the configured 8080/8443 bind ports are available
 
 3. If the issue is migration-related, roll back using the procedure above.

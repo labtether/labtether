@@ -10,11 +10,13 @@ import { relativeTime } from "./apiKeyPresentation";
 export type KeyRowProps = {
   keyInfo: ApiKeyInfo;
   assetNameByID: Map<string, string>;
+  // False for another user's admin-role key when the caller is not the owner.
+  canManage: boolean;
   onEdit: () => void;
   onRevoke: () => void;
 };
 
-export function KeyRow({ keyInfo, assetNameByID, onEdit, onRevoke }: KeyRowProps) {
+export function KeyRow({ keyInfo, assetNameByID, canManage, onEdit, onRevoke }: KeyRowProps) {
   const t = useTranslations("settings");
   const scopeLabel = keyInfo.scopes.includes("*")
     ? t("apiKeys.scopesFullAccess")
@@ -39,22 +41,26 @@ export function KeyRow({ keyInfo, assetNameByID, onEdit, onRevoke }: KeyRowProps
       <span className="text-[var(--muted)]">{relativeTime(keyInfo.created_at)}</span>
       <span className="text-[var(--muted)]">{keyInfo.last_used_at ? relativeTime(keyInfo.last_used_at) : t("apiKeys.never")}</span>
       <div className="flex justify-end gap-1">
-        <button
-          onClick={onEdit}
-          className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-[var(--muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"
-          aria-label={t("apiKeys.edit")}
-          title={t("apiKeys.edit")}
-        >
-          <Pencil size={13} />
-        </button>
-        <button
-          onClick={onRevoke}
-          className="flex items-center justify-center h-6 w-6 rounded-md text-[var(--bad)] hover:bg-[var(--bad)]/10 transition-colors cursor-pointer bg-transparent border-none"
-          aria-label={t("apiKeys.revoke")}
-          title={t("apiKeys.revoke")}
-        >
-          <Trash2 size={13} />
-        </button>
+        {canManage ? (
+          <>
+            <button
+              onClick={onEdit}
+              className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-[var(--muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"
+              aria-label={t("apiKeys.edit")}
+              title={t("apiKeys.edit")}
+            >
+              <Pencil size={13} />
+            </button>
+            <button
+              onClick={onRevoke}
+              className="flex items-center justify-center h-6 w-6 rounded-md text-[var(--bad)] hover:bg-[var(--bad)]/10 transition-colors cursor-pointer bg-transparent border-none"
+              aria-label={t("apiKeys.revoke")}
+              title={t("apiKeys.revoke")}
+            >
+              <Trash2 size={13} />
+            </button>
+          </>
+        ) : null}
       </div>
     </div>
   );

@@ -22,6 +22,7 @@ const maxMCPRequestBodyBytes = 128 * 1024
 
 func (s *apiServer) buildMCPServer() *server.MCPServer {
 	deps := &mcpserver.Deps{
+		Version:    hubVersion(),
 		AssetStore: s.assetStore,
 		AgentMgr:   s.agentMgr,
 		ExecuteViaAgent: func(ctx context.Context, job terminal.CommandJob) terminal.CommandResult {

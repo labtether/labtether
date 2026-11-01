@@ -124,6 +124,20 @@ func (d *Deps) AuthorizeExecutionTarget(ctx context.Context, actorID, assetID st
 		if !apikeys.AssetAllowed(key.AllowedAssets, assetID) {
 			return fmt.Errorf("schedule API key no longer has access to target")
 		}
+		// A key made by a user who was deleted or lost write rights must not
+		// keep running commands for that user.
+		if creator := strings.TrimSpace(key.CreatedBy); creator != "" && creator != "owner" && creator != "system" {
+			if d.AuthStore == nil {
+				return fmt.Errorf("user authorization store unavailable")
+			}
+			user, found, err := d.AuthStore.GetUserByID(creator)
+			if err != nil {
+				return fmt.Errorf("load schedule API key creator: %w", err)
+			}
+			if !found || !auth.HasWritePrivileges(user.Role) {
+				return fmt.Errorf("schedule API key creator is no longer authorized")
+			}
+		}
 		return nil
 	}
 	if d.AuthStore == nil {

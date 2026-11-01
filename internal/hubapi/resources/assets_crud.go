@@ -79,6 +79,9 @@ func (d *Deps) V2GetAsset(w http.ResponseWriter, _ *http.Request, assetID string
 	if d.AgentMgr != nil {
 		result["agent_connected"] = d.AgentMgr.IsConnected(assetID)
 	}
+	if d.HubSSHKeyEnabled != nil {
+		result["hub_ssh_key_enabled"] = d.HubSSHKeyEnabled(assetID)
+	}
 	apiv2.WriteJSON(w, http.StatusOK, result)
 }
 

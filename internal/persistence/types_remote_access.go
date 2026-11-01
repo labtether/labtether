@@ -16,7 +16,7 @@ type TerminalStore interface {
 	ListSessions() ([]terminal.Session, error)
 	DeleteTerminalSession(id string) error
 	AddCommand(sessionID string, req terminal.CreateCommandRequest, target, mode string) (terminal.Command, error)
-	UpdateCommandResult(sessionID, commandID, status, output string) error
+	UpdateCommandResult(sessionID, commandID, status, output string, exitCode *int) error
 	GetCommand(commandID string) (terminal.Command, bool, error)
 	DeleteCommand(commandID string) error
 	ListCommands(sessionID string) ([]terminal.Command, error)

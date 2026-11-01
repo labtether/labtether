@@ -46,6 +46,7 @@ func TestHandleV2OpenAPIAdvertisesImplementedAssetSubpaths(t *testing.T) {
 
 	expected := map[string][]string{
 		"/api/v2/assets/{id}/exec":                    {"post"},
+		"/api/v2/assets/{id}/hub-ssh-key":             {"get", "put"},
 		"/api/v2/assets/{id}/files":                   {"get", "delete"},
 		"/api/v2/assets/{id}/files/read":              {"get"},
 		"/api/v2/assets/{id}/files/write":             {"post"},

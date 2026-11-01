@@ -35,7 +35,7 @@ func (d *Deps) spoolAgentTransferSource(ctx context.Context, assetID, sourcePath
 		return nil, 0, nil, fmt.Errorf("send file read request: %w", err)
 	}
 
-	spool, err := os.CreateTemp("", "labtether-transfer-*")
+	spool, err := d.createFileSpool("transfer-*")
 	if err != nil {
 		cleanupBridge()
 		return nil, 0, nil, errors.New("create transfer spool")

@@ -1,67 +1,64 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="20 20 200 180">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
   <defs>
-    <filter id="neon-glow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="3" result="blur1" />
-      <feGaussianBlur stdDeviation="6" result="blur2" />
+    <linearGradient id="lt-body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FDFCF8"/>
+      <stop offset="1" stop-color="#DCD5C7"/>
+    </linearGradient>
+    <linearGradient id="lt-glare" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFF" stop-opacity=".2"/>
+      <stop offset=".35" stop-color="#FFF" stop-opacity=".05"/>
+      <stop offset=".35" stop-color="#FFF" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="lt-led">
+      <stop offset="0" stop-color="#00FFCC" stop-opacity=".6"/>
+      <stop offset=".4" stop-color="#00FFCC" stop-opacity=".2"/>
+      <stop offset="1" stop-color="#00FFCC" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="lt-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="near"/>
+      <feGaussianBlur in="near" stdDeviation="6" result="far"/>
       <feMerge>
-        <feMergeNode in="blur2" />
-        <feMergeNode in="blur1" />
-        <feMergeNode in="SourceGraphic" />
+        <feMergeNode in="far"/>
+        <feMergeNode in="near"/>
+        <feMergeNode in="SourceGraphic"/>
       </feMerge>
     </filter>
-
-    <linearGradient id="body-front" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#FDFCF8"/>
-      <stop offset="100%" stop-color="#DCD5C7"/>
-    </linearGradient>
-
-    <linearGradient id="glass-glare" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.20"/>
-      <stop offset="35%" stop-color="#FFFFFF" stop-opacity="0.05"/>
-      <stop offset="35.1%" stop-color="#FFFFFF" stop-opacity="0"/>
-      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
-    </linearGradient>
-
-    <clipPath id="screen-clip">
-      <rect width="134" height="94" rx="6" />
+    <clipPath id="lt-screen">
+      <rect x="33" y="38" width="134" height="94" rx="6"/>
     </clipPath>
   </defs>
 
   <!-- Body -->
-  <rect x="30" y="30" width="180" height="170" rx="24" fill="url(#body-front)"/>
-  <rect x="31.5" y="31.5" width="177" height="167" rx="22.5" fill="none" stroke="#FFFFFF" stroke-width="2" opacity="0.9"/>
-  <rect x="29" y="29" width="182" height="172" rx="25" fill="none" stroke="#8C8577" stroke-width="0.5" opacity="0.5"/>
+  <rect x="10" y="15" width="180" height="170" rx="24" fill="url(#lt-body)"/>
+  <rect x="12" y="17" width="176" height="166" rx="22" fill="none" stroke="#FFF" stroke-opacity=".9" stroke-width="2"/>
+  <rect x="10.5" y="15.5" width="179" height="169" rx="23.5" fill="none" stroke="#8C8577" stroke-opacity=".5"/>
 
-  <!-- Screen bezel -->
-  <rect x="45" y="45" width="150" height="110" rx="12" fill="#0A0A0A" stroke="#8C8577" stroke-width="1.5"/>
+  <!-- Bezel -->
+  <rect x="25" y="30" width="150" height="110" rx="12" fill="#8C8577"/>
+  <rect x="26" y="31" width="148" height="108" rx="11" fill="#0A0A0A"/>
 
-  <!-- Screen content -->
-  <g transform="translate(53, 53)">
-    <rect width="134" height="94" rx="6" fill="#1A0012" />
-
-    <g clip-path="url(#screen-clip)">
-      <g filter="url(#neon-glow)" stroke="#FF79C6" stroke-width="3.5" fill="none" stroke-linecap="round" transform="translate(2, 5)">
-        <path d="M 35 35 Q 45 25 55 35" />
-        <path d="M 75 35 Q 85 25 95 35" />
-        <path d="M 55 52 Q 65 62 75 52" />
-        <text x="5" y="20" font-family="monospace" font-size="12" fill="#FF79C6" stroke="none" font-weight="bold">&gt;_</text>
-      </g>
-
-      <rect width="134" height="94" rx="6" fill="url(#glass-glare)" pointer-events="none" />
+  <!-- Screen: prompt, face, glare -->
+  <g clip-path="url(#lt-screen)">
+    <rect x="33" y="38" width="134" height="94" fill="#1A0012"/>
+    <g fill="none" stroke="#FF79C6" stroke-linecap="round" stroke-linejoin="round" filter="url(#lt-glow)">
+      <path d="M42 55l5 4-5 4m8 1h6" stroke-width="2"/>
+      <path d="M70 78q10-10 20 0m20 0q10-10 20 0M90 95q10 10 20 0" stroke-width="3.5"/>
     </g>
-
-    <rect width="132" height="92" x="1" y="1" rx="5" fill="none" stroke="#FFFFFF" stroke-width="1" opacity="0.1" pointer-events="none" />
+    <rect x="33" y="38" width="134" height="94" fill="url(#lt-glare)"/>
   </g>
+  <rect x="33.5" y="38.5" width="133" height="93" rx="5.5" fill="none" stroke="#FFF" stroke-opacity=".1"/>
 
-  <!-- Bottom details -->
-  <rect x="48" y="170" width="55" height="4" rx="2" fill="#8C8577" />
-  <rect x="48" y="170" width="55" height="2" rx="1" fill="#4A443A" opacity="0.5" />
+  <!-- Drive slot -->
+  <rect x="33" y="158" width="55" height="4" rx="2" fill="#8C8577"/>
+  <path d="M33 160a2 2 0 0 1 2-2h51a2 2 0 0 1 2 2z" fill="#4A443A" fill-opacity=".5"/>
 
   <!-- LED -->
-  <circle cx="120" cy="172" r="2.5" fill="#00FFCC" filter="url(#neon-glow)" />
+  <circle cx="100" cy="160" r="9" fill="url(#lt-led)"/>
+  <circle cx="100" cy="160" r="2.5" fill="#00FFCC"/>
 
   <!-- Power button -->
-  <circle cx="180" cy="172" r="9" fill="#8C8577" />
-  <circle cx="180" cy="172" r="7.5" fill="#A82B2B" stroke="#4A1515" stroke-width="1" />
-  <circle cx="180" cy="170" r="3.5" fill="#FF6B6B" opacity="0.8" />
+  <circle cx="158" cy="160" r="9" fill="#8C8577"/>
+  <circle cx="158" cy="160" r="8" fill="#4A1515"/>
+  <circle cx="158" cy="160" r="7" fill="#A82B2B"/>
+  <circle cx="158" cy="158" r="3.5" fill="#FF6B6B" fill-opacity=".8"/>
 </svg>

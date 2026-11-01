@@ -13,7 +13,7 @@ export interface FileConnection {
   initial_path: string;
   credential_id?: string;
   extra_config?: Record<string, unknown>;
-  // Set by the Hub when a saved connection cannot open under 1.7.0 rules.
+  // Set by the Hub when a saved connection cannot open under 1.7.1 rules.
   transport_notice?: string;
   created_at: string;
   updated_at: string;

@@ -163,7 +163,7 @@ func seedHistoryCommand(t *testing.T, actorID, target, status string) (*persiste
 		t.Fatal(err)
 	}
 	if status != "queued" {
-		if err := store.UpdateCommandResult(session.ID, command.ID, status, "output"); err != nil {
+		if err := store.UpdateCommandResult(session.ID, command.ID, status, "output", nil); err != nil {
 			t.Fatal(err)
 		}
 		command.Status = status

@@ -61,6 +61,7 @@ export function ProtocolForm({
 
   // SSH-specific
   const [strictHostKey, setStrictHostKey] = useState<boolean>((initial?.config?.["strict_host_key"] as boolean | undefined) ?? false);
+  const [hostKey, setHostKey] = useState<string>((initial?.config?.["host_key"] as string | undefined) ?? "");
 
   // VNC/ARD-specific
   const [allowInsecureVNC, setAllowInsecureVNC] = useState<boolean>(
@@ -99,6 +100,7 @@ export function ProtocolForm({
     setProtocol(next);
     setPort(DEFAULT_PORTS[next]);
     setCredentialProfileId("");
+    setHostKey("");
     setAllowInsecureVNC(false);
     setAllowInsecureTelnet(false);
     setTestResult(null);
@@ -109,6 +111,7 @@ export function ProtocolForm({
     const cfg: Record<string, unknown> = {};
     if (protocol === "ssh") {
       cfg["strict_host_key"] = strictHostKey;
+      if (hostKey.trim()) cfg["host_key"] = hostKey.trim();
     }
     if (protocol === "rdp") {
       if (rdpDomain.trim()) cfg["domain"] = rdpDomain.trim();
@@ -300,6 +303,18 @@ export function ProtocolForm({
           />
           Strict host key checking
         </label>
+      )}
+      {protocol === "ssh" && (
+        <div>
+          <label htmlFor="protocol-host-key" className="text-xs font-medium text-[var(--muted)] mb-1 block">Host key</label>
+          <Input
+            id="protocol-host-key"
+            value={hostKey}
+            onChange={(e) => setHostKey(e.target.value)}
+            placeholder="ssh-ed25519 AAAA..."
+          />
+          <p className="mt-1 text-[11px] text-[var(--muted)]">The device&apos;s SSH host public key, from a file such as /etc/ssh/ssh_host_ed25519_key.pub.</p>
+        </div>
       )}
 
       {/* RDP-specific */}

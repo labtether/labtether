@@ -71,6 +71,17 @@ func (s *apiServer) enforceRateLimit(w http.ResponseWriter, r *http.Request, buc
 	return s.enforceRateLimitKey(w, bucket+":"+requestClientKey(r), limit, window)
 }
 
+// enforceClientRateLimit is enforceRateLimit keyed by the real client address.
+// Requests relayed by the bundled console (or another trusted proxy) carry
+// that address in X-Forwarded-For; without it every console user would share
+// the console's own bucket.
+func (s *apiServer) enforceClientRateLimit(w http.ResponseWriter, r *http.Request, bucket string, limit int, window time.Duration) bool {
+	if limit <= 0 || window <= 0 {
+		return true
+	}
+	return s.enforceRateLimitKey(w, bucket+":"+trustedRequestClientIP(r), limit, window)
+}
+
 // enforceRateLimitGlobal is like enforceRateLimit but uses the bucket key as-is
 // without appending the client IP. This allows rate limiting across all IPs for
 // a given principal (e.g. an API key regardless of which IP it originates from).

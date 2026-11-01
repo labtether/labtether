@@ -90,11 +90,26 @@ func ParseArgv(raw string) ([]string, error) {
 	return argv, nil
 }
 
+// ExactRulePrefix marks an allowlist rule that must match the whole command,
+// for example "=ipconfig" allows `ipconfig` but not `ipconfig /release`.
+const ExactRulePrefix = "="
+
 // MatchesRule requires every token in the allowlist rule to match an argv
-// token exactly. Additional arguments are allowed after the matched rule.
+// token exactly. Additional arguments are allowed after the matched rule,
+// except for exact rules and for command interpreters: extra arguments to
+// `cmd /c` or `powershell -Command` would run as code, so an interpreter
+// rule always has to match the whole command.
 func MatchesRule(argv []string, rule string) bool {
+	rule = strings.TrimSpace(rule)
+	exact := strings.HasPrefix(rule, ExactRulePrefix)
+	if exact {
+		rule = strings.TrimPrefix(rule, ExactRulePrefix)
+	}
 	ruleArgv, err := ParseArgv(rule)
 	if err != nil || len(ruleArgv) == 0 || len(argv) < len(ruleArgv) {
+		return false
+	}
+	if (exact || isCommandInterpreter(ruleArgv[0])) && len(argv) != len(ruleArgv) {
 		return false
 	}
 	for i := range ruleArgv {
@@ -103,6 +118,17 @@ func MatchesRule(argv []string, rule string) bool {
 		}
 	}
 	return true
+}
+
+func isCommandInterpreter(program string) bool {
+	name := strings.ToLower(strings.TrimSpace(program))
+	name = name[strings.LastIndexAny(name, `/\`)+1:]
+	name = strings.TrimSuffix(name, ".exe")
+	switch name {
+	case "sh", "bash", "zsh", "dash", "ash", "cmd", "powershell", "pwsh", "osascript":
+		return true
+	}
+	return false
 }
 
 // QuoteArgv produces a shell-safe remote command string from already parsed

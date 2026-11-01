@@ -46,8 +46,8 @@ func (m *MemoryTerminalStore) AddCommand(sessionID string, req terminal.CreateCo
 	return m.store.AddCommand(sessionID, req, target, mode)
 }
 
-func (m *MemoryTerminalStore) UpdateCommandResult(sessionID, commandID, status, output string) error {
-	return m.store.UpdateCommandResult(sessionID, commandID, status, output)
+func (m *MemoryTerminalStore) UpdateCommandResult(sessionID, commandID, status, output string, exitCode *int) error {
+	return m.store.UpdateCommandResult(sessionID, commandID, status, output, exitCode)
 }
 
 func (m *MemoryTerminalStore) GetCommand(commandID string) (terminal.Command, bool, error) {

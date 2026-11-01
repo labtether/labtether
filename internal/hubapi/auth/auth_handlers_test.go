@@ -123,6 +123,27 @@ func TestHandleAuthMeReturnsUser(t *testing.T) {
 	}
 }
 
+// Clients such as the iOS app hide write controls by this role, so a
+// read-only key must not be reported as owner.
+func TestHandleAuthMeReportsAPIKeyRole(t *testing.T) {
+	deps, _ := newTestAuthDeps(t)
+	deps.UserIDFromContext = func(_ context.Context) string { return "apikey:key_dash" }
+	deps.UserRoleFromContext = func(_ context.Context) string { return auth.RoleViewer }
+
+	req := httptest.NewRequest(http.MethodGet, "/auth/me", nil)
+	rec := httptest.NewRecorder()
+	deps.HandleAuthMe(rec, req)
+	var resp struct {
+		User map[string]string `json:"user"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil || rec.Code != http.StatusOK {
+		t.Fatalf("status=%d err=%v body=%s", rec.Code, err, rec.Body.String())
+	}
+	if resp.User["role"] != auth.RoleViewer {
+		t.Fatalf("API key role = %q, want viewer", resp.User["role"])
+	}
+}
+
 func TestHandleAuthBootstrapStatusReturnsSetupRequired(t *testing.T) {
 	deps, _ := newTestAuthDeps(t)
 	req := httptest.NewRequest(http.MethodGet, "/auth/bootstrap/status", nil)

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolvedBackendBaseURLs } from "./backend";
 import { readBoundedRequestBody, RequestBodyTooLargeError } from "./boundedBody";
 import { trimTrailingSlashes } from "./trimChars";
+import { trustedClientIdentity } from "./clientIdentity";
+import { isIP } from "node:net";
 
 function publicRequestHost(request: NextRequest): string {
   return request.headers.get("host")?.trim() || request.nextUrl.host;
@@ -22,6 +24,10 @@ export function publicHubOriginHeaders(request: NextRequest): Headers {
   // proxy to describe the browser-facing origin used for generated URLs.
   headers.set("X-Forwarded-Host", host);
   headers.set("X-Forwarded-Proto", proto);
+  // Per-client limits on the Hub (such as enrollment) need the real client,
+  // not this console's address. Only a trusted hop's entry is passed on.
+  const client = trustedClientIdentity(request.headers);
+  if (isIP(client) !== 0) headers.set("X-Forwarded-For", client);
   return headers;
 }
 

@@ -11,10 +11,15 @@ permissions:
   attestations: write
   artifact-metadata: write
 
+# Run one release at a time so image tags and the latest release move in order.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -39,23 +44,23 @@ jobs:
         run: |
           ./scripts/release/generate-agent-manifest.sh "${RELEASE_VERSION}" ./agent-dist
 
-      - name: Build and push all-in-one image
+      # Push by digest only. No version or latest tag exists until the image
+      # has passed the runtime check below.
+      - name: Build and push all-in-one image by digest
         id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: build/Dockerfile
-          push: true
-          tags: |
-            ghcr.io/labtether/labtether:${{ github.ref_name }}
-            ghcr.io/labtether/labtether:latest
+          outputs: type=image,name=ghcr.io/labtether/labtether,push-by-digest=true,name-canonical=true,push=true
           platforms: linux/amd64,linux/arm64
           build-args: |
             APP_VERSION=${{ github.ref_name }}
           provenance: mode=max
           sbom: true
 
-      - name: Verify pushed deploy image runtime mounts
+      - name: Start the deploy stack from the pushed image
+        timeout-minutes: 15
         env:
           LABTETHER_IMAGE: ghcr.io/labtether/labtether@${{ steps.build.outputs.digest }}
         run: |
@@ -95,9 +100,51 @@ jobs:
             ${{ runner.temp }}/release-artifacts/deploy-manifest.json
             ${{ runner.temp }}/release-artifacts/SHA256SUMS
 
+      # Only the highest vX.Y.Z tag moves latest, so a patch for an older line
+      # or a pre-release never takes it from a newer release.
+      - name: Decide whether this release becomes latest
+        id: latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: |
+          set -Eeuo pipefail
+          semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          move_latest=false
+          if [[ "${RELEASE_VERSION}" =~ ${semver} ]]; then
+            highest="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v" --jq '.[].ref' \
+              | sed 's|^refs/tags/||' | { grep -E "${semver}" || true; } | sort -V | tail -n 1)"
+            if [[ "${highest}" == "${RELEASE_VERSION}" ]]; then
+              move_latest=true
+            fi
+          fi
+          echo "move_latest=${move_latest}" >> "${GITHUB_OUTPUT}"
+
+      - name: Tag the tested image
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          RELEASE_VERSION: ${{ github.ref_name }}
+          MOVE_LATEST: ${{ steps.latest.outputs.move_latest }}
+        run: |
+          set -Eeuo pipefail
+          image=ghcr.io/labtether/labtether
+          tags=("${RELEASE_VERSION}")
+          if [[ "${MOVE_LATEST}" == true ]]; then
+            tags+=(latest)
+          fi
+          for tag in "${tags[@]}"; do
+            docker buildx imagetools create --tag "${image}:${tag}" "${image}@${IMAGE_DIGEST}"
+            actual="$(docker buildx imagetools inspect --format '{{json .Manifest}}' "${image}:${tag}" | jq -r .digest)"
+            if [[ "${actual}" != "${IMAGE_DIGEST}" ]]; then
+              echo "::error::${image}:${tag} points at ${actual}, not the tested ${IMAGE_DIGEST}"
+              exit 1
+            fi
+          done
+
       - name: Upload release artifacts to GitHub Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
+          make_latest: ${{ steps.latest.outputs.move_latest }}
           files: |
             ${{ runner.temp }}/release-artifacts/docker-compose.deploy.yml
             ${{ runner.temp }}/release-artifacts/deploy.env.example

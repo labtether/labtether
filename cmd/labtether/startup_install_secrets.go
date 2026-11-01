@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -119,11 +120,26 @@ func resolveRuntimeInstallSecrets(store *installstate.Store) (runtimeInstallSecr
 			log.Printf("labtether: install state initialized in %s", store.Root())
 		}
 	}
-	if err := writeRuntimeAPITokenFile(resolved.APIToken); err != nil {
+	// The bundled console gets a narrow derived token, never the
+	// owner-equivalent API token itself.
+	if err := writeRuntimeAPITokenFile(consoleServiceToken(resolved.APIToken)); err != nil {
 		return runtimeInstallSecrets{}, err
 	}
 
 	return resolved, nil
+}
+
+// consoleServiceToken derives the token the bundled console uses for its
+// server-side routing read. The Hub accepts it only for GET /settings/runtime,
+// so a compromised console process does not hold owner rights.
+func consoleServiceToken(apiToken string) string {
+	apiToken = strings.TrimSpace(apiToken)
+	if apiToken == "" {
+		return ""
+	}
+	mac := hmac.New(sha256.New, []byte(apiToken))
+	_, _ = mac.Write([]byte("labtether console service token v1"))
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 func writeRuntimeAPITokenFile(token string) error {

@@ -123,3 +123,24 @@ func TestHandleOIDCSettingsApplyHidesDiscoveryResponseBody(t *testing.T) {
 func boolPointer(value bool) *bool {
 	return &value
 }
+
+// An IdP group literally named "admin" often belongs to another app. On a Hub
+// where nobody listed admin groups, it must not grant LabTether admin; a list
+// an admin did set must still apply.
+func TestOIDCAdminGroupsAreEmptyUnlessConfigured(t *testing.T) {
+	t.Setenv("LABTETHER_OIDC_ADMIN_ROLES", "")
+	merged, sources := mergeOIDCSettings(oidcDBSettings{}, "", false)
+	if len(merged.AdminRoleValues) != 0 || sources["admin_role_values"] != "default" {
+		t.Fatalf("default admin groups = %q (source %q), want none", merged.AdminRoleValues, sources["admin_role_values"])
+	}
+
+	merged, _ = mergeOIDCSettings(oidcDBSettings{AdminRoleValues: []string{"admin"}}, "", false)
+	if strings.Join(merged.AdminRoleValues, ",") != "admin" {
+		t.Fatalf("saved admin groups = %q, want admin", merged.AdminRoleValues)
+	}
+	t.Setenv("LABTETHER_OIDC_ADMIN_ROLES", "lab-admins")
+	merged, _ = mergeOIDCSettings(oidcDBSettings{}, "", false)
+	if strings.Join(merged.AdminRoleValues, ",") != "lab-admins" {
+		t.Fatalf("environment admin groups = %q, want lab-admins", merged.AdminRoleValues)
+	}
+}

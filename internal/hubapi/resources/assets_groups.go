@@ -238,7 +238,7 @@ func (d *Deps) HandleAssetActions(w http.ResponseWriter, r *http.Request) {
 	if len(parts) == 1 {
 		switch r.Method {
 		case http.MethodGet:
-			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"asset": assetEntry})
+			servicehttp.WriteJSON(w, http.StatusOK, d.assetDetailPayload(assetEntry))
 		case http.MethodPut, http.MethodPatch:
 			if !d.EnforceRateLimit(w, r, "assets.update", 240, time.Minute) {
 				return
@@ -358,6 +358,15 @@ func (d *Deps) HandleAssetActions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(parts) == 2 && parts[1] == "hub-ssh-key" {
+		if d.HandleHubSSHKey != nil {
+			d.HandleHubSSHKey(w, r, assetEntry)
+		} else {
+			servicehttp.WriteError(w, http.StatusNotImplemented, "hub SSH key handler not configured")
+		}
+		return
+	}
+
 	if len(parts) == 2 && parts[1] == "displays" {
 		if d.HandleDisplayList != nil {
 			d.HandleDisplayList(w, r, assetID)
@@ -470,6 +479,12 @@ func requireAssetActionScope(w http.ResponseWriter, r *http.Request, parts []str
 			required = "assets:power"
 		case "displays":
 			required = "assets:read"
+		case "hub-ssh-key":
+			if isSafeHTTPMethod(r.Method) {
+				required = "assets:read"
+			} else {
+				required = "hub:admin"
+			}
 		case "blast-radius", "upstream":
 			required = "topology:read"
 		case "dependencies":

@@ -20,7 +20,7 @@ import (
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
-// LegacyRecordingsDir is where releases before 1.7.0 wrote recordings,
+// LegacyRecordingsDir is where releases before 1.7.1 wrote recordings,
 // relative to the process working directory rather than the data directory.
 const LegacyRecordingsDir = "data/recordings"
 

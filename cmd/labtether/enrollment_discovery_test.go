@@ -51,6 +51,7 @@ func TestDiscoverEndpoint(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/discover", nil)
 	req.Host = "localhost:8080"
+	req.RemoteAddr = "192.168.1.20:50000"
 	rec := httptest.NewRecorder()
 	sut.handleDiscover(rec, req)
 
@@ -82,6 +83,36 @@ func TestDiscoverEndpoint(t *testing.T) {
 	}
 	if len(resp.HubCandidates) == 0 {
 		t.Fatalf("expected discover response to include hub_candidates")
+	}
+
+	// Callers from public addresses, and proxied callers whose address is not
+	// known, must not learn LAN IPs or tailnet names. A LAN caller behind the
+	// trusted console keeps the full list.
+	for _, tc := range []struct {
+		name, remote, forwardedFor string
+		wantCandidates             bool
+	}{
+		{"public caller", "203.0.113.7:50000", "", false},
+		{"trusted proxy without client", "127.0.0.1:40000", "", false},
+		{"trusted proxy with public client", "127.0.0.1:40000", "203.0.113.7", false},
+		{"trusted proxy with LAN client", "127.0.0.1:40000", "192.168.1.30", true},
+		{"untrusted reverse proxy", "192.168.1.5:40000", "203.0.113.7", false},
+	} {
+		caseReq := httptest.NewRequest(http.MethodGet, "/api/v1/discover", nil)
+		caseReq.Host = "localhost:8080"
+		caseReq.RemoteAddr = tc.remote
+		if tc.forwardedFor != "" {
+			caseReq.Header.Set("X-Forwarded-For", tc.forwardedFor)
+		}
+		caseRec := httptest.NewRecorder()
+		sut.handleDiscover(caseRec, caseReq)
+		var caseResp discoverResponse
+		if err := json.Unmarshal(caseRec.Body.Bytes(), &caseResp); err != nil {
+			t.Fatalf("%s: failed to decode discover response: %v", tc.name, err)
+		}
+		if caseRec.Code != http.StatusOK || (len(caseResp.HubCandidates) > 0) != tc.wantCandidates {
+			t.Fatalf("%s: status=%d candidates=%v, want candidates=%t", tc.name, caseRec.Code, caseResp.HubCandidates, tc.wantCandidates)
+		}
 	}
 }
 
@@ -164,6 +195,7 @@ func TestDiscoverEndpoint_PrefersExactRequestOriginOverDiscoveredCandidates(t *t
 	sut := newTestAPIServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/discover", nil)
 	req.Host = "localhost:8080"
+	req.RemoteAddr = "192.168.1.20:50000"
 	rec := httptest.NewRecorder()
 	sut.handleDiscover(rec, req)
 
@@ -238,6 +270,7 @@ func TestDiscoverEndpoint_BuiltInCAForwardedHTTPSUsesOperatorManagedTrust(t *tes
 	req.RemoteAddr = "127.0.0.1:40000"
 	req.Header.Set("X-Forwarded-Host", "proxy.example:443")
 	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("X-Forwarded-For", "192.168.1.30")
 	rec := httptest.NewRecorder()
 	sut.handleDiscover(rec, req)
 

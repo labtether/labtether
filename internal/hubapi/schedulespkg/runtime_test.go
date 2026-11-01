@@ -101,7 +101,7 @@ func (s *runtimeScheduleStore) ListScheduledTasksForEvaluation(_ context.Context
 	return out, nil
 }
 
-func (s *runtimeScheduleStore) UpdateScheduledTask(_ context.Context, _ string, _ *string, _ *string, _ *string, _ *[]string, _ *string, _ *bool, _ schedules.NextRunUpdate) error {
+func (s *runtimeScheduleStore) UpdateScheduledTask(_ context.Context, _ string, _ *string, _ *string, _ *string, _ *[]string, _ *string, _ *bool, _ schedules.NextRunUpdate, _ string) error {
 	return nil
 }
 

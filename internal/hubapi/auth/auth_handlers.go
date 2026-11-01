@@ -27,6 +27,13 @@ func (d *Deps) loginClientIP(r *http.Request) string {
 	return shared.RequestClientKey(r)
 }
 
+func (d *Deps) requestIsSecure(r *http.Request) bool {
+	if d == nil || d.RequestIsSecure == nil {
+		return true
+	}
+	return d.RequestIsSecure(r)
+}
+
 // HandleAuthLogin handles POST /auth/login.
 func (d *Deps) HandleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -127,6 +134,7 @@ func (d *Deps) HandleAuthLogout(w http.ResponseWriter, r *http.Request) {
 			if delErr := d.AuthStore.DeleteSession(session.ID); delErr != nil {
 				log.Printf("auth: logout: failed to delete session %s: %v", session.ID, delErr) // #nosec G706 -- Session IDs are store-generated identifiers.
 			}
+			d.revokeStreams(shared.StreamSessionKey(session.ID))
 		}
 	}
 
@@ -179,6 +187,7 @@ func (d *Deps) HandleDeleteOwnAccount(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete account")
 		return
 	}
+	d.revokeUserStreams(r.Context(), userID)
 
 	auth.ClearSessionCookie(w)
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"ok": true})
@@ -206,6 +215,25 @@ func (d *Deps) HandleAuthMe(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+	}
+
+	// API keys are not user rows. Report the key's own role so clients do not
+	// show controls the key cannot use.
+	if keyID, isKey := strings.CutPrefix(userID, "apikey:"); isKey {
+		name := "API key"
+		if d.APIKeyStore != nil {
+			if key, found, err := d.APIKeyStore.GetAPIKey(r.Context(), keyID); err == nil && found && strings.TrimSpace(key.Name) != "" {
+				name = key.Name
+			}
+		}
+		role := auth.RoleViewer
+		if d.UserRoleFromContext != nil {
+			role = auth.NormalizeRole(d.UserRoleFromContext(r.Context()))
+		}
+		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
+			"user": map[string]string{"id": userID, "username": name, "role": role},
+		})
+		return
 	}
 
 	// Fallback for bearer token auth (userID="owner") or missing store

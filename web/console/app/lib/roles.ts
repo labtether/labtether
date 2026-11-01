@@ -64,3 +64,36 @@ export function isNodePanelAllowed(
   // logs panel shows stored log history, which stays viewer-readable.
   return !(panel === "logs" && options.isDockerContainer);
 }
+
+// Mirrors the Hub's owner rule (internal/hubapi/auth/identity_audit.go): only
+// the owner creates, promotes, changes, signs out or deletes an admin, saves
+// SSO settings, or changes an admin-role API key another user made. Admins
+// manage operators, viewers and their own account and keys. The Hub refuses
+// the rest, so the console does not offer it.
+export function isOwnerRole(role: string | null | undefined): boolean {
+  return normalizeHubRole(role) === "owner";
+}
+
+type Principal = { id?: string; role?: string } | null | undefined;
+
+// Roles the caller may give a user whose current role is targetRole. A
+// non-owner admin keeps "admin" only for an account that already has it,
+// which is their own.
+export function assignableUserRoles(callerRole: string | null | undefined, targetRole?: string): HubRole[] {
+  const roles: HubRole[] = ["operator", "viewer"];
+  if (isOwnerRole(callerRole) || normalizeHubRole(targetRole) === "admin") {
+    roles.unshift("admin");
+  }
+  return roles;
+}
+
+export function canManageUserAccount(caller: Principal, target: { id: string; role: string }): boolean {
+  if (!caller) return false;
+  if (caller.id && caller.id === target.id) return true;
+  return !hasAdminRole(target.role) || isOwnerRole(caller.role);
+}
+
+export function canManageApiKey(caller: Principal, key: { role: string; created_by?: string }): boolean {
+  if (!hasAdminRole(key.role) || isOwnerRole(caller?.role)) return true;
+  return Boolean(caller?.id) && key.created_by === caller?.id;
+}

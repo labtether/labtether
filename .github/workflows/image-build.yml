@@ -3,12 +3,18 @@ name: Image build
 # The release workflow is the only other place these images are built, and it
 # runs after a tag is pushed. Build them (without pushing) whenever their
 # inputs change, so a broken base image, apk pin or lockfile is caught before
-# a release tag instead of during it.
+# a release tag instead of during it. The all-in-one image is also started with
+# the deploy Compose file, because the two only meet at runtime.
 on:
   workflow_dispatch:
   pull_request:
     paths:
-      - build/Dockerfile
+      - build/**
+      - deploy/compose/docker-compose.deploy.yml
+      - scripts/ci/test-deploy-image-runtime.sh
+      - web/console/scripts/console-ingress.mjs
+      - web/console/scripts/console-runtime.mjs
+      - web/console/scripts/runtime-proxy.mjs
       - web/console/Dockerfile
       - web/console/package.json
       - web/console/package-lock.json
@@ -27,7 +33,7 @@ jobs:
   build:
     name: Build ${{ matrix.image }} image
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
@@ -56,6 +62,16 @@ jobs:
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
           push: false
+          load: ${{ matrix.image == 'all-in-one' }}
+          tags: labtether-build-check:${{ matrix.image }}
           platforms: linux/amd64
           build-args: |
             APP_VERSION=build-check
+
+      # A wrong Node path in the deploy file left the Hub unhealthy and the
+      # console stopped on fresh installs, and nothing before a release ran the
+      # image with that file. Start the real stack from this build.
+      - name: Start the deploy stack from the built image
+        if: matrix.image == 'all-in-one'
+        timeout-minutes: 15
+        run: ./scripts/ci/test-deploy-image-runtime.sh labtether-build-check:all-in-one

@@ -22,6 +22,7 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       DOCKER_ENABLED="$2"
+      DOCKER_ENABLED_SET=1
       shift 2
       ;;
     --docker-endpoint)
@@ -31,6 +32,7 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       DOCKER_ENDPOINT="$2"
+      DOCKER_ENDPOINT_SET=1
       shift 2
       ;;
     --docker-discovery-interval)
@@ -40,6 +42,7 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       DOCKER_DISCOVERY_INTERVAL="$2"
+      DOCKER_DISCOVERY_INTERVAL_SET=1
       shift 2
       ;;
     --docker-wizard)
@@ -53,6 +56,7 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       FILES_ROOT_MODE="$(echo "$2" | tr '[:upper:]' '[:lower:]')"
+      FILES_ROOT_MODE_SET=1
       shift 2
       ;;
     --auto-update)
@@ -190,6 +194,42 @@ fi
 
 print_banner
 
+# The pinned-CA bootstrap also adds the hub CA to the system trust store.
+# Purge removes that copy, but only while it still matches the agent's CA.
+remove_hub_ca_trust() {
+  local anchor removed=0
+  for anchor in "/usr/local/share/ca-certificates/labtether-ca.crt" "/etc/pki/ca-trust/source/anchors/labtether-ca.crt"; do
+    [[ -f "${anchor}" && ! -L "${anchor}" ]] || continue
+    if ! cmp -s "${anchor}" "${CONFIG_DIR}/ca.crt"; then
+      warn "Kept ${anchor}: it does not match this agent's hub CA."
+      continue
+    fi
+    rm -f "${anchor}"
+    removed=1
+  done
+  [[ "${removed}" -eq 1 ]] || return 0
+  if command -v update-ca-certificates >/dev/null 2>&1; then
+    update-ca-certificates >/dev/null
+  fi
+  if command -v update-ca-trust >/dev/null 2>&1; then
+    update-ca-trust extract
+  fi
+  success "Hub CA removed from the system trust store"
+}
+
+# Self-update keeps the replaced binary (.previous) and its rollback state
+# (.update-state) next to the agent binary. An update that was cut off can
+# also leave a staged download or a temporary file there.
+remove_agent_update_files() {
+  local leftover
+  rm -f "${BINARY_DEST}.previous" "${BINARY_DEST}.update-state"
+  for leftover in "${BINARY_DEST%%/*}/.${BINARY_DEST##*/}.update-"* "${BINARY_DEST%%/*}/.labtether-tmp-"*; do
+    if [[ -f "${leftover}" && ! -L "${leftover}" ]]; then
+      rm -f "${leftover}"
+    fi
+  done
+}
+
 # ── Uninstall ──────────────────────────────────────────────────────────────
 if [[ "${UNINSTALL}" -eq 1 ]]; then
   info "Stopping service..."
@@ -198,22 +238,26 @@ if [[ "${UNINSTALL}" -eq 1 ]]; then
   rm -f "${SERVICE_FILE}"
   systemctl daemon-reload
   success "Service stopped and disabled"
+  remove_hub_ssh_keys
   rm -f "${BINARY_DEST}"
+  remove_agent_update_files
   success "Binary removed"
   rm -f "${ENV_FILE}"
   success "Configuration removed"
   if [[ "${PURGE}" -eq 1 ]]; then
+    remove_hub_ca_trust
     rm -f "${TOKEN_FILE}"
     rm -f "${DEVICE_KEY_FILE}"
     rm -f "${DEVICE_PUBLIC_KEY_FILE}"
     rm -f "${FINGERPRINT_FILE}"
     rm -rf "${CONFIG_DIR}"
     success "Identity and tokens purged"
+    if grep -q "LABTETHER_AGENT_WRAPPER=1" "${LABTETHER_CLI_DEST}" 2>/dev/null; then
+      rm -f "${LABTETHER_CLI_DEST}"
+      success "CLI helper removed"
+    fi
     printf "\n  ${GREEN}${SYM_OK}${RESET} ${BOLD}LabTether agent uninstalled and purged.${RESET}\n"
     info "All local identity and token material has been removed."
-    if command -v labtether >/dev/null 2>&1; then
-      info "CLI helper remains available at: $(command -v labtether)"
-    fi
   else
     # Preserve agent-token and identity so a reinstall can reconnect without re-approval.
     printf "\n  ${GREEN}${SYM_OK}${RESET} ${BOLD}LabTether agent uninstalled.${RESET}\n"

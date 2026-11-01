@@ -128,29 +128,39 @@ export function linuxInstallerCommand(
   const expectedCAFingerprint = pinnedCAFingerprint(base, candidate);
   const usePinnedBootstrap = expectedCAFingerprint !== "";
   const managedCAPath = "/etc/labtether/ca.crt";
-  const flags: string[] = [
-    `--docker-enabled ${options.dockerEnabled}`,
-    `--files-root-mode ${options.filesRootMode}`,
-    `--auto-update ${options.autoUpdateEnabled ? "true" : "false"}`,
-  ];
+  const defaults = defaultLinuxInstallOptions;
+  // The agent treats settings written at install time as fixed and ignores
+  // Hub changes to them. Pass a Docker or file-scope flag only when the user
+  // changed it from the default, so the Hub can still manage the rest.
+  const flags: string[] = [];
+  if (options.dockerEnabled !== defaults.dockerEnabled) {
+    flags.push(`--docker-enabled ${options.dockerEnabled}`);
+  }
+  if (options.filesRootMode !== defaults.filesRootMode) {
+    flags.push(`--files-root-mode ${options.filesRootMode}`);
+  }
+  flags.push(`--auto-update ${options.autoUpdateEnabled ? "true" : "false"}`);
 
   if (options.autoInstallVNC) {
     flags.push("--install-vnc-prereqs");
   }
 
   if (options.dockerEnabled !== "false") {
-    const endpoint =
-      options.dockerEndpoint.trim() ||
-      defaultLinuxInstallOptions.dockerEndpoint;
-    flags.push(`--docker-endpoint ${shellQuote(endpoint)}`);
+    const endpoint = options.dockerEndpoint.trim() || defaults.dockerEndpoint;
+    if (endpoint !== defaults.dockerEndpoint) {
+      flags.push(`--docker-endpoint ${shellQuote(endpoint)}`);
+    }
 
+    const defaultInterval = Number(defaults.dockerDiscoveryIntervalSec);
     const boundedInterval = parseBoundedDecimalInt(
       options.dockerDiscoveryIntervalSec,
       5,
       3600,
-      30,
+      defaultInterval,
     );
-    flags.push(`--docker-discovery-interval ${boundedInterval}`);
+    if (boundedInterval !== defaultInterval) {
+      flags.push(`--docker-discovery-interval ${boundedInterval}`);
+    }
   }
 
   if (options.forceUpdate) {

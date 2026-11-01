@@ -124,6 +124,17 @@ func TestPBSAndPortainerAssetActionsKeepRuntimeOwner(t *testing.T) {
 					}
 					wantCode, wantB = http.StatusOK, 1
 				}
+				// Portainer says plainly when the saved connection is gone, off,
+				// or of another kind, instead of a 502 that looks like an
+				// appliance failure. No request reaches either appliance.
+				if provider == "portainer" {
+					switch scenario {
+					case "missing owner", "disabled owner":
+						wantCode = http.StatusNotFound
+					case "wrong provider owner":
+						wantCode = http.StatusConflict
+					}
+				}
 				assetType := "storage-pool"
 				if provider == "portainer" {
 					assetType = "container-host"

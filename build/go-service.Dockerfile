@@ -17,9 +17,12 @@ RUN CGO_ENABLED=0 \
 RUN mkdir -p /out/data /out/ca
 
 FROM alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
+# Alpine's stable branch replaces old patch releases with security updates, so
+# exact apk patch pins make a clean rebuild fail once the old packages are
+# retired. The digest-pinned base image keeps the package family fixed.
 RUN apk add --no-cache \
-    bash=5.3.9-r1 \
-    ca-certificates=20261020-r0 && \
+    bash \
+    ca-certificates && \
     adduser -D -u 65532 labtether
 COPY --from=builder /out/service /service
 COPY --from=builder --chown=65532:65532 /out/data /data

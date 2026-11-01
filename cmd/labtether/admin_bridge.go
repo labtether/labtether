@@ -64,6 +64,7 @@ func (s *apiServer) buildAdminDeps() *adminpkg.Deps {
 		LoadHubPrivateKeyPEM: func(identity *shared.HubSSHIdentity) (string, error) {
 			return s.loadHubPrivateKeyPEM(identity)
 		},
+		HubSSHKeyEnabled: s.hubSSHKeyEnabled,
 		UserRoleFromContext: func(ctx context.Context) string {
 			return userRoleFromContext(ctx)
 		},

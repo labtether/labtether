@@ -38,6 +38,8 @@ var hostDataRouteCases = []struct{ route, path string }{
 	{"/cron/", "/cron/srv1"},
 	{"/users/", "/users/srv1"},
 	{"/logs/journal/", "/logs/journal/srv1"},
+	{"/actions/runs", "/actions/runs"},
+	{"/actions/runs/", "/actions/runs/run-1"},
 	{"/api/v2/assets/", "/api/v2/assets/srv1/files/download?path=/etc/shadow"},
 	{"/api/v2/assets/", "/api/v2/assets/srv1/processes"},
 	{"/api/v2/assets/", "/api/v2/assets/srv1/logs"},

@@ -8,12 +8,25 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 )
 
 // version is set at build time via ldflags: -X main.version=...
 var version string
+
+// hubVersion is the version the Hub reports to clients: APP_VERSION, else the
+// build version, else "dev".
+func hubVersion() string {
+	if resolved := strings.TrimSpace(os.Getenv("APP_VERSION")); resolved != "" {
+		return resolved
+	}
+	if resolved := strings.TrimSpace(version); resolved != "" {
+		return resolved
+	}
+	return "dev"
+}
 
 const (
 	maxActorIDLength          = 64

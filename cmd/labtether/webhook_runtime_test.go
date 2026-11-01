@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -90,6 +91,8 @@ func TestWebhookRelayDeliversBroadcastEventsAndMarksTriggered(t *testing.T) {
 	waitForWebhookTrigger(t, s, webhookID)
 }
 
+// An endpoint that stops answering must not hold up deliveries to other
+// webhooks, for the same event or for the events that follow it.
 func TestWebhookDispatchDoesNotLetOneSlowSubscriptionBlockAnother(t *testing.T) {
 	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
 	t.Setenv("LABTETHER_OUTBOUND_ALLOW_LOOPBACK", "true")
@@ -98,15 +101,18 @@ func TestWebhookDispatchDoesNotLetOneSlowSubscriptionBlockAnother(t *testing.T) 
 	s.webhookEventCh = make(chan webhookDispatchEvent, 32)
 	adapter := s.notificationDispatcher.Adapters["webhook"].(*notifications.WebhookAdapter)
 
-	slowStarted := make(chan struct{})
+	slowStarted := make(chan struct{}, 2)
 	releaseSlow := make(chan struct{})
 	slowServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		close(slowStarted)
+		slowStarted <- struct{}{}
 		<-releaseSlow
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer slowServer.Close()
-	fastReceived := make(chan struct{}, 1)
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releaseSlow) }) }
+	defer release()
+	fastReceived := make(chan struct{}, 2)
 	fastServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		fastReceived <- struct{}{}
 		w.WriteHeader(http.StatusNoContent)
@@ -126,35 +132,31 @@ func TestWebhookDispatchDoesNotLetOneSlowSubscriptionBlockAnother(t *testing.T) 
 	}
 	s.invalidateWebhookCache()
 
-	event := webhookDispatchEvent{
-		ID:        "evt-parallel",
-		EventType: "asset.online",
-		Data:      json.RawMessage(`{"asset_id":"asset-1"}`),
-		Timestamp: time.Now().UTC(),
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	queues := newWebhookDeliveryQueues(ctx, func(ctx context.Context, delivery webhookDelivery) {
+		s.deliverWebhook(ctx, adapter, delivery)
+	})
+	for _, id := range []string{"evt-first", "evt-second"} {
+		s.dispatchWebhookEvent(ctx, queues, webhookDispatchEvent{
+			ID:        id,
+			EventType: "asset.online",
+			Data:      json.RawMessage(`{"asset_id":"asset-1"}`),
+			Timestamp: time.Now().UTC(),
+		})
 	}
-	done := make(chan struct{})
-	go func() {
-		s.dispatchWebhookEvent(context.Background(), adapter, event)
-		close(done)
-	}()
 
 	select {
 	case <-slowStarted:
 	case <-time.After(2 * time.Second):
-		close(releaseSlow)
 		t.Fatal("slow subscription was not reached")
 	}
-	select {
-	case <-fastReceived:
-	case <-time.After(750 * time.Millisecond):
-		close(releaseSlow)
-		t.Fatal("fast subscription was blocked behind the slow subscription")
-	}
-	close(releaseSlow)
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("parallel webhook dispatch did not finish")
+	for i := 0; i < 2; i++ {
+		select {
+		case <-fastReceived:
+		case <-time.After(750 * time.Millisecond):
+			t.Fatalf("fast subscription received %d of 2 events while the slow one was stuck", i)
+		}
 	}
 }
 

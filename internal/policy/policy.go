@@ -52,6 +52,17 @@ func DefaultEvaluatorConfig() EvaluatorConfig {
 			"grep",
 			"tail",
 			"head",
+			// Windows read-only commands. Rules starting with "=" must match
+			// the whole command: `hostname` and `ipconfig` change settings
+			// when given arguments.
+			"whoami",
+			"=hostname",
+			"=ipconfig",
+			"=ipconfig /all",
+			"systeminfo",
+			"tasklist",
+			"=cmd /c ver",
+			"=powershell -Command Get-Date",
 		},
 		BlockedSubstrings: []string{
 			"rm -rf /",

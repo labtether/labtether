@@ -97,6 +97,7 @@ func (d *Deps) HandleChangePassword(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update password")
 		return
 	}
+	d.auditIdentityChange(r, "auth.password.changed", userID, nil)
 	if !retainedCurrent {
 		auth.ClearSessionCookie(w)
 	}

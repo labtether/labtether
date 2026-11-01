@@ -56,3 +56,9 @@ fi
 
 size=$(du -sh "$backup_path" | cut -f1)
 log_pass "Backup complete: ${backup_path} (${size})"
+# The dump holds saved credentials, webhook secrets and 2FA enrolments only in
+# encrypted form. Without the Hub's encryption key a restore cannot read them.
+log_warn "This file holds the database only. Also back up the Hub's encryption key, and keep it secret:"
+log_warn "  /data/install/secrets.json in the Hub data volume (the encryption_key value), or"
+log_warn "  LABTETHER_ENCRYPTION_KEY if you set it in your env file."
+log_warn "Restore it together with this file; without it the restored secrets cannot be read."

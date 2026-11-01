@@ -277,6 +277,14 @@ func (m *MemoryEnrollmentStore) ValidateAgentToken(tokenHash string) (enrollment
 	return tok, true, nil
 }
 
+func (m *MemoryEnrollmentStore) GetAgentToken(id string) (enrollment.AgentToken, bool, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	tok, ok := m.agentTokens[id]
+	return tok, ok, nil
+}
+
 func (m *MemoryEnrollmentStore) TouchAgentTokenLastUsed(id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

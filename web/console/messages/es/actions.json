@@ -59,6 +59,7 @@
     "running": "Ejecutando...",
     "results": "Resultados de ejecución",
     "failed": "Falló",
+    "succeeded": "Correcto",
     "exitCode": "Salida {code}",
     "noOutput": "El comando terminó sin salida.",
     "deleteTitle": "Eliminar acción guardada",

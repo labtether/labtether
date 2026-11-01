@@ -191,7 +191,7 @@ func mergeOIDCSettings(db oidcDBSettings, dbClientSecret string, dbClientSecretC
 	resolveSlice := func(field, envKey string, dbSlice []string, def []string) []string {
 		if ev := strings.TrimSpace(os.Getenv(envKey)); ev != "" {
 			sources[field] = "env"
-			return csvSplit(ev)
+			return splitOIDCEnvList(ev)
 		}
 		if len(dbSlice) > 0 {
 			sources[field] = "db"
@@ -230,11 +230,12 @@ func mergeOIDCSettings(db oidcDBSettings, dbClientSecret string, dbClientSecretC
 		DefaultRole:  resolve("default_role", "LABTETHER_OIDC_DEFAULT_ROLE", db.DefaultRole, auth.RoleViewer),
 		Scopes: resolveSlice("scopes", "LABTETHER_OIDC_SCOPES", db.Scopes,
 			[]string{"openid", "profile", "email"}),
+		// No IdP group grants admin unless an admin group list is configured.
 		AdminRoleValues: resolveSlice("admin_role_values", "LABTETHER_OIDC_ADMIN_ROLES",
-			db.AdminRoleValues, []string{"admin"}),
+			db.AdminRoleValues, nil),
 		OperatorRoleValues: resolveSlice("operator_role_values", "LABTETHER_OIDC_OPERATOR_ROLES",
 			db.OperatorRoleValues, []string{"operator"}),
-		AllowedEndpointOrigins: csvSplit(os.Getenv("LABTETHER_OIDC_ALLOWED_ENDPOINT_ORIGINS")),
+		AllowedEndpointOrigins: splitOIDCEnvList(os.Getenv("LABTETHER_OIDC_ALLOWED_ENDPOINT_ORIGINS")),
 		AllowPrivateEndpoints:  envOrDefaultBool("LABTETHER_OIDC_ALLOW_PRIVATE", false),
 		AllowLoopbackEndpoints: envOrDefaultBool("LABTETHER_OIDC_ALLOW_LOOPBACK", false),
 	}
@@ -303,6 +304,12 @@ func (d *Deps) HandleOIDCSettingsPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if rejectAPIKeyIdentityMutation(w, r) {
+		return
+	}
+	// The issuer, role claim, default role and group lists decide who signs
+	// in as an admin, so only the owner may change them.
+	if !d.callerIsOwner(r) {
+		servicehttp.WriteError(w, http.StatusForbidden, "only the owner can change SSO settings")
 		return
 	}
 
@@ -408,6 +415,7 @@ func (d *Deps) HandleOIDCSettingsPut(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to save oidc settings")
 		return
 	}
+	d.auditIdentityChange(r, "settings.oidc.updated", "oidc", map[string]any{"enabled": enabled, "issuer_url": updated.IssuerURL, "default_role": updated.DefaultRole, "auto_provision": autoProvision})
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"enabled":                  enabled,
@@ -440,47 +448,26 @@ func (d *Deps) HandleOIDCSettingsApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db, err := d.loadOIDCDBSettings(r.Context())
-	if err != nil {
-		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load oidc settings")
-		return
-	}
-
-	dbSecretConfigured := storedOIDCClientSecretConfigured(db)
-	merged, _ := mergeOIDCSettings(db, "", dbSecretConfigured)
-	if merged.Enabled && strings.TrimSpace(os.Getenv("LABTETHER_OIDC_CLIENT_SECRET")) == "" && dbSecretConfigured {
-		dbClientSecret, decryptErr := d.decryptOIDCClientSecret(db)
-		if decryptErr != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load oidc client secret")
-			return
-		}
-		merged, _ = mergeOIDCSettings(db, dbClientSecret, true)
-	}
-
-	// Compute auto_provision effective value.
-	autoProvision := envOrDefaultBool("LABTETHER_OIDC_AUTO_PROVISION",
-		func() bool {
-			if db.AutoProvision != nil {
-				return *db.AutoProvision
-			}
-			return true
-		}(),
-	)
-
-	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), oidcProviderLoadTimeout)
 	defer cancel()
 
-	provider, err := auth.NewOIDCProvider(ctx, merged)
+	provider, autoProvision, err := d.LoadEffectiveOIDCProvider(ctx)
 	if err != nil {
-		if errors.Is(err, auth.ErrOIDCInvalidConfiguration) {
+		switch {
+		case errors.Is(err, errOIDCSettingsUnavailable):
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load oidc settings")
+		case errors.Is(err, errOIDCClientSecretUnavailable):
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to load oidc client secret")
+		case errors.Is(err, auth.ErrOIDCInvalidConfiguration):
 			servicehttp.WriteError(w, http.StatusBadRequest, "invalid oidc configuration")
-			return
+		default:
+			servicehttp.WriteError(w, http.StatusBadGateway, "oidc provider is unavailable")
 		}
-		servicehttp.WriteError(w, http.StatusBadGateway, "oidc provider is unavailable")
 		return
 	}
 
 	d.OIDCRef.Swap(provider, autoProvision)
+	d.auditIdentityChange(r, "settings.oidc.applied", "oidc", map[string]any{"enabled": provider != nil, "auto_provision": autoProvision})
 
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 		"applied":        true,

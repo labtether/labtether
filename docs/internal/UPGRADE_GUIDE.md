@@ -14,7 +14,7 @@ This guide provides version-specific upgrade notes. Always follow the general up
 ### v2026.2
 
 - **Agent distribution:** Agents are now downloaded from GitHub Releases instead of being bundled with the hub. The hub Docker image includes agent binaries at `/opt/labtether/agents/`.
-- ~~**New env var:** `LABTETHER_AGENT_MANIFEST_REFRESH`~~ — no code ever read it; removed in 1.7.0. `POST /api/v1/agent/cache/refresh` reloads `agent-manifest.json` from disk and never downloads from GitHub.
+- ~~**New env var:** `LABTETHER_AGENT_MANIFEST_REFRESH`~~ — no code ever read it; removed in 1.7.1. `POST /api/v1/agent/cache/refresh` reloads `agent-manifest.json` from disk and never downloads from GitHub.
 - **New env var:** `LABTETHER_AGENT_CACHE_DIR` — runtime agent cache directory (default: `/data/agents`).
 - **New volume:** `labtether-agent-cache` mounted at `/data/agents` for persistent agent binary cache.
 - **Removed env var:** `LABTETHER_AGENT_RELEASE_VERSION` — replaced by `agent-manifest.json`.

@@ -7,6 +7,7 @@ import { useAuth } from "../../../contexts/AuthContext";
 import { useToast } from "../../../contexts/ToastContext";
 import { useSettingsForm } from "../../../hooks/useSettingsForm";
 import { useEnrollment } from "../../../hooks/useEnrollment";
+import { isOwnerRole } from "../../../lib/roles";
 import { ConnectAgentsCard } from "../settings/components/ConnectAgentsCard";
 import { DangerZoneCard } from "../settings/components/DangerZoneCard";
 import { ManagedDatabaseCard } from "../settings/components/ManagedDatabaseCard";
@@ -80,7 +81,7 @@ export default function SecurityPage() {
         canManageActions={canManageUsers}
       />
 
-      <OIDCSettingsCard canManageUsers={canManageUsers} />
+      <OIDCSettingsCard canManageUsers={canManageUsers} canEdit={isOwnerRole(user?.role)} />
 
       <ConnectAgentsCard
         sectionHeadingClassName={SECTION_HEADING}

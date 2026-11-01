@@ -259,7 +259,7 @@ func (s *PostgresStore) DecommissionAgentAsset(ctx context.Context, assetID stri
 	return tx.Commit(ctx)
 }
 
-func (s *PostgresStore) CommitAuthenticatedAgentHeartbeat(ctx context.Context, agentTokenID string, req assets.HeartbeatRequest) (assets.Asset, error) {
+func (s *PostgresStore) CommitAuthenticatedAgentHeartbeat(ctx context.Context, agentTokenID string, tokenTTL time.Duration, req assets.HeartbeatRequest) (assets.Asset, error) {
 	assetID := strings.TrimSpace(req.AssetID)
 	if assetID == "" {
 		return assets.Asset{}, ErrAgentCredentialInactive
@@ -305,7 +305,20 @@ func (s *PostgresStore) CommitAuthenticatedAgentHeartbeat(ctx context.Context, a
 	if err != nil {
 		return assets.Asset{}, err
 	}
-	if _, err := tx.Exec(ctx, `UPDATE agent_tokens SET last_used_at = clock_timestamp() WHERE id = $1`, strings.TrimSpace(agentTokenID)); err != nil {
+	// Sliding expiry: the row is locked above and was checked active,
+	// unrevoked, unexpired and bound to this existing asset, so only a live
+	// credential is extended. GREATEST never shortens an expiry.
+	renewSeconds := 0.0
+	if tokenTTL > 0 {
+		renewSeconds = tokenTTL.Seconds()
+	}
+	if _, err := tx.Exec(ctx,
+		`UPDATE agent_tokens
+		 SET last_used_at = clock_timestamp(),
+		     expires_at = GREATEST(expires_at, clock_timestamp() + ($2::double precision * interval '1 second'))
+		 WHERE id = $1`,
+		strings.TrimSpace(agentTokenID), renewSeconds,
+	); err != nil {
 		return assets.Asset{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {

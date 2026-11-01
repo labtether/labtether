@@ -13,6 +13,7 @@ import (
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/idgen"
 	"github.com/labtether/labtether/internal/persistence"
+	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/webhooks"
 )
 
@@ -167,6 +168,9 @@ func (d *Deps) HandleV2WebhookList(w http.ResponseWriter, r *http.Request) {
 	if list == nil {
 		list = []webhooks.Webhook{}
 	}
+	for i := range list {
+		list[i] = WebhookForReader(r.Context(), list[i])
+	}
 	apiv2.WriteJSON(w, http.StatusOK, list)
 }
 
@@ -185,7 +189,7 @@ func (d *Deps) HandleV2WebhookGet(w http.ResponseWriter, r *http.Request, id str
 		apiv2.WriteError(w, http.StatusNotFound, "not_found", "webhook not found")
 		return
 	}
-	apiv2.WriteJSON(w, http.StatusOK, wh)
+	apiv2.WriteJSON(w, http.StatusOK, WebhookForReader(r.Context(), wh))
 }
 
 // HandleV2WebhookUpdate applies a partial update to an existing webhook.
@@ -228,7 +232,7 @@ func (d *Deps) HandleV2WebhookUpdate(w http.ResponseWriter, r *http.Request, id 
 			apiv2.WriteError(w, http.StatusBadRequest, "validation", "url cannot be empty")
 			return
 		}
-		if err := validateWebhookURL(trimmed); err != nil {
+		if err := validateWebhookURLChange(trimmed, existing.URL); err != nil {
 			apiv2.WriteError(w, http.StatusBadRequest, "validation", err.Error())
 			return
 		}
@@ -325,6 +329,36 @@ func (d *Deps) HandleV2WebhookDelete(w http.ResponseWriter, r *http.Request, id 
 }
 
 func validateWebhookURL(raw string) error {
+	if err := validateWebhookURLShape(raw); err != nil {
+		return err
+	}
+	if strings.EqualFold(webhookURLScheme(raw), "http") && !securityruntime.InsecureTransportAllowed() {
+		// Delivery refuses plain HTTP under this setting, so saving the URL
+		// would only create a webhook that silently never fires.
+		return errors.New("url must use https; http:// needs LABTETHER_ALLOW_INSECURE_TRANSPORT=true on the Hub")
+	}
+	return nil
+}
+
+// validateWebhookURLChange keeps a stored http:// URL editable. A webhook saved
+// before plain HTTP was refused can still be renamed, given other events,
+// turned off or moved to https://; a new or changed URL gets the full check.
+func validateWebhookURLChange(raw, current string) error {
+	if strings.TrimSpace(raw) == strings.TrimSpace(current) {
+		return validateWebhookURLShape(raw)
+	}
+	return validateWebhookURL(raw)
+}
+
+func webhookURLScheme(raw string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return ""
+	}
+	return parsed.Scheme
+}
+
+func validateWebhookURLShape(raw string) error {
 	raw = strings.TrimSpace(raw)
 	if len(raw) > maxWebhookURLLength {
 		return errors.New("url is too long")

@@ -14,6 +14,7 @@ import {
   type CreateSavedActionRequest,
   type SavedAction,
   type SavedActionRun,
+  type SavedActionRunStep,
   type SavedActionStep,
   useSavedActions,
 } from "../../../hooks/useSavedActions";
@@ -38,6 +39,12 @@ function createdLabel(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
+}
+
+// Status decides success. The exit code is shown only when the device
+// reported it; an unknown one is never shown as 0 or 1.
+function stepSucceeded(step: SavedActionRunStep): boolean {
+  return !step.error && step.status === "succeeded";
 }
 
 export function SavedActionsCard({ assets }: SavedActionsCardProps) {
@@ -154,7 +161,7 @@ export function SavedActionsCard({ assets }: SavedActionsCardProps) {
     try {
       const result = await runAction(action.id);
       setRunResult(result);
-      const failedSteps = result.steps.filter((step) => Boolean(step.error) || step.exit_code !== 0).length;
+      const failedSteps = result.steps.filter((step) => !stepSucceeded(step)).length;
       setMessage(failedSteps > 0
         ? t("messages.runFinishedWithFailures", { name: action.name, count: failedSteps })
         : t("messages.runFinished", { name: action.name }));
@@ -374,14 +381,16 @@ export function SavedActionsCard({ assets }: SavedActionsCardProps) {
               <h3 id="saved-action-results-heading" className="text-xs font-mono uppercase tracking-wider text-[var(--muted)]">{t("results")}</h3>
               <ol className="space-y-3">
                 {runResult.steps.map((step, index) => {
-                  const succeeded = !step.error && step.exit_code === 0;
+                  const succeeded = stepSucceeded(step);
                   return (
                     <li key={`${step.target}-${index}`} className="rounded-lg border border-[var(--line)] p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="text-sm text-[var(--text)]">{index + 1}. {step.name}</p>
                         <span className="inline-flex items-center gap-1.5 text-xs text-[var(--muted)]">
                           <Badge status={succeeded ? "ok" : "bad"} size="sm" dot />
-                          {step.error ? t("failed") : t("exitCode", { code: step.exit_code ?? 1 })}
+                          {!step.error && typeof step.exit_code === "number"
+                            ? t("exitCode", { code: step.exit_code })
+                            : t(succeeded ? "succeeded" : "failed")}
                         </span>
                       </div>
                       <p className="mt-1 text-[10px] font-mono text-[var(--muted)]">

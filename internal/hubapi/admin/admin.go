@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
@@ -37,6 +38,11 @@ func (d *Deps) HandleAdminReset(w http.ResponseWriter, r *http.Request) {
 		writeAdminInternalError(w, http.StatusInternalServerError, "reset failed", err)
 		return
 	}
+	ev := audit.NewEvent("admin.reset")
+	ev.ActorID = actorID
+	ev.Decision = "applied"
+	ev.Details = map[string]any{"tables_cleared": result.TablesCleared}
+	d.appendAuditEventBestEffort(ev, "api warning: failed to append admin reset audit event")
 
 	// Flush in-memory caches so the UI reflects the clean state immediately.
 	if d.WebServiceCoordinator != nil {

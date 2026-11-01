@@ -156,6 +156,7 @@ func (m *MemoryActionStore) ApplyActionResult(result actions.Result) error {
 			Status:    stepStatus,
 			Output:    strings.TrimSpace(step.Output),
 			Error:     strings.TrimSpace(step.Error),
+			ExitCode:  step.ExitCode,
 			CreatedAt: completedAt,
 			UpdatedAt: completedAt,
 		})

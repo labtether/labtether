@@ -153,9 +153,9 @@ func (d *Deps) HandleAgentSettingsPatch(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	effective, err := d.CollectEffectiveAgentSettingValues(assetID)
+	configured, err := d.CollectConfiguredAgentSettingValues(assetID)
 	if err == nil {
-		d.PushAgentSettingsApply(assetID, effective)
+		d.PushAgentSettingsApply(assetID, configured)
 	}
 
 	payload, err := d.BuildAgentSettingsPayload(assetID)
@@ -181,12 +181,12 @@ func (d *Deps) HandleAgentSettingsReset(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	var keys []string
+	var settingKeys []string
 	if len(req.Keys) == 0 {
 		definitions := agentsettings.AgentSettingDefinitions()
-		keys = make([]string, 0, len(definitions))
+		settingKeys = make([]string, 0, len(definitions))
 		for _, definition := range definitions {
-			keys = append(keys, AgentSettingStoreKey(assetID, definition.Key))
+			settingKeys = append(settingKeys, definition.Key)
 		}
 	} else {
 		for _, raw := range req.Keys {
@@ -195,7 +195,22 @@ func (d *Deps) HandleAgentSettingsReset(w http.ResponseWriter, r *http.Request, 
 				servicehttp.WriteError(w, http.StatusBadRequest, fmt.Sprintf("unknown setting key: %s", key))
 				return
 			}
-			keys = append(keys, AgentSettingStoreKey(assetID, key))
+			settingKeys = append(settingKeys, key)
+		}
+	}
+
+	existing, err := d.RuntimeStore.ListRuntimeSettingOverrides()
+	if err != nil {
+		writeAgentSettingsInternalError(w, "failed to reset settings", err)
+		return
+	}
+	keys := make([]string, 0, len(settingKeys))
+	var removedKeys []string
+	for _, key := range settingKeys {
+		storeKey := AgentSettingStoreKey(assetID, key)
+		keys = append(keys, storeKey)
+		if _, ok := existing[storeKey]; ok {
+			removedKeys = append(removedKeys, key)
 		}
 	}
 
@@ -204,9 +219,8 @@ func (d *Deps) HandleAgentSettingsReset(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	effective, err := d.CollectEffectiveAgentSettingValues(assetID)
-	if err == nil {
-		d.PushAgentSettingsApply(assetID, effective)
+	if values, err := d.agentSettingsAfterReset(assetID, removedKeys); err == nil && len(values) > 0 {
+		d.PushAgentSettingsApply(assetID, values)
 	}
 
 	payload, err := d.BuildAgentSettingsPayload(assetID)
@@ -215,6 +229,23 @@ func (d *Deps) HandleAgentSettingsReset(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	servicehttp.WriteJSON(w, http.StatusOK, payload)
+}
+
+// agentSettingsAfterReset returns what to push once per-asset overrides are
+// removed. Agents keep values they were sent before, so each removed override
+// is sent again with its Hub default. Settings the Hub never set stay out.
+func (d *Deps) agentSettingsAfterReset(assetID string, removedKeys []string) (map[string]string, error) {
+	values, err := d.CollectConfiguredAgentSettingValues(assetID)
+	if err != nil {
+		return nil, err
+	}
+	defaults := agentsettings.DefaultAgentSettingValues()
+	for _, key := range removedKeys {
+		if _, ok := values[key]; !ok {
+			values[key] = defaults[key]
+		}
+	}
+	return values, nil
 }
 
 func (d *Deps) HandleAgentSettingsDockerTest(w http.ResponseWriter, r *http.Request, assetID string) {

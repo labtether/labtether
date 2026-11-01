@@ -93,9 +93,28 @@ type Deps struct {
 	PrincipalActorID                     func(context.Context) string
 	AppendAuditEventBestEffort           func(event audit.Event, logMessage string)
 
+	// DiscoverClientIP returns the /api/v1/discover caller's address, or ""
+	// when a proxy relayed the request without a trusted client address.
+	DiscoverClientIP func(r *http.Request) string
+
 	// Credential store method helpers.
 	GetAssetTerminalConfig  func(assetID string) (credentials.AssetTerminalConfig, bool, error)
 	SaveAssetTerminalConfig func(cfg credentials.AssetTerminalConfig) (credentials.AssetTerminalConfig, error)
+
+	// HubSSHKeyEnabled reports whether an admin turned on the Hub SSH key for
+	// a device. When nil, the key is treated as off.
+	HubSSHKeyEnabled func(assetID string) bool
+	// HubSSHKeyMayBeInstalled reports whether the Hub SSH key may be in a
+	// device's authorized_keys: the setting is on or a removal is pending.
+	// When nil, the key is assumed to be there.
+	HubSSHKeyMayBeInstalled func(assetID string) bool
+	// SendHubSSHKeyRemoval sends the Hub SSH key removal under the Hub's
+	// identity lock. When nil, SendSSHKeyRemove is used.
+	SendHubSSHKeyRemoval func(conn *agentmgr.AgentConn) error
+	// RemoveHubSSHKeyIfOff answers an "installed" reply from a device whose
+	// Hub SSH key is off by sending a removal under the Hub's identity lock.
+	// When nil, SendSSHKeyRemove is used.
+	RemoveHubSSHKeyIfOff func(conn *agentmgr.AgentConn)
 }
 
 // broadcastEvent calls the Broadcast function if non-nil.

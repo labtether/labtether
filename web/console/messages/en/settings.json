@@ -44,6 +44,7 @@
     "uses": "{used}{max} uses",
     "expires": "Expires {age}",
     "disable": "Disable",
+    "hubSSHKeyNotRemoved": "Hub SSH key left on {device}: its agent could not be reached. Remove the labtether-hub line from authorized_keys there, or run labtether-agent ssh-key remove.",
     "connectedAgents": "Agent Credentials",
     "lastSeen": "Last authenticated {age}",
     "added": "Added {age}",
@@ -77,6 +78,7 @@
     "operatorRoleValues": "Operator Role Values (comma-separated)",
     "autoProvision": "Auto-provision new users on first login",
     "save": "Save",
+    "ownerOnly": "Only the owner can change SSO settings.",
     "apply": "Apply"
   },
   "dangerZone": {

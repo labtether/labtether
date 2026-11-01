@@ -97,11 +97,13 @@ type apiServer struct {
 	edgeStore                     edges.Store
 	topologyStore                 topology.Store
 	linkSuggestionStore           persistence.LinkSuggestionStore
+	hubSSHKeyStore                persistence.HubSSHKeyStore
 	secretsManager                *secrets.Manager
 	policyState                   *policyRuntimeState
 	connectorRegistry             *connectorsdk.Registry
 	jobQueue                      *jobqueue.Queue
 	authValidator                 *auth.TokenValidator
+	consoleServiceValidator       *auth.TokenValidator
 	oidcRef                       *authpkg.OIDCProviderRef
 	agentMgr                      *agentmgr.AgentManager
 	allowLegacySharedAgentAuth    bool
@@ -215,6 +217,7 @@ type apiServer struct {
 	activeTransfers               sync.Map
 	agentCache                    *agentspkg.AgentCache
 	externalURL                   string
+	consoleURL                    string
 	dataDir                       string
 	demoMode                      bool
 	demoRateLimiter               *demoSessionRateLimiter
@@ -268,6 +271,7 @@ type streamTicket struct {
 	Scopes        []string
 	AllowedAssets []string
 	APIKeyID      string
+	AuthSessionID string // sign-in session the ticket was issued through
 	ExpiresAt     time.Time
 }
 

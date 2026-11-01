@@ -27,8 +27,9 @@ func TestHandleHubRootReturnsLandingPayload(t *testing.T) {
 	if got := payload["service"]; got != "labtether-hub" {
 		t.Fatalf("service=%v want=%q", got, "labtether-hub")
 	}
-	if got := payload["console_url"]; got != "https://127.0.0.1:3000" {
-		t.Fatalf("console_url=%v want=%q", got, "https://127.0.0.1:3000")
+	// Port 3000 is the bundled console's plain-HTTP port, even with Hub TLS on.
+	if got := payload["console_url"]; got != "http://127.0.0.1:3000" {
+		t.Fatalf("console_url=%v want=%q", got, "http://127.0.0.1:3000")
 	}
 	if got := payload["healthz_path"]; got != "/healthz" {
 		t.Fatalf("healthz_path=%v want=%q", got, "/healthz")

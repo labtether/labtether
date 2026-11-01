@@ -111,12 +111,32 @@ services:
           create_secret_file /bootstrap/auth/setup-token 65532:65532 0400
         fi
         validate_secret_file /bootstrap/auth/setup-token 65532:65532 400
+        # LabTether v1.4.0 ran the Hub as root, so the files it wrote to these
+        # volumes are owned by root (secrets.json and state.json with mode
+        # 0600). The Hub now runs as 65532:65532 and cannot read them. Hand
+        # only root-owned entries to the Hub user. find does not follow
+        # symlinks, chown -h changes a link itself, and -xdev keeps the walk on
+        # each volume's own filesystem.
+        for hub_volume in /hub-volumes/data /hub-volumes/ca /hub-volumes/service-auth /hub-volumes/agent-cache; do
+          if [ -L "$$hub_volume" ] || [ ! -d "$$hub_volume" ]; then
+            echo "bootstrap: refusing unsafe Hub volume: $$hub_volume" >&2
+            exit 1
+          fi
+          if [ -n "$$(find "$$hub_volume" -xdev -mindepth 1 -user 0 -print | head -n 1)" ]; then
+            echo "bootstrap: giving root-owned files in $${hub_volume#/hub-volumes/} to the Hub user (written by LabTether v1.4.0 or older)"
+          fi
+          find "$$hub_volume" -xdev -user 0 -exec chown -h 65532:65532 {} +
+        done
     environment:
       LABTETHER_POSTGRES_NEW_DATABASE: ${LABTETHER_POSTGRES_NEW_DATABASE:-false}
     volumes:
       - labtether-bootstrap:/bootstrap
       - labtether-auth-bootstrap:/bootstrap/auth
       - postgres-data:/postgres-root
+      - labtether-data:/hub-volumes/data
+      - labtether-ca:/hub-volumes/ca
+      - labtether-service-auth:/hub-volumes/service-auth
+      - labtether-agent-cache:/hub-volumes/agent-cache
     deploy:
       resources:
         limits:
@@ -199,6 +219,8 @@ services:
       LABTETHER_MANAGED_POSTGRES: "true"
       LABTETHER_TLS_MODE: ${LABTETHER_TLS_MODE:-auto}
       LABTETHER_EXTERNAL_URL: ${LABTETHER_EXTERNAL_URL:-}
+      # Browser address of the console; single sign-on returns here.
+      LABTETHER_CONSOLE_URL: ${LABTETHER_CONSOLE_URL:-}
       # iOS push relay for the official app; "off" disables relay delivery.
       LABTETHER_PUSH_RELAY_URL: ${LABTETHER_PUSH_RELAY_URL:-https://push.labtether.com}
       LABTETHER_CORS_ALLOWED_ORIGINS: ${LABTETHER_CORS_ALLOWED_ORIGINS:-}
@@ -225,6 +247,10 @@ services:
       LABTETHER_OUTBOUND_ALLOW_PRIVATE: ${LABTETHER_OUTBOUND_ALLOW_PRIVATE:-true}
       LABTETHER_OUTBOUND_ALLOW_LOOPBACK: ${LABTETHER_OUTBOUND_ALLOW_LOOPBACK:-false}
       LABTETHER_OUTBOUND_ALLOW_LINK_LOCAL: ${LABTETHER_OUTBOUND_ALLOW_LINK_LOCAL:-false}
+      # Wake-on-LAN without an agent relay: the Hub's own broadcast only
+      # reaches the LAN with host networking (detected) or macvlan networking.
+      # Set true for macvlan; false turns the Hub broadcast off.
+      LABTETHER_WOL_HUB_BROADCAST: ${LABTETHER_WOL_HUB_BROADCAST:-}
       LABTETHER_ALLOW_INSECURE_TRANSPORT: ${LABTETHER_ALLOW_INSECURE_TRANSPORT:-false}
       # Use the verified container-local TLS route for the hub's own status
       # probe. This avoids weakening the global insecure-transport policy just
@@ -296,7 +322,7 @@ services:
       # skipped only for this container-local probe of the auto-generated cert.
       test:
         - CMD
-        - /usr/bin/node
+        - /usr/local/bin/node
         - -e
         - >-
           const secure=process.env.LABTETHER_TLS_MODE!=='disabled';
@@ -307,7 +333,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
-      start_period: 15s
+      # The Hub migrates the database before it listens, and Compose starts the
+      # console only after this check passes, never later. Allow as long as a
+      # migration may run (LABTETHER_DB_MIGRATION_TIMEOUT, default 30m) so a
+      # slow first start after an upgrade does not leave the console stopped.
+      # start_interval probes every 5s meanwhile, so a normal start is seen at
+      # once.
+      start_period: 30m
+      start_interval: 5s
 
   web-console:
     image: ${LABTETHER_IMAGE:?set LABTETHER_IMAGE in .env.deploy}
@@ -383,7 +416,7 @@ services:
       - -i
       - HOME=/tmp
       - LABTETHER_CONSOLE_INGRESS_MAX_CONNECTIONS=${LABTETHER_CONSOLE_INGRESS_MAX_CONNECTIONS:-512}
-      - /usr/bin/node
+      - /usr/local/bin/node
       - /app/console/scripts/console-ingress.mjs
     restart: unless-stopped
     logging: *default-logging

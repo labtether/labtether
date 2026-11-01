@@ -59,6 +59,7 @@
     "running": "正在运行...",
     "results": "运行结果",
     "failed": "失败",
+    "succeeded": "成功",
     "exitCode": "退出码 {code}",
     "noOutput": "命令已完成，没有输出。",
     "deleteTitle": "删除已保存操作",
