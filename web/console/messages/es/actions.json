@@ -1,110 +1,112 @@
 {
   "title": "Acciones",
-  "subtitle": "Ejecutar tareas en sus dispositivos y revisar resultados",
-  "runAction": {
-    "heading": "// Ejecutar acción",
-    "integration": {
-      "label": "Integración",
-      "tooltip": "Módulo de integración que proporciona esta acción"
-    },
-    "action": "Acción",
-    "device": {
-      "label": "Dispositivo",
-      "tooltip": "El identificador del recurso a actuar (ID de contenedor, nombre de VM, etc.)",
-      "placeholder": "container-id / vm-id / entity-id",
-      "notRequired": "Esta acción no requiere un dispositivo objetivo."
-    },
-    "parameters": {
-      "none": "Esta acción no requiere parámetros adicionales.",
-      "required": "(obligatorio)"
-    },
-    "previewOnly": {
-      "label": "Solo vista previa",
-      "tooltip": "Simular la acción sin realizar cambios",
-      "unsupportedTooltip": "Esta acción se ejecuta en vivo y no admite modo de vista previa"
-    },
-    "submit": "Ejecutar",
-    "submitting": "Encolando..."
-  },
-  "savedActions": {
-    "heading": "// Acciones de comando guardadas",
-    "description": "Cree secuencias de comandos ordenadas y reutilizables para dispositivos específicos.",
-    "reload": "Recargar",
-    "create": "Nueva acción guardada",
-    "noAssets": "No hay dispositivos accesibles. Añada o conecte un dispositivo antes de crear una acción guardada.",
-    "loading": "Cargando acciones guardadas...",
-    "empty": "Aún no hay acciones de comando guardadas.",
-    "listLabel": "Acciones de comando guardadas",
-    "summary": "{count} pasos · creada {date}",
-    "view": "Ver",
-    "run": "Ejecutar",
-    "delete": "Eliminar",
-    "deleteAction": "Eliminar {name}",
-    "createTitle": "Crear acción de comando guardada",
-    "fields": { "name": "Nombre de la acción", "description": "Descripción (opcional)", "steps": "Pasos de comando", "stepName": "Nombre del paso", "asset": "Dispositivo", "command": "Comando" },
-    "defaultStepName": "Paso {number}",
-    "stepHeading": "Paso {number}",
-    "removeStep": "Quitar paso {number}",
-    "remove": "Quitar",
-    "selectAsset": "Seleccione un dispositivo",
-    "addStep": "Añadir paso",
+  "new": "Nueva acción",
+  "common": {
     "cancel": "Cancelar",
-    "close": "Cerrar",
-    "creating": "Creando...",
-    "createAction": "Crear acción",
-    "detailsTitle": "Detalles de la acción guardada",
-    "loadingDetails": "Cargando los detalles actuales...",
-    "stepListLabel": "Pasos de comando de la acción guardada",
-    "runNow": "Ejecutar ahora",
-    "running": "Ejecutando...",
-    "results": "Resultados de ejecución",
-    "failed": "Falló",
-    "succeeded": "Correcto",
-    "exitCode": "Salida {code}",
-    "noOutput": "El comando terminó sin salida.",
-    "deleteTitle": "Eliminar acción guardada",
-    "deleteWarning": "Esto elimina “{name}” de forma permanente. Los comandos ya iniciados no se cancelan.",
-    "deletePrompt": "Escriba exactamente {name} para confirmar",
-    "deleting": "Eliminando...",
-    "deleteActionButton": "Eliminar acción",
-    "errors": { "nameRequired": "Introduzca un nombre para la acción.", "stepRequired": "Cada paso necesita un dispositivo y un comando.", "assetUnavailable": "Uno o más dispositivos seleccionados ya no están disponibles.", "createFailed": "No se pudo crear la acción guardada.", "loadOneFailed": "No se pudo cargar la acción guardada.", "runFailed": "No se pudo ejecutar la acción guardada.", "deleteFailed": "No se pudo eliminar la acción guardada." },
-    "messages": { "created": "Se creó “{name}”.", "runFinished": "Finalizó la ejecución de “{name}”.", "runFinishedWithFailures": "Finalizó “{name}” con {count} pasos fallidos.", "deleted": "Se eliminó “{name}”." }
+    "create": "Crear",
+    "save": "Guardar",
+    "delete": "Eliminar",
+    "deleteMenu": "Eliminar…",
+    "edit": "Editar…",
+    "rowMenu": "Acciones de {name}",
+    "loading": "Cargando…",
+    "retry": "Reintentar",
+    "never": "Nunca",
+    "on": "Activo",
+    "remove": "Quitar {name}"
   },
-  "history": {
-    "heading": "// Historial de ejecución",
-    "viewLogs": "Ver registros",
-    "empty": {
-      "title": "Aún no hay ejecuciones",
-      "description": "Seleccione una integración y acción arriba, luego presione Ejecutar."
-    }
-  },
-  "updates": {
-    "title": "Actualizaciones",
-    "subtitle": "Programar y ejecutar actualizaciones en su laboratorio",
-    "planName": "Nombre del plan",
-    "devices": {
-      "label": "Dispositivos",
-      "tooltip": "Lista separada por comas de nombres de host de dispositivos a actualizar",
-      "placeholder": "lab-host-01, docker-host-01"
-    },
-    "scopes": {
-      "label": "Alcances",
-      "tooltip": "Categoría de actualización compatible actualmente: os_packages.",
-      "placeholder": "os_packages"
-    },
-    "previewOnly": "Solo vista previa",
-    "createPlan": "Crear plan",
-    "saving": "Guardando...",
-    "plans": "Planes",
-    "recentRuns": "Ejecuciones recientes",
+  "list": {
+    "label": "Acciones guardadas",
+    "action": "Acción",
+    "empty": "No hay acciones guardadas",
+    "loadFailed": "No se pudieron cargar las acciones guardadas",
+    "steps": "{count, plural, one {# paso} other {# pasos}}",
     "run": "Ejecutar",
-    "plansEmpty": {
-      "title": "Aún no hay planes de actualización",
-      "description": "Cree un plan arriba para definir qué dispositivos y alcances actualizar."
-    },
-    "runsEmpty": {
-      "title": "Aún no hay ejecuciones de actualización",
-      "description": "Ejecute un plan para iniciar una ejecución."
-    }
+    "runMany": "Ejecutar…",
+    "runLabel": "Ejecutar {name}",
+    "running": "En ejecución",
+    "failed": "Falló",
+    "succeededAt": "Correcta · {time}",
+    "showSteps": "Mostrar pasos",
+    "hideSteps": "Ocultar pasos",
+    "duplicate": "Duplicar…"
+  },
+  "panel": {
+    "steps": "Pasos",
+    "command": "Comando",
+    "lastRun": "Última ejecución",
+    "running": "En ejecución",
+    "exit": "Código de salida {code}",
+    "succeeded": "Correcto",
+    "failed": "Falló",
+    "noOutput": "Sin salida",
+    "duration": "{ms} ms",
+    "loadFailed": "No se pudieron cargar los pasos actuales"
+  },
+  "run": {
+    "title": "¿Ejecutar «{name}»?",
+    "body": "Se ejecuta en {count} dispositivos: {devices}.",
+    "confirm": "Ejecutar en {count} dispositivos",
+    "finished": "«{name}» terminó",
+    "finishedFailures": "«{name}» terminó con {count, plural, one {# paso fallido} other {# pasos fallidos}}",
+    "failed": "No se pudo ejecutar «{name}»"
+  },
+  "delete": {
+    "title": "¿Eliminar «{name}»?",
+    "body": "Los comandos que ya se están ejecutando continúan.",
+    "prompt": "Escriba {name} para confirmar",
+    "deleted": "«{name}» eliminada",
+    "failed": "No se pudo eliminar la acción"
+  },
+  "editor": {
+    "newTitle": "Nueva acción",
+    "copyTitle": "Duplicar acción",
+    "command": "Comando",
+    "integration": "Acción de integración",
+    "name": "Nombre",
+    "description": "Descripción",
+    "optional": "Opcional",
+    "noDevices": "No hay dispositivos que ejecuten comandos",
+    "steps": "Pasos",
+    "device": "Dispositivo",
+    "stepDevice": "Dispositivo del paso {number}",
+    "stepCommand": "Comando del paso {number}",
+    "removeStep": "Quitar paso {number}",
+    "addStep": "Añadir paso",
+    "defaultStepName": "Paso {number}",
+    "nameRequired": "Escriba un nombre",
+    "commandRequired": "Escriba un comando",
+    "deviceRequired": "Elija un dispositivo",
+    "deviceGone": "Este dispositivo ya no está disponible",
+    "created": "«{name}» creada",
+    "createFailed": "No se pudo crear la acción",
+    "copyName": "{name} (copia)"
+  },
+  "integration": {
+    "none": "No hay integraciones conectadas",
+    "integration": "Integración",
+    "action": "Acción",
+    "target": "Destino",
+    "targetRequired": "Escriba un destino",
+    "paramRequired": "Obligatorio",
+    "optional": "Opcional",
+    "loadFailed": "No se pudieron cargar las acciones de esta integración",
+    "preview": "Vista previa",
+    "previewHint": "Simulación: la comprueba sin cambiar nada",
+    "noPreview": "Esta acción no tiene simulación",
+    "once": "Se ejecuta una vez, no se guarda",
+    "run": "Ejecutar",
+    "runPreview": "Ejecutar vista previa",
+    "queued": "«{name}» en cola",
+    "previewQueued": "Vista previa de «{name}» en cola",
+    "failed": "No se pudo ejecutar la acción"
+  },
+  "runs": {
+    "title": "Ejecuciones recientes",
+    "empty": "Aún no hay ejecuciones",
+    "running": "En ejecución",
+    "queued": "En cola",
+    "failed": "Falló",
+    "logs": "Registros"
   }
 }

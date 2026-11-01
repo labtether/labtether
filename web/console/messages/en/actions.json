@@ -1,130 +1,112 @@
 {
   "title": "Actions",
-  "subtitle": "Run tasks on your devices and review results",
-  "runAction": {
-    "heading": "// Run Action",
-    "integration": {
-      "label": "Integration",
-      "tooltip": "Integration module that provides this action"
-    },
-    "action": "Action",
-    "device": {
-      "label": "Device",
-      "tooltip": "The resource identifier to act on (container ID, VM name, etc.)",
-      "placeholder": "container-id / vm-id / entity-id",
-      "notRequired": "This action does not require a target device."
-    },
-    "parameters": {
-      "none": "This action does not require any additional parameters.",
-      "required": "(required)"
-    },
-    "previewOnly": {
-      "label": "Preview Only",
-      "tooltip": "Simulate the action without making changes",
-      "unsupportedTooltip": "This action runs live and does not support dry-run mode"
-    },
-    "submit": "Run",
-    "submitting": "Queueing..."
-  },
-  "savedActions": {
-    "heading": "// Saved command actions",
-    "description": "Build reusable, ordered command sequences for specific devices.",
-    "reload": "Reload",
-    "create": "New saved action",
-    "noAssets": "No accessible devices are available. Add or connect a device before creating a saved action.",
-    "loading": "Loading saved actions...",
-    "empty": "No saved command actions yet.",
-    "listLabel": "Saved command actions",
-    "summary": "{count} steps · created {date}",
-    "view": "View",
-    "run": "Run",
-    "delete": "Delete",
-    "deleteAction": "Delete {name}",
-    "createTitle": "Create saved command action",
-    "fields": {
-      "name": "Action name",
-      "description": "Description (optional)",
-      "steps": "Command steps",
-      "stepName": "Step name",
-      "asset": "Device",
-      "command": "Command"
-    },
-    "defaultStepName": "Step {number}",
-    "stepHeading": "Step {number}",
-    "removeStep": "Remove step {number}",
-    "remove": "Remove",
-    "selectAsset": "Select a device",
-    "addStep": "Add step",
+  "new": "New action",
+  "common": {
     "cancel": "Cancel",
-    "close": "Close",
-    "creating": "Creating...",
-    "createAction": "Create action",
-    "detailsTitle": "Saved action details",
-    "loadingDetails": "Loading current action details...",
-    "stepListLabel": "Saved action command steps",
-    "runNow": "Run now",
-    "running": "Running...",
-    "results": "Run results",
-    "failed": "Failed",
-    "succeeded": "Succeeded",
-    "exitCode": "Exit {code}",
-    "noOutput": "Command completed without output.",
-    "deleteTitle": "Delete saved action",
-    "deleteWarning": "This permanently deletes “{name}”. Commands that are already running are not cancelled.",
-    "deletePrompt": "Type {name} exactly to confirm",
-    "deleting": "Deleting...",
-    "deleteActionButton": "Delete action",
-    "errors": {
-      "nameRequired": "Enter an action name.",
-      "stepRequired": "Every step needs a device and command.",
-      "assetUnavailable": "One or more selected devices are no longer available.",
-      "createFailed": "Failed to create saved action.",
-      "loadOneFailed": "Failed to load saved action.",
-      "runFailed": "Failed to run saved action.",
-      "deleteFailed": "Failed to delete saved action."
-    },
-    "messages": {
-      "created": "Created “{name}”.",
-      "runFinished": "Finished running “{name}”.",
-      "runFinishedWithFailures": "Finished running “{name}” with {count} failed steps.",
-      "deleted": "Deleted “{name}”."
-    }
+    "create": "Create",
+    "save": "Save",
+    "delete": "Delete",
+    "deleteMenu": "Delete…",
+    "edit": "Edit…",
+    "rowMenu": "Actions for {name}",
+    "loading": "Loading…",
+    "retry": "Try again",
+    "never": "Never",
+    "on": "On",
+    "remove": "Remove {name}"
   },
-  "history": {
-    "heading": "// Run History",
-    "viewLogs": "View logs",
-    "empty": {
-      "title": "No runs yet",
-      "description": "Pick an integration and action above, then hit Run."
-    }
-  },
-  "updates": {
-    "title": "Updates",
-    "subtitle": "Schedule and run updates across your lab",
-    "planName": "Plan Name",
-    "devices": {
-      "label": "Devices",
-      "tooltip": "Comma-separated list of device hostnames to update",
-      "placeholder": "lab-host-01, docker-host-01"
-    },
-    "scopes": {
-      "label": "Scopes",
-      "tooltip": "Currently supported update category: os_packages.",
-      "placeholder": "os_packages"
-    },
-    "previewOnly": "Preview Only",
-    "createPlan": "Create Plan",
-    "saving": "Saving...",
-    "plans": "Plans",
-    "recentRuns": "Recent Runs",
+  "list": {
+    "label": "Saved actions",
+    "action": "Action",
+    "empty": "No saved actions",
+    "loadFailed": "Couldn’t load saved actions",
+    "steps": "{count, plural, one {# step} other {# steps}}",
     "run": "Run",
-    "plansEmpty": {
-      "title": "No update plans yet",
-      "description": "Create a plan above to define which devices and scopes to update."
-    },
-    "runsEmpty": {
-      "title": "No update runs yet",
-      "description": "Execute a plan to start a run."
-    }
+    "runMany": "Run…",
+    "runLabel": "Run {name}",
+    "running": "Running",
+    "failed": "Failed",
+    "succeededAt": "Succeeded · {time}",
+    "showSteps": "Show steps",
+    "hideSteps": "Hide steps",
+    "duplicate": "Duplicate…"
+  },
+  "panel": {
+    "steps": "Steps",
+    "command": "Command",
+    "lastRun": "Last run",
+    "running": "Running",
+    "exit": "Exit {code}",
+    "succeeded": "Succeeded",
+    "failed": "Failed",
+    "noOutput": "No output",
+    "duration": "{ms} ms",
+    "loadFailed": "Couldn’t load the current steps"
+  },
+  "run": {
+    "title": "Run “{name}”?",
+    "body": "It runs on {count} devices: {devices}.",
+    "confirm": "Run on {count} devices",
+    "finished": "Finished “{name}”",
+    "finishedFailures": "Finished “{name}” with {count, plural, one {# failed step} other {# failed steps}}",
+    "failed": "Couldn’t run “{name}”"
+  },
+  "delete": {
+    "title": "Delete “{name}”?",
+    "body": "Commands already running keep running.",
+    "prompt": "Type {name} to confirm",
+    "deleted": "Deleted “{name}”",
+    "failed": "Couldn’t delete the action"
+  },
+  "editor": {
+    "newTitle": "New action",
+    "copyTitle": "Duplicate action",
+    "command": "Command",
+    "integration": "Integration action",
+    "name": "Name",
+    "description": "Description",
+    "optional": "Optional",
+    "noDevices": "No devices to run commands on",
+    "steps": "Steps",
+    "device": "Device",
+    "stepDevice": "Step {number} device",
+    "stepCommand": "Step {number} command",
+    "removeStep": "Remove step {number}",
+    "addStep": "Add step",
+    "defaultStepName": "Step {number}",
+    "nameRequired": "Enter a name",
+    "commandRequired": "Enter a command",
+    "deviceRequired": "Pick a device",
+    "deviceGone": "This device is no longer available",
+    "created": "Created “{name}”",
+    "createFailed": "Couldn’t create the action",
+    "copyName": "{name} (copy)"
+  },
+  "integration": {
+    "none": "No integrations connected",
+    "integration": "Integration",
+    "action": "Action",
+    "target": "Target",
+    "targetRequired": "Enter a target",
+    "paramRequired": "Required",
+    "optional": "Optional",
+    "loadFailed": "Couldn’t load this integration’s actions",
+    "preview": "Preview",
+    "previewHint": "Dry run: checks it, changes nothing",
+    "noPreview": "No dry run for this action",
+    "once": "Runs once, not saved",
+    "run": "Run",
+    "runPreview": "Run preview",
+    "queued": "Queued “{name}”",
+    "previewQueued": "Queued a preview of “{name}”",
+    "failed": "Couldn’t run the action"
+  },
+  "runs": {
+    "title": "Recent runs",
+    "empty": "No runs yet",
+    "running": "Running",
+    "queued": "Queued",
+    "failed": "Failed",
+    "logs": "Logs"
   }
 }

@@ -1,0 +1,190 @@
+/* ── 2.0 Automations: Actions, Schedules and Webhooks ──
+   Each tab is one sheet of plain rows under one column header: the name over a grey line (what it does, where),
+   then times as a word and a clock time, an On switch and a ⋯ menu. Run shows on hover. New and Edit open a form
+   sheet above the list (title on the canvas, Cancel and the main button in the sheet's footer). An opened action
+   shows its steps and last run in a sunk well under its row. Columns follow the page's own width (container queries),
+   so a narrow window with the sidebar folded keeps the desktop layout. */
+
+.au-page { container: au / inline-size; }
+
+/* Lists */
+.au-list { padding: 4px; border-radius: var(--r-4); background: var(--panel); box-shadow: var(--elev-1); }
+.au-cols, .au-row { display: grid; align-items: center; column-gap: 12px; padding: 0 12px; }
+.au-cols { min-height: 36px; margin: -4px -4px 4px; padding-inline: 16px; box-shadow: inset 0 -1px 0 var(--divider); font-size: var(--fs-micro); line-height: var(--lh-micro); font-weight: 500; color: var(--text-3); }
+.au-row { position: relative; min-height: 36px; padding-top: 4px; padding-bottom: 4px; border-radius: var(--r-2); cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out); }
+.au-row:hover { background: var(--hover); transition-duration: 0s; }
+.au-row.open { background: var(--sel); }
+.au-a { grid-template-columns: minmax(0, 1fr) minmax(0, 190px) 64px 28px; }
+.au-s { grid-template-columns: minmax(0, 1fr) 128px 176px 32px 28px; }
+.au-w { grid-template-columns: minmax(0, 1fr) minmax(0, 200px) 112px 32px 28px; }
+.au-r { grid-template-columns: minmax(0, 1fr) 176px 64px; }
+
+.au-sort { display: inline-flex; align-items: center; gap: 2px; justify-self: start; height: 24px; margin: 0 -4px; padding: 0 4px; border-radius: var(--r-1); color: inherit; font: inherit; cursor: pointer; }
+.au-sort:hover, .au-sort.on { color: var(--text); }
+.au-sort svg { width: 12px; height: 12px; }
+
+.au-ln { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.au-nm { flex: none; max-width: 60%; font-weight: 500; line-height: 20px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.au-tg { cursor: pointer; border-radius: var(--r-1); }
+.au-tg:hover { text-decoration: underline; text-decoration-color: var(--text-3); text-underline-offset: 3px; }
+.au-sub { flex: 1 1 0; min-width: 0; font-size: var(--fs-meta); line-height: 18px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.au-sub.bad { color: var(--bad-text); }
+.au-sub.warn { color: var(--warn-text); }
+.au-row.off .au-nm { font-weight: 400; color: var(--text-2); }
+.au-mono { font-family: var(--font-mono); font-size: 12px; }
+.au-nm.au-mono { font-weight: 400; }
+
+.au-last, .au-next, .au-ev { min-width: 0; font-size: var(--fs-meta); line-height: 18px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.au-cols .au-ev { font-size: inherit; color: inherit; }
+.au-dim, .au-last .num { color: var(--text-3); }
+.au-word { font-weight: 500; color: var(--text-2); }
+.au-word.bad { color: var(--bad-text); }
+.au-word.warn { color: var(--warn-text); }
+.au-word.busy::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: var(--text-2); vertical-align: 1px; animation: au-pulse 1.6s ease-in-out infinite; }
+@keyframes au-pulse { 50% { opacity: 0.35; } }
+.au-page .num { font-variant-numeric: tabular-nums; }
+
+/* The row's quick Run (on hover or focus), its ⋯ and its switch. */
+.au-q { justify-self: end; height: var(--ctl-sm); padding: 0 10px; border-radius: var(--r-2); font-size: var(--fs-meta); font-weight: 500; color: var(--text-2); opacity: 0; cursor: pointer; transition: opacity var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out); }
+.au-q:hover { background: var(--hover); color: var(--text); }
+.au-row:hover .au-q:enabled, .au-row:focus-within .au-q:enabled { opacity: 1; }
+.au-q:disabled { cursor: default; }
+@media (hover: none) { .au-q:enabled { opacity: 1; } }
+.au-more { display: grid; place-items: center; width: 28px; height: 28px; border-radius: var(--r-2); color: var(--text-3); cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
+.au-more:hover, .au-more[data-state="open"] { background: var(--sel); color: var(--text); }
+.au-more svg { width: 16px; height: 16px; }
+.lt-menu-item.au-danger { color: var(--bad-text); }
+.lt-menu-item[data-disabled] { color: var(--text-3); cursor: default; }
+
+.au-tg:focus-visible, .au-q:focus-visible, .au-more:focus-visible, .au-sort:focus-visible, .au-link:focus-visible,
+.au-ib:focus-visible, .au-add:focus-visible, .au-tag button:focus-visible { outline: 2px solid var(--control-focus-ring); outline-offset: 1px; }
+
+.au-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 28px 12px; text-align: center; color: var(--text-3); }
+.au-link { font-size: var(--fs-meta); font-weight: 500; color: var(--text-2); cursor: pointer; border-radius: var(--r-1); }
+.au-link:hover { color: var(--text); }
+.au-err { font-size: var(--fs-meta); line-height: var(--lh-meta); color: var(--bad-text); }
+.au-hint { font-size: var(--fs-meta); line-height: var(--lh-meta); color: var(--text-3); }
+.au-gap { margin-top: 16px; }
+
+/* An opened action or run: a sunk well under its row. */
+.au-panel { display: grid; gap: 16px 24px; margin: 2px 0 6px; padding: 12px 16px 16px; border-radius: var(--r-3); background: var(--sunk); cursor: auto; }
+.au-panel.two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.au-pc { display: grid; align-content: start; gap: 8px; min-width: 0; }
+.au-desc { color: var(--text-2); }
+.au-cap { font-size: var(--fs-body); line-height: 20px; font-weight: 600; letter-spacing: -0.006em; }
+.au-steps-ro, .au-results { display: grid; gap: 12px; list-style: none; }
+.au-std, .au-rh { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; font-size: var(--fs-meta); }
+.au-std b, .au-rh b { font-weight: 500; }
+.au-sn { color: var(--text-3); }
+.au-stn { color: var(--text-3); }
+.au-rh .num { color: var(--text-3); }
+.au-ok { color: var(--text-3); }
+.au-bad { font-weight: 500; color: var(--bad-text); }
+.au-code { margin: 0; padding: 8px 10px; border-radius: var(--r-2); background: var(--panel); box-shadow: inset 0 0 0 1px var(--divider); font-family: var(--font-mono); font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.au-out { max-height: 240px; overflow: auto; color: var(--text-2); }
+
+/* A section on the canvas under the list (Recent runs). */
+.au-sec { margin-top: var(--gap-section); }
+.au-sh { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px; margin-bottom: 8px; }
+.au-sh h2 { font-size: var(--fs-head); line-height: var(--lh-head); }
+
+/* The create and edit form. */
+.au-fsec { margin-bottom: 24px; }
+.au-fsec > h2 { margin-bottom: 8px; }
+.au-sheet { container: auf / inline-size; padding: 20px; border-radius: var(--r-4); background: var(--panel); box-shadow: var(--elev-1); }
+.au-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: 20px -20px -20px; padding: 12px 20px; border-top: 1px solid var(--divider); }
+.au-foot-note { margin-right: auto; font-size: var(--fs-meta); color: var(--text-3); }
+.au-ferr { margin-top: 16px; }
+.au-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; align-items: start; }
+.au-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.au-grid.au-wh { grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 220px); }
+.au-field { display: grid; gap: 6px; min-width: 0; }
+.au-field > label, .au-field > span, .au-evs legend { font-size: var(--fs-meta); line-height: var(--lh-meta); font-weight: 500; color: var(--text-2); }
+.au-wide { grid-column: 1 / -1; }
+.au-kind { margin-bottom: 16px; }
+/* Commands in the kit's textarea: a step's command starts one line high, a schedule's two. */
+textarea.au-line { min-height: var(--ctl); padding-top: 6px; padding-bottom: 6px; line-height: 18px; }
+textarea.au-two { min-height: 56px; line-height: 18px; }
+
+/* Command steps: number, device, command, remove. */
+.au-steps { display: grid; gap: 8px; margin-top: 16px; }
+.au-step { display: grid; grid-template-columns: 20px minmax(140px, 220px) minmax(0, 1fr) 28px; gap: 8px; align-items: start; }
+.au-step-h { margin-bottom: -2px; font-size: var(--fs-meta); font-weight: 500; color: var(--text-2); }
+.au-step > .au-sn { display: grid; place-items: center; height: var(--ctl); font-size: var(--fs-meta); }
+.au-sc { display: grid; gap: 4px; min-width: 0; }
+.au-ib { display: grid; place-items: center; width: 28px; height: 28px; margin-top: 2px; border-radius: var(--r-2); color: var(--text-3); cursor: pointer; }
+.au-ib:hover { background: var(--hover); color: var(--text); }
+.au-ib svg { width: 14px; height: 14px; }
+.au-add { display: inline-flex; align-items: center; gap: 6px; height: var(--ctl-sm); margin: 8px 0 0 20px; padding: 0 10px; border-radius: var(--r-2); font-size: var(--fs-meta); font-weight: 500; color: var(--text-2); cursor: pointer; }
+.au-add:hover { background: var(--hover); color: var(--text); }
+.au-add svg { width: 14px; height: 14px; color: var(--text-3); }
+
+.au-pv { display: flex; align-items: center; gap: 8px; margin-top: 16px; font-size: var(--fs-meta); color: var(--text); }
+.au-foot .au-pv { margin-top: 0; }
+
+/* Schedule devices: picked ones as tags, then the add menu. */
+.au-pick { display: grid; gap: 8px; min-width: 0; }
+.au-tags { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; }
+.au-tag { display: inline-flex; align-items: center; gap: 2px; height: 24px; padding: 0 2px 0 8px; border-radius: var(--r-1); background: var(--sel); font-size: var(--fs-meta); color: var(--text); }
+.au-tag button { display: grid; place-items: center; width: 20px; height: 20px; border-radius: var(--r-1); color: var(--text-3); cursor: pointer; }
+.au-tag button:hover { color: var(--text); background: var(--hover); }
+.au-tag svg { width: 12px; height: 12px; }
+
+/* Webhook events: one column per group. */
+.au-evs { min-width: 0; margin: 4px 0 0; padding: 0; border: 0; }
+.au-evs legend { margin-bottom: 8px; padding: 0; }
+.au-evg { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px 16px; }
+.au-evc { display: grid; align-content: start; gap: 6px; }
+.au-ck { display: flex; align-items: center; gap: 8px; min-height: 24px; font-size: var(--fs-meta); color: var(--text); cursor: pointer; }
+.au-ck input { flex: none; width: 16px; height: 16px; margin: 0; accent-color: var(--text); cursor: pointer; }
+.au-evs .au-hint { margin-top: 8px; }
+
+/* Confirm dialogs. */
+.au-scrim { position: fixed; inset: 0; z-index: 60; background: var(--scrim); backdrop-filter: blur(2px); }
+.au-dlg { position: fixed; z-index: 61; top: 18vh; left: 50%; width: min(440px, calc(100vw - 32px)); padding: 24px; border-radius: var(--r-4); background: var(--panel-glass); box-shadow: var(--elev-3); transform: translateX(-50%); }
+.au-dlg:focus { outline: none; }
+.au-dlg-t { font-size: var(--fs-head); line-height: var(--lh-head); font-weight: 600; letter-spacing: -0.011em; overflow-wrap: anywhere; }
+.au-dlg-b { margin-top: 8px; color: var(--text-2); overflow-wrap: anywhere; }
+.au-dlg .au-err { margin-top: 12px; }
+.au-dlg-a { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
+
+@container auf (max-width: 760px) {
+  .au-grid.three, .au-grid.au-wh { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .au-evg { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@container auf (max-width: 520px) {
+  .au-grid, .au-grid.three, .au-grid.au-wh, .au-evg { grid-template-columns: minmax(0, 1fr); }
+  .au-step { grid-template-columns: 20px minmax(0, 1fr) 28px; }
+  .au-step > .au-sc:nth-child(2) { grid-area: 1 / 2; }
+  .au-step > .au-sc:nth-child(3) { grid-area: 2 / 2; }
+  .au-step > :last-child { grid-area: 1 / 3; }
+  .au-step-h { display: none; }
+  .au-foot { flex-wrap: wrap; }
+}
+@container au (max-width: 720px) {
+  .au-s { grid-template-columns: minmax(0, 1fr) 112px 32px 28px; }
+  .au-s .au-last, .au-cols.au-s > :nth-child(3) { display: none; }
+  .au-w { grid-template-columns: minmax(0, 1fr) 104px 32px 28px; }
+  .au-w .au-ev { display: none; }
+  .au-panel.two { grid-template-columns: minmax(0, 1fr); }
+}
+@container au (max-width: 560px) {
+  .au-cols { display: none; }
+  .au-row { min-height: 52px; }
+  .au-ln { flex-direction: column; align-items: stretch; gap: 0; }
+  .au-nm { max-width: none; }
+  .au-sub { flex: none; }
+  .au-a { grid-template-columns: minmax(0, 1fr) 28px; }
+  .au-a .au-last, .au-a .au-q { display: none; }
+  .au-s, .au-w { grid-template-columns: minmax(0, 1fr) 32px 28px; }
+  .au-s .au-next, .au-w .au-last { display: none; }
+  .au-r { grid-template-columns: minmax(0, 1fr) auto; }
+  .au-r > :last-child { display: none; }
+}
+@media (max-width: 640px) {
+  .au-dlg { top: auto; bottom: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .au-row, .au-q, .au-more { transition: none; }
+  .au-word.busy::before { animation: none; }
+}

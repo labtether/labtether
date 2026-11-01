@@ -1,160 +1,173 @@
 "use client";
 
-import { Link } from "../../../../i18n/navigation";
+import { Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { Zap } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
 import { PageHeader } from "../../../components/PageHeader";
-import { Card } from "../../../components/ui/Card";
-import { Badge } from "../../../components/ui/Badge";
 import { Button } from "../../../components/ui/Button";
-import { EmptyState } from "../../../components/ui/EmptyState";
 import { Input } from "../../../components/ui/Input";
-import { Select } from "../../../components/ui/Input";
+import { useToast } from "../../../contexts/ToastContext";
 import { useActions } from "../../../hooks/useActions";
-import { SavedActionsCard } from "./SavedActionsCard";
+import { type SavedAction, useSavedActions } from "../../../hooks/useSavedActions";
+import { errorText } from "./_parts/autoApi";
+import { AutoDialog } from "./_parts/AutoDialog";
+import { ActionEditor, type EditorStart } from "./ActionEditor";
+import { actionDevices, failedSteps, type SessionRun } from "./actionsModel";
+import { RecentRuns } from "./RecentRuns";
+import { SavedActionList } from "./SavedActionList";
 
+/**
+ * Automations › Actions: saved command actions (run, open for steps and the last run's output, duplicate, delete),
+ * New action for a saved command or a one-off integration action (with a dry-run preview), and the hub's recent runs.
+ */
 export default function ActionsPage() {
-  const t = useTranslations('actions');
-  const {
-    actionParameters,
-    actionParamValues,
-    assets,
-    connectors,
-    selectedConnector,
-    setSelectedConnector,
-    connectorActions,
-    selectedConnectorAction,
-    setSelectedConnectorAction,
-    selectedActionDescriptor,
-    actionRequiresTarget,
-    actionSupportsDryRun,
-    actionTarget,
-    setActionTarget,
-    setActionParamValue,
-    actionDryRun,
-    setActionDryRun,
-    actionSubmitting,
-    actionMessage,
-    connectorActionsError,
-    actionRuns,
-    submitConnectorAction
-  } = useActions();
+  const t = useTranslations("actions");
+  const tc = useTranslations("actions.common");
+  const { addToast } = useToast();
+  const integration = useActions();
+  const saved = useSavedActions();
+  const { assets } = integration;
+
+  const names = useMemo(() => new Map(assets.map((a) => [a.id, a.name || a.id])), [assets]);
+  const deviceName = useCallback((id: string) => names.get(id) ?? id, [names]);
+  const actionNames = useMemo(
+    () => new Map(integration.connectorActions.map((a) => [`${integration.selectedConnector}:${a.id}`, a.name])),
+    [integration.connectorActions, integration.selectedConnector],
+  );
+
+  const [editor, setEditor] = useState<EditorStart | null>(null);
+  const [runs, setRuns] = useState<Record<string, SessionRun>>({});
+  const [openID, setOpenID] = useState<string | null>(null);
+  const [openError, setOpenError] = useState<string | null>(null);
+  const [confirmRun, setConfirmRun] = useState<SavedAction | null>(null);
+  const [toDelete, setToDelete] = useState<SavedAction | null>(null);
+  const [typed, setTyped] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const open = async (action: SavedAction | null) => {
+    setOpenID(action?.id ?? null);
+    setOpenError(null);
+    if (!action) return;
+    try {
+      await saved.getAction(action.id);
+    } catch (cause) {
+      setOpenError(errorText(cause, t("panel.loadFailed")));
+    }
+  };
+
+  const run = async (action: SavedAction) => {
+    setConfirmRun(null);
+    setOpenID(action.id);
+    setRuns((all) => ({ ...all, [action.id]: { state: "running" } }));
+    try {
+      const result = await saved.runAction(action.id);
+      const failed = failedSteps(result);
+      setRuns((all) => ({ ...all, [action.id]: { state: "done", at: new Date().toISOString(), result, failed } }));
+      addToast(failed ? "warning" : "success", failed
+        ? t("run.finishedFailures", { name: action.name, count: failed })
+        : t("run.finished", { name: action.name }));
+    } catch (cause) {
+      const message = errorText(cause, t("run.failed", { name: action.name }));
+      setRuns((all) => ({ ...all, [action.id]: { state: "refused", at: new Date().toISOString(), message } }));
+    }
+  };
+
+  const askRun = (action: SavedAction) => {
+    if (actionDevices(action).length > 1) setConfirmRun(action);
+    else void run(action);
+  };
+
+  const askDelete = (action: SavedAction) => {
+    setToDelete(action);
+    setTyped("");
+    setDeleteError(null);
+  };
+
+  const remove = async () => {
+    if (!toDelete || typed !== toDelete.name) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await saved.deleteAction(toDelete.id);
+      if (openID === toDelete.id) setOpenID(null);
+      addToast("success", t("delete.deleted", { name: toDelete.name }));
+      setToDelete(null);
+    } catch (cause) {
+      setDeleteError(errorText(cause, t("delete.failed")));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const runDevices = confirmRun ? actionDevices(confirmRun) : [];
 
   return (
-    <>
-      <PageHeader title={t('title')} subtitle={t('subtitle')} />
-      <Card>
-        <h2 className="text-xs font-mono uppercase tracking-wider text-[var(--muted)] mb-2">{t('runAction.heading')}</h2>
-        <form className="space-y-3" onSubmit={submitConnectorAction}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1 text-xs font-mono uppercase tracking-wider text-[var(--muted)]">
-              <span data-tooltip={t('runAction.integration.tooltip')}>{t('runAction.integration.label')}</span>
-              <Select
-                value={selectedConnector}
-                onChange={(event) => setSelectedConnector(event.target.value)}
-              >
-                {connectors.map((connector) => (
-                  <option key={connector.id} value={connector.id}>
-                    {connector.display_name}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label className="flex flex-col gap-1 text-xs font-mono uppercase tracking-wider text-[var(--muted)]">
-              {t('runAction.action')}
-              <Select
-                value={selectedConnectorAction}
-                onChange={(event) => setSelectedConnectorAction(event.target.value)}
-              >
-                {connectorActions.map((action) => (
-                  <option key={action.id} value={action.id}>
-                    {action.name}
-                  </option>
-                ))}
-              </Select>
-            </label>
-          </div>
-          {actionRequiresTarget ? (
-            <label className="flex flex-col gap-1 text-xs font-mono uppercase tracking-wider text-[var(--muted)]">
-              <span data-tooltip={t('runAction.device.tooltip')}>{t('runAction.device.label')}</span>
-              <Input
-                value={actionTarget}
-                onChange={(event) => setActionTarget(event.target.value)}
-                placeholder={t('runAction.device.placeholder')}
-              />
-            </label>
-          ) : (
-            <p className="text-xs text-[var(--muted)]">{t('runAction.device.notRequired')}</p>
-          )}
-          {actionParameters.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {actionParameters.map((parameter) => (
-                <label key={parameter.key} className="flex flex-col gap-1 text-xs font-mono uppercase tracking-wider text-[var(--muted)]">
-                  <span title={parameter.description}>
-                    {parameter.label}
-                    {parameter.required ? ` ${t('runAction.parameters.required')}` : ""}
-                  </span>
-                  <Input
-                    value={actionParamValues[parameter.key] ?? ""}
-                    onChange={(event) => setActionParamValue(parameter.key, event.target.value)}
-                    placeholder={parameter.description || parameter.key}
-                  />
-                </label>
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-[var(--muted)]">{t('runAction.parameters.none')}</p>
-          )}
-          <label className={`flex items-center gap-2 text-sm text-[var(--text)] select-none ${actionSupportsDryRun ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}>
-            <input
-              type="checkbox"
-              checked={actionSupportsDryRun && actionDryRun}
-              disabled={!actionSupportsDryRun}
-              onChange={(event) => setActionDryRun(event.target.checked)}
-              className="h-4 w-4 rounded border border-[var(--line)] accent-[var(--accent)]"
-            />
-            <span data-tooltip={actionSupportsDryRun ? t('runAction.previewOnly.tooltip') : t('runAction.previewOnly.unsupportedTooltip')}>
-              {t('runAction.previewOnly.label')}
-            </span>
-          </label>
-          <Button type="submit" variant="primary" disabled={actionSubmitting || !selectedActionDescriptor}>
-            {actionSubmitting ? t('runAction.submitting') : t('runAction.submit')}
+    <div className="au-page">
+      <PageHeader
+        title={t("title")}
+        action={(
+          <Button variant={editor ? "secondary" : "primary"} onClick={() => setEditor({ kind: "command" })}>
+            <Plus size={14} aria-hidden="true" />
+            {t("new")}
           </Button>
-        </form>
-        {selectedActionDescriptor?.description ? <p className="mt-3 text-xs text-[var(--muted)]">{selectedActionDescriptor.description}</p> : null}
-        {connectorActionsError ? <p className="mt-3 text-xs text-[var(--bad)]">{connectorActionsError}</p> : null}
-        {actionMessage ? <p className="mt-3 text-xs text-[var(--muted)]">{actionMessage}</p> : null}
-      </Card>
+        )}
+      />
+      {editor ? (
+        <ActionEditor
+          key={editor.from?.id ?? editor.kind}
+          start={editor}
+          assets={assets}
+          integration={integration}
+          createAction={saved.createAction}
+          onClose={(created) => { setEditor(null); if (created) setOpenID(created.id); }}
+        />
+      ) : null}
+      <SavedActionList
+        actions={saved.actions}
+        loading={saved.loading}
+        error={saved.error}
+        runs={runs}
+        openID={openID}
+        openError={openError}
+        deviceName={deviceName}
+        onOpen={(action) => { void open(action); }}
+        onRun={askRun}
+        onDuplicate={(action) => setEditor({ kind: "command", from: action })}
+        onDelete={askDelete}
+        onRetry={() => { void saved.loadActions().catch(() => undefined); }}
+      />
+      <RecentRuns runs={integration.actionRuns} connectors={integration.connectors} actionNames={actionNames} deviceName={deviceName} />
 
-      <SavedActionsCard assets={assets} />
+      <AutoDialog
+        open={confirmRun !== null}
+        title={t("run.title", { name: confirmRun?.name ?? "" })}
+        cancelLabel={tc("cancel")}
+        confirmLabel={t("run.confirm", { count: runDevices.length })}
+        onConfirm={() => { if (confirmRun) void run(confirmRun); }}
+        onClose={() => setConfirmRun(null)}
+      >
+        <p>{t("run.body", { count: runDevices.length, devices: runDevices.map(deviceName).join(", ") })}</p>
+      </AutoDialog>
 
-      <Card>
-        <h2 className="text-xs font-mono uppercase tracking-wider text-[var(--muted)] mb-2">{t('history.heading')}</h2>
-        <ul className="divide-y divide-[var(--line)]">
-          {actionRuns.slice(0, 8).map((run) => (
-            <li key={run.id} className="flex items-center justify-between gap-3 py-2.5">
-              <span>
-                {run.connector_id ? `${run.connector_id}:${run.action_id}` : run.command || run.type}
-                {run.status === "failed" ? <> &middot; <Link href="/logs" className="nodeLink">{t('history.viewLogs')}</Link></> : null}
-              </span>
-              <Badge
-                status={run.status === "succeeded" ? "ok" : run.status === "failed" ? "bad" : "pending"}
-                size="sm"
-                dot
-              />
-            </li>
-          ))}
-          {actionRuns.length === 0 ? (
-            <li>
-              <EmptyState
-                icon={Zap}
-                title={t('history.empty.title')}
-                description={t('history.empty.description')}
-              />
-            </li>
-          ) : null}
-        </ul>
-      </Card>
-    </>
+      <AutoDialog
+        open={toDelete !== null}
+        title={t("delete.title", { name: toDelete?.name ?? "" })}
+        cancelLabel={tc("cancel")}
+        confirmLabel={tc("delete")}
+        danger
+        pending={deleting}
+        confirmDisabled={!toDelete || typed !== toDelete.name}
+        error={deleteError}
+        onConfirm={() => { void remove(); }}
+        onClose={() => setToDelete(null)}
+      >
+        <p>{t("delete.body")}</p>
+        <label className="au-field au-gap" htmlFor="au-del-name">
+          <span>{t("delete.prompt", { name: toDelete?.name ?? "" })}</span>
+          <Input id="au-del-name" value={typed} autoComplete="off" autoFocus onChange={(e) => setTyped(e.target.value)} />
+        </label>
+      </AutoDialog>
+    </div>
   );
 }

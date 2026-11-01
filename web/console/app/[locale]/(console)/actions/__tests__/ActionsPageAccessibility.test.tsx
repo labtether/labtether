@@ -2,14 +2,17 @@ import { act, type AnchorHTMLAttributes } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ToastProvider } from "../../../../contexts/ToastContext";
+
+// Risk: Preview (a dry run) looks on for an action that has no dry run, or screen readers cannot name the switch.
+
 vi.mock("next-intl", () => ({
-  useTranslations: () => (key: string) => key === "runAction.previewOnly.label" ? "Preview Only" : key,
+  useLocale: () => "en",
+  useTranslations: () => (key: string) => key,
 }));
 
 vi.mock("../../../../../i18n/navigation", () => ({
-  Link: ({ href, ...props }: AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) => (
-    <a href={href} {...props} />
-  ),
+  Link: ({ href, ...props }: AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) => <a href={href} {...props} />,
 }));
 
 vi.mock("../../../../hooks/useActions", () => ({
@@ -29,17 +32,14 @@ vi.mock("../../../../hooks/useActions", () => ({
     actionTarget: "",
     setActionTarget: vi.fn(),
     setActionParamValue: vi.fn(),
-    actionDryRun: false,
+    actionDryRun: true,
     setActionDryRun: vi.fn(),
     actionSubmitting: false,
-    actionMessage: null,
     connectorActionsError: null,
     actionRuns: [],
-    submitConnectorAction: vi.fn((event: Event) => event.preventDefault()),
+    submitConnectorAction: vi.fn(),
   }),
 }));
-
-vi.mock("../SavedActionsCard", () => ({ SavedActionsCard: () => null }));
 
 import ActionsPage from "../page";
 
@@ -49,6 +49,7 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ data: [] }), { status: 200 })));
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -57,16 +58,27 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
+  vi.unstubAllGlobals();
 });
 
-describe("Actions page accessibility", () => {
-  it("uses a native, visibly labelled checkbox for preview mode", async () => {
-    await act(async () => root.render(<ActionsPage />));
+const press = async (label: string) => {
+  const target = [...container.querySelectorAll("button")].find((b) => b.textContent?.trim() === label);
+  if (!target) throw new Error(`missing button ${label}`);
+  await act(async () => { target.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+};
 
-    const checkbox = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
-    expect(checkbox).not.toBeNull();
-    expect(checkbox?.disabled).toBe(true);
-    expect(checkbox?.closest("label")?.textContent).toContain("Preview Only");
-    expect(container.querySelector('[role="checkbox"]')).toBeNull();
+describe("Actions page accessibility", () => {
+  it("keeps Preview off and disabled for an action without a dry run, named by its visible label", async () => {
+    await act(async () => root.render(<ToastProvider><ActionsPage /></ToastProvider>));
+    await press("new");
+    await press("integration");
+
+    const preview = container.querySelector<HTMLButtonElement>('button[role="switch"]');
+    expect(preview).not.toBeNull();
+    expect(preview?.disabled).toBe(true);
+    expect(preview?.getAttribute("aria-checked")).toBe("false");
+    const label = document.getElementById(preview?.getAttribute("aria-labelledby") ?? "");
+    expect(label?.textContent).toBe("preview");
+    expect(container.textContent).toContain("noPreview");
   });
 });

@@ -1,110 +1,112 @@
 {
   "title": "Actions",
-  "subtitle": "Exécuter des tâches sur vos appareils et consulter les résultats",
-  "runAction": {
-    "heading": "// Exécuter une action",
-    "integration": {
-      "label": "Intégration",
-      "tooltip": "Module d'intégration qui fournit cette action"
-    },
-    "action": "Action",
-    "device": {
-      "label": "Appareil",
-      "tooltip": "L'identifiant de la ressource cible (ID de conteneur, nom de VM, etc.)",
-      "placeholder": "container-id / vm-id / entity-id",
-      "notRequired": "Cette action ne nécessite pas de cible."
-    },
-    "parameters": {
-      "none": "Cette action ne nécessite aucun paramètre supplémentaire.",
-      "required": "(obligatoire)"
-    },
-    "previewOnly": {
-      "label": "Aperçu uniquement",
-      "tooltip": "Simuler l'action sans effectuer de modifications",
-      "unsupportedTooltip": "Cette action s'exécute réellement et ne prend pas en charge le mode aperçu"
-    },
-    "submit": "Exécuter",
-    "submitting": "Mise en file d'attente..."
-  },
-  "savedActions": {
-    "heading": "// Actions de commande enregistrées",
-    "description": "Créez des séquences de commandes ordonnées et réutilisables pour des appareils précis.",
-    "reload": "Recharger",
-    "create": "Nouvelle action enregistrée",
-    "noAssets": "Aucun appareil accessible n'est disponible. Ajoutez ou connectez un appareil avant de créer une action.",
-    "loading": "Chargement des actions enregistrées...",
-    "empty": "Aucune action de commande enregistrée.",
-    "listLabel": "Actions de commande enregistrées",
-    "summary": "{count} étapes · créée {date}",
-    "view": "Afficher",
-    "run": "Exécuter",
-    "delete": "Supprimer",
-    "deleteAction": "Supprimer {name}",
-    "createTitle": "Créer une action de commande enregistrée",
-    "fields": { "name": "Nom de l'action", "description": "Description (facultative)", "steps": "Étapes de commande", "stepName": "Nom de l'étape", "asset": "Appareil", "command": "Commande" },
-    "defaultStepName": "Étape {number}",
-    "stepHeading": "Étape {number}",
-    "removeStep": "Retirer l'étape {number}",
-    "remove": "Retirer",
-    "selectAsset": "Sélectionnez un appareil",
-    "addStep": "Ajouter une étape",
+  "new": "Nouvelle action",
+  "common": {
     "cancel": "Annuler",
-    "close": "Fermer",
-    "creating": "Création...",
-    "createAction": "Créer l'action",
-    "detailsTitle": "Détails de l'action enregistrée",
-    "loadingDetails": "Chargement des détails actuels...",
-    "stepListLabel": "Étapes de commande de l'action enregistrée",
-    "runNow": "Exécuter maintenant",
-    "running": "Exécution...",
-    "results": "Résultats de l'exécution",
-    "failed": "Échec",
-    "succeeded": "Réussi",
-    "exitCode": "Sortie {code}",
-    "noOutput": "Commande terminée sans sortie.",
-    "deleteTitle": "Supprimer l'action enregistrée",
-    "deleteWarning": "« {name} » sera supprimée définitivement. Les commandes déjà lancées ne sont pas annulées.",
-    "deletePrompt": "Saisissez exactement {name} pour confirmer",
-    "deleting": "Suppression...",
-    "deleteActionButton": "Supprimer l'action",
-    "errors": { "nameRequired": "Saisissez un nom d'action.", "stepRequired": "Chaque étape nécessite un appareil et une commande.", "assetUnavailable": "Un ou plusieurs appareils sélectionnés ne sont plus disponibles.", "createFailed": "Impossible de créer l'action enregistrée.", "loadOneFailed": "Impossible de charger l'action enregistrée.", "runFailed": "Impossible d'exécuter l'action enregistrée.", "deleteFailed": "Impossible de supprimer l'action enregistrée." },
-    "messages": { "created": "« {name} » a été créée.", "runFinished": "Exécution de « {name} » terminée.", "runFinishedWithFailures": "Exécution de « {name} » terminée avec {count} étapes en échec.", "deleted": "« {name} » a été supprimée." }
+    "create": "Créer",
+    "save": "Enregistrer",
+    "delete": "Supprimer",
+    "deleteMenu": "Supprimer…",
+    "edit": "Modifier…",
+    "rowMenu": "Actions pour {name}",
+    "loading": "Chargement…",
+    "retry": "Réessayer",
+    "never": "Jamais",
+    "on": "Actif",
+    "remove": "Retirer {name}"
   },
-  "history": {
-    "heading": "// Historique d'exécution",
-    "viewLogs": "Voir les journaux",
-    "empty": {
-      "title": "Aucune exécution pour le moment",
-      "description": "Sélectionnez une intégration et une action ci-dessus, puis cliquez sur Exécuter."
-    }
-  },
-  "updates": {
-    "title": "Mises à jour",
-    "subtitle": "Planifier et exécuter des mises à jour dans votre lab",
-    "planName": "Nom du plan",
-    "devices": {
-      "label": "Appareils",
-      "tooltip": "Liste de noms d'hôtes séparés par des virgules à mettre à jour",
-      "placeholder": "lab-host-01, docker-host-01"
-    },
-    "scopes": {
-      "label": "Portées",
-      "tooltip": "Catégorie de mise à jour actuellement prise en charge : os_packages.",
-      "placeholder": "os_packages"
-    },
-    "previewOnly": "Aperçu uniquement",
-    "createPlan": "Créer un plan",
-    "saving": "Enregistrement...",
-    "plans": "Plans",
-    "recentRuns": "Exécutions récentes",
+  "list": {
+    "label": "Actions enregistrées",
+    "action": "Action",
+    "empty": "Aucune action enregistrée",
+    "loadFailed": "Impossible de charger les actions enregistrées",
+    "steps": "{count, plural, one {# étape} other {# étapes}}",
     "run": "Exécuter",
-    "plansEmpty": {
-      "title": "Aucun plan de mise à jour",
-      "description": "Créez un plan ci-dessus pour définir quels appareils et portées mettre à jour."
-    },
-    "runsEmpty": {
-      "title": "Aucune exécution de mise à jour",
-      "description": "Exécutez un plan pour démarrer une exécution."
-    }
+    "runMany": "Exécuter…",
+    "runLabel": "Exécuter {name}",
+    "running": "En cours",
+    "failed": "Échec",
+    "succeededAt": "Réussie · {time}",
+    "showSteps": "Afficher les étapes",
+    "hideSteps": "Masquer les étapes",
+    "duplicate": "Dupliquer…"
+  },
+  "panel": {
+    "steps": "Étapes",
+    "command": "Commande",
+    "lastRun": "Dernière exécution",
+    "running": "En cours",
+    "exit": "Code de sortie {code}",
+    "succeeded": "Réussie",
+    "failed": "Échec",
+    "noOutput": "Aucune sortie",
+    "duration": "{ms}\u00a0ms",
+    "loadFailed": "Impossible de charger les étapes actuelles"
+  },
+  "run": {
+    "title": "Exécuter «\u00a0{name}\u00a0»\u00a0?",
+    "body": "Elle s’exécute sur {count} appareils\u00a0: {devices}.",
+    "confirm": "Exécuter sur {count} appareils",
+    "finished": "«\u00a0{name}\u00a0» terminée",
+    "finishedFailures": "«\u00a0{name}\u00a0» terminée avec {count, plural, one {# étape en échec} other {# étapes en échec}}",
+    "failed": "Impossible d’exécuter «\u00a0{name}\u00a0»"
+  },
+  "delete": {
+    "title": "Supprimer «\u00a0{name}\u00a0»\u00a0?",
+    "body": "Les commandes déjà en cours continuent.",
+    "prompt": "Saisissez {name} pour confirmer",
+    "deleted": "«\u00a0{name}\u00a0» supprimée",
+    "failed": "Impossible de supprimer l’action"
+  },
+  "editor": {
+    "newTitle": "Nouvelle action",
+    "copyTitle": "Dupliquer l’action",
+    "command": "Commande",
+    "integration": "Action d’intégration",
+    "name": "Nom",
+    "description": "Description",
+    "optional": "Facultatif",
+    "noDevices": "Aucun appareil pour exécuter des commandes",
+    "steps": "Étapes",
+    "device": "Appareil",
+    "stepDevice": "Appareil de l’étape {number}",
+    "stepCommand": "Commande de l’étape {number}",
+    "removeStep": "Retirer l’étape {number}",
+    "addStep": "Ajouter une étape",
+    "defaultStepName": "Étape {number}",
+    "nameRequired": "Saisissez un nom",
+    "commandRequired": "Saisissez une commande",
+    "deviceRequired": "Choisissez un appareil",
+    "deviceGone": "Cet appareil n’est plus disponible",
+    "created": "«\u00a0{name}\u00a0» créée",
+    "createFailed": "Impossible de créer l’action",
+    "copyName": "{name} (copie)"
+  },
+  "integration": {
+    "none": "Aucune intégration connectée",
+    "integration": "Intégration",
+    "action": "Action",
+    "target": "Cible",
+    "targetRequired": "Saisissez une cible",
+    "paramRequired": "Obligatoire",
+    "optional": "Facultatif",
+    "loadFailed": "Impossible de charger les actions de cette intégration",
+    "preview": "Aperçu",
+    "previewHint": "Essai à blanc\u00a0: vérifie l’action sans rien changer",
+    "noPreview": "Pas d’essai à blanc pour cette action",
+    "once": "S’exécute une fois, non enregistrée",
+    "run": "Exécuter",
+    "runPreview": "Exécuter l’aperçu",
+    "queued": "«\u00a0{name}\u00a0» mise en file",
+    "previewQueued": "Aperçu de «\u00a0{name}\u00a0» mis en file",
+    "failed": "Impossible d’exécuter l’action"
+  },
+  "runs": {
+    "title": "Exécutions récentes",
+    "empty": "Aucune exécution",
+    "running": "En cours",
+    "queued": "En file",
+    "failed": "Échec",
+    "logs": "Journaux"
   }
 }

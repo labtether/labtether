@@ -1,555 +1,118 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { Calendar, Pencil, Plus, Trash2 } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
 import { PageHeader } from "../../../components/PageHeader";
-import { Card } from "../../../components/ui/Card";
 import { Button } from "../../../components/ui/Button";
-import { Input } from "../../../components/ui/Input";
-import { EmptyState } from "../../../components/ui/EmptyState";
-import { apiMutate } from "../../../lib/api";
-import { fetchAllSchedules } from "../../../lib/schedules";
+import { useFastStatus, useSlowStatus } from "../../../contexts/StatusContext";
+import { useToast } from "../../../contexts/ToastContext";
+import { errorText } from "../actions/_parts/autoApi";
+import { AutoDialog } from "../actions/_parts/AutoDialog";
+import { ScheduleEditor } from "./ScheduleEditor";
+import { ScheduleList } from "./ScheduleList";
+import type { Schedule, ScheduleInput } from "./scheduleModel";
+import { useSchedules } from "./useSchedules";
 
-// ── Types ──
+type EditorState = { mode: "new" } | { mode: "edit"; schedule: Schedule };
 
-interface Schedule {
-  id: string;
-  name: string;
-  cron_expr: string;
-  command: string;
-  targets: string[];
-  group_id?: string;
-  enabled: boolean;
-  last_run_at?: string;
-  next_run_at?: string;
-  last_run_status?: string;
-  last_error?: string;
-}
-
-// ── Modal ──
-
-type ModalMode = "create" | "edit";
-
-interface ScheduleModalProps {
-  mode: ModalMode;
-  initial?: Schedule;
-  saving: boolean;
-  error: string;
-  onClose: () => void;
-  onSubmit: (payload: {
-    name: string;
-    cron_expr: string;
-    command: string;
-    targets: string[];
-    group_id?: string;
-    enabled?: boolean;
-  }) => void;
-}
-
-function ScheduleModal({ mode, initial, saving, error, onClose, onSubmit }: ScheduleModalProps) {
-  const t = useTranslations("schedules");
-
-  const [name, setName] = useState(initial?.name ?? "");
-  const [cronExpr, setCronExpr] = useState(initial?.cron_expr ?? "");
-  const [command, setCommand] = useState(initial?.command ?? "");
-  const [targetsRaw, setTargetsRaw] = useState((initial?.targets ?? []).join(", "));
-  const [groupId, setGroupId] = useState(initial?.group_id ?? "");
-  const [enabled, setEnabled] = useState(initial?.enabled ?? true);
-
-  // Close on Escape
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !saving) {
-        e.preventDefault();
-        onClose();
-      }
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [saving, onClose]);
-
-  function handleSubmit() {
-    const targets = targetsRaw
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    onSubmit({
-      name: name.trim(),
-      cron_expr: cronExpr.trim(),
-      command: command.trim(),
-      targets,
-      group_id: groupId.trim() || undefined,
-      enabled,
-    });
-  }
-
-  const title = mode === "create" ? t("createSchedule") : t("editSchedule");
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div onClick={(e) => e.stopPropagation()}>
-        <Card className="w-[34rem] max-w-[92vw] space-y-4">
-          <h3 className="text-sm font-medium text-[var(--text)]">{title}</h3>
-
-          {/* Name */}
-          <label className="block space-y-1">
-            <span className="text-[10px] text-[var(--muted)]">{t("name")}</span>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={t("namePlaceholder")}
-              disabled={saving}
-            />
-          </label>
-
-          {/* Cron expression */}
-          <label className="block space-y-1">
-            <span className="text-[10px] text-[var(--muted)]">{t("cronExpr")}</span>
-            <Input
-              value={cronExpr}
-              onChange={(e) => setCronExpr(e.target.value)}
-              placeholder={t("cronPlaceholder")}
-              disabled={saving}
-              className="font-mono"
-            />
-            <span className="text-[10px] text-[var(--muted)]">{t("cronHelp")}</span>
-          </label>
-
-          {/* Command */}
-          <label className="block space-y-1">
-            <span className="text-[10px] text-[var(--muted)]">{t("command")}</span>
-            <textarea
-              value={command}
-              onChange={(e) => setCommand(e.target.value)}
-              placeholder={t("commandPlaceholder")}
-              disabled={saving}
-              rows={3}
-              className="w-full bg-transparent border border-[var(--line)] focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_var(--accent-subtle)] rounded-lg px-3 py-2 text-sm font-mono text-[var(--text)] placeholder:text-[var(--muted)] transition-[border-color,box-shadow] duration-[var(--dur-fast)] outline-none resize-none disabled:bg-[var(--surface)] disabled:text-[var(--text-disabled)] disabled:cursor-not-allowed"
-            />
-          </label>
-
-          {/* Targets */}
-          <label className="block space-y-1">
-            <span className="text-[10px] text-[var(--muted)]">{t("targets")}</span>
-            <Input
-              value={targetsRaw}
-              onChange={(e) => setTargetsRaw(e.target.value)}
-              placeholder="asset-id-1, asset-id-2"
-              disabled={saving}
-            />
-          </label>
-
-          {/* Group */}
-          <label className="block space-y-1">
-            <span className="text-[10px] text-[var(--muted)]">{t("group")}</span>
-            <Input
-              value={groupId}
-              onChange={(e) => setGroupId(e.target.value)}
-              placeholder={t("groupPlaceholder")}
-              disabled={saving}
-            />
-          </label>
-
-          <label className="flex items-center gap-2 text-xs text-[var(--text)]">
-            <input
-              type="checkbox"
-              checked={enabled}
-              onChange={(event) => setEnabled(event.target.checked)}
-              disabled={saving}
-            />
-            {t("enabled")}
-          </label>
-
-          {error ? <p className="text-xs text-[var(--bad)]">{error}</p> : null}
-
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="secondary" onClick={onClose} disabled={saving}>
-              {t("cancel")}
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleSubmit}
-              disabled={saving}
-              loading={saving}
-            >
-              {t("save")}
-            </Button>
-          </div>
-        </Card>
-      </div>
-    </div>
-  );
-}
-
-// ── Delete confirm ──
-
-interface DeleteConfirmProps {
-  schedule: Schedule;
-  deleting: boolean;
-  error: string;
-  onClose: () => void;
-  onConfirm: () => void;
-}
-
-function DeleteConfirm({ schedule, deleting, error, onClose, onConfirm }: DeleteConfirmProps) {
-  const t = useTranslations("schedules");
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !deleting) {
-        e.preventDefault();
-        onClose();
-      }
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [deleting, onClose]);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div onClick={(e) => e.stopPropagation()}>
-        <Card className="w-[26rem] max-w-[92vw] space-y-4">
-          <h3 className="text-sm font-medium text-[var(--text)]">{t("delete")} &ldquo;{schedule.name}&rdquo;</h3>
-          <p className="text-sm text-[var(--muted)]">{t("deleteConfirm")}</p>
-          {error ? <p className="text-xs text-[var(--bad)]">{error}</p> : null}
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="secondary" onClick={onClose} disabled={deleting}>
-              {t("cancel")}
-            </Button>
-            <Button variant="danger" onClick={onConfirm} disabled={deleting} loading={deleting}>
-              {t("delete")}
-            </Button>
-          </div>
-        </Card>
-      </div>
-    </div>
-  );
-}
-
-// ── Page ──
-
-type ModalState =
-  | { type: "create" }
-  | { type: "edit"; schedule: Schedule }
-  | { type: "delete"; schedule: Schedule }
-  | null;
-
+/** Automations › Schedules: commands the hub runs on a cron line, on devices or a group. */
 export default function SchedulesPage() {
   const t = useTranslations("schedules");
+  const tc = useTranslations("actions.common");
+  const { addToast } = useToast();
+  const assets = useFastStatus()?.assets;
+  const groups = useSlowStatus()?.groups;
+  const devices = useMemo(() => [...(assets ?? [])].sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id)), [assets]);
+  const names = useMemo(() => new Map(devices.map((d) => [d.id, d.name || d.id])), [devices]);
+  const groupNames = useMemo(() => new Map((groups ?? []).map((g) => [g.id, g.name])), [groups]);
+  const deviceName = useCallback((id: string) => names.get(id) ?? id, [names]);
+  const groupName = useCallback((id: string) => groupNames.get(id) ?? id, [groupNames]);
 
-  const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [fetchError, setFetchError] = useState("");
-
-  const [modal, setModal] = useState<ModalState>(null);
-  const [saving, setSaving] = useState(false);
-  const [modalError, setModalError] = useState("");
-
-  // ── Fetch ──
-
-  const fetchSchedules = useCallback(async () => {
-    setFetchError("");
-    try {
-      setSchedules((await fetchAllSchedules<Schedule>()).data);
-    } catch {
-      setFetchError("Failed to load schedules.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void fetchSchedules();
-  }, [fetchSchedules]);
-
-  // ── Create ──
-
-  const handleCreate = useCallback(
-    async (payload: {
-      name: string;
-      cron_expr: string;
-      command: string;
-      targets: string[];
-      group_id?: string;
-    }) => {
-      setSaving(true);
-      setModalError("");
-      try {
-        await apiMutate("/api/v2/schedules", "POST", payload);
-        await fetchSchedules();
-        setModal(null);
-      } catch (err) {
-        setModalError(err instanceof Error ? err.message : "Failed to create schedule.");
-      } finally {
-        setSaving(false);
-      }
-    },
-    [fetchSchedules],
-  );
-
-  // ── Update ──
-
-  const handleUpdate = useCallback(
-    async (
-      id: string,
-      payload: {
-        name: string;
-        cron_expr: string;
-        command: string;
-        targets: string[];
-        group_id?: string;
-        enabled?: boolean;
-      },
-    ) => {
-      setSaving(true);
-      setModalError("");
-      try {
-        await apiMutate(`/api/v2/schedules/${id}`, "PATCH", payload);
-        await fetchSchedules();
-        setModal(null);
-      } catch (err) {
-        setModalError(err instanceof Error ? err.message : "Failed to update schedule.");
-      } finally {
-        setSaving(false);
-      }
-    },
-    [fetchSchedules],
-  );
-
-  // ── Delete ──
-
+  const { schedules, loading, failed, load, create, update, remove, setEnabled } = useSchedules();
+  const [editor, setEditor] = useState<EditorState | null>(null);
+  const [toDelete, setToDelete] = useState<Schedule | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState("");
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const handleDelete = useCallback(
-    async (id: string) => {
-      setDeleting(true);
-      setDeleteError("");
-      try {
-        await apiMutate(`/api/v2/schedules/${id}`, "DELETE");
-        await fetchSchedules();
-        setModal(null);
-      } catch (err) {
-        setDeleteError(err instanceof Error ? err.message : "Failed to delete schedule.");
-      } finally {
-        setDeleting(false);
-      }
-    },
-    [fetchSchedules],
-  );
+  const save = async (input: ScheduleInput) => {
+    if (editor?.mode === "edit") {
+      await update(editor.schedule.id, input);
+      addToast("success", t("saved", { name: input.name }));
+    } else {
+      await create(input);
+      addToast("success", t("created", { name: input.name }));
+    }
+    setEditor(null);
+  };
 
-  // ── Modal helpers ──
+  const toggle = (schedule: Schedule, on: boolean) => {
+    setEnabled(schedule, on).catch((cause: unknown) => {
+      addToast("error", errorText(cause, t("toggleFailed", { name: schedule.name })));
+    });
+  };
 
-  const openCreate = useCallback(() => {
-    setModalError("");
-    setModal({ type: "create" });
-  }, []);
-
-  const openEdit = useCallback((schedule: Schedule) => {
-    setModalError("");
-    setModal({ type: "edit", schedule });
-  }, []);
-
-  const openDelete = useCallback((schedule: Schedule) => {
-    setDeleteError("");
-    setModal({ type: "delete", schedule });
-  }, []);
-
-  const closeModal = useCallback(() => {
-    if (saving || deleting) return;
-    setModal(null);
-    setModalError("");
-    setDeleteError("");
-  }, [saving, deleting]);
-
-  // ── Render ──
+  const confirmDelete = async () => {
+    if (!toDelete) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await remove(toDelete.id);
+      if (editor?.mode === "edit" && editor.schedule.id === toDelete.id) setEditor(null);
+      addToast("success", t("deleted", { name: toDelete.name }));
+      setToDelete(null);
+    } catch (cause) {
+      setDeleteError(errorText(cause, t("deleteFailed")));
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
-    <>
+    <div className="au-page">
       <PageHeader
         title={t("title")}
-        subtitle={t("subtitle")}
         action={(
-          <Button variant="primary" size="sm" onClick={openCreate}>
-            <Plus size={14} />
-            {t("createSchedule")}
+          <Button variant={editor ? "secondary" : "primary"} onClick={() => setEditor({ mode: "new" })}>
+            <Plus size={14} aria-hidden="true" />
+            {t("new")}
           </Button>
         )}
       />
-
-      <Card variant="flush">
-        <div className="border-b border-[var(--line)] px-4 py-3 text-xs text-[var(--muted)]">
-          {t("configOnlyNotice")}
-        </div>
-        {loading ? (
-          <div className="p-4">
-            <EmptyState
-              icon={Calendar}
-              title="Loading..."
-              description=""
-            />
-          </div>
-        ) : fetchError ? (
-          <div className="p-4">
-            <p className="text-sm text-[var(--bad)]">{fetchError}</p>
-          </div>
-        ) : schedules.length === 0 ? (
-          <div className="p-4">
-            <EmptyState
-              icon={Calendar}
-              title={t("noSchedules")}
-              description={t("noSchedulesDesc")}
-              action={(
-                <Button size="sm" variant="secondary" onClick={openCreate}>
-                  <Plus size={14} />
-                  {t("createSchedule")}
-                </Button>
-              )}
-            />
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--line)]">
-                  <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">
-                    {t("name")}
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">
-                    {t("cronExpr")}
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] hidden md:table-cell">
-                    {t("command")}
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)] hidden lg:table-cell">
-                    {t("targets")}
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">
-                    {t("status")}
-                  </th>
-                  <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">
-                    {/* actions */}
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--line)]">
-                {schedules.map((s) => (
-                  <tr
-                    key={s.id}
-                    className="hover:bg-[var(--hover)] transition-colors"
-                    style={{ transitionDuration: "var(--dur-instant)" }}
-                  >
-                    {/* Name */}
-                    <td className="px-4 py-3 font-medium text-[var(--text)]">
-                      {s.name}
-                    </td>
-
-                    {/* Cron */}
-                    <td className="px-4 py-3 font-mono text-xs text-[var(--muted)]">
-                      {s.cron_expr}
-                    </td>
-
-                    {/* Command */}
-                    <td className="px-4 py-3 text-xs text-[var(--muted)] hidden md:table-cell max-w-[200px]">
-                      <span className="block truncate font-mono">{s.command}</span>
-                    </td>
-
-                    {/* Targets */}
-                    <td className="px-4 py-3 hidden lg:table-cell">
-                      {s.targets.length === 0 && s.group_id ? (
-                        <span className="text-xs text-[var(--muted)]">{t("groupTarget", { group: s.group_id })}</span>
-                      ) : s.targets.length === 0 ? (
-                        <span className="text-xs text-[var(--bad)]">{t("noTargets")}</span>
-                      ) : (
-                        <span className="inline-flex items-center rounded-full border border-[var(--control-border)] px-2 py-0.5 text-[10px] text-[var(--control-fg-muted)]">
-                          {t("targetsCount", { count: s.targets.length })}
-                        </span>
-                      )}
-                    </td>
-
-                    <td className="px-4 py-3 text-xs text-[var(--muted)]">
-                      <span className={s.enabled ? "text-[var(--good)]" : "text-[var(--muted)]"}>
-                        {s.enabled ? (s.last_run_status || t("scheduled")) : t("disabled")}
-                      </span>
-                      {s.next_run_at && s.enabled ? (
-                        <span className="mt-0.5 block text-[10px]">
-                          {new Date(s.next_run_at).toLocaleString()}
-                        </span>
-                      ) : null}
-                      {s.last_error ? <span className="mt-0.5 block max-w-[220px] truncate text-[10px] text-[var(--bad)]" title={s.last_error}>{s.last_error}</span> : null}
-                    </td>
-
-                    {/* Actions */}
-                    <td className="px-4 py-3 text-right">
-                      <div className="inline-flex items-center gap-1">
-                        <button
-                          type="button"
-                          aria-label="Edit schedule"
-                          onClick={() => openEdit(s)}
-                          className="p-1.5 rounded text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--hover)] transition-colors cursor-pointer"
-                          style={{ transitionDuration: "var(--dur-instant)" }}
-                        >
-                          <Pencil size={13} />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label="Delete schedule"
-                          onClick={() => openDelete(s)}
-                          className="p-1.5 rounded text-[var(--muted)] hover:text-[var(--bad)] hover:bg-[var(--bad-glow)] transition-colors cursor-pointer"
-                          style={{ transitionDuration: "var(--dur-instant)" }}
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-
-      {/* Create modal */}
-      {modal?.type === "create" ? (
-        <ScheduleModal
-          mode="create"
-          saving={saving}
-          error={modalError}
-          onClose={closeModal}
-          onSubmit={(payload) => { void handleCreate(payload); }}
+      {editor ? (
+        <ScheduleEditor
+          key={editor.mode === "edit" ? editor.schedule.id : "new"}
+          schedule={editor.mode === "edit" ? editor.schedule : undefined}
+          devices={devices}
+          groups={groups ?? []}
+          onSave={save}
+          onClose={() => setEditor(null)}
         />
       ) : null}
-
-      {/* Edit modal */}
-      {modal?.type === "edit" ? (
-        <ScheduleModal
-          mode="edit"
-          initial={modal.schedule}
-          saving={saving}
-          error={modalError}
-          onClose={closeModal}
-          onSubmit={(payload) => { void handleUpdate(modal.schedule.id, payload); }}
-        />
-      ) : null}
-
-      {/* Delete confirm */}
-      {modal?.type === "delete" ? (
-        <DeleteConfirm
-          schedule={modal.schedule}
-          deleting={deleting}
-          error={deleteError}
-          onClose={closeModal}
-          onConfirm={() => { void handleDelete(modal.schedule.id); }}
-        />
-      ) : null}
-    </>
+      <ScheduleList
+        schedules={schedules}
+        loading={loading}
+        failed={failed}
+        deviceName={deviceName}
+        groupName={groupName}
+        onEdit={(schedule) => setEditor({ mode: "edit", schedule })}
+        onToggle={toggle}
+        onDelete={(schedule) => { setToDelete(schedule); setDeleteError(null); }}
+        onRetry={() => { void load(); }}
+      />
+      <AutoDialog
+        open={toDelete !== null}
+        title={t("deleteTitle", { name: toDelete?.name ?? "" })}
+        cancelLabel={tc("cancel")}
+        confirmLabel={tc("delete")}
+        danger
+        pending={deleting}
+        error={deleteError}
+        onConfirm={() => { void confirmDelete(); }}
+        onClose={() => setToDelete(null)}
+      >
+        <p>{t("deleteBody")}</p>
+      </AutoDialog>
+    </div>
   );
 }
