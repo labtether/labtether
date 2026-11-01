@@ -174,9 +174,9 @@ test("nodes and logs stay responsive under high-volume payloads", async ({ page 
   await expect(page.getByRole("heading", { name: "Devices", level: 1, exact: true })).toBeVisible();
   expect(Date.now() - nodesStarted).toBeLessThan(7000);
 
-  await page.getByPlaceholder("Search devices...").fill("load-node-1199");
+  await page.getByPlaceholder("Filter by name, IP, OS or tag").fill("load-node-1199");
   await expect(
-    page.locator("[role='link']").filter({ hasText: "load-node-1199" }).first(),
+    page.getByRole("link", { name: "load-node-1199", exact: true }),
   ).toBeVisible({ timeout: 3000 });
 
   const logsStarted = Date.now();

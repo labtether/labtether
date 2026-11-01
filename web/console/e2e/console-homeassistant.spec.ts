@@ -163,13 +163,10 @@ test("nodes page shows populated Home Assistant detail panels and keeps entity g
   });
 
   await page.goto("/nodes", { waitUntil: "domcontentloaded" });
-  const homeAssistantCard = page
-    .locator("[role='link']")
-    .filter({ hasText: "Home Assistant Main" })
-    .first();
+  const homeAssistantCard = page.getByRole("link", { name: "Home Assistant Main", exact: true });
 
   await expect(homeAssistantCard).toHaveCount(1);
-  await expect(page.locator("[role='link']").filter({ hasText: "Kitchen Light" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Kitchen Light", exact: true })).toHaveCount(0);
 
   await Promise.all([
     page.waitForURL(/(?:\/[a-z]{2})?\/nodes\/ha-hub-main$/, { timeout: 10_000 }),
