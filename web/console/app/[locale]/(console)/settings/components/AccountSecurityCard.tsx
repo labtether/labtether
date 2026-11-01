@@ -4,10 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { useAuth } from "../../../../contexts/AuthContext";
-import { Card } from "../../../../components/ui/Card";
 import { Button } from "../../../../components/ui/Button";
 import { Input } from "../../../../components/ui/Input";
 import { safeJSON, extractError } from "../../../../lib/api";
+import { ChevronDown } from "lucide-react";
 
 type TwoFactorState = "idle" | "setting-up" | "verifying";
 
@@ -74,14 +74,15 @@ function ChangePasswordSection() {
   };
 
   return (
-    <div className="mt-4 pt-4 border-t border-[var(--line)]">
+    <div className="mt-6">
       <button
         type="button"
         className="flex items-center justify-between w-full text-left"
         onClick={handleToggle}
+        aria-expanded={open}
       >
         <h3 className="text-sm font-medium text-[var(--text)]">{t("security.changePassword")}</h3>
-        <span className="text-xs text-[var(--muted)]">{open ? "▲" : "▼"}</span>
+        <ChevronDown size={16} aria-hidden="true" className={`text-[var(--text-3)] transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
       {message ? <p className="mt-2 text-sm text-[var(--ok)]">{message}</p> : null}
@@ -320,10 +321,12 @@ export function AccountSecurityCard() {
   };
 
   return (
-    <Card className="mb-6">
-      <h2>{t("security.title")}</h2>
-
-      <div className="mt-4 pt-4 border-t border-[var(--line)]">
+    <section className="st st-sec st-acct" aria-labelledby="st-acct-h">
+      <div className="st-sh">
+        <h2 id="st-acct-h">{t("security.title")}</h2>
+      </div>
+      <div className="st-sheet pad">
+      <div>
         <h3 className="text-sm font-medium text-[var(--text)]">{t("security.twoFactor")}</h3>
 
         {tfError ? <p className="mt-2 text-sm text-[var(--bad)]">{tfError}</p> : null}
@@ -334,7 +337,7 @@ export function AccountSecurityCard() {
             <p className="text-sm text-[var(--muted)]">
               {t("security.twoFactorDisabled")}
             </p>
-            <Button variant="primary" className="mt-3" loading={tfLoading} onClick={() => void handleStartSetup()}>
+            <Button variant="secondary" className="mt-3" loading={tfLoading} onClick={() => void handleStartSetup()}>
               {t("security.enableTwoFactor")}
             </Button>
           </div>
@@ -502,7 +505,8 @@ export function AccountSecurityCard() {
       </div>
 
       <ChangePasswordSection />
-    </Card>
+      </div>
+    </section>
   );
 }
 

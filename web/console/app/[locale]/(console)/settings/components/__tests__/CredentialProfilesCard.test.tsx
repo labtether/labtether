@@ -4,6 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CredentialProfilesCard } from "../CredentialProfilesCard";
 
+vi.mock("next-intl", () => ({
+  useLocale: () => "en",
+  useTranslations: () => (key: string) => key,
+}));
+
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 let container: HTMLDivElement;
@@ -60,6 +65,18 @@ async function click(element: HTMLElement) {
   await settle();
 }
 
+/** Opens a row's ⋯ menu the way a pointer does, then picks the item. */
+async function openRowMenuItem(text: string) {
+  const trigger = document.body.querySelector<HTMLButtonElement>('button[aria-label="logins.actionsFor"]');
+  if (!trigger) throw new Error("missing row menu");
+  await act(async () => {
+    trigger.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+  });
+  const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) => candidate.textContent === text);
+  if (!item) throw new Error(`missing menu item ${text}`);
+  await click(item);
+}
+
 async function setValue(element: HTMLInputElement | HTMLTextAreaElement, value: string) {
   await act(async () => {
     const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), "value")?.set;
@@ -87,14 +104,14 @@ describe("CredentialProfilesCard", () => {
       .mockResolvedValueOnce(inventoryResponse())
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: "credential profile global limit reached" }), { status: 409 }));
     await renderCard();
-    await click(button("Create profile"));
+    await click(button("logins.add"));
 
     const dialog = document.body.querySelector('[role="dialog"]');
     if (!dialog) throw new Error("missing create dialog");
     const inputs = dialog.querySelectorAll<HTMLInputElement>("input");
     await setValue(inputs[0], "Exact profile");
     await setValue(inputs[3], " secret with edges ");
-    await click(button("Create profile"));
+    await click(button("Add login"));
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const request = fetchMock.mock.calls[1]?.[1] as RequestInit;
@@ -111,8 +128,8 @@ describe("CredentialProfilesCard", () => {
         references: [{ resource: "asset_protocol_configs", count: 2 }],
       }), { status: 409 }));
     await renderCard();
+    await openRowMenuItem("logins.delete");
     await click(button("Delete"));
-    await click(button("Delete profile"));
 
     expect(document.body.querySelector('[role="dialog"]')).toBeTruthy();
     expect(document.body.querySelector('[role="alert"]')?.textContent).toContain("2 asset protocol configurations");

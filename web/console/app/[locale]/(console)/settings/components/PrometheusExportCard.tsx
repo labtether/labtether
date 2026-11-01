@@ -2,10 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Card } from "../../../../components/ui/Card";
 import { Button } from "../../../../components/ui/Button";
 import { Input, Select } from "../../../../components/ui/Input";
-import { SkeletonRow } from "../../../../components/ui/Skeleton";
 import {
   PROMETHEUS_SETTING_KEYS as KEYS,
   buildPrometheusPatch,
@@ -13,10 +11,9 @@ import {
   buildPrometheusTestRequest,
   type PrometheusSettingsMap as SettingsMap,
 } from "./prometheusSettings";
+import { CopyButton, Field, Row, Section, Sheet, SheetFoot, Switch } from "./SettingsKit";
 
 type TestState = "idle" | "testing" | "ok" | "error";
-
-const SECTION_HEADING = "text-xs font-semibold uppercase tracking-wider text-[var(--muted)]";
 
 const REMOTE_WRITE_INTERVALS = [
   { value: "10s", label: "10s" },
@@ -41,31 +38,6 @@ function boolStr(value: string | undefined, fallback: boolean): boolean {
   if (value === "true") return true;
   if (value === "false") return false;
   return fallback;
-}
-
-function Toggle({
-  checked,
-  disabled,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  disabled?: boolean;
-  onChange: (next: boolean) => void;
-  label: string;
-}) {
-  return (
-    <label className="flex items-center gap-2 cursor-pointer select-none">
-      <input
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.checked)}
-        className="h-4 w-4 rounded border-[var(--line)] accent-[var(--accent)]"
-      />
-      <span className="text-sm text-[var(--text)]">{label}</span>
-    </label>
-  );
 }
 
 export function PrometheusExportCard() {
@@ -181,179 +153,93 @@ export function PrometheusExportCard() {
   const processMetricsEnabled = boolStr(draft[KEYS.processMetricsEnabled], false);
 
   const scrapeURL = `http://<hub-host>:8080/metrics`;
+  const dirty = Object.keys(buildPrometheusPatch(draft, settings)).length > 0;
 
   return (
-    <Card className="mb-6">
-      <h2>{t("prometheus.title")}</h2>
-      <p className="text-sm text-[var(--muted)] mt-1 mb-4">
-        {t("prometheus.description")}
-      </p>
+    <Section title={t("prometheus.title")} id="prometheus">
+      <Sheet className={loading ? "st-loading" : ""}>
+        {loading ? null : (
+          <>
+            <Row
+              label={t("prometheus.scrapeEndpoint")}
+              hint={scrapeEnabled ? <span className="st-cv"><code className="st-mono">{scrapeURL}</code><CopyButton text={scrapeURL} label={t("prometheus.copy")} /></span> : null}
+              className="st-sw-row"
+            >
+              <Switch checked={scrapeEnabled} disabled={saving} onChange={(v) => set(KEYS.scrapeEnabled, String(v))} label={t("prometheus.enableScrape")} />
+            </Row>
 
-      {loading ? (
-        <div className="space-y-1">
-          <SkeletonRow />
-          <SkeletonRow />
-          <SkeletonRow />
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {/* Prometheus Scrape */}
-          <div>
-            <p className={SECTION_HEADING}>{t("prometheus.scrapeEndpoint")}</p>
-            <div className="mt-3 space-y-3">
-              <Toggle
-                label={t("prometheus.enableScrape")}
-                checked={scrapeEnabled}
-                disabled={saving}
-                onChange={(v) => set(KEYS.scrapeEnabled, String(v))}
-              />
-              {scrapeEnabled && (
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 rounded border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--muted)] font-mono select-all">
-                    {scrapeURL}
-                  </code>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => void navigator.clipboard.writeText(scrapeURL)}
-                  >
-                    {t("prometheus.copy")}
-                  </Button>
-                </div>
-              )}
-              <p className="text-xs text-[var(--muted)]">
-                {t("prometheus.scrapeDescription")}
-              </p>
-            </div>
-          </div>
-
-          {/* Remote Write */}
-          <div>
-            <p className={SECTION_HEADING}>{t("prometheus.remoteWrite")}</p>
-            <div className="mt-3 space-y-3">
-              <Toggle
-                label={t("prometheus.enableRemoteWrite")}
-                checked={remoteWriteEnabled}
-                disabled={saving}
-                onChange={(v) => set(KEYS.remoteWriteEnabled, String(v))}
-              />
-              {remoteWriteEnabled && (
-                <div className="grid gap-3 md:grid-cols-2">
-                  <label className="flex flex-col gap-1.5 text-xs text-[var(--muted)] md:col-span-2">
-                    {t("prometheus.remoteWriteURL")}
-                    <Input
-                      value={draft[KEYS.remoteWriteURL] ?? ""}
-                      onChange={(e) => set(KEYS.remoteWriteURL, e.target.value)}
-                      placeholder="https://prometheus.example.com/api/v1/write"
-                      disabled={saving}
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1.5 text-xs text-[var(--muted)]">
-                    {t("prometheus.username")} <span className="text-[var(--muted)]/60">{t("prometheus.optional")}</span>
-                    <Input
-                      value={draft[KEYS.remoteWriteUsername] ?? ""}
-                      onChange={(e) => set(KEYS.remoteWriteUsername, e.target.value)}
-                      placeholder="e.g. prometheus"
-                      disabled={saving}
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1.5 text-xs text-[var(--muted)]">
-                    {t("prometheus.password")} <span className="text-[var(--muted)]/60">{t("prometheus.optional")}</span>
-                    <Input
-                      type="password"
-                      value={draft[KEYS.remoteWritePassword] ?? ""}
-                      onChange={(e) => set(KEYS.remoteWritePassword, e.target.value)}
-                      placeholder={t("prometheus.passwordPlaceholder")}
-                      disabled={saving}
-                      autoComplete="new-password"
-                    />
-                    {passwordConfigured && !(draft[KEYS.remoteWritePassword] ?? "") ? (
-                      <span className="text-[11px] text-[var(--muted)]">
-                        {t("prometheus.passwordConfigured")}
-                      </span>
-                    ) : null}
-                  </label>
-                  <label className="flex flex-col gap-1.5 text-xs text-[var(--muted)]">
-                    {t("prometheus.pushInterval")}
-                    <Select
-                      value={draft[KEYS.remoteWriteInterval] ?? "30s"}
-                      onChange={(e) => set(KEYS.remoteWriteInterval, e.target.value)}
-                      disabled={saving}
-                    >
-                      {REMOTE_WRITE_INTERVALS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </Select>
-                  </label>
-                  <div className="flex items-end gap-2">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      loading={testState === "testing"}
-                      disabled={saving || !(draft[KEYS.remoteWriteURL] ?? "").trim()}
-                      onClick={() => void testConnection()}
-                    >
-                      {t("prometheus.testConnection")}
-                    </Button>
-                    {testState === "ok" && (
-                      <span className="text-xs text-[var(--good)]">{testMessage}</span>
-                    )}
-                    {testState === "error" && (
-                      <span className="text-xs text-[var(--bad)]">{testMessage}</span>
-                    )}
-                  </div>
-                </div>
-              )}
-              <p className="text-xs text-[var(--muted)]">
-                {t("prometheus.remoteWriteDescription")}
-              </p>
-            </div>
-          </div>
-
-          {/* Process Metrics */}
-          <div>
-            <p className={SECTION_HEADING}>{t("prometheus.processMetrics")}</p>
-            <div className="mt-3 space-y-3">
-              <Toggle
-                label={t("prometheus.enableProcessMetrics")}
-                checked={processMetricsEnabled}
-                disabled={saving}
-                onChange={(v) => set(KEYS.processMetricsEnabled, String(v))}
-              />
-              {processMetricsEnabled && (
-                <label className="flex flex-col gap-1.5 text-xs text-[var(--muted)] w-32">
-                  {t("prometheus.topNProcesses")}
-                  <Select
-                    value={draft[KEYS.processMetricsTopN] ?? "10"}
-                    onChange={(e) => set(KEYS.processMetricsTopN, e.target.value)}
+            <Row label={t("prometheus.remoteWrite")} className="st-sw-row">
+              <Switch checked={remoteWriteEnabled} disabled={saving} onChange={(v) => set(KEYS.remoteWriteEnabled, String(v))} label={t("prometheus.enableRemoteWrite")} />
+            </Row>
+            {remoteWriteEnabled ? (
+              <div className="st-form">
+                <Field label={t("prometheus.remoteWriteURL")} htmlFor="st-prom-url" wide>
+                  <Input
+                    id="st-prom-url"
+                    value={draft[KEYS.remoteWriteURL] ?? ""}
+                    onChange={(e) => set(KEYS.remoteWriteURL, e.target.value)}
+                    placeholder="https://prometheus.example.com/api/v1/write"
                     disabled={saving}
-                  >
-                    {PROCESS_TOP_N_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
+                  />
+                </Field>
+                <Field label={`${t("prometheus.username")} ${t("prometheus.optional")}`} htmlFor="st-prom-user">
+                  <Input id="st-prom-user" value={draft[KEYS.remoteWriteUsername] ?? ""} onChange={(e) => set(KEYS.remoteWriteUsername, e.target.value)} placeholder="prometheus" disabled={saving} autoComplete="off" />
+                </Field>
+                <Field
+                  label={`${t("prometheus.password")} ${t("prometheus.optional")}`}
+                  htmlFor="st-prom-pass"
+                  hint={passwordConfigured && !(draft[KEYS.remoteWritePassword] ?? "") ? t("prometheus.passwordConfigured") : undefined}
+                >
+                  <Input
+                    id="st-prom-pass"
+                    type="password"
+                    value={draft[KEYS.remoteWritePassword] ?? ""}
+                    onChange={(e) => set(KEYS.remoteWritePassword, e.target.value)}
+                    placeholder={t("prometheus.passwordPlaceholder")}
+                    disabled={saving}
+                    autoComplete="new-password"
+                  />
+                </Field>
+                <Field label={t("prometheus.pushInterval")} htmlFor="st-prom-interval">
+                  <Select id="st-prom-interval" className="w-full" value={draft[KEYS.remoteWriteInterval] ?? "30s"} onChange={(e) => set(KEYS.remoteWriteInterval, e.target.value)} disabled={saving}>
+                    {REMOTE_WRITE_INTERVALS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                   </Select>
-                </label>
-              )}
-              <p className="text-xs text-[var(--muted)]">
-                {t("prometheus.processMetricsDescription")}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
+                </Field>
+                <div className="st-acts st-field st-end">
+                  <Button
+                    size="sm"
+                    loading={testState === "testing"}
+                    disabled={saving || !(draft[KEYS.remoteWriteURL] ?? "").trim()}
+                    onClick={() => void testConnection()}
+                  >
+                    {t("prometheus.testConnection")}
+                  </Button>
+                  {testState === "ok" || testState === "error" ? (
+                    <span className={`st-msg${testState === "error" ? " bad" : ""}`} role="status">{testMessage}</span>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
 
-      {error ? <p className="mt-3 text-sm text-[var(--bad)]">{error}</p> : null}
+            <Row label={t("prometheus.processMetrics")} className="st-sw-row">
+              <Switch checked={processMetricsEnabled} disabled={saving} onChange={(v) => set(KEYS.processMetricsEnabled, String(v))} label={t("prometheus.enableProcessMetrics")} />
+            </Row>
+            {processMetricsEnabled ? (
+              <Row label={<label htmlFor="st-prom-topn">{t("prometheus.topNProcesses")}</label>}>
+                <Select id="st-prom-topn" className="st-in-xs" value={draft[KEYS.processMetricsTopN] ?? "10"} onChange={(e) => set(KEYS.processMetricsTopN, e.target.value)} disabled={saving}>
+                  {PROCESS_TOP_N_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                </Select>
+              </Row>
+            ) : null}
+          </>
+        )}
 
-      <div className="flex items-center gap-3 pt-4">
-        <Button variant="primary" loading={saving} disabled={loading} onClick={() => void save()}>
-          {t("prometheus.saveSettings")}
-        </Button>
-        {message ? <span className="text-xs text-[var(--muted)]">{message}</span> : null}
-      </div>
-    </Card>
+        <SheetFoot message={error ?? message} tone={error ? "bad" : undefined}>
+          <Button size="sm" loading={saving} disabled={loading || !dirty} onClick={() => void save()}>
+            {t("prometheus.saveSettings")}
+          </Button>
+        </SheetFoot>
+      </Sheet>
+    </Section>
   );
 }

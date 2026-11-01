@@ -36,7 +36,7 @@ export function ScopeSelector({ fullAccess, onFullAccessChange, selectedScopes, 
           type="checkbox"
           checked={fullAccess}
           onChange={(e) => onFullAccessChange(e.target.checked)}
-          className="accent-[var(--accent)]"
+          className="accent-[var(--text)]"
         />
         {t("apiKeys.scopesFullAccess")}
       </label>
@@ -55,7 +55,7 @@ export function ScopeSelector({ fullAccess, onFullAccessChange, selectedScopes, 
                       if (el) el.indeterminate = someSelected && !allSelected;
                     }}
                     onChange={() => onToggleGroup(group.scopes, allSelected)}
-                    className="accent-[var(--accent)]"
+                    className="accent-[var(--text)]"
                   />
                   {group.label}
                 </label>
@@ -65,11 +65,8 @@ export function ScopeSelector({ fullAccess, onFullAccessChange, selectedScopes, 
                       key={scope}
                       type="button"
                       onClick={() => onToggleScope(scope)}
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono border cursor-pointer transition-colors ${
-                        selectedScopes.has(scope)
-                          ? "bg-[var(--accent)]/15 border-[var(--accent)]/40 text-[var(--accent)]"
-                          : "bg-transparent border-[var(--line)] text-[var(--muted)] hover:border-[var(--text)]"
-                      }`}
+                      aria-pressed={selectedScopes.has(scope)}
+                      className="st-scope"
                     >
                       {scope}
                     </button>
@@ -110,7 +107,7 @@ export function AssetSelector({
 
   return (
     <fieldset className="space-y-2">
-      <legend className="block text-[10px] uppercase tracking-wider text-[var(--muted)] mb-1.5">
+      <legend className="st-lbl mb-1.5">
         {t("apiKeys.allowedAssets")}
       </legend>
       <label className="flex items-center gap-2 text-xs text-[var(--text)] cursor-pointer select-none">
@@ -119,7 +116,7 @@ export function AssetSelector({
           name={inputName}
           checked={!restricted}
           onChange={() => onRestrictedChange(false)}
-          className="accent-[var(--accent)]"
+          className="accent-[var(--text)]"
         />
         {t("apiKeys.allowedAssetsAll")}
       </label>
@@ -129,37 +126,37 @@ export function AssetSelector({
           name={inputName}
           checked={restricted}
           onChange={() => onRestrictedChange(true)}
-          className="accent-[var(--accent)]"
+          className="accent-[var(--text)]"
         />
         {t("apiKeys.allowedAssetsSelect")}
       </label>
       {restricted && (
         assets.length > 0 ? (
-          <div className="grid max-h-48 grid-cols-1 gap-1 overflow-y-auto rounded-lg border border-[var(--line)] bg-[var(--surface)] p-2 sm:grid-cols-2">
+          <div className="grid max-h-48 grid-cols-1 gap-1 overflow-y-auto rounded-[var(--r-3)] bg-[var(--sunk)] p-2 sm:grid-cols-2">
             {assets.map((asset) => (
               <label
                 key={asset.id}
-                className="flex min-w-0 cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs text-[var(--text)] hover:bg-[var(--surface-hover)]"
+                className="flex min-w-0 cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs text-[var(--text)] hover:bg-[var(--hover)]"
               >
                 <input
                   type="checkbox"
                   checked={selectedAssetIDs.has(asset.id)}
                   onChange={() => onToggleAsset(asset.id)}
-                  className="shrink-0 accent-[var(--accent)]"
+                  className="shrink-0 accent-[var(--text)]"
                 />
                 <span className="min-w-0 truncate" title={`${asset.name} (${asset.id})`}>
                   {asset.name}
-                  <span className="ml-1 font-mono text-[10px] text-[var(--muted)]">{asset.id}</span>
+                  <span className="ml-1 font-mono text-[12px] text-[var(--text-3)]">{asset.id}</span>
                 </span>
               </label>
             ))}
           </div>
         ) : (
-          <p className="pl-5 text-xs text-[var(--muted)]">{t("apiKeys.allowedAssetsEmpty")}</p>
+          <p className="pl-5 st-msg">{t("apiKeys.allowedAssetsEmpty")}</p>
         )
       )}
       {restricted && selectedAssetIDs.size === 0 && (
-        <p className="pl-5 text-xs text-[var(--bad)]">{t("apiKeys.allowedAssetsRequired")}</p>
+        <p className="pl-5 st-msg bad">{t("apiKeys.allowedAssetsRequired")}</p>
       )}
     </fieldset>
   );

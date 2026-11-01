@@ -1,8 +1,4 @@
-"use client";
-
-
-/* ── helpers ── */
-
+/** The ISO time a new key expires for an expiry choice (30d, 90d, 1y); null for never. */
 export function expiryToIso(value: string): string | null {
   if (value === "never") return null;
   const now = Date.now();
@@ -17,16 +13,4 @@ export function expiryToIso(value: string): string | null {
     default:
       return null;
   }
-}
-
-export function relativeTime(iso: string | null | undefined): string {
-  if (!iso) return "Never";
-  const diff = Date.now() - new Date(iso).getTime();
-  if (diff < 60_000) return "just now";
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
 }

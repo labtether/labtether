@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Card } from "../../../../components/ui/Card";
 import { Button } from "../../../../components/ui/Button";
 import { apiFetch } from "../../../../lib/api";
 import { downloadJSON } from "../../../../lib/export";
 import { fetchAllSchedules } from "../../../../lib/schedules";
+import { Facts, Section, Sheet, SheetFoot } from "./SettingsKit";
 
 type SavedActionListResponse = {
   data?: Array<{ id: string }>;
@@ -179,29 +179,15 @@ export function BackupExportCard() {
   }
 
   return (
-    <Card className="mb-6">
-      <h2>{t("backup.title")}</h2>
-      <p className="text-sm text-[var(--muted)] mt-1 mb-4">
-        {t("backup.description")}
-      </p>
-
-      <div className="flex items-center gap-3">
-        <Button
-          variant="secondary"
-          loading={loading}
-          onClick={() => void handleExport()}
-        >
-          {loading ? t("backup.exporting") : t("backup.exportButton")}
-        </Button>
-
-        {message && !error ? (
-          <span className="text-xs text-[var(--ok)]">{message}</span>
-        ) : null}
-
-        {error ? (
-          <span className="text-xs text-[var(--bad)]">{error}</span>
-        ) : null}
-      </div>
-    </Card>
+    <Section title={t("backup.title")} id="backup">
+      <Sheet>
+        <Facts items={[[t("backup.includes"), t("backup.includesValue")]]} />
+        <SheetFoot message={error ?? (message || null)} tone={error ? "bad" : undefined}>
+          <Button size="sm" loading={loading} onClick={() => void handleExport()}>
+            {loading ? t("backup.exporting") : t("backup.exportButton")}
+          </Button>
+        </SheetFoot>
+      </Sheet>
+    </Section>
   );
 }

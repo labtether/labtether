@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildNotificationChannelConfig,
   channelConfigForForm,
+  channelTarget,
   configWithSMTPMode,
   normalizeEmailRecipients,
   SMTP_INSECURE_ACKNOWLEDGEMENT,
@@ -218,5 +219,17 @@ describe("notification channel email form", () => {
       smtp_port: "2525",
       smtp_tls_mode: "implicit",
     });
+  });
+});
+
+// A channel row names where alerts go without ever printing a secret URL or an encrypted value.
+describe("notification channel target", () => {
+  it("shows recipients and server addresses but never Slack or webhook URLs", () => {
+    expect(channelTarget("email", { to: "ops@example.com" })).toBe("ops@example.com");
+    expect(channelTarget("ntfy", { server_url: "https://ntfy.example.test/", topic: "lab" })).toBe("https://ntfy.example.test/lab");
+    expect(channelTarget("gotify", { server_url: "https://gotify.example.test", app_token: "secret" })).toBe("https://gotify.example.test");
+    expect(channelTarget("slack", { webhook_url: "https://hooks.slack.com/services/T0/B0/secret" })).toBe("");
+    expect(channelTarget("webhook", { url: "https://example.test/hook?token=secret" })).toBe("");
+    expect(channelTarget("email", { to: "v2:ciphertext" })).toBe("");
   });
 });

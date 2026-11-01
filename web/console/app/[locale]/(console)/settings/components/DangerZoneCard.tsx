@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { Card } from "../../../../components/ui/Card";
 import { Button } from "../../../../components/ui/Button";
 import { Input } from "../../../../components/ui/Input";
+import { Message, Row, Section, SettingsDialog, Sheet } from "./SettingsKit";
 
+const CONFIRM_WORD = "RESET";
+
+/** Reset hub: the quiet last part of General. The dialog asks for RESET before the button works. */
 export function DangerZoneCard() {
   const t = useTranslations("settings");
   const [showConfirm, setShowConfirm] = useState(false);
@@ -24,7 +26,14 @@ export function DangerZoneCard() {
     };
   }, []);
 
+  const closeConfirm = () => {
+    if (resetting) return;
+    setShowConfirm(false);
+    setConfirmInput("");
+  };
+
   const handleReset = async () => {
+    if (confirmInput !== CONFIRM_WORD) return;
     setResetting(true);
     setResetError("");
     setResetResult(null);
@@ -36,7 +45,7 @@ export function DangerZoneCard() {
       const res = await fetch("/api/admin/reset", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirm: "RESET" }),
+        body: JSON.stringify({ confirm: CONFIRM_WORD }),
         signal: controller.signal,
       });
       const data = await res.json();
@@ -60,73 +69,58 @@ export function DangerZoneCard() {
   };
 
   return (
-    <Card className="border-[var(--bad)]/20 mb-6" style={{ background: "rgba(255,51,85,0.03)" }}>
-      <h2 className="flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-[var(--bad)]" strokeWidth={2} /> {t("dangerZone.title")}</h2>
-      <p className="text-sm text-[var(--muted)] mb-4">
-        {t("dangerZone.description")}
-      </p>
-      <div className="flex items-center gap-3 pt-4">
-        <Button variant="danger" className="bg-[var(--bad-glow)]" onClick={() => setShowConfirm(true)} disabled={resetting}>
-          {resetting ? t("dangerZone.wiping") : t("dangerZone.wipeAll")}
-        </Button>
-      </div>
-
-      {resetResult ? (
-        <Card className="bg-[var(--ok-glow)] border-[var(--ok)]/20 text-sm text-[var(--ok)] mt-4">
-          {t("dangerZone.resetComplete", {
-            count: resetResult.tables_cleared,
-            time: new Date(resetResult.reset_at).toLocaleTimeString(),
-          })}
-        </Card>
-      ) : null}
-
-      {resetError ? <Card className="bg-[var(--bad-glow)] border-[var(--bad)]/20 text-sm text-[var(--bad)] mt-4">{resetError}</Card> : null}
+    <Section title={t("dangerZone.title")} id="reset">
+      <Sheet>
+        <Row label={t("dangerZone.row")} hint={t("dangerZone.description")} two>
+          <Button variant="danger" size="sm" onClick={() => setShowConfirm(true)} disabled={resetting}>
+            {resetting ? t("dangerZone.wiping") : t("dangerZone.wipeAll")}
+          </Button>
+        </Row>
+        {resetResult ? (
+          <Message>
+            {t("dangerZone.resetComplete", {
+              count: resetResult.tables_cleared,
+              time: new Date(resetResult.reset_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }),
+            })}
+          </Message>
+        ) : null}
+        {resetError ? <Message tone="bad">{resetError}</Message> : null}
+      </Sheet>
 
       {showConfirm ? (
-        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/60 backdrop-blur-sm" onClick={() => setShowConfirm(false)}>
-          <div onClick={(event) => event.stopPropagation()}>
-            <Card className="w-96 space-y-4">
-              <h3>{t("dangerZone.confirmTitle")}</h3>
-              <p>
-                {t("dangerZone.confirmDescription")}
-              </p>
+        <SettingsDialog labelledBy="st-reset-title" onClose={closeConfirm}>
+          <form
+            className="st-dlg-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleReset();
+            }}
+          >
+            <h3 id="st-reset-title">{t("dangerZone.confirmTitle")}</h3>
+            <p>{t("dangerZone.confirmDescription")}</p>
+            <div className="st-field">
+              <label htmlFor="st-reset-word">{t("dangerZone.confirmLabel", { word: CONFIRM_WORD })}</label>
               <Input
-                placeholder={t("dangerZone.confirmPlaceholder")}
+                id="st-reset-word"
+                placeholder={CONFIRM_WORD}
                 value={confirmInput}
                 onChange={(event) => setConfirmInput(event.target.value)}
+                autoComplete="off"
+                spellCheck={false}
                 autoFocus
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && confirmInput === "RESET") {
-                    void handleReset();
-                  }
-                  if (event.key === "Escape") {
-                    setShowConfirm(false);
-                    setConfirmInput("");
-                  }
-                }}
               />
-              <div className="flex items-center gap-3">
-                <Button
-                  onClick={() => {
-                    setShowConfirm(false);
-                    setConfirmInput("");
-                  }}
-                >
-                  {t("dangerZone.cancel")}
-                </Button>
-                <Button
-                  variant="danger"
-                  className="bg-[var(--bad-glow)]"
-                  disabled={confirmInput !== "RESET" || resetting}
-                  onClick={() => void handleReset()}
-                >
-                  {resetting ? t("dangerZone.wiping") : t("dangerZone.wipeConfirm")}
-                </Button>
-              </div>
-            </Card>
-          </div>
-        </div>
+            </div>
+            <div className="st-dlg-acts">
+              <Button type="button" onClick={closeConfirm} disabled={resetting}>
+                {t("dangerZone.cancel")}
+              </Button>
+              <Button type="submit" variant="danger" className="st-danger-fill" disabled={confirmInput !== CONFIRM_WORD || resetting}>
+                {resetting ? t("dangerZone.wiping") : t("dangerZone.wipeConfirm")}
+              </Button>
+            </div>
+          </form>
+        </SettingsDialog>
       ) : null}
-    </Card>
+    </Section>
   );
 }

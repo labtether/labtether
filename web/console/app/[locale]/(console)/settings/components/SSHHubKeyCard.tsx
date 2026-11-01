@@ -1,11 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Copy, KeyRound, RotateCw } from "lucide-react";
-import { Badge } from "../../../../components/ui/Badge";
 import { Button } from "../../../../components/ui/Button";
-import { Card } from "../../../../components/ui/Card";
-import { SkeletonRow } from "../../../../components/ui/Skeleton";
+import { Facts, Section, Sheet } from "./SettingsKit";
 import { SSHHubKeyRotateDialog } from "./SSHHubKeyRotateDialog";
 import {
   parseSSHHubKeyInfo,
@@ -121,76 +118,62 @@ export function SSHHubKeyCard() {
 
   return (
     <>
-      <Card className="mb-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex min-w-0 items-start gap-3">
-            <KeyRound className="mt-0.5 shrink-0 text-[var(--accent)]" size={18} aria-hidden="true" />
-            <div>
-              <h2>SSH Hub Key</h2>
-              <p className="mt-1 text-sm text-[var(--muted)]">
-                Public identity used for passwordless hub-to-agent SSH access. Private key material is never shown here.
-              </p>
-            </div>
-          </div>
-          {keyInfo ? <Badge status={keyInfo.key_type === "rsa" ? "RSA 4096" : "Ed25519"} size="sm" /> : null}
-        </div>
-
-        {loading ? (
-          <div className="mt-4 space-y-1" aria-label="Loading SSH hub key">
-            <SkeletonRow />
-            <SkeletonRow />
-          </div>
+      <Section
+        title="Hub SSH key"
+        id="hub-ssh-key"
+        action={keyInfo ? (
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={() => {
+              setRotationError("");
+              setMessage("");
+              setRotateOpen(true);
+            }}
+          >
+            Rotate key…
+          </Button>
         ) : null}
-
-        {!loading && loadError ? (
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <p role="alert" className="text-sm text-[var(--bad)]">{loadError}</p>
-            <Button variant="secondary" size="sm" onClick={() => { void loadKeyInfo(); }}>
-              Retry
-            </Button>
-          </div>
-        ) : null}
-
-        {!loading && keyInfo ? (
-          <div className="mt-4 divide-y divide-[var(--line)]">
-            <div className="py-3">
-              <p className="text-xs font-medium text-[var(--muted)]">SHA-256 fingerprint</p>
-              <code className="mt-1 block break-all text-sm text-[var(--text)]">
-                {keyInfo.fingerprint_sha256}
-              </code>
-            </div>
-            <div className="py-3">
-              <p className="text-xs font-medium text-[var(--muted)]">OpenSSH public key</p>
-              <code className="mt-1 block max-h-28 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-[var(--surface)] p-3 text-xs text-[var(--text)]">
-                {keyInfo.public_key.trim()}
-              </code>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button variant="secondary" size="sm" onClick={() => { void copyPublicKey(); }}>
-                  <Copy size={13} aria-hidden="true" />
-                  {copied ? "Copied" : "Copy public key"}
-                </Button>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onClick={() => {
-                    setRotationError("");
-                    setMessage("");
-                    setRotateOpen(true);
-                  }}
-                >
-                  <RotateCw size={13} aria-hidden="true" />
-                  Rotate key
-                </Button>
+      >
+        <Sheet className={loading ? "st-loading" : ""}>
+          {!loading && loadError ? (
+            <div className="st-row">
+              <p role="alert" className="st-msg bad">{loadError}</p>
+              <div className="st-row-r">
+                <Button size="sm" onClick={() => { void loadKeyInfo(); }}>Retry</Button>
               </div>
             </div>
-          </div>
-        ) : null}
+          ) : null}
 
-        <div className="mt-3 min-h-5" aria-live="polite">
-          {message ? <p className="text-sm text-[var(--ok)]">{message}</p> : null}
-          {!rotateOpen && rotationError ? <p role="alert" className="text-sm text-[var(--bad)]">{rotationError}</p> : null}
-        </div>
-      </Card>
+          {!loading && keyInfo ? (
+            <>
+              <Facts
+                items={[
+                  ["Type", keyInfo.key_type === "rsa" ? "RSA 4096" : "Ed25519"],
+                  ["Fingerprint", <code key="fp" className="st-mono">{keyInfo.fingerprint_sha256}</code>],
+                ]}
+              />
+              <div className="st-pad-row">
+                <div className="st-code">
+                  <pre aria-label="OpenSSH public key">{keyInfo.public_key.trim()}</pre>
+                </div>
+              </div>
+            </>
+          ) : null}
+
+          {keyInfo || message || (!rotateOpen && rotationError) ? (
+            <div className="st-foot" aria-live="polite">
+              {message ? <p className="st-msg">{message}</p> : null}
+              {!rotateOpen && rotationError ? <p role="alert" className="st-msg bad">{rotationError}</p> : null}
+              {keyInfo ? (
+                <Button size="sm" onClick={() => { void copyPublicKey(); }}>
+                  {copied ? "Copied" : "Copy public key"}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+        </Sheet>
+      </Section>
 
       {rotateOpen && keyInfo ? (
         <SSHHubKeyRotateDialog

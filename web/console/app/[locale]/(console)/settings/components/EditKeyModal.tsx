@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "../../../../components/ui/Button";
-import { Card } from "../../../../components/ui/Card";
+import { Input, Select } from "../../../../components/ui/Input";
 import type { ApiKeyInfo, UpdateKeyRequest } from "../../../../hooks/useApiKeys";
+import { SettingsDialog } from "./SettingsKit";
 import { sanitizeErrorMessage } from "../../../../lib/sanitizeErrorMessage";
 import { type AssetOption, ALL_SCOPES, ScopeSelector, AssetSelector } from "./ApiKeyAccessSelectors";
 import { expiryToIso } from "./apiKeyPresentation";
@@ -79,30 +80,22 @@ export function EditKeyModal({ keyInfo, assets, onClose, onConfirm }: EditKeyMod
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="api-key-edit-title"
-        className="max-h-[90vh] w-[42rem] max-w-[96vw] overflow-y-auto"
-      >
-        <Card className="space-y-4">
-          <h3 id="api-key-edit-title" className="text-sm font-medium text-[var(--text)]">{t("apiKeys.editTitle")}</h3>
-          <div>
-            <label htmlFor="api-key-edit-name" className="mb-1 block text-[10px] uppercase tracking-wider text-[var(--muted)]">
+    <SettingsDialog labelledBy="api-key-edit-title" onClose={() => { if (!saving) onClose(); }} wide>
+          <h3 id="api-key-edit-title">{t("apiKeys.editTitle")}</h3>
+          <div className="st-field">
+            <label htmlFor="api-key-edit-name">
               {t("apiKeys.name")}
             </label>
-            <input
+            <Input
               id="api-key-edit-name"
               type="text"
               value={name}
               maxLength={120}
               onChange={(event) => setName(event.target.value)}
-              className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1.5 text-xs text-[var(--text)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
             />
           </div>
-          <div>
-            <p className="mb-1.5 text-[10px] uppercase tracking-wider text-[var(--muted)]">{t("apiKeys.scopes")}</p>
+          <div className="st-field">
+            <span className="st-lbl">{t("apiKeys.scopes")}</span>
             <ScopeSelector
               fullAccess={fullAccess}
               onFullAccessChange={setFullAccess}
@@ -119,32 +112,30 @@ export function EditKeyModal({ keyInfo, assets, onClose, onConfirm }: EditKeyMod
             selectedAssetIDs={selectedAssetIDs}
             onToggleAsset={toggleAsset}
           />
-          <div>
-            <label htmlFor="api-key-edit-expiry" className="mb-1 block text-[10px] uppercase tracking-wider text-[var(--muted)]">
+          <div className="st-field">
+            <label htmlFor="api-key-edit-expiry">
               {t("apiKeys.expiresAt")}
             </label>
-            <select
+            <Select
               id="api-key-edit-expiry"
               value={expiry}
               onChange={(event) => setExpiry(event.target.value)}
-              className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1.5 text-xs text-[var(--text)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] sm:w-48"
+              className="st-in-m"
             >
               <option value="unchanged">{t("apiKeys.expiresUnchanged")}</option>
               <option value="30d">{t("apiKeys.expires30d")}</option>
               <option value="90d">{t("apiKeys.expires90d")}</option>
               <option value="1y">{t("apiKeys.expires1y")}</option>
               <option value="never">{t("apiKeys.expiresNever")}</option>
-            </select>
+            </Select>
           </div>
-          {error ? <p className="text-xs text-[var(--bad)]" role="alert">{error}</p> : null}
-          <div className="flex justify-end gap-2">
+          {error ? <p className="st-msg bad" role="alert">{error}</p> : null}
+          <div className="st-dlg-acts">
             <Button variant="secondary" disabled={saving} onClick={onClose}>{t("apiKeys.cancel")}</Button>
             <Button variant="primary" loading={saving} disabled={!canSave} onClick={() => { void handleSave(); }}>
               {t("apiKeys.saveChanges")}
             </Button>
           </div>
-        </Card>
-      </div>
-    </div>
+    </SettingsDialog>
   );
 }

@@ -1,14 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, Key, ShieldAlert } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Button } from "../../../../components/ui/Button";
-import { Card } from "../../../../components/ui/Card";
 import type { ApiKeyInfo, CreatedKeyResponse } from "../../../../hooks/useApiKeys";
 import { sanitizeErrorMessage } from "../../../../lib/sanitizeErrorMessage";
+import { SettingsDialog } from "./SettingsKit";
 
-/* ── key reveal modal ── */
+/* ── a new key's value, shown once ── */
 
 export type KeyRevealModalProps = {
   created: CreatedKeyResponse;
@@ -25,48 +24,29 @@ export function KeyRevealModal({ created, onDismiss }: KeyRevealModalProps) {
       setCopied(true);
       setTimeout(() => setCopied(false), 3000);
     } catch {
-      // fallback: do nothing
+      // Clipboard blocked (plain HTTP): the value stays selectable.
     }
   };
 
+  // The value is shown once, so a stray click outside does not close it; the button does.
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="api-key-reveal-title"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <Card className="w-[32rem] max-w-[92vw] space-y-4">
-          <div className="flex items-center gap-2">
-            <Key size={16} className="text-[var(--accent)]" />
-            <h3 id="api-key-reveal-title" className="text-sm font-medium text-[var(--text)]">{t("apiKeys.revealTitle")}</h3>
-          </div>
-          <div className="bg-[var(--surface)] rounded-lg p-3 font-mono text-xs text-[var(--text)] break-all select-all">
-            {created.raw_key}
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={() => { void handleCopy(); }}>
-              {copied ? <Check size={13} /> : <Copy size={13} />}
-              {copied ? t("apiKeys.revealCopied") : "Copy"}
-            </Button>
-          </div>
-          <p className="text-xs text-[var(--bad)] flex items-center gap-1.5">
-            <ShieldAlert size={13} className="shrink-0" />
-            {t("apiKeys.revealWarning")}
-          </p>
-          <div className="flex justify-end">
-            <Button variant="primary" size="sm" onClick={onDismiss}>
-              {t("apiKeys.revealDismiss")}
-            </Button>
-          </div>
-        </Card>
+    <SettingsDialog labelledBy="api-key-reveal-title" onClose={() => undefined}>
+      <h3 id="api-key-reveal-title">{t("apiKeys.revealTitle", { name: created.name })}</h3>
+      <code className="st-secret">{created.raw_key}</code>
+      <p className="st-msg warn">{t("apiKeys.revealWarning")}</p>
+      <div className="st-dlg-acts">
+        <Button onClick={() => { void handleCopy(); }}>
+          {copied ? t("apiKeys.revealCopied") : t("apiKeys.copy")}
+        </Button>
+        <Button variant="primary" onClick={onDismiss}>
+          {t("apiKeys.revealDismiss")}
+        </Button>
       </div>
-    </div>
+    </SettingsDialog>
   );
 }
 
-/* ── revoke confirm modal ── */
+/* ── revoke confirm ── */
 
 export type RevokeConfirmModalProps = {
   keyInfo: ApiKeyInfo;
@@ -85,34 +65,22 @@ export function RevokeConfirmModal({ keyInfo, onClose, onConfirm }: RevokeConfir
     try {
       await onConfirm();
     } catch (err) {
-      setError(sanitizeErrorMessage(err instanceof Error ? err.message : "", "Failed to revoke key."));
+      setError(sanitizeErrorMessage(err instanceof Error ? err.message : "", t("apiKeys.revokeFailed")));
       setRevoking(false);
     }
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      onClick={() => { if (!revoking) onClose(); }}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="api-key-revoke-title"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <Card className="w-[28rem] max-w-[92vw] space-y-4">
-          <h3 id="api-key-revoke-title" className="text-sm font-medium text-[var(--text)]">{t("apiKeys.revokeTitle")}</h3>
-          <p className="text-xs text-[var(--muted)]">
-            {t("apiKeys.revokeBody", { name: keyInfo.name })}
-          </p>
-          {error ? <p className="text-xs text-[var(--bad)]">{error}</p> : null}
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="secondary" onClick={onClose} disabled={revoking}>{t("apiKeys.cancel")}</Button>
-            <Button variant="danger" loading={revoking} onClick={() => { void handleConfirm(); }}>{t("apiKeys.revokeConfirm")}</Button>
-          </div>
-        </Card>
+    <SettingsDialog labelledBy="api-key-revoke-title" onClose={() => { if (!revoking) onClose(); }}>
+      <h3 id="api-key-revoke-title">{t("apiKeys.revokeTitle", { name: keyInfo.name })}</h3>
+      <p>{t("apiKeys.revokeBody", { name: keyInfo.name })}</p>
+      {error ? <p className="st-msg bad" role="alert">{error}</p> : null}
+      <div className="st-dlg-acts">
+        <Button onClick={onClose} disabled={revoking}>{t("apiKeys.cancel")}</Button>
+        <Button variant="danger" className="st-danger-fill" loading={revoking} onClick={() => { void handleConfirm(); }}>
+          {t("apiKeys.revokeConfirm")}
+        </Button>
       </div>
-    </div>
+    </SettingsDialog>
   );
 }

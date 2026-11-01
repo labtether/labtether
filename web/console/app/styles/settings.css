@@ -1,0 +1,199 @@
+/* ── 2.0 Settings: General, Notifications, Security, Agents ──
+   Section titles on the canvas, one sheet under each, rows inside (label left, control right). No card boxes, no
+   tinted notices: problems are a line in --bad-text or --warn-text. Layout follows the page width (container
+   queries), so a narrow window with the sidebar folded keeps the desktop rows until 560 px. */
+
+.st { container: st / inline-size; }
+.st-sec + .st-sec { margin-top: var(--gap-section); }
+.st-sh { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px; margin-bottom: 8px; }
+.st-sh h2 { font-size: var(--fs-body); line-height: var(--lh-body); font-weight: 600; letter-spacing: -0.006em; color: var(--text); }
+.st-sh-act { display: flex; align-items: center; gap: 8px; }
+.st-sub { margin: 20px 0 8px; font-size: var(--fs-meta); line-height: var(--lh-meta); font-weight: 600; color: var(--text-2); }
+.st-sheet > .st-sub:first-child, [role="group"]:first-child > .st-sub:first-child { margin-top: 8px; }
+.st-pad-x { padding-left: 12px; padding-right: 12px; }
+
+/* Sheets */
+.st-sheet { padding: 4px; border-radius: var(--r-4); background: var(--panel); box-shadow: var(--elev-1); }
+.st-sheet.pad { padding: 20px; }
+.st-sheet + .st-sheet { margin-top: 12px; }
+.st-empty { display: grid; gap: 4px; justify-items: start; padding: 16px 12px; }
+.st-empty b { font-weight: 500; }
+.st-empty span { font-size: var(--fs-meta); color: var(--text-3); }
+.st-loading { min-height: 88px; }
+
+/* Rows */
+.st-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 16px; min-height: 44px; padding: 6px 12px; border-radius: var(--r-2); }
+.st-row-l { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; min-width: 0; }
+.st-row.two .st-row-l { flex-direction: column; align-items: flex-start; gap: 2px; padding: 4px 0; }
+.st-nm { min-width: 0; font-weight: 500; overflow-wrap: anywhere; }
+.st-g { min-width: 0; font-size: var(--fs-meta); line-height: var(--lh-meta); color: var(--text-3); overflow-wrap: anywhere; }
+.st-g.bad { color: var(--bad-text); }
+.st-g.warn { color: var(--warn-text); }
+.st-row-r { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
+.st-mono, .st-row code { font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--fs-micro); color: var(--text-2); overflow-wrap: anywhere; }
+.st-num { font-variant-numeric: tabular-nums; }
+
+/* List columns (tokens, keys, logins): a header row of micro labels, then rows on the same grid. */
+.st-cols { min-height: 36px; padding-top: 0; padding-bottom: 0; border-radius: 0; box-shadow: inset 0 -1px 0 var(--divider); margin-bottom: 4px; font-size: var(--fs-micro); line-height: var(--lh-micro); color: var(--text-3); }
+.st-cols > span { white-space: nowrap; }
+.st-cell { font-size: var(--fs-meta); color: var(--text-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-cell.r, .st-cols > .r { text-align: right; }
+.st-cell.c3 { color: var(--text-3); }
+
+/* Expanded details inside a sheet (certificate, Tailscale, MCP). */
+.st-x { display: grid; gap: 16px; padding: 4px 12px 16px; }
+.st-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+/* Key-value facts */
+.st-kv { display: grid; }
+.st-kv > div { display: grid; grid-template-columns: 136px minmax(0, 1fr); align-items: baseline; gap: 16px; padding: 6px 0; }
+.st-kv dt { font-size: var(--fs-meta); line-height: 20px; color: var(--text-3); }
+.st-kv dd { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; line-height: 20px; overflow-wrap: anywhere; }
+.st-sheet > .st-kv { padding: 4px 12px; }
+
+/* Forms */
+.st-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 16px 20px; max-width: 720px; }
+.st-sheet:not(.pad) > .st-form, .st-fieldset > .st-form { padding: 12px 12px 16px; }
+.st-fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.st-form-1 { display: grid; gap: 12px; }
+.st-end { align-self: end; }
+.st-form.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.st-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.st-field.wide { grid-column: 1 / -1; }
+.st-field > label, .st-lbl { font-size: var(--fs-meta); line-height: var(--lh-meta); font-weight: 500; color: var(--text-2); }
+.st-in-xs { width: 96px; }
+.st-in-s { width: 128px; }
+.st-in-m { width: 256px; max-width: 100%; }
+.st-in-l { width: 320px; max-width: 100%; }
+.st-hint { font-size: var(--fs-meta); line-height: var(--lh-meta); color: var(--text-3); }
+.st-ta { width: 100%; min-height: 96px; padding: 8px 10px; border: 1px solid var(--field-line, var(--line)); border-radius: var(--r-3); background: var(--panel); color: var(--text); font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--fs-micro); line-height: 1.6; resize: vertical; outline: none; }
+.st-ta:focus { border-color: var(--text-3); box-shadow: 0 0 0 3px var(--ring, var(--sel)); }
+.st-check { display: flex; align-items: flex-start; gap: 8px; font-size: var(--fs-meta); line-height: 20px; color: var(--text); cursor: pointer; }
+.st-check input { margin-top: 3px; accent-color: var(--text); }
+.st-check.bad { color: var(--bad-text); }
+.st-check.wide { grid-column: 1 / -1; }
+
+/* Footer of a sheet: message left, buttons right. */
+.st-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 4px; padding: 12px 8px 8px 12px; box-shadow: inset 0 1px 0 var(--divider); }
+.st-sheet.pad > .st-foot { margin: 20px -20px -12px; padding: 12px 20px 0; }
+.st-foot > .st-msg { margin-right: auto; }
+.st-msg { min-width: 0; font-size: var(--fs-meta); line-height: var(--lh-meta); color: var(--text-2); overflow-wrap: anywhere; }
+.st-msg.bad { color: var(--bad-text); }
+.st-msg.warn { color: var(--warn-text); }
+.st-sheet > .st-msg { padding: 8px 12px; }
+
+/* Status: dot + word */
+.st-st { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-meta); font-weight: 500; color: var(--text-2); white-space: nowrap; }
+.st-st i { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); }
+.st-st.ok i { background: var(--ok); }
+.st-st.warn { color: var(--warn-text); }
+.st-st.warn i { background: var(--warn); }
+.st-st.bad { color: var(--bad-text); }
+.st-st.bad i { background: var(--bad); }
+.st-st.off i { background: none; box-shadow: inset 0 0 0 1.5px var(--text-3); }
+.st-st.busy i { background: var(--text-2); animation: st-pulse 1.4s ease-in-out infinite; }
+@keyframes st-pulse { 50% { opacity: 0.35; } }
+
+
+/* Small quiet controls */
+.st-more:focus-visible, .st-icon-btn:focus-visible, .st-link:focus-visible, .st-btn-link:focus-visible { outline: 2px solid var(--text-3); outline-offset: 2px; }
+.st-icon-btn, .st-more { display: inline-grid; place-items: center; flex: none; width: var(--ctl-sm); height: var(--ctl-sm); border-radius: var(--r-2); color: var(--text-3); cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
+.st-icon-btn:hover, .st-more:hover, .st-more[data-state="open"] { background: var(--hover); color: var(--text); }
+.st-more-gap { width: var(--ctl-sm); }
+.st-link { font-size: var(--fs-meta); font-weight: 500; color: var(--text-2); cursor: pointer; transition: color var(--dur-fast) var(--ease-out); }
+.st-link:hover { color: var(--text); }
+.st-cv { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.lt-menu-item.st-danger { color: var(--bad-text); }
+.lt-menu-item[data-disabled] { opacity: 0.5; cursor: default; }
+
+/* Code wells */
+.st-code { display: flex; align-items: flex-start; gap: 8px; padding: 8px 8px 8px 12px; border-radius: var(--r-3); background: var(--sunk); }
+.st-code pre { flex: 1; min-width: 0; margin: 0; padding: 4px 0; font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--fs-micro); line-height: 1.6; color: var(--text); white-space: pre-wrap; word-break: break-all; }
+.st-label { font-size: var(--fs-meta); font-weight: 500; color: var(--text-2); }
+
+/* Dialogs */
+.st-scrim { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 16px; background: var(--scrim); backdrop-filter: blur(2px); }
+.st-dlg { display: grid; gap: 16px; width: min(480px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; padding: 24px; border-radius: var(--r-4); background: var(--panel-glass); box-shadow: var(--elev-3); color: var(--text); }
+.st-dlg.wide { width: min(600px, 100%); }
+.st-dlg h3 { font-size: var(--fs-head); line-height: var(--lh-head); font-weight: 600; letter-spacing: -0.011em; }
+.st-dlg p { font-size: var(--fs-body); line-height: var(--lh-body); color: var(--text-2); }
+.st-dlg .st-msg { font-size: var(--fs-meta); }
+.st-dlg-acts { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.st-dlg-acts .sp { flex: 1; }
+.st-secret { padding: 10px 12px; border-radius: var(--r-3); background: var(--sunk); font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--fs-micro); color: var(--text); word-break: break-all; user-select: all; }
+.st-dlg .st-form { gap: 12px 16px; }
+
+/* Notification channel type picker */
+.st-pick { display: grid; gap: 2px; }
+.st-pick button { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; gap: 12px; min-height: 48px; padding: 6px 12px; border-radius: var(--r-2); text-align: left; cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out); }
+.st-pick button:hover { background: var(--hover); transition-duration: 0s; }
+.st-pick svg { color: var(--text-3); }
+
+/* Shown-once value (new token) */
+.st-once { display: grid; gap: 8px; padding: 12px 12px 16px; }
+.st-once-r { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.st-once-r .st-secret { flex: 1 1 280px; min-width: 0; }
+
+/* General: theme, density, accent and refresh as rows with segmented controls. */
+.st-seg-row .st-row-r { flex-wrap: nowrap; }
+
+/* Tokens and keys: name, then fixed columns. */
+.st-tk { grid-template-columns: minmax(0, 1fr) 72px 104px 88px 88px 64px; }
+.st-en { grid-template-columns: minmax(0, 1fr) 88px 72px 96px 28px; }
+.st-ak { grid-template-columns: minmax(0, 1fr) 200px 112px 88px 28px; }
+.st-lg { grid-template-columns: minmax(0, 1fr) 104px 112px 28px; }
+.st-ch { grid-template-columns: minmax(0, 1fr) auto 34px 28px; }
+.st-tk .st-nm, .st-en .st-nm, .st-ak .st-nm, .st-lg .st-nm, .st-ch .st-nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-tk .st-row-l, .st-en .st-row-l, .st-ak .st-row-l, .st-lg .st-row-l, .st-ch .st-row-l { flex-wrap: nowrap; overflow: hidden; }
+.st-tk .st-g, .st-en .st-g, .st-lg .st-g, .st-ch .st-g { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-row-acts { display: flex; justify-content: flex-end; gap: 2px; }
+
+/* Small parts used by several sections */
+.st-pad-row { padding: 8px 12px 12px; }
+.st-left { text-align: left; }
+.st-tag { display: inline-flex; align-items: center; margin-left: 8px; padding: 0 6px; height: 18px; border-radius: var(--r-1); background: var(--pill); color: var(--pill-text); font-size: var(--fs-micro); font-weight: 500; vertical-align: middle; }
+.st-btn-link { display: inline-flex; align-items: center; height: var(--ctl-sm); padding: 0 10px; border-radius: var(--r-3); background: var(--ctl-bg); box-shadow: var(--ctl-elev); font-size: var(--fs-meta); font-weight: 500; color: var(--text); white-space: nowrap; transition: box-shadow var(--dur-fast) var(--ease-out); }
+.st-btn-link:hover { box-shadow: var(--ctl-elev-hover); }
+.st-details > summary { list-style: none; display: inline-flex; }
+.st-details > summary::-webkit-details-marker { display: none; }
+.st-details[open] > .st-code { margin-top: 8px; }
+.st-scope { padding: 2px 6px; border-radius: var(--r-1); font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--fs-micro); color: var(--text-2); box-shadow: inset 0 0 0 1px var(--line); cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out); }
+.st-scope:hover { background: var(--hover); }
+.st-scope[aria-pressed="true"] { background: var(--sel); color: var(--text); box-shadow: inset 0 0 0 1px var(--text-3); }
+.st-ch-test { display: flex; justify-content: flex-end; }
+
+/* Dialog bodies: the reset form, and forms inside the shared Modal (saved logins, hub SSH key). */
+.st-dlg-form { display: grid; gap: 16px; }
+.st-modal-form { display: grid; gap: 16px; max-height: calc(100vh - 7rem); overflow-y: auto; padding: 16px 20px 20px; }
+.st-pick .st-row-l { flex-direction: column; align-items: flex-start; gap: 2px; }
+.st-danger-fill { background: var(--bad-fill); color: var(--accent-contrast); box-shadow: none; }
+.st-danger-fill:hover { background: var(--bad-fill); filter: brightness(1.08); }
+
+/* Account security on the Users page uses the same section grammar. */
+.st-acct { margin-bottom: var(--gap-section); }
+
+@container st (max-width: 760px) {
+  .st-tk { grid-template-columns: minmax(0, 1fr) 72px 88px 64px; }
+  .st-tk > .st-hide-m, .st-ak > .st-hide-m, .st-en > .st-hide-m { display: none; }
+  .st-ak { grid-template-columns: minmax(0, 1fr) 112px 88px 28px; }
+  .st-en { grid-template-columns: minmax(0, 1fr) 72px 96px 28px; }
+}
+@container st (max-width: 560px) {
+  /* Rows flow: the control stays beside its label when it fits and drops under it when it does not. */
+  .st-row { display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; }
+  .st-row > .st-row-l { flex: 1 1 140px; }
+  .st-row > .st-row-r { flex: 0 1 auto; max-width: 100%; margin-left: auto; }
+  .st-row.two > .st-row-r { flex-basis: 100%; justify-content: flex-start; margin-left: 0; }
+  .st-form, .st-form.three { grid-template-columns: minmax(0, 1fr); }
+  .st-kv > div { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 4px 0; }
+  .st-tk > .st-cell, .st-ak > .st-cell:not(.st-keep), .st-en > .st-cell:not(.st-keep), .st-lg > .st-cell, .st-cols, .st-ch > .st-ch-test { display: none; }
+  .st-row > .st-keep { flex: none; }
+}
+@media (max-width: 640px) {
+  .st-scrim { place-items: end center; padding: 8px; }
+  .st-dlg, .st-dlg.wide { width: 100%; padding: 20px 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .st-icon-btn, .st-more, .st-link, .st-pick button { transition: none; }
+  .st-st.busy i { animation: none; }
+}

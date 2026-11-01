@@ -226,3 +226,27 @@ export function buildNotificationChannelConfig(
 
   return cleanConfig;
 }
+
+/**
+ * Where a channel sends, for its row: recipients, the ntfy topic URL or the Gotify server. Slack and webhook URLs are
+ * secrets (they carry the token), so those rows show nothing here; encrypted values (v2:…) are never shown either.
+ */
+export function channelTarget(type: string, config: Record<string, unknown>): string {
+  const text = (key: string) => {
+    const value = config[key];
+    return typeof value === "string" && !value.trim().startsWith("v2:") ? value.trim() : "";
+  };
+  switch (type) {
+    case "email":
+      return text("to");
+    case "ntfy": {
+      const server = text("server_url").replace(/\/+$/u, "");
+      const topic = text("topic");
+      return server && topic ? `${server}/${topic}` : server || topic;
+    }
+    case "gotify":
+      return text("server_url");
+    default:
+      return "";
+  }
+}

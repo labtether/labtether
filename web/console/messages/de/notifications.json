@@ -1,16 +1,13 @@
 {
-  "heading": "// Benachrichtigungen",
-  "addChannel": "+ Kanal hinzufügen",
-  "empty": "Keine Benachrichtigungskanäle konfiguriert. Fügen Sie einen hinzu, um Alarme zu erhalten.",
-  "enabled": "Aktiviert",
-  "disabled": "Deaktiviert",
-  "edit": "Bearbeiten",
+  "addChannel": "Kanal hinzufügen",
+  "empty": "Noch keine Kanäle",
+  "edit": "Bearbeiten…",
   "test": "Test senden",
   "testSent": "Test gesendet",
   "testFailed": "Test fehlgeschlagen",
-  "delete": "Löschen",
+  "delete": "Löschen…",
   "typeSelect": {
-    "heading": "Kanaltyp auswählen",
+    "heading": "Kanal hinzufügen",
     "slack": {
       "name": "Slack",
       "description": "Alarme über einen eingehenden Webhook an einen Slack-Kanal senden"
@@ -63,9 +60,10 @@
   "cancel": "Abbrechen",
   "back": "Zurück",
   "deleteDialog": {
-    "title": "Kanal löschen",
-    "body": "Dadurch wird der Kanal {name} dauerhaft entfernt. Diese Aktion kann nicht rückgängig gemacht werden.",
-    "confirm": "Kanal löschen"
+    "title": "{name} löschen?",
+    "body": "Alarme werden nicht mehr an diesen Kanal gesendet.",
+    "confirm": "Löschen",
+    "failed": "Der Kanal wurde nicht gelöscht."
   },
   "errors": {
     "nameRequired": "Kanalname ist erforderlich.",
@@ -85,5 +83,11 @@
     "serverUrlRequired": "Server-URL ist erforderlich.",
     "topicRequired": "Thema ist erforderlich.",
     "appTokenRequired": "App-Token ist erforderlich."
-  }
+  },
+  "title": "Benachrichtigungen",
+  "emptyHint": "Slack, E-Mail, Webhooks, ntfy und Gotify können Alarme empfangen.",
+  "sending": "Wird gesendet",
+  "sendTo": "An {name} senden",
+  "actionsFor": "Aktionen für {name}",
+  "toggleFailed": "Der Kanal wurde nicht geändert."
 }

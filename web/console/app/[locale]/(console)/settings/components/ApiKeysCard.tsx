@@ -1,10 +1,9 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Button } from "../../../../components/ui/Button";
-import { Card } from "../../../../components/ui/Card";
+import { Input, Select } from "../../../../components/ui/Input";
 import { useAuth } from "../../../../contexts/AuthContext";
 import { useFastStatus } from "../../../../contexts/StatusContext";
 import { useApiKeys } from "../../../../hooks/useApiKeys";
@@ -16,6 +15,7 @@ import { expiryToIso } from "./apiKeyPresentation";
 import { KeyRow } from "./ApiKeyRow";
 import { KeyRevealModal, RevokeConfirmModal } from "./ApiKeySecurityDialogs";
 import { EditKeyModal } from "./EditKeyModal";
+import { Field, Message, Section, Sheet } from "./SettingsKit";
 
 /* ── main card ── */
 
@@ -53,6 +53,7 @@ export function ApiKeysCard() {
   const [createError, setCreateError] = useState("");
 
   const [dialog, setDialog] = useState<Dialog>(null);
+  const [formOpen, setFormOpen] = useState(false);
 
   /* admin gate */
   const isAdmin = user?.role === "owner" || user?.role === "admin";
@@ -104,6 +105,7 @@ export function ApiKeysCard() {
       };
       const created = await createKey(req);
       setDialog({ type: "reveal", created });
+      setFormOpen(false);
       /* reset form */
       setName("");
       setRole("operator");
@@ -129,135 +131,121 @@ export function ApiKeysCard() {
     setDialog(null);
   };
 
-  /* responsive header columns for key table */
-  const tableHeader = useMemo(
-    () => (
-      <div className="grid min-w-[58rem] grid-cols-[5rem_1fr_4rem_1fr_8rem_5.5rem_5.5rem_4rem] items-center gap-2 bg-[var(--surface)] px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-[var(--muted)]">
-        <span>{t("apiKeys.colPrefix")}</span>
-        <span>{t("apiKeys.colName")}</span>
-        <span>{t("apiKeys.colRole")}</span>
-        <span>{t("apiKeys.colScopes")}</span>
-        <span>{t("apiKeys.colAssets")}</span>
-        <span>{t("apiKeys.colCreated")}</span>
-        <span>{t("apiKeys.colLastUsed")}</span>
-        <span />
-      </div>
-    ),
-    [t],
-  );
-
   if (!isAdmin) {
     return (
-      <Card className="mb-6">
-        <p className="text-xs font-mono uppercase tracking-wider text-[var(--muted)] mb-2">{t("apiKeys.heading")}</p>
-        <p className="text-xs text-[var(--muted)]">{t("apiKeys.adminRequired")}</p>
-      </Card>
+      <Section title={t("apiKeys.heading")} id="api-tokens">
+        <Sheet pad>
+          <p className="st-msg">{t("apiKeys.adminRequired")}</p>
+        </Sheet>
+      </Section>
     );
   }
 
   return (
-    <>
-      <Card className="mb-6">
-        <div className="flex items-center justify-between mb-1">
-          <p className="text-xs font-mono uppercase tracking-wider text-[var(--muted)]">{t("apiKeys.heading")}</p>
-        </div>
-        <p className="text-xs text-[var(--muted)] mb-4">{t("apiKeys.description")}</p>
-
-        {/* ── create form ── */}
-        <div className="border border-[var(--line)] rounded-xl p-3 mb-4 space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-[1fr_8rem_8rem_auto] gap-2 items-end">
-            <div>
-              <label className="block text-[10px] uppercase tracking-wider text-[var(--muted)] mb-1">{t("apiKeys.name")}</label>
-              <input
+    <Section
+      title={t("apiKeys.heading")}
+      id="api-tokens"
+      action={(
+        <Button size="sm" onClick={() => setFormOpen((open) => !open)} aria-expanded={formOpen}>
+          {t("apiKeys.createKey")}
+        </Button>
+      )}
+    >
+      {formOpen ? (
+        <Sheet pad>
+          <form
+            className="st-form three"
+            aria-label={t("apiKeys.createKey")}
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleCreate();
+            }}
+          >
+            <Field label={t("apiKeys.name")} htmlFor="st-key-name" wide>
+              <Input
+                id="st-key-name"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 maxLength={120}
                 placeholder={t("apiKeys.namePlaceholder")}
-                className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1.5 text-xs text-[var(--text)] placeholder:text-[var(--muted)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                autoComplete="off"
               />
-            </div>
-            <div>
-              <label className="block text-[10px] uppercase tracking-wider text-[var(--muted)] mb-1">{t("apiKeys.role")}</label>
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1.5 text-xs text-[var(--text)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] cursor-pointer"
-              >
+            </Field>
+            <Field label={t("apiKeys.role")} htmlFor="st-key-role">
+              <Select id="st-key-role" className="w-full" value={role} onChange={(e) => setRole(e.target.value)}>
                 <option value="admin">{t("apiKeys.roleAdmin")}</option>
                 <option value="operator">{t("apiKeys.roleOperator")}</option>
                 <option value="viewer">{t("apiKeys.roleViewer")}</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-[10px] uppercase tracking-wider text-[var(--muted)] mb-1">{t("apiKeys.expiresAt")}</label>
-              <select
-                value={expiry}
-                onChange={(e) => setExpiry(e.target.value)}
-                className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1.5 text-xs text-[var(--text)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)] cursor-pointer"
-              >
+              </Select>
+            </Field>
+            <Field label={t("apiKeys.expiresAt")} htmlFor="st-key-expiry">
+              <Select id="st-key-expiry" className="w-full" value={expiry} onChange={(e) => setExpiry(e.target.value)}>
                 <option value="30d">{t("apiKeys.expires30d")}</option>
                 <option value="90d">{t("apiKeys.expires90d")}</option>
                 <option value="1y">{t("apiKeys.expires1y")}</option>
                 <option value="never">{t("apiKeys.expiresNever")}</option>
-              </select>
-            </div>
-            <Button variant="primary" size="sm" loading={creating} disabled={!canCreate} onClick={() => { void handleCreate(); }}>
-              <Plus size={13} />
-              {t("apiKeys.createKey")}
-            </Button>
-          </div>
-
-          {/* scope selector */}
-          <div>
-            <label className="block text-[10px] uppercase tracking-wider text-[var(--muted)] mb-1.5">{t("apiKeys.scopes")}</label>
-            <ScopeSelector
-              fullAccess={fullAccess}
-              onFullAccessChange={setFullAccess}
-              selectedScopes={selectedScopes}
-              onToggleScope={handleToggleScope}
-              onToggleGroup={handleToggleGroup}
-            />
-          </div>
-
-          <AssetSelector
-            assets={assets}
-            inputName="api-key-create-assets-mode"
-            restricted={restrictAssets}
-            onRestrictedChange={setRestrictAssets}
-            selectedAssetIDs={selectedAssetIDs}
-            onToggleAsset={handleToggleAsset}
-          />
-
-          {createError && <p className="text-xs text-[var(--bad)]">{createError}</p>}
-        </div>
-
-        {/* ── loading / error / empty ── */}
-        {loading && <p className="text-xs text-[var(--muted)] py-2">&nbsp;</p>}
-
-        {!loading && error && <p className="text-xs text-[var(--bad)]">{error}</p>}
-
-        {!loading && !error && keys.length === 0 && (
-          <p className="text-xs text-[var(--muted)] py-1">{t("apiKeys.emptyState")}</p>
-        )}
-
-        {/* ── key table ── */}
-        {!loading && keys.length > 0 && (
-          <div className="overflow-x-auto rounded-xl border border-[var(--line)]">
-            {tableHeader}
-            {keys.map((k) => (
-              <KeyRow
-                key={k.id}
-                keyInfo={k}
-                assetNameByID={assetNameByID}
-                canManage={canManageApiKey(user, k)}
-                onEdit={() => setDialog({ type: "edit", keyInfo: k })}
-                onRevoke={() => setDialog({ type: "revoke", keyInfo: k })}
+              </Select>
+            </Field>
+            <div className="st-field wide">
+              <span className="st-lbl">{t("apiKeys.scopes")}</span>
+              <ScopeSelector
+                fullAccess={fullAccess}
+                onFullAccessChange={setFullAccess}
+                selectedScopes={selectedScopes}
+                onToggleScope={handleToggleScope}
+                onToggleGroup={handleToggleGroup}
               />
-            ))}
+            </div>
+            <div className="st-field wide">
+              <AssetSelector
+                assets={assets}
+                inputName="api-key-create-assets-mode"
+                restricted={restrictAssets}
+                onRestrictedChange={setRestrictAssets}
+                selectedAssetIDs={selectedAssetIDs}
+                onToggleAsset={handleToggleAsset}
+              />
+            </div>
+            {createError ? <p className="st-msg bad st-field wide" role="alert">{createError}</p> : null}
+            <div className="st-acts st-field wide">
+              <Button type="submit" variant="primary" loading={creating} disabled={!canCreate}>
+                {t("apiKeys.create")}
+              </Button>
+              <Button type="button" variant="ghost" onClick={() => setFormOpen(false)}>{t("apiKeys.cancel")}</Button>
+            </div>
+          </form>
+        </Sheet>
+      ) : null}
+
+      <Sheet className={loading && keys.length === 0 ? "st-loading" : ""}>
+        {keys.length > 0 ? (
+          <div className="st-row st-tk st-cols" aria-hidden="true">
+            <span>{t("apiKeys.colName")}</span>
+            <span>{t("apiKeys.colRole")}</span>
+            <span className="st-hide-m">{t("apiKeys.colAccess")}</span>
+            <span className="r st-hide-m">{t("apiKeys.colLastUsed")}</span>
+            <span className="r">{t("apiKeys.expiresAt")}</span>
+            <span />
           </div>
-        )}
-      </Card>
+        ) : null}
+        {keys.map((k) => (
+          <KeyRow
+            key={k.id}
+            keyInfo={k}
+            assetNameByID={assetNameByID}
+            canManage={canManageApiKey(user, k)}
+            onEdit={() => setDialog({ type: "edit", keyInfo: k })}
+            onRevoke={() => setDialog({ type: "revoke", keyInfo: k })}
+          />
+        ))}
+        {!loading && !error && keys.length === 0 ? (
+          <div className="st-empty">
+            <b>{t("apiKeys.emptyState")}</b>
+          </div>
+        ) : null}
+        {!loading && error ? <Message tone="bad">{error}</Message> : null}
+      </Sheet>
 
       {/* ── key reveal modal ── */}
       {dialog?.type === "reveal" && (
@@ -284,6 +272,6 @@ export function ApiKeysCard() {
           onConfirm={(request) => handleUpdate(dialog.keyInfo, request)}
         />
       )}
-    </>
+    </Section>
   );
 }

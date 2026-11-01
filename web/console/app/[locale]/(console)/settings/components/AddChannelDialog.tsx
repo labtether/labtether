@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Bell, Globe, Mail, MessageSquare } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Button } from "../../../../components/ui/Button";
-import { Card } from "../../../../components/ui/Card";
 import { Input, Select } from "../../../../components/ui/Input";
 import {
   buildNotificationChannelConfig,
@@ -16,6 +15,7 @@ import {
   type NotificationChannelType,
   type SMTPTLSMode,
 } from "./notificationChannelForm";
+import { SettingsDialog } from "./SettingsKit";
 
 type AddChannelDialogProps = {
   open: boolean;
@@ -31,17 +31,17 @@ type TypeOption = {
 };
 
 const TYPE_OPTIONS: TypeOption[] = [
-  { type: "slack", icon: <MessageSquare size={18} />, descKey: "slack" },
-  { type: "email", icon: <Mail size={18} />, descKey: "email" },
-  { type: "webhook", icon: <Globe size={18} />, descKey: "webhook" },
-  { type: "ntfy", icon: <Bell size={18} />, descKey: "ntfy" },
-  { type: "gotify", icon: <Bell size={18} />, descKey: "gotify" },
+  { type: "slack", icon: <MessageSquare size={18} aria-hidden="true" />, descKey: "slack" },
+  { type: "email", icon: <Mail size={18} aria-hidden="true" />, descKey: "email" },
+  { type: "webhook", icon: <Globe size={18} aria-hidden="true" />, descKey: "webhook" },
+  { type: "ntfy", icon: <Bell size={18} aria-hidden="true" />, descKey: "ntfy" },
+  { type: "gotify", icon: <Bell size={18} aria-hidden="true" />, descKey: "gotify" },
 ];
 
 function FormField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="block space-y-1">
-      <span className="text-[10px] text-[var(--muted)]">{label}</span>
+    <label className="st-field">
+      <span className="st-lbl">{label}</span>
       {children}
     </label>
   );
@@ -82,7 +82,7 @@ function ConfigForm({
   };
 
   return (
-    <div className="space-y-3">
+    <div className="st-form-1">
       <FormField label={t("form.name")}>
         <Input name="name" value={name} onChange={(e) => setName(e.target.value)} disabled={saving} autoFocus />
       </FormField>
@@ -127,8 +127,8 @@ function ConfigForm({
             <Input name="to" value={config.to ?? ""} onChange={set("to")} placeholder="ops@example.com, on-call@example.com" inputMode="email" disabled={saving} maxLength={2048} />
           </FormField>
           {smtpTLSMode === "insecure" && allowInsecureSMTP ? (
-            <div className="rounded-lg border border-[var(--bad)] bg-[var(--bg-error)] p-3 space-y-2">
-              <p className="text-xs text-[var(--bad)]">{t("form.smtpInsecureWarning")}</p>
+            <div className="st-form-1">
+              <p className="st-msg bad">{t("form.smtpInsecureWarning")}</p>
               <FormField label={t("form.smtpInsecureAcknowledgement", { phrase: SMTP_INSECURE_ACKNOWLEDGEMENT })}>
                 <Input
                   name="smtp_insecure_acknowledgement"
@@ -259,62 +259,53 @@ export function AddChannelDialog({ open, allowInsecureSMTP, onClose, onConfirm }
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      onClick={handleClose}
-      onKeyDown={(event) => { if (event.key === "Escape") handleClose(); }}
-    >
-      <div role="dialog" aria-modal="true" aria-labelledby="add-notification-channel-title" onClick={(e) => e.stopPropagation()}>
-        <Card className="w-[32rem] max-w-[92vw] space-y-4 max-h-[90vh] overflow-y-auto">
-          {selectedType === null ? (
-            <>
-              <h3 id="add-notification-channel-title" className="text-sm font-medium text-[var(--text)]">{t("typeSelect.heading")}</h3>
-              <div className="grid grid-cols-1 gap-2">
-                {TYPE_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.type}
-                    className="flex items-center gap-3 rounded-lg border border-[var(--line)] px-3 py-2.5 text-left transition-colors hover:border-[var(--accent)] hover:bg-[var(--hover)] cursor-pointer bg-transparent"
-                    onClick={() => handleSelectType(opt.type)}
-                  >
-                    <span className="shrink-0 text-[var(--muted)]">{opt.icon}</span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-[var(--text)]">{t(`typeSelect.${opt.descKey}.name` as Parameters<typeof t>[0])}</p>
-                      <p className="text-xs text-[var(--muted)] truncate">{t(`typeSelect.${opt.descKey}.description` as Parameters<typeof t>[0])}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-              <div className="flex justify-end">
-                <Button variant="secondary" onClick={handleClose}>{t("cancel")}</Button>
-              </div>
-            </>
-          ) : (
-            <>
-              <h3 id="add-notification-channel-title" className="text-sm font-medium text-[var(--text)]">{t(`typeSelect.${selectedType}.name` as Parameters<typeof t>[0])}</h3>
-              <ConfigForm
-                t={t}
-                type={selectedType}
-                name={name}
-                setName={setName}
-                config={config}
-                setConfig={setConfig}
-                allowInsecureSMTP={allowInsecureSMTP}
-                insecureAcknowledgement={insecureAcknowledgement}
-                setInsecureAcknowledgement={setInsecureAcknowledgement}
-                saving={saving}
-              />
-              {error ? <p role="alert" className="text-xs text-[var(--bad)]">{error}</p> : null}
-              <div className="flex items-center justify-between gap-2">
-                <Button variant="ghost" onClick={handleBack} disabled={saving}>{t("back")}</Button>
-                <div className="flex items-center gap-2">
-                  <Button variant="secondary" onClick={handleClose} disabled={saving}>{t("cancel")}</Button>
-                  <Button variant="primary" loading={saving} onClick={() => { void handleSave(); }}>{t("save")}</Button>
-                </div>
-              </div>
-            </>
-          )}
-        </Card>
-      </div>
-    </div>
+    <SettingsDialog labelledBy="add-notification-channel-title" onClose={handleClose}>
+      {selectedType === null ? (
+        <>
+          <h3 id="add-notification-channel-title">{t("typeSelect.heading")}</h3>
+          <div className="st-pick">
+            {TYPE_OPTIONS.map((opt) => (
+              <button
+                key={opt.type}
+                type="button"
+                onClick={() => handleSelectType(opt.type)}
+              >
+                {opt.icon}
+                <span className="st-row-l two">
+                  <span className="st-nm">{t(`typeSelect.${opt.descKey}.name` as Parameters<typeof t>[0])}</span>
+                  <span className="st-g">{t(`typeSelect.${opt.descKey}.description` as Parameters<typeof t>[0])}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="st-dlg-acts">
+            <Button variant="secondary" onClick={handleClose}>{t("cancel")}</Button>
+          </div>
+        </>
+      ) : (
+        <>
+          <h3 id="add-notification-channel-title">{t(`typeSelect.${selectedType}.name` as Parameters<typeof t>[0])}</h3>
+          <ConfigForm
+            t={t}
+            type={selectedType}
+            name={name}
+            setName={setName}
+            config={config}
+            setConfig={setConfig}
+            allowInsecureSMTP={allowInsecureSMTP}
+            insecureAcknowledgement={insecureAcknowledgement}
+            setInsecureAcknowledgement={setInsecureAcknowledgement}
+            saving={saving}
+          />
+          {error ? <p role="alert" className="st-msg bad">{error}</p> : null}
+          <div className="st-dlg-acts">
+            <Button variant="ghost" onClick={handleBack} disabled={saving}>{t("back")}</Button>
+            <span className="sp" />
+            <Button variant="secondary" onClick={handleClose} disabled={saving}>{t("cancel")}</Button>
+            <Button variant="primary" loading={saving} onClick={() => { void handleSave(); }}>{t("save")}</Button>
+          </div>
+        </>
+      )}
+    </SettingsDialog>
   );
 }

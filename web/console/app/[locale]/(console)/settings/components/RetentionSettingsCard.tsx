@@ -1,12 +1,14 @@
+"use client";
+
 import type { Dispatch, SetStateAction } from "react";
+import { useTranslations } from "next-intl";
 import { retentionFieldDefs, type RetentionSettingsPayload } from "../../../../console/models";
-import { Card } from "../../../../components/ui/Card";
 import { Button } from "../../../../components/ui/Button";
 import { Input } from "../../../../components/ui/Input";
-import { SkeletonRow } from "../../../../components/ui/Skeleton";
+import { Row, Section, Sheet, SheetFoot } from "./SettingsKit";
 
 type RetentionSettingsCardProps = {
-  sectionHeadingClassName: string;
+  retentionSettings: RetentionSettingsPayload["settings"] | null;
   retentionPresets: RetentionSettingsPayload["presets"];
   retentionDraftValues: Record<string, string>;
   setRetentionDraftValues: Dispatch<SetStateAction<Record<string, string>>>;
@@ -17,8 +19,9 @@ type RetentionSettingsCardProps = {
   saveRetentionSettings: () => Promise<void> | void;
 };
 
+/** How long the hub keeps each kind of history. Presets apply at once; edited windows wait for Save. */
 export function RetentionSettingsCard({
-  sectionHeadingClassName,
+  retentionSettings,
   retentionPresets,
   retentionDraftValues,
   setRetentionDraftValues,
@@ -28,58 +31,48 @@ export function RetentionSettingsCard({
   applyRetentionPreset,
   saveRetentionSettings,
 }: RetentionSettingsCardProps) {
+  const t = useTranslations("settings");
+  const dirty = retentionFieldDefs.some(
+    (field) => (retentionDraftValues[field.key] ?? "") !== (retentionSettings?.[field.key] ?? ""),
+  );
+
   return (
-    <Card className="mb-6">
-      <h2>Data Cleanup</h2>
-      {retentionLoading ? (
-        <div className="space-y-1">
-          <SkeletonRow />
-          <SkeletonRow />
-        </div>
-      ) : null}
-      <div className="space-y-6">
-        <div>
-          <p className={sectionHeadingClassName}>Quick Presets</p>
-          <div className="flex items-center gap-2 mt-2">
-            {retentionPresets.map((preset) => (
-              <Button
-                key={preset.id}
-                disabled={retentionSaving}
-                onClick={() => void applyRetentionPreset(preset.id)}
-              >
-                {preset.name}
-              </Button>
-            ))}
-          </div>
-        </div>
-        <div>
-          <p className={sectionHeadingClassName}>Retention Windows</p>
-          <div className="divide-y divide-[var(--line)] mt-2">
-            {retentionFieldDefs.map((field) => (
-              <div key={field.key} className="flex items-start justify-between gap-4 py-3">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm font-medium text-[var(--text)]">{field.label}</span>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Input
-                    value={retentionDraftValues[field.key] ?? ""}
-                    onChange={(event) =>
-                      setRetentionDraftValues((current) => ({ ...current, [field.key]: event.target.value }))
-                    }
-                    placeholder="e.g. 24h, 7d"
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-      <div className="flex items-center gap-3 pt-4">
-        <Button variant="primary" disabled={retentionSaving} onClick={() => void saveRetentionSettings()}>
-          {retentionSaving ? "Saving..." : "Save Cleanup Rules"}
-        </Button>
-        {retentionMessage ? <span className="text-xs text-[var(--muted)]">{retentionMessage}</span> : null}
-      </div>
-    </Card>
+    <Section title={t("retention.title")} id="retention">
+      <Sheet className={retentionLoading && !retentionSettings ? "st-loading" : ""}>
+        {retentionFieldDefs.map((field) => {
+          const id = `st-retention-${field.key}`;
+          return (
+            <Row key={field.key} label={<label htmlFor={id}>{t(`retention.fields.${field.key}`)}</label>}>
+              <Input
+                id={id}
+                className="st-in-s"
+                value={retentionDraftValues[field.key] ?? ""}
+                onChange={(event) => setRetentionDraftValues((current) => ({ ...current, [field.key]: event.target.value }))}
+                placeholder={t("retention.placeholder")}
+                disabled={retentionLoading}
+              />
+            </Row>
+          );
+        })}
+        <SheetFoot message={retentionMessage}>
+          {retentionPresets.length > 0 ? <span className="st-label">{t("retention.presets")}</span> : null}
+          {retentionPresets.map((preset) => (
+            <Button
+              key={preset.id}
+              size="sm"
+              variant="ghost"
+              title={preset.description || undefined}
+              disabled={retentionSaving}
+              onClick={() => void applyRetentionPreset(preset.id)}
+            >
+              {preset.name}
+            </Button>
+          ))}
+          <Button size="sm" disabled={retentionSaving || !dirty} loading={retentionSaving} onClick={() => void saveRetentionSettings()}>
+            {t("retention.save")}
+          </Button>
+        </SheetFoot>
+      </Sheet>
+    </Section>
   );
 }
