@@ -3,5 +3,6 @@
 @import "./styles/foundation.css";
 @import "./styles/themes.css";
 @import "./styles/shell.css";
+@import "./styles/devices.css";
 @import "./styles/remote-view.css";
 @import "./styles/interaction.css";

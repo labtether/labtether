@@ -1,8 +1,8 @@
 /* ── Living Lab global utilities ── */
 
-/* Focus ring system — high-contrast for keyboard navigation */
+/* Focus ring for keyboard navigation: a quiet grey ring (2.0), at least 3:1 against both themes' surfaces. */
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 1.5px solid var(--text-3);
   outline-offset: 2px;
   transition: outline-offset var(--dur-instant) var(--ease-out);
 }
@@ -10,8 +10,8 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-subtle), 0 0 0 1px var(--accent);
+  border-color: var(--text-3);
+  box-shadow: 0 0 0 1px var(--text-3);
 }
 /* Container focus-within for grouped controls */
 fieldset:focus-within,
