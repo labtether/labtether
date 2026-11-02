@@ -9,6 +9,7 @@ const terminalState = vi.hoisted(() => ({ instances: [] as Array<{
 vi.mock("@xterm/xterm", () => ({ Terminal: class {
   options = {};
   unicode = { activeVersion: "" };
+  parser = { registerCsiHandler: () => ({ dispose() {} }), registerDcsHandler: () => ({ dispose() {} }), registerOscHandler: () => ({ dispose() {} }) };
   data: ((value: string) => void) | null = null;
   paste = vi.fn((text: string) => { this.data?.(`\x1b[200~${text}\x1b[201~`); });
   constructor() { terminalState.instances.push(this); }
