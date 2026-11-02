@@ -365,18 +365,6 @@ func (d *Deps) LatestAgentVersionForPlatform(agentOS, arch string) (string, stri
 	return agent.Version, m.GeneratedAt, nil
 }
 
-func DetermineAgentVersionStatus(currentVersion, latestVersion string) string {
-	current := strings.TrimSpace(currentVersion)
-	latest := strings.TrimSpace(latestVersion)
-	if current == "" || latest == "" {
-		return "unknown"
-	}
-	if strings.EqualFold(current, latest) {
-		return "up_to_date"
-	}
-	return "update_available"
-}
-
 // SendUpdateRequest sends an update.request message to a connected agent to
 // trigger a self-update. This is a fire-and-forget push — the agent will
 // report progress and results via update.progress / update.result messages.
