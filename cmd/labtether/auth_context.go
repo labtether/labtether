@@ -22,7 +22,9 @@ func contextWithUserRole(ctx context.Context, role string) context.Context {
 	return apiv2.ContextWithUserRole(ctx, role)
 }
 
+// contextWithPrincipal also tells the request's audit row who signed in.
 func contextWithPrincipal(ctx context.Context, userID, role string) context.Context {
+	noteAuditActor(ctx, userID)
 	return apiv2.ContextWithPrincipal(ctx, userID, role)
 }
 
