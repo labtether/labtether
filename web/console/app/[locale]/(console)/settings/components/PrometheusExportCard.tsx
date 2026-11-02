@@ -34,6 +34,24 @@ const REMOTE_WRITE_CREDENTIAL_KEYS = new Set([
   "prometheus.remote_write_password",
 ]);
 
+/** Whether the hub serves HTTPS (Security › HTTPS); true until the hub says otherwise, as TLS is on by default. */
+function useHubTLSEnabled(): boolean {
+  const [enabled, setEnabled] = useState(true);
+  useEffect(() => {
+    let live = true;
+    fetch("/api/settings/tls", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { tls_enabled?: unknown } | null) => {
+        if (live && typeof payload?.tls_enabled === "boolean") setEnabled(payload.tls_enabled);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
+  return enabled;
+}
+
 function boolStr(value: string | undefined, fallback: boolean): boolean {
   if (value === "true") return true;
   if (value === "false") return false;
@@ -55,6 +73,7 @@ export function PrometheusExportCard() {
 
   // Draft copy of mutable fields
   const [draft, setDraft] = useState<SettingsMap>({});
+  const tlsOn = useHubTLSEnabled();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -143,7 +162,7 @@ export function PrometheusExportCard() {
       }
     } catch (err) {
       setTestState("error");
-      setTestMessage(err instanceof Error ? err.message : "Connection test failed.");
+      setTestMessage(t("prometheus.connectionFailed"));
     }
   }, [t, draft, passwordConfigured]);
 
@@ -152,7 +171,8 @@ export function PrometheusExportCard() {
   const remoteWriteEnabled = boolStr(draft[KEYS.remoteWriteEnabled], false);
   const processMetricsEnabled = boolStr(draft[KEYS.processMetricsEnabled], false);
 
-  const scrapeURL = `http://<hub-host>:8080/metrics`;
+  // With hub TLS on (the default) :8080 only redirects, so a scraper must use HTTPS on 8443.
+  const scrapeURL = tlsOn ? "https://<hub-host>:8443/metrics" : "http://<hub-host>:8080/metrics";
   const dirty = Object.keys(buildPrometheusPatch(draft, settings)).length > 0;
 
   return (

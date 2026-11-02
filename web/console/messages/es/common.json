@@ -39,7 +39,7 @@
   "errorBoundary": {
     "title": "Algo salió mal",
     "sectionTitle": "Algo salió mal en {section}",
-    "sectionDescription": "Esta sección encontró un error. Las demás secciones no se ven afectadas.",
+    "sectionDescription": "Las demás páginas siguen funcionando.",
     "tryAgain": "Reintentar"
   },
   "demoBanner": {
@@ -53,5 +53,9 @@
     "files": "Se requiere acceso de operador para explorar o descargar archivos en los hosts administrados.",
     "recordings": "Se requiere acceso de operador para ver y descargar grabaciones de sesiones.",
     "hostData": "Se requiere acceso de operador para esta vista. Los observadores pueden ver el inventario y el estado, pero no las sesiones ni los datos del interior de un host."
+  },
+  "session": {
+    "unreachable": "No se pudo conectar con el hub",
+    "retrying": "Reintentando automáticamente."
   }
 }

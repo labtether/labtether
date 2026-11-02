@@ -324,14 +324,14 @@
       "discovery": "Discovery"
     },
     "overrides": {
-      "serviceName": "Service Name",
+      "serviceName": "Service name",
       "host": "Host",
-      "overriddenFields": "Overridden Fields",
-      "lastUpdated": "Last Updated",
+      "overriddenFields": "Overridden fields",
+      "lastUpdated": "Last updated",
       "actions": "Actions",
       "loading": "Loading...",
-      "resetToAuto": "Reset to Auto",
-      "resetSelected": "Reset Selected",
+      "resetToAuto": "Reset to auto",
+      "resetSelected": "Reset selected",
       "resetConfirm": "Reset this override? The service will revert to its auto-detected values.",
       "bulkResetConfirm": "Reset {count} overrides? These services will revert to auto-detected values.",
       "emptyState": "No overrides. Services are showing their auto-detected values.",
@@ -345,8 +345,8 @@
       }
     },
     "grouping": {
-      "urlGroupingTitle": "URL Grouping",
-      "serviceMergingTitle": "Service Merging",
+      "urlGroupingTitle": "URL grouping",
+      "serviceMergingTitle": "Service merging",
       "mode": "Mode",
       "modes": {
         "off": "Off",
@@ -366,17 +366,17 @@
         "balanced": "Merge high-confidence and selected medium-confidence matches.",
         "aggressive": "Merge broader candidates and rely more on manual exclusions."
       },
-      "confidenceThreshold": "Confidence Threshold",
-      "aliasRules": "Alias Rules",
-      "aliasRulesDesc": "One rule per line. Format: source_pattern => canonical_pattern.",
+      "confidenceThreshold": "Confidence threshold",
+      "aliasRules": "Alias rules",
+      "aliasRulesDesc": "One rule per line. Format: source_pattern => target_pattern.",
       "aliasRulesPlaceholder": "*.*.example.com => *.example.com",
-      "neverGroupRules": "Never-Group Rules",
+      "neverGroupRules": "Never-group rules",
       "neverGroupDesc": "URL pair per line. Use this to prevent grouping or remove an alternative URL from Service Edit.",
-      "dryRun": "Dry Run",
+      "dryRun": "Dry run",
       "dryRunLabel": "Evaluate merge candidates without auto-applying.",
-      "forceMergeRules": "Force-Merge Rules",
+      "forceMergeRules": "Force-merge rules",
       "forceMergeDesc": "URL pair per line. Supported separators: =>, <=>, or comma.",
-      "neverMergeRules": "Never-Merge Rules",
+      "neverMergeRules": "Never-merge rules",
       "neverMergeDesc": "URL pair per line. Use this to block merges or undo a merge from Service Edit.",
       "urlPairPlaceholder": "https://example.tail.domain => https://example.domain",
       "quickPresets": "Quick presets",
@@ -391,10 +391,10 @@
       "loadingMerge": "Loading service merge settings...",
       "saving": "Saving...",
       "presets": {
-        "ignoreMiddleLabel": "Ignore Middle Label",
-        "balanced": "Balanced Preset",
-        "safe": "Safe Preset",
-        "live": "Live Preset"
+        "ignoreMiddleLabel": "Ignore middle label",
+        "balanced": "Balanced preset",
+        "safe": "Safe preset",
+        "live": "Live preset"
       },
       "save": "Save",
       "saved": "Settings saved",
@@ -438,7 +438,7 @@
       }
     },
     "icons": {
-      "upload": "Upload Icon",
+      "upload": "Upload icon",
       "rename": "Rename",
       "delete": "Delete",
       "deleteConfirm": "Delete this icon?",
