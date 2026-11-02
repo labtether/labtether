@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from "react";
 import type { ITheme } from "@xterm/xterm";
 import { labtetherTerminalTheme } from "./terminal/terminalLook";
+import { createReplaySilencer } from "./terminal/replaySilencer";
 
 export type XTerminalHandle = {
   /** Write data to the terminal display (does NOT send to remote) */
@@ -297,6 +298,8 @@ const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XTerminal
       term.loadAddon(unicode11Addon);
 
       term.unicode.activeVersion = "11";
+      const history = createReplaySilencer(term);
+      disposablesRef.current.push(history);
 
       term.open(containerRef.current);
       fitAddon.fit();
@@ -321,7 +324,7 @@ const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XTerminal
 
       // Connect WebSocket if URL provided
       if (wsUrl) {
-        connectWebSocket(term, wsUrl);
+        connectWebSocket(term, wsUrl, history.write);
       }
 
       const clickFocus = () => term.focus();
@@ -331,10 +334,14 @@ const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XTerminal
       });
     };
 
-    const connectWebSocket = (term: import("@xterm/xterm").Terminal, url: string) => {
+    const connectWebSocket = (term: import("@xterm/xterm").Terminal, url: string, writeHistory: (data: string | Uint8Array) => void) => {
       const socket = new WebSocket(url);
       socketRef.current = socket;
       let streamReadySignaled = false;
+      // The Hub's terminal stream sends status events, then the session's earlier history, then "ready". Old queries
+      // in that history get no answer. Streams without status events (a Portainer shell) are live from the start.
+      let live = true;
+      const writeOutput = (data: string | Uint8Array) => (live ? term.write(data) : writeHistory(data));
 
       const markStreamReady = (message?: string) => {
         if (streamReadySignaled) return;
@@ -360,7 +367,7 @@ const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XTerminal
         if (cancelled) return;
         if (event.data instanceof ArrayBuffer) {
           markStreamReady();
-          term.write(new Uint8Array(event.data));
+          writeOutput(new Uint8Array(event.data));
         } else if (typeof event.data === "string") {
           const payload = parseTerminalStreamEvent(event.data);
           if (
@@ -370,10 +377,12 @@ const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XTerminal
           ) {
             const typeLabel = payload.type.trim().toLowerCase();
             if (typeLabel === "status") {
+              if (!streamReadySignaled) live = false;
               onStreamStatusRef.current?.(payload);
               return;
             }
             if (typeLabel === "ready") {
+              live = true;
               onStreamStatusRef.current?.(payload);
               markStreamReady(payload.message);
               return;
@@ -386,7 +395,7 @@ const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XTerminal
             }
           }
           markStreamReady();
-          term.write(event.data);
+          writeOutput(event.data);
         }
       };
 
