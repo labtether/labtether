@@ -97,6 +97,9 @@ v1.7.1.
 - Terminal links that name a target or a quick-connect address open it.
 - CPU and other percent charts stop at 100% on a busy device instead of
   drawing up to 104%.
+- An agent at or above the Hub's agent release shows as up to date. Before,
+  any other version showed "update available", so an agent updated before
+  the Hub was offered the older release, which the agent refuses.
 
 ## [1.7.1] - 2026-10-31
 
