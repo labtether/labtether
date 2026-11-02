@@ -245,6 +245,7 @@
     "colRole": "Rol",
     "colLastUsed": "Último uso",
     "never": "Nunca",
+    "expired": "Caducada",
     "revoke": "Revocar",
     "edit": "Editar",
     "editTitle": "Editar clave de API",

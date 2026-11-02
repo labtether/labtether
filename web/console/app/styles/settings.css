@@ -79,6 +79,7 @@
 .st-foot > .st-msg { margin-right: auto; }
 .st-msg { min-width: 0; font-size: var(--fs-meta); line-height: var(--lh-meta); color: var(--text-2); overflow-wrap: anywhere; }
 .st-msg.bad { color: var(--bad-text); }
+.st-bad { color: var(--bad-text); }
 .st-msg.warn { color: var(--warn-text); }
 .st-sheet > .st-msg { padding: 8px 12px; }
 

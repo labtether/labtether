@@ -101,6 +101,9 @@ v1.7.1.
   Quick connect.
 - `/api-docs` without a language in the address opens the API docs instead of
   an "unauthorized" error.
+- Settings › Security › API keys says "Expired" for a key past its expiry.
+  It showed only the past time. The plain-HTTP note on a file connection no
+  longer names version 1.7.1.
 - Clearing a schedule's group when editing it is saved.
 - Terminal links that name a target or a quick-connect address open it.
 - CPU and other percent charts stop at 100% on a busy device instead of
