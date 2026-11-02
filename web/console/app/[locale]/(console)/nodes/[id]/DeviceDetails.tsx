@@ -8,6 +8,7 @@ import type { Asset, Group } from "../../../../console/models";
 import { ContainsSummary } from "./ContainsSummary";
 import { GroupPathBreadcrumb } from "./GroupPathBreadcrumb";
 import { agentVersion, deviceAddress, deviceOS, deviceState, parseBackupAgeDays, shortWhen, uptimeParts } from "./deviceStatusModel";
+import { copyText } from "../../../../lib/clipboard";
 
 type Props = {
   asset: Asset;
@@ -52,7 +53,7 @@ export function DeviceDetails({ asset, nodeHasAgent, host, groups, guests }: Pro
         {address ? (
           <Row k={t("address")}>
             <span>{address}</span>
-            <button type="button" className="dv-copy" aria-label={t("copyAddress")} onClick={() => void navigator.clipboard?.writeText(address)}>
+            <button type="button" className="dv-copy" aria-label={t("copyAddress")} onClick={() => void copyText(address).catch(() => {})}>
               <Copy aria-hidden="true" />
             </button>
           </Row>

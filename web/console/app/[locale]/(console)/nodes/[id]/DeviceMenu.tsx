@@ -15,6 +15,7 @@ import { NodeEditModal } from "./NodeEditModal";
 import { deviceAddress } from "./deviceStatusModel";
 import { panelHref } from "./deviceTabsModel";
 import { useNodeDeleteFlow } from "./useNodeDeleteFlow";
+import { copyText } from "../../../../lib/clipboard";
 
 export type DeviceOffers = { terminal: boolean; files: boolean; desktop: boolean };
 type Power = "restart" | "shutdown";
@@ -73,7 +74,7 @@ export function DeviceMenu({ asset, offers, skip = [], variant = "head", onPower
               </Menu.Item>
             ))}
             {address ? (
-              <Menu.Item className="lt-menu-item" onSelect={() => void navigator.clipboard?.writeText(address)}>
+              <Menu.Item className="lt-menu-item" onSelect={() => void copyText(address).catch(() => {})}>
                 {t("copyAddress")}
               </Menu.Item>
             ) : null}

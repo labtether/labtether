@@ -23,6 +23,7 @@ import { useSession } from "../../../../hooks/useSession";
 import { useTerminalPreferences } from "../../../../hooks/useTerminalPreferences";
 import { useTerminalSnippets } from "../../../../hooks/useTerminalSnippets";
 import { getFontById } from "../../../../terminal/fonts";
+import { copyText } from "../../../../lib/clipboard";
 
 /** The package manager command that installs tmux on the device's OS. */
 function tmuxInstallCommand(asset: { metadata?: Record<string, string> } | null): string {
@@ -131,7 +132,7 @@ export function TerminalTab({ nodeId }: { nodeId: string }) {
             type="button"
             className="tm-qbtn"
             onClick={() => {
-              void navigator.clipboard?.writeText(installCmd).then(() => setCopied(true), () => setCopied(false));
+              void copyText(installCmd).then(() => setCopied(true), () => setCopied(false));
             }}
           >
             {copied ? t("copied") : t("copy")}

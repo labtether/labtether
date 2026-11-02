@@ -6,6 +6,7 @@ import { Button } from "../../../../components/ui/Button";
 import type { ApiKeyInfo, CreatedKeyResponse } from "../../../../hooks/useApiKeys";
 import { sanitizeErrorMessage } from "../../../../lib/sanitizeErrorMessage";
 import { SettingsDialog } from "./SettingsKit";
+import { copyText } from "../../../../lib/clipboard";
 
 /* ── a new key's value, shown once ── */
 
@@ -20,11 +21,11 @@ export function KeyRevealModal({ created, onDismiss }: KeyRevealModalProps) {
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(created.raw_key);
+      await copyText(created.raw_key);
       setCopied(true);
       setTimeout(() => setCopied(false), 3000);
     } catch {
-      // Clipboard blocked (plain HTTP): the value stays selectable.
+      // Copy refused: the value stays selectable.
     }
   };
 

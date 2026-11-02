@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp, MoreHorizontal, RefreshCw, Search } from "lucid
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { Button } from "../../../../components/ui/Button";
+import { copyText as copyToClipboard } from "../../../../lib/clipboard";
 
 /** Shared parts of the System tab's list views: filter, refresh, sortable headers, row ⋯ and list states. */
 
@@ -138,7 +139,7 @@ export function RowMenu({ name, items }: { name: string; items: RowMenuItem[] })
 
 /** Copy text to the clipboard; nothing happens where the browser refuses. */
 export function copyText(text: string) {
-  try { void navigator.clipboard?.writeText(text); } catch { /* clipboard not allowed */ }
+  void copyToClipboard(text).catch(() => {});
 }
 
 /** Loading, error and empty states for a list; children render when there are rows. */
