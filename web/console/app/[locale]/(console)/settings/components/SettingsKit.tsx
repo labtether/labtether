@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { Check, Copy } from "lucide-react";
 import { Switch as KitSwitch } from "../../../../components/ui/Switch";
+import { copyText } from "../../../../lib/clipboard";
 
 /*
  * The 2.0 Settings grammar shared by General, Notifications, Security and Agents: a section title on the canvas,
@@ -174,8 +175,7 @@ export function CopyButton({
       className="st-icon-btn"
       aria-label={copied && copiedLabel ? copiedLabel : label}
       onClick={() => {
-        void navigator.clipboard
-          ?.writeText(text)
+        void copyText(text)
           .then(() => {
             set(true);
             window.setTimeout(() => set(false), 2000);

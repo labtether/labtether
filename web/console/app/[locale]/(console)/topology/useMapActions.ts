@@ -6,6 +6,7 @@ import type { RelationshipType, TopologyConnection, TopologyState, Zone, ZoneMem
 import type { DisplayConnection } from "./topologyRelationshipGraph";
 import type { useTopologyData } from "./useTopologyData";
 import type { MapWords } from "./useMapWords";
+import { copyText } from "../../../lib/clipboard";
 
 type Data = ReturnType<typeof useTopologyData>;
 
@@ -60,7 +61,7 @@ export function useMapActions(data: Data, words: MapWords, nameOf: (id: string) 
   const setLabel = useCallback((id: string, label: string) => run(() => data.updateConnection(id, { label })), [run, data]);
 
   const copy = useCallback((text: string) => {
-    void navigator.clipboard?.writeText(text).then(() => addToast("success", t("copied", { text })), () => addToast("error", t("errors.copy")));
+    void copyText(text).then(() => addToast("success", t("copied", { text })), () => addToast("error", t("errors.copy")));
   }, [addToast, t]);
 
   return {

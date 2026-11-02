@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { Copy, Check } from "lucide-react";
+import { copyText } from "../../lib/clipboard";
 
 export function CopyButton({
   text,
@@ -14,11 +15,11 @@ export function CopyButton({
 }) {
   const [copied, setCopied] = useState(false);
   const handleCopy = useCallback(() => {
-    void navigator.clipboard.writeText(text).then(() => {
+    void copyText(text).then(() => {
       onCopy?.();
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    });
+    }, () => setCopied(false));
   }, [onCopy, text]);
   return (
     <button

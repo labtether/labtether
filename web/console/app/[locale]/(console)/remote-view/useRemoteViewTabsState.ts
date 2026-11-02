@@ -2,10 +2,11 @@
 
 import { useState, useCallback, useMemo } from "react";
 import type { RemoteViewTab, RemoteViewConnectionState } from "./types";
+import { clientId } from "../../../lib/clientId";
 
 function newTab(): RemoteViewTab {
   return {
-    id: crypto.randomUUID(),
+    id: clientId(),
     type: "new",
     label: "New Tab",
     connectionState: "idle",
