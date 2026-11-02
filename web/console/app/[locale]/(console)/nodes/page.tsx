@@ -12,7 +12,7 @@ import { Input } from "../../../components/ui/Input";
 import { AddDeviceModal } from "../../../components/AddDeviceModal";
 import { RoutePerfBoundary } from "../../../components/RoutePerfBoundary";
 import { useFastStatus, useSlowStatus, useStatusControls } from "../../../contexts/StatusContext";
-import { PendingAgentsBanner } from "./nodesPageComponents";
+import { PendingAgents } from "./PendingAgents";
 import { DeviceTree } from "./DeviceTree";
 import { useDeviceTree } from "./useDeviceTree";
 import { useHierarchyManagement } from "./useHierarchyManagement";
@@ -230,7 +230,7 @@ export default function NodesPage() {
         groups={slowStatus?.groups ?? []}
       />
 
-      <PendingAgentsBanner />
+      <PendingAgents />
 
       <LinkSuggestionsBanner
         count={proposals.length}

@@ -32,7 +32,11 @@
     "dismiss": "Dismiss",
     "matchSignals": "Match signals",
     "confidence": "Confidence: {value}%",
-    "newSuggestions": "{count} suggested relationships"
+    "newSuggestions": "{count, plural, one {# suggested relationship} other {# suggested relationships}}",
+    "review": "Review",
+    "pair": "{a} and {b}",
+    "noneLeft": "No suggestions left.",
+    "failed": "Could not save the change. Try again."
   },
   "hubSshKey": {
     "title": "Hub SSH key",
@@ -891,5 +895,16 @@
       "outlier": "Some samples are far outside the usual values",
       "gaps": "Longest gap between samples is {age}"
     }
+  },
+  "pending": {
+    "title": "Waiting for approval",
+    "connected": "Connected at {time}",
+    "verified": "Identity verified",
+    "unverified": "Identity not verified",
+    "noFingerprint": "No device fingerprint",
+    "approve": "Approve",
+    "reject": "Reject",
+    "approveFailed": "Could not approve {name}. Try again.",
+    "rejectFailed": "Could not reject {name}. Try again."
   }
 }

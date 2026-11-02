@@ -32,7 +32,11 @@
     "dismiss": "Descartar",
     "matchSignals": "Señales de coincidencia",
     "confidence": "Confianza: {value}%",
-    "newSuggestions": "{count} relaciones sugeridas"
+    "newSuggestions": "{count, plural, one {# relación sugerida} other {# relaciones sugeridas}}",
+    "review": "Revisar",
+    "pair": "{a} y {b}",
+    "noneLeft": "No quedan sugerencias.",
+    "failed": "No se pudo guardar el cambio. Inténtalo de nuevo."
   },
   "hubSshKey": {
     "title": "Clave SSH del Hub",
@@ -891,5 +895,16 @@
       "outlier": "Algunas muestras están muy fuera de los valores habituales",
       "gaps": "El hueco más largo entre muestras es de {age}"
     }
+  },
+  "pending": {
+    "title": "Pendientes de aprobación",
+    "connected": "Conectado a las {time}",
+    "verified": "Identidad verificada",
+    "unverified": "Identidad sin verificar",
+    "noFingerprint": "Sin huella del dispositivo",
+    "approve": "Aprobar",
+    "reject": "Rechazar",
+    "approveFailed": "No se pudo aprobar {name}. Inténtalo de nuevo.",
+    "rejectFailed": "No se pudo rechazar {name}. Inténtalo de nuevo."
   }
 }

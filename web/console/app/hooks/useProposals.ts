@@ -54,32 +54,24 @@ export function useProposals(): {
     };
   }, [fetchProposals]);
 
+  // Throws when the hub refuses or cannot be reached; the proposal then stays in the list.
   const accept = useCallback(async (id: string) => {
-    try {
-      const res = await fetch(
-        `/api/v1/discovery/proposals/${encodeURIComponent(id)}/accept`,
-        { method: "POST" },
-      );
-      if (res.ok) {
-        setProposals((prev) => prev.filter((p) => p.id !== id));
-      }
-    } catch {
-      // Silently ignore — proposal stays in list for retry
-    }
+    const res = await fetch(
+      `/api/v1/discovery/proposals/${encodeURIComponent(id)}/accept`,
+      { method: "POST" },
+    );
+    if (!res.ok) throw new Error(`proposal accept failed: ${res.status}`);
+    setProposals((prev) => prev.filter((p) => p.id !== id));
   }, []);
 
+  // Throws when the hub refuses or cannot be reached; the proposal then stays in the list.
   const dismiss = useCallback(async (id: string) => {
-    try {
-      const res = await fetch(
-        `/api/v1/discovery/proposals/${encodeURIComponent(id)}/dismiss`,
-        { method: "POST" },
-      );
-      if (res.ok) {
-        setProposals((prev) => prev.filter((p) => p.id !== id));
-      }
-    } catch {
-      // Silently ignore — proposal stays in list for retry
-    }
+    const res = await fetch(
+      `/api/v1/discovery/proposals/${encodeURIComponent(id)}/dismiss`,
+      { method: "POST" },
+    );
+    if (!res.ok) throw new Error(`proposal dismiss failed: ${res.status}`);
+    setProposals((prev) => prev.filter((p) => p.id !== id));
   }, []);
 
   return { proposals, loading, accept, dismiss, refetch: fetchProposals };
