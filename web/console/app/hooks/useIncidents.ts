@@ -27,11 +27,11 @@ export function useIncidents() {
   const fetchIncidents = useCallback(async (signal?: AbortSignal) => {
     try {
       const res = await fetch("/api/incidents", { cache: "no-store", signal });
-      if (res.ok) {
-        const data = (await res.json().catch(() => null)) as unknown;
-        const payload = ensureRecord(data);
-        setIncidents(Array.isArray(data) ? data as Incident[] : ensureArray<Incident>(payload?.incidents));
-      }
+      // A refused answer is an error: before, it left the list empty and the page said "No active issues".
+      if (!res.ok) throw new Error(`incidents unavailable (${res.status})`);
+      const data = (await res.json().catch(() => null)) as unknown;
+      const payload = ensureRecord(data);
+      setIncidents(Array.isArray(data) ? data as Incident[] : ensureArray<Incident>(payload?.incidents));
       setError(null);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;

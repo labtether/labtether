@@ -27,6 +27,7 @@
     "s": "{n}\u00a0s"
   },
   "errors": {
+    "load": "Impossible de charger les alertes",
     "action": "Impossible de modifier l'alerte"
   },
   "inbox": {

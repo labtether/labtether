@@ -1,6 +1,6 @@
 {
   "title": "仪表盘",
-  "errorHint": "请检查后端是否正在运行且可访问。",
+  "statusFailed": "无法加载 Hub 状态",
   "sections": {
     "attention": "需要关注",
     "running": "进行中",

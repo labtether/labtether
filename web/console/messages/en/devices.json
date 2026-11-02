@@ -6,6 +6,7 @@
     "placeholder": "Search devices...",
     "label": "Search devices"
   },
+  "loadFailed": "Could not load devices",
   "empty": {
     "title": "No devices yet",
     "description": "Install an agent, connect a Proxmox cluster or link another system.",

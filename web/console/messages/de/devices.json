@@ -6,6 +6,7 @@
     "placeholder": "Geräte suchen...",
     "label": "Geräte suchen"
   },
+  "loadFailed": "Geräte konnten nicht geladen werden",
   "empty": {
     "title": "Noch keine Geräte",
     "description": "Klicken Sie auf Gerät hinzufügen, um einen Agenten zu installieren, ein Proxmox-Cluster zu verbinden oder andere Infrastruktur einzubinden.",
