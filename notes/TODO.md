@@ -1,5 +1,23 @@
 # TODO
 
+## Open bugs
+
+- [ ] **The Hub never pushes a self-update to an outdated agent** (found in
+  2.0 QA; kept and documented for 2.0, fix after). On heartbeat,
+  `SendUpdateRequest` in `internal/hubapi/agents/agent_settings_resolution.go`
+  reads `conn.Meta("cpu_architecture")`, which nothing sets, so it returns
+  before sending. The push has been dead since it was added in `b180ab91`;
+  v1.7.1 behaves the same. Agents update only when they start with
+  auto-update on, or with Update agent on the device. Fix both sides in one
+  change: the Hub reads the architecture from the asset metadata
+  (`asset.Metadata["cpu_architecture"]`, as `BuildAgentSettingsPayload`
+  does), and the agent (`remoteaccess.HandleUpdateRequest` in
+  labtether-agent) refuses Hub-started `auto-update-*` jobs when
+  `LABTETHER_AUTO_UPDATE=false`, while explicit Update agent requests keep
+  working. A Hub-only fix would also update agents installed with
+  `--auto-update false`, because the agent's update handler ignores that
+  setting today.
+
 ## Current work — 2026-10-08
 
 - [x] Reconcile all ten workspace repos onto current `origin/main` while
