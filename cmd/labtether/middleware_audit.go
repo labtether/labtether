@@ -2,9 +2,11 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/labtether/labtether/internal/audit"
@@ -90,16 +92,73 @@ func isAuditSkippedPath(path string) bool {
 	return false
 }
 
-// auditMiddleware returns an HTTP middleware that logs every API request with
-// method, path, status code, duration, and authenticated actor. It also
-// appends a best-effort audit event to the audit store for API-queryable
-// trail.
+// auditNote travels in the request context so the audit middleware learns
+// what the auth layer decided: who signed in (contextWithPrincipal) and
+// whether the route only reads although it uses POST (withReadCapabilityAuth).
+type auditNote struct {
+	mu       sync.Mutex
+	actorID  string
+	readOnly bool
+}
+
+type auditNoteKey struct{}
+
+func noteAuditActor(ctx context.Context, actorID string) {
+	if note, ok := ctx.Value(auditNoteKey{}).(*auditNote); ok {
+		note.mu.Lock()
+		note.actorID = strings.TrimSpace(actorID)
+		note.mu.Unlock()
+	}
+}
+
+func noteAuditReadOnly(ctx context.Context) {
+	if note, ok := ctx.Value(auditNoteKey{}).(*auditNote); ok {
+		note.mu.Lock()
+		note.readOnly = true
+		note.mu.Unlock()
+	}
+}
+
+func (n *auditNote) read() (actorID string, readOnly bool) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.actorID, n.readOnly
+}
+
+// keepRequestAudit reports whether a request belongs in the audit log.
+// Reads go to the hub log only: the console polls several of them every few
+// seconds, and storing each one buried people's actions under thousands of
+// "API request GET" rows. Changes are kept whatever their result, so failed
+// sign-ins and refused changes stay visible. Read-only capabilities (event
+// stream tickets, MCP calls, which audit their tools themselves) and agent
+// heartbeats are machine traffic, not something a person did.
+func keepRequestAudit(method, path string, readOnly bool) bool {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+	default:
+		return false
+	}
+	return !readOnly && path != "/assets/heartbeat"
+}
+
+// requestAuditDecision is the result word the audit log shows for a request.
+func requestAuditDecision(status int) string {
+	switch {
+	case status == http.StatusUnauthorized || status == http.StatusForbidden || status == http.StatusTooManyRequests:
+		return "denied"
+	case status >= http.StatusInternalServerError:
+		return "failed"
+	}
+	return ""
+}
+
+// auditMiddleware logs every API request (method, path, status, duration and
+// client address) to the hub log, and appends the changes among them to the
+// audit store (see keepRequestAudit), attributed to the person or key that
+// made them. Requests nobody signed in for keep the client address as actor.
 //
-// The middleware must wrap handlers *after* auth middleware has run (so that
-// the actor ID is present in the request context) but the typical deployment
-// inserts it between CORS and gzip in the middleware chain -- this is fine
-// because the auth context is set by per-handler wrappers (withAuth), not a
-// global middleware layer.
+// It wraps handlers outside the per-handler auth wrappers (withAuth), so it
+// learns the signed-in actor through the auditNote in the request context.
 func (s *apiServer) auditMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
@@ -112,42 +171,46 @@ func (s *apiServer) auditMiddleware(next http.Handler) http.Handler {
 
 		start := time.Now()
 		sw := &statusCapturingWriter{ResponseWriter: w, statusCode: http.StatusOK}
+		note := &auditNote{}
 
-		next.ServeHTTP(sw, r)
+		next.ServeHTTP(sw, r.WithContext(context.WithValue(r.Context(), auditNoteKey{}, note)))
 
 		duration := time.Since(start)
-		// Note: actor ID is not available at middleware level because auth middleware
-		// creates a new request context. Per-handler audit events (appendAuditEventBestEffort)
-		// capture the authenticated actor. This middleware log uses client IP for correlation.
 		clientIP, peerIP := auditRequestAddresses(r)
 
 		securityruntime.Logf("audit: %s %s %d %dms ip=%s peer=%s",
 			r.Method, path, sw.statusCode, duration.Milliseconds(), clientIP, peerIP)
 
+		actorID, readOnly := note.read()
+		if s.auditStore == nil || !keepRequestAudit(r.Method, path, readOnly) {
+			return
+		}
+		if actorID == "" {
+			actorID = clientIP
+		}
 		// Best-effort append to the audit store -- never fail the request.
-		if s.auditStore != nil {
-			event := audit.Event{
-				ID:        idgen.New("audit"),
-				Type:      "api.request",
-				ActorID:   clientIP,
-				Target:    r.Method + " " + path,
-				Timestamp: start.UTC(),
-				Details: map[string]any{
-					"method":      r.Method,
-					"path":        path,
-					"status":      sw.statusCode,
-					"duration_ms": duration.Milliseconds(),
-					"client_ip":   clientIP,
-					"peer_ip":     peerIP,
-				},
-			}
-			select {
-			case s.auditEventCh <- event:
-			default:
-				// The request path must not create unbounded goroutines or block on
-				// persistence. A saturated queue intentionally drops low-value
-				// request telemetry; handler-level security audit events remain.
-			}
+		event := audit.Event{
+			ID:        idgen.New("audit"),
+			Type:      "api.request",
+			ActorID:   actorID,
+			Target:    r.Method + " " + path,
+			Decision:  requestAuditDecision(sw.statusCode),
+			Timestamp: start.UTC(),
+			Details: map[string]any{
+				"method":      r.Method,
+				"path":        path,
+				"status":      sw.statusCode,
+				"duration_ms": duration.Milliseconds(),
+				"client_ip":   clientIP,
+				"peer_ip":     peerIP,
+			},
+		}
+		select {
+		case s.auditEventCh <- event:
+		default:
+			// The request path must not create unbounded goroutines or block on
+			// persistence. A saturated queue intentionally drops low-value
+			// request telemetry; handler-level security audit events remain.
 		}
 	})
 }
