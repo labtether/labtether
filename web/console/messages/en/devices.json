@@ -8,7 +8,7 @@
   },
   "empty": {
     "title": "No devices yet",
-    "description": "Click Add Device to install an agent, connect a Proxmox cluster, or link other infrastructure.",
+    "description": "Install an agent, connect a Proxmox cluster or link another system.",
     "action": "Add your first device"
   },
   "hierarchy": {
@@ -26,7 +26,7 @@
     "sourceView": "Source: {source}"
   },
   "proposals": {
-    "title": "Suggested Relationships",
+    "title": "Suggested relationships",
     "mergeComposite": "Merge",
     "linkParentChild": "Link",
     "dismiss": "Dismiss",
