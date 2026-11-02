@@ -19,6 +19,7 @@ export type KeyRowProps = {
 export function KeyRow({ keyInfo, assetNameByID, canManage, onEdit, onRevoke }: KeyRowProps) {
   const t = useTranslations("settings");
   const now = new Date();
+  const expired = Boolean(keyInfo.expires_at) && new Date(keyInfo.expires_at as string).getTime() <= now.getTime();
   const fullAccess = keyInfo.scopes.includes("*");
   const allowedAssets = keyInfo.allowed_assets ?? [];
   const access = allowedAssets.length === 0
@@ -39,7 +40,9 @@ export function KeyRow({ keyInfo, assetNameByID, canManage, onEdit, onRevoke }: 
       <span className="st-cell">{roleKey ? t(`apiKeys.${roleKey}`) : keyInfo.role}</span>
       <span className="st-cell st-hide-m" title={accessTitle}>{access}</span>
       <span className="st-cell st-num r c3 st-hide-m">{keyInfo.last_used_at ? formatWhen(keyInfo.last_used_at, now) : t("apiKeys.never")}</span>
-      <span className="st-cell st-num r c3">{keyInfo.expires_at ? formatWhen(keyInfo.expires_at, now) : t("apiKeys.never")}</span>
+      <span className="st-cell st-num r c3" title={keyInfo.expires_at ? formatWhen(keyInfo.expires_at, now) : undefined}>
+        {!keyInfo.expires_at ? t("apiKeys.never") : expired ? <span className="st-bad">{t("apiKeys.expired")}</span> : formatWhen(keyInfo.expires_at, now)}
+      </span>
       <div className="st-row-acts">
         {canManage ? (
           <>
