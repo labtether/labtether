@@ -105,8 +105,8 @@ The relay deletes a registration when APNs answers `410`, or `400` with
 
 The owner runs these steps; they need the owner's Cloudflare login and Apple key.
 
-- Cloudflare account: "Owners Account"
-  (`25c357768b0fd4b877d6f008dc50e63b`, pinned as `account_id` in
+- Cloudflare account: Watari business account
+  (`62f3a7e24e93220b32c39058daf55cbf`, pinned as `account_id` in
   `wrangler.jsonc`). It already serves the labtether.com website Worker, so
   the `labtether.com` zone is on this account.
 - Use a machine with Node 22 or newer (the lab Mac mini, not the MacBook Pro
@@ -119,7 +119,7 @@ The owner runs these steps; they need the owner's Cloudflare login and Apple key
    cd services/push-relay
    npm install
    npx wrangler login
-   npx wrangler whoami   # must list account 25c357768b0fd4b877d6f008dc50e63b
+   npx wrangler whoami   # must list account 62f3a7e24e93220b32c39058daf55cbf
    ```
 
 2. Create the KV namespace and paste the printed `id` into `wrangler.jsonc`
