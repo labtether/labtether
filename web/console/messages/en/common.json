@@ -39,7 +39,7 @@
   "errorBoundary": {
     "title": "Something went wrong",
     "sectionTitle": "Something went wrong in {section}",
-    "sectionDescription": "This section encountered an error. Other sections are unaffected.",
+    "sectionDescription": "Other pages still work.",
     "tryAgain": "Try again"
   },
   "demoBanner": {
@@ -53,5 +53,9 @@
     "files": "Operator access is required to browse or download files on managed hosts.",
     "recordings": "Operator access is required to view and download session recordings.",
     "hostData": "Operator access is required for this view. Viewers can see inventory and status, but not sessions or data from inside a host."
+  },
+  "session": {
+    "unreachable": "Could not reach the hub",
+    "retrying": "Trying again automatically."
   }
 }

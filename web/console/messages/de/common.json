@@ -39,7 +39,7 @@
   "errorBoundary": {
     "title": "Etwas ist schiefgelaufen",
     "sectionTitle": "Etwas ist in {section} schiefgelaufen",
-    "sectionDescription": "In diesem Bereich ist ein Fehler aufgetreten. Andere Bereiche sind nicht betroffen.",
+    "sectionDescription": "Andere Seiten funktionieren weiterhin.",
     "tryAgain": "Erneut versuchen"
   },
   "demoBanner": {
@@ -53,5 +53,9 @@
     "files": "Zum Durchsuchen oder Herunterladen von Dateien auf verwalteten Hosts ist Operator-Zugriff erforderlich.",
     "recordings": "Zum Anzeigen und Herunterladen von Sitzungsaufzeichnungen ist Operator-Zugriff erforderlich.",
     "hostData": "Für diese Ansicht ist Operator-Zugriff erforderlich. Betrachter sehen Inventar und Status, aber keine Sitzungen oder Daten aus dem Inneren eines Hosts."
+  },
+  "session": {
+    "unreachable": "Hub nicht erreichbar",
+    "retrying": "Neuer Versuch läuft automatisch."
   }
 }

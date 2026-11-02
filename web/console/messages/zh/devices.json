@@ -32,7 +32,11 @@
     "dismiss": "忽略",
     "matchSignals": "匹配信号",
     "confidence": "置信度：{value}%",
-    "newSuggestions": "{count} 个建议的关系"
+    "newSuggestions": "{count, plural, other {# 个建议的关系}}",
+    "review": "查看",
+    "pair": "{a} 和 {b}",
+    "noneLeft": "没有剩余的建议。",
+    "failed": "无法保存更改，请重试。"
   },
   "hubSshKey": {
     "title": "Hub SSH 密钥",
@@ -891,5 +895,16 @@
       "outlier": "部分样本远超常见范围",
       "gaps": "样本之间最长间断为 {age}"
     }
+  },
+  "pending": {
+    "title": "等待批准",
+    "connected": "{time} 连接",
+    "verified": "身份已验证",
+    "unverified": "身份未验证",
+    "noFingerprint": "无设备指纹",
+    "approve": "批准",
+    "reject": "拒绝",
+    "approveFailed": "无法批准 {name}，请重试。",
+    "rejectFailed": "无法拒绝 {name}，请重试。"
   }
 }

@@ -109,6 +109,15 @@ v1.7.1.
 - An agent at or above the Hub's agent release shows as up to date. Before,
   any other version showed "update available", so an agent updated before
   the Hub was offered the older release, which the agent refuses.
+- A switch that is off is easy to see on a light page.
+- Section error pages, the screen shown while the Hub cannot be reached and
+  busy buttons are in your language. They showed English text before.
+- Agents waiting for approval and suggested relationships on Devices use the
+  new look and your language. A merge, link or dismiss that the Hub refuses
+  now says so; before, nothing happened.
+- Settings › Security › Prometheus shows `https://<hub-host>:8443/metrics`
+  as the scrape address when Hub TLS is on. It showed the plain-HTTP port,
+  which only redirects.
 
 ## [1.7.1] - 2026-10-31
 
