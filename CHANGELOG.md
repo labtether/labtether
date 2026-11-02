@@ -106,6 +106,9 @@ v1.7.1.
   an "unauthorized" error.
 - Clearing a schedule's group when editing it is saved.
 - Terminal links that name a target or a quick-connect address open it.
+- Reconnecting to a terminal no longer types stray text such as `0c1;2c0;276`
+  at the prompt. The replayed history held old terminal queries, the console
+  answered them, and each reconnect added more and broke the next command.
 - CPU and other percent charts stop at 100% on a busy device instead of
   drawing up to 104%.
 - The Audit log shows people's actions again. Every open console added an
