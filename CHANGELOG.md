@@ -93,6 +93,9 @@ v1.7.1.
 
 ### Fixed
 
+- Settings › Security › Saved logins lists the saved logins, and the login
+  pickers for terminals, remote view and file connections offer them. With a
+  real Hub the list showed "Credential profile response was invalid".
 - Saved webhooks show in the Webhooks list. The list read the Hub's reply as
   empty.
 - Container links on hosts whose names contain a dash open the right

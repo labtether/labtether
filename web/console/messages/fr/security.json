@@ -113,6 +113,7 @@
     "actionsFor": "Actions pour {name}",
     "empty": "Aucun identifiant enregistré",
     "emptyHint": "Clés SSH et mots de passe pour les terminaux, Remote View et les connexions de fichiers.",
+    "loadFailed": "Impossible de charger les identifiants enregistrés",
     "added": "Identifiant ajouté.",
     "rotated": "Secret renouvelé.",
     "deleted": "Identifiant supprimé."
