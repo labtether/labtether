@@ -27,6 +27,11 @@ v1.7.1.
   Page addresses have not changed, so bookmarks keep working.
 - **Agents from v1.7.1 keep working** with a 2.0.0 Hub. Upgrade the Hub first,
   then the agents.
+- **Updating agents.** An agent with auto-update on (the default) installs the
+  Hub's newer agent release when it starts. To update a running agent, click
+  **Update to v2.0.0** on the device's Settings tab; the Hub does not send
+  updates by itself. The macOS and Windows apps update by installing the new
+  app.
 - **New installs get the console address setting.** The release file
   `deploy.env.example`, which the installer copies to `.env.deploy` on a new
   install, now lists `LABTETHER_EXTERNAL_URL` and `LABTETHER_CONSOLE_URL`. An
