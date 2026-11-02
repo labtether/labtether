@@ -166,6 +166,11 @@ button.mp-lnk:hover { text-decoration: underline; text-decoration-color: var(--t
 .mp-mini .mp-n:hover .mp-nm, .mp-mini .mp-g:hover .mp-gn { text-decoration: underline; text-underline-offset: 3px; }
 @container db (max-width: 600px) { .db-sec:has(.mp-mini) { display: none; } }
 
+/* React Flow outside the map's own variables: also a cluster's graph view (device-int.css styles its controls). Links
+   end in round caps; an animated link runs its dash three times after it appears, not forever. */
+.react-flow__edge-path { stroke-linecap: round; }
+html .react-flow__edge.animated path { animation-iteration-count: 3; }
+
 /* Edit layout: the free canvas (React Flow) in the 2.0 look */
 .mp-rf { width: 100%; height: 100%; }
 .mp-rf .react-flow {

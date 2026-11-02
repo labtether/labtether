@@ -8,10 +8,13 @@ const GENERIC_UPSTREAM_ERRORS = new Set([
   "an internal error occurred.",
   "internal server error",
 ]);
+// The console's own API routes answer "<route> endpoint unavailable" when the hub cannot be reached; that names an
+// internal route, so the caller's own message shows instead.
+const PROXY_UNAVAILABLE = /\bendpoint unavailable$/i;
 
 export function sanitizeErrorMessage(rawMessage: string, fallback: string, secrets: string[] = []): string {
   const raw = (rawMessage ?? "").trim();
-  const base = !raw || GENERIC_UPSTREAM_ERRORS.has(raw.toLowerCase()) ? fallback : raw;
+  const base = !raw || GENERIC_UPSTREAM_ERRORS.has(raw.toLowerCase()) || PROXY_UNAVAILABLE.test(raw) ? fallback : raw;
   let sanitized = base
     .replaceAll(SECRET_KV_PATTERN, `$1${REDACTED}`)
     .replaceAll(AUTH_HEADER_PATTERN, `$1${REDACTED}`)

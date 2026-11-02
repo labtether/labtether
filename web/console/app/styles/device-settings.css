@@ -119,7 +119,7 @@ button.dst-run-nm:hover .dv-nm { text-decoration: underline; text-decoration-col
 .dst-switch-row { display: flex; align-items: center; gap: 12px; }
 .dst-switch-txt { flex: 1; min-width: 0; color: var(--text-2); }
 .dst-switch-word { font-size: var(--fs-meta); font-weight: 500; color: var(--text-2); }
-.dst-switch { position: relative; width: 34px; height: 20px; flex: none; border-radius: 10px; background: var(--track); cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out); }
+.dst-switch { position: relative; width: 34px; height: 20px; flex: none; border-radius: 10px; background: var(--switch-off); cursor: pointer; transition: background-color var(--dur-fast) var(--ease-out); }
 .dst-switch i { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: var(--thumb-elev); transition: transform var(--dur-normal) var(--ease-out); }
 .dst-switch.on { background: var(--text); }
 .dst-switch.on i { transform: translateX(14px); background: var(--panel); }
