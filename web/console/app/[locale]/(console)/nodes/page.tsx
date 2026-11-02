@@ -312,7 +312,7 @@ export default function NodesPage() {
           description={t('empty.description')}
           action={
             <Button
-              variant="primary"
+              variant="secondary"
               size="sm"
               onClick={() => setShowAddDevice(true)}
             >
