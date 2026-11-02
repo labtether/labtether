@@ -117,6 +117,10 @@ v1.7.1.
 - Reconnecting to a terminal no longer types stray text such as `0c1;2c0;276`
   at the prompt. The replayed history held old terminal queries, the console
   answered them, and each reconnect added more and broke the next command.
+- A terminal whose stream cannot open, for example behind a proxy without
+  websocket support or at a console address the Hub does not allow, shows
+  the error with Try again. Before, it tried again several times a second
+  for as long as the tab stayed open.
 - CPU and other percent charts stop at 100% on a busy device instead of
   drawing up to 104%.
 - The Audit log shows people's actions again. Every open console added an
