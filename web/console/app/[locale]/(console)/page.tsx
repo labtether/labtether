@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { PageHeader } from "../../components/PageHeader";
+import { Button } from "../../components/ui/Button";
 import { RoutePerfBoundary } from "../../components/RoutePerfBoundary";
 import { AddDeviceModal } from "../../components/AddDeviceModal";
 import { DashSection, NeedsAttention, Running } from "../../components/dashboard/DashSections";
@@ -31,7 +32,8 @@ export default function DashboardPage() {
   const canAdmin = hasAdminRole(user?.role);
   const status = useFastStatus();
   const slowStatus = useSlowStatus();
-  const { loading, error } = useStatusControls();
+  const { loading, error, fetchStatus } = useStatusControls();
+  const tCommon = useTranslations("common");
   const [addDeviceOpen, setAddDeviceOpen] = useState(false);
   const { instances, rules } = useAlerts();
   const { services } = useWebServices({ detailLevel: "compact" });
@@ -86,8 +88,8 @@ export default function DashboardPage() {
 
       {error ? (
         <div className="db-error" role="alert">
-          <p className="bad">{error}</p>
-          <p>{t("errorHint")}</p>
+          <p className="bad">{t("statusFailed")}</p>
+          <Button size="sm" onClick={() => void fetchStatus()}>{tCommon("retry")}</Button>
         </div>
       ) : null}
 

@@ -7,6 +7,7 @@ import { MoreHorizontal, Plus, Search, Server } from "lucide-react";
 import { Link } from "../../../../i18n/navigation";
 import { PageHeader } from "../../../components/PageHeader";
 import { Button } from "../../../components/ui/Button";
+import { PageError } from "../../../components/ui/PageError";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { Input } from "../../../components/ui/Input";
 import { AddDeviceModal } from "../../../components/AddDeviceModal";
@@ -35,9 +36,10 @@ const GROUPING_KEY = "labtether.devices.grouping";
 export default function NodesPage() {
   const t = useTranslations('devices');
   const tNav = useTranslations('nav');
+  const tCommon = useTranslations('common');
   const status = useFastStatus();
   const slowStatus = useSlowStatus();
-  const { fetchStatus } = useStatusControls();
+  const { fetchStatus, error: statusError } = useStatusControls();
   const [showAddDevice, setShowAddDevice] = useState(false);
   const [query, setQuery] = useState("");
   const queryInteractionStartedAtRef = useRef<number | null>(null);
@@ -305,7 +307,10 @@ export default function NodesPage() {
             onCreateChildGroup={handleCreateChildGroup}
           />
         </div>
-      ) : (
+      ) : statusError ? (
+        // The Hub's status did not load: say so, never the first-run "No devices yet".
+        <PageError title={t('loadFailed')} retryLabel={tCommon('retry')} onRetry={() => void fetchStatus()} />
+      ) : !status ? null : (
         <EmptyState
           icon={Server}
           title={t('empty.title')}

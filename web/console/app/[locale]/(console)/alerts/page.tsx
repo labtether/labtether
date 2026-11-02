@@ -6,6 +6,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { useRouter } from "../../../../i18n/navigation";
 import { PageHeader } from "../../../components/PageHeader";
+import { PageError } from "../../../components/ui/PageError";
 import { Button } from "../../../components/ui/Button";
 import type { AlertInstance, AlertSilence } from "../../../console/models";
 import { useToast } from "../../../contexts/ToastContext";
@@ -26,6 +27,7 @@ import { DEFAULT_FILTER, durationPresets, parseAlertTab, type DurationPreset, ty
  */
 export default function AlertsPage() {
   const t = useTranslations("alerts");
+  const tCommon = useTranslations("common");
   const locale = useLocale();
   const params = useSearchParams();
   const router = useRouter();
@@ -88,6 +90,8 @@ export default function AlertsPage() {
   };
 
   const newRuleMain = tab === "rules" && ruleOpen?.kind !== "new";
+  // Nothing has loaded and the last try failed: the error, not "No alerts".
+  const blank = data.loadFailed && data.instances.length === 0 && data.rules.length === 0;
   return (
     <>
       <PageHeader
@@ -101,9 +105,11 @@ export default function AlertsPage() {
         )}
       />
       <AlertTabs current={tab} tools={tab === "alerts" && data.instances.length > 0 ? <AlertInboxToolbar filter={filter} onFilter={setFilter} /> : undefined} />
-      {data.error ? <p role="alert" className="al-error">{data.error}</p> : null}
+      {data.loadFailed && !blank ? <p role="alert" className="al-error">{t("errors.load")}</p> : null}
+      {data.error && !data.loadFailed ? <p role="alert" className="al-error">{data.error}</p> : null}
+      {blank && tab !== "delivery" ? <PageError title={t("errors.load")} retryLabel={tCommon("retry")} onRetry={() => void data.refresh()} /> : null}
 
-      {tab === "alerts" ? (
+      {!blank && tab === "alerts" ? (
         <AlertInbox
           loading={data.loading}
           instances={data.instances}
@@ -117,7 +123,7 @@ export default function AlertsPage() {
         />
       ) : null}
 
-      {tab === "rules" ? (
+      {!blank && tab === "rules" ? (
         <AlertRulesTab
           loading={data.loading}
           rules={data.rules}
@@ -131,7 +137,7 @@ export default function AlertsPage() {
         />
       ) : null}
 
-      {tab === "silences" ? (
+      {!blank && tab === "silences" ? (
         <AlertSilencesTab
           silences={data.silences}
           createSilence={data.createSilence}

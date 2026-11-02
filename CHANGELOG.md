@@ -108,6 +108,11 @@ v1.7.1.
   It showed only the past time. The plain-HTTP note on a file connection no
   longer names version 1.7.1.
 - Clearing a schedule's group when editing it is saved.
+- When the Hub's status or alert list does not load, Devices, the Dashboard
+  and Alerts say so in your language, with Try again. Devices showed "No
+  devices yet" with Add your first device, the Dashboard showed "status
+  fetch failed: 500", and Alerts and Issues showed "No alerts" and "No active
+  issues".
 - Terminal links that name a target or a quick-connect address open it.
 - Reconnecting to a terminal no longer types stray text such as `0c1;2c0;276`
   at the prompt. The replayed history held old terminal queries, the console

@@ -27,6 +27,7 @@
     "s": "{n} s"
   },
   "errors": {
+    "load": "Alarme konnten nicht geladen werden",
     "action": "Der Alarm konnte nicht geändert werden"
   },
   "inbox": {

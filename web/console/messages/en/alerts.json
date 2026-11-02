@@ -27,6 +27,7 @@
     "s": "{n} s"
   },
   "errors": {
+    "load": "Could not load alerts",
     "action": "Could not change the alert"
   },
   "inbox": {

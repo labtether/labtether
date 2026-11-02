@@ -18,6 +18,8 @@ export function useAlerts() {
   const [silences, setSilences] = useState<AlertSilence[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** The lists did not load (the last refresh failed); action errors stay in error. */
+  const [loadFailed, setLoadFailed] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const mutationAbortRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
@@ -52,11 +54,13 @@ export function useAlerts() {
         setTemplates(Array.isArray(templateData) ? templateData : templateData.templates ?? []);
         setSilences(Array.isArray(silenceData) ? silenceData : silenceData.silences ?? []);
         setError(null);
+        setLoadFailed(false);
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       if (mountedRef.current) {
         setError(err instanceof Error ? err.message : "alerts unavailable");
+        setLoadFailed(true);
       }
     } finally {
       if (abortRef.current === controller) {
@@ -294,6 +298,7 @@ export function useAlerts() {
     silences,
     loading,
     error,
+    loadFailed,
     refresh: fetchAll,
     ackAlert,
     resolveAlert,

@@ -6,6 +6,7 @@
     "placeholder": "Rechercher des appareils...",
     "label": "Rechercher des appareils"
   },
+  "loadFailed": "Impossible de charger les appareils",
   "empty": {
     "title": "Aucun appareil pour le moment",
     "description": "Cliquez sur Ajouter un appareil pour installer un agent, connecter un cluster Proxmox ou lier une autre infrastructure.",

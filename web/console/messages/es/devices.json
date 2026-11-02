@@ -6,6 +6,7 @@
     "placeholder": "Buscar dispositivos...",
     "label": "Buscar dispositivos"
   },
+  "loadFailed": "No se pudieron cargar los dispositivos",
   "empty": {
     "title": "Aún no hay dispositivos",
     "description": "Haga clic en Agregar dispositivo para instalar un agente, conectar un clúster Proxmox o vincular otra infraestructura.",
