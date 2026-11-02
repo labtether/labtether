@@ -43,7 +43,12 @@ export default function AuditLogPage() {
     return () => window.clearInterval(id);
   }, [fetchStatus, visible]);
 
-  const usernames = useMemo(() => new Map(users.map((u) => [u.id, u.username])), [users]);
+  // Only admins load the user list; everyone else still sees their own name on their own rows.
+  const usernames = useMemo(() => {
+    const names = new Map(users.map((u) => [u.id, u.username]));
+    if (user?.id && user.username && !names.has(user.id)) names.set(user.id, user.username);
+    return names;
+  }, [user?.id, user?.username, users]);
   const nameOf = useCallback(
     (id: string) => (id === "system" ? t("hub") : usernames.get(id) ?? id),
     [t, usernames],

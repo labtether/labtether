@@ -1,6 +1,6 @@
 import type { AuditEvent } from "../../../console/models";
 
-/** An audit entry as the hub sends it (the status carries the newest few hundred). */
+/** An audit entry as the hub sends it (the full status carries the newest 20 this person may see). */
 export type AuditEntry = AuditEvent & {
   actor_id?: string;
   reason?: string;

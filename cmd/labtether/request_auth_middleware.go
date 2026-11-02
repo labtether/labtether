@@ -25,7 +25,11 @@ func (s *apiServer) withAuth(next http.HandlerFunc) http.HandlerFunc {
 // mutation. Use this only for endpoints whose handler encodes a read-only
 // operation as POST, such as minting a one-use subscription ticket.
 func (s *apiServer) withReadCapabilityAuth(next http.HandlerFunc) http.HandlerFunc {
-	return s.withAuthMethodPolicy(next, func(_, _ string) bool { return true })
+	authed := s.withAuthMethodPolicy(next, func(_, _ string) bool { return true })
+	return func(w http.ResponseWriter, r *http.Request) {
+		noteAuditReadOnly(r.Context()) // a read: no audit row
+		authed(w, r)
+	}
 }
 
 func (s *apiServer) withAuthMethodPolicy(next http.HandlerFunc, methodPolicy func(role, method string) bool) http.HandlerFunc {
