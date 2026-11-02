@@ -409,6 +409,14 @@ func (s *PostgresStore) Append(event audit.Event) error {
 	return err
 }
 
+// auditListShown hides the request rows hubs before 2.0 stored for every read
+// (the console's polling) and for machine traffic. The hub no longer writes
+// them; older ones stay in the table until audit retention removes them. It
+// reads only plain columns, so skipping a long run of them stays cheap.
+const auditListShown = `NOT (type = 'api.request' AND (
+	split_part(COALESCE(target, ''), ' ', 1) IN ('GET', 'HEAD', 'OPTIONS')
+	OR COALESCE(target, '') IN ('POST /ws/events/ticket', 'POST /mcp', 'POST /assets/heartbeat')))`
+
 func (s *PostgresStore) List(limit, offset int) ([]audit.Event, error) {
 	if limit <= 0 {
 		limit = 100
@@ -419,13 +427,13 @@ func (s *PostgresStore) List(limit, offset int) ([]audit.Event, error) {
 	if offset > 0 {
 		rows, err = s.pool.Query(context.Background(),
 			`SELECT id, type, actor_id, target, session_id, command_id, decision, reason, details, timestamp
-			 FROM audit_events ORDER BY timestamp DESC LIMIT $1 OFFSET $2`,
+			 FROM audit_events WHERE `+auditListShown+` ORDER BY timestamp DESC LIMIT $1 OFFSET $2`,
 			limit, offset,
 		)
 	} else {
 		rows, err = s.pool.Query(context.Background(),
 			`SELECT id, type, actor_id, target, session_id, command_id, decision, reason, details, timestamp
-			 FROM audit_events ORDER BY timestamp DESC LIMIT $1`,
+			 FROM audit_events WHERE `+auditListShown+` ORDER BY timestamp DESC LIMIT $1`,
 			limit,
 		)
 	}
