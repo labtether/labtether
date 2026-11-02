@@ -38,7 +38,7 @@
     // 10-character Apple Team ID and APNs Key ID (not secret). Pushes answer
     // 503 not_configured while either is empty or the key secret is missing.
     "APNS_TEAM_ID": "D2WZW3YTL6",
-    "APNS_KEY_ID": ""
+    "APNS_KEY_ID": "TX94565GPN"
   },
   // Secret, never in this file or the repo. The owner uploads the .p8 personally:
   //   npx wrangler secret put APNS_PRIVATE_KEY < AuthKey_XXXXXXXXXX.p8
