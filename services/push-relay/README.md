@@ -122,17 +122,17 @@ The owner runs these steps; they need the owner's Cloudflare login and Apple key
    npx wrangler whoami   # must list account 62f3a7e24e93220b32c39058daf55cbf
    ```
 
-2. Create the KV namespace and paste the printed `id` into `wrangler.jsonc`
-   (`kv_namespaces[0].id`, replacing `REPLACE_WITH_KV_NAMESPACE_ID`):
+2. The KV namespace already exists; its id is in `wrangler.jsonc`
+   (`kv_namespaces[0].id`). Only on a new account, create one and put the
+   printed `id` there:
 
    ```sh
    npx wrangler kv namespace create REGISTRATIONS
    ```
 
-3. Set `APNS_TEAM_ID` and `APNS_KEY_ID` in `wrangler.jsonc` `vars`: the
-   10-character Apple Team ID and the 10-character Key ID of the APNs auth
-   key. They identify the key but are not secret. `APNS_TOPIC` stays
-   `com.labtether.mobile`. Commit these two values and the KV id.
+3. `APNS_TEAM_ID` is set in `wrangler.jsonc` `vars`. Set `APNS_KEY_ID` to the
+   10-character Key ID of the APNs auth key. Both identify the key but are not
+   secret. `APNS_TOPIC` stays `com.labtether.mobile`. Commit the Key ID.
 
 4. Deploy. This also creates the `push.labtether.com` custom domain (DNS
    record and certificate) from the `routes` entry. Pushes answer

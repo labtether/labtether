@@ -15,11 +15,10 @@
   // on for DEBUG iOS builds and for checks before the domain is live.
   "routes": [{ "pattern": "push.labtether.com", "custom_domain": true }],
 
-  // Registration store. Before the first deploy run
+  // Registration store, made with
   //   npx wrangler kv namespace create REGISTRATIONS
-  // and paste the printed id here. The placeholder makes deploy fail on purpose.
   "kv_namespaces": [
-    { "binding": "REGISTRATIONS", "id": "REPLACE_WITH_KV_NAMESPACE_ID" }
+    { "binding": "REGISTRATIONS", "id": "5bec63183a7d401e86019b8017f1991b" }
   ],
 
   // Workers rate limiting. Counters are per Cloudflare location and
@@ -36,9 +35,9 @@
 
   "vars": {
     "APNS_TOPIC": "com.labtether.mobile",
-    // 10-character Apple Team ID and APNs Key ID. Fill in before deploying;
-    // pushes answer 503 not_configured while either is empty.
-    "APNS_TEAM_ID": "",
+    // 10-character Apple Team ID and APNs Key ID (not secret). Pushes answer
+    // 503 not_configured while either is empty or the key secret is missing.
+    "APNS_TEAM_ID": "D2WZW3YTL6",
     "APNS_KEY_ID": ""
   },
   // Secret, never in this file or the repo. The owner uploads the .p8 personally:
