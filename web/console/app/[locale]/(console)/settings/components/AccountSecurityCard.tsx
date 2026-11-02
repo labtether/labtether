@@ -8,6 +8,7 @@ import { Button } from "../../../../components/ui/Button";
 import { Input } from "../../../../components/ui/Input";
 import { safeJSON, extractError } from "../../../../lib/api";
 import { ChevronDown } from "lucide-react";
+import { copyText } from "../../../../lib/clipboard";
 
 type TwoFactorState = "idle" | "setting-up" | "verifying";
 
@@ -309,15 +310,17 @@ export function AccountSecurityCard() {
   };
 
   const copySecret = () => {
-    void navigator.clipboard.writeText(setupSecret);
-    setSecretCopied(true);
-    setTimeout(() => setSecretCopied(false), 2000);
+    void copyText(setupSecret).then(() => {
+      setSecretCopied(true);
+      setTimeout(() => setSecretCopied(false), 2000);
+    }, () => setSecretCopied(false));
   };
 
   const copyRecoveryCodes = () => {
-    void navigator.clipboard.writeText(recoveryCodes.join("\n"));
-    setCodesCopied(true);
-    setTimeout(() => setCodesCopied(false), 2000);
+    void copyText(recoveryCodes.join("\n")).then(() => {
+      setCodesCopied(true);
+      setTimeout(() => setCodesCopied(false), 2000);
+    }, () => setCodesCopied(false));
   };
 
   return (

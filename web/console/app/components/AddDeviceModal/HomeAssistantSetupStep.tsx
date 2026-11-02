@@ -11,6 +11,7 @@ import { useEnrollment, type HubConnectionCandidate } from "../../hooks/useEnrol
 import { baseURLHostLabel, validateHTTPSOrHTTPURL, validatePollIntervalSeconds } from "./validation";
 import { monitorCollectorRunWithRetry } from "./collectorSync";
 import type { AddDeviceAddedEvent, AddDeviceCompatPrefill, SetupMode } from "./types";
+import { copyText } from "../../lib/clipboard";
 
 type HomeAssistantSetupStepProps = {
   onBack: () => void;
@@ -127,9 +128,10 @@ function CopyRow({ label, value }: CopyRowProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(() => {
-    void navigator.clipboard.writeText(value);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
+    void copyText(value).then(() => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    }, () => setCopied(false));
   }, [value]);
 
   return (

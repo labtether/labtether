@@ -16,6 +16,7 @@ import { EmptyLine, RowCheck } from "./LogControls";
 import { LogLine, OpenLogLine, type LineCtx } from "./LogLine";
 import { LogsToolbar } from "./LogsToolbar";
 import { contextLines, lineText, logTime, newestFirst, selectedText } from "./logsModel";
+import { copyText } from "../../../lib/clipboard";
 
 /** Logs: one stream from every device, newest first. Filter, Device, Level, Range and Source; Live polls again. */
 export default function LogsPage() {
@@ -53,11 +54,7 @@ export default function LogsPage() {
   const copy = useCallback(
     (text: string, done: string) => {
       const fail = () => addToast("error", t("copyFailed"));
-      try {
-        void navigator.clipboard.writeText(text).then(() => addToast("success", done), fail);
-      } catch {
-        fail();
-      }
+      void copyText(text).then(() => addToast("success", done), fail);
     },
     [addToast, t],
   );

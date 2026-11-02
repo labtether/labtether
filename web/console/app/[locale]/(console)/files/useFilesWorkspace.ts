@@ -12,6 +12,7 @@ import { useFileTransfers } from "./useFileTransfers";
 import { useFileWorkspaceState, type WorkspaceClipboardMode } from "./useFileWorkspaceState";
 import { useFilesSource } from "./useFilesSource";
 import { usePathHistory } from "./usePathHistory";
+import { copyText } from "../../../lib/clipboard";
 
 export type FileViewMode = "list" | "grid";
 
@@ -150,7 +151,7 @@ export function useFilesWorkspace() {
       copy: () => toClipboard("copy", names),
       cut: () => toClipboard("cut", names),
       paste: () => void paste(dirPath),
-      copyPath: entry ? () => void navigator.clipboard?.writeText(joinPath(cur, entry.name)) : undefined,
+      copyPath: entry ? () => void copyText(joinPath(cur, entry.name)).catch(() => {}) : undefined,
       delete: () => setDeleteNames(names),
       newFolder: () => setNewFolderOpen(true),
       uploadHere: () => pickUpload(dirPath),

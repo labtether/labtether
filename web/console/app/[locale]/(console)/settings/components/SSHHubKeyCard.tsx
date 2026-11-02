@@ -10,6 +10,7 @@ import {
   type SSHHubKeyInfo,
   type SSHHubKeyRotationPayload,
 } from "./sshHubKeyModel";
+import { copyText } from "../../../../lib/clipboard";
 
 async function responseJSON(response: Response): Promise<unknown> {
   try {
@@ -63,7 +64,7 @@ export function SSHHubKeyCard() {
     setMessage("");
     setRotationError("");
     try {
-      await navigator.clipboard.writeText(keyInfo.public_key.trim());
+      await copyText(keyInfo.public_key.trim());
       setCopied(true);
       setMessage("Public key copied to clipboard.");
     } catch {

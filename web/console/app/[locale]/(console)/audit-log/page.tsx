@@ -16,6 +16,7 @@ import { ChipGroup, EmptyLine, FilterField, PickMenu } from "../logs/LogControls
 import { AuditRow, type AuditText } from "./AuditRow";
 import { AuditViews } from "./AuditViews";
 import { actionKey, auditRows, auditTime, humanizeType, outcome, peopleByActivity, type AuditEntry, type AuditSort } from "./auditModel";
+import { copyText } from "../../../lib/clipboard";
 
 const AUTO_REFRESH_MS = 30_000;
 
@@ -99,11 +100,7 @@ export default function AuditLogPage() {
   };
   const copy = (line: string) => {
     const fail = () => addToast("error", t("copyFailed"));
-    try {
-      void navigator.clipboard.writeText(line).then(() => addToast("success", t("copied")), fail);
-    } catch {
-      fail();
-    }
+    void copyText(line).then(() => addToast("success", t("copied")), fail);
   };
   const sortBy = (key: "time" | "who") =>
     setSort((cur) => (cur.startsWith(key) ? (cur.endsWith("desc") ? `${key}:asc` : `${key}:desc`) : key === "time" ? "time:desc" : "who:asc") as AuditSort);

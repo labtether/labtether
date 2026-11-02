@@ -1,4 +1,5 @@
 import { executeContainerAction } from "../../../lib/docker";
+import { copyText as copyToClipboard } from "../../lib/clipboard";
 
 export type CtAction = "start" | "stop" | "restart";
 
@@ -25,7 +26,7 @@ export async function runContainerAction(target: CtTarget, action: CtAction): Pr
 /** Copy text to the clipboard; false when the browser refuses. */
 export async function copyText(text: string): Promise<boolean> {
   try {
-    await navigator.clipboard.writeText(text);
+    await copyToClipboard(text);
     return true;
   } catch {
     return false;

@@ -115,6 +115,27 @@ export default [
       "react-hooks/exhaustive-deps": "error",
       "react-hooks/rules-of-hooks": "error",
       "labtether/no-conflicting-control-text": "error",
+      // The console is often opened over plain HTTP on a LAN address, where these secure-context APIs are missing:
+      // crypto.randomUUID throws and navigator.clipboard is undefined. Use the helpers that fall back.
+      "no-restricted-properties": [
+        "error",
+        { object: "crypto", property: "randomUUID", message: "Use clientId() from app/lib/clientId: it works over plain HTTP." },
+        { object: "navigator", property: "clipboard", message: "Use copyText() from app/lib/clipboard: it works over plain HTTP." },
+      ],
     },
+  },
+  {
+    // The helpers themselves, remote-session clipboard sync (it also reads, which has no fallback) and tests.
+    files: [
+      "app/lib/clientId.ts",
+      "app/lib/clipboard.ts",
+      "app/components/XTerminal.tsx",
+      "app/components/VNCViewer.tsx",
+      "app/components/GuacamoleViewer.tsx",
+      "app/components/webrtc/useWebRTCDataChannels.ts",
+      "app/hooks/useClipboardSync.ts",
+      "app/**/__tests__/**",
+    ],
+    rules: { "no-restricted-properties": "off" },
   },
 ];

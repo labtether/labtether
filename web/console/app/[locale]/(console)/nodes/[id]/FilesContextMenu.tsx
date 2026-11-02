@@ -7,6 +7,7 @@ import { joinPath } from "../../files/fileWorkspaceUtils";
 import { menuActions } from "../../files/filesListModel";
 import { PointMenu, toMenuItems, useMenuLabels, type MenuItemSpec } from "../../files/FileMenus";
 import type { WorkspaceClipboard, WorkspaceContextMenuState } from "../../files/useFileWorkspaceState";
+import { copyText } from "../../../../lib/clipboard";
 
 // The item menu of a device's Files tab (row ⋯ and right-click). Changes show only after "Allow changes".
 
@@ -48,7 +49,7 @@ export function useFilesTabMenu({ entries, currentPath, writeEnabled, clipboard,
       copy: () => h.copyNames(names),
       cut: () => h.cutNames(names),
       paste: () => h.pasteTo(dirPath),
-      copyPath: entry ? () => void navigator.clipboard?.writeText(joinPath(currentPath, entry.name)) : undefined,
+      copyPath: entry ? () => void copyText(joinPath(currentPath, entry.name)).catch(() => {}) : undefined,
       delete: () => h.remove(picked),
       newFolder: h.newFolder,
       uploadHere: () => h.uploadHere(dirPath),
