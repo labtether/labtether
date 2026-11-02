@@ -100,7 +100,7 @@ a.iu-nm:hover, button.iu-nm:hover { text-decoration: underline; text-decoration-
 .iu-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .iu-opts { display: grid; gap: 4px; }
 .iu-opt { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 40px; max-width: 480px; }
-.iu-switch { position: relative; width: 34px; height: 20px; flex: none; border-radius: 10px; background: var(--track); cursor: pointer; transition: background-color var(--dur-normal) var(--ease-out); }
+.iu-switch { position: relative; width: 34px; height: 20px; flex: none; border-radius: 10px; background: var(--switch-off); cursor: pointer; transition: background-color var(--dur-normal) var(--ease-out); }
 .iu-switch i { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--accent-contrast); box-shadow: var(--thumb-elev); transition: transform var(--dur-normal) var(--ease-out); }
 .iu-switch[aria-checked="true"] { background: var(--text); }
 .iu-switch[aria-checked="true"] i { transform: translateX(14px); background: var(--panel); }
