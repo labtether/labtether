@@ -39,8 +39,8 @@ your network.
   silences. Group related alerts into an incident and track it to the fix.
 - **Day-to-day jobs in one place.** Move files between machines, restart
   services, search logs and roll out package updates with a dry run first.
-- **A map of what depends on what.** The topology view shows what else goes
-  down before you reboot something.
+- **A map of what depends on what.** The Map shows what else goes down
+  before you reboot something.
 - **Automation.** Save a command once, then run it on a group or on a schedule.
   Webhooks send hub events to your other tools.
 - **Ask your AI agent.** The built-in MCP server gives Claude, Cursor or any MCP
@@ -52,7 +52,7 @@ your network.
 - **Open source.** The hub is Apache 2.0 and runs with Docker Compose.
 
 <p align="center">
-  <img src="screenshots/walkthrough.gif" alt="Walkthrough of Dashboard, Devices, Topology, Terminal, Alerts and Files" width="900" />
+  <img src="screenshots/02-devices.png" alt="Devices list with VMs under their Proxmox host" width="900" />
 </p>
 
 ## Try it
@@ -97,7 +97,7 @@ In the hub, click **Add Device** and copy the command for your OS. See
 |---|---|---|
 | Linux (amd64, arm64) | Supported | [labtether-agent](https://github.com/labtether/labtether-agent) |
 | macOS 13+ | Supported | [Menu bar app](https://github.com/labtether/labtether-mac) |
-| Windows 10+ (amd64, arm64) | Partial. Metrics and terminal work; more is in progress. | [labtether-agent](https://github.com/labtether/labtether-agent). A [tray app](https://github.com/labtether/labtether-win) is on the way. |
+| Windows 10+ (amd64, arm64) | Partial. Metrics and terminal work; more is in progress. | [labtether-agent](https://github.com/labtether/labtether-agent), or the [tray app](https://github.com/labtether/labtether-win) (x64) |
 | FreeBSD | Planned | For now, add it as a manual device and reach it over SSH |
 
 Full details: [platform support](https://labtether.com/docs/reference/platform-support).
@@ -116,24 +116,24 @@ Full details: [platform support](https://labtether.com/docs/reference/platform-s
 <summary>Show all screenshots</summary>
 <br/>
 <p align="center">
-  <img src="screenshots/02-devices.png" alt="Device detail" width="800" /><br/>
-  <em>Device detail</em>
+  <img src="screenshots/11-docker-host.png" alt="Docker stacks on a device" width="800" /><br/>
+  <em>Docker stacks on a device</em>
 </p>
 <p align="center">
   <img src="screenshots/05-terminal.png" alt="Terminal" width="800" /><br/>
-  <em>Terminal with snippets and bookmarks</em>
+  <em>Terminal</em>
 </p>
 <p align="center">
   <img src="screenshots/06-files.png" alt="Files" width="800" /><br/>
-  <em>Files across machines</em>
+  <em>Files on a device</em>
 </p>
 <p align="center">
   <img src="screenshots/04-services.png" alt="Services" width="800" /><br/>
   <em>Services with health checks</em>
 </p>
 <p align="center">
-  <img src="screenshots/03-topology.png" alt="Topology" width="800" /><br/>
-  <em>Topology</em>
+  <img src="screenshots/03-topology.png" alt="Map" width="800" /><br/>
+  <em>Map</em>
 </p>
 <p align="center">
   <img src="screenshots/08-alerts.png" alt="Alerts" width="800" /><br/>
@@ -142,10 +142,6 @@ Full details: [platform support](https://labtether.com/docs/reference/platform-s
 <p align="center">
   <img src="screenshots/07-logs.png" alt="Logs" width="800" /><br/>
   <em>Logs</em>
-</p>
-<p align="center">
-  <img src="screenshots/10-health.png" alt="Health" width="800" /><br/>
-  <em>Health</em>
 </p>
 </details>
 
