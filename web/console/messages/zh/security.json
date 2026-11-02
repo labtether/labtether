@@ -113,6 +113,7 @@
     "actionsFor": "{name} 的操作",
     "empty": "没有已保存的登录凭据",
     "emptyHint": "用于终端、远程查看和文件连接的 SSH 密钥和密码。",
+    "loadFailed": "无法加载已保存的登录",
     "added": "已添加登录凭据。",
     "rotated": "已轮换密钥。",
     "deleted": "已删除登录凭据。"
