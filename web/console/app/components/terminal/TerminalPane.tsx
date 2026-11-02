@@ -231,16 +231,16 @@ export default function TerminalPane({
           </div>
         ) : null}
         {state === "connecting" ? <p className="tm-progress">{progress}</p> : null}
-        {!session.wsUrl && state !== "connecting" ? (
+        {/* A stream that fails keeps its ended terminal mounted (wsUrl stays set), so the error covers it. */}
+        {state === "error" ? (
+          <div className={`tm-state${session.wsUrl ? " over" : ""}`}>
+            <p className="tm-state-t bad">{error || t("failed")}</p>
+            <button type="button" className="tm-tbtn" onClick={pane.reconnect}>{t("retry")}</button>
+          </div>
+        ) : null}
+        {!session.wsUrl && state === "idle" ? (
           <div className="tm-state">
-            {state === "error" ? (
-              <>
-                <p className="tm-state-t bad">{error || t("failed")}</p>
-                <button type="button" className="tm-tbtn" onClick={pane.reconnect}>{t("retry")}</button>
-              </>
-            ) : state === "idle" ? (
-              <button type="button" className="tm-tbtn" onClick={pane.reconnect}>{t("connect")}</button>
-            ) : null}
+            <button type="button" className="tm-tbtn" onClick={pane.reconnect}>{t("connect")}</button>
           </div>
         ) : null}
         {state === "disconnected" ? (
