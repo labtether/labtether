@@ -169,6 +169,14 @@ LABTETHER_TLS_MODE=auto
 # LABTETHER_INTERNAL_CONNECT_HOST=labtether
 # LABTETHER_INTERNAL_CA_FILE=/ca/ca.crt
 # NEXT_PUBLIC_HUB_API_PORT=8443
+# Hub address that agents and install scripts use. Set it when that differs
+# from the address the Hub sees, for example behind a reverse proxy.
+LABTETHER_EXTERNAL_URL=
+# Browser address of the console, for example http://192.0.2.10:3000.
+# Single sign-on returns here; set it before turning on SSO.
+LABTETHER_CONSOLE_URL=
+# Push relay for the official iOS app. Set "off" to disable it.
+# LABTETHER_PUSH_RELAY_URL=https://push.labtether.com
 # OIDC token and signing-key endpoints use the issuer origin by default.
 # Add exact extra origins only when your identity provider requires them.
 LABTETHER_OIDC_ALLOWED_ENDPOINT_ORIGINS=
