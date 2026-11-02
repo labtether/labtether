@@ -113,6 +113,7 @@
     "actionsFor": "Acciones para {name}",
     "empty": "No hay inicios de sesión guardados",
     "emptyHint": "Claves SSH y contraseñas para terminales, Remote View y conexiones de archivos.",
+    "loadFailed": "No se pudieron cargar los inicios de sesión guardados",
     "added": "Inicio de sesión añadido.",
     "rotated": "Secreto rotado.",
     "deleted": "Inicio de sesión eliminado."

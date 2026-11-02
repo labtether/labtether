@@ -80,7 +80,7 @@ export function CredentialProfilesCard() {
         ) : null}
         {inventory.error ? (
           <div className="st-row" role="alert">
-            <span className="st-msg bad">{inventory.error}</span>
+            <span className="st-msg bad">{t("logins.loadFailed")}</span>
             <div className="st-row-r">
               <Button size="sm" variant="ghost" onClick={inventory.refresh}>{t("retry")}</Button>
             </div>
