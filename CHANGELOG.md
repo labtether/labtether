@@ -76,6 +76,12 @@ v1.7.1.
 - Features that moved: the device group tree with drag and drop is under
   Devices ⋯ › Arrange groups, and the old Map layout editor is under Map ⋯ ›
   Edit layout.
+- The audit log stores a row when someone changes something, or tries to and
+  is refused, instead of one for every API request. Reads go to the Hub log
+  only. Each row names the person or API key; sign-in attempts name the
+  client address. `GET /api/v2/audit/events` no longer returns the read rows
+  older versions stored; they stay in the database until audit retention
+  removes them.
 
 ### Removed
 
@@ -97,6 +103,9 @@ v1.7.1.
 - Terminal links that name a target or a quick-connect address open it.
 - CPU and other percent charts stop at 100% on a busy device instead of
   drawing up to 104%.
+- The Audit log shows people's actions again. Every open console added an
+  "API request GET" row every few seconds, which pushed real actions out of
+  the list and showed client addresses as the person.
 - An agent at or above the Hub's agent release shows as up to date. Before,
   any other version showed "update available", so an agent updated before
   the Hub was offered the older release, which the agent refuses.
