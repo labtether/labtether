@@ -20,6 +20,8 @@ type EnrollmentTokensSectionProps = {
   generateToken: (label: string, ttlHours: number, maxUses: number, scope: EnrollmentTokenScopeRequest) => Promise<unknown> | void;
   revokeEnrollmentToken: (id: string) => Promise<void> | void;
   clearNewToken: () => void;
+  /** The username for a user ID, when the hub's user list has it. */
+  userName: (id: string) => string | undefined;
 };
 
 /** Enrollment tokens: Create token opens the form, a new token's value shows once, then the list with Disable. */
@@ -31,11 +33,14 @@ export function EnrollmentTokensSection({
   generateToken,
   revokeEnrollmentToken,
   clearNewToken,
+  userName,
 }: EnrollmentTokensSectionProps) {
   const t = useTranslations("settings");
   const locale = useLocale();
   const [formOpen, setFormOpen] = useState(false);
 
+  // A user ID is not shown: "by alex" only when the user list names the creator.
+  const creator = (token: EnrollmentToken) => (token.created_by ? userName(token.created_by) : undefined);
   const scopeText = (token: EnrollmentToken) => {
     if (token.scope === "asset") return t("agents.forDevice", { id: token.asset_id ?? "" });
     if (token.scope === "group") return t("agents.forGroup", { id: token.allowed_group_id ?? "" });
@@ -112,7 +117,7 @@ export LABTETHER_WS_URL="${wsURL}"
             <div key={token.id} className="st-row st-en">
               <div className="st-row-l">
                 <span className="st-nm">{name}</span>
-                <span className="st-g">{token.created_by ? `${scopeText(token)} · ${t("agents.byUser", { user: token.created_by })}` : scopeText(token)}</span>
+                <span className="st-g">{creator(token) ? `${scopeText(token)} · ${t("agents.byUser", { user: creator(token) as string })}` : scopeText(token)}</span>
               </div>
               <span className="st-cell st-num st-hide-m">
                 {token.max_uses > 0 ? t("agents.used", { used: token.use_count, max: token.max_uses }) : t("agents.usedNoLimit", { used: token.use_count })}

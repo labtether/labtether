@@ -1,9 +1,11 @@
 "use client";
 
+import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { PageHeader } from "../../../../components/PageHeader";
 import { useAuth } from "../../../../contexts/AuthContext";
 import { useEnrollment } from "../../../../hooks/useEnrollment";
+import { useHubUsers } from "../../../../hooks/useHubUsers";
 import { hasAdminRole } from "../../../../lib/roles";
 import { AgentConnectionSection } from "../components/AgentConnectionSection";
 import { AgentKeysSection } from "../components/AgentKeysSection";
@@ -33,6 +35,8 @@ export default function AgentSettingsPage() {
 function AgentSettings() {
   const t = useTranslations("settings");
   const enrollment = useEnrollment();
+  const { users } = useHubUsers();
+  const userNames = useMemo(() => new Map(users.map((u) => [u.id, u.username])), [users]);
 
   return (
     <>
@@ -57,6 +61,7 @@ function AgentSettings() {
           generateToken={enrollment.generateToken}
           revokeEnrollmentToken={enrollment.revokeEnrollmentToken}
           clearNewToken={enrollment.clearNewToken}
+          userName={(id) => userNames.get(id)}
         />
         <AgentKeysSection
           enrollmentTokens={enrollment.enrollmentTokens}
