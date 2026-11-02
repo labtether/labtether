@@ -59,8 +59,17 @@ export function usePaneSession({
     if (targetNodeId) setTargetRef.current(targetNodeId);
   }, [targetNodeId]);
 
+  // Connect by itself once per device while the tab shows. A stream that never opens (a proxy without websocket
+  // upgrade, a console address the Hub does not allow) then ends in the error with Try again. Before, the pane went
+  // back to idle and connected again at once, a few times a second, for as long as the tab stayed open.
+  const autoTriedRef = useRef<string | null>(null);
   useEffect(() => {
-    if (isTabActive && targetNodeId && !quickConnectParams && session.connectionState === "idle" && !wasConnected) {
+    if (!isTabActive) {
+      autoTriedRef.current = null;
+      return;
+    }
+    if (targetNodeId && !quickConnectParams && session.connectionState === "idle" && !wasConnected && autoTriedRef.current !== targetNodeId) {
+      autoTriedRef.current = targetNodeId;
       void connectRef.current(targetNodeId);
     }
   }, [isTabActive, targetNodeId, quickConnectParams, session.connectionState, wasConnected]);
@@ -135,7 +144,9 @@ export function usePaneSession({
           ? "error"
           : wasConnected
             ? "disconnected"
-            : "idle";
+            : session.error
+              ? "error"
+              : "idle";
   const status: PaneStatus = {
     state,
     progress: `${session.connectionProgress.message} (${formatElapsed(session.connectionProgress.totalElapsedMs)})`,
