@@ -14,7 +14,9 @@ notifications and Live Activity updates to the official iOS app
   stores only its SHA-256.
 
 Plain JavaScript ES modules with JSDoc types, no build step, no runtime
-dependencies. APNs is reached with plain `fetch` over HTTP/2.
+dependencies. APNs is reached with plain `fetch` over HTTP/2. Requests from the
+custom domain use a signed HTTP hop to this same Worker's `workers.dev`
+address before contacting Apple.
 
 The calls the iOS app makes (relay and Hub) are in `IOS-CONTRACT.md`; the Hub
 side is described in the Hub's `docs/internal/OPERATIONS.md` ("iOS push
@@ -133,6 +135,9 @@ The owner runs these steps; they need the owner's Cloudflare login and Apple key
 3. `APNS_TEAM_ID` is set in `wrangler.jsonc` `vars`. Set `APNS_KEY_ID` to the
    10-character Key ID of the APNs auth key. Both identify the key but are not
    secret. `APNS_TOPIC` stays `com.labtether.mobile`. Commit the Key ID.
+   `APNS_EGRESS_ORIGIN` must be this same Worker's direct `workers.dev` origin,
+   without a trailing slash. Keep `workers_dev` and
+   `global_fetch_strictly_public` enabled.
 
 4. Deploy. This also creates the `push.labtether.com` custom domain (DNS
    record and certificate) from the `routes` entry. Pushes answer
@@ -150,24 +155,54 @@ The owner runs these steps; they need the owner's Cloudflare login and Apple key
    npx wrangler secret put APNS_PRIVATE_KEY < /path/to/AuthKey_KEYID.p8
    ```
 
+   Create the separate internal-hop secret without printing or saving it:
+
+   ```sh
+   openssl rand -hex 32 | npx wrangler secret put APNS_EGRESS_SECRET
+   ```
+
+   Both secrets stay on the relay Worker. The second secret signs short-lived
+   requests to the direct Worker address; it is not an Apple credential.
+
 6. Check the deployment:
 
    ```sh
    curl -s https://push.labtether.com/v1/health          # {"ok":true}
-   npx wrangler secret list                               # APNS_PRIVATE_KEY listed
+   npx wrangler secret list                           # both secrets listed
    ```
 
    Then let a development build of the app register and send one test alert
    from a Hub on the lab VM. A `503 not_configured` answer means a variable or
    the secret is missing or the key does not parse.
 
-Rotating the key: create a new APNs key at Apple, update `APNS_KEY_ID`, deploy,
-then repeat step 5. Registrations survive a key rotation.
+Rotating the Apple key: create a new APNs key at Apple, update `APNS_KEY_ID`,
+deploy, then repeat the `APNS_PRIVATE_KEY` upload. Registrations survive a key
+rotation. Rotate `APNS_EGRESS_SECRET` separately with its generation command.
 
 Leave `observability.logs.invocation_logs` off: invocation logs record request
 URLs, and `DELETE /v1/registrations/:id` carries a registration id. The rate
 limit `namespace_id` values (4801 to 4803) only need to be unique within the
 account.
+
+### Custom-domain Apple connection
+
+The domain has global Authenticated Origin Pulls enabled for the demo server,
+which requires Cloudflare's client certificate. The relay's direct Apple
+connection returned Cloudflare `520` from the custom domain while the same
+code and key succeeded through `workers.dev`. Loopback and private service
+bindings also kept the failing connection context.
+
+`src/worker.js` keeps registration lookup, payload validation, caller limits,
+per-registration limits and dead-token cleanup in the normal API handler.
+Only the resulting Apple request crosses the signed HTTP hop. The internal
+`/_internal/apns` handler is accepted only on `APNS_EGRESS_ORIGIN`; unsigned,
+modified and expired envelopes are refused before contacting Apple. A valid
+signature expires after 30 seconds, with five seconds of allowance for a
+sender clock ahead of the receiver. Destinations are limited to the two APNs
+hosts and device paths; host overrides and redirects are refused.
+
+This keeps the demo's client-certificate requirement in place. Do not disable
+global Authenticated Origin Pulls to fix relay delivery.
 
 ## Privacy
 
@@ -179,6 +214,10 @@ account.
   error class), never tokens, ids, payloads or upstream error text.
 - Workers invocation logs are disabled in `wrangler.jsonc` because they record
   request URLs, and `DELETE /v1/registrations/:id` carries an id.
+- Internal envelopes contain the APNs request, its provider token and a short
+  expiry, never a registration id. They are signed with HMAC-SHA-256 and sent
+  over HTTPS to this same Worker. They are not stored or logged. Connection
+  errors return a fixed response without native error text or device URLs.
 - Rate limits are keyed by client IP and by the hash of the registration id.
   Bindings: `REGISTER_LIMIT` (register/delete per IP), `PUSH_IP_LIMIT`
   (push per IP), `PUSH_LIMIT` (push per registration). A missing binding
