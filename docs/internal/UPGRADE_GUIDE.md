@@ -15,7 +15,9 @@ This guide provides version-specific upgrade notes. Always follow the general up
 
 - **Console:** the web console is rebuilt with the 2.0 design. Page addresses
   are unchanged, and saved theme and language choices carry over.
-- **No database migration and no new or removed setting** since v1.7.1.
+- **No database migration and no new or removed setting** since v1.7.1. The
+  schema is unchanged (latest migration v108), so going back to v1.7.1 needs
+  no database restore.
 - **New installs:** the release `deploy.env.example` now lists
   `LABTETHER_EXTERNAL_URL` and `LABTETHER_CONSOLE_URL`. Upgrades keep the
   existing `.env.deploy` unchanged.

@@ -19,6 +19,8 @@ v1.7.1.
   `./scripts/upgrade-compose.sh --version v2.0.0`. Both keep your
   `.env.deploy`.
 - **No database migration and no new or removed setting** since v1.7.1.
+  The database schema is the same, so going back to v1.7.1 needs no database
+  restore.
 - **From v1.4.0 or older,** read the v1.7.1 upgrade notes below first. They
   still apply.
 - **Saved choices carry over.** Your theme and language stay as they were.
@@ -118,6 +120,8 @@ v1.7.1.
 - Settings › Security › Prometheus shows `https://<hub-host>:8443/metrics`
   as the scrape address when Hub TLS is on. It showed the plain-HTTP port,
   which only redirects.
+- Changing a connection's type on the Map keeps its label. Before, the Hub
+  erased the label.
 
 ## [1.7.1] - 2026-10-31
 
