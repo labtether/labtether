@@ -20,7 +20,9 @@ type Store interface {
 
 	// Connections
 	CreateConnection(c Connection) (Connection, error)
-	UpdateConnection(id string, relationship, label string) error
+	// UpdateConnection changes the relationship when it is not empty and the
+	// label when label is not nil; an empty label clears it.
+	UpdateConnection(id string, relationship string, label *string) error
 	DeleteConnection(id string) error
 	ListConnections(topologyID string) ([]Connection, error)
 

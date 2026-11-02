@@ -36,8 +36,8 @@ func TestConnectionCRUD(t *testing.T) {
 		t.Fatal("expected connection to not be deleted")
 	}
 
-	// Update relationship.
-	if err := store.UpdateConnection(conn.ID, "runs_on", ""); err != nil {
+	// Changing the type in the Map sends no label; the label must stay.
+	if err := store.UpdateConnection(conn.ID, "runs_on", nil); err != nil {
 		t.Fatalf("UpdateConnection: %v", err)
 	}
 
@@ -60,6 +60,21 @@ func TestConnectionCRUD(t *testing.T) {
 	}
 	if updated.Label != "primary link" {
 		t.Fatalf("expected label unchanged, got %q", updated.Label)
+	}
+
+	// Clearing the label in the Map sends an empty label.
+	empty := ""
+	if err := store.UpdateConnection(conn.ID, "", &empty); err != nil {
+		t.Fatalf("UpdateConnection clear label: %v", err)
+	}
+	conns, err = store.ListConnections(layout.ID)
+	if err != nil {
+		t.Fatalf("ListConnections after clearing label: %v", err)
+	}
+	for _, c := range conns {
+		if c.ID == conn.ID && (c.Label != "" || c.Relationship != "runs_on") {
+			t.Fatalf("expected cleared label and kept relationship, got %q / %q", c.Label, c.Relationship)
+		}
 	}
 
 	// Soft-delete.

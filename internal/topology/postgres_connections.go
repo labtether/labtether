@@ -53,13 +53,13 @@ func (s *PostgresStore) CreateConnection(c Connection) (Connection, error) {
 	return result, nil
 }
 
-func (s *PostgresStore) UpdateConnection(id string, relationship, label string) error {
+func (s *PostgresStore) UpdateConnection(id string, relationship string, label *string) error {
 	ctx := context.Background()
 
 	tag, err := s.pool.Exec(ctx,
 		`UPDATE topology_connections
 		 SET relationship = COALESCE(NULLIF($2, ''), relationship),
-		     label = $3
+		     label = COALESCE($3::text, label)
 		 WHERE id = $1 AND deleted = false`,
 		id, relationship, label,
 	)
