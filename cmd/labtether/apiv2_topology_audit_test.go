@@ -236,8 +236,10 @@ func (m *mockTopologyStore) ListMembers(topologyID string) ([]topology.ZoneMembe
 func (m *mockTopologyStore) CreateConnection(c topology.Connection) (topology.Connection, error) {
 	return c, nil
 }
-func (m *mockTopologyStore) UpdateConnection(id string, relationship, label string) error { return nil }
-func (m *mockTopologyStore) DeleteConnection(id string) error                             { return nil }
+func (m *mockTopologyStore) UpdateConnection(id string, relationship string, label *string) error {
+	return nil
+}
+func (m *mockTopologyStore) DeleteConnection(id string) error { return nil }
 func (m *mockTopologyStore) ListConnections(topologyID string) ([]topology.Connection, error) {
 	return nil, nil
 }
