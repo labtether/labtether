@@ -3,8 +3,8 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "labtether-push-relay",
   "main": "src/index.js",
-  // The owner's Cloudflare account ("Owners Account").
-  "account_id": "25c357768b0fd4b877d6f008dc50e63b",
+  // The Watari business Cloudflare account.
+  "account_id": "62f3a7e24e93220b32c39058daf55cbf",
   // Not newer than the workerd (1.20261019.1) bundled with the pinned wrangler 4.151.2.
   "compatibility_date": "2026-10-19",
   "workers_dev": true,
