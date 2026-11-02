@@ -250,12 +250,3 @@
   .rv-btn, .rv-ib, .rv-row, .rv-tab, .rv-tab-x, .rv-tools.pill, .rv-prog b { transition: none; }
   .rv-dot.busy, .rv-rec i, .rv-spin { animation: none; }
 }
-
-/* Topology map controls (the map's own styles live with it; kept here until they move) */
-.react-flow__controls { border-radius: var(--radius-md); border: 1px solid var(--line); background: var(--panel-glass); backdrop-filter: blur(var(--blur-md)); -webkit-backdrop-filter: blur(var(--blur-md)); box-shadow: var(--shadow-panel); }
-.react-flow__minimap { background: var(--bg) !important; border-color: var(--line); }
-.react-flow__minimap-mask { fill: rgba(0, 0, 0, 0.5); }
-.react-flow__controls-button { background: transparent; border-bottom: 1px solid var(--line); fill: var(--muted); }
-.react-flow__controls-button:hover { background: var(--hover); }
-.react-flow__controls-button svg { fill: var(--muted); }
-.react-flow__edge-path { stroke-linecap: round; }
