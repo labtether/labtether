@@ -5,6 +5,99 @@ All notable changes to LabTether are documented in this file.
 This changelog starts on 2026-03-09, when work on the first public release
 began. Hub v1.2.0 was the first public release.
 
+## [2.0.0] - unreleased
+
+Hub 2.0.0 ships a rebuilt console. Every page has a new design, and the
+console gains a Dashboard that lists what needs attention, one Devices list for
+every kind of machine, a network Map and a Sign out control. Changes since
+v1.7.1.
+
+### Upgrade notes
+
+- **Upgrade from v1.7.1 the same way as before.** Run the installer again
+  from the folder you first ran it in, with `LABTETHER_VERSION=v2.0.0`, or run
+  `./scripts/upgrade-compose.sh --version v2.0.0`. Both keep your
+  `.env.deploy`.
+- **No database migration and no new or removed setting** since v1.7.1.
+- **From v1.4.0 or older,** read the v1.7.1 upgrade notes below first. They
+  still apply.
+- **Saved choices carry over.** Your theme and language stay as they were.
+  Page addresses have not changed, so bookmarks keep working.
+- **Agents from v1.7.1 keep working** with a 2.0.0 Hub. Upgrade the Hub first,
+  then the agents.
+- **New installs get the console address setting.** The release file
+  `deploy.env.example`, which the installer copies to `.env.deploy` on a new
+  install, now lists `LABTETHER_EXTERNAL_URL` and `LABTETHER_CONSOLE_URL`. An
+  existing `.env.deploy` is not changed. Single sign-on through the console
+  still needs `LABTETHER_CONSOLE_URL`, as in v1.7.1.
+
+### Added
+
+- A new look across the console: new colours and type, and a sidebar with one
+  list (Dashboard, Devices, Map, Services, Containers, Alerts, Automations and
+  Logs). Terminal, Files and Remote View sit apart, and Settings and your
+  account are at the bottom. Below 900 px wide the sidebar folds into a
+  drawer.
+- An account menu with theme, language and **Sign out**. The console had no
+  way to sign out before.
+- Dashboard: **Needs attention** lists open alerts (most severe first),
+  devices that stopped answering, and containers and services in trouble.
+  **Running** shows action runs, update runs and terminal commands in
+  progress. **Servers** shows CPU, memory and disk for Proxmox hosts, NAS,
+  backup servers and Docker hosts, with a 24-hour CPU curve. **Services**
+  puts every web service one click away.
+- Devices: one list in sections by type (Servers, Storage, Computers and VMs)
+  with CPU, memory and disk bars. Devices that need attention come first in
+  each section, and VMs fold under their Proxmox host. The toolbar has a
+  filter, a Needs attention chip and a Group menu (Type, Status, Group or
+  None).
+- Map (the Topology page) draws a top-down network tree with details for the
+  device you pick. The Dashboard shows a small copy.
+- Alerts: the list sits beside the alert you pick, with Acknowledge and then
+  Resolve. Tabs for Alerts, Issues, Rules, Silences and Delivery log. A rule
+  can be turned on or off, and edited, from the Rules tab.
+- Each issue has its own page with a timeline, notes, write-up, owner and
+  state.
+- Updates shows update plans and their history.
+- Automations groups Actions, Schedules and Webhooks, each a list with an
+  editor and run results.
+- Settings has new Notifications and Agents tabs, and holds Users, Groups,
+  Security, Health and the Audit log. Recordings open from the Audit log.
+- The device page has a new header, tabs and a ⋯ menu, which every Devices
+  row also has. The Proxmox, Proxmox Backup Server, TrueNAS, Home Assistant
+  and storage tabs are rebuilt.
+- Terminal, Files and Remote View are rebuilt.
+
+### Changed
+
+- Every time in the console uses the 24-hour clock.
+- The sign-in page says "Sign in to LabTether", and the label under the logo
+  says "homelab hub".
+- Features that moved: the device group tree with drag and drop is under
+  Devices ⋯ › Arrange groups, and the old Map layout editor is under Map ⋯ ›
+  Edit layout.
+
+### Removed
+
+- From the Dashboard: the summary paragraph, number cards, fleet focus,
+  activity feed, hotspots, the export button and the old topology panel.
+  Containers in trouble now show under Needs attention.
+
+### Fixed
+
+- Saved webhooks show in the Webhooks list. The list read the Hub's reply as
+  empty.
+- Container links on hosts whose names contain a dash open the right
+  container.
+- In the ⌘K palette, Enter on a plain word no longer opens a terminal through
+  Quick connect.
+- `/api-docs` without a language in the address opens the API docs instead of
+  an "unauthorized" error.
+- Clearing a schedule's group when editing it is saved.
+- Terminal links that name a target or a quick-connect address open it.
+- CPU and other percent charts stop at 100% on a busy device instead of
+  drawing up to 104%.
+
 ## [1.7.1] - 2026-10-31
 
 User-visible changes since v1.4.0. Hub v1.7.0 was never released, so v1.7.1 is

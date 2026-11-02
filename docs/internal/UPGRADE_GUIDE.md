@@ -6,10 +6,36 @@ This guide provides version-specific upgrade notes. Always follow the general up
 
 1. Back up: `make db-backup`
 2. Check status: `make db-migrate-status`
-3. Upgrade: `make upgrade-compose VERSION=v2026.X`
+3. Upgrade: `make upgrade-compose VERSION=vX.Y.Z`
 4. Verify: Check hub logs for successful migration and startup
 
 ## Version-Specific Notes
+
+### v2.0.0
+
+- **Console:** the web console is rebuilt with the 2.0 design. Page addresses
+  are unchanged, and saved theme and language choices carry over.
+- **No database migration and no new or removed setting** since v1.7.1.
+- **New installs:** the release `deploy.env.example` now lists
+  `LABTETHER_EXTERNAL_URL` and `LABTETHER_CONSOLE_URL`. Upgrades keep the
+  existing `.env.deploy` unchanged.
+- **Agents:** v1.7.1 agents keep working with a 2.0.0 Hub. Upgrade the Hub
+  first, then the agents.
+
+### v1.7.1
+
+Full list: the 1.7.1 upgrade notes in [CHANGELOG.md](../../CHANGELOG.md).
+The items below need a step during the upgrade from v1.4.0.
+
+- **Docker installs:** upgrade with the installer or
+  `scripts/upgrade-compose.sh`, which move a v1.4.0 database into the
+  `postgres-data` volume. A bare `docker compose up` does not.
+- **Agent auth default:** shared owner-token authentication for agent WebSockets and legacy HTTP heartbeats is now disabled. Temporarily set `LABTETHER_ALLOW_LEGACY_SHARED_AGENT_AUTH=true` only while migrating an old agent to a per-agent credential.
+- **Enrollment controls:** one-use tokens are the default; token-use, durable-fleet, live-socket, inbound-rate, and credential-revalidation ceilings are configurable with the variables documented in `OPERATIONS.md` and `.env.example`.
+- **Database migration:** v93 (`durable_agent_identity_state`) backfills a durable credential-rotation marker for existing agent assets. The marker prevents pre-issued enrollment tokens from being replayed after a later credential rotation and provides durable fleet accounting. The migration is transactional and requires no planned downtime.
+- **Database migration:** v98 (`scoped_enrollment_tokens`) disables every older enrollment token because those rows do not contain the intended device or group. Create replacement tokens after the upgrade. New tokens are bound to one device, one group, unplaced devices, or an explicitly confirmed unrestricted scope.
+- **Rollback warning:** do not roll back only the Hub binary after v98. Older code does not understand the new token claims. Restore the pre-upgrade database backup and older Hub together, or revoke every active scoped token before starting older code.
+- **Collector URL cleanup:** v99 removes usernames and passwords embedded in collector URLs and known metadata copies. Any affected collector is disabled. Rotate that exposed password, save it in a credential profile, set the collector's `credential_id`, then re-enable the collector.
 
 ### v2026.2
 
@@ -21,15 +47,6 @@ This guide provides version-specific upgrade notes. Always follow the general up
 - **New API endpoints:** `GET /api/v1/agent/manifest`, `POST /api/v1/agent/cache/refresh`.
 - **Database migrations:** v73 (audit_events_indexes) — adds indexes for audit event queries. No downtime required.
 
-### Current development release
-
-- **Agent auth default:** shared owner-token authentication for agent WebSockets and legacy HTTP heartbeats is now disabled. Temporarily set `LABTETHER_ALLOW_LEGACY_SHARED_AGENT_AUTH=true` only while migrating an old agent to a per-agent credential.
-- **Enrollment controls:** one-use tokens are the default; token-use, durable-fleet, live-socket, inbound-rate, and credential-revalidation ceilings are configurable with the variables documented in `OPERATIONS.md` and `.env.example`.
-- **Database migration:** v93 (`durable_agent_identity_state`) backfills a durable credential-rotation marker for existing agent assets. The marker prevents pre-issued enrollment tokens from being replayed after a later credential rotation and provides durable fleet accounting. The migration is transactional and requires no planned downtime.
-- **Database migration:** v98 (`scoped_enrollment_tokens`) disables every older enrollment token because those rows do not contain the intended device or group. Create replacement tokens after the upgrade. New tokens are bound to one device, one group, unplaced devices, or an explicitly confirmed unrestricted scope.
-- **Rollback warning:** do not roll back only the Hub binary after v98. Older code does not understand the new token claims. Restore the pre-upgrade database backup and older Hub together, or revoke every active scoped token before starting older code.
-- **Collector URL cleanup:** v99 removes usernames and passwords embedded in collector URLs and known metadata copies. Any affected collector is disabled. Rotate that exposed password, save it in a credential profile, set the collector's `credential_id`, then re-enable the collector.
-
 ### v2026.1
 
 - Initial public release.
@@ -40,7 +57,9 @@ This guide provides version-specific upgrade notes. Always follow the general up
 
 | Hub Version | Go Agent | macOS Agent | Windows Agent |
 |-------------|----------|-------------|---------------|
+| v2.0.0 | v2.0.0 (v1.7.1 still connects) | v2.0.0 | v2.0.0 |
+| v1.7.1 | v1.7.1 | v1.7.1 | v1.7.1 |
 | v2026.2 | v2026.2 | v2026.1 | — |
 | v2026.1 | v2026.1 | v2026.1 | — |
 
-Agents are backward-compatible within the same major version. Upgrade the hub first, then agents.
+Upgrade the hub first, then agents.
