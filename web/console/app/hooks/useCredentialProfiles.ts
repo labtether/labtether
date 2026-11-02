@@ -36,7 +36,12 @@ export type CredentialProfile = {
   expires_at?: string;
 };
 
-type CredentialProfilesEnvelope = { profiles?: unknown };
+/** The hub's v2 answer wraps the list in "data" ({ data: { profiles } }); older answers had { profiles } at the top. */
+type CredentialProfilesEnvelope = { data?: { profiles?: unknown } | null; profiles?: unknown };
+
+export function profilesOf(payload: CredentialProfilesEnvelope | null): unknown {
+  return payload?.data?.profiles ?? payload?.profiles;
+}
 
 function isCredentialProfile(value: unknown): value is CredentialProfile {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -84,13 +89,13 @@ export function useCredentialProfiles(enabled = true) {
           setError(await credentialResponseError(response, `Failed to load credential profiles (${response.status}).`));
           return;
         }
-        const payload = await response.json() as CredentialProfilesEnvelope;
-        if (!Array.isArray(payload.profiles)) {
+        const list = profilesOf(await response.json() as CredentialProfilesEnvelope);
+        if (!Array.isArray(list)) {
           setProfiles([]);
           setError("Credential profile response was invalid.");
           return;
         }
-        setProfiles(payload.profiles.filter(isCredentialProfile));
+        setProfiles(list.filter(isCredentialProfile));
       } catch (loadError) {
         if (controller.signal.aborted) return;
         setProfiles([]);

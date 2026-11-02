@@ -113,6 +113,7 @@
     "actionsFor": "Actions for {name}",
     "empty": "No saved logins",
     "emptyHint": "SSH keys and passwords for terminals, remote view and file connections.",
+    "loadFailed": "Could not load saved logins",
     "added": "Added the login.",
     "rotated": "Rotated the secret.",
     "deleted": "Deleted the login."

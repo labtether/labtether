@@ -113,6 +113,7 @@
     "actionsFor": "Aktionen für {name}",
     "empty": "Keine gespeicherten Anmeldungen",
     "emptyHint": "SSH-Schlüssel und Passwörter für Terminal, Remote View und Dateiverbindungen.",
+    "loadFailed": "Gespeicherte Anmeldungen konnten nicht geladen werden",
     "added": "Anmeldung hinzugefügt.",
     "rotated": "Geheimnis rotiert.",
     "deleted": "Anmeldung gelöscht."
