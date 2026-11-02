@@ -245,6 +245,7 @@
     "colRole": "角色",
     "colLastUsed": "上次使用",
     "never": "从未",
+    "expired": "已过期",
     "revoke": "撤销",
     "edit": "编辑",
     "editTitle": "编辑 API 密钥",
