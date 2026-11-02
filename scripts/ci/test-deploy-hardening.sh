@@ -322,6 +322,14 @@ fi
   fi
 )
 grep -F '"guacd": "guacamole/guacd:1.6.0@sha256:' "${tmp_dir}/rendered/deploy-manifest.json" >/dev/null
+# The installer copies deploy.env.example to .env.deploy. Single sign-on fails
+# until LABTETHER_CONSOLE_URL is set, so the release file must name it.
+for setting in LABTETHER_EXTERNAL_URL LABTETHER_CONSOLE_URL; do
+  if ! grep -Eq "^${setting}=" "${tmp_dir}/rendered/deploy.env.example"; then
+    printf 'FAIL: release deploy.env.example does not name %s\n' "${setting}" >&2
+    exit 1
+  fi
+done
 # Release assets must not start with a dot (GitHub renames them), and the
 # website installer requires SHA256SUMS to list exactly these three files.
 grep -F '"env_example": "deploy.env.example"' "${tmp_dir}/rendered/deploy-manifest.json" >/dev/null

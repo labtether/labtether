@@ -55,7 +55,7 @@ This guide covers the upgrade procedure for LabTether hub deployments, including
 make db-backup
 
 # 2. Pull new images
-./scripts/upgrade-compose.sh v2026.X
+./scripts/upgrade-compose.sh --version vX.Y.Z
 # or manually:
 docker compose -f deploy/compose/docker-compose.deploy.yml pull
 
@@ -98,7 +98,7 @@ LabTether uses forward-only migrations. There are no Down() rollbacks. Rollback 
 
 ## When Upgrades Require Downtime
 
-- Major version upgrades (e.g., v2026.1 to v2026.2) may include breaking migrations that alter table structures or rename columns.
+- Major version upgrades (for example v1.7.1 to v2.0.0) may include breaking migrations that alter table structures or rename columns.
 - Always read the CHANGELOG before upgrading.
 - Plan for 1-5 minutes of downtime during migration, depending on database size.
 - For zero-downtime requirements, test the upgrade on a staging environment first.
@@ -212,7 +212,7 @@ Migrations are forward-only by design. To rollback:
 
 3. **Pin the previous version** in `.env.deploy`:
    ```bash
-   LABTETHER_VERSION=v2026.1  # Previous working version
+   LABTETHER_VERSION=v1.7.1  # Previous working version
    ```
 
 4. **Restart:**
