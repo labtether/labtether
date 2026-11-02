@@ -73,6 +73,10 @@ Use the version from the [latest release](https://github.com/labtether/labtether
 The installer checks the release checksums and starts pinned images. When it
 finishes, open <http://localhost:3000> and the setup wizard takes it from there.
 
+To upgrade, run the installer again from the same folder with the new version.
+It keeps your `.env.deploy`. The [changelog](CHANGELOG.md) lists what each
+release changes.
+
 External Postgres, custom TLS and other options are in the
 [installation guide](https://labtether.com/docs/getting-started/installation).
 
