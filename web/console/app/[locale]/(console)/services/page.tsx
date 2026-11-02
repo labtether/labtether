@@ -30,6 +30,7 @@ import { useServiceMutationActions } from "./useServiceMutationActions";
 import { useServiceSelectionState } from "./useServiceSelectionState";
 import { useServicesView } from "./useServicesView";
 import { useGroupingSuggestionToasts } from "./useGroupingSuggestionToasts";
+import { copyText } from "../../../lib/clipboard";
 
 export default function ServicesPage() {
   const t = useTranslations("services");
@@ -77,7 +78,7 @@ export default function ServicesPage() {
     onToggleHidden: (service) => void toggleHidden(service),
     onRemove: setRemoving,
     onCopy: (service) => {
-      void navigator.clipboard?.writeText(service.url).then(
+      void copyText(service.url).then(
         () => notify("success", t("toasts.copied", { address: serviceAddress(service.url) })),
         () => notify("error", t("toasts.copyFailed")),
       );

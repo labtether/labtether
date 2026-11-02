@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import { clientId } from "../../../lib/clientId";
 
 // Files tabs. Each tab browses one device (through its agent) or one saved connection, or is a new tab that shows
 // the source picker. A tab may show a second pane with another source (or the same one) beside it.
@@ -24,7 +25,7 @@ export type FileSource =
 
 function makeTab(partial: Partial<FileTab>): FileTab {
   return {
-    id: crypto.randomUUID(),
+    id: clientId(),
     type: partial.type ?? "new",
     label: partial.label ?? "",
     protocol: partial.protocol,

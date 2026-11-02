@@ -10,6 +10,7 @@ import {
 } from "./fileTransferClient";
 import type { FileSource } from "./useFileTabsState";
 import { joinTransferDestinationPath } from "./fileTransferPaths";
+import { clientId } from "../../../lib/clientId";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -116,7 +117,7 @@ export function useFileTransfers() {
         } catch {
           // Surface a failed-client-side transfer entry so the UI shows the error.
           const failedEntry: FileTransfer = {
-            id: crypto.randomUUID(),
+            id: clientId(),
             source_type: src.type,
             source_id: src.id,
             source_path: filePath,

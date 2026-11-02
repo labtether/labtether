@@ -122,6 +122,9 @@ v1.7.1.
   which only redirects.
 - Changing a connection's type on the Map keeps its label. Before, the Hub
   erased the label.
+- Remote View and Files open, and Copy buttons copy, when the console is
+  opened over plain HTTP on a LAN address such as `http://<hub-host>:3000`.
+  Remote View showed an error page there, and Copy did nothing.
 
 ## [1.7.1] - 2026-10-31
 

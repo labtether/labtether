@@ -26,6 +26,7 @@ import { TopBar } from "../../components/shell/TopBar";
 import { usePresenceToasts } from "../../hooks/usePresenceToasts";
 import { hasWriteRole } from "../../lib/roles";
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import { copyText } from "../../lib/clipboard";
 
 function BuiltInPaletteProviders() {
   const router = useRouter();
@@ -60,7 +61,7 @@ function BuiltInPaletteProviders() {
 
   const handleSnippetInsert = useCallback(
     (command: string) => {
-      void navigator.clipboard.writeText(command);
+      void copyText(command).catch(() => {});
       router.push("/terminal");
     },
     [router],

@@ -10,6 +10,7 @@ import { safeLocalRedirectPath } from "../../../lib/safeRedirect";
 import { buildLocalSetupDestination, buildRemoteAccessURL } from "./setupNavigation";
 import { SetupRemoteAccessStep } from "./SetupRemoteAccessStep";
 import { SignInField, SignInShell } from "../login/SignInShell";
+import { copyText } from "../../lib/clipboard";
 
 // How the compose install prints the one-time setup token (the installer prints the same line when it finishes).
 const SETUP_TOKEN_COMMAND = "docker compose --env-file .env.deploy -f docker-compose.deploy.yml exec -T labtether sh -c 'cat /bootstrap/auth/setup-token'";
@@ -178,9 +179,10 @@ export default function SetupPage() {
   };
 
   const copyToClipboard = (text: string, label: string) => {
-    void navigator.clipboard.writeText(text);
-    setCopied(label);
-    setTimeout(() => setCopied(""), 2000);
+    void copyText(text).then(() => {
+      setCopied(label);
+      setTimeout(() => setCopied(""), 2000);
+    }, () => setCopied(""));
   };
 
   const persistRemoteAccessMode = async (mode: "serve" | "off") => {
