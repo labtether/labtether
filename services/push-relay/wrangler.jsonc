@@ -2,12 +2,14 @@
   // LabTether push relay. Deploy steps and the API are in README.md.
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "labtether-push-relay",
-  "main": "src/index.js",
+  "main": "src/worker.js",
   // The Watari business Cloudflare account.
   "account_id": "62f3a7e24e93220b32c39058daf55cbf",
   // Not newer than the workerd (1.20261019.1) bundled with the pinned wrangler 4.151.2.
   "compatibility_date": "2026-10-19",
   "workers_dev": true,
+  // Re-enter this Worker's public handler for the signed Apple connection.
+  "compatibility_flags": ["global_fetch_strictly_public"],
 
   // Custom domain. labtether.com is a zone on this account (it serves the
   // website Worker), so `wrangler deploy` creates the DNS record and the
@@ -34,6 +36,8 @@
   ],
 
   "vars": {
+    // Same Worker, separate HTTP request context. Keep workers_dev enabled.
+    "APNS_EGRESS_ORIGIN": "https://labtether-push-relay.hidden-glade-95d2.workers.dev",
     "APNS_TOPIC": "com.labtether.mobile",
     // 10-character Apple Team ID and APNs Key ID (not secret). Pushes answer
     // 503 not_configured while either is empty or the key secret is missing.
@@ -42,6 +46,8 @@
   },
   // Secret, never in this file or the repo. The owner uploads the .p8 personally:
   //   npx wrangler secret put APNS_PRIVATE_KEY < AuthKey_XXXXXXXXXX.p8
+  // Separate 256-bit HMAC secret for the internal hop:
+  //   openssl rand -hex 32 | npx wrangler secret put APNS_EGRESS_SECRET
 
   "observability": {
     "enabled": true,
