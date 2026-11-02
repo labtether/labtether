@@ -6,6 +6,7 @@
     "placeholder": "搜索设备...",
     "label": "搜索设备"
   },
+  "loadFailed": "无法加载设备",
   "empty": {
     "title": "还没有设备",
     "description": "点击添加设备来安装代理、连接 Proxmox 集群或关联其他基础设施。",

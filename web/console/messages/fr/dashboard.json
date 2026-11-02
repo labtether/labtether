@@ -1,6 +1,6 @@
 {
   "title": "Tableau de bord",
-  "errorHint": "Vérifiez que le backend est en cours d'exécution et accessible.",
+  "statusFailed": "Impossible de charger l’état du hub",
   "sections": {
     "attention": "À vérifier",
     "running": "En cours",

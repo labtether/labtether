@@ -1,6 +1,6 @@
 {
   "title": "Panel",
-  "errorHint": "Verifique que el backend esté funcionando y sea accesible.",
+  "statusFailed": "No se pudo cargar el estado del hub",
   "sections": {
     "attention": "Requiere atención",
     "running": "En curso",

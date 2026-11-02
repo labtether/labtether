@@ -1,6 +1,6 @@
 {
   "title": "Dashboard",
-  "errorHint": "Check that the backend is running and accessible.",
+  "statusFailed": "Could not load the Hub's status",
   "sections": {
     "attention": "Needs attention",
     "running": "Running",
