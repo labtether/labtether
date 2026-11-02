@@ -14,6 +14,14 @@ describe("sanitizeErrorMessage", () => {
     expect(sanitizeErrorMessage("internal server error", "Try again later.")).toBe("Try again later.");
   });
 
+  // Risk: a console API route's "password change endpoint unavailable" (an internal route name, in English) reaches
+  // the page instead of the page's own translated message.
+  it("replaces a console route's endpoint-unavailable line with the fallback", () => {
+    expect(sanitizeErrorMessage("password change endpoint unavailable", "Could not change the password.")).toBe(
+      "Could not change the password.",
+    );
+  });
+
   it("passes through clean messages", () => {
     expect(sanitizeErrorMessage("connection refused", "err")).toBe(
       "connection refused",

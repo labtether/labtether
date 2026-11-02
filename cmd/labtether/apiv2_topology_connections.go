@@ -87,7 +87,9 @@ func (s *apiServer) handleV2TopologyConnection(w http.ResponseWriter, r *http.Re
 		}
 		var req struct {
 			Relationship string `json:"relationship"`
-			Label        string `json:"label"`
+			// Absent keeps the label (a type change sends only the
+			// relationship); "" clears it.
+			Label *string `json:"label"`
 		}
 		if err := decodeJSONBody(w, r, &req); err != nil {
 			return

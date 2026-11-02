@@ -39,7 +39,7 @@
   "errorBoundary": {
     "title": "出了点问题",
     "sectionTitle": "{section}出了点问题",
-    "sectionDescription": "此部分遇到错误，其他部分不受影响。",
+    "sectionDescription": "其他页面仍可正常使用。",
     "tryAgain": "重试"
   },
   "demoBanner": {
@@ -53,5 +53,9 @@
     "files": "浏览或下载受管主机上的文件需要操作员权限。",
     "recordings": "查看和下载会话录制需要操作员权限。",
     "hostData": "此视图需要操作员权限。查看者可以查看清单和状态，但无法访问会话或主机内部的数据。"
+  },
+  "session": {
+    "unreachable": "无法连接 Hub",
+    "retrying": "正在自动重试。"
   }
 }

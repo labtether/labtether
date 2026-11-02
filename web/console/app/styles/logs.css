@@ -23,7 +23,7 @@
 /* Live: a switch, and a dot that pulses while new lines can arrive. */
 .lg-live { display: inline-flex; align-items: center; gap: 8px; height: var(--ctl); padding: 0 4px; font-size: var(--fs-meta); font-weight: 500; color: var(--text-2); white-space: nowrap; cursor: pointer; }
 .lg-live[aria-checked="true"] { color: var(--text); }
-.lg-switch { position: relative; display: block; width: 34px; height: 20px; flex: none; border-radius: 10px; background: var(--track); transition: background-color var(--dur-normal) var(--ease-out); }
+.lg-switch { position: relative; display: block; width: 34px; height: 20px; flex: none; border-radius: 10px; background: var(--switch-off); transition: background-color var(--dur-normal) var(--ease-out); }
 .lg-switch i { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(15, 15, 20, 0.2); transition: transform var(--dur-slow) var(--ease-out); }
 .lg-switch.on { background: var(--text); }
 .lg-switch.on i { transform: translateX(14px); background: var(--panel); }
