@@ -32,7 +32,11 @@
     "dismiss": "Ignorer",
     "matchSignals": "Signaux de correspondance",
     "confidence": "Confiance\u00a0: {value}%",
-    "newSuggestions": "{count} relations suggérées"
+    "newSuggestions": "{count, plural, one {# relation suggérée} other {# relations suggérées}}",
+    "review": "Examiner",
+    "pair": "{a} et {b}",
+    "noneLeft": "Plus aucune suggestion.",
+    "failed": "Impossible d'enregistrer la modification. Réessayez."
   },
   "hubSshKey": {
     "title": "Clé SSH du Hub",
@@ -891,5 +895,16 @@
       "outlier": "Certaines mesures sont très éloignées des valeurs habituelles",
       "gaps": "Le plus long écart entre deux mesures est de {age}"
     }
+  },
+  "pending": {
+    "title": "En attente d'approbation",
+    "connected": "Connecté à {time}",
+    "verified": "Identité vérifiée",
+    "unverified": "Identité non vérifiée",
+    "noFingerprint": "Pas d'empreinte d'appareil",
+    "approve": "Approuver",
+    "reject": "Refuser",
+    "approveFailed": "Impossible d'approuver {name}. Réessayez.",
+    "rejectFailed": "Impossible de refuser {name}. Réessayez."
   }
 }

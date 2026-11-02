@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "../../i18n/navigation";
+import { SessionChecking, SessionUnreachable } from "./SessionScreens";
 
 type User = {
   id: string;
@@ -23,13 +24,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [bootstrapError, setBootstrapError] = useState<string | null>(null);
+  const [bootstrapError, setBootstrapError] = useState(false);
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
   const sessionGeneration = useRef(0);
   const logoutStarted = useRef(false);
 
   const retryBootstrap = useCallback(() => {
-    setBootstrapError(null);
+    setBootstrapError(false);
     setLoading(true);
     setBootstrapAttempt((attempt) => attempt + 1);
   }, []);
@@ -75,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async function checkAuth() {
       const markTransientUnavailable = () => {
         if (!isCurrent()) return;
-        setBootstrapError("LabTether can’t reach the backend right now. It may still be starting or restarting. We’ll keep retrying automatically.");
+        setBootstrapError(true);
         if (isCurrent()) {
           const backoffMs = Math.min(3000 * Math.pow(2, bootstrapAttempt), 60000);
           retryTimer = window.setTimeout(() => {
@@ -95,14 +96,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (response.ok) {
           const data = await response.json();
           if (!isCurrent()) return;
-          setBootstrapError(null);
+          setBootstrapError(false);
           setBootstrapAttempt(0);
           setUser(data.user ?? null);
           return;
         }
 
         if (response.status === 401 || response.status === 403) {
-          setBootstrapError(null);
+          setBootstrapError(false);
           setUser(null);
           const needsSetup = await setupRequired();
           if (!isCurrent()) return;
@@ -156,7 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logoutStarted.current = true;
     ++sessionGeneration.current;
     setUser(null);
-    setBootstrapError(null);
+    setBootstrapError(false);
     setLoading(false);
     try {
       await fetch("/api/auth/logout", { method: "POST" });
@@ -172,30 +173,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   if (bootstrapError && !user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[var(--bg)] px-6">
-        <div className="max-w-md rounded-2xl border border-[var(--line)] bg-[var(--panel-glass)] p-6 text-center shadow-[var(--shadow-panel)]">
-          <h1 className="text-base font-medium text-[var(--text)]">Session check unavailable</h1>
-          <p className="mt-2 text-sm text-[var(--muted)]">{bootstrapError}</p>
-          <p className="mt-2 text-xs text-[var(--muted)]">If you just restarted the backend, this page should recover on its own once the hub is reachable again.</p>
-          <button
-            type="button"
-            onClick={retryBootstrap}
-            className="mt-4 inline-flex items-center justify-center rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-black transition-opacity hover:opacity-90"
-          >
-            Try Again
-          </button>
-        </div>
-      </div>
-    );
+    return <SessionUnreachable onRetry={retryBootstrap} />;
   }
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[var(--bg)]">
-        <p className="text-sm text-[var(--muted)]">Loading...</p>
-      </div>
-    );
+    return <SessionChecking />;
   }
 
   return (

@@ -53,7 +53,7 @@
   .kt-tz-hint { grid-column: 1 / -1; font-size: var(--fs-meta); line-height: var(--lh-meta); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* Switch: 34×20 (28×16 small). On is the text colour, not rose. */
-  .kt-switch { position: relative; display: inline-block; width: 34px; height: 20px; flex: none; border-radius: 10px; background: var(--track); cursor: pointer; transition: background-color var(--t) var(--ease); }
+  .kt-switch { position: relative; display: inline-block; width: 34px; height: 20px; flex: none; border-radius: 10px; background: var(--switch-off); cursor: pointer; transition: background-color var(--t) var(--ease); }
   .kt-switch > i { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(15, 15, 20, 0.2), 0 0 0 0.5px rgba(15, 15, 20, 0.06); transition: transform var(--t-slow) var(--ease); }
   .kt-switch[aria-checked="true"] { background: var(--text); }
   .kt-switch[aria-checked="true"] > i { transform: translateX(14px); background: var(--panel); }

@@ -1,4 +1,5 @@
 import { ensureRecord } from "./responseGuards";
+import { sanitizeErrorMessage } from "./sanitizeErrorMessage";
 
 /**
  * Safe JSON parsing — returns null on failure instead of throwing.
@@ -20,7 +21,7 @@ export function extractError(payload: unknown, fallback: string): string {
   if (record !== null) {
     const message = record["error"];
     if (typeof message === "string" && message.trim() !== "") {
-      return message;
+      return sanitizeErrorMessage(message, fallback);
     }
   }
   return fallback;
