@@ -5,7 +5,7 @@ import { GripVertical, MoreHorizontal } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { memo, useRef, type KeyboardEvent, type MouseEvent } from "react";
 import { useRouter } from "../../../../i18n/navigation";
-import { ServiceIcon } from "../../../components/ServiceIcon";
+import { ServiceIcon, serviceIconKey } from "../../../components/ServiceIcon";
 import type { WebService } from "../../../hooks/useWebServices";
 import { safeHttpURL } from "../../../../lib/safeExternalURL";
 import { ServiceDetailPanel } from "./ServiceDetailPanel";
@@ -117,7 +117,7 @@ function ServiceRowView({ service, hostName, selected, open, detail, arranging, 
             </>
           )}
         </span>
-        <span className="sv-ic" aria-hidden="true"><ServiceIcon iconKey={service.icon_key} size={16} /></span>
+        <span className="sv-ic" aria-hidden="true"><ServiceIcon iconKey={serviceIconKey(service)} size={16} /></span>
         <span className="sv-main">
           {href ? (
             <a className="sv-nm" href={href} target="_blank" rel="noopener noreferrer" data-service-name={service.name} draggable={false}>{service.name}</a>

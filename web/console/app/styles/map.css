@@ -56,14 +56,15 @@ button.mp-lnk:hover { text-decoration: underline; text-decoration-color: var(--t
 .mp-dep path { stroke: var(--text-2); stroke-dasharray: 4 4; }
 .mp-zl { position: absolute; height: 22px; margin: 0; white-space: nowrap; pointer-events: none; }
 .mp-zl span { display: inline-block; height: 21px; padding: 0 6px 5px 0; background: var(--mp-bg); font-size: var(--fs-micro); line-height: 16px; font-weight: 500; color: var(--text-3); }
+/* Names stay 8 px narrower than the 84 px column, so neighbours never touch; a cut name shows in full on hover. */
 .mp-n { position: absolute; display: flex; flex-direction: column; align-items: center; width: 84px; color: inherit; }
 .mp-hit { display: flex; flex-direction: column; align-items: center; width: 100%; border-radius: var(--r-3); cursor: pointer; }
 .mp-t { position: relative; display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 10px; background: var(--panel); box-shadow: var(--elev-tile); color: var(--text-2); transition: translate var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
 .mp-b { position: absolute; top: -3px; right: -3px; width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 0 2px var(--mp-bg); }
 .mp-b.bad, .mp-gd.bad { background: var(--bad); }
 .mp-b.warn, .mp-gd.warn { background: var(--warn); }
-.mp-nm { max-width: 92px; margin-top: 6px; font-size: var(--fs-meta); line-height: 18px; font-weight: 500; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mp-m { max-width: 92px; font-size: var(--fs-micro); line-height: 16px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-nm { max-width: 76px; margin-top: 6px; font-size: var(--fs-meta); line-height: 18px; font-weight: 500; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-m { max-width: 76px; font-size: var(--fs-micro); line-height: 16px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mp-nm.bad, .mp-m.bad, .mp-gn.bad, .mp-ti-prob.bad, .mp-ist.bad { color: var(--bad-text); }
 .mp-nm.warn, .mp-m.warn, .mp-gn.warn, .mp-ti-prob.warn, .mp-ist.warn { color: var(--warn-text); }
 .mp-g { position: absolute; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px 0 4px; border-radius: var(--r-2); font-size: var(--fs-meta); color: var(--text-2); white-space: nowrap; text-align: left; transition: background-color var(--dur-fast) var(--ease-out); }

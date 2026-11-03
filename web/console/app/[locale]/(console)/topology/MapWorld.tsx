@@ -92,7 +92,7 @@ function Node({ n, L, words, sel, q, graph, onSelect, menu }: {
         aria-current={sel === d.id ? "true" : undefined}
       >
         <MapTile d={d} size={18} />
-        <span className="mp-nm">{d.name}</span>
+        <span className="mp-nm" title={d.name}>{d.name}</span>
         {short && <span className={`mp-m ${d.tone}`} title={long}>{short}</span>}
       </button>
       {menu && <div className="mp-nm-more">{menu}</div>}
@@ -138,7 +138,7 @@ function CompactNode({ n }: { n: LayoutNode }) {
   return (
     <Link href={`/nodes/${encodeURIComponent(d.id)}`} className="mp-n" tabIndex={-1} aria-hidden="true" style={{ left: n.cx - COL / 2, top: n.y }}>
       <MapTile d={d} size={16} />
-      <span className={`mp-nm ${d.tone}`}>{d.name}</span>
+      <span className={`mp-nm ${d.tone}`} title={d.name}>{d.name}</span>
     </Link>
   );
 }
