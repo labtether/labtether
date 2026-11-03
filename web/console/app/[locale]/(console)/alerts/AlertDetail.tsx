@@ -4,6 +4,7 @@ import { useLocale, useTranslations } from "next-intl";
 import type { Ref } from "react";
 import { Link } from "../../../../i18n/navigation";
 import type { AlertInstance, AlertRule, AlertSilence } from "../../../console/models";
+import { alertAssetIds } from "../../../console/models/alerts";
 import { assetFreshnessLabel } from "../../../console/formatters";
 import { useFastStatus } from "../../../contexts/StatusContext";
 import { AlertDetailActions, type AlertActions } from "./AlertDetailActions";
@@ -32,11 +33,12 @@ export function AlertDetail({ ref, alert, title, rule, silence, deliveries, chan
   const now = Date.now();
   const status = useFastStatus();
   const issue = useAlertIssue(alert);
-  const assetId = alert.labels?.asset_id;
-  const asset = assetId ? status?.assets?.find((a) => a.id === assetId) : undefined;
-  // The device's state word when it is not answering ("Not responding" in amber, "Offline" in red), as in the mockup.
-  const freshness = asset ? assetFreshnessLabel(asset.last_seen_at) : "online";
-  const deviceState = freshness === "offline" ? "bad" : freshness === "unresponsive" ? "warn" : "";
+  const devices = alertAssetIds(alert).map((id) => {
+    const asset = status?.assets?.find((a) => a.id === id);
+    // The device's state word when it is not answering ("Not responding" in amber, "Offline" in red), as in the mockup.
+    const freshness = asset ? assetFreshnessLabel(asset.last_seen_at) : "online";
+    return { id, name: asset?.name ?? id, freshness, state: freshness === "offline" ? "bad" : freshness === "unresponsive" ? "warn" : "" };
+  });
   // The rule name and device already show as the title and the Device row.
   const labels = Object.entries(alert.labels ?? {}).filter(([key]) => key !== "rule_name" && key !== "asset_id");
   const notes = Object.entries(alert.annotations ?? {}).filter(([key]) => key !== "summary");
@@ -65,15 +67,15 @@ export function AlertDetail({ ref, alert, title, rule, silence, deliveries, chan
       {alert.annotations?.summary ? <p className="al-why">{alert.annotations.summary}</p> : null}
 
       <dl className="al-facts">
-        {assetId ? (
-          <div className="al-kv">
+        {devices.map((device) => (
+          <div key={device.id} className="al-kv">
             <dt>{t("device")}</dt>
             <dd>
-              <Link href={`/nodes/${encodeURIComponent(assetId)}`} className="al-lnk">{asset?.name ?? assetId}</Link>
-              {deviceState ? <span className={`al-st ${deviceState}`}>{t(`deviceState.${freshness}`)}</span> : null}
+              <Link href={`/nodes/${encodeURIComponent(device.id)}`} className="al-lnk">{device.name}</Link>
+              {device.state ? <span className={`al-st ${device.state}`}>{t(`deviceState.${device.freshness}`)}</span> : null}
             </dd>
           </div>
-        ) : null}
+        ))}
         {rule ? (
           <div className="al-kv">
             <dt>{t("rule")}</dt>

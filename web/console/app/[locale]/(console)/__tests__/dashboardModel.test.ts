@@ -23,6 +23,13 @@ describe("Dashboard Needs attention", () => {
     expect(items.map((i) => i.key)).toEqual(["alert:a1", "device:pc"]);
   });
 
+  // The Hub names a metric or heartbeat alert's devices in firing_scope, not in an asset_id label.
+  it("treats a device in an alert's firing scope as named by that alert", () => {
+    const scoped = { ...alert("a2", "high"), firing_scope: { version: 1, asset_ids: ["nas"] } };
+    const items = attentionItems({ ...base, alerts: [scoped], cards: [card("nas", "offline")] });
+    expect(items.map((i) => i.key)).toEqual(["alert:a2"]);
+  });
+
   it("puts critical alerts before lower ones and gives medium no dot", () => {
     const items = attentionItems({ ...base, alerts: [alert("m", "medium"), alert("c", "critical")], cards: [] });
     expect(items.map((i) => [i.key, i.tone])).toEqual([["alert:c", "bad"], ["alert:m", ""]]);

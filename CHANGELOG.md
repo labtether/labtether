@@ -126,6 +126,10 @@ v1.7.1.
   websocket support or at a console address the Hub does not allow, shows
   the error with Try again. Before, it tried again several times a second
   for as long as the tab stayed open.
+- An alert shows the device it fired for, with Open device in its menu. The
+  console looked for the device in a label the Hub does not set, so metric
+  and heartbeat alerts showed no device, and the Dashboard could list an
+  offline device twice: once for the device and once for its alert.
 - A terminal whose stream gets no answer at all, for example from a hung
   proxy, shows the error with Try again after 45 seconds. Before, it showed
   "Opening secure stream" with a counter that never stopped.

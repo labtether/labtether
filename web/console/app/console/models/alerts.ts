@@ -10,9 +10,19 @@ export type AlertInstance = {
   resolved_at?: string;
   last_fired_at: string;
   suppressed_by?: string;
+  /** The devices the alert fired for (the Hub's metric and heartbeat rules name them here, not in labels). */
+  firing_scope?: { version?: number; asset_ids?: string[] };
   created_at: string;
   updated_at: string;
 };
+
+/** The devices an alert is about: an asset_id label, then the Hub's firing scope, without repeats. */
+export function alertAssetIds(alert: Pick<AlertInstance, "labels" | "firing_scope">): string[] {
+  const ids = [alert.labels?.asset_id, ...(alert.firing_scope?.asset_ids ?? [])]
+    .map((id) => (typeof id === "string" ? id.trim() : ""))
+    .filter(Boolean);
+  return [...new Set(ids)];
+}
 
 export type AlertRule = {
   id: string;
