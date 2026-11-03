@@ -305,6 +305,8 @@ export default function SetupPage() {
                   {copied === "token-command" ? t("copied") : t("copy")}
                 </Button>
               </span>
+              {/* The Hub also runs as a Home Assistant add-on, which keeps its token elsewhere (add-on DOCS.md). */}
+              <span>{t("setup.tokenWhereAddon")}</span>
             </>
           )}
         />

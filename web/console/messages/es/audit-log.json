@@ -1,6 +1,10 @@
 {
   "title": "Registro de auditoría",
   "exportCSV": "Exportar CSV",
+  "loadMore": "Cargar entradas anteriores",
+  "loadingMore": "Cargando",
+  "exporting": "Exportando",
+  "exportFailed": "La exportación no terminó.",
   "views": {
     "log": "Registro",
     "recordings": "Grabaciones"

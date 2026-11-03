@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession, type QuickConnectParams } from "../../hooks/useSession";
 import type { TerminalClipboardActionResult, XTerminalHandle } from "../XTerminal";
+import { useTerminalWords } from "./terminalWords";
 
 export type PaneStatus = {
   /** "connecting" covers creating the session, authenticating and starting the shell. */
@@ -48,6 +49,7 @@ export function usePaneSession({
   targetNodeId, targetSource, isTabActive, isFocused, autoReconnect, quickConnectParams, onClipboardBlocked, onToggleSearch,
 }: Options) {
   const session = useSession({ type: "terminal", autoReconnect: quickConnectParams ? false : autoReconnect, quickConnectParams });
+  const say = useTerminalWords();
   const termRef = useRef<XTerminalHandle | null>(null);
   const [wasConnected, setWasConnected] = useState(false);
   const setTargetRef = useRef(session.setTarget);
@@ -149,8 +151,8 @@ export function usePaneSession({
               : "idle";
   const status: PaneStatus = {
     state,
-    progress: `${session.connectionProgress.message} (${formatElapsed(session.connectionProgress.totalElapsedMs)})`,
-    error: session.error ?? "",
+    progress: `${say(session.connectionProgress.message)} (${formatElapsed(session.connectionProgress.totalElapsedMs)})`,
+    error: session.error ? say(session.error) : "",
     via: quickConnectParams ? "ssh" : session.connectedAgentIds.has(targetNodeId) ? "agent" : targetSource === "proxmox" ? "proxmox" : "ssh",
   };
 

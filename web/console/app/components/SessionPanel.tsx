@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import type { ITheme } from "@xterm/xterm";
 import type { SessionConnectionState, SessionStreamStatus, SessionType } from "../hooks/useSession";
 import type { XTerminalHandle } from "./XTerminal";
+import { useTerminalWords } from "./terminal/terminalWords";
 
 /** While the terminal's code loads: a quiet empty frame, no words. */
 const XTerminal = dynamic(() => import("./XTerminal"), {
@@ -75,6 +76,8 @@ export function SessionPanel({
   idleText,
 }: SessionPanelProps) {
   const t = useTranslations("terminal.panel");
+  const tWords = useTranslations("terminal.words");
+  const say = useTerminalWords();
   const isConnecting = connectionState === "connecting" || connectionState === "authenticating";
 
   const overlay = isConnecting ? (
@@ -96,7 +99,7 @@ export function SessionPanel({
     <>
       {error ? (
         <div className="tm-alert" role="alert">
-          <span>{error}</span>
+          <span>{say(error)}</span>
           <button type="button" className="tm-qbtn" onClick={onRetry} disabled={!target}>{t("retry")}</button>
         </div>
       ) : null}
@@ -105,6 +108,7 @@ export function SessionPanel({
           <XTerminal
             ref={termRef}
             wsUrl={wsUrl}
+            endedText={tWords("sessionEnded")}
             onConnected={onTerminalConnected}
             onDisconnected={onTerminalDisconnected}
             onError={onTerminalError}

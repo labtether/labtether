@@ -17,6 +17,7 @@ import { AuditRow, type AuditText } from "./AuditRow";
 import { AuditViews } from "./AuditViews";
 import { actionKey, ALL_REQUESTS, auditRows, auditTime, humanizeType, outcome, peopleByActivity, REQUEST_TYPE, targetText, type AuditEntry, type AuditSort } from "./auditModel";
 import { copyText } from "../../../lib/clipboard";
+import { useAuditPages } from "./useAuditPages";
 
 const AUTO_REFRESH_MS = 30_000;
 
@@ -36,13 +37,22 @@ export default function AuditLogPage() {
   const [sort, setSort] = useState<AuditSort>("time:desc");
   const [openId, setOpenId] = useState("");
 
-  const entries = useMemo(() => (slow?.recentAudit ?? []) as AuditEntry[], [slow?.recentAudit]);
+  // The owner pages through the whole log; the status carries only the 20 newest rows (others see their own there).
+  const owner = user?.role === "owner";
+  const pages = useAuditPages(owner);
+  const paged = owner && pages.entries.length > 0;
+  const entries = useMemo(() => (paged ? pages.entries : (slow?.recentAudit ?? []) as AuditEntry[]), [paged, pages.entries, slow?.recentAudit]);
+  const [exporting, setExporting] = useState(false);
+  const { refresh: refreshPages } = pages;
 
   useEffect(() => {
     if (!visible) return;
-    const id = window.setInterval(() => void fetchStatus(), AUTO_REFRESH_MS);
+    const id = window.setInterval(() => {
+      void fetchStatus();
+      void refreshPages();
+    }, AUTO_REFRESH_MS);
     return () => window.clearInterval(id);
-  }, [fetchStatus, visible]);
+  }, [fetchStatus, refreshPages, visible]);
 
   // Only admins load the user list; everyone else still sees their own name on their own rows.
   const usernames = useMemo(() => {
@@ -85,9 +95,23 @@ export default function AuditLogPage() {
     [entries, kind, person, query, searchText, sort, text],
   );
 
-  const exportCSV = () => {
+  // The export covers every row the filters match, not only the loaded pages.
+  const exportCSV = async () => {
+    let list = rows;
+    if (paged) {
+      setExporting(true);
+      try {
+        const all = await pages.readAll();
+        list = auditRows(all, { query, who: person, type: kind, sort, nameOf: (id) => text.who({ actor_id: id } as AuditEntry), textOf: searchText });
+      } catch {
+        addToast("error", t("exportFailed"));
+        return;
+      } finally {
+        setExporting(false);
+      }
+    }
     downloadCSV(
-      rows.map((e) => ({
+      list.map((e) => ({
         timestamp: e.timestamp,
         person: text.who(e),
         action: text.action(e),
@@ -124,7 +148,7 @@ export default function AuditLogPage() {
     <>
       <PageHeader
         title={t("title")}
-        action={<Button onClick={exportCSV} disabled={rows.length === 0}>{t("exportCSV")}</Button>}
+        action={<Button onClick={() => void exportCSV()} disabled={rows.length === 0 || exporting}>{exporting ? t("exporting") : t("exportCSV")}</Button>}
       />
       <AuditViews current="log" />
       {entries.length === 0 ? (
@@ -160,6 +184,12 @@ export default function AuditLogPage() {
               <div className="lg-foot">
                 <span>{t("shown", { count: rows.length, total })}</span>
                 <button type="button" onClick={() => { setQuery(""); setWho("all"); setType("all"); }}>{t("clearFilter")}</button>
+              </div>
+            ) : null}
+            {paged && pages.more ? (
+              <div className="lg-foot">
+                <span />
+                <button type="button" onClick={() => void pages.loadMore()} disabled={pages.loading}>{pages.loading ? t("loadingMore") : t("loadMore")}</button>
               </div>
             ) : null}
           </div>
