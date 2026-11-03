@@ -30,11 +30,13 @@ import { buildDeviceCards } from "./deviceCards";
 import { buildSections, GROUPINGS, needsAttention, type Grouping } from "./deviceListModel";
 import { DeviceList } from "./DeviceList";
 import { DeviceListToolbar } from "./DeviceListToolbar";
+import { useCanWrite } from "../../../hooks/useCanWrite";
 
 const GROUPING_KEY = "labtether.devices.grouping";
 
 export default function NodesPage() {
   const t = useTranslations('devices');
+  const canWrite = useCanWrite();
   const tNav = useTranslations('nav');
   const tCommon = useTranslations('common');
   const status = useFastStatus();
@@ -192,10 +194,12 @@ export default function NodesPage() {
         title={t('title')}
         action={
           <div className="flex items-center gap-2">
-            <Button variant="primary" onClick={() => setShowAddDevice(true)}>
-              <Plus size={14} />
-              {t('addDevice')}
-            </Button>
+            {canWrite ? (
+              <Button variant="primary" onClick={() => setShowAddDevice(true)}>
+                <Plus size={14} />
+                {t('addDevice')}
+              </Button>
+            ) : null}
             {hasAssets && (
               <Menu.Root>
                 <Menu.Trigger className="lt-icon-btn" aria-label={t('list.more')}>
@@ -206,9 +210,11 @@ export default function NodesPage() {
                     <Menu.Item className="lt-menu-item" asChild>
                       <Link href="/updates">{tNav('updates')}</Link>
                     </Menu.Item>
-                    <Menu.Item className="lt-menu-item" onSelect={() => setArranging(!arranging)}>
-                      {t(arranging ? 'list.backToList' : 'list.arrangeGroups')}
-                    </Menu.Item>
+                    {canWrite ? (
+                      <Menu.Item className="lt-menu-item" onSelect={() => setArranging(!arranging)}>
+                        {t(arranging ? 'list.backToList' : 'list.arrangeGroups')}
+                      </Menu.Item>
+                    ) : null}
                   </Menu.Content>
                 </Menu.Portal>
               </Menu.Root>

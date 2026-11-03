@@ -15,6 +15,8 @@ vi.mock("../../../../../i18n/navigation", () => ({
   Link: ({ href, ...props }: AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) => <a href={href} {...props} />,
 }));
 
+vi.mock("../../../../contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1", username: "u1", role: "owner" } }) }));
+
 vi.mock("../../../../hooks/useActions", () => ({
   useActions: () => ({
     actionParameters: [],

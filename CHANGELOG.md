@@ -143,6 +143,13 @@ v1.7.1.
   and Enable 2FA failed.
 - A wrong password or two-factor code says so in your language ("Wrong
   username or password") instead of the Hub's "invalid credentials".
+- Viewers are no longer offered changes the Hub refuses them: New rule,
+  rule switches, acknowledge, resolve and silence in Alerts; New action, Run,
+  schedule and webhook switches and menus in Automations; Add service, Edit
+  and Hide in Services; New group and group menus; Add device in Devices.
+  Each ended in an error such as "forbidden". Approve and Reject for agents
+  waiting for approval show for owners and admins only. A viewer's Refresh
+  in Services reads the list again instead of starting a scan.
 - A terminal whose stream gets no answer at all, for example from a hung
   proxy, shows the error with Try again after 45 seconds. Before, it showed
   "Opening secure stream" with a counter that never stopped.

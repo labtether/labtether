@@ -15,6 +15,7 @@ import { ActionEditor, type EditorStart } from "./ActionEditor";
 import { actionDevices, failedSteps, type SessionRun } from "./actionsModel";
 import { RecentRuns } from "./RecentRuns";
 import { SavedActionList } from "./SavedActionList";
+import { useCanWrite } from "../../../hooks/useCanWrite";
 
 /**
  * Automations › Actions: saved command actions (run, open for steps and the last run's output, duplicate, delete),
@@ -101,17 +102,18 @@ export default function ActionsPage() {
   };
 
   const runDevices = confirmRun ? actionDevices(confirmRun) : [];
+  const canWrite = useCanWrite();
 
   return (
     <div className="au-page">
       <PageHeader
         title={t("title")}
-        action={(
+        action={canWrite ? (
           <Button variant={editor ? "secondary" : "primary"} onClick={() => setEditor({ kind: "command" })}>
             <Plus size={14} aria-hidden="true" />
             {t("new")}
           </Button>
-        )}
+        ) : undefined}
       />
       {editor ? (
         <ActionEditor
@@ -133,6 +135,7 @@ export default function ActionsPage() {
         deviceName={deviceName}
         onOpen={(action) => { void open(action); }}
         onRun={askRun}
+        canWrite={canWrite}
         onDuplicate={(action) => setEditor({ kind: "command", from: action })}
         onDelete={askDelete}
         onRetry={() => { void saved.loadActions().catch(() => undefined); }}

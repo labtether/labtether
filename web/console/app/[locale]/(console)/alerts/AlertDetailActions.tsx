@@ -8,6 +8,7 @@ import { Button } from "../../../components/ui/Button";
 import type { AlertInstance, AlertRule, AlertSilence } from "../../../console/models";
 import { alertAssetIds } from "../../../console/models/alerts";
 import { durationPresets, type DurationPreset } from "./alertsPageTypes";
+import { useCanWrite } from "../../../hooks/useCanWrite";
 
 export type AlertActions = {
   /** The alert (or silence) whose action is in flight, so its buttons wait. */
@@ -33,9 +34,11 @@ export function AlertDetailActions({ alert, rule, silence, issueId, actions }: {
 }) {
   const t = useTranslations("alerts.detail");
   const busy = actions.busy !== null && (actions.busy === alert.id || actions.busy === silence?.id);
-  const firing = alert.status === "firing";
-  const open = alert.status !== "resolved";
-  const canResolve = firing || alert.status === "acknowledged";
+  // A viewer gets only the links: the Hub refuses their acknowledge, resolve and silence.
+  const canWrite = useCanWrite();
+  const firing = canWrite && alert.status === "firing";
+  const open = canWrite && alert.status !== "resolved";
+  const canResolve = firing || (canWrite && alert.status === "acknowledged");
   const hasLabels = Object.keys(alert.labels ?? {}).length > 0;
   const assetIds = alertAssetIds(alert);
   const assetId = assetIds.length === 1 ? assetIds[0] : "";

@@ -13,12 +13,14 @@ import { ScheduleEditor } from "./ScheduleEditor";
 import { ScheduleList } from "./ScheduleList";
 import type { Schedule, ScheduleInput } from "./scheduleModel";
 import { useSchedules } from "./useSchedules";
+import { useCanWrite } from "../../../hooks/useCanWrite";
 
 type EditorState = { mode: "new" } | { mode: "edit"; schedule: Schedule };
 
 /** Automations › Schedules: commands the hub runs on a cron line, on devices or a group. */
 export default function SchedulesPage() {
   const t = useTranslations("schedules");
+  const canWrite = useCanWrite();
   const tc = useTranslations("actions.common");
   const { addToast } = useToast();
   const assets = useFastStatus()?.assets;
@@ -72,12 +74,12 @@ export default function SchedulesPage() {
     <div className="au-page">
       <PageHeader
         title={t("title")}
-        action={(
+        action={canWrite ? (
           <Button variant={editor ? "secondary" : "primary"} onClick={() => setEditor({ mode: "new" })}>
             <Plus size={14} aria-hidden="true" />
             {t("new")}
           </Button>
-        )}
+        ) : undefined}
       />
       {editor ? (
         <ScheduleEditor

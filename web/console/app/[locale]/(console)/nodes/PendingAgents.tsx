@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { Button } from "../../../components/ui/Button";
 import { ensureArray, ensureRecord } from "../../../lib/responseGuards";
+import { useIsAdmin } from "../../../hooks/useCanWrite";
 
 interface PendingAgent {
   asset_id: string;
@@ -84,6 +85,8 @@ export function PendingAgents() {
   const { pending, setPending } = usePendingAgents();
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState<{ id: string; action: "approve" | "reject" } | null>(null);
+  // Only owners and admins may approve; the others see who waits without buttons the Hub would refuse.
+  const isAdmin = useIsAdmin();
 
   if (pending.length === 0) return null;
 
@@ -127,7 +130,7 @@ export function PendingAgents() {
             <span className={`ld-wait-st${agent.identity_verified ? "" : " warn"}`}>
               {agent.identity_verified ? t("verified") : t("unverified")}
             </span>
-            <div className="ld-wait-acts">
+            {isAdmin ? <div className="ld-wait-acts">
               <Button
                 size="sm"
                 disabled={isBusy || !agent.identity_verified}
@@ -145,7 +148,7 @@ export function PendingAgents() {
               >
                 {t("reject")}
               </Button>
-            </div>
+            </div> : null}
           </div>
         );
       })}
