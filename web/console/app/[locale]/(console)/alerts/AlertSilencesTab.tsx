@@ -11,6 +11,7 @@ import { shortTime } from "./alertsModel";
 import { blankLabel, durationPresets, labelsFromRows, type DurationPreset, type LabelRow, type SilencePayload } from "./alertsPageTypes";
 import { LabelRows } from "./LabelRows";
 import { Field } from "./ruleFields";
+import { useCanWrite } from "../../../hooks/useCanWrite";
 
 type Props = {
   silences: AlertSilence[];
@@ -21,6 +22,7 @@ type Props = {
 /** Silences as a plain list (active first, then ended), with a form to silence alerts whose rule labels match. */
 export function AlertSilencesTab({ silences, createSilence, deleteSilence }: Props) {
   const t = useTranslations("alerts.silences");
+  const canWrite = useCanWrite();
   const locale = useLocale();
   const { addToast } = useToast();
   const [formOpen, setFormOpen] = useState(false);
@@ -92,9 +94,11 @@ export function AlertSilencesTab({ silences, createSilence, deleteSilence }: Pro
         </span>
         <span className="al-row-end">
           <span className="al-time">{live ? t("until", { time: shortTime(silence.ends_at, locale, now) }) : t("endedAt", { time: shortTime(silence.ends_at, locale, now) })}</span>
-          <Button size="sm" variant="ghost" disabled={busy === silence.id} onClick={() => void remove(silence)}>
-            {live ? t("end") : t("remove")}
-          </Button>
+          {canWrite ? (
+            <Button size="sm" variant="ghost" disabled={busy === silence.id} onClick={() => void remove(silence)}>
+              {live ? t("end") : t("remove")}
+            </Button>
+          ) : null}
         </span>
       </div>
     );
@@ -104,7 +108,7 @@ export function AlertSilencesTab({ silences, createSilence, deleteSilence }: Pro
     <>
       <div className="al-tools">
         <span className="al-sp" />
-        {!formOpen ? (
+        {!formOpen && canWrite ? (
           <Button onClick={() => setFormOpen(true)}>
             <Plus aria-hidden="true" size={14} strokeWidth={2} />
             {t("add")}

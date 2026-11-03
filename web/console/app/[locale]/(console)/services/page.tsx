@@ -31,6 +31,7 @@ import { useServiceSelectionState } from "./useServiceSelectionState";
 import { useServicesView } from "./useServicesView";
 import { useGroupingSuggestionToasts } from "./useGroupingSuggestionToasts";
 import { copyText } from "../../../lib/clipboard";
+import { useCanWrite } from "../../../hooks/useCanWrite";
 
 export default function ServicesPage() {
   const t = useTranslations("services");
@@ -60,14 +61,18 @@ export default function ServicesPage() {
   const editActions = useServiceEditModalActions({ editingService: editing, saveServiceOverride: web.saveServiceOverride, refresh });
   const picked = useMemo(() => list.visible.filter((s) => selection.selected.has(serviceLayoutKey(s))), [list.visible, selection.selected]);
 
+  const canWrite = useCanWrite();
+  // A new scan is a change the Hub refuses from a viewer; a viewer's Refresh reads the list again.
   const refreshAll = useCallback(async () => {
-    try {
-      await sync(view.filters.host !== "all" ? view.filters.host : undefined);
-    } catch {
-      // The hook keeps the error; the list shows it.
+    if (canWrite) {
+      try {
+        await sync(view.filters.host !== "all" ? view.filters.host : undefined);
+      } catch {
+        // The hook keeps the error; the list shows it.
+      }
     }
     await refresh();
-  }, [refresh, sync, view.filters.host]);
+  }, [canWrite, refresh, sync, view.filters.host]);
 
   const { toggleDetails, withDetails } = details;
   const { handleCardDragStart, handleCardDragOver, handleCardDrop, clearDragState } = layout;

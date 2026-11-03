@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import type { Group } from "../../../console/models";
 import { firstNames, hopsLine, visibleRows } from "./groupListModel";
 import type { GroupTreeItem } from "./useGroupTree";
+import { useCanWrite } from "../../../hooks/useCanWrite";
 
 export type GroupAction = "edit" | "child" | "delete";
 
@@ -24,6 +25,7 @@ type GroupListProps = {
  */
 export function GroupList({ tree, namesByGroup, ungrouped, onToggle, onAction }: GroupListProps) {
   const t = useTranslations("groups");
+  const canWrite = useCanWrite();
   const rows = visibleRows(tree);
 
   const line = (item: GroupTreeItem) => {
@@ -70,7 +72,7 @@ export function GroupList({ tree, namesByGroup, ungrouped, onToggle, onAction }:
             </span>
             <span className="pp-c pp-r pp-num" role="gridcell">{item.deviceCount}</span>
             <span className="pp-end" role="gridcell">
-              <Menu.Root>
+              {canWrite ? <Menu.Root>
                 <Menu.Trigger className="pp-more" aria-label={t("list.actionsFor", { name: group.name })}>
                   <MoreHorizontal aria-hidden="true" />
                 </Menu.Trigger>
@@ -82,7 +84,7 @@ export function GroupList({ tree, namesByGroup, ungrouped, onToggle, onAction }:
                     <Menu.Item className="lt-menu-item pp-danger" onSelect={() => onAction("delete", group)}>{t("menu.delete")}</Menu.Item>
                   </Menu.Content>
                 </Menu.Portal>
-              </Menu.Root>
+              </Menu.Root> : null}
             </span>
           </div>
         );

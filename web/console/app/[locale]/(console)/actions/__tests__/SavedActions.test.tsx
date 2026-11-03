@@ -38,6 +38,9 @@ vi.mock("../../../../hooks/useActions", () => ({
   }),
 }));
 
+const session = vi.hoisted(() => ({ role: "owner" }));
+vi.mock("../../../../contexts/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1", username: "u1", role: session.role } }) }));
+
 // The ⋯ menu as plain buttons: the page's behaviour is under test here, not the menu library.
 vi.mock("../_parts/RowMenu", async (original) => ({
   ...(await original<typeof import("../_parts/RowMenu")>()),
@@ -93,6 +96,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  session.role = "owner";
   await act(async () => root.unmount());
   container.remove();
   vi.unstubAllGlobals();
@@ -197,5 +201,21 @@ describe("Saved actions", () => {
     await act(async () => { field("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
     await settle();
     expect(field<HTMLElement>("form").textContent).toContain("Target is no longer accessible");
+  });
+
+  // Risk: a viewer is offered New action, Run and Delete, and each one ends in the Hub's refusal.
+  it("offers a viewer the steps of a saved action but no changes", async () => {
+    session.role = "viewer";
+    const saved = { id: "act-1", name: "Fleet health check", steps: [{ name: "Check Alpha", target: "node-a", command: "uptime" }], created_by: "owner-1", created_at: "2026-07-15T00:00:00Z" };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === "/api/v2/actions?limit=100") return envelope([saved]);
+      throw new Error(`unexpected fetch ${String(input)}`);
+    }));
+    await render();
+    expect(container.textContent).toContain("Fleet health check");
+    const labels = [...container.querySelectorAll("button")].map((b) => b.textContent?.trim() || b.getAttribute("aria-label"));
+    expect(labels).not.toContain("new");
+    expect(labels.filter((label) => label?.startsWith("run") || label === "duplicate" || label === "deleteMenu")).toEqual([]);
+    expect(labels).toContain("showSteps");
   });
 });

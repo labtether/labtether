@@ -7,6 +7,7 @@ import { SortHead, type SortState } from "../actions/_parts/Editor";
 import { RowMenu, Switch } from "../actions/_parts/RowMenu";
 import { eventParts } from "./webhookEvents";
 import type { WebhookRecord } from "./webhookPayload";
+import { useCanWrite } from "../../../hooks/useCanWrite";
 
 type Key = "name" | "last";
 
@@ -44,6 +45,7 @@ export function WebhookList({
   const t = useTranslations("webhooks.list");
   const te = useTranslations("webhooks.events");
   const tc = useTranslations("actions.common");
+  const canWrite = useCanWrite();
   const locale = useLocale();
   const [sort, setSort] = useState<SortState<Key>>({ key: "name", dir: "asc" });
   const now = new Date();
@@ -69,15 +71,15 @@ export function WebhookList({
       {sorted(webhooks, sort).map((w) => {
         const last = pastWhen(w.last_triggered_at, now, locale);
         return (
-          <div key={w.id} className={`au-row au-w${w.enabled ? "" : " off"}`} onClick={(e) => { if (!(e.target as HTMLElement).closest("button, a")) onEdit(w); }}>
+          <div key={w.id} className={`au-row au-w${w.enabled ? "" : " off"}`} onClick={(e) => { if (canWrite && !(e.target as HTMLElement).closest("button, a")) onEdit(w); }}>
             <span className="au-ln">
-              <button type="button" className="au-nm au-tg" onClick={() => onEdit(w)}>{w.name}</button>
+              {canWrite ? <button type="button" className="au-nm au-tg" onClick={() => onEdit(w)}>{w.name}</button> : <span className="au-nm">{w.name}</span>}
               <span className="au-sub">{w.url}</span>
             </span>
             <span className="au-ev" title={w.events.join(", ") || undefined}>{events(w.events)}</span>
             <span className="au-last">{last ? <span className="num">{last}</span> : <span className="au-dim">{tc("never")}</span>}</span>
-            <Switch on={w.enabled} label={t("onLabel", { name: w.name })} onChange={(on) => onToggle(w, on)} />
-            <RowMenu
+            <Switch on={w.enabled} label={t("onLabel", { name: w.name })} onChange={(on) => onToggle(w, on)} disabled={!canWrite} />
+            {canWrite ? <RowMenu
               label={tc("rowMenu", { name: w.name })}
               items={[
                 { label: tc("edit"), onSelect: () => onEdit(w) },
@@ -85,7 +87,7 @@ export function WebhookList({
                 { separator: true },
                 { label: tc("deleteMenu"), onSelect: () => onDelete(w), danger: true },
               ]}
-            />
+            /> : null}
           </div>
         );
       })}

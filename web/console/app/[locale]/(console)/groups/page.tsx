@@ -15,6 +15,7 @@ import { GroupList, type GroupAction } from "./GroupList";
 import { deviceNamesByGroup, ungroupedCount } from "./groupListModel";
 import { useGroupMutationActions } from "./useGroupMutationActions";
 import { useGroupTree } from "./useGroupTree";
+import { useCanWrite } from "../../../hooks/useCanWrite";
 
 type Dialog = { type: "create"; parentId: string } | { type: "edit" | "delete"; group: Group } | null;
 
@@ -45,6 +46,7 @@ export default function GroupsPage() {
     setDialog(action === "child" ? { type: "create", parentId: group.id } : { type: action, group });
   const target = (type: "edit" | "delete") => (dialog && dialog.type === type ? dialog.group : null);
   const deleting = target("delete");
+  const canWrite = useCanWrite();
 
   return (
     <>
@@ -65,10 +67,12 @@ export default function GroupsPage() {
                 </Menu.Portal>
               </Menu.Root>
             ) : null}
-            <Button variant="primary" onClick={() => setDialog({ type: "create", parentId: "" })}>
-              <Plus size={14} aria-hidden="true" />
-              {t("newGroup")}
-            </Button>
+            {canWrite ? (
+              <Button variant="primary" onClick={() => setDialog({ type: "create", parentId: "" })}>
+                <Plus size={14} aria-hidden="true" />
+                {t("newGroup")}
+              </Button>
+            ) : null}
           </div>
         )}
       />
