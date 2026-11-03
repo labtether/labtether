@@ -126,6 +126,10 @@ v1.7.1.
 - Settings › Audit log shows the owner the whole log: Load older entries
   pages back, and Export CSV writes every row the filters match. Before, the
   page and the export stopped at the 20 newest entries.
+- Terminal: ⌘F (find) and ⌘A (select all) on a Mac and Ctrl+Shift+C and
+  Ctrl+Shift+V (copy, paste) work while you type in the shell. Before, they
+  worked only when the shell did not have focus. Ctrl+Shift+B, S and F no
+  longer also reach the shell, and plain Ctrl+A and Ctrl+F stay with it.
 - Settings › Audit log hides the "API request" rows that repeat each change
   (pick "All requests" to see them) and names the object a row is about when
   the Hub stored its name, instead of its ID.

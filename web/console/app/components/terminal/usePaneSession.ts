@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession, type QuickConnectParams } from "../../hooks/useSession";
 import type { TerminalClipboardActionResult, XTerminalHandle } from "../XTerminal";
 import { useTerminalWords } from "./terminalWords";
+import { isShellInput, paneShortcut } from "./consoleShortcuts";
 
 export type PaneStatus = {
   /** "connecting" covers creating the session, authenticating and starting the shell. */
@@ -35,7 +36,7 @@ function formatElapsed(ms: number): string {
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
+  if (!(target instanceof HTMLElement) || isShellInput(target)) return false;
   if (target.isContentEditable) return true;
   const tag = target.tagName.toLowerCase();
   return tag === "input" || tag === "textarea" || tag === "select";
@@ -43,7 +44,8 @@ function isEditableTarget(target: EventTarget | null): boolean {
 
 /**
  * One pane's shell: connects when its tab is shown and it has a device (or an address), reconnects on request, and owns
- * the focused pane's shortcuts (⌘/Ctrl+F find, ⌘/Ctrl+A select all, Ctrl+Shift+C copy, Ctrl+Shift+V paste).
+ * the focused pane's shortcuts (⌘F find and ⌘A select all on a Mac, Ctrl+Shift+C copy, Ctrl+Shift+V paste; plain Ctrl+A
+ * and Ctrl+F stay with the shell).
  */
 export function usePaneSession({
   targetNodeId, targetSource, isTabActive, isFocused, autoReconnect, quickConnectParams, onClipboardBlocked, onToggleSearch,
@@ -116,21 +118,13 @@ export function usePaneSession({
     if (!isFocused) return undefined;
     const handler = (event: KeyboardEvent) => {
       if (isEditableTarget(event.target)) return;
-      if (!(event.ctrlKey || event.metaKey)) return;
-      const key = event.key.toLowerCase();
-      if (key === "f" && !event.shiftKey) {
-        event.preventDefault();
-        toggleSearchRef.current();
-      } else if (key === "a" && !event.shiftKey) {
-        event.preventDefault();
-        termRef.current?.selectAll();
-      } else if (event.shiftKey && key === "c") {
-        event.preventDefault();
-        void termRef.current?.copySelection().then((result) => report(result, "copy"));
-      } else if (event.shiftKey && key === "v") {
-        event.preventDefault();
-        void termRef.current?.pasteFromClipboard().then((result) => report(result, "paste"));
-      }
+      const action = paneShortcut(event);
+      if (!action) return;
+      event.preventDefault();
+      if (action === "find") toggleSearchRef.current();
+      else if (action === "selectAll") termRef.current?.selectAll();
+      else if (action === "copy") void termRef.current?.copySelection().then((result) => report(result, "copy"));
+      else void termRef.current?.pasteFromClipboard().then((result) => report(result, "paste"));
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);

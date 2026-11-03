@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 
 import type { ITheme } from "@xterm/xterm";
 import { labtetherTerminalTheme } from "./terminal/terminalLook";
 import { createReplaySilencer } from "./terminal/replaySilencer";
+import { isConsoleShortcut } from "./terminal/consoleShortcuts";
 
 export type XTerminalHandle = {
   /** Write data to the terminal display (does NOT send to remote) */
@@ -306,6 +307,8 @@ const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XTerminal
       term.loadAddon(unicode11Addon);
 
       term.unicode.activeVersion = "11";
+      // The page's shortcuts pass by the shell, so its window handlers see them (see consoleShortcuts.ts).
+      term.attachCustomKeyEventHandler((event) => !isConsoleShortcut(event));
       const history = createReplaySilencer(term);
       disposablesRef.current.push(history);
 
