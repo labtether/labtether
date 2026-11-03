@@ -40,7 +40,7 @@ func (d *Deps) handleProxmoxStorageContent(w http.ResponseWriter, r *http.Reques
 	collectorID := strings.TrimSpace(r.URL.Query().Get("collector_id"))
 	runtime, err := d.LoadProxmoxRuntime(collectorID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "proxmox runtime unavailable: "+shared.SanitizeUpstreamError(err.Error()))
+		writeProxmoxRuntimeError(w, err, false)
 		return
 	}
 

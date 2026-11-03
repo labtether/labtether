@@ -26,7 +26,7 @@ func (d *Deps) LoadTrueNASRuntime(collectorID string) (*TruenasRuntime, error) {
 
 	selected := selectCollectorForTrueNASRuntime(collectors, collectorID)
 	if selected == nil {
-		return nil, fmt.Errorf("no active truenas collector configured")
+		return nil, fmt.Errorf("%w: no active truenas collector configured", shared.ErrCollectorNotActive)
 	}
 
 	baseURL := shared.CollectorConfigString(selected.Config, "base_url")

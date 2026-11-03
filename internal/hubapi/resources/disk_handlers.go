@@ -41,7 +41,7 @@ func (d *Deps) HandleDisks(w http.ResponseWriter, r *http.Request) {
 func (d *Deps) handleDiskList(w http.ResponseWriter, r *http.Request, assetID string) {
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {
-		servicehttp.WriteError(w, http.StatusBadGateway, "agent disconnected")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 

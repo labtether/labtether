@@ -213,6 +213,7 @@ func (s *apiServer) buildOperationsDeps() *opspkg.ExecDeps {
 	return &opspkg.ExecDeps{
 		AgentMgr:   s.agentMgr,
 		AssetStore: s.assetStore,
+		GroupStore: s.groupStore,
 		ExecuteViaAgent: func(job terminal.CommandJob) terminal.CommandResult {
 			return s.executeViaAgent(job)
 		},

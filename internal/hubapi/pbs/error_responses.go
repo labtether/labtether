@@ -3,6 +3,7 @@ package pbs
 import (
 	"net/http"
 
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
@@ -19,4 +20,15 @@ func writePBSError(w http.ResponseWriter, status int, clientMessage string, err 
 func pbsWarning(clientMessage string, err error) string {
 	securityruntime.Logf("pbs: %s: %v", clientMessage, err)
 	return clientMessage
+}
+
+// writePBSRuntimeError answers a request whose Proxmox Backup Server
+// connection could not be loaded. No connection, or a turned-off one, is a
+// 404 in words; anything else stays a 502. forDevice says the request named
+// one device.
+func writePBSRuntimeError(w http.ResponseWriter, err error, forDevice bool) {
+	if shared.WriteCollectorSetupError(w, err, "Proxmox Backup Server", forDevice) {
+		return
+	}
+	writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
 }

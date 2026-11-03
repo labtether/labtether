@@ -70,7 +70,7 @@ func (d *Deps) HandleNetworks(w http.ResponseWriter, r *http.Request) {
 func (d *Deps) handleNetworkList(w http.ResponseWriter, r *http.Request, assetID string) {
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {
-		servicehttp.WriteError(w, http.StatusBadGateway, "agent disconnected")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 
@@ -120,7 +120,7 @@ func (d *Deps) handleNetworkAction(w http.ResponseWriter, r *http.Request, asset
 
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {
-		servicehttp.WriteError(w, http.StatusBadGateway, "agent disconnected")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 

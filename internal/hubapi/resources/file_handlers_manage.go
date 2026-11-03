@@ -26,7 +26,7 @@ func (d *Deps) HandleFileMkdir(w http.ResponseWriter, r *http.Request, assetID s
 
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {
-		servicehttp.WriteError(w, http.StatusBadGateway, "agent disconnected")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 
@@ -61,7 +61,7 @@ func (d *Deps) HandleFileMkdir(w http.ResponseWriter, r *http.Request, assetID s
 			return
 		}
 		if result.Error != "" {
-			servicehttp.WriteError(w, http.StatusBadRequest, result.Error)
+			writeAgentFileError(w, missingParent, dirPath, result.Error)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, result)
@@ -88,7 +88,7 @@ func (d *Deps) HandleFileDelete(w http.ResponseWriter, r *http.Request, assetID 
 
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {
-		servicehttp.WriteError(w, http.StatusBadGateway, "agent disconnected")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 
@@ -123,7 +123,7 @@ func (d *Deps) HandleFileDelete(w http.ResponseWriter, r *http.Request, assetID 
 			return
 		}
 		if result.Error != "" {
-			servicehttp.WriteError(w, http.StatusBadRequest, result.Error)
+			writeAgentFileError(w, missingFile, filePath, result.Error)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, result)
@@ -151,7 +151,7 @@ func (d *Deps) HandleFileRename(w http.ResponseWriter, r *http.Request, assetID 
 
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {
-		servicehttp.WriteError(w, http.StatusBadGateway, "agent disconnected")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 
@@ -187,7 +187,7 @@ func (d *Deps) HandleFileRename(w http.ResponseWriter, r *http.Request, assetID 
 			return
 		}
 		if result.Error != "" {
-			servicehttp.WriteError(w, http.StatusBadRequest, result.Error)
+			writeAgentFileError(w, missingFile, oldPath, result.Error)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, result)
@@ -215,7 +215,7 @@ func (d *Deps) HandleFileCopy(w http.ResponseWriter, r *http.Request, assetID st
 
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {
-		servicehttp.WriteError(w, http.StatusBadGateway, "agent disconnected")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 
@@ -251,7 +251,7 @@ func (d *Deps) HandleFileCopy(w http.ResponseWriter, r *http.Request, assetID st
 			return
 		}
 		if result.Error != "" {
-			servicehttp.WriteError(w, http.StatusBadRequest, result.Error)
+			writeAgentFileError(w, missingFile, srcPath, result.Error)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, result)

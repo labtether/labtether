@@ -51,7 +51,7 @@ func (d *Deps) handleProxmoxAssetHA(w http.ResponseWriter, r *http.Request) {
 
 	runtime, err := d.LoadProxmoxRuntime(target.CollectorID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to load proxmox runtime: "+shared.SanitizeUpstreamError(err.Error()))
+		writeProxmoxRuntimeError(w, err, true)
 		return
 	}
 

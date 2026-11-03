@@ -147,24 +147,31 @@ func TestV2PowerActionMapsTypedFailuresToNon2xx(t *testing.T) {
 	}
 }
 
+// An offline device says its agent is not connected (409); an ID that names
+// no device says so (404) instead of blaming an agent that never existed.
 func TestV2PowerActionOfflineDeliveryAndTimeoutNeverSucceed(t *testing.T) {
 	tests := []struct {
 		name       string
+		device     string
 		sender     *powerTestSender
 		timeout    time.Duration
 		wantStatus int
 		wantCode   string
 	}{
-		{"offline", &powerTestSender{}, time.Second, http.StatusConflict, "asset_offline"},
-		{"send failed", &powerTestSender{connected: true, sendErr: errors.New("closed")}, time.Second, http.StatusBadGateway, "power_delivery_failed"},
-		{"timeout", &powerTestSender{connected: true}, 10 * time.Millisecond, http.StatusGatewayTimeout, "power_timed_out"},
+		{"offline", "node-1", &powerTestSender{}, time.Second, http.StatusConflict, "agent is not connected"},
+		{"unknown device", "node-missing", &powerTestSender{}, time.Second, http.StatusNotFound, "device not found"},
+		{"send failed", "node-1", &powerTestSender{connected: true, sendErr: errors.New("closed")}, time.Second, http.StatusBadGateway, "power_delivery_failed"},
+		{"timeout", "node-1", &powerTestSender{connected: true}, 10 * time.Millisecond, http.StatusGatewayTimeout, "power_timed_out"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			sut := newTestAPIServer(t)
+			if _, err := sut.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{AssetID: "node-1", Status: "online"}); err != nil {
+				t.Fatalf("seed asset: %v", err)
+			}
 			sut.powerCoordinator = powercontrol.New(tc.sender, tc.timeout)
 			rec := httptest.NewRecorder()
-			sut.handleV2AssetReboot(rec, powerRequest(http.MethodPost, "/api/v2/assets/node-1/reboot", nil, nil), "node-1")
+			sut.handleV2AssetReboot(rec, powerRequest(http.MethodPost, "/api/v2/assets/"+tc.device+"/reboot", nil, nil), tc.device)
 			if rec.Code != tc.wantStatus || !strings.Contains(rec.Body.String(), tc.wantCode) {
 				t.Fatalf("status=%d body=%s, want %d/%s", rec.Code, rec.Body.String(), tc.wantStatus, tc.wantCode)
 			}

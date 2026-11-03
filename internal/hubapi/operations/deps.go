@@ -26,6 +26,9 @@ type ExecDeps struct {
 	// AssetStore is used to look up asset metadata when the agent is offline.
 	AssetStore persistence.AssetStore
 
+	// GroupStore tells a missing group from an empty one for group exec.
+	GroupStore persistence.GroupStore
+
 	// ExecuteViaAgent dispatches a command job through the connected agent.
 	ExecuteViaAgent func(job terminal.CommandJob) terminal.CommandResult
 

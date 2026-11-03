@@ -10,6 +10,7 @@ import (
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/powercontrol"
 )
 
@@ -62,6 +63,13 @@ func (s *apiServer) handleV2AssetPowerAction(w http.ResponseWriter, r *http.Requ
 		message := err.Error()
 		if strings.TrimSpace(message) == "" {
 			message = "power action failed"
+		}
+		if kind == powercontrol.ErrorAgentOffline {
+			// Same words as the other device routes; an unknown ID is a 404.
+			status, message = shared.OfflineDeviceAnswer(s.assetStore, assetID)
+			if status == http.StatusNotFound {
+				code = "asset_not_found"
+			}
 		}
 		reason := string(kind)
 		if result.Code.Valid() {

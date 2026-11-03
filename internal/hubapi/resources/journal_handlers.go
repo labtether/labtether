@@ -34,7 +34,7 @@ func (d *Deps) HandleJournalLogs(w http.ResponseWriter, r *http.Request) {
 
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {
-		servicehttp.WriteError(w, http.StatusBadGateway, "agent disconnected")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 

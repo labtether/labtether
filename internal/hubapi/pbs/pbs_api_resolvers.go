@@ -21,7 +21,7 @@ func WritePBSResolveError(w http.ResponseWriter, err error) {
 	case errors.Is(err, ErrPBSAssetNotFound), errors.Is(err, ErrAssetNotPBS):
 		servicehttp.WriteError(w, http.StatusNotFound, err.Error())
 	default:
-		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
+		writePBSRuntimeError(w, err, true)
 	}
 }
 
