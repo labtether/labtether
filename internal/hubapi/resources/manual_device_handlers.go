@@ -134,6 +134,7 @@ func (d *Deps) HandleManualDeviceRoutes(w http.ResponseWriter, r *http.Request) 
 	ev := audit.NewEvent("asset.manual.created")
 	ev.ActorID = actorID
 	ev.Target = assetID
+	ev.TargetName = strings.TrimSpace(req.Name)
 	ev.Details = map[string]any{
 		"name": req.Name,
 		"host": req.Host,

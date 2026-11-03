@@ -3,10 +3,8 @@ package main
 import (
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/labtether/labtether/internal/apiv2"
-	"github.com/labtether/labtether/internal/audit"
 )
 
 // handleV2Assets handles GET /api/v2/assets (list) and POST /api/v2/assets (create).
@@ -77,13 +75,6 @@ func (s *apiServer) handleV2AssetActions(w http.ResponseWriter, r *http.Request)
 			apiv2.WriteScopeForbidden(w, "assets:write")
 			return
 		}
-		s.appendAuditEventBestEffort(audit.Event{
-			Type:      "api.asset.deleted",
-			ActorID:   principalActorID(r.Context()),
-			Target:    assetID,
-			Details:   map[string]any{"asset_id": assetID},
-			Timestamp: time.Now().UTC(),
-		}, "v2 asset delete on "+assetID)
 		s.v2DeleteAsset(w, r, assetID)
 	default:
 		apiv2.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")

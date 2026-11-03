@@ -20,6 +20,8 @@ type correlationPage struct {
 	updateRuns     []updates.Run
 	alertInstances []alerts.AlertInstance
 	auditEvents    []audit.Event
+	// names holds the words the store found for the page's one event.
+	names timelineNames
 }
 
 func (d *Deps) RunIncidentCorrelator(ctx context.Context) {
@@ -55,7 +57,7 @@ func (d *Deps) correlateIncidentPage(ctx context.Context, inc incidents.Incident
 		}
 		if err := d.upsertCorrelationEvent(ctx, inc.ID, incidents.EventTypeActionRun,
 			fmt.Sprintf("action_runs:%s", run.ID),
-			fmt.Sprintf("Failed action run: %s", run.Type),
+			failedRunWords(run.Type, pf.names.device),
 			"warning",
 			run.CreatedAt,
 		); err != nil {
@@ -76,7 +78,7 @@ func (d *Deps) correlateIncidentPage(ctx context.Context, inc incidents.Incident
 		}
 		if err := d.upsertCorrelationEvent(ctx, inc.ID, incidents.EventTypeUpdateRun,
 			fmt.Sprintf("update_runs:%s", run.ID),
-			fmt.Sprintf("Failed update run for plan %s", run.PlanID),
+			failedUpdateWords(pf.names.plan),
 			"warning",
 			run.CreatedAt,
 		); err != nil {
@@ -97,7 +99,7 @@ func (d *Deps) correlateIncidentPage(ctx context.Context, inc incidents.Incident
 		}
 		if err := d.upsertCorrelationEvent(ctx, inc.ID, incidents.EventTypeAlertFired,
 			fmt.Sprintf("alert_instances:%s", inst.ID),
-			fmt.Sprintf("Alert fired: rule %s (severity: %s)", inst.RuleID, inst.Severity),
+			alertFiredWords(pf.names.rule, pf.names.device),
 			inst.Severity,
 			*inst.FirstFiredAt,
 		); err != nil {
@@ -116,7 +118,7 @@ func (d *Deps) correlateIncidentPage(ctx context.Context, inc incidents.Incident
 		}
 		if err := d.upsertCorrelationEvent(ctx, inc.ID, incidents.EventTypeAudit,
 			fmt.Sprintf("audit_events:%s", evt.ID),
-			fmt.Sprintf("Audit: %s by %s", evt.Type, evt.ActorID),
+			auditWords(evt.Type, pf.names.actor),
 			"info",
 			evt.Timestamp,
 		); err != nil {

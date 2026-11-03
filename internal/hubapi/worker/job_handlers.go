@@ -262,6 +262,7 @@ func (d *Deps) HandleUpdateRunJob(processed *atomic.Uint64) jobqueue.HandlerFunc
 		auditEvent := audit.NewEvent("updates.run.completed")
 		auditEvent.ID = fmt.Sprintf("audit_update_completed_%s", result.JobID)
 		auditEvent.SessionID = result.RunID
+		auditEvent.TargetName = updateJob.Plan.Name
 		auditEvent.Decision = result.Status
 		auditEvent.Details = map[string]any{
 			"summary": result.Summary,
@@ -292,6 +293,7 @@ func (d *Deps) HandleUpdateRunJob(processed *atomic.Uint64) jobqueue.HandlerFunc
 		execAudit.ID = fmt.Sprintf("audit_update_executed_%s", updateJob.JobID)
 		execAudit.ActorID = updateJob.ActorID
 		execAudit.SessionID = updateJob.RunID
+		execAudit.TargetName = updateJob.Plan.Name
 		execAudit.Decision = result.Status
 		execAudit.Details = map[string]any{
 			"job_id":   result.JobID,

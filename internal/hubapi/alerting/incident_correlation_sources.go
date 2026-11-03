@@ -38,7 +38,7 @@ func (d *Deps) readCorrelationPage(ctx context.Context, source int, window persi
 		for _, row := range rows {
 			out = append(out, correlationCandidate{id: row.ID, data: correlationPage{actionRuns: []actions.Run{
 				{ID: row.ID, Type: row.Type, Target: row.Target, Status: actions.StatusFailed, CreatedAt: row.CreatedAt},
-			}}})
+			}, names: timelineNames{device: row.TargetName}}})
 		}
 		return out, next, done, nil
 	case 1:
@@ -58,7 +58,7 @@ func (d *Deps) readCorrelationPage(ctx context.Context, source int, window persi
 			out = append(out, correlationCandidate{id: row.ID, data: correlationPage{updateRuns: []updates.Run{
 				{ID: row.ID, PlanID: row.PlanID, Status: updates.StatusFailed, CreatedAt: row.CreatedAt,
 					Results: []updates.RunResultEntry{{Target: row.Target, Status: updates.StatusFailed}}},
-			}}})
+			}, names: timelineNames{plan: row.PlanName}}})
 		}
 		return out, next, done, nil
 	case 2:
@@ -78,7 +78,7 @@ func (d *Deps) readCorrelationPage(ctx context.Context, source int, window persi
 			out = append(out, correlationCandidate{id: row.ID, rejected: row.Rejected, data: correlationPage{alertInstances: []alerts.AlertInstance{
 				{ID: row.ID, RuleID: row.RuleID, Fingerprint: row.Fingerprint, Severity: row.Severity,
 					FirstFiredAt: &row.FirstFiredAt, FiringScope: row.FiringScope},
-			}}})
+			}, names: timelineNames{rule: row.RuleName, device: row.DeviceName}}})
 		}
 		return out, next, done, nil
 	case 3:
@@ -97,7 +97,7 @@ func (d *Deps) readCorrelationPage(ctx context.Context, source int, window persi
 		for _, row := range rows {
 			out = append(out, correlationCandidate{id: row.ID, data: correlationPage{auditEvents: []audit.Event{
 				{ID: row.ID, Type: row.Type, ActorID: row.ActorID, Target: row.Target, Timestamp: row.Timestamp},
-			}}})
+			}, names: timelineNames{actor: row.ActorName}}})
 		}
 		return out, next, done, nil
 	default:

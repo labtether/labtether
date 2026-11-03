@@ -128,7 +128,7 @@ func (m *memoryScheduleStore) UpdateScheduledTask(_ context.Context, id string, 
 	}
 	if enabled != nil {
 		t.Enabled = *enabled
-		if !*enabled {
+		if !*enabled && (t.LastRunStatus == "queued" || t.LastRunStatus == "running") {
 			t.LastRunStatus = "cancelled"
 			t.LastRunJobID = ""
 		}
