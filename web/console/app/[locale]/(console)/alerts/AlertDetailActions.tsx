@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { Link } from "../../../../i18n/navigation";
 import { Button } from "../../../components/ui/Button";
 import type { AlertInstance, AlertRule, AlertSilence } from "../../../console/models";
+import { alertAssetIds } from "../../../console/models/alerts";
 import { durationPresets, type DurationPreset } from "./alertsPageTypes";
 
 export type AlertActions = {
@@ -36,7 +37,8 @@ export function AlertDetailActions({ alert, rule, silence, issueId, actions }: {
   const open = alert.status !== "resolved";
   const canResolve = firing || alert.status === "acknowledged";
   const hasLabels = Object.keys(alert.labels ?? {}).length > 0;
-  const assetId = alert.labels?.asset_id;
+  const assetIds = alertAssetIds(alert);
+  const assetId = assetIds.length === 1 ? assetIds[0] : "";
 
   return (
     <div className="al-acts">

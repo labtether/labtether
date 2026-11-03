@@ -1,4 +1,5 @@
 import type { ActionRun, AlertInstance, Asset, Command, Session, UpdateRun } from "../../console/models";
+import { alertAssetIds } from "../../console/models/alerts";
 import { childParentKey, hostParentKey, isInfraHost } from "../../console/taxonomy";
 import { typeSection } from "./nodes/deviceListModel";
 import type { DeviceCardData } from "./nodes/nodesPageUtils";
@@ -38,7 +39,7 @@ export function attentionItems(params: {
   const open = alerts
     .filter((a) => OPEN_ALERT.has(a.status))
     .sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || b.started_at.localeCompare(a.started_at));
-  const alerted = new Set(open.map((a) => a.labels?.asset_id).filter(Boolean));
+  const alerted = new Set(open.flatMap((a) => alertAssetIds(a)));
 
   const fromAlerts: AttentionItem[] = open.map((a) => ({
     key: `alert:${a.id}`,
