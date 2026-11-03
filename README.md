@@ -14,7 +14,7 @@
 </div>
 
 <p align="center">
-  <img src="screenshots/01-dashboard.png" alt="LabTether dashboard" width="900" />
+  <img src="screenshots/dashboard.png" alt="LabTether dashboard" width="900" />
 </p>
 
 You already run Proxmox, TrueNAS, Docker and maybe Home Assistant. Each one has
@@ -52,10 +52,14 @@ your network.
 - **Open source.** The hub is Apache 2.0 and runs with Docker Compose.
 
 <p align="center">
-  <img src="screenshots/02-devices.png" alt="Devices list with VMs under their Proxmox host" width="900" />
+  <img src="screenshots/devices-dark.png" alt="Devices list in the dark theme, with VMs under their Proxmox host" width="900" />
 </p>
 
 ## Try it
+
+<p align="center">
+  <img src="screenshots/walkthrough.gif" alt="Walkthrough of Dashboard, Devices, a device page, Map, Alerts and Terminal" width="900" />
+</p>
 
 Click around the [live demo](https://demo.labtether.com). No sign-up.
 
@@ -116,32 +120,44 @@ Full details: [platform support](https://labtether.com/docs/reference/platform-s
 <summary>Show all screenshots</summary>
 <br/>
 <p align="center">
-  <img src="screenshots/11-docker-host.png" alt="Docker stacks on a device" width="800" /><br/>
-  <em>Docker stacks on a device</em>
+  <img src="screenshots/device.png" alt="A Proxmox node with its CPU, memory, network and disk charts, details and recent activity" width="800" /><br/>
+  <em>Device details</em>
 </p>
 <p align="center">
-  <img src="screenshots/05-terminal.png" alt="Terminal" width="800" /><br/>
-  <em>Terminal</em>
-</p>
-<p align="center">
-  <img src="screenshots/06-files.png" alt="Files" width="800" /><br/>
-  <em>Files on a device</em>
-</p>
-<p align="center">
-  <img src="screenshots/04-services.png" alt="Services" width="800" /><br/>
-  <em>Services with health checks</em>
-</p>
-<p align="center">
-  <img src="screenshots/03-topology.png" alt="Map" width="800" /><br/>
+  <img src="screenshots/map.png" alt="Map of a homelab: router, switch, servers and the VMs on each node" width="800" /><br/>
   <em>Map</em>
 </p>
 <p align="center">
-  <img src="screenshots/08-alerts.png" alt="Alerts" width="800" /><br/>
+  <img src="screenshots/alerts.png" alt="Open alerts with one critical alert open" width="800" /><br/>
   <em>Alerts</em>
 </p>
 <p align="center">
-  <img src="screenshots/07-logs.png" alt="Logs" width="800" /><br/>
+  <img src="screenshots/terminal.png" alt="Terminal session on a Proxmox node" width="800" /><br/>
+  <em>Terminal</em>
+</p>
+<p align="center">
+  <img src="screenshots/files.png" alt="Backup files on a Proxmox node" width="800" /><br/>
+  <em>Files</em>
+</p>
+<p align="center">
+  <img src="screenshots/remote-view.png" alt="Remote desktop of a Mac in the browser" width="800" /><br/>
+  <em>Remote View</em>
+</p>
+<p align="center">
+  <img src="screenshots/logs.png" alt="Logs from every device in one list" width="800" /><br/>
   <em>Logs</em>
+</p>
+<p align="center">
+  <img src="screenshots/automations.png" alt="Saved actions and recent runs" width="800" /><br/>
+  <em>Automations</em>
+</p>
+<p align="center">
+  <img src="screenshots/services.png" alt="Services with response times" width="800" /><br/>
+  <em>Services with health checks</em>
+</p>
+<p align="center">
+  <img src="screenshots/settings.png" alt="General settings" width="800" /><br/>
+  <em>Settings</em>
 </p>
 </details>
 
