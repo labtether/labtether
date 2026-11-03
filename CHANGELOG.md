@@ -107,6 +107,8 @@ v1.7.1.
 - The first-run setup screen says where the setup token is for a Home
   Assistant add-on too (its labtether_setup_token option or
   /data/labtether-addon/setup-token), not only on a Docker host.
+- Removing an agent device says how to add it back: a new single-use token
+  from Add device.
 - Add device follows the console language (English, German, French, Spanish
   and Chinese) and uses plain, sentence-case labels in every setup step, its
   checks and its sync messages. It was English only, partly in Title Case.
