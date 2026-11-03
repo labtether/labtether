@@ -92,6 +92,8 @@ export function parseBoundedDecimalInt(
     : fallback;
 }
 
+// The bash commands below run their script from a here-document, so bash's own input is the script. `3<&0` keeps
+// the terminal on descriptor 3 and the token prompt reads from there; reading stdin would take the script's next line.
 export function manualInstallCommand(
   platform: Platform,
   wsURL: string,
@@ -99,7 +101,7 @@ export function manualInstallCommand(
   if (platform === "windows") {
     return `$tokenFile = Join-Path $env:TEMP "labtether-enrollment-token-$PID"\n$secureToken = Read-Host "Paste enrollment token" -AsSecureString\n$pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureToken)\ntry {\n  [IO.File]::WriteAllText($tokenFile, [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer))\n} finally {\n  [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)\n}\n$env:LABTETHER_ENROLLMENT_TOKEN_FILE=$tokenFile\n$env:LABTETHER_WS_URL=${powershellQuote(wsURL)}\ntry {\n  .\\labtether-agent.exe\n} finally {\n  Remove-Item -Force -ErrorAction SilentlyContinue $tokenFile\n  Remove-Item Env:LABTETHER_ENROLLMENT_TOKEN_FILE -ErrorAction SilentlyContinue\n}`;
   }
-  return `bash <<'LABTETHER_AGENT'\nset -euo pipefail\numask 077\ntoken_file="$(mktemp)"\ntrap 'rm -f "$token_file"' EXIT\nread -r -s -p 'Paste enrollment token: ' token\nprintf '\\n'\nprintf '%s\\n' "$token" > "$token_file"\nunset token\nLABTETHER_ENROLLMENT_TOKEN_FILE="$token_file" \\\n  LABTETHER_WS_URL=${shellQuote(wsURL)} \\\n  ./labtether-agent\nLABTETHER_AGENT`;
+  return `bash 3<&0 <<'LABTETHER_AGENT'\nset -euo pipefail\numask 077\ntoken_file="$(mktemp)"\ntrap 'rm -f "$token_file"' EXIT\nread -r -s -p 'Paste enrollment token: ' token <&3\nprintf '\\n'\nprintf '%s\\n' "$token" > "$token_file"\nunset token\nLABTETHER_ENROLLMENT_TOKEN_FILE="$token_file" \\\n  LABTETHER_WS_URL=${shellQuote(wsURL)} \\\n  ./labtether-agent\nLABTETHER_AGENT`;
 }
 
 export function trustModeLabel(
@@ -197,10 +199,10 @@ sudo install -m 0644 "$ca_file" ${shellQuote(managedCAPath)}
 curl --cacert "$ca_file" -fsSL ${shellQuote(`${base}/install.sh`)} -o "$installer"`
     : `curl -fsSL ${shellQuote(`${base}/install.sh`)} -o "$installer"`;
   const tokenSetup = options.includeEnrollmentToken
-    ? `read -r -s -p 'Paste enrollment token: ' token\nprintf '\\n'\nprintf '%s\\n' "$token" > "$token_file"\nunset token\ntoken_args=(--enrollment-token-file "$token_file")`
+    ? `read -r -s -p 'Paste enrollment token: ' token <&3\nprintf '\\n'\nprintf '%s\\n' "$token" > "$token_file"\nunset token\ntoken_args=(--enrollment-token-file "$token_file")`
     : "token_args=()";
   const tokenArgsExpansion = "$" + "{token_args[@]}";
-  return `bash <<'LABTETHER_INSTALL'\nset -euo pipefail\numask 077\ninstaller="$(mktemp)"\ntoken_file="$(mktemp)"\nca_file=""\ncleanup() {\n  rm -f "$installer" "$token_file"\n  if [[ -n "$ca_file" ]]; then rm -f "$ca_file"; fi\n}\ntrap cleanup EXIT\n${installerDownload}\nchmod 700 "$installer"\n${tokenSetup}\nsudo bash "$installer" "${tokenArgsExpansion}" \\\n  ${flags.join(" \\\n  ")}\nLABTETHER_INSTALL`;
+  return `bash 3<&0 <<'LABTETHER_INSTALL'\nset -euo pipefail\numask 077\ninstaller="$(mktemp)"\ntoken_file="$(mktemp)"\nca_file=""\ncleanup() {\n  rm -f "$installer" "$token_file"\n  if [[ -n "$ca_file" ]]; then rm -f "$ca_file"; fi\n}\ntrap cleanup EXIT\n${installerDownload}\nchmod 700 "$installer"\n${tokenSetup}\nsudo bash "$installer" "${tokenArgsExpansion}" \\\n  ${flags.join(" \\\n  ")}\nLABTETHER_INSTALL`;
 }
 
 export function formatHubCandidateOption(candidate: HubConnectionCandidate): string {
