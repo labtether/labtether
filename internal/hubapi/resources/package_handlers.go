@@ -64,7 +64,7 @@ func (d *Deps) HandlePackages(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if d.AgentMgr == nil || !d.AgentMgr.IsConnected(assetID) {
-			servicehttp.WriteError(w, http.StatusBadGateway, "agent not connected")
+			d.writeAgentNotConnected(w, assetID)
 			return
 		}
 		inventory := packageInventoryInstalled
@@ -88,7 +88,7 @@ func (d *Deps) HandlePackages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if d.AgentMgr == nil || !d.AgentMgr.IsConnected(assetID) {
-		servicehttp.WriteError(w, http.StatusBadGateway, "agent not connected")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 	d.handlePackageAction(w, r, assetID, action)

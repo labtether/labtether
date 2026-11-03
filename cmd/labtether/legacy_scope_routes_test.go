@@ -75,14 +75,15 @@ func TestLegacyPackageRoutesUseExactReadWriteScopesAndAssetBinding(t *testing.T)
 	handlers := sut.buildHTTPHandlers(nil, nil, nil)
 	readKey := createLegacyRouteAPIKey(t, sut, []string{"packages:read"}, []string{"srv1"})
 	writeKey := createLegacyRouteAPIKey(t, sut, []string{"packages:write"}, []string{"srv1"})
+	seedOfflineTestAsset(t, sut, "srv1")
 
-	if rec := invokeLegacyRoute(t, handlers["/packages/"], http.MethodGet, "/packages/srv1/upgradable", readKey, ""); rec.Code != http.StatusBadGateway {
+	if rec := invokeLegacyRoute(t, handlers["/packages/"], http.MethodGet, "/packages/srv1/upgradable", readKey, ""); rec.Code != http.StatusConflict {
 		t.Fatalf("read scope should reach upgradable handler, got %d: %s", rec.Code, rec.Body.String())
 	}
 	if rec := invokeLegacyRoute(t, handlers["/packages/"], http.MethodPost, "/packages/srv1/update", readKey, `{"packages":["curl"]}`); rec.Code != http.StatusForbidden {
 		t.Fatalf("read scope performed package mutation, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if rec := invokeLegacyRoute(t, handlers["/packages/"], http.MethodPost, "/packages/srv1/update", writeKey, `{"packages":["curl"]}`); rec.Code != http.StatusBadGateway {
+	if rec := invokeLegacyRoute(t, handlers["/packages/"], http.MethodPost, "/packages/srv1/update", writeKey, `{"packages":["curl"]}`); rec.Code != http.StatusConflict {
 		t.Fatalf("write scope should reach update handler, got %d: %s", rec.Code, rec.Body.String())
 	}
 	if rec := invokeLegacyRoute(t, handlers["/packages/"], http.MethodGet, "/packages/srv1/upgradable", writeKey, ""); rec.Code != http.StatusForbidden {
