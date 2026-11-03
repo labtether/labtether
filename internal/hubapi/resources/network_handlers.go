@@ -47,7 +47,7 @@ func (d *Deps) HandleNetworks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if d.AgentMgr == nil || !d.AgentMgr.IsConnected(assetID) {
-		servicehttp.WriteError(w, http.StatusBadGateway, "agent not connected")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 
