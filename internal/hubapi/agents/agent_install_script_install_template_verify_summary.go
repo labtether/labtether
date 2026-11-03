@@ -68,6 +68,28 @@ if [[ -f "${FINGERPRINT_FILE}" ]]; then
   DEVICE_FINGERPRINT="$(tr -d '\r\n' < "${FINGERPRINT_FILE}" 2>/dev/null || true)"
 fi
 
+# With a new enrollment token on a device that had no agent token, wait for
+# the agent to join, or for LabTether's refusal, which the agent reports in
+# its status, so the summary says what really happened.
+ENROLLMENT_REFUSAL=""
+if [[ "${AGENT_OK}" -eq 1 && -n "${ENROLLMENT_TOKEN}" && "${HAD_AGENT_TOKEN}" -eq 0 ]]; then
+  for i in $(seq 1 15); do
+    if command -v curl &>/dev/null; then
+      STATUS="$(curl -sf "${STATUS_URL}" 2>/dev/null || true)"
+    else
+      STATUS="$(wget -qO- "${STATUS_URL}" 2>/dev/null || true)"
+    fi
+    if [[ "${STATUS}" == *'"connected":true'* ]]; then
+      break
+    fi
+    ENROLLMENT_REFUSAL="$(sed -n 's/.*"enrollment_error":"\([^"\\]*\)".*/\1/p' <<<"${STATUS}" | head -n 1)"
+    if [[ -n "${ENROLLMENT_REFUSAL}" ]]; then
+      break
+    fi
+    sleep 1
+  done
+fi
+
 # Report preserved enrollment only when the installed agent has written a
 # non-empty, owner-readable private token file. Do not read the token value:
 # this boolean is used only to keep the completion guidance truthful.
@@ -140,7 +162,10 @@ if [[ "${LABTETHER_WRAPPER_INSTALLED}" -eq 1 ]]; then
   summary_row "Uninstall" "sudo labtether agent uninstall"
 fi
 printf "\n"
-if [[ -n "${ENROLLMENT_TOKEN}" && "${HAD_AGENT_TOKEN}" -eq 1 && "${PERSISTED_AGENT_TOKEN}" -eq 1 ]]; then
+if [[ -n "${ENROLLMENT_REFUSAL}" ]]; then
+  error "LabTether refused this device: ${ENROLLMENT_REFUSAL}"
+  info "The agent stays installed. Run the install command again with a new token."
+elif [[ -n "${ENROLLMENT_TOKEN}" && "${HAD_AGENT_TOKEN}" -eq 1 && "${PERSISTED_AGENT_TOKEN}" -eq 1 ]]; then
   success "Existing approval kept. The agent is reconnecting to LabTether."
   info "The new enrollment token is used only if LabTether no longer accepts this agent."
 elif [[ -n "${ENROLLMENT_TOKEN}" ]]; then

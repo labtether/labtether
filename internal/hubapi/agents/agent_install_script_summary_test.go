@@ -105,9 +105,18 @@ func TestInstallScriptSummaryIsPlainTextWithWholeFingerprint(t *testing.T) {
 		args             []string
 		want             string
 		agentWritesToken bool
+		agentStatus      string
+		wantAbsent       string
 	}{
 		{name: "waiting for approval", want: "Approve it only if LabTether shows the fingerprint above"},
 		{name: "enrollment token", args: []string{"--enrollment-token", "enroll-123"}, want: "Enrollment token saved", agentWritesToken: true},
+		// LabTether refused the token: the summary must show its words, not
+		// claim the token was saved and no approval is needed.
+		{name: "refused token", args: []string{"--enrollment-token", "enroll-123"},
+			want:        "LabTether refused this device: This enrollment token was already used. Make a new one in Devices, Add device.",
+			agentStatus: `{"connected":false,"connection_state":"auth_failed","enrollment_error":"This enrollment token was already used. Make a new one in Devices, Add device."}`,
+			wantAbsent:  "no approval needed",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -136,6 +145,9 @@ exit 0
 			if tc.agentWritesToken {
 				env = append(env, "LABTETHER_TEST_AGENT_TOKEN_FILE="+filepath.Join(root, "etc/labtether/agent-token"))
 			}
+			if tc.agentStatus != "" {
+				env = append(env, "LABTETHER_TEST_AGENT_STATUS="+tc.agentStatus)
+			}
 
 			script := rewriteAgentScriptForHarness(GenerateInstallScript("https://hub.example.com", "wss://hub.example.com/ws/agent"), root)
 			args := append([]string{"--docker-enabled", "true", "--skip-vnc-prereqs"}, tc.args...)
@@ -150,6 +162,9 @@ exit 0
 				if !strings.Contains(output, want) {
 					t.Fatalf("summary is missing %q, got:\n%s", want, output)
 				}
+			}
+			if tc.wantAbsent != "" && strings.Contains(output, tc.wantAbsent) {
+				t.Fatalf("summary still says %q, got:\n%s", tc.wantAbsent, output)
 			}
 			if strings.Contains(output, "enroll-123") {
 				t.Fatalf("install output exposed enrollment token value:\n%s", output)

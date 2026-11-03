@@ -57,13 +57,13 @@ func (s *PostgresStore) CommitAgentEnrollment(ctx context.Context, req AgentEnro
 		return AgentEnrollmentCommitResult{}, err
 	}
 	if !valid {
-		return AgentEnrollmentCommitResult{}, ErrEnrollmentTokenInvalid
+		return AgentEnrollmentCommitResult{}, unusableEnrollmentTokenReason(ctx, tx, req.EnrollmentTokenHash)
 	}
-	retired, err := isAgentIdentityRetired(ctx, tx, assetID)
+	retiredAt, retired, err := selectAgentIdentityRetirement(ctx, tx, assetID)
 	if err != nil {
 		return AgentEnrollmentCommitResult{}, err
 	}
-	if retired {
+	if retired && (exists || !readmitsRetiredIdentity(etok, retiredAt)) {
 		return AgentEnrollmentCommitResult{}, ErrAgentIdentityRetired
 	}
 
@@ -105,6 +105,11 @@ func (s *PostgresStore) CommitAgentEnrollment(ctx context.Context, req AgentEnro
 	}
 
 	now := time.Now().UTC()
+	if retired {
+		if _, err := tx.Exec(ctx, `DELETE FROM retired_agent_identities WHERE asset_id = $1`, assetID); err != nil {
+			return AgentEnrollmentCommitResult{}, err
+		}
+	}
 	if _, err := tx.Exec(ctx, `UPDATE enrollment_tokens SET use_count = use_count + 1 WHERE id = $1`, etok.ID); err != nil {
 		return AgentEnrollmentCommitResult{}, err
 	}
@@ -182,6 +187,7 @@ func (s *PostgresStore) CommitAgentEnrollment(ctx context.Context, req AgentEnro
 		AgentToken:           agentToken,
 		Asset:                existing,
 		Recovery:             exists,
+		Readmitted:           retired,
 		RevokedAgentTokenIDs: revokedAgentTokenIDs,
 	}, nil
 }
@@ -404,6 +410,44 @@ func selectAgentIdentityAsset(ctx context.Context, tx pgx.Tx, assetID string) (a
 		return assets.Asset{}, false, err
 	}
 	return asset, true, nil
+}
+
+// selectAgentIdentityRetirement returns when a device name was retired by
+// removing the device, locking the tombstone for this transaction.
+func selectAgentIdentityRetirement(ctx context.Context, tx pgx.Tx, assetID string) (time.Time, bool, error) {
+	var retiredAt time.Time
+	err := tx.QueryRow(ctx,
+		`SELECT retired_at FROM retired_agent_identities WHERE asset_id = $1 FOR UPDATE`,
+		strings.TrimSpace(assetID),
+	).Scan(&retiredAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return time.Time{}, false, nil
+	}
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	return retiredAt, true, nil
+}
+
+// unusableEnrollmentTokenReason names why a token failed validation, without
+// locking it: nothing about the token changes on this path.
+func unusableEnrollmentTokenReason(ctx context.Context, tx pgx.Tx, tokenHash string) error {
+	var token enrollment.EnrollmentToken
+	var revokedAt *time.Time
+	var now time.Time
+	err := tx.QueryRow(ctx,
+		`SELECT expires_at, max_uses, use_count, revoked_at, clock_timestamp()
+		 FROM enrollment_tokens WHERE token_hash = $1`,
+		strings.TrimSpace(tokenHash),
+	).Scan(&token.ExpiresAt, &token.MaxUses, &token.UseCount, &revokedAt, &now)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrEnrollmentTokenInvalid
+	}
+	if err != nil {
+		return err
+	}
+	token.RevokedAt = revokedAt
+	return classifyUnusableEnrollmentToken(token, true, now)
 }
 
 func isAgentIdentityRetired(ctx context.Context, tx pgx.Tx, assetID string) (bool, error) {

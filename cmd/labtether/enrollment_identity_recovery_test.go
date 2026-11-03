@@ -55,7 +55,7 @@ func TestEnrollRejectsRetiredAgentIdentityWithoutConsumingToken(t *testing.T) {
 	retryReq.RemoteAddr = "127.0.0.1:12345"
 	retryRec := httptest.NewRecorder()
 	sut.handleEnroll(retryRec, retryReq)
-	if retryRec.Code != http.StatusConflict || !strings.Contains(retryRec.Body.String(), "new hostname/asset ID") {
+	if retryRec.Code != http.StatusConflict || !strings.Contains(retryRec.Body.String(), "This device was removed from LabTether") {
 		t.Fatalf("retired enrollment status=%d body=%s", retryRec.Code, retryRec.Body.String())
 	}
 	if token, valid, err := sut.enrollmentStore.ValidateEnrollmentToken(auth.HashToken(retryToken)); err != nil || !valid || token.ID != retryRecord.ID || token.UseCount != 0 {

@@ -93,7 +93,8 @@ INSTALL
 fi
 
 if [[ "${url}" == "http://localhost:${LABTETHER_TEST_AGENT_PORT:-8090}/agent/status" ]]; then
-  printf '{"status":"ok"}\n'
+  status_json='{"status":"ok","connected":true}'
+  printf '%s\n' "${LABTETHER_TEST_AGENT_STATUS:-${status_json}}"
   exit 0
 fi
 
