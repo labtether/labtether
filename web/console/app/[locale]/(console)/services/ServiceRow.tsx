@@ -11,6 +11,7 @@ import { safeHttpURL } from "../../../../lib/safeExternalURL";
 import { ServiceDetailPanel } from "./ServiceDetailPanel";
 import { formatResponseTime } from "./servicesLayoutHelpers";
 import { formatCheckTime, isDown, isHidden, isManual, serviceLine, SLOW_MS } from "./servicesListModel";
+import { useCanWrite } from "../../../hooks/useCanWrite";
 
 /** What a row can ask the page to do. The service is passed back so the handlers stay stable across rows. */
 export type ServiceRowActions = {
@@ -56,6 +57,7 @@ function useServiceLine(service: WebService, hostName: string) {
 function ServiceRowView({ service, hostName, selected, open, detail, arranging, dragging, dragOver, actions }: ServiceRowProps) {
   const t = useTranslations("services.list");
   const router = useRouter();
+  const canWrite = useCanWrite();
   const rowRef = useRef<HTMLDivElement>(null);
   const line = useServiceLine(service, hostName);
   const href = safeHttpURL(service.url);
@@ -154,9 +156,9 @@ function ServiceRowView({ service, hostName, selected, open, detail, arranging, 
               )}
               <Menu.Separator className="lt-menu-sep" />
               <Menu.Item className="lt-menu-item" onSelect={() => actions.onToggleDetails(service)}>{open ? t("hideDetails") : t("details")}</Menu.Item>
-              <Menu.Item className="lt-menu-item" onSelect={() => actions.onEdit(service)}>{t("edit")}</Menu.Item>
-              <Menu.Item className="lt-menu-item" onSelect={() => actions.onToggleHidden(service)}>{isHidden(service) ? t("unhide") : t("hide")}</Menu.Item>
-              {isManual(service) && (
+              {canWrite ? <Menu.Item className="lt-menu-item" onSelect={() => actions.onEdit(service)}>{t("edit")}</Menu.Item> : null}
+              {canWrite ? <Menu.Item className="lt-menu-item" onSelect={() => actions.onToggleHidden(service)}>{isHidden(service) ? t("unhide") : t("hide")}</Menu.Item> : null}
+              {canWrite && isManual(service) && (
                 <>
                   <Menu.Separator className="lt-menu-sep" />
                   <Menu.Item className="lt-menu-item sv-danger" onSelect={() => actions.onRemove(service)}>{t("remove")}</Menu.Item>

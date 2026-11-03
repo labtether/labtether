@@ -36,6 +36,7 @@ export function SavedActionList({
   deviceName,
   onOpen,
   onRun,
+  canWrite = true,
   onDuplicate,
   onDelete,
   onRetry,
@@ -49,6 +50,8 @@ export function SavedActionList({
   deviceName: (id: string) => string;
   onOpen: (action: SavedAction | null) => void;
   onRun: (action: SavedAction) => void;
+  /** False for a viewer: no Run, Duplicate or Delete (the Hub refuses them). */
+  canWrite?: boolean;
   onDuplicate: (action: SavedAction) => void;
   onDelete: (action: SavedAction) => void;
   onRetry: () => void;
@@ -101,24 +104,26 @@ export function SavedActionList({
                 <span className="au-sub">{sub(action)}</span>
               </span>
               <RunState run={run} />
-              <button
-                type="button"
-                className="au-q"
-                disabled={busy}
-                aria-label={t("runLabel", { name: action.name })}
-                onClick={() => onRun(action)}
-              >
-                {t("run")}
-              </button>
+              {canWrite ? (
+                <button
+                  type="button"
+                  className="au-q"
+                  disabled={busy}
+                  aria-label={t("runLabel", { name: action.name })}
+                  onClick={() => onRun(action)}
+                >
+                  {t("run")}
+                </button>
+              ) : null}
               <RowMenu
                 label={tc("rowMenu", { name: action.name })}
-                items={[
+                items={canWrite ? [
                   { label: actionDevices(action).length > 1 ? t("runMany") : t("run"), onSelect: () => onRun(action), disabled: busy },
                   { label: open ? t("hideSteps") : t("showSteps"), onSelect: () => toggle(action) },
                   { label: t("duplicate"), onSelect: () => onDuplicate(action) },
                   { separator: true },
                   { label: tc("deleteMenu"), onSelect: () => onDelete(action), danger: true },
-                ]}
+                ] : [{ label: open ? t("hideSteps") : t("showSteps"), onSelect: () => toggle(action) }]}
               />
             </div>
             {open ? <SavedActionPanel action={action} run={run} deviceName={deviceName} loadError={openError} /> : null}

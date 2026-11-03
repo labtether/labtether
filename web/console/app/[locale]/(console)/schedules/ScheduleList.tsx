@@ -7,6 +7,7 @@ import { SortHead } from "../actions/_parts/Editor";
 import { RowMenu, Switch } from "../actions/_parts/RowMenu";
 import { browserZone, presetOf, splitZone } from "./cronModel";
 import { lastRun, type Schedule, type ScheduleSort, sortSchedules } from "./scheduleModel";
+import { useCanWrite } from "../../../hooks/useCanWrite";
 
 /**
  * Schedules as one list: name over when it runs, the command and where; next run; the last run as a word and a time;
@@ -34,6 +35,7 @@ export function ScheduleList({
   onRetry: () => void;
 }) {
   const t = useTranslations("schedules.list");
+  const canWrite = useCanWrite();
   const te = useTranslations("schedules.editor");
   const tc = useTranslations("actions.common");
   const locale = useLocale();
@@ -75,9 +77,9 @@ export function ScheduleList({
         const problem = (last.tone === "bad" || last.tone === "warn") && s.last_error ? s.last_error : "";
         const sub = problem || [whenWords(s.cron_expr), s.command, where(s) || t("noTargets")].join(" · ");
         return (
-          <div key={s.id} className={`au-row au-s${s.enabled ? "" : " off"}`} onClick={(e) => { if (!(e.target as HTMLElement).closest("button, a")) onEdit(s); }}>
+          <div key={s.id} className={`au-row au-s${s.enabled ? "" : " off"}`} onClick={(e) => { if (canWrite && !(e.target as HTMLElement).closest("button, a")) onEdit(s); }}>
             <span className="au-ln">
-              <button type="button" className="au-nm au-tg" onClick={() => onEdit(s)}>{s.name}</button>
+              {canWrite ? <button type="button" className="au-nm au-tg" onClick={() => onEdit(s)}>{s.name}</button> : <span className="au-nm">{s.name}</span>}
               <span className={`au-sub${problem ? ` ${last.tone}` : ""}`} title={problem || undefined}>{sub}</span>
             </span>
             <span className="au-next num">{s.enabled ? futureWhen(s.next_run_at, now, locale) || "" : <span className="au-dim">{t("paused")}</span>}</span>
@@ -91,8 +93,8 @@ export function ScheduleList({
                     </>
                   )}
             </span>
-            <Switch on={s.enabled} label={t("onLabel", { name: s.name })} onChange={(on) => onToggle(s, on)} />
-            <RowMenu
+            <Switch on={s.enabled} label={t("onLabel", { name: s.name })} onChange={(on) => onToggle(s, on)} disabled={!canWrite} />
+            {canWrite ? <RowMenu
               label={tc("rowMenu", { name: s.name })}
               items={[
                 { label: tc("edit"), onSelect: () => onEdit(s) },
@@ -100,7 +102,7 @@ export function ScheduleList({
                 { separator: true },
                 { label: tc("deleteMenu"), onSelect: () => onDelete(s), danger: true },
               ]}
-            />
+            /> : null}
           </div>
         );
       })}

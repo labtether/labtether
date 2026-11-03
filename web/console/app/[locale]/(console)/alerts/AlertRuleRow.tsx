@@ -8,6 +8,7 @@ import type { AlertRule } from "../../../console/models";
 import { useDuration } from "./alertBits";
 import { fullTime } from "./alertsModel";
 import { ruleCondition, type RuleCondition } from "./rulesModel";
+import { useCanWrite } from "../../../hooks/useCanWrite";
 
 /** "cpu_used_percent > 90 (average)", "No heartbeat for 5 min" …: what a rule watches, in words. */
 export function useRuleSummary() {
@@ -50,6 +51,7 @@ export function AlertRuleRow({ rule, scope, open, on, switching, editor, openAle
   const tSev = useTranslations("alerts.severity");
   const locale = useLocale();
   const summary = useRuleSummary();
+  const canWrite = useCanWrite();
   const duration = useDuration();
   const rowRef = useRef<HTMLDivElement>(null);
   const watch = summary(ruleCondition(rule));
@@ -75,7 +77,7 @@ export function AlertRuleRow({ rule, scope, open, on, switching, editor, openAle
         <span className="al-rscope">{scope}</span>
         {/* The span keeps a click on the switch, enabled or not, from opening the row. */}
         <span className="al-r al-rstate" onClick={(e) => e.stopPropagation()}>
-          <Switch size="sm" checked={on} disabled={switching} onChange={onSwitch} aria-label={t("switch", { name: rule.name })} />
+          <Switch size="sm" checked={on} disabled={switching || !canWrite} onChange={onSwitch} aria-label={t("switch", { name: rule.name })} />
         </span>
       </div>
       {open && editor ? editor : open ? (
@@ -93,11 +95,13 @@ export function AlertRuleRow({ rule, scope, open, on, switching, editor, openAle
             {kv(t("facts.description"), rule.description ?? "")}
             {labels.length ? kv(t("facts.labels"), labels.map(([k, v]) => `${k}=${v}`).join(", ")) : null}
           </dl>
-          <div className="al-ed-acts">
-            <Button variant="ghost" className="al-danger" onClick={onDelete}>{t("deleteAsk")}</Button>
-            <span className="al-sp" />
-            <Button onClick={onEdit}>{t("edit")}</Button>
-          </div>
+          {canWrite ? (
+            <div className="al-ed-acts">
+              <Button variant="ghost" className="al-danger" onClick={onDelete}>{t("deleteAsk")}</Button>
+              <span className="al-sp" />
+              <Button onClick={onEdit}>{t("edit")}</Button>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </>

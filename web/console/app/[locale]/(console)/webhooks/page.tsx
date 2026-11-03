@@ -12,12 +12,14 @@ import { type WebhookInput, useWebhooks } from "./useWebhooks";
 import { WebhookEditor } from "./WebhookEditor";
 import { WebhookList } from "./WebhookList";
 import type { WebhookRecord } from "./webhookPayload";
+import { useCanWrite } from "../../../hooks/useCanWrite";
 
 type EditorState = { mode: "new" } | { mode: "edit"; webhook: WebhookRecord };
 
 /** Automations › Webhooks: addresses the hub posts events to, signed with a secret when one is set. */
 export default function WebhooksPage() {
   const t = useTranslations("webhooks");
+  const canWrite = useCanWrite();
   const tc = useTranslations("actions.common");
   const { addToast } = useToast();
   const { webhooks, loading, failed, load, create, update, remove, setEnabled } = useWebhooks();
@@ -63,12 +65,12 @@ export default function WebhooksPage() {
     <div className="au-page">
       <PageHeader
         title={t("title")}
-        action={(
+        action={canWrite ? (
           <Button variant={editor ? "secondary" : "primary"} onClick={() => setEditor({ mode: "new" })}>
             <Plus size={14} aria-hidden="true" />
             {t("new")}
           </Button>
-        )}
+        ) : undefined}
       />
       {editor ? (
         <WebhookEditor

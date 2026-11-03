@@ -20,6 +20,7 @@ import { AlertTabs } from "./AlertTabs";
 import type { AlertActions } from "./AlertDetail";
 import { shortTime } from "./alertsModel";
 import { DEFAULT_FILTER, durationPresets, parseAlertTab, type DurationPreset, type InboxFilter } from "./alertsPageTypes";
+import { useCanWrite } from "../../../hooks/useCanWrite";
 
 /**
  * Alerts: the open alerts beside the chosen one, Rules (and the rule editor), Silences and the delivery log, one
@@ -90,6 +91,7 @@ export default function AlertsPage() {
   };
 
   const newRuleMain = tab === "rules" && ruleOpen?.kind !== "new";
+  const canWrite = useCanWrite();
   // Nothing has loaded and the last try failed: the error, not "No alerts".
   const blank = data.loadFailed && data.instances.length === 0 && data.rules.length === 0;
   return (
@@ -97,12 +99,12 @@ export default function AlertsPage() {
       <PageHeader
         title={t("title")}
         className="al-ph"
-        action={(
+        action={canWrite ? (
           <Button variant={newRuleMain ? "primary" : "secondary"} onClick={() => openRules({ kind: "new", seq: Date.now() })}>
             <Plus aria-hidden="true" size={14} strokeWidth={2} />
             {t("newRule")}
           </Button>
-        )}
+        ) : undefined}
       />
       <AlertTabs current={tab} tools={tab === "alerts" && data.instances.length > 0 ? <AlertInboxToolbar filter={filter} onFilter={setFilter} /> : undefined} />
       {data.loadFailed && !blank ? <p role="alert" className="al-error">{t("errors.load")}</p> : null}
