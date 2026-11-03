@@ -102,12 +102,35 @@ func collectStartupFailureLogFields(err error) startupFailureLogFields {
 	return fields
 }
 
+// startupFailureMeaning says in words what each stage code means, so the log
+// line is readable without the code table. The words are fixed per stage and
+// never include the cause, which can carry credentials.
+var startupFailureMeaning = map[startupFailureCode]string{
+	startupFailureDatabaseInitialize: "PostgreSQL could not be reached or opened; the Hub starts again when it answers",
+	startupFailureDatabaseSchema:     "the database schema migration failed",
+	startupFailureRuntimeOwnership:   "the Hub lost its PostgreSQL connection or its single-instance lock; it starts again on its own",
+	startupFailureInstallState:       "the install state in the data volume could not be read or written",
+	startupFailureAuthConfiguration:  "the sign-in settings are not valid",
+	startupFailureEncryptionConfig:   "the encryption key could not be loaded",
+	startupFailureDemoConfiguration:  "the demo mode settings are not valid",
+	startupFailureAdminBootstrap:     "the admin account from LABTETHER_ADMIN_USERNAME and LABTETHER_ADMIN_PASSWORD could not be created",
+	startupFailureDemoBootstrap:      "the demo data could not be created",
+	startupFailureTOTPKey:            "the two-factor key could not be loaded",
+	startupFailureTLSConfiguration:   "the TLS settings are not valid (LABTETHER_TLS_MODE, LABTETHER_TLS_CERT, LABTETHER_TLS_KEY or a port)",
+	startupFailureServerRuntime:      "the HTTP server stopped with an error",
+}
+
 func logStartupFailure(err error) {
 	fields := collectStartupFailureLogFields(err)
+	meaning := ""
+	if text := startupFailureMeaning[fields.code]; text != "" {
+		meaning = ": " + text
+	}
 	securityruntime.Logf(
-		"labtether exited with fatal error: code=%s cause_type=%s fingerprint=%s",
+		"labtether exited with fatal error: code=%s cause_type=%s fingerprint=%s%s",
 		string(fields.code),
 		fields.causeType,
 		fields.fingerprint,
+		meaning,
 	)
 }
