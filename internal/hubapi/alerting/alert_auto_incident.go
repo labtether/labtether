@@ -7,6 +7,7 @@ import (
 	"github.com/labtether/labtether/internal/incidents"
 	"github.com/labtether/labtether/internal/persistence"
 	"log"
+	"strings"
 	"time"
 )
 
@@ -36,12 +37,17 @@ func (d *Deps) maybeAutoCreateIncidentContext(ctx context.Context, rule alerts.R
 		log.Printf("alert evaluator: context-aware auto incident store unavailable")
 		return
 	}
-	// The store owns duplicate prevention and both writes in one operation.
+	// The store owns duplicate prevention (one open issue per rule) and
+	// writes the issue, its alert link and the first timeline line together.
+	title := rule.Name
+	if device := d.autoIncidentDeviceName(instance); device != "" {
+		title = fmt.Sprintf("%s on %s", rule.Name, device)
+	}
 	inc, created, err := store.CreateAutoIncidentForAlertInstanceContext(ctx, instance.ID, incidents.CreateIncidentRequest{
-		Title:    fmt.Sprintf("Auto: %s", rule.Name),
+		Title:    title,
 		Severity: incidents.SeverityCritical,
 		Source:   incidents.SourceAlertAuto,
-		Summary:  fmt.Sprintf("Auto-created from critical alert rule %q firing for >5 minutes", rule.Name),
+		Summary:  fmt.Sprintf("%s has been firing for 5 minutes.", rule.Name),
 	})
 	if err != nil {
 		log.Printf("alert evaluator: failed to auto-create incident: %v", err)
@@ -53,4 +59,16 @@ func (d *Deps) maybeAutoCreateIncidentContext(ctx context.Context, rule alerts.R
 	}
 	d.dispatchIncidentNotificationAsync(inc, "incident.created")
 	log.Printf("alert evaluator: auto-created incident %s from critical alert %s", inc.ID, rule.Name)
+}
+
+// autoIncidentDeviceName names the one device an alert fired for, or "".
+func (d *Deps) autoIncidentDeviceName(instance alerts.AlertInstance) string {
+	if d.AssetStore == nil || instance.FiringScope == nil || len(instance.FiringScope.AssetIDs) != 1 {
+		return ""
+	}
+	asset, ok, err := d.AssetStore.GetAsset(instance.FiringScope.AssetIDs[0])
+	if err != nil || !ok {
+		return ""
+	}
+	return strings.TrimSpace(asset.Name)
 }
