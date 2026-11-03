@@ -260,5 +260,17 @@
     "snippets": "Snippets…",
     "settings": "Settings…",
     "openInTerminal": "Open in Terminal"
+  },
+  "words": {
+    "creatingSession": "Creating session…",
+    "reconnectingSession": "Reconnecting session…",
+    "requestingTicket": "Requesting stream ticket…",
+    "openingStream": "Opening secure stream…",
+    "startingShell": "Starting remote shell…",
+    "connected": "Connected",
+    "connectionError": "The terminal connection failed.",
+    "closedUnexpectedly": "The connection closed unexpectedly.",
+    "connectionFailed": "Could not connect.",
+    "sessionEnded": "Session ended"
   }
 }

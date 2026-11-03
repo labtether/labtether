@@ -20,7 +20,14 @@ type WaitForCollectorResult = {
   discovered?: number;
   error?: string;
   warning?: string;
+  /** The collector's own warning text, without the generic fallback in `warning`. */
+  warningDetail?: string;
+  /** The run did not finish in time and no poll error explains why. */
+  timedOut?: boolean;
 };
+
+/** The `auth.addDevice.sync` translator for the sync toasts. */
+export type CollectorSyncT = (key: string, values?: Record<string, string | number>) => string;
 
 const RUN_TIMEOUT_MS = 90_000;
 const POLL_INTERVAL_MS = 1_500;
@@ -74,8 +81,8 @@ export async function waitForCollectorRun(collectorID: string, startedAtMs: numb
           return { ok: true, discovered: snapshot.discovered };
         }
         if (status === "partial") {
-          const reason = snapshot.collector?.last_error?.trim() || "collector completed with warnings";
-          return { ok: true, discovered: snapshot.discovered, warning: reason };
+          const detail = snapshot.collector?.last_error?.trim() ?? "";
+          return { ok: true, discovered: snapshot.discovered, warning: detail || "collector completed with warnings", warningDetail: detail };
         }
         const reason = snapshot.collector?.last_error?.trim() || `collector finished with status "${status}"`;
         return { ok: false, error: reason };
@@ -92,49 +99,45 @@ export async function waitForCollectorRun(collectorID: string, startedAtMs: numb
   return {
     ok: false,
     error: lastError || "collector sync did not complete in time",
+    timedOut: !lastError,
   };
 }
 
+/**
+ * Starts a sync for a connector that was saved and reports start, finish and failure as toasts, with a Retry button
+ * on failure. `name` is the system's product name ("Proxmox"); `t` is the `auth.addDevice.sync` translator.
+ */
 export function monitorCollectorRunWithRetry(
   collectorID: string,
-  connectorLabel: string,
+  name: string,
   addToast: AddToast,
+  t: CollectorSyncT,
 ) {
+  const retry = { label: t("retry"), onClick: () => { void runSync(); } };
   const runSync = async () => {
     let startedAtMs = 0;
     try {
       startedAtMs = await startCollectorRun(collectorID);
-      addToast("info", `${connectorLabel} sync started.`);
+      addToast("info", t("started", { name }));
     } catch (err) {
-      const message = err instanceof Error ? err.message : `failed to start ${connectorLabel.toLowerCase()} sync`;
-      addToast(
-        "warning",
-        `${connectorLabel} sync failed to start: ${message}`,
-        0,
-        { label: "Retry Sync", onClick: () => { void runSync(); } }
-      );
+      const message = err instanceof Error && err.message ? err.message : t("noReason");
+      addToast("warning", t("startFailed", { name, error: message }), 0, retry);
       return;
     }
 
     const result = await waitForCollectorRun(collectorID, startedAtMs);
     if (result.ok) {
-      const discoveredSuffix = Number.isFinite(result.discovered)
-        ? ` ${result.discovered} assets discovered.`
-        : "";
-      if (result.warning) {
-        addToast("warning", `${connectorLabel} sync completed with warnings.${discoveredSuffix} ${result.warning}`.trim());
-        return;
-      }
-      addToast("success", `${connectorLabel} sync complete.${discoveredSuffix}`);
+      const found = Number.isFinite(result.discovered) ? t("found", { count: result.discovered ?? 0 }) : "";
+      const partial = result.warning !== undefined;
+      const summary = [t(partial ? "doneWarnings" : "done", { name }), found, partial ? result.warningDetail ?? "" : ""];
+      addToast(partial ? "warning" : "success", summary.filter(Boolean).join(" "));
       return;
     }
 
-    addToast(
-      "warning",
-      `${connectorLabel} sync failed: ${result.error || "unknown error"}`,
-      0,
-      { label: "Retry Sync", onClick: () => { void runSync(); } }
-    );
+    const failure = result.timedOut
+      ? t("timedOut", { name })
+      : t("failed", { name, error: result.error || t("noReason") });
+    addToast("warning", failure, 0, retry);
   };
 
   void runSync();

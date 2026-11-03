@@ -20,6 +20,12 @@ vi.mock("../../../hooks/useSession", () => ({
   }),
 }));
 
+// The real German words, so the test also sees the console's own English error translated.
+vi.mock("next-intl", async () => {
+  const de = (await import("../../../../messages/de/terminal.json")).default as unknown as Record<string, Record<string, string>>;
+  return { useTranslations: (ns: string) => (key: string) => de[ns.split(".")[1]]?.[key] ?? key };
+});
+
 import { usePaneSession, type PaneStatus } from "../usePaneSession";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -56,4 +62,5 @@ it("connects once and shows the error when the stream never opens", async () => 
   }
   expect(fake.connect).toHaveBeenCalledTimes(1);
   expect(status?.state).toBe("error");
+  expect(status?.error).toBe("Die Terminalverbindung ist fehlgeschlagen.");
 });

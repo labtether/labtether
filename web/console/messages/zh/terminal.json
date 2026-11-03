@@ -260,5 +260,17 @@
     "snippets": "代码片段…",
     "settings": "设置…",
     "openInTerminal": "在终端中打开"
+  },
+  "words": {
+    "creatingSession": "正在创建会话…",
+    "reconnectingSession": "正在重新连接会话…",
+    "requestingTicket": "正在请求流票据…",
+    "openingStream": "正在打开安全流…",
+    "startingShell": "正在启动远程 shell…",
+    "connected": "已连接",
+    "connectionError": "终端连接失败。",
+    "closedUnexpectedly": "连接意外关闭。",
+    "connectionFailed": "无法连接。",
+    "sessionEnded": "会话已结束"
   }
 }

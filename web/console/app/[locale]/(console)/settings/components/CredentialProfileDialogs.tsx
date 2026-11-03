@@ -159,15 +159,19 @@ export function CreateCredentialDialog({ open, onClose, onCreated }: CreateDialo
           <span className="st-lbl">Passphrase (optional)</span>
           <Input type="password" value={draft.passphrase} onChange={(event) => update("passphrase", event.target.value)} maxLength={16384} autoComplete="new-password" />
         </label>
-        <label className="st-field">
-          <span className="st-lbl">Metadata JSON (optional string values only)</span>
-          <textarea
-            value={draft.metadataText}
-            onChange={(event) => update("metadataText", event.target.value)}
-            spellCheck={false}
-            className="st-ta"
-          />
-        </label>
+        {/* Metadata is for scripts and the API; it waits behind Advanced so the form asks only what a login needs. */}
+        <details className="st-details" open={draft.metadataText.trim() !== "" && draft.metadataText.trim() !== "{}"}>
+          <summary className="st-link">Advanced</summary>
+          <label className="st-field st-fold">
+            <span className="st-lbl">Metadata (JSON, text values)</span>
+            <textarea
+              value={draft.metadataText}
+              onChange={(event) => update("metadataText", event.target.value)}
+              spellCheck={false}
+              className="st-ta"
+            />
+          </label>
+        </details>
         <div className="st-dlg-acts">
           <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>Cancel</Button>
           <Button type="submit" variant="primary" loading={saving}>Add login</Button>
