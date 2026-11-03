@@ -301,6 +301,22 @@ func TestExecuteDockerCollectorPrunesStaleDiscoveredAssets(t *testing.T) {
 			},
 		},
 		{
+			// agent-02 is offline, so it reports nothing this run. Its
+			// container must stay until the agent returns or the host is
+			// removed; deleting it made Home Assistant drop the device.
+			AssetID: "docker-ct-agent-02-away456",
+			Type:    "docker-container",
+			Name:    "away",
+			Source:  "docker",
+			Status:  "online",
+			Metadata: map[string]string{
+				"agent_id":     "agent-02",
+				"container_id": "away456",
+				"state":        "running",
+				"status":       "Up 1h",
+			},
+		},
+		{
 			AssetID: "docker-cluster-prune",
 			Type:    "connector-cluster",
 			Name:    "",
@@ -324,6 +340,10 @@ func TestExecuteDockerCollectorPrunesStaleDiscoveredAssets(t *testing.T) {
 		t.Fatalf("GetAsset(keep) error = %v", err)
 	} else if !exists {
 		t.Fatalf("expected keep asset to remain after prune")
+	}
+
+	if _, exists, err := sut.assetStore.GetAsset("docker-ct-agent-02-away456"); err != nil || !exists {
+		t.Fatalf("container of an offline Docker host was pruned: exists=%v err=%v", exists, err)
 	}
 
 	if _, exists, err := sut.assetStore.GetAsset("docker-ct-agent-01-stale999"); err != nil {

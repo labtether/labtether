@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/hubcollector"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/servicehttp"
@@ -21,7 +22,7 @@ var ErrConnectedAgentDeletion = errors.New("connected agent assets must be stopp
 // HandleDeleteAsset handles DELETE /assets/{id}. It decommissions an asset
 // with best-effort SSH key cleanup, token revocation, coordinator removal,
 // attached child cascade, and final store delete.
-func (d *Deps) HandleDeleteAsset(w http.ResponseWriter, assetEntry assets.Asset) {
+func (d *Deps) HandleDeleteAsset(w http.ResponseWriter, r *http.Request, assetEntry assets.Asset) {
 	if err := d.DeleteAsset(context.Background(), assetEntry); err != nil {
 		switch {
 		case errors.Is(err, ErrConnectedAgentDeletion):
@@ -33,8 +34,37 @@ func (d *Deps) HandleDeleteAsset(w http.ResponseWriter, assetEntry assets.Asset)
 		}
 		return
 	}
+	d.AuditAssetDeleted(r, assetEntry)
 	assetID := strings.TrimSpace(assetEntry.ID)
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "asset_id": assetID})
+}
+
+// AuditAssetDeleted records a removed device with its name, after the
+// removal succeeded (a refused removal keeps only its request row).
+func (d *Deps) AuditAssetDeleted(r *http.Request, assetEntry assets.Asset) {
+	if d.AppendAuditEventBestEffort == nil {
+		return
+	}
+	event := audit.NewEvent("api.asset.deleted")
+	if d.PrincipalActorID != nil {
+		event.ActorID = d.PrincipalActorID(r.Context())
+	}
+	event.Target = strings.TrimSpace(assetEntry.ID)
+	event.TargetName = strings.TrimSpace(assetEntry.Name)
+	event.Details = map[string]any{"asset_id": event.Target}
+	d.AppendAuditEventBestEffort(event, "api warning: failed to append device removal audit event")
+}
+
+// assetName is a device's name for an audit row, or "" when unknown.
+func (d *Deps) assetName(assetID string) string {
+	if d == nil || d.AssetStore == nil || strings.TrimSpace(assetID) == "" {
+		return ""
+	}
+	assetEntry, ok, err := d.AssetStore.GetAsset(strings.TrimSpace(assetID))
+	if err != nil || !ok {
+		return ""
+	}
+	return strings.TrimSpace(assetEntry.Name)
 }
 
 // DeleteAsset applies the same decommission policy for both v1 and v2. Agent

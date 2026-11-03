@@ -133,7 +133,7 @@ func (d *Deps) collectAggregateCollections(
 	go func() {
 		defer wg.Done()
 		if canReadActions {
-			c.actionRuns = d.listActionRuns(groupFilter, assetGroup)
+			c.actionRuns = shared.VisibleActionRuns(ctx, d.listActionRuns(groupFilter, assetGroup))
 		}
 	}()
 

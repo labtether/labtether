@@ -49,12 +49,16 @@ func (s *PostgresStore) ReadAlertCorrelationPage(ctx context.Context, w Correlat
  (COALESCE(l->>'alert_instance_id','')='' OR l->>'alert_instance_id'=s.id) AND
  (COALESCE(l->>'alert_fingerprint','')='' OR l->>'alert_fingerprint'=s.fingerprint)))`
 	result := make([]CorrelationAlert, 0, CorrelationPageSize)
-	next, done, err := s.readCorrelationPage(ctx, "alert_instances", "s.id,s.rule_id,s.fingerprint,s.severity,s.first_fired_at,"+correlationAlertWitnessSQL, predicate, []any{w.From.UTC(), w.Through.UTC(), scope.AssetIDs, scope.GroupID, links}, cursor, func(rows pgx.Rows) (string, error) {
+	names := ",COALESCE((SELECT r.name FROM alert_rules r WHERE r.id=s.rule_id),'')" +
+		",COALESCE((SELECT a.name FROM assets a WHERE a.id=(" + singleFiringAssetSQL("s") + ")),'')"
+	next, done, err := s.readCorrelationPage(ctx, "alert_instances", "s.id,s.rule_id,s.fingerprint,s.severity,s.first_fired_at,"+correlationAlertWitnessSQL+names, predicate, []any{w.From.UTC(), w.Through.UTC(), scope.AssetIDs, scope.GroupID, links}, cursor, func(rows pgx.Rows) (string, error) {
 		var row CorrelationAlert
 		var payload []byte
-		if err := rows.Scan(&row.ID, &row.RuleID, &row.Fingerprint, &row.Severity, &row.FirstFiredAt, &payload); err != nil {
+		var ruleName, deviceName string
+		if err := rows.Scan(&row.ID, &row.RuleID, &row.Fingerprint, &row.Severity, &row.FirstFiredAt, &payload, &ruleName, &deviceName); err != nil {
 			return "", err
 		}
+		row.RuleName, row.DeviceName = ruleName, deviceName
 		row.FirstFiredAt = row.FirstFiredAt.UTC()
 		if len(payload) > 0 {
 			var scope alerts.FiringScope
@@ -80,9 +84,9 @@ func (s *PostgresStore) ReadAuditCorrelationPage(ctx context.Context, w Correlat
 		return nil, cursor, false, err
 	}
 	result := make([]CorrelationAudit, 0, CorrelationPageSize)
-	next, done, err := s.readCorrelationPage(ctx, "audit_events", "s.id,s.type,COALESCE(s.actor_id,''),COALESCE(s.target,''),s.timestamp", `s.timestamp >= $1 AND s.timestamp <= $2 AND (s.target=$3 OR s.target=ANY($4::text[]))`, []any{w.From.UTC(), w.Through.UTC(), scope.IncidentID, scope.OperationAssetIDs}, cursor, func(rows pgx.Rows) (string, error) {
+	next, done, err := s.readCorrelationPage(ctx, "audit_events", "s.id,s.type,COALESCE(s.actor_id,''),COALESCE(s.target,''),COALESCE((SELECT u.username FROM users u WHERE u.id=s.actor_id),''),s.timestamp", `s.timestamp >= $1 AND s.timestamp <= $2 AND (s.target=$3 OR s.target=ANY($4::text[]))`, []any{w.From.UTC(), w.Through.UTC(), scope.IncidentID, scope.OperationAssetIDs}, cursor, func(rows pgx.Rows) (string, error) {
 		var row CorrelationAudit
-		err := rows.Scan(&row.ID, &row.Type, &row.ActorID, &row.Target, &row.Timestamp)
+		err := rows.Scan(&row.ID, &row.Type, &row.ActorID, &row.Target, &row.ActorName, &row.Timestamp)
 		row.Timestamp = row.Timestamp.UTC()
 		result = append(result, row)
 		return row.ID, err

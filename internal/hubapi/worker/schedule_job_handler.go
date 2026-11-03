@@ -346,6 +346,7 @@ func (d *Deps) appendScheduleAudit(execution schedules.ExecutionJob, status stri
 	event.ID = "audit_" + execution.JobID
 	event.ActorID = execution.ActorID
 	event.SessionID = execution.ScheduleID
+	event.TargetName = execution.ScheduleName
 	event.Decision = status
 	event.Details = map[string]any{
 		"job_id":        execution.JobID,

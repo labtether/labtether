@@ -184,6 +184,7 @@ func (d *Deps) V2DeleteAsset(w http.ResponseWriter, r *http.Request, assetID str
 		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to delete asset")
 		return
 	}
+	d.AuditAssetDeleted(r, assetEntry)
 	if d.Broadcast != nil {
 		d.Broadcast("asset.deleted", map[string]any{"asset_id": assetID})
 	}

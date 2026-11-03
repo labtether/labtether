@@ -144,11 +144,12 @@ func (d *Deps) HandleV2WebhookCreate(w http.ResponseWriter, r *http.Request) {
 	d.invalidateWebhookCache()
 
 	shared.AppendAuditEventBestEffort(d.AuditStore, audit.Event{
-		Type:      "webhook.created",
-		ActorID:   apiv2.PrincipalActorID(r.Context()),
-		Target:    wh.ID,
-		Details:   map[string]any{"name": wh.Name, "events": wh.Events},
-		Timestamp: now,
+		Type:       "webhook.created",
+		ActorID:    apiv2.PrincipalActorID(r.Context()),
+		Target:     wh.ID,
+		TargetName: wh.Name,
+		Details:    map[string]any{"name": wh.Name, "events": wh.Events},
+		Timestamp:  now,
 	}, "webhook created: "+wh.Name)
 
 	apiv2.WriteJSON(w, http.StatusCreated, wh)
@@ -284,9 +285,10 @@ func (d *Deps) HandleV2WebhookUpdate(w http.ResponseWriter, r *http.Request, id 
 	}
 	d.invalidateWebhookCache()
 	shared.AppendAuditEventBestEffort(d.AuditStore, audit.Event{
-		Type:    "webhook.updated",
-		ActorID: apiv2.PrincipalActorID(r.Context()),
-		Target:  id,
+		Type:       "webhook.updated",
+		ActorID:    apiv2.PrincipalActorID(r.Context()),
+		Target:     id,
+		TargetName: updated.Name,
 		Details: map[string]any{
 			"name_changed":    req.Name != nil,
 			"url_changed":     req.URL != nil,
@@ -305,7 +307,8 @@ func (d *Deps) HandleV2WebhookDelete(w http.ResponseWriter, r *http.Request, id 
 		apiv2.WriteError(w, http.StatusInternalServerError, "not_configured", "webhook store not configured")
 		return
 	}
-	if _, ok, err := d.WebhookStore.GetWebhook(r.Context(), id); err != nil {
+	existing, ok, err := d.WebhookStore.GetWebhook(r.Context(), id)
+	if err != nil {
 		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to get webhook")
 		return
 	} else if !ok {
@@ -319,10 +322,11 @@ func (d *Deps) HandleV2WebhookDelete(w http.ResponseWriter, r *http.Request, id 
 	d.invalidateWebhookCache()
 
 	shared.AppendAuditEventBestEffort(d.AuditStore, audit.Event{
-		Type:      "webhook.deleted",
-		ActorID:   apiv2.PrincipalActorID(r.Context()),
-		Target:    id,
-		Timestamp: time.Now().UTC(),
+		Type:       "webhook.deleted",
+		ActorID:    apiv2.PrincipalActorID(r.Context()),
+		Target:     id,
+		TargetName: existing.Name,
+		Timestamp:  time.Now().UTC(),
 	}, "webhook deleted: "+id)
 
 	apiv2.WriteJSON(w, http.StatusOK, map[string]any{"status": "deleted"})
