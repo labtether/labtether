@@ -267,39 +267,58 @@ func TestGeneratedScriptsShellQuoteInterpolatedLiterals(t *testing.T) {
 	}
 }
 
-func TestInstallScriptReinstallPreservesPersistedTokenWithoutEnrollmentToken(t *testing.T) {
-	root, env := newAgentScriptHarness(t, strings.Repeat("c", 64))
+// Reinstalling keeps the saved agent token, also when the console's command
+// passes a new enrollment token. Deleting it made the agent enroll as a new
+// device, which the Hub refuses for a hostname it already has, so the device
+// went offline. The agent re-enrolls with the staged token only if the Hub
+// refuses its token.
+func TestInstallScriptReinstallPreservesPersistedToken(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		args  []string
+		extra string
+	}{
+		{name: "without enrollment token"},
+		{name: "with new enrollment token", args: []string{"--enrollment-token", "enroll-123"},
+			extra: "used only if LabTether no longer accepts this agent"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root, env := newAgentScriptHarness(t, strings.Repeat("c", 64))
 
-	tokenPath := filepath.Join(root, "etc/labtether/agent-token")
-	if err := os.MkdirAll(filepath.Dir(tokenPath), 0o755); err != nil {
-		t.Fatalf("mkdir token dir: %v", err)
-	}
-	if err := os.WriteFile(tokenPath, []byte("persisted-token"), 0o600); err != nil {
-		t.Fatalf("write token file: %v", err)
-	}
+			tokenPath := filepath.Join(root, "etc/labtether/agent-token")
+			if err := os.MkdirAll(filepath.Dir(tokenPath), 0o755); err != nil {
+				t.Fatalf("mkdir token dir: %v", err)
+			}
+			if err := os.WriteFile(tokenPath, []byte("persisted-token"), 0o600); err != nil {
+				t.Fatalf("write token file: %v", err)
+			}
 
-	caPath := filepath.Join(root, "fixtures", "hub-ca.crt")
-	if err := os.MkdirAll(filepath.Dir(caPath), 0o755); err != nil {
-		t.Fatalf("mkdir fixtures: %v", err)
-	}
-	if err := os.WriteFile(caPath, []byte("test-ca"), 0o644); err != nil {
-		t.Fatalf("write CA file: %v", err)
-	}
+			caPath := filepath.Join(root, "fixtures", "hub-ca.crt")
+			if err := os.MkdirAll(filepath.Dir(caPath), 0o755); err != nil {
+				t.Fatalf("mkdir fixtures: %v", err)
+			}
+			if err := os.WriteFile(caPath, []byte("test-ca"), 0o644); err != nil {
+				t.Fatalf("write CA file: %v", err)
+			}
 
-	script := rewriteAgentScriptForHarness(GenerateInstallScript("https://hub.example.com", "wss://hub.example.com/ws/agent"), root)
-	output, err := runGeneratedShellScript(t, script, env, "--skip-vnc-prereqs", "--tls-ca-file", caPath)
-	if err != nil {
-		t.Fatalf("run reinstall script: %v", err)
-	}
+			script := rewriteAgentScriptForHarness(GenerateInstallScript("https://hub.example.com", "wss://hub.example.com/ws/agent"), root)
+			args := append([]string{"--skip-vnc-prereqs", "--tls-ca-file", caPath}, tc.args...)
+			output, err := runGeneratedShellScript(t, script, env, args...)
+			if err != nil {
+				t.Fatalf("run reinstall script: %v", err)
+			}
 
-	if got := mustReadFile(t, tokenPath); !strings.Contains(got, "persisted-token") {
-		t.Fatalf("expected persisted token to survive reinstall, got %q", got)
-	}
-	if !strings.Contains(output, "Existing approval kept") || !strings.Contains(output, "reconnecting to LabTether") {
-		t.Fatalf("expected preserved-enrollment summary, got:\n%s", output)
-	}
-	if strings.Contains(output, "persisted-token") {
-		t.Fatalf("install output exposed persisted token value:\n%s", output)
+			if got := mustReadFile(t, tokenPath); !strings.Contains(got, "persisted-token") {
+				t.Fatalf("expected persisted token to survive reinstall, got %q", got)
+			}
+			if !strings.Contains(output, "Existing approval kept") || !strings.Contains(output, "reconnecting to LabTether") ||
+				!strings.Contains(output, tc.extra) || strings.Contains(output, "no approval needed") {
+				t.Fatalf("expected preserved-enrollment summary, got:\n%s", output)
+			}
+			if strings.Contains(output, "persisted-token") || strings.Contains(output, "enroll-123") {
+				t.Fatalf("install output exposed a token value:\n%s", output)
+			}
+		})
 	}
 }
 

@@ -367,15 +367,13 @@ if [[ "${DOCKER_ENABLED}" != "false" ]]; then
   fi
 fi
 
-# If a new enrollment token is provided, force a fresh enrollment by clearing
-# any persisted per-agent token from previous hubs/installations.
-if [[ -n "${ENROLLMENT_TOKEN}" && -f "${TOKEN_FILE}" ]]; then
-  rm -f "${TOKEN_FILE}"
-  success "Old agent token removed; the agent enrolls again with the new token"
-fi
-
-# An existing agent token is kept, so reinstalling against the same hub does
-# not require re-approval. Without one, the agent creates it on first start.
+# An existing agent token is kept, also when a new enrollment token is given:
+# the agent keeps using it while this Hub accepts it, and enrolls again with
+# the new token, proving it is the same device, only if the Hub refuses it. A
+# token saved for another Hub address is never sent to this one. Deleting it
+# made the agent enroll as if new, which the Hub refuses for a device it
+# already has, and the device went offline. Without a token, the agent
+# creates one on first start.
 
 # ── Systemd service ────────────────────────────────────────────────────────
 cat > "${SERVICE_FILE}" <<'UNIT'
