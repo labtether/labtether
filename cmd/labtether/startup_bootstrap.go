@@ -209,7 +209,7 @@ func runHub(ctx context.Context) error {
 	startRuntimeLoops(runtimeCtx, srv, pgStore, worker.state, worker.retentionTracker)
 
 	// --- TLS mode resolution ---
-	tlsMode := envOrDefault("LABTETHER_TLS_MODE", "auto")
+	tlsMode := resolveTLSModeSetting(envOrDefault("LABTETHER_TLS_MODE", "auto"))
 	tlsCertFile := envOrDefault("LABTETHER_TLS_CERT", "")
 	tlsKeyFile := envOrDefault("LABTETHER_TLS_KEY", "")
 	httpsPort := envOrDefault("LABTETHER_HTTPS_PORT", "8443")

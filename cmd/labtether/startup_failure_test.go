@@ -51,7 +51,10 @@ func TestLogStartupFailureNeverEmitsCredentialBearingCause(t *testing.T) {
 	if strings.Contains(logged, secret) || strings.Contains(logged, "credential-bearing-secret") || strings.Contains(logged, "postgres://") {
 		t.Fatalf("fatal startup log exposed credential-bearing cause: %q", logged)
 	}
-	for _, required := range []string{"code=database_initialize", "cause_type=*errors.errorString", "fingerprint="} {
+	// The line also says what failed in words; "code=database_initialize"
+	// alone left a user with a stopped Hub and no hint that PostgreSQL was down.
+	for _, required := range []string{"code=database_initialize", "cause_type=*errors.errorString", "fingerprint=",
+		": PostgreSQL could not be reached or opened"} {
 		if !strings.Contains(logged, required) {
 			t.Fatalf("fatal startup log %q is missing %q", logged, required)
 		}
