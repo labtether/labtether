@@ -140,7 +140,7 @@ if [[ "${LABTETHER_WRAPPER_INSTALLED}" -eq 1 ]]; then
   summary_row "Uninstall" "sudo labtether agent uninstall"
 fi
 printf "\n"
-if [[ -n "${ENROLLMENT_TOKEN}" && "${PERSISTED_AGENT_TOKEN}" -eq 1 ]]; then
+if [[ -n "${ENROLLMENT_TOKEN}" && "${HAD_AGENT_TOKEN}" -eq 1 && "${PERSISTED_AGENT_TOKEN}" -eq 1 ]]; then
   success "Existing approval kept. The agent is reconnecting to LabTether."
   info "The new enrollment token is used only if LabTether no longer accepts this agent."
 elif [[ -n "${ENROLLMENT_TOKEN}" ]]; then
