@@ -364,7 +364,7 @@ func (d *Deps) handlePackageAction(w http.ResponseWriter, r *http.Request, asset
 			return
 		}
 		if result.Error != "" {
-			servicehttp.WriteError(w, http.StatusBadRequest, result.Error)
+			servicehttp.WriteError(w, http.StatusBadRequest, agentFailureMessage(result.Error, result.Output))
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, result)
