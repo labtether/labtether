@@ -295,7 +295,7 @@ func TestInstallScriptReinstallPreservesPersistedTokenWithoutEnrollmentToken(t *
 	if got := mustReadFile(t, tokenPath); !strings.Contains(got, "persisted-token") {
 		t.Fatalf("expected persisted token to survive reinstall, got %q", got)
 	}
-	if !strings.Contains(output, "Existing agent approval preserved") || !strings.Contains(output, "reconnecting to LabTether") {
+	if !strings.Contains(output, "Existing approval kept") || !strings.Contains(output, "reconnecting to LabTether") {
 		t.Fatalf("expected preserved-enrollment summary, got:\n%s", output)
 	}
 	if strings.Contains(output, "persisted-token") {

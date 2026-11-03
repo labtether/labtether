@@ -51,7 +51,7 @@ $adminsSid = New-Object System.Security.Principal.SecurityIdentifier("S-1-5-32-5
 
 # --- Config directory with restricted ACLs ---
 if (-not (Test-Path $ConfigDir)) {
-    Write-Host "Creating config directory: $ConfigDir"
+    Write-Host "Creating config folder $ConfigDir"
     New-Item -ItemType Directory -Path $ConfigDir -Force | Out-Null
 
     $acl = Get-Acl $ConfigDir
@@ -67,7 +67,7 @@ if (-not (Test-Path $ConfigDir)) {
     $acl.AddAccessRule($systemRule)
     $acl.AddAccessRule($adminRule)
     Set-Acl -Path $ConfigDir -AclObject $acl
-    Write-Host "Config directory created with restricted ACLs."
+    Write-Host "Config folder created; only SYSTEM and Administrators can open it."
 }
 
 # --- Hub CA pin ---
@@ -118,7 +118,7 @@ if ($CAFingerprintSha256 -ne "") {
     # by SYSTEM and Administrators.
     $caText = "-----BEGIN CERTIFICATE-----`n" + [Convert]::ToBase64String($caDer, [Base64FormattingOptions]::InsertLineBreaks) + "`n-----END CERTIFICATE-----`n"
     Set-Content -LiteralPath $caPath -Value $caText -NoNewline -Encoding ASCII
-    Write-Host "Hub CA saved to: $caPath"
+    Write-Host "Hub CA fingerprint matches; saved to $caPath"
 }
 
 # --- Install directory ---
@@ -131,9 +131,9 @@ $destBinary = Join-Path $InstallDir "labtether-agent.exe"
 # --- Upgrade path: stop service before replacing binary ---
 $existing = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if ($null -ne $existing) {
-    Write-Host "Existing service found. Performing upgrade..."
+    Write-Host "Updating the installed agent"
     if ($existing.Status -eq "Running") {
-        Write-Host "Stopping $ServiceName..."
+        Write-Host "Stopping $ServiceName"
         Stop-Service -Name $ServiceName -Force
         Start-Sleep -Seconds 2
     }
@@ -141,7 +141,7 @@ if ($null -ne $existing) {
 
 # Copy binary into place
 Copy-Item -Path $sourceBinary -Destination $destBinary -Force
-Write-Host "Binary installed to: $destBinary"
+Write-Host "Agent saved to $destBinary"
 
 # --- Build environment block for service ---
 # sc.exe does not natively set env vars on services; we use the registry.
@@ -149,13 +149,13 @@ $regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName"
 
 # --- Create or reconfigure service ---
 if ($null -eq $existing) {
-    Write-Host "Creating service: $ServiceName"
+    Write-Host "Creating service $ServiceName"
     New-Service -Name $ServiceName `
                 -BinaryPathName "`"$destBinary`"" `
                 -DisplayName $DisplayName `
                 -StartupType Automatic
 } else {
-    Write-Host "Reconfiguring service: $ServiceName"
+    Write-Host "Updating service $ServiceName"
     sc.exe config $ServiceName binPath= "`"$destBinary`"" start= auto | Out-Null
 }
 
@@ -164,7 +164,7 @@ sc.exe description $ServiceName "LabTether Agent: endpoint monitoring, operation
 
 # --- Recovery configuration: restart 3x with 60s delay, reset after 24h ---
 sc.exe failure $ServiceName reset= 86400 actions= restart/60000/restart/60000/restart/60000 | Out-Null
-Write-Host "Recovery policy configured (restart x3, 60s delay, 24h reset)."
+Write-Host "If the service fails, Windows restarts it up to 3 times, 60 seconds apart."
 
 # --- Enrollment token ---
 # The service's registry Environment value is readable by every local user,
@@ -191,7 +191,7 @@ if ($EnrollmentToken -ne "") {
     }
     Set-Acl -LiteralPath $tokenPath -AclObject $tokenAcl
     Set-Content -LiteralPath $tokenPath -Value $EnrollmentToken -NoNewline -Encoding ASCII
-    Write-Host "Enrollment token saved to: $tokenPath"
+    Write-Host "Enrollment token saved to $tokenPath"
 }
 
 # --- Environment variables via registry ---
@@ -227,15 +227,21 @@ if ($envVars.Count -gt 0 -or $hadPlainToken) {
     }
 
     Set-ItemProperty -Path $regPath -Name "Environment" -Value ($envList.ToArray()) -Type MultiString
-    Write-Host "Service environment variables set."
+    Write-Host "Service settings saved."
 }
 
 # --- Start service ---
-Write-Host "Starting $ServiceName..."
+Write-Host "Starting $ServiceName"
 Start-Service -Name $ServiceName
 
 Write-Host ""
-Write-Host "Install complete."
-Write-Host "  Service : $ServiceName"
-Write-Host "  Binary  : $destBinary"
-Write-Host "  Config  : $ConfigDir"
+Write-Host "LabTether agent installed and running."
+Write-Host "  Service   $ServiceName"
+Write-Host "  Agent     $destBinary"
+Write-Host "  Settings  $ConfigDir"
+Write-Host ""
+if ($EnrollmentToken -ne "") {
+    Write-Host "Enrollment token saved. The agent uses it to join LabTether; no approval needed."
+} elseif ($null -eq $existing -and $HubURL -ne "") {
+    Write-Host "Next: in LabTether, open Devices and approve $env:COMPUTERNAME."
+}

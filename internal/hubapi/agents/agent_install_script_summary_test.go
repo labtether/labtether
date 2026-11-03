@@ -80,24 +80,36 @@ func TestInstallScriptSummaryRequiresPrivateNonemptyRegularAgentToken(t *testing
 			if err != nil {
 				t.Fatalf("run install script: %v\noutput:\n%s", err, output)
 			}
-			if !strings.Contains(output, "Awaiting approval in LabTether console") {
-				t.Fatalf("expected awaiting-approval summary, got:\n%s", output)
+			if !strings.Contains(output, "Waiting for approval") {
+				t.Fatalf("expected waiting-for-approval summary, got:\n%s", output)
 			}
-			if strings.Contains(output, "Existing agent approval preserved") || strings.Contains(output, "must-not-appear") {
+			if strings.Contains(output, "Existing approval kept") || strings.Contains(output, "must-not-appear") {
 				t.Fatalf("summary claimed or exposed an unusable token:\n%s", output)
 			}
 		})
 	}
 }
 
-func TestInstallScriptSummaryWrapsLongValues(t *testing.T) {
-	root, env := newAgentScriptHarness(t, strings.Repeat("9", 64))
-
+// The summary is read in a terminal and kept in logs. The fingerprint must be
+// whole so it can be compared with the console before approval, the
+// enrollment token must never be printed, and output to a pipe or log must
+// carry no terminal escape codes.
+func TestInstallScriptSummaryIsPlainTextWithWholeFingerprint(t *testing.T) {
 	longFingerprint := "LT-WJHN-I4WG-VI7N-6TM6-A636-J6ZP-EAPV-WWXV-VLNW-GKZR-TU4M-JTCB-PX3A"
-	longHostname := "dockerhost1-northserver-with-a-very-long-hostname-for-summary-wrap-tests"
-
-	writeExecutable(t, filepath.Join(root, "bin", "hostname"), "#!/bin/bash\nset -euo pipefail\nprintf '%s\\n' \""+longHostname+"\"\n")
-	writeExecutable(t, filepath.Join(root, "bin", "systemctl"), `#!/bin/bash
+	longHostname := "dockerhost1-northserver-with-a-very-long-hostname-for-summary-tests"
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "waiting for approval", want: "Approve it only if LabTether shows the fingerprint above"},
+		{name: "enrollment token", args: []string{"--enrollment-token", "enroll-123"}, want: "Enrollment token saved"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root, env := newAgentScriptHarness(t, strings.Repeat("9", 64))
+			writeExecutable(t, filepath.Join(root, "bin", "hostname"), "#!/bin/bash\nset -euo pipefail\nprintf '%s\\n' \""+longHostname+"\"\n")
+			writeExecutable(t, filepath.Join(root, "bin", "systemctl"), `#!/bin/bash
 set -euo pipefail
 printf '%s\n' "$*" >> "${LABTETHER_TEST_LOG_DIR}/systemctl.log"
 if [[ "${1:-}" == "enable" ]]; then
@@ -109,47 +121,28 @@ if [[ "${1:-}" == "is-active" ]]; then
 fi
 exit 0
 `)
-	env = append(env,
-		"LABTETHER_TEST_FINGERPRINT="+longFingerprint,
-		"LABTETHER_TEST_FINGERPRINT_FILE="+filepath.Join(root, "etc/labtether/device-fingerprint"),
-	)
+			env = append(env,
+				"LABTETHER_TEST_FINGERPRINT="+longFingerprint,
+				"LABTETHER_TEST_FINGERPRINT_FILE="+filepath.Join(root, "etc/labtether/device-fingerprint"),
+			)
 
-	script := rewriteAgentScriptForHarness(GenerateInstallScript("https://hub.example.com", "wss://hub.example.com/ws/agent"), root)
-	output, err := runGeneratedShellScript(t, script, env,
-		"--docker-enabled", "true",
-		"--docker-endpoint", "/var/run/docker.sock",
-		"--skip-vnc-prereqs",
-		"--enrollment-token", "enroll-123",
-	)
-	if err != nil {
-		t.Fatalf("run install script: %v\noutput:\n%s", err, output)
-	}
-
-	lines := strings.Split(output, "\n")
-	sawSummary := false
-	for _, line := range lines {
-		if strings.Contains(line, "Installation Complete") {
-			sawSummary = true
-		}
-		if strings.Contains(line, "│") {
-			if !strings.HasPrefix(line, "  │") || !strings.HasSuffix(line, "│") {
-				t.Fatalf("expected boxed line to stay aligned, got %q", line)
+			script := rewriteAgentScriptForHarness(GenerateInstallScript("https://hub.example.com", "wss://hub.example.com/ws/agent"), root)
+			args := append([]string{"--docker-enabled", "true", "--skip-vnc-prereqs"}, tc.args...)
+			output, err := runGeneratedShellScript(t, script, env, args...)
+			if err != nil {
+				t.Fatalf("run install script: %v\noutput:\n%s", err, output)
 			}
-			if len([]rune(line)) > 100 {
-				t.Fatalf("expected wrapped summary line, got %d chars: %q", len([]rune(line)), line)
+			if strings.Contains(output, "\x1b") {
+				t.Fatalf("output to a pipe contains terminal escape codes:\n%q", output)
 			}
-		}
-	}
-	if !sawSummary {
-		t.Fatalf("expected installation summary in output, got:\n%s", output)
-	}
-	if !strings.Contains(output, "Verify this fingerprint in LabTether before approving") {
-		t.Fatalf("expected fingerprint verification message, got:\n%s", output)
-	}
-	if !strings.Contains(output, "Auto-enrollment configured") {
-		t.Fatalf("expected auto-enrollment summary message, got:\n%s", output)
-	}
-	if strings.Contains(output, "enroll-123") {
-		t.Fatalf("install output exposed enrollment token value:\n%s", output)
+			for _, want := range []string{"LabTether agent installed on " + longHostname, "Fingerprint  " + longFingerprint, tc.want} {
+				if !strings.Contains(output, want) {
+					t.Fatalf("summary is missing %q, got:\n%s", want, output)
+				}
+			}
+			if strings.Contains(output, "enroll-123") {
+				t.Fatalf("install output exposed enrollment token value:\n%s", output)
+			}
+		})
 	}
 }

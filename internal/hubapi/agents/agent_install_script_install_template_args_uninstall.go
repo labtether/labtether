@@ -232,7 +232,7 @@ remove_agent_update_files() {
 
 # ── Uninstall ──────────────────────────────────────────────────────────────
 if [[ "${UNINSTALL}" -eq 1 ]]; then
-  info "Stopping service..."
+  printf "\nUninstalling the agent\n"
   systemctl stop "${SERVICE_NAME}" 2>/dev/null || true
   systemctl disable "${SERVICE_NAME}" 2>/dev/null || true
   rm -f "${SERVICE_FILE}"
@@ -241,9 +241,9 @@ if [[ "${UNINSTALL}" -eq 1 ]]; then
   remove_hub_ssh_keys
   rm -f "${BINARY_DEST}"
   remove_agent_update_files
-  success "Binary removed"
+  success "Agent removed from ${BINARY_DEST}"
   rm -f "${ENV_FILE}"
-  success "Configuration removed"
+  success "Settings removed"
   if [[ "${PURGE}" -eq 1 ]]; then
     remove_hub_ca_trust
     rm -f "${TOKEN_FILE}"
@@ -251,20 +251,20 @@ if [[ "${UNINSTALL}" -eq 1 ]]; then
     rm -f "${DEVICE_PUBLIC_KEY_FILE}"
     rm -f "${FINGERPRINT_FILE}"
     rm -rf "${CONFIG_DIR}"
-    success "Identity and tokens purged"
+    success "Device identity and tokens removed"
     if grep -q "LABTETHER_AGENT_WRAPPER=1" "${LABTETHER_CLI_DEST}" 2>/dev/null; then
       rm -f "${LABTETHER_CLI_DEST}"
-      success "CLI helper removed"
+      success "labtether command removed"
     fi
-    printf "\n  ${GREEN}${SYM_OK}${RESET} ${BOLD}LabTether agent uninstalled and purged.${RESET}\n"
-    info "All local identity and token material has been removed."
+    printf "\nLabTether agent uninstalled and purged.\n"
   else
     # Preserve agent-token and identity so a reinstall can reconnect without re-approval.
-    printf "\n  ${GREEN}${SYM_OK}${RESET} ${BOLD}LabTether agent uninstalled.${RESET}\n"
-    info "Token and device identity files preserved at ${CONFIG_DIR}"
-    info "Use --purge to remove all local agent credentials and identity."
+    printf "\nLabTether agent uninstalled.\n"
+    printf "The token and device identity stay in %%s, so a reinstall reconnects without a new approval.\n" "${CONFIG_DIR}"
     if command -v labtether >/dev/null 2>&1; then
-      info "Or run: sudo labtether agent purge"
+      printf "To remove them: sudo labtether agent purge\n"
+    else
+      printf "To remove them, run this installer with --purge.\n"
     fi
   fi
   exit 0

@@ -1,8 +1,8 @@
 package agents
 
 func agentInstallScriptTemplateInstallFlow() string {
-	return `# ── Desktop prerequisites ──────────────────────────────────────────────────
-step 2 "Desktop prerequisites"
+	return `# ── Remote View tools ──────────────────────────────────────────────────────
+step 2 "Remote View tools"
 
 MISSING_VNC_PREREQS=()
 if ! command -v x11vnc &>/dev/null; then
@@ -29,7 +29,7 @@ if [[ "${#MISSING_VNC_PREREQS[@]}" -gt 0 ]]; then
   VNC_PREREQS_STATUS="missing"
   if [[ "${VNC_PREREQS_MODE}" == "ask" ]]; then
     if [[ -r /dev/tty && -w /dev/tty ]]; then
-      printf "  ${YELLOW}${SYM_WARN}${RESET} Install desktop prerequisites now (x11vnc + Xvfb + xterm + xdotool + xmodmap + GStreamer)? [Y/n]: " > /dev/tty
+      printf "  Install them now (x11vnc, Xvfb, xterm, xdotool, xmodmap and GStreamer)? [Y/n]: " > /dev/tty
       read -r vnc_prompt_reply < /dev/tty || vnc_prompt_reply=""
       vnc_prompt_reply="$(echo "${vnc_prompt_reply}" | tr '[:upper:]' '[:lower:]')"
       if [[ -z "${vnc_prompt_reply}" || "${vnc_prompt_reply}" == "y" || "${vnc_prompt_reply}" == "yes" ]]; then
@@ -38,8 +38,7 @@ if [[ "${#MISSING_VNC_PREREQS[@]}" -gt 0 ]]; then
         VNC_PREREQS_MODE="skip"
       fi
     else
-      info "No TTY detected; skipping prerequisite prompt."
-      info "Rerun installer with --install-vnc-prereqs (alias: --auto-install-vnc) to auto-install the desktop stack."
+      info "No terminal to ask on."
       VNC_PREREQS_MODE="skip"
     fi
   fi
@@ -47,28 +46,27 @@ if [[ "${#MISSING_VNC_PREREQS[@]}" -gt 0 ]]; then
   if [[ "${VNC_PREREQS_MODE}" == "install" ]]; then
     VNC_LOG="$(mktemp)"
     install_vnc_prereqs >"${VNC_LOG}" 2>&1 &
-    spin $! "Installing desktop prerequisites (x11vnc + Xvfb + xterm + xdotool + xmodmap + GStreamer)..."
+    spin $! "Installing x11vnc, Xvfb, xterm, xdotool, xmodmap and GStreamer"
     if wait $!; then
-      success "Desktop prerequisites installed"
+      success "Remote View tools installed"
       VNC_PREREQS_STATUS="installed"
     else
-      warn "Desktop prerequisites install failed. Continuing."
-      info "Install manually, then reconnect desktop from LabTether."
+      warn "Remote View tools could not be installed. The agent install continues."
+      info "Install them by hand, then open Remote View again."
       VNC_PREREQS_STATUS="install_failed"
     fi
     rm -f "${VNC_LOG}"
   else
-    info "Skipping desktop prerequisite installation."
-    info "Remote desktop features may be unavailable until x11vnc/Xvfb/xdotool/xmodmap/GStreamer are installed."
+    info "Not installed. Remote View needs them; run the installer again with --install-vnc-prereqs to add them."
     VNC_PREREQS_STATUS="missing_skipped"
   fi
 else
-  success "Desktop prerequisites available (x11vnc + Xvfb + xterm + xdotool + xmodmap + GStreamer)"
+  success "Remote View tools found (x11vnc, Xvfb, xdotool, xmodmap and GStreamer)"
   VNC_PREREQS_STATUS="available"
 fi
 
 # ── Arch detection ─────────────────────────────────────────────────────────
-step 3 "Detecting platform"
+step 3 "Checking the CPU architecture"
 
 MACHINE="$(uname -m)"
 case "${MACHINE}" in
@@ -83,13 +81,12 @@ success "Architecture: ${ARCH}"
 
 # ── Stop existing agent (reinstall) ────────────────────────────────────────
 if systemctl is-active --quiet "${SERVICE_NAME}" 2>/dev/null; then
-  info "Stopping existing agent service..."
   systemctl stop "${SERVICE_NAME}"
-  success "Existing agent stopped"
+  success "Stopped the running agent to replace it"
 fi
 
 # ── Download binary ────────────────────────────────────────────────────────
-step 4 "Downloading agent"
+step 4 "Downloading the agent"
 
 BINARY_URL="${HUB_URL}/api/v1/agent/binary?arch=${ARCH}"
 TMP_BINARY="$(mktemp)"
@@ -101,22 +98,21 @@ if [[ "${DOWNLOADER}" == "curl" ]]; then
   else
     curl -fsSL --output "${TMP_BINARY}" "${BINARY_URL}" &
   fi
-  spin $! "Downloading labtether-agent..."
+  spin $! "Downloading labtether-agent"
 else
   if [[ "${#WGET_TLS_ARGS[@]}" -gt 0 ]]; then
     wget "${WGET_TLS_ARGS[@]}" -q -O "${TMP_BINARY}" "${BINARY_URL}" &
   else
     wget -q -O "${TMP_BINARY}" "${BINARY_URL}" &
   fi
-  spin $! "Downloading labtether-agent..."
+  spin $! "Downloading labtether-agent"
 fi
 if ! wait $! 2>/dev/null; then
-  error "Download failed from ${BINARY_URL}"
+  error "Could not download the agent from ${HUB_URL}."
   exit 1
 fi
 
 # ── Verify checksum ───────────────────────────────────────────────────────
-info "Verifying binary integrity"
 
 RELEASE_URL="${HUB_URL}/api/v1/agent/releases/latest?arch=${ARCH}"
 if [[ "${DOWNLOADER}" == "curl" ]]; then
@@ -134,12 +130,12 @@ else
 fi
 
 if [[ -z "${RELEASE_JSON}" ]]; then
-  error "Could not fetch release metadata; refusing an unverified install."
+  error "Could not get the agent checksum from the Hub, so the agent was not installed."
   exit 1
 fi
 EXPECTED_SHA256=$(echo "${RELEASE_JSON}" | grep -o '"sha256":"[^"]*"' | head -1 | cut -d'"' -f4)
 if [[ ! "${EXPECTED_SHA256}" =~ ^[a-f0-9]{64}$ ]]; then
-  error "Release metadata did not contain a valid SHA256; refusing an unverified install."
+  error "The Hub sent no valid SHA256 checksum, so the agent was not installed."
   exit 1
 fi
 ACTUAL_SHA256=$(sha256sum "${TMP_BINARY}" 2>/dev/null | awk '{print $1}')
@@ -147,19 +143,21 @@ if [[ -z "${ACTUAL_SHA256}" ]]; then
   ACTUAL_SHA256=$(shasum -a 256 "${TMP_BINARY}" 2>/dev/null | awk '{print $1}')
 fi
 if [[ "${ACTUAL_SHA256}" != "${EXPECTED_SHA256}" ]]; then
-  error "SHA256 mismatch! Expected: ${EXPECTED_SHA256}, Got: ${ACTUAL_SHA256}"
+  error "The download does not match its SHA256 checksum, so the agent was not installed."
+  info "Expected ${EXPECTED_SHA256}"
+  info "Got      ${ACTUAL_SHA256}"
   rm -f "${TMP_BINARY}"
   exit 1
 fi
-success "SHA256 verified"
+success "SHA256 checksum matches"
 
 chmod 755 "${TMP_BINARY}"
 mv "${TMP_BINARY}" "${BINARY_DEST}"
 trap - EXIT
-success "Installed ${SYM_ARROW} ${BINARY_DEST}"
+success "Agent saved to ${BINARY_DEST}"
 
 # ── Configuration ──────────────────────────────────────────────────────────
-step 5 "Configuring"
+step 5 "Setting up the service"
 
 mkdir -p "${CONFIG_DIR}"
 chmod 750 "${CONFIG_DIR}"
@@ -209,7 +207,7 @@ case "${WS_URL}" in
     ;;
 esac
 chmod 600 "${ENV_FILE}"
-success "Environment ${SYM_ARROW} ${ENV_FILE}"
+success "Settings saved to ${ENV_FILE}"
 
 LABTETHER_WRAPPER_INSTALLED=0
 INSTALL_LABTETHER_WRAPPER=1
@@ -218,8 +216,8 @@ if [[ -e "${LABTETHER_CLI_DEST}" ]]; then
     INSTALL_LABTETHER_WRAPPER=1
   else
     INSTALL_LABTETHER_WRAPPER=0
-    warn "Skipping CLI helper install: ${LABTETHER_CLI_DEST} already exists."
-    info "Use --uninstall/--purge or systemctl commands for removal."
+    warn "${LABTETHER_CLI_DEST} already exists, so the labtether command was not installed."
+    info "To remove the agent later, run this installer with --uninstall."
   fi
 fi
 
@@ -354,7 +352,7 @@ esac
 WRAPPER
   chmod 755 "${LABTETHER_CLI_DEST}"
   LABTETHER_WRAPPER_INSTALLED=1
-  success "CLI helper ${SYM_ARROW} ${LABTETHER_CLI_DEST}"
+  success "labtether command saved to ${LABTETHER_CLI_DEST}"
 fi
 
 if [[ "${DOCKER_ENABLED}" != "false" ]]; then
@@ -365,23 +363,19 @@ if [[ "${DOCKER_ENABLED}" != "false" ]]; then
     DOCKER_LOCAL_SOCKET="${DOCKER_ENDPOINT#unix://}"
   fi
   if [[ -n "${DOCKER_LOCAL_SOCKET}" && ! -S "${DOCKER_LOCAL_SOCKET}" ]]; then
-    warn "Docker socket not found at ${DOCKER_LOCAL_SOCKET}"
-    info "Agent will install, but Docker integration may be unavailable."
+    warn "No Docker socket at ${DOCKER_LOCAL_SOCKET}"
   fi
 fi
 
 # If a new enrollment token is provided, force a fresh enrollment by clearing
 # any persisted per-agent token from previous hubs/installations.
 if [[ -n "${ENROLLMENT_TOKEN}" && -f "${TOKEN_FILE}" ]]; then
-  info "Enrollment token provided; removing existing persisted token to force re-enrollment."
   rm -f "${TOKEN_FILE}"
+  success "Old agent token removed; the agent enrolls again with the new token"
 fi
 
-# Preserve existing agent token by default so reinstalling against the same hub
-# does not require re-approval.
-if [[ ! -f "${TOKEN_FILE}" ]]; then
-  info "New agent token will be generated on first run."
-fi
+# An existing agent token is kept, so reinstalling against the same hub does
+# not require re-approval. Without one, the agent creates it on first start.
 
 # ── Systemd service ────────────────────────────────────────────────────────
 cat > "${SERVICE_FILE}" <<'UNIT'
@@ -411,7 +405,7 @@ UNIT
 
 systemctl daemon-reload
 systemctl enable --now "${SERVICE_NAME}"
-success "Systemd service enabled and started"
+success "Service ${SERVICE_NAME} started and enabled at boot"
 
 `
 }

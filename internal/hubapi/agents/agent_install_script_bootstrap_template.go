@@ -20,8 +20,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
+if [[ -t 1 ]]; then
+  SYM_OK='✓' SYM_ERR='✗' SYM_WARN='!'
+else
+  SYM_OK='[ok]' SYM_ERR='[err]' SYM_WARN='[!!]'
+fi
+
 if [[ "${EUID}" -ne 0 ]]; then
-  echo "Error: this script must be run as root (use sudo)." >&2
+  echo "  ${SYM_ERR} Run this script as root, for example with sudo." >&2
   exit 1
 fi
 
@@ -31,7 +37,7 @@ if command -v curl >/dev/null 2>&1; then
 elif command -v wget >/dev/null 2>&1; then
   DOWNLOAD_TOOL="wget"
 else
-  echo "Error: curl or wget is required." >&2
+  echo "  ${SYM_ERR} curl or wget is required." >&2
   exit 1
 fi
 
@@ -55,11 +61,12 @@ download_with_ca() {
   fi
 }
 
-echo "Downloading LabTether CA certificate..."
+echo ""
+echo "Checking the Hub certificate"
 download_insecure "${HUB_URL}/api/v1/ca.crt" "${TMP_CA}"
 
 if ! command -v openssl >/dev/null 2>&1; then
-  echo "Error: openssl is required for CA fingerprint verification." >&2
+  echo "  ${SYM_ERR} openssl is required to check the Hub CA fingerprint." >&2
   exit 1
 fi
 
@@ -68,21 +75,21 @@ if command -v sha256sum >/dev/null 2>&1; then
 elif command -v shasum >/dev/null 2>&1; then
   ACTUAL_CA_FINGERPRINT="$(openssl x509 -in "${TMP_CA}" -outform DER | shasum -a 256 | awk '{print $1}')"
 else
-  echo "Error: sha256sum or shasum is required for CA fingerprint verification." >&2
+  echo "  ${SYM_ERR} sha256sum or shasum is required to check the Hub CA fingerprint." >&2
   exit 1
 fi
 
 ACTUAL_CA_FINGERPRINT="${ACTUAL_CA_FINGERPRINT,,}"
 if [[ "${ACTUAL_CA_FINGERPRINT}" != "${EXPECTED_CA_FINGERPRINT}" ]]; then
-  echo "Error: hub CA fingerprint mismatch." >&2
-  echo "Expected: ${EXPECTED_CA_FINGERPRINT}" >&2
-  echo "Actual:   ${ACTUAL_CA_FINGERPRINT}" >&2
+  echo "  ${SYM_ERR} The Hub CA fingerprint does not match, so nothing was installed." >&2
+  echo "    Expected ${EXPECTED_CA_FINGERPRINT}" >&2
+  echo "    Got      ${ACTUAL_CA_FINGERPRINT}" >&2
   exit 1
 fi
 
 install -d -m 0755 /etc/labtether
 install -m 0644 "${TMP_CA}" "${CA_DEST}"
-echo "Saved CA certificate to ${CA_DEST}"
+echo "  ${SYM_OK} Hub CA fingerprint matches; saved to ${CA_DEST}"
 
 # The agent and installer trust ${CA_DEST} directly, so the hub CA is not
 # added to the system trust store. Remove a copy an older bootstrap added,
@@ -99,7 +106,7 @@ for anchor in /usr/local/share/ca-certificates/labtether-ca.crt /etc/pki/ca-trus
     rm -f "${anchor}"
     SYSTEM_CA_REMOVED=1
   else
-    echo "Kept ${anchor}: it is not a LabTether CA certificate." >&2
+    echo "  ${SYM_WARN} Kept ${anchor}: it is not a LabTether CA certificate." >&2
   fi
 done
 if [[ "${SYSTEM_CA_REMOVED}" -eq 1 ]]; then
@@ -109,14 +116,13 @@ if [[ "${SYSTEM_CA_REMOVED}" -eq 1 ]]; then
   if command -v update-ca-trust >/dev/null 2>&1; then
     update-ca-trust extract
   fi
-  echo "Removed the hub CA from the system trust store"
+  echo "  ${SYM_OK} Removed the Hub CA from the system trust store; the agent uses ${CA_DEST}"
 fi
 
-echo "Downloading trusted installer..."
 download_with_ca "${HUB_URL}/install.sh" "${TMP_INSTALL}"
 chmod 755 "${TMP_INSTALL}"
+echo "  ${SYM_OK} Installer downloaded using the Hub CA"
 
-echo "Running installer with pinned CA trust..."
 bash "${TMP_INSTALL}" --tls-ca-file "${CA_DEST}" "$@"
 
 `
