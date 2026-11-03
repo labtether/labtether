@@ -2,15 +2,9 @@ package persistence
 
 import (
 	"encoding/json"
-	"strings"
 
 	"github.com/labtether/labtether/internal/audit"
 )
-
-// auditTargetNameKey stores an event's TargetName inside its details JSON,
-// so the name needs no new column (2.0 keeps the 1.7.1 schema). Reads move
-// it back to TargetName and out of Details.
-const auditTargetNameKey = "target_name"
 
 // auditDetailsWithTargetNameSQL is the details value an audit insert stores
 // ($2 type, $4 target, $9 details). When the writer gave no name and the
@@ -36,20 +30,15 @@ const auditDetailsWithTargetNameSQL = `CASE
 END`
 
 func marshalAuditDetails(event audit.Event) ([]byte, error) {
-	name := strings.TrimSpace(event.TargetName)
-	if event.Details == nil && name == "" {
+	details := event.DetailsWithTargetName()
+	if details == nil {
 		return []byte("{}"), nil
-	}
-	details := make(map[string]any, len(event.Details)+1)
-	for key, value := range event.Details {
-		details[key] = value
-	}
-	if name != "" {
-		details[auditTargetNameKey] = name
 	}
 	return json.Marshal(details)
 }
 
+// unmarshalAuditDetails reads stored details and fills TargetName from them;
+// the name stays in Details, where API clients read it.
 func unmarshalAuditDetails(event *audit.Event, payload []byte) {
 	if len(payload) == 0 {
 		return
@@ -58,9 +47,8 @@ func unmarshalAuditDetails(event *audit.Event, payload []byte) {
 	if err := json.Unmarshal(payload, &mapped); err != nil {
 		return
 	}
-	if name, ok := mapped[auditTargetNameKey].(string); ok {
+	if name, ok := mapped[audit.TargetNameKey].(string); ok {
 		event.TargetName = name
-		delete(mapped, auditTargetNameKey)
 	}
 	event.Details = mapped
 }

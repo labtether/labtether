@@ -91,7 +91,7 @@ v1.7.1.
   removes them.
 - Audit rows keep the name of what changed (device, webhook, user, API key,
   saved login, notification channel, schedule, update plan) in
-  `target_name`, so a row can say which webhook was deleted after it is
+  `details.target_name`, so a row can say which webhook was deleted after it is
   gone. Removing a device through the console now writes a "Removed a
   device" row, and a refused removal no longer writes one.
 

@@ -13,7 +13,7 @@ import (
 // Audit rows named the changed object only by ID ("Deleted a webhook
 // wh_1793…"). A row keeps the name its writer gave, a row about an object
 // that still exists gets that object's name from the store, and the name
-// comes back as target_name rather than inside details.
+// is served as details.target_name, which the console reads.
 func TestPostgresAuditRowsKeepTheChangedObjectsName(t *testing.T) {
 	s := newTestPostgresStore(t)
 	suffix := time.Now().UTC().UnixNano()
@@ -50,10 +50,10 @@ func TestPostgresAuditRowsKeepTheChangedObjectsName(t *testing.T) {
 	for _, event := range listed {
 		got[event.ID] = event
 	}
-	if e := got[ids["given"]]; e.TargetName != "nightly" || e.Details["target_name"] != nil || e.Details["events"] != "alert.fired" {
+	if e := got[ids["given"]]; e.TargetName != "nightly" || e.Details["target_name"] != "nightly" || e.Details["events"] != "alert.fired" {
 		t.Fatalf("named row = name %q details %v, want nightly with details intact", e.TargetName, e.Details)
 	}
-	if e := got[ids["lookup"]]; e.TargetName != "nas01" {
+	if e := got[ids["lookup"]]; e.TargetName != "nas01" || e.Details["target_name"] != "nas01" {
 		t.Fatalf("row about an existing device has name %q, want nas01", e.TargetName)
 	}
 	if e := got[ids["unknown"]]; e.TargetName != "" {
