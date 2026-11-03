@@ -32,7 +32,7 @@ if [[ "${DOCKER_WIZARD}" -eq 1 ]]; then
       FILES_ROOT_MODE_SET=1
     fi
   else
-    warn "--docker-wizard requested without TTY; using provided/default Docker settings."
+    warn "--docker-wizard needs a terminal to ask on; using the Docker settings given or the defaults."
   fi
 fi
 
@@ -106,17 +106,17 @@ if [[ -n "${TLS_CA_FILE}" && "${TLS_CA_FILE}" != /* ]]; then
   exit 1
 fi
 
-# ── Preflight checks ───────────────────────────────────────────────────────
-step 1 "Preflight checks"
+# ── Requirements ───────────────────────────────────────────────────────────
+step 1 "Checking requirements"
 
 if [[ "${EUID}" -ne 0 ]]; then
-  error "This script must be run as root."
+  error "Run the installer as root, for example with sudo."
   exit 1
 fi
 success "Running as root"
 
 if ! command -v systemctl &>/dev/null; then
-  error "systemd is required but not found."
+  error "systemd is required and was not found."
   exit 1
 fi
 success "systemd available"
@@ -130,7 +130,7 @@ else
   error "curl or wget is required to download the agent binary."
   exit 1
 fi
-success "Downloader: ${DOWNLOADER}"
+success "Downloads use ${DOWNLOADER}"
 
 if [[ -n "${TLS_CA_FILE}" && ! -f "${TLS_CA_FILE}" ]]; then
   error "--tls-ca-file does not exist: ${TLS_CA_FILE}"
@@ -138,11 +138,11 @@ if [[ -n "${TLS_CA_FILE}" && ! -f "${TLS_CA_FILE}" ]]; then
 fi
 
 if [[ "${TLS_SKIP_VERIFY}" == "true" ]]; then
-  warn "TLS verification is disabled for install downloads"
+  warn "TLS verification is off for these downloads (--tls-skip-verify)"
 elif [[ -n "${TLS_CA_FILE}" ]]; then
-  success "TLS CA: ${TLS_CA_FILE}"
+  success "TLS verified with ${TLS_CA_FILE}"
 else
-  success "TLS verification enabled"
+  success "TLS verification on"
 fi
 
 CURL_TLS_ARGS=()
@@ -197,8 +197,8 @@ install_vnc_prereqs() {
       gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav
     return 0
   fi
-  error "No supported package manager detected for automatic desktop prerequisite installation."
-  info "Install manually: x11vnc + Xvfb + xterm + xdotool + xmodmap + GStreamer, then reconnect desktop from LabTether."
+  error "No supported package manager found to install the Remote View tools."
+  info "Install x11vnc, Xvfb, xterm, xdotool, xmodmap and GStreamer, then open Remote View again."
   return 1
 }
 
