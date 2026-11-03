@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import en from "../../../../../messages/en/audit-log.json";
-import { actionKey, auditRows, humanizeType, KNOWN_ACTIONS, outcome, peopleByActivity, type AuditEntry } from "../auditModel";
+import { actionKey, ALL_REQUESTS, auditRows, detailRows, humanizeType, KNOWN_ACTIONS, outcome, peopleByActivity, targetText, type AuditEntry } from "../auditModel";
 
 // Risks: a refused attempt does not read "Denied", the person chips miss or misorder people, a filter hides the
 // entries it should keep, or an unknown event shows as a raw code.
@@ -52,5 +52,22 @@ describe("auditModel", () => {
     expect(auditRows(list, { ...base, type: "terminal.session.created" }).map((e) => e.id)).toEqual(["2", "1"]);
     expect(auditRows(list, { ...base, query: "WEBHOOK" }).map((e) => e.id)).toEqual(["3"]);
     expect(auditRows(list, { ...base, sort: "who:asc" }).map((e) => e.id)).toEqual(["3", "1", "2"]);
+  });
+
+  // Risk: the log fills with "API request POST /…" rows that repeat each change, or shows IDs where the Hub has a name.
+  it("keeps API requests out until All requests is picked", () => {
+    const list = [entry("1", "usr-1", "webhook.deleted", 1), entry("2", "usr-1", "api.request", 1)];
+    const base = { query: "", who: "all", type: "all", sort: "time:desc" as const, nameOf, textOf };
+    expect(auditRows(list, base).map((e) => e.id)).toEqual(["1"]);
+    expect(auditRows(list, { ...base, type: ALL_REQUESTS }).map((e) => e.id).sort()).toEqual(["1", "2"]);
+    expect(auditRows(list, { ...base, type: "api.request" }).map((e) => e.id)).toEqual(["2"]);
+  });
+
+  it("shows the name the Hub stored, else the ID, and does not repeat the name in the details", () => {
+    const named = { ...entry("1", "usr-1", "webhook.deleted", 1), target: "wh_1793", details: { target_name: "ltqa-hook", url: "https://hooks.example.com" } };
+    expect(targetText(named)).toBe("ltqa-hook");
+    expect(targetText({ ...named, details: { target_name: "  " } })).toBe("wh_1793");
+    expect(targetText({ target: "wh_1793" })).toBe("wh_1793");
+    expect(detailRows(named)).toEqual([["url", "https://hooks.example.com"]]);
   });
 });

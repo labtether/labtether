@@ -3,7 +3,7 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { Copy, MoreHorizontal, PanelTopOpen } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { detailRows, outcome, type AuditEntry } from "./auditModel";
+import { detailRows, outcome, targetText, type AuditEntry } from "./auditModel";
 
 export type AuditText = {
   time: (e: AuditEntry) => string;
@@ -31,12 +31,13 @@ export function AuditRow({
   const time = text.time(entry);
   const who = text.who(entry);
   const action = text.action(entry);
-  const line = [time, who, result ? `${t(`outcome.${result}`)}:` : "", action, entry.target ?? ""].filter(Boolean).join(" ");
+  const target = targetText(entry);
+  const line = [time, who, result ? `${t(`outcome.${result}`)}:` : "", action, target].filter(Boolean).join(" ");
   const what = (
     <>
       {result ? <span className={`lg-au-res ${result}`}>{t(`outcome.${result}`)}</span> : null}
       <span className="lg-au-act">{action}</span>
-      {entry.target ? <span className="lg-au-tg">{entry.target}</span> : null}
+      {target ? <span className="lg-au-tg">{target}</span> : null}
     </>
   );
   return (
