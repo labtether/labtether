@@ -98,6 +98,9 @@ v1.7.1.
 
 ### Fixed
 
+- The terminal's own connection steps and errors ("Opening secure stream…",
+  "The connection closed unexpectedly.", "Session ended") are in your
+  language.
 - Add device follows the console language (English, German, French, Spanish
   and Chinese) and uses plain, sentence-case labels in every setup step, its
   checks and its sync messages. It was English only, partly in Title Case.

@@ -42,6 +42,8 @@ export type TerminalClipboardActionResult =
 type XTerminalProps = {
   /** WebSocket URL to connect to for the SSH session */
   wsUrl: string | null;
+  /** The line written when the stream closes, in the person's language. */
+  endedText?: string;
   /** Called when the WebSocket connection opens */
   onConnected?: () => void;
   /** Called when the WebSocket connection closes or errors */
@@ -100,6 +102,7 @@ const STREAM_OPEN_TIMEOUT_MS = 45_000;
 const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XTerminal(
   {
     wsUrl,
+    endedText,
     onConnected,
     onDisconnected,
     onError,
@@ -124,6 +127,8 @@ const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XTerminal
 
   // Store callbacks in refs so the terminal effect never needs them as deps.
   // This prevents the terminal from being torn down on every parent re-render.
+  const endedTextRef = useRef(endedText);
+  endedTextRef.current = endedText;
   const onConnectedRef = useRef(onConnected);
   const onDisconnectedRef = useRef(onDisconnected);
   const onErrorRef = useRef(onError);
@@ -421,7 +426,7 @@ const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XTerminal
         socketRef.current = null;
         const reason = event.reason || (event.code !== 1000 ? "The connection closed unexpectedly" : undefined);
         onDisconnectedRef.current?.(reason);
-        term.write("\r\n\x1b[90m--- Session ended ---\x1b[0m\r\n");
+        term.write(`\r\n\x1b[90m--- ${endedTextRef.current ?? "Session ended"} ---\x1b[0m\r\n`);
       };
 
       // Forward terminal input to WebSocket
