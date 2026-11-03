@@ -163,6 +163,14 @@ v1.7.1.
   "cannot bind connector action target".
 - `/api-docs` without a language in the address opens the API docs instead of
   an "unauthorized" error.
+- `scripts/db-backup.sh` and `scripts/db-restore.sh` work with the Compose
+  stack, which publishes no Postgres port: with `--install-dir <folder>` (a
+  release install) or `--compose` (a checkout's deploy stack) they run
+  `pg_dump` and `psql` inside the postgres container. The restore stops the
+  Hub, replaces the database with an empty one, loads the backup and starts
+  the Hub again, so it works on a Hub that already has data. Before, both
+  needed a reachable `DATABASE_URL`, and a restore stopped at the first
+  existing table.
 - Settings › Security › API keys says "Expired" for a key past its expiry.
   It showed only the past time. The plain-HTTP note on a file connection no
   longer names version 1.7.1.
