@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 
-import { credentialKindLabels } from "../../../../components/credentials/CredentialProfileSelect";
+import { useCredentialKindLabel } from "../../../../components/credentials/CredentialProfileSelect";
 import { Button } from "../../../../components/ui/Button";
 import { type CredentialProfile, useCredentialProfiles } from "../../../../hooks/useCredentialProfiles";
 import { CreateCredentialDialog, DeleteCredentialDialog, RotateCredentialDialog } from "./CredentialProfileDialogs";
@@ -19,6 +19,7 @@ import { formatWhen } from "./settingsModel";
 export function CredentialProfilesCard() {
   const t = useTranslations("security");
   const locale = useLocale();
+  const kindLabel = useCredentialKindLabel();
   const inventory = useCredentialProfiles();
   const [createOpen, setCreateOpen] = useState(false);
   const [rotateProfile, setRotateProfile] = useState<CredentialProfile | null>(null);
@@ -50,7 +51,7 @@ export function CredentialProfilesCard() {
         <ul aria-label={t("logins.title")}>
           {inventory.profiles.map((profile) => {
             const protectedIdentity = profile.kind === "hub_ssh_identity";
-            const kind = credentialKindLabels[profile.kind] ?? profile.kind;
+            const kind = kindLabel(profile.kind);
             return (
               <li key={profile.id} className="st-row st-lg">
                 <div className="st-row-l">

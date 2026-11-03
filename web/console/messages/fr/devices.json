@@ -647,7 +647,7 @@
       "hostPlaceholder": "Adresse de l’appareil",
       "port": "Port",
       "username": "Nom d’utilisateur",
-      "credential": "Profil d’identifiants",
+      "credential": "Identifiant enregistré",
       "credentialHint": "Vide utilise l’identifiant par défaut de cet appareil.",
       "strictHostKey": "Vérifier la clé d’hôte",
       "hostKey": "Clé d’hôte",

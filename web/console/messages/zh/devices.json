@@ -647,7 +647,7 @@
       "hostPlaceholder": "设备地址",
       "port": "端口",
       "username": "用户名",
-      "credential": "凭据配置",
+      "credential": "已保存的登录凭据",
       "credentialHint": "留空则使用此设备的默认登录。",
       "strictHostKey": "检查主机密钥",
       "hostKey": "主机密钥",

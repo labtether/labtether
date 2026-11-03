@@ -647,7 +647,7 @@
       "hostPlaceholder": "Dirección del dispositivo",
       "port": "Puerto",
       "username": "Usuario",
-      "credential": "Perfil de credenciales",
+      "credential": "Inicio de sesión guardado",
       "credentialHint": "Vacío usa el acceso predeterminado de este dispositivo.",
       "strictHostKey": "Comprobar la clave del host",
       "hostKey": "Clave del host",

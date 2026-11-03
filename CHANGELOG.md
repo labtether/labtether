@@ -98,6 +98,9 @@ v1.7.1.
 
 ### Fixed
 
+- Security › Saved logins: the Add login, Rotate and Delete dialogs, login
+  types and the saved login picker are in your language, and their errors
+  name what happened without internal words.
 - The terminal's own connection steps and errors ("Opening secure stream…",
   "The connection closed unexpectedly.", "Session ended") are in your
   language.
