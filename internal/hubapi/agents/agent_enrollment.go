@@ -59,8 +59,9 @@ type PendingAgentInfo struct {
 
 // PendingAgents is a thread-safe in-memory registry of pending enrollment agents.
 type PendingAgents struct {
-	mu     sync.RWMutex
-	agents map[string]*PendingAgent
+	mu       sync.RWMutex
+	agents   map[string]*PendingAgent
+	rejected rejectedPendingDevices
 }
 
 type PendingDecisionClaim struct {
@@ -115,6 +116,10 @@ func (d *Deps) HandlePendingEnrollment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !d.EnforceRateLimit(w, r, "agent.enrollment.pending", 20, time.Minute) {
+		return
+	}
+	if d.PendingAgents.rejected.has(deviceFingerprint, hostname) {
+		servicehttp.WriteError(w, http.StatusForbidden, refusalRejectedPending)
 		return
 	}
 	if d.PendingAgents.Count() >= maxPendingEnrollmentAgents {
@@ -340,7 +345,7 @@ func (d *Deps) HandleApproveAgent(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Printf("enrollment: failed to prepare agent token for %s: %v", stableAssetID, err) // #nosec G706 -- Asset IDs are hub-generated identifiers.
 		if errors.Is(err, persistence.ErrAgentApprovalAssetConflict) {
-			servicehttp.WriteError(w, http.StatusConflict, "an enrolled asset already uses this hostname; use identity recovery instead")
+			servicehttp.WriteError(w, http.StatusConflict, refusalApproveNameUsed)
 			return
 		}
 		if errors.Is(err, persistence.ErrAgentIdentityRetired) {
@@ -452,10 +457,14 @@ func (d *Deps) HandleRejectAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Send rejection message before closing the connection.
+	// Remembered first, so the agent cannot ask again before this finishes.
+	// The socket closes after CompleteDecision: closing it while sending let
+	// the disconnect remove the session first, and Reject answered 409 after
+	// the rejection went through.
+	d.PendingAgents.rejected.remember(claim.Info.DeviceFingerprint, claim.Info.Hostname)
 	if err := SendPendingEnrollmentClaimDecision(claim, agentmgr.MsgEnrollmentRejected, agentmgr.EnrollmentRejectedData{
-		Reason: "rejected by operator",
-	}, "enrollment rejected"); err != nil {
+		Reason: refusalAdminRejected,
+	}, ""); err != nil {
 		if !d.PendingAgents.ReleaseDecision(claim) {
 			log.Printf("enrollment: lost pending decision ownership after rejection delivery failure asset_id=%s", assetID) // #nosec G706 -- Asset IDs are hub-generated identifiers.
 		}
@@ -466,8 +475,9 @@ func (d *Deps) HandleRejectAgent(w http.ResponseWriter, r *http.Request) {
 
 	if !d.PendingAgents.CompleteDecision(claim) {
 		log.Printf("enrollment: rejection delivered after pending session ownership was lost asset_id=%s", assetID) // #nosec G706 -- Asset IDs are hub-generated identifiers.
-		servicehttp.WriteError(w, http.StatusConflict, "pending session ended during rejection")
-		return
+	}
+	if err := ClosePendingEnrollmentClaim(claim, "enrollment rejected"); err != nil {
+		log.Printf("enrollment: rejection delivered but pending socket close failed asset_id=%s: %v", assetID, err) // #nosec G706 -- Asset IDs are hub-generated identifiers.
 	}
 	log.Printf("enrollment: rejected pending agent hostname=%s asset_id=%s", claim.Info.Hostname, assetID) // #nosec G706 -- Hostname and asset ID are bounded enrollment fields already persisted by the hub.
 
