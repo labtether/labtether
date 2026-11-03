@@ -98,6 +98,9 @@ v1.7.1.
 
 ### Fixed
 
+- Settings › Audit log hides the "API request" rows that repeat each change
+  (pick "All requests" to see them) and names the object a row is about when
+  the Hub stored its name, instead of its ID.
 - Settings › Security › Saved logins lists the saved logins, and the login
   pickers for terminals, remote view and file connections offer them. With a
   real Hub the list showed "Credential profile response was invalid".

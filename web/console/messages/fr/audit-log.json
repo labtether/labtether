@@ -8,6 +8,7 @@
   "filter": "Filtrer par personne ou action",
   "all": "Tous",
   "allActions": "Toutes les actions",
+  "allRequests": "Toutes les requêtes",
   "cols": {
     "time": "Heure",
     "person": "Personne",

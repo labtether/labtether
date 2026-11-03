@@ -8,6 +8,7 @@
   "filter": "按人员或操作筛选",
   "all": "全部",
   "allActions": "所有操作",
+  "allRequests": "所有请求",
   "cols": {
     "time": "时间",
     "person": "人员",
