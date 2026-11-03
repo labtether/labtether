@@ -21,7 +21,7 @@ function runPasted(command: string) {
   return spawnSync("/bin/sh", ["-c", command], {
     cwd: dir,
     input: "lt-enroll-token-123\n",
-    env: { PATH: `${path.join(dir, "bin")}:${process.env.PATH}`, OUT: path.join(dir, "out"), HOME: dir },
+    env: { ...process.env, PATH: `${path.join(dir, "bin")}:${process.env.PATH}`, OUT: path.join(dir, "out"), HOME: dir },
     encoding: "utf8",
     timeout: 20_000,
   });
