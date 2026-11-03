@@ -98,6 +98,9 @@ v1.7.1.
 
 ### Fixed
 
+- The terminal's own connection steps and errors ("Opening secure stream…",
+  "The connection closed unexpectedly.", "Session ended") are in your
+  language.
 - Add device follows the console language (English, German, French, Spanish
   and Chinese) and uses plain, sentence-case labels in every setup step, its
   checks and its sync messages. It was English only, partly in Title Case.
@@ -111,6 +114,11 @@ v1.7.1.
   ("/etc is outside the folder this device shares (/root).") and keeps the
   open folder. Before, Files stayed put with no message, and a device's Files
   tab emptied the list and showed the agent's English refusal.
+- New schedule: picking Custom after a preset starts from the preset's line in
+  your time zone (`CRON_TZ=…`), so the schedule keeps its time. Before, Custom
+  started from a UTC line and the next run moved by your UTC offset.
+- Security › Saved logins: the metadata field sits under Advanced in Add
+  login.
 - Settings › Security › Saved logins lists the saved logins, and the login
   pickers for terminals, remote view and file connections offer them. With a
   real Hub the list showed "Credential profile response was invalid".
