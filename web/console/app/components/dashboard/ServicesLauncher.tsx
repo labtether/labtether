@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import type { Asset } from "../../console/models";
 import type { WebService } from "../../hooks/useWebServices";
-import { ServiceIcon } from "../ServiceIcon";
+import { ServiceIcon, serviceIconKey } from "../ServiceIcon";
 
 /** Every web service's icon and name, A–Z, one click from the Dashboard. Two of the same app say which machine each is on. */
 export function ServicesLauncher({ services, assets }: { services: WebService[]; assets: Asset[] }) {
@@ -22,7 +22,7 @@ export function ServicesLauncher({ services, assets }: { services: WebService[];
     <div className="db-apps">
       {list.map(({ s, host, twice }) => (
         <a key={s.id} href={s.url} target="_blank" rel="noopener noreferrer" className={`db-app${s.status === "down" ? " down" : ""}`} title={host ? `${s.name} · ${host}` : s.name}>
-          <ServiceIcon iconKey={s.icon_key} size={20} />
+          <ServiceIcon iconKey={serviceIconKey(s)} size={20} />
           <span className="db-app-n">
             {s.name}
             {twice && host && <small>{host}</small>}

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Link } from "../../../../../i18n/navigation";
-import { ServiceIcon } from "../../../../components/ServiceIcon";
+import { ServiceIcon, serviceIconKey } from "../../../../components/ServiceIcon";
 import type { LogEvent } from "../../../../console/models";
 import type { WebService } from "../../../../hooks/useWebServices";
 import { shortWhen } from "./deviceStatusModel";
@@ -30,7 +30,7 @@ export function DeviceServicesList({ services }: { services: WebService[] }) {
           return (
             <div key={s.id} className="dv-row" role="listitem">
               <span className="dv-lead">{down ? <i className="dv-dot bad" aria-hidden="true" /> : null}</span>
-              <span className="dv-svc-ic"><ServiceIcon iconKey={s.icon_key} size={18} /></span>
+              <span className="dv-svc-ic"><ServiceIcon iconKey={serviceIconKey(s)} size={18} /></span>
               <span className="dv-ln">
                 {web ? <a className="dv-nm" href={s.url} target="_blank" rel="noopener noreferrer">{s.name}</a> : <span className="dv-nm">{s.name}</span>}
                 {down ? <span className="dv-prob bad">{t("down")}</span> : <span className="dv-grey">{address}</span>}
