@@ -28,7 +28,7 @@ func (d *Deps) HandleJournalLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if d.AgentMgr == nil || !d.AgentMgr.IsConnected(assetID) {
-		servicehttp.WriteError(w, http.StatusBadGateway, "agent not connected")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 
