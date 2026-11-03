@@ -2,7 +2,7 @@ package agents
 
 func agentInstallScriptTemplateVerifyAndSummary() string {
 	return `# ── Verify ─────────────────────────────────────────────────────────────────
-step 6 "Verifying"
+step 6 "Checking the agent"
 
 # Ask the agent on the port its service runs with: a unit or drop-in can set
 # AGENT_PORT; the agent's default is 8090.
@@ -24,20 +24,20 @@ AGENT_OK=0
   done
   exit 1
 ) &
-spin $! "Waiting for agent to become ready..."
+spin $! "Waiting for the agent to start"
 if wait $!; then
   AGENT_OK=1
   success "Agent is running"
 else
-  warn "Agent did not respond within 10 seconds"
-  info "Check status with: systemctl status ${SERVICE_NAME}"
+  warn "The agent did not answer within 10 seconds"
+  info "Check it with: systemctl status ${SERVICE_NAME}"
 fi
 
 if [[ "${FORCE_UPDATE}" -eq 1 ]]; then
   FORCE_UPDATE_LOG="$(mktemp "${CONFIG_DIR}/.force-update.XXXXXX")"
   trap 'rm -f -- "${FORCE_UPDATE_LOG}"' EXIT
   chmod 600 "${FORCE_UPDATE_LOG}"
-  info "Force update requested: running self-update check..."
+  info "Checking for an agent update (--force-update)"
   # Use the service's environment so the update sees the same Hub URL, TLS
   # settings and release-signing key. Lines are read as KEY=VALUE, not run.
   FORCE_UPDATE_ENV=()
@@ -50,13 +50,13 @@ if [[ "${FORCE_UPDATE}" -eq 1 ]]; then
     FORCE_UPDATE_ENV+=("${BASH_REMATCH[1]}=${env_value}")
   done < "${ENV_FILE}"
   if env "${FORCE_UPDATE_ENV[@]}" "${BINARY_DEST}" update self --force >"${FORCE_UPDATE_LOG}" 2>&1; then
-    success "Self-update completed"
+    success "Agent update finished"
     if systemctl is-active --quiet "${SERVICE_NAME}" 2>/dev/null; then
       systemctl restart "${SERVICE_NAME}" || true
     fi
   else
-    warn "Self-update failed"
-    info "Output: $(cat "${FORCE_UPDATE_LOG}" 2>/dev/null || true)"
+    warn "Agent update failed:"
+    info "$(cat "${FORCE_UPDATE_LOG}" 2>/dev/null || true)"
   fi
   rm -f -- "${FORCE_UPDATE_LOG}"
   trap - EXIT
@@ -82,99 +82,73 @@ if [[ ! -L "${TOKEN_FILE}" && -f "${TOKEN_FILE}" && -s "${TOKEN_FILE}" && -r "${
 fi
 unset TOKEN_FILE_MODE
 
-DOCKER_STATUS="disabled"
-DOCKER_STATUS_TONE="muted"
+DOCKER_STATUS="off"
 if [[ "${DOCKER_ENABLED}" != "false" ]]; then
   if "${BINARY_DEST}" settings test docker "${DOCKER_ENDPOINT}" >/dev/null 2>&1; then
-    DOCKER_STATUS="${DOCKER_ENABLED} (connected)"
-    DOCKER_STATUS_TONE="success"
+    DOCKER_STATUS="connected"
   else
-    DOCKER_STATUS="${DOCKER_ENABLED} (check endpoint)"
-    DOCKER_STATUS_TONE="warning"
+    DOCKER_STATUS="not reachable at ${DOCKER_ENDPOINT}"
   fi
 fi
 
-# ── Summary ───────────────────────────────────────────────────────────────
-printf "\n"
-init_box_layout
-box_top
-box_title "LabTether Agent" "Installation Complete"
-box_mid
-box_kv_tone "Hostname" "${HOSTNAME_VALUE:-unknown}" accent
-if [[ -n "${DEVICE_FINGERPRINT}" ]]; then
-  box_kv_tone "Fingerprint" "${DEVICE_FINGERPRINT}" accent
-fi
-box_kv "Binary" "${BINARY_DEST}"
-box_kv "Config" "${ENV_FILE}"
-if [[ "${LABTETHER_WRAPPER_INSTALLED}" -eq 1 ]]; then
-  box_kv_tone "CLI helper" "${LABTETHER_CLI_DEST}" accent
-fi
-box_kv_tone "Docker" "${DOCKER_STATUS}" "${DOCKER_STATUS_TONE}"
-box_kv_tone "File scope" "${FILES_ROOT_MODE}" accent
 case "${VNC_PREREQS_STATUS:-unknown}" in
-  available)
-    VNC_STATUS_LABEL="available"
-    VNC_STATUS_TONE="success"
-    ;;
-  installed)
-    VNC_STATUS_LABEL="installed by script"
-    VNC_STATUS_TONE="success"
-    ;;
-  install_failed)
-    VNC_STATUS_LABEL="install failed (manual action needed)"
-    VNC_STATUS_TONE="danger"
-    ;;
-  missing_skipped)
-    VNC_STATUS_LABEL="missing (skipped)"
-    VNC_STATUS_TONE="warning"
-    ;;
-  *)
-    VNC_STATUS_LABEL="unknown"
-    VNC_STATUS_TONE="muted"
-    ;;
+  available) REMOTE_VIEW_STATUS="ready" ;;
+  installed) REMOTE_VIEW_STATUS="tools installed" ;;
+  install_failed) REMOTE_VIEW_STATUS="tools failed to install" ;;
+  missing_skipped) REMOTE_VIEW_STATUS="tools not installed" ;;
+  *) REMOTE_VIEW_STATUS="unknown" ;;
 esac
-box_kv_tone "Desktop prereqs" "${VNC_STATUS_LABEL}" "${VNC_STATUS_TONE}"
+if [[ "${FILES_ROOT_MODE}" == "full" ]]; then
+  FILES_STATUS="all folders"
+else
+  FILES_STATUS="home folders"
+fi
 if [[ "${AUTO_UPDATE}" == "true" ]]; then
-  AUTO_UPDATE_LABEL="true"
-  AUTO_UPDATE_TONE="success"
+  UPDATES_STATUS="automatic"
 else
-  AUTO_UPDATE_LABEL="false"
-  AUTO_UPDATE_TONE="warning"
+  UPDATES_STATUS="off"
 fi
-box_kv_tone "Auto-update" "${AUTO_UPDATE_LABEL}" "${AUTO_UPDATE_TONE}"
 if [[ "${TLS_SKIP_VERIFY}" == "true" ]]; then
-  TLS_VERIFY_LABEL="disabled"
-  TLS_VERIFY_TONE="warning"
+  TLS_STATUS="not verified (--tls-skip-verify)"
+elif [[ -n "${TLS_CA_FILE}" ]]; then
+  TLS_STATUS="verified with ${TLS_CA_FILE}"
 else
-  TLS_VERIFY_LABEL="enabled"
-  TLS_VERIFY_TONE="success"
+  TLS_STATUS="verified"
 fi
-box_kv_tone "TLS verify" "${TLS_VERIFY_LABEL}" "${TLS_VERIFY_TONE}"
-if [[ -n "${TLS_CA_FILE}" ]]; then
-  box_kv_tone "TLS CA" "${TLS_CA_FILE}" accent
+# ── Summary ───────────────────────────────────────────────────────────────
+summary_row() {
+  printf "  %%-12s %%s\n" "$1" "$2"
+}
+
+DEVICE_NAME="${HOSTNAME_VALUE:-this device}"
+if [[ "${AGENT_OK}" -eq 1 ]]; then
+  printf "\nLabTether agent installed on %%s and running.\n" "${DEVICE_NAME}"
+else
+  printf "\nLabTether agent installed on %%s. It is not answering yet.\n" "${DEVICE_NAME}"
 fi
-if [[ "${FORCE_UPDATE}" -eq 1 ]]; then
-  box_kv_tone "Force update" "enabled" success
-fi
-box_mid
+summary_row "Agent" "${BINARY_DEST}"
+summary_row "Settings" "${ENV_FILE}"
 if [[ -n "${DEVICE_FINGERPRINT}" ]]; then
-  box_line_tone "warning" "Verify this fingerprint in LabTether before approving this agent."
+  summary_row "Fingerprint" "${DEVICE_FINGERPRINT}"
 fi
-if [[ -n "${ENROLLMENT_TOKEN}" ]]; then
-  box_line_tone "success" "${SYM_OK} Auto-enrollment configured"
-  box_line_tone "muted" "The agent will connect to LabTether automatically."
-elif [[ "${PERSISTED_AGENT_TOKEN}" -eq 1 ]]; then
-  box_line_tone "success" "${SYM_OK} Existing agent approval preserved"
-  box_line_tone "muted" "The agent is reconnecting to LabTether."
-else
-  box_line_tone "warning" "${SYM_WARN} Awaiting approval in LabTether console"
-fi
-box_bottom
-printf "\n"
-info "Tip: configure Add Device ${SYM_ARROW} Docker in the LabTether UI to"
-info "surface Docker containers/stacks in the dashboard."
+summary_row "Docker" "${DOCKER_STATUS}"
+summary_row "Remote View" "${REMOTE_VIEW_STATUS}"
+summary_row "Files" "${FILES_STATUS}"
+summary_row "Updates" "${UPDATES_STATUS}"
+summary_row "TLS" "${TLS_STATUS}"
 if [[ "${LABTETHER_WRAPPER_INSTALLED}" -eq 1 ]]; then
-  info "Agent lifecycle helper: sudo labtether agent uninstall (or purge)."
+  summary_row "Uninstall" "sudo labtether agent uninstall"
+fi
+printf "\n"
+if [[ -n "${ENROLLMENT_TOKEN}" ]]; then
+  success "Enrollment token saved. The agent uses it to join LabTether; no approval needed."
+elif [[ "${PERSISTED_AGENT_TOKEN}" -eq 1 ]]; then
+  success "Existing approval kept. The agent is reconnecting to LabTether."
+else
+  warn "Waiting for approval. In LabTether, open Devices and approve ${DEVICE_NAME}."
+  if [[ -n "${DEVICE_FINGERPRINT}" ]]; then
+    info "Approve it only if LabTether shows the fingerprint above."
+  fi
 fi
 printf "\n"
 

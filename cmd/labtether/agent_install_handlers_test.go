@@ -388,15 +388,14 @@ func TestGenerateInstallScript(t *testing.T) {
 		{"forced update command", "update self --force"},
 		{"preserve agent token", "agent-token"},
 		{"docker connectivity check", "connected"},
-		{"docker ui tip", "configure Add Device"},
 		{"purge cleanup message", "uninstalled and purged"},
 		{"systemd unit description", "LabTether Agent"},
 		{"systemd protect system off", "ProtectSystem=off"},
 		{"systemd enable", "systemctl enable --now"},
 		{"daemon-reload", "daemon-reload"},
 		{"status check", "/agent/status"},
-		{"fingerprint verify message", "Verify this fingerprint in LabTether before approving"},
-		{"success message", "Auto-enrollment configured"},
+		{"fingerprint verify message", "Approve it only if LabTether shows the fingerprint"},
+		{"enrollment token message", "Enrollment token saved"},
 	}
 
 	for _, c := range checks {
