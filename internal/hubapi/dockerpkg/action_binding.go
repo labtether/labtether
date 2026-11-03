@@ -119,6 +119,9 @@ func (d *Deps) resolveActionOwner(ctx context.Context, actionID, logicalTarget s
 	}
 	actionID = modelmap.ResolveActionID(actionID, logicalTarget, d.DockerCoordinator.Actions())
 	target, err := d.DockerCoordinator.ResolveActionTarget(actionID, logicalTarget)
+	if err != nil {
+		err = d.offlineTargetError(logicalTarget, err)
+	}
 	return actionID, target, err
 }
 

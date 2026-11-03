@@ -114,6 +114,14 @@ v1.7.1.
   container.
 - In the ⌘K palette, Enter on a plain word no longer opens a terminal through
   Quick connect.
+- A Docker host whose agent goes offline keeps its containers and stacks.
+  They show as offline until the agent is back. Before, the Hub deleted
+  them about a minute after the agent disconnected and added them again
+  when it returned, so Home Assistant removed and re-created their
+  devices. Removing the host still removes them.
+- A Docker action on a host whose agent is offline says so: "docker01 is
+  offline. Its agent was last seen at 2026-11-03 10:06 UTC." It said
+  "cannot bind connector action target".
 - `/api-docs` without a language in the address opens the API docs instead of
   an "unauthorized" error.
 - Settings › Security › API keys says "Expired" for a key past its expiry.

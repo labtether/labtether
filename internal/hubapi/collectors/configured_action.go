@@ -23,7 +23,10 @@ func (d *Deps) handleConfiguredConnectorAction(w http.ResponseWriter, r *http.Re
 	}
 	bound, err := configured.Bind(r.Context(), actionID, req)
 	if err != nil {
-		if errors.Is(err, connectorsdk.ErrComposeUpgradeRequired) {
+		var offline *connectorsdk.TargetOfflineError
+		if errors.As(err, &offline) {
+			servicehttp.WriteError(w, http.StatusConflict, offline.Error())
+		} else if errors.Is(err, connectorsdk.ErrComposeUpgradeRequired) {
 			servicehttp.WriteError(w, http.StatusConflict, connectorsdk.ErrComposeUpgradeRequired.Error())
 		} else if !maintenanceguard.WriteBlockedAction(w, err) {
 			servicehttp.WriteError(w, http.StatusConflict, "cannot bind connector action target")
@@ -39,7 +42,10 @@ func (d *Deps) handleConfiguredConnectorAction(w http.ResponseWriter, r *http.Re
 	}
 	result, err := configured.Execute(r.Context(), actionID, bound)
 	if err != nil {
-		if errors.Is(err, connectorsdk.ErrComposeUpgradeRequired) {
+		var offline *connectorsdk.TargetOfflineError
+		if errors.As(err, &offline) {
+			servicehttp.WriteError(w, http.StatusConflict, offline.Error())
+		} else if errors.Is(err, connectorsdk.ErrComposeUpgradeRequired) {
 			servicehttp.WriteError(w, http.StatusConflict, connectorsdk.ErrComposeUpgradeRequired.Error())
 		} else if !maintenanceguard.WriteBlockedAction(w, err) {
 			servicehttp.WriteError(w, http.StatusBadGateway, "action execution failed")
