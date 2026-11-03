@@ -94,6 +94,9 @@ func (d *Deps) KeepConnectorClusterAssetAlive(
 	if name == "" {
 		name = CollectorConfigString(collector.Config, "display_name")
 	}
+	if name == "" {
+		name = d.fallbackClusterName(collector, trimmedSource)
+	}
 	return d.RefreshCollectorParentAsset(CollectorParentAssetRefreshOptions{
 		Collector: collector,
 		Source:    trimmedSource,
