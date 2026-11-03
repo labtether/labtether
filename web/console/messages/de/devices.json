@@ -648,7 +648,7 @@
       "hostPlaceholder": "Geräteadresse",
       "port": "Port",
       "username": "Benutzername",
-      "credential": "Anmeldeprofil",
+      "credential": "Gespeicherte Anmeldung",
       "credentialHint": "Leer nutzt die Standardanmeldung dieses Geräts.",
       "strictHostKey": "Host-Schlüssel prüfen",
       "hostKey": "Host-Schlüssel",
