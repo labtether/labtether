@@ -1,6 +1,10 @@
 {
   "title": "Audit log",
   "exportCSV": "Export CSV",
+  "loadMore": "Load older entries",
+  "loadingMore": "Loading",
+  "exporting": "Exporting",
+  "exportFailed": "The export did not finish.",
   "views": {
     "log": "Log",
     "recordings": "Recordings"

@@ -1,6 +1,10 @@
 {
   "title": "Journal d'audit",
   "exportCSV": "Exporter en CSV",
+  "loadMore": "Charger les entrées plus anciennes",
+  "loadingMore": "Chargement",
+  "exporting": "Export en cours",
+  "exportFailed": "L’export n’a pas abouti.",
   "views": {
     "log": "Journal",
     "recordings": "Enregistrements"

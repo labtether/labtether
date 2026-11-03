@@ -104,9 +104,15 @@ v1.7.1.
 - The terminal's own connection steps and errors ("Opening secure stream…",
   "The connection closed unexpectedly.", "Session ended") are in your
   language.
+- The first-run setup screen says where the setup token is for a Home
+  Assistant add-on too (its labtether_setup_token option or
+  /data/labtether-addon/setup-token), not only on a Docker host.
 - Add device follows the console language (English, German, French, Spanish
   and Chinese) and uses plain, sentence-case labels in every setup step, its
   checks and its sync messages. It was English only, partly in Title Case.
+- Settings › Audit log shows the owner the whole log: Load older entries
+  pages back, and Export CSV writes every row the filters match. Before, the
+  page and the export stopped at the 20 newest entries.
 - Settings › Audit log hides the "API request" rows that repeat each change
   (pick "All requests" to see them) and names the object a row is about when
   the Hub stored its name, instead of its ID.
