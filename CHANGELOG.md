@@ -126,6 +126,10 @@ v1.7.1.
   websocket support or at a console address the Hub does not allow, shows
   the error with Try again. Before, it tried again several times a second
   for as long as the tab stayed open.
+- Device names on the Map and the Dashboard's small map no longer run into
+  each other, and a cut name shows in full when you point at it.
+- The LabTether Console a host runs shows the LabTether mark in Services and
+  on the Dashboard instead of a globe.
 - An alert shows the device it fired for, with Open device in its menu. The
   console looked for the device in a label the Hub does not set, so metric
   and heartbeat alerts showed no device, and the Dashboard could list an

@@ -5,7 +5,7 @@ import { X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "./ui/Button";
-import { describeServiceIconSelection, ServiceIcon } from "./ServiceIcon";
+import { describeServiceIconSelection, ServiceIcon, serviceIconKey } from "./ServiceIcon";
 import type { ServiceCustomIcon, WebServiceAltURL, WebService, WebServiceOverrideInput } from "../hooks/useWebServices";
 import { ServiceIconEditor, useCustomIconActions } from "./ServiceIconEditor";
 import { TagsEditor } from "./ServiceTagsEditor";
@@ -160,7 +160,7 @@ export function ServiceEditModal({
         <div className="sv-field">
           <span className="sv-lbl">{t("icon")}</span>
           <button type="button" className="sv-input sv-icbtn" onClick={() => setPicking((on) => !on)} aria-expanded={picking}>
-            <ServiceIcon iconKey={iconKey || service.icon_key} size={16} />
+            <ServiceIcon iconKey={iconKey || serviceIconKey(service)} size={16} />
             <span>{iconLabel || t("iconFound")}</span>
             <span className="sv-hint">{picking ? t("iconDone") : t("iconChange")}</span>
           </button>

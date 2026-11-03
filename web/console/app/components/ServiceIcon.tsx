@@ -67,6 +67,12 @@ function sanitizeBuiltinIconKey(iconKey: string): string | null {
   return trimmed;
 }
 
+/** A service's icon: its own, or the LabTether mark for a LabTether console found on a host (it comes without one). */
+export function serviceIconKey(service: { icon_key?: string; service_key?: string }): string {
+  const own = service.icon_key?.trim() ?? "";
+  return own || (service.service_key === "labtether" ? "/logo.svg" : "");
+}
+
 export function isCustomServiceIconSource(iconKey: string): boolean {
   return sanitizeCustomIconSource(iconKey) !== null;
 }
