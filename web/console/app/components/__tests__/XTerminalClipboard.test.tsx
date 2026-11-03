@@ -14,6 +14,7 @@ vi.mock("@xterm/xterm", () => ({ Terminal: class {
   paste = vi.fn((text: string) => { this.data?.(`\x1b[200~${text}\x1b[201~`); });
   constructor() { terminalState.instances.push(this); }
   loadAddon() {}
+  attachCustomKeyEventHandler() {}
   open() {}
   focus() {}
   dispose() {}
