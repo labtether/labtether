@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Button } from "../ui/Button";
 import { Input, Select } from "../ui/Input";
 import { deleteEnrollmentToken, useEnrollment } from "../../hooks/useEnrollment";
 import { useFastStatus } from "../../contexts/StatusContext";
 import { useToast } from "../../contexts/ToastContext";
 import type { AddDeviceAddedEvent } from "./types";
-import { type Platform, type LinuxInstallOptions, defaultLinuxInstallOptions, linuxInstallerCommand, manualInstallCommand, formatHubCandidateOption, trustModeLabel } from "./agentInstallCommands";
+import { type Platform, type LinuxInstallOptions, defaultLinuxInstallOptions, linuxInstallerCommand, manualInstallCommand, formatHubCandidateOption, trustModeText } from "./agentInstallCommands";
 import { CopyButton } from "./EnrollmentCopyButton";
 import { LinuxAgentInstallForm } from "./LinuxAgentInstallForm";
 export type { LinuxInstallOptions } from "./agentInstallCommands";
@@ -26,6 +27,7 @@ export function AgentSetupStep({
   onClose,
   onAdded,
 }: AgentSetupStepProps) {
+  const t = useTranslations("auth.addDevice");
   const { addToast } = useToast();
   const [platform, setPlatform] = useState<Platform>("linux");
   const [linuxOptions, setLinuxOptions] = useState<LinuxInstallOptions>(
@@ -51,6 +53,7 @@ export function AgentSetupStep({
       hubCandidates.find((candidate) => candidate.hub_url === hubURL) ?? null,
     [hubCandidates, hubURL],
   );
+  const trust = trustModeText(t, selectedCandidate);
   const status = useFastStatus();
   const initialAssetCount = useRef<number | null>(null);
   const [deviceDetected, setDeviceDetected] = useState(false);
@@ -148,12 +151,12 @@ export function AgentSetupStep({
   useEffect(() => {
     if (!deviceDetected || detectionHandledRef.current) return;
     detectionHandledRef.current = true;
-    addToast("success", "Agent connected successfully.");
+    addToast("success", t("agent.connected"));
     onAdded?.({ source: "agent" });
     autoCloseTimerRef.current = window.setTimeout(() => {
       onClose();
     }, 1200);
-  }, [deviceDetected, addToast, onClose, onAdded]);
+  }, [deviceDetected, addToast, onClose, onAdded, t]);
 
   useEffect(() => {
     return () => {
@@ -175,10 +178,10 @@ export function AgentSetupStep({
       <div className="flex flex-col items-center gap-4 py-8">
         <p className="flex items-center gap-2 text-sm font-medium text-[var(--text)]" role="status">
           <Check size={16} className="text-[var(--ok)]" aria-hidden="true" />
-          Device connected
+          {t("agent.deviceConnected")}
         </p>
         <Button variant="primary" onClick={onClose}>
-          Done
+          {t("agent.done")}
         </Button>
       </div>
     );
@@ -190,11 +193,13 @@ export function AgentSetupStep({
 
       {/* Platform picker */}
       <div>
-        <p className="text-xs font-medium text-[var(--muted)] mb-2">Platform</p>
+        <p className="text-xs font-medium text-[var(--muted)] mb-2">{t("agent.platform")}</p>
         <div className="flex gap-2">
           {platforms.map((p) => (
             <button
               key={p.id}
+              type="button"
+              aria-pressed={platform === p.id}
               onClick={() => setPlatform(p.id)}
               className={`px-3 py-1.5 text-xs rounded-lg border transition-colors duration-150 ${
                 platform === p.id
@@ -211,38 +216,35 @@ export function AgentSetupStep({
       {!newRawToken && !generating ? (
         <div className="space-y-2 rounded-lg border border-[var(--line)] bg-[var(--surface)] p-3">
           <label className="flex flex-col gap-1 text-xs font-medium text-[var(--muted)]">
-            Expected hostname
+            {t("agent.expectedHostname")}
             <Input
-              aria-label="Expected hostname"
-              placeholder="example: server-01"
+              aria-label={t("agent.expectedHostname")}
+              placeholder="server-01"
               value={expectedHostname}
               onChange={(event) => setExpectedHostname(event.target.value)}
             />
           </label>
-          <p className="text-xs text-[var(--muted)]">
-            This makes the one-time token work only for this device name.
-          </p>
+          <p className="text-xs text-[var(--muted)]">{t("agent.hostnameHint")}</p>
           <Button
             variant="primary"
             disabled={!expectedHostname.trim()}
             onClick={createScopedToken}
           >
-            Create one-time token
+            {t("agent.createToken")}
           </Button>
         </div>
       ) : null}
 
       {generating ? (
         <div className="flex items-center gap-2 py-4 text-sm text-[var(--muted)]">
-          <Loader2 size={16} className="animate-spin" /> Generating enrollment
-          token...
+          <Loader2 size={16} className="animate-spin" aria-hidden="true" /> {t("agent.creatingToken")}
         </div>
       ) : newRawToken ? (
         <>
           {/* Token */}
           <div>
             <p className="text-xs font-medium text-[var(--muted)] mb-1">
-              Enrollment Token
+              {t("agent.token")}
             </p>
             <div className="flex items-center gap-2 bg-[var(--surface)] rounded-lg px-3 py-2">
               <code className="text-xs text-[var(--text)] flex-1 truncate">
@@ -250,7 +252,7 @@ export function AgentSetupStep({
               </code>
               <CopyButton
                 text={newRawToken}
-                label="enrollment token"
+                label={t("agent.copyToken")}
                 onCopy={() => {
                   tokenCopiedRef.current = true;
                 }}
@@ -262,52 +264,50 @@ export function AgentSetupStep({
           {hubCandidates.length > 1 ? (
             <div>
               <p className="text-xs font-medium text-[var(--muted)] mb-1">
-                Connection Target
+                {t("agent.connectThrough")}
               </p>
               <Select
-                aria-label="Connection target"
+                aria-label={t("agent.connectThrough")}
                 value={hubURL}
                 onChange={(event) => selectHubURL(event.target.value)}
               >
                 {hubCandidates.map((candidate) => (
                   <option key={candidate.hub_url} value={candidate.hub_url}>
-                    {formatHubCandidateOption(candidate)}
+                    {formatHubCandidateOption(t, candidate)}
                   </option>
                 ))}
               </Select>
             </div>
           ) : null}
 
-          {selectedCandidate?.preferred_reason ? (
+          {trust ? (
             <div className="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--muted)]">
-              <span className="font-medium text-[var(--text)]">
-                {trustModeLabel(selectedCandidate)}.
-              </span>{" "}
-              {selectedCandidate.preferred_reason}
+              <span className="font-medium text-[var(--text)]">{trust.label}</span>{" "}
+              {trust.reason}
             </div>
           ) : null}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <p className="text-xs font-medium text-[var(--muted)] mb-1">
-                Hub URL
+                {t("agent.hubUrl")}
               </p>
               <div className="flex items-center gap-1 bg-[var(--surface)] rounded-lg px-3 py-2">
                 <code className="text-xs text-[var(--text)] flex-1 truncate">
                   {hubURL}
                 </code>
-                <CopyButton text={hubURL} label="Hub URL" />
+                <CopyButton text={hubURL} label={t("agent.copyHubUrl")} />
               </div>
             </div>
             <div>
               <p className="text-xs font-medium text-[var(--muted)] mb-1">
-                WebSocket URL
+                {t("agent.wsUrl")}
               </p>
               <div className="flex items-center gap-1 bg-[var(--surface)] rounded-lg px-3 py-2">
                 <code className="text-xs text-[var(--text)] flex-1 truncate">
                   {wsURL}
                 </code>
-                <CopyButton text={wsURL} label="WebSocket URL" />
+                <CopyButton text={wsURL} label={t("agent.copyWsUrl")} />
               </div>
             </div>
           </div>
@@ -328,7 +328,7 @@ export function AgentSetupStep({
           {!isLinux ? (
             <div>
               <p className="text-xs font-medium text-[var(--muted)] mb-1">
-                Run on target device
+                {t("agent.runOnDevice")}
               </p>
               <div className="relative bg-[var(--surface)] rounded-lg px-3 py-2">
                 <pre className="text-xs text-[var(--text)] whitespace-pre-wrap">
@@ -337,7 +337,7 @@ export function AgentSetupStep({
                 <div className="absolute top-2 right-2">
                   <CopyButton
                     text={fallbackCommand}
-                    label={`${platform} agent command`}
+                    label={t("agent.copyCommand")}
                   />
                 </div>
               </div>
@@ -346,14 +346,14 @@ export function AgentSetupStep({
 
           {/* Waiting indicator */}
           <div className="flex items-center gap-2 text-xs text-[var(--muted)] pt-2">
-            <Loader2 size={14} className="animate-spin" />
-            Waiting for device to check in...
+            <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+            {t("agent.waiting")}
           </div>
         </>
       ) : null}
 
       <div className="flex items-center gap-3 pt-2">
-        <Button onClick={onBack}>Back</Button>
+        <Button onClick={onBack}>{t("form.back")}</Button>
       </div>
     </div>
   );
