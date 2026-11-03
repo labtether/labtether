@@ -340,7 +340,7 @@ func (d *Deps) HandleApproveAgent(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Printf("enrollment: failed to prepare agent token for %s: %v", stableAssetID, err) // #nosec G706 -- Asset IDs are hub-generated identifiers.
 		if errors.Is(err, persistence.ErrAgentApprovalAssetConflict) {
-			servicehttp.WriteError(w, http.StatusConflict, "an enrolled asset already uses this hostname; use identity recovery instead")
+			servicehttp.WriteError(w, http.StatusConflict, refusalApproveNameUsed)
 			return
 		}
 		if errors.Is(err, persistence.ErrAgentIdentityRetired) {
@@ -454,7 +454,7 @@ func (d *Deps) HandleRejectAgent(w http.ResponseWriter, r *http.Request) {
 
 	// Send rejection message before closing the connection.
 	if err := SendPendingEnrollmentClaimDecision(claim, agentmgr.MsgEnrollmentRejected, agentmgr.EnrollmentRejectedData{
-		Reason: "rejected by operator",
+		Reason: refusalAdminRejected,
 	}, "enrollment rejected"); err != nil {
 		if !d.PendingAgents.ReleaseDecision(claim) {
 			log.Printf("enrollment: lost pending decision ownership after rejection delivery failure asset_id=%s", assetID) // #nosec G706 -- Asset IDs are hub-generated identifiers.
