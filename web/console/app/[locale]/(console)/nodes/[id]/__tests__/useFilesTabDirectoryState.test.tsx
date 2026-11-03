@@ -1,6 +1,10 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+vi.mock("next-intl", () => ({
+  useTranslations: () => (key: string, values?: Record<string, unknown>) => (values ? `${key} ${Object.values(values).join(" ")}` : key),
+}));
+
 import { useFilesTabDirectoryState } from "../useFilesTabDirectoryState";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -80,4 +84,25 @@ it("keeps edits made during a directory read, ignores older replies, and resolve
   expect(container.querySelector("ul")?.textContent).toBe("next.txt");
   expect(container.querySelector("[data-loading]")?.textContent).toBe("false");
   expect(setError).toHaveBeenLastCalledWith(null);
+});
+
+// Risk: a typed path the agent does not share empties the list and shows the agent's English refusal (or nothing).
+it("keeps the open folder and says, in words, that a typed path is outside the shared folder", async () => {
+  await act(async () => root.render(<Consumer />));
+  const reads = pending.splice(0);
+  for (const read of reads) await resolveDirectory(read, "/root", "notes.txt");
+  const input = container.querySelector("input")!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "/etc");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => { container.querySelector("button")!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+  const refused = pending.splice(0).pop()!;
+  await act(async () => {
+    refused.resolve(new Response(JSON.stringify({ error: 'path "/etc" is outside the allowed base directory' }), { status: 400 }));
+  });
+  expect(setError).toHaveBeenLastCalledWith("outsideShared /etc");
+  expect(container.querySelector("[data-path]")?.textContent).toBe("/root");
+  expect([...container.querySelectorAll("li")].map((li) => li.textContent)).toEqual(["notes.txt"]);
+  expect(input.value).toBe("/root");
 });

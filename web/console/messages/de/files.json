@@ -53,7 +53,9 @@
     "refresh": "Aktualisieren",
     "openSplit": "Zweiten Bereich öffnen",
     "closeSplit": "Zweiten Bereich schließen",
-    "thisTab": "{name} (dieser Tab)"
+    "thisTab": "{name} (dieser Tab)",
+    "outsideRoot": "{path} liegt außerhalb des Ordners, den dieses Gerät freigibt ({root}).",
+    "outsideShared": "{path} liegt außerhalb des Ordners, den dieses Gerät freigibt."
   },
   "clip": {
     "copy": "{count, plural, one {# Element} other {# Elemente}} zum Einfügen",

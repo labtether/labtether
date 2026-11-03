@@ -53,7 +53,9 @@
     "refresh": "Actualizar",
     "openSplit": "Abrir segundo panel",
     "closeSplit": "Cerrar segundo panel",
-    "thisTab": "{name} (esta pestaña)"
+    "thisTab": "{name} (esta pestaña)",
+    "outsideRoot": "{path} está fuera de la carpeta que comparte este dispositivo ({root}).",
+    "outsideShared": "{path} está fuera de la carpeta que comparte este dispositivo."
   },
   "clip": {
     "copy": "{count, plural, one {# elemento} other {# elementos}} para pegar",

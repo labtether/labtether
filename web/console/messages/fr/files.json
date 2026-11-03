@@ -53,7 +53,9 @@
     "refresh": "Actualiser",
     "openSplit": "Ouvrir un second panneau",
     "closeSplit": "Fermer le second panneau",
-    "thisTab": "{name} (cet onglet)"
+    "thisTab": "{name} (cet onglet)",
+    "outsideRoot": "{path} est en dehors du dossier que cet appareil partage ({root}).",
+    "outsideShared": "{path} est en dehors du dossier que cet appareil partage."
   },
   "clip": {
     "copy": "{count, plural, one {# élément} other {# éléments}} à coller",
