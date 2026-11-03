@@ -20,6 +20,23 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+/** How often an open console checks that its session still works (it can expire or be signed out elsewhere). */
+const SESSION_CHECK_MS = 30_000;
+
+/** The signed-in user from GET /api/auth/me. The Hub sends 2FA state beside the user, not inside it. */
+function userFrom(data: { user?: User | null; totp_enabled?: boolean } | null): User | null {
+  if (!data?.user) return null;
+  const totp = typeof data.totp_enabled === "boolean" ? data.totp_enabled : data.user.totp_enabled;
+  return totp === undefined ? data.user : { ...data.user, totp_enabled: totp };
+}
+
+/** Sign-in, returning to the page the person was on. */
+function loginPathHere(): string | null {
+  const currentPath = window.location.pathname;
+  if (/^\/(?:[a-z]{2}\/)?(?:login|setup)(?:\/|$)/.test(currentPath)) return null;
+  return `/login?next=${encodeURIComponent(`${currentPath}${window.location.search}`)}`;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
@@ -45,11 +62,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       && generation === generations.current;
     let retryTimer: number | null = null;
     const redirectToLogin = () => {
-      const currentPath = window.location.pathname;
-      const currentSearch = window.location.search;
-      if (currentPath === "/login" || currentPath === "/setup") return;
-      const nextPath = `${currentPath}${currentSearch}`;
-      router.push(`/login?next=${encodeURIComponent(nextPath)}`);
+      const loginPath = loginPathHere();
+      if (loginPath) router.push(loginPath);
     };
 
     const redirectToSetup = () => {
@@ -98,7 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (!isCurrent()) return;
           setBootstrapError(false);
           setBootstrapAttempt(0);
-          setUser(data.user ?? null);
+          setUser(userFrom(data));
           return;
         }
 
@@ -145,12 +159,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (response.ok) {
         const data = await response.json();
         if (logoutStarted.current || generation !== sessionGeneration.current) return;
-        setUser(data.user ?? null);
+        setUser(userFrom(data));
       }
     } catch {
       // Ignore — keep current user state on refresh failure.
     }
   }, []);
+
+  // A session can end while the page stays open: it expires, or someone signs it out. Check it every 30 s and when
+  // the tab comes back, so the person lands on sign-in instead of on pages that cannot load.
+  const signedIn = user !== null;
+  useEffect(() => {
+    if (!signedIn) return;
+    let stopped = false;
+    let checking = false;
+    const check = async () => {
+      if (stopped || checking || logoutStarted.current || document.visibilityState !== "visible") return;
+      checking = true;
+      const generation = sessionGeneration.current;
+      try {
+        const response = await fetch("/api/auth/me", { cache: "no-store" });
+        if (stopped || logoutStarted.current || generation !== sessionGeneration.current || response.status !== 401) return;
+        ++sessionGeneration.current;
+        setUser(null);
+        const loginPath = loginPathHere();
+        if (loginPath) router.push(loginPath);
+      } catch {
+        // The Hub did not answer; the pages say so themselves. Keep the session.
+      } finally {
+        checking = false;
+      }
+    };
+    const timer = window.setInterval(() => void check(), SESSION_CHECK_MS);
+    const onVisible = () => void check();
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [signedIn, router]);
 
   const logout = useCallback(async () => {
     // Invalidate pending reads before waiting for the logout request.

@@ -134,6 +134,15 @@ v1.7.1.
   console looked for the device in a label the Hub does not set, so metric
   and heartbeat alerts showed no device, and the Dashboard could list an
   offline device twice: once for the device and once for its alert.
+- When your session ends while the console is open (it expired, or someone
+  signed you out everywhere), the console opens sign-in within 30 seconds or
+  when you come back to the tab, and returns you to the same page after you
+  sign in. Before, every page said it could not load its data.
+- Settings › Users shows two-factor sign-in as on when it is on, with
+  Disable and new recovery codes. After a reload it always said 2FA was off,
+  and Enable 2FA failed.
+- A wrong password or two-factor code says so in your language ("Wrong
+  username or password") instead of the Hub's "invalid credentials".
 - A terminal whose stream gets no answer at all, for example from a hung
   proxy, shows the error with Try again after 45 seconds. Before, it showed
   "Opening secure stream" with a counter that never stopped.

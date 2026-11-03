@@ -82,7 +82,9 @@ test("login visibly announces rejected credentials", async ({ page }) => {
   await page.getByLabel("Password").fill("wrong-password");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
 
-  await expect(page.getByRole("alert").filter({ hasText: "invalid credentials" })).toBeVisible();
+  // The person's language, not the Hub's English reason.
+  await expect(page.getByRole("alert").filter({ hasText: "Wrong username or password" })).toBeVisible();
+  await expect(page.getByText("invalid credentials")).toHaveCount(0);
   await expect(page.getByLabel("Username")).toHaveValue("admin");
   await expect(page.getByLabel("Password")).toHaveValue("");
 });

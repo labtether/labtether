@@ -162,7 +162,8 @@ export default function LoginPage() {
 
       if (!response.ok) {
         setPassword("");
-        setError(data?.error ?? t("login.failed"));
+        // A refused sign-in gets the translated words; the Hub's own text ("invalid credentials") stays for others.
+        setError(response.status === 401 ? t("login.failed") : data?.error ?? t("login.failed"));
         return;
       }
 
@@ -201,7 +202,7 @@ export default function LoginPage() {
         // with the same token will always fail. Clear and send user back to login.
         setChallengeToken(null);
         setTotpCode("");
-        setError(data?.error ?? t("twoFactor.failed"));
+        setError(response.status === 401 ? t("twoFactor.failed") : data?.error ?? t("twoFactor.failed"));
         return;
       }
       router.push(nextPath);
