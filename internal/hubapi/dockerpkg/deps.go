@@ -13,6 +13,7 @@ import (
 	"github.com/labtether/labtether/internal/connectors/docker"
 	"github.com/labtether/labtether/internal/connectorsdk"
 	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
+	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -25,6 +26,9 @@ type Deps struct {
 
 	// Agent manager
 	AgentMgr *agentmgr.AgentManager
+
+	// AssetStore names a Docker host whose agent is offline.
+	AssetStore persistence.AssetStore
 
 	// Docker exec bridges (shared with cmd/labtether for WS handler dispatch).
 	DockerExecBridges *sync.Map

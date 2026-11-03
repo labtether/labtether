@@ -126,11 +126,21 @@ func (s *Store) resolveAll(assetList []assets.Asset) []assets.Asset {
 	return resolved
 }
 
+// resolve shows an agent device as offline without a current connection, and
+// so do the Docker host, containers and stacks that agent reports: the Hub
+// keeps them while the agent is away, but their last state is not current.
 func (s *Store) resolve(assetEntry assets.Asset) assets.Asset {
-	if s.connectivity == nil || !strings.EqualFold(strings.TrimSpace(assetEntry.Source), "agent") {
+	if s.connectivity == nil {
 		return assetEntry
 	}
-	if s.connectivity.IsConnected(assetEntry.ID) {
+	agentID := ""
+	switch strings.ToLower(strings.TrimSpace(assetEntry.Source)) {
+	case "agent":
+		agentID = assetEntry.ID
+	case "docker":
+		agentID = strings.TrimSpace(assetEntry.Metadata["agent_id"])
+	}
+	if agentID == "" || s.connectivity.IsConnected(agentID) {
 		return assetEntry
 	}
 	assetEntry.Status = "offline"

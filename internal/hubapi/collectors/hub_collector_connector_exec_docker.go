@@ -91,18 +91,26 @@ func (d *Deps) ExecuteDockerCollector(ctx context.Context, collector hubcollecto
 	d.UpdateCollectorStatus(collector.ID, "ok", "")
 }
 
+// pruneStaleDockerDiscoveryAssets deletes Docker assets that a reporting
+// host no longer has, such as a removed container. A host whose agent is
+// offline reports nothing, so its host, containers and stacks are kept (they
+// read as offline) until the agent returns or the device is removed.
 func (d *Deps) pruneStaleDockerDiscoveryAssets(discovered []connectorsdk.Asset) {
 	if d == nil || d.AssetStore == nil {
 		return
 	}
 
 	liveAssetIDs := make(map[string]struct{}, len(discovered))
+	reportingAgents := make(map[string]struct{}, len(discovered))
 	for _, asset := range discovered {
 		assetID := strings.TrimSpace(asset.ID)
 		if assetID == "" {
 			continue
 		}
 		liveAssetIDs[assetID] = struct{}{}
+		if agentID := strings.TrimSpace(asset.Metadata["agent_id"]); agentID != "" {
+			reportingAgents[agentID] = struct{}{}
+		}
 	}
 
 	assetList, err := d.AssetStore.ListAssets()
@@ -117,6 +125,11 @@ func (d *Deps) pruneStaleDockerDiscoveryAssets(discovered []connectorsdk.Asset) 
 		}
 		if _, ok := liveAssetIDs[strings.TrimSpace(candidate.ID)]; ok {
 			continue
+		}
+		if agentID := strings.TrimSpace(candidate.Metadata["agent_id"]); agentID != "" {
+			if _, reporting := reportingAgents[agentID]; !reporting {
+				continue
+			}
 		}
 		if err := d.AssetStore.DeleteAsset(candidate.ID); err != nil && !errors.Is(err, persistence.ErrNotFound) {
 			log.Printf("hub collector docker: failed to delete stale asset %s: %v", candidate.ID, err)
