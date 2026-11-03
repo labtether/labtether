@@ -112,25 +112,17 @@ func (d *Deps) HandleEnroll(w http.ResponseWriter, r *http.Request) {
 		MaxEnrolledAgents:   d.MaxEnrolledAgents,
 	})
 	if err != nil {
-		switch {
-		case errors.Is(err, persistence.ErrEnrollmentTokenInvalid),
-			errors.Is(err, persistence.ErrEnrollmentTokenScopeMismatch):
-			servicehttp.WriteError(w, http.StatusUnauthorized, "invalid or expired enrollment token")
-		case errors.Is(err, persistence.ErrAgentIdentityRetired):
-			servicehttp.WriteError(w, http.StatusConflict, "agent identity was decommissioned and cannot be reused; enroll with a new hostname/asset ID")
-		case errors.Is(err, persistence.ErrAgentIdentityProofV2Required),
-			errors.Is(err, persistence.ErrRecoveryRequiresSingleUseToken),
-			errors.Is(err, persistence.ErrAgentIdentityContinuityConflict):
-			servicehttp.WriteError(w, http.StatusConflict, "hostname is already enrolled; valid single-use device identity continuity proof is required")
-		case errors.Is(err, persistence.ErrEnrollmentTokenPredatesRotation):
-			servicehttp.WriteError(w, http.StatusConflict, "enrollment token was issued before the latest credential rotation; create a new single-use token")
-		case errors.Is(err, persistence.ErrAgentFleetCapacityReached):
-			servicehttp.WriteError(w, http.StatusConflict, "agent fleet capacity reached; decommission an enrolled agent or raise the configured limit")
-		default:
-			log.Printf("enroll: atomic enrollment failed: %v", err)
-			servicehttp.WriteError(w, http.StatusInternalServerError, "enrollment error")
+		if status, message, ok := enrollmentRefusal(err); ok {
+			log.Printf("enroll: refused hostname=%q: %s", assetID, message)
+			servicehttp.WriteError(w, status, message)
+			return
 		}
+		log.Printf("enroll: atomic enrollment failed: %v", err)
+		servicehttp.WriteError(w, http.StatusInternalServerError, "enrollment error")
 		return
+	}
+	if commitResult.Readmitted {
+		log.Printf("enroll: %q was removed earlier and is added again with a new single-use token", assetID)
 	}
 	d.disconnectRevokedAgentConnection(assetID, commitResult.RevokedAgentTokenIDs)
 

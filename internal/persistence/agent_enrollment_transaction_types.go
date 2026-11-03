@@ -41,10 +41,13 @@ type AgentEnrollmentCommitRequest struct {
 }
 
 type AgentEnrollmentCommitResult struct {
-	EnrollmentToken      enrollment.EnrollmentToken
-	AgentToken           enrollment.AgentToken
-	Asset                assets.Asset
-	Recovery             bool
+	EnrollmentToken enrollment.EnrollmentToken
+	AgentToken      enrollment.AgentToken
+	Asset           assets.Asset
+	Recovery        bool
+	// Readmitted is true when a removed device's name was brought back by a
+	// fresh single-use token.
+	Readmitted           bool
 	RevokedAgentTokenIDs []string
 }
 

@@ -41,16 +41,18 @@ func (m *MemoryEnrollmentStore) CommitAgentEnrollment(ctx context.Context, req A
 	}
 	etok, valid := m.validateEnrollmentTokenLocked(req.EnrollmentTokenHash, now)
 	if !valid {
-		return AgentEnrollmentCommitResult{}, ErrEnrollmentTokenInvalid
+		_, found := m.enrollmentByHash[req.EnrollmentTokenHash]
+		return AgentEnrollmentCommitResult{}, classifyUnusableEnrollmentToken(etok, found, now)
 	}
-	if _, retired := m.assetStore.retiredAgentIDs[req.AssetID]; retired {
+	existing, exists := m.assetStore.assets[req.AssetID]
+	retiredAt, retired := m.assetStore.retiredAgentIDs[req.AssetID]
+	if retired && (exists || !readmitsRetiredIdentity(etok, retiredAt)) {
 		return AgentEnrollmentCommitResult{}, ErrAgentIdentityRetired
 	}
 	if _, duplicate := m.agentByHash[req.AgentTokenHash]; duplicate {
 		return AgentEnrollmentCommitResult{}, fmt.Errorf("agent token hash already exists")
 	}
 
-	existing, exists := m.assetStore.assets[req.AssetID]
 	if exists {
 		if err := validateEnrollmentRecoveryScope(etok, req.AssetID, existing.GroupID); err != nil {
 			return AgentEnrollmentCommitResult{}, err
@@ -86,6 +88,9 @@ func (m *MemoryEnrollmentStore) CommitAgentEnrollment(ctx context.Context, req A
 	}
 
 	// All validation is complete. Mutate both stores as one critical section.
+	if retired {
+		delete(m.assetStore.retiredAgentIDs, req.AssetID)
+	}
 	etok.UseCount++
 	m.enrollmentTokens[etok.ID] = etok
 
@@ -121,6 +126,7 @@ func (m *MemoryEnrollmentStore) CommitAgentEnrollment(ctx context.Context, req A
 		AgentToken:           agentToken,
 		Asset:                existing,
 		Recovery:             exists,
+		Readmitted:           retired,
 		RevokedAgentTokenIDs: revokedAgentTokenIDs,
 	}, nil
 }

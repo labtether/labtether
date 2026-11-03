@@ -183,7 +183,7 @@ func TestAssetScopedEnrollmentTokenCannotEnrollAnotherHostname(t *testing.T) {
 		sut.handleEnroll(rec, req)
 		return rec
 	}
-	if rec := enroll("other-node"); rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), "invalid or expired enrollment token") {
+	if rec := enroll("other-node"); rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), "made for another device or group") {
 		t.Fatalf("wrong hostname status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	if token, valid, err := sut.enrollmentStore.ValidateEnrollmentToken(auth.HashToken(rawToken)); err != nil || !valid || token.UseCount != 0 {
