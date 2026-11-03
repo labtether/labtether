@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { useToast } from "../../contexts/ToastContext";
@@ -12,8 +13,8 @@ type ManualDeviceSetupStepProps = {
   onAdded?: (event: AddDeviceAddedEvent) => void;
 };
 
+/** Product names stay as they are; the empty value is "Other" in the reader's language. */
 const PLATFORM_OPTIONS = [
-  { value: "", label: "Unknown / Other" },
   { value: "linux", label: "Linux" },
   { value: "windows", label: "Windows" },
   { value: "macos", label: "macOS" },
@@ -21,6 +22,7 @@ const PLATFORM_OPTIONS = [
 ];
 
 export function ManualDeviceSetupStep({ onBack, onClose, onAdded }: ManualDeviceSetupStepProps) {
+  const t = useTranslations("auth.addDevice");
   const { addToast } = useToast();
 
   const [name, setName] = useState("");
@@ -36,13 +38,13 @@ export function ManualDeviceSetupStep({ onBack, onClose, onAdded }: ManualDevice
     const trimmedHost = host.trim();
 
     if (!trimmedName) {
-      const err = "Device name is required.";
+      const err = t("manual.nameRequired");
       setFormError(err);
       addToast("error", err);
       return;
     }
     if (!trimmedHost) {
-      const err = "Host (IP or hostname) is required.";
+      const err = t("manual.hostRequired");
       setFormError(err);
       addToast("error", err);
       return;
@@ -54,8 +56,8 @@ export function ManualDeviceSetupStep({ onBack, onClose, onAdded }: ManualDevice
     try {
       const tagList = tags
         .split(",")
-        .map((t) => t.trim())
-        .filter((t) => t.length > 0);
+        .map((tag) => tag.trim())
+        .filter((tag) => tag.length > 0);
 
       const body: Record<string, unknown> = {
         name: trimmedName,
@@ -76,16 +78,16 @@ export function ManualDeviceSetupStep({ onBack, onClose, onAdded }: ManualDevice
 
       if (!res.ok) {
         const payload = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(payload.error || `Failed to create device (${res.status})`);
+        throw new Error(payload.error || "");
       }
 
       const payload = (await res.json()) as { id?: string; name?: string };
-      addToast("success", `Device "${trimmedName}" added.`);
+      addToast("success", t("manual.added", { name: trimmedName }));
       onAdded?.({ source: "manual", focusQuery: trimmedName });
       onClose();
       void payload;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to create device.";
+      const msg = err instanceof Error && err.message ? err.message : t("manual.addFailed");
       setFormError(msg);
       addToast("error", msg);
     } finally {
@@ -98,7 +100,7 @@ export function ManualDeviceSetupStep({ onBack, onClose, onAdded }: ManualDevice
       {formError ? <p className="text-xs text-[var(--bad)]">{formError}</p> : null}
 
       <div>
-        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Device Name</label>
+        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("manual.name")}</label>
         <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -107,22 +109,23 @@ export function ManualDeviceSetupStep({ onBack, onClose, onAdded }: ManualDevice
       </div>
 
       <div>
-        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Host</label>
+        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("manual.host")}</label>
         <Input
           value={host}
           onChange={(e) => setHost(e.target.value)}
-          placeholder="192.168.1.100 or hostname.local"
+          placeholder={t("manual.hostPlaceholder")}
         />
-        <p className="mt-1 text-xs text-[var(--muted)]">IP address or hostname used to reach this device.</p>
+        <p className="mt-1 text-xs text-[var(--muted)]">{t("manual.hostHint")}</p>
       </div>
 
       <div>
-        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Platform</label>
+        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("manual.platform")}</label>
         <select
           value={platform}
           onChange={(e) => setPlatform(e.target.value)}
           className="w-full rounded-md border border-[var(--line)] bg-[var(--surface)] px-2 py-2 text-xs text-[var(--text)]"
         >
+          <option value="">{t("manual.otherPlatform")}</option>
           {PLATFORM_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
@@ -132,23 +135,23 @@ export function ManualDeviceSetupStep({ onBack, onClose, onAdded }: ManualDevice
       </div>
 
       <div>
-        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Tags</label>
+        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("manual.tags")}</label>
         <Input
           value={tags}
           onChange={(e) => setTags(e.target.value)}
-          placeholder="homelab, dmz, storage (comma-separated)"
+          placeholder="homelab, storage"
         />
-        <p className="mt-1 text-xs text-[var(--muted)]">Optional comma-separated tags for grouping and filtering.</p>
+        <p className="mt-1 text-xs text-[var(--muted)]">{t("manual.tagsHint")}</p>
       </div>
 
       <div className="flex items-center gap-3 pt-2">
-        <Button onClick={onBack}>Back</Button>
+        <Button onClick={onBack}>{t("form.back")}</Button>
         <Button
           variant="primary"
           disabled={saving}
           onClick={() => void handleSave()}
         >
-          {saving ? "Adding..." : "Add Device"}
+          {saving ? t("manual.adding") : t("manual.add")}
         </Button>
       </div>
     </div>

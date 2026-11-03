@@ -1,6 +1,8 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import auth from "../../../../messages/en/auth.json";
 
 vi.mock("../../../contexts/ToastContext", () => ({
   useToast: () => ({ addToast: vi.fn() }),
@@ -92,11 +94,13 @@ describe("HomeAssistantSetupStep", () => {
   it("shows the LabTether hub address separately from the Home Assistant connector address", async () => {
     await act(async () => {
       root.render(
-        <HomeAssistantSetupStep
-          onBack={vi.fn()}
-          onClose={vi.fn()}
-          setupMode="advanced"
-        />,
+        <NextIntlClientProvider locale="en" messages={{ auth }}>
+          <HomeAssistantSetupStep
+            onBack={vi.fn()}
+            onClose={vi.fn()}
+            setupMode="advanced"
+          />
+        </NextIntlClientProvider>,
       );
     });
 
@@ -113,9 +117,9 @@ describe("HomeAssistantSetupStep", () => {
     expect(suggestedHubURLs).toEqual([
       "https://hub.example.test:8443",
     ]);
-    expect(container.textContent).toContain("Use the direct Hub address, not this web console address.");
+    expect(container.textContent).toContain("Use the hub’s own address, not this console’s address.");
 
-    expect(container.querySelector('label[for="homeassistant-base-url"]')?.textContent).toBe("Home Assistant Base URL");
+    expect(container.querySelector('label[for="homeassistant-base-url"]')?.textContent).toBe("Home Assistant URL");
     expect(container.querySelector('#homeassistant-base-url')).not.toBeNull();
     expect(container.querySelector('label[for="homeassistant-access-token"]')).not.toBeNull();
     expect(container.querySelector('label[for="homeassistant-display-name"]')).not.toBeNull();
@@ -154,7 +158,7 @@ describe("HomeAssistantSetupStep", () => {
     expect(validateHomeAssistantHubOrigin("http://127.0.0.1:8080")).toBe("");
     expect(validateHomeAssistantHubOrigin("https://user:secret@hub.example.test")).not.toBe("");
     expect(validateHomeAssistantHubOrigin("https://hub.example.test/api?token=secret#fragment")).not.toBe("");
-    expect(homeAssistantHubHTTPWarning("http://hub.example.test:8080")).toContain("Allow insecure HTTP");
+    expect(homeAssistantHubHTTPWarning("http://hub.example.test:8080")).toBe("hubPlainHttp");
     expect(homeAssistantHubHTTPWarning("http://localhost:8080")).toBe("");
   });
 });

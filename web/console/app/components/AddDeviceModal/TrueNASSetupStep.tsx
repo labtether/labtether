@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { useTrueNASSettings } from "../../hooks/useTrueNASSettings";
@@ -9,6 +10,7 @@ import { useToast } from "../../contexts/ToastContext";
 import { useStatusControls } from "../../contexts/StatusContext";
 import { baseURLHostLabel, validateHTTPSOrHTTPURL, validatePollIntervalSeconds } from "./validation";
 import { monitorCollectorRunWithRetry } from "./collectorSync";
+import { compatPrefillOption, firstError, validationText } from "./addDeviceText";
 import type { AddDeviceAddedEvent, AddDeviceCompatPrefill, SetupMode } from "./types";
 
 type TrueNASSetupStepProps = {
@@ -20,6 +22,8 @@ type TrueNASSetupStepProps = {
 };
 
 export function TrueNASSetupStep({ onBack, onClose, onAdded, compatPrefills = [], setupMode }: TrueNASSetupStepProps) {
+  const t = useTranslations("auth.addDevice");
+  const tSync = useTranslations("auth.addDevice.sync");
   const { addToast } = useToast();
   const { fetchStatus } = useStatusControls();
   const {
@@ -83,11 +87,11 @@ export function TrueNASSetupStep({ onBack, onClose, onAdded, compatPrefills = []
     prefillAppliedRef.current = true;
   }, [applyCompatPrefill, loading, configured, selectedCompat, baseURL, displayName]);
 
-  const baseURLError = validateHTTPSOrHTTPURL(baseURL);
-  const intervalError = validatePollIntervalSeconds(intervalSeconds);
-  const apiKeyError = !apiKey.trim() ? "API Key is required." : "";
-  const saveValidationError = [baseURLError, intervalError, apiKeyError].find((entry) => entry) ?? "";
-  const testValidationError = [baseURLError, apiKeyError].find((entry) => entry) ?? "";
+  const baseURLError = validationText(t, validateHTTPSOrHTTPURL(baseURL));
+  const intervalError = validationText(t, validatePollIntervalSeconds(intervalSeconds));
+  const apiKeyError = !apiKey.trim() ? t("validation.apiKeyRequired") : "";
+  const saveValidationError = firstError(baseURLError, intervalError, apiKeyError);
+  const testValidationError = firstError(baseURLError, apiKeyError);
 
   const handleSave = async () => {
     if (saveValidationError) {
@@ -99,7 +103,7 @@ export function TrueNASSetupStep({ onBack, onClose, onAdded, compatPrefills = []
 
     const result = await save();
     if (!result.ok) {
-      addToast("error", result.error || "Failed to save TrueNAS settings.");
+      addToast("error", result.error || t("form.saveFailed", { name: "TrueNAS" }));
       return;
     }
 
@@ -108,12 +112,12 @@ export function TrueNASSetupStep({ onBack, onClose, onAdded, compatPrefills = []
     }
 
     if (result.collectorID) {
-      monitorCollectorRunWithRetry(result.collectorID, "TrueNAS", addToast);
+      monitorCollectorRunWithRetry(result.collectorID, "TrueNAS", addToast, tSync);
     }
 
     const focusQuery = displayName.trim() || baseURLHostLabel(baseURL);
     onAdded?.({ source: "truenas", focusQuery });
-    addToast("success", "TrueNAS connector saved.");
+    addToast("success", t("form.connectorSaved", { name: "TrueNAS" }));
     void fetchStatus();
     onClose();
   };
@@ -129,7 +133,7 @@ export function TrueNASSetupStep({ onBack, onClose, onAdded, compatPrefills = []
   };
 
   if (loading) {
-    return <p className="text-xs text-[var(--muted)]">Loading TrueNAS settings...</p>;
+    return <p className="text-xs text-[var(--muted)]">{t("form.loading")}</p>;
   }
 
   return (
@@ -140,7 +144,7 @@ export function TrueNASSetupStep({ onBack, onClose, onAdded, compatPrefills = []
 
       {compatPrefills.length > 1 && (
         <div>
-          <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Detected Endpoint</label>
+          <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.detected")}</label>
           <select
             value={selectedCompatBaseURL || compatPrefills[0].baseURL}
             onChange={(event) => {
@@ -155,45 +159,42 @@ export function TrueNASSetupStep({ onBack, onClose, onAdded, compatPrefills = []
           >
             {compatPrefills.map((prefill) => (
               <option key={prefill.baseURL} value={prefill.baseURL}>
-                {formatCompatPrefillOption(prefill)}
+                {compatPrefillOption(t, prefill)}
               </option>
             ))}
           </select>
-          <p className="mt-1 text-xs text-[var(--muted)]">Selecting a detected endpoint updates base URL and display name.</p>
         </div>
       )}
 
       <div>
-        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Base URL</label>
+        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.baseUrl")}</label>
         <Input value={baseURL} onChange={(e) => setBaseURL(e.target.value)} placeholder="https://truenas.local" />
       </div>
 
       <div className="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
-        <p className="text-xs font-medium text-[var(--text)]">Credential Template</p>
-        <p className="text-xs text-[var(--muted)]">
-          Create a dedicated TrueNAS API key for LabTether with read permissions for datasets, pools, SMART, and system health.
-        </p>
+        <p className="text-xs font-medium text-[var(--text)]">{t("form.credentials")}</p>
+        <p className="text-xs text-[var(--muted)]">{t("truenas.credentialsText")}</p>
       </div>
 
       <div>
-        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">API Key</label>
+        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.apiKey")}</label>
         <Input
           type="password"
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
-          placeholder="Required"
+          placeholder={t("form.required")}
         />
       </div>
 
       <div>
-        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Display Name</label>
+        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.displayName")}</label>
         <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Homelab TrueNAS" />
       </div>
 
       {setupMode === "advanced" ? (
         <>
           <div>
-            <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Poll Interval (s)</label>
+            <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.pollInterval")}</label>
             <Input
               type="number"
               min={15}
@@ -205,34 +206,28 @@ export function TrueNASSetupStep({ onBack, onClose, onAdded, compatPrefills = []
 
           <label className="flex items-center gap-2 text-xs text-[var(--muted)]">
             <input type="checkbox" checked={skipVerify} onChange={(e) => setSkipVerify(e.target.checked)} />
-            Skip TLS certificate verification
+            {t("form.skipTls")}
           </label>
         </>
       ) : (
-        <p className="text-xs text-[var(--muted)]">Default setup uses 60s polling with TLS verification enabled.</p>
+        <p className="text-xs text-[var(--muted)]">{t("form.defaultPolling")}</p>
       )}
 
       <div className="flex items-center gap-3 pt-2">
-        <Button onClick={onBack}>Back</Button>
+        <Button onClick={onBack}>{t("form.back")}</Button>
         <Button disabled={testing || saving || running} onClick={() => void handleTestConnection()}>
           {testing ? <Loader2 size={14} className="animate-spin mr-1 inline" /> : null}
-          {testing ? "Testing..." : "Test Connection"}
+          {testing ? t("form.testing") : t("form.testConnection")}
         </Button>
         <Button disabled={!collectorID || saving || testing || running} onClick={() => void runNow()}>
           {running ? <Loader2 size={14} className="animate-spin mr-1 inline" /> : null}
-          {running ? "Starting..." : "Run Sync"}
+          {running ? t("form.starting") : t("form.syncNow")}
         </Button>
         <Button variant="primary" disabled={saving || testing || running || Boolean(saveValidationError)} onClick={() => void handleSave()}>
           {saving ? <Loader2 size={14} className="animate-spin mr-1 inline" /> : null}
-          {saving ? "Saving..." : "Save, Sync & Close"}
+          {saving ? t("form.saving") : t("form.saveAndSync")}
         </Button>
       </div>
     </div>
   );
-}
-
-function formatCompatPrefillOption(prefill: AddDeviceCompatPrefill): string {
-  const pct = `${Math.round(Math.max(0, Math.min(1, prefill.confidence)) * 100)}%`;
-  const label = prefill.serviceName || prefill.baseURL;
-  return `${label} (${prefill.baseURL}, ${pct})`;
 }

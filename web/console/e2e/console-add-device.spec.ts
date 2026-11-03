@@ -30,14 +30,14 @@ test("add device agent linux installer enables install-vnc-prereqs by default", 
   await page.getByRole("button", { name: "Add device", exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: /^Agent/ }).click();
 
-  await expect(page.getByText("Install Agent", { exact: true })).toBeVisible();
+  await expect(page.getByText("Install the agent", { exact: true })).toBeVisible();
   await page.getByLabel("Expected hostname").fill("vnc-test-node");
   await page.getByRole("button", { name: "Create one-time token", exact: true }).click();
-  await expect(page.getByText("Enrollment Token", { exact: true })).toBeVisible();
+  await expect(page.getByText("Enrollment token", { exact: true })).toBeVisible();
   await expect(page.locator("pre").filter({ hasText: "--install-vnc-prereqs" }).first()).toBeVisible();
 
   await page.getByRole("button", { name: /Advanced settings/i }).click();
-  await page.getByLabel("Enable desktop prerequisites for VNC/remote view").uncheck();
+  await page.getByLabel("Install VNC prerequisites for Remote View").uncheck();
   await expect(page.locator("pre").filter({ hasText: "--install-vnc-prereqs" })).toHaveCount(0);
 });
 
@@ -146,8 +146,8 @@ test("add device portainer flow tests and saves connector settings", async ({ pa
 
   await expect(page.getByText("Connect Portainer", { exact: true })).toBeVisible();
 
-  const testButton = page.getByRole("button", { name: "Test Connection", exact: true });
-  const saveButton = page.getByRole("button", { name: "Save, Sync & Close", exact: true });
+  const testButton = page.getByRole("button", { name: "Test connection", exact: true });
+  const saveButton = page.getByRole("button", { name: "Save and sync", exact: true });
   await expect(saveButton).toBeDisabled();
 
   await page.getByPlaceholder("https://portainer.local:9443").fill("https://portainer.local:9443/");
@@ -158,7 +158,7 @@ test("add device portainer flow tests and saves connector settings", async ({ pa
   await expect(page.getByText("Portainer API reachable.")).toBeVisible();
 
   await page.getByPlaceholder("Homelab Portainer").fill("Lab Portainer");
-  await page.getByRole("button", { name: "Save, Sync & Close", exact: true }).click();
+  await page.getByRole("button", { name: "Save and sync", exact: true }).click();
 
   await expect(page.getByText("Connect Portainer", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Portainer connector saved.")).toBeVisible();
@@ -255,7 +255,7 @@ test("add device portainer flow lets operator choose detected endpoint", async (
 
   const detectedEndpointBlock = page
     .locator("div")
-    .filter({ has: page.getByText("Detected Endpoint", { exact: true }) })
+    .filter({ has: page.getByText("Detected address", { exact: true }) })
     .filter({ has: page.locator("select") })
     .first();
   const detectedEndpointSelect = detectedEndpointBlock.locator("select");
@@ -273,7 +273,7 @@ test("add device portainer flow lets operator choose detected endpoint", async (
   await expect(clusterNameInput).toHaveValue("Portainer Beta");
 
   await page.getByPlaceholder("Required for initial setup").fill("ptr-secret");
-  await page.getByRole("button", { name: "Test Connection", exact: true }).click();
+  await page.getByRole("button", { name: "Test connection", exact: true }).click();
   await expect(page.getByText("Portainer API reachable.")).toBeVisible();
 
   expect(lastTestPayload).not.toBeNull();
@@ -321,7 +321,7 @@ test("add device portainer flow surfaces test-connection failures", async ({ pag
   await expect(page.getByText("Connect Portainer", { exact: true })).toBeVisible();
   await page.getByPlaceholder("https://portainer.local:9443").fill("https://portainer.local:9443/");
 
-  await page.getByRole("button", { name: "Test Connection", exact: true }).click();
+  await page.getByRole("button", { name: "Test connection", exact: true }).click();
   await expect(page.getByText("portainer test failed")).toBeVisible();
   await expect(page.getByText("Connect Portainer", { exact: true })).toBeVisible();
 });
@@ -431,13 +431,13 @@ test("add device pbs flow tests and saves connector settings", async ({ page }) 
 
   await expect(page.getByText("Connect PBS", { exact: true })).toBeVisible();
 
-  const testButton = page.getByRole("button", { name: "Test Connection", exact: true });
-  const saveButton = page.getByRole("button", { name: "Save, Sync & Close", exact: true });
+  const testButton = page.getByRole("button", { name: "Test connection", exact: true });
+  const saveButton = page.getByRole("button", { name: "Save and sync", exact: true });
   await expect(saveButton).toBeDisabled();
 
   await page.getByLabel("Base URL", { exact: true }).fill("https://pbs.local:8007/");
   await page.getByLabel("Token ID", { exact: true }).fill("root@pam!labtether");
-  await page.getByLabel("Token Secret", { exact: true }).fill("pbs-secret");
+  await page.getByLabel("Token secret", { exact: true }).fill("pbs-secret");
   await page.getByLabel("Custom CA certificate (PEM)", { exact: true }).fill(
     "-----BEGIN CERTIFICATE-----\nqa-ca\n-----END CERTIFICATE-----",
   );
@@ -446,8 +446,8 @@ test("add device pbs flow tests and saves connector settings", async ({ page }) 
   await testButton.click();
   await expect(page.getByText("PBS API reachable.")).toBeVisible();
 
-  await page.getByLabel("Display Name", { exact: true }).fill("Lab PBS");
-  await page.getByRole("button", { name: "Save, Sync & Close", exact: true }).click();
+  await page.getByLabel("Display name", { exact: true }).fill("Lab PBS");
+  await page.getByRole("button", { name: "Save and sync", exact: true }).click();
 
   await expect(page.getByText("Connect PBS", { exact: true })).toHaveCount(0);
   await expect(page.getByText("PBS connector saved.")).toBeVisible();
@@ -510,7 +510,7 @@ test("add device pbs flow surfaces test-connection failures", async ({ page }) =
   await page.getByLabel("Base URL", { exact: true }).fill("https://pbs.local:8007/");
   await page.getByLabel("Token ID", { exact: true }).fill("root@pam!labtether");
 
-  await page.getByRole("button", { name: "Test Connection", exact: true }).click();
+  await page.getByRole("button", { name: "Test connection", exact: true }).click();
   await expect(page.getByText("pbs test failed")).toBeVisible();
   await expect(page.getByText("Connect PBS", { exact: true })).toBeVisible();
 });
@@ -616,8 +616,8 @@ test("add device truenas flow tests and saves connector settings", async ({ page
 
   await expect(page.getByText("Connect TrueNAS", { exact: true })).toBeVisible();
 
-  const testButton = page.getByRole("button", { name: "Test Connection", exact: true });
-  const saveButton = page.getByRole("button", { name: "Save, Sync & Close", exact: true });
+  const testButton = page.getByRole("button", { name: "Test connection", exact: true });
+  const saveButton = page.getByRole("button", { name: "Save and sync", exact: true });
   await expect(saveButton).toBeDisabled();
 
   await page.getByPlaceholder("https://truenas.local").fill("https://vaultnas.local:9443/");
@@ -628,7 +628,7 @@ test("add device truenas flow tests and saves connector settings", async ({ page
   await testButton.click();
   await expect(page.getByText("TrueNAS API reachable.")).toBeVisible();
 
-  await page.getByRole("button", { name: "Save, Sync & Close", exact: true }).click();
+  await page.getByRole("button", { name: "Save and sync", exact: true }).click();
 
   await expect(page.getByText("Connect TrueNAS", { exact: true })).toHaveCount(0);
   await expect(page.getByText("TrueNAS connector saved.")).toBeVisible();

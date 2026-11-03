@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Copy, ExternalLink, Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { useToast } from "../../contexts/ToastContext";
@@ -10,6 +11,8 @@ import { useHomeAssistantSettings } from "../../hooks/useHomeAssistantSettings";
 import { useEnrollment, type HubConnectionCandidate } from "../../hooks/useEnrollment";
 import { baseURLHostLabel, validateHTTPSOrHTTPURL, validatePollIntervalSeconds } from "./validation";
 import { monitorCollectorRunWithRetry } from "./collectorSync";
+import { compatPrefillOption, firstError, validationText } from "./addDeviceText";
+import { hubCandidateLabel } from "./agentInstallCommands";
 import type { AddDeviceAddedEvent, AddDeviceCompatPrefill, SetupMode } from "./types";
 import { copyText } from "../../lib/clipboard";
 
@@ -79,52 +82,58 @@ function isLoopbackHostname(rawHostname: string): boolean {
     && Number(octets[0]) === 127;
 }
 
+/**
+ * Checks the hub address the way the Home Assistant integration does. Returns a message key under
+ * `auth.addDevice.homeassistant`, or "" when the address is usable.
+ */
 export function validateHomeAssistantHubOrigin(rawURL: string): string {
   const value = rawURL.trim();
-  if (!value) return "Enter a direct LabTether Hub URL that Home Assistant can reach.";
+  if (!value) return "hubEmpty";
   if ([...value].some((character) => {
     const codePoint = character.codePointAt(0) ?? 0;
     return codePoint < 0x20 || codePoint === 0x7f;
   })) {
-    return "LabTether Hub Address contains invalid control characters.";
+    return "hubControl";
   }
 
   let parsed: URL;
   try {
     parsed = new URL(value);
   } catch {
-    return "LabTether Hub Address must be a valid URL.";
+    return "hubInvalid";
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    return "LabTether Hub Address must start with http:// or https://.";
+    return "hubScheme";
   }
   if (!parsed.hostname || parsed.username || parsed.password) {
-    return "LabTether Hub Address must be a credential-free origin.";
+    return "hubCredentials";
   }
   if (parsed.pathname !== "/" || parsed.search || parsed.hash) {
-    return "LabTether Hub Address must not include a path, query, or fragment.";
+    return "hubPath";
   }
   if (parsed.port === "0") {
-    return "LabTether Hub Address must use a valid port.";
+    return "hubPort";
   }
   return "";
 }
 
+/** "hubPlainHttp" when Home Assistant needs its insecure HTTP option for this address, else "". */
 export function homeAssistantHubHTTPWarning(rawURL: string): string {
   if (validateHomeAssistantHubOrigin(rawURL)) return "";
   const parsed = new URL(rawURL.trim());
   if (parsed.protocol === "http:" && !isLoopbackHostname(parsed.hostname)) {
-    return "Plain HTTP requires explicitly enabling Allow insecure HTTP in Home Assistant.";
+    return "hubPlainHttp";
   }
   return "";
 }
 
 type CopyRowProps = {
   label: string;
+  copyLabel: string;
   value: string;
 };
 
-function CopyRow({ label, value }: CopyRowProps) {
+function CopyRow({ label, copyLabel, value }: CopyRowProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(() => {
@@ -142,9 +151,9 @@ function CopyRow({ label, value }: CopyRowProps) {
         <button
           type="button"
           onClick={handleCopy}
-          aria-label={`Copy ${label}`}
+          aria-label={copyLabel}
           className="rounded p-1 transition-colors duration-150 hover:bg-[var(--hover)]"
-          title={`Copy ${label}`}
+          title={copyLabel}
         >
           {copied ? <Check size={14} className="text-[var(--ok)]" /> : <Copy size={14} className="text-[var(--muted)]" />}
         </button>
@@ -168,6 +177,8 @@ function DocsLink({ href, label }: { href: string; label: string }) {
 }
 
 export function HomeAssistantSetupStep({ onBack, onClose, onAdded, compatPrefills = [], setupMode }: HomeAssistantSetupStepProps) {
+  const t = useTranslations("auth.addDevice");
+  const tSync = useTranslations("auth.addDevice.sync");
   const { addToast } = useToast();
   const { fetchStatus } = useStatusControls();
   const {
@@ -254,17 +265,17 @@ export function HomeAssistantSetupStep({ onBack, onClose, onAdded, compatPrefill
     setIntegrationHubURL(preferredHomeAssistantHubURL(hubCandidates, selectedHubURL, consoleOrigin));
   }, [hubCandidates, selectedHubURL, consoleOrigin]);
 
-  const integrationHubURLError = validateHomeAssistantHubOrigin(integrationHubURL);
-  const integrationHubURLWarning = homeAssistantHubHTTPWarning(integrationHubURL);
+  const hubText = (key: string) => (key ? t(`homeassistant.${key}`) : "");
+  const integrationHubURLError = hubText(validateHomeAssistantHubOrigin(integrationHubURL));
+  const integrationHubURLWarning = hubText(homeAssistantHubHTTPWarning(integrationHubURL));
 
-  const baseURLError = validateHTTPSOrHTTPURL(baseURL);
-  const intervalError = validatePollIntervalSeconds(intervalSeconds);
+  const baseURLError = validationText(t, validateHTTPSOrHTTPURL(baseURL));
+  const intervalError = validationText(t, validatePollIntervalSeconds(intervalSeconds));
   const tokenRequiredError = (configured || Boolean(credentialID) || token.trim())
     ? ""
-    : "Token is required for initial setup.";
-  const saveValidationError = [baseURLError, intervalError, tokenRequiredError].find((entry) => entry) ?? "";
-  const testValidationError = [baseURLError, (!token.trim() && !credentialID) ? "Token or saved credential is required for testing." : ""]
-    .find((entry) => entry) ?? "";
+    : t("validation.accessTokenRequired");
+  const saveValidationError = firstError(baseURLError, intervalError, tokenRequiredError);
+  const testValidationError = firstError(baseURLError, (!token.trim() && !credentialID) ? t("validation.accessTokenToTest") : "");
 
   const handleSave = async () => {
     if (saveValidationError) {
@@ -276,7 +287,7 @@ export function HomeAssistantSetupStep({ onBack, onClose, onAdded, compatPrefill
 
     const result = await save();
     if (!result.ok) {
-      addToast("error", result.error || "Failed to save Home Assistant settings.");
+      addToast("error", result.error || t("form.saveFailed", { name: "Home Assistant" }));
       return;
     }
 
@@ -285,12 +296,12 @@ export function HomeAssistantSetupStep({ onBack, onClose, onAdded, compatPrefill
     }
 
     if (result.collectorID) {
-      monitorCollectorRunWithRetry(result.collectorID, "Home Assistant", addToast);
+      monitorCollectorRunWithRetry(result.collectorID, "Home Assistant", addToast, tSync);
     }
 
     const focusQuery = displayName.trim() || baseURLHostLabel(baseURL);
     onAdded?.({ source: "homeassistant", focusQuery });
-    addToast("success", "Home Assistant connector saved.");
+    addToast("success", t("form.connectorSaved", { name: "Home Assistant" }));
     void fetchStatus();
     onClose();
   };
@@ -306,7 +317,7 @@ export function HomeAssistantSetupStep({ onBack, onClose, onAdded, compatPrefill
   };
 
   if (loading) {
-    return <p className="text-xs text-[var(--muted)]">Loading Home Assistant settings...</p>;
+    return <p className="text-xs text-[var(--muted)]">{t("form.loading")}</p>;
   }
 
   return (
@@ -317,7 +328,7 @@ export function HomeAssistantSetupStep({ onBack, onClose, onAdded, compatPrefill
 
       {compatPrefills.length > 1 && (
         <div>
-          <label className="mb-1 block text-xs font-medium text-[var(--muted)]">Detected Endpoint</label>
+          <label className="mb-1 block text-xs font-medium text-[var(--muted)]">{t("form.detected")}</label>
           <select
             value={selectedCompatBaseURL || compatPrefills[0].baseURL}
             onChange={(event) => {
@@ -332,45 +343,30 @@ export function HomeAssistantSetupStep({ onBack, onClose, onAdded, compatPrefill
           >
             {compatPrefills.map((prefill) => (
               <option key={prefill.baseURL} value={prefill.baseURL}>
-                {formatCompatPrefillOption(prefill)}
+                {compatPrefillOption(t, prefill)}
               </option>
             ))}
           </select>
-          <p className="mt-1 text-xs text-[var(--muted)]">Selecting a detected endpoint updates base URL and display name.</p>
         </div>
       )}
 
-      <p className="text-xs text-[var(--muted)]">
-        Home Assistant onboarding has two paths: install the custom integration now, or use the add-on packaging scaffold path.
-      </p>
-
       <div className="space-y-2 rounded-lg border border-[var(--line)] bg-[var(--surface)] p-3">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-sm font-medium text-[var(--text)]">Custom Integration</p>
-          <span className="text-xs text-[var(--text-2)]">Available</span>
-        </div>
-        <p className="text-xs text-[var(--muted)]">
-          Add the `labtether` custom integration in Home Assistant, then configure it with your LabTether hub URL and owner token.
-        </p>
-        <DocsLink href={CUSTOM_INTEGRATION_DOC_URL} label="Open Integration Setup Guide" />
+        <p className="text-sm font-medium text-[var(--text)]">{t("homeassistant.integration")}</p>
+        <p className="text-xs text-[var(--muted)]">{t("homeassistant.integrationText")}</p>
+        <DocsLink href={CUSTOM_INTEGRATION_DOC_URL} label={t("homeassistant.integrationGuide")} />
       </div>
 
       <div className="space-y-2 rounded-lg border border-[var(--line)] bg-[var(--surface)] p-3">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-sm font-medium text-[var(--text)]">Home Assistant Add-on</p>
-          <span className="text-xs text-[var(--text-2)]">Scaffold</span>
-        </div>
-        <p className="text-xs text-[var(--muted)]">
-          The install guide includes scaffold status and the eventual add-on install steps once repository publishing is available.
-        </p>
-        <DocsLink href={ADDON_DOC_URL} label="Open Add-on Install Guide" />
+        <p className="text-sm font-medium text-[var(--text)]">{t("homeassistant.addon")}</p>
+        <p className="text-xs text-[var(--muted)]">{t("homeassistant.addonText")}</p>
+        <DocsLink href={ADDON_DOC_URL} label={t("homeassistant.addonGuide")} />
       </div>
 
       <div className="space-y-2 rounded-lg border border-[var(--line)] p-3">
-        <p className="text-xs font-medium text-[var(--muted)]">Quick Config Values</p>
+        <p className="text-xs font-medium text-[var(--muted)]">{t("homeassistant.values")}</p>
         <div className="space-y-1">
           <label htmlFor="homeassistant-hub-url" className="block text-xs font-medium text-[var(--muted)]">
-            LabTether Hub Address
+            {t("homeassistant.hubAddress")}
           </label>
           <Input
             id="homeassistant-hub-url"
@@ -387,57 +383,56 @@ export function HomeAssistantSetupStep({ onBack, onClose, onAdded, compatPrefill
             <datalist id="homeassistant-hub-candidates">
               {integrationHubCandidates.map((candidate) => (
                 <option key={candidate.hub_url} value={candidate.hub_url}>
-                  {candidate.label || candidate.kind}
+                  {hubCandidateLabel(t, candidate)}
                 </option>
               ))}
             </datalist>
           ) : null}
           <p id="homeassistant-hub-url-help" className="text-xs text-[var(--muted)]">
-            Use the direct Hub address, not this web console address. Configured external and Tailscale addresses are suggested; enter a reachable LAN address manually when needed.
+            {t("homeassistant.hubAddressHelp")}
           </p>
           {integrationHubURLError ? <p role="alert" className="text-xs text-[var(--warn)]">{integrationHubURLError}</p> : null}
           {integrationHubURLWarning ? <p role="alert" className="text-xs text-[var(--warn)]">{integrationHubURLWarning}</p> : null}
         </div>
-        {integrationHubURLError ? null : <CopyRow label="LabTether Hub URL" value={integrationHubURL.trim()} />}
-        <CopyRow label="Token variable" value="LABTETHER_OWNER_TOKEN" />
-        <p className="text-xs text-[var(--muted)]">
-          Use an address that the Home Assistant host can reach; do not use localhost unless both products run on the same host.
-        </p>
+        {integrationHubURLError ? null : (
+          <CopyRow label={t("homeassistant.hubUrl")} copyLabel={t("homeassistant.copyHubUrl")} value={integrationHubURL.trim()} />
+        )}
+        <CopyRow label={t("homeassistant.tokenVariable")} copyLabel={t("homeassistant.copyTokenVariable")} value="LABTETHER_OWNER_TOKEN" />
+        <p className="text-xs text-[var(--muted)]">{t("homeassistant.reachNote")}</p>
       </div>
 
       <div>
-        <label htmlFor="homeassistant-base-url" className="mb-1 block text-xs font-medium text-[var(--muted)]">Home Assistant Base URL</label>
+        <label htmlFor="homeassistant-base-url" className="mb-1 block text-xs font-medium text-[var(--muted)]">{t("homeassistant.baseUrl")}</label>
         <Input id="homeassistant-base-url" value={baseURL} onChange={(event) => setBaseURL(event.target.value)} placeholder="http://homeassistant.local:8123" />
       </div>
 
       <div>
-        <label htmlFor="homeassistant-access-token" className="mb-1 block text-xs font-medium text-[var(--muted)]">Long-Lived Access Token</label>
+        <label htmlFor="homeassistant-access-token" className="mb-1 block text-xs font-medium text-[var(--muted)]">{t("homeassistant.accessToken")}</label>
         <Input
           id="homeassistant-access-token"
           type="password"
           value={token}
           onChange={(event) => setToken(event.target.value)}
-          placeholder={configured ? "•••••••• (unchanged)" : "Required for initial setup"}
+          placeholder={configured ? t("form.savedSecret") : t("form.requiredForSetup")}
         />
       </div>
 
       <div className="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
-        <p className="text-xs font-medium text-[var(--text)]">Credential Template</p>
+        <p className="text-xs font-medium text-[var(--text)]">{t("form.credentials")}</p>
         <p className="text-xs text-[var(--muted)]">
-          In Home Assistant, create a long-lived access token dedicated to LabTether. Name suggestion:
-          <code className="text-[var(--text)]"> labtether_connector </code>.
+          {t.rich("homeassistant.credentialsText", { code: (chunks) => <code className="text-[var(--text)]">{chunks}</code> })}
         </p>
       </div>
 
       <div>
-        <label htmlFor="homeassistant-display-name" className="mb-1 block text-xs font-medium text-[var(--muted)]">Display Name</label>
+        <label htmlFor="homeassistant-display-name" className="mb-1 block text-xs font-medium text-[var(--muted)]">{t("form.displayName")}</label>
         <Input id="homeassistant-display-name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Home Assistant" />
       </div>
 
       {setupMode === "advanced" ? (
         <>
           <div>
-            <label htmlFor="homeassistant-poll-interval" className="mb-1 block text-xs font-medium text-[var(--muted)]">Poll Interval (s)</label>
+            <label htmlFor="homeassistant-poll-interval" className="mb-1 block text-xs font-medium text-[var(--muted)]">{t("form.pollInterval")}</label>
             <Input
               id="homeassistant-poll-interval"
               type="number"
@@ -450,34 +445,28 @@ export function HomeAssistantSetupStep({ onBack, onClose, onAdded, compatPrefill
 
           <label className="flex items-center gap-2 text-xs text-[var(--muted)]">
             <input type="checkbox" checked={skipVerify} onChange={(event) => setSkipVerify(event.target.checked)} />
-            Skip TLS certificate verification
+            {t("form.skipTls")}
           </label>
         </>
       ) : (
-        <p className="text-xs text-[var(--muted)]">Default setup uses 60s polling with TLS verification enabled.</p>
+        <p className="text-xs text-[var(--muted)]">{t("form.defaultPolling")}</p>
       )}
 
       <div className="flex items-center gap-3 pt-1">
-        <Button onClick={onBack}>Back</Button>
+        <Button onClick={onBack}>{t("form.back")}</Button>
         <Button disabled={testing || saving || running} onClick={() => void handleTestConnection()}>
           {testing ? <Loader2 size={14} className="mr-1 inline animate-spin" /> : null}
-          {testing ? "Testing..." : "Test Connection"}
+          {testing ? t("form.testing") : t("form.testConnection")}
         </Button>
         <Button disabled={!collectorID || saving || testing || running} onClick={() => void runNow()}>
           {running ? <Loader2 size={14} className="mr-1 inline animate-spin" /> : null}
-          {running ? "Starting..." : "Run Sync"}
+          {running ? t("form.starting") : t("form.syncNow")}
         </Button>
         <Button variant="primary" disabled={saving || testing || running || Boolean(saveValidationError)} onClick={() => void handleSave()}>
           {saving ? <Loader2 size={14} className="mr-1 inline animate-spin" /> : null}
-          {saving ? "Saving..." : "Save, Sync & Close"}
+          {saving ? t("form.saving") : t("form.saveAndSync")}
         </Button>
       </div>
     </div>
   );
-}
-
-function formatCompatPrefillOption(prefill: AddDeviceCompatPrefill): string {
-  const pct = `${Math.round(Math.max(0, Math.min(1, prefill.confidence)) * 100)}%`;
-  const label = prefill.serviceName || prefill.baseURL;
-  return `${label} (${prefill.baseURL}, ${pct})`;
 }

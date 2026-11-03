@@ -22,18 +22,6 @@ type AddDeviceModalProps = {
   onAdded?: (event: AddDeviceAddedEvent) => void;
 };
 
-// Step titles (English, as the setup steps' own text is).
-const sourceLabels: Record<SourceType, string> = {
-  agent: "Install Agent",
-  proxmox: "Connect Proxmox",
-  pbs: "Connect PBS",
-  docker: "Connect Docker",
-  portainer: "Connect Portainer",
-  truenas: "Connect TrueNAS",
-  homeassistant: "Connect Home Assistant",
-  manual: "Add a manual device",
-};
-
 /**
  * Add a device: pick how it connects (the agent, an API, or by hand), then that system's setup step.
  * The header names the step; Back in each step returns to the list.
@@ -41,6 +29,7 @@ const sourceLabels: Record<SourceType, string> = {
 export function AddDeviceModal({ open, onClose, onAdded }: AddDeviceModalProps) {
   const t = useTranslations("auth.addDevice");
   const [selectedSource, setSelectedSource] = useState<SourceType | null>(null);
+  const stepTitle = selectedSource ? t(`steps.${selectedSource}`) : "";
   const [prefillsBySource, setPrefillsBySource] = useState<Partial<Record<SourceType, AddDeviceCompatPrefill[]>>>({});
 
   useEffect(() => {
@@ -130,7 +119,7 @@ export function AddDeviceModal({ open, onClose, onAdded }: AddDeviceModalProps) 
     <Modal
       open={open}
       onClose={handleClose}
-      ariaTitle={selectedSource ? `${t("title")}: ${sourceLabels[selectedSource]}` : t("title")}
+      ariaTitle={selectedSource ? `${t("title")}: ${stepTitle}` : t("title")}
       description={t("description")}
       className="si-ad"
     >
@@ -140,7 +129,7 @@ export function AddDeviceModal({ open, onClose, onAdded }: AddDeviceModalProps) 
             <>
               <button type="button" className="si-ad-up" onClick={handleBack}>{t("title")}</button>
               <ChevronRight aria-hidden="true" strokeWidth={2} />
-              <span>{sourceLabels[selectedSource]}</span>
+              <span>{stepTitle}</span>
             </>
           ) : (
             <span>{t("title")}</span>
