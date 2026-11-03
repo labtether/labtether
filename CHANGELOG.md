@@ -108,6 +108,13 @@ v1.7.1.
   empty.
 - Container links on hosts whose names contain a dash open the right
   container.
+- A critical alert opens one issue per rule. When the rule fires again
+  while its issue is still open, the firing joins that issue instead of
+  opening a second one. The issue is named after the rule and its device
+  ("High CPU on nas01"), not "Auto: High CPU". Its timeline shows each time
+  the alert fired and recovered; before, it said "No events recorded".
+  Timeline lines name the rule, device, update plan or person instead of
+  IDs.
 - In the ⌘K palette, Enter on a plain word no longer opens a terminal through
   Quick connect.
 - `/api-docs` without a language in the address opens the API docs instead of
