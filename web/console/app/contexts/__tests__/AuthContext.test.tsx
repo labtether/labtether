@@ -108,3 +108,45 @@ describe("AuthProvider request ownership", () => {
     expect(navigation.router.push).not.toHaveBeenCalled();
   });
 });
+
+describe("AuthProvider session", () => {
+  it("keeps the Hub's 2FA state, which it sends beside the user", async () => {
+    fetchMock.mockImplementation(async () => json({ totp_enabled: true, user: signedIn }));
+    await render();
+    expect(current.user).toEqual({ ...signedIn, totp_enabled: true });
+  });
+
+  it("sends a person whose session ended while the page was open to sign-in, back to the same page", async () => {
+    vi.useFakeTimers();
+    try {
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+      window.history.replaceState(null, "", "/en/alerts?tab=rules");
+      await render();
+      expect(current.user).toEqual(signedIn);
+      fetchMock.mockImplementation(async () => json({ error: "unauthorized" }, 401));
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+      expect(current.user).toBeNull();
+      expect(navigation.router.push).toHaveBeenCalledWith(`/login?next=${encodeURIComponent("/en/alerts?tab=rules")}`);
+    } finally {
+      vi.useRealTimers();
+      Reflect.deleteProperty(document, "visibilityState");
+      window.history.replaceState(null, "", "/");
+    }
+  });
+
+  it("keeps the session when the Hub does not answer the check", async () => {
+    vi.useFakeTimers();
+    try {
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+      await render();
+      fetchMock.mockImplementation(async () => { throw new TypeError("network down"); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+      expect(current.user).toEqual(signedIn);
+      expect(navigation.router.push).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+      Reflect.deleteProperty(document, "visibilityState");
+    }
+  });
+});
