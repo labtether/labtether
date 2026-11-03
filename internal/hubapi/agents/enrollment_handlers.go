@@ -44,7 +44,7 @@ func (d *Deps) HandleEnroll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if d.EnrollmentStore == nil || d.EnrollmentTransactions == nil {
-		servicehttp.WriteError(w, http.StatusServiceUnavailable, "enrollment not available")
+		servicehttp.WriteError(w, http.StatusServiceUnavailable, refusalServerError)
 		return
 	}
 
@@ -55,17 +55,17 @@ func (d *Deps) HandleEnroll(w http.ResponseWriter, r *http.Request) {
 
 	var req enrollment.EnrollRequest
 	if err := shared.DecodeJSONBody(w, r, &req); err != nil {
-		servicehttp.WriteError(w, http.StatusBadRequest, "invalid enrollment request")
+		servicehttp.WriteError(w, http.StatusBadRequest, refusalBadRequest)
 		return
 	}
 
 	if strings.TrimSpace(req.EnrollmentToken) == "" {
-		servicehttp.WriteError(w, http.StatusBadRequest, "enrollment_token is required")
+		servicehttp.WriteError(w, http.StatusBadRequest, refusalMissingKey)
 		return
 	}
 	hostname, validHostname := validEnrollmentHostname(req.Hostname, false)
 	if !validHostname {
-		servicehttp.WriteError(w, http.StatusBadRequest, "hostname must be valid UTF-8, at most 253 bytes, and contain no control characters")
+		servicehttp.WriteError(w, http.StatusBadRequest, refusalBadHostname)
 		return
 	}
 	req.Hostname = hostname
@@ -75,13 +75,13 @@ func (d *Deps) HandleEnroll(w http.ResponseWriter, r *http.Request) {
 	// Generate asset ID from hostname (normalized to safe characters).
 	assetID := NormalizeHostnameForAssetID(req.Hostname)
 	if assetID == "" {
-		servicehttp.WriteError(w, http.StatusBadRequest, "hostname produced an empty asset ID after normalization")
+		servicehttp.WriteError(w, http.StatusBadRequest, refusalNoHostname)
 		return
 	}
 	resolvedPlatform := platforms.Resolve(req.Platform, "", "", "", "")
 	deviceFingerprint, proofVersion, identityProofProvided, identityProofErr := verifyTokenEnrollmentIdentity(req, assetID)
 	if identityProofErr != nil {
-		servicehttp.WriteError(w, http.StatusBadRequest, "invalid device identity proof")
+		servicehttp.WriteError(w, http.StatusBadRequest, refusalBadProof)
 		return
 	}
 
@@ -89,7 +89,7 @@ func (d *Deps) HandleEnroll(w http.ResponseWriter, r *http.Request) {
 	rawToken, hashedToken, err := auth.GenerateSessionToken()
 	if err != nil {
 		log.Printf("enroll: error generating agent token: %v", err)
-		servicehttp.WriteError(w, http.StatusInternalServerError, "enrollment error")
+		servicehttp.WriteError(w, http.StatusInternalServerError, refusalServerError)
 		return
 	}
 	expiresAt := NewAgentTokenExpiry(time.Now().UTC())
@@ -118,7 +118,7 @@ func (d *Deps) HandleEnroll(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		log.Printf("enroll: atomic enrollment failed: %v", err)
-		servicehttp.WriteError(w, http.StatusInternalServerError, "enrollment error")
+		servicehttp.WriteError(w, http.StatusInternalServerError, refusalServerError)
 		return
 	}
 	if commitResult.Readmitted {
