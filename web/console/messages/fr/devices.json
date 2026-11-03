@@ -240,6 +240,7 @@
     "remove": {
       "title": "Supprimer {name}\u00a0?",
       "body": "LabTether cesse de surveiller {name} et efface son historique.",
+      "addBack": "Pour l’ajouter plus tard, utilisez un nouveau jeton à usage unique depuis Ajouter un appareil.",
       "typeName": "Saisissez {name} pour confirmer",
       "cancel": "Annuler",
       "confirm": "Supprimer",
