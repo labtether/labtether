@@ -27,6 +27,18 @@ export const KNOWN_ACTIONS = new Set([
   "settings.ssh_hub_key.rotation", "settings.managed_database.password_revealed",
 ]);
 
+/** Every API change the Hub stores beside its named event; shown only under "All requests". */
+export const REQUEST_TYPE = "api.request";
+
+/** The type filter value that also shows API requests. */
+export const ALL_REQUESTS = "requests";
+
+/** The object's name the Hub stored with the row (details.target_name), else its ID. */
+export function targetText(entry: Pick<AuditEntry, "target" | "details">): string {
+  const name = entry.details?.target_name;
+  return typeof name === "string" && name.trim() ? name.trim() : entry.target ?? "";
+}
+
 /** The message key for a known type ("terminal.session.created" → "terminal_session_created"), or "". */
 export function actionKey(type: string): string {
   return KNOWN_ACTIONS.has(type) ? type.replace(/\./g, "_") : "";
@@ -87,10 +99,13 @@ export function auditRows(
   opts: { query: string; who: string; type: string; sort: AuditSort; nameOf: (id: string) => string; textOf: (e: AuditEntry) => string },
 ): AuditEntry[] {
   const q = opts.query.trim().toLowerCase();
+  // "all" is every action but the API requests behind them; "requests" adds those.
+  const typeHit = (e: AuditEntry) =>
+    opts.type === ALL_REQUESTS || (opts.type === "all" ? e.type !== REQUEST_TYPE : e.type === opts.type);
   const hit = entries.filter(
     (e) =>
       (opts.who === "all" || opts.nameOf(e.actor_id ?? "") === opts.who) &&
-      (opts.type === "all" || e.type === opts.type) &&
+      typeHit(e) &&
       (!q || opts.textOf(e).toLowerCase().includes(q)),
   );
   const [key, dir] = opts.sort.split(":") as ["time" | "who", "asc" | "desc"];
@@ -111,7 +126,7 @@ export function detailRows(entry: AuditEntry): Array<[string, string]> {
   const rows: Array<[string, string]> = [];
   if (entry.reason) rows.push(["reason", entry.reason]);
   for (const [k, v] of Object.entries(entry.details ?? {})) {
-    if (v === null || v === undefined || v === "") continue;
+    if (v === null || v === undefined || v === "" || k === "target_name") continue;
     rows.push([k, typeof v === "string" ? v : JSON.stringify(v)]);
   }
   return rows;

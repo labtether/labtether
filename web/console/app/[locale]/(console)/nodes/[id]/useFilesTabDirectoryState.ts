@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
+import { useTranslations } from "next-intl";
 import { listFiles, type FileEntry } from "../../files/fileOpsClient";
-import { joinPath, parentPath } from "../../files/fileWorkspaceUtils";
+import { joinPath, outsideBasePath, parentPath } from "../../files/fileWorkspaceUtils";
 
 type UseFilesTabDirectoryStateArgs = {
   nodeId: string;
@@ -10,6 +11,10 @@ type UseFilesTabDirectoryStateArgs = {
 };
 
 export function useFilesTabDirectoryState({ nodeId, setError }: UseFilesTabDirectoryStateArgs) {
+  // Kept in a ref so a new translator does not make a new listDir (which re-reads the folder).
+  const tBar = useTranslations("files.bar");
+  const tBarRef = useRef(tBar);
+  tBarRef.current = tBar;
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [currentPath, setCurrentPath] = useState("~");
   const [pathInput, setPathInputState] = useState("~");
@@ -72,6 +77,13 @@ export function useFilesTabDirectoryState({ nodeId, setError }: UseFilesTabDirec
         return;
       }
 
+      // A typed path the agent does not share: keep the open folder and say why, in the person's language.
+      const refused = outsideBasePath(err instanceof Error ? err.message : "");
+      if (refused !== null) {
+        setPathInputState(currentPathRef.current);
+        setError(tBarRef.current("outsideShared", { path: refused }));
+        return;
+      }
       setEntries([]);
       setError(err instanceof Error ? err.message : "failed to list files");
     } finally {

@@ -53,7 +53,9 @@
     "refresh": "Refresh",
     "openSplit": "Open second pane",
     "closeSplit": "Close second pane",
-    "thisTab": "{name} (this tab)"
+    "thisTab": "{name} (this tab)",
+    "outsideRoot": "{path} is outside the folder this device shares ({root}).",
+    "outsideShared": "{path} is outside the folder this device shares."
   },
   "clip": {
     "copy": "{count, plural, one {# item} other {# items}} to paste",

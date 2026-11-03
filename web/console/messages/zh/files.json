@@ -53,7 +53,9 @@
     "refresh": "刷新",
     "openSplit": "打开第二个窗格",
     "closeSplit": "关闭第二个窗格",
-    "thisTab": "{name}（此标签页）"
+    "thisTab": "{name}（此标签页）",
+    "outsideRoot": "{path} 不在此设备共享的文件夹（{root}）内。",
+    "outsideShared": "{path} 不在此设备共享的文件夹内。"
   },
   "clip": {
     "copy": "{count, plural, other {# 项}}待粘贴",

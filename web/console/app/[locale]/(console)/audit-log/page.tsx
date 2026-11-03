@@ -15,7 +15,7 @@ import { hasAdminRole } from "../../../lib/roles";
 import { ChipGroup, EmptyLine, FilterField, PickMenu } from "../logs/LogControls";
 import { AuditRow, type AuditText } from "./AuditRow";
 import { AuditViews } from "./AuditViews";
-import { actionKey, auditRows, auditTime, humanizeType, outcome, peopleByActivity, type AuditEntry, type AuditSort } from "./auditModel";
+import { actionKey, ALL_REQUESTS, auditRows, auditTime, humanizeType, outcome, peopleByActivity, REQUEST_TYPE, targetText, type AuditEntry, type AuditSort } from "./auditModel";
 import { copyText } from "../../../lib/clipboard";
 
 const AUTO_REFRESH_MS = 30_000;
@@ -65,7 +65,7 @@ export default function AuditLogPage() {
   const searchText = useCallback(
     (e: AuditEntry) => {
       const result = outcome(e.decision);
-      return [text.time(e), text.who(e), text.action(e), e.target ?? "", e.type, result ? t(`outcome.${result}`) : ""].join(" ");
+      return [text.time(e), text.who(e), text.action(e), targetText(e), e.target ?? "", e.type, result ? t(`outcome.${result}`) : ""].join(" ");
     },
     [t, text],
   );
@@ -76,7 +76,10 @@ export default function AuditLogPage() {
     [entries, text],
   );
   const person = people.includes(who) ? who : "all";
-  const kind = types.some((o) => o.value === type) ? type : "all";
+  const hasRequests = types.some((o) => o.value === REQUEST_TYPE);
+  const kind = types.some((o) => o.value === type) || (type === ALL_REQUESTS && hasRequests) ? type : "all";
+  // API requests repeat the named changes beside them, so they show only when asked for.
+  const total = kind === ALL_REQUESTS || kind === REQUEST_TYPE ? entries.length : entries.filter((e) => e.type !== REQUEST_TYPE).length;
   const rows = useMemo(
     () => auditRows(entries, { query, who: person, type: kind, sort, nameOf: (id) => text.who({ actor_id: id } as AuditEntry), textOf: searchText }),
     [entries, kind, person, query, searchText, sort, text],
@@ -88,7 +91,8 @@ export default function AuditLogPage() {
         timestamp: e.timestamp,
         person: text.who(e),
         action: text.action(e),
-        target: e.target ?? "",
+        target: targetText(e),
+        target_id: e.target ?? "",
         result: e.decision ?? "",
         type: e.type,
         actor_id: e.actor_id ?? "",
@@ -114,7 +118,7 @@ export default function AuditLogPage() {
       </button>
     );
   };
-  const filtered = rows.length < entries.length;
+  const filtered = rows.length < total;
 
   return (
     <>
@@ -132,8 +136,13 @@ export default function AuditLogPage() {
             {people.length > 1 ? (
               <ChipGroup label={t("cols.person")} value={person} options={[{ value: "all", label: t("all") }, ...people.map((p) => ({ value: p, label: p }))]} onChange={setWho} />
             ) : null}
-            {types.length > 1 ? (
-              <PickMenu label={t("cols.action")} value={kind} options={[{ value: "all", label: t("allActions") }, ...types]} onChange={setType} />
+            {types.length > 1 || hasRequests ? (
+              <PickMenu
+                label={t("cols.action")}
+                value={kind}
+                options={[{ value: "all", label: t("allActions") }, ...(hasRequests ? [{ value: ALL_REQUESTS, label: t("allRequests") }] : []), ...types]}
+                onChange={setType}
+              />
             ) : null}
           </div>
           <div className="lg-box lg-au-box">
@@ -149,7 +158,7 @@ export default function AuditLogPage() {
             {rows.length === 0 ? <p className="lg-none">{query.trim() ? t("noMatch", { query: query.trim() }) : t("noneFiltered")}</p> : null}
             {filtered ? (
               <div className="lg-foot">
-                <span>{t("shown", { count: rows.length, total: entries.length })}</span>
+                <span>{t("shown", { count: rows.length, total })}</span>
                 <button type="button" onClick={() => { setQuery(""); setWho("all"); setType("all"); }}>{t("clearFilter")}</button>
               </div>
             ) : null}
