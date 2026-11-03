@@ -260,5 +260,17 @@
     "snippets": "Snippets…",
     "settings": "Einstellungen…",
     "openInTerminal": "Im Terminal öffnen"
+  },
+  "words": {
+    "creatingSession": "Sitzung wird erstellt…",
+    "reconnectingSession": "Sitzung wird wieder verbunden…",
+    "requestingTicket": "Stream-Ticket wird angefordert…",
+    "openingStream": "Sicherer Stream wird geöffnet…",
+    "startingShell": "Remote-Shell wird gestartet…",
+    "connected": "Verbunden",
+    "connectionError": "Die Terminalverbindung ist fehlgeschlagen.",
+    "closedUnexpectedly": "Die Verbindung wurde unerwartet getrennt.",
+    "connectionFailed": "Verbindung nicht möglich.",
+    "sessionEnded": "Sitzung beendet"
   }
 }
