@@ -276,8 +276,15 @@ func (m *MemoryTelemetryStore) SnapshotMany(assetIDs []string, at time.Time) (ma
 
 func dynamicSnapshotFromSamples(samples []telemetry.MetricSample, at time.Time) telemetry.DynamicSnapshot {
 	latest := make(map[string]telemetry.MetricSample, 8)
+	parts := make(map[string]telemetry.MetricSample)
 	for _, sample := range samples {
 		if sample.CollectedAt.After(at) {
+			continue
+		}
+		if !isDeviceLevelSample(sample.Labels) {
+			if current, ok := parts[sample.Metric]; !ok || betterMountSample(sample, current) {
+				parts[sample.Metric] = sample
+			}
 			continue
 		}
 		current, ok := latest[sample.Metric]
@@ -289,6 +296,13 @@ func dynamicSnapshotFromSamples(samples []telemetry.MetricSample, at time.Time) 
 	metrics := make(map[string]float64, len(latest))
 	for metric, sample := range latest {
 		metrics[metric] = sample.Value
+	}
+	// Metrics only a part of the device reports (disk totals per mount) come
+	// from the newest collection's system disk, so they fit together.
+	for metric, sample := range parts {
+		if _, ok := metrics[metric]; !ok && at.Sub(sample.CollectedAt) <= recentMountSampleAge {
+			metrics[metric] = sample.Value
+		}
 	}
 	return telemetry.DynamicSnapshot{Metrics: metrics}
 }
@@ -302,7 +316,7 @@ func (m *MemoryTelemetryStore) Series(assetID string, start, end time.Time, step
 	for _, definition := range telemetry.CanonicalMetrics() {
 		points := make([]telemetry.Point, 0, 64)
 		for _, sample := range samples {
-			if sample.Metric != definition.Metric {
+			if sample.Metric != definition.Metric || !isDeviceLevelSample(sample.Labels) {
 				continue
 			}
 			if sample.CollectedAt.Before(start) || sample.CollectedAt.After(end) {

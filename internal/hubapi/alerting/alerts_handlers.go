@@ -219,6 +219,7 @@ func (d *Deps) HandleAlertRuleActions(w http.ResponseWriter, r *http.Request) {
 			if !d.requireAlertRuleAccess(w, r, rule) {
 				return
 			}
+			endedForAgents := d.agentAlertIDsForRule(ruleID)
 			if err := d.AlertStore.DeleteAlertRule(ruleID); err != nil {
 				if errors.Is(err, alerts.ErrRuleNotFound) {
 					servicehttp.WriteError(w, http.StatusNotFound, "alert rule not found")
@@ -227,6 +228,7 @@ func (d *Deps) HandleAlertRuleActions(w http.ResponseWriter, r *http.Request) {
 				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete alert rule")
 				return
 			}
+			d.tellAgentsAlertsEnded(rule, endedForAgents)
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "rule_id": ruleID})
 		default:
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
