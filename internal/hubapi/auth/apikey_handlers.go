@@ -159,11 +159,12 @@ func (d *Deps) handleAPIKeyCreate(w http.ResponseWriter, r *http.Request) {
 
 	if d.AppendAuditEventBestEffort != nil {
 		d.AppendAuditEventBestEffort(audit.Event{
-			Type:      "api_key.created",
-			ActorID:   d.actorIDFromContext(r.Context()),
-			Target:    key.ID,
-			Details:   map[string]any{"name": key.Name, "role": key.Role, "scopes": key.Scopes},
-			Timestamp: now,
+			Type:       "api_key.created",
+			ActorID:    d.actorIDFromContext(r.Context()),
+			Target:     key.ID,
+			TargetName: key.Name,
+			Details:    map[string]any{"name": key.Name, "role": key.Role, "scopes": key.Scopes},
+			Timestamp:  now,
 		}, "api key created: "+key.Name)
 	}
 
@@ -325,6 +326,8 @@ func (d *Deps) handleAPIKeyDelete(w http.ResponseWriter, r *http.Request, id str
 	if !d.requireAPIKeyManagement(w, r, id) {
 		return
 	}
+	// Read the name first: the audit row keeps it after the key is gone.
+	deleted, _, _ := d.APIKeyStore.GetAPIKey(r.Context(), id)
 	if err := d.APIKeyStore.DeleteAPIKey(r.Context(), id); err != nil {
 		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to delete key")
 		return
@@ -332,10 +335,11 @@ func (d *Deps) handleAPIKeyDelete(w http.ResponseWriter, r *http.Request, id str
 
 	if d.AppendAuditEventBestEffort != nil {
 		d.AppendAuditEventBestEffort(audit.Event{
-			Type:      "api_key.deleted",
-			ActorID:   d.actorIDFromContext(r.Context()),
-			Target:    id,
-			Timestamp: time.Now().UTC(),
+			Type:       "api_key.deleted",
+			ActorID:    d.actorIDFromContext(r.Context()),
+			Target:     id,
+			TargetName: deleted.Name,
+			Timestamp:  time.Now().UTC(),
 		}, "api key deleted: "+id)
 	}
 

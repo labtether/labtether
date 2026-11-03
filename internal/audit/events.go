@@ -7,18 +7,22 @@ import (
 	"github.com/labtether/labtether/internal/idgen"
 )
 
-// Event captures one auditable action or state transition.
+// Event captures one auditable action or state transition. TargetName is the
+// changed object's name when the event was written (webhook, device, user,
+// API key, ...), so a row can say "Deleted webhook nightly" after the object
+// is gone; it is empty when unknown.
 type Event struct {
-	ID        string         `json:"id"`
-	Type      string         `json:"type"`
-	ActorID   string         `json:"actor_id,omitempty"`
-	Target    string         `json:"target,omitempty"`
-	SessionID string         `json:"session_id,omitempty"`
-	CommandID string         `json:"command_id,omitempty"`
-	Decision  string         `json:"decision,omitempty"`
-	Reason    string         `json:"reason,omitempty"`
-	Details   map[string]any `json:"details,omitempty"`
-	Timestamp time.Time      `json:"timestamp"`
+	ID         string         `json:"id"`
+	Type       string         `json:"type"`
+	ActorID    string         `json:"actor_id,omitempty"`
+	Target     string         `json:"target,omitempty"`
+	TargetName string         `json:"target_name,omitempty"`
+	SessionID  string         `json:"session_id,omitempty"`
+	CommandID  string         `json:"command_id,omitempty"`
+	Decision   string         `json:"decision,omitempty"`
+	Reason     string         `json:"reason,omitempty"`
+	Details    map[string]any `json:"details,omitempty"`
+	Timestamp  time.Time      `json:"timestamp"`
 }
 
 const maxAuditEvents = 5_000
