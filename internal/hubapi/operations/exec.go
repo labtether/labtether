@@ -11,8 +11,8 @@ import (
 	"github.com/labtether/labtether/internal/apiv2"
 	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/hubapi/maintenanceguard"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/idgen"
-	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/policy"
 	"github.com/labtether/labtether/internal/terminal"
 )
@@ -130,6 +130,9 @@ func (d *ExecDeps) HandleAssetExec(w http.ResponseWriter, r *http.Request, asset
 		status := http.StatusInternalServerError
 		errorCode := "exec_failed"
 		switch result.Error {
+		case "asset_not_found":
+			status = http.StatusNotFound
+			errorCode = "asset_not_found"
 		case "asset_offline":
 			status = http.StatusConflict
 			errorCode = "asset_offline"
@@ -221,12 +224,9 @@ func (d *ExecDeps) ExecOnAsset(r *http.Request, assetID, command string, timeout
 	timeoutSec = normalizeExecTimeoutSeconds(timeoutSec)
 
 	if d.AgentMgr == nil || !d.AgentMgr.IsConnected(assetID) {
-		// Check if asset exists to give a better error message.
-		asset, ok, _ := d.AssetStore.GetAsset(assetID)
-		msg := assetID + " agent is not connected"
-		if ok {
-			msg = fmt.Sprintf("%s agent is not connected (last seen: %s)",
-				assetID, asset.LastSeenAt.Format(time.RFC3339))
+		status, msg := shared.OfflineDeviceAnswer(d.AssetStore, assetID)
+		if status == http.StatusNotFound {
+			return ExecResult{AssetID: assetID, Error: "asset_not_found", Message: msg}
 		}
 		return ExecResult{AssetID: assetID, Error: "asset_offline", Message: msg}
 	}
@@ -302,20 +302,9 @@ func (d *ExecDeps) HandleExecMulti(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Group != "" && len(targets) == 0 {
-		// Resolve group members via GroupAssetStore if available.
-		if groupAssetStore, ok := d.AssetStore.(persistence.GroupAssetStore); ok {
-			members, err := groupAssetStore.ListAssetsByGroup(req.Group)
-			if err == nil {
-				expandedTargets := make([]string, 0, min(len(members), maxExecMultiUniqueTargets+1))
-				seenExpandedTargets := make(map[string]struct{}, min(len(members), maxExecMultiUniqueTargets+1))
-				for _, m := range members {
-					if err := appendExecMultiTarget(&expandedTargets, seenExpandedTargets, m.ID); err != nil {
-						apiv2.WriteError(w, http.StatusBadRequest, "validation", err.Error())
-						return
-					}
-				}
-				targets = expandedTargets
-			}
+		var ok bool
+		if targets, ok = d.execGroupTargets(w, req.Group); !ok {
+			return
 		}
 	}
 	if len(targets) == 0 {

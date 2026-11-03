@@ -17,7 +17,7 @@ import (
 func (d *Deps) HandlePBSRemotes(ctx context.Context, w http.ResponseWriter, r *http.Request, collectorID string) {
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
+		writePBSRuntimeError(w, err, true)
 		return
 	}
 
@@ -63,7 +63,7 @@ func (d *Deps) HandlePBSRemotes(ctx context.Context, w http.ResponseWriter, r *h
 func (d *Deps) HandlePBSTrafficControl(ctx context.Context, w http.ResponseWriter, r *http.Request, collectorID string, subParts []string) {
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
+		writePBSRuntimeError(w, err, true)
 		return
 	}
 
@@ -150,7 +150,7 @@ func (d *Deps) HandlePBSCertificates(ctx context.Context, w http.ResponseWriter,
 
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
+		writePBSRuntimeError(w, err, true)
 		return
 	}
 
@@ -213,7 +213,7 @@ func (d *Deps) HandlePBSDatastoreMaintenanceMode(ctx context.Context, w http.Res
 func (d *Deps) setPBSDatastoreMaintenanceMode(ctx context.Context, w http.ResponseWriter, collectorID, store, mode string) {
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
+		writePBSRuntimeError(w, err, true)
 		return
 	}
 

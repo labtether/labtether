@@ -56,7 +56,7 @@ func (d *Deps) handleAgentFileDownload(w http.ResponseWriter, r *http.Request, a
 
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {
-		servicehttp.WriteError(w, http.StatusBadGateway, "agent disconnected")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 
@@ -76,7 +76,7 @@ func (d *Deps) handleAgentFileDownload(w http.ResponseWriter, r *http.Request, a
 		ID:   requestID,
 		Data: data,
 	}); err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to send request to agent")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 
@@ -101,7 +101,7 @@ func (d *Deps) handleAgentFileDownload(w http.ResponseWriter, r *http.Request, a
 		return
 	}
 	if firstChunk.Error != "" {
-		servicehttp.WriteError(w, http.StatusBadRequest, firstChunk.Error)
+		writeAgentFileError(w, missingFile, filePath, firstChunk.Error)
 		return
 	}
 	firstPayload, err := DecodeFileDownloadChunk(firstChunk)

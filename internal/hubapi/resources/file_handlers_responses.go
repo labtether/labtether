@@ -16,12 +16,17 @@ import (
 var errFileResponseBackpressured = errors.New("file response bridge backpressure exceeded")
 var errFileAgentDisconnected = errors.New("agent disconnected")
 
+// agentLeftText answers a request whose agent disconnected before it
+// answered. It is a 409 like "agent is not connected": every 5xx message
+// reaches users as "An internal error occurred."
+const agentLeftText = "agent disconnected before it answered"
+
 func writeFileBridgeClosedError(w http.ResponseWriter, bridge *FileBridge) {
-	message := "agent response stream closed"
 	if errors.Is(bridge.Err(), errFileAgentDisconnected) {
-		message = errFileAgentDisconnected.Error()
+		servicehttp.WriteError(w, http.StatusConflict, agentLeftText)
+		return
 	}
-	servicehttp.WriteError(w, http.StatusBadGateway, message)
+	servicehttp.WriteError(w, http.StatusBadGateway, "agent response stream closed")
 }
 
 // FailAgentFileOperations runs inside the agent's disconnect transition,

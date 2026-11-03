@@ -15,12 +15,15 @@ import (
 )
 
 func WriteTrueNASResolveError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, ErrTrueNASAssetNotFound), errors.Is(err, ErrAssetNotTrueNAS):
+	if errors.Is(err, ErrTrueNASAssetNotFound) || errors.Is(err, ErrAssetNotTrueNAS) {
 		servicehttp.WriteError(w, http.StatusNotFound, err.Error())
-	default:
-		writeTrueNASError(w, http.StatusBadGateway, "truenas runtime unavailable", err)
+		return
 	}
+	// A removed or turned-off connection is not a TrueNAS failure.
+	if shared.WriteCollectorSetupError(w, err, "TrueNAS", true) {
+		return
+	}
+	writeTrueNASError(w, http.StatusBadGateway, "truenas runtime unavailable", err)
 }
 
 func (d *Deps) ResolveTrueNASAsset(assetID string) (assets.Asset, error) {

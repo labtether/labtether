@@ -81,7 +81,7 @@ func (d *Deps) HandleProcesses(w http.ResponseWriter, r *http.Request) {
 func (d *Deps) handleProcessList(w http.ResponseWriter, r *http.Request, assetID string) {
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {
-		servicehttp.WriteError(w, http.StatusBadGateway, "agent disconnected")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 
@@ -107,7 +107,7 @@ func (d *Deps) handleProcessList(w http.ResponseWriter, r *http.Request, assetID
 		ID:   requestID,
 		Data: data,
 	}); err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to send request to agent")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 
@@ -137,7 +137,7 @@ func (d *Deps) handleProcessKill(w http.ResponseWriter, r *http.Request, assetID
 	}
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {
-		servicehttp.WriteError(w, http.StatusBadGateway, "agent disconnected")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 
@@ -177,7 +177,7 @@ func (d *Deps) handleProcessKill(w http.ResponseWriter, r *http.Request, assetID
 		ID:   requestID,
 		Data: data,
 	}); err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to send request to agent")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 

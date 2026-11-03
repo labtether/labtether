@@ -28,7 +28,7 @@ func (d *Deps) HandlePBSSnapshotVerify(ctx context.Context, w http.ResponseWrite
 
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
+		writePBSRuntimeError(w, err, true)
 		return
 	}
 
@@ -76,7 +76,7 @@ func (d *Deps) HandlePBSSnapshotForget(ctx context.Context, w http.ResponseWrite
 
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
+		writePBSRuntimeError(w, err, true)
 		return
 	}
 
@@ -113,7 +113,7 @@ func (d *Deps) HandlePBSGroupForget(ctx context.Context, w http.ResponseWriter, 
 
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
+		writePBSRuntimeError(w, err, true)
 		return
 	}
 
