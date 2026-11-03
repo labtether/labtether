@@ -126,6 +126,11 @@ v1.7.1.
   websocket support or at a console address the Hub does not allow, shows
   the error with Try again. Before, it tried again several times a second
   for as long as the tab stayed open.
+- The Linux install command in Add device asks for the enrollment token and
+  passes the token you paste. It read the command's next line as the token,
+  so the agent could not enroll, and the pasted token ran as a command in
+  your shell. The same fix applies to the command that starts a downloaded
+  agent by hand.
 - CPU and other percent charts stop at 100% on a busy device instead of
   drawing up to 104%.
 - The Audit log shows people's actions again. Every open console added an
