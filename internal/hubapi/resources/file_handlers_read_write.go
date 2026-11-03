@@ -54,7 +54,7 @@ func (d *Deps) HandleFileList(w http.ResponseWriter, r *http.Request, assetID st
 		ID:   requestID,
 		Data: data,
 	}); err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to send request to agent")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 
@@ -183,7 +183,7 @@ func writeFileDownloadError(w http.ResponseWriter, err error) {
 	case errors.Is(err, errFileDownloadTimedOut):
 		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
 	case errors.Is(err, errFileAgentDisconnected):
-		servicehttp.WriteError(w, http.StatusBadGateway, "agent disconnected")
+		servicehttp.WriteError(w, http.StatusConflict, agentLeftText)
 	case errors.Is(err, errFileDownloadBackpressured):
 		servicehttp.WriteError(w, http.StatusBadGateway, "agent response stream exceeded backpressure limit")
 	case errors.Is(err, errFileDownloadAgentFailed):

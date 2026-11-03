@@ -59,7 +59,7 @@ func (d *Deps) HandleJournalLogs(w http.ResponseWriter, r *http.Request) {
 		ID:   requestID,
 		Data: data,
 	}); err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to send request to agent")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 

@@ -62,7 +62,7 @@ func (d *Deps) handleCronList(w http.ResponseWriter, r *http.Request, assetID st
 		ID:   requestID,
 		Data: data,
 	}); err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to send request to agent")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 

@@ -122,7 +122,7 @@ func (d *Deps) handlePackageList(w http.ResponseWriter, r *http.Request, assetID
 		ID:   requestID,
 		Data: data,
 	}); err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to send request to agent")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 
@@ -348,7 +348,7 @@ func (d *Deps) handlePackageAction(w http.ResponseWriter, r *http.Request, asset
 		ID:   requestID,
 		Data: data,
 	}); err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to send request to agent")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 

@@ -45,7 +45,7 @@ func (d *Deps) HandleFileMkdir(w http.ResponseWriter, r *http.Request, assetID s
 		ID:   requestID,
 		Data: data,
 	}); err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to send request to agent")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 
@@ -107,7 +107,7 @@ func (d *Deps) HandleFileDelete(w http.ResponseWriter, r *http.Request, assetID 
 		ID:   requestID,
 		Data: data,
 	}); err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to send request to agent")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 
@@ -171,7 +171,7 @@ func (d *Deps) HandleFileRename(w http.ResponseWriter, r *http.Request, assetID 
 		ID:   requestID,
 		Data: data,
 	}); err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to send request to agent")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 
@@ -235,7 +235,7 @@ func (d *Deps) HandleFileCopy(w http.ResponseWriter, r *http.Request, assetID st
 		ID:   requestID,
 		Data: data,
 	}); err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to send request to agent")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 

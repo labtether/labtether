@@ -52,9 +52,9 @@ func TestFileDisconnectWakesPendingRequests(t *testing.T) {
 			var response struct {
 				Error string `json:"error"`
 			}
-			// servicehttp intentionally sanitizes all 5xx details. Require a
-			// failed response without coupling cleanup to its public wording.
-			if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil || rec.Code != http.StatusBadGateway || response.Error == "" {
+			// A 5xx reaches users as "An internal error occurred.", so the
+			// answer is a 409 that says the agent left.
+			if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil || rec.Code != http.StatusConflict || response.Error != agentLeftText {
 				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 			}
 		})
