@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { useToast } from "../../contexts/ToastContext";
@@ -7,6 +8,7 @@ import { useStatusControls } from "../../contexts/StatusContext";
 import { sanitizeErrorMessage } from "../../lib/sanitizeErrorMessage";
 import { baseURLHostLabel, validateHTTPSOrHTTPURL, validatePollIntervalSeconds, validatePortainerTokenID } from "./validation";
 import { monitorCollectorRunWithRetry } from "./collectorSync";
+import { compatPrefillOption, firstError, validationText } from "./addDeviceText";
 import type { AddDeviceAddedEvent, AddDeviceCompatPrefill, SetupMode } from "./types";
 
 type PortainerSettingsPayload = {
@@ -37,6 +39,8 @@ type PortainerSetupStepProps = {
 };
 
 export function PortainerSetupStep({ onBack, onClose, onAdded, compatPrefills = [], setupMode }: PortainerSetupStepProps) {
+  const t = useTranslations("auth.addDevice");
+  const tSync = useTranslations("auth.addDevice.sync");
   const { addToast } = useToast();
   const { fetchStatus } = useStatusControls();
   const [loading, setLoading] = useState(true);
@@ -66,7 +70,7 @@ export function PortainerSetupStep({ onBack, onClose, onAdded, compatPrefills = 
       const response = await fetch("/api/settings/portainer", { cache: "no-store" });
       const payload = (await response.json()) as PortainerSettingsPayload;
       if (!response.ok) {
-        throw new Error(payload.error || `failed to load portainer settings (${response.status})`);
+        throw new Error(payload.error || "");
       }
       const collectorID = payload.collector_id?.trim() ?? "";
       setConfigured(Boolean(payload.configured));
@@ -78,12 +82,12 @@ export function PortainerSetupStep({ onBack, onClose, onAdded, compatPrefills = 
       setIntervalSeconds(payload.settings?.interval_seconds ?? 60);
       return collectorID;
     } catch (err) {
-      setError(sanitizeErrorMessage(err instanceof Error ? err.message : "", "failed to load portainer settings"));
+      setError(sanitizeErrorMessage(err instanceof Error ? err.message : "", t("form.loadFailed", { name: "Portainer" })));
       return "";
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void load();
@@ -151,14 +155,14 @@ export function PortainerSetupStep({ onBack, onClose, onAdded, compatPrefills = 
       });
       const payload = (await response.json()) as PortainerSettingsPayload;
       if (!response.ok) {
-        throw new Error(payload.error || `connection test failed (${response.status})`);
+        throw new Error(payload.error || "");
       }
-      setMessage(payload.message || "Portainer connection succeeded.");
+      setMessage(payload.message || t("form.testOk", { name: "Portainer" }));
     } catch (err) {
       setError(
         sanitizeErrorMessage(
           err instanceof Error ? err.message : "",
-          "failed to test portainer connection",
+          t("form.testFailed", { name: "Portainer" }),
           [tokenSecret],
         ),
       );
@@ -197,7 +201,7 @@ export function PortainerSetupStep({ onBack, onClose, onAdded, compatPrefills = 
       });
       const payload = (await response.json()) as PortainerSettingsPayload;
       if (!response.ok) {
-        throw new Error(payload.error || `failed to save portainer settings (${response.status})`);
+        throw new Error(payload.error || "");
       }
 
       const savedCollectorID = extractCollectorID(payload);
@@ -205,24 +209,25 @@ export function PortainerSetupStep({ onBack, onClose, onAdded, compatPrefills = 
       const loadedCollectorID = await load();
       const collectorID = savedCollectorID || loadedCollectorID;
 
-      setMessage(payload.warning ? `Portainer connection settings saved. ${payload.warning}` : "Portainer connection settings saved.");
+      const saved = t("form.saved", { name: "Portainer" });
+      setMessage(payload.warning ? `${saved} ${payload.warning}` : saved);
       if (payload.warning) {
         addToast("warning", payload.warning);
       }
 
       if (collectorID) {
-        monitorCollectorRunWithRetry(collectorID, "Portainer", addToast);
+        monitorCollectorRunWithRetry(collectorID, "Portainer", addToast, tSync);
       }
 
       const focusQuery = clusterName.trim() || baseURLHostLabel(baseURL);
       onAdded?.({ source: "portainer", focusQuery });
-      addToast("success", "Portainer connector saved.");
+      addToast("success", t("form.connectorSaved", { name: "Portainer" }));
       void fetchStatus();
       onClose();
     } catch (err) {
       const errorMessage = sanitizeErrorMessage(
         err instanceof Error ? err.message : "",
-        "failed to save portainer settings",
+        t("form.saveFailed", { name: "Portainer" }),
         [tokenSecret],
       );
       setError(errorMessage);
@@ -233,25 +238,18 @@ export function PortainerSetupStep({ onBack, onClose, onAdded, compatPrefills = 
     }
   };
 
-  const validateTest = (): string => {
-    const baseURLError = validateHTTPSOrHTTPURL(baseURL);
-    const tokenIDError = validatePortainerTokenID(tokenID);
-    return [baseURLError, tokenIDError].find((entry) => entry) ?? "";
-  };
+  const validateTest = (): string => validationText(t, validateHTTPSOrHTTPURL(baseURL) || validatePortainerTokenID(tokenID));
 
   const validateSave = (): string => {
-    const baseURLError = validateHTTPSOrHTTPURL(baseURL);
-    const tokenIDError = validatePortainerTokenID(tokenID);
-    const intervalError = validatePollIntervalSeconds(intervalSeconds);
-    const secretError = (configured || Boolean(credentialID) ? "" : !tokenSecret.trim() ? "API Key is required for initial setup." : "");
-    return [baseURLError, tokenIDError, intervalError, secretError].find((entry) => entry) ?? "";
+    const secretError = configured || Boolean(credentialID) || tokenSecret.trim() ? "" : t("validation.apiKeyRequired");
+    return firstError(validateTest(), validationText(t, validatePollIntervalSeconds(intervalSeconds)), secretError);
   };
 
   const canTest = !testing && !saving && !validateTest();
   const canSave = !saving && !testing && !validateSave();
 
   if (loading) {
-    return <p className="text-xs text-[var(--muted)]">Loading Portainer settings...</p>;
+    return <p className="text-xs text-[var(--muted)]">{t("form.loading")}</p>;
   }
 
   return (
@@ -262,7 +260,7 @@ export function PortainerSetupStep({ onBack, onClose, onAdded, compatPrefills = 
 
       {compatPrefills.length > 1 && (
         <div>
-          <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Detected Endpoint</label>
+          <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.detected")}</label>
           <select
             value={selectedCompatBaseURL || compatPrefills[0].baseURL}
             onChange={(event) => {
@@ -277,16 +275,15 @@ export function PortainerSetupStep({ onBack, onClose, onAdded, compatPrefills = 
           >
             {compatPrefills.map((prefill) => (
               <option key={prefill.baseURL} value={prefill.baseURL}>
-                {formatCompatPrefillOption(prefill)}
+                {compatPrefillOption(t, prefill)}
               </option>
             ))}
           </select>
-          <p className="mt-1 text-xs text-[var(--muted)]">Selecting a detected endpoint updates base URL and cluster name.</p>
         </div>
       )}
 
       <div>
-        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Base URL</label>
+        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.baseUrl")}</label>
         <Input
           value={baseURL}
           onChange={(e) => setBaseURL(e.target.value)}
@@ -295,33 +292,31 @@ export function PortainerSetupStep({ onBack, onClose, onAdded, compatPrefills = 
       </div>
 
       <div className="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
-        <p className="text-xs font-medium text-[var(--text)]">Credential Template</p>
-        <p className="text-xs text-[var(--muted)]">
-          Use a Portainer API key with permission to list environments/endpoints. Token ID is optional and stored only as a label in LabTether.
-        </p>
+        <p className="text-xs font-medium text-[var(--text)]">{t("form.credentials")}</p>
+        <p className="text-xs text-[var(--muted)]">{t("portainer.credentialsText")}</p>
       </div>
 
       <div>
-        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Token ID (optional)</label>
+        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("portainer.tokenIdOptional")}</label>
         <Input
           value={tokenID}
           onChange={(e) => setTokenID(e.target.value)}
-          placeholder="Friendly label for this key"
+          placeholder={t("portainer.tokenIdPlaceholder")}
         />
       </div>
 
       <div>
-        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">API Key</label>
+        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.apiKey")}</label>
         <Input
           type="password"
           value={tokenSecret}
           onChange={(e) => setTokenSecret(e.target.value)}
-          placeholder={configured ? "•••••••• (unchanged)" : "Required for initial setup"}
+          placeholder={configured ? t("form.savedSecret") : t("form.requiredForSetup")}
         />
       </div>
 
       <div>
-        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Cluster Name</label>
+        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.clusterName")}</label>
         <Input
           value={clusterName}
           onChange={(e) => setClusterName(e.target.value)}
@@ -332,7 +327,7 @@ export function PortainerSetupStep({ onBack, onClose, onAdded, compatPrefills = 
       {setupMode === "advanced" ? (
         <>
           <div>
-            <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Poll Interval (s)</label>
+            <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.pollInterval")}</label>
             <Input
               type="number"
               min={15}
@@ -348,32 +343,26 @@ export function PortainerSetupStep({ onBack, onClose, onAdded, compatPrefills = 
               checked={skipVerify}
               onChange={(e) => setSkipVerify(e.target.checked)}
             />
-            Skip TLS certificate verification
+            {t("form.skipTls")}
           </label>
         </>
       ) : (
-        <p className="text-xs text-[var(--muted)]">Default setup uses 60s polling with TLS verification enabled.</p>
+        <p className="text-xs text-[var(--muted)]">{t("form.defaultPolling")}</p>
       )}
 
       <div className="flex items-center gap-3 pt-2">
-        <Button onClick={onBack}>Back</Button>
+        <Button onClick={onBack}>{t("form.back")}</Button>
         <Button disabled={!canTest} onClick={() => void handleTest()}>
           {testing ? <Loader2 size={14} className="animate-spin mr-1 inline" /> : null}
-          {testing ? "Testing..." : "Test Connection"}
+          {testing ? t("form.testing") : t("form.testConnection")}
         </Button>
         <Button variant="primary" disabled={!canSave} onClick={() => void handleSave()}>
           {saving ? <Loader2 size={14} className="animate-spin mr-1 inline" /> : null}
-          {saving ? "Saving..." : "Save, Sync & Close"}
+          {saving ? t("form.saving") : t("form.saveAndSync")}
         </Button>
       </div>
     </div>
   );
-}
-
-function formatCompatPrefillOption(prefill: AddDeviceCompatPrefill): string {
-  const pct = `${Math.round(Math.max(0, Math.min(1, prefill.confidence)) * 100)}%`;
-  const label = prefill.serviceName || prefill.baseURL;
-  return `${label} (${prefill.baseURL}, ${pct})`;
 }
 
 function extractCollectorID(payload: PortainerSettingsPayload): string {

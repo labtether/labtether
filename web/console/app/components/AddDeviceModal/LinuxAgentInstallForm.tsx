@@ -1,6 +1,7 @@
 "use client";
 
 import { type Dispatch, type SetStateAction } from "react";
+import { useTranslations } from "next-intl";
 import { Input, Select } from "../ui/Input";
 import { type HubConnectionCandidate } from "../../hooks/useEnrollment";
 import { type LinuxInstallOptions, type FilesRootMode, type LinuxDockerMode } from "./agentInstallCommands";
@@ -25,35 +26,24 @@ export function LinuxAgentInstallForm({
   fallbackCommand,
   installerCommand,
 }: LinuxAgentInstallFormProps) {
+  const t = useTranslations("auth.addDevice");
   return (
     <div className="space-y-3 rounded-lg border border-[var(--line)] p-3">
       <div>
         <p className="text-xs font-medium text-[var(--text)] mb-1">
-          Linux Installer Script (Recommended)
-        </p>
-        <p className="text-xs text-[var(--muted)]">
-          Choose the normal access settings here, then run the generated
-          installer.
+          {t("linux.title")}
         </p>
         {selectedCandidate?.bootstrap_strategy ===
         "pinned_ca_bootstrap" ? (
-          <p className="mt-1 text-xs text-[var(--warn)]">
-            This target uses LabTether&apos;s built-in CA, so the
-            generated command bootstraps trust before running the
-            installer.
-          </p>
+          <p className="mt-1 text-xs text-[var(--warn)]">{t("linux.pinnedCa")}</p>
         ) : selectedCandidate?.trust_mode === "custom_tls" ? (
-          <p className="mt-1 text-xs text-[var(--muted)]">
-            This target uses operator-managed TLS. Make sure the
-            uploaded certificate chain is already trusted by the target
-            machine.
-          </p>
+          <p className="mt-1 text-xs text-[var(--muted)]">{t("linux.customTls")}</p>
         ) : null}
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-          File access
+          {t("linux.fileAccess")}
           <Select
             value={linuxOptions.filesRootMode}
             onChange={(event) =>
@@ -63,8 +53,8 @@ export function LinuxAgentInstallForm({
               }))
             }
           >
-            <option value="home">Home-only access</option>
-            <option value="full">Full disk access</option>
+            <option value="home">{t("linux.fileHome")}</option>
+            <option value="full">{t("linux.fileFull")}</option>
           </Select>
         </label>
 
@@ -79,7 +69,7 @@ export function LinuxAgentInstallForm({
               }))
             }
           />
-          Enable desktop prerequisites for VNC/remote view
+          {t("linux.vnc")}
         </label>
 
         <label className="flex items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--muted)] md:col-span-2">
@@ -93,7 +83,7 @@ export function LinuxAgentInstallForm({
               }))
             }
           />
-          Keep the agent updated automatically
+          {t("linux.autoUpdate")}
         </label>
       </div>
 
@@ -101,26 +91,21 @@ export function LinuxAgentInstallForm({
         <button
           type="button"
           onClick={() => setShowAdvancedSettings((current) => !current)}
+          aria-expanded={showAdvancedSettings}
           className="flex w-full items-center justify-between px-3 py-2 text-left"
         >
-          <span>
-            <span className="block text-xs font-medium text-[var(--text)]">
-              Advanced settings
-            </span>
-            <span className="block text-[11px] text-[var(--muted)]">
-              Docker discovery, force update, manual token control, and
-              fallback binary install.
-            </span>
+          <span className="block text-xs font-medium text-[var(--text)]">
+            {t("linux.advanced")}
           </span>
           <span className="text-xs text-[var(--muted)]">
-            {showAdvancedSettings ? "Hide" : "Show"}
+            {showAdvancedSettings ? t("linux.hide") : t("linux.show")}
           </span>
         </button>
 
         {showAdvancedSettings ? (
           <div className="grid grid-cols-1 gap-3 border-t border-[var(--line)] px-3 py-3 md:grid-cols-2">
             <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-              Docker mode
+              {t("linux.docker")}
               <Select
                 value={linuxOptions.dockerEnabled}
                 onChange={(event) =>
@@ -131,14 +116,14 @@ export function LinuxAgentInstallForm({
                   }))
                 }
               >
-                <option value="auto">auto</option>
-                <option value="true">true</option>
-                <option value="false">false</option>
+                <option value="auto">{t("linux.dockerAuto")}</option>
+                <option value="true">{t("linux.dockerOn")}</option>
+                <option value="false">{t("linux.dockerOff")}</option>
               </Select>
             </label>
 
             <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">
-              Docker discovery interval (sec)
+              {t("linux.dockerInterval")}
               <Input
                 type="number"
                 min={5}
@@ -155,7 +140,7 @@ export function LinuxAgentInstallForm({
             </label>
 
             <label className="flex flex-col gap-1 text-xs text-[var(--muted)] md:col-span-2">
-              Docker endpoint
+              {t("linux.dockerEndpoint")}
               <Input
                 value={linuxOptions.dockerEndpoint}
                 disabled={linuxOptions.dockerEnabled === "false"}
@@ -180,7 +165,7 @@ export function LinuxAgentInstallForm({
                   }))
                 }
               />
-              Force update immediately after install
+              {t("linux.forceUpdate")}
             </label>
 
             <label className="flex items-center gap-2 text-xs text-[var(--muted)]">
@@ -194,12 +179,12 @@ export function LinuxAgentInstallForm({
                   }))
                 }
               />
-              Prompt for one-time enrollment token
+              {t("linux.askToken")}
             </label>
 
             <div className="md:col-span-2">
               <p className="text-xs font-medium text-[var(--muted)] mb-1">
-                Manual binary command
+                {t("linux.binaryCommand")}
               </p>
               <div className="relative bg-[var(--panel)] rounded-lg px-3 py-2">
                 <pre className="text-xs text-[var(--text)] whitespace-pre-wrap">
@@ -208,7 +193,7 @@ export function LinuxAgentInstallForm({
                 <div className="absolute top-2 right-2">
                   <CopyButton
                     text={fallbackCommand}
-                    label="manual binary command"
+                    label={t("linux.copyBinaryCommand")}
                   />
                 </div>
               </div>
@@ -218,15 +203,12 @@ export function LinuxAgentInstallForm({
       </div>
 
       {!linuxOptions.includeEnrollmentToken ? (
-        <p className="text-xs text-[var(--warn)]">
-          Token disabled: this install uses pending approval flow
-          instead of auto-enrollment.
-        </p>
+        <p className="text-xs text-[var(--warn)]">{t("linux.noToken")}</p>
       ) : null}
 
       <div>
         <p className="text-xs font-medium text-[var(--muted)] mb-1">
-          Run on Linux target
+          {t("linux.runOnLinux")}
         </p>
         <div className="relative bg-[var(--surface)] rounded-lg px-3 py-2">
           <pre className="text-xs text-[var(--text)] whitespace-pre-wrap">
@@ -235,7 +217,7 @@ export function LinuxAgentInstallForm({
           <div className="absolute top-2 right-2">
             <CopyButton
               text={installerCommand}
-              label="Linux installer command"
+              label={t("linux.copyInstall")}
             />
           </div>
         </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { useProxmoxSettings } from "../../hooks/useProxmoxSettings";
@@ -8,6 +9,7 @@ import { useToast } from "../../contexts/ToastContext";
 import { useStatusControls } from "../../contexts/StatusContext";
 import { baseURLHostLabel, validateHTTPSOrHTTPURL, validatePollIntervalSeconds, validateProxmoxTokenID } from "./validation";
 import { monitorCollectorRunWithRetry } from "./collectorSync";
+import { compatPrefillOption, firstError, validationText } from "./addDeviceText";
 import type { AddDeviceAddedEvent, AddDeviceCompatPrefill, SetupMode } from "./types";
 
 type ProxmoxSetupStepProps = {
@@ -19,6 +21,8 @@ type ProxmoxSetupStepProps = {
 };
 
 export function ProxmoxSetupStep({ onBack, onClose, onAdded, compatPrefills = [], setupMode }: ProxmoxSetupStepProps) {
+  const t = useTranslations("auth.addDevice");
+  const tSync = useTranslations("auth.addDevice.sync");
   const { addToast } = useToast();
   const { fetchStatus } = useStatusControls();
   const {
@@ -39,13 +43,13 @@ export function ProxmoxSetupStep({ onBack, onClose, onAdded, compatPrefills = []
     save, testConnection, runNow,
   } = useProxmoxSettings();
 
-  const baseURLError = validateHTTPSOrHTTPURL(baseURL);
-  const intervalError = validatePollIntervalSeconds(intervalSeconds);
-  const tokenIDError = authMethod === "api_token" ? validateProxmoxTokenID(tokenID) : "";
-  const usernameError = authMethod === "password" && !username.trim() ? "Username is required." : "";
+  const baseURLError = validationText(t, validateHTTPSOrHTTPURL(baseURL));
+  const intervalError = validationText(t, validatePollIntervalSeconds(intervalSeconds));
+  const tokenIDError = authMethod === "api_token" ? validationText(t, validateProxmoxTokenID(tokenID)) : "";
+  const usernameError = authMethod === "password" && !username.trim() ? t("validation.usernameRequired") : "";
 
-  const saveValidationError = [baseURLError, intervalError, tokenIDError, usernameError].find((entry) => entry) ?? "";
-  const testValidationError = [baseURLError, tokenIDError, usernameError].find((entry) => entry) ?? "";
+  const saveValidationError = firstError(baseURLError, intervalError, tokenIDError, usernameError);
+  const testValidationError = firstError(baseURLError, tokenIDError, usernameError);
 
   const handleSave = async () => {
     if (saveValidationError) {
@@ -57,7 +61,7 @@ export function ProxmoxSetupStep({ onBack, onClose, onAdded, compatPrefills = []
 
     const result = await save();
     if (!result.ok) {
-      addToast("error", result.error || "Failed to save Proxmox settings.");
+      addToast("error", result.error || t("form.saveFailed", { name: "Proxmox" }));
       return;
     }
 
@@ -66,12 +70,12 @@ export function ProxmoxSetupStep({ onBack, onClose, onAdded, compatPrefills = []
     }
 
     if (result.collectorID) {
-      monitorCollectorRunWithRetry(result.collectorID, "Proxmox", addToast);
+      monitorCollectorRunWithRetry(result.collectorID, "Proxmox", addToast, tSync);
     }
 
     const focusQuery = clusterName.trim() || baseURLHostLabel(baseURL);
     onAdded?.({ source: "proxmox", focusQuery });
-    addToast("success", "Proxmox connector saved.");
+    addToast("success", t("form.connectorSaved", { name: "Proxmox" }));
     void fetchStatus();
     onClose();
   };
@@ -131,7 +135,7 @@ export function ProxmoxSetupStep({ onBack, onClose, onAdded, compatPrefills = []
 
       {compatPrefills.length > 1 && (
         <div>
-          <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Detected Endpoint</label>
+          <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.detected")}</label>
           <select
             value={selectedCompatBaseURL || compatPrefills[0].baseURL}
             onChange={(event) => {
@@ -146,39 +150,37 @@ export function ProxmoxSetupStep({ onBack, onClose, onAdded, compatPrefills = []
           >
             {compatPrefills.map((prefill) => (
               <option key={prefill.baseURL} value={prefill.baseURL}>
-                {formatCompatPrefillOption(prefill)}
+                {compatPrefillOption(t, prefill)}
               </option>
             ))}
           </select>
-          <p className="mt-1 text-xs text-[var(--muted)]">Selecting a detected endpoint updates base URL and cluster name.</p>
         </div>
       )}
 
       <div>
-        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Base URL</label>
+        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.baseUrl")}</label>
         <Input value={baseURL} onChange={(e) => setBaseURL(e.target.value)} placeholder="https://pve.local:8006" />
       </div>
 
       <div className="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
-        <p className="text-xs font-medium text-[var(--text)]">Credential Template</p>
+        <p className="text-xs font-medium text-[var(--text)]">{t("form.credentials")}</p>
         <p className="text-xs text-[var(--muted)]">
-          Recommended API token format: <code className="text-[var(--text)]">labtether@pve!monitoring</code> with read-only inventory
-          and metrics permissions for initial setup.
+          {t.rich("proxmox.credentialsText", { code: (chunks) => <code className="text-[var(--text)]">{chunks}</code> })}
         </p>
       </div>
 
       <div>
-        <label className="text-xs font-medium text-[var(--muted)] mb-1.5 block">Authentication Method</label>
+        <label className="text-xs font-medium text-[var(--muted)] mb-1.5 block">{t("proxmox.auth")}</label>
         <div className="flex gap-2">
           <AuthMethodButton
             active={authMethod === "api_token"}
             onClick={() => setAuthMethod("api_token")}
-            label="API Token"
+            label={t("proxmox.apiToken")}
           />
           <AuthMethodButton
             active={authMethod === "password"}
             onClick={() => setAuthMethod("password")}
-            label="Username & Password"
+            label={t("proxmox.userPassword")}
           />
         </div>
       </div>
@@ -187,36 +189,36 @@ export function ProxmoxSetupStep({ onBack, onClose, onAdded, compatPrefills = []
         <>
           <div>
             <p className="text-xs text-[var(--warn-text)]">
-              API tokens do not support Proxmox console/terminal access due to a known Proxmox limitation (bug #6079). Terminal sessions will fall back to SSH.
+              {t("proxmox.consoleLimit")}
             </p>
           </div>
           <div>
-            <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Token ID</label>
+            <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.tokenId")}</label>
             <Input value={tokenID} onChange={(e) => setTokenID(e.target.value)} placeholder="labtether@pve!monitoring" />
           </div>
           <div>
-            <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Token Secret</label>
+            <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.tokenSecret")}</label>
             <Input
               type="password"
               value={tokenSecret}
               onChange={(e) => setTokenSecret(e.target.value)}
-              placeholder={configured ? "•••••••• (unchanged)" : "Required for initial setup"}
+              placeholder={configured ? t("form.savedSecret") : t("form.requiredForSetup")}
             />
           </div>
         </>
       ) : (
         <>
           <div>
-            <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Username</label>
+            <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.username")}</label>
             <Input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="root@pam" />
           </div>
           <div>
-            <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Password</label>
+            <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.password")}</label>
             <Input
               type="password"
               value={tokenSecret}
               onChange={(e) => setTokenSecret(e.target.value)}
-              placeholder={configured ? "•••••••• (unchanged)" : "Required for initial setup"}
+              placeholder={configured ? t("form.savedSecret") : t("form.requiredForSetup")}
             />
           </div>
         </>
@@ -226,24 +228,21 @@ export function ProxmoxSetupStep({ onBack, onClose, onAdded, compatPrefills = []
         <>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Cluster Name</label>
+              <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.clusterName")}</label>
               <Input value={clusterName} onChange={(e) => setClusterName(e.target.value)} placeholder="Homelab Proxmox" />
             </div>
             <div>
-              <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Poll Interval (s)</label>
+              <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.pollInterval")}</label>
               <Input type="number" min={15} max={3600} value={intervalSeconds} onChange={(e) => setIntervalSeconds(Number(e.target.value) || 60)} />
             </div>
           </div>
 
           <label className="flex items-center gap-2 text-xs text-[var(--muted)]">
             <input type="checkbox" checked={skipVerify} onChange={(e) => setSkipVerify(e.target.checked)} />
-            Skip Proxmox API certificate verification
+            {t("proxmox.skipApiTls")}
           </label>
           {skipVerify && !spiceSkipVerify && (
-            <p className="text-xs text-[var(--warn)]">
-              SPICE stays blocked because certificate details from an
-              unverified API cannot be trusted.
-            </p>
+            <p className="text-xs text-[var(--warn)]">{t("proxmox.spiceBlocked")}</p>
           )}
           <label className="flex items-start gap-2 text-xs text-[var(--warn)]">
             <input
@@ -252,30 +251,27 @@ export function ProxmoxSetupStep({ onBack, onClose, onAdded, compatPrefills = []
               onChange={(e) => setSPICESkipVerify(e.target.checked)}
               className="mt-0.5"
             />
-            <span>
-              Skip SPICE certificate verification. This is separate from the
-              API setting and also needs the Hub unsafe transport switch.
-            </span>
+            <span>{t("proxmox.skipSpiceTls")}</span>
           </label>
         </>
       ) : (
         <div>
-          <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Cluster Name</label>
+          <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.clusterName")}</label>
           <Input value={clusterName} onChange={(e) => setClusterName(e.target.value)} placeholder="Homelab Proxmox" />
-          <p className="mt-1 text-xs text-[var(--muted)]">Default setup uses 60s polling with TLS verification enabled.</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">{t("form.defaultPolling")}</p>
         </div>
       )}
 
       <div className="flex items-center gap-3 pt-2">
-        <Button onClick={onBack}>Back</Button>
+        <Button onClick={onBack}>{t("form.back")}</Button>
         <Button disabled={testing || saving || running} onClick={() => void handleTestConnection()}>
-          {testing ? "Testing..." : "Test Connection"}
+          {testing ? t("form.testing") : t("form.testConnection")}
         </Button>
         <Button disabled={!collectorID || saving || testing || running} onClick={() => void runNow()}>
-          {running ? "Starting..." : "Run Sync"}
+          {running ? t("form.starting") : t("form.syncNow")}
         </Button>
         <Button variant="primary" disabled={saving || testing || running || Boolean(saveValidationError)} onClick={() => void handleSave()}>
-          {saving ? "Saving..." : "Save, Sync & Close"}
+          {saving ? t("form.saving") : t("form.saveAndSync")}
         </Button>
       </div>
     </div>
@@ -296,10 +292,4 @@ function AuthMethodButton({ active, onClick, label }: { active: boolean; onClick
       {label}
     </button>
   );
-}
-
-function formatCompatPrefillOption(prefill: AddDeviceCompatPrefill): string {
-  const pct = `${Math.round(Math.max(0, Math.min(1, prefill.confidence)) * 100)}%`;
-  const label = prefill.serviceName || prefill.baseURL;
-  return `${label} (${prefill.baseURL}, ${pct})`;
 }

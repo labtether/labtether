@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { usePBSSettings } from "../../hooks/usePBSSettings";
@@ -9,6 +10,7 @@ import { useToast } from "../../contexts/ToastContext";
 import { useStatusControls } from "../../contexts/StatusContext";
 import { baseURLHostLabel, validateHTTPSOrHTTPURL, validatePollIntervalSeconds, validateProxmoxTokenID } from "./validation";
 import { monitorCollectorRunWithRetry } from "./collectorSync";
+import { compatPrefillOption, firstError, validationText } from "./addDeviceText";
 import type { AddDeviceAddedEvent, AddDeviceCompatPrefill, SetupMode } from "./types";
 
 type PBSSetupStepProps = {
@@ -20,6 +22,8 @@ type PBSSetupStepProps = {
 };
 
 export function PBSSetupStep({ onBack, onClose, onAdded, compatPrefills = [], setupMode }: PBSSetupStepProps) {
+  const t = useTranslations("auth.addDevice");
+  const tSync = useTranslations("auth.addDevice.sync");
   const { addToast } = useToast();
   const { fetchStatus } = useStatusControls();
   const {
@@ -89,14 +93,14 @@ export function PBSSetupStep({ onBack, onClose, onAdded, compatPrefills = [], se
     prefillAppliedRef.current = true;
   }, [applyCompatPrefill, loading, configured, selectedCompat, baseURL, displayName]);
 
-  const baseURLError = validateHTTPSOrHTTPURL(baseURL);
-  const tokenIDError = validateProxmoxTokenID(tokenID);
-  const intervalError = validatePollIntervalSeconds(intervalSeconds);
+  const baseURLError = validationText(t, validateHTTPSOrHTTPURL(baseURL));
+  const tokenIDError = validationText(t, validateProxmoxTokenID(tokenID));
+  const intervalError = validationText(t, validatePollIntervalSeconds(intervalSeconds));
   const secretRequiredError = (configured || Boolean(credentialID) || tokenSecret.trim())
     ? ""
-    : "Token secret is required for initial setup.";
-  const saveValidationError = [baseURLError, tokenIDError, intervalError, secretRequiredError].find((entry) => entry) ?? "";
-  const testValidationError = [baseURLError, tokenIDError].find((entry) => entry) ?? "";
+    : t("validation.tokenSecretRequired");
+  const saveValidationError = firstError(baseURLError, tokenIDError, intervalError, secretRequiredError);
+  const testValidationError = firstError(baseURLError, tokenIDError);
 
   const handleSave = async () => {
     if (saveValidationError) {
@@ -108,7 +112,7 @@ export function PBSSetupStep({ onBack, onClose, onAdded, compatPrefills = [], se
 
     const result = await save();
     if (!result.ok) {
-      addToast("error", result.error || "Failed to save PBS settings.");
+      addToast("error", result.error || t("form.saveFailed", { name: "PBS" }));
       return;
     }
 
@@ -117,12 +121,12 @@ export function PBSSetupStep({ onBack, onClose, onAdded, compatPrefills = [], se
     }
 
     if (result.collectorID) {
-      monitorCollectorRunWithRetry(result.collectorID, "PBS", addToast);
+      monitorCollectorRunWithRetry(result.collectorID, "PBS", addToast, tSync);
     }
 
     const focusQuery = displayName.trim() || baseURLHostLabel(baseURL);
     onAdded?.({ source: "pbs", focusQuery });
-    addToast("success", "PBS connector saved.");
+    addToast("success", t("form.connectorSaved", { name: "PBS" }));
     void fetchStatus();
     onClose();
   };
@@ -138,7 +142,7 @@ export function PBSSetupStep({ onBack, onClose, onAdded, compatPrefills = [], se
   };
 
   if (loading) {
-    return <p className="text-xs text-[var(--muted)]">Loading PBS settings...</p>;
+    return <p className="text-xs text-[var(--muted)]">{t("form.loading")}</p>;
   }
 
   return (
@@ -150,7 +154,7 @@ export function PBSSetupStep({ onBack, onClose, onAdded, compatPrefills = [], se
       {compatPrefills.length > 1 && (
         <div>
           <label htmlFor={`${fieldID}-detected-endpoint`} className="text-xs font-medium text-[var(--muted)] mb-1 block">
-            Detected Endpoint
+            {t("form.detected")}
           </label>
           <select
             id={`${fieldID}-detected-endpoint`}
@@ -167,16 +171,15 @@ export function PBSSetupStep({ onBack, onClose, onAdded, compatPrefills = [], se
           >
             {compatPrefills.map((prefill) => (
               <option key={prefill.baseURL} value={prefill.baseURL}>
-                {formatCompatPrefillOption(prefill)}
+                {compatPrefillOption(t, prefill)}
               </option>
             ))}
           </select>
-          <p className="mt-1 text-xs text-[var(--muted)]">Selecting a detected endpoint updates base URL and display name.</p>
         </div>
       )}
 
       <div>
-        <label htmlFor={`${fieldID}-base-url`} className="text-xs font-medium text-[var(--muted)] mb-1 block">Base URL</label>
+        <label htmlFor={`${fieldID}-base-url`} className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.baseUrl")}</label>
         <Input
           id={`${fieldID}-base-url`}
           value={baseURL}
@@ -187,14 +190,14 @@ export function PBSSetupStep({ onBack, onClose, onAdded, compatPrefills = [], se
       </div>
 
       <div className="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
-        <p className="text-xs font-medium text-[var(--text)]">Credential Template</p>
+        <p className="text-xs font-medium text-[var(--text)]">{t("form.credentials")}</p>
         <p className="text-xs text-[var(--muted)]">
-          Recommended token format: <code className="text-[var(--text)]">root@pam!labtether</code> with backup inventory read access.
+          {t.rich("pbs.credentialsText", { code: (chunks) => <code className="text-[var(--text)]">{chunks}</code> })}
         </p>
       </div>
 
       <div>
-        <label htmlFor={`${fieldID}-token-id`} className="text-xs font-medium text-[var(--muted)] mb-1 block">Token ID</label>
+        <label htmlFor={`${fieldID}-token-id`} className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.tokenId")}</label>
         <Input
           id={`${fieldID}-token-id`}
           value={tokenID}
@@ -206,20 +209,20 @@ export function PBSSetupStep({ onBack, onClose, onAdded, compatPrefills = [], se
       </div>
 
       <div>
-        <label htmlFor={`${fieldID}-token-secret`} className="text-xs font-medium text-[var(--muted)] mb-1 block">Token Secret</label>
+        <label htmlFor={`${fieldID}-token-secret`} className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.tokenSecret")}</label>
         <Input
           id={`${fieldID}-token-secret`}
           type="password"
           value={tokenSecret}
           onChange={(e) => setTokenSecret(e.target.value)}
-          placeholder={configured ? "•••••••• (unchanged)" : "Required for initial setup"}
+          placeholder={configured ? t("form.savedSecret") : t("form.requiredForSetup")}
           autoComplete="off"
           aria-invalid={Boolean(secretRequiredError)}
         />
       </div>
 
       <div>
-        <label htmlFor={`${fieldID}-display-name`} className="text-xs font-medium text-[var(--muted)] mb-1 block">Display Name</label>
+        <label htmlFor={`${fieldID}-display-name`} className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.displayName")}</label>
         <Input
           id={`${fieldID}-display-name`}
           value={displayName}
@@ -232,7 +235,7 @@ export function PBSSetupStep({ onBack, onClose, onAdded, compatPrefills = [], se
       {setupMode === "advanced" ? (
         <>
           <div>
-            <label htmlFor={`${fieldID}-poll-interval`} className="text-xs font-medium text-[var(--muted)] mb-1 block">Poll Interval (s)</label>
+            <label htmlFor={`${fieldID}-poll-interval`} className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.pollInterval")}</label>
             <Input
               id={`${fieldID}-poll-interval`}
               type="number"
@@ -251,12 +254,12 @@ export function PBSSetupStep({ onBack, onClose, onAdded, compatPrefills = [], se
               checked={skipVerify}
               onChange={(e) => setSkipVerify(e.target.checked)}
             />
-            Skip TLS certificate verification
+            {t("form.skipTls")}
           </label>
 
           <div>
             <label htmlFor={`${fieldID}-ca-pem`} className="text-xs font-medium text-[var(--muted)] mb-1 block">
-              Custom CA certificate (PEM)
+              {t("pbs.caPem")}
             </label>
             <textarea
               id={`${fieldID}-ca-pem`}
@@ -268,36 +271,28 @@ export function PBSSetupStep({ onBack, onClose, onAdded, compatPrefills = [], se
               autoComplete="off"
               spellCheck={false}
             />
-            <p className="mt-1 text-xs text-[var(--muted)]">
-              Paste the issuing CA certificate chain to keep TLS verification enabled. Prefer this to skipping verification.
-            </p>
+            <p className="mt-1 text-xs text-[var(--muted)]">{t("pbs.caPemHint")}</p>
           </div>
         </>
       ) : (
-        <p className="text-xs text-[var(--muted)]">Default setup uses 60s polling with TLS verification enabled.</p>
+        <p className="text-xs text-[var(--muted)]">{t("form.defaultPolling")}</p>
       )}
 
       <div className="flex items-center gap-3 pt-2">
-        <Button onClick={onBack}>Back</Button>
+        <Button onClick={onBack}>{t("form.back")}</Button>
         <Button disabled={testing || saving || running} onClick={() => void handleTestConnection()}>
           {testing ? <Loader2 size={14} className="animate-spin mr-1 inline" /> : null}
-          {testing ? "Testing..." : "Test Connection"}
+          {testing ? t("form.testing") : t("form.testConnection")}
         </Button>
         <Button disabled={!collectorID || saving || testing || running} onClick={() => void runNow()}>
           {running ? <Loader2 size={14} className="animate-spin mr-1 inline" /> : null}
-          {running ? "Starting..." : "Run Sync"}
+          {running ? t("form.starting") : t("form.syncNow")}
         </Button>
         <Button variant="primary" disabled={saving || testing || running || Boolean(saveValidationError)} onClick={() => void handleSave()}>
           {saving ? <Loader2 size={14} className="animate-spin mr-1 inline" /> : null}
-          {saving ? "Saving..." : "Save, Sync & Close"}
+          {saving ? t("form.saving") : t("form.saveAndSync")}
         </Button>
       </div>
     </div>
   );
-}
-
-function formatCompatPrefillOption(prefill: AddDeviceCompatPrefill): string {
-  const pct = `${Math.round(Math.max(0, Math.min(1, prefill.confidence)) * 100)}%`;
-  const label = prefill.serviceName || prefill.baseURL;
-  return `${label} (${prefill.baseURL}, ${pct})`;
 }
