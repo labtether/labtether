@@ -23,9 +23,9 @@ func (d *Deps) bindConnectorActionCollector(ctx context.Context, w http.Response
 		}
 		bound, err := configured.Bind(ctx, req.ActionID, connectorsdk.ActionRequest{TargetID: req.Target, Params: req.Params, DryRun: req.DryRun})
 		if err != nil {
-			var offline *connectorsdk.TargetOfflineError
-			if errors.As(err, &offline) {
-				servicehttp.WriteError(w, http.StatusConflict, offline.Error())
+			var unavailable *connectorsdk.TargetUnavailableError
+			if errors.As(err, &unavailable) {
+				servicehttp.WriteError(w, http.StatusConflict, unavailable.Error())
 			} else if errors.Is(err, connectorsdk.ErrComposeUpgradeRequired) {
 				servicehttp.WriteError(w, http.StatusConflict, connectorsdk.ErrComposeUpgradeRequired.Error())
 			} else if !maintenanceguard.WriteBlockedAction(w, err) {

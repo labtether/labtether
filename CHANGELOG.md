@@ -120,7 +120,9 @@ v1.7.1.
   when it returned, so Home Assistant removed and re-created their
   devices. Removing the host still removes them.
 - A Docker action on a host whose agent is offline says so: "docker01 is
-  offline. Its agent was last seen at 2026-11-03 10:06 UTC." It said
+  offline. Its agent was last seen at 2026-11-03 10:06 UTC." In the seconds
+  after the agent reconnects, before it reports its containers, it says
+  "docker01 has not sent its containers since it connected." Both said
   "cannot bind connector action target".
 - `/api-docs` without a language in the address opens the API docs instead of
   an "unauthorized" error.
