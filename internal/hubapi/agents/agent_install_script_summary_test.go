@@ -97,13 +97,17 @@ func TestInstallScriptSummaryRequiresPrivateNonemptyRegularAgentToken(t *testing
 func TestInstallScriptSummaryIsPlainTextWithWholeFingerprint(t *testing.T) {
 	longFingerprint := "LT-WJHN-I4WG-VI7N-6TM6-A636-J6ZP-EAPV-WWXV-VLNW-GKZR-TU4M-JTCB-PX3A"
 	longHostname := "dockerhost1-northserver-with-a-very-long-hostname-for-summary-tests"
+	// With a token the new agent enrolls and writes its agent token within
+	// seconds of starting, before the summary; a fresh install must still say
+	// the enrollment token was used, not "Existing approval kept".
 	tests := []struct {
-		name string
-		args []string
-		want string
+		name             string
+		args             []string
+		want             string
+		agentWritesToken bool
 	}{
 		{name: "waiting for approval", want: "Approve it only if LabTether shows the fingerprint above"},
-		{name: "enrollment token", args: []string{"--enrollment-token", "enroll-123"}, want: "Enrollment token saved"},
+		{name: "enrollment token", args: []string{"--enrollment-token", "enroll-123"}, want: "Enrollment token saved", agentWritesToken: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -115,6 +119,10 @@ printf '%s\n' "$*" >> "${LABTETHER_TEST_LOG_DIR}/systemctl.log"
 if [[ "${1:-}" == "enable" ]]; then
   mkdir -p "$(dirname "${LABTETHER_TEST_FINGERPRINT_FILE}")"
   printf '%s\n' "${LABTETHER_TEST_FINGERPRINT}" > "${LABTETHER_TEST_FINGERPRINT_FILE}"
+  if [[ -n "${LABTETHER_TEST_AGENT_TOKEN_FILE:-}" ]]; then
+    printf 'agent-token-from-enrollment\n' > "${LABTETHER_TEST_AGENT_TOKEN_FILE}"
+    chmod 600 "${LABTETHER_TEST_AGENT_TOKEN_FILE}"
+  fi
 fi
 if [[ "${1:-}" == "is-active" ]]; then
   exit 1
@@ -125,6 +133,9 @@ exit 0
 				"LABTETHER_TEST_FINGERPRINT="+longFingerprint,
 				"LABTETHER_TEST_FINGERPRINT_FILE="+filepath.Join(root, "etc/labtether/device-fingerprint"),
 			)
+			if tc.agentWritesToken {
+				env = append(env, "LABTETHER_TEST_AGENT_TOKEN_FILE="+filepath.Join(root, "etc/labtether/agent-token"))
+			}
 
 			script := rewriteAgentScriptForHarness(GenerateInstallScript("https://hub.example.com", "wss://hub.example.com/ws/agent"), root)
 			args := append([]string{"--docker-enabled", "true", "--skip-vnc-prereqs"}, tc.args...)

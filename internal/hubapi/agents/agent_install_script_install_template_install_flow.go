@@ -373,7 +373,12 @@ fi
 # token saved for another Hub address is never sent to this one. Deleting it
 # made the agent enroll as if new, which the Hub refuses for a device it
 # already has, and the device went offline. Without a token, the agent
-# creates one on first start.
+# creates one on first start. Whether one was there before the service starts
+# decides the summary: the new agent writes its own token within seconds.
+HAD_AGENT_TOKEN=0
+if [[ ! -L "${TOKEN_FILE}" && -f "${TOKEN_FILE}" && -s "${TOKEN_FILE}" ]]; then
+  HAD_AGENT_TOKEN=1
+fi
 
 # ── Systemd service ────────────────────────────────────────────────────────
 cat > "${SERVICE_FILE}" <<'UNIT'
