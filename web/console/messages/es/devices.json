@@ -240,6 +240,7 @@
     "remove": {
       "title": "¿Eliminar {name}?",
       "body": "LabTether deja de vigilar {name} y borra su historial.",
+      "addBack": "Para volver a añadirlo más tarde, usa un nuevo token de un solo uso desde Añadir dispositivo.",
       "typeName": "Escribe {name} para confirmar",
       "cancel": "Cancelar",
       "confirm": "Eliminar",
