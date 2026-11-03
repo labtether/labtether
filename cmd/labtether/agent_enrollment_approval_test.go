@@ -65,7 +65,7 @@ func TestHandleApproveAgentRejectsRetiredIdentity(t *testing.T) {
 	rec := httptest.NewRecorder()
 	sut.handleApproveAgent(rec, req)
 
-	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "new hostname/asset ID") {
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "This device was removed from LabTether") {
 		t.Fatalf("retired approval status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	if _, exists := sut.pendingAgents.Get("pending-retired-approval"); !exists {
