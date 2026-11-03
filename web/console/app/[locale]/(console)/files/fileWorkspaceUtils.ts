@@ -42,6 +42,18 @@ function pathWithinRoot(path: string, root: string): boolean {
   return normalizedPath.startsWith(`${normalizedRoot}/`);
 }
 
+/** The path in an agent's refusal ('path "/etc" is outside the allowed base directory'), or null for other errors. */
+export function outsideBasePath(message: string | null | undefined): string | null {
+  const match = /path "([^"]*)" is outside the allowed base directory/i.exec(message ?? "");
+  return match ? match[1] : null;
+}
+
+/** Whether a typed path leaves the folder the agent shares (root "~" is not known yet; "~/…" is the agent's own). */
+export function isOutsideRoot(path: string, root: string): boolean {
+  const wanted = normalizePath(path);
+  return !wanted.startsWith("~") && clampPathToRoot(wanted, root) !== wanted;
+}
+
 export function clampPathToRoot(path: string, root: string): string {
   const normalizedPath = normalizePath(path);
   const normalizedRoot = normalizePath(root);
