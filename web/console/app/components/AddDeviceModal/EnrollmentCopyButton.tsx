@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { Copy, Check } from "lucide-react";
 import { copyText } from "../../lib/clipboard";
 
+/** A copy icon button; `label` is its full accessible name, such as "Copy enrollment token". */
 export function CopyButton({
   text,
   label,
@@ -25,9 +26,9 @@ export function CopyButton({
     <button
       type="button"
       onClick={handleCopy}
-      aria-label={`Copy ${label}`}
+      aria-label={label}
       className="p-1 rounded hover:bg-[var(--hover)] transition-colors duration-150"
-      title={`Copy ${label}`}
+      title={label}
     >
       {copied ? (
         <Check size={14} className="text-[var(--ok)]" />

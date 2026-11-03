@@ -1,54 +1,63 @@
 const PROXMOX_TOKEN_ID_RE = /^[^@\s]+@[^!\s]+![^\s!]+$/;
 
-export function validateHTTPSOrHTTPURL(raw: string, label = "Base URL"): string {
+/**
+ * The validators return a message key under `auth.addDevice.validation`, or "" when the value is fine.
+ * The setup steps turn the key into text with `validationText`.
+ */
+export type ValidationKey =
+  | ""
+  | "urlRequired"
+  | "urlInvalid"
+  | "urlScheme"
+  | "urlHost"
+  | "interval"
+  | "tokenIdRequired"
+  | "tokenIdFormat"
+  | "tokenIdLength";
+
+export function validateHTTPSOrHTTPURL(raw: string): ValidationKey {
   const value = raw.trim();
   if (!value) {
-    return `${label} is required.`;
+    return "urlRequired";
   }
   let parsed: URL;
   try {
     parsed = new URL(value);
   } catch {
-    return `${label} must be a valid URL.`;
+    return "urlInvalid";
   }
   const protocol = parsed.protocol.toLowerCase();
   if (protocol !== "https:" && protocol !== "http:") {
-    return `${label} must start with http:// or https://.`;
+    return "urlScheme";
   }
   if (!parsed.hostname.trim()) {
-    return `${label} must include a hostname.`;
+    return "urlHost";
   }
   return "";
 }
 
-export function validatePollIntervalSeconds(value: number): string {
-  if (!Number.isFinite(value)) {
-    return "Poll interval must be a number.";
-  }
-  if (value < 15 || value > 3600) {
-    return "Poll interval must be between 15 and 3600 seconds.";
+export function validatePollIntervalSeconds(value: number): ValidationKey {
+  if (!Number.isFinite(value) || value < 15 || value > 3600) {
+    return "interval";
   }
   return "";
 }
 
-export function validateProxmoxTokenID(raw: string): string {
+export function validateProxmoxTokenID(raw: string): ValidationKey {
   const value = raw.trim();
   if (!value) {
-    return "Token ID is required.";
+    return "tokenIdRequired";
   }
   if (!PROXMOX_TOKEN_ID_RE.test(value)) {
-    return "Token ID must look like user@realm!tokenname.";
+    return "tokenIdFormat";
   }
   return "";
 }
 
-export function validatePortainerTokenID(raw: string): string {
+export function validatePortainerTokenID(raw: string): ValidationKey {
   const value = raw.trim();
-  if (!value) {
-    return "";
-  }
   if (value.length > 255) {
-    return "Token ID must be 255 characters or fewer.";
+    return "tokenIdLength";
   }
   return "";
 }

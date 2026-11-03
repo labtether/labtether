@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { useFiles, type FileEntry, type SortField } from "../../../hooks/useFiles";
 import type { UnifiedFileEntry } from "./fileOpsClient";
-import { joinPath, parentPath } from "./fileWorkspaceUtils";
+import { isOutsideRoot, joinPath, normalizePath, outsideBasePath, parentPath } from "./fileWorkspaceUtils";
 import { useConnectionBrowser } from "./useConnectionBrowser";
 import { sourceKey, sourceOf, type FileSource, type FileTab } from "./useFileTabsState";
 
@@ -144,6 +145,18 @@ export function useFilesSource(tab: FileTab | null): FilesSourceApi {
     if (target) void listDir(target, files.currentPath, next);
   }, [conn, files, isConn, listDir, target]);
 
+  // A typed path outside the agent's folder used to fall back to that folder in silence; now it says why.
+  const tBar = useTranslations("files.bar");
+  const goToAgent = useCallback((path: string) => {
+    if (isOutsideRoot(path, files.rootPath)) {
+      files.setErrorMessage(tBar("outsideRoot", { path: normalizePath(path), root: files.rootPath }));
+      return;
+    }
+    files.navigateToPath(path);
+  }, [files, tBar]);
+  const refused = outsideBasePath(files.error);
+  const agentError = refused === null ? files.error : tBar("outsideShared", { path: refused });
+
   const normalizedRoot = rootPath === "~" || rootPath === "" ? "" : rootPath;
   const canUp = currentPath !== "~" && currentPath !== "/" && currentPath !== normalizedRoot && parentPath(currentPath) !== currentPath;
 
@@ -155,7 +168,7 @@ export function useFilesSource(tab: FileTab | null): FilesSourceApi {
     rootPath,
     entries,
     loading: isConn ? conn.loading : files.loading || (agentConnected && target !== agentId),
-    error: isConn ? conn.error : files.error,
+    error: isConn ? conn.error : agentError,
     setError: isConn ? conn.setError : files.setErrorMessage,
     showHidden: isConn ? conn.showHidden : files.showHidden,
     setShowHidden,
@@ -163,7 +176,7 @@ export function useFilesSource(tab: FileTab | null): FilesSourceApi {
     sortDir: isConn ? conn.sortDir : files.sortDir,
     toggleSort: isConn ? conn.toggleSort : files.toggleSort,
     refresh,
-    goTo: isConn ? conn.navigateToPath : files.navigateToPath,
+    goTo: isConn ? conn.navigateToPath : goToAgent,
     goUp: isConn ? conn.navigateUp : files.navigateUp,
     canUp,
     openFile,

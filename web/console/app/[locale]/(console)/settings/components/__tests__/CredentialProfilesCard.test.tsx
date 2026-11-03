@@ -1,13 +1,13 @@
 import { act } from "react";
+import { NextIntlClientProvider } from "next-intl";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import deSecurity from "../../../../../../messages/de/security.json";
+import enSecurity from "../../../../../../messages/en/security.json";
 import { CredentialProfilesCard } from "../CredentialProfilesCard";
 
-vi.mock("next-intl", () => ({
-  useLocale: () => "en",
-  useTranslations: () => (key: string) => key,
-}));
+const securityMessages = { en: enSecurity, de: deSecurity };
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -44,8 +44,12 @@ async function settle() {
   });
 }
 
-async function renderCard() {
-  await act(async () => root.render(<CredentialProfilesCard />));
+async function renderCard(locale: keyof typeof securityMessages = "en") {
+  await act(async () => root.render(
+    <NextIntlClientProvider locale={locale} messages={{ security: securityMessages[locale] }}>
+      <CredentialProfilesCard />
+    </NextIntlClientProvider>,
+  ));
   await settle();
 }
 
@@ -66,8 +70,8 @@ async function click(element: HTMLElement) {
 }
 
 /** Opens a row's ⋯ menu the way a pointer does, then picks the item. */
-async function openRowMenuItem(text: string) {
-  const trigger = document.body.querySelector<HTMLButtonElement>('button[aria-label="logins.actionsFor"]');
+async function openRowMenuItem(menuLabel: string, text: string) {
+  const trigger = document.body.querySelector<HTMLButtonElement>(`button[aria-label="${menuLabel}"]`);
   if (!trigger) throw new Error("missing row menu");
   await act(async () => {
     trigger.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
@@ -99,12 +103,12 @@ const inventoryResponse = () => new Response(JSON.stringify({
 }), { status: 200, headers: { "content-type": "application/json" } });
 
 describe("CredentialProfilesCard", () => {
-  it("keeps exact-byte create input and an accessible dialog visible on backend failure", async () => {
+  it("keeps exact-byte create input and an accessible dialog visible, in the console's words, on backend failure", async () => {
     fetchMock
       .mockResolvedValueOnce(inventoryResponse())
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: "credential profile global limit reached" }), { status: 409 }));
     await renderCard();
-    await click(button("logins.add"));
+    await click(button("Add login"));
 
     const dialog = document.body.querySelector('[role="dialog"]');
     if (!dialog) throw new Error("missing create dialog");
@@ -117,22 +121,23 @@ describe("CredentialProfilesCard", () => {
     const request = fetchMock.mock.calls[1]?.[1] as RequestInit;
     expect(JSON.parse(String(request.body)).secret).toBe(" secret with edges ");
     expect(document.body.querySelector('[role="dialog"]')).toBeTruthy();
-    expect(document.body.querySelector('[role="alert"]')?.textContent).toContain("global limit reached");
+    expect(document.body.querySelector('[role="alert"]')?.textContent).toBe("Saved login limit reached. Delete a login to add another.");
   });
 
-  it("keeps delete confirmation open and renders redacted live-reference counts", async () => {
+  it("keeps delete confirmation open and names what still uses the login in the person's language", async () => {
     fetchMock
       .mockResolvedValueOnce(inventoryResponse())
       .mockResolvedValueOnce(new Response(JSON.stringify({
         error: "credential profile is in use",
-        references: [{ resource: "asset_protocol_configs", count: 2 }],
+        references: [{ resource: "asset_protocol_configs", count: 2 }, { resource: "hub_collectors", count: 1 }],
       }), { status: 409 }));
-    await renderCard();
-    await openRowMenuItem("logins.delete");
-    await click(button("Delete"));
+    await renderCard("de");
+    await openRowMenuItem("Aktionen für Lab SSH", "Löschen…");
+    await click(button("Löschen"));
 
     expect(document.body.querySelector('[role="dialog"]')).toBeTruthy();
-    expect(document.body.querySelector('[role="alert"]')?.textContent).toContain("2 asset protocol configurations");
+    expect(document.body.querySelector('[role="alert"]')?.textContent)
+      .toBe("Noch verwendet von 2 Protokolleinstellungen von Geräten und 1 Collector. Entferne die Anmeldung zuerst dort.");
     expect(document.body.textContent).not.toContain("asset-secret-canary");
   });
 });

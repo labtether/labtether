@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { useToast } from "../../contexts/ToastContext";
 import { useStatusControls } from "../../contexts/StatusContext";
 import { validatePollIntervalSeconds } from "./validation";
 import { monitorCollectorRunWithRetry } from "./collectorSync";
+import { compatPrefillOption, validationText } from "./addDeviceText";
 import type { AddDeviceAddedEvent, AddDeviceCompatPrefill, SetupMode } from "./types";
 
 type DockerSettingsPayload = {
@@ -30,6 +32,8 @@ type DockerSetupStepProps = {
 };
 
 export function DockerSetupStep({ onBack, onClose, onAdded, compatPrefills = [], setupMode }: DockerSetupStepProps) {
+  const t = useTranslations("auth.addDevice");
+  const tSync = useTranslations("auth.addDevice.sync");
   const { addToast } = useToast();
   const { fetchStatus } = useStatusControls();
   const [loading, setLoading] = useState(true);
@@ -54,7 +58,7 @@ export function DockerSetupStep({ onBack, onClose, onAdded, compatPrefills = [],
       const response = await fetch("/api/settings/docker", { cache: "no-store" });
       const payload = (await response.json()) as DockerSettingsPayload;
       if (!response.ok) {
-        throw new Error(payload.error || `failed to load docker settings (${response.status})`);
+        throw new Error(payload.error || t("form.loadFailed", { name: "Docker" }));
       }
       const collectorID = payload.collector_id?.trim() ?? "";
       setConfigured(Boolean(payload.configured));
@@ -62,12 +66,12 @@ export function DockerSetupStep({ onBack, onClose, onAdded, compatPrefills = [],
       setIntervalSeconds(payload.settings?.interval_seconds ?? 60);
       return collectorID;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "failed to load docker settings");
+      setError(err instanceof Error && err.message ? err.message : t("form.loadFailed", { name: "Docker" }));
       return "";
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void load();
@@ -109,11 +113,11 @@ export function DockerSetupStep({ onBack, onClose, onAdded, compatPrefills = [],
       });
       const payload = (await response.json()) as DockerSettingsPayload;
       if (!response.ok) {
-        throw new Error(payload.error || `test failed (${response.status})`);
+        throw new Error(payload.error || t("form.testFailed", { name: "Docker" }));
       }
-      setMessage(payload.message || "Docker connector is healthy.");
+      setMessage(payload.message || t("form.testOk", { name: "Docker" }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "failed to test docker connector");
+      setError(err instanceof Error && err.message ? err.message : t("form.testFailed", { name: "Docker" }));
     } finally {
       setTesting(false);
     }
@@ -144,28 +148,29 @@ export function DockerSetupStep({ onBack, onClose, onAdded, compatPrefills = [],
       });
       const payload = (await response.json()) as DockerSettingsPayload;
       if (!response.ok) {
-        throw new Error(payload.error || `failed to save docker settings (${response.status})`);
+        throw new Error(payload.error || t("form.saveFailed", { name: "Docker" }));
       }
 
       const savedCollectorID = extractCollectorID(payload);
       const loadedCollectorID = await load();
       const collectorID = savedCollectorID || loadedCollectorID;
 
-      setMessage(payload.warning ? `Docker settings saved. ${payload.warning}` : "Docker settings saved.");
+      const saved = t("form.saved", { name: "Docker" });
+      setMessage(payload.warning ? `${saved} ${payload.warning}` : saved);
       if (payload.warning) {
         addToast("warning", payload.warning);
       }
 
       if (collectorID) {
-        monitorCollectorRunWithRetry(collectorID, "Docker", addToast);
+        monitorCollectorRunWithRetry(collectorID, "Docker", addToast, tSync);
       }
 
       onAdded?.({ source: "docker", focusQuery: clusterName.trim() });
-      addToast("success", "Docker connector saved.");
+      addToast("success", t("form.connectorSaved", { name: "Docker" }));
       void fetchStatus();
       onClose();
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "failed to save docker settings";
+      const errorMessage = err instanceof Error && err.message ? err.message : t("form.saveFailed", { name: "Docker" });
       setError(errorMessage);
       addToast("error", errorMessage);
     } finally {
@@ -176,13 +181,13 @@ export function DockerSetupStep({ onBack, onClose, onAdded, compatPrefills = [],
 
   const validateSave = (): string => {
     if (!clusterName.trim()) {
-      return "Cluster Name is required.";
+      return t("validation.clusterNameRequired");
     }
-    return validatePollIntervalSeconds(intervalSeconds);
+    return validationText(t, validatePollIntervalSeconds(intervalSeconds));
   };
 
   if (loading) {
-    return <p className="text-xs text-[var(--muted)]">Loading Docker settings...</p>;
+    return <p className="text-xs text-[var(--muted)]">{t("form.loading")}</p>;
   }
 
   return (
@@ -193,7 +198,7 @@ export function DockerSetupStep({ onBack, onClose, onAdded, compatPrefills = [],
 
       {compatPrefills.length > 1 && (
         <div>
-          <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Detected Endpoint</label>
+          <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.detected")}</label>
           <select
             value={selectedCompatBaseURL || compatPrefills[0].baseURL}
             onChange={(event) => {
@@ -208,27 +213,20 @@ export function DockerSetupStep({ onBack, onClose, onAdded, compatPrefills = [],
           >
             {compatPrefills.map((prefill) => (
               <option key={prefill.baseURL} value={prefill.baseURL}>
-                {formatCompatPrefillOption(prefill)}
+                {compatPrefillOption(t, prefill)}
               </option>
             ))}
           </select>
-          <p className="mt-1 text-xs text-[var(--muted)]">Selecting a detected endpoint updates the suggested cluster name.</p>
         </div>
       )}
 
-      <p className="text-xs text-[var(--muted)]">
-        Docker discovery requires active Docker-enabled LabTether agents to report workload state.
-      </p>
-
       <div className="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
-        <p className="text-xs font-medium text-[var(--text)]">Credential Template</p>
-        <p className="text-xs text-[var(--muted)]">
-          No external credentials are required. Install at least one Docker-enabled LabTether agent, then save and run sync.
-        </p>
+        <p className="text-xs font-medium text-[var(--text)]">{t("form.credentials")}</p>
+        <p className="text-xs text-[var(--muted)]">{t("docker.credentialsText")}</p>
       </div>
 
       <div>
-        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Cluster Name</label>
+        <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.clusterName")}</label>
         <Input
           value={clusterName}
           onChange={(e) => setClusterName(e.target.value)}
@@ -238,7 +236,7 @@ export function DockerSetupStep({ onBack, onClose, onAdded, compatPrefills = [],
 
       {setupMode === "advanced" ? (
         <div>
-          <label className="text-xs font-medium text-[var(--muted)] mb-1 block">Poll Interval (s)</label>
+          <label className="text-xs font-medium text-[var(--muted)] mb-1 block">{t("form.pollInterval")}</label>
           <Input
             type="number"
             min={15}
@@ -248,18 +246,18 @@ export function DockerSetupStep({ onBack, onClose, onAdded, compatPrefills = [],
           />
         </div>
       ) : (
-        <p className="text-xs text-[var(--muted)]">Default setup uses the default poll interval (60s).</p>
+        <p className="text-xs text-[var(--muted)]">{t("docker.defaultPolling")}</p>
       )}
 
       <div className="flex items-center gap-3 pt-2">
-        <Button onClick={onBack}>Back</Button>
+        <Button onClick={onBack}>{t("form.back")}</Button>
         <Button disabled={testing} onClick={() => void handleTest()}>
           {testing ? <Loader2 size={14} className="animate-spin mr-1 inline" /> : null}
-          {testing ? "Testing..." : "Test Connector"}
+          {testing ? t("form.testing") : t("form.testConnection")}
         </Button>
         <Button variant="primary" disabled={saving || Boolean(validateSave())} onClick={() => void handleSave()}>
           {saving ? <Loader2 size={14} className="animate-spin mr-1 inline" /> : null}
-          {saving ? "Saving..." : "Save, Sync & Close"}
+          {saving ? t("form.saving") : t("form.saveAndSync")}
         </Button>
       </div>
     </div>
@@ -290,10 +288,4 @@ function extractCollectorID(payload: DockerSettingsPayload): string {
   }
 
   return "";
-}
-
-function formatCompatPrefillOption(prefill: AddDeviceCompatPrefill): string {
-  const pct = `${Math.round(Math.max(0, Math.min(1, prefill.confidence)) * 100)}%`;
-  const label = prefill.serviceName || prefill.baseURL;
-  return `${label} (${prefill.baseURL}, ${pct})`;
 }

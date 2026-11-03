@@ -89,12 +89,12 @@ test("enrollment connection target persists and add-device installer command fol
   await page.getByRole("button", { name: "Add device", exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: /^Agent/ }).click();
 
-  await expect(page.getByText("Install Agent", { exact: true })).toBeVisible();
+  await expect(page.getByText("Install the agent", { exact: true })).toBeVisible();
   await page.getByLabel("Expected hostname").fill("wizard-node");
   await page.getByRole("button", { name: "Create one-time token", exact: true }).click();
-  await expect(page.getByText("Enrollment Token", { exact: true })).toBeVisible();
+  await expect(page.getByText("Enrollment token", { exact: true })).toBeVisible();
   expect(tokenRequests[1]).toMatchObject({ scope: "asset", asset_id: "wizard-node", max_uses: 1 });
-  await expect(page.getByLabel("Connection target")).toHaveValue(LAN_HUB_URL);
+  await expect(page.getByLabel("Connect through")).toHaveValue(LAN_HUB_URL);
   await expect(page.getByText(LAN_HUB_URL, { exact: true })).toBeVisible();
   await expect(page.getByText(LAN_WS_URL, { exact: true })).toBeVisible();
   await expect(page.locator("pre").filter({ hasText: `${LAN_HUB_URL}/install.sh` }).first()).toBeVisible();

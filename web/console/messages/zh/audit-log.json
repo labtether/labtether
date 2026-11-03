@@ -1,6 +1,10 @@
 {
   "title": "审计日志",
   "exportCSV": "导出 CSV",
+  "loadMore": "加载更早的条目",
+  "loadingMore": "正在加载",
+  "exporting": "正在导出",
+  "exportFailed": "导出未完成。",
   "views": {
     "log": "日志",
     "recordings": "录像"
