@@ -113,6 +113,12 @@ v1.7.1.
   It showed only the past time. The plain-HTTP note on a file connection no
   longer names version 1.7.1.
 - Clearing a schedule's group when editing it is saved.
+- Pausing a schedule keeps the result of its last run. Schedules showed
+  "Cancelled" for a run that had already finished; now only a run that is
+  still queued or running is cancelled.
+- Running a saved action adds each step to Automations › Recent runs, with
+  its device, result and output. Before, only scheduled runs were listed.
+  Runs of a saved action show to the person who ran it and to the owner.
 - When the Hub's status or alert list does not load, Devices, the Dashboard
   and Alerts say so in your language, with Try again. Devices showed "No
   devices yet" with Add your first device, the Dashboard showed "status

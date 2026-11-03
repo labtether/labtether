@@ -171,7 +171,11 @@ func (s *PostgresStore) UpdateScheduledTask(ctx context.Context, id string, name
 		args = append(args, *enabled)
 		argIdx++
 		if !*enabled {
-			setClauses = append(setClauses, "last_run_status = 'cancelled'", "last_run_job_id = NULL")
+			// Pausing cancels only an occurrence that has not finished. A run
+			// that already ended keeps its own result.
+			setClauses = append(setClauses,
+				"last_run_status = CASE WHEN last_run_status IN ('queued', 'running') THEN 'cancelled' ELSE last_run_status END",
+				"last_run_job_id = CASE WHEN last_run_status IN ('queued', 'running') THEN NULL ELSE last_run_job_id END")
 		}
 	}
 	if nextRun.Set {
@@ -179,8 +183,10 @@ func (s *PostgresStore) UpdateScheduledTask(ctx context.Context, id string, name
 		args = append(args, nextRun.Value)
 		argIdx++
 	}
-	if cronExpr != nil || command != nil || targets != nil || groupID != nil || enabled != nil {
+	if cronExpr != nil || command != nil || targets != nil || groupID != nil || (enabled != nil && *enabled) {
 		setClauses = append(setClauses, "last_error = ''")
+	} else if enabled != nil {
+		setClauses = append(setClauses, "last_error = CASE WHEN last_run_status IN ('queued', 'running') THEN '' ELSE last_error END")
 	}
 
 	if len(setClauses) == 0 {
