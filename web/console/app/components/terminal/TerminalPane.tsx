@@ -62,6 +62,7 @@ export default function TerminalPane({
   onTerminalRef, prefs, themeDef, fontDef, split = false, quickConnectParams, onRequestAddress, onStatusChange, onControls,
 }: TerminalPaneProps) {
   const t = useTranslations("terminal.pane");
+  const tWords = useTranslations("terminal.words");
   const status = useFastStatus();
   const assets = useMemo(() => (status?.assets ?? []).filter((asset) => !isHiddenAsset(asset)), [status?.assets]);
   const asset = assets.find((entry) => entry.id === targetNodeId);
@@ -215,6 +216,7 @@ export default function TerminalPane({
             <XTerminal
               ref={setTermRef}
               wsUrl={session.wsUrl}
+              endedText={tWords("sessionEnded")}
               onConnected={pane.handleConnected}
               onDisconnected={session.handleDisconnected}
               onError={session.handleError}
