@@ -78,6 +78,12 @@ v1.7.1.
 ### Changed
 
 - Every time in the console uses the 24-hour clock.
+- Settings, a device's agent settings and the alert rule templates use
+  short sentence-case names, and a line under a setting appears only when it
+  adds something: "Docker containers" instead of "Default Agent Docker
+  Discovery" with "Default agent setting for Docker-backed service
+  discovery.", "High CPU" instead of "CPU Saturation". Rules made from a
+  template before keep their name.
 - The sign-in page says "Sign in to LabTether", and the label under the logo
   says "homelab hub".
 - Features that moved: the device group tree with drag and drop is under
