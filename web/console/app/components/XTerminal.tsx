@@ -94,6 +94,9 @@ function focusUnlessBusy(term: { focus: () => void }, container: HTMLElement | n
 /** Without a theme from the caller, the 2.0 terminal colours. */
 const defaultTheme: ITheme = labtetherTerminalTheme("dark");
 
+/** The Hub upgrades a stream within seconds; a Proxmox shell can take up to ~25 s while it signs in first. */
+const STREAM_OPEN_TIMEOUT_MS = 45_000;
+
 const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XTerminal(
   {
     wsUrl,
@@ -351,7 +354,15 @@ const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XTerminal
 
       socket.binaryType = "arraybuffer";
 
+      // An upgrade nobody answers (a hung proxy or Hub) would leave the page opening the stream forever. Closing a
+      // socket that is still connecting fails it, so the usual error and close handlers show the error and Try again.
+      const openTimer = setTimeout(() => {
+        if (socket.readyState === WebSocket.CONNECTING) socket.close();
+      }, STREAM_OPEN_TIMEOUT_MS);
+      disposablesRef.current.push({ dispose: () => clearTimeout(openTimer) });
+
       socket.onopen = () => {
+        clearTimeout(openTimer);
         if (cancelled) return;
         onConnectedRef.current?.();
         focusUnlessBusy(term, containerRef.current);
@@ -405,6 +416,7 @@ const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XTerminal
       };
 
       socket.onclose = (event) => {
+        clearTimeout(openTimer);
         if (cancelled) return;
         socketRef.current = null;
         const reason = event.reason || (event.code !== 1000 ? "The connection closed unexpectedly" : undefined);
