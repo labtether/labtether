@@ -65,6 +65,7 @@ func (d *Deps) HandleGroupMaintenanceWindowsCollection(w http.ResponseWriter, r 
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create maintenance window")
 			return
 		}
+		d.auditMaintenanceWindow(r, maintenanceWindowCreatedAuditType, window)
 		servicehttp.WriteJSON(w, http.StatusCreated, map[string]any{"window": window})
 	default:
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -121,8 +122,12 @@ func (d *Deps) HandleGroupMaintenanceWindowActions(w http.ResponseWriter, r *htt
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update maintenance window")
 			return
 		}
+		d.auditMaintenanceWindow(r, maintenanceWindowUpdatedAuditType, window)
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"window": window})
 	case http.MethodDelete:
+		// Read it first: the audit row needs its name after it is gone.
+		window, _, _ := d.GroupMaintenanceStore.GetGroupMaintenanceWindow(groupID, windowID)
+		window.ID, window.GroupID = windowID, groupID
 		err := d.GroupMaintenanceStore.DeleteGroupMaintenanceWindow(groupID, windowID)
 		if err != nil {
 			if errors.Is(err, groupmaintenance.ErrGroupNotFound) {
@@ -136,6 +141,7 @@ func (d *Deps) HandleGroupMaintenanceWindowActions(w http.ResponseWriter, r *htt
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete maintenance window")
 			return
 		}
+		d.auditMaintenanceWindow(r, maintenanceWindowDeletedAuditType, window)
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 			"status":    "deleted",
 			"group_id":  groupID,

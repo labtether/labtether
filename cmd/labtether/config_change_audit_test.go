@@ -10,6 +10,63 @@ import (
 	"github.com/labtether/labtether/internal/audit"
 )
 
+// auditedCall drives one handler as the owner and returns its JSON answer.
+func auditedCall(t *testing.T, handler http.HandlerFunc, method, path, body string) map[string]any {
+	t.Helper()
+	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(contextWithPrincipal(req.Context(), "owner-1", "owner"))
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+	if rec.Code >= 300 {
+		t.Fatalf("%s %s = %d: %s", method, path, rec.Code, rec.Body.String())
+	}
+	var out map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &out)
+	return out
+}
+
+// answerField reads one string out of a handler's JSON answer.
+func answerField(t *testing.T, m map[string]any, keys ...string) string {
+	t.Helper()
+	var cur any = m
+	for _, key := range keys {
+		next, _ := cur.(map[string]any)
+		cur = next[key]
+	}
+	value, _ := cur.(string)
+	if value == "" {
+		t.Fatalf("response has no %v: %v", keys, m)
+	}
+	return value
+}
+
+// checkNamedAuditRows fails for each "type target" row that is missing, is not
+// by the owner, or does not carry the wanted details.target_name. It returns
+// every stored row as JSON for secret checks.
+func checkNamedAuditRows(t *testing.T, s *apiServer, want map[string]string) string {
+	t.Helper()
+	events, err := s.auditStore.List(500, 0)
+	if err != nil {
+		t.Fatalf("list audit: %v", err)
+	}
+	rows := map[string]audit.Event{}
+	for _, event := range events {
+		rows[event.Type+" "+event.Target] = event
+	}
+	for row, name := range want {
+		event, ok := rows[row]
+		if got, _ := event.Details["target_name"].(string); !ok || got != name || event.ActorID != "owner-1" {
+			t.Errorf("audit row %q: present %t, name %q, actor %q; want name %q by owner-1", row, ok, got, event.ActorID, name)
+		}
+	}
+	encoded, err := json.Marshal(events)
+	if err != nil {
+		t.Fatalf("encode audit: %v", err)
+	}
+	return string(encoded)
+}
+
 // Creating, changing or deleting an API key, a schedule, an alert rule or a
 // group left only an "API request" row, which the console hides, so these
 // changes did not show in the audit log. Each must write a named row
@@ -19,30 +76,11 @@ func TestConfigChangesWriteNamedAuditRows(t *testing.T) {
 	s := newTestAPIServer(t)
 	call := func(handler http.HandlerFunc, method, path, body string) map[string]any {
 		t.Helper()
-		req := httptest.NewRequest(method, path, strings.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		req = req.WithContext(contextWithPrincipal(req.Context(), "owner-1", "owner"))
-		rec := httptest.NewRecorder()
-		handler(rec, req)
-		if rec.Code >= 300 {
-			t.Fatalf("%s %s = %d: %s", method, path, rec.Code, rec.Body.String())
-		}
-		var out map[string]any
-		_ = json.Unmarshal(rec.Body.Bytes(), &out)
-		return out
+		return auditedCall(t, handler, method, path, body)
 	}
 	field := func(m map[string]any, keys ...string) string {
 		t.Helper()
-		var cur any = m
-		for _, key := range keys {
-			next, _ := cur.(map[string]any)
-			cur = next[key]
-		}
-		value, _ := cur.(string)
-		if value == "" {
-			t.Fatalf("response has no %v: %v", keys, m)
-		}
-		return value
+		return answerField(t, m, keys...)
 	}
 
 	key := call(s.handleAPIKeys, http.MethodPost, "/api/v2/keys", `{"name":"backup key","role":"operator","scopes":["assets:read"]}`)
@@ -65,14 +103,6 @@ func TestConfigChangesWriteNamedAuditRows(t *testing.T) {
 	call(s.handleGroupActions, http.MethodPatch, "/groups/"+groupID, `{"name":"Rack B"}`)
 	call(s.handleGroupActions, http.MethodDelete, "/groups/"+groupID, "")
 
-	events, err := s.auditStore.List(200, 0)
-	if err != nil {
-		t.Fatalf("list audit: %v", err)
-	}
-	rows := map[string]audit.Event{}
-	for _, event := range events {
-		rows[event.Type+" "+event.Target] = event
-	}
 	want := map[string]string{
 		"api_key.created " + keyID:       "backup key",
 		"api_key.updated " + keyID:       "backup key 2",
@@ -87,18 +117,9 @@ func TestConfigChangesWriteNamedAuditRows(t *testing.T) {
 		"group.updated " + groupID:       "Rack B",
 		"group.deleted " + groupID:       "Rack B",
 	}
-	for row, name := range want {
-		event, ok := rows[row]
-		if got, _ := event.Details["target_name"].(string); !ok || got != name || event.ActorID != "owner-1" {
-			t.Errorf("audit row %q: present %t, name %q, actor %q; want name %q by owner-1", row, ok, got, event.ActorID, name)
-		}
-	}
-	encoded, err := json.Marshal(events)
-	if err != nil {
-		t.Fatalf("encode audit: %v", err)
-	}
+	encoded := checkNamedAuditRows(t, s, want)
 	for label, secret := range map[string]string{"the API key's secret": rawKey, "the schedule's command": "hunter2"} {
-		if strings.Contains(string(encoded), secret) {
+		if strings.Contains(encoded, secret) {
 			t.Errorf("audit rows contain %s", label)
 		}
 	}
