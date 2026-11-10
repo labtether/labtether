@@ -17,7 +17,14 @@ const v2OpenAPITopologyPaths = `    "/api/v2/discovery/run": {
 	},
 
     "/api/v2/dependencies": {
-      "get":  { "summary": "List service dependencies",  "description": "Scope: topology:read.",  "operationId": "listDependencies",  "tags": ["dependencies"], "responses": { "200": { "description": "Dependency list" } } },
+      "get": {
+        "summary": "List service dependencies", "description": "Scope: topology:read.", "operationId": "listDependencies", "tags": ["dependencies"],
+        "parameters": [
+          { "name": "asset_id", "in": "query", "required": true, "schema": { "type": "string" }, "description": "Asset ID" },
+          { "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 50 } }
+        ],
+        "responses": { "200": { "description": "Dependency list" }, "400": { "description": "A required query parameter is missing" } }
+      },
       "post": { "summary": "Create service dependency",  "description": "Scope: topology:write.", "operationId": "createDependency", "tags": ["dependencies"], "responses": { "201": { "description": "Created" } } }
     },
     "/api/v2/dependencies/{id}": {
@@ -26,13 +33,36 @@ const v2OpenAPITopologyPaths = `    "/api/v2/discovery/run": {
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
 	"/api/v2/dependencies/batch": {
-	  "get": { "summary": "List dependencies for multiple assets", "description": "Scope: topology:read. Every requested asset must be allowed by the authenticated principal.", "operationId": "listDependenciesBatch", "tags": ["dependencies"], "responses": { "200": { "description": "Dependency list" } } }
+      "get": {
+        "summary": "List dependencies for multiple assets", "description": "Scope: topology:read. Every requested asset must be allowed by the authenticated principal. Send asset_ids or asset_id; one of them is required.", "operationId": "listDependenciesBatch", "tags": ["dependencies"],
+        "parameters": [
+          { "name": "asset_ids", "in": "query", "required": false, "schema": { "type": "string" }, "description": "Comma-separated asset IDs" },
+          { "name": "asset_id", "in": "query", "required": false, "schema": { "type": "array", "items": { "type": "string" } }, "description": "Asset ID; repeat it for more assets" },
+          { "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 50000, "default": 5000 } }
+        ],
+        "responses": { "200": { "description": "Dependency list" }, "400": { "description": "A required query parameter is missing" } }
+      }
 	},
 	"/api/v2/dependencies/graph": {
-	  "get": { "summary": "Get dependency graph around an asset", "description": "Scope: topology:read.", "operationId": "getDependencyGraph", "tags": ["dependencies"], "responses": { "200": { "description": "Dependency graph" } } }
+      "get": {
+        "summary": "Get dependency graph around an asset", "description": "Scope: topology:read.", "operationId": "getDependencyGraph", "tags": ["dependencies"],
+        "parameters": [
+          { "name": "root", "in": "query", "required": true, "schema": { "type": "string" }, "description": "Asset ID the graph starts from" },
+          { "name": "depth", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 10, "default": 3 } }
+        ],
+        "responses": { "200": { "description": "Dependency graph" }, "400": { "description": "A required query parameter is missing" } }
+      }
 	},
     "/api/v2/edges": {
-      "get":  { "summary": "List topology edges",  "description": "Scope: topology:read.",  "operationId": "listEdges",  "tags": ["dependencies"], "responses": { "200": { "description": "Edge list" } } },
+      "get": {
+        "summary": "List topology edges", "description": "Scope: topology:read. Send asset_ids or asset_id; one of them is required. asset_ids is used when both are sent.", "operationId": "listEdges", "tags": ["dependencies"],
+        "parameters": [
+          { "name": "asset_id", "in": "query", "required": false, "schema": { "type": "string" }, "description": "One asset ID; an unknown ID answers 404" },
+          { "name": "asset_ids", "in": "query", "required": false, "schema": { "type": "string" }, "description": "Comma-separated asset IDs" },
+          { "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 50 } }
+        ],
+        "responses": { "200": { "description": "Edge list" }, "400": { "description": "A required query parameter is missing" } }
+      },
       "post": { "summary": "Create topology edge",  "description": "Scope: topology:write.", "operationId": "createEdge", "tags": ["dependencies"], "responses": { "201": { "description": "Created" } } }
     },
 	"/api/v2/edges/{id}": {
@@ -42,10 +72,24 @@ const v2OpenAPITopologyPaths = `    "/api/v2/discovery/run": {
 	  "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
 	},
 	"/api/v2/edges/tree": {
-	  "get": { "summary": "Get descendant edge tree", "description": "Scope: topology:read.", "operationId": "getEdgeTree", "tags": ["dependencies"], "responses": { "200": { "description": "Descendant tree" } } }
+      "get": {
+        "summary": "Get descendant edge tree", "description": "Scope: topology:read.", "operationId": "getEdgeTree", "tags": ["dependencies"],
+        "parameters": [
+          { "name": "root", "in": "query", "required": true, "schema": { "type": "string" }, "description": "Asset ID the tree starts from" },
+          { "name": "depth", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 10, "default": 3 } }
+        ],
+        "responses": { "200": { "description": "Descendant tree" }, "400": { "description": "A required query parameter is missing" } }
+      }
 	},
 	"/api/v2/edges/ancestors": {
-	  "get": { "summary": "Get edge ancestor chain", "description": "Scope: topology:read.", "operationId": "getEdgeAncestors", "tags": ["dependencies"], "responses": { "200": { "description": "Ancestor chain" } } }
+      "get": {
+        "summary": "Get edge ancestor chain", "description": "Scope: topology:read.", "operationId": "getEdgeAncestors", "tags": ["dependencies"],
+        "parameters": [
+          { "name": "id", "in": "query", "required": true, "schema": { "type": "string" }, "description": "Asset ID the chain starts from" },
+          { "name": "depth", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 10, "default": 3 } }
+        ],
+        "responses": { "200": { "description": "Ancestor chain" }, "400": { "description": "A required query parameter is missing" } }
+      }
 	},
     "/api/v2/composites": {
       "post": { "summary": "Create composite service",  "description": "Scope: topology:write.", "operationId": "createComposite", "tags": ["dependencies"], "responses": { "201": { "description": "Created" } } }

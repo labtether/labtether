@@ -12,6 +12,7 @@ import { useFileTransfers } from "./useFileTransfers";
 import { useFileWorkspaceState, type WorkspaceClipboardMode } from "./useFileWorkspaceState";
 import { useFilesSource } from "./useFilesSource";
 import { usePathHistory } from "./usePathHistory";
+import { useUploadReplace } from "./useUploadReplace";
 import { copyText } from "../../../lib/clipboard";
 
 export type FileViewMode = "list" | "grid";
@@ -100,9 +101,25 @@ export function useFilesWorkspace() {
     uploadInputRef.current?.click();
   }, []);
 
-  const onUploadInput = useCallback((files: File[]) => {
-    if (files.length) void src.upload(files, uploadDirRef.current);
+  // An upload over files of the same name waits for Replace, Skip these or Cancel.
+  const startUpload = useCallback((files: File[], dir: string) => {
+    void src.upload(files, dir);
   }, [src]);
+  const uploadUnread = useCallback((dir: string) => {
+    src.setError(t("errors.uploadNotChecked", { path: dir }));
+  }, [src, t]);
+  const replace = useUploadReplace({
+    held: { path: cur, entries: src.entries, showHidden: src.showHidden, ready: !src.loading && !src.error },
+    list: src.listFolder,
+    ignoreCase: src.namesIgnoreCase,
+    upload: startUpload,
+    onUnread: uploadUnread,
+  });
+  const startReplaceCheck = replace.start;
+
+  const onUploadInput = useCallback((files: File[]) => {
+    startReplaceCheck(files, uploadDirRef.current);
+  }, [startReplaceCheck]);
 
   const startRename = useCallback((name: string) => {
     renameOpen.current = true;
@@ -200,10 +217,10 @@ export function useFilesWorkspace() {
       e.preventDefault();
       setDragOver(false);
       const files = Array.from(e.dataTransfer.files ?? []);
-      if (files.length > 1) setPendingUpload({ files, dir: cur });
-      else if (files.length === 1) void src.upload(files, cur);
+      // Several dropped files with no clash keep their own question; a clash asks once, in the Replace dialog.
+      startReplaceCheck(files, cur, files.length > 1 ? (list, dir) => setPendingUpload({ files: list, dir }) : undefined);
     },
-  }), [cur, src]);
+  }), [cur, startReplaceCheck]);
 
   return {
     t,
@@ -227,7 +244,7 @@ export function useFilesWorkspace() {
     onContextMenu,
     contextItems,
     targetsFor,
-    upload: { inputRef: uploadInputRef, pick: pickUpload, onInput: onUploadInput, pending: pendingUpload, confirm: confirmUpload, cancel: () => setPendingUpload(null) },
+    upload: { inputRef: uploadInputRef, pick: pickUpload, onInput: onUploadInput, pending: pendingUpload, confirm: confirmUpload, cancel: () => setPendingUpload(null), replace },
     del: { names: deleteNames, ask: setDeleteNames, confirm: confirmDelete, cancel: () => setDeleteNames(null) },
     newFolder: { open: newFolderOpen, show: () => setNewFolderOpen(true), create: createFolder, cancel: () => setNewFolderOpen(false) },
     drop,

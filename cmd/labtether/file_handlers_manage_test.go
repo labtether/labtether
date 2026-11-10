@@ -209,10 +209,10 @@ func TestHandleFileRenamePropagatesAgentError(t *testing.T) {
 		t.Fatal("timed out waiting for agent rename bridge")
 	}
 
-	if rec.Code != http.StatusBadRequest {
+	if rec.Code != http.StatusConflict {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "destination already exists") {
+	if !strings.Contains(rec.Body.String(), `\"new.txt\" already exists in /tmp. Choose another name.`) {
 		t.Fatalf("expected rename error, got %s", rec.Body.String())
 	}
 }

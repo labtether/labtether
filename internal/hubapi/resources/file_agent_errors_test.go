@@ -35,3 +35,36 @@ func TestAgentFileErrorsArePlainWords(t *testing.T) {
 		})
 	}
 }
+
+// Renaming or copying onto a taken name answered 400 with the agent's own
+// "destination already exists", which named nothing. The answer must be a 409
+// that names the taken entry and its folder on every agent OS, and any other
+// refusal must still be about the source path.
+func TestAgentFileNameClashNamesTheTakenEntry(t *testing.T) {
+	cases := []struct {
+		name, src, dst, agent string
+		wantCode              int
+		wantText              string
+	}{
+		{"linux rename", "/srv/docs/one.txt", "/srv/docs/two.txt", "destination already exists",
+			http.StatusConflict, `"two.txt" already exists in /srv/docs. Choose another name.`},
+		{"windows copy", `C:\docs\one.txt`, `C:\two.txt`, "destination already exists",
+			http.StatusConflict, `"two.txt" already exists in C:\. Choose another name.`},
+		{"folder in root", "/old", "/new/", "destination already exists",
+			http.StatusConflict, `"new" already exists in /. Choose another name.`},
+		{"taken after the agent's check", "/srv/a", "/srv/b", "rename a b: file exists",
+			http.StatusConflict, `"b" already exists in /srv. Choose another name.`},
+		{"bare name", "one.txt", "two.txt", "destination already exists",
+			http.StatusConflict, `"two.txt" already exists. Choose another name.`},
+		{"missing source", "/srv/gone.txt", "/srv/two.txt", "lstat gone.txt: no such file or directory",
+			http.StatusNotFound, "file not found: /srv/gone.txt"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			code, text := agentFileMoveErrorAnswer(tc.src, tc.dst, tc.agent)
+			if code != tc.wantCode || text != tc.wantText {
+				t.Fatalf("got %d %q, want %d %q", code, text, tc.wantCode, tc.wantText)
+			}
+		})
+	}
+}
