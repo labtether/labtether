@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/labtether/labtether/internal/alerts"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/groupmaintenance"
+	"github.com/labtether/labtether/internal/persistence"
 )
 
 // editableMaintenanceStore adds the edit and delete that the shared double
@@ -38,7 +40,9 @@ func (m *editableMaintenanceStore) DeleteGroupMaintenanceWindow(groupID, _ strin
 // alert routes, issue edits, update plans and terminal bookmarks left only an
 // "API request" row, which the console hides, so none of them showed in the
 // audit log. Each must write a named row (details.target_name), the delete row
-// included, and no row may carry a note's text or a bookmark's user name.
+// included, and no row may carry a note's text or a bookmark's user name. An
+// alert row must also say which device the alert was for: one rule fires on
+// many devices, and the rule's name alone does not tell them apart.
 func TestUserChangesWriteNamedAuditRows(t *testing.T) {
 	s := newTestAPIServer(t)
 	s.notificationStore = newNotificationStoreStub()
@@ -67,11 +71,15 @@ func TestUserChangesWriteNamedAuditRows(t *testing.T) {
 	call(s.handleGroupActions, http.MethodDelete, windows+"/"+windowID, "")
 
 	ruleID := field(call(s.handleAlertRules, http.MethodPost, "/alerts/rules", `{"name":"Disk nearly full","kind":"metric_threshold","severity":"high","target_scope":"global","condition":{"metric":"disk_used_percent","operator":">=","value":90,"aggregate":"max"}}`), "rule", "id")
+	// One rule, two alerts: the first fired on one device, the second on two.
+	if _, err := s.assetStore.UpsertAssetHeartbeat(assets.HeartbeatRequest{AssetID: "db01", Type: "host", Name: "db01", Source: "agent", Status: "online"}); err != nil {
+		t.Fatalf("seed second device: %v", err)
+	}
 	alertIDs := make([]string, 2)
-	for i := range alertIDs {
+	for i, devices := range [][]string{{"nas01"}, {"nas01", "db01"}} {
 		inst, err := s.alertInstanceStore.CreateAlertInstance(alerts.CreateInstanceRequest{RuleID: ruleID, Fingerprint: "fp-" + string(rune('a'+i)), Severity: "high"})
 		if err == nil {
-			_, err = s.alertInstanceStore.UpdateAlertInstanceStatus(inst.ID, alerts.InstanceStatusFiring)
+			_, err = s.alertInstanceStore.(persistence.AlertInstanceFiringStore).FireAlertInstance(context.Background(), inst.ID, alerts.FiringScope{Version: 1, AssetIDs: devices})
 		}
 		if err != nil {
 			t.Fatalf("seed alert: %v", err)
@@ -143,6 +151,15 @@ func TestUserChangesWriteNamedAuditRows(t *testing.T) {
 		case "asset.updated":
 			changed, _ := json.Marshal(row.Details["changed"])
 			deviceEdits = append(deviceEdits, string(changed)+" was "+strings.TrimSpace(asString(row.Details["previous_name"]))+" group "+asString(row.Details["group_name"]))
+		case "alert.acknowledged", "alert.resolved":
+			// The device carries the name it has now: nas01 was renamed above.
+			if row.Details["device_id"] != "nas01" || row.Details["device_name"] != "nas-main" {
+				t.Errorf("%s row does not say which device the alert was for: %v", row.Type, row.Details)
+			}
+		case "alert.deleted":
+			if devices, _ := json.Marshal([]any{row.Details["device_count"], row.Details["device_ids"], row.Details["device_names"]}); string(devices) != `[2,["db01","nas01"],["db01","nas-main"]]` {
+				t.Errorf("row for an alert on two devices names them as %s", devices)
+			}
 		case "incident.updated":
 			if changed, _ := json.Marshal(row.Details["changed"]); string(changed) != `["summary","status","assignee"]` || row.Details["assignee"] != "sam" || row.Details["status"] != "resolved" {
 				t.Errorf("issue edit row details = %v", row.Details)

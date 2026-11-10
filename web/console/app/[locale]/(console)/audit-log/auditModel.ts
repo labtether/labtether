@@ -26,7 +26,15 @@ export const KNOWN_ACTIONS = new Set([
   "actions.run.policy_checked", "api.exec.policy_checked", "queue.dead_letter", "asset.hub_ssh_key.updated",
   "settings.ssh_hub_key.rotation", "settings.managed_database.password_revealed", "api_key.updated",
   "schedule.created", "schedule.updated", "schedule.deleted", "alert.rule.created", "alert.rule.updated",
-  "alert.rule.deleted", "group.created", "group.updated", "group.deleted",
+  "alert.rule.deleted", "group.created", "group.updated", "group.deleted", "asset.updated", "asset.wake.requested",
+  "asset.wake.outcome", "asset.wake.relay_dispatch", "asset.wake.relay_result", "maintenance_window.created",
+  "maintenance_window.updated", "maintenance_window.deleted", "alert.acknowledged", "alert.resolved", "alert.deleted",
+  "alert.silence.created", "alert.silence.deleted", "alert.route.created", "alert.route.updated", "alert.route.deleted",
+  "incident.created", "incident.updated", "incident.deleted", "updates.plan.created", "updates.plan.deleted",
+  "terminal.bookmark.created", "terminal.bookmark.updated", "terminal.bookmark.deleted", "auth.user.created",
+  "auth.user.deleted", "auth.user.role_changed", "auth.user.password_reset", "auth.user.sessions_revoked",
+  "auth.password.changed", "auth.2fa.enabled", "auth.2fa.disabled", "saved_action.created", "saved_action.deleted",
+  "saved_action.run.completed", "settings.oidc.updated", "settings.oidc.applied",
 ]);
 
 /** Every API change the Hub stores beside its named event; shown only under "All requests". */
@@ -54,6 +62,53 @@ export function visibleAuditRows(entries: AuditEntry[], wholeLog: boolean, actor
 /** The message key for a known type ("terminal.session.created" → "terminal_session_created"), or "". */
 export function actionKey(type: string): string {
   return KNOWN_ACTIONS.has(type) ? type.replace(/\./g, "_") : "";
+}
+
+/**
+ * The sentence for a row: its type's own (actions.<key>), or a closer one when the row's details say what changed.
+ * A renamed device reads "Renamed nas01 to" before its new name; an issue someone resolved reads "Resolved an
+ * issue", not "Changed an issue". key is "" for a type without a sentence.
+ */
+export function actionSentence(entry: Pick<AuditEntry, "type" | "details">): { key: string; values?: Record<string, string> } {
+  const key = actionKey(entry.type);
+  const details = entry.details ?? {};
+  const changed = Array.isArray(details.changed) ? details.changed.filter((field): field is string => typeof field === "string") : [];
+  const only = (field: string) => changed.length === 1 && changed[0] === field;
+  const word = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+  if (entry.type === "asset.updated") {
+    const previous = word(details.previous_name);
+    const group = word(details.group_name);
+    if (only("name") && previous) return { key: `${key}_renamed`, values: { previous } };
+    if (only("group")) return group ? { key: `${key}_moved`, values: { group } } : { key: `${key}_ungrouped` };
+    if (only("tags")) return { key: `${key}_tags` };
+  }
+  if (entry.type === "incident.updated") {
+    const assignee = word(details.assignee);
+    if (changed.includes("status") && word(details.status) === "resolved") return { key: `${key}_resolved` };
+    if (only("assignee")) return assignee ? { key: `${key}_assigned`, values: { assignee } } : { key: `${key}_unassigned` };
+  }
+  return { key };
+}
+
+/** The alert rows the Hub writes with the alert's devices in their details. */
+const ALERT_DEVICE_TYPES = new Set(["alert.acknowledged", "alert.resolved", "alert.deleted"]);
+
+/**
+ * The devices an alert row is about: one name ("on nas01"), or how many with the names the row carries ("on 3
+ * devices"; the Hub sends the first 20 names, "" for a device that is gone). null when the row names no device:
+ * a rule that is not about a device, or one device that no longer exists.
+ */
+export function alertDevices(entry: Pick<AuditEntry, "type" | "details">): { name: string } | { count: number; names: string[] } | null {
+  if (!ALERT_DEVICE_TYPES.has(entry.type)) return null;
+  const details = entry.details ?? {};
+  const name = typeof details.device_name === "string" ? details.device_name.trim() : "";
+  if (name) return { name };
+  const names = (Array.isArray(details.device_names) ? details.device_names : [])
+    .filter((value): value is string => typeof value === "string" && value.trim() !== "")
+    .map((value) => value.trim());
+  const count = typeof details.device_count === "number" && Number.isFinite(details.device_count) ? Math.floor(details.device_count) : names.length;
+  if (count === 1 && names.length === 1) return { name: names[0] };
+  return count > 1 ? { count, names } : null;
 }
 
 /** A type without a sentence of its own, read as words: "backup.verify_job.started" → "Backup verify job started". */
@@ -139,7 +194,12 @@ export function detailRows(entry: AuditEntry): Array<[string, string]> {
   if (entry.reason) rows.push(["reason", entry.reason]);
   for (const [k, v] of Object.entries(entry.details ?? {})) {
     if (v === null || v === undefined || v === "" || k === "target_name") continue;
-    rows.push([k, typeof v === "string" ? v : JSON.stringify(v)]);
+    // A list of words (device names, changed fields, tags) reads as words, not as JSON.
+    const words = Array.isArray(v) && v.every((item) => typeof item === "string" || typeof item === "number")
+      ? v.filter((item) => item !== "").join(", ")
+      : null;
+    if (words === "") continue;
+    rows.push([k, words ?? (typeof v === "string" ? v : JSON.stringify(v))]);
   }
   return rows;
 }
