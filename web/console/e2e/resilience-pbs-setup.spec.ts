@@ -77,9 +77,7 @@ test("pbs setup surfaces offline network failures", async ({ page }) => {
   await page.getByPlaceholder("Required for initial setup").fill("pbs-secret");
   await page.getByRole("button", { name: "Test connection", exact: true }).click();
 
-  await expect(
-    page.getByText(/ERR_INTERNET_DISCONNECTED|Failed to fetch|NetworkError when attempting to fetch resource|Load failed|failed to test pbs connection/i),
-  ).toBeVisible();
+  await expect(page.getByText("The PBS connection test failed.", { exact: true })).toBeVisible();
 });
 
 test("pbs setup save failures keep the wizard open with actionable error", async ({ page }) => {
@@ -144,12 +142,10 @@ test("pbs setup recovers after transient test/save failures with retry", async (
   await page.getByPlaceholder("Required for initial setup").fill("pbs-secret");
 
   await page.getByRole("button", { name: "Test connection", exact: true }).click();
-  await expect(
-    page.getByText(/ERR_INTERNET_DISCONNECTED|Failed to fetch|NetworkError when attempting to fetch resource|Load failed|failed to test pbs connection/i),
-  ).toBeVisible();
+  await expect(page.getByText("The PBS connection test failed.", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Test connection", exact: true }).click();
-  await expect(page.getByText("pbs API reachable after retry")).toBeVisible();
+  await expect(page.getByText("PBS connection works.", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Save and sync", exact: true }).click();
   const dialog = page.getByRole("dialog");

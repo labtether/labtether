@@ -24,8 +24,6 @@ type TrueNASSettingsPayload = {
 const useTrueNASConnectorSettings = createConnectorSettingsHook({
   settingsPath: "/api/settings/truenas",
   displayName: "TrueNAS",
-  messageKey: "truenas",
-  testSuccessMessage: "TrueNAS connection succeeded.",
   useAdapterState: () => {
     const [baseURL, setBaseURL] = useState("");
     const [apiKey, setApiKey] = useState("");

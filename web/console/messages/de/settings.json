@@ -267,7 +267,7 @@
     "transport": "Streamable HTTP",
     "claudeCode": "Claude Code",
     "genericConfig": "MCP-Konfiguration",
-    "authNote": "Verwende einen API-Schlüssel mit nur den Bereichen und Geräten, die seine Werkzeuge brauchen. Werkzeuge für alle Geräte lehnen einen auf einzelne Geräte beschränkten Schlüssel ab.",
+    "authNote": "Verwenden Sie einen API-Schlüssel mit nur den Bereichen und Geräten, die seine Werkzeuge brauchen. Werkzeuge für alle Geräte lehnen einen auf einzelne Geräte beschränkten Schlüssel ab.",
     "toolsToggle": "{count} Tools anzeigen",
     "toolsHide": "Werkzeuge ausblenden",
     "show": "Anzeigen",
@@ -327,7 +327,7 @@
     "hide": "Passwort ausblenden",
     "copy": "Passwort kopieren",
     "managedBy": "Verwaltet von",
-    "notManaged": "Deine Installation, nicht LabTether",
+    "notManaged": "Ihre Installation, nicht LabTether",
     "loadFailed": "Datenbankeinstellungen konnten nicht geladen werden.",
     "revealFailed": "Das Passwort konnte nicht angezeigt werden."
   },

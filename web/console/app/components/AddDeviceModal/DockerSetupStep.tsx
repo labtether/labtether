@@ -5,6 +5,7 @@ import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { useToast } from "../../contexts/ToastContext";
 import { useStatusControls } from "../../contexts/StatusContext";
+import { readHubReply, useConnectorWords } from "../../hooks/connectorWords";
 import { validatePollIntervalSeconds } from "./validation";
 import { monitorCollectorRunWithRetry } from "./collectorSync";
 import { compatPrefillOption, validationText } from "./addDeviceText";
@@ -34,6 +35,7 @@ type DockerSetupStepProps = {
 export function DockerSetupStep({ onBack, onClose, onAdded, compatPrefills = [], setupMode }: DockerSetupStepProps) {
   const t = useTranslations("auth.addDevice");
   const tSync = useTranslations("auth.addDevice.sync");
+  const words = useConnectorWords("Docker");
   const { addToast } = useToast();
   const { fetchStatus } = useStatusControls();
   const [loading, setLoading] = useState(true);
@@ -111,13 +113,10 @@ export function DockerSetupStep({ onBack, onClose, onAdded, compatPrefills = [],
         method: "POST",
         headers: { "Content-Type": "application/json" }
       });
-      const payload = (await response.json()) as DockerSettingsPayload;
-      if (!response.ok) {
-        throw new Error(payload.error || t("form.testFailed", { name: "Docker" }));
-      }
-      setMessage(payload.message || t("form.testOk", { name: "Docker" }));
+      await readHubReply<DockerSettingsPayload>(response);
+      setMessage(words.testOk());
     } catch (err) {
-      setError(err instanceof Error && err.message ? err.message : t("form.testFailed", { name: "Docker" }));
+      setError(words.testFailed(err));
     } finally {
       setTesting(false);
     }
