@@ -51,9 +51,9 @@ type Config struct {
 	RedirectHost     string       // explicit host for HTTP→HTTPS redirects; never taken from a request
 	ReadinessCheck   func() error // optional: returns nil if ready, error if not
 	// GetCertificate is an optional TLS callback for dynamic certificate serving.
-	// When set alongside TLSCertFile/TLSKeyFile, it is assigned to
-	// tls.Config.GetCertificate so the server can hot-swap certs without restart.
-	// Go's TLS stack calls GetCertificate preferentially over the static files.
+	// When set, every handshake is answered from it, also for clients that
+	// send no server name, so the server can swap certificates without a
+	// restart. TLSCertFile/TLSKeyFile then only turn TLS on.
 	GetCertificate func(*tls.ClientHelloInfo) (*tls.Certificate, error)
 }
 
@@ -287,7 +287,16 @@ func Run(ctx context.Context, cfg Config) error {
 	var listenErr error
 	if useTLS {
 		log.Printf("%s listening on %s (TLS)", cfg.Name, addr)
-		listenErr = server.ListenAndServeTLS(cfg.TLSCertFile, cfg.TLSKeyFile)
+		certFile, keyFile := cfg.TLSCertFile, cfg.TLSKeyFile
+		if cfg.GetCertificate != nil {
+			// Given files, net/http also loads them as a static certificate,
+			// and crypto/tls then asks GetCertificate only when the client
+			// sends a server name. A client that connects by IP address sends
+			// none, so it got the file's certificate alone: no CA in the
+			// chain, and no renewed or uploaded certificate until a restart.
+			certFile, keyFile = "", ""
+		}
+		listenErr = server.ListenAndServeTLS(certFile, keyFile)
 	} else {
 		log.Printf("%s listening on %s", cfg.Name, addr)
 		listenErr = server.ListenAndServe()
