@@ -340,7 +340,7 @@ export function useSession({
   );
 
   const handleDisconnected = useCallback(
-    (detail?: string | { clean: boolean; reason?: string }) => {
+    (detail?: { clean: boolean; reason?: string }) => {
       if (manualDisconnectRef.current) {
         manualDisconnectRef.current = false;
         setConnectionState("idle");
@@ -349,9 +349,10 @@ export function useSession({
         return;
       }
       terminateDesktopSession(sessionRef.current?.id);
-      const isClean = typeof detail === "object" && detail?.clean;
-      const disconnectReason =
-        typeof detail === "object" ? detail.reason?.trim() ?? "" : "";
+      // A clean close is a session that ended on purpose (the shell exited): never reconnect to it. A terminal
+      // used to report its close as text, which counted as a drop, so `exit` opened a new shell every time.
+      const isClean = detail?.clean === true;
+      const disconnectReason = detail?.reason?.trim() ?? "";
       const supportsAutoReconnect = !!(
         sessionRef.current &&
         ((type === "desktop" && fixedTarget) ||
@@ -422,22 +423,10 @@ export function useSession({
         setReconnectAttempt(0);
         setProgress("idle", "Idle");
       }
-      if (typeof detail === "string") {
-        if (detail) setError(detail);
-      } else if (detail?.reason) {
-        const reason = detail.reason.trim();
-        if (!reason) {
-          return;
-        }
-        // For desktop sessions, surface close reasons even when the close was
-        // clean so operator-facing startup/permission failures are visible.
-        const shouldSurfaceReason = !detail.clean || type === "desktop";
-        if (
-          shouldSurfaceReason &&
-          reason.toLowerCase() !== "user disconnected"
-        ) {
-          setError(reason);
-        }
+      // The Hub's close reason shows even after a clean close ("Session attached elsewhere", a Remote View that
+      // could not start).
+      if (disconnectReason && disconnectReason.toLowerCase() !== "user disconnected") {
+        setError(disconnectReason);
       }
     },
     [

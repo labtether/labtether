@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 
 import type { ITheme } from "@xterm/xterm";
 import { labtetherTerminalTheme } from "./terminal/terminalLook";
 import { createReplaySilencer } from "./terminal/replaySilencer";
+import { terminalCloseFrom, type TerminalClose } from "./terminal/terminalClose";
 
 export type XTerminalHandle = {
   /** Write data to the terminal display (does NOT send to remote) */
@@ -46,8 +47,8 @@ type XTerminalProps = {
   endedText?: string;
   /** Called when the WebSocket connection opens */
   onConnected?: () => void;
-  /** Called when the WebSocket connection closes or errors */
-  onDisconnected?: (reason?: string) => void;
+  /** Called when the WebSocket connection closes: a finished shell is `clean`, a dropped connection is not. */
+  onDisconnected?: (close: TerminalClose) => void;
   /** Called when the WebSocket encounters an error */
   onError?: (message: string) => void;
   /** Called when backend emits a connection status event. */
@@ -424,8 +425,7 @@ const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XTerminal
         clearTimeout(openTimer);
         if (cancelled) return;
         socketRef.current = null;
-        const reason = event.reason || (event.code !== 1000 ? "The connection closed unexpectedly" : undefined);
-        onDisconnectedRef.current?.(reason);
+        onDisconnectedRef.current?.(terminalCloseFrom(event));
         term.write(`\r\n\x1b[90m--- ${endedTextRef.current ?? "Session ended"} ---\x1b[0m\r\n`);
       };
 
