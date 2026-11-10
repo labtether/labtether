@@ -82,6 +82,8 @@ const VISIBILITY_TIER: Record<string, VisibilityTier> = {
   "storage-controller": "device",
   vm: "device",
   "container-host": "device",
+  // A device added by hand (Add device › Manual); the Hub gives it this type.
+  device: "device",
   // Workloads — hidden when healthy
   container: "workload",
   "docker-container": "workload",

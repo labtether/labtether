@@ -318,6 +318,9 @@ v1.7.1.
   out of the sentence, an API key reads "API key", and a person without a
   name reads "Unknown", as on iPhone. The IDs are in the row's details and
   in the CSV export.
+- A device added by hand (Add device › Manual) shows on the Devices page,
+  the Dashboard, the Map and Remote View. Before, it was saved but listed
+  nowhere.
 
 ## [1.7.1] - 2026-10-31
 
