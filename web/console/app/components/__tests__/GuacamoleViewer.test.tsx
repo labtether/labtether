@@ -18,7 +18,13 @@ type FakeClient = {
   disconnect: ReturnType<typeof vi.fn>;
   clipboard: OutputStream;
 };
-const mocks = vi.hoisted(() => ({ clients: [] as FakeClient[], pointers: [] as FakePointer[], resets: [] as Array<ReturnType<typeof vi.fn>> }));
+type FakeTunnel = {
+  onerror: ((status: { code: number; message: string }) => void) | null;
+  onstatechange: ((state: number) => void) | null;
+};
+const mocks = vi.hoisted(() => ({
+  clients: [] as FakeClient[], tunnels: [] as FakeTunnel[], pointers: [] as FakePointer[], resets: [] as Array<ReturnType<typeof vi.fn>>,
+}));
 vi.mock("guacamole-common-js", () => {
   class Pointer {
     onmousedown = null;
@@ -29,7 +35,11 @@ vi.mock("guacamole-common-js", () => {
     constructor() { mocks.pointers.push(this); }
   }
   const module = {
-    WebSocketTunnel: class {},
+    WebSocketTunnel: class {
+      onerror = null;
+      onstatechange = null;
+      constructor() { mocks.tunnels.push(this); }
+    },
     Mouse: Pointer,
     Keyboard: class {
       onkeydown = null;
@@ -57,6 +67,7 @@ vi.mock("guacamole-common-js", () => {
 
 import GuacamoleViewer, { type GuacamoleViewerHandle } from "../GuacamoleViewer";
 import { readGuacamoleClipboard, writeGuacamoleClipboard } from "../guacamole/clipboard";
+import { STREAM_NOT_OPENED } from "../remote-toolbar/screenWords";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 let root: Root;
@@ -64,6 +75,7 @@ let container: HTMLDivElement;
 const writeText = vi.fn(async () => {});
 const onConnect = vi.fn();
 const onDisconnect = vi.fn();
+const onError = vi.fn();
 const inputStream = (): InputStream => ({ onblob: null, onend: null, sendAck: vi.fn() });
 const base64 = (bytes: Uint8Array) => btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""));
 const pointerState: Mouse.State = { x: 240, y: 120, left: true, middle: false, right: false, up: false, down: false };
@@ -76,7 +88,7 @@ async function render(wsUrl: string, ref = createRef<GuacamoleViewerHandle>()) {
     await act(async () => { await vi.dynamicImportSettled(); });
   }
   await act(async () => {
-    root.render(<GuacamoleViewer ref={ref} wsUrl={wsUrl} onConnect={onConnect} onDisconnect={onDisconnect} />);
+    root.render(<GuacamoleViewer ref={ref} wsUrl={wsUrl} onConnect={onConnect} onDisconnect={onDisconnect} onError={onError} />);
   });
   await act(async () => { await vi.dynamicImportSettled(); });
   return ref;
@@ -85,6 +97,7 @@ async function render(wsUrl: string, ref = createRef<GuacamoleViewerHandle>()) {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.clients = [];
+  mocks.tunnels = [];
   mocks.pointers = [];
   mocks.resets = [];
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
@@ -201,5 +214,31 @@ describe("RDP viewer input and session ownership", () => {
     mocks.clients[1].onclipboard!(current, "text/plain");
     current.onend!();
     expect(writeText).toHaveBeenCalledExactlyOnceWith("");
+  });
+});
+
+// On a Hub without its RDP gateway the stream was refused and the page stayed on "Opening stream" for ever:
+// Guacamole's client does not watch its tunnel. The viewer must say so once, with the stream's reason.
+describe("RDP stream that does not open", () => {
+  it("reports a refused stream as a failed connection with its reason", async () => {
+    await render("wss://example.test/rdp");
+    const reason = "RDP needs the Hub's RDP gateway (guacd), which is not running on this Hub.";
+    mocks.tunnels[0].onerror!({ code: 519, message: reason });
+    mocks.tunnels[0].onstatechange!(2);
+    expect(onError).toHaveBeenCalledExactlyOnceWith(reason);
+    expect(onDisconnect).not.toHaveBeenCalled();
+  });
+
+  it("reports a stream that closes without a reason, and a lost connection once the screen has appeared", async () => {
+    await render("wss://example.test/first");
+    mocks.tunnels[0].onerror!({ code: 519, message: "519" });
+    mocks.tunnels[0].onstatechange!(2);
+    expect(onError).toHaveBeenCalledExactlyOnceWith(STREAM_NOT_OPENED);
+
+    await render("wss://example.test/second");
+    mocks.clients[1].onstatechange!(3);
+    mocks.tunnels[1].onstatechange!(2);
+    expect(onError).toHaveBeenCalledOnce();
+    expect(onDisconnect).toHaveBeenCalledExactlyOnceWith({ clean: false, reason: "session ended" });
   });
 });

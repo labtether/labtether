@@ -143,6 +143,7 @@
     "stepReconnect": "Reconnexion de la session",
     "cancel": "Annuler",
     "failed": "Échec de la connexion",
+    "streamNotOpened": "Le flux ne s’est pas ouvert.",
     "notConnected": "Non connecté",
     "disconnected": "Déconnecté",
     "connect": "Se connecter",

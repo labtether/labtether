@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 
 import type { DesktopProtocol } from "../../../../components/SessionPanel";
 import type { VNCViewerHandle, VNCCredentialRequest } from "../../../../components/VNCViewer";
+import { useSessionPasswordAttempt } from "../../../../hooks/useSessionPasswordAttempt";
 
 interface UseDesktopCredentialsOptions {
   protocol: DesktopProtocol;
@@ -16,26 +17,32 @@ export function useDesktopCredentials({ protocol, vncRef, autoPassword }: UseDes
   const [credUsername, setCredUsername] = useState("");
   const [credPassword, setCredPassword] = useState("");
   const autoAttemptedRef = useRef(false);
+  const sessionPassword = useSessionPasswordAttempt();
 
   const needsUsername = credPrompt?.types.includes("username") ?? false;
 
+  // Each attempt gets its own ticket, so a new one starts here.
   useEffect(() => {
     autoAttemptedRef.current = false;
-  }, [autoPassword, protocol]);
+    sessionPassword.settled();
+  }, [autoPassword, protocol, sessionPassword]);
 
   const handleCredentialsRequired = useCallback(
     (request: VNCCredentialRequest) => {
       if (protocol !== "vnc") return;
       const supportsAutoPassword = request.types.includes("password") && !request.types.includes("username");
       const trimmedAutoPassword = autoPassword?.trim() ?? "";
-      if (!autoAttemptedRef.current && supportsAutoPassword && trimmedAutoPassword) {
+      // The Hub sends a session password only for a VNC server the agent started with it; a device that refused it
+      // once is not sent it again.
+      if (!autoAttemptedRef.current && sessionPassword.allowed() && supportsAutoPassword && trimmedAutoPassword) {
         autoAttemptedRef.current = true;
+        sessionPassword.sent();
         vncRef.current?.sendCredentials({ password: trimmedAutoPassword });
         return;
       }
       setCredPrompt(request);
     },
-    [autoPassword, protocol, vncRef],
+    [autoPassword, protocol, sessionPassword, vncRef],
   );
 
   const handleSubmitCredentials = useCallback(() => {
@@ -70,5 +77,6 @@ export function useDesktopCredentials({ protocol, vncRef, autoPassword }: UseDes
     handleSubmitCredentials,
     resetCredentialForm,
     dismissCredentialPrompt,
+    takeSessionPasswordRefusal: sessionPassword.takeRefusal,
   };
 }

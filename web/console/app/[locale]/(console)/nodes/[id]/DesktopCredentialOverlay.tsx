@@ -11,6 +11,8 @@ interface DesktopCredentialOverlayProps {
   credPassword: string;
   onCredPasswordChange: (value: string) => void;
   onSubmit: () => void;
+  /** Ends the attempt: the page disconnects and closes the session. */
+  onCancel: () => void;
 }
 
 /** The device's VNC server asks for a login: the sign-in card over the screen. */
@@ -22,6 +24,7 @@ export function DesktopCredentialOverlay({
   credPassword,
   onCredPasswordChange,
   onSubmit,
+  onCancel,
 }: DesktopCredentialOverlayProps) {
   if (!credPrompt) return null;
   return (
@@ -32,6 +35,7 @@ export function DesktopCredentialOverlay({
       password={credPassword}
       onPasswordChange={onCredPasswordChange}
       onSubmit={onSubmit}
+      onCancel={onCancel}
     />
   );
 }

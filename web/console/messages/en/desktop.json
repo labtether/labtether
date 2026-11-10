@@ -143,6 +143,7 @@
     "stepReconnect": "Reconnecting session",
     "cancel": "Cancel",
     "failed": "Connection failed",
+    "streamNotOpened": "The stream did not open.",
     "notConnected": "Not connected",
     "disconnected": "Disconnected",
     "connect": "Connect",

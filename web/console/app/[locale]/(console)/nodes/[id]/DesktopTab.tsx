@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useCallback, useRef } from "react";
 
 import type { GuacamoleViewerHandle } from "../../../../components/GuacamoleViewer";
 import type { SPICEViewerHandle } from "../../../../components/SPICEViewer";
@@ -49,6 +49,7 @@ export function DesktopTab({ nodeId }: { nodeId: string }) {
     targetAsset,
     connectedAgentIds: session.connectedAgentIds,
     connectionState: session.connectionState,
+    rdpGateway: displayList.rdpGateway,
   });
 
   const {
@@ -107,7 +108,8 @@ export function DesktopTab({ nodeId }: { nodeId: string }) {
     handleCredentialsRequired,
     resetCredentialForm,
     dismissCredentialPrompt,
-    credentialOverlay,
+    renderCredentialOverlay,
+    takeSessionPasswordRefusal,
   } = useDesktopConnectionUx({
     protocol,
     vncRef,
@@ -146,6 +148,20 @@ export function DesktopTab({ nodeId }: { nodeId: string }) {
     setWebRTCStats,
     setWebRTCStream,
   });
+
+  const { handleError } = session;
+  const handleViewerError = useCallback(
+    (message: string) => {
+      if (takeSessionPasswordRefusal()) {
+        // The device's VNC server refused the password the Hub made: connect again and ask the person.
+        vncRef.current?.disconnect();
+        connectDesktop();
+        return;
+      }
+      handleError(message);
+    },
+    [connectDesktop, handleError, takeSessionPasswordRefusal],
+  );
 
   const {
     keyboardGrab,
@@ -274,12 +290,12 @@ export function DesktopTab({ nodeId }: { nodeId: string }) {
     connectedAgentIds: session.connectedAgentIds,
     handleSessionPanelDisconnect,
     handleConnected: session.handleConnected,
-    handleError: session.handleError,
+    handleError: handleViewerError,
     handleCredentialsRequired,
     setWebRTCStats,
     setWebRTCStream,
     displayList,
-    credentialOverlay,
+    credentialOverlay: renderCredentialOverlay(handleDisconnect),
     viewerMetrics,
     showPerfOverlay,
     togglePerfOverlay,
