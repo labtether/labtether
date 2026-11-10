@@ -537,6 +537,8 @@ async function writeClipboardText(text: string): Promise<TerminalClipboardAction
     if (typeof document === "undefined") {
       return { ok: false, reason: fallbackReason };
     }
+    // select() moves the focus to the helper; give it back, or typing stops reaching the shell after a copy.
+    const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const textarea = document.createElement("textarea");
     textarea.value = text;
     textarea.setAttribute("readonly", "true");
@@ -547,6 +549,7 @@ async function writeClipboardText(text: string): Promise<TerminalClipboardAction
     textarea.select();
     const copied = document.execCommand("copy");
     document.body.removeChild(textarea);
+    focused?.focus({ preventScroll: true });
     return copied ? { ok: true } : { ok: false, reason: fallbackReason };
   } catch {
     return { ok: false, reason: fallbackReason };

@@ -32,12 +32,14 @@ import { usePaneSession, type PaneStatus } from "../usePaneSession";
 
 let root: Root;
 let status: PaneStatus | null;
+let pane: ReturnType<typeof usePaneSession> | null;
 
 function Pane() {
-  status = usePaneSession({
+  pane = usePaneSession({
     targetNodeId: "nas01", targetSource: "agent", isTabActive: true, isFocused: true, autoReconnect: false,
     onClipboardBlocked: () => {}, onToggleSearch: () => {},
-  } as Parameters<typeof usePaneSession>[0]).status;
+  } as Parameters<typeof usePaneSession>[0]);
+  status = pane.status;
   return null;
 }
 
@@ -63,4 +65,31 @@ it("connects once and shows the error when the stream never opens", async () => 
   expect(fake.connect).toHaveBeenCalledTimes(1);
   expect(status?.state).toBe("error");
   expect(status?.error).toBe("Die Terminalverbindung ist fehlgeschlagen.");
+});
+
+// Risk: xterm takes typing through a hidden textarea and the pane's key handler skipped every textarea, so
+// Ctrl+Shift+C never copied while someone typed in the shell (found in a real browser on the 2.0 lab Hub).
+it("copies with Ctrl+Shift+C while the shell has focus and leaves the shell its own keys", async () => {
+  await act(async () => root.render(<Pane />));
+  const term = { copySelection: vi.fn(async () => ({ ok: true as const })), pasteFromClipboard: vi.fn(async () => ({ ok: true as const })), selectAll: vi.fn() };
+  pane!.termRef.current = term as unknown as NonNullable<typeof pane>["termRef"]["current"];
+  const shell = document.createElement("textarea");
+  shell.className = "xterm-helper-textarea";
+  document.body.append(shell);
+  const press = (key: string, mods: KeyboardEventInit) => {
+    const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...mods });
+    shell.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  try {
+    expect(press("C", { ctrlKey: true, shiftKey: true })).toBe(true);
+    expect(term.copySelection).toHaveBeenCalledTimes(1);
+    // Start of line and the browser's own paste are not the pane's: no action, no preventDefault.
+    expect(press("a", { ctrlKey: true })).toBe(false);
+    expect(press("V", { ctrlKey: true, shiftKey: true })).toBe(false);
+    expect(term.selectAll).not.toHaveBeenCalled();
+    expect(term.pasteFromClipboard).not.toHaveBeenCalled();
+  } finally {
+    shell.remove();
+  }
 });
