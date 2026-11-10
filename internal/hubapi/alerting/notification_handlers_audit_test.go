@@ -156,6 +156,7 @@ func TestNotificationChannelLifecycleAuditIsAttributedAndRedacted(t *testing.T) 
 			details: map[string]any{
 				"resource_type": "notification_channel",
 				"action":        "delete",
+				"channel_type":  notifications.ChannelTypeSlack,
 			},
 		},
 	}
@@ -184,6 +185,10 @@ func TestNotificationChannelLifecycleAuditIsAttributedAndRedacted(t *testing.T) 
 		}
 		if event.Reason != "" {
 			t.Errorf("event[%d].Reason unexpectedly retained provider data: %q", index, event.Reason)
+		}
+		// The delete row is read after the channel is gone, so it keeps the name.
+		if expected.eventType == notificationChannelDeletedAuditType && event.TargetName != "Security notifications" {
+			t.Errorf("delete event TargetName = %q, want the channel's name", event.TargetName)
 		}
 		if warnings[index] != notificationChannelAuditWarning {
 			t.Errorf("warning[%d] = %q, want %q", index, warnings[index], notificationChannelAuditWarning)

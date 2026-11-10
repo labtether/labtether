@@ -37,13 +37,14 @@ const (
 	credentialProfileAuditWarning     = "api warning: failed to append credential profile audit event"
 )
 
-func (d *Deps) appendCredentialProfileAudit(r *http.Request, eventType, profileID, action, kind string) {
+func (d *Deps) appendCredentialProfileAudit(r *http.Request, eventType, profileID, profileName, action, kind string) {
 	if d.AppendAuditEventBestEffort == nil {
 		return
 	}
 	event := audit.NewEvent(eventType)
 	event.ActorID = d.actorIDFromContext(r.Context())
 	event.Target = strings.TrimSpace(profileID)
+	event.TargetName = strings.TrimSpace(profileName)
 	event.Decision = "applied"
 	event.Details = map[string]any{
 		"resource_type": "credential_profile",
@@ -206,7 +207,7 @@ func (d *Deps) HandleCredentialProfiles(w http.ResponseWriter, r *http.Request) 
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create credential profile")
 			return
 		}
-		d.appendCredentialProfileAudit(r, credentialProfileCreatedAuditType, created.ID, "create", created.Kind)
+		d.appendCredentialProfileAudit(r, credentialProfileCreatedAuditType, created.ID, created.Name, "create", created.Kind)
 
 		servicehttp.WriteJSON(w, http.StatusCreated, map[string]any{"profile": redactCredentialProfileURLUserinfo(created)})
 	default:
@@ -278,7 +279,7 @@ func (d *Deps) HandleCredentialProfileActions(w http.ResponseWriter, r *http.Req
 				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete credential profile")
 				return
 			}
-			d.appendCredentialProfileAudit(r, credentialProfileDeletedAuditType, profileID, "delete", profile.Kind)
+			d.appendCredentialProfileAudit(r, credentialProfileDeletedAuditType, profileID, profile.Name, "delete", profile.Kind)
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "profile_id": profileID})
 		default:
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -346,7 +347,7 @@ func (d *Deps) HandleCredentialProfileActions(w http.ResponseWriter, r *http.Req
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to rotate credential profile secret")
 			return
 		}
-		d.appendCredentialProfileAudit(r, credentialProfileRotatedAuditType, profileID, "rotate", updated.Kind)
+		d.appendCredentialProfileAudit(r, credentialProfileRotatedAuditType, profileID, updated.Name, "rotate", updated.Kind)
 
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 			"profile": redactCredentialProfileURLUserinfo(updated),

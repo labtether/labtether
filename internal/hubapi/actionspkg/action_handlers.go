@@ -410,6 +410,7 @@ func (d *Deps) HandleActionRuns(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list action runs")
 		return
 	}
+	runs = shared.VisibleActionRuns(r.Context(), runs)
 	if shared.HasAssetRestriction(r.Context()) {
 		allowed := make([]actions.Run, 0, len(runs))
 		for _, run := range runs {
@@ -483,7 +484,7 @@ func (d *Deps) HandleActionRunActions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// A key limited to some assets must not read or delete runs on others.
-	if !ok || !shared.AllAssetsAllowed(r.Context(), run.Target) {
+	if !ok || !shared.AllAssetsAllowed(r.Context(), run.Target) || !shared.ActionRunVisible(r.Context(), run) {
 		servicehttp.WriteError(w, http.StatusNotFound, "action run not found")
 		return
 	}

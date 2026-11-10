@@ -107,3 +107,23 @@ func TestStoreWithoutConnectivityPreservesUnderlyingStatus(t *testing.T) {
 		t.Fatalf("status without connectivity authority = %q, want unchanged online", got)
 	}
 }
+
+// A Docker host's containers kept while its agent is away read as offline;
+// with the agent connected they keep their reported status.
+func TestStoreShowsDockerAssetsOfDisconnectedAgentOffline(t *testing.T) {
+	underlying := &staticAssetStore{
+		MemoryAssetStore: persistence.NewMemoryAssetStore(),
+		listed: []assets.Asset{
+			{ID: "docker-ct-away-1", Source: "docker", Status: "online", Metadata: map[string]string{"agent_id": "away"}},
+			{ID: "docker-ct-here-1", Source: "docker", Status: "online", Metadata: map[string]string{"agent_id": "here"}},
+			{ID: "docker-cluster-x", Source: "docker", Status: "online"},
+		},
+	}
+	listed, err := NewStore(underlying, staticConnectivity{"here": true}).ListAssets()
+	if err != nil {
+		t.Fatalf("ListAssets: %v", err)
+	}
+	if got := []string{listed[0].Status, listed[1].Status, listed[2].Status}; !reflect.DeepEqual(got, []string{"offline", "online", "online"}) {
+		t.Fatalf("statuses = %v, want offline for the away agent's container only", got)
+	}
+}

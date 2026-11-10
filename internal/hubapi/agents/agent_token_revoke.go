@@ -141,6 +141,11 @@ func (d *Deps) auditAgentTokenRevoked(r *http.Request, token enrollment.AgentTok
 		event.ActorID = strings.TrimSpace(d.PrincipalActorID(r.Context()))
 	}
 	event.Target = token.ID
+	if d.AssetStore != nil {
+		if asset, ok, err := d.AssetStore.GetAsset(token.AssetID); err == nil && ok {
+			event.TargetName = asset.Name
+		}
+	}
 	event.Decision = "applied"
 	event.Details = map[string]any{"asset_id": token.AssetID}
 	if hubSSHKey != "" {

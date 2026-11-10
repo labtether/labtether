@@ -54,9 +54,9 @@ func (s *PostgresStore) ReadActionCorrelationPage(ctx context.Context, w Correla
 		return nil, cursor, false, err
 	}
 	result := make([]CorrelationAction, 0, CorrelationPageSize)
-	next, done, err := s.readCorrelationPage(ctx, "action_runs", "s.id,s.type,s.target,s.created_at", `s.status='failed' AND s.created_at >= $1 AND s.created_at <= $2 AND s.target=ANY($3::text[])`, []any{w.From.UTC(), w.Through.UTC(), scope.OperationAssetIDs}, cursor, func(rows pgx.Rows) (string, error) {
+	next, done, err := s.readCorrelationPage(ctx, "action_runs", "s.id,s.type,s.target,COALESCE((SELECT a.name FROM assets a WHERE a.id=s.target),''),s.created_at", `s.status='failed' AND s.created_at >= $1 AND s.created_at <= $2 AND s.target=ANY($3::text[])`, []any{w.From.UTC(), w.Through.UTC(), scope.OperationAssetIDs}, cursor, func(rows pgx.Rows) (string, error) {
 		var row CorrelationAction
-		err := rows.Scan(&row.ID, &row.Type, &row.Target, &row.CreatedAt)
+		err := rows.Scan(&row.ID, &row.Type, &row.Target, &row.TargetName, &row.CreatedAt)
 		row.CreatedAt = row.CreatedAt.UTC()
 		result = append(result, row)
 		return row.ID, err
@@ -76,9 +76,9 @@ func (s *PostgresStore) ReadUpdateCorrelationPage(ctx context.Context, w Correla
 	}
 	result := make([]CorrelationUpdate, 0, CorrelationPageSize)
 	predicate := `s.status='failed' AND s.created_at >= $1 AND s.created_at <= $2 AND ` + correlationFailedUpdateTarget + ` IS NOT NULL`
-	next, done, err := s.readCorrelationPage(ctx, "update_runs", "s.id,s.plan_id,"+correlationFailedUpdateTarget+",s.created_at", predicate, []any{w.From.UTC(), w.Through.UTC(), scope.OperationAssetIDs}, cursor, func(rows pgx.Rows) (string, error) {
+	next, done, err := s.readCorrelationPage(ctx, "update_runs", "s.id,s.plan_id,"+correlationFailedUpdateTarget+",COALESCE((SELECT p.name FROM update_plans p WHERE p.id=s.plan_id),''),s.created_at", predicate, []any{w.From.UTC(), w.Through.UTC(), scope.OperationAssetIDs}, cursor, func(rows pgx.Rows) (string, error) {
 		var row CorrelationUpdate
-		err := rows.Scan(&row.ID, &row.PlanID, &row.Target, &row.CreatedAt)
+		err := rows.Scan(&row.ID, &row.PlanID, &row.Target, &row.PlanName, &row.CreatedAt)
 		row.CreatedAt = row.CreatedAt.UTC()
 		result = append(result, row)
 		return row.ID, err
