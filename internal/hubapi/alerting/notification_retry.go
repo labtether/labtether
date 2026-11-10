@@ -2,7 +2,6 @@ package alerting
 
 import (
 	"context"
-	"fmt"
 	"github.com/labtether/labtether/internal/alerts"
 	"github.com/labtether/labtether/internal/notifications"
 	"github.com/labtether/labtether/internal/securityruntime"
@@ -165,8 +164,8 @@ func (d *Deps) payloadForRetry(rec notifications.Record) map[string]any {
 		"event":             "notification.retry",
 		"alert_instance_id": strings.TrimSpace(rec.AlertInstanceID),
 		"alert_id":          strings.TrimSpace(rec.AlertInstanceID),
-		"title":             "LabTether notification retry",
-		"text":              fmt.Sprintf("Retrying notification delivery for alert instance %s", strings.TrimSpace(rec.AlertInstanceID)),
+		"title":             "LabTether alert",
+		"text":              "An earlier LabTether alert could not be sent at the time. Its rule or alert has since been removed.",
 		"retry":             true,
 	}
 	return payload
