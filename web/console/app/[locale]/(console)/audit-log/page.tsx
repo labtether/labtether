@@ -15,7 +15,7 @@ import { hasAdminRole } from "../../../lib/roles";
 import { ChipGroup, EmptyLine, FilterField, PickMenu } from "../logs/LogControls";
 import { AuditRow, type AuditText } from "./AuditRow";
 import { AuditViews } from "./AuditViews";
-import { actionSentence, alertDevices, ALL_REQUESTS, auditRows, auditTime, humanizeType, outcome, peopleByActivity, REQUEST_TYPE, targetText, visibleAuditRows, type AuditEntry, type AuditSort } from "./auditModel";
+import { actionSentence, alertDevices, ALL_REQUESTS, auditActor, hiddenIDs, auditRows, auditTime, humanizeType, outcome, peopleByActivity, REQUEST_TYPE, targetText, visibleAuditRows, type AuditEntry, type AuditSort } from "./auditModel";
 import { copyText } from "../../../lib/clipboard";
 import { useAuditPages } from "./useAuditPages";
 
@@ -63,15 +63,19 @@ export default function AuditLogPage() {
     if (user?.id && user.username && !names.has(user.id)) names.set(user.id, user.username);
     return names;
   }, [user?.id, user?.username, users]);
+  // No Hub-made IDs in the normal view: an API key reads "API key", a person without a name "Unknown".
   const nameOf = useCallback(
-    (id: string) => (id === "system" ? t("hub") : usernames.get(id) ?? id),
+    (id: string) => {
+      const actor = auditActor(id, usernames);
+      return "name" in actor ? actor.name : t(actor.kind);
+    },
     [t, usernames],
   );
   const text = useMemo<AuditText>(() => {
     const now = new Date();
     return {
       time: (e) => auditTime(e.timestamp, now, locale),
-      who: (e) => nameOf(e.actor_id ?? "") || t("unknown"),
+      who: (e) => nameOf(e.actor_id ?? ""),
       action: (e) => {
         const sentence = actionSentence(e);
         return sentence.key ? t(`actions.${sentence.key}`, sentence.values) : humanizeType(e.type);
@@ -81,8 +85,9 @@ export default function AuditLogPage() {
         if (!devices) return "";
         return "name" in devices ? t("where.device", { name: devices.name }) : t("where.devices", { count: devices.count });
       },
+      ids: (e) => hiddenIDs(e, auditActor(e.actor_id, usernames)),
     };
-  }, [locale, nameOf, t]);
+  }, [locale, nameOf, t, usernames]);
   const searchText = useCallback(
     (e: AuditEntry) => {
       const result = outcome(e.decision);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import en from "../../../../../messages/en/audit-log.json";
-import { actionKey, actionSentence, alertDevices, ALL_REQUESTS, auditRows, detailRows, humanizeType, KNOWN_ACTIONS, outcome, peopleByActivity, targetText, visibleAuditRows, type AuditEntry } from "../auditModel";
+import { actionKey, actionSentence, alertDevices, ALL_REQUESTS, auditActor, auditRows, detailRows, hiddenIDs, ID_KEYS, isGeneratedID, humanizeType, KNOWN_ACTIONS, outcome, peopleByActivity, targetText, visibleAuditRows, type AuditEntry } from "../auditModel";
 
 // Risks: a refused attempt does not read "Denied", the person chips miss or misorder people, a filter hides the
 // entries it should keep, or an unknown event shows as a raw code.
@@ -115,11 +115,45 @@ describe("auditModel", () => {
     expect(auditRows(list, { ...base, type: "api.request" }).map((e) => e.id)).toEqual(["2"]);
   });
 
-  it("shows the name the Hub stored, else the ID, and does not repeat the name in the details", () => {
-    const named = { ...entry("1", "usr-1", "webhook.deleted", 1), target: "wh_1793", details: { target_name: "ltqa-hook", url: "https://hooks.example.com" } };
+  // Risk: the normal row view shows a Hub-made ID ("wh_1000000000000000005_5") where a person expects a name, or
+  // the ID is lost entirely for a sysadmin who opens the row's details.
+  it("shows the name the Hub stored, a person-chosen ID, or nothing for a Hub-made ID", () => {
+    const hook = "wh_1000000000000000005_5";
+    const named = { ...entry("1", "usr-1", "webhook.deleted", 1), target: hook, details: { target_name: "ltqa-hook", url: "https://hooks.example.com" } };
     expect(targetText(named)).toBe("ltqa-hook");
-    expect(targetText({ ...named, details: { target_name: "  " } })).toBe("wh_1793");
-    expect(targetText({ target: "wh_1793" })).toBe("wh_1793");
+    expect(targetText({ ...named, details: { target_name: "  " } })).toBe("");
+    expect(targetText({ target: hook })).toBe("");
+    expect(targetText({ target: "dlq_1000000000000000006" })).toBe("");
+    // A device's ID is its host name, chosen by a person: it stays.
+    expect(targetText({ target: "nas01" })).toBe("nas01");
     expect(detailRows(named)).toEqual([["url", "https://hooks.example.com"]]);
+  });
+
+  it("names the actor without Hub-made IDs, and keeps the IDs for the details", () => {
+    const names = new Map([["usr_1000000000000000001_1", "alex"]]);
+    expect(auditActor("usr_1000000000000000001_1", names)).toEqual({ name: "alex" });
+    expect(auditActor("usr_1000000000000000002_2", names)).toEqual({ kind: "unknown" });
+    expect(auditActor("apikey:key_1000000000000000003_3", names)).toEqual({ kind: "apiKey" });
+    expect(auditActor("system", names)).toEqual({ kind: "hub" });
+    expect(auditActor("", names)).toEqual({ kind: "unknown" });
+    expect(auditActor("pve01", names)).toEqual({ name: "pve01" });
+    expect(isGeneratedID("v2sess_1000000000000000007_7")).toBe(true);
+    expect(isGeneratedID("fence-job_1000000000000000008_8")).toBe(true);
+    expect(isGeneratedID("nas01_2024")).toBe(false);
+
+    const row = { actor_id: "apikey:key_1000000000000000003_3", target: "sched_1000000000000000004_4" };
+    expect(hiddenIDs(row, auditActor(row.actor_id, names))).toEqual([
+      [ID_KEYS.apiKey, "key_1000000000000000003_3"],
+      [ID_KEYS.target, "sched_1000000000000000004_4"],
+    ]);
+    const unknown = { actor_id: "usr_1000000000000000002_2", target: "nas01" };
+    expect(hiddenIDs(unknown, auditActor(unknown.actor_id, names))).toEqual([[ID_KEYS.actor, "usr_1000000000000000002_2"]]);
+    const known = { actor_id: "usr_1000000000000000001_1", target: "wh_1000000000000000005_5", details: { target_name: "ltqa-hook" } };
+    expect(hiddenIDs(known, auditActor(known.actor_id, names))).toEqual([]);
+    expect(hiddenIDs({ actor_id: "system" }, { kind: "hub" })).toEqual([]);
+
+    const words = en as Record<string, unknown> & { ids: Record<string, string> };
+    expect(words.apiKey).toBe("API key");
+    expect(Object.keys(words.ids).sort()).toEqual(["actor", "apiKey", "target"]);
   });
 });
