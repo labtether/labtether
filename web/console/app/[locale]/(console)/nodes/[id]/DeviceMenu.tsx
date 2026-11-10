@@ -109,6 +109,7 @@ export function DeviceMenu({ asset, offers, skip = [], variant = "head", onPower
       <NodeDeleteConfirmModal
         open={del.showDeleteConfirm}
         assetName={asset.name}
+        agent={asset.source === "agent"}
         confirmInput={del.deleteConfirmInput}
         deleting={del.deleting}
         error={del.deleteError}

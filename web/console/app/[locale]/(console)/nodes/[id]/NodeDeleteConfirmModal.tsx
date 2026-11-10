@@ -10,6 +10,8 @@ type NodeDeleteConfirmModalProps = {
   confirmInput: string;
   deleting: boolean;
   error?: string | null;
+  /** An agent device: it can come back with a new single-use token from Add device (Hub #298). */
+  agent?: boolean;
   onConfirmInputChange: (value: string) => void;
   onCancel: () => void;
   onConfirm: () => void;
@@ -22,6 +24,7 @@ export function NodeDeleteConfirmModal({
   confirmInput,
   deleting,
   error,
+  agent = false,
   onConfirmInputChange,
   onCancel,
   onConfirm,
@@ -38,6 +41,7 @@ export function NodeDeleteConfirmModal({
         }}
       >
         <p>{t("body", { name: assetName })}</p>
+        {agent ? <p>{t("addBack")}</p> : null}
         <div className="dv-field">
           <label htmlFor="dv-remove-name">{t("typeName", { name: assetName })}</label>
           <input

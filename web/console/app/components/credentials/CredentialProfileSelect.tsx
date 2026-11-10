@@ -1,33 +1,36 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+import { useCallback } from "react";
+
 import { Select } from "../ui/Input";
 import type { CredentialProfile } from "../../hooks/useCredentialProfiles";
 
-export const credentialKindLabels: Record<string, string> = {
-  ssh_password: "SSH password",
-  ssh_private_key: "SSH private key",
-  hub_ssh_identity: "Hub SSH identity",
-  vnc_password: "VNC / ARD password",
-  proxmox_api_token: "Proxmox API token",
-  proxmox_password: "Proxmox password",
-  pbs_api_token: "PBS API token",
-  portainer_api_key: "Portainer API key",
-  truenas_api_key: "TrueNAS API key",
-  homeassistant_token: "Home Assistant token",
-  telnet_password: "Telnet password",
-  rdp_password: "RDP password",
-  ftp_password: "FTP password",
-  smb_credentials: "SMB credentials",
-  webdav_credentials: "WebDAV credentials",
-};
+/** Kinds with a name under security.logins.kinds; a kind the console does not know shows as the hub sent it. */
+const namedKinds = new Set([
+  "ssh_password",
+  "ssh_private_key",
+  "hub_ssh_identity",
+  "vnc_password",
+  "proxmox_api_token",
+  "proxmox_password",
+  "pbs_api_token",
+  "portainer_api_key",
+  "truenas_api_key",
+  "homeassistant_token",
+  "telnet_password",
+  "rdp_password",
+  "ftp_password",
+  "smb_credentials",
+  "webdav_credentials",
+]);
 
 export const sshCredentialKinds = ["ssh_password", "ssh_private_key", "hub_ssh_identity"];
 
-export function credentialProfileLabel(profile: CredentialProfile): string {
-  const kind = credentialKindLabels[profile.kind] ?? profile.kind;
-  return profile.username
-    ? `${profile.name} — ${kind} (${profile.username})`
-    : `${profile.name} — ${kind}`;
+/** A saved login's type ("SSH password", "Proxmox API token") in the person's language. */
+export function useCredentialKindLabel(): (kind: string) => string {
+  const t = useTranslations("security.logins.kinds");
+  return useCallback((kind: string) => (namedKinds.has(kind) ? t(kind) : kind), [t]);
 }
 
 type CredentialProfileSelectProps = {
@@ -57,8 +60,10 @@ export function CredentialProfileSelect({
   allowedKinds,
   disabled = false,
   className = "",
-  emptyLabel = "No credential profile",
+  emptyLabel,
 }: CredentialProfileSelectProps) {
+  const t = useTranslations("security.logins");
+  const kindLabel = useCredentialKindLabel();
   const allowed = allowedKinds ? new Set(allowedKinds) : null;
   const options = profiles.filter((profile) => !allowed || allowed.has(profile.kind));
   const selectedAvailable = value === "" || options.some((profile) => profile.id === value);
@@ -77,13 +82,18 @@ export function CredentialProfileSelect({
         error={Boolean(error)}
         className="w-full"
       >
-        <option value="">{loading ? "Loading credential profiles…" : emptyLabel}</option>
-        {!selectedAvailable ? <option value={value}>Previously selected profile (unavailable)</option> : null}
-        {options.map((profile) => (
-          <option key={profile.id} value={profile.id}>{credentialProfileLabel(profile)}</option>
-        ))}
+        <option value="">{loading ? t("loading") : emptyLabel ?? t("none")}</option>
+        {!selectedAvailable ? <option value={value}>{t("unavailable")}</option> : null}
+        {options.map((profile) => {
+          const kind = kindLabel(profile.kind);
+          return (
+            <option key={profile.id} value={profile.id}>
+              {profile.username ? t("optionUser", { name: profile.name, kind, username: profile.username }) : t("option", { name: profile.name, kind })}
+            </option>
+          );
+        })}
       </Select>
-      {error ? <p id={statusID} role="alert" className="mt-1 text-[11px] text-[var(--bad)]">{error}</p> : null}
+      {error ? <p id={statusID} role="alert" className="mt-1 text-[11px] text-[var(--bad)]">{t("loadFailed")}</p> : null}
     </div>
   );
 }

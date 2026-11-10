@@ -323,7 +323,7 @@ func (d *Deps) HandleAssetActions(w http.ResponseWriter, r *http.Request) {
 
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"asset": updatedAsset})
 		case http.MethodDelete:
-			d.HandleDeleteAsset(w, assetEntry)
+			d.HandleDeleteAsset(w, r, assetEntry)
 		default:
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
