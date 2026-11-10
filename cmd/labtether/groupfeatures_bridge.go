@@ -14,6 +14,7 @@ func (s *apiServer) buildGroupFeaturesDeps() *groupfeaturespkg.Deps {
 		UpdateStore:           s.updateStore,
 		GroupMaintenanceStore: s.groupMaintenanceStore,
 		GroupProfileStore:     s.groupProfileStore,
+		AuditStore:            s.auditStore,
 	}
 }
 

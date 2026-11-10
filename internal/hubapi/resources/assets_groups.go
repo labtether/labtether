@@ -314,6 +314,7 @@ func (d *Deps) HandleAssetActions(w http.ResponseWriter, r *http.Request) {
 				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update asset")
 				return
 			}
+			d.auditAssetUpdated(r, assetEntry, updatedAsset)
 			if updateReq.GroupID != nil {
 				if err := d.CascadeAssetSiteToInfraChildren(updatedAsset); err != nil {
 					servicehttp.WriteError(w, http.StatusInternalServerError, "failed to cascade asset group assignment")
