@@ -40,7 +40,8 @@ func (d *Deps) auditChange(r *http.Request, eventType, targetID, targetName stri
 }
 
 // auditAlertInstance records an acknowledged, resolved or deleted alert under
-// its rule's name, which is what the alert list shows.
+// its rule's name, which is what the alert list shows, and says which device
+// the alert is for: one rule can fire on many devices.
 func (d *Deps) auditAlertInstance(r *http.Request, eventType string, inst alerts.AlertInstance) {
 	name := ""
 	if d.AlertStore != nil && strings.TrimSpace(inst.RuleID) != "" {
@@ -48,7 +49,68 @@ func (d *Deps) auditAlertInstance(r *http.Request, eventType string, inst alerts
 			name = rule.Name
 		}
 	}
-	d.auditChange(r, eventType, inst.ID, name, map[string]any{"rule_id": inst.RuleID, "severity": inst.Severity})
+	details := map[string]any{"rule_id": inst.RuleID, "severity": inst.Severity}
+	d.addAlertDevices(details, inst)
+	d.auditChange(r, eventType, inst.ID, name, details)
+}
+
+// maxAuditAlertDevices bounds the device list one alert row carries.
+const maxAuditAlertDevices = 20
+
+// addAlertDevices writes the alert's devices into an audit row's details, with
+// their names as they are now, so the row still reads after a device is
+// renamed or removed. One device: device_id and device_name. Several:
+// device_count, and device_ids with device_names for the first 20 in the same
+// order. A device that no longer exists keeps its ID and has no name.
+func (d *Deps) addAlertDevices(details map[string]any, inst alerts.AlertInstance) {
+	ids := alertInstanceDeviceIDs(inst)
+	if len(ids) == 0 {
+		return
+	}
+	deviceName := func(id string) string {
+		if d.AssetStore == nil {
+			return ""
+		}
+		entry, ok, err := d.AssetStore.GetAsset(id)
+		if err != nil || !ok {
+			return ""
+		}
+		return strings.TrimSpace(entry.Name)
+	}
+	if len(ids) == 1 {
+		details["device_id"] = ids[0]
+		if name := deviceName(ids[0]); name != "" {
+			details["device_name"] = name
+		}
+		return
+	}
+	details["device_count"] = len(ids)
+	ids = ids[:min(len(ids), maxAuditAlertDevices)]
+	names := make([]string, len(ids))
+	for i, id := range ids {
+		names[i] = deviceName(id)
+	}
+	details["device_ids"] = ids
+	details["device_names"] = names
+}
+
+// alertInstanceDeviceIDs lists the devices an alert is for, the way the alert
+// list does: the alert's own asset label first, then the devices it fired for.
+func alertInstanceDeviceIDs(inst alerts.AlertInstance) []string {
+	ids := []string{}
+	add := func(id string) {
+		id = strings.TrimSpace(id)
+		if id != "" && !slices.Contains(ids, id) {
+			ids = append(ids, id)
+		}
+	}
+	add(inst.Labels["asset_id"])
+	if inst.FiringScope != nil {
+		for _, id := range inst.FiringScope.AssetIDs {
+			add(id)
+		}
+	}
+	return ids
 }
 
 // auditAlertSilence names a silence by its reason, or by what it matches when
