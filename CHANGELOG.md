@@ -162,6 +162,9 @@ v1.7.1.
   too, and `/auth/me` says how the account signs in (`auth_provider`).
 - The two-factor code fields under Account security have names for screen
   readers.
+- Services: adding, renaming or removing an icon in the icon library needs
+  `web-services:write`. A viewer or a read-only API key could change it.
+
 - Security › Saved logins: the Add login, Rotate and Delete dialogs, login
   types and the saved login picker are in your language, and their errors
   name what happened without internal words.
