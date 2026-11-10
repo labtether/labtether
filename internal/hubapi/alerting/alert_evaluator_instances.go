@@ -2,13 +2,10 @@ package alerting
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
-	"strings"
 	"time"
 
-	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/alerts"
 	"github.com/labtether/labtether/internal/persistence"
 )
@@ -84,8 +81,8 @@ func (d *Deps) fireOrRefireAlertWithScopeAt(ctx context.Context, rule alerts.Rul
 		d.broadcastEvent("alert.fired", map[string]any{"rule_id": rule.ID, "severity": string(rule.Severity)})
 		d.dispatchAlertNotificationsAsync(rule, inst.ID, "firing")
 
-		// Push alert notification to connected agents (best-effort).
-		d.pushAlertNotifyToAgents(ctx, rule, inst.ID, "firing")
+		// Tell the agents of the devices it fired for (best-effort).
+		d.pushAlertFiringToAgents(ctx, rule, inst.ID, scope)
 	}
 
 	existing, ok, err := store.GetActiveInstanceByFingerprintContext(ctx, rule.ID, fingerprint)
@@ -118,6 +115,7 @@ func (d *Deps) fireOrRefireAlertWithScopeAt(ctx context.Context, rule alerts.Rul
 		if err := store.UpdateAlertInstanceLastFiredContext(ctx, existing.ID); err != nil {
 			return
 		}
+		d.syncAlertFiringDevices(ctx, rule, existing, scope)
 		d.maybeAutoCreateIncidentContext(ctx, rule, existing)
 		return
 	}
@@ -231,46 +229,9 @@ func (d *Deps) resolveStaleInstancesContext(ctx context.Context, rule alerts.Rul
 			d.broadcastEvent("alert.resolved", map[string]any{"rule_id": rule.ID, "instance_id": inst.ID})
 			d.dispatchAlertNotificationsAsync(rule, inst.ID, "resolved")
 
-			// Push resolved notification to connected agents (best-effort).
-			d.pushAlertNotifyToAgents(ctx, rule, inst.ID, "resolved")
+			// Tell the agents that showed it (best-effort).
+			d.pushAlertResolvedToAgents(ctx, rule, inst.ID)
 		}
 	}
 	return resolved
-}
-
-// pushAlertNotifyToAgents sends an alert.notify message to connected agents
-// for each asset targeted by the rule. This is best-effort; send errors are ignored.
-func (d *Deps) pushAlertNotifyToAgents(ctx context.Context, rule alerts.Rule, instanceID string, state string) {
-	if d.AgentMgr == nil {
-		return
-	}
-
-	targetAssets, err := d.resolveRuleTargetAssetsContext(ctx, rule, nil, nil, true)
-	if err != nil {
-		log.Printf("alert evaluator: failed to resolve agent notification targets: %v", err)
-		return
-	}
-
-	for _, targetAsset := range targetAssets {
-		if ctx.Err() != nil {
-			return
-		}
-		assetID := strings.TrimSpace(targetAsset.ID)
-		if !d.AgentMgr.IsConnected(assetID) {
-			continue
-		}
-		conn, ok := d.AgentMgr.Get(assetID)
-		if !ok {
-			continue
-		}
-		notifyData, _ := json.Marshal(agentmgr.AlertNotifyData{
-			ID:        instanceID,
-			Severity:  rule.Severity,
-			Title:     rule.Name,
-			Summary:   rule.Description,
-			State:     state,
-			Timestamp: time.Now().UTC().Format(time.RFC3339),
-		})
-		_ = conn.SendContext(ctx, agentmgr.Message{Type: agentmgr.MsgAlertNotify, Data: notifyData})
-	}
 }

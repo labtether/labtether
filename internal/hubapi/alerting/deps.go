@@ -72,6 +72,10 @@ type Deps struct {
 	PrincipalActorID           func(ctx context.Context) string
 	AppendAuditEventBestEffort func(event audit.Event, logMessage string)
 
+	// AgentAlertDevices remembers which devices' agents were told an alert is
+	// firing. It must outlive this Deps value; nil turns the memory off.
+	AgentAlertDevices *AgentAlertDevices
+
 	// Event broadcaster (nil-safe; called from broadcastEvent).
 	Broadcast func(eventType string, data map[string]any)
 

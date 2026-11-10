@@ -32,6 +32,14 @@ func (d *Deps) ReplayAlertsToAgent(ctx context.Context, conn *agentmgr.AgentConn
 	if assetID == "" {
 		return
 	}
+	// First what it missed while away: alerts it showed that have ended.
+	for _, data := range d.AgentAlertDevices.takeForLater(assetID) {
+		payload, _ := json.Marshal(data)
+		if err := conn.SendContext(ctx, agentmgr.Message{Type: agentmgr.MsgAlertNotify, Data: payload}); err != nil {
+			d.AgentAlertDevices.keepForLater(assetID, data)
+			return
+		}
+	}
 	since := time.Now().UTC().Add(-agentReplayResolvedSince)
 	rules := map[string]alerts.Rule{}
 	targets := map[string]bool{}
@@ -50,7 +58,16 @@ func (d *Deps) ReplayAlertsToAgent(ctx context.Context, conn *agentmgr.AgentConn
 				continue
 			}
 			rule, ok := d.replayRule(rules, inst.RuleID)
-			if !ok || !d.instanceTargetsAsset(ctx, inst, rule, assetID, targets) {
+			if !ok {
+				continue
+			}
+			// While an alert fires, the devices breaching now are remembered;
+			// otherwise use the devices it first fired for.
+			if told, known := d.AgentAlertDevices.toldFor(inst.ID); known && status != alerts.InstanceStatusResolved {
+				if _, breaching := told[assetID]; !breaching {
+					continue
+				}
+			} else if !d.instanceTargetsAsset(ctx, inst, rule, assetID, targets) {
 				continue
 			}
 			state, at := "firing", inst.LastFiredAt
