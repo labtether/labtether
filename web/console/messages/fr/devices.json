@@ -231,6 +231,8 @@
       "title": "Modifier {name}",
       "name": "Nom",
       "group": "Groupe",
+      "tags": "Étiquettes",
+      "tagsHint": "Séparez les étiquettes par des virgules.",
       "cancel": "Annuler",
       "save": "Enregistrer",
       "nameRequired": "Saisissez un nom",
@@ -496,6 +498,11 @@
     }
   },
   "settingsTab": {
+    "device": {
+      "title": "Appareil",
+      "saving": "Enregistrement…",
+      "saved": "Enregistré."
+    },
     "name": {
       "title": "Nom",
       "label": "Nom de l’appareil",
