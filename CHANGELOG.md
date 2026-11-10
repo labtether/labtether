@@ -286,8 +286,10 @@ v1.7.1.
   characters everywhere, and Settings › Security shows it too, as "LabTether
   CA fingerprint". The macOS and Windows steps no longer say that the install
   command adds the CA.
-- In the Audit log, "Load older entries" and Export CSV work for admins too,
-  not only the owner. Before, an admin saw only their own 20 newest rows.
+- In the Audit log, "Load older entries" and Export CSV work for everyone,
+  not only the owner. The owner and admins get the whole log; other people
+  get their own rows, which is all the Hub sends them. Before, an admin or
+  anyone else saw only their own 20 newest rows.
 - A device's page shows the devices it sits in above its name again, such as
   a VM's host. The console read another field than the one the Hub sends, so
   the trail was always empty.

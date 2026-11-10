@@ -37,11 +37,11 @@ export default function AuditLogPage() {
   const [sort, setSort] = useState<AuditSort>("time:desc");
   const [openId, setOpenId] = useState("");
 
-  // The owner and admins page through the whole log. Everyone else keeps the status call's rows (their own 20
-  // newest): the Hub's audit list does not yet limit a person to their own rows, so the console does not ask it
-  // for them. visibleAuditRows is a second check only; the Hub is what decides who may read a row.
+  // Everyone pages through the rows the Hub lets them read: the whole log for the owner and admins, their own rows
+  // for everyone else (the Hub's audit list applies that rule in its query). visibleAuditRows is a second check
+  // only; the Hub is what decides who may read a row.
   const wholeLog = hasAdminRole(user?.role);
-  const pages = useAuditPages(wholeLog);
+  const pages = useAuditPages(Boolean(user?.id));
   const pageRows = useMemo(() => visibleAuditRows(pages.entries, wholeLog, user?.id), [pages.entries, user?.id, wholeLog]);
   const paged = pageRows.length > 0;
   const entries = useMemo(() => (paged ? pageRows : (slow?.recentAudit ?? []) as AuditEntry[]), [paged, pageRows, slow?.recentAudit]);
