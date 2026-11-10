@@ -2,7 +2,6 @@ package proxmox
 
 import (
 	"context"
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strings"
 	"time"
@@ -54,7 +53,7 @@ func (d *Deps) handleProxmoxNodeReplication(w http.ResponseWriter, r *http.Reque
 		}
 		upid, runErr := runtime.client.RunReplication(ctx, node, jobID)
 		if runErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to run replication: "+shared.SanitizeUpstreamError(runErr.Error()))
+			writeProxmoxUpstreamError(w, "failed to run replication: ", runErr)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]string{
@@ -71,7 +70,7 @@ func (d *Deps) handleProxmoxNodeReplication(w http.ResponseWriter, r *http.Reque
 	}
 	jobs, listErr := runtime.client.ListReplication(ctx, node)
 	if listErr != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to list replication jobs: "+shared.SanitizeUpstreamError(listErr.Error()))
+		writeProxmoxUpstreamError(w, "failed to list replication jobs: ", listErr)
 		return
 	}
 	if jobs == nil {

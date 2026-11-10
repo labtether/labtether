@@ -38,7 +38,7 @@ func (d *Deps) HandlePortainerContainers(ctx context.Context, w http.ResponseWri
 		}
 		containers, err := runtime.Client.GetContainers(ctx, epID)
 		if err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+			writePortainerUpstreamError(w, err)
 			return
 		}
 		if shared.HasAssetRestriction(r.Context()) {
@@ -88,7 +88,7 @@ func (d *Deps) HandlePortainerContainers(ctx context.Context, w http.ResponseWri
 		timestamps := r.URL.Query().Get("timestamps") == "true"
 		logs, err := runtime.Client.GetContainerLogs(ctx, epID, containerID, tail, timestamps)
 		if err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+			writePortainerUpstreamError(w, err)
 			return
 		}
 		WritePortainerJSON(w, logs, nil)
@@ -100,7 +100,7 @@ func (d *Deps) HandlePortainerContainers(ctx context.Context, w http.ResponseWri
 		}
 		data, err := runtime.Client.InspectContainer(ctx, epID, containerID)
 		if err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+			writePortainerUpstreamError(w, err)
 			return
 		}
 		WritePortainerJSON(w, data, nil)
@@ -118,7 +118,7 @@ func (d *Deps) HandlePortainerContainers(ctx context.Context, w http.ResponseWri
 			return
 		}
 		if err := runtime.Client.ContainerAction(ctx, epID, containerID, subAction); err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+			writePortainerUpstreamError(w, err)
 			return
 		}
 		WritePortainerJSON(w, map[string]string{"status": "ok"}, nil)
@@ -137,7 +137,7 @@ func (d *Deps) HandlePortainerContainers(ctx context.Context, w http.ResponseWri
 			return
 		}
 		if err := runtime.Client.RemoveContainer(ctx, epID, containerID, force); err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+			writePortainerUpstreamError(w, err)
 			return
 		}
 		WritePortainerJSON(w, map[string]string{"status": "ok"}, nil)

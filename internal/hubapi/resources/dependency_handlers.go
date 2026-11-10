@@ -33,6 +33,9 @@ func (d *Deps) HandleDependencies(w http.ResponseWriter, r *http.Request) {
 		if !requireAssetAccess(w, r, assetID) {
 			return
 		}
+		if d.writeIfDeviceMissing(w, assetID) {
+			return
+		}
 		deps, err := d.DependencyStore.ListAssetDependencies(assetID, parseLimit(r, 50))
 		if err != nil {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list dependencies")

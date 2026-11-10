@@ -116,7 +116,13 @@ func TestHomeAssistantRuntimeKeepsExactOwnerBeyondInventoryPage(t *testing.T) {
 		if problem != "missing" {
 			store.collectors = append(store.collectors, broken)
 		}
-		invoke(named, "", http.StatusConflict, 0, 0)
+		// A connection that is gone or turned off is said as such (404); one
+		// of another kind, or without its saved login, is a 409 in words.
+		want := http.StatusConflict
+		if problem == "missing" || problem == "disabled" {
+			want = http.StatusNotFound
+		}
+		invoke(named, "", want, 0, 0)
 		// B is still a valid positive control, not a broken fallback transport.
 		invoke(scoped, collectorB.ID, http.StatusOK, 0, 1)
 	}

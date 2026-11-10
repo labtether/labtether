@@ -17,8 +17,8 @@ import (
 )
 
 var (
-	ErrTrueNASAssetNotFound = errors.New("truenas asset not found")
-	ErrAssetNotTrueNAS      = errors.New("asset is not truenas-backed")
+	ErrTrueNASAssetNotFound = errors.New("device not found")
+	ErrAssetNotTrueNAS      = errors.New("this is not a TrueNAS device")
 )
 
 const TrueNASMethodCallRetryAttempts = 5

@@ -17,6 +17,15 @@ var ErrCollectorNotActive = errors.New("collector not active")
 // another kind, for example a Docker connector named on a Portainer device.
 var ErrCollectorWrongType = errors.New("collector is another kind")
 
+// ErrCollectorLoginMissing marks a connection whose saved login is gone or
+// cannot be read: the credential was deleted, cannot be decrypted, or lacks
+// the user or token name the connector needs.
+var ErrCollectorLoginMissing = errors.New("collector login missing")
+
+// ErrCollectorIncomplete marks a connection saved without an address or a
+// login reference.
+var ErrCollectorIncomplete = errors.New("collector incomplete")
+
 // ResolveEnabledHubCollector never substitutes a collector for a saved owner.
 // Legacy unowned callers require a complete, type-filtered uniqueness check.
 func ResolveEnabledHubCollector(store persistence.HubCollectorStore, collectorType, collectorID string) (*hubcollector.Collector, error) {

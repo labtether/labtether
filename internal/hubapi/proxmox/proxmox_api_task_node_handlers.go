@@ -51,7 +51,7 @@ func (d *Deps) HandleProxmoxTaskLog(w http.ResponseWriter, r *http.Request) {
 
 	log, err := runtime.client.GetTaskLog(ctx, node, upid, 500)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to fetch task log: "+err.Error())
+		writeProxmoxUpstreamError(w, "failed to fetch task log: ", err)
 		return
 	}
 
@@ -97,7 +97,7 @@ func (d *Deps) HandleProxmoxTaskStop(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	if err := runtime.client.StopTask(ctx, node, upid); err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to stop task: "+err.Error())
+		writeProxmoxUpstreamError(w, "failed to stop task: ", err)
 		return
 	}
 
@@ -203,7 +203,7 @@ func (d *Deps) HandleProxmoxClusterStatus(w http.ResponseWriter, r *http.Request
 
 	entries, err := runtime.client.GetClusterStatus(ctx)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to fetch cluster status: "+err.Error())
+		writeProxmoxUpstreamError(w, "failed to fetch cluster status: ", err)
 		return
 	}
 
@@ -241,7 +241,7 @@ func (d *Deps) HandleProxmoxNodeNetwork(w http.ResponseWriter, r *http.Request) 
 
 	ifaces, err := runtime.client.GetNodeNetwork(ctx, node)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to fetch node network: "+err.Error())
+		writeProxmoxUpstreamError(w, "failed to fetch node network: ", err)
 		return
 	}
 

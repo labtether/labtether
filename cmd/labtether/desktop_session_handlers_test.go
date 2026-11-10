@@ -416,8 +416,8 @@ func TestHandleDesktopStreamKeepsSessionOptionsForReconnect(t *testing.T) {
 		Mode:   "desktop",
 	})
 
-	if rec.Code != http.StatusBadGateway {
-		t.Fatalf("expected direct proxy disabled response, got %d: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected the no-route answer (409), got %d: %s", rec.Code, rec.Body.String())
 	}
 
 	opts := sut.getDesktopSessionOptions("sess-reconnect")

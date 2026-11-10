@@ -130,7 +130,8 @@ func TestPBSAndPortainerAssetActionsKeepRuntimeOwner(t *testing.T) {
 				switch scenario {
 				case "missing owner", "disabled owner":
 					wantCode = http.StatusNotFound
-				case "wrong provider owner":
+				case "wrong provider owner", "broken owner config":
+					// "broken": the saved login is gone, said in words.
 					wantCode = http.StatusConflict
 				}
 				assetType := "storage-pool"

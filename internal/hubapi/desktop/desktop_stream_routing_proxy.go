@@ -189,7 +189,7 @@ func (d *Deps) HandleDesktopStream(w http.ResponseWriter, r *http.Request, sessi
 
 	// Priority 4: Direct VNC proxy (agentless fallback, env-gated).
 	if !d.desktopDirectProxyEnabled() {
-		servicehttp.WriteError(w, http.StatusBadGateway, "direct VNC proxy is disabled")
+		d.writeNoDesktopRoute(w, session.Target)
 		return
 	}
 	d.handleDirectVNCProxy(w, r, session)

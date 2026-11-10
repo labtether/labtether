@@ -18,7 +18,6 @@ import (
 
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/hubapi/shared"
-	"github.com/labtether/labtether/internal/servicehttp"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -113,7 +112,7 @@ func (d *Deps) HandleAgentDesktopStream(w http.ResponseWriter, r *http.Request, 
 	agentConn, ok := d.AgentMgr.Get(session.Target)
 	if !ok {
 		log.Printf("desktop-agent: stream_setup_failed reason=agent_disconnected session=%s target=%s trace=%s", session.ID, session.Target, traceLog) // #nosec G706 -- Session, target, and trace IDs are hub-controlled runtime identifiers.
-		servicehttp.WriteError(w, http.StatusBadGateway, "agent disconnected")
+		d.writeAgentNotConnected(w, session.Target)
 		return
 	}
 

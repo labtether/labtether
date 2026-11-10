@@ -28,7 +28,7 @@ func (d *Deps) HandleDeleteAsset(w http.ResponseWriter, r *http.Request, assetEn
 		case errors.Is(err, ErrConnectedAgentDeletion):
 			servicehttp.WriteError(w, http.StatusConflict, ErrConnectedAgentDeletion.Error())
 		case errors.Is(err, persistence.ErrNotFound):
-			servicehttp.WriteError(w, http.StatusNotFound, "asset not found")
+			servicehttp.WriteError(w, http.StatusNotFound, "device not found")
 		default:
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete asset")
 		}

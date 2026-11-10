@@ -33,7 +33,7 @@ func (d *Deps) HandleDesktopDiagnoseRequest(w http.ResponseWriter, r *http.Reque
 
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {
-		servicehttp.WriteError(w, http.StatusServiceUnavailable, "agent not connected")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 
@@ -48,7 +48,7 @@ func (d *Deps) HandleDesktopDiagnoseRequest(w http.ResponseWriter, r *http.Reque
 		ID:   requestID,
 		Data: payload,
 	}); err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to send diagnose request to agent")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 

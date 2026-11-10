@@ -231,7 +231,7 @@ func (d *Deps) HandleAssetActions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !ok {
-		servicehttp.WriteError(w, http.StatusNotFound, "asset not found")
+		servicehttp.WriteError(w, http.StatusNotFound, "device not found")
 		return
 	}
 
@@ -304,7 +304,7 @@ func (d *Deps) HandleAssetActions(w http.ResponseWriter, r *http.Request) {
 			updatedAsset, err := d.AssetStore.UpdateAsset(assetEntry.ID, updateReq)
 			if err != nil {
 				if errors.Is(err, persistence.ErrNotFound) {
-					servicehttp.WriteError(w, http.StatusNotFound, "asset not found")
+					servicehttp.WriteError(w, http.StatusNotFound, "device not found")
 					return
 				}
 				if errors.Is(err, groups.ErrGroupNotFound) {

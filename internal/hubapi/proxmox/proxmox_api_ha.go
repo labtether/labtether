@@ -36,11 +36,11 @@ func (d *Deps) handleProxmoxAssetHA(w http.ResponseWriter, r *http.Request) {
 
 	target, ok, err := d.ResolveProxmoxSessionTarget(assetID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to resolve proxmox asset: "+shared.SanitizeUpstreamError(err.Error()))
+		writeProxmoxUpstreamError(w, "failed to resolve proxmox asset: ", err)
 		return
 	}
 	if !ok {
-		servicehttp.WriteError(w, http.StatusNotFound, "asset is not proxmox-backed")
+		d.writeNotProxmoxDevice(w, assetID)
 		return
 	}
 	// HA configuration and migration involve cluster-wide placement state and
@@ -115,7 +115,7 @@ func (d *Deps) proxmoxHAMigrate(w http.ResponseWriter, r *http.Request, ctx cont
 		upid, err = runtime.client.MigrateCT(ctx, target.Node, target.VMID, req.TargetNode)
 	}
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to migrate: "+shared.SanitizeUpstreamError(err.Error()))
+		writeProxmoxUpstreamError(w, "failed to migrate: ", err)
 		return
 	}
 
@@ -141,7 +141,7 @@ func (d *Deps) proxmoxHAUpdateConfig(w http.ResponseWriter, r *http.Request, ctx
 	}
 
 	if err := runtime.client.UpdateHAResource(ctx, sid, config); err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to update HA resource: "+shared.SanitizeUpstreamError(err.Error()))
+		writeProxmoxUpstreamError(w, "failed to update HA resource: ", err)
 		return
 	}
 

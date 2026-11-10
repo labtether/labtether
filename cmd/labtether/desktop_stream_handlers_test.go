@@ -113,8 +113,8 @@ func TestHandleDesktopStreamRejectsDirectProxyWhenDisabled(t *testing.T) {
 		Mode:   "desktop",
 	})
 
-	if rec.Code != http.StatusBadGateway {
-		t.Fatalf("expected 502 when direct desktop proxy is disabled, got %d: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 when no route can reach the device, got %d: %s", rec.Code, rec.Body.String())
 	}
 	opts := sut.getDesktopSessionOptions("sess-1")
 	if opts.Protocol != "webrtc" || opts.Display != ":0" || opts.Quality != "high" {

@@ -2,7 +2,6 @@ package proxmox
 
 import (
 	"context"
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strings"
 	"time"
@@ -46,7 +45,7 @@ func (d *Deps) handleProxmoxNodeCertificates(w http.ResponseWriter, r *http.Requ
 	case r.Method == http.MethodGet && subAction == "":
 		certs, listErr := runtime.client.ListCertificates(ctx, node)
 		if listErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to list certificates: "+shared.SanitizeUpstreamError(listErr.Error()))
+			writeProxmoxUpstreamError(w, "failed to list certificates: ", listErr)
 			return
 		}
 		if certs == nil {
@@ -60,7 +59,7 @@ func (d *Deps) handleProxmoxNodeCertificates(w http.ResponseWriter, r *http.Requ
 		}
 		upid, renewErr := runtime.client.RenewACMECert(ctx, node)
 		if renewErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to renew certificate: "+shared.SanitizeUpstreamError(renewErr.Error()))
+			writeProxmoxUpstreamError(w, "failed to renew certificate: ", renewErr)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]string{

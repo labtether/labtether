@@ -104,7 +104,9 @@ func (d *Deps) handleServiceList(w http.ResponseWriter, r *http.Request, assetID
 			return
 		}
 		if listed.Error != "" {
-			servicehttp.WriteError(w, http.StatusBadRequest, listed.Error)
+			if !writeMissingCommand(w, listed.Error, "services can't be listed") {
+				servicehttp.WriteError(w, http.StatusBadRequest, listed.Error)
+			}
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, listed)
@@ -171,7 +173,9 @@ func (d *Deps) handleServiceAction(w http.ResponseWriter, r *http.Request, asset
 			return
 		}
 		if result.Error != "" {
-			servicehttp.WriteError(w, http.StatusBadRequest, agentFailureMessage(result.Error, result.Output))
+			if !writeMissingCommand(w, result.Error, "services can't be started, stopped or restarted") {
+				servicehttp.WriteError(w, http.StatusBadRequest, agentFailureMessage(result.Error, result.Output))
+			}
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, result)
