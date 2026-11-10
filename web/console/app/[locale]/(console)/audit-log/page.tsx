@@ -15,7 +15,7 @@ import { hasAdminRole } from "../../../lib/roles";
 import { ChipGroup, EmptyLine, FilterField, PickMenu } from "../logs/LogControls";
 import { AuditRow, type AuditText } from "./AuditRow";
 import { AuditViews } from "./AuditViews";
-import { actionKey, ALL_REQUESTS, auditRows, auditTime, humanizeType, outcome, peopleByActivity, REQUEST_TYPE, targetText, visibleAuditRows, type AuditEntry, type AuditSort } from "./auditModel";
+import { actionSentence, ALL_REQUESTS, auditRows, auditTime, humanizeType, outcome, peopleByActivity, REQUEST_TYPE, targetText, visibleAuditRows, type AuditEntry, type AuditSort } from "./auditModel";
 import { copyText } from "../../../lib/clipboard";
 import { useAuditPages } from "./useAuditPages";
 
@@ -72,7 +72,10 @@ export default function AuditLogPage() {
     return {
       time: (e) => auditTime(e.timestamp, now, locale),
       who: (e) => nameOf(e.actor_id ?? "") || t("unknown"),
-      action: (e) => (actionKey(e.type) ? t(`actions.${actionKey(e.type)}`) : humanizeType(e.type)),
+      action: (e) => {
+        const sentence = actionSentence(e);
+        return sentence.key ? t(`actions.${sentence.key}`, sentence.values) : humanizeType(e.type);
+      },
     };
   }, [locale, nameOf, t]);
   const searchText = useCallback(

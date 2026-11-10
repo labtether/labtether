@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import en from "../../../../../messages/en/audit-log.json";
-import { actionKey, ALL_REQUESTS, auditRows, detailRows, humanizeType, KNOWN_ACTIONS, outcome, peopleByActivity, targetText, visibleAuditRows, type AuditEntry } from "../auditModel";
+import { actionKey, actionSentence, ALL_REQUESTS, auditRows, detailRows, humanizeType, KNOWN_ACTIONS, outcome, peopleByActivity, targetText, visibleAuditRows, type AuditEntry } from "../auditModel";
 
 // Risks: a refused attempt does not read "Denied", the person chips miss or misorder people, a filter hides the
 // entries it should keep, or an unknown event shows as a raw code.
@@ -42,6 +42,26 @@ describe("auditModel", () => {
     expect(humanizeType("backup.verify_job.started")).toBe("Backup verify job started");
     const sentences = en.actions as Record<string, string>;
     expect([...KNOWN_ACTIONS].filter((type) => !sentences[actionKey(type)])).toEqual([]);
+  });
+
+  // Risk: a rename or a resolved issue reads only "Changed a device" / "Changed an issue", or a detail-specific
+  // sentence has no text.
+  it("picks a closer sentence when the row's details say what changed", () => {
+    const sentences = en.actions as Record<string, string>;
+    const of = (type: string, details: Record<string, unknown>) => actionSentence({ type, details });
+    expect(of("asset.updated", { changed: ["name"], previous_name: "nas01" })).toEqual({ key: "asset_updated_renamed", values: { previous: "nas01" } });
+    expect(of("asset.updated", { changed: ["group"], group_name: "Rack 2" })).toEqual({ key: "asset_updated_moved", values: { group: "Rack 2" } });
+    expect(of("asset.updated", { changed: ["group"], group_name: "" })).toEqual({ key: "asset_updated_ungrouped" });
+    expect(of("asset.updated", { changed: ["tags"], tags: ["backup"] })).toEqual({ key: "asset_updated_tags" });
+    expect(of("asset.updated", { changed: ["name", "tags"], previous_name: "nas01" })).toEqual({ key: "asset_updated" });
+    expect(of("incident.updated", { changed: ["status"], status: "resolved" })).toEqual({ key: "incident_updated_resolved" });
+    expect(of("incident.updated", { changed: ["assignee"], assignee: "sam" })).toEqual({ key: "incident_updated_assigned", values: { assignee: "sam" } });
+    expect(of("incident.updated", { changed: ["assignee"], assignee: "" })).toEqual({ key: "incident_updated_unassigned" });
+    expect(of("incident.updated", { changed: ["summary"], status: "open" })).toEqual({ key: "incident_updated" });
+    expect(actionSentence({ type: "backup.verify_job.started" })).toEqual({ key: "" });
+    for (const key of ["asset_updated_renamed", "asset_updated_moved", "asset_updated_ungrouped", "asset_updated_tags", "incident_updated_resolved", "incident_updated_assigned", "incident_updated_unassigned"]) {
+      expect(sentences[key], key).toBeTruthy();
+    }
   });
 
   it("lists people most active first, then A-Z", () => {
