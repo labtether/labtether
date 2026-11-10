@@ -74,7 +74,9 @@ func (d *Deps) handleUsersList(w http.ResponseWriter, r *http.Request, assetID s
 			return
 		}
 		if listed.Error != "" {
-			servicehttp.WriteError(w, http.StatusBadRequest, listed.Error)
+			if !writeMissingCommand(w, listed.Error, "signed-in users can't be listed") {
+				servicehttp.WriteError(w, http.StatusBadRequest, listed.Error)
+			}
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, listed)

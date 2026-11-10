@@ -71,7 +71,9 @@ func (d *Deps) HandleJournalLogs(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if listed.Error != "" {
-			servicehttp.WriteError(w, http.StatusBadRequest, listed.Error)
+			if !writeMissingCommand(w, listed.Error, "the journal can't be read") {
+				servicehttp.WriteError(w, http.StatusBadRequest, listed.Error)
+			}
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{

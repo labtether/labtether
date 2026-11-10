@@ -74,7 +74,9 @@ func (d *Deps) handleCronList(w http.ResponseWriter, r *http.Request, assetID st
 			return
 		}
 		if listed.Error != "" {
-			servicehttp.WriteError(w, http.StatusBadRequest, listed.Error)
+			if !writeMissingCommand(w, listed.Error, "cron jobs can't be listed") {
+				servicehttp.WriteError(w, http.StatusBadRequest, listed.Error)
+			}
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, listed)
