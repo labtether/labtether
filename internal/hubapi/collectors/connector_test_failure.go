@@ -32,6 +32,15 @@ func connectorTestReason(product, failure string) string {
 		return "The Hub is set not to connect to private, loopback or link-local addresses like that one."
 	case has("http response to https client", "does not look like a tls handshake"):
 		return fmt.Sprintf("That address does not answer with HTTPS. Check the address and port of %s.", product)
+	// Go checks a certificate's dates first, then the name, then the issuer,
+	// and stops at the first problem. Each needs a different fix: renew it,
+	// fix the clock, use the right address, or add the CA.
+	case has("certificate has expired or is not yet valid") && has(" is before "):
+		return fmt.Sprintf("The certificate of %s is not valid yet. Check the date and time on %s and on the Hub.", product, product)
+	case has("certificate has expired or is not yet valid"):
+		return fmt.Sprintf("The certificate of %s has expired. Renew it on %s.", product, product)
+	case has("doesn't contain any ip sans", "certificate is valid for", "certificate is not valid for any names"):
+		return fmt.Sprintf("The certificate of %s does not match that address. Use the name or IP address the certificate was made for.", product)
 	case has("x509:", "tls:", "certificate"):
 		return fmt.Sprintf("The certificate of %s is not trusted. Add its CA certificate or turn on Skip TLS verification.", product)
 	case has("connection refused", "no such host", "no route to host", "network is unreachable", "host is down", "timeout", "timed out", "deadline exceeded", "connection reset", "eof"):
