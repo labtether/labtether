@@ -3,7 +3,7 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { Copy, MoreHorizontal, PanelTopOpen } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { alertDevices, detailRows, outcome, targetText, type AuditEntry } from "./auditModel";
+import { alertDevices, detailRows, ID_KEYS, outcome, targetText, type AuditEntry } from "./auditModel";
 
 export type AuditText = {
   time: (e: AuditEntry) => string;
@@ -11,7 +11,11 @@ export type AuditText = {
   action: (e: AuditEntry) => string;
   /** Where it happened, after the object's name: "on nas01", "on 3 devices"; "" for most rows. */
   where: (e: AuditEntry) => string;
+  /** The IDs the row left out (a person or object without a name), for its details. */
+  ids: (e: AuditEntry) => Array<[string, string]>;
 };
+
+const ID_LABELS: Record<string, string> = { [ID_KEYS.actor]: "ids.actor", [ID_KEYS.apiKey]: "ids.apiKey", [ID_KEYS.target]: "ids.target" };
 
 /** Time, person and what they did; a refused attempt leads with "Denied". Opens to its reason and details. */
 export function AuditRow({
@@ -29,7 +33,7 @@ export function AuditRow({
 }) {
   const t = useTranslations("audit-log");
   const result = outcome(entry.decision);
-  const details = detailRows(entry);
+  const details = detailRows(entry, text.ids(entry));
   const time = text.time(entry);
   const who = text.who(entry);
   const action = text.action(entry);
@@ -80,7 +84,7 @@ export function AuditRow({
       {open && details.length > 0 ? (
         <dl className="lg-fields lg-au-d">
           {details.map(([k, v]) => (
-            <div key={k}><dt>{k === "reason" ? t("reason") : k}</dt><dd>{v}</dd></div>
+            <div key={k}><dt>{k === "reason" ? t("reason") : ID_LABELS[k] ? t(ID_LABELS[k]) : k}</dt><dd>{v}</dd></div>
           ))}
         </dl>
       ) : null}

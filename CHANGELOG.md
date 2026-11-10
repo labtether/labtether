@@ -313,6 +313,11 @@ v1.7.1.
   deleted says which device it was about after the rule's name: "on nas01",
   or "on 3 devices" with their names on hover and in the row's details.
   Lists in a row's details read as words, not as JSON.
+- The Audit log no longer shows IDs the Hub made up, such as
+  `usr_1793…` or `wh_1793…`, in its rows. An object without a name is left
+  out of the sentence, an API key reads "API key", and a person without a
+  name reads "Unknown", as on iPhone. The IDs are in the row's details and
+  in the CSV export.
 
 ## [1.7.1] - 2026-10-31
 

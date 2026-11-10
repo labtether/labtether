@@ -28,6 +28,12 @@
   },
   "hub": "Hub",
   "unknown": "Unbekannt",
+  "apiKey": "API-Schlüssel",
+  "ids": {
+    "actor": "Personen-ID",
+    "apiKey": "ID des API-Schlüssels",
+    "target": "Objekt-ID"
+  },
   "rowActions": "Aktionen für diesen Eintrag",
   "copyLine": "Zeile kopieren",
   "copied": "Zeile kopiert",

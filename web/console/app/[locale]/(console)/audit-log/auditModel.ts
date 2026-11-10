@@ -43,11 +43,61 @@ export const REQUEST_TYPE = "api.request";
 /** The type filter value that also shows API requests. */
 export const ALL_REQUESTS = "requests";
 
-/** The object's name the Hub stored with the row (details.target_name), else its ID. */
+/**
+ * A Hub-made ID such as usr_<nanoseconds>_<counter> or dlq_<nanoseconds> (internal/idgen: a prefix, the time
+ * in nanoseconds, a counter). It tells a person nothing, so the normal row view leaves it out; the row's details
+ * keep it.
+ */
+export function isGeneratedID(value: string): boolean {
+  return /^[a-z][a-z0-9-]{0,39}_[0-9]{10,}(_[0-9]+)?$/.test(value.trim());
+}
+
+/**
+ * The object's name the Hub stored with the row (details.target_name). Without one, its own ID when a person chose
+ * it (a device's ID is its host name), and nothing when the Hub made the ID up.
+ */
 export function targetText(entry: Pick<AuditEntry, "target" | "details">): string {
   const name = entry.details?.target_name;
-  return typeof name === "string" && name.trim() ? name.trim() : entry.target ?? "";
+  if (typeof name === "string" && name.trim()) return name.trim();
+  const id = (entry.target ?? "").trim();
+  return isGeneratedID(id) ? "" : id;
 }
+
+/** Who did it: a name, or a kind of actor the row reads in words ("Hub", "API key", "Unknown"). */
+export type AuditActor = { name: string } | { kind: "hub" | "apiKey" | "unknown" };
+
+/**
+ * The person (or key) behind a row. A row carries an ID only, so names come from the Hub's user list (admins see
+ * it) and the signed-in person. With no name, an API key reads "API key" and a Hub-made user ID "Unknown"; any
+ * other ID (a device acting for itself) is its own name.
+ */
+export function auditActor(actorID: string | undefined, names: ReadonlyMap<string, string>): AuditActor {
+  const id = (actorID ?? "").trim();
+  if (!id) return { kind: "unknown" };
+  if (id === "system") return { kind: "hub" };
+  const name = names.get(id)?.trim();
+  if (name) return { name };
+  if (id.startsWith("apikey:")) return { kind: "apiKey" };
+  return isGeneratedID(id) ? { kind: "unknown" } : { name: id };
+}
+
+/**
+ * The IDs the normal row view left out, for the row's details, where a sysadmin looks on purpose: the actor's when
+ * the row reads "API key" or "Unknown", the object's when the row shows no name for it.
+ */
+export function hiddenIDs(entry: Pick<AuditEntry, "actor_id" | "target" | "details">, actor: AuditActor): Array<[string, string]> {
+  const rows: Array<[string, string]> = [];
+  const actorID = (entry.actor_id ?? "").trim();
+  if (actorID && "kind" in actor && actor.kind !== "hub") {
+    rows.push(actor.kind === "apiKey" ? [ID_KEYS.apiKey, actorID.slice("apikey:".length)] : [ID_KEYS.actor, actorID]);
+  }
+  const target = (entry.target ?? "").trim();
+  if (target && !targetText(entry)) rows.push([ID_KEYS.target, target]);
+  return rows;
+}
+
+/** Keys of the hiddenIDs rows; they cannot clash with the Hub's own detail keys. */
+export const ID_KEYS = { actor: "@actor", apiKey: "@api_key", target: "@target" } as const;
 
 /**
  * The rows this person may see: the whole log for the owner and admins, their own rows for everyone else. Not access
@@ -188,8 +238,8 @@ export function auditRows(
     .map(({ e }) => e);
 }
 
-/** Details worth showing when a row opens: the reason first, then each field as text. */
-export function detailRows(entry: AuditEntry): Array<[string, string]> {
+/** Details worth showing when a row opens: the reason first, then each field as text, then the IDs the row left out. */
+export function detailRows(entry: AuditEntry, ids: Array<[string, string]> = []): Array<[string, string]> {
   const rows: Array<[string, string]> = [];
   if (entry.reason) rows.push(["reason", entry.reason]);
   for (const [k, v] of Object.entries(entry.details ?? {})) {
@@ -201,5 +251,5 @@ export function detailRows(entry: AuditEntry): Array<[string, string]> {
     if (words === "") continue;
     rows.push([k, words ?? (typeof v === "string" ? v : JSON.stringify(v))]);
   }
-  return rows;
+  return [...rows, ...ids];
 }

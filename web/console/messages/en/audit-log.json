@@ -28,6 +28,12 @@
   },
   "hub": "Hub",
   "unknown": "Unknown",
+  "apiKey": "API key",
+  "ids": {
+    "actor": "Person ID",
+    "apiKey": "API key ID",
+    "target": "Object ID"
+  },
   "rowActions": "Actions for this entry",
   "copyLine": "Copy line",
   "copied": "Copied the line",
