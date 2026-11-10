@@ -3,7 +3,7 @@
 import { useCallback } from "react";
 import { useTranslations } from "next-intl";
 import type { FileEntry } from "../../files/fileOpsClient";
-import { joinPath } from "../../files/fileWorkspaceUtils";
+import { joinPath } from "../../files/remotePaths";
 import { menuActions } from "../../files/filesListModel";
 import { PointMenu, toMenuItems, useMenuLabels, type MenuItemSpec } from "../../files/FileMenus";
 import type { WorkspaceClipboard, WorkspaceContextMenuState } from "../../files/useFileWorkspaceState";

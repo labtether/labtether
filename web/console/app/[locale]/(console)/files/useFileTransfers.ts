@@ -10,6 +10,7 @@ import {
 } from "./fileTransferClient";
 import type { FileSource } from "./useFileTabsState";
 import { joinTransferDestinationPath } from "./fileTransferPaths";
+import { baseName } from "./remotePaths";
 import { clientId } from "../../../lib/clientId";
 
 // ---------------------------------------------------------------------------
@@ -124,7 +125,7 @@ export function useFileTransfers() {
             dest_type: dst.type,
             dest_id: dst.id,
             dest_path: destinationFilePath,
-            file_name: filePath.split("/").pop() ?? filePath,
+            file_name: baseName(filePath) || filePath,
             bytes_transferred: 0,
             status: "failed",
             error: "Failed to initiate transfer",

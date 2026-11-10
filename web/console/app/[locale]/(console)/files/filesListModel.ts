@@ -1,25 +1,5 @@
-// Pure helpers for the 2.0 file list, shared by the Files page and a device's Files tab: the path's crumbs, short
-// modified times, the search filter, click selection and which actions an item menu offers.
-
-export type Crumb = { label: string; path: string };
-
-/** The clickable parts of a path: "/", "var", "lib" for /var/lib; "~", "docs" for ~/docs; "C:", "Users" on Windows. */
-export function pathCrumbs(path: string): Crumb[] {
-  const raw = path.trim() || "~";
-  if (raw.startsWith("~")) {
-    const segs = raw.slice(1).split(/[\\/]/).filter(Boolean);
-    return [{ label: "~", path: "~" }, ...segs.map((s, i) => ({ label: s, path: `~/${segs.slice(0, i + 1).join("/")}` }))];
-  }
-  const drive = /^([A-Za-z]:)(?:[\\/]|$)/.exec(raw);
-  if (drive) {
-    const sep = raw.includes("\\") ? "\\" : "/";
-    const root = `${drive[1]}${sep}`;
-    const segs = raw.slice(2).split(/[\\/]/).filter(Boolean);
-    return [{ label: drive[1], path: root }, ...segs.map((s, i) => ({ label: s, path: root + segs.slice(0, i + 1).join(sep) }))];
-  }
-  const segs = raw.split("/").filter(Boolean);
-  return [{ label: "/", path: "/" }, ...segs.map((s, i) => ({ label: s, path: `/${segs.slice(0, i + 1).join("/")}` }))];
-}
+// Pure helpers for the 2.0 file list, shared by the Files page and a device's Files tab: short modified times, the
+// search filter, click selection and which actions an item menu offers. Paths and their crumbs are in remotePaths.ts.
 
 /** "14:02" today (24-hour clock), "2 Oct" this year, "2 Oct 2024" before. The raw text when it is not a date. */
 export function formatModified(raw: string, locale: string, now: Date = new Date()): string {

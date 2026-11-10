@@ -1,6 +1,6 @@
 "use client";
 
-import { joinPath } from "./fileWorkspaceUtils";
+import { joinPath } from "./remotePaths";
 import type {
   WorkspaceClipboard,
   WorkspaceClipboardItem,
