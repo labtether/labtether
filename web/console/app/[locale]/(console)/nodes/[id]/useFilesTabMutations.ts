@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, type RefObject } from "react";
+import { useCallback, useState } from "react";
 import {
   createDirectory,
   deleteFilePath,
@@ -39,10 +39,10 @@ type CreateFolderArgs = PathAndListDir & {
   name: string;
 };
 
-type UploadSelectedFilesArgs = PathAndListDir & {
+type UploadFilesArgs = PathAndListDir & {
+  files: File[];
   writeEnabled: boolean;
   uploadDestinationPath: string;
-  uploadInputRef: RefObject<HTMLInputElement | null>;
 };
 
 function toErrorMessage(error: unknown, fallback: string): string {
@@ -101,23 +101,22 @@ export function useFilesTabMutations({ nodeId }: UseFilesTabMutationsArgs) {
     }
   }, [nodeId]);
 
-  const uploadSelectedFiles = useCallback(async ({
+  /** Uploads the files as given. The Files tab asks before it passes files that would replace others. */
+  const uploadFiles = useCallback(async ({
+    files: selectedFiles,
     currentPath,
     listDir,
     writeEnabled,
     uploadDestinationPath,
-    uploadInputRef,
-  }: UploadSelectedFilesArgs) => {
-    if (!writeEnabled) return;
-    const selectedFiles = uploadInputRef.current?.files;
-    if (!selectedFiles || selectedFiles.length === 0) return;
+  }: UploadFilesArgs) => {
+    if (!writeEnabled || selectedFiles.length === 0) return;
 
     setActionBusy(true);
     setError(null);
     setActionMessage(null);
 
     try {
-      for (const file of Array.from(selectedFiles)) {
+      for (const file of selectedFiles) {
         if (file.size > MAX_UPLOAD_SIZE) {
           throw new Error(`"${file.name}" exceeds the 512 MB upload limit.`);
         }
@@ -125,9 +124,6 @@ export function useFilesTabMutations({ nodeId }: UseFilesTabMutationsArgs) {
         await uploadFileViaFetch(nodeId, destinationPath, file, {
           fallbackError: (status) => `upload failed (${status})`,
         });
-      }
-      if (uploadInputRef.current) {
-        uploadInputRef.current.value = "";
       }
       setActionMessage(`Uploaded ${selectedFiles.length} file${selectedFiles.length === 1 ? "" : "s"}`);
       await listDir(currentPath);
@@ -222,7 +218,7 @@ export function useFilesTabMutations({ nodeId }: UseFilesTabMutationsArgs) {
     setRenameName,
     downloadEntry,
     createFolder,
-    uploadSelectedFiles,
+    uploadFiles,
     renameEntry,
     commitRename,
     cancelRename,

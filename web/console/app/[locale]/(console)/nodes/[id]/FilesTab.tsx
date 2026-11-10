@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { type FileEntry } from "../../files/fileOpsClient";
+import { listFiles, type FileEntry } from "../../files/fileOpsClient";
 import { joinPath } from "../../files/fileWorkspaceUtils";
 import { filterEntries, pickedBytes } from "../../files/filesListModel";
+import { UploadReplaceDialog } from "../../files/FilesOverlays";
 import { FilesStatusLine } from "../../files/FilesStatusLine";
 import { useFileWorkspaceState } from "../../files/useFileWorkspaceState";
 import { usePathHistory } from "../../files/usePathHistory";
+import { useUploadReplace } from "../../files/useUploadReplace";
 import { FilesTabControls } from "./FilesTabControls";
 import { FilesEntriesTable } from "./FilesEntriesTable";
 import { FilesContextMenu, useFilesTabMenu, type FilesTabMenuHandlers } from "./FilesContextMenu";
@@ -18,8 +20,11 @@ import { useFilesTabDirectoryState } from "./useFilesTabDirectoryState";
 import { useFilesTabMutations } from "./useFilesTabMutations";
 import { useFilesTabWriteAccess } from "./useFilesTabWriteAccess";
 
-/** A device's Files tab: the 2.0 file list on the device's agent. It opens read-only; "Allow changes" turns on writes. */
-export function FilesTab({ nodeId }: { nodeId: string }) {
+/**
+ * A device's Files tab: the 2.0 file list on the device's agent. It opens read-only; "Allow changes" turns on writes.
+ * platform is the device's: on Windows an upload replaces a file whose name differs only in case.
+ */
+export function FilesTab({ nodeId, platform }: { nodeId: string; platform?: string }) {
   const t = useTranslations("files");
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const m = useFilesTabMutations({ nodeId });
@@ -79,6 +84,23 @@ export function FilesTab({ nodeId }: { nodeId: string }) {
     m.renameEntry(entry, { currentPath: cur, writeEnabled: write });
   };
   const remove = (entries: FileEntry[]) => m.deleteEntries(entries, { currentPath: cur, writeEnabled: write });
+
+  // An upload over files of the same name waits for Replace, Skip these or Cancel.
+  const { uploadFiles, setError } = m;
+  const listFolder = useCallback(async (path: string) => (await listFiles(nodeId, path, { showHidden: true })).entries, [nodeId]);
+  const startUpload = useCallback((files: File[], to: string) => {
+    void uploadFiles({ files, currentPath: cur, listDir, writeEnabled: write, uploadDestinationPath: to });
+  }, [cur, listDir, uploadFiles, write]);
+  const uploadUnread = useCallback((path: string) => {
+    setError(t("errors.uploadNotChecked", { path }));
+  }, [setError, t]);
+  const replace = useUploadReplace({
+    held: { path: cur, entries: dir.entries, showHidden: dir.showHidden, ready: !dir.loading && !m.error },
+    list: listFolder,
+    ignoreCase: /windows/i.test(platform ?? ""),
+    upload: startUpload,
+    onUnread: uploadUnread,
+  });
 
   const handlers: FilesTabMenuHandlers = {
     open: (entry) => (entry.is_dir ? dir.openEntry(entry) : void m.downloadEntry(entry, cur)),
@@ -189,12 +211,21 @@ export function FilesTab({ nodeId }: { nodeId: string }) {
         type="file"
         multiple
         hidden
-        onChange={() => {
-          void m.uploadSelectedFiles({ currentPath: cur, listDir, writeEnabled: write, uploadDestinationPath: access.uploadDestinationPath, uploadInputRef });
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? []);
+          e.target.value = "";
+          if (write) replace.start(files, access.uploadDestinationPath);
         }}
       />
 
       <FilesContextMenu contextMenu={ws.contextMenu} menuFor={menuFor} onClose={ws.closeContextMenu} />
+      <UploadReplaceDialog
+        ask={replace.ask}
+        where={replace.ask?.dir ?? ""}
+        onCancel={replace.cancel}
+        onSkip={replace.skip}
+        onReplace={replace.replace}
+      />
 
       <FilesTabOverlays
         where={cur}
