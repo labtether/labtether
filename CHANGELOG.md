@@ -321,6 +321,9 @@ v1.7.1.
 - A device added by hand (Add device › Manual) shows on the Devices page,
   the Dashboard, the Map and Remote View. Before, it was saved but listed
   nowhere.
+- A device added by hand has a Device card under Settings to change its
+  name, group and tags. Edit… in any device's ⋯ menu can change its tags
+  too; before, tags were set only when adding a device by hand.
 
 ## [1.7.1] - 2026-10-31
 

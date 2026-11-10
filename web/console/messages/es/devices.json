@@ -231,6 +231,8 @@
       "title": "Editar {name}",
       "name": "Nombre",
       "group": "Grupo",
+      "tags": "Etiquetas",
+      "tagsHint": "Separa las etiquetas con comas.",
       "cancel": "Cancelar",
       "save": "Guardar",
       "nameRequired": "Introduce un nombre",
@@ -496,6 +498,11 @@
     }
   },
   "settingsTab": {
+    "device": {
+      "title": "Dispositivo",
+      "saving": "Guardando…",
+      "saved": "Guardado."
+    },
     "name": {
       "title": "Nombre",
       "label": "Nombre del dispositivo",
