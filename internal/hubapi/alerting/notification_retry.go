@@ -154,7 +154,7 @@ func (d *Deps) payloadForRetry(rec notifications.Record) map[string]any {
 		if err == nil && ok && d.AlertStore != nil {
 			rule, rok, ruleErr := d.AlertStore.GetAlertRule(strings.TrimSpace(inst.RuleID))
 			if ruleErr == nil && rok {
-				payload := buildAlertNotificationPayload(rule, inst.ID, retryStateForInstance(inst.Status), d.collectRuleGroupIDs(rule))
+				payload := buildAlertNotificationPayload(rule, inst.ID, retryStateForInstance(inst.Status), d.collectRuleGroupIDs(rule), d.alertNotificationDevices(inst.ID))
 				payload["retry"] = true
 				return payload
 			}

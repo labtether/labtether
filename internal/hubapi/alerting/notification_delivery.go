@@ -66,7 +66,7 @@ func (d *Deps) dispatchAlertNotificationsSync(rule alerts.Rule, instanceID, stat
 
 	predicateContext, _ := d.BuildAlertPredicateContext(rule, nil)
 
-	payload := buildAlertNotificationPayload(rule, instanceID, state, predicateContext.GroupIDs)
+	payload := buildAlertNotificationPayload(rule, instanceID, state, predicateContext.GroupIDs, d.alertNotificationDevices(instanceID))
 	seenChannelsByRoute := make(map[string]map[string]struct{}, len(routes))
 	channelCache := make(map[string]notifications.Channel, 16)
 	missingChannels := make(map[string]struct{}, 8)

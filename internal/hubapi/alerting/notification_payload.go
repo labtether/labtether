@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func buildAlertNotificationPayload(rule alerts.Rule, instanceID, state string, groupIDs map[string]struct{}) map[string]any {
+func buildAlertNotificationPayload(rule alerts.Rule, instanceID, state string, groupIDs map[string]struct{}, devices []string) map[string]any {
 	now := time.Now().UTC()
 	alertID := strings.TrimSpace(instanceID)
 	targets := make([]map[string]string, 0, len(rule.Targets))
@@ -28,24 +28,29 @@ func buildAlertNotificationPayload(rule alerts.Rule, instanceID, state string, g
 	}
 	sort.Strings(groupList)
 
-	title := fmt.Sprintf("[%s] %s (%s)", strings.ToUpper(strings.TrimSpace(rule.Severity)), strings.TrimSpace(rule.Name), strings.TrimSpace(state))
-	description := strings.TrimSpace(rule.Description)
-	if description == "" {
-		description = "No description provided."
+	name := strings.TrimSpace(rule.Name)
+	state = strings.TrimSpace(state)
+	onDevices := alertDeviceSummary(devices)
+	subject := name
+	if onDevices != "" {
+		subject += " on " + onDevices
 	}
+	title := fmt.Sprintf("[%s] %s (%s)", strings.ToUpper(strings.TrimSpace(rule.Severity)), subject, state)
 
 	payload := map[string]any{
-		"event":             "alert." + strings.TrimSpace(state),
-		"state":             strings.TrimSpace(state),
+		"event":             "alert." + state,
+		"state":             state,
 		"alert_instance_id": alertID,
 		"alert_id":          alertID,
 		"rule_id":           strings.TrimSpace(rule.ID),
-		"rule_name":         strings.TrimSpace(rule.Name),
+		"rule_name":         name,
 		"rule_kind":         strings.TrimSpace(rule.Kind),
 		"severity":          strings.TrimSpace(rule.Severity),
-		"description":       description,
+		"description":       strings.TrimSpace(rule.Description),
+		"devices":           append([]string(nil), devices...),
+		"device_summary":    onDevices,
 		"title":             title,
-		"text":              fmt.Sprintf("%s\nRule: %s (%s)\nState: %s\nInstance: %s\nOccurred: %s", description, rule.Name, rule.ID, state, instanceID, now.Format(time.RFC3339)),
+		"text":              alertNotificationText(rule, state, onDevices, now),
 		"occurred_at":       now.Format(time.RFC3339),
 		"target_scope":      strings.TrimSpace(rule.TargetScope),
 		"group_ids":         groupList,
@@ -53,10 +58,70 @@ func buildAlertNotificationPayload(rule alerts.Rule, instanceID, state string, g
 		"labels":            cloneAlertLabels(rule.Labels),
 		"deep_link":         fmt.Sprintf("labtether://alerts/%s", alertID),
 	}
-	if strings.EqualFold(strings.TrimSpace(state), "firing") {
+	if strings.EqualFold(state, "firing") {
 		payload["apns_category"] = "LT_ALERT_ACTIONS"
 	}
 	return payload
+}
+
+// alertNotificationText is what a person reads in an email, Slack, ntfy,
+// Gotify or a push: what happened and where, then the rule's own words, the
+// severity and the time. Hub-made IDs stay in the payload's fields only.
+func alertNotificationText(rule alerts.Rule, state, onDevices string, now time.Time) string {
+	headline := fmt.Sprintf("%s is %s", strings.TrimSpace(rule.Name), state)
+	if onDevices != "" {
+		headline += " on " + onDevices
+	}
+	lines := []string{headline + "."}
+	if description := strings.TrimSpace(rule.Description); description != "" {
+		lines = append(lines, description)
+	}
+	if severity := strings.TrimSpace(rule.Severity); severity != "" {
+		lines = append(lines, "Severity: "+severity)
+	}
+	lines = append(lines, "Time: "+now.Format("2006-01-02 15:04 MST"))
+	return strings.Join(lines, "\n")
+}
+
+// alertDeviceSummary names up to three devices, then a count: "nas01",
+// "nas01, nas02 and nas03", "nas01, nas02 and 4 more".
+func alertDeviceSummary(devices []string) string {
+	switch n := len(devices); {
+	case n == 0:
+		return ""
+	case n == 1:
+		return devices[0]
+	case n <= 3:
+		return strings.Join(devices[:n-1], ", ") + " and " + devices[n-1]
+	default:
+		return fmt.Sprintf("%s and %d more", strings.Join(devices[:2], ", "), n-2)
+	}
+}
+
+// alertNotificationDevices names the devices an alert is for, the way the
+// Alerts page shows them: the instance's asset_id label, then the devices it
+// fired on. A device that no longer exists is left out.
+func (d *Deps) alertNotificationDevices(instanceID string) []string {
+	if d == nil || d.AlertInstanceStore == nil || d.AssetStore == nil || strings.TrimSpace(instanceID) == "" {
+		return nil
+	}
+	inst, ok, err := d.AlertInstanceStore.GetAlertInstance(strings.TrimSpace(instanceID))
+	if err != nil || !ok {
+		return nil
+	}
+	names := []string{}
+	for _, id := range alertInstanceDeviceIDs(inst) {
+		entry, found, getErr := d.AssetStore.GetAsset(id)
+		if getErr != nil || !found {
+			continue
+		}
+		name := strings.TrimSpace(entry.Name)
+		if name == "" {
+			name = id
+		}
+		names = append(names, name)
+	}
+	return names
 }
 
 func buildEmailNotificationPayload(config map[string]any, payload map[string]any) (map[string]any, error) {
@@ -77,6 +142,9 @@ func buildEmailNotificationPayload(config map[string]any, payload map[string]any
 	)
 	state := payloadString(payload, "state")
 	subject := ruleName
+	if onDevices := payloadString(payload, "device_summary"); onDevices != "" {
+		subject += " on " + onDevices
+	}
 	if severity != "" {
 		subject = fmt.Sprintf("[%s] %s", severity, subject)
 	}

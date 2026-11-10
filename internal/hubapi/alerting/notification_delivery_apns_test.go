@@ -427,11 +427,11 @@ func TestPushDeviceAllowsPayloadHonorsQuietHoursInDeviceTimezone(t *testing.T) {
 
 func TestAlertNotificationPayloadOnlyOffersActionsWhileFiring(t *testing.T) {
 	rule := alerts.Rule{ID: "rule-1", Name: "CPU", Severity: "high"}
-	firing := buildAlertNotificationPayload(rule, "instance-1", "firing", nil)
+	firing := buildAlertNotificationPayload(rule, "instance-1", "firing", nil, nil)
 	if firing["apns_category"] != "LT_ALERT_ACTIONS" {
 		t.Fatalf("firing payload category = %v", firing["apns_category"])
 	}
-	resolved := buildAlertNotificationPayload(rule, "instance-1", "resolved", nil)
+	resolved := buildAlertNotificationPayload(rule, "instance-1", "resolved", nil, nil)
 	if _, present := resolved["apns_category"]; present {
 		t.Fatalf("resolved payload must not expose stale mutation actions: %+v", resolved)
 	}
