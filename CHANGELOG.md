@@ -280,6 +280,12 @@ v1.7.1.
   Before, it drew every device unconnected and said nothing. The Devices
   list keeps its nesting the same way, and reloads when a device is added or
   removed while a load is still running.
+- Add device shows "Hub certificate fingerprint" for macOS and Windows when
+  the Hub uses its own CA, with a Copy button. Mac and Windows setup show the
+  same value before they trust the Hub. It is written in groups of four
+  characters everywhere, and Settings › Security shows it too, as "LabTether
+  CA fingerprint". The macOS and Windows steps no longer say that the install
+  command adds the CA.
 
 ## [1.7.1] - 2026-10-31
 
