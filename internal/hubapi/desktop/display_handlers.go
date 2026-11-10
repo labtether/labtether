@@ -60,7 +60,8 @@ func (d *Deps) HandleDisplayListDirect(w http.ResponseWriter, r *http.Request, a
 	d.handleDisplayList(w, r, assetID)
 }
 
-// handleDisplayList queries the list of displays/monitors on a remote agent.
+// handleDisplayList queries the list of displays/monitors on a remote agent,
+// and says whether this Hub's RDP gateway is running.
 // Endpoint: GET /api/v1/nodes/{id}/displays
 func (d *Deps) handleDisplayList(w http.ResponseWriter, r *http.Request, assetID string) {
 	if r.Method != http.MethodGet {
@@ -71,6 +72,10 @@ func (d *Deps) handleDisplayList(w http.ResponseWriter, r *http.Request, assetID
 		d.writeAgentNotConnected(w, assetID)
 		return
 	}
+
+	// Asked while the agent answers, so a Hub without the gateway adds no wait.
+	rdpGateway := make(chan bool, 1)
+	go func() { rdpGateway <- rdpGatewayReachable(r.Context()) }()
 
 	requestID := idgen.New("dreq")
 	bridge := &DisplayBridge{
@@ -96,8 +101,11 @@ func (d *Deps) handleDisplayList(w http.ResponseWriter, r *http.Request, assetID
 			servicehttp.WriteError(w, http.StatusBadGateway, result.Error)
 			return
 		}
+		// rdp_gateway tells the console whether this Hub can serve RDP, so it
+		// does not offer or recommend a protocol that cannot start.
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
-			"displays": result.Displays,
+			"displays":    result.Displays,
+			"rdp_gateway": <-rdpGateway,
 		})
 	case <-time.After(displayRequestTimeout):
 		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")

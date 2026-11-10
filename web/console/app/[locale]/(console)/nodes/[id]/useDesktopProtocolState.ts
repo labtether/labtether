@@ -23,9 +23,14 @@ function metadataFlag(
   return normalizeLower(targetAsset?.metadata?.[key]) === "true";
 }
 
+/**
+ * The protocols to offer for a device, the recommended one first. rdpGateway is what the Hub said about its RDP
+ * gateway: false means this Hub cannot serve RDP, so RDP is not offered; null means the Hub has not said.
+ */
 export function computeAvailableDesktopProtocols(
   targetAsset: DesktopProtocolAsset | null | undefined,
   targetHasAgent: boolean,
+  rdpGateway: boolean | null = null,
 ): DesktopProtocol[] {
   const options: DesktopProtocol[] = ["vnc"];
   const source = normalizeLower(targetAsset?.source);
@@ -42,7 +47,7 @@ export function computeAvailableDesktopProtocols(
   const preferVNCFirst =
     platform === "linux" && (!isWayland || vncRealDesktopSupported);
 
-  if (platform === "windows") {
+  if (platform === "windows" && rdpGateway !== false) {
     options.unshift("rdp");
   }
   if (source === "proxmox" && proxmoxType === "qemu") {
@@ -116,6 +121,7 @@ interface UseDesktopProtocolStateOptions {
   targetAsset: DesktopProtocolAsset | null | undefined;
   connectedAgentIds: Set<string>;
   connectionState: SessionConnectionState;
+  rdpGateway?: boolean | null;
 }
 
 interface SetDesktopProtocolOptions {
@@ -127,14 +133,15 @@ export function useDesktopProtocolState({
   targetAsset,
   connectedAgentIds,
   connectionState,
+  rdpGateway = null,
 }: UseDesktopProtocolStateOptions) {
   const [protocol, setProtocolState] = useState<DesktopProtocol>("vnc");
   const requestedProtocolRef = useRef<DesktopProtocol | null>(null);
   const targetHasAgent = connectedAgentIds.has(nodeId);
 
   const availableProtocols = useMemo(
-    () => computeAvailableDesktopProtocols(targetAsset, targetHasAgent),
-    [targetAsset, targetHasAgent],
+    () => computeAvailableDesktopProtocols(targetAsset, targetHasAgent, rdpGateway),
+    [targetAsset, targetHasAgent, rdpGateway],
   );
 
   useEffect(() => {

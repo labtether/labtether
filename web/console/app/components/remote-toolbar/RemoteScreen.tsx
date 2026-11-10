@@ -48,6 +48,7 @@ export function RemoteScreen(props: RemoteScreenProps) {
         wsUrl={wsUrl}
         onConnect={props.onDesktopConnect}
         onDisconnect={props.onDesktopDisconnect}
+        onError={props.onDesktopError}
       />
     );
   }

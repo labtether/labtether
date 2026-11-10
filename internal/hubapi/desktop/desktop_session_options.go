@@ -69,6 +69,29 @@ func generateSessionVNCPassword() (string, error) {
 	return string(out), nil
 }
 
+// agentStartsVNCWithSessionPassword reports whether the device's agent starts
+// its own VNC server with the session password the Hub made. The Linux and
+// FreeBSD agent does (x11vnc). On macOS and Windows the agent only tunnels to
+// the VNC server the person runs, which has its own login, so the session
+// password must not be offered to the viewer: sending it was a failed login
+// on that server ("authentication rejected") and the person was never asked.
+// The agent does not say which it did, so this goes by the platform it
+// connected with. A platform the Hub does not know keeps the password.
+func (d *Deps) agentStartsVNCWithSessionPassword(assetID string) bool {
+	if d == nil || d.AgentMgr == nil {
+		return true
+	}
+	conn, ok := d.AgentMgr.Get(assetID)
+	if !ok {
+		return true
+	}
+	switch strings.ToLower(strings.TrimSpace(conn.Platform)) {
+	case "darwin", "mac", "macos", "windows", "win32":
+		return false
+	}
+	return true
+}
+
 func (d *Deps) SetDesktopSessionOptions(sessionID string, opts DesktopSessionOptions) {
 	sessionID = strings.TrimSpace(sessionID)
 	if d == nil || d.DesktopSessionMu == nil || d.DesktopSessionOpts == nil || sessionID == "" {

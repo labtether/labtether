@@ -30,13 +30,15 @@ export function useDesktopConnectionUx({
     handleSubmitCredentials,
     resetCredentialForm,
     dismissCredentialPrompt,
+    takeSessionPasswordRefusal,
   } = useDesktopCredentials({
     protocol,
     vncRef,
     autoPassword,
   });
 
-  const credentialOverlay =
+  // The sign-in card had no way out. onCancel is the page's Disconnect, which exists only after this hook has run.
+  const renderCredentialOverlay = (onCancel: () => void) =>
     protocol === "vnc" && credPrompt ? (
       <DesktopCredentialOverlay
         credPrompt={credPrompt}
@@ -46,6 +48,7 @@ export function useDesktopConnectionUx({
         credPassword={credPassword}
         onCredPasswordChange={setCredPassword}
         onSubmit={handleSubmitCredentials}
+        onCancel={onCancel}
       />
     ) : undefined;
 
@@ -53,6 +56,7 @@ export function useDesktopConnectionUx({
     handleCredentialsRequired,
     resetCredentialForm,
     dismissCredentialPrompt,
-    credentialOverlay,
+    renderCredentialOverlay,
+    takeSessionPasswordRefusal,
   };
 }

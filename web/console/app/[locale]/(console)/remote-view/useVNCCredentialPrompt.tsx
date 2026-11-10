@@ -1,22 +1,31 @@
 "use client";
 
-import { useCallback, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import type { VNCViewerHandle, VNCCredentialRequest } from "../../../components/VNCViewer";
 import { SignInCard } from "../../../components/remote-toolbar/SignInCard";
+import { useSessionPasswordAttempt } from "../../../hooks/useSessionPasswordAttempt";
 
 type CredentialPromptOptions = {
   vncRef: RefObject<VNCViewerHandle | null>;
   initialCredentials?: { username?: string; password?: string };
   vncPassword: string | null;
+  /** Cancel on the sign-in card: ends the attempt (the page disconnects and closes the session). */
+  onCancel: () => void;
 };
 
-export function useVNCCredentialPrompt({ vncRef, initialCredentials, vncPassword }: CredentialPromptOptions) {
+export function useVNCCredentialPrompt({ vncRef, initialCredentials, vncPassword, onCancel }: CredentialPromptOptions) {
   // ── Credential state ──
   const [credentialRequest, setCredentialRequest] = useState<VNCCredentialRequest | null>(null);
   const [credPassword, setCredPassword] = useState("");
   const [credUsername, setCredUsername] = useState("");
   // Track whether initial credentials have been consumed so we only auto-submit once.
   const initialCredentialsUsedRef = useRef(false);
+  const sessionPassword = useSessionPasswordAttempt();
+
+  // Each attempt gets its own ticket, so a new one starts here.
+  useEffect(() => {
+    sessionPassword.settled();
+  }, [sessionPassword, vncPassword]);
 
   const handleCredentialsRequired = useCallback((request: VNCCredentialRequest) => {
     // Priority 1: initial credentials from the pre-connect dialog (one-shot)
@@ -33,15 +42,28 @@ export function useVNCCredentialPrompt({ vncRef, initialCredentials, vncPassword
         return;
       }
     }
-    // Priority 2: VNC password from the stream ticket (password-only flows)
+    // Priority 2: VNC password from the stream ticket (password-only flows). The Hub sends one only for a VNC server
+    // the agent started with it; a device that refused it once is not sent it again.
     const autoPassword = vncPassword;
-    if (autoPassword && request.types.includes("password") && !request.types.includes("username")) {
+    if (
+      autoPassword &&
+      sessionPassword.allowed() &&
+      request.types.includes("password") &&
+      !request.types.includes("username")
+    ) {
+      sessionPassword.sent();
       vncRef.current?.sendCredentials({ password: autoPassword });
       return;
     }
     // Priority 3: show the runtime credential overlay
     setCredentialRequest(request);
-  }, [initialCredentials, vncPassword, vncRef]);
+  }, [initialCredentials, sessionPassword, vncPassword, vncRef]);
+
+  const clearPrompt = useCallback(() => {
+    setCredentialRequest(null);
+    setCredPassword("");
+    setCredUsername("");
+  }, []);
 
   const handleCredentialSubmit = useCallback(() => {
     if (!credentialRequest) return;
@@ -49,10 +71,14 @@ export function useVNCCredentialPrompt({ vncRef, initialCredentials, vncPassword
     if (credentialRequest.types.includes("username")) creds.username = credUsername;
     if (credentialRequest.types.includes("password")) creds.password = credPassword;
     vncRef.current?.sendCredentials(creds);
-    setCredentialRequest(null);
-    setCredPassword("");
-    setCredUsername("");
-  }, [credentialRequest, credPassword, credUsername, vncRef]);
+    clearPrompt();
+  }, [clearPrompt, credentialRequest, credPassword, credUsername, vncRef]);
+
+  // Cancel used to close only the card, which left the page on "Opening stream" with the session still open.
+  const handleCredentialCancel = useCallback(() => {
+    clearPrompt();
+    onCancel();
+  }, [clearPrompt, onCancel]);
 
   // ── Credential overlay ──
   const credentialOverlay = credentialRequest ? (
@@ -63,13 +89,13 @@ export function useVNCCredentialPrompt({ vncRef, initialCredentials, vncPassword
       password={credPassword}
       onPasswordChange={setCredPassword}
       onSubmit={handleCredentialSubmit}
-      onCancel={() => {
-        setCredentialRequest(null);
-        setCredPassword("");
-        setCredUsername("");
-      }}
+      onCancel={handleCredentialCancel}
     />
   ) : null;
 
-  return { credentialOverlay, handleCredentialsRequired };
+  return {
+    credentialOverlay,
+    handleCredentialsRequired,
+    takeSessionPasswordRefusal: sessionPassword.takeRefusal,
+  };
 }
