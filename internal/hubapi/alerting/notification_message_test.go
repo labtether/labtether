@@ -50,3 +50,37 @@ func TestAlertNotificationNamesTheDeviceAndHidesHubIDs(t *testing.T) {
 		t.Fatalf("summary of five devices = %q", got)
 	}
 }
+
+// An agent or a connector sets the device name. A name with a line break must
+// not break the email subject (the send refuses it, so the alert email would
+// never go out) or the ntfy Title header.
+func TestAlertNotificationCleansDeviceNames(t *testing.T) {
+	d := newTestAlertingDeps(t)
+	store := persistence.NewMemoryAssetStore()
+	d.AssetStore = store
+	if _, err := store.UpsertAssetHeartbeat(assets.HeartbeatRequest{AssetID: "evil-agent", Name: "nas01\r\nBcc: x@example.com", Type: "host", Source: "agent", Status: "online"}); err != nil {
+		t.Fatal(err)
+	}
+	inst, err := d.AlertInstanceStore.CreateAlertInstance(alerts.CreateInstanceRequest{
+		RuleID: "rule_1000000000000000002_1", Fingerprint: "evil", Severity: "high", Labels: map[string]string{"asset_id": "evil-agent"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rule := alerts.Rule{ID: "rule_1000000000000000002_1", Name: "Disk nearly full", Severity: "high"}
+	payload := buildAlertNotificationPayload(rule, inst.ID, "firing", nil, d.alertNotificationDevices(inst.ID))
+	if got, want := payload["title"], "[HIGH] Disk nearly full on nas01 Bcc: x@example.com (firing)"; got != want {
+		t.Fatalf("title = %q, want %q", got, want)
+	}
+	email, err := buildEmailNotificationPayload(map[string]any{"to": "ops@example.com"}, payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	subject, _ := email["subject"].(string)
+	if strings.ContainsAny(subject, "\r\n") || subject != "[HIGH] Disk nearly full on nas01 Bcc: x@example.com (firing)" {
+		t.Fatalf("subject = %q, want one line", subject)
+	}
+	if got := cleanNotificationDeviceName(strings.Repeat("x", 80)); len([]rune(got)) != 64 || !strings.HasSuffix(got, "…") {
+		t.Fatalf("long name = %q, want 63 characters and …", got)
+	}
+}

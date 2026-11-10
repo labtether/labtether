@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"github.com/labtether/labtether/internal/alerts"
 	"math"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 func buildAlertNotificationPayload(rule alerts.Rule, instanceID, state string, groupIDs map[string]struct{}, devices []string) map[string]any {
@@ -35,7 +37,7 @@ func buildAlertNotificationPayload(rule alerts.Rule, instanceID, state string, g
 	if onDevices != "" {
 		subject += " on " + onDevices
 	}
-	title := fmt.Sprintf("[%s] %s (%s)", strings.ToUpper(strings.TrimSpace(rule.Severity)), subject, state)
+	title := singleLine(fmt.Sprintf("[%s] %s (%s)", strings.ToUpper(strings.TrimSpace(rule.Severity)), subject, state))
 
 	payload := map[string]any{
 		"event":             "alert." + state,
@@ -115,13 +117,52 @@ func (d *Deps) alertNotificationDevices(instanceID string) []string {
 		if getErr != nil || !found {
 			continue
 		}
-		name := strings.TrimSpace(entry.Name)
+		name := cleanNotificationDeviceName(entry.Name)
+		if name == "" && !hubMadeID.MatchString(id) {
+			name = cleanNotificationDeviceName(id)
+		}
 		if name == "" {
-			name = id
+			name = "unnamed device"
 		}
 		names = append(names, name)
 	}
 	return names
+}
+
+// hubMadeID matches the IDs the Hub makes (idgen.New), which never go into
+// text a person reads; a host name used as a device ID may.
+var hubMadeID = regexp.MustCompile(`^[a-z][a-z0-9-]{0,39}_[0-9]{10,}(_[0-9]+)?$`)
+
+const maxNotificationDeviceNameRunes = 64
+
+// cleanNotificationDeviceName makes a device name safe for a title, an email
+// subject or an HTTP header: an agent or a connector sets the name, so it may
+// hold line breaks or other control characters. Those and runs of white space
+// become one space, and a long name is cut with "…".
+func cleanNotificationDeviceName(raw string) string {
+	var b strings.Builder
+	pendingSpace := false
+	for _, r := range raw {
+		if unicode.IsControl(r) || unicode.IsSpace(r) {
+			pendingSpace = b.Len() > 0
+			continue
+		}
+		if pendingSpace {
+			b.WriteByte(' ')
+			pendingSpace = false
+		}
+		b.WriteRune(r)
+	}
+	runes := []rune(b.String())
+	if len(runes) > maxNotificationDeviceNameRunes {
+		return strings.TrimSpace(string(runes[:maxNotificationDeviceNameRunes-1])) + "…"
+	}
+	return string(runes)
+}
+
+// singleLine turns any line break left in a title or subject into a space.
+func singleLine(s string) string {
+	return strings.NewReplacer("\r\n", " ", "\r", " ", "\n", " ").Replace(s)
 }
 
 func buildEmailNotificationPayload(config map[string]any, payload map[string]any) (map[string]any, error) {
@@ -154,6 +195,7 @@ func buildEmailNotificationPayload(config map[string]any, payload map[string]any
 	if prefix := configString(config, "subject_prefix"); prefix != "" {
 		subject = strings.TrimSpace(prefix + " " + subject)
 	}
+	subject = singleLine(subject)
 
 	body := payloadString(payload, "text")
 	if body == "" {

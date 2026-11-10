@@ -166,7 +166,8 @@ v1.7.1.
   alert is for ("Disk nearly full is firing on nas01."), in the title and the
   email subject too. They no longer show the rule's and alert's internal IDs or
   "No description provided."; the webhook channel's JSON keeps every field and
-  adds `devices`.
+  adds `devices`. A device name with line breaks or markup cannot break an email
+  subject, an ntfy title or a Slack message.
 
 - Security › Saved logins: the Add login, Rotate and Delete dialogs, login
   types and the saved login picker are in your language, and their errors
