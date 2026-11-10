@@ -121,6 +121,10 @@ func (d *Deps) HandleEnroll(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, refusalServerError)
 		return
 	}
+	if d.PendingAgents != nil {
+		// Enrolled with a token: an earlier rejection in Pending no longer applies.
+		d.PendingAgents.rejected.forget(deviceFingerprint, hostname)
+	}
 	if commitResult.Readmitted {
 		log.Printf("enroll: %q was removed earlier and is added again with a new single-use token", assetID)
 	}

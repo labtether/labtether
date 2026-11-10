@@ -332,4 +332,18 @@ func TestHandleRejectAgentSuccess(t *testing.T) {
 	if _, _, err := clientConn.ReadMessage(); err == nil {
 		t.Fatalf("expected close frame after rejection")
 	}
+
+	// Reject sticks: the same device asking again is refused, not listed in
+	// Pending again (it was back within seconds).
+	again := httptest.NewRequest(http.MethodGet, "/ws/agent", nil)
+	again.Header.Set("X-Request-Enrollment", "true")
+	again.Header.Set("X-Hostname", "hotel")
+	againRec := httptest.NewRecorder()
+	sut.handlePendingEnrollment(againRec, again)
+	if againRec.Code != http.StatusForbidden || !strings.Contains(againRec.Body.String(), "An admin rejected this device") {
+		t.Fatalf("rejected device asked again: %d %s", againRec.Code, againRec.Body.String())
+	}
+	if sut.pendingAgents.Count() != 0 {
+		t.Fatalf("rejected device is back in Pending")
+	}
 }
