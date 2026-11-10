@@ -8,11 +8,12 @@ import { ConfirmDialog } from "../../../components/ui/ConfirmDialog";
 import { Modal } from "../../../components/ui/Modal";
 import { formatSize } from "./fileWorkspaceUtils";
 
-// Dialogs of the file views: Delete… (one or several items), New folder, Upload of several dropped files, and the
-// text viewer for small text files (numbered lines, Download).
+// Dialogs of the file views: Delete… (one or several items), New folder, Upload of several dropped files, Replace
+// before an upload over files of the same name, and the text viewer for small text files (numbered lines, Download).
 
 const BAD_NAME = /[/\\\0]/;
 const MAX_LINES = 2000;
+const MAX_CLASH_NAMES = 3;
 
 export function DeleteConfirmDialog({ names, where, onCancel, onConfirm, busy }: {
   names: string[] | null;
@@ -54,6 +55,41 @@ export function UploadConfirmDialog({ files, where, onCancel, onConfirm }: {
       title={t("uploadTitle", { count, size: formatSize(bytes) })}
       message={t("uploadBody", { where })}
       confirmLabel={t("upload")}
+    />
+  );
+}
+
+/**
+ * Before an upload over files of the same name: Replace uploads every chosen file, Skip these (shown when some chosen
+ * files do not clash) uploads only those, Cancel uploads nothing. container is the fullscreen element, if any.
+ */
+export function UploadReplaceDialog({ ask, where, onCancel, onSkip, onReplace, container }: {
+  ask: { clashing: { name: string }[]; rest: unknown[] } | null;
+  where: string;
+  onCancel: () => void;
+  onSkip: () => void;
+  onReplace: () => void;
+  container?: HTMLElement | null;
+}) {
+  const t = useTranslations("files.dialog");
+  const names = (ask?.clashing ?? []).map((file) => file.name);
+  const count = names.length;
+  const shown = names.slice(0, MAX_CLASH_NAMES).join(", ");
+  const list = count > MAX_CLASH_NAMES ? t("replaceMore", { names: shown, count: count - MAX_CLASH_NAMES }) : shown;
+  let message = "";
+  if (count === 1) message = t("replaceOneBody", { name: names[0], where });
+  else if (count > 1) message = t("replaceManyBody", { names: list, where });
+  return (
+    <ConfirmDialog
+      open={count > 0}
+      onClose={onCancel}
+      onConfirm={onReplace}
+      title={count > 0 ? t("replaceTitle", { count }) : ""}
+      message={message}
+      confirmLabel={t("replace")}
+      extra={ask && ask.rest.length > 0 ? { label: t("replaceSkip"), onClick: onSkip } : undefined}
+      danger
+      container={container}
     />
   );
 }
