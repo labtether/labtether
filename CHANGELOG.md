@@ -288,6 +288,9 @@ v1.7.1.
   command adds the CA.
 - In the Audit log, "Load older entries" and Export CSV work for admins too,
   not only the owner. Before, an admin saw only their own 20 newest rows.
+- A device's page shows the devices it sits in above its name again, such as
+  a VM's host. The console read another field than the one the Hub sends, so
+  the trail was always empty.
 
 ## [1.7.1] - 2026-10-31
 

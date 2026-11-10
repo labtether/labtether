@@ -175,7 +175,8 @@ export function useEdgeAncestors(assetID: string | null): {
         if (!res.ok) throw new Error(`failed ${res.status}`);
         const data = ensureRecord(await res.json().catch(() => null));
         if (cancelled) return;
-        setAncestors(ensureArray<{ asset_id: string; depth: number }>(data?.ancestors ?? data));
+        // The Hub answers { id, depth, nodes: [...] }, like the tree route.
+        setAncestors(ensureArray<{ asset_id: string; depth: number }>(data?.nodes ?? data?.ancestors));
         setError(null);
       } catch (err) {
         if (cancelled) return;
