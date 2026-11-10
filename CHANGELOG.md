@@ -300,6 +300,13 @@ v1.7.1.
 - A device's page shows the devices it sits in above its name again, such as
   a VM's host. The console read another field than the one the Hub sends, so
   the trail was always empty.
+- The Audit log has a sentence for every kind of row the Hub writes, in
+  every language: device edits ("Renamed nas01 to nas02", "Moved a device to
+  Rack 2"), maintenance windows, alerts acknowledged, resolved or deleted,
+  silences, alert routes, issues ("Resolved an issue", "Gave an issue to
+  sam"), update plans, terminal bookmarks, users, passwords, two-factor
+  sign-in, Wake-on-LAN, saved actions and single sign-on settings. Before,
+  37 kinds showed their type as words, such as "Alert acknowledged".
 
 ## [1.7.1] - 2026-10-31
 
