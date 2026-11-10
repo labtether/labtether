@@ -309,6 +309,10 @@ v1.7.1.
   sam"), update plans, terminal bookmarks, users, passwords, two-factor
   sign-in, Wake-on-LAN, saved actions and single sign-on settings. Before,
   37 kinds showed their type as words, such as "Alert acknowledged".
+- In the Audit log, a row for an alert that was acknowledged, resolved or
+  deleted says which device it was about: "Acknowledged an alert · Disk
+  above 85% · on nas01", or "on 3 devices" with their names on hover and in
+  the row's details. Lists in a row's details read as words, not as JSON.
 
 ## [1.7.1] - 2026-10-31
 

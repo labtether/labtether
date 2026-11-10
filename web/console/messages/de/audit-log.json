@@ -18,6 +18,10 @@
     "person": "Person",
     "action": "Aktion"
   },
+  "where": {
+    "device": "auf {name}",
+    "devices": "auf {count, plural, one {# Gerät} other {# Geräten}}"
+  },
   "outcome": {
     "denied": "Abgelehnt",
     "failed": "Fehlgeschlagen"
