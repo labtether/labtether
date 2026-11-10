@@ -118,7 +118,6 @@ func TestPersistCanonicalHeartbeatWritesCheckpointAndBindingByPlatform(t *testin
 		{name: "linux", platform: "linux"},
 		{name: "darwin", platform: "darwin"},
 		{name: "windows", platform: "windows"},
-		{name: "freebsd", platform: "freebsd"},
 	}
 
 	for _, tt := range tests {

@@ -12,7 +12,6 @@ export function tmuxInstallCommand(asset: TmuxAsset): string | null {
   const name = (meta.os_pretty_name ?? meta.os_name ?? "").toLowerCase();
   if (platform.includes("windows") || name.includes("windows")) return null;
   if (platform.includes("darwin") || name.includes("macos") || name.includes("darwin")) return "brew install tmux";
-  if (osId === "freebsd" || platform.includes("freebsd")) return "sudo pkg install -y tmux";
   if (["fedora", "rhel", "centos", "rocky", "alma"].includes(osId) || like.includes("fedora") || like.includes("rhel")) return "sudo dnf install -y tmux";
   if (["arch", "manjaro"].includes(osId) || like.includes("arch")) return "sudo pacman -S --noconfirm tmux";
   if (["opensuse", "sles"].includes(osId) || like.includes("suse")) return "sudo zypper install -y tmux";

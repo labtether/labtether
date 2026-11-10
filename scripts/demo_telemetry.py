@@ -25,11 +25,11 @@ METRIC_PROFILES = [
     ("asset-pbs",     "memory_percent", "%",    42,  4,  2,  0,    []),
     ("asset-pbs",     "disk_percent",   "%",    65,  0.5,0,  0.2,  []),
     ("asset-pbs",     "network_rx_mbps","Mbps", 5,   15, 20, 0,    []),
-    # OPNsense — low everything, steady
-    ("asset-opnsense","cpu_percent",    "%",    8,   3,  4,  0,    [(5, 0.5, 60)]),  # firmware update spike
-    ("asset-opnsense","memory_percent", "%",    32,  2,  1,  0,    []),
-    ("asset-opnsense","disk_percent",   "%",    18,  0.5,0,  0,    []),
-    ("asset-opnsense","network_rx_mbps","Mbps", 120, 40, 60, 0,    []),
+    # VyOS — low everything, steady
+    ("asset-vyos","cpu_percent",    "%",    8,   3,  4,  0,    [(5, 0.5, 60)]),  # image update spike
+    ("asset-vyos","memory_percent", "%",    32,  2,  1,  0,    []),
+    ("asset-vyos","disk_percent",   "%",    18,  0.5,0,  0,    []),
+    ("asset-vyos","network_rx_mbps","Mbps", 120, 40, 60, 0,    []),
     # Pi-hole — very low resource, steady DNS traffic
     ("asset-pihole",  "cpu_percent",    "%",    6,   3,  3,  0,    []),
     ("asset-pihole",  "memory_percent", "%",    28,  3,  2,  0,    []),
@@ -176,10 +176,10 @@ def generate_logs(now: datetime, new_id: Callable[[], str]) -> list:
     log("asset-pbs", "agent", "info",    "Pruning old backups: removed 12 snapshots, freed 24.3 GB", None, now - timedelta(hours=6))
     log("asset-pbs", "agent", "info",    "Datastore usage: 65.8% (retention policy: 14 days, 3 keep-daily)", None, now - timedelta(hours=1))
 
-    # OPNsense
-    log("asset-opnsense", "agent", "info",    "Firewall rules: 142 active, 0 blocked in last hour from LAN", None, now - timedelta(minutes=15))
-    log("asset-opnsense", "agent", "info",    "WireGuard tunnel wg0: 2 peers connected, 12.4 MB transferred", None, now - timedelta(minutes=30))
-    log("asset-opnsense", "agent", "info",    "Suricata IDS: 0 alerts in last 24h, 2.1M packets inspected", None, now - timedelta(hours=1))
+    # VyOS
+    log("asset-vyos", "agent", "info",    "Firewall rules: 142 active, 0 blocked in last hour from LAN", None, now - timedelta(minutes=15))
+    log("asset-vyos", "agent", "info",    "WireGuard tunnel wg0: 2 peers connected, 12.4 MB transferred", None, now - timedelta(minutes=30))
+    log("asset-vyos", "agent", "info",    "Suricata IDS: 0 alerts in last 24h, 2.1M packets inspected", None, now - timedelta(hours=1))
 
     # Pi-hole
     log("asset-pihole", "agent", "info",    "DNS queries last hour: 14,231 (16.8% blocked)", {"queries":14231,"blocked_pct":16.8}, now - timedelta(minutes=1))

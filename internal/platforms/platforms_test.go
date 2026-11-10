@@ -17,8 +17,6 @@ func TestNormalize(t *testing.T) {
 		{name: "windows alias", in: "Windows NT", want: Windows},
 		{name: "darwin canonical", in: "darwin", want: Darwin},
 		{name: "darwin alias", in: "macOS Sonoma", want: Darwin},
-		{name: "freebsd canonical", in: "freebsd", want: FreeBSD},
-		{name: "freebsd with version", in: "FreeBSD 14.1", want: FreeBSD},
 		{name: "unknown preserved", in: "openbsd", want: "openbsd"},
 		{name: "empty", in: " ", want: ""},
 	}

@@ -70,8 +70,8 @@ func generateSessionVNCPassword() (string, error) {
 }
 
 // agentStartsVNCWithSessionPassword reports whether the device's agent starts
-// its own VNC server with the session password the Hub made. The Linux and
-// FreeBSD agent does (x11vnc). On macOS and Windows the agent only tunnels to
+// its own VNC server with the session password the Hub made. The Linux agent
+// does (x11vnc). On macOS and Windows the agent only tunnels to
 // the VNC server the person runs, which has its own login, so the session
 // password must not be offered to the viewer: sending it was a failed login
 // on that server ("authentication rejected") and the person was never asked.

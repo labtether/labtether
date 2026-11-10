@@ -9,10 +9,9 @@ const (
 	Linux   = "linux"
 	Windows = "windows"
 	Darwin  = "darwin"
-	FreeBSD = "freebsd"
 )
 
-var supportedPlatforms = []string{Linux, Windows, Darwin, FreeBSD}
+var supportedPlatforms = []string{Linux, Windows, Darwin}
 
 var compactAliasMap = map[string]string{
 	"linux":      Linux,
@@ -46,8 +45,6 @@ var compactAliasMap = map[string]string{
 	"osx":    Darwin,
 	"macosx": Darwin,
 	"apple":  Darwin,
-
-	"freebsd": FreeBSD,
 }
 
 var compactReplacer = strings.NewReplacer(
@@ -82,7 +79,7 @@ func Current() string {
 // IsSupported returns true when the value resolves to a canonical platform.
 func IsSupported(raw string) bool {
 	switch Normalize(raw) {
-	case Linux, Windows, Darwin, FreeBSD:
+	case Linux, Windows, Darwin:
 		return true
 	default:
 		return false
@@ -136,8 +133,6 @@ func Normalize(raw string) string {
 		strings.Contains(normalized, "mac"),
 		strings.Contains(normalized, "os x"):
 		return Darwin
-	case strings.Contains(normalized, "freebsd"):
-		return FreeBSD
 	default:
 		return normalized
 	}
