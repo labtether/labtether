@@ -35,6 +35,8 @@
     "expires": "Expires",
     "fingerprint": "Fingerprint",
     "copyFingerprint": "Copy fingerprint",
+    "caFingerprint": "LabTether CA fingerprint",
+    "copyCaFingerprint": "Copy LabTether CA fingerprint",
     "uploadedCert": "Uploaded certificate",
     "uploadedAt": "{subject}, saved {when}",
     "selfSignedNote": "Agents that connect to this address need the LabTether CA certificate.",

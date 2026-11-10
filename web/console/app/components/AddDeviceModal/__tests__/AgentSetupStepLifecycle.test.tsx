@@ -146,4 +146,56 @@ describe("AgentSetupStep token lifecycle", () => {
 
     await unmountStep();
   });
+
+  // Risk: the person compares this value by eye with the one Mac or Windows setup shows before trusting the Hub.
+  // A different grouping, a missing value, or a value shown for a Hub with no CA of its own breaks that check.
+  describe("Hub certificate fingerprint", () => {
+    const fingerprint = "3f9a1c0e5b7d2468ace013579bdf02468ace13579bdf0a1b2c3d4e5f60718293";
+    const grouped = "3f9a 1c0e 5b7d 2468 ace0 1357 9bdf 0246 8ace 1357 9bdf 0a1b 2c3d 4e5f 6071 8293";
+    const tlsInfo = (body: unknown) =>
+      vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } })));
+    const pick = async (name: string) => {
+      const button = [...container.querySelectorAll("button")].find((b) => b.textContent === name);
+      await act(async () => button?.click());
+    };
+
+    afterEach(() => vi.unstubAllGlobals());
+
+    it("shows the Hub CA's fingerprint in groups of four for macOS and Windows, and copies the plain value", async () => {
+      tlsInfo({ ca_available: true, ca_fingerprint_sha256: fingerprint.toUpperCase() });
+      await mountStep();
+      expect(container.textContent).not.toContain(grouped);
+
+      for (const platform of ["macOS", "Windows"]) {
+        await pick(platform);
+        expect(container.textContent).toContain("Hub certificate fingerprint");
+        expect(container.textContent).toContain(grouped);
+      }
+      await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Copy Hub certificate fingerprint"]')?.click());
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(fingerprint);
+
+      await unmountStep();
+    });
+
+    it("shows it before a token is made, for someone who only came to compare", async () => {
+      mocks.newRawToken = "";
+      mocks.newTokenID = "";
+      tlsInfo({ ca_available: true, ca_fingerprint_sha256: fingerprint });
+      await mountStep();
+      await pick("Windows");
+      expect(container.textContent).toContain(grouped);
+      expect(mocks.generateToken).not.toHaveBeenCalled();
+
+      await unmountStep();
+    });
+
+    it("shows no fingerprint when the Hub has no CA of its own", async () => {
+      tlsInfo({ ca_available: false, ca_fingerprint_sha256: fingerprint });
+      await mountStep();
+      await pick("macOS");
+      expect(container.textContent).not.toContain("Hub certificate fingerprint");
+
+      await unmountStep();
+    });
+  });
 });

@@ -168,6 +168,7 @@
   },
   "errors": {
     "load": "El mapa no se cargó.",
+    "links": "Las conexiones entre dispositivos no se cargaron.",
     "retry": "Reintentar",
     "save": "El hub no guardó el cambio. Inténtalo de nuevo.",
     "copy": "No se pudo copiar",

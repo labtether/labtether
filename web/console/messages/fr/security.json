@@ -35,6 +35,8 @@
     "expires": "Expire",
     "fingerprint": "Empreinte",
     "copyFingerprint": "Copier l'empreinte",
+    "caFingerprint": "Empreinte de l'autorité LabTether",
+    "copyCaFingerprint": "Copier l'empreinte de l'autorité LabTether",
     "uploadedCert": "Certificat importé",
     "uploadedAt": "{subject}, enregistré {when}",
     "selfSignedNote": "Les agents qui se connectent à cette adresse ont besoin du certificat de l'autorité LabTether.",

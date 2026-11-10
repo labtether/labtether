@@ -24,8 +24,9 @@ function merge(newer: AuditEntry[], older: AuditEntry[]): AuditEntry[] {
 }
 
 /**
- * The owner's whole audit log, a page at a time: the newest page (read again on refresh), "Load more" for older
- * pages, and every row for an export. Off (enabled false) for everyone else, whose own rows come with the status.
+ * The audit log a page at a time: the newest page (read again on refresh), "Load more" for older pages, and every
+ * row for an export. The Hub sends each person the rows they may read (the whole log to the owner and admins,
+ * their own rows to everyone else). Off (enabled false) until the signed-in person is known.
  */
 export function useAuditPages(enabled: boolean) {
   const [entries, setEntries] = useState<AuditEntry[]>([]);

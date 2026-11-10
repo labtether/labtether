@@ -35,6 +35,8 @@
     "expires": "Läuft ab",
     "fingerprint": "Fingerabdruck",
     "copyFingerprint": "Fingerabdruck kopieren",
+    "caFingerprint": "Fingerabdruck der LabTether-CA",
+    "copyCaFingerprint": "Fingerabdruck der LabTether-CA kopieren",
     "uploadedCert": "Hochgeladenes Zertifikat",
     "uploadedAt": "{subject}, gespeichert {when}",
     "selfSignedNote": "Agents, die sich mit dieser Adresse verbinden, brauchen das LabTether-CA-Zertifikat.",
