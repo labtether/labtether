@@ -116,6 +116,7 @@ a.lg-dev:hover { color: var(--text); text-decoration: underline; text-decoration
 .lg-au-res { margin-right: 6px; font-weight: 500; }
 .lg-au-res.denied, .lg-au-res.failed { color: var(--bad-text); }
 .lg-au-tg { margin-left: 6px; color: var(--text-2); }
+.lg-au-wh { margin-left: 6px; }
 .lg-au-d { margin-left: 96px; }
 /* Audit log and Recordings: the filter fills the row beside the chips. */
 .lg-tools.wide .lg-filter { max-width: none; }
