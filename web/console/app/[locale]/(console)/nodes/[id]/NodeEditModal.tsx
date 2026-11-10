@@ -6,6 +6,7 @@ import type { Asset, Group } from "../../../../console/models";
 import { Button } from "../../../../components/ui/Button";
 import { Modal } from "../../../../components/ui/Modal";
 import { GroupParentSelect } from "../../../../components/GroupParentSelect";
+import { draftOf, useDeviceEdit, type DeviceEditResult } from "./deviceEdit";
 
 type NodeEditModalProps = {
   asset: Asset;
@@ -14,60 +15,29 @@ type NodeEditModalProps = {
   onSave: () => void;
 };
 
-/** The hub's error text from a failed response, without status codes; "" when it sent none. */
-async function errorText(res: Response): Promise<string> {
-  const text = await res.text().catch(() => "");
-  if (!text) return "";
-  try {
-    const body = JSON.parse(text) as { error?: string };
-    return body.error ?? "";
-  } catch {
-    return text.length < 200 ? text : "";
-  }
+/** The words for a failed save: an empty name, or the Hub's reason when it gave one. */
+export function editErrorText(t: (key: string, values?: Record<string, string>) => string, result: DeviceEditResult): string | null {
+  if (result.ok) return null;
+  if (result.error === "nameRequired") return t("nameRequired");
+  return result.reason ? t("failedWith", { reason: result.reason }) : t("failed");
 }
 
-/** Rename the device and set its group (Edit… in the device ⋯). */
+/** Rename the device, set its group and its tags (Edit… in the device ⋯). */
 export function NodeEditModal({ asset, groups, onClose, onSave }: NodeEditModalProps) {
   const t = useTranslations("devices.page.edit");
-  const [name, setName] = useState(asset.name);
-  const [groupId, setGroupId] = useState(asset.group_id ?? "");
-  const [saving, setSaving] = useState(false);
+  const [draft, setDraft] = useState(() => draftOf(asset));
   const [error, setError] = useState<string | null>(null);
+  const { save, saving } = useDeviceEdit(asset);
 
   const handleSave = async () => {
-    const trimmedName = name.trim();
-    if (!trimmedName) {
-      setError(t("nameRequired"));
-      return;
-    }
-    const patch: Record<string, string | null> = {};
-    if (trimmedName !== asset.name) patch.name = trimmedName;
-    if (groupId !== (asset.group_id ?? "")) patch.group_id = groupId || null;
-    if (Object.keys(patch).length === 0) {
-      onClose();
-      return;
-    }
-
-    setSaving(true);
     setError(null);
-    try {
-      const res = await fetch(`/api/assets/${encodeURIComponent(asset.id)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-      });
-      if (!res.ok) {
-        const reason = await errorText(res);
-        setError(reason ? t("failedWith", { reason }) : t("failed"));
-        return;
-      }
-      onSave();
-      onClose();
-    } catch {
-      setError(t("failed"));
-    } finally {
-      setSaving(false);
+    const result = await save(draft);
+    if (!result.ok) {
+      setError(editErrorText(t, result));
+      return;
     }
+    if (result.changed) onSave();
+    onClose();
   };
 
   return (
@@ -84,8 +54,8 @@ export function NodeEditModal({ asset, groups, onClose, onSave }: NodeEditModalP
           <input
             id="dv-edit-name"
             className="dv-input"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
+            value={draft.name}
+            onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
             disabled={saving}
             autoComplete="off"
             spellCheck={false}
@@ -93,7 +63,21 @@ export function NodeEditModal({ asset, groups, onClose, onSave }: NodeEditModalP
             aria-invalid={error === t("nameRequired") ? true : undefined}
           />
         </div>
-        <GroupParentSelect groups={groups} value={groupId} onChange={setGroupId} disabled={saving} label={t("group")} />
+        <GroupParentSelect groups={groups} value={draft.groupId} onChange={(groupId) => setDraft((d) => ({ ...d, groupId }))} disabled={saving} label={t("group")} />
+        <div className="dv-field">
+          <label htmlFor="dv-edit-tags">{t("tags")}</label>
+          <input
+            id="dv-edit-tags"
+            className="dv-input"
+            value={draft.tags}
+            onChange={(e) => setDraft((d) => ({ ...d, tags: e.target.value }))}
+            disabled={saving}
+            autoComplete="off"
+            spellCheck={false}
+            aria-describedby="dv-edit-tags-h"
+          />
+          <p className="dv-hint" id="dv-edit-tags-h">{t("tagsHint")}</p>
+        </div>
         {error ? <p className="dv-err" role="alert">{error}</p> : null}
         <div className="kt-dlg-acts">
           <Button type="button" onClick={onClose} disabled={saving}>{t("cancel")}</Button>
