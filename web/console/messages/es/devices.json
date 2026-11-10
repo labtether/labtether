@@ -240,6 +240,7 @@
     "remove": {
       "title": "¿Eliminar {name}?",
       "body": "LabTether deja de vigilar {name} y borra su historial.",
+      "addBack": "Para volver a añadirlo más tarde, usa un nuevo token de un solo uso desde Añadir dispositivo.",
       "typeName": "Escribe {name} para confirmar",
       "cancel": "Cancelar",
       "confirm": "Eliminar",
@@ -647,7 +648,7 @@
       "hostPlaceholder": "Dirección del dispositivo",
       "port": "Puerto",
       "username": "Usuario",
-      "credential": "Perfil de credenciales",
+      "credential": "Inicio de sesión guardado",
       "credentialHint": "Vacío usa el acceso predeterminado de este dispositivo.",
       "strictHostKey": "Comprobar la clave del host",
       "hostKey": "Clave del host",

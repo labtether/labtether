@@ -222,6 +222,10 @@ func (s *PostgresStore) UpdateAlertInstanceStatusContext(ctx context.Context, id
 	if err != nil {
 		return alerts.AlertInstance{}, err
 	}
+	// A pending (silenced) instance never fired, so it has no recovery.
+	if status == alerts.InstanceStatusResolved && existing.Status != alerts.InstanceStatusPending {
+		recordAlertResolvedOnIncidents(ctx, tx, id)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return alerts.AlertInstance{}, err
 	}

@@ -338,6 +338,7 @@ func (d *Deps) V2RunSavedAction(w http.ResponseWriter, r *http.Request, id strin
 		if preflight[index] != nil {
 			failedSteps++
 			stepResults = append(stepResults, preflight[index])
+			d.recordSavedActionStep(r, action, index, step, deniedStepOutcome(preflight[index]))
 			continue
 		}
 		// Policy and maintenance settings can change while an earlier step runs.
@@ -345,17 +346,20 @@ func (d *Deps) V2RunSavedAction(w http.ResponseWriter, r *http.Request, id strin
 		if deniedEntry, denied := d.savedActionDeniedStep(r, action, index, step); denied {
 			failedSteps++
 			stepResults = append(stepResults, deniedEntry)
+			d.recordSavedActionStep(r, action, index, step, deniedStepOutcome(deniedEntry))
 			continue
 		}
 		remaining := maxSavedActionRunDuration - time.Since(startedAt)
 		if remaining <= 0 {
 			failedSteps++
-			stepResults = append(stepResults, map[string]any{
+			deadlineEntry := map[string]any{
 				"name":    step.Name,
 				"target":  step.Target,
 				"error":   "run_deadline_exceeded",
 				"message": "saved action run reached its time limit",
-			})
+			}
+			stepResults = append(stepResults, deadlineEntry)
+			d.recordSavedActionStep(r, action, index, step, deniedStepOutcome(deadlineEntry))
 			continue
 		}
 		timeoutSec := defaultExecTimeout
@@ -383,6 +387,7 @@ func (d *Deps) V2RunSavedAction(w http.ResponseWriter, r *http.Request, id strin
 			entry["duration_ms"] = result.DurationMs
 		}
 		stepResults = append(stepResults, entry)
+		d.recordSavedActionStep(r, action, index, step, execStepOutcome(result))
 	}
 	d.auditSavedAction(r, "saved_action.run.completed", action, "allowed", "", map[string]any{
 		"failed_steps": failedSteps,

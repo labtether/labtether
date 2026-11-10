@@ -279,6 +279,7 @@ func (d *Deps) HandleUpdatePlanActions(w http.ResponseWriter, r *http.Request) {
 		auditDispatch := audit.NewEvent("updates.run.queued")
 		auditDispatch.ActorID = run.ActorID
 		auditDispatch.SessionID = run.ID
+		auditDispatch.TargetName = plan.Name
 		auditDispatch.Decision = "failed"
 		auditDispatch.Reason = "queue unavailable"
 		auditDispatch.Details = map[string]any{
@@ -320,6 +321,7 @@ func (d *Deps) HandleUpdatePlanActions(w http.ResponseWriter, r *http.Request) {
 		auditDispatch := audit.NewEvent("updates.run.queued")
 		auditDispatch.ActorID = run.ActorID
 		auditDispatch.SessionID = run.ID
+		auditDispatch.TargetName = plan.Name
 		auditDispatch.Decision = "failed"
 		auditDispatch.Reason = "enqueue failed"
 		auditDispatch.Details = map[string]any{
@@ -338,6 +340,7 @@ func (d *Deps) HandleUpdatePlanActions(w http.ResponseWriter, r *http.Request) {
 	auditQueued := audit.NewEvent("updates.run.queued")
 	auditQueued.ActorID = run.ActorID
 	auditQueued.SessionID = run.ID
+	auditQueued.TargetName = plan.Name
 	auditQueued.Decision = "queued"
 	auditQueuedDetails := map[string]any{
 		"job_id":    job.JobID,

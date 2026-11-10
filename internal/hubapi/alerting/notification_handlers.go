@@ -27,9 +27,20 @@ func (d *Deps) appendNotificationChannelAudit(
 	r *http.Request,
 	eventType, channelID, action, channelType, decision, outcome string,
 ) {
+	d.appendNamedNotificationChannelAudit(r, eventType, channelID, "", action, channelType, decision, outcome)
+}
+
+// appendNamedNotificationChannelAudit also stores the channel's name, for a
+// row written after the channel is gone. The audit store names a channel
+// that still exists by itself.
+func (d *Deps) appendNamedNotificationChannelAudit(
+	r *http.Request,
+	eventType, channelID, channelName, action, channelType, decision, outcome string,
+) {
 	event := audit.NewEvent(eventType)
 	event.ActorID = d.principalActorID(r.Context())
 	event.Target = strings.TrimSpace(channelID)
+	event.TargetName = strings.TrimSpace(channelName)
 	event.Decision = decision
 	event.Details = map[string]any{
 		"resource_type": "notification_channel",
@@ -294,6 +305,7 @@ func (d *Deps) HandleNotificationChannelActions(w http.ResponseWriter, r *http.R
 		)
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"channel": updated})
 	case http.MethodDelete:
+		deleted, _, _ := d.NotificationStore.GetNotificationChannel(channelID)
 		if err := d.NotificationStore.DeleteNotificationChannel(channelID); err != nil {
 			if err == notifications.ErrChannelNotFound {
 				servicehttp.WriteError(w, http.StatusNotFound, "channel not found")
@@ -302,8 +314,8 @@ func (d *Deps) HandleNotificationChannelActions(w http.ResponseWriter, r *http.R
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete channel")
 			return
 		}
-		d.appendNotificationChannelAudit(
-			r, notificationChannelDeletedAuditType, channelID, "delete", "", "applied", "",
+		d.appendNamedNotificationChannelAudit(
+			r, notificationChannelDeletedAuditType, channelID, deleted.Name, "delete", deleted.Type, "applied", "",
 		)
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"status": "deleted"})
 	default:

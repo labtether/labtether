@@ -10,8 +10,8 @@ func (d *Deps) alertRuleTemplatesCatalog() []alertRuleTemplate {
 	return []alertRuleTemplate{
 		{
 			ID:                 "starter.agent_offline",
-			Name:               "Agent Offline",
-			Description:        "Alert when an asset stops sending heartbeats for five minutes.",
+			Name:               "Agent offline",
+			Description:        "No heartbeat from a device for 5 minutes.",
 			Kind:               alerts.RuleKindHeartbeatStale,
 			Severity:           alerts.SeverityCritical,
 			TargetScope:        alerts.TargetScopeAsset,
@@ -33,8 +33,8 @@ func (d *Deps) alertRuleTemplatesCatalog() []alertRuleTemplate {
 		},
 		{
 			ID:                 "starter.cpu_saturation",
-			Name:               "CPU Saturation",
-			Description:        "Alert when CPU usage stays above 90 percent for five minutes.",
+			Name:               "High CPU",
+			Description:        "CPU at 90% or more for 5 minutes.",
 			Kind:               alerts.RuleKindMetricThreshold,
 			Severity:           alerts.SeverityHigh,
 			TargetScope:        alerts.TargetScopeAsset,
@@ -59,8 +59,8 @@ func (d *Deps) alertRuleTemplatesCatalog() []alertRuleTemplate {
 		},
 		{
 			ID:                 "starter.memory_pressure",
-			Name:               "Memory Pressure",
-			Description:        "Alert when memory usage stays above 90 percent for five minutes.",
+			Name:               "High memory",
+			Description:        "Memory at 90% or more for 5 minutes.",
 			Kind:               alerts.RuleKindMetricThreshold,
 			Severity:           alerts.SeverityHigh,
 			TargetScope:        alerts.TargetScopeAsset,
@@ -85,8 +85,8 @@ func (d *Deps) alertRuleTemplatesCatalog() []alertRuleTemplate {
 		},
 		{
 			ID:                 "starter.disk_nearly_full",
-			Name:               "Disk Nearly Full",
-			Description:        "Alert when disk usage reaches 90 percent on an asset.",
+			Name:               "Disk nearly full",
+			Description:        "A disk at 90% or more.",
 			Kind:               alerts.RuleKindMetricThreshold,
 			Severity:           alerts.SeverityCritical,
 			TargetScope:        alerts.TargetScopeAsset,
@@ -111,8 +111,8 @@ func (d *Deps) alertRuleTemplatesCatalog() []alertRuleTemplate {
 		},
 		{
 			ID:                 "starter.error_burst",
-			Name:               "Error Burst",
-			Description:        "Alert when repeated error-pattern log lines appear in a short window.",
+			Name:               "Error log lines",
+			Description:        "10 or more ERROR, FATAL or panic log lines in 5 minutes.",
 			Kind:               alerts.RuleKindLogPattern,
 			Severity:           alerts.SeverityMedium,
 			TargetScope:        alerts.TargetScopeGlobal,
@@ -135,8 +135,8 @@ func (d *Deps) alertRuleTemplatesCatalog() []alertRuleTemplate {
 		},
 		{
 			ID:                 "mobile.reconnect_storm",
-			Name:               "Mobile Reconnect Storm",
-			Description:        "High-frequency iOS realtime reconnect scheduling events in a short window.",
+			Name:               "Mobile app reconnects",
+			Description:        "25 or more reconnects from the mobile app in 5 minutes.",
 			Kind:               alerts.RuleKindLogPattern,
 			Severity:           alerts.SeverityHigh,
 			TargetScope:        alerts.TargetScopeGlobal,
@@ -163,8 +163,8 @@ func (d *Deps) alertRuleTemplatesCatalog() []alertRuleTemplate {
 		},
 		{
 			ID:                 "mobile.api_error_burst",
-			Name:               "Mobile API Error Burst",
-			Description:        "Burst of iOS API request telemetry events with error status.",
+			Name:               "Mobile app errors",
+			Description:        "20 or more failed requests from the mobile app in 5 minutes.",
 			Kind:               alerts.RuleKindLogPattern,
 			Severity:           alerts.SeverityCritical,
 			TargetScope:        alerts.TargetScopeGlobal,
@@ -192,8 +192,8 @@ func (d *Deps) alertRuleTemplatesCatalog() []alertRuleTemplate {
 		},
 		{
 			ID:                 "services.web.down_transition_burst",
-			Name:               "Service Down Transition Burst",
-			Description:        "Multiple discovered services transitioned to down state within a short window.",
+			Name:               "Services going down",
+			Description:        "3 or more services went down in 5 minutes.",
 			Kind:               alerts.RuleKindLogPattern,
 			Severity:           alerts.SeverityHigh,
 			TargetScope:        alerts.TargetScopeGlobal,
@@ -221,8 +221,8 @@ func (d *Deps) alertRuleTemplatesCatalog() []alertRuleTemplate {
 		},
 		{
 			ID:                 "services.web.uptime_drop",
-			Name:               "Service Uptime Drop",
-			Description:        "A discovered service crossed below the rolling uptime threshold.",
+			Name:               "Service uptime drop",
+			Description:        "A service's rolling uptime fell below " + strconv.FormatFloat(d.WebServiceUptimeDropThreshold, 'f', 0, 64) + "%.",
 			Kind:               alerts.RuleKindLogPattern,
 			Severity:           alerts.SeverityMedium,
 			TargetScope:        alerts.TargetScopeGlobal,

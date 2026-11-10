@@ -388,6 +388,7 @@ func (d *Deps) appendWakeAuditWithActor(eventType, actorID, target, decision, re
 	event := audit.NewEvent(eventType)
 	event.ActorID = strings.TrimSpace(actorID)
 	event.Target = strings.TrimSpace(target)
+	event.TargetName = d.assetName(event.Target)
 	event.Decision = decision
 	event.Reason = reason
 	event.Details = details

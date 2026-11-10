@@ -240,6 +240,7 @@
     "remove": {
       "title": "移除 {name}？",
       "body": "LabTether 将停止监控 {name} 并删除其历史记录。",
+      "addBack": "以后要重新添加，请在“添加设备”中使用新的一次性令牌。",
       "typeName": "输入 {name} 以确认",
       "cancel": "取消",
       "confirm": "移除",
@@ -647,7 +648,7 @@
       "hostPlaceholder": "设备地址",
       "port": "端口",
       "username": "用户名",
-      "credential": "凭据配置",
+      "credential": "已保存的登录凭据",
       "credentialHint": "留空则使用此设备的默认登录。",
       "strictHostKey": "检查主机密钥",
       "hostKey": "主机密钥",
