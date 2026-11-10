@@ -173,10 +173,11 @@ func TestHandleTrueNASConnectorTestSuccessAndFailure(t *testing.T) {
 		rec := httptest.NewRecorder()
 		sut.handleTrueNASConnectorTest(rec, req)
 
-		if rec.Code != http.StatusBadGateway {
-			t.Fatalf("expected 502, got %d body=%s", rec.Code, rec.Body.String())
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("expected 422, got %d body=%s", rec.Code, rec.Body.String())
 		}
-		assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
+		// A plain reason that names the product, never the generic 5xx text.
+		assertErrorBodyContains(t, rec.Body.Bytes(), "TrueNAS")
 	})
 
 	t.Run("upstream health failure redacts api key", func(t *testing.T) {
@@ -194,10 +195,11 @@ func TestHandleTrueNASConnectorTestSuccessAndFailure(t *testing.T) {
 		rec := httptest.NewRecorder()
 		sut.handleTrueNASConnectorTest(rec, req)
 
-		if rec.Code != http.StatusBadGateway {
-			t.Fatalf("expected 502, got %d body=%s", rec.Code, rec.Body.String())
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("expected 422, got %d body=%s", rec.Code, rec.Body.String())
 		}
-		assertErrorBodyContains(t, rec.Body.Bytes(), "An internal error occurred.")
+		// A plain reason that names the product, never the generic 5xx text.
+		assertErrorBodyContains(t, rec.Body.Bytes(), "TrueNAS")
 		if strings.Contains(rec.Body.String(), leakedSecret) {
 			t.Fatalf("expected response to redact leaked api key, got %s", rec.Body.String())
 		}

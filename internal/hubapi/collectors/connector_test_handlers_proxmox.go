@@ -109,7 +109,7 @@ func (d *Deps) HandleProxmoxConnectorTest(w http.ResponseWriter, r *http.Request
 
 	release, err := client.GetVersion(r.Context())
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, SanitizeConnectorError(err, tokenSecret, password))
+		writeConnectorTestFailure(w, "Proxmox", err.Error(), tokenSecret, password)
 		return
 	}
 

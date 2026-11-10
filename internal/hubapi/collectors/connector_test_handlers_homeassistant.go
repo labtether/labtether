@@ -69,7 +69,7 @@ func (d *Deps) HandleHomeAssistantConnectorTest(w http.ResponseWriter, r *http.R
 	})
 	health, _ := connector.TestConnection(r.Context())
 	if health.Status != "ok" {
-		servicehttp.WriteError(w, http.StatusBadGateway, SanitizeConnectorErrorMessage(strings.TrimSpace(health.Message), token))
+		writeConnectorTestFailure(w, "Home Assistant", health.Message, token)
 		return
 	}
 
