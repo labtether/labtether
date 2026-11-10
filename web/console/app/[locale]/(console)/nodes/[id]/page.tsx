@@ -6,7 +6,7 @@ import { useTranslations } from "next-intl";
 import { useRouter, Link } from "../../../../../i18n/navigation";
 import { DeviceIdentityBar } from "../../../../components/DeviceIdentityBar";
 import type { Asset } from "../../../../console/models";
-import { useFastStatus, useGroupLabelByID, useSlowStatus } from "../../../../contexts/StatusContext";
+import { useFastStatus, useGroupLabelByID, useSlowStatus, useStatusControls } from "../../../../contexts/StatusContext";
 import { useConnectedAgents } from "../../../../hooks/useConnectedAgents";
 import { ClusterTopologySection } from "./ClusterTopologySection";
 import { DockerStackOverviewTab } from "./DockerStackOverviewTab";
@@ -20,6 +20,7 @@ import { DeviceHeaderActions } from "./DeviceHeaderActions";
 import { DeviceContainerActions } from "./DeviceContainerActions";
 import { DeviceTabBar } from "./DeviceTabBar";
 import { DeviceDetails } from "./DeviceDetails";
+import { DeviceEditCard } from "./DeviceEditCard";
 import { DeviceUsage } from "./DeviceUsage";
 import { DeviceActivity, DeviceServicesList } from "./DeviceOverviewLists";
 import { DeviceLogsTab, DeviceOverviewLayout, DeviceSettingsTab, DeviceSystemTab } from "./DeviceTabShells";
@@ -36,6 +37,7 @@ export default function NodeDetailPage() {
   const nodeId = params.id as string;
   const status = useFastStatus();
   const slowStatus = useSlowStatus();
+  const { fetchStatus } = useStatusControls();
   const groupLabelByID = useGroupLabelByID();
   const { user } = useAuth();
   const t = useTranslations("devices.page");
@@ -201,6 +203,9 @@ export default function NodeDetailPage() {
   } else if (currentTab === "settings") {
     body = (
       <DeviceSettingsTab asset={asset}>
+        {asset.source === "manual" && canWrite ? (
+          <DeviceEditCard asset={asset} groups={slowStatus?.groups ?? []} onSaved={() => void fetchStatus()} />
+        ) : null}
         {has("agent-settings") ? panelAt("agent-settings") : null}
         {isProxmoxAsset && model.isInfra ? panelAt("settings") : null}
         {panelAt("connect")}

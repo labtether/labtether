@@ -231,6 +231,8 @@
       "title": "{name} bearbeiten",
       "name": "Name",
       "group": "Gruppe",
+      "tags": "Tags",
+      "tagsHint": "Tags mit Kommas trennen.",
       "cancel": "Abbrechen",
       "save": "Speichern",
       "nameRequired": "Geben Sie einen Namen ein",
@@ -496,6 +498,11 @@
     }
   },
   "settingsTab": {
+    "device": {
+      "title": "Gerät",
+      "saving": "Wird gespeichert …",
+      "saved": "Gespeichert."
+    },
     "name": {
       "title": "Name",
       "label": "Gerätename",

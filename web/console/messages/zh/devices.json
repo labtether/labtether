@@ -231,6 +231,8 @@
       "title": "编辑 {name}",
       "name": "名称",
       "group": "分组",
+      "tags": "标签",
+      "tagsHint": "用逗号分隔标签。",
       "cancel": "取消",
       "save": "保存",
       "nameRequired": "请输入名称",
@@ -496,6 +498,11 @@
     }
   },
   "settingsTab": {
+    "device": {
+      "title": "设备",
+      "saving": "正在保存…",
+      "saved": "已保存。"
+    },
     "name": {
       "title": "名称",
       "label": "设备名称",
