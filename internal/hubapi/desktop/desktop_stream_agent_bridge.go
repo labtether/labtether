@@ -144,7 +144,7 @@ func (d *Deps) HandleAgentDesktopStream(w http.ResponseWriter, r *http.Request, 
 
 	if !d.publishDesktopStream(r.Context(), bridgeState) {
 		log.Printf("desktop-agent: stream_setup_failed reason=agent_disconnected_before_publish %s", logContext) // #nosec G706 -- Log context is composed from bounded session/runtime identifiers.
-		SafeWriteClose(wsConn, websocket.CloseTryAgainLater, "agent disconnected while opening desktop")
+		SafeWriteClose(wsConn, websocket.CloseTryAgainLater, remoteViewAgentWentAway)
 		return
 	}
 	startSent := false
@@ -209,7 +209,7 @@ func (d *Deps) HandleAgentDesktopStream(w http.ResponseWriter, r *http.Request, 
 		endReason = "agent_start_send_failed"
 		endErr = err
 		log.Printf("desktop-agent: stream_setup_failed reason=agent_start_send_failed %s err=%v", logContext, err) // #nosec G706 -- Log fields are bounded session/runtime identifiers and local bridge errors.
-		SafeWriteClose(wsConn, websocket.CloseTryAgainLater, "failed to start desktop on agent")
+		SafeWriteClose(wsConn, websocket.CloseTryAgainLater, remoteViewStartNotSent)
 		return
 	}
 	startSent = true
@@ -235,18 +235,19 @@ func (d *Deps) HandleAgentDesktopStream(w http.ResponseWriter, r *http.Request, 
 		endReason = "session_request_cancelled"
 		return
 	case <-closedCh:
-		reason := strings.TrimSpace(bridgeState.CloseReason())
+		agentReason := strings.TrimSpace(bridgeState.CloseReason())
+		reason := agentReason
 		if reason == "" {
 			reason = "agent_closed_before_ready"
 		}
 		endReason = "agent_closed_before_ready_" + d.SanitizeAgentStreamReason(reason)
 		log.Printf("desktop-agent: stream_setup_failed reason=%s %s", endReason, logContext) // #nosec G706 -- Reason and context are bounded runtime values.
-		SafeWriteClose(wsConn, websocket.CloseTryAgainLater, "agent desktop session closed unexpectedly")
+		SafeWriteClose(wsConn, websocket.CloseTryAgainLater, desktopClosedBeforeReady(agentReason, d.AgentMgr.IsConnected(session.Target)))
 		return
 	case <-time.After(15 * time.Second):
 		endReason = "agent_start_timeout"
 		log.Printf("desktop-agent: stream_setup_failed reason=agent_start_timeout %s", logContext) // #nosec G706 -- Log context is composed from bounded session/runtime identifiers.
-		SafeWriteClose(wsConn, websocket.CloseTryAgainLater, "agent desktop start timed out")
+		SafeWriteClose(wsConn, websocket.CloseTryAgainLater, remoteViewStartTimedOut)
 		return
 	case data := <-outputCh:
 		if data != nil {
