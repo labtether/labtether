@@ -49,6 +49,53 @@ func agentFileErrorAnswer(missing, path, agentError string) (int, string) {
 	return http.StatusBadRequest, agentError
 }
 
+// writeAgentFileMoveError answers a rename or copy the agent refused. A name
+// clash is about the destination; every other error is about the source.
+func writeAgentFileMoveError(w http.ResponseWriter, srcPath, dstPath, agentError string) {
+	status, message := agentFileMoveErrorAnswer(srcPath, dstPath, agentError)
+	servicehttp.WriteError(w, status, message)
+}
+
+func agentFileMoveErrorAnswer(srcPath, dstPath, agentError string) (int, string) {
+	// "destination already exists" is the agent's own check; the other two are
+	// the Linux and Windows words for a name taken after that check.
+	if containsAny(strings.ToLower(agentError), "destination already exists", "file exists", "file already exists") {
+		return http.StatusConflict, nameTakenText(dstPath)
+	}
+	return agentFileErrorAnswer(missingFile, srcPath, agentError)
+}
+
+// nameTakenText names the entry and its folder, as in
+// `"two.txt" already exists in /srv/docs. Choose another name.`
+func nameTakenText(path string) string {
+	folder, name := splitAgentPath(path)
+	if folder == "" {
+		return `"` + name + `" already exists. Choose another name.`
+	}
+	return `"` + name + `" already exists in ` + folder + ". Choose another name."
+}
+
+// splitAgentPath splits a path from any agent OS into its folder and last
+// name. A backslash separates names unless the path starts with "/", where it
+// can be part of a name.
+func splitAgentPath(path string) (folder, name string) {
+	separators := `/\`
+	if strings.HasPrefix(path, "/") {
+		separators = "/"
+	}
+	trimmed := strings.TrimRight(path, separators)
+	i := strings.LastIndexAny(trimmed, separators)
+	switch {
+	case trimmed == "":
+		return "", path
+	case i < 0:
+		return "", trimmed
+	case i == 0 || trimmed[i-1] == ':':
+		return trimmed[:i+1], trimmed[i+1:]
+	}
+	return trimmed[:i], trimmed[i+1:]
+}
+
 func containsAny(text string, parts ...string) bool {
 	for _, part := range parts {
 		if strings.Contains(text, part) {

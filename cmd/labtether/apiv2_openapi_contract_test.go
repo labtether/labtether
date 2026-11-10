@@ -232,3 +232,52 @@ func TestHandleV2OpenAPI_MethodNotAllowed(t *testing.T) {
 		t.Fatalf("expected 405, got %d", rec.Code)
 	}
 }
+
+// These GET routes answer 400 without a query parameter, and the spec listed
+// none, so a reader or generated client could not call them. Each route must
+// declare the parameters its handler insists on. A name ending in "?" has an
+// alternative on the same route: it must be declared but not marked required.
+func TestV2OpenAPIDeclaresQueryParametersHandlersInsistOn(t *testing.T) {
+	var doc struct {
+		Paths map[string]struct {
+			Get struct {
+				Parameters []struct {
+					Name     string `json:"name"`
+					In       string `json:"in"`
+					Required bool   `json:"required"`
+				} `json:"parameters"`
+			} `json:"get"`
+		} `json:"paths"`
+	}
+	if err := json.Unmarshal([]byte(v2OpenAPISpec), &doc); err != nil {
+		t.Fatalf("openapi spec is not valid JSON: %v", err)
+	}
+
+	for path, names := range map[string][]string{
+		"/api/v2/dependencies":       {"asset_id"},
+		"/api/v2/dependencies/batch": {"asset_ids?", "asset_id?"},
+		"/api/v2/dependencies/graph": {"root"},
+		"/api/v2/edges":              {"asset_id?", "asset_ids?"},
+		"/api/v2/edges/ancestors":    {"id"},
+		"/api/v2/edges/tree":         {"root"},
+		"/api/v2/metrics/query":      {"asset_ids", "metric"},
+		"/api/v2/search":             {"q"},
+	} {
+		declared := map[string]bool{}
+		for _, param := range doc.Paths[path].Get.Parameters {
+			if param.In == "query" {
+				declared[param.Name] = param.Required
+			}
+		}
+		for _, name := range names {
+			wantRequired := !strings.HasSuffix(name, "?")
+			name = strings.TrimSuffix(name, "?")
+			required, ok := declared[name]
+			if !ok {
+				t.Errorf("GET %s does not declare query parameter %q", path, name)
+			} else if required != wantRequired {
+				t.Errorf("GET %s query parameter %q required = %v, want %v", path, name, required, wantRequired)
+			}
+		}
+	}
+}

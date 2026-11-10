@@ -187,7 +187,7 @@ func (d *Deps) HandleFileRename(w http.ResponseWriter, r *http.Request, assetID 
 			return
 		}
 		if result.Error != "" {
-			writeAgentFileError(w, missingFile, oldPath, result.Error)
+			writeAgentFileMoveError(w, oldPath, newPath, result.Error)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, result)
@@ -251,7 +251,7 @@ func (d *Deps) HandleFileCopy(w http.ResponseWriter, r *http.Request, assetID st
 			return
 		}
 		if result.Error != "" {
-			writeAgentFileError(w, missingFile, srcPath, result.Error)
+			writeAgentFileMoveError(w, srcPath, dstPath, result.Error)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, result)
