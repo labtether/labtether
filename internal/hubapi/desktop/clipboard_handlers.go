@@ -47,7 +47,7 @@ func (d *Deps) HandleClipboardRoutes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if d.AgentMgr == nil || !d.AgentMgr.IsConnected(assetID) {
-		servicehttp.WriteError(w, http.StatusBadGateway, "agent not connected")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 
@@ -65,7 +65,7 @@ func (d *Deps) HandleClipboardRoutes(w http.ResponseWriter, r *http.Request) {
 func (d *Deps) handleClipboardGet(w http.ResponseWriter, r *http.Request, assetID string) {
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {
-		servicehttp.WriteError(w, http.StatusBadGateway, "agent disconnected")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 
@@ -101,7 +101,7 @@ func (d *Deps) handleClipboardGet(w http.ResponseWriter, r *http.Request, assetI
 		ID:   requestID,
 		Data: data,
 	}); err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to send request to agent")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 
@@ -131,7 +131,7 @@ func (d *Deps) handleClipboardSet(w http.ResponseWriter, r *http.Request, assetI
 	}
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {
-		servicehttp.WriteError(w, http.StatusBadGateway, "agent disconnected")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 
@@ -157,7 +157,7 @@ func (d *Deps) handleClipboardSet(w http.ResponseWriter, r *http.Request, assetI
 		ID:   requestID,
 		Data: data,
 	}); err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to send request to agent")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 
