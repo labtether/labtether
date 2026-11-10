@@ -215,6 +215,9 @@ func (d *Deps) V2CreateSchedule(w http.ResponseWriter, r *http.Request) {
 		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to create schedule")
 		return
 	}
+	d.auditSchedule(r, scheduleCreatedAuditType, task, map[string]any{
+		"cron_expr": task.CronExpr, "target_count": len(task.Targets), "group_id": task.GroupID, "enabled": task.Enabled,
+	})
 
 	apiv2.WriteJSON(w, http.StatusCreated, task)
 }
@@ -401,6 +404,14 @@ func (d *Deps) V2UpdateSchedule(w http.ResponseWriter, r *http.Request, id strin
 		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to update schedule")
 		return
 	}
+	// The change is stored: record it now, under the name it has from here on.
+	if req.Name != nil {
+		prospective.Name = *req.Name
+	}
+	d.auditSchedule(r, scheduleUpdatedAuditType, prospective, map[string]any{
+		"name_changed": req.Name != nil, "cron_changed": req.CronExpr != nil, "command_changed": req.Command != nil,
+		"targets_changed": req.Targets != nil || req.GroupID != nil, "enabled": prospective.Enabled,
+	})
 
 	task, ok, err := d.ScheduleStore.GetScheduledTask(r.Context(), id)
 	if err != nil {
@@ -440,6 +451,8 @@ func (d *Deps) V2DeleteSchedule(w http.ResponseWriter, r *http.Request, id strin
 		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to delete schedule")
 		return
 	}
+	// task was read before the delete, so the row keeps the schedule's name.
+	d.auditSchedule(r, scheduleDeletedAuditType, task, nil)
 	apiv2.WriteJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 

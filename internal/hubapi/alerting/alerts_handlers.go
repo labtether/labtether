@@ -97,6 +97,7 @@ func (d *Deps) HandleAlertRules(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create alert rule")
 			return
 		}
+		d.auditAlertRule(r, alertRuleCreatedAuditType, rule, alertRuleAuditDetails(rule))
 		servicehttp.WriteJSON(w, http.StatusCreated, map[string]any{"rule": rule})
 	default:
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -200,6 +201,7 @@ func (d *Deps) HandleAlertRuleActions(w http.ResponseWriter, r *http.Request) {
 				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update alert rule")
 				return
 			}
+			d.auditAlertRule(r, alertRuleUpdatedAuditType, updated, alertRuleAuditDetails(updated))
 			if updated.Status == alerts.RuleStatusPaused && existingRule.Status != alerts.RuleStatusPaused {
 				// The evaluator skips paused rules, so nothing else would ever
 				// close the alerts this rule still has open.
@@ -228,6 +230,8 @@ func (d *Deps) HandleAlertRuleActions(w http.ResponseWriter, r *http.Request) {
 				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete alert rule")
 				return
 			}
+			// rule was read before the delete, so the row keeps its name.
+			d.auditAlertRule(r, alertRuleDeletedAuditType, rule, nil)
 			d.tellAgentsAlertsEnded(rule, endedForAgents)
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "rule_id": ruleID})
 		default:
