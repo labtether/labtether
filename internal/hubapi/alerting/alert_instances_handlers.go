@@ -220,6 +220,8 @@ func (d *Deps) HandleAlertInstanceActions(w http.ResponseWriter, r *http.Request
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to resolve alert instance")
 			return
 		}
+		// The agents that show this alert must see it end too.
+		d.tellAgentsAlertResolved(updated)
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"instance": updated})
 		return
 	}

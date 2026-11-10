@@ -43,3 +43,18 @@ func (d *Deps) tellAgentsAlertsEnded(rule alerts.Rule, ids []string) {
 		d.pushAlertResolvedToAgents(ctx, rule, id)
 	}
 }
+
+// tellAgentsAlertResolved sends "resolved" for an alert someone resolved by
+// hand. The evaluator did not end it, so nothing told the agents, and the
+// tray kept showing it as firing. If the rule is still breached the
+// evaluator opens a new alert, which the breaching devices are told about.
+func (d *Deps) tellAgentsAlertResolved(inst alerts.AlertInstance) {
+	if d.AgentMgr == nil || d.AlertStore == nil {
+		return
+	}
+	rule, ok, err := d.AlertStore.GetAlertRule(inst.RuleID)
+	if err != nil || !ok {
+		return
+	}
+	d.tellAgentsAlertsEnded(rule, []string{inst.ID})
+}
