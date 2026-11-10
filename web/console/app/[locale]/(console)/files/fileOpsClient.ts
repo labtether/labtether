@@ -11,6 +11,7 @@ import {
   copyConnectionFile,
   type ConnectionFileEntry,
 } from "./fileConnectionsClient";
+import { joinPath } from "./remotePaths";
 import type { FileSource } from "./useFileTabsState";
 
 export type FileEntry = {
@@ -39,11 +40,10 @@ export interface UnifiedFileEntry {
 // Mappers
 // ---------------------------------------------------------------------------
 
-function agentEntryToUnified(entry: FileEntry, parentPath: string): UnifiedFileEntry {
-  const path = parentPath === "/" ? `/${entry.name}` : `${parentPath}/${entry.name}`;
+function agentEntryToUnified(entry: FileEntry, folderPath: string): UnifiedFileEntry {
   return {
     name: entry.name,
-    path,
+    path: joinPath(folderPath, entry.name),
     is_dir: entry.is_dir,
     size: entry.size,
     mod_time: entry.mod_time,

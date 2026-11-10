@@ -1,20 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clickSelection, connectionAddress, formatModified, menuActions, pathCrumbs } from "../filesListModel";
-
-// Crumbs decide which folder a click opens; a wrong path lists the wrong folder or leaves the home tree.
-describe("pathCrumbs", () => {
-  it("splits POSIX, home and Windows paths into openable folders", () => {
-    expect(pathCrumbs("/var/lib/vz")).toEqual([
-      { label: "/", path: "/" },
-      { label: "var", path: "/var" },
-      { label: "lib", path: "/var/lib" },
-      { label: "vz", path: "/var/lib/vz" },
-    ]);
-    expect(pathCrumbs("~/docs/")).toEqual([{ label: "~", path: "~" }, { label: "docs", path: "~/docs" }]);
-    expect(pathCrumbs("C:\\Users\\demo").map((c) => c.path)).toEqual(["C:\\", "C:\\Users", "C:\\Users\\demo"]);
-    expect(pathCrumbs("")).toEqual([{ label: "~", path: "~" }]);
-  });
-});
+import { clickSelection, connectionAddress, formatModified, menuActions } from "../filesListModel";
 
 describe("formatModified", () => {
   const now = new Date(2026, 9, 27, 22, 41);

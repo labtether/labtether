@@ -13,7 +13,7 @@ import {
   unifiedCopyFilePath,
   type UnifiedFileEntry,
 } from "./fileOpsClient";
-import { joinPath, parentPath } from "./fileWorkspaceUtils";
+import { joinPath, parentPath } from "./remotePaths";
 
 // Re-export for consumers
 export type { UnifiedFileEntry };

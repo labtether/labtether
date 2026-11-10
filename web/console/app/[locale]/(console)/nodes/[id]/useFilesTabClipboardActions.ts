@@ -6,7 +6,7 @@ import {
   applyWorkspaceClipboard,
   buildWorkspaceClipboardItems,
 } from "../../files/fileWorkspaceClipboard";
-import { joinPath } from "../../files/fileWorkspaceUtils";
+import { joinPath } from "../../files/remotePaths";
 import type {
   WorkspaceClipboard,
   WorkspaceClipboardItem,

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type
 import { useTranslations } from "next-intl";
 import type { FileEntry } from "./fileOpsClient";
 import { applyWorkspaceClipboard, buildWorkspaceClipboardItems } from "./fileWorkspaceClipboard";
-import { joinPath } from "./fileWorkspaceUtils";
+import { joinPath } from "./remotePaths";
 import { filterEntries, menuActions } from "./filesListModel";
 import { toMenuItems, useMenuLabels, type MenuItemSpec } from "./FileMenus";
 import { useFileTabsState, sourceFromKey } from "./useFileTabsState";

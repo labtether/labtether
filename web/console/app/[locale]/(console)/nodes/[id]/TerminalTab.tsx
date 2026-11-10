@@ -24,20 +24,7 @@ import { useTerminalPreferences } from "../../../../hooks/useTerminalPreferences
 import { useTerminalSnippets } from "../../../../hooks/useTerminalSnippets";
 import { getFontById } from "../../../../terminal/fonts";
 import { copyText } from "../../../../lib/clipboard";
-
-/** The package manager command that installs tmux on the device's OS. */
-function tmuxInstallCommand(asset: { metadata?: Record<string, string> } | null): string {
-  const osId = (asset?.metadata?.os_id ?? "").toLowerCase();
-  const like = (asset?.metadata?.os_id_like ?? "").toLowerCase();
-  const name = (asset?.metadata?.os_pretty_name ?? asset?.metadata?.os_name ?? "").toLowerCase();
-  if (["fedora", "rhel", "centos", "rocky", "alma"].includes(osId) || like.includes("fedora") || like.includes("rhel")) return "sudo dnf install -y tmux";
-  if (["arch", "manjaro"].includes(osId) || like.includes("arch")) return "sudo pacman -S --noconfirm tmux";
-  if (["opensuse", "sles"].includes(osId) || like.includes("suse")) return "sudo zypper install -y tmux";
-  if (osId === "alpine") return "sudo apk add tmux";
-  if (osId === "freebsd") return "sudo pkg install -y tmux";
-  if (name.includes("macos") || name.includes("darwin")) return "brew install tmux";
-  return "sudo apt install -y tmux";
-}
+import { tmuxInstallCommand } from "./tmuxInstallCommand";
 
 const DOCKER_SHELL_PRESET_KEY_PREFIX = "labtether.docker-terminal.shell-preset.";
 const DOCKER_SHELL_CUSTOM_KEY_PREFIX = "labtether.docker-terminal.shell-custom.";
@@ -119,12 +106,13 @@ export function TerminalTab({ nodeId }: { nodeId: string }) {
   }, []);
 
   const name = asset?.name || nodeId;
-  const showTmuxHint = agentTmuxStatus.get(nodeId) === false && !tmuxHintDismissed && !isDockerContainer;
+  // The note is there for its install command; a device with none to run (Windows) gets no note.
   const installCmd = tmuxInstallCommand(asset);
+  const showTmuxHint = installCmd !== null && agentTmuxStatus.get(nodeId) === false && !tmuxHintDismissed && !isDockerContainer;
 
   return (
     <div className="tm-devtab">
-      {showTmuxHint ? (
+      {showTmuxHint && installCmd ? (
         <div className="tm-note">
           <span>{t("noTmux", { name })}</span>
           <code>{installCmd}</code>
