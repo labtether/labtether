@@ -41,6 +41,7 @@ func (s *apiServer) buildAlertingDeps() *alertingpkg.Deps {
 		ActionStore:        s.actionStore,
 		UpdateStore:        s.updateStore,
 		AuditStore:         s.auditStore,
+		AgentAlertDevices:  s.ensureAgentAlertDevices(),
 
 		NotificationAdapters: s.notificationDispatcher.Adapters,
 		NotificationSem:      s.notificationDispatcher.DispatchSem,
@@ -144,6 +145,18 @@ func (s *apiServer) resolveSyntheticServiceAsset(ctx context.Context, serviceID 
 //
 // Like ensureProxmoxDeps, this pattern does NOT have the race-on-lazy-init
 // fixed in ensureCollectorsDeps, because neither branch mutates shared state.
+// ensureAgentAlertDevices returns the one memory of which agents were told
+// an alert is firing. buildAlertingDeps runs on every use, so the memory
+// lives on the server, not in a Deps value.
+func (s *apiServer) ensureAgentAlertDevices() *alertingpkg.AgentAlertDevices {
+	s.agentAlertDevicesOnce.Do(func() {
+		if s.agentAlertDevices == nil {
+			s.agentAlertDevices = alertingpkg.NewAgentAlertDevices()
+		}
+	})
+	return s.agentAlertDevices
+}
+
 func (s *apiServer) ensureAlertingDeps() *alertingpkg.Deps {
 	if s.alertingDeps != nil {
 		return s.alertingDeps

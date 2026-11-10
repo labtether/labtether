@@ -176,6 +176,8 @@ type apiServer struct {
 	authDepsOnce                  sync.Once
 	authDeps                      *authpkg.Deps
 	alertingDeps                  *alertingpkg.Deps
+	agentAlertDevices             *alertingpkg.AgentAlertDevices
+	agentAlertDevicesOnce         sync.Once
 	dockerDepsOnce                sync.Once
 	dockerDeps                    *dockerpkg.Deps
 	operationsDepsOnce            sync.Once

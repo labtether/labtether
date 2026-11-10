@@ -31,8 +31,8 @@ func (d *Deps) agentAlertIDsForRule(ruleID string) []string {
 
 // tellAgentsAlertsEnded sends "resolved" for alerts that ended without the
 // evaluator. Deleting a rule deletes its alerts, and the agent (the Mac and
-// Windows tray) kept showing them as firing until it restarted. Same targets
-// as the "firing" message the evaluator sent.
+// Windows tray) kept showing them as firing until it restarted. The devices
+// told "firing" get it.
 func (d *Deps) tellAgentsAlertsEnded(rule alerts.Rule, ids []string) {
 	if len(ids) == 0 || d.AgentMgr == nil {
 		return
@@ -40,6 +40,6 @@ func (d *Deps) tellAgentsAlertsEnded(rule alerts.Rule, ids []string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	for _, id := range ids {
-		d.pushAlertNotifyToAgents(ctx, rule, id, "resolved")
+		d.pushAlertResolvedToAgents(ctx, rule, id)
 	}
 }
