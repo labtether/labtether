@@ -2,7 +2,6 @@ package proxmox
 
 import (
 	"context"
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strings"
 	"time"
@@ -46,7 +45,7 @@ func (d *Deps) handleProxmoxNodeUpdates(w http.ResponseWriter, r *http.Request) 
 	case r.Method == http.MethodGet && subAction == "":
 		updates, listErr := runtime.client.ListUpdates(ctx, node)
 		if listErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to list updates: "+shared.SanitizeUpstreamError(listErr.Error()))
+			writeProxmoxUpstreamError(w, "failed to list updates: ", listErr)
 			return
 		}
 		if updates == nil {
@@ -60,7 +59,7 @@ func (d *Deps) handleProxmoxNodeUpdates(w http.ResponseWriter, r *http.Request) 
 		}
 		upid, refreshErr := runtime.client.RefreshUpdates(ctx, node)
 		if refreshErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to refresh updates: "+shared.SanitizeUpstreamError(refreshErr.Error()))
+			writeProxmoxUpstreamError(w, "failed to refresh updates: ", refreshErr)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]string{

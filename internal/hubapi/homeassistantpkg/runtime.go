@@ -63,18 +63,18 @@ func (d *Deps) loadRuntimeForCollector(selected *hubcollector.Collector) (*runti
 	baseURL := shared.CollectorConfigString(selected.Config, "base_url")
 	credentialID := shared.CollectorConfigString(selected.Config, "credential_id")
 	if baseURL == "" || credentialID == "" {
-		return nil, fmt.Errorf("home assistant collector config is incomplete")
+		return nil, fmt.Errorf("%w: home assistant collector config is incomplete", shared.ErrCollectorIncomplete)
 	}
 	credential, ok, err := d.CredentialStore.GetCredentialProfile(credentialID)
 	if err != nil || !ok {
-		return nil, fmt.Errorf("home assistant credential profile not found")
+		return nil, fmt.Errorf("%w: home assistant credential profile not found", shared.ErrCollectorLoginMissing)
 	}
 	if credential.Kind != credentials.KindHomeAssistantToken {
-		return nil, fmt.Errorf("home assistant collector credential kind is invalid")
+		return nil, fmt.Errorf("%w: home assistant collector credential kind is invalid", shared.ErrCollectorLoginMissing)
 	}
 	token, err := d.SecretsManager.DecryptString(credential.SecretCiphertext, credential.ID)
 	if err != nil || strings.TrimSpace(token) == "" {
-		return nil, fmt.Errorf("failed to decrypt home assistant credential")
+		return nil, fmt.Errorf("%w: failed to decrypt home assistant credential", shared.ErrCollectorLoginMissing)
 	}
 	skipVerify, hasSkipVerify := shared.CollectorConfigBool(selected.Config, "skip_verify")
 	if !hasSkipVerify {

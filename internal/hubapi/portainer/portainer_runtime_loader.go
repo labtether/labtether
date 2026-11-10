@@ -27,7 +27,7 @@ func (d *Deps) LoadPortainerRuntime(collectorID string) (*PortainerRuntime, erro
 	baseURL := shared.CollectorConfigString(selected.Config, "base_url")
 	credentialID := shared.CollectorConfigString(selected.Config, "credential_id")
 	if baseURL == "" || credentialID == "" {
-		return nil, fmt.Errorf("portainer collector config is incomplete")
+		return nil, fmt.Errorf("%w: portainer collector config is incomplete", shared.ErrCollectorIncomplete)
 	}
 
 	authMethod := strings.ToLower(strings.TrimSpace(shared.CollectorConfigString(selected.Config, "auth_method")))
@@ -37,12 +37,12 @@ func (d *Deps) LoadPortainerRuntime(collectorID string) (*PortainerRuntime, erro
 
 	credential, ok, err := d.CredentialStore.GetCredentialProfile(credentialID)
 	if err != nil || !ok {
-		return nil, fmt.Errorf("portainer credential profile not found")
+		return nil, fmt.Errorf("%w: portainer credential profile not found", shared.ErrCollectorLoginMissing)
 	}
 
 	decryptedSecret, err := d.SecretsManager.DecryptString(credential.SecretCiphertext, credential.ID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decrypt portainer credential")
+		return nil, fmt.Errorf("%w: failed to decrypt portainer credential", shared.ErrCollectorLoginMissing)
 	}
 
 	skipVerify, hasSkip := shared.CollectorConfigBool(selected.Config, "skip_verify")

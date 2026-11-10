@@ -119,7 +119,9 @@ func (d *Deps) handleProcessList(w http.ResponseWriter, r *http.Request, assetID
 			return
 		}
 		if listed.Error != "" {
-			servicehttp.WriteError(w, http.StatusBadRequest, listed.Error)
+			if !writeMissingCommand(w, listed.Error, "processes can't be listed") {
+				servicehttp.WriteError(w, http.StatusBadRequest, listed.Error)
+			}
 			return
 		}
 		if listed.Processes == nil {

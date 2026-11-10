@@ -27,17 +27,17 @@ func (d *Deps) LoadPBSRuntime(collectorID string) (*PBSRuntime, error) {
 	baseURL := shared.CollectorConfigString(selected.Config, "base_url")
 	credentialID := shared.CollectorConfigString(selected.Config, "credential_id")
 	if baseURL == "" || credentialID == "" {
-		return nil, fmt.Errorf("pbs collector config is incomplete")
+		return nil, fmt.Errorf("%w: pbs collector config is incomplete", shared.ErrCollectorIncomplete)
 	}
 
 	credential, ok, err := d.CredentialStore.GetCredentialProfile(credentialID)
 	if err != nil || !ok {
-		return nil, fmt.Errorf("pbs credential profile not found")
+		return nil, fmt.Errorf("%w: pbs credential profile not found", shared.ErrCollectorLoginMissing)
 	}
 
 	decryptedSecret, err := d.SecretsManager.DecryptString(credential.SecretCiphertext, credential.ID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decrypt pbs credential")
+		return nil, fmt.Errorf("%w: failed to decrypt pbs credential", shared.ErrCollectorLoginMissing)
 	}
 
 	tokenID := shared.CollectorConfigString(selected.Config, "token_id")
@@ -48,7 +48,7 @@ func (d *Deps) LoadPBSRuntime(collectorID string) (*PBSRuntime, error) {
 		tokenID = strings.TrimSpace(credential.Metadata["token_id"])
 	}
 	if tokenID == "" {
-		return nil, fmt.Errorf("pbs token_id missing in collector config")
+		return nil, fmt.Errorf("%w: pbs token_id missing in collector config", shared.ErrCollectorLoginMissing)
 	}
 
 	skipVerify, hasSkip := shared.CollectorConfigBool(selected.Config, "skip_verify")

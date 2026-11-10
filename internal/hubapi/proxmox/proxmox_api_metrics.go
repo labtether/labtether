@@ -2,7 +2,6 @@ package proxmox
 
 import (
 	"context"
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strings"
 	"time"
@@ -32,11 +31,11 @@ func (d *Deps) handleProxmoxAssetMetrics(w http.ResponseWriter, r *http.Request)
 
 	target, ok, err := d.ResolveProxmoxSessionTarget(assetID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to resolve proxmox asset: "+shared.SanitizeUpstreamError(err.Error()))
+		writeProxmoxUpstreamError(w, "failed to resolve proxmox asset: ", err)
 		return
 	}
 	if !ok {
-		servicehttp.WriteError(w, http.StatusNotFound, "asset is not proxmox-backed")
+		d.writeNotProxmoxDevice(w, assetID)
 		return
 	}
 
@@ -55,7 +54,7 @@ func (d *Deps) handleProxmoxAssetMetrics(w http.ResponseWriter, r *http.Request)
 	case "node":
 		points, rrdErr := runtime.client.GetNodeRRDData(ctx, target.Node, timeframe)
 		if rrdErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to fetch node rrd data: "+shared.SanitizeUpstreamError(rrdErr.Error()))
+			writeProxmoxUpstreamError(w, "failed to fetch node rrd data: ", rrdErr)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
@@ -68,7 +67,7 @@ func (d *Deps) handleProxmoxAssetMetrics(w http.ResponseWriter, r *http.Request)
 	case "qemu":
 		points, rrdErr := runtime.client.GetQemuRRDData(ctx, target.Node, target.VMID, timeframe)
 		if rrdErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to fetch qemu rrd data: "+shared.SanitizeUpstreamError(rrdErr.Error()))
+			writeProxmoxUpstreamError(w, "failed to fetch qemu rrd data: ", rrdErr)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
@@ -82,7 +81,7 @@ func (d *Deps) handleProxmoxAssetMetrics(w http.ResponseWriter, r *http.Request)
 	case "lxc":
 		points, rrdErr := runtime.client.GetLXCRRDData(ctx, target.Node, target.VMID, timeframe)
 		if rrdErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to fetch lxc rrd data: "+shared.SanitizeUpstreamError(rrdErr.Error()))
+			writeProxmoxUpstreamError(w, "failed to fetch lxc rrd data: ", rrdErr)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{

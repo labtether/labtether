@@ -68,7 +68,7 @@ func (d *Deps) handleDisplayList(w http.ResponseWriter, r *http.Request, assetID
 		return
 	}
 	if d.AgentMgr == nil || !d.AgentMgr.IsConnected(assetID) {
-		servicehttp.WriteError(w, http.StatusServiceUnavailable, "agent not connected")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 
@@ -86,7 +86,7 @@ func (d *Deps) handleDisplayList(w http.ResponseWriter, r *http.Request, assetID
 		ID:   requestID,
 		Data: payload,
 	}); err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to request displays from agent")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 

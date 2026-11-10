@@ -12,6 +12,11 @@ import (
 // stable, non-sensitive description to API clients.
 func writePBSError(w http.ResponseWriter, status int, clientMessage string, err error) {
 	securityruntime.Logf("pbs: %s: %v", clientMessage, err)
+	// A system that cannot be reached, or refuses the saved login, is said in
+	// fixed words; every other 5xx text stays hidden.
+	if status == http.StatusBadGateway && shared.WriteUpstreamUnreachable(w, err, "Proxmox Backup Server") {
+		return
+	}
 	servicehttp.WriteError(w, status, clientMessage)
 }
 
@@ -19,6 +24,10 @@ func writePBSError(w http.ResponseWriter, status int, clientMessage string, err 
 // stale-cache responses that include a warnings array.
 func pbsWarning(clientMessage string, err error) string {
 	securityruntime.Logf("pbs: %s: %v", clientMessage, err)
+	// A listing that could not load says why when the system was unreachable.
+	if shared.UpstreamUnreachable(err) {
+		return shared.UnreachableMessage("Proxmox Backup Server")
+	}
 	return clientMessage
 }
 

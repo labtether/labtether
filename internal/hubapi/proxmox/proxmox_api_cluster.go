@@ -2,7 +2,6 @@ package proxmox
 
 import (
 	"context"
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strings"
 	"time"
@@ -33,7 +32,7 @@ func (d *Deps) HandleProxmoxClusterResources(w http.ResponseWriter, r *http.Requ
 
 	resources, err := runtime.client.GetClusterResources(ctx)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to fetch cluster resources: "+shared.SanitizeUpstreamError(err.Error()))
+		writeProxmoxUpstreamError(w, "failed to fetch cluster resources: ", err)
 		return
 	}
 

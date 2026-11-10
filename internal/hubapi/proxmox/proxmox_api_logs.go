@@ -2,7 +2,6 @@ package proxmox
 
 import (
 	"context"
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strconv"
 	"strings"
@@ -50,7 +49,7 @@ func (d *Deps) handleProxmoxNodeSyslog(w http.ResponseWriter, r *http.Request) {
 
 	lines, err := runtime.client.GetNodeSyslog(ctx, node, limit, since)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to fetch syslog: "+shared.SanitizeUpstreamError(err.Error()))
+		writeProxmoxUpstreamError(w, "failed to fetch syslog: ", err)
 		return
 	}
 	if lines == nil {

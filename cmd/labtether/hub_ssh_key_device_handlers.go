@@ -129,7 +129,7 @@ func (s *apiServer) handleV2AssetHubSSHKey(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if !ok {
-		apiv2.WriteError(w, http.StatusNotFound, "asset_not_found", "no asset with id: "+assetID)
+		apiv2.WriteError(w, http.StatusNotFound, "asset_not_found", "device not found")
 		return
 	}
 	apiv2.WrapV1Handler(func(w http.ResponseWriter, r *http.Request) {

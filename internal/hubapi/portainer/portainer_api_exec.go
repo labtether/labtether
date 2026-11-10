@@ -76,7 +76,7 @@ func (d *Deps) HandlePortainerContainerExec(w http.ResponseWriter, r *http.Reque
 	cancel()
 	if err != nil {
 		securityruntime.Logf("portainer-exec: create exec failed: %v", err)
-		servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+		writePortainerUpstreamError(w, err)
 		return
 	}
 	securityruntime.Logf("portainer-exec: exec instance created exec_id=%.16s", execID)
@@ -86,14 +86,14 @@ func (d *Deps) HandlePortainerContainerExec(w http.ResponseWriter, r *http.Reque
 	cancel2()
 	if wsErr != nil {
 		securityruntime.Logf("portainer-exec: get ws url failed: %v", wsErr)
-		servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(wsErr.Error()))
+		writePortainerUpstreamError(w, wsErr)
 		return
 	}
 
 	portainerConn, err := dialPortainerExecSocket(wsURL, wsToken, runtime.SkipVerify)
 	if err != nil {
 		securityruntime.Logf("portainer-exec: dial portainer ws failed: %v", err)
-		servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+		writePortainerUpstreamError(w, err)
 		return
 	}
 	shared.LimitUpstreamTerminalMessages(portainerConn)

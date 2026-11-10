@@ -42,7 +42,7 @@ func (d *Deps) HandleDesktopAudioStream(w http.ResponseWriter, r *http.Request, 
 	}
 	agentConn, ok := d.AgentMgr.Get(session.Target)
 	if !ok {
-		servicehttp.WriteError(w, http.StatusBadGateway, "agent disconnected")
+		d.writeAgentNotConnected(w, session.Target)
 		return
 	}
 

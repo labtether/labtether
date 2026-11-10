@@ -137,12 +137,12 @@ func (d *Deps) LoadProxmoxRuntime(collectorID string) (*ProxmoxRuntime, error) {
 	baseURL := shared.CollectorConfigString(selected.Config, "base_url")
 	credentialID := shared.CollectorConfigString(selected.Config, "credential_id")
 	if baseURL == "" || credentialID == "" {
-		return nil, fmt.Errorf("proxmox collector config is incomplete")
+		return nil, fmt.Errorf("%w: proxmox collector config is incomplete", shared.ErrCollectorIncomplete)
 	}
 
 	credential, ok, err := d.CredentialStore.GetCredentialProfile(credentialID)
 	if err != nil || !ok {
-		return nil, fmt.Errorf("proxmox credential profile not found")
+		return nil, fmt.Errorf("%w: proxmox credential profile not found", shared.ErrCollectorLoginMissing)
 	}
 
 	skipVerify, hasSkip := shared.CollectorConfigBool(selected.Config, "skip_verify")
@@ -169,7 +169,7 @@ func (d *Deps) LoadProxmoxRuntime(collectorID string) (*ProxmoxRuntime, error) {
 			username = strings.TrimSpace(credential.Username)
 		}
 		if username == "" {
-			return nil, fmt.Errorf("proxmox username missing in credential profile")
+			return nil, fmt.Errorf("%w: proxmox username missing in credential profile", shared.ErrCollectorLoginMissing)
 		}
 	} else {
 		tokenID = shared.CollectorConfigString(selected.Config, "token_id")
@@ -180,7 +180,7 @@ func (d *Deps) LoadProxmoxRuntime(collectorID string) (*ProxmoxRuntime, error) {
 			tokenID = strings.TrimSpace(credential.Metadata["token_id"])
 		}
 		if tokenID == "" {
-			return nil, fmt.Errorf("proxmox token_id missing in collector config")
+			return nil, fmt.Errorf("%w: proxmox token_id missing in collector config", shared.ErrCollectorLoginMissing)
 		}
 	}
 
@@ -197,7 +197,7 @@ func (d *Deps) LoadProxmoxRuntime(collectorID string) (*ProxmoxRuntime, error) {
 
 	decryptedSecret, err := d.SecretsManager.DecryptString(credential.SecretCiphertext, credential.ID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decrypt proxmox credential")
+		return nil, fmt.Errorf("%w: failed to decrypt proxmox credential", shared.ErrCollectorLoginMissing)
 	}
 
 	tokenSecret := ""

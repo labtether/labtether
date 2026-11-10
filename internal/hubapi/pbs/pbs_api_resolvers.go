@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	ErrPBSAssetNotFound = errors.New("pbs asset not found")
-	ErrAssetNotPBS      = errors.New("asset is not pbs-backed")
+	ErrPBSAssetNotFound = errors.New("device not found")
+	ErrAssetNotPBS      = errors.New("this is not a Proxmox Backup Server device")
 )
 
 func WritePBSResolveError(w http.ResponseWriter, err error) {

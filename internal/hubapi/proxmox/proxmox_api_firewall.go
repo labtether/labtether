@@ -36,11 +36,11 @@ func (d *Deps) handleProxmoxAssetFirewall(w http.ResponseWriter, r *http.Request
 
 	target, ok, err := d.ResolveProxmoxSessionTarget(assetID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to resolve proxmox asset: "+shared.SanitizeUpstreamError(err.Error()))
+		writeProxmoxUpstreamError(w, "failed to resolve proxmox asset: ", err)
 		return
 	}
 	if !ok {
-		servicehttp.WriteError(w, http.StatusNotFound, "asset is not proxmox-backed")
+		d.writeNotProxmoxDevice(w, assetID)
 		return
 	}
 
@@ -109,7 +109,7 @@ func (d *Deps) proxmoxFirewallList(w http.ResponseWriter, ctx context.Context, t
 		return
 	}
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to fetch firewall rules: "+shared.SanitizeUpstreamError(err.Error()))
+		writeProxmoxUpstreamError(w, "failed to fetch firewall rules: ", err)
 		return
 	}
 	if rules == nil {
@@ -137,7 +137,7 @@ func (d *Deps) proxmoxFirewallCreate(w http.ResponseWriter, r *http.Request, ctx
 		return
 	}
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to create firewall rule: "+shared.SanitizeUpstreamError(err.Error()))
+		writeProxmoxUpstreamError(w, "failed to create firewall rule: ", err)
 		return
 	}
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "created"})
@@ -162,7 +162,7 @@ func (d *Deps) proxmoxFirewallUpdate(w http.ResponseWriter, r *http.Request, ctx
 		return
 	}
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to update firewall rule: "+shared.SanitizeUpstreamError(err.Error()))
+		writeProxmoxUpstreamError(w, "failed to update firewall rule: ", err)
 		return
 	}
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "updated"})
@@ -182,7 +182,7 @@ func (d *Deps) proxmoxFirewallDelete(w http.ResponseWriter, ctx context.Context,
 		return
 	}
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to delete firewall rule: "+shared.SanitizeUpstreamError(err.Error()))
+		writeProxmoxUpstreamError(w, "failed to delete firewall rule: ", err)
 		return
 	}
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "deleted"})

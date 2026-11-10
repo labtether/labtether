@@ -48,7 +48,7 @@ func (d *Deps) handleProxmoxNodeNetworkCRUD(w http.ResponseWriter, r *http.Reque
 	case http.MethodGet:
 		ifaces, getErr := runtime.client.GetNodeNetwork(ctx, node)
 		if getErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to fetch node network: "+shared.SanitizeUpstreamError(getErr.Error()))
+			writeProxmoxUpstreamError(w, "failed to fetch node network: ", getErr)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"interfaces": ifaces})
@@ -63,7 +63,7 @@ func (d *Deps) handleProxmoxNodeNetworkCRUD(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		if createErr := runtime.client.CreateNodeNetwork(ctx, node, config); createErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to create network interface: "+shared.SanitizeUpstreamError(createErr.Error()))
+			writeProxmoxUpstreamError(w, "failed to create network interface: ", createErr)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "created"})
@@ -75,7 +75,7 @@ func (d *Deps) handleProxmoxNodeNetworkCRUD(w http.ResponseWriter, r *http.Reque
 		if iface == "" {
 			// No interface specified — apply pending changes.
 			if applyErr := runtime.client.ApplyNodeNetworkChanges(ctx, node); applyErr != nil {
-				servicehttp.WriteError(w, http.StatusBadGateway, "failed to apply network changes: "+shared.SanitizeUpstreamError(applyErr.Error()))
+				writeProxmoxUpstreamError(w, "failed to apply network changes: ", applyErr)
 				return
 			}
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "applied"})
@@ -87,7 +87,7 @@ func (d *Deps) handleProxmoxNodeNetworkCRUD(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		if updateErr := runtime.client.UpdateNodeNetwork(ctx, node, iface, config); updateErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to update network interface: "+shared.SanitizeUpstreamError(updateErr.Error()))
+			writeProxmoxUpstreamError(w, "failed to update network interface: ", updateErr)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "updated"})
