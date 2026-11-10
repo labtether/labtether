@@ -25,6 +25,7 @@ func (s *PostgresStore) Series(assetID string, start, end time.Time, step time.D
 		   AND metric = ANY($2::text[])
 		   AND collected_at >= $3
 		   AND collected_at <= $4
+		   AND `+deviceLevelSampleFilter+`
 		 ORDER BY metric, collected_at ASC`,
 		assetID,
 		metricNames,
@@ -83,6 +84,7 @@ func (s *PostgresStore) SeriesMetric(assetID, metric string, start, end time.Tim
 		   AND metric = $2
 		   AND collected_at >= $3
 		   AND collected_at <= $4
+		   AND `+deviceLevelSampleFilter+`
 		 ORDER BY collected_at ASC`,
 		assetID,
 		metric,
@@ -196,6 +198,7 @@ func (s *PostgresStore) metricSeriesBatch(ctx context.Context, assetIDs []string
 		   AND metric = $2
 		   AND collected_at >= $3
 		   AND collected_at <= $4
+		   AND ` + deviceLevelSampleFilter + `
 		 ORDER BY asset_id ASC, collected_at ASC`
 	args := []any{cleanIDs, metric, start.UTC(), end.UTC()}
 	if maxRawPoints > 0 {
