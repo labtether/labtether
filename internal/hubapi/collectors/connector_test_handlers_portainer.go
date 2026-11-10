@@ -102,7 +102,7 @@ func (d *Deps) HandlePortainerConnectorTest(w http.ResponseWriter, r *http.Reque
 	connector := portainer.NewWithClient(client)
 	health, _ := connector.TestConnection(r.Context())
 	if health.Status != "ok" {
-		servicehttp.WriteError(w, http.StatusBadGateway, SanitizeConnectorErrorMessage(health.Message, tokenSecret, password))
+		writeConnectorTestFailure(w, "Portainer", health.Message, tokenSecret, password)
 		return
 	}
 
@@ -126,11 +126,11 @@ func (d *Deps) HandleDockerConnectorTest(w http.ResponseWriter, r *http.Request)
 
 	health, err := connector.TestConnection(r.Context())
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, SanitizeConnectorError(err))
+		writeConnectorTestFailure(w, "Portainer", err.Error())
 		return
 	}
 	if health.Status != "ok" {
-		servicehttp.WriteError(w, http.StatusBadGateway, SanitizeConnectorErrorMessage(health.Message))
+		writeConnectorTestFailure(w, "Portainer", health.Message)
 		return
 	}
 

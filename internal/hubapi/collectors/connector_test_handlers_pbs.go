@@ -77,22 +77,22 @@ func (d *Deps) HandlePBSConnectorTest(w http.ResponseWriter, r *http.Request) {
 
 	ping, err := client.Ping(r.Context())
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, SanitizeConnectorError(err, tokenSecret))
+		writeConnectorTestFailure(w, "Proxmox Backup Server", err.Error(), tokenSecret)
 		return
 	}
 	if !ping.Pong {
-		servicehttp.WriteError(w, http.StatusBadGateway, "pbs ping did not return pong=true")
+		writeConnectorTestFailure(w, "Proxmox Backup Server", "ping did not return pong")
 		return
 	}
 
 	version, err := client.GetVersion(r.Context())
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, SanitizeConnectorError(err, tokenSecret))
+		writeConnectorTestFailure(w, "Proxmox Backup Server", err.Error(), tokenSecret)
 		return
 	}
 	datastores, err := client.ListDatastores(r.Context())
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, SanitizeConnectorError(err, tokenSecret))
+		writeConnectorTestFailure(w, "Proxmox Backup Server", err.Error(), tokenSecret)
 		return
 	}
 

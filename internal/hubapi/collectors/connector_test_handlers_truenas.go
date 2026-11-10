@@ -70,7 +70,7 @@ func (d *Deps) HandleTrueNASConnectorTest(w http.ResponseWriter, r *http.Request
 
 	health, _ := connector.TestConnection(r.Context())
 	if health.Status != "ok" {
-		servicehttp.WriteError(w, http.StatusBadGateway, SanitizeConnectorErrorMessage(strings.TrimSpace(health.Message), apiKey))
+		writeConnectorTestFailure(w, "TrueNAS", health.Message, apiKey)
 		return
 	}
 
