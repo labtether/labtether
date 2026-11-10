@@ -79,33 +79,15 @@ func (s *PostgresStore) HubMetricSnapshots(ctx context.Context, at time.Time, ma
 }
 
 func (s *PostgresStore) DynamicSnapshotForAsset(assetID string, at time.Time) (telemetry.DynamicSnapshot, error) {
-	rows, err := s.pool.Query(context.Background(),
-		`SELECT DISTINCT ON (metric) metric, value
-		 FROM metric_samples
-		 WHERE asset_id = $1
-		   AND collected_at <= $2
-		 ORDER BY metric, collected_at DESC`,
-		assetID,
-		at.UTC(),
-	)
+	many, err := s.DynamicSnapshotMany([]string{assetID}, at)
 	if err != nil {
 		return telemetry.DynamicSnapshot{}, err
 	}
-	defer rows.Close()
-
-	metrics := make(map[string]float64)
-	for rows.Next() {
-		var metric string
-		var value float64
-		if err := rows.Scan(&metric, &value); err != nil {
-			return telemetry.DynamicSnapshot{}, err
-		}
-		metrics[metric] = value
+	dyn := many[strings.TrimSpace(assetID)]
+	if dyn.Metrics == nil {
+		dyn.Metrics = make(map[string]float64)
 	}
-	if rows.Err() != nil {
-		return telemetry.DynamicSnapshot{}, rows.Err()
-	}
-	return telemetry.DynamicSnapshot{Metrics: metrics}, nil
+	return dyn, nil
 }
 
 func (s *PostgresStore) Snapshot(assetID string, at time.Time) (telemetry.Snapshot, error) {
@@ -139,19 +121,36 @@ func (s *PostgresStore) DynamicSnapshotMany(assetIDs []string, at time.Time) (ma
 		out[assetID] = telemetry.DynamicSnapshot{Metrics: make(map[string]float64)}
 	}
 
-	// Query the latest value per (asset, metric) across all metrics via
-	// DISTINCT ON. No metric name filter — returns whatever metrics exist.
-	rows, err := s.pool.Query(context.Background(),
-		`SELECT DISTINCT ON (asset_id, metric) asset_id, metric, value
+	// Latest value per (asset, metric) from the device's own samples. Then,
+	// for metrics only a part of the device reports (disk totals per mount),
+	// the newest collection's system disk, so a device's disk numbers fit
+	// together. No metric name filter: returns whatever metrics exist.
+	if err := s.scanSnapshotRows(out, `SELECT DISTINCT ON (asset_id, metric) asset_id, metric, value
 		 FROM metric_samples
 		 WHERE asset_id = ANY($1::text[])
 		   AND collected_at <= $2
-		 ORDER BY asset_id, metric, collected_at DESC`,
-		cleanIDs,
-		at.UTC(),
-	)
-	if err != nil {
+		   AND `+deviceLevelSampleFilter+`
+		 ORDER BY asset_id, metric, collected_at DESC`, cleanIDs, at.UTC(), true); err != nil {
 		return nil, err
+	}
+	if err := s.scanSnapshotRows(out, `SELECT DISTINCT ON (asset_id, metric) asset_id, metric, value
+		 FROM metric_samples
+		 WHERE asset_id = ANY($1::text[])
+		   AND collected_at <= $2
+		   AND collected_at > $2 - `+recentMountSampleWindow+`
+		   AND NOT `+deviceLevelSampleFilter+`
+		 ORDER BY asset_id, metric, collected_at DESC, `+primaryMountOrderSQL, cleanIDs, at.UTC(), false); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// scanSnapshotRows adds (asset_id, metric, value) rows to out. With
+// overwrite false it only fills metrics an asset does not have yet.
+func (s *PostgresStore) scanSnapshotRows(out map[string]telemetry.DynamicSnapshot, query string, assetIDs []string, at time.Time, overwrite bool) error {
+	rows, err := s.pool.Query(context.Background(), query, assetIDs, at)
+	if err != nil {
+		return err
 	}
 	defer rows.Close()
 
@@ -162,7 +161,7 @@ func (s *PostgresStore) DynamicSnapshotMany(assetIDs []string, at time.Time) (ma
 			value   float64
 		)
 		if err := rows.Scan(&assetID, &metric, &value); err != nil {
-			return nil, err
+			return err
 		}
 		dyn, ok := out[assetID]
 		if !ok {
@@ -171,14 +170,13 @@ func (s *PostgresStore) DynamicSnapshotMany(assetIDs []string, at time.Time) (ma
 		if dyn.Metrics == nil {
 			dyn.Metrics = make(map[string]float64)
 		}
+		if _, exists := dyn.Metrics[metric]; exists && !overwrite {
+			continue
+		}
 		dyn.Metrics[metric] = value
 		out[assetID] = dyn
 	}
-	if rows.Err() != nil {
-		return nil, rows.Err()
-	}
-
-	return out, nil
+	return rows.Err()
 }
 
 func (s *PostgresStore) SnapshotMany(assetIDs []string, at time.Time) (map[string]telemetry.Snapshot, error) {
