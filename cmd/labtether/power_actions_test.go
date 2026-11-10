@@ -13,6 +13,7 @@ import (
 
 	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/assets"
+	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/groupmaintenance"
 	"github.com/labtether/labtether/internal/powercontrol"
 )
@@ -288,7 +289,14 @@ func TestV2PowerActionMaintenanceBlockPreventsAgentDispatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list audit events: %v", err)
 	}
-	if len(events) != 1 || events[0].Type != "asset.power" || events[0].Decision != "denied" || events[0].Reason != "maintenance_blocked" {
+	// The group made for this test writes its own "group.created" row.
+	var power []audit.Event
+	for _, event := range events {
+		if event.Type == "asset.power" {
+			power = append(power, event)
+		}
+	}
+	if len(power) != 1 || power[0].Decision != "denied" || power[0].Reason != "maintenance_blocked" {
 		t.Fatalf("unexpected power audit events: %+v", events)
 	}
 }

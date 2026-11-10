@@ -106,6 +106,10 @@ v1.7.1.
   `details.target_name`, so a row can say which webhook was deleted after it is
   gone. Removing a device through the console now writes a "Removed a
   device" row, and a refused removal no longer writes one.
+- Creating, changing or deleting an API key, a schedule, an alert rule or a
+  group writes an audit row with its name. Before, these changes left only
+  an "API request" row, which the Audit log hides unless you turn on All
+  requests. A row never holds an API key's secret or a schedule's command.
 
 ### Removed
 

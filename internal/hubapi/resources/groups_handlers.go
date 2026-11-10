@@ -113,6 +113,7 @@ func (d *Deps) HandleGroups(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create group")
 			return
 		}
+		d.auditGroup(r, groupCreatedAuditType, created, map[string]any{"parent_group_id": created.ParentGroupID})
 		servicehttp.WriteJSON(w, http.StatusCreated, map[string]any{"group": created})
 
 	default:
@@ -217,9 +218,15 @@ func (d *Deps) HandleGroupActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update group")
 			return
 		}
+		d.auditGroup(r, groupUpdatedAuditType, updated, map[string]any{
+			"name_changed": req.Name != nil, "parent_changed": req.ParentGroupID != nil, "jump_chain_changed": req.JumpChain != nil,
+		})
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"group": updated})
 
 	case http.MethodDelete:
+		// Read the group first: the audit row keeps its name after it is gone.
+		deleted, _, _ := d.GroupStore.GetGroup(groupID)
+		deleted.ID = groupID
 		if err := d.GroupStore.DeleteGroup(groupID); err != nil {
 			if errors.Is(err, persistence.ErrNotFound) {
 				servicehttp.WriteError(w, http.StatusNotFound, "group not found")
@@ -245,6 +252,7 @@ func (d *Deps) HandleGroupActions(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		d.auditGroup(r, groupDeletedAuditType, deleted, map[string]any{"unlinked_devices": unlinked})
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "id": groupID, "unlinked_assets": unlinked})
 
 	default:
@@ -296,6 +304,7 @@ func (d *Deps) handleGroupMove(w http.ResponseWriter, r *http.Request, groupID s
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to move group")
 		return
 	}
+	d.auditGroup(r, groupUpdatedAuditType, updated, map[string]any{"parent_changed": true, "parent_group_id": updated.ParentGroupID})
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"group": updated})
 }
 

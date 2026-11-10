@@ -312,6 +312,10 @@ func (d *Deps) handleAPIKeyUpdate(w http.ResponseWriter, r *http.Request, id str
 		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to update key")
 		return
 	}
+	d.auditAPIKeyUpdated(r, id, map[string]any{
+		"name_changed": req.Name != nil, "scopes_changed": req.Scopes != nil,
+		"allowed_devices_changed": req.AllowedAssets != nil, "expiry_changed": expiresAtUpdate != nil,
+	})
 	// Open streams keep the scopes they were opened with; end them so the
 	// key's new limits apply.
 	d.revokeStreams(shared.StreamActorKey("apikey:" + id))

@@ -206,6 +206,9 @@ func (d *Deps) HandleAlertTemplateActions(w http.ResponseWriter, r *http.Request
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to enable alert template")
 		return
 	}
+	templateDetails := alertRuleAuditDetails(createdRule)
+	templateDetails["template_id"] = template.ID
+	d.auditAlertRule(r, alertRuleCreatedAuditType, createdRule, templateDetails)
 
 	servicehttp.WriteJSON(w, http.StatusCreated, map[string]any{
 		"template_id":     template.ID,
