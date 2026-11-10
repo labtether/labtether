@@ -131,7 +131,7 @@ func (d *Deps) HandleWebRTCStream(w http.ResponseWriter, r *http.Request, sessio
 		ClosedCh:        make(chan struct{}),
 	}
 	if !d.publishWebRTCStream(r.Context(), bridge) {
-		SafeWriteClose(browserWS, websocket.CloseTryAgainLater, "agent disconnected while opening desktop")
+		SafeWriteClose(browserWS, websocket.CloseTryAgainLater, remoteViewAgentWentAway)
 		return
 	}
 	defer d.finalizeWebRTCStream(bridge)

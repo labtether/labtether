@@ -3,14 +3,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import { useTranslations } from "next-intl";
 import { listFiles, type FileEntry } from "../../files/fileOpsClient";
-import { joinPath, outsideBasePath, parentPath } from "../../files/fileWorkspaceUtils";
+import { joinPath, outsideBasePath, parentPath, pathStyleOf, typedPath } from "../../files/remotePaths";
 
 type UseFilesTabDirectoryStateArgs = {
   nodeId: string;
+  /** The device's platform: it decides how a typed path is read until the agent has named a folder. */
+  platform?: string;
   setError: (error: string | null) => void;
 };
 
-export function useFilesTabDirectoryState({ nodeId, setError }: UseFilesTabDirectoryStateArgs) {
+export function useFilesTabDirectoryState({ nodeId, platform, setError }: UseFilesTabDirectoryStateArgs) {
   // Kept in a ref so a new translator does not make a new listDir (which re-reads the folder).
   const tBar = useTranslations("files.bar");
   const tBarRef = useRef(tBar);
@@ -107,10 +109,10 @@ export function useFilesTabDirectoryState({ nodeId, setError }: UseFilesTabDirec
   }, [currentPath, listDir]);
 
   const navigateTo = useCallback((path: string) => {
-    const nextPath = path.trim();
+    const nextPath = typedPath(path, pathStyleOf(currentPath, platform));
     if (nextPath === "") return;
     void listDir(nextPath);
-  }, [listDir]);
+  }, [currentPath, listDir, platform]);
 
   const openEntry = useCallback((entry: FileEntry) => {
     if (!entry.is_dir) return;

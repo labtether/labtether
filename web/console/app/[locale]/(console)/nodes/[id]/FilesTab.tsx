@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { listFiles, type FileEntry } from "../../files/fileOpsClient";
-import { joinPath } from "../../files/fileWorkspaceUtils";
+import { devicePlaces, isTopFolder, isWindowsPlatform, joinPath, pathStyleOf } from "../../files/remotePaths";
 import { filterEntries, pickedBytes } from "../../files/filesListModel";
 import { UploadReplaceDialog } from "../../files/FilesOverlays";
 import { FilesStatusLine } from "../../files/FilesStatusLine";
@@ -22,14 +22,15 @@ import { useFilesTabWriteAccess } from "./useFilesTabWriteAccess";
 
 /**
  * A device's Files tab: the 2.0 file list on the device's agent. It opens read-only; "Allow changes" turns on writes.
- * platform is the device's: on Windows an upload replaces a file whose name differs only in case.
+ * platform is the device's: on Windows paths use backslashes and an upload replaces a file whose name differs only in
+ * case.
  */
 export function FilesTab({ nodeId, platform }: { nodeId: string; platform?: string }) {
   const t = useTranslations("files");
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const m = useFilesTabMutations({ nodeId });
   const ws = useFileWorkspaceState<FileEntry>();
-  const dir = useFilesTabDirectoryState({ nodeId, setError: m.setError });
+  const dir = useFilesTabDirectoryState({ nodeId, platform, setError: m.setError });
   const cur = dir.currentPath;
   const { listDir } = dir;
   const access = useFilesTabWriteAccess({ currentPath: cur, uploadInputRef });
@@ -97,7 +98,7 @@ export function FilesTab({ nodeId, platform }: { nodeId: string; platform?: stri
   const replace = useUploadReplace({
     held: { path: cur, entries: dir.entries, showHidden: dir.showHidden, ready: !dir.loading && !m.error },
     list: listFolder,
-    ignoreCase: /windows/i.test(platform ?? ""),
+    ignoreCase: isWindowsPlatform(platform),
     upload: startUpload,
     onUnread: uploadUnread,
   });
@@ -146,7 +147,8 @@ export function FilesTab({ nodeId, platform }: { nodeId: string; platform?: stri
         onPathInputChange={dir.setPathInput}
         onNavigateToPath={dir.navigateTo}
         onNavigateUp={dir.navigateUp}
-        disableNavigateUp={dir.loading || m.actionBusy || cur === "~" || cur === "/"}
+        disableNavigateUp={dir.loading || m.actionBusy || isTopFolder(cur)}
+        places={devicePlaces(pathStyleOf(cur, platform)).map((place) => ({ label: t(`bar.${place.id}`), path: place.path }))}
         canBack={history.canGoBack}
         onBack={() => {
           const prev = history.back();

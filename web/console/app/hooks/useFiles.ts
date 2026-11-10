@@ -3,13 +3,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFastStatus } from "../contexts/StatusContext";
 import { useConnectedAgents } from "./useConnectedAgents";
+import { triggerBlobDownload } from "../[locale]/(console)/files/fileWorkspaceUtils";
 import {
+  baseName,
   clampPathToRoot,
   joinPath,
   normalizePath,
   parentPath,
-  triggerBlobDownload,
-} from "../[locale]/(console)/files/fileWorkspaceUtils";
+  samePath,
+} from "../[locale]/(console)/files/remotePaths";
 import {
   copyFilePath,
   createDirectory,
@@ -155,7 +157,7 @@ export function useFiles() {
     if (!target) return;
     const root = normalizePath(rootPathRef.current);
     const current = normalizePath(currentPath);
-    if (current === root) return;
+    if (samePath(current, root)) return;
     const next = clampPathToRoot(parentPath(current), root);
     void listDir(target, next);
   }, [target, currentPath, listDir]);
@@ -171,7 +173,7 @@ export function useFiles() {
   const downloadFile = useCallback(
     (filePath: string) => {
       if (!target) return;
-      const fileName = filePath.split("/").pop() || "download";
+      const fileName = baseName(filePath) || "download";
 
       const abort = new AbortController();
       downloadAbortRef.current = abort;

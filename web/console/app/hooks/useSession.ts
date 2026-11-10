@@ -8,7 +8,16 @@ import { createSession, requestSpiceTicket, requestStreamTicket } from "./sessio
 import type { DesktopProtocol, SpiceTicket, SessionConnectionState, SessionStreamStatus, UseSessionOptions, TerminalConnectOptions } from "./session/sessionTypes";
 export type * from "./session/sessionTypes";
 
-function isNonRetryableDisconnectReason(reason: string): boolean {
+// The Hub's answers for a Remote View that cannot start on the device until
+// someone changes the device (install x11vnc, log in to X11, close a view).
+const finalRemoteViewReasons = [
+  "remote view needs ",
+  "remote view cannot ",
+  "remote view could not start",
+  "remote view is already open",
+];
+
+export function isNonRetryableDisconnectReason(reason: string): boolean {
   const normalized = reason.trim().toLowerCase();
   if (!normalized) {
     return false;
@@ -16,7 +25,8 @@ function isNonRetryableDisconnectReason(reason: string): boolean {
   return (
     normalized.includes("auth") ||
     normalized.includes("credential") ||
-    normalized.includes("password")
+    normalized.includes("password") ||
+    finalRemoteViewReasons.some((prefix) => normalized.startsWith(prefix))
   );
 }
 

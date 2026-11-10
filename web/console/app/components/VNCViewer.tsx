@@ -35,6 +35,17 @@ type VNCViewerProps = {
   viewOnly?: boolean;
 };
 
+// openVNCSocket opens the Remote View stream for noVNC and records the
+// server's close reason in closeInfo.
+export function openVNCSocket(wsUrl: string, closeInfo: { reason: string }): WebSocket {
+  const socket = new WebSocket(wsUrl, ["binary"]);
+  socket.binaryType = "arraybuffer";
+  socket.addEventListener("close", (event) => {
+    closeInfo.reason = (event.reason ?? "").trim();
+  });
+  return socket;
+}
+
 type TestWindow = Window & {
   __labtetherTestRFBClass?: new (
     target: HTMLDivElement,
@@ -202,16 +213,24 @@ const VNCViewer = forwardRef<VNCViewerHandle, VNCViewerProps>(function VNCViewer
         // Allow browser tests to inject a lightweight RFB shim without
         // patching the app bundle or shipping a production-only code path.
         const testRFBClass = (window as TestWindow).__labtetherTestRFBClass;
-        const RFBClass =
-          testRFBClass ??
-          (await import("@novnc/novnc")).default;
+        const NoVNC = testRFBClass ? null : (await import("@novnc/novnc")).default;
         if (cancelled) {
           return;
         }
 
-        rfb = new RFBClass(container, wsUrl, {
-          wsProtocols: ["binary"],
-        });
+        // noVNC's disconnect event carries no reason, so the Hub's words
+        // for a Remote View that could not start ("Remote View needs x11vnc
+        // on this device. ...") were lost and the page kept retrying. Open
+        // the socket here and keep its close reason.
+        const closeInfo = { reason: "" };
+        const options = { wsProtocols: ["binary"] };
+        if (testRFBClass) {
+          rfb = new testRFBClass(container, wsUrl, options);
+        } else if (NoVNC) {
+          rfb = new NoVNC(container, openVNCSocket(wsUrl, closeInfo), options);
+        } else {
+          return;
+        }
         rfbDisconnectedRef.current = false;
         rfbRef.current = rfb;
         const isCurrent = () => !cancelled && rfbRef.current === rfb;
@@ -247,7 +266,7 @@ const VNCViewer = forwardRef<VNCViewerHandle, VNCViewerProps>(function VNCViewer
           if (!isCurrent()) return;
           rfbDisconnectedRef.current = true;
           setConnected(false);
-          onDisconnectRef.current?.({ clean: e.detail.clean, reason: e.detail.reason });
+          onDisconnectRef.current?.({ clean: e.detail.clean, reason: e.detail.reason || closeInfo.reason || undefined });
         });
 
         rfb.addEventListener("securityfailure", (e: RFBSecurityFailureEvent) => {

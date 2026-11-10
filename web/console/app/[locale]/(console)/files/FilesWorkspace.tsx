@@ -10,6 +10,7 @@ import { FilesStatusLine } from "./FilesStatusLine";
 import { FilesMoreMenu, FilesToolbar, type SplitChoice } from "./FilesToolbar";
 import { pickedBytes } from "./filesListModel";
 import { NewTabPage } from "./NewTabPage";
+import { devicePlaces } from "./remotePaths";
 import { SplitView } from "./SplitView";
 import { TransferProgressBar } from "./TransferProgressBar";
 import { useFileSources } from "./useFileSources";
@@ -48,7 +49,7 @@ export function FilesWorkspace() {
   const openConn = (id: string, name: string, protocol: string) => tabs.openInTab({ type: "connection", sourceId: id, label: name, protocol });
 
   const places = src.source?.type === "agent"
-    ? [{ label: t("bar.home"), path: "~" }, { label: t("bar.root"), path: "/" }]
+    ? devicePlaces(src.pathStyle, src.rootPath).map((place) => ({ label: t(`bar.${place.id}`), path: place.path }))
     : [{ label: t("bar.root"), path: "/" }];
   const picked = ws.selectedEntries;
   const where = t("dialog.where", { path: src.currentPath, source: label });

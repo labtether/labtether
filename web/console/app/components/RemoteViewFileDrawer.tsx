@@ -7,6 +7,7 @@ import { listFiles } from "../[locale]/(console)/files/fileOpsClient";
 import type { FileEntry } from "../[locale]/(console)/files/fileOpsClient";
 import { formatSize } from "../[locale]/(console)/files/filesPageUtils";
 import { UploadReplaceDialog } from "../[locale]/(console)/files/FilesOverlays";
+import { joinPath, namesBelow, parentPath, pathStyleOf } from "../[locale]/(console)/files/remotePaths";
 import { useUploadReplace } from "../[locale]/(console)/files/useUploadReplace";
 import { useFileDownload } from "../hooks/useFileDownload";
 import { ToolbarPortalContext } from "./remote-toolbar/ToolbarButtons";
@@ -16,8 +17,6 @@ type Props = {
   open: boolean;
   onClose: () => void;
 };
-
-const join = (dir: string, name: string) => (dir.endsWith("/") ? `${dir}${name}` : `${dir}/${name}`);
 
 /**
  * Files on the remote machine, over the right of the screen: one folder (home first), Upload from this computer (or
@@ -80,7 +79,7 @@ export function RemoteViewFileDrawer({ nodeId, open, onClose }: Props) {
       if (!file) return;
       setUpload({ name: file.name, percent: 0 });
       const xhr = new XMLHttpRequest();
-      xhr.open("POST", `/api/files/${encodeURIComponent(nodeId)}/upload?path=${encodeURIComponent(join(dir, file.name))}`);
+      xhr.open("POST", `/api/files/${encodeURIComponent(nodeId)}/upload?path=${encodeURIComponent(joinPath(dir, file.name))}`);
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) setUpload({ name: file.name, percent: Math.round((event.loaded / event.total) * 100) });
       };
@@ -128,13 +127,14 @@ export function RemoteViewFileDrawer({ nodeId, open, onClose }: Props) {
 
   if (!open) return null;
 
-  const relative = homePath && currentPath.startsWith(homePath) ? currentPath.slice(homePath.length) : currentPath;
-  const segments = relative.split("/").filter(Boolean);
-  const atHome = !relative || relative === "/";
+  // The folders from the shared folder down to the open one; a Windows device answers with backslash paths.
+  const segments = namesBelow(currentPath, homePath) ?? [];
+  const atHome = segments.length === 0;
+  const separator = pathStyleOf(currentPath) === "windows" ? "\\" : "/";
   const sorted = [...entries].sort((a, b) => (a.is_dir !== b.is_dir ? (a.is_dir ? -1 : 1) : a.name.localeCompare(b.name)));
   const goUp = () => {
-    const parent = `/${currentPath.split("/").filter(Boolean).slice(0, -1).join("/")}`;
-    navigateTo(parent.length <= homePath.length ? "" : parent);
+    const parent = parentPath(currentPath);
+    navigateTo(namesBelow(parent, homePath)?.length ? parent : "");
   };
   const onDrag = (event: DragEvent, step: 1 | -1) => {
     event.preventDefault();
@@ -169,10 +169,10 @@ export function RemoteViewFileDrawer({ nodeId, open, onClose }: Props) {
           </button>
           {segments.map((segment, i) => (
             <span key={`${i}-${segment}`}>
-              <span aria-hidden="true">/</span>
+              <span aria-hidden="true">{separator}</span>
               <button
                 type="button"
-                onClick={() => navigateTo(`${homePath}/${segments.slice(0, i + 1).join("/")}`)}
+                onClick={() => navigateTo(segments.slice(0, i + 1).reduce(joinPath, homePath))}
                 aria-current={i === segments.length - 1 ? "location" : undefined}
               >
                 {segment}
@@ -238,7 +238,7 @@ export function RemoteViewFileDrawer({ nodeId, open, onClose }: Props) {
                 key={entry.name}
                 type="button"
                 className="rv-file"
-                onClick={() => (entry.is_dir ? navigateTo(join(currentPath, entry.name)) : void downloadFile(join(currentPath, entry.name)))}
+                onClick={() => (entry.is_dir ? navigateTo(joinPath(currentPath, entry.name)) : void downloadFile(joinPath(currentPath, entry.name)))}
                 title={entry.is_dir ? undefined : t("download", { name: entry.name })}
               >
                 <span className="rv-file-n">{entry.name}</span>

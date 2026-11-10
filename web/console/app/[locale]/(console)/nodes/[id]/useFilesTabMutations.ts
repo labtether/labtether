@@ -9,7 +9,8 @@ import {
   uploadFileViaFetch,
   type FileEntry,
 } from "../../files/fileOpsClient";
-import { joinPath, triggerBlobDownload } from "../../files/fileWorkspaceUtils";
+import { triggerBlobDownload } from "../../files/fileWorkspaceUtils";
+import { joinPath } from "../../files/remotePaths";
 
 const MAX_UPLOAD_SIZE = 512 * 1024 * 1024; // 512MB
 

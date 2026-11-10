@@ -3,7 +3,7 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { MoreHorizontal, Search, Upload } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { FilesPathBar } from "../../files/FilesPathBar";
+import { FilesPathBar, type Place } from "../../files/FilesPathBar";
 import { ToolMenu } from "../../files/FileMenus";
 import { ClipChip } from "../../files/FilesToolbar";
 import type { WorkspaceClipboard } from "../../files/useFileWorkspaceState";
@@ -15,6 +15,7 @@ type FilesTabControlsProps = {
   onNavigateToPath: (path: string) => void;
   onNavigateUp: () => void;
   disableNavigateUp: boolean;
+  places: Place[];
   canBack: boolean;
   onBack: () => void;
   busy: boolean;
@@ -43,7 +44,7 @@ export function FilesTabControls(p: FilesTabControlsProps) {
     <div className="fx-bar">
       <FilesPathBar
         path={p.currentPath}
-        places={[{ label: t("bar.home"), path: "~" }, { label: t("bar.root"), path: "/" }]}
+        places={p.places}
         draft={p.pathInput}
         onDraft={p.onPathInputChange}
         onGo={p.onNavigateToPath}
