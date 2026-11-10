@@ -176,6 +176,24 @@ export function AgentSetupStep({
     { id: "windows", label: "Windows" },
   ];
 
+  // Mac and Windows setup show the Hub CA's fingerprint and ask before they trust it; this is the value to compare
+  // with, so it shows with or without a token. Linux needs no look: its install command carries the fingerprint
+  // and checks it.
+  const hubFingerprint = !isLinux && caFingerprint ? (
+    <div>
+      <p className="text-xs font-medium text-[var(--muted)] mb-1">
+        {t("agent.hubFingerprint")}
+      </p>
+      <div className="flex items-center gap-2 bg-[var(--surface)] rounded-lg px-3 py-2">
+        <code className="text-xs text-[var(--text)] flex-1 break-words">
+          {groupedFingerprint(caFingerprint)}
+        </code>
+        <CopyButton text={caFingerprint} label={t("agent.copyHubFingerprint")} />
+      </div>
+      <p className="mt-1 text-xs text-[var(--muted)]">{t("agent.hubFingerprintHint")}</p>
+    </div>
+  ) : null;
+
   if (deviceDetected) {
     return (
       <div className="flex flex-col items-center gap-4 py-8">
@@ -237,6 +255,7 @@ export function AgentSetupStep({
           </Button>
         </div>
       ) : null}
+      {!newRawToken ? hubFingerprint : null}
 
       {generating ? (
         <div className="flex items-center gap-2 py-4 text-sm text-[var(--muted)]">
@@ -327,22 +346,7 @@ export function AgentSetupStep({
             />
           ) : null}
 
-          {/* Mac and Windows setup show the Hub CA's fingerprint and ask before they trust it; this is the value to
-              compare with. Linux needs no look: its install command carries the fingerprint and checks it. */}
-          {!isLinux && caFingerprint ? (
-            <div>
-              <p className="text-xs font-medium text-[var(--muted)] mb-1">
-                {t("agent.hubFingerprint")}
-              </p>
-              <div className="flex items-center gap-2 bg-[var(--surface)] rounded-lg px-3 py-2">
-                <code className="text-xs text-[var(--text)] flex-1 break-words">
-                  {groupedFingerprint(caFingerprint)}
-                </code>
-                <CopyButton text={caFingerprint} label={t("agent.copyHubFingerprint")} />
-              </div>
-              <p className="mt-1 text-xs text-[var(--muted)]">{t("agent.hubFingerprintHint")}</p>
-            </div>
-          ) : null}
+          {hubFingerprint}
 
           {/* Manual command */}
           {!isLinux ? (

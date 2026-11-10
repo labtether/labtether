@@ -177,6 +177,18 @@ describe("AgentSetupStep token lifecycle", () => {
       await unmountStep();
     });
 
+    it("shows it before a token is made, for someone who only came to compare", async () => {
+      mocks.newRawToken = "";
+      mocks.newTokenID = "";
+      tlsInfo({ ca_available: true, ca_fingerprint_sha256: fingerprint });
+      await mountStep();
+      await pick("Windows");
+      expect(container.textContent).toContain(grouped);
+      expect(mocks.generateToken).not.toHaveBeenCalled();
+
+      await unmountStep();
+    });
+
     it("shows no fingerprint when the Hub has no CA of its own", async () => {
       tlsInfo({ ca_available: false, ca_fingerprint_sha256: fingerprint });
       await mountStep();
