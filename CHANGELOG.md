@@ -117,6 +117,8 @@ v1.7.1.
   creating, editing or deleting an issue; creating or deleting an update plan.
   An issue row says what changed (status, owner), never the text of a note. A
   bookmark row holds where it points, never the user name or a saved login.
+  An alert row names the device the alert was for, or the devices when it
+  fired on several.
 
 ### Removed
 
