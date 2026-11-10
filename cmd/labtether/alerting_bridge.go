@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/alerts"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/auth"
@@ -148,6 +149,25 @@ func (s *apiServer) ensureAlertingDeps() *alertingpkg.Deps {
 		return s.alertingDeps
 	}
 	return s.buildAlertingDeps()
+}
+
+// replayAlertsToAgentAsync sends a newly connected agent the alerts that are
+// firing for its device (and those that ended in the last day), bounded by
+// the connection and 30 seconds.
+func (s *apiServer) replayAlertsToAgentAsync(conn *agentmgr.AgentConn) {
+	deps := s.ensureAlertingDeps()
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		go func() {
+			select {
+			case <-conn.Done():
+				cancel()
+			case <-ctx.Done():
+			}
+		}()
+		deps.ReplayAlertsToAgent(ctx, conn)
+	}()
 }
 
 // --- Forwarding methods from apiServer to alerting.Deps ---

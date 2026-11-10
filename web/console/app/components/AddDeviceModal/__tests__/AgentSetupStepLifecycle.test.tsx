@@ -1,6 +1,8 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import auth from "../../../../messages/en/auth.json";
 
 const mocks = vi.hoisted(() => ({
   deleteEnrollmentToken: vi.fn(async () => undefined),
@@ -62,7 +64,9 @@ afterEach(() => {
 async function mountStep() {
   await act(async () => {
     root.render(
-      <AgentSetupStep onBack={vi.fn()} onClose={vi.fn()} />,
+      <NextIntlClientProvider locale="en" messages={{ auth }}>
+        <AgentSetupStep onBack={vi.fn()} onClose={vi.fn()} />
+      </NextIntlClientProvider>,
     );
   });
 }
@@ -138,7 +142,7 @@ describe("AgentSetupStep token lifecycle", () => {
     expect(container.querySelector('[aria-label="Copy enrollment token"]')).not.toBeNull();
     expect(container.querySelector('[aria-label="Copy Hub URL"]')).not.toBeNull();
     expect(container.querySelector('[aria-label="Copy WebSocket URL"]')).not.toBeNull();
-    expect(container.querySelector('[aria-label="Copy Linux installer command"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Copy Linux install command"]')).not.toBeNull();
 
     await unmountStep();
   });

@@ -1,8 +1,9 @@
 "use client";
 
+import { useFormatter, useTranslations } from "next-intl";
 import { useState } from "react";
 
-import { credentialKindLabels } from "../../../../components/credentials/CredentialProfileSelect";
+import { useCredentialKindLabel } from "../../../../components/credentials/CredentialProfileSelect";
 import { Button } from "../../../../components/ui/Button";
 import { Input, Select } from "../../../../components/ui/Input";
 import { Modal } from "../../../../components/ui/Modal";
@@ -13,7 +14,10 @@ import {
 } from "../../../../hooks/useCredentialProfiles";
 import {
   buildCredentialCreatePayload,
-  credentialReferenceMessage,
+  credentialFailure,
+  credentialReferenceUses,
+  CredentialValidationError,
+  type CredentialAction,
   type CredentialCreateDraft,
   type CredentialReference,
 } from "./credentialProfileModel";
@@ -26,17 +30,23 @@ type ErrorPayload = {
 };
 
 class CredentialRequestError extends Error {
-  references: CredentialReference[];
+  status: number;
+  /** The hub's own reason, or "" when it sent none. */
+  hubMessage: string;
+  /** What still uses the login, when the hub refused a delete for that reason; null otherwise. */
+  references: CredentialReference[] | null;
 
-  constructor(message: string, references: CredentialReference[] = []) {
-    super(message);
+  constructor(status: number, hubMessage: string, references: CredentialReference[] | null) {
+    super(hubMessage || `credential request failed with ${status}`);
     this.name = "CredentialRequestError";
+    this.status = status;
+    this.hubMessage = hubMessage;
     this.references = references;
   }
 }
 
-function parseReferences(value: unknown): CredentialReference[] {
-  if (!Array.isArray(value)) return [];
+function parseReferences(value: unknown): CredentialReference[] | null {
+  if (!Array.isArray(value)) return null;
   return value.flatMap((entry) => {
     if (!entry || typeof entry !== "object") return [];
     const record = entry as Record<string, unknown>;
@@ -54,12 +64,27 @@ export async function credentialRequest(path: string, init: RequestInit): Promis
     payload = null;
   }
   if (!response.ok) {
-    const message = typeof payload?.error === "string" && payload.error.trim()
-      ? payload.error.trim()
-      : "The hub could not change this login.";
-    throw new CredentialRequestError(message, parseReferences(payload?.references));
+    const hubMessage = typeof payload?.error === "string" ? payload.error.trim() : "";
+    throw new CredentialRequestError(response.status, hubMessage, parseReferences(payload?.references));
   }
   return payload;
+}
+
+/** Words for a failed request: what still uses the login, the console's own refusal line, or the hub's 400 reason. */
+function useFailureText(): (action: CredentialAction, error: unknown) => string {
+  const t = useTranslations("security.logins");
+  const format = useFormatter();
+  return (action, error) => {
+    if (!(error instanceof CredentialRequestError)) return t(`errors.${action}Failed`);
+    if (error.references) {
+      const uses = credentialReferenceUses(error.references);
+      if (uses.length === 0) return t("errors.inUse");
+      const items = format.list(uses.map(({ use, count }) => t(`uses.${use}`, { count })), { type: "conjunction" });
+      return t("errors.usedBy", { items });
+    }
+    const failure = credentialFailure(action, error.status, error.hubMessage);
+    return failure ? t(`errors.${failure}`) : error.hubMessage;
+  };
 }
 
 const initialCreateDraft: CredentialCreateDraft = {
@@ -79,6 +104,9 @@ type CreateDialogProps = {
 };
 
 export function CreateCredentialDialog({ open, onClose, onCreated }: CreateDialogProps) {
+  const t = useTranslations("security");
+  const kindLabel = useCredentialKindLabel();
+  const failureText = useFailureText();
   const [draft, setDraft] = useState<CredentialCreateDraft>(initialCreateDraft);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,7 +122,9 @@ export function CreateCredentialDialog({ open, onClose, onCreated }: CreateDialo
     try {
       payload = buildCredentialCreatePayload(draft);
     } catch (validationError) {
-      setError(validationError instanceof Error ? validationError.message : "Credential profile is invalid.");
+      setError(validationError instanceof CredentialValidationError
+        ? t(`logins.errors.${validationError.problem}`, validationError.values)
+        : failureText("add", validationError));
       return;
     }
     setSaving(true);
@@ -108,7 +138,7 @@ export function CreateCredentialDialog({ open, onClose, onCreated }: CreateDialo
       onCreated();
       onClose();
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "The hub could not add this login.");
+      setError(failureText("add", requestError));
     } finally {
       setSaving(false);
     }
@@ -116,30 +146,30 @@ export function CreateCredentialDialog({ open, onClose, onCreated }: CreateDialo
 
   const privateKey = draft.kind === "ssh_private_key";
   return (
-    <Modal open={open} onClose={onClose} title="Add login" className="max-w-xl">
+    <Modal open={open} onClose={onClose} title={t("logins.add")} className="max-w-xl">
       <form onSubmit={(event) => void submit(event)} className="st-modal-form">
-        <p className="st-msg">The hub encrypts the secret and never shows it again.</p>
+        <p className="st-msg">{t("logins.form.secretNote")}</p>
         {error ? <p role="alert" className="st-msg bad">{error}</p> : null}
         <label className="st-field">
-          <span className="st-lbl">Name</span>
+          <span className="st-lbl">{t("logins.form.name")}</span>
           <Input value={draft.name} onChange={(event) => update("name", event.target.value)} maxLength={120} required />
         </label>
         <label className="st-field">
-          <span className="st-lbl">Type</span>
+          <span className="st-lbl">{t("logins.form.type")}</span>
           <Select value={draft.kind} onChange={(event) => update("kind", event.target.value as CredentialKind)} className="w-full">
-            {credentialKinds.map((kind) => <option key={kind} value={kind}>{credentialKindLabels[kind] ?? kind}</option>)}
+            {credentialKinds.map((kind) => <option key={kind} value={kind}>{kindLabel(kind)}</option>)}
           </Select>
         </label>
         <label className="st-field">
-          <span className="st-lbl">Username (optional)</span>
+          <span className="st-lbl">{t("logins.form.username")}</span>
           <Input value={draft.username} onChange={(event) => update("username", event.target.value)} maxLength={64} autoComplete="off" />
         </label>
         <label className="st-field">
-          <span className="st-lbl">Description (optional)</span>
+          <span className="st-lbl">{t("logins.form.description")}</span>
           <Input value={draft.description} onChange={(event) => update("description", event.target.value)} maxLength={4096} />
         </label>
         <label className="st-field">
-          <span className="st-lbl">{privateKey ? "Private key" : "Secret"}</span>
+          <span className="st-lbl">{privateKey ? t("logins.form.privateKey") : t("logins.form.secret")}</span>
           {privateKey ? (
             <textarea
               value={draft.secret}
@@ -153,24 +183,28 @@ export function CreateCredentialDialog({ open, onClose, onCreated }: CreateDialo
           ) : (
             <Input type="password" value={draft.secret} onChange={(event) => update("secret", event.target.value)} maxLength={16384} required autoComplete="new-password" />
           )}
-          <span className="st-hint">Spaces at the start and end are kept.</span>
+          <span className="st-hint">{t("logins.form.edgesKept")}</span>
         </label>
         <label className="st-field">
-          <span className="st-lbl">Passphrase (optional)</span>
+          <span className="st-lbl">{t("logins.form.passphrase")}</span>
           <Input type="password" value={draft.passphrase} onChange={(event) => update("passphrase", event.target.value)} maxLength={16384} autoComplete="new-password" />
         </label>
-        <label className="st-field">
-          <span className="st-lbl">Metadata JSON (optional string values only)</span>
-          <textarea
-            value={draft.metadataText}
-            onChange={(event) => update("metadataText", event.target.value)}
-            spellCheck={false}
-            className="st-ta"
-          />
-        </label>
+        {/* Metadata is for scripts and the API; it waits behind Advanced so the form asks only what a login needs. */}
+        <details className="st-details" open={draft.metadataText.trim() !== "" && draft.metadataText.trim() !== "{}"}>
+          <summary className="st-link">{t("logins.form.advanced")}</summary>
+          <label className="st-field st-fold">
+            <span className="st-lbl">{t("logins.form.metadata")}</span>
+            <textarea
+              value={draft.metadataText}
+              onChange={(event) => update("metadataText", event.target.value)}
+              spellCheck={false}
+              className="st-ta"
+            />
+          </label>
+        </details>
         <div className="st-dlg-acts">
-          <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button type="submit" variant="primary" loading={saving}>Add login</Button>
+          <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>{t("cancel")}</Button>
+          <Button type="submit" variant="primary" loading={saving}>{t("logins.add")}</Button>
         </div>
       </form>
     </Modal>
@@ -183,7 +217,12 @@ type RotateDialogProps = {
   onRotated: () => void;
 };
 
+/** The word the person types to confirm a rotation. It stays ROTATE in every language so the check never changes. */
+const rotateWord = "ROTATE";
+
 export function RotateCredentialDialog({ profile, onClose, onRotated }: RotateDialogProps) {
+  const t = useTranslations("security");
+  const failureText = useFailureText();
   const [secret, setSecret] = useState("");
   const [passphrase, setPassphrase] = useState("");
   const [reason, setReason] = useState("");
@@ -193,7 +232,7 @@ export function RotateCredentialDialog({ profile, onClose, onRotated }: RotateDi
 
   if (!profile) return null;
   const privateKey = profile.kind === "ssh_private_key";
-  const canRotate = secret.length > 0 && reason.trim().length > 0 && confirmation === "ROTATE";
+  const canRotate = secret.length > 0 && reason.trim().length > 0 && confirmation === rotateWord;
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -217,41 +256,41 @@ export function RotateCredentialDialog({ profile, onClose, onRotated }: RotateDi
       onRotated();
       onClose();
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Failed to rotate credential profile.");
+      setError(failureText("rotate", requestError));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <Modal open onClose={onClose} title={`Rotate ${profile.name}`} className="max-w-lg">
+    <Modal open onClose={onClose} title={t("logins.rotateTitle", { name: profile.name })} className="max-w-lg">
       <form onSubmit={(event) => void submit(event)} className="st-modal-form">
-        <p className="st-msg warn">Everything that uses this login switches to the new secret at once. The old secret cannot be recovered.</p>
+        <p className="st-msg warn">{t("logins.rotateWarning")}</p>
         {error ? <p role="alert" className="st-msg bad">{error}</p> : null}
         <label className="st-field">
-          <span className="st-lbl">{privateKey ? "Replacement private key" : "Replacement secret"}</span>
+          <span className="st-lbl">{privateKey ? t("logins.newPrivateKey") : t("logins.newSecret")}</span>
           {privateKey ? (
             <textarea value={secret} onChange={(event) => setSecret(event.target.value)} maxLength={16384} required spellCheck={false} autoComplete="new-password" className="st-ta" />
           ) : (
             <Input type="password" value={secret} onChange={(event) => setSecret(event.target.value)} maxLength={16384} required autoComplete="new-password" />
           )}
-          <span className="st-hint">Spaces at the start and end are kept.</span>
+          <span className="st-hint">{t("logins.form.edgesKept")}</span>
         </label>
         <label className="st-field">
-          <span className="st-lbl">Replacement passphrase (optional)</span>
+          <span className="st-lbl">{t("logins.newPassphrase")}</span>
           <Input type="password" value={passphrase} onChange={(event) => setPassphrase(event.target.value)} maxLength={16384} autoComplete="new-password" />
         </label>
         <label className="st-field">
-          <span className="st-lbl">Rotation reason</span>
+          <span className="st-lbl">{t("logins.reason")}</span>
           <Input value={reason} onChange={(event) => setReason(event.target.value)} maxLength={512} required />
         </label>
         <label className="st-field">
-          <span className="st-lbl">Type ROTATE to confirm</span>
+          <span className="st-lbl">{t("logins.confirmWord", { word: rotateWord })}</span>
           <Input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" />
         </label>
         <div className="st-dlg-acts">
-          <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button type="submit" variant="danger" className="st-danger-fill" loading={saving} disabled={!canRotate}>Rotate</Button>
+          <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>{t("cancel")}</Button>
+          <Button type="submit" variant="danger" className="st-danger-fill" loading={saving} disabled={!canRotate}>{t("logins.rotateConfirm")}</Button>
         </div>
       </form>
     </Modal>
@@ -265,6 +304,8 @@ type DeleteDialogProps = {
 };
 
 export function DeleteCredentialDialog({ profile, onClose, onDeleted }: DeleteDialogProps) {
+  const t = useTranslations("security");
+  const failureText = useFailureText();
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   if (!profile) return null;
@@ -277,24 +318,20 @@ export function DeleteCredentialDialog({ profile, onClose, onDeleted }: DeleteDi
       onDeleted();
       onClose();
     } catch (requestError) {
-      if (requestError instanceof CredentialRequestError && requestError.references.length > 0) {
-        setError(credentialReferenceMessage(requestError.references));
-      } else {
-        setError(requestError instanceof Error ? requestError.message : "Failed to delete credential profile.");
-      }
+      setError(failureText("delete", requestError));
     } finally {
       setDeleting(false);
     }
   };
 
   return (
-    <Modal open onClose={onClose} title={`Delete ${profile.name}`} className="max-w-md">
+    <Modal open onClose={onClose} title={t("logins.deleteTitle", { name: profile.name })} className="max-w-md">
       <div className="st-modal-form">
-        <p className="st-msg">The hub deletes it only when no device, bookmark, jump chain, collector or file connection still uses it.</p>
+        <p className="st-msg">{t("logins.deleteBody")}</p>
         {error ? <p role="alert" className="st-msg bad">{error}</p> : null}
         <div className="st-dlg-acts">
-          <Button variant="ghost" onClick={onClose} disabled={deleting}>Cancel</Button>
-          <Button variant="danger" className="st-danger-fill" onClick={() => void remove()} loading={deleting}>Delete</Button>
+          <Button variant="ghost" onClick={onClose} disabled={deleting}>{t("cancel")}</Button>
+          <Button variant="danger" className="st-danger-fill" onClick={() => void remove()} loading={deleting}>{t("logins.deleteConfirm")}</Button>
         </div>
       </div>
     </Modal>

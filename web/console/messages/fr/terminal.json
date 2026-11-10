@@ -260,5 +260,17 @@
     "snippets": "Extraits…",
     "settings": "Réglages…",
     "openInTerminal": "Ouvrir dans Terminal"
+  },
+  "words": {
+    "creatingSession": "Création de la session…",
+    "reconnectingSession": "Reconnexion de la session…",
+    "requestingTicket": "Demande du ticket de flux…",
+    "openingStream": "Ouverture du flux sécurisé…",
+    "startingShell": "Démarrage du shell distant…",
+    "connected": "Connecté",
+    "connectionError": "La connexion du terminal a échoué.",
+    "closedUnexpectedly": "La connexion s’est fermée de façon inattendue.",
+    "connectionFailed": "Connexion impossible.",
+    "sessionEnded": "Session terminée"
   }
 }

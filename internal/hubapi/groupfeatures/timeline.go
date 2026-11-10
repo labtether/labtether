@@ -163,7 +163,7 @@ func (d *Deps) HandleGroupTimeline(w http.ResponseWriter, r *http.Request, group
 		if run.UpdatedAt.Before(from) || run.UpdatedAt.After(to) {
 			continue
 		}
-		if !shared.ActionRunMatchesGroup(run, groupID, assetGroup) {
+		if !shared.ActionRunMatchesGroup(run, groupID, assetGroup) || !shared.ActionRunVisible(r.Context(), run) {
 			continue
 		}
 

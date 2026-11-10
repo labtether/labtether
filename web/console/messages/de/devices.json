@@ -240,6 +240,7 @@
     "remove": {
       "title": "{name} entfernen?",
       "body": "LabTether überwacht {name} nicht mehr und löscht seinen Verlauf.",
+      "addBack": "Um es später wieder hinzuzufügen, verwenden Sie ein neues Einmal-Token aus „Gerät hinzufügen“.",
       "typeName": "Geben Sie zur Bestätigung {name} ein",
       "cancel": "Abbrechen",
       "confirm": "Entfernen",
@@ -647,7 +648,7 @@
       "hostPlaceholder": "Geräteadresse",
       "port": "Port",
       "username": "Benutzername",
-      "credential": "Anmeldeprofil",
+      "credential": "Gespeicherte Anmeldung",
       "credentialHint": "Leer nutzt die Standardanmeldung dieses Geräts.",
       "strictHostKey": "Host-Schlüssel prüfen",
       "hostKey": "Host-Schlüssel",

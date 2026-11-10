@@ -260,5 +260,17 @@
     "snippets": "Fragmentos…",
     "settings": "Ajustes…",
     "openInTerminal": "Abrir en Terminal"
+  },
+  "words": {
+    "creatingSession": "Creando la sesión…",
+    "reconnectingSession": "Reconectando la sesión…",
+    "requestingTicket": "Solicitando el ticket del flujo…",
+    "openingStream": "Abriendo el flujo seguro…",
+    "startingShell": "Iniciando el shell remoto…",
+    "connected": "Conectado",
+    "connectionError": "La conexión del terminal falló.",
+    "closedUnexpectedly": "La conexión se cerró inesperadamente.",
+    "connectionFailed": "No se pudo conectar.",
+    "sessionEnded": "Sesión finalizada"
   }
 }

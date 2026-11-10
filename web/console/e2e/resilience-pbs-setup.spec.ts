@@ -24,7 +24,7 @@ for (const statusCode of [401, 403, 429, 500]) {
     await page.getByPlaceholder("https://pbs.local:8007").fill("https://pbs.local:8007/");
     await page.getByPlaceholder("root@pam!labtether").fill("root@pam!labtether");
     await page.getByPlaceholder("Required for initial setup").fill("pbs-secret");
-    await page.getByRole("button", { name: "Test Connection", exact: true }).click();
+    await page.getByRole("button", { name: "Test connection", exact: true }).click();
 
     await expect(page.getByText(`pbs test failed (${statusCode})`)).toBeVisible();
     await expect(page.getByText("Connect PBS", { exact: true })).toBeVisible();
@@ -51,7 +51,7 @@ test("pbs setup redacts secret literals in test-connection errors", async ({ pag
   await page.getByPlaceholder("https://pbs.local:8007").fill("https://pbs.local:8007/");
   await page.getByPlaceholder("root@pam!labtether").fill("root@pam!labtether");
   await page.getByPlaceholder("Required for initial setup").fill(leakedSecret);
-  await page.getByRole("button", { name: "Test Connection", exact: true }).click();
+  await page.getByRole("button", { name: "Test connection", exact: true }).click();
 
   await expect(page.getByText("token_secret=[redacted]")).toBeVisible();
   await expect(page.getByText(leakedSecret)).toHaveCount(0);
@@ -75,7 +75,7 @@ test("pbs setup surfaces offline network failures", async ({ page }) => {
   await page.getByPlaceholder("https://pbs.local:8007").fill("https://pbs.local:8007/");
   await page.getByPlaceholder("root@pam!labtether").fill("root@pam!labtether");
   await page.getByPlaceholder("Required for initial setup").fill("pbs-secret");
-  await page.getByRole("button", { name: "Test Connection", exact: true }).click();
+  await page.getByRole("button", { name: "Test connection", exact: true }).click();
 
   await expect(
     page.getByText(/ERR_INTERNET_DISCONNECTED|Failed to fetch|NetworkError when attempting to fetch resource|Load failed|failed to test pbs connection/i),
@@ -100,7 +100,7 @@ test("pbs setup save failures keep the wizard open with actionable error", async
   await page.getByPlaceholder("https://pbs.local:8007").fill("https://pbs.local:8007/");
   await page.getByPlaceholder("root@pam!labtether").fill("root@pam!labtether");
   await page.getByPlaceholder("Required for initial setup").fill("pbs-secret");
-  await page.getByRole("button", { name: "Save, Sync & Close", exact: true }).click();
+  await page.getByRole("button", { name: "Save and sync", exact: true }).click();
 
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByText("failed to save pbs settings (500)")).toBeVisible();
@@ -143,19 +143,19 @@ test("pbs setup recovers after transient test/save failures with retry", async (
   await page.getByPlaceholder("root@pam!labtether").fill("root@pam!labtether");
   await page.getByPlaceholder("Required for initial setup").fill("pbs-secret");
 
-  await page.getByRole("button", { name: "Test Connection", exact: true }).click();
+  await page.getByRole("button", { name: "Test connection", exact: true }).click();
   await expect(
     page.getByText(/ERR_INTERNET_DISCONNECTED|Failed to fetch|NetworkError when attempting to fetch resource|Load failed|failed to test pbs connection/i),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Test Connection", exact: true }).click();
+  await page.getByRole("button", { name: "Test connection", exact: true }).click();
   await expect(page.getByText("pbs API reachable after retry")).toBeVisible();
 
-  await page.getByRole("button", { name: "Save, Sync & Close", exact: true }).click();
+  await page.getByRole("button", { name: "Save and sync", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByText("temporary backend unavailable")).toBeVisible();
   await expect(dialog.getByText("Connect PBS", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Save, Sync & Close", exact: true }).click();
+  await page.getByRole("button", { name: "Save and sync", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });

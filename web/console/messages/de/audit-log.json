@@ -1,6 +1,10 @@
 {
   "title": "Audit-Protokoll",
   "exportCSV": "CSV exportieren",
+  "loadMore": "Ältere Einträge laden",
+  "loadingMore": "Wird geladen",
+  "exporting": "Wird exportiert",
+  "exportFailed": "Der Export wurde nicht abgeschlossen.",
   "views": {
     "log": "Protokoll",
     "recordings": "Aufzeichnungen"

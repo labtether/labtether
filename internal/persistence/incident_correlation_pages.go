@@ -37,23 +37,32 @@ type CorrelationIncident struct {
 }
 type CorrelationAction struct {
 	ID, Type, Target string
-	CreatedAt        time.Time
+	// TargetName is the device's name, empty when the store has none.
+	TargetName string
+	CreatedAt  time.Time
 }
 type CorrelationUpdate struct {
 	ID, PlanID, Target string
-	CreatedAt          time.Time
+	// PlanName is the update plan's name, empty when the store has none.
+	PlanName  string
+	CreatedAt time.Time
 }
 type CorrelationAlert struct {
 	ID, RuleID, Fingerprint, Severity string
 	FirstFiredAt                      time.Time
 	FiringScope                       *alerts.FiringScope
+	// RuleName and DeviceName name the rule and the one device the alert
+	// fired for; empty when the store has no names.
+	RuleName, DeviceName string
 	// Rejected exposes only the ID of malformed stored evidence. It cannot
 	// produce an event, but allows an explicit skip without poisoning a page.
 	Rejected bool
 }
 type CorrelationAudit struct {
 	ID, Type, ActorID, Target string
-	Timestamp                 time.Time
+	// ActorName is the person's user name, empty for API keys and unknowns.
+	ActorName string
+	Timestamp time.Time
 }
 
 // Done means genuine EOF, not a time/row budget. A full page needs a further

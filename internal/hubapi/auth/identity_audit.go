@@ -20,6 +20,10 @@ func (d *Deps) auditIdentityChange(r *http.Request, eventType, targetUserID stri
 	event := audit.NewEvent(eventType)
 	event.ActorID = d.actorIDFromContext(r.Context())
 	event.Target = strings.TrimSpace(targetUserID)
+	// A removed user is gone when the row is read; keep the name with it.
+	if username, ok := details["username"].(string); ok {
+		event.TargetName = strings.TrimSpace(username)
+	}
 	event.Decision = "applied"
 	event.Details = details
 	d.AppendAuditEventBestEffort(event, identityAuditWarning)

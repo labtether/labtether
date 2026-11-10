@@ -49,6 +49,11 @@ export function ScheduleEditor({
   const [pending, setPending] = useState(false);
 
   const expr = when === CUSTOM ? cron.trim().replace(/\s+/g, " ") : presetExpr(when, zone);
+  // Custom starts from the line the preset would save (with its CRON_TZ= zone), so switching does not move the time.
+  const pickWhen = (value: CronPresetID | typeof CUSTOM) => {
+    if (value === CUSTOM && when !== CUSTOM) setCron(presetExpr(when, zone));
+    setWhen(value);
+  };
   const next = nextRun(expr);
   const nextText = next ? t("next", { time: futureWhen(next.toISOString(), new Date(), locale) }) : t("cronHelp");
 
@@ -92,7 +97,7 @@ export function ScheduleEditor({
           <Input id="sf-name" value={name} maxLength={200} autoComplete="off" onChange={(e) => setName(e.target.value)} {...fieldAria("sf-name", errors.name)} />
         </Field>
         <Field id="sf-when" label={t("when")} hint={when === CUSTOM ? undefined : nextText}>
-          <Select className="w-full" id="sf-when" value={when} onChange={(e) => setWhen(e.target.value as CronPresetID | typeof CUSTOM)} {...fieldAria("sf-when", undefined, when !== CUSTOM)}>
+          <Select className="w-full" id="sf-when" value={when} onChange={(e) => pickWhen(e.target.value as CronPresetID | typeof CUSTOM)} {...fieldAria("sf-when", undefined, when !== CUSTOM)}>
             {CRON_PRESETS.map((p) => <option key={p.id} value={p.id}>{t(`presets.${p.id}`)}</option>)}
             <option value={CUSTOM}>{t("custom")}</option>
           </Select>

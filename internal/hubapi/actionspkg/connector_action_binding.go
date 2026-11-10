@@ -23,7 +23,10 @@ func (d *Deps) bindConnectorActionCollector(ctx context.Context, w http.Response
 		}
 		bound, err := configured.Bind(ctx, req.ActionID, connectorsdk.ActionRequest{TargetID: req.Target, Params: req.Params, DryRun: req.DryRun})
 		if err != nil {
-			if errors.Is(err, connectorsdk.ErrComposeUpgradeRequired) {
+			var unavailable *connectorsdk.TargetUnavailableError
+			if errors.As(err, &unavailable) {
+				servicehttp.WriteError(w, http.StatusConflict, unavailable.Error())
+			} else if errors.Is(err, connectorsdk.ErrComposeUpgradeRequired) {
 				servicehttp.WriteError(w, http.StatusConflict, connectorsdk.ErrComposeUpgradeRequired.Error())
 			} else if !maintenanceguard.WriteBlockedAction(w, err) {
 				servicehttp.WriteError(w, http.StatusConflict, "cannot bind connector action target")

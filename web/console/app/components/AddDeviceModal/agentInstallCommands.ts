@@ -2,6 +2,7 @@
 
 import { type HubConnectionCandidate } from "../../hooks/useEnrollment";
 import { trimTrailingSlashes } from "../../../lib/trimChars";
+import type { AddDeviceT } from "./addDeviceText";
 
 export type Platform = "linux" | "macos" | "windows";
 
@@ -104,21 +105,27 @@ export function manualInstallCommand(
   return `bash 3<&0 <<'LABTETHER_AGENT'\nset -euo pipefail\numask 077\ntoken_file="$(mktemp)"\ntrap 'rm -f "$token_file"' EXIT\nread -r -s -p 'Paste enrollment token: ' token <&3\nprintf '\\n'\nprintf '%s\\n' "$token" > "$token_file"\nunset token\nLABTETHER_ENROLLMENT_TOKEN_FILE="$token_file" \\\n  LABTETHER_WS_URL=${shellQuote(wsURL)} \\\n  ./labtether-agent\nLABTETHER_AGENT`;
 }
 
-export function trustModeLabel(
+const TRUST_MODE_KEYS = new Map([
+  ["public_tls", "publicTls"],
+  ["custom_tls", "customTls"],
+  ["labtether_ca", "labtetherCa"],
+  ["plain_http", "plainHttp"],
+]);
+
+/**
+ * How agents trust the selected address, as a short label and one line of detail. The detail comes from the
+ * console's messages so it follows the language; a trust mode it does not know falls back to the hub's text.
+ */
+export function trustModeText(
+  t: AddDeviceT,
   candidate: HubConnectionCandidate | null | undefined,
-): string {
-  switch (candidate?.trust_mode) {
-    case "public_tls":
-      return "Public / Tailscale trusted TLS";
-    case "custom_tls":
-      return "Operator-managed TLS";
-    case "labtether_ca":
-      return "LabTether built-in CA";
-    case "plain_http":
-      return "Plain HTTP";
-    default:
-      return "Connection";
+): { label: string; reason: string } | null {
+  const key = TRUST_MODE_KEYS.get(candidate?.trust_mode ?? "");
+  if (key) {
+    return { label: t(`agent.trust.${key}`), reason: t(`agent.trustReason.${key}`) };
   }
+  const reason = candidate?.preferred_reason ?? "";
+  return reason ? { label: t("agent.trust.other"), reason } : null;
 }
 
 export function linuxInstallerCommand(
@@ -205,13 +212,27 @@ curl --cacert "$ca_file" -fsSL ${shellQuote(`${base}/install.sh`)} -o "$installe
   return `bash 3<&0 <<'LABTETHER_INSTALL'\nset -euo pipefail\numask 077\ninstaller="$(mktemp)"\ntoken_file="$(mktemp)"\nca_file=""\ncleanup() {\n  rm -f "$installer" "$token_file"\n  if [[ -n "$ca_file" ]]; then rm -f "$ca_file"; fi\n}\ntrap cleanup EXIT\n${installerDownload}\nchmod 700 "$installer"\n${tokenSetup}\nsudo bash "$installer" "${tokenArgsExpansion}" \\\n  ${flags.join(" \\\n  ")}\nLABTETHER_INSTALL`;
 }
 
-export function formatHubCandidateOption(candidate: HubConnectionCandidate): string {
-  const label =
-    candidate.label ||
-    (candidate.kind === "tailscale"
-      ? "Tailscale"
-      : candidate.kind === "lan"
-        ? "LAN"
-        : "Connection");
-  return candidate.host ? `${label} (${candidate.host})` : label;
+const HUB_TARGET_KEYS = new Map([
+  ["external", "external"],
+  ["request", "request"],
+  ["tailscale", "tailscale"],
+  ["tailscale_https", "tailscaleHttps"],
+  ["lan", "lan"],
+  ["fallback", "fallback"],
+]);
+
+/** The name of one of the hub's addresses, by its kind; an unknown kind keeps the hub's own label. */
+export function hubCandidateLabel(t: AddDeviceT, candidate: HubConnectionCandidate): string {
+  // The hub labels a loopback request address "Localhost" and any other request address "Request host".
+  if (candidate.kind === "request" && candidate.label === "Localhost") {
+    return t("agent.target.localhost");
+  }
+  const key = HUB_TARGET_KEYS.get(candidate.kind);
+  if (key) return t(`agent.target.${key}`);
+  return candidate.label || t("agent.target.other");
+}
+
+export function formatHubCandidateOption(t: AddDeviceT, candidate: HubConnectionCandidate): string {
+  const label = hubCandidateLabel(t, candidate);
+  return candidate.host ? t("agent.targetOption", { label, host: candidate.host }) : label;
 }

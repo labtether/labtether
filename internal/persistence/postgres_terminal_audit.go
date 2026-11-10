@@ -2,7 +2,6 @@ package persistence
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"sort"
 	"time"
@@ -382,18 +381,14 @@ func (s *PostgresStore) Append(event audit.Event) error {
 		event.Timestamp = time.Now().UTC()
 	}
 
-	details := []byte("{}")
-	if event.Details != nil {
-		payload, err := json.Marshal(event.Details)
-		if err != nil {
-			return err
-		}
-		details = payload
+	details, err := marshalAuditDetails(event)
+	if err != nil {
+		return err
 	}
 
-	_, err := s.pool.Exec(ctx,
+	_, err = s.pool.Exec(ctx,
 		`INSERT INTO audit_events (id, type, actor_id, target, session_id, command_id, decision, reason, details, timestamp)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, `+auditDetailsWithTargetNameSQL+`, $10)
 		 ON CONFLICT (id) DO NOTHING`,
 		event.ID,
 		event.Type,
@@ -461,12 +456,7 @@ func (s *PostgresStore) List(limit, offset int) ([]audit.Event, error) {
 			return nil, err
 		}
 
-		if len(details) > 0 {
-			mapped := map[string]any{}
-			if err := json.Unmarshal(details, &mapped); err == nil {
-				event.Details = mapped
-			}
-		}
+		unmarshalAuditDetails(&event, details)
 		out = append(out, event)
 	}
 
