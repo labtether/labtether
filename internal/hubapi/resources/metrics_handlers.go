@@ -193,7 +193,7 @@ func (d *Deps) HandleAssetMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !ok {
-		servicehttp.WriteError(w, http.StatusNotFound, "asset not found")
+		servicehttp.WriteError(w, http.StatusNotFound, "device not found")
 		return
 	}
 

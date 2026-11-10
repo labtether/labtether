@@ -3,6 +3,7 @@ package truenas
 import (
 	"net/http"
 
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
@@ -11,6 +12,11 @@ import (
 // only a stable, non-sensitive description to API clients.
 func writeTrueNASError(w http.ResponseWriter, status int, clientMessage string, err error) {
 	securityruntime.Logf("truenas: %s: %v", clientMessage, err)
+	// A system that cannot be reached, or refuses the saved login, is said in
+	// fixed words; every other 5xx text stays hidden.
+	if status == http.StatusBadGateway && shared.WriteUpstreamUnreachable(w, err, "TrueNAS") {
+		return
+	}
 	servicehttp.WriteError(w, status, clientMessage)
 }
 

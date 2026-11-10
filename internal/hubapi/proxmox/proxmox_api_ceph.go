@@ -2,7 +2,6 @@ package proxmox
 
 import (
 	"context"
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strconv"
 	"strings"
@@ -45,7 +44,7 @@ func (d *Deps) HandleProxmoxCeph(w http.ResponseWriter, r *http.Request) {
 		}
 		pools, listErr := runtime.client.ListCephPools(ctx)
 		if listErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to list ceph pools: "+shared.SanitizeUpstreamError(listErr.Error()))
+			writeProxmoxUpstreamError(w, "failed to list ceph pools: ", listErr)
 			return
 		}
 		if pools == nil {
@@ -84,7 +83,7 @@ func (d *Deps) HandleProxmoxCeph(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if setErr := runtime.client.SetCephOSDState(ctx, node, osdID, state); setErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to set osd state: "+shared.SanitizeUpstreamError(setErr.Error()))
+			writeProxmoxUpstreamError(w, "failed to set osd state: ", setErr)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]string{
@@ -119,7 +118,7 @@ func (d *Deps) HandleProxmoxCephStatus(w http.ResponseWriter, r *http.Request) {
 
 	status, err := runtime.client.GetCephStatus(ctx)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to fetch ceph status: "+shared.SanitizeUpstreamError(err.Error()))
+		writeProxmoxUpstreamError(w, "failed to fetch ceph status: ", err)
 		return
 	}
 

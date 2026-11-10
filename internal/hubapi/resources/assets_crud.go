@@ -69,7 +69,7 @@ func (d *Deps) V2GetAsset(w http.ResponseWriter, _ *http.Request, assetID string
 		return
 	}
 	if !ok {
-		apiv2.WriteError(w, http.StatusNotFound, "asset_not_found", "no asset with id: "+assetID)
+		apiv2.WriteError(w, http.StatusNotFound, "asset_not_found", "device not found")
 		return
 	}
 
@@ -149,7 +149,7 @@ func (d *Deps) V2UpdateAsset(w http.ResponseWriter, r *http.Request, assetID str
 	updated, err := d.AssetStore.UpdateAsset(assetID, req)
 	if err != nil {
 		if errors.Is(err, persistence.ErrNotFound) {
-			apiv2.WriteError(w, http.StatusNotFound, "asset_not_found", "no asset with id: "+assetID)
+			apiv2.WriteError(w, http.StatusNotFound, "asset_not_found", "device not found")
 			return
 		}
 		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to update asset")
@@ -169,12 +169,12 @@ func (d *Deps) V2DeleteAsset(w http.ResponseWriter, r *http.Request, assetID str
 		return
 	}
 	if !ok {
-		apiv2.WriteError(w, http.StatusNotFound, "asset_not_found", "no asset with id: "+assetID)
+		apiv2.WriteError(w, http.StatusNotFound, "asset_not_found", "device not found")
 		return
 	}
 	if err := d.DeleteAsset(r.Context(), assetEntry); err != nil {
 		if errors.Is(err, persistence.ErrNotFound) {
-			apiv2.WriteError(w, http.StatusNotFound, "asset_not_found", "no asset with id: "+assetID)
+			apiv2.WriteError(w, http.StatusNotFound, "asset_not_found", "device not found")
 			return
 		}
 		if errors.Is(err, ErrConnectedAgentDeletion) {

@@ -1,7 +1,6 @@
 package proxmox
 
 import (
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strings"
 	"time"
@@ -31,11 +30,11 @@ func (d *Deps) handleProxmoxCapabilities(w http.ResponseWriter, r *http.Request)
 
 	target, ok, err := d.ResolveProxmoxSessionTarget(assetID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to resolve proxmox asset: "+shared.SanitizeUpstreamError(err.Error()))
+		writeProxmoxUpstreamError(w, "failed to resolve proxmox asset: ", err)
 		return
 	}
 	if !ok {
-		servicehttp.WriteError(w, http.StatusNotFound, "asset is not proxmox-backed")
+		d.writeNotProxmoxDevice(w, assetID)
 		return
 	}
 

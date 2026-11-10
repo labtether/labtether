@@ -3,7 +3,6 @@ package proxmox
 import (
 	"context"
 	"github.com/labtether/labtether/internal/apiv2"
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strings"
 	"time"
@@ -92,11 +91,11 @@ func (d *Deps) HandleProxmoxAssets(w http.ResponseWriter, r *http.Request) {
 
 	target, ok, err := d.ResolveProxmoxSessionTarget(assetID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to resolve proxmox asset: "+shared.SanitizeUpstreamError(err.Error()))
+		writeProxmoxUpstreamError(w, "failed to resolve proxmox asset: ", err)
 		return
 	}
 	if !ok {
-		servicehttp.WriteError(w, http.StatusNotFound, "asset is not proxmox-backed")
+		d.writeNotProxmoxDevice(w, assetID)
 		return
 	}
 	if !d.requireProxmoxCollectorAccess(w, r, target.CollectorID) {
@@ -115,7 +114,7 @@ func (d *Deps) HandleProxmoxAssets(w http.ResponseWriter, r *http.Request) {
 	if action == "details" {
 		resp, loadErr := d.LoadProxmoxAssetDetails(ctx, assetID, target, runtime)
 		if loadErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to load proxmox details: "+loadErr.Error())
+			writeProxmoxUpstreamError(w, "failed to load proxmox details: ", loadErr)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, resp)
@@ -125,7 +124,7 @@ func (d *Deps) HandleProxmoxAssets(w http.ResponseWriter, r *http.Request) {
 	window := ParseStorageInsightsWindow(r.URL.Query().Get("window"))
 	resp, loadErr := d.LoadProxmoxStorageInsights(ctx, assetID, target, runtime, window)
 	if loadErr != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to load proxmox storage insights: "+loadErr.Error())
+		writeProxmoxUpstreamError(w, "failed to load proxmox storage insights: ", loadErr)
 		return
 	}
 	servicehttp.WriteJSON(w, http.StatusOK, resp)

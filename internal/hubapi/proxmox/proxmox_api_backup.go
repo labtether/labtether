@@ -41,11 +41,11 @@ func (d *Deps) handleProxmoxAssetBackup(w http.ResponseWriter, r *http.Request) 
 
 	target, ok, err := d.ResolveProxmoxSessionTarget(assetID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to resolve proxmox asset: "+shared.SanitizeUpstreamError(err.Error()))
+		writeProxmoxUpstreamError(w, "failed to resolve proxmox asset: ", err)
 		return
 	}
 	if !ok {
-		servicehttp.WriteError(w, http.StatusNotFound, "asset is not proxmox-backed")
+		d.writeNotProxmoxDevice(w, assetID)
 		return
 	}
 
@@ -88,7 +88,7 @@ func (d *Deps) handleProxmoxAssetBackup(w http.ResponseWriter, r *http.Request) 
 
 	upid, err := runtime.client.TriggerBackup(ctx, target.Node, target.VMID, req.Storage, req.Mode)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to trigger backup: "+shared.SanitizeUpstreamError(err.Error()))
+		writeProxmoxUpstreamError(w, "failed to trigger backup: ", err)
 		return
 	}
 

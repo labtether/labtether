@@ -8,7 +8,6 @@ import (
 	"strconv"
 
 	"github.com/labtether/labtether/internal/assets"
-	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
@@ -37,7 +36,7 @@ func (d *Deps) HandlePortainerImages(ctx context.Context, w http.ResponseWriter,
 		}
 		images, err := runtime.Client.GetImages(ctx, epID)
 		if err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+			writePortainerUpstreamError(w, err)
 			return
 		}
 		WritePortainerJSON(w, images, nil)
@@ -75,7 +74,7 @@ func (d *Deps) HandlePortainerImages(ctx context.Context, w http.ResponseWriter,
 			return
 		}
 		if err := runtime.Client.PullImage(ctx, epID, req.Image); err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+			writePortainerUpstreamError(w, err)
 			return
 		}
 		WritePortainerJSON(w, map[string]string{"status": "ok"}, nil)
@@ -98,7 +97,7 @@ func (d *Deps) HandlePortainerImages(ctx context.Context, w http.ResponseWriter,
 			return
 		}
 		if err := runtime.Client.RemoveImage(ctx, epID, imageID); err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+			writePortainerUpstreamError(w, err)
 			return
 		}
 		WritePortainerJSON(w, map[string]string{"status": "ok"}, nil)
@@ -127,7 +126,7 @@ func (d *Deps) HandlePortainerVolumes(ctx context.Context, w http.ResponseWriter
 		case http.MethodGet:
 			volumes, err := runtime.Client.GetVolumes(ctx, epID)
 			if err != nil {
-				servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+				writePortainerUpstreamError(w, err)
 				return
 			}
 			WritePortainerJSON(w, volumes, nil)
@@ -157,7 +156,7 @@ func (d *Deps) HandlePortainerVolumes(ctx context.Context, w http.ResponseWriter
 			}
 			result, err := runtime.Client.CreateVolume(ctx, epID, req.Name, req.Driver)
 			if err != nil {
-				servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+				writePortainerUpstreamError(w, err)
 				return
 			}
 			WritePortainerJSON(w, result, nil)
@@ -185,7 +184,7 @@ func (d *Deps) HandlePortainerVolumes(ctx context.Context, w http.ResponseWriter
 		return
 	}
 	if err := runtime.Client.RemoveVolume(ctx, epID, volumeName); err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+		writePortainerUpstreamError(w, err)
 		return
 	}
 	WritePortainerJSON(w, map[string]string{"status": "ok"}, nil)
@@ -213,7 +212,7 @@ func (d *Deps) HandlePortainerNetworks(ctx context.Context, w http.ResponseWrite
 		case http.MethodGet:
 			networks, err := runtime.Client.GetNetworks(ctx, epID)
 			if err != nil {
-				servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+				writePortainerUpstreamError(w, err)
 				return
 			}
 			WritePortainerJSON(w, networks, nil)
@@ -245,7 +244,7 @@ func (d *Deps) HandlePortainerNetworks(ctx context.Context, w http.ResponseWrite
 			}
 			result, err := runtime.Client.CreateNetwork(ctx, epID, req.Name, req.Driver, req.Subnet, req.Gateway)
 			if err != nil {
-				servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+				writePortainerUpstreamError(w, err)
 				return
 			}
 			WritePortainerJSON(w, result, nil)
@@ -273,7 +272,7 @@ func (d *Deps) HandlePortainerNetworks(ctx context.Context, w http.ResponseWrite
 		return
 	}
 	if err := runtime.Client.RemoveNetwork(ctx, epID, networkID); err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+		writePortainerUpstreamError(w, err)
 		return
 	}
 	WritePortainerJSON(w, map[string]string{"status": "ok"}, nil)

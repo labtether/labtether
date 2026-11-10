@@ -42,7 +42,7 @@ func (d *Deps) HandlePortainerStacks(ctx context.Context, w http.ResponseWriter,
 
 	stacks, err := runtime.Client.GetStacks(ctx)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+		writePortainerUpstreamError(w, err)
 		return
 	}
 	endpointStacks := make([]portainerconnector.Stack, 0, len(stacks))
@@ -111,7 +111,7 @@ func (d *Deps) HandlePortainerStacks(ctx context.Context, w http.ResponseWriter,
 		case http.MethodGet:
 			content, err := runtime.Client.GetStackCompose(ctx, stackID)
 			if err != nil {
-				servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+				writePortainerUpstreamError(w, err)
 				return
 			}
 			WritePortainerJSON(w, content, nil)
@@ -133,7 +133,7 @@ func (d *Deps) HandlePortainerStacks(ctx context.Context, w http.ResponseWriter,
 				return
 			}
 			if err := runtime.Client.UpdateStackCompose(ctx, stackID, epID, req.Content); err != nil {
-				servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+				writePortainerUpstreamError(w, err)
 				return
 			}
 			WritePortainerJSON(w, map[string]string{"status": "ok"}, nil)
@@ -151,7 +151,7 @@ func (d *Deps) HandlePortainerStacks(ctx context.Context, w http.ResponseWriter,
 			return
 		}
 		if err := runtime.Client.StartStack(ctx, stackID, epID); err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+			writePortainerUpstreamError(w, err)
 			return
 		}
 		WritePortainerJSON(w, map[string]string{"status": "ok"}, nil)
@@ -165,7 +165,7 @@ func (d *Deps) HandlePortainerStacks(ctx context.Context, w http.ResponseWriter,
 			return
 		}
 		if err := runtime.Client.StopStack(ctx, stackID, epID); err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+			writePortainerUpstreamError(w, err)
 			return
 		}
 		WritePortainerJSON(w, map[string]string{"status": "ok"}, nil)
@@ -180,7 +180,7 @@ func (d *Deps) HandlePortainerStacks(ctx context.Context, w http.ResponseWriter,
 			return
 		}
 		if err := runtime.Client.RedeployStack(ctx, stackID, epID, pullImage); err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+			writePortainerUpstreamError(w, err)
 			return
 		}
 		WritePortainerJSON(w, map[string]string{"status": "ok"}, nil)
@@ -194,7 +194,7 @@ func (d *Deps) HandlePortainerStacks(ctx context.Context, w http.ResponseWriter,
 			return
 		}
 		if err := runtime.Client.RemoveStack(ctx, stackID, epID); err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+			writePortainerUpstreamError(w, err)
 			return
 		}
 		WritePortainerJSON(w, map[string]string{"status": "ok"}, nil)

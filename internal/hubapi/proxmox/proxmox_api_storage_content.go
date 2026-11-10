@@ -51,7 +51,7 @@ func (d *Deps) handleProxmoxStorageContent(w http.ResponseWriter, r *http.Reques
 	case http.MethodGet:
 		content, getErr := runtime.client.GetStorageContent(ctx, node, storageName)
 		if getErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to fetch storage content: "+shared.SanitizeUpstreamError(getErr.Error()))
+			writeProxmoxUpstreamError(w, "failed to fetch storage content: ", getErr)
 			return
 		}
 		if content == nil {
@@ -77,7 +77,7 @@ func (d *Deps) handleProxmoxStorageContent(w http.ResponseWriter, r *http.Reques
 		}
 		upid, postErr := runtime.client.DownloadStorageURL(ctx, node, storageName, req.Filename, req.URL)
 		if postErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to start download: "+shared.SanitizeUpstreamError(postErr.Error()))
+			writeProxmoxUpstreamError(w, "failed to start download: ", postErr)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]string{
@@ -94,7 +94,7 @@ func (d *Deps) handleProxmoxStorageContent(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		if delErr := runtime.client.DeleteStorageContent(ctx, node, storageName, volid); delErr != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "failed to delete storage content: "+shared.SanitizeUpstreamError(delErr.Error()))
+			writeProxmoxUpstreamError(w, "failed to delete storage content: ", delErr)
 			return
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]string{"status": "deleted"})

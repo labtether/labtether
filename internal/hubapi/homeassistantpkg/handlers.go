@@ -199,7 +199,9 @@ func (d *Deps) executeEntityAction(w http.ResponseWriter, r *http.Request, asset
 
 	runtime, err := d.loadRuntimeForAsset(asset, req.CollectorID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusConflict, "Home Assistant collector is not available for the selected entity")
+		if !shared.WriteCollectorSetupError(w, err, "Home Assistant", true) {
+			servicehttp.WriteError(w, http.StatusConflict, "The Home Assistant connection for this entity can't be used.")
+		}
 		return
 	}
 	entityID := strings.TrimSpace(asset.Metadata["entity_id"])
@@ -221,7 +223,9 @@ func (d *Deps) executeEntityAction(w http.ResponseWriter, r *http.Request, asset
 		DryRun:   req.DryRun,
 	})
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "Home Assistant action execution failed")
+		if !shared.WriteUpstreamUnreachable(w, err, "Home Assistant") {
+			servicehttp.WriteError(w, http.StatusBadGateway, "Home Assistant action execution failed")
+		}
 		return
 	}
 	if strings.EqualFold(result.Status, "failed") {

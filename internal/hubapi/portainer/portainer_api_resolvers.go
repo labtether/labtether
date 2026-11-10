@@ -13,8 +13,8 @@ import (
 )
 
 var (
-	ErrPortainerAssetNotFound = errors.New("portainer asset not found")
-	ErrAssetNotPortainer      = errors.New("asset is not portainer-backed")
+	ErrPortainerAssetNotFound = errors.New("device not found")
+	ErrAssetNotPortainer      = errors.New("this is not a Portainer device")
 )
 
 func writePortainerResolveError(w http.ResponseWriter, err error) {
@@ -26,7 +26,7 @@ func writePortainerResolveError(w http.ResponseWriter, err error) {
 	if shared.WriteCollectorSetupError(w, err, "Portainer", true) {
 		return
 	}
-	servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
+	writePortainerUpstreamError(w, err)
 }
 
 func (d *Deps) ResolvePortainerAsset(assetID string) (assets.Asset, error) {
@@ -68,4 +68,14 @@ func (d *Deps) ResolvePortainerAssetRuntime(assetID string) (assets.Asset, *Port
 		return assets.Asset{}, nil, fmt.Errorf("portainer asset collector does not match runtime")
 	}
 	return asset, runtime, nil
+}
+
+// writePortainerUpstreamError answers a Portainer request that failed after
+// its connection was loaded. A Portainer that cannot be reached, or refuses
+// the saved login, is said in fixed words; anything else stays a hidden 502.
+func writePortainerUpstreamError(w http.ResponseWriter, err error) {
+	if shared.WriteUpstreamUnreachable(w, err, "Portainer") {
+		return
+	}
+	servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
 }
