@@ -31,7 +31,8 @@ func (d *Deps) HandleEdges(w http.ResponseWriter, r *http.Request) {
 		}
 		// Support both asset_id (single) and asset_ids (comma-separated batch)
 		assetIDsRaw := strings.TrimSpace(r.URL.Query().Get("asset_ids"))
-		if assetIDsRaw == "" {
+		oneDevice := assetIDsRaw == ""
+		if oneDevice {
 			assetIDsRaw = strings.TrimSpace(r.URL.Query().Get("asset_id"))
 		}
 		if assetIDsRaw == "" {
@@ -42,6 +43,12 @@ func (d *Deps) HandleEdges(w http.ResponseWriter, r *http.Request) {
 			if !requireAssetAccess(w, r, assetID) {
 				return
 			}
+		}
+		// asset_id asks about one device, so an unknown ID is a 404. The
+		// console's Map sends asset_ids for every node it shows; there an ID
+		// that no longer exists only adds nothing to the list.
+		if oneDevice && !strings.Contains(assetIDsRaw, ",") && d.writeIfDeviceMissing(w, assetIDsRaw) {
+			return
 		}
 		limit := parseLimit(r, 50)
 		var edgeList []edges.Edge
@@ -251,6 +258,9 @@ func (d *Deps) HandleEdgeTree(w http.ResponseWriter, r *http.Request) {
 	if !requireAssetAccess(w, r, root) {
 		return
 	}
+	if d.writeIfDeviceMissing(w, root) {
+		return
+	}
 	depth := 3
 	if raw := r.URL.Query().Get("depth"); raw != "" {
 		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
@@ -289,6 +299,9 @@ func (d *Deps) HandleEdgeAncestors(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !requireAssetAccess(w, r, assetID) {
+		return
+	}
+	if d.writeIfDeviceMissing(w, assetID) {
 		return
 	}
 	depth := 3
