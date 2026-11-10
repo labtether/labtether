@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import type { Asset, Group } from "../../../../console/models";
 import { Button } from "../../../../components/ui/Button";
 import { GroupParentSelect } from "../../../../components/GroupParentSelect";
-import { draftOf, deviceEditPatch, useDeviceEdit } from "./deviceEdit";
+import { draftOf, deviceEditPatch, mergeDraft, useDeviceEdit } from "./deviceEdit";
 import { editErrorText } from "./NodeEditModal";
 
 /**
@@ -20,9 +20,16 @@ export function DeviceEditCard({ asset, groups, onSaved }: { asset: Asset; group
   const [saved, setSaved] = useState(false);
   const { save, saving } = useDeviceEdit(asset);
 
-  // A save (or another person's change) arrives with the next status: start again from what the Hub has.
+  // A change from the Hub (a save, or another person's edit) arrives with a later status. Take it in every field
+  // the person has not changed; keep the ones they are typing. A status refresh from the previous save can land
+  // while they type the next change.
+  const base = useRef(draftOf(asset));
   const key = `${asset.name}|${asset.group_id ?? ""}|${(asset.tags ?? []).join(",")}`;
-  useEffect(() => setDraft(draftOf(asset)), [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const next = draftOf(asset);
+    setDraft((current) => mergeDraft(current, base.current, next));
+    base.current = next;
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const changed = deviceEditPatch(asset, draft) !== null;
   const submit = async () => {

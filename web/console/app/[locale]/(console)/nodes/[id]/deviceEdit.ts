@@ -12,6 +12,19 @@ export const draftOf = (asset: Pick<Asset, "name" | "group_id" | "tags">): Devic
   tags: (asset.tags ?? []).join(", "),
 });
 
+/**
+ * The form after the Hub's values move from `base` to `next`: each field the person left as it was takes the new
+ * value; a field they changed keeps their text.
+ */
+export function mergeDraft(current: DeviceEditDraft, base: DeviceEditDraft, next: DeviceEditDraft): DeviceEditDraft {
+  const sameTags = parseTags(current.tags).join(",") === parseTags(base.tags).join(",");
+  return {
+    name: current.name.trim() === base.name.trim() ? next.name : current.name,
+    groupId: current.groupId === base.groupId ? next.groupId : current.groupId,
+    tags: sameTags ? next.tags : current.tags,
+  };
+}
+
 /** "nas, backup,  nas" → ["nas", "backup"]: comma-separated, trimmed, each tag once. */
 export function parseTags(text: string): string[] {
   return [...new Set(text.split(",").map((tag) => tag.trim()).filter(Boolean))];
