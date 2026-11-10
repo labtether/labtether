@@ -55,7 +55,7 @@ func (d *Deps) HandlePBSTaskStatus(w http.ResponseWriter, r *http.Request) {
 	collectorID := strings.TrimSpace(r.URL.Query().Get("collector_id"))
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
+		writePBSRuntimeError(w, err, false)
 		return
 	}
 
@@ -97,7 +97,7 @@ func (d *Deps) HandlePBSTaskLog(w http.ResponseWriter, r *http.Request) {
 	collectorID := strings.TrimSpace(r.URL.Query().Get("collector_id"))
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
+		writePBSRuntimeError(w, err, false)
 		return
 	}
 
@@ -135,7 +135,7 @@ func (d *Deps) HandlePBSTaskStop(w http.ResponseWriter, r *http.Request) {
 	collectorID := strings.TrimSpace(r.URL.Query().Get("collector_id"))
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
+		writePBSRuntimeError(w, err, false)
 		return
 	}
 

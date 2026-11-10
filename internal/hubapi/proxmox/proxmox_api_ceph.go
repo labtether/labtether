@@ -30,7 +30,7 @@ func (d *Deps) HandleProxmoxCeph(w http.ResponseWriter, r *http.Request) {
 	collectorID := strings.TrimSpace(r.URL.Query().Get("collector_id"))
 	runtime, err := d.LoadProxmoxRuntime(collectorID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "proxmox runtime unavailable: "+shared.SanitizeUpstreamError(err.Error()))
+		writeProxmoxRuntimeError(w, err, false)
 		return
 	}
 
@@ -110,7 +110,7 @@ func (d *Deps) HandleProxmoxCephStatus(w http.ResponseWriter, r *http.Request) {
 	collectorID := strings.TrimSpace(r.URL.Query().Get("collector_id"))
 	runtime, err := d.LoadProxmoxRuntime(collectorID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "proxmox runtime unavailable: "+shared.SanitizeUpstreamError(err.Error()))
+		writeProxmoxRuntimeError(w, err, false)
 		return
 	}
 

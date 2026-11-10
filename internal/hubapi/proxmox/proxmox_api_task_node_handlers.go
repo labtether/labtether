@@ -42,7 +42,7 @@ func (d *Deps) HandleProxmoxTaskLog(w http.ResponseWriter, r *http.Request) {
 	// Find a Proxmox runtime (prefer explicit collector_id when provided).
 	runtime, err := d.LoadProxmoxRuntime(collectorID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "proxmox runtime unavailable: "+err.Error())
+		writeProxmoxRuntimeError(w, err, false)
 		return
 	}
 
@@ -89,7 +89,7 @@ func (d *Deps) HandleProxmoxTaskStop(w http.ResponseWriter, r *http.Request) {
 
 	runtime, err := d.LoadProxmoxRuntime(collectorID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "proxmox runtime unavailable: "+err.Error())
+		writeProxmoxRuntimeError(w, err, false)
 		return
 	}
 
@@ -194,7 +194,7 @@ func (d *Deps) HandleProxmoxClusterStatus(w http.ResponseWriter, r *http.Request
 
 	runtime, err := d.LoadProxmoxRuntime(collectorID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "proxmox runtime unavailable: "+err.Error())
+		writeProxmoxRuntimeError(w, err, false)
 		return
 	}
 
@@ -232,7 +232,7 @@ func (d *Deps) HandleProxmoxNodeNetwork(w http.ResponseWriter, r *http.Request) 
 
 	runtime, err := d.LoadProxmoxRuntime(collectorID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "proxmox runtime unavailable: "+err.Error())
+		writeProxmoxRuntimeError(w, err, false)
 		return
 	}
 

@@ -64,20 +64,20 @@ func (d *Deps) HandleWakeOnLAN(w http.ResponseWriter, r *http.Request, assetID s
 	}
 	if !ok {
 		d.appendWakeRequestAudit(r.Context(), "asset.wake.outcome", assetID, "denied", "asset_not_found", nil)
-		servicehttp.WriteError(w, http.StatusNotFound, "asset not found")
+		servicehttp.WriteError(w, http.StatusNotFound, "device not found")
 		return
 	}
 
 	macStr := FindAssetMAC(assetEntry.Metadata)
 	if macStr == "" {
 		d.appendWakeRequestAudit(r.Context(), "asset.wake.outcome", assetID, "denied", "mac_missing", nil)
-		servicehttp.WriteError(w, http.StatusUnprocessableEntity, "no MAC address known for this asset; add a MAC address to its network metadata")
+		servicehttp.WriteError(w, http.StatusUnprocessableEntity, "no MAC address known for this device; add a MAC address to its network metadata")
 		return
 	}
 	mac, err := wol.ParseMAC(macStr)
 	if err != nil {
 		d.appendWakeRequestAudit(r.Context(), "asset.wake.outcome", assetID, "denied", "mac_invalid", nil)
-		servicehttp.WriteError(w, http.StatusUnprocessableEntity, "the asset has an invalid MAC address; update its network metadata")
+		servicehttp.WriteError(w, http.StatusUnprocessableEntity, "this device has an invalid MAC address; update its network metadata")
 		return
 	}
 

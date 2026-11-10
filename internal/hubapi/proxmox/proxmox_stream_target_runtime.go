@@ -131,7 +131,7 @@ func (d *Deps) LoadProxmoxRuntime(collectorID string) (*ProxmoxRuntime, error) {
 		}
 	}
 	if selected == nil {
-		return nil, fmt.Errorf("no active proxmox collector configured")
+		return nil, fmt.Errorf("%w: no active proxmox collector configured", shared.ErrCollectorNotActive)
 	}
 
 	baseURL := shared.CollectorConfigString(selected.Config, "base_url")

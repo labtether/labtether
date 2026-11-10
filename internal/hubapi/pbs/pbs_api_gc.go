@@ -17,7 +17,7 @@ import (
 func (d *Deps) HandlePBSDatastoreGC(ctx context.Context, w http.ResponseWriter, r *http.Request, collectorID, store string) {
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
+		writePBSRuntimeError(w, err, true)
 		return
 	}
 
@@ -81,7 +81,7 @@ func (d *Deps) HandlePBSDatastoreVerify(ctx context.Context, w http.ResponseWrit
 
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
+		writePBSRuntimeError(w, err, true)
 		return
 	}
 

@@ -41,7 +41,7 @@ func (d *Deps) handleProxmoxNodeSyslog(w http.ResponseWriter, r *http.Request) {
 
 	runtime, err := d.LoadProxmoxRuntime(collectorID)
 	if err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "proxmox runtime unavailable: "+shared.SanitizeUpstreamError(err.Error()))
+		writeProxmoxRuntimeError(w, err, false)
 		return
 	}
 

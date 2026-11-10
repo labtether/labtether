@@ -41,7 +41,7 @@ func (d *Deps) HandleUsers(w http.ResponseWriter, r *http.Request) {
 func (d *Deps) handleUsersList(w http.ResponseWriter, r *http.Request, assetID string) {
 	agentConn, ok := d.AgentMgr.Get(assetID)
 	if !ok {
-		servicehttp.WriteError(w, http.StatusBadGateway, "agent disconnected")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 
@@ -62,7 +62,7 @@ func (d *Deps) handleUsersList(w http.ResponseWriter, r *http.Request, assetID s
 		ID:   requestID,
 		Data: data,
 	}); err != nil {
-		servicehttp.WriteError(w, http.StatusBadGateway, "failed to send request to agent")
+		d.writeAgentNotConnected(w, assetID)
 		return
 	}
 

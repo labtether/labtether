@@ -21,7 +21,7 @@ import (
 func (d *Deps) HandlePBSVerifyJobs(ctx context.Context, w http.ResponseWriter, r *http.Request, collectorID string, subParts []string) {
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
+		writePBSRuntimeError(w, err, true)
 		return
 	}
 
@@ -135,7 +135,7 @@ func (d *Deps) HandlePBSVerifyJobs(ctx context.Context, w http.ResponseWriter, r
 func (d *Deps) HandlePBSPruneJobs(ctx context.Context, w http.ResponseWriter, r *http.Request, collectorID string, subParts []string) {
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
+		writePBSRuntimeError(w, err, true)
 		return
 	}
 
@@ -292,7 +292,7 @@ func pbsIntValue(value *int) int {
 func (d *Deps) HandlePBSSyncJobs(ctx context.Context, w http.ResponseWriter, r *http.Request, collectorID string, subParts []string) {
 	runtime, err := d.LoadPBSRuntime(collectorID)
 	if err != nil {
-		writePBSError(w, http.StatusBadGateway, "pbs runtime unavailable", err)
+		writePBSRuntimeError(w, err, true)
 		return
 	}
 
