@@ -41,7 +41,7 @@ func (d *Deps) HandleIncidents(w http.ResponseWriter, r *http.Request) {
 			if shared.HasAssetRestriction(r.Context()) {
 				groupAccess, authErr := d.accessibleGroupIDs(r.Context())
 				if authErr != nil {
-					writeAssetScopeForbidden(w, "unable to prove incident group scope")
+					writeAssetScopeForbidden(w, "Could not confirm this group stays within the devices this API key is allowed")
 					return
 				}
 				if _, allowed := groupAccess[groupID]; !allowed {

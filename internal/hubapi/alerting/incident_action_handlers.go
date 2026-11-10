@@ -231,7 +231,7 @@ func (d *Deps) HandleIncidentActions(w http.ResponseWriter, r *http.Request) {
 			groupAccess, authErr := d.accessibleGroupIDs(r.Context())
 			allowed, checkErr := d.alertInstanceAllowed(r.Context(), instance, groupAccess)
 			if authErr != nil || checkErr != nil || !allowed {
-				writeAssetScopeForbidden(w, "api key does not have access to this alert instance")
+				writeAssetScopeForbidden(w, "This API key does not have access to this alert")
 				return
 			}
 		}
