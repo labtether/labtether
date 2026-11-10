@@ -159,6 +159,16 @@ function pathWithinRoot(path: string, root: string): boolean {
   return namesBelow(path, root) !== null;
 }
 
+/**
+ * Whether folder lies above root, the folder a device shares: the agent refuses to open it. Nothing is above a root
+ * that is still "~" (not read yet).
+ */
+export function isAboveRoot(folder: string, root: string | null | undefined): boolean {
+  if (!root || isHomePath(normalizePath(root))) return false;
+  const down = namesBelow(root, folder);
+  return down !== null && down.length > 0;
+}
+
 /** Whether a typed path leaves the folder the agent shares. "~" and "~/docs" are the agent's own to resolve. */
 export function isOutsideRoot(path: string, root: string): boolean {
   const normalizedRoot = normalizePath(root);
