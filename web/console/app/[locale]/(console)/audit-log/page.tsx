@@ -15,7 +15,7 @@ import { hasAdminRole } from "../../../lib/roles";
 import { ChipGroup, EmptyLine, FilterField, PickMenu } from "../logs/LogControls";
 import { AuditRow, type AuditText } from "./AuditRow";
 import { AuditViews } from "./AuditViews";
-import { actionKey, ALL_REQUESTS, auditRows, auditTime, humanizeType, outcome, peopleByActivity, REQUEST_TYPE, targetText, visibleAuditRows, type AuditEntry, type AuditSort } from "./auditModel";
+import { actionSentence, alertDevices, ALL_REQUESTS, auditRows, auditTime, humanizeType, outcome, peopleByActivity, REQUEST_TYPE, targetText, visibleAuditRows, type AuditEntry, type AuditSort } from "./auditModel";
 import { copyText } from "../../../lib/clipboard";
 import { useAuditPages } from "./useAuditPages";
 
@@ -72,13 +72,23 @@ export default function AuditLogPage() {
     return {
       time: (e) => auditTime(e.timestamp, now, locale),
       who: (e) => nameOf(e.actor_id ?? "") || t("unknown"),
-      action: (e) => (actionKey(e.type) ? t(`actions.${actionKey(e.type)}`) : humanizeType(e.type)),
+      action: (e) => {
+        const sentence = actionSentence(e);
+        return sentence.key ? t(`actions.${sentence.key}`, sentence.values) : humanizeType(e.type);
+      },
+      where: (e) => {
+        const devices = alertDevices(e);
+        if (!devices) return "";
+        return "name" in devices ? t("where.device", { name: devices.name }) : t("where.devices", { count: devices.count });
+      },
     };
   }, [locale, nameOf, t]);
   const searchText = useCallback(
     (e: AuditEntry) => {
       const result = outcome(e.decision);
-      return [text.time(e), text.who(e), text.action(e), targetText(e), e.target ?? "", e.type, result ? t(`outcome.${result}`) : ""].join(" ");
+      const devices = alertDevices(e);
+      const deviceNames = devices && "names" in devices ? devices.names.join(" ") : "";
+      return [text.time(e), text.who(e), text.action(e), targetText(e), text.where(e), deviceNames, e.target ?? "", e.type, result ? t(`outcome.${result}`) : ""].join(" ");
     },
     [t, text],
   );

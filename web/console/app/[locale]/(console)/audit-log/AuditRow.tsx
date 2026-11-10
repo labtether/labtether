@@ -3,12 +3,14 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { Copy, MoreHorizontal, PanelTopOpen } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { detailRows, outcome, targetText, type AuditEntry } from "./auditModel";
+import { alertDevices, detailRows, outcome, targetText, type AuditEntry } from "./auditModel";
 
 export type AuditText = {
   time: (e: AuditEntry) => string;
   who: (e: AuditEntry) => string;
   action: (e: AuditEntry) => string;
+  /** Where it happened, after the object's name: "on nas01", "on 3 devices"; "" for most rows. */
+  where: (e: AuditEntry) => string;
 };
 
 /** Time, person and what they did; a refused attempt leads with "Denied". Opens to its reason and details. */
@@ -32,12 +34,17 @@ export function AuditRow({
   const who = text.who(entry);
   const action = text.action(entry);
   const target = targetText(entry);
-  const line = [time, who, result ? `${t(`outcome.${result}`)}:` : "", action, target].filter(Boolean).join(" ");
+  const where = text.where(entry);
+  // Several devices show as a count; their names are in the row's details and on hover.
+  const devices = alertDevices(entry);
+  const deviceNames = devices && "names" in devices ? devices.names.join(", ") : "";
+  const line = [time, who, result ? `${t(`outcome.${result}`)}:` : "", action, target, where].filter(Boolean).join(" ");
   const what = (
     <>
       {result ? <span className={`lg-au-res ${result}`}>{t(`outcome.${result}`)}</span> : null}
       <span className="lg-au-act">{action}</span>
       {target ? <span className="lg-au-tg">{target}</span> : null}
+      {where ? <span className="lg-au-wh" title={deviceNames || undefined}>{where}</span> : null}
     </>
   );
   return (

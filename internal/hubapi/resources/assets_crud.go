@@ -146,6 +146,8 @@ func (d *Deps) V2UpdateAsset(w http.ResponseWriter, r *http.Request, assetID str
 		return
 	}
 
+	// Read it first: the audit row says what the edit changed.
+	before, _, _ := d.AssetStore.GetAsset(assetID)
 	updated, err := d.AssetStore.UpdateAsset(assetID, req)
 	if err != nil {
 		if errors.Is(err, persistence.ErrNotFound) {
@@ -155,6 +157,7 @@ func (d *Deps) V2UpdateAsset(w http.ResponseWriter, r *http.Request, assetID str
 		apiv2.WriteError(w, http.StatusInternalServerError, "internal", "failed to update asset")
 		return
 	}
+	d.auditAssetUpdated(r, before, updated)
 	if d.Broadcast != nil {
 		d.Broadcast("asset.updated", map[string]any{"asset_id": updated.ID})
 	}
