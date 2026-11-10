@@ -163,8 +163,10 @@ func (d *Deps) HandleAuditEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The owner, admins and admin API keys read the whole log; everyone
+	// else reads only their own rows.
 	limit := parseLimit(r, 100)
-	events, err := d.AuditStore.List(limit, shared.ParseOffset(r))
+	events, err := shared.ListAuditEventsFor(r.Context(), d.AuditStore, limit, shared.ParseOffset(r))
 	if err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to list audit events")
 		return

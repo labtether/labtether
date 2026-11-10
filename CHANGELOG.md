@@ -95,6 +95,12 @@ v1.7.1.
   client address. `GET /api/v2/audit/events` no longer returns the read rows
   older versions stored; they stay in the database until audit retention
   removes them.
+- The audit log API follows the reader's role. `GET /audit/events` and
+  `GET /api/v2/audit/events` (and `labtether audit`) give the owner, admins
+  and admin API keys every row. Operators, viewers and other API keys get
+  only their own rows. Before, anyone with `audit:read` got every row, so a
+  viewer could read what the owner and admins did. In the console, admins
+  now see the whole log, like the owner.
 - Audit rows keep the name of what changed (device, webhook, user, API key,
   saved login, notification channel, schedule, update plan) in
   `details.target_name`, so a row can say which webhook was deleted after it is
