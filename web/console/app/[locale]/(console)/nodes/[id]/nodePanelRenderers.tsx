@@ -132,7 +132,7 @@ const PANEL_RENDERERS: Record<RegisteredPanelID, PanelRenderer> = {
   ),
   processes: (context) => <ProcessesTab nodeId={context.nodeId} />,
   network: (context) => <InterfacesTab nodeId={context.nodeId} />,
-  files: (context) => <FilesTab nodeId={context.nodeId} />,
+  files: (context) => <FilesTab nodeId={context.nodeId} platform={context.asset.platform} />,
   services: (context) => <ServicesTab nodeId={context.nodeId} />,
   packages: (context) => (
     <PackagesTab

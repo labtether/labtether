@@ -39,11 +39,11 @@ const v2OpenAPIAssetPaths = `    "/api/v2/assets": {
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/files/rename": {
-      "post": { "summary": "Rename or move a file", "description": "Scope: files:write.", "operationId": "renameAssetFile", "tags": ["files"], "responses": { "200": { "description": "Rename result" } } },
+      "post": { "summary": "Rename or move a file", "description": "Scope: files:write.", "operationId": "renameAssetFile", "tags": ["files"], "responses": { "200": { "description": "Rename result" }, "409": { "description": "The destination name is taken, or the agent is not connected" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/files/copy": {
-      "post": { "summary": "Copy a file", "description": "Scope: files:write.", "operationId": "copyAssetFile", "tags": ["files"], "responses": { "200": { "description": "Copy result" } } },
+      "post": { "summary": "Copy a file", "description": "Scope: files:write.", "operationId": "copyAssetFile", "tags": ["files"], "responses": { "200": { "description": "Copy result" }, "409": { "description": "The destination name is taken, or the agent is not connected" } } },
       "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }]
     },
     "/api/v2/assets/{id}/processes": {

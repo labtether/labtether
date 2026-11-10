@@ -17,6 +17,8 @@ type ModalProps = {
   title?: string;
   ariaTitle?: string;
   description?: string;
+  /** Where the dialog is put in the page. Set it to the fullscreen element when the opener is inside one. */
+  container?: HTMLElement | null;
 };
 
 /**
@@ -33,6 +35,7 @@ export function Modal({
   title,
   ariaTitle,
   description,
+  container,
 }: ModalProps) {
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -76,7 +79,7 @@ export function Modal({
 
   return (
     <Dialog.Root open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
-      <Dialog.Portal>
+      <Dialog.Portal container={container ?? undefined}>
         <Dialog.Overlay className="kt-scrim">
           <Dialog.Content
             {...describedBy}

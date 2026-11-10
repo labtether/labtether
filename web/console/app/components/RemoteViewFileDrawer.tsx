@@ -1,12 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
+import { useCallback, useContext, useEffect, useRef, useState, type DragEvent } from "react";
 import { useTranslations } from "next-intl";
 import { ArrowUp, ChevronRight, Download, Eye, EyeOff, RefreshCw, Upload, X } from "lucide-react";
 import { listFiles } from "../[locale]/(console)/files/fileOpsClient";
 import type { FileEntry } from "../[locale]/(console)/files/fileOpsClient";
 import { formatSize } from "../[locale]/(console)/files/filesPageUtils";
+import { UploadReplaceDialog } from "../[locale]/(console)/files/FilesOverlays";
+import { useUploadReplace } from "../[locale]/(console)/files/useUploadReplace";
 import { useFileDownload } from "../hooks/useFileDownload";
+import { ToolbarPortalContext } from "./remote-toolbar/ToolbarButtons";
 
 type Props = {
   nodeId: string;
@@ -18,8 +21,8 @@ const join = (dir: string, name: string) => (dir.endsWith("/") ? `${dir}${name}`
 
 /**
  * Files on the remote machine, over the right of the screen: one folder (home first), Upload from this computer (or
- * drop files on the drawer), Download by choosing a file, with the transfer's progress at the bottom. Goes through the
- * device's agent.
+ * drop files on the drawer), Download by choosing a file, with the transfer's progress at the bottom. An upload over
+ * a file of the same name asks first. Goes through the device's agent.
  */
 export function RemoteViewFileDrawer({ nodeId, open, onClose }: Props) {
   const t = useTranslations("desktop.files");
@@ -34,6 +37,8 @@ export function RemoteViewFileDrawer({ nodeId, open, onClose }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
   const { downloading, progress, filename, downloadFile } = useFileDownload(nodeId);
+  // In fullscreen only the viewer is shown, so the Replace dialog is put inside it.
+  const dialogContainer = useContext(ToolbarPortalContext);
 
   const fetchEntries = useCallback(
     async (path: string) => {
@@ -69,19 +74,19 @@ export function RemoteViewFileDrawer({ nodeId, open, onClose }: Props) {
     [fetchEntries],
   );
 
-  const handleUpload = useCallback(
-    (files: FileList | File[]) => {
-      const file = Array.from(files)[0];
+  const startUpload = useCallback(
+    (files: File[], dir: string) => {
+      const file = files[0];
       if (!file) return;
       setUpload({ name: file.name, percent: 0 });
       const xhr = new XMLHttpRequest();
-      xhr.open("POST", `/api/files/${encodeURIComponent(nodeId)}/upload?path=${encodeURIComponent(join(currentPath, file.name))}`);
+      xhr.open("POST", `/api/files/${encodeURIComponent(nodeId)}/upload?path=${encodeURIComponent(join(dir, file.name))}`);
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) setUpload({ name: file.name, percent: Math.round((event.loaded / event.total) * 100) });
       };
       xhr.onload = () => {
         setUpload(null);
-        void fetchEntries(currentPath);
+        void fetchEntries(dir);
       };
       xhr.onerror = () => {
         setUpload(null);
@@ -89,20 +94,37 @@ export function RemoteViewFileDrawer({ nodeId, open, onClose }: Props) {
       };
       xhr.send(file);
     },
-    [nodeId, currentPath, fetchEntries, t],
+    [nodeId, fetchEntries, t],
   );
+
+  // The drawer uploads one file. When the folder has a file of that name, it waits for Replace or Cancel.
+  const listFolder = useCallback(async (dir: string) => (await listFiles(nodeId, dir, { showHidden: true })).entries, [nodeId]);
+  const uploadUnread = useCallback(() => setError(t("listFailed")), [t]);
+  const replace = useUploadReplace({
+    held: { path: currentPath, entries, showHidden, ready: !loading && !error },
+    list: listFolder,
+    upload: startUpload,
+    onUnread: uploadUnread,
+  });
+  const { ask: replaceAsk, start: startReplaceCheck, cancel: cancelReplace } = replace;
+  const handleUpload = (files: FileList | File[]) => startReplaceCheck(Array.from(files).slice(0, 1), currentPath);
+
+  useEffect(() => {
+    if (!open) cancelReplace();
+  }, [open, cancelReplace]);
 
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      // Escape closes the Replace dialog first, then the drawer.
+      if (event.key === "Escape" && !replaceAsk) {
         onClose();
         event.stopPropagation();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, onClose, replaceAsk]);
 
   if (!open) return null;
 
@@ -236,6 +258,14 @@ export function RemoteViewFileDrawer({ nodeId, open, onClose }: Props) {
           </i>
         </div>
       ) : null}
+      <UploadReplaceDialog
+        ask={replaceAsk}
+        where={replaceAsk?.dir ?? ""}
+        onCancel={cancelReplace}
+        onSkip={replace.skip}
+        onReplace={replace.replace}
+        container={dialogContainer}
+      />
     </aside>
   );
 }

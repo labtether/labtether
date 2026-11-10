@@ -156,10 +156,10 @@ func TestHandleFileCopyPropagatesAgentError(t *testing.T) {
 		t.Fatal("timed out waiting for agent bridge")
 	}
 
-	if rec.Code != http.StatusBadRequest {
+	if rec.Code != http.StatusConflict {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "destination already exists") {
+	if !strings.Contains(rec.Body.String(), `\"dst.txt\" already exists in /tmp. Choose another name.`) {
 		t.Fatalf("expected destination error, got %s", rec.Body.String())
 	}
 }
