@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { useFiles, type FileEntry, type SortField } from "../../../hooks/useFiles";
-import type { UnifiedFileEntry } from "./fileOpsClient";
+import { unifiedListFiles, type UnifiedFileEntry } from "./fileOpsClient";
 import { isOutsideRoot, joinPath, normalizePath, outsideBasePath, parentPath } from "./fileWorkspaceUtils";
+import type { FolderEntry } from "./uploadClashes";
 import { useConnectionBrowser } from "./useConnectionBrowser";
 import { sourceKey, sourceOf, type FileSource, type FileTab } from "./useFileTabsState";
 
@@ -36,6 +37,10 @@ export type FilesSourceApi = {
   openFile: (entry: FileEntry) => void;
   download: (names: string[]) => void;
   upload: (files: File[], dir: string) => Promise<void>;
+  /** Reads a folder with its hidden files and leaves the open folder as it is. */
+  listFolder: (dir: string) => Promise<FolderEntry[]>;
+  /** File names on this source match without regard to case (a Windows device). */
+  namesIgnoreCase: boolean;
   createDir: (name: string) => Promise<void>;
   remove: (names: string[]) => Promise<void>;
   rename: (from: string, to: string) => Promise<void>;
@@ -102,6 +107,12 @@ export function useFilesSource(tab: FileTab | null): FilesSourceApi {
       else await files.uploadFile(file, dir);
     }
   }, [conn, files, isConn]);
+
+  const listFolder = useCallback(async (dir: string): Promise<FolderEntry[]> => {
+    if (!source) throw new Error("no source");
+    return (await unifiedListFiles(source, dir, { showHidden: true })).entries;
+  }, [source]);
+  const namesIgnoreCase = !isConn && /windows/i.test(files.assets.find((a) => a.id === agentId)?.platform ?? "");
 
   const remove = useCallback(async (names: string[]) => {
     if (names.length === 0) return;
@@ -182,6 +193,8 @@ export function useFilesSource(tab: FileTab | null): FilesSourceApi {
     openFile,
     download,
     upload,
+    listFolder,
+    namesIgnoreCase,
     createDir: isConn ? conn.createDir : files.createDir,
     remove,
     rename,
