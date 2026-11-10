@@ -215,6 +215,10 @@ func (d *Deps) HandleDesktopSessions(w http.ResponseWriter, r *http.Request) {
 		if !d.enforceAssetActionGuard(w, target) {
 			return
 		}
+		if d.agentDesktopUnreachable(target, protocol) {
+			d.writeAgentNotConnected(w, target)
+			return
+		}
 	}
 
 	actorID := d.PrincipalActorID(r.Context())
@@ -377,6 +381,12 @@ func (d *Deps) HandleDesktopStreamTicket(w http.ResponseWriter, r *http.Request,
 	opts := d.GetDesktopSessionOptions(session.ID)
 	effectiveProtocol := d.ResolveDesktopProtocol(session, r)
 	if effectiveProtocol == "vnc" && opts.Direct && !requireInsecureVNCTransport(w, opts.VNCAllowInsecureTransport) {
+		return
+	}
+	if !opts.Direct && d.agentDesktopUnreachable(session.Target, effectiveProtocol) {
+		// The session cannot work until the agent is back: close it.
+		_ = d.TerminateDesktopSession(session)
+		d.writeAgentNotConnected(w, session.Target)
 		return
 	}
 

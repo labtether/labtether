@@ -395,7 +395,7 @@ func TestHandleAgentDesktopStreamClosesBeforeReadyWhenAgentCloses(t *testing.T) 
 
 	closedPayload, err := json.Marshal(agentmgr.DesktopCloseData{
 		SessionID: start.SessionID,
-		Reason:    "failed to start VNC",
+		Reason:    "failed to start VNC: x11vnc not found: install with 'apt install x11vnc' or 'pkg install x11vnc'",
 	})
 	if err != nil {
 		t.Fatalf("marshal desktop close payload: %v", err)
@@ -410,6 +410,11 @@ func TestHandleAgentDesktopStreamClosesBeforeReadyWhenAgentCloses(t *testing.T) 
 	}
 	if closeErr.Code != websocket.CloseTryAgainLater {
 		t.Fatalf("close code=%d, want %d", closeErr.Code, websocket.CloseTryAgainLater)
+	}
+	// The viewer shows this reason. It said "agent desktop session closed
+	// unexpectedly" for every cause, so nobody learnt x11vnc was missing.
+	if want := "Remote View needs x11vnc on this device. Install it, then try again: sudo apt install x11vnc"; closeErr.Text != want {
+		t.Fatalf("close reason=%q, want %q", closeErr.Text, want)
 	}
 
 	_ = agentClientConn.SetReadDeadline(time.Now().Add(2 * time.Second))

@@ -70,7 +70,7 @@ func (d *Deps) ReplayAlertsToAgent(ctx context.Context, conn *agentmgr.AgentConn
 			} else if !d.instanceTargetsAsset(ctx, inst, rule, assetID, targets) {
 				continue
 			}
-			state, at := "firing", inst.LastFiredAt
+			state, at := "firing", alertFiringSince(inst)
 			if status == alerts.InstanceStatusResolved {
 				state, at = "resolved", *inst.ResolvedAt
 			}
@@ -123,4 +123,15 @@ func (d *Deps) instanceTargetsAsset(ctx context.Context, inst alerts.AlertInstan
 	}
 	cache[rule.ID] = hit
 	return hit
+}
+
+// alertFiringSince is when an alert started firing: the time the live
+// "firing" message carries. The resync sent the last time it was seen firing,
+// so after an agent reconnected the Mac and Windows tray said "since" a few
+// seconds ago for an alert that had fired for hours.
+func alertFiringSince(inst alerts.AlertInstance) time.Time {
+	if inst.FirstFiredAt != nil && !inst.FirstFiredAt.IsZero() {
+		return *inst.FirstFiredAt
+	}
+	return inst.StartedAt
 }

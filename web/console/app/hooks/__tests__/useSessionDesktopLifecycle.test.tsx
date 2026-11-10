@@ -113,6 +113,29 @@ describe("useSession desktop lifecycle", () => {
     );
   });
 
+  // The Hub says why Remote View cannot start on the device. The page used
+  // to retry five times and end with "Unable to reconnect after 5 attempts".
+  it("shows the Hub's reason and stops when the device is missing what Remote View needs", async () => {
+    await connectDesktop();
+    const reason = "Remote View needs x11vnc on this device. Install it, then try again: sudo apt install x11vnc";
+    await act(async () => {
+      current?.handleDisconnected({ clean: false, reason });
+      await Promise.resolve();
+    });
+    expect(current?.isReconnecting).toBe(false);
+    expect(current?.connectionState).toBe("idle");
+    expect(current?.error).toBe(reason);
+  });
+
+  it("still retries when the stream drops for another reason", async () => {
+    await connectDesktop();
+    await act(async () => {
+      current?.handleDisconnected({ clean: false, reason: "Remote View stopped: the device's agent disconnected. Try again when it is back." });
+      await Promise.resolve();
+    });
+    expect(current?.isReconnecting).toBe(true);
+  });
+
   it("terminates a created session when ticket acquisition fails", async () => {
     fetchMock.mockImplementationOnce(async () =>
       new Response(
