@@ -10,7 +10,7 @@ import (
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
-var connectorLoginRefusedPattern = regexp.MustCompile(`\b(401|403)\b|authentication fail|unauthori[sz]ed|forbidden|permission denied|access denied|invalid (api )?(key|token|credentials|username)`)
+var connectorLoginRefusedPattern = regexp.MustCompile(`\b(401|403)\b|authentication fail|unauthori[sz]ed|forbidden|permission denied|access denied|invalid (api )?(key|token|credentials|username)|rejected (the )?(api )?(key|token|login)`)
 
 // connectorTestReason picks the words for a failed Test connection. The
 // failure text only selects the reason and is never sent: it can carry the
@@ -34,11 +34,11 @@ func connectorTestReason(product, failure string) string {
 		return fmt.Sprintf("That address does not answer with HTTPS. Check the address and port of %s.", product)
 	case has("x509:", "tls:", "certificate"):
 		return fmt.Sprintf("The certificate of %s is not trusted. Add its CA certificate or turn on Skip TLS verification.", product)
-	case has("connection refused", "no such host", "no route to host", "network is unreachable", "timeout", "deadline exceeded", "connection reset", "eof"):
+	case has("connection refused", "no such host", "no route to host", "network is unreachable", "host is down", "timeout", "timed out", "deadline exceeded", "connection reset", "eof"):
 		return fmt.Sprintf("Could not reach %s at that address. Check the address and port.", product)
 	case connectorLoginRefusedPattern.MatchString(text):
 		return fmt.Sprintf("%s refused the login. Check the user or token name and the secret.", product)
-	case has(" 404", " 405", " 501", "not found", "invalid character", "cannot unmarshal", "unexpected", "did not return"):
+	case has(" 404", " 405", " 501", "not found", "invalid character", "cannot unmarshal", "unexpected", "did not return", "bad handshake", "malformed", "mismatch"):
 		return fmt.Sprintf("That address did not answer like %s. Check the address, port and path.", product)
 	}
 	return fmt.Sprintf("%s answered with an error, so the test did not finish.", product)

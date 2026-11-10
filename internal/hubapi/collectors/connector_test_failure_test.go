@@ -15,6 +15,12 @@ func TestConnectorTestFailureGivesAReasonAndNoInternals(t *testing.T) {
 	// A made-up value that stands for the login the person typed.
 	const planted = "planted-login-value"
 	cases := []struct{ failure, want string }{
+		{`truenas ws auth: server rejected api key`,
+			"Proxmox refused the login. Check the user or token name and the secret."},
+		{`truenas ws dial wss://192.0.2.10/api/current: websocket: bad handshake`,
+			"That address did not answer like Proxmox. Check the address, port and path."},
+		{`Get "https://192.0.2.10:8006/x": dial tcp 192.0.2.10:8006: connect: connection timed out`,
+			"Could not reach Proxmox at that address. Check the address and port."},
 		{`Get "https://192.0.2.10:8006/api2/json/version": dial tcp 192.0.2.10:8006: connect: connection refused`,
 			"Could not reach Proxmox at that address. Check the address and port."},
 		{`Get "https://pve.example.test:8006/x": dial tcp: lookup pve.example.test: no such host`,
