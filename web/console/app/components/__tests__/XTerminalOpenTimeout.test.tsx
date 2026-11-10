@@ -7,7 +7,6 @@ vi.mock("@xterm/xterm", () => ({ Terminal: class {
   unicode = { activeVersion: "" };
   parser = { registerCsiHandler: () => ({ dispose() {} }), registerDcsHandler: () => ({ dispose() {} }), registerOscHandler: () => ({ dispose() {} }) };
   loadAddon() {}
-  attachCustomKeyEventHandler() {}
   open() {}
   focus() {}
   dispose() {}

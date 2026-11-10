@@ -1,24 +1,27 @@
-// Keys the Terminal page keeps for itself while a shell has focus. xterm would otherwise send them to the shell
-// (Ctrl+Shift+S as ^S pauses output) and stop them, so the page's own handlers never saw them.
-// Plain Ctrl+A and Ctrl+F stay with the shell (start of line, tmux and screen prefixes); on a Mac ⌘A and ⌘F are free.
+// The focused pane's own keys. xterm takes typing through a hidden textarea, and the pane's handler used to skip every
+// textarea, so none of these worked while someone typed in the shell.
+//
+// While typing in the shell, the shell keeps its keys: plain Ctrl+A and Ctrl+F (start of line, vim and less paging,
+// tmux and screen prefixes), and the browser pastes into it by itself (Ctrl+Shift+V, ⌘V), which needs no clipboard
+// permission and works over plain HTTP. The pane adds what the shell lacks: Ctrl+Shift+C copies the selection, and on
+// a Mac ⌘F finds and ⌘A selects all. With the focus elsewhere on the page, Ctrl or ⌘ with F, A, Shift+C and Shift+V
+// find, select all, copy and paste, as before.
 
 const isMac = () => typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
 
-/** Ctrl+Shift+B/S/F (send to all, snippets, full screen), Ctrl+Shift+C/V (copy, paste), and ⌘F/⌘A on a Mac. */
-export function isConsoleShortcut(event: KeyboardEvent, mac = isMac()): boolean {
-  if (event.type !== "keydown" || event.altKey) return false;
-  const key = event.key.toLowerCase();
-  if (event.ctrlKey && event.shiftKey && !event.metaKey) return ["b", "s", "f", "c", "v"].includes(key);
-  return mac && event.metaKey && !event.ctrlKey && !event.shiftKey && (key === "f" || key === "a");
-}
+export type PaneAction = "find" | "selectAll" | "copy" | "paste";
 
-/** The pane's own action for a key: find and select all (⌘F, ⌘A on a Mac), copy and paste (Ctrl+Shift+C, V). */
-export function paneShortcut(event: KeyboardEvent, mac = isMac()): "find" | "selectAll" | "copy" | "paste" | null {
-  if (event.altKey) return null;
+/** The pane's action for a key press, or null when the key is not the pane's (inShell: the focus is in xterm's input). */
+export function paneShortcut(event: KeyboardEvent, inShell: boolean, mac = isMac()): PaneAction | null {
+  if (event.altKey || !(event.ctrlKey || event.metaKey)) return null;
   const key = event.key.toLowerCase();
-  if (event.ctrlKey && event.shiftKey && !event.metaKey) return key === "c" ? "copy" : key === "v" ? "paste" : null;
-  if (mac && event.metaKey && !event.ctrlKey && !event.shiftKey) return key === "f" ? "find" : key === "a" ? "selectAll" : null;
-  return null;
+  if (inShell) {
+    if (event.shiftKey) return event.ctrlKey && !event.metaKey && key === "c" ? "copy" : null;
+    if (!(mac && event.metaKey && !event.ctrlKey)) return null;
+    return key === "f" ? "find" : key === "a" ? "selectAll" : null;
+  }
+  if (event.shiftKey) return key === "c" ? "copy" : key === "v" ? "paste" : null;
+  return key === "f" ? "find" : key === "a" ? "selectAll" : null;
 }
 
 /** xterm's hidden input: typing in the shell, not in a form field. */

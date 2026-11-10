@@ -36,7 +36,7 @@ function formatElapsed(ms: number): string {
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement) || isShellInput(target)) return false;
+  if (!(target instanceof HTMLElement)) return false;
   if (target.isContentEditable) return true;
   const tag = target.tagName.toLowerCase();
   return tag === "input" || tag === "textarea" || tag === "select";
@@ -44,8 +44,8 @@ function isEditableTarget(target: EventTarget | null): boolean {
 
 /**
  * One pane's shell: connects when its tab is shown and it has a device (or an address), reconnects on request, and owns
- * the focused pane's shortcuts (⌘F find and ⌘A select all on a Mac, Ctrl+Shift+C copy, Ctrl+Shift+V paste; plain Ctrl+A
- * and Ctrl+F stay with the shell).
+ * the focused pane's shortcuts (Ctrl+Shift+C copy, ⌘F find and ⌘A select all on a Mac; while someone types in the
+ * shell, Ctrl+A, Ctrl+F and paste stay with the shell and the browser).
  */
 export function usePaneSession({
   targetNodeId, targetSource, isTabActive, isFocused, autoReconnect, quickConnectParams, onClipboardBlocked, onToggleSearch,
@@ -117,8 +117,10 @@ export function usePaneSession({
   useEffect(() => {
     if (!isFocused) return undefined;
     const handler = (event: KeyboardEvent) => {
-      if (isEditableTarget(event.target)) return;
-      const action = paneShortcut(event);
+      // xterm's input is the shell, not a form field: the pane's keys count there too (see consoleShortcuts.ts).
+      const inShell = isShellInput(event.target);
+      if (!inShell && isEditableTarget(event.target)) return;
+      const action = paneShortcut(event, inShell);
       if (!action) return;
       event.preventDefault();
       if (action === "find") toggleSearchRef.current();
