@@ -18,6 +18,10 @@
     "person": "人员",
     "action": "操作"
   },
+  "where": {
+    "device": "（{name}）",
+    "devices": "（{count, plural, other {# 台设备}}）"
+  },
   "outcome": {
     "denied": "已拒绝",
     "failed": "失败"

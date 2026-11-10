@@ -18,6 +18,10 @@
     "person": "Person",
     "action": "Action"
   },
+  "where": {
+    "device": "on {name}",
+    "devices": "on {count, plural, one {# device} other {# devices}}"
+  },
   "outcome": {
     "denied": "Denied",
     "failed": "Failed"

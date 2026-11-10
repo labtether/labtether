@@ -90,6 +90,27 @@ export function actionSentence(entry: Pick<AuditEntry, "type" | "details">): { k
   return { key };
 }
 
+/** The alert rows the Hub writes with the alert's devices in their details. */
+const ALERT_DEVICE_TYPES = new Set(["alert.acknowledged", "alert.resolved", "alert.deleted"]);
+
+/**
+ * The devices an alert row is about: one name ("on nas01"), or how many with the names the row carries ("on 3
+ * devices"; the Hub sends the first 20 names, "" for a device that is gone). null when the row names no device:
+ * a rule that is not about a device, or one device that no longer exists.
+ */
+export function alertDevices(entry: Pick<AuditEntry, "type" | "details">): { name: string } | { count: number; names: string[] } | null {
+  if (!ALERT_DEVICE_TYPES.has(entry.type)) return null;
+  const details = entry.details ?? {};
+  const name = typeof details.device_name === "string" ? details.device_name.trim() : "";
+  if (name) return { name };
+  const names = (Array.isArray(details.device_names) ? details.device_names : [])
+    .filter((value): value is string => typeof value === "string" && value.trim() !== "")
+    .map((value) => value.trim());
+  const count = typeof details.device_count === "number" && Number.isFinite(details.device_count) ? Math.floor(details.device_count) : names.length;
+  if (count === 1 && names.length === 1) return { name: names[0] };
+  return count > 1 ? { count, names } : null;
+}
+
 /** A type without a sentence of its own, read as words: "backup.verify_job.started" → "Backup verify job started". */
 export function humanizeType(type: string): string {
   const words = type.split(/[._\s-]+/).filter(Boolean).join(" ").toLowerCase();
@@ -173,7 +194,12 @@ export function detailRows(entry: AuditEntry): Array<[string, string]> {
   if (entry.reason) rows.push(["reason", entry.reason]);
   for (const [k, v] of Object.entries(entry.details ?? {})) {
     if (v === null || v === undefined || v === "" || k === "target_name") continue;
-    rows.push([k, typeof v === "string" ? v : JSON.stringify(v)]);
+    // A list of words (device names, changed fields, tags) reads as words, not as JSON.
+    const words = Array.isArray(v) && v.every((item) => typeof item === "string" || typeof item === "number")
+      ? v.filter((item) => item !== "").join(", ")
+      : null;
+    if (words === "") continue;
+    rows.push([k, words ?? (typeof v === "string" ? v : JSON.stringify(v))]);
   }
   return rows;
 }

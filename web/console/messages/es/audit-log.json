@@ -18,6 +18,10 @@
     "person": "Persona",
     "action": "Acción"
   },
+  "where": {
+    "device": "en {name}",
+    "devices": "en {count, plural, one {# dispositivo} other {# dispositivos}}"
+  },
   "outcome": {
     "denied": "Denegado",
     "failed": "Falló"
