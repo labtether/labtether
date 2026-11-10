@@ -24,7 +24,9 @@ export const KNOWN_ACTIONS = new Set([
   "protocol.config.updated", "protocol.config.deleted", "protocol.test.run", "protocol.ssh.hub_key_pushed",
   "api.exec", "mcp.tool", "api.bulk.file_push", "api.bulk.service_action", "api.request", "terminal.command.policy_checked",
   "actions.run.policy_checked", "api.exec.policy_checked", "queue.dead_letter", "asset.hub_ssh_key.updated",
-  "settings.ssh_hub_key.rotation", "settings.managed_database.password_revealed",
+  "settings.ssh_hub_key.rotation", "settings.managed_database.password_revealed", "api_key.updated",
+  "schedule.created", "schedule.updated", "schedule.deleted", "alert.rule.created", "alert.rule.updated",
+  "alert.rule.deleted", "group.created", "group.updated", "group.deleted",
 ]);
 
 /** Every API change the Hub stores beside its named event; shown only under "All requests". */

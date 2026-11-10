@@ -266,6 +266,9 @@ v1.7.1.
   browser's "Failed to fetch".
 - German addresses you as "Sie" on every page. Sign-in, Add device, saved
   logins and a few settings lines said "du".
+- The Audit log has sentences for the new rows about API keys, schedules,
+  alert rules and groups, such as "Changed a schedule", in every language.
+  Revoking an API key reads "Revoked an API key", like its button.
 
 ## [1.7.1] - 2026-10-31
 
