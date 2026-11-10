@@ -15,7 +15,8 @@ import (
 // GET /audit/events returned every row to any signed-in user or API key, so a
 // viewer could read what the owner and admins did. The owner, admins and
 // admin API keys read the whole log; everyone else reads only their own rows
-// (owner decision, 2026-11-10), with paging done over their own rows.
+// (owner decision, 2026-11-10), by every route that returns audit rows: both
+// audit endpoints and the status call. Paging is done over their own rows.
 func TestAuditEventsReadScopeFollowsRole(t *testing.T) {
 	s := newTestAPIServer(t)
 	base := time.Now().UTC().Add(-time.Hour)
@@ -39,8 +40,9 @@ func TestAuditEventsReadScopeFollowsRole(t *testing.T) {
 			t.Fatalf("GET %s as %s = %d: %s", path, actorID, rec.Code, rec.Body.String())
 		}
 		var body struct {
-			Events []audit.Event `json:"events"`
-			Data   struct {
+			Events      []audit.Event `json:"events"`
+			RecentAudit []audit.Event `json:"recentAudit"`
+			Data        struct {
 				Events []audit.Event `json:"events"`
 			} `json:"data"`
 		}
@@ -48,7 +50,7 @@ func TestAuditEventsReadScopeFollowsRole(t *testing.T) {
 			t.Fatalf("decode: %v", err)
 		}
 		actors := []string{}
-		for _, event := range append(body.Events, body.Data.Events...) {
+		for _, event := range append(append(body.Events, body.Data.Events...), body.RecentAudit...) {
 			actors = append(actors, event.ActorID)
 		}
 		sort.Strings(actors)
@@ -71,6 +73,14 @@ func TestAuditEventsReadScopeFollowsRole(t *testing.T) {
 		if got := strings.Join(read(s.handleV2AuditEvents, "/api/v2/audit/events", tc.actor, tc.role), " "); got != tc.want {
 			t.Errorf("/api/v2/audit/events as %s (%s) shows rows by [%s], want [%s]", tc.actor, tc.role, got, tc.want)
 		}
+	}
+	// The console's status call carries the newest audit rows; same rule there.
+	status := s.handleStatusAggregate(nil, nil)
+	if got := strings.Join(read(status, "/status/aggregate", "usr-viewer", "viewer"), " "); got != "usr-viewer usr-viewer" {
+		t.Errorf("status recentAudit as the viewer shows rows by [%s], want only the viewer's", got)
+	}
+	if got := strings.Join(read(status, "/status/aggregate", "usr-admin", "admin"), " "); got != everyone {
+		t.Errorf("status recentAudit as an admin shows rows by [%s], want everyone's", got)
 	}
 	// Paging counts the reader's own rows: the viewer's second row is on page 2.
 	if got := read(s.handleAuditEvents, "/audit/events?limit=1&offset=1", "usr-viewer", "viewer"); len(got) != 1 || got[0] != "usr-viewer" {
