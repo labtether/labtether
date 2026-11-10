@@ -70,7 +70,12 @@ func WriteUpstreamUnreachable(w http.ResponseWriter, err error, product string) 
 	if !UpstreamUnreachable(err) {
 		return false
 	}
-	servicehttp.WriteError(w, http.StatusConflict,
-		fmt.Sprintf("Could not reach %s. Check the connection's address and login in Settings.", product))
+	servicehttp.WriteError(w, http.StatusConflict, UnreachableMessage(product))
 	return true
+}
+
+// UnreachableMessage is the fixed sentence for a system that could not be
+// reached or refused its login. It names no address.
+func UnreachableMessage(product string) string {
+	return fmt.Sprintf("Could not reach %s. Check the connection's address and login in Settings.", product)
 }

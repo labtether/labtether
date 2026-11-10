@@ -24,6 +24,10 @@ func writeTrueNASError(w http.ResponseWriter, status int, clientMessage string, 
 // or stale-cache responses that include a warnings array.
 func trueNASWarning(clientMessage string, err error) string {
 	securityruntime.Logf("truenas: %s: %v", clientMessage, err)
+	// A listing that could not load says why when the system was unreachable.
+	if shared.UpstreamUnreachable(err) {
+		return shared.UnreachableMessage("TrueNAS")
+	}
 	return clientMessage
 }
 
