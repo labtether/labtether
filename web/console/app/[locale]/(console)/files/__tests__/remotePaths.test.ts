@@ -112,13 +112,14 @@ describe("a typed path", () => {
   it.each([
     ["C:\\Windows", WIN_HOME],
     ["C:\\Users", WIN_HOME],
-    ["C:\\Users\\demolition", WIN_HOME],
+    // A sibling folder whose name only starts like the shared one.
+    [`${WIN_HOME}-old`, WIN_HOME],
     ["M:\\", WIN_HOME],
     ["\\\\localhost\\C$\\Users", WIN_HOME],
     ["\\\\nas01\\share", "C:\\"],
     ["/etc", POSIX_HOME],
     ["/home", POSIX_HOME],
-    ["/home/demolition", POSIX_HOME],
+    [`${POSIX_HOME}-old`, POSIX_HOME],
   ])("%s is outside %s", (path, root) => {
     expect(isOutsideRoot(path, root)).toBe(true);
     expect(clampPathToRoot(path, root)).toBe(root);
