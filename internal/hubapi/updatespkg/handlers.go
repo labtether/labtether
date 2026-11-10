@@ -93,7 +93,7 @@ func (d *Deps) HandleUpdatePlans(w http.ResponseWriter, r *http.Request) {
 		}
 		req.Targets = normalizedTargets
 		if !shared.AllAssetsAllowed(r.Context(), req.Targets...) {
-			apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "api key may only create update plans containing explicitly allowed assets")
+			apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "This API key may only create update plans for the devices it is allowed")
 			return
 		}
 		for i, scope := range req.Scopes {

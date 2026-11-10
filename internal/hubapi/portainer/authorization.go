@@ -116,7 +116,7 @@ func (d *Deps) requirePortainerEndpointAccess(w http.ResponseWriter, r *http.Req
 	if err == nil && allowed {
 		return true
 	}
-	apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "api key does not have access to every asset in this Portainer endpoint")
+	apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "This API key does not have access to every device in this Portainer endpoint")
 	return false
 }
 

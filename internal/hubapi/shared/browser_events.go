@@ -276,7 +276,7 @@ func (d *BrowserEventsDeps) HandleEventTicket(w http.ResponseWriter, r *http.Req
 	// envelopes carry a uniformly trustworthy asset identifier for per-client
 	// filtering, an asset-restricted API key must not subscribe to that feed.
 	if apiv2.APIKeyIDFromContext(r.Context()) != "" && len(apiv2.AllowedAssetsFromContext(r.Context())) > 0 {
-		servicehttp.WriteError(w, http.StatusForbidden, "asset-restricted API keys cannot subscribe to the global event stream")
+		servicehttp.WriteError(w, http.StatusForbidden, "API keys limited to some devices cannot subscribe to the global event stream")
 		return
 	}
 	ticket, expiresAt, err := d.IssueStreamTicket(r.Context(), "__browser_events__")
@@ -344,7 +344,7 @@ func (d *BrowserEventsDeps) HandleBrowserEvents(w http.ResponseWriter, r *http.R
 // feed is global, so asset-restricted keys are refused as at ticket issue.
 func (d *BrowserEventsDeps) ServeAuthenticatedBrowserEvents(w http.ResponseWriter, r *http.Request) {
 	if apiv2.APIKeyIDFromContext(r.Context()) != "" && len(apiv2.AllowedAssetsFromContext(r.Context())) > 0 {
-		servicehttp.WriteError(w, http.StatusForbidden, "asset-restricted API keys cannot subscribe to the global event stream")
+		servicehttp.WriteError(w, http.StatusForbidden, "API keys limited to some devices cannot subscribe to the global event stream")
 		return
 	}
 	d.serveBrowserEvents(w, r, StreamPrincipalKeys(r.Context()))

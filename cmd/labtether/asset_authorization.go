@@ -10,7 +10,7 @@ func denyAssetRestrictedGlobalAPI(w http.ResponseWriter, r *http.Request, object
 	if len(allowedAssetsFromContext(r.Context())) == 0 {
 		return false
 	}
-	apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "asset-restricted api keys cannot access global "+object)
+	apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "API keys limited to some devices cannot access global "+object)
 	return true
 }
 

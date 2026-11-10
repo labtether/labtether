@@ -272,16 +272,16 @@ func (s *apiServer) mcpAuthorizeMutation() func(context.Context, string, string)
 			resolved, err := s.mcpResolveDockerContainer("", target)
 			if err != nil {
 				if len(allowedAssets) > 0 {
-					return errors.New("access denied: target is unavailable or outside allowed assets")
+					return errors.New("access denied: the device is unavailable or not one this API key is allowed")
 				}
 				return err
 			}
 			if !apikeys.AssetAllowed(allowedAssets, resolved.host.AgentID) {
-				return errors.New("access denied: target is unavailable or outside allowed assets")
+				return errors.New("access denied: the device is unavailable or not one this API key is allowed")
 			}
 			assetTarget = resolved.host.AgentID
 		} else if tool != "alerts_acknowledge" && !apikeys.AssetAllowed(allowedAssets, assetTarget) {
-			return errors.New("access denied: target is unavailable or outside allowed assets")
+			return errors.New("access denied: the device is unavailable or not one this API key is allowed")
 		}
 
 		// Wake-on-LAN is executed through the production HTTP handler, which owns

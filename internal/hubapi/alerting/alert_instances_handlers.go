@@ -52,7 +52,7 @@ func (d *Deps) HandleAlertInstances(w http.ResponseWriter, r *http.Request) {
 	if shared.HasAssetRestriction(r.Context()) {
 		groupAccess, authErr := d.accessibleGroupIDs(r.Context())
 		if authErr != nil {
-			writeAssetScopeForbidden(w, "unable to prove alert instance asset scope")
+			writeAssetScopeForbidden(w, "Could not confirm this alert stays within the devices this API key is allowed")
 			return
 		}
 		instances, err = d.listAccessibleAlertInstances(r.Context(), filter, groupAccess)
@@ -100,7 +100,7 @@ func (d *Deps) HandleAlertInstanceActions(w http.ResponseWriter, r *http.Request
 				groupAccess, authErr := d.accessibleGroupIDs(r.Context())
 				allowed, checkErr := d.alertInstanceAllowed(r.Context(), inst, groupAccess)
 				if authErr != nil || checkErr != nil || !allowed {
-					writeAssetScopeForbidden(w, "api key does not have access to this alert instance")
+					writeAssetScopeForbidden(w, "This API key does not have access to this alert")
 					return
 				}
 			}
@@ -120,7 +120,7 @@ func (d *Deps) HandleAlertInstanceActions(w http.ResponseWriter, r *http.Request
 				groupAccess, authErr := d.accessibleGroupIDs(r.Context())
 				allowed, checkErr := d.alertInstanceAllowed(r.Context(), inst, groupAccess)
 				if authErr != nil || checkErr != nil || !allowed {
-					writeAssetScopeForbidden(w, "api key does not have access to this alert instance")
+					writeAssetScopeForbidden(w, "This API key does not have access to this alert")
 					return
 				}
 			}
@@ -162,7 +162,7 @@ func (d *Deps) HandleAlertInstanceActions(w http.ResponseWriter, r *http.Request
 			groupAccess, authErr := d.accessibleGroupIDs(r.Context())
 			allowed, checkErr := d.alertInstanceAllowed(r.Context(), inst, groupAccess)
 			if authErr != nil || checkErr != nil || !allowed {
-				writeAssetScopeForbidden(w, "api key does not have access to this alert instance")
+				writeAssetScopeForbidden(w, "This API key does not have access to this alert")
 				return
 			}
 		}
@@ -205,7 +205,7 @@ func (d *Deps) HandleAlertInstanceActions(w http.ResponseWriter, r *http.Request
 			groupAccess, authErr := d.accessibleGroupIDs(r.Context())
 			allowed, checkErr := d.alertInstanceAllowed(r.Context(), inst, groupAccess)
 			if authErr != nil || checkErr != nil || !allowed {
-				writeAssetScopeForbidden(w, "api key does not have access to this alert instance")
+				writeAssetScopeForbidden(w, "This API key does not have access to this alert")
 				return
 			}
 		}

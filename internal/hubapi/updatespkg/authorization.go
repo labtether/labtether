@@ -19,7 +19,7 @@ func requireUpdatePlanAccess(w http.ResponseWriter, r *http.Request, plan update
 	if updatePlanAllowed(r.Context(), plan) {
 		return true
 	}
-	apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "api key does not have access to every asset targeted by this update plan")
+	apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "This API key does not have access to every device targeted by this update plan")
 	return false
 }
 
@@ -45,6 +45,6 @@ func (d *Deps) requireGroupAccess(w http.ResponseWriter, r *http.Request, groupI
 	if _, ok := accessible[strings.TrimSpace(groupID)]; ok {
 		return true
 	}
-	apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "api key does not have access to every asset in this group")
+	apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "This API key does not have access to every device in this group")
 	return false
 }

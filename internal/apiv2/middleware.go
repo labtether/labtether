@@ -65,5 +65,5 @@ func WriteScopeForbidden(w http.ResponseWriter, required string) {
 // WriteAssetForbidden writes a 403 for an inaccessible asset.
 func WriteAssetForbidden(w http.ResponseWriter, assetID string) {
 	WriteError(w, http.StatusForbidden, "asset_forbidden",
-		"api key does not have access to asset: "+assetID)
+		"This API key does not have access to device: "+assetID)
 }

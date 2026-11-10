@@ -102,7 +102,7 @@ func (d *Deps) HandleDesktopSessions(w http.ResponseWriter, r *http.Request) {
 	directOpts := DesktopSessionOptions{}
 	if req.DirectTarget != nil {
 		if shared.HasAssetRestriction(r.Context()) {
-			servicehttp.WriteError(w, http.StatusForbidden, "asset-restricted API keys cannot create direct desktop sessions")
+			servicehttp.WriteError(w, http.StatusForbidden, "API keys limited to some devices cannot create direct desktop sessions")
 			return
 		}
 		if protocol == "webrtc" {

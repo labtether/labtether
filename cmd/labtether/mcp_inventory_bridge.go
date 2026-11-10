@@ -132,7 +132,7 @@ func (s *apiServer) mcpListAlerts() func(context.Context) ([]map[string]any, err
 		}
 		instances, err = s.ensureAlertingDeps().FilterAlertInstancesForAccess(ctx, instances)
 		if err != nil {
-			return nil, fmt.Errorf("unable to prove alert asset scope: %w", err)
+			return nil, fmt.Errorf("Could not confirm these alerts stay within the devices this API key is allowed: %w", err)
 		}
 		out := make([]map[string]any, 0, len(instances))
 		for _, inst := range instances {
@@ -162,14 +162,14 @@ func (s *apiServer) mcpAcknowledgeAlert() func(context.Context, string) error {
 			return err
 		}
 		if !found {
-			return fmt.Errorf("alert is unavailable or outside allowed assets")
+			return fmt.Errorf("the alert is unavailable or outside the devices this API key is allowed")
 		}
 		allowed, err := s.ensureAlertingDeps().AlertInstanceAllowedForAccess(ctx, instance)
 		if err != nil {
-			return fmt.Errorf("unable to prove alert asset scope: %w", err)
+			return fmt.Errorf("Could not confirm these alerts stay within the devices this API key is allowed: %w", err)
 		}
 		if !allowed {
-			return fmt.Errorf("alert is unavailable or outside allowed assets")
+			return fmt.Errorf("the alert is unavailable or outside the devices this API key is allowed")
 		}
 		_, err = s.alertInstanceStore.UpdateAlertInstanceStatus(alertID, "acknowledged")
 		return err
@@ -238,7 +238,7 @@ func (s *apiServer) mcpListSchedules() func(ctx context.Context) ([]map[string]a
 			}
 			tasks, err = s.ensureSchedulesDeps().FilterScheduledTasksForAccess(ctx, tasks)
 			if err != nil {
-				return nil, fmt.Errorf("unable to prove schedule asset scope: %w", err)
+				return nil, fmt.Errorf("Could not confirm these schedules stay within the devices this API key is allowed: %w", err)
 			}
 			total = len(tasks)
 		}

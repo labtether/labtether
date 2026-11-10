@@ -299,7 +299,7 @@ func TestAssetRestrictedViewerKeyCanReadMCPButCannotMutateOrReadGlobalData(t *te
 
 	globalCall := `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"webhooks_list","arguments":{}}}`
 	globalResult := invokeLegacyRoute(t, handlers["/mcp"], http.MethodPost, "/mcp", key, globalCall, mcpHeaders)
-	if globalResult.Code != http.StatusOK || !strings.Contains(globalResult.Body.String(), "asset-restricted") {
+	if globalResult.Code != http.StatusOK || !strings.Contains(globalResult.Body.String(), "limited to some devices") {
 		t.Fatalf("restricted viewer reached global MCP data: status=%d body=%s", globalResult.Code, globalResult.Body.String())
 	}
 

@@ -39,7 +39,7 @@ func (d *Deps) HandleAlertRules(w http.ResponseWriter, r *http.Request) {
 		if shared.HasAssetRestriction(r.Context()) {
 			groupAccess, authErr := d.accessibleGroupIDs(r.Context())
 			if authErr != nil {
-				writeAssetScopeForbidden(w, "unable to prove alert rule asset scope")
+				writeAssetScopeForbidden(w, "Could not confirm this alert rule stays within the devices this API key is allowed")
 				return
 			}
 			rules, err = d.listAccessibleAlertRules(r.Context(), filter, groupAccess)
@@ -82,7 +82,7 @@ func (d *Deps) HandleAlertRules(w http.ResponseWriter, r *http.Request) {
 		if shared.HasAssetRestriction(r.Context()) {
 			groupAccess, authErr := d.accessibleGroupIDs(r.Context())
 			if authErr != nil || !alertRuleInputsAllowed(r.Context(), req.Targets, groupAccess) {
-				writeAssetScopeForbidden(w, "api key may only create alert rules targeting explicitly allowed assets")
+				writeAssetScopeForbidden(w, "This API key may only create alert rules for the devices it is allowed")
 				return
 			}
 		}
@@ -181,7 +181,7 @@ func (d *Deps) HandleAlertRuleActions(w http.ResponseWriter, r *http.Request) {
 				if shared.HasAssetRestriction(r.Context()) {
 					groupAccess, authErr := d.accessibleGroupIDs(r.Context())
 					if authErr != nil || !alertRuleInputsAllowed(r.Context(), *req.Targets, groupAccess) {
-						writeAssetScopeForbidden(w, "api key may only update alert rules to target explicitly allowed assets")
+						writeAssetScopeForbidden(w, "This API key may only point alert rules at the devices it is allowed")
 						return
 					}
 				}

@@ -21,7 +21,7 @@ func denyAssetRestrictedGlobal(w http.ResponseWriter, r *http.Request, object st
 	if !shared.HasAssetRestriction(r.Context()) {
 		return false
 	}
-	writeAssetScopeForbidden(w, "asset-restricted api keys cannot access global "+object)
+	writeAssetScopeForbidden(w, "API keys limited to some devices cannot access global "+object)
 	return true
 }
 
@@ -97,13 +97,13 @@ func (d *Deps) requireAlertRuleAccess(w http.ResponseWriter, r *http.Request, ru
 	}
 	groupAccess, err := d.accessibleGroupIDs(r.Context())
 	if err != nil {
-		writeAssetScopeForbidden(w, "unable to prove alert rule asset scope")
+		writeAssetScopeForbidden(w, "Could not confirm this alert rule stays within the devices this API key is allowed")
 		return false
 	}
 	if alertRuleAllowed(r.Context(), rule, groupAccess) {
 		return true
 	}
-	writeAssetScopeForbidden(w, "api key does not have access to every asset targeted by this alert rule")
+	writeAssetScopeForbidden(w, "This API key does not have access to every device targeted by this alert rule")
 	return false
 }
 
@@ -260,12 +260,12 @@ func (d *Deps) requireIncidentAccess(w http.ResponseWriter, r *http.Request, inc
 	}
 	groupAccess, err := d.accessibleGroupIDs(r.Context())
 	if err != nil {
-		writeAssetScopeForbidden(w, "unable to prove incident asset scope")
+		writeAssetScopeForbidden(w, "Could not confirm this incident stays within the devices this API key is allowed")
 		return false
 	}
 	allowed, err := d.incidentAllowed(r.Context(), incident, groupAccess)
 	if err != nil || !allowed {
-		writeAssetScopeForbidden(w, "api key does not have access to every asset referenced by this incident")
+		writeAssetScopeForbidden(w, "This API key does not have access to every device referenced by this incident")
 		return false
 	}
 	return true

@@ -12,6 +12,6 @@ func (d *Deps) requireTrueNASCollectorAccess(w http.ResponseWriter, r *http.Requ
 	if err == nil && allowed {
 		return true
 	}
-	apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "api key does not have access to every asset managed by this TrueNAS collector")
+	apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "This API key does not have access to every device of this TrueNAS connection")
 	return false
 }

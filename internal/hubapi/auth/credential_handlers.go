@@ -118,7 +118,7 @@ func (d *Deps) HandleCredentialProfiles(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if shared.HasAssetRestriction(r.Context()) {
-		servicehttp.WriteError(w, http.StatusForbidden, "asset-restricted API keys cannot access global credential profiles")
+		servicehttp.WriteError(w, http.StatusForbidden, "API keys limited to some devices cannot access global credential profiles")
 		return
 	}
 	if !d.authorizeCredentialProfileMutation(w, r) {
@@ -224,7 +224,7 @@ func (d *Deps) HandleCredentialProfileActions(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if shared.HasAssetRestriction(r.Context()) {
-		servicehttp.WriteError(w, http.StatusForbidden, "asset-restricted API keys cannot access global credential profiles")
+		servicehttp.WriteError(w, http.StatusForbidden, "API keys limited to some devices cannot access global credential profiles")
 		return
 	}
 	if !d.authorizeCredentialProfileMutation(w, r) {

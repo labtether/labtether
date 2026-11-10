@@ -13,7 +13,7 @@ func denyAssetRestrictedGlobal(w http.ResponseWriter, r *http.Request, object st
 	if !shared.HasAssetRestriction(r.Context()) {
 		return false
 	}
-	apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "asset-restricted api keys cannot access global PBS "+object)
+	apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "API keys limited to some devices cannot access global PBS "+object)
 	return true
 }
 
@@ -22,7 +22,7 @@ func (d *Deps) requirePBSCollectorAccess(w http.ResponseWriter, r *http.Request,
 	if err == nil && allowed {
 		return true
 	}
-	apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "api key does not have access to every asset managed by this PBS collector")
+	apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "This API key does not have access to every device of this Proxmox Backup Server connection")
 	return false
 }
 
