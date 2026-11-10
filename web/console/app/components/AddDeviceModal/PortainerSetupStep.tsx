@@ -5,6 +5,7 @@ import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { useToast } from "../../contexts/ToastContext";
 import { useStatusControls } from "../../contexts/StatusContext";
+import { readHubReply, useConnectorWords } from "../../hooks/connectorWords";
 import { sanitizeErrorMessage } from "../../lib/sanitizeErrorMessage";
 import { baseURLHostLabel, validateHTTPSOrHTTPURL, validatePollIntervalSeconds, validatePortainerTokenID } from "./validation";
 import { monitorCollectorRunWithRetry } from "./collectorSync";
@@ -41,6 +42,7 @@ type PortainerSetupStepProps = {
 export function PortainerSetupStep({ onBack, onClose, onAdded, compatPrefills = [], setupMode }: PortainerSetupStepProps) {
   const t = useTranslations("auth.addDevice");
   const tSync = useTranslations("auth.addDevice.sync");
+  const words = useConnectorWords("Portainer");
   const { addToast } = useToast();
   const { fetchStatus } = useStatusControls();
   const [loading, setLoading] = useState(true);
@@ -153,19 +155,10 @@ export function PortainerSetupStep({ onBack, onClose, onAdded, compatPrefills = 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
       });
-      const payload = (await response.json()) as PortainerSettingsPayload;
-      if (!response.ok) {
-        throw new Error(payload.error || "");
-      }
-      setMessage(payload.message || t("form.testOk", { name: "Portainer" }));
+      await readHubReply<PortainerSettingsPayload>(response);
+      setMessage(words.testOk());
     } catch (err) {
-      setError(
-        sanitizeErrorMessage(
-          err instanceof Error ? err.message : "",
-          t("form.testFailed", { name: "Portainer" }),
-          [tokenSecret],
-        ),
-      );
+      setError(words.testFailed(err, [tokenSecret]));
     } finally {
       setTesting(false);
     }

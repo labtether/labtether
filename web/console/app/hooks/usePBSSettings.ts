@@ -26,8 +26,6 @@ type PBSSettingsPayload = {
 const usePBSConnectorSettings = createConnectorSettingsHook({
   settingsPath: "/api/settings/pbs",
   displayName: "PBS",
-  messageKey: "pbs",
-  testSuccessMessage: "PBS connection succeeded.",
   useAdapterState: () => {
     const [baseURL, setBaseURL] = useState("");
     const [tokenID, setTokenID] = useState("");
