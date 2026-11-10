@@ -18,13 +18,16 @@ import (
 // time, or 404 for an ID that names no device.
 func TestRemoteViewRoutesSayAgentIsNotConnected(t *testing.T) {
 	store := persistence.NewMemoryAssetStore()
-	if _, err := store.UpsertAssetHeartbeat(assets.HeartbeatRequest{AssetID: "srv-offline", Status: "online"}); err != nil {
+	if _, err := store.UpsertAssetHeartbeat(assets.HeartbeatRequest{AssetID: "srv-offline", Source: "agent", Status: "online"}); err != nil {
 		t.Fatalf("seed asset: %v", err)
 	}
 	deps := &Deps{AssetStore: store, AgentMgr: agentmgr.NewManager()}
 	routes := map[string]func(http.ResponseWriter, string){
 		"clipboard": func(w http.ResponseWriter, id string) {
 			deps.HandleClipboardRoutes(w, httptest.NewRequest(http.MethodPost, "/api/v1/nodes/"+id+"/clipboard/get", strings.NewReader("{}")))
+		},
+		"displays": func(w http.ResponseWriter, id string) {
+			deps.handleDisplayList(w, httptest.NewRequest(http.MethodGet, "/api/v1/nodes/"+id+"/displays", nil), id)
 		},
 		"audio": func(w http.ResponseWriter, id string) {
 			deps.HandleDesktopAudioStream(w, httptest.NewRequest(http.MethodGet, "/desktop/audio", nil), terminal.Session{ID: "s1", Target: id})
@@ -44,5 +47,25 @@ func TestRemoteViewRoutesSayAgentIsNotConnected(t *testing.T) {
 				t.Fatalf("%s %s: got %d %s, want %d %q", name, id, rec.Code, rec.Body.String(), want.code, want.text)
 			}
 		}
+	}
+}
+
+// The stream route fell through to "direct VNC proxy is disabled" (502) when
+// the agent of an agent device was away. It must give the agent answer.
+func TestRemoteViewStreamSaysAgentIsNotConnected(t *testing.T) {
+	store := persistence.NewMemoryAssetStore()
+	if _, err := store.UpsertAssetHeartbeat(assets.HeartbeatRequest{AssetID: "srv-offline", Source: "agent", Status: "online"}); err != nil {
+		t.Fatalf("seed asset: %v", err)
+	}
+	deps := &Deps{AssetStore: store, AgentMgr: agentmgr.NewManager()}
+	rec := httptest.NewRecorder()
+	deps.writeNoDesktopRoute(rec, "srv-offline")
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "agent is not connected (last seen: ") {
+		t.Fatalf("agent device: got %d %s", rec.Code, rec.Body.String())
+	}
+	rec = httptest.NewRecorder()
+	deps.writeNoDesktopRoute(rec, "host-without-agent")
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "Remote View has no way to reach this device.") {
+		t.Fatalf("other device: got %d %s", rec.Code, rec.Body.String())
 	}
 }

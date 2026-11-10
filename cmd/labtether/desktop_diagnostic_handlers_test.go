@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/labtether/labtether/internal/agentmgr"
@@ -43,8 +44,9 @@ func TestHandleDesktopDiagnoseRequestRejectsDisconnectedAgent(t *testing.T) {
 	rec := httptest.NewRecorder()
 	sut.handleDesktopDiagnoseRequest(rec, req)
 
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d: %s", rec.Code, rec.Body.String())
+	// A 5xx text never reaches users; an ID that names no device is a 404.
+	if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "device not found") {
+		t.Fatalf("expected 404 device not found, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
