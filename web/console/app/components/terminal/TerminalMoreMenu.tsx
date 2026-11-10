@@ -65,7 +65,8 @@ export default function TerminalMoreMenu(props: TerminalMoreMenuProps) {
         <Menu.Item className="lt-menu-item" disabled={!hasShell} onSelect={props.onClear}>{t("clear")}</Menu.Item>
         <Menu.Item className="lt-menu-item" disabled={!hasShell} onSelect={props.onFind}>
           {t("find")}
-          <span className="lt-menu-hint">{shortcut("F", false, true)}</span>
+          {/* ⌘F on a Mac; elsewhere Ctrl+F stays with the shell, so Find has no key there. */}
+          {MAC ? <span className="lt-menu-hint">{shortcut("F", false, true)}</span> : null}
         </Menu.Item>
         <Menu.Item className="lt-menu-item" onSelect={props.onChangeDevice}>{t("changeDevice")}</Menu.Item>
         <Menu.Separator className="lt-menu-sep" />
