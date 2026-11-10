@@ -119,7 +119,7 @@ func TestNormalizeAgentReleaseOS(t *testing.T) {
 		"darwin":  "darwin",
 		"macOS":   "darwin",
 		"windows": "windows",
-		"freebsd": "",
+		"plan9":   "",
 		"":        "",
 	}
 	for input, want := range cases {

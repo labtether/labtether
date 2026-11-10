@@ -53,14 +53,14 @@ This page tracks current public-release caveats and the best known workarounds.
   - [Supported Release Matrix](https://labtether.com/docs/wiki/reference/supported-release-matrix)
   - [Home Assistant connector docs](https://labtether.com/docs/wiki/connectors/home-assistant)
 
-## 4. Windows and FreeBSD parity still trails Linux and macOS
+## 4. Windows parity still trails Linux and macOS
 
 **Affected surface**
-- deeper node-management workflows on Windows and FreeBSD
+- deeper node-management workflows on Windows
 
 **What happens**
 - Cross-platform behavior is improving, but the deepest current release validation is on Linux and macOS.
-- Windows remains parity-track, and FreeBSD is not part of the published agent-release artifact contract yet.
+- Windows remains parity-track.
 
 **Workaround**
 - Validate required workflows on your target platform before depending on them in production.

@@ -29,7 +29,7 @@ test("dashboard lists devices that stop answering under Needs attention", async 
       source: "truenas",
       group_id: "group-garage",
       status: "unresponsive",
-      platform: "freebsd",
+      platform: "linux",
       last_seen_at: new Date(now - 4 * 60_000).toISOString(),
       metrics: { cpu_used_percent: 40, memory_used_percent: 50, disk_used_percent: 62 }
     },
@@ -64,7 +64,7 @@ test("dashboard lists devices that stop answering under Needs attention", async 
       source: "truenas",
       group_id: "group-garage",
       status: "unresponsive",
-      platform: "freebsd",
+      platform: "linux",
       last_seen_at: new Date(now - 4 * 60_000).toISOString(),
       metadata: {}
     },

@@ -20,7 +20,6 @@ var validManualDevicePlatforms = map[string]struct{}{
 	"linux":   {},
 	"windows": {},
 	"macos":   {},
-	"freebsd": {},
 	"other":   {},
 }
 
@@ -63,7 +62,7 @@ func (d *Deps) HandleManualDeviceRoutes(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if _, ok := validManualDevicePlatforms[req.Platform]; !ok {
-		servicehttp.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid platform %q: must be one of linux, windows, macos, freebsd, other, or empty", req.Platform))
+		servicehttp.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid platform %q: must be one of linux, windows, macos, other, or empty", req.Platform))
 		return
 	}
 

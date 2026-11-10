@@ -150,8 +150,7 @@ func (d *Deps) HandlePushHubKey(w http.ResponseWriter, r *http.Request, assetID 
 		return
 	}
 	var installScript string
-	switch strings.ToLower(platform) {
-	case "darwin", "linux", "freebsd", "openbsd", "netbsd":
+	if !unameReportsWindows(platform) {
 		installScript = fmt.Sprintf(`
 set -e
 mkdir -p ~/.ssh
@@ -160,8 +159,7 @@ touch ~/.ssh/authorized_keys
 chmod 600 ~/.ssh/authorized_keys
 grep -qxF %q ~/.ssh/authorized_keys || echo %q >> ~/.ssh/authorized_keys
 `, pubKey, pubKey)
-	default:
-		// Windows — use PowerShell.
+	} else {
 		installScript = fmt.Sprintf(`
 $sshDir = "$env:USERPROFILE\.ssh"
 if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir | Out-Null }
@@ -246,6 +244,15 @@ if ($existing -notcontains $key) { Add-Content -Path $authKeys -Value $key }
 		"success":  true,
 		"key_type": "ed25519",
 	})
+}
+
+// unameReportsWindows tells a Windows host from a Unix one by its `uname -s`
+// answer. Windows answers only through Git, MSYS, Cygwin or BusyBox tools
+// (MINGW64_NT-10.0, CYGWIN_NT-10.0, Windows_NT); every Unix system answers with
+// its own name and gets the POSIX script.
+func unameReportsWindows(uname string) bool {
+	lower := strings.ToLower(strings.TrimSpace(uname))
+	return strings.Contains(lower, "windows") || strings.Contains(lower, "_nt")
 }
 
 // runSSHCommand opens a session on the given client, runs cmd, and returns
