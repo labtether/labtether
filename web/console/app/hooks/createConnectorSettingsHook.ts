@@ -2,17 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { sanitizeErrorMessage } from "../lib/sanitizeErrorMessage";
+import { readHubReply, useConnectorWords } from "./connectorWords";
 
 type ConnectorSettingsPayload = {
   configured?: boolean;
   collector_id?: string;
   credential_id?: string;
   credential_name?: string;
-  message?: string;
   warning?: string;
   result?: unknown;
   error?: string;
+  release?: string;
+  visible_datastores?: number;
 };
 
 type AdapterState<
@@ -33,8 +34,6 @@ type ConnectorSettingsHookAdapter<
 > = {
   settingsPath: string;
   displayName: string;
-  messageKey: string;
-  testSuccessMessage: string;
   useAdapterState: () => AdapterState<TPayload, TFields>;
   loadRequestInit?: RequestInit;
   saveRequestInit?: RequestInit;
@@ -107,6 +106,7 @@ export function createConnectorSettingsHook<
       clearSensitiveFields,
       getSensitiveValues,
     } = adapter.useAdapterState();
+    const words = useConnectorWords(adapter.displayName);
 
     const [collectorID, setCollectorID] = useState("");
     const [credentialID, setCredentialID] = useState("");
@@ -130,10 +130,7 @@ export function createConnectorSettingsHook<
           cache: "no-store",
           ...adapter.loadRequestInit,
         });
-        const payload = (await response.json()) as TPayload;
-        if (!response.ok) {
-          throw new Error(payload.error || `failed to load ${adapter.messageKey} settings (${response.status})`);
-        }
+        const payload = await readHubReply<TPayload>(response);
 
         const nextCollectorID = payload.collector_id?.trim() ?? "";
         setConfigured(Boolean(payload.configured));
@@ -143,17 +140,12 @@ export function createConnectorSettingsHook<
         applyLoadedSettings(payload);
         return nextCollectorID;
       } catch (err) {
-        setError(
-          sanitizeErrorMessage(
-            err instanceof Error ? err.message : "",
-            `failed to load ${adapter.messageKey} settings`,
-          ),
-        );
+        setError(words.loadFailed(err));
         return "";
       } finally {
         setLoading(false);
       }
-    }, [applyLoadedSettings]);
+    }, [applyLoadedSettings, words]);
 
     useEffect(() => {
       void load();
@@ -161,7 +153,7 @@ export function createConnectorSettingsHook<
 
     const save = useCallback(async (): Promise<ConnectorSaveResult> => {
       if (savingRef.current) {
-        return { ok: false, error: "save already in progress" };
+        return { ok: false, error: words.saveBusy() };
       }
       savingRef.current = true;
       setSaving(true);
@@ -174,34 +166,26 @@ export function createConnectorSettingsHook<
           body: JSON.stringify(buildSaveBody()),
           ...adapter.saveRequestInit,
         });
-        const payload = (await response.json()) as TPayload;
-        if (!response.ok) {
-          throw new Error(payload.error || `failed to save ${adapter.messageKey} settings (${response.status})`);
-        }
+        const payload = await readHubReply<TPayload>(response);
 
         const savedCollectorID = extractCollectorID(payload);
         clearSensitiveFields();
         const loadedCollectorID = await load();
-        const saveSuccessMessage = `${adapter.displayName} settings saved.`;
-        setMessage(payload.warning ? `${saveSuccessMessage} ${payload.warning}` : saveSuccessMessage);
+        setMessage(words.saved(payload.warning));
         return {
           ok: true,
           collectorID: savedCollectorID || loadedCollectorID,
           warning: payload.warning,
         };
       } catch (err) {
-        const errorMessage = sanitizeErrorMessage(
-          err instanceof Error ? err.message : "",
-          `failed to save ${adapter.messageKey} settings`,
-          getSensitiveValues(),
-        );
+        const errorMessage = words.saveFailed(err, getSensitiveValues());
         setError(errorMessage);
         return { ok: false, error: errorMessage };
       } finally {
         savingRef.current = false;
         setSaving(false);
       }
-    }, [buildSaveBody, clearSensitiveFields, getSensitiveValues, load]);
+    }, [buildSaveBody, clearSensitiveFields, getSensitiveValues, load, words]);
 
     const testConnection = useCallback(async () => {
       setTesting(true);
@@ -214,27 +198,17 @@ export function createConnectorSettingsHook<
           body: JSON.stringify(buildTestBody(credentialID)),
           ...adapter.testRequestInit,
         });
-        const payload = (await response.json()) as TPayload;
-        if (!response.ok) {
-          throw new Error(payload.error || `connection test failed (${response.status})`);
-        }
-        setMessage(payload.message || adapter.testSuccessMessage);
+        setMessage(words.testOk(await readHubReply<TPayload>(response)));
       } catch (err) {
-        setError(
-          sanitizeErrorMessage(
-            err instanceof Error ? err.message : "",
-            `Failed to test ${adapter.displayName} connection. Check the endpoint, credentials, network access, and TLS settings.`,
-            getSensitiveValues(),
-          ),
-        );
+        setError(words.testFailed(err, getSensitiveValues()));
       } finally {
         setTesting(false);
       }
-    }, [buildTestBody, credentialID, getSensitiveValues]);
+    }, [buildTestBody, credentialID, getSensitiveValues, words]);
 
     const runNow = useCallback(async () => {
       if (!collectorID) {
-        setError("Save the collector first, then run it.");
+        setError(words.saveFirst());
         return;
       }
       setRunning(true);
@@ -249,22 +223,14 @@ export function createConnectorSettingsHook<
             ...adapter.runRequestInit,
           },
         );
-        const payload = (await response.json()) as TPayload;
-        if (!response.ok) {
-          throw new Error(payload.error || `failed to run ${adapter.messageKey} collector (${response.status})`);
-        }
-        setMessage(payload.message || "Collector run started.");
+        await readHubReply<TPayload>(response);
+        setMessage(words.syncStarted());
       } catch (err) {
-        setError(
-          sanitizeErrorMessage(
-            err instanceof Error ? err.message : "",
-            `failed to run ${adapter.messageKey} collector`,
-          ),
-        );
+        setError(words.syncFailed(err));
       } finally {
         setRunning(false);
       }
-    }, [collectorID]);
+    }, [collectorID, words]);
 
     return {
       ...fields,

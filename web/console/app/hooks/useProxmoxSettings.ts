@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { sanitizeErrorMessage } from "../lib/sanitizeErrorMessage";
+
+import { readHubReply, useConnectorWords } from "./connectorWords";
 
 export type ProxmoxAuthMethod = "api_token" | "password";
 
@@ -21,10 +22,10 @@ type ProxmoxSettingsPayload = {
     cluster_name?: string;
     interval_seconds?: number;
   };
-  message?: string;
   warning?: string;
   result?: unknown;
   error?: string;
+  release?: string;
 };
 
 type ProxmoxSaveResult = {
@@ -84,6 +85,7 @@ export function useProxmoxSettings() {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const words = useConnectorWords("Proxmox");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -91,10 +93,7 @@ export function useProxmoxSettings() {
     setMessage("");
     try {
       const response = await fetch("/api/settings/proxmox", { cache: "no-store", signal: AbortSignal.timeout(15_000) });
-      const payload = (await response.json()) as ProxmoxSettingsPayload;
-      if (!response.ok) {
-        throw new Error(payload.error || `failed to load proxmox settings (${response.status})`);
-      }
+      const payload = await readHubReply<ProxmoxSettingsPayload>(response);
 
       const nextCollectorID = payload.collector_id?.trim() ?? "";
       setConfigured(Boolean(payload.configured));
@@ -112,12 +111,12 @@ export function useProxmoxSettings() {
       setIntervalSeconds(payload.settings?.interval_seconds ?? 60);
       return nextCollectorID;
     } catch (err) {
-      setError(sanitizeErrorMessage(err instanceof Error ? err.message : "", "failed to load proxmox settings"));
+      setError(words.loadFailed(err));
       return "";
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [words]);
 
   useEffect(() => {
     void load();
@@ -125,7 +124,7 @@ export function useProxmoxSettings() {
 
   const save = useCallback(async (): Promise<ProxmoxSaveResult> => {
     if (savingRef.current) {
-      return { ok: false, error: "save already in progress" };
+      return { ok: false, error: words.saveBusy() };
     }
     savingRef.current = true;
     setSaving(true);
@@ -156,33 +155,26 @@ export function useProxmoxSettings() {
         signal: AbortSignal.timeout(30_000),
         body: JSON.stringify(body)
       });
-      const payload = (await response.json()) as ProxmoxSettingsPayload;
-      if (!response.ok) {
-        throw new Error(payload.error || `failed to save proxmox settings (${response.status})`);
-      }
+      const payload = await readHubReply<ProxmoxSettingsPayload>(response);
 
       const savedCollectorID = extractCollectorID(payload);
       setTokenSecret("");
       const loadedCollectorID = await load();
-      setMessage(payload.warning ? `Proxmox settings saved. ${payload.warning}` : "Proxmox settings saved.");
+      setMessage(words.saved(payload.warning));
       return {
         ok: true,
         collectorID: savedCollectorID || loadedCollectorID,
         warning: payload.warning,
       };
     } catch (err) {
-      const errorMessage = sanitizeErrorMessage(
-        err instanceof Error ? err.message : "",
-        "failed to save proxmox settings",
-        [tokenSecret],
-      );
+      const errorMessage = words.saveFailed(err, [tokenSecret]);
       setError(errorMessage);
       return { ok: false, error: errorMessage };
     } finally {
       savingRef.current = false;
       setSaving(false);
     }
-  }, [baseURL, authMethod, tokenID, tokenSecret, username, skipVerify, spiceSkipVerify, caPEM, clusterName, intervalSeconds, load]);
+  }, [baseURL, authMethod, tokenID, tokenSecret, username, skipVerify, spiceSkipVerify, caPEM, clusterName, intervalSeconds, load, words]);
 
   const testConnection = useCallback(async () => {
     setTesting(true);
@@ -210,27 +202,17 @@ export function useProxmoxSettings() {
         signal: AbortSignal.timeout(25_000),
         body: JSON.stringify(body)
       });
-      const payload = (await response.json()) as ProxmoxSettingsPayload;
-      if (!response.ok) {
-        throw new Error(payload.error || `connection test failed (${response.status})`);
-      }
-      setMessage(payload.message || "Proxmox connection succeeded.");
+      setMessage(words.testOk(await readHubReply<ProxmoxSettingsPayload>(response)));
     } catch (err) {
-      setError(
-        sanitizeErrorMessage(
-          err instanceof Error ? err.message : "",
-          "failed to test proxmox connection",
-          [tokenSecret],
-        ),
-      );
+      setError(words.testFailed(err, [tokenSecret]));
     } finally {
       setTesting(false);
     }
-  }, [baseURL, authMethod, tokenID, tokenSecret, username, credentialID, skipVerify, caPEM]);
+  }, [baseURL, authMethod, tokenID, tokenSecret, username, credentialID, skipVerify, caPEM, words]);
 
   const runNow = useCallback(async () => {
     if (!collectorID) {
-      setError("Save the collector first, then run it.");
+      setError(words.saveFirst());
       return;
     }
     setRunning(true);
@@ -244,17 +226,14 @@ export function useProxmoxSettings() {
           signal: AbortSignal.timeout(20_000),
         },
       );
-      const payload = (await response.json()) as ProxmoxSettingsPayload;
-      if (!response.ok) {
-        throw new Error(payload.error || `failed to run proxmox collector (${response.status})`);
-      }
-      setMessage(payload.message || "Collector run started.");
+      await readHubReply<ProxmoxSettingsPayload>(response);
+      setMessage(words.syncStarted());
     } catch (err) {
-      setError(sanitizeErrorMessage(err instanceof Error ? err.message : "", "failed to run proxmox collector"));
+      setError(words.syncFailed(err));
     } finally {
       setRunning(false);
     }
-  }, [collectorID]);
+  }, [collectorID, words]);
 
   return {
     baseURL,

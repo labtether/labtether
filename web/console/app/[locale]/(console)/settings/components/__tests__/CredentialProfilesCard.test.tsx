@@ -137,7 +137,7 @@ describe("CredentialProfilesCard", () => {
 
     expect(document.body.querySelector('[role="dialog"]')).toBeTruthy();
     expect(document.body.querySelector('[role="alert"]')?.textContent)
-      .toBe("Noch verwendet von 2 Protokolleinstellungen von Geräten und 1 Collector. Entferne die Anmeldung zuerst dort.");
+      .toBe("Noch verwendet von 2 Protokolleinstellungen von Geräten und 1 Collector. Entfernen Sie die Anmeldung zuerst dort.");
     expect(document.body.textContent).not.toContain("asset-secret-canary");
   });
 });

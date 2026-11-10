@@ -24,8 +24,6 @@ type HomeAssistantSettingsPayload = {
 const useHomeAssistantConnectorSettings = createConnectorSettingsHook({
   settingsPath: "/api/settings/homeassistant",
   displayName: "Home Assistant",
-  messageKey: "home assistant",
-  testSuccessMessage: "Home Assistant connection succeeded.",
   useAdapterState: () => {
     const [baseURL, setBaseURL] = useState("");
     const [token, setToken] = useState("");

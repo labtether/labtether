@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { sanitizeErrorMessage } from "../lib/sanitizeErrorMessage";
+import { readHubReply, useConnectorWords } from "./connectorWords";
 import type { ProxmoxAuthMethod } from "./useProxmoxSettings";
 
 type CollectorSettingsPayload = {
@@ -20,8 +20,8 @@ type CollectorSettingsPayload = {
     cluster_name?: string;
     interval_seconds?: number;
   };
-  message?: string;
   error?: string;
+  release?: string;
 };
 
 export function useCollectorSettings(collectorId: string | null) {
@@ -46,6 +46,7 @@ export function useCollectorSettings(collectorId: string | null) {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const words = useConnectorWords("Proxmox");
 
   const load = useCallback(async () => {
     if (!collectorId) return;
@@ -57,10 +58,7 @@ export function useCollectorSettings(collectorId: string | null) {
         `/api/settings/proxmox/${encodeURIComponent(collectorId)}`,
         { cache: "no-store", signal: AbortSignal.timeout(15_000) },
       );
-      const payload = (await response.json()) as CollectorSettingsPayload;
-      if (!response.ok) {
-        throw new Error(payload.error || `failed to load collector settings (${response.status})`);
-      }
+      const payload = await readHubReply<CollectorSettingsPayload>(response);
 
       setConfigured(Boolean(payload.configured));
       setCredentialID(payload.credential_id ?? "");
@@ -74,11 +72,11 @@ export function useCollectorSettings(collectorId: string | null) {
       setClusterName(payload.settings?.cluster_name ?? "");
       setIntervalSeconds(payload.settings?.interval_seconds ?? 60);
     } catch (err) {
-      setError(sanitizeErrorMessage(err instanceof Error ? err.message : "", "failed to load collector settings"));
+      setError(words.loadFailed(err));
     } finally {
       setLoading(false);
     }
-  }, [collectorId]);
+  }, [collectorId, words]);
 
   useEffect(() => {
     if (collectorId) {
@@ -118,26 +116,17 @@ export function useCollectorSettings(collectorId: string | null) {
           body: JSON.stringify(body),
         },
       );
-      const payload = (await response.json()) as CollectorSettingsPayload;
-      if (!response.ok) {
-        throw new Error(payload.error || `failed to save collector settings (${response.status})`);
-      }
-      setMessage("Collector settings saved.");
+      await readHubReply<CollectorSettingsPayload>(response);
       setTokenSecret("");
       await load();
+      setMessage(words.saved());
     } catch (err) {
-      setError(
-        sanitizeErrorMessage(
-          err instanceof Error ? err.message : "",
-          "failed to save collector settings",
-          [tokenSecret],
-        ),
-      );
+      setError(words.saveFailed(err, [tokenSecret]));
     } finally {
       savingRef.current = false;
       setSaving(false);
     }
-  }, [collectorId, baseURL, authMethod, tokenID, tokenSecret, username, skipVerify, caPEM, clusterName, intervalSeconds, load]);
+  }, [collectorId, baseURL, authMethod, tokenID, tokenSecret, username, skipVerify, caPEM, clusterName, intervalSeconds, load, words]);
 
   const testConnection = useCallback(async () => {
     setTesting(true);
@@ -165,23 +154,13 @@ export function useCollectorSettings(collectorId: string | null) {
         signal: AbortSignal.timeout(25_000),
         body: JSON.stringify(body),
       });
-      const payload = (await response.json()) as CollectorSettingsPayload;
-      if (!response.ok) {
-        throw new Error(payload.error || `connection test failed (${response.status})`);
-      }
-      setMessage(payload.message || "Proxmox connection succeeded.");
+      setMessage(words.testOk(await readHubReply<CollectorSettingsPayload>(response)));
     } catch (err) {
-      setError(
-        sanitizeErrorMessage(
-          err instanceof Error ? err.message : "",
-          "failed to test proxmox connection",
-          [tokenSecret],
-        ),
-      );
+      setError(words.testFailed(err, [tokenSecret]));
     } finally {
       setTesting(false);
     }
-  }, [baseURL, authMethod, tokenID, tokenSecret, username, credentialID, skipVerify, caPEM]);
+  }, [baseURL, authMethod, tokenID, tokenSecret, username, credentialID, skipVerify, caPEM, words]);
 
   const runNow = useCallback(async () => {
     if (!collectorId) return;
@@ -196,17 +175,14 @@ export function useCollectorSettings(collectorId: string | null) {
           signal: AbortSignal.timeout(20_000),
         },
       );
-      const payload = (await response.json()) as { message?: string; error?: string };
-      if (!response.ok) {
-        throw new Error(payload.error || `failed to run collector (${response.status})`);
-      }
-      setMessage(payload.message || "Collector run started.");
+      await readHubReply<{ error?: string }>(response);
+      setMessage(words.syncStarted());
     } catch (err) {
-      setError(sanitizeErrorMessage(err instanceof Error ? err.message : "", "failed to run collector"));
+      setError(words.syncFailed(err));
     } finally {
       setRunning(false);
     }
-  }, [collectorId]);
+  }, [collectorId, words]);
 
   return {
     baseURL,

@@ -155,7 +155,7 @@ test("add device portainer flow tests and saves connector settings", async ({ pa
 
   await expect(saveButton).toBeEnabled();
   await testButton.click();
-  await expect(page.getByText("Portainer API reachable.")).toBeVisible();
+  await expect(page.getByText("Portainer connection works.")).toBeVisible();
 
   await page.getByPlaceholder("Homelab Portainer").fill("Lab Portainer");
   await page.getByRole("button", { name: "Save and sync", exact: true }).click();
@@ -274,7 +274,7 @@ test("add device portainer flow lets operator choose detected endpoint", async (
 
   await page.getByPlaceholder("Required for initial setup").fill("ptr-secret");
   await page.getByRole("button", { name: "Test connection", exact: true }).click();
-  await expect(page.getByText("Portainer API reachable.")).toBeVisible();
+  await expect(page.getByText("Portainer connection works.")).toBeVisible();
 
   expect(lastTestPayload).not.toBeNull();
   expect(lastTestPayload).toMatchObject({
@@ -444,7 +444,7 @@ test("add device pbs flow tests and saves connector settings", async ({ page }) 
 
   await expect(saveButton).toBeEnabled();
   await testButton.click();
-  await expect(page.getByText("PBS API reachable.")).toBeVisible();
+  await expect(page.getByText("PBS connection works.")).toBeVisible();
 
   await page.getByLabel("Display name", { exact: true }).fill("Lab PBS");
   await page.getByRole("button", { name: "Save and sync", exact: true }).click();
@@ -626,7 +626,7 @@ test("add device truenas flow tests and saves connector settings", async ({ page
 
   await expect(saveButton).toBeEnabled();
   await testButton.click();
-  await expect(page.getByText("TrueNAS API reachable.")).toBeVisible();
+  await expect(page.getByText("TrueNAS connection works.")).toBeVisible();
 
   await page.getByRole("button", { name: "Save and sync", exact: true }).click();
 

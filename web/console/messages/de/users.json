@@ -15,7 +15,7 @@
     "off": "Aus",
     "local": "Lokales Konto",
     "sso": "Single Sign-On",
-    "youAnd": "Du · {kind}",
+    "youAnd": "Sie · {kind}",
     "empty": "Keine Benutzer",
     "loadFailed": "Benutzer wurden nicht geladen.",
     "actions": "Aktionen",
@@ -50,7 +50,7 @@
     "title": "{name} überall abmelden?",
     "titleYou": "Überall abmelden?",
     "body": "Alle Sitzungen von {name} enden. {name} kann sich wieder anmelden.",
-    "bodyYou": "Alle deine Sitzungen enden, auch diese.",
+    "bodyYou": "Alle Ihre Sitzungen enden, auch diese.",
     "submit": "Abmelden"
   },
   "remove": {

@@ -255,6 +255,13 @@ v1.7.1.
 - Remote View and Files open, and Copy buttons copy, when the console is
   opened over plain HTTP on a LAN address such as `http://<hub-host>:3000`.
   Remote View showed an error page there, and Copy did nothing.
+- Add device and a device's Proxmox settings say in your language whether a
+  connection test, save or sync worked. They showed the Hub's English text,
+  such as "pbs API reachable". A failed test keeps the Hub's reason after a
+  translated start, and a lost network connection no longer shows the
+  browser's "Failed to fetch".
+- German addresses you as "Sie" on every page. Sign-in, Add device, saved
+  logins and a few settings lines said "du".
 
 ## [1.7.1] - 2026-10-31
 
