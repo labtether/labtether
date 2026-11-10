@@ -92,6 +92,11 @@ type Deps struct {
 	RemoveDockerHost     func(assetID string)
 	RemoveWebServiceHost func(assetID string)
 
+	// RemoveSavedTerminalSessions drops the saved terminal sessions of a device
+	// after it was deleted, and clears it from saved workspace tabs. They are
+	// keyed by device id without a foreign key, so nothing else removes them.
+	RemoveSavedTerminalSessions func(ctx context.Context, assetID string)
+
 	// SendSSHKeyRemoveToAsset sends the ssh_key_remove message to the agent
 	// currently connected for the given asset. It is a no-op when the asset
 	// is not connected or hub identity is not set.

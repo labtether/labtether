@@ -129,6 +129,11 @@ func (d *Deps) DeleteAsset(ctx context.Context, assetEntry assets.Asset) error {
 	if d.AgentMgr != nil {
 		d.AgentMgr.Unregister(assetID)
 	}
+	// Only after the device is gone: a refused or failed delete keeps its
+	// saved terminal sessions.
+	if d.RemoveSavedTerminalSessions != nil {
+		d.RemoveSavedTerminalSessions(ctx, assetID)
+	}
 	return nil
 }
 

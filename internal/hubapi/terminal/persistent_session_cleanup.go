@@ -67,7 +67,17 @@ func (d *Deps) TerminatePersistentTerminalRuntime(persistent terminal.Persistent
 		return fmt.Errorf("failed to resolve ssh config for saved shell cleanup: %w", err)
 	}
 	if resolvedSSHConfig == nil {
-		return fmt.Errorf("%w: connect the agent or configure ssh access before deleting this saved shell", ErrPersistentTerminalCleanupUnavailable)
+		device, exists, err := d.persistentTargetDevice(target)
+		if err != nil {
+			return fmt.Errorf("failed to look up the device for this saved shell: %w", err)
+		}
+		if !exists {
+			// The device was removed from the Hub. No agent can connect under
+			// this id again and no SSH login is left for it, so the saved
+			// record is all that remains and nothing blocks removing it.
+			return nil
+		}
+		return &persistentTargetAwayError{device: device}
 	}
 	if err := PersistentTmuxCleanupSSHFunc(d, resolvedSSHConfig, tmuxSessionName); err != nil {
 		return fmt.Errorf("failed to end saved shell over ssh: %w", err)
