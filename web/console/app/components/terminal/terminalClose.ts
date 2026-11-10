@@ -9,3 +9,16 @@ export function terminalCloseFrom(event: { code: number; reason: string }): Term
   const clean = event.code === 1000;
   return { clean, reason: event.reason || (clean ? undefined : "The connection closed unexpectedly") };
 }
+
+/**
+ * The shell itself finished: someone typed `exit`, or the session was removed. A session that another window took
+ * over closes cleanly too, and has not ended.
+ */
+export function isShellEnded(close: TerminalClose): boolean {
+  return close.clean && !/attached elsewhere/i.test(close.reason ?? "");
+}
+
+/** The Hub closes a device's shell with this reason when the device's agent drops off the Hub. */
+export function isDeviceGone(close: TerminalClose): boolean {
+  return !close.clean && close.reason?.trim().toLowerCase() === "agent disconnected";
+}

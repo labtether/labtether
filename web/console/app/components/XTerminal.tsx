@@ -4,7 +4,7 @@ import { useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 
 import type { ITheme } from "@xterm/xterm";
 import { labtetherTerminalTheme } from "./terminal/terminalLook";
 import { createReplaySilencer } from "./terminal/replaySilencer";
-import { terminalCloseFrom, type TerminalClose } from "./terminal/terminalClose";
+import { isDeviceGone, terminalCloseFrom, type TerminalClose } from "./terminal/terminalClose";
 
 export type XTerminalHandle = {
   /** Write data to the terminal display (does NOT send to remote) */
@@ -45,6 +45,8 @@ type XTerminalProps = {
   wsUrl: string | null;
   /** The line written when the stream closes, in the person's language. */
   endedText?: string;
+  /** The line written instead when the stream closed because the device went away ("nas01 disconnected"). */
+  deviceGoneText?: string;
   /** Called when the WebSocket connection opens */
   onConnected?: () => void;
   /** Called when the WebSocket connection closes: a finished shell is `clean`, a dropped connection is not. */
@@ -104,6 +106,7 @@ const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XTerminal
   {
     wsUrl,
     endedText,
+    deviceGoneText,
     onConnected,
     onDisconnected,
     onError,
@@ -130,6 +133,8 @@ const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XTerminal
   // This prevents the terminal from being torn down on every parent re-render.
   const endedTextRef = useRef(endedText);
   endedTextRef.current = endedText;
+  const deviceGoneTextRef = useRef(deviceGoneText);
+  deviceGoneTextRef.current = deviceGoneText;
   const onConnectedRef = useRef(onConnected);
   const onDisconnectedRef = useRef(onDisconnected);
   const onErrorRef = useRef(onError);
@@ -425,8 +430,12 @@ const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XTerminal
         clearTimeout(openTimer);
         if (cancelled) return;
         socketRef.current = null;
-        onDisconnectedRef.current?.(terminalCloseFrom(event));
-        term.write(`\r\n\x1b[90m--- ${endedTextRef.current ?? "Session ended"} ---\x1b[0m\r\n`);
+        const close = terminalCloseFrom(event);
+        onDisconnectedRef.current?.(close);
+        // A stream that never reached a shell has no session to end; the pane says what went wrong.
+        if (!streamReadySignaled) return;
+        const line = (isDeviceGone(close) && deviceGoneTextRef.current) || endedTextRef.current || "Session ended";
+        term.write(`\r\n\x1b[90m--- ${line} ---\x1b[0m\r\n`);
       };
 
       // Forward terminal input to WebSocket
