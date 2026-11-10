@@ -2,7 +2,7 @@
 
 import { useCallback } from "react";
 import type React from "react";
-import { joinPath } from "../../files/fileWorkspaceUtils";
+import { joinPath } from "../../files/remotePaths";
 import type { FileEntry } from "../../files/fileOpsClient";
 
 type ContextMenuState = {

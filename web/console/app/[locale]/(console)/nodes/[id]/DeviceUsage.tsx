@@ -6,6 +6,7 @@ import type { Asset, AssetTelemetryDetails, TelemetryOverviewAsset, TelemetryWin
 import { MetricChart } from "./metricsViewChart";
 import { analyzeTelemetryDetails, valueToChartY, type AnalyzedSeries } from "./nodeMetricsModel";
 import { deviceState, shortWhen } from "./deviceStatusModel";
+import { isWindowsPlatform } from "../../files/remotePaths";
 
 const RANGES: TelemetryWindow[] = ["1h", "6h", "24h"];
 const num = (raw: string | undefined): number | null => (raw && /^\d+(?:\.\d+)?$/.test(raw.trim()) ? Number(raw) : null);
@@ -81,6 +82,8 @@ export function DeviceUsage({ asset, telemetry, details, loading, window, onWind
   const memTotal = num(metaOf.memory_total_bytes) ?? num(metaOf.physmem);
   const diskTotal = num(metaOf.disk_root_total_bytes);
   const diskFree = num(metaOf.disk_root_available_bytes);
+  // The Hub's overview has one disk reading and no mount name. The agent takes it from C:\ on Windows, / elsewhere.
+  const diskMount = isWindowsPlatform(asset.platform || metaOf.platform) ? "C:" : "/";
 
   const note = quiet ? (state.since ? t("quietSince", { time: shortWhen(state.since, locale) }) : t("quiet")) : !hasAny && !loading ? t("none") : "";
   const big = (text: string, hot = false) => <b className={`dv-readout${hot ? " hot" : ""}`}>{text}</b>;
@@ -128,7 +131,7 @@ export function DeviceUsage({ asset, telemetry, details, loading, window, onWind
             <span className="dv-cell-k">{t("disk")}</span>
             {disk == null ? <div className="dv-cell-v">{quiet ? none : <span className="dv-hint">{t("noDisk")}</span>}</div> : (
               <div className="dv-mount">
-                <span className="dv-mono">/</span>
+                <span className="dv-mono">{diskMount}</span>
                 <span className={`dv-meter${disk >= 85 ? " hot" : ""}`} aria-hidden="true"><i style={{ width: `${Math.min(100, Math.max(0, disk))}%` }} /></span>
                 <span className={`dv-n${disk >= 85 ? " hot" : ""}`}>{pct(disk)}</span>
                 <span className="dv-n">{diskTotal ? t("ofSize", usedOf(diskFree != null ? diskTotal - diskFree : (diskTotal * disk) / 100, diskTotal)) : ""}</span>

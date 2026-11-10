@@ -28,6 +28,12 @@
   },
   "hub": "Hub",
   "unknown": "未知",
+  "apiKey": "API 密钥",
+  "ids": {
+    "actor": "人员 ID",
+    "apiKey": "API 密钥 ID",
+    "target": "对象 ID"
+  },
   "rowActions": "此条目的操作",
   "copyLine": "复制此行",
   "copied": "已复制此行",

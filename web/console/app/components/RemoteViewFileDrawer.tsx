@@ -1,12 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
+import { useCallback, useContext, useEffect, useRef, useState, type DragEvent } from "react";
 import { useTranslations } from "next-intl";
 import { ArrowUp, ChevronRight, Download, Eye, EyeOff, RefreshCw, Upload, X } from "lucide-react";
 import { listFiles } from "../[locale]/(console)/files/fileOpsClient";
 import type { FileEntry } from "../[locale]/(console)/files/fileOpsClient";
 import { formatSize } from "../[locale]/(console)/files/filesPageUtils";
+import { UploadReplaceDialog } from "../[locale]/(console)/files/FilesOverlays";
+import { joinPath, namesBelow, parentPath, pathStyleOf } from "../[locale]/(console)/files/remotePaths";
+import { useUploadReplace } from "../[locale]/(console)/files/useUploadReplace";
 import { useFileDownload } from "../hooks/useFileDownload";
+import { ToolbarPortalContext } from "./remote-toolbar/ToolbarButtons";
 
 type Props = {
   nodeId: string;
@@ -14,12 +18,10 @@ type Props = {
   onClose: () => void;
 };
 
-const join = (dir: string, name: string) => (dir.endsWith("/") ? `${dir}${name}` : `${dir}/${name}`);
-
 /**
  * Files on the remote machine, over the right of the screen: one folder (home first), Upload from this computer (or
- * drop files on the drawer), Download by choosing a file, with the transfer's progress at the bottom. Goes through the
- * device's agent.
+ * drop files on the drawer), Download by choosing a file, with the transfer's progress at the bottom. An upload over
+ * a file of the same name asks first. Goes through the device's agent.
  */
 export function RemoteViewFileDrawer({ nodeId, open, onClose }: Props) {
   const t = useTranslations("desktop.files");
@@ -34,6 +36,8 @@ export function RemoteViewFileDrawer({ nodeId, open, onClose }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
   const { downloading, progress, filename, downloadFile } = useFileDownload(nodeId);
+  // In fullscreen only the viewer is shown, so the Replace dialog is put inside it.
+  const dialogContainer = useContext(ToolbarPortalContext);
 
   const fetchEntries = useCallback(
     async (path: string) => {
@@ -69,19 +73,19 @@ export function RemoteViewFileDrawer({ nodeId, open, onClose }: Props) {
     [fetchEntries],
   );
 
-  const handleUpload = useCallback(
-    (files: FileList | File[]) => {
-      const file = Array.from(files)[0];
+  const startUpload = useCallback(
+    (files: File[], dir: string) => {
+      const file = files[0];
       if (!file) return;
       setUpload({ name: file.name, percent: 0 });
       const xhr = new XMLHttpRequest();
-      xhr.open("POST", `/api/files/${encodeURIComponent(nodeId)}/upload?path=${encodeURIComponent(join(currentPath, file.name))}`);
+      xhr.open("POST", `/api/files/${encodeURIComponent(nodeId)}/upload?path=${encodeURIComponent(joinPath(dir, file.name))}`);
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) setUpload({ name: file.name, percent: Math.round((event.loaded / event.total) * 100) });
       };
       xhr.onload = () => {
         setUpload(null);
-        void fetchEntries(currentPath);
+        void fetchEntries(dir);
       };
       xhr.onerror = () => {
         setUpload(null);
@@ -89,30 +93,48 @@ export function RemoteViewFileDrawer({ nodeId, open, onClose }: Props) {
       };
       xhr.send(file);
     },
-    [nodeId, currentPath, fetchEntries, t],
+    [nodeId, fetchEntries, t],
   );
+
+  // The drawer uploads one file. When the folder has a file of that name, it waits for Replace or Cancel.
+  const listFolder = useCallback(async (dir: string) => (await listFiles(nodeId, dir, { showHidden: true })).entries, [nodeId]);
+  const uploadUnread = useCallback(() => setError(t("listFailed")), [t]);
+  const replace = useUploadReplace({
+    held: { path: currentPath, entries, showHidden, ready: !loading && !error },
+    list: listFolder,
+    upload: startUpload,
+    onUnread: uploadUnread,
+  });
+  const { ask: replaceAsk, start: startReplaceCheck, cancel: cancelReplace } = replace;
+  const handleUpload = (files: FileList | File[]) => startReplaceCheck(Array.from(files).slice(0, 1), currentPath);
+
+  useEffect(() => {
+    if (!open) cancelReplace();
+  }, [open, cancelReplace]);
 
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      // Escape closes the Replace dialog first, then the drawer.
+      if (event.key === "Escape" && !replaceAsk) {
         onClose();
         event.stopPropagation();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, onClose, replaceAsk]);
 
   if (!open) return null;
 
-  const relative = homePath && currentPath.startsWith(homePath) ? currentPath.slice(homePath.length) : currentPath;
-  const segments = relative.split("/").filter(Boolean);
-  const atHome = !relative || relative === "/";
+  // The folders from the shared folder down to the open one; a Windows device answers with backslash paths.
+  const segments = namesBelow(currentPath, homePath) ?? [];
+  const atHome = segments.length === 0;
+  const separator = pathStyleOf(currentPath) === "windows" ? "\\" : "/";
   const sorted = [...entries].sort((a, b) => (a.is_dir !== b.is_dir ? (a.is_dir ? -1 : 1) : a.name.localeCompare(b.name)));
   const goUp = () => {
-    const parent = `/${currentPath.split("/").filter(Boolean).slice(0, -1).join("/")}`;
-    navigateTo(parent.length <= homePath.length ? "" : parent);
+    const parent = parentPath(currentPath);
+    navigateTo(namesBelow(parent, homePath)?.length ? parent : "");
   };
   const onDrag = (event: DragEvent, step: 1 | -1) => {
     event.preventDefault();
@@ -147,10 +169,10 @@ export function RemoteViewFileDrawer({ nodeId, open, onClose }: Props) {
           </button>
           {segments.map((segment, i) => (
             <span key={`${i}-${segment}`}>
-              <span aria-hidden="true">/</span>
+              <span aria-hidden="true">{separator}</span>
               <button
                 type="button"
-                onClick={() => navigateTo(`${homePath}/${segments.slice(0, i + 1).join("/")}`)}
+                onClick={() => navigateTo(segments.slice(0, i + 1).reduce(joinPath, homePath))}
                 aria-current={i === segments.length - 1 ? "location" : undefined}
               >
                 {segment}
@@ -216,7 +238,7 @@ export function RemoteViewFileDrawer({ nodeId, open, onClose }: Props) {
                 key={entry.name}
                 type="button"
                 className="rv-file"
-                onClick={() => (entry.is_dir ? navigateTo(join(currentPath, entry.name)) : void downloadFile(join(currentPath, entry.name)))}
+                onClick={() => (entry.is_dir ? navigateTo(joinPath(currentPath, entry.name)) : void downloadFile(joinPath(currentPath, entry.name)))}
                 title={entry.is_dir ? undefined : t("download", { name: entry.name })}
               >
                 <span className="rv-file-n">{entry.name}</span>
@@ -236,6 +258,14 @@ export function RemoteViewFileDrawer({ nodeId, open, onClose }: Props) {
           </i>
         </div>
       ) : null}
+      <UploadReplaceDialog
+        ask={replaceAsk}
+        where={replaceAsk?.dir ?? ""}
+        onCancel={cancelReplace}
+        onSkip={replace.skip}
+        onReplace={replace.replace}
+        container={dialogContainer}
+      />
     </aside>
   );
 }

@@ -3,8 +3,12 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { useFiles, type FileEntry, type SortField } from "../../../hooks/useFiles";
-import type { UnifiedFileEntry } from "./fileOpsClient";
-import { isOutsideRoot, joinPath, normalizePath, outsideBasePath, parentPath } from "./fileWorkspaceUtils";
+import { unifiedListFiles, type UnifiedFileEntry } from "./fileOpsClient";
+import {
+  isOutsideRoot, isTopFolder, isWindowsPlatform, joinPath, normalizePath, outsideBasePath, pathStyleOf, samePath, typedPath,
+  type PathStyle,
+} from "./remotePaths";
+import type { FolderEntry } from "./uploadClashes";
 import { useConnectionBrowser } from "./useConnectionBrowser";
 import { sourceKey, sourceOf, type FileSource, type FileTab } from "./useFileTabsState";
 
@@ -20,6 +24,8 @@ export type FilesSourceApi = {
   waiting: boolean;
   currentPath: string;
   rootPath: string;
+  /** How this source writes paths: "windows" for a Windows device, "posix" for every other device and connection. */
+  pathStyle: PathStyle;
   entries: FileEntry[];
   loading: boolean;
   error: string | null;
@@ -36,6 +42,10 @@ export type FilesSourceApi = {
   openFile: (entry: FileEntry) => void;
   download: (names: string[]) => void;
   upload: (files: File[], dir: string) => Promise<void>;
+  /** Reads a folder with its hidden files and leaves the open folder as it is. */
+  listFolder: (dir: string) => Promise<FolderEntry[]>;
+  /** File names on this source match without regard to case (a Windows device). */
+  namesIgnoreCase: boolean;
   createDir: (name: string) => Promise<void>;
   remove: (names: string[]) => Promise<void>;
   rename: (from: string, to: string) => Promise<void>;
@@ -103,6 +113,15 @@ export function useFilesSource(tab: FileTab | null): FilesSourceApi {
     }
   }, [conn, files, isConn]);
 
+  const listFolder = useCallback(async (dir: string): Promise<FolderEntry[]> => {
+    if (!source) throw new Error("no source");
+    return (await unifiedListFiles(source, dir, { showHidden: true })).entries;
+  }, [source]);
+  const agentPlatform = isConn ? "" : files.assets.find((a) => a.id === agentId)?.platform ?? "";
+  const namesIgnoreCase = isWindowsPlatform(agentPlatform);
+  // The agent's own answer decides the style; the platform only stands in until the first folder is read.
+  const pathStyle = pathStyleOf(rootPath === "~" ? currentPath : rootPath, agentPlatform);
+
   const remove = useCallback(async (names: string[]) => {
     if (names.length === 0) return;
     if (names.length === 1) {
@@ -148,17 +167,18 @@ export function useFilesSource(tab: FileTab | null): FilesSourceApi {
   // A typed path outside the agent's folder used to fall back to that folder in silence; now it says why.
   const tBar = useTranslations("files.bar");
   const goToAgent = useCallback((path: string) => {
-    if (isOutsideRoot(path, files.rootPath)) {
-      files.setErrorMessage(tBar("outsideRoot", { path: normalizePath(path), root: files.rootPath }));
+    const wanted = typedPath(path, pathStyle);
+    if (isOutsideRoot(wanted, files.rootPath)) {
+      files.setErrorMessage(tBar("outsideRoot", { path: normalizePath(wanted, pathStyle), root: files.rootPath }));
       return;
     }
-    files.navigateToPath(path);
-  }, [files, tBar]);
+    files.navigateToPath(wanted);
+  }, [files, pathStyle, tBar]);
   const refused = outsideBasePath(files.error);
   const agentError = refused === null ? files.error : tBar("outsideShared", { path: refused });
 
-  const normalizedRoot = rootPath === "~" || rootPath === "" ? "" : rootPath;
-  const canUp = currentPath !== "~" && currentPath !== "/" && currentPath !== normalizedRoot && parentPath(currentPath) !== currentPath;
+  const atRoot = rootPath !== "~" && rootPath !== "" && samePath(currentPath, rootPath);
+  const canUp = !atRoot && !isTopFolder(currentPath);
 
   return {
     key: sourceKey(source),
@@ -166,6 +186,7 @@ export function useFilesSource(tab: FileTab | null): FilesSourceApi {
     waiting: source?.type === "agent" && !agentConnected,
     currentPath,
     rootPath,
+    pathStyle,
     entries,
     loading: isConn ? conn.loading : files.loading || (agentConnected && target !== agentId),
     error: isConn ? conn.error : agentError,
@@ -182,6 +203,8 @@ export function useFilesSource(tab: FileTab | null): FilesSourceApi {
     openFile,
     download,
     upload,
+    listFolder,
+    namesIgnoreCase,
     createDir: isConn ? conn.createDir : files.createDir,
     remove,
     rename,

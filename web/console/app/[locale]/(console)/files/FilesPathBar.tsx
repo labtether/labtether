@@ -4,8 +4,8 @@ import * as Menu from "@radix-ui/react-dropdown-menu";
 import { ArrowLeft, ArrowUp, ChevronDown, Folder } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Fragment, useState } from "react";
-import { pathCrumbs } from "./filesListModel";
 import { ToolMenu } from "./FileMenus";
+import { pathCrumbs, pathStyleOf } from "./remotePaths";
 
 // Back, Up and the path: crumbs to click, or a field to type a path in (click beside the crumbs). The folder menu
 // on the left lists the places to jump to (home and the filesystem root).
@@ -34,6 +34,8 @@ export function FilesPathBar({ path, onGo, canUp, onUp, canBack, onBack, places 
   const value = draft ?? localDraft;
   const setValue = onDraft ?? setLocalDraft;
   const crumbs = pathCrumbs(path);
+  // A Windows path reads "C: \ Users \ demo", as its path field does.
+  const sepChar = pathStyleOf(path) === "windows" ? "\\" : "/";
   const inputId = `fx-path-in${idSuffix}`;
 
   const startEdit = () => {
@@ -101,7 +103,7 @@ export function FilesPathBar({ path, onGo, canUp, onUp, canBack, onBack, places 
           <span className="fx-crumbs">
             {crumbs.map((c, i) => {
               const last = i === crumbs.length - 1;
-              const sep = i > 1 || (i === 1 && crumbs[0].label !== "/") ? <span className="fx-sep" aria-hidden="true">/</span> : null;
+              const sep = i > 1 || (i === 1 && crumbs[0].label !== "/") ? <span className="fx-sep" aria-hidden="true">{sepChar}</span> : null;
               return (
                 <Fragment key={c.path}>
                   {sep}

@@ -6,7 +6,7 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import type { FileEntry } from "./fileOpsClient";
 import { unifiedListFiles, type UnifiedFileEntry } from "./fileOpsClient";
-import { parentPath } from "./fileWorkspaceUtils";
+import { parentPath } from "./remotePaths";
 import { clickSelection } from "./filesListModel";
 import { FileListView } from "./FileListView";
 import { ToolMenu, type MenuItemSpec } from "./FileMenus";

@@ -5,11 +5,12 @@ import { PageHeader } from "../../../components/PageHeader";
 import { FileListView } from "./FileListView";
 import { PointMenu } from "./FileMenus";
 import { FileTabBar } from "./FileTabBar";
-import { DeleteConfirmDialog, NameDialog, TextPreviewOverlay, UploadConfirmDialog } from "./FilesOverlays";
+import { DeleteConfirmDialog, NameDialog, TextPreviewOverlay, UploadConfirmDialog, UploadReplaceDialog } from "./FilesOverlays";
 import { FilesStatusLine } from "./FilesStatusLine";
 import { FilesMoreMenu, FilesToolbar, type SplitChoice } from "./FilesToolbar";
 import { pickedBytes } from "./filesListModel";
 import { NewTabPage } from "./NewTabPage";
+import { devicePlaces } from "./remotePaths";
 import { SplitView } from "./SplitView";
 import { TransferProgressBar } from "./TransferProgressBar";
 import { useFileSources } from "./useFileSources";
@@ -48,7 +49,7 @@ export function FilesWorkspace() {
   const openConn = (id: string, name: string, protocol: string) => tabs.openInTab({ type: "connection", sourceId: id, label: name, protocol });
 
   const places = src.source?.type === "agent"
-    ? [{ label: t("bar.home"), path: "~" }, { label: t("bar.root"), path: "/" }]
+    ? devicePlaces(src.pathStyle, src.rootPath).map((place) => ({ label: t(`bar.${place.id}`), path: place.path }))
     : [{ label: t("bar.root"), path: "/" }];
   const picked = ws.selectedEntries;
   const where = t("dialog.where", { path: src.currentPath, source: label });
@@ -201,6 +202,13 @@ export function FilesWorkspace() {
       />
       <DeleteConfirmDialog names={w.del.names} where={where} onCancel={w.del.cancel} onConfirm={w.del.confirm} />
       <UploadConfirmDialog files={w.upload.pending?.files ?? null} where={t("dialog.where", { path: w.upload.pending?.dir ?? "", source: label })} onCancel={w.upload.cancel} onConfirm={w.upload.confirm} />
+      <UploadReplaceDialog
+        ask={w.upload.replace.ask}
+        where={t("dialog.where", { path: w.upload.replace.ask?.dir ?? "", source: label })}
+        onCancel={w.upload.replace.cancel}
+        onSkip={w.upload.replace.skip}
+        onReplace={w.upload.replace.replace}
+      />
       <NameDialog open={w.newFolder.open} title={t("dialog.newFolder")} confirmLabel={t("dialog.create")} onCancel={w.newFolder.cancel} onSubmit={w.newFolder.create} />
       <TextPreviewOverlay
         previewContent={src.preview}

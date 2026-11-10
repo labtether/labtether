@@ -313,6 +313,17 @@ v1.7.1.
   deleted says which device it was about after the rule's name: "on nas01",
   or "on 3 devices" with their names on hover and in the row's details.
   Lists in a row's details read as words, not as JSON.
+- The Audit log no longer shows IDs the Hub made up, such as
+  `usr_1793…` or `wh_1793…`, in its rows. An object without a name is left
+  out of the sentence, an API key reads "API key", and a person without a
+  name reads "Unknown", as on iPhone. The IDs are in the row's details and
+  in the CSV export.
+- A device added by hand (Add device › Manual) shows on the Devices page,
+  the Dashboard, the Map and Remote View. Before, it was saved but listed
+  nowhere.
+- A device added by hand has a Device card under Settings to change its
+  name, group and tags. Edit… in any device's ⋯ menu can change its tags
+  too; before, tags were set only when adding a device by hand.
 
 ## [1.7.1] - 2026-10-31
 

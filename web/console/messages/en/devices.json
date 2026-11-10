@@ -231,6 +231,8 @@
       "title": "Edit {name}",
       "name": "Name",
       "group": "Group",
+      "tags": "Tags",
+      "tagsHint": "Separate tags with commas.",
       "cancel": "Cancel",
       "save": "Save",
       "nameRequired": "Enter a name",
@@ -496,6 +498,11 @@
     }
   },
   "settingsTab": {
+    "device": {
+      "title": "Device",
+      "saving": "Saving…",
+      "saved": "Saved."
+    },
     "name": {
       "title": "Name",
       "label": "Device name",

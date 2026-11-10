@@ -28,6 +28,12 @@
   },
   "hub": "Hub",
   "unknown": "Inconnu",
+  "apiKey": "Clé d’API",
+  "ids": {
+    "actor": "ID de la personne",
+    "apiKey": "ID de la clé d’API",
+    "target": "ID de l’objet"
+  },
   "rowActions": "Actions pour cette entrée",
   "copyLine": "Copier la ligne",
   "copied": "Ligne copiée",

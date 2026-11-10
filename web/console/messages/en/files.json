@@ -115,6 +115,12 @@
     "uploadTitle": "Upload {count} files ({size})?",
     "uploadBody": "They go to {where}.",
     "upload": "Upload",
+    "replaceTitle": "{count, plural, one {Replace # file?} other {Replace # files?}}",
+    "replaceOneBody": "{name} is already in {where}. Replacing it can't be undone.",
+    "replaceManyBody": "Already in {where}: {names}. Replacing them can't be undone.",
+    "replaceMore": "{names} and {count, plural, other {# more}}",
+    "replace": "Replace",
+    "replaceSkip": "Skip these",
     "newFolder": "New folder",
     "create": "Create",
     "name": "Name",
@@ -158,7 +164,8 @@
     "noAgent": "{name} · Agent not connected"
   },
   "errors": {
-    "crossMove": "Cut items move only within one device or connection. Copy them instead."
+    "crossMove": "Cut items move only within one device or connection. Copy them instead.",
+    "uploadNotChecked": "{path} could not be read. Nothing was uploaded."
   },
   "device": {
     "readOnly": "Read-only",

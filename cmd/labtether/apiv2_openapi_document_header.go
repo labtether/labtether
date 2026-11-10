@@ -119,7 +119,13 @@ const v2OpenAPIDocumentHeader = `{
         "description": "Full-text search across assets, groups, services, and more. Scope: search:read.",
         "operationId": "search",
         "tags": ["meta"],
-        "responses": { "200": { "description": "Search results" } }
+        "parameters": [
+          { "name": "q", "in": "query", "required": true, "schema": { "type": "string" }, "description": "Text to find in an ID, name or platform" }
+        ],
+        "responses": {
+          "200": { "description": "Search results" },
+          "400": { "description": "q is missing" }
+        }
       }
     },
 
