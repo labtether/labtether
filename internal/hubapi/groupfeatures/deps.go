@@ -12,4 +12,6 @@ type Deps struct {
 	UpdateStore           persistence.UpdateStore
 	GroupMaintenanceStore persistence.GroupMaintenanceStore
 	GroupProfileStore     persistence.GroupProfileStore
+	// AuditStore takes the named rows for maintenance window changes; nil turns them off.
+	AuditStore persistence.AuditStore
 }
