@@ -275,6 +275,11 @@ v1.7.1.
 - The Audit log has sentences for the new rows about API keys, schedules,
   alert rules and groups, such as "Changed a schedule", in every language.
   Revoking an API key reads "Revoked an API key", like its button.
+- The Map keeps the connections it had when the Hub does not return them,
+  and says "The connections between devices did not load." with Try again.
+  Before, it drew every device unconnected and said nothing. The Devices
+  list keeps its nesting the same way, and reloads when a device is added or
+  removed while a load is still running.
 
 ## [1.7.1] - 2026-10-31
 

@@ -168,6 +168,7 @@
   },
   "errors": {
     "load": "La carte ne s’est pas chargée.",
+    "links": "Les connexions entre les appareils ne se sont pas chargées.",
     "retry": "Réessayer",
     "save": "Le hub n’a pas enregistré la modification. Réessayez.",
     "copy": "Échec de la copie",

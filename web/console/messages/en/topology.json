@@ -168,6 +168,7 @@
   },
   "errors": {
     "load": "The map did not load.",
+    "links": "The connections between devices did not load.",
     "retry": "Try again",
     "save": "The hub did not save the change. Try again.",
     "copy": "Copy failed",

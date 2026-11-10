@@ -35,7 +35,7 @@ export default function MapPage() {
   const { user } = useAuth();
   const canWrite = hasWriteRole(user?.role);
   const map = useMapGraph();
-  const { graph, assets, hierarchy, topology, isLoading, error, refresh, statusLoaded } = map;
+  const { graph, assets, hierarchy, topology, isLoading, error, refresh, statusLoaded, linksFailed, retryLinks } = map;
   const words = useMapWords(graph);
   const { t } = words;
   const assetById = useMemo(() => new Map(assets.map((a) => [a.id, a])), [assets]);
@@ -210,6 +210,9 @@ export default function MapPage() {
       {header}
       {error && !topology && (
         <p className="mp-err" role="alert">{t("errors.load")} <button type="button" className="mp-lnk" onClick={() => void refresh()}>{t("errors.retry")}</button></p>
+      )}
+      {linksFailed && !(error && !topology) && (
+        <p className="mp-err" role="alert">{t("errors.links")} <button type="button" className="mp-lnk" onClick={retryLinks}>{t("errors.retry")}</button></p>
       )}
       {empty && !editing ? (
         <div className="mp-empty"><p>{t("empty")}</p><Link href="/nodes" className="mp-btn">{t("emptyLink")}</Link></div>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ensureArray, ensureRecord } from "../../../lib/responseGuards";
 
 /**
@@ -55,14 +55,23 @@ function normalizeEdge(raw: unknown, index: number): AssetDependency | null {
   };
 }
 
+/**
+ * The links between the listed devices, from one batch request. When a load fails (the Hub is away, or it refuses
+ * the list because a device in it was removed a moment ago), the links from the load before stay and
+ * `relationshipsFailed` turns true: a Map that drops every link looks like a Hub that lost them. The next device
+ * list, or retry(), loads again.
+ */
 export function useAssetDependencies(assetIDs: string[]): {
   dependencies: AssetDependency[];
   relationshipsLoading: boolean;
-  relationshipsError: string | null;
+  relationshipsFailed: boolean;
+  retry: () => void;
 } {
   const [dependencies, setDependencies] = useState<AssetDependency[]>([]);
   const [relationshipsLoading, setRelationshipsLoading] = useState(false);
-  const [relationshipsError, setRelationshipsError] = useState<string | null>(null);
+  const [relationshipsFailed, setRelationshipsFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const retry = useCallback(() => setAttempt((n) => n + 1), []);
   const assetIDsKey = useMemo(() => assetIDs.join("|"), [assetIDs]);
   const stableAssetIDs = useMemo(
     () => (assetIDsKey ? assetIDsKey.split("|").filter((id) => id.length > 0) : []),
@@ -72,14 +81,13 @@ export function useAssetDependencies(assetIDs: string[]): {
   useEffect(() => {
     if (stableAssetIDs.length === 0) {
       setDependencies([]);
-      setRelationshipsError(null);
+      setRelationshipsFailed(false);
       setRelationshipsLoading(false);
       return;
     }
 
     let cancelled = false;
     setRelationshipsLoading(true);
-    setRelationshipsError(null);
 
     const load = async () => {
       const params = new URLSearchParams();
@@ -90,8 +98,10 @@ export function useAssetDependencies(assetIDs: string[]): {
         const response = await fetch(`/api/edges?${params.toString()}`, {
           cache: "no-store",
         });
+        if (cancelled) return;
         if (!response.ok) {
-          throw new Error(`failed ${response.status}`);
+          setRelationshipsFailed(true);
+          return;
         }
 
         const data = ensureRecord(await response.json().catch(() => null));
@@ -108,11 +118,10 @@ export function useAssetDependencies(assetIDs: string[]): {
           merged.push(dep);
         }
         setDependencies(merged);
-        setRelationshipsError(null);
-      } catch (error) {
+        setRelationshipsFailed(false);
+      } catch {
         if (cancelled) return;
-        setDependencies([]);
-        setRelationshipsError(error instanceof Error ? error.message : "Failed to load relationship edges.");
+        setRelationshipsFailed(true);
       } finally {
         if (cancelled) return;
         setRelationshipsLoading(false);
@@ -123,11 +132,12 @@ export function useAssetDependencies(assetIDs: string[]): {
     return () => {
       cancelled = true;
     };
-  }, [stableAssetIDs]);
+  }, [stableAssetIDs, attempt]);
 
   return {
     dependencies,
     relationshipsLoading,
-    relationshipsError,
+    relationshipsFailed,
+    retry,
   };
 }
