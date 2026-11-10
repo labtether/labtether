@@ -115,6 +115,7 @@ func (d *Deps) HandleUpdatePlans(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create update plan")
 			return
 		}
+		d.auditUpdatePlan(r, updatePlanCreatedAuditType, plan)
 		servicehttp.WriteJSON(w, http.StatusCreated, map[string]any{"plan": plan})
 	default:
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -180,6 +181,7 @@ func (d *Deps) HandleUpdatePlanActions(w http.ResponseWriter, r *http.Request) {
 				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete update plan")
 				return
 			}
+			d.auditUpdatePlan(r, updatePlanDeletedAuditType, plan)
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "plan_id": planID})
 		default:
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")

@@ -48,6 +48,7 @@ func (d *Deps) HandleAlertRoutes(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create alert route")
 			return
 		}
+		d.auditAlertRoute(r, alertRouteCreatedAuditType, route)
 		servicehttp.WriteJSON(w, http.StatusCreated, map[string]any{"route": route})
 	default:
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -103,8 +104,12 @@ func (d *Deps) HandleAlertRouteActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update route")
 			return
 		}
+		d.auditAlertRoute(r, alertRouteUpdatedAuditType, updated)
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"route": updated})
 	case http.MethodDelete:
+		// Read it first: the audit row needs its name after it is gone.
+		route, _, _ := d.NotificationStore.GetAlertRoute(routeID)
+		route.ID = routeID
 		if err := d.NotificationStore.DeleteAlertRoute(routeID); err != nil {
 			if err == notifications.ErrRouteNotFound {
 				servicehttp.WriteError(w, http.StatusNotFound, "route not found")
@@ -113,6 +118,7 @@ func (d *Deps) HandleAlertRouteActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete route")
 			return
 		}
+		d.auditAlertRoute(r, alertRouteDeletedAuditType, route)
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"status": "deleted"})
 	default:
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")

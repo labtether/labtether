@@ -129,6 +129,7 @@ func (d *Deps) HandleIncidentActions(w http.ResponseWriter, r *http.Request) {
 				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update incident")
 				return
 			}
+			d.auditIncident(r, incidentUpdatedAuditType, updated, incidentUpdateAuditDetails(existingIncident, updated))
 			if event := incidentMaterialTransitionEvent(existingIncident, updated); event != "" {
 				d.dispatchIncidentNotificationAsync(updated, event)
 			} else if incidentLiveActivityContentChanged(existingIncident, updated) {
@@ -162,6 +163,7 @@ func (d *Deps) HandleIncidentActions(w http.ResponseWriter, r *http.Request) {
 				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete incident")
 				return
 			}
+			d.auditIncident(r, incidentDeletedAuditType, existingIncident, map[string]any{"status": existingIncident.Status, "severity": existingIncident.Severity})
 			finalIncident := existingIncident
 			finalIncident.Status = incidents.StatusClosed
 			finalIncident.UpdatedAt = time.Now().UTC()

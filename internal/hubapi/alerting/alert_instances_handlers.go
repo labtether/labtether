@@ -132,6 +132,7 @@ func (d *Deps) HandleAlertInstanceActions(w http.ResponseWriter, r *http.Request
 				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete alert instance")
 				return
 			}
+			d.auditAlertInstance(r, alertDeletedAuditType, inst)
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"status": "deleted"})
 			return
 		default:
@@ -178,6 +179,7 @@ func (d *Deps) HandleAlertInstanceActions(w http.ResponseWriter, r *http.Request
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to acknowledge alert instance")
 			return
 		}
+		d.auditAlertInstance(r, alertAcknowledgedAuditType, updated)
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"instance": updated})
 		return
 	}
@@ -220,6 +222,7 @@ func (d *Deps) HandleAlertInstanceActions(w http.ResponseWriter, r *http.Request
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to resolve alert instance")
 			return
 		}
+		d.auditAlertInstance(r, alertResolvedAuditType, updated)
 		// The agents that show this alert must see it end too.
 		d.tellAgentsAlertResolved(updated)
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"instance": updated})
@@ -272,6 +275,7 @@ func (d *Deps) HandleAlertSilences(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create silence")
 			return
 		}
+		d.auditAlertSilence(r, alertSilenceCreatedAuditType, silence)
 		servicehttp.WriteJSON(w, http.StatusCreated, map[string]any{"silence": silence})
 	default:
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -306,6 +310,9 @@ func (d *Deps) HandleAlertSilenceActions(w http.ResponseWriter, r *http.Request)
 		}
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"silence": silence})
 	case http.MethodDelete:
+		// Read it first: the audit row needs its name after it is gone.
+		silence, _, _ := d.AlertInstanceStore.GetAlertSilence(silenceID)
+		silence.ID = silenceID
 		if err := d.AlertInstanceStore.DeleteAlertSilence(silenceID); err != nil {
 			if strings.Contains(strings.ToLower(err.Error()), "not found") {
 				servicehttp.WriteError(w, http.StatusNotFound, "silence not found")
@@ -314,6 +321,7 @@ func (d *Deps) HandleAlertSilenceActions(w http.ResponseWriter, r *http.Request)
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete silence")
 			return
 		}
+		d.auditAlertSilence(r, alertSilenceDeletedAuditType, silence)
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"status": "deleted"})
 	default:
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")

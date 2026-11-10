@@ -110,6 +110,13 @@ v1.7.1.
   group writes an audit row with its name. Before, these changes left only
   an "API request" row, which the Audit log hides unless you turn on All
   requests. A row never holds an API key's secret or a schedule's command.
+- These changes also write an audit row with a name now: renaming a device,
+  moving it to another group or changing its tags; creating, changing or
+  deleting a maintenance window, an alert route or a terminal bookmark;
+  acknowledging, resolving or deleting an alert; creating or ending a silence;
+  creating, editing or deleting an issue; creating or deleting an update plan.
+  An issue row says what changed (status, owner), never the text of a note. A
+  bookmark row holds where it points, never the user name or a saved login.
 
 ### Removed
 

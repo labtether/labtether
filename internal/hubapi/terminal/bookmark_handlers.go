@@ -77,7 +77,7 @@ func (d *Deps) HandleBookmarkActions(w http.ResponseWriter, r *http.Request) {
 		case http.MethodPut:
 			d.updateBookmark(w, r, bookmark)
 		case http.MethodDelete:
-			d.deleteBookmark(w, bookmark)
+			d.deleteBookmark(w, r, bookmark)
 		default:
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
@@ -154,6 +154,7 @@ func (d *Deps) createBookmark(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create bookmark")
 		return
 	}
+	d.auditBookmark(r, bookmarkCreatedAuditType, bookmark)
 	servicehttp.WriteJSON(w, http.StatusCreated, map[string]any{"bookmark": bookmark})
 }
 
@@ -216,14 +217,16 @@ func (d *Deps) updateBookmark(w http.ResponseWriter, r *http.Request, bookmark t
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update bookmark")
 		return
 	}
+	d.auditBookmark(r, bookmarkUpdatedAuditType, updated)
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"bookmark": updated})
 }
 
-func (d *Deps) deleteBookmark(w http.ResponseWriter, bookmark terminal.Bookmark) {
+func (d *Deps) deleteBookmark(w http.ResponseWriter, r *http.Request, bookmark terminal.Bookmark) {
 	if err := d.TerminalBookmarkStore.DeleteBookmark(bookmark.ID); err != nil {
 		servicehttp.WriteError(w, http.StatusInternalServerError, "failed to delete bookmark")
 		return
 	}
+	d.auditBookmark(r, bookmarkDeletedAuditType, bookmark)
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "bookmark_id": bookmark.ID})
 }
 

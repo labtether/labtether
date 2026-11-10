@@ -122,6 +122,7 @@ func (d *Deps) HandleIncidents(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create incident")
 			return
 		}
+		d.auditIncident(r, incidentCreatedAuditType, incident, map[string]any{"status": incident.Status, "severity": incident.Severity})
 		d.dispatchIncidentNotificationAsync(incident, "incident.created")
 		servicehttp.WriteJSON(w, http.StatusCreated, map[string]any{"incident": incident})
 	default:
