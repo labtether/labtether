@@ -114,15 +114,9 @@ func (d *Deps) deletePersistentSession(w http.ResponseWriter, persistent termina
 // The caller holds the saved-shell gate before acquiring any logical-session
 // gate. Stop the concrete attachments and tmux before removing saved metadata.
 func (d *Deps) deletePersistentSessionRuntime(persistent terminal.PersistentSession) error {
-	sessions, err := d.TerminalStore.ListSessions()
+	attachedSessions, err := d.attachedTerminalSessions(persistent.ID)
 	if err != nil {
 		return &persistentDeleteFailure{http.StatusInternalServerError, "failed to load attached terminal sessions"}
-	}
-	attachedSessions := make([]terminal.Session, 0, 1)
-	for _, session := range sessions {
-		if strings.TrimSpace(session.PersistentSessionID) == persistent.ID {
-			attachedSessions = append(attachedSessions, session)
-		}
 	}
 	if err := d.ClosePersistentTerminalAttachments(persistent, attachedSessions); err != nil {
 		return &persistentDeleteFailure{http.StatusBadGateway, err.Error()}
@@ -134,6 +128,26 @@ func (d *Deps) deletePersistentSessionRuntime(persistent terminal.PersistentSess
 		}
 		return &persistentDeleteFailure{status, err.Error()}
 	}
+	return d.removePersistentSessionRecords(persistent, attachedSessions)
+}
+
+func (d *Deps) attachedTerminalSessions(persistentID string) ([]terminal.Session, error) {
+	sessions, err := d.TerminalStore.ListSessions()
+	if err != nil {
+		return nil, err
+	}
+	attached := make([]terminal.Session, 0, 1)
+	for _, session := range sessions {
+		if strings.TrimSpace(session.PersistentSessionID) == persistentID {
+			attached = append(attached, session)
+		}
+	}
+	return attached, nil
+}
+
+// removePersistentSessionRecords drops the attached logical sessions and then
+// the saved record. The caller holds the saved-shell gate.
+func (d *Deps) removePersistentSessionRecords(persistent terminal.PersistentSession, attachedSessions []terminal.Session) error {
 	for _, session := range attachedSessions {
 		remove := func() error { return d.TerminalStore.DeleteTerminalSession(session.ID) }
 		var err error

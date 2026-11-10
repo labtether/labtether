@@ -105,6 +105,7 @@ func (s *apiServer) buildResourcesDeps() *respkg.Deps {
 				s.webServiceCoordinator.RemoveHost(assetID)
 			}
 		},
+		RemoveSavedTerminalSessions: s.removeSavedTerminalSessionsForRemovedDevice,
 		SendSSHKeyRemoveToAsset: func(assetID string) {
 			if s.currentHubSSHIdentity() == nil || s.agentMgr == nil {
 				return

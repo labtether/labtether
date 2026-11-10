@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -161,6 +162,16 @@ func (s *apiServer) ensureTerminalDeps() *terminalpkg.Deps {
 		s.terminalDeps = s.buildTerminalDeps()
 	})
 	return s.terminalDeps
+}
+
+// removeSavedTerminalSessionsForRemovedDevice runs after a device is deleted.
+// The device is already gone, so a failure here is logged and the leftover
+// saved session can still be removed from the Terminal page. A closed browser
+// request must not stop it halfway.
+func (s *apiServer) removeSavedTerminalSessionsForRemovedDevice(ctx context.Context, assetID string) {
+	if err := s.ensureTerminalDeps().RemovePersistentSessionsForRemovedDevice(context.WithoutCancel(ctx), assetID); err != nil {
+		log.Printf("api warning: failed to remove saved terminal sessions of removed device %s: %v", assetID, err) // #nosec G706 -- Asset IDs are Hub records; no secret is logged.
+	}
 }
 
 // Forwarding methods from apiServer to terminal.Deps so that existing
