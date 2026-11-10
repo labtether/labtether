@@ -6,7 +6,7 @@ const v2OpenAPIOperatorSettingsPaths = `    "/api/v2/dead-letters": {
     },
 
     "/api/v2/audit/events": {
-      "get": { "summary": "Query audit event log", "description": "Scope: audit:read. Results are newest-first.", "operationId": "listAuditEvents", "tags": ["audit"], "parameters": [{ "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 100 } }, { "name": "offset", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 0, "default": 0 } }], "responses": { "200": { "description": "Audit events" } } }
+      "get": { "summary": "Query audit event log", "description": "Scope: audit:read. Results are newest-first. The owner, admins and admin API keys get every row; other users and API keys get only their own rows.", "operationId": "listAuditEvents", "tags": ["audit"], "parameters": [{ "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 100 } }, { "name": "offset", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 0, "default": 0 } }], "responses": { "200": { "description": "Audit events" } } }
     },
 
     "/api/v2/logs/views": {

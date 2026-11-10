@@ -35,6 +35,8 @@
     "expires": "Caduca",
     "fingerprint": "Huella",
     "copyFingerprint": "Copiar huella",
+    "caFingerprint": "Huella de la CA de LabTether",
+    "copyCaFingerprint": "Copiar huella de la CA de LabTether",
     "uploadedCert": "Certificado subido",
     "uploadedAt": "{subject}, guardado {when}",
     "selfSignedNote": "Los agentes que se conectan a esta dirección necesitan el certificado de la CA de LabTether.",

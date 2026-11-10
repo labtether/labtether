@@ -15,7 +15,7 @@ import { hasAdminRole } from "../../../lib/roles";
 import { ChipGroup, EmptyLine, FilterField, PickMenu } from "../logs/LogControls";
 import { AuditRow, type AuditText } from "./AuditRow";
 import { AuditViews } from "./AuditViews";
-import { actionKey, ALL_REQUESTS, auditRows, auditTime, humanizeType, outcome, peopleByActivity, REQUEST_TYPE, targetText, type AuditEntry, type AuditSort } from "./auditModel";
+import { actionKey, ALL_REQUESTS, auditRows, auditTime, humanizeType, outcome, peopleByActivity, REQUEST_TYPE, targetText, visibleAuditRows, type AuditEntry, type AuditSort } from "./auditModel";
 import { copyText } from "../../../lib/clipboard";
 import { useAuditPages } from "./useAuditPages";
 
@@ -37,11 +37,14 @@ export default function AuditLogPage() {
   const [sort, setSort] = useState<AuditSort>("time:desc");
   const [openId, setOpenId] = useState("");
 
-  // The owner pages through the whole log; the status carries only the 20 newest rows (others see their own there).
-  const owner = user?.role === "owner";
-  const pages = useAuditPages(owner);
-  const paged = owner && pages.entries.length > 0;
-  const entries = useMemo(() => (paged ? pages.entries : (slow?.recentAudit ?? []) as AuditEntry[]), [paged, pages.entries, slow?.recentAudit]);
+  // Everyone pages through the rows the Hub lets them read: the whole log for the owner and admins, their own rows
+  // for everyone else (the Hub's audit list applies that rule in its query). visibleAuditRows is a second check
+  // only; the Hub is what decides who may read a row.
+  const wholeLog = hasAdminRole(user?.role);
+  const pages = useAuditPages(Boolean(user?.id));
+  const pageRows = useMemo(() => visibleAuditRows(pages.entries, wholeLog, user?.id), [pages.entries, user?.id, wholeLog]);
+  const paged = pageRows.length > 0;
+  const entries = useMemo(() => (paged ? pageRows : (slow?.recentAudit ?? []) as AuditEntry[]), [paged, pageRows, slow?.recentAudit]);
   const [exporting, setExporting] = useState(false);
   const { refresh: refreshPages } = pages;
 
@@ -101,7 +104,7 @@ export default function AuditLogPage() {
     if (paged) {
       setExporting(true);
       try {
-        const all = await pages.readAll();
+        const all = visibleAuditRows(await pages.readAll(), wholeLog, user?.id);
         list = auditRows(all, { query, who: person, type: kind, sort, nameOf: (id) => text.who({ actor_id: id } as AuditEntry), textOf: searchText });
       } catch {
         addToast("error", t("exportFailed"));

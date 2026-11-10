@@ -35,6 +35,8 @@
     "expires": "到期",
     "fingerprint": "指纹",
     "copyFingerprint": "复制指纹",
+    "caFingerprint": "LabTether CA 指纹",
+    "copyCaFingerprint": "复制 LabTether CA 指纹",
     "uploadedCert": "已上传证书",
     "uploadedAt": "{subject}，保存于 {when}",
     "selfSignedNote": "连接到此地址的代理需要 LabTether CA 证书。",

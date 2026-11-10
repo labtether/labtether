@@ -112,7 +112,7 @@ func (d *Deps) collectAggregateCollections(
 	go func() {
 		defer wg.Done()
 		if canReadAudit && !restrictedAssets {
-			c.recentAudit = filterAuditEvents(d.listRecentAudit(20), actorID, ownerPrincipal)
+			c.recentAudit = d.listRecentAudit(ctx, 20)
 		}
 	}()
 
@@ -208,19 +208,6 @@ func filterCommands(commands []terminal.Command, actorID string, ownerPrincipal 
 	for _, command := range commands {
 		if strings.TrimSpace(command.ActorID) == actorID {
 			filtered = append(filtered, command)
-		}
-	}
-	return filtered
-}
-
-func filterAuditEvents(events []audit.Event, actorID string, ownerPrincipal bool) []audit.Event {
-	if ownerPrincipal {
-		return events
-	}
-	filtered := make([]audit.Event, 0, len(events))
-	for _, event := range events {
-		if strings.TrimSpace(event.ActorID) == actorID {
-			filtered = append(filtered, event)
 		}
 	}
 	return filtered

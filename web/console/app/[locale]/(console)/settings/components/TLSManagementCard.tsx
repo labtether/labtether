@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Button } from "../../../../components/ui/Button";
+import { useHubCAFingerprint } from "../../../../hooks/useHubCAFingerprint";
 import { useTailscaleServeStatus } from "../../../../hooks/useTailscaleServeStatus";
+import { groupedFingerprint, plainFingerprint } from "../../../../lib/fingerprint";
 import { CopyButton, Facts, Field, Message, Row, SettingsDialog } from "./SettingsKit";
 import { formatWhen } from "./settingsModel";
 
@@ -51,6 +53,7 @@ function daysLeft(iso?: string): number | null {
 export function TLSManagementCard() {
   const t = useTranslations("security");
   const locale = useLocale();
+  const caFingerprint = useHubCAFingerprint();
   const [details, setDetails] = useState<TLSSettingsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -162,8 +165,15 @@ export function TLSManagementCard() {
               active?.expires_at ? [t("tls.expires"), formatWhen(active.expires_at, new Date(), locale)] : false,
               active?.fingerprint_sha256 ? [t("tls.fingerprint"), (
                 <>
-                  <code className="st-mono">{active.fingerprint_sha256}</code>
-                  <CopyButton text={active.fingerprint_sha256} label={t("tls.copyFingerprint")} />
+                  <code className="st-mono">{groupedFingerprint(active.fingerprint_sha256) || active.fingerprint_sha256}</code>
+                  <CopyButton text={plainFingerprint(active.fingerprint_sha256) || active.fingerprint_sha256} label={t("tls.copyFingerprint")} />
+                </>
+              )] : false,
+              // The value Mac, Windows and iPhone setup show before they trust this Hub (also in Add device).
+              details.ca_available && caFingerprint ? [t("tls.caFingerprint"), (
+                <>
+                  <code className="st-mono">{groupedFingerprint(caFingerprint)}</code>
+                  <CopyButton text={caFingerprint} label={t("tls.copyCaFingerprint")} />
                 </>
               )] : false,
               uploaded?.subject_summary ? [t("tls.uploadedCert"), details.uploaded_updated_at

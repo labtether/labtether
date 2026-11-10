@@ -3,7 +3,6 @@ package persistence
 import (
 	"context"
 	"errors"
-	"sort"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -413,59 +412,5 @@ const auditListShown = `NOT (type = 'api.request' AND (
 	OR COALESCE(target, '') IN ('POST /ws/events/ticket', 'POST /mcp', 'POST /assets/heartbeat')))`
 
 func (s *PostgresStore) List(limit, offset int) ([]audit.Event, error) {
-	if limit <= 0 {
-		limit = 100
-	}
-
-	var rows pgx.Rows
-	var err error
-	if offset > 0 {
-		rows, err = s.pool.Query(context.Background(),
-			`SELECT id, type, actor_id, target, session_id, command_id, decision, reason, details, timestamp
-			 FROM audit_events WHERE `+auditListShown+` ORDER BY timestamp DESC LIMIT $1 OFFSET $2`,
-			limit, offset,
-		)
-	} else {
-		rows, err = s.pool.Query(context.Background(),
-			`SELECT id, type, actor_id, target, session_id, command_id, decision, reason, details, timestamp
-			 FROM audit_events WHERE `+auditListShown+` ORDER BY timestamp DESC LIMIT $1`,
-			limit,
-		)
-	}
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	out := make([]audit.Event, 0)
-	for rows.Next() {
-		event := audit.Event{}
-		var details []byte
-		if err := rows.Scan(
-			&event.ID,
-			&event.Type,
-			&event.ActorID,
-			&event.Target,
-			&event.SessionID,
-			&event.CommandID,
-			&event.Decision,
-			&event.Reason,
-			&details,
-			&event.Timestamp,
-		); err != nil {
-			return nil, err
-		}
-
-		unmarshalAuditDetails(&event, details)
-		out = append(out, event)
-	}
-
-	if rows.Err() != nil {
-		return nil, rows.Err()
-	}
-
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].Timestamp.After(out[j].Timestamp)
-	})
-	return out, nil
+	return s.listAuditEvents("", limit, offset)
 }

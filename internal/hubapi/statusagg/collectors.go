@@ -1,6 +1,7 @@
 package statusagg
 
 import (
+	"context"
 	"github.com/labtether/labtether/internal/actions"
 	"github.com/labtether/labtether/internal/assets"
 	"github.com/labtether/labtether/internal/audit"
@@ -247,11 +248,14 @@ func (d *Deps) listRecentCommands(limit int) []terminal.Command {
 	return commands
 }
 
-func (d *Deps) listRecentAudit(limit int) []audit.Event {
+// listRecentAudit returns the newest audit rows the caller may read: all of
+// them for the owner, admins and admin API keys, the caller's own otherwise
+// (the same rule as GET /audit/events).
+func (d *Deps) listRecentAudit(ctx context.Context, limit int) []audit.Event {
 	if d.AuditStore == nil {
 		return []audit.Event{}
 	}
-	events, err := d.AuditStore.List(limit, 0)
+	events, err := shared.ListAuditEventsFor(ctx, d.AuditStore, limit, 0)
 	if err != nil {
 		log.Printf("status aggregate: failed to list audit events: %v", err)
 		return []audit.Event{}

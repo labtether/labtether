@@ -168,6 +168,7 @@
   },
   "errors": {
     "load": "Die Karte wurde nicht geladen.",
+    "links": "Die Verbindungen zwischen den Geräten wurden nicht geladen.",
     "retry": "Erneut versuchen",
     "save": "Der Hub hat die Änderung nicht gespeichert. Erneut versuchen.",
     "copy": "Kopieren fehlgeschlagen",
