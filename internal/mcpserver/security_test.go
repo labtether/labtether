@@ -381,7 +381,7 @@ func TestAssetRestrictedKeysCannotInvokeGlobalMCPReads(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if result == nil || !result.IsError || !strings.Contains(toolResultText(t, result), "asset-restricted") {
+			if result == nil || !result.IsError || !strings.Contains(toolResultText(t, result), "limited to some devices") {
 				t.Fatalf("unexpected result: %#v", result)
 			}
 		})

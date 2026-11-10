@@ -116,7 +116,7 @@ func (d *Deps) HandleV2BulkServiceAction(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if len(filteredTargets) == 0 {
-		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "none of the requested targets are accessible with this API key")
+		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "This API key does not have access to any of the requested devices")
 		return
 	}
 	for _, target := range filteredTargets {

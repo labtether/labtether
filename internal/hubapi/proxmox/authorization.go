@@ -11,7 +11,7 @@ func denyAssetRestrictedGlobal(w http.ResponseWriter, r *http.Request, object st
 	if !shared.HasAssetRestriction(r.Context()) {
 		return false
 	}
-	apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "asset-restricted api keys cannot access global Proxmox "+object)
+	apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "API keys limited to some devices cannot access global Proxmox "+object)
 	return true
 }
 
@@ -20,6 +20,6 @@ func (d *Deps) requireProxmoxCollectorAccess(w http.ResponseWriter, r *http.Requ
 	if err == nil && allowed {
 		return true
 	}
-	apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "api key does not have access to every asset managed by this Proxmox collector")
+	apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "This API key does not have access to every device of this Proxmox connection")
 	return false
 }

@@ -162,14 +162,14 @@ func (s *apiServer) mcpAcknowledgeAlert() func(context.Context, string) error {
 			return err
 		}
 		if !found {
-			return fmt.Errorf("alert is unavailable or outside allowed assets")
+			return fmt.Errorf("the alert is unavailable or outside the devices this API key is allowed")
 		}
 		allowed, err := s.ensureAlertingDeps().AlertInstanceAllowedForAccess(ctx, instance)
 		if err != nil {
 			return fmt.Errorf("unable to prove alert asset scope: %w", err)
 		}
 		if !allowed {
-			return fmt.Errorf("alert is unavailable or outside allowed assets")
+			return fmt.Errorf("the alert is unavailable or outside the devices this API key is allowed")
 		}
 		_, err = s.alertInstanceStore.UpdateAlertInstanceStatus(alertID, "acknowledged")
 		return err

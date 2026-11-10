@@ -41,7 +41,7 @@ func (s *apiServer) handleV2AssetPowerAction(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if !apiv2.AssetCheck(allowedAssetsFromContext(r.Context()), assetID) {
-		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "api key does not have access to this asset")
+		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "This API key does not have access to this device")
 		return
 	}
 	if !maintenanceguard.EnforceAssetAction(w, assetID, s.ensureGroupFeaturesDeps().EvaluateAssetGuardrails) {

@@ -45,7 +45,7 @@ func (d *Deps) HandleIncidents(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				if _, allowed := groupAccess[groupID]; !allowed {
-					writeAssetScopeForbidden(w, "api key does not have access to every asset in this incident group")
+					writeAssetScopeForbidden(w, "This API key does not have access to every device in this incident group")
 					return
 				}
 			}
@@ -65,7 +65,7 @@ func (d *Deps) HandleIncidents(w http.ResponseWriter, r *http.Request) {
 		if shared.HasAssetRestriction(r.Context()) {
 			groupAccess, authErr := d.accessibleGroupIDs(r.Context())
 			if authErr != nil {
-				writeAssetScopeForbidden(w, "unable to prove incident asset scope")
+				writeAssetScopeForbidden(w, "Could not confirm this incident stays within the devices this API key is allowed")
 				return
 			}
 			listed, err = d.listAccessibleIncidents(r.Context(), filter, groupAccess)
@@ -112,7 +112,7 @@ func (d *Deps) HandleIncidents(w http.ResponseWriter, r *http.Request) {
 		if shared.HasAssetRestriction(r.Context()) {
 			groupAccess, authErr := d.accessibleGroupIDs(r.Context())
 			if authErr != nil || !incidentReferencesAllowed(r.Context(), req.GroupID, req.PrimaryAssetID, groupAccess) {
-				writeAssetScopeForbidden(w, "api key may only create incidents scoped to explicitly allowed assets")
+				writeAssetScopeForbidden(w, "This API key may only create incidents for the devices it is allowed")
 				return
 			}
 		}

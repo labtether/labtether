@@ -92,7 +92,7 @@ func NewServer(deps *Deps) *server.MCPServer {
 
 	s.AddTool(
 		mcp.NewTool("whoami",
-			mcp.WithDescription("Show what this API key has access to: scopes, allowed assets, and their online status"),
+			mcp.WithDescription("Show what this API key has access to: scopes, allowed devices, and their online status"),
 		),
 		deps.handleWhoami,
 	)

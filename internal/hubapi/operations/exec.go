@@ -104,7 +104,7 @@ func (d *ExecDeps) HandleAssetExec(w http.ResponseWriter, r *http.Request, asset
 		return
 	}
 	if d.AllowedAssetsFromContext == nil || !apiv2.AssetCheck(d.AllowedAssetsFromContext(r.Context()), assetID) {
-		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "asset is not accessible with this API key")
+		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "This API key does not have access to this device")
 		return
 	}
 	if d.EnforceRateLimit != nil && !d.EnforceRateLimit(w, r, execRateLimitBucket, execRateLimitCount, execRateLimitWindow) {
@@ -327,7 +327,7 @@ func (d *ExecDeps) HandleExecMulti(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(filteredTargets) == 0 {
-		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "none of the requested targets are accessible with this API key")
+		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "This API key does not have access to any of the requested devices")
 		return
 	}
 	for _, target := range filteredTargets {

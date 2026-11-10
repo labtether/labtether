@@ -25,7 +25,7 @@ func requireSavedViewAccess(w http.ResponseWriter, r *http.Request, assetID stri
 	if savedViewAllowed(r.Context(), assetID) {
 		return true
 	}
-	apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "asset-restricted api keys may only access log views for explicitly allowed assets")
+	apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "API keys limited to some devices may only access log views for the devices they are allowed")
 	return false
 }
 

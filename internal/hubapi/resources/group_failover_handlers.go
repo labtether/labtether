@@ -108,7 +108,7 @@ func (d *Deps) HandleFailoverPairActions(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if shared.HasAssetRestriction(r.Context()) && r.Method != http.MethodGet {
-		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "asset-restricted api keys cannot mutate global group failover configuration")
+		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "API keys limited to some devices cannot mutate global group failover configuration")
 		return
 	}
 

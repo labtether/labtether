@@ -52,7 +52,7 @@ func (d *Deps) unrestrictedGlobalRead(ctx context.Context, object string) error 
 		return errors.New("MCP asset authorization context is unavailable")
 	}
 	if len(d.GetAllowedAssets(ctx)) > 0 {
-		return fmt.Errorf("asset-restricted API keys cannot access global %s", object)
+		return fmt.Errorf("API keys limited to some devices cannot access global %s", object)
 	}
 	return nil
 }

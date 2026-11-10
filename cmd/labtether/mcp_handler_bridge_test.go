@@ -252,7 +252,7 @@ func TestMCPDockerAuthorizationFiltersHostsAndHidesRestrictedContainerExistence(
 	if hiddenErr == nil || missingErr == nil || hiddenErr.Error() != missingErr.Error() {
 		t.Fatalf("restricted restart disclosed target existence: hidden=%v missing=%v", hiddenErr, missingErr)
 	}
-	if !strings.Contains(hiddenErr.Error(), "outside allowed assets") || strings.Contains(hiddenErr.Error(), "hidden-container") {
+	if !strings.Contains(hiddenErr.Error(), "not one this API key is allowed") || strings.Contains(hiddenErr.Error(), "hidden-container") {
 		t.Fatalf("restricted restart returned unsafe error: %v", hiddenErr)
 	}
 	if err := authorize(ctx, "docker_container_restart", "allowed-container"); err != nil {

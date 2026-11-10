@@ -161,6 +161,6 @@ func (d *Deps) requireScheduleAccess(w http.ResponseWriter, r *http.Request, tas
 	if err == nil && allowed {
 		return true
 	}
-	apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "api key does not have access to every asset targeted by this schedule")
+	apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "This API key does not have access to every device targeted by this schedule")
 	return false
 }

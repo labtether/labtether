@@ -28,7 +28,7 @@ const (
 // HandleV2Webhooks routes collection-level webhook requests (GET list, POST create).
 func (d *Deps) HandleV2Webhooks(w http.ResponseWriter, r *http.Request) {
 	if shared.HasAssetRestriction(r.Context()) {
-		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "asset-restricted api keys cannot access global webhooks")
+		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "API keys limited to some devices cannot access global webhooks")
 		return
 	}
 	scope := "webhooks:read"
@@ -52,7 +52,7 @@ func (d *Deps) HandleV2Webhooks(w http.ResponseWriter, r *http.Request) {
 // HandleV2WebhookActions routes per-resource webhook requests (GET, PUT/PATCH, DELETE).
 func (d *Deps) HandleV2WebhookActions(w http.ResponseWriter, r *http.Request) {
 	if shared.HasAssetRestriction(r.Context()) {
-		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "asset-restricted api keys cannot access global webhooks")
+		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "API keys limited to some devices cannot access global webhooks")
 		return
 	}
 	scope := "webhooks:read"

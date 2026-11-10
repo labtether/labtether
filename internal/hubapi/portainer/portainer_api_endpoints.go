@@ -32,7 +32,7 @@ type portainerEndpointSummary struct {
 // HandlePortainerEndpoints handles GET /portainer/endpoints — list all Portainer endpoints.
 func (d *Deps) HandlePortainerEndpoints(w http.ResponseWriter, r *http.Request) {
 	if shared.HasAssetRestriction(r.Context()) {
-		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "asset-restricted api keys cannot access global Portainer endpoints")
+		apiv2.WriteError(w, http.StatusForbidden, "asset_forbidden", "API keys limited to some devices cannot access global Portainer endpoints")
 		return
 	}
 	if r.Method != http.MethodGet {

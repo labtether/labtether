@@ -110,7 +110,7 @@ func (d *Deps) HandleIncidentActions(w http.ResponseWriter, r *http.Request) {
 				groupAccess, authErr := d.accessibleGroupIDs(r.Context())
 				allowed, checkErr := d.incidentAllowed(r.Context(), prospective, groupAccess)
 				if authErr != nil || checkErr != nil || !allowed {
-					writeAssetScopeForbidden(w, "incident update would exceed the api key asset allowlist")
+					writeAssetScopeForbidden(w, "This change would reach devices this API key is not allowed")
 					return
 				}
 			}
@@ -234,7 +234,7 @@ func (d *Deps) HandleIncidentActions(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if shared.HasAssetRestriction(r.Context()) && req.AlertRuleID == "" && req.AlertInstanceID == "" {
-			writeAssetScopeForbidden(w, "fingerprint-only alert links cannot be proven to stay within the asset allowlist")
+			writeAssetScopeForbidden(w, "An alert link without a device cannot be shown to stay within the devices this API key is allowed")
 			return
 		}
 
@@ -280,7 +280,7 @@ func (d *Deps) HandleIncidentActions(w http.ResponseWriter, r *http.Request) {
 		if shared.HasAssetRestriction(r.Context()) {
 			groupAccess, authErr := d.accessibleGroupIDs(r.Context())
 			if authErr != nil {
-				writeAssetScopeForbidden(w, "unable to prove alert link asset scope")
+				writeAssetScopeForbidden(w, "Could not confirm this alert link stays within the devices this API key is allowed")
 				return
 			}
 			filtered := make([]incidents.AlertLink, 0, len(links))
