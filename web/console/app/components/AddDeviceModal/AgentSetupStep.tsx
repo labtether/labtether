@@ -7,6 +7,8 @@ import { Button } from "../ui/Button";
 import { Input, Select } from "../ui/Input";
 import { deleteEnrollmentToken, useEnrollment } from "../../hooks/useEnrollment";
 import { useFastStatus } from "../../contexts/StatusContext";
+import { useHubCAFingerprint } from "../../hooks/useHubCAFingerprint";
+import { groupedFingerprint } from "../../lib/fingerprint";
 import { useToast } from "../../contexts/ToastContext";
 import type { AddDeviceAddedEvent } from "./types";
 import { type Platform, type LinuxInstallOptions, defaultLinuxInstallOptions, linuxInstallerCommand, manualInstallCommand, formatHubCandidateOption, trustModeText } from "./agentInstallCommands";
@@ -53,7 +55,8 @@ export function AgentSetupStep({
       hubCandidates.find((candidate) => candidate.hub_url === hubURL) ?? null,
     [hubCandidates, hubURL],
   );
-  const trust = trustModeText(t, selectedCandidate);
+  const trust = trustModeText(t, selectedCandidate, platform);
+  const caFingerprint = useHubCAFingerprint();
   const status = useFastStatus();
   const initialAssetCount = useRef<number | null>(null);
   const [deviceDetected, setDeviceDetected] = useState(false);
@@ -173,6 +176,24 @@ export function AgentSetupStep({
     { id: "windows", label: "Windows" },
   ];
 
+  // Mac and Windows setup show the Hub CA's fingerprint and ask before they trust it; this is the value to compare
+  // with, so it shows with or without a token. Linux needs no look: its install command carries the fingerprint
+  // and checks it.
+  const hubFingerprint = !isLinux && caFingerprint ? (
+    <div>
+      <p className="text-xs font-medium text-[var(--muted)] mb-1">
+        {t("agent.hubFingerprint")}
+      </p>
+      <div className="flex items-center gap-2 bg-[var(--surface)] rounded-lg px-3 py-2">
+        <code className="text-xs text-[var(--text)] flex-1 break-words">
+          {groupedFingerprint(caFingerprint)}
+        </code>
+        <CopyButton text={caFingerprint} label={t("agent.copyHubFingerprint")} />
+      </div>
+      <p className="mt-1 text-xs text-[var(--muted)]">{t("agent.hubFingerprintHint")}</p>
+    </div>
+  ) : null;
+
   if (deviceDetected) {
     return (
       <div className="flex flex-col items-center gap-4 py-8">
@@ -234,6 +255,7 @@ export function AgentSetupStep({
           </Button>
         </div>
       ) : null}
+      {!newRawToken ? hubFingerprint : null}
 
       {generating ? (
         <div className="flex items-center gap-2 py-4 text-sm text-[var(--muted)]">
@@ -323,6 +345,8 @@ export function AgentSetupStep({
               installerCommand={installerCommand}
             />
           ) : null}
+
+          {hubFingerprint}
 
           {/* Manual command */}
           {!isLinux ? (

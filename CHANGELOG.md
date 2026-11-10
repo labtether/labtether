@@ -95,6 +95,12 @@ v1.7.1.
   client address. `GET /api/v2/audit/events` no longer returns the read rows
   older versions stored; they stay in the database until audit retention
   removes them.
+- The audit log API follows the reader's role. `GET /audit/events` and
+  `GET /api/v2/audit/events` (and `labtether audit`) give the owner, admins
+  and admin API keys every row. Operators, viewers and other API keys get
+  only their own rows. Before, anyone with `audit:read` got every row, so a
+  viewer could read what the owner and admins did. In the console, admins
+  now see the whole log, like the owner.
 - Audit rows keep the name of what changed (device, webhook, user, API key,
   saved login, notification channel, schedule, update plan) in
   `details.target_name`, so a row can say which webhook was deleted after it is
@@ -269,6 +275,24 @@ v1.7.1.
 - The Audit log has sentences for the new rows about API keys, schedules,
   alert rules and groups, such as "Changed a schedule", in every language.
   Revoking an API key reads "Revoked an API key", like its button.
+- The Map keeps the connections it had when the Hub does not return them,
+  and says "The connections between devices did not load." with Try again.
+  Before, it drew every device unconnected and said nothing. The Devices
+  list keeps its nesting the same way, and reloads when a device is added or
+  removed while a load is still running.
+- Add device shows "Hub certificate fingerprint" for macOS and Windows when
+  the Hub uses its own CA, with a Copy button. Mac and Windows setup show the
+  same value before they trust the Hub. It is written in groups of four
+  characters everywhere, and Settings › Security shows it too, as "LabTether
+  CA fingerprint". The macOS and Windows steps no longer say that the install
+  command adds the CA.
+- In the Audit log, "Load older entries" and Export CSV work for everyone,
+  not only the owner. The owner and admins get the whole log; other people
+  get their own rows, which is all the Hub sends them. Before, an admin or
+  anyone else saw only their own 20 newest rows.
+- A device's page shows the devices it sits in above its name again, such as
+  a VM's host. The console read another field than the one the Hub sends, so
+  the trail was always empty.
 
 ## [1.7.1] - 2026-10-31
 

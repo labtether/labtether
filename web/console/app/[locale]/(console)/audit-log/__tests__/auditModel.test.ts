@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import en from "../../../../../messages/en/audit-log.json";
-import { actionKey, ALL_REQUESTS, auditRows, detailRows, humanizeType, KNOWN_ACTIONS, outcome, peopleByActivity, targetText, type AuditEntry } from "../auditModel";
+import { actionKey, ALL_REQUESTS, auditRows, detailRows, humanizeType, KNOWN_ACTIONS, outcome, peopleByActivity, targetText, visibleAuditRows, type AuditEntry } from "../auditModel";
 
 // Risks: a refused attempt does not read "Denied", the person chips miss or misorder people, a filter hides the
 // entries it should keep, or an unknown event shows as a raw code.
@@ -19,6 +19,15 @@ const nameOf = (id: string) => names[id] ?? id;
 const textOf = (e: AuditEntry) => `${nameOf(e.actor_id ?? "")} ${e.type} ${e.target ?? ""}`;
 
 describe("auditModel", () => {
+  // Risk: rows of other people that are already in the page show to a person who is not an admin (second check;
+  // the Hub is what limits the rows it sends).
+  it("shows the whole log to the owner and admins, and only their own rows to everyone else", () => {
+    const log = [entry("a", "usr-1", "terminal.session.created", 1), entry("b", "usr-2", "api_key.created", 2), entry("c", "usr-1", "asset.power", 3)];
+    expect(visibleAuditRows(log, true, "usr-2").map((e) => e.id)).toEqual(["a", "b", "c"]);
+    expect(visibleAuditRows(log, false, "usr-1").map((e) => e.id)).toEqual(["a", "c"]);
+    expect(visibleAuditRows(log, false, undefined)).toEqual([]);
+  });
+
   it("reads refused attempts as Denied and failures as Failed", () => {
     expect(outcome("denied")).toBe("denied");
     expect(outcome("DENY")).toBe("denied");

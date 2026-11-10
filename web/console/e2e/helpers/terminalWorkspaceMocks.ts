@@ -1,4 +1,4 @@
-import { type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
 export const BASE_TS = "2026-01-01T12:00:00.000Z";
 
@@ -140,29 +140,26 @@ export async function emitTerminalOutput(page: Page, data: string, index = 0) {
   );
 }
 
-export async function triggerTerminalShortcut(
-  page: Page,
-  key: string,
-  options?: { shift?: boolean; meta?: boolean; ctrl?: boolean },
-) {
-  await page.evaluate(
-    ({ eventKey, shift, meta, ctrl }) => {
-      window.dispatchEvent(new KeyboardEvent("keydown", {
-        key: eventKey,
-        shiftKey: shift,
-        metaKey: meta,
-        ctrlKey: ctrl,
-        bubbles: true,
-        cancelable: true,
-      }));
-    },
-    {
-      eventKey: key,
-      shift: options?.shift ?? false,
-      meta: options?.meta ?? false,
-      ctrl: options?.ctrl ?? true,
-    },
-  );
+/**
+ * Presses real keys with the pane's shell focused, the way a person types. xterm takes typing through a hidden
+ * textarea; an event dispatched on window never has that target, so it cannot show whether a key works while typing.
+ */
+export async function pressInShell(page: Page, keys: string, index = 0) {
+  const shell = page.locator(".xterm-helper-textarea").nth(index);
+  await shell.focus();
+  await expect(shell).toBeFocused();
+  await page.keyboard.press(keys);
+}
+
+/** Presses real keys with nothing focused: the page has the keys, not the shell and not a form field. */
+export async function pressOutsideShell(page: Page, keys: string) {
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press(keys);
+}
+
+/** What the mock clipboard holds now. */
+export async function mockClipboardText(page: Page): Promise<string> {
+  return page.evaluate(() => navigator.clipboard.readText());
 }
 
 export async function commandSendEvents(page: Page, command: string): Promise<Array<{ url: string; data: string }>> {

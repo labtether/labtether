@@ -119,10 +119,13 @@ const TRUST_MODE_KEYS = new Map([
 export function trustModeText(
   t: AddDeviceT,
   candidate: HubConnectionCandidate | null | undefined,
+  platform: Platform = "linux",
 ): { label: string; reason: string } | null {
   const key = TRUST_MODE_KEYS.get(candidate?.trust_mode ?? "");
   if (key) {
-    return { label: t(`agent.trust.${key}`), reason: t(`agent.trustReason.${key}`) };
+    // Only the Linux install command adds the Hub's CA by itself. Mac and Windows setup show its fingerprint and ask.
+    const reasonKey = key === "labtetherCa" && platform !== "linux" ? "labtetherCaApp" : key;
+    return { label: t(`agent.trust.${key}`), reason: t(`agent.trustReason.${reasonKey}`) };
   }
   const reason = candidate?.preferred_reason ?? "";
   return reason ? { label: t("agent.trust.other"), reason } : null;

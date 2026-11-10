@@ -26,7 +26,7 @@ export function useMapGraph({ edges = true }: { edges?: boolean } = {}) {
     [assets, status?.telemetryOverview],
   );
   const assetIDs = useMemo(() => (edges ? assets.map((a) => a.id).sort() : NO_IDS), [edges, assets]);
-  const { dependencies } = useAssetDependencies(assetIDs);
+  const { dependencies, relationshipsFailed: linksFailed, retry: retryLinks } = useAssetDependencies(assetIDs);
 
   const hierarchy = useMemo(() => {
     const merged: AssetDependency[] = [...dependencies];
@@ -46,5 +46,5 @@ export function useMapGraph({ edges = true }: { edges?: boolean } = {}) {
     [assets, cards, topology, hierarchy.parentOf],
   );
 
-  return { graph, assets, hierarchy, statusLoaded: !!status, ...data };
+  return { graph, assets, hierarchy, statusLoaded: !!status, linksFailed, retryLinks, ...data };
 }

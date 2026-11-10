@@ -56,21 +56,26 @@ export function useEdges(assetIDs: string[]): {
       setError(null);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
-      setEdges([]);
+      // Keep the edges from the load before: one failed refresh must not flatten the Devices tree.
       setError(err instanceof Error ? err.message : "Failed to load edges.");
     } finally {
+      // A request the cleanup below aborted has already been replaced: only the current one ends the loading state.
       if (abortRef.current === controller) {
         abortRef.current = null;
+        inFlightRef.current = false;
+        setLoading(false);
       }
-      inFlightRef.current = false;
-      setLoading(false);
     }
   }, [stableAssetIDs]);
 
   useEffect(() => {
     void fetchEdges();
     return () => {
+      // The device list changed (or the page closed): drop this request so the next list loads at once. Before, the
+      // new list found the old request still in flight and was never loaded.
       abortRef.current?.abort();
+      abortRef.current = null;
+      inFlightRef.current = false;
     };
   }, [fetchEdges]);
 
@@ -170,7 +175,8 @@ export function useEdgeAncestors(assetID: string | null): {
         if (!res.ok) throw new Error(`failed ${res.status}`);
         const data = ensureRecord(await res.json().catch(() => null));
         if (cancelled) return;
-        setAncestors(ensureArray<{ asset_id: string; depth: number }>(data?.ancestors ?? data));
+        // The Hub answers { id, depth, nodes: [...] }, like the tree route.
+        setAncestors(ensureArray<{ asset_id: string; depth: number }>(data?.nodes ?? data?.ancestors));
         setError(null);
       } catch (err) {
         if (cancelled) return;
