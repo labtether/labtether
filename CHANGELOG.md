@@ -286,6 +286,8 @@ v1.7.1.
   characters everywhere, and Settings › Security shows it too, as "LabTether
   CA fingerprint". The macOS and Windows steps no longer say that the install
   command adds the CA.
+- In the Audit log, "Load older entries" and Export CSV work for admins too,
+  not only the owner. Before, an admin saw only their own 20 newest rows.
 
 ## [1.7.1] - 2026-10-31
 

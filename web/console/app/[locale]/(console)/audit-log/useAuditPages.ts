@@ -24,8 +24,9 @@ function merge(newer: AuditEntry[], older: AuditEntry[]): AuditEntry[] {
 }
 
 /**
- * The owner's whole audit log, a page at a time: the newest page (read again on refresh), "Load more" for older
- * pages, and every row for an export. Off (enabled false) for everyone else, whose own rows come with the status.
+ * The whole audit log a page at a time, for the owner and admins: the newest page (read again on refresh), "Load
+ * more" for older pages, and every row for an export. Off (enabled false) for everyone else, whose own rows come
+ * with the status.
  */
 export function useAuditPages(enabled: boolean) {
   const [entries, setEntries] = useState<AuditEntry[]>([]);

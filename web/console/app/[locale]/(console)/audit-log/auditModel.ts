@@ -41,6 +41,16 @@ export function targetText(entry: Pick<AuditEntry, "target" | "details">): strin
   return typeof name === "string" && name.trim() ? name.trim() : entry.target ?? "";
 }
 
+/**
+ * The rows this person may see: the whole log for the owner and admins, their own rows for everyone else. Not access
+ * control: the Hub decides which rows it sends. This only keeps rows already in the page from showing to a person
+ * who may not see them (a role changed while the page was open, or a Hub that sent more than it should).
+ */
+export function visibleAuditRows(entries: AuditEntry[], wholeLog: boolean, actorID: string | undefined): AuditEntry[] {
+  if (wholeLog) return entries;
+  return actorID ? entries.filter((entry) => entry.actor_id === actorID) : [];
+}
+
 /** The message key for a known type ("terminal.session.created" → "terminal_session_created"), or "". */
 export function actionKey(type: string): string {
   return KNOWN_ACTIONS.has(type) ? type.replace(/\./g, "_") : "";
