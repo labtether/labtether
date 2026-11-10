@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { Button } from "../../../components/ui/Button";
 import { ensureArray, ensureRecord } from "../../../lib/responseGuards";
+import { viewerTimeZone } from "../../../lib/viewerTimeZone";
 import { useIsAdmin } from "../../../hooks/useCanWrite";
 
 interface PendingAgent {
@@ -110,7 +111,7 @@ export function PendingAgents() {
 
   const connectedAt = (iso: string) => {
     const date = new Date(iso);
-    return Number.isNaN(date.getTime()) ? "" : format.dateTime(date, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+    return Number.isNaN(date.getTime()) ? "" : format.dateTime(date, { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: viewerTimeZone() });
   };
 
   return (

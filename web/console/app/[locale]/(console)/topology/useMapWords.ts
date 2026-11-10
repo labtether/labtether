@@ -2,6 +2,7 @@
 
 import { useFormatter, useTranslations } from "next-intl";
 import { useCallback, useMemo } from "react";
+import { viewerTimeZone } from "../../../lib/viewerTimeZone";
 import type { MapDevice, MapGraph } from "./mapModel";
 
 const DAY = 86_400_000;
@@ -17,9 +18,10 @@ export function useMapWords(graph?: MapGraph) {
   const since = useCallback((iso: string) => {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime()) || d.getTime() <= 0) return "";
+    const timeZone = viewerTimeZone();
     return Date.now() - d.getTime() < DAY
-      ? format.dateTime(d, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
-      : format.dateTime(d, { day: "numeric", month: "short" });
+      ? format.dateTime(d, { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone })
+      : format.dateTime(d, { day: "numeric", month: "short", timeZone });
   }, [format]);
 
   const short = useCallback((d: MapDevice) => {
