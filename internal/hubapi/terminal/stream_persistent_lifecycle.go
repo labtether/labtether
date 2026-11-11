@@ -1,10 +1,12 @@
 package terminal
 
 import (
+	"log"
 	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/labtether/labtether/internal/agentmgr"
 	"github.com/labtether/labtether/internal/terminal"
 )
 
@@ -29,7 +31,7 @@ func (d *Deps) ClaimPersistentTerminalStream(session terminal.Session, conn *web
 			closePersistentBrowser(old)
 		}
 	}
-	detach = func() { d.detachPersistentTerminalStream(session, conn) }
+	detach = func() { d.detachPersistentTerminalStream(session, conn, false) }
 	return activate, detach
 }
 
@@ -52,17 +54,39 @@ func (d *Deps) markPersistentTerminalStreamAttached(persistentID string, conn *w
 	}
 }
 
+// agentShellExitedReason is what an agent sends when the shell ended by itself.
+const agentShellExitedReason = "shell exited"
+
+// agentTmuxDetachedReason is what an agent sends when its tmux client ended
+// and the tmux session is still running, or it could not tell.
+const agentTmuxDetachedReason = "tmux client detached"
+
+// persistentShellEnded reports whether the agent closed this stream because
+// the saved shell itself ended.
+func persistentShellEnded(bridge *TerminalBridge, agentConn *agentmgr.AgentConn) bool {
+	return bridge.CloseReasonOr("") == agentShellExitedReason &&
+		strings.EqualFold(strings.TrimSpace(agentConn.Meta(agentmgr.MetaTerminalReportsTmuxDetach)), "true")
+}
+
 // detachPersistentTerminalStream detaches only the exact current owner; a
-// replaced browser finishing later must not detach its successor.
-func (d *Deps) detachPersistentTerminalStream(session terminal.Session, conn *websocket.Conn) {
+// replaced browser finishing later must not detach its successor. A saved
+// shell that ended has nothing left to attach to, so it moves to Ended with
+// its scroll-back instead of staying listed as running.
+func (d *Deps) detachPersistentTerminalStream(session terminal.Session, conn *websocket.Conn, shellEnded bool) {
 	persistentID := strings.TrimSpace(session.PersistentSessionID)
 	if persistentID == "" {
 		return
 	}
 	d.persistentStreamMu.Lock()
 	defer d.persistentStreamMu.Unlock()
-	if d.ActivePersistentConns.CompareAndDelete(persistentID, conn) {
-		d.markPersistentTerminalStreamDetached(session)
+	if !d.ActivePersistentConns.CompareAndDelete(persistentID, conn) {
+		return
+	}
+	d.markPersistentTerminalStreamDetached(session)
+	if shellEnded && d.TerminalPersistentStore != nil {
+		if _, err := d.TerminalPersistentStore.MarkPersistentSessionArchived(persistentID, time.Now().UTC()); err != nil {
+			log.Printf("terminal-agent: mark_ended_failed persistent=%s err=%v", persistentID, err)
+		}
 	}
 }
 

@@ -190,6 +190,12 @@ func (c *AgentConn) GetConnectedAt() time.Time {
 }
 
 // SetMeta stores a lightweight runtime metadata key/value on the connection.
+// MetaTerminalReportsTmuxDetach is set from the agent's heartbeat. Such an
+// agent closes a terminal with "tmux client detached" when the tmux session
+// outlives its client, so "shell exited" from it means the session is gone.
+// An older agent sends "shell exited" for both.
+const MetaTerminalReportsTmuxDetach = "terminal_reports_tmux_detach"
+
 func (c *AgentConn) SetMeta(key, value string) {
 	c.stateMu.Lock()
 	defer c.stateMu.Unlock()
