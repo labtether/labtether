@@ -3,6 +3,7 @@ package portainer
 import (
 	"errors"
 	"fmt"
+	portainerconnector "github.com/labtether/labtether/internal/connectors/portainer"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"net/http"
 	"strings"
@@ -75,6 +76,14 @@ func (d *Deps) ResolvePortainerAssetRuntime(assetID string) (assets.Asset, *Port
 // the saved login, is said in fixed words; anything else stays a hidden 502.
 func writePortainerUpstreamError(w http.ResponseWriter, err error) {
 	if shared.WriteUpstreamUnreachable(w, err, "Portainer") {
+		return
+	}
+	// Portainer answered and refused the request (for example "Stack deployment
+	// is already in progress"): pass its own words on instead of an internal error.
+	var apiErr *portainerconnector.APIError
+	if errors.As(err, &apiErr) && apiErr.StatusCode >= 400 && apiErr.StatusCode < 500 &&
+		apiErr.StatusCode != http.StatusUnauthorized && apiErr.Reason() != "" {
+		servicehttp.WriteError(w, http.StatusConflict, "Portainer did not do this: "+strings.TrimSuffix(apiErr.Reason(), ".")+".")
 		return
 	}
 	servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))

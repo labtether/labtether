@@ -245,7 +245,7 @@ func (c *Client) request(ctx context.Context, method, path string, body io.Reade
 	}
 
 	if statusCode >= 300 {
-		return nil, fmt.Errorf("portainer api returned %d: %s", statusCode, strings.TrimSpace(string(payload)))
+		return nil, newAPIError(statusCode, payload)
 	}
 	return payload, nil
 }
