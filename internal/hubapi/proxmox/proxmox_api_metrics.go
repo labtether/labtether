@@ -3,13 +3,14 @@ package proxmox
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
-// handleProxmoxAssetMetrics handles GET /proxmox/assets/{id}/metrics?window=
+// handleProxmoxAssetMetrics handles GET /proxmox/assets/{id}/metrics?timeframe= (or ?window=)
 // Returns RRD time-series data for a Proxmox asset (node, qemu, or lxc).
 func (d *Deps) handleProxmoxAssetMetrics(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -45,7 +46,7 @@ func (d *Deps) handleProxmoxAssetMetrics(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	timeframe := proxmoxMetricsWindowToTimeframe(r.URL.Query().Get("window"))
+	timeframe := proxmoxMetricsTimeframe(r.URL.Query())
 
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
@@ -97,7 +98,18 @@ func (d *Deps) handleProxmoxAssetMetrics(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// proxmoxMetricsWindowToTimeframe maps UI window query params to Proxmox RRD timeframe names.
+// proxmoxMetricsTimeframe picks the RRD range a caller asked for. The console's
+// Metrics tab sends timeframe=hour|day|week|month; API clients may send
+// window=1h|24h|7d|30d. Anything else is the last hour.
+func proxmoxMetricsTimeframe(query url.Values) string {
+	switch timeframe := strings.ToLower(strings.TrimSpace(query.Get("timeframe"))); timeframe {
+	case "hour", "day", "week", "month", "year":
+		return timeframe
+	}
+	return proxmoxMetricsWindowToTimeframe(query.Get("window"))
+}
+
+// proxmoxMetricsWindowToTimeframe maps window query params to Proxmox RRD timeframe names.
 // Proxmox accepts: hour, day, week, month, year.
 func proxmoxMetricsWindowToTimeframe(window string) string {
 	switch strings.ToLower(strings.TrimSpace(window)) {
