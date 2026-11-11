@@ -472,6 +472,12 @@ v1.7.1.
   connects to an address the certificate covers stops connecting until it
   also trusts the certificate's issuer, and that Remove uploaded certificate
   brings it back.
+- API keys and agent tokens work behind an HTTPS reverse proxy with
+  `LABTETHER_TLS_MODE=disabled`. The Hub accepts the proxy's
+  `X-Forwarded-Proto: https` when the proxy's address is in
+  `LABTETHER_TRUST_PROXY_CIDRS` or `LABTETHER_TRUST_PROXY_HOSTS`. Before, only
+  a proxy on the Hub's own host counted, so every key got 403 "api keys
+  require HTTPS". The header from any other address is still ignored.
 
 ## [1.7.1] - 2026-10-31
 
