@@ -112,6 +112,23 @@ func TestWrapV1Handler_WrapsErrorResponse(t *testing.T) {
 	}
 }
 
+// A failed connector or Docker action answers 400 with its reason inside
+// "result". The v2 answer said only {"error":"error","message":""}, so the
+// CLI and API callers never learned why an action failed.
+func TestWrapV1Handler_KeepsAFailedActionsReason(t *testing.T) {
+	v1 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"result":{"status":"failed","message":"image is in use by a container"}}`))
+	})
+	rec := httptest.NewRecorder()
+	WrapV1Handler(v1)(rec, httptest.NewRequest(http.MethodPost, "/", nil))
+	body := rec.Body.String()
+	if rec.Code != http.StatusBadRequest || !strings.Contains(body, `"message":"image is in use by a container"`) || !strings.Contains(body, `"error":"action_failed"`) {
+		t.Fatalf("got %d %s, want 400 with the action's reason", rec.Code, body)
+	}
+}
+
 func TestWrapV1Handler_PassThroughAlreadyV2(t *testing.T) {
 	v1 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		WriteJSON(w, http.StatusOK, "already v2")
