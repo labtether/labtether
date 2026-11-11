@@ -61,7 +61,7 @@ func (s *apiServer) handlePortainerEndpoints(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *apiServer) handlePortainerAssets(w http.ResponseWriter, r *http.Request) {
-	if s.refuseIntegrationActionWhenOff(w, r) {
+	if s.refuseIntegrationActionWhenOff(w, r) || s.refusePortainerShellWhenOff(w, r) {
 		return
 	}
 	s.ensurePortainerDeps().HandlePortainerAssets(w, r)

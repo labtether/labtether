@@ -31,6 +31,12 @@ func TestIntegrationActionsOffRefusesEveryConnectorWrite(t *testing.T) {
 		{http.MethodPost, "/connectors/proxmox/actions/vm.start/execute", sut.handleConnectorActions},
 		{http.MethodPost, "/api/v2/homeassistant/entities/ha-entity-light-desk", sut.handleV2HAEntityActions},
 		{http.MethodPost, "/api/v1/docker/containers/docker-ct-a-1/action", sut.handleDockerContainerActions},
+		// Objects named "test" are writes like any other, and only the exact
+		// Test connection route is exempt.
+		{http.MethodDelete, "/portainer/assets/portainer-endpoint-1/volumes/test", sut.handlePortainerAssets},
+		{http.MethodDelete, "/truenas/assets/truenas-host-1/datasets/test", sut.handleTrueNASAssets},
+		{http.MethodPost, "/connectors/proxmox/actions/vm.start/test", sut.handleConnectorActions},
+		{http.MethodPost, "/connectors/proxmox%2Factions%2Fvm.start/test", sut.handleConnectorActions},
 	} {
 		rec := httptest.NewRecorder()
 		tc.handle(rec, httptest.NewRequest(tc.method, tc.path, strings.NewReader(`{"action":"toggle"}`)))
@@ -52,6 +58,17 @@ func TestIntegrationActionsOffRefusesEveryConnectorWrite(t *testing.T) {
 		if strings.Contains(rec.Body.String(), integrationActionsOffMessage) {
 			t.Errorf("%s %s was refused by the switch: %d %s", tc.method, tc.path, rec.Code, rec.Body.String())
 		}
+	}
+
+	// Settings › Terminal sessions off closes a Portainer container shell too.
+	shellOff := policy.DefaultEvaluatorConfig()
+	shellOff.InteractiveEnabled = false
+	shell := newTestAPIServer(t)
+	shell.policyState = newPolicyRuntimeState(shellOff)
+	rec := httptest.NewRecorder()
+	shell.handlePortainerAssets(rec, httptest.NewRequest(http.MethodGet, "/portainer/assets/portainer-endpoint-1/containers/abc/exec", nil))
+	if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), terminalSessionsOffMessage) {
+		t.Errorf("Portainer shell with Terminal sessions off = %d %s, want 403 with the reason", rec.Code, rec.Body.String())
 	}
 
 	if restart := sut.mcpRestartDockerContainer(); restart != nil {
