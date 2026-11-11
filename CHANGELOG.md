@@ -172,6 +172,11 @@ v1.7.1.
   errors no longer end with a bare status code.
 - The first-run checklist's "Add someone" names the person who was added,
   not the owner.
+- Health checks say why a check failed in words, with the host: "192.0.2.10:8080
+  refused the connection.", "nas01.example was not found in DNS.", "… did not
+  answer within 10s.", "…'s certificate has expired or is not valid yet.".
+  Results showed Go's error text, such as `Get "http://…": dial tcp …:
+  connect: connection refused`.
 - Alerts › Delivery log names the alert of a message whose rule or alert was
   deleted, instead of "Unknown alert". Notification history has `alert_name`.
 - A single sign-on account is no longer offered a LabTether password change
