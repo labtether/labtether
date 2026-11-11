@@ -373,6 +373,7 @@ func (d *Deps) handleFileConnectionRename(w http.ResponseWriter, r *http.Request
 
 	var req fileConnectionRenameRequest
 	if err := d.DecodeJSONBody(w, r, &req); err != nil {
+		servicehttp.WriteJSONBodyError(w, err)
 		return
 	}
 
@@ -413,6 +414,7 @@ func (d *Deps) handleFileConnectionCopy(w http.ResponseWriter, r *http.Request, 
 
 	var req fileConnectionCopyRequest
 	if err := d.DecodeJSONBody(w, r, &req); err != nil {
+		servicehttp.WriteJSONBodyError(w, err)
 		return
 	}
 

@@ -74,8 +74,8 @@ func TestNotificationHTTPAdaptersRejectNon2xxResponses(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			err := test.adapter.Send(context.Background(), test.config, test.payload)
-			if err == nil || !strings.Contains(err.Error(), "status 300") {
-				t.Fatalf("expected status 300 error, got %v", err)
+			if err == nil || !strings.Contains(err.Error(), "HTTP 300") {
+				t.Fatalf("expected an HTTP 300 error, got %v", err)
 			}
 		})
 	}
@@ -143,5 +143,30 @@ func TestGotifyAdapterDoesNotForwardTokenAcrossOriginRedirect(t *testing.T) {
 	}
 	if calls := targetCalls.Load(); calls != 0 {
 		t.Fatalf("redirect target received %d calls; token could have leaked", calls)
+	}
+}
+
+// A wrong Gotify token used to read "gotify returned status 401" in Send test
+// and the Delivery log. Each answer names the receiver and says what it refused.
+func TestNotificationResponseErrorSaysWhatTheReceiverRefused(t *testing.T) {
+	cases := []struct {
+		channel string
+		status  int
+		want    string
+	}{
+		{"gotify", http.StatusUnauthorized, "Gotify did not accept the app token (HTTP 401)"},
+		{"ntfy", http.StatusForbidden, "ntfy did not accept the access token or password (HTTP 403)"},
+		{"slack", http.StatusNotFound, "Slack has nothing at this address (HTTP 404)"},
+		{"webhook", http.StatusTooManyRequests, "The webhook receiver is limiting messages right now (HTTP 429)"},
+		{"gotify", http.StatusBadGateway, "Gotify had a server error (HTTP 502)"},
+	}
+	for _, tc := range cases {
+		err := notificationResponseError(tc.channel, tc.status)
+		if err == nil || err.Error() != tc.want {
+			t.Errorf("%s %d = %v, want %q", tc.channel, tc.status, err, tc.want)
+		}
+	}
+	if err := notificationResponseError("gotify", http.StatusOK); err != nil {
+		t.Fatalf("200 = %v, want nil", err)
 	}
 }

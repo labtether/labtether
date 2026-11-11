@@ -27,6 +27,11 @@ func validateNotificationEndpoint(config map[string]any, key string, baseOnly bo
 	if !strings.EqualFold(parsed.Scheme, "https") && !strings.EqualFold(parsed.Scheme, "http") {
 		return fmt.Errorf("%s must use HTTP or HTTPS", key)
 	}
+	// Sending refuses http:// unless the Hub allows insecure transport, so a
+	// channel that could never deliver is refused when it is saved.
+	if strings.EqualFold(parsed.Scheme, "http") && !securityruntime.InsecureTransportAllowed() {
+		return fmt.Errorf("%s must start with https://. This Hub sends to http:// addresses only when LABTETHER_ALLOW_INSECURE_TRANSPORT=true is set", key)
+	}
 	if parsed.User != nil {
 		return fmt.Errorf("%s must not contain embedded credentials", key)
 	}

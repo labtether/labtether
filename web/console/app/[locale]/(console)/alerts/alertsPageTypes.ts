@@ -39,6 +39,8 @@ export type DeliveryRecord = {
   channel_id: string;
   alert_instance_id: string;
   route_id: string;
+  /** The alert rule's name when the message was sent; it outlives the rule and the alert. */
+  alert_name?: string;
   status: DeliveryStatus;
   sent_at: string | null;
   error: string;

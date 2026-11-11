@@ -57,9 +57,38 @@ func effectiveNotificationPort(value *url.URL) string {
 	}
 }
 
+// notificationReceiver names who answered and what proves who sends, so a
+// failed send says "Gotify did not accept the app token" instead of a bare
+// status code.
+var notificationReceiver = map[string]struct{ name, credential string }{
+	"gotify":  {"Gotify", "app token"},
+	"ntfy":    {"ntfy", "access token or password"},
+	"slack":   {"Slack", "webhook URL"},
+	"webhook": {"The webhook receiver", "credentials"},
+}
+
 func notificationResponseError(channel string, status int) error {
 	if status >= http.StatusOK && status < http.StatusMultipleChoices {
 		return nil
 	}
-	return fmt.Errorf("%s returned status %d", channel, status)
+	receiver, ok := notificationReceiver[channel]
+	if !ok {
+		receiver.name, receiver.credential = channel, "credentials"
+	}
+	switch {
+	case status == http.StatusUnauthorized || status == http.StatusForbidden:
+		return fmt.Errorf("%s did not accept the %s (HTTP %d)", receiver.name, receiver.credential, status)
+	case status == http.StatusNotFound || status == http.StatusGone:
+		return fmt.Errorf("%s has nothing at this address (HTTP %d)", receiver.name, status)
+	case status == http.StatusRequestEntityTooLarge:
+		return fmt.Errorf("%s refused the message as too large (HTTP %d)", receiver.name, status)
+	case status == http.StatusTooManyRequests:
+		return fmt.Errorf("%s is limiting messages right now (HTTP %d)", receiver.name, status)
+	case status >= http.StatusInternalServerError:
+		return fmt.Errorf("%s had a server error (HTTP %d)", receiver.name, status)
+	case status >= http.StatusBadRequest:
+		return fmt.Errorf("%s refused the message (HTTP %d)", receiver.name, status)
+	default:
+		return fmt.Errorf("%s answered HTTP %d instead of taking the message", receiver.name, status)
+	}
 }

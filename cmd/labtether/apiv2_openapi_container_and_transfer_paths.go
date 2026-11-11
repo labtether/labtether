@@ -87,8 +87,8 @@ const v2OpenAPIContainerAndTransferPaths = `    "/api/v2/docker/hosts": {
     },
     "/api/v2/bulk/service-action": {
       "post": {
-        "summary": "Bulk systemctl action across assets",
-        "description": "Runs a systemctl action (start, stop, restart, etc.) on multiple assets. Scope: bulk:*.",
+        "summary": "Bulk service action across devices",
+        "description": "Starts, stops, restarts, enables or disables a service on several devices through each agent's service manager, or reads systemctl status with action status. Scopes: bulk:* and services:write (services:read for status).",
         "operationId": "bulkServiceAction",
         "tags": ["bulk"],
         "responses": { "200": { "description": "Per-target results" } }

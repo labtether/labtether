@@ -14,12 +14,12 @@ import (
 )
 
 // validServiceActions is the allowlist of service management actions accepted
-// by HandleV2BulkServiceAction.
+// by HandleV2BulkServiceAction. "status" reads systemctl's answer through the
+// command runner; every other action goes to the agent's service manager.
 var validServiceActions = map[string]bool{
 	"start":   true,
 	"stop":    true,
 	"restart": true,
-	"reload":  true,
 	"enable":  true,
 	"disable": true,
 	"status":  true,
@@ -56,6 +56,7 @@ func (d *Deps) HandleV2BulkServiceAction(w http.ResponseWriter, r *http.Request)
 		Targets []string `json:"targets"`
 	}
 	if err := shared.DecodeJSONBody(w, r, &req); err != nil {
+		apiv2.WriteJSONBodyError(w, err)
 		return
 	}
 	if len(req.Targets) > maxBulkServiceRawTargets {
@@ -71,7 +72,16 @@ func (d *Deps) HandleV2BulkServiceAction(w http.ResponseWriter, r *http.Request)
 
 	// Validate action against allowlist.
 	if !validServiceActions[req.Action] {
-		apiv2.WriteError(w, http.StatusBadRequest, "validation", "invalid action: must be start, stop, restart, reload, enable, disable, or status")
+		apiv2.WriteError(w, http.StatusBadRequest, "validation", "invalid action: must be start, stop, restart, enable, disable, or status")
+		return
+	}
+	// A bulk action needs the same service scope as one device's action, on
+	// top of bulk:*. Every action but status goes to the agent's service
+	// manager without the structured command policy, exactly as the device
+	// Services route (/api/v2/assets/{id}/services) does, so services:write
+	// is what guards it. status runs as a command and keeps the policy.
+	if scope := serviceActionScope(req.Action); !apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), scope) {
+		apiv2.WriteScopeForbidden(w, scope)
 		return
 	}
 
@@ -84,7 +94,6 @@ func (d *Deps) HandleV2BulkServiceAction(w http.ResponseWriter, r *http.Request)
 	}
 
 	allowed := apiv2.AllowedAssetsFromContext(r.Context())
-	command := "systemctl " + req.Action + " " + req.Service
 
 	seenTargets := make(map[string]struct{}, len(req.Targets))
 	filteredTargets := make([]string, 0, len(req.Targets))
@@ -134,7 +143,7 @@ func (d *Deps) HandleV2BulkServiceAction(w http.ResponseWriter, r *http.Request)
 		go func() {
 			defer wg.Done()
 			for index := range jobs {
-				orderedResults[index] = d.ExecOnAsset(r, filteredTargets[index], command, 30)
+				orderedResults[index] = d.runBulkServiceAction(r, filteredTargets[index], req.Service, req.Action)
 			}
 		}()
 	}
@@ -155,6 +164,9 @@ func (d *Deps) HandleV2BulkServiceAction(w http.ResponseWriter, r *http.Request)
 		if result.Status != "succeeded" {
 			entry["status"] = "failed"
 		}
+		if result.Message != "" {
+			entry["message"] = result.Message
+		}
 		if result.ExitCode != nil {
 			entry["exit_code"] = *result.ExitCode
 		}
@@ -169,4 +181,23 @@ func (d *Deps) HandleV2BulkServiceAction(w http.ResponseWriter, r *http.Request)
 	}, "v2 bulk service action")
 
 	apiv2.WriteJSON(w, http.StatusOK, map[string]any{"results": results})
+}
+
+// runBulkServiceAction sends one target's action to its agent. Only "status"
+// runs as a command, since the agent's service manager has no status action and
+// "systemctl status" is in the default command allowlist.
+func (d *Deps) runBulkServiceAction(r *http.Request, assetID, service, action string) ExecResult {
+	if action == "status" {
+		return d.ExecOnAsset(r, assetID, "systemctl status "+service, 30)
+	}
+	return d.RunServiceAction(r, assetID, service, action)
+}
+
+// serviceActionScope is the scope one device's service route requires for
+// the action: services:read to read status, services:write to change it.
+func serviceActionScope(action string) string {
+	if action == "status" {
+		return "services:read"
+	}
+	return "services:write"
 }

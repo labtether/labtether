@@ -24,6 +24,7 @@ func (s *apiServer) handleV2TopologyZones(w http.ResponseWriter, r *http.Request
 
 	var req topology.Zone
 	if err := decodeJSONBody(w, r, &req); err != nil {
+		apiv2.WriteJSONBodyError(w, err)
 		return
 	}
 
@@ -92,6 +93,7 @@ func (s *apiServer) handleV2TopologyZoneActions(w http.ResponseWriter, r *http.R
 		}
 		var req topology.Zone
 		if err := decodeJSONBody(w, r, &req); err != nil {
+			apiv2.WriteJSONBodyError(w, err)
 			return
 		}
 		req.ID = zoneID
@@ -148,6 +150,7 @@ func (s *apiServer) handleV2TopologyZoneMembers(w http.ResponseWriter, r *http.R
 		Members []topology.ZoneMember `json:"members"`
 	}
 	if err := decodeJSONBody(w, r, &req); err != nil {
+		apiv2.WriteJSONBodyError(w, err)
 		return
 	}
 	if len(req.Members) > maxTopologyMutationItems {
@@ -198,6 +201,7 @@ func (s *apiServer) handleV2TopologyZoneReorder(w http.ResponseWriter, r *http.R
 		Updates []topology.ZoneReorder `json:"updates"`
 	}
 	if err := decodeJSONBody(w, r, &req); err != nil {
+		apiv2.WriteJSONBodyError(w, err)
 		return
 	}
 

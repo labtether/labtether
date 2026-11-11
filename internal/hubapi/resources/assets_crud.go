@@ -94,6 +94,7 @@ func (d *Deps) V2CreateAsset(w http.ResponseWriter, r *http.Request) {
 		GroupID  string `json:"group_id"`
 	}
 	if err := d.DecodeJSONBody(w, r, &req); err != nil {
+		apiv2.WriteJSONBodyError(w, err)
 		return
 	}
 
@@ -139,6 +140,7 @@ func (d *Deps) V2UpdateAsset(w http.ResponseWriter, r *http.Request, assetID str
 	}
 	var req assets.UpdateRequest
 	if err := d.DecodeJSONBody(w, r, &req); err != nil {
+		apiv2.WriteJSONBodyError(w, err)
 		return
 	}
 	if req.Name == nil && req.GroupID == nil && req.Tags == nil {

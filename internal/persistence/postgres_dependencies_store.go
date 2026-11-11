@@ -179,102 +179,80 @@ func (s *PostgresStore) DeleteAssetDependency(id string) error {
 	return nil
 }
 
-func (s *PostgresStore) BlastRadius(assetID string, maxDepth int) ([]dependencies.ImpactNode, error) {
-	if maxDepth <= 0 {
-		maxDepth = 5
-	}
-	if maxDepth > 20 {
-		maxDepth = 20
-	}
-
-	// Cycle detection: track visited asset IDs in a path array.
-	// NOT (ad.target_asset_id = ANY(d.visited)) prevents re-visiting nodes
-	// that are already in the current traversal path, breaking circular references.
-	// The depth < $2 guard provides a hard stop even for very wide non-cyclic graphs.
-	rows, err := s.pool.Query(context.Background(),
-		`WITH RECURSIVE downstream AS (
-			SELECT
-				target_asset_id AS asset_id,
-				relationship_type,
-				criticality,
-				1 AS depth,
-				ARRAY[source_asset_id, target_asset_id] AS visited
-			FROM asset_dependencies
-			WHERE source_asset_id = $1 AND direction IN ('downstream', 'bidirectional')
+// impactLinksSQL lists confirmed links as cause and affected device: when the
+// cause goes down, the affected device is hit. runs_on, hosted_on and
+// depends_on point from the device that needs the other (a container runs on
+// its host, a service depends on its database), so impact flows from target to
+// source; contains, provides_to and connected_to keep their source-to-target
+// reading. A bidirectional link carries impact both ways. Suggested and
+// dismissed links are not confirmed and carry none.
+const impactLinksSQL = `
+			SELECT target_asset_id AS cause_id, source_asset_id AS affected_id, relationship_type, criticality
+			FROM asset_edges
+			WHERE relationship_type IN ('runs_on', 'hosted_on', 'depends_on')
+			  AND origin NOT IN ('suggested', 'dismissed')
 			UNION ALL
-			SELECT
-				ad.target_asset_id,
-				ad.relationship_type,
-				ad.criticality,
-				d.depth + 1,
-				d.visited || ad.target_asset_id
-			FROM asset_dependencies ad
-			JOIN downstream d ON d.asset_id = ad.source_asset_id
-			WHERE d.depth < $2
-			  AND ad.direction IN ('downstream', 'bidirectional')
-			  AND NOT (ad.target_asset_id = ANY(d.visited))
-		)
-		SELECT DISTINCT d.asset_id, COALESCE(a.name, ''), d.depth, d.relationship_type, d.criticality
-		FROM downstream d LEFT JOIN assets a ON a.id = d.asset_id
-		ORDER BY d.depth, d.criticality`,
-		strings.TrimSpace(assetID), maxDepth,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
+			SELECT source_asset_id, target_asset_id, relationship_type, criticality
+			FROM asset_edges
+			WHERE relationship_type NOT IN ('runs_on', 'hosted_on', 'depends_on')
+			  AND origin NOT IN ('suggested', 'dismissed')
+			UNION ALL
+			SELECT source_asset_id, target_asset_id, relationship_type, criticality
+			FROM asset_edges
+			WHERE relationship_type IN ('runs_on', 'hosted_on', 'depends_on') AND direction = 'bidirectional'
+			  AND origin NOT IN ('suggested', 'dismissed')
+			UNION ALL
+			SELECT target_asset_id, source_asset_id, relationship_type, criticality
+			FROM asset_edges
+			WHERE relationship_type NOT IN ('runs_on', 'hosted_on', 'depends_on') AND direction = 'bidirectional'
+			  AND origin NOT IN ('suggested', 'dismissed')`
 
-	out := make([]dependencies.ImpactNode, 0, 32)
-	for rows.Next() {
-		var node dependencies.ImpactNode
-		if err := rows.Scan(&node.AssetID, &node.AssetName, &node.Depth, &node.RelationshipType, &node.Criticality); err != nil {
-			return nil, err
-		}
-		out = append(out, node)
-	}
-	return out, rows.Err()
+// BlastRadius lists the devices hit when assetID goes down, each once at its
+// nearest depth.
+func (s *PostgresStore) BlastRadius(assetID string, maxDepth int) ([]dependencies.ImpactNode, error) {
+	return s.impactWalk(`WITH RECURSIVE links AS (`+impactLinksSQL+`),
+		walk AS (
+			SELECT affected_id AS asset_id, relationship_type, criticality, 1 AS depth, ARRAY[cause_id, affected_id] AS visited
+			FROM links WHERE cause_id = $1
+			UNION ALL
+			SELECT l.affected_id, l.relationship_type, l.criticality, w.depth + 1, w.visited || l.affected_id
+			FROM links l JOIN walk w ON l.cause_id = w.asset_id
+			WHERE w.depth < $2 AND NOT (l.affected_id = ANY(w.visited))
+		)`+impactNearestSQL, assetID, maxDepth)
 }
 
+// UpstreamCauses lists the devices whose failure hits assetID, each once at
+// its nearest depth.
 func (s *PostgresStore) UpstreamCauses(assetID string, maxDepth int) ([]dependencies.ImpactNode, error) {
+	return s.impactWalk(`WITH RECURSIVE links AS (`+impactLinksSQL+`),
+		walk AS (
+			SELECT cause_id AS asset_id, relationship_type, criticality, 1 AS depth, ARRAY[affected_id, cause_id] AS visited
+			FROM links WHERE affected_id = $1
+			UNION ALL
+			SELECT l.cause_id, l.relationship_type, l.criticality, w.depth + 1, w.visited || l.cause_id
+			FROM links l JOIN walk w ON l.affected_id = w.asset_id
+			WHERE w.depth < $2 AND NOT (l.cause_id = ANY(w.visited))
+		)`+impactNearestSQL, assetID, maxDepth)
+}
+
+// impactNearestSQL keeps each device once, at the depth it is first reached.
+const impactNearestSQL = `,
+		nearest AS (
+			SELECT DISTINCT ON (asset_id) asset_id, relationship_type, criticality, depth
+			FROM walk ORDER BY asset_id, depth, relationship_type
+		)
+		SELECT n.asset_id, COALESCE(a.name, ''), n.depth, n.relationship_type, n.criticality
+		FROM nearest n LEFT JOIN assets a ON a.id = n.asset_id
+		ORDER BY n.depth, n.criticality, n.asset_id`
+
+func (s *PostgresStore) impactWalk(query, assetID string, maxDepth int) ([]dependencies.ImpactNode, error) {
 	if maxDepth <= 0 {
 		maxDepth = 5
 	}
 	if maxDepth > 20 {
 		maxDepth = 20
 	}
-
-	// Cycle detection: track visited asset IDs in a path array.
-	// NOT (ad.source_asset_id = ANY(u.visited)) prevents re-visiting nodes
-	// that are already in the current traversal path, breaking circular references.
-	// The depth < $2 guard provides a hard stop even for very wide non-cyclic graphs.
-	rows, err := s.pool.Query(context.Background(),
-		`WITH RECURSIVE upstream AS (
-			SELECT
-				source_asset_id AS asset_id,
-				relationship_type,
-				criticality,
-				1 AS depth,
-				ARRAY[target_asset_id, source_asset_id] AS visited
-			FROM asset_dependencies
-			WHERE target_asset_id = $1 AND direction IN ('upstream', 'bidirectional')
-			UNION ALL
-			SELECT
-				ad.source_asset_id,
-				ad.relationship_type,
-				ad.criticality,
-				u.depth + 1,
-				u.visited || ad.source_asset_id
-			FROM asset_dependencies ad
-			JOIN upstream u ON u.asset_id = ad.target_asset_id
-			WHERE u.depth < $2
-			  AND ad.direction IN ('upstream', 'bidirectional')
-			  AND NOT (ad.source_asset_id = ANY(u.visited))
-		)
-		SELECT DISTINCT u.asset_id, COALESCE(a.name, ''), u.depth, u.relationship_type, u.criticality
-		FROM upstream u LEFT JOIN assets a ON a.id = u.asset_id
-		ORDER BY u.depth, u.criticality`,
-		strings.TrimSpace(assetID), maxDepth,
-	)
+	rows, err := s.pool.Query(context.Background(), query, strings.TrimSpace(assetID), maxDepth)
 	if err != nil {
 		return nil, err
 	}

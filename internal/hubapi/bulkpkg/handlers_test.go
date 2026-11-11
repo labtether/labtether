@@ -20,10 +20,19 @@ func stubExec(_ *http.Request, assetID, _ string, _ int) ExecResult {
 	return ExecResult{AssetID: assetID, Status: "succeeded", Stdout: "active", ExitCode: new(0)}
 }
 
+// bulkServiceScopes lets a test key run every bulk service action.
+var bulkServiceScopes = []string{"bulk:*", "services:read", "services:write"}
+
+// stubServiceAction answers every agent service action as done.
+func stubServiceAction(_ *http.Request, assetID, _, _ string) ExecResult {
+	return ExecResult{AssetID: assetID, Status: "succeeded"}
+}
+
 func newTestDeps() *Deps {
 	return &Deps{
-		AuditStore:  testutil.NewAuditStore(),
-		ExecOnAsset: stubExec,
+		AuditStore:       testutil.NewAuditStore(),
+		ExecOnAsset:      stubExec,
+		RunServiceAction: stubServiceAction,
 	}
 }
 
@@ -67,7 +76,7 @@ func TestHandleV2BulkServiceAction_RateLimitPreventsDispatch(t *testing.T) {
 	}
 	body := `{"action":"restart","service":"nginx","targets":["srv1"]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/bulk/service-action", strings.NewReader(body))
-	req = req.WithContext(apiv2.ContextWithScopes(req.Context(), []string{"bulk:*"}))
+	req = req.WithContext(apiv2.ContextWithScopes(req.Context(), bulkServiceScopes))
 	rec := httptest.NewRecorder()
 
 	d.HandleV2BulkServiceAction(rec, req)
@@ -85,7 +94,7 @@ func TestHandleV2BulkServiceAction_InvalidAction(t *testing.T) {
 	body := `{"action":"rm -rf","service":"nginx","targets":["srv1"]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/bulk/service-action", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	ctx := apiv2.ContextWithScopes(req.Context(), []string{"bulk:*"})
+	ctx := apiv2.ContextWithScopes(req.Context(), bulkServiceScopes)
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	d.HandleV2BulkServiceAction(rec, req)
@@ -99,7 +108,7 @@ func TestHandleV2BulkServiceAction_InvalidServiceName(t *testing.T) {
 	body := `{"action":"restart","service":"nginx; curl evil.com","targets":["srv1"]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/bulk/service-action", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	ctx := apiv2.ContextWithScopes(req.Context(), []string{"bulk:*"})
+	ctx := apiv2.ContextWithScopes(req.Context(), bulkServiceScopes)
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	d.HandleV2BulkServiceAction(rec, req)
@@ -113,7 +122,7 @@ func TestHandleV2BulkServiceAction_AllTargetsDenied(t *testing.T) {
 	body := `{"action":"restart","service":"nginx","targets":["srv1","srv2"]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/bulk/service-action", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	ctx := apiv2.ContextWithScopes(req.Context(), []string{"bulk:*"})
+	ctx := apiv2.ContextWithScopes(req.Context(), bulkServiceScopes)
 	ctx = apiv2.ContextWithAllowedAssets(ctx, []string{"other-server"}) // srv1/srv2 not allowed
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
@@ -137,7 +146,7 @@ func TestHandleV2BulkServiceAction_MissingFields(t *testing.T) {
 			d := newTestDeps()
 			req := httptest.NewRequest(http.MethodPost, "/api/v2/bulk/service-action", strings.NewReader(tc.body))
 			req.Header.Set("Content-Type", "application/json")
-			ctx := apiv2.ContextWithScopes(req.Context(), []string{"bulk:*"})
+			ctx := apiv2.ContextWithScopes(req.Context(), bulkServiceScopes)
 			req = req.WithContext(ctx)
 			rec := httptest.NewRecorder()
 			d.HandleV2BulkServiceAction(rec, req)
@@ -154,7 +163,7 @@ func TestHandleV2BulkServiceAction_Success(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/bulk/service-action", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	// Wildcard allowed assets means all targets are permitted.
-	ctx := apiv2.ContextWithScopes(req.Context(), []string{"bulk:*"})
+	ctx := apiv2.ContextWithScopes(req.Context(), bulkServiceScopes)
 	ctx = apiv2.ContextWithAllowedAssets(ctx, nil) // nil = wildcard
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
@@ -172,7 +181,7 @@ func TestHandleV2BulkServiceActionReportsNonzeroExitAsFailure(t *testing.T) {
 	body := `{"action":"status","service":"missing-service","targets":["srv1"]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/bulk/service-action", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	ctx := apiv2.ContextWithScopes(req.Context(), []string{"bulk:*"})
+	ctx := apiv2.ContextWithScopes(req.Context(), bulkServiceScopes)
 	ctx = apiv2.ContextWithAllowedAssets(ctx, nil)
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
@@ -216,7 +225,7 @@ func TestHandleV2BulkServiceAction_MaintenanceBlocksAllBeforeExecution(t *testin
 	body := `{"action":"restart","service":"nginx","targets":["srv1","srv2","srv3"]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/bulk/service-action", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	ctx := apiv2.ContextWithScopes(req.Context(), []string{"bulk:*"})
+	ctx := apiv2.ContextWithScopes(req.Context(), bulkServiceScopes)
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
@@ -242,7 +251,7 @@ func TestHandleV2BulkServiceAction_RejectsDuplicateTargets(t *testing.T) {
 	body := `{"action":"status","service":"nginx","targets":["srv1","srv1"]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/bulk/service-action", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	ctx := apiv2.ContextWithScopes(req.Context(), []string{"bulk:*"})
+	ctx := apiv2.ContextWithScopes(req.Context(), bulkServiceScopes)
 	ctx = apiv2.ContextWithAllowedAssets(ctx, nil)
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
@@ -269,7 +278,7 @@ func TestHandleV2BulkServiceAction_RejectsMixedForbiddenTargetsWithoutExecuting(
 	body := `{"action":"status","service":"nginx","targets":["srv1","srv2"]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/bulk/service-action", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	ctx := apiv2.ContextWithScopes(req.Context(), []string{"bulk:*"})
+	ctx := apiv2.ContextWithScopes(req.Context(), bulkServiceScopes)
 	ctx = apiv2.ContextWithAllowedAssets(ctx, []string{"srv1"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
@@ -289,7 +298,7 @@ func TestHandleV2BulkServiceAction_TrimsTargetsBeforeExecution(t *testing.T) {
 	body := `{"action":"status","service":"nginx","targets":[" srv1 ","srv2"]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/bulk/service-action", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	ctx := apiv2.ContextWithScopes(req.Context(), []string{"bulk:*"})
+	ctx := apiv2.ContextWithScopes(req.Context(), bulkServiceScopes)
 	ctx = apiv2.ContextWithAllowedAssets(ctx, nil)
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
@@ -319,7 +328,7 @@ func TestHandleV2BulkServiceAction_ValidActionNames(t *testing.T) {
 			body := `{"action":"` + action + `","service":"nginx","targets":["srv1"]}`
 			req := httptest.NewRequest(http.MethodPost, "/api/v2/bulk/service-action", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
-			ctx := apiv2.ContextWithScopes(req.Context(), []string{"bulk:*"})
+			ctx := apiv2.ContextWithScopes(req.Context(), bulkServiceScopes)
 			ctx = apiv2.ContextWithAllowedAssets(ctx, nil) // wildcard
 			req = req.WithContext(ctx)
 			rec := httptest.NewRecorder()
@@ -351,7 +360,7 @@ func TestHandleV2BulkServiceAction_RejectsExcessiveTargetsBeforeExecution(t *tes
 		t.Fatalf("marshal request: %v", err)
 	}
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/bulk/service-action", strings.NewReader(string(body)))
-	req = req.WithContext(apiv2.ContextWithScopes(req.Context(), []string{"bulk:*"}))
+	req = req.WithContext(apiv2.ContextWithScopes(req.Context(), bulkServiceScopes))
 	rec := httptest.NewRecorder()
 
 	d.HandleV2BulkServiceAction(rec, req)
@@ -396,7 +405,7 @@ func TestHandleV2BulkServiceAction_CapsConcurrency(t *testing.T) {
 		t.Fatalf("marshal request: %v", err)
 	}
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/bulk/service-action", strings.NewReader(string(body)))
-	ctx := apiv2.ContextWithScopes(req.Context(), []string{"bulk:*"})
+	ctx := apiv2.ContextWithScopes(req.Context(), bulkServiceScopes)
 	ctx = apiv2.ContextWithAllowedAssets(ctx, nil)
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()

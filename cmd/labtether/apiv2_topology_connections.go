@@ -24,6 +24,7 @@ func (s *apiServer) handleV2TopologyConnections(w http.ResponseWriter, r *http.R
 
 	var req topology.Connection
 	if err := decodeJSONBody(w, r, &req); err != nil {
+		apiv2.WriteJSONBodyError(w, err)
 		return
 	}
 
@@ -92,6 +93,7 @@ func (s *apiServer) handleV2TopologyConnection(w http.ResponseWriter, r *http.Re
 			Label *string `json:"label"`
 		}
 		if err := decodeJSONBody(w, r, &req); err != nil {
+			apiv2.WriteJSONBodyError(w, err)
 			return
 		}
 		if req.Relationship != "" && !topology.ValidRelationships[req.Relationship] {
@@ -145,6 +147,7 @@ func (s *apiServer) handleV2TopologyViewport(w http.ResponseWriter, r *http.Requ
 
 	var req topology.Viewport
 	if err := decodeJSONBody(w, r, &req); err != nil {
+		apiv2.WriteJSONBodyError(w, err)
 		return
 	}
 

@@ -18,9 +18,11 @@ v1.7.1.
   from the folder you first ran it in, with `LABTETHER_VERSION=v2.0.0`, or run
   `./scripts/upgrade-compose.sh --version v2.0.0`. Both keep your
   `.env.deploy`.
-- **No database migration and no new or removed setting** since v1.7.1.
-  The database schema is the same, so going back to v1.7.1 needs no database
-  restore.
+- **Two small database migrations and no new or removed setting** since
+  v1.7.1. Migration 109 lets the database store alert rules for a group and
+  health-check rules; migration 110 turns automatic Docker "runs on" links
+  the right way round. Neither removes your data, and v1.7.1 still runs on the
+  migrated database, so going back to v1.7.1 needs no database restore.
 - **From v1.4.0 or older,** read the v1.7.1 upgrade notes below first. They
   still apply.
 - **Saved choices carry over.** Your theme and language stay as they were.
@@ -135,6 +137,12 @@ v1.7.1.
   with "An internal error occurred." because the database still allowed the
   old scope name "site" and no health-check kind. Rules stored with "site"
   become group rules.
+- Devices: the breadcrumb of a host with Docker no longer lists its own
+  containers and Docker engine as its parents, and a container's breadcrumb
+  reads host, Docker engine, container. Link discovery stored a container's
+  "runs on" link from the host to the container, the reverse of every other
+  link; migration 110 turns the stored ones around. A suggested link is not a
+  parent until it is accepted.
 
 - A change to Settings › General › Service discovery defaults now reaches
   connected agents at once. Before, agents got it only when they next
@@ -164,20 +172,46 @@ v1.7.1.
   errors no longer end with a bare status code.
 - The first-run checklist's "Add someone" names the person who was added,
   not the owner.
+- Alerts › Delivery log names the alert of a message whose rule or alert was
+  deleted, instead of "Unknown alert". Notification history has `alert_name`.
 - A single sign-on account is no longer offered a LabTether password change
   (the Hub refuses it) or two-factor setup (its sign-ins never ask for the
   code, so the account only looked protected). The Hub refuses that setup
   too, and `/auth/me` says how the account signs in (`auth_provider`).
+- A device's blast radius (`/assets/{id}/blast-radius`) and upstream
+  (`/assets/{id}/upstream`) follow what each link means: a device that depends
+  on, runs on or is hosted on another is hit when that one goes down. A
+  dependency such as "nas01 depends on host01" was in neither host01's blast
+  radius nor nas01's upstream. Each device is listed once, and suggested links
+  count only after they are accepted.
 - The two-factor code fields under Account security have names for screen
   readers.
+- A request whose body is not the JSON the route takes is refused with a 400
+  that says why ("The request needs a JSON body.", "count must be a whole
+  number."). Twenty-nine routes, among them SFTP rename and copy, device and
+  bookmark edits, webhooks, schedules, actions, exec, bulk actions and the
+  Map's links and zones, answered an empty 200 and did nothing.
 - Alerts: email, Slack, ntfy, Gotify and push messages name the device the
   alert is for ("Disk nearly full is firing on nas01."), in the title and the
   email subject too. They no longer show the rule's and alert's internal IDs or
   "No description provided."; the webhook channel's JSON keeps every field and
   adds `devices`. A device name with line breaks or markup cannot break an email
   subject, an ntfy title or a Slack message.
+- Notifications: a failed send says what the receiver refused, for example
+  "Gotify did not accept the app token (HTTP 401)", in Send test and the
+  Delivery log, instead of "gotify returned status 401". A webhook, Slack, ntfy
+  or Gotify channel with an http:// address is refused when it is saved, unless
+  `LABTETHER_ALLOW_INSECURE_TRANSPORT=true` is set. It used to save and then
+  fail at every send.
 - Services: adding, renaming or removing an icon in the icon library needs
   `web-services:write`. A viewer or a read-only API key could change it.
+- The bulk service API (`POST /api/v2/bulk/service-action`) starts, stops,
+  restarts, enables and disables services through each agent's service
+  manager, like a device's Services page. It ran `systemctl` as a shell
+  command, which the default command allowlist refuses, so it failed on every
+  Hub. A failed device says why in words. Like one device's Services route,
+  it needs `services:write` (`services:read` for `status`) as well as
+  `bulk:*`. The `reload` action, which never worked, is no longer accepted.
 
 - Security › Saved logins: the Add login, Rotate and Delete dialogs, login
   types and the saved login picker are in your language, and their errors

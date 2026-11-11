@@ -157,6 +157,7 @@ type fileTransferStartRequest struct {
 func (d *Deps) handleStartFileTransfer(w http.ResponseWriter, r *http.Request) {
 	var req fileTransferStartRequest
 	if err := d.DecodeJSONBody(w, r, &req); err != nil {
+		servicehttp.WriteJSONBodyError(w, err)
 		return
 	}
 	req.SourceType = strings.TrimSpace(req.SourceType)

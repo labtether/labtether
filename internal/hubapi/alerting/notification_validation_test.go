@@ -137,3 +137,27 @@ func TestValidateNotificationChannelConfigEnforcesStructuralBounds(t *testing.T)
 		t.Fatal("oversized config string was not rejected")
 	}
 }
+
+// An http:// channel used to save fine and fail only at Send test, because
+// sending refuses http:// unless the Hub allows insecure transport. Saving
+// refuses it the same way, in words that name the setting.
+func TestNotificationChannelAPIRefusesHTTPURLUnlessInsecureTransportAllowed(t *testing.T) {
+	store := newNotificationSecurityStore()
+	deps := newTestAlertingDeps(t)
+	deps.NotificationStore = store
+	deps.NotificationSecrets = testutil.TestSecretsManager(t)
+	body := `{"name":"Receiver","type":"gotify","config":{"server_url":"http://192.0.2.10:8080","app_token":"secret"}}`
+
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "false")
+	refused := runNotificationHandlerRequest(t, deps.HandleNotificationChannels, http.MethodPost, "/notifications/channels", body)
+	if refused.Code != http.StatusBadRequest || !strings.Contains(refused.Body.String(), "server_url must start with https://") ||
+		!strings.Contains(refused.Body.String(), "LABTETHER_ALLOW_INSECURE_TRANSPORT=true") {
+		t.Fatalf("http channel without insecure transport = %d %s, want 400 naming https and the setting", refused.Code, refused.Body.String())
+	}
+
+	t.Setenv("LABTETHER_ALLOW_INSECURE_TRANSPORT", "true")
+	saved := runNotificationHandlerRequest(t, deps.HandleNotificationChannels, http.MethodPost, "/notifications/channels", body)
+	if saved.Code != http.StatusCreated {
+		t.Fatalf("http channel with insecure transport = %d %s, want 201", saved.Code, saved.Body.String())
+	}
+}

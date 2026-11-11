@@ -221,6 +221,19 @@ func (s *PostgresStore) ListEdgesBatch(assetIDs []string, limit int) ([]edges.Ed
 // Graph traversal
 // ---------------------------------------------------------------------------
 
+// containmentLinksSQL lists confirmed containment links as parent and child.
+// "contains" points from the parent to the child; "runs_on" and "hosted_on"
+// point from the child to its host (a container runs on its Docker host).
+// Reading them all as parent-to-child put a host under its own containers.
+const containmentLinksSQL = `
+			SELECT source_asset_id AS parent_id, target_asset_id AS child_id
+			FROM asset_edges
+			WHERE relationship_type = 'contains' AND origin NOT IN ('suggested', 'dismissed')
+			UNION
+			SELECT target_asset_id, source_asset_id
+			FROM asset_edges
+			WHERE relationship_type IN ('runs_on', 'hosted_on') AND origin NOT IN ('suggested', 'dismissed')`
+
 func (s *PostgresStore) Descendants(rootAssetID string, maxDepth int) ([]edges.TreeNode, error) {
 	if maxDepth <= 0 {
 		maxDepth = 5
@@ -230,22 +243,19 @@ func (s *PostgresStore) Descendants(rootAssetID string, maxDepth int) ([]edges.T
 	}
 
 	rows, err := s.pool.Query(context.Background(),
-		`WITH RECURSIVE tree AS (
-			SELECT target_asset_id AS id, 1 AS depth, ARRAY[source_asset_id] AS visited
-			FROM asset_edges
-			WHERE source_asset_id = $1
-			  AND relationship_type IN ('contains', 'runs_on', 'hosted_on')
-			  AND origin NOT IN ('suggested', 'dismissed')
+		`WITH RECURSIVE links AS (`+containmentLinksSQL+`),
+		tree AS (
+			SELECT child_id AS id, 1 AS depth, ARRAY[parent_id, child_id] AS visited
+			FROM links
+			WHERE parent_id = $1
 			UNION ALL
-			SELECT e.target_asset_id, t.depth + 1, t.visited || e.source_asset_id
-			FROM asset_edges e
-			JOIN tree t ON e.source_asset_id = t.id
-			WHERE e.relationship_type IN ('contains', 'runs_on', 'hosted_on')
-			  AND e.origin NOT IN ('suggested', 'dismissed')
-			  AND t.depth < $2
-			  AND NOT (e.target_asset_id = ANY(t.visited))
+			SELECT l.child_id, t.depth + 1, t.visited || l.child_id
+			FROM links l
+			JOIN tree t ON l.parent_id = t.id
+			WHERE t.depth < $2
+			  AND NOT (l.child_id = ANY(t.visited))
 		)
-		SELECT id, depth FROM tree`,
+		SELECT id, MIN(depth) AS depth FROM tree GROUP BY id ORDER BY depth, id`,
 		strings.TrimSpace(rootAssetID), maxDepth,
 	)
 	if err != nil {
@@ -273,22 +283,19 @@ func (s *PostgresStore) Ancestors(assetID string, maxDepth int) ([]edges.TreeNod
 	}
 
 	rows, err := s.pool.Query(context.Background(),
-		`WITH RECURSIVE ancestors AS (
-			SELECT source_asset_id AS id, 1 AS depth, ARRAY[target_asset_id] AS visited
-			FROM asset_edges
-			WHERE target_asset_id = $1
-			  AND relationship_type IN ('contains', 'runs_on', 'hosted_on')
-			  AND origin NOT IN ('suggested', 'dismissed')
+		`WITH RECURSIVE links AS (`+containmentLinksSQL+`),
+		ancestors AS (
+			SELECT parent_id AS id, 1 AS depth, ARRAY[child_id, parent_id] AS visited
+			FROM links
+			WHERE child_id = $1
 			UNION ALL
-			SELECT e.source_asset_id, a.depth + 1, a.visited || e.target_asset_id
-			FROM asset_edges e
-			JOIN ancestors a ON e.target_asset_id = a.id
-			WHERE e.relationship_type IN ('contains', 'runs_on', 'hosted_on')
-			  AND e.origin NOT IN ('suggested', 'dismissed')
-			  AND a.depth < $2
-			  AND NOT (e.source_asset_id = ANY(a.visited))
+			SELECT l.parent_id, a.depth + 1, a.visited || l.parent_id
+			FROM links l
+			JOIN ancestors a ON l.child_id = a.id
+			WHERE a.depth < $2
+			  AND NOT (l.parent_id = ANY(a.visited))
 		)
-		SELECT id, depth FROM ancestors ORDER BY depth DESC`,
+		SELECT id, MAX(depth) AS depth FROM ancestors GROUP BY id ORDER BY depth DESC, id`,
 		strings.TrimSpace(assetID), maxDepth,
 	)
 	if err != nil {
