@@ -334,6 +334,9 @@ v1.7.1.
   log channels and sources, not systemd units. Its Cron / Timers tab names
   scheduled tasks "Task Scheduler", and Services shows "Manual" for
   services that start on demand.
+- The Processes tab shows each process's memory in the right unit. Agents
+  report it in KiB and the tab read it as bytes, so a 97 MB process showed
+  as 97 KB.
 
 ## [1.7.1] - 2026-10-31
 
