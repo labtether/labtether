@@ -101,7 +101,7 @@ func (s *PostgresStore) CreateHubCollector(req hubcollector.CreateCollectorReque
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "duplicate key") ||
 			strings.Contains(strings.ToLower(err.Error()), "unique") {
-			return hubcollector.Collector{}, errors.New("hub collector already exists for this asset")
+			return hubcollector.Collector{}, hubcollector.ErrCollectorExists
 		}
 		return hubcollector.Collector{}, err
 	}

@@ -22,10 +22,16 @@ type hubCollectorHandlerStore struct {
 	statusCalls  int
 	deleteCalled bool
 	createConfig map[string]any
+	createErr    error
+	lastStatus   string
+	lastError    string
 }
 
 func (s *hubCollectorHandlerStore) CreateHubCollector(req hubcollector.CreateCollectorRequest) (hubcollector.Collector, error) {
 	s.createCalls++
+	if s.createErr != nil {
+		return hubcollector.Collector{}, s.createErr
+	}
 	interval, err := hubcollector.CreateIntervalSeconds(req.IntervalSeconds)
 	if err != nil {
 		return hubcollector.Collector{}, err
@@ -86,6 +92,7 @@ func (s *hubCollectorHandlerStore) DeleteHubCollector(id string) error {
 
 func (s *hubCollectorHandlerStore) UpdateHubCollectorStatus(id, status, lastError string, collectedAt time.Time) error {
 	s.statusCalls++
+	s.lastStatus, s.lastError = status, lastError
 	return nil
 }
 
