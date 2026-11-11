@@ -246,6 +246,9 @@
     "remove": {
       "title": "¿Eliminar {name}?",
       "body": "LabTether deja de vigilar {name} y borra su historial.",
+      "alsoFound": "También quita {count, plural, one {# dispositivo} other {# dispositivos}} que encontró esta conexión.",
+      "alsoAttached": "También quita {count, plural, one {# dispositivo vinculado} other {# dispositivos vinculados}}.",
+      "alsoLogin": "También se quita su inicio de sesión guardado, salvo que otra cosa lo use.",
       "addBack": "Para volver a añadirlo más tarde, usa un nuevo token de un solo uso desde Añadir dispositivo.",
       "typeName": "Escribe {name} para confirmar",
       "cancel": "Cancelar",

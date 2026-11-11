@@ -3,9 +3,12 @@
 import { useTranslations } from "next-intl";
 import { Button } from "../../../../components/ui/Button";
 import { Modal } from "../../../../components/ui/Modal";
+import { useDeletePreview } from "./useDeletePreview";
 
 type NodeDeleteConfirmModalProps = {
   open: boolean;
+  /** The device being removed: the dialog asks the Hub what goes with it. */
+  assetId?: string;
   assetName: string;
   confirmInput: string;
   deleting: boolean;
@@ -20,6 +23,7 @@ type NodeDeleteConfirmModalProps = {
 /** Remove a device: say what goes, and ask for its name before the red button works. */
 export function NodeDeleteConfirmModal({
   open,
+  assetId,
   assetName,
   confirmInput,
   deleting,
@@ -31,6 +35,7 @@ export function NodeDeleteConfirmModal({
 }: NodeDeleteConfirmModalProps) {
   const t = useTranslations("devices.page.remove");
   const ready = confirmInput === assetName && !deleting;
+  const preview = useDeletePreview(open, assetId);
   return (
     <Modal open={open} onClose={onCancel} title={t("title", { name: assetName })}>
       <form
@@ -41,6 +46,10 @@ export function NodeDeleteConfirmModal({
         }}
       >
         <p>{t("body", { name: assetName })}</p>
+        {preview && preview.devices > 0 ? (
+          <p>{t(preview.connection ? "alsoFound" : "alsoAttached", { count: preview.devices })}</p>
+        ) : null}
+        {preview?.saved_login ? <p>{t("alsoLogin")}</p> : null}
         {agent ? <p>{t("addBack")}</p> : null}
         <div className="dv-field">
           <label htmlFor="dv-remove-name">{t("typeName", { name: assetName })}</label>
