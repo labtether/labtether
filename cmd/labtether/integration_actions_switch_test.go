@@ -60,15 +60,23 @@ func TestIntegrationActionsOffRefusesEveryConnectorWrite(t *testing.T) {
 		}
 	}
 
-	// Settings › Terminal sessions off closes a Portainer container shell too.
+	// Settings › Terminal sessions off closes a Portainer container shell too,
+	// whatever spaces or escapes the path carries: the handler trims segments
+	// when it routes, and decides on that same parse.
 	shellOff := policy.DefaultEvaluatorConfig()
 	shellOff.InteractiveEnabled = false
 	shell := newTestAPIServer(t)
 	shell.policyState = newPolicyRuntimeState(shellOff)
-	rec := httptest.NewRecorder()
-	shell.handlePortainerAssets(rec, httptest.NewRequest(http.MethodGet, "/portainer/assets/portainer-endpoint-1/containers/abc/exec", nil))
-	if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), terminalSessionsOffMessage) {
-		t.Errorf("Portainer shell with Terminal sessions off = %d %s, want 403 with the reason", rec.Code, rec.Body.String())
+	for _, path := range []string{
+		"/portainer/assets/portainer-endpoint-1/containers/abc/exec",
+		"/portainer/assets/portainer-endpoint-1/containers/abc/exec%20",
+		"/portainer/assets/portainer-endpoint-1/containers/%20abc%20/exec",
+	} {
+		rec := httptest.NewRecorder()
+		shell.handlePortainerAssets(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "Terminal sessions are turned off") {
+			t.Errorf("Portainer shell %s with Terminal sessions off = %d %s, want 403 with the reason", path, rec.Code, rec.Body.String())
+		}
 	}
 
 	if restart := sut.mcpRestartDockerContainer(); restart != nil {

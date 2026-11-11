@@ -43,6 +43,15 @@ func (d *Deps) HandleConnectorActions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Settings › Integration actions off refuses every write here except Test
+	// connection, decided on this handler's own parse of the route.
+	if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions &&
+		!(len(parts) == 2 && parts[1] == "test") &&
+		d.IntegrationActionsAllowed != nil && !d.IntegrationActionsAllowed() {
+		servicehttp.WriteError(w, http.StatusForbidden, "Integration actions are turned off in Settings.")
+		return
+	}
+
 	connectorID := parts[0]
 	resolvedConnectorID := normalizeConnectorID(connectorID)
 	connector, ok := d.ConnectorRegistry.Get(resolvedConnectorID)

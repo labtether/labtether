@@ -20,6 +20,7 @@ import (
 // buildCollectorsDeps constructs the collectors.Deps from the apiServer's fields.
 func (s *apiServer) buildCollectorsDeps() *collectorspkg.Deps {
 	return &collectorspkg.Deps{
+		IntegrationActionsAllowed:   s.integrationActionsOn,
 		AssetStore:                  s.assetStore,
 		HubCollectorStore:           s.hubCollectorStore,
 		CredentialStore:             s.credentialStore,
@@ -114,9 +115,7 @@ func (s *apiServer) handleListConnectors(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *apiServer) handleConnectorActions(w http.ResponseWriter, r *http.Request) {
-	if s.refuseConnectorRouteWhenOff(w, r) {
-		return
-	}
+	// The switch is checked inside the handler: Test connection stays open.
 	s.ensureCollectorsDeps().HandleConnectorActions(w, r)
 }
 

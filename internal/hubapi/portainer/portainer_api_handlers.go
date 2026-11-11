@@ -87,6 +87,10 @@ func (d *Deps) HandlePortainerAssets(w http.ResponseWriter, r *http.Request) {
 	// applying the short-lived context timeout used by regular API calls.
 	// Auth is already enforced by the withAuth middleware at route registration.
 	if action == "containers" && len(subParts) == 2 && strings.TrimSpace(subParts[1]) == "exec" {
+		if d.ShellsAllowed != nil && !d.ShellsAllowed() {
+			servicehttp.WriteError(w, http.StatusForbidden, "Terminal sessions are turned off in Settings.")
+			return
+		}
 		containerID := strings.TrimSpace(subParts[0])
 		if containerID == "" {
 			servicehttp.WriteError(w, http.StatusBadRequest, "container id required")
