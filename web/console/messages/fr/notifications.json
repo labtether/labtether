@@ -85,6 +85,10 @@
     "appTokenRequired": "Le jeton d'application est requis."
   },
   "title": "Notifications",
+  "allAlerts": {
+    "label": "Envoyer toutes les alertes ici",
+    "hint": "Désactivé\u00a0: seulement les alertes qu'une route envoie ici."
+  },
   "emptyHint": "Slack, e-mail, webhooks, ntfy et Gotify peuvent recevoir les alertes.",
   "sending": "Envoi",
   "sendTo": "Envoyer à {name}",

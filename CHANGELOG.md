@@ -18,13 +18,21 @@ v1.7.1.
   from the folder you first ran it in, with `LABTETHER_VERSION=v2.0.0`, or run
   `./scripts/upgrade-compose.sh --version v2.0.0`. Both keep your
   `.env.deploy`.
-- **Three small database migrations and no new or removed setting** since
+- **Four small database migrations and no new or removed setting** since
   v1.7.1. Migration 109 lets the database store alert rules for a group and
   health-check rules; migration 110 turns automatic Docker "runs on" links
   the right way round; migration 111 turns any device name with a line break
-  or other control character into one line. None removes your data, and
-  v1.7.1 still runs on the migrated database, so going back to v1.7.1 needs no
+  or other control character into one line; migration 112 adds "Send every
+  alert here" to notification channels. None removes your data, and v1.7.1
+  still runs on the migrated database, so going back to v1.7.1 needs no
   database restore.
+- **Channels start getting alerts.** A notification channel that a person
+  signed in to the console (or the owner) made, and that no alert route
+  names, gets every alert after the upgrade: "Send every alert here" is on for
+  it. In 1.x such channels got no alerts. Channels an API key made, channels
+  older than the audit log's record of who made them, channels a route names
+  and push channels keep what they got; turn on "Send every alert here" for
+  the ones that should get alerts.
 - **From v1.4.0 or older,** read the v1.7.1 upgrade notes below first. They
   still apply.
 - **Saved choices carry over.** Your theme and language stay as they were.
@@ -215,6 +223,15 @@ v1.7.1.
   "No description provided."; the webhook channel's JSON keeps every field and
   adds `devices`. A device name with line breaks or markup cannot break an email
   subject, an ntfy title or a Slack message.
+- Alerts reach the channels made under Settings › Notifications. Each channel
+  has "Send every alert here" (on by default; "Off: only alerts a route sends
+  here."), and each alert reaches a channel once. Turning it on needs the
+  `alerts:write` permission as well as `notifications:write`, the same as
+  making a route, and so does changing where or whether a channel that gets
+  alerts sends them (its settings, or switching it on); a new name does not.
+  Push channels keep their own route. Before, the Hub sent
+  alerts only to channels an alert route names, and the console makes no
+  routes, so a new email or ntfy channel never got an alert.
 - Notifications: a failed send says what the receiver refused, for example
   "Gotify did not accept the app token (HTTP 401)", in Send test and the
   Delivery log, instead of "gotify returned status 401". A webhook, Slack, ntfy
