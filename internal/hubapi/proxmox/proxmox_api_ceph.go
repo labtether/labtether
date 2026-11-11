@@ -44,7 +44,7 @@ func (d *Deps) HandleProxmoxCeph(w http.ResponseWriter, r *http.Request) {
 		}
 		pools, listErr := runtime.client.ListCephPools(ctx)
 		if listErr != nil {
-			writeProxmoxUpstreamError(w, "failed to list ceph pools: ", listErr)
+			writeProxmoxCephError(w, "failed to list ceph pools: ", listErr)
 			return
 		}
 		if pools == nil {
@@ -118,7 +118,7 @@ func (d *Deps) HandleProxmoxCephStatus(w http.ResponseWriter, r *http.Request) {
 
 	status, err := runtime.client.GetCephStatus(ctx)
 	if err != nil {
-		writeProxmoxUpstreamError(w, "failed to fetch ceph status: ", err)
+		writeProxmoxCephError(w, "failed to fetch ceph status: ", err)
 		return
 	}
 

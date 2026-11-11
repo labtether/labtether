@@ -263,7 +263,7 @@ func (c *Client) requestRaw(ctx context.Context, method, path string, values net
 		return nil, err
 	}
 	if resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("proxmox api returned %d: %s", resp.StatusCode, strings.TrimSpace(string(payload)))
+		return nil, newAPIError(resp, payload)
 	}
 	return payload, nil
 }

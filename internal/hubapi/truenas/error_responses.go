@@ -3,6 +3,7 @@ package truenas
 import (
 	"net/http"
 
+	tnconnector "github.com/labtether/labtether/internal/connectors/truenas"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
@@ -17,6 +18,11 @@ func writeTrueNASError(w http.ResponseWriter, status int, clientMessage string, 
 	if status == http.StatusBadGateway && shared.WriteUpstreamUnreachable(w, err, "TrueNAS") {
 		return
 	}
+	// TrueNAS answered "Not authorized": the saved login lacks the role.
+	if status == http.StatusBadGateway && tnconnector.IsNotAuthorized(err) {
+		servicehttp.WriteError(w, http.StatusConflict, shared.NoPermissionMessage("TrueNAS"))
+		return
+	}
 	servicehttp.WriteError(w, status, clientMessage)
 }
 
@@ -27,6 +33,9 @@ func trueNASWarning(clientMessage string, err error) string {
 	// A listing that could not load says why when the system was unreachable.
 	if shared.UpstreamUnreachable(err) {
 		return shared.UpstreamProblemMessage(err, "TrueNAS")
+	}
+	if tnconnector.IsNotAuthorized(err) {
+		return clientMessage + ": TrueNAS refused it for the saved login"
 	}
 	return clientMessage
 }

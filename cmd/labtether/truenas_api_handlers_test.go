@@ -30,6 +30,7 @@ type trueNASRPCRequest struct {
 type trueNASRPCError struct {
 	Code    int
 	Message string
+	Data    map[string]any
 }
 
 // isExpectedTrueNASRPCTestDisconnect recognizes transport shutdown from the
@@ -109,6 +110,7 @@ func newTrueNASRPCServer(t *testing.T, handler func(method string, params []any)
 				"error": map[string]any{
 					"code":    rpcErr.Code,
 					"message": rpcErr.Message,
+					"data":    rpcErr.Data,
 				},
 			}); err != nil {
 				if !isExpectedTrueNASRPCTestDisconnect(err) {

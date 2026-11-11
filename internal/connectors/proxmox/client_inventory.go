@@ -427,15 +427,6 @@ func (c *Client) DeleteStorageContent(ctx context.Context, node, storage, volid 
 	return err
 }
 
-// ListCephPools returns the list of Ceph pools from cluster-level endpoint.
-func (c *Client) ListCephPools(ctx context.Context) ([]map[string]any, error) {
-	var result []map[string]any
-	if err := c.getData(ctx, "/api2/json/cluster/ceph/pools", &result); err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
 // SetCephOSDState sets the in/out state of a Ceph OSD on a node.
 // state must be "in" or "out".
 func (c *Client) SetCephOSDState(ctx context.Context, node string, osdID int, state string) error {
