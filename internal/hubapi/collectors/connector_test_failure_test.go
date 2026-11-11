@@ -36,6 +36,8 @@ func TestConnectorTestFailureGivesAReasonAndNoInternals(t *testing.T) {
 		// Home Assistant answers http by default; the Hub's refusal named only an env variable.
 		{`insecure url scheme "http" requires LABTETHER_ALLOW_INSECURE_TRANSPORT=true`,
 			"The Hub connects to Proxmox over https only. Use an https:// address, or let the Hub use http by setting LABTETHER_ALLOW_INSECURE_TRANSPORT=true."},
+		{`outbound host "192.0.2.10" is not allowlisted`,
+			"The Hub's list of allowed outbound addresses does not include that one. Add it to LABTETHER_OUTBOUND_ALLOWED_HOSTS."},
 		{`outbound private host "192.0.2.10" is not allowed`,
 			"The Hub is set not to connect to private, loopback or link-local addresses like that one."},
 		{`proxmox api returned 500: {"error":"token_secret=` + planted + `"}`,
