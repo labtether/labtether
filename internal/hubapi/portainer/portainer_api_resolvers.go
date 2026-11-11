@@ -83,7 +83,7 @@ func writePortainerUpstreamError(w http.ResponseWriter, err error) {
 	var apiErr *portainerconnector.APIError
 	if errors.As(err, &apiErr) && apiErr.StatusCode >= 400 && apiErr.StatusCode < 500 &&
 		apiErr.StatusCode != http.StatusUnauthorized && apiErr.Reason() != "" {
-		servicehttp.WriteError(w, http.StatusConflict, "Portainer did not do this: "+strings.TrimSuffix(apiErr.Reason(), ".")+".")
+		servicehttp.WriteError(w, http.StatusConflict, "Portainer did not do this: "+portainerRefusalReason(apiErr.Reason()))
 		return
 	}
 	servicehttp.WriteError(w, http.StatusBadGateway, shared.SanitizeUpstreamError(err.Error()))
