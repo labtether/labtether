@@ -131,6 +131,10 @@ v1.7.1.
 - Devices: Test connection over SSH, and the SSH health check, log in when the
   device's ed25519 host key is pinned. They failed with "host key mismatch"
   when the device also has an ECDSA key; the terminal already handled this.
+- Alerts: a rule for a group and a health-check rule can be saved. Both failed
+  with "An internal error occurred." because the database still allowed the
+  old scope name "site" and no health-check kind. Rules stored with "site"
+  become group rules.
 
 - A change to Settings › General › Service discovery defaults now reaches
   connected agents at once. Before, agents got it only when they next
