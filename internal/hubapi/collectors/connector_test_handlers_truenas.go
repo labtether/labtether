@@ -52,7 +52,7 @@ func (d *Deps) HandleTrueNASConnectorTest(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if _, err := securityruntime.ValidateOutboundURL(baseURL); err != nil {
-		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+		writeConnectorTestFailure(w, "TrueNAS", err.Error())
 		return
 	}
 

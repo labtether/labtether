@@ -33,6 +33,9 @@ func TestConnectorTestFailureGivesAReasonAndNoInternals(t *testing.T) {
 			"Proxmox refused the login. Check the user or token name and the secret."},
 		{`proxmox api returned 404: <html><body>nginx</body></html>`,
 			"That address did not answer like Proxmox. Check the address, port and path."},
+		// Home Assistant answers http by default; the Hub's refusal named only an env variable.
+		{`insecure url scheme "http" requires LABTETHER_ALLOW_INSECURE_TRANSPORT=true`,
+			"The Hub connects to Proxmox over https only. Use an https:// address, or let the Hub use http by setting LABTETHER_ALLOW_INSECURE_TRANSPORT=true."},
 		{`outbound private host "192.0.2.10" is not allowed`,
 			"The Hub is set not to connect to private, loopback or link-local addresses like that one."},
 		{`proxmox api returned 500: {"error":"token_secret=` + planted + `"}`,

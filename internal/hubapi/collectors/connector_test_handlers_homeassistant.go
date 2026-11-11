@@ -52,7 +52,7 @@ func (d *Deps) HandleHomeAssistantConnectorTest(w http.ResponseWriter, r *http.R
 		return
 	}
 	if _, err := securityruntime.ValidateOutboundURL(baseURL); err != nil {
-		servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+		writeConnectorTestFailure(w, "Home Assistant", err.Error())
 		return
 	}
 
