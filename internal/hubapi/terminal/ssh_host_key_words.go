@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 	"syscall"
 )
 
@@ -43,6 +44,8 @@ func hostKeyReadFailedMessage(host string, port int, err error) string {
 	var dnsErr *net.DNSError
 	var netErr net.Error
 	switch {
+	case strings.Contains(err.Error(), "is not allowed") || strings.Contains(err.Error(), "not allowlisted"):
+		why = "the Hub's outbound address rules do not allow it"
 	case errors.Is(err, syscall.ECONNREFUSED):
 		why = "it refused the connection"
 	case errors.As(err, &dnsErr):

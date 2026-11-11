@@ -51,6 +51,7 @@ func (d *Deps) HandleSSHHostKeys(w http.ResponseWriter, r *http.Request) {
 	}
 	var req hostKeyRequest
 	if err := d.DecodeJSONBody(w, r, &req); err != nil {
+		servicehttp.WriteJSONBodyError(w, err)
 		return
 	}
 	host, port, bookmark, ok := d.hostKeyTarget(w, r, req)
