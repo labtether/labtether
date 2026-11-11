@@ -170,6 +170,11 @@ v1.7.1.
   too, and `/auth/me` says how the account signs in (`auth_provider`).
 - The two-factor code fields under Account security have names for screen
   readers.
+- A request whose body is not the JSON the route takes is refused with a 400
+  that says why ("The request needs a JSON body.", "count must be a whole
+  number."). Twenty-nine routes, among them SFTP rename and copy, device and
+  bookmark edits, webhooks, schedules, actions, exec, bulk actions and the
+  Map's links and zones, answered an empty 200 and did nothing.
 - Alerts: email, Slack, ntfy, Gotify and push messages name the device the
   alert is for ("Disk nearly full is firing on nas01."), in the title and the
   email subject too. They no longer show the rule's and alert's internal IDs or

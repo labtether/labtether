@@ -140,6 +140,7 @@ func (s *apiServer) handleV2TopologyAutoPlace(w http.ResponseWriter, r *http.Req
 		} `json:"placements"`
 	}
 	if err := decodeJSONBody(w, r, &req); err != nil {
+		apiv2.WriteJSONBodyError(w, err)
 		return
 	}
 
@@ -335,6 +336,7 @@ func (s *apiServer) handleV2TopologyDismiss(w http.ResponseWriter, r *http.Reque
 		AssetID string `json:"asset_id"`
 	}
 	if err := decodeJSONBody(w, r, &req); err != nil {
+		apiv2.WriteJSONBodyError(w, err)
 		return
 	}
 	if req.AssetID == "" {

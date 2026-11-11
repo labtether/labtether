@@ -113,6 +113,7 @@ func (d *ExecDeps) HandleAssetExec(w http.ResponseWriter, r *http.Request, asset
 
 	var req ExecRequest
 	if err := d.DecodeJSONBody(w, r, &req); err != nil {
+		apiv2.WriteJSONBodyError(w, err)
 		return
 	}
 	req.Command = strings.TrimSpace(req.Command)
@@ -279,6 +280,7 @@ func (d *ExecDeps) HandleExecMulti(w http.ResponseWriter, r *http.Request) {
 
 	var req ExecMultiRequest
 	if err := d.DecodeJSONBody(w, r, &req); err != nil {
+		apiv2.WriteJSONBodyError(w, err)
 		return
 	}
 	req.Command = strings.TrimSpace(req.Command)

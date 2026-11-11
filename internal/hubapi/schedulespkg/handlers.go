@@ -134,6 +134,7 @@ func (d *Deps) V2CreateSchedule(w http.ResponseWriter, r *http.Request) {
 
 	var req schedules.CreateRequest
 	if err := shared.DecodeJSONBody(w, r, &req); err != nil {
+		apiv2.WriteJSONBodyError(w, err)
 		return
 	}
 
@@ -302,6 +303,7 @@ func (d *Deps) V2UpdateSchedule(w http.ResponseWriter, r *http.Request, id strin
 		Enabled  *bool     `json:"enabled,omitempty"`
 	}
 	if err := shared.DecodeJSONBody(w, r, &req); err != nil {
+		apiv2.WriteJSONBodyError(w, err)
 		return
 	}
 

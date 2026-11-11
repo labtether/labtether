@@ -68,6 +68,7 @@ func (d *Deps) HandleDeviceRegister(w http.ResponseWriter, r *http.Request) {
 		}
 		req := defaultRegisterDeviceRequest()
 		if err := d.DecodeJSONBody(w, r, &req); err != nil {
+			servicehttp.WriteJSONBodyError(w, err)
 			return
 		}
 		if errMessage := normalizeAndValidateDeviceRegistration(&req); errMessage != "" {
@@ -151,6 +152,7 @@ func (d *Deps) deletePushDevice(w http.ResponseWriter, r *http.Request, userID s
 	if deviceID == "" && allowJSONBody {
 		var req DeregisterDeviceRequest
 		if err := d.DecodeJSONBody(w, r, &req); err != nil {
+			servicehttp.WriteJSONBodyError(w, err)
 			return
 		}
 		deviceID = strings.TrimSpace(req.DeviceID)

@@ -91,6 +91,7 @@ func (d *Deps) HandleV2WebhookCreate(w http.ResponseWriter, r *http.Request) {
 
 	var req webhooks.CreateRequest
 	if err := shared.DecodeJSONBody(w, r, &req); err != nil {
+		apiv2.WriteJSONBodyError(w, err)
 		return
 	}
 
@@ -202,6 +203,7 @@ func (d *Deps) HandleV2WebhookUpdate(w http.ResponseWriter, r *http.Request, id 
 
 	var req webhooks.UpdateRequest
 	if err := shared.DecodeJSONBody(w, r, &req); err != nil {
+		apiv2.WriteJSONBodyError(w, err)
 		return
 	}
 	if req.Name == nil && req.URL == nil && req.Secret == nil && req.Events == nil && req.Enabled == nil {

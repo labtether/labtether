@@ -125,6 +125,7 @@ func (d *Deps) handleCreateFileConnection(w http.ResponseWriter, r *http.Request
 	}
 	var req fileConnectionCreateRequest
 	if err := d.DecodeJSONBody(w, r, &req); err != nil {
+		servicehttp.WriteJSONBodyError(w, err)
 		return
 	}
 	req.Name = strings.TrimSpace(req.Name)
@@ -237,6 +238,7 @@ func (d *Deps) handleUpdateFileConnection(w http.ResponseWriter, r *http.Request
 
 	var req fileConnectionUpdateRequest
 	if err := d.DecodeJSONBody(w, r, &req); err != nil {
+		servicehttp.WriteJSONBodyError(w, err)
 		return
 	}
 	req.Name = strings.TrimSpace(req.Name)

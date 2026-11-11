@@ -153,6 +153,7 @@ func (d *Deps) V2CreateSavedAction(w http.ResponseWriter, r *http.Request) {
 
 	var req savedactions.CreateRequest
 	if err := shared.DecodeJSONBody(w, r, &req); err != nil {
+		apiv2.WriteJSONBodyError(w, err)
 		return
 	}
 

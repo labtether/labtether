@@ -10,6 +10,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"time"
+
+	"github.com/labtether/labtether/internal/servicehttp"
 )
 
 func WriteJSON(w http.ResponseWriter, status int, data any) {
@@ -168,4 +170,15 @@ func markV2Envelope(w http.ResponseWriter) {
 	if recorder, ok := w.(*v2EnvelopeRecorder); ok {
 		recorder.isV2Envelope = true
 	}
+}
+
+// WriteJSONBodyError answers a v2 request whose body could not be read, in
+// words, instead of an empty 200.
+func WriteJSONBodyError(w http.ResponseWriter, err error) {
+	status, message := servicehttp.JSONBodyErrorAnswer(err)
+	code := "validation"
+	if status == http.StatusRequestEntityTooLarge {
+		code = "payload_too_large"
+	}
+	WriteError(w, status, code, message)
 }
