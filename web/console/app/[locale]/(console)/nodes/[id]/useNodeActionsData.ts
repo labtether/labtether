@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import type { ActionRun } from "../../../../console/models";
 
@@ -9,6 +10,7 @@ type UseNodeActionsDataArgs = {
 };
 
 export function useNodeActionsData({ activeTab, nodeId }: UseNodeActionsDataArgs) {
+  const tMenu = useTranslations("devices.page.menu");
   const [actionRuns, setActionRuns] = useState<ActionRun[]>([]);
   const [actionsLoading, setActionsLoading] = useState(false);
   const [expandedActionId, setExpandedActionId] = useState<string | null>(null);
@@ -48,39 +50,32 @@ export function useNodeActionsData({ activeTab, nodeId }: UseNodeActionsDataArgs
     return () => { controller.abort(); };
   }, [activeTab, nodeId]);
 
-  const runNodeQuickAction = useCallback(async (command: string, actionLabel?: string) => {
-    const trimmed = command.trim();
-    if (!nodeId || trimmed === "") {
-      setNodeActionError("Command is required.");
-      return;
-    }
-
+  /** Restart or shut down through the agent (POST /api/v2/assets/{id}/reboot|shutdown, proxied). */
+  const runNodePower = useCallback(async (power: "restart" | "shutdown", name: string) => {
+    if (!nodeId) return;
     setNodeActionRunning(true);
     setNodeActionError(null);
     setNodeActionMessage(null);
+    const failed = power === "restart" ? "restartFailed" : "shutdownFailed";
     try {
-      const response = await fetch("/api/actions/execute", {
+      const response = await fetch(`/api/assets/${encodeURIComponent(nodeId)}/power`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "command",
-          actor_id: "owner",
-          target: nodeId,
-          command: trimmed,
-        }),
+        body: JSON.stringify({ action: power === "restart" ? "reboot" : "shutdown" }),
       });
-      const payload = (await response.json()) as { error?: string; run?: { id?: string } };
+      const payload = (await response.json().catch(() => ({}))) as { message?: string; error?: string };
       if (!response.ok) {
-        throw new Error(payload.error || `action failed (${response.status})`);
+        const reason = (payload.message || payload.error || response.statusText || String(response.status)).trim();
+        setNodeActionError(tMenu(failed, { name, reason }));
+        return;
       }
-      const label = (actionLabel ?? trimmed).trim();
-      setNodeActionMessage(`Queued ${label}${payload.run?.id ? ` (${payload.run.id.slice(0, 8)})` : ""}`);
+      setNodeActionMessage(tMenu(power === "restart" ? "restarting" : "shuttingDown", { name }));
     } catch (err) {
-      setNodeActionError(err instanceof Error ? err.message : "failed to queue node action");
+      setNodeActionError(tMenu(failed, { name, reason: err instanceof Error ? err.message : "" }));
     } finally {
       setNodeActionRunning(false);
     }
-  }, [nodeId]);
+  }, [nodeId, tMenu]);
 
   const runNodeNetworkAction = useCallback(async (
     action: "snapshot" | "apply" | "rollback",
@@ -154,7 +149,7 @@ export function useNodeActionsData({ activeTab, nodeId }: UseNodeActionsDataArgs
     nodeNetworkActionRunning,
     nodeNetworkActionMessage,
     nodeNetworkActionError,
-    runNodeQuickAction,
+    runNodePower,
     runNodeNetworkAction,
   };
 }

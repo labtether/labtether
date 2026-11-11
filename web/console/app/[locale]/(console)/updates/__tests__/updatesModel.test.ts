@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { UpdateRun } from "../../../../console/models";
-import { lastResults, lastRunByPlan, tally } from "../updatesModel";
+import type { Asset, UpdateRun } from "../../../../console/models";
+import { lastResults, lastRunByPlan, pickableDevices, tally } from "../updatesModel";
 
 const run = (id: string, plan: string, status: string, at: string, results: UpdateRun["results"] = []): UpdateRun => ({
   id, plan_id: plan, plan_name: plan, actor_id: "owner", dry_run: false, status, results, created_at: at, updated_at: at,
@@ -31,5 +31,15 @@ describe("update runs per plan", () => {
 
   it("counts results the hub reports in any other state apart from done and failed", () => {
     expect(tally([ok("a"), bad("b"), { target: "c", scope: "os_packages", status: "skipped", summary: "" }])).toEqual({ succeeded: 1, failed: 1, other: 1 });
+  });
+});
+
+// A plan with a Windows or Mac device always failed for it: "os_packages updates require linux".
+describe("devices an update plan can hold", () => {
+  const device = (id: string, platform: string): Asset => ({ id, name: id, type: "host", source: "agent", status: "online", platform, last_seen_at: "" } as Asset);
+
+  it("offers Linux devices and leaves out Windows and Mac ones", () => {
+    const picked = pickableDevices([device("nas01", "linux"), device("win01", "windows"), device("mac01", "darwin"), device("box01", "")], "");
+    expect(picked.map((a) => a.id)).toEqual(["box01", "nas01"]);
   });
 });
