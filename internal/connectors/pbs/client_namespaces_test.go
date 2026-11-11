@@ -66,3 +66,21 @@ func TestListAcrossNamespacesReadsEveryReadableNamespace(t *testing.T) {
 		t.Fatalf("forget query = %q, want the group's namespace", forgot)
 	}
 }
+
+// PBS 4 sends {"version":"4.2","release":"10"}; the Hub showed "10" as the
+// version on the device page and in Test connection.
+func TestVersionDisplay(t *testing.T) {
+	for _, tc := range []struct {
+		v    Version
+		want string
+	}{
+		{Version{Version: "4.2", Release: "10"}, "4.2.10"},
+		{Version{Version: "3.4", Release: "3.4-1"}, "3.4-1"},
+		{Version{Release: "3.2"}, "3.2"},
+		{Version{Version: "4.2"}, "4.2"},
+	} {
+		if got := tc.v.Display(); got != tc.want {
+			t.Errorf("%+v.Display() = %q, want %q", tc.v, got, tc.want)
+		}
+	}
+}

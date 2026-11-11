@@ -96,10 +96,7 @@ func (d *Deps) HandlePBSConnectorTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	release := strings.TrimSpace(version.Release)
-	if release == "" {
-		release = strings.TrimSpace(version.Version)
-	}
+	release := version.Display()
 
 	message := "pbs API reachable"
 	if release != "" {

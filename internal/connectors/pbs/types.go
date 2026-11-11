@@ -11,6 +11,21 @@ type Version struct {
 	RepoID  string `json:"repoid"`
 }
 
+// Display is the version people know. PBS 4 answers {"version":"4.2",
+// "release":"10"} (shown as "4.2.10"); PBS 3 answered a full release such as
+// "3.4-1". The Hub showed the bare release, "10", as the version.
+func (v Version) Display() string {
+	version, release := strings.TrimSpace(v.Version), strings.TrimSpace(v.Release)
+	switch {
+	case release == "":
+		return version
+	case version == "" || strings.ContainsAny(release, ".-"):
+		return release
+	default:
+		return version + "." + release
+	}
+}
+
 type PingResponse struct {
 	Pong bool `json:"pong"`
 }

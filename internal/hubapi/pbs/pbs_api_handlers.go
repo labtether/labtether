@@ -362,7 +362,7 @@ func (d *Deps) LoadPBSAssetDetails(ctx context.Context, asset assets.Asset, runt
 	if err != nil {
 		warnings = append(warnings, pbsWarning("version unavailable", err))
 	} else {
-		response.Version = strings.TrimSpace(version.Release)
+		response.Version = version.Display()
 		if response.Version == "" {
 			response.Version = strings.TrimSpace(version.Version)
 		}
