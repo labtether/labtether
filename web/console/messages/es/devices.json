@@ -225,7 +225,11 @@
       "restartConfirm": "Reiniciar",
       "shutdownTitle": "¿Apagar {name}?",
       "shutdownBody": "{name} sigue apagado hasta que alguien lo encienda.",
-      "shutdownConfirm": "Apagar"
+      "shutdownConfirm": "Apagar",
+      "restarting": "Reiniciando {name}",
+      "shuttingDown": "Apagando {name}",
+      "restartFailed": "No se pudo reiniciar {name}: {reason}",
+      "shutdownFailed": "No se pudo apagar {name}: {reason}"
     },
     "edit": {
       "title": "Editar {name}",
@@ -317,7 +321,8 @@
         "masked": "Enmascarado",
         "indirect": "Indirecto",
         "generated": "Generado",
-        "transient": "Temporal"
+        "transient": "Temporal",
+        "manual": "Manual"
       },
       "start": "Iniciar",
       "restart": "Reiniciar",
@@ -359,7 +364,8 @@
       },
       "kind": {
         "timer": "Temporizador",
-        "launchd": "launchd"
+        "launchd": "launchd",
+        "task": "Programador de tareas"
       },
       "copyCommand": "Copiar comando",
       "copySchedule": "Copiar programación"

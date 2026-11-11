@@ -219,7 +219,7 @@ export function buildCorePanels(ctx: PanelContext): PanelDef[] {
     });
   }
 
-  if (ctx.isLinuxAgentNode) {
+  if (ctx.nodeHasAgent) {
     panels.push({
       id: "disks",
       label: "Disks",
