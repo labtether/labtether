@@ -105,6 +105,7 @@ func (d *Deps) UpdateCollectorStatus(collectorID, status, errMsg string) {
 	if d.HubCollectorStore == nil {
 		return
 	}
+	errMsg = d.collectorStatusMessage(collectorID, status, errMsg)
 	if err := d.HubCollectorStore.UpdateHubCollectorStatus(collectorID, status, errMsg, time.Now().UTC()); err != nil {
 		log.Printf("hub collector: failed to update status for %s: %v", collectorID, err) // #nosec G706 -- Collector IDs are bounded persisted identifiers and the error is local runtime state.
 	}
