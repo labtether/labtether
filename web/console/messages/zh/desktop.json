@@ -137,7 +137,7 @@
     "connectingTo": "正在连接到 {name}",
     "step": {
       "session": "正在启动会话",
-      "ticket": "正在获取流票据",
+      "ticket": "正在获取访问权限",
       "stream": "正在打开流"
     },
     "stepReconnect": "正在重新连接会话",

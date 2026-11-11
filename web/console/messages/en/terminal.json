@@ -266,7 +266,7 @@
   "words": {
     "creatingSession": "Creating session…",
     "reconnectingSession": "Reconnecting session…",
-    "requestingTicket": "Requesting stream ticket…",
+    "requestingTicket": "Getting access…",
     "openingStream": "Opening secure stream…",
     "startingShell": "Starting remote shell…",
     "connected": "Connected",

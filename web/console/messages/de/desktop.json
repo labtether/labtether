@@ -137,7 +137,7 @@
     "connectingTo": "Verbindung zu {name} wird aufgebaut",
     "step": {
       "session": "Sitzung wird gestartet",
-      "ticket": "Stream-Ticket wird geholt",
+      "ticket": "Zugriff wird angefordert",
       "stream": "Stream wird geöffnet"
     },
     "stepReconnect": "Sitzung wird neu verbunden",

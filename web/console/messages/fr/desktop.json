@@ -137,7 +137,7 @@
     "connectingTo": "Connexion à {name}",
     "step": {
       "session": "Démarrage de la session",
-      "ticket": "Obtention du ticket de flux",
+      "ticket": "Demande d’accès",
       "stream": "Ouverture du flux"
     },
     "stepReconnect": "Reconnexion de la session",

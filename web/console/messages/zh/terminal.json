@@ -266,7 +266,7 @@
   "words": {
     "creatingSession": "正在创建会话…",
     "reconnectingSession": "正在重新连接会话…",
-    "requestingTicket": "正在请求流票据…",
+    "requestingTicket": "正在获取访问权限…",
     "openingStream": "正在打开安全流…",
     "startingShell": "正在启动远程 shell…",
     "connected": "已连接",

@@ -137,7 +137,7 @@
     "connectingTo": "Conectando con {name}",
     "step": {
       "session": "Iniciando sesión",
-      "ticket": "Obteniendo ticket de transmisión",
+      "ticket": "Obteniendo acceso",
       "stream": "Abriendo transmisión"
     },
     "stepReconnect": "Reconectando sesión",
