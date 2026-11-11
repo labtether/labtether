@@ -2,6 +2,7 @@ package collectors
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -75,6 +76,11 @@ func (d *Deps) HandleHubCollectors(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			if err == hubcollector.ErrInvalidInterval {
 				servicehttp.WriteError(w, http.StatusBadRequest, "interval_seconds is out of range")
+				return
+			}
+			if errors.Is(err, hubcollector.ErrCollectorExists) {
+				servicehttp.WriteError(w, http.StatusConflict,
+					"This device already has a collector. Edit that one, or add the new one to another device.")
 				return
 			}
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to create hub collector")
