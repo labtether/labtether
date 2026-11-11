@@ -28,6 +28,10 @@ type Deps struct {
 	// on a single asset. Using a function field avoids importing cmd/labtether
 	// (which would be a circular import).
 	ExecOnAsset func(r *http.Request, assetID, command string, timeoutSec int) ExecResult
+	// RunServiceAction asks the device's agent to start, stop, restart,
+	// enable or disable a service, the same way the device's Services page
+	// does, so the bulk route never depends on the shell command allowlist.
+	RunServiceAction func(r *http.Request, assetID, service, action string) ExecResult
 	// EvaluateAssetGuardrails resolves group maintenance constraints before
 	// any target in a bulk mutation is dispatched.
 	EvaluateAssetGuardrails maintenanceguard.EvaluateAssetFunc

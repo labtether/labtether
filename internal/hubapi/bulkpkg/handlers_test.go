@@ -20,10 +20,16 @@ func stubExec(_ *http.Request, assetID, _ string, _ int) ExecResult {
 	return ExecResult{AssetID: assetID, Status: "succeeded", Stdout: "active", ExitCode: new(0)}
 }
 
+// stubServiceAction answers every agent service action as done.
+func stubServiceAction(_ *http.Request, assetID, _, _ string) ExecResult {
+	return ExecResult{AssetID: assetID, Status: "succeeded"}
+}
+
 func newTestDeps() *Deps {
 	return &Deps{
-		AuditStore:  testutil.NewAuditStore(),
-		ExecOnAsset: stubExec,
+		AuditStore:       testutil.NewAuditStore(),
+		ExecOnAsset:      stubExec,
+		RunServiceAction: stubServiceAction,
 	}
 }
 

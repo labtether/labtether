@@ -14,12 +14,12 @@ import (
 )
 
 // validServiceActions is the allowlist of service management actions accepted
-// by HandleV2BulkServiceAction.
+// by HandleV2BulkServiceAction. "status" reads systemctl's answer through the
+// command runner; every other action goes to the agent's service manager.
 var validServiceActions = map[string]bool{
 	"start":   true,
 	"stop":    true,
 	"restart": true,
-	"reload":  true,
 	"enable":  true,
 	"disable": true,
 	"status":  true,
@@ -71,7 +71,7 @@ func (d *Deps) HandleV2BulkServiceAction(w http.ResponseWriter, r *http.Request)
 
 	// Validate action against allowlist.
 	if !validServiceActions[req.Action] {
-		apiv2.WriteError(w, http.StatusBadRequest, "validation", "invalid action: must be start, stop, restart, reload, enable, disable, or status")
+		apiv2.WriteError(w, http.StatusBadRequest, "validation", "invalid action: must be start, stop, restart, enable, disable, or status")
 		return
 	}
 
@@ -84,7 +84,6 @@ func (d *Deps) HandleV2BulkServiceAction(w http.ResponseWriter, r *http.Request)
 	}
 
 	allowed := apiv2.AllowedAssetsFromContext(r.Context())
-	command := "systemctl " + req.Action + " " + req.Service
 
 	seenTargets := make(map[string]struct{}, len(req.Targets))
 	filteredTargets := make([]string, 0, len(req.Targets))
@@ -134,7 +133,7 @@ func (d *Deps) HandleV2BulkServiceAction(w http.ResponseWriter, r *http.Request)
 		go func() {
 			defer wg.Done()
 			for index := range jobs {
-				orderedResults[index] = d.ExecOnAsset(r, filteredTargets[index], command, 30)
+				orderedResults[index] = d.runBulkServiceAction(r, filteredTargets[index], req.Service, req.Action)
 			}
 		}()
 	}
@@ -155,6 +154,9 @@ func (d *Deps) HandleV2BulkServiceAction(w http.ResponseWriter, r *http.Request)
 		if result.Status != "succeeded" {
 			entry["status"] = "failed"
 		}
+		if result.Message != "" {
+			entry["message"] = result.Message
+		}
 		if result.ExitCode != nil {
 			entry["exit_code"] = *result.ExitCode
 		}
@@ -169,4 +171,14 @@ func (d *Deps) HandleV2BulkServiceAction(w http.ResponseWriter, r *http.Request)
 	}, "v2 bulk service action")
 
 	apiv2.WriteJSON(w, http.StatusOK, map[string]any{"results": results})
+}
+
+// runBulkServiceAction sends one target's action to its agent. Only "status"
+// runs as a command, since the agent's service manager has no status action and
+// "systemctl status" is in the default command allowlist.
+func (d *Deps) runBulkServiceAction(r *http.Request, assetID, service, action string) ExecResult {
+	if action == "status" {
+		return d.ExecOnAsset(r, assetID, "systemctl status "+service, 30)
+	}
+	return d.RunServiceAction(r, assetID, service, action)
 }
