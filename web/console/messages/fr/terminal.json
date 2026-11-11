@@ -129,6 +129,8 @@
     "failed": "Connexion impossible",
     "disconnected": "Déconnecté",
     "sessionDisconnected": "Session déconnectée",
+    "deviceDisconnected": "{name} s'est déconnecté",
+    "deviceStillDisconnected": "{name} est toujours déconnecté",
     "connect": "Se connecter",
     "reconnect": "Se reconnecter",
     "retry": "Réessayer",

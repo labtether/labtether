@@ -7,6 +7,7 @@ import type { ITheme } from "@xterm/xterm";
 import type { SessionConnectionState, SessionStreamStatus, SessionType } from "../hooks/useSession";
 import type { XTerminalHandle } from "./XTerminal";
 import { useTerminalWords } from "./terminal/terminalWords";
+import type { TerminalClose } from "./terminal/terminalClose";
 
 /** While the terminal's code loads: a quiet empty frame, no words. */
 const XTerminal = dynamic(() => import("./XTerminal"), {
@@ -37,7 +38,7 @@ export interface SessionPanelProps {
   onRetry: () => void;
   termRef?: RefObject<XTerminalHandle | null>;
   onTerminalConnected?: () => void;
-  onTerminalDisconnected?: (reason?: string) => void;
+  onTerminalDisconnected?: (close: TerminalClose) => void;
   onTerminalError?: (message: string) => void;
   onTerminalStreamReady?: (message?: string) => void;
   onTerminalStreamStatus?: (status: SessionStreamStatus) => void;

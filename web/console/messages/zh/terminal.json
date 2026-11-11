@@ -129,6 +129,8 @@
     "failed": "无法连接",
     "disconnected": "已断开",
     "sessionDisconnected": "会话已断开",
+    "deviceDisconnected": "{name} 已断开",
+    "deviceStillDisconnected": "{name} 仍未连接",
     "connect": "连接",
     "reconnect": "重新连接",
     "retry": "重试",

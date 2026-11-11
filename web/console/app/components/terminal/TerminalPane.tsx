@@ -100,11 +100,11 @@ export default function TerminalPane({
 
   const onStatusRef = useRef(onStatusChange);
   onStatusRef.current = onStatusChange;
-  const { state, progress, error, via } = pane.status;
+  const { state, progress, error, via, ended } = pane.status;
   // The bar above needs the state, not the ticking progress text.
   useEffect(() => {
-    onStatusRef.current?.({ state, progress: "", error, via });
-  }, [state, error, via]);
+    onStatusRef.current?.({ state, progress: "", error, via, ended });
+  }, [state, error, via, ended]);
 
   const reconnectRef = useRef(pane.reconnect);
   reconnectRef.current = pane.reconnect;
@@ -184,7 +184,12 @@ export default function TerminalPane({
   const live = state === "connected";
   const statusWord = live
     ? via === "agent" ? t("connected") : t("connectedVia", { via: t(`via_${via}`) })
-    : state === "connecting" ? t("connecting") : state === "error" ? t("failed") : state === "disconnected" ? t("disconnected") : "";
+    : state === "connecting" ? t("connecting") : state === "error" ? t("failed")
+      : state === "disconnected" ? ended === "shell" ? tWords("sessionEnded") : t("disconnected") : "";
+  // A shell that ended and a device that went away are different things: say which, and name the device.
+  const stoppedText = ended === "shell" ? tWords("sessionEnded")
+    : ended === "device" ? t("deviceDisconnected", { name })
+      : ended === "deviceStillAway" ? t("deviceStillDisconnected", { name }) : t("sessionDisconnected");
 
   return (
     <section
@@ -217,8 +222,9 @@ export default function TerminalPane({
               ref={setTermRef}
               wsUrl={session.wsUrl}
               endedText={tWords("sessionEnded")}
+              deviceGoneText={t("deviceDisconnected", { name })}
               onConnected={pane.handleConnected}
-              onDisconnected={session.handleDisconnected}
+              onDisconnected={pane.handleDisconnected}
               onError={session.handleError}
               onStreamStatus={session.handleStreamStatus}
               onStreamReady={pane.handleStreamReady}
@@ -247,7 +253,7 @@ export default function TerminalPane({
         ) : null}
         {state === "disconnected" ? (
           <div className="tm-state over">
-            <p className="tm-state-t">{t("sessionDisconnected")}</p>
+            <p className="tm-state-t">{stoppedText}</p>
             <button type="button" className="tm-tbtn" onClick={pane.reconnect}>{t("reconnect")}</button>
           </div>
         ) : null}

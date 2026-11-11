@@ -129,6 +129,8 @@
     "failed": "Verbindung fehlgeschlagen",
     "disconnected": "Getrennt",
     "sessionDisconnected": "Sitzung getrennt",
+    "deviceDisconnected": "{name} wurde getrennt",
+    "deviceStillDisconnected": "{name} ist weiterhin getrennt",
     "connect": "Verbinden",
     "reconnect": "Neu verbinden",
     "retry": "Erneut versuchen",

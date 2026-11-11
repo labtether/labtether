@@ -118,7 +118,7 @@ export default function TerminalWorkspaceView({
     ? status.via === "agent" ? t("pane.connected") : t("pane.connectedVia", { via: t(`pane.via_${status.via}`) })
     : status.state === "connecting" ? t("pane.connecting")
       : status.state === "error" ? t("pane.failed")
-        : status.state === "disconnected" ? t("pane.disconnected") : "";
+        : status.state === "disconnected" ? status.ended === "shell" ? t("words.sessionEnded") : t("pane.disconnected") : "";
 
   return (
     <div ref={ws.tabUI.tabMenuHostRef} className={`tm-root${fullscreen ? " full" : ""}`}>
