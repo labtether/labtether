@@ -15,7 +15,7 @@ func postgresAdminResetTables() []string {
 		"hub_collectors",
 		"canonical_reconciliation_results", "canonical_ingest_checkpoints", "canonical_template_bindings",
 		"canonical_capability_sets", "canonical_resource_relationships", "resource_external_refs", "provider_instances",
-		"asset_dependencies", "asset_link_suggestions",
+		"asset_edges", "asset_link_suggestions",
 		"terminal_commands", "terminal_sessions", "terminal_output_buffer", "terminal_persistent_sessions",
 		"session_recordings",
 		"action_run_steps", "action_runs",

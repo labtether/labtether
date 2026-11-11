@@ -113,6 +113,9 @@ func (d *Deps) HandleRuntimeSettings(w http.ResponseWriter, r *http.Request) {
 			"count": len(updatedKeys),
 		}
 		d.appendAuditEventBestEffort(auditEvent, runtimeSettingsUpdateAuditWarning)
+		if d.AgentDefaultsChanged != nil {
+			d.AgentDefaultsChanged(updatedKeys, nil)
+		}
 		if d.ApplyPrometheusRemoteWriteSettings != nil && prometheusRemoteWriteKeysTouched(normalized, nil) {
 			if err := d.ApplyPrometheusRemoteWriteSettings(); err != nil {
 				servicehttp.WriteError(w, http.StatusServiceUnavailable, "settings saved but prometheus remote write runtime reload failed")
@@ -194,6 +197,9 @@ func (d *Deps) HandleRuntimeSettingsReset(w http.ResponseWriter, r *http.Request
 		"count": len(resetKeys),
 	}
 	d.appendAuditEventBestEffort(auditEvent, runtimeSettingsResetAuditWarning)
+	if d.AgentDefaultsChanged != nil {
+		d.AgentDefaultsChanged(nil, resetKeys)
+	}
 	if d.ApplyPrometheusRemoteWriteSettings != nil && prometheusRemoteWriteKeysTouched(nil, keys) {
 		if err := d.ApplyPrometheusRemoteWriteSettings(); err != nil {
 			servicehttp.WriteError(w, http.StatusServiceUnavailable, "settings reset but prometheus remote write runtime reload failed")

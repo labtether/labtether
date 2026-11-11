@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/labtether/labtether/internal/audit"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/retention"
@@ -57,6 +58,7 @@ func (d *Deps) HandleRetentionSettings(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to save retention settings")
 			return
 		}
+		d.auditRetentionChange(r, req, saved)
 
 		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 			"settings": shared.FormatRetentionSettings(saved),
@@ -65,6 +67,33 @@ func (d *Deps) HandleRetentionSettings(w http.ResponseWriter, r *http.Request) {
 	default:
 		servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+// auditRetentionChange records a retention change: shorter windows delete
+// data at the next cleanup, so the Audit log names who changed them.
+func (d *Deps) auditRetentionChange(r *http.Request, req shared.RetentionSettingsRequest, saved retention.Settings) {
+	if d.AppendAuditEventBestEffort == nil {
+		return
+	}
+	windows := shared.FormatRetentionSettings(saved)
+	event := audit.NewEvent("settings.retention.updated")
+	if d.PrincipalActorID != nil {
+		event.ActorID = d.PrincipalActorID(r.Context())
+	}
+	event.Decision = "applied"
+	event.Details = map[string]any{
+		"logs_window":        windows.LogsWindow,
+		"metrics_window":     windows.MetricsWindow,
+		"audit_window":       windows.AuditWindow,
+		"terminal_window":    windows.TerminalWindow,
+		"action_runs_window": windows.ActionRunsWindow,
+		"update_runs_window": windows.UpdateRunsWindow,
+		"recordings_window":  windows.RecordingsWindow,
+	}
+	if preset := strings.TrimSpace(req.Preset); preset != "" {
+		event.Details["preset"] = preset
+	}
+	d.AppendAuditEventBestEffort(event, "api warning: failed to append retention change audit event")
 }
 
 func resolveRetentionSettings(store persistence.RetentionStore, req shared.RetentionSettingsRequest) (retention.Settings, error) {

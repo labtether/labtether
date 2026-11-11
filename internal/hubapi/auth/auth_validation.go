@@ -10,6 +10,9 @@ type LoginRequest struct {
 
 const MinPasswordLength = 8
 
+// maxPasswordLength is the longest password sign-in accepts.
+const maxPasswordLength = 256
+
 // ValidateLoginRequest validates the login credentials.
 func ValidateLoginRequest(req LoginRequest) error {
 	if req.Username == "" {
@@ -24,7 +27,7 @@ func ValidateLoginRequest(req LoginRequest) error {
 	if len(req.Password) < MinPasswordLength {
 		return errors.New("password must be at least 8 characters")
 	}
-	if len(req.Password) > 256 {
+	if len(req.Password) > maxPasswordLength {
 		return errors.New("password exceeds max length 256")
 	}
 	return nil
