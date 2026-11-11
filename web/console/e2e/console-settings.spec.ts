@@ -138,7 +138,8 @@ test("settings page saves and resets runtime overrides", async ({ page }) => {
   await expect(pollInput).toHaveValue("8");
   await expect(pollRow.getByText("Set here", { exact: true })).toBeVisible();
 
-  await pollRow.getByRole("button", { name: "Reset Status Poll Interval", exact: true }).click();
+  // The console names a setting it knows in its own words, not the mock Hub's label.
+  await pollRow.getByRole("button", { name: "Reset Status refresh", exact: true }).click();
   await expect(advanced.getByText("Runtime setting reset to Docker/default baseline.")).toBeVisible();
   await expect(pollInput).toHaveValue("5");
 });
