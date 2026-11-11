@@ -211,6 +211,9 @@ func TestStackOperations(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{}`))
 
+		case r.Method == http.MethodGet && r.URL.Path == "/api/stacks/5":
+			_, _ = w.Write([]byte(`{"Id":5,"GitConfig":{"URL":"https://git.example.invalid/stack.git"}}`))
+
 		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/stacks/5/git/redeploy"):
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{}`))
