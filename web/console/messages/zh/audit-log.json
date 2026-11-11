@@ -105,6 +105,8 @@
     "terminal_bookmark_created": "添加了书签",
     "terminal_bookmark_updated": "修改了书签",
     "terminal_bookmark_deleted": "删除了书签",
+    "terminal_ssh_host_key_trusted": "信任了 SSH 主机密钥",
+    "terminal_ssh_host_key_removed": "移除了已保存的 SSH 主机密钥",
     "auth_user_created": "添加了用户",
     "auth_user_deleted": "移除了用户",
     "auth_user_role_changed": "更改了用户的角色",

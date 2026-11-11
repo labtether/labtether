@@ -105,6 +105,8 @@
     "terminal_bookmark_created": "Lesezeichen hinzugefügt",
     "terminal_bookmark_updated": "Lesezeichen geändert",
     "terminal_bookmark_deleted": "Lesezeichen gelöscht",
+    "terminal_ssh_host_key_trusted": "SSH-Host-Schlüssel vertraut",
+    "terminal_ssh_host_key_removed": "Gespeicherten SSH-Host-Schlüssel entfernt",
     "auth_user_created": "Benutzer hinzugefügt",
     "auth_user_deleted": "Benutzer entfernt",
     "auth_user_role_changed": "Rolle eines Benutzers geändert",

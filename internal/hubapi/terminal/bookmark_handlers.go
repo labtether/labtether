@@ -237,6 +237,9 @@ func (d *Deps) connectBookmark(w http.ResponseWriter, r *http.Request, bookmark 
 	if strings.TrimSpace(bookmark.CredentialProfileID) != "" && !apiv2.RequireScope(w, r, "credentials:use") {
 		return
 	}
+	if !d.bookmarkHostReady(w, r, bookmark) {
+		return
+	}
 
 	// Touch last_used_at.
 	if err := d.TerminalBookmarkStore.TouchBookmarkLastUsed(bookmark.ID, time.Now().UTC()); err != nil {
@@ -301,4 +304,30 @@ func (d *Deps) connectBookmark(w http.ResponseWriter, r *http.Request, bookmark 
 		"stream_ticket":            ticket,
 		"stream_ticket_expires_at": ticketExpiresAt,
 	})
+}
+
+// bookmarkHostReady checks a bookmark to a host (not a device) before it
+// connects: it needs a saved login and a host key the owner trusted (or one
+// in the Hub's known_hosts file), and the rights to start a session there.
+func (d *Deps) bookmarkHostReady(w http.ResponseWriter, r *http.Request, bookmark terminal.Bookmark) bool {
+	host, port, isHost := bookmarkHostTarget(bookmark)
+	if !isHost {
+		return true
+	}
+	if strings.TrimSpace(bookmark.CredentialProfileID) == "" {
+		servicehttp.WriteError(w, http.StatusBadRequest, bookmarkNoLoginMessage)
+		return false
+	}
+	if !d.authorizeTerminalStart(w, r, host) {
+		return false
+	}
+	if needsTrustedHostKey(bookmark.PinnedHostKey()) {
+		servicehttp.WriteJSON(w, http.StatusConflict, map[string]any{
+			"error":                          hostKeyUnknownMessage(host, port),
+			"requires_host_key_confirmation": true,
+			"bookmark_id":                    bookmark.ID,
+		})
+		return false
+	}
+	return true
 }

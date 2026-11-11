@@ -172,6 +172,21 @@
     "errPassword": "请输入密码",
     "errKey": "请粘贴私钥"
   },
+  "hostKey": {
+    "titleUnknown": "检查主机密钥",
+    "titleChanged": "主机密钥已更改",
+    "checking": "正在读取 SSH 主机密钥…",
+    "unknownBody": "LabTether 没有 {target} 的已保存 SSH 主机密钥。该主机显示此密钥。",
+    "fingerprint": "指纹 ({type})",
+    "compare": "在该主机上，<command></command> 会显示它的指纹。",
+    "changedBody": "{target} 的 SSH 主机密钥不是 LabTether 保存的那个。LabTether 没有连接，也没有发送密码或密钥。",
+    "saved": "已保存",
+    "now": "当前 ({type})",
+    "trust": "信任并连接",
+    "remove": "移除已保存的密钥",
+    "cancel": "取消",
+    "failed": "LabTether 无法读取 {target} 的 SSH 主机密钥。"
+  },
   "bookmark": {
     "title": "保存连接",
     "editTitle": "编辑连接",

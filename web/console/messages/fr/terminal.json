@@ -172,6 +172,21 @@
     "errPassword": "Saisissez le mot de passe",
     "errKey": "Collez la clé privée"
   },
+  "hostKey": {
+    "titleUnknown": "Vérifier la clé d'hôte",
+    "titleChanged": "Clé d'hôte modifiée",
+    "checking": "Lecture de la clé d'hôte SSH…",
+    "unknownBody": "LabTether n'a pas de clé d'hôte SSH enregistrée pour {target}. L'hôte présente cette clé.",
+    "fingerprint": "Empreinte ({type})",
+    "compare": "Sur l'hôte, <command></command> affiche son empreinte.",
+    "changedBody": "La clé d'hôte SSH de {target} n'est pas celle que LabTether a enregistrée. LabTether ne s'est pas connecté et n'a envoyé ni mot de passe ni clé.",
+    "saved": "Enregistrée",
+    "now": "Actuelle ({type})",
+    "trust": "Faire confiance et se connecter",
+    "remove": "Retirer la clé enregistrée",
+    "cancel": "Annuler",
+    "failed": "LabTether n'a pas pu lire la clé d'hôte SSH de {target}."
+  },
   "bookmark": {
     "title": "Enregistrer une connexion",
     "editTitle": "Modifier la connexion",

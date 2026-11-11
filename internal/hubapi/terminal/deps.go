@@ -39,6 +39,11 @@ type Deps struct {
 	LogStore                persistence.LogStore
 	AssetStore              persistence.AssetStore
 	GroupStore              persistence.GroupStore
+	// SSHKnownHostStore keeps the host keys trusted through Quick connect.
+	SSHKnownHostStore persistence.SSHKnownHostStore
+	// ProbeSSHHostKey reads a server's SSH host key and stops before any
+	// login. Nil uses fileproto.DiscoverSSHHostKey.
+	ProbeSSHHostKey func(ctx context.Context, host string, port int) (hostKey, fingerprint string, err error)
 
 	// Database pool for direct queries (preferences, snippets, workspace, output buffer).
 	DBPool *pgxpool.Pool
@@ -151,6 +156,7 @@ func RegisterRoutes(handlers map[string]http.HandlerFunc, d *Deps) {
 	handlers["/terminal/commands/recent"] = d.WrapAuth(d.HandleRecentCommands)
 	handlers["/terminal/commands/"] = d.WrapAuth(d.HandleCommandActions)
 	handlers["/terminal/quick-session"] = d.WrapAuth(d.HandleQuickSession)
+	handlers["/terminal/host-keys/"] = d.WrapAuth(d.HandleSSHHostKeys)
 }
 
 // RegisterWSHandlers registers WebSocket message handlers for terminal-related

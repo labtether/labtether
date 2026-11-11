@@ -172,6 +172,21 @@
     "errPassword": "Escribe la contraseña",
     "errKey": "Pega la clave privada"
   },
+  "hostKey": {
+    "titleUnknown": "Comprobar la clave del host",
+    "titleChanged": "La clave del host cambió",
+    "checking": "Leyendo la clave SSH del host…",
+    "unknownBody": "LabTether no tiene una clave SSH guardada para el host {target}. El host muestra esta clave.",
+    "fingerprint": "Huella ({type})",
+    "compare": "En el host, <command></command> muestra su huella.",
+    "changedBody": "La clave SSH del host {target} no es la que LabTether guardó. LabTether no se conectó y no envió ninguna contraseña ni clave.",
+    "saved": "Guardada",
+    "now": "Ahora ({type})",
+    "trust": "Confiar y conectar",
+    "remove": "Quitar clave guardada",
+    "cancel": "Cancelar",
+    "failed": "LabTether no pudo leer la clave SSH del host {target}."
+  },
   "bookmark": {
     "title": "Guardar una conexión",
     "editTitle": "Editar conexión",

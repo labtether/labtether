@@ -172,6 +172,21 @@
     "errPassword": "Geben Sie das Passwort ein",
     "errKey": "Fügen Sie den privaten Schlüssel ein"
   },
+  "hostKey": {
+    "titleUnknown": "Host-Schlüssel prüfen",
+    "titleChanged": "Host-Schlüssel geändert",
+    "checking": "SSH-Host-Schlüssel wird gelesen…",
+    "unknownBody": "LabTether hat keinen gespeicherten SSH-Host-Schlüssel für {target}. Der Host zeigt diesen Schlüssel.",
+    "fingerprint": "Fingerabdruck ({type})",
+    "compare": "Auf dem Host zeigt <command></command> seinen Fingerabdruck.",
+    "changedBody": "Der SSH-Host-Schlüssel von {target} ist nicht der, den LabTether gespeichert hat. LabTether hat sich nicht verbunden und weder Passwort noch Schlüssel gesendet.",
+    "saved": "Gespeichert",
+    "now": "Jetzt ({type})",
+    "trust": "Vertrauen und verbinden",
+    "remove": "Gespeicherten Schlüssel entfernen",
+    "cancel": "Abbrechen",
+    "failed": "LabTether konnte den SSH-Host-Schlüssel von {target} nicht lesen."
+  },
   "bookmark": {
     "title": "Verbindung speichern",
     "editTitle": "Verbindung bearbeiten",

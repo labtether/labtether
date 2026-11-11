@@ -333,7 +333,12 @@ func BuildSSHHostKeyCallback(cfg *terminal.SSHConfig) (ssh.HostKeyCallback, erro
 	}
 	callback, err := shared.BuildSSHHostKeyCallback(strict, expected)
 	if err != nil {
-		return nil, fmt.Errorf("strict host key enabled but no SSH_HOST_KEY provided and no known_hosts file is available")
+		host := "this device"
+		if cfg != nil && strings.TrimSpace(cfg.Host) != "" {
+			host = strings.TrimSpace(cfg.Host)
+		}
+		return nil, fmt.Errorf("the Hub has no SSH host key for %s and no known_hosts file, so it cannot check the host and did not connect; "+
+			"add the host key to the device's SSH entry in its Connect panel", host)
 	}
 	return callback, nil
 }

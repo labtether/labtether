@@ -172,6 +172,21 @@
     "errPassword": "Enter the password",
     "errKey": "Paste the private key"
   },
+  "hostKey": {
+    "titleUnknown": "Check the host key",
+    "titleChanged": "Host key changed",
+    "checking": "Reading the SSH host key…",
+    "unknownBody": "LabTether has no saved SSH host key for {target}. The host shows this key.",
+    "fingerprint": "Fingerprint ({type})",
+    "compare": "On the host, <command></command> shows its fingerprint.",
+    "changedBody": "The SSH host key of {target} is not the one LabTether saved. LabTether did not connect and sent no password or key.",
+    "saved": "Saved",
+    "now": "Now ({type})",
+    "trust": "Trust and connect",
+    "remove": "Remove saved key",
+    "cancel": "Cancel",
+    "failed": "LabTether could not read the SSH host key of {target}."
+  },
   "bookmark": {
     "title": "Save a connection",
     "editTitle": "Edit connection",

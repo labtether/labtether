@@ -26,6 +26,7 @@ import type { Bookmark } from "../../../components/terminal/terminalSessionTypes
 import { useTerminalPageKeys } from "../../../components/terminal/useTerminalPageKeys";
 import { useTerminalSessionLibrary } from "../../../components/terminal/useTerminalSessionLibrary";
 import { useTerminalWorkspace } from "../../../components/terminal/useTerminalWorkspace";
+import { useHostKeyGate } from "../../../components/terminal/useHostKeyGate";
 
 const ScrollbackViewer = dynamic(() => import("../../../components/terminal/ScrollbackViewer"), { ssr: false });
 
@@ -62,6 +63,7 @@ function TerminalWorkspacePageContent() {
   const nameOf = useCallback((id: string) => names.get(id) ?? "", [names]);
   const devices = useMemo(() => assets.map((asset) => ({ id: asset.id, name: asset.name || asset.id })).sort((a, b) => a.name.localeCompare(b.name)), [assets]);
 
+  const hostKeys = useHostKeyGate();
   const { openTarget, setAddressRequest } = ws;
   const { handleCreateTab } = ws.tabUI;
   const onSessionSelect = useCallback((_id: string, _persistentId: string, _ticket: string, newTab: boolean, target?: string) => {
@@ -72,6 +74,8 @@ function TerminalWorkspacePageContent() {
   const onBookmarkConnect = useCallback((_id: string, newTab: boolean, bookmark?: Bookmark) => {
     setSessionsOpen(false);
     if (bookmark?.asset_id) void openTarget(bookmark.asset_id, newTab);
+    // A bookmark with a saved login opens its own saved session (host:port); one without asks for the login.
+    else if (bookmark?.host && bookmark.credential_profile_id) void openTarget(`${bookmark.host}:${bookmark.port ?? 22}`, newTab);
     else if (bookmark?.host) {
       setAddressRequest({ paneKey: null, initial: formatAddress({ user: bookmark.username ?? "", host: bookmark.host, port: bookmark.port ?? 22 }) });
     }
@@ -81,6 +85,7 @@ function TerminalWorkspacePageContent() {
     onSessionSelect,
     onBookmarkConnect,
     onArchivedView: (id, title) => setArchived({ id, title }),
+    hostKeyGate: hostKeys.gate,
   });
 
   const toggleSnippets = useCallback(() => setSnippetsOpen((open) => !open), []);
@@ -137,8 +142,12 @@ function TerminalWorkspacePageContent() {
         open={ws.addressRequest !== null}
         initialAddress={ws.addressRequest?.initial ?? ""}
         onClose={() => setAddressRequest(null)}
-        onConnect={(params) => void ws.connectAddress(params)}
+        onConnect={(params) => {
+          void hostKeys.gate({ host: params.host, port: params.port ?? 22, strict: params.strict_host_key !== false })
+            .then((trusted) => (trusted ? ws.connectAddress(params) : undefined));
+        }}
       />
+      {hostKeys.dialog}
       <SessionsPanel
         open={sessionsOpen}
         onClose={() => setSessionsOpen(false)}

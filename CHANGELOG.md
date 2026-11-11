@@ -18,11 +18,13 @@ v1.7.1.
   from the folder you first ran it in, with `LABTETHER_VERSION=v2.0.0`, or run
   `./scripts/upgrade-compose.sh --version v2.0.0`. Both keep your
   `.env.deploy`.
-- **Two small database migrations and no new or removed setting** since
+- **Three small database migrations and no new or removed setting** since
   v1.7.1. Migration 109 lets the database store alert rules for a group and
   health-check rules; migration 110 turns automatic Docker "runs on" links
-  the right way round. Neither removes your data, and v1.7.1 still runs on the
-  migrated database, so going back to v1.7.1 needs no database restore.
+  the right way round; migration 112 adds a table for the SSH host keys
+  trusted through Quick connect and a bookmark's own host key. None removes
+  your data, and v1.7.1 still runs on the migrated database, so going back to
+  v1.7.1 needs no database restore.
 - **From v1.4.0 or older,** read the v1.7.1 upgrade notes below first. They
   still apply.
 - **Saved choices carry over.** Your theme and language stay as they were.
@@ -427,6 +429,19 @@ v1.7.1.
   as 97 KB.
 - Updates › New plan offers Linux devices only. A plan with a Windows or
   Mac device always failed for it with "os_packages updates require linux".
+- Terminal: Quick connect (`user@host`) and a bookmark to a host that is not
+  a device connect to SSH hosts the Hub has never seen. The first connect
+  shows the host's SSH host key fingerprint with Trust and connect. The Hub
+  saves exactly that key for the host and port (on the bookmark, or in its
+  own list for Quick connect) and checks every later connect strictly
+  against it. A changed key is refused with both fingerprints before any
+  password or key is sent; Remove saved key lets you check the new one.
+  Before, both always failed with "strict host key enabled but no
+  SSH_HOST_KEY provided and no known_hosts file is available". A bookmark to
+  a host with a saved login now logs in with it, and the Audit log names
+  each trusted and removed host key. A device with no agent and no SSH login
+  says so in words instead of "no agent connected and no SSH credentials
+  configured".
 
 ## [1.7.1] - 2026-10-31
 

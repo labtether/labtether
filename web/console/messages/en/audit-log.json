@@ -105,6 +105,8 @@
     "terminal_bookmark_created": "Added a bookmark",
     "terminal_bookmark_updated": "Changed a bookmark",
     "terminal_bookmark_deleted": "Deleted a bookmark",
+    "terminal_ssh_host_key_trusted": "Trusted an SSH host key",
+    "terminal_ssh_host_key_removed": "Removed a saved SSH host key",
     "auth_user_created": "Added a user",
     "auth_user_deleted": "Removed a user",
     "auth_user_role_changed": "Changed a user’s role",
