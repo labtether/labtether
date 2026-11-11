@@ -52,6 +52,9 @@ func (s *apiServer) ensurePBSDeps() *pbspkg.Deps {
 // Forwarding methods.
 
 func (s *apiServer) handlePBSAssets(w http.ResponseWriter, r *http.Request) {
+	if s.refuseIntegrationActionWhenOff(w, r) {
+		return
+	}
 	s.ensurePBSDeps().HandlePBSAssets(w, r)
 }
 
@@ -60,6 +63,9 @@ func (s *apiServer) loadPBSRuntime(collectorID string) (*pbspkg.PBSRuntime, erro
 }
 
 func (s *apiServer) handlePBSTaskRoutes(w http.ResponseWriter, r *http.Request) {
+	if s.refuseIntegrationActionWhenOff(w, r) {
+		return
+	}
 	s.ensurePBSDeps().HandlePBSTaskRoutes(w, r)
 }
 

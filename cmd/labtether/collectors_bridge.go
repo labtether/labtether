@@ -114,6 +114,9 @@ func (s *apiServer) handleListConnectors(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *apiServer) handleConnectorActions(w http.ResponseWriter, r *http.Request) {
+	if s.refuseIntegrationActionWhenOff(w, r) {
+		return
+	}
 	s.ensureCollectorsDeps().HandleConnectorActions(w, r)
 }
 

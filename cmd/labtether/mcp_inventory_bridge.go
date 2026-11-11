@@ -85,6 +85,9 @@ func (s *apiServer) mcpRestartDockerContainer() func(context.Context, string) er
 		return nil
 	}
 	return func(ctx context.Context, containerID string) error {
+		if !s.integrationActionsOn() {
+			return errIntegrationActionsOff
+		}
 		resolved, err := s.mcpResolveDockerContainer("", containerID)
 		if err != nil {
 			return err
