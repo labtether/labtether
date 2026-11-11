@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useFastStatus, useStatusSettings } from "../contexts/StatusContext";
+import { isWindowsDevice } from "../[locale]/(console)/nodes/[id]/tmuxInstallCommand";
 import { useConnectedAgents } from "./useConnectedAgents";
 import { useSessionProgress } from "./session/useSessionProgress";
 import { createSession, requestSpiceTicket, requestStreamTicket } from "./session/sessionRequests";
@@ -73,6 +74,11 @@ export function useSession({
 
   const isFixedTarget = fixedTarget != null;
   const assets = status?.assets ?? [];
+  // connect reads the device list as it is when called, without being rebuilt each time the list refreshes.
+  const assetsRef = useRef(assets);
+  useEffect(() => {
+    assetsRef.current = assets;
+  });
 
   const clearReconnectTimer = useCallback(() => {
     if (reconnectTimerRef.current) {
@@ -165,6 +171,8 @@ export function useSession({
         sessionId = await createSession({
           type, connectTarget, existingSession: sessionRef.current, quickConnectParams,
           defaultActorID, quality, protocol, display, record, directTarget,
+          // A Windows device has no tmux. Asking for a persistent session there was refused on every open.
+          persistent: !isWindowsDevice(assetsRef.current.find((asset) => asset.id === connectTarget)),
         });
 
         if (!isLatestAttempt()) {
