@@ -18,11 +18,13 @@ v1.7.1.
   from the folder you first ran it in, with `LABTETHER_VERSION=v2.0.0`, or run
   `./scripts/upgrade-compose.sh --version v2.0.0`. Both keep your
   `.env.deploy`.
-- **Two small database migrations and no new or removed setting** since
+- **Three small database migrations and no new or removed setting** since
   v1.7.1. Migration 109 lets the database store alert rules for a group and
   health-check rules; migration 110 turns automatic Docker "runs on" links
-  the right way round. Neither removes your data, and v1.7.1 still runs on the
-  migrated database, so going back to v1.7.1 needs no database restore.
+  the right way round; migration 111 turns any device name with a line break
+  or other control character into one line. None removes your data, and
+  v1.7.1 still runs on the migrated database, so going back to v1.7.1 needs no
+  database restore.
 - **From v1.4.0 or older,** read the v1.7.1 upgrade notes below first. They
   still apply.
 - **Saved choices carry over.** Your theme and language stay as they were.
@@ -191,6 +193,12 @@ v1.7.1.
   number."). Twenty-nine routes, among them SFTP rename and copy, device and
   bookmark edits, webhooks, schedules, actions, exec, bulk actions and the
   Map's links and zones, answered an empty 200 and did nothing.
+- Devices: a name with a line break, tab or other control character is
+  refused when a device is added or renamed ("The name can't contain line
+  breaks, tabs or other control characters."). Names from agents and
+  connectors are stored as one line, and migration 111 turns existing ones the
+  same way. Before, such a name was stored as typed and showed as
+  "nas01 Bcc: x@example.com".
 - Alerts: email, Slack, ntfy, Gotify and push messages name the device the
   alert is for ("Disk nearly full is firing on nas01."), in the title and the
   email subject too. They no longer show the rule's and alert's internal IDs or

@@ -106,6 +106,10 @@ func (d *Deps) V2CreateAsset(w http.ResponseWriter, r *http.Request) {
 		apiv2.WriteError(w, http.StatusBadRequest, "validation", "name is required")
 		return
 	}
+	if err := assets.ValidateName(req.Name); err != nil {
+		apiv2.WriteError(w, http.StatusBadRequest, "validation", err.Error())
+		return
+	}
 
 	assetID := idgen.New("asset")
 	metadata := map[string]string{}
@@ -146,6 +150,22 @@ func (d *Deps) V2UpdateAsset(w http.ResponseWriter, r *http.Request, assetID str
 	if req.Name == nil && req.GroupID == nil && req.Tags == nil {
 		apiv2.WriteError(w, http.StatusBadRequest, "validation", "at least one field required")
 		return
+	}
+	if req.Name != nil {
+		name := strings.TrimSpace(*req.Name)
+		if name == "" {
+			apiv2.WriteError(w, http.StatusBadRequest, "validation", "name cannot be empty")
+			return
+		}
+		if err := validateMaxLen("name", name, MaxPlanNameLength); err != nil {
+			apiv2.WriteError(w, http.StatusBadRequest, "validation", err.Error())
+			return
+		}
+		if err := assets.ValidateName(name); err != nil {
+			apiv2.WriteError(w, http.StatusBadRequest, "validation", err.Error())
+			return
+		}
+		req.Name = &name
 	}
 
 	// Read it first: the audit row says what the edit changed.
