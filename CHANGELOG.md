@@ -138,6 +138,8 @@ v1.7.1.
   the console's internal connection, as it does for an uploaded certificate.
 - Changing data retention writes a named Audit log row ("Changed data
   retention").
+- Settings › General › Reset hub works again. It failed every time with
+  "reset failed" because it tried to clear a table that was renamed long ago.
 - The Dashboard's first-run checklist no longer marks "Connect Proxmox,
   TrueNAS or Docker" as done on a Hub with nothing connected.
 - Settings › Agents › Connection names each address and how agents trust it
