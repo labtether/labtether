@@ -76,7 +76,6 @@
     "acknowledge": "Acknowledge",
     "resolve": "Resolve",
     "silence": "Silence",
-    "silenceNoLabels": "This alert's rule has no labels to match",
     "silenceFor": {
       "1h": "For 1 hour",
       "4h": "For 4 hours",

@@ -76,7 +76,6 @@
     "acknowledge": "Bestätigen",
     "resolve": "Auflösen",
     "silence": "Stummschalten",
-    "silenceNoLabels": "Die Regel dieses Alarms hat keine Labels zum Abgleichen",
     "silenceFor": {
       "1h": "Für 1 Stunde",
       "4h": "Für 4 Stunden",

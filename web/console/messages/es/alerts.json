@@ -76,7 +76,6 @@
     "acknowledge": "Reconocer",
     "resolve": "Resolver",
     "silence": "Silenciar",
-    "silenceNoLabels": "La regla de esta alerta no tiene etiquetas que coincidir",
     "silenceFor": {
       "1h": "Durante 1 hora",
       "4h": "Durante 4 horas",

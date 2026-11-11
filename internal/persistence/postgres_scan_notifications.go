@@ -108,6 +108,7 @@ func scanNotificationChannel(row notificationChannelScanner) (notifications.Chan
 		&ch.Type,
 		&config,
 		&ch.Enabled,
+		&ch.AllAlerts,
 		&ch.CreatedAt,
 		&ch.UpdatedAt,
 	); err != nil {
