@@ -225,7 +225,11 @@
       "restartConfirm": "Neu starten",
       "shutdownTitle": "{name} herunterfahren?",
       "shutdownBody": "{name} bleibt aus, bis jemand es startet.",
-      "shutdownConfirm": "Herunterfahren"
+      "shutdownConfirm": "Herunterfahren",
+      "restarting": "{name} wird neu gestartet",
+      "shuttingDown": "{name} wird heruntergefahren",
+      "restartFailed": "{name} konnte nicht neu gestartet werden: {reason}",
+      "shutdownFailed": "{name} konnte nicht heruntergefahren werden: {reason}"
     },
     "edit": {
       "title": "{name} bearbeiten",
@@ -317,7 +321,8 @@
         "masked": "Maskiert",
         "indirect": "Indirekt",
         "generated": "Generiert",
-        "transient": "Temporär"
+        "transient": "Temporär",
+        "manual": "Manuell"
       },
       "start": "Starten",
       "restart": "Neu starten",
@@ -359,7 +364,8 @@
       },
       "kind": {
         "timer": "Timer",
-        "launchd": "launchd"
+        "launchd": "launchd",
+        "task": "Aufgabenplanung"
       },
       "copyCommand": "Befehl kopieren",
       "copySchedule": "Zeitplan kopieren"

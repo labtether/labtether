@@ -8,6 +8,7 @@ export type ProcessInfo = {
   user: string;
   cpu_pct: number;
   mem_pct: number;
+  /** Resident memory in KiB, as ps and every agent report it. */
   mem_rss: number;
   command: string;
 };

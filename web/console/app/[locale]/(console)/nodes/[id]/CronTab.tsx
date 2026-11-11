@@ -5,11 +5,12 @@ import { useEffect, useMemo } from "react";
 import { useCron } from "../../../../hooks/useCron";
 import { copyText, ListState, RefreshButton, RowMenu, shortTime } from "./systemViewParts";
 
-/** "timer", "launchd" or "cron" for the hub's source names; anything else as sent. */
+/** "timer", "launchd", "task" or "cron" for the hub's source names; anything else as sent. */
 function kindOf(source: string): string {
   const normalized = source.trim().toLowerCase();
   if (normalized === "systemd-timer") return "timer";
   if (normalized === "launchd") return "launchd";
+  if (normalized === "task-scheduler") return "task";
   if (normalized === "crontab") return "cron";
   return "";
 }

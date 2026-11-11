@@ -224,7 +224,7 @@ export default function NodeDetailPage() {
           <DeviceHeaderActions
             asset={asset}
             offers={offers}
-            onPower={nodeHasAgent && canWrite ? (command) => void data.runNodeQuickAction(command, command) : undefined}
+            onPower={nodeHasAgent && canWrite ? (power) => void data.runNodePower(power, asset.name) : undefined}
           />
         )}
       />
