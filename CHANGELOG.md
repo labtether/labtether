@@ -147,6 +147,7 @@ v1.7.1.
 - A refused Prometheus remote-write address says why (for example plain
   http), and the API no longer tells the owner to transfer ownership, which
   the Hub cannot do.
+- Console answers no longer carry an `X-Powered-By: Next.js` header.
 - Security › Saved logins: the Add login, Rotate and Delete dialogs, login
   types and the saved login picker are in your language, and their errors
   name what happened without internal words.
