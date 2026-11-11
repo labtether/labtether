@@ -75,8 +75,13 @@ func (d *Deps) HandlePBSAssetSnapshots(ctx context.Context, w http.ResponseWrite
 		storeName = PBSStoreFromAsset(asset)
 	}
 	if storeName == "" {
-		servicehttp.WriteError(w, http.StatusBadRequest, "store query parameter is required for server-kind assets")
-		return
+		// A server device: use its datastore when it has exactly one.
+		stores, _ := d.ResolvePBSStoreList(ctx, asset, runtime)
+		if len(stores) != 1 {
+			servicehttp.WriteError(w, http.StatusBadRequest, "This backup server has more than one datastore. Name one with store, or open the datastore's own device.")
+			return
+		}
+		storeName = stores[0]
 	}
 	filterType := strings.TrimSpace(r.URL.Query().Get("type"))
 	filterID := strings.TrimSpace(r.URL.Query().Get("id"))

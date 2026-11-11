@@ -6,12 +6,15 @@ import (
 	"github.com/labtether/labtether/internal/hubcollector"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
 func TestHandlePBSAssetSnapshots(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api2/json/admin/datastore":
+			_, _ = w.Write([]byte(`{"data":[{"store":"backup"}]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api2/json/admin/datastore/backup/namespace":
 			_, _ = w.Write([]byte(`{"data":[]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api2/json/admin/datastore/backup/snapshots":
@@ -164,8 +167,10 @@ func TestHandlePBSAssetSnapshots(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/pbs/assets/pbs-server-nostore/snapshots", nil)
 		rec := httptest.NewRecorder()
 		sut.handlePBSAssets(rec, req)
-		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("expected 400 for server-kind without store param, got %d body=%s", rec.Code, rec.Body.String())
+		// `labtether pbs snapshots <server>` names the server device; with one
+		// datastore that is the datastore it means (it answered 400 before).
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"store":"backup"`) {
+			t.Fatalf("expected the only datastore's snapshots for a server without store, got %d body=%s", rec.Code, rec.Body.String())
 		}
 	})
 }
