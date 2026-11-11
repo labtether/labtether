@@ -6,6 +6,7 @@ import { useTerminalWorkspaceTabUI, type WorkspaceErrorCode } from "../../hooks/
 import { useWorkspaceTabs, type PanelSizes, type WorkspacePane } from "../../hooks/useWorkspaceTabs";
 import type { XTerminalHandle } from "../XTerminal";
 import type { PaneControls, PaneStatus } from "./TerminalPane";
+import { loadActiveTab, pageOpensByLink, saveActiveTab } from "./terminalActiveTab";
 
 const EMPTY_PANES: WorkspacePane[] = [];
 
@@ -38,6 +39,23 @@ export function useTerminalWorkspace() {
   const paneRefs = useRef<Map<string, XTerminalHandle>>(new Map());
   const paneControls = useRef<Map<string, PaneControls>>(new Map());
   const focusedTermRef = useRef<XTerminalHandle | null>(null);
+
+  // After a reload the hub's first tab is in front. Once the tabs have loaded, go back to the tab that was showing in
+  // this browser if it still exists; from then on remember each tab that comes to the front.
+  const tabRestoredRef = useRef(false);
+  const tabsLoading = workspace.loading;
+  useEffect(() => {
+    if (tabsLoading || tabs.length === 0) return;
+    if (!tabRestoredRef.current) {
+      tabRestoredRef.current = true;
+      const remembered = pageOpensByLink() ? "" : loadActiveTab();
+      if (remembered && remembered !== activeTabId && tabs.some((tab) => tab.id === remembered)) {
+        setActiveTab(remembered);
+        return;
+      }
+    }
+    if (activeTabId) saveActiveTab(activeTabId);
+  }, [activeTabId, setActiveTab, tabs, tabsLoading]);
 
   const tabPanels = useMemo(() => tabs.map((tab) => {
     const layout = tab.layout ?? "single";

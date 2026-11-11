@@ -7,6 +7,9 @@ import { Button } from "../../../../components/ui/Button";
 import { Input } from "../../../../components/ui/Input";
 import { Row, Section, Sheet, SheetFoot } from "./SettingsKit";
 
+/** Presets the Hub ships; their names and hints are translated here, any other keeps the Hub's words. */
+const KNOWN_PRESETS = new Set(["compact", "balanced", "extended"]);
+
 type RetentionSettingsCardProps = {
   retentionSettings: RetentionSettingsPayload["settings"] | null;
   retentionPresets: RetentionSettingsPayload["presets"];
@@ -61,11 +64,11 @@ export function RetentionSettingsCard({
               key={preset.id}
               size="sm"
               variant="ghost"
-              title={preset.description || undefined}
+              title={KNOWN_PRESETS.has(preset.id) ? t(`retention.presetHints.${preset.id}`) : preset.description || undefined}
               disabled={retentionSaving}
               onClick={() => void applyRetentionPreset(preset.id)}
             >
-              {preset.name}
+              {KNOWN_PRESETS.has(preset.id) ? t(`retention.presetNames.${preset.id}`) : preset.name}
             </Button>
           ))}
           <Button size="sm" disabled={retentionSaving || !dirty} loading={retentionSaving} onClick={() => void saveRetentionSettings()}>

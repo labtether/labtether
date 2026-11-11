@@ -71,6 +71,7 @@
 .fx-crumbs { display: flex; align-items: center; min-width: 0; overflow: hidden; white-space: nowrap; font-family: var(--font-mono); font-size: 12px; color: var(--text-3); }
 .fx-crumbs button { flex: none; height: 24px; padding: 0 5px; border-radius: var(--r-2); color: var(--text-2); cursor: pointer; }
 .fx-crumbs button:hover { background: var(--hover); color: var(--text); }
+.fx-above { display: inline-flex; align-items: center; flex: none; height: 24px; padding: 0 5px; color: var(--text-2); }
 .fx-here { padding: 0 5px; font-weight: 500; color: var(--text); overflow: hidden; text-overflow: ellipsis; }
 .fx-sep { flex: none; color: var(--text-3); }
 .fx-pedit { flex: 1; align-self: stretch; min-width: 24px; cursor: text; }

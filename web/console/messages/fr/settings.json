@@ -6,7 +6,15 @@
     "accent": "Accent",
     "autoRefreshLabel": "Actualisation auto",
     "autoRefreshOff": "Off",
-    "language": "Langue"
+    "language": "Langue",
+    "themes": {
+      "dark": "Sombre",
+      "light": "Clair"
+    },
+    "layouts": {
+      "minimal": "Minimal",
+      "diagnostic": "Diagnostic"
+    }
   },
   "about": {
     "heading": "À propos",
@@ -172,7 +180,8 @@
     "verificationFailed": "Échec de la vérification",
     "disableFailed": "Échec de la désactivation de la 2FA",
     "regenFailed": "Échec de la régénération des codes de récupération",
-    "setupFailed": "Échec du démarrage de la configuration 2FA"
+    "setupFailed": "Échec du démarrage de la configuration 2FA",
+    "singleSignOn": "Vous vous connectez par authentification unique. Votre fournisseur d'identité gère votre mot de passe et la connexion à deux facteurs."
   },
   "prometheus": {
     "title": "Prometheus",
@@ -210,7 +219,54 @@
   "discoveryDefaults": {
     "title": "Valeurs par défaut de la découverte de services",
     "saving": "Enregistrement...",
-    "saveDefaults": "Enregistrer"
+    "saveDefaults": "Enregistrer",
+    "fields": {
+      "docker_enabled": {
+        "label": "Conteneurs Docker",
+        "hint": "Trouver des services à partir des ports et des labels des conteneurs."
+      },
+      "proxy_enabled": {
+        "label": "Reverse proxies",
+        "hint": "Lire les services routés depuis les API de proxy ci-dessous."
+      },
+      "proxy_traefik_enabled": {
+        "label": "Routes Traefik"
+      },
+      "proxy_caddy_enabled": {
+        "label": "Routes Caddy",
+        "hint": "Depuis l'API d'administration de Caddy."
+      },
+      "proxy_npm_enabled": {
+        "label": "Routes Nginx Proxy Manager"
+      },
+      "port_scan_enabled": {
+        "label": "Scan local des ports",
+        "hint": "Sonder les ports de l'appareil à la recherche de services web."
+      },
+      "port_scan_include_listening": {
+        "label": "Ajouter les ports en écoute",
+        "hint": "Sonder aussi chaque port TCP sur lequel l'appareil écoute."
+      },
+      "port_scan_ports": {
+        "label": "Ports du scan local",
+        "hint": "Séparés par des virgules. Vide : la liste intégrée."
+      },
+      "lan_scan_enabled": {
+        "label": "Scan du LAN",
+        "hint": "Sonder les plages du LAN à la recherche de services web."
+      },
+      "lan_scan_cidrs": {
+        "label": "Plages du LAN",
+        "hint": "CIDR privés, séparés par des virgules."
+      },
+      "lan_scan_ports": {
+        "label": "Ports du scan LAN",
+        "hint": "Séparés par des virgules. Vide : la liste intégrée."
+      },
+      "lan_scan_max_hosts": {
+        "label": "Hôtes par scan LAN"
+      }
+    }
   },
   "apiKeys": {
     "heading": "Clés d'API",
@@ -259,7 +315,18 @@
     "colAccess": "Accès",
     "scopeCount": "{count, plural, one {# portée} other {# portées}}",
     "createdOn": "Créée {when}",
-    "revokeFailed": "La clé n'a pas été révoquée."
+    "revokeFailed": "La clé n'a pas été révoquée.",
+    "scopeGroups": {
+      "inventory": "Appareils et inventaire",
+      "operations": "Opérations",
+      "monitoring": "Surveillance",
+      "system": "Système",
+      "integrations": "Intégrations",
+      "automation": "Automatisation",
+      "platform": "Hub"
+    },
+    "editNamed": "Modifier {name}",
+    "revokeNamed": "Révoquer {name}"
   },
   "mcp": {
     "heading": "MCP",
@@ -297,6 +364,16 @@
       "terminal_window": "Historique du terminal",
       "action_runs_window": "Exécutions d'actions",
       "update_runs_window": "Exécutions de mises à jour"
+    },
+    "presetNames": {
+      "compact": "Compact",
+      "balanced": "Équilibré",
+      "extended": "Étendu"
+    },
+    "presetHints": {
+      "compact": "Durées les plus courtes : moins de disque.",
+      "balanced": "Les durées par défaut.",
+      "extended": "Durées les plus longues : plus d'historique."
     }
   },
   "advanced": {
@@ -331,5 +408,31 @@
     "loadFailed": "Impossible de charger les paramètres de la base de données.",
     "revealFailed": "Impossible d'afficher le mot de passe."
   },
-  "title": "Paramètres"
+  "title": "Paramètres",
+  "sshKey": {
+    "title": "Clé SSH du hub",
+    "rotateButton": "Renouveler la clé…",
+    "retry": "Réessayer",
+    "type": "Type",
+    "fingerprint": "Empreinte",
+    "publicKey": "Clé publique OpenSSH",
+    "copy": "Copier la clé publique",
+    "copied": "Copiée",
+    "copiedMessage": "Clé publique copiée.",
+    "copyFailed": "Le navigateur n'a pas pu copier la clé. Sélectionnez-la et copiez-la vous-même.",
+    "loadFailed": "La clé SSH du hub n'a pas été chargée.",
+    "rotateFailed": "La clé n'a pas été renouvelée. La clé affichée reste active.",
+    "rotateUnclear": "La clé a été renouvelée, mais la réponse du hub est illisible. Rechargez la page avant de la renouveler de nouveau.",
+    "rotated": "Clé SSH du hub renouvelée.",
+    "rotatedWarning": "Clé renouvelée, avec un avertissement : {warning}",
+    "agentsUpdated": "{updated} agents connectés sur {total} ont la nouvelle clé.",
+    "rotateTitle": "Renouveler la clé SSH du hub",
+    "rotateBody": "Les agents connectés reçoivent la nouvelle clé publique avant qu'elle ne devienne active. En cas d'échec, la clé actuelle reste active. Les appareils hors ligne reçoivent la clé active à leur reconnexion.",
+    "keyType": "Type de clé",
+    "note": "Note (facultatif)",
+    "notePlaceholder": "Pourquoi la clé change",
+    "confirmLabel": "Saisissez {word} pour confirmer",
+    "cancel": "Annuler",
+    "rotateSubmit": "Renouveler la clé"
+  }
 }

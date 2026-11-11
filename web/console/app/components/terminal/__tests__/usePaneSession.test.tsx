@@ -15,6 +15,7 @@ vi.mock("../../../hooks/useSession", () => ({
     disconnect: () => {},
     handleConnected: () => {},
     handleStreamReady: () => {},
+    handleDisconnected: () => {},
     connectionProgress: { message: "", totalElapsedMs: 0 },
     connectedAgentIds: new Set<string>(),
   }),
@@ -26,6 +27,7 @@ vi.mock("next-intl", async () => {
   return { useTranslations: (ns: string) => (key: string) => de[ns.split(".")[1]]?.[key] ?? key };
 });
 
+import { terminalCloseFrom } from "../terminalClose";
 import { usePaneSession, type PaneStatus } from "../usePaneSession";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -92,4 +94,30 @@ it("copies with Ctrl+Shift+C while the shell has focus and leaves the shell its 
   } finally {
     shell.remove();
   }
+});
+
+// Risk: a lost device and a typed `exit` both read "Session disconnected", and Reconnect to a device that was still
+// away showed an empty screen with the same words (seen on a Windows device, 2026-11-11). The Hub sends the reason.
+it("tells a shell that ended from a device that went away", async () => {
+  await act(async () => root.render(<Pane />));
+  const runThenClose = async (event: { code: number; reason: string }) => {
+    fake.state = "connected";
+    await act(async () => pane!.handleStreamReady());
+    fake.state = "idle";
+    await act(async () => pane!.handleDisconnected(terminalCloseFrom(event)));
+  };
+
+  await runThenClose({ code: 1000, reason: "" });
+  expect(status).toMatchObject({ state: "disconnected", ended: "shell" });
+
+  // A session another window took over closes cleanly too; it has not ended.
+  await runThenClose({ code: 1000, reason: "Session attached elsewhere" });
+  expect(status).toMatchObject({ state: "disconnected", ended: "" });
+
+  await runThenClose({ code: 1001, reason: "Agent disconnected" });
+  expect(status).toMatchObject({ state: "disconnected", ended: "device" });
+
+  // Reconnect while the device is away: the new stream closes before a shell starts.
+  await act(async () => pane!.handleDisconnected(terminalCloseFrom({ code: 1006, reason: "" })));
+  expect(status).toMatchObject({ state: "disconnected", ended: "deviceStillAway" });
 });

@@ -9,6 +9,7 @@ import {
 } from "../../../components/RemoteViewerShell";
 import type { ScalingMode } from "../../../components/RemoteViewToolbar";
 import type { SPICEViewerHandle } from "../../../components/SPICEViewer";
+import { macSignInName } from "../../../components/remote-toolbar/signInTarget";
 import type { VNCViewerHandle } from "../../../components/VNCViewer";
 import type {
   WebRTCConnectionStats,
@@ -180,6 +181,7 @@ export default function RemoteViewSession({
     initialCredentials,
     vncPassword: session.vncPassword,
     onCancel: handleDisconnect,
+    macName: macSignInName(session.assets, tab.type === "device" ? tab.target?.assetId : undefined),
   });
 
   // ── Desktop event callbacks ──

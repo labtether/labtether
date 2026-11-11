@@ -4,14 +4,16 @@ import { useTranslations } from "next-intl";
 
 /* ── scope categories (mirrors internal/apikeys/scope.go knownScopeCategories) ── */
 
-export const SCOPE_GROUPS: { label: string; scopes: string[] }[] = [
-  { label: "Assets & Inventory", scopes: ["assets", "groups", "topology", "discovery"] },
-  { label: "Operations", scopes: ["shell", "files", "services", "processes", "cron"] },
-  { label: "Monitoring", scopes: ["alerts", "metrics", "logs", "incidents", "notifications"] },
-  { label: "System", scopes: ["network", "disks", "packages", "users", "settings", "updates"] },
-  { label: "Integrations", scopes: ["docker", "connectors", "homeassistant", "agents", "collectors", "web-services"] },
-  { label: "Automation", scopes: ["webhooks", "schedules", "actions", "events", "bulk"] },
-  { label: "Platform", scopes: ["hub", "failover", "terminal", "search", "dead-letters", "credentials", "audit"] },
+type ScopeGroupID = "inventory" | "operations" | "monitoring" | "system" | "integrations" | "automation" | "platform";
+
+export const SCOPE_GROUPS: { id: ScopeGroupID; scopes: string[] }[] = [
+  { id: "inventory", scopes: ["assets", "groups", "topology", "discovery"] },
+  { id: "operations", scopes: ["shell", "files", "services", "processes", "cron"] },
+  { id: "monitoring", scopes: ["alerts", "metrics", "logs", "incidents", "notifications"] },
+  { id: "system", scopes: ["network", "disks", "packages", "users", "settings", "updates"] },
+  { id: "integrations", scopes: ["docker", "connectors", "homeassistant", "agents", "collectors", "web-services"] },
+  { id: "automation", scopes: ["webhooks", "schedules", "actions", "events", "bulk"] },
+  { id: "platform", scopes: ["hub", "failover", "terminal", "search", "dead-letters", "credentials", "audit"] },
 ];
 
 export const ALL_SCOPES = SCOPE_GROUPS.flatMap((g) => g.scopes);
@@ -46,7 +48,7 @@ export function ScopeSelector({ fullAccess, onFullAccessChange, selectedScopes, 
             const allSelected = group.scopes.every((s) => selectedScopes.has(s));
             const someSelected = group.scopes.some((s) => selectedScopes.has(s));
             return (
-              <div key={group.label} className="space-y-1">
+              <div key={group.id} className="space-y-1">
                 <label className="flex items-center gap-2 text-xs font-medium text-[var(--text)] cursor-pointer select-none">
                   <input
                     type="checkbox"
@@ -57,7 +59,7 @@ export function ScopeSelector({ fullAccess, onFullAccessChange, selectedScopes, 
                     onChange={() => onToggleGroup(group.scopes, allSelected)}
                     className="accent-[var(--text)]"
                   />
-                  {group.label}
+                  {t(`apiKeys.scopeGroups.${group.id}`)}
                 </label>
                 <div className="flex flex-wrap gap-1 pl-5">
                   {group.scopes.map((scope) => (

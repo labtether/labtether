@@ -22,6 +22,7 @@ import {
   startUploadFileXhr,
   type FileEntry,
 } from "../[locale]/(console)/files/fileOpsClient";
+import { sharedRootOf } from "../[locale]/(console)/files/sharedRoot";
 export type { FileEntry } from "../[locale]/(console)/files/fileOpsClient";
 
 export type SortField = "name" | "size" | "mod_time";
@@ -37,18 +38,6 @@ const TEXT_EXTENSIONS = new Set([
   "swift",
 ]);
 const MAX_UPLOAD_SIZE = 512 * 1024 * 1024; // 512MB
-
-async function detectFilesystemRoot(assetId: string, showHidden: boolean): Promise<string | null> {
-  try {
-    const data = await listFiles(assetId, "/", {
-      showHidden,
-      fallbackError: (status) => `Failed (${status})`,
-    });
-    return normalizePath(data.path || "/");
-  } catch {
-    return null;
-  }
-}
 
 export function useFiles() {
   const status = useFastStatus();
@@ -121,11 +110,11 @@ export function useFiles() {
         setCurrentPath(resolvedPath);
         if (requestedPath === "~") {
           setRootPath(resolvedPath);
-          void detectFilesystemRoot(assetId, hidden ?? showHiddenRef.current).then((detectedRoot) => {
-            if (latestListRequestRef.current !== requestID || !detectedRoot) {
+          void sharedRootOf(assetId, resolvedPath, hidden ?? showHiddenRef.current).then((sharedRoot) => {
+            if (latestListRequestRef.current !== requestID) {
               return;
             }
-            setRootPath(detectedRoot);
+            setRootPath(sharedRoot);
           });
         }
       } catch (err) {
@@ -324,6 +313,8 @@ export function useFiles() {
         });
         void listDir(target, currentPath);
       } catch (err) {
+        // The entry can already be gone on the device. Read the folder again so its row goes, then say why.
+        await listDir(target, currentPath);
         setError(err instanceof Error ? err.message : "Delete failed");
       }
     },
@@ -374,6 +365,7 @@ export function useFiles() {
     async (names: string[]) => {
       if (!target) return;
       setError(null);
+      let failure: string | null = null;
       for (const name of names) {
         const fullPath = joinPath(currentPath, name);
         try {
@@ -381,11 +373,13 @@ export function useFiles() {
             fallbackError: (status) => `Delete failed (${status})`,
           });
         } catch (err) {
-          setError(err instanceof Error ? err.message : "Delete failed");
+          failure = err instanceof Error ? err.message : "Delete failed";
           break;
         }
       }
-      void listDir(target, currentPath);
+      // Reading the folder clears the error line, so a failure is shown after it.
+      await listDir(target, currentPath);
+      if (failure) setError(failure);
     },
     [target, currentPath, listDir]
   );

@@ -136,6 +136,7 @@
     "notification_channel_tested": "发送了测试通知",
     "settings_runtime_updated": "更改了设置",
     "settings_runtime_reset": "将设置恢复为默认值",
+    "settings_retention_updated": "更改了数据保留期限",
     "settings_tls_updated": "更改了 HTTPS 证书",
     "settings_tls_cleared": "移除了 HTTPS 证书",
     "hub_tls_renewed": "续订了 Hub 证书",
