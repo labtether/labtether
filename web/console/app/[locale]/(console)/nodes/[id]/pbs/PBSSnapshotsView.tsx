@@ -25,7 +25,9 @@ type Filter = { store: string; type: string; id: string };
 
 const COLS = "24px minmax(0, 1fr) 72px 120px 28px";
 const COLS_S = "24px minmax(0, 1fr) 96px 28px";
-const keyOf = (snap: PBSSnapshotEntry) => `${snap.ns ?? ""}/${snap.backup_type}/${snap.backup_id}/${snap.backup_time}`;
+// A snapshot in a namespace keys with its namespace: the same type/id/time can exist in two.
+const keyOf = (snap: PBSSnapshotEntry) =>
+  `${snap.ns ? `${snap.ns}|` : ""}${snap.backup_type}/${snap.backup_id}/${snap.backup_time}`;
 
 export function PBSSnapshotsView({ assetId, details }: Props) {
   const { t, tk, when } = usePBSWords();

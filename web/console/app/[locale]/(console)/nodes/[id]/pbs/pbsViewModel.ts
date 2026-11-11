@@ -47,7 +47,7 @@ export function coverageRows(groups: PBSGroupsResponse | null): CoverageRow[] {
   if (!groups) return [];
   return groups.datastores.flatMap((datastore) =>
     datastore.groups.map((group) => ({
-      key: `${datastore.store}/${group.ns ?? ""}/${group.backup_type}/${group.backup_id}`,
+      key: `${datastore.store}/${group.ns ? `${group.ns}|` : ""}${group.backup_type}/${group.backup_id}`,
       store: datastore.store,
       ns: group.ns ?? "",
       type: group.backup_type,
