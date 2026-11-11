@@ -1,7 +1,7 @@
 // "Allow http on my network" for Home Assistant is offered only for an http://
-// address on the local network: an RFC 1918, tailnet (100.64.0.0/10) or
-// link-local IPv4 address, a unique-local or link-local IPv6 address, or a
-// name ending in .local or .ts.net. The Hub checks the same rule again and
+// address on the local network: an RFC 1918 or tailnet (100.64.0.0/10) IPv4
+// address, a unique-local IPv6 address (not AWS's fd00:ec2::/32), or a name
+// ending in .local or .ts.net. Link-local addresses are not offered. The Hub checks the same rule again and
 // resolves a name on every connection, so this only decides what to offer.
 
 function ipv4Octets(host: string): number[] | null {
@@ -15,8 +15,7 @@ function isLocalIPv4(octets: number[]): boolean {
   return a === 10
     || (a === 172 && b >= 16 && b <= 31)
     || (a === 192 && b === 168)
-    || (a === 100 && b >= 64 && b <= 127)
-    || (a === 169 && b === 254);
+    || (a === 100 && b >= 64 && b <= 127);
 }
 
 function isLocalIPv6(host: string): boolean {
@@ -24,7 +23,8 @@ function isLocalIPv6(host: string): boolean {
   const first = host.split(":")[0] ?? "";
   if (!/^[0-9a-f]{1,4}$/.test(first)) return false;
   const value = parseInt(first.padStart(4, "0"), 16);
-  return (value & 0xfe00) === 0xfc00 || (value & 0xffc0) === 0xfe80;
+  if (/^fd00:0*ec2(:|$)/.test(host)) return false; // cloud metadata
+  return (value & 0xfe00) === 0xfc00;
 }
 
 export function isLocalNetworkHost(rawHost: string): boolean {

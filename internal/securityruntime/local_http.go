@@ -25,15 +25,38 @@ var ErrNotLocalNetworkAddress = errors.New("plain http is allowed only to an add
 // tailnetPrefix is the CGNAT range Tailscale uses for its IPv4 addresses.
 var tailnetPrefix = sharedAddressSpacePrefix
 
+// Cloud metadata services: never reachable through this path, whatever other
+// rule or setting would allow (fd00:ec2::/32 is inside the unique-local range).
+var localHTTPDeniedPrefixes = []netip.Prefix{
+	netip.MustParsePrefix("169.254.169.254/32"),
+	netip.MustParsePrefix("169.254.170.0/24"),
+	netip.MustParsePrefix("fd00:ec2::/32"),
+}
+
 var localNetworkNameSuffixes = []string{".local", ".ts.net"}
 
-// IsLocalNetworkAddr reports whether addr is a private, tailnet or link-local
-// address. Loopback and every public address are not.
+// IsLocalNetworkAddr reports whether addr is on the local network for this
+// rule: an RFC 1918 or IPv6 unique-local address (fc00::/7, Tailscale's IPv6
+// too), or a tailnet address (100.64.0.0/10). Link-local, loopback, cloud
+// metadata and every public address are not.
 func IsLocalNetworkAddr(addr netip.Addr) bool {
 	addr = addr.Unmap()
-	// IsPrivate: the RFC 1918 ranges and IPv6 unique-local fc00::/7 (Tailscale's
-	// IPv6 too); IsLinkLocalUnicast: 169.254.0.0/16 and fe80::/10.
-	return addr.IsPrivate() || addr.IsLinkLocalUnicast() || tailnetPrefix.Contains(addr)
+	for _, denied := range localHTTPDeniedPrefixes {
+		if denied.Contains(addr) {
+			return false
+		}
+	}
+	return addr.IsPrivate() || tailnetPrefix.Contains(addr)
+}
+
+// localHTTPPrivateAllowed keeps the operator's outbound policy: private
+// addresses stay allowed by default, and an explicit
+// LABTETHER_OUTBOUND_ALLOW_PRIVATE=false turns this path off too.
+func localHTTPPrivateAllowed() bool {
+	if value, present := parseBoolEnvWithPresence(envOutboundAllowPrivate, false); present {
+		return value
+	}
+	return true
 }
 
 // IsLocalNetworkHost reports whether host may be offered plain http: a local
@@ -69,8 +92,12 @@ func ValidateLocalHTTPURL(rawURL string) (*url.URL, error) {
 	if !IsLocalNetworkHost(parsed.Hostname()) {
 		return nil, ErrNotLocalNetworkAddress
 	}
+	if !localHTTPPrivateAllowed() {
+		return nil, fmt.Errorf("outbound private host %q is not allowed", normalizeHostname(parsed.Hostname()))
+	}
 	if parseBoolEnv(envOutboundAllowlistMode, false) {
-		if err := validateOutboundHostWithPolicy(parsed.Hostname(), true, true, false, true); err != nil {
+		// The operator's allowlist, with their private setting; never loopback or link-local.
+		if err := validateOutboundHostWithPolicy(parsed.Hostname(), true, localHTTPPrivateAllowed(), false, false); err != nil {
 			return nil, err
 		}
 	}
@@ -141,6 +168,10 @@ func localNetworkDialer(dialer *net.Dialer, wantHost, origin string) func(contex
 // resolveLocalNetworkHost returns the host's addresses, or an error when any
 // of them is not on the local network.
 func resolveLocalNetworkHost(ctx context.Context, host string) ([]netip.Addr, error) {
+	// The operator's setting is read again on every connection.
+	if !localHTTPPrivateAllowed() {
+		return nil, fmt.Errorf("outbound private host %q is not allowed", normalizeHostname(host))
+	}
 	if addr, err := netip.ParseAddr(normalizeHostname(host)); err == nil {
 		if !IsLocalNetworkAddr(addr) {
 			return nil, ErrNotLocalNetworkAddress
