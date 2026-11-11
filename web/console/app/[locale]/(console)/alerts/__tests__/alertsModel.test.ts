@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AlertInstance, AlertSilence, Incident } from "../../../../console/models";
-import { alertTimeline, groupAlerts, pickAlert, silenceFor } from "../alertsModel";
+import { alertTimeline, groupAlerts, pickAlert, silenceFor, silencesFor } from "../alertsModel";
 import { DEFAULT_FILTER, type DeliveryRecord } from "../alertsPageTypes";
 import { candidateIssues } from "../useAlertIssue";
 
@@ -57,6 +57,21 @@ describe("silenceFor", () => {
     expect(silenceFor(a, [silence({ asset_id: "nas01" }, -10, -60)], NOW)).toBeNull();
     expect(silenceFor(a, [silence({ asset_id: "nas01", team: "lab" }, 10, -10)], NOW)).toBeNull();
     expect(silenceFor(a, [silence({}, 10, -10)], NOW)).toBeNull();
+  });
+});
+
+// Risk: Silence on an alert makes rule_id + asset_id silences (a rule without labels must work), and one device's
+// silence must not show the alert as silenced while it still alerts for another device.
+describe("silenceFor with rule and device silences", () => {
+  const two = alert("y", { rule_id: "r-y", labels: {}, firing_scope: { version: 1, asset_ids: ["nas01", "nas02"] } });
+  it("covers an alert with no labels when its rule is silenced", () => {
+    expect(silenceFor(two, [silence({ rule_id: "r-y" }, 10, -10)], NOW)).not.toBeNull();
+    expect(silenceFor(two, [silence({ rule_id: "r-other" }, 10, -10)], NOW)).toBeNull();
+  });
+  it("covers it only when every device it fired for is silenced", () => {
+    const nas01 = silence({ rule_id: "r-y", asset_id: "nas01" }, 10, -10);
+    expect(silenceFor(two, [nas01], NOW)).toBeNull();
+    expect(silencesFor(two, [nas01, { ...silence({ rule_id: "r-y", asset_id: "nas02" }, 10, -10), id: "s2" }], NOW)).toHaveLength(2);
   });
 });
 
