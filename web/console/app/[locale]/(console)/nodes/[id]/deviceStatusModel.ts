@@ -1,6 +1,6 @@
 // What the device header and Details say about a device: its state as a word and a time, its address and the
 // facts read from metadata. Pure functions, so the rules can be checked without rendering.
-import { assetFreshnessLabel } from "../../../../console/formatters";
+import { deviceFreshnessLabel } from "../../../../console/formatters";
 import type { Asset } from "../../../../console/models";
 import { assetCategory, childParentKey, hostParentKey } from "../../../../console/taxonomy";
 import { resolveAssetPresentationStatus, type AssetPresentationStatus } from "../../../../lib/status";
@@ -18,8 +18,8 @@ function validDate(iso: string | undefined): Date | null {
  * The device's state. An explicit status from the hub (offline, degraded …) wins over a fresh check-in; a stale
  * check-in turns a healthy status into "Not responding" and then "Offline". since: the last check-in, when known.
  */
-export function deviceState(asset: Pick<Asset, "status" | "last_seen_at">): DeviceState {
-  const fresh = assetFreshnessLabel(asset.last_seen_at) as AssetPresentationStatus;
+export function deviceState(asset: Pick<Asset, "status" | "last_seen_at" | "metadata">): DeviceState {
+  const fresh = deviceFreshnessLabel(asset) as AssetPresentationStatus;
   const resolved = resolveAssetPresentationStatus(asset.status ?? "", fresh);
   const since = validDate(asset.last_seen_at);
   if (resolved === "online") return { tone: "ok", word: "online", since: null };

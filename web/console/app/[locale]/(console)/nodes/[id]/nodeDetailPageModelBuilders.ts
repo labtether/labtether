@@ -1,6 +1,6 @@
 "use client";
 
-import { assetFreshnessLabel } from "../../../../console/formatters";
+import { deviceFreshnessLabel } from "../../../../console/formatters";
 import {
   CATEGORIES,
   assetCategory,
@@ -16,7 +16,7 @@ import type { PanelContext, ConnectionBadge } from "./devicePanels";
 const infraPanelSources = new Set(["proxmox", "pbs", "truenas", "docker", "portainer", "homeassistant"]);
 
 export function deriveFreshnessClass(asset: Asset | null): "ok" | "pending" | "bad" {
-  const freshness = asset ? assetFreshnessLabel(asset.last_seen_at) : "unknown";
+  const freshness = asset ? deviceFreshnessLabel(asset) : "unknown";
   if (freshness === "online") {
     return "ok";
   }

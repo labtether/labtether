@@ -43,7 +43,7 @@ func (d *Deps) LoadProxmoxAssetDetails(ctx context.Context, assetID string, targ
 			resp.Version = strings.TrimSpace(release)
 			mu.Unlock()
 		} else {
-			addWarning("version unavailable: " + err.Error())
+			addWarning(proxmoxReadWarning("version", err))
 		}
 		return nil
 	})
@@ -69,7 +69,13 @@ func (d *Deps) LoadProxmoxAssetDetails(ctx context.Context, assetID string, targ
 			addWarning("unsupported proxmox kind: " + resp.Kind)
 		}
 		if configErr != nil {
-			return configErr
+			// A login that may read the guests but not this part keeps the
+			// rest of the page; anything else still fails the request.
+			if !proxmoxReadRefused(configErr) {
+				return configErr
+			}
+			addWarning(proxmoxReadWarning(proxmoxConfigPart(resp.Kind), configErr))
+			return nil
 		}
 		if config != nil {
 			mu.Lock()
@@ -90,7 +96,7 @@ func (d *Deps) LoadProxmoxAssetDetails(ctx context.Context, assetID string, targ
 				snapshots, err = runtime.client.ListLXCSnapshots(gctx, resp.Node, resp.VMID)
 			}
 			if err != nil {
-				addWarning("snapshots unavailable: " + err.Error())
+				addWarning(proxmoxReadWarning("snapshots", err))
 			} else {
 				mu.Lock()
 				resp.Snapshots = SortProxmoxSnapshots(snapshots)
@@ -104,7 +110,7 @@ func (d *Deps) LoadProxmoxAssetDetails(ctx context.Context, assetID string, targ
 	g.Go(func() error {
 		tasks, err := runtime.client.ListClusterTasks(gctx, resp.Node, resp.VMID, 60)
 		if err != nil {
-			addWarning("tasks unavailable: " + err.Error())
+			addWarning(proxmoxReadWarning("tasks", err))
 		} else {
 			mu.Lock()
 			resp.Tasks = FilterAndSortProxmoxTasks(tasks, resp.Node, resp.VMID, 30)
@@ -117,7 +123,7 @@ func (d *Deps) LoadProxmoxAssetDetails(ctx context.Context, assetID string, targ
 	g.Go(func() error {
 		haResources, err := runtime.client.ListHAResources(gctx)
 		if err != nil {
-			addWarning("ha resources unavailable: " + err.Error())
+			addWarning(proxmoxReadWarning("ha resources", err))
 		} else {
 			match, related := SelectProxmoxHA(haResources, target)
 			mu.Lock()
@@ -142,7 +148,7 @@ func (d *Deps) LoadProxmoxAssetDetails(ctx context.Context, assetID string, targ
 				rules, err = runtime.client.GetVMFirewallRules(gctx, resp.Node, resp.VMID, "lxc")
 			}
 			if err != nil {
-				addWarning("firewall rules unavailable: " + err.Error())
+				addWarning(proxmoxReadWarning("firewall rules", err))
 			} else if len(rules) > 0 {
 				mu.Lock()
 				resp.FirewallRules = rules
@@ -156,7 +162,7 @@ func (d *Deps) LoadProxmoxAssetDetails(ctx context.Context, assetID string, targ
 	g.Go(func() error {
 		schedules, err := runtime.client.GetBackupSchedules(gctx)
 		if err != nil {
-			addWarning("backup schedules unavailable: " + err.Error())
+			addWarning(proxmoxReadWarning("backup schedules", err))
 		} else if len(schedules) > 0 {
 			mu.Lock()
 			resp.BackupSchedules = schedules
@@ -198,7 +204,7 @@ func (d *Deps) LoadProxmoxAssetDetails(ctx context.Context, assetID string, targ
 		g.Go(func() error {
 			pools, err := runtime.client.GetNodeZFSPools(gctx, resp.Node)
 			if err != nil {
-				addWarning("zfs pools unavailable: " + err.Error())
+				addWarning(proxmoxReadWarning("zfs pools", err))
 			} else if len(pools) > 0 {
 				mu.Lock()
 				resp.ZFSPools = pools
@@ -213,7 +219,7 @@ func (d *Deps) LoadProxmoxAssetDetails(ctx context.Context, assetID string, targ
 		g.Go(func() error {
 			content, err := runtime.client.GetStorageContent(gctx, resp.Node, target.StorageName)
 			if err != nil {
-				addWarning("storage content unavailable: " + err.Error())
+				addWarning(proxmoxReadWarning("storage content", err))
 			} else if len(content) > 0 {
 				// Sort by content type, then by volid.
 				sort.Slice(content, func(i, j int) bool {

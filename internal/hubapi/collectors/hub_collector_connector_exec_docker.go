@@ -45,6 +45,7 @@ func (d *Deps) ExecuteDockerCollector(ctx context.Context, collector hubcollecto
 			metadata[key] = value
 		}
 		resourceKind, metadata := WithCanonicalResourceMetadata("docker", asset.Type, metadata)
+		metadata = withCollectorInterval(metadata, collector.IntervalSeconds)
 
 		assetType := strings.TrimSpace(asset.Kind)
 		if assetType == "" {

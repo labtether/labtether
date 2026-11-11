@@ -61,8 +61,10 @@ func TestHandlePortainerCapabilitiesReportsExecSupportFromAuthMethod(t *testing.
 		authMethod  string
 		wantCanExec bool
 	}{
-		{name: "defaults api key to no exec", authMethod: "", wantCanExec: false},
+		{name: "api key auth enables exec", authMethod: "api_key", wantCanExec: true},
+		{name: "default auth is api key", authMethod: "", wantCanExec: true},
 		{name: "password auth enables exec", authMethod: "password", wantCanExec: true},
+		{name: "unknown auth has no exec", authMethod: "oauth", wantCanExec: false},
 	}
 
 	for _, tt := range tests {

@@ -101,6 +101,7 @@ func (d *Deps) ProcessAgentHeartbeatInLifecycle(conn *agentmgr.AgentConn, msg ag
 	conn.SetMeta("desktop_capture_backend", strings.TrimSpace(data.Metadata["desktop_capture_backend"]))
 	conn.SetMeta("desktop_vnc_real_desktop_supported", strings.TrimSpace(data.Metadata["desktop_vnc_real_desktop_supported"]))
 	conn.SetMeta("desktop_webrtc_real_desktop_supported", strings.TrimSpace(data.Metadata["desktop_webrtc_real_desktop_supported"]))
+	conn.SetMeta(agentmgr.MetaTerminalReportsTmuxDetach, strings.TrimSpace(data.Metadata[agentmgr.MetaTerminalReportsTmuxDetach]))
 	if reportedVersion := strings.TrimSpace(data.Metadata["agent_version"]); reportedVersion != "" {
 		conn.SetMeta("agent_version", reportedVersion)
 	}

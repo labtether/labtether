@@ -200,6 +200,9 @@ v1.7.1.
   and, on a Mac, ⌘F opens the terminal's Find. Before, the pane's keys worked
   only when the shell did not have focus. Ctrl+A, Ctrl+F and paste stay with
   the shell.
+- Terminal: a session whose shell you ended with `exit` moves from Running
+  sessions to Ended, with its scroll-back. Before, it stayed listed as
+  Detached. This needs the 2.0 agent on the device.
 - Settings › Audit log hides the "API request" rows that repeat each change
   (pick "All requests" to see them) and names the object a row is about when
   the Hub stored its name, instead of its ID.

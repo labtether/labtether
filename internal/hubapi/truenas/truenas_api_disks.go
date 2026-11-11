@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/labtether/labtether/internal/assets"
+	tnconnector "github.com/labtether/labtether/internal/connectors/truenas"
 	"github.com/labtether/labtether/internal/servicehttp"
 )
 
@@ -113,9 +114,15 @@ func (d *Deps) HandleTrueNASDisks(ctx context.Context, w http.ResponseWriter, r 
 			return
 		}
 		allResults := make([]map[string]any, 0, 32)
+		var warnings []string
 		if err := CallTrueNASQueryWithRetries(ctx, runtime.Client, "smart.test.results", &allResults); err != nil {
-			writeTrueNASError(w, http.StatusBadGateway, "failed to query SMART results", err)
-			return
+			// The Disks overview already treats a missing method as no history.
+			if !tnconnector.IsMethodNotFound(err) {
+				writeTrueNASError(w, http.StatusBadGateway, "failed to query SMART results", err)
+				return
+			}
+			allResults = nil
+			warnings = []string{"This TrueNAS keeps no SMART test history."}
 		}
 		// Filter to the requested disk.
 		filtered := make([]map[string]any, 0, len(allResults))
@@ -135,6 +142,7 @@ func (d *Deps) HandleTrueNASDisks(ctx context.Context, w http.ResponseWriter, r 
 			AssetID:   strings.TrimSpace(asset.ID),
 			DiskName:  diskName,
 			Results:   filtered,
+			Warnings:  warnings,
 			FetchedAt: time.Now().UTC().Format(time.RFC3339),
 		})
 	default:

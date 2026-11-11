@@ -25,6 +25,8 @@ const (
 var (
 	ErrCollectorNotFound = errors.New("hub collector not found")
 	ErrInvalidInterval   = errors.New("invalid hub collector interval_seconds")
+	// ErrCollectorExists: a device has at most one collector.
+	ErrCollectorExists = errors.New("hub collector already exists for this asset")
 )
 
 type Collector struct {

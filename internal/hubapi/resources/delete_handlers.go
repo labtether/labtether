@@ -191,28 +191,11 @@ func (d *Deps) deleteAttachedInfraAssets(parent assets.Asset) error {
 
 func (d *Deps) deleteAutoDockerCollectorsForAsset(assetID string) error {
 	trimmedAssetID := strings.TrimSpace(assetID)
-	if trimmedAssetID == "" || d.HubCollectorStore == nil {
-		return nil
-	}
-
-	collectors, err := d.HubCollectorStore.ListHubCollectors(500, false)
+	collectors, err := d.autoDockerCollectorsForAsset(trimmedAssetID)
 	if err != nil {
 		return err
 	}
-
 	for _, collector := range collectors {
-		if !strings.EqualFold(strings.TrimSpace(collector.CollectorType), hubcollector.CollectorTypeDocker) {
-			continue
-		}
-
-		var targetAssetID string
-		if d.CollectorConfigString != nil {
-			targetAssetID = strings.TrimSpace(d.CollectorConfigString(collector.Config, "agent_asset_id"))
-		}
-		if targetAssetID != trimmedAssetID {
-			continue
-		}
-
 		if err := d.HubCollectorStore.DeleteHubCollector(collector.ID); err != nil && !errors.Is(err, hubcollector.ErrCollectorNotFound) {
 			return err
 		}
@@ -227,6 +210,36 @@ func (d *Deps) deleteAutoDockerCollectorsForAsset(assetID string) error {
 	}
 
 	return nil
+}
+
+// autoDockerCollectorsForAsset returns the Docker connections the Hub made by
+// itself for the agent device assetID.
+func (d *Deps) autoDockerCollectorsForAsset(assetID string) ([]hubcollector.Collector, error) {
+	trimmedAssetID := strings.TrimSpace(assetID)
+	if trimmedAssetID == "" || d.HubCollectorStore == nil {
+		return nil, nil
+	}
+
+	collectors, err := d.HubCollectorStore.ListHubCollectors(500, false)
+	if err != nil {
+		return nil, err
+	}
+
+	matched := make([]hubcollector.Collector, 0)
+	for _, collector := range collectors {
+		if !strings.EqualFold(strings.TrimSpace(collector.CollectorType), hubcollector.CollectorTypeDocker) {
+			continue
+		}
+
+		var targetAssetID string
+		if d.CollectorConfigString != nil {
+			targetAssetID = strings.TrimSpace(d.CollectorConfigString(collector.Config, "agent_asset_id"))
+		}
+		if targetAssetID == trimmedAssetID {
+			matched = append(matched, collector)
+		}
+	}
+	return matched, nil
 }
 
 // dockerAssetAttachedToAgent reports whether candidate is a Docker asset

@@ -338,7 +338,7 @@ func (d *Deps) executeAPICollector(ctx context.Context, collector hubcollector.C
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		d.UpdateCollectorStatus(collector.ID, "error", fmt.Sprintf("API returned status %d", resp.StatusCode))
+		d.UpdateCollectorStatus(collector.ID, "error", apiCollectorStatusWords(resp.StatusCode))
 		d.appendCollectorOutputLog(collector.AssetID, "hub-collector-api", "error", output)
 		return
 	}
@@ -397,4 +397,13 @@ func BuildCollectorSSHHostKeyCallback(config map[string]any) (ssh.HostKeyCallbac
 		return nil, false, fmt.Errorf("strict host key enabled but no host_key provided and no known_hosts file is available")
 	}
 	return callback, !strictHostKey && shared.InsecureSSHHostKeysAllowed(), nil
+}
+
+// apiCollectorStatusWords says what the polled page answered, such as
+// "The page answered 404 Not Found.".
+func apiCollectorStatusWords(code int) string {
+	if text := http.StatusText(code); text != "" {
+		return fmt.Sprintf("The page answered %d %s.", code, text)
+	}
+	return fmt.Sprintf("The page answered %d.", code)
 }

@@ -1,7 +1,7 @@
 // What the Terminal can open: the devices and containers the hub knows, how each one is reached, and the lists the
 // picker shows (Recent, All devices, Containers, Offline). Also the address form's parser and the tab strip's labels.
 import type { Asset } from "../../console/models";
-import { assetFreshnessLabel } from "../../console/formatters";
+import { deviceFreshnessLabel } from "../../console/formatters";
 import { childParentKey, hostParentKey, isDeviceTier, isHiddenAsset, isInfraHost } from "../../console/taxonomy";
 
 const CONTAINER_TYPES = new Set(["container", "docker-container", "pod", "deployment", "app", "stack", "compose-stack"]);
@@ -34,7 +34,7 @@ export type TargetLists = {
 };
 
 function stateOf(asset: Asset): TargetState {
-  const fresh = assetFreshnessLabel(asset.last_seen_at);
+  const fresh = deviceFreshnessLabel(asset);
   if (fresh === "online" || fresh === "unresponsive" || fresh === "offline") return fresh;
   return "unknown";
 }
