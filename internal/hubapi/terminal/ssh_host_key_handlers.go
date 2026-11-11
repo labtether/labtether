@@ -135,7 +135,17 @@ func (d *Deps) checkSSHHostKey(w http.ResponseWriter, r *http.Request, req hostK
 	if bookmark != nil {
 		result.BookmarkID = bookmark.ID
 	}
+	d.checkedKeys().remember(d.hostKeyCheckID(r, host, port, bookmark), result.HostKey, time.Now())
 	servicehttp.WriteJSON(w, http.StatusOK, result)
+}
+
+// hostKeyCheckID names one person's check of one host, port and bookmark.
+func (d *Deps) hostKeyCheckID(r *http.Request, host string, port int, bookmark *terminal.Bookmark) string {
+	bookmarkID := ""
+	if bookmark != nil {
+		bookmarkID = bookmark.ID
+	}
+	return checkedHostKeyID(d.PrincipalActorID(r.Context()), terminal.SSHPinTarget(host, port), bookmarkID)
 }
 
 func (d *Deps) trustSSHHostKey(w http.ResponseWriter, r *http.Request, req hostKeyRequest, host string, port int, bookmark *terminal.Bookmark) {
@@ -160,6 +170,10 @@ func (d *Deps) trustSSHHostKey(w http.ResponseWriter, r *http.Request, req hostK
 		// A saved key is replaced only after the person removes it.
 	case knownHostsListsOther(host, port, key):
 		servicehttp.WriteError(w, http.StatusConflict, hostKeyKnownHostsMessage(host, port))
+		return
+	case !d.checkedKeys().take(d.hostKeyCheckID(r, host, port, bookmark), key, time.Now()):
+		// Only a key the host showed to this person's check just now.
+		servicehttp.WriteError(w, http.StatusConflict, hostKeyCheckAgainMessage)
 		return
 	case bookmark != nil:
 		keys, ok := d.TerminalBookmarkStore.(persistence.TerminalBookmarkHostKeyStore)

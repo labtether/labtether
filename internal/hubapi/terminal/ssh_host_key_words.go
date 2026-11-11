@@ -56,8 +56,9 @@ func hostKeyReadFailedMessage(host string, port int, err error) string {
 }
 
 const (
-	bookmarkNoLoginMessage = "This bookmark has no saved login. Edit the bookmark and choose one, or connect with Quick connect."
-	noTerminalRouteMessage = "This device has no connected agent and no SSH login, so the Hub cannot open a terminal on it. " +
+	hostKeyCheckAgainMessage = "Check this host's key again before you trust it."
+	bookmarkNoLoginMessage   = "This bookmark has no saved login. Edit the bookmark and choose one, or connect with Quick connect."
+	noTerminalRouteMessage   = "This device has no connected agent and no SSH login, so the Hub cannot open a terminal on it. " +
 		"Start the agent on the device, or add SSH with a login in the device's Connect panel."
 )
 

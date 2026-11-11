@@ -44,6 +44,9 @@ type Deps struct {
 	// ProbeSSHHostKey reads a server's SSH host key and stops before any
 	// login. Nil uses fileproto.DiscoverSSHHostKey.
 	ProbeSSHHostKey func(ctx context.Context, host string, port int) (hostKey, fingerprint string, err error)
+	// The keys recent checks saw; trust pins only one of them.
+	checkedHostKeysOnce sync.Once
+	checkedHostKeys     *checkedHostKeys
 
 	// Database pool for direct queries (preferences, snippets, workspace, output buffer).
 	DBPool *pgxpool.Pool

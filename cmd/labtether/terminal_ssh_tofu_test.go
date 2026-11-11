@@ -180,6 +180,9 @@ func TestBookmarkToHostPinsSSHHostKeyOnTheBookmark(t *testing.T) {
 	if code, out := tofuCall(t, deps.HandleBookmarkActions, connect, map[string]any{}, auth.RoleOperator); code != http.StatusConflict || out["requires_host_key_confirmation"] != true {
 		t.Fatalf("bookmark connect before trust: %d %v, want 409", code, out)
 	}
+	if _, out := tofuCall(t, deps.HandleSSHHostKeys, "/terminal/host-keys/check", map[string]any{"bookmark_id": bookmark.ID}, auth.RoleOperator); out["status"] != "unknown" || out["bookmark_id"] != bookmark.ID {
+		t.Fatalf("bookmark check: %v", out)
+	}
 	if code, out := tofuCall(t, deps.HandleSSHHostKeys, "/terminal/host-keys/trust", map[string]any{"bookmark_id": bookmark.ID, "host_key": keyA}, auth.RoleOperator); code != http.StatusOK {
 		t.Fatalf("trust for the bookmark: %d %v", code, out)
 	}
@@ -217,5 +220,35 @@ func TestBookmarkToHostPinsSSHHostKeyOnTheBookmark(t *testing.T) {
 	stored.Port = &other
 	if stored.PinnedHostKey() != "" {
 		t.Fatal("a pin must not follow the bookmark to another port")
+	}
+}
+
+// Trust pins only a key the host showed to this person's own check just now,
+// so nobody can pin a key the host never presented.
+func TestSSHHostKeyTrustNeedsTheKeyACheckSaw(t *testing.T) {
+	_, deps, shown := tofuServer(t)
+	keyA, _ := tofuTestKey(t)
+	keyB, _ := tofuTestKey(t)
+	*shown = keyA
+	trust := func(key, actor string) int {
+		raw, _ := json.Marshal(map[string]any{"host": "192.0.2.10", "port": 22, "host_key": key})
+		req := httptest.NewRequest(http.MethodPost, "/terminal/host-keys/trust", bytes.NewReader(raw))
+		req = req.WithContext(contextWithPrincipal(req.Context(), actor, auth.RoleOperator))
+		rec := httptest.NewRecorder()
+		deps.HandleSSHHostKeys(rec, req)
+		return rec.Code
+	}
+	if code := trust(keyA, "usr-tofu"); code != http.StatusConflict {
+		t.Fatalf("trust with no check first: %d, want 409", code)
+	}
+	tofuCall(t, deps.HandleSSHHostKeys, "/terminal/host-keys/check", map[string]any{"host": "192.0.2.10", "port": 22}, auth.RoleOperator)
+	if code := trust(keyB, "usr-tofu"); code != http.StatusConflict {
+		t.Fatalf("trust with a key the host never showed: %d, want 409", code)
+	}
+	if code := trust(keyA, "usr-other"); code != http.StatusConflict {
+		t.Fatalf("trust with another person's check: %d, want 409", code)
+	}
+	if code := trust(keyA, "usr-tofu"); code != http.StatusOK {
+		t.Fatalf("trust right after the check: %d, want 200", code)
 	}
 }
