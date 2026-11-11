@@ -385,11 +385,11 @@
       "routing": {
         "api_base_url": {
           "label": "Dirección de la API",
-          "description": "Donde el servidor de la consola accede a la API del hub."
+          "description": "Dirección con la que el servidor de la consola accede a la API del hub."
         },
         "agent_base_url": {
           "label": "Dirección del agente",
-          "description": "Donde el servidor de la consola accede a un agente de Linux."
+          "description": "Dirección con la que el servidor de la consola accede a un agente de Linux."
         }
       },
       "worker": {
@@ -511,7 +511,7 @@
         },
         "process_metrics_top_n": {
           "label": "Procesos por dispositivo",
-          "description": "Los procesos más activos que se guardan de cada dispositivo."
+          "description": "Los procesos más activos que se guardan por dispositivo."
         }
       }
     }

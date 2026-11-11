@@ -362,11 +362,11 @@
         },
         "default_telemetry_window": {
           "label": "Diagrammzeitraum",
-          "description": "Der Zeitraum, mit dem Diagramme öffnen."
+          "description": "Der Zeitraum, mit dem Diagramme geöffnet werden."
         },
         "default_log_window": {
           "label": "Protokollzeitraum",
-          "description": "Der Zeitraum, mit dem die Seite Protokolle öffnet."
+          "description": "Der Zeitraum, mit dem die Seite Protokolle geöffnet wird."
         },
         "log_query_limit": {
           "label": "Protokollzeilen pro Abfrage"
