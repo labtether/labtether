@@ -83,7 +83,7 @@ func (s *apiServer) buildHTTPHandlers(
 		"/api/v1/services/web/manual":                s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", s.handleWebServiceManual)),
 		"/api/v1/services/web/manual/":               s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", s.handleWebServiceManualActions)),
 		"/api/v1/services/web/overrides":             s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", s.handleWebServiceOverrides)),
-		"/api/v1/services/web/icon-library":          s.withAuth(requireScope("web-services:read", s.handleWebServiceIconLibrary)),
+		"/api/v1/services/web/icon-library":          s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", s.handleWebServiceIconLibrary)),
 		"/api/v1/services/web/alt-urls/":             s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", s.handleWebServiceAltURLs)),
 		"/api/v1/services/web/never-group-rules":     s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", s.handleWebServiceNeverGroupRules)),
 		"/api/v1/services/web/grouping-settings":     s.withAuth(requireReadWriteScopes("web-services:read", "web-services:write", s.handleWebServiceGroupingSettings)),

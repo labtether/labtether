@@ -119,5 +119,6 @@ func postgresSchemaMigrations() []schemaMigration {
 		schemaMigrationPushRelayTransport(),
 		schemaMigrationAssetHubSSHKeySettings(),
 		schemaMigrationCommandExitCodes(),
+		schemaMigrationAlertRuleKindAndScopeChecks(),
 	}
 }

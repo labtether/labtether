@@ -128,6 +128,14 @@ v1.7.1.
 
 ### Fixed
 
+- Devices: Test connection over SSH, and the SSH health check, log in when the
+  device's ed25519 host key is pinned. They failed with "host key mismatch"
+  when the device also has an ECDSA key; the terminal already handled this.
+- Alerts: a rule for a group and a health-check rule can be saved. Both failed
+  with "An internal error occurred." because the database still allowed the
+  old scope name "site" and no health-check kind. Rules stored with "site"
+  become group rules.
+
 - A change to Settings › General › Service discovery defaults now reaches
   connected agents at once. Before, agents got it only when they next
   connected, and after a reset they kept the old value.
@@ -162,6 +170,15 @@ v1.7.1.
   too, and `/auth/me` says how the account signs in (`auth_provider`).
 - The two-factor code fields under Account security have names for screen
   readers.
+- Alerts: email, Slack, ntfy, Gotify and push messages name the device the
+  alert is for ("Disk nearly full is firing on nas01."), in the title and the
+  email subject too. They no longer show the rule's and alert's internal IDs or
+  "No description provided."; the webhook channel's JSON keeps every field and
+  adds `devices`. A device name with line breaks or markup cannot break an email
+  subject, an ntfy title or a Slack message.
+- Services: adding, renaming or removing an icon in the icon library needs
+  `web-services:write`. A viewer or a read-only API key could change it.
+
 - Security › Saved logins: the Add login, Rotate and Delete dialogs, login
   types and the saved login picker are in your language, and their errors
   name what happened without internal words.

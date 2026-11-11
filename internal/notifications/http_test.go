@@ -30,7 +30,7 @@ func TestSlackAdapterPostsExpectedLocalWebhookPayload(t *testing.T) {
 		"webhook_url": server.URL,
 	}, map[string]any{
 		"title": "Critical alert",
-		"text":  "Disk usage exceeded threshold",
+		"text":  "Disk usage exceeded threshold on <!channel> & co",
 	})
 	if err != nil {
 		t.Fatalf("send Slack webhook to local sink: %v", err)
@@ -38,12 +38,17 @@ func TestSlackAdapterPostsExpectedLocalWebhookPayload(t *testing.T) {
 	if method != http.MethodPost || contentType != "application/json" {
 		t.Fatalf("Slack request = %s %q, want POST application/json", method, contentType)
 	}
-	if payload["text"] != "Critical alert Disk usage exceeded threshold" {
+	// mrkdwn reads <, > and & as markup; a name from an agent must not ping the channel.
+	if payload["text"] != "Critical alert Disk usage exceeded threshold on &lt;!channel&gt; &amp; co" {
 		t.Fatalf("Slack fallback text = %v", payload["text"])
 	}
 	blocks, ok := payload["blocks"].([]any)
 	if !ok || len(blocks) != 2 {
 		t.Fatalf("Slack blocks = %#v, want header and section", payload["blocks"])
+	}
+	section, _ := blocks[1].(map[string]any)["text"].(map[string]any)
+	if section["text"] != "Disk usage exceeded threshold on &lt;!channel&gt; &amp; co" {
+		t.Fatalf("Slack section text = %v", section["text"])
 	}
 }
 
