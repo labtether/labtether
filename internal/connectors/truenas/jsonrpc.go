@@ -104,10 +104,26 @@ type rpcResponse struct {
 }
 
 // rpcErrorBody is the "error" object inside a JSON-RPC 2.0 response.
+// TrueNAS puts its own words and errno name in "data".
 type rpcErrorBody struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 	Reason  string `json:"reason,omitempty"`
+	Data    *struct {
+		Errname string `json:"errname"`
+		Reason  string `json:"reason"`
+	} `json:"data,omitempty"`
+}
+
+func (b *rpcErrorBody) rpcError() *RPCError {
+	out := &RPCError{Code: b.Code, Message: b.Message, Reason: b.Reason}
+	if b.Data != nil {
+		out.Errname = strings.TrimSpace(b.Data.Errname)
+		if strings.TrimSpace(out.Reason) == "" {
+			out.Reason = b.Data.Reason
+		}
+	}
+	return out
 }
 
 // RPCError is returned by Call when the TrueNAS server responds with a
@@ -116,6 +132,8 @@ type RPCError struct {
 	Code    int
 	Message string
 	Reason  string
+	// Errname is TrueNAS's errno name, such as EACCES, when it gave one.
+	Errname string
 }
 
 func (e *RPCError) Error() string {
@@ -148,12 +166,24 @@ func IsMethodNotFound(err error) bool {
 // IsMethodCallError reports whether err is an RPCError with code -32001
 // (middleware method call error). This commonly indicates argument shape
 // mismatches across TrueNAS versions.
+// A refusal for the saved login is not a shape mismatch, so it is not one.
 func IsMethodCallError(err error) bool {
-	if err == nil {
+	if err == nil || IsNotAuthorized(err) {
 		return false
 	}
 	var e *RPCError
 	return errors.As(err, &e) && e.Code == -32001
+}
+
+// IsNotAuthorized reports whether TrueNAS refused the call for the saved
+// login (its "Not authorized", errno EACCES).
+func IsNotAuthorized(err error) bool {
+	var e *RPCError
+	if !errors.As(err, &e) {
+		return false
+	}
+	return strings.EqualFold(e.Errname, "EACCES") ||
+		strings.Contains(strings.ToLower(e.Reason+" "+e.Message), "not authorized")
 }
 
 // Call performs a single JSON-RPC 2.0 method call against TrueNAS.
@@ -215,7 +245,7 @@ func (c *Client) Call(ctx context.Context, method string, params []any, dest any
 		return fmt.Errorf("truenas ws auth: response id mismatch (want %d, got %d)", authID, authResp.ID)
 	}
 	if authResp.Error != nil {
-		return &RPCError{Code: authResp.Error.Code, Message: authResp.Error.Message, Reason: authResp.Error.Reason}
+		return authResp.Error.rpcError()
 	}
 
 	// Verify that the auth response signals success (result == true).
@@ -250,7 +280,7 @@ func (c *Client) Call(ctx context.Context, method string, params []any, dest any
 		return fmt.Errorf("truenas ws call (%s): response id mismatch (want %d, got %d)", method, callID, callResp.ID)
 	}
 	if callResp.Error != nil {
-		return &RPCError{Code: callResp.Error.Code, Message: callResp.Error.Message, Reason: callResp.Error.Reason}
+		return callResp.Error.rpcError()
 	}
 
 	// Step 3: unmarshal result into dest when a destination is provided.
@@ -330,7 +360,7 @@ func (c *Client) Subscribe(ctx context.Context, collection string, handler func(
 		return fmt.Errorf("truenas ws auth: response id mismatch (want %d, got %d)", authID, authResp.ID)
 	}
 	if authResp.Error != nil {
-		return &RPCError{Code: authResp.Error.Code, Message: authResp.Error.Message, Reason: authResp.Error.Reason}
+		return authResp.Error.rpcError()
 	}
 
 	var authOK bool
@@ -361,7 +391,7 @@ func (c *Client) Subscribe(ctx context.Context, collection string, handler func(
 		return fmt.Errorf("truenas ws subscribe (%s): response id mismatch (want %d, got %d)", collection, subscribeID, subscribeResp.ID)
 	}
 	if subscribeResp.Error != nil {
-		return &RPCError{Code: subscribeResp.Error.Code, Message: subscribeResp.Error.Message, Reason: subscribeResp.Error.Reason}
+		return subscribeResp.Error.rpcError()
 	}
 	subscriptionID := parseSubscriptionID(subscribeResp.Result)
 
