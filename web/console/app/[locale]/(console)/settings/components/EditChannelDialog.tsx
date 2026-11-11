@@ -15,6 +15,7 @@ import {
   type NotificationChannelType,
   type SMTPTLSMode,
 } from "./notificationChannelForm";
+import { AllAlertsSwitch } from "./AllAlertsSwitch";
 import { SettingsDialog } from "./SettingsKit";
 
 type EditChannelDialogProps = {
@@ -41,6 +42,7 @@ export function EditChannelDialog({ channel, allowInsecureSMTP, onClose, onConfi
   const [error, setError] = useState("");
   const [insecureAcknowledgement, setInsecureAcknowledgement] = useState("");
   const [saving, setSaving] = useState(false);
+  const [allAlerts, setAllAlerts] = useState(false);
 
   useEffect(() => {
     if (!channel) {
@@ -48,6 +50,7 @@ export function EditChannelDialog({ channel, allowInsecureSMTP, onClose, onConfi
       return;
     }
     setName(channel.name);
+    setAllAlerts(channel.all_alerts === true);
     setConfig(channelConfigForForm(channel.type as NotificationChannelType, channel.config));
     setInsecureAcknowledgement("");
     setError("");
@@ -94,7 +97,8 @@ export function EditChannelDialog({ channel, allowInsecureSMTP, onClose, onConfi
         allowInsecureSMTP,
         insecureAcknowledgement,
       });
-      await onConfirm(channel.id, { name: name.trim(), config: cleanConfig });
+      const pushChannel = channel.type === "apns";
+      await onConfirm(channel.id, { name: name.trim(), config: cleanConfig, ...(pushChannel ? {} : { all_alerts: allAlerts }) });
       setSaving(false);
       onClose();
     } catch (err) {
@@ -222,6 +226,7 @@ export function EditChannelDialog({ channel, allowInsecureSMTP, onClose, onConfi
         )}
       </div>
 
+      {channel.type !== "apns" ? <AllAlertsSwitch checked={allAlerts} onChange={setAllAlerts} disabled={saving} /> : null}
       {error ? <p role="alert" className="st-msg bad">{error}</p> : null}
       <div className="st-dlg-acts">
         <Button variant="secondary" onClick={handleClose} disabled={saving}>{t("cancel")}</Button>

@@ -37,6 +37,7 @@ func (s *notificationSecurityStore) CreateNotificationChannel(req notifications.
 		Type:      req.Type,
 		Config:    deepCloneNotificationMap(req.Config),
 		Enabled:   enabled,
+		AllAlerts: req.AllAlerts != nil && *req.AllAlerts,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -85,6 +86,9 @@ func (s *notificationSecurityStore) UpdateNotificationChannel(id string, req not
 	}
 	if req.Enabled != nil {
 		channel.Enabled = *req.Enabled
+	}
+	if req.AllAlerts != nil {
+		channel.AllAlerts = *req.AllAlerts
 	}
 	channel.UpdatedAt = time.Now().UTC()
 	s.channels[id] = channel

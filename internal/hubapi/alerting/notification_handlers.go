@@ -99,6 +99,9 @@ func (d *Deps) HandleNotificationChannels(w http.ResponseWriter, r *http.Request
 			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		if req.AllAlerts != nil && *req.AllAlerts && !allowAllAlertsOn(w, r, req.Type) {
+			return
+		}
 		ch, err := d.createSecureNotificationChannel(req)
 		if err != nil {
 			var validationErr *notificationChannelValidationError
@@ -281,6 +284,20 @@ func (d *Deps) HandleNotificationChannelActions(w http.ResponseWriter, r *http.R
 		if err := ValidateUpdateChannelRequest(req); err != nil {
 			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 			return
+		}
+		if req.AllAlerts != nil && *req.AllAlerts {
+			current, found, getErr := d.NotificationStore.GetNotificationChannel(channelID)
+			if getErr != nil {
+				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update channel")
+				return
+			}
+			if !found {
+				servicehttp.WriteError(w, http.StatusNotFound, "channel not found")
+				return
+			}
+			if !current.AllAlerts && !allowAllAlertsOn(w, r, current.Type) {
+				return
+			}
 		}
 		updated, err := d.updateSecureNotificationChannel(channelID, req)
 		if err != nil {

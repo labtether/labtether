@@ -27,13 +27,16 @@ var (
 )
 
 type Channel struct {
-	ID        string         `json:"id"`
-	Name      string         `json:"name"`
-	Type      string         `json:"type"`
-	Config    map[string]any `json:"config,omitempty"`
-	Enabled   bool           `json:"enabled"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
+	ID      string         `json:"id"`
+	Name    string         `json:"name"`
+	Type    string         `json:"type"`
+	Config  map[string]any `json:"config,omitempty"`
+	Enabled bool           `json:"enabled"`
+	// AllAlerts sends every alert to the channel, besides what routes send it.
+	// Turning it on needs alerts:write; push (APNs) channels keep their route.
+	AllAlerts bool      `json:"all_alerts"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type CreateChannelRequest struct {
@@ -45,12 +48,15 @@ type CreateChannelRequest struct {
 	Type    string         `json:"type"`
 	Config  map[string]any `json:"config,omitempty"`
 	Enabled *bool          `json:"enabled,omitempty"`
+	// AllAlerts defaults to off when omitted.
+	AllAlerts *bool `json:"all_alerts,omitempty"`
 }
 
 type UpdateChannelRequest struct {
-	Name    *string         `json:"name,omitempty"`
-	Config  *map[string]any `json:"config,omitempty"`
-	Enabled *bool           `json:"enabled,omitempty"`
+	Name      *string         `json:"name,omitempty"`
+	Config    *map[string]any `json:"config,omitempty"`
+	Enabled   *bool           `json:"enabled,omitempty"`
+	AllAlerts *bool           `json:"all_alerts,omitempty"`
 }
 
 type Route struct {

@@ -9,6 +9,8 @@ export type NotificationChannel = {
   type: string;
   config: Record<string, unknown>;
   enabled: boolean;
+  /** "Send every alert here": the channel gets every alert, not only what alert routes send it. */
+  all_alerts?: boolean;
   created_at: string;
   updated_at: string;
 };
