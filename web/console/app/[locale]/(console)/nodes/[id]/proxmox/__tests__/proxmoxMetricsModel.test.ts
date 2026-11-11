@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { metricPoints } from "../ProxmoxMetricsTab";
+import { metricPoints } from "../proxmoxMetricsModel";
 
 // The Hub answers GET /proxmox/assets/{id}/metrics with {"points": [...]}; the
 // tab read only "data" and showed "No samples in this range" for every VM.
