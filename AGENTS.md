@@ -113,8 +113,12 @@ Read user-facing text once against this list before you ship it.
     `web-visual-https` are the jobs that fail most.
 - Read a red run with `gh run view <run-id> --log-failed` and fix every failure
   in one push. A new push cancels the run in progress.
-- Put related small fixes in one pull request. `main` requires an up-to-date
-  branch, so each merge sends every other open pull request through CI again.
+- Merge with `gh pr merge <number> --auto`. This repo uses a merge queue: when
+  the pull request's checks pass it joins the queue, which tests it on the
+  newest `main` with a short CI pass and merges it. Do not run
+  `gh pr update-branch`; the queue does that step.
+- Put related small fixes in one pull request. Each pull request costs one
+  full CI run plus one queue run.
 
 ## This repo
 
