@@ -98,7 +98,7 @@ func drainAgentTerminalOutput(wsConn *websocket.Conn, outputCh <-chan []byte, wr
 func closeAgentTerminalBrowser(wsConn *websocket.Conn, reason string) {
 	code, message := websocket.CloseInternalServerErr, "Terminal session ended"
 	switch reason {
-	case "", "shell exited", "persistent_session_deleted":
+	case "", agentShellExitedReason, agentTmuxDetachedReason, "persistent_session_deleted":
 		code, message = websocket.CloseNormalClosure, ""
 	case "session_attached_elsewhere":
 		code, message = websocket.CloseNormalClosure, "Session attached elsewhere"
