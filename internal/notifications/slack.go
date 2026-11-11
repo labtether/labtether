@@ -11,6 +11,9 @@ import (
 	"github.com/labtether/labtether/internal/securityruntime"
 )
 
+// slackEscaper escapes the three characters Slack reads as markup in mrkdwn.
+var slackEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
+
 type SlackAdapter struct{}
 
 func (s *SlackAdapter) Type() string { return ChannelTypeSlack }
@@ -23,6 +26,9 @@ func (s *SlackAdapter) Send(ctx context.Context, config map[string]any, payload 
 
 	title, _ := payload["title"].(string)
 	text, _ := payload["text"].(string)
+	// The section and fallback text are mrkdwn: Slack reads <, > and & as markup,
+	// and names in the text (rules, devices) come from people and agents.
+	text = slackEscaper.Replace(text)
 	if title == "" && text == "" {
 		return fmt.Errorf("slack payload requires title or text")
 	}
@@ -51,7 +57,7 @@ func (s *SlackAdapter) Send(ctx context.Context, config map[string]any, payload 
 		"blocks": blocks,
 	}
 	if text != "" {
-		slackMsg["text"] = strings.TrimSpace(title + " " + text)
+		slackMsg["text"] = strings.TrimSpace(slackEscaper.Replace(title) + " " + text)
 	}
 
 	body, err := json.Marshal(slackMsg)

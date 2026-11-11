@@ -137,7 +137,7 @@ func TestAlertRetryDefersSilenceWithoutConsumingAttempt(t *testing.T) {
 			if _, err := instances.UpdateAlertInstanceStatus(instanceID, alerts.InstanceStatusAcknowledged); err != nil {
 				t.Fatal(err)
 			}
-			encoded, err := json.Marshal(buildAlertNotificationPayload(rule, instanceID, "firing", d.collectRuleGroupIDs(rule)))
+			encoded, err := json.Marshal(buildAlertNotificationPayload(rule, instanceID, "firing", d.collectRuleGroupIDs(rule), nil))
 			if err != nil {
 				t.Fatal(err)
 			}
