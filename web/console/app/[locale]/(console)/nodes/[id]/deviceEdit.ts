@@ -31,18 +31,18 @@ export function parseTags(text: string): string[] {
 }
 
 /**
- * The fields a save sends (PATCH /api/assets/{id}): only what changed, a group of "" as null (no group). null when
- * nothing changed; "nameRequired" when the name is empty.
+ * The fields a save sends (PATCH /api/assets/{id}): only what changed; no group is group_id "" (the Hub reads a null
+ * group_id as "not sent"). null when nothing changed; "nameRequired" when the name is empty.
  */
 export function deviceEditPatch(
   asset: Pick<Asset, "name" | "group_id" | "tags">,
   draft: DeviceEditDraft,
-): Record<string, string | string[] | null> | null | "nameRequired" {
+): Record<string, string | string[]> | null | "nameRequired" {
   const name = draft.name.trim();
   if (!name) return "nameRequired";
-  const patch: Record<string, string | string[] | null> = {};
+  const patch: Record<string, string | string[]> = {};
   if (name !== asset.name) patch.name = name;
-  if (draft.groupId !== (asset.group_id ?? "")) patch.group_id = draft.groupId || null;
+  if (draft.groupId !== (asset.group_id ?? "")) patch.group_id = draft.groupId;
   const tags = parseTags(draft.tags);
   const before = asset.tags ?? [];
   if (tags.length !== before.length || tags.some((tag, i) => tag !== before[i])) patch.tags = tags;

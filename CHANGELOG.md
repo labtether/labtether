@@ -128,6 +128,9 @@ v1.7.1.
 
 ### Fixed
 
+- Devices: Edit… with "No group" takes a device out of its group. The Hub read
+  the empty group the console sent as "not sent" and refused the save.
+
 - A change to Settings › General › Service discovery defaults now reaches
   connected agents at once. Before, agents got it only when they next
   connected, and after a reset they kept the old value.

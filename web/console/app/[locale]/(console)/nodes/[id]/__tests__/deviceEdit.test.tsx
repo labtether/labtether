@@ -17,7 +17,7 @@ const manual = {
 describe("deviceEditPatch", () => {
   it("sends only what changed", () => {
     expect(deviceEditPatch(manual, { ...draftOf(manual), name: "nas02" })).toEqual({ name: "nas02" });
-    expect(deviceEditPatch(manual, { ...draftOf(manual), groupId: "" })).toEqual({ group_id: null });
+    expect(deviceEditPatch(manual, { ...draftOf(manual), groupId: "" })).toEqual({ group_id: "" });
     expect(deviceEditPatch(manual, { ...draftOf(manual), tags: "backup, media ,backup" })).toEqual({ tags: ["backup", "media"] });
     expect(deviceEditPatch(manual, { ...draftOf(manual), tags: "" })).toEqual({ tags: [] });
     expect(deviceEditPatch(manual, { ...draftOf(manual), name: "  nas01 " })).toBeNull();
