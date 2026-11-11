@@ -78,7 +78,7 @@ export function ServiceDiscoveryDefaultsCard({
                 {entry.source !== "default" ? <span className="st-g">{t(`advanced.source.${entry.source}`)}</span> : null}
                 <RuntimeControl
                   id={id}
-                  entry={entry}
+                  entry={{ ...entry, label: wordsOf(entry).label }}
                   value={draftOf(entry)}
                   onChange={(value) => setRuntimeDraftValues((current) => ({ ...current, [entry.key]: value }))}
                   testId={`service-discovery-default-${entry.key}`}
