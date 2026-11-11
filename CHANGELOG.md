@@ -358,6 +358,21 @@ v1.7.1.
 - A device added by hand has a Device card under Settings to change its
   name, group and tags. Edit… in any device's ⋯ menu can change its tags
   too; before, tags were set only when adding a device by hand.
+- Restart… and Shut down… in a device's ⋯ menu restart or shut the device
+  down through its agent. Before, they sent the words "restart" and
+  "shutdown" as a shell command, which the Hub refused ("command not in
+  allowlist") or no system runs.
+- Windows and Mac devices have the Disks and Users tabs, as Linux devices
+  do. The agent reported both, but the console showed them only for Linux.
+- A Windows device's Logs tab names its log "Event Log" and suggests event
+  log channels and sources, not systemd units. Its Cron / Timers tab names
+  scheduled tasks "Task Scheduler", and Services shows "Manual" for
+  services that start on demand.
+- The Processes tab shows each process's memory in the right unit. Agents
+  report it in KiB and the tab read it as bytes, so a 97 MB process showed
+  as 97 KB.
+- Updates › New plan offers Linux devices only. A plan with a Windows or
+  Mac device always failed for it with "os_packages updates require linux".
 
 ## [1.7.1] - 2026-10-31
 
