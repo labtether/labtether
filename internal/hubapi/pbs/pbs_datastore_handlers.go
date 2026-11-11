@@ -41,7 +41,7 @@ func (d *Deps) HandlePBSAssetGroups(ctx context.Context, w http.ResponseWriter, 
 	for _, storeName := range storeNames {
 		groups, err := runtime.Client.ListDatastoreGroups(ctx, storeName)
 		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("%s groups unavailable: %v", storeName, err))
+			warnings = append(warnings, pbsWarning(fmt.Sprintf("The backup groups of %s could not be read.", storeName), err))
 			continue
 		}
 		entries := make([]PBSBackupGroupEntry, 0, len(groups))
@@ -140,7 +140,7 @@ func (d *Deps) HandlePBSAssetVerification(ctx context.Context, w http.ResponseWr
 	for _, storeName := range storeNames {
 		snapshots, err := runtime.Client.ListDatastoreSnapshots(ctx, storeName)
 		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("%s snapshots unavailable: %v", storeName, err))
+			warnings = append(warnings, pbsWarning(fmt.Sprintf("The snapshots of %s could not be read.", storeName), err))
 			continue
 		}
 		entry := pbsDatastoreVerification{Store: storeName}

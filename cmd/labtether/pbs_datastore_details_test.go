@@ -200,7 +200,7 @@ func TestLoadPBSAssetDetailsDatastoreAndServerBranches(t *testing.T) {
 		}
 		combined := strings.Join(response.Warnings, " | ")
 		if !strings.Contains(combined, "datastore usage unavailable") ||
-			!strings.Contains(combined, "datastore bad unavailable") ||
+			!strings.Contains(combined, "Datastore bad could not be read.") ||
 			!strings.Contains(combined, "task listing unavailable") {
 			t.Fatalf("unexpected server warnings: %v", response.Warnings)
 		}
