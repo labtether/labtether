@@ -23,10 +23,14 @@ async function proxyForget(request: Request, { params }: Params) {
 
   const incomingURL = new URL(request.url);
   const upstreamURL = new URL(`${base.api}/pbs/assets/${assetID}/groups/forget`);
-  for (const key of ["store", "ns", "backup-type", "backup-id"]) {
+  for (const key of ["store", "backup-type", "backup-id"]) {
     const value = incomingURL.searchParams.get(key)?.trim();
     if (value) upstreamURL.searchParams.set(key, value);
   }
+  // The namespace is passed even when empty: an empty ns names the root, and
+  // the Hub refuses a forget without ns when the group is also in a namespace.
+  const ns = incomingURL.searchParams.get("ns");
+  if (ns !== null) upstreamURL.searchParams.set("ns", ns.trim());
 
   // Translate the previous console's POST body so an already-open tab remains
   // compatible across a Hub update.

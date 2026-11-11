@@ -88,7 +88,7 @@ export function PBSSnapshotsView({ assetId, details }: Props) {
       "backup-type": snap.backup_type,
       "backup-id": snap.backup_id,
       "backup-time": String(snap.backup_time),
-      ...(snap.ns ? { ns: snap.ns } : {}),
+      ns: snap.ns ?? "",
     }).toString()}`,
     "DELETE",
   );

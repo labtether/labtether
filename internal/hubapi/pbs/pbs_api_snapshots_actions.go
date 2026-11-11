@@ -83,7 +83,10 @@ func (d *Deps) HandlePBSSnapshotForget(ctx context.Context, w http.ResponseWrite
 	if !d.enforceMutation(w, runtime, store) {
 		return
 	}
-	ns := strings.TrimSpace(r.URL.Query().Get("ns"))
+	ns, ok := forgetNamespace(ctx, w, r, runtime.Client, store, backupType, backupID)
+	if !ok {
+		return
+	}
 	if forgetErr := runtime.Client.ForgetSnapshot(ctx, store, ns, backupType, backupID, backupTime); forgetErr != nil {
 		writePBSError(w, http.StatusBadGateway, "failed to forget snapshot", forgetErr)
 		return
@@ -121,7 +124,10 @@ func (d *Deps) HandlePBSGroupForget(ctx context.Context, w http.ResponseWriter, 
 	if !d.enforceMutation(w, runtime, store) {
 		return
 	}
-	ns := strings.TrimSpace(r.URL.Query().Get("ns"))
+	ns, ok := forgetNamespace(ctx, w, r, runtime.Client, store, backupType, backupID)
+	if !ok {
+		return
+	}
 	if forgetErr := runtime.Client.ForgetGroup(ctx, store, ns, backupType, backupID); forgetErr != nil {
 		writePBSError(w, http.StatusBadGateway, "failed to forget group", forgetErr)
 		return

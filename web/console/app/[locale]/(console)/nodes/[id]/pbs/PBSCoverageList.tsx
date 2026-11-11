@@ -37,8 +37,7 @@ export function PBSCoverageList({ assetId }: { assetId: string }) {
   const forget = (row: CoverageRow) => run(
     `forget-${row.key}`,
     () => {
-      const params = new URLSearchParams({ store: row.store, "backup-type": row.type, "backup-id": row.id });
-      if (row.ns) params.set("ns", row.ns);
+      const params = new URLSearchParams({ store: row.store, ns: row.ns, "backup-type": row.type, "backup-id": row.id });
       return pbsAction(`/api/pbs/assets/${encodeURIComponent(assetId)}/groups/forget?${params.toString()}`, "DELETE");
     },
     t("coverage.forgotten", { name: coverageName(row), store: coverageWhere(row) }),

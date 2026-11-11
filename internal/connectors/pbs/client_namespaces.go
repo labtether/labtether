@@ -3,6 +3,7 @@ package pbs
 import (
 	"context"
 	"fmt"
+	"log"
 	neturl "net/url"
 	"sort"
 	"strings"
@@ -46,6 +47,9 @@ func (c *Client) namespacesToRead(ctx context.Context, store string) []string {
 	out := []string{""}
 	listed, err := c.ListNamespaces(ctx, store)
 	if err != nil {
+		if !pbsStatusIs(err, 404) && !pbsStatusIs(err, 400) { // 404/400: a PBS without namespaces
+			log.Printf("pbs: namespaces of %s unavailable, reading the root only: %v", store, err)
+		}
 		return out
 	}
 	seen := map[string]bool{"": true}
@@ -59,6 +63,7 @@ func (c *Client) namespacesToRead(ctx context.Context, store string) []string {
 	}
 	sort.Strings(out[1:])
 	if len(out) > maxNamespaces {
+		log.Printf("pbs: %s has %d namespaces; reading the first %d", store, len(out), maxNamespaces)
 		out = out[:maxNamespaces]
 	}
 	return out
@@ -96,6 +101,9 @@ func listAcrossNamespaces[T any](ctx context.Context, c *Client, store, kind str
 			if firstErr == nil {
 				firstErr = err
 			}
+			if !pbsStatusIs(err, 403) { // 403: the token may not read this namespace
+				log.Printf("pbs: %s of namespace %q in %s unavailable: %v", kind, ns, store, err)
+			}
 			continue
 		}
 		readOne = true
@@ -108,4 +116,9 @@ func listAcrossNamespaces[T any](ctx context.Context, c *Client, store, kind str
 		return nil, firstErr
 	}
 	return out, nil
+}
+
+// pbsStatusIs reports whether err is PBS answering with that HTTP status.
+func pbsStatusIs(err error, status int) bool {
+	return err != nil && strings.Contains(err.Error(), fmt.Sprintf("pbs api returned %d:", status))
 }
