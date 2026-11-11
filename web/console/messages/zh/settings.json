@@ -327,6 +327,14 @@
       "compact": "最短保留期：占用磁盘最少。",
       "balanced": "默认保留期。",
       "extended": "最长保留期：历史最多。"
+    },
+    "lines": {
+      "loadFailed": "无法加载数据保留设置。请刷新页面后重试。",
+      "saved": "数据保留设置已保存。",
+      "saveFailed": "无法保存数据保留设置，请重试。",
+      "presetApplied": "已应用预设：{name}。",
+      "presetFailed": "无法应用预设，请重试。",
+      "noSettings": "Hub 的响应中没有数据保留设置。请刷新页面。"
     }
   },
   "advanced": {
@@ -514,6 +522,15 @@
           "description": "每台设备保留的最活跃进程。"
         }
       }
+    },
+    "lines": {
+      "saved": "设置已保存。",
+      "noChanges": "没有需要保存的更改。",
+      "resetDefault": "已重置为默认值。",
+      "resetEnv": "已重置为 Hub 环境变量中的值。",
+      "loadFailed": "无法加载设置。请刷新页面后重试。",
+      "saveFailed": "无法保存设置，请重试。",
+      "resetFailed": "无法重置该设置，请重试。"
     }
   },
   "database": {
