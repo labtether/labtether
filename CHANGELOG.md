@@ -468,6 +468,12 @@ v1.7.1.
   as 97 KB.
 - Updates › New plan offers Linux devices only. A plan with a Windows or
   Mac device always failed for it with "os_packages updates require linux".
+- API keys and agent tokens work behind an HTTPS reverse proxy with
+  `LABTETHER_TLS_MODE=disabled`. The Hub accepts the proxy's
+  `X-Forwarded-Proto: https` when the proxy's address is in
+  `LABTETHER_TRUST_PROXY_CIDRS` or `LABTETHER_TRUST_PROXY_HOSTS`. Before, only
+  a proxy on the Hub's own host counted, so every key got 403 "api keys
+  require HTTPS". The header from any other address is still ignored.
 
 ## [1.7.1] - 2026-10-31
 
