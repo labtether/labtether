@@ -266,7 +266,7 @@
   "words": {
     "creatingSession": "Creando la sesión…",
     "reconnectingSession": "Reconectando la sesión…",
-    "requestingTicket": "Solicitando el ticket del flujo…",
+    "requestingTicket": "Obteniendo acceso…",
     "openingStream": "Abriendo el flujo seguro…",
     "startingShell": "Iniciando el shell remoto…",
     "connected": "Conectado",

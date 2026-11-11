@@ -313,6 +313,8 @@ export function useFiles() {
         });
         void listDir(target, currentPath);
       } catch (err) {
+        // The entry can already be gone on the device. Read the folder again so its row goes, then say why.
+        await listDir(target, currentPath);
         setError(err instanceof Error ? err.message : "Delete failed");
       }
     },
@@ -363,6 +365,7 @@ export function useFiles() {
     async (names: string[]) => {
       if (!target) return;
       setError(null);
+      let failure: string | null = null;
       for (const name of names) {
         const fullPath = joinPath(currentPath, name);
         try {
@@ -370,11 +373,13 @@ export function useFiles() {
             fallbackError: (status) => `Delete failed (${status})`,
           });
         } catch (err) {
-          setError(err instanceof Error ? err.message : "Delete failed");
+          failure = err instanceof Error ? err.message : "Delete failed";
           break;
         }
       }
-      void listDir(target, currentPath);
+      // Reading the folder clears the error line, so a failure is shown after it.
+      await listDir(target, currentPath);
+      if (failure) setError(failure);
     },
     [target, currentPath, listDir]
   );

@@ -11,9 +11,11 @@ type CredentialPromptOptions = {
   vncPassword: string | null;
   /** Cancel on the sign-in card: ends the attempt (the page disconnects and closes the session). */
   onCancel: () => void;
+  /** The device's name when it is a Mac: the card then asks for an account on it. */
+  macName?: string;
 };
 
-export function useVNCCredentialPrompt({ vncRef, initialCredentials, vncPassword, onCancel }: CredentialPromptOptions) {
+export function useVNCCredentialPrompt({ vncRef, initialCredentials, vncPassword, onCancel, macName }: CredentialPromptOptions) {
   // ── Credential state ──
   const [credentialRequest, setCredentialRequest] = useState<VNCCredentialRequest | null>(null);
   const [credPassword, setCredPassword] = useState("");
@@ -90,6 +92,7 @@ export function useVNCCredentialPrompt({ vncRef, initialCredentials, vncPassword
       onPasswordChange={setCredPassword}
       onSubmit={handleCredentialSubmit}
       onCancel={handleCredentialCancel}
+      macName={macName}
     />
   ) : null;
 
