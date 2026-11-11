@@ -14,6 +14,8 @@ export type SplitChoice = { key: string; label: string; onSelect: () => void };
 
 type FilesToolbarProps = {
   path: string;
+  /** The folder a device shares; see FilesPathBar. */
+  root?: string;
   places: Place[];
   busy: boolean;
   canUp: boolean;
@@ -103,7 +105,7 @@ export function FilesToolbar(p: FilesToolbarProps) {
   const t = useTranslations("files.bar");
   return (
     <div className="fx-bar">
-      <FilesPathBar path={p.path} places={p.places} busy={p.busy} canUp={p.canUp} onUp={p.onUp} canBack={p.canBack} onBack={p.onBack} onGo={p.onGo} />
+      <FilesPathBar path={p.path} root={p.root} places={p.places} busy={p.busy} canUp={p.canUp} onUp={p.onUp} canBack={p.canBack} onBack={p.onBack} onGo={p.onGo} />
       {p.onQuery ? (
         <label className="fx-q">
           <Search aria-hidden="true" width={14} height={14} strokeWidth={2} />

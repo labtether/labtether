@@ -4,7 +4,7 @@ import { checklistSteps } from "../firstRunSteps";
 // Risks: the Dashboard's first-run checklist ticks a step the person has not done (a Proxmox node counted as "a
 // device with the agent"), or offers a step their role cannot take.
 
-const base = { assets: [], connectorCount: 0, recentCommandCount: 0, hasChannels: false, users: [], canWrite: true, canAdmin: false };
+const base = { assets: [], recentCommandCount: 0, hasChannels: false, users: [], canWrite: true, canAdmin: false };
 
 describe("checklistSteps", () => {
   it("ticks the agent and connect steps from the right kind of device", () => {
@@ -31,5 +31,15 @@ describe("checklistSteps", () => {
     expect(admin.map((s) => s.id)).toEqual(["device", "connect", "terminal", "notify", "invite"]);
     expect(admin.find((s) => s.id === "notify")?.done).toBe(true);
     expect(admin.find((s) => s.id === "invite")).toMatchObject({ done: true, sub: "sam" });
+  });
+
+  it("names the person the owner added, not the owner, from the Hub's oldest-first user list", () => {
+    // The Hub's /auth/users answer has no created_at and lists the owner first.
+    const steps = checklistSteps({ ...base, canAdmin: true, users: [
+      { username: "owner", role: "owner" },
+      { username: "sam", role: "operator" },
+      { username: "kim", role: "viewer" },
+    ] });
+    expect(steps.find((s) => s.id === "invite")).toMatchObject({ done: true, sub: "kim" });
   });
 });

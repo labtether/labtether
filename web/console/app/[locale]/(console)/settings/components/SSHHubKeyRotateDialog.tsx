@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "../../../../components/ui/Button";
 import { Input, Select } from "../../../../components/ui/Input";
 import { Modal } from "../../../../components/ui/Modal";
@@ -26,6 +27,7 @@ export function SSHHubKeyRotateDialog({
   onClose,
   onConfirm,
 }: SSHHubKeyRotateDialogProps) {
+  const t = useTranslations("settings.sshKey");
   const [keyType, setKeyType] = useState<SSHHubKeyType>(currentKeyType);
   const [reason, setReason] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -43,16 +45,15 @@ export function SSHHubKeyRotateDialog({
   }
 
   return (
-    <Modal open onClose={onClose} title="Rotate SSH hub key" className="max-w-lg">
+    <Modal open onClose={onClose} title={t("rotateTitle")} className="max-w-lg">
       <form className="st-modal-form" onSubmit={(event) => { void handleSubmit(event); }}>
         <p className="st-msg">
-          Connected agents get the new public key before it becomes active. If that fails, the current key stays active.
-          Offline devices get the active key when they reconnect.
+          {t("rotateBody")}
         </p>
 
         <div className="st-field">
           <label htmlFor="ssh-hub-key-type">
-            Key type
+            {t("keyType")}
           </label>
           <Select
             id="ssh-hub-key-type"
@@ -67,21 +68,21 @@ export function SSHHubKeyRotateDialog({
 
         <div className="st-field">
           <label htmlFor="ssh-hub-key-reason">
-            Note (optional)
+            {t("note")}
           </label>
           <Input
             id="ssh-hub-key-reason"
             value={reason}
             onChange={(event) => setReason(event.target.value)}
             maxLength={SSH_HUB_KEY_ROTATION_REASON_MAX_LENGTH}
-            placeholder="Change ticket or reason"
+            placeholder={t("notePlaceholder")}
             disabled={loading}
           />
         </div>
 
         <div className="st-field">
           <label htmlFor="ssh-hub-key-confirmation">
-            Type {SSH_HUB_KEY_ROTATION_CONFIRMATION} to confirm
+            {t("confirmLabel", { word: SSH_HUB_KEY_ROTATION_CONFIRMATION })}
           </label>
           <Input
             id="ssh-hub-key-confirmation"
@@ -99,10 +100,10 @@ export function SSHHubKeyRotateDialog({
 
         <div className="st-dlg-acts">
           <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>
-            Cancel
+            {t("cancel")}
           </Button>
           <Button type="submit" variant="danger" className="st-danger-fill" loading={loading} disabled={!confirmationMatches}>
-            Rotate key
+            {t("rotateSubmit")}
           </Button>
         </div>
       </form>

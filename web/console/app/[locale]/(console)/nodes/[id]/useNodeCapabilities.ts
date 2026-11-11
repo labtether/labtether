@@ -27,6 +27,13 @@ type UseNodeCapabilitiesResult = {
   nodeNetworkControlsHint: string;
 };
 
+/** The device log's own name: macOS System Log, Windows Event Log, else the systemd journal. */
+export function logQueryModeLabelFor(logBackend: string | undefined): string {
+  if (logBackend === "oslog") return "System Log";
+  if (logBackend === "eventlog") return "Event Log";
+  return "Journal";
+}
+
 export function supportsCapability(
   metadata: Record<string, string>,
   capabilityKey: string,
@@ -60,7 +67,7 @@ export function useNodeCapabilities({
   const supportsLogQuery = nodeHasAgent && supportsCapability(metadata, "cap_logs", "query", true);
 
   const networkActionBackend = (metadata["network_action_backend"] ?? "").trim().toLowerCase();
-  const logQueryModeLabel = metadata["log_backend"] === "oslog" ? "System Log" : "Journal";
+  const logQueryModeLabel = logQueryModeLabelFor(metadata["log_backend"]);
 
   const nodeNetworkMethodOptions = useMemo(() => {
     if (!supportsNetworkActions) {

@@ -225,7 +225,11 @@
       "restartConfirm": "重启",
       "shutdownTitle": "关闭 {name}？",
       "shutdownBody": "{name} 将保持关机，直到有人启动它。",
-      "shutdownConfirm": "关机"
+      "shutdownConfirm": "关机",
+      "restarting": "正在重启 {name}",
+      "shuttingDown": "正在关闭 {name}",
+      "restartFailed": "无法重启 {name}：{reason}",
+      "shutdownFailed": "无法关闭 {name}：{reason}"
     },
     "edit": {
       "title": "编辑 {name}",
@@ -317,7 +321,8 @@
         "masked": "已屏蔽",
         "indirect": "间接",
         "generated": "自动生成",
-        "transient": "临时"
+        "transient": "临时",
+        "manual": "手动"
       },
       "start": "启动",
       "restart": "重启",
@@ -359,7 +364,8 @@
       },
       "kind": {
         "timer": "定时器",
-        "launchd": "launchd"
+        "launchd": "launchd",
+        "task": "任务计划程序"
       },
       "copyCommand": "复制命令",
       "copySchedule": "复制计划"

@@ -88,7 +88,7 @@ export function useNodeDetailData({
     nodeNetworkActionError: actionsData.nodeNetworkActionError,
     fetchProxmoxDetails: proxmoxData.fetchProxmoxDetails,
     runProxmoxQuickAction: proxmoxData.runProxmoxQuickAction,
-    runNodeQuickAction: actionsData.runNodeQuickAction,
+    runNodePower: actionsData.runNodePower,
     runNodeNetworkAction: actionsData.runNodeNetworkAction,
   };
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { pathStyleOf } from "./remotePaths";
 import { findUploadClashes, heldEntriesFor, type FolderEntry, type HeldListing } from "./uploadClashes";
 
 export type UploadReplaceAsk = { files: File[]; dir: string; clashing: File[]; rest: File[] };
@@ -11,7 +12,7 @@ type UseUploadReplaceArgs = {
   held: HeldListing;
   /** Reads a folder with its hidden files, for a target the open listing does not answer for. */
   list: (dir: string) => Promise<FolderEntry[]>;
-  /** Names match without regard to case (Windows devices). */
+  /** The device is a Windows one. Needed while the target is still "~"; a drive or share path says so itself. */
   ignoreCase?: boolean;
   upload: UploadFn;
   /** The target folder could not be read, so nothing was uploaded. */
@@ -28,8 +29,10 @@ export function useUploadReplace({ held, list, ignoreCase = false, upload, onUnr
   /** whenClear runs instead of the upload when nothing clashes (the Files page asks before a drop of several files). */
   const start = useCallback((files: File[], dir: string, whenClear?: UploadFn) => {
     if (files.length === 0) return;
+    // On Windows "Report.txt" and "report.txt" are one file, so names match in any case there.
+    const anyCase = ignoreCase || pathStyleOf(dir) === "windows";
     const decide = (entries: FolderEntry[]) => {
-      const found = findUploadClashes(files, entries, ignoreCase);
+      const found = findUploadClashes(files, entries, anyCase);
       if (found.clashing.length > 0) setAsk({ files, dir, clashing: found.clashing, rest: found.rest });
       else (whenClear ?? upload)(files, dir);
     };

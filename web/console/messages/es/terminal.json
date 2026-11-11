@@ -129,6 +129,8 @@
     "failed": "No se pudo conectar",
     "disconnected": "Desconectado",
     "sessionDisconnected": "Sesión desconectada",
+    "deviceDisconnected": "{name} se desconectó",
+    "deviceStillDisconnected": "{name} sigue desconectado",
     "connect": "Conectar",
     "reconnect": "Reconectar",
     "retry": "Reintentar",
@@ -264,7 +266,7 @@
   "words": {
     "creatingSession": "Creando la sesión…",
     "reconnectingSession": "Reconectando la sesión…",
-    "requestingTicket": "Solicitando el ticket del flujo…",
+    "requestingTicket": "Obteniendo acceso…",
     "openingStream": "Abriendo el flujo seguro…",
     "startingShell": "Iniciando el shell remoto…",
     "connected": "Conectado",

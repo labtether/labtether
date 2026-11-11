@@ -157,7 +157,7 @@ describe("ApiKeysCard asset restrictions", () => {
       root.render(<ApiKeysCard />);
     });
 
-    const editButton = container.querySelector<HTMLButtonElement>('button[aria-label="apiKeys.edit"]');
+    const editButton = container.querySelector<HTMLButtonElement>('button[aria-label="apiKeys.editNamed"]');
     if (!editButton) throw new Error("missing edit button");
     await click(editButton);
 

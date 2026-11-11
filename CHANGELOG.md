@@ -128,6 +128,40 @@ v1.7.1.
 
 ### Fixed
 
+- A change to Settings › General › Service discovery defaults now reaches
+  connected agents at once. Before, agents got it only when they next
+  connected, and after a reset they kept the old value.
+- A `LABTETHER_ADMIN_PASSWORD` shorter than 8 characters is refused at start
+  with a plain message. Before, it made an owner who could never sign in.
+- With `LABTETHER_TLS_MODE=external` (certificate from the environment) the
+  bundled console reaches the Hub again; the Hub keeps its own certificate for
+  the console's internal connection, as it does for an uploaded certificate.
+- Changing data retention writes a named Audit log row ("Changed data
+  retention").
+- Settings › General › Reset hub works again. It failed every time with
+  "reset failed" because it tried to clear a table that was renamed long ago.
+- The Dashboard's first-run checklist no longer marks "Connect Proxmox,
+  TrueNAS or Docker" as done on a Hub with nothing connected.
+- Settings › Agents › Connection names each address and how agents trust it
+  in your language, like Add device.
+- The API key scope groups are in your language ("Devices and inventory"),
+  and each key's Edit and Revoke buttons name the key for screen readers.
+- A refused Prometheus remote-write address says why (for example plain
+  http), and the API no longer tells the owner to transfer ownership, which
+  the Hub cannot do.
+- Console answers no longer carry an `X-Powered-By: Next.js` header.
+- Settings in your language: the Hub SSH key card and its Rotate dialog,
+  the theme and layout choices, the retention presets and the service
+  discovery defaults were English in every language. The SSH key card's
+  errors no longer end with a bare status code.
+- The first-run checklist's "Add someone" names the person who was added,
+  not the owner.
+- A single sign-on account is no longer offered a LabTether password change
+  (the Hub refuses it) or two-factor setup (its sign-ins never ask for the
+  code, so the account only looked protected). The Hub refuses that setup
+  too, and `/auth/me` says how the account signs in (`auth_provider`).
+- The two-factor code fields under Account security have names for screen
+  readers.
 - Security › Saved logins: the Add login, Rotate and Delete dialogs, login
   types and the saved login picker are in your language, and their errors
   name what happened without internal words.
@@ -324,6 +358,21 @@ v1.7.1.
 - A device added by hand has a Device card under Settings to change its
   name, group and tags. Edit… in any device's ⋯ menu can change its tags
   too; before, tags were set only when adding a device by hand.
+- Restart… and Shut down… in a device's ⋯ menu restart or shut the device
+  down through its agent. Before, they sent the words "restart" and
+  "shutdown" as a shell command, which the Hub refused ("command not in
+  allowlist") or no system runs.
+- Windows and Mac devices have the Disks and Users tabs, as Linux devices
+  do. The agent reported both, but the console showed them only for Linux.
+- A Windows device's Logs tab names its log "Event Log" and suggests event
+  log channels and sources, not systemd units. Its Cron / Timers tab names
+  scheduled tasks "Task Scheduler", and Services shows "Manual" for
+  services that start on demand.
+- The Processes tab shows each process's memory in the right unit. Agents
+  report it in KiB and the tab read it as bytes, so a 97 MB process showed
+  as 97 KB.
+- Updates › New plan offers Linux devices only. A plan with a Windows or
+  Mac device always failed for it with "os_packages updates require linux".
 
 ## [1.7.1] - 2026-10-31
 

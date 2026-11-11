@@ -35,7 +35,7 @@ type NodeLogsTabCardProps = {
   onRefresh: () => void;
 };
 
-/** Units offered while typing in the journal's Unit field (the field takes any unit). */
+/** Offered while typing in the Unit field (it takes any value): systemd units, or Windows Event Log channels and sources. */
 const journalUnitPresets = [
   "ssh.service",
   "docker.service",
@@ -43,6 +43,13 @@ const journalUnitPresets = [
   "NetworkManager.service",
   "labtether-agent.service",
 ];
+const eventLogUnitPresets = ["System", "Application", "Service Control Manager", "Microsoft-Windows-Kernel-Power"];
+
+export function unitPresetsFor(logQueryModeLabel: string): string[] {
+  if (logQueryModeLabel === "Event Log") return eventLogUnitPresets;
+  if (logQueryModeLabel === "Journal") return journalUnitPresets;
+  return [];
+}
 const journalPriorities = ["emerg", "alert", "crit", "err", "warning", "notice", "info", "debug"] as const;
 const levelFilters = ["all", "error", "warn", "info"] as const;
 const COLS = { "--cols": "88px 48px minmax(0, 160px) minmax(0, 1fr)" } as CSSProperties;
@@ -143,7 +150,7 @@ export function NodeLogsTabCard({
             <input className="dv-input dst-mono-in" list="dst-journal-units" value={journalUnit} onChange={(e) => onJournalUnitChange(e.target.value)} placeholder={t("unitPlaceholder")} spellCheck={false} />
           </label>
           <datalist id="dst-journal-units">
-            {journalUnitPresets.map((unit) => <option key={unit} value={unit} />)}
+            {unitPresetsFor(logQueryModeLabel).map((unit) => <option key={unit} value={unit} />)}
           </datalist>
           <select className="dv-input dst-select" aria-label={t("priority")} value={journalPriority} onChange={(e) => onJournalPriorityChange(e.target.value)}>
             <option value="all">{t("priorities.all")}</option>
