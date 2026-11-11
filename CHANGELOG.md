@@ -21,7 +21,7 @@ v1.7.1.
 - **Three small database migrations and no new or removed setting** since
   v1.7.1. Migration 109 lets the database store alert rules for a group and
   health-check rules; migration 110 turns automatic Docker "runs on" links
-  the right way round; migration 112 adds a table for the SSH host keys
+  the right way round; migration 113 adds a table for the SSH host keys
   trusted through Quick connect and a bookmark's own host key. None removes
   your data, and v1.7.1 still runs on the migrated database, so going back to
   v1.7.1 needs no database restore.

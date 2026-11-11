@@ -4,7 +4,7 @@ package persistence
 // connect: Quick connect keys in ssh_known_hosts (one per host and port), a
 // bookmark's key on the bookmark with the host and port it was trusted for.
 func schemaMigrationSSHHostKeyPins() schemaMigration {
-	return schemaMigration{Version: 112, Name: "ssh_host_key_pins", Statements: []string{
+	return schemaMigration{Version: 113, Name: "ssh_host_key_pins", Statements: []string{
 		`CREATE TABLE IF NOT EXISTS ssh_known_hosts (
 			host TEXT NOT NULL,
 			port INTEGER NOT NULL CHECK (port BETWEEN 1 AND 65535),
