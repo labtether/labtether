@@ -246,6 +246,9 @@
     "remove": {
       "title": "{name} entfernen?",
       "body": "LabTether überwacht {name} nicht mehr und löscht seinen Verlauf.",
+      "alsoFound": "Entfernt auch {count, plural, one {# Gerät} other {# Geräte}}, die diese Verbindung gefunden hat.",
+      "alsoAttached": "Entfernt auch {count, plural, one {# zugehöriges Gerät} other {# zugehörige Geräte}}.",
+      "alsoLogin": "Die gespeicherte Anmeldung wird ebenfalls entfernt, sofern nichts anderes sie nutzt.",
       "addBack": "Um es später wieder hinzuzufügen, verwenden Sie ein neues Einmal-Token aus „Gerät hinzufügen“.",
       "typeName": "Geben Sie zur Bestätigung {name} ein",
       "cancel": "Abbrechen",

@@ -89,6 +89,7 @@ export function DeviceSettingsTab({ asset, children }: { asset: Asset; children:
           </div>
           <NodeDeleteConfirmModal
             open={del.showDeleteConfirm}
+            assetId={asset.id}
             assetName={asset.name}
             agent={asset.source === "agent"}
             confirmInput={del.deleteConfirmInput}

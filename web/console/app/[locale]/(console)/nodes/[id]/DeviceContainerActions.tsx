@@ -60,6 +60,7 @@ export function DeviceContainerActions({ asset }: { asset: Asset }) {
       {editing ? <NodeEditModal asset={asset} groups={slowStatus?.groups ?? []} onClose={() => setEditing(false)} onSave={refresh} /> : null}
       <NodeDeleteConfirmModal
         open={del.showDeleteConfirm}
+        assetId={asset.id}
         assetName={asset.name}
         confirmInput={del.deleteConfirmInput}
         deleting={del.deleting}

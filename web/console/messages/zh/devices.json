@@ -246,6 +246,9 @@
     "remove": {
       "title": "移除 {name}？",
       "body": "LabTether 将停止监控 {name} 并删除其历史记录。",
+      "alsoFound": "{count, plural, other {同时移除此连接发现的 # 台设备。}}",
+      "alsoAttached": "{count, plural, other {同时移除附属于它的 # 台设备。}}",
+      "alsoLogin": "其保存的登录信息也会被移除，除非其他地方仍在使用。",
       "addBack": "以后要重新添加，请在“添加设备”中使用新的一次性令牌。",
       "typeName": "输入 {name} 以确认",
       "cancel": "取消",
