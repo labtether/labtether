@@ -129,6 +129,8 @@
     "failed": "Connexion impossible",
     "disconnected": "Déconnecté",
     "sessionDisconnected": "Session déconnectée",
+    "deviceDisconnected": "{name} s'est déconnecté",
+    "deviceStillDisconnected": "{name} est toujours déconnecté",
     "connect": "Se connecter",
     "reconnect": "Se reconnecter",
     "retry": "Réessayer",
@@ -264,7 +266,7 @@
   "words": {
     "creatingSession": "Création de la session…",
     "reconnectingSession": "Reconnexion de la session…",
-    "requestingTicket": "Demande du ticket de flux…",
+    "requestingTicket": "Demande d’accès…",
     "openingStream": "Ouverture du flux sécurisé…",
     "startingShell": "Démarrage du shell distant…",
     "connected": "Connecté",

@@ -132,6 +132,13 @@ func (d *Deps) Handle2FASetup(w http.ResponseWriter, r *http.Request) {
 		servicehttp.WriteError(w, http.StatusConflict, "2FA is already enabled; disable it first")
 		return
 	}
+	// Single sign-on accounts never reach the code step: the identity
+	// provider handles their second factor, so a LabTether code would only
+	// look like protection.
+	if provider := strings.ToLower(strings.TrimSpace(user.AuthProvider)); provider != "" && provider != "local" {
+		servicehttp.WriteError(w, http.StatusBadRequest, "this account signs in with single sign-on; set up two-factor sign-in at your identity provider")
+		return
+	}
 
 	secret, uri, err := auth.GenerateTOTPSecret(user.Username, "LabTether")
 	if err != nil {

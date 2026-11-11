@@ -5,6 +5,7 @@ import { useCallback, useRef } from "react";
 import type { GuacamoleViewerHandle } from "../../../../components/GuacamoleViewer";
 import type { SPICEViewerHandle } from "../../../../components/SPICEViewer";
 import type { VNCViewerHandle } from "../../../../components/VNCViewer";
+import { macSignInName } from "../../../../components/remote-toolbar/signInTarget";
 import type { WebRTCViewerHandle } from "../../../../components/WebRTCViewer";
 import { useDesktopSession } from "../../../../contexts/DesktopSessionContext";
 import { useDisplayList } from "../../../../hooks/useDisplayList";
@@ -114,6 +115,7 @@ export function DesktopTab({ nodeId }: { nodeId: string }) {
     protocol,
     vncRef,
     autoPassword: session.vncPassword,
+    macName: macSignInName(session.assets, nodeId),
   });
 
   const {

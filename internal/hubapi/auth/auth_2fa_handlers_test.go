@@ -358,3 +358,28 @@ func clearsSessionCookie(rec *httptest.ResponseRecorder) bool {
 	}
 	return false
 }
+
+// Risk: a single sign-on account could turn on LabTether two-factor sign-in,
+// which its sign-ins never ask for, so the account looked protected and was not.
+func TestTwoFactorSetupRefusesSingleSignOnAccount(t *testing.T) {
+	store := persistence.NewMemoryAuthStore()
+	user, err := store.CreateUserWithRole("sso-user", "", coreauth.RoleViewer, "oidc", "subject-1")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	deps := &Deps{
+		AuthStore:         store,
+		OIDCRef:           &OIDCProviderRef{},
+		ChallengeStore:    coreauth.NewChallengeStore(),
+		TOTPEncryptionKey: make([]byte, 32),
+		EnforceRateLimit:  testutil.NoopRateLimit,
+		UserIDFromContext: func(context.Context) string { return user.ID },
+	}
+	setup := performJSONRequest(t, http.MethodPost, "/auth/2fa/setup", nil, deps.Handle2FASetup)
+	if setup.Code != http.StatusBadRequest {
+		t.Fatalf("setup status = %d, want 400; body = %s", setup.Code, setup.Body.String())
+	}
+	if persisted, _, _ := store.GetUserByID(user.ID); persisted.TOTPSecret != "" {
+		t.Fatal("a TOTP secret was saved for a single sign-on account")
+	}
+}

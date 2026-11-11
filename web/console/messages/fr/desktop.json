@@ -137,7 +137,7 @@
     "connectingTo": "Connexion à {name}",
     "step": {
       "session": "Démarrage de la session",
-      "ticket": "Obtention du ticket de flux",
+      "ticket": "Demande d’accès",
       "stream": "Ouverture du flux"
     },
     "stepReconnect": "Reconnexion de la session",
@@ -159,6 +159,8 @@
   "signIn": {
     "title": "Nom d’utilisateur et mot de passe",
     "vncTitle": "Mot de passe VNC",
+    "macTitle": "Se connecter à {name}",
+    "macAccount": "Utilisez un compte de ce Mac.",
     "username": "Nom d’utilisateur",
     "password": "Mot de passe",
     "cancel": "Annuler",

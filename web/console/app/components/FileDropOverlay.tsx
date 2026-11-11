@@ -1,8 +1,15 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslations } from "next-intl";
+import { FileRequestError, listFiles } from "../[locale]/(console)/files/fileOpsClient";
+import { UploadReplaceDialog } from "../[locale]/(console)/files/FilesOverlays";
+import { isWindowsPlatform } from "../[locale]/(console)/files/remotePaths";
+import type { FolderEntry, HeldListing } from "../[locale]/(console)/files/uploadClashes";
+import { useUploadReplace } from "../[locale]/(console)/files/useUploadReplace";
+import { useFastStatus } from "../contexts/StatusContext";
+import { ToolbarPortalContext } from "./remote-toolbar/ToolbarButtons";
 
 interface FileDropOverlayProps {
   assetId: string;
@@ -24,6 +31,10 @@ type UploadState = {
   startedAt: number;
 };
 
+// The Remote View screen has no folder open, so the target folder is read before every drop.
+const NO_LISTING: HeldListing = { path: "", entries: [], showHidden: false, ready: false };
+const NOTICE_MS = 8000;
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -40,6 +51,10 @@ export default function FileDropOverlay({
   uploadFile: customUploadFile,
 }: FileDropOverlayProps) {
   const t = useTranslations("files.drop");
+  const tErrors = useTranslations("files.errors");
+  const platform = useFastStatus()?.assets?.find((asset) => asset.id === assetId)?.platform;
+  const dialogContainer = useContext(ToolbarPortalContext);
+  const [notice, setNotice] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [upload, setUpload] = useState<UploadState | null>(null);
   const [queueInfo, setQueueInfo] = useState<{
@@ -140,16 +155,9 @@ export default function FileDropOverlay({
     [],
   );
 
-  const onDrop = useCallback(
-    async (event: React.DragEvent) => {
-      event.preventDefault();
-      dragCounterRef.current = 0;
-      setDragging(false);
-      if (disabled) return;
-
-      const files = Array.from(event.dataTransfer.files);
-      if (files.length === 0) return;
-
+  /** Uploads the files one after another, by the viewer's own channel when it has one (WebRTC), else through the Hub. */
+  const runUploads = useCallback(
+    async (files: File[], dir: string) => {
       const total = files.length;
 
       for (let i = 0; i < files.length; i++) {
@@ -157,9 +165,7 @@ export default function FileDropOverlay({
         setQueueInfo(total > 1 ? { index: i + 1, total } : null);
 
         const normalizedDir =
-          targetDir.endsWith("\\") || targetDir.endsWith("/")
-            ? targetDir.slice(0, -1)
-            : targetDir;
+          dir.endsWith("\\") || dir.endsWith("/") ? dir.slice(0, -1) : dir;
         const separator = normalizedDir.includes("\\") ? "\\" : "/";
         const targetPath = `${normalizedDir}${separator}${file.name}`;
 
@@ -201,7 +207,61 @@ export default function FileDropOverlay({
       setUpload(null);
       setQueueInfo(null);
     },
-    [assetId, customUploadFile, disabled, targetDir, uploadFileViaHTTP],
+    [assetId, customUploadFile, uploadFileViaHTTP],
+  );
+
+  // A dropped file is written over a file of the same name, so the target folder is read first, through the Hub's
+  // list call whichever channel does the upload. A folder that does not exist yet holds nothing to replace (the
+  // upload creates it). Any other failure to read it uploads nothing.
+  const listTarget = useCallback(
+    async (dir: string): Promise<FolderEntry[]> => {
+      try {
+        return (await listFiles(assetId, dir, { showHidden: true })).entries;
+      } catch (error) {
+        if (error instanceof FileRequestError && error.status === 404) return [];
+        throw error;
+      }
+    },
+    [assetId],
+  );
+  const startUploads = useCallback(
+    (files: File[], dir: string) => {
+      void runUploads(files, dir);
+    },
+    [runUploads],
+  );
+  const targetUnread = useCallback(
+    (dir: string) => setNotice(tErrors("uploadNotChecked", { path: dir })),
+    [tErrors],
+  );
+  const replace = useUploadReplace({
+    held: NO_LISTING,
+    list: listTarget,
+    ignoreCase: isWindowsPlatform(platform),
+    upload: startUploads,
+    onUnread: targetUnread,
+  });
+  const startReplaceCheck = replace.start;
+
+  useEffect(() => {
+    if (!notice) return undefined;
+    const timer = window.setTimeout(() => setNotice(null), NOTICE_MS);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
+  const onDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault();
+      dragCounterRef.current = 0;
+      setDragging(false);
+      if (disabled) return;
+
+      const files = Array.from(event.dataTransfer.files);
+      if (files.length === 0) return;
+      setNotice(null);
+      startReplaceCheck(files, targetDir);
+    },
+    [disabled, startReplaceCheck, targetDir],
   );
 
   const pct =
@@ -253,6 +313,19 @@ export default function FileDropOverlay({
           </div>
         </div>
       )}
+      {notice && !upload && (
+        <div className="fx-rprog" role="alert">
+          <span className="fx-rprog-d bad">{notice}</span>
+        </div>
+      )}
+      <UploadReplaceDialog
+        ask={replace.ask}
+        where={replace.ask?.dir ?? ""}
+        onCancel={replace.cancel}
+        onSkip={replace.skip}
+        onReplace={replace.replace}
+        container={dialogContainer}
+      />
     </div>
   );
 }

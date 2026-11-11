@@ -13,11 +13,13 @@ type SessionRequestOptions = {
   display: string;
   record: boolean;
   directTarget: TerminalConnectOptions["directTarget"];
+  /** False for a device without tmux (Windows): the Hub refuses a persistent session there, so none is asked for. */
+  persistent?: boolean;
 };
 
 export async function createSession({
   type, connectTarget, existingSession, quickConnectParams,
-  defaultActorID, quality, protocol, display, record, directTarget,
+  defaultActorID, quality, protocol, display, record, directTarget, persistent = true,
 }: SessionRequestOptions): Promise<string> {
   let sessionId = "";
   if (type === "terminal") {
@@ -51,16 +53,18 @@ export async function createSession({
     } else {
       // Use persistent sessions so tmux sessions survive disconnect/reconnect.
       // Step 1: Ensure a persistent session exists for this actor+target.
-      const ensureRes = await fetch("/api/terminal/persistent-sessions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target: connectTarget }),
-      });
       let persistentId = "";
-      if (ensureRes.ok) {
-        persistentId = persistentSessionIDFromPayload(
-          await ensureRes.json().catch(() => null),
-        );
+      if (persistent) {
+        const ensureRes = await fetch("/api/terminal/persistent-sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ target: connectTarget }),
+        });
+        if (ensureRes.ok) {
+          persistentId = persistentSessionIDFromPayload(
+            await ensureRes.json().catch(() => null),
+          );
+        }
       }
 
       if (persistentId) {

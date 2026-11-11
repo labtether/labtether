@@ -136,6 +136,7 @@
     "notification_channel_tested": "A envoyé une notification de test",
     "settings_runtime_updated": "A modifié les paramètres",
     "settings_runtime_reset": "A rétabli les paramètres par défaut",
+    "settings_retention_updated": "A modifié la conservation des données",
     "settings_tls_updated": "A modifié le certificat HTTPS",
     "settings_tls_cleared": "A retiré le certificat HTTPS",
     "hub_tls_renewed": "A renouvelé le certificat du hub",

@@ -243,6 +243,18 @@ func runHub(ctx context.Context) error {
 		port = httpsPort
 		srv.tlsState.Enabled = true
 		log.Printf("labtether: TLS enabled (external cert=%s, key=%s) — serving HTTPS on :%s", tlsCertFile, tlsKeyFile, port)
+		// The bundled console reaches the Hub by its container name and trusts
+		// only the Hub's own CA, which an external certificate does not cover.
+		// As with an uploaded certificate, names the external certificate does
+		// not cover get the built-in one. CACertPEM stays empty, so agent setup
+		// does not offer the built-in CA.
+		if builtIn, err := certmgr.Provision(dataDir+"/certs", builtInSANHosts...); err != nil {
+			log.Printf("labtether warning: no built-in certificate for the console's connection to the Hub: %v", err)
+		} else {
+			srv.tlsState.CertReloader = builtIn.Reloader
+			go builtIn.Reloader.Run(ctx)
+			shareCACert(builtIn.CACertPEM, "/ca")
+		}
 
 	default: // "auto"
 		certsDir := dataDir + "/certs"
@@ -306,6 +318,14 @@ func runHub(ctx context.Context) error {
 		if tsrl, ok := srv.tlsState.TailscaleCertReloader.(*tailscaleCertReloader); ok && tsrl != nil {
 			srv.tlsState.CertSwitcher.SetProvider(tsrl.GetCertificate)
 			srv.tlsState.DefaultGetCertificate = tsrl.GetCertificate
+		} else if defaultTLSMode == "external" {
+			staticProvider, err := newStaticHubCertificateProvider(tlsCertFile, tlsKeyFile)
+			if err != nil {
+				return newStartupFailure(startupFailureTLSConfiguration, err)
+			}
+			provider := srv.tlsState.UploadedCertificateProvider(staticProvider.GetCertificate)
+			srv.tlsState.CertSwitcher.SetProvider(provider)
+			srv.tlsState.DefaultGetCertificate = provider
 		} else if srv.tlsState.CertReloader != nil {
 			srv.tlsState.CertSwitcher.SetProvider(srv.tlsState.CertReloader.GetCertificate)
 			srv.tlsState.DefaultGetCertificate = srv.tlsState.CertReloader.GetCertificate
