@@ -178,6 +178,12 @@ v1.7.1.
   (the Hub refuses it) or two-factor setup (its sign-ins never ask for the
   code, so the account only looked protected). The Hub refuses that setup
   too, and `/auth/me` says how the account signs in (`auth_provider`).
+- A device's blast radius (`/assets/{id}/blast-radius`) and upstream
+  (`/assets/{id}/upstream`) follow what each link means: a device that depends
+  on, runs on or is hosted on another is hit when that one goes down. A
+  dependency such as "nas01 depends on host01" was in neither host01's blast
+  radius nor nas01's upstream. Each device is listed once, and suggested links
+  count only after they are accepted.
 - The two-factor code fields under Account security have names for screen
   readers.
 - Alerts: email, Slack, ntfy, Gotify and push messages name the device the
