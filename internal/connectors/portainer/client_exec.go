@@ -86,8 +86,8 @@ type ExecAuth struct {
 }
 
 const (
-	execAuthHeaderAPIKey = "X-API-Key"
-	execAuthHeaderBearer = "Authorization"
+	execAuthHeaderAPIKey = "X-API-Key"     // #nosec G101 -- HTTP header name, not a credential
+	execAuthHeaderBearer = "Authorization" // #nosec G101 -- HTTP header name, not a credential
 )
 
 // HeaderValue is the value of the auth header for the WebSocket handshake.
