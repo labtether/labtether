@@ -6,7 +6,15 @@
     "accent": "Acento",
     "autoRefreshLabel": "Actualización automática",
     "autoRefreshOff": "Off",
-    "language": "Idioma"
+    "language": "Idioma",
+    "themes": {
+      "dark": "Oscuro",
+      "light": "Claro"
+    },
+    "layouts": {
+      "minimal": "Mínimo",
+      "diagnostic": "Diagnóstico"
+    }
   },
   "about": {
     "heading": "Acerca de",
@@ -210,7 +218,54 @@
   "discoveryDefaults": {
     "title": "Valores predeterminados de descubrimiento de servicios",
     "saving": "Guardando...",
-    "saveDefaults": "Guardar"
+    "saveDefaults": "Guardar",
+    "fields": {
+      "docker_enabled": {
+        "label": "Contenedores Docker",
+        "hint": "Encontrar servicios por los puertos y etiquetas de los contenedores."
+      },
+      "proxy_enabled": {
+        "label": "Proxies inversos",
+        "hint": "Leer los servicios enrutados desde las API de proxy de abajo."
+      },
+      "proxy_traefik_enabled": {
+        "label": "Rutas de Traefik"
+      },
+      "proxy_caddy_enabled": {
+        "label": "Rutas de Caddy",
+        "hint": "Desde la API de administración de Caddy."
+      },
+      "proxy_npm_enabled": {
+        "label": "Rutas de Nginx Proxy Manager"
+      },
+      "port_scan_enabled": {
+        "label": "Escaneo local de puertos",
+        "hint": "Sondear los puertos del propio dispositivo en busca de servicios web."
+      },
+      "port_scan_include_listening": {
+        "label": "Añadir puertos en escucha",
+        "hint": "Sondear también cada puerto TCP en el que escucha el dispositivo."
+      },
+      "port_scan_ports": {
+        "label": "Puertos del escaneo local",
+        "hint": "Separados por comas. Vacío usa la lista integrada."
+      },
+      "lan_scan_enabled": {
+        "label": "Escaneo de la LAN",
+        "hint": "Sondear los rangos de la LAN en busca de servicios web."
+      },
+      "lan_scan_cidrs": {
+        "label": "Rangos de la LAN",
+        "hint": "CIDR privados, separados por comas."
+      },
+      "lan_scan_ports": {
+        "label": "Puertos del escaneo de la LAN",
+        "hint": "Separados por comas. Vacío usa la lista integrada."
+      },
+      "lan_scan_max_hosts": {
+        "label": "Hosts por escaneo de la LAN"
+      }
+    }
   },
   "apiKeys": {
     "heading": "Claves de API",
@@ -308,6 +363,16 @@
       "terminal_window": "Historial de terminal",
       "action_runs_window": "Ejecuciones de acciones",
       "update_runs_window": "Ejecuciones de actualizaciones"
+    },
+    "presetNames": {
+      "compact": "Compacto",
+      "balanced": "Equilibrado",
+      "extended": "Extendido"
+    },
+    "presetHints": {
+      "compact": "Periodos más cortos: menos disco.",
+      "balanced": "Los periodos predeterminados.",
+      "extended": "Periodos más largos: más historial."
     }
   },
   "advanced": {
@@ -342,5 +407,31 @@
     "loadFailed": "No se pudo cargar la configuración de la base de datos.",
     "revealFailed": "No se pudo mostrar la contraseña."
   },
-  "title": "Configuración"
+  "title": "Configuración",
+  "sshKey": {
+    "title": "Clave SSH del hub",
+    "rotateButton": "Renovar clave…",
+    "retry": "Reintentar",
+    "type": "Tipo",
+    "fingerprint": "Huella",
+    "publicKey": "Clave pública OpenSSH",
+    "copy": "Copiar clave pública",
+    "copied": "Copiada",
+    "copiedMessage": "Clave pública copiada.",
+    "copyFailed": "El navegador no pudo copiar la clave. Selecciónela y cópiela usted.",
+    "loadFailed": "La clave SSH del hub no se cargó.",
+    "rotateFailed": "La clave no se renovó. La clave mostrada sigue activa.",
+    "rotateUnclear": "La clave se renovó, pero la respuesta del hub no se pudo leer. Recargue la página antes de renovarla otra vez.",
+    "rotated": "Clave SSH del hub renovada.",
+    "rotatedWarning": "Clave renovada, con una advertencia: {warning}",
+    "agentsUpdated": "{updated} de {total} agentes conectados tienen la clave nueva.",
+    "rotateTitle": "Renovar la clave SSH del hub",
+    "rotateBody": "Los agentes conectados reciben la nueva clave pública antes de que se active. Si falla, la clave actual sigue activa. Los dispositivos sin conexión reciben la clave activa al reconectarse.",
+    "keyType": "Tipo de clave",
+    "note": "Nota (opcional)",
+    "notePlaceholder": "Por qué cambia la clave",
+    "confirmLabel": "Escriba {word} para confirmar",
+    "cancel": "Cancelar",
+    "rotateSubmit": "Renovar clave"
+  }
 }

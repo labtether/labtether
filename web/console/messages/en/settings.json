@@ -6,7 +6,15 @@
     "accent": "Accent",
     "autoRefreshLabel": "Auto-refresh",
     "autoRefreshOff": "Off",
-    "language": "Language"
+    "language": "Language",
+    "themes": {
+      "dark": "Dark",
+      "light": "Light"
+    },
+    "layouts": {
+      "minimal": "Minimal",
+      "diagnostic": "Diagnostic"
+    }
   },
   "about": {
     "heading": "About",
@@ -210,7 +218,54 @@
   "discoveryDefaults": {
     "title": "Service discovery defaults",
     "saving": "Saving...",
-    "saveDefaults": "Save"
+    "saveDefaults": "Save",
+    "fields": {
+      "docker_enabled": {
+        "label": "Docker containers",
+        "hint": "Find services from container ports and labels."
+      },
+      "proxy_enabled": {
+        "label": "Reverse proxies",
+        "hint": "Read routed services from the proxy APIs below."
+      },
+      "proxy_traefik_enabled": {
+        "label": "Traefik routes"
+      },
+      "proxy_caddy_enabled": {
+        "label": "Caddy routes",
+        "hint": "From the Caddy admin API."
+      },
+      "proxy_npm_enabled": {
+        "label": "Nginx Proxy Manager routes"
+      },
+      "port_scan_enabled": {
+        "label": "Local port scan",
+        "hint": "Probe the device's own ports for web services."
+      },
+      "port_scan_include_listening": {
+        "label": "Add listening ports",
+        "hint": "Also scan every TCP port the device listens on."
+      },
+      "port_scan_ports": {
+        "label": "Local scan ports",
+        "hint": "Comma separated. Empty uses the built-in list."
+      },
+      "lan_scan_enabled": {
+        "label": "LAN scan",
+        "hint": "Probe the LAN ranges for web services."
+      },
+      "lan_scan_cidrs": {
+        "label": "LAN ranges",
+        "hint": "Private CIDRs, comma separated."
+      },
+      "lan_scan_ports": {
+        "label": "LAN scan ports",
+        "hint": "Comma separated. Empty uses the built-in list."
+      },
+      "lan_scan_max_hosts": {
+        "label": "Hosts per LAN scan"
+      }
+    }
   },
   "apiKeys": {
     "heading": "API keys",
@@ -308,6 +363,16 @@
       "terminal_window": "Terminal history",
       "action_runs_window": "Action runs",
       "update_runs_window": "Update runs"
+    },
+    "presetNames": {
+      "compact": "Compact",
+      "balanced": "Balanced",
+      "extended": "Extended"
+    },
+    "presetHints": {
+      "compact": "Shortest windows: least disk use.",
+      "balanced": "The default windows.",
+      "extended": "Longest windows: most history."
     }
   },
   "advanced": {
@@ -342,5 +407,31 @@
     "loadFailed": "Could not load the database settings.",
     "revealFailed": "Could not show the password."
   },
-  "title": "Settings"
+  "title": "Settings",
+  "sshKey": {
+    "title": "Hub SSH key",
+    "rotateButton": "Rotate key…",
+    "retry": "Try again",
+    "type": "Type",
+    "fingerprint": "Fingerprint",
+    "publicKey": "OpenSSH public key",
+    "copy": "Copy public key",
+    "copied": "Copied",
+    "copiedMessage": "Public key copied.",
+    "copyFailed": "The browser could not copy the key. Select it and copy it yourself.",
+    "loadFailed": "The Hub SSH key did not load.",
+    "rotateFailed": "The key was not rotated. The key shown is still the active one.",
+    "rotateUnclear": "The key was rotated, but the Hub's answer could not be read. Reload the page before you rotate again.",
+    "rotated": "Hub SSH key rotated.",
+    "rotatedWarning": "Key rotated, with a warning: {warning}",
+    "agentsUpdated": "{updated} of {total} connected agents have the new key.",
+    "rotateTitle": "Rotate the Hub SSH key",
+    "rotateBody": "Connected agents get the new public key before it becomes active. If that fails, the current key stays active. Offline devices get the active key when they reconnect.",
+    "keyType": "Key type",
+    "note": "Note (optional)",
+    "notePlaceholder": "Why the key changes",
+    "confirmLabel": "Type {word} to confirm",
+    "cancel": "Cancel",
+    "rotateSubmit": "Rotate key"
+  }
 }

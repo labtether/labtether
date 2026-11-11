@@ -19,7 +19,7 @@ type Inputs = {
   assets: Pick<Asset, "id" | "name" | "source" | "status">[];
   recentCommandCount: number;
   hasChannels: boolean;
-  users: Array<{ username: string; created_at?: string }>;
+  users: Array<{ username: string; role?: string; created_at?: string }>;
   canWrite: boolean;
   canAdmin: boolean;
 };
@@ -39,7 +39,12 @@ function pick<T extends { status: string }>(list: T[]): T | undefined {
 export function checklistSteps(input: Inputs): ChecklistStep[] {
   const agent = pick(input.assets.filter((a) => a.source.toLowerCase() === "agent"));
   const source = pick(input.assets.filter((a) => API_SOURCES.has(a.source.toLowerCase())));
-  const others = [...input.users].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+  // The person the owner added: newest first. The Hub's user list has no creation time and is oldest first, so
+  // without one the last person who is not the owner is the newest.
+  const people = input.users.filter((u) => u.role !== "owner");
+  const others = people.some((u) => u.created_at)
+    ? [...people].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))
+    : [...people].reverse();
   const steps: ChecklistStep[] = [
     { id: "device", done: Boolean(agent), sub: agent ? nameOf(agent) : "", action: "add" },
     // Done when the Hub lists a system added through its API. The status call's connector list names the kinds

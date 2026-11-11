@@ -6,7 +6,15 @@
     "accent": "强调色",
     "autoRefreshLabel": "自动刷新",
     "autoRefreshOff": "关闭",
-    "language": "语言"
+    "language": "语言",
+    "themes": {
+      "dark": "深色",
+      "light": "浅色"
+    },
+    "layouts": {
+      "minimal": "简洁",
+      "diagnostic": "诊断"
+    }
   },
   "about": {
     "heading": "关于",
@@ -210,7 +218,54 @@
   "discoveryDefaults": {
     "title": "服务发现默认设置",
     "saving": "正在保存...",
-    "saveDefaults": "保存"
+    "saveDefaults": "保存",
+    "fields": {
+      "docker_enabled": {
+        "label": "Docker 容器",
+        "hint": "从容器端口和标签发现服务。"
+      },
+      "proxy_enabled": {
+        "label": "反向代理",
+        "hint": "从下面的代理 API 读取已路由的服务。"
+      },
+      "proxy_traefik_enabled": {
+        "label": "Traefik 路由"
+      },
+      "proxy_caddy_enabled": {
+        "label": "Caddy 路由",
+        "hint": "来自 Caddy 管理 API。"
+      },
+      "proxy_npm_enabled": {
+        "label": "Nginx Proxy Manager 路由"
+      },
+      "port_scan_enabled": {
+        "label": "本地端口扫描",
+        "hint": "探测设备自身端口上的 Web 服务。"
+      },
+      "port_scan_include_listening": {
+        "label": "加入监听端口",
+        "hint": "同时扫描设备监听的每个 TCP 端口。"
+      },
+      "port_scan_ports": {
+        "label": "本地扫描端口",
+        "hint": "以逗号分隔。留空使用内置列表。"
+      },
+      "lan_scan_enabled": {
+        "label": "局域网扫描",
+        "hint": "探测局域网范围内的 Web 服务。"
+      },
+      "lan_scan_cidrs": {
+        "label": "局域网范围",
+        "hint": "私有 CIDR，以逗号分隔。"
+      },
+      "lan_scan_ports": {
+        "label": "局域网扫描端口",
+        "hint": "以逗号分隔。留空使用内置列表。"
+      },
+      "lan_scan_max_hosts": {
+        "label": "每次局域网扫描的主机数"
+      }
+    }
   },
   "apiKeys": {
     "heading": "API 密钥",
@@ -308,6 +363,16 @@
       "terminal_window": "终端历史",
       "action_runs_window": "操作运行记录",
       "update_runs_window": "更新运行记录"
+    },
+    "presetNames": {
+      "compact": "精简",
+      "balanced": "均衡",
+      "extended": "扩展"
+    },
+    "presetHints": {
+      "compact": "最短保留期：占用磁盘最少。",
+      "balanced": "默认保留期。",
+      "extended": "最长保留期：历史最多。"
     }
   },
   "advanced": {
@@ -342,5 +407,31 @@
     "loadFailed": "无法加载数据库设置。",
     "revealFailed": "无法显示密码。"
   },
-  "title": "设置"
+  "title": "设置",
+  "sshKey": {
+    "title": "Hub SSH 密钥",
+    "rotateButton": "轮换密钥…",
+    "retry": "重试",
+    "type": "类型",
+    "fingerprint": "指纹",
+    "publicKey": "OpenSSH 公钥",
+    "copy": "复制公钥",
+    "copied": "已复制",
+    "copiedMessage": "已复制公钥。",
+    "copyFailed": "浏览器无法复制密钥。请手动选中并复制。",
+    "loadFailed": "Hub SSH 密钥未能加载。",
+    "rotateFailed": "密钥未轮换。显示的密钥仍然有效。",
+    "rotateUnclear": "密钥已轮换，但无法读取 Hub 的回应。再次轮换前请刷新页面。",
+    "rotated": "Hub SSH 密钥已轮换。",
+    "rotatedWarning": "密钥已轮换，但有警告：{warning}",
+    "agentsUpdated": "{total} 个已连接的 Agent 中有 {updated} 个已获得新密钥。",
+    "rotateTitle": "轮换 Hub SSH 密钥",
+    "rotateBody": "已连接的 Agent 会在新公钥生效前收到它。如果失败，当前密钥保持有效。离线设备在重新连接时获得有效的密钥。",
+    "keyType": "密钥类型",
+    "note": "备注（可选）",
+    "notePlaceholder": "更换密钥的原因",
+    "confirmLabel": "输入 {word} 以确认",
+    "cancel": "取消",
+    "rotateSubmit": "轮换密钥"
+  }
 }

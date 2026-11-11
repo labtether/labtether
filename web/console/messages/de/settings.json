@@ -6,7 +6,15 @@
     "accent": "Akzentfarbe",
     "autoRefreshLabel": "Auto-Aktualisierung",
     "autoRefreshOff": "Aus",
-    "language": "Sprache"
+    "language": "Sprache",
+    "themes": {
+      "dark": "Dunkel",
+      "light": "Hell"
+    },
+    "layouts": {
+      "minimal": "Minimal",
+      "diagnostic": "Diagnose"
+    }
   },
   "about": {
     "heading": "Info",
@@ -210,7 +218,54 @@
   "discoveryDefaults": {
     "title": "Standardwerte für die Diensterkennung",
     "saving": "Wird gespeichert...",
-    "saveDefaults": "Speichern"
+    "saveDefaults": "Speichern",
+    "fields": {
+      "docker_enabled": {
+        "label": "Docker-Container",
+        "hint": "Dienste über Container-Ports und Labels finden."
+      },
+      "proxy_enabled": {
+        "label": "Reverse Proxies",
+        "hint": "Geroutete Dienste aus den Proxy-APIs unten lesen."
+      },
+      "proxy_traefik_enabled": {
+        "label": "Traefik-Routen"
+      },
+      "proxy_caddy_enabled": {
+        "label": "Caddy-Routen",
+        "hint": "Aus der Caddy-Admin-API."
+      },
+      "proxy_npm_enabled": {
+        "label": "Nginx-Proxy-Manager-Routen"
+      },
+      "port_scan_enabled": {
+        "label": "Lokaler Port-Scan",
+        "hint": "Die eigenen Ports des Geräts nach Webdiensten prüfen."
+      },
+      "port_scan_include_listening": {
+        "label": "Lauschende Ports hinzufügen",
+        "hint": "Auch jeden TCP-Port prüfen, auf dem das Gerät lauscht."
+      },
+      "port_scan_ports": {
+        "label": "Ports für den lokalen Scan",
+        "hint": "Durch Kommas getrennt. Leer nimmt die eingebaute Liste."
+      },
+      "lan_scan_enabled": {
+        "label": "LAN-Scan",
+        "hint": "Die LAN-Bereiche nach Webdiensten prüfen."
+      },
+      "lan_scan_cidrs": {
+        "label": "LAN-Bereiche",
+        "hint": "Private CIDRs, durch Kommas getrennt."
+      },
+      "lan_scan_ports": {
+        "label": "Ports für den LAN-Scan",
+        "hint": "Durch Kommas getrennt. Leer nimmt die eingebaute Liste."
+      },
+      "lan_scan_max_hosts": {
+        "label": "Hosts pro LAN-Scan"
+      }
+    }
   },
   "apiKeys": {
     "heading": "API-Schlüssel",
@@ -308,6 +363,16 @@
       "terminal_window": "Terminal-Verlauf",
       "action_runs_window": "Aktionsläufe",
       "update_runs_window": "Update-Läufe"
+    },
+    "presetNames": {
+      "compact": "Kompakt",
+      "balanced": "Ausgewogen",
+      "extended": "Erweitert"
+    },
+    "presetHints": {
+      "compact": "Kürzeste Zeiträume: am wenigsten Speicher.",
+      "balanced": "Die Standardzeiträume.",
+      "extended": "Längste Zeiträume: der meiste Verlauf."
     }
   },
   "advanced": {
@@ -342,5 +407,31 @@
     "loadFailed": "Datenbankeinstellungen konnten nicht geladen werden.",
     "revealFailed": "Das Passwort konnte nicht angezeigt werden."
   },
-  "title": "Einstellungen"
+  "title": "Einstellungen",
+  "sshKey": {
+    "title": "SSH-Schlüssel des Hubs",
+    "rotateButton": "Schlüssel erneuern…",
+    "retry": "Erneut versuchen",
+    "type": "Typ",
+    "fingerprint": "Fingerabdruck",
+    "publicKey": "Öffentlicher OpenSSH-Schlüssel",
+    "copy": "Öffentlichen Schlüssel kopieren",
+    "copied": "Kopiert",
+    "copiedMessage": "Öffentlicher Schlüssel kopiert.",
+    "copyFailed": "Der Browser konnte den Schlüssel nicht kopieren. Markieren und kopieren Sie ihn selbst.",
+    "loadFailed": "Der SSH-Schlüssel des Hubs wurde nicht geladen.",
+    "rotateFailed": "Der Schlüssel wurde nicht erneuert. Der angezeigte Schlüssel ist weiter aktiv.",
+    "rotateUnclear": "Der Schlüssel wurde erneuert, aber die Antwort des Hubs war nicht lesbar. Laden Sie die Seite neu, bevor Sie erneut erneuern.",
+    "rotated": "SSH-Schlüssel des Hubs erneuert.",
+    "rotatedWarning": "Schlüssel erneuert, mit Warnung: {warning}",
+    "agentsUpdated": "{updated} von {total} verbundenen Agents haben den neuen Schlüssel.",
+    "rotateTitle": "SSH-Schlüssel des Hubs erneuern",
+    "rotateBody": "Verbundene Agents erhalten den neuen öffentlichen Schlüssel, bevor er aktiv wird. Schlägt das fehl, bleibt der aktuelle Schlüssel aktiv. Offline-Geräte erhalten den aktiven Schlüssel, wenn sie sich wieder verbinden.",
+    "keyType": "Schlüsseltyp",
+    "note": "Notiz (optional)",
+    "notePlaceholder": "Warum der Schlüssel wechselt",
+    "confirmLabel": "Geben Sie {word} zur Bestätigung ein",
+    "cancel": "Abbrechen",
+    "rotateSubmit": "Schlüssel erneuern"
+  }
 }

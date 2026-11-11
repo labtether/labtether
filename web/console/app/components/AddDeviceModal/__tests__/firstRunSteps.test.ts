@@ -32,4 +32,14 @@ describe("checklistSteps", () => {
     expect(admin.find((s) => s.id === "notify")?.done).toBe(true);
     expect(admin.find((s) => s.id === "invite")).toMatchObject({ done: true, sub: "sam" });
   });
+
+  it("names the person the owner added, not the owner, from the Hub's oldest-first user list", () => {
+    // The Hub's /auth/users answer has no created_at and lists the owner first.
+    const steps = checklistSteps({ ...base, canAdmin: true, users: [
+      { username: "owner", role: "owner" },
+      { username: "sam", role: "operator" },
+      { username: "kim", role: "viewer" },
+    ] });
+    expect(steps.find((s) => s.id === "invite")).toMatchObject({ done: true, sub: "kim" });
+  });
 });
