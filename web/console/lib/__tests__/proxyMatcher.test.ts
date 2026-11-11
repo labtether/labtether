@@ -23,6 +23,14 @@ describe("proxy matcher", () => {
     expect(unstable_doesProxyMatch({ config, url: "https://hub.example/mcpx" })).toBe(true);
   });
 
+  // The Shell WebSocket was redirected to /en/portainer/... by locale routing, so
+  // the upgrade never reached the runtime proxy and the window stayed empty.
+  it("bypasses locale routing for the Portainer container Shell WebSocket only", () => {
+    expect(unstable_doesProxyMatch({ config, url: "https://hub.example/portainer/assets/ep-1/containers/abc123/exec" })).toBe(false);
+    expect(unstable_doesProxyMatch({ config, url: "https://hub.example/portainer/assets/ep-1/containers" })).toBe(true);
+    expect(unstable_doesProxyMatch({ config, url: "https://hub.example/en/portainer" })).toBe(true);
+  });
+
   it.each([
     "https://hub.example/api/auth/login",
     "https://hub.example/api/assets",
