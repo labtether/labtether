@@ -48,6 +48,7 @@ func (s *apiServer) buildTerminalDeps() *terminalpkg.Deps {
 		TerminalStore:           s.terminalStore,
 		TerminalPersistentStore: s.terminalPersistentStore,
 		TerminalBookmarkStore:   s.terminalBookmarkStore,
+		SSHKnownHostStore:       s.sshKnownHostStore,
 		TerminalScrollbackStore: s.terminalScrollbackStore,
 		CredentialStore:         s.credentialStore,
 		AuditStore:              s.auditStore,
@@ -231,6 +232,10 @@ func (s *apiServer) handleBookmarks(w http.ResponseWriter, r *http.Request) {
 
 func (s *apiServer) handleBookmarkActions(w http.ResponseWriter, r *http.Request) {
 	s.ensureTerminalDeps().HandleBookmarkActions(w, r)
+}
+
+func (s *apiServer) handleSSHHostKeys(w http.ResponseWriter, r *http.Request) {
+	s.ensureTerminalDeps().HandleSSHHostKeys(w, r)
 }
 
 func (s *apiServer) handleSessionStream(w http.ResponseWriter, r *http.Request, session terminal.Session) {

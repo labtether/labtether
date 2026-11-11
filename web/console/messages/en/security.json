@@ -47,6 +47,7 @@
     "certChain": "Certificate chain (PEM)",
     "privateKey": "Private key (PEM)",
     "keyStored": "The hub encrypts the key before it stores it.",
+    "agentTrustNote": "Agents trust the LabTether CA. An agent that connects to an address this certificate covers stops connecting until it also trusts this certificate's issuer. Remove uploaded certificate brings it back.",
     "apply": "Apply certificate",
     "applied": "Applied the uploaded certificate.",
     "savedRestart": "Saved. Restart the hub to serve it.",

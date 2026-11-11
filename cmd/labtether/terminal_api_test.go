@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/labtether/labtether/internal/auth"
+	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/persistence"
 	"github.com/labtether/labtether/internal/terminal"
 	"net/http"
@@ -196,8 +197,13 @@ func TestTerminalCommandAuditDoesNotPersistRawCommand(t *testing.T) {
 }
 
 func TestQuickSessionCredentialsRemainEphemeralAndResolveAfterPersistentReload(t *testing.T) {
+	t.Setenv(shared.EnvSSHKnownHostsPaths, "")
 	sut := newTestAPIServer(t)
 	deps := sut.ensureTerminalDeps()
+	hostKey, _ := tofuTestKey(t)
+	if _, err := sut.sshKnownHostStore.AddSSHKnownHost(terminal.SSHKnownHost{Host: "192.0.2.10", Port: 22, HostKey: hostKey}); err != nil {
+		t.Fatal(err)
+	}
 	secret := "LTQA_QUICK_CONNECT_SECRET_62bc"
 	body, err := json.Marshal(map[string]any{
 		"host": "192.0.2.10", "port": 22, "username": "qa-user",

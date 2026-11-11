@@ -30,12 +30,13 @@ type SFTPClient struct {
 	CapturedFingerprint string // populated by TOFU callback
 }
 
-var errSFTPHostKeyProbeComplete = errors.New("SFTP host key probe complete")
+var errSSHHostKeyProbeComplete = errors.New("SSH host key probe complete")
 
-// DiscoverSFTPHostKey performs only the SSH key exchange. It deliberately
+// DiscoverSSHHostKey performs only the SSH key exchange. It deliberately
 // stops before authentication so a password or private key is never sent to
-// an unapproved server identity.
-func DiscoverSFTPHostKey(ctx context.Context, host string, port int) (string, string, error) {
+// an unapproved server identity. SFTP connections and terminal SSH (Quick
+// connect, bookmarks) use it to show a server's key before it is trusted.
+func DiscoverSSHHostKey(ctx context.Context, host string, port int) (string, string, error) {
 	opCtx, cancel := WithOperationTimeout(ctx)
 	defer cancel()
 	if port == 0 {
@@ -44,12 +45,12 @@ func DiscoverSFTPHostKey(ctx context.Context, host string, port int) (string, st
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	conn, err := securityruntime.DialOutboundTCPContext(opCtx, host, port, 15*time.Second)
 	if err != nil {
-		return "", "", fmt.Errorf("sftp host key probe dial: %w", err)
+		return "", "", fmt.Errorf("ssh host key probe dial: %w", err)
 	}
-	defer closeAndLog("close SFTP host key probe connection", conn.Close)
+	defer closeAndLog("close SSH host key probe connection", conn.Close)
 	deadline, _ := opCtx.Deadline()
 	if err := conn.SetDeadline(deadline); err != nil {
-		return "", "", fmt.Errorf("sftp host key probe deadline: %w", err)
+		return "", "", fmt.Errorf("ssh host key probe deadline: %w", err)
 	}
 	stopDeadline := watchConnCancellation(opCtx, conn)
 	defer stopDeadline()
@@ -61,15 +62,15 @@ func DiscoverSFTPHostKey(ctx context.Context, host string, port int) (string, st
 		HostKeyCallback: func(_ string, _ net.Addr, key ssh.PublicKey) error {
 			capturedKey = strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key)))
 			capturedFingerprint = ssh.FingerprintSHA256(key)
-			return errSFTPHostKeyProbeComplete
+			return errSSHHostKeyProbeComplete
 		},
 	}
 	_, _, _, _ = ssh.NewClientConn(conn, addr, probeConfig)
 	if err := opCtx.Err(); err != nil {
-		return "", "", fmt.Errorf("sftp host key probe canceled: %w", err)
+		return "", "", fmt.Errorf("ssh host key probe canceled: %w", err)
 	}
 	if capturedKey == "" || capturedFingerprint == "" {
-		return "", "", errors.New("SFTP host key probe failed")
+		return "", "", errors.New("SSH host key probe failed")
 	}
 	return capturedKey, capturedFingerprint, nil
 }

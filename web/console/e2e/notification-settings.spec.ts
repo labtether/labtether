@@ -9,6 +9,7 @@ test("notification channels complete add, edit, test, toggle, and delete flow", 
     type: string;
     config: Record<string, unknown>;
     enabled: boolean;
+    all_alerts?: boolean;
     created_at: string;
     updated_at: string;
   };
@@ -29,6 +30,7 @@ test("notification channels complete add, edit, test, toggle, and delete flow", 
           name: "Homelab Gotify",
           type: "gotify",
           enabled: true,
+          all_alerts: true,
           config: {
             server_url: "https://gotify.example.test",
             app_token: "synthetic-app-token",
@@ -41,6 +43,7 @@ test("notification channels complete add, edit, test, toggle, and delete flow", 
           type: "gotify",
           config: { server_url: "https://gotify.example.test", priority: "5" },
           enabled: true,
+          all_alerts: true,
           created_at: "2026-07-15T00:00:00Z",
           updated_at: "2026-07-15T00:00:00Z",
         });

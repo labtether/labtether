@@ -22,6 +22,7 @@ func (s *PostgresStore) CreateNotificationChannel(req notifications.CreateChanne
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
+	allAlerts := req.AllAlerts != nil && *req.AllAlerts
 
 	configPayload, err := marshalAnyMap(req.Config)
 	if err != nil {
@@ -29,15 +30,16 @@ func (s *PostgresStore) CreateNotificationChannel(req notifications.CreateChanne
 	}
 
 	return scanNotificationChannel(s.pool.QueryRow(context.Background(),
-		`INSERT INTO notification_channels (id, name, type, config, enabled, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4::jsonb, $5, $6, $6)
-		 RETURNING id, name, type, config, enabled, created_at, updated_at`,
+		`INSERT INTO notification_channels (id, name, type, config, enabled, all_alerts, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4::jsonb, $5, $7, $6, $6)
+		 RETURNING id, name, type, config, enabled, all_alerts, created_at, updated_at`,
 		channelID,
 		strings.TrimSpace(req.Name),
 		notifications.NormalizeChannelType(req.Type),
 		configPayload,
 		enabled,
 		now,
+		allAlerts,
 	))
 }
 
@@ -75,7 +77,7 @@ func (s *PostgresStore) GetNotificationChannel(id string) (notifications.Channel
 
 func (s *PostgresStore) GetNotificationChannelContext(ctx context.Context, id string) (notifications.Channel, bool, error) {
 	ch, err := scanNotificationChannel(s.pool.QueryRow(ctx,
-		`SELECT id, name, type, config, enabled, created_at, updated_at
+		`SELECT id, name, type, config, enabled, all_alerts, created_at, updated_at
 		 FROM notification_channels WHERE id = $1`,
 		strings.TrimSpace(id),
 	))
@@ -100,7 +102,7 @@ func (s *PostgresStore) ListNotificationChannels(limit, offset int) ([]notificat
 	}
 
 	rows, err := s.pool.Query(context.Background(),
-		`SELECT id, name, type, config, enabled, created_at, updated_at
+		`SELECT id, name, type, config, enabled, all_alerts, created_at, updated_at
 		 FROM notification_channels ORDER BY updated_at DESC, id DESC LIMIT $1 OFFSET $2`,
 		limit, offset,
 	)
@@ -138,6 +140,9 @@ func (s *PostgresStore) UpdateNotificationChannel(id string, req notifications.U
 	if req.Enabled != nil {
 		existing.Enabled = *req.Enabled
 	}
+	if req.AllAlerts != nil {
+		existing.AllAlerts = *req.AllAlerts
+	}
 
 	configPayload, err := marshalAnyMap(existing.Config)
 	if err != nil {
@@ -145,13 +150,20 @@ func (s *PostgresStore) UpdateNotificationChannel(id string, req notifications.U
 	}
 
 	now := time.Now().UTC()
-	return scanNotificationChannel(s.pool.QueryRow(context.Background(),
+	updated, err := scanNotificationChannel(s.pool.QueryRow(context.Background(),
 		`UPDATE notification_channels
-		 SET name = $2, config = $3::jsonb, enabled = $4, updated_at = $5
+		 SET name = $2, config = $3::jsonb, enabled = $4, all_alerts = $6, updated_at = $5
 		 WHERE id = $1
-		 RETURNING id, name, type, config, enabled, created_at, updated_at`,
-		existing.ID, existing.Name, configPayload, existing.Enabled, now,
+		   AND ($7::boolean IS NULL OR all_alerts = $7)
+		   AND ($8::boolean IS NULL OR enabled = $8)
+		 RETURNING id, name, type, config, enabled, all_alerts, created_at, updated_at`,
+		existing.ID, existing.Name, configPayload, existing.Enabled, now, existing.AllAlerts,
+		req.ExpectAllAlerts, req.ExpectEnabled,
 	))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return notifications.Channel{}, notifications.ErrChannelChanged
+	}
+	return updated, err
 }
 
 func (s *PostgresStore) DeleteNotificationChannel(id string) error {

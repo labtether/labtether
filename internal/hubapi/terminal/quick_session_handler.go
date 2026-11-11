@@ -83,23 +83,28 @@ func (d *Deps) HandleQuickSession(w http.ResponseWriter, r *http.Request) {
 
 	// Build the target label for the session (used in logs and UI).
 	target := req.Host
-	if !d.requireTargetAccess(w, r, target) {
-		return
-	}
-	if !d.enforceAssetActionGuard(w, target) {
+	if !d.authorizeTerminalStart(w, r, target) {
 		return
 	}
 
-	// Policy check: quick sessions must pass session_start just like regular sessions.
-	checkRes := policy.Evaluate(policy.CheckRequest{
-		ActorID: actorID,
-		Target:  target,
-		Mode:    "interactive",
-		Action:  "session_start",
-	}, d.PolicyState.Current())
-	if !checkRes.Allowed {
-		servicehttp.WriteError(w, http.StatusForbidden, checkRes.Reason)
-		return
+	// Connect only to a key the person trusted (POST /terminal/host-keys/trust)
+	// or one in the Hub's known_hosts file; the stream checks it strictly.
+	strict := effectiveQuickSessionStrictHostKey(req.StrictHostKey)
+	hostKey := ""
+	if strict {
+		pinned, err := d.knownHostKey(req.Host, req.Port)
+		if err != nil {
+			servicehttp.WriteError(w, http.StatusServiceUnavailable, "LabTether could not read its saved SSH host keys.")
+			return
+		}
+		if needsTrustedHostKey(pinned) {
+			servicehttp.WriteJSON(w, http.StatusConflict, map[string]any{
+				"error":                          hostKeyUnknownMessage(req.Host, req.Port),
+				"requires_host_key_confirmation": true,
+			})
+			return
+		}
+		hostKey = pinned
 	}
 
 	// Create the session through the standard store.
@@ -124,7 +129,8 @@ func (d *Deps) HandleQuickSession(w http.ResponseWriter, r *http.Request) {
 		Password:             req.Password,
 		PrivateKey:           req.PrivateKey,
 		PrivateKeyPassphrase: req.Passphrase,
-		StrictHostKey:        effectiveQuickSessionStrictHostKey(req.StrictHostKey),
+		StrictHostKey:        strict,
+		HostKey:              hostKey,
 	}
 	if d.EphemeralSSHConfigs == nil {
 		_ = d.TerminalStore.DeleteTerminalSession(session.ID)
@@ -155,4 +161,27 @@ func (d *Deps) HandleQuickSession(w http.ResponseWriter, r *http.Request) {
 
 func effectiveQuickSessionStrictHostKey(requested bool) bool {
 	return requested || !shared.InsecureSSHHostKeysAllowed()
+}
+
+// authorizeTerminalStart applies the checks for starting a terminal session
+// on target: access to the target, its maintenance guard and the session_start
+// policy. Trusting or removing an SSH host key needs the same.
+func (d *Deps) authorizeTerminalStart(w http.ResponseWriter, r *http.Request, target string) bool {
+	if !d.requireTargetAccess(w, r, target) {
+		return false
+	}
+	if !d.enforceAssetActionGuard(w, target) {
+		return false
+	}
+	checkRes := policy.Evaluate(policy.CheckRequest{
+		ActorID: d.PrincipalActorID(r.Context()),
+		Target:  target,
+		Mode:    "interactive",
+		Action:  "session_start",
+	}, d.PolicyState.Current())
+	if !checkRes.Allowed {
+		servicehttp.WriteError(w, http.StatusForbidden, checkRes.Reason)
+		return false
+	}
+	return true
 }

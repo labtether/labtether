@@ -76,7 +76,6 @@
     "acknowledge": "Prendre en compte",
     "resolve": "Résoudre",
     "silence": "Mettre en silence",
-    "silenceNoLabels": "La règle de cette alerte n'a aucun label à faire correspondre",
     "silenceFor": {
       "1h": "Pendant 1\u00a0heure",
       "4h": "Pendant 4\u00a0heures",

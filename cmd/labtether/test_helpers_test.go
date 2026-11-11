@@ -117,6 +117,7 @@ func newTestAPIServer(t *testing.T) *apiServer {
 	sut := &apiServer{
 		terminalStore:           terminalStore,
 		terminalPersistentStore: terminalStore,
+		sshKnownHostStore:       persistence.NewMemorySSHKnownHostStore(),
 		auditStore:              auditStore,
 		assetStore:              assetStore,
 		groupStore:              groupStore,

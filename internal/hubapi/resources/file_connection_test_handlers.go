@@ -76,7 +76,7 @@ func (d *Deps) handleFileConnectionTestStateless(w http.ResponseWriter, r *http.
 	if config.Protocol == "sftp" {
 		if _, pinned := normalizedExtra["host_key"]; !pinned {
 			start := time.Now()
-			hostKey, fingerprint, discoverErr := fileproto.DiscoverSFTPHostKey(r.Context(), config.Host, config.Port)
+			hostKey, fingerprint, discoverErr := fileproto.DiscoverSSHHostKey(r.Context(), config.Host, config.Port)
 			if discoverErr != nil {
 				securityruntime.Logf("file protocol: SFTP host key discovery failed: %v", discoverErr)
 				servicehttp.WriteJSON(w, http.StatusOK, map[string]any{

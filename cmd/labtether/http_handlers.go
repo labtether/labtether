@@ -32,6 +32,7 @@ func (s *apiServer) buildHTTPHandlers(
 		"/terminal/sessions":             s.withAuth(requireReadWriteScopes("terminal:read", "terminal:write", s.handleSessions)),
 		"/terminal/sessions/":            s.withAuth(requireReadWriteScopes("terminal:read", "terminal:write", s.handleSessionActions)),
 		"/terminal/quick-session":        s.withAuth(requireScope("terminal:write", s.handleQuickSession)),
+		"/terminal/host-keys/":           s.withAuth(requireScope("terminal:write", s.handleSSHHostKeys)),
 		"/terminal/bookmarks":            s.withAuth(requireReadWriteScopes("terminal:read", "terminal:write", s.handleBookmarks)),
 		"/terminal/bookmarks/":           s.withAuth(requireReadWriteScopes("terminal:read", "terminal:write", s.handleBookmarkActions)),
 		"/terminal/commands/recent":      s.withAuth(requireScope("terminal:read", s.handleRecentCommands)),

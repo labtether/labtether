@@ -18,11 +18,22 @@ v1.7.1.
   from the folder you first ran it in, with `LABTETHER_VERSION=v2.0.0`, or run
   `./scripts/upgrade-compose.sh --version v2.0.0`. Both keep your
   `.env.deploy`.
-- **Two small database migrations and no new or removed setting** since
+- **Five small database migrations and no new or removed setting** since
   v1.7.1. Migration 109 lets the database store alert rules for a group and
   health-check rules; migration 110 turns automatic Docker "runs on" links
-  the right way round. Neither removes your data, and v1.7.1 still runs on the
-  migrated database, so going back to v1.7.1 needs no database restore.
+  the right way round; migration 111 turns any device name with a line break
+  or other control character into one line; migration 112 adds "Send every
+  alert here" to notification channels; migration 113 adds a table for the
+  SSH host keys trusted through Quick connect and a bookmark's own host key.
+  None removes your data, and v1.7.1 still runs on the migrated database, so
+  going back to v1.7.1 needs no database restore.
+- **Channels start getting alerts.** A notification channel that a person
+  signed in to the console (or the owner) made, and that no alert route
+  names, gets every alert after the upgrade: "Send every alert here" is on for
+  it. In 1.x such channels got no alerts. Channels an API key made, channels
+  older than the audit log's record of who made them, channels a route names
+  and push channels keep what they got; turn on "Send every alert here" for
+  the ones that should get alerts.
 - **From v1.4.0 or older,** read the v1.7.1 upgrade notes below first. They
   still apply.
 - **Saved choices carry over.** Your theme and language stay as they were.
@@ -130,9 +141,17 @@ v1.7.1.
 
 ### Fixed
 
+- Settings: Edit on a webhook or Slack channel opens the channel. It showed
+  "Something went wrong in Settings" because the Hub leaves a channel's
+  settings out when its only one is the secret URL.
 - Devices: Test connection over SSH, and the SSH health check, log in when the
   device's ed25519 host key is pinned. They failed with "host key mismatch"
   when the device also has an ECDSA key; the terminal already handled this.
+- Alerts: Silence on an alert silences that alert's rule on that alert's
+  devices only; the same rule keeps alerting for its other devices. It works
+  for rules without labels (it answered "matchers are required" before).
+  Silences may match `rule_id` and `asset_id` as well as rule labels, and
+  label silences work as before. Silences list a rule and device by name.
 - Alerts: a rule for a group and a health-check rule can be saved. Both failed
   with "An internal error occurred." because the database still allowed the
   old scope name "site" and no health-check kind. Rules stored with "site"
@@ -172,6 +191,11 @@ v1.7.1.
   errors no longer end with a bare status code.
 - The first-run checklist's "Add someone" names the person who was added,
   not the owner.
+- Health checks say why a check failed in words, with the host: "192.0.2.10:8080
+  refused the connection.", "nas01.example was not found in DNS.", "… did not
+  answer within 10s.", "…'s certificate has expired or is not valid yet.".
+  Results showed Go's error text, such as `Get "http://…": dial tcp …:
+  connect: connection refused`.
 - Alerts › Delivery log names the alert of a message whose rule or alert was
   deleted, instead of "Unknown alert". Notification history has `alert_name`.
 - A single sign-on account is no longer offered a LabTether password change
@@ -191,12 +215,27 @@ v1.7.1.
   number."). Twenty-nine routes, among them SFTP rename and copy, device and
   bookmark edits, webhooks, schedules, actions, exec, bulk actions and the
   Map's links and zones, answered an empty 200 and did nothing.
+- Devices: a name with a line break, tab or other control character is
+  refused when a device is added or renamed ("The name can't contain line
+  breaks, tabs or other control characters."). Names from agents and
+  connectors are stored as one line, and migration 111 turns existing ones the
+  same way. Before, such a name was stored as typed and showed as
+  "nas01 Bcc: x@example.com".
 - Alerts: email, Slack, ntfy, Gotify and push messages name the device the
   alert is for ("Disk nearly full is firing on nas01."), in the title and the
   email subject too. They no longer show the rule's and alert's internal IDs or
   "No description provided."; the webhook channel's JSON keeps every field and
   adds `devices`. A device name with line breaks or markup cannot break an email
   subject, an ntfy title or a Slack message.
+- Alerts reach the channels made under Settings › Notifications. Each channel
+  has "Send every alert here" (on by default; "Off: only alerts a route sends
+  here."), and each alert reaches a channel once. Turning it on needs the
+  `alerts:write` permission as well as `notifications:write`, the same as
+  making a route, and so does changing where or whether a channel that gets
+  alerts sends them (its settings, or switching it on); a new name does not.
+  Push channels keep their own route. Before, the Hub sent
+  alerts only to channels an alert route names, and the console makes no
+  routes, so a new email or ntfy channel never got an alert.
 - Notifications: a failed send says what the receiver refused, for example
   "Gotify did not accept the app token (HTTP 401)", in Send test and the
   Delivery log, instead of "gotify returned status 401". A webhook, Slack, ntfy
@@ -362,6 +401,9 @@ v1.7.1.
 - Remote View and Files open, and Copy buttons copy, when the console is
   opened over plain HTTP on a LAN address such as `http://<hub-host>:3000`.
   Remote View showed an error page there, and Copy did nothing.
+- Remote View: a session that never started (for example when the device's
+  VNC server failed) no longer leaves a "completed" recording of 0 bytes. The
+  empty recording and its file are removed, and older ones are not listed.
 - Add device and a device's Proxmox settings say in your language whether a
   connection test, save or sync worked. They showed the Hub's English text,
   such as "pbs API reachable". A failed test keeps the Hub's reason after a
@@ -427,6 +469,29 @@ v1.7.1.
   as 97 KB.
 - Updates › New plan offers Linux devices only. A plan with a Windows or
   Mac device always failed for it with "os_packages updates require linux".
+- Terminal: Quick connect (`user@host`) and a bookmark to a host that is not
+  a device connect to SSH hosts the Hub has never seen. The first connect
+  shows the host's SSH host key fingerprint with Trust and connect. The Hub
+  saves exactly that key for the host and port (on the bookmark, or in its
+  own list for Quick connect) and checks every later connect strictly
+  against it. A changed key is refused with both fingerprints before any
+  password or key is sent; Remove saved key lets you check the new one.
+  Before, both always failed with "strict host key enabled but no
+  SSH_HOST_KEY provided and no known_hosts file is available". A bookmark to
+  a host with a saved login now logs in with it, and the Audit log names
+  each trusted and removed host key. A device with no agent and no SSH login
+  says so in words instead of "no agent connected and no SSH credentials
+  configured".
+- Settings › Security › Upload certificate… says that an agent which
+  connects to an address the certificate covers stops connecting until it
+  also trusts the certificate's issuer, and that Remove uploaded certificate
+  brings it back.
+- API keys and agent tokens work behind an HTTPS reverse proxy with
+  `LABTETHER_TLS_MODE=disabled`. The Hub accepts the proxy's
+  `X-Forwarded-Proto: https` when the proxy's address is in
+  `LABTETHER_TRUST_PROXY_CIDRS` or `LABTETHER_TRUST_PROXY_HOSTS`. Before, only
+  a proxy on the Hub's own host counted, so every key got 403 "api keys
+  require HTTPS". The header from any other address is still ignored.
 
 ## [1.7.1] - 2026-10-31
 

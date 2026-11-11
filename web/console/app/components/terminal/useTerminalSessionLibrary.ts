@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePollingTask } from "../../hooks/usePollingTask";
 import type { Bookmark, BookmarkFormData, PersistentSession, RenameTarget, SessionsPanelProps } from "./terminalSessionTypes";
+import type { HostKeyGate } from "./useHostKeyGate";
 
 async function safeJSON(response: Response): Promise<unknown> {
   try {
@@ -27,8 +28,8 @@ function matches(query: string, ...fields: Array<string | undefined>): boolean {
  * isOpen. Rows call the actions below; each refreshes the lists once the hub answers.
  */
 export function useTerminalSessionLibrary({
-  isOpen, onSessionSelect, onBookmarkConnect, onArchivedView,
-}: Omit<SessionsPanelProps, "onClose">) {
+  isOpen, onSessionSelect, onBookmarkConnect, onArchivedView, hostKeyGate,
+}: Omit<SessionsPanelProps, "onClose"> & { hostKeyGate?: HostKeyGate }) {
   const [sessions, setSessions] = useState<PersistentSession[]>([]);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -110,7 +111,17 @@ export function useTerminalSessionLibrary({
 
   const connectBookmark = useCallback(
     async (bookmark: Bookmark, newTab = false) => {
+      const toHost = !bookmark.asset_id && Boolean(bookmark.host);
+      // Without a saved login the page asks for one (Quick connect, which checks the host key itself).
+      if (toHost && !bookmark.credential_profile_id) {
+        onBookmarkConnect(bookmark.id, newTab, bookmark);
+        return;
+      }
       try {
+        if (toHost && hostKeyGate) {
+          const trusted = await hostKeyGate({ host: bookmark.host ?? "", port: bookmark.port ?? 22, bookmarkId: bookmark.id });
+          if (!trusted) return;
+        }
         const res = await fetch(`/api/terminal/bookmarks/${encodeURIComponent(bookmark.id)}/connect`, jsonInit("POST"));
         if (!res.ok) return;
         onBookmarkConnect(bookmark.id, newTab, bookmark);
@@ -119,7 +130,7 @@ export function useTerminalSessionLibrary({
         // Nothing opened; the row stays.
       }
     },
-    [onBookmarkConnect, fetchData],
+    [onBookmarkConnect, fetchData, hostKeyGate],
   );
 
   const saveAsBookmark = useCallback(

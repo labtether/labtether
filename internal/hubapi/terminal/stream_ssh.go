@@ -46,22 +46,22 @@ func (d *Deps) HandleSSHTerminalStream(w http.ResponseWriter, r *http.Request, s
 	resolved, err := d.ResolveSessionSSHConfig(session)
 	if err != nil {
 		log.Printf("terminal-ssh: stream_setup_failed reason=ssh_config_invalid %s err=%v", logContext, err) // #nosec G706 -- Log fields are bounded session/runtime identifiers and local validation errors.
-		_ = WriteTerminalError(wsConn, "ssh_config_invalid", fmt.Sprintf("Terminal stream unavailable: %v", err))
+		_ = WriteTerminalError(wsConn, sshSetupErrorStage(err), sshSetupErrorText("Terminal stream unavailable: ", err))
 		return
 	}
 	if resolved == nil {
 		log.Printf("terminal-ssh: stream_setup_failed reason=ssh_config_missing %s", logContext) // #nosec G706 -- Log context is composed from bounded session/runtime identifiers.
-		_ = WriteTerminalError(wsConn, "ssh_config_missing",
-			"Terminal unavailable: no agent connected and no SSH credentials configured. Deploy the LabTether Agent on this device, or set SSH_USERNAME + SSH_PASSWORD/SSH_PRIVATE_KEY.")
+		_ = WriteTerminalError(wsConn, "ssh_config_missing", noTerminalRouteMessage)
 		return
 	}
 
 	clientConfig, err := d.CreateSSHClientConfig(resolved, SSHDialAttemptTimeout)
 	if err != nil {
 		log.Printf("terminal-ssh: stream_setup_failed reason=ssh_client_config_invalid %s err=%v", logContext, err) // #nosec G706 -- Log fields are bounded session/runtime identifiers and local validation errors.
-		_ = WriteTerminalError(wsConn, "ssh_config_invalid", fmt.Sprintf("Invalid SSH config: %v", err))
+		_ = WriteTerminalError(wsConn, sshSetupErrorStage(err), sshSetupErrorText("Invalid SSH config: ", err))
 		return
 	}
+	keyWatch := watchHostKey(clientConfig, resolved)
 
 	addr := net.JoinHostPort(resolved.Host, strconv.Itoa(resolved.Port))
 	connectStart := time.Now()
@@ -106,6 +106,10 @@ func (d *Deps) HandleSSHTerminalStream(w http.ResponseWriter, r *http.Request, s
 				)
 				if chainErr != nil {
 					log.Printf("terminal-ssh: stream_setup_failed reason=jump_chain_failed %s err=%v", logContext, chainErr) // #nosec G706 -- Log fields are bounded session/runtime identifiers and local connection errors.
+					if changed, ok := keyWatch.changedMessage(resolved); ok {
+						_ = WriteTerminalError(wsConn, "ssh_host_key_changed", changed)
+						return
+					}
 					_ = WriteTerminalError(wsConn, "ssh_connect_failed",
 						fmt.Sprintf("SSH jump chain connection failed: %v", chainErr))
 					return
@@ -152,6 +156,10 @@ func (d *Deps) HandleSSHTerminalStream(w http.ResponseWriter, r *http.Request, s
 		)
 		if dialErr != nil {
 			log.Printf("terminal-ssh: stream_setup_failed reason=ssh_connect_failed %s attempts=%d err=%v", logContext, attemptsUsed, dialErr) // #nosec G706 -- Log fields are bounded session/runtime identifiers and local connection errors.
+			if changed, ok := keyWatch.changedMessage(resolved); ok {
+				_ = WriteTerminalError(wsConn, "ssh_host_key_changed", changed)
+				return
+			}
 			_ = WriteTerminalError(wsConn, "ssh_connect_failed",
 				fmt.Sprintf("SSH connection failed after %d attempt(s): %v", attemptsUsed, dialErr),
 			)

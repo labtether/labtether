@@ -47,6 +47,7 @@
     "certChain": "Zertifikatskette (PEM)",
     "privateKey": "Privater Schlüssel (PEM)",
     "keyStored": "Der Hub verschlüsselt den Schlüssel vor dem Speichern.",
+    "agentTrustNote": "Agents vertrauen der LabTether-CA. Ein Agent, der sich mit einer Adresse verbindet, die dieses Zertifikat abdeckt, verbindet sich nicht mehr, bis er auch dem Aussteller dieses Zertifikats vertraut. Mit „Hochgeladenes Zertifikat entfernen“ verbindet er sich wieder.",
     "apply": "Zertifikat anwenden",
     "applied": "Hochgeladenes Zertifikat angewendet.",
     "savedRestart": "Gespeichert. Starten Sie den Hub neu, damit er es ausliefert.",

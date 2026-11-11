@@ -85,6 +85,10 @@
     "appTokenRequired": "El token de aplicación es obligatorio."
   },
   "title": "Notificaciones",
+  "allAlerts": {
+    "label": "Enviar todas las alertas aquí",
+    "hint": "Desactivado: solo las alertas que una ruta envía aquí."
+  },
   "emptyHint": "Slack, correo, webhooks, ntfy y Gotify pueden recibir alertas.",
   "sending": "Enviando",
   "sendTo": "Enviar a {name}",

@@ -5,6 +5,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
 import { Button } from "../../../components/ui/Button";
 import type { AlertSilence } from "../../../console/models";
+import { useFastStatus } from "../../../contexts/StatusContext";
 import { useToast } from "../../../contexts/ToastContext";
 import { Dot } from "./alertBits";
 import { shortTime } from "./alertsModel";
@@ -15,12 +16,14 @@ import { useCanWrite } from "../../../hooks/useCanWrite";
 
 type Props = {
   silences: AlertSilence[];
+  /** Rule names by ID, so a silence made from an alert names its rule rather than an ID. */
+  ruleNames: Map<string, string>;
   createSilence: (payload: SilencePayload) => Promise<void>;
   deleteSilence: (id: string) => Promise<void>;
 };
 
 /** Silences as a plain list (active first, then ended), with a form to silence alerts whose rule labels match. */
-export function AlertSilencesTab({ silences, createSilence, deleteSilence }: Props) {
+export function AlertSilencesTab({ silences, ruleNames, createSilence, deleteSilence }: Props) {
   const t = useTranslations("alerts.silences");
   const canWrite = useCanWrite();
   const locale = useLocale();
@@ -33,6 +36,8 @@ export function AlertSilencesTab({ silences, createSilence, deleteSilence }: Pro
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const now = Date.now();
+  const status = useFastStatus();
+  const deviceName = (id: string) => status?.assets?.find((a) => a.id === id)?.name ?? id;
   const active = silences.filter((s) => Date.parse(s.ends_at) > now).sort((a, b) => Date.parse(a.ends_at) - Date.parse(b.ends_at));
   const ended = silences.filter((s) => !(Date.parse(s.ends_at) > now)).sort((a, b) => Date.parse(b.ends_at) - Date.parse(a.ends_at));
   const matchers = labelsFromRows(rows);
@@ -84,7 +89,9 @@ export function AlertSilencesTab({ silences, createSilence, deleteSilence }: Pro
   }
 
   const row = (silence: AlertSilence, live: boolean) => {
-    const matchers = Object.entries(silence.matchers ?? {}).map(([k, v]) => `${k}=${v}`).join(", ");
+    // A silence made from an alert names its rule and device: show their names, other matchers as label=value.
+    const matchers = Object.entries(silence.matchers ?? {}).map(([k, v]) =>
+      k === "rule_id" ? ruleNames.get(v) ?? v : k === "asset_id" ? deviceName(v) : `${k}=${v}`).join(" · ");
     return (
       <div key={silence.id} className={`al-row two${live ? "" : " done"}`}>
         <Dot tone={live ? "" : "off"} />

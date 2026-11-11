@@ -61,6 +61,7 @@ type apiServer struct {
 	terminalStore                 persistence.TerminalStore
 	terminalPersistentStore       persistence.TerminalPersistentSessionStore
 	terminalBookmarkStore         persistence.TerminalBookmarkStore
+	sshKnownHostStore             persistence.SSHKnownHostStore
 	terminalScrollbackStore       persistence.TerminalScrollbackStore
 	terminalInMemStore            *terminal.Store
 	auditStore                    persistence.AuditStore

@@ -47,6 +47,7 @@
     "certChain": "Chaîne de certificats (PEM)",
     "privateKey": "Clé privée (PEM)",
     "keyStored": "Le hub chiffre la clé avant de l'enregistrer.",
+    "agentTrustNote": "Les agents font confiance à l'autorité LabTether. Un agent qui se connecte à une adresse couverte par ce certificat ne se connecte plus tant qu'il ne fait pas aussi confiance à l'émetteur de ce certificat. «\u00a0Retirer le certificat importé\u00a0» le reconnecte.",
     "apply": "Appliquer le certificat",
     "applied": "Certificat importé appliqué.",
     "savedRestart": "Enregistré. Redémarrez le hub pour le servir.",

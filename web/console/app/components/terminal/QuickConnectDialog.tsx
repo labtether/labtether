@@ -6,7 +6,7 @@ import type { QuickConnectParams } from "../../hooks/useSession";
 import { Button } from "../ui/Button";
 import { Select, Textarea } from "../ui/Input";
 import { Modal } from "../ui/Modal";
-import { parseAddress } from "./terminalTargets";
+import { formatAddress, parseAddress } from "./terminalTargets";
 
 type AuthMethod = "password" | "private_key";
 type Errors = { address?: string; secret?: string; key?: string };
@@ -17,13 +17,15 @@ interface QuickConnectDialogProps {
   onConnect: (params: QuickConnectParams) => void;
   /** The address to start from ("root@10.20.0.50:22"), from "Connect to <address>". */
   initialAddress?: string;
+  /** What the person typed before stepping aside for the host key check; the form comes back with it. */
+  draft?: QuickConnectParams | null;
 }
 
 /**
  * Connect to an address: SSH to a host that is not a device here (user@host:port) with a password or a private key,
  * the host key checked against the hub's known hosts unless turned off. Secrets are dropped when the form closes.
  */
-export default function QuickConnectDialog({ open, onClose, onConnect, initialAddress = "" }: QuickConnectDialogProps) {
+export default function QuickConnectDialog({ open, onClose, onConnect, initialAddress = "", draft = null }: QuickConnectDialogProps) {
   const t = useTranslations("terminal.address");
   const [address, setAddress] = useState("");
   const [authMethod, setAuthMethod] = useState<AuthMethod>("password");
@@ -37,16 +39,16 @@ export default function QuickConnectDialog({ open, onClose, onConnect, initialAd
 
   useEffect(() => {
     if (!open) return undefined;
-    setAddress(initialAddress);
-    setAuthMethod("password");
-    setPassword("");
-    setPrivateKey("");
-    setPassphrase("");
-    setCheckHostKey(true);
+    setAddress(draft ? formatAddress({ user: draft.username, host: draft.host, port: draft.port ?? 22 }) : initialAddress);
+    setAuthMethod(draft?.auth_method ?? "password");
+    setPassword(draft?.password ?? "");
+    setPrivateKey(draft?.private_key ?? "");
+    setPassphrase(draft?.passphrase ?? "");
+    setCheckHostKey(draft ? draft.strict_host_key !== false : true);
     setErrors({});
-    const timer = window.setTimeout(() => (initialAddress ? secretRef.current : addressRef.current)?.focus(), 30);
+    const timer = window.setTimeout(() => (draft || initialAddress ? secretRef.current : addressRef.current)?.focus(), 30);
     return () => window.clearTimeout(timer);
-  }, [open, initialAddress]);
+  }, [open, initialAddress, draft]);
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();

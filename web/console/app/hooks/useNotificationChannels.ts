@@ -9,6 +9,8 @@ export type NotificationChannel = {
   type: string;
   config: Record<string, unknown>;
   enabled: boolean;
+  /** "Send every alert here": the channel gets every alert, not only what alert routes send it. */
+  all_alerts?: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -45,6 +47,14 @@ async function safePayload<T extends object>(response: Response): Promise<Partia
     // Callers provide a bounded, non-sensitive fallback for malformed replies.
   }
   return {};
+}
+
+// The Hub leaves "config" out when every setting in it is secret, as for a
+// webhook or Slack channel that has only its URL. The dialogs read it as an
+// object, so a channel without one gets an empty config.
+function withConfig(channel: NotificationChannel): NotificationChannel {
+  const { config } = channel as { config?: unknown };
+  return config && typeof config === "object" && !Array.isArray(config) ? channel : { ...channel, config: {} };
 }
 
 function safeChannelError(error: unknown, fallback: string): Error {
@@ -88,7 +98,7 @@ export async function fetchAllNotificationChannels(): Promise<{
       seenIDs.add(channel.id);
     }
     capabilities ??= { smtp_insecure_transport_allowed: insecureSMTPAllowed };
-    channels.push(...pageChannels);
+    channels.push(...pageChannels.map(withConfig));
     if (pageChannels.length < CHANNEL_PAGE_SIZE) return { channels, capabilities };
   }
 

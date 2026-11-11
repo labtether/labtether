@@ -23,9 +23,12 @@ import TerminalWorkspaceView from "../../../components/terminal/TerminalWorkspac
 import { formatAddress } from "../../../components/terminal/terminalTargets";
 import { resolveTerminalTheme } from "../../../components/terminal/terminalLook";
 import type { Bookmark } from "../../../components/terminal/terminalSessionTypes";
+import type { QuickConnectParams } from "../../../hooks/useSession";
 import { useTerminalPageKeys } from "../../../components/terminal/useTerminalPageKeys";
 import { useTerminalSessionLibrary } from "../../../components/terminal/useTerminalSessionLibrary";
 import { useTerminalWorkspace } from "../../../components/terminal/useTerminalWorkspace";
+import { useHostKeyGate } from "../../../components/terminal/useHostKeyGate";
+import { useQuickConnectFlow } from "../../../components/terminal/useQuickConnectFlow";
 
 const ScrollbackViewer = dynamic(() => import("../../../components/terminal/ScrollbackViewer"), { ssr: false });
 
@@ -62,6 +65,7 @@ function TerminalWorkspacePageContent() {
   const nameOf = useCallback((id: string) => names.get(id) ?? "", [names]);
   const devices = useMemo(() => assets.map((asset) => ({ id: asset.id, name: asset.name || asset.id })).sort((a, b) => a.name.localeCompare(b.name)), [assets]);
 
+  const hostKeys = useHostKeyGate();
   const { openTarget, setAddressRequest } = ws;
   const { handleCreateTab } = ws.tabUI;
   const onSessionSelect = useCallback((_id: string, _persistentId: string, _ticket: string, newTab: boolean, target?: string) => {
@@ -72,15 +76,27 @@ function TerminalWorkspacePageContent() {
   const onBookmarkConnect = useCallback((_id: string, newTab: boolean, bookmark?: Bookmark) => {
     setSessionsOpen(false);
     if (bookmark?.asset_id) void openTarget(bookmark.asset_id, newTab);
+    // A bookmark with a saved login opens its own saved session (host:port); one without asks for the login.
+    else if (bookmark?.host && bookmark.credential_profile_id) void openTarget(`${bookmark.host}:${bookmark.port ?? 22}`, newTab);
     else if (bookmark?.host) {
       setAddressRequest({ paneKey: null, initial: formatAddress({ user: bookmark.username ?? "", host: bookmark.host, port: bookmark.port ?? 22 }) });
     }
   }, [openTarget, setAddressRequest]);
+  const closeAddressRequest = useCallback(() => setAddressRequest(null), [setAddressRequest]);
+  const { connectAddress } = ws;
+  const connectQuick = useCallback((params: QuickConnectParams) => void connectAddress(params), [connectAddress]);
+  const quick = useQuickConnectFlow({
+    requested: ws.addressRequest !== null,
+    closeRequest: closeAddressRequest,
+    connect: connectQuick,
+    gate: hostKeys.gate,
+  });
   const lib = useTerminalSessionLibrary({
     isOpen: ws.fresh || sessionsOpen || plusOpen,
     onSessionSelect,
     onBookmarkConnect,
     onArchivedView: (id, title) => setArchived({ id, title }),
+    hostKeyGate: hostKeys.gate,
   });
 
   const toggleSnippets = useCallback(() => setSnippetsOpen((open) => !open), []);
@@ -134,11 +150,13 @@ function TerminalWorkspacePageContent() {
     <>
       {body}
       <QuickConnectDialog
-        open={ws.addressRequest !== null}
+        open={quick.open}
         initialAddress={ws.addressRequest?.initial ?? ""}
-        onClose={() => setAddressRequest(null)}
-        onConnect={(params) => void ws.connectAddress(params)}
+        draft={quick.draft}
+        onClose={quick.onClose}
+        onConnect={quick.onConnect}
       />
+      {hostKeys.dialog}
       <SessionsPanel
         open={sessionsOpen}
         onClose={() => setSessionsOpen(false)}

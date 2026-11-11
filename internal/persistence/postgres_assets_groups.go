@@ -42,6 +42,7 @@ func (s *PostgresStore) UpsertAssetHeartbeat(req assets.HeartbeatRequest) (asset
 }
 
 func upsertAssetHeartbeatTx(ctx context.Context, tx pgx.Tx, req assets.HeartbeatRequest, now time.Time) (assets.Asset, error) {
+	req.Name = assets.OneLineName(req.Name)
 	status := req.Status
 	if status == "" {
 		status = "online"
@@ -209,7 +210,7 @@ func (s *PostgresStore) UpdateAsset(id string, req assets.UpdateRequest) (assets
 
 	nextName := current.Name
 	if req.Name != nil {
-		nextName = strings.TrimSpace(*req.Name)
+		nextName = assets.OneLineName(*req.Name)
 	}
 
 	nextGroupID := strings.TrimSpace(current.GroupID)
