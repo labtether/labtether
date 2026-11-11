@@ -16,7 +16,7 @@ const BUSY: Record<string, string> = { activating: "starting", deactivating: "st
 /** While LabTether runs an action on a unit. */
 const PENDING: Record<Verb, string> = { start: "starting", stop: "stopping", restart: "restarting" };
 const ENABLED = new Set(["enabled", "enabled-runtime", "alias"]);
-const KNOWN_ENABLED = new Set(["disabled", "static", "masked", "indirect", "generated", "transient"]);
+const KNOWN_ENABLED = new Set(["disabled", "static", "masked", "indirect", "generated", "transient", "manual"]);
 
 const notRunning = (svc: ServiceInfo) => !RUNNING.has(svc.active_state.trim().toLowerCase());
 const base = (name: string) => name.replace(/\.service$/, "").replace(/@.*/, "");
@@ -24,7 +24,7 @@ const base = (name: string) => name.replace(/\.service$/, "").replace(/@.*/, "")
 function stopRisk(name: string): "ssh" | "agent" | "docker" | null {
   const unit = base(name).toLowerCase();
   if (unit === "ssh" || unit === "sshd") return "ssh";
-  if (unit.startsWith("labtether-agent")) return "agent";
+  if (unit.startsWith("labtether-agent") || unit === "labtetheragent") return "agent";
   if (unit === "docker") return "docker";
   return null;
 }
