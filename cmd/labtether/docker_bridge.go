@@ -81,14 +81,23 @@ func (s *apiServer) handleDockerHosts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *apiServer) handleDockerHostActions(w http.ResponseWriter, r *http.Request) {
+	if s.refuseIntegrationActionWhenOff(w, r) {
+		return
+	}
 	s.ensureDockerDeps().HandleDockerHostActions(w, r)
 }
 
 func (s *apiServer) handleDockerContainerActions(w http.ResponseWriter, r *http.Request) {
+	if s.refuseIntegrationActionWhenOff(w, r) {
+		return
+	}
 	s.ensureDockerDeps().HandleDockerContainerActions(w, r)
 }
 
 func (s *apiServer) handleDockerStackActions(w http.ResponseWriter, r *http.Request) {
+	if s.refuseIntegrationActionWhenOff(w, r) {
+		return
+	}
 	s.ensureDockerDeps().HandleDockerStackActions(w, r)
 }
 

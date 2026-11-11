@@ -22,6 +22,8 @@ func TestRestrictedPBSDatastoreDetailsOmitNodeWideTasks(t *testing.T) {
 			_, _ = w.Write([]byte(`{"data":{"version":"4.0"}}`))
 		case "/api2/json/admin/datastore/backup/status":
 			_, _ = w.Write([]byte(`{"data":{"store":"backup","mount-status":"mounted"}}`))
+		case "/api2/json/admin/datastore/backup/namespace":
+			_, _ = w.Write([]byte(`{"data":[]}`))
 		case "/api2/json/admin/datastore/backup/groups", "/api2/json/admin/datastore/backup/snapshots":
 			_, _ = w.Write([]byte(`{"data":[]}`))
 		case "/api2/json/nodes/localhost/tasks":

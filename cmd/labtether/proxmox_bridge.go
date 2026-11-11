@@ -96,10 +96,16 @@ func (s *apiServer) ensureProxmoxDeps() *proxmoxpkg.Deps {
 // cmd/labtether/ callers keep compiling without changes.
 
 func (s *apiServer) handleProxmoxAssets(w http.ResponseWriter, r *http.Request) {
+	if s.refuseIntegrationActionWhenOff(w, r) {
+		return
+	}
 	s.ensureProxmoxDeps().HandleProxmoxAssets(w, r)
 }
 
 func (s *apiServer) handleProxmoxTaskRoutes(w http.ResponseWriter, r *http.Request) {
+	if s.refuseIntegrationActionWhenOff(w, r) {
+		return
+	}
 	s.ensureProxmoxDeps().HandleProxmoxTaskRoutes(w, r)
 }
 
@@ -112,6 +118,9 @@ func (s *apiServer) handleProxmoxClusterResources(w http.ResponseWriter, r *http
 }
 
 func (s *apiServer) handleProxmoxNodeRoutes(w http.ResponseWriter, r *http.Request) {
+	if s.refuseIntegrationActionWhenOff(w, r) {
+		return
+	}
 	s.ensureProxmoxDeps().HandleProxmoxNodeRoutes(w, r)
 }
 

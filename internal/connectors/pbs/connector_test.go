@@ -59,6 +59,8 @@ func TestConnectorDiscoverAndAction(t *testing.T) {
 			_, _ = w.Write([]byte(`{"data":[{"store":"store-a","total":1000,"used":500,"avail":500}]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api2/json/admin/datastore/store-a/status":
 			_, _ = w.Write([]byte(`{"data":{"store":"store-a","total":1000,"used":500,"avail":500,"mount-status":"mounted"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api2/json/admin/datastore/store-a/namespace":
+			_, _ = w.Write([]byte(`{"data":[]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api2/json/admin/datastore/store-a/groups":
 			_, _ = w.Write([]byte(`{"data":[{"backup-type":"vm","backup-id":"100","backup-count":2,"last-backup":1739985600}]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api2/json/admin/datastore/store-a/snapshots":

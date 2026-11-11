@@ -121,6 +121,9 @@ func (s *apiServer) ensureTruenasDeps() *truenaspkg.Deps {
 // cmd/labtether/ callers and tests keep compiling without changes.
 
 func (s *apiServer) handleTrueNASAssets(w http.ResponseWriter, r *http.Request) {
+	if s.refuseIntegrationActionWhenOff(w, r) {
+		return
+	}
 	s.ensureTruenasDeps().HandleTrueNASAssets(w, r)
 }
 

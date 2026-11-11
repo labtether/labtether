@@ -50,6 +50,23 @@ func TestConnectionProblemsAreSaidInFixedWords(t *testing.T) {
 			t.Fatalf("%v: answer leaks upstream detail: %s", err, body)
 		}
 	}
+	// A 403 means the system was reached and knows the login; it only lacks
+	// the right for this part (a Proxmox token scoped to some VMs reading the
+	// node). "Could not reach" sent people to check an address that worked.
+	for _, err := range []error{
+		errors.New("proxmox api returned 403: permission check failed (/nodes/pve01, Sys.Audit)"),
+		errors.New("pbs api returned 403: {\"errors\":\"permission check failed\"}"),
+	} {
+		rec := httptest.NewRecorder()
+		body := ""
+		if WriteUpstreamUnreachable(rec, err, "Proxmox") {
+			body = rec.Body.String()
+		}
+		if rec.Code != http.StatusConflict || !strings.Contains(body, "Proxmox refused this for the saved login. Give that login access to it on Proxmox.") ||
+			strings.Contains(body, "Could not reach") || strings.Contains(body, "Sys.Audit") {
+			t.Fatalf("%v: got %d %s", err, rec.Code, body)
+		}
+	}
 	hidden := []error{
 		errors.New("proxmox api returned 500: VM is locked (backup)"),
 		errors.New("Post \"https://192.0.2.10:8006/x\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"),

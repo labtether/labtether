@@ -44,6 +44,8 @@ func TestLoadPBSAssetDetailsDatastoreAndServerBranches(t *testing.T) {
 				_, _ = w.Write([]byte(`{"data":{"release":"","version":"3.2"}}`))
 			case "/api2/json/admin/datastore/backup/status":
 				_, _ = w.Write([]byte(`{"data":{"store":"backup","total":1000,"used":250,"avail":750,"mount-status":"mounted"}}`))
+			case "/api2/json/admin/datastore/backup/namespace":
+				_, _ = w.Write([]byte(`{"data":[]}`))
 			case "/api2/json/admin/datastore/backup/groups":
 				_, _ = w.Write([]byte(`{"data":[{"backup-type":"vm","backup-id":"100"}]}`))
 			case "/api2/json/admin/datastore/backup/snapshots":
@@ -94,6 +96,8 @@ func TestLoadPBSAssetDetailsDatastoreAndServerBranches(t *testing.T) {
 				http.Error(w, `{"errors":"version failed"}`, http.StatusBadGateway)
 			case "/api2/json/admin/datastore/backup/status":
 				_, _ = w.Write([]byte(`{"data":{"store":"backup","total":1000,"used":250,"avail":750,"mount-status":"mounted"}}`))
+			case "/api2/json/admin/datastore/backup/namespace":
+				_, _ = w.Write([]byte(`{"data":[]}`))
 			case "/api2/json/admin/datastore/backup/groups":
 				_, _ = w.Write([]byte(`{"data":[]}`))
 			case "/api2/json/admin/datastore/backup/snapshots":
@@ -149,6 +153,8 @@ func TestLoadPBSAssetDetailsDatastoreAndServerBranches(t *testing.T) {
 				http.Error(w, `{"errors":"status failed"}`, http.StatusBadGateway)
 			case "/api2/json/admin/datastore/good/status":
 				_, _ = w.Write([]byte(`{"data":{"store":"good","total":1000,"used":100,"avail":900,"mount-status":""}}`))
+			case "/api2/json/admin/datastore/good/namespace":
+				_, _ = w.Write([]byte(`{"data":[]}`))
 			case "/api2/json/admin/datastore/good/groups":
 				_, _ = w.Write([]byte(`{"data":[{"backup-type":"vm","backup-id":"100"}]}`))
 			case "/api2/json/admin/datastore/good/snapshots":
@@ -194,7 +200,7 @@ func TestLoadPBSAssetDetailsDatastoreAndServerBranches(t *testing.T) {
 		}
 		combined := strings.Join(response.Warnings, " | ")
 		if !strings.Contains(combined, "datastore usage unavailable") ||
-			!strings.Contains(combined, "datastore bad unavailable") ||
+			!strings.Contains(combined, "Datastore bad could not be read.") ||
 			!strings.Contains(combined, "task listing unavailable") {
 			t.Fatalf("unexpected server warnings: %v", response.Warnings)
 		}
@@ -218,12 +224,16 @@ func TestLoadPBSAssetDetailsDatastoreAndServerBranches(t *testing.T) {
 				]}`))
 			case "/api2/json/admin/datastore/alpha/status":
 				_, _ = w.Write([]byte(`{"data":{"store":"alpha","total":2000,"used":500,"avail":1500,"mount-status":"mounted"}}`))
+			case "/api2/json/admin/datastore/alpha/namespace":
+				_, _ = w.Write([]byte(`{"data":[]}`))
 			case "/api2/json/admin/datastore/alpha/groups":
 				_, _ = w.Write([]byte(`{"data":[]}`))
 			case "/api2/json/admin/datastore/alpha/snapshots":
 				_, _ = w.Write([]byte(`{"data":[]}`))
 			case "/api2/json/admin/datastore/beta/status":
 				_, _ = w.Write([]byte(`{"data":{"store":"beta","total":1000,"used":400,"avail":600,"mount-status":"mounted"}}`))
+			case "/api2/json/admin/datastore/beta/namespace":
+				_, _ = w.Write([]byte(`{"data":[]}`))
 			case "/api2/json/admin/datastore/beta/groups":
 				_, _ = w.Write([]byte(`{"data":[]}`))
 			case "/api2/json/admin/datastore/beta/snapshots":
@@ -314,6 +324,8 @@ func TestLoadPBSDatastoreSummaryBranches(t *testing.T) {
 			switch r.URL.Path {
 			case "/api2/json/admin/datastore/backup/status":
 				_, _ = w.Write([]byte(`{"data":{"store":"backup","total":0,"used":0,"avail":0,"mount-status":"mounted"}}`))
+			case "/api2/json/admin/datastore/backup/namespace":
+				_, _ = w.Write([]byte(`{"data":[]}`))
 			case "/api2/json/admin/datastore/backup/groups":
 				http.Error(w, `{"errors":"groups failed"}`, http.StatusBadGateway)
 			case "/api2/json/admin/datastore/backup/snapshots":
@@ -350,6 +362,8 @@ func TestLoadPBSDatastoreSummaryBranches(t *testing.T) {
 			switch r.URL.Path {
 			case "/api2/json/admin/datastore/backup/status":
 				_, _ = w.Write([]byte(`{"data":{"store":"backup","total":100,"used":150,"avail":0,"mount-status":"mounted"}}`))
+			case "/api2/json/admin/datastore/backup/namespace":
+				_, _ = w.Write([]byte(`{"data":[]}`))
 			case "/api2/json/admin/datastore/backup/groups":
 				_, _ = w.Write([]byte(`{"data":[]}`))
 			case "/api2/json/admin/datastore/backup/snapshots":

@@ -43,6 +43,15 @@ func (d *Deps) HandleConnectorActions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Settings › Integration actions off refuses every write here except Test
+	// connection, decided on this handler's own parse of the route.
+	if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions &&
+		!(len(parts) == 2 && parts[1] == "test") &&
+		d.IntegrationActionsAllowed != nil && !d.IntegrationActionsAllowed() {
+		servicehttp.WriteError(w, http.StatusForbidden, "Integration actions are turned off in Settings.")
+		return
+	}
+
 	connectorID := parts[0]
 	resolvedConnectorID := normalizeConnectorID(connectorID)
 	connector, ok := d.ConnectorRegistry.Get(resolvedConnectorID)
@@ -101,12 +110,7 @@ func (d *Deps) HandleConnectorActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		health, err := connector.TestConnection(r.Context())
-		if err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "health check failed")
-			return
-		}
-		servicehttp.WriteJSON(w, http.StatusOK, health)
+		d.writeConnectorHealth(w, r, resolvedConnectorID, connector)
 	case len(parts) == 2 && parts[1] == "actions":
 		if r.Method != http.MethodGet {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -203,12 +207,7 @@ func (d *Deps) HandlePortainerConnectorActions(w http.ResponseWriter, r *http.Re
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		health, err := connector.TestConnection(r.Context())
-		if err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "health check failed")
-			return
-		}
-		servicehttp.WriteJSON(w, http.StatusOK, health)
+		d.writeConnectorHealth(w, r, "portainer", connector)
 	case len(parts) == 2 && parts[1] == "actions":
 		if r.Method != http.MethodGet {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")

@@ -246,6 +246,10 @@ func TestExecuteStackActionBranches(t *testing.T) {
 	t.Run("stack redeploy supports pull_image=false", func(t *testing.T) {
 		var capturedBody map[string]any
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodGet && r.URL.Path == "/api/stacks/5" {
+				_, _ = w.Write([]byte(`{"Id":5,"GitConfig":{"URL":"https://git.example.invalid/stack.git"}}`))
+				return
+			}
 			if r.Method != http.MethodPut {
 				t.Fatalf("expected PUT, got %s", r.Method)
 			}
