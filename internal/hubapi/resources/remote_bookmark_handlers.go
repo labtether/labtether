@@ -171,6 +171,7 @@ type remoteBookmarkCreateRequest struct {
 func (d *Deps) handleCreateRemoteBookmark(w http.ResponseWriter, r *http.Request) {
 	var req remoteBookmarkCreateRequest
 	if err := d.DecodeJSONBody(w, r, &req); err != nil {
+		servicehttp.WriteJSONBodyError(w, err)
 		return
 	}
 	label, protocol, host, port, err := validateRemoteBookmarkFields(req.Label, req.Protocol, req.Host, req.Port)
@@ -289,6 +290,7 @@ func (d *Deps) handleUpdateRemoteBookmark(w http.ResponseWriter, r *http.Request
 
 	var req remoteBookmarkUpdateRequest
 	if err := d.DecodeJSONBody(w, r, &req); err != nil {
+		servicehttp.WriteJSONBodyError(w, err)
 		return
 	}
 	label, protocol, host, port := existing.Label, existing.Protocol, existing.Host, existing.Port

@@ -18,7 +18,9 @@ import (
 
 const MaxJSONBodyBytes = 1 << 20 // 1MB limit for JSON request bodies
 
-// DecodeJSONBody limits the request body size and decodes JSON into dst.
+// DecodeJSONBody limits the request body size and decodes JSON into dst. It
+// writes nothing: on an error the caller must answer, for example with
+// servicehttp.WriteJSONBodyError, or the client gets an empty 200.
 func DecodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
 	r.Body = http.MaxBytesReader(w, r.Body, MaxJSONBodyBytes)
 	decoder := json.NewDecoder(r.Body)

@@ -56,6 +56,7 @@ func (d *Deps) HandleV2BulkServiceAction(w http.ResponseWriter, r *http.Request)
 		Targets []string `json:"targets"`
 	}
 	if err := shared.DecodeJSONBody(w, r, &req); err != nil {
+		apiv2.WriteJSONBodyError(w, err)
 		return
 	}
 	if len(req.Targets) > maxBulkServiceRawTargets {

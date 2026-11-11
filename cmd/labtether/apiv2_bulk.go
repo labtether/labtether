@@ -54,6 +54,7 @@ func (s *apiServer) handleV2BulkFilePush(w http.ResponseWriter, r *http.Request)
 		} `json:"targets"`
 	}
 	if err := decodeJSONBody(w, r, &req); err != nil {
+		apiv2.WriteJSONBodyError(w, err)
 		return
 	}
 
