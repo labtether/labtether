@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useFastStatus, useStatusSettings } from "../contexts/StatusContext";
+import { isWindowsDevice } from "../[locale]/(console)/nodes/[id]/tmuxInstallCommand";
 import { useConnectedAgents } from "./useConnectedAgents";
 import { useSessionProgress } from "./session/useSessionProgress";
 import { createSession, requestSpiceTicket, requestStreamTicket } from "./session/sessionRequests";
@@ -73,6 +74,11 @@ export function useSession({
 
   const isFixedTarget = fixedTarget != null;
   const assets = status?.assets ?? [];
+  // connect reads the device list as it is when called, without being rebuilt each time the list refreshes.
+  const assetsRef = useRef(assets);
+  useEffect(() => {
+    assetsRef.current = assets;
+  });
 
   const clearReconnectTimer = useCallback(() => {
     if (reconnectTimerRef.current) {
@@ -165,6 +171,8 @@ export function useSession({
         sessionId = await createSession({
           type, connectTarget, existingSession: sessionRef.current, quickConnectParams,
           defaultActorID, quality, protocol, display, record, directTarget,
+          // A Windows device has no tmux. Asking for a persistent session there was refused on every open.
+          persistent: !isWindowsDevice(assetsRef.current.find((asset) => asset.id === connectTarget)),
         });
 
         if (!isLatestAttempt()) {
@@ -340,7 +348,7 @@ export function useSession({
   );
 
   const handleDisconnected = useCallback(
-    (detail?: string | { clean: boolean; reason?: string }) => {
+    (detail?: { clean: boolean; reason?: string }) => {
       if (manualDisconnectRef.current) {
         manualDisconnectRef.current = false;
         setConnectionState("idle");
@@ -349,9 +357,10 @@ export function useSession({
         return;
       }
       terminateDesktopSession(sessionRef.current?.id);
-      const isClean = typeof detail === "object" && detail?.clean;
-      const disconnectReason =
-        typeof detail === "object" ? detail.reason?.trim() ?? "" : "";
+      // A clean close is a session that ended on purpose (the shell exited): never reconnect to it. A terminal
+      // used to report its close as text, which counted as a drop, so `exit` opened a new shell every time.
+      const isClean = detail?.clean === true;
+      const disconnectReason = detail?.reason?.trim() ?? "";
       const supportsAutoReconnect = !!(
         sessionRef.current &&
         ((type === "desktop" && fixedTarget) ||
@@ -422,22 +431,10 @@ export function useSession({
         setReconnectAttempt(0);
         setProgress("idle", "Idle");
       }
-      if (typeof detail === "string") {
-        if (detail) setError(detail);
-      } else if (detail?.reason) {
-        const reason = detail.reason.trim();
-        if (!reason) {
-          return;
-        }
-        // For desktop sessions, surface close reasons even when the close was
-        // clean so operator-facing startup/permission failures are visible.
-        const shouldSurfaceReason = !detail.clean || type === "desktop";
-        if (
-          shouldSurfaceReason &&
-          reason.toLowerCase() !== "user disconnected"
-        ) {
-          setError(reason);
-        }
+      // The Hub's close reason shows even after a clean close ("Session attached elsewhere", a Remote View that
+      // could not start).
+      if (disconnectReason && disconnectReason.toLowerCase() !== "user disconnected") {
+        setError(disconnectReason);
       }
     },
     [

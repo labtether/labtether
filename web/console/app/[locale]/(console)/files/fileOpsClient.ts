@@ -263,6 +263,16 @@ function resolveFallbackMessage(
   return defaultMessage;
 }
 
+/** A file request the Hub refused. status is its HTTP status: 404 means the path does not exist on the device. */
+export class FileRequestError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "FileRequestError";
+    this.status = status;
+  }
+}
+
 async function responseError(response: Response, fallbackMessage: string): Promise<Error> {
   const payload = await response.json().catch(() => ({} as ErrorPayload));
   return new Error(payload.error || fallbackMessage);
@@ -295,7 +305,7 @@ export async function listFiles(assetID: string, path: string, options?: ListFil
   const payload = await response.json().catch(() => ({} as ListFilesPayload));
   if (!response.ok) {
     const message = resolveFallbackMessage(response.status, options?.fallbackError, `Failed (${response.status})`);
-    throw new Error(payload.error || message);
+    throw new FileRequestError(payload.error || message, response.status);
   }
 
   return {
