@@ -48,6 +48,7 @@ type PBSDatastoreSummary struct {
 }
 
 type PBSBackupGroupEntry struct {
+	NS          string `json:"ns,omitempty"` // namespace; "" is the root
 	BackupType  string `json:"backup_type"`
 	BackupID    string `json:"backup_id"`
 	Owner       string `json:"owner,omitempty"`
@@ -68,6 +69,7 @@ type PBSGroupsResponse struct {
 }
 
 type PBSSnapshotEntry struct {
+	NS           string                             `json:"ns,omitempty"` // namespace; "" is the root
 	BackupType   string                             `json:"backup_type"`
 	BackupID     string                             `json:"backup_id"`
 	BackupTime   int64                              `json:"backup_time"`
@@ -360,7 +362,7 @@ func (d *Deps) LoadPBSAssetDetails(ctx context.Context, asset assets.Asset, runt
 	if err != nil {
 		warnings = append(warnings, pbsWarning("version unavailable", err))
 	} else {
-		response.Version = strings.TrimSpace(version.Release)
+		response.Version = version.Display()
 		if response.Version == "" {
 			response.Version = strings.TrimSpace(version.Version)
 		}
@@ -463,7 +465,7 @@ func (d *Deps) LoadPBSAssetDetails(ctx context.Context, asset assets.Asset, runt
 		}
 		result := results[idx]
 		if result.err != nil {
-			warnings = append(warnings, fmt.Sprintf("datastore %s unavailable: %v", storeName, result.err))
+			warnings = append(warnings, pbsWarning(fmt.Sprintf("Datastore %s could not be read.", storeName), result.err))
 			continue
 		}
 		summaries = append(summaries, result.summary)
@@ -510,14 +512,14 @@ func LoadPBSDatastoreSummary(ctx context.Context, client *pbsconnector.Client, s
 
 	groups, groupsErr := client.ListDatastoreGroups(ctx, summary.Store)
 	if groupsErr != nil {
-		warnings = append(warnings, fmt.Sprintf("%s groups unavailable: %v", summary.Store, groupsErr))
+		warnings = append(warnings, pbsWarning(fmt.Sprintf("The backup groups of %s could not be read.", summary.Store), groupsErr))
 	} else {
 		summary.GroupCount = len(groups)
 	}
 
 	snapshots, snapshotsErr := client.ListDatastoreSnapshots(ctx, summary.Store)
 	if snapshotsErr != nil {
-		warnings = append(warnings, fmt.Sprintf("%s snapshots unavailable: %v", summary.Store, snapshotsErr))
+		warnings = append(warnings, pbsWarning(fmt.Sprintf("The snapshots of %s could not be read.", summary.Store), snapshotsErr))
 	} else {
 		summary.SnapshotCount = len(snapshots)
 		if latest := latestPBSSnapshotEpoch(snapshots); latest > 0 {

@@ -36,10 +36,16 @@ func (s *apiServer) ensureHomeAssistantDeps() *homeassistantpkg.Deps {
 // Forwarding methods.
 
 func (s *apiServer) handleV2HAEntities(w http.ResponseWriter, r *http.Request) {
+	if s.refuseIntegrationActionWhenOff(w, r) {
+		return
+	}
 	apiv2.WrapV1Handler(s.ensureHomeAssistantDeps().HandleV2HAEntities)(w, r)
 }
 
 func (s *apiServer) handleV2HAEntityActions(w http.ResponseWriter, r *http.Request) {
+	if s.refuseIntegrationActionWhenOff(w, r) {
+		return
+	}
 	apiv2.WrapV1Handler(s.ensureHomeAssistantDeps().HandleV2HAEntityActions)(w, r)
 }
 

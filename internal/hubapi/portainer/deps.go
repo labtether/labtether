@@ -12,6 +12,11 @@ import (
 
 // Deps holds all dependencies required by the portainer handler package.
 type Deps struct {
+	// ShellsAllowed reports whether Settings › Terminal sessions allows a
+	// container shell; nil allows it. Checked in the exec branch itself, so
+	// it uses the handler's own route parsing.
+	ShellsAllowed func() bool
+
 	// Store interfaces
 	AssetStore        persistence.AssetStore
 	HubCollectorStore persistence.HubCollectorStore

@@ -69,7 +69,7 @@ func (s *apiServer) buildHTTPHandlers(
 		"/proxmox/cluster/status":                    s.withAuth(requireScope("connectors:read", s.handleProxmoxClusterStatus)),
 		"/proxmox/cluster/resources":                 s.withAuth(requireScope("connectors:read", s.handleProxmoxClusterResources)),
 		"/proxmox/nodes/":                            s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.handleProxmoxNodeRoutes)),
-		"/proxmox/ceph/":                             s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.ensureProxmoxDeps().HandleProxmoxCeph)),
+		"/proxmox/ceph/":                             s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.guardIntegrationActions(s.ensureProxmoxDeps().HandleProxmoxCeph))),
 		"/proxmox/ceph/status":                       s.withAuth(requireScope("connectors:read", s.handleProxmoxCephStatus)),
 		"/pbs/assets/":                               s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.handlePBSAssets)),
 		"/pbs/tasks/":                                s.withAuth(requireReadWriteScopes("connectors:read", "connectors:write", s.handlePBSTaskRoutes)),

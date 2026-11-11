@@ -111,6 +111,8 @@ func TestHandlePBSAssetDetailsAndTaskRoutes(t *testing.T) {
 			_, _ = w.Write([]byte(`{"data":{"release":"3.4-1","version":"3.4"}}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api2/json/admin/datastore/backup/status":
 			_, _ = w.Write([]byte(`{"data":{"store":"backup","total":1000,"used":250,"avail":750,"mount-status":"mounted"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api2/json/admin/datastore/backup/namespace":
+			_, _ = w.Write([]byte(`{"data":[]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api2/json/admin/datastore/backup/groups":
 			_, _ = w.Write([]byte(`{"data":[{"backup-type":"vm","backup-id":"100"}]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api2/json/admin/datastore/backup/snapshots":

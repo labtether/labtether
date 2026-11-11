@@ -15,6 +15,8 @@ const EMPTY: PBSSnapshotsResponse = { store: "", snapshots: [] };
 type Props = {
   assetId: string;
   store: string;
+  /** The group's namespace; empty for the root. */
+  ns?: string;
   type: string;
   id: string;
 };
@@ -27,7 +29,7 @@ export function verificationWord(state: string | undefined, t: (key: string) => 
   return { text: t("snap.notVerified"), bad: false };
 }
 
-export function PBSGroupSnapshots({ assetId, store, type, id }: Props) {
+export function PBSGroupSnapshots({ assetId, store, ns = "", type, id }: Props) {
   const { t, tk, when } = usePBSWords();
   const params = new URLSearchParams({ store, type, id });
   const snaps = usePBSResource(
@@ -35,7 +37,11 @@ export function PBSGroupSnapshots({ assetId, store, type, id }: Props) {
     normalizePBSSnapshotsResponse,
     EMPTY,
   );
-  const sorted = useMemo(() => [...snaps.data.snapshots].sort((a, b) => b.backup_time - a.backup_time), [snaps.data]);
+  // The list holds this type/id from every namespace; keep the group's own.
+  const sorted = useMemo(
+    () => snaps.data.snapshots.filter((snap) => (snap.ns ?? "") === ns).sort((a, b) => b.backup_time - a.backup_time),
+    [snaps.data, ns],
+  );
 
   return (
     <div className="di-pbs-panel" role="region" aria-label={t("snap.of", { name: `${type}/${id}` })}>
