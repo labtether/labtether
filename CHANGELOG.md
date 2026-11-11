@@ -427,6 +427,10 @@ v1.7.1.
   as 97 KB.
 - Updates › New plan offers Linux devices only. A plan with a Windows or
   Mac device always failed for it with "os_packages updates require linux".
+- Settings › Security › Upload certificate… says that an agent which
+  connects to an address the certificate covers stops connecting until it
+  also trusts the certificate's issuer, and that Remove uploaded certificate
+  brings it back.
 
 ## [1.7.1] - 2026-10-31
 
