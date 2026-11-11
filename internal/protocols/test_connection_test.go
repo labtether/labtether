@@ -8,7 +8,7 @@ import (
 )
 
 func TestSSHRejectsMissingHostKeyCallback(t *testing.T) {
-	result := TestSSH(context.Background(), "192.0.2.10", 22, "operator", "password", "", nil)
+	result := TestSSH(context.Background(), "192.0.2.10", 22, "operator", "password", "", nil, nil)
 	if result.Success || result.Error != "SSH host key callback is required" {
 		t.Fatalf("expected fail-closed missing callback result, got %#v", result)
 	}

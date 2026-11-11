@@ -20,7 +20,9 @@ const (
 
 // TestSSH attempts a full SSH dial, handshake, and authentication against the
 // target host:port. At least one of password or privateKey must be non-empty.
-func TestSSH(ctx context.Context, host string, port int, username, password, privateKey string, hostKeyCallback ssh.HostKeyCallback) *TestResult {
+// TestSSH dials host:port and logs in. hostKeyAlgorithms limits the host keys
+// the server may present (the type of a pinned key); nil keeps Go's defaults.
+func TestSSH(ctx context.Context, host string, port int, username, password, privateKey string, hostKeyCallback ssh.HostKeyCallback, hostKeyAlgorithms []string) *TestResult {
 	start := time.Now()
 
 	authMethods := make([]ssh.AuthMethod, 0, 2)
@@ -56,10 +58,11 @@ func TestSSH(ctx context.Context, host string, port int, username, password, pri
 	}
 
 	cfg := &ssh.ClientConfig{
-		User:            strings.TrimSpace(username),
-		Auth:            authMethods,
-		HostKeyCallback: hostKeyCallback,
-		Timeout:         dialTimeout,
+		User:              strings.TrimSpace(username),
+		Auth:              authMethods,
+		HostKeyCallback:   hostKeyCallback,
+		HostKeyAlgorithms: hostKeyAlgorithms,
+		Timeout:           dialTimeout,
 	}
 
 	dialCtx, cancel := context.WithTimeout(ctx, handshakeTimeout)

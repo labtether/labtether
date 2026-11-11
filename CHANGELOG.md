@@ -128,6 +128,10 @@ v1.7.1.
 
 ### Fixed
 
+- Devices: Test connection over SSH, and the SSH health check, log in when the
+  device's ed25519 host key is pinned. They failed with "host key mismatch"
+  when the device also has an ECDSA key; the terminal already handled this.
+
 - A change to Settings › General › Service discovery defaults now reaches
   connected agents at once. Before, agents got it only when they next
   connected, and after a reset they kept the old value.

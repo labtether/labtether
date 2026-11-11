@@ -121,7 +121,7 @@ func (d *Deps) HandleTestProtocolConnection(w http.ResponseWriter, r *http.Reque
 			servicehttp.WriteError(w, http.StatusBadRequest, "SSH host key verification requires a configured host key or known_hosts entry")
 			return
 		}
-		result = protocols.TestSSH(r.Context(), host, pc.Port, username, password, privateKey, hostKeyCallback)
+		result = protocols.TestSSH(r.Context(), host, pc.Port, username, password, privateKey, hostKeyCallback, shared.PinnedHostKeyAlgorithms(sshCfg.StrictHostKey, sshCfg.HostKey))
 	case protocols.ProtocolTelnet:
 		telnetOptions, decodeErr := protocols.DecodeTelnetConfig(pc.Config)
 		if decodeErr != nil {
