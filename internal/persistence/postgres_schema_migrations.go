@@ -123,5 +123,6 @@ func postgresSchemaMigrations() []schemaMigration {
 		schemaMigrationDiscoveryRunsOnChildToHost(),
 		schemaMigrationDeviceNamesOneLine(),
 		schemaMigrationChannelAllAlerts(),
+		schemaMigrationSSHHostKeyPins(),
 	}
 }

@@ -195,7 +195,7 @@ func TestSFTPStatelessHostKeyDiscovery(t *testing.T) {
 	var portNum int
 	fmt.Sscanf(port, "%d", &portNum)
 
-	hostKey, fingerprint, err := DiscoverSFTPHostKey(context.Background(), host, portNum)
+	hostKey, fingerprint, err := DiscoverSSHHostKey(context.Background(), host, portNum)
 	if err != nil {
 		t.Fatalf("discover host key: %v", err)
 	}

@@ -81,6 +81,7 @@ func newAPIServer(
 		terminalStore:              pgStore,
 		terminalPersistentStore:    pgStore,
 		terminalBookmarkStore:      pgStore,
+		sshKnownHostStore:          pgStore,
 		terminalScrollbackStore:    pgStore,
 		terminalInMemStore:         terminal.NewStore(),
 		auditStore:                 pgStore,

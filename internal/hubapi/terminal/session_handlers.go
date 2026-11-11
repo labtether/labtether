@@ -211,7 +211,7 @@ func (d *Deps) HandleSessionActions(w http.ResponseWriter, r *http.Request) {
 			}
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"commands": commands})
 		case http.MethodPost:
-			if !d.requireCredentialUseForTarget(w, r, session.Target) {
+			if !d.requireCredentialUseForSession(w, r, session) {
 				return
 			}
 			d.createCommand(w, r, session)
@@ -222,7 +222,7 @@ func (d *Deps) HandleSessionActions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(parts) == 2 && parts[1] == "stream" {
-		if !d.requireCredentialUseForTarget(w, r, session.Target) {
+		if !d.requireCredentialUseForSession(w, r, session) {
 			return
 		}
 		d.HandleSessionStream(w, r, session)
@@ -230,7 +230,7 @@ func (d *Deps) HandleSessionActions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(parts) == 2 && parts[1] == "stream-ticket" {
-		if !d.requireCredentialUseForTarget(w, r, session.Target) {
+		if !d.requireCredentialUseForSession(w, r, session) {
 			return
 		}
 		d.HandleSessionStreamTicket(w, r, session)

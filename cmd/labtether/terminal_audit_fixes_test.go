@@ -136,6 +136,18 @@ func (s *memoryTerminalBookmarkStore) DeleteBookmark(id string) error {
 	return nil
 }
 
+func (s *memoryTerminalBookmarkStore) SetBookmarkHostKey(id, hostKey, target string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	bookmark, ok := s.bookmarks[strings.TrimSpace(id)]
+	if !ok {
+		return persistence.ErrNotFound
+	}
+	bookmark.HostKey, bookmark.HostKeyTarget = hostKey, target
+	s.bookmarks[bookmark.ID] = bookmark
+	return nil
+}
+
 func (s *memoryTerminalBookmarkStore) TouchBookmarkLastUsed(id string, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -234,7 +246,7 @@ func TestConnectBookmarkDoesNotMarkAttachedWhenStreamTicketIssueFails(t *testing
 	sut := newTestAPIServer(t)
 	sut.terminalBookmarkStore = newMemoryTerminalBookmarkStore()
 	sut.resetTerminalDepsForTest()
-	bookmark := mustCreateBookmark(t, sut, "actor-a", `{"title":"Lab Host","host":"lab-host-01","port":22}`)
+	bookmark := mustCreateBookmark(t, sut, "actor-a", `{"title":"Lab Host","asset_id":"lab-host-01"}`)
 
 	sut.ensureTerminalDeps().IssueStreamTicket = func(_ context.Context, _ string) (string, time.Time, error) {
 		return "", time.Time{}, errors.New("synthetic stream ticket failure")

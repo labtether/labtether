@@ -29,7 +29,8 @@ const jumpChainHopDialTimeout = 6 * time.Second
 //  2. Ephemeral process-local Quick Connect config by session ID
 //  3. asset_protocol_configs row for SSH
 //  4. Saved SSH login (stored when an agent installs the Hub SSH key)
-//  5. Environment variable fallback
+//  5. The bookmark to a host that a saved session was opened from
+//  6. Environment variable fallback
 func (d *Deps) ResolveSessionSSHConfig(session terminal.Session) (*terminal.SSHConfig, error) {
 	if session.InlineSSHConfig != nil {
 		return session.InlineSSHConfig, nil
@@ -51,6 +52,9 @@ func (d *Deps) ResolveSessionSSHConfig(session terminal.Session) (*terminal.SSHC
 	}
 	if saved, err := d.resolveSavedTerminalSSH(session.Target); err != nil || saved != nil {
 		return saved, err
+	}
+	if bookmarked, err := d.resolveBookmarkSSH(session); err != nil || bookmarked != nil {
+		return bookmarked, err
 	}
 
 	return resolveEnvSSHConfig(session.Target)
@@ -289,7 +293,11 @@ func (d *Deps) buildSSHHostKeyCallback(cfg *terminal.SSHConfig) (ssh.HostKeyCall
 	}
 	callback, err := shared.BuildSSHHostKeyCallback(strict, expected)
 	if err != nil {
-		return nil, errors.New("strict host key enabled but no SSH_HOST_KEY provided and no known_hosts file is available")
+		host, port := "this host", 22
+		if cfg != nil && strings.TrimSpace(cfg.Host) != "" {
+			host, port = strings.TrimSpace(cfg.Host), cfg.Port
+		}
+		return nil, errHostKeyUnknown{text: hostKeyUnknownMessage(host, port)}
 	}
 	return callback, nil
 }

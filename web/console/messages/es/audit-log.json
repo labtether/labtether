@@ -105,6 +105,8 @@
     "terminal_bookmark_created": "Añadió un marcador",
     "terminal_bookmark_updated": "Cambió un marcador",
     "terminal_bookmark_deleted": "Borró un marcador",
+    "terminal_ssh_host_key_trusted": "Confió en una clave SSH de host",
+    "terminal_ssh_host_key_removed": "Quitó una clave SSH de host guardada",
     "auth_user_created": "Añadió un usuario",
     "auth_user_deleted": "Quitó un usuario",
     "auth_user_role_changed": "Cambió el rol de un usuario",

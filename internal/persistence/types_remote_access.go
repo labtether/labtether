@@ -56,6 +56,22 @@ type TerminalBookmarkStore interface {
 	TouchBookmarkLastUsed(id string, at time.Time) error
 }
 
+// TerminalBookmarkHostKeyStore stores the SSH host key trusted for a
+// bookmark, with the "host:port" it was trusted for ("" clears both).
+type TerminalBookmarkHostKeyStore interface {
+	SetBookmarkHostKey(id, hostKey, target string) error
+}
+
+// SSHKnownHostStore keeps the SSH host keys trusted through Quick connect,
+// one per host and port.
+type SSHKnownHostStore interface {
+	GetSSHKnownHost(host string, port int) (terminal.SSHKnownHost, bool, error)
+	// AddSSHKnownHost stores the key unless one is already stored for that
+	// host and port; it then returns the stored one.
+	AddSSHKnownHost(known terminal.SSHKnownHost) (terminal.SSHKnownHost, error)
+	DeleteSSHKnownHost(host string, port int) (bool, error)
+}
+
 // TerminalScrollbackStore provides persistence for terminal session scrollback buffers.
 type TerminalScrollbackStore interface {
 	UpsertScrollback(persistentSessionID string, buffer []byte, bufferSize int, totalLines int) error

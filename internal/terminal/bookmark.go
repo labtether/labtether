@@ -16,6 +16,11 @@ type Bookmark struct {
 	CreatedAt           time.Time  `json:"created_at"`
 	UpdatedAt           time.Time  `json:"updated_at"`
 	LastUsedAt          *time.Time `json:"last_used_at,omitempty"`
+
+	// HostKey is the SSH host key the owner trusted for HostKeyTarget (the
+	// host and port the bookmark pointed to then). PinnedHostKey applies it.
+	HostKey       string `json:"host_key,omitempty"`
+	HostKeyTarget string `json:"-"`
 }
 
 type CreateBookmarkRequest struct {

@@ -22,6 +22,7 @@ export type Bookmark = {
   host?: string;
   port?: number;
   username?: string;
+  credential_profile_id?: string;
   tags?: string[];
   last_used_at?: string;
 };

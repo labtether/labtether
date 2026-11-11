@@ -55,7 +55,8 @@ func (s *PostgresStore) CreateBookmark(req terminal.CreateBookmarkRequest) (term
 func (s *PostgresStore) GetBookmark(id string) (terminal.Bookmark, bool, error) {
 	row := s.pool.QueryRow(context.Background(),
 		`SELECT id, actor_id, title, asset_id, host, port, username,
-		        credential_profile_id, jump_chain_group_id, tags, created_at, updated_at, last_used_at
+		        credential_profile_id, jump_chain_group_id, tags, created_at, updated_at, last_used_at,
+		        host_key, host_key_target
 		 FROM terminal_session_bookmarks WHERE id = $1`,
 		strings.TrimSpace(id),
 	)
@@ -72,7 +73,8 @@ func (s *PostgresStore) GetBookmark(id string) (terminal.Bookmark, bool, error) 
 func (s *PostgresStore) ListBookmarks(actorID string) ([]terminal.Bookmark, error) {
 	rows, err := s.pool.Query(context.Background(),
 		`SELECT id, actor_id, title, asset_id, host, port, username,
-		        credential_profile_id, jump_chain_group_id, tags, created_at, updated_at, last_used_at
+		        credential_profile_id, jump_chain_group_id, tags, created_at, updated_at, last_used_at,
+		        host_key, host_key_target
 		 FROM terminal_session_bookmarks
 		 WHERE actor_id = $1
 		 ORDER BY last_used_at DESC NULLS LAST, created_at DESC`,
@@ -175,6 +177,25 @@ func (s *PostgresStore) DeleteBookmark(id string) error {
 	return nil
 }
 
+// SetBookmarkHostKey stores the SSH host key trusted for a bookmark and the
+// "host:port" it was trusted for; empty values clear the pin.
+func (s *PostgresStore) SetBookmarkHostKey(id, hostKey, target string) error {
+	tag, err := s.pool.Exec(context.Background(),
+		`UPDATE terminal_session_bookmarks SET host_key = $2, host_key_target = $3, updated_at = $4 WHERE id = $1`,
+		strings.TrimSpace(id),
+		nullIfBlank(hostKey),
+		nullIfBlank(target),
+		time.Now().UTC(),
+	)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *PostgresStore) TouchBookmarkLastUsed(id string, at time.Time) error {
 	_, err := s.pool.Exec(context.Background(),
 		`UPDATE terminal_session_bookmarks SET last_used_at = $2 WHERE id = $1`,
@@ -191,6 +212,7 @@ type bookmarkScanner interface {
 func scanBookmark(scanner bookmarkScanner) (terminal.Bookmark, error) {
 	var bkm terminal.Bookmark
 	var assetID, host, username, credentialProfileID, jumpChainGroupID *string
+	var hostKey, hostKeyTarget *string
 	var tagsPayload []byte
 	var lastUsedAt *time.Time
 
@@ -208,9 +230,17 @@ func scanBookmark(scanner bookmarkScanner) (terminal.Bookmark, error) {
 		&bkm.CreatedAt,
 		&bkm.UpdatedAt,
 		&lastUsedAt,
+		&hostKey,
+		&hostKeyTarget,
 	)
 	if err != nil {
 		return terminal.Bookmark{}, err
+	}
+	if hostKey != nil {
+		bkm.HostKey = *hostKey
+	}
+	if hostKeyTarget != nil {
+		bkm.HostKeyTarget = *hostKeyTarget
 	}
 
 	if assetID != nil {
