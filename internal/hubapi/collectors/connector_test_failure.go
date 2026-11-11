@@ -28,6 +28,8 @@ func connectorTestReason(product, failure string) string {
 	switch {
 	case has("no endpoints are visible"):
 		return fmt.Sprintf("%s answered, but this login sees no environments.", product)
+	case has("allowed only to an address on your own network", "outside your network"):
+		return fmt.Sprintf("Plain http to %s works only for an address on your own network: a private, tailnet or link-local address, or a .local or .ts.net name. Use such an address, or https.", product)
 	case has("insecure url scheme"):
 		return fmt.Sprintf("The Hub connects to %s over https only. Use an https:// address, or let the Hub use http by setting LABTETHER_ALLOW_INSECURE_TRANSPORT=true.", product)
 	case has("outbound") && has("not allowlisted"):

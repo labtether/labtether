@@ -55,11 +55,13 @@ func (d *Deps) executeHomeAssistantCollector(ctx context.Context, collector hubc
 	if !hasSkipVerify {
 		skipVerify = false
 	}
+	allowLocalHTTP, _ := collectorConfigBool(collector.Config, "allow_local_http")
 	connector := homeassistant.NewWithConfig(homeassistant.Config{
-		BaseURL:    baseURL,
-		Token:      strings.TrimSpace(token),
-		SkipVerify: skipVerify,
-		Timeout:    collectorConfigDuration(collector.Config, "timeout", 15*time.Second),
+		BaseURL:        baseURL,
+		Token:          strings.TrimSpace(token),
+		SkipVerify:     skipVerify,
+		Timeout:        collectorConfigDuration(collector.Config, "timeout", 15*time.Second),
+		AllowLocalHTTP: allowLocalHTTP,
 	})
 
 	collectorCtx, collectorCancel := context.WithTimeout(ctx, 2*time.Minute)
