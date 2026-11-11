@@ -56,6 +56,8 @@ func newPortainerOwnerFixture(t *testing.T) *portainerOwnerFixture {
 			_, _ = fmt.Fprintf(w, `{"Id":%q,"Name":"/friendly"}`, f.inspectID)
 		case r.URL.Path == "/api/stacks":
 			_, _ = w.Write([]byte(`[{"Id":8,"EndpointId":7},{"Id":9,"EndpointId":99}]`))
+		case r.URL.Path == "/api/stacks/8":
+			_, _ = w.Write([]byte(`{"Id":8,"EndpointId":7,"GitConfig":{"URL":"https://git.example.invalid/stack.git"}}`))
 		case strings.HasSuffix(r.URL.Path, "/images/json"):
 			_, _ = w.Write([]byte(`[]`))
 		default:

@@ -260,6 +260,31 @@ describe("PBS user-facing controls", () => {
     expect(container.textContent).toContain("No backup groups");
   });
 
+  it("keeps groups of two namespaces apart and forgets the one picked in its namespace", async () => {
+    vi.mocked(fetch).mockImplementation(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/groups/forget") && init?.method === "DELETE") return respond({ status: "deleted" });
+      return respond(url.includes("/groups")
+        ? { datastores: [{ store: "qa-store", groups: [
+          { ns: "site-a", backup_type: "vm", backup_id: "100", backup_count: 3 },
+          { ns: "site-b", backup_type: "vm", backup_id: "100", backup_count: 1 },
+        ] }] }
+        : detailsPayload);
+    });
+
+    await render(<PBSCoverageList assetId="pbs-server-qa" />);
+    expect(container.textContent).toContain("qa-store/site-a");
+    expect(container.textContent).toContain("qa-store/site-b");
+    await openMenu("Actions for vm/100 site-b");
+    await chooseMenuItem("Forget group…");
+    await confirmDialog("Forget group");
+
+    const call = vi.mocked(fetch).mock.calls.find(([input, init]) =>
+      String(input).includes("/groups/forget") && init?.method === "DELETE");
+    expect(String(call?.[0])).toContain("ns=site-b");
+    expect(String(call?.[0])).toContain("backup-id=100");
+  });
+
   it("requires confirmation before a datastore mutation", async () => {
     await render(<PBSDatastoreList assetId="pbs-server-qa" datastores={sortedStores} onChanged={() => undefined} />);
 

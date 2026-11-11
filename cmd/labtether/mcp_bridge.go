@@ -229,6 +229,15 @@ func (s *apiServer) mcpConnectorsHealth() func(ctx context.Context) ([]map[strin
 						"display_name": desc.DisplayName,
 						"capabilities": desc.Capabilities,
 					}
+					// Connections saved in the console are what the Hub collects;
+					// report their last collection, without calling the systems.
+					if health, connections, found := s.ensureCollectorsDeps().SavedConnectionsHealth(desc.ID); found {
+						entry["status"] = health.Status
+						entry["message"] = safeMCPConnectorMessage(health.Message)
+						entry["saved_connections"] = len(connections)
+						results <- healthResult{index: index, entry: entry}
+						continue
+					}
 					connector, ok := s.connectorRegistry.Get(desc.ID)
 					if !ok {
 						entry["status"] = "unavailable"

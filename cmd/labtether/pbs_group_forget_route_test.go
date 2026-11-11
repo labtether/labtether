@@ -56,7 +56,7 @@ func TestHandlePBSGroupForgetRouteAllowsDelete(t *testing.T) {
 		t.Fatalf("seed pbs datastore asset: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodDelete, "/pbs/assets/pbs-datastore-backup/groups/forget?store=backup&backup-type=vm&backup-id=900", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/pbs/assets/pbs-datastore-backup/groups/forget?store=backup&ns=&backup-type=vm&backup-id=900", nil)
 	req = req.WithContext(contextWithPrincipal(req.Context(), "owner", "owner"))
 	rec := httptest.NewRecorder()
 	sut.handlePBSAssets(rec, req)

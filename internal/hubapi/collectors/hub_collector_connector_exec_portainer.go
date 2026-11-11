@@ -101,6 +101,7 @@ func (d *Deps) ExecutePortainerCollector(ctx context.Context, collector hubcolle
 	}
 
 	ingested := 0
+	seenAssetIDs := make(map[string]struct{})
 	eligibleAssets := 0
 	upsertFailures := 0
 	snapshotAssets := make([]connectorsdk.Asset, 0)
@@ -213,7 +214,17 @@ func (d *Deps) ExecutePortainerCollector(ctx context.Context, collector hubcolle
 			continue
 		}
 		snapshotAssets = append(snapshotAssets, ConnectorSnapshotAssetFromHeartbeat(req, asset.Kind))
+		seenAssetIDs[req.AssetID] = struct{}{}
 		ingested++
+	}
+	if upsertFailures == 0 {
+		liveEndpoints := make(map[string]struct{})
+		for endpointID, inventory := range endpointInventoryByID {
+			if inventory.containers > 0 || inventory.stacks > 0 {
+				liveEndpoints[endpointID] = struct{}{}
+			}
+		}
+		d.prunePortainerAssetsNotSeen(collector.ID, seenAssetIDs, liveEndpoints)
 	}
 
 	if clusterAsset, ok := d.KeepConnectorClusterAssetAlive(collector, "portainer", ingested, "hub collector portainer"); ok {

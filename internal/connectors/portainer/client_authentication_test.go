@@ -180,6 +180,9 @@ func TestJWTRetryOn401PreservesJSONBody(t *testing.T) {
 			authCount.Add(1)
 			_, _ = w.Write([]byte(`{"jwt":"fresh-token"}`))
 
+		case "/api/stacks/5":
+			_, _ = w.Write([]byte(`{"Id":5,"GitConfig":{"URL":"https://git.example.invalid/stack.git"}}`))
+
 		case "/api/stacks/5/git/redeploy":
 			call := requestCount.Add(1)
 			if call == 1 {
