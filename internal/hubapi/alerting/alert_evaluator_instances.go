@@ -53,6 +53,22 @@ func (d *Deps) fireOrRefireAlertWithScopeAt(ctx context.Context, rule alerts.Rul
 	}
 	fingerprint := alerts.GenerateFingerprint(rule.ID, rule.Labels)
 
+	// A silence on one device mutes the alert there only: the rule fires
+	// for its other devices, and waits like a silenced rule when every device
+	// it fired for is silenced.
+	devicesAllSilenced := false
+	if len(scope.AssetIDs) > 0 {
+		silences, ok := d.activeSilencesContext(ctx, suppressionPrefetch)
+		if !ok {
+			devicesAllSilenced = true
+		} else {
+			scope, devicesAllSilenced = withoutSilencedDevices(rule, scope, silences)
+		}
+	}
+	suppressed := func() bool {
+		return devicesAllSilenced || d.isAlertSuppressedContext(ctx, rule, suppressionPrefetch)
+	}
+
 	createAndDispatchFiringInstance := func() {
 		firingStore, ok := d.AlertInstanceStore.(persistence.AlertInstanceFiringStore)
 		if !ok {
@@ -96,7 +112,7 @@ func (d *Deps) fireOrRefireAlertWithScopeAt(ctx context.Context, rule alerts.Rul
 		// has lifted, promote by resolving the placeholder and creating a fresh
 		// firing instance so incident timing starts from actual firing time.
 		if existing.Status == alerts.InstanceStatusPending {
-			if d.isAlertSuppressedContext(ctx, rule, suppressionPrefetch) {
+			if suppressed() {
 				_ = store.UpdateAlertInstanceLastFiredContext(ctx, existing.ID)
 				return
 			}
@@ -121,7 +137,7 @@ func (d *Deps) fireOrRefireAlertWithScopeAt(ctx context.Context, rule alerts.Rul
 	}
 
 	// Check suppression: active silences
-	if d.isAlertSuppressedContext(ctx, rule, suppressionPrefetch) {
+	if suppressed() {
 		_, _ = store.CreateAlertInstanceContext(ctx, alerts.CreateInstanceRequest{
 			RuleID:      rule.ID,
 			Fingerprint: fingerprint,
@@ -143,19 +159,9 @@ func (d *Deps) isAlertSuppressedContext(ctx context.Context, rule alerts.Rule, p
 	if d.isAlertMaintenanceSuppressedContext(ctx, rule) {
 		return true
 	}
-	var silences []alerts.AlertSilence
-	if prefetch != nil {
-		silences = prefetch.activeSilences
-	} else {
-		store, ok := d.AlertInstanceStore.(persistence.AlertInstanceContextStore)
-		if !ok {
-			return true
-		}
-		loaded, err := store.ListAlertSilencesContext(ctx, 500, true)
-		if err != nil || len(loaded) >= 500 {
-			return true
-		}
-		silences = loaded
+	silences, ok := d.activeSilencesContext(ctx, prefetch)
+	if !ok {
+		return true
 	}
 	for _, silence := range silences {
 		if matchesSilence(rule, silence) {
@@ -166,17 +172,21 @@ func (d *Deps) isAlertSuppressedContext(ctx context.Context, rule alerts.Rule, p
 	return false
 }
 
-func matchesSilence(rule alerts.Rule, silence alerts.AlertSilence) bool {
-	if len(silence.Matchers) == 0 {
-		return false
+// activeSilencesContext lists the running silences; ok is false when the list
+// cannot be read in full, which callers treat as silenced.
+func (d *Deps) activeSilencesContext(ctx context.Context, prefetch *alertSuppressionPrefetch) ([]alerts.AlertSilence, bool) {
+	if prefetch != nil {
+		return prefetch.activeSilences, true
 	}
-	for key, pattern := range silence.Matchers {
-		labelVal, ok := rule.Labels[key]
-		if !ok || labelVal != pattern {
-			return false
-		}
+	store, ok := d.AlertInstanceStore.(persistence.AlertInstanceContextStore)
+	if !ok {
+		return nil, false
 	}
-	return true
+	loaded, err := store.ListAlertSilencesContext(ctx, 500, true)
+	if err != nil || len(loaded) >= 500 {
+		return nil, false
+	}
+	return loaded, true
 }
 
 func (d *Deps) resolveStaleInstances(rule alerts.Rule, suppressionPrefetch *alertSuppressionPrefetch) {

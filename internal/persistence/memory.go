@@ -224,6 +224,7 @@ func applyAssetCanonical(asset assets.Asset) assets.Asset {
 }
 
 func (m *MemoryAssetStore) UpsertAssetHeartbeat(req assets.HeartbeatRequest) (assets.Asset, error) {
+	req.Name = assets.OneLineName(req.Name)
 	now := time.Now().UTC()
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -351,7 +352,7 @@ func (m *MemoryAssetStore) UpdateAsset(id string, req assets.UpdateRequest) (ass
 	}
 
 	if req.Name != nil {
-		existing.Name = strings.TrimSpace(*req.Name)
+		existing.Name = assets.OneLineName(*req.Name)
 		if existing.Metadata == nil {
 			existing.Metadata = map[string]string{}
 		}

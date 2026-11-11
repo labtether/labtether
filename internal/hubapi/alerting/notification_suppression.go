@@ -11,7 +11,9 @@ import (
 // so uncertainty suppresses the send rather than leaking a matching alert.
 const notificationSilenceScanLimit = 500
 
-func (d *Deps) isAlertSilencedAtDelivery(rule alerts.Rule) bool {
+// isAlertSilencedAtDelivery reports whether a silence covers the alert's rule,
+// or every device the alert is for.
+func (d *Deps) isAlertSilencedAtDelivery(rule alerts.Rule, devices []string) bool {
 	if strings.TrimSpace(rule.ID) == "" || d.AlertInstanceStore == nil {
 		return true
 	}
@@ -24,7 +26,20 @@ func (d *Deps) isAlertSilencedAtDelivery(rule alerts.Rule) bool {
 			return true
 		}
 	}
-	return false
+	return devicesSilenced(rule, silences, devices)
+}
+
+// alertDeliveryDevices lists the devices an alert instance is for, or none
+// when it cannot be read (then only rule silences apply).
+func (d *Deps) alertDeliveryDevices(instanceID string) []string {
+	if d.AlertInstanceStore == nil || strings.TrimSpace(instanceID) == "" {
+		return nil
+	}
+	inst, ok, err := d.AlertInstanceStore.GetAlertInstance(strings.TrimSpace(instanceID))
+	if err != nil || !ok {
+		return nil
+	}
+	return alertInstanceDeviceIDs(inst)
 }
 
 func (d *Deps) notificationRetrySuppressed(rec notifications.Record, payload map[string]any) bool {
@@ -37,7 +52,7 @@ func (d *Deps) notificationRetrySuppressed(rec notifications.Record, payload map
 		return false
 	}
 	rule, ok := d.alertRuleForRetrySuppression(rec, payload)
-	return !ok || d.isAlertSilencedAtDelivery(rule)
+	return !ok || d.isAlertSilencedAtDelivery(rule, d.alertDeliveryDevices(rec.AlertInstanceID))
 }
 
 func (d *Deps) alertRuleForRetrySuppression(rec notifications.Record, payload map[string]any) (alerts.Rule, bool) {

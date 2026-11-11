@@ -85,6 +85,10 @@
     "appTokenRequired": "App-Token ist erforderlich."
   },
   "title": "Benachrichtigungen",
+  "allAlerts": {
+    "label": "Jeden Alarm hierher senden",
+    "hint": "Aus: nur Alarme, die eine Route hierher sendet."
+  },
   "emptyHint": "Slack, E-Mail, Webhooks, ntfy und Gotify können Alarme empfangen.",
   "sending": "Wird gesendet",
   "sendTo": "An {name} senden",

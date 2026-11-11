@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -136,13 +135,14 @@ func (d *Deps) listRecordings(w http.ResponseWriter, r *http.Request) {
 	}
 	query := `SELECT id, session_id, asset_id, actor_id, protocol, file_path, file_size, duration_ms, status, created_at, stopped_at
 		FROM session_recordings
+		WHERE NOT (status = 'completed' AND file_size = 0)
 		ORDER BY created_at DESC
 		LIMIT 100`
 	args := []any{}
 	if !auth.HasAdminPrivileges(d.UserRoleFromContext(r.Context())) {
 		query = `SELECT id, session_id, asset_id, actor_id, protocol, file_path, file_size, duration_ms, status, created_at, stopped_at
 			FROM session_recordings
-			WHERE actor_id = $1
+			WHERE actor_id = $1 AND NOT (status = 'completed' AND file_size = 0)
 			ORDER BY created_at DESC
 			LIMIT 100`
 		args = append(args, d.PrincipalActorID(r.Context()))
@@ -443,33 +443,4 @@ func (d *Deps) StopRecordingBySession(sessionID string) bool {
 		return false
 	}
 	return bridge.StopRecordingLocked(d.StopRecording)
-}
-
-// DefaultStopRecording finalizes a recording. Used as a default for Deps.StopRecording.
-func DefaultStopRecording(dbPool *pgxpool.Pool, rec *ActiveRecording) {
-	if rec == nil {
-		return
-	}
-	rec.Stop()
-	if dbPool == nil {
-		return
-	}
-	now := time.Now().UTC()
-	durationMS := now.Sub(rec.StartedAt).Milliseconds()
-	_, err := dbPool.Exec(
-		context.Background(),
-		`UPDATE session_recordings
-		 SET status = 'completed',
-		     file_size = $1,
-		     duration_ms = $2,
-		     stopped_at = $3
-		 WHERE id = $4`,
-		rec.Bytes,
-		durationMS,
-		now,
-		rec.ID,
-	)
-	if err != nil {
-		log.Printf("recording: failed to finalize %s: %v", rec.ID, err)
-	}
 }

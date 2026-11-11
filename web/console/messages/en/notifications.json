@@ -85,6 +85,10 @@
     "appTokenRequired": "App token is required."
   },
   "title": "Notifications",
+  "allAlerts": {
+    "label": "Send every alert here",
+    "hint": "Off: only alerts a route sends here."
+  },
   "emptyHint": "Slack, email, webhooks, ntfy and Gotify can receive alerts.",
   "sending": "Sending",
   "sendTo": "Send to {name}",
