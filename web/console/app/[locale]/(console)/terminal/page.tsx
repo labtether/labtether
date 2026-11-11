@@ -23,10 +23,12 @@ import TerminalWorkspaceView from "../../../components/terminal/TerminalWorkspac
 import { formatAddress } from "../../../components/terminal/terminalTargets";
 import { resolveTerminalTheme } from "../../../components/terminal/terminalLook";
 import type { Bookmark } from "../../../components/terminal/terminalSessionTypes";
+import type { QuickConnectParams } from "../../../hooks/useSession";
 import { useTerminalPageKeys } from "../../../components/terminal/useTerminalPageKeys";
 import { useTerminalSessionLibrary } from "../../../components/terminal/useTerminalSessionLibrary";
 import { useTerminalWorkspace } from "../../../components/terminal/useTerminalWorkspace";
 import { useHostKeyGate } from "../../../components/terminal/useHostKeyGate";
+import { useQuickConnectFlow } from "../../../components/terminal/useQuickConnectFlow";
 
 const ScrollbackViewer = dynamic(() => import("../../../components/terminal/ScrollbackViewer"), { ssr: false });
 
@@ -80,6 +82,15 @@ function TerminalWorkspacePageContent() {
       setAddressRequest({ paneKey: null, initial: formatAddress({ user: bookmark.username ?? "", host: bookmark.host, port: bookmark.port ?? 22 }) });
     }
   }, [openTarget, setAddressRequest]);
+  const closeAddressRequest = useCallback(() => setAddressRequest(null), [setAddressRequest]);
+  const { connectAddress } = ws;
+  const connectQuick = useCallback((params: QuickConnectParams) => void connectAddress(params), [connectAddress]);
+  const quick = useQuickConnectFlow({
+    requested: ws.addressRequest !== null,
+    closeRequest: closeAddressRequest,
+    connect: connectQuick,
+    gate: hostKeys.gate,
+  });
   const lib = useTerminalSessionLibrary({
     isOpen: ws.fresh || sessionsOpen || plusOpen,
     onSessionSelect,
@@ -139,13 +150,11 @@ function TerminalWorkspacePageContent() {
     <>
       {body}
       <QuickConnectDialog
-        open={ws.addressRequest !== null}
+        open={quick.open}
         initialAddress={ws.addressRequest?.initial ?? ""}
-        onClose={() => setAddressRequest(null)}
-        onConnect={(params) => {
-          void hostKeys.gate({ host: params.host, port: params.port ?? 22, strict: params.strict_host_key !== false })
-            .then((trusted) => (trusted ? ws.connectAddress(params) : undefined));
-        }}
+        draft={quick.draft}
+        onClose={quick.onClose}
+        onConnect={quick.onConnect}
       />
       {hostKeys.dialog}
       <SessionsPanel
