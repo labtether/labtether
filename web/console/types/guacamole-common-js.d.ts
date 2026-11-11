@@ -18,6 +18,10 @@ declare module "guacamole-common-js" {
 
   export class WebSocketTunnel {
     constructor(url: string);
+    /** Called with why the stream closed, when it did not close on request. */
+    onerror: ((status: Status) => void) | null;
+    /** Tunnel states: 0 connecting, 1 open, 2 closed, 3 unstable. */
+    onstatechange: ((state: number) => void) | null;
   }
 
   export class Display {

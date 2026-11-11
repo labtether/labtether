@@ -3,6 +3,7 @@
 import { Check } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { SessionConnectionPhase, SessionConnectionState } from "../../hooks/useSession";
+import { STREAM_NOT_OPENED } from "./screenWords";
 
 const STEPS = ["session", "ticket", "stream"] as const;
 
@@ -67,7 +68,8 @@ export function ScreenOverlay({
   if (connectionState === "error" || connectionState === "idle") {
     // A session that ended for a reason (a refused login, a closed stream) is idle with an error: say why.
     const failed = connectionState === "error" || !!error;
-    const word = failed ? error || t("failed") : t(start === "connect" ? "notConnected" : "disconnected");
+    const reason = error === STREAM_NOT_OPENED ? t("streamNotOpened") : error;
+    const word = failed ? reason || t("failed") : t(start === "connect" ? "notConnected" : "disconnected");
     return (
       <div className="rv-over" role={failed ? "alert" : undefined}>
         <div className="rv-card">

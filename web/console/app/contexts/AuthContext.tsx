@@ -9,6 +9,8 @@ type User = {
   username: string;
   role?: string;
   totp_enabled?: boolean;
+  /** "local" for a LabTether password, else the single sign-on provider. */
+  auth_provider?: string;
 };
 
 type AuthContextValue = {
@@ -24,10 +26,11 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const SESSION_CHECK_MS = 30_000;
 
 /** The signed-in user from GET /api/auth/me. The Hub sends 2FA state beside the user, not inside it. */
-function userFrom(data: { user?: User | null; totp_enabled?: boolean } | null): User | null {
+function userFrom(data: { user?: User | null; totp_enabled?: boolean; auth_provider?: string } | null): User | null {
   if (!data?.user) return null;
   const totp = typeof data.totp_enabled === "boolean" ? data.totp_enabled : data.user.totp_enabled;
-  return totp === undefined ? data.user : { ...data.user, totp_enabled: totp };
+  const withTotp = totp === undefined ? data.user : { ...data.user, totp_enabled: totp };
+  return typeof data.auth_provider === "string" ? { ...withTotp, auth_provider: data.auth_provider } : withTotp;
 }
 
 /** Sign-in, returning to the page the person was on. */

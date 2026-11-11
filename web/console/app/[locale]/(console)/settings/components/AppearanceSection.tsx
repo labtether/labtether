@@ -48,14 +48,14 @@ export function AppearanceSection({ runtimeDraftValues, setRuntimeDraftValues, s
         <Row label={t("appearance.theme")} className="st-seg-row">
           <SegmentedTabs
             value={theme}
-            options={themeOptions.map((option) => ({ id: option.id, label: option.label }))}
+            options={themeOptions.map((option) => ({ id: option.id, label: option.id === "oled" ? option.label : t(`appearance.themes.${option.id}`) }))}
             onChange={setTheme}
           />
         </Row>
         <Row label={t("appearance.layout")} className="st-seg-row">
           <SegmentedTabs
             value={density}
-            options={densityOptions.map((option) => ({ id: option.id, label: option.label }))}
+            options={densityOptions.map((option) => ({ id: option.id, label: t(`appearance.layouts.${option.id}`) }))}
             onChange={setDensity}
           />
         </Row>

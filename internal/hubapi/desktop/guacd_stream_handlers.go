@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,23 +21,9 @@ import (
 	"github.com/labtether/labtether/internal/terminal"
 )
 
-const (
-	defaultGUACDHost = "127.0.0.1"
-	defaultGUACDPort = 4822
-)
-
 // HandleGuacdDesktopStream handles RDP desktop streams through guacd.
 func (d *Deps) HandleGuacdDesktopStream(w http.ResponseWriter, r *http.Request, session terminal.Session) {
-	guacdHost := strings.TrimSpace(os.Getenv("GUACD_HOST"))
-	if guacdHost == "" {
-		guacdHost = defaultGUACDHost
-	}
-	guacdPort := defaultGUACDPort
-	if raw := strings.TrimSpace(os.Getenv("GUACD_PORT")); raw != "" {
-		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
-			guacdPort = parsed
-		}
-	}
+	guacdHost, guacdPort := rdpGatewayAddress()
 
 	target, targetErr := d.ResolveRDPTarget(r.Context(), session)
 	if targetErr != nil {
@@ -58,7 +43,7 @@ func (d *Deps) HandleGuacdDesktopStream(w http.ResponseWriter, r *http.Request, 
 	client, err := guacamole.ConnectContext(r.Context(), guacdHost, guacdPort)
 	if err != nil {
 		log.Printf("rdp: guacd connect failed: %v", err)
-		servicehttp.WriteError(w, http.StatusBadGateway, "guacd unavailable")
+		writeRDPGatewayNotRunning(w)
 		return
 	}
 	defer client.Close()

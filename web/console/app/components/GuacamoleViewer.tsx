@@ -3,6 +3,7 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from "react";
 import type { Client, Keyboard, Mouse } from "guacamole-common-js";
 import { readGuacamoleClipboard, writeGuacamoleClipboard } from "./guacamole/clipboard";
+import { STREAM_NOT_OPENED } from "./remote-toolbar/screenWords";
 
 type GuacModule = typeof import("guacamole-common-js");
 
@@ -17,10 +18,20 @@ interface GuacamoleViewerProps {
   wsUrl: string | null;
   onConnect?: () => void;
   onDisconnect?: (detail: { clean: boolean; reason?: string }) => void;
+  /** The stream ended before the screen appeared: why, in the stream's own words when it gave any. */
+  onError?: (message: string) => void;
+}
+
+const TUNNEL_CLOSED = 2;
+
+/** A close reason worth showing: Guacamole servers send a bare status number, which says nothing to a person. */
+function streamReason(status?: { message?: string } | null): string {
+  const text = status?.message?.trim() ?? "";
+  return /^\d*$/.test(text) ? "" : text;
 }
 
 const GuacamoleViewer = forwardRef<GuacamoleViewerHandle, GuacamoleViewerProps>(function GuacamoleViewer(
-  { wsUrl, onConnect, onDisconnect },
+  { wsUrl, onConnect, onDisconnect, onError },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -33,11 +44,13 @@ const GuacamoleViewer = forwardRef<GuacamoleViewerHandle, GuacamoleViewerProps>(
   const disconnectedRef = useRef(false);
   const onConnectRef = useRef(onConnect);
   const onDisconnectRef = useRef(onDisconnect);
+  const onErrorRef = useRef(onError);
 
   useEffect(() => {
     onConnectRef.current = onConnect;
     onDisconnectRef.current = onDisconnect;
-  }, [onConnect, onDisconnect]);
+    onErrorRef.current = onError;
+  }, [onConnect, onDisconnect, onError]);
 
   const emitDisconnect = useCallback((detail: { clean: boolean; reason?: string }) => {
     if (disconnectedRef.current) {
@@ -259,19 +272,49 @@ const GuacamoleViewer = forwardRef<GuacamoleViewerHandle, GuacamoleViewerProps>(
         }
       };
 
+      // Guacamole's client does not watch its tunnel, so a stream the Hub refused or dropped went unnoticed: the page
+      // stayed on "Opening stream" for ever. A stream that ends before the screen appears is a failed connection,
+      // reported once with its reason; one that ends afterwards is a lost connection.
+      let screenShown = false;
+      const streamEnded = (reason: string) => {
+        if (stopped || clientRef.current !== client || manualDisconnectRef.current) return;
+        if (screenShown) {
+          emitDisconnect({ clean: false, reason: reason || "session ended" });
+          return;
+        }
+        if (disconnectedRef.current) return;
+        disconnectedRef.current = true;
+        onErrorRef.current?.(reason || STREAM_NOT_OPENED);
+      };
+      tunnel.onerror = (status) => streamEnded(streamReason(status));
+      tunnel.onstatechange = (state: number) => {
+        if (state === TUNNEL_CLOSED) streamEnded("");
+      };
+
       client.onstatechange = (state: number) => {
         if (stopped || clientRef.current !== client) return;
         // 3 = CONNECTED, 5 = DISCONNECTED
-        if (state === 3) onConnectRef.current?.();
+        if (state === 3) {
+          screenShown = true;
+          onConnectRef.current?.();
+        }
         if (state === 5) {
           const clean = manualDisconnectRef.current;
+          if (!clean && !screenShown) {
+            streamEnded("");
+            return;
+          }
           manualDisconnectRef.current = false;
           emitDisconnect({ clean, reason: clean ? "user disconnected" : "session ended" });
         }
       };
 
-      client.onerror = () => {
+      client.onerror = (status) => {
         if (stopped || clientRef.current !== client) return;
+        if (!screenShown) {
+          streamEnded(streamReason(status));
+          return;
+        }
         emitDisconnect({ clean: false, reason: "guacamole error" });
       };
 
@@ -320,6 +363,10 @@ const GuacamoleViewer = forwardRef<GuacamoleViewerHandle, GuacamoleViewerProps>(
         client.onclipboard = null;
         client.onstatechange = null;
         client.onerror = null;
+      }
+      if (tunnel) {
+        tunnel.onerror = null;
+        tunnel.onstatechange = null;
       }
       try {
         client?.disconnect();

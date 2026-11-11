@@ -94,6 +94,9 @@ vi.mock("../../../../components/RemoteViewerShell", () => ({
   },
 }));
 
+vi.mock("next-intl", () => ({
+  useTranslations: () => (key: string) => key,
+}));
 vi.mock("../../../../hooks/useConnectedAgents", () => ({
   useConnectedAgents: () => ({ connectedAgentIds: new Set(["asset-1"]) }),
 }));
@@ -151,7 +154,10 @@ const tab: RemoteViewTab = {
 
 beforeEach(() => {
   mocks.shellProps = null;
-  Object.assign(mocks.session, { connectionState: "connected" as const });
+  Object.assign(mocks.session, {
+    connectionState: "connected" as const,
+    vncPassword: "  exact ticket password\n",
+  });
   for (const fn of [
     mocks.session.connect,
     mocks.session.disconnect,
@@ -336,5 +342,75 @@ describe("RemoteViewSession feature wiring", () => {
         record: false,
       }),
     );
+  });
+});
+
+describe("RemoteViewSession sign-in", () => {
+  function attachViewer(props: RemoteViewerShellProps) {
+    const viewer = {
+      disconnect: vi.fn(),
+      exitPointerLock: vi.fn(),
+      requestPointerLock: vi.fn(),
+      sendCredentials: vi.fn(),
+    };
+    Object.assign(props.vncRef, { current: viewer });
+    return viewer;
+  }
+  const passwordField = () => container.querySelector('input[type="password"]');
+
+  // A VNC server the person runs (Windows, macOS) has its own password, and the Hub sends no session password for
+  // it. The page sent a Hub-made one anyway: "authentication rejected" at once, and the person was never asked.
+  it("asks for the VNC password when the Hub sends no session password", async () => {
+    Object.assign(mocks.session, { connectionState: "authenticating", vncPassword: null });
+    const props = await renderSession();
+    const viewer = attachViewer(props);
+
+    await act(async () => {
+      props.onCredentialsRequired({ types: ["password"] });
+    });
+    expect(viewer.sendCredentials).not.toHaveBeenCalled();
+    expect(passwordField()).not.toBeNull();
+  });
+
+  it("connects again and asks when the device refuses the session password", async () => {
+    Object.assign(mocks.session, { connectionState: "authenticating" });
+    const props = await renderSession();
+    const viewer = attachViewer(props);
+
+    await act(async () => {
+      props.onCredentialsRequired({ types: ["password"] });
+      props.onDesktopError("VNC security failure: 1 - authentication rejected");
+    });
+    expect(viewer.sendCredentials).toHaveBeenCalledOnce();
+    expect(mocks.session.handleError).not.toHaveBeenCalled();
+    expect(viewer.disconnect).toHaveBeenCalledOnce();
+    expect(mocks.session.connect).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      mocks.shellProps?.onCredentialsRequired({ types: ["password"] });
+    });
+    expect(viewer.sendCredentials).toHaveBeenCalledOnce();
+    expect(passwordField()).not.toBeNull();
+  });
+
+  // Cancel closed only the card: the page went back to "Opening stream" and the Hub kept the session.
+  it("ends the attempt when the sign-in card is cancelled", async () => {
+    Object.assign(mocks.session, { connectionState: "authenticating", vncPassword: null });
+    const props = await renderSession();
+    const viewer = attachViewer(props);
+    await act(async () => {
+      props.onCredentialsRequired({ types: ["username", "password"] });
+    });
+    const cancel = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "cancel",
+    );
+    expect(cancel).toBeDefined();
+
+    await act(async () => {
+      cancel?.click();
+    });
+    expect(viewer.disconnect).toHaveBeenCalledOnce();
+    expect(mocks.session.disconnect).toHaveBeenCalledOnce();
+    expect(passwordField()).toBeNull();
   });
 });

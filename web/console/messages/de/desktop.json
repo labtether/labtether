@@ -143,6 +143,7 @@
     "stepReconnect": "Sitzung wird neu verbunden",
     "cancel": "Abbrechen",
     "failed": "Verbindung fehlgeschlagen",
+    "streamNotOpened": "Der Stream wurde nicht geöffnet.",
     "notConnected": "Nicht verbunden",
     "disconnected": "Getrennt",
     "connect": "Verbinden",

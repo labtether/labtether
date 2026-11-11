@@ -143,6 +143,7 @@
     "stepReconnect": "正在重新连接会话",
     "cancel": "取消",
     "failed": "连接失败",
+    "streamNotOpened": "流未能打开。",
     "notConnected": "未连接",
     "disconnected": "已断开",
     "connect": "连接",

@@ -102,7 +102,6 @@ In the hub, click **Add Device** and copy the command for your OS. See
 | Linux (amd64, arm64) | Supported | [labtether-agent](https://github.com/labtether/labtether-agent) |
 | macOS 13+ | Supported | [Menu bar app](https://github.com/labtether/labtether-mac) |
 | Windows 10+ (amd64, arm64) | Partial. Metrics and terminal work; more is in progress. | [labtether-agent](https://github.com/labtether/labtether-agent), or the [tray app](https://github.com/labtether/labtether-win) (x64) |
-| FreeBSD | Planned | For now, add it as a manual device and reach it over SSH |
 
 Full details: [platform support](https://labtether.com/docs/reference/platform-support).
 

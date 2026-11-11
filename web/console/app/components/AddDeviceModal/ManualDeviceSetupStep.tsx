@@ -18,7 +18,6 @@ const PLATFORM_OPTIONS = [
   { value: "linux", label: "Linux" },
   { value: "windows", label: "Windows" },
   { value: "macos", label: "macOS" },
-  { value: "freebsd", label: "FreeBSD" },
 ];
 
 export function ManualDeviceSetupStep({ onBack, onClose, onAdded }: ManualDeviceSetupStepProps) {

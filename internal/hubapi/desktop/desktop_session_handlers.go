@@ -380,6 +380,13 @@ func (d *Deps) HandleDesktopStreamTicket(w http.ResponseWriter, r *http.Request,
 
 	opts := d.GetDesktopSessionOptions(session.ID)
 	effectiveProtocol := d.ResolveDesktopProtocol(session, r)
+	if effectiveProtocol == "rdp" && !rdpGatewayReachable(r.Context()) {
+		// A browser cannot read why a stream was refused, so the page sat on
+		// its last connecting step. Say it here, and close the session.
+		_ = d.TerminateDesktopSession(session)
+		writeRDPGatewayNotRunning(w)
+		return
+	}
 	if effectiveProtocol == "vnc" && opts.Direct && !requireInsecureVNCTransport(w, opts.VNCAllowInsecureTransport) {
 		return
 	}
@@ -440,7 +447,7 @@ func (d *Deps) HandleDesktopStreamTicket(w http.ResponseWriter, r *http.Request,
 		"stream_path": streamPath,
 		"protocol":    effectiveProtocol,
 	}
-	if strings.TrimSpace(opts.VNCPassword) != "" {
+	if strings.TrimSpace(opts.VNCPassword) != "" && d.agentStartsVNCWithSessionPassword(session.Target) {
 		response["vnc_password"] = opts.VNCPassword
 	}
 	if strings.TrimSpace(audioTicket) != "" {

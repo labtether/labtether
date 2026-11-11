@@ -143,6 +143,7 @@
     "stepReconnect": "Reconectando sesión",
     "cancel": "Cancelar",
     "failed": "Falló la conexión",
+    "streamNotOpened": "La transmisión no se abrió.",
     "notConnected": "Sin conectar",
     "disconnected": "Desconectado",
     "connect": "Conectar",

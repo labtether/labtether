@@ -157,40 +157,6 @@ export default function RemoteViewSession({
     restoreViewerFocus,
   });
 
-  const { credentialOverlay, handleCredentialsRequired } = useVNCCredentialPrompt({
-    vncRef,
-    initialCredentials,
-    vncPassword: session.vncPassword,
-  });
-
-  // ── Desktop event callbacks ──
-  const handleDesktopConnect = useCallback(() => {
-    session.handleConnected();
-  }, [session]);
-
-  const handleDesktopDisconnect = useCallback(
-    (detail: { clean: boolean; reason?: string }) => {
-      setRecording(false);
-      session.handleDisconnected(detail);
-    },
-    [session],
-  );
-
-  const handleDesktopError = useCallback(
-    (message: string) => {
-      session.handleError(message);
-    },
-    [session],
-  );
-
-  // ── Actions ──
-  const handleCtrlAltDel = useCallback(() => {
-    if (desktopProtocol === "vnc") vncRef.current?.sendCtrlAltDel();
-    if (desktopProtocol === "rdp") guacRef.current?.sendCtrlAltDel();
-    if (desktopProtocol === "spice") spiceRef.current?.sendCtrlAltDel();
-    restoreViewerFocus();
-  }, [desktopProtocol, restoreViewerFocus]);
-
   const handleDisconnect = useCallback(() => {
     vncRef.current?.disconnect();
     guacRef.current?.disconnect();
@@ -208,6 +174,47 @@ export default function RemoteViewSession({
       record: false,
     });
   }, [session, desktopProtocol, directTarget, selectedDisplay]);
+
+  const { credentialOverlay, handleCredentialsRequired, takeSessionPasswordRefusal } = useVNCCredentialPrompt({
+    vncRef,
+    initialCredentials,
+    vncPassword: session.vncPassword,
+    onCancel: handleDisconnect,
+  });
+
+  // ── Desktop event callbacks ──
+  const handleDesktopConnect = useCallback(() => {
+    session.handleConnected();
+  }, [session]);
+
+  const handleDesktopDisconnect = useCallback(
+    (detail: { clean: boolean; reason?: string }) => {
+      setRecording(false);
+      session.handleDisconnected(detail);
+    },
+    [session],
+  );
+
+  const handleDesktopError = useCallback(
+    (message: string) => {
+      if (takeSessionPasswordRefusal()) {
+        // The device's VNC server refused the password the Hub made: connect again and ask the person.
+        vncRef.current?.disconnect();
+        handleRetry();
+        return;
+      }
+      session.handleError(message);
+    },
+    [handleRetry, session, takeSessionPasswordRefusal],
+  );
+
+  // ── Actions ──
+  const handleCtrlAltDel = useCallback(() => {
+    if (desktopProtocol === "vnc") vncRef.current?.sendCtrlAltDel();
+    if (desktopProtocol === "rdp") guacRef.current?.sendCtrlAltDel();
+    if (desktopProtocol === "spice") spiceRef.current?.sendCtrlAltDel();
+    restoreViewerFocus();
+  }, [desktopProtocol, restoreViewerFocus]);
 
   const handlePointerLockToggle = useCallback(() => {
     if (!pointerLockSupported) return;

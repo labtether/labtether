@@ -101,7 +101,7 @@ func NewServer(deps *Deps) *server.MCPServer {
 		mcp.NewTool("assets_list",
 			mcp.WithDescription("List all managed assets (servers, VMs, containers) with their status"),
 			mcp.WithString("status", mcp.Description("Filter by status: online, offline")),
-			mcp.WithString("platform", mcp.Description("Filter by platform: linux, windows, freebsd, darwin")),
+			mcp.WithString("platform", mcp.Description("Filter by platform: linux, windows, darwin")),
 		),
 		deps.handleAssetsList,
 	)

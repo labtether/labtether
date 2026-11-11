@@ -1,7 +1,7 @@
 import { trimLeadingChars, trimTrailingChars, trimTrailingSlashes } from "../../../../lib/trimChars";
 
-// Paths on the machine a file view browses, in the two forms an agent answers with. Linux, macOS and FreeBSD agents
-// and every saved connection use "/" ("/home/demo/docs"). A Windows agent answers with a drive path
+// Paths on the machine a file view browses, in the two forms an agent answers with. Linux and macOS agents and every
+// saved connection use "/" ("/home/demo/docs"). A Windows agent answers with a drive path
 // ("C:\Users\demo\docs") or a UNC share ("\\nas01\share\docs"); it takes either slash and matches names in any case.
 // "~" is the agent's home folder on every platform, and an agent expands "~/docs" only, never "~\docs".
 //

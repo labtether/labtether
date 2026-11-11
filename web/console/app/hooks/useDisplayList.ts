@@ -13,6 +13,8 @@ interface DisplayInfo {
 
 interface DisplayListState {
   displays: DisplayInfo[];
+  /** Whether the Hub's RDP gateway is running: the Hub says so with the displays. null until it has answered. */
+  rdpGateway: boolean | null;
   loading: boolean;
   error: string | null;
 }
@@ -42,6 +44,7 @@ function normalizeDisplayList(value: unknown): DisplayInfo[] {
 export function useDisplayList(nodeId: string, enabled: boolean) {
   const [state, setState] = useState<DisplayListState>({
     displays: [],
+    rdpGateway: null,
     loading: false,
     error: null,
   });
@@ -55,9 +58,14 @@ export function useDisplayList(nodeId: string, enabled: boolean) {
       // 404 for authenticated agent operations.
       const res = await fetch(`/api/displays/${encodeURIComponent(nodeId)}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json().catch(() => null)) as { displays?: unknown; error?: unknown } | null;
+      const data = (await res.json().catch(() => null)) as { displays?: unknown; rdp_gateway?: unknown; error?: unknown } | null;
       if (typeof data?.error === "string" && data.error !== "") throw new Error(data.error);
-      setState({ displays: normalizeDisplayList(data?.displays), loading: false, error: null });
+      setState({
+        displays: normalizeDisplayList(data?.displays),
+        rdpGateway: typeof data?.rdp_gateway === "boolean" ? data.rdp_gateway : null,
+        loading: false,
+        error: null,
+      });
     } catch (err) {
       setState((s) => ({ ...s, loading: false, error: (err as Error).message }));
     }

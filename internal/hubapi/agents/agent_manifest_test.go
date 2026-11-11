@@ -126,7 +126,7 @@ func TestAgentManifest_LookupBinary(t *testing.T) {
 		t.Errorf("name = %q", bin.Name)
 	}
 
-	_, err = m.LookupBinary("freebsd", "amd64")
+	_, err = m.LookupBinary("plan9", "amd64")
 	if err == nil {
 		t.Fatal("expected error for unknown platform")
 	}
