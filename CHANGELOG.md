@@ -164,6 +164,8 @@ v1.7.1.
   errors no longer end with a bare status code.
 - The first-run checklist's "Add someone" names the person who was added,
   not the owner.
+- Alerts › Delivery log names the alert of a message whose rule or alert was
+  deleted, instead of "Unknown alert". Notification history has `alert_name`.
 - A single sign-on account is no longer offered a LabTether password change
   (the Hub refuses it) or two-factor setup (its sign-ins never ask for the
   code, so the account only looked protected). The Hub refuses that setup
