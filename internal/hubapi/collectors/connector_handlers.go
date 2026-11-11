@@ -110,12 +110,7 @@ func (d *Deps) HandleConnectorActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		health, err := connector.TestConnection(r.Context())
-		if err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "health check failed")
-			return
-		}
-		servicehttp.WriteJSON(w, http.StatusOK, health)
+		d.writeConnectorHealth(w, r, resolvedConnectorID, connector)
 	case len(parts) == 2 && parts[1] == "actions":
 		if r.Method != http.MethodGet {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -212,12 +207,7 @@ func (d *Deps) HandlePortainerConnectorActions(w http.ResponseWriter, r *http.Re
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		health, err := connector.TestConnection(r.Context())
-		if err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "health check failed")
-			return
-		}
-		servicehttp.WriteJSON(w, http.StatusOK, health)
+		d.writeConnectorHealth(w, r, "portainer", connector)
 	case len(parts) == 2 && parts[1] == "actions":
 		if r.Method != http.MethodGet {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
