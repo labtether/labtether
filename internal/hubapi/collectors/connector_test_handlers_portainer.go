@@ -126,11 +126,11 @@ func (d *Deps) HandleDockerConnectorTest(w http.ResponseWriter, r *http.Request)
 
 	health, err := connector.TestConnection(r.Context())
 	if err != nil {
-		writeConnectorTestFailure(w, "Portainer", err.Error())
+		writeConnectorTestFailure(w, "Docker", err.Error())
 		return
 	}
 	if health.Status != "ok" {
-		writeConnectorTestFailure(w, "Portainer", health.Message)
+		writeConnectorTestFailure(w, "Docker", health.Message)
 		return
 	}
 

@@ -191,6 +191,8 @@ export function pbsTaskStatusBadge(status?: string): "ok" | "pending" | "bad" {
 // ---------------------------------------------------------------------------
 
 export type PBSBackupGroupEntry = {
+  /** Namespace of the group; empty for the root. */
+  ns?: string;
   backup_type: string;
   backup_id: string;
   owner?: string;
@@ -216,6 +218,8 @@ export type PBSGroupsResponse = {
 // ---------------------------------------------------------------------------
 
 export type PBSSnapshotEntry = {
+  /** Namespace of the snapshot; empty for the root. */
+  ns?: string;
   backup_type: string;
   backup_id: string;
   backup_time: number;
@@ -270,6 +274,7 @@ export function normalizePBSGroupsResponse(value: unknown): PBSGroupsResponse {
               ? ds.groups.map((g) => {
                   const group = asRecord(g) ?? {};
                   return {
+                    ns: asString(group.ns) || undefined,
                     backup_type: asString(group.backup_type) ?? "",
                     backup_id: asString(group.backup_id) ?? "",
                     owner: asString(group.owner),
@@ -297,6 +302,7 @@ export function normalizePBSSnapshotsResponse(value: unknown): PBSSnapshotsRespo
           const snap = asRecord(entry) ?? {};
           const verification = asRecord(snap.verification);
           return {
+            ns: asString(snap.ns) || undefined,
             backup_type: asString(snap.backup_type) ?? "",
             backup_id: asString(snap.backup_id) ?? "",
             backup_time: asNumber(snap.backup_time) ?? 0,
