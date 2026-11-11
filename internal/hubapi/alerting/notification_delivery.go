@@ -67,6 +67,7 @@ func (d *Deps) dispatchAlertNotificationsSync(rule alerts.Rule, instanceID, stat
 	predicateContext, _ := d.BuildAlertPredicateContext(rule, nil)
 
 	payload := buildAlertNotificationPayload(rule, instanceID, state, predicateContext.GroupIDs, d.alertNotificationDevices(instanceID))
+	devices := d.alertDeliveryDevices(instanceID)
 	seenChannelsByRoute := make(map[string]map[string]struct{}, len(routes))
 	channelCache := make(map[string]notifications.Channel, 16)
 	missingChannels := make(map[string]struct{}, 8)
@@ -125,7 +126,7 @@ func (d *Deps) dispatchAlertNotificationsSync(rule alerts.Rule, instanceID, stat
 
 			// A previous channel can block while a new silence or maintenance
 			// window starts. Check again at each send, not just dispatch entry.
-			if d.isAlertMaintenanceSuppressed(rule) || d.isAlertSilencedAtDelivery(rule) {
+			if d.isAlertMaintenanceSuppressed(rule) || d.isAlertSilencedAtDelivery(rule, devices) {
 				return
 			}
 			sendCtx, cancel := context.WithTimeout(context.Background(), notificationDispatchTimeout)

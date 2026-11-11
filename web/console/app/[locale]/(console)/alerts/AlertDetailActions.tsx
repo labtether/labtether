@@ -16,13 +16,13 @@ export type AlertActions = {
   acknowledge: (alert: AlertInstance) => Promise<void>;
   resolve: (alert: AlertInstance) => Promise<void>;
   silence: (alert: AlertInstance, preset: DurationPreset) => Promise<void>;
-  endSilence: (silence: AlertSilence) => Promise<void>;
+  endSilence: (alert: AlertInstance) => Promise<void>;
   openRule: (ruleId: string) => void;
 };
 
 /**
  * Acknowledge, Resolve and Silence as plain buttons; the next step is the one rose button (Acknowledge while it fires,
- * Resolve once acknowledged). Silence needs labels: the hub matches a silence against the alert's rule labels.
+ * Resolve once acknowledged). Silence mutes this alert's rule on the alert's devices only.
  */
 export function AlertDetailActions({ alert, rule, silence, issueId, actions }: {
   alert: AlertInstance;
@@ -39,7 +39,6 @@ export function AlertDetailActions({ alert, rule, silence, issueId, actions }: {
   const firing = canWrite && alert.status === "firing";
   const open = canWrite && alert.status !== "resolved";
   const canResolve = firing || (canWrite && alert.status === "acknowledged");
-  const hasLabels = Object.keys(alert.labels ?? {}).length > 0;
   const assetIds = alertAssetIds(alert);
   const assetId = assetIds.length === 1 ? assetIds[0] : "";
 
@@ -52,11 +51,11 @@ export function AlertDetailActions({ alert, rule, silence, issueId, actions }: {
         <Button variant={firing ? "secondary" : "primary"} disabled={busy} onClick={() => void actions.resolve(alert)}>{t("resolve")}</Button>
       ) : null}
       {open && silence ? (
-        <Button disabled={busy} onClick={() => void actions.endSilence(silence)}>{t("endSilence")}</Button>
+        <Button disabled={busy} onClick={() => void actions.endSilence(alert)}>{t("endSilence")}</Button>
       ) : null}
       {open && !silence ? (
         <Menu.Root>
-          <Menu.Trigger className="al-btn" disabled={busy || !hasLabels} title={hasLabels ? undefined : t("silenceNoLabels")}>
+          <Menu.Trigger className="al-btn" disabled={busy}>
             {t("silence")}
             <ChevronDown aria-hidden="true" strokeWidth={2} />
           </Menu.Trigger>

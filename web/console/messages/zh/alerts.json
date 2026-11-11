@@ -76,7 +76,6 @@
     "acknowledge": "确认",
     "resolve": "解决",
     "silence": "静默",
-    "silenceNoLabels": "此告警的规则没有可匹配的标签",
     "silenceFor": {
       "1h": "1 小时",
       "4h": "4 小时",
