@@ -23,7 +23,7 @@ async function proxyForget(request: Request, { params }: Params) {
 
   const incomingURL = new URL(request.url);
   const upstreamURL = new URL(`${base.api}/pbs/assets/${assetID}/groups/forget`);
-  for (const key of ["store", "backup-type", "backup-id"]) {
+  for (const key of ["store", "ns", "backup-type", "backup-id"]) {
     const value = incomingURL.searchParams.get(key)?.trim();
     if (value) upstreamURL.searchParams.set(key, value);
   }

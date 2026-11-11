@@ -48,6 +48,7 @@ type PBSDatastoreSummary struct {
 }
 
 type PBSBackupGroupEntry struct {
+	NS          string `json:"ns,omitempty"` // namespace; "" is the root
 	BackupType  string `json:"backup_type"`
 	BackupID    string `json:"backup_id"`
 	Owner       string `json:"owner,omitempty"`
@@ -68,6 +69,7 @@ type PBSGroupsResponse struct {
 }
 
 type PBSSnapshotEntry struct {
+	NS           string                             `json:"ns,omitempty"` // namespace; "" is the root
 	BackupType   string                             `json:"backup_type"`
 	BackupID     string                             `json:"backup_id"`
 	BackupTime   int64                              `json:"backup_time"`

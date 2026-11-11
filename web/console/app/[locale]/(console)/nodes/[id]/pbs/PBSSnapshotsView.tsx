@@ -25,7 +25,7 @@ type Filter = { store: string; type: string; id: string };
 
 const COLS = "24px minmax(0, 1fr) 72px 120px 28px";
 const COLS_S = "24px minmax(0, 1fr) 96px 28px";
-const keyOf = (snap: PBSSnapshotEntry) => `${snap.backup_type}/${snap.backup_id}/${snap.backup_time}`;
+const keyOf = (snap: PBSSnapshotEntry) => `${snap.ns ?? ""}/${snap.backup_type}/${snap.backup_id}/${snap.backup_time}`;
 
 export function PBSSnapshotsView({ assetId, details }: Props) {
   const { t, tk, when } = usePBSWords();
@@ -86,6 +86,7 @@ export function PBSSnapshotsView({ assetId, details }: Props) {
       "backup-type": snap.backup_type,
       "backup-id": snap.backup_id,
       "backup-time": String(snap.backup_time),
+      ...(snap.ns ? { ns: snap.ns } : {}),
     }).toString()}`,
     "DELETE",
   );
@@ -215,7 +216,7 @@ export function PBSSnapshotsView({ assetId, details }: Props) {
                 name={name}
                 mono
                 problem={verifyWord.bad ? { tone: "bad", text: verifyWord.text } : null}
-                grey={<DiDots parts={[verifyWord.text, snap.protected ? t("snap.protected") : null, snap.comment, snap.owner]} />}
+                grey={<DiDots parts={[verifyWord.text, snap.protected ? t("snap.protected") : null, snap.ns, snap.comment, snap.owner]} />}
               />
               <DiNum value={size?.value} unit={size?.unit} className="di-s" />
               <DiTime>{time}</DiTime>

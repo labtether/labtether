@@ -40,6 +40,9 @@ type DatastoreGCStatus struct {
 }
 
 type BackupGroup struct {
+	// NS is the namespace the group lives in ("" is the root). PBS does not
+	// send it; the client sets it from the namespace it listed.
+	NS          string   `json:"ns,omitempty"`
 	BackupType  string   `json:"backup-type"`
 	BackupID    string   `json:"backup-id"`
 	BackupCount int64    `json:"backup-count,omitempty"`
@@ -55,6 +58,7 @@ type SnapshotVerification struct {
 }
 
 type BackupSnapshot struct {
+	NS           string                `json:"ns,omitempty"` // set by the client, as for BackupGroup
 	BackupType   string                `json:"backup-type"`
 	BackupID     string                `json:"backup-id"`
 	BackupTime   int64                 `json:"backup-time"`
@@ -68,6 +72,7 @@ type BackupSnapshot struct {
 
 func (s *BackupSnapshot) UnmarshalJSON(data []byte) error {
 	type rawBackupSnapshot struct {
+		NS           string                `json:"ns,omitempty"`
 		BackupType   string                `json:"backup-type"`
 		BackupID     string                `json:"backup-id"`
 		BackupTime   int64                 `json:"backup-time"`
@@ -90,6 +95,7 @@ func (s *BackupSnapshot) UnmarshalJSON(data []byte) error {
 	}
 
 	*s = BackupSnapshot{
+		NS:           raw.NS,
 		BackupType:   raw.BackupType,
 		BackupID:     raw.BackupID,
 		BackupTime:   raw.BackupTime,

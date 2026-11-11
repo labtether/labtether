@@ -12,6 +12,8 @@ import (
 func TestHandlePBSAssetSnapshots(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api2/json/admin/datastore/backup/namespace":
+			_, _ = w.Write([]byte(`{"data":[]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api2/json/admin/datastore/backup/snapshots":
 			_, _ = w.Write([]byte(`{"data":[
 				{"backup-type":"vm","backup-id":"100","backup-time":1700000300,"size":1024,"owner":"root@pam","protected":true,"verification":{"state":"ok","upid":"UPID-1"}},
@@ -171,6 +173,8 @@ func TestHandlePBSAssetSnapshots(t *testing.T) {
 func TestHandlePBSAssetVerification(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api2/json/admin/datastore/backup/namespace":
+			_, _ = w.Write([]byte(`{"data":[]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api2/json/admin/datastore/backup/snapshots":
 			_, _ = w.Write([]byte(`{"data":[
 				{"backup-type":"vm","backup-id":"100","backup-time":1700000300,"verification":{"state":"ok","upid":"UPID-V1"}},
@@ -260,6 +264,8 @@ func TestHandlePBSAssetVerification(t *testing.T) {
 func TestHandlePBSAssetGroups(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api2/json/admin/datastore/backup/namespace":
+			_, _ = w.Write([]byte(`{"data":[]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api2/json/admin/datastore/backup/groups":
 			_, _ = w.Write([]byte(`{"data":[{"backup-type":"vm","backup-id":"100","backup-count":5,"last-backup":1700000000,"owner":"root@pam"}]}`))
 		default:

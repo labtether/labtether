@@ -9,7 +9,7 @@ import { DiRowMenu, DiSeg, DiSortHead, useDiConfirm, type DiSortState } from "..
 import { DiCols, DiDots, DiEmpty, DiFoot, DiList, DiMain, DiNote, DiNum, DiRow, DiSection } from "../proxmox/DiList";
 import { normalizePBSGroupsResponse, type PBSGroupsResponse } from "../pbsTabModel";
 import { PBSGroupSnapshots } from "./PBSGroupSnapshots";
-import { coverageName, coverageRows, sortCoverage, type CoverageRow, type CoverageSortKey } from "./pbsViewModel";
+import { coverageName, coverageWhere, coverageRows, sortCoverage, type CoverageRow, type CoverageSortKey } from "./pbsViewModel";
 import { pbsAction, pbsErrorDetail, usePBSActions, usePBSResource } from "./usePBSData";
 import { usePBSWords } from "./usePBSWords";
 
@@ -38,9 +38,10 @@ export function PBSCoverageList({ assetId }: { assetId: string }) {
     `forget-${row.key}`,
     () => {
       const params = new URLSearchParams({ store: row.store, "backup-type": row.type, "backup-id": row.id });
+      if (row.ns) params.set("ns", row.ns);
       return pbsAction(`/api/pbs/assets/${encodeURIComponent(assetId)}/groups/forget?${params.toString()}`, "DELETE");
     },
-    t("coverage.forgotten", { name: coverageName(row), store: row.store }),
+    t("coverage.forgotten", { name: coverageName(row), store: coverageWhere(row) }),
     t("coverage.forgetFailed", { name: coverageName(row) }),
     () => {
       setOpen(null);
@@ -90,16 +91,16 @@ export function PBSCoverageList({ assetId }: { assetId: string }) {
               tone={row.tone === "ok" ? "" : row.tone}
               onOpen={toggle}
               selected={expanded}
-              after={expanded ? <PBSGroupSnapshots assetId={assetId} store={row.store} type={row.type} id={row.id} /> : null}
+              after={expanded ? <PBSGroupSnapshots assetId={assetId} store={row.store} ns={row.ns} type={row.type} id={row.id} /> : null}
             >
               <DiMain
                 name={name}
-                grey={<DiDots parts={[row.comment ? <span className="di-mono">{`${row.type}/${row.id}`}</span> : null, row.store, row.owner]} />}
+                grey={<DiDots parts={[row.comment ? <span className="di-mono">{`${row.type}/${row.id}`}</span> : null, coverageWhere(row), row.owner]} />}
               />
               {lastCell(row)}
               <DiNum value={row.count || undefined} className="di-s" />
               <DiRowMenu
-                label={tk("actionsFor", { name })}
+                label={tk("actionsFor", { name: row.ns ? `${name} ${row.ns}` : name })}
                 items={[
                   { label: expanded ? t("coverage.hideSnapshots") : t("coverage.showSnapshots"), onSelect: toggle },
                   { separator: true },
@@ -108,7 +109,7 @@ export function PBSCoverageList({ assetId }: { assetId: string }) {
                     danger: true,
                     disabled: busy !== null,
                     onSelect: () => ask({
-                      title: t("coverage.ask.title", { name, store: row.store }),
+                      title: t("coverage.ask.title", { name, store: coverageWhere(row) }),
                       message: t("coverage.ask.body", { count: row.count }),
                       confirmLabel: t("coverage.ask.confirm"),
                       onConfirm: () => forget(row),

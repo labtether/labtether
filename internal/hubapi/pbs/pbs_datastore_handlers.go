@@ -47,6 +47,7 @@ func (d *Deps) HandlePBSAssetGroups(ctx context.Context, w http.ResponseWriter, 
 		entries := make([]PBSBackupGroupEntry, 0, len(groups))
 		for _, group := range groups {
 			entries = append(entries, PBSBackupGroupEntry{
+				NS:          group.NS,
 				BackupType:  strings.TrimSpace(group.BackupType),
 				BackupID:    strings.TrimSpace(group.BackupID),
 				Owner:       strings.TrimSpace(group.Owner),
@@ -79,6 +80,7 @@ func (d *Deps) HandlePBSAssetSnapshots(ctx context.Context, w http.ResponseWrite
 	}
 	filterType := strings.TrimSpace(r.URL.Query().Get("type"))
 	filterID := strings.TrimSpace(r.URL.Query().Get("id"))
+	filterNS, filterByNS := r.URL.Query()["ns"]
 
 	snapshots, err := runtime.Client.ListDatastoreSnapshots(ctx, storeName)
 	if err != nil {
@@ -96,7 +98,11 @@ func (d *Deps) HandlePBSAssetSnapshots(ctx context.Context, w http.ResponseWrite
 		if filterID != "" && !strings.EqualFold(bi, filterID) {
 			continue
 		}
+		if filterByNS && snap.NS != strings.Trim(strings.TrimSpace(filterNS[0]), "/") {
+			continue
+		}
 		entries = append(entries, PBSSnapshotEntry{
+			NS:           snap.NS,
 			BackupType:   bt,
 			BackupID:     bi,
 			BackupTime:   snap.BackupTime,

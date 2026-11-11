@@ -29,6 +29,8 @@ export function pbsStoreNames(details: PBSAssetDetailsResponse | null): string[]
 export type CoverageRow = {
   key: string;
   store: string;
+  /** Namespace; empty for the root. The same type/id can exist in two namespaces. */
+  ns: string;
   type: string;
   id: string;
   comment?: string;
@@ -45,8 +47,9 @@ export function coverageRows(groups: PBSGroupsResponse | null): CoverageRow[] {
   if (!groups) return [];
   return groups.datastores.flatMap((datastore) =>
     datastore.groups.map((group) => ({
-      key: `${datastore.store}/${group.backup_type}/${group.backup_id}`,
+      key: `${datastore.store}/${group.ns ?? ""}/${group.backup_type}/${group.backup_id}`,
       store: datastore.store,
+      ns: group.ns ?? "",
       type: group.backup_type,
       id: group.backup_id,
       comment: group.comment?.trim() || undefined,
@@ -56,6 +59,11 @@ export function coverageRows(groups: PBSGroupsResponse | null): CoverageRow[] {
       tone: backupStaleness(group.last_backup),
     })),
   );
+}
+
+/** Where a group lives: its datastore, then its namespace when it is not the root. */
+export function coverageWhere(row: Pick<CoverageRow, "store" | "ns">): string {
+  return row.ns ? `${row.store}/${row.ns}` : row.store;
 }
 
 /** The group's name as people read it: its comment when PBS has one, else type/id. */
