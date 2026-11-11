@@ -99,7 +99,7 @@ func GenerateRecoveryCodes(n int) []string {
 
 // HashRecoveryCode hashes a recovery code with bcrypt (cost 10).
 func HashRecoveryCode(code string) (string, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(strings.TrimSpace(code)), 10)
+	hash, err := bcrypt.GenerateFromPassword([]byte(strings.TrimSpace(code)), recoveryCodeCost)
 	return string(hash), err
 }
 
