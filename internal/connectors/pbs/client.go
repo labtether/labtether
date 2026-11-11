@@ -117,24 +117,6 @@ func (c *Client) GetDatastoreStatus(ctx context.Context, store string, verbose b
 	return out, nil
 }
 
-func (c *Client) ListDatastoreGroups(ctx context.Context, store string) ([]BackupGroup, error) {
-	path := fmt.Sprintf("/api2/json/admin/datastore/%s/groups", neturl.PathEscape(strings.TrimSpace(store)))
-	var out []BackupGroup
-	if err := c.getData(ctx, path, &out); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *Client) ListDatastoreSnapshots(ctx context.Context, store string) ([]BackupSnapshot, error) {
-	path := fmt.Sprintf("/api2/json/admin/datastore/%s/snapshots", neturl.PathEscape(strings.TrimSpace(store)))
-	var out []BackupSnapshot
-	if err := c.getData(ctx, path, &out); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *Client) ListDatastoreUsage(ctx context.Context) ([]DatastoreUsage, error) {
 	var out []DatastoreUsage
 	if err := c.getData(ctx, "/api2/json/status/datastore-usage", &out); err != nil {
@@ -405,28 +387,30 @@ func (c *Client) DeleteTrafficControl(ctx context.Context, name string) error {
 
 // --- Snapshot/Group actions ---
 
-// ForgetSnapshot deletes a single snapshot.
+// ForgetSnapshot deletes a single snapshot in namespace ns ("" is the root).
 // Calls DELETE /api2/json/admin/datastore/{store}/snapshots with query params.
-func (c *Client) ForgetSnapshot(ctx context.Context, store, backupType, backupID string, backupTime int64) error {
+func (c *Client) ForgetSnapshot(ctx context.Context, store, ns, backupType, backupID string, backupTime int64) error {
 	path := fmt.Sprintf(
-		"/api2/json/admin/datastore/%s/snapshots?backup-type=%s&backup-id=%s&backup-time=%d",
+		"/api2/json/admin/datastore/%s/snapshots?backup-type=%s&backup-id=%s&backup-time=%d%s",
 		neturl.PathEscape(strings.TrimSpace(store)),
 		neturl.QueryEscape(strings.TrimSpace(backupType)),
 		neturl.QueryEscape(strings.TrimSpace(backupID)),
 		backupTime,
+		namespaceQuery(ns),
 	)
 	_, err := c.requestRaw(ctx, http.MethodDelete, path, nil)
 	return err
 }
 
-// ForgetGroup deletes all snapshots in a backup group.
+// ForgetGroup deletes all snapshots in a backup group in namespace ns ("" is the root).
 // Calls DELETE /api2/json/admin/datastore/{store}/groups with query params.
-func (c *Client) ForgetGroup(ctx context.Context, store, backupType, backupID string) error {
+func (c *Client) ForgetGroup(ctx context.Context, store, ns, backupType, backupID string) error {
 	path := fmt.Sprintf(
-		"/api2/json/admin/datastore/%s/groups?backup-type=%s&backup-id=%s",
+		"/api2/json/admin/datastore/%s/groups?backup-type=%s&backup-id=%s%s",
 		neturl.PathEscape(strings.TrimSpace(store)),
 		neturl.QueryEscape(strings.TrimSpace(backupType)),
 		neturl.QueryEscape(strings.TrimSpace(backupID)),
+		namespaceQuery(ns),
 	)
 	_, err := c.requestRaw(ctx, http.MethodDelete, path, nil)
 	return err

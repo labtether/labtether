@@ -97,10 +97,7 @@ func (c *Connector) TestConnection(ctx context.Context) (connectorsdk.Health, er
 		return connectorsdk.Health{Status: "failed", Message: err.Error()}, nil
 	}
 
-	release := strings.TrimSpace(version.Release)
-	if release == "" {
-		release = strings.TrimSpace(version.Version)
-	}
+	release := version.Display()
 	if release == "" {
 		return connectorsdk.Health{Status: "ok", Message: "pbs API reachable"}, nil
 	}

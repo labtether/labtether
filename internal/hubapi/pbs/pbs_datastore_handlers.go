@@ -41,12 +41,13 @@ func (d *Deps) HandlePBSAssetGroups(ctx context.Context, w http.ResponseWriter, 
 	for _, storeName := range storeNames {
 		groups, err := runtime.Client.ListDatastoreGroups(ctx, storeName)
 		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("%s groups unavailable: %v", storeName, err))
+			warnings = append(warnings, pbsWarning(fmt.Sprintf("The backup groups of %s could not be read.", storeName), err))
 			continue
 		}
 		entries := make([]PBSBackupGroupEntry, 0, len(groups))
 		for _, group := range groups {
 			entries = append(entries, PBSBackupGroupEntry{
+				NS:          group.NS,
 				BackupType:  strings.TrimSpace(group.BackupType),
 				BackupID:    strings.TrimSpace(group.BackupID),
 				Owner:       strings.TrimSpace(group.Owner),
@@ -74,11 +75,17 @@ func (d *Deps) HandlePBSAssetSnapshots(ctx context.Context, w http.ResponseWrite
 		storeName = PBSStoreFromAsset(asset)
 	}
 	if storeName == "" {
-		servicehttp.WriteError(w, http.StatusBadRequest, "store query parameter is required for server-kind assets")
-		return
+		// A server device: use its datastore when it has exactly one.
+		stores, _ := d.ResolvePBSStoreList(ctx, asset, runtime)
+		if len(stores) != 1 {
+			servicehttp.WriteError(w, http.StatusBadRequest, "This backup server has more than one datastore. Name one with store, or open the datastore's own device.")
+			return
+		}
+		storeName = stores[0]
 	}
 	filterType := strings.TrimSpace(r.URL.Query().Get("type"))
 	filterID := strings.TrimSpace(r.URL.Query().Get("id"))
+	filterNS, filterByNS := r.URL.Query()["ns"]
 
 	snapshots, err := runtime.Client.ListDatastoreSnapshots(ctx, storeName)
 	if err != nil {
@@ -96,7 +103,11 @@ func (d *Deps) HandlePBSAssetSnapshots(ctx context.Context, w http.ResponseWrite
 		if filterID != "" && !strings.EqualFold(bi, filterID) {
 			continue
 		}
+		if filterByNS && snap.NS != strings.Trim(strings.TrimSpace(filterNS[0]), "/") {
+			continue
+		}
 		entries = append(entries, PBSSnapshotEntry{
+			NS:           snap.NS,
 			BackupType:   bt,
 			BackupID:     bi,
 			BackupTime:   snap.BackupTime,
@@ -129,7 +140,7 @@ func (d *Deps) HandlePBSAssetVerification(ctx context.Context, w http.ResponseWr
 	for _, storeName := range storeNames {
 		snapshots, err := runtime.Client.ListDatastoreSnapshots(ctx, storeName)
 		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("%s snapshots unavailable: %v", storeName, err))
+			warnings = append(warnings, pbsWarning(fmt.Sprintf("The snapshots of %s could not be read.", storeName), err))
 			continue
 		}
 		entry := pbsDatastoreVerification{Store: storeName}

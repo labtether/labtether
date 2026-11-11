@@ -148,7 +148,7 @@ func TestPBSAndPortainerAssetActionsKeepRuntimeOwner(t *testing.T) {
 					}
 				}
 				call := func(id string) *httptest.ResponseRecorder {
-					method, path := http.MethodDelete, "/pbs/assets/"+id+"/groups/forget?store=backup&backup-type=vm&backup-id=900"
+					method, path := http.MethodDelete, "/pbs/assets/"+id+"/groups/forget?store=backup&ns=&backup-type=vm&backup-id=900"
 					if provider == "portainer" {
 						method, path = http.MethodPost, "/portainer/assets/"+id+"/containers/container-fixture/stop"
 					}
