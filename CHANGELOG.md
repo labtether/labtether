@@ -168,6 +168,8 @@ v1.7.1.
   "No description provided."; the webhook channel's JSON keeps every field and
   adds `devices`. A device name with line breaks or markup cannot break an email
   subject, an ntfy title or a Slack message.
+- Services: adding, renaming or removing an icon in the icon library needs
+  `web-services:write`. A viewer or a read-only API key could change it.
 
 - Security › Saved logins: the Add login, Rotate and Delete dialogs, login
   types and the saved login picker are in your language, and their errors
