@@ -45,7 +45,7 @@ func (d *Deps) HandlePortainerCapabilities(w http.ResponseWriter, asset assets.A
 	servicehttp.WriteJSON(w, http.StatusOK, PortainerCapabilities{
 		Tabs:      tabs,
 		Kind:      kind,
-		CanExec:   kind == "container-host" && strings.EqualFold(authMethod, "password"),
+		CanExec:   kind == "container-host" && portainerAuthCanExec(authMethod),
 		FetchedAt: time.Now().UTC().Format(time.RFC3339),
 	})
 }
@@ -70,4 +70,15 @@ func (d *Deps) portainerCapabilityAuthMethod(asset assets.Asset) string {
 		authMethod = "api_key"
 	}
 	return authMethod
+}
+
+// portainerAuthCanExec: API-key and password connections can both open a
+// container shell (Portainer takes the API key on its exec WebSocket).
+func portainerAuthCanExec(authMethod string) bool {
+	switch strings.ToLower(strings.TrimSpace(authMethod)) {
+	case "", "api_key", "password":
+		return true
+	default:
+		return false
+	}
 }

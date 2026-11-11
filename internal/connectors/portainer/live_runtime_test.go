@@ -183,12 +183,12 @@ func TestLivePortainerRuntimeLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create Portainer exec: %v", err)
 	}
-	wsURL, wsToken, err := client.ExecWebSocketURL(ctx, epID, execID)
+	wsURL, wsAuth, err := client.ExecWebSocketURL(ctx, epID, execID)
 	if err != nil {
 		t.Fatalf("Portainer exec URL: %v", err)
 	}
 	headers := http.Header{}
-	headers.Set("Authorization", "Bearer "+wsToken)
+	headers.Set(wsAuth.Header, wsAuth.HeaderValue())
 	ws, _, err := websocket.DefaultDialer.Dial(wsURL, headers)
 	if err != nil {
 		t.Fatalf("dial Portainer exec: %v", err)

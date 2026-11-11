@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/labtether/labtether/internal/apiv2"
+	portainerconnector "github.com/labtether/labtether/internal/connectors/portainer"
 	"github.com/labtether/labtether/internal/hubapi/shared"
 	"github.com/labtether/labtether/internal/securityruntime"
 	"github.com/labtether/labtether/internal/servicehttp"
@@ -82,7 +83,7 @@ func (d *Deps) HandlePortainerContainerExec(w http.ResponseWriter, r *http.Reque
 	securityruntime.Logf("portainer-exec: exec instance created exec_id=%.16s", execID)
 
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
-	wsURL, wsToken, wsErr := runtime.Client.ExecWebSocketURL(ctx2, epID, execID)
+	wsURL, wsAuth, wsErr := runtime.Client.ExecWebSocketURL(ctx2, epID, execID)
 	cancel2()
 	if wsErr != nil {
 		securityruntime.Logf("portainer-exec: get ws url failed: %v", wsErr)
@@ -90,7 +91,7 @@ func (d *Deps) HandlePortainerContainerExec(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	portainerConn, err := dialPortainerExecSocket(wsURL, wsToken, runtime.SkipVerify)
+	portainerConn, err := dialPortainerExecSocket(wsURL, wsAuth, runtime.SkipVerify)
 	if err != nil {
 		securityruntime.Logf("portainer-exec: dial portainer ws failed: %v", err)
 		writePortainerUpstreamError(w, err)
@@ -114,9 +115,10 @@ func (d *Deps) HandlePortainerContainerExec(w http.ResponseWriter, r *http.Reque
 	securityruntime.Logf("portainer-exec: bridge ended asset=%s container=%.12s", assetID, containerID)
 }
 
-// dialPortainerExecSocket dials the Portainer exec WebSocket URL using the JWT
-// Authorization header expected by current Portainer releases.
-func dialPortainerExecSocket(wsURL, token string, skipVerify bool) (*websocket.Conn, error) {
+// dialPortainerExecSocket dials the Portainer exec WebSocket URL with the
+// connection's API key or JWT in a header, never in the URL.
+func dialPortainerExecSocket(wsURL string, auth portainerconnector.ExecAuth, skipVerify bool) (*websocket.Conn, error) {
+	token := auth.Secret
 	parsed, err := url.Parse(wsURL)
 	if err != nil || (parsed.Scheme != "ws" && parsed.Scheme != "wss") {
 		return nil, fmt.Errorf("invalid exec websocket URL")
@@ -149,7 +151,7 @@ func dialPortainerExecSocket(wsURL, token string, skipVerify bool) (*websocket.C
 	}
 
 	headers := http.Header{}
-	headers.Set("Authorization", "Bearer "+token)
+	headers.Set(auth.Header, auth.HeaderValue())
 	conn, httpResp, err := dialer.Dial(wsURL, headers)
 	if err != nil {
 		detail := err.Error()
