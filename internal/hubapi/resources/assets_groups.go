@@ -265,6 +265,10 @@ func (d *Deps) HandleAssetActions(w http.ResponseWriter, r *http.Request) {
 					servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 					return
 				}
+				if err := assets.ValidateName(name); err != nil {
+					servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
+					return
+				}
 				updateReq.Name = &name
 			}
 			if req.GroupID != nil {

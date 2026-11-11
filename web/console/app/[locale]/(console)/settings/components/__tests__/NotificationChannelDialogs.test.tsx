@@ -149,10 +149,12 @@ describe("notification channel dialogs", () => {
     await click(button("save"));
 
     expect(onConfirm).toHaveBeenCalledTimes(1);
+    // "Send every alert here" is on by default: a channel added here gets alerts without a route.
     expect(onConfirm).toHaveBeenCalledWith({
       name: "Operations email",
       type: "email",
       enabled: true,
+      all_alerts: true,
       config: {
         smtp_host: "smtp.example.test",
         smtp_port: 587,
@@ -287,6 +289,7 @@ describe("notification channel dialogs", () => {
     expect(onConfirm).toHaveBeenCalledWith("channel-slack-1", {
       name: "Operations Slack",
       config: { channel: "operations" },
+      all_alerts: false,
     });
   });
 });

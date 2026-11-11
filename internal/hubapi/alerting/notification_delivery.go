@@ -60,16 +60,17 @@ func (d *Deps) dispatchAlertNotificationsSync(rule alerts.Rule, instanceID, stat
 		log.Printf("notifications: failed to list alert routes: %v", err)
 		return
 	}
-	if len(routes) == 0 {
-		return
-	}
-
 	predicateContext, _ := d.BuildAlertPredicateContext(rule, nil)
 
 	payload := buildAlertNotificationPayload(rule, instanceID, state, predicateContext.GroupIDs, d.alertNotificationDevices(instanceID))
-	seenChannelsByRoute := make(map[string]map[string]struct{}, len(routes))
+	devices := d.alertDeliveryDevices(instanceID)
+	// Each channel gets an alert once, from the first route that sends it or
+	// from its "Send every alert here" setting.
+	sentChannels := make(map[string]struct{}, 8)
 	channelCache := make(map[string]notifications.Channel, 16)
 	missingChannels := make(map[string]struct{}, 8)
+	type delivery struct{ routeID, channelID string }
+	deliveries := make([]delivery, 0, 8)
 
 	for _, route := range routes {
 		if !route.Enabled {
@@ -86,63 +87,70 @@ func (d *Deps) dispatchAlertNotificationsSync(rule alerts.Rule, instanceID, stat
 		if routeID == "" {
 			routeID = notificationDefaultRouteName
 		}
-		if _, ok := seenChannelsByRoute[routeID]; !ok {
-			seenChannelsByRoute[routeID] = make(map[string]struct{}, len(route.ChannelIDs))
-		}
-
 		for _, channelID := range route.ChannelIDs {
 			channelID = strings.TrimSpace(channelID)
 			if channelID == "" {
 				continue
 			}
-			if _, dup := seenChannelsByRoute[routeID][channelID]; dup {
+			if _, dup := sentChannels[channelID]; dup {
 				continue
 			}
-			seenChannelsByRoute[routeID][channelID] = struct{}{}
-
-			channel, ok := channelCache[channelID]
-			if !ok {
-				if _, missing := missingChannels[channelID]; missing {
-					continue
-				}
-				loadedChannel, loaded, loadErr := d.getNotificationChannelForRuntime(channelID)
-				if loadErr != nil {
-					log.Printf("notifications: failed to load channel %s: %v", channelID, loadErr)
-					continue
-				}
-				if !loaded {
-					missingChannels[channelID] = struct{}{}
-					log.Printf("notifications: route %s references unknown channel %s", routeID, channelID)
-					continue
-				}
-				channelCache[channelID] = loadedChannel
-				channel = loadedChannel
-			}
-			if !channel.Enabled {
-				d.recordNotificationHistory(channelID, instanceID, routeID, notifications.RecordStatusFailed, "channel disabled", payload)
-				continue
-			}
-
-			// A previous channel can block while a new silence or maintenance
-			// window starts. Check again at each send, not just dispatch entry.
-			if d.isAlertMaintenanceSuppressed(rule) || d.isAlertSilencedAtDelivery(rule) {
-				return
-			}
-			sendCtx, cancel := context.WithTimeout(context.Background(), notificationDispatchTimeout)
-			sendErr := d.sendNotification(sendCtx, channel, payload)
-			cancel()
-			if sendErr != nil {
-				safeError := sanitizeNotificationDeliveryError(channel, sendErr)
-				failedPayload := payload
-				if targetedPayload, targeted := payloadWithAPNsRetryTargets(payload, sendErr); targeted {
-					failedPayload = targetedPayload
-				}
-				rec := d.recordNotificationHistoryWithRetry(channel.ID, instanceID, routeID, notifications.RecordStatusFailed, safeError, failedPayload)
-				securityruntime.Logf("notifications: channel %s send failed (retry %d/%d)", channel.ID, rec.RetryCount, rec.MaxRetries)
-				continue
-			}
-			d.recordNotificationHistory(channel.ID, instanceID, routeID, notifications.RecordStatusSent, "", payload)
+			sentChannels[channelID] = struct{}{}
+			deliveries = append(deliveries, delivery{routeID, channelID})
 		}
+	}
+	for _, channelID := range d.allAlertsChannelIDs() {
+		if _, dup := sentChannels[channelID]; dup {
+			continue
+		}
+		sentChannels[channelID] = struct{}{}
+		deliveries = append(deliveries, delivery{"", channelID})
+	}
+
+	for _, next := range deliveries {
+		routeID, channelID := next.routeID, next.channelID
+		channel, ok := channelCache[channelID]
+		if !ok {
+			if _, missing := missingChannels[channelID]; missing {
+				continue
+			}
+			loadedChannel, loaded, loadErr := d.getNotificationChannelForRuntime(channelID)
+			if loadErr != nil {
+				log.Printf("notifications: failed to load channel %s: %v", channelID, loadErr)
+				continue
+			}
+			if !loaded {
+				missingChannels[channelID] = struct{}{}
+				log.Printf("notifications: route %s references unknown channel %s", routeID, channelID)
+				continue
+			}
+			channelCache[channelID] = loadedChannel
+			channel = loadedChannel
+		}
+		if !channel.Enabled {
+			d.recordNotificationHistory(channelID, instanceID, routeID, notifications.RecordStatusFailed, "channel disabled", payload)
+			continue
+		}
+
+		// A previous channel can block while a new silence or maintenance
+		// window starts. Check again at each send, not just dispatch entry.
+		if d.isAlertMaintenanceSuppressed(rule) || d.isAlertSilencedAtDelivery(rule, devices) {
+			return
+		}
+		sendCtx, cancel := context.WithTimeout(context.Background(), notificationDispatchTimeout)
+		sendErr := d.sendNotification(sendCtx, channel, payload)
+		cancel()
+		if sendErr != nil {
+			safeError := sanitizeNotificationDeliveryError(channel, sendErr)
+			failedPayload := payload
+			if targetedPayload, targeted := payloadWithAPNsRetryTargets(payload, sendErr); targeted {
+				failedPayload = targetedPayload
+			}
+			rec := d.recordNotificationHistoryWithRetry(channel.ID, instanceID, routeID, notifications.RecordStatusFailed, safeError, failedPayload)
+			securityruntime.Logf("notifications: channel %s send failed (retry %d/%d)", channel.ID, rec.RetryCount, rec.MaxRetries)
+			continue
+		}
+		d.recordNotificationHistory(channel.ID, instanceID, routeID, notifications.RecordStatusSent, "", payload)
 	}
 }
 

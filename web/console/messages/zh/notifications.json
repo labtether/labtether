@@ -85,6 +85,10 @@
     "appTokenRequired": "应用令牌为必填项。"
   },
   "title": "通知",
+  "allAlerts": {
+    "label": "将所有告警发送到这里",
+    "hint": "关闭：只接收路由发送到这里的告警。"
+  },
   "emptyHint": "Slack、电子邮件、Webhook、ntfy 和 Gotify 都可以接收告警。",
   "sending": "正在发送",
   "sendTo": "发送到 {name}",

@@ -74,7 +74,7 @@ func executeHTTPCheck(check synthetic.Check) synthetic.Result {
 			CheckID:   check.ID,
 			Status:    synthetic.ResultStatusFail,
 			LatencyMS: &latencyMS,
-			Error:     err.Error(),
+			Error:     syntheticErrorWords(syntheticURLHost(check.Target), timeout, err),
 			Metadata:  map[string]any{"check_type": "http", "target": check.Target},
 			CheckedAt: time.Now().UTC(),
 		}
@@ -148,7 +148,7 @@ func executeTCPCheck(check synthetic.Check) synthetic.Result {
 			CheckID:   check.ID,
 			Status:    synthetic.ResultStatusFail,
 			LatencyMS: &latencyMS,
-			Error:     err.Error(),
+			Error:     syntheticErrorWords(check.Target, timeout, err),
 			Metadata:  map[string]any{"check_type": "tcp", "target": check.Target},
 			CheckedAt: time.Now().UTC(),
 		}
@@ -179,7 +179,7 @@ func executeDNSCheck(check synthetic.Check) synthetic.Result {
 			CheckID:   check.ID,
 			Status:    synthetic.ResultStatusFail,
 			LatencyMS: &latencyMS,
-			Error:     err.Error(),
+			Error:     syntheticErrorWords(check.Target, 0, err),
 			Metadata:  map[string]any{"check_type": "dns", "target": check.Target},
 			CheckedAt: time.Now().UTC(),
 		}
@@ -250,7 +250,7 @@ func executeTLSCheck(check synthetic.Check) synthetic.Result {
 			CheckID:   check.ID,
 			Status:    synthetic.ResultStatusFail,
 			LatencyMS: &latencyMS,
-			Error:     err.Error(),
+			Error:     syntheticErrorWords(check.Target, timeout, err),
 			Metadata:  map[string]any{"check_type": "tls_cert", "target": check.Target},
 			CheckedAt: time.Now().UTC(),
 		}
@@ -314,14 +314,14 @@ func executeTLSCheck(check synthetic.Check) synthetic.Result {
 func parseSyntheticHostPort(target string) (string, int, error) {
 	host, portRaw, err := net.SplitHostPort(strings.TrimSpace(target))
 	if err != nil {
-		return "", 0, fmt.Errorf("target must be host:port: %w", err)
+		return "", 0, syntheticTargetError("The target must be host:port, such as nas01:443.")
 	}
 	port, err := strconv.Atoi(portRaw)
 	if err != nil || port <= 0 || port > 65535 {
-		return "", 0, fmt.Errorf("invalid target port %q", portRaw)
+		return "", 0, syntheticTargetError(fmt.Sprintf("The target's port %q is not a port number from 1 to 65535.", portRaw))
 	}
 	if strings.TrimSpace(host) == "" {
-		return "", 0, fmt.Errorf("target host is required")
+		return "", 0, syntheticTargetError("The target needs a host, such as nas01:443.")
 	}
 	return host, port, nil
 }
