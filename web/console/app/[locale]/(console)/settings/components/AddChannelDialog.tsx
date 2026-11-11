@@ -15,6 +15,7 @@ import {
   type NotificationChannelType,
   type SMTPTLSMode,
 } from "./notificationChannelForm";
+import { AllAlertsSwitch } from "./AllAlertsSwitch";
 import { SettingsDialog } from "./SettingsKit";
 
 type AddChannelDialogProps = {
@@ -199,6 +200,7 @@ export function AddChannelDialog({ open, allowInsecureSMTP, onClose, onConfirm }
   const [error, setError] = useState("");
   const [insecureAcknowledgement, setInsecureAcknowledgement] = useState("");
   const [saving, setSaving] = useState(false);
+  const [allAlerts, setAllAlerts] = useState(true);
 
   if (!open) return null;
 
@@ -223,6 +225,7 @@ export function AddChannelDialog({ open, allowInsecureSMTP, onClose, onConfirm }
 
   const handleSelectType = (type: NotificationChannelType) => {
     setSelectedType(type);
+    setAllAlerts(true);
     setConfig(defaultChannelConfig(type));
     setInsecureAcknowledgement("");
     setError("");
@@ -245,7 +248,7 @@ export function AddChannelDialog({ open, allowInsecureSMTP, onClose, onConfirm }
         allowInsecureSMTP,
         insecureAcknowledgement,
       });
-      await onConfirm({ name: name.trim(), type: selectedType, config: cleanConfig, enabled: true });
+      await onConfirm({ name: name.trim(), type: selectedType, config: cleanConfig, enabled: true, all_alerts: allAlerts });
       setSelectedType(null);
       setName("");
       setConfig({});
@@ -297,6 +300,7 @@ export function AddChannelDialog({ open, allowInsecureSMTP, onClose, onConfirm }
             setInsecureAcknowledgement={setInsecureAcknowledgement}
             saving={saving}
           />
+          <AllAlertsSwitch checked={allAlerts} onChange={setAllAlerts} disabled={saving} />
           {error ? <p role="alert" className="st-msg bad">{error}</p> : null}
           <div className="st-dlg-acts">
             <Button variant="ghost" onClick={handleBack} disabled={saving}>{t("back")}</Button>

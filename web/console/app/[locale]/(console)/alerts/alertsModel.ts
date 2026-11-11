@@ -1,4 +1,5 @@
 import type { AlertInstance, AlertSilence } from "../../../console/models";
+import { alertAssetIds } from "../../../console/models/alerts";
 import { SEVERITIES, type AlertSort, type DeliveryRecord, type InboxFilter } from "./alertsPageTypes";
 
 /** Severity order as the hub ranks it: critical, high, medium, low; anything else sorts last. */
@@ -21,17 +22,31 @@ export const alertTitle = (alert: AlertInstance, ruleNames: Map<string, string>)
   alert.labels?.rule_name || ruleNames.get(alert.rule_id) || "";
 
 /**
- * The active silence that covers this alert, if any. The hub matches a silence against the rule's labels (every
- * matcher must equal one), and an alert carries its rule's labels.
+ * The running silences that cover this alert, matched as the Hub matches them: rule_id is the alert's rule, asset_id
+ * one of its devices (or the rule's asset_id label), any other key one of the rule's labels. A silence that names a
+ * device mutes the alert on that device only, so the alert counts as silenced when silences cover its whole rule or
+ * every device it fired for.
  */
-export function silenceFor(alert: AlertInstance, silences: AlertSilence[], now: number): AlertSilence | null {
+export function silencesFor(alert: AlertInstance, silences: AlertSilence[], now: number): AlertSilence[] {
   const labels = alert.labels ?? {};
-  return silences.find((silence) => {
-    const matchers = Object.entries(silence.matchers ?? {});
-    if (matchers.length === 0) return false;
-    if (!(ts(silence.starts_at) <= now && now < ts(silence.ends_at))) return false;
-    return matchers.every(([key, value]) => labels[key] === value);
-  }) ?? null;
+  const running = silences.filter((silence) => Object.keys(silence.matchers ?? {}).length > 0
+    && ts(silence.starts_at) <= now && now < ts(silence.ends_at));
+  const holds = (silence: AlertSilence, device?: string) => Object.entries(silence.matchers ?? {}).every(([key, value]) => {
+    if (key === "rule_id") return alert.rule_id === value;
+    if (key === "asset_id") return labels.asset_id === value || (device !== undefined && device === value);
+    return labels[key] === value;
+  });
+  const whole = running.filter((silence) => holds(silence));
+  if (whole.length > 0) return whole;
+  const devices = alertAssetIds(alert);
+  if (devices.length === 0) return [];
+  const perDevice = devices.map((device) => running.filter((silence) => "asset_id" in (silence.matchers ?? {}) && holds(silence, device)));
+  return perDevice.every((list) => list.length > 0) ? [...new Set(perDevice.flat())] : [];
+}
+
+/** A silence that covers this alert (see silencesFor), if any. */
+export function silenceFor(alert: AlertInstance, silences: AlertSilence[], now: number): AlertSilence | null {
+  return silencesFor(alert, silences, now)[0] ?? null;
 }
 
 function compareAlerts(sort: AlertSort) {

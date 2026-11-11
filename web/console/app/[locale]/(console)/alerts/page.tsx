@@ -8,7 +8,8 @@ import { useRouter } from "../../../../i18n/navigation";
 import { PageHeader } from "../../../components/PageHeader";
 import { PageError } from "../../../components/ui/PageError";
 import { Button } from "../../../components/ui/Button";
-import type { AlertInstance, AlertSilence } from "../../../console/models";
+import type { AlertInstance } from "../../../console/models";
+import { alertAssetIds } from "../../../console/models/alerts";
 import { useToast } from "../../../contexts/ToastContext";
 import { useAlerts } from "../../../hooks/useAlerts";
 import { AlertDeliveryLogTab } from "./AlertDeliveryLogTab";
@@ -18,7 +19,7 @@ import { AlertRulesTab, type RuleOpen } from "./AlertRulesTab";
 import { AlertSilencesTab } from "./AlertSilencesTab";
 import { AlertTabs } from "./AlertTabs";
 import type { AlertActions } from "./AlertDetail";
-import { shortTime } from "./alertsModel";
+import { shortTime, silencesFor } from "./alertsModel";
 import { DEFAULT_FILTER, durationPresets, parseAlertTab, type DurationPreset, type InboxFilter } from "./alertsPageTypes";
 import { useCanWrite } from "../../../hooks/useCanWrite";
 
@@ -69,17 +70,22 @@ export default function AlertsPage() {
       const hours = durationPresets.find((p) => p.id === preset)?.hours ?? 1;
       const start = new Date();
       const end = new Date(start.getTime() + hours * 3_600_000);
-      return run(alert, () => data.createSilence({
-        matchers: { ...(alert.labels ?? {}) },
-        starts_at: start.toISOString(),
-        ends_at: end.toISOString(),
-        reason: alert.labels?.rule_name || data.rules.find((r) => r.id === alert.rule_id)?.name || undefined,
-      }), t("detail.silenced", { time: shortTime(end.toISOString(), locale, Date.now()) }));
+      const reason = alert.labels?.rule_name || data.rules.find((r) => r.id === alert.rule_id)?.name || undefined;
+      // This alert's rule on each device it fired for; the rule's other devices keep alerting.
+      const devices = alertAssetIds(alert);
+      const matchers = devices.length > 0 ? devices.map((id) => ({ rule_id: alert.rule_id, asset_id: id })) : [{ rule_id: alert.rule_id }];
+      return run(alert, async () => {
+        for (const m of matchers) {
+          await data.createSilence({ matchers: m, starts_at: start.toISOString(), ends_at: end.toISOString(), reason });
+        }
+      }, t("detail.silenced", { time: shortTime(end.toISOString(), locale, Date.now()) }));
     },
-    endSilence: async (silence: AlertSilence) => {
-      setBusy(silence.id);
+    endSilence: async (alert: AlertInstance) => {
+      const covering = silencesFor(alert, data.silences, Date.now());
+      if (covering.length === 0) return;
+      setBusy(covering[0].id);
       try {
-        await data.deleteSilence(silence.id);
+        for (const silence of covering) await data.deleteSilence(silence.id);
         addToast("success", t("detail.silenceEnded"));
       } catch (err) {
         addToast("error", err instanceof Error && err.message ? err.message : t("errors.action"));
@@ -142,6 +148,7 @@ export default function AlertsPage() {
       {!blank && tab === "silences" ? (
         <AlertSilencesTab
           silences={data.silences}
+          ruleNames={new Map(data.rules.map((rule) => [rule.id, rule.name]))}
           createSilence={data.createSilence}
           deleteSilence={data.deleteSilence}
         />

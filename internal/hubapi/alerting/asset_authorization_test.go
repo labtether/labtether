@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/labtether/labtether/internal/alerts"
 	"github.com/labtether/labtether/internal/apiv2"
@@ -312,6 +313,31 @@ func TestRestrictedAlertSilencesFailClosed(t *testing.T) {
 	d.HandleAlertSilences(rec, restrictedAlertRequest(http.MethodGet, "/alerts/silences", nil, "asset-a"))
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	// Silences may name a rule and a device now; a key limited to some devices
+	// still may not make or end one, even for its own device: a rule-only
+	// silence covers every device, and silences are a whole-Hub list.
+	window := `"starts_at":"2026-01-01T00:00:00Z","ends_at":"2099-01-01T00:00:00Z"`
+	for _, body := range []string{
+		`{"matchers":{"rule_id":"rule-1","asset_id":"asset-a"},` + window + `}`,
+		`{"matchers":{"rule_id":"rule-1"},` + window + `}`,
+	} {
+		rec = httptest.NewRecorder()
+		d.HandleAlertSilences(rec, restrictedAlertRequest(http.MethodPost, "/alerts/silences", []byte(body), "asset-a"))
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("limited key creating %s: %d %s, want 403", body, rec.Code, rec.Body.String())
+		}
+	}
+	silence, err := d.AlertInstanceStore.CreateAlertSilence(alerts.CreateSilenceRequest{
+		Matchers: map[string]string{"rule_id": "rule-1", "asset_id": "asset-a"}, StartsAt: time.Now(), EndsAt: time.Now().Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec = httptest.NewRecorder()
+	d.HandleAlertSilenceActions(rec, restrictedAlertRequest(http.MethodDelete, "/alerts/silences/"+silence.ID, nil, "asset-a"))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("limited key ending a silence on its device: %d %s, want 403", rec.Code, rec.Body.String())
 	}
 }
 

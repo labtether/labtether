@@ -121,6 +121,8 @@ func postgresSchemaMigrations() []schemaMigration {
 		schemaMigrationCommandExitCodes(),
 		schemaMigrationAlertRuleKindAndScopeChecks(),
 		schemaMigrationDiscoveryRunsOnChildToHost(),
+		schemaMigrationDeviceNamesOneLine(),
+		schemaMigrationChannelAllAlerts(),
 		schemaMigrationSSHHostKeyPins(),
 	}
 }
