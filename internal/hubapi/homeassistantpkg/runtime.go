@@ -81,13 +81,15 @@ func (d *Deps) loadRuntimeForCollector(selected *hubcollector.Collector) (*runti
 		skipVerify = false
 	}
 	timeout := shared.CollectorConfigDuration(selected.Config, "timeout", 15*time.Second)
+	allowLocalHTTP, _ := shared.CollectorConfigBool(selected.Config, "allow_local_http")
 
 	return &runtime{
 		Connector: homeassistant.NewWithConfig(homeassistant.Config{
-			BaseURL:    baseURL,
-			Token:      strings.TrimSpace(token),
-			SkipVerify: skipVerify,
-			Timeout:    timeout,
+			BaseURL:        baseURL,
+			Token:          strings.TrimSpace(token),
+			SkipVerify:     skipVerify,
+			Timeout:        timeout,
+			AllowLocalHTTP: allowLocalHTTP,
 		}),
 		CollectorID: selected.ID,
 	}, nil

@@ -15,6 +15,7 @@ import { compatPrefillOption, firstError, validationText } from "./addDeviceText
 import { hubCandidateLabel } from "./agentInstallCommands";
 import type { AddDeviceAddedEvent, AddDeviceCompatPrefill, SetupMode } from "./types";
 import { copyText } from "../../lib/clipboard";
+import { isLocalNetworkHTTPAddress } from "../../../lib/localNetworkAddress";
 
 type HomeAssistantSetupStepProps = {
   onBack: () => void;
@@ -190,6 +191,8 @@ export function HomeAssistantSetupStep({ onBack, onClose, onAdded, compatPrefill
     setDisplayName,
     skipVerify,
     setSkipVerify,
+    allowLocalHTTP,
+    setAllowLocalHTTP,
     intervalSeconds,
     setIntervalSeconds,
     collectorID,
@@ -404,6 +407,15 @@ export function HomeAssistantSetupStep({ onBack, onClose, onAdded, compatPrefill
       <div>
         <label htmlFor="homeassistant-base-url" className="mb-1 block text-xs font-medium text-[var(--muted)]">{t("homeassistant.baseUrl")}</label>
         <Input id="homeassistant-base-url" value={baseURL} onChange={(event) => setBaseURL(event.target.value)} placeholder="https://homeassistant.local:8123" />
+        {isLocalNetworkHTTPAddress(baseURL) ? (
+          <div className="mt-2">
+            <label className="flex items-center gap-2 text-xs text-[var(--muted)]">
+              <input type="checkbox" checked={allowLocalHTTP} onChange={(event) => setAllowLocalHTTP(event.target.checked)} />
+              {t("homeassistant.allowLocalHttp")}
+            </label>
+            <p className="mt-1 text-xs text-[var(--muted)]">{t("homeassistant.allowLocalHttpNote")}</p>
+          </div>
+        ) : null}
       </div>
 
       <div>

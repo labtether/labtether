@@ -29,6 +29,10 @@ type Connector struct {
 	token      string
 	skipVerify bool
 	httpClient *http.Client
+	// localHTTP: the owner allowed plain http on the local network for this
+	// connection; requests go through securityruntime's local-network client.
+	localHTTP    bool
+	localHTTPErr error
 }
 
 type Config struct {
@@ -36,6 +40,9 @@ type Config struct {
 	Token      string
 	SkipVerify bool
 	Timeout    time.Duration
+	// AllowLocalHTTP lets an http:// BaseURL on the local network be used
+	// without LABTETHER_ALLOW_INSECURE_TRANSPORT (see securityruntime).
+	AllowLocalHTTP bool
 }
 
 func New() *Connector {
@@ -54,12 +61,22 @@ func NewWithConfig(cfg Config) *Connector {
 	if timeout <= 0 {
 		timeout = 10 * time.Second
 	}
-	return &Connector{
+	connector := &Connector{
 		baseURL:    strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/"),
 		token:      strings.TrimSpace(cfg.Token),
 		skipVerify: cfg.SkipVerify,
 		httpClient: newHTTPClient(timeout, cfg.SkipVerify),
 	}
+	if cfg.AllowLocalHTTP && UsesPlainHTTP(connector.baseURL) && !securityruntime.InsecureTransportAllowed() {
+		connector.localHTTP = true
+		connector.httpClient, connector.localHTTPErr = securityruntime.NewLocalHTTPClient(connector.baseURL, timeout)
+	}
+	return connector
+}
+
+// UsesPlainHTTP reports whether baseURL is an http:// address.
+func UsesPlainHTTP(baseURL string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(baseURL)), "http://")
 }
 
 func (c *Connector) ID() string {
@@ -261,7 +278,7 @@ func (c *Connector) request(ctx context.Context, method, path string, body map[s
 		reader = bytes.NewReader(payload)
 	}
 
-	req, err := securityruntime.NewOutboundRequestWithContext(ctx, method, url, reader)
+	req, err := c.newRequest(ctx, method, url, reader)
 	if err != nil {
 		return nil, err
 	}
@@ -271,7 +288,7 @@ func (c *Connector) request(ctx context.Context, method, path string, body map[s
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := securityruntime.DoOutboundRequest(c.httpClient, req)
+	resp, err := c.do(req)
 	if err != nil {
 		return nil, err
 	}

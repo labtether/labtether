@@ -13,6 +13,7 @@ import {
   slugify,
   stringValue,
 } from "../shared";
+import { isLocalNetworkHTTPAddress } from "../../../../lib/localNetworkAddress";
 
 export const dynamic = "force-dynamic";
 const FETCH_TIMEOUT_MS = 10_000;
@@ -58,6 +59,7 @@ export async function GET(request: Request) {
           base_url: "",
           display_name: "",
           skip_verify: false,
+          allow_local_http: false,
           interval_seconds: 60,
         },
       });
@@ -88,6 +90,7 @@ export async function GET(request: Request) {
         base_url: stringValue(config["base_url"]),
         display_name: stringValue(config["display_name"]),
         skip_verify: boolValue(config["skip_verify"], false),
+        allow_local_http: boolValue(config["allow_local_http"], false),
         interval_seconds: numberValue(config["interval_seconds"], collector.interval_seconds || 60),
       },
     });
@@ -119,6 +122,8 @@ export async function POST(request: Request) {
   const token = stringValue(body.token);
   const displayName = stringValue(body.display_name);
   const skipVerify = boolValue(body.skip_verify, false);
+  // Only for plain http to the local network; the Hub enforces this again.
+  const allowLocalHTTP = boolValue(body.allow_local_http, false) && isLocalNetworkHTTPAddress(baseURL);
   const intervalSeconds = clampInterval(numberValue(body.interval_seconds, 60));
 
   if (!baseURL) {
@@ -212,6 +217,7 @@ export async function POST(request: Request) {
       display_name: displayName,
       credential_id: credentialID,
       skip_verify: skipVerify,
+      allow_local_http: allowLocalHTTP,
       interval_seconds: intervalSeconds,
     };
 
