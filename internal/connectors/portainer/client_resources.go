@@ -113,19 +113,6 @@ func (c *Client) StopStack(ctx context.Context, stackID, endpointID int) error {
 	return err
 }
 
-// RedeployStack redeploys a git-based stack, optionally pulling new images.
-func (c *Client) RedeployStack(ctx context.Context, stackID, endpointID int, pullImage bool) error {
-	path := fmt.Sprintf("/api/stacks/%s/git/redeploy?endpointId=%d",
-		url.PathEscape(fmt.Sprintf("%d", stackID)),
-		endpointID,
-	)
-	body := map[string]any{
-		"pullImage": pullImage,
-	}
-	_, err := c.put(ctx, path, body)
-	return err
-}
-
 // RemoveStack deletes a stack.
 func (c *Client) RemoveStack(ctx context.Context, stackID, endpointID int) error {
 	path := fmt.Sprintf("/api/stacks/%s?endpointId=%d",
@@ -308,18 +295,4 @@ func (c *Client) GetStackCompose(ctx context.Context, stackID int) (string, erro
 		return "", fmt.Errorf("decode stack file response: %w", err)
 	}
 	return result.StackFileContent, nil
-}
-
-// UpdateStackCompose updates the compose file content for a stack.
-func (c *Client) UpdateStackCompose(ctx context.Context, stackID, endpointID int, composeContent string) error {
-	path := fmt.Sprintf("/api/stacks/%s?endpointId=%d",
-		url.PathEscape(fmt.Sprintf("%d", stackID)),
-		endpointID,
-	)
-	body := map[string]any{
-		"StackFileContent": composeContent,
-		"Prune":            false,
-	}
-	_, err := c.put(ctx, path, body)
-	return err
 }
