@@ -373,6 +373,7 @@ func (d *Deps) HandleNotificationHistory(w http.ResponseWriter, r *http.Request)
 			}
 		}
 		records[i].Error = safeError
+		records[i].AlertName = historyAlertName(records[i].Payload)
 	}
 	servicehttp.WriteJSON(w, http.StatusOK, map[string]any{"history": records})
 }

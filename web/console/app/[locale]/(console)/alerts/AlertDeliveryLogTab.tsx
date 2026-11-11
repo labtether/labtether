@@ -71,7 +71,7 @@ export function AlertDeliveryLogTab({ instances, rules, onShowAlert }: { instanc
           </div>
           {shown.map((r) => {
             const alert = alerts.get(r.alert_instance_id);
-            const title = alert ? alertTitle(alert, ruleNames) || t("unknownAlert") : t("unknownAlert");
+            const title = (alert ? alertTitle(alert, ruleNames) : "") || r.alert_name || t("unknownAlert");
             const at = r.sent_at ?? r.created_at;
             return (
               <div key={r.id} className={`al-dl-row${r.error ? " two" : ""}`}>
