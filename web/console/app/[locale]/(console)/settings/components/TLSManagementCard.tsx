@@ -200,6 +200,7 @@ export function TLSManagementCard() {
               <Field label={t("tls.privateKey")} htmlFor="st-tls-key" hint={t("tls.keyStored")} wide>
                 <textarea id="st-tls-key" className="st-ta" value={keyPEM} onChange={(event) => setKeyPEM(event.target.value)} placeholder="-----BEGIN PRIVATE KEY-----" spellCheck={false} autoComplete="off" />
               </Field>
+              <p className="st-g st-field wide">{t("tls.agentTrustNote")}</p>
               <div className="st-acts st-field wide">
                 <Button type="submit" size="sm" loading={submitting === "upload"} disabled={!certPEM.trim() || !keyPEM.trim()}>
                   {t("tls.apply")}
