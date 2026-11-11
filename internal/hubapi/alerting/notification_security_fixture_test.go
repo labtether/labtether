@@ -78,6 +78,10 @@ func (s *notificationSecurityStore) UpdateNotificationChannel(id string, req not
 	if !ok {
 		return notifications.Channel{}, notifications.ErrChannelNotFound
 	}
+	if (req.ExpectAllAlerts != nil && *req.ExpectAllAlerts != channel.AllAlerts) ||
+		(req.ExpectEnabled != nil && *req.ExpectEnabled != channel.Enabled) {
+		return notifications.Channel{}, notifications.ErrChannelChanged
+	}
 	if req.Name != nil {
 		channel.Name = *req.Name
 	}

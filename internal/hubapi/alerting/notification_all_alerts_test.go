@@ -1,6 +1,7 @@
 package alerting
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -110,5 +111,69 @@ func TestEveryAlertChannelGetsEachAlertOnceWithOrWithoutRoutes(t *testing.T) {
 	}
 	if channel, _, _ := store.GetNotificationChannel("every"); !channel.AllAlerts {
 		t.Fatal("deleting the route changed the channel's setting")
+	}
+}
+
+// staleChannelStore answers the permission read as if "Send every alert here"
+// were still off, the way a channel turned on between read and write looks.
+type staleChannelStore struct{ *routedNotificationStore }
+
+func (s staleChannelStore) GetNotificationChannel(id string) (notifications.Channel, bool, error) {
+	channel, ok, err := s.routedNotificationStore.GetNotificationChannel(id)
+	channel.AllAlerts = false
+	return channel, ok, err
+}
+
+// A key with only notifications:write could not turn "Send every alert here"
+// on, but could still point a channel that gets alerts at its own server, or
+// wake a disabled one. On a channel that gets every alert, or that a route
+// names, those edits need alerts:write; a new name does not.
+func TestEditingAChannelThatGetsAlertsNeedsAlertsWrite(t *testing.T) {
+	base := &apnsRetryNotificationStore{newNotificationSecurityStore()}
+	store := &routedNotificationStore{apnsRetryNotificationStore: base}
+	deps := newTestAlertingDeps(t)
+	deps.NotificationStore = store
+	deps.NotificationSecrets = testutil.TestSecretsManager(t)
+	for _, channel := range []notifications.Channel{
+		{ID: "every", Enabled: true, AllAlerts: true}, {ID: "routed", Enabled: true},
+		{ID: "every-off", Enabled: false, AllAlerts: true}, {ID: "quiet", Enabled: true},
+	} {
+		channel.Name, channel.Type = channel.ID, notifications.ChannelTypeWebhook
+		channel.Config = map[string]any{"url": "https://example.invalid/" + channel.ID}
+		store.seed(channel)
+	}
+	store.routes = []notifications.Route{{ID: "r", Enabled: true, ChannelIDs: []string{"routed"}}}
+	patch := func(id, body string, scopes ...string) int {
+		rec := httptest.NewRecorder()
+		deps.HandleNotificationChannelActions(rec, scopedChannelRequest(http.MethodPatch, "/notifications/channels/"+id, body, scopes...))
+		return rec.Code
+	}
+	moveURL := `{"config":{"url":"https://example.invalid/attacker"}}`
+	for _, id := range []string{"every", "routed"} {
+		if code := patch(id, moveURL, "notifications:write"); code != http.StatusForbidden {
+			t.Errorf("notifications:write moving %s = %d, want 403", id, code)
+		}
+		if code := patch(id, `{"name":"renamed-`+id+`"}`, "notifications:write"); code != http.StatusOK {
+			t.Errorf("notifications:write renaming %s = %d, want 200", id, code)
+		}
+	}
+	if code := patch("every-off", `{"enabled":true}`, "notifications:write"); code != http.StatusForbidden {
+		t.Errorf("notifications:write waking a disabled every-alert channel = %d, want 403", code)
+	}
+	if code := patch("every-off", `{"enabled":true}`, "notifications:write", "alerts:write"); code != http.StatusOK {
+		t.Errorf("with alerts:write too = %d, want 200", code)
+	}
+	if code := patch("quiet", moveURL, "notifications:write"); code != http.StatusOK {
+		t.Errorf("notifications:write moving a channel that gets no alerts = %d, want 200", code)
+	}
+
+	// The check and the write are one step: a channel turned on meanwhile is not changed.
+	before, _, _ := store.GetNotificationChannel("every")
+	deps.NotificationStore = staleChannelStore{store}
+	if code := patch("every", moveURL, "notifications:write"); code != http.StatusConflict {
+		t.Errorf("edit raced by turning every alert on = %d, want 409", code)
+	}
+	if after, _, _ := store.GetNotificationChannel("every"); fmt.Sprint(after.Config) != fmt.Sprint(before.Config) {
+		t.Errorf("the raced edit changed the channel: %v -> %v", before.Config, after.Config)
 	}
 }

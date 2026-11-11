@@ -285,24 +285,30 @@ func (d *Deps) HandleNotificationChannelActions(w http.ResponseWriter, r *http.R
 			servicehttp.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		if req.AllAlerts != nil && *req.AllAlerts {
-			current, found, getErr := d.NotificationStore.GetNotificationChannel(channelID)
-			if getErr != nil {
-				servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update channel")
-				return
-			}
-			if !found {
-				servicehttp.WriteError(w, http.StatusNotFound, "channel not found")
-				return
-			}
-			if !current.AllAlerts && !allowAllAlertsOn(w, r, current.Type) {
-				return
-			}
+		current, found, getErr := d.NotificationStore.GetNotificationChannel(channelID)
+		if getErr != nil {
+			servicehttp.WriteError(w, http.StatusInternalServerError, "failed to update channel")
+			return
 		}
+		if !found {
+			servicehttp.WriteError(w, http.StatusNotFound, "channel not found")
+			return
+		}
+		if !d.allowChannelUpdate(w, r, current, req) {
+			return
+		}
+		// The write happens only while the channel still gets alerts as it did
+		// when the permission was decided.
+		expectAllAlerts, expectEnabled := current.AllAlerts, current.Enabled
+		req.ExpectAllAlerts, req.ExpectEnabled = &expectAllAlerts, &expectEnabled
 		updated, err := d.updateSecureNotificationChannel(channelID, req)
 		if err != nil {
 			if err == notifications.ErrChannelNotFound {
 				servicehttp.WriteError(w, http.StatusNotFound, "channel not found")
+				return
+			}
+			if errors.Is(err, notifications.ErrChannelChanged) {
+				servicehttp.WriteError(w, http.StatusConflict, "The channel changed while you were editing it. Open it again and save.")
 				return
 			}
 			if errors.Is(err, errNotificationSecretsUnavailable) {

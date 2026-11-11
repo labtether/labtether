@@ -150,13 +150,20 @@ func (s *PostgresStore) UpdateNotificationChannel(id string, req notifications.U
 	}
 
 	now := time.Now().UTC()
-	return scanNotificationChannel(s.pool.QueryRow(context.Background(),
+	updated, err := scanNotificationChannel(s.pool.QueryRow(context.Background(),
 		`UPDATE notification_channels
 		 SET name = $2, config = $3::jsonb, enabled = $4, all_alerts = $6, updated_at = $5
 		 WHERE id = $1
+		   AND ($7::boolean IS NULL OR all_alerts = $7)
+		   AND ($8::boolean IS NULL OR enabled = $8)
 		 RETURNING id, name, type, config, enabled, all_alerts, created_at, updated_at`,
 		existing.ID, existing.Name, configPayload, existing.Enabled, now, existing.AllAlerts,
+		req.ExpectAllAlerts, req.ExpectEnabled,
 	))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return notifications.Channel{}, notifications.ErrChannelChanged
+	}
+	return updated, err
 }
 
 func (s *PostgresStore) DeleteNotificationChannel(id string) error {

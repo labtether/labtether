@@ -56,3 +56,42 @@ func (d *Deps) allAlertsChannelIDs() []string {
 		}
 	}
 }
+
+// channelReceivesAlerts reports whether alerts go to the stored channel: it is
+// set to get every alert, or an alert route names it. When the routes cannot
+// be read in full it answers true, so the stricter permission applies.
+func (d *Deps) channelReceivesAlerts(channel notifications.Channel) bool {
+	if channel.AllAlerts {
+		return true
+	}
+	routes, err := d.NotificationStore.ListAlertRoutes(notificationRouteScanLimit)
+	if err != nil || len(routes) >= notificationRouteScanLimit {
+		return true
+	}
+	for _, route := range routes {
+		for _, id := range route.ChannelIDs {
+			if strings.TrimSpace(id) == channel.ID {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// allowChannelUpdate decides from the stored channel whether this edit needs
+// alerts:write, writing the refusal when it does and is missing. Turning
+// "Send every alert here" on always does. On a channel that gets alerts, any
+// change to where or whether it sends (config, enabled) does too, so a key
+// that may only manage channels cannot point one at its own server or wake
+// a disabled one. A new name, or turning every alert off, does not.
+func (d *Deps) allowChannelUpdate(w http.ResponseWriter, r *http.Request, current notifications.Channel, req notifications.UpdateChannelRequest) bool {
+	if req.AllAlerts != nil && *req.AllAlerts && !current.AllAlerts {
+		return allowAllAlertsOn(w, r, current.Type)
+	}
+	changesDelivery := req.Config != nil || (req.Enabled != nil && *req.Enabled != current.Enabled)
+	if !changesDelivery || apiv2.ScopeCheck(apiv2.ScopesFromContext(r.Context()), allAlertsScope) || !d.channelReceivesAlerts(current) {
+		return true
+	}
+	servicehttp.WriteError(w, http.StatusForbidden, "Changing a channel that gets alerts needs the alerts:write permission as well.")
+	return false
+}

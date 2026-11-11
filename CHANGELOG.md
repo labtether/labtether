@@ -24,10 +24,13 @@ v1.7.1.
   the right way round; migration 112 adds "Send every alert here" to
   notification channels. None removes your data, and v1.7.1 still runs on the
   migrated database, so going back to v1.7.1 needs no database restore.
-- **Channels start getting alerts.** Notification channels that no alert
-  route names (the ones made in the console, which got no alerts in 1.x) get
-  every alert after the upgrade: "Send every alert here" is on for them.
-  Channels a route names, and push channels, keep what they got.
+- **Channels start getting alerts.** A notification channel that a person
+  signed in to the console (or the owner) made, and that no alert route
+  names, gets every alert after the upgrade: "Send every alert here" is on for
+  it. In 1.x such channels got no alerts. Channels an API key made, channels
+  older than the audit log's record of who made them, channels a route names
+  and push channels keep what they got; turn on "Send every alert here" for
+  the ones that should get alerts.
 - **From v1.4.0 or older,** read the v1.7.1 upgrade notes below first. They
   still apply.
 - **Saved choices carry over.** Your theme and language stay as they were.
@@ -206,7 +209,9 @@ v1.7.1.
   has "Send every alert here" (on by default; "Off: only alerts a route sends
   here."), and each alert reaches a channel once. Turning it on needs the
   `alerts:write` permission as well as `notifications:write`, the same as
-  making a route; push channels keep their own route. Before, the Hub sent
+  making a route, and so does changing where or whether a channel that gets
+  alerts sends them (its settings, or switching it on); a new name does not.
+  Push channels keep their own route. Before, the Hub sent
   alerts only to channels an alert route names, and the console makes no
   routes, so a new email or ntfy channel never got an alert.
 - Notifications: a failed send says what the receiver refused, for example

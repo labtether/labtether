@@ -23,7 +23,10 @@ const (
 
 var (
 	ErrChannelNotFound = errors.New("notification channel not found")
-	ErrRouteNotFound   = errors.New("alert route not found")
+	// ErrChannelChanged: the channel's alert delivery changed between the
+	// permission check and the write, so the write did not happen.
+	ErrChannelChanged = errors.New("notification channel changed while it was being edited")
+	ErrRouteNotFound  = errors.New("alert route not found")
 )
 
 type Channel struct {
@@ -57,6 +60,11 @@ type UpdateChannelRequest struct {
 	Config    *map[string]any `json:"config,omitempty"`
 	Enabled   *bool           `json:"enabled,omitempty"`
 	AllAlerts *bool           `json:"all_alerts,omitempty"`
+	// ExpectAllAlerts and ExpectEnabled, set by the API layer, make the write
+	// happen only while the stored channel still has these values, so a
+	// permission decided from them cannot be raced.
+	ExpectAllAlerts *bool `json:"-"`
+	ExpectEnabled   *bool `json:"-"`
 }
 
 type Route struct {
