@@ -5,7 +5,7 @@ import { ChevronDown } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Link } from "../../../../../i18n/navigation";
 import { useFastStatus } from "../../../../contexts/StatusContext";
-import { assetFreshnessLabel } from "../../../../console/formatters";
+import { deviceFreshnessLabel } from "../../../../console/formatters";
 import { buildNodeMetadataSections } from "../../../../console/models";
 import type { Asset, TelemetryOverviewAsset } from "../../../../console/models";
 import {
@@ -40,7 +40,7 @@ function CategoryAssetRow({ asset, telemetry }: { asset: Asset; telemetry: Telem
   const [open, setOpen] = useState(false);
   const state: AssetPresentationStatus = resolveAssetPresentationStatus(
     asset.status,
-    assetFreshnessLabel(asset.last_seen_at) as AssetPresentationStatus,
+    deviceFreshnessLabel(asset) as AssetPresentationStatus,
   );
   const sections = buildNodeMetadataSections(asset.metadata);
   const fieldCount = sections.reduce((count, section) => count + section.rows.length, 0);

@@ -1,4 +1,4 @@
-import { assetFreshnessLabel, formatAge } from "../../../../console/formatters";
+import { deviceFreshnessLabel, formatAge } from "../../../../console/formatters";
 import type { Asset } from "../../../../console/models";
 import { assetCategory, childParentKey, hostParentKey } from "../../../../console/taxonomy";
 import {
@@ -72,7 +72,7 @@ export function buildFallbackRows(
     const usedPercent = zfsUsedPercent != null ? Math.min(Math.max(zfsUsedPercent, 0), 100) : parsePercent(asset.metadata?.disk_percent);
 
     const staleLabel = formatAge(asset.last_seen_at);
-    const stale = assetFreshnessLabel(asset.last_seen_at) !== "online";
+    const stale = deviceFreshnessLabel(asset) !== "online";
     const isHealthy = isHealthyHealth(health);
 
     let riskScore = 0;

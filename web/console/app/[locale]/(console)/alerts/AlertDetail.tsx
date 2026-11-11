@@ -5,7 +5,7 @@ import type { Ref } from "react";
 import { Link } from "../../../../i18n/navigation";
 import type { AlertInstance, AlertRule, AlertSilence } from "../../../console/models";
 import { alertAssetIds } from "../../../console/models/alerts";
-import { assetFreshnessLabel } from "../../../console/formatters";
+import { deviceFreshnessLabel } from "../../../console/formatters";
 import { useFastStatus } from "../../../contexts/StatusContext";
 import { AlertDetailActions, type AlertActions } from "./AlertDetailActions";
 import { SevLabel } from "./alertBits";
@@ -36,7 +36,7 @@ export function AlertDetail({ ref, alert, title, rule, silence, deliveries, chan
   const devices = alertAssetIds(alert).map((id) => {
     const asset = status?.assets?.find((a) => a.id === id);
     // The device's state word when it is not answering ("Not responding" in amber, "Offline" in red), as in the mockup.
-    const freshness = asset ? assetFreshnessLabel(asset.last_seen_at) : "online";
+    const freshness = asset ? deviceFreshnessLabel(asset) : "online";
     return { id, name: asset?.name ?? id, freshness, state: freshness === "offline" ? "bad" : freshness === "unresponsive" ? "warn" : "" };
   });
   // The rule name and device already show as the title and the Device row.
