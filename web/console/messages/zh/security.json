@@ -47,6 +47,7 @@
     "certChain": "证书链 (PEM)",
     "privateKey": "私钥 (PEM)",
     "keyStored": "Hub 会在保存前加密私钥。",
+    "agentTrustNote": "代理信任 LabTether CA。连接到此证书所覆盖地址的代理会停止连接，直到它也信任此证书的颁发者。“移除已上传证书”会让它重新连接。",
     "apply": "应用证书",
     "applied": "已应用上传的证书。",
     "savedRestart": "已保存。重启 Hub 后生效。",

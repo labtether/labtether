@@ -47,6 +47,7 @@
     "certChain": "Cadena de certificados (PEM)",
     "privateKey": "Clave privada (PEM)",
     "keyStored": "El hub cifra la clave antes de guardarla.",
+    "agentTrustNote": "Los agentes confían en la CA de LabTether. Un agente que se conecta a una dirección que cubre este certificado deja de conectarse hasta que también confíe en el emisor de este certificado. «Quitar certificado subido» lo vuelve a conectar.",
     "apply": "Aplicar certificado",
     "applied": "Certificado subido aplicado.",
     "savedRestart": "Guardado. Reinicia el hub para servirlo.",
