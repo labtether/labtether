@@ -97,7 +97,6 @@ export default function DashboardPage() {
         loading={loading && !status}
         hasError={Boolean(error)}
         deviceCount={deviceCount}
-        connectorCount={slowStatus?.connectors?.length ?? 0}
         recentCommandCount={slowStatus?.recentCommands?.length ?? 0}
         recentLogCount={slowStatus?.recentLogs?.length ?? 0}
         canWrite={canWrite}

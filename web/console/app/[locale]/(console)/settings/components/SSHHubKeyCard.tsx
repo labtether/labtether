@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "../../../../components/ui/Button";
 import { Facts, Section, Sheet } from "./SettingsKit";
 import { SSHHubKeyRotateDialog } from "./SSHHubKeyRotateDialog";
@@ -21,6 +22,7 @@ async function responseJSON(response: Response): Promise<unknown> {
 }
 
 export function SSHHubKeyCard() {
+  const t = useTranslations("settings.sshKey");
   const [keyInfo, setKeyInfo] = useState<SSHHubKeyInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -40,18 +42,18 @@ export function SSHHubKeyCard() {
       });
       const payload = await responseJSON(response);
       if (!response.ok) {
-        throw new Error(sshHubKeyErrorMessage(payload, `Failed to load SSH hub key (${response.status})`));
+        throw new Error(sshHubKeyErrorMessage(payload, t("loadFailed")));
       }
       const parsed = parseSSHHubKeyInfo(payload);
-      if (!parsed) throw new Error("SSH hub key endpoint returned an invalid response");
+      if (!parsed) throw new Error(t("loadFailed"));
       setKeyInfo(parsed);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
-      setLoadError(error instanceof Error ? error.message : "Failed to load SSH hub key");
+      setLoadError(error instanceof Error ? error.message : t("loadFailed"));
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -66,10 +68,10 @@ export function SSHHubKeyCard() {
     try {
       await copyText(keyInfo.public_key.trim());
       setCopied(true);
-      setMessage("Public key copied to clipboard.");
+      setMessage(t("copiedMessage"));
     } catch {
       setCopied(false);
-      setRotationError("The browser could not copy the public key. Select it manually instead.");
+      setRotationError(t("copyFailed"));
     }
   }
 
@@ -85,26 +87,23 @@ export function SSHHubKeyCard() {
       });
       const responsePayload = await responseJSON(response);
       if (!response.ok) {
-        setRotationError(sshHubKeyErrorMessage(
-          responsePayload,
-          `SSH hub key rotation failed (${response.status}); the displayed key remains active.`,
-        ));
+        setRotationError(sshHubKeyErrorMessage(responsePayload, t("rotateFailed")));
         return false;
       }
       const rotatedInfo = parseSSHHubKeyInfo(responsePayload);
       if (!rotatedInfo) {
-        setRotationError("Rotation completed but the hub returned invalid key metadata. Reload before rotating again.");
+        setRotationError(t("rotateUnclear"));
         return false;
       }
       setKeyInfo(rotatedInfo);
       setCopied(false);
       const agentSummary = typeof rotatedInfo.agents_updated === "number" && typeof rotatedInfo.agents_total === "number"
-        ? ` ${rotatedInfo.agents_updated} of ${rotatedInfo.agents_total} connected agents were updated.`
+        ? ` ${t("agentsUpdated", { updated: rotatedInfo.agents_updated, total: rotatedInfo.agents_total })}`
         : "";
-      setMessage(rotatedInfo.warning ? `Key rotated with a warning: ${rotatedInfo.warning}` : `SSH hub key rotated.${agentSummary}`);
+      setMessage(rotatedInfo.warning ? t("rotatedWarning", { warning: rotatedInfo.warning }) : `${t("rotated")}${agentSummary}`);
       return true;
     } catch {
-      setRotationError("The rotation endpoint is unavailable; the displayed key remains active.");
+      setRotationError(t("rotateFailed"));
       return false;
     } finally {
       setRotating(false);
@@ -120,7 +119,7 @@ export function SSHHubKeyCard() {
   return (
     <>
       <Section
-        title="Hub SSH key"
+        title={t("title")}
         id="hub-ssh-key"
         action={keyInfo ? (
           <Button
@@ -132,7 +131,7 @@ export function SSHHubKeyCard() {
               setRotateOpen(true);
             }}
           >
-            Rotate key…
+            {t("rotateButton")}
           </Button>
         ) : null}
       >
@@ -141,7 +140,7 @@ export function SSHHubKeyCard() {
             <div className="st-row">
               <p role="alert" className="st-msg bad">{loadError}</p>
               <div className="st-row-r">
-                <Button size="sm" onClick={() => { void loadKeyInfo(); }}>Retry</Button>
+                <Button size="sm" onClick={() => { void loadKeyInfo(); }}>{t("retry")}</Button>
               </div>
             </div>
           ) : null}
@@ -150,13 +149,13 @@ export function SSHHubKeyCard() {
             <>
               <Facts
                 items={[
-                  ["Type", keyInfo.key_type === "rsa" ? "RSA 4096" : "Ed25519"],
-                  ["Fingerprint", <code key="fp" className="st-mono">{keyInfo.fingerprint_sha256}</code>],
+                  [t("type"), keyInfo.key_type === "rsa" ? "RSA 4096" : "Ed25519"],
+                  [t("fingerprint"), <code key="fp" className="st-mono">{keyInfo.fingerprint_sha256}</code>],
                 ]}
               />
               <div className="st-pad-row">
                 <div className="st-code">
-                  <pre aria-label="OpenSSH public key">{keyInfo.public_key.trim()}</pre>
+                  <pre aria-label={t("publicKey")}>{keyInfo.public_key.trim()}</pre>
                 </div>
               </div>
             </>
@@ -168,7 +167,7 @@ export function SSHHubKeyCard() {
               {!rotateOpen && rotationError ? <p role="alert" className="st-msg bad">{rotationError}</p> : null}
               {keyInfo ? (
                 <Button size="sm" onClick={() => { void copyPublicKey(); }}>
-                  {copied ? "Copied" : "Copy public key"}
+                  {copied ? t("copied") : t("copy")}
                 </Button>
               ) : null}
             </div>

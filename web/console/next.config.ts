@@ -12,6 +12,8 @@ const runtimeProxyBaseURL = "http://127.0.0.1:3011";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // No "X-Powered-By: Next.js" banner on every console answer.
+  poweredByHeader: false,
   transpilePackages: ["@novnc/novnc"],
   images: { formats: ["image/avif", "image/webp"] },
   turbopack: {

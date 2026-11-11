@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession, type QuickConnectParams } from "../../hooks/useSession";
 import type { TerminalClipboardActionResult, XTerminalHandle } from "../XTerminal";
+import { isDeviceGone, isShellEnded, type TerminalClose } from "./terminalClose";
 import { useTerminalWords } from "./terminalWords";
 import { isShellInput, paneShortcut } from "./consoleShortcuts";
 
@@ -14,6 +15,12 @@ export type PaneStatus = {
   error: string;
   /** How the shell is reached: "agent", "proxmox", "ssh". */
   via: "agent" | "proxmox" | "ssh";
+  /**
+   * Why a shell that was running stopped: "shell" when it ended (someone typed `exit`), "device" when the device
+   * went away, "deviceStillAway" when Reconnect was pressed after that and the device had not come back. "" when
+   * the pane does not know, or the shell has not stopped.
+   */
+  ended: "" | "shell" | "device" | "deviceStillAway";
 };
 
 type Options = {
@@ -54,6 +61,8 @@ export function usePaneSession({
   const say = useTerminalWords();
   const termRef = useRef<XTerminalHandle | null>(null);
   const [wasConnected, setWasConnected] = useState(false);
+  const [ended, setEnded] = useState<PaneStatus["ended"]>("");
+  const shellRunningRef = useRef(false);
   const setTargetRef = useRef(session.setTarget);
   const connectRef = useRef(session.connect);
   setTargetRef.current = session.setTarget;
@@ -82,6 +91,7 @@ export function usePaneSession({
   useEffect(() => {
     if (!quickConnectParams) return;
     setWasConnected(false);
+    setEnded("");
     void connectRef.current("quick-connect");
   }, [quickConnectParams]);
 
@@ -92,10 +102,25 @@ export function usePaneSession({
 
   const handleStreamReady = useCallback((message?: string) => {
     setWasConnected(true);
+    shellRunningRef.current = true;
+    setEnded("");
     session.handleStreamReady(message);
   }, [session]);
 
+  // The stream closed. Only a shell that was running can end or lose its device. A stream that closes before its
+  // shell starts is a Reconnect that failed: after a lost device, the device is still away.
+  const handleDisconnected = useCallback((close: TerminalClose) => {
+    const wasRunning = shellRunningRef.current;
+    shellRunningRef.current = false;
+    setEnded((before) => {
+      if (wasRunning) return isShellEnded(close) ? "shell" : isDeviceGone(close) ? "device" : "";
+      return before === "device" ? "deviceStillAway" : before;
+    });
+    session.handleDisconnected(close);
+  }, [session]);
+
   const reconnect = useCallback(() => {
+    shellRunningRef.current = false;
     if (quickConnectParams) void session.connect("quick-connect");
     else if (targetNodeId) void session.connect(targetNodeId);
   }, [quickConnectParams, session, targetNodeId]);
@@ -104,6 +129,8 @@ export function usePaneSession({
   const switchTarget = useCallback((id: string) => {
     session.disconnect();
     setWasConnected(false);
+    shellRunningRef.current = false;
+    setEnded("");
     void session.connect(id);
   }, [session]);
 
@@ -150,7 +177,9 @@ export function usePaneSession({
     progress: `${say(session.connectionProgress.message)} (${formatElapsed(session.connectionProgress.totalElapsedMs)})`,
     error: session.error ? say(session.error) : "",
     via: quickConnectParams ? "ssh" : session.connectedAgentIds.has(targetNodeId) ? "agent" : targetSource === "proxmox" ? "proxmox" : "ssh",
+    // Once the Hub sees the device again, the pane no longer says it is still away.
+    ended: ended === "deviceStillAway" && session.connectedAgentIds.has(targetNodeId) ? "device" : ended,
   };
 
-  return { session, termRef, status, handleConnected, handleStreamReady, reconnect, switchTarget, report };
+  return { session, termRef, status, handleConnected, handleStreamReady, handleDisconnected, reconnect, switchTarget, report };
 }

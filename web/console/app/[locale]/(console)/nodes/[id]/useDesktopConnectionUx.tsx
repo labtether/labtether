@@ -12,12 +12,15 @@ type UseDesktopConnectionUxOptions = {
   protocol: DesktopProtocol;
   vncRef: RefObject<VNCViewerHandle | null>;
   autoPassword?: string | null;
+  /** The device's name when it is a Mac: the sign-in card then asks for an account on it. */
+  macName?: string;
 };
 
 export function useDesktopConnectionUx({
   protocol,
   vncRef,
   autoPassword,
+  macName,
 }: UseDesktopConnectionUxOptions) {
   const {
     credPrompt,
@@ -49,6 +52,7 @@ export function useDesktopConnectionUx({
         onCredPasswordChange={setCredPassword}
         onSubmit={handleSubmitCredentials}
         onCancel={onCancel}
+        macName={macName}
       />
     ) : undefined;
 

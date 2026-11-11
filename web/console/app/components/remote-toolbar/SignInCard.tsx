@@ -4,7 +4,8 @@ import { useTranslations } from "next-intl";
 
 /**
  * The remote screen asks for a login: a card over the screen with a username (when the screen asks for one) and a
- * password. onCancel is optional; without it the card has only Sign in.
+ * password. onCancel is optional; without it the card has only Sign in. macName is the device's name when it is a
+ * Mac: its Screen Sharing asks for an account on that Mac, so the card says so.
  */
 export function SignInCard({
   needsUsername,
@@ -14,6 +15,7 @@ export function SignInCard({
   onPasswordChange,
   onSubmit,
   onCancel,
+  macName,
 }: {
   needsUsername: boolean;
   username: string;
@@ -22,8 +24,10 @@ export function SignInCard({
   onPasswordChange: (value: string) => void;
   onSubmit: () => void;
   onCancel?: () => void;
+  macName?: string;
 }) {
   const t = useTranslations("desktop.signIn");
+  const macTitle = needsUsername && macName ? t("macTitle", { name: macName }) : null;
   return (
     <div className="rv-over">
       <form
@@ -36,7 +40,8 @@ export function SignInCard({
           onSubmit();
         }}
       >
-        <h2 id="rv-signin-title">{t(needsUsername ? "title" : "vncTitle")}</h2>
+        <h2 id="rv-signin-title">{macTitle ?? t(needsUsername ? "title" : "vncTitle")}</h2>
+        {macTitle ? <p className="rv-card-sub">{t("macAccount")}</p> : null}
         {needsUsername ? (
           <div className="rv-field">
             <label className="rv-field-l" htmlFor="rv-signin-user">
