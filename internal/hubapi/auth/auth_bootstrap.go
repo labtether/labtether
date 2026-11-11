@@ -230,6 +230,8 @@ func BootstrapAdminUser(store AdminBootstrapStore) error {
 	// Sign-in refuses a password outside these lengths, so an owner created
 	// with one could never sign in.
 	if len(password) < MinPasswordLength || len(password) > maxPasswordLength {
+		// The startup failure line never carries the cause, so say it here.
+		securityruntime.Logf("labtether auth: LABTETHER_ADMIN_PASSWORD must be %d to %d characters long; change it in .env.deploy and start the Hub again", MinPasswordLength, maxPasswordLength)
 		return fmt.Errorf("LABTETHER_ADMIN_PASSWORD must be %d to %d characters long, or the owner cannot sign in", MinPasswordLength, maxPasswordLength)
 	}
 
