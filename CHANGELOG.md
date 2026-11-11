@@ -178,6 +178,13 @@ v1.7.1.
   subject, an ntfy title or a Slack message.
 - Services: adding, renaming or removing an icon in the icon library needs
   `web-services:write`. A viewer or a read-only API key could change it.
+- The bulk service API (`POST /api/v2/bulk/service-action`) starts, stops,
+  restarts, enables and disables services through each agent's service
+  manager, like a device's Services page. It ran `systemctl` as a shell
+  command, which the default command allowlist refuses, so it failed on every
+  Hub. A failed device says why in words. Like one device's Services route,
+  it needs `services:write` (`services:read` for `status`) as well as
+  `bulk:*`. The `reload` action, which never worked, is no longer accepted.
 
 - Security › Saved logins: the Add login, Rotate and Delete dialogs, login
   types and the saved login picker are in your language, and their errors

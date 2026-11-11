@@ -2,6 +2,7 @@ package resources
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -124,8 +125,7 @@ func (d *Deps) handleServiceAction(w http.ResponseWriter, r *http.Request, asset
 		return
 	}
 
-	agentConn, ok := d.AgentMgr.Get(assetID)
-	if !ok {
+	if _, ok := d.AgentMgr.Get(assetID); !ok {
 		d.writeAgentNotConnected(w, assetID)
 		return
 	}
@@ -142,46 +142,25 @@ func (d *Deps) handleServiceAction(w http.ResponseWriter, r *http.Request, asset
 		return
 	}
 
-	requestID := generateRequestID()
-
-	bridge := &ServiceBridge{
-		Ch:              make(chan agentmgr.Message, 1),
-		ExpectedAssetID: assetID,
-	}
-	d.ServiceBridges.Store(requestID, bridge)
-	defer d.ServiceBridges.Delete(requestID)
-
-	data, _ := json.Marshal(agentmgr.ServiceActionData{
-		RequestID: requestID,
-		Service:   body.Service,
-		Action:    action,
-	})
-	if err := agentConn.Send(agentmgr.Message{
-		Type: agentmgr.MsgServiceAction,
-		ID:   requestID,
-		Data: data,
-	}); err != nil {
+	result, err := d.RunServiceAction(assetID, body.Service, action)
+	switch {
+	case errors.Is(err, ErrServiceAgentNotConnected):
 		d.writeAgentNotConnected(w, assetID)
 		return
-	}
-
-	select {
-	case msg := <-bridge.Ch:
-		var result agentmgr.ServiceResultData
-		if err := json.Unmarshal(msg.Data, &result); err != nil {
-			servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
-			return
-		}
-		if result.Error != "" {
-			if !writeMissingCommand(w, result.Error, "services can't be started, stopped or restarted") {
-				servicehttp.WriteError(w, http.StatusBadRequest, agentFailureMessage(result.Error, result.Output))
-			}
-			return
-		}
-		servicehttp.WriteJSON(w, http.StatusOK, result)
-	case <-time.After(serviceActionTimeout):
+	case errors.Is(err, ErrServiceAgentTimeout):
 		servicehttp.WriteError(w, http.StatusGatewayTimeout, "agent did not respond in time")
+		return
+	case err != nil:
+		servicehttp.WriteError(w, http.StatusInternalServerError, "invalid agent response")
+		return
 	}
+	if result.Error != "" {
+		if !writeMissingCommand(w, result.Error, serviceActionWhat) {
+			servicehttp.WriteError(w, http.StatusBadRequest, agentFailureMessage(result.Error, result.Output))
+		}
+		return
+	}
+	servicehttp.WriteJSON(w, http.StatusOK, result)
 }
 
 func (d *Deps) ProcessAgentServiceListed(conn *agentmgr.AgentConn, msg agentmgr.Message) {
