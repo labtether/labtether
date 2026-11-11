@@ -144,7 +144,7 @@ func (s *apiServer) testProtocolConfig(ctx context.Context, pc *protocols.Protoc
 		if callbackErr != nil {
 			result = &protocols.TestResult{Success: false, Error: callbackErr.Error()}
 		} else {
-			result = protocols.TestSSH(testCtx, host, pc.Port, username, password, privateKey, hostKeyCallback)
+			result = protocols.TestSSH(testCtx, host, pc.Port, username, password, privateKey, hostKeyCallback, shared.PinnedHostKeyAlgorithms(sshCfg.StrictHostKey, sshCfg.HostKey))
 		}
 	case protocols.ProtocolTelnet:
 		telnetOptions, decodeErr := protocols.DecodeTelnetConfig(pc.Config)

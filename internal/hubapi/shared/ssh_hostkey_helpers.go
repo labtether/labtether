@@ -107,3 +107,23 @@ func DiscoverKnownHostsFiles() []string {
 
 	return paths
 }
+
+// PinnedHostKeyAlgorithms limits the host-key algorithms an SSH client offers
+// to the type of a pinned host key. A server with several host keys presents
+// the one the client prefers; Go prefers ECDSA over ed25519, so a pinned
+// ed25519 key would otherwise fail ("host key mismatch") against a server
+// that also has an ECDSA key. It returns nil (Go's defaults) when no full key
+// is pinned or checking is off.
+func PinnedHostKeyAlgorithms(strict bool, hostKey string) []string {
+	if !strict && InsecureSSHHostKeysAllowed() {
+		return nil
+	}
+	key, _, _, _, err := ssh.ParseAuthorizedKey([]byte(strings.TrimSpace(hostKey)))
+	if err != nil {
+		return nil
+	}
+	if key.Type() == ssh.KeyAlgoRSA {
+		return []string{ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256}
+	}
+	return []string{key.Type()}
+}
