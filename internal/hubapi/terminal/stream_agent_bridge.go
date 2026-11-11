@@ -88,7 +88,7 @@ func (d *Deps) HandleAgentTerminalStream(w http.ResponseWriter, r *http.Request,
 			<-flushDone
 		}
 		if published {
-			d.detachPersistentTerminalStream(session, wsConn)
+			d.detachPersistentTerminalStream(session, wsConn, persistentShellEnded(bridgeState, agentConn))
 		}
 	}()
 
