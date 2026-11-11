@@ -26,7 +26,7 @@ func pbsWarning(clientMessage string, err error) string {
 	securityruntime.Logf("pbs: %s: %v", clientMessage, err)
 	// A listing that could not load says why when the system was unreachable.
 	if shared.UpstreamUnreachable(err) {
-		return shared.UnreachableMessage("Proxmox Backup Server")
+		return shared.UpstreamProblemMessage(err, "Proxmox Backup Server")
 	}
 	return clientMessage
 }

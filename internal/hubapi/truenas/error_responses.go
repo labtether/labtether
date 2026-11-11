@@ -26,7 +26,7 @@ func trueNASWarning(clientMessage string, err error) string {
 	securityruntime.Logf("truenas: %s: %v", clientMessage, err)
 	// A listing that could not load says why when the system was unreachable.
 	if shared.UpstreamUnreachable(err) {
-		return shared.UnreachableMessage("TrueNAS")
+		return shared.UpstreamProblemMessage(err, "TrueNAS")
 	}
 	return clientMessage
 }
