@@ -176,6 +176,12 @@ v1.7.1.
   "No description provided."; the webhook channel's JSON keeps every field and
   adds `devices`. A device name with line breaks or markup cannot break an email
   subject, an ntfy title or a Slack message.
+- Notifications: a failed send says what the receiver refused, for example
+  "Gotify did not accept the app token (HTTP 401)", in Send test and the
+  Delivery log, instead of "gotify returned status 401". A webhook, Slack, ntfy
+  or Gotify channel with an http:// address is refused when it is saved, unless
+  `LABTETHER_ALLOW_INSECURE_TRANSPORT=true` is set. It used to save and then
+  fail at every send.
 - Services: adding, renaming or removing an icon in the icon library needs
   `web-services:write`. A viewer or a read-only API key could change it.
 
