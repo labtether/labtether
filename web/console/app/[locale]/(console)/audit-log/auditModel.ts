@@ -19,7 +19,7 @@ export const KNOWN_ACTIONS = new Set([
   "enrollment.token.created", "agent.token.revoked", "credential.profile.created", "credential.profile.deleted",
   "credential.profile.rotated", "credential.desktop.retrieved", "notification.channel.created",
   "notification.channel.updated", "notification.channel.deleted", "notification.channel.tested",
-  "settings.runtime.updated", "settings.runtime.reset", "settings.tls.updated", "settings.tls.cleared",
+  "settings.runtime.updated", "settings.runtime.reset", "settings.retention.updated", "settings.tls.updated", "settings.tls.cleared",
   "hub.tls.renewed", "settings.restart.requested", "admin.reset", "protocol.config.created",
   "protocol.config.updated", "protocol.config.deleted", "protocol.test.run", "protocol.ssh.hub_key_pushed",
   "api.exec", "mcp.tool", "api.bulk.file_push", "api.bulk.service_action", "api.request", "terminal.command.policy_checked",

@@ -17,7 +17,6 @@ type DashboardFirstRunChecklistCardProps = {
   loading: boolean;
   hasError: boolean;
   deviceCount: number;
-  connectorCount: number;
   recentCommandCount: number;
   recentLogCount: number;
   canWrite: boolean;
@@ -50,7 +49,6 @@ export function DashboardFirstRunChecklistCard({
   loading,
   hasError,
   deviceCount,
-  connectorCount,
   recentCommandCount,
   canWrite,
   canAdmin,
@@ -84,8 +82,8 @@ export function DashboardFirstRunChecklistCard({
   const { users } = useHubUsers(active && canAdmin);
   const hasChannels = useHasChannels(active && canAdmin);
   const steps = useMemo(
-    () => checklistSteps({ assets: fast?.assets ?? [], connectorCount, recentCommandCount, hasChannels: Boolean(hasChannels), users, canWrite, canAdmin }),
-    [fast?.assets, connectorCount, recentCommandCount, hasChannels, users, canWrite, canAdmin],
+    () => checklistSteps({ assets: fast?.assets ?? [], recentCommandCount, hasChannels: Boolean(hasChannels), users, canWrite, canAdmin }),
+    [fast?.assets, recentCommandCount, hasChannels, users, canWrite, canAdmin],
   );
 
   if (!active || steps.length === 0) return null;

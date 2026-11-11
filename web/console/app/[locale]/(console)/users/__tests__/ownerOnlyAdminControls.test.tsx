@@ -133,8 +133,8 @@ describe("controls only the owner may use", () => {
 
     // API keys: edit and revoke on the admin's own admin key and on the
     // operator key, not on another admin's admin key.
-    expect(container.querySelectorAll('button[aria-label="apiKeys.edit"]')).toHaveLength(2);
-    expect(container.querySelectorAll('button[aria-label="apiKeys.revoke"]')).toHaveLength(2);
+    expect(container.querySelectorAll('button[aria-label="apiKeys.editNamed"]')).toHaveLength(2);
+    expect(container.querySelectorAll('button[aria-label="apiKeys.revokeNamed"]')).toHaveLength(2);
 
     // SSO: shown read-only with the owner note and no Save.
     expect(container.textContent).toContain("oidc.ownerOnly");

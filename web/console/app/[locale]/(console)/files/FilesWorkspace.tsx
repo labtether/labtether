@@ -58,6 +58,7 @@ export function FilesWorkspace() {
     <>
       <FilesToolbar
         path={src.currentPath}
+        root={src.source?.type === "agent" ? src.rootPath : undefined}
         places={places}
         busy={src.loading}
         canUp={src.canUp}

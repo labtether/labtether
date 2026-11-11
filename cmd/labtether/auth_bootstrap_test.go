@@ -101,6 +101,22 @@ func TestBootstrapAdminUserRejectsWeakPasswordInProduction(t *testing.T) {
 	}
 }
 
+// An owner created from a LABTETHER_ADMIN_PASSWORD that sign-in refuses (under
+// 8 characters) could never sign in, and the setup token was not offered.
+func TestBootstrapAdminUserRejectsPasswordSignInWouldRefuse(t *testing.T) {
+	t.Setenv("LABTETHER_ENV", "production")
+	t.Setenv("LABTETHER_ADMIN_PASSWORD", "Lt7char")
+
+	store := &fakeAdminBootstrapStore{}
+	err := bootstrapAdminUser(store)
+	if err == nil || !strings.Contains(err.Error(), "8 to 256 characters") {
+		t.Fatalf("expected a password length error, got %v", err)
+	}
+	if store.createCount != 0 || store.bootstrapCount != 0 {
+		t.Fatalf("expected no owner to be created, got create=%d bootstrap=%d", store.createCount, store.bootstrapCount)
+	}
+}
+
 func TestBootstrapAdminUserSkipsAutoCreateInProductionWithoutPassword(t *testing.T) {
 	t.Setenv("LABTETHER_ENV", "production")
 	t.Setenv("LABTETHER_ADMIN_PASSWORD", "")

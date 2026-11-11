@@ -124,3 +124,23 @@ func TestConfigChangesWriteNamedAuditRows(t *testing.T) {
 		}
 	}
 }
+
+// Risk: shortening a retention window deletes data at the next cleanup, and the
+// change wrote no named audit row, so nobody could see who made it.
+func TestRetentionChangeWritesNamedAuditRow(t *testing.T) {
+	s := newTestAPIServer(t)
+	auditedCall(t, s.handleRetentionSettings, http.MethodPost, "/settings/retention", `{"logs_window":"2d"}`)
+	events, err := s.auditStore.List(50, 0)
+	if err != nil {
+		t.Fatalf("list audit: %v", err)
+	}
+	for _, event := range events {
+		if event.Type == "settings.retention.updated" {
+			if event.ActorID != "owner-1" || event.Details["logs_window"] != "2d" {
+				t.Fatalf("retention row by %q with details %v; want owner-1 and logs_window 2d", event.ActorID, event.Details)
+			}
+			return
+		}
+	}
+	t.Fatalf("no settings.retention.updated audit row among %d rows", len(events))
+}

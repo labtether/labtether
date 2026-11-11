@@ -9,6 +9,7 @@ const pane = vi.hoisted(() => ({
   state: "error",
   error: "The connection closed unexpectedly",
   wsUrl: "wss://hub.example/terminal/sessions/s1/stream",
+  ended: "",
   reconnect: vi.fn(),
 }));
 vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
@@ -21,7 +22,7 @@ vi.mock("../usePaneSession", () => ({
   usePaneSession: () => ({
     session: { wsUrl: pane.wsUrl, connectedAgentIds: new Set<string>(), disconnect: () => {} },
     termRef: { current: null },
-    status: { state: pane.state, progress: "", error: pane.error, via: "agent" },
+    status: { state: pane.state, progress: "", error: pane.error, via: "agent", ended: pane.ended },
     handleConnected: () => {},
     handleStreamReady: () => {},
     reconnect: pane.reconnect,
@@ -50,10 +51,13 @@ async function render() {
 }
 
 const retryButton = () => [...host.querySelectorAll("button")].find((button) => button.textContent === "retry");
+const reconnectButton = () => [...host.querySelectorAll("button")].find((button) => button.textContent === "reconnect");
 
 beforeEach(() => {
   host = document.createElement("div");
   root = createRoot(host);
+  pane.state = "error";
+  pane.ended = "";
   pane.reconnect.mockReset();
 });
 
@@ -63,5 +67,24 @@ it("offers Try again over the ended terminal when the stream failed", async () =
   await render();
   expect(host.textContent).toContain("The connection closed unexpectedly");
   await act(async () => retryButton()?.click());
+  expect(pane.reconnect).toHaveBeenCalledTimes(1);
+});
+
+// Risk: the pane read "Session disconnected" whether someone typed `exit` or the device went away, so nobody could
+// tell a finished shell from a lost device (seen on a Windows device, 2026-11-11).
+it("says the shell ended, or names the device that went away, and keeps Reconnect", async () => {
+  pane.state = "disconnected";
+  pane.ended = "shell";
+  await render();
+  expect(host.querySelector(".tm-state-t")?.textContent).toBe("sessionEnded");
+
+  pane.ended = "device";
+  await render();
+  expect(host.querySelector(".tm-state-t")?.textContent).toBe("deviceDisconnected");
+
+  pane.ended = "deviceStillAway";
+  await render();
+  expect(host.querySelector(".tm-state-t")?.textContent).toBe("deviceStillDisconnected");
+  await act(async () => reconnectButton()?.click());
   expect(pane.reconnect).toHaveBeenCalledTimes(1);
 });

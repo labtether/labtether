@@ -1,7 +1,9 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import enSettings from "../../../../../../messages/en/settings.json";
 import { SSHHubKeyCard } from "../SSHHubKeyCard";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -57,7 +59,11 @@ async function settle() {
 
 async function renderCard() {
   await act(async () => {
-    root.render(<SSHHubKeyCard />);
+    root.render(
+      <NextIntlClientProvider locale="en" messages={{ settings: enSettings }}>
+        <SSHHubKeyCard />
+      </NextIntlClientProvider>,
+    );
   });
   await settle();
 }
@@ -116,7 +122,7 @@ describe("SSH hub key settings card", () => {
 
     await click(button("Copy public key"));
     expect(clipboardWrite).toHaveBeenCalledWith("ssh-ed25519 AAAAold labtether-hub");
-    expect(document.body.textContent).toContain("Public key copied to clipboard");
+    expect(document.body.textContent).toContain("Public key copied.");
 
     await click(button("Rotate key"));
     expect(document.body.querySelector('[role="dialog"]')).toBeTruthy();
@@ -140,7 +146,7 @@ describe("SSH hub key settings card", () => {
       confirm: "ROTATE",
     });
     expect(document.body.textContent).toContain("SHA256:new");
-    expect(document.body.textContent).toContain("2 of 2 connected agents were updated");
+    expect(document.body.textContent).toContain("2 of 2 connected agents have the new key.");
   });
 
   it("keeps the existing key visible and the dialog open on an honest backend failure", async () => {

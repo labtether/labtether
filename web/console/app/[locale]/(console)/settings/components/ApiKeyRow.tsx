@@ -46,10 +46,10 @@ export function KeyRow({ keyInfo, assetNameByID, canManage, onEdit, onRevoke }: 
       <div className="st-row-acts">
         {canManage ? (
           <>
-            <button type="button" className="st-icon-btn" onClick={onEdit} aria-label={t("apiKeys.edit")}>
+            <button type="button" className="st-icon-btn" onClick={onEdit} aria-label={t("apiKeys.editNamed", { name: keyInfo.name })} title={t("apiKeys.edit")}>
               <Pencil size={14} aria-hidden="true" />
             </button>
-            <button type="button" className="st-icon-btn" onClick={onRevoke} aria-label={t("apiKeys.revoke")}>
+            <button type="button" className="st-icon-btn" onClick={onRevoke} aria-label={t("apiKeys.revokeNamed", { name: keyInfo.name })} title={t("apiKeys.revoke")}>
               <Trash2 size={14} aria-hidden="true" />
             </button>
           </>
