@@ -17,6 +17,8 @@ func (d *Deps) HandleHomeAssistantConnectorTest(w http.ResponseWriter, r *http.R
 		Token        string `json:"token"`
 		CredentialID string `json:"credential_id,omitempty"`
 		SkipVerify   *bool  `json:"skip_verify,omitempty"`
+		// AllowLocalHTTP: "Allow http on my network" for this connection.
+		AllowLocalHTTP bool `json:"allow_local_http,omitempty"`
 	}
 	if err := shared.DecodeJSONBody(w, r, &req); err != nil {
 		servicehttp.WriteError(w, http.StatusBadRequest, "invalid test payload")
@@ -51,7 +53,7 @@ func (d *Deps) HandleHomeAssistantConnectorTest(w http.ResponseWriter, r *http.R
 		servicehttp.WriteError(w, http.StatusBadRequest, "base_url and token (or credential_id) are required")
 		return
 	}
-	if _, err := securityruntime.ValidateOutboundURL(baseURL); err != nil {
+	if err := validateHomeAssistantBaseURL(baseURL, req.AllowLocalHTTP); err != nil {
 		writeConnectorTestFailure(w, "Home Assistant", err.Error())
 		return
 	}
@@ -62,10 +64,11 @@ func (d *Deps) HandleHomeAssistantConnectorTest(w http.ResponseWriter, r *http.R
 	}
 
 	connector := homeassistant.NewWithConfig(homeassistant.Config{
-		BaseURL:    baseURL,
-		Token:      token,
-		SkipVerify: skipVerify,
-		Timeout:    15 * time.Second,
+		BaseURL:        baseURL,
+		Token:          token,
+		SkipVerify:     skipVerify,
+		Timeout:        15 * time.Second,
+		AllowLocalHTTP: req.AllowLocalHTTP,
 	})
 	health, _ := connector.TestConnection(r.Context())
 	if health.Status != "ok" {
@@ -77,4 +80,17 @@ func (d *Deps) HandleHomeAssistantConnectorTest(w http.ResponseWriter, r *http.R
 		"status":  "ok",
 		"message": health.Message,
 	})
+}
+
+// validateHomeAssistantBaseURL checks the address as the connection will use
+// it: plain http on the local network when its owner allowed that, otherwise
+// the Hub's outbound policy (https, or http with
+// LABTETHER_ALLOW_INSECURE_TRANSPORT).
+func validateHomeAssistantBaseURL(baseURL string, allowLocalHTTP bool) error {
+	if allowLocalHTTP && homeassistant.UsesPlainHTTP(baseURL) && !securityruntime.InsecureTransportAllowed() {
+		_, err := securityruntime.ValidateLocalHTTPURL(baseURL)
+		return err
+	}
+	_, err := securityruntime.ValidateOutboundURL(baseURL)
+	return err
 }

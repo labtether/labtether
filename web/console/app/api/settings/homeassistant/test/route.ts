@@ -26,6 +26,7 @@ export async function POST(request: Request) {
     token: typeof parsed.token === "string" ? parsed.token : undefined,
     credential_id: typeof parsed.credential_id === "string" ? parsed.credential_id : undefined,
     skip_verify: typeof parsed.skip_verify === "boolean" ? parsed.skip_verify : false,
+    allow_local_http: parsed.allow_local_http === true,
   });
   const secretCandidates = [typeof parsed.token === "string" ? parsed.token : ""];
 
