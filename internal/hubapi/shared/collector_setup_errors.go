@@ -46,6 +46,10 @@ var upstreamUnreachablePattern = regexp.MustCompile(`(?i)connection refused|no s
 // The system answered but refused the saved login.
 var upstreamLoginRefusedPattern = regexp.MustCompile(`(?i)\b(returned|HTTP) (401|403)\b`)
 
+// The system answered and knows the login, but that login may not do this one
+// thing (Proxmox and PBS "permission check failed", Portainer non-admin).
+var upstreamForbiddenPattern = regexp.MustCompile(`(?i)\b(returned|HTTP) 403\b`)
+
 // UpstreamUnreachable reports whether a connector request failed because the
 // system could not be reached (DNS, connect, TLS) or refused the saved login.
 // A timeout after the request was sent is not counted: a change may have run.
@@ -70,8 +74,24 @@ func WriteUpstreamUnreachable(w http.ResponseWriter, err error, product string) 
 	if !UpstreamUnreachable(err) {
 		return false
 	}
-	servicehttp.WriteError(w, http.StatusConflict, UnreachableMessage(product))
+	servicehttp.WriteError(w, http.StatusConflict, UpstreamProblemMessage(err, product))
 	return true
+}
+
+// UpstreamProblemMessage is the sentence for an error UpstreamUnreachable
+// accepts: no permission when the system was reached and refused only this
+// part (403), else could not reach.
+func UpstreamProblemMessage(err error, product string) string {
+	if err != nil && upstreamForbiddenPattern.MatchString(err.Error()) {
+		return NoPermissionMessage(product)
+	}
+	return UnreachableMessage(product)
+}
+
+// NoPermissionMessage is the fixed sentence for a request the system refused
+// because the saved login lacks the right for it. It names no address.
+func NoPermissionMessage(product string) string {
+	return fmt.Sprintf("%s refused this for the saved login. Give that login access to it on %s.", product, product)
 }
 
 // UnreachableMessage is the fixed sentence for a system that could not be

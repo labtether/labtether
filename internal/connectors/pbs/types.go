@@ -11,6 +11,21 @@ type Version struct {
 	RepoID  string `json:"repoid"`
 }
 
+// Display is the version people know. PBS 4 answers {"version":"4.2",
+// "release":"10"} (shown as "4.2.10"); PBS 3 answered a full release such as
+// "3.4-1". The Hub showed the bare release, "10", as the version.
+func (v Version) Display() string {
+	version, release := strings.TrimSpace(v.Version), strings.TrimSpace(v.Release)
+	switch {
+	case release == "":
+		return version
+	case version == "" || strings.ContainsAny(release, ".-"):
+		return release
+	default:
+		return version + "." + release
+	}
+}
+
 type PingResponse struct {
 	Pong bool `json:"pong"`
 }
@@ -40,6 +55,9 @@ type DatastoreGCStatus struct {
 }
 
 type BackupGroup struct {
+	// NS is the namespace the group lives in ("" is the root). PBS does not
+	// send it; the client sets it from the namespace it listed.
+	NS          string   `json:"ns,omitempty"`
 	BackupType  string   `json:"backup-type"`
 	BackupID    string   `json:"backup-id"`
 	BackupCount int64    `json:"backup-count,omitempty"`
@@ -55,6 +73,7 @@ type SnapshotVerification struct {
 }
 
 type BackupSnapshot struct {
+	NS           string                `json:"ns,omitempty"` // set by the client, as for BackupGroup
 	BackupType   string                `json:"backup-type"`
 	BackupID     string                `json:"backup-id"`
 	BackupTime   int64                 `json:"backup-time"`
@@ -68,6 +87,7 @@ type BackupSnapshot struct {
 
 func (s *BackupSnapshot) UnmarshalJSON(data []byte) error {
 	type rawBackupSnapshot struct {
+		NS           string                `json:"ns,omitempty"`
 		BackupType   string                `json:"backup-type"`
 		BackupID     string                `json:"backup-id"`
 		BackupTime   int64                 `json:"backup-time"`
@@ -90,6 +110,7 @@ func (s *BackupSnapshot) UnmarshalJSON(data []byte) error {
 	}
 
 	*s = BackupSnapshot{
+		NS:           raw.NS,
 		BackupType:   raw.BackupType,
 		BackupID:     raw.BackupID,
 		BackupTime:   raw.BackupTime,

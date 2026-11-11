@@ -208,7 +208,9 @@ func TestHomeAssistantCollectorOutagePreservesInventoryAndRecoveryRestoresParent
 	if _, ok, err := assetStore.GetAsset("ha-entity-light-last-success"); err != nil || !ok {
 		t.Fatalf("outage deleted last successful child inventory: ok=%v err=%v", ok, err)
 	}
-	if statusStore.collector.LastStatus != "error" || !strings.Contains(statusStore.collector.LastError, "home assistant discovery failed") {
+	// last_error is a sentence about Home Assistant, not the raw discovery error.
+	if statusStore.collector.LastStatus != "error" || !strings.Contains(statusStore.collector.LastError, "Home Assistant") ||
+		strings.Contains(statusStore.collector.LastError, "discovery failed") {
 		t.Fatalf("collector outage status = %q error=%q", statusStore.collector.LastStatus, statusStore.collector.LastError)
 	}
 

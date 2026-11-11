@@ -25,6 +25,10 @@ import (
 // Store interfaces are embedded directly; cross-cutting concerns that live
 // in other cmd/labtether subsystems are injected as function fields.
 type Deps struct {
+	// IntegrationActionsAllowed reports whether Settings › Integration
+	// actions allows connector writes; nil allows them.
+	IntegrationActionsAllowed func() bool
+
 	ConfiguredConnectorActions map[string]shared.ConfiguredConnectorAction
 	// Store interfaces
 	AssetStore        persistence.AssetStore
