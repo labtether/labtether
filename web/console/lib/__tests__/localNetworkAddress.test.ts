@@ -8,7 +8,7 @@ describe("isLocalNetworkHTTPAddress", () => {
   it.each([
     "http://192.168.1.20:8123", "http://10.0.0.5:8123", "http://172.20.1.1:8123", "http://100.101.102.103:8123",
     "http://[fd7a:115c:a1e0::1]:8123",
-    "http://homeassistant.local:8123", "http://ha.tail1234.ts.net:8123",
+    "http://homeassistant.local:8123", "http://ha.host.example.ts.net:8123",
   ])("offers the switch for %s", (url) => {
     expect(isLocalNetworkHTTPAddress(url)).toBe(true);
   });

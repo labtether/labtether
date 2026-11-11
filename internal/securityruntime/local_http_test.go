@@ -17,7 +17,7 @@ func TestLocalNetworkHostRule(t *testing.T) {
 		"192.168.1.20": true, "10.0.0.5": true, "172.20.1.1": true, "100.101.102.103": true,
 		"fd7a:115c:a1e0::1": true, "169.254.10.1": false, "fe80::1": false,
 		"169.254.169.254": false, "169.254.170.2": false, "fd00:ec2::254": false,
-		"homeassistant.local": true, "ha.tail1234.ts.net": true,
+		"homeassistant.local": true, "ha.host.example.ts.net": true,
 		"8.8.8.8": false, "127.0.0.1": false, "::1": false, "172.32.0.1": false, "100.128.0.1": false,
 		"example.com": false, ".local": false, "local": false, "ts.net": false,
 	} {
