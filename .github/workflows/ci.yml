@@ -3,6 +3,11 @@ name: CI
 on:
   workflow_dispatch:
   pull_request:
+  # The merge queue tests each pull request merged onto the newest main, so a
+  # pull request no longer has to be updated and tested again by hand. This
+  # run is the short one: no race detector, browser, perf or stack jobs. The
+  # pull request run already did those.
+  merge_group:
   # main requires an up-to-date branch, so the pull request run already
   # tested the merged code. Run on main only when dependencies change, to
   # refresh the caches pull requests read.
@@ -64,7 +69,7 @@ jobs:
       - name: Select contracts
         id: select
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
           FULL_MODE: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') }}
         run: |
           set -euo pipefail
@@ -377,7 +382,7 @@ jobs:
 
   stack-checks:
     needs: qa-select
-    if: needs.qa-select.outputs.hub_installed_system == 'true' || needs.qa-select.outputs.connector_system == 'true'
+    if: github.event_name != 'merge_group' && (needs.qa-select.outputs.hub_installed_system == 'true' || needs.qa-select.outputs.connector_system == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
