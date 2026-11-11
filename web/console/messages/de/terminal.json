@@ -129,6 +129,8 @@
     "failed": "Verbindung fehlgeschlagen",
     "disconnected": "Getrennt",
     "sessionDisconnected": "Sitzung getrennt",
+    "deviceDisconnected": "{name} wurde getrennt",
+    "deviceStillDisconnected": "{name} ist weiterhin getrennt",
     "connect": "Verbinden",
     "reconnect": "Neu verbinden",
     "retry": "Erneut versuchen",
@@ -264,7 +266,7 @@
   "words": {
     "creatingSession": "Sitzung wird erstellt…",
     "reconnectingSession": "Sitzung wird wieder verbunden…",
-    "requestingTicket": "Stream-Ticket wird angefordert…",
+    "requestingTicket": "Zugriff wird angefordert…",
     "openingStream": "Sicherer Stream wird geöffnet…",
     "startingShell": "Remote-Shell wird gestartet…",
     "connected": "Verbunden",

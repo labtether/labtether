@@ -100,6 +100,10 @@ type Deps struct {
 	// remote_write worker after a persisted settings mutation.
 	ApplyPrometheusRemoteWriteSettings func() error
 
+	// AgentDefaultsChanged pushes Hub-wide agent defaults to connected agents
+	// after runtime settings are saved (changed keys) or reset (reset keys).
+	AgentDefaultsChanged func(changedKeys, resetKeys []string)
+
 	// InvalidateWebServiceURLGroupingConfigCache drops the cached URL-grouping
 	// config so the next request reloads from the runtime settings store.
 	InvalidateWebServiceURLGroupingConfigCache func()

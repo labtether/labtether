@@ -225,7 +225,11 @@
       "restartConfirm": "Redémarrer",
       "shutdownTitle": "Éteindre {name}\u00a0?",
       "shutdownBody": "{name} reste éteint jusqu’à ce que quelqu’un le rallume.",
-      "shutdownConfirm": "Éteindre"
+      "shutdownConfirm": "Éteindre",
+      "restarting": "Redémarrage de {name}",
+      "shuttingDown": "Arrêt de {name}",
+      "restartFailed": "Impossible de redémarrer {name}\u00a0: {reason}",
+      "shutdownFailed": "Impossible d’éteindre {name}\u00a0: {reason}"
     },
     "edit": {
       "title": "Modifier {name}",
@@ -317,7 +321,8 @@
         "masked": "Masqué",
         "indirect": "Indirect",
         "generated": "Généré",
-        "transient": "Temporaire"
+        "transient": "Temporaire",
+        "manual": "Manuel"
       },
       "start": "Démarrer",
       "restart": "Redémarrer",
@@ -359,7 +364,8 @@
       },
       "kind": {
         "timer": "Minuterie",
-        "launchd": "launchd"
+        "launchd": "launchd",
+        "task": "Planificateur de tâches"
       },
       "copyCommand": "Copier la commande",
       "copySchedule": "Copier la planification"

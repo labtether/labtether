@@ -73,7 +73,7 @@ export function ProcessesTab({ nodeId }: { nodeId: string }) {
               <span role="cell" className="dv-txt c-user">{proc.user || "—"}</span>
               <PctCell value={proc.cpu_pct} />
               <PctCell value={proc.mem_pct} className="c-mempct" />
-              <SizeCell bytes={proc.mem_rss} className="c-rss" />
+              <SizeCell bytes={proc.mem_rss * 1024} className="c-rss" />
               <RowMenu
                 name={proc.name}
                 items={[

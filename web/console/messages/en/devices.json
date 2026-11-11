@@ -225,7 +225,11 @@
       "restartConfirm": "Restart",
       "shutdownTitle": "Shut down {name}?",
       "shutdownBody": "{name} stays off until someone starts it.",
-      "shutdownConfirm": "Shut down"
+      "shutdownConfirm": "Shut down",
+      "restarting": "Restarting {name}",
+      "shuttingDown": "Shutting down {name}",
+      "restartFailed": "Could not restart {name}: {reason}",
+      "shutdownFailed": "Could not shut down {name}: {reason}"
     },
     "edit": {
       "title": "Edit {name}",
@@ -317,7 +321,8 @@
         "masked": "Masked",
         "indirect": "Indirect",
         "generated": "Generated",
-        "transient": "Transient"
+        "transient": "Transient",
+        "manual": "Manual"
       },
       "start": "Start",
       "restart": "Restart",
@@ -359,7 +364,8 @@
       },
       "kind": {
         "timer": "Timer",
-        "launchd": "launchd"
+        "launchd": "launchd",
+        "task": "Task Scheduler"
       },
       "copyCommand": "Copy command",
       "copySchedule": "Copy schedule"

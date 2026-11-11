@@ -137,7 +137,7 @@
     "connectingTo": "Connecting to {name}",
     "step": {
       "session": "Starting session",
-      "ticket": "Getting stream ticket",
+      "ticket": "Getting access",
       "stream": "Opening stream"
     },
     "stepReconnect": "Reconnecting session",
@@ -159,6 +159,8 @@
   "signIn": {
     "title": "Username and password",
     "vncTitle": "VNC password",
+    "macTitle": "Sign in to {name}",
+    "macAccount": "Use an account on this Mac.",
     "username": "Username",
     "password": "Password",
     "cancel": "Cancel",

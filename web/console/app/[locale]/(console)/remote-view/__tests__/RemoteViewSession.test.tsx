@@ -155,6 +155,7 @@ const tab: RemoteViewTab = {
 beforeEach(() => {
   mocks.shellProps = null;
   Object.assign(mocks.session, {
+    assets: [],
     connectionState: "connected" as const,
     vncPassword: "  exact ticket password\n",
   });
@@ -401,6 +402,7 @@ describe("RemoteViewSession sign-in", () => {
     await act(async () => {
       props.onCredentialsRequired({ types: ["username", "password"] });
     });
+    expect(container.querySelector("#rv-signin-title")?.textContent).toBe("title");
     const cancel = Array.from(container.querySelectorAll("button")).find(
       (button) => button.textContent === "cancel",
     );
@@ -412,5 +414,21 @@ describe("RemoteViewSession sign-in", () => {
     expect(viewer.disconnect).toHaveBeenCalledOnce();
     expect(mocks.session.disconnect).toHaveBeenCalledOnce();
     expect(passwordField()).toBeNull();
+  });
+
+  // A Mac's Screen Sharing wants an account on that Mac. The card said only "Username and password", not whose.
+  it("names the Mac and asks for an account on it when the device is a Mac", async () => {
+    Object.assign(mocks.session, {
+      assets: [{ id: "asset-1", name: "mac01", platform: "darwin" }],
+      connectionState: "authenticating",
+      vncPassword: null,
+    });
+    const props = await renderSession();
+    attachViewer(props);
+    await act(async () => {
+      props.onCredentialsRequired({ types: ["username", "password"] });
+    });
+    expect(container.querySelector("#rv-signin-title")?.textContent).toBe("macTitle");
+    expect(container.querySelector(".rv-card-sub")?.textContent).toBe("macAccount");
   });
 });

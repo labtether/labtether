@@ -136,6 +136,7 @@
     "notification_channel_tested": "Testbenachrichtigung gesendet",
     "settings_runtime_updated": "Einstellungen geändert",
     "settings_runtime_reset": "Einstellungen zurückgesetzt",
+    "settings_retention_updated": "Datenaufbewahrung geändert",
     "settings_tls_updated": "HTTPS-Zertifikat geändert",
     "settings_tls_cleared": "HTTPS-Zertifikat entfernt",
     "hub_tls_renewed": "Hub-Zertifikat erneuert",

@@ -5,7 +5,7 @@ import { ArrowLeft, ArrowUp, ChevronDown, Folder } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Fragment, useState } from "react";
 import { ToolMenu } from "./FileMenus";
-import { pathCrumbs, pathStyleOf } from "./remotePaths";
+import { isAboveRoot, pathCrumbs, pathStyleOf } from "./remotePaths";
 
 // Back, Up and the path: crumbs to click, or a field to type a path in (click beside the crumbs). The folder menu
 // on the left lists the places to jump to (home and the filesystem root).
@@ -19,6 +19,8 @@ type FilesPathBarProps = {
   onUp: () => void;
   canBack?: boolean;
   onBack?: () => void;
+  /** The folder a device shares. The parts of the path above it are plain text: the device opens none of them. */
+  root?: string;
   places?: Place[];
   busy?: boolean;
   /** A controlled draft for the typed path (a device's Files tab keeps it across folder reads). */
@@ -27,7 +29,7 @@ type FilesPathBarProps = {
   idSuffix?: string;
 };
 
-export function FilesPathBar({ path, onGo, canUp, onUp, canBack, onBack, places = [], busy, draft, onDraft, idSuffix = "" }: FilesPathBarProps) {
+export function FilesPathBar({ path, onGo, canUp, onUp, canBack, onBack, root, places = [], busy, draft, onDraft, idSuffix = "" }: FilesPathBarProps) {
   const t = useTranslations("files.bar");
   const [editing, setEditing] = useState(false);
   const [localDraft, setLocalDraft] = useState("");
@@ -109,6 +111,8 @@ export function FilesPathBar({ path, onGo, canUp, onUp, canBack, onBack, places 
                   {sep}
                   {last ? (
                     <span className="fx-here" aria-current="page">{c.label}</span>
+                  ) : isAboveRoot(c.path, root) ? (
+                    <span className="fx-above">{c.label}</span>
                   ) : (
                     <button type="button" onClick={() => onGo(c.path)} disabled={busy}>{c.label}</button>
                   )}
