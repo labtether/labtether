@@ -47,10 +47,11 @@ func TestHandleHomeAssistantConnectorTestRejectsDisallowedOutboundURL(t *testing
 	}`))
 	rec := httptest.NewRecorder()
 	sut.handleHomeAssistantConnectorTest(rec, req)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for disallowed outbound URL, got %d body=%s", rec.Code, rec.Body.String())
+	// A refused address is a failed test in words (422), like every other test failure.
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for disallowed outbound URL, got %d body=%s", rec.Code, rec.Body.String())
 	}
-	assertErrorBodyContains(t, rec.Body.Bytes(), "not allowlisted")
+	assertErrorBodyContains(t, rec.Body.Bytes(), "allowed outbound addresses")
 }
 
 func TestHandleConnectorActionsHomeAssistantTestRateLimit(t *testing.T) {

@@ -51,6 +51,7 @@ func (s *apiServer) ensurePortainerDeps() *portainerpkg.Deps {
 	d.SecretsManager = s.secretsManager
 	d.RequireAdminAuth = s.requireAdminAuth
 	d.EvaluateAssetGuardrails = s.ensureGroupFeaturesDeps().EvaluateAssetGuardrails
+	d.ShellsAllowed = s.terminalSessionsOn
 	return d
 }
 
@@ -61,6 +62,9 @@ func (s *apiServer) handlePortainerEndpoints(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *apiServer) handlePortainerAssets(w http.ResponseWriter, r *http.Request) {
+	if s.refuseIntegrationActionWhenOff(w, r) {
+		return
+	}
 	s.ensurePortainerDeps().HandlePortainerAssets(w, r)
 }
 

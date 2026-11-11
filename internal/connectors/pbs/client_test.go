@@ -99,6 +99,8 @@ func TestClientDatastoreTaskAndActionEndpoints(t *testing.T) {
 			_, _ = w.Write([]byte(`{"data":[{"store":"store-a","comment":"Main Store","mount-status":"mounted"}]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api2/json/admin/datastore/store-a/status":
 			_, _ = w.Write([]byte(`{"data":{"store":"store-a","total":1000,"used":400,"avail":600,"mount-status":"mounted","gc-status":{"upid":"UPID:GC:1","removed-bytes":42}}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api2/json/admin/datastore/store-a/namespace":
+			_, _ = w.Write([]byte(`{"data":[{"ns":""}]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api2/json/admin/datastore/store-a/groups":
 			_, _ = w.Write([]byte(`{"data":[{"backup-type":"vm","backup-id":"100","backup-count":2,"last-backup":1739985600}]}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api2/json/admin/datastore/store-a/snapshots":
