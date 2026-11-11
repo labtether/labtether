@@ -362,6 +362,8 @@ func TestLoadPBSDatastoreSummaryBranches(t *testing.T) {
 			switch r.URL.Path {
 			case "/api2/json/admin/datastore/backup/status":
 				_, _ = w.Write([]byte(`{"data":{"store":"backup","total":100,"used":150,"avail":0,"mount-status":"mounted"}}`))
+			case "/api2/json/admin/datastore/backup/namespace":
+				_, _ = w.Write([]byte(`{"data":[]}`))
 			case "/api2/json/admin/datastore/backup/groups":
 				_, _ = w.Write([]byte(`{"data":[]}`))
 			case "/api2/json/admin/datastore/backup/snapshots":
