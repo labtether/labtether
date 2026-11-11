@@ -79,8 +79,9 @@ func (s *apiServer) withAuthMethodPolicy(next http.HandlerFunc, methodPolicy fun
 				servicehttp.WriteError(w, http.StatusServiceUnavailable, "api key authentication unavailable")
 				return
 			}
-			// Reject API keys over plain HTTP. Forwarded proto is trusted only
-			// from loopback reverse proxies; LAN clients can spoof it directly.
+			// Reject API keys over plain HTTP. A forwarded protocol counts only
+			// from a trusted proxy (loopback or LABTETHER_TRUST_PROXY_CIDRS /
+			// LABTETHER_TRUST_PROXY_HOSTS); other clients can write it freely.
 			if !s.apiKeyRequestIsSecure(r) {
 				servicehttp.WriteError(w, http.StatusForbidden, "api keys require HTTPS")
 				return
@@ -287,6 +288,11 @@ func methodAllowedForRole(role, method string) bool {
 	return auth.HasWritePrivileges(role)
 }
 
+// apiKeyRequestIsSecure reports whether an API key or agent token arrived over
+// HTTPS. Behind a TLS reverse proxy with the Hub's own TLS off, the proxy's
+// forwarded protocol decides, but only when the direct peer is a proxy the
+// owner trusts; the header check runs first so plain requests skip the
+// LABTETHER_TRUST_PROXY_HOSTS lookups.
 func (s *apiServer) apiKeyRequestIsSecure(r *http.Request) bool {
 	if r != nil && r.TLS != nil {
 		return true
@@ -294,7 +300,7 @@ func (s *apiServer) apiKeyRequestIsSecure(r *http.Request) bool {
 	if s != nil && s.tlsState.Enabled {
 		return true
 	}
-	return isLoopbackRequestSource(r) && requestForwardedProtoHTTPS(r)
+	return requestForwardedProtoHTTPS(r) && isTrustedForwardedHostSource(r)
 }
 
 func (s *apiServer) validateOwnerTokenRequest(r *http.Request) bool {

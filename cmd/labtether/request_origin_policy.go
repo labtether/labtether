@@ -277,23 +277,20 @@ func browserRequestIsSecure(r *http.Request) bool {
 	return !strings.EqualFold(strings.TrimSpace(proto), "http")
 }
 
-func isLoopbackRequestSource(r *http.Request) bool {
-	clientHost := requestClientKey(r)
-	if clientHost == "" {
-		return false
-	}
-	ip := net.ParseIP(strings.Trim(clientHost, "[]"))
-	return ip != nil && ip.IsLoopback()
-}
-
+// requestForwardedProtoHTTPS reports whether the forwarding headers say the
+// client used HTTPS: the first X-Forwarded-Proto value must be exactly
+// "https" (any case). Forwarded is read only when X-Forwarded-Proto is absent,
+// so a client-written Forwarded header cannot overrule a proxy that says
+// "http". The caller must still check that the peer is a trusted proxy.
 func requestForwardedProtoHTTPS(r *http.Request) bool {
 	if r == nil {
 		return false
 	}
-	if strings.EqualFold(strings.TrimSpace(firstForwardedValue(r.Header.Get("X-Forwarded-Proto"))), "https") {
-		return true
+	proto := firstForwardedValue(r.Header.Get("X-Forwarded-Proto"))
+	if proto == "" {
+		proto = forwardedHeaderProto(r.Header.Get("Forwarded"))
 	}
-	return strings.EqualFold(strings.TrimSpace(forwardedHeaderProto(r.Header.Get("Forwarded"))), "https")
+	return strings.EqualFold(strings.TrimSpace(proto), "https")
 }
 
 func externalURLIsHTTPS(raw string) bool {
