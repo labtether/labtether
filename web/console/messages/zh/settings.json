@@ -219,54 +219,7 @@
   "discoveryDefaults": {
     "title": "服务发现默认设置",
     "saving": "正在保存...",
-    "saveDefaults": "保存",
-    "fields": {
-      "docker_enabled": {
-        "label": "Docker 容器",
-        "hint": "从容器端口和标签发现服务。"
-      },
-      "proxy_enabled": {
-        "label": "反向代理",
-        "hint": "从下面的代理 API 读取已路由的服务。"
-      },
-      "proxy_traefik_enabled": {
-        "label": "Traefik 路由"
-      },
-      "proxy_caddy_enabled": {
-        "label": "Caddy 路由",
-        "hint": "来自 Caddy 管理 API。"
-      },
-      "proxy_npm_enabled": {
-        "label": "Nginx Proxy Manager 路由"
-      },
-      "port_scan_enabled": {
-        "label": "本地端口扫描",
-        "hint": "探测设备自身端口上的 Web 服务。"
-      },
-      "port_scan_include_listening": {
-        "label": "加入监听端口",
-        "hint": "同时扫描设备监听的每个 TCP 端口。"
-      },
-      "port_scan_ports": {
-        "label": "本地扫描端口",
-        "hint": "以逗号分隔。留空使用内置列表。"
-      },
-      "lan_scan_enabled": {
-        "label": "局域网扫描",
-        "hint": "探测局域网范围内的 Web 服务。"
-      },
-      "lan_scan_cidrs": {
-        "label": "局域网范围",
-        "hint": "私有 CIDR，以逗号分隔。"
-      },
-      "lan_scan_ports": {
-        "label": "局域网扫描端口",
-        "hint": "以逗号分隔。留空使用内置列表。"
-      },
-      "lan_scan_max_hosts": {
-        "label": "每次局域网扫描的主机数"
-      }
-    }
+    "saveDefaults": "保存"
   },
   "apiKeys": {
     "heading": "API 密钥",
@@ -389,7 +342,179 @@
       "default": "默认"
     },
     "show": "显示",
-    "hide": "隐藏"
+    "hide": "隐藏",
+    "scopes": {
+      "console": "控制台",
+      "routing": "路由",
+      "worker": "后台任务",
+      "policy": "策略",
+      "security": "安全",
+      "remote_access": "远程访问",
+      "services": "服务",
+      "prometheus": "Prometheus",
+      "other": "其他"
+    },
+    "fields": {
+      "console": {
+        "poll_interval_seconds": {
+          "label": "状态刷新",
+          "description": "仪表盘每次更新之间的秒数。"
+        },
+        "default_telemetry_window": {
+          "label": "图表时间范围",
+          "description": "图表打开时显示的时间范围。"
+        },
+        "default_log_window": {
+          "label": "日志时间范围",
+          "description": "日志页面打开时显示的时间范围。"
+        },
+        "log_query_limit": {
+          "label": "每次查询的日志行数"
+        },
+        "default_actor_id": {
+          "label": "默认用户 ID",
+          "description": "未指定用户的命令和操作将记录为此用户。"
+        },
+        "default_action_dry_run": {
+          "label": "集成操作试运行"
+        },
+        "default_update_dry_run": {
+          "label": "更新试运行"
+        }
+      },
+      "routing": {
+        "api_base_url": {
+          "label": "API 地址",
+          "description": "控制台服务器访问 Hub API 的地址。"
+        },
+        "agent_base_url": {
+          "label": "代理地址",
+          "description": "控制台服务器访问 Linux 代理的地址。"
+        }
+      },
+      "worker": {
+        "queue_max_deliveries": {
+          "label": "任务尝试次数",
+          "description": "失败的任务被搁置前的尝试次数。"
+        },
+        "retention_apply_interval": {
+          "label": "保留清理间隔",
+          "description": "Hub 删除超出保留期限数据的频率。"
+        }
+      },
+      "policy": {
+        "structured_enabled": {
+          "label": "命令",
+          "description": "允许来自操作、定时任务和 API 的命令。"
+        },
+        "interactive_enabled": {
+          "label": "终端会话"
+        },
+        "connector_enabled": {
+          "label": "集成操作"
+        }
+      },
+      "security": {
+        "outbound_allow_private": {
+          "label": "私有网络目标",
+          "description": "auto：允许 HTTPS 和 WSS 集成连接私有地址。true：允许所有私有地址。false：阻止私有地址。"
+        },
+        "outbound_allow_link_local": {
+          "label": "链路本地目标",
+          "description": "允许连接到链路本地地址（169.254.0.0/16 和 fe80::/10）。"
+        }
+      },
+      "remote_access": {
+        "mode": {
+          "label": "远程访问",
+          "description": "serve：建议使用 Tailscale Serve 提供 HTTPS。manual：自行配置访问。off：不提供建议。"
+        },
+        "tailscale_serve_target": {
+          "label": "Tailscale Serve 目标",
+          "description": "Tailscale Serve 转发到的本地地址。留空使用 Hub 自身的地址。"
+        }
+      },
+      "services": {
+        "discovery_default_docker_enabled": {
+          "label": "Docker 容器",
+          "description": "从容器端口和标签发现服务。"
+        },
+        "discovery_default_proxy_enabled": {
+          "label": "反向代理",
+          "description": "从下面的代理 API 读取已路由的服务。"
+        },
+        "discovery_default_proxy_traefik_enabled": {
+          "label": "Traefik 路由"
+        },
+        "discovery_default_proxy_caddy_enabled": {
+          "label": "Caddy 路由",
+          "description": "来自 Caddy 管理 API。"
+        },
+        "discovery_default_proxy_npm_enabled": {
+          "label": "Nginx Proxy Manager 路由"
+        },
+        "discovery_default_port_scan_enabled": {
+          "label": "本地端口扫描",
+          "description": "探测设备自身端口上的 Web 服务。"
+        },
+        "discovery_default_port_scan_include_listening": {
+          "label": "加入监听端口",
+          "description": "同时扫描设备监听的每个 TCP 端口。"
+        },
+        "discovery_default_port_scan_ports": {
+          "label": "本地扫描端口",
+          "description": "以逗号分隔。留空使用内置列表。"
+        },
+        "discovery_default_lan_scan_enabled": {
+          "label": "局域网扫描",
+          "description": "探测局域网范围内的 Web 服务。"
+        },
+        "discovery_default_lan_scan_cidrs": {
+          "label": "局域网范围",
+          "description": "私有 CIDR，以逗号分隔。"
+        },
+        "discovery_default_lan_scan_ports": {
+          "label": "局域网扫描端口",
+          "description": "以逗号分隔。留空使用内置列表。"
+        },
+        "discovery_default_lan_scan_max_hosts": {
+          "label": "每次局域网扫描的主机数"
+        }
+      },
+      "prometheus": {
+        "scrape_enabled": {
+          "label": "Prometheus 抓取",
+          "description": "在 /metrics 提供指标。"
+        },
+        "remote_write_enabled": {
+          "label": "Prometheus 远程写入",
+          "description": "将指标推送到 remote_write 端点。"
+        },
+        "remote_write_url": {
+          "label": "远程写入 URL",
+          "description": "例如 https://prometheus.example.com/api/v1/write"
+        },
+        "remote_write_username": {
+          "label": "远程写入用户名",
+          "description": "用于 HTTP 基本认证。"
+        },
+        "remote_write_password": {
+          "label": "远程写入密码",
+          "description": "用于 HTTP 基本认证。有密钥管理器时加密存储。"
+        },
+        "remote_write_interval": {
+          "label": "远程写入间隔"
+        },
+        "process_metrics_enabled": {
+          "label": "进程指标",
+          "description": "收集设备上每个进程的 CPU 和内存。"
+        },
+        "process_metrics_top_n": {
+          "label": "每台设备的进程数",
+          "description": "每台设备保留的最活跃进程。"
+        }
+      }
+    }
   },
   "database": {
     "title": "数据库",

@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { runtimeSettingKeys, type RuntimeSettingEntry } from "../../../../console/models";
 import { Button } from "../../../../components/ui/Button";
 import { RuntimeControl } from "./AdvancedSettingsCard";
+import { runtimeSettingWords } from "./runtimeSettingWords";
 import { Section, Sheet, SheetFoot } from "./SettingsKit";
 
 type ServiceDiscoveryDefaultsCardProps = {
@@ -52,14 +53,6 @@ export function ServiceDiscoveryDefaultsCard({
 
   if (entries.length === 0) return null;
 
-  // The Hub sends English labels; these settings have their own words in each language.
-  const wordsOf = (entry: RuntimeSettingEntry) => {
-    const key = entry.key.replace("services.discovery_default_", "");
-    return t.has(`discoveryDefaults.fields.${key}.label`)
-      ? { label: t(`discoveryDefaults.fields.${key}.label`), description: t.has(`discoveryDefaults.fields.${key}.hint`) ? t(`discoveryDefaults.fields.${key}.hint`) : "" }
-      : { label: entry.label, description: entry.description };
-  };
-
   const draftOf = (entry: RuntimeSettingEntry) => runtimeDraftValues[entry.key] ?? entry.effective_value;
   const dirty = entries.some((entry) => draftOf(entry).trim() !== entry.effective_value);
 
@@ -68,17 +61,18 @@ export function ServiceDiscoveryDefaultsCard({
       <Sheet>
         {entries.map((entry) => {
           const id = `st-sd-${entry.key.replace(/[^a-z0-9]+/gi, "-")}`;
+          const { label, description } = runtimeSettingWords(t, entry);
           return (
             <div key={entry.key} className="st-row two">
               <div className="st-row-l">
-                {entry.type === "bool" ? <span className="st-nm">{wordsOf(entry).label}</span> : <label className="st-nm" htmlFor={id}>{wordsOf(entry).label}</label>}
-                {wordsOf(entry).description ? <span className="st-g">{wordsOf(entry).description}</span> : null}
+                {entry.type === "bool" ? <span className="st-nm">{label}</span> : <label className="st-nm" htmlFor={id}>{label}</label>}
+                {description ? <span className="st-g">{description}</span> : null}
               </div>
               <div className="st-row-r">
                 {entry.source !== "default" ? <span className="st-g">{t(`advanced.source.${entry.source}`)}</span> : null}
                 <RuntimeControl
                   id={id}
-                  entry={{ ...entry, label: wordsOf(entry).label }}
+                  entry={{ ...entry, label }}
                   value={draftOf(entry)}
                   onChange={(value) => setRuntimeDraftValues((current) => ({ ...current, [entry.key]: value }))}
                   testId={`service-discovery-default-${entry.key}`}

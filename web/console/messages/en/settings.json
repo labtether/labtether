@@ -219,54 +219,7 @@
   "discoveryDefaults": {
     "title": "Service discovery defaults",
     "saving": "Saving...",
-    "saveDefaults": "Save",
-    "fields": {
-      "docker_enabled": {
-        "label": "Docker containers",
-        "hint": "Find services from container ports and labels."
-      },
-      "proxy_enabled": {
-        "label": "Reverse proxies",
-        "hint": "Read routed services from the proxy APIs below."
-      },
-      "proxy_traefik_enabled": {
-        "label": "Traefik routes"
-      },
-      "proxy_caddy_enabled": {
-        "label": "Caddy routes",
-        "hint": "From the Caddy admin API."
-      },
-      "proxy_npm_enabled": {
-        "label": "Nginx Proxy Manager routes"
-      },
-      "port_scan_enabled": {
-        "label": "Local port scan",
-        "hint": "Probe the device's own ports for web services."
-      },
-      "port_scan_include_listening": {
-        "label": "Add listening ports",
-        "hint": "Also scan every TCP port the device listens on."
-      },
-      "port_scan_ports": {
-        "label": "Local scan ports",
-        "hint": "Comma separated. Empty uses the built-in list."
-      },
-      "lan_scan_enabled": {
-        "label": "LAN scan",
-        "hint": "Probe the LAN ranges for web services."
-      },
-      "lan_scan_cidrs": {
-        "label": "LAN ranges",
-        "hint": "Private CIDRs, comma separated."
-      },
-      "lan_scan_ports": {
-        "label": "LAN scan ports",
-        "hint": "Comma separated. Empty uses the built-in list."
-      },
-      "lan_scan_max_hosts": {
-        "label": "Hosts per LAN scan"
-      }
-    }
+    "saveDefaults": "Save"
   },
   "apiKeys": {
     "heading": "API keys",
@@ -389,7 +342,179 @@
       "default": "Default"
     },
     "show": "Show",
-    "hide": "Hide"
+    "hide": "Hide",
+    "scopes": {
+      "console": "Console",
+      "routing": "Routing",
+      "worker": "Background jobs",
+      "policy": "Policy",
+      "security": "Security",
+      "remote_access": "Remote access",
+      "services": "Services",
+      "prometheus": "Prometheus",
+      "other": "Other"
+    },
+    "fields": {
+      "console": {
+        "poll_interval_seconds": {
+          "label": "Status refresh",
+          "description": "Seconds between dashboard updates."
+        },
+        "default_telemetry_window": {
+          "label": "Chart range",
+          "description": "The range charts open with."
+        },
+        "default_log_window": {
+          "label": "Logs range",
+          "description": "The range Logs opens with."
+        },
+        "log_query_limit": {
+          "label": "Log lines per query"
+        },
+        "default_actor_id": {
+          "label": "Default user ID",
+          "description": "Recorded as the person for commands and actions that name no user."
+        },
+        "default_action_dry_run": {
+          "label": "Dry run for integration actions"
+        },
+        "default_update_dry_run": {
+          "label": "Dry run for updates"
+        }
+      },
+      "routing": {
+        "api_base_url": {
+          "label": "API address",
+          "description": "Where the console server reaches the hub API."
+        },
+        "agent_base_url": {
+          "label": "Agent address",
+          "description": "Where the console server reaches a Linux agent."
+        }
+      },
+      "worker": {
+        "queue_max_deliveries": {
+          "label": "Job attempts",
+          "description": "Tries before a failing job is set aside."
+        },
+        "retention_apply_interval": {
+          "label": "Retention interval",
+          "description": "How often the hub deletes data older than its retention."
+        }
+      },
+      "policy": {
+        "structured_enabled": {
+          "label": "Commands",
+          "description": "Allow commands from actions, schedules and the API."
+        },
+        "interactive_enabled": {
+          "label": "Terminal sessions"
+        },
+        "connector_enabled": {
+          "label": "Integration actions"
+        }
+      },
+      "security": {
+        "outbound_allow_private": {
+          "label": "Private network targets",
+          "description": "auto: allow HTTPS and WSS integrations on private addresses. true: allow every private address. false: block private addresses."
+        },
+        "outbound_allow_link_local": {
+          "label": "Link-local targets",
+          "description": "Allow connections to link-local addresses (169.254.0.0/16 and fe80::/10)."
+        }
+      },
+      "remote_access": {
+        "mode": {
+          "label": "Remote access",
+          "description": "serve: suggest Tailscale Serve for HTTPS. manual: you set up access yourself. off: no suggestion."
+        },
+        "tailscale_serve_target": {
+          "label": "Tailscale Serve target",
+          "description": "The local address Tailscale Serve forwards to. Empty uses the hub's own address."
+        }
+      },
+      "services": {
+        "discovery_default_docker_enabled": {
+          "label": "Docker containers",
+          "description": "Find services from container ports and labels."
+        },
+        "discovery_default_proxy_enabled": {
+          "label": "Reverse proxies",
+          "description": "Read routed services from the proxy APIs below."
+        },
+        "discovery_default_proxy_traefik_enabled": {
+          "label": "Traefik routes"
+        },
+        "discovery_default_proxy_caddy_enabled": {
+          "label": "Caddy routes",
+          "description": "From the Caddy admin API."
+        },
+        "discovery_default_proxy_npm_enabled": {
+          "label": "Nginx Proxy Manager routes"
+        },
+        "discovery_default_port_scan_enabled": {
+          "label": "Local port scan",
+          "description": "Probe the device's own ports for web services."
+        },
+        "discovery_default_port_scan_include_listening": {
+          "label": "Add listening ports",
+          "description": "Also scan every TCP port the device listens on."
+        },
+        "discovery_default_port_scan_ports": {
+          "label": "Local scan ports",
+          "description": "Comma separated. Empty uses the built-in list."
+        },
+        "discovery_default_lan_scan_enabled": {
+          "label": "LAN scan",
+          "description": "Probe the LAN ranges for web services."
+        },
+        "discovery_default_lan_scan_cidrs": {
+          "label": "LAN ranges",
+          "description": "Private CIDRs, comma separated."
+        },
+        "discovery_default_lan_scan_ports": {
+          "label": "LAN scan ports",
+          "description": "Comma separated. Empty uses the built-in list."
+        },
+        "discovery_default_lan_scan_max_hosts": {
+          "label": "Hosts per LAN scan"
+        }
+      },
+      "prometheus": {
+        "scrape_enabled": {
+          "label": "Prometheus scraping",
+          "description": "Serve metrics at /metrics."
+        },
+        "remote_write_enabled": {
+          "label": "Prometheus remote write",
+          "description": "Push metrics to a remote_write endpoint."
+        },
+        "remote_write_url": {
+          "label": "Remote write URL",
+          "description": "For example https://prometheus.example.com/api/v1/write"
+        },
+        "remote_write_username": {
+          "label": "Remote write username",
+          "description": "For HTTP basic auth."
+        },
+        "remote_write_password": {
+          "label": "Remote write password",
+          "description": "For HTTP basic auth. Stored encrypted when a secrets manager is available."
+        },
+        "remote_write_interval": {
+          "label": "Remote write interval"
+        },
+        "process_metrics_enabled": {
+          "label": "Process metrics",
+          "description": "Collect CPU and memory for each process on devices."
+        },
+        "process_metrics_top_n": {
+          "label": "Processes per device",
+          "description": "The busiest processes kept for each device."
+        }
+      }
+    }
   },
   "database": {
     "title": "Database",

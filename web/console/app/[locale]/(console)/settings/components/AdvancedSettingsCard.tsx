@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import type { RuntimeSettingEntry } from "../../../../console/models";
 import { Button } from "../../../../components/ui/Button";
 import { Input, Select } from "../../../../components/ui/Input";
+import { runtimeScopeTitle, runtimeSettingWords } from "./runtimeSettingWords";
 import { Section, Sheet, SheetFoot, Switch } from "./SettingsKit";
 
 type AdvancedSettingsCardProps = {
@@ -18,12 +19,6 @@ type AdvancedSettingsCardProps = {
   saveRuntimeSettings: (keys?: string[]) => Promise<void> | void;
   resetRuntimeSetting: (key: string) => Promise<void> | void;
 };
-
-/** "remote_access" → "Remote access": a scope as a sub-heading. */
-function scopeTitle(scope: string): string {
-  const words = scope.replace(/[_.-]+/gu, " ").trim();
-  return words ? words.charAt(0).toUpperCase() + words.slice(1) : scope;
-}
 
 /**
  * Every hub runtime setting, grouped by scope, behind Show (the sections above hold the common ones). Each row: label,
@@ -64,7 +59,7 @@ export function AdvancedSettingsCard({
           <div id="st-advanced-list">
             {runtimeSettingsByScope.map(([scope, entries]) => (
               <div key={scope} role="group" aria-labelledby={`st-scope-${scope}`}>
-                <h3 className="st-sub st-pad-x" id={`st-scope-${scope}`}>{scopeTitle(scope)}</h3>
+                <h3 className="st-sub st-pad-x" id={`st-scope-${scope}`}>{runtimeScopeTitle(t, scope)}</h3>
                 {entries.map((entry) => (
                   <AdvancedRow
                     key={entry.key}
@@ -107,21 +102,22 @@ function AdvancedRow({
 }) {
   const t = useTranslations("settings");
   const id = `st-rt-${entry.key.replace(/[^a-z0-9]+/gi, "-")}`;
+  const { label, description } = runtimeSettingWords(t, entry);
   return (
     <div className="st-row two" data-setting-key={entry.key}>
       <div className="st-row-l">
-        {entry.type === "bool" ? <span className="st-nm">{entry.label}</span> : <label className="st-nm" htmlFor={id}>{entry.label}</label>}
-        {entry.description ? <span className="st-g">{entry.description}</span> : null}
+        {entry.type === "bool" ? <span className="st-nm">{label}</span> : <label className="st-nm" htmlFor={id}>{label}</label>}
+        {description ? <span className="st-g">{description}</span> : null}
         <code className="st-mono">{entry.key}</code>
       </div>
       <div className="st-row-r">
         <span className="st-g">{t(`advanced.source.${entry.source}`)}</span>
         {entry.source === "ui" ? (
-          <Button variant="ghost" size="sm" onClick={onReset} disabled={disabled} aria-label={t("advanced.resetKey", { key: entry.label })}>
+          <Button variant="ghost" size="sm" onClick={onReset} disabled={disabled} aria-label={t("advanced.resetKey", { key: label })}>
             {t("advanced.reset")}
           </Button>
         ) : null}
-        <RuntimeControl id={id} entry={entry} value={value} onChange={onChange} />
+        <RuntimeControl id={id} entry={{ ...entry, label }} value={value} onChange={onChange} />
       </div>
     </div>
   );

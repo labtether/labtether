@@ -219,54 +219,7 @@
   "discoveryDefaults": {
     "title": "Valeurs par défaut de la découverte de services",
     "saving": "Enregistrement...",
-    "saveDefaults": "Enregistrer",
-    "fields": {
-      "docker_enabled": {
-        "label": "Conteneurs Docker",
-        "hint": "Trouver des services à partir des ports et des labels des conteneurs."
-      },
-      "proxy_enabled": {
-        "label": "Reverse proxies",
-        "hint": "Lire les services routés depuis les API de proxy ci-dessous."
-      },
-      "proxy_traefik_enabled": {
-        "label": "Routes Traefik"
-      },
-      "proxy_caddy_enabled": {
-        "label": "Routes Caddy",
-        "hint": "Depuis l'API d'administration de Caddy."
-      },
-      "proxy_npm_enabled": {
-        "label": "Routes Nginx Proxy Manager"
-      },
-      "port_scan_enabled": {
-        "label": "Scan local des ports",
-        "hint": "Sonder les ports de l'appareil à la recherche de services web."
-      },
-      "port_scan_include_listening": {
-        "label": "Ajouter les ports en écoute",
-        "hint": "Sonder aussi chaque port TCP sur lequel l'appareil écoute."
-      },
-      "port_scan_ports": {
-        "label": "Ports du scan local",
-        "hint": "Séparés par des virgules. Vide : la liste intégrée."
-      },
-      "lan_scan_enabled": {
-        "label": "Scan du LAN",
-        "hint": "Sonder les plages du LAN à la recherche de services web."
-      },
-      "lan_scan_cidrs": {
-        "label": "Plages du LAN",
-        "hint": "CIDR privés, séparés par des virgules."
-      },
-      "lan_scan_ports": {
-        "label": "Ports du scan LAN",
-        "hint": "Séparés par des virgules. Vide : la liste intégrée."
-      },
-      "lan_scan_max_hosts": {
-        "label": "Hôtes par scan LAN"
-      }
-    }
+    "saveDefaults": "Enregistrer"
   },
   "apiKeys": {
     "heading": "Clés d'API",
@@ -389,7 +342,179 @@
       "default": "Par défaut"
     },
     "show": "Afficher",
-    "hide": "Masquer"
+    "hide": "Masquer",
+    "scopes": {
+      "console": "Console",
+      "routing": "Routage",
+      "worker": "Jobs en arrière-plan",
+      "policy": "Règles",
+      "security": "Sécurité",
+      "remote_access": "Accès à distance",
+      "services": "Services",
+      "prometheus": "Prometheus",
+      "other": "Autres"
+    },
+    "fields": {
+      "console": {
+        "poll_interval_seconds": {
+          "label": "Actualisation de l'état",
+          "description": "Secondes entre deux mises à jour du tableau de bord."
+        },
+        "default_telemetry_window": {
+          "label": "Période des graphiques",
+          "description": "La période affichée à l'ouverture des graphiques."
+        },
+        "default_log_window": {
+          "label": "Période des journaux",
+          "description": "La période affichée à l'ouverture de Journaux."
+        },
+        "log_query_limit": {
+          "label": "Lignes de journal par requête"
+        },
+        "default_actor_id": {
+          "label": "ID utilisateur par défaut",
+          "description": "Enregistré comme auteur des commandes et actions qui ne nomment aucun utilisateur."
+        },
+        "default_action_dry_run": {
+          "label": "Simulation pour les actions d'intégration"
+        },
+        "default_update_dry_run": {
+          "label": "Simulation pour les mises à jour"
+        }
+      },
+      "routing": {
+        "api_base_url": {
+          "label": "Adresse de l'API",
+          "description": "L'adresse où le serveur de la console joint l'API du hub."
+        },
+        "agent_base_url": {
+          "label": "Adresse de l'agent",
+          "description": "L'adresse où le serveur de la console joint un agent Linux."
+        }
+      },
+      "worker": {
+        "queue_max_deliveries": {
+          "label": "Tentatives par job",
+          "description": "Essais avant qu'un job en échec soit mis de côté."
+        },
+        "retention_apply_interval": {
+          "label": "Intervalle de rétention",
+          "description": "Fréquence à laquelle le hub supprime les données plus anciennes que leur rétention."
+        }
+      },
+      "policy": {
+        "structured_enabled": {
+          "label": "Commandes",
+          "description": "Autoriser les commandes depuis les actions, les planifications et l'API."
+        },
+        "interactive_enabled": {
+          "label": "Sessions de terminal"
+        },
+        "connector_enabled": {
+          "label": "Actions d'intégration"
+        }
+      },
+      "security": {
+        "outbound_allow_private": {
+          "label": "Cibles sur réseau privé",
+          "description": "auto : autoriser les intégrations HTTPS et WSS vers des adresses privées. true : autoriser toutes les adresses privées. false : bloquer les adresses privées."
+        },
+        "outbound_allow_link_local": {
+          "label": "Cibles link-local",
+          "description": "Autoriser les connexions vers les adresses link-local (169.254.0.0/16 et fe80::/10)."
+        }
+      },
+      "remote_access": {
+        "mode": {
+          "label": "Accès à distance",
+          "description": "serve : proposer Tailscale Serve pour le HTTPS. manual : vous configurez l'accès vous-même. off : aucune suggestion."
+        },
+        "tailscale_serve_target": {
+          "label": "Cible de Tailscale Serve",
+          "description": "L'adresse locale vers laquelle Tailscale Serve transfère. Vide : l'adresse du hub."
+        }
+      },
+      "services": {
+        "discovery_default_docker_enabled": {
+          "label": "Conteneurs Docker",
+          "description": "Trouver des services à partir des ports et des labels des conteneurs."
+        },
+        "discovery_default_proxy_enabled": {
+          "label": "Reverse proxies",
+          "description": "Lire les services routés depuis les API de proxy ci-dessous."
+        },
+        "discovery_default_proxy_traefik_enabled": {
+          "label": "Routes Traefik"
+        },
+        "discovery_default_proxy_caddy_enabled": {
+          "label": "Routes Caddy",
+          "description": "Depuis l'API d'administration de Caddy."
+        },
+        "discovery_default_proxy_npm_enabled": {
+          "label": "Routes Nginx Proxy Manager"
+        },
+        "discovery_default_port_scan_enabled": {
+          "label": "Scan local des ports",
+          "description": "Sonder les ports de l'appareil à la recherche de services web."
+        },
+        "discovery_default_port_scan_include_listening": {
+          "label": "Ajouter les ports en écoute",
+          "description": "Sonder aussi chaque port TCP sur lequel l'appareil écoute."
+        },
+        "discovery_default_port_scan_ports": {
+          "label": "Ports du scan local",
+          "description": "Séparés par des virgules. Vide : la liste intégrée."
+        },
+        "discovery_default_lan_scan_enabled": {
+          "label": "Scan du LAN",
+          "description": "Sonder les plages du LAN à la recherche de services web."
+        },
+        "discovery_default_lan_scan_cidrs": {
+          "label": "Plages du LAN",
+          "description": "CIDR privés, séparés par des virgules."
+        },
+        "discovery_default_lan_scan_ports": {
+          "label": "Ports du scan LAN",
+          "description": "Séparés par des virgules. Vide : la liste intégrée."
+        },
+        "discovery_default_lan_scan_max_hosts": {
+          "label": "Hôtes par scan LAN"
+        }
+      },
+      "prometheus": {
+        "scrape_enabled": {
+          "label": "Collecte Prometheus",
+          "description": "Servir les métriques sur /metrics."
+        },
+        "remote_write_enabled": {
+          "label": "Écriture distante Prometheus",
+          "description": "Envoyer les métriques vers un point de terminaison remote_write."
+        },
+        "remote_write_url": {
+          "label": "URL d'écriture distante",
+          "description": "Par exemple https://prometheus.example.com/api/v1/write"
+        },
+        "remote_write_username": {
+          "label": "Nom d'utilisateur d'écriture distante",
+          "description": "Pour l'authentification HTTP Basic."
+        },
+        "remote_write_password": {
+          "label": "Mot de passe d'écriture distante",
+          "description": "Pour l'authentification HTTP Basic. Stocké chiffré quand un gestionnaire de secrets est disponible."
+        },
+        "remote_write_interval": {
+          "label": "Intervalle d'écriture distante"
+        },
+        "process_metrics_enabled": {
+          "label": "Métriques des processus",
+          "description": "Collecter le CPU et la mémoire de chaque processus sur les appareils."
+        },
+        "process_metrics_top_n": {
+          "label": "Processus par appareil",
+          "description": "Les processus les plus actifs conservés pour chaque appareil."
+        }
+      }
+    }
   },
   "database": {
     "title": "Base de données",
