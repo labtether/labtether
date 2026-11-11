@@ -1,15 +1,39 @@
-export function assetFreshnessLabel(lastSeenISO: string): string {
+/** Metadata key the Hub stamps on every device a connection makes: that connection's sync interval in seconds. */
+export const COLLECTOR_INTERVAL_METADATA_KEY = "collector_interval_seconds";
+
+/**
+ * Freshness from the last check-in. Agents check in every few seconds, so a device is online under 65 s and not
+ * responding under 300 s. A connection (Proxmox, Portainer, Home Assistant ...) refreshes its devices once per its
+ * interval, so with intervalSeconds a device stays online under 1.5 x interval + 15 s and goes offline after
+ * 5 x interval, never tighter than the agent limits.
+ */
+export function assetFreshnessLabel(lastSeenISO: string, intervalSeconds?: number): string {
   const diffMs = Date.now() - new Date(lastSeenISO).getTime();
   if (!Number.isFinite(diffMs) || diffMs < 0) {
     return "unknown";
   }
-  if (diffMs < 65_000) {
+  const interval = intervalSeconds && Number.isFinite(intervalSeconds) && intervalSeconds > 0 ? intervalSeconds : 0;
+  const onlineMs = Math.max(65_000, interval > 0 ? (1.5 * interval + 15) * 1000 : 0);
+  const offlineMs = Math.max(300_000, interval * 5 * 1000);
+  if (diffMs < onlineMs) {
     return "online";
   }
-  if (diffMs < 300_000) {
+  if (diffMs < offlineMs) {
     return "unresponsive";
   }
   return "offline";
+}
+
+/** The sync interval a connection stamped on its device, when it has one. */
+export function collectorIntervalSeconds(asset: { metadata?: Record<string, string> | null }): number | undefined {
+  const raw = asset.metadata?.[COLLECTOR_INTERVAL_METADATA_KEY];
+  const seconds = raw ? Number(raw) : NaN;
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : undefined;
+}
+
+/** A device's freshness, judged by its connection's interval when a connection made it. */
+export function deviceFreshnessLabel(asset: { last_seen_at: string; metadata?: Record<string, string> | null }): string {
+  return assetFreshnessLabel(asset.last_seen_at, collectorIntervalSeconds(asset));
 }
 
 export function formatAge(lastSeenISO: string): string {

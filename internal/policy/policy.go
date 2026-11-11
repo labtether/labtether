@@ -91,7 +91,7 @@ func Evaluate(req CheckRequest, cfg EvaluatorConfig) CheckResponse {
 		}
 	case "connector":
 		if !cfg.ConnectorEnabled {
-			return CheckResponse{Allowed: false, Reason: "connector mode disabled by policy", Mode: normalizedMode}
+			return CheckResponse{Allowed: false, Reason: "Integration actions are turned off in Settings.", Mode: normalizedMode}
 		}
 	default:
 		return CheckResponse{Allowed: false, Reason: "unsupported command mode", Mode: normalizedMode}

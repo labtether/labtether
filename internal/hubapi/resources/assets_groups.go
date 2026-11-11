@@ -368,6 +368,11 @@ func (d *Deps) HandleAssetActions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(parts) == 2 && parts[1] == "delete-preview" {
+		d.HandleAssetDeletePreview(w, r, assetEntry)
+		return
+	}
+
 	if len(parts) == 2 && parts[1] == "displays" {
 		if d.HandleDisplayList != nil {
 			d.HandleDisplayList(w, r, assetID)
@@ -478,7 +483,7 @@ func requireAssetActionScope(w http.ResponseWriter, r *http.Request, parts []str
 		switch parts[1] {
 		case "wake":
 			required = "assets:power"
-		case "displays":
+		case "displays", "delete-preview":
 			required = "assets:read"
 		case "hub-ssh-key":
 			if isSafeHTTPMethod(r.Method) {

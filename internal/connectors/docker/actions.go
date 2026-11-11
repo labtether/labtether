@@ -174,7 +174,7 @@ func (c *Coordinator) executeContainerAction(ctx context.Context, actionID strin
 		}
 		msg := actionID + " completed"
 		if result.Error != "" {
-			msg = result.Error
+			msg = dockerFailureWords(result.Error)
 		}
 		return connectorsdk.ActionResult{Status: status, Message: msg, Output: result.Data}, nil
 	case <-time.After(actionTimeout):
@@ -290,7 +290,7 @@ func (c *Coordinator) executeStackAction(ctx context.Context, actionID string, r
 		}
 		msg := fmt.Sprintf("stack %s %s completed", stackName, composeAction)
 		if result.Error != "" {
-			msg = result.Error
+			msg = dockerFailureWords(result.Error)
 		}
 		return connectorsdk.ActionResult{Status: status, Message: msg, Output: result.Output}, nil
 	case <-time.After(composeTimeout):

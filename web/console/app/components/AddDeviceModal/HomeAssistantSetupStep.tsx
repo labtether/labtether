@@ -403,7 +403,7 @@ export function HomeAssistantSetupStep({ onBack, onClose, onAdded, compatPrefill
 
       <div>
         <label htmlFor="homeassistant-base-url" className="mb-1 block text-xs font-medium text-[var(--muted)]">{t("homeassistant.baseUrl")}</label>
-        <Input id="homeassistant-base-url" value={baseURL} onChange={(event) => setBaseURL(event.target.value)} placeholder="http://homeassistant.local:8123" />
+        <Input id="homeassistant-base-url" value={baseURL} onChange={(event) => setBaseURL(event.target.value)} placeholder="https://homeassistant.local:8123" />
       </div>
 
       <div>

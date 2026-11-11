@@ -77,29 +77,46 @@ func validatePortainerExecID(execID string) error {
 	return nil
 }
 
-// ExecWebSocketURL returns the WebSocket URL and auth token for connecting to an
-// exec session via Portainer's /api/websocket/exec endpoint. The token must be
-// sent in an Authorization header; keeping it out of the URL avoids exposing it
-// through access logs and is required by current Portainer releases.
+// ExecAuth is how the Hub signs in to Portainer's exec WebSocket: the API key
+// in X-API-Key for an API-key connection, or a JWT in Authorization for a
+// password connection. Secret never goes into the URL.
+type ExecAuth struct {
+	Header string
+	Secret string
+}
+
+const (
+	execAuthHeaderAPIKey = "X-API-Key"     // #nosec G101 -- HTTP header name, not a credential
+	execAuthHeaderBearer = "Authorization" // #nosec G101 -- HTTP header name, not a credential
+)
+
+// HeaderValue is the value of the auth header for the WebSocket handshake.
+func (a ExecAuth) HeaderValue() string {
+	if a.Header == execAuthHeaderBearer {
+		return "Bearer " + a.Secret
+	}
+	return a.Secret
+}
+
+// ExecWebSocketURL returns the WebSocket URL and the credentials for an exec
+// session via Portainer's /api/websocket/exec endpoint. Portainer accepts the
+// same API key there as on its REST API; password connections use a JWT.
 // wsURL uses the ws:// or wss:// scheme matching the client base URL.
-func (c *Client) ExecWebSocketURL(ctx context.Context, endpointID int, execID string) (wsURL string, token string, err error) {
+func (c *Client) ExecWebSocketURL(ctx context.Context, endpointID int, execID string) (wsURL string, auth ExecAuth, err error) {
 	if endpointID <= 0 {
-		return "", "", fmt.Errorf("portainer endpoint ID must be positive")
+		return "", ExecAuth{}, fmt.Errorf("portainer endpoint ID must be positive")
 	}
 	if err := validatePortainerExecID(execID); err != nil {
-		return "", "", err
+		return "", ExecAuth{}, err
 	}
-	// Portainer requires a JWT token even when the primary auth mode is API key.
-	// If apiKey auth is configured, we must obtain a JWT by authenticating first.
 	if c.apiKey != "" {
-		// For API-key-only clients we cannot obtain a JWT; the caller must
-		// use username/password credentials for exec WebSocket sessions.
-		// Return a clear error rather than silently failing.
-		return "", "", fmt.Errorf("portainer exec websocket requires JWT auth; configure username/password credentials for exec sessions")
-	}
-	jwt, err := c.getJWT(ctx)
-	if err != nil {
-		return "", "", fmt.Errorf("acquire JWT for exec websocket: %w", err)
+		auth = ExecAuth{Header: execAuthHeaderAPIKey, Secret: c.apiKey}
+	} else {
+		jwt, err := c.getJWT(ctx)
+		if err != nil {
+			return "", ExecAuth{}, fmt.Errorf("acquire JWT for exec websocket: %w", err)
+		}
+		auth = ExecAuth{Header: execAuthHeaderBearer, Secret: jwt}
 	}
 
 	base := strings.TrimRight(c.baseURL, "/")
@@ -123,5 +140,5 @@ func (c *Client) ExecWebSocketURL(ctx context.Context, endpointID int, execID st
 		url.QueryEscape(execID),
 		url.QueryEscape(execID),
 	)
-	return wsURL, jwt, nil
+	return wsURL, auth, nil
 }

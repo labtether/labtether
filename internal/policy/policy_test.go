@@ -85,3 +85,14 @@ func TestDefaultAllowlistCoversWindowsReadOnlyCommands(t *testing.T) {
 		}
 	}
 }
+
+// The reason is shown as-is on the Actions page and in API answers, so it
+// names the Settings switch people turned off.
+func TestEvaluateConnectorOffNamesTheSettingsSwitch(t *testing.T) {
+	cfg := DefaultEvaluatorConfig()
+	cfg.ConnectorEnabled = false
+	res := Evaluate(CheckRequest{Mode: "connector", Command: "vm.start"}, cfg)
+	if want := "Integration actions are turned off in Settings."; res.Allowed || res.Reason != want {
+		t.Fatalf("got allowed=%v %q, want %q", res.Allowed, res.Reason, want)
+	}
+}

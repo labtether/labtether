@@ -246,6 +246,9 @@
     "remove": {
       "title": "Remove {name}?",
       "body": "LabTether stops watching {name} and deletes its history.",
+      "alsoFound": "Also removes {count, plural, one {# device} other {# devices}} this connection found.",
+      "alsoAttached": "Also removes {count, plural, one {# device} other {# devices}} attached to it.",
+      "alsoLogin": "Its saved login is removed too, unless something else uses it.",
       "addBack": "To add it back later, use a new single-use token from Add device.",
       "typeName": "Type {name} to confirm",
       "cancel": "Cancel",

@@ -30,6 +30,9 @@ func (d *Deps) ProcessScopedCollectorHeartbeat(collectorID string, req assets.He
 	}
 
 	req = ScopedCollectorHeartbeatRequest(collectorID, req)
+	if seconds := d.collectorIntervalSeconds(collectorID); seconds > 0 {
+		req.Metadata = withCollectorInterval(req.Metadata, seconds)
+	}
 
 	var legacy assets.Asset
 	adoptLegacy := false

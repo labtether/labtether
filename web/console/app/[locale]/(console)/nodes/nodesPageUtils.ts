@@ -1,4 +1,4 @@
-import { assetFreshnessLabel } from "../../../console/formatters";
+import { deviceFreshnessLabel } from "../../../console/formatters";
 import { resolveAssetPresentationStatus } from "../../../lib/status";
 import type { Asset, TelemetryOverviewAsset } from "../../../console/models";
 import {
@@ -79,7 +79,7 @@ export type DeviceGroupSection = {
 /* ---------- Helpers ---------- */
 
 export function assetFreshness(asset: Asset): Freshness {
-  const freshness = assetFreshnessLabel(asset.last_seen_at);
+  const freshness = deviceFreshnessLabel(asset);
   if (
     freshness === "online" ||
     freshness === "unresponsive" ||

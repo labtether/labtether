@@ -1,5 +1,5 @@
 import type { Asset } from "./models";
-import { formatMetadataLabel, assetFreshnessLabel } from "./formatters";
+import { formatMetadataLabel, deviceFreshnessLabel } from "./formatters";
 import type { LucideIcon } from "lucide-react";
 import {
   AppWindow,
@@ -125,10 +125,10 @@ const UNHEALTHY_STATUSES = new Set([
   "failed",
 ]);
 
-export function isAssetHealthy(asset: { status: string; last_seen_at: string }): boolean {
+export function isAssetHealthy(asset: { status: string; last_seen_at: string; metadata?: Record<string, string> }): boolean {
   const raw = asset.status.trim().toLowerCase();
   if (UNHEALTHY_STATUSES.has(raw)) return false;
-  const freshness = assetFreshnessLabel(asset.last_seen_at);
+  const freshness = deviceFreshnessLabel(asset);
   return freshness === "online";
 }
 

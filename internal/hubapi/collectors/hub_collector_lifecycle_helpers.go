@@ -127,6 +127,7 @@ func (d *Deps) RefreshCollectorParentAsset(opts CollectorParentAssetRefreshOptio
 	metadata := cloneStringMap(opts.Metadata)
 	if collectorID := strings.TrimSpace(opts.Collector.ID); collectorID != "" {
 		metadata["collector_id"] = collectorID
+		metadata = withCollectorInterval(metadata, opts.Collector.IntervalSeconds)
 	}
 	_, metadata = WithCanonicalResourceMetadata(source, assetType, metadata)
 
