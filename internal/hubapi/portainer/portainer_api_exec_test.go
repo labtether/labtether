@@ -132,7 +132,7 @@ func TestBridgePortainerExecDoesNotForwardUpstreamCloseSecret(t *testing.T) {
 			return
 		}
 		defer browserConn.Close()
-		deps.bridgePortainerExec(browserConn, upstreamConn)
+		deps.bridgePortainerExec(browserConn, upstreamConn, nil)
 	}))
 	defer browserServer.Close()
 
