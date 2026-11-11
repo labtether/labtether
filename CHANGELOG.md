@@ -482,6 +482,12 @@ v1.7.1.
   each trusted and removed host key. A device with no agent and no SSH login
   says so in words instead of "no agent connected and no SSH credentials
   configured".
+- API keys and agent tokens work behind an HTTPS reverse proxy with
+  `LABTETHER_TLS_MODE=disabled`. The Hub accepts the proxy's
+  `X-Forwarded-Proto: https` when the proxy's address is in
+  `LABTETHER_TRUST_PROXY_CIDRS` or `LABTETHER_TRUST_PROXY_HOSTS`. Before, only
+  a proxy on the Hub's own host counted, so every key got 403 "api keys
+  require HTTPS". The header from any other address is still ignored.
 
 ## [1.7.1] - 2026-10-31
 
