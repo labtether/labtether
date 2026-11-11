@@ -18,9 +18,11 @@ v1.7.1.
   from the folder you first ran it in, with `LABTETHER_VERSION=v2.0.0`, or run
   `./scripts/upgrade-compose.sh --version v2.0.0`. Both keep your
   `.env.deploy`.
-- **No database migration and no new or removed setting** since v1.7.1.
-  The database schema is the same, so going back to v1.7.1 needs no database
-  restore.
+- **Two small database migrations and no new or removed setting** since
+  v1.7.1. Migration 109 lets the database store alert rules for a group and
+  health-check rules; migration 110 turns automatic Docker "runs on" links
+  the right way round. Neither removes your data, and v1.7.1 still runs on the
+  migrated database, so going back to v1.7.1 needs no database restore.
 - **From v1.4.0 or older,** read the v1.7.1 upgrade notes below first. They
   still apply.
 - **Saved choices carry over.** Your theme and language stay as they were.
@@ -135,6 +137,12 @@ v1.7.1.
   with "An internal error occurred." because the database still allowed the
   old scope name "site" and no health-check kind. Rules stored with "site"
   become group rules.
+- Devices: the breadcrumb of a host with Docker no longer lists its own
+  containers and Docker engine as its parents, and a container's breadcrumb
+  reads host, Docker engine, container. Link discovery stored a container's
+  "runs on" link from the host to the container, the reverse of every other
+  link; migration 110 turns the stored ones around. A suggested link is not a
+  parent until it is accepted.
 
 - A change to Settings › General › Service discovery defaults now reaches
   connected agents at once. Before, agents got it only when they next

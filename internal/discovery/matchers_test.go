@@ -65,6 +65,11 @@ func TestParentHintMatcher_AgentEdgeType(t *testing.T) {
 	if candidates[0].EdgeType != "runs_on" {
 		t.Errorf("expected runs_on for agent_id hint, got %s", candidates[0].EdgeType)
 	}
+	// runs_on points from the child to its host. The reverse made the host a
+	// child of its own Docker containers in the device breadcrumb.
+	if candidates[0].SourceAssetID != "svc-1" || candidates[0].TargetAssetID != "agent-host-1" {
+		t.Errorf("runs_on = %s -> %s, want svc-1 -> agent-host-1", candidates[0].SourceAssetID, candidates[0].TargetAssetID)
+	}
 }
 
 func TestParentHintMatcher_NoMatch(t *testing.T) {
