@@ -121,6 +121,15 @@ func WrapV1Handler(next http.HandlerFunc) http.HandlerFunc {
 						if msg, ok := m["message"].(string); ok && msg != "" {
 							errMsg = msg
 						}
+						// A failed connector or Docker action answers {"result":
+						// {"status":"failed","message":…}}; keep its reason, which
+						// the v1 answer carries too.
+						if result, ok := m["result"].(map[string]any); ok && errMsg == "" {
+							if msg, ok := result["message"].(string); ok && strings.TrimSpace(msg) != "" {
+								errCode = "action_failed"
+								errMsg = msg
+							}
+						}
 					}
 					WriteError(w, rec.Code, errCode, errMsg)
 					return
