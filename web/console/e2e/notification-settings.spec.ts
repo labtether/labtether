@@ -9,6 +9,7 @@ test("notification channels complete add, edit, test, toggle, and delete flow", 
     type: string;
     config: Record<string, unknown>;
     enabled: boolean;
+    all_alerts?: boolean;
     created_at: string;
     updated_at: string;
   };
