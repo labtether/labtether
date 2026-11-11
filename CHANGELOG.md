@@ -154,6 +154,12 @@ v1.7.1.
   errors no longer end with a bare status code.
 - The first-run checklist's "Add someone" names the person who was added,
   not the owner.
+- A single sign-on account is no longer offered a LabTether password change
+  (the Hub refuses it) or two-factor setup (its sign-ins never ask for the
+  code, so the account only looked protected). The Hub refuses that setup
+  too, and `/auth/me` says how the account signs in (`auth_provider`).
+- The two-factor code fields under Account security have names for screen
+  readers.
 - Security › Saved logins: the Add login, Rotate and Delete dialogs, login
   types and the saved login picker are in your language, and their errors
   name what happened without internal words.

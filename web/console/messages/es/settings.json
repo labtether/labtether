@@ -180,7 +180,8 @@
     "verificationFailed": "Error de verificación",
     "disableFailed": "No se pudo deshabilitar 2FA",
     "regenFailed": "No se pudieron regenerar los códigos de recuperación",
-    "setupFailed": "No se pudo iniciar la configuración de 2FA"
+    "setupFailed": "No se pudo iniciar la configuración de 2FA",
+    "singleSignOn": "Esta cuenta usa el inicio de sesión único (SSO). Su proveedor de identidad gestiona la contraseña y la verificación en dos pasos."
   },
   "prometheus": {
     "title": "Prometheus",

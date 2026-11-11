@@ -180,7 +180,8 @@
     "verificationFailed": "Überprüfung fehlgeschlagen",
     "disableFailed": "2FA konnte nicht deaktiviert werden",
     "regenFailed": "Wiederherstellungscodes konnten nicht neu generiert werden",
-    "setupFailed": "2FA-Einrichtung konnte nicht gestartet werden"
+    "setupFailed": "2FA-Einrichtung konnte nicht gestartet werden",
+    "singleSignOn": "Sie melden sich mit Single Sign-On an. Ihr Identitätsanbieter verwaltet Ihr Passwort und die Zwei-Faktor-Anmeldung."
   },
   "prometheus": {
     "title": "Prometheus",

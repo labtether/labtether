@@ -180,7 +180,8 @@
     "verificationFailed": "Échec de la vérification",
     "disableFailed": "Échec de la désactivation de la 2FA",
     "regenFailed": "Échec de la régénération des codes de récupération",
-    "setupFailed": "Échec du démarrage de la configuration 2FA"
+    "setupFailed": "Échec du démarrage de la configuration 2FA",
+    "singleSignOn": "Vous vous connectez par authentification unique. Votre fournisseur d'identité gère votre mot de passe et la connexion à deux facteurs."
   },
   "prometheus": {
     "title": "Prometheus",

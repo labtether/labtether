@@ -212,6 +212,9 @@ func (d *Deps) HandleAuthMe(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
 				"user":         auth.UserInfo{ID: user.ID, Username: user.Username, Role: auth.NormalizeRole(user.Role)},
 				"totp_enabled": user.TOTPSecret != "" && user.TOTPVerifiedAt != nil,
+				// "local" or the single sign-on provider: the console offers a
+				// password change and two-factor setup only to local accounts.
+				"auth_provider": accountProvider(user.AuthProvider),
 			})
 			return
 		}
@@ -248,4 +251,13 @@ func (d *Deps) HandleAuthMe(w http.ResponseWriter, r *http.Request) {
 			"role":     auth.RoleOwner,
 		},
 	})
+}
+
+// accountProvider names how an account signs in: "local" for a LabTether
+// password (also rows made before the column existed), else its provider.
+func accountProvider(provider string) string {
+	if p := strings.ToLower(strings.TrimSpace(provider)); p != "" {
+		return p
+	}
+	return "local"
 }

@@ -180,7 +180,8 @@
     "verificationFailed": "验证失败",
     "disableFailed": "无法禁用 2FA",
     "regenFailed": "无法重新生成恢复代码",
-    "setupFailed": "无法开始 2FA 设置"
+    "setupFailed": "无法开始 2FA 设置",
+    "singleSignOn": "您通过单点登录进行登录。您的身份提供商管理您的密码和双重验证登录。"
   },
   "prometheus": {
     "title": "Prometheus",

@@ -377,6 +377,7 @@ export function AccountSecurityCard() {
                   value={verifyCode}
                   onChange={(event) => setVerifyCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
                   placeholder="000000"
+                  aria-label={t("security.enterCode")}
                   maxLength={6}
                   className="max-w-[160px] font-mono text-center tracking-widest"
                   autoComplete="one-time-code"
@@ -445,6 +446,7 @@ export function AccountSecurityCard() {
                     value={disableCode}
                     onChange={(event) => setDisableCode(event.target.value.slice(0, 17))}
                     placeholder={t("security.codeOrRecoveryPlaceholder")}
+                    aria-label={t("security.enterCodeToDisable")}
                     maxLength={17}
                     className="max-w-[240px] font-mono tracking-wide"
                     autoComplete="one-time-code"
@@ -467,6 +469,7 @@ export function AccountSecurityCard() {
                     value={regenCode}
                     onChange={(event) => setRegenCode(event.target.value.slice(0, 17))}
                     placeholder={t("security.codeOrRecoveryPlaceholder")}
+                    aria-label={t("security.enterCodeToRegen")}
                     maxLength={17}
                     className="max-w-[240px] font-mono tracking-wide"
                     autoComplete="one-time-code"

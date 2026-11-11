@@ -180,7 +180,8 @@
     "verificationFailed": "Verification failed",
     "disableFailed": "Could not disable 2FA.",
     "regenFailed": "Could not create new recovery codes.",
-    "setupFailed": "Could not start 2FA setup."
+    "setupFailed": "Could not start 2FA setup.",
+    "singleSignOn": "You sign in with single sign-on. Your identity provider handles your password and two-factor sign-in."
   },
   "prometheus": {
     "title": "Prometheus",

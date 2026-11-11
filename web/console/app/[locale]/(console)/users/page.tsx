@@ -10,7 +10,7 @@ import { useToast } from "../../../contexts/ToastContext";
 import { useHubUsers } from "../../../hooks/useHubUsers";
 import type { HubUser } from "../../../hooks/useHubUsers";
 import { canManageUserAccount, hasAdminRole } from "../../../lib/roles";
-import { AccountSecurityCard } from "../settings/components/AccountSecurityCard";
+import { AccountSecuritySection } from "../settings/components/AccountSecuritySection";
 import { CreateUserDialog } from "./CreateUserDialog";
 import { DeleteUserDialog, SignOutUserDialog } from "./DeleteUserDialog";
 import { EditRoleDialog } from "./EditRoleDialog";
@@ -71,7 +71,7 @@ export default function UsersPage() {
       ) : null}
 
       <div className={canManage ? "pp-own" : undefined}>
-        <AccountSecurityCard />
+        <AccountSecuritySection />
       </div>
 
       <CreateUserDialog
