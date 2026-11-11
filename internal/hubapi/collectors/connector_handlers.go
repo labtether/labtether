@@ -84,18 +84,7 @@ func (d *Deps) HandleConnectorActions(w http.ResponseWriter, r *http.Request) {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		assets, err := connector.Discover(r.Context())
-		if err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "discover failed")
-			return
-		}
-		canonicalAssets := modelmap.CanonicalizeConnectorAssets(connectorID, assets)
-		d.PersistCanonicalConnectorSnapshot(resolvedConnectorID, "", connector.DisplayName(), "", connector, canonicalAssets)
-		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
-			"assets":          canonicalAssets,
-			"relationships":   modelmap.SynthesizeResourceRelationships(connectorID, canonicalAssets),
-			"capability_sets": modelmap.SynthesizeCapabilitySets(connector, canonicalAssets),
-		})
+		d.writeConnectorDiscover(w, r, connectorID, resolvedConnectorID, connector)
 	case len(parts) == 2 && parts[1] == "health":
 		if r.Method != http.MethodGet {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -181,18 +170,7 @@ func (d *Deps) HandlePortainerConnectorActions(w http.ResponseWriter, r *http.Re
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		assets, err := connector.Discover(r.Context())
-		if err != nil {
-			servicehttp.WriteError(w, http.StatusBadGateway, "discover failed")
-			return
-		}
-		canonicalAssets := modelmap.CanonicalizeConnectorAssets("portainer", assets)
-		d.PersistCanonicalConnectorSnapshot("portainer", "", connector.DisplayName(), "", connector, canonicalAssets)
-		servicehttp.WriteJSON(w, http.StatusOK, map[string]any{
-			"assets":          canonicalAssets,
-			"relationships":   modelmap.SynthesizeResourceRelationships("portainer", canonicalAssets),
-			"capability_sets": modelmap.SynthesizeCapabilitySets(connector, canonicalAssets),
-		})
+		d.writeConnectorDiscover(w, r, "portainer", "portainer", connector)
 	case len(parts) == 2 && parts[1] == "health":
 		if r.Method != http.MethodGet {
 			servicehttp.WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
