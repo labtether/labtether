@@ -53,6 +53,9 @@ func (s *apiServer) buildAdminDeps() *adminpkg.Deps {
 			}
 			return s.prometheusRemoteWriteRuntime.Apply()
 		},
+		AgentDefaultsChanged: func(changedKeys, resetKeys []string) {
+			s.ensureAgentsDeps().PushAgentDefaultsToConnected(changedKeys, resetKeys)
+		},
 		InvalidateWebServiceURLGroupingConfigCache: s.invalidateWebServiceURLGroupingConfigCache,
 		InvalidateStatusCaches:                     s.invalidateStatusCaches,
 		PrincipalActorID: func(ctx context.Context) string {

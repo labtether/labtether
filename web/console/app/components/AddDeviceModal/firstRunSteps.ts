@@ -17,7 +17,6 @@ export type ChecklistStep = {
 
 type Inputs = {
   assets: Pick<Asset, "id" | "name" | "source" | "status">[];
-  connectorCount: number;
   recentCommandCount: number;
   hasChannels: boolean;
   users: Array<{ username: string; created_at?: string }>;
@@ -43,7 +42,9 @@ export function checklistSteps(input: Inputs): ChecklistStep[] {
   const others = [...input.users].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
   const steps: ChecklistStep[] = [
     { id: "device", done: Boolean(agent), sub: agent ? nameOf(agent) : "", action: "add" },
-    { id: "connect", done: Boolean(source) || input.connectorCount > 0, sub: source ? nameOf(source) : "", action: "add" },
+    // Done when the Hub lists a system added through its API. The status call's connector list names the kinds
+    // of connector the Hub supports, not ones that were set up, so it cannot tick this step.
+    { id: "connect", done: Boolean(source), sub: source ? nameOf(source) : "", action: "add" },
     { id: "terminal", done: input.recentCommandCount > 0, sub: "", href: "/terminal" },
   ];
   const visible = steps.filter((s) => s.done || input.canWrite);

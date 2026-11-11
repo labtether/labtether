@@ -174,7 +174,7 @@ func (d *Deps) HandleDeleteOwnAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if auth.NormalizeRole(user.Role) == auth.RoleOwner {
-		servicehttp.WriteError(w, http.StatusForbidden, "owner account cannot be self-deleted; transfer ownership first")
+		servicehttp.WriteError(w, http.StatusForbidden, "the owner account cannot be deleted")
 		return
 	}
 

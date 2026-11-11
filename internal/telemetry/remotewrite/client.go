@@ -219,7 +219,9 @@ func Push(ctx context.Context, url string, body []byte, username, password strin
 	}
 	req, err := securityruntime.NewOutboundRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("remotewrite: endpoint is invalid or disallowed")
+		// Say which rule refused the address (for example plain http, or a
+		// loopback address), so the person can fix the URL.
+		return fmt.Errorf("remotewrite: endpoint not allowed: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-protobuf")
 	req.Header.Set("Content-Encoding", "snappy")

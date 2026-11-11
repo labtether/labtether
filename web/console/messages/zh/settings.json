@@ -259,7 +259,18 @@
     "colAccess": "访问范围",
     "scopeCount": "{count, plural, other {# 个范围}}",
     "createdOn": "创建于 {when}",
-    "revokeFailed": "密钥未被吊销。"
+    "revokeFailed": "密钥未被吊销。",
+    "scopeGroups": {
+      "inventory": "设备和清单",
+      "operations": "运维",
+      "monitoring": "监控",
+      "system": "系统",
+      "integrations": "集成",
+      "automation": "自动化",
+      "platform": "Hub"
+    },
+    "editNamed": "编辑 {name}",
+    "revokeNamed": "吊销 {name}"
   },
   "mcp": {
     "heading": "MCP",

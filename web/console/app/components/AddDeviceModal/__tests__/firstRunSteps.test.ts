@@ -4,7 +4,7 @@ import { checklistSteps } from "../firstRunSteps";
 // Risks: the Dashboard's first-run checklist ticks a step the person has not done (a Proxmox node counted as "a
 // device with the agent"), or offers a step their role cannot take.
 
-const base = { assets: [], connectorCount: 0, recentCommandCount: 0, hasChannels: false, users: [], canWrite: true, canAdmin: false };
+const base = { assets: [], recentCommandCount: 0, hasChannels: false, users: [], canWrite: true, canAdmin: false };
 
 describe("checklistSteps", () => {
   it("ticks the agent and connect steps from the right kind of device", () => {

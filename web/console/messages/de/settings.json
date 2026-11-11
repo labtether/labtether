@@ -259,7 +259,18 @@
     "colAccess": "Zugriff",
     "scopeCount": "{count, plural, one {# Bereich} other {# Bereiche}}",
     "createdOn": "Erstellt {when}",
-    "revokeFailed": "Der Schlüssel wurde nicht widerrufen."
+    "revokeFailed": "Der Schlüssel wurde nicht widerrufen.",
+    "scopeGroups": {
+      "inventory": "Geräte und Inventar",
+      "operations": "Betrieb",
+      "monitoring": "Überwachung",
+      "system": "System",
+      "integrations": "Integrationen",
+      "automation": "Automatisierung",
+      "platform": "Hub"
+    },
+    "editNamed": "{name} bearbeiten",
+    "revokeNamed": "{name} widerrufen"
   },
   "mcp": {
     "heading": "MCP",

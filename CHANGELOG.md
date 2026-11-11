@@ -128,6 +128,25 @@ v1.7.1.
 
 ### Fixed
 
+- A change to Settings › General › Service discovery defaults now reaches
+  connected agents at once. Before, agents got it only when they next
+  connected, and after a reset they kept the old value.
+- A `LABTETHER_ADMIN_PASSWORD` shorter than 8 characters is refused at start
+  with a plain message. Before, it made an owner who could never sign in.
+- With `LABTETHER_TLS_MODE=external` (certificate from the environment) the
+  bundled console reaches the Hub again; the Hub keeps its own certificate for
+  the console's internal connection, as it does for an uploaded certificate.
+- Changing data retention writes a named Audit log row ("Changed data
+  retention").
+- The Dashboard's first-run checklist no longer marks "Connect Proxmox,
+  TrueNAS or Docker" as done on a Hub with nothing connected.
+- Settings › Agents › Connection names each address and how agents trust it
+  in your language, like Add device.
+- The API key scope groups are in your language ("Devices and inventory"),
+  and each key's Edit and Revoke buttons name the key for screen readers.
+- A refused Prometheus remote-write address says why (for example plain
+  http), and the API no longer tells the owner to transfer ownership, which
+  the Hub cannot do.
 - Security › Saved logins: the Add login, Rotate and Delete dialogs, login
   types and the saved login picker are in your language, and their errors
   name what happened without internal words.

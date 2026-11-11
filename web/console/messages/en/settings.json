@@ -259,7 +259,18 @@
     "colAccess": "Access",
     "scopeCount": "{count, plural, one {# scope} other {# scopes}}",
     "createdOn": "Created {when}",
-    "revokeFailed": "The key was not revoked."
+    "revokeFailed": "The key was not revoked.",
+    "scopeGroups": {
+      "inventory": "Devices and inventory",
+      "operations": "Operations",
+      "monitoring": "Monitoring",
+      "system": "System",
+      "integrations": "Integrations",
+      "automation": "Automation",
+      "platform": "Hub"
+    },
+    "editNamed": "Edit {name}",
+    "revokeNamed": "Revoke {name}"
   },
   "mcp": {
     "heading": "MCP",
