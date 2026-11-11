@@ -337,6 +337,8 @@ v1.7.1.
 - The Processes tab shows each process's memory in the right unit. Agents
   report it in KiB and the tab read it as bytes, so a 97 MB process showed
   as 97 KB.
+- Updates › New plan offers Linux devices only. A plan with a Windows or
+  Mac device always failed for it with "os_packages updates require linux".
 
 ## [1.7.1] - 2026-10-31
 

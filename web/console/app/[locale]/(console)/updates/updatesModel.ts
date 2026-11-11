@@ -41,10 +41,16 @@ export function tally(results: UpdateRunResult[] = []) {
 }
 
 /** Devices the plan form offers: device-tier assets, A to Z, matching the filter by name, id or OS. */
+/** OS package updates run on Linux; a device known to run another system cannot be part of a plan. */
+function runsOSUpdates(asset: Asset): boolean {
+  const platform = (asset.platform || asset.metadata?.platform || "").trim().toLowerCase();
+  return platform === "" || platform === "linux";
+}
+
 export function pickableDevices(assets: Asset[], query: string): Asset[] {
   const q = query.trim().toLowerCase();
   return assets
-    .filter((a) => isDeviceTier(a))
+    .filter((a) => isDeviceTier(a) && runsOSUpdates(a))
     .filter((a) => !q || [a.name, a.id, a.metadata?.os_pretty_name ?? ""].some((v) => v.toLowerCase().includes(q)))
     .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
 }
