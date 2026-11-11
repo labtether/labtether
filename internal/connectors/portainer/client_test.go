@@ -517,3 +517,21 @@ func TestExecWebSocketURLUsesAPIKeyForAPIKeyConnections(t *testing.T) {
 		t.Fatalf("auth = %+v url = %q", auth, wsURL)
 	}
 }
+
+func TestResizeExecCallsDockerExecResizeThroughPortainer(t *testing.T) {
+	allowInsecureTransportForPortainerTests(t)
+	execID := strings.Repeat("c", portainerExecIDLength)
+	var got string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Method + " " + r.URL.Path + "?" + r.URL.RawQuery + " key=" + r.Header.Get("X-API-Key")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	client := NewClient(Config{BaseURL: server.URL, APIKey: "ptr_key"})
+	if err := client.ResizeExec(context.Background(), 2, execID, 132, 41); err != nil {
+		t.Fatalf("ResizeExec: %v", err)
+	}
+	if want := "POST /api/endpoints/2/docker/exec/" + execID + "/resize?h=41&w=132 key=ptr_key"; got != want {
+		t.Fatalf("request = %q, want %q", got, want)
+	}
+}

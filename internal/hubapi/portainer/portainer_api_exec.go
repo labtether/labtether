@@ -111,7 +111,14 @@ func (d *Deps) HandlePortainerContainerExec(w http.ResponseWriter, r *http.Reque
 	defer browserConn.Close()
 
 	securityruntime.Logf("portainer-exec: bridge started asset=%s container=%.12s", assetID, containerID)
-	d.bridgePortainerExec(browserConn, portainerConn)
+	resize := func(cols, rows int) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := runtime.Client.ResizeExec(ctx, epID, execID, cols, rows); err != nil {
+			securityruntime.Logf("portainer-exec: resize failed: %v", err)
+		}
+	}
+	d.bridgePortainerExec(browserConn, portainerConn, resize)
 	securityruntime.Logf("portainer-exec: bridge ended asset=%s container=%.12s", assetID, containerID)
 }
 
@@ -196,7 +203,7 @@ func redactPortainerExecSecret(value, token string) string {
 // bridgePortainerExec bidirectionally proxies data between the browser WebSocket
 // and the Portainer exec WebSocket. It uses a mutex-protected write path for
 // the browser connection to coordinate with the keepalive goroutine.
-func (d *Deps) bridgePortainerExec(browserConn, portainerConn *websocket.Conn) {
+func (d *Deps) bridgePortainerExec(browserConn, portainerConn *websocket.Conn, resize func(cols, rows int)) {
 	var browserWriteMu sync.Mutex
 	stopKeepalive := d.StartBrowserWebSocketKeepalive(browserConn, &browserWriteMu, "portainer-exec")
 	defer stopKeepalive()
@@ -236,6 +243,19 @@ func (d *Deps) bridgePortainerExec(browserConn, portainerConn *websocket.Conn) {
 		_ = d.TouchBrowserWebSocketReadDeadline(browserConn)
 		if msgType != websocket.TextMessage && msgType != websocket.BinaryMessage {
 			continue
+		}
+		if control, ok := parsePortainerExecControl(payload); ok {
+			switch control.Type {
+			case "resize":
+				if resize != nil && control.Cols > 0 && control.Rows > 0 {
+					resize(control.Cols, control.Rows)
+				}
+				continue
+			case "ping":
+				continue
+			case "input":
+				msgType, payload = websocket.TextMessage, []byte(control.Data)
+			}
 		}
 		if err := portainerConn.WriteMessage(msgType, payload); err != nil {
 			return

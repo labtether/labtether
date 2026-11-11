@@ -142,3 +142,18 @@ func (c *Client) ExecWebSocketURL(ctx context.Context, endpointID int, execID st
 	)
 	return wsURL, auth, nil
 }
+
+// ResizeExec sets the TTY size of a running exec instance (Docker's
+// /exec/{id}/resize through Portainer).
+func (c *Client) ResizeExec(ctx context.Context, endpointID int, execID string, cols, rows int) error {
+	if err := validatePortainerExecID(execID); err != nil {
+		return err
+	}
+	if cols <= 0 || rows <= 0 || cols > 1000 || rows > 1000 {
+		return fmt.Errorf("terminal size out of range")
+	}
+	path := fmt.Sprintf("/api/endpoints/%s/docker/exec/%s/resize?h=%d&w=%d",
+		url.PathEscape(fmt.Sprintf("%d", endpointID)), url.PathEscape(execID), rows, cols)
+	_, err := c.post(ctx, path, nil)
+	return err
+}
