@@ -140,6 +140,9 @@ v1.7.1.
 
 ### Fixed
 
+- Settings: Edit on a webhook or Slack channel opens the channel. It showed
+  "Something went wrong in Settings" because the Hub leaves a channel's
+  settings out when its only one is the secret URL.
 - Devices: Test connection over SSH, and the SSH health check, log in when the
   device's ed25519 host key is pinned. They failed with "host key mismatch"
   when the device also has an ECDSA key; the terminal already handled this.

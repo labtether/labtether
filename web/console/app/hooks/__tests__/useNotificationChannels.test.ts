@@ -66,6 +66,17 @@ describe("notification channel test request", () => {
 });
 
 describe("Settings notification channel list", () => {
+  it("gives a webhook channel an empty config when the Hub leaves out its only, secret setting", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      channels: [{ id: "hook-1", name: "Hook", type: "webhook", enabled: true, all_alerts: true, created_at: "2026-10-09T00:00:00Z", updated_at: "2026-10-09T00:00:00Z" }],
+      capabilities: { smtp_insecure_transport_allowed: false },
+    }), { status: 200 })));
+
+    const { channels: loaded } = await fetchAllNotificationChannels();
+
+    expect(loaded[0]).toMatchObject({ id: "hook-1", all_alerts: true, config: {} });
+  });
+
   it("loads every channel when the Hub has 105", async () => {
     const fetchMock = vi.fn(async (url: string) => {
       const offset = Number(new URL(url, "http://localhost").searchParams.get("offset"));
